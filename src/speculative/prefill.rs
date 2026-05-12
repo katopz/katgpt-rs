@@ -4,7 +4,7 @@
 //! then compresses the prompt to top-`keep_ratio` spans before target prefill.
 //! Inspired by [Cross-Family Speculative Prefill](https://arxiv.org/abs/2603.02631).
 
-use crate::speculative::types::SpeculativeContext;
+use crate::speculative::types::{FlashPrefillConfig, PrefillMode, SpeculativeContext};
 use crate::transformer::{TransformerWeights, forward};
 use crate::types::Config;
 
@@ -234,11 +234,309 @@ pub fn speculative_prefill(
     compress_prompt(&scores, keep_ratio, prefix_len, suffix_len)
 }
 
+// ── PFlash Block-Sparse Selection (Plan 044) ──────────────────
+
+/// Block selection: turns per-block scores into selected block indices.
+///
+/// Rules (from FlashPrefill / PFlash):
+///   - sink:       k_block < attention_sink -> always include
+///   - window:     |q_block - k_block| < window -> include (recent context)
+///   - last_full:  q_block >= num_blocks - last_n_full -> include all blocks
+///   - alpha:      score >= max_score * alpha -> include (importance threshold)
+///   - causal:     k_block <= q_block
+///
+/// For prefill scoring, q_block = last block (scoring from generation-start position).
+pub fn block_select(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize> {
+    let num_blocks = block_scores.len();
+    if num_blocks == 0 {
+        return Vec::new();
+    }
+
+    let q_block = num_blocks - 1;
+    let max_score = block_scores.iter().cloned().fold(0.0f32, f32::max);
+    let threshold = max_score * cfg.alpha;
+
+    let mut selected: Vec<usize> = Vec::with_capacity(num_blocks);
+
+    for (k_block, &score) in block_scores.iter().enumerate() {
+        if k_block > q_block {
+            continue;
+        }
+
+        let keep = k_block < cfg.attention_sink
+            || q_block.abs_diff(k_block) < cfg.window
+            || q_block >= num_blocks.saturating_sub(cfg.last_n_full)
+            || score >= threshold;
+
+        if keep {
+            selected.push(k_block);
+        }
+    }
+
+    selected.sort();
+    selected.dedup();
+    selected
+}
+
+/// Full block-selection with per-(q_block, k_block, head) score grid.
+///
+/// `score`: [M][N][H] row-major (M=q_blocks, N=k_blocks, H=heads).
+/// Returns selected indices per (q_block, head) and counts.
+pub fn block_select_grid(
+    score: &[f32],
+    num_q_blocks: usize,
+    num_k_blocks: usize,
+    num_heads: usize,
+    cfg: &FlashPrefillConfig,
+) -> (Vec<i32>, Vec<i32>) {
+    let m = num_q_blocks;
+    let n = num_k_blocks;
+    let h = num_heads;
+
+    let mut idx_out = vec![-1i32; m * n * h];
+    let mut cnt_out = vec![0i32; m * h];
+
+    for q in 0..m {
+        let last_full = q >= m.saturating_sub(cfg.last_n_full);
+
+        for head in 0..h {
+            let mut max_score: f32 = -f32::INFINITY;
+            for k in 0..=q.min(n - 1) {
+                let v = score[q * n * h + k * h + head];
+                if v > max_score {
+                    max_score = v;
+                }
+            }
+            let thresh = max_score * cfg.alpha;
+
+            let mut selected = Vec::with_capacity(n);
+            for k in 0..=q.min(n - 1) {
+                let keep = k < cfg.attention_sink
+                    || q.abs_diff(k) < cfg.window
+                    || last_full
+                    || score[q * n * h + k * h + head] >= thresh;
+
+                if keep {
+                    selected.push(k as i32);
+                }
+            }
+
+            selected.sort();
+
+            let idx_row = &mut idx_out[q * n * h + head..];
+            for (i, &sel) in selected.iter().enumerate() {
+                idx_row[i * h] = sel;
+            }
+            cnt_out[q * h + head] = selected.len() as i32;
+        }
+    }
+
+    (idx_out, cnt_out)
+}
+
+/// Block-sparse attention scorer (CPU fallback for PFlash).
+///
+/// Aggregates token-level attention scores into block-level importance,
+/// then upsamples back to per-token scores for compression.
+pub struct BlockAttentionScorer {
+    pub config: FlashPrefillConfig,
+}
+
+impl BlockAttentionScorer {
+    /// Zero-alloc scoring using pre-allocated context.
+    pub fn score_with(
+        &self,
+        sctx: &mut SpeculativeContext,
+        draft_weights: &TransformerWeights,
+        draft_config: &Config,
+        prompt_tokens: &[usize],
+        scores: &mut [f32],
+    ) {
+        let block_size = self.config.block_size;
+        let seq_len = prompt_tokens.len();
+        let num_blocks = seq_len.div_ceil(block_size);
+
+        if seq_len == 0 {
+            return;
+        }
+
+        sctx.cache.reset();
+
+        let filled = seq_len.min(draft_config.block_size);
+        for (pos, &token) in prompt_tokens.iter().enumerate().take(filled) {
+            let _logits = forward(
+                &mut sctx.ctx,
+                draft_weights,
+                &mut sctx.cache,
+                token,
+                pos,
+                draft_config,
+            );
+        }
+
+        let mut block_scores = vec![0.0f32; num_blocks];
+        let mut block_counts = vec![0usize; num_blocks];
+
+        let tail_start = seq_len.saturating_sub(self.config.tail_window * block_size);
+        for pos in tail_start..filled {
+            let score = sctx.ctx.scores[pos];
+            let block_idx = pos / block_size;
+            if block_idx < num_blocks {
+                block_scores[block_idx] += score;
+                block_counts[block_idx] += 1;
+            }
+        }
+
+        for i in 0..num_blocks {
+            if block_counts[i] > 0 {
+                block_scores[i] /= block_counts[i] as f32;
+            }
+        }
+
+        let max_block = block_scores.iter().cloned().fold(0.0f32, f32::max);
+        if max_block > 0.0 {
+            for s in &mut block_scores {
+                *s /= max_block;
+            }
+        }
+
+        for (pos, slot) in scores.iter_mut().enumerate().take(seq_len) {
+            *slot = block_scores[pos / block_size];
+        }
+    }
+}
+
+impl PrefillScorer for BlockAttentionScorer {
+    fn score(
+        &self,
+        draft_weights: &TransformerWeights,
+        draft_config: &Config,
+        prompt_tokens: &[usize],
+    ) -> Vec<f32> {
+        let mut sctx = SpeculativeContext::new(draft_config);
+        let mut scores = vec![0.0f32; prompt_tokens.len()];
+        self.score_with(
+            &mut sctx,
+            draft_weights,
+            draft_config,
+            prompt_tokens,
+            &mut scores,
+        );
+        scores
+    }
+}
+
+/// Compress prompt using block-sparse selection (PFlash algorithm).
+///
+/// 1. Aggregate per-token scores to per-block scores (max of block)
+/// 2. Select blocks via `block_select` rules
+/// 3. Flatten selected blocks to token indices
+/// 4. Always include prefix and suffix tokens
+pub fn compress_prompt_blocks(
+    importance_scores: &[f32],
+    cfg: &FlashPrefillConfig,
+    prefix_len: usize,
+    suffix_len: usize,
+) -> Vec<usize> {
+    let total = importance_scores.len();
+    if total == 0 {
+        return Vec::new();
+    }
+
+    let block_size = cfg.block_size;
+    let num_blocks = total.div_ceil(block_size);
+
+    let mut block_scores = vec![0.0f32; num_blocks];
+    for (i, &score) in importance_scores.iter().enumerate() {
+        let block_idx = i / block_size;
+        block_scores[block_idx] = block_scores[block_idx].max(score);
+    }
+
+    let selected_blocks = block_select(&block_scores, cfg);
+
+    let mut selected_tokens: Vec<usize> = Vec::new();
+    let prefix_end = prefix_len.min(total);
+    selected_tokens.extend(0..prefix_end);
+
+    for &block_idx in &selected_blocks {
+        let block_start = block_idx * block_size;
+        let block_end = ((block_idx + 1) * block_size).min(total);
+        for token_idx in block_start..block_end {
+            if token_idx >= prefix_end && token_idx < total.saturating_sub(suffix_len) {
+                selected_tokens.push(token_idx);
+            }
+        }
+    }
+
+    let suffix_start = total.saturating_sub(suffix_len);
+    selected_tokens.extend(suffix_start..total);
+
+    selected_tokens.sort();
+    selected_tokens.dedup();
+
+    selected_tokens
+}
+
+/// Whether to apply compression for the given prompt length and mode.
+pub fn should_compress(mode: PrefillMode, prompt_len: usize, threshold: usize) -> bool {
+    match mode {
+        PrefillMode::Off => false,
+        PrefillMode::Always => true,
+        PrefillMode::Auto => prompt_len >= threshold,
+    }
+}
+
+/// PFlash compression — CPU path (fallback when no GPU).
+pub fn speculative_prefill_block(
+    scorer: &dyn PrefillScorer,
+    draft_weights: &TransformerWeights,
+    draft_config: &Config,
+    prompt_tokens: &[usize],
+    cfg: &FlashPrefillConfig,
+    prefix_len: usize,
+    suffix_len: usize,
+) -> Vec<usize> {
+    if prompt_tokens.is_empty() {
+        return Vec::new();
+    }
+    let scores = scorer.score(draft_weights, draft_config, prompt_tokens);
+    compress_prompt_blocks(&scores, cfg, prefix_len, suffix_len)
+}
+
+/// PFlash compression with adaptive threshold.
+/// Picks CPU path (GPU path available via feature flag).
+#[allow(clippy::too_many_arguments)]
+pub fn speculative_prefill_adaptive(
+    scorer: &dyn PrefillScorer,
+    draft_weights: &TransformerWeights,
+    draft_config: &Config,
+    prompt_tokens: &[usize],
+    mode: PrefillMode,
+    threshold: usize,
+    cfg: &FlashPrefillConfig,
+    prefix_len: usize,
+    suffix_len: usize,
+) -> Vec<usize> {
+    if !should_compress(mode, prompt_tokens.len(), threshold) {
+        return (0..prompt_tokens.len()).collect();
+    }
+    speculative_prefill_block(
+        scorer,
+        draft_weights,
+        draft_config,
+        prompt_tokens,
+        cfg,
+        prefix_len,
+        suffix_len,
+    )
+}
+
 // ── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::speculative::types::{FlashPrefillConfig, PrefillMode};
     use crate::transformer::TransformerWeights;
     use crate::types::Rng;
 
@@ -529,5 +827,70 @@ mod tests {
         for &t in &accepted {
             assert!(t < config.vocab_size, "token {t} out of vocab range");
         }
+    }
+
+    // ── Plan 044: PFlash Block-Sparse Prefill Tests ─────────────
+
+    #[test]
+    fn test_block_select_sink_rule() {
+        let cfg = FlashPrefillConfig::default();
+        let scores = vec![0.0, 0.5, 0.8, 0.3, 0.6]; // 5 blocks
+        let selected = block_select(&scores, &cfg);
+        // Block 0 should always be selected (sink rule)
+        assert!(selected.contains(&0));
+    }
+
+    #[test]
+    fn test_block_select_window_rule() {
+        let cfg = FlashPrefillConfig::default();
+        let scores = vec![0.0, 0.0, 0.0, 0.0, 0.0]; // 5 blocks
+        let selected = block_select(&scores, &cfg);
+        // Last 2 blocks should be selected (window around q_block=4)
+        assert!(selected.contains(&4));
+        assert!(selected.contains(&3));
+    }
+
+    #[test]
+    fn test_block_select_alpha_rule() {
+        let mut cfg = FlashPrefillConfig::default();
+        cfg.alpha = 0.5;
+        cfg.attention_sink = 0;
+        cfg.window = 0;
+        cfg.last_n_full = 0;
+        let scores = vec![0.1, 0.9, 0.2, 0.8, 1.0]; // 5 blocks, q=4
+        let selected = block_select(&scores, &cfg);
+        // Should select blocks with score >= 0.5 (0.5 * max=1.0)
+        assert!(selected.contains(&1)); // 0.9 >= 0.5
+        assert!(selected.contains(&3)); // 0.8 >= 0.5
+        assert!(selected.contains(&4)); // 1.0 >= 0.5 (q_block)
+        assert!(!selected.contains(&0)); // 0.1 < 0.5
+    }
+
+    #[test]
+    fn test_block_select_empty() {
+        let cfg = FlashPrefillConfig::default();
+        let selected = block_select(&[], &cfg);
+        assert!(selected.is_empty());
+    }
+
+    #[test]
+    fn test_compress_prompt_blocks_preserves_prefix_suffix() {
+        let cfg = FlashPrefillConfig::default();
+        let scores = vec![0.5; 100];
+        let selected = compress_prompt_blocks(&scores, &cfg, 5, 3);
+        // First 5 tokens always included
+        assert!(selected.contains(&0));
+        assert!(selected.contains(&4));
+        // Last 3 tokens always included
+        assert!(selected.contains(&97));
+        assert!(selected.contains(&99));
+    }
+
+    #[test]
+    fn test_should_compress_modes() {
+        assert!(!should_compress(PrefillMode::Off, 1000, 100));
+        assert!(should_compress(PrefillMode::Always, 10, 100));
+        assert!(should_compress(PrefillMode::Auto, 200, 100));
+        assert!(!should_compress(PrefillMode::Auto, 50, 100));
     }
 }

@@ -406,6 +406,106 @@ pub enum DraftEvent {
     },
 }
 
+// ── PFlash Block-Sparse Prefill (Plan 044) ─────────────────────
+
+/// Whether to apply block-sparse prefill compression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
+pub enum PrefillMode {
+    /// Never compress — use full prompt.
+    #[default]
+    Off,
+    /// Auto: compress when prompt length >= threshold.
+    Auto,
+    /// Always compress (even short prompts).
+    Always,
+}
+
+
+/// Configuration for PFlash block-sparse prefill scoring.
+///
+/// Controls how prompts are compressed before target model prefill.
+/// Inspired by FlashPrefill (arXiv:2506.07317) and PFlash speculative prefill.
+#[derive(Debug, Clone)]
+pub struct FlashPrefillConfig {
+    /// Tokens per block for scoring granularity.
+    pub block_size: usize,
+    /// Number of initial blocks to always keep (attention sink).
+    pub attention_sink: usize,
+    /// Number of adjacent blocks to always keep (local window).
+    pub window: usize,
+    /// Number of final query blocks that get full attention.
+    pub last_n_full: usize,
+    /// Importance threshold: keep blocks with score >= max_score * alpha.
+    pub alpha: f32,
+    /// Number of tail blocks to use for importance scoring.
+    pub tail_window: usize,
+}
+
+impl Default for FlashPrefillConfig {
+    fn default() -> Self {
+        Self {
+            block_size: 32,
+            attention_sink: 1,
+            window: 2,
+            last_n_full: 1,
+            alpha: 0.15,
+            tail_window: 4,
+        }
+    }
+}
+
+impl FlashPrefillConfig {
+    /// Config for GPU path (Metal). Larger blocks for GPU parallelism.
+    pub fn metal() -> Self {
+        Self {
+            block_size: 64,
+            attention_sink: 1,
+            window: 2,
+            last_n_full: 1,
+            alpha: 0.15,
+            tail_window: 4,
+        }
+    }
+
+    /// Config tuned for long-context compression (keep_ratio <= 0.05).
+    pub fn long_context() -> Self {
+        Self {
+            block_size: 64,
+            attention_sink: 1,
+            window: 2,
+            last_n_full: 1,
+            alpha: 0.85,
+            tail_window: 8,
+        }
+    }
+
+    /// Config for short/medium prompts (keep_ratio 0.1-0.3).
+    pub fn short_context() -> Self {
+        Self {
+            block_size: 32,
+            attention_sink: 1,
+            window: 2,
+            last_n_full: 1,
+            alpha: 0.12,
+            tail_window: 2,
+        }
+    }
+}
+
+/// Block importance scores from PFlash scoring.
+#[derive(Debug, Clone)]
+pub struct BlockScores {
+    /// Number of blocks scored.
+    pub num_blocks: usize,
+    /// Block size used for scoring.
+    pub block_size: usize,
+    /// Per-block importance scores (num_blocks entries).
+    pub scores: Vec<f32>,
+    /// Selected block indices after applying rules.
+    pub selected: Vec<usize>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

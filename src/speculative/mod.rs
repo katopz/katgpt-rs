@@ -20,16 +20,18 @@ pub use dflash::{
     dflash_predict_conditioned_with, dflash_predict_parallel, dflash_predict_with,
 };
 pub use prefill::{
-    AttentionScorer, PrefillScorer, RandomScorer, UniformScorer, compress_prompt,
-    speculative_prefill,
+    AttentionScorer, BlockAttentionScorer, PrefillScorer, RandomScorer, UniformScorer,
+    block_select, block_select_grid, compress_prompt, compress_prompt_blocks, should_compress,
+    speculative_prefill, speculative_prefill_adaptive, speculative_prefill_block,
 };
 pub use sampling::{
     sample_from_distribution, sample_residual_distribution, sample_residual_distribution_into,
 };
 pub use step::{speculative_step, speculative_step_verifier};
 pub use types::{
-    BinaryScreeningPruner, ConstraintPruner, DDTreeBranchCache, DraftEvent, DraftResult, NoPruner,
-    NoScreeningPruner, RejectionReason, ScreeningPruner, SpeculativeContext, TreeNode,
+    BinaryScreeningPruner, BlockScores, ConstraintPruner, DDTreeBranchCache, DraftEvent,
+    DraftResult, FlashPrefillConfig, NoPruner, NoScreeningPruner, PrefillMode, RejectionReason,
+    ScreeningPruner, SpeculativeContext, TreeNode,
 };
 pub use verifier::{SimulatedVerifier, SpeculativeVerifier};
 
