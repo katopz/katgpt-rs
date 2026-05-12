@@ -84,7 +84,7 @@ Plan 045 showed HL (+475) >> LoRA+WASM (-15). The gap exists because:
 
 ### Phase 3: Dynamic Rules Proof (microgpt-rs + riir-ai)
 
-- [ ] **T7: `DynamicHLPlayer` in riir-ai — composition-based Full HL**
+- [x] **T7: `DynamicHLPlayer` in riir-ai — composition-based Full HL**
   - `riir-ai` defines `FullHLPlayer` struct that impls `BomberPlayer`
   - Composes: LoRA v2 proposals + WASM safety + Bandit adaptation
   - Hot-swap: between rounds, reload LoRA weights from updated file
@@ -102,7 +102,7 @@ Plan 045 showed HL (+475) >> LoRA+WASM (-15). The gap exists because:
     Final action
     ```
 
-- [ ] **T8: `bomber_dynamic_rules_demo.rs` in riir-ai — The GOAT proof**
+- [x] **T8: `bomber_dynamic_rules_demo.rs` in riir-ai — The GOAT proof**
   - 5-player tournament, 1000 rounds:
     - P0 🐰 Random — baseline
     - P1 🤖 LoRA v1 — old model (proves v2 > v1)
