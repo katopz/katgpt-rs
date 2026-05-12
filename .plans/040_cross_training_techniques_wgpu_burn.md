@@ -345,13 +345,14 @@ pub struct GameTrainingReport {
   - `full` feature includes both `game_domain` and `language_domain` ✅
   - Ensure existing tests pass with and without `game_domain` ✅ (350 tests pass)
 
-- [ ] **Task 9: Benchmarks**
-  - Benchmark: `BetaConfig` training (β=0.3) vs manual config (same derived params) — should be identical
-  - Benchmark: Draft distillation quality (KL divergence over epochs)
-  - Benchmark: Screening-guided top-3 vs all targets (training time + final loss)
-  - Benchmark: Training with and without domain latent
-  - All benchmarks use `std::time::Instant` like existing benchmarks
-  - Output to `bench/040_*` files
+- [x] **Task 9: Benchmarks** ✅
+  - Benchmark: `BetaConfig` training (β=0.3) vs manual config (same derived params) — identical ✅
+  - Benchmark: Draft distillation quality (KL divergence over epochs) ✅
+  - Benchmark: Screening-guided top-3 vs all targets (training time + final loss) ✅
+  - Benchmark: Training with and without domain latent ✅
+  - All benchmarks use `std::time::Instant` like existing benchmarks ✅
+  - Output to `bench/056_results.csv` (040–055 already taken) ✅
+  - 5 benchmark tests in `riir-gpu/tests/bench_cross_training.rs` ✅
 
 ---
 
@@ -373,12 +374,12 @@ pub struct GameTrainingReport {
 | `microgpt-rs/src/types.rs` | `Config::game()` for Bomberman LoRA training (Plan 041) | microgpt-rs |
 | `microgpt-rs/Cargo.toml` | Add `game_domain` and `language_domain` feature flags | microgpt-rs |
 
-### Remaining (Task 9)
+### Done (Task 9) ✅
 
 | File | Change | Target |
 |------|--------|--------|
-| `riir-gpu/src/training_loop.rs` | Add `validate_game()` for game-specific validation | riir-gpu |
-| `riir-gpu/examples/train_bomber.rs` | Game validation | riir-gpu |
+| `riir-gpu/tests/bench_cross_training.rs` | New: 5 benchmarks — BetaConfig vs manual, SVD+KL, screening top-K, domain latent, pipeline overhead (Task 9) | riir-gpu |
+| `microgpt-rs/bench/056_results.csv` | Benchmark results for Plan 040 cross-training techniques | microgpt-rs |
 
 ---
 
