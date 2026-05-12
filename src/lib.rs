@@ -1,10 +1,12 @@
 pub mod benchmark;
+pub mod feedback;
 pub mod percepta;
 pub mod plot;
 pub mod pruners;
 pub mod speculative;
 pub mod tokenizer;
 pub mod transformer;
+pub mod turboquant;
 pub mod types;
 
 #[cfg(debug_assertions)]

@@ -5,6 +5,7 @@ use super::types::BinaryScreeningPruner;
 #[cfg(test)]
 use super::types::NoScreeningPruner;
 use super::types::{ConstraintPruner, NoPruner, ScreeningPruner, TreeNode};
+use crate::types::InferenceResult;
 use rayon::prelude::*;
 
 /// Extract tokens from `parent_path` bitfield for path-aware pruning.
@@ -157,6 +158,34 @@ pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
         }
     }
     path
+}
+
+/// Build an InferenceResult from a completed DDTree inference.
+pub fn build_inference_result(
+    domain: &str,
+    reward: f32,
+    tree_size: usize,
+    budget_level: u8,
+    prompt_hash: u64,
+    output: &str,
+    screening_threshold: f32,
+) -> InferenceResult {
+    InferenceResult {
+        domain: domain.to_string(),
+        reward,
+        tree_budget_used: tree_size,
+        budget_level,
+        prompt_hash,
+        output: output.to_string(),
+        timestamp: {
+            // Use simple Unix epoch millis since we don't depend on uuid/chrono
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as i64
+        },
+        screened: reward < screening_threshold,
+    }
 }
 
 /// Inject retrieved token sequences into the DDTree as candidate branches.

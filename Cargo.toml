@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 plotters = "0.3"
 rayon = "1.10"
+log = "0.4"
 blake3 = "1"
 fastrand = "2"
 serde = { version = "1", features = ["derive"] }

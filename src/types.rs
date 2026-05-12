@@ -1043,6 +1043,27 @@ fn read_u16_le(data: &[u8], offset: &mut usize) -> Result<u16, String> {
     Ok(val)
 }
 
+/// Output of a single inference pass, with reward signal for feedback loop.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct InferenceResult {
+    /// Domain that handled this inference.
+    pub domain: String,
+    /// Best-path reward (max relevance score from WasmPruner).
+    pub reward: f32,
+    /// Number of nodes explored in DDTree.
+    pub tree_budget_used: usize,
+    /// Inference budget level (0=cheap, 1=moderate, 2=expensive).
+    pub budget_level: u8,
+    /// Input prompt hash (for dedup, not stored).
+    pub prompt_hash: u64,
+    /// Generated output text.
+    pub output: String,
+    /// Timestamp (Uuid v7 prefix).
+    pub timestamp: i64,
+    /// Was this result screened out (reward below threshold)?
+    pub screened: bool,
+}
+
 #[cfg(test)]
 mod tests_types {
     use super::*;

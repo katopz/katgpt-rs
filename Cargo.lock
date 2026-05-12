@@ -1446,6 +1446,7 @@ dependencies = [
  "blake3",
  "crossterm",
  "fastrand",
+ "log",
  "papaya",
  "plotters",
  "proc-macro2",

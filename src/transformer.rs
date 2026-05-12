@@ -1688,6 +1688,141 @@ pub fn forward_raven<'a>(
     &mut ctx.logits
 }
 
+/// Forward pass using TurboQuant compressed KV cache (Plan 043).
+///
+/// Mirrors [`forward_base`] but stores K/V into a compressed cache and
+/// dequantizes on-the-fly during attention scoring. The rest of the
+/// transformer (embedding, QKV projection, MLP, LM head) is unchanged.
+///
+/// **Trade-off**: ~8× KV cache memory savings at the cost of dequantization
+/// overhead during attention. Best for long sequences where cache memory
+/// dominates.
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub fn forward_turboquant<'a>(
+    ctx: &'a mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut crate::turboquant::TurboQuantKVCache,
+    token: usize,
+    pos: usize,
+    config: &Config,
+) -> &'a mut [f32] {
+    let n = config.n_embd;
+    let hd = config.head_dim;
+    let kvd = types::kv_dim(config);
+    let n_kv = config.n_kv_head;
+
+    // 1. Embedding: x = wte[token] + wpe[pos]
+    let tok_off = token * n;
+    let pos_off_emb = pos * n;
+    for i in 0..n {
+        unsafe {
+            *ctx.x.get_unchecked_mut(i) = *weights.wte.get_unchecked(tok_off + i)
+                + *weights.wpe.get_unchecked(pos_off_emb + i);
+        }
+    }
+
+    // 2. Layer loop
+    for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
+        // Pre-attention: RMSNorm → save residual → RMSNorm
+        rmsnorm(&mut ctx.x);
+        ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
+        rmsnorm(&mut ctx.x);
+
+        // QKV projections from per-layer weights (GQA: K/V produce kv_dim outputs)
+        matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+        matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+        matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+
+        // Store compressed K,V
+        cache.store_key(layer_idx, pos, &ctx.k[..kvd]);
+        cache.store_value(layer_idx, pos, &ctx.v[..kvd]);
+
+        // Dequantize all K,V into flat buffers for attention scoring
+        let t_n = pos + 1;
+        for t in 0..t_n {
+            cache.dequantize_key_into(
+                layer_idx,
+                t,
+                &mut ctx.paged_flat_key[t * kvd..(t + 1) * kvd],
+            );
+            cache.dequantize_value_into(
+                layer_idx,
+                t,
+                &mut ctx.paged_flat_value[t * kvd..(t + 1) * kvd],
+            );
+        }
+
+        // Multi-head attention with GQA using dequantized flat cache
+        let scale = 1.0 / (hd as f32).sqrt();
+        ctx.attn_out[..n].fill(0.0);
+
+        for h in 0..config.n_head {
+            let kv_group = h * n_kv / config.n_head;
+            unsafe {
+                attention_head(
+                    &ctx.q,
+                    &ctx.paged_flat_key,
+                    &ctx.paged_flat_value,
+                    &mut ctx.attn_out,
+                    &mut ctx.scores,
+                    h * hd,
+                    kv_group * hd,
+                    kvd,
+                    hd,
+                    t_n,
+                    scale,
+                );
+            }
+        }
+
+        // Output projection + residual
+        matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
+        for i in 0..n {
+            unsafe {
+                *ctx.x.get_unchecked_mut(i) += *ctx.xr.get_unchecked(i);
+            }
+        }
+
+        // MLP: save residual → RMSNorm → MLP → residual
+        ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
+        rmsnorm(&mut ctx.x);
+        types::matmul_relu(
+            &mut ctx.hidden,
+            &layer_weights.mlp_w1,
+            &ctx.x,
+            config.mlp_hidden,
+            n,
+        );
+        matmul(
+            &mut ctx.x,
+            &layer_weights.mlp_w2,
+            &ctx.hidden,
+            n,
+            config.mlp_hidden,
+        );
+        for i in 0..n {
+            unsafe {
+                *ctx.x.get_unchecked_mut(i) += *ctx.xr2.get_unchecked(i);
+            }
+        }
+    }
+
+    // Snapshot hidden state (Plan 009 compatibility)
+    ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
+
+    // LM Head
+    matmul(
+        &mut ctx.logits,
+        &weights.lm_head,
+        &ctx.x,
+        config.vocab_size,
+        n,
+    );
+
+    &mut ctx.logits
+}
+
 #[cfg(test)]
 #[allow(unnameable_test_items)]
 #[allow(dead_code)]

@@ -10,10 +10,10 @@
 ## Tasks
 
 - [ ] **Task 1: Benchmark baseline KV cache memory and attention fidelity**
-- [ ] **Task 2: Implement `TurboQuantCodebook` (Lloyd-Max scalar quantizer)**
-- [ ] **Task 3: Implement `RandomRotation` (QR-based orthogonal matrix)**
-- [ ] **Task 4: Implement `TurboQuantKVCache` struct**
-- [ ] **Task 5: Implement `forward_turboquant()` attention path**
+- [x] **Task 2: Implement `TurboQuantCodebook` (Lloyd-Max scalar quantizer)**
+- [x] **Task 3: Implement `RandomRotation` (QR-based orthogonal matrix)**
+- [x] **Task 4: Implement `TurboQuantKVCache` struct**
+- [x] **Task 5: Implement `forward_turboquant()` attention path**
 - [ ] **Task 6: Add `attention_score_tq.wgsl` GPU kernel in riir-gpu**
 - [ ] **Task 7: Add benchmarks and quality validation**
 - [ ] **Task 8: Commit with conventional message**
