@@ -183,6 +183,9 @@ fn run_round(
                             tick,
                             round: 0, // backfilled later
                             player_type: player_names[i].to_string(),
+                            danger_level: 0,
+                            nearest_opponent_dist: 0,
+                            escape_routes: 0,
                         },
                     });
                 }
@@ -387,18 +390,19 @@ fn main() {
 
         // Absorb-compress cycle every 100 rounds
         if (round + 1) % COMPRESS_INTERVAL == 0
-            && let Some(hl) = players[3].as_any_mut().downcast_mut::<HLPlayer>() {
-                let compressed = hl.compress_cycle();
-                if !compressed.is_empty() {
-                    println!(
-                        "  [Round {}/{}] P4 compressed {} arms: {:?}",
-                        round + 1,
-                        ROUNDS,
-                        compressed.len(),
-                        compressed,
-                    );
-                }
+            && let Some(hl) = players[3].as_any_mut().downcast_mut::<HLPlayer>()
+        {
+            let compressed = hl.compress_cycle();
+            if !compressed.is_empty() {
+                println!(
+                    "  [Round {}/{}] P4 compressed {} arms: {:?}",
+                    round + 1,
+                    ROUNDS,
+                    compressed.len(),
+                    compressed,
+                );
             }
+        }
 
         // Progress every 200 rounds
         if (round + 1) % 200 == 0 {

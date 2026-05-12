@@ -23,9 +23,123 @@ pub struct ReplaySample {
     pub tick: u32,
     pub round: u32,
     pub player_type: String,
+    /// 0=safe, 1=adjacent to blast zone, 2=in blast zone.
+    #[serde(default)]
+    pub danger_level: u8,
+    /// Manhattan distance to nearest opponent. 255 if none.
+    #[serde(default)]
+    pub nearest_opponent_dist: u8,
+    /// Count of walkable adjacent cells.
+    #[serde(default)]
+    pub escape_routes: u8,
 }
 
 impl ReplaySample {
+    /// Create a new ReplaySample with enriched features computed from game state.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_enriched(
+        board: Vec<u8>,
+        player_pos: [u8; 2],
+        player_id: u8,
+        bombs: Vec<[u8; 4]>,
+        powerups: Vec<[u8; 2]>,
+        action: u8,
+        quality: f32,
+        tick: u32,
+        round: u32,
+        player_type: String,
+        grid: &super::ArenaGrid,
+        opponent_positions: &[(i32, i32)],
+    ) -> Self {
+        let px = player_pos[0] as i32;
+        let py = player_pos[1] as i32;
+
+        let danger_level = Self::compute_danger_level(grid, &bombs, px, py);
+        let nearest_opponent_dist = match opponent_positions.is_empty() {
+            true => 255,
+            false => opponent_positions
+                .iter()
+                .map(|&(ox, oy)| (px - ox).unsigned_abs() + (py - oy).unsigned_abs())
+                .min()
+                .unwrap_or(255) as u8,
+        };
+        let escape_routes = Self::count_escape_routes(grid, px, py);
+
+        Self {
+            board,
+            player_pos,
+            player_id,
+            bombs,
+            powerups,
+            action,
+            quality,
+            tick,
+            round,
+            player_type,
+            danger_level,
+            nearest_opponent_dist,
+            escape_routes,
+        }
+    }
+
+    /// Check if position (x, y) is within any bomb's blast zone.
+    fn is_in_blast_zone(grid: &super::ArenaGrid, bombs: &[[u8; 4]], x: i32, y: i32) -> bool {
+        let directions: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+
+        for &[bx, by, range, _fuse] in bombs {
+            // Bomb position itself is in blast zone
+            if bx as i32 == x && by as i32 == y {
+                return true;
+            }
+
+            for &(dx, dy) in &directions {
+                for dist in 1..=range as i32 {
+                    let cx = bx as i32 + dx * dist;
+                    let cy = by as i32 + dy * dist;
+
+                    if cx == x && cy == y {
+                        return true;
+                    }
+
+                    // Stop propagation at walls
+                    match grid.get(cx, cy) {
+                        Cell::FixedWall | Cell::DestructibleWall | Cell::PowerUpHidden(_) => break,
+                        Cell::Floor => {}
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// Compute danger level: 2=in blast zone, 1=adjacent to blast zone, 0=safe.
+    fn compute_danger_level(grid: &super::ArenaGrid, bombs: &[[u8; 4]], px: i32, py: i32) -> u8 {
+        if Self::is_in_blast_zone(grid, bombs, px, py) {
+            return 2;
+        }
+
+        let adjacent: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+        for &(dx, dy) in &adjacent {
+            if Self::is_in_blast_zone(grid, bombs, px + dx, py + dy) {
+                return 1;
+            }
+        }
+
+        0
+    }
+
+    /// Count walkable adjacent cells (escape routes).
+    fn count_escape_routes(grid: &super::ArenaGrid, px: i32, py: i32) -> u8 {
+        let adjacent: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+        let mut count = 0u8;
+        for &(dx, dy) in &adjacent {
+            if grid.is_walkable(px + dx, py + dy) {
+                count += 1;
+            }
+        }
+        count
+    }
+
     /// Compute quality score from game outcome.
     ///
     /// - Death → 0.0, Survived → 0.5, Winner → 1.0
@@ -210,6 +324,9 @@ mod tests {
             tick: 42,
             round: 7,
             player_type: "Greedy".to_string(),
+            danger_level: 0,
+            nearest_opponent_dist: 0,
+            escape_routes: 0,
         };
 
         let json = sample.to_json();
@@ -276,6 +393,9 @@ mod tests {
             tick: 1,
             round: 1,
             player_type: "Random".to_string(),
+            danger_level: 0,
+            nearest_opponent_dist: 0,
+            escape_routes: 0,
         };
 
         {
@@ -299,5 +419,156 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);
+    }
+
+    // ── new_enriched constructor ───────────────────────────────
+
+    #[test]
+    fn enriched_no_bombs_no_opponents_safe() {
+        let grid = ArenaGrid {
+            cells: vec![vec![Cell::Floor; ARENA_W]; ARENA_H],
+            width: ARENA_W,
+            height: ARENA_H,
+        };
+
+        let sample = ReplaySample::new_enriched(
+            vec![0u8; 169],
+            [5, 5],
+            0,
+            vec![], // no bombs
+            vec![],
+            0,
+            0.5,
+            1,
+            1,
+            "Test".to_string(),
+            &grid,
+            &[], // no opponents
+        );
+
+        assert_eq!(sample.danger_level, 0);
+        assert_eq!(sample.nearest_opponent_dist, 255);
+        assert_eq!(sample.escape_routes, 4); // open floor, all 4 directions
+    }
+
+    #[test]
+    fn enriched_player_in_blast_zone() {
+        let grid = ArenaGrid {
+            cells: vec![vec![Cell::Floor; ARENA_W]; ARENA_H],
+            width: ARENA_W,
+            height: ARENA_H,
+        };
+
+        // Bomb at (3, 5) with range 3 — blast reaches (5, 5) going right
+        let sample = ReplaySample::new_enriched(
+            vec![0u8; 169],
+            [5, 5],
+            0,
+            vec![[3, 5, 3, 2]],
+            vec![],
+            0,
+            0.5,
+            1,
+            1,
+            "Test".to_string(),
+            &grid,
+            &[],
+        );
+
+        assert_eq!(sample.danger_level, 2); // directly in blast zone
+    }
+
+    #[test]
+    fn enriched_player_adjacent_to_blast_zone() {
+        let grid = ArenaGrid {
+            cells: vec![vec![Cell::Floor; ARENA_W]; ARENA_H],
+            width: ARENA_W,
+            height: ARENA_H,
+        };
+
+        // Bomb at (3, 5) with range 1 — blast covers (3,5), (4,5), (2,5), (3,4), (3,6)
+        // Player at (5, 5) — not in blast, but (4, 5) is adjacent and in blast
+        let sample = ReplaySample::new_enriched(
+            vec![0u8; 169],
+            [5, 5],
+            0,
+            vec![[3, 5, 1, 2]],
+            vec![],
+            0,
+            0.5,
+            1,
+            1,
+            "Test".to_string(),
+            &grid,
+            &[],
+        );
+
+        assert_eq!(sample.danger_level, 1); // adjacent to blast zone
+    }
+
+    #[test]
+    fn enriched_nearest_opponent_distance() {
+        let grid = ArenaGrid {
+            cells: vec![vec![Cell::Floor; ARENA_W]; ARENA_H],
+            width: ARENA_W,
+            height: ARENA_H,
+        };
+
+        let sample = ReplaySample::new_enriched(
+            vec![0u8; 169],
+            [5, 5],
+            0,
+            vec![],
+            vec![],
+            0,
+            0.5,
+            1,
+            1,
+            "Test".to_string(),
+            &grid,
+            &[(8, 5), (5, 9), (1, 1)], // manhattan: 3, 4, 8 → min = 3
+        );
+
+        assert_eq!(sample.nearest_opponent_dist, 3);
+    }
+
+    #[test]
+    fn enriched_escape_routes_with_walls() {
+        let mut grid = ArenaGrid {
+            cells: vec![vec![Cell::Floor; ARENA_W]; ARENA_H],
+            width: ARENA_W,
+            height: ARENA_H,
+        };
+        // Block left and up with walls
+        grid.cells[5][4] = Cell::FixedWall; // left of (5,5)
+        grid.cells[4][5] = Cell::DestructibleWall; // above (5,5)
+
+        let sample = ReplaySample::new_enriched(
+            vec![0u8; 169],
+            [5, 5],
+            0,
+            vec![],
+            vec![],
+            0,
+            0.5,
+            1,
+            1,
+            "Test".to_string(),
+            &grid,
+            &[],
+        );
+
+        assert_eq!(sample.escape_routes, 2); // only right and down
+    }
+
+    #[test]
+    fn enriched_backward_compat_json_without_new_fields() {
+        // Old JSON without danger_level, nearest_opponent_dist, escape_routes
+        let old_json = r#"{"board":[0,0,0],"player_pos":[1,1],"player_id":0,"bombs":[],"powerups":[],"action":0,"quality":0.5,"tick":1,"round":1,"player_type":"Old"}"#;
+
+        let sample = ReplaySample::from_json(old_json).expect("should parse old format");
+        assert_eq!(sample.danger_level, 0);
+        assert_eq!(sample.nearest_opponent_dist, 0);
+        assert_eq!(sample.escape_routes, 0);
     }
 }

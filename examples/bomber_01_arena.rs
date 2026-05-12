@@ -249,6 +249,9 @@ fn run_round(
                             tick,
                             round: 0, // backfilled later
                             player_type: player_names[i].to_string(),
+                            danger_level: 0,            // backfilled later
+                            nearest_opponent_dist: 255, // backfilled later
+                            escape_routes: 0,           // backfilled later
                         },
                     });
                 }

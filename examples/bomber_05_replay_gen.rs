@@ -126,6 +126,9 @@ fn main() {
                     tick: ps.tick,
                     round: round as u32,
                     player_type: ps.player_type,
+                    danger_level: 0,
+                    nearest_opponent_dist: 255,
+                    escape_routes: 0,
                 };
                 writer.write_sample(&sample).ok();
                 action_counts[ps.action as usize] += 1;
