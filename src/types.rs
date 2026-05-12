@@ -76,6 +76,44 @@ impl Config {
         c
     }
 
+    /// Game config for Bomberman LoRA training (Plan 041).
+    /// Tiny Transformer for board state → action prediction.
+    /// 10-token vocab: 4 board cells (0-3) + 6 actions (4-9).
+    /// 170-token sequences: 169 board cells + 1 action.
+    /// ~18K params total, ~1.5K LoRA params (rank=4).
+    pub fn game() -> Self {
+        Self {
+            vocab_size: 10,
+            block_size: 170,
+            n_embd: 32,
+            n_head: 4,
+            head_dim: 8,
+            mlp_hidden: 128,
+            n_layer: 1,
+            n_kv_head: 4,
+            bos_token: 0,
+            temperature: 1.0,
+            draft_lookahead: 0,
+            tree_budget: 0,
+            parallel_threshold: 128,
+            lora_rank: 4,
+            lora_alpha: 8.0,
+            lora_dropout: 0.0,
+            lora_targets: vec![
+                "q".into(),
+                "k".into(),
+                "v".into(),
+                "o".into(),
+                "mlp1".into(),
+                "mlp2".into(),
+            ],
+            screening_threshold: 0.0,
+            sparse_threshold: 0.8,
+            early_exit_patience: 0,
+            early_exit_gap: 0.0,
+        }
+    }
+
     /// Lightweight draft model for speculative decoding (~4× smaller than target).
     /// Same vocab/block to share embeddings, but embd=4, heads=2, mlp=16.
     pub fn draft() -> Self {
@@ -1183,5 +1221,20 @@ mod tests_types {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_config_game() {
+        let c = Config::game();
+        assert_eq!(c.vocab_size, 10); // 4 board cells + 6 actions
+        assert_eq!(c.block_size, 170); // 169 board + 1 action
+        assert_eq!(c.n_layer, 1);
+        assert_eq!(c.n_embd, 32);
+        assert_eq!(c.n_head, 4);
+        assert_eq!(c.head_dim, 8);
+        assert_eq!(c.mlp_hidden, 128);
+        assert!(c.block_size >= 170, "block_size must fit game sequences");
+        assert_eq!(c.lora_rank, 4);
+        assert!(!c.lora_targets.is_empty(), "game config needs LoRA targets");
     }
 }
