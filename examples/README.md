@@ -10,12 +10,13 @@ All examples run with `cargo run --example <name>`. Some require feature flags.
 | 2 | Heuristic Learning | 2 examples | `bandit` |
 | 3 | Bomberman Arena | 3 examples | `bomber` |
 | 4 | Monopoly FSM | 4 examples | `monopoly` |
-| 5 | Blue Bear | 2 examples | — |
-| 6 | Core | 4 examples | varies |
-| 7 | Dungeon | 2 examples | — |
-| 8 | Sudoku | 3 examples | `sudoku` |
-| 9 | Tactical AI | 6 examples | — |
-| 10 | Getting Started | 1 example | — |
+| 5 | FFT Tactics Arena | 1 example | — |
+| 6 | Blue Bear | 2 examples | — |
+| 7 | Core | 4 examples | varies |
+| 8 | Dungeon | 2 examples | — |
+| 9 | Sudoku | 3 examples | `sudoku` |
+| 10 | Tactical AI | 6 examples | — |
+| 11 | Getting Started | 1 example | — |
 
 ---
 
@@ -175,7 +176,21 @@ cargo run --example monopoly_04_bench --features monopoly
 
 ---
 
-## 5. Blue Bear
+## 5. FFT Tactics Arena
+
+Final Fantasy Tactics-inspired 4v4 turn-based battle. Pure data-driven (no ECS), speed-based turn queue, 4 classes with HP/MP, and 4 AI tiers.
+
+### fft_01_arena
+
+Headless 100-round tournament. 8 units (4v4) with classes: Knight, Archer, Black Mage, White Mage. AI strategies: Random, Greedy, Validator, HL (bandit Q-learning). Outputs per-round kills, final standings, unit stats, and HL Q-value convergence.
+
+```bash
+cargo run --example fft_01_arena
+```
+
+---
+
+## 6. Blue Bear
 
 Experimental tools and TUI demos.
 
@@ -197,7 +212,7 @@ cargo run --example bear_02_tui
 
 ---
 
-## 6. Core
+## 7. Core
 
 Core library features — validation, inference, sampling.
 
@@ -235,7 +250,7 @@ cargo run --example core_04_prefill
 
 ---
 
-## 7. Dungeon
+## 8. Dungeon
 
 Roguelike dungeon generation and TUI.
 
@@ -257,7 +272,7 @@ cargo run --example dungeon_02_multifloor
 
 ---
 
-## 8. Sudoku
+## 9. Sudoku
 
 Streaming "Thinking" Sudoku solver with deterministic validation.
 
@@ -287,7 +302,7 @@ cargo run --example sudoku_03_tui --features sudoku
 
 ---
 
-## 9. Tactical AI
+## 10. Tactical AI
 
 Grid-based tactical AI with terrain, procedural maps, and parallel simulation.
 
@@ -341,7 +356,7 @@ cargo run --example tactical_06_tui
 
 ---
 
-## 10. Getting Started
+## 11. Getting Started
 
 ### hello_py2rs
 
@@ -363,6 +378,7 @@ cargo run --example hello_py2rs
 | `bandit` | BanditPruner, bandit/HL examples | — |
 | `bomber` | Bomberman arena (Plan 033) | `bevy_ecs`, `bandit` |
 | `monopoly` | Monopoly FSM arena (Plan 035) | `bevy_ecs`, `bandit` |
+| — | FFT Tactics Arena (Plan 047) | `fastrand` |
 | `rest` | REST API client | `reqwest`, `tokio` |
 | `embedding_router` | Semantic embedding retrieval | — |
 | `gpu` | GPU compute | `wgpu`, `safetensors` |

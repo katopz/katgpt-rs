@@ -126,6 +126,11 @@ required-features = ["monopoly"]
 name = "monopoly_04_bench"
 required-features = ["monopoly"]
 
+# ── FFT Tactics Arena ────────────────────────────────────────
+
+[[example]]
+name = "fft_01_arena"
+
 # ── Blue Bear ──────────────────────────────────────────────────
 
 [[example]]
