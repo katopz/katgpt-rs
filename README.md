@@ -528,7 +528,13 @@ src/
     step.rs         High-level step functions (speculative, rollback, conditioned)
     prefill.rs      Speculative prefill scoring + prompt compression
     sampling.rs     Temperature, top-k, top-p sampling strategies
-    ppot/           PPoT CPU resampling (entropy, resample, knowledge, rank)
+    ppot/           PPoT CPU resampling:
+      mod.rs         Module root
+      entropy.rs     Entropy-based sampling
+      resample.rs    Resampling strategies
+      knowledge.rs   Knowledge distillation
+      rank.rs        Rank-based selection
+      types.rs       PPoT types
   pruners/          Pruner & HL infrastructure:
     bandit.rs       BanditPruner, BanditSession, BanditEnv, strategies
     trial_log.rs    TrialLog JSONL persistence
@@ -542,10 +548,34 @@ src/
     dungeon_pathfinder.rs  Dungeon pathfinder
     map_generator.rs    Procedural map generation
     pathfinder.rs      A* pathfinding
-    bomber/          Bomberman HL arena (bevy_ecs)
-    monopoly/        Monopoly FSM arena (bevy_ecs)
-  tokenizer/        BPE tokenizer (encode/decode/train)
-  validator/        SynPruner + PartialParser + CompilerFeedback
+    g_zero/          G-Zero self-play distillation:
+      mod.rs           Module root
+      delta_absorb.rs  Delta absorb logic
+      delta_bandit.rs  Delta bandit strategies
+      template_proposer.rs  Template proposing
+      types.rs         G-Zero types
+    bomber/          Bomberman HL arena (bevy_ecs):
+      mod.rs           Module root
+      arena.rs         Arena setup
+      players.rs       Player entities
+      replay.rs        Replay system
+      systems.rs       ECS systems
+      wasm_pruner.rs   WASM pruner
+      wasm_state.rs    WASM state
+    monopoly/        Monopoly FSM arena (bevy_ecs):
+      mod.rs           Module root
+      board.rs         Board definition
+      players.rs       Player entities
+      systems.rs       ECS systems
+  tokenizer/        BPE tokenizer (encode/decode/train):
+    mod.rs           Module root
+    bpe.rs           BPE algorithm
+    types.rs         Tokenizer types
+  validator/        SynPruner + PartialParser + CompilerFeedback:
+    mod.rs           Module root
+    partial_parser.rs  Partial JSON/code parsing
+    syn_pruner.rs    Syntax-aware pruning
+    types.rs         Validator types
   percepta.rs       O(log N) convex hull attention, Sudoku solvers, StreamingSolver
   turboquant/      TurboQuant KV cache compression:
     mod.rs          Module root (re-exports)
@@ -554,9 +584,11 @@ src/
     rotation.rs     QR-based orthogonal rotation + QJL projection
     kv_cache.rs     TurboQuantKVCache (store_key, store_value, dequantize, bit-pack)
     forward.rs      attention_turboquant, dequantize_keys_flat/values_flat, cosine_similarity
+  alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
+  feedback.rs       TTT feedback (feature-gated feedback)
   benchmark.rs      BenchResult, run_all, save_results_csv
   plot.rs           PNG horizontal bar chart
-examples/           36 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, raven, prefill)
+examples/           39 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, raven, prefill)
 tests/              88+ integration tests + 9 benchmark suites (TurboQuant, PFlash NIAH)
 bench/              Auto-numbered PNG + CSV benchmark output
 ```
