@@ -1,7 +1,7 @@
 # Issue 053: DomainLatent Integration — Tests, ExpertRegistry, Burner Training
 
 **Plan:** 038 (Free Transformer — Domain Latent Mid-Layer Injection)
-**Status:** Open
+**Status:** Partial — Task A complete, Tasks B & C open
 **Depends on:** Plan 025 (Bidirectional Prefill + LoRA), Plan 050 (Feature Gate Audit)
 
 ## Background
@@ -167,9 +167,9 @@ riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no dom
 
 ## Checklist
 
-- [ ] A1: `test_domain_latent_with_lora_changes_logits`
-- [ ] A2: `test_domain_latent_with_lora_prefill_pipeline`
-- [ ] A3: `test_domain_latent_zero_with_lora_same_as_lora_only`
+- [x] A1: `test_domain_latent_with_lora_changes_logits` ✅
+- [x] A2: `test_domain_latent_with_lora_prefill_pipeline` ✅
+- [x] A3: `test_domain_latent_zero_with_lora_same_as_lora_only` ✅
 - [ ] B1: Decide cross-crate dependency approach for `DomainLatent` in riir-router
 - [ ] B2: Add `domain_latent: Option<String>` to `DomainConfig` (with `#[serde(default)]`)
 - [ ] B3: Add `domain_latent: Option<DomainLatent>` to `ExpertBundle`
