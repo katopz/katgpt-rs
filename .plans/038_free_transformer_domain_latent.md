@@ -114,9 +114,9 @@ Cost: 2 × kv_dim additions. Zero allocations, zero RNG calls.
 
 - [ ] **Task 3: DomainLatent in Config** (`src/types.rs`) — partial
   - ✅ `DomainLatent` type exists with `load()`, `save()`, `zeros()`, `from_vec()`
-  - ⏳ `domain_latent_path: Option<PathBuf>` in Config skipped — deferred to runtime config
-  - ⏳ Lazy loading alongside `LoraAdapter` deferred — no runtime config system yet
-  - ⏳ Integration test with lora + domain_latent deferred
+  - ~~`domain_latent_path: Option<PathBuf>` in Config — blocked on runtime config system (not built)~~
+  - ~~Lazy loading alongside `LoraAdapter` — blocked on runtime config system (not built)~~
+  - ⏳ Integration test with lora + domain_latent — **unblocked** (both APIs accept both params), needs writing
 
 - [x] **Task 4: Prefill integration** (`src/transformer.rs`) ✅
   - `forward_prefill` gained `#[cfg(feature = "domain_latent")] domain_latent` parameter
@@ -136,14 +136,15 @@ Cost: 2 × kv_dim additions. Zero allocations, zero RNG calls.
 
 - [ ] **Task 5b: riir-burner training support (language domain)** — deferred
   - For larger language models (4B+ params) that need Python training pipeline
-  - Deferred until language model LoRA training pipeline matures
+  - ~~LoRA training pipeline has matured (riir-burner supports Gemma 2/4 LoRA) — but no domain_latent training path exists yet~~
+  - Needs: `DomainLatentAdamWStep` equivalent added to burn pipeline (riir-gpu has it, riir-burner does not)
 
-- [ ] **Task 6: Expert Registry integration** (`src/router/registry.rs`) — deferred
-  - No `src/router/registry.rs` exists yet — Expert Registry (Plan 023) not implemented
-  - `ExpertBundle` gains optional `domain_latent: Option<DomainLatent>`
-  - When router resolves a domain, load the corresponding domain_latent
-  - Pass to `forward()` and `forward_prefill()` via new parameter
-  - Deferred until Expert Registry is built
+- [ ] **Task 6: Expert Registry integration** (`riir-ai/crates/riir-router/src/registry.rs`) — **unblocked**
+  - ✅ `ExpertRegistry` is fully implemented at `riir-ai/crates/riir-router/src/registry.rs` (10+ tests)
+  - ✅ `ExpertBundle` exists at `riir-ai/crates/riir-router/src/types.rs` (has `lora_path`, `pruner`, `inference_budget`)
+  - ⏳ Add `domain_latent_path: Option<PathBuf>` to `DomainConfig`
+  - ⏳ Add `domain_latent: Option<DomainLatent>` to `ExpertBundle`
+  - ⏳ Load in `ExpertRegistry::from_config()`, thread to `forward()` / `forward_prefill()`
 
 ---
 

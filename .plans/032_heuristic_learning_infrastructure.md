@@ -182,10 +182,10 @@ src/pruners/
 
 ## Out of Scope
 
-- [ ] Coding agent integration (LLM writing new validators — future work)
-- [ ] Multi-agent HL (multiple bandit pruners coordinating — Bomberman Plan 033)
-- [ ] Contextual bandits (feature vectors per arm)
-- [ ] WASM validator auto-generation from failure traces
+- ~~[-] Coding agent integration (LLM writing new validators — future work, no LLM code-gen infrastructure)~~
+- [ ] Multi-agent HL (multiple bandit pruners coordinating — Bomberman Plan 033 ✅ complete, pattern proven with HLPlayer)
+- ~~[-] Contextual bandits (feature vectors per arm — no ContextualBandit implementation exists)~~
+- ~~[-] WASM validator auto-generation from failure traces (depends on coding agent above)~~
 
 ---
 

@@ -545,13 +545,13 @@ After 1000 rounds, P4's absorb-compress should show:
 
 ## Out of Scope
 
-- [ ] Real-time multiplayer (human keyboard input — future: add bevy_input)
-- [ ] Network play
-- [ ] Complex bomb types (remote, landmine, piercing)
-- [ ] Custom maps (fixed arena for reproducibility)
-- [ ] Coding agent writing validators (future: after HL infrastructure proven)
-- [ ] Full Bevy renderer (staying with ratatui TUI)
-- [ ] bevy_audio (staying silent)
+- ~~[-]~~ Real-time multiplayer (human keyboard input — future: add bevy_input)
+- ~~[-]~~ Network play
+- [ ] Complex bomb types (remote, landmine, piercing) — ECS clean, easy to extend
+- [ ] Custom maps (fixed arena for reproducibility) — trivial to add to `arena.rs`
+- [ ] Coding agent writing validators — HL proven (+177), WASM loader mature (78ns), needs agent loop
+- ~~[-]~~ Full Bevy renderer (intentional: staying with ratatui TUI)
+- ~~[-]~~ bevy_audio (intentional: staying silent)
 
 ---
 

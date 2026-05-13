@@ -1,7 +1,7 @@
 # Plan 020: Raven RSM (Routing Slot Memory) KV Cache
 
 **Date:** 2025-06
-**Status:** Planning
+**Status:** ✅ Complete
 **Depends on:** `.research/06_Raven_Routing_Slot_Memories.md`
 **Target:** `microgpt-rs/src/transformer.rs` (draft model path)
 
@@ -16,7 +16,7 @@
 - [x] Task 5: Add unit tests for router, update, readout (8 tests)
 - [x] Task 6: Run post-implementation benchmark, compare regression
 - [x] Task 7: Wire into `run_all` benchmark suite
-- [ ] Task 8: Commit with conventional message (ready to commit)
+- [x] Task 8: Commit with conventional message (`2f7263d feat: add Raven RSM KV cache`)
 
 ---
 

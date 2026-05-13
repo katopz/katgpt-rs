@@ -289,11 +289,11 @@ The review loop is a PPoT concern (rescue with structured feedback). Adding it t
 
 ## Out of Scope
 
-- [ ] LLM-based reviewer agent (the paper uses o3-mini; our WASM validators are the distilled equivalent)
-- [ ] GEPA implementation for automated prompt optimization (AbsorbCompress + HotSwapPruner serve this role at code level)
-- [ ] RAG query reviewer gate for riir-rest (the query is deterministic via `embedding_to_query`; a gate at `EmbeddingRouter` level in riir-router is more appropriate but out of scope for this plan)
-- [ ] Cross-domain metric transfer (metrics are per-pruner, not shared across domains)
-- [ ] Best-of-N Selection/Grading implementations (DDTree already supersedes these; paper shows Progressive Feedback outperforms both)
+- ~~[-]~~ LLM-based reviewer agent (the paper uses o3-mini; our WASM validators are the distilled equivalent — no LLM inference path in microgpt-rs)
+- ~~[-]~~ GEPA implementation for automated prompt optimization (AbsorbCompress + HotSwapPruner serve this role at code level — no prompt mutation loop exists)
+- ~~[-]~~ RAG query reviewer gate for riir-rest (`EmbeddingRouter` now exists in riir-router with three-tier fallback, but no `ReviewMetrics` gate wired — future plan could add `BenefitRatioGate` to tier decisions)
+- ~~[-]~~ Cross-domain metric transfer (metrics are per-pruner, not shared across domains — no cross-domain sharing architecture exists)
+- ~~[-]~~ Best-of-N Selection/Grading implementations (`BestOfNSelection`/`BestOfNGrading` enum variants exist in `review_metrics.rs`; DDTree with `ScreeningPruner` scoring IS the runtime implementation — no separate code needed)
 
 ---
 
