@@ -556,10 +556,10 @@ SelfImprovingCycle {
     ├── Path A (existing):  Export JSONL → riir-burner LoRA SFT      (modelless HL)
     ├── Path B (Phase 1):   DeltaGatedAbsorbCompress + DeltaBanditPruner (smarter modelless)
     └── Path C (Phase 2):   Proposer↔Generator self-play → DPO LoRA  (model-based G-Zero)
-                              ├─ DPO loss:       riir-gpu/src/loss.rs (extends GpuLoss) ← ONLY DPO path
-                              ├─ Backward pass:   riir-gpu/src/backward.rs (LoRA grads)
-                              ├─ Optimizer:       riir-gpu/src/optimizer.rs (AdamW)
-                              └─ SFT fallback:    riir-burner --backend rust (burn/Metal, SFT only, no custom loss)
+                              ├─ SFT + DPO loss: riir-gpu/src/loss.rs (GpuLoss CE + DPO extension)
+                              ├─ Backward pass:  riir-gpu/src/backward.rs (LoRA grads)
+                              ├─ Optimizer:      riir-gpu/src/optimizer.rs (AdamW)
+                              └─ Alt SFT path:   riir-burner --backend rust (burn/Metal subprocess, SFT only)
 }
 ```
 
@@ -577,8 +577,8 @@ All three paths feed into `HotSwapPruner` for zero-downtime model updates.
 | Reward hacking defense | `ReviewMetrics` benefit-ratio | Both |
 | Hot-swap updated model | `HotSwapPruner` | Both |
 | Regression safety | `RegressionSuite` | Both |
-| LoRA SFT (shell, burn/Metal) | `riir-burner --backend rust` (rank 32, SFT only, no custom loss) | Model-based (SFT) |
-| LoRA DPO/GRPO (GPU native) | `riir-gpu` (wgpu/Metal, forward+backward+loss+optimizer) ← only DPO-capable path | Model-based (DPO/GRPO) |
+| LoRA training (GPU native) | `riir-gpu` (wgpu/Metal, forward+backward+loss+optimizer, SFT + DPO) | Model-based (SFT + DPO/GRPO) |
+| LoRA SFT (shell fallback) | `riir-burner --backend rust` (burn/Metal subprocess, SFT only, no custom loss) | Model-based (SFT only) |
 | Domain inference budget | `InferenceBudget` (β) | Both |
 | δ reward signal | `ScreeningPruner::relevance()` | Both (needs log-prob access) |
 | Bandit exploration | `BanditPruner` (UCB1/Thompson) | Modelless (enhanced with δ) |
