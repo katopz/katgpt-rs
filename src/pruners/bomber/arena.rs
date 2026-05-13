@@ -128,7 +128,153 @@ impl ArenaGrid {
             }
         }
     }
+
+    /// Create arena from a 2D cell grid. Validates dimensions, border walls, and spawn zones.
+    pub fn from_cells(cells: &[Vec<Cell>]) -> Result<Self, String> {
+        // Validate dimensions
+        if cells.len() != ARENA_H {
+            return Err(format!("Expected {ARENA_H} rows, got {}", cells.len()));
+        }
+        for (y, row) in cells.iter().enumerate() {
+            if row.len() != ARENA_W {
+                return Err(format!(
+                    "Row {y}: expected {ARENA_W} cols, got {}",
+                    row.len()
+                ));
+            }
+        }
+
+        // Validate border walls
+        for (y, row) in cells.iter().enumerate() {
+            for (x, cell) in row.iter().enumerate() {
+                let is_border = x == 0 || x == ARENA_W - 1 || y == 0 || y == ARENA_H - 1;
+                if is_border && *cell != Cell::FixedWall {
+                    return Err(format!("Border ({x},{y}) must be FixedWall"));
+                }
+            }
+        }
+
+        // Validate pillar positions (even x, even y, not border)
+        for y in (2..ARENA_H - 1).step_by(2) {
+            for x in (2..ARENA_W - 1).step_by(2) {
+                if cells[y][x] != Cell::FixedWall {
+                    return Err(format!("Pillar ({x},{y}) must be FixedWall"));
+                }
+            }
+        }
+
+        // Validate spawn zones — non-pillar, non-border cells must be Floor
+        for &(sx, sy) in &SPAWN_POSITIONS {
+            for dy in -1_i32..=1 {
+                for dx in -1_i32..=1 {
+                    let x = (sx + dx) as usize;
+                    let y = (sy + dy) as usize;
+                    let is_border = x == 0 || x == ARENA_W - 1 || y == 0 || y == ARENA_H - 1;
+                    let is_pillar = x.is_multiple_of(2)
+                        && y.is_multiple_of(2)
+                        && (2..ARENA_W - 1).contains(&x)
+                        && (2..ARENA_H - 1).contains(&y);
+                    if is_border || is_pillar {
+                        continue;
+                    }
+                    if cells[y][x] != Cell::Floor {
+                        return Err(format!("Spawn zone ({x},{y}) must be Floor"));
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            cells: cells.to_vec(),
+            width: ARENA_W,
+            height: ARENA_H,
+        })
+    }
+
+    /// Create arena from a compact string template.
+    /// `#` = FixedWall, `.` = Floor, `D` = DestructibleWall, `P` = PowerUpHidden
+    /// Rows separated by `\n`
+    pub fn fixed(template: &str) -> Result<Self, String> {
+        let rows: Vec<&str> = template.split('\n').collect();
+        if rows.len() != ARENA_H {
+            return Err(format!("Expected {ARENA_H} rows, got {}", rows.len()));
+        }
+
+        let mut cells = Vec::with_capacity(ARENA_H);
+        for (y, row) in rows.iter().enumerate() {
+            if row.len() != ARENA_W {
+                return Err(format!(
+                    "Row {y}: expected {ARENA_W} cols, got {}",
+                    row.len()
+                ));
+            }
+            let mut row_cells = Vec::with_capacity(ARENA_W);
+            for (x, ch) in row.chars().enumerate() {
+                let cell = match ch {
+                    '#' => Cell::FixedWall,
+                    '.' => Cell::Floor,
+                    'D' => Cell::DestructibleWall,
+                    'P' => Cell::PowerUpHidden(PowerUpKind::BombUp),
+                    other => return Err(format!("Row {y}, col {x}: invalid char '{other}'")),
+                };
+                row_cells.push(cell);
+            }
+            cells.push(row_cells);
+        }
+
+        Self::from_cells(&cells)
+    }
 }
+
+// ── Preset Arena Templates ─────────────────────────────────────
+
+/// Empty arena — all floors except borders and pillars.
+pub const EMPTY_ARENA: &str = "\
+#############\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#############";
+
+/// Standard arena with ~40% destructible fill (mimics generate(seed) output).
+pub const STANDARD_ARENA: &str = "\
+#############\
+\n#..DDD.DD...#\
+\n#.#.#.#.#.#.#\
+\n#.D.DD.DD.DD#\
+\n#.#.#.#.#.#.#\
+\n#.DD..DDD.D.#\
+\n#.#.#.#.#.#.#\
+\n#..D.DD.D.DD#\
+\n#.#.#.#.#.#.#\
+\n#.D.DD.DD.D.#\
+\n#.#.#.#.#.#.#\
+\n#...DD.DDD..#\
+\n#############";
+
+/// Pillar-heavy arena with extra fixed walls.
+pub const PILLAR_HEAVY_ARENA: &str = "\
+#############\
+\n#...........#\
+\n#.#.#.#.#.#.#\
+\n#.#.......#.#\
+\n#.#.#.#.#.#.#\
+\n#...#...#...#\
+\n#.#.#.#.#.#.#\
+\n#.#.......#.#\
+\n#.#.#.#.#.#.#\
+\n#...#...#...#\
+\n#.#.#.#.#.#.#\
+\n#...........#\
+\n#############";
 
 #[cfg(test)]
 mod tests {
@@ -191,5 +337,121 @@ mod tests {
         let a = ArenaGrid::generate(999);
         let b = ArenaGrid::generate(999);
         assert_eq!(a.cells, b.cells);
+    }
+
+    #[test]
+    fn test_from_cells_valid() {
+        let grid = ArenaGrid::fixed(EMPTY_ARENA).expect("empty arena should parse");
+        assert_eq!(grid.width, 13);
+        assert_eq!(grid.height, 13);
+        // Verify specific cells
+        assert_eq!(grid.cells[0][0], Cell::FixedWall, "top-left border");
+        assert_eq!(grid.cells[1][1], Cell::Floor, "top-left spawn");
+        assert_eq!(grid.cells[2][2], Cell::FixedWall, "first pillar");
+        assert_eq!(grid.cells[6][6], Cell::FixedWall, "center pillar");
+    }
+
+    #[test]
+    fn test_from_cells_bad_dimensions() {
+        // Wrong number of rows
+        let small = vec![vec![Cell::Floor; 13]; 10];
+        let err = ArenaGrid::from_cells(&small).unwrap_err();
+        assert!(err.contains("rows"), "Expected row error: {err}");
+
+        // Wrong number of cols
+        let narrow = vec![vec![Cell::Floor; 10]; 13];
+        let err = ArenaGrid::from_cells(&narrow).unwrap_err();
+        assert!(err.contains("cols"), "Expected col error: {err}");
+    }
+
+    #[test]
+    fn test_from_cells_missing_border() {
+        let mut cells = vec![vec![Cell::Floor; 13]; 13];
+        // Set proper borders
+        for y in 0..13 {
+            for x in 0..13 {
+                if x == 0 || x == 12 || y == 0 || y == 12 {
+                    cells[y][x] = Cell::FixedWall;
+                }
+            }
+        }
+        // Set pillars
+        for y in (2..12).step_by(2) {
+            for x in (2..12).step_by(2) {
+                cells[y][x] = Cell::FixedWall;
+            }
+        }
+        // Break a border cell
+        cells[0][5] = Cell::Floor;
+        let err = ArenaGrid::from_cells(&cells).unwrap_err();
+        assert!(err.contains("Border"), "Expected border error: {err}");
+    }
+
+    #[test]
+    fn test_fixed_parsing() {
+        let grid = ArenaGrid::fixed(EMPTY_ARENA).expect("should parse");
+        // All border cells are FixedWall
+        for y in 0..13 {
+            assert_eq!(grid.cells[y][0], Cell::FixedWall, "left border y={y}");
+            assert_eq!(grid.cells[y][12], Cell::FixedWall, "right border y={y}");
+        }
+        for x in 0..13 {
+            assert_eq!(grid.cells[0][x], Cell::FixedWall, "top border x={x}");
+            assert_eq!(grid.cells[12][x], Cell::FixedWall, "bottom border x={x}");
+        }
+        // Pillars at even (x, y) interior positions
+        for y in (2..12).step_by(2) {
+            for x in (2..12).step_by(2) {
+                assert_eq!(grid.cells[y][x], Cell::FixedWall, "pillar ({x},{y})");
+            }
+        }
+        // Non-pillar, non-border interior cells are Floor
+        for y in 1..12 {
+            for x in 1..12 {
+                if x % 2 == 0 && y % 2 == 0 {
+                    continue; // pillar
+                }
+                assert_eq!(grid.cells[y][x], Cell::Floor, "floor ({x},{y})");
+            }
+        }
+    }
+
+    #[test]
+    fn test_fixed_roundtrip() {
+        // STANDARD_ARENA: verify destructible count
+        let grid = ArenaGrid::fixed(STANDARD_ARENA).expect("standard arena should parse");
+        let d_count = grid
+            .cells
+            .iter()
+            .flatten()
+            .filter(|c| matches!(c, Cell::DestructibleWall))
+            .count();
+        assert_eq!(
+            d_count, 35,
+            "Expected 35 destructible walls in STANDARD_ARENA"
+        );
+
+        // Verify spawn zones are clear (Floor or FixedWall only)
+        for &(sx, sy) in &SPAWN_POSITIONS {
+            for dy in -1_i32..=1 {
+                for dx in -1_i32..=1 {
+                    let (x, y) = (sx + dx, sy + dy);
+                    if x < 1 || x > 11 || y < 1 || y > 11 {
+                        continue;
+                    }
+                    match grid.get(x, y) {
+                        Cell::Floor | Cell::FixedWall => {}
+                        other => panic!("spawn ({x},{y}) has {other:?}"),
+                    }
+                }
+            }
+        }
+
+        // PILLAR_HEAVY_ARENA: verify extra fixed walls at non-pillar positions
+        let grid = ArenaGrid::fixed(PILLAR_HEAVY_ARENA).expect("pillar-heavy should parse");
+        assert_eq!(grid.cells[3][2], Cell::FixedWall, "extra wall at (2,3)");
+        assert_eq!(grid.cells[3][10], Cell::FixedWall, "extra wall at (10,3)");
+        assert_eq!(grid.cells[5][4], Cell::FixedWall, "extra wall at (4,5)");
+        assert_eq!(grid.cells[5][8], Cell::FixedWall, "extra wall at (8,5)");
     }
 }

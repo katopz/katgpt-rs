@@ -1,7 +1,7 @@
 # Issue 052: Bomber Arena Extensions — Complex Bombs, Custom Maps, Agent Validators
 
 **Source:** Plan 033 (Bomberman Arena) — Out of Scope items now actionable
-**Status:** Open
+**Status:** Partial — Task B (B1-B3, B6) complete, Tasks A & C open
 **Feature gate:** `bomber`, `bomber-wasm`
 
 ---
@@ -87,12 +87,12 @@ impl ArenaGrid {
 
 ### Subtasks
 
-- [ ] B1: Add `ArenaGrid::from_cells(cells: &[Vec<Cell>])` constructor — validates dimensions (13×13), border walls, spawn zones
-- [ ] B2: Add `ArenaGrid::fixed(template: &str)` — parse compact string format (e.g., `"##....##\n#......#\n..."`)
-- [ ] B3: Add 2-3 preset constants: `EMPTY_ARENA`, `STANDARD_ARENA`, `PILLAR_HEAVY_ARENA`
+- [x] B1: Add `ArenaGrid::from_cells(cells: &[Vec<Cell>])` constructor — validates dimensions (13×13), border walls, spawn zones
+- [x] B2: Add `ArenaGrid::fixed(template: &str)` — parse compact string format (e.g., `"##....##\n#......#\n..."`)
+- [x] B3: Add 2-3 preset constants: `EMPTY_ARENA`, `STANDARD_ARENA`, `PILLAR_HEAVY_ARENA`
 - [ ] B4: Update bomber examples to accept `--map <preset>` or `--seed <u64>` CLI arg
 - [ ] B5: Add benchmark comparison: fixed map vs procedural (score variance across runs)
-- [ ] B6: Add tests: from_cells validation (bad dimensions, missing borders), fixed parsing roundtrip
+- [x] B6: Add tests: from_cells validation (bad dimensions, missing borders), fixed parsing roundtrip
 
 ### Design Notes
 
