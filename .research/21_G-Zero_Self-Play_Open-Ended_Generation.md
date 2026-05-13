@@ -27,27 +27,34 @@ Critically, **>70% of the final DPO pool comes from non-verifiable tasks** (writ
 
 ### Hint-δ Reward (the central object)
 
-For a query `q`, a hint `h`, and a generated response `a = (a_1, ..., a_T)` sampled from the Generator without the hint:
+For a query `q`, a hint `h`, and an unassisted response `a_hard` sampled from the Solver on `q` only. δ is computed via **teacher-forced log-probs** — the same `a_hard` tokens are scored under both prompt contexts:
 
 ```
-δ(q, h, a) = (1/T) · Σ_{t=1..T} [ log π_G(a_t | q, a_<t)  -  log π_G(a_t | q, h, a_<t) ]
+δ(q, h, a_hard) = (1/T) · Σ_{t=1..T} [ log π_S(a_hard_t | q, a_hard_<t)  -  log π_S(a_hard_t | q, h, a_hard_<t) ]
 ```
 
-Read this as: *under hint h, how much would the Generator have re-ranked its own tokens?* High δ means the hint substantially changes the conditional distribution — i.e. the Generator was confused without it. Low δ means the hint was redundant.
+Both terms score the **same** `a_hard` tokens — the difference is whether `h` is in the prompt. Positive δ ⇒ the hint shifts the Solver away from its own unassisted response ⇒ hint carries structural signal. The paper retains the **lower half** of the empirical δ distribution (`bot50` filter) — low-δ pairs distill style shifts that generalize without hints; high-δ pairs indicate answer leakage that hurts no-hint test performance.
+
+**Source:** `.raw/G-Zero/g_zero/hint_delta.py` — `delta = logp_q - logp_qh` via Tinker `compute_logprobs`.
 
 Two properties make this work as supervision:
-- **Intrinsic** — uses only `π_G`'s own log-probs. No verifier, no reward model, no labels.
-- **Joint difficulty + informativeness** — large δ requires both a hard query (Generator uncertain) and a good hint (Generator pivots on it). Hacking δ on a trivial query is hard because the unassisted response is already near-optimal, leaving no room for the hint to shift the distribution.
+- **Intrinsic** — uses only `π_S`'s own log-probs. No verifier, no reward model, no labels.
+- **Joint difficulty + informativeness** — large δ requires both a hard query (Solver uncertain) and a good hint (Solver pivots on it). Hacking δ on a trivial query is hard because the unassisted response is already near-optimal, leaving no room for the hint to shift the distribution.
 
 ### Proposer Training (GRPO)
 
-The Proposer is a policy that emits `(q, h)` pairs. Reward:
+**Paper phases (per round):**
+1. **Phase 1** (optional GRPO Challenger): Proposer is GRPO-trained against δ reward. Ablation shows skipping this (`--run_phase1 false`) matches Phase-1-on within noise on Qwen3-8B-Base.
+2. **Phase 2** (Build DPO pool): Challenger generates `(q, h)` pairs; Solver samples `a_hard ~ π(·|q)` and `a_assisted ~ π(·|q,h)`; compute δ; filter by percentile + quality.
+3. **Phase 3** (DPO Solver): DPO-train Solver on δ-filtered pairs. Prompt = `q` only (no hint), so trained Solver internalizes hint-assisted style without needing hints at test time.
+
+The Proposer (Challenger) is a policy that emits `(q, h)` pairs. Reward:
 
 ```
 r(q, h) = δ(q, h, a_hard)  -  P_length  -  P_BLEU
 ```
 
-where `a_hard` is sampled from the *frozen* Generator on `q`. Structural penalties prevent two failure modes:
+where `a_hard` is sampled from the *frozen* Solver on `q`. Structural penalties prevent two failure modes:
 - `P_length` — penalizes hints exceeding ~200 chars (else the Proposer dumps the answer into the hint).
 - `P_BLEU` — penalizes near-duplicate queries within a batch (else the Proposer collapses to one easy mode).
 

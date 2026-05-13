@@ -30,24 +30,35 @@ G-Zero enables **verifier-free self-evolution** for open-ended (non-verifiable) 
 
 ### Core Innovation: Hint-δ
 
-Measures how much a hint shifts the Generator's distribution over its own unassisted response:
+Measures how much a hint shifts the Solver's distribution, using **teacher-forced log-probs of the same `a_hard` tokens** under two prompt contexts:
 
 ```text
-δ(q, h, a_hard) = (1/T) Σ [log πG(at | q, h, a<t) − log πG(at | q, a<t)]
+δ(q, h, a_hard) = (1/T) Σ [log πS(a_hard_t | q, a_hard_<t) − log πS(a_hard_t | q, h, a_hard_<t)]
 ```
 
-**Key property:** δ is large only when (1) the query is challenging AND (2) the hint carries information the Generator lacks. Two objectives compressed into one scalar — no external oracle needed.
+Note: both terms score the **same** `a_hard` tokens — the difference is whether `h` is in the prompt. Positive δ ⇒ hint shifts the Solver away from its own unassisted response ⇒ hint carries structural signal (not answer leakage). The paper retains the **lower half** of the δ distribution (`bot50` filter) — low-δ pairs distill style shifts, high-δ pairs indicate answer leakage that hurts no-hint generalization.
 
-### Why Two Paths?
+**Key property:** δ is large only when (1) the query is challenging AND (2) the hint carries information the Solver lacks. Two objectives compressed into one scalar — no external oracle needed.
+
+**Source:** `.raw/G-Zero/g_zero/hint_delta.py` — `delta = logp_q - logp_qh` via Tinker `compute_logprobs`.
+
+### Why Two Paths? + Paper Phase Mapping
+
+The paper has **three phases** per round:
+1. **Phase 1** (optional): GRPO-train Challenger against δ reward (ablation: skipping this matches Phase-1-on within noise on Qwen3-8B-Base)
+2. **Phase 2**: Build DPO pool — Challenger generates (q,h), Solver samples a_hard and a_assisted, compute δ, filter by percentile + quality
+3. **Phase 3**: DPO-train Solver on δ-filtered (chosen=a_assisted, rejected=a_hard), prompt=q only (no hint)
 
 Hint-δ is **architecture-agnostic** — it's a scalar like `ScreeningPruner::relevance()`. The paper uses it for gradient-based training (DPO/GRPO), but it fits equally well into our existing **gradient-free HL infrastructure**:
 
-| Path | Mechanism | Updates | Cost | Strength |
-|------|-----------|---------|------|----------|
-| **Modelless** (Phase 1) | δ → AbsorbCompress + BanditPruner | Heuristics/rules | Low | Safe, fast, proven HL loop |
-| **Model-based** (Phase 2) | δ → GRPO + DPO | LoRA weights | High | Stronger for open-ended domains |
+| Our Path | Maps to Paper Phase | Mechanism | Updates | Cost |
+|----------|---------------------|-----------|---------|------|
+| **Modelless** (our Phase 1) | Uses δ signal only | δ → AbsorbCompress + BanditPruner | Heuristics/rules | Low |
+| **Model-based** (our Phase 2) | Paper Phases 1+2+3 | δ → GRPO (Challenger) + DPO (Solver) | LoRA weights | High |
 
 Modelless makes the existing HL smarter with a better reward signal. Model-based adds neural self-play on top.
+
+**Source:** `.raw/G-Zero/g_zero/main.py` (orchestration), `.raw/G-Zero/g_zero/phase{1,2,3}.py`, `.raw/G-Zero/g_zero/multi_round.py` (multi-round with `resume_state.json` crash recovery).
 
 ---
 
@@ -85,41 +96,51 @@ Don't train weights — use δ as a **smarter reward signal** for the existing A
 
 ### T1: HintDelta Computation
 
-**Shared foundation for both paths.** Requires per-token log-prob access from `transformer.rs` forward pass.
+**Shared foundation for both paths.** Matches `.raw/G-Zero/g_zero/hint_delta.py` `QHScore` dataclass.
+
+Requires per-token log-prob access from `transformer.rs` forward pass. The source computes log-probs via teacher-forcing: given `a_hard` tokens, compute `log πS(a_hard_t | context)` under two contexts (q only vs q+h). Both score the **same** response tokens — the difference is the prompt context.
 
 Currently `generate()` returns token indices only. Options:
 
 - **Option A:** Add `generate_with_logprobs()` returning `Vec<(usize, f32)>`
-- **Option B:** Add `logprobs()` method that recomputes for a given token sequence
+- **Option B:** Add `logprobs()` method that recomputes for a given token sequence (teacher-forced)
 
 ```rust
-/// Intrinsic reward: log-prob shift from hint conditioning
+/// Intrinsic reward: hint-induced log-prob shift.
+/// Source: .raw/G-Zero/g_zero/hint_delta.py QHScore
 pub struct HintDelta {
-    pub value: f32,       // per-token mean log-prob difference
+    pub value: f32,           // δ = mean(logp_q - logp_qh) over a_hard tokens
     pub query: String,
     pub hint: String,
-    pub unassisted_len: usize,
-    pub assisted_len: usize,
+    pub a_hard: String,       // unassisted response text
+    pub a_assisted: String,   // hint-assisted response text ("" for delta_only mode)
+    pub logp_q: f32,          // mean log πS(a_hard | q)
+    pub logp_qh: f32,         // mean log πS(a_hard | q, h)
 }
 
 impl HintDelta {
-    /// δ(q, h, a_hard) = (1/T) Σ [log πG(at|q,h,a<t) − log πG(at|q,a<t)]
+    /// δ(q, h, a_hard) = (1/T) Σ [log πS(a_hard_t|q,a_hard_<t) − log πS(a_hard_t|q,h,a_hard_<t)]
+    /// Positive δ ⇒ hint shifts Solver away from its own unassisted response.
+    /// Source: hint_delta.py delta = logp_q - logp_qh
     pub fn compute(
-        logprobs_unassisted: &[f32],
-        logprobs_assisted: &[f32],
+        logp_q_tokens: &[f32],    // teacher-forced log-probs of a_hard under context q
+        logp_qh_tokens: &[f32],   // teacher-forced log-probs of a_hard under context q+h
         query: &str,
         hint: &str,
+        a_hard: &str,
+        a_assisted: &str,
     ) -> Self {
-        let t = logprobs_unassisted.len().min(logprobs_assisted.len());
-        let sum: f32 = (0..t)
-            .map(|i| logprobs_assisted[i] - logprobs_unassisted[i])
-            .sum();
+        let t = logp_q_tokens.len().min(logp_qh_tokens.len());
+        let logp_q: f32 = logp_q_tokens[..t].iter().sum::<f32>() / t as f32;
+        let logp_qh: f32 = logp_qh_tokens[..t].iter().sum::<f32>() / t as f32;
         Self {
-            value: sum / t as f32,
+            value: logp_q - logp_qh,
             query: query.to_string(),
             hint: hint.to_string(),
-            unassisted_len: logprobs_unassisted.len(),
-            assisted_len: logprobs_assisted.len(),
+            a_hard: a_hard.to_string(),
+            a_assisted: a_assisted.to_string(),
+            logp_q,
+            logp_qh,
         }
     }
 }
@@ -375,38 +396,82 @@ fn group_advantage(rewards: &[f32]) -> Vec<f32> {
 
 ### T7: Length-Normalized DPO
 
-Per-token mean log-ratio DPO loss — the key to avoiding length collapse.
+Per-token mean log-ratio DPO loss — the key to avoiding length collapse. Matches `.raw/G-Zero/g_zero/phase3.py` `_dpo_loss()`.
+
+**Critical details from source:**
+1. Length-normalized log-ratios: `dot(logp, weights) / weights_sum` so longer chosen doesn't dominate gradient
+2. DPO prompt is **q only** (no hint) — distills hint-assisted behavior into q-only conditional
+3. π_ref = frozen Solver snapshot at DPO start
+4. Uses `forward_backward_custom` with custom loss function (not standard CE)
 
 ```rust
-/// L = -E[log σ(β·(r̄_θ(x,yw) - r̄_θ(x,yl)))]
-/// where r̄_θ(x,y) = (1/|y|) · log(πθ(y|x) / πref(y|x))
+/// Length-normalized DPO-sigmoid loss (Rafailov 2023).
+/// Source: .raw/G-Zero/g_zero/phase3.py _dpo_loss()
+///
+/// L = -E[log σ(β·(r̄_chosen - r̄_rejected))]
+/// where r̄ = dot(logp, mask) / mask_sum (length-normalized log-ratio)
 pub struct LengthNormalizedDpo {
-    pub beta: f32,  // KL penalty (default: 2.0)
+    pub beta: f32,  // KL penalty (default: 2.0, lower than typical because chosen/rejected gap is small)
 }
 
 pub struct PreferencePair {
-    pub query: String,
-    pub chosen: String,    // hint-assisted response
-    pub rejected: String,  // unassisted response
+    pub query: String,     // DPO prompt = q only (no hint!)
+    pub chosen: String,    // a_assisted (hint-assisted response)
+    pub rejected: String,  // a_hard (unassisted response)
     pub delta: f32,        // must be in lower half after filtering
 }
 
+pub struct DpoMetrics {
+    pub loss: f32,
+    pub accuracy: f32,        // fraction where chosen_ratio > rejected_ratio
+    pub margin: f32,          // β * mean(chosen_ratio - rejected_ratio)
+    pub chosen_reward: f32,   // β * mean(chosen_ratio)
+    pub rejected_reward: f32, // β * mean(rejected_ratio)
+}
+
 impl LengthNormalizedDpo {
+    /// Compute DPO loss from length-normalized log-ratios.
+    /// Source: phase3.py _dpo_loss() — uses torch.stack + F.logsigmoid
     pub fn loss(
         &self,
-        policy_chosen: f32,    // mean log πθ(yw|x)
-        policy_rejected: f32,  // mean log πθ(yl|x)
-        ref_chosen: f32,       // mean log πref(yw|x)
-        ref_rejected: f32,     // mean log πref(yl|x)
-    ) -> f32 {
-        let r_chosen = policy_chosen - ref_chosen;
-        let r_rejected = policy_rejected - ref_rejected;
-        -log_sigmoid(self.beta * (r_chosen - r_rejected))
+        policy_chosen: &[f32],    // per-token log πθ(chosen_t | q)
+        policy_rejected: &[f32],  // per-token log πθ(rejected_t | q)
+        ref_chosen: &[f32],       // per-token log πref(chosen_t | q)
+        ref_rejected: &[f32],     // per-token log πref(rejected_t | q)
+        chosen_mask: &[f32],      // 1.0 for response tokens, 0.0 for prompt
+        rejected_mask: &[f32],
+    ) -> (f32, DpoMetrics) {
+        // Length-normalized log-ratios: dot(logp, mask) / mask_sum
+        let chosen_ratio = Self::norm_ratio(policy_chosen, ref_chosen, chosen_mask);
+        let rejected_ratio = Self::norm_ratio(policy_rejected, ref_rejected, rejected_mask);
+
+        let loss = -log_sigmoid(self.beta * (chosen_ratio - rejected_ratio));
+        let margin = self.beta * (chosen_ratio - rejected_ratio);
+        let accuracy = if chosen_ratio > rejected_ratio { 1.0f32 } else { 0.0f32 };
+
+        (loss, DpoMetrics {
+            loss,
+            accuracy,
+            margin,
+            chosen_reward: self.beta * chosen_ratio,
+            rejected_reward: self.beta * rejected_ratio,
+        })
+    }
+
+    fn norm_ratio(policy: &[f32], reference: &[f32], mask: &[f32]) -> f32 {
+        let n = policy.len().min(reference.len()).min(mask.len());
+        let mask_sum: f32 = mask[..n].iter().sum::<f32>().max(1.0);
+        let dot: f32 = (0..n)
+            .map(|i| (policy[i] - reference[i]) * mask[i])
+            .sum();
+        dot / mask_sum
     }
 }
 ```
 
-### T8: DeltaFilter + Reward Hacking Defenses
+### T8: DeltaFilter + Reward Hacking Defenses (Paper Phase 2 Quality Filters)
+
+Matches `.raw/G-Zero/g_zero/phase2.py` filtering pipeline. The source applies filters **in order**: δ percentile → length → ratio → zlib repetition → prompt echo → role marker.
 
 Multi-stage filtering pipeline for preference dataset curation:
 
@@ -491,6 +556,10 @@ SelfImprovingCycle {
     ├── Path A (existing):  Export JSONL → riir-burner LoRA SFT      (modelless HL)
     ├── Path B (Phase 1):   DeltaGatedAbsorbCompress + DeltaBanditPruner (smarter modelless)
     └── Path C (Phase 2):   Proposer↔Generator self-play → DPO LoRA  (model-based G-Zero)
+                              ├─ DPO loss:       riir-gpu/src/loss.rs (extends GpuLoss) ← ONLY DPO path
+                              ├─ Backward pass:   riir-gpu/src/backward.rs (LoRA grads)
+                              ├─ Optimizer:       riir-gpu/src/optimizer.rs (AdamW)
+                              └─ SFT fallback:    riir-burner --backend rust (burn/Metal, SFT only, no custom loss)
 }
 ```
 
@@ -508,7 +577,8 @@ All three paths feed into `HotSwapPruner` for zero-downtime model updates.
 | Reward hacking defense | `ReviewMetrics` benefit-ratio | Both |
 | Hot-swap updated model | `HotSwapPruner` | Both |
 | Regression safety | `RegressionSuite` | Both |
-| LoRA training | `riir-burner` (rank 32) | Model-based |
+| LoRA SFT (shell, burn/Metal) | `riir-burner --backend rust` (rank 32, SFT only, no custom loss) | Model-based (SFT) |
+| LoRA DPO/GRPO (GPU native) | `riir-gpu` (wgpu/Metal, forward+backward+loss+optimizer) ← only DPO-capable path | Model-based (DPO/GRPO) |
 | Domain inference budget | `InferenceBudget` (β) | Both |
 | δ reward signal | `ScreeningPruner::relevance()` | Both (needs log-prob access) |
 | Bandit exploration | `BanditPruner` (UCB1/Thompson) | Modelless (enhanced with δ) |
@@ -524,7 +594,7 @@ All three paths feed into `HotSwapPruner` for zero-downtime model updates.
 | `TemplateProposer` | 1 | Rule-based query-hint generation |
 | `Proposer` trait | 2 | Neural proposer with GRPO |
 | `GrpoConfig` | 2 | Group-relative policy optimization |
-| `LengthNormalizedDpo` | 2 | Per-token mean log-ratio DPO loss |
+| `LengthNormalizedDpo` | 2 | Per-token mean log-ratio DPO loss → `riir-gpu/src/loss.rs` extension |
 | `DeltaFilter` | 2 | Lower-half δ retention + quality heuristics |
 | `GZeroRound` | 2 | Round orchestration |
 
@@ -534,7 +604,12 @@ All three paths feed into `HotSwapPruner` for zero-downtime model updates.
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| LoRA rank | 32 | Match existing riir-burner config |
+| LoRA rank | 32 | Match existing riir-burner/riir-gpu config |
+| Training backend | `riir-gpu` (DPO) or `riir-burner --backend rust` (SFT) | Python/unsloth-mlx not available |
+| Phase 1 (GRPO Challenger) | **Optional** — ablation shows `--run_phase1 false` matches within noise | Source: `.raw/G-Zero/g_zero/phase1.py` |
+| BLEU cluster penalty | `sklearn.AgglomerativeClustering` on sentence-BLEU distance | Source: `.raw/G-Zero/g_zero/bleu_penalty.py` — prevents Challenger collapse |
+| Multi-round resumability | `resume_state.json` crash recovery pattern | Source: `.raw/G-Zero/g_zero/multi_round.py` |
+| Config | Single dataclass, CLI override via `--field value` | Source: `.raw/G-Zero/g_zero/config.py` |
 | Proposer batch size | 128 | |
 | Proposer group size (GRPO K) | 16 | |
 | Proposer steps | 6 | Phase 1 |
@@ -556,6 +631,30 @@ All three paths feed into `HotSwapPruner` for zero-downtime model updates.
 | DPO max steps | 50 | |
 | DPO batch size | 8 | |
 | DPO log-ratio normalization | length-normalized | Critical for stability |
+
+---
+
+## Source Code Reference
+
+Full G-Zero reference implementation at `.raw/G-Zero/g_zero/`:
+
+| File | Purpose | Our Mapping |
+|------|---------|-------------|
+| `config.py` | Single Config dataclass, all hyperparameters | `GZeroRound` config |
+| `hint_delta.py` | `QHScore` dataclass, `score_batch()` | `HintDelta::compute()` |
+| `phase1.py` | Challenger GRPO training (optional) | `Proposer` trait + GRPO |
+| `phase2.py` | Build DPO pool: generate (q,h), sample, score δ, filter | `DeltaFilter` + `HintDelta` |
+| `phase3.py` | Solver DPO training with length-normalized log-ratios | `LengthNormalizedDpo` in `riir-gpu/src/loss.rs` |
+| `multi_round.py` | Outer loop with `resume_state.json` crash recovery | `GZeroRound` + `SelfImprovingCycle` |
+| `bleu_penalty.py` | BLEU cluster diversity penalty | `bleu_duplication_penalty()` |
+| `parse.py` | `<question>/<hint>` XML extraction | N/A (our TemplateProposer uses enums) |
+| `prompts.py` | Challenger/Solver prompt templates | `QueryTemplate` enum variants |
+
+Key architectural difference: The source runs on **Tinker** (cloud API with `SamplingClient` and `TrainingClient`). We map:
+- `SamplingClient.sample()` → `microgpt-rs` transformer forward + generate
+- `SamplingClient.compute_logprobs()` → teacher-forced forward with log-prob extraction
+- `TrainingClient.forward_backward_custom()` → `riir-gpu` custom loss pipeline
+- `TrainingClient.optim_step()` → `riir-gpu/src/optimizer.rs` AdamW
 
 ---
 
