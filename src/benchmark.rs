@@ -1,13 +1,15 @@
+use crate::speculative::types::FlashPrefillConfig;
 use crate::speculative::{
     AttentionScorer, NoPruner, NoScreeningPruner, SimulatedVerifier, SpeculativeContext,
-    TreeBuilder, compress_prompt, dflash_predict_ar_with, dflash_predict_with,
+    TreeBuilder, block_select, compress_prompt, dflash_predict_ar_with, dflash_predict_with,
     extract_best_path_into, sample_from_distribution, speculative_step_verifier,
 };
 use crate::transformer::{
     ForwardContext, MultiLayerKVCache, PagedKVCache, RavenKVCache, TransformerWeights, forward,
     forward_paged, forward_raven, generate_into, raven_readout, raven_update, tokens_to_string,
 };
-use crate::types::{Config, Rng, softmax_scaled};
+use crate::turboquant::TurboQuantKVCache;
+use crate::types::{Config, Rng, kv_dim, softmax_scaled};
 use rayon::prelude::*;
 use std::io::Write;
 use std::time::Instant;
@@ -219,6 +221,14 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
     // Raven recall accuracy after noise
     let recall_br = bench_raven_recall(config);
     results.push(recall_br);
+
+    // TQ-3bit store+dequant (Plan 043)
+    let tq_br = bench_turboquant_store_dequant(config);
+    results.push(tq_br);
+
+    // PFlash block_select (Plan 044)
+    let pflash_br = bench_pflash_block_select();
+    results.push(pflash_br);
 
     results
 }
@@ -1278,6 +1288,120 @@ pub fn bench_raven_recall(_config: &Config) -> BenchResult {
         time_per_step_us: elapsed.as_micros() as f64 / noise_steps as f64,
         avg_acceptance_len: recall_accuracy,
         color: (50, 205, 50),
+        category: BenchCategory::Infrastructure,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plan 043: TurboQuant KV Cache Compression
+// ═══════════════════════════════════════════════════════════════
+
+/// Benchmark TQ-3bit store+dequant throughput.
+///
+/// Measures round-trip: store synthetic KV → dequantize back.
+/// Uses 3-bit as the sweet spot between compression and quality.
+pub fn bench_turboquant_store_dequant(config: &Config) -> BenchResult {
+    let kvd = kv_dim(config);
+    let n_positions = config.block_size;
+    let iters = 100u64;
+
+    // Synthetic KV data
+    let keys: Vec<Vec<f32>> = (0..n_positions)
+        .map(|p| (0..kvd).map(|i| ((i + p * 7) as f32 * 0.1).sin()).collect())
+        .collect();
+    let vals: Vec<Vec<f32>> = (0..n_positions)
+        .map(|p| {
+            (0..kvd)
+                .map(|i| ((i + p * 3) as f32 * 0.07).cos())
+                .collect()
+        })
+        .collect();
+
+    let mut cache = TurboQuantKVCache::new(config, 3, 3);
+
+    // Warmup
+    for _ in 0..10 {
+        cache.reset();
+        for pos in 0..n_positions {
+            cache.store_key(0, pos, &keys[pos]);
+            cache.store_value(0, pos, &vals[pos]);
+        }
+        for pos in 0..n_positions {
+            std::hint::black_box(cache.dequantize_key(0, pos));
+            std::hint::black_box(cache.dequantize_value(0, pos));
+        }
+    }
+
+    let start = Instant::now();
+    for _ in 0..iters {
+        cache.reset();
+        for pos in 0..n_positions {
+            cache.store_key(0, pos, &keys[pos]);
+            cache.store_value(0, pos, &vals[pos]);
+        }
+        for pos in 0..n_positions {
+            std::hint::black_box(cache.dequantize_key(0, pos));
+            std::hint::black_box(cache.dequantize_value(0, pos));
+        }
+    }
+    let elapsed = start.elapsed();
+
+    let total_tokens = n_positions as u64 * iters;
+    let throughput = total_tokens as f64 / elapsed.as_secs_f64();
+
+    BenchResult {
+        label: "TQ-3bit store+dequant".into(),
+        throughput,
+        time_per_step_us: elapsed.as_micros() as f64 / total_tokens as f64,
+        avg_acceptance_len: cache.compression_ratio(),
+        color: (148, 0, 211),
+        category: BenchCategory::Infrastructure,
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plan 044: PFlash Block-Sparse Speculative Prefill
+// ═══════════════════════════════════════════════════════════════
+
+/// Benchmark PFlash block_select throughput at 1024 blocks.
+///
+/// Measures the block selection kernel with sparse importance scores
+/// (simulates real attention: mostly hay, few needle peaks).
+pub fn bench_pflash_block_select() -> BenchResult {
+    let num_blocks = 1024;
+    let iters = 100_000u64;
+
+    // Sparse scores: mostly low, a few peaks (simulates real attention)
+    let scores: Vec<f32> = (0..num_blocks)
+        .map(|i| if i % 20 == 0 { 1.0f32 } else { 0.01f32 })
+        .collect();
+
+    let cfg = FlashPrefillConfig {
+        attention_sink: 1,
+        window: 1,
+        last_n_full: 0, // allow compression
+        ..Default::default()
+    };
+
+    // Warmup
+    for _ in 0..1000 {
+        std::hint::black_box(block_select(&scores, &cfg));
+    }
+
+    let start = Instant::now();
+    for _ in 0..iters {
+        std::hint::black_box(block_select(&scores, &cfg));
+    }
+    let elapsed = start.elapsed();
+
+    let throughput = iters as f64 / elapsed.as_secs_f64();
+
+    BenchResult {
+        label: "PFlash block_select (1024 blocks)".into(),
+        throughput,
+        time_per_step_us: elapsed.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: 0.0,
+        color: (0, 128, 128),
         category: BenchCategory::Infrastructure,
     }
 }
