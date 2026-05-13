@@ -60,4 +60,32 @@ run_date,commit,category,method,throughput,us_per_step,avg_accept_len
 2026-05-13T16:10:10,7c56369,infrastructure,forward_raven (16 slots),1668840,0.60,0.00
 2026-05-13T16:10:10,7c56369,infrastructure,raven_recall (1000 noise, slot 12=9.9→6.3 acc=63%),9565533,0.10,63.21
 2026-05-13T16:10:10,7c56369,infrastructure,TQ-3bit store+dequant,1388889,0.72,5.33
-2026-05-13T16:10:10,7c56369,infrastructure,PFlash block_select (1024 blocks),1129644,0.89,0.00
+2026-05-13T19:17:34,5d6b1ff,speculative,Transformer AR,1180098,0.85,1.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DFlash,517238,1.93,8.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DDTree Build,354030,2.82,0.00
+2026-05-13T19:17:34,5d6b1ff,speculative,Speculative (Simulated),1019794,4.90,5.00
+2026-05-13T19:17:34,5d6b1ff,speculative,Speculative (AR Draft),1450197,4.82,7.00
+2026-05-13T19:17:34,5d6b1ff,speculative,Leviathan (Algorithm 1),111805,10.54,1.18
+2026-05-13T19:17:34,5d6b1ff,speculative,Leviathan (no rollback),110836,10.64,1.18
+2026-05-13T19:17:34,5d6b1ff,speculative,Leviathan (w/ rollback),188610,6.23,1.18
+2026-05-13T19:17:34,5d6b1ff,speculative,Spec (unconditioned),1018386,4.91,5.00
+2026-05-13T19:17:34,5d6b1ff,speculative,Spec (conditioned),1121202,6.02,6.74
+2026-05-13T19:17:34,5d6b1ff,infrastructure,Prefill (no compress),301844,3.31,64.00
+2026-05-13T19:17:34,5d6b1ff,infrastructure,Prefill (compressed),280227,3.57,7.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DDTree (no chain),356307,2.81,16.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DDTree (chain-seed),380339,2.63,16.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DDTree (screened R=1.0),289610,3.45,16.00
+2026-05-13T19:17:34,5d6b1ff,tree_build,DDTree (screened adapter),290051,3.45,16.00
+2026-05-13T19:17:34,5d6b1ff,infrastructure,forward (flat),1174024,0.85,0.00
+2026-05-13T19:17:34,5d6b1ff,infrastructure,forward_paged,1029546,0.97,0.00
+2026-05-13T19:17:34,5d6b1ff,infrastructure,forward_raven (16 slots),1727395,0.58,0.00
+2026-05-13T19:17:34,5d6b1ff,infrastructure,raven_recall (1000 noise, slot 12=9.9→6.3 acc=63%),9356725,0.11,63.21
+2026-05-13T19:17:34,5d6b1ff,infrastructure,TQ-3bit store+dequant,1501056,0.67,5.33
+2026-05-13T19:17:34,5d6b1ff,infrastructure,PFlash block_select (1024 blocks),1180091,0.85,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,Hint-δ compute (64 tok),9533723,0.10,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,TemplateProposer,2807195,0.36,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,G-Zero Pipeline,2164826,0.46,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,Blind Spot Arms (absorb),15842638,0.06,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,Blind Spot Arms (bandit),15535984,0.06,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,Δ-Absorb relevance,499585344,0.00,0.00
+2026-05-13T19:17:34,5d6b1ff,heuristic_learning,Δ-Bandit relevance,183626401,0.01,0.00

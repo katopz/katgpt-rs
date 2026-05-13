@@ -194,6 +194,7 @@ pub fn plot_timeseries(
         ("speculative", "Speculative Decoding Throughput"),
         ("tree_build", "DDTree Build Performance"),
         ("infrastructure", "Infrastructure Primitives"),
+        ("heuristic_learning", "G-Zero Heuristic Learning"),
     ];
 
     let mut all_regressions = Vec::new();

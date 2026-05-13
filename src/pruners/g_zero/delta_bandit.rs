@@ -89,21 +89,26 @@ impl<P: ScreeningPruner> DeltaBanditPruner<P> {
     ///
     /// The bandit's Q-value for this arm is updated incrementally:
     /// `Q(arm) += (reward - Q(arm)) / visits(arm)`
+    #[inline]
     pub fn observe_delta(&mut self, arm: usize, delta: f32) {
-        if arm >= self.delta_weights.len() {
+        let Some(total) = self.delta_weights.get_mut(arm) else {
             return;
-        }
+        };
 
         // Accumulate δ (only positive counts as blind spot signal)
         let effective_delta = delta.max(self.delta_floor);
-        self.delta_weights[arm] += effective_delta;
-        self.delta_counts[arm] += 1;
+        *total += effective_delta;
+        // SAFETY: arm bounds checked above via get_mut
+        unsafe {
+            *self.delta_counts.get_unchecked_mut(arm) += 1;
+        }
 
         // Feed as reward to inner bandit
         self.inner.update(arm, effective_delta);
     }
 
     /// Feed a [`HintDelta`] directly — convenience wrapper for [`observe_delta`](Self::observe_delta).
+    #[inline]
     pub fn observe_hint_delta(&mut self, arm: usize, delta: &HintDelta) {
         self.observe_delta(arm, delta.value);
     }
@@ -131,19 +136,27 @@ impl<P: ScreeningPruner> DeltaBanditPruner<P> {
     /// Mean δ for a specific arm.
     ///
     /// Returns 0.0 for unobserved arms.
+    #[inline]
     pub fn mean_delta(&self, arm: usize) -> f32 {
-        if arm >= self.delta_counts.len() || self.delta_counts[arm] == 0 {
+        let Some(&count) = self.delta_counts.get(arm) else {
+            return 0.0;
+        };
+        if count == 0 {
             return 0.0;
         }
-        self.delta_weights[arm] / self.delta_counts[arm] as f32
+        // SAFETY: arm bounds checked above via get()
+        let total = unsafe { *self.delta_weights.get_unchecked(arm) };
+        total / count as f32
     }
 
     /// Accumulated δ for a specific arm.
+    #[inline]
     pub fn total_delta(&self, arm: usize) -> f32 {
         self.delta_weights.get(arm).copied().unwrap_or(0.0)
     }
 
     /// Number of δ observations for a specific arm.
+    #[inline]
     pub fn delta_observation_count(&self, arm: usize) -> usize {
         self.delta_counts.get(arm).copied().unwrap_or(0)
     }
@@ -171,6 +184,7 @@ impl<P: ScreeningPruner> DeltaBanditPruner<P> {
 
 // Delegate ScreeningPruner to inner BanditPruner
 impl<P: ScreeningPruner> ScreeningPruner for DeltaBanditPruner<P> {
+    #[inline]
     fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
         self.inner.relevance(depth, token_idx, parent_tokens)
     }

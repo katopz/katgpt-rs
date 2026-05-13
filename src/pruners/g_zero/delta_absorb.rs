@@ -108,6 +108,11 @@ pub struct DeltaGatedAbsorbCompress<P: ScreeningPruner> {
     delta_history: Vec<f32>,
     /// Per-arm δ observation count (for mean δ tracking).
     delta_counts: Vec<usize>,
+    /// Per-arm cached threshold flag — updated incrementally in `observe_delta()`.
+    ///
+    /// Avoids float division on every `absorb()` call (hot path).
+    /// Pattern: "Track per-slot aggregates during insert/evict instead of scanning on read."
+    arm_above_threshold: Vec<bool>,
     /// Configuration thresholds.
     config: DeltaGatedConfig,
 }
@@ -121,6 +126,7 @@ impl<P: ScreeningPruner> DeltaGatedAbsorbCompress<P> {
             inner,
             delta_history: vec![0.0; num_arms],
             delta_counts: vec![0; num_arms],
+            arm_above_threshold: vec![false; num_arms],
             config,
         }
     }
@@ -132,18 +138,29 @@ impl<P: ScreeningPruner> DeltaGatedAbsorbCompress<P> {
     ///
     /// Only positive δ is absorbed — negative δ means the hint hurt,
     /// which doesn't indicate a blind spot worth promoting.
+    #[inline]
     pub fn observe_delta(&mut self, arm: usize, delta: f32, reward: f32) {
-        if arm >= self.delta_history.len() {
+        let Some(total) = self.delta_history.get_mut(arm) else {
             return;
+        };
+
+        // Accumulate δ for this arm (positive only — negative = hint hurt)
+        *total += delta.max(0.0);
+        // SAFETY: arm bounds checked above via get_mut
+        unsafe {
+            *self.delta_counts.get_unchecked_mut(arm) += 1;
         }
 
-        // Accumulate δ for this arm
-        self.delta_history[arm] += delta.max(0.0);
-        self.delta_counts[arm] += 1;
+        // Cache threshold flag incrementally — avoids division on every absorb()
+        // SAFETY: arm bounds checked above via get_mut on delta_history
+        let count = unsafe { *self.delta_counts.get_unchecked(arm) };
+        let mean_delta = *total / count as f32;
+        let above = mean_delta >= self.config.delta_threshold;
+        unsafe {
+            *self.arm_above_threshold.get_unchecked_mut(arm) = above;
+        }
 
-        // Only absorb if mean δ exceeds threshold
-        let mean_delta = self.delta_history[arm] / self.delta_counts[arm] as f32;
-        if mean_delta >= self.config.delta_threshold {
+        if above {
             self.inner.absorb(arm, reward);
         }
     }
@@ -151,6 +168,7 @@ impl<P: ScreeningPruner> DeltaGatedAbsorbCompress<P> {
     /// Feed a [`HintDelta`] directly — convenience wrapper for [`observe_delta`](Self::observe_delta).
     ///
     /// Uses `delta.value` as the δ signal and `delta.value.max(0.0)` as the reward.
+    #[inline]
     pub fn observe_hint_delta(&mut self, arm: usize, delta: &HintDelta) {
         let reward = delta.value.max(0.0);
         self.observe_delta(arm, delta.value, reward);
@@ -159,19 +177,27 @@ impl<P: ScreeningPruner> DeltaGatedAbsorbCompress<P> {
     /// Mean δ for a specific arm.
     ///
     /// Returns 0.0 for unobserved arms.
+    #[inline]
     pub fn mean_delta(&self, arm: usize) -> f32 {
-        if arm >= self.delta_counts.len() || self.delta_counts[arm] == 0 {
+        let Some(&count) = self.delta_counts.get(arm) else {
+            return 0.0;
+        };
+        if count == 0 {
             return 0.0;
         }
-        self.delta_history[arm] / self.delta_counts[arm] as f32
+        // SAFETY: arm bounds checked above via get()
+        let total = unsafe { *self.delta_history.get_unchecked(arm) };
+        total / count as f32
     }
 
     /// Accumulated δ for a specific arm.
+    #[inline]
     pub fn total_delta(&self, arm: usize) -> f32 {
         self.delta_history.get(arm).copied().unwrap_or(0.0)
     }
 
     /// Number of δ observations for a specific arm.
+    #[inline]
     pub fn delta_observation_count(&self, arm: usize) -> usize {
         self.delta_counts.get(arm).copied().unwrap_or(0)
     }
@@ -215,6 +241,7 @@ impl<P: ScreeningPruner> DeltaGatedAbsorbCompress<P> {
 }
 
 impl<P: ScreeningPruner> ScreeningPruner for DeltaGatedAbsorbCompress<P> {
+    #[inline]
     fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
         // Delegate to inner layer (which handles compressed arm blocking)
         self.inner.relevance(depth, token_idx, parent_tokens)
@@ -226,10 +253,10 @@ impl<P: ScreeningPruner> AbsorbCompress for DeltaGatedAbsorbCompress<P> {
     ///
     /// If the arm hasn't been observed via `observe_delta` yet, the absorb
     /// is skipped (no δ evidence = don't promote).
+    #[inline]
     fn absorb(&mut self, arm: usize, reward: f32) {
-        // Gate: only absorb if we have δ evidence above threshold
-        let mean_delta = self.mean_delta(arm);
-        if mean_delta >= self.config.delta_threshold {
+        // Gate: check cached threshold flag — no division needed
+        if self.arm_above_threshold.get(arm).copied().unwrap_or(false) {
             self.inner.absorb(arm, reward);
         }
     }
@@ -253,16 +280,8 @@ impl<P: ScreeningPruner> AbsorbCompress for DeltaGatedAbsorbCompress<P> {
     /// 2. Inner layer is ready to compress (visit/Q-value criteria)
     /// 3. Review metrics (if provided) show net-positive benefit ratio
     fn should_compress_gated(&self, metrics: Option<&ReviewMetrics>) -> bool {
-        // Gate 1: must have δ evidence
-        let has_delta_evidence =
-            self.delta_history
-                .iter()
-                .zip(self.delta_counts.iter())
-                .any(|(&total, &count)| {
-                    count > 0 && (total / count as f32) >= self.config.delta_threshold
-                });
-
-        if !has_delta_evidence {
+        // Gate 1: must have δ evidence (cached flags — no division)
+        if !self.arm_above_threshold.iter().any(|&above| above) {
             return false;
         }
 

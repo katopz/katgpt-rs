@@ -73,6 +73,7 @@ fn main() {
             BenchCategory::Speculative => "tok/s",
             BenchCategory::TreeBuild => "ops/s",
             BenchCategory::Infrastructure => "ops/s",
+            BenchCategory::HeuristicLearning => "ops/s",
         };
         println!(
             "  {:<20} {:>12.0} {:>3} {:>12.2} {:>15.2}",
@@ -109,6 +110,12 @@ fn main() {
             BenchCategory::Infrastructure,
             "infrastructure",
             "Infrastructure Primitives",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::HeuristicLearning,
+            "heuristic_learning",
+            "G-Zero Heuristic Learning (Plan 049)",
             "Operations/s",
         ),
     ];
