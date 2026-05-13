@@ -136,6 +136,21 @@ fn main() {
         Err(e) => eprintln!("⚠️  CSV save failed: {e}"),
     }
 
+    // ── Time Series (cumulative regression tracking) ───────────────
+    match benchmark::append_timeseries_csv(&results, "bench/timeseries.csv") {
+        Ok(()) => println!("📝 Time series appended to bench/timeseries.csv"),
+        Err(e) => eprintln!("⚠️  Timeseries CSV append failed: {e}"),
+    }
+    match plot::plot_timeseries("bench/timeseries.csv", "bench") {
+        Ok(regressions) => {
+            println!("📈 Time series charts saved to bench/timeseries_*.png");
+            for msg in &regressions {
+                println!("{msg}");
+            }
+        }
+        Err(e) => eprintln!("⚠️  Timeseries plot failed: {e}"),
+    }
+
     // ── Budget Sweep ───────────────────────────────────────────────
     println!("\n📊 DDTree Budget Sweep");
     println!("{}", "─".repeat(75));

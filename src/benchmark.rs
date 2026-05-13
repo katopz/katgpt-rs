@@ -70,6 +70,49 @@ pub fn save_results_csv(results: &[BenchResult], path: &str) -> std::io::Result<
     Ok(())
 }
 
+/// Append benchmark results to cumulative `bench/timeseries.csv` for regression tracking.
+/// Creates file with header if missing; otherwise appends rows.
+pub fn append_timeseries_csv(results: &[BenchResult], path: &str) -> std::io::Result<()> {
+    let commit = std::process::Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".into());
+
+    let date = chrono_like_now();
+
+    let file_exists = std::path::Path::new(path).exists();
+
+    use std::io::Write;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
+
+    if !file_exists {
+        writeln!(
+            file,
+            "run_date,commit,category,method,throughput,us_per_step,avg_accept_len"
+        )?;
+    }
+
+    for r in results {
+        let cat = match r.category {
+            BenchCategory::Speculative => "speculative",
+            BenchCategory::TreeBuild => "tree_build",
+            BenchCategory::Infrastructure => "infrastructure",
+        };
+        writeln!(
+            file,
+            "{},{},{},{},{:.0},{:.2},{:.2}",
+            date, commit, cat, r.label, r.throughput, r.time_per_step_us, r.avg_acceptance_len,
+        )?;
+    }
+
+    Ok(())
+}
+
 /// Simple timestamp without chrono dependency: `YYYY-MM-DDTHH:MM:SS`
 fn chrono_like_now() -> String {
     let output = std::process::Command::new("date")
