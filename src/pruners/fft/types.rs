@@ -412,3 +412,87 @@ pub enum GameEvent {
         effect: String,
     },
 }
+
+// ── TFT Types (Plan 055) ──────────────────────────────────────
+
+#[cfg(feature = "g_zero")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TftMode {
+    Nice,
+    Retaliatory { target: u8, ticks_left: u8 },
+}
+
+#[cfg(feature = "g_zero")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProvokeLevel {
+    None,
+    Personal(u8),  // attacker id
+    Team(u8),      // attacker id
+    Escalated(u8), // attacker id (killer)
+}
+
+#[cfg(feature = "g_zero")]
+#[derive(Clone, Debug)]
+pub struct PartyTftState {
+    pub provoked_by: Option<u8>,
+    pub provoke_level: ProvokeLevel,
+    pub forgive_timer: u8,
+    pub escalation_count: u8,
+    pub generous_chance: f32,
+}
+
+#[cfg(feature = "g_zero")]
+impl Default for PartyTftState {
+    fn default() -> Self {
+        Self {
+            provoked_by: None,
+            provoke_level: ProvokeLevel::None,
+            forgive_timer: 0,
+            escalation_count: 0,
+            generous_chance: 0.10,
+        }
+    }
+}
+
+#[cfg(feature = "g_zero")]
+impl PartyTftState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_generous_chance(mut self, chance: f32) -> Self {
+        self.generous_chance = chance;
+        self
+    }
+
+    pub fn reset(&mut self) {
+        self.provoked_by = None;
+        self.provoke_level = ProvokeLevel::None;
+        self.forgive_timer = 0;
+        self.escalation_count = 0;
+    }
+}
+
+#[cfg(feature = "g_zero")]
+#[derive(Clone, Debug)]
+pub struct UnitTftState {
+    pub mode: TftMode,
+    pub last_attacker: Option<u8>,
+    pub class: Class,
+}
+
+#[cfg(feature = "g_zero")]
+impl UnitTftState {
+    pub fn new(class: Class) -> Self {
+        Self {
+            mode: TftMode::Nice,
+            last_attacker: None,
+            class,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.mode = TftMode::Nice;
+        self.last_attacker = None;
+    }
+}

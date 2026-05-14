@@ -468,3 +468,17 @@ fn wake_on_damage(state: &mut BattleState, target_id: u8) {
         });
     }
 }
+
+// ── TFT Provocation Detection (Plan 055) ──────────────────────
+
+/// TFT forgiveness check — Generous TFT randomly forgives provocation.
+#[cfg(feature = "g_zero")]
+pub fn should_forgive(provoke_level: &ProvokeLevel, rng: &mut fastrand::Rng) -> bool {
+    let chance = match provoke_level {
+        ProvokeLevel::None => 1.0,          // Nothing to forgive
+        ProvokeLevel::Personal(_) => 0.10,  // 10% forgive
+        ProvokeLevel::Team(_) => 0.10,      // 10% forgive
+        ProvokeLevel::Escalated(_) => 0.05, // 5% forgive (kills are harder to forgive)
+    };
+    rng.f32() < chance
+}

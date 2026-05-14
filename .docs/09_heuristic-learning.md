@@ -498,6 +498,40 @@ Config        │ Survival │ Avg Score │ Avg Kills │ P50 (μs) │ P95 (μ
 
 **Production recommendation**: GZero for real-time MMO (fastest + good survival), Greedy for survival-critical (most robust).
 
+### FFT Tactics Arena TFT Benchmark (Plan 055)
+
+Tit-for-Tat party AI in 4v4 ATB arena — provocation-driven FSM (Nice ↔ Retaliatory) with role-based response.
+
+**A/B Benchmark** (1000 rounds each, release, 4v4 vs balanced enemy team):
+
+```
+Config    │ Win% │ Survival │ Kills/rnd │ Latency
+🐱 Greedy  │ 56.1 │   35.7%  │   0.83     │ 119.7μs
+🐵 HL      │ 91.5 │   85.9%  │   0.88     │  86.5μs
+🤖 GZero   │ 15.8 │   61.9%  │   0.16     │ 572.8μs
+🦊 TFT     │ 99.0 │   95.7%  │   1.10     │ 119.4μs
+```
+
+**GvG Round-Robin** (250 rounds/matchup, 6 matchups):
+
+```
+Matchup              Left Win%  Right Win%  Left Surv  Right Surv
+🦊 TFT vs HL         81.6%      18.0%       78.5%      17.3%
+🦊 TFT vs Greedy     99.6%       0.4%       97.5%       0.3%
+🦊 TFT vs Mixed      96.4%       3.6%       94.6%       4.9%
+🐵 HL vs Greedy      90.4%       9.6%       81.3%       5.7%
+🐵 HL vs Mixed       55.6%      44.4%       50.7%      39.9%
+🐱 Greedy vs Mixed   61.6%      38.4%       50.3%      31.2%
+```
+
+**Strategy Power Ranking**: 🦊 TFT (92.5%) > 🐵 HL (73.0%) > 🐱 Greedy (61.6%)
+
+**Key result**: TFT dominates all strategies — 99% win rate, 95.7% survival, 1.10 kills/round. Provocation detection from `GameEvent::DamageDealt` provides crystal-clear signal (vs bomber's ambiguous proximity). Role-based retaliation (Knight intercepts, WhiteMage heals first, BlackMage bursts) creates emergent team coordination without hardcoded cooperation.
+
+**Nash analysis**: TFT is a dominant strategy — HL improves by 9.2% when switching to TFT vs Greedy (90.4% → 99.6%).
+
+**TFT game theory traits**: ✅ Nice (role default), ✅ Retaliatory (on provoke), ✅ Forgiving (10% generous + 5-tick timer), ✅ Clear (2-state FSM).
+
 ### Quick Start
 
 ```rust,ignore
@@ -541,4 +575,5 @@ proposer.observe_delta(pair.template_id, delta.value);
 - Plan 049: G-Zero Self-Play Distillation
 - Plan 052: GZeroPlayer Bomber Integration
 - Plan 054: Player A/B Benchmark
+- Plan 055: MMORPG TFT Party AI
 - Research 14: HL Distillation

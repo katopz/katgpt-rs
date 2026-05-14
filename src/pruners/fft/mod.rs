@@ -24,3 +24,9 @@ pub mod g_zero_player;
 
 #[cfg(feature = "g_zero")]
 pub use g_zero_player::GZeroFFTPlayer;
+
+#[cfg(feature = "g_zero")]
+pub mod tft_player;
+
+#[cfg(feature = "g_zero")]
+pub use tft_player::TftFFTPlayer;
