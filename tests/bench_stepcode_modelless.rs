@@ -7,12 +7,20 @@ use std::time::Instant;
 
 #[cfg(feature = "stepcode")]
 use microgpt_rs::pruners::{
-    BanditEnv, BanditSession, BanditStats, BanditStrategy, BernoulliEnv, PathStep, ShapedPath,
-    path_consistency, shape_path,
+    BanditEnv, BanditPruner, BanditSession, BanditStats, BanditStrategy, BernoulliEnv, PathStep,
+    ShapedPath, path_consistency, shape_path,
 };
 
 #[cfg(feature = "stepcode")]
-use microgpt_rs::types::Rng;
+use microgpt_rs::pruners::tactical_pruner::TacticalPruner;
+
+#[cfg(feature = "stepcode")]
+use microgpt_rs::speculative::{
+    BinaryScreeningPruner, TreeNode, build_dd_tree_screened, extract_parent_tokens,
+};
+
+#[cfg(feature = "stepcode")]
+use microgpt_rs::types::{Config, Rng};
 
 // ── Bench 1: Shape Path Overhead ────────────────────────────────
 
@@ -587,22 +595,318 @@ fn bench_shaped_reward_values() {
     );
 }
 
+// ── Bench 5: DDTree Real Proof — Flat vs Shaped Rewards ─────────
+//
+// Uses TacticalPruner on real game maps to measure whether shaped rewards
+// actually affect DDTree construction (node count, goal rate, path quality).
+//
+// This is the PROOF test. The previous benchmarks only tested raw bandit sessions.
+// This one builds actual DDTree with BanditPruner using flat vs shaped rewards.
+
+/// Small tactical map: BXT/SMG — 7-step optimal solution
+/// Solution: → ⚔ ↓ ⚔ ↑ → ↓ = [3, 4, 1, 4, 0, 3, 1]
+const BXT_MAP: &str = "\
+B X T
+# M G";
+
+#[cfg(feature = "stepcode")]
+struct DDBenchResult {
+    avg_nodes: f64,
+    avg_path_len: f64,
+    goal_rate: f64,
+    elapsed: std::time::Duration,
+}
+
+#[cfg(feature = "stepcode")]
+fn find_goal_path(tree: &[TreeNode], checker: &TacticalPruner) -> Option<usize> {
+    let mut best: Option<usize> = None;
+    for node in tree {
+        let path = extract_parent_tokens(node.parent_path, node.depth + 1);
+        if let Some(state) = checker.replay_state(&path)
+            && (state.r, state.c) == checker.goal {
+                match best {
+                    None => best = Some(path.len()),
+                    Some(b) if path.len() < b => best = Some(path.len()),
+                    _ => {}
+                }
+            }
+    }
+    best
+}
+
+#[cfg(feature = "stepcode")]
+#[test]
+fn bench_ddtree_flat_vs_shaped() {
+    let iters = 100;
+    let episodes = 200; // bandit learning episodes before each tree build
+
+    println!("\n🧪 Bench 5: DDTree Real Proof — Flat vs Shaped Rewards");
+    println!("{}", "═".repeat(78));
+    println!("   Map: BXT/SMG (2×3), optimal=7 steps [3,4,1,4,0,3,1]");
+    println!("   Vocab: 5 [Up=0, Down=1, Left=2, Right=3, Attack=4]");
+    println!("   {iters} DDTree builds × {episodes} bandit episodes each");
+    println!();
+
+    let mut config = Config::draft();
+    config.vocab_size = 5;
+    config.draft_lookahead = 8;
+    config.tree_budget = 256; // Tight budget — forces pruning competition
+
+    // Non-uniform marginals: bias toward Right/Down (toward goal at bottom-right)
+    let marginals: Vec<Vec<f32>> = (0..config.draft_lookahead)
+        .map(|d| {
+            let shift = (d % 3) as f32 * 0.02;
+            vec![
+                0.06 + shift, // Up — low (away from goal)
+                0.24 + shift, // Down — high (toward goal)
+                0.06 + shift, // Left — low (away from goal)
+                0.34 + shift, // Right — highest (toward goal)
+                0.10 + shift, // Attack — medium (situational)
+            ]
+        })
+        .collect();
+    let mv: Vec<&[f32]> = marginals.iter().map(|v| v.as_slice()).collect();
+
+    let checker = TacticalPruner::new(BXT_MAP);
+
+    // ── 1. Baseline: BinaryScreeningPruner (no bandit) ──
+    let p_binary = TacticalPruner::new(BXT_MAP);
+    let binary = BinaryScreeningPruner(p_binary);
+
+    let start = Instant::now();
+    let mut total_nodes = 0usize;
+    let mut total_path = 0usize;
+    let mut goals = 0usize;
+    for _ in 0..iters {
+        let tree = build_dd_tree_screened(&mv, &config, &binary, false);
+        total_nodes += tree.len();
+        if let Some(len) = find_goal_path(&tree, &checker) {
+            total_path += len;
+            goals += 1;
+        }
+    }
+    let r_baseline = DDBenchResult {
+        avg_nodes: total_nodes as f64 / iters as f64,
+        avg_path_len: if goals > 0 {
+            total_path as f64 / goals as f64
+        } else {
+            0.0
+        },
+        goal_rate: goals as f64 / iters as f64 * 100.0,
+        elapsed: start.elapsed(),
+    };
+
+    // ── 2. BanditPruner with FLAT rewards (λ=0.0, binary reward) ──
+    let strategy = BanditStrategy::EpsilonGreedy {
+        epsilon: 0.3,
+        decay: 0.995,
+    };
+
+    let start = Instant::now();
+    let mut total_nodes = 0usize;
+    let mut total_path = 0usize;
+    let mut goals = 0usize;
+    for _ in 0..iters {
+        let mut bandit = BanditPruner::new(
+            BinaryScreeningPruner(TacticalPruner::new(BXT_MAP)),
+            strategy.clone(),
+            5,
+        );
+        // Train bandit with FLAT binary rewards for `episodes` episodes
+        for _ in 0..episodes {
+            // Simulate: prefer Right(3) and Down(1), penalize Left(2)
+            bandit.update(0, 0.8);
+            bandit.update(1, 0.9);
+            bandit.update(2, 0.2);
+            bandit.update(3, 0.95);
+            bandit.update(4, 0.7);
+        }
+        let tree = build_dd_tree_screened(&mv, &config, &bandit, false);
+        total_nodes += tree.len();
+        if let Some(len) = find_goal_path(&tree, &checker) {
+            total_path += len;
+            goals += 1;
+        }
+    }
+    let r_flat = DDBenchResult {
+        avg_nodes: total_nodes as f64 / iters as f64,
+        avg_path_len: if goals > 0 {
+            total_path as f64 / goals as f64
+        } else {
+            0.0
+        },
+        goal_rate: goals as f64 / iters as f64 * 100.0,
+        elapsed: start.elapsed(),
+    };
+
+    // ── 3. BanditPruner with SHAPED rewards (λ=0.3) ──
+    // After each simulated episode, shape the path rewards and feed those back
+    let start = Instant::now();
+    let mut total_nodes = 0usize;
+    let mut total_path = 0usize;
+    let mut goals = 0usize;
+    for _ in 0..iters {
+        let mut bandit = BanditPruner::new(
+            BinaryScreeningPruner(TacticalPruner::new(BXT_MAP)),
+            strategy.clone(),
+            5,
+        );
+        // Train bandit with SHAPED rewards for `episodes` episodes
+        for _ in 0..episodes {
+            // Simulate a verification path: [Right=3, Down=1, Attack=4, Right=3]
+            // all correct → shaped rewards boost early steps
+            let steps = vec![
+                PathStep {
+                    arm: 3,
+                    depth: 0,
+                    reward: 1.0,
+                }, // Right — correct
+                PathStep {
+                    arm: 1,
+                    depth: 1,
+                    reward: 1.0,
+                }, // Down — correct
+                PathStep {
+                    arm: 4,
+                    depth: 2,
+                    reward: 1.0,
+                }, // Attack — correct
+                PathStep {
+                    arm: 3,
+                    depth: 3,
+                    reward: 1.0,
+                }, // Right — correct
+            ];
+            let shaped = ShapedPath::shape(steps, 0.3);
+            shaped.apply_to_bandit(&mut bandit);
+
+            // Also feed some non-optimal paths for exploration
+            let steps_mixed = vec![
+                PathStep {
+                    arm: 0,
+                    depth: 0,
+                    reward: 1.0,
+                }, // Up — correct but dead-end
+                PathStep {
+                    arm: 2,
+                    depth: 1,
+                    reward: 0.0,
+                }, // Left — blocked
+            ];
+            let shaped_mixed = ShapedPath::shape(steps_mixed, 0.3);
+            shaped_mixed.apply_to_bandit(&mut bandit);
+        }
+        let tree = build_dd_tree_screened(&mv, &config, &bandit, false);
+        total_nodes += tree.len();
+        if let Some(len) = find_goal_path(&tree, &checker) {
+            total_path += len;
+            goals += 1;
+        }
+    }
+    let r_shaped = DDBenchResult {
+        avg_nodes: total_nodes as f64 / iters as f64,
+        avg_path_len: if goals > 0 {
+            total_path as f64 / goals as f64
+        } else {
+            0.0
+        },
+        goal_rate: goals as f64 / iters as f64 * 100.0,
+        elapsed: start.elapsed(),
+    };
+
+    // ── Print Results ──
+    println!(
+        "   {:>35} {:>8} {:>8} {:>8} {:>10}",
+        "Method", "Nodes", "PathLen", "Goal%", "Time"
+    );
+    println!("   {}", "─".repeat(71));
+    println!(
+        "   {:>35} {:>8.1} {:>8.1} {:>7.1}% {:>10?}",
+        "Baseline (BinaryScreen)",
+        r_baseline.avg_nodes,
+        r_baseline.avg_path_len,
+        r_baseline.goal_rate,
+        r_baseline.elapsed
+    );
+    println!(
+        "   {:>35} {:>8.1} {:>8.1} {:>7.1}% {:>10?}",
+        "Flat rewards (λ=0)",
+        r_flat.avg_nodes,
+        r_flat.avg_path_len,
+        r_flat.goal_rate,
+        r_flat.elapsed
+    );
+    println!(
+        "   {:>35} {:>8.1} {:>8.1} {:>7.1}% {:>10?}",
+        "Shaped rewards (λ=0.3)",
+        r_shaped.avg_nodes,
+        r_shaped.avg_path_len,
+        r_shaped.goal_rate,
+        r_shaped.elapsed
+    );
+    println!();
+
+    // ── Gate 1: Node count delta ≤ 5% ──
+    let node_delta = ((r_shaped.avg_nodes - r_flat.avg_nodes) / r_flat.avg_nodes).abs() * 100.0;
+    let gate_nodes = node_delta <= 5.0;
+    println!(
+        "   Gate 1: node delta ≤ 5%:  {node_delta:.1}%  {}",
+        if gate_nodes { "✅ PASS" } else { "❌ FAIL" }
+    );
+
+    // ── Gate 2: Goal rate not degraded ──
+    let goal_delta = r_shaped.goal_rate - r_flat.goal_rate;
+    let gate_goal = goal_delta >= -5.0;
+    println!(
+        "   Gate 2: goal rate ≥ flat:  {goal_delta:+.1}pp  {}",
+        if gate_goal { "✅ PASS" } else { "❌ FAIL" }
+    );
+
+    // ── Gate 3: Latency delta ≤ 5% ──
+    let latency_delta =
+        (r_shaped.elapsed.as_nanos() as f64 / r_flat.elapsed.as_nanos() as f64 - 1.0) * 100.0;
+    let gate_latency = latency_delta <= 5.0;
+    println!(
+        "   Gate 3: latency delta ≤ 5%: {latency_delta:+.1}%  {}",
+        if gate_latency { "✅ PASS" } else { "❌ FAIL" }
+    );
+    println!();
+
+    // ── Honest verdict ──
+    let any_improvement = r_shaped.goal_rate > r_flat.goal_rate + 1.0
+        || r_shaped.avg_path_len < r_flat.avg_path_len - 0.5;
+    println!("   ── Verdict ──");
+    if any_improvement {
+        println!("   Shaped rewards show MEASURABLE improvement over flat.");
+    } else {
+        println!("   Shaped rewards show NO measurable improvement over flat.");
+        println!("   Same goal rate, same path length — only magnitude inflation.");
+    }
+    println!("{}", "═".repeat(78));
+
+    // Don't fail the test — this is a measurement, not a gate
+    // The proof IS the data above. Improvements would be bonus.
+}
+
 // ── Summary ─────────────────────────────────────────────────────
 
 #[cfg(feature = "stepcode")]
 #[test]
 fn bench_stepcode_modelless_summary() {
     println!("\n📋 Plan 054: StepCodeReasoner Modelless Distillation — Benchmark Summary");
-    println!("{}", "═".repeat(70));
-    println!("   Bench 1: ShapedPath::shape() overhead   — bench_shape_path_overhead");
+    println!("{}", "═".repeat(78));
+    println!("   Bench 1: ShapedPath::shape() overhead       — bench_shape_path_overhead");
     println!(
-        "   Bench 2: Flat vs Shaped convergence      — bench_bandit_flat_vs_shaped_convergence"
+        "   Bench 2: Flat vs Shaped convergence (raw)   — bench_bandit_flat_vs_shaped_convergence"
     );
-    println!("   Bench 3: path_consistency() overhead      — bench_path_consistency_computation");
-    println!("   Bench 4: Shaped reward correctness        — bench_shaped_reward_values");
+    println!(
+        "   Bench 3: path_consistency() overhead         — bench_path_consistency_computation"
+    );
+    println!("   Bench 4: Shaped reward correctness           — bench_shaped_reward_values");
+    println!("   Bench 5: DDTree PROOF (nodes, goal, latency) — bench_ddtree_flat_vs_shaped");
     println!();
     println!(
         "   Run: cargo test --features \"bandit,stepcode\" --test bench_stepcode_modelless -- --nocapture"
     );
-    println!("{}", "═".repeat(70));
+    println!("{}", "═".repeat(78));
 }
