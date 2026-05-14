@@ -605,6 +605,7 @@ fn bench_shaped_reward_values() {
 
 /// Small tactical map: BXT/SMG — 7-step optimal solution
 /// Solution: → ⚔ ↓ ⚔ ↑ → ↓ = [3, 4, 1, 4, 0, 3, 1]
+#[cfg(feature = "stepcode")]
 const BXT_MAP: &str = "\
 B X T
 # M G";
@@ -623,13 +624,14 @@ fn find_goal_path(tree: &[TreeNode], checker: &TacticalPruner) -> Option<usize> 
     for node in tree {
         let path = extract_parent_tokens(node.parent_path, node.depth + 1);
         if let Some(state) = checker.replay_state(&path)
-            && (state.r, state.c) == checker.goal {
-                match best {
-                    None => best = Some(path.len()),
-                    Some(b) if path.len() < b => best = Some(path.len()),
-                    _ => {}
-                }
+            && (state.r, state.c) == checker.goal
+        {
+            match best {
+                None => best = Some(path.len()),
+                Some(b) if path.len() < b => best = Some(path.len()),
+                _ => {}
             }
+        }
     }
     best
 }

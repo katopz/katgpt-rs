@@ -231,14 +231,19 @@ Based on arXiv:2604.27233 — tracks whether reviewer intervention is net-positi
 
 Run: `cargo run --example review_01_metrics --features bandit`
 
-### Stepwise Reward Shaping (Plan 054)
+### ⚠️ Stepwise Reward Shaping (Plan 054) — NO GAIN
 
-Distilled from [StepCodeReasoner](https://arxiv.org/pdf/2605.11922) (ICML 2026) — intra-trajectory shaping rewards bandit arms proportionally to how many downstream arms they enable. After DDTree verification, correct arms that lead to more correct future arms get boosted credit.
+Distilled from [StepCodeReasoner](https://arxiv.org/pdf/2605.11922) (ICML 2026). **Benchmarked, no measurable improvement over flat rewards.** Feature-gated off by default, not in `full`.
 
-| λ | Behavior |
-|---|----------|
-| 0.0 | Flat binary rewards (default, backward-compatible) |
-| 0.3 | Shaped rewards (paper default, arms enabling success get boosted) |
+| Method | Nodes | PathLen | Goal% | Time |
+|--------|-------|---------|-------|------|
+| Baseline (BinaryScreen) | 256 | 7 | 100% | 297ms |
+| Flat rewards (λ=0) | 256 | 7 | 100% | 356ms |
+| **Shaped rewards (λ=0.3)** | **256** | **7** | **100%** | **475ms** |
+
+Same tree, same path, same goal rate — shaped rewards only add +33% latency. The paper's +7-14% gains come from GRPO gradient updates on a 7B model, not from post-hoc reward shaping on a bandit Q-value.
+
+Infrastructure kept for future GRPO integration (G-Zero Phase 2). `stepcode` feature must be explicitly enabled.
 
 Run: `cargo test --features "stepcode" --test bench_stepcode_modelless -- --nocapture`
 

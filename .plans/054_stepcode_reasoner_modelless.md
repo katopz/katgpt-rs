@@ -564,24 +564,40 @@ Our `WasmPruner` validation is rule-based by construction. We don't need a learn
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
-| Shaped rewards don't improve bandit convergence | Medium | λ=0 reverts to flat — zero regression risk |
-| Path shaping adds measurable latency | Low | O(n) suffix sum, n≤16, off hot path |
+| Shaped rewards don't improve bandit convergence | ~~Medium~~ **CONFIRMED** | λ=0 reverts to flat — zero regression risk |
+| Path shaping adds measurable latency | ~~Low~~ **CONFIRMED (+33%)** | O(n) suffix sum, n≤16, off hot path |
 | AnchorTrace bloats TrialLog JSONL size | Low | `Option<Vec<AnchorTrace>>` — None by default |
-| Shaped reward signal too weak for micro-Transformer | Medium | Honest expectation: +0.5-1.5 points, not +7-14% |
+| Shaped reward signal too weak for micro-Transformer | ~~Medium~~ **CONFIRMED** | No gain at all — post-hoc shaping ≠ GRPO gradient |
 | Interaction with DeltaBanditPruner unclear | Low | Both use shaped reward as input — orthogonal |
 
 ## Success Criteria — Honest Assessment
 
-| Metric | Target | How Measured |
-|--------|--------|-------------|
-| DDTree nodes with shaped rewards | ≤ 5% increase vs flat | T11 benchmark |
-| Latency per DDTree build | ≤ 5% increase vs flat | T11 benchmark |
-| Bandit convergence speed | ≥ as fast as flat (ideally faster) | T11 reward curve |
-| Unit tests | All passing | T4, T7, T9 |
-| Backward compatibility | λ=0 produces identical behavior | T4 test |
-| Path consistency metric | Correctly computed | T9 tests |
+| Metric | Target | Actual | Verdict |
+|--------|--------|--------|---------|
+| DDTree nodes with shaped rewards | ≤ 5% increase vs flat | 0.0% (256=256) | ✅ PASS |
+| Latency per DDTree build | ≤ 5% increase vs flat | **+33%** (475ms vs 356ms) | ❌ FAIL |
+| Bandit convergence speed | ≥ as fast as flat (ideally faster) | Same — both find optimal | ⚠️ NEUTRAL |
+| Unit tests | All passing | 489 pass | ✅ PASS |
+| Backward compatibility | λ=0 produces identical behavior | Verified | ✅ PASS |
+| Path consistency metric | Correctly computed | Verified | ✅ PASS |
+| **DDTree goal rate improvement** | **> flat** | **0.0pp (100%=100%)** | **❌ NO GAIN** |
+| **DDTree path length improvement** | **< flat** | **0.0 (7=7)** | **❌ NO GAIN** |
 
-**Honest expectation:** The paper's +7-14% accuracy gains come from training a 7B model on dense stepwise rewards via GRPO. Our modelless path improves the **quality of the heuristic signal** fed to the bandit, not the model itself. Expected improvement in bandit convergence: **marginal to modest** (+0.5-1.5 points). The value is in the richer signal, not the magnitude.
+## Benchmark Proof (BXT/SMG, 100 builds, budget=256, 200 episodes)
+
+```
+                    Method    Nodes  PathLen    Goal%       Time
+─────────────────────────────────────────────────────────────────
+            Baseline         256.0      7.0   100.0%    297ms
+            Flat (λ=0)       256.0      7.0   100.0%    356ms
+            Shaped (λ=0.3)   256.0      7.0   100.0%    475ms
+
+  Nodes:   0.0% delta  ✅ (no regression)
+  Goals:  +0.0pp       ✅ (no regression)
+  Speed:  +33% slower  ❌ (overhead only)
+```
+
+**Verdict: NO measurable improvement over flat rewards.** The paper's +7-14% gains come from GRPO gradient updates on a 7B model, not from post-hoc reward shaping on a bandit Q-value. Feature gated off by default (`stepcode` not in `full`). Infrastructure kept for future GRPO integration (G-Zero Phase 2).
 
 ## Hyperparameters (Paper-Verified)
 
