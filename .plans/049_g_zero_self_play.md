@@ -1,7 +1,7 @@
 # Plan 049: G-Zero Self-Play Distillation
 
 > **Source:** [G-Zero: Self-Play for Open-Ended Generation from Zero Data](https://arxiv.org/pdf/2605.09959) — Huang et al., 2026
-> **Status:** Phase 1 Complete
+> **Status:** Phase 1 ✅ Complete · Phase 2 ✅ Complete (Plan 059 — `riir-gpu`)
 > **Depends on:** Plan 048 (Research Audit), Plan 032 (HL Infrastructure), Plan 036 (Review Metrics)
 
 ## Tasks
@@ -14,12 +14,12 @@
 - [x] T4: Implement `TemplateProposer` (rule-based query-hint generation, no neural model)
 - [x] T5: Benchmark modelless G-Zero vs existing HL AbsorbCompress
 
-### Phase 2: Model-Based (δ → DPO/GRPO weight updates)
+### Phase 2: Model-Based (δ → DPO/GRPO weight updates) — ✅ Complete (Plan 059)
 
-- [ ] T6: Implement `Proposer` trait + `GRPO` optimizer (gradient-based query-hint training)
-- [ ] T7: Implement `LengthNormalizedDPO` loss for Generator training
-- [ ] T8: Implement `DeltaFilter` + reward hacking defenses (lower-half retention, penalties)
-- [ ] T9: Implement model-based `GZeroLoop` + wire into `SelfImprovingCycle`
+- [x] T6: Implement `Proposer` trait + `GRPO` optimizer ✅ (`riir-gpu/src/proposer.rs` + `loss_grpo.rs`)
+- [x] T7: Implement `LengthNormalizedDPO` loss for Generator training ✅ (`riir-gpu/src/loss_dpo.rs` + `dpo_log_ratio.wgsl` + `dpo_reduce.wgsl`)
+- [x] T8: Implement `DeltaFilter` + reward hacking defenses ✅ (`riir-gpu/src/delta_filter.rs` — 6-stage filter)
+- [x] T9: Implement model-based `GZeroLoop` + crash recovery ✅ (`riir-gpu/src/gzero_loop.rs`)
 - [ ] T10: Update README, .docs, references
 
 ### Feature Gate

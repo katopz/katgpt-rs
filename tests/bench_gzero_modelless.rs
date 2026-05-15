@@ -17,6 +17,7 @@
 //! 4. **Convergence Speed** — Does GZero improve faster across rounds?
 //! 5. **Action Selection Overhead** — Latency comparison
 
+#[cfg(all(feature = "g_zero", feature = "bomber"))]
 use std::time::Instant;
 
 #[cfg(all(feature = "g_zero", feature = "bomber"))]

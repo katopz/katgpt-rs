@@ -522,7 +522,12 @@ mod tests {
     /// Verify forward_hla works with all standard configs.
     #[test]
     fn forward_hla_all_configs() {
-        for config in [Config::micro(), Config::game(), Config::bpe()] {
+        for config in [
+            Config::micro(),
+            Config::game(),
+            Config::bpe(),
+            Config::gqa_draft(),
+        ] {
             let weights = random_weights(&config);
             let mut ctx = ForwardContext::new(&config);
             let mut cache = MultiLayerHlaCache::new(&config);
@@ -538,6 +543,42 @@ mod tests {
             for (i, &l) in logits.iter().enumerate() {
                 assert!(l.is_finite(), "Config logits[{i}] not finite: {l}");
             }
+        }
+    }
+
+    /// Verify forward_ahla works with GQA config (n_head=8, n_kv_head=2).
+    #[test]
+    fn forward_ahla_gqa_draft() {
+        let config = Config::gqa_draft(); // n_head=8, n_kv_head=2
+        let weights = random_weights(&config);
+        let mut ctx = ForwardContext::new(&config);
+        let mut cache = MultiLayerAhlaCache::new(&config);
+
+        // Single token
+        let logits = forward_ahla(&mut ctx, &weights, &mut cache, config.bos_token, 0, &config);
+        assert_eq!(logits.len(), config.vocab_size);
+        for (i, &l) in logits.iter().enumerate() {
+            assert!(l.is_finite(), "AHLA GQA logits[{i}] not finite: {l}");
+        }
+
+        // Multi-token streaming
+        let mut rng = crate::types::Rng::new(42);
+        let mut tokens = Vec::new();
+        generate_ahla_into(
+            &mut ctx,
+            &mut cache,
+            &weights,
+            &config,
+            &mut rng,
+            16,
+            &mut tokens,
+        );
+        assert_eq!(tokens.len(), 16);
+        for &t in &tokens {
+            assert!(
+                t < config.vocab_size,
+                "AHLA GQA token {t} out of vocab range"
+            );
         }
     }
 }

@@ -460,6 +460,50 @@ No gradient updates. δ enhances existing HL infrastructure:
 | `DeltaBanditPruner` | δ as dense reward for bandit arms | `g_zero::delta_bandit` |
 | `TemplateProposer` | Rule-based (query, hint) generation | `g_zero::template_proposer` |
 
+### Model-Based Path (Phase 2 — Plan 059)
+
+Gradient-based self-play in `riir-gpu`. δ signal trains LoRA weights via DPO on the Generator and GRPO on the Proposer.
+
+| Component | Role | Location |
+|-----------|------|----------|
+| `GpuDpoLoss` | Length-normalized DPO-sigmoid loss (2 WGSL kernels) | `riir-gpu::loss_dpo` |
+| `LengthNormalizedDpo` | CPU reference: dot(policy-ref, mask) / mask_sum | `riir-gpu::loss_dpo` |
+| `GrpoConfig` | Group-relative policy optimization | `riir-gpu::loss_grpo` |
+| `group_advantage` | (reward − μ) / σ normalization within K rollouts | `riir-gpu::loss_grpo` |
+| `grpo_loss` | Clipped policy gradient with group baseline | `riir-gpu::loss_grpo` |
+| `Proposer` trait | Query-hint generation interface | `riir-gpu::proposer` |
+| `TemplateProposerAdapter` | Wraps modelless `TemplateProposer` for GPU pipeline | `riir-gpu::proposer` |
+| `DeltaFilter` | 6-stage preference pair filtering (δ percentile → length → ratio → zlib → echo → role markers) | `riir-gpu::delta_filter` |
+| `GZeroLoop` | Round orchestration with crash recovery | `riir-gpu::gzero_loop` |
+| `dpo_log_ratio.wgsl` | Per-pair length-normalized log-ratio computation | `riir-gpu/kernels/` |
+| `dpo_reduce.wgsl` | Sigmoid loss + metric aggregation via tree reduction | `riir-gpu/kernels/` |
+
+**DPO loss formula** (Rafailov 2023, length-normalized):
+
+```
+L = −E[log σ(β · (r̄_chosen − r̄_rejected))]
+where r̄ = dot(log πθ − log πref, mask) / mask_sum
+```
+
+**GRPO advantage** (DeepSeekMath 2024):
+
+```
+Â = (r − μ_group) / σ_group    (no external value model needed)
+```
+
+**Hyperparameters** (paper defaults):
+
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| DPO β | 2.0 | KL penalty (lower than typical — chosen/rejected gap is small) |
+| DPO lr | 1e-5 | |
+| DPO steps | 50 | Per round |
+| DPO batch | 8 | Preference pairs |
+| GRPO group K | 16 | Rollouts per context |
+| GRPO clip ε | 0.2 | PPO-style clip |
+| GRPO lr | 4e-5 | |
+| δ cutoff | [0.0, 0.5] percentile | Lower half retention |
+
 ### Why δ-Gating Beats Raw Reward
 
 - **Dense:** Every token scored, not just episode outcome

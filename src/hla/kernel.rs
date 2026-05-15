@@ -152,6 +152,96 @@ pub fn hla_state_update(
     }
 }
 
+/// Per-Q-head update for symmetric HLA (no shared state mutation).
+///
+/// Computes cross-terms using OLD per-head state, then updates per-head
+/// accumulators. Shared SK must be updated separately (once per KV group)
+/// by [`hla_layer_update`].
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn hla_per_head_update(
+    q_head: &mut HlaQHeadState,
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    hd: usize,
+    gamma: f32,
+    tmp_k_cqv: &mut [f32],
+    tmp_q_g: &mut [f32],
+) {
+    // Step 1: Cross-terms using OLD CQV, mQ (before decay/accumulation)
+
+    // kᵀ · CQV_{t-1} → [hd]
+    tmp_k_cqv[..hd].fill(0.0);
+    for i in 0..hd {
+        let ki = unsafe { *k.get_unchecked(i) };
+        let cqv_row = &q_head.cqv[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *tmp_k_cqv.get_unchecked_mut(j) += ki * *cqv_row.get_unchecked(j);
+            }
+        }
+    }
+
+    // G_t += k_t · (kᵀ · CQV_{t-1})
+    for i in 0..hd {
+        let ki = unsafe { *k.get_unchecked(i) };
+        let g_row = &mut q_head.g[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *g_row.get_unchecked_mut(j) += ki * *tmp_k_cqv.get_unchecked(j);
+            }
+        }
+    }
+
+    // kᵀ · mQ_{t-1} → scalar
+    let k_mq: f32 = (0..hd)
+        .map(|i| unsafe { *k.get_unchecked(i) * *q_head.mq.get_unchecked(i) })
+        .sum();
+
+    // h_t += k_t · (kᵀ · mQ_{t-1})
+    for i in 0..hd {
+        unsafe {
+            *q_head.h.get_unchecked_mut(i) += *k.get_unchecked(i) * k_mq;
+        }
+    }
+
+    // Step 2: Decay per-head state
+    if gamma < 1.0 {
+        for x in q_head.cqv.iter_mut() {
+            *x *= gamma;
+        }
+        for x in q_head.mq.iter_mut() {
+            *x *= gamma;
+        }
+        for x in q_head.g.iter_mut() {
+            *x *= gamma;
+        }
+        for x in q_head.h.iter_mut() {
+            *x *= gamma;
+        }
+    }
+
+    // Step 3: Accumulate per-head state
+    // CQV_t += q_t · v_tᵀ
+    for i in 0..hd {
+        let qi = unsafe { *q.get_unchecked(i) };
+        let cqv_row = &mut q_head.cqv[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *cqv_row.get_unchecked_mut(j) += qi * *v.get_unchecked(j);
+            }
+        }
+    }
+
+    // mQ_t += q_t
+    for i in 0..hd {
+        unsafe {
+            *q_head.mq.get_unchecked_mut(i) += *q.get_unchecked(i);
+        }
+    }
+}
+
 /// Symmetric HLA readout: compute attention output from current state.
 ///
 /// ```text
@@ -426,14 +516,35 @@ pub fn hla_layer_update(
     let hd = config.head_dim;
     let n_kv = config.n_kv_head;
 
+    // Phase 1: Update shared SK once per KV group (avoid double-accumulation with GQA)
+    for g in 0..n_kv {
+        // Decay
+        if gamma < 1.0 {
+            for x in layer.sk[g].iter_mut() {
+                *x *= gamma;
+            }
+        }
+        // SK[g] += k_g · k_gᵀ
+        let k_slice = &k[g * hd..(g + 1) * hd];
+        for i in 0..hd {
+            let ki = unsafe { *k_slice.get_unchecked(i) };
+            let sk_row = &mut layer.sk[g][i * hd..i * hd + hd];
+            for j in 0..hd {
+                unsafe {
+                    *sk_row.get_unchecked_mut(j) += ki * *k_slice.get_unchecked(j);
+                }
+            }
+        }
+    }
+
+    // Phase 2: Per-Q-head update (cross-terms + accumulators)
     for h in 0..config.n_head {
         let kv_group = h * n_kv / config.n_head;
         let q_slice = &q[h * hd..(h + 1) * hd];
         let k_slice = &k[kv_group * hd..(kv_group + 1) * hd];
-        let v_slice = &v[h * hd..(h + 1) * hd];
+        let v_slice = &v[kv_group * hd..(kv_group + 1) * hd];
 
-        hla_state_update(
-            &mut layer.sk[kv_group],
+        hla_per_head_update(
             &mut layer.heads[h],
             q_slice,
             k_slice,
@@ -503,15 +614,92 @@ pub fn hla_layer_readout(
     }
 }
 
+/// Per-Q-head update + readout for AHLA (no shared state mutation).
+///
+/// Reads shared PKV and mK (already updated for this KV group), updates
+/// per-head E and n, then computes readout.
+#[allow(clippy::too_many_arguments)]
+#[inline]
+fn ahla_per_head_step(
+    pkv: &[f32],
+    mk: &[f32],
+    q_head: &mut AhlaQHeadState,
+    q: &[f32],
+    k: &[f32],
+    hd: usize,
+    gamma: f32,
+    out: &mut [f32],
+    tmp_r: &mut [f32],
+) {
+    // Step 1: Decay per-head state
+    if gamma < 1.0 {
+        for x in q_head.e.iter_mut() {
+            *x *= gamma;
+        }
+        for x in q_head.n.iter_mut() {
+            *x *= gamma;
+        }
+    }
+
+    // Step 2: Compute r = q_tᵀ · PKV_t (shared, already updated)
+    tmp_r[..hd].fill(0.0);
+    for i in 0..hd {
+        let qi = unsafe { *q.get_unchecked(i) };
+        let pkv_row = &pkv[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *tmp_r.get_unchecked_mut(j) += qi * *pkv_row.get_unchecked(j);
+            }
+        }
+    }
+
+    // Step 3: E_t += k_t · r_t
+    for i in 0..hd {
+        let ki = unsafe { *k.get_unchecked(i) };
+        let e_row = &mut q_head.e[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *e_row.get_unchecked_mut(j) += ki * *tmp_r.get_unchecked(j);
+            }
+        }
+    }
+
+    // Step 4: q_tᵀ · mK_t → scalar (shared, already updated)
+    let q_mk: f32 = (0..hd)
+        .map(|i| unsafe { *q.get_unchecked(i) * *mk.get_unchecked(i) })
+        .sum();
+
+    // Step 5: n_t += k_t · (q_tᵀ · mK_t)
+    for i in 0..hd {
+        unsafe {
+            *q_head.n.get_unchecked_mut(i) += *k.get_unchecked(i) * q_mk;
+        }
+    }
+
+    // Step 6: Readout: o_t = q_tᵀ · E_t
+    for j in 0..hd {
+        let mut val = 0.0f32;
+        for i in 0..hd {
+            unsafe {
+                val += *q.get_unchecked(i) * *q_head.e.get_unchecked(i * hd + j);
+            }
+        }
+        unsafe {
+            *out.get_unchecked_mut(j) = val;
+        }
+    }
+}
+
 /// Update + readout all heads in one layer for AHLA.
 ///
-/// Combined for efficiency: AHLA does update and readout in one pass.
+/// GQA-aware: shared PKV and mK are updated once per KV group,
+/// then per-Q-head state (E, n) is updated separately.
 ///
 /// # Arguments
 /// * `layer` - AHLA layer state
 /// * `q` - Full query tensor [n_head × hd]
 /// * `k` - Full key tensor [n_kv_head × hd]
-/// * `v` - Full value tensor [n_head × hd]
+/// * `v` - Full value tensor [n_kv_head × hd]
 /// * `config` - Model config for GQA mapping
 /// * `gamma` - Exponential decay
 /// * `normalize` - Whether to divide by denominator
@@ -534,20 +722,50 @@ pub fn ahla_layer_step(
     let hd = config.head_dim;
     let n_kv = config.n_kv_head;
 
+    // Phase 1: Update shared PKV, mK once per KV group (avoid double-accumulation with GQA)
+    for g in 0..n_kv {
+        // Decay
+        if gamma < 1.0 {
+            for x in layer.pkv[g].iter_mut() {
+                *x *= gamma;
+            }
+            for x in layer.mk[g].iter_mut() {
+                *x *= gamma;
+            }
+        }
+        // PKV[g] += k_g · v_gᵀ
+        let k_slice = &k[g * hd..(g + 1) * hd];
+        let v_slice = &v[g * hd..(g + 1) * hd];
+        for i in 0..hd {
+            let ki = unsafe { *k_slice.get_unchecked(i) };
+            let pkv_row = &mut layer.pkv[g][i * hd..i * hd + hd];
+            for j in 0..hd {
+                unsafe {
+                    *pkv_row.get_unchecked_mut(j) += ki * *v_slice.get_unchecked(j);
+                }
+            }
+        }
+        // mK[g] += k_g
+        for i in 0..hd {
+            unsafe {
+                *layer.mk[g].get_unchecked_mut(i) += *k_slice.get_unchecked(i);
+            }
+        }
+    }
+
+    // Phase 2: Per-Q-head update + readout
     for h in 0..config.n_head {
         let kv_group = h * n_kv / config.n_head;
         let q_slice = &q[h * hd..(h + 1) * hd];
         let k_slice = &k[kv_group * hd..(kv_group + 1) * hd];
-        let v_slice = &v[h * hd..(h + 1) * hd];
         let out_slice = &mut attn_out[h * hd..(h + 1) * hd];
 
-        ahla_step(
-            &mut layer.pkv[kv_group],
-            &mut layer.mk[kv_group],
+        ahla_per_head_step(
+            &layer.pkv[kv_group],
+            &layer.mk[kv_group],
             &mut layer.heads[h],
             q_slice,
             k_slice,
-            v_slice,
             hd,
             gamma,
             out_slice,
