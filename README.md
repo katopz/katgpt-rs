@@ -278,6 +278,35 @@ Run: `cargo test --features "stepcode" --test bench_stepcode_modelless -- --noca
 
 📖 See [`.docs/10_bomber_arena.md`](.docs/10_bomber_arena.md).
 
+## 🔮 GameState Forward Model — STRATEGA Distillation
+
+Generic `GameState` trait for what-if simulation, distilled from [STRATEGA framework](https://www.tnt.uni-hannover.de/papers/data/1606/2020__AIIDE_SGW__STRATEGA__A_General_Strategy_Games_Framework.pdf). Snapshot-based design: lightweight `Clone` structs (~2KB), no `bevy_ecs::World` dependency in the trait.
+
+**Key finding confirmed: generic MCTS ≈ random (25% each) in 4-player Bomberman.** Domain heuristics (HLPlayer) beat generic search — exactly what STRATEGA reported.
+
+| Component | Description |
+|-----------|-------------|
+| `GameState` trait | `advance()`, `available_actions()`, `is_terminal()`, `reward()`, `tick()` |
+| `StateHeuristic<S>` trait | Pluggable evaluation for non-terminal states |
+| `BomberState` snapshot | 13×13 grid + 4 players + bombs + power-ups, fully deterministic `advance()` |
+| `mcts_search<S>()` | UCB1 tree selection + random rollouts, configurable budget/depth |
+| `ActionSpaceLog` | Per-tick branching factor metrics |
+
+100-round tournament (budget=200, rollout_depth=10):
+
+| Player | Win Rate | Note |
+|--------|----------|------|
+| MCTS (P0) | 25.0% | ≈ random — generic search needs domain heuristics |
+| Random (P1) | 24.0% | Baseline |
+| Random (P2) | 21.0% | Baseline |
+| Random (P3) | 30.0% | Baseline |
+
+Feature gate: `game_state` (implies `bomber`). 50 unit tests covering explosions, chain reactions, power-ups, MCTS correctness.
+
+Run: `cargo run --features game_state --example game_state_01_bomber_mcts`
+
+📖 See [`.plans/056_game_state_forward_model.md`](.plans/056_game_state_forward_model.md), [`.research/27_STRATEGA_General_Strategy_Games_Forward_Model.md`](.research/27_STRATEGA_General_Strategy_Games_Forward_Model.md).
+
 ## 🎲 Monopoly FSM Arena
 
 4-player Monopoly with `bevy_ecs` standalone. Turn-based event-driven FSM with 8 phases, 40-square board, and 4 AI tiers.
@@ -603,6 +632,7 @@ cargo clippy --all-targets --all-features --quiet
 | `bandit` | Multi-armed bandit + HL infrastructure (TrialLog, AbsorbCompress, HotSwapPruner) |
 | `bomber` | Bomberman HL arena (bevy_ecs + bandit, Plan 033) |
 | `bomber-wasm` | WASM bomber validator loader (bomber + wasmtime + papaya, Plan 034) |
+| `game_state` | GameState forward model trait + generic MCTS (bomber + Plan 056) |
 | `monopoly` | Monopoly FSM arena (bevy_ecs + bandit, Plan 035) |
 | `feedback` | E2E feedback loop — sends inference results to REST endpoint (Plan 042, requires consumer in riir-gpu) |
 | `rest` | REST bridge test + merge stub (Plan 009, client lives in riir-ai/riir-rest) |
@@ -671,6 +701,10 @@ src/
       wasm_pruner.rs   WASM pruner
       wasm_state.rs    WASM state
       tft_player.rs    TftPlayer — game theory Tit-for-Tat bomber (Issue 056)
+    game_state/      GameState forward model + generic MCTS (Plan 056):
+      mod.rs           GameState trait, StateHeuristic, ActionSpaceLog
+      bomber_state.rs  BomberState snapshot + BomberHeuristic
+      mcts.rs          UCB1 tree search + random rollouts
     fft/             FFT Tactics Arena (ATB battle engine):
       mod.rs           Module root
       types.rs         Class, Team, ActionType, Stats, Unit, Action, GameEvent, TFT types

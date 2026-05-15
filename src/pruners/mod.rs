@@ -18,6 +18,9 @@ pub use tactical_pruner::{GameState, TacticalPruner};
 #[cfg(feature = "bomber")]
 pub mod bomber;
 
+#[cfg(feature = "game_state")]
+pub mod game_state;
+
 #[cfg(feature = "sudoku")]
 pub mod sudoku_pruner;
 
@@ -99,6 +102,12 @@ pub use bomber::{
     ArenaGrid, BomberAction, BomberPlayer, GridPos, ScoreBoard, TickCounter, run_tick,
     spawn_players,
 };
+
+#[cfg(feature = "game_state")]
+pub use game_state::{ActionSpaceLog, StateHeuristic, mcts_search};
+
+#[cfg(all(feature = "game_state", feature = "bomber"))]
+pub use game_state::{BombSnapshot, BomberHeuristic, BomberState, PlayerSnapshot};
 
 #[cfg(feature = "monopoly")]
 pub mod monopoly;
