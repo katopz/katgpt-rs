@@ -46,7 +46,7 @@
 - [x] T21: Update `README.md` — added HLA section after PFlash with memory comparison table, variant table, key insight, and "not a drop-in replacement" warning
 - [x] T22: Update `Cargo.toml` feature flags section in README with `hla_attention`
 - [x] T23: Fix all clippy warnings under `hla_attention` feature: `cargo clippy --features hla_attention --fix --allow-dirty` — clean
-- [ ] T24: Commit with message `feat(hla): second-order linear attention — O(1) inference cache`
+- [x] T24: Commit with message `feat(hla): second-order linear attention — O(1) inference cache` — `b48aced` (Phase 1-3) + `80d0a7c` (Phase 4-5)
 
 ---
 
