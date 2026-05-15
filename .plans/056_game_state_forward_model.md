@@ -40,7 +40,7 @@
 
 - [x] T16: Update `README.md` with GameState section under architecture
 - [x] T17: Update `.docs/` with GameState trait design rationale
-- [ ] T18: Commit with message `feat(game_state): forward model trait + bomber mcts poc`
+- [x] T18: Commit with message `feat(game_state): forward model trait + bomber mcts poc`
 
 ---
 

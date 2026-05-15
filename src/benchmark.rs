@@ -263,6 +263,16 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         );
         results.push(uncond_br);
         results.push(cond_br);
+
+        // Plan 055 T10: MTP on vs off at BPE scale
+        let (mtp_off, mtp_on) = bench_mtp_leviathan(warmup, iters);
+        results.push(mtp_off);
+        results.push(mtp_on);
+
+        // Plan 055 T24: Multi-scale MTP with shared KV (small_target)
+        let (mtp_shared_off, mtp_shared_on) = bench_mtp_shared_kv(warmup, iters);
+        results.push(mtp_shared_off);
+        results.push(mtp_shared_on);
     }
     cooldown(3);
 
@@ -1013,6 +1023,214 @@ fn bench_conditioned_vs_unconditioned(
     };
 
     (uncond, cond)
+}
+
+/// Plan 055 T10: Benchmark MTP on vs off at BPE scale.
+/// Compares Leviathan acceptance rate with MTP features enabled (truncate/pad)
+/// vs disabled (MTP thresholds set to MAX).
+/// Note: Uses truncate/pad fallback — no trained projection weights required.
+/// When trained weights are available, acceptance rate should improve further.
+fn bench_mtp_leviathan(warmup: usize, iters: usize) -> (BenchResult, BenchResult) {
+    // BPE target + BPE draft (MTP active by default: n_embd=32 >= threshold=32)
+    let bpe_target = Config::bpe();
+    let bpe_draft = Config::bpe_draft();
+
+    let mut rng = Rng::new(42);
+    let target_weights = TransformerWeights::new(&bpe_target, &mut rng);
+    let draft_weights = TransformerWeights::new(&bpe_draft, &mut Rng::new(99));
+
+    // MTP OFF config — all thresholds disabled
+    let bpe_target_off = Config {
+        mtp_activation_threshold: usize::MAX,
+        mtp_shared_kv_prompt_threshold: usize::MAX,
+        mtp_cluster_vocab_threshold: usize::MAX,
+        ..Config::bpe()
+    };
+    let target_weights_off = TransformerWeights::new(&bpe_target_off, &mut Rng::new(42));
+
+    // ── MTP OFF: standard Leviathan, no target conditioning ──
+    let mut verifier_off = LeviathanVerifier::new(&target_weights_off, &bpe_target_off, &bpe_draft);
+    let mut rng_off = Rng::new(99);
+
+    for _ in 0..warmup {
+        let _ = speculative_step_verifier(
+            &draft_weights,
+            &bpe_draft,
+            0,
+            0,
+            &mut rng_off,
+            &mut verifier_off,
+        );
+    }
+
+    let mut total_off = 0usize;
+    let start = Instant::now();
+    for _ in 0..iters {
+        let (accepted, _) = speculative_step_verifier(
+            &draft_weights,
+            &bpe_draft,
+            0,
+            0,
+            &mut rng_off,
+            &mut verifier_off,
+        );
+        total_off += accepted.len();
+    }
+    let elapsed_off = start.elapsed();
+
+    let off = BenchResult {
+        label: "MTP OFF (BPE)".into(),
+        throughput: total_off as f64 / elapsed_off.as_secs_f64(),
+        time_per_step_us: elapsed_off.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: total_off as f64 / iters as f64,
+        color: (200, 100, 100),
+        category: BenchCategory::Speculative,
+    };
+
+    // ── MTP ON: truncate/pad fallback (no trained projection weights) ──
+    let mut verifier_on = LeviathanVerifier::new(&target_weights, &bpe_target, &bpe_draft);
+    let mut rng_on = Rng::new(99);
+
+    for _ in 0..warmup {
+        let _ = speculative_step_verifier(
+            &draft_weights,
+            &bpe_draft,
+            0,
+            0,
+            &mut rng_on,
+            &mut verifier_on,
+        );
+    }
+
+    let mut total_on = 0usize;
+    let start = Instant::now();
+    for _ in 0..iters {
+        let (accepted, _) = speculative_step_verifier(
+            &draft_weights,
+            &bpe_draft,
+            0,
+            0,
+            &mut rng_on,
+            &mut verifier_on,
+        );
+        total_on += accepted.len();
+    }
+    let elapsed_on = start.elapsed();
+
+    let on = BenchResult {
+        label: "MTP ON truncate/pad (BPE)".into(),
+        throughput: total_on as f64 / elapsed_on.as_secs_f64(),
+        time_per_step_us: elapsed_on.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: total_on as f64 / iters as f64,
+        color: (100, 200, 100),
+        category: BenchCategory::Speculative,
+    };
+
+    (off, on)
+}
+
+/// Plan 055 T24: Multi-scale MTP benchmark — small_target with shared KV.
+/// Uses `Config::small_target()` for both target and draft (matching kv_dim=64)
+/// so shared KV cache preloading is active. Compares MTP OFF vs ON with shared KV.
+fn bench_mtp_shared_kv(warmup: usize, iters: usize) -> (BenchResult, BenchResult) {
+    // small_target for both — kv_dim matches so shared KV preload is active
+    let config = Config {
+        mtp_shared_kv_prompt_threshold: 0, // Always share KV
+        ..Config::small_target()
+    };
+    let config_off = Config {
+        mtp_activation_threshold: usize::MAX,
+        mtp_shared_kv_prompt_threshold: usize::MAX,
+        mtp_cluster_vocab_threshold: usize::MAX,
+        ..Config::small_target()
+    };
+
+    let mut rng = Rng::new(42);
+    let target_weights = TransformerWeights::new(&config, &mut rng);
+    let target_weights_off = TransformerWeights::new(&config_off, &mut Rng::new(42));
+
+    // Use pos=8 so shared KV preload triggers (pos > threshold=0)
+    let pos = 8usize;
+
+    // ── MTP OFF: no shared KV, no conditioning ──
+    let mut verifier_off = LeviathanVerifier::new(&target_weights_off, &config_off, &config);
+    let mut rng_off = Rng::new(99);
+
+    for _ in 0..warmup {
+        let _ = speculative_step_verifier(
+            &target_weights_off,
+            &config_off,
+            0,
+            pos,
+            &mut rng_off,
+            &mut verifier_off,
+        );
+    }
+
+    let mut total_off = 0usize;
+    let start = Instant::now();
+    for _ in 0..iters {
+        let (accepted, _) = speculative_step_verifier(
+            &target_weights_off,
+            &config_off,
+            0,
+            pos,
+            &mut rng_off,
+            &mut verifier_off,
+        );
+        total_off += accepted.len();
+    }
+    let elapsed_off = start.elapsed();
+
+    let off = BenchResult {
+        label: "MTP OFF shared KV (small)".into(),
+        throughput: total_off as f64 / elapsed_off.as_secs_f64(),
+        time_per_step_us: elapsed_off.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: total_off as f64 / iters as f64,
+        color: (180, 120, 120),
+        category: BenchCategory::Speculative,
+    };
+
+    // ── MTP ON: shared KV + truncate/pad conditioning ──
+    let mut verifier_on = LeviathanVerifier::new(&target_weights, &config, &config);
+    let mut rng_on = Rng::new(99);
+
+    for _ in 0..warmup {
+        let _ = speculative_step_verifier(
+            &target_weights,
+            &config,
+            0,
+            pos,
+            &mut rng_on,
+            &mut verifier_on,
+        );
+    }
+
+    let mut total_on = 0usize;
+    let start = Instant::now();
+    for _ in 0..iters {
+        let (accepted, _) = speculative_step_verifier(
+            &target_weights,
+            &config,
+            0,
+            pos,
+            &mut rng_on,
+            &mut verifier_on,
+        );
+        total_on += accepted.len();
+    }
+    let elapsed_on = start.elapsed();
+
+    let on = BenchResult {
+        label: "MTP ON shared KV (small)".into(),
+        throughput: total_on as f64 / elapsed_on.as_secs_f64(),
+        time_per_step_us: elapsed_on.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: total_on as f64 / iters as f64,
+        color: (120, 180, 120),
+        category: BenchCategory::Speculative,
+    };
+
+    (off, on)
 }
 
 fn bench_prefill_compression(
