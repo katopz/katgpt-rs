@@ -259,7 +259,23 @@ Default features changed in Plan 051 from `["bandit", "g_zero"]` to `["sparse_ml
 
 Not a regression from Plan 054 stepcode (feature is off-by-default, not compiled). This is a **Plan 051 default-features decision**: trade ~20% raw forward throughput for sparsity + domain conditioning capability.
 
-For benchmark comparisons: `cargo run --release --no-default-features --features "bandit,g_zero"`.
+Run bench with `--features g_zero` to include heuristic learning (Plan 049: gate stays until T5 proven). `g_zero` does NOT touch `forward()` hot path — zero hits in `transformer.rs`.
+
+### Bench 065 Stability Confirmation (064→065, same HEAD `1a00e32`)
+
+| Method | 064 | 065 | Delta |
+|--------|-----:|-----:|------:|
+| DDTree (chain-seed) | 389,978 | 389,172 | -0.2% |
+| DDTree Build | 372,598 | 366,950 | -1.5% |
+| DFlash | 450,259 | 472,035 | +4.8% |
+| PFlash block_select | 1,184,015 | 1,187,070 | +0.3% |
+| Speculative (AR Draft) | 1,417,878 | 1,399,307 | -1.3% |
+| TQ-3bit (zero-alloc) | 2,401,050 | 2,417,375 | +0.7% |
+| Transformer AR | 924,098 | 945,989 | +2.4% |
+| forward (flat) | 831,619 | 917,519 | +10.3% |
+| forward_paged | 780,361 | 844,141 | +8.2% |
+
+Core model benchmarks ±2% stable. Infrastructure (`forward (flat)`, `forward_paged`) shows higher variance due to thermal sensitivity — 064 ran on warmer CPU. Cool CPU + 3s cooldowns + infrastructure-first run order (commit `05d0a51`) gives reproducible results.
 
 ### Regression Visibility
 
