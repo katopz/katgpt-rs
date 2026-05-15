@@ -199,6 +199,32 @@ Composable with TurboQuant: TQ compresses the *precision* dimension (fewer bits)
 
 📁 `src/speculative/prefill.rs` — `block_select`, `block_select_grid`, `compress_prompt_blocks`, `BlockAttentionScorer`
 
+## 🧮 HLA: Higher-order Linear Attention (Plan 057)
+
+Replaces the growing KV cache with **constant-size O(d²) prefix sufficient statistics**. No context window limit — streaming is O(1) per token regardless of sequence length. Based on Zhang, Qin, Wang, Gu (2026) *"Higher-order Linear Attention"*.
+
+| Variant | State per head | Per-token cost | Best for |
+|---------|---------------|---------------|----------|
+| **Symmetric HLA** | O(d² + d·dv) | O(d²) | Small head_dim, quality-critical |
+| **AHLA** (asymmetric) | O(d·dv) | O(d·dv) | Larger head_dim, memory-critical |
+
+### Memory Comparison (micro config: hd=4, n_head=4, n_kv_head=4)
+
+| Cache | Bytes/Layer | Grows with seq? |
+|-------|-------------|-----------------|
+| Flat KV (block=16) | 2,048 B | ✅ O(N) |
+| Symmetric HLA | 896 B | ❌ O(1) |
+| AHLA | 640 B | ❌ O(1) |
+
+### Key Insight
+
+The second-order attention matrix QKᵀQKᵀᵀ = Q(KᵀK)Qᵀ depends only on KᵀK (a d×d matrix), not the full N×N attention matrix. HLA maintains running summaries of these moments.
+
+> ⚠️ **Not a drop-in replacement.** HLA computes a different function than softmax attention. Models must be **trained with HLA from scratch** for quality. Random-weight divergence is expected and not a bug.
+
+📁 `src/hla/` — `types.rs`, `kernel.rs`, `forward.rs`, `mod.rs`
+🔧 Feature flag: `hla_attention`
+
 ### Gemma 4 MTP Drafter (Plan 055)
 
 Threshold-gated Multi-Token Prediction inspired by Gemma 4's architecture:
@@ -637,6 +663,7 @@ cargo clippy --all-targets --all-features --quiet
 | `feedback` | E2E feedback loop — sends inference results to REST endpoint (Plan 042, requires consumer in riir-gpu) |
 | `rest` | REST bridge test + merge stub (Plan 009, client lives in riir-ai/riir-rest) |
 | `embedding_router` | Semantic embedding routing (Plan 024, not yet started) |
+| `hla_attention` | Higher-order Linear Attention — O(1) inference cache (Plan 057) |
 | `gpu` | Placeholder — GPU training lives in riir-ai/riir-gpu |
 | `game_domain` | Alias for `domain_latent` — game-specific Config presets (Plan 040) |
 | `language_domain` | Language domain: BPE vocab, LLM models (Plan 040, future) |

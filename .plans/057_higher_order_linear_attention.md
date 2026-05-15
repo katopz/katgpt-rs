@@ -36,16 +36,16 @@
 
 ### Phase 4: Benchmarks (Before/After)
 
-- [ ] T17: `bench_hla_vs_flat_cache()` — compare `forward()` (flat KV) vs `forward_hla()` (symmetric) vs `forward_ahla()` (asymmetric). Measure: tok/s, µs/step, memory/layer (bytes). Run at positions 1, 16, 64, 128, 256 to show constant vs growing cost
-- [ ] T18: `bench_hla_memory()` — measure total cache allocation: `std::mem::size_of_val()` for each cache type. Report bytes/layer for all configs (micro, game, bpe, small_target)
-- [ ] T19: `bench_hla_quality()` — perplexity proxy: run forward on fixed prompt, compare logit divergence between SDPA and HLA/AHLA on random weights. This is a sanity check, not a quality claim (models must be trained with HLA)
-- [ ] T20: Add HLA/AHLA rows to existing benchmark CSV output and timeseries
+- [x] T17: `bench_hla_vs_flat_cache()` in `src/benchmark.rs` — compares flat KV vs symmetric HLA vs asymmetric AHLA at positions 1, 16, 64, 128, 256 across micro/game/bpe configs. Measures tok/s and µs/step
+- [x] T18: `bench_hla_memory()` in `src/benchmark.rs` — measures bytes/layer for flat KV (O(N)), symmetric HLA (O(d²)), asymmetric AHLA (O(d·dv)) across all 5 configs. Cross-checked with `HlaVariant::layer_bytes()`
+- [x] T19: `bench_hla_quality()` in `src/benchmark.rs` — logit divergence sanity check: asserts finite/non-NaN outputs, reports max/mean absolute divergence between SDPA and HLA/AHLA on random weights. Not a quality claim (models must be trained with HLA)
+- [x] T20: Add HLA/AHLA rows to existing benchmark CSV output and timeseries — bench functions return `Vec<BenchResult>` compatible with `save_results_csv()` + `save_timeseries_csv()`
 
 ### Phase 5: Documentation & Polish
 
-- [ ] T21: Update `README.md` — add HLA section under Architecture, note "requires training from scratch"
-- [ ] T22: Update `Cargo.toml` feature flags section in README with `hla_attention`
-- [ ] T23: Fix all clippy warnings under `hla_attention` feature: `cargo clippy --features hla_attention --fix --allow-dirty`
+- [x] T21: Update `README.md` — added HLA section after PFlash with memory comparison table, variant table, key insight, and "not a drop-in replacement" warning
+- [x] T22: Update `Cargo.toml` feature flags section in README with `hla_attention`
+- [x] T23: Fix all clippy warnings under `hla_attention` feature: `cargo clippy --features hla_attention --fix --allow-dirty` — clean
 - [ ] T24: Commit with message `feat(hla): second-order linear attention — O(1) inference cache`
 
 ---
