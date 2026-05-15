@@ -1,6 +1,8 @@
 pub mod benchmark;
 #[cfg(feature = "feedback")]
 pub mod feedback;
+#[cfg(feature = "hla_attention")]
+pub mod hla;
 pub mod percepta;
 pub mod plot;
 pub mod pruners;

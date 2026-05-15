@@ -223,24 +223,24 @@ pub struct KVLayerSnapshot {
 /// Pre-allocated buffers for zero-alloc forward passes.
 /// Create once, reuse across calls.
 pub struct ForwardContext {
-    x: Vec<f32>,                // [n_embd] main activation
-    xr: Vec<f32>,               // [n_embd] residual
-    xr2: Vec<f32>,              // [n_embd] residual 2
-    q: Vec<f32>,                // [n_embd] query
-    k: Vec<f32>,                // [kv_dim] key (kv_dim = n_kv_head * head_dim)
-    v: Vec<f32>,                // [kv_dim] value
-    attn_out: Vec<f32>,         // [n_embd] attention output
-    pub scores: Vec<f32>,       // [block_size] attention scores (max possible)
-    hidden: Vec<f32>,           // [mlp_hidden] MLP hidden
-    pub logits: Vec<f32>,       // [vocab_size] output logits
-    pub hidden_state: Vec<f32>, // [n_embd] final hidden state (Plan 009 compat)
+    pub(crate) x: Vec<f32>,        // [n_embd] main activation
+    pub(crate) xr: Vec<f32>,       // [n_embd] residual
+    pub(crate) xr2: Vec<f32>,      // [n_embd] residual 2
+    pub(crate) q: Vec<f32>,        // [n_embd] query
+    pub(crate) k: Vec<f32>,        // [kv_dim] key (kv_dim = n_kv_head * head_dim)
+    pub(crate) v: Vec<f32>,        // [kv_dim] value
+    pub(crate) attn_out: Vec<f32>, // [n_embd] attention output
+    pub scores: Vec<f32>,          // [block_size] attention scores (max possible)
+    pub(crate) hidden: Vec<f32>,   // [mlp_hidden] MLP hidden
+    pub logits: Vec<f32>,          // [vocab_size] output logits
+    pub hidden_state: Vec<f32>,    // [n_embd] final hidden state (Plan 009 compat)
     /// LoRA intermediate buffer [lora_rank]. Pre-allocated, zero alloc in hot path.
     pub lora_buf: Vec<f32>,
     // Sparse MLP buffers (Plan 022: TwELL-inspired unstructured sparsity)
     #[cfg(feature = "sparse_mlp")]
-    active_indices: Vec<usize>, // [mlp_hidden] pre-allocated index buffer
+    pub(crate) active_indices: Vec<usize>, // [mlp_hidden] pre-allocated index buffer
     #[cfg(feature = "sparse_mlp")]
-    active_values: Vec<f32>, // [mlp_hidden] pre-allocated value buffer
+    pub(crate) active_values: Vec<f32>, // [mlp_hidden] pre-allocated value buffer
     // Paged KV cache: pre-allocated flat buffers for attention computation
     paged_flat_key: Vec<f32>,   // [block_size * kv_dim]
     paged_flat_value: Vec<f32>, // [block_size * kv_dim]

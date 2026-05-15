@@ -37,6 +37,7 @@ stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only
 bomber = ["bevy_ecs", "bandit"]  # Bomberman HL Arena (Plan 033)
 bomber-wasm = ["bomber", "wasmtime", "papaya"]  # WASM bomber validator loader (Plan 034) + batch pool (Plan 037)
 game_state = ["bomber"]  # GameState forward model trait + generic MCTS (Plan 056)
+hla_attention = []  # Higher-order Linear Attention — O(1) inference cache (Plan 057)
 monopoly = ["bevy_ecs", "bandit"]  # Monopoly Board Game Engine (Plan 034)
 feedback = []  # E2E feedback loop — sends inference results to REST endpoint (Plan 042, requires consumer in riir-gpu)
 rest = []  # REST bridge test + merge stub (Plan 009, client lives in riir-ai/riir-rest)
@@ -45,7 +46,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-wasm", "game_state", "monopoly", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-wasm", "game_state", "hla_attention", "monopoly", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 

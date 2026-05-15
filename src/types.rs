@@ -32,6 +32,25 @@ pub struct Config {
     pub mtp_cluster_vocab_threshold: usize,
     pub mtp_shared_kv_prompt_threshold: usize,
     pub mtp_cluster_size: usize,
+    // HLA Attention (Plan 057: Higher-order Linear Attention)
+    pub hla_mode: HlaMode,
+    pub hla_normalize: bool,
+    pub hla_decay: f32,
+}
+
+/// Attention mode for HLA (Higher-order Linear Attention).
+///
+/// - `Standard`: SDPA with KV cache (default, backward-compatible).
+/// - `Hla`: Symmetric second-order linear attention — O(1) per-token memory.
+/// - `Ahla`: Asymmetric second-order linear attention — lower state cost than symmetric.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HlaMode {
+    #[default]
+    Standard,
+    /// Symmetric second-order: SK, CQV, mQ accumulators.
+    Hla,
+    /// Asymmetric second-order: PKV, mK accumulators.
+    Ahla,
 }
 
 impl Config {
@@ -65,6 +84,9 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -124,6 +146,9 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -156,6 +181,9 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -189,6 +217,9 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: 128,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -220,6 +251,9 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: 128,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -253,6 +287,9 @@ impl Config {
             mtp_cluster_vocab_threshold: 4096,
             mtp_shared_kv_prompt_threshold: 64,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
@@ -285,6 +322,9 @@ impl Config {
             mtp_cluster_vocab_threshold: 4096,
             mtp_shared_kv_prompt_threshold: 64,
             mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
         }
     }
 
