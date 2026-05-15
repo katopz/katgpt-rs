@@ -1,6 +1,6 @@
 # microgpt-rs: Heuristic Learning
 
-> **Status (Plan 049):** G-Zero self-play distillation implemented behind `--features g_zero` (implies `bandit`). Hint-δ intrinsic reward signal, `DeltaGatedAbsorbCompress`, `DeltaBanditPruner`, and `TemplateProposer` provide modelless self-evolution — no gradient updates required. See `src/pruners/g_zero/`.
+> **Status (Plan 049):** G-Zero self-play distillation — both phases complete. Phase 1 (modelless): `HintDelta`, `DeltaGatedAbsorbCompress`, `DeltaBanditPruner`, `TemplateProposer` behind `--features g_zero` (implies `bandit`). Phase 2 (model-based): `LengthNormalizedDPO`, `GRPO`, `DeltaFilter` (6-stage), `GZeroLoop` in `riir-gpu` (Plan 059, 3,369 lines, 76 tests, 2 DPO WGSL kernels). See `src/pruners/g_zero/` and `riir-gpu/src/`.
 >
 > **Status (Plan 036):** ReviewMetrics, ReviewStrategy, and benefit-ratio gating are implemented behind `--features bandit`. AbsorbCompress gates compression by benefit-risk ratio. `ppot_rescue_reviewed` provides structured review loops behind `--features bandit,ppot`. See example `review_01_metrics`.
 >

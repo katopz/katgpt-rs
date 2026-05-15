@@ -20,7 +20,7 @@
 - [x] T7: Implement `LengthNormalizedDPO` loss for Generator training ✅ (`riir-gpu/src/loss_dpo.rs` + `dpo_log_ratio.wgsl` + `dpo_reduce.wgsl`)
 - [x] T8: Implement `DeltaFilter` + reward hacking defenses ✅ (`riir-gpu/src/delta_filter.rs` — 6-stage filter)
 - [x] T9: Implement model-based `GZeroLoop` + crash recovery ✅ (`riir-gpu/src/gzero_loop.rs`)
-- [ ] T10: Update README, .docs, references
+- [x] T10: Update README, .docs, references ✅ (kernel count 21→26, Phase 2 ✅ in README + riir-ai README, feature flag note updated)
 
 ### Feature Gate
 

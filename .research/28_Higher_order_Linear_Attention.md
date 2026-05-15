@@ -468,6 +468,105 @@ For microgpt-rs's tiny head_dims (4-16), AHLA's lower state overhead and simpler
 
 ---
 
+## Latent State RAG Analysis (Post-Implementation Review)
+
+> Architectural analysis of HLA state as a "Latent Knowledge Graph" for RAG, MCTS, and agentic loops.
+> Evaluates what the benchmark numbers actually enable vs. what's overclaimed.
+
+### Dead Ideas (Math Kills These)
+
+| Idea | Why Dead |
+|------|----------|
+| **LoRA + HLA Orthogonal Swap** | HLA state is $\Sigma (W_k \cdot x)(W_k \cdot x)^T$ — computed in the basis of $W_k$. Swapping LoRA changes $W_k$, making stored statistics meaningless. State is weight-dependent, not weight-independent. |
+| **Absorb KG into LoRA** | SK·CQV is a data-dependent covariance matrix used in a quadratic readout $q^T \cdot SK \cdot CQV$. LoRA modifies linear projections ($\Delta W = A \times B$). You cannot factor an activation-dependent covariance into a static weight matrix. Different algebraic objects entirely. |
+| **WASM-Direct KG Injection** | HLA state lives in activation space (outputs of $W_Q, W_K, W_V$ projections). You can't skip the embedding + projection layers and map raw game state ($x$: 5, $y$: 10) directly to HLA $\Delta$. The state is defined by the model's internal representations, not raw input. |
+| **Cross-Domain State Merge** | $S_{GameRules} \oplus S_{PythonSyntax}$ = superposition interference. Covariance matrices from unrelated domains wash each other out. The associative merge ($\oplus$) is only valid for sequential chunks of the same stream. |
+
+### Surviving Ideas (Architecture Wins)
+
+| Idea | Status | Blocker |
+|------|--------|---------|
+| **O(1) Memory for Long Context** | ✅ Proven | None — benchmarks confirm 88% savings, constant µs/step |
+| **Cheap Fork MCTS** | ✅ Architecture wins | Distillation quality — branch evaluations need coherent model output |
+| **Hierarchical Same-Domain Merge** | ⚠️ Valid math | Model must be trained to handle merged states |
+| **State Separation (HLA + SDPA)** | ⚠️ Clean pattern | Needs `forward_hybrid()` — layer-wise HLA/SDPA split |
+| **Instant Rollback** | ✅ Trivial | Copy previous 640-byte state — O(d²) copy |
+
+### Precision vs. Covariance (The Fundamental Tradeoff)
+
+HLA state is $SK_t = \Sigma k_i k_i^T$ — an unnormalized covariance matrix tracking feature co-occurrence.
+
+**Good at (heuristics):**
+- "Opponent tends to bomb the left side" (tendency)
+- "Low health correlates with fleeing" (covariance)
+- Domain priors / style / tone shaping
+
+**Bad at (facts):**
+- "Player is at position (5, 10)" (exact coordinate)
+- "I have exactly 3 HP" (discrete state)
+- "Token at position 42 was 'bomb'" (retrieval)
+
+For game AI (`bomber_arena`, `monopoly_fsm`), game state is already precise and structured (Bevy ECS, WASM structs). Compressing it into fuzzy statistics is backwards — you want exact state tracking, not lossy compression.
+
+### HLA State vs. DeltaMemoryState
+
+Both provide O(1) fixed-size, serializable, domain-isolated state. Key difference: role in the pipeline.
+
+| Property | DeltaMemoryState | HLA State |
+|----------|-----------------|-----------|
+| Location | Pruner (auxiliary) | Attention (core) |
+| Size | rank² = 64 floats (rank=8) | hd² × heads = varies |
+| Operations | read/write O(r²) | update/readout O(hd²) |
+| Requires retraining | ❌ No | ✅ Yes |
+| Domain isolation | ✅ `MultiDomainMemory` | Would need similar |
+| What it shapes | Search tree (MCTS) | Token distribution (LM head) |
+| Precision | Same covariance tradeoff | Same covariance tradeoff |
+
+**Verdict:** If the goal is steering agent behavior, `DeltaMemoryState` already solves this without retraining. If the goal is replacing KV-cache for infinite-context inference, HLA needs the distillation gauntlet.
+
+### The Distillation Path (What Actually Matters)
+
+The single binary test that determines whether any of this is worth pursuing:
+
+```
+SDPA→HLA distillation: can KL(softmax(y_teacher/τ) || softmax(y_student/τ)) → 0?
+  YES → Cheap fork MCTS works, state separation works, latent RAG maybe works
+  NO  → Double down on DeltaMemoryState (already works, no retraining)
+```
+
+Distillation pipeline:
+1. **Teacher:** `forward()` (SDPA) — frozen weights, produces $y_t$
+2. **Student:** `forward_hla()` or `forward_ahla()` — trainable W_Q/W_K/W_V, produces $y_s$
+3. **Loss:** KL divergence at LM head (NOT cosine sim on hidden states — hidden sim of 0.95 can still scramble token argmax)
+4. **Trainable:** Only attention projections (`attn_wq`, `attn_wk`, `attn_wv`). FFN (`mlp_w1`, `mlp_w2`), embeddings (`wte`, `wpe`), and LM head frozen.
+5. **Config:** Start with `micro` (27 vocab, 16 embd, 4 heads) — fast iteration.
+
+This is the same bootstrapping approach used by Mamba, RetNet, and RWKV to create linear attention models from SDPA teachers.
+
+### Hybrid Architecture (If Distillation Passes)
+
+If KL divergence converges to near-zero, the practical deployment is layer-wise hybrid:
+
+```text
+Layers 0..N-2:  forward_hla()   — processes zero-copy latent state blob for domain understanding
+Layer N-1:      forward_base()  — tiny 128-token sliding window KV for exact prompt facts
+```
+
+No per-head mixing (destroys memory contiguity). Simple `if layer_idx < n_layer - 1` branch. Almost zero architectural rewrite.
+
+### What DeltaMemoryState Already Does (No Retraining Required)
+
+Our existing `DeltaMemoryState` (`.research/24_Delta_Mem_Online_Associative_Memory.md`) already provides:
+
+- O(1) fixed-size state (rank² = 256 bytes at rank=8)
+- Per-domain isolation (`MultiDomainMemory`)
+- Snapshot/rollback for MCTS
+- Zero-copy serialization
+- Heuristic gates (no training needed)
+- Feature hashing (no learned projections needed)
+
+For game AI steering (`bomber_arena`, `monopoly_fsm`), this is the pragmatic choice today. HLA distillation is the research path for tomorrow.
+
 ## References
 
 - Zhang, Y., Qin, Z., Wang, M., & Gu, Q. (2026). Higher-order Linear Attention. arXiv:2510.27258v3.

@@ -463,9 +463,9 @@ TemplateProposer ──(query, hint)──▸ Generator (frozen, inference only)
 | `DeltaBanditPruner` | δ as dense reward for arm selection | No need to wait for episode completion |
 | `TemplateProposer` | Rule-based query-hint generation | 0 GPU cost, targets blind spots from bandit history |
 
-### Phase 2: Model-Based Self-Play (T6–T9)
+### Phase 2: Model-Based Self-Play (T6–T9) — ✅ Complete (Plan 059)
 
-Builds on Phase 1's δ computation — adds gradient-based training via GRPO (Proposer) and length-normalized DPO (Generator):
+Implemented in `riir-gpu` (3,369 lines, 76 tests). Builds on Phase 1's δ computation — adds gradient-based training via GRPO (Proposer) and length-normalized DPO (Generator):
 
 ```text
 Phase 2a — Proposer Training (GRPO):
@@ -477,6 +477,15 @@ Phase 2b — Generator Training (Length-Normalized DPO):
   → lower-half δ filter → DPO update (hint-assisted=chosen, unassisted=rejected)
   → HotSwapPruner reloads adapter (zero-downtime)
 ```
+
+| Module | Lines | Key Components | Tests |
+|--------|-------|---------------|-------|
+| `loss_dpo.rs` | 774 | `LengthNormalizedDpo`, `PreferencePair`, `DpoMetrics`, GPU DPO pipeline | CPU parity + GPU tests |
+| `loss_grpo.rs` | 565 | `GrpoConfig`, `group_advantage`, `grpo_loss`, `grpo_reward`, `length_penalty` | Advantage + loss tests |
+| `proposer.rs` | 413 | `Proposer` trait, `NeuralProposer`, `TemplateProposerAdapter`, `QueryTemplate` | Template tests |
+| `delta_filter.rs` | 794 | 6-stage filter (δ percentile → length → ratio → zlib → echo → role markers) | 24 filter tests |
+| `gzero_loop.rs` | 823 | `GZeroLoop`, `GZeroRound`, `RoundMetrics`, `GZeroCheckpoint` (crash recovery) | 5 checkpoint tests |
+| GPU kernels | — | `dpo_log_ratio.wgsl` + `dpo_reduce.wgsl` (per-pair log-ratio + tree reduction) | GPU parity tests |
 
 ### Three Training Paths
 
@@ -626,7 +635,7 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
    - **WASM Validator SDK** (riir-validator-sdk) — WASM Validator trait + `export_validator!` macro + streaming events ABI. Compiles to sandboxed `.wasm` modules that plug into microgpt-rs's `WasmPruner`.
    - **WASM Runtime** — Host-side `WasmPruner` implementing `ConstraintPruner` + `ScreeningPruner`. Loads `.wasm`, calls `is_valid`/`relevance` in sandboxed wasmtime.
    - **Prompt Router + Expert Registry** — `KeywordRouter` (V1) + `EmbeddingRouter` (V2, 3-tier fallback via RAG) + `ExpertRegistry` mapping domains to pruner + LoRA pairs. Config-driven via `domains.toml` with domain inference budget (β). Routing strategies: keyword, embedding, combined.
-   - **GPU Training** — ✅ Production-ready `wgpu` compute pipeline with 21 WGSL kernels. Forward, backward (LoRA grads only), AdamW optimizer, cross-entropy loss, PFlash block-sparse prefill (4 kernels), TurboQuant attention scoring, TTT feedback consumer. Targets WebGPU, Metal, Vulkan, DX12. LoRA export/load.
+   - **GPU Training** — ✅ Production-ready `wgpu` compute pipeline with 26 WGSL kernels. Forward, backward (LoRA grads only), AdamW optimizer, cross-entropy loss, PFlash block-sparse prefill (4 kernels), TurboQuant attention scoring, TTT feedback consumer, G-Zero Phase 2 (DPO loss + GRPO optimizer, Plan 059 ✅). Targets WebGPU, Metal, Vulkan, DX12. LoRA export/load.
    - **REST Client** — HTTP client for vector search against the RAG Engine. Retrieves historically successful token continuations merged into DDTree branches.
    - **Transpiler** (riir-transpiler) — Python→Rust transpilation service loading `.wasm` validators + `.bin` LoRA adapter. Exercises the full pipeline: BPE tokenize → WASM validate → DDTree prune → compiler feedback.
 
@@ -641,7 +650,7 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
 | **WASM SDK** | riir-ai | Validator trait + export macro + streaming events ABI + CLI checker | ✅ Working | Private |
 | **WASM Runtime** | riir-ai | WasmPruner + wasmtime sandbox | ✅ Working | Private |
 | **Router** | riir-ai | Keyword + Embedding routing (3-tier fallback), ExpertRegistry, domain inference budget (β) | ✅ Working | Private |
-| **GPU Training** | riir-ai | ✅ Production-ready wgpu pipeline (21 WGSL kernels): forward/backward, PFlash, TurboQuant, feedback consumer, LoRA export | ✅ Working | Private |
+| **GPU Training** | riir-ai | ✅ Production-ready wgpu pipeline (26 WGSL kernels): forward/backward, PFlash, TurboQuant, feedback consumer, DPO+GRPO (G-Zero Phase 2 ✅, Plan 059), LoRA export | ✅ Working | Private |
 | **REST Client** | riir-ai | Vector search, tokenization, agent hints | ✅ Working | Private |
 | **Transpiler** | riir-ai | Python→Rust transpilation, compiler feedback loop | ✅ Working | Private |
 
@@ -708,12 +717,12 @@ cargo clippy --all-targets --all-features --quiet
 | `game_domain` | Alias for `domain_latent` — game-specific Config presets (Plan 040) |
 | `language_domain` | Language domain: BPE vocab, LLM models (Plan 040, future) |
 | `delta_mem` | δ-Mem associative bandit memory — infrastructure only, no DDTree gain (Plan 053, off by default) |
-| `g_zero` | G-Zero self-play + FFT arena + Bomber arena + TFT party AI (Plans 049–055) |
+| `g_zero` | G-Zero self-play + FFT arena + Bomber arena + TFT party AI (Plans 049–055). Phase 1 (modelless) + Phase 2 (GRPO/DPO in `riir-gpu`, Plan 059 ✅) |
 | `fft` | FFT Tactics Arena — ATB battle engine with status effects (Plan 053) |
 | `stepcode` | ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full` |
 | `full` | Enable all features (excludes `stepcode`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit"]` targets production accuracy + sparsity. `g_zero` is bench-only (Plan 049: Phase 1 benchmarked T5 ✅, gate stays for Phase 2 readiness) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit"]` targets production accuracy + sparsity. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
