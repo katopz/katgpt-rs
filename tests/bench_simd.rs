@@ -10,6 +10,8 @@
 //!
 //! Run with: cargo test --features hla_attention bench_simd -- --nocapture
 
+#![cfg(feature = "hla_attention")]
+
 use microgpt_rs::hla::{
     AhlaQHeadState, HlaQHeadState, MultiLayerAhlaCache, MultiLayerHlaCache, ahla_step,
     forward_ahla, forward_hla, hla_state_update,
