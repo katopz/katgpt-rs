@@ -20,9 +20,12 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - Speculative decoding: ~1.64M tok/s (AR Draft)
 - forward_raven (16 slots): ~1.6M trees/s
 - raven_recall (1000 noise): ~9.3M tok/s
+- SIMD-accelerated matmul/HLA kernels: 15.6M ops/s [16×16] NEON (Plan 060)
+- forward_hla: ~939K tok/s (single-core, 30K CCU feasible)
+- forward_ahla: ~1.2M tok/s (single-core)
 - TurboQuant 3-bit KV cache: 5.3× compression, 0.99 attention correlation
 - PFlash block-sparse prefill: up to 21.3× sequence reduction, 100% NIAH retrieval
-- 400+ tests passing, zero clippy warnings
+- 516 tests passing, zero clippy warnings
 
 ## Module Structure
 
@@ -31,7 +34,8 @@ src/
   lib.rs            Module index + debug tracking allocator
   main.rs           Entry point (proof → bench → Percepta bench → plot)
   types.rs          Config (micro/draft/bpe/small_target/gqa_draft + micro_lora/game), InferenceOverrides, Rng, softmax, rmsnorm, matmul, matmul_relu, sparse_matmul, sample_token, LoraAdapter, LoraPair, DomainLatent, InferenceResult, lora_apply, kv_dim
-  transformer.rs    TransformerWeights, LayerWeights, KVCache, MultiLayerKVCache, KVSnapshot, PagedKVCache, RavenKVCache, ForwardContext (+ sparse buffers + lora_buf), PrefillContext, forward, forward_prefill, forward_paged, forward_raven, forward_turboquant, generate, generate_into, generate_batch, generate_with_prefill, tokens_to_string, raven_compute_router, raven_update, raven_readout
+  simd.rs          SimdLevel (Scalar/Neon/Avx2), simd_level(), simd_dot_f32, simd_outer_product_acc, simd_matvec, simd_matmul_rows, simd_matmul_relu_rows (Plan 060)
+  transformer.rs    TransformerWeights, LayerWeights, KVCache, MultiLayerKVCache, KVSnapshot, PagedKVCache, RavenKVCache, ForwardContext (+ sparse buffers + lora_buf), PrefillContext, forward, forward_prefill, forward_paged, forward_raven, forward_hla (SIMD-accelerated), forward_ahla (SIMD-accelerated), forward_turboquant, generate, generate_into, generate_batch, generate_with_prefill, tokens_to_string, raven_compute_router, raven_update, raven_readout
   feedback.rs       FeedbackConfig, send_feedback ⌁
   percepta.rs       Vec2, KVCache2D, Sudoku9x9, SymbolicValidator, StreamingSolver, SolveEvent
   benchmark.rs      BenchCategory, BenchResult, run_all, run_all_parallel, save_results_csv, append_timeseries_csv, generate_batch
@@ -155,6 +159,7 @@ src/
 | `validator` | `syn`, `proc-macro2` | SynPruner + partial parser |
 | `delta_mem` | `bandit` | δ-Mem modelless distillation — associative bandit memory (Plan 053) |
 | `g_zero` | `bandit` | G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049) |
+| `hla_attention` | — | HLA/AHLA streaming attention kernels (Plan 057, SIMD-accelerated in Plan 060) |
 | `fft` | `bandit` | FFT Tactics Arena — ATB battle engine with status effects (Plan 053) |
 | `bomber` | `bevy_ecs`, `bandit` | Bomberman HL arena (Plan 033) |
 | `bomber-wasm` | `bomber`, `wasmtime`, `papaya` | WASM bomber validator loader + batch pool (Plans 034 + 037) |
@@ -208,7 +213,7 @@ cargo run --example fft_01_arena --features fft               # FFT Tactics aren
 3. **Trait-based strategy** — `ConstraintPruner`, `SpeculativeVerifier`, `PrefillScorer`, `ScreeningPruner` for swappable behavior
 4. **SOLID module decomposition** — each file < 1024 lines, single responsibility
 5. **`mod.rs` for index only**, minimal `main.rs`/`lib.rs`
-6. **Unsafe only in verified hot-path kernels** with `get_unchecked` + `#[inline(always)]`
+6. **Unsafe only in verified hot-path kernels** with `get_unchecked` + `#[inline(always)]` + SIMD intrinsics (`core::arch` NEON/AVX2)
 
 ## Related Documentation
 

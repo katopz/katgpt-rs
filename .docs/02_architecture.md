@@ -158,8 +158,8 @@ When `n_kv_head < n_head`, K/V heads are shared:
 
 ## Math Kernels (`types.rs`)
 All hot-path kernels are `#[inline(always)]` with `unsafe get_unchecked`:
-- `matmul(out, w, x, rows, cols)` — out = W @ x
-- `matmul_relu(out, w, x, rows, cols)` — fused matmul + ReLU
+- `matmul(out, w, x, rows, cols)` — out = W @ x — SIMD-accelerated via `simd_dot_f32` (Plan 060)
+- `matmul_relu(out, w, x, rows, cols)` — fused matmul + ReLU — SIMD-accelerated with fused ReLU zero-clamp (Plan 060)
 - `sparse_matmul(out, w, x, rows, cols, active_indices, active_values)` — skip dead ReLU neurons (Plan 022)
 - `softmax(x)` — in-place, one-pass exp+sum, uses `inv_sum` multiply
 - `softmax_scaled(x, scale)` — scaled softmax for attention (divides by sqrt(head_dim) before exp)
@@ -167,6 +167,18 @@ All hot-path kernels are `#[inline(always)]` with `unsafe get_unchecked`:
 - `attention_head(...)` — fused: score → softmax → weighted value (avoids separate softmax write)
 - `sample_token(logits, rng)` — categorical sampling
 - `lora_apply(output, lora, input, lora_buf)` — in-place LoRA delta: `output += (α/r) × B @ (A @ input)`
+
+## SIMD Kernels (`simd.rs`, Plan 060)
+
+Runtime SIMD detection and dispatch for hot-path operations:
+- `SimdLevel` enum: `Scalar`, `Neon` (ARM), `Avx2` (x86_64)
+- `simd_level()` — runtime detection of available SIMD level
+- `simd_dot_f32(a, b, len)` — NEON `vfmaq_f32` / AVX2 `_mm256_mul_ps` dot product
+- `simd_outer_product_acc(acc, a, b, m, n)` — rank-1 update for HLA SK, CQV, PKV
+- `simd_matmul_rows(out, w, x, rows, cols)` — row-major matmul via SIMD dot
+- `simd_matmul_relu_rows(out, w, x, rows, cols)` — SIMD matmul + fused ReLU clamp
+- No dependencies — pure `core::arch::{aarch64, x86_64}` intrinsics
+- Zero-cost dispatch: compile-time `#[cfg(target_arch)]` + runtime level check
 
 ## Additional Forward Variants (`transformer.rs`)
 
@@ -176,9 +188,11 @@ All hot-path kernels are `#[inline(always)]` with `unsafe get_unchecked`:
 | `forward_paged(ctx, weights, paged_cache, token, pos, config, seq_idx)` | Paged KV cache forward — copy-on-write branch isolation |
 | `forward_raven(ctx, weights, raven_cache, token, pos, config)` | Raven RSM forward — slot-based O(1) routing attention |
 | `forward_turboquant(ctx, weights, tq_cache, token, pos, config)` | TurboQuant forward — bit-packed KV cache with dequantize-on-read |
-| `forward_hla(ctx, weights, hla_cache, token, pos, config)` | Symmetric second-order HLA — O(d²) constant-state attention (Plan 057, `hla_attention`) |
-| `forward_ahla(ctx, weights, ahla_cache, token, pos, config)` | Asymmetric AHLA — O(d·dv) constant-state attention (Plan 057, `hla_attention`) |
+| `forward_hla(ctx, weights, hla_cache, token, pos, config)` | Symmetric second-order HLA — O(d²) constant-state attention, SIMD-accelerated (Plan 057/060, `hla_attention`) |
+| `forward_ahla(ctx, weights, ahla_cache, token, pos, config)` | Asymmetric AHLA — O(d·dv) constant-state attention, SIMD-accelerated (Plan 057/060, `hla_attention`) |
 | `forward_with_domain_latent(ctx, weights, cache, token, pos, config, dl)` | Convenience wrapper — `forward_base` with domain latent only (no LoRA) |
+
+> **Plan 059 Note**: HLA is inference-only — SDPA→HLA distillation via LoRA shows KL divergence does NOT converge. HLA provides streaming O(1) attention for inference but cannot be trained to approximate SDPA outputs. Use DeltaMemoryState for facts/retrieval.
 
 ## Generate (`transformer.rs`)
 ```rust

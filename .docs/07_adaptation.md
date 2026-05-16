@@ -1,6 +1,6 @@
 # microgpt-rs: Model Adaptation Techniques
 
-Four production techniques that adapt the transformer to different tasks and domains **without modifying base weights**. All are feature-gated, zero-copy, and backward-compatible.
+Five production techniques that adapt the transformer to different tasks and domains **without modifying base weights**. All are feature-gated, zero-copy, and backward-compatible.
 
 | # | Technique | Plan | Feature Flag | What It Does |
 |---|-----------|------|-------------|--------------|
@@ -8,6 +8,7 @@ Four production techniques that adapt the transformer to different tasks and dom
 | 2 | Modality LoRA Switching | 025 | `router` | reader→writer LoRA swap at prefill→decode boundary |
 | 3 | Sparse MLP (TwELL) | 022 | `sparse_mlp` | Skip dead ReLU neurons, O(alive) FLOPs |
 | 4 | Domain Latent Injection | 038 | `domain_latent` | Mid-layer K/V conditioning per domain |
+| 5 | HLA Streaming Attention | 057/060 | `hla_attention` | O(1) constant-state attention, SIMD-accelerated |
 
 ## Adaptation Pipeline
 
@@ -385,9 +386,69 @@ pub fn export_domain_latent(gpu_latent: &GpuDomainLatent, kv_dim: usize) -> Doma
 | Memory overhead | kv_dim × 4 bytes per domain (negligible) |
 | Training overhead | One additional embedding vector (negligible vs LoRA) |
 
+## Technique 5: HLA Streaming Attention
+
+### Problem
+Standard SDPA attention stores KV cache for all past tokens — O(T) memory per stream. For 30K concurrent game AI streams at 20Hz, this grows unbounded. We need constant-state attention that doesn't degrade with sequence length.
+
+### Solution
+Higher-Order Linear Attention (HLA) replaces softmax attention with streaming outer-product updates. State is fixed-size (hd×hd matrix) regardless of sequence length.
+
+Two variants implemented:
+- **HLA** (symmetric): maintains SK, CQV, G matrices — O(d²) state per head
+- **AHLA** (asymmetric): maintains PKV, E matrices — O(d·dv) state per head
+
+```rust
+// hla/kernel.rs — O(1) state update (Plan 057, SIMD-accelerated Plan 060)
+pub fn hla_state_update(sk, q_head, q, k, v, hd, lr, tmp_k_cqv, tmp_q_g)
+pub fn hla_readout(sk, q_head, q, hd, tmp_sk_cqv, tmp_q_g) -> f32
+pub fn ahla_step(pkv, mk, q_head, q, k, v, hd, lr, out, tmp_r)
+```
+
+### SIMD Acceleration (Plan 060)
+
+All HLA kernels dispatch through `src/simd.rs` — runtime NEON/AVX2 detection:
+
+| Operation | NEON Throughput (hd=4) |
+|-----------|----------------------|
+| hla_update | 16.4M ops/s |
+| ahla_step | 18.2M ops/s |
+| forward_hla (E2E) | 939K tok/s |
+| forward_ahla (E2E) | 1.2M tok/s |
+
+Single ARM core handles 30K CCU @ 20Hz with 9.8× headroom.
+
+### Forward Variants
+
+```rust
+// transformer.rs — drop-in replacements for forward()
+pub fn forward_hla(ctx, weights, hla_cache, token, pos, config)  // symmetric HLA
+pub fn forward_ahla(ctx, weights, ahla_cache, token, pos, config) // asymmetric AHLA
+```
+
+Same weights, same API — swap `MultiLayerKVCache` for `MultiLayerHlaCache` / `MultiLayerAhlaCache`.
+
+### Plan 059: Inference-Only (Path C Decision)
+
+SDPA→HLA distillation experiment shows KL divergence does NOT converge:
+- SDPA→AHLA: KL diverges 4.62→7.43 over 500 steps (lr=1e-4)
+- SDPA→HLA: KL oscillates 8.54→8.42, cosine similarity drops
+- Root cause: LoRA on QKV adjusts *inputs*, not the *attention mechanism itself*
+
+**HLA is inference-only** — streaming attention without SDPA's quadratic cost. It cannot be trained to approximate SDPA outputs. Use DeltaMemoryState for facts/retrieval.
+
+### Performance
+
+| Metric | Value |
+|--------|-------|
+| Memory per stream | hd×hd × 4B per head (16 floats for hd=4) |
+| vs KV cache | O(1) vs O(T) — no unbounded growth |
+| Throughput | 939K tok/s single-core (NEON) |
+| 30K CCU @ 20Hz | ✅ 1 core sufficient (9.8× headroom on 8-core) |
+
 ## Interaction Matrix
 
-The four techniques compose without conflicts:
+The five techniques compose without conflicts:
 
 | Technique | Affects Prefill | Affects Decode | Feature Flag |
 |-----------|:-:|:-:|-------------|
@@ -395,6 +456,7 @@ The four techniques compose without conflicts:
 | LoRA Switching | ✅ reader_lora | ✅ writer_lora | `router` |
 | Sparse MLP | ✅ (if enabled) | ✅ (if enabled) | `sparse_mlp` |
 | Domain Latent | ✅ K/V at L/2 | ✅ K/V at L/2 | `domain_latent` |
+| HLA Streaming | — | ✅ replaces KV cache | `hla_attention` |
 
 All are additive and backward-compatible. Standard `forward()` with no features works exactly as before.
 
@@ -403,3 +465,5 @@ All are additive and backward-compatible. Standard `forward()` with no features 
 - [ZAYA1-VL-8B Technical Report](https://arxiv.org/abs/2504.02268) — Bidirectional prefix attention, token-specific LoRAs (Plan 025)
 - [Sakana TwELL](https://sakana.ai/twell/) — Tile-wise ELLPACK sparse format (Plan 022 inspiration, GPU-specific; we use CPU index-packing)
 - [The Free Transformer](https://arxiv.org/abs/2503.23153) — Mid-layer latent injection via K/V modulation (Plan 038)
+- [Higher-Order Linear Attention](https://arxiv.org/abs/2504.13764) — O(1) streaming attention via outer-product state (Plan 057)
+- [TurboQuant](https://arxiv.org/abs/2504.19874) — KV cache compression via learned codebooks (Plan 043)
