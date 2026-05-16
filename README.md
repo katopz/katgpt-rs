@@ -297,6 +297,31 @@ Based on arXiv:2604.27233 — tracks whether reviewer intervention is net-positi
 
 Run: `cargo run --example review_01_metrics --features bandit`
 
+### Entropy Anomaly Detection (Plan 061)
+
+Session-level Out-Of-Distribution (OOD) monitoring using signals already in the pipeline:
+
+| Signal | Source | Meaning |
+|:-------|:-------|:--------|
+| Mean entropy | `PPoT` Shannon entropy | Model confused by user inputs |
+| Max entropy spike | Per-position `token_entropy()` | Single-position uncertainty peak |
+| Prediction error | `DeltaMemoryState` error history | Inputs drifting from learned patterns |
+
+`ReviewMetrics` now tracks `entropy_mean`, `entropy_max`, `entropy_n` per session. High mean entropy indicates the model cannot predict the user's intent — potential OOD or adversarial input.
+
+```rust
+// Wire into existing session
+let metrics = Arc::new(ReviewMetrics::new());
+metrics.record_entropy(token_entropy(&marginals)); // per decoding step
+
+// Check anomaly
+if metrics.is_high_entropy_session(threshold) {
+    // Session is statistically abnormal
+}
+```
+
+`DeltaMemoryState::mean_prediction_error()` exposes the running average prediction error as a drift signal — no new storage, data already tracked internally.
+
 ### ⚠️ Stepwise Reward Shaping (Plan 054) — NO GAIN
 
 Distilled from [StepCodeReasoner](https://arxiv.org/pdf/2605.11922) (ICML 2026). **Benchmarked, no measurable improvement over flat rewards.** Feature-gated off by default, not in `full`.

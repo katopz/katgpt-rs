@@ -55,7 +55,7 @@ pub use bandit::{
 };
 
 #[cfg(feature = "bandit")]
-pub use review_metrics::{ReviewMetrics, ReviewStrategy, ReviewSummary};
+pub use review_metrics::{EntropyAnomalySummary, ReviewMetrics, ReviewStrategy, ReviewSummary};
 
 #[cfg(feature = "bandit")]
 pub use hot_swap::HotSwapPruner;

@@ -73,6 +73,17 @@ pub struct ReviewSummary {
 /// let summary = metrics.summary();
 /// println!("{metrics}"); // "helpful=33.3% harmful=33.3% ratio=1.0:1 n=3"
 /// ```
+/// Snapshot of entropy anomaly statistics for a session (Plan 061).
+#[derive(Clone, Debug, Default)]
+pub struct EntropyAnomalySummary {
+    /// Mean entropy across all recorded positions.
+    pub mean: f64,
+    /// Maximum single-position entropy observed.
+    pub max: f64,
+    /// Number of entropy observations recorded.
+    pub count: u64,
+}
+
 pub struct ReviewMetrics {
     helpful: AtomicU64,
     harmful: AtomicU64,
@@ -86,6 +97,12 @@ pub struct ReviewMetrics {
     path_total: AtomicU64,
     /// Running sum of path consistency values (Plan 054).
     path_consistency_sum: AtomicU64,
+    /// Running sum of entropy values × 10000 (Plan 061: OOD drift signal).
+    entropy_sum: AtomicU64,
+    /// Number of entropy observations (Plan 061).
+    entropy_count: AtomicU64,
+    /// Maximum entropy spike observed × 10000 (Plan 061).
+    entropy_max: AtomicU64,
 }
 
 impl ReviewMetrics {
@@ -100,6 +117,9 @@ impl ReviewMetrics {
             path_faithful: AtomicU64::new(0),
             path_total: AtomicU64::new(0),
             path_consistency_sum: AtomicU64::new(0),
+            entropy_sum: AtomicU64::new(0),
+            entropy_count: AtomicU64::new(0),
+            entropy_max: AtomicU64::new(0),
         }
     }
 
@@ -169,6 +189,9 @@ impl ReviewMetrics {
         self.harmful.store(0, Ordering::Relaxed);
         self.both_correct.store(0, Ordering::Relaxed);
         self.both_wrong.store(0, Ordering::Relaxed);
+        self.entropy_sum.store(0, Ordering::Relaxed);
+        self.entropy_count.store(0, Ordering::Relaxed);
+        self.entropy_max.store(0, Ordering::Relaxed);
     }
 
     /// Compute a snapshot of all metrics for display/logging.
@@ -259,30 +282,64 @@ impl ReviewMetrics {
     pub fn path_faithful_count(&self) -> u64 {
         self.path_faithful.load(Ordering::Relaxed)
     }
+
+    // ── Entropy Anomaly (Plan 061: OOD Drift Signal) ─────────────
+
+    /// Record a Shannon entropy observation from PPoT token predictions.
+    ///
+    /// Call this after each decoding step with the entropy of the chosen token's
+    /// marginal distribution. Thread-safe: single atomic updates, no lock.
+    ///
+    /// Precision: entropy is stored as `h * 10000` in a u64 (4 decimal places).
+    pub fn record_entropy(&self, entropy: f32) {
+        let scaled = (entropy * 10000.0) as u64;
+        self.entropy_sum.fetch_add(scaled, Ordering::Relaxed);
+        self.entropy_count.fetch_add(1, Ordering::Relaxed);
+        // CAS loop to update max
+        loop {
+            let current = self.entropy_max.load(Ordering::Relaxed);
+            if scaled <= current {
+                break;
+            }
+            match self.entropy_max.compare_exchange_weak(
+                current,
+                scaled,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(_) => continue,
+            }
+        }
+    }
+
+    /// Snapshot of entropy anomaly statistics for this session.
+    pub fn entropy_anomaly_summary(&self) -> EntropyAnomalySummary {
+        let count = self.entropy_count.load(Ordering::Relaxed);
+        let mean = if count > 0 {
+            let sum = self.entropy_sum.load(Ordering::Relaxed);
+            sum as f64 / (count as f64 * 10000.0)
+        } else {
+            0.0
+        };
+        let max = self.entropy_max.load(Ordering::Relaxed) as f64 / 10000.0;
+        EntropyAnomalySummary { mean, max, count }
+    }
+
+    /// Whether the session's mean entropy exceeds a threshold.
+    ///
+    /// Use `ln(vocab_size) * 0.7` as a reasonable default:
+    /// - micro config (vocab=32): threshold ≈ 2.42
+    /// - standard (vocab=32000): threshold ≈ 6.98
+    pub fn is_high_entropy_session(&self, threshold: f64) -> bool {
+        let summary = self.entropy_anomaly_summary();
+        summary.count > 0 && summary.mean > threshold
+    }
 }
 
 impl Default for ReviewMetrics {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-impl fmt::Display for ReviewMetrics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ratio = self.benefit_ratio();
-        let ratio_str = if ratio.is_infinite() {
-            "∞".to_string()
-        } else {
-            format!("{ratio:.1}")
-        };
-        write!(
-            f,
-            "helpful={:.1}% harmful={:.1}% ratio={}:1 n={}",
-            self.helpfulness(),
-            self.harmfulness(),
-            ratio_str,
-            self.total()
-        )
     }
 }
 
@@ -297,6 +354,29 @@ impl fmt::Display for ReviewSummary {
             f,
             "helpful={:.1}% harmful={:.1}% ratio={}:1 n={}",
             self.helpfulness, self.harmfulness, ratio_str, self.total
+        )
+    }
+}
+
+impl fmt::Display for ReviewMetrics {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = self.summary();
+        let ratio_str = if s.benefit_ratio == f64::INFINITY {
+            "∞".to_string()
+        } else {
+            format!("{:.1}:1", s.benefit_ratio)
+        };
+        let entropy = self.entropy_anomaly_summary();
+        write!(
+            f,
+            "helpful={:.1}% harmful={:.1}% ratio={} n={} entropy_mean={:.3} entropy_max={:.3} entropy_n={}",
+            s.helpfulness,
+            s.harmfulness,
+            ratio_str,
+            s.total,
+            entropy.mean,
+            entropy.max,
+            entropy.count
         )
     }
 }
@@ -614,5 +694,151 @@ mod tests {
             "expected ratio=3.1:1 in: {display}"
         );
         assert!(display.contains("n=1000"), "expected n=1000 in: {display}");
+    }
+
+    // ── Entropy Anomaly Tests (Plan 061) ───────────────────────
+
+    #[test]
+    fn test_entropy_anomaly_empty() {
+        let metrics = ReviewMetrics::new();
+        let summary = metrics.entropy_anomaly_summary();
+        assert_eq!(summary.count, 0);
+        assert!((summary.mean - 0.0).abs() < 1e-6);
+        assert!((summary.max - 0.0).abs() < 1e-6);
+        assert!(!metrics.is_high_entropy_session(1.0));
+    }
+
+    #[test]
+    fn test_entropy_anomaly_single_observation() {
+        let metrics = ReviewMetrics::new();
+        metrics.record_entropy(1.5);
+        let summary = metrics.entropy_anomaly_summary();
+        assert_eq!(summary.count, 1);
+        assert!(
+            (summary.mean - 1.5).abs() < 0.001,
+            "mean should be ~1.5, got {}",
+            summary.mean
+        );
+        assert!(
+            (summary.max - 1.5).abs() < 0.001,
+            "max should be ~1.5, got {}",
+            summary.max
+        );
+    }
+
+    #[test]
+    fn test_entropy_anomaly_multiple_observations() {
+        let metrics = ReviewMetrics::new();
+        metrics.record_entropy(1.0);
+        metrics.record_entropy(2.0);
+        metrics.record_entropy(3.0);
+        let summary = metrics.entropy_anomaly_summary();
+        assert_eq!(summary.count, 3);
+        assert!(
+            (summary.mean - 2.0).abs() < 0.01,
+            "mean should be ~2.0, got {}",
+            summary.mean
+        );
+        assert!(
+            (summary.max - 3.0).abs() < 0.01,
+            "max should be ~3.0, got {}",
+            summary.max
+        );
+    }
+
+    #[test]
+    fn test_entropy_anomaly_max_updates() {
+        let metrics = ReviewMetrics::new();
+        metrics.record_entropy(1.0);
+        metrics.record_entropy(5.0);
+        metrics.record_entropy(2.0);
+        let summary = metrics.entropy_anomaly_summary();
+        assert!(
+            (summary.max - 5.0).abs() < 0.01,
+            "max should be 5.0, got {}",
+            summary.max
+        );
+    }
+
+    #[test]
+    fn test_is_high_entropy_session_below_threshold() {
+        let metrics = ReviewMetrics::new();
+        for _ in 0..10 {
+            metrics.record_entropy(0.5); // Low entropy — model is confident
+        }
+        assert!(
+            !metrics.is_high_entropy_session(2.0),
+            "mean=0.5 should be below threshold=2.0"
+        );
+    }
+
+    #[test]
+    fn test_is_high_entropy_session_above_threshold() {
+        let metrics = ReviewMetrics::new();
+        for _ in 0..10 {
+            metrics.record_entropy(3.0); // High entropy — model is confused
+        }
+        assert!(
+            metrics.is_high_entropy_session(2.0),
+            "mean=3.0 should be above threshold=2.0"
+        );
+    }
+
+    #[test]
+    fn test_is_high_entropy_session_no_observations() {
+        let metrics = ReviewMetrics::new();
+        assert!(
+            !metrics.is_high_entropy_session(0.0),
+            "no observations should return false"
+        );
+    }
+
+    #[test]
+    fn test_entropy_anomaly_display_includes_entropy_fields() {
+        let metrics = ReviewMetrics::new();
+        metrics.record(false, true);
+        metrics.record_entropy(2.5);
+        let display = format!("{metrics}");
+        assert!(
+            display.contains("entropy_mean="),
+            "display should contain 'entropy_mean=': {display}"
+        );
+        assert!(
+            display.contains("entropy_max="),
+            "display should contain 'entropy_max=': {display}"
+        );
+        assert!(
+            display.contains("entropy_n=1"),
+            "display should contain 'entropy_n=1': {display}"
+        );
+    }
+
+    #[test]
+    fn test_entropy_anomaly_reset() {
+        let metrics = ReviewMetrics::new();
+        metrics.record_entropy(5.0);
+        metrics.record_entropy(3.0);
+        metrics.reset();
+        let summary = metrics.entropy_anomaly_summary();
+        assert_eq!(summary.count, 0, "reset should clear entropy tracking");
+        assert!(
+            (summary.mean).abs() < 1e-6,
+            "reset should clear entropy mean"
+        );
+        assert!((summary.max).abs() < 1e-6, "reset should clear entropy max");
+    }
+
+    #[test]
+    fn test_entropy_precision_scaled_storage() {
+        // Verify that entropy values are stored with sufficient precision
+        let metrics = ReviewMetrics::new();
+        let entropy = 2.3456;
+        metrics.record_entropy(entropy);
+        let summary = metrics.entropy_anomaly_summary();
+        assert!(
+            (summary.mean - entropy as f64).abs() < 0.001,
+            "precision should be within 0.001, got diff of {}",
+            (summary.mean - entropy as f64).abs()
+        );
     }
 }

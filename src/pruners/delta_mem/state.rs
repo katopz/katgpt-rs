@@ -217,6 +217,17 @@ impl DeltaMemoryState {
         &self.error_history
     }
 
+    /// Mean prediction error over recent history (Plan 061: OOD drift signal).
+    ///
+    /// Returns 0.0 if no writes have occurred.
+    /// High mean error indicates inputs are drifting from learned patterns.
+    pub fn mean_prediction_error(&self) -> f32 {
+        if self.error_history.is_empty() {
+            return 0.0;
+        }
+        self.error_history.iter().sum::<f32>() / self.error_history.len() as f32
+    }
+
     /// Get current beta values
     pub fn beta(&self) -> &[f32] {
         &self.beta
@@ -418,5 +429,36 @@ mod tests {
         assert_eq!(restored.rank, 4);
         assert_eq!(restored.state.len(), 16);
         assert_eq!(restored.update_count, 1);
+    }
+
+    #[test]
+    fn test_mean_prediction_error_zero_initially() {
+        let state = DeltaMemoryState::new(DeltaMemoryConfig::default());
+        assert!(
+            (state.mean_prediction_error() - 0.0).abs() < 1e-6,
+            "empty state should have zero error"
+        );
+    }
+
+    #[test]
+    fn test_mean_prediction_error_after_writes() {
+        let mut state = DeltaMemoryState::new(DeltaMemoryConfig {
+            rank: 4,
+            ..Default::default()
+        });
+        let key = vec![1.0, 0.0, 0.0, 0.0];
+        let value = vec![0.0, 1.0, 0.0, 0.0];
+        state.write(&key, &value);
+
+        let error = state.mean_prediction_error();
+        assert!(error >= 0.0, "error should be non-negative, got {error}");
+        // First write on zero state: pred = S·k = 0, so error = |v_i - 0|
+        // For row 1: val=1.0, pred=0.0 → error=1.0
+        // Other rows: val=0.0, pred=0.0 → error=0.0
+        // Mean across all rank*1 writes: some non-zero value
+        assert!(
+            error > 0.0,
+            "first write on zero state should have non-zero error, got {error}"
+        );
     }
 }
