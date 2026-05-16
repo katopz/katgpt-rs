@@ -158,11 +158,83 @@ The Trinity: **Raven** (O(1) memory) + **Screening** (O(1) judgment) + **Sparse 
 
 ## 🔬 Percepta: O(log N) 2D Convex Hull Attention
 
-When keys form a convex hull, finding the maximum attention score becomes ternary search → **O(log N)**.
+Based on [Percepta's research](https://www.percepta.ai/blog/can-llms-be-computers) — executing arbitrary C programs inside a standard autoregressive transformer by compiling a [WebAssembly interpreter](https://github.com/Percepta-Core/transformer-vm) into weights, with exponentially faster decoding via 2D geometric attention. **The reference is Apache-2.0** — we distill to Rust under MIT per [`.research/32_percepta_distillation_strategy.md`](.research/32_percepta_distillation_strategy.md). See [`.research/31_percepta_deep_dive.md`](.research/31_percepta_deep_dive.md) for full gap analysis and [Plan 063](.plans/063_percepta_cht_hull_kv_cache.md) for the CHT upgrade (Phase A).
 
-**Proved:** All 4 arithmetic ops (+, −, ×, ÷), power, combined expressions, backtracking search (4×4 Sudoku, 8-Queens, 9×9 Arto Inkala) — all computed via attention-based state retrieval.
+### Core Mechanism: Parabolic Key Encoding
 
-**960 arithmetic operations** verified: all a+b, a×b, a−b, a÷b for a,b ∈ 0..=10.
+The geometric trick that enables exact discrete retrieval in 2D attention heads:
+
+- **Key encoding:** k ↦ (2k, −k²) — points lie on a downward-opening parabola
+- **Query direction:** q ↦ (q, 1)
+- **Attention score:** 2qk − k² = −(k − q)² + q² — **uniquely maximized when k = q**
+- **Hull decoding:** restricting heads to d=2 turns argmax into a supporting-point query on the convex hull → **O(log N)** via ternary search over unimodal dot-product sequence
+
+### Percepta's Compiler Stack vs Our Implementation
+
+| Component | Description | In our impl? |
+|-----------|-------------|:------------:|
+| **ALM** | Append-only Lookup Machine — abstract model for exact integer ops in transformers | Concept |
+| **CALM** | DSL: `fetch`, `fetch_sum`, `reglu`, `stepglu`, `persist` — 5 primitive dimension types | — |
+| **LookUp gates** | Exact key-value retrieval via 2D parabolic attention (`HARD_K=1e10` → hardmax) | ✅ `KVCache2D` |
+| **ReGLU gates** | `relu(b)*a` (1 FFN neuron), `step(b≥0)` (2 neurons), `a*b` (2 neurons + persist) | — |
+| **Parabolic keys** | k → (2k, −k²) with `inv_log_pos * 0.3` tie-break, `clear_key * 1e30` erase | ✅ test patterns |
+| **Gate graph** | `Expression` (sparse linear combo) / `Dimension` DAG → intermediate representation | — |
+| **MILP scheduling** | PuLP/HiGHS: 4-phase layer assignment, `interval_coloring` slot reuse, minimizes `d_model` | — |
+| **WASM interpreter** | 35 opcodes as circle-point dispatch (r²=32045), byte-serial carry propagation | — |
+| **Specialized model** | Futamura projection: `_cursor_lookup` bakes instruction table into FFN weights | — |
+| **Universal model** | WASM bytecode as input tokens, instruction fetch via attention at `5*cursor+1` | — |
+| **CHT hull cache** | Dynamic Convex Hull Trick (`BTreeSet<Line>`): upper+lower hull, `HullMeta` aggregation | ❌ Plan 063 |
+| **Cumulative sum** | `fetch_sum`: uniform attention (AVERAGE tie-break) × position = exact running sum | ❌ Plan 063 |
+| **Weight construction** | `expr_to_tensor`: graph + schedule → analytical weight matrices, no training | — |
+
+### What We Implement
+
+The **geometric attention mechanism** — the reusable component any transformer with 2D heads can exploit at decoding time:
+
+- **`KVCache2D`**: Upper convex hull maintenance via Graham Scan (amortized O(1) append)
+- **`fast_attention`**: Ternary search over hull vertices → O(log H) where H = hull size
+- **`linear_attention`**: O(N) baseline for correctness verification
+- **Arithmetic computation**: add, sub, mul, div, mod, power via incremental attention trace
+- **DFA execution**: divisible-by-3 state machine verified on 0..=1000
+- **Backtracking search**: 4×4 Sudoku, 8-Queens, 9×9 Arto Inkala with hull compression
+- **`StreamingSolver`**: Step-by-step solve events matching Percepta's demo output
+- **`SymbolicValidator`**: Constraint pruning bridge to speculative decoding (DDTree)
+
+### Known Limitations vs Reference (`transformer-vm`)
+
+| Limitation | Impact | Fix |
+|------------|--------|-----|
+| Upper hull only — no lower hull | `qy < 0` queries produce wrong results (documented in adversarial tests) | Plan 063: CHT dual hull |
+| Requires monotonically increasing X | Cannot handle arbitrary 2D key distributions | Plan 063: CHT LineContainer |
+| O(N) memory — stores all keys | No sublinear compression of KV cache | Plan 063: `HullMeta` aggregation |
+| No tie-breaking (LATEST/AVERAGE) | Cannot implement cumulative sum or latest-write semantics | Plan 063: `TieBreak` enum |
+| No cumulative sum (`fetch_sum`) | Cannot track state machines via attention alone | Plan 063: uniform attention mode |
+| No ReGLU / stepglu primitives | Cannot express conditional logic or multiplication as FFN operations | Future: `gates.rs` module |
+| No computation graph DSL | Cannot express programs as transformer-native operations | Future: `graph.rs` module |
+
+### Verified Properties
+
+- **960 arithmetic ops**: all a+b, a×b, a−b, a÷b for a,b ∈ 0..=10
+- **Unimodality**: dot products over hull vertices proven bitonic across 360° query sweep
+- **Supporting point**: `linear_attention` ≡ `fast_attention` for convex distributions
+- **Hull compression**: backtracking traces compress valleys (dead ends), retain peaks (explorations)
+- **Adversarial limits**: V-shaped (concave-up) keys break `fast_attention` for downward queries — documented and tested
+- **100K trace stress**: fast attention agrees with linear at scale
+
+### Roadmap
+
+**Phase A — CHT Hull KV Cache** (Plan 063, next): Replace Graham Scan with Dynamic Convex Hull Trick (LineContainer). Fixes arbitrary 2D points, dual hull, tie-breaking, cumulative sum, sublinear memory. Reference: `.raw/transformer-vm/attention/hull2d_cht.h` (Apache-2.0 © Percepta).
+
+**Phase B — ReGLU/stepglu Gates**: `relu(b)*a`, `step(b≥0)`, `a*b` as FFN neurons. Enables programmatic weight construction. New plan after Phase A completes.
+
+**Phase C — Full Compiler Stack** (pivot decision): Expression/Dimension DSL → MILP scheduling → WASM interpreter → analytical weight construction → Futamura specialization. Only if Phase B reveals product-market fit for "programs as weights."
+
+**From blog**: k-sparse softmax (nested hulls, O(k + log n)), 3D heads (3D convex hulls), programs into weights (gradient descent no longer the only way to modify a model).
+
+📁 `src/percepta.rs` — `Vec2`, `KVCache2D`, `Sudoku9x9`, `SymbolicValidator`, `StreamingSolver`, `SolveEvent`
+📁 `.research/32_percepta_distillation_strategy.md` — **Phased distillation verdict** (what to take, what to keep, Apache-2.0 → MIT)
+📁 `.research/31_percepta_deep_dive.md` — Gap analysis + **comparison table** (what each does better)
+📁 `.plans/063_percepta_cht_hull_kv_cache.md` — Phase A: CHT upgrade plan with tasks
 
 ## 🗜️ TurboQuant: Near-Optimal KV Cache Compression
 
@@ -869,7 +941,8 @@ Lessons from [NVIDIA Dynamo's agentic inference](https://developer.nvidia.com/bl
 - [Cross-Family Speculative Prefill](https://arxiv.org/abs/2603.02631) — Liu et al., ICLR 2026
 - [ZAYA1-VL-8B Technical Report](https://arxiv.org/abs/2504.02268) — Bidirectional prefix attention, token-specific LoRAs
 - [Raven: Sparse Memory Routing](https://github.com/goombalab/raven) — Afzal et al., 2025
-- [Percepta: Can LLMs Be Computers?](https://www.percepta.ai/blog/can-llms-be-computers) — O(log N) hull attention
+- [Percepta: Can LLMs Be Computers?](https://www.percepta.ai/blog/can-llms-be-computers) — 2D convex hull attention, WASM interpreter in transformer weights, O(log N) decoding
+- [Percepta: Constructing an LLM-Computer](https://www.percepta.ai/blog/constructing-llm-computer) — ALM, CALM, gate graphs, MILP scheduling, specialized vs universal models
 - [Sparser, Faster, Lighter Transformers](https://arxiv.org/abs/2603.23198) — Sakana AI, 2025
 - [EMO: Mixture of Experts](https://arxiv.org/abs/2406.08732) — Document-level routing
 - [Probabilistic Programs of Thought](https://arxiv.org/abs/2604.17290) — Logit-parameterized CPU resampling
