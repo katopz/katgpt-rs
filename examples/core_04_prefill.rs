@@ -246,17 +246,37 @@ fn main() {
     let mut cache_e2e = MultiLayerKVCache::new(&config);
     let mut rng_e2e = Rng::new(123);
 
-    let generated = generate_with_prefill(
-        &mut ctx_e2e,
-        &mut pf_e2e,
-        &weights,
-        &mut cache_e2e,
-        &config,
-        &mut rng_e2e,
-        &prompt_tokens,
-        16,
-        &lora_pair,
-    );
+    let generated = {
+        #[cfg(not(feature = "domain_latent"))]
+        {
+            generate_with_prefill(
+                &mut ctx_e2e,
+                &mut pf_e2e,
+                &weights,
+                &mut cache_e2e,
+                &config,
+                &mut rng_e2e,
+                &prompt_tokens,
+                16,
+                &lora_pair,
+            )
+        }
+        #[cfg(feature = "domain_latent")]
+        {
+            generate_with_prefill(
+                &mut ctx_e2e,
+                &mut pf_e2e,
+                &weights,
+                &mut cache_e2e,
+                &config,
+                &mut rng_e2e,
+                &prompt_tokens,
+                16,
+                &lora_pair,
+                None,
+            )
+        }
+    };
 
     let all_valid = generated.iter().all(|&t| t < config.vocab_size);
 

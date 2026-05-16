@@ -12,18 +12,54 @@ use std::path::PathBuf;
 
 use fastrand::Rng;
 
+use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
 use microgpt_rs::pruners::bomber::replay::{
     ReplaySample, ReplayWriter, serialize_board, serialize_bombs, serialize_powerups,
 };
 use microgpt_rs::pruners::bomber::{
-    BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer, init_world,
-    run_tick, spawn_players,
+    ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer,
+    init_world, init_world_with_arena, run_tick, spawn_players,
 };
 
 // ── Config ─────────────────────────────────────────────────────
 
 const ROUNDS: usize = 100;
 const TICK_LIMIT: u32 = 200;
+
+// ── CLI ────────────────────────────────────────────────────────
+
+fn parse_map_arg() -> (Option<&'static str>, u64) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut map_preset = None;
+    let mut seed = 42u64;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--map" if i + 1 < args.len() => {
+                i += 1;
+                map_preset = match args[i].as_str() {
+                    "empty" => Some(EMPTY_ARENA),
+                    "standard" => Some(STANDARD_ARENA),
+                    "pillar_heavy" => Some(PILLAR_HEAVY_ARENA),
+                    other => {
+                        eprintln!("Unknown map: {other}. Use: empty, standard, pillar_heavy");
+                        std::process::exit(1);
+                    }
+                };
+            }
+            "--seed" if i + 1 < args.len() => {
+                i += 1;
+                seed = args[i].parse().unwrap_or_else(|e| {
+                    eprintln!("Bad seed: {e}");
+                    std::process::exit(1);
+                });
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    (map_preset, seed)
+}
 
 // ── Pending Capture ────────────────────────────────────────────
 
@@ -44,7 +80,8 @@ fn main() {
         std::fs::create_dir_all(dir).ok();
     }
 
-    let mut rng = Rng::with_seed(42);
+    let (map_preset, default_seed) = parse_map_arg();
+    let mut rng = Rng::with_seed(default_seed);
     let mut players: Vec<Box<dyn BomberPlayer>> = vec![
         Box::new(RandomPlayer::new(0)),
         Box::new(GreedyPlayer::new(1)),
@@ -54,6 +91,10 @@ fn main() {
 
     println!("╔═══ Bomberman HL Arena ═══════════════════════════════════╗");
     println!("║  P1 🐰 Random  |  P2 🐱 Greedy  |  P3 🐶 Validator  |  P4 🐵 HL  ║");
+    match map_preset {
+        Some(_) => println!("║  Map: fixed preset                                      ║"),
+        None => println!("║  Map: procedural (seed={default_seed:<35})  ║"),
+    }
     if let Some(ref dir) = replay_dir {
         println!("║  Replay dir: {:<42}║", dir.display());
     }
@@ -73,9 +114,10 @@ fn main() {
             replay_writer = ReplayWriter::create(&path, round as u32).ok();
         }
 
-        let seed = 42 + round as u64;
+        let seed = default_seed + round as u64;
         let result = run_round(
             seed,
+            map_preset,
             &mut players,
             &mut rng,
             round as u32,
@@ -167,12 +209,22 @@ struct RoundResult {
 
 fn run_round(
     seed: u64,
+    map_preset: Option<&'static str>,
     players: &mut [Box<dyn BomberPlayer>],
     rng: &mut Rng,
     round_num: u32,
     replay_writer: &mut Option<ReplayWriter>,
 ) -> RoundResult {
-    let mut world = init_world(seed);
+    let mut world = match map_preset {
+        Some(template) => {
+            let arena = ArenaGrid::fixed(template).unwrap_or_else(|e| {
+                eprintln!("Invalid map preset: {e}");
+                std::process::exit(1);
+            });
+            init_world_with_arena(arena)
+        }
+        None => init_world(seed),
+    };
     let entities = spawn_players(&mut world);
 
     // Reset players

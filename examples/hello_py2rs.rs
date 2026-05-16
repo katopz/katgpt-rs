@@ -257,17 +257,37 @@ fn main() {
     let mut cache = MultiLayerKVCache::new(&config);
     let mut gen_rng = Rng::new(123);
 
-    let generated = generate_with_prefill(
-        &mut ctx,
-        &mut prefill,
-        &weights,
-        &mut cache,
-        &config,
-        &mut gen_rng,
-        &prompt_tokens,
-        max_gen,
-        &lora_pair,
-    );
+    let generated = {
+        #[cfg(not(feature = "domain_latent"))]
+        {
+            generate_with_prefill(
+                &mut ctx,
+                &mut prefill,
+                &weights,
+                &mut cache,
+                &config,
+                &mut gen_rng,
+                &prompt_tokens,
+                max_gen,
+                &lora_pair,
+            )
+        }
+        #[cfg(feature = "domain_latent")]
+        {
+            generate_with_prefill(
+                &mut ctx,
+                &mut prefill,
+                &weights,
+                &mut cache,
+                &config,
+                &mut gen_rng,
+                &prompt_tokens,
+                max_gen,
+                &lora_pair,
+                None,
+            )
+        }
+    };
 
     let rust_output = BpeTokenizerImpl::decode(&tokenizer, &generated);
 
@@ -382,17 +402,37 @@ fn main() {
     let mut cache_ns = MultiLayerKVCache::new(&config);
     let mut rng_ns = Rng::new(123);
 
-    let generated_ns = generate_with_prefill(
-        &mut ctx_ns,
-        &mut pf_ns,
-        &weights,
-        &mut cache_ns,
-        &config,
-        &mut rng_ns,
-        &prompt_tokens,
-        max_gen,
-        &lora_no_switch,
-    );
+    let generated_ns = {
+        #[cfg(not(feature = "domain_latent"))]
+        {
+            generate_with_prefill(
+                &mut ctx_ns,
+                &mut pf_ns,
+                &weights,
+                &mut cache_ns,
+                &config,
+                &mut rng_ns,
+                &prompt_tokens,
+                max_gen,
+                &lora_no_switch,
+            )
+        }
+        #[cfg(feature = "domain_latent")]
+        {
+            generate_with_prefill(
+                &mut ctx_ns,
+                &mut pf_ns,
+                &weights,
+                &mut cache_ns,
+                &config,
+                &mut rng_ns,
+                &prompt_tokens,
+                max_gen,
+                &lora_no_switch,
+                None,
+            )
+        }
+    };
 
     let output_ns = BpeTokenizerImpl::decode(&tokenizer, &generated_ns);
 

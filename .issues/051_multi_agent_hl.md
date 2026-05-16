@@ -68,10 +68,14 @@ let mut players: Vec<Box<dyn BomberPlayer>> = vec![
   - `compress_arm()` and `is_compressed()` are shared — one agent's compression propagates to all
   - HLPlayer's `compress_cycle()` delegates to shared stats when present
 
-- [ ] **T4: `TrialLog` multi-writer support**
-  - Add `player_id: u32` to `TrialRecord`
-  - All shared HLPlayers write to same JSONL with their ID
-  - Enables post-hoc analysis of which agent contributed which experience
+- [x] **T4: `TrialLog` multi-writer support** ✅
+  - Added `player_id: u32` to `TrialRecord` with `#[serde(default)]` for backward compat
+  - Created `SharedTrialLog` wrapper (`Arc<Mutex<TrialLog>>`) behind `#[cfg(feature = "bandit")]`
+  - `HLPlayer::with_shared_stats()` now accepts optional `SharedTrialLog`
+  - `update_outcome()` writes `TrialRecord` with `player_id = self._id as u32` when shared log present
+  - Re-exported `SharedTrialLog` from `pruners/mod.rs`
+  - Test: `test_shared_trial_log_multi_writer` — 4 threads × 50 records, verifies 200 total + per-player counts
+  - Test: `test_player_id_backward_compat` — legacy JSONL without `player_id` parses with default `0`
 
 - [ ] **T5: Tournament benchmark**
   - Run 1000-game tournament: 4× shared HL vs 4× independent HL

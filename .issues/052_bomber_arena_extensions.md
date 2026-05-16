@@ -90,8 +90,8 @@ impl ArenaGrid {
 - [x] B1: Add `ArenaGrid::from_cells(cells: &[Vec<Cell>])` constructor — validates dimensions (13×13), border walls, spawn zones
 - [x] B2: Add `ArenaGrid::fixed(template: &str)` — parse compact string format (e.g., `"##....##\n#......#\n..."`)
 - [x] B3: Add 2-3 preset constants: `EMPTY_ARENA`, `STANDARD_ARENA`, `PILLAR_HEAVY_ARENA`
-- [ ] B4: Update bomber examples to accept `--map <preset>` or `--seed <u64>` CLI arg
-- [ ] B5: Add benchmark comparison: fixed map vs procedural (score variance across runs)
+- [x] B4: Update bomber examples to accept `--map <preset>` or `--seed <u64>` CLI arg ✅
+- [x] B5: Add benchmark comparison: fixed map vs procedural (score variance across runs) ✅ — `tests/bench_fixed_vs_procedural.rs`
 - [x] B6: Add tests: from_cells validation (bad dimensions, missing borders), fixed parsing roundtrip
 
 ### Design Notes
@@ -148,13 +148,13 @@ Build an outer orchestration loop that:
 
 ## Priority
 
-| Task | Scope | Impact | Effort |
-|------|-------|--------|--------|
-| **B: Custom Maps** | Low | High (benchmark reproducibility) | Low — trivial `from_cells` + presets |
-| **A: Complex Bombs** | Medium | Medium (gameplay depth) | Medium — ECS extension + blast logic |
-| **C: Agent Loop** | High | High (self-improving validators) | High — new orchestration layer |
+| Task | Scope | Impact | Effort | Status |
+|------|-------|--------|--------|--------|
+| **B: Custom Maps** | Low | High (benchmark reproducibility) | Low | ✅ Done |
+| **A: Complex Bombs** | Medium | Medium (gameplay depth) | Medium — ECS extension + blast logic | Open |
+| **C: Agent Loop** | High | High (self-improving validators) | High — new orchestration layer | Open |
 
-**Recommended order:** B → A → C (low-hanging fruit first, then gameplay, then research)
+**Recommended order:** A → C (B complete, gameplay next, then research)
 
 ---
 

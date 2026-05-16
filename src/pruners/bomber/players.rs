@@ -17,7 +17,10 @@ use fastrand::Rng;
 use std::sync::Arc;
 
 #[cfg(feature = "bandit")]
-use crate::pruners::SharedBanditStats;
+use crate::pruners::{SharedBanditStats, TrialRecord};
+
+#[cfg(feature = "bandit")]
+use crate::pruners::trial_log::SharedTrialLog;
 
 use super::{ArenaGrid, BomberAction, GameEvent, GridPos};
 
@@ -1124,6 +1127,9 @@ pub struct HLPlayer {
     /// When `Some`, Q-values/visits/compressed are delegated here.
     #[cfg(feature = "bandit")]
     shared_stats: Option<Arc<SharedBanditStats>>,
+    /// Shared trial log for multi-agent episode recording (Issue 051 T4).
+    #[cfg(feature = "bandit")]
+    shared_log: Option<SharedTrialLog>,
 }
 
 impl HLPlayer {
@@ -1141,6 +1147,8 @@ impl HLPlayer {
             last_dir: None,
             #[cfg(feature = "bandit")]
             shared_stats: None,
+            #[cfg(feature = "bandit")]
+            shared_log: None,
         }
     }
 
@@ -1149,8 +1157,15 @@ impl HLPlayer {
     /// Multiple agents sharing one `SharedBanditStats` learn cooperatively:
     /// Q-values and visit counts are shared, but each agent still has
     /// its own heuristic scoring and RNG for action selection.
+    ///
+    /// Optionally pass a `SharedTrialLog` to record episodes with `player_id`
+    /// for multi-agent post-hoc analysis (Issue 051 T4).
     #[cfg(feature = "bandit")]
-    pub fn with_shared_stats(id: u8, stats: Arc<SharedBanditStats>) -> Self {
+    pub fn with_shared_stats(
+        id: u8,
+        stats: Arc<SharedBanditStats>,
+        shared_log: Option<SharedTrialLog>,
+    ) -> Self {
         Self {
             _id: id,
             known_bombs: Vec::new(),
@@ -1163,6 +1178,7 @@ impl HLPlayer {
             round_actions: Vec::new(),
             last_dir: None,
             shared_stats: Some(stats),
+            shared_log,
         }
     }
 
@@ -1286,6 +1302,36 @@ impl HLPlayer {
             }
             let reward = action_rewards[idx] / action_weights[idx];
             self.update_arm_q(idx, reward);
+        }
+
+        // Record trial data for shared log (Issue 051 T4)
+        #[cfg(feature = "bandit")]
+        if let Some(ref log) = self.shared_log {
+            let episode = match &self.shared_stats {
+                Some(stats) => stats.total_pulls() as usize,
+                None => self.total_pulls as usize,
+            };
+            for idx in 0..ACTION_COUNT {
+                if action_weights[idx] == 0.0 {
+                    continue;
+                }
+                let reward = action_rewards[idx] / action_weights[idx];
+                let record = TrialRecord {
+                    episode,
+                    player_id: self._id as u32,
+                    arm: idx,
+                    reward,
+                    q_value: self.arm_q(idx),
+                    cumulative_reward: 0.0,
+                    cumulative_regret: 0.0,
+                    config: "bomber_hl".into(),
+                    note: format!("survived={survived},killed={killed_opponent}"),
+                    base_correct: None,
+                    reviewed_correct: None,
+                    anchors: None,
+                };
+                let _ = log.append(&record);
+            }
         }
     }
 

@@ -204,6 +204,7 @@ fn main() {
         let note = format!("version={}", absorb.inner().version());
         let record = TrialRecord {
             episode,
+            player_id: 0,
             arm,
             reward,
             q_value: stats.q_value(arm),

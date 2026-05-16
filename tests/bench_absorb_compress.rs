@@ -158,6 +158,7 @@ fn bench_trial_log_throughput() {
 
     let sample = TrialRecord {
         episode: 0,
+        player_id: 0,
         arm: 2,
         reward: 0.8,
         q_value: 0.75,

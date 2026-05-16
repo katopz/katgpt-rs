@@ -29,10 +29,11 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
+use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
 use microgpt_rs::pruners::bomber::{
     Alive, ArenaGrid, BombFuse, BomberPlayer, Cell, GameEvent, GreedyPlayer, GridPos, HLPlayer,
-    PlayerEntities, PowerUpKind, RandomPlayer, ValidatorPlayer, init_world, run_tick,
-    spawn_players,
+    PlayerEntities, PowerUpKind, RandomPlayer, ValidatorPlayer, init_world, init_world_with_arena,
+    run_tick, spawn_players,
 };
 
 // ── Emoji Constants ────────────────────────────────────────────
@@ -52,6 +53,41 @@ const PU_SPEED: &str = "👟";
 // ── Timing ─────────────────────────────────────────────────────
 
 const AUTO_STEP_MS: u64 = 300;
+
+// ── CLI ────────────────────────────────────────────────────────
+
+fn parse_map_arg() -> (Option<&'static str>, u64) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut map_preset = None;
+    let mut seed = 42u64;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--map" if i + 1 < args.len() => {
+                i += 1;
+                map_preset = match args[i].as_str() {
+                    "empty" => Some(EMPTY_ARENA),
+                    "standard" => Some(STANDARD_ARENA),
+                    "pillar_heavy" => Some(PILLAR_HEAVY_ARENA),
+                    other => {
+                        eprintln!("Unknown map: {other}. Use: empty, standard, pillar_heavy");
+                        std::process::exit(1);
+                    }
+                };
+            }
+            "--seed" if i + 1 < args.len() => {
+                i += 1;
+                seed = args[i].parse().unwrap_or_else(|e| {
+                    eprintln!("Bad seed: {e}");
+                    std::process::exit(1);
+                });
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    (map_preset, seed)
+}
 
 // ── Snapshot ───────────────────────────────────────────────────
 
@@ -78,8 +114,22 @@ struct RecordedRound {
     _total_ticks: u32,
 }
 
-fn record_round(seed: u64, players: &mut [Box<dyn BomberPlayer>], rng: &mut Rng) -> RecordedRound {
-    let mut world = init_world(seed);
+fn record_round(
+    seed: u64,
+    map_preset: Option<&'static str>,
+    players: &mut [Box<dyn BomberPlayer>],
+    rng: &mut Rng,
+) -> RecordedRound {
+    let mut world = match map_preset {
+        Some(template) => {
+            let arena = ArenaGrid::fixed(template).unwrap_or_else(|e| {
+                eprintln!("Invalid map preset: {e}");
+                std::process::exit(1);
+            });
+            init_world_with_arena(arena)
+        }
+        None => init_world(seed),
+    };
     let entities = spawn_players(&mut world);
 
     for p in players.iter_mut() {
@@ -385,7 +435,8 @@ fn main() -> io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Initial round
-    let mut rng = Rng::with_seed(42);
+    let (map_preset, default_seed) = parse_map_arg();
+    let mut rng = Rng::with_seed(default_seed);
     let mut round_idx = 0usize;
     let total_rounds = 5usize;
 
@@ -396,7 +447,12 @@ fn main() -> io::Result<()> {
         Box::new(HLPlayer::new(3)),
     ];
 
-    let mut recorded = record_round(42 + round_idx as u64, &mut players, &mut rng);
+    let mut recorded = record_round(
+        default_seed + round_idx as u64,
+        map_preset,
+        &mut players,
+        &mut rng,
+    );
     let mut cursor = 0usize;
     let mut auto_play = false;
 
@@ -431,19 +487,23 @@ fn main() -> io::Result<()> {
         if auto_play && cursor < total_snaps.saturating_sub(1) {
             let dur = Duration::from_millis(AUTO_STEP_MS);
             if event::poll(dur)? {
-                if let Event::Key(key) = event::read()? {
-                    if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') | KeyCode::Esc => break,
-                            KeyCode::Char(' ') => auto_play = !auto_play,
-                            KeyCode::Char('r') => {
-                                round_idx = (round_idx + 1) % total_rounds;
-                                recorded =
-                                    record_round(42 + round_idx as u64, &mut players, &mut rng);
-                                cursor = 0;
-                            }
-                            _ => {}
+                if let Event::Key(key) = event::read()?
+                    && key.kind == KeyEventKind::Press
+                {
+                    match key.code {
+                        KeyCode::Char('q') | KeyCode::Esc => break,
+                        KeyCode::Char(' ') => auto_play = !auto_play,
+                        KeyCode::Char('r') => {
+                            round_idx = (round_idx + 1) % total_rounds;
+                            recorded = record_round(
+                                default_seed + round_idx as u64,
+                                map_preset,
+                                &mut players,
+                                &mut rng,
+                            );
+                            cursor = 0;
                         }
+                        _ => {}
                     }
                 }
             } else {
@@ -473,7 +533,12 @@ fn main() -> io::Result<()> {
                 KeyCode::End => cursor = total_snaps.saturating_sub(1),
                 KeyCode::Char('r') => {
                     round_idx = (round_idx + 1) % total_rounds;
-                    recorded = record_round(42 + round_idx as u64, &mut players, &mut rng);
+                    recorded = record_round(
+                        default_seed + round_idx as u64,
+                        map_preset,
+                        &mut players,
+                        &mut rng,
+                    );
                     cursor = 0;
                 }
                 _ => {}
@@ -492,9 +557,9 @@ fn main() -> io::Result<()> {
     let names = ["Random", "Greedy", "Validator", "HL"];
     for i in 0..4 {
         println!(
-            "  {} {} {:<10} Score={:+4}",
+            "  {} P{} {:<10} Score={:+4}",
             P_EMOJI[i],
-            format!("P{}", i + 1),
+            i + 1,
             names[i],
             recorded.final_scores[i],
         );

@@ -23,15 +23,17 @@
 //! # Output: target/wasm32-unknown-unknown/release/examples/bomber_validator.wasm
 //! ```
 
-use std::env;
 use std::time::Instant;
 
 use fastrand::Rng;
 
 #[cfg(feature = "bomber-wasm")]
+use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+
+#[cfg(feature = "bomber-wasm")]
 use microgpt_rs::pruners::bomber::{
-    BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, NNPlayer, RandomPlayer, ValidatorPlayer,
-    init_world, run_tick, spawn_players,
+    ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, NNPlayer, RandomPlayer,
+    ValidatorPlayer, init_world, init_world_with_arena, run_tick, spawn_players,
 };
 
 #[cfg(not(feature = "bomber-wasm"))]
@@ -41,12 +43,52 @@ fn main() {
     std::process::exit(1);
 }
 
+// ── CLI ────────────────────────────────────────────────────────
+
+#[cfg(feature = "bomber-wasm")]
+fn parse_args() -> (Option<&'static str>, u64, Option<String>) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut map_preset = None;
+    let mut seed = 42u64;
+    let mut wasm_path = None;
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--map" if i + 1 < args.len() => {
+                i += 1;
+                map_preset = match args[i].as_str() {
+                    "empty" => Some(EMPTY_ARENA),
+                    "standard" => Some(STANDARD_ARENA),
+                    "pillar_heavy" => Some(PILLAR_HEAVY_ARENA),
+                    other => {
+                        eprintln!("Unknown map: {other}. Use: empty, standard, pillar_heavy");
+                        std::process::exit(1);
+                    }
+                };
+            }
+            "--seed" if i + 1 < args.len() => {
+                i += 1;
+                seed = args[i].parse().unwrap_or_else(|e| {
+                    eprintln!("Bad seed: {e}");
+                    std::process::exit(1);
+                });
+            }
+            other if !other.starts_with('-') && wasm_path.is_none() => {
+                wasm_path = Some(args[i].clone());
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    (map_preset, seed, wasm_path)
+}
+
 #[cfg(feature = "bomber-wasm")]
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let wasm_path = args.get(1).map(|s| s.as_str());
+    let (map_preset, default_seed, wasm_path_str) = parse_args();
+    let wasm_path = wasm_path_str.as_deref();
 
-    let mut rng = Rng::with_seed(42);
+    let mut rng = Rng::with_seed(default_seed);
 
     // ── WASM Loading ───────────────────────────────────────────
 
@@ -105,9 +147,9 @@ fn main() {
     let mut total_ticks = 0u32;
 
     for round in 0..ROUNDS {
-        let seed = 42 + round as u64;
+        let seed = default_seed + round as u64;
         let round_start = Instant::now();
-        let result = run_round(seed, &mut players, &mut rng, TICK_LIMIT);
+        let result = run_round(seed, map_preset, &mut players, &mut rng, TICK_LIMIT);
         let round_elapsed = round_start.elapsed();
 
         // Update stats
@@ -214,8 +256,8 @@ fn main() {
         let mut native_wins = [0u32; 4];
 
         for round in 0..5 {
-            let seed = 1000 + round as u64;
-            let result = run_round(seed, &mut native_players, &mut rng, TICK_LIMIT);
+            let seed = default_seed + 1000 + round as u64;
+            let result = run_round(seed, map_preset, &mut native_players, &mut rng, TICK_LIMIT);
 
             for (i, s) in result.scores.iter().enumerate() {
                 native_scores[i] += s;
@@ -258,11 +300,21 @@ struct RoundResult {
 #[cfg(feature = "bomber-wasm")]
 fn run_round(
     seed: u64,
+    map_preset: Option<&'static str>,
     players: &mut [Box<dyn BomberPlayer>],
     rng: &mut Rng,
     tick_limit: u32,
 ) -> RoundResult {
-    let mut world = init_world(seed);
+    let mut world = match map_preset {
+        Some(template) => {
+            let arena = ArenaGrid::fixed(template).unwrap_or_else(|e| {
+                eprintln!("Invalid map preset: {e}");
+                std::process::exit(1);
+            });
+            init_world_with_arena(arena)
+        }
+        None => init_world(seed),
+    };
     let entities = spawn_players(&mut world);
 
     // Reset players

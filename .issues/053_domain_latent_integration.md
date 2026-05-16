@@ -157,11 +157,11 @@ riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no dom
 
 | Task | Scope | Status | Est. Effort |
 |------|-------|--------|-------------|
-| A: Integration tests | `microgpt-rs/src/transformer.rs` | Unblocked | Small (3 tests) |
-| B: ExpertRegistry integration | `riir-ai/crates/riir-router/` | Unblocked | Medium (cross-crate dep decision) |
+| A: Integration tests | `microgpt-rs/src/transformer.rs` | ✅ Done | Small (3 tests) |
+| B: ExpertRegistry + inference wiring | `riir-router/` + `transformer.rs` | ✅ Done | Medium |
 | C: riir-burner training | `riir-ai/crates/riir-burner/` | Partially blocked | Large (burn tensor API) |
 
-**Recommended order:** A → B → C (A is trivial, B has design decision, C needs burn expertise)
+**Status:** A ✅, B ✅, C open (needs burn expertise). Only C1-C4 remain.
 
 ---
 
@@ -170,12 +170,12 @@ riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no dom
 - [x] A1: `test_domain_latent_with_lora_changes_logits` ✅
 - [x] A2: `test_domain_latent_with_lora_prefill_pipeline` ✅
 - [x] A3: `test_domain_latent_zero_with_lora_same_as_lora_only` ✅
-- [ ] B1: Decide cross-crate dependency approach for `DomainLatent` in riir-router
-- [ ] B2: Add `domain_latent: Option<String>` to `DomainConfig` (with `#[serde(default)]`)
-- [ ] B3: Add `domain_latent: Option<DomainLatent>` to `ExpertBundle`
-- [ ] B4: Implement `resolve_domain_latent()` in `ExpertRegistry`
-- [ ] B5: Wire `domain_latent` through to `forward()` / `forward_prefill()` call sites
-- [ ] B6: Add tests (TOML config with domain_latent, graceful degradation)
+- [x] B1: Decide cross-crate dependency approach for `DomainLatent` in riir-router ✅ — direct dep with feature forwarding
+- [x] B2: Add `domain_latent: Option<String>` to `DomainConfig` (with `#[serde(default)]`) ✅
+- [x] B3: Add `domain_latent: Option<DomainLatent>` to `ExpertBundle` ✅
+- [x] B4: Implement `resolve_domain_latent()` in `ExpertRegistry` ✅
+- [x] B5: Wire `domain_latent` through to `forward()` / `forward_prefill()` / `generate_with_prefill()` call sites ✅
+- [x] B6: Add tests (TOML config with domain_latent, graceful degradation) ✅ — 2 registry tests + generate_with_prefill test
 - [ ] C1: Port `DomainLatentAdamWStep` to burn tensor API
 - [ ] C2: Wire domain latent training into LoRA training loop
 - [ ] C3: Add `--domain-latent` flag to `scripts/train_lora.py`

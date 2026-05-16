@@ -17,7 +17,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Result, Write};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 
@@ -53,6 +53,10 @@ pub struct AnchorTrace {
 pub struct TrialRecord {
     /// Episode index (0-based).
     pub episode: usize,
+    /// Player/agent ID for multi-agent shared bandit (Issue 051 T4).
+    /// Defaults to `0` when absent in legacy JSONL files.
+    #[serde(default)]
+    pub player_id: u32,
     /// Arm (action) selected.
     pub arm: usize,
     /// Observed reward ∈ [0.0, 1.0].
@@ -255,6 +259,62 @@ impl TrialLog {
     }
 }
 
+// ── SharedTrialLog (Issue 051 T4: multi-writer support) ────────
+
+/// Thread-safe wrapper around [`TrialLog`] for multi-agent shared bandit.
+///
+/// Multiple HLPlayers can write to the same JSONL file via cloned handles.
+/// Gate: `#[cfg(feature = "bandit")]` — only needed for shared bandit mode.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// let log = SharedTrialLog::new(TrialLog::new(path)?);
+/// let h1 = log.clone_handle();
+/// let h2 = log.clone_handle();
+/// // h1 and h2 write concurrently to the same file
+/// ```
+#[cfg(feature = "bandit")]
+pub struct SharedTrialLog {
+    inner: Arc<Mutex<TrialLog>>,
+}
+
+#[cfg(feature = "bandit")]
+impl SharedTrialLog {
+    /// Wrap an existing [`TrialLog`] in a thread-safe handle.
+    pub fn new(log: TrialLog) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(log)),
+        }
+    }
+
+    /// Append a trial record (thread-safe).
+    ///
+    /// Blocks until the mutex is available.
+    pub fn append(&self, record: &TrialRecord) -> Result<()> {
+        self.inner.lock().unwrap().append(record)
+    }
+
+    /// Number of records written so far (thread-safe).
+    pub fn count(&self) -> usize {
+        self.inner.lock().unwrap().count()
+    }
+
+    /// Flush buffered writes to disk (thread-safe).
+    pub fn flush(&self) -> Result<()> {
+        self.inner.lock().unwrap().flush()
+    }
+
+    /// Clone a new handle referencing the same underlying log.
+    ///
+    /// Use this to distribute handles across threads/agents.
+    pub fn clone_handle(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -271,6 +331,7 @@ mod tests {
     fn sample_record(episode: usize, arm: usize, reward: f32) -> TrialRecord {
         TrialRecord {
             episode,
+            player_id: 0,
             arm,
             reward,
             q_value: 0.5,
@@ -398,6 +459,7 @@ mod tests {
 
         let record = TrialRecord {
             episode: 42,
+            player_id: 0,
             arm: 7,
             reward: 0.0,
             q_value: 0.5,
@@ -442,5 +504,85 @@ mod tests {
         assert_eq!(record.episode, 0);
         assert_eq!(record.arm, 1);
         assert!(record.anchors.is_none());
+    }
+
+    #[test]
+    fn test_player_id_backward_compat() {
+        // Legacy JSON without player_id should parse with default 0
+        let json_line = r#"{"episode":5,"arm":2,"reward":0.8,"q_value":0.6,"cumulative_reward":4.0,"cumulative_regret":1.0,"config":"old","note":"","base_correct":null,"reviewed_correct":null}"#;
+        let record: TrialRecord = serde_json::from_str(json_line).unwrap();
+        assert_eq!(record.player_id, 0);
+
+        // New JSON with player_id should parse correctly
+        let json_with_id = r#"{"episode":5,"player_id":3,"arm":2,"reward":0.8,"q_value":0.6,"cumulative_reward":4.0,"cumulative_regret":1.0,"config":"new","note":"","base_correct":null,"reviewed_correct":null}"#;
+        let record_id: TrialRecord = serde_json::from_str(json_with_id).unwrap();
+        assert_eq!(record_id.player_id, 3);
+    }
+
+    // ── SharedTrialLog Tests (Issue 051 T4) ──────────────────────
+
+    #[test]
+    #[cfg(feature = "bandit")]
+    fn test_shared_trial_log_multi_writer() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let path = temp_path("shared_multi_writer");
+        let _ = std::fs::remove_file(&path);
+
+        let log = Arc::new(super::SharedTrialLog::new(TrialLog::new(&path).unwrap()));
+
+        let num_threads = 4usize;
+        let records_per_thread = 50usize;
+
+        let handles: Vec<_> = (0..num_threads)
+            .map(|player_id| {
+                let log_clone = Arc::clone(&log);
+                thread::spawn(move || {
+                    for i in 0..records_per_thread {
+                        let record = TrialRecord {
+                            episode: i,
+                            player_id: player_id as u32,
+                            arm: player_id,
+                            reward: 0.5,
+                            q_value: 0.5,
+                            cumulative_reward: 0.0,
+                            cumulative_regret: 0.0,
+                            config: "multi".into(),
+                            note: format!("player{player_id}_ep{i}"),
+                            base_correct: None,
+                            reviewed_correct: None,
+                            anchors: None,
+                        };
+                        log_clone.append(&record).unwrap();
+                    }
+                })
+            })
+            .collect();
+
+        for h in handles {
+            h.join().unwrap();
+        }
+
+        log.flush().unwrap();
+
+        // Verify total count
+        let total_expected = num_threads * records_per_thread;
+        assert_eq!(log.count(), total_expected);
+
+        // Load and verify records
+        let records = TrialLog::load(&path).unwrap();
+        assert_eq!(records.len(), total_expected);
+
+        // Each player_id should appear exactly records_per_thread times
+        for pid in 0..num_threads {
+            let count = records.iter().filter(|r| r.player_id == pid as u32).count();
+            assert_eq!(
+                count, records_per_thread,
+                "player_id {pid} expected {records_per_thread} records, got {count}"
+            );
+        }
+
+        let _ = std::fs::remove_file(&path);
     }
 }

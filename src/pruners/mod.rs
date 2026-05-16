@@ -64,7 +64,7 @@ pub use hot_swap::HotSwapPruner;
 pub use regression::{GoldenTrace, RegressionResult, RegressionSuite, ReplayReward};
 
 #[cfg(feature = "bandit")]
-pub use trial_log::{TrialLog, TrialRecord, TrialSummary};
+pub use trial_log::{SharedTrialLog, TrialLog, TrialRecord, TrialSummary};
 
 #[cfg(feature = "g_zero")]
 pub mod g_zero;

@@ -1291,6 +1291,7 @@ pub fn generate_with_prefill(
     prompt_tokens: &[usize],
     max_gen_tokens: usize,
     lora_pair: &crate::types::LoraPair,
+    #[cfg(feature = "domain_latent")] domain_latent: Option<&crate::types::DomainLatent>,
 ) -> Vec<usize> {
     // 1. Bidirectional prefill with reader LoRA
     let logits = {
@@ -1316,7 +1317,7 @@ pub fn generate_with_prefill(
                 prompt_tokens,
                 config,
                 lora_pair.reader.as_ref(),
-                None,
+                domain_latent,
             )
         }
     };
@@ -1361,7 +1362,7 @@ pub fn generate_with_prefill(
                     pos,
                     config,
                     lora_pair.writer.as_ref(),
-                    None,
+                    domain_latent,
                 )
             }
         };
@@ -1380,6 +1381,36 @@ pub fn generate_with_prefill(
     }
 
     generated
+}
+
+/// Generate with prefill and optional domain latent (Plan 038).
+/// Convenience wrapper for callers that need domain conditioning during generation.
+#[cfg(feature = "domain_latent")]
+#[allow(clippy::too_many_arguments)]
+pub fn generate_with_prefill_and_domain_latent(
+    ctx: &mut ForwardContext,
+    prefill: &mut PrefillContext,
+    weights: &TransformerWeights,
+    cache: &mut MultiLayerKVCache,
+    config: &Config,
+    rng: &mut crate::types::Rng,
+    prompt_tokens: &[usize],
+    max_gen_tokens: usize,
+    lora_pair: &crate::types::LoraPair,
+    domain_latent: Option<&crate::types::DomainLatent>,
+) -> Vec<usize> {
+    generate_with_prefill(
+        ctx,
+        prefill,
+        weights,
+        cache,
+        config,
+        rng,
+        prompt_tokens,
+        max_gen_tokens,
+        lora_pair,
+        domain_latent,
+    )
 }
 
 /// Forward pass using `PagedKVCache` instead of `MultiLayerKVCache`.
@@ -3654,17 +3685,37 @@ mod tests {
         let mut cache = MultiLayerKVCache::new(&config);
 
         let prompt: Vec<usize> = (0..4).collect();
-        let generated = generate_with_prefill(
-            &mut ctx,
-            &mut prefill,
-            &weights,
-            &mut cache,
-            &config,
-            &mut rng,
-            &prompt,
-            10,
-            &crate::types::LoraPair::none(),
-        );
+        let generated = {
+            #[cfg(not(feature = "domain_latent"))]
+            {
+                generate_with_prefill(
+                    &mut ctx,
+                    &mut prefill,
+                    &weights,
+                    &mut cache,
+                    &config,
+                    &mut rng,
+                    &prompt,
+                    10,
+                    &crate::types::LoraPair::none(),
+                )
+            }
+            #[cfg(feature = "domain_latent")]
+            {
+                generate_with_prefill(
+                    &mut ctx,
+                    &mut prefill,
+                    &weights,
+                    &mut cache,
+                    &config,
+                    &mut rng,
+                    &prompt,
+                    10,
+                    &crate::types::LoraPair::none(),
+                    None,
+                )
+            }
+        };
 
         assert!(!generated.is_empty(), "should generate at least one token");
         assert!(generated.len() <= 10, "should not exceed max_gen_tokens");
@@ -3676,6 +3727,62 @@ mod tests {
     // -----------------------------------------------------------------------
     // Multi-layer prefill tests
     // -----------------------------------------------------------------------
+
+    #[cfg(feature = "domain_latent")]
+    #[test]
+    fn test_generate_with_prefill_domain_latent() {
+        let config = small_target_2layer();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let kvd = crate::types::kv_dim(&config);
+
+        // Create a non-zero domain latent
+        let dl = crate::types::DomainLatent::from_vec(vec![0.5; kvd]);
+
+        let prompt: Vec<usize> = (0..4).collect();
+
+        // Generate without domain latent
+        let mut ctx1 = ForwardContext::new(&config);
+        let mut prefill1 = PrefillContext::new(&config);
+        let mut cache1 = MultiLayerKVCache::new(&config);
+        let mut rng1 = Rng::new(42);
+        let generated1 = generate_with_prefill(
+            &mut ctx1,
+            &mut prefill1,
+            &weights,
+            &mut cache1,
+            &config,
+            &mut rng1,
+            &prompt,
+            10,
+            &crate::types::LoraPair::none(),
+            None,
+        );
+
+        // Generate with domain latent (same seed)
+        let mut ctx2 = ForwardContext::new(&config);
+        let mut prefill2 = PrefillContext::new(&config);
+        let mut cache2 = MultiLayerKVCache::new(&config);
+        let mut rng2 = Rng::new(42);
+        let generated2 = generate_with_prefill(
+            &mut ctx2,
+            &mut prefill2,
+            &weights,
+            &mut cache2,
+            &config,
+            &mut rng2,
+            &prompt,
+            10,
+            &crate::types::LoraPair::none(),
+            Some(&dl),
+        );
+
+        // Outputs should differ — domain latent modulates K/V at mid-layer
+        assert_ne!(
+            generated1, generated2,
+            "domain latent should change generation output"
+        );
+    }
 
     fn small_target_2layer() -> Config {
         let mut c = Config::small_target();

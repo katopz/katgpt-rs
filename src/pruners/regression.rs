@@ -318,6 +318,7 @@ mod tests {
                 let reward = (i as f32) * 0.1; // 0.0, 0.1, ..., 0.9
                 log.append(&TrialRecord {
                     episode: i,
+                    player_id: 0,
                     arm: i % 3,
                     reward,
                     q_value: reward,

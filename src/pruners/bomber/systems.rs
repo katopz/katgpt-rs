@@ -45,6 +45,17 @@ pub fn init_world(seed: u64) -> World {
     world
 }
 
+/// Create a fresh `World` with a pre-built [`ArenaGrid`] (e.g. from a fixed template).
+pub fn init_world_with_arena(arena: ArenaGrid) -> World {
+    let mut world = World::new();
+    world.insert_resource(arena);
+    world.insert_resource(GameRng { seed: 0 });
+    world.insert_resource(TickCounter::default());
+    world.insert_resource(ScoreBoard::default());
+    world.init_resource::<Events<GameEvent>>();
+    world
+}
+
 /// Spawn 4 player entities at the corner spawn positions.
 ///
 /// Returns the 4 player [`Entity`] ids and inserts a [`PlayerEntities`] resource.

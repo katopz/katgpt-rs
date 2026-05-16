@@ -799,6 +799,7 @@ impl<E: BanditEnv> BanditSession<E> {
             // Persist to trial log
             let record = TrialRecord {
                 episode,
+                player_id: 0,
                 arm,
                 reward,
                 q_value: self.stats.q_value(arm),

@@ -8,12 +8,13 @@ use std::path::PathBuf;
 
 use fastrand::Rng;
 
+use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
 use microgpt_rs::pruners::bomber::replay::{
     ReplaySample, ReplayWriter, serialize_board, serialize_bombs, serialize_powerups,
 };
 use microgpt_rs::pruners::bomber::{
-    BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer, init_world,
-    run_tick, spawn_players,
+    ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer,
+    init_world, init_world_with_arena, run_tick, spawn_players,
 };
 
 // ── Config ─────────────────────────────────────────────────────
@@ -22,6 +23,45 @@ const ROUNDS: usize = 1000;
 const TICK_LIMIT: u32 = 200;
 const QUALITY_THRESHOLD: f32 = 0.5;
 const ACTION_NAMES: [&str; 6] = ["Up", "Down", "Left", "Right", "Bomb", "Wait"];
+
+// ── CLI ────────────────────────────────────────────────────────
+
+fn parse_args() -> (Option<&'static str>, u64, PathBuf) {
+    let args: Vec<String> = std::env::args().collect();
+    let mut map_preset = None;
+    let mut seed = 42u64;
+    let mut output_dir = PathBuf::from("output/replays");
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--map" if i + 1 < args.len() => {
+                i += 1;
+                map_preset = match args[i].as_str() {
+                    "empty" => Some(EMPTY_ARENA),
+                    "standard" => Some(STANDARD_ARENA),
+                    "pillar_heavy" => Some(PILLAR_HEAVY_ARENA),
+                    other => {
+                        eprintln!("Unknown map: {other}. Use: empty, standard, pillar_heavy");
+                        std::process::exit(1);
+                    }
+                };
+            }
+            "--seed" if i + 1 < args.len() => {
+                i += 1;
+                seed = args[i].parse().unwrap_or_else(|e| {
+                    eprintln!("Bad seed: {e}");
+                    std::process::exit(1);
+                });
+            }
+            other if !other.starts_with('-') => {
+                output_dir = PathBuf::from(other);
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    (map_preset, seed, output_dir)
+}
 
 // ── Pending Sample ─────────────────────────────────────────────
 
@@ -50,16 +90,10 @@ struct RoundResult {
 // ── Main ───────────────────────────────────────────────────────
 
 fn main() {
-    // Parse optional CLI arg for output dir (default: output/replays)
-    let args: Vec<String> = std::env::args().collect();
-    let output_dir: PathBuf = if args.len() > 1 {
-        PathBuf::from(&args[1])
-    } else {
-        PathBuf::from("output/replays")
-    };
+    let (map_preset, default_seed, output_dir) = parse_args();
     std::fs::create_dir_all(&output_dir).ok();
 
-    let mut rng = Rng::with_seed(42);
+    let mut rng = Rng::with_seed(default_seed);
     let mut players: Vec<Box<dyn BomberPlayer>> = vec![
         Box::new(RandomPlayer::new(0)),
         Box::new(GreedyPlayer::new(1)),
@@ -87,8 +121,8 @@ fn main() {
     let mut total_samples = 0u64;
 
     for round in 0..ROUNDS {
-        let seed = 42 + round as u64;
-        let (result, pending) = run_round(seed, &mut players, &mut rng);
+        let seed = default_seed + round as u64;
+        let (result, pending) = run_round(seed, map_preset, &mut players, &mut rng);
 
         // Update HL player with outcome
         let p4_survived = result.survivors.contains(&3);
@@ -177,10 +211,20 @@ fn main() {
 
 fn run_round(
     seed: u64,
+    map_preset: Option<&'static str>,
     players: &mut [Box<dyn BomberPlayer>],
     rng: &mut Rng,
 ) -> (RoundResult, Vec<PendingSample>) {
-    let mut world = init_world(seed);
+    let mut world = match map_preset {
+        Some(template) => {
+            let arena = ArenaGrid::fixed(template).unwrap_or_else(|e| {
+                eprintln!("Invalid map preset: {e}");
+                std::process::exit(1);
+            });
+            init_world_with_arena(arena)
+        }
+        None => init_world(seed),
+    };
     let entities = spawn_players(&mut world);
 
     for p in players.iter_mut() {
