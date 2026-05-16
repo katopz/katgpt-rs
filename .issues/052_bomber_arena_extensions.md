@@ -49,9 +49,9 @@ pub enum BombType {
 - [x] A5: Modify `propagate_blast()` — `Piercing` continues through `DestructibleWall` (destroys + continues)
 - [x] A6: Add remote detonation system — `Detonate` action triggers all `Remote` bombs owned by player
 - [x] A7: Add landmine trigger system — step on `Landmine` → instant 1-range explosion
-- [ ] A8: Add `BombType` to replay/action serialization
-- [ ] A9: Update `BomberWasmPruner` WASM state format — add bomb_type per bomb token
-- [ ] A10: Update player heuristics — `HLPlayer` / `GreedyPlayer` consider bomb types
+- [x] A8: Add `BombType` to replay/action serialization
+- [x] A9: Update `BomberWasmPruner` WASM state format — add bomb_type per bomb token
+- [x] A10: Update player heuristics — `HLPlayer` / `GreedyPlayer` consider bomb types
 - [ ] A11: Add tests for each bomb type behavior
 - [ ] A12: Add bomber example demonstrating all bomb types
 

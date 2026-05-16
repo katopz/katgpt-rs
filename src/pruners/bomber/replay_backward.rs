@@ -254,6 +254,7 @@ mod tests {
             danger_level: 0,
             nearest_opponent_dist: 255,
             escape_routes: 4,
+            bomb_types: vec![],
         }
     }
 

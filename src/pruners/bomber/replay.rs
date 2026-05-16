@@ -32,6 +32,10 @@ pub struct ReplaySample {
     /// Count of walkable adjacent cells.
     #[serde(default)]
     pub escape_routes: u8,
+    /// Bomb type per bomb: 0=Timed, 1=Piercing, 2=Remote, 3=Landmine.
+    /// Defaults to empty for backward compat (old replays → all Timed).
+    #[serde(default)]
+    pub bomb_types: Vec<u8>,
 }
 
 impl ReplaySample {
@@ -64,6 +68,7 @@ impl ReplaySample {
                 .unwrap_or(255) as u8,
         };
         let escape_routes = Self::count_escape_routes(grid, px, py);
+        let bomb_count = bombs.len();
 
         Self {
             board,
@@ -79,6 +84,7 @@ impl ReplaySample {
             danger_level,
             nearest_opponent_dist,
             escape_routes,
+            bomb_types: vec![0; bomb_count],
         }
     }
 
@@ -256,6 +262,20 @@ pub fn serialize_powerups(world: &mut World) -> Vec<[u8; 2]> {
     powerups
 }
 
+/// Extract bomb type bytes from all bomb entities.
+///
+/// Encoding: 0=Timed, 1=Piercing, 2=Remote, 3=Landmine.
+/// Order matches [`serialize_bombs`] output — uses identical entity set for consistent iteration.
+pub fn serialize_bomb_types(world: &mut World) -> Vec<u8> {
+    let mut types = Vec::new();
+    // Same components as serialize_bombs (+ Bomb) for consistent iteration order
+    let mut query = world.query_filtered::<(&GridPos, &BombRange, &BombFuse, &Bomb), ()>();
+    for (_, _, _, bomb) in query.iter(world) {
+        types.push(bomb.bomb_type.to_u8());
+    }
+    types
+}
+
 // ── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -327,6 +347,7 @@ mod tests {
             danger_level: 0,
             nearest_opponent_dist: 0,
             escape_routes: 0,
+            bomb_types: vec![0],
         };
 
         let json = sample.to_json();
@@ -341,6 +362,7 @@ mod tests {
         assert_eq!(restored.tick, 42);
         assert_eq!(restored.round, 7);
         assert_eq!(restored.player_type, "Greedy");
+        assert_eq!(restored.bomb_types, vec![0]);
     }
 
     // ── Board serialization ────────────────────────────────────
@@ -396,6 +418,7 @@ mod tests {
             danger_level: 0,
             nearest_opponent_dist: 0,
             escape_routes: 0,
+            bomb_types: vec![],
         };
 
         {
@@ -570,5 +593,6 @@ mod tests {
         assert_eq!(sample.danger_level, 0);
         assert_eq!(sample.nearest_opponent_dist, 0);
         assert_eq!(sample.escape_routes, 0);
+        assert!(sample.bomb_types.is_empty());
     }
 }

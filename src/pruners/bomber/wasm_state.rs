@@ -19,7 +19,7 @@
 //! | 170         | player_y   | player Y coordinate (u8)                           |
 //! | 171         | player_id  | player ID (u8)                                     |
 //! | 172         | bomb_count | number of bombs N (u8, max 16)                     |
-//! | 173..       | N×4 tokens | bombs: N × (x, y, range, fuse)                     |
+//! | 173..       | N×5 tokens | bombs: N × (x, y, range, fuse, bomb_type)          |
 //!
 //! # Cell → Token Mapping
 //!
@@ -54,12 +54,15 @@ const OFF_PLAYER_ID: usize = GRID_TOKENS + 2;
 #[allow(dead_code)]
 const OFF_BOMB_COUNT: usize = GRID_TOKENS + 3;
 
-/// Token index: first bomb (x, y, range, fuse × N).
+/// Token index: first bomb (x, y, range, fuse, bomb_type × N).
 #[allow(dead_code)]
 const OFF_BOMBS: usize = GRID_TOKENS + 4;
 
 /// Header size in tokens: grid + player_x + player_y + player_id + bomb_count.
 const HEADER_TOKENS: usize = OFF_BOMBS; // 173
+
+/// Tokens per bomb: x, y, range, fuse, bomb_type.
+const TOKENS_PER_BOMB: usize = 5;
 
 /// Bytes per u32 token.
 const BYTES_PER_TOKEN: usize = 4;
@@ -120,7 +123,7 @@ pub fn serialize_game_state(
     bombs: &[((i32, i32), u32, u32)],
 ) -> (Vec<u8>, u32) {
     let bomb_count = bombs.len().min(MAX_BOMBS);
-    let token_count = (HEADER_TOKENS + bomb_count * 4) as u32;
+    let token_count = (HEADER_TOKENS + bomb_count * TOKENS_PER_BOMB) as u32;
     let total_bytes = token_count as usize * BYTES_PER_TOKEN;
     let mut buf = Vec::with_capacity(total_bytes);
 
@@ -141,12 +144,14 @@ pub fn serialize_game_state(
     // Bomb count (capped at MAX_BOMBS)
     push_token(&mut buf, bomb_count as u8);
 
-    // Bombs: each bomb is 4 tokens (x, y, range, fuse)
+    // Bombs: each bomb is 5 tokens (x, y, range, fuse, bomb_type)
+    // bomb_type=0 (Timed) until callers pass bomb types (future: power-up grant)
     for &((bx, by), blast_range, fuse) in &bombs[..bomb_count] {
         push_token(&mut buf, clamp_to_u8(bx));
         push_token(&mut buf, clamp_to_u8(by));
         push_token(&mut buf, blast_range as u8);
         push_token(&mut buf, fuse as u8);
+        push_token(&mut buf, 0); // bomb_type: 0=Timed
     }
 
     debug_assert_eq!(buf.len(), total_bytes);
@@ -166,7 +171,7 @@ const BATCH_OFF_BOMB_COUNT: usize = GRID_TOKENS; // 169
 const BATCH_OFF_BOMBS: usize = GRID_TOKENS + 1; // 170
 
 /// Maximum buffer size for zero-copy serialization (bytes).
-/// 237 tokens × 4 bytes = 948 bytes + margin.
+/// 253 tokens × 4 bytes = 1012 bytes + margin (16 bombs × 5 tokens each).
 const ZEROCOPY_BUF_SIZE: usize = 1024;
 
 /// Write a u8 value as a u32 LE token (4 bytes) directly to a byte slice.
@@ -194,7 +199,7 @@ fn write_token(buf: &mut [u8], offset: usize, value: u8) {
 /// ```text
 /// [0..676]      grid: 13×13 cells, 4 bytes each (row-major)
 /// [676..692]    player_x, player_y, player_id, bomb_count
-/// [692..]       bombs: N × (x, y, range, fuse) × 4 bytes
+/// [692..]       bombs: N × (x, y, range, fuse, bomb_type) × 4 bytes
 /// ```
 pub fn serialize_into_buffer(
     buf: &mut [u8; ZEROCOPY_BUF_SIZE],
@@ -205,7 +210,7 @@ pub fn serialize_into_buffer(
     bombs: &[((i32, i32), u32, u32)],
 ) -> (usize, u32) {
     let bomb_count = bombs.len().min(MAX_BOMBS);
-    let token_count = (HEADER_TOKENS + bomb_count * 4) as u32;
+    let token_count = (HEADER_TOKENS + bomb_count * TOKENS_PER_BOMB) as u32;
     let total_bytes = token_count as usize * BYTES_PER_TOKEN;
     let mut off = 0usize;
 
@@ -227,7 +232,8 @@ pub fn serialize_into_buffer(
     write_token(buf, off, bomb_count as u8);
     off += BYTES_PER_TOKEN;
 
-    // Bombs: each bomb is 4 tokens (x, y, range, fuse)
+    // Bombs: each bomb is 5 tokens (x, y, range, fuse, bomb_type)
+    // bomb_type=0 (Timed) until callers pass bomb types (future: power-up grant)
     for &((bx, by), blast_range, fuse) in &bombs[..bomb_count] {
         write_token(buf, off, clamp_to_u8(bx));
         off += BYTES_PER_TOKEN;
@@ -236,6 +242,8 @@ pub fn serialize_into_buffer(
         write_token(buf, off, blast_range as u8);
         off += BYTES_PER_TOKEN;
         write_token(buf, off, fuse as u8);
+        off += BYTES_PER_TOKEN;
+        write_token(buf, off, 0); // bomb_type: 0=Timed
         off += BYTES_PER_TOKEN;
     }
 
@@ -251,7 +259,7 @@ pub fn serialize_into_buffer(
 /// ```text
 /// [0..676]      grid: 13×13 cells, 4 bytes each (row-major)
 /// [676..680]    bomb_count: u32 LE
-/// [680..]       bombs: N × (x, y, range, fuse) × 4 bytes
+/// [680..]       bombs: N × (x, y, range, fuse, bomb_type) × 4 bytes
 /// ```
 ///
 /// Returns `(bytes_written, token_count)`.
@@ -262,7 +270,7 @@ pub fn serialize_grid_only(
 ) -> (usize, u32) {
     let bomb_count = bombs.len().min(MAX_BOMBS);
     let batch_header = BATCH_OFF_BOMBS; // 170 tokens (169 grid + 1 bomb_count)
-    let token_count = (batch_header + bomb_count * 4) as u32;
+    let token_count = (batch_header + bomb_count * TOKENS_PER_BOMB) as u32;
     let total_bytes = token_count as usize * BYTES_PER_TOKEN;
     let mut off = 0usize;
 
@@ -278,7 +286,8 @@ pub fn serialize_grid_only(
     write_token(buf, off, bomb_count as u8);
     off += BYTES_PER_TOKEN;
 
-    // Bombs (at tokens 170+)
+    // Bombs (at tokens 170+): each bomb is 5 tokens (x, y, range, fuse, bomb_type)
+    // bomb_type=0 (Timed) until callers pass bomb types (future: power-up grant)
     for &((bx, by), blast_range, fuse) in &bombs[..bomb_count] {
         write_token(buf, off, clamp_to_u8(bx));
         off += BYTES_PER_TOKEN;
@@ -287,6 +296,8 @@ pub fn serialize_grid_only(
         write_token(buf, off, blast_range as u8);
         off += BYTES_PER_TOKEN;
         write_token(buf, off, fuse as u8);
+        off += BYTES_PER_TOKEN;
+        write_token(buf, off, 0); // bomb_type: 0=Timed
         off += BYTES_PER_TOKEN;
     }
 
@@ -302,8 +313,8 @@ pub fn serialize_grid_only(
 ///
 /// # Capacity
 ///
-/// Holds up to 237 tokens (948 bytes), which covers the maximum
-/// state size: 169 grid + 4 header + 16 bombs × 4 = 237 tokens.
+/// Holds up to 253 tokens (1012 bytes), which covers the maximum
+/// state size: 169 grid + 4 header + 16 bombs × 5 = 253 tokens.
 pub struct ZeroCopyStateBuffer {
     buf: [u8; ZEROCOPY_BUF_SIZE],
 }
@@ -462,28 +473,31 @@ mod tests {
 
         let (buf, token_count) = serialize_game_state(&grid, 1, 1, 0, &bombs);
 
-        // 173 header + 3×4 bomb tokens = 185 tokens × 4 = 740 bytes
-        assert_eq!(token_count, 185);
-        assert_eq!(buf.len(), 185 * BYTES_PER_TOKEN);
+        // 173 header + 3×5 bomb tokens = 188 tokens × 4 = 752 bytes
+        assert_eq!(token_count, 188);
+        assert_eq!(buf.len(), 188 * BYTES_PER_TOKEN);
         assert_eq!(read_token(&buf, OFF_BOMB_COUNT), 3);
 
-        // First bomb: (3, 4, 2, 3)
+        // First bomb: (3, 4, 2, 3, 0=Timed)
         assert_eq!(read_token(&buf, OFF_BOMBS), 3); // x
         assert_eq!(read_token(&buf, OFF_BOMBS + 1), 4); // y
         assert_eq!(read_token(&buf, OFF_BOMBS + 2), 2); // range
         assert_eq!(read_token(&buf, OFF_BOMBS + 3), 3); // fuse
+        assert_eq!(read_token(&buf, OFF_BOMBS + 4), 0); // bomb_type: Timed
 
-        // Second bomb: (5, 6, 3, 1)
-        assert_eq!(read_token(&buf, OFF_BOMBS + 4), 5); // x
-        assert_eq!(read_token(&buf, OFF_BOMBS + 5), 6); // y
-        assert_eq!(read_token(&buf, OFF_BOMBS + 6), 3); // range
-        assert_eq!(read_token(&buf, OFF_BOMBS + 7), 1); // fuse
+        // Second bomb: (5, 6, 3, 1, 0=Timed)
+        assert_eq!(read_token(&buf, OFF_BOMBS + 5), 5); // x
+        assert_eq!(read_token(&buf, OFF_BOMBS + 6), 6); // y
+        assert_eq!(read_token(&buf, OFF_BOMBS + 7), 3); // range
+        assert_eq!(read_token(&buf, OFF_BOMBS + 8), 1); // fuse
+        assert_eq!(read_token(&buf, OFF_BOMBS + 9), 0); // bomb_type: Timed
 
-        // Third bomb: (7, 8, 1, 4)
-        assert_eq!(read_token(&buf, OFF_BOMBS + 8), 7); // x
-        assert_eq!(read_token(&buf, OFF_BOMBS + 9), 8); // y
-        assert_eq!(read_token(&buf, OFF_BOMBS + 10), 1); // range
-        assert_eq!(read_token(&buf, OFF_BOMBS + 11), 4); // fuse
+        // Third bomb: (7, 8, 1, 4, 0=Timed)
+        assert_eq!(read_token(&buf, OFF_BOMBS + 10), 7); // x
+        assert_eq!(read_token(&buf, OFF_BOMBS + 11), 8); // y
+        assert_eq!(read_token(&buf, OFF_BOMBS + 12), 1); // range
+        assert_eq!(read_token(&buf, OFF_BOMBS + 13), 4); // fuse
+        assert_eq!(read_token(&buf, OFF_BOMBS + 14), 0); // bomb_type: Timed
     }
 
     #[test]
@@ -493,9 +507,9 @@ mod tests {
 
         let (buf, token_count) = serialize_game_state(&grid, 0, 0, 0, &bombs);
 
-        // Should cap at 16 bombs: 173 + 16×4 = 237 tokens × 4 = 948 bytes
-        assert_eq!(token_count, 237);
-        assert_eq!(buf.len(), 237 * BYTES_PER_TOKEN);
+        // Should cap at 16 bombs: 173 + 16×5 = 253 tokens × 4 = 1012 bytes
+        assert_eq!(token_count, 253);
+        assert_eq!(buf.len(), 253 * BYTES_PER_TOKEN);
         assert_eq!(read_token(&buf, OFF_BOMB_COUNT), 16); // bomb_count capped
 
         // First bomb
@@ -503,13 +517,15 @@ mod tests {
         assert_eq!(read_token(&buf, OFF_BOMBS + 1), 0); // y
         assert_eq!(read_token(&buf, OFF_BOMBS + 2), 2); // range
         assert_eq!(read_token(&buf, OFF_BOMBS + 3), 4); // fuse
+        assert_eq!(read_token(&buf, OFF_BOMBS + 4), 0); // bomb_type: Timed
 
         // 16th bomb (last serialized)
-        let last_base = OFF_BOMBS + 15 * 4;
+        let last_base = OFF_BOMBS + 15 * 5;
         assert_eq!(read_token(&buf, last_base), 15); // x
         assert_eq!(read_token(&buf, last_base + 1), 15); // y
         assert_eq!(read_token(&buf, last_base + 2), 2); // range
         assert_eq!(read_token(&buf, last_base + 3), 4); // fuse
+        assert_eq!(read_token(&buf, last_base + 4), 0); // bomb_type: Timed
     }
 
     #[test]
@@ -606,9 +622,9 @@ mod tests {
         let mut zbuf = ZeroCopyStateBuffer::new();
         let (bytes_written, token_count) = zbuf.serialize_grid(&grid, &bombs);
 
-        // Batch layout: 169 grid + 1 bomb_count + 2×4 bombs = 178 tokens
-        assert_eq!(token_count, 178);
-        assert_eq!(bytes_written, 178 * BYTES_PER_TOKEN);
+        // Batch layout: 169 grid + 1 bomb_count + 2×5 bombs = 180 tokens
+        assert_eq!(token_count, 180);
+        assert_eq!(bytes_written, 180 * BYTES_PER_TOKEN);
 
         let data = zbuf.as_bytes(bytes_written);
 
@@ -620,17 +636,19 @@ mod tests {
         // bomb_count at token 169
         assert_eq!(read_token(data, BATCH_OFF_BOMB_COUNT), 2);
 
-        // First bomb at tokens 170..173
+        // First bomb at tokens 170..174: (1, 2, 3, 4, 0=Timed)
         assert_eq!(read_token(data, BATCH_OFF_BOMBS), 1); // x
         assert_eq!(read_token(data, BATCH_OFF_BOMBS + 1), 2); // y
         assert_eq!(read_token(data, BATCH_OFF_BOMBS + 2), 3); // range
         assert_eq!(read_token(data, BATCH_OFF_BOMBS + 3), 4); // fuse
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 4), 0); // bomb_type: Timed
 
-        // Second bomb at tokens 174..177
-        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 4), 5); // x
-        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 5), 6); // y
-        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 6), 1); // range
-        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 7), 2); // fuse
+        // Second bomb at tokens 175..179: (5, 6, 1, 2, 0=Timed)
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 5), 5); // x
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 6), 6); // y
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 7), 1); // range
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 8), 2); // fuse
+        assert_eq!(read_token(data, BATCH_OFF_BOMBS + 9), 0); // bomb_type: Timed
     }
 
     #[test]

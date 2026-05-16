@@ -220,6 +220,13 @@ pub struct BanditPruner<P: ScreeningPruner> {
     stats: BanditStats,
     /// Cached Thompson samples, updated by `prepare_episode`.
     thompson_cache: Vec<f32>,
+    /// Shared bandit stats for multi-agent cooperative learning.
+    ///
+    /// When `Some`, Q-values/visits are delegated to this shared reference.
+    /// Multiple `BanditPruner` instances sharing one `Arc<SharedBanditStats>`
+    /// learn cooperatively — updates from one are visible to all.
+    #[cfg(feature = "bandit")]
+    shared_stats: Option<Arc<SharedBanditStats>>,
 }
 
 impl<P: ScreeningPruner> BanditPruner<P> {
@@ -232,7 +239,141 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             strategy,
             stats: BanditStats::new(num_arms),
             thompson_cache: vec![0.0; num_arms],
+            #[cfg(feature = "bandit")]
+            shared_stats: None,
         }
+    }
+
+    /// Create a bandit pruner sharing stats with other pruner instances.
+    ///
+    /// Multiple `BanditPruner` instances sharing one `Arc<SharedBanditStats>`
+    /// learn cooperatively: Q-values and visit counts are shared, but each
+    /// pruner still has its own inner pruner, strategy, and Thompson cache.
+    #[cfg(feature = "bandit")]
+    pub fn with_shared_stats(
+        inner: P,
+        strategy: BanditStrategy,
+        num_arms: usize,
+        stats: Arc<SharedBanditStats>,
+    ) -> Self {
+        Self {
+            inner,
+            strategy,
+            stats: BanditStats::new(num_arms),
+            thompson_cache: vec![0.0; num_arms],
+            shared_stats: Some(stats),
+        }
+    }
+
+    // ── Shared Stats Accessors ─────────────────────────────────
+
+    /// Visit count for an arm.
+    ///
+    /// Delegates to shared stats when present, else uses local stats.
+    #[cfg(feature = "bandit")]
+    fn arm_visits(&self, arm: usize) -> u32 {
+        match &self.shared_stats {
+            Some(stats) => stats.visits(arm),
+            None => self.stats.visit_count(arm),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_visits(&self, arm: usize) -> u32 {
+        self.stats.visit_count(arm)
+    }
+
+    /// Q-value estimate for an arm.
+    #[cfg(feature = "bandit")]
+    fn arm_q(&self, arm: usize) -> f32 {
+        match &self.shared_stats {
+            Some(stats) => stats.q_value(arm),
+            None => self.stats.q_value(arm),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_q(&self, arm: usize) -> f32 {
+        self.stats.q_value(arm)
+    }
+
+    /// Total pulls across all arms.
+    #[cfg(feature = "bandit")]
+    fn arm_total_pulls(&self) -> u32 {
+        match &self.shared_stats {
+            Some(stats) => stats.total_pulls(),
+            None => self.stats.total_pulls(),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_total_pulls(&self) -> u32 {
+        self.stats.total_pulls()
+    }
+
+    /// UCB1 score for an arm.
+    #[cfg(feature = "bandit")]
+    fn arm_ucb1(&self, arm: usize) -> f32 {
+        match &self.shared_stats {
+            Some(stats) => stats.ucb1_score(arm),
+            None => self.stats.ucb1_score(arm),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_ucb1(&self, arm: usize) -> f32 {
+        self.stats.ucb1_score(arm)
+    }
+
+    /// Thompson sample for an arm using shared or local stats.
+    #[cfg(feature = "bandit")]
+    fn arm_thompson(&self, arm: usize, rng: &mut Rng) -> f32 {
+        match &self.shared_stats {
+            Some(stats) => {
+                let n = stats.visits(arm);
+                if n == 0 {
+                    return rng.uniform();
+                }
+                let q = stats.q_value(arm).clamp(0.0, 1.0);
+                let alpha = q * n as f32 + 1.0;
+                let beta = (1.0 - q) * n as f32 + 1.0;
+                sample_beta(alpha, beta, rng)
+            }
+            None => self.stats.thompson_sample(arm, rng),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_thompson(&self, arm: usize, rng: &mut Rng) -> f32 {
+        self.stats.thompson_sample(arm, rng)
+    }
+
+    /// Update Q-value for an arm after observing a reward.
+    #[cfg(feature = "bandit")]
+    fn update_arm(&mut self, arm: usize, reward: f32) {
+        match &self.shared_stats {
+            Some(stats) => stats.update(arm, reward),
+            None => self.stats.update(arm, reward),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn update_arm(&mut self, arm: usize, reward: f32) {
+        self.stats.update(arm, reward);
+    }
+
+    /// Index of the best arm (highest Q-value).
+    #[cfg(feature = "bandit")]
+    fn arm_best(&self) -> usize {
+        match &self.shared_stats {
+            Some(stats) => stats.best_arm(),
+            None => self.stats.best_arm(),
+        }
+    }
+
+    #[cfg(not(feature = "bandit"))]
+    fn arm_best(&self) -> usize {
+        self.stats.best_arm()
     }
 
     /// Prepare for a new episode. Call before each DDTree build.
@@ -241,8 +382,9 @@ impl<P: ScreeningPruner> BanditPruner<P> {
     /// For other strategies: no-op.
     pub fn prepare_episode(&mut self, rng: &mut Rng) {
         if matches!(self.strategy, BanditStrategy::ThompsonSampling) {
-            for i in 0..self.stats.num_arms {
-                self.thompson_cache[i] = self.stats.thompson_sample(i, rng);
+            let n = self.stats.num_arms;
+            for i in 0..n {
+                self.thompson_cache[i] = self.arm_thompson(i, rng);
             }
         }
     }
@@ -250,7 +392,7 @@ impl<P: ScreeningPruner> BanditPruner<P> {
     /// Update Q-value for an arm after observing a reward.
     #[inline]
     pub fn update(&mut self, arm: usize, reward: f32) {
-        self.stats.update(arm, reward);
+        self.update_arm(arm, reward);
     }
 
     /// Decay epsilon after an episode (EpsilonGreedy only).
@@ -262,7 +404,7 @@ impl<P: ScreeningPruner> BanditPruner<P> {
 
     /// Index of the best arm (highest Q-value).
     pub fn best_arm(&self) -> usize {
-        self.stats.best_arm()
+        self.arm_best()
     }
 
     /// Q-values slice (for inspection).
@@ -277,7 +419,7 @@ impl<P: ScreeningPruner> BanditPruner<P> {
 
     /// Total pulls across all arms.
     pub fn total_pulls(&self) -> u32 {
-        self.stats.total_pulls()
+        self.arm_total_pulls()
     }
 
     /// Strategy reference.
@@ -299,27 +441,25 @@ impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
         }
 
         // Cold start: no data yet, use domain only
-        if self.stats.total_pulls == 0 {
+        if self.arm_total_pulls() == 0 {
             return domain;
         }
 
         // Unvisited arm: maximum exploration priority
-        if self.stats.visit_count(token_idx) == 0 {
+        if self.arm_visits(token_idx) == 0 {
             return domain;
         }
 
         // Bandit score based on strategy
         let bandit = match &self.strategy {
-            BanditStrategy::Ucb1 => self.stats.ucb1_score(token_idx).clamp(0.0, 1.5) / 1.5,
-            BanditStrategy::EpsilonGreedy { .. } => {
-                self.stats.q_value(token_idx).clamp(0.0, 1.0).max(0.01)
-            }
+            BanditStrategy::Ucb1 => self.arm_ucb1(token_idx).clamp(0.0, 1.5) / 1.5,
+            BanditStrategy::EpsilonGreedy { .. } => self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01),
             BanditStrategy::ThompsonSampling => {
                 // Use cached sample from prepare_episode
                 self.thompson_cache
                     .get(token_idx)
                     .copied()
-                    .unwrap_or_else(|| self.stats.q_value(token_idx))
+                    .unwrap_or_else(|| self.arm_q(token_idx))
                     .clamp(0.0, 1.0)
                     .max(0.01)
             }
@@ -1452,5 +1592,69 @@ mod tests {
                 "arm {arm} q_value {q} should be close to {expected}"
             );
         }
+    }
+
+    #[cfg(feature = "bandit")]
+    #[test]
+    fn test_bandit_pruner_shared_stats() {
+        use std::sync::Arc;
+
+        // Simple mock pruner that always returns 1.0
+        struct MockPruner;
+        impl ScreeningPruner for MockPruner {
+            fn relevance(&self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> f32 {
+                1.0
+            }
+        }
+
+        let shared = Arc::new(SharedBanditStats::new(3));
+        let mut p1 = BanditPruner::with_shared_stats(
+            MockPruner,
+            BanditStrategy::Ucb1,
+            3,
+            Arc::clone(&shared),
+        );
+        let mut p2 = BanditPruner::with_shared_stats(
+            MockPruner,
+            BanditStrategy::Ucb1,
+            3,
+            Arc::clone(&shared),
+        );
+
+        // P1 updates arm 0 with high reward
+        p1.update(0, 0.9);
+
+        // P2 updates arm 1 with low reward
+        p2.update(1, 0.1);
+
+        // P2 updates arm 2 with medium reward
+        p2.update(2, 0.5);
+
+        // Verify P1 sees P2's updates and vice versa
+        // Total pulls should be 3 from either pruner's perspective
+        assert_eq!(p1.total_pulls(), 3, "p1 should see 3 total pulls");
+        assert_eq!(p2.total_pulls(), 3, "p2 should see 3 total pulls");
+
+        // Best arm should be arm 0 (highest reward 0.9)
+        assert_eq!(p1.best_arm(), 0, "p1 best arm should be 0");
+        assert_eq!(p2.best_arm(), 0, "p2 best arm should be 0");
+
+        // Verify visits are shared
+        assert_eq!(p1.arm_visits(0), 1, "arm 0 should have 1 visit via p1");
+        assert_eq!(p2.arm_visits(1), 1, "arm 1 should have 1 visit via p2");
+        assert_eq!(p1.arm_visits(2), 1, "arm 2 should have 1 visit via p1");
+
+        // More updates from P1
+        for _ in 0..10 {
+            p1.update(0, 0.9);
+        }
+
+        // P2 should see the accumulated visits
+        assert_eq!(
+            p2.arm_visits(0),
+            11,
+            "p2 should see p1's accumulated visits on arm 0"
+        );
+        assert_eq!(p2.total_pulls(), 13, "p2 should see total 13 pulls");
     }
 }

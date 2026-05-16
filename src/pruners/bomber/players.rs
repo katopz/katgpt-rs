@@ -456,8 +456,10 @@ pub fn is_safe_action(
             !in_blast_zone(pos, grid, bombs)
         }
         BomberAction::Detonate => {
-            // Detonating own bombs is always safe (player doesn't move)
-            true
+            // Detonate is only valid when active bombs exist and player won't be
+            // caught in the resulting blast (no bomb movement, but blast affects player).
+            // Future: restrict to Remote bombs only once bomb_type is tracked in KnownBomb.
+            !bombs.is_empty() && !in_blast_zone(pos, grid, bombs)
         }
     }
 }
@@ -707,8 +709,17 @@ pub(crate) fn score_action(
             }
         }
         BomberAction::Detonate => {
-            // Detonate: moderate score — situational, depends on bomb placement
-            0.0
+            // Detonate: only meaningful when remote bombs exist (future: power-up grant).
+            // Score based on safety — detonating while in own blast zone is fatal.
+            if bombs.is_empty() {
+                -2.0 // No bombs to detonate — wasted action
+            } else if in_blast_zone(pos, grid, bombs) {
+                -10.0 // Unsafe: player would be caught in detonation
+            } else {
+                // Strategic option: slight positive when safe and bombs are active.
+                // Becomes higher value when remote bombs are available (future work).
+                1.0
+            }
         }
     }
 }
@@ -1064,6 +1075,12 @@ impl BomberPlayer for ValidatorPlayer {
                 if !is_safe_action(action, grid, pos, &self.known_bombs) {
                     continue;
                 }
+                // Detonate validation: only valid when active bombs exist and safe to detonate.
+                // Future: restrict to Remote bombs only once bomb_type is tracked in KnownBomb.
+                if *action == BomberAction::Detonate
+                    && (self.known_bombs.is_empty() || in_blast_zone(pos, grid, &self.known_bombs)) {
+                        continue;
+                    }
                 let score = score_action(
                     action,
                     grid,
@@ -1526,7 +1543,23 @@ impl BomberPlayer for HLPlayer {
                             trap_score((pos.x, pos.y), (ox, oy), grid, DEFAULT_BLAST_RANGE);
                     }
                 }
-                BomberAction::Wait | BomberAction::Detonate => {}
+                BomberAction::Wait => {}
+                BomberAction::Detonate => {
+                    // Strategic detonation: bonus when own bombs are near opponents
+                    // (future: remote bombs only; currently all player bombs are Timed)
+                    if let Some((ox, oy)) = nearest_opponent {
+                        for &((bx, by), _range, _fuse) in &self.known_bombs {
+                            let bomb_to_opp = (bx - ox).abs() + (by - oy).abs();
+                            if bomb_to_opp <= DEFAULT_BLAST_RANGE as i32 {
+                                strategy_bonus += 2.0; // Own bomb threatens opponent
+                            }
+                        }
+                    }
+                    // Safety penalty: detonating while in own blast zone is fatal
+                    if in_blast_zone(pos, grid, &self.known_bombs) {
+                        strategy_bonus -= 5.0;
+                    }
+                }
             }
 
             // Bandit Q-value component (default 0.0 for unvisited arms)

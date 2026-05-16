@@ -162,6 +162,7 @@ fn main() {
                 player_pos: ps.player_pos,
                 player_id: ps.player_id,
                 bombs: ps.bombs.clone(),
+                bomb_types: vec![],
                 powerups: ps.powerups,
                 action: ps.action,
                 quality,

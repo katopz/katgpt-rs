@@ -369,6 +369,7 @@ fn bench_d4_backward_replay_quality() {
             player_pos: [px, py],
             player_id: 0,
             bombs: vec![],
+            bomb_types: vec![],
             powerups: vec![],
             action,
             quality: if tick == ticks - 1 { 1.0 } else { 0.5 },

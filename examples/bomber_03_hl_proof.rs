@@ -223,6 +223,7 @@ fn run_round(
                             player_pos: [pos.x as u8, pos.y as u8],
                             player_id: i as u8,
                             bombs: bombs.clone(),
+                            bomb_types: vec![],
                             powerups: powerups.clone(),
                             action: actions[i].map(|a| a.as_usize() as u8).unwrap_or(0),
                             quality: 0.0, // backfilled later

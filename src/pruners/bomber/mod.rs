@@ -160,7 +160,7 @@ pub struct Player {
 }
 
 /// Bomb type determining blast behavior.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BombType {
     /// Default: fuse-based, stops at walls.
     #[default]
@@ -171,6 +171,33 @@ pub enum BombType {
     Remote,
     /// Invisible until stepped on, 1-range instant blast.
     Landmine,
+}
+
+impl BombType {
+    /// Encode bomb type as u8 for WASM/replay serialization.
+    ///
+    /// Encoding: 0=Timed, 1=Piercing, 2=Remote, 3=Landmine.
+    pub fn to_u8(self) -> u8 {
+        match self {
+            Self::Timed => 0,
+            Self::Piercing => 1,
+            Self::Remote => 2,
+            Self::Landmine => 3,
+        }
+    }
+
+    /// Decode bomb type from u8, defaulting to `Timed` for unknown values.
+    ///
+    /// Provides backward compat for old replays/WASM state without bomb_type.
+    pub fn from_u8(val: u8) -> Self {
+        match val {
+            0 => Self::Timed,
+            1 => Self::Piercing,
+            2 => Self::Remote,
+            3 => Self::Landmine,
+            _ => Self::Timed,
+        }
+    }
 }
 
 /// Bomb component with type information.

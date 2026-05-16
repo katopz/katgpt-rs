@@ -82,10 +82,12 @@ let mut players: Vec<Box<dyn BomberPlayer>> = vec![
   - Metrics: convergence speed (Q-value stability), win rate, survival rate
   - Record in `.benchmarks/` with sequential numbering
 
-- [ ] **T6: Generalize to `BanditPruner<P>`**
-  - After bomber proof, add `BanditPruner::with_shared_stats(stats: Arc<SharedBanditStats>)`
-  - Enables multi-agent HL in any domain (not just bomber)
-  - Document in `.docs/` as reusable pattern
+- [x] **T6: Generalize to `BanditPruner<P>`** ✅
+  - Added `BanditPruner::with_shared_stats(inner, strategy, num_arms, stats: Arc<SharedBanditStats>)` constructor (feature-gated)
+  - Added accessor methods (`arm_visits`, `arm_q`, `arm_total_pulls`, `arm_ucb1`, `arm_thompson`, `update_arm`, `arm_best`) with dual implementation
+  - `relevance()`, `prepare_episode()`, `update()`, `best_arm()`, `total_pulls()` use accessors that delegate to shared stats when present
+  - `BanditPruner::new()` works exactly as before (shared_stats=None)
+  - Test: `test_bandit_pruner_shared_stats` — 2 pruners sharing one `SharedBanditStats`, verifies cross-pruner visibility
 
 ## Design Decisions
 
