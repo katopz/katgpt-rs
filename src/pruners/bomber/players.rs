@@ -29,7 +29,7 @@ use crate::types::{LoraAdapter, lora_apply};
 
 // ── Constants ──────────────────────────────────────────────────
 
-const ACTION_COUNT: usize = 6;
+const ACTION_COUNT: usize = 7;
 const DEFAULT_BLAST_RANGE: u32 = 2;
 const BOMB_FUSE_TICKS: u32 = super::BOMB_FUSE_TICKS;
 
@@ -40,6 +40,7 @@ const ALL_ACTIONS: [BomberAction; ACTION_COUNT] = [
     BomberAction::Right,
     BomberAction::Bomb,
     BomberAction::Wait,
+    BomberAction::Detonate,
 ];
 
 /// Tracked bomb: (position, blast_range, fuse_ticks_remaining).
@@ -104,11 +105,11 @@ pub(crate) fn move_target(action: &BomberAction, pos: GridPos) -> GridPos {
             x: pos.x + 1,
             y: pos.y,
         },
-        BomberAction::Bomb | BomberAction::Wait => pos,
+        BomberAction::Bomb | BomberAction::Wait | BomberAction::Detonate => pos,
     }
 }
 
-/// Convert action to index 0..6.
+/// Convert action to index 0..7.
 fn action_index(action: &BomberAction) -> usize {
     match action {
         BomberAction::Up => 0,
@@ -117,10 +118,11 @@ fn action_index(action: &BomberAction) -> usize {
         BomberAction::Right => 3,
         BomberAction::Bomb => 4,
         BomberAction::Wait => 5,
+        BomberAction::Detonate => 6,
     }
 }
 
-/// Convert index 0..6 to action.
+/// Convert index 0..7 to action.
 fn index_to_action(idx: usize) -> BomberAction {
     match idx {
         0 => BomberAction::Up,
@@ -128,6 +130,8 @@ fn index_to_action(idx: usize) -> BomberAction {
         2 => BomberAction::Left,
         3 => BomberAction::Right,
         4 => BomberAction::Bomb,
+        5 => BomberAction::Wait,
+        6 => BomberAction::Detonate,
         _ => BomberAction::Wait,
     }
 }
@@ -451,6 +455,10 @@ pub fn is_safe_action(
             // Waiting is only safe if not in blast zone
             !in_blast_zone(pos, grid, bombs)
         }
+        BomberAction::Detonate => {
+            // Detonating own bombs is always safe (player doesn't move)
+            true
+        }
     }
 }
 
@@ -697,6 +705,10 @@ pub(crate) fn score_action(
             } else {
                 -1.0
             }
+        }
+        BomberAction::Detonate => {
+            // Detonate: moderate score — situational, depends on bomb placement
+            0.0
         }
     }
 }
@@ -1514,7 +1526,7 @@ impl BomberPlayer for HLPlayer {
                             trap_score((pos.x, pos.y), (ox, oy), grid, DEFAULT_BLAST_RANGE);
                     }
                 }
-                BomberAction::Wait => {}
+                BomberAction::Wait | BomberAction::Detonate => {}
             }
 
             // Bandit Q-value component (default 0.0 for unvisited arms)

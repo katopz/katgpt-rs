@@ -131,7 +131,7 @@ impl BomberState {
             BomberAction::Down => (pos.0, pos.1 + 1),
             BomberAction::Left => (pos.0 - 1, pos.1),
             BomberAction::Right => (pos.0 + 1, pos.1),
-            BomberAction::Bomb | BomberAction::Wait => pos,
+            BomberAction::Bomb | BomberAction::Wait | BomberAction::Detonate => pos,
         }
     }
 
@@ -365,7 +365,7 @@ impl BomberState {
                     self.players[player_id as usize].active_bombs += 1;
                 }
             }
-            BomberAction::Wait => {}
+            BomberAction::Wait | BomberAction::Detonate => {}
         }
     }
 

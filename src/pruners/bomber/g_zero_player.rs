@@ -45,7 +45,7 @@ use super::{
 
 // ── Constants ──────────────────────────────────────────────────
 
-const ACTION_COUNT: usize = 6;
+const ACTION_COUNT: usize = 7;
 const NUM_TEMPLATES: usize = 8;
 
 const ALL_ACTIONS: [BomberAction; ACTION_COUNT] = [
@@ -55,6 +55,7 @@ const ALL_ACTIONS: [BomberAction; ACTION_COUNT] = [
     BomberAction::Right,
     BomberAction::Bomb,
     BomberAction::Wait,
+    BomberAction::Detonate,
 ];
 
 /// Tracked bomb: (position, blast_range, fuse_ticks_remaining).
@@ -84,7 +85,7 @@ fn move_target(action: BomberAction, pos: GridPos) -> GridPos {
             x: pos.x + 1,
             y: pos.y,
         },
-        BomberAction::Bomb | BomberAction::Wait => pos,
+        BomberAction::Bomb | BomberAction::Wait | BomberAction::Detonate => pos,
     }
 }
 
@@ -380,7 +381,7 @@ impl BomberPlayer for GZeroPlayer {
                         .count();
                     if wall_adj > 0 { 1.0 } else { 0.0 }
                 }
-                BomberAction::Wait => 0.0,
+                BomberAction::Wait | BomberAction::Detonate => 0.0,
             };
         }
 
@@ -473,6 +474,9 @@ impl BomberPlayer for GZeroPlayer {
                     if in_blast_zone(pos, grid, &self.known_bombs) {
                         final_scores[i] = f32::NEG_INFINITY;
                     }
+                }
+                BomberAction::Detonate => {
+                    // Detonate is safe (player doesn't move), no-op for now
                 }
             }
         }
@@ -591,16 +595,16 @@ mod tests {
 
     #[test]
     fn test_compute_game_delta() {
-        let query = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
-        let hinted = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5];
+        let query = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let hinted = [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5];
         let delta = compute_game_delta(&query, &hinted);
         assert!((delta - 0.5).abs() < 0.01);
     }
 
     #[test]
     fn test_compute_game_delta_with_neg_inf() {
-        let query = [1.0, f32::NEG_INFINITY, 3.0, 4.0, 5.0, 6.0];
-        let hinted = [1.5, f32::NEG_INFINITY, 3.5, 4.5, 5.5, 6.5];
+        let query = [1.0, f32::NEG_INFINITY, 3.0, 4.0, 5.0, 6.0, 7.0];
+        let hinted = [1.5, f32::NEG_INFINITY, 3.5, 4.5, 5.5, 6.5, 7.5];
         let delta = compute_game_delta(&query, &hinted);
         // Only 4 valid pairs (excluding index 1)
         assert!((delta - 0.5).abs() < 0.01);
@@ -635,6 +639,7 @@ mod tests {
                 | BomberAction::Right
                 | BomberAction::Bomb
                 | BomberAction::Wait
+                | BomberAction::Detonate
         ));
     }
 

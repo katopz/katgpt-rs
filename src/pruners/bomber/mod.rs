@@ -62,6 +62,8 @@ pub enum BomberAction {
     Right,
     Bomb,
     Wait,
+    /// Detonate all remote bombs owned by this player.
+    Detonate,
 }
 
 impl BomberAction {
@@ -73,10 +75,11 @@ impl BomberAction {
             Self::Right => 3,
             Self::Bomb => 4,
             Self::Wait => 5,
+            Self::Detonate => 6,
         }
     }
 
-    pub fn all() -> [BomberAction; 6] {
+    pub fn all() -> [BomberAction; 7] {
         [
             Self::Up,
             Self::Down,
@@ -84,6 +87,7 @@ impl BomberAction {
             Self::Right,
             Self::Bomb,
             Self::Wait,
+            Self::Detonate,
         ]
     }
 }
@@ -97,6 +101,7 @@ impl fmt::Display for BomberAction {
             Self::Right => "→",
             Self::Bomb => "💣",
             Self::Wait => "⏸",
+            Self::Detonate => "💥",
         };
         write!(f, "{s}")
     }
@@ -110,6 +115,8 @@ impl From<usize> for BomberAction {
             2 => Self::Left,
             3 => Self::Right,
             4 => Self::Bomb,
+            5 => Self::Wait,
+            6 => Self::Detonate,
             _ => Self::Wait,
         }
     }
@@ -152,8 +159,37 @@ pub struct Player {
     pub id: u8,
 }
 
-#[derive(Component)]
-pub struct Bomb;
+/// Bomb type determining blast behavior.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BombType {
+    /// Default: fuse-based, stops at walls.
+    #[default]
+    Timed,
+    /// Blast continues through destructible walls.
+    Piercing,
+    /// Detonates on player action.
+    Remote,
+    /// Invisible until stepped on, 1-range instant blast.
+    Landmine,
+}
+
+/// Bomb component with type information.
+#[derive(Clone, Copy, Component, Debug, Default)]
+pub struct Bomb {
+    pub bomb_type: BombType,
+}
+
+impl Bomb {
+    /// Create a new bomb with default type (Timed).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a bomb with a specific type.
+    pub fn with_type(bomb_type: BombType) -> Self {
+        Self { bomb_type }
+    }
+}
 
 #[derive(Component)]
 pub struct PowerUp {

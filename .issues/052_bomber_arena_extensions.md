@@ -42,9 +42,9 @@ pub enum BombType {
 
 ### Subtasks
 
-- [ ] A1: Add `BombType` enum to `src/pruners/bomber/mod.rs`
-- [ ] A2: Add `bomb_type: BombType` field to `Bomb` component (change from ZST to struct)
-- [ ] A3: Add `BomberAction::Detonate` variant for remote bombs
+- [x] A1: Add `BombType` enum to `src/pruners/bomber/mod.rs`
+- [x] A2: Add `bomb_type: BombType` field to `Bomb` component (change from ZST to struct)
+- [x] A3: Add `BomberAction::Detonate` variant for remote bombs
 - [ ] A4: Modify `place_bomb()` in `systems.rs` to accept `BombType` (default `Timed`)
 - [ ] A5: Modify `propagate_blast()` — `Piercing` continues through `DestructibleWall` (destroys + continues)
 - [ ] A6: Add remote detonation system — `Detonate` action triggers all `Remote` bombs owned by player

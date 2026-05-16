@@ -296,7 +296,7 @@ fn apply_movement(world: &mut World, actions: [Option<BomberAction>; 4]) {
                 BomberAction::Down => (0, 1),
                 BomberAction::Left => (-1, 0),
                 BomberAction::Right => (1, 0),
-                BomberAction::Bomb | BomberAction::Wait => continue,
+                BomberAction::Bomb | BomberAction::Wait | BomberAction::Detonate => continue,
             };
             let tx = pos.x + dx;
             let ty = pos.y + dy;
@@ -356,7 +356,7 @@ fn place_bombs(world: &mut World, actions: [Option<BomberAction>; 4]) {
 
     for (owner, (x, y), range) in to_place {
         world.spawn((
-            Bomb,
+            Bomb::new(),
             GridPos { x, y },
             BombFuse {
                 owner,
@@ -539,7 +539,7 @@ mod tests {
         // Place a bomb at player 0 position
         let pos = *world.get::<GridPos>(p0).unwrap();
         world.spawn((
-            Bomb,
+            Bomb::new(),
             GridPos { x: pos.x, y: pos.y },
             BombFuse {
                 owner: p0,

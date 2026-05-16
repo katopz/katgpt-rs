@@ -25,7 +25,7 @@ use super::{
 
 // ── Constants ──────────────────────────────────────────────────
 
-const ACTION_COUNT: usize = 6;
+const ACTION_COUNT: usize = 7;
 
 const ALL_ACTIONS: [BomberAction; ACTION_COUNT] = [
     BomberAction::Up,
@@ -34,6 +34,7 @@ const ALL_ACTIONS: [BomberAction; ACTION_COUNT] = [
     BomberAction::Right,
     BomberAction::Bomb,
     BomberAction::Wait,
+    BomberAction::Detonate,
 ];
 
 /// Tracked bomb: (position, blast_range, fuse_ticks_remaining).
@@ -300,7 +301,7 @@ impl TftPlayer {
                 // Attack: trap scoring when opponent is nearby
                 bonus += trap_score((pos.x, pos.y), (ox, oy), grid, DEFAULT_BLAST_RANGE);
             }
-            BomberAction::Wait => {}
+            BomberAction::Wait | BomberAction::Detonate => {}
         }
         bonus
     }
@@ -626,6 +627,7 @@ mod tests {
                 | BomberAction::Right
                 | BomberAction::Bomb
                 | BomberAction::Wait
+                | BomberAction::Detonate
         ));
     }
 
