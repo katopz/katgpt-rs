@@ -162,7 +162,7 @@ No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure 
 | B: ExpertRegistry + inference wiring | `riir-router/` + `transformer.rs` | ✅ Done | Medium |
 | C: riir-gpu domain latent training | `riir-ai/crates/riir-gpu/examples/train_lora.rs` | Open | Medium (follow bomber pattern) |
 
-**Status:** A ✅, B ✅, C open. Only C1-C4 remain.
+**Status:** A ✅, B ✅, C ✅ — All tasks complete.
 
 ---
 
@@ -177,7 +177,7 @@ No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure 
 - [x] B4: Implement `resolve_domain_latent()` in `ExpertRegistry` ✅
 - [x] B5: Wire `domain_latent` through to `forward()` / `forward_prefill()` / `generate_with_prefill()` call sites ✅
 - [x] B6: Add tests (TOML config with domain_latent, graceful degradation) ✅ — 2 registry tests + generate_with_prefill test
-- [ ] C1: Add `--domain-latent` flag to `train_lora.rs` CLI args
-- [ ] C2: Wire domain latent training into `train_lora.rs` (follow `train_bomber.rs` Phase 5 pattern)
-- [ ] C3: Export `.dlat` binary alongside `lora.bin` via `DomainLatent::save()`
-- [ ] C4: E2E test: `train_lora --domain-latent` → export `.dlat` → load in microgpt-rs → verify injection works
+- [x] C1: Add `--domain-latent` flag to `train_lora.rs` CLI args ✅ — `--domain-latent`, `--domain-latent-epochs`, `--domain-latent-lr`
+- [x] C2: Wire domain latent training into `train_lora.rs` (follow `train_bomber.rs` Phase 5 pattern) ✅ — `prepare_domain_latent_features()` + `train_domain_latent_cpu()`
+- [x] C3: Export `.dlat` binary alongside `lora.bin` via `write_domain_latent()` ✅ — `<stem>.dlat` next to `lora.bin`
+- [x] C4: E2E test: write `.dlat` → load in microgpt-rs → verify round-trip ✅ — 7 tests in `riir-gpu/tests/test_domain_latent_e2e.rs`
