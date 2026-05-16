@@ -109,9 +109,9 @@ Decide on approach before implementing.
 
 ---
 
-## Task C: riir-burner DomainLatent Training [partially blocked]
+## Task C: riir-gpu DomainLatent Training for `train_lora.rs` [unblocked]
 
-riir-gpu has full `DomainLatentAdamWStep` + CPU fallback for game-domain training. riir-burner (language domain, Gemma 2/4) needs the equivalent for training domain latent embeddings alongside LoRA.
+riir-gpu already has `DomainLatentAdamWStep` + `adamw_step_cpu` (pure CPU) and a working pattern in `train_bomber.rs` (Phase 5). The generic `train_lora.rs` example needs the same domain latent training capability added alongside its LoRA training loop.
 
 ### What exists (riir-gpu reference)
 
@@ -134,21 +134,22 @@ Algorithm: standard AdamW with bias correction, pure CPU (`adamw_step_cpu`). Exp
 
 ### What to do
 
-1. Port `DomainLatentAdamWStep` + `adamw_step_cpu` to riir-burner's tensor API (burn tensors instead of `&mut [f32]`)
-2. Add domain latent parameters alongside LoRA in training loop
-3. Compute grads: forward with domain_latent → loss → backward → update params
-4. Export trained embedding via `DomainLatent::save()` (`.dlat` binary, same format)
-5. Integration: `scripts/train_lora.py` gets `--domain-latent` flag
+1. Add `--domain-latent` flag to `train_lora.rs` CLI args — when set, train domain latent alongside LoRA
+2. Reuse existing `DomainLatentAdamWStep` + `adamw_step_cpu` from `riir-gpu::domain_latent` (no porting needed — already works with `&mut [f32]`)
+3. Follow `train_bomber.rs` Phase 5 pattern: extract features → `train_domain_latent_cpu()` → export `.dlat`
+4. Export trained embedding via `DomainLatent::save()` (`.dlat` binary, same format as microgpt-rs expects)
+5. Output: `lora.bin` + `domain_latent.dlat` side by side in output directory
 
-### Blocker
+### Approach
 
-riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no domain_latent training path. The AdamW step itself is simple (port from riir-gpu), but wiring it into the burn training loop + autograd requires understanding burn's tensor gradient API.
+No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure CPU with `&mut [f32]`, already tested and working. The pattern is proven in `train_bomber.rs` Phase 5 — adapt the same feature extraction + AdamW loop for generic JSONL data.
 
 ### Key references
 
-- riir-gpu reference: `riir-ai/crates/riir-gpu/src/domain_latent.rs`
-- riir-gpu training usage: `riir-ai/crates/riir-gpu/examples/train_bomber.rs#L307-317`
-- riir-burner LoRA training: `riir-ai/crates/riir-burner/`
+- `DomainLatentAdamWStep` + `adamw_step_cpu`: `riir-ai/crates/riir-gpu/src/domain_latent.rs`
+- Reference pattern (Phase 5 CPU training): `riir-ai/crates/riir-gpu/examples/train_bomber.rs#L299-340`
+- Target file to modify: `riir-ai/crates/riir-gpu/examples/train_lora.rs`
+- `Trainer` API: `riir-ai/crates/riir-gpu/src/trainer.rs`
 - Binary format spec: `microgpt-rs/src/types.rs` — `[DLAT 4B][VERSION 1B][KV_DIM 4B LE][EMBEDDING kv_dim×f32 LE][BLAKE3 32B]`
 
 ---
@@ -159,9 +160,9 @@ riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no dom
 |------|-------|--------|-------------|
 | A: Integration tests | `microgpt-rs/src/transformer.rs` | ✅ Done | Small (3 tests) |
 | B: ExpertRegistry + inference wiring | `riir-router/` + `transformer.rs` | ✅ Done | Medium |
-| C: riir-burner training | `riir-ai/crates/riir-burner/` | Partially blocked | Large (burn tensor API) |
+| C: riir-gpu domain latent training | `riir-ai/crates/riir-gpu/examples/train_lora.rs` | Open | Medium (follow bomber pattern) |
 
-**Status:** A ✅, B ✅, C open (needs burn expertise). Only C1-C4 remain.
+**Status:** A ✅, B ✅, C open. Only C1-C4 remain.
 
 ---
 
@@ -176,7 +177,7 @@ riir-burner's LoRA pipeline is mature (Gemma 2/4 LoRA works), but there's no dom
 - [x] B4: Implement `resolve_domain_latent()` in `ExpertRegistry` ✅
 - [x] B5: Wire `domain_latent` through to `forward()` / `forward_prefill()` / `generate_with_prefill()` call sites ✅
 - [x] B6: Add tests (TOML config with domain_latent, graceful degradation) ✅ — 2 registry tests + generate_with_prefill test
-- [ ] C1: Port `DomainLatentAdamWStep` to burn tensor API
-- [ ] C2: Wire domain latent training into LoRA training loop
-- [ ] C3: Add `--domain-latent` flag to `scripts/train_lora.py`
-- [ ] C4: Test: train → export `.dlat` → load in microgpt-rs → verify injection works
+- [ ] C1: Add `--domain-latent` flag to `train_lora.rs` CLI args
+- [ ] C2: Wire domain latent training into `train_lora.rs` (follow `train_bomber.rs` Phase 5 pattern)
+- [ ] C3: Export `.dlat` binary alongside `lora.bin` via `DomainLatent::save()`
+- [ ] C4: E2E test: `train_lora --domain-latent` → export `.dlat` → load in microgpt-rs → verify injection works
