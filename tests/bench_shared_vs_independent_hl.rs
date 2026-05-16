@@ -21,7 +21,7 @@ use microgpt_rs::pruners::bomber::{
 #[cfg(feature = "bomber")]
 use microgpt_rs::pruners::bomber::arena::STANDARD_ARENA;
 
-#[cfg(feature = "bandit")]
+#[cfg(all(feature = "bomber", feature = "bandit"))]
 use microgpt_rs::pruners::bomber::SharedBanditStats;
 
 // ── Constants ──────────────────────────────────────────────────
@@ -196,7 +196,7 @@ fn q_value_spread(q_values: &[f32]) -> f32 {
 }
 
 /// Compute Q-value spread from SharedBanditStats.
-#[cfg(feature = "bandit")]
+#[cfg(all(feature = "bomber", feature = "bandit"))]
 fn shared_q_spread(stats: &SharedBanditStats) -> f32 {
     let q_values: Vec<f32> = (0..ACTION_COUNT).map(|i| stats.q_value(i)).collect();
     q_value_spread(&q_values)
@@ -284,7 +284,7 @@ fn run_independent_tournament() -> TournamentResult {
 
 // ── Shared HL Tournament ───────────────────────────────────────
 
-#[cfg(feature = "bandit")]
+#[cfg(all(feature = "bomber", feature = "bandit"))]
 fn run_shared_tournament() -> TournamentResult {
     let mut rng = Rng::new();
     let shared_stats = Arc::new(SharedBanditStats::new(ACTION_COUNT));
