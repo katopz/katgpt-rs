@@ -9,9 +9,9 @@ use bevy_ecs::prelude::*;
 
 use super::arena::ArenaGrid;
 use super::{
-    Alive, BOMB_FUSE_TICKS, Blast, Bomb, BombCount, BombFuse, BombRange, BomberAction, Cell,
-    DEFAULT_BLAST_RANGE, DEFAULT_MAX_BOMBS, DEFAULT_SPEED, GameEvent, GameRng, GridPos, Player,
-    PlayerEntities, PowerUp, PowerUpKind, SPAWN_POSITIONS, ScoreBoard, Speed, TICK_LIMIT,
+    Alive, BOMB_FUSE_TICKS, Blast, Bomb, BombCount, BombFuse, BombRange, BombType, BomberAction,
+    Cell, DEFAULT_BLAST_RANGE, DEFAULT_MAX_BOMBS, DEFAULT_SPEED, GameEvent, GameRng, GridPos,
+    Player, PlayerEntities, PowerUp, PowerUpKind, SPAWN_POSITIONS, ScoreBoard, Speed, TICK_LIMIT,
     TickCounter,
 };
 
@@ -25,6 +25,8 @@ pub struct PendingExplosion {
     pub range: u32,
     /// Player entity that placed the bomb (for active-count tracking).
     pub owner: Entity,
+    /// Bomb type — determines blast behavior (e.g. piercing continues through walls).
+    pub bomb_type: BombType,
 }
 
 /// Four cardinal directions used for blast propagation.
@@ -96,10 +98,35 @@ pub fn spawn_players(world: &mut World) -> [Entity; 4] {
 // ---------------------------------------------------------------------------
 
 /// Run one game tick. Returns `true` while the round continues, `false` when ended.
+///
+/// Processing order:
+/// 1. Fuse countdown (skips Remote/Landmine bombs)
+/// 2. Remote detonation (player-triggered)
+/// 3. Process explosions (timed + remote)
+/// 4. Apply movement
+/// 5. Landmine trigger (proximity-based, after movement)
+/// 6. Process landmine explosions
+/// 7. Bomb placement
+/// 8. Power-up collection
+/// 9. Cleanup + round-end check
 pub fn run_tick(world: &mut World, actions: [Option<BomberAction>; 4]) -> bool {
-    let pending = tick_bomb_fuses(world);
-    let blast_cells = process_explosions(world, pending);
+    // 1–2. Fuse countdown + remote detonation
+    let mut pending = tick_bomb_fuses(world);
+    pending.extend(detonate_remote_bombs(world, actions));
+
+    // 3. Process all explosions (timed + remote)
+    let mut blast_cells = process_explosions(world, pending);
+
+    // 4. Movement
     apply_movement(world, actions);
+
+    // 5–6. Landmine trigger (after movement — stepping on one triggers it)
+    let landmine_explosions = trigger_landmines(world);
+    if !landmine_explosions.is_empty() {
+        blast_cells.extend(process_explosions(world, landmine_explosions));
+    }
+
+    // 7–9. Placement, collection, cleanup
     place_bombs(world, actions);
     collect_powerups(world);
     cleanup_and_check(world, blast_cells)
@@ -110,16 +137,81 @@ pub fn run_tick(world: &mut World, actions: [Option<BomberAction>; 4]) -> bool {
 // ---------------------------------------------------------------------------
 
 fn tick_bomb_fuses(world: &mut World) -> Vec<PendingExplosion> {
-    let mut to_explode: Vec<(Entity, (i32, i32), u32, Entity)> = Vec::new();
+    #[allow(clippy::type_complexity)]
+    let mut to_explode: Vec<(Entity, (i32, i32), u32, Entity, BombType)> = Vec::new();
 
     {
-        let mut q = world.query::<(Entity, &mut BombFuse, &GridPos, &BombRange)>();
-        for (entity, mut fuse, pos, range) in q.iter_mut(world) {
+        let mut q = world.query::<(Entity, &Bomb, &mut BombFuse, &GridPos, &BombRange)>();
+        for (entity, bomb, mut fuse, pos, range) in q.iter_mut(world) {
+            // Remote and Landmine bombs use trigger-based detonation, not fuse countdown
+            let bomb_type = bomb.bomb_type;
+            match bomb_type {
+                BombType::Remote | BombType::Landmine => continue,
+                BombType::Timed | BombType::Piercing => {}
+            }
             let owner = fuse.owner;
             fuse.ticks_remaining = fuse.ticks_remaining.saturating_sub(1);
             if fuse.ticks_remaining == 0 {
-                to_explode.push((entity, (pos.x, pos.y), range.cells, owner));
+                to_explode.push((entity, (pos.x, pos.y), range.cells, owner, bomb_type));
             }
+        }
+    }
+
+    let mut result = Vec::with_capacity(to_explode.len());
+    for (entity, pos, range, owner, bomb_type) in to_explode {
+        world.entity_mut(entity).despawn();
+        world.send_event(GameEvent::BombExploded { pos, range });
+        result.push(PendingExplosion {
+            pos,
+            range,
+            owner,
+            bomb_type,
+        });
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// 2. Remote detonation
+// ---------------------------------------------------------------------------
+
+/// Process `Detonate` actions: all `Remote` bombs owned by the detonating player
+/// immediately explode.
+fn detonate_remote_bombs(
+    world: &mut World,
+    actions: [Option<BomberAction>; 4],
+) -> Vec<PendingExplosion> {
+    // Collect player entities that issued Detonate action
+    let detonating_owners: Vec<Entity> = {
+        let Some(pe) = world.get_resource::<PlayerEntities>() else {
+            return Vec::new();
+        };
+        actions
+            .iter()
+            .enumerate()
+            .filter_map(|(i, action)| match action {
+                Some(BomberAction::Detonate) => Some(pe.entities[i]),
+                _ => None,
+            })
+            .collect()
+    };
+
+    if detonating_owners.is_empty() {
+        return Vec::new();
+    }
+
+    // Find all Remote bombs owned by detonating players
+    let mut to_explode: Vec<(Entity, (i32, i32), u32, Entity)> = Vec::new();
+    {
+        let mut q = world.query::<(Entity, &Bomb, &BombFuse, &BombRange, &GridPos)>();
+        for (entity, bomb, fuse, range, pos) in q.iter(world) {
+            if bomb.bomb_type != BombType::Remote {
+                continue;
+            }
+            if !detonating_owners.contains(&fuse.owner) {
+                continue;
+            }
+            to_explode.push((entity, (pos.x, pos.y), range.cells, fuse.owner));
         }
     }
 
@@ -127,13 +219,18 @@ fn tick_bomb_fuses(world: &mut World) -> Vec<PendingExplosion> {
     for (entity, pos, range, owner) in to_explode {
         world.entity_mut(entity).despawn();
         world.send_event(GameEvent::BombExploded { pos, range });
-        result.push(PendingExplosion { pos, range, owner });
+        result.push(PendingExplosion {
+            pos,
+            range,
+            owner,
+            bomb_type: BombType::Remote,
+        });
     }
     result
 }
 
 // ---------------------------------------------------------------------------
-// 2. Blast propagation
+// 3. Blast propagation
 // ---------------------------------------------------------------------------
 
 fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i32, i32)> {
@@ -142,10 +239,11 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
     }
 
     // ── Snapshot current state (immutable reads) ────────────────────
-    let bomb_map: HashMap<(i32, i32), (Entity, u32, Entity)> = {
-        let mut q = world.query_filtered::<(Entity, &GridPos, &BombRange, &BombFuse), With<Bomb>>();
+    let bomb_map: HashMap<(i32, i32), (Entity, u32, Entity, BombType)> = {
+        let mut q =
+            world.query_filtered::<(Entity, &GridPos, &BombRange, &BombFuse, &Bomb), With<Bomb>>();
         q.iter(world)
-            .map(|(e, p, r, f)| ((p.x, p.y), (e, r.cells, f.owner)))
+            .map(|(e, p, r, f, b)| ((p.x, p.y), (e, r.cells, f.owner, b.bomb_type)))
             .collect()
     };
 
@@ -198,7 +296,10 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                         if let Some(&(pid, pe)) = player_map.get(&(cx, cy)) {
                             players_killed.push((pid, pe, killer_id));
                         }
-                        break;
+                        match exp.bomb_type {
+                            BombType::Piercing => {} // continue through wall
+                            _ => break,
+                        }
                     }
                     Cell::PowerUpHidden(kind) => {
                         blast_cells.push((cx, cy));
@@ -215,7 +316,7 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                             players_killed.push((pid, pe, killer_id));
                         }
                         if processed.insert((cx, cy))
-                            && let Some(&(be, br, bo)) = bomb_map.get(&(cx, cy))
+                            && let Some(&(be, br, bo, bt)) = bomb_map.get(&(cx, cy))
                         {
                             bombs_to_despawn.push(be);
                             owners_to_decrement.insert(bo);
@@ -223,6 +324,7 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                                 pos: (cx, cy),
                                 range: br,
                                 owner: bo,
+                                bomb_type: bt,
                             });
                         }
                     }
@@ -272,13 +374,17 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
 }
 
 // ---------------------------------------------------------------------------
-// 3. Movement
+// 4. Movement
 // ---------------------------------------------------------------------------
 
 fn apply_movement(world: &mut World, actions: [Option<BomberAction>; 4]) {
+    // Landmines do NOT block movement — players can walk onto them
     let bomb_pos: HashSet<(i32, i32)> = {
-        let mut q = world.query_filtered::<&GridPos, With<Bomb>>();
-        q.iter(world).map(|p| (p.x, p.y)).collect()
+        let mut q = world.query_filtered::<(&GridPos, &Bomb), ()>();
+        q.iter(world)
+            .filter(|(_, bomb)| bomb.bomb_type != BombType::Landmine)
+            .map(|(p, _)| (p.x, p.y))
+            .collect()
     };
 
     // Collect phase — immutable query
@@ -326,7 +432,54 @@ fn apply_movement(world: &mut World, actions: [Option<BomberAction>; 4]) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Bomb placement
+// 5. Landmine trigger
+// ---------------------------------------------------------------------------
+
+/// After movement, check if any alive player is standing on a `Landmine` bomb.
+/// Triggered landmines explode with range 1 regardless of their `BombRange` component.
+fn trigger_landmines(world: &mut World) -> Vec<PendingExplosion> {
+    // Collect alive player positions
+    let player_positions: Vec<(i32, i32)> = {
+        let mut q = world.query_filtered::<&GridPos, With<Alive>>();
+        q.iter(world).map(|p| (p.x, p.y)).collect()
+    };
+
+    if player_positions.is_empty() {
+        return Vec::new();
+    }
+
+    // Find landmines at player positions
+    let mut to_explode: Vec<(Entity, (i32, i32), Entity)> = Vec::new();
+    {
+        let mut q = world.query::<(Entity, &Bomb, &BombFuse, &GridPos)>();
+        for (entity, bomb, fuse, pos) in q.iter(world) {
+            if bomb.bomb_type != BombType::Landmine {
+                continue;
+            }
+            if player_positions.contains(&(pos.x, pos.y)) {
+                to_explode.push((entity, (pos.x, pos.y), fuse.owner));
+            }
+        }
+    }
+
+    let mut result = Vec::with_capacity(to_explode.len());
+    for (entity, pos, owner) in to_explode {
+        world.entity_mut(entity).despawn();
+        // Landmine always has range 1 regardless of BombRange
+        let range = 1;
+        world.send_event(GameEvent::BombExploded { pos, range });
+        result.push(PendingExplosion {
+            pos,
+            range,
+            owner,
+            bomb_type: BombType::Landmine,
+        });
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// 6. Bomb placement
 // ---------------------------------------------------------------------------
 
 fn place_bombs(world: &mut World, actions: [Option<BomberAction>; 4]) {
@@ -376,7 +529,7 @@ fn place_bombs(world: &mut World, actions: [Option<BomberAction>; 4]) {
 }
 
 // ---------------------------------------------------------------------------
-// 5. Power-up collection
+// 7. Power-up collection
 // ---------------------------------------------------------------------------
 
 fn collect_powerups(world: &mut World) {
@@ -446,7 +599,7 @@ fn collect_powerups(world: &mut World) {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Cleanup + round-end check
+// 8. Cleanup + round-end check
 // ---------------------------------------------------------------------------
 
 fn cleanup_and_check(world: &mut World, blast_cells: Vec<(i32, i32)>) -> bool {
@@ -566,5 +719,476 @@ mod tests {
             q.iter(&world).count()
         };
         assert_eq!(bomb_count, 0);
+    }
+
+    // ── A6: Remote detonation tests ─────────────────────────────────
+
+    #[test]
+    fn remote_bomb_detonates_on_action() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Place a remote bomb at a position away from player 0
+        let pos = *world.get::<GridPos>(p0).unwrap();
+        let bomb_pos = (pos.x + 1, pos.y);
+        world.spawn((
+            Bomb::with_type(BombType::Remote),
+            GridPos {
+                x: bomb_pos.0,
+                y: bomb_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Issue Detonate action for player 0
+        let _ = run_tick(&mut world, [Some(BomberAction::Detonate), None, None, None]);
+
+        // Bomb should be gone, active count decremented
+        assert_eq!(
+            world.get_mut::<BombCount>(p0).unwrap().active,
+            0,
+            "remote bomb should be despawned after detonate"
+        );
+        let bomb_count = {
+            let mut q = world.query_filtered::<Entity, With<Bomb>>();
+            q.iter(&world).count()
+        };
+        assert_eq!(bomb_count, 0, "no bomb entities should remain");
+    }
+
+    #[test]
+    fn remote_bomb_ignores_fuse_countdown() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Place a remote bomb with fuse = 1 (would normally explode next tick)
+        let pos = *world.get::<GridPos>(p0).unwrap();
+        let bomb_pos = (pos.x + 1, pos.y);
+        world.spawn((
+            Bomb::with_type(BombType::Remote),
+            GridPos {
+                x: bomb_pos.0,
+                y: bomb_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: 1,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Run a tick without Detonate action
+        let _ = run_tick(&mut world, [None; 4]);
+
+        // Remote bomb should still exist (fuse was not decremented)
+        let bomb_count = {
+            let mut q = world.query_filtered::<Entity, With<Bomb>>();
+            q.iter(&world).count()
+        };
+        assert_eq!(
+            bomb_count, 1,
+            "remote bomb should not explode via fuse countdown"
+        );
+        assert_eq!(
+            world.get_mut::<BombCount>(p0).unwrap().active,
+            1,
+            "active count should remain unchanged"
+        );
+    }
+
+    #[test]
+    fn remote_detonate_only_affects_owned_bombs() {
+        let mut world = init_world(42);
+        let [p0, p1, ..] = spawn_players(&mut world);
+
+        // Place a remote bomb for player 0
+        let pos0 = *world.get::<GridPos>(p0).unwrap();
+        world.spawn((
+            Bomb::with_type(BombType::Remote),
+            GridPos {
+                x: pos0.x + 1,
+                y: pos0.y,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Place a remote bomb for player 1
+        let pos1 = *world.get::<GridPos>(p1).unwrap();
+        world.spawn((
+            Bomb::with_type(BombType::Remote),
+            GridPos {
+                x: pos1.x + 1,
+                y: pos1.y,
+            },
+            BombFuse {
+                owner: p1,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p1).unwrap().active = 1;
+
+        // Player 0 detonates — only their bomb should explode
+        let _ = run_tick(&mut world, [Some(BomberAction::Detonate), None, None, None]);
+
+        // Player 0's bomb gone, player 1's bomb still present
+        assert_eq!(world.get_mut::<BombCount>(p0).unwrap().active, 0);
+        assert_eq!(world.get_mut::<BombCount>(p1).unwrap().active, 1);
+
+        let bomb_count = {
+            let mut q = world.query_filtered::<Entity, With<Bomb>>();
+            q.iter(&world).count()
+        };
+        assert_eq!(bomb_count, 1, "only player 1's remote bomb should remain");
+    }
+
+    #[test]
+    fn remote_detonate_with_no_remote_bombs_is_noop() {
+        let mut world = init_world(42);
+        spawn_players(&mut world);
+
+        // No bombs placed — Detonate should be a no-op
+        let ongoing = run_tick(&mut world, [Some(BomberAction::Detonate), None, None, None]);
+        assert!(ongoing, "round should continue");
+    }
+
+    // ── A7: Landmine trigger tests ──────────────────────────────────
+
+    #[test]
+    fn landmine_triggers_on_step() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Player 0 is at (1,1). Place landmine at (2,1) — within safe zone, should be floor.
+        let landmine_pos = (2, 1);
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos {
+                x: landmine_pos.0,
+                y: landmine_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Move player 0 right onto the landmine
+        let _ = run_tick(&mut world, [Some(BomberAction::Right), None, None, None]);
+
+        // Landmine should have exploded
+        assert_eq!(
+            world.get_mut::<BombCount>(p0).unwrap().active,
+            0,
+            "landmine should be despawned after trigger"
+        );
+        let bomb_count = {
+            let mut q = world.query_filtered::<Entity, With<Bomb>>();
+            q.iter(&world).count()
+        };
+        assert_eq!(bomb_count, 0, "no bomb entities should remain");
+    }
+
+    #[test]
+    fn landmine_ignores_fuse_countdown() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Place a landmine with fuse = 1 (would normally explode next tick)
+        // Use position away from player so it doesn't trigger by proximity
+        let landmine_pos = (2, 1);
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos {
+                x: landmine_pos.0,
+                y: landmine_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: 1,
+            },
+            BombRange {
+                cells: DEFAULT_BLAST_RANGE,
+            },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Run a tick — player doesn't move onto landmine
+        let _ = run_tick(&mut world, [Some(BomberAction::Wait), None, None, None]);
+
+        // Landmine should still exist (fuse was not decremented, player not on it)
+        let bomb_count = {
+            let mut q = world.query_filtered::<Entity, With<Bomb>>();
+            q.iter(&world).count()
+        };
+        assert_eq!(
+            bomb_count, 1,
+            "landmine should not explode via fuse countdown"
+        );
+        assert_eq!(
+            world.get_mut::<BombCount>(p0).unwrap().active,
+            1,
+            "active count should remain unchanged"
+        );
+    }
+
+    #[test]
+    fn landmine_always_range_1() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Place landmine with high BombRange — should still only blast range 1
+        let landmine_pos = (2, 1);
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos {
+                x: landmine_pos.0,
+                y: landmine_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange { cells: 5 }, // high range, but landmine ignores it
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Move player onto landmine
+        let _ = run_tick(&mut world, [Some(BomberAction::Right), None, None, None]);
+
+        // Verify the BombExploded event has range 1
+        let events = world.resource::<Events<GameEvent>>();
+        let mut cursor = events.get_cursor();
+        let mut found_landmine_explosion = false;
+        for event in cursor.read(&events) {
+            match event {
+                GameEvent::BombExploded { pos, range } if *pos == landmine_pos => {
+                    assert_eq!(*range, 1, "landmine should always have range 1");
+                    found_landmine_explosion = true;
+                }
+                _ => {}
+            }
+        }
+        assert!(
+            found_landmine_explosion,
+            "should find landmine explosion event"
+        );
+    }
+
+    #[test]
+    fn landmine_friendly_fire() {
+        let mut world = init_world(42);
+        let [p0, _p1, ..] = spawn_players(&mut world);
+
+        // Player 0 places landmine at (2,1)
+        let landmine_pos = (2, 1);
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos {
+                x: landmine_pos.0,
+                y: landmine_pos.1,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange { cells: 1 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Player 0 moves away first, then player 1 steps on landmine
+        // Tick 1: Player 0 moves right to (2,1)... wait, that's where the landmine is.
+        // Actually, let's place the landmine where player 1 can reach it.
+        // Player 1 spawns at (11,1). Let me place landmine at (10,1).
+        // But first, let me just verify the owner can trigger it.
+
+        // Simpler test: place landmine at player 0's current position (1,1)
+        // Player 0 stays → triggers own landmine
+        let bomb_entity = world
+            .query_filtered::<Entity, With<Bomb>>()
+            .iter(&world)
+            .next()
+            .unwrap();
+        world.despawn(bomb_entity);
+        world.get_mut::<BombCount>(p0).unwrap().active = 0;
+
+        let player_pos = *world.get::<GridPos>(p0).unwrap();
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos {
+                x: player_pos.x,
+                y: player_pos.y,
+            },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange { cells: 1 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Player 0 doesn't move — already on landmine → triggers
+        let _ = run_tick(&mut world, [Some(BomberAction::Wait), None, None, None]);
+
+        // Landmine should explode, player 0 should die (friendly fire)
+        assert_eq!(world.get_mut::<BombCount>(p0).unwrap().active, 0);
+        assert!(
+            world.get::<Alive>(p0).is_none(),
+            "player 0 should be killed by own landmine"
+        );
+    }
+
+    #[test]
+    fn landmine_does_not_block_movement() {
+        let mut world = init_world(42);
+        let [p0, ..] = spawn_players(&mut world);
+
+        // Place landmine at (2,1) — should NOT block player from moving there
+        world.spawn((
+            Bomb::with_type(BombType::Landmine),
+            GridPos { x: 2, y: 1 },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: u32::MAX,
+            },
+            BombRange { cells: 1 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Player 0 at (1,1) moves right to (2,1) — landmine should not block
+        let _ = run_tick(&mut world, [Some(BomberAction::Right), None, None, None]);
+
+        // Player should have moved to (2,1)
+        let pos = world.get::<GridPos>(p0).unwrap();
+        assert_eq!((pos.x, pos.y), (2, 1), "player should move onto landmine");
+
+        // Landmine should have triggered
+        assert_eq!(world.get_mut::<BombCount>(p0).unwrap().active, 0);
+    }
+
+    // ── A5: Piercing blast tests ────────────────────────────────────
+
+    /// Piercing blast should destroy a destructible wall AND continue propagating
+    /// through it, hitting cells behind the wall that a Timed bomb would not reach.
+    #[test]
+    fn piercing_blast_destroys_wall_and_continues() {
+        let mut world = init_world(42);
+        let [p0, p1, ..] = spawn_players(&mut world);
+
+        // Set up controlled layout:
+        //   (1,1) bomb origin (player 0 spawn)
+        //   (2,1) destructible wall — should be destroyed
+        //   (3,1) floor with player 1 — blast should reach here
+        {
+            let mut grid = world.resource_mut::<ArenaGrid>();
+            grid.set(1, 1, Cell::Floor);
+            grid.set(2, 1, Cell::DestructibleWall);
+            grid.set(3, 1, Cell::Floor);
+        }
+
+        // Move player 1 behind the wall
+        *world.get_mut::<GridPos>(p1).unwrap() = GridPos { x: 3, y: 1 };
+
+        // Place a piercing bomb at (1,1) with range 3
+        world.spawn((
+            Bomb::with_type(BombType::Piercing),
+            GridPos { x: 1, y: 1 },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: BOMB_FUSE_TICKS,
+            },
+            BombRange { cells: 3 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        // Run ticks until bomb explodes
+        for _ in 0..BOMB_FUSE_TICKS {
+            let _ = run_tick(&mut world, [None; 4]);
+        }
+
+        // Wall destroyed — grid should now be Floor
+        assert_eq!(
+            world.resource::<ArenaGrid>().get(2, 1),
+            Cell::Floor,
+            "piercing blast should destroy wall at (2,1)"
+        );
+
+        // Blast continued through wall — player 1 behind wall should be dead
+        assert!(
+            world.get::<Alive>(p1).is_none(),
+            "piercing blast should continue through wall and kill player 1 at (3,1)"
+        );
+
+        // Bomb cleaned up
+        assert_eq!(world.get_mut::<BombCount>(p0).unwrap().active, 0);
+    }
+
+    /// Timed (default) blast should NOT continue through a destructible wall.
+    #[test]
+    fn timed_blast_stops_at_destructible_wall() {
+        let mut world = init_world(42);
+        let [p0, p1, ..] = spawn_players(&mut world);
+
+        // Same layout: wall at (2,1), player 1 at (3,1)
+        {
+            let mut grid = world.resource_mut::<ArenaGrid>();
+            grid.set(1, 1, Cell::Floor);
+            grid.set(2, 1, Cell::DestructibleWall);
+            grid.set(3, 1, Cell::Floor);
+        }
+
+        *world.get_mut::<GridPos>(p1).unwrap() = GridPos { x: 3, y: 1 };
+
+        // Place a default Timed bomb
+        world.spawn((
+            Bomb::new(),
+            GridPos { x: 1, y: 1 },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: BOMB_FUSE_TICKS,
+            },
+            BombRange { cells: 3 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active = 1;
+
+        for _ in 0..BOMB_FUSE_TICKS {
+            let _ = run_tick(&mut world, [None; 4]);
+        }
+
+        // Wall destroyed
+        assert_eq!(
+            world.resource::<ArenaGrid>().get(2, 1),
+            Cell::Floor,
+            "timed blast should still destroy wall at (2,1)"
+        );
+
+        // Player 1 behind wall should be alive — blast stopped at wall
+        assert!(
+            world.get::<Alive>(p1).is_some(),
+            "timed blast should stop at wall, player 1 at (3,1) should survive"
+        );
     }
 }

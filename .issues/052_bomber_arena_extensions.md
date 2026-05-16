@@ -45,10 +45,10 @@ pub enum BombType {
 - [x] A1: Add `BombType` enum to `src/pruners/bomber/mod.rs`
 - [x] A2: Add `bomb_type: BombType` field to `Bomb` component (change from ZST to struct)
 - [x] A3: Add `BomberAction::Detonate` variant for remote bombs
-- [ ] A4: Modify `place_bomb()` in `systems.rs` to accept `BombType` (default `Timed`)
-- [ ] A5: Modify `propagate_blast()` — `Piercing` continues through `DestructibleWall` (destroys + continues)
-- [ ] A6: Add remote detonation system — `Detonate` action triggers all `Remote` bombs owned by player
-- [ ] A7: Add landmine trigger system — step on `Landmine` → instant 1-range explosion
+- [x] A4: Modify `place_bomb()` in `systems.rs` to accept `BombType` (default `Timed`)
+- [x] A5: Modify `propagate_blast()` — `Piercing` continues through `DestructibleWall` (destroys + continues)
+- [x] A6: Add remote detonation system — `Detonate` action triggers all `Remote` bombs owned by player
+- [x] A7: Add landmine trigger system — step on `Landmine` → instant 1-range explosion
 - [ ] A8: Add `BombType` to replay/action serialization
 - [ ] A9: Update `BomberWasmPruner` WASM state format — add bomb_type per bomb token
 - [ ] A10: Update player heuristics — `HLPlayer` / `GreedyPlayer` consider bomb types
