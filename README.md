@@ -158,7 +158,7 @@ The Trinity: **Raven** (O(1) memory) + **Screening** (O(1) judgment) + **Sparse 
 
 ## 🔬 Percepta: O(log N) 2D Convex Hull Attention
 
-Based on [Percepta's research](https://www.percepta.ai/blog/can-llms-be-computers) — executing arbitrary C programs inside a standard autoregressive transformer by compiling a [WebAssembly interpreter](https://github.com/Percepta-Core/transformer-vm) into weights, with exponentially faster decoding via 2D geometric attention. **The reference is Apache-2.0** — we distill to Rust under MIT per [`.research/32_percepta_distillation_strategy.md`](.research/32_percepta_distillation_strategy.md). See [`.research/31_percepta_deep_dive.md`](.research/31_percepta_deep_dive.md) for full gap analysis and [Plan 063](.plans/063_percepta_cht_hull_kv_cache.md) for the CHT upgrade (Phase A).
+Based on [Percepta's research](https://www.percepta.ai/blog/can-llms-be-computers) — executing arbitrary C programs inside a standard autoregressive transformer by compiling a [WebAssembly interpreter](https://github.com/Percepta-Core/transformer-vm) into weights, with exponentially faster decoding via 2D geometric attention. **The reference is Apache-2.0** — we're doing a [full RIIR](.research/32_percepta_distillation_strategy.md) (~9K lines Python+C++ → Rust) to prove Rust is better. See [`.research/31_percepta_deep_dive.md`](.research/31_percepta_deep_dive.md) for gap analysis and [Plan 064](.plans/064_percepta_full_riir.md) for the master plan.
 
 ### Core Mechanism: Parabolic Key Encoding
 
@@ -223,18 +223,29 @@ The **geometric attention mechanism** — the reusable component any transformer
 
 ### Roadmap
 
-**Phase A — CHT Hull KV Cache** (Plan 063, next): Replace Graham Scan with Dynamic Convex Hull Trick (LineContainer). Fixes arbitrary 2D points, dual hull, tie-breaking, cumulative sum, sublinear memory. Reference: `.raw/transformer-vm/attention/hull2d_cht.h` (Apache-2.0 © Percepta).
+**Plan 064 — Full RIIR** (master plan): Complete Rust port of `transformer-vm` (~9K lines Python+C++ → idiomatic Rust). 11 task groups in dependency order. Prove Rust is better. Show them what's possible.
 
-**Phase B — ReGLU/stepglu Gates**: `relu(b)*a`, `step(b≥0)`, `a*b` as FFN neurons. Enables programmatic weight construction. New plan after Phase A completes.
-
-**Phase C — Full Compiler Stack** (pivot decision): Expression/Dimension DSL → MILP scheduling → WASM interpreter → analytical weight construction → Futamura specialization. Only if Phase B reveals product-market fit for "programs as weights."
+| TG | What | Source | Target |
+|----|------|--------|--------|
+| **A** | CHT Hull KV Cache | `hull2d_cht.h` (419 lines) | `cht.rs` + `hull.rs` |
+| **B** | ReGLU/stepglu gates | `core.py` (gates portion) | `gates.rs` |
+| **C** | Expression/Dimension DSL | `core.py` (449 lines) | `graph.rs` |
+| **D** | MILP scheduling | `milp.py` (814 lines) | `scheduler.rs` |
+| **E** | WASM decoder + lowering | `decoder.py` + `lower.py` (2472 lines) | `wasm/decoder.rs` + `wasm/lower.rs` |
+| **F** | WASM interpreter | `interpreter.py` (637 lines) | `wasm/interpreter.rs` |
+| **G** | Weight construction | `weights.py` (776 lines) | `weights.rs` |
+| **H** | Transformer execution | `transformer.py` + `transformer.cpp` (513 lines) | `transformer.rs` (Rust native, no C++ needed) |
+| **I** | Futamura specialization | `specialize.py` (148 lines) | `specialize.rs` |
+| **J** | CLI + evaluator + runner | `evaluator.py` + `runner.py` + `compile_wasm.py` (1408 lines) | `evaluator.rs` + `runner.rs` + `compile.rs` |
+| **K** | Examples + docs | `examples/` | Port + benchmark |
 
 **From blog**: k-sparse softmax (nested hulls, O(k + log n)), 3D heads (3D convex hulls), programs into weights (gradient descent no longer the only way to modify a model).
 
 📁 `src/percepta.rs` — `Vec2`, `KVCache2D`, `Sudoku9x9`, `SymbolicValidator`, `StreamingSolver`, `SolveEvent`
-📁 `.research/32_percepta_distillation_strategy.md` — **Phased distillation verdict** (what to take, what to keep, Apache-2.0 → MIT)
+📁 `.plans/064_percepta_full_riir.md` — **Master plan**: all 11 task groups with tasks, module map, success criteria
+📁 `.plans/063_percepta_cht_hull_kv_cache.md` — TG-A detail: CHT upgrade plan
+📁 `.research/32_percepta_distillation_strategy.md` — **Full RIIR verdict** (why take everything, Apache-2.0 → MIT)
 📁 `.research/31_percepta_deep_dive.md` — Gap analysis + **comparison table** (what each does better)
-📁 `.plans/063_percepta_cht_hull_kv_cache.md` — Phase A: CHT upgrade plan with tasks
 
 ## 🗜️ TurboQuant: Near-Optimal KV Cache Compression
 

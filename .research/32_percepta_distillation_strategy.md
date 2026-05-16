@@ -1,14 +1,22 @@
-# Percepta Distillation Strategy: What to Take, What to Keep, What to Build
+# Percepta Distillation Strategy: Full RIIR of transformer-vm
 
 **Date:** 2025-06
-**Status:** Verdict — Execute Phase A+B Now, Evaluate Phase C Later
+**Status:** Verdict — Take Everything. Full RIIR.
 **Context:** Percepta's transformer-vm is Apache-2.0 (confirmed from LICENSE + pyproject.toml). Per our strategy in `03_Commercial_Open_Source_Strategy_Verdict.md`, we distill open-source components to Rust and open them under MIT.
 
 ---
 
 ## TL;DR
 
-**Take all their goodies.** The code is Apache-2.0. We're legally and ethically clear. Distill to Rust, open source under MIT, strengthen our engine. But do it in phases — each layer depends on the previous.
+**Take all their goodies.** The code is Apache-2.0. We're legally and ethically clear. Distill to Rust, open source under MIT, strengthen our engine. Take everything, not just the attention mechanism.
+
+**Why take everything (not just Phase A):**
+
+1. **Prove Rust is better than Python+C++** — One language, one binary, zero GC, deterministic perf. The full transformer-vm in Rust is a definitive proof point.
+2. **Show Percepta what's possible** — If they see a clean Rust port that's faster and more maintainable, they might change their stack, or at minimum we inspire each other.
+3. **We're already secure** — Our production inference pipeline (4.2M tok/s DFlash, TurboQuant, DDTree) is untouched. This is research code in `src/percepta/`. No risk.
+4. **micro-gpt is for research** — Their WASM interpreter running inside a transformer is fascinating even if it's slower than native. It proves a concept, not a benchmark. We're the right home for it.
+5. **It's fun** — Watching a transformer execute WASM bytecodes deterministically is objectively cool. Do it because we can.
 
 ---
 
@@ -70,23 +78,26 @@ Take the FFN-side improvements. These enable programmatic weight construction:
 
 ---
 
-## Phase C: Full Compiler Stack (P4–P6) — PIVOT DECISION
+## Phase C: Full Compiler Stack (P4–P6) — DO IT
 
-**Status:** Evaluate after Phase B completes
+**Status:** New plan after Phase B
 
-This is a **different product** from RIIR. Only pursue if we want to offer "compile your program into transformer weights" as a product.
+The full compiler stack, ported from Python to Rust. This is the "transformer as computer" product — compile arbitrary C programs into transformer weights.
 
-| Layer | Component | What It Does |
-|-------|-----------|-------------|
-| **P4** | Expression/Dimension DSL | Symbolic algebra for transformer-native computation |
-| **P5** | MILP Scheduling | Optimal layer/slot assignment (PuLP/HiGHS) |
-| **P6** | WASM Interpreter | 35 opcodes as computation graph |
-| **P6** | Weight Construction | Graph + schedule → weight matrices, no training |
-| **P6** | Futamura Specialization | Bake program into FFN weights |
+| Layer | Component | What It Does | Source File |
+|-------|-----------|-------------|-------------|
+| **P4** | Expression/Dimension DSL | Symbolic algebra for transformer-native computation | `graph/core.py` (449 lines) |
+| **P5** | MILP Scheduling | Optimal layer/slot assignment | `scheduler/milp.py` (814 lines) |
+| **P6a** | WASM Decoder | Parse WASM binary into opcode stream | `compilation/decoder.py` (664 lines) |
+| **P6b** | WASM Lowering | Lower unsupported ops (MUL, DIV, etc.) to supported ones | `compilation/lower.py` (1808 lines) |
+| **P6c** | WASM Interpreter | 35-opcode machine as computation graph | `wasm/interpreter.py` (637 lines) |
+| **P6d** | Weight Construction | Graph + schedule → weight matrices, no training | `model/weights.py` (776 lines) |
+| **P6e** | Futamura Specialization | Bake program into FFN weights | `specialize.py` (148 lines) |
+| **P6f** | Transformer (ReGLU) | VanillaTransformer with ReGLU FFN | `model/transformer.py` (~40 lines) |
+| **P6g** | C→WASM Compiler | Compile C source to WASM token prefix | `compilation/compile_wasm.py` (703 lines) |
+| **P6h** | Graph Evaluator | Run computation graph with exact arithmetic | `evaluator.py` (404 lines) |
 
-**Why this is a pivot:** Our current product is "Python → Rust translation that compiles." This would be "C → transformer weights that execute deterministically." Different customers, different value prop, different everything.
-
-**Honest assessment:** The full compiler stack is academically brilliant but commercially unproven. No one is asking to run C programs inside transformer weights. The market for RIIR (Python → Rust) is real and growing. Don't pivot unless Phase A+B reveals unexpected demand.
+**This is NOT a pivot.** Our core product remains RIIR. This is a research-grade proof that Rust can do everything Python+C++ can do, but better. The transformer-as-computer code lives in `src/percepta/` alongside our existing attention mechanism. It doesn't replace or compete with our inference pipeline.
 
 ---
 
