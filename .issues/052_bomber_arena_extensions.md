@@ -1,7 +1,7 @@
 # Issue 052: Bomber Arena Extensions — Complex Bombs, Custom Maps, Agent Validators
 
 **Source:** Plan 033 (Bomberman Arena) — Out of Scope items now actionable
-**Status:** Partial — Task B (B1-B3, B6) complete, Tasks A & C open
+**Status:** Partial — Task A complete, Task B complete, Task C (C1-C4) complete, C5-C10 open
 **Feature gate:** `bomber`, `bomber-wasm`
 
 ---
@@ -124,10 +124,10 @@ Build an outer orchestration loop that:
 
 ### Subtasks
 
-- [ ] C1: Define `ValidatorCandidate` struct — rules as serializable AST (not raw code string)
-- [ ] C2: Define `ArenaEvaluation` struct — survival_rate, kill_rate, score, failure_traces
-- [ ] C3: Implement `evaluate_validator(candidate, rounds) -> ArenaEvaluation` — runs bomber arena with candidate as NNPlayer's WASM
-- [ ] C4: Implement `failure_traces()` — extract rounds where validator approved fatal moves
+- [x] C1: Define `ValidatorCandidate` struct — rules as serializable AST (not raw code string)
+- [x] C2: Define `ArenaEvaluation` struct — survival_rate, kill_rate, score, failure_traces
+- [x] C3: Implement `evaluate_validator(candidate, rounds) -> ArenaEvaluation` — runs bomber arena with candidate as NNPlayer's WASM
+- [x] C4: Implement `failure_traces()` — extract rounds where validator approved fatal moves
 - [ ] C5: Implement `TemplateProposer` — rule templates with configurable thresholds (no neural model)
 - [ ] C6: Implement `propose_from_trace(failures) -> Vec<ValidatorCandidate>` — generate fix candidates from failure patterns
 - [ ] C7: Implement `AgentLoop` — propose → evaluate → filter → iterate, with max rounds and convergence check
@@ -152,7 +152,7 @@ Build an outer orchestration loop that:
 |------|-------|--------|--------|--------|
 | **B: Custom Maps** | Low | High (benchmark reproducibility) | Low | ✅ Done |
 | **A: Complex Bombs** | Medium | Medium (gameplay depth) | Medium — ECS extension + blast logic | Open |
-| **C: Agent Loop** | High | High (self-improving validators) | High — new orchestration layer | Open |
+| **C: Agent Loop** | High | High (self-improving validators) | High — new orchestration layer | C1-C4 ✅, C5-C10 Open |
 
 **Recommended order:** A → C (B complete, gameplay next, then research)
 

@@ -9,6 +9,9 @@ pub mod replay;
 pub mod replay_backward;
 pub mod systems;
 
+#[cfg(feature = "bomber")]
+pub mod validator_agent;
+
 #[cfg(feature = "g_zero")]
 pub mod g_zero_player;
 #[cfg(feature = "g_zero")]
@@ -21,6 +24,12 @@ pub mod wasm_state;
 pub use arena::ArenaGrid;
 pub use players::{BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer};
 pub use replay_backward::{BackwardSample, BackwardWalkResult, ReplayBackwardWalker};
+
+#[cfg(feature = "bomber")]
+pub use validator_agent::{
+    ArenaEvaluation, FailureTrace, RulePlayer, ValidatorCandidate, ValidatorRule,
+    evaluate_validator,
+};
 
 #[cfg(feature = "bandit")]
 pub use crate::pruners::SharedBanditStats;
