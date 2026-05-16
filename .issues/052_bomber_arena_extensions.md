@@ -128,10 +128,10 @@ Build an outer orchestration loop that:
 - [x] C2: Define `ArenaEvaluation` struct — survival_rate, kill_rate, score, failure_traces
 - [x] C3: Implement `evaluate_validator(candidate, rounds) -> ArenaEvaluation` — runs bomber arena with candidate as NNPlayer's WASM
 - [x] C4: Implement `failure_traces()` — extract rounds where validator approved fatal moves
-- [ ] C5: Implement `TemplateProposer` — rule templates with configurable thresholds (no neural model)
-- [ ] C6: Implement `propose_from_trace(failures) -> Vec<ValidatorCandidate>` — generate fix candidates from failure patterns
-- [ ] C7: Implement `AgentLoop` — propose → evaluate → filter → iterate, with max rounds and convergence check
-- [ ] C8: Add bomber example: `bomber_07_agent_loop.rs` — runs agent loop, outputs best validator as `.wasm`
+- [x] C5: Implement `TemplateProposer` — rule templates with configurable thresholds (no neural model)
+- [x] C6: Implement `propose_from_trace(failures) -> Vec<ValidatorCandidate>` — generate fix candidates from failure patterns
+- [x] C7: Implement `AgentLoop` — propose → evaluate → filter → iterate, with max rounds and convergence check
+- [x] C8: Add bomber example: `bomber_08_agent_loop.rs` — runs agent loop, outputs best discovered validator
 - [ ] C9: Add feature gate `bomber-agent` (depends on `bomber-wasm`)
 - [ ] C10: Benchmarks: agent-discovered validator vs hand-written `ValidatorPlayer` rules
 

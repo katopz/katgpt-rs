@@ -27,8 +27,8 @@ pub use replay_backward::{BackwardSample, BackwardWalkResult, ReplayBackwardWalk
 
 #[cfg(feature = "bomber")]
 pub use validator_agent::{
-    ArenaEvaluation, FailureTrace, RulePlayer, ValidatorCandidate, ValidatorRule,
-    evaluate_validator,
+    AgentLoop, AgentLoopResult, ArenaEvaluation, FailureTrace, RulePlayer, TemplateProposer,
+    ValidatorCandidate, ValidatorRule, evaluate_validator, propose_from_trace,
 };
 
 #[cfg(feature = "bandit")]

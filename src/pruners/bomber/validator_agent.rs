@@ -1,4 +1,4 @@
-//! validator_agent.rs — Coding Agent Validator Loop (Issue 052, Tasks C1-C4)
+//! validator_agent.rs — Coding Agent Validator Loop (Issue 052, Tasks C1-C8)
 //!
 //! Foundational structs and arena evaluation for generating and testing
 //! rule-based validator candidates in the bomber arena.
@@ -10,17 +10,37 @@
 //! ## Architecture
 //!
 //! ```text
-//! ValidatorCandidate (rules AST)
+//! TemplateProposer (C5: rule templates)
 //!       │
 //!       ▼
-//! RulePlayer (implements BomberPlayer)
+//! ValidatorCandidate (C1: rules AST)
 //!       │
 //!       ▼
-//! evaluate_validator() → ArenaEvaluation
+//! RulePlayer (C3: implements BomberPlayer)
+//!       │
+//!       ▼
+//! evaluate_validator() → ArenaEvaluation (C2+C4)
 //!       │
 //!       ├── survival_rate, kill_rate, avg_score
-//!       └── failure_traces (C4: rounds where fatal moves were approved)
+//!       ├── failure_traces (C4: rounds where fatal moves were approved)
+//!       │
+//!       ▼
+//! propose_from_trace() (C6: mutate from failures)
+//!       │
+//!       ▼
+//! AgentLoop (C7: propose → evaluate → filter → iterate)
 //! ```
+//!
+//! ## Tasks
+//!
+//! - C1: `ValidatorCandidate`, `ValidatorRule` AST
+//! - C2: `ArenaEvaluation` metrics
+//! - C3: `RulePlayer` (implements `BomberPlayer`)
+//! - C4: `evaluate_validator()` with failure trace extraction
+//! - C5: `TemplateProposer` — rule templates with random subsets
+//! - C6: `propose_from_trace()` — mutate candidates from failure patterns
+//! - C7: `AgentLoop` — propose → evaluate → filter → iterate
+//! - C8: `bomber_08_agent_loop` example
 
 #[cfg(feature = "bomber")]
 use std::any::Any;
@@ -688,5 +708,437 @@ pub fn evaluate_validator(candidate: &ValidatorCandidate, rounds: u32) -> ArenaE
         kill_rate,
         avg_score,
         failure_traces,
+    }
+}
+
+// ── C5: Template Proposer ──────────────────────────────────────
+
+/// Proposes new validator candidates from rule templates.
+///
+/// Generates initial candidates by combining rule templates with random
+/// threshold variations. Each template provides a sensible default, and
+/// the proposer randomizes parameters within small ranges for diversity.
+#[cfg(feature = "bomber")]
+pub struct TemplateProposer {
+    /// Rule templates with default thresholds.
+    templates: Vec<ValidatorRule>,
+    /// Counter for unique candidate IDs.
+    next_id: u64,
+}
+
+#[cfg(feature = "bomber")]
+impl Default for TemplateProposer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "bomber")]
+impl TemplateProposer {
+    /// Create a new proposer with default rule templates.
+    pub fn new() -> Self {
+        Self {
+            templates: vec![
+                ValidatorRule::AvoidBlast { lookahead: 2 },
+                ValidatorRule::DistanceFromBomb { min_distance: 2 },
+                ValidatorRule::SeekPowerUp { priority: 1.0 },
+                ValidatorRule::AvoidDeadEnd { lookahead: 2 },
+                ValidatorRule::BlockOpponent { aggression: 1.0 },
+            ],
+            next_id: 0,
+        }
+    }
+
+    /// Generate N candidates with random subsets of templates.
+    ///
+    /// Each candidate gets 2-5 rules (random subset) with randomized thresholds.
+    pub fn propose_initial(&mut self, n: usize, rng: &mut Rng) -> Vec<ValidatorCandidate> {
+        (0..n)
+            .map(|_| {
+                let id = self.next_id;
+                self.next_id += 1;
+                ValidatorCandidate {
+                    id: format!("{id}"),
+                    generation: 0,
+                    rules: self.random_subset(rng),
+                }
+            })
+            .collect()
+    }
+
+    /// Pick a random subset (2-5 rules) with randomized thresholds.
+    fn random_subset(&self, rng: &mut Rng) -> Vec<ValidatorRule> {
+        let count = rng.usize(2..=self.templates.len());
+        let mut indices: Vec<usize> = (0..self.templates.len()).collect();
+
+        // Fisher-Yates shuffle
+        for i in (1..indices.len()).rev() {
+            let j = rng.usize(0..=i);
+            indices.swap(i, j);
+        }
+
+        indices[..count]
+            .iter()
+            .map(|&i| Self::randomize_rule(&self.templates[i], rng))
+            .collect()
+    }
+
+    /// Randomize thresholds around defaults.
+    fn randomize_rule(rule: &ValidatorRule, rng: &mut Rng) -> ValidatorRule {
+        match rule {
+            ValidatorRule::AvoidBlast { .. } => ValidatorRule::AvoidBlast {
+                lookahead: rng.u32(1..=4),
+            },
+            ValidatorRule::DistanceFromBomb { .. } => ValidatorRule::DistanceFromBomb {
+                min_distance: rng.u32(1..=3),
+            },
+            ValidatorRule::SeekPowerUp { .. } => ValidatorRule::SeekPowerUp {
+                priority: 0.5 + rng.f32() * 1.5,
+            },
+            ValidatorRule::AvoidDeadEnd { .. } => ValidatorRule::AvoidDeadEnd {
+                lookahead: rng.u32(1..=4),
+            },
+            ValidatorRule::BlockOpponent { .. } => ValidatorRule::BlockOpponent {
+                aggression: 0.3 + rng.f32() * 1.7,
+            },
+        }
+    }
+}
+
+// ── C6: Failure Trace Analysis ─────────────────────────────────
+
+/// Failure pattern classification for rule adjustment.
+#[cfg(feature = "bomber")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FailurePattern {
+    /// Died while waiting (stayed in blast zone).
+    BlastZone,
+    /// Died from own bomb placement.
+    SelfBomb,
+    /// Died in a dead-end with few escape routes.
+    CornerTrap,
+    /// General movement into danger.
+    MovedIntoDanger,
+}
+
+/// Classify a failure trace into a failure pattern.
+#[cfg(feature = "bomber")]
+fn classify_failure(trace: &FailureTrace) -> FailurePattern {
+    let action = BomberAction::from(trace.approved_action as usize);
+    match action {
+        BomberAction::Wait => FailurePattern::BlastZone,
+        BomberAction::Bomb => FailurePattern::SelfBomb,
+        _ => match trace.safe_actions.len() {
+            0..=1 => FailurePattern::CornerTrap,
+            _ => FailurePattern::MovedIntoDanger,
+        },
+    }
+}
+
+/// Mutate a random rule in the list using template randomization.
+#[cfg(feature = "bomber")]
+fn mutate_random_rule(rules: &mut [ValidatorRule], rng: &mut Rng) {
+    if rules.is_empty() {
+        return;
+    }
+    let idx = rng.usize(0..rules.len());
+    rules[idx] = TemplateProposer::randomize_rule(&rules[idx], rng);
+}
+
+/// Generate fix candidates from failure patterns.
+///
+/// Analyzes failure traces and proposes candidates with adjusted rules
+/// to address the specific failure modes.
+///
+/// Pattern matching on failure modes:
+/// - Died in blast → increase `AvoidBlast` lookahead
+/// - Died near bomb → increase `DistanceFromBomb` min_distance
+/// - Died in corner → increase `AvoidDeadEnd` lookahead
+///
+/// Returns 3-5 variants with adjusted parameters.
+#[cfg(feature = "bomber")]
+pub fn propose_from_trace(
+    base: &ValidatorCandidate,
+    failures: &[FailureTrace],
+    rng: &mut Rng,
+) -> Vec<ValidatorCandidate> {
+    // Handle no-failure case: candidate survived, explore mutations
+    if failures.is_empty() {
+        return (0..3)
+            .map(|i| {
+                let mut rules = base.rules.clone();
+                mutate_random_rule(&mut rules, rng);
+                ValidatorCandidate {
+                    id: format!("{}_explore{i}", base.id),
+                    generation: base.generation + 1,
+                    rules,
+                }
+            })
+            .collect();
+    }
+
+    // Classify all failures
+    let patterns: Vec<FailurePattern> = failures.iter().map(classify_failure).collect();
+
+    let has_blast = patterns.contains(&FailurePattern::BlastZone)
+        || patterns.contains(&FailurePattern::MovedIntoDanger);
+    let has_self_bomb = patterns.contains(&FailurePattern::SelfBomb);
+    let has_corner = patterns.contains(&FailurePattern::CornerTrap);
+
+    let mut variants = Vec::new();
+
+    // Variant 1: Increase blast avoidance
+    if has_blast {
+        let mut rules = base.rules.clone();
+        for rule in &mut rules {
+            if let ValidatorRule::AvoidBlast { lookahead } = rule {
+                *lookahead = (*lookahead + 1).min(4);
+            }
+        }
+        variants.push(ValidatorCandidate {
+            id: format!("{}_blast", base.id),
+            generation: base.generation + 1,
+            rules,
+        });
+    }
+
+    // Variant 2: Increase bomb distance
+    if has_self_bomb {
+        let mut rules = base.rules.clone();
+        for rule in &mut rules {
+            if let ValidatorRule::DistanceFromBomb { min_distance } = rule {
+                *min_distance = (*min_distance + 1).min(3);
+            }
+        }
+        variants.push(ValidatorCandidate {
+            id: format!("{}_dist", base.id),
+            generation: base.generation + 1,
+            rules,
+        });
+    }
+
+    // Variant 3: Increase dead-end avoidance
+    if has_corner {
+        let mut rules = base.rules.clone();
+        for rule in &mut rules {
+            if let ValidatorRule::AvoidDeadEnd { lookahead } = rule {
+                *lookahead = (*lookahead + 1).min(4);
+            }
+        }
+        variants.push(ValidatorCandidate {
+            id: format!("{}_corner", base.id),
+            generation: base.generation + 1,
+            rules,
+        });
+    }
+
+    // Variant 4: Random mutation (always)
+    {
+        let mut rules = base.rules.clone();
+        mutate_random_rule(&mut rules, rng);
+        variants.push(ValidatorCandidate {
+            id: format!("{}_mutate", base.id),
+            generation: base.generation + 1,
+            rules,
+        });
+    }
+
+    variants
+}
+
+// ── C7: Agent Loop ─────────────────────────────────────────────
+
+/// Result of the agent loop.
+#[cfg(feature = "bomber")]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AgentLoopResult {
+    /// Best candidate discovered.
+    pub best_candidate: ValidatorCandidate,
+    /// Evaluation of the best candidate.
+    pub best_evaluation: ArenaEvaluation,
+    /// Number of generations run.
+    pub generations_run: u32,
+    /// Total candidates evaluated across all generations.
+    pub total_candidates_evaluated: usize,
+}
+
+/// The main agent loop: propose → evaluate → filter → iterate.
+///
+/// Uses a seeded RNG for reproducibility. The loop:
+/// 1. Generate initial population from templates
+/// 2. Evaluate each candidate in the arena
+/// 3. Select top performers (top 50%)
+/// 4. Propose mutations from failure traces
+/// 5. Repeat until convergence or max generations
+///
+/// CPU-only — no GPU, no training weights, just rule search + arena evaluation.
+#[cfg(feature = "bomber")]
+pub struct AgentLoop {
+    proposer: TemplateProposer,
+    max_generations: u32,
+    rounds_per_eval: u32,
+    population_size: usize,
+    convergence_threshold: f32,
+    seed: u64,
+}
+
+#[cfg(feature = "bomber")]
+impl Default for AgentLoop {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "bomber")]
+impl AgentLoop {
+    /// Create a new agent loop with default settings.
+    pub fn new() -> Self {
+        Self {
+            proposer: TemplateProposer::new(),
+            max_generations: 10,
+            rounds_per_eval: 50,
+            population_size: 10,
+            convergence_threshold: 0.1,
+            seed: 42,
+        }
+    }
+
+    /// Set max generations (default: 10).
+    pub fn max_generations(mut self, n: u32) -> Self {
+        self.max_generations = n;
+        self
+    }
+
+    /// Set rounds per evaluation (default: 50).
+    pub fn rounds_per_eval(mut self, n: u32) -> Self {
+        self.rounds_per_eval = n;
+        self
+    }
+
+    /// Set population size (default: 10).
+    pub fn population_size(mut self, n: usize) -> Self {
+        self.population_size = n;
+        self
+    }
+
+    /// Set convergence threshold — minimum score improvement to reset stagnation (default: 0.1).
+    pub fn convergence_threshold(mut self, t: f32) -> Self {
+        self.convergence_threshold = t;
+        self
+    }
+
+    /// Set RNG seed for reproducibility (default: 42).
+    pub fn seed(mut self, s: u64) -> Self {
+        self.seed = s;
+        self
+    }
+
+    /// Run the full agent loop.
+    ///
+    /// Returns the best candidate found.
+    pub fn run(mut self) -> AgentLoopResult {
+        let mut rng = Rng::with_seed(self.seed);
+
+        // 1. Generate initial population
+        let mut population = self
+            .proposer
+            .propose_initial(self.population_size, &mut rng);
+        let mut best_score = f32::NEG_INFINITY;
+        let mut best_candidate = population[0].clone();
+        let mut best_evaluation = ArenaEvaluation {
+            candidate_id: String::new(),
+            rounds: 0,
+            survival_rate: 0.0,
+            kill_rate: 0.0,
+            avg_score: f32::NEG_INFINITY,
+            failure_traces: Vec::new(),
+        };
+        let mut generations_without_improvement = 0u32;
+        let mut total_evaluated = 0usize;
+        let mut generations_completed = 0u32;
+
+        println!("Agent Loop — Starting optimization");
+        println!(
+            "  Config: pop={} gens={} rounds/gen={}",
+            self.population_size, self.max_generations, self.rounds_per_eval
+        );
+
+        for generation in 0..self.max_generations {
+            generations_completed = generation + 1;
+
+            // 2. Evaluate each candidate
+            let mut scored: Vec<(ValidatorCandidate, ArenaEvaluation)> = population
+                .into_iter()
+                .map(|c| {
+                    let eval = evaluate_validator(&c, self.rounds_per_eval);
+                    total_evaluated += 1;
+                    (c, eval)
+                })
+                .collect();
+
+            // 3. Sort by avg_score descending
+            scored.sort_by(|a, b| {
+                b.1.avg_score
+                    .partial_cmp(&a.1.avg_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+
+            // 4. Update best
+            let gen_best_score = scored[0].1.avg_score;
+            if gen_best_score > best_score + self.convergence_threshold {
+                best_score = gen_best_score;
+                best_candidate = scored[0].0.clone();
+                best_evaluation = scored[0].1.clone();
+                generations_without_improvement = 0;
+            } else {
+                generations_without_improvement += 1;
+            }
+
+            println!(
+                "  Gen {:>2}/{}: best={:>6.1} gen_best={:>6.1} pop={:>2} stagnation={}",
+                generations_completed,
+                self.max_generations,
+                best_score,
+                gen_best_score,
+                scored.len(),
+                generations_without_improvement,
+            );
+
+            // 5. Check convergence
+            if generations_without_improvement >= 3 {
+                println!("  ✓ Converged — no improvement for 3 generations");
+                break;
+            }
+
+            // 6. Select top 50%
+            let survivor_count = (scored.len() / 2).max(1);
+            let survivors: Vec<(ValidatorCandidate, ArenaEvaluation)> =
+                scored.into_iter().take(survivor_count).collect();
+
+            // 7. Propose mutations from survivors
+            let mut next_pop = Vec::new();
+            for (candidate, eval) in &survivors {
+                next_pop.push(candidate.clone());
+                let variants = propose_from_trace(candidate, &eval.failure_traces, &mut rng);
+                next_pop.extend(variants);
+            }
+
+            // Fill remaining slots with fresh candidates
+            while next_pop.len() < self.population_size {
+                let fresh = self.proposer.propose_initial(1, &mut rng);
+                next_pop.extend(fresh);
+            }
+
+            // Cap population to configured size (truncate excess variants)
+            next_pop.truncate(self.population_size);
+            population = next_pop;
+        }
+
+        AgentLoopResult {
+            best_candidate,
+            best_evaluation,
+            generations_run: generations_completed,
+            total_candidates_evaluated: total_evaluated,
+        }
     }
 }
