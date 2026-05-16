@@ -1,119 +1,247 @@
-# Plan 062: FFO Distillation — First-Order Hypergradient for Modelless Stack
+# Plan 062: FFO Distillation — Verify Active-Set Masking Already Captured by BanditPruner
 
 **Branch:** `develop/feature/062_ffo_distillation`
-**Depends on:** Plan 053 (δ-Mem Modelless Distillation), Plan 052 (GFlowNet Modelless Distillation)
+**Depends on:** Plan 053 (δ-Mem Modelless Distillation — "NO GAIN" precedent), Plan 030 (Bandit)
 **Research:** `.research/30_FFO_First_Order_Differentiable_Optimization.md`
-**Code:** `.raw/FFOLayer/` (local source audit)
-**Goal:** Distill the most valuable techniques from FFOLayer (arXiv:2512.02494) into the microgpt-rs modelless distillation stack. Benchmark-first: measure before, implement, measure after, revert if no gain.
+**Code:** `.raw/FFOLayer/` (local source audit — `ffocp_eq.py`, `ffoqp_eq.py`)
+**Goal:** Verify whether FFOLayer's active-set dual-cutoff masking (arXiv:2512.02494 §4.1) provides any gain over our existing `BanditPruner` which already blends `domain × bandit_q`. Benchmark-first: measure before, implement minimal change, measure after. **Expect "NO GAIN" like Plan 053.**
 
 ## Tasks
 
 - [ ] T0: Plan creation
-- [ ] T1: Benchmark baseline (current ScreeningPruner + BanditPruner + DDTree)
-- [ ] T2: `DualMaskedPruner<P>` — active constraint masking using bandit Q-values as dual proxy
-- [ ] T3: Benchmark T2 vs baseline
-- [ ] T4: `SchurHLAKernel` — Cholesky-accelerated AHLA update (optional, gated on T2 results)
-- [ ] T5: Benchmark T4 vs baseline
-- [ ] T6: Run clippy, fix warnings, commit
+- [ ] T1: Port FFOLayer finite-difference hypergradient correctness test from `.raw/FFOLayer/ffo_sdp.py`
+- [ ] T2: Benchmark baseline — `BanditPruner` Q-value distribution analysis (is masking already happening?)
+- [ ] T3: Add `dual_cutoff` field to `BanditPruner` — skip arms below Q-value threshold in `relevance()`
+- [ ] T4: Unit test — verify cutoff masks low-Q arms, preserves high-Q arms
+- [ ] T5: Benchmark T3 vs baseline — DDTree nodes, latency, acceptance rate
+- [ ] T6: Honest verdict — commit if gain, revert+document if no gain
+- [ ] T7: Run clippy, fix warnings, commit
+
+## Honest Assessment
+
+### Why This Plan Might Show "NO GAIN"
+
+1. **BanditPruner already does the blending.** `relevance()` returns `(domain * bandit).clamp(0.0, 1.0)`. When `bandit_q` is low, the product is low — effectively "masking" without an explicit cutoff. FFOLayer's `dual_cutoff` adds a hard threshold; our bandit does soft masking via multiplication.
+
+2. **The trait signature doesn't support wrappers.** `ScreeningPruner::relevance(&self, depth, token_idx, parent_tokens) -> f32` — no Q-value parameter. A `DualMaskedPruner` wrapper CAN'T access Q-values unless we modify the trait. Adding a field to `BanditPruner` itself is the only clean path.
+
+3. **DDTree explores by marginals, not by pruner scores alone.** Even if we mask low-Q arms to 0.0, the tree still explores all non-zero-marginal paths. The pruner influences beam scoring, not tree structure. Masking might not reduce node count at all.
+
+4. **Plan 053 precedent.** δ-Mem's associative memory was mathematically correct but showed "+2500% latency, 0% tree quality improvement" because correcting a single scalar relevance score is too simple a surface for the technique's value prop.
+
+### What Actually IS Testable
+
+| Claim | Testable? | How |
+|-------|-----------|-----|
+| FFOLayer finite-difference hypergradient matches autodiff | ✅ Yes | Port `ffo_sdp.py` test — compare FD gradient vs analytical gradient |
+| BanditPruner already masks low-Q arms | ✅ Yes | Analyze Q-value distribution after N episodes — count arms near 0.0 |
+| Explicit cutoff improves over soft masking | ✅ Yes | A/B benchmark with/without cutoff |
+| Schur complement helps AHLA | ⚠️ Marginal | AHLA already 95% SDPA throughput, unlikely to move needle |
 
 ## Architecture
 
-### What This Actually Is
+### T1: Correctness Test — Finite-Difference Hypergradient
 
-Distilling two techniques from the FFOLayer paper into our Rust inference stack:
-
-1. **Active constraint masking** (P1 from Research 30): The paper uses dual values (Lagrange multipliers) to identify which inequality constraints are active at the optimum, then sparsifies the KKT system. We adapt this by using **bandit Q-values** as a proxy for dual values — high Q-value arms are "active constraints" worth evaluating, low Q-value arms can be masked out (skipped).
-
-2. **KKT Schur complement** (P2 from Research 30): The paper solves the KKT system via Cholesky factorization + Schur complement instead of forming the full Hessian. We adapt this for the **AHLA attention kernel** where the asymmetric update involves solving a least-squares system that has KKT structure.
-
-### What This Is NOT
-
-- NOT a PyTorch differentiable optimization layer (we're pure Rust inference)
-- NOT integrating CVXPY or any external solver
-- NOT replacing DDTree search with optimization (DDTree already re-solves)
-- NOT replacing AdamW in riir-gpu (that's Plan 067 in riir-ai)
-
-### Design: DualMaskedPruner
+Port the SDP gradient verification from `.raw/FFOLayer/ffo_sdp.py`:
 
 ```rust
-// src/pruners/dual_masked.rs
+// tests/ffo_gradient_correctness.rs
 
-/// Wraps any ScreeningPruner, gating evaluation by bandit Q-value thresholds.
+/// Verify that finite-difference hypergradient matches analytical gradient.
+/// Direct port of FFOLayer's ffo_sdp.py — proves we understand the math.
 ///
-/// Distilled from FFOLayer's active-set Lagrangian masking (ffocp_eq.py L1248-1269):
-///   mask = (slack <= tol) & (dual >= cutoff)
-///   if |mask| > cap: keep top-k by dual value
+/// Paper §4.2, Equation 11:
+///   vx = (1/δ)[∇x[g̃(x, y*_δ) + ⟨λ*_δ, h̃(x, y*)⟩] - ∇x[g̃(x, y*) + ⟨λ*, h̃(x, y*)⟩]]
 ///
-/// We replace:
-///   dual values → bandit Q-values (accumulated reward signal)
-///   slack threshold → relevance baseline (configurable)
-///   cap → max_active_prunes (prevents evaluation explosion)
-pub struct DualMaskedPruner<P: ScreeningPruner> {
-    inner: P,
-    dual_cutoff: f32,        // Q-value threshold for "active" constraints
-    max_active: usize,       // cap on active constraints per evaluation
-    baseline_relevance: f32, // minimum relevance to consider
+/// Test: solve a small QP, perturb, compare FD gradient vs autodiff gradient.
+#[test]
+fn test_ffo_fd_gradient_matches_autodiff() {
+    // 1. Define small QP: min ½ xᵀQx + pᵀx  s.t. Ax = b, Gx ≤ h
+    // 2. Solve → get (x*, λ*, ν*)
+    // 3. Perturb objective by δ·cᵀx → solve → get (x*_δ, λ*_δ)
+    // 4. Compute FD gradient: vx = (1/δ)[Lagrangian_grad(perturbed) - Lagrangian_grad(original)]
+    // 5. Compare with autodiff gradient (finite difference on parameters)
+    // Assert: ||vx - analytical|| < tolerance
 }
 
-impl<P: ScreeningPruner> ScreeningPruner for DualMaskedPruner<P> {
-    fn relevance(&self, token: usize, context: &[f32], logits: &[f32]) -> f32 {
-        // Delegate to inner pruner but with early exit if below baseline
-        let r = self.inner.relevance(token, context, logits);
-        if r < self.baseline_relevance { return 0.0; }
-        r
-    }
+/// Verify the KKT Schur complement gives exact solution for QP.
+/// Port of ffoqp_eq.py kkt_schur_complement (L85-121).
+#[test]
+fn test_schur_complement_exact_qp_solution() {
+    // 1. Q = random PD matrix, A = random constraint matrix
+    // 2. Solve min ½ zᵀQz + pᵀz s.t. Az = b
+    //    via Schur: L=chol(Q+εI), S=A·Q⁻¹Aᵀ, dlam=chol_solve(rhs,chol(S)), dz=-chol_solve(...)
+    // 3. Verify KKT residual: ||Q·dz + Aᵀ·dlam + p|| < ε AND ||A·dz - b|| < ε
 }
 ```
 
-### Integration with BanditPruner
+**Gate T1:** Both tests must pass before proceeding. This proves the math is correct in Rust.
 
-The DualMaskedPruner wraps ScreeningPruner, while BanditPruner wraps DualMaskedPruner:
+### T2: Baseline — BanditPruner Q-Value Distribution
+
+```rust
+// tests/bench_ffo_distillation.rs
+
+/// Analyze whether BanditPruner already provides "active-set masking".
+/// Run N episodes, record Q-value distribution, check if low-Q arms
+/// are effectively suppressed by the domain × bandit product.
+#[test]
+fn test_baseline_bandit_q_distribution() {
+    // 1. Create BanditPruner<NoScreeningPruner> with 27 arms
+    // 2. Run 1000 episodes with random rewards
+    // 3. Record: Q-value per arm, relevance() output per arm
+    // 4. Print: histogram of Q-values, count of arms with relevance < 0.01
+    //
+    // Key question: after training, how many arms have effectively zero relevance?
+    // If most low-Q arms already return ~0.0, explicit cutoff adds nothing.
+}
+```
+
+**Gate T2:** If ≥80% of arms already have relevance < 0.01 after training, the "masking" is already happening. Skip T3-T5, go straight to "NO GAIN" verdict.
+
+### T3: Dual Cutoff in BanditPruner
+
+Instead of a separate wrapper (which can't access Q-values), add a cutoff field directly:
+
+```rust
+// src/pruners/bandit.rs — modification to existing BanditPruner
+
+pub struct BanditPruner<P: ScreeningPruner> {
+    inner: P,
+    strategy: BanditStrategy,
+    stats: BanditStats,
+    thompson_cache: Vec<f32>,
+    // ... existing fields ...
+
+    /// FFOLayer-inspired dual cutoff: arms with Q < cutoff get relevance = 0.0.
+    /// Distilled from ffocp_eq.py backward pass (L1248-1269):
+    ///   mask = (dual >= cutoff) → 1.0 else 0.0
+    /// When 0.0 (disabled), behaves identically to current BanditPruner.
+    dual_cutoff: f32,
+}
+
+// In ScreeningPruner impl:
+fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+    // ... existing domain + cold start checks ...
+
+    // NEW: hard cutoff for low-Q arms (FFOLayer active-set masking)
+    if self.dual_cutoff > 0.0 && self.arm_visits(token_idx) > 0 {
+        if self.arm_q(token_idx) < self.dual_cutoff {
+            return 0.0; // masked — "inactive constraint"
+        }
+    }
+
+    // ... existing bandit score computation + harmonic blend ...
+}
+```
+
+**Key design choice:** `dual_cutoff = 0.0` means disabled (current behavior). Any non-zero value activates masking. This makes the change backward-compatible and benchmark-comparable.
+
+### T4: Unit Test — Cutoff Behavior
+
+```rust
+#[test]
+fn test_dual_cutoff_masks_low_q_arms() {
+    let mut bp = BanditPruner::new(
+        NoScreeningPruner,
+        BanditStrategy::Ucb1,
+        5, // 5 arms
+    );
+    bp.dual_cutoff = 0.3;
+
+    // Arm 0: high Q (should pass)
+    bp.update(0, 0.8);
+    bp.update(0, 0.9);
+    // Arm 1: low Q (should be masked)
+    bp.update(1, 0.1);
+    bp.update(1, 0.05);
+    // Arm 2: unvisited (should NOT be masked — exploration)
+
+    bp.prepare_episode(&mut Rng::seed_from_u64(42));
+
+    let r0 = bp.relevance(0, 0, &[]);
+    let r1 = bp.relevance(0, 1, &[]);
+    let r2 = bp.relevance(0, 2, &[]);
+
+    assert!(r0 > 0.0, "high-Q arm should have positive relevance");
+    assert_eq!(r1, 0.0, "low-Q arm should be masked by dual_cutoff");
+    assert!(r2 > 0.0, "unvisited arm should not be masked (exploration)");
+}
+
+#[test]
+fn test_dual_cutoff_disabled_by_default() {
+    let bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 5);
+    assert_eq!(bp.dual_cutoff, 0.0, "default cutoff should be 0 (disabled)");
+}
+```
+
+**Gate T4:** Tests must pass — proves the masking logic is correct.
+
+### T5: A/B Benchmark
+
+```rust
+#[test]
+fn test_bench_dual_cutoff_vs_baseline() {
+    let config = Config::micro();
+
+    // A: Baseline (dual_cutoff = 0.0)
+    // B: Treatment (dual_cutoff = 0.2)
+    // C: Treatment (dual_cutoff = 0.5)
+
+    // For each: run 1000 speculative steps with SimulatedVerifier
+    // Record: DDTree nodes explored, latency per build, acceptance rate
+
+    // Print comparison table:
+    // | Config        | Nodes | Latency | Accept% |
+    // |---------------|-------|---------|---------|
+    // | baseline      |  N    |  T      |  A%     |
+    // | cutoff=0.2    |  N'   |  T'     |  A'%    |
+    // | cutoff=0.5    |  N''  |  T''    |  A''%   |
+
+    // Gate: proceed only if cutoff shows ≤5% node reduction WITH ≤3% acceptance regression
+}
+```
+
+## Success Criteria (Honest)
+
+| Metric | "GAIN" Threshold | "NO GAIN" Threshold |
+|--------|-----------------|-------------------|
+| DDTree nodes | ≤5% fewer | ≥0% (no change or more) |
+| Latency | ≤3% faster | ≥0% (no change or slower) |
+| Acceptance rate | ≤5% regression | >5% regression |
+| Bandit Q distribution | <80% arms already masked | ≥80% arms already near-zero |
+
+**Expected outcome:** "NO GAIN" — BanditPruner's soft `domain × bandit` blending already captures the active-set masking concept. Hard cutoff adds no signal because multiplication already suppresses low-Q arms.
+
+## Risk Assessment
+
+**Very low risk:** This plan adds one field (`dual_cutoff: f32`) and a 4-line check to existing `BanditPruner`. If no gain, we set `dual_cutoff = 0.0` (default) and nothing changes. Total code change: ~20 lines.
+
+**Precedent:** Plan 053 (δ-Mem) showed the same pattern — mathematically correct technique, no gain on our tree-scoring surface. We documented the honest verdict and moved on.
+
+## What Schur Complement Would Look Like (NOT PLANNED — For Reference Only)
+
+The Schur complement for AHLA would replace the asymmetric update's least-squares solve:
 
 ```text
-Before: BanditPruner → ScreeningPruner → DDTree
-After:  BanditPruner → DualMaskedPruner → ScreeningPruner → DDTree
+Current:  AHLA update via direct matmul (O(d·dv))
+Schur:    Cholesky + Schur complement KKT solve (O(d² + m²) where m = constraint dim)
 ```
 
-The bandit's Q-values flow down to DualMaskedPruner which uses them as "dual proxies" for the active-set masking.
+**Why NOT planned:** AHLA already achieves 95% SDPA throughput (Plan 060). The Cholesky overhead for d=4-8 head dims would likely make it SLOWER, not faster. The Schur complement shines when the problem size is large (d >> 16), which is not our case. If someone wants to pursue this, benchmark the current `forward_ahla` first and prove the least-squares solve is a bottleneck.
 
-### File Changes
+## File Changes
 
 | File | Change |
 |------|--------|
-| `src/pruners/dual_masked.rs` | New file — DualMaskedPruner wrapper |
-| `src/pruners/mod.rs` | Export new module |
-| `src/speculative/types.rs` | Add DualMaskedPruner to SpeculativeContext (optional) |
-| `tests/` | New test for dual masking behavior |
-
-### Benchmark Design
-
-#### Baseline (T1)
-- Config: micro (27 vocab, 16 embd, 4 heads, hd=4)
-- Metrics: DDTree nodes explored, latency per build, acceptance rate
-- 1000 speculative steps with SimulatedVerifier
-
-#### T3 (DualMaskedPruner)
-- Same config + metrics
-- Compare: nodes explored (should decrease), latency (should decrease), acceptance rate (should not degrade >5%)
-
-#### Success Criteria
-| Metric | Target |
-|--------|--------|
-| DDTree node delta | ≤5% fewer nodes explored |
-| Latency delta | ≤3% improvement OR no regression |
-| Acceptance rate delta | ≤5% regression |
-| Memory overhead | ≤1KB per DualMaskedPruner instance |
-
-### Risk Assessment
-
-**Low risk:** DualMaskedPruner is a thin wrapper that falls back to inner pruner. If no gain, we simply don't use it.
-
-**Medium risk:** SchurHLAKernel modifies the AHLA hot path. Gated on T2 results — only proceed if DualMaskedPruner shows clear signal that constraint masking helps.
+| `tests/ffo_gradient_correctness.rs` | New — FD hypergradient + Schur complement correctness tests |
+| `tests/bench_ffo_distillation.rs` | New — Q-value distribution analysis + A/B benchmark |
+| `src/pruners/bandit.rs` | Add `dual_cutoff` field + masking logic (4 lines in `relevance()`) |
 
 ## References
 
 - Research 30: `.research/30_FFO_First_Order_Differentiable_Optimization.md`
 - Paper: arXiv:2512.02494 — "A Fully First-Order Layer for Differentiable Optimization"
-- Code: `.raw/FFOLayer/src/ffolayer/` — ffocp_eq.py, ffoqp_eq.py, utils.py
-- Plan 052: GFlowNet Modelless Distillation (flow-based pruning precedent)
-- Plan 053: δ-Mem Modelless Distillation (modelless distillation precedent)
+- Code: `.raw/FFOLayer/src/ffolayer/` — ffocp_eq.py (L1248-1269 active masking), ffoqp_eq.py (L85-121 Schur)
+- Plan 053: δ-Mem Modelless Distillation — "NO GAIN" precedent, honest verdict pattern
+- Plan 030: Bandit — original BanditPruner design with `domain × bandit` blending
