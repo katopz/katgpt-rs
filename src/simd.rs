@@ -699,9 +699,9 @@ mod tests {
 
         // Only acc[0*4 + 3] = 1.0 * 1.0 = 1.0 should be non-zero
         assert!((acc[3] - 1.0).abs() < 1e-5);
-        for i in 0..16 {
+        for (i, &val) in acc.iter().enumerate() {
             if i != 3 {
-                assert!(acc[i].abs() < 1e-6, "acc[{i}] should be 0, got {}", acc[i]);
+                assert!(val.abs() < 1e-6, "acc[{i}] should be 0, got {val}");
             }
         }
     }
@@ -904,19 +904,17 @@ mod tests {
         let mut output_simd = vec![0.0f32; rows];
 
         // Scalar
-        for r in 0..rows {
-            output_scalar[r] = scalar_sparse_dot_f32(&weight, r * cols, &indices, &values, 3);
+        for (r, out) in output_scalar.iter_mut().enumerate() {
+            *out = scalar_sparse_dot_f32(&weight, r * cols, &indices, &values, 3);
         }
 
         // SIMD
         simd_sparse_matmul_rows(&mut output_simd, &weight, &indices, &values, rows, cols, 3);
 
-        for r in 0..rows {
+        for (r, (scalar, simd)) in output_scalar.iter().zip(output_simd.iter()).enumerate() {
             assert!(
-                (output_scalar[r] - output_simd[r]).abs() < 1e-4,
-                "row {r}: scalar={}, simd={}",
-                output_scalar[r],
-                output_simd[r]
+                (scalar - simd).abs() < 1e-4,
+                "row {r}: scalar={scalar}, simd={simd}"
             );
         }
     }
@@ -936,8 +934,8 @@ mod tests {
         let mut output_scalar = vec![0.0f32; rows];
         let mut output_simd = vec![0.0f32; rows];
 
-        for r in 0..rows {
-            output_scalar[r] = scalar_sparse_dot_f32(&weight, r * cols, &indices, &values, alive);
+        for (r, out) in output_scalar.iter_mut().enumerate() {
+            *out = scalar_sparse_dot_f32(&weight, r * cols, &indices, &values, alive);
         }
         simd_sparse_matmul_rows(
             &mut output_simd,

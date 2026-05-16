@@ -4572,14 +4572,11 @@ mod tests {
 
         // Cluster tokens: finite. Others: -inf
         let cluster_set: std::collections::HashSet<usize> = winning.iter().copied().collect();
-        for i in 0..config.vocab_size {
+        for (i, &logit) in logits.iter().enumerate() {
             if cluster_set.contains(&i) {
-                assert!(
-                    logits[i].is_finite(),
-                    "token {i} in cluster should be finite"
-                );
+                assert!(logit.is_finite(), "token {i} in cluster should be finite");
             } else {
-                assert_eq!(logits[i], f32::NEG_INFINITY, "token {i} should be -inf");
+                assert_eq!(logit, f32::NEG_INFINITY, "token {i} should be -inf");
             }
         }
     }
