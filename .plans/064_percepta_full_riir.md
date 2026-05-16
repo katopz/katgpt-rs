@@ -207,7 +207,7 @@ src/percepta/
 - [ ] **K2:** Add Rust-specific examples and benchmarks
 - [ ] **K3:** Write module documentation for each `src/percepta/` file
 - [ ] **K4:** Update README with full Percepta section (remove "known limitations" as they're fixed)
-- [ ] **K5:** Add `percepta_full` feature flag that enables the entire stack
+- [ ] **K5:** Add feature flag hierarchy to Cargo.toml (`percepta` → `percepta_gates` → `percepta_graph` → `percepta_wasm` → `percepta_compile`)
 - [ ] **K6:** Write a blog post: "transformer-vm in Rust — 9K lines of Python+C++ → idiomatic Rust"
 
 ## Design Decisions
@@ -216,7 +216,7 @@ src/percepta/
 
 2. **`good_lp` crate for MILP** — Rust LP/MILP solver interface. Can use HiGHS backend (same as reference) or pure-Rust solver. Evaluate after TG-C.
 
-3. **Feature flags** — `percepta_cht` for TG-A only, `percepta_full` for everything. Default off.
+3. **Granular feature flags** — incremental adoption, each level unlocks the next. See Feature Flags section below. Default off.
 
 4. **File size limit** — `lower.rs` may exceed 2048 lines (source is 1808). Split into `lower/arithmetic.rs`, `lower/logic.rs`, `lower/shift.rs` if needed.
 
@@ -224,20 +224,43 @@ src/percepta/
 
 6. **Test against Python reference** — Use `.raw/transformer-vm/` as oracle. Every Rust output must match Python output for the same inputs.
 
+## Feature Flags
+
+Incremental adoption — each level depends on and unlocks the next:
+
+| Flag | Enables | TG | New Deps | WASM Runtime? |
+|------|---------|-----|----------|---------------|
+| `percepta` | CHT hull cache (upper+lower, HullMeta, tie-breaking, cumsum, parabolic encoding) | A | `ordered-float` | No |
+| `percepta_gates` | + ReGLU, stepglu, multiply, persist primitives | A+B | (none extra) | No |
+| `percepta_graph` | + Expression/Dimension DSL, ProgramGraph, fetch/fetch_sum builders | A–C | (none extra) | No |
+| `percepta_wasm` | + WASM decoder, lowering passes, 35-opcode interpreter as computation graph | A–F | (none extra) | **No — pure Rust graph, NOT wasmtime** |
+| `percepta_compile` | + MILP scheduling, weight construction, transformer execution, Futamura, CLI, evaluator | A–J | `good_lp` | No |
+
+**Key distinction from `bomber-wasm`:**
+
+| Feature | What | WASM Runtime | New Deps |
+|---------|------|-------------|----------|
+| `bomber-wasm` | Our validators in wasmtime sandbox | **Yes — wasmtime** | wasmtime, papaya |
+| `percepta_wasm` | Transformer interprets WASM bytecodes | **No — pure Rust computation graph** | ordered-float |
+
+No naming conflict: `percepta_*` namespace is clearly the transformer-vm port. `bomber-wasm` is our validator sandbox. Completely different systems that happen to share the word "WASM".
+
 ## Dependencies (New Crates)
 
 | Crate | Purpose | Needed By |
 |-------|---------|-----------|
-| `ordered_float` | `Ord` wrapper for `f64` (breakpoints in CHT) | TG-A |
-| `good_lp` or `highs` | MILP solver (4-phase scheduling) | TG-D |
+| `ordered-float` | `Ord` wrapper for `f64` (breakpoints in CHT) | TG-A |
+| `good_lp` | MILP solver (4-phase scheduling) | TG-D |
 
 No other new dependencies. We already have: `rayon` (parallelism), `serde` (serialization), `blake3` (hashing).
+
+Note: crate names in Cargo.toml use `-` (`ordered-float`, `good_lp`), but Rust code references them with `_` (`ordered_float`). The feature gates reference the Cargo.toml names.
 
 ## Constraints
 
 - Each file < 2048 lines (split if needed)
 - All existing tests must continue to pass
-- Feature-gated: `percepta_cht` and `percepta_full`, default off
+- Feature-gated: granular hierarchy (`percepta` → `percepta_compile`), default off. See Feature Flags.
 - No Python or C++ dependency at runtime (Rust only)
 - Match Python reference output exactly for all example programs
 - Apache-2.0 attribution in every file derived from transformer-vm
