@@ -1,4 +1,9 @@
 pub mod benchmark;
+#[cfg(feature = "dllm")]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::needless_range_loop)]
+pub mod dllm;
 #[cfg(feature = "feedback")]
 pub mod feedback;
 #[cfg(feature = "hla_attention")]

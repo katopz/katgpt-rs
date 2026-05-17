@@ -36,6 +36,9 @@ pub struct Config {
     pub hla_mode: HlaMode,
     pub hla_normalize: bool,
     pub hla_decay: f32,
+    // D2F Discrete Diffusion Forcing (Plan 066)
+    pub mask_token: usize,
+    pub attention_mode: AttentionMode,
 }
 
 /// Attention mode for HLA (Higher-order Linear Attention).
@@ -52,6 +55,20 @@ pub enum HlaMode {
     Hla,
     /// Asymmetric second-order: PKV, mK accumulators.
     Ahla,
+}
+
+/// Attention mode for forward passes.
+///
+/// - `Causal`: Standard autoregressive — only attend to positions ≤ current (default).
+/// - `Bidirectional`: Attend to ALL positions — used for dLLM masked prediction (Plan 066).
+/// - `BlockCausal`: Bidirectional within current block, causal across blocks — D2F student (Plan 066).
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AttentionMode {
+    #[default]
+    Causal,
+    Bidirectional,
+    BlockCausal,
 }
 
 impl Config {
@@ -88,6 +105,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -150,6 +169,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -185,6 +206,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -221,6 +244,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -255,6 +280,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -291,6 +318,8 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
         }
     }
 
@@ -326,6 +355,45 @@ impl Config {
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
+            mask_token: 0,
+            attention_mode: AttentionMode::Causal,
+        }
+    }
+
+    /// D2F mini dLLM config for discrete diffusion forcing research (Plan 066).
+    /// vocab=27, block=8, n_embd=32, n_head=4, n_layer=1, mask_token=26 (vocab_size-1).
+    pub fn dllm_micro() -> Self {
+        Self {
+            vocab_size: 27,
+            block_size: 8,
+            n_embd: 32,
+            n_head: 4,
+            head_dim: 8,
+            mlp_hidden: 128,
+            n_layer: 1,
+            n_kv_head: 4,
+            bos_token: 26,
+            temperature: 1.0,
+            draft_lookahead: 0,
+            tree_budget: 0,
+            parallel_threshold: 128,
+            lora_rank: 4,
+            lora_alpha: 8.0,
+            lora_dropout: 0.0,
+            lora_targets: Vec::new(),
+            screening_threshold: 0.0,
+            sparse_threshold: 0.8,
+            early_exit_patience: 0,
+            early_exit_gap: 0.0,
+            mtp_activation_threshold: usize::MAX,
+            mtp_cluster_vocab_threshold: usize::MAX,
+            mtp_shared_kv_prompt_threshold: usize::MAX,
+            mtp_cluster_size: 512,
+            hla_mode: HlaMode::Standard,
+            hla_normalize: false,
+            hla_decay: 1.0,
+            mask_token: 26,
+            attention_mode: AttentionMode::Bidirectional,
         }
     }
 

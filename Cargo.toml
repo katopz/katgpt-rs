@@ -26,6 +26,7 @@ crossterm = "0.28"
 
 [features]
 default = ["sparse_mlp", "domain_latent", "ppot", "bandit"]  # Production best perf + accuracy (Plan 051)
+dllm = []  # D2F Discrete Diffusion Forcing — mini dLLM research (Plan 066)
 sudoku = []
 validator = ["syn", "proc-macro2"]
 sparse_mlp = []  # TwELL-inspired sparse MLP matmul (Plan 022)
@@ -56,7 +57,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 
