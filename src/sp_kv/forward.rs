@@ -16,6 +16,35 @@
 
 use crate::simd::simd_dot_f32;
 
+/// Pre-allocated context for SP-KV forward passes.
+///
+/// Holds gate bias buffer and utility predictor scratch buffer.
+/// Create once, reuse across calls. Zero alloc in hot path.
+pub struct SpKvForwardContext {
+    /// Gate bias buffer: [block_size]. Rebuilt every forward call.
+    gate_bias: crate::sp_kv::types::GateBiasBuffer,
+    /// Utility predictor scratch: [predictor_hidden]. Reused across layers.
+    predictor_buf: Vec<f32>,
+    /// Per-head utilities: [n_kv_heads]. Reused across layers.
+    head_utilities: Vec<f32>,
+}
+
+impl SpKvForwardContext {
+    /// Create SP-KV forward context for the given model and SP-KV config.
+    pub fn new(
+        config: &crate::types::Config,
+        sp_kv_config: &crate::sp_kv::types::SpKvConfig,
+    ) -> Self {
+        let hidden = sp_kv_config.predictor_hidden.max(16);
+        let n_kv_heads = config.n_kv_head;
+        Self {
+            gate_bias: crate::sp_kv::types::GateBiasBuffer::new(config.block_size),
+            predictor_buf: vec![0.0; hidden],
+            head_utilities: vec![0.0; n_kv_heads],
+        }
+    }
+}
+
 /// Fused attention head with GQA support and optional SP-KV gate bias.
 ///
 /// Identical to `attention_head()` in `transformer.rs` when `gate_bias` is `None`.
@@ -143,6 +172,254 @@ pub fn build_gate_biases(
 #[inline(always)]
 pub fn is_in_window(current_pos: usize, source_pos: usize, window: usize) -> bool {
     current_pos.saturating_sub(source_pos) < window
+}
+
+/// SP-KV forward pass: utility-gated attention with conditional KV write.
+///
+/// Mirrors `forward_base()` from `transformer.rs` with three SP-KV modifications:
+///
+/// 1. **Utility prediction** (after RMSNorm, before QKV): 2-layer MLP predicts per-KV-head utility
+/// 2. **Conditional KV write**: only store if `utility ≥ τ` or position is in sliding window
+/// 3. **Gate-biased attention**: `attention_head_gated()` adds `log(u)` bias to Q·K scores
+///
+/// Pipeline composability: PFlash (prefill) → SP-KV (decode) → TurboQuant (storage).
+///
+/// # Arguments
+///
+/// * `ctx` — Pre-allocated forward context (from `transformer.rs`)
+/// * `weights` — Transformer weights (embeddings, per-layer, LM head)
+/// * `sp_cache` — SP-KV sparse KV cache (replaces `MultiLayerKVCache`)
+/// * `predictors` — Per-layer utility predictor weights
+/// * `sp_ctx` — SP-KV forward context (gate bias buffer, predictor scratch)
+/// * `token` — Current input token index
+/// * `pos` — Current sequence position
+/// * `config` — Model configuration
+/// * `lora` — Optional LoRA adapter
+/// * `gate_mode` — Soft (training), Hard (inference), or TAHG (annealing)
+/// * `domain_latent` — Optional domain latent for mid-layer injection (feature-gated)
+///
+/// # Returns
+///
+/// Mutable reference to logits buffer `ctx.logits`.
+///
+/// # When to Use
+///
+/// During **decode** (autoregressive generation) with SP-KV enabled.
+/// Prefill should use standard `forward_base()` or PFlash.
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+#[inline(always)]
+pub fn forward_sp_kv<'a>(
+    ctx: &'a mut crate::transformer::ForwardContext,
+    weights: &crate::transformer::TransformerWeights,
+    sp_cache: &mut crate::sp_kv::types::SpKvCache,
+    predictors: &crate::sp_kv::types::SpKvPredictors,
+    sp_ctx: &mut SpKvForwardContext,
+    token: usize,
+    pos: usize,
+    config: &crate::types::Config,
+    lora: Option<&crate::types::LoraAdapter>,
+    gate_mode: crate::sp_kv::types::SpKvGateMode,
+    #[cfg(feature = "domain_latent")] domain_latent: Option<&crate::types::DomainLatent>,
+) -> &'a mut [f32] {
+    use crate::types::{kv_dim, matmul, matmul_relu, rmsnorm};
+
+    let n = config.n_embd;
+    let hd = config.head_dim;
+    let kvd = kv_dim(config);
+    let n_kv = config.n_kv_head;
+    let sp_config = &sp_cache.config;
+
+    // 1. Embedding: x = wte[token] + wpe[pos]
+    let tok_off = token * n;
+    let pos_off_emb = pos * n;
+    for i in 0..n {
+        unsafe {
+            *ctx.x.get_unchecked_mut(i) = *weights.wte.get_unchecked(tok_off + i)
+                + *weights.wpe.get_unchecked(pos_off_emb + i);
+        }
+    }
+
+    // 2. Layer loop
+    for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
+        let layer_cache = &mut sp_cache.layers[layer_idx];
+
+        // Pre-attention: RMSNorm → save residual → RMSNorm
+        rmsnorm(&mut ctx.x);
+        ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
+        rmsnorm(&mut ctx.x);
+
+        // ── SP-KV: Predict utility from hidden state (after RMSNorm, before QKV) ──
+        let predictor = &predictors.layers[layer_idx];
+        sp_ctx.head_utilities = crate::sp_kv::utility_predictor::predict(
+            predictor,
+            &ctx.x,
+            n,
+            sp_config.predictor_hidden,
+            n_kv,
+            &mut sp_ctx.predictor_buf,
+        );
+
+        // Aggregate per-head utilities to single scalar for cache write decision
+        let pos_utility = crate::sp_kv::utility_predictor::aggregate_utilities(
+            &sp_ctx.head_utilities,
+            crate::sp_kv::utility_predictor::UtilityAggregation::Max,
+        );
+
+        // QKV projections from per-layer weights (GQA: K/V produce kv_dim outputs)
+        matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut ctx.lora_buf);
+        }
+        matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.k, lora, &ctx.x, &mut ctx.lora_buf);
+        }
+        matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.v, lora, &ctx.x, &mut ctx.lora_buf);
+        }
+
+        // Domain latent injection at mid-layer (Plan 038)
+        #[cfg(feature = "domain_latent")]
+        if layer_idx == config.n_layer / 2
+            && let Some(dl) = domain_latent
+        {
+            for i in 0..kvd {
+                unsafe {
+                    *ctx.k.get_unchecked_mut(i) += *dl.embedding.get_unchecked(i);
+                    *ctx.v.get_unchecked_mut(i) += *dl.embedding.get_unchecked(i);
+                }
+            }
+        }
+
+        // ── SP-KV: Conditional KV write (skip positions with low utility) ──
+        // Current position is always in window (distance 0 < window).
+        layer_cache.write_gated(
+            &ctx.k,
+            &ctx.v,
+            pos_utility,
+            pos,
+            true, // current pos always in window
+            sp_config.threshold,
+            kvd,
+        );
+
+        // ── SP-KV: Build gate biases for all past positions ──
+        build_gate_biases(
+            &mut sp_ctx.gate_bias,
+            &layer_cache.utilities,
+            &layer_cache.retained,
+            pos,
+            sp_config.window,
+            sp_config.threshold,
+            gate_mode,
+        );
+
+        // Multi-head attention with GQA + SP-KV gate bias
+        let scale = 1.0 / (hd as f32).sqrt();
+        ctx.attn_out[..n].fill(0.0);
+        let t_n = pos + 1;
+
+        for h in 0..config.n_head {
+            let kv_group = h * n_kv / config.n_head;
+            unsafe {
+                attention_head_gated(
+                    &ctx.q,
+                    &layer_cache.key,
+                    &layer_cache.value,
+                    &mut ctx.attn_out,
+                    &mut ctx.scores,
+                    h * hd,
+                    kv_group * hd,
+                    kvd,
+                    hd,
+                    t_n,
+                    scale,
+                    Some(&sp_ctx.gate_bias.bias),
+                );
+            }
+        }
+
+        // Output projection + residual
+        matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.x, lora, &ctx.attn_out, &mut ctx.lora_buf);
+        }
+        for i in 0..n {
+            unsafe {
+                *ctx.x.get_unchecked_mut(i) += *ctx.xr.get_unchecked(i);
+            }
+        }
+
+        // MLP: save residual → RMSNorm → MLP → residual
+        ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
+        rmsnorm(&mut ctx.x);
+        matmul_relu(
+            &mut ctx.hidden,
+            &layer_weights.mlp_w1,
+            &ctx.x,
+            config.mlp_hidden,
+            n,
+        );
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.hidden, lora, &ctx.x, &mut ctx.lora_buf);
+        }
+
+        // MLP w2: sparse when feature enabled and sparsity is high enough
+        #[cfg(feature = "sparse_mlp")]
+        {
+            let alive = crate::types::sparse_matmul(
+                &mut ctx.x,
+                &layer_weights.mlp_w2,
+                &ctx.hidden,
+                n,
+                config.mlp_hidden,
+                &mut ctx.active_indices,
+                &mut ctx.active_values,
+            );
+            if (alive as f32 / config.mlp_hidden as f32) > (1.0 - config.sparse_threshold) {
+                matmul(
+                    &mut ctx.x,
+                    &layer_weights.mlp_w2,
+                    &ctx.hidden,
+                    n,
+                    config.mlp_hidden,
+                );
+            }
+        }
+        #[cfg(not(feature = "sparse_mlp"))]
+        matmul(
+            &mut ctx.x,
+            &layer_weights.mlp_w2,
+            &ctx.hidden,
+            n,
+            config.mlp_hidden,
+        );
+
+        if let Some(lora) = lora {
+            crate::types::lora_apply(&mut ctx.x, lora, &ctx.hidden, &mut ctx.lora_buf);
+        }
+        for i in 0..n {
+            unsafe {
+                *ctx.x.get_unchecked_mut(i) += *ctx.xr2.get_unchecked(i);
+            }
+        }
+    }
+
+    // Snapshot hidden state (Plan 009 compatibility)
+    ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
+
+    // LM Head: standard matmul (clustered LM head not yet wired — TODO: expose as pub(crate))
+    matmul(
+        &mut ctx.logits,
+        &weights.lm_head,
+        &ctx.x,
+        config.vocab_size,
+        n,
+    );
+
+    &mut ctx.logits
 }
 
 #[cfg(test)]

@@ -39,6 +39,11 @@ pub struct Config {
     // D2F Discrete Diffusion Forcing (Plan 066)
     pub mask_token: usize,
     pub attention_mode: AttentionMode,
+    // SP-KV self-pruned KV attention (Plan 070)
+    pub sp_kv_window: usize,
+    pub sp_kv_threshold: f32,
+    pub sp_kv_predictor_hidden: usize,
+    pub sp_kv_predictor_lr_mult: f32,
 }
 
 /// Attention mode for HLA (Higher-order Linear Attention).
@@ -111,9 +116,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// Micro config with LoRA
     /// Micro config with LoRA defaults (Plan 008).
     pub fn micro_lora() -> Self {
         let mut c = Self::micro();
@@ -175,9 +185,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// Game
     /// Lightweight draft model for speculative decoding (~4× smaller than target).
     /// Same vocab/block to share embeddings, but embd=4, heads=2, mlp=16.
     pub fn draft() -> Self {
@@ -212,9 +227,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// Draft
     /// Small target model for multi-layer testing.
     /// vocab=4096, block=256, n_layer=4, n_head=4, n_embd=64, head_dim=16,
     /// MLP hidden=256.
@@ -250,9 +270,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// Small target
     /// GQA draft config: 8 Q heads, 2 KV heads (4:1 ratio, 4× KV cache reduction).
     pub fn gqa_draft() -> Self {
         Self {
@@ -286,9 +311,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// GQA draft
     /// BPE tokenizer config for Rust source code.
     /// vocab=4096, block=256, n_layer=1, n_head=4, n_embd=32, head_dim=8,
     /// MLP hidden=128.
@@ -324,9 +354,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// BPE
     /// BPE draft model (smaller for speculative decoding).
     /// Same vocab/block as bpe(), but embd=16, heads=2, mlp=64.
     pub fn bpe_draft() -> Self {
@@ -361,9 +396,14 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 0,
             attention_mode: AttentionMode::Causal,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
+    /// BPE draft
     /// D2F mini dLLM config for discrete diffusion forcing research (Plan 066).
     /// vocab=27, block=8, n_embd=32, n_head=4, n_layer=1, mask_token=26 (vocab_size-1).
     pub fn dllm_micro() -> Self {
@@ -398,6 +438,10 @@ impl Config {
             hla_decay: 1.0,
             mask_token: 26,
             attention_mode: AttentionMode::Bidirectional,
+            sp_kv_window: 128,
+            sp_kv_threshold: 0.5,
+            sp_kv_predictor_hidden: 0,
+            sp_kv_predictor_lr_mult: 5.0,
         }
     }
 
@@ -470,6 +514,9 @@ impl Config {
         if let Some(v) = overrides.mtp_cluster_size {
             c.mtp_cluster_size = v;
         }
+        if let Some(v) = overrides.sp_kv_threshold {
+            c.sp_kv_threshold = v;
+        }
         c
     }
 }
@@ -497,6 +544,8 @@ pub struct InferenceOverrides {
     pub mtp_cluster_vocab_threshold: Option<usize>,
     pub mtp_shared_kv_prompt_threshold: Option<usize>,
     pub mtp_cluster_size: Option<usize>,
+    // SP-KV inference-time threshold knob (Plan 070)
+    pub sp_kv_threshold: Option<f32>,
 }
 
 impl Default for Config {
@@ -1251,6 +1300,7 @@ mod tests_types {
             mtp_cluster_vocab_threshold: None,
             mtp_shared_kv_prompt_threshold: None,
             mtp_cluster_size: None,
+            sp_kv_threshold: None,
         };
         let result = config.with_overrides(&overrides);
         assert_eq!(result.tree_budget, 9999);

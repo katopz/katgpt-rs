@@ -30,7 +30,7 @@ pub mod forward;
 pub mod types;
 pub mod utility_predictor;
 
-pub use forward::attention_head_gated;
+pub use forward::{SpKvForwardContext, attention_head_gated};
 pub use types::{
     GateBiasBuffer, SpKvCache, SpKvConfig, SpKvGateMode, SpKvLayerCache, SpKvPredictors,
     UtilityPredictorWeights,

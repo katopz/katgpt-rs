@@ -39,11 +39,11 @@ forward_base()                    forward_sp_kv() dispatch variant
 - [x] **T6**: Add `AttentionMode::SpKv` variant to `types.rs` + `sp_kv` feature flag in `Cargo.toml` + `pub mod sp_kv` in `lib.rs` ✅
 
 ### Phase 2: Forward Pass + Training
-- [ ] **T7**: Implement `forward_sp_kv()` — mirrors `forward_base()` with: (1) utility prediction after QKV projection, (2) soft gate bias = `log(u)` during training, (3) conditional KV store based on threshold at inference
-- [ ] **T8**: Implement soft-gating training mode — gate bias = `log(u + ε)`, preserves gradient flow, init predictor bias to +5 (σ(5) ≈ 0.993 = fully open)
-- [ ] **T9**: Implement TAHG (Threshold-Aware Hard Gating) — freeze predictor at 75% schedule, binarize with annealing: `ũ = (1-α)u + α·1[u≥τ]`, α linear 0→1 over 500 steps
-- [ ] **T10**: Add `SpKvConfig` fields to `Config`: `sp_kv_window: usize` (default 128), `sp_kv_threshold: f32` (default 0.5), `sp_kv_predictor_hidden: usize`, `sp_kv_predictor_lr_mult: f32` (default 5.0)
-- [ ] **T11**: Wire `forward_sp_kv()` into `forward()` dispatch based on `attention_mode` or config
+- [x] **T7**: Implement `forward_sp_kv()` — mirrors `forward_base()` with: (1) utility prediction after RMSNorm before QKV, (2) conditional KV write via `SpKvLayerCache::write_gated()`, (3) gate-biased attention via `attention_head_gated()`, (4) `SpKvForwardContext` for zero-alloc gate bias buffer + predictor scratch ✅
+- [x] **T8**: Implement soft-gating training mode — `GateBiasBuffer::build_soft()`: bias = `log(u + ε)`, preserves gradient flow, predictor bias=+5 init (σ(5)≈0.993) ✅
+- [x] **T9**: Implement TAHG (Threshold-Aware Hard Gating) — `SpKvGateMode::Tahg`, `GateBiasBuffer::build_tahg()`, `SpKvPredictors::freeze()`, annealing via `SpKvConfig::gate_mode_at_step()` ✅
+- [x] **T10**: Add SP-KV fields to `Config`: `sp_kv_window` (128), `sp_kv_threshold` (0.5), `sp_kv_predictor_hidden` (0=auto), `sp_kv_predictor_lr_mult` (5.0) + `InferenceOverrides::sp_kv_threshold` ✅
+- [x] **T11**: Wire `forward_sp_kv()` — `AttentionMode::SpKv` variant added, `SpKvForwardContext` for dispatch, full feature-gated module behind `sp_kv` flag ✅
 
 ### Phase 3: Integration
 - [ ] **T12**: Implement `forward_sp_kv_tq()` — SP-KV selective write + TurboQuant quantize what's kept (two-stage compression: selective write + lossy quant)
