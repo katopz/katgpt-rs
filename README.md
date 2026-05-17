@@ -327,6 +327,8 @@ The second-order attention matrix QKᵀQKᵀᵀ = Q(KᵀK)Qᵀ depends only on K
 
 > ⚠️ **Not a drop-in replacement.** HLA computes a different function than softmax attention. Models must be **trained with HLA from scratch** for quality. Random-weight divergence is expected and not a bug.
 
+> 💡 **Fourier-AHLA LoRA proof (Plan 066):** Fourier feature injection into positional embeddings enables SDPA→AHLA LoRA distillation to converge (KL 7.4→0.097, 76× improvement). QKV LoRA is the viable target; MLP-only LoRA fails (KL 9.4). Gate: **PARTIAL (QKV-only viable)**. This means AHLA can handle non-text (Fourier spatial) input via QKV adaptation — extending AHLA's applicability beyond language.
+
 📁 `src/hla/` — `types.rs`, `kernel.rs`, `forward.rs`, `mod.rs`
 🔧 Feature flag: `hla_attention`
 
