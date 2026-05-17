@@ -10,6 +10,8 @@
 //!
 //! Run with: cargo test --features sp_kv bench_sp_kv -- --nocapture
 
+#![cfg(feature = "sp_kv")]
+
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -514,7 +516,7 @@ fn test_palindrome_retention() {
 
     let config = Config::micro();
     let kvd = kv_dim(&config);
-    let hidden = config.n_embd / 4;
+    let _hidden = config.n_embd / 4;
     let seq_len: usize = config.block_size.min(64);
     let window: usize = 8.min(seq_len / 2); // Small window to make the test harder
     let palindrome_pos: usize = 0; // Anchor at start, must be attended at end

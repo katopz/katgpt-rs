@@ -97,6 +97,16 @@ src/
       players.rs    FftPlayer trait, GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer
       g_zero_player.rs  GZeroFFTPlayer — G-Zero self-play for FFT
       tft_player.rs  TftFFTPlayer — Tit-for-Tat FFT player
+    go/             Go GameState + AutoGo API bridge + tournament ⛩
+      mod.rs        Module root, re-exports
+      types.rs      GoAction (Place, Pass), GoCell (Empty, Black, White)
+      state.rs      GoState — flat array board, simple ko, Tromp-Taylor scoring, GameState trait, GoHeuristic
+      autogo_client.rs  AutoGoClient — REST API bridge to AutoGo play.py server
+      replay.rs     GoReplay, MoveRecord — game recording + deterministic playback
+      players.rs    GoPlayer trait, GoRandomPlayer, GoGreedyPlayer, GoValidatorPlayer, GoHLPlayer, GoGZeroPlayer, GoMctsPlayer
+      tournament.rs GoTournamentConfig, GoTournamentResult, AutoGoProxyPlayer, run_tournament
+      g_zero_player.rs  GoGZeroSelfPlay — HintDelta + absorb-compress self-play
+      autoresearch.rs   AutoResearchLoop — UCB1 bandit over config arms, early stopping
     delta_mem/      δ-Mem modelless distillation — associative bandit memory ⌘
       mod.rs        Module root, re-exports
       state.rs      DeltaMemoryConfig, DeltaMemoryState, DeltaMemorySnapshot
@@ -142,6 +152,7 @@ src/
   ⍟ behind --features bomber         (bevy_ecs + bandit)
   ✦ behind --features monopoly       (bevy_ecs + bandit)
   ✧ behind --features fft            (bandit)
+  ⛩ behind --features go             (bandit + reqwest)
   ⌘ behind --features delta_mem      (bandit)
   ǂ behind --features g_zero         (bandit)
   ⌁ behind --features feedback
@@ -170,6 +181,7 @@ src/
 | `game_domain` | `domain_latent` | Alias for domain_latent — game-specific Config presets (Plan 040) |
 | `language_domain` | — | Language domain: BPE vocab, LLM models (Plan 040) |
 | `gpu` | — | Placeholder — GPU training lives in riir-ai/riir-gpu |
+| `go` | `bandit`, `reqwest` | Go GameState + AutoGo API bridge + tournament + G-Zero self-play + AutoResearch loop (Plan 065) |
 | `full` | all above | Enable all features |
 
 Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit` (production best perf + accuracy, Plan 051).
@@ -191,6 +203,7 @@ cargo run --example bandit_01_basic --features bandit         # Bandit basics
 cargo run --example bomber_01_arena --features bomber         # Bomberman arena
 cargo run --example monopoly_01_arena --features monopoly     # Monopoly arena
 cargo run --example fft_01_arena --features fft               # FFT Tactics arena
+cargo run --example go_06_bench --features go --release       # Go benchmark suite
 ```
 
 ## Config Presets

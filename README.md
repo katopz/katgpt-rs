@@ -580,6 +580,61 @@ Final Fantasy Tactics-inspired 4v4 ATB (Active Time Battle) arena with status ef
 3 examples (arena, GvG tournament, A/B benchmark).
 📖 See [`.docs/09_heuristic-learning.md`](.docs/09_heuristic-learning.md) for full benchmark results.
 
+## 🏟️ Go: AutoGo Distillation (Plan 065)
+
+Go GameState with full game logic (simple ko, Tromp-Taylor scoring), REST API bridge to AutoGo, 6 AI player strategies, G-Zero self-play, and AutoResearch loop for automated hyperparameter search. Port from `alpha_go/go.py:FastGoBoard` + `go_game.h:GoBoard`.
+
+### GoState Performance (release build)
+
+| Config | Legal Moves | advance() ops/sec | µs/advance | µs/clone |
+|--------|-------------|-------------------|------------|----------|
+| 9×9 opening | 82 | 619,009 | 1.62 | 1.70 |
+| 9×9 midgame | 53 | 571,287 | 1.75 | 1.54 |
+| 9×9 endgame | 11 | 436,576 | 2.29 | 1.55 |
+| 19×19 opening | 362 | 145,737 | 6.86 | 6.66 |
+| 19×19 midgame | 312 | 142,680 | 7.01 | 6.74 |
+| 19×19 endgame | 169 | 135,793 | 7.36 | 6.70 |
+
+### MCTS Throughput (9×9, ~10 moves played)
+
+| Budget | µs/search | actions/sec | nodes/sec |
+|--------|-----------|-------------|-----------|
+| 50 | 305 | 3,274 | 163,680 |
+| 200 | 1,330 | 752 | 150,329 |
+| 500 | 3,123 | 320 | 160,120 |
+| 1000 | 6,455 | 155 | 154,912 |
+
+### Player Scaling Laws (9×9, 20 games vs Random)
+
+| Player | Tech | Win% |
+|--------|------|------|
+| Greedy 🐱 | Capture + liberty + positional scoring | **100%** |
+| Validator 🐶 | Safety-first rules on greedy | **100%** |
+| HL 🐵 | Bandit Q-learning over 8 move categories | **100%** |
+| MCTS (budget=200) | UCB1 tree + heuristic rollout | 60% |
+| Random 🎲 | Uniform random legal move | 35% |
+
+**Key finding**: Greedy/Validator/HL dominate random play. MCTS with random rollouts underperforms heuristic players — confirms STRATEGA result that generic search needs domain heuristics.
+
+### Module Structure
+
+| Component | Description |
+|-----------|-------------|
+| `GoState` | Flat array board, simple ko, Tromp-Taylor scoring, `GameState` trait |
+| `GoHeuristic` | Weighted: liberty (40%) + capture (30%) + influence (20%) + center (10%) |
+| `AutoGoClient` | REST API bridge to AutoGo `play.py` server |
+| `GoPlayer` trait | `select_move()` — 6 implementations (Random, Greedy, Validator, HL, GZero, MCTS) |
+| `GoReplay` | Game recording + deterministic playback |
+| `GoTournament` | Head-to-head against AutoGo agents via API |
+| `GoGZeroSelfPlay` | G-Zero self-play with HintDelta + absorb-compress |
+| `AutoResearchLoop` | UCB1 bandit over config arms, early stopping, evolution |
+
+Feature gate: `go` (implies `bandit`, `reqwest`). 693 tests pass. 7 examples.
+
+Run: `cargo run --features go --example go_06_bench --release`
+
+📖 See [`.plans/065_autogo_distillation.md`](.plans/065_autogo_distillation.md).
+
 ## 🔄 Self-Improving Loop (Plan 048)
 
 The system closes the feedback → retrain → hot-swap cycle for continuous improvement:

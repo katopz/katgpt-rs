@@ -1057,8 +1057,8 @@ mod tests {
     fn scale_non_aligned_len_13() {
         let mut x = [1.0f32; 13];
         simd_scale_inplace(&mut x, 3.0);
-        for i in 0..13 {
-            assert!((x[i] - 3.0).abs() < 1e-6, "x[{i}]={}", x[i]);
+        for (i, &val) in x.iter().enumerate() {
+            assert!((val - 3.0).abs() < 1e-6, "x[{i}]={val}");
         }
     }
 

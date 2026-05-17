@@ -683,7 +683,7 @@ mod tests {
         };
         let mut rng = Rng::with_seed(42);
         let action = mcts_search(&state, 0, 500, 10, &|_s, _p| 0.5, &mut rng);
-        assert_eq!(action, true, "should find the winning action (true)");
+        assert!(action, "should find the winning action (true)");
     }
 
     #[test]
@@ -784,8 +784,8 @@ mod tests {
             },
             &mut rng,
         );
-        assert_eq!(
-            action, true,
+        assert!(
+            action,
             "MCTS should prefer the action with better heuristic"
         );
     }
@@ -806,10 +806,7 @@ mod tests {
             &|s: &DeepState, _| s.cumulative / 5.0,
             &mut rng,
         );
-        assert_eq!(
-            action, true,
-            "should prefer the rewarding action in deep state"
-        );
+        assert!(action, "should prefer the rewarding action in deep state");
     }
 
     // ── Backpropagation Tests ──────────────────────────────────
@@ -861,8 +858,8 @@ mod tests {
         let mut policy = RandomRolloutPolicy;
         let heuristic = FnHeuristic(|_s: &TwoActionState, _p: u8| 0.5f32);
         let action = mcts_search_informed(&state, 0, 500, 10, &heuristic, &mut policy, &mut rng);
-        assert_eq!(
-            action, true,
+        assert!(
+            action,
             "informed search with random policy should find winning action"
         );
     }
@@ -878,8 +875,8 @@ mod tests {
         let mut policy = RandomRolloutPolicy;
         let heuristic = FnHeuristic(|s: &DeepState, _| s.cumulative / 5.0);
         let action = mcts_search_informed(&state, 0, 500, 10, &heuristic, &mut policy, &mut rng);
-        assert_eq!(
-            action, true,
+        assert!(
+            action,
             "informed search should prefer rewarding action in deep state"
         );
     }
@@ -1004,8 +1001,8 @@ mod tests {
         let heuristic = FnHeuristic(|_s: &TwoActionState, _p: u8| 0.5f32);
 
         let action = mcts_search_informed(&state, 0, 500, 10, &heuristic, &mut policy, &mut rng);
-        assert_eq!(
-            action, true,
+        assert!(
+            action,
             "bandit-guided MCTS should find the winning action (true)"
         );
     }

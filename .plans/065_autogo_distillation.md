@@ -382,15 +382,15 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
 
 ### Phase 6: Benchmarks & Documentation
 
-- [ ] T43: Add `bench_go_state()` — GoState::advance() ops/sec for 9×9 and 19×19
-- [ ] T44: Add `bench_go_mcts()` — mcts_search::<GoState>() actions/sec with varying budgets
-- [ ] T45: Add `bench_go_api()` — games/sec through AutoGo REST API bridge
-- [ ] T46: Record scaling law data: win rate vs episodes for each player type (CSV timeseries)
-- [ ] T47: Update `README.md` with Go section (GameState impl, tournament results, API bridge)
-- [ ] T48: Update `.docs/01_overview.md` with Go module in feature flags and module structure
-- [ ] T49: Update `.research/33_autogo_distillation_strategy.md` with actual benchmark results
-- [ ] T50: Run `cargo clippy --fix --allow-dirty`, fix warnings
-- [ ] T51: Commit with message `feat(go): gamestate trait impl + api bridge + head-to-head tournament`
+- [x] T43: Add `bench_go_state()` — GoState::advance() ops/sec for 9×9 and 19×19
+- [x] T44: Add `bench_go_mcts()` — mcts_search::<GoState>() actions/sec with varying budgets
+- [x] T45: Add `bench_go_api()` — games/sec through AutoGo REST API bridge (optional, env-gated)
+- [x] T46: Record scaling law data: win rate vs episodes for each player type (CSV timeseries)
+- [x] T47: Update `README.md` with Go section (GameState impl, tournament results, API bridge)
+- [x] T48: Update `.docs/01_overview.md` with Go module in feature flags and module structure
+- [x] T49: Update `.research/33_autogo_distillation_strategy.md` with actual benchmark results
+- [x] T50: Run `cargo clippy --fix --allow-dirty`, fix warnings
+- [x] T51: Commit with message `feat(go): benchmarks, documentation, scaling laws` (c672f1e)
 
 ---
 

@@ -767,3 +767,75 @@ Plan 065 implements `go` feature gate (GoState + MCTS + HL + API bridge). Each s
 - WASM Pruner: `riir-ai/crates/riir-wasm/src/wasm_pruner.rs`
 - MTP projection cache: `riir-ai/crates/riir-router/src/mtp_cache.rs`
 - Bomber WASM pruner: `microgpt-rs/src/pruners/bomber/wasm_pruner.rs`
+
+---
+
+## 8. Plan 065 Implementation — Actual Benchmark Results (Phase 6)
+
+Date: 2026-05-19. Release build on macOS Apple Silicon.
+
+### 8.1 GoState::advance() Performance
+
+Flat array board with pre-computed neighbor offsets. Snapshot-based `Clone` design (no `bevy_ecs::World` dependency).
+
+| Config | Legal Moves | advance() ops/sec | µs/advance | µs/clone |
+|--------|-------------|-------------------|------------|----------|
+| 9×9 opening | 82 | 619,009 | 1.62 | 1.70 |
+| 9×9 midgame (~30 moves) | 53 | 571,287 | 1.75 | 1.54 |
+| 9×9 endgame (~80 moves) | 11 | 436,576 | 2.29 | 1.55 |
+| 19×19 opening | 362 | 145,737 | 6.86 | 6.66 |
+| 19×19 midgame (~50 moves) | 312 | 142,680 | 7.01 | 6.74 |
+| 19×19 endgame (~200 moves) | 169 | 135,793 | 7.36 | 6.70 |
+
+**Analysis**: 9×9 advance ~1.6-2.3µs, scales with board area. 19×19 ~7µs — still sub-10ms per MCTS node expansion. Clone cost ≈ advance cost (both copy flat `Vec<GoCell>`).
+
+### 8.2 MCTS Throughput (9×9, ~10 moves played)
+
+| Budget | µs/search | actions/sec | nodes/sec |
+|--------|-----------|-------------|-----------|
+| 50 | 305 | 3,274 | 163,680 |
+| 200 | 1,330 | 752 | 150,329 |
+| 500 | 3,123 | 320 | 160,120 |
+| 1000 | 6,455 | 155 | 154,912 |
+
+**Analysis**: ~150K nodes/sec consistently across budgets. Linear scaling confirmed. Budget=200 is the sweet spot (~1.3ms/search, good enough for real-time play).
+
+### 8.3 Player Scaling Laws (9×9, 20 games vs Random)
+
+| Player | Tech | Win% vs Random |
+|--------|------|----------------|
+| Greedy | Capture + liberty + positional scoring | **100%** |
+| Validator | Safety-first rules on greedy | **100%** |
+| HL | Bandit Q-learning over 8 move categories | **100%** |
+| MCTS (budget=200) | UCB1 tree + GoHeuristic rollout | 60% |
+| Random | Uniform random legal move | 35% (baseline) |
+
+**Key finding**: Greedy/Validator/HL all achieve 100% win rate vs Random on 9×9. MCTS underperforms heuristic players — confirms the STRATEGA result (Plan 056) that generic MCTS with random rollouts needs domain heuristics. The BanditMCTS pattern (Plan 067) wires bandit Q-values into rollouts, achieving +67pp improvement in Bomberman. Same pattern should apply to Go.
+
+### 8.4 Module Summary
+
+| Component | Lines | Description |
+|-----------|-------|-------------|
+| `types.rs` | ~40 | `GoAction`, `GoCell` enums |
+| `state.rs` | ~620 | `GoState` board, `GoHeuristic`, `GameState` trait |
+| `autogo_client.rs` | ~250 | REST API bridge |
+| `replay.rs` | ~200 | Game recording + playback |
+| `players.rs` | ~900 | 6 AI player implementations |
+| `tournament.rs` | ~600 | Head-to-head tournament vs AutoGo |
+| `g_zero_player.rs` | ~850 | G-Zero self-play |
+| `autoresearch.rs` | ~1140 | AutoResearch loop with UCB1 bandit |
+
+**Total**: ~4600 lines, 693 tests, 7 examples.
+
+### 8.5 Comparison to AutoGo Python/C++
+
+| Metric | AutoGo (Python+C++) | microgpt-rs (Rust) |
+|--------|---------------------|---------------------|
+| Board rep | numpy array | `Vec<GoCell>` flat array |
+| Ko rule | Simple | Simple (not superko) |
+| Scoring | Tromp-Taylor | Tromp-Taylor (ported) |
+| API | Flask/HTTP | `reqwest` blocking HTTP |
+| Players | Policy/value NN | 6 heuristic + bandit players |
+| AutoResearch | Claude-driven | UCB1 bandit loop |
+
+The Rust implementation provides a fast forward model for modelless distillation research (G-Zero, BanditMCTS) without requiring GPU infrastructure.
