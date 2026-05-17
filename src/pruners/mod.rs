@@ -18,8 +18,7 @@ pub use tactical_pruner::{GameState, TacticalPruner};
 #[cfg(feature = "bomber")]
 pub mod bomber;
 
-#[cfg(feature = "game_state")]
-pub mod game_state;
+pub mod game_state; // Always compiled — GameState trait has no bevy_ecs dependency (G1 fix, Plan 065)
 
 #[cfg(feature = "sudoku")]
 pub mod sudoku_pruner;
@@ -103,7 +102,6 @@ pub use bomber::{
     spawn_players,
 };
 
-#[cfg(feature = "game_state")]
 pub use game_state::{ActionSpaceLog, StateHeuristic, mcts_search};
 
 #[cfg(all(feature = "game_state", feature = "bomber"))]
@@ -124,7 +122,10 @@ pub use monopoly::{
 pub mod go;
 
 #[cfg(feature = "go")]
-pub use go::{AutoGoClient, AutoGoGameState};
+pub use go::{
+    AutoGoClient, AutoGoError, AutoGoGameState, DEFAULT_KOMI, GoAction, GoCell, GoHeuristic,
+    GoReplay, GoState, MoveRecord, ReplayError,
+};
 
 #[cfg(feature = "fft")]
 pub mod fft;
