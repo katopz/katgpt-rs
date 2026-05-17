@@ -248,6 +248,10 @@ pub struct ForwardContext {
     raven_query_buf: Vec<f32>, // [kv_dim]
     // MTP Drafter: pre-allocated projection buffer [n_embd] for target activation conditioning (Plan 055)
     pub mtp_context_buf: Vec<f32>,
+    // TurboQuant incremental dequant: tracks last dequantized position per layer (Plan 068)
+    // When tq_dequant_pos[layer] == pos - 1, only dequant the new position (O(1) vs O(pos)).
+    // On mismatch (layer switch, reset, pos jump), rebuild all positions for that layer.
+    tq_dequant_pos: Vec<usize>, // [n_layer]
 }
 
 impl ForwardContext {
@@ -275,7 +279,14 @@ impl ForwardContext {
             paged_flat_value: vec![0.0; block_kv],
             raven_query_buf: vec![0.0; kvd],
             mtp_context_buf: vec![0.0; config.n_embd],
+            tq_dequant_pos: vec![0; config.n_layer],
         }
+    }
+
+    /// Reset TurboQuant incremental dequant state.
+    /// Call when starting a new sequence or after cache reset.
+    pub fn reset_tq_dequant(&mut self) {
+        self.tq_dequant_pos.fill(0);
     }
 }
 
@@ -1881,6 +1892,10 @@ pub struct RavenKVCache {
     // Pre-allocated buffers for zero-alloc router computation
     router_scored: Vec<(usize, f32)>, // [num_slots]
     router_r_t: Vec<f32>,             // [num_slots]
+    /// Pre-allocated score buffer for raven_readout_into [num_slots]
+    readout_scores: Vec<f32>,
+    /// Pre-allocated output buffer for raven_readout_into [kv_dim]
+    readout_output: Vec<f32>,
 }
 
 impl RavenKVCache {
@@ -1895,6 +1910,8 @@ impl RavenKVCache {
             values: vec![0.0; num_slots * kvd],
             router_scored: Vec::with_capacity(num_slots),
             router_r_t: Vec::with_capacity(num_slots),
+            readout_scores: vec![0.0; num_slots],
+            readout_output: vec![0.0; kvd],
         }
     }
 
@@ -1903,6 +1920,8 @@ impl RavenKVCache {
         self.values.fill(0.0);
         self.router_scored.clear();
         self.router_r_t.clear();
+        self.readout_scores.fill(0.0);
+        self.readout_output.fill(0.0);
     }
 }
 
@@ -1993,6 +2012,71 @@ pub fn raven_update(
 
 /// Readout: attention over fixed slot memory.
 /// `O(num_slots × kv_dim)` — constant regardless of sequence length.
+/// Zero-alloc readout: computes attention-weighted slot values into pre-allocated buffers.
+///
+/// Fused 2-pass optimization over `raven_readout` (3-pass):
+/// - Pass 1: Q·K^T dot products + find max
+/// - Pass 2: exp(scores - max) + weighted value accumulation + normalize
+///
+/// Returns `&mut output[..kv_dim]` (borrowed from the provided output buffer).
+pub fn raven_readout_into<'a>(
+    query: &[f32],
+    keys: &[f32],
+    values: &[f32],
+    num_slots: usize,
+    kv_dim: usize,
+    scores: &'a mut [f32],
+    output: &'a mut [f32],
+) -> &'a mut [f32] {
+    debug_assert!(scores.len() >= num_slots);
+    debug_assert!(output.len() >= kv_dim);
+
+    // Pass 1: Q·K^T + find max
+    let mut max_score = f32::NEG_INFINITY;
+    for s in 0..num_slots {
+        let k_off = s * kv_dim;
+        let mut dot = 0.0f32;
+        for d in 0..kv_dim {
+            unsafe {
+                dot += *query.get_unchecked(d) * *keys.get_unchecked(k_off + d);
+            }
+        }
+        unsafe {
+            *scores.get_unchecked_mut(s) = dot;
+        }
+        if dot > max_score {
+            max_score = dot;
+        }
+    }
+
+    // Pass 2: fused exp + accumulate + normalize
+    output[..kv_dim].fill(0.0);
+    let mut sum_exp = 0.0f32;
+    for s in 0..num_slots {
+        let exp_val = unsafe { (*scores.get_unchecked(s) - max_score).exp() };
+        unsafe {
+            *scores.get_unchecked_mut(s) = exp_val;
+        }
+        sum_exp += exp_val;
+    }
+
+    if sum_exp > 0.0 {
+        let inv_sum = 1.0 / sum_exp;
+        for s in 0..num_slots {
+            let weight = unsafe { *scores.get_unchecked(s) * inv_sum };
+            let v_off = s * kv_dim;
+            for d in 0..kv_dim {
+                unsafe {
+                    *output.get_unchecked_mut(d) += weight * *values.get_unchecked(v_off + d);
+                }
+            }
+        }
+    }
+
+    &mut output[..kv_dim]
+}
+
+/// Allocating wrapper for backward compatibility (tests, benchmark).
 pub fn raven_readout(
     query: &[f32],
     keys: &[f32],
@@ -2000,28 +2084,17 @@ pub fn raven_readout(
     num_slots: usize,
     kv_dim: usize,
 ) -> Vec<f32> {
-    // Q · K^T
-    let scores: Vec<f32> = keys
-        .chunks(kv_dim)
-        .take(num_slots)
-        .map(|k_chunk| query.iter().zip(k_chunk).map(|(q, k)| q * k).sum())
-        .collect();
-
-    let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-
-    // Softmax + weighted value sum
-    let sum_exp: f32 = scores.iter().map(|s| (*s - max_score).exp()).sum();
+    let mut scores = vec![0.0f32; num_slots];
     let mut output = vec![0.0f32; kv_dim];
-    for (weight, v_chunk) in scores
-        .iter()
-        .map(|s| (s - max_score).exp() / sum_exp)
-        .zip(values.chunks(kv_dim).take(num_slots))
-    {
-        for (out, v) in output.iter_mut().zip(v_chunk) {
-            *out += weight * v;
-        }
-    }
-
+    raven_readout_into(
+        query,
+        keys,
+        values,
+        num_slots,
+        kv_dim,
+        &mut scores,
+        &mut output,
+    );
     output
 }
 
@@ -2084,9 +2157,11 @@ pub fn forward_raven<'a>(
             &mut cache.router_r_t,
         );
 
-        // Clone router_r_t to avoid self-borrow (cache.keys vs cache.router_r_t)
-        // num_slots is typically 16-64 floats, so this is a tiny stack-like allocation
-        let r_t = cache.router_r_t.clone();
+        // Stack-allocated copy to avoid self-borrow (cache.keys vs cache.router_r_t)
+        // num_slots is typically 16-64 floats — fits on stack
+        let mut r_t = [0.0f32; 64];
+        let copy_len = cache.router_r_t.len().min(64);
+        r_t[..copy_len].copy_from_slice(&cache.router_r_t[..copy_len]);
 
         // Raven: gated update (only selected slots are modified)
         raven_update(
@@ -2116,12 +2191,14 @@ pub fn forward_raven<'a>(
                 ctx.raven_query_buf[kv_group * hd + d] = hq * scale;
             }
 
-            let slot_values = raven_readout(
+            let slot_values = raven_readout_into(
                 &ctx.raven_query_buf,
                 &cache.keys,
                 &cache.values,
                 cache.num_slots,
                 kvd,
+                &mut cache.readout_scores,
+                &mut cache.readout_output,
             );
 
             // Extract this head's attention output
@@ -2252,20 +2329,40 @@ pub fn forward_turboquant<'a>(
         cache.store_key(layer_idx, pos, &ctx.k[..kvd]);
         cache.store_value(layer_idx, pos, &ctx.v[..kvd]);
 
-        // Dequantize all K,V into flat buffers for attention scoring
+        // Incremental dequant (Plan 068): only dequant the new position when possible.
+        // Tracks per-layer progress: if tq_dequant_pos[layer] == pos - 1, the flat buffer
+        // already contains positions 0..pos-1 from the previous decode step for this layer.
+        // On mismatch (first call, layer switch, reset, pos jump), rebuild all positions.
         let t_n = pos + 1;
-        for t in 0..t_n {
+        let last_pos = ctx.tq_dequant_pos[layer_idx];
+        if last_pos + 1 == pos && pos > 0 {
+            // Incremental: only dequant the new position
             cache.dequantize_key_into(
                 layer_idx,
-                t,
-                &mut ctx.paged_flat_key[t * kvd..(t + 1) * kvd],
+                pos,
+                &mut ctx.paged_flat_key[pos * kvd..(pos + 1) * kvd],
             );
             cache.dequantize_value_into(
                 layer_idx,
-                t,
-                &mut ctx.paged_flat_value[t * kvd..(t + 1) * kvd],
+                pos,
+                &mut ctx.paged_flat_value[pos * kvd..(pos + 1) * kvd],
             );
+        } else {
+            // Full rebuild: dequantize all positions (first call, reset, or pos jump)
+            for t in 0..t_n {
+                cache.dequantize_key_into(
+                    layer_idx,
+                    t,
+                    &mut ctx.paged_flat_key[t * kvd..(t + 1) * kvd],
+                );
+                cache.dequantize_value_into(
+                    layer_idx,
+                    t,
+                    &mut ctx.paged_flat_value[t * kvd..(t + 1) * kvd],
+                );
+            }
         }
+        ctx.tq_dequant_pos[layer_idx] = pos;
 
         // Multi-head attention with GQA using dequantized flat cache
         let scale = 1.0 / (hd as f32).sqrt();

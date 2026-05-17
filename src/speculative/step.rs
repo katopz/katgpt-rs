@@ -55,6 +55,8 @@ pub fn speculative_step(
 /// Snapshot cost: O(n_layer × pos × kv_dim) — cheap at our model scale.
 ///
 /// Requires target model forward pass.
+/// **Deprecated**: Prefer `speculative_step_rollback_with` for zero-alloc hot path.
+/// This variant allocates `Vec<f32>` per candidate and is kept for backward compatibility only.
 #[allow(clippy::too_many_arguments)]
 pub fn speculative_step_rollback(
     draft_weights: &TransformerWeights,

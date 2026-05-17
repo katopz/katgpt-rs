@@ -43,6 +43,7 @@ pub struct Config {
 /// - `Standard`: SDPA with KV cache (default, backward-compatible).
 /// - `Hla`: Symmetric second-order linear attention — O(1) per-token memory.
 /// - `Ahla`: Asymmetric second-order linear attention — lower state cost than symmetric.
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum HlaMode {
     #[default]
