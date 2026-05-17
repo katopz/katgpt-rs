@@ -43,13 +43,9 @@ use microgpt_rs::pruners::go::{
 
 // ── Constants ──────────────────────────────────────────────────
 
-const BLACK_STONE: &str = "⚫";
-const WHITE_STONE: &str = "⚪";
-const LAST_BLACK: &str = "🖤";
-const LAST_WHITE: &str = "🤍";
-const KO_MARKER: &str = "❌";
-const EMPTY_INTERSECTION: &str = "╋";
-const EMPTY_HOSHI: &str = "◉";
+const BLACK_STONE: &str = "●";
+const WHITE_STONE: &str = "○";
+
 const AUTO_STEP_MS: u64 = 300;
 const MAX_MOVES: usize = 300;
 
@@ -281,71 +277,79 @@ fn is_star_point(row: usize, col: usize, size: usize) -> bool {
 fn render_board(f: &mut Frame, snap: &MoveSnapshot, area: Rect) {
     let mut lines: Vec<Line> = Vec::new();
 
-    // Column headers
-    let mut header = String::from("   ");
+    // Column headers — each col label + space = 2 terminal cols
+    let mut header_spans: Vec<Span> = vec![Span::styled("   ", Style::default())];
     for c in 0..snap.size {
         let col_label = match c {
             0..=25 => ((b'A' + c as u8) as char).to_string(),
             _ => format!("{c}"),
         };
-        header.push_str(&format!("{col_label:^3}"));
+        header_spans.push(Span::styled(
+            format!("{col_label} "),
+            Style::default()
+                .fg(Color::DarkGray)
+                .add_modifier(Modifier::BOLD),
+        ));
     }
-    lines.push(Line::from(Span::styled(
-        header,
-        Style::default()
-            .add_modifier(Modifier::BOLD)
-            .fg(Color::DarkGray),
-    )));
+    lines.push(Line::from(header_spans));
 
-    // Board rows
+    // Board rows — 1-char-wide symbols + space, per-cell coloring
     for r in 0..snap.size {
-        let mut row_str = format!("{r:>2} ");
+        let mut spans: Vec<Span> = vec![Span::styled(
+            format!("{r:>2} "),
+            Style::default().fg(Color::DarkGray),
+        )];
 
         for c in 0..snap.size {
             let idx = r * snap.size + c;
-            let is_last_move = snap.last_move == Some((r, c));
-            let is_ko = snap.ko_point == Some(idx);
+            let is_last = snap.last_move == Some((r, c));
+            let is_ko = snap.ko_point == Some(idx) && snap.board[idx] == GoCell::Empty;
 
-            // Ko marker takes priority if empty
-            if is_ko && snap.board[idx] == GoCell::Empty {
-                row_str.push_str(KO_MARKER);
-                row_str.push(' ');
-                continue;
-            }
-
-            let cell_str = match snap.board[idx] {
-                GoCell::Black => {
-                    if is_last_move {
-                        LAST_BLACK
-                    } else {
-                        BLACK_STONE
+            let (sym, style) = if is_ko {
+                ("x", Style::default().fg(Color::Red))
+            } else {
+                match snap.board[idx] {
+                    GoCell::Black => {
+                        if is_last {
+                            (
+                                "●",
+                                Style::default()
+                                    .fg(Color::Green)
+                                    .add_modifier(Modifier::BOLD),
+                            )
+                        } else {
+                            ("●", Style::default().fg(Color::White))
+                        }
                     }
-                }
-                GoCell::White => {
-                    if is_last_move {
-                        LAST_WHITE
-                    } else {
-                        WHITE_STONE
+                    GoCell::White => {
+                        if is_last {
+                            (
+                                "○",
+                                Style::default()
+                                    .fg(Color::Green)
+                                    .add_modifier(Modifier::BOLD),
+                            )
+                        } else {
+                            ("○", Style::default().fg(Color::Gray))
+                        }
                     }
-                }
-                GoCell::Empty => {
-                    if is_star_point(r, c, snap.size) {
-                        EMPTY_HOSHI
-                    } else {
-                        EMPTY_INTERSECTION
+                    GoCell::Empty => {
+                        if is_star_point(r, c, snap.size) {
+                            ("+", Style::default().fg(Color::DarkGray))
+                        } else {
+                            ("·", Style::default().fg(Color::DarkGray))
+                        }
                     }
                 }
             };
-            row_str.push_str(cell_str);
-            row_str.push(' ');
+
+            spans.push(Span::styled(format!("{sym} "), style));
         }
 
-        let style = Style::default();
-        lines.push(Line::from(Span::styled(row_str, style)));
+        lines.push(Line::from(spans));
     }
 
     let title = format!(" Go {}×{} ", snap.size, snap.size);
-
     let block = Block::default().borders(Borders::ALL).title(Span::styled(
         title,
         Style::default().add_modifier(Modifier::BOLD),
