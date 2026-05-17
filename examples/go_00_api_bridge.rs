@@ -26,6 +26,7 @@ struct GameResult {
     our_color: String,
     result: Option<String>,
     moves_played: usize,
+    #[allow(dead_code)]
     message: String,
 }
 
@@ -158,7 +159,7 @@ fn play_random_game(client: &AutoGoClient, color: &str) -> GameResult {
         moves_played += 1;
 
         // Log every 10 moves
-        if moves_played % 10 == 0 {
+        if moves_played.is_multiple_of(10) {
             println!(
                 "  ... {moves_played} moves, {} to play, {} legal",
                 format_player(current.to_play),

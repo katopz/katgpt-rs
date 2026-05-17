@@ -129,7 +129,7 @@ Before writing any Go rules, validate the head-to-head benchmarking path by spin
 
 Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our `GameState` trait. Reference both Python and C++ implementations.
 
-- [ ] T9: Define `GoAction` enum and `GoCell` enum in `src/pruners/go/types.rs`:
+- [x] T9: Define `GoAction` enum and `GoCell` enum in `src/pruners/go/types.rs`:
   ```rust
   #[derive(Clone, Debug, PartialEq)]
   pub enum GoAction {
@@ -156,7 +156,7 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
       }
   }
   ```
-- [ ] T10: Define `GoState` snapshot in `src/pruners/go/state.rs` — port from `FastGoBoard` (Python) with C++ optimizations:
+- [x] T10: Define `GoState` snapshot in `src/pruners/go/state.rs` — port from `FastGoBoard` (Python) with C++ optimizations:
   ```rust
   /// Lightweight Go state snapshot. Port from go.py:FastGoBoard + go_game.h:GoBoard.
   ///
@@ -177,12 +177,12 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
       neighbor_offsets: Vec<Vec<usize>>,
   }
   ```
-- [ ] T10a: Implement `GoState::new(size)` constructor:
+- [x] T10a: Implement `GoState::new(size)` constructor:
   - Initialize empty board `vec![GoCell::Empty; size * size]`
   - Pre-compute neighbor offsets for each position (skip edges)
   - Set `to_play = GoCell::Black`, `komi = 7.5`
   - Port from `FastGoBoard.__init__` neighbor cache pattern
-- [ ] T11: Implement Go core logic (port from `go.py:FastGoBoard`):
+- [x] T11: Implement Go core logic (port from `go.py:FastGoBoard`):
   - `get_neighbors(idx)` — cached neighbor lookup (port from `_neighbor_cache`)
   - `get_group_and_liberties(idx)` — BFS flood fill (port from `_get_group_and_liberties`)
   - `would_be_suicide(idx, color)` — temp placement + liberty + capture check (port from `_would_be_suicide`)
@@ -191,11 +191,11 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
   - `pass()` — increment consecutive_passes, switch player
   - `get_legal_moves()` — iterate all cells, filter by `is_legal`
   - `resolve_captures(idx, color)` — remove opponent groups with zero liberties, track captures
-- [ ] T12: Implement Tromp-Taylor scoring (port from `go.py:score()` + `go_game.h:score()`):
+- [x] T12: Implement Tromp-Taylor scoring (port from `go.py:score()` + `go_game.h:score()`):
   - `score()` → f32 — black_score - white_score (with komi)
   - `flood_territory(idx)` — BFS empty region, determine ownership by border colors
   - `get_winner()` — `GoCell::Black` if score > 0, `GoCell::White` if score < 0
-- [ ] T13: Implement `GameState` trait for `GoState`:
+- [x] T13: Implement `GameState` trait for `GoState`:
   ```rust
   impl GameState for GoState {
       type Action = GoAction;
@@ -206,7 +206,7 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
       fn tick(&self) -> u32;  // move_count
   }
   ```
-- [ ] T14: Implement `GoHeuristic` (`StateHeuristic<GoState>`):
+- [x] T14: Implement `GoHeuristic` (`StateHeuristic<GoState>`):
   ```rust
   pub struct GoHeuristic;
 
@@ -222,20 +222,20 @@ Port `FastGoBoard` (`go.py`) + `GoBoard` (`go_game.h`) to Rust, implementing our
       }
   }
   ```
-- [ ] T15: Write unit tests (port from `tests/test_go.py` + `tests/test_cpp_go.py`):
+- [x] T15: Write unit tests (port from `tests/test_go.py` + `tests/test_cpp_go.py`):
   - Capture: single stone capture, group capture, snapback
   - Ko: simple ko violation blocked, ko threat allowed after other move
   - Suicide: suicide blocked, capture-not-suicide allowed
   - Scoring: Tromp-Taylor matches known positions (simple territory, seki-ish, capture-heavy)
   - Terminal: two passes end game, pass + move + pass does NOT end game
   - `advance()`: produces valid successor, immutable self
-- [ ] T15a: Write property-based fuzz tests (G5):
+- [x] T15a: Write property-based fuzz tests (G5):
   - Generate random game: `GoState::new(9)` → random legal moves until terminal
   - Assert invariants at every step: `available_actions` only contains legal moves, `advance` produces valid board (stone counts consistent), no panics
   - Run 200 random games, 0 panics = pass
   - **API cross-validation**: If AutoGo Docker is running, play same random game via API, compare `legal_moves` at each step. Skip silently if Docker unavailable.
-- [ ] T16: Create `examples/go_01_mcts.rs` — MCTS player vs Random on 9×9, 100 games, print win rates
-- [ ] T16a: Create `src/pruners/go/replay.rs` — game recording and playback (G6):
+- [x] T16: Create `examples/go_01_mcts.rs` — MCTS player vs Random on 9×9, configurable games/budget via env vars, print win rates
+- [x] T16a: Create `src/pruners/go/replay.rs` — game recording and playback (G6):
   ```rust
   /// Single move record for replay.
   #[derive(Clone, Debug, Serialize, Deserialize)]

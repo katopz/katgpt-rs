@@ -169,9 +169,12 @@ mod tests {
 
     #[test]
     fn go_cell_display() {
-        assert_eq!(format!("{GoCell::Empty}"), "·");
-        assert_eq!(format!("{GoCell::Black}"), "X");
-        assert_eq!(format!("{GoCell::White}"), "O");
+        let empty = GoCell::Empty;
+        let black = GoCell::Black;
+        let white = GoCell::White;
+        assert_eq!(format!("{empty}"), "·");
+        assert_eq!(format!("{black}"), "X");
+        assert_eq!(format!("{white}"), "O");
     }
 
     #[test]

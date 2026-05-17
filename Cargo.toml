@@ -238,6 +238,10 @@ required-features = ["sudoku"]
 name = "go_00_api_bridge"
 required-features = ["go"]
 
+[[example]]
+name = "go_01_mcts"
+required-features = ["go"]
+
 # ── Tactical AI ────────────────────────────────────────────────
 
 [[example]]
