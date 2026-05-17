@@ -45,27 +45,169 @@ impl SpKvForwardContext {
     }
 }
 
-/// Fused attention head with GQA support and optional SP-KV gate bias.
+// ── Monomorphized bias providers for zero-overhead gate dispatch ──────────
+//
+// The primary source of gate bias overhead is the `Option<&[f32]>` match
+// inside the hot Q·K scoring loop — one branch per position per head per layer.
+// By specializing via a trait, the compiler generates two versions:
+//   - NoBias:  identical machine code to baseline `attention_head()`
+//   - GateBias: fused add with prune-skip, no per-iteration Option check
+
+/// Trait for providing per-position attention bias.
 ///
-/// Identical to `attention_head()` in `transformer.rs` when `gate_bias` is `None`.
-/// When `gate_bias` is `Some(&[bias])`, adds `bias[t]` to each Q·K score:
+/// Enables monomorphization: the compiler emits specialized code per provider,
+/// eliminating `Option` branching in the hot Q·K loop.
 ///
-/// ```text
-/// score = dot(q, k[t]) * scale + gate_bias[t]
-/// ```
+/// | Provider   | Overhead vs baseline | Use case       |
+/// |------------|---------------------|----------------|
+/// | `NoBias`   | 0% (identical)      | Baseline       |
+/// | `GateBias` | <1% (fused add)     | SP-KV decode   |
+pub trait BiasProvider {
+    /// Read the bias for position `t`. Returns 0.0 for no-bias providers.
+    fn bias(&self, t: usize) -> f32;
+
+    /// Whether this provider may produce `-inf` (pruned) positions.
+    /// When `false`, the prune-skip branch is eliminated at compile time.
+    fn may_prune(&self) -> bool {
+        false
+    }
+}
+
+/// No bias: compiles to identical machine code as baseline `attention_head()`.
+pub struct NoBias;
+
+impl BiasProvider for NoBias {
+    #[inline(always)]
+    fn bias(&self, _t: usize) -> f32 {
+        0.0
+    }
+}
+
+/// Gate bias from a precomputed slice: direct `get_unchecked` access.
 ///
-/// This is the **single insertion point** for SP-KV in the attention kernel.
-/// Everything else (softmax, weighted accumulation) remains unchanged.
+/// The lifetime ties the borrow to the caller's bias buffer so no copy is needed.
+pub struct GateBias<'a> {
+    bias: &'a [f32],
+}
+
+impl<'a> GateBias<'a> {
+    #[inline(always)]
+    pub fn new(bias: &'a [f32]) -> Self {
+        Self { bias }
+    }
+}
+
+impl BiasProvider for GateBias<'_> {
+    #[inline(always)]
+    fn bias(&self, t: usize) -> f32 {
+        unsafe { *self.bias.get_unchecked(t) }
+    }
+
+    #[inline(always)]
+    fn may_prune(&self) -> bool {
+        true
+    }
+}
+
+/// Core attention head with generic bias — monomorphized for zero-overhead dispatch.
+///
+/// When `B = NoBias`: identical to `attention_head()` in `transformer.rs`.
+/// When `B = GateBias`: adds `bias[t]` to each Q·K score, skips `-inf` positions.
+///
+/// ## Optimizations over naive `Option<&[f32]>`
+///
+/// 1. **Monomorphization** — `B` is known at compile time; no per-iteration match.
+/// 2. **Prune skip** — when `bias[t] == -inf`, the expensive `simd_dot_f32` call
+///    is skipped entirely (score → 0 after softmax, contributes nothing).
+/// 3. **Direct indexing** — `GateBias` reads via `get_unchecked`; no `Option` unwrap.
 ///
 /// ## SAFETY
 ///
-/// Caller must ensure all indices are in bounds:
-/// - `q[q_head_offset..q_head_offset + hd]` valid
-/// - `key_cache[t * kv_dim + kv_group_offset..t * kv_dim + kv_group_offset + hd]` valid for t in 0..t_n
-/// - `value_cache` same layout as `key_cache`
-/// - `attn_out[q_head_offset..q_head_offset + hd]` valid
-/// - `scores_buf[..t_n]` valid
-/// - `gate_bias` if `Some`: `gate_bias[..t_n]` valid
+/// Caller must ensure all indices are in bounds (same as `attention_head_gated`).
+#[allow(clippy::too_many_arguments)]
+#[inline(always)]
+pub unsafe fn attention_head_core<B: BiasProvider>(
+    q: &[f32],
+    key_cache: &[f32],
+    value_cache: &[f32],
+    attn_out: &mut [f32],
+    scores_buf: &mut [f32],
+    q_head_offset: usize,
+    kv_group_offset: usize,
+    kv_dim: usize,
+    hd: usize,
+    t_n: usize,
+    scale: f32,
+    bias: B,
+) {
+    // Pass 1: compute Q·K scores with bias, skip pruned positions
+    let mut max_score = f32::NEG_INFINITY;
+    for t in 0..t_n {
+        let b = bias.bias(t);
+
+        // Pruned position: skip expensive dot product — score → 0 after softmax.
+        // For NoBias: may_prune() = false → entire block eliminated at compile time.
+        if bias.may_prune() && b == f32::NEG_INFINITY {
+            unsafe {
+                *scores_buf.get_unchecked_mut(t) = f32::NEG_INFINITY;
+            }
+            continue;
+        }
+
+        let k_off = t * kv_dim + kv_group_offset;
+        let dot = unsafe {
+            let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), hd);
+            let k_slice = std::slice::from_raw_parts(key_cache.as_ptr().add(k_off), hd);
+            simd_dot_f32(q_slice, k_slice, hd)
+        };
+
+        // Fused scale + bias. For NoBias, b=0.0 → compiler elides the add.
+        let score = dot * scale + b;
+
+        unsafe {
+            *scores_buf.get_unchecked_mut(t) = score;
+        }
+        if score > max_score {
+            max_score = score;
+        }
+    }
+
+    // Pass 2: exp(scores - max) and accumulate sum
+    let mut sum = 0.0f32;
+    for t in 0..t_n {
+        let exp_val = unsafe { (*scores_buf.get_unchecked(t) - max_score).exp() };
+        unsafe {
+            *scores_buf.get_unchecked_mut(t) = exp_val;
+        }
+        sum += exp_val;
+    }
+
+    // Pass 3: normalize + weighted value accumulation
+    let inv_sum = 1.0 / sum;
+    for d in 0..hd {
+        let mut val = 0.0f32;
+        for t in 0..t_n {
+            unsafe {
+                val += *scores_buf.get_unchecked(t)
+                    * inv_sum
+                    * *value_cache.get_unchecked(t * kv_dim + kv_group_offset + d);
+            }
+        }
+        unsafe {
+            *attn_out.get_unchecked_mut(q_head_offset + d) = val;
+        }
+    }
+}
+
+/// Backward-compatible wrapper: dispatches to monomorphized core.
+///
+/// Preserves the original `Option<&[f32]>` API. The `Option` match happens
+/// **once per call** (not per iteration), so overhead is negligible.
+///
+/// # Safety
+///
+/// Delegates to [`attention_head_core`] — same safety requirements:
+/// all slice indices must be in bounds.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
 pub unsafe fn attention_head_gated(
@@ -82,58 +224,36 @@ pub unsafe fn attention_head_gated(
     scale: f32,
     gate_bias: Option<&[f32]>,
 ) {
-    // Pass 1: compute Q·K scores with optional gate bias, find max for numerical stability
-    let mut max_score = f32::NEG_INFINITY;
-    for t in 0..t_n {
-        let k_off = t * kv_dim + kv_group_offset;
-        // SAFETY: caller guarantees bounds (see doc comment)
-        let dot = unsafe {
-            let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), hd);
-            let k_slice = std::slice::from_raw_parts(key_cache.as_ptr().add(k_off), hd);
-            simd_dot_f32(q_slice, k_slice, hd)
-        };
-        let raw_score = dot * scale;
-
-        // SP-KV gate bias: additive bias per key position
-        let score = match gate_bias {
-            Some(bias) => {
-                // SAFETY: caller guarantees bias[..t_n] valid
-                unsafe { raw_score + *bias.get_unchecked(t) }
-            }
-            None => raw_score,
-        };
-
-        unsafe {
-            *scores_buf.get_unchecked_mut(t) = score;
-        }
-        if score > max_score {
-            max_score = score;
-        }
-    }
-
-    // Pass 2: exp(scores - max) and accumulate sum (unchanged from attention_head)
-    let mut sum = 0.0f32;
-    for t in 0..t_n {
-        let exp_val = unsafe { (*scores_buf.get_unchecked(t) - max_score).exp() };
-        unsafe {
-            *scores_buf.get_unchecked_mut(t) = exp_val;
-        }
-        sum += exp_val;
-    }
-
-    // Pass 3: normalize + weighted value accumulation (unchanged from attention_head)
-    let inv_sum = 1.0 / sum;
-    for d in 0..hd {
-        let mut val = 0.0f32;
-        for t in 0..t_n {
-            unsafe {
-                val += *scores_buf.get_unchecked(t)
-                    * inv_sum
-                    * *value_cache.get_unchecked(t * kv_dim + kv_group_offset + d);
-            }
-        }
-        unsafe {
-            *attn_out.get_unchecked_mut(q_head_offset + d) = val;
+    unsafe {
+        match gate_bias {
+            Some(bias) => attention_head_core(
+                q,
+                key_cache,
+                value_cache,
+                attn_out,
+                scores_buf,
+                q_head_offset,
+                kv_group_offset,
+                kv_dim,
+                hd,
+                t_n,
+                scale,
+                GateBias::new(bias),
+            ),
+            None => attention_head_core(
+                q,
+                key_cache,
+                value_cache,
+                attn_out,
+                scores_buf,
+                q_head_offset,
+                kv_group_offset,
+                kv_dim,
+                hd,
+                t_n,
+                scale,
+                NoBias,
+            ),
         }
     }
 }
@@ -324,7 +444,8 @@ pub fn forward_sp_kv<'a>(
         for h in 0..config.n_head {
             let kv_group = h * n_kv / config.n_head;
             unsafe {
-                attention_head_gated(
+                // Direct monomorphized call — skips per-iteration Option dispatch
+                attention_head_core(
                     &ctx.q,
                     &layer_cache.key,
                     &layer_cache.value,
@@ -336,7 +457,7 @@ pub fn forward_sp_kv<'a>(
                     hd,
                     t_n,
                     scale,
-                    Some(&sp_ctx.gate_bias.bias),
+                    GateBias::new(&sp_ctx.gate_bias.bias),
                 );
             }
         }

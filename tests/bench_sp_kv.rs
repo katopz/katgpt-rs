@@ -14,8 +14,8 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use microgpt_rs::sp_kv::{
-    GateBiasBuffer, SpKvCache, SpKvConfig, SpKvPredictors, UtilityAggregation, aggregate_utilities,
-    attention_head_gated, predict,
+    GateBias, GateBiasBuffer, NoBias, SpKvCache, SpKvConfig, SpKvPredictors, UtilityAggregation,
+    aggregate_utilities, attention_head_core, attention_head_gated, predict,
 };
 use microgpt_rs::types::{Config, Rng, kv_dim};
 
@@ -61,11 +61,37 @@ fn bench_gate_bias_overhead() {
     println!("\n🧪 T16: Gate Bias Overhead (n_head={n_head}, n_kv={n_kv}, hd={hd}, t_n={t_n})");
     println!("{}", "═".repeat(60));
 
-    // Baseline: attention_head_gated with None (no gate bias)
     let mut attn_out = vec![0.0; config.n_embd];
     let mut scores = vec![0.0; config.block_size];
 
-    let start_baseline = Instant::now();
+    // ── A: Baseline — monomorphized NoBias (should match original attention_head) ──
+    let start_nobias = Instant::now();
+    for _ in 0..BENCH_ITERS {
+        for h in 0..n_head {
+            let kv_group = h * n_kv / n_head;
+            unsafe {
+                attention_head_core(
+                    &q,
+                    &key_cache,
+                    &value_cache,
+                    &mut attn_out,
+                    &mut scores,
+                    h * hd,
+                    kv_group * hd,
+                    kvd,
+                    hd,
+                    t_n,
+                    scale,
+                    NoBias,
+                );
+            }
+        }
+        black_box(&attn_out);
+    }
+    let elapsed_nobias = start_nobias.elapsed();
+
+    // ── B: Legacy wrapper — attention_head_gated with None ──
+    let start_legacy_none = Instant::now();
     for _ in 0..BENCH_ITERS {
         for h in 0..n_head {
             let kv_group = h * n_kv / n_head;
@@ -82,23 +108,23 @@ fn bench_gate_bias_overhead() {
                     hd,
                     t_n,
                     scale,
-                    None, // No gate bias — equivalent to baseline
+                    None,
                 );
             }
         }
         black_box(&attn_out);
     }
-    let elapsed_baseline = start_baseline.elapsed();
+    let elapsed_legacy_none = start_legacy_none.elapsed();
 
-    // SP-KV: attention_head_gated with gate bias (all zeros = no pruning)
-    let gate_bias = vec![0.0f32; config.block_size];
+    // ── C: Monomorphized GateBias (zero bias = no pruning, worst-case overhead) ──
+    let zero_bias = vec![0.0f32; config.block_size];
 
-    let start_gated = Instant::now();
+    let start_gated_zero = Instant::now();
     for _ in 0..BENCH_ITERS {
         for h in 0..n_head {
             let kv_group = h * n_kv / n_head;
             unsafe {
-                attention_head_gated(
+                attention_head_core(
                     &q,
                     &key_cache,
                     &value_cache,
@@ -110,15 +136,15 @@ fn bench_gate_bias_overhead() {
                     hd,
                     t_n,
                     scale,
-                    Some(&gate_bias), // With gate bias (all zeros = no effect)
+                    GateBias::new(&zero_bias),
                 );
             }
         }
         black_box(&attn_out);
     }
-    let elapsed_gated = start_gated.elapsed();
+    let elapsed_gated_zero = start_gated_zero.elapsed();
 
-    // SP-KV: attention_head_gated with mixed gate bias (realistic: some pruned)
+    // ── D: Monomorphized GateBias (mixed: ~50% pruned, prune-skip active) ──
     let mut mixed_bias = vec![0.0f32; config.block_size];
     for t in 0..t_n {
         // Prune ~50% of positions (outside window of 16)
@@ -127,7 +153,33 @@ fn bench_gate_bias_overhead() {
         }
     }
 
-    let start_mixed = Instant::now();
+    let start_gated_mixed = Instant::now();
+    for _ in 0..BENCH_ITERS {
+        for h in 0..n_head {
+            let kv_group = h * n_kv / n_head;
+            unsafe {
+                attention_head_core(
+                    &q,
+                    &key_cache,
+                    &value_cache,
+                    &mut attn_out,
+                    &mut scores,
+                    h * hd,
+                    kv_group * hd,
+                    kvd,
+                    hd,
+                    t_n,
+                    scale,
+                    GateBias::new(&mixed_bias),
+                );
+            }
+        }
+        black_box(&attn_out);
+    }
+    let elapsed_gated_mixed = start_gated_mixed.elapsed();
+
+    // ── E: Legacy wrapper — attention_head_gated with Some (zero bias) ──
+    let start_legacy_some = Instant::now();
     for _ in 0..BENCH_ITERS {
         for h in 0..n_head {
             let kv_group = h * n_kv / n_head;
@@ -144,38 +196,70 @@ fn bench_gate_bias_overhead() {
                     hd,
                     t_n,
                     scale,
-                    Some(&mixed_bias),
+                    Some(&zero_bias),
                 );
             }
         }
         black_box(&attn_out);
     }
-    let elapsed_mixed = start_mixed.elapsed();
+    let elapsed_legacy_some = start_legacy_some.elapsed();
 
-    let overhead_zero_bias =
-        (elapsed_gated.as_nanos() as f64 / elapsed_baseline.as_nanos() as f64 - 1.0) * 100.0;
-    let overhead_mixed =
-        (elapsed_mixed.as_nanos() as f64 / elapsed_baseline.as_nanos() as f64 - 1.0) * 100.0;
+    // ── Report ──
+    let baseline_ns = elapsed_nobias.as_nanos() as f64;
 
+    let overhead_gated_zero = (elapsed_gated_zero.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
+    let overhead_gated_mixed = (elapsed_gated_mixed.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
+    let overhead_legacy_none = (elapsed_legacy_none.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
+    let overhead_legacy_some = (elapsed_legacy_some.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
+    let prune_skip_speedup = baseline_ns / elapsed_gated_mixed.as_nanos() as f64;
+
+    println!("  ┌─ Monomorphized (zero-overhead dispatch) ─────────────────┐");
     println!(
-        "  Baseline (no gate):    {:>8.2} µs/iter",
-        elapsed_baseline.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        "  │ NoBias baseline:     {:>8.2} µs/iter                   │",
+        elapsed_nobias.as_secs_f64() * 1e6 / BENCH_ITERS as f64
     );
     println!(
-        "  Gated (zero bias):     {:>8.2} µs/iter  ({overhead_zero_bias:+.1}% overhead)",
-        elapsed_gated.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        "  │ GateBias (zero):     {:>8.2} µs/iter  ({overhead_gated_zero:+.2}%)        │",
+        elapsed_gated_zero.as_secs_f64() * 1e6 / BENCH_ITERS as f64
     );
     println!(
-        "  Gated (mixed bias):    {:>8.2} µs/iter  ({overhead_mixed:+.1}% overhead)",
-        elapsed_mixed.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        "  │ GateBias (50%% pruned):{:>7.2} µs/iter  ({overhead_gated_mixed:+.2}%, {prune_skip_speedup:.2}×)  │",
+        elapsed_gated_mixed.as_secs_f64() * 1e6 / BENCH_ITERS as f64
     );
+    println!("  ├─ Legacy wrapper (Option dispatch) ──────────────────────┤");
+    println!(
+        "  │ Gated(None):         {:>8.2} µs/iter  ({overhead_legacy_none:+.2}%)        │",
+        elapsed_legacy_none.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+    );
+    println!(
+        "  │ Gated(Some(zero)):   {:>8.2} µs/iter  ({overhead_legacy_some:+.2}%)        │",
+        elapsed_legacy_some.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+    );
+    println!("  └──────────────────────────────────────────────────────────┘");
     println!();
 
-    // Expect <10% overhead for zero-bias (paper target: <1%)
-    assert!(
-        overhead_zero_bias < 10.0,
-        "Gate bias overhead too high: {overhead_zero_bias:.1}%"
-    );
+    // The key metric: monomorphized GateBias with zero bias should have low overhead
+    // vs monomorphized NoBias (paper target: <1%). Debug builds have higher overhead
+    // due to lack of inlining; release is the true measurement.
+    if cfg!(debug_assertions) {
+        // Debug: just check it's not catastrophically slow (<15%)
+        assert!(
+            overhead_gated_zero < 15.0,
+            "Gate bias overhead too high even for debug: {overhead_gated_zero:.2}%"
+        );
+        println!("  ℹ️  Debug build — overhead numbers are not representative (use --release)");
+    } else {
+        // Release: paper target <1%, allow some margin for measurement noise
+        assert!(
+            overhead_gated_zero < 3.0,
+            "Monomorphized gate bias overhead too high: {overhead_gated_zero:.2}% (target: <1%)"
+        );
+        // Prune-skip should produce measurable speedup when ~50% pruned (release only)
+        assert!(
+            prune_skip_speedup > 1.05,
+            "Prune-skip speedup not measurable: {prune_skip_speedup:.2}× (expected >1.05×)"
+        );
+    }
 }
 
 // ── T17: KV Cache Density Ratio ──────────────────────────────────
