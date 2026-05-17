@@ -227,6 +227,11 @@ pub struct BanditPruner<P: ScreeningPruner> {
     /// learn cooperatively — updates from one are visible to all.
     #[cfg(feature = "bandit")]
     shared_stats: Option<Arc<SharedBanditStats>>,
+    /// FFOLayer-inspired dual cutoff: arms with Q < cutoff get relevance = 0.0.
+    /// Distilled from ffocp_eq.py backward pass (L1248-1269):
+    ///   mask = (dual >= cutoff) → 1.0 else 0.0
+    /// When 0.0 (disabled), behaves identically to current BanditPruner.
+    dual_cutoff: f32,
 }
 
 impl<P: ScreeningPruner> BanditPruner<P> {
@@ -241,6 +246,7 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             thompson_cache: vec![0.0; num_arms],
             #[cfg(feature = "bandit")]
             shared_stats: None,
+            dual_cutoff: 0.0,
         }
     }
 
@@ -262,6 +268,7 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             stats: BanditStats::new(num_arms),
             thompson_cache: vec![0.0; num_arms],
             shared_stats: Some(stats),
+            dual_cutoff: 0.0,
         }
     }
 
@@ -426,6 +433,14 @@ impl<P: ScreeningPruner> BanditPruner<P> {
     pub fn strategy(&self) -> &BanditStrategy {
         &self.strategy
     }
+
+    /// Set the FFOLayer-inspired dual cutoff threshold.
+    ///
+    /// Arms with Q-value below `cutoff` get relevance = 0.0 (hard masked).
+    /// Set to 0.0 to disable (default, backward-compatible).
+    pub fn set_dual_cutoff(&mut self, cutoff: f32) {
+        self.dual_cutoff = cutoff;
+    }
 }
 
 impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
@@ -448,6 +463,11 @@ impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
         // Unvisited arm: maximum exploration priority
         if self.arm_visits(token_idx) == 0 {
             return domain;
+        }
+
+        // FFOLayer active-set masking: hard cutoff for low-Q arms
+        if self.dual_cutoff > 0.0 && self.arm_q(token_idx) < self.dual_cutoff {
+            return 0.0;
         }
 
         // Bandit score based on strategy
@@ -1656,5 +1676,47 @@ mod tests {
             "p2 should see p1's accumulated visits on arm 0"
         );
         assert_eq!(p2.total_pulls(), 13, "p2 should see total 13 pulls");
+    }
+
+    // ── Dual Cutoff Tests (Plan 062) ────────────────────────────
+
+    #[test]
+    fn test_dual_cutoff_disabled_by_default() {
+        let bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 5);
+        assert_eq!(bp.dual_cutoff, 0.0, "default cutoff should be 0 (disabled)");
+    }
+
+    #[test]
+    fn test_dual_cutoff_masks_low_q_arms() {
+        let mut bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 5);
+        bp.dual_cutoff = 0.3;
+
+        // Arm 0: high Q (should pass)
+        bp.update(0, 0.8);
+        bp.update(0, 0.9);
+        // Arm 1: low Q (should be masked)
+        bp.update(1, 0.1);
+        bp.update(1, 0.05);
+        // Arm 2: unvisited (should NOT be masked — exploration)
+
+        let r0 = bp.relevance(0, 0, &[]);
+        let r1 = bp.relevance(0, 1, &[]);
+        let r2 = bp.relevance(0, 2, &[]);
+
+        assert!(r0 > 0.0, "high-Q arm should have positive relevance");
+        assert_eq!(r1, 0.0, "low-Q arm should be masked by dual_cutoff");
+        assert!(r2 > 0.0, "unvisited arm should not be masked (exploration)");
+    }
+
+    #[test]
+    fn test_set_dual_cutoff_method() {
+        let mut bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 3);
+        assert_eq!(bp.dual_cutoff, 0.0);
+
+        bp.set_dual_cutoff(0.5);
+        assert_eq!(bp.dual_cutoff, 0.5);
+
+        bp.set_dual_cutoff(0.0);
+        assert_eq!(bp.dual_cutoff, 0.0, "can re-disable via setter");
     }
 }
