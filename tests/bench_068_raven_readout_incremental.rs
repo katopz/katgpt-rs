@@ -462,8 +462,8 @@ fn bench_068_incremental_dequant_quality() {
                 }
             }
         }
-        print!(
-            "   pos {:>3}: max_diff = {:.2e} {}\n",
+        println!(
+            "   pos {:>3}: max_diff = {:.2e} {}",
             pos,
             pos_max_diff,
             if pos_max_diff < 1e-5 { "✅" } else { "⚠️" }
