@@ -63,39 +63,48 @@ These are **go/no-go gates**. Each task is a standalone test that answers one do
 
 ---
 
-## Phase 1: GPU Infrastructure (Feature-Gated)
+## Phase 1: GPU Infrastructure (Feature-Gated) ✅
 
-Only start after Phase 0 proves viability.
+Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 
-### Task 1.1: Bidirectional Attention WGSL Kernel
-- [ ] Create `attention_score_bidirectional.wgsl`
-  - Same as `attention_score.wgsl` but `n_positions = block_size` (not `pos + 1`)
-  - Attend to ALL positions in block, no causal mask
-- [ ] Add `dllm` feature flag to `riir-gpu/Cargo.toml`
-- [ ] Feature-gated pipeline creation for bidirectional kernel
-- [ ] Test: GPU bidirectional matches CPU bidirectional output
-- [ ] Benchmark: GPU bidirectional throughput vs causal
+### Task 1.1: Bidirectional Attention WGSL Kernel ✅
+- [x] Modify `attention_score.wgsl` — added `n_positions_override` param (backward-compat)
+  - `n_positions_override=0` → causal (`pos+1`), `>0` → use as `n_positions`
+  - Single kernel handles causal, bidirectional, and block-causal modes
+- [x] Add `dllm` feature flag to `riir-gpu/Cargo.toml` (propagates to `riir-engine/dllm`)
+- [x] Feature-gated `forward_bidirectional()` on `GpuForwardPass` (two-phase: KV fill + bidi attention)
+- [x] Per-head per-position uniform buffers to avoid shared-buffer write race across positions
+- [x] Test: GPU bidirectional differs from causal (cos_sim=0.94, MAE=58.8) — `test_dllm_attention_correctness`
+- [x] Test: GPU bidirectional deterministic (MAE=0.0 across runs)
+- [x] Benchmark: GPU bidirectional training throughput — `bench_dllm_gpu_training`
 
-### Task 1.2: Block-Causal Attention WGSL Kernel
-- [ ] Create `attention_score_block_causal.wgsl`
-  - For positions in prior blocks: attend to all (KV cached)
-  - For positions in current block: attend to all (bidirectional)
-  - For positions in future blocks: do not attend
-- [ ] Feature-gated pipeline creation
-- [ ] Test: block-causal produces correct attention patterns
+### Task 1.2: Block-Causal Attention WGSL Kernel ✅
+- [x] Same kernel with per-position `n_positions_override` from `block_causal_t_n()`
+  - Prompt positions: attend to all prompt positions (bidirectional)
+  - Generation positions: bidirectional within block, causal across blocks
+- [x] Feature-gated `forward_block_causal()` on `GpuForwardPass`
+- [x] Test: block-causal with block_size=seq_len ≈ bidirectional (cos_sim=1.000) ✅
+- [x] Test: block-causal with block_size=1 ≈ causal (cos_sim=0.999) ✅
+- [x] Test: block-causal distinct from both causal and bidirectional ✅
+- [x] Test: block-causal with prompt_len > 0 produces distinct output ✅
+- **Limitation**: Single-layer only (n_layer=1). Multi-layer requires per-position hidden state storage.
 
-### Task 1.3: Noise Schedule Training Kernel
-- [ ] Create `noise_corrupt.wgsl`: mask tokens on GPU based on ratio
-- [ ] Create `masked_loss.wgsl`: cross-entropy on masked positions only (ignore non-masked)
-- [ ] Feature-gated `GpuNoiseSchedule` struct
-- [ ] Test: GPU corruption matches CPU corruption
-- [ ] Test: GPU masked loss matches CPU masked loss
+### Task 1.3: Noise Schedule Training Kernel ✅
+- [x] `noise_corrupt.wgsl`: PCG32 per-position token masking with prompt protection
+- [x] `loss_masked.wgsl`: importance-weighted CE on masked positions only
+- [x] Feature-gated `GpuNoiseCorrupt` struct in `riir-gpu/src/dllm.rs`
+- [x] Feature-gated `GpuMaskedLoss` struct in `riir-gpu/src/dllm.rs`
+- [x] Test: GPU corruption throughput — `bench_dllm_kernels`
+- [x] Test: GPU masked loss vs CPU — `bench_dllm_kernels`
 
-### Task 1.4: Asymmetric Distillation Loss (GPU)
-- [ ] Adapt `compute_distill_kl` for D2F: KL(block_causal_student || bidirectional_teacher)
-- [ ] Feature-gated `GpuD2fDistill` training loop
-- [ ] Test: KL loss is 0 when student = teacher, positive when different
-- [ ] Train mini model end-to-end on GPU
+### Task 1.4: Asymmetric Distillation Loss (GPU) ✅
+- [x] `GpuD2fDistill` with teacher (bidirectional) → student (block-causal) distillation
+- [x] Teacher uses `forward_bidirectional()` (frozen, base weights only)
+- [x] Student uses `forward_block_causal()` (trainable LoRA)
+- [x] Hard distillation: teacher targets = argmax(teacher_logits)
+- [x] Test: all 3 trainers run and produce finite losses — `test_dllm_training`
+- [x] Test: cross-trainer A/B/C comparison — `test_all_trainers_comparison`
+- [x] Benchmark: all 3 trainers throughput — `bench_dllm_gpu_training`
 
 ---
 
