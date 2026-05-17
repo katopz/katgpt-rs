@@ -552,6 +552,92 @@ impl StateHeuristic<BomberState> for BomberHeuristic {
     }
 }
 
+// ── BanditBomberHeuristic ─────────────────────────────────────
+
+/// Combined heuristic: domain knowledge + bandit backward signal.
+///
+/// Plan 067 (NFSP/MCTS Duality): fuses `BomberHeuristic` (forward-looking
+/// domain features) with `BanditStats` Q-values (backward-looking episode data).
+///
+/// Evaluation: `domain.evaluate(s, pid) + λ * avg_q_bonus(s, pid)`
+///
+/// The `λ` (bandit_weight) controls how much to trust bandit Q-values vs domain:
+/// - `λ = 0.0`: pure domain heuristic (equivalent to `BomberHeuristic`)
+/// - `λ = 1.0`: equal weight
+/// - `λ = 2.0+`: bandit signal dominates
+///
+/// The Q-value bonus is the average Q-value of available actions (higher → state
+/// is reachable via historically good actions).
+#[cfg(feature = "bandit")]
+pub struct BanditBomberHeuristic {
+    /// Domain-specific heuristic (safety, resources, position, progress).
+    domain: BomberHeuristic,
+    /// Bandit statistics accumulated across episodes.
+    stats: crate::pruners::bandit::BanditStats,
+    /// Weight for bandit Q-value bonus (λ). Domain heuristic is always weight 1.0.
+    bandit_weight: f32,
+}
+
+#[cfg(feature = "bandit")]
+impl BanditBomberHeuristic {
+    /// Create a new combined heuristic.
+    ///
+    /// # Arguments
+    /// * `stats` — bandit statistics with accumulated Q-values from prior episodes
+    /// * `bandit_weight` — weight for bandit Q-value bonus (0.0 = pure domain)
+    ///
+    /// # Panics
+    /// Panics if `bandit_weight` is negative.
+    pub fn new(stats: crate::pruners::bandit::BanditStats, bandit_weight: f32) -> Self {
+        assert!(
+            bandit_weight >= 0.0,
+            "bandit_weight must be >= 0.0, got {bandit_weight}"
+        );
+        Self {
+            domain: BomberHeuristic,
+            stats,
+            bandit_weight,
+        }
+    }
+
+    /// Update bandit statistics after an episode.
+    pub fn update(&mut self, arm: usize, reward: f32) {
+        self.stats.update(arm, reward);
+    }
+
+    /// Access the underlying bandit statistics.
+    pub fn stats(&self) -> &crate::pruners::bandit::BanditStats {
+        &self.stats
+    }
+
+    /// Access the underlying bandit statistics (mutable).
+    pub fn stats_mut(&mut self) -> &mut crate::pruners::bandit::BanditStats {
+        &mut self.stats
+    }
+}
+
+#[cfg(feature = "bandit")]
+impl StateHeuristic<BomberState> for BanditBomberHeuristic {
+    fn evaluate(&self, state: &BomberState, player_id: u8) -> f32 {
+        let domain_score = self.domain.evaluate(state, player_id);
+
+        // Bandit Q-value bonus: average Q of available actions
+        let actions = state.available_actions(player_id);
+        if actions.is_empty() || self.bandit_weight == 0.0 {
+            return domain_score;
+        }
+
+        let q_sum: f32 = actions
+            .iter()
+            .map(|a| self.stats.q_value(a.as_usize()))
+            .sum();
+        let avg_q = q_sum / actions.len() as f32;
+        let bandit_bonus = avg_q * self.bandit_weight;
+
+        domain_score + bandit_bonus
+    }
+}
+
 // ── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]

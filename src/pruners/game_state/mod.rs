@@ -10,6 +10,8 @@
 
 use std::fmt;
 
+use fastrand::Rng;
+
 // ── GameState Trait ────────────────────────────────────────────
 
 /// Forward model trait — any game state that supports what-if simulation.
@@ -67,6 +69,49 @@ pub trait GameState: Clone {
 pub trait StateHeuristic<S: GameState> {
     /// Evaluate state for `player_id`. Higher = better.
     fn evaluate(&self, state: &S, player_id: u8) -> f32;
+}
+
+// ── RolloutPolicy Trait ────────────────────────────────────────
+
+/// Pluggable rollout policy for MCTS.
+///
+/// Replaces hardcoded random selection with informed action choice.
+/// The default `RandomRolloutPolicy` preserves existing behavior.
+///
+/// # Implementors
+/// - `RandomRolloutPolicy`: uniform random (baseline)
+/// - `BanditRolloutPolicy<S>`: ε-greedy guided by bandit Q-values (Plan 067)
+pub trait RolloutPolicy<S: GameState> {
+    /// Select an action index from `actions` during MCTS rollout.
+    ///
+    /// # Arguments
+    /// * `state` — current rollout state
+    /// * `actions` — available actions for `player_id`
+    /// * `player_id` — which player is acting
+    /// * `rng` — RNG for stochastic policies
+    ///
+    /// # Returns
+    /// Index into `actions` (0..actions.len()).
+    fn select(&mut self, state: &S, actions: &[S::Action], player_id: u8, rng: &mut Rng) -> usize;
+}
+
+/// Uniform random rollout policy — baseline, identical to original MCTS behavior.
+///
+/// Every action has equal probability. Use this as a control group when
+/// comparing against informed rollout policies.
+pub struct RandomRolloutPolicy;
+
+impl<S: GameState> RolloutPolicy<S> for RandomRolloutPolicy {
+    #[inline]
+    fn select(
+        &mut self,
+        _state: &S,
+        actions: &[S::Action],
+        _player_id: u8,
+        rng: &mut Rng,
+    ) -> usize {
+        rng.usize(0..actions.len())
+    }
 }
 
 // ── ActionSpaceLog ─────────────────────────────────────────────
@@ -168,6 +213,20 @@ pub use bomber_state::{BombSnapshot, BomberHeuristic, BomberState, PlayerSnapsho
 mod mcts;
 
 pub use mcts::mcts_search;
+pub use mcts::mcts_search_informed;
+
+#[cfg(feature = "bandit")]
+pub use mcts::BanditRolloutPolicy;
+
+#[cfg(all(feature = "bomber", feature = "bandit"))]
+pub use bomber_state::BanditBomberHeuristic;
+
+// Public types defined in this module (no pub use needed — already pub):
+// - `RolloutPolicy<S>` trait
+// - `RandomRolloutPolicy` struct
+// - `StateHeuristic<S>` trait
+// - `GameState` trait
+// - `ActionSpaceLog` struct
 
 // ── Tests ──────────────────────────────────────────────────────
 

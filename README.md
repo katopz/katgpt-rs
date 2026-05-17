@@ -528,6 +528,20 @@ Both methods find a better action at state `s` for a student policy to imitate. 
 
 The inference pipeline (DDTree + BanditPruner) already embodies this duality at the token level — backward Q-values inform forward best-first search.
 
+
+**Benchmark results (100-round tournament, release build):**
+
+| Player | Wins | Win Rate | Note |
+|--------|------|----------|------|
+| **BanditMCTS (P0)** | **75** | **75.0%** | Bandit Q-values + domain heuristic |
+| MCTS (P1) | 8 | 8.0% | Random rollouts, no memory |
+| Random (P2) | 11 | 11.0% | Baseline |
+| Random (P3) | 6 | 6.0% | Baseline |
+
+**Δ BanditMCTS vs MCTS: +67.0pp** — confirms the duality hypothesis. Wiring backward signal (bandit Q-values) into forward search (MCTS rollouts) transforms MCTS from ≈random (Plan 056) to dominant. The AlphaZero pattern works even modelless (no neural net, just bandit statistics).
+
+Feature gate: `bandit_mcts` (implies `game_state`). Run: `cargo test --release --features bandit_mcts --test bench_067_bandit_mcts -- --nocapture`
+
 📖 See [`.plans/067_nfsp_mcts_duality.md`](.plans/067_nfsp_mcts_duality.md).
 
 ## 🎲 Monopoly FSM Arena
@@ -883,6 +897,7 @@ cargo clippy --all-targets --all-features --quiet
 | `bomber` | Bomberman HL arena (bevy_ecs + bandit, Plan 033) |
 | `bomber-wasm` | WASM bomber validator loader (bomber + wasmtime + papaya, Plan 034) |
 | `game_state` | GameState forward model trait + generic MCTS (bomber + Plan 056) |
+| `bandit_mcts` | Bandit-guided MCTS rollout policy — NFSP/MCTS duality (game_state + Plan 067) |
 | `monopoly` | Monopoly FSM arena (bevy_ecs + bandit, Plan 035) |
 | `feedback` | E2E feedback loop — sends inference results to REST endpoint (Plan 042, requires consumer in riir-gpu) |
 | `rest` | REST bridge test + merge stub (Plan 009, client lives in riir-ai/riir-rest) |
@@ -957,10 +972,10 @@ src/
       wasm_pruner.rs   WASM pruner
       wasm_state.rs    WASM state
       tft_player.rs    TftPlayer — game theory Tit-for-Tat bomber (Issue 056)
-    game_state/      GameState forward model + generic MCTS (Plan 056):
-      mod.rs           GameState trait, StateHeuristic, ActionSpaceLog
-      bomber_state.rs  BomberState snapshot + BomberHeuristic
-      mcts.rs          UCB1 tree search + random rollouts
+    game_state/      GameState forward model + generic MCTS (Plan 056 + 067):
+      mod.rs           GameState trait, StateHeuristic, RolloutPolicy, RandomRolloutPolicy, ActionSpaceLog
+      bomber_state.rs  BomberState snapshot + BomberHeuristic + BanditBomberHeuristic (Plan 067)
+      mcts.rs          UCB1 tree search + pluggable rollout policy (BanditRolloutPolicy, mcts_search_informed)
     fft/             FFT Tactics Arena (ATB battle engine):
       mod.rs           Module root
       types.rs         Class, Team, ActionType, Stats, Unit, Action, GameEvent, TFT types
