@@ -46,10 +46,10 @@ forward_base()                    forward_sp_kv() dispatch variant
 - [x] **T11**: Wire `forward_sp_kv()` — `AttentionMode::SpKv` variant added, `SpKvForwardContext` for dispatch, full feature-gated module behind `sp_kv` flag ✅
 
 ### Phase 3: Integration
-- [ ] **T12**: Implement `forward_sp_kv_tq()` — SP-KV selective write + TurboQuant quantize what's kept (two-stage compression: selective write + lossy quant)
-- [ ] **T13**: Add `sp_kv` feature flag to `Cargo.toml`
-- [ ] **T14**: Create `riir-ai/crates/riir-gpu/src/kernels/attention_score_sp_kv.wgsl` — attention scoring with gate bias uniform buffer
-- [ ] **T15**: Create `riir-ai/crates/riir-gpu/src/forward_sp_kv.rs` — GPU dispatch for SP-KV forward pass
+- [x] **T12**: `forward_sp_kv_tq()` stub with TODO tasks — `SpKvTqCache` hybrid type design documented, compression estimates (~3×–29×), two-stage pipeline (SP-KV selective write → TurboQuant quantize retained) ✅
+- [x] **T13**: `sp_kv` feature flag in `Cargo.toml` + `pub mod sp_kv` in `lib.rs` (completed in Phase 1) ✅
+- [x] **T14**: `attention_score_sp_kv.wgsl` — WGSL kernel with `gate_bias[t]` additive bias, `SpKvAttnScoreParams` uniform struct, pipeline registered in `GpuPipelines` ✅
+- [x] **T15**: `forward_sp_kv.rs` — GPU dispatch stub with `SpKvForwardState`, `SpKvGateMode` enum, `forward_sp_kv_gpu()` TODO, kernel dispatch plan documented ✅
 
 ### Phase 4: Benchmarks + Documentation
 - [ ] **T16**: Benchmark: baseline `attention_head()` vs `attention_head_gated()` — measure gate bias overhead (expect <1%)

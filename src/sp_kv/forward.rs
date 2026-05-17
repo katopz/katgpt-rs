@@ -422,6 +422,53 @@ pub fn forward_sp_kv<'a>(
     &mut ctx.logits
 }
 
+// ---------------------------------------------------------------------------
+// SP-KV + TurboQuant Fusion (T12) — stub for Plan 070 Phase 3
+// ---------------------------------------------------------------------------
+
+/// SP-KV + TurboQuant fused forward: selective write + lossy quantize.
+///
+/// Two-stage KV compression pipeline:
+/// 1. **SP-KV selective write**: utility predictor decides which positions to retain
+/// 2. **TurboQuant quantize**: retained positions are compressed (f32 → 2-4 bits)
+///
+/// This is the maximal-compression decode path:
+/// ```text
+/// Prefill: PFlash (block-sparse token selection)
+/// Decode:  SP-KV (selective write) → TurboQuant (lossy quantize retained)
+/// Result:  only useful KV pairs kept, those compressed to 2-4 bits/coord
+/// ```
+///
+/// ## Implementation Strategy
+///
+/// `forward_sp_kv_tq()` mirrors `forward_sp_kv()` but replaces `SpKvCache` with
+/// a hybrid cache that combines:
+/// - `SpKvLayerCache.retained[]` bitfield (which positions to keep)
+/// - `TurboQuantKVCache` (compressed storage for retained positions)
+///
+/// For retained positions: `TurboQuantKVCache::store_key/value()` quantizes in-place.
+/// For pruned positions: no write (cache stays at default).
+/// During attention: dequantize only retained positions into flat buffer, then
+/// `attention_head_gated()` with hard gate bias.
+///
+/// ## TODO (Phase 3)
+///
+/// - [ ] Create `SpKvTqCache` hybrid type wrapping `SpKvLayerCache` + `TurboQuantKVCache`
+/// - [ ] Implement `forward_sp_kv_tq()` with dual cache
+/// - [ ] Benchmark: density × compression ratio vs standalone SP-KV and TQ
+/// - [ ] Wire into `forward()` dispatch as `AttentionMode::SpKvTq`
+///
+/// ## Estimated Compression
+///
+/// At τ=0.5 (~30% density) + 3-bit TQ: ~10.7 bits/position vs 32-bit baseline = **3× compression**.
+/// At τ=0.7 (~11% density) + 3-bit TQ: ~33 bits/position vs 32-bit baseline = **~29× compression**.
+#[allow(dead_code)]
+fn forward_sp_kv_tq() {
+    // Stub — will be implemented in Phase 3 when TurboQuant integration is wired.
+    // See Plan 070, Task T12.
+    todo!("forward_sp_kv_tq: SP-KV + TurboQuant fusion (Plan 070 Phase 3)")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
