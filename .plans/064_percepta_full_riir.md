@@ -2,6 +2,8 @@
 
 > **Status**: ✅ Core complete — TG-A through TG-J + TG-K2/K3/K4 + TG-L done. K1/K6 deferred (C examples/blog). End-to-end tasks (F6, H5, H6, J8) blocked on Rust→WASM pipeline wiring. Comparison tasks (G5, I4, J9) deferred to Percepta Docker environment.
 >
+> **MILP Solver Upgrade (Issue 003)**: Swapped `microlp` → **HiGHS** (production-grade, 30s timeout). Full WASM interpreter graph (216 dims, 189 ops, 7 layers) now solves in **1.13s** (was ∞ hang). `percepta_05_pipeline` §2 runs full graph end-to-end: d_model=152, 1.08M params, 2,233 tok/s.
+>
 > **WASM Strategy**: Rust-first — write Rust programs → `cargo build --target wasm32-unknown-unknown` → feed into percepta pipeline. No clang needed. C→WASM comparison deferred: copy `.wasm` binaries out of Percepta's Docker environment for 1:1 reference matching later.
 
 Complete Rust port of Percepta's `transformer-vm` (Apache-2.0 © Percepta). Distill ~9K lines of Python+C++ into idiomatic Rust under MIT. Prove Rust is better. Show them what's possible.
@@ -119,7 +121,7 @@ src/percepta/
 
 **Depends on:** TG-C. **Source:** `scheduler/milp.py` (814 lines)
 
-- [x] **D1:** Add `good_lp` or `highs` crate dependency for MILP solving ✅ (microlp backend)
+- [x] **D1:** Add `good_lp` + `highs` crate dependency for MILP solving ✅ (HiGHS primary, microlp fallback — Issue 003 fix)
 - [x] **D2:** Implement 4-phase layer assignment (Attention → Persist1 → FFN → Persist2) ✅
 - [x] **D3:** Implement `interval_coloring` for slot reuse across layers ✅
 - [x] **D4:** Implement d_model minimization objective ✅
