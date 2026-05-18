@@ -29,15 +29,15 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::percepta::wasm::decoder::{
-    self, DecodeError, ExportKind, FuncBody, ImportKind, OP_BLOCK, OP_BR, OP_BR_IF, OP_CALL,
-    OP_DROP, OP_ELSE, OP_END, OP_GLOBAL_GET, OP_GLOBAL_SET, OP_I32_ADD, OP_I32_CONST, OP_I32_EQ,
-    OP_I32_EQZ, OP_I32_GE_S, OP_I32_GE_U, OP_I32_GT_S, OP_I32_GT_U, OP_I32_LE_S, OP_I32_LE_U,
-    OP_I32_LOAD, OP_I32_LOAD8_S, OP_I32_LOAD8_U, OP_I32_LOAD16_S, OP_I32_LOAD16_U, OP_I32_LT_S,
-    OP_I32_LT_U, OP_I32_NE, OP_I32_STORE, OP_I32_STORE8, OP_I32_STORE16, OP_I32_SUB, OP_IF,
-    OP_LOCAL_GET, OP_LOCAL_SET, OP_LOCAL_TEE, OP_LOOP, OP_NOP, OP_RETURN, OP_SELECT,
+    self, DecodeError, ExportKind, FuncBody, ImportKind, OP_BLOCK, OP_BR, OP_BR_IF, OP_BR_TABLE,
+    OP_CALL, OP_DROP, OP_ELSE, OP_END, OP_GLOBAL_GET, OP_GLOBAL_SET, OP_I32_ADD, OP_I32_CONST,
+    OP_I32_EQ, OP_I32_EQZ, OP_I32_GE_S, OP_I32_GE_U, OP_I32_GT_S, OP_I32_GT_U, OP_I32_LE_S,
+    OP_I32_LE_U, OP_I32_LOAD, OP_I32_LOAD8_S, OP_I32_LOAD8_U, OP_I32_LOAD16_S, OP_I32_LOAD16_U,
+    OP_I32_LT_S, OP_I32_LT_U, OP_I32_NE, OP_I32_STORE, OP_I32_STORE8, OP_I32_STORE16, OP_I32_SUB,
+    OP_IF, OP_LOCAL_GET, OP_LOCAL_SET, OP_LOCAL_TEE, OP_LOOP, OP_NOP, OP_RETURN, OP_SELECT,
     OP_UNREACHABLE, WASM_OP_NAMES, WasmModule,
 };
-use crate::percepta::wasm::lower::lower_hard_ops;
+use crate::percepta::wasm::lower::{lower_hard_ops, lower_i64_ops};
 
 // ── Constants ──────────────────────────────────────────────────
 
@@ -256,8 +256,21 @@ pub fn write_runtime_h(dir: &Path) -> Result<PathBuf, CompileError> {
 ///
 /// The `runtime_h_path` should point to the runtime.h header file
 /// (use [`write_runtime_h`] to create one from the embedded content).
+/// Generate a unique temp dir name using process ID + nanosecond timestamp.
+fn unique_temp_id(prefix: &str) -> String {
+    format!(
+        "{}-{}-{:x}",
+        prefix,
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    )
+}
+
 pub fn compile_c_to_wasm(c_source: &str, runtime_h_path: &Path) -> Result<Vec<u8>, CompileError> {
-    let temp_dir = std::env::temp_dir().join(format!("microgpt-compile-{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(unique_temp_id("microgpt-compile"));
     fs::create_dir_all(&temp_dir).map_err(|e| CompileError::IoError(format!("{e}")))?;
 
     let c_path = temp_dir.join("input.c");
@@ -301,6 +314,185 @@ pub fn compile_c_to_wasm(c_source: &str, runtime_h_path: &Path) -> Result<Vec<u8
     }
 
     fs::read(&wasm_path).map_err(|e| CompileError::IoError(format!("{e}")))
+}
+
+// ── Rust → WASM ───────────────────────────────────────────────
+
+/// Find `rustc` with `wasm32-unknown-unknown` target support.
+///
+/// Resolution order:
+/// 1. `RUSTC_PATH` environment variable
+/// 2. `rustc` on `$PATH` (via `which`)
+///
+/// Verifies the target is installed via `rustup target list --installed`.
+pub fn find_rustc() -> Result<PathBuf, CompileError> {
+    // 1. RUSTC_PATH env var
+    if let Ok(path) = std::env::var("RUSTC_PATH") {
+        let p = PathBuf::from(path);
+        if p.exists() {
+            return Ok(p);
+        }
+    }
+
+    // 2. which rustc
+    if let Ok(output) = Command::new("which").arg("rustc").output()
+        && output.status.success()
+    {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !path.is_empty() {
+            let p = PathBuf::from(path);
+            // Verify wasm32-unknown-unknown target is installed
+            if let Ok(target_output) = Command::new("rustup")
+                .args(["target", "list", "--installed"])
+                .output()
+            {
+                let stdout = String::from_utf8_lossy(&target_output.stdout);
+                if stdout.contains("wasm32-unknown-unknown") {
+                    return Ok(p);
+                }
+            }
+            // Even without rustup, try rustc directly — may work if target is built-in
+            if let Ok(version_output) = Command::new(&p).args(["--print", "sysroot"]).output()
+                && version_output.status.success()
+            {
+                // Check if wasm32 target exists in the sysroot
+                let sysroot = String::from_utf8_lossy(&version_output.stdout)
+                    .trim()
+                    .to_string();
+                let target_dir = PathBuf::from(sysroot)
+                    .join("lib")
+                    .join("rustlib")
+                    .join("wasm32-unknown-unknown");
+                if target_dir.exists() {
+                    return Ok(p);
+                }
+            }
+        }
+    }
+
+    Err(CompileError::Other(
+        "No rustc with wasm32-unknown-unknown target found. \
+         Run: rustup target add wasm32-unknown-unknown"
+            .to_string(),
+    ))
+}
+
+/// Compile Rust source code to WASM bytes.
+///
+/// The Rust source must be a complete `#![no_std]` `#![no_main]` program that:
+/// - Imports `output_byte` from the `env` module: `extern "C" { fn output_byte(ch: i32); }`
+/// - Exports a `compute` function: `#[no_mangle] pub unsafe extern "C" fn compute(input: *const u8)`
+/// - Includes a `#[panic_handler]`
+///
+/// # Arguments
+/// * `rust_source` — Complete Rust source code (must include all boilerplate)
+///
+/// # Returns
+/// Raw WASM binary bytes with `compute`, `__heap_base`, and `memory` exports.
+pub fn compile_rust_to_wasm(rust_source: &str) -> Result<Vec<u8>, CompileError> {
+    let temp_id = format!(
+        "microgpt-rust-{}-{:x}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    );
+    let temp_dir = std::env::temp_dir().join(&temp_id);
+    fs::create_dir_all(&temp_dir).map_err(|e| CompileError::IoError(format!("{e}")))?;
+
+    let rs_path = temp_dir.join("input.rs");
+    let wasm_path = temp_dir.join("output.wasm");
+
+    fs::write(&rs_path, rust_source).map_err(|e| CompileError::IoError(format!("{e}")))?;
+
+    let rustc = find_rustc()?;
+
+    let result = Command::new(&rustc)
+        .args([
+            "--target=wasm32-unknown-unknown",
+            "-O",
+            "--crate-type=cdylib",
+            "-o",
+        ])
+        .arg(&wasm_path)
+        .arg(&rs_path)
+        .output()
+        .map_err(|e| CompileError::Other(format!("Failed to execute rustc: {e}")))?;
+
+    if !result.status.success() {
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        return Err(CompileError::Other(format!(
+            "rustc failed (exit {}): {}",
+            result.status.code().unwrap_or(-1),
+            stderr.trim()
+        )));
+    }
+
+    let bytes = fs::read(&wasm_path).map_err(|e| CompileError::IoError(format!("{e}")))?;
+    let _ = fs::remove_dir_all(&temp_dir);
+    Ok(bytes)
+}
+
+/// End-to-end: Rust source + input → compiled program with prefix.
+///
+/// Compiles Rust source to WASM, then decodes, lowers, and builds the
+/// dispatch table + token prefix. See [`compile_rust_to_wasm`] for the
+/// required source format.
+///
+/// # Arguments
+/// * `rust_source` — Complete `#![no_std]` Rust source
+/// * `input_str` — Input string for the program (empty if no input)
+pub fn compile_rust_program(
+    rust_source: &str,
+    input_str: &str,
+) -> Result<CompiledProgram, CompileError> {
+    // Rust → WASM
+    let wasm_bytes = compile_rust_to_wasm(rust_source)?;
+
+    // WASM → prefix
+    let mut result = compile_wasm_to_prefix(&wasm_bytes)?;
+
+    // Format input section
+    if !input_str.is_empty() && result.input_base > 0 {
+        result.input_section = format_input_section(input_str);
+    }
+
+    Ok(result)
+}
+
+/// Template for a minimal Rust→WASM program.
+///
+/// Generates the boilerplate (`#![no_std]`, `#![no_main]`, panic handler,
+/// import/export declarations) and wraps the user's compute body.
+///
+/// # Arguments
+/// * `body` — The function body for `compute`. Has access to `output_byte(ch: i32)`
+///   and `input: *const u8` (pointer to null-terminated input string).
+///
+/// # Returns
+/// Complete Rust source ready for [`compile_rust_to_wasm`].
+pub fn rust_template(body: &str) -> String {
+    format!(
+        r#"#![no_std]
+#![no_main]
+
+#[link(wasm_import_module = "env")]
+extern "C" {{
+    fn output_byte(ch: i32);
+}}
+
+#[no_mangle]
+pub unsafe extern "C" fn compute(input: *const u8) {{
+    {body}
+}}
+
+#[panic_handler]
+fn panic(_info: &core::panic::PanicInfo) -> ! {{
+    loop {{}}
+}}
+"#
+    )
 }
 
 // ── WASM → Dispatch Table ─────────────────────────────────────
@@ -451,6 +643,77 @@ fn compile_function(
             continue;
         }
 
+        if op == OP_BR_TABLE {
+            // br_table immediates: [target0, target1, ..., targetN-1, default]
+            // Pop i32 index from stack; branch to targets[index] or default.
+            // Lower to: local.set temp, then (local.get temp, i32.const i, i32.eq, br_if target_i)*, br default
+            let n_targets = instr.immediates.len().saturating_sub(1);
+            let default_label_idx = instr.immediates[n_targets] as usize;
+
+            // Temp local for saving the switch index
+            let temp = match global_temp_local {
+                Some(t) => t,
+                None => {
+                    let ti = module.func_type_indices[_local_func_idx] as usize;
+                    module.types[ti].params.len() as i32 + func.num_locals as i32
+                }
+            };
+
+            // Save switch index to temp local
+            entries.push(("local.set".to_string(), temp));
+
+            // Emit compare-and-branch for each target
+            for (i, &label_idx_raw) in instr.immediates[..n_targets].iter().enumerate() {
+                let label_idx = label_idx_raw as usize;
+                let target_frame_idx =
+                    label_stack
+                        .len()
+                        .checked_sub(label_idx + 1)
+                        .ok_or_else(|| {
+                            CompileError::Other(format!(
+                                "BR_TABLE label index {label_idx} out of range"
+                            ))
+                        })?;
+
+                entries.push(("local.get".to_string(), temp));
+                entries.push(("i32.const".to_string(), i as i32));
+                entries.push(("i32.eq".to_string(), 0));
+
+                if label_stack[target_frame_idx].kind == LabelKind::Loop {
+                    entries.push((
+                        "br_if".to_string(),
+                        label_stack[target_frame_idx].start_pc as i32,
+                    ));
+                } else {
+                    let idx = entries.len();
+                    entries.push(("br_if".to_string(), PLACEHOLDER));
+                    label_stack[target_frame_idx].patches.push(idx);
+                }
+            }
+
+            // Default branch (unconditional)
+            let default_frame_idx = label_stack
+                .len()
+                .checked_sub(default_label_idx + 1)
+                .ok_or_else(|| {
+                    CompileError::Other(format!(
+                        "BR_TABLE default label {default_label_idx} out of range"
+                    ))
+                })?;
+
+            if label_stack[default_frame_idx].kind == LabelKind::Loop {
+                entries.push((
+                    "br".to_string(),
+                    label_stack[default_frame_idx].start_pc as i32,
+                ));
+            } else {
+                let idx = entries.len();
+                entries.push(("br".to_string(), PLACEHOLDER));
+                label_stack[default_frame_idx].patches.push(idx);
+            }
+            continue;
+        }
+
         if op == OP_RETURN {
             entries.push((if is_main { "halt" } else { "return" }.to_string(), 0));
             continue;
@@ -550,7 +813,7 @@ fn compile_function(
         // ── Unsupported ─────────────────────────────────────
         let op_name = WASM_OP_NAMES.get(&op).unwrap_or("???");
         return Err(CompileError::UnsupportedOpcode(format!(
-            "unsupported wasm opcode: {op_name}"
+            "unsupported wasm opcode: {op_name} (0x{op:02x})"
         )));
     }
 
@@ -813,6 +1076,9 @@ pub fn compile_wasm_to_prefix(wasm_bytes: &[u8]) -> Result<CompiledProgram, Comp
     for fi in 0..module.functions.len() {
         let type_idx = module.func_type_indices[fi] as usize;
         let num_params = module.types[type_idx].params.len() as u32;
+        // Step 1: Lower i64 ops → i32 equivalents (Rust WASM backend emits i64)
+        module.functions[fi] = lower_i64_ops(&module.functions[fi]);
+        // Step 2: Lower hard ops (MUL, DIV, AND, etc.) → ADD/SUB sequences
         module.functions[fi] = lower_hard_ops(&module.functions[fi], num_params);
     }
 
@@ -830,7 +1096,7 @@ pub fn compile_wasm_to_prefix(wasm_bytes: &[u8]) -> Result<CompiledProgram, Comp
 /// End-to-end compilation: C source + input → compiled program with prefix.
 pub fn compile_program(c_source: &str, input_str: &str) -> Result<CompiledProgram, CompileError> {
     // Write runtime.h to temp dir
-    let temp_dir = std::env::temp_dir().join(format!("microgpt-compile-{}", std::process::id()));
+    let temp_dir = std::env::temp_dir().join(unique_temp_id("microgpt-compile"));
     fs::create_dir_all(&temp_dir).map_err(|e| CompileError::IoError(format!("{e}")))?;
 
     let runtime_h_path = write_runtime_h(&temp_dir)?;
@@ -1577,7 +1843,7 @@ void compute(const char *input) {
 }
 "#;
 
-        let temp_dir = std::env::temp_dir().join(format!("microgpt-e2e-{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(unique_temp_id("microgpt-e2e"));
         let _ = fs::create_dir_all(&temp_dir);
         let runtime_h = write_runtime_h(&temp_dir).unwrap();
 
@@ -1647,8 +1913,7 @@ void compute(void) {
     }
 
     fn compile_c_to_wasm_only(c_source: &str) -> Result<Vec<u8>, CompileError> {
-        let temp_dir =
-            std::env::temp_dir().join(format!("microgpt-e2e-noinput-{}", std::process::id()));
+        let temp_dir = std::env::temp_dir().join(unique_temp_id("microgpt-e2e-noinput"));
         let _ = fs::create_dir_all(&temp_dir);
         let runtime_h = write_runtime_h(&temp_dir)?;
         let result = compile_c_to_wasm(c_source, &runtime_h);

@@ -94,6 +94,67 @@ pub const LOWERABLE_UNARY: &[u8] = &[
     OP_I32_POPCNT,
 ];
 
+// ── i64 opcodes (not defined in decoder.rs, used for i64→i32 lowering) ──
+
+/// i64 comparison opcodes that map 1:1 to i32 equivalents.
+pub const I64_CMP_OPS: &[(u8, u8)] = &[
+    (0x50, OP_I32_EQZ),  // i64.eqz → i32.eqz
+    (0x51, OP_I32_EQ),   // i64.eq → i32.eq
+    (0x52, OP_I32_NE),   // i64.ne → i32.ne
+    (0x53, OP_I32_LT_S), // i64.lt_s → i32.lt_s
+    (0x54, OP_I32_LT_U), // i64.lt_u → i32.lt_u
+    (0x55, OP_I32_GT_S), // i64.gt_s → i32.gt_s
+    (0x56, OP_I32_GT_U), // i64.gt_u → i32.gt_u
+    (0x57, OP_I32_LE_S), // i64.le_s → i32.le_s
+    (0x58, OP_I32_LE_U), // i32.le_u → i32.le_u
+    (0x59, OP_I32_GE_S), // i64.ge_s → i32.ge_s
+    (0x5A, OP_I32_GE_U), // i64.ge_u → i32.ge_u
+];
+
+/// i64 arithmetic opcodes that map 1:1 to i32 equivalents.
+pub const I64_ARITH_OPS: &[(u8, u8)] = &[
+    (0x7C, OP_I32_ADD),   // i64.add → i32.add
+    (0x7D, OP_I32_SUB),   // i64.sub → i32.sub
+    (0x7E, OP_I32_MUL),   // i64.mul → i32.mul (further lowered by lower_hard_ops)
+    (0x7F, OP_I32_DIV_S), // i64.div_s → i32.div_s
+    (0x80, OP_I32_DIV_U), // i64.div_u → i32.div_u
+    (0x81, OP_I32_REM_S), // i64.rem_s → i32.rem_s
+    (0x82, OP_I32_REM_U), // i64.rem_u → i32.rem_u
+    (0x83, OP_I32_AND),   // i64.and → i32.and
+    (0x84, OP_I32_OR),    // i64.or → i32.or
+    (0x85, OP_I32_XOR),   // i64.xor → i32.xor
+    (0x86, OP_I32_SHL),   // i64.shl → i32.shl
+    (0x87, OP_I32_SHR_S), // i64.shr_s → i32.shr_s
+    (0x88, OP_I32_SHR_U), // i64.shr_u → i32.shr_u
+    (0x89, OP_I32_ROTL),  // i64.rotl → i32.rotl
+    (0x8A, OP_I32_ROTR),  // i64.rotr → i32.rotr
+];
+
+/// i64 opcodes that are identity operations (no-op) when lowering to i32.
+pub const I64_IDENTITY_OPS: &[u8] = &[
+    0xA7, // i32.wrap_i64 → no-op (value is already i32)
+    0xAC, // i64.extend_i32_s → no-op (value is already i32)
+    0xAD, // i64.extend_i32_u → no-op (value is already i32)
+];
+
+/// i64 memory opcodes that map to i32 equivalents (alignment+offset preserved).
+pub const I64_MEM_OPS: &[(u8, u8)] = &[
+    (0x29, 0x28), // i64.load → i32.load
+    (0x37, 0x36), // i64.store → i32.store
+    (0x30, 0x2C), // i64.load8_s → i32.load8_s
+    (0x31, 0x2D), // i64.load8_u → i32.load8_u
+    (0x32, 0x2E), // i64.load16_s → i32.load16_s
+    (0x33, 0x2F), // i64.load16_u → i32.load16_u
+    (0x3C, 0x3A), // i64.store8 → i32.store8
+    (0x3D, 0x3B), // i64.store16 → i32.store16
+    (0x34, 0x28), // i64.load32_s → i32.load
+    (0x35, 0x28), // i64.load32_u → i32.load
+    (0x3E, 0x36), // i64.store32 → i32.store
+];
+
+/// i64.const opcode.
+const OP_I64_CONST_LOCAL: u8 = 0x42;
+
 // ===================================================================== //
 //  Bitwise operation kind                                                //
 // ===================================================================== //
@@ -167,9 +228,10 @@ fn find_const_locals(instrs: &[WasmInstr]) -> HashMap<u32, i64> {
                     .entry(local_idx)
                     .and_modify(|e| {
                         if let Some(prev) = e
-                            && *prev != val {
-                                *e = None;
-                            }
+                            && *prev != val
+                        {
+                            *e = None;
+                        }
                     })
                     .or_insert(Some(val));
             } else {
@@ -1531,10 +1593,12 @@ pub fn lower_hard_ops(func: &FuncBody, num_params: u32) -> FuncBody {
         } else if ins.opcode == OP_LOCAL_GET {
             let local_idx = ins.immediates[0] as u32;
             if let Some(&cv) = const_locals.get(&local_idx)
-                && i + 1 < instrs.len() && opcode_in(instrs[i + 1].opcode, LOWERABLE_BINOPS) {
-                    const_val = Some(cv & 0xFFFFFFFF);
-                    binop_idx = Some(i + 1);
-                }
+                && i + 1 < instrs.len()
+                && opcode_in(instrs[i + 1].opcode, LOWERABLE_BINOPS)
+            {
+                const_val = Some(cv & 0xFFFFFFFF);
+                binop_idx = Some(i + 1);
+            }
         }
 
         if let (Some(cv), Some(bi)) = (const_val, binop_idx) {
@@ -1616,6 +1680,108 @@ pub fn lower_hard_ops(func: &FuncBody, num_params: u32) -> FuncBody {
     FuncBody {
         locals: new_locals,
         num_locals: new_num_locals,
+        instructions: new_instrs,
+    }
+}
+
+// ===================================================================== //
+//  i64 → i32 lowering pass                                              //
+// ===================================================================== //
+
+/// Lower i64 operations to i32 equivalents.
+///
+/// Rust's WASM backend frequently emits i64 instructions even when all values
+/// fit in 32 bits (e.g., `i32 * i32` may be promoted to i64 for overflow safety).
+/// This pass converts those i64 ops to their i32 counterparts so the downstream
+/// `lower_hard_ops` pass and `compile_function` can handle them.
+///
+/// # What gets lowered
+///
+/// - `i64.const V` → `i32.const (V & 0xFFFFFFFF)` (truncate to low 32 bits)
+/// - `i64.add/sub/mul/div/rem/and/or/xor/shl/shr/rotl/rotr` → i32 equivalents
+/// - `i64.eqz/eq/ne/lt/gt/le/ge` → i32 equivalents
+/// - `i32.wrap_i64` → removed (identity)
+/// - `i64.extend_i32_s/u` → removed (identity)
+/// - `i64.load` → `i32.load` (alignment adjusted)
+/// - `i64.store` → `i32.store` (alignment adjusted)
+///
+/// # Safety
+///
+/// This is only valid for programs where all i64 values actually fit in 32 bits.
+/// For programs with genuine 64-bit arithmetic, this will produce incorrect results.
+/// Since the transformer-vm operates on 32-bit WASM MVP, genuine i64 programs are
+/// unsupported regardless.
+pub fn lower_i64_ops(func: &FuncBody) -> FuncBody {
+    let instrs = &func.instructions;
+
+    // Quick check: any i64 ops present?
+    let has_i64 = instrs.iter().any(|ins| {
+        ins.opcode == OP_I64_CONST_LOCAL
+            || I64_IDENTITY_OPS.contains(&ins.opcode)
+            || I64_ARITH_OPS
+                .iter()
+                .any(|(i64_op, _)| ins.opcode == *i64_op)
+            || I64_CMP_OPS.iter().any(|(i64_op, _)| ins.opcode == *i64_op)
+            || I64_MEM_OPS.iter().any(|(i64_op, _)| ins.opcode == *i64_op)
+    });
+
+    if !has_i64 {
+        return func.clone();
+    }
+
+    let mut new_instrs = Vec::with_capacity(instrs.len());
+    let mut lowered_count: usize = 0;
+
+    for ins in instrs {
+        // i64.const → i32.const (truncate)
+        if ins.opcode == OP_I64_CONST_LOCAL {
+            let val = ins.immediates[0] & 0xFFFFFFFF;
+            new_instrs.push(instr(OP_I32_CONST, val));
+            lowered_count += 1;
+            continue;
+        }
+
+        // Identity ops (wrap_i64, extend_i32_s/u) → skip
+        if I64_IDENTITY_OPS.contains(&ins.opcode) {
+            lowered_count += 1;
+            continue;
+        }
+
+        // i64 arithmetic → i32 equivalent
+        if let Some((_, i32_op)) = I64_ARITH_OPS
+            .iter()
+            .find(|(i64_op, _)| ins.opcode == *i64_op)
+        {
+            new_instrs.push(ni(*i32_op));
+            lowered_count += 1;
+            continue;
+        }
+
+        // i64 comparison → i32 equivalent
+        if let Some((_, i32_op)) = I64_CMP_OPS.iter().find(|(i64_op, _)| ins.opcode == *i64_op) {
+            new_instrs.push(ni(*i32_op));
+            lowered_count += 1;
+            continue;
+        }
+
+        // i64 memory ops → i32 equivalents (preserve alignment+offset immediates)
+        if let Some((_, i32_op)) = I64_MEM_OPS.iter().find(|(i64_op, _)| ins.opcode == *i64_op) {
+            new_instrs.push(WasmInstr::with_imms(*i32_op, ins.immediates.clone()));
+            lowered_count += 1;
+            continue;
+        }
+
+        // Pass through everything else unchanged
+        new_instrs.push(ins.clone());
+    }
+
+    if lowered_count > 0 {
+        log::debug!("  Lowered {lowered_count} i64 ops to i32");
+    }
+
+    FuncBody {
+        locals: func.locals.clone(),
+        num_locals: func.num_locals,
         instructions: new_instrs,
     }
 }
@@ -1860,5 +2026,167 @@ mod tests {
         );
         let bad = check_basic_only(&lowered);
         assert!(bad.is_empty(), "unexpected hard ops: {bad:?}");
+    }
+
+    // ── lower_i64_ops tests ─────────────────────────────────
+
+    #[test]
+    fn test_lower_i64_const() {
+        // i64.const 42 → i32.const 42
+        let func = make_func(vec![
+            instr(0x42, 42i64), // i64.const
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert!(
+            lowered.instructions.iter().all(|i| i.opcode != 0x42),
+            "should not contain i64.const"
+        );
+        assert!(
+            lowered
+                .instructions
+                .iter()
+                .any(|i| i.opcode == OP_I32_CONST && i.immediates[0] == 42),
+            "should contain i32.const 42"
+        );
+    }
+
+    #[test]
+    fn test_lower_i64_const_truncates() {
+        // i64.const with value > 32 bits → truncated to low 32 bits
+        let func = make_func(vec![
+            instr(0x42, 0x1_0000_0042i64), // i64.const (high bit set)
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        let const_val = lowered
+            .instructions
+            .iter()
+            .find(|i| i.opcode == OP_I32_CONST)
+            .map(|i| i.immediates[0])
+            .unwrap();
+        assert_eq!(const_val, 0x42, "should truncate to low 32 bits");
+    }
+
+    #[test]
+    fn test_lower_i64_add() {
+        // i64.add → i32.add
+        let func = make_func(vec![
+            instr(OP_LOCAL_GET, 0),
+            instr(OP_LOCAL_GET, 1),
+            ni(0x7C), // i64.add
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert!(
+            lowered.instructions.iter().all(|i| i.opcode != 0x7C),
+            "should not contain i64.add"
+        );
+        assert!(
+            lowered.instructions.iter().any(|i| i.opcode == OP_I32_ADD),
+            "should contain i32.add"
+        );
+    }
+
+    #[test]
+    fn test_lower_i64_mul_to_i32_mul() {
+        // i64.mul → i32.mul (further lowered by lower_hard_ops)
+        let func = make_func(vec![
+            instr(OP_LOCAL_GET, 0),
+            instr(OP_LOCAL_GET, 1),
+            ni(0x7E), // i64.mul
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert!(
+            lowered.instructions.iter().all(|i| i.opcode != 0x7E),
+            "should not contain i64.mul"
+        );
+        assert!(
+            lowered.instructions.iter().any(|i| i.opcode == OP_I32_MUL),
+            "should contain i32.mul"
+        );
+    }
+
+    #[test]
+    fn test_lower_i64_identity_ops() {
+        // i32.wrap_i64 (0xA7), i64.extend_i32_s (0xAC), i64.extend_i32_u (0xAD) → removed
+        for &op in &[0xA7, 0xAC, 0xAD] {
+            let func = make_func(vec![instr(OP_LOCAL_GET, 0), ni(op), ni(OP_END)]);
+            let lowered = lower_i64_ops(&func);
+            assert!(
+                lowered.instructions.iter().all(|i| i.opcode != op),
+                "opcode 0x{op:02x} should be removed"
+            );
+            // Should have local.get + end (2 instructions, identity op removed)
+            assert_eq!(
+                lowered.instructions.len(),
+                2,
+                "opcode 0x{op:02x}: should have 2 instructions (local.get + end)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_lower_i64_comparison_ops() {
+        // i64.eq (0x51) → i32.eq
+        let func = make_func(vec![
+            instr(OP_LOCAL_GET, 0),
+            instr(OP_LOCAL_GET, 1),
+            ni(0x51), // i64.eq
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert!(
+            lowered.instructions.iter().all(|i| i.opcode != 0x51),
+            "should not contain i64.eq"
+        );
+        assert!(
+            lowered.instructions.iter().any(|i| i.opcode == OP_I32_EQ),
+            "should contain i32.eq"
+        );
+    }
+
+    #[test]
+    fn test_lower_i64_store() {
+        // i64.store (0x37) → i32.store (0x36), preserving alignment+offset immediates
+        let func = make_func(vec![
+            instr(OP_LOCAL_GET, 0),
+            instr(OP_LOCAL_GET, 1),
+            WasmInstr::with_imms(0x37, vec![2, 0]), // i64.store align=2 offset=0
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert!(
+            lowered.instructions.iter().all(|i| i.opcode != 0x37),
+            "should not contain i64.store"
+        );
+        let store = lowered
+            .instructions
+            .iter()
+            .find(|i| i.opcode == OP_I32_STORE)
+            .expect("should contain i32.store");
+        assert_eq!(
+            store.immediates,
+            vec![2, 0],
+            "alignment+offset should be preserved"
+        );
+    }
+
+    #[test]
+    fn test_lower_i64_noop_when_no_i64() {
+        // Pure i32 code should be unchanged
+        let func = make_func(vec![
+            instr(OP_LOCAL_GET, 0),
+            instr(OP_LOCAL_GET, 1),
+            ni(OP_I32_ADD),
+            ni(OP_END),
+        ]);
+        let lowered = lower_i64_ops(&func);
+        assert_eq!(
+            lowered.instructions.len(),
+            func.instructions.len(),
+            "should be unchanged"
+        );
     }
 }

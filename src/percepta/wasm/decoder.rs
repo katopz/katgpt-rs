@@ -19,15 +19,23 @@ pub fn read_unsigned_leb128(data: &[u8], pos: usize) -> Result<(u64, usize), Dec
     let mut result: u64 = 0;
     let mut shift: u32 = 0;
     let mut p = pos;
+    let max_bytes: u32 = 10; // ceil(64/7) = 10 for i64
+    let mut count: u32 = 0;
     loop {
         if p >= data.len() {
             return Err(DecodeError::UnexpectedEof("unsigned leb128"));
         }
         let b = data[p];
         p += 1;
-        result |= u64::from(b & 0x7F) << shift;
+        count += 1;
+        if shift < 64 {
+            result |= u64::from(b & 0x7F) << shift;
+        }
         shift += 7;
         if b & 0x80 == 0 {
+            break;
+        }
+        if count >= max_bytes {
             break;
         }
     }
@@ -36,11 +44,14 @@ pub fn read_unsigned_leb128(data: &[u8], pos: usize) -> Result<(u64, usize), Dec
 
 /// Decode a signed LEB128 integer. Returns `(value, new_pos)`.
 /// `bits` is the target bit width (typically 32 or 64).
+#[allow(unused_assignments)]
 pub fn read_signed_leb128(data: &[u8], pos: usize, bits: u32) -> Result<(i64, usize), DecodeError> {
     let mut result: i64 = 0;
     let mut shift: u32 = 0;
-    let mut last_byte: u8;
+    let mut last_byte: u8 = 0;
     let mut p = pos;
+    let max_bytes: u32 = bits.div_ceil(7); // ceil(bits/7): 5 for i32, 10 for i64
+    let mut count: u32 = 0;
     loop {
         if p >= data.len() {
             return Err(DecodeError::UnexpectedEof("signed leb128"));
@@ -48,21 +59,27 @@ pub fn read_signed_leb128(data: &[u8], pos: usize, bits: u32) -> Result<(i64, us
         let b = data[p];
         p += 1;
         last_byte = b;
-        result |= i64::from(b & 0x7F) << shift;
+        count += 1;
+        if shift < 64 {
+            result |= i64::from(b & 0x7F) << shift;
+        }
         shift += 7;
         if b & 0x80 == 0 {
             break;
         }
+        if count >= max_bytes {
+            break;
+        }
     }
     // Sign extend
-    if shift < bits && (last_byte & 0x40) != 0 {
+    if shift < 64 && shift < bits && (last_byte & 0x40) != 0 {
         result |= -(1i64 << shift);
     }
     // Truncate to the specified bit width (two's complement)
-    let mask = (1i64 << bits) - 1;
-    result &= mask;
-    // Re-sign-extend from the truncated width so i64 carries the correct sign
     if bits < 64 {
+        let mask = (1i64 << bits) - 1;
+        result &= mask;
+        // Re-sign-extend from the truncated width so i64 carries the correct sign
         let sign_bit = 1i64 << (bits - 1);
         if (result & sign_bit) != 0 {
             result |= !mask;

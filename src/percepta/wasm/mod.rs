@@ -142,6 +142,7 @@ pub use decoder::{
 
 pub use lower::{
     BASIC_OPS, LOWERABLE_BINOPS, LOWERABLE_UNARY, SCRATCH_ADDR, check_basic_only, lower_hard_ops,
+    lower_i64_ops,
 };
 
 // ── Re-exports from interpreter ──────────────────────────────

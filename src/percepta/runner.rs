@@ -178,6 +178,49 @@ impl Runner {
         Ok((compiled.prefix.clone(), compiled.input_section.clone()))
     }
 
+    /// Compile Rust source to WASM token prefix.
+    ///
+    /// Uses `rustc --target wasm32-unknown-unknown` instead of clang.
+    /// The Rust source must be `#![no_std]` `#![no_main]` with:
+    /// - `extern "C" { fn output_byte(ch: i32); }` (imported from env)
+    /// - `#[no_mangle] pub unsafe extern "C" fn compute(input: *const u8)` (exported)
+    /// - `#[panic_handler]`
+    ///
+    /// Use [`compile_rust_template`](Self::compile_rust_template) for auto-generated boilerplate.
+    ///
+    /// # Arguments
+    /// * `rust_source` — Complete Rust source code
+    pub fn compile_rust(rust_source: &str) -> Result<CompiledProgram, RunnerError> {
+        compile::compile_rust_program(rust_source, "").map_err(Into::into)
+    }
+
+    /// Compile Rust source with input data to WASM token prefix.
+    ///
+    /// Like [`compile_rust`](Self::compile_rust), but also formats the input section.
+    ///
+    /// # Arguments
+    /// * `rust_source` — Complete Rust source code
+    /// * `input_str` — Input string to pass to the program
+    pub fn compile_rust_with_input(
+        rust_source: &str,
+        input_str: &str,
+    ) -> Result<CompiledProgram, RunnerError> {
+        compile::compile_rust_program(rust_source, input_str).map_err(Into::into)
+    }
+
+    /// Compile Rust from a template body string.
+    ///
+    /// Generates the `#![no_std]` / `#![no_main]` / panic handler boilerplate
+    /// and compiles the result. The `body` has access to `output_byte(ch: i32)`
+    /// and `input: *const u8`.
+    ///
+    /// # Arguments
+    /// * `body` — Function body for `compute`. Example: `"output_byte(b'H'); output_byte(b'i');"`
+    pub fn compile_rust_template(body: &str) -> Result<CompiledProgram, RunnerError> {
+        let source = compile::rust_template(body);
+        Self::compile_rust(&source)
+    }
+
     // ── Build Pipeline ─────────────────────────────────────────
 
     /// Build transformer weights from a computation graph.

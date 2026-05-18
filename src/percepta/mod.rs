@@ -171,6 +171,7 @@ pub use runner::{BuildResult, Runner, RunnerError};
 #[cfg(feature = "percepta_compile")]
 pub use compile::{
     CompileError, CompiledProgram, RUNTIME_H, compile_c_to_wasm, compile_program,
-    compile_wasm_to_prefix, find_clang, format_input_section, format_prefix, format_spec_input,
-    int_to_bytes, write_runtime_h,
+    compile_rust_program, compile_rust_to_wasm, compile_wasm_to_prefix, find_clang, find_rustc,
+    format_input_section, format_prefix, format_spec_input, int_to_bytes, rust_template,
+    write_runtime_h,
 };
