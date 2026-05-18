@@ -1,6 +1,6 @@
 # Plan 064: Percepta Full RIIR — transformer-vm in Rust
 
-> **Status**: ✅ Core complete — TG-A through TG-J + TG-K3/K4 + TG-L done. K1/K2/K6 deferred (examples/blog). End-to-end tasks (F6, H5, H6, J8) blocked on Rust→WASM pipeline wiring. Comparison tasks (G5, I4, J9) deferred to Percepta Docker environment.
+> **Status**: ✅ Core complete — TG-A through TG-J + TG-K2/K3/K4 + TG-L done. K1/K6 deferred (C examples/blog). End-to-end tasks (F6, H5, H6, J8) blocked on Rust→WASM pipeline wiring. Comparison tasks (G5, I4, J9) deferred to Percepta Docker environment.
 >
 > **WASM Strategy**: Rust-first — write Rust programs → `cargo build --target wasm32-unknown-unknown` → feed into percepta pipeline. No clang needed. C→WASM comparison deferred: copy `.wasm` binaries out of Percepta's Docker environment for 1:1 reference matching later.
 
@@ -208,7 +208,12 @@ src/percepta/
 **Depends on:** TG-J. **Source:** `examples/` directory
 
 - [ ] ⏭️ **K1:** Port C examples (keep as-is — they're C source, language-agnostic) — *deferred: language-agnostic, not RIIR scope*
-- [ ] ⏭️ **K2:** Add Rust-specific examples and benchmarks — *deferred: nice-to-have*
+- [x] **K2:** Add Rust-specific examples and benchmarks ✅ 5 examples in `riir-ai/crates/riir-examples/examples/`:
+  - `percepta_01_graph_eval` — Graph evaluator (exact arithmetic, no MILP needed)
+  - `percepta_02_gates` — Gate primitives (ReGLU, stepglu, multiply, persist)
+  - `percepta_03_cht_attention` — CHT hull KV cache (6645× speedup at N=100K)
+  - `percepta_04_wasm_interp` — Full WASM interpreter graph anatomy (216 dims, 36 opcodes)
+  - `percepta_05_pipeline` — Full pipeline: graph → MILP → weights → transformer (37.9K tok/s)
 - [x] **K3:** Write module documentation for each `src/percepta/` file ✅ all 24 files already had adequate docs
 - [x] **K4:** Update README with full Percepta section (remove "known limitations" as they're fixed) ✅ updated status table, feature flags, module structure, project structure
 - [x] **K5:** Add feature flag hierarchy to Cargo.toml (`percepta` → `percepta_gates` → `percepta_graph` → `percepta_wasm` → `percepta_compile`) ✅ done
