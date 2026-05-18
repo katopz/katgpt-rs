@@ -39,7 +39,7 @@ The core building block — a reusable sigmoid gate function.
 - Properties: smooth, differentiable, bounded ∈ (0,1), monotonic
 - β=5.0 is empirically optimal (β=0 = no gate, β→∞ = binary gate)
 
-- [ ] **T2: Implement `sdar_gate` function** — `src/pruners/sdar_gate.rs`
+- [x] **T2: Implement `sdar_gate` function** — `src/pruners/sdar_gate.rs`
   ```rust
   //! SDAR-inspired sigmoid gating for modelless distillation signals.
   //!
@@ -99,13 +99,13 @@ Apply SDAR gate to bandit arm update magnitude.
 
 **Motivation:** SDAR gates distillation loss by teacher-student gap. Analogously, we gate bandit Q-value updates by reward quality gap. When reward signal is noisy (negative gap), attenuate the update. When reward signal is trustworthy (positive gap), pass it through.
 
-- [ ] **T3: Add `SdarBanditPruner` wrapper** — `src/pruners/bandit.rs`
+- [x] **T3: Add `SdarBanditPruner` wrapper** — `src/pruners/bandit.rs`
   - Wraps existing `BanditPruner<P>` with sigmoid-gated reward updates
   - `update(arm, reward)`: compute `gap = reward - q_values[arm]`, gate = `σ(β·gap)`, update with `gated_reward = reward * gate`
   - Property: positive reward surprise → full update, negative reward surprise → attenuated update
   - This is the modelless analog of SDAR's token-level gating
 
-- [ ] **T4: Unit tests for `SdarBanditPruner`** — `src/pruners/bandit.rs` (test module)
+- [x] **T4: Unit tests for `SdarBanditPruner`** — `src/pruners/bandit.rs` (test module)
   - Test: gate opens for positive gap (reward > Q-value)
   - Test: gate closes for negative gap (reward < Q-value)
   - Test: convergence still reaches optimal arm (no regression vs ungated)
@@ -117,14 +117,14 @@ Apply SDAR gate to absorb-compress promotion decisions.
 
 **Motivation:** Our existing `AbsorbCompress` uses a benefit-ratio threshold (hard binary gate). SDAR's sigmoid provides soft gating — partial credit for borderline cases.
 
-- [ ] **T5: Add `SdarGatedAbsorbCompress` variant** — `src/pruners/g_zero/absorb.rs` (or new file)
+- [x] **T5: Add `SdarGatedAbsorbCompress` variant** — `src/pruners/g_zero/absorb.rs` (or new file)
   - Replace hard benefit-ratio threshold with sigmoid gate
   - `gap = benefit_ratio - 1.0` (positive = beneficial, negative = harmful)
   - `gate = σ(β · gap)`, promotion probability ∝ gate
   - Property: borderline promotions get partial probability instead of all-or-nothing
   - This is the modelless analog of SDAR's smooth modulation on borderline tokens
 
-- [ ] **T6: Unit tests for `SdarGatedAbsorbCompress`**
+- [x] **T6: Unit tests for `SdarGatedAbsorbCompress`**
   - Test: high benefit ratio → gate ≈ 1.0 (promote)
   - Test: zero benefit ratio → gate ≈ 0.5 (neutral)
   - Test: negative benefit ratio → gate ≈ 0.0 (block)
@@ -137,7 +137,7 @@ Apply SDAR gate to absorb-compress promotion decisions.
   - Metrics: win rate, regret curve, DDTree accept rate
   - Record results in benchmark file
 
-- [ ] **T8: Feature gate** — `sdar_gate` feature in `Cargo.toml`
+- [x] **T8: Feature gate** — `sdar_gate` feature in `Cargo.toml`
   ```toml
   [features]
   sdar_gate = []  # off by default, opt-in

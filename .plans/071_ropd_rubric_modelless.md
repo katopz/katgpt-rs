@@ -41,7 +41,7 @@ The foundation: structured rubric representation that replaces scalar δ.
 
 **Our adaptation:** Template-based criteria (no LLM), WASM-verifiable (no judge API).
 
-- [ ] **T2: Implement `RubricTemplate` enum** — `src/pruners/ropd_rubric/template.rs`
+- [x] **T2: Implement `RubricTemplate` enum** — `src/pruners/ropd_rubric/template.rs`
   ```rust
   /// Fixed rubric criteria per domain — no LLM generation needed.
   /// Each variant maps to a deterministic WASM-checkable criterion.
@@ -72,7 +72,7 @@ The foundation: structured rubric representation that replaces scalar δ.
   - `RubricTemplate::fft_tactics()` — role_fulfillment + team_coordination + survival (3 criteria, multi-axis)
   - `RubricTemplate::generic()` — task + structure + constraints (3 criteria, baseline)
 
-- [ ] **T3: Implement `RubricVector`** — `src/pruners/ropd_rubric/types.rs`
+- [x] **T3: Implement `RubricVector`** — `src/pruners/ropd_rubric/types.rs`
   ```rust
   /// Structured multi-criteria score — ROPD's reward without LLM.
   /// Replaces scalar HintDelta with per-criterion pass/fail vector.
@@ -107,7 +107,7 @@ The foundation: structured rubric representation that replaces scalar δ.
 
   **Design principle (SRP):** `RubricVector` is pure data — no domain logic. Domain-specific scoring stays in the template/validator.
 
-- [ ] **T4: Implement `RubricScorer` trait** — `src/pruners/ropd_rubric/scorer.rs`
+- [x] **T4: Implement `RubricScorer` trait** — `src/pruners/ropd_rubric/scorer.rs`
   ```rust
   /// Scores a response against a rubric template — no LLM.
   /// Implementations use WASM validators, pattern matching, or game-state queries.
@@ -154,7 +154,7 @@ Replace `DeltaGatedAbsorbCompress`'s scalar δ gate with rubric vector gate.
 **From our HL:** Absorb-compress promotes observed patterns to hard constraints.
 **Synthesis:** Only absorb when rubric reveals a gap in a high-weight criterion.
 
-- [ ] **T5: Implement `RubricGatedAbsorbCompress<P>`** — `src/pruners/ropd_rubric/rubric_absorb.rs`
+- [x] **T5: Implement `RubricGatedAbsorbCompress<P>`** — `src/pruners/ropd_rubric/rubric_absorb.rs`
   ```rust
   /// Absorb-compress gated by rubric vector instead of scalar δ.
   ///
@@ -186,7 +186,7 @@ Replace `DeltaGatedAbsorbCompress`'s scalar δ gate with rubric vector gate.
 
   Implements `ScreeningPruner` (delegates to inner) + `AbsorbCompress` (gated by rubric gap).
 
-- [ ] **T6: Unit tests for RubricGatedAbsorbCompress**
+- [x] **T6: Unit tests for RubricGatedAbsorbCompress**
   - Test: absorb triggers when high-weight criterion has gap
   - Test: absorb skipped when only low-weight criteria have gaps
   - Test: gap_criteria returns sorted by weight × gap magnitude
@@ -203,7 +203,7 @@ Replace `DeltaBanditPruner`'s scalar δ reward with rubric-weighted score.
 **From ROPD:** reward = `(student_score - teacher_score) / reward_scale`
 **Our adaptation:** reward = `(student.weighted_score() - reference.weighted_score()) / max_score`
 
-- [ ] **T7: Implement `RubricBanditPruner<P>`** — `src/pruners/ropd_rubric/rubric_bandit.rs`
+- [x] **T7: Implement `RubricBanditPruner<P>`** — `src/pruners/ropd_rubric/rubric_bandit.rs`
   ```rust
   /// Bandit pruner using rubric-weighted scores as reward.
   ///
@@ -228,7 +228,7 @@ Replace `DeltaBanditPruner`'s scalar δ reward with rubric-weighted score.
 
   `observe_rubric(arm, student_rubric, reference_rubric)` → compute reward → `inner.update(arm, reward)`.
 
-- [ ] **T8: Unit tests for RubricBanditPruner**
+- [x] **T8: Unit tests for RubricBanditPruner**
   - Test: reward = positive when student outperforms reference
   - Test: reward = negative when student underperforms
   - Test: reward = 0 when scores match
@@ -260,12 +260,12 @@ Wire rubric components into existing game arenas for real-world validation.
 
 ### Phase 5: Feature Gate + Docs
 
-- [ ] **T12: Feature gate** — `ropd_rubric = ["bandit"]` in `Cargo.toml`
+- [x] **T12: Feature gate** — `ropd_rubric = ["bandit"]` in `Cargo.toml`
   - All new code behind `#[cfg(feature = "ropd_rubric")]`
   - Off by default (same as `delta_mem`)
   - Feature implies `bandit` (reuses `AbsorbCompressLayer`, `BanditPruner`)
 
-- [ ] **T13: Update module structure** — `src/pruners/ropd_rubric/mod.rs`
+- [x] **T13: Update module structure** — `src/pruners/ropd_rubric/mod.rs`
   ```
   src/pruners/ropd_rubric/
       mod.rs              — re-exports
