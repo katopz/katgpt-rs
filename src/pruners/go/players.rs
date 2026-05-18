@@ -491,6 +491,34 @@ impl GoMoveCategory {
     pub const fn count() -> usize {
         NUM_CATEGORIES
     }
+
+    /// Short display name for TUI.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::CornerStar => "Corner",
+            Self::SideApproach => "Side",
+            Self::CenterControl => "Center",
+            Self::Capture => "Capture",
+            Self::Defend => "Defend",
+            Self::Extend => "Extend",
+            Self::Influence => "Influence",
+            Self::Pass => "Pass",
+        }
+    }
+
+    /// All categories in enum order.
+    pub const fn all() -> &'static [GoMoveCategory; NUM_CATEGORIES] {
+        &[
+            Self::CornerStar,
+            Self::SideApproach,
+            Self::CenterControl,
+            Self::Capture,
+            Self::Defend,
+            Self::Extend,
+            Self::Influence,
+            Self::Pass,
+        ]
+    }
 }
 
 /// Bandit Q-learning player over 8 move categories.
@@ -532,6 +560,16 @@ impl GoHLPlayer {
     /// Current bandit Q-values (for inspection).
     pub fn q_values(&self) -> &[f32] {
         self.bandit.q_values()
+    }
+
+    /// Visit counts per category (for inspection).
+    pub fn visits(&self) -> &[u32] {
+        self.bandit.visits()
+    }
+
+    /// Current exploration rate ε (for inspection).
+    pub fn epsilon(&self) -> f32 {
+        self.epsilon
     }
 }
 
@@ -621,6 +659,21 @@ impl GoTemplate {
     pub const fn count() -> usize {
         NUM_TEMPLATES
     }
+
+    /// Short display name for TUI.
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::CornerStar => "Corner★",
+            Self::Capture => "Capture",
+            Self::Defend => "Defend",
+            Self::Tenuki => "Tenuki",
+        }
+    }
+
+    /// All templates in enum order.
+    pub const fn all() -> &'static [GoTemplate; NUM_TEMPLATES] {
+        &[Self::CornerStar, Self::Capture, Self::Defend, Self::Tenuki]
+    }
 }
 
 /// Local UCB1 stats for template selection (re-implemented, no g_zero dependency).
@@ -700,6 +753,26 @@ impl GoGZeroPlayer {
             self.stats.update(tmpl as usize, reward);
         }
         self.last_template = None;
+    }
+
+    /// Current Q-values for each template (for inspection).
+    pub fn q_values(&self) -> &[f32] {
+        &self.stats.q_values
+    }
+
+    /// Visit counts for each template (for inspection).
+    pub fn template_visits(&self) -> &[u32] {
+        &self.stats.visits
+    }
+
+    /// Total number of template pulls across all games.
+    pub fn total_pulls(&self) -> u32 {
+        self.stats.total_pulls
+    }
+
+    /// Best template by UCB1 score.
+    pub fn best_template(&self) -> GoTemplate {
+        self.select_template()
     }
 
     fn select_template(&self) -> GoTemplate {
