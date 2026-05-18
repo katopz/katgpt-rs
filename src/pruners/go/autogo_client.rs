@@ -101,14 +101,6 @@ struct MoveRequest {
     pass_move: bool,
 }
 
-/// New game request matching AutoGo's expected parameters.
-#[derive(Serialize)]
-struct NewGameRequest {
-    size: usize,
-    color: String,
-    agent: String,
-}
-
 impl AutoGoClient {
     /// Create a new client pointing at the AutoGo server.
     ///
@@ -148,22 +140,14 @@ impl AutoGoClient {
     ///
     /// If we play White, AutoGo plays Black's first move immediately.
     pub fn new_game(&self, size: usize, color: &str, agent: &str) -> Result<AutoGoGameState> {
-        let url = format!("{}/api/game/new", self.base_url);
-        let body = NewGameRequest {
-            size,
-            color: color.to_lowercase(),
-            agent: agent.to_lowercase(),
-        };
-        log::debug!(
-            "POST {url} — size={size}, color={}, agent={agent}",
-            body.color
+        let color = color.to_lowercase();
+        let agent = agent.to_lowercase();
+        let url = format!(
+            "{}/api/new_game?size={size}&color={color}&agent={agent}",
+            self.base_url
         );
-        let response = self
-            .client
-            .post(&url)
-            .json(&body)
-            .send()
-            .map_err(AutoGoError::Http)?;
+        log::debug!("POST {url}");
+        let response = self.client.post(&url).send().map_err(AutoGoError::Http)?;
         Self::parse_response(response)
     }
 

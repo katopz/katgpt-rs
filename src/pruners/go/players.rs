@@ -103,21 +103,32 @@ fn captures_for(me: GoCell, before: &GoState, after: &GoState) -> u32 {
 }
 
 /// True if (row, col) is on the first board line (edge).
+#[allow(dead_code)]
 #[inline]
 fn is_first_line(row: usize, col: usize, size: usize) -> bool {
     row == 0 || row == size - 1 || col == 0 || col == size - 1
 }
 
-/// Center proximity bonus: 1.0 at center, 0.0 at corners.
+/// Minimum distance from (row, col) to any board edge.
+/// Returns 0 for first line, 1 for second line, 2 for third line (territory), etc.
 #[inline]
-fn center_bonus(row: usize, col: usize, size: usize) -> f32 {
-    let center = (size - 1) as f32 / 2.0;
-    let max_dist = center;
-    if max_dist == 0.0 {
-        return 1.0;
+fn line_from_edge(row: usize, col: usize, size: usize) -> usize {
+    row.min(col).min(size - 1 - row).min(size - 1 - col)
+}
+
+/// Corner and side bonus: rewards 3rd/4th line play near corners and sides.
+///
+/// Go fundamentals: "Corner and edge plays are cheap — the board itself serves as a wall.
+/// 3rd line = territory, 4th line = influence."
+fn corner_side_bonus(row: usize, col: usize, size: usize) -> f32 {
+    let line = line_from_edge(row, col, size);
+    match line {
+        0 => -2.0, // 1st line: bad (too close to edge, no territory potential)
+        1 => 0.0,  // 2nd line: neutral
+        2 => 3.0,  // 3rd line: territory line (secure territory)
+        3 => 2.0,  // 4th line: influence line (outward power)
+        _ => 0.5,  // 5th+: center is lower priority
     }
-    let dist = ((row as f32 - center).abs() + (col as f32 - center).abs()) / 2.0;
-    1.0 - dist / max_dist
 }
 
 /// True if (row, col) is a corner star point for the given board size.
@@ -177,6 +188,57 @@ fn is_defend_move(state: &GoState, idx: usize) -> bool {
     false
 }
 
+/// Connection bonus: rewards extending own groups and forming bamboo joints.
+///
+/// "Stones are strong in groups. Bamboo joints are uncuttable;
+///  knight's moves trade solidity for speed."
+fn connect_bonus(state: &GoState, row: usize, col: usize) -> f32 {
+    let me = state.to_play;
+    let opp = me.opponent();
+    let size = state.size;
+    let idx = state.flat_index(row, col);
+    let mut bonus = 0.0f32;
+    let mut adjacent_own = 0usize;
+    let mut adjacent_opp = 0usize;
+
+    // Adjacent (4-connected) — bamboo joint / direct connection
+    for n in board_neighbors(idx, size) {
+        match state.board[n] {
+            c if c == me => adjacent_own += 1,
+            c if c == opp => adjacent_opp += 1,
+            _ => {}
+        }
+    }
+    if adjacent_own > 0 {
+        bonus += 1.0 * adjacent_own as f32; // Extending existing group
+    }
+
+    // Diagonal — bamboo joint potential
+    let r = row as isize;
+    let c = col as isize;
+    let diags: [(isize, isize); 4] = [(-1, -1), (-1, 1), (1, -1), (1, 1)];
+    for (dr, dc) in diags {
+        let nr = r + dr;
+        let nc = c + dc;
+        if nr < 0 || nr >= size as isize || nc < 0 || nc >= size as isize {
+            continue;
+        }
+        let ni = nr as usize * size + nc as usize;
+        if state.board[ni] == me {
+            // Check if the two shared adjacent points have at least one empty
+            // (this means the diagonal pair forms a potential bamboo joint)
+            bonus += 0.5;
+        }
+    }
+
+    // Penalty for isolated stone in enemy territory
+    if adjacent_own == 0 && adjacent_opp >= 2 {
+        bonus -= 1.0;
+    }
+
+    bonus
+}
+
 // ── Scoring ────────────────────────────────────────────────────
 
 /// Greedy move score: captures, liberties, atari threats, center, edge, self-atari.
@@ -207,13 +269,11 @@ fn greedy_score(state: &GoState, row: usize, col: usize) -> f32 {
         }
     }
 
-    // 4. Center bonus
-    score += center_bonus(row, col, size) * 2.0;
+    // 4. Corner/side positional bonus (3rd line=territory, 4th line=influence)
+    score += corner_side_bonus(row, col, size);
 
-    // 5. Edge penalty (unless capturing)
-    if captures == 0 && is_first_line(row, col, size) {
-        score -= 3.0;
-    }
+    // 5. Connection bonus (extends group, bamboo joint potential)
+    score += connect_bonus(state, row, col);
 
     // 6. Self-atari penalty
     if libs.len() == 1 && captures == 0 {
@@ -1031,12 +1091,16 @@ mod tests {
     }
 
     #[test]
-    fn center_bonus_values() {
-        let bonus_center = center_bonus(4, 4, 9);
-        let bonus_corner = center_bonus(0, 0, 9);
-        assert!(bonus_center > bonus_corner);
-        assert!((bonus_center - 1.0).abs() < 0.01);
-        assert!(bonus_corner < 0.5);
+    fn corner_side_bonus_values() {
+        // 3rd line (line_from_edge=2) should have highest bonus
+        let bonus_3rd = corner_side_bonus(2, 2, 9);
+        let bonus_4th = corner_side_bonus(3, 3, 9);
+        let bonus_1st = corner_side_bonus(0, 0, 9);
+        let bonus_center = corner_side_bonus(4, 4, 9);
+        assert!((bonus_3rd - 3.0).abs() < 0.01, "3rd line should be 3.0");
+        assert!((bonus_4th - 2.0).abs() < 0.01, "4th line should be 2.0");
+        assert!((bonus_1st - (-2.0)).abs() < 0.01, "1st line should be -2.0");
+        assert!((bonus_center - 0.5).abs() < 0.01, "center should be 0.5");
     }
 
     #[test]
@@ -1086,7 +1150,7 @@ mod tests {
     }
 
     #[test]
-    fn greedy_player_prefers_center_on_empty() {
+    fn greedy_player_prefers_corner_side_on_empty() {
         let mut rng = Rng::with_seed(42);
         let state = new_9x9();
         let legal = state.legal_moves();
@@ -1094,11 +1158,11 @@ mod tests {
         let action = player.select_move(&state, &legal, &mut rng);
         match action {
             GoAction::Place(r, c) => {
-                // On empty board, greedy should prefer center-ish positions
-                let center_dist = ((r as i32 - 4).abs() + (c as i32 - 4).abs()) as usize;
+                // On empty board, greedy should prefer 3rd/4th line (corner/side opening)
+                let line = line_from_edge(r, c, 9);
                 assert!(
-                    center_dist <= 3,
-                    "Greedy chose ({r},{c}), too far from center"
+                    line == 2 || line == 3,
+                    "Greedy chose ({r},{c}), line={line}, expected 3rd (2) or 4th (3) line"
                 );
             }
             GoAction::Pass => panic!("Greedy should not pass on empty board"),

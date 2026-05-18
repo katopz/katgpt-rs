@@ -19,6 +19,11 @@ const NUM_GAMES: usize = 5;
 /// Default AutoGo server URL.
 const AUTOGO_URL: &str = "http://localhost:8000";
 
+/// Board fill percentage at which we start passing every turn to force game end.
+/// Random play without passes leads to infinite capture/recapture cycles.
+/// At 70% fill on 9×9 (~51 stones), the remaining territory is clear enough.
+const PASS_FILL_PCT: f64 = 0.70;
+
 /// Game result tracked for summary.
 #[derive(Debug)]
 struct GameResult {
@@ -31,8 +36,6 @@ struct GameResult {
 }
 
 fn main() {
-    // Logging via RUST_LOG=info if needed
-
     let client = AutoGoClient::new(AUTOGO_URL);
 
     // Discover available agents
@@ -43,7 +46,7 @@ fn main() {
             eprintln!("  {e}");
             eprintln!();
             eprintln!("Start the server first:");
-            eprintln!("  ./scripts/autogo_server.sh");
+            eprintln!("  cd .raw/autogo && uv run -m alpha_go.play --host 127.0.0.1 --port 8000");
             std::process::exit(1);
         }
     };
@@ -115,13 +118,16 @@ fn main() {
 }
 
 /// Play a full game using random legal moves, returning the result.
+///
+/// When the board is >70% full, we pass every turn to force game end via two
+/// consecutive passes. Random play without passes leads to infinite capture/recapture cycles.
 fn play_random_game(client: &AutoGoClient, color: &str) -> GameResult {
-    // color: "black" | "white"
     let state = client
         .new_game(9, color, "random")
         .expect("Failed to start new game");
     let game_id = state.game_id.clone();
     let mut moves_played = 0usize;
+    let total_cells = state.size * state.size;
 
     println!(
         "  Game {game_id} started, {} to play, {} legal moves",
@@ -131,16 +137,36 @@ fn play_random_game(client: &AutoGoClient, color: &str) -> GameResult {
 
     let mut current = state;
 
-    // Safety limit: 9×9 max ~200 moves
-    for _ in 0..300 {
+    // Safety limit: 9×9 max ~500 moves (should never reach with fill-based pass logic)
+    for _ in 0..500 {
         if current.is_over {
             break;
+        }
+
+        // Count stones on board — pass when mostly full to force game end.
+        let stone_count: usize = current
+            .board
+            .iter()
+            .flat_map(|row| row.iter())
+            .filter(|&&c| c != 0)
+            .count();
+        let fill_pct = stone_count as f64 / total_cells as f64;
+        if fill_pct >= PASS_FILL_PCT {
+            log::debug!(
+                "  Late game pass at {moves_played} moves ({:.0}% full)",
+                fill_pct * 100.0
+            );
+            current = client.pass_move(&game_id).unwrap_or_else(|e| {
+                panic!("Pass failed for game {game_id}: {e}");
+            });
+            moves_played += 1;
+            continue;
         }
 
         // Pick a random legal move
         match current.legal_moves.as_slice() {
             [] => {
-                // No legal moves — pass
+                // No legal moves — must pass
                 log::debug!("  No legal moves, passing");
                 current = client.pass_move(&game_id).unwrap_or_else(|e| {
                     panic!("Pass failed for game {game_id}: {e}");
@@ -158,8 +184,8 @@ fn play_random_game(client: &AutoGoClient, color: &str) -> GameResult {
 
         moves_played += 1;
 
-        // Log every 10 moves
-        if moves_played.is_multiple_of(10) {
+        // Log every 20 moves
+        if moves_played.is_multiple_of(20) {
             println!(
                 "  ... {moves_played} moves, {} to play, {} legal",
                 format_player(current.to_play),

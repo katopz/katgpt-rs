@@ -18,6 +18,11 @@ mod go_integration {
 
     const AUTOGO_URL: &str = "http://localhost:8000";
 
+    /// Board fill percentage at which we start passing every turn to force game end.
+    /// Random play without passes leads to infinite capture/recapture cycles.
+    /// At 70% fill on 9×9 (~51 stones), the remaining territory is clear enough.
+    const PASS_FILL_PCT: f64 = 0.70;
+
     fn client() -> AutoGoClient {
         AutoGoClient::new(AUTOGO_URL)
     }
@@ -36,9 +41,24 @@ mod go_integration {
         let mut current = state;
         let mut moves = 0usize;
 
-        for _ in 0..300 {
+        for _ in 0..500 {
             if current.is_over {
                 break;
+            }
+
+            // Count stones on board — pass when mostly full to force game end.
+            let total_cells = size * size;
+            let stone_count: usize = current
+                .board
+                .iter()
+                .flat_map(|row| row.iter())
+                .filter(|&&c| c != 0)
+                .count();
+            let fill_pct = stone_count as f64 / total_cells as f64;
+            if fill_pct >= PASS_FILL_PCT {
+                current = client.pass_move(&game_id).expect("Pass failed");
+                moves += 1;
+                continue;
             }
 
             match current.legal_moves.as_slice() {

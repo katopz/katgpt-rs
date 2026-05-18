@@ -561,13 +561,33 @@ impl GameState for GoState {
 
 // ── GoHeuristic ────────────────────────────────────────────────
 
+/// Game phase based on move count relative to board size.
+///
+/// Go strategy shifts dramatically between phases:
+/// - Opening (Fuseki): corners > sides > center
+/// - Midgame: influence + connection
+/// - Endgame: territory enclosure
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OpeningPhase {
+    Early,
+    Mid,
+    Late,
+}
+
+/// Minimum distance from (row, col) to any board edge.
+/// Returns 0 for first line, 1 for second line, 2 for third line (territory line), etc.
+#[inline]
+fn line_from_edge(row: usize, col: usize, size: usize) -> usize {
+    row.min(col).min(size - 1 - row).min(size - 1 - col)
+}
+
 /// Pluggable heuristic for evaluating non-terminal Go states.
 ///
 /// Uses a weighted combination of:
-/// - Liberty advantage (40%) — total liberties of our groups vs opponent's
+/// - Liberty advantage (35%) — total liberties of our groups vs opponent's
 /// - Capture delta (30%) — stones we've captured vs stones we've lost
 /// - Influence (20%) — empty cells closer to our stones
-/// - Center preference (10%) — stones in the center region
+/// - Territorial preference (15%) — phase-aware positional evaluation
 ///
 /// Returns a value in roughly [-1, 1]. Positive = good for `player_id`.
 pub struct GoHeuristic;
@@ -665,31 +685,87 @@ impl GoHeuristic {
         (our_influence as f32 / total_empty as f32) * 2.0 - 1.0 // Normalize to [-1, 1]
     }
 
-    /// Center preference: count our stones in center third vs opponent's.
-    fn center_preference(&self, state: &GoState, color: GoCell) -> f32 {
-        let opponent = color.opponent();
-        let third = state.size / 3;
-        let two_third = state.size - third;
-        let mut our_center = 0usize;
-        let mut opp_center = 0usize;
+    fn opening_phase(&self, state: &GoState) -> OpeningPhase {
+        let threshold = state.move_count as usize;
+        let size = state.size;
+        if threshold < size * 2 {
+            OpeningPhase::Early
+        } else if threshold < size * 6 {
+            OpeningPhase::Mid
+        } else {
+            OpeningPhase::Late
+        }
+    }
 
-        for r in third..two_third {
-            for c in third..two_third {
-                let idx = state.flat_index(r, c);
-                match state.board[idx] {
-                    GoCell::Empty => {}
-                    c if c == color => our_center += 1,
-                    c if c == opponent => opp_center += 1,
-                    _ => {}
+    /// Territorial preference: phase-aware positional evaluation.
+    ///
+    /// Opening: corners and 3rd/4th lines are rewarded (cheap territory).
+    /// Endgame: center influence matters more.
+    ///
+    /// Source: "3rd line = territory, 4th line = influence.
+    ///          Corner stones claim territory with fewest friends."
+    fn territorial_preference(&self, state: &GoState, color: GoCell, phase: OpeningPhase) -> f32 {
+        let opponent = color.opponent();
+        let size = state.size;
+        let mut our_score = 0.0f32;
+        let mut opp_score = 0.0f32;
+        let total = size * size;
+
+        for idx in 0..total {
+            let row = idx / size;
+            let col = idx % size;
+            match state.board[idx] {
+                c if c == color => {
+                    our_score += self.positional_value(row, col, size, phase);
                 }
+                c if c == opponent => {
+                    opp_score += self.positional_value(row, col, size, phase);
+                }
+                _ => {}
             }
         }
 
-        let total = (two_third - third) * (two_third - third);
         if total == 0 {
             return 0.0;
         }
-        (our_center as f32 - opp_center as f32) / total as f32
+        (our_score - opp_score) / total as f32
+    }
+
+    /// Positional value of a stone at (row, col) based on game phase.
+    fn positional_value(&self, row: usize, col: usize, size: usize, phase: OpeningPhase) -> f32 {
+        let line = line_from_edge(row, col, size);
+
+        match phase {
+            OpeningPhase::Early => {
+                // Corners and sides are premium during opening
+                match line {
+                    0 => -1.0, // 1st line: bad (too close to edge, no territory)
+                    1 => 0.0,  // 2nd line: neutral
+                    2 => 2.0,  // 3rd line: territory line (secure)
+                    3 => 1.5,  // 4th line: influence line (power)
+                    _ => 0.5,  // 5th+: center is low priority early
+                }
+            }
+            OpeningPhase::Mid => {
+                // Blend: still prefer sides but center becomes useful
+                match line {
+                    0 => -0.5,
+                    1 => 0.5,
+                    2 => 1.5,
+                    3 => 1.5,
+                    _ => 1.0,
+                }
+            }
+            OpeningPhase::Late => {
+                // Endgame: center influence matters
+                match line {
+                    0 => 0.0,
+                    1 => 0.5,
+                    2 => 1.0,
+                    _ => 1.0,
+                }
+            }
+        }
     }
 }
 
@@ -699,11 +775,12 @@ impl StateHeuristic<GoState> for GoHeuristic {
             return state.reward(player_id);
         }
         let color = GoCell::from_player_id(player_id);
+        let phase = self.opening_phase(state);
         let liberty = self.liberty_advantage(state, color);
         let capture = self.capture_delta(state, color);
         let influence = self.influence(state, color);
-        let center = self.center_preference(state, color);
-        liberty * 0.4 + capture * 0.3 + influence * 0.2 + center * 0.1
+        let territory = self.territorial_preference(state, color, phase);
+        liberty * 0.35 + capture * 0.30 + influence * 0.20 + territory * 0.15
     }
 }
 
