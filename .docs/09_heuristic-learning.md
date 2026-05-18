@@ -6,7 +6,7 @@
 >
 > **Status (Plan 036):** ReviewMetrics, ReviewStrategy, and benefit-ratio gating are implemented behind `--features bandit`. AbsorbCompress gates compression by benefit-risk ratio. `ppot_rescue_reviewed` provides structured review loops behind `--features bandit,ppot`. See example `review_01_metrics`.
 >
-> **Status (Plan 071):** ROPD Rubric modelless distillation — `RubricVector`, `RubricTemplate`, `RubricGatedAbsorbCompress`, `RubricBanditPruner` behind `--features ropd_rubric` (implies `bandit`). Per-criterion gap targeting replaces scalar δ with structured multi-criteria reward. Benchmark: 5.3M observe_rubric/sec, 20/20 targeting accuracy, zero regression. See `.benchmarks/007_ropd_rubric_modelless.md`.
+> **Status (Plan 071):** ROPD Rubric modelless distillation — `RubricVector`, `RubricTemplate`, `RubricGatedAbsorbCompress`, `RubricBanditPruner` behind `--features ropd_rubric` (implies `bandit`). Per-criterion gap targeting replaces scalar δ with structured multi-criteria reward. `RubricPlayer` (bomber, `g_zero`+`bomber`) and `RubricFFTPlayer` (FFT, `g_zero`+`fft`) integrate rubric reward into arena players (Plan 071 T9/T10). Benchmark: 5.3M observe_rubric/sec, 20/20 targeting accuracy, zero regression. See `.benchmarks/007_ropd_rubric_modelless.md`.
 >
 > **Status (Plan 072):** SDAR Gated distillation modelless — `sdar_gate()`, `SdarBanditPruner`, `SdarGatedAbsorbCompress` behind `--features sdar_gate`. Asymmetric trust: sigmoid gate σ(β·x) endorses positive gaps, attenuates negative. β=5.0 paper-validated. Benchmark: 118M updates/sec, zero hot-path overhead, 97.5% targeting accuracy. See `.benchmarks/008_sdar_gated_modelless.md`.
 >
@@ -617,6 +617,63 @@ proposer.observe_delta(pair.template_id, delta.value);
 
 ---
 
+## ROPD Rubric Modelless Players (Plan 071 T9/T10)
+
+> **Feature:** `--features "g_zero,bomber,ropd_rubric"` for RubricPlayer, `--features "g_zero,fft,ropd_rubric"` for RubricFFTPlayer
+
+Replaces scalar Hint-δ with rubric-vector reward in arena players. Same template proposer and Q-learning backbone as GZero, but uses [`RubricBanditPruner`] and [`RubricGatedAbsorbCompress`] instead of scalar δ-based components.
+
+### Architecture
+
+```text
+GZeroPlayer (scalar δ)              RubricPlayer (rubric vector)
+├── BomberTemplateProposer          ├── BomberTemplateProposer       (same UCB1)
+├── DeltaBanditPruner       ──→     ├── RubricBanditPruner           (rubric-weighted reward)
+├── DeltaGatedAbsorbCompress ──→    ├── RubricGatedAbsorbCompress    (per-criterion gated)
+└── Q-values (cross-round)          └── Q-values (cross-round)       (same)
+```
+
+### RubricPlayer (Bomber Arena)
+
+`src/pruners/bomber/rubric_player.rs` — behind `ropd_rubric` + `g_zero` + `bomber`
+
+Multi-criteria rubric reward replaces scalar δ for Bomber arena. Uses `BomberTemplateProposer` (8 strategies, UCB1) + `RubricBanditPruner` + `RubricGatedAbsorbCompress` + Q-learning over 7 actions.
+
+**Plan 071 hypothesis**: Bomber has one dominant quality axis (survival), so rubric gain over scalar δ should be minimal. The rubric has 3 criteria: TaskFulfillment, ConstraintSatisfaction, Completeness.
+
+| Component | Source |
+|-----------|--------|
+| `RubricBanditPruner` | `ropd_rubric::rubric_bandit` |
+| `RubricGatedAbsorbCompress` | `ropd_rubric::rubric_absorb` |
+| `BomberTemplateProposer` | `g_zero::bomber_templates` |
+| `RubricTemplate` | `ropd_rubric::template` |
+| `RubricVector` | `ropd_rubric::types` |
+
+### RubricFFTPlayer (FFT Tactics Arena)
+
+`src/pruners/fft/rubric_player.rs` — behind `ropd_rubric` + `g_zero` + `fft`
+
+Same architecture as RubricPlayer but for multi-axis FFT domain. Uses `FFTTemplateProposer` (10 strategies, UCB1) + `RubricBanditPruner` + `RubricGatedAbsorbCompress` + Q-learning over 9 action types. Class-dependent rubric scoring — each of the 6 classes weights criteria differently.
+
+**Plan 071 hypothesis**: FFT's multi-axis nature (damage, survival, support, positioning) is where rubric vectors should help most. Scalar δ conflates these axes; per-criterion rubric targets each independently.
+
+| Component | Source |
+|-----------|--------|
+| `RubricBanditPruner` | `ropd_rubric::rubric_bandit` |
+| `RubricGatedAbsorbCompress` | `ropd_rubric::rubric_absorb` |
+| `FFTTemplateProposer` | `g_zero::fft_templates` |
+| `RubricTemplate` | `ropd_rubric::template` |
+| `RubricVector` | `ropd_rubric::types` |
+
+### When Rubric Helps vs Scalar δ
+
+| Domain | Axes | Expected Rubric Gain | Reason |
+|--------|------|---------------------|--------|
+| Bomber | 1 (survival) | Minimal | Single dominant axis — scalar δ captures it |
+| FFT | 4+ (damage, survival, support, position) | Significant | Multi-axis — scalar δ conflates, rubric separates |
+
+---
+
 ## δ-Mem: Modelless Distillation — Associative Bandit Memory (Plan 053)
 
 > **Feature:** `--features delta_mem` (implies `bandit`)
@@ -739,4 +796,7 @@ let mut pruner = MemorySteeredPruner::new(inner, config, 6);
 - Plan 053: δ-Mem Modelless Distillation
 - Plan 054: Player A/B Benchmark
 - Plan 055: MMORPG TFT Party AI
+- Plan 071: ROPD Rubric Modelless Distillation
+- Plan 071 T9: RubricPlayer (Bomber Arena)
+- Plan 071 T10: RubricFFTPlayer (FFT Tactics Arena)
 - Research 14: HL Distillation

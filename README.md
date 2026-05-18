@@ -480,6 +480,7 @@ Run: `cargo test --features "stepcode" --test bench_stepcode_modelless -- --noca
 | Greedy 🐱 | Heuristic + 20% safe exploration | +131 | 5 |
 | Validator 🐶 | Static safety rules | -30 | 1 |
 | Random 🐰 | Blast-zone avoidance only | -55 | 9 |
+| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`bomber`) | — | — |
 
 📖 See [`.docs/10_bomber_arena.md`](.docs/10_bomber_arena.md).
 
@@ -583,6 +584,7 @@ Final Fantasy Tactics-inspired 4v4 ATB (Active Time Battle) arena with status ef
 | HL 🐵 | Bandit Q-learning over 9 action types | 91.5 | 85.9% | 0.88 |
 | Greedy 🐱 | Weakest-target + heal + potion | 56.1 | 35.7% | 0.83 |
 | GZero 🤖 | Template hints + δ bandit + heuristics | 15.8 | 61.9% | 0.16 |
+| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`fft`) | — | — | — |
 | Validator 🐶 | Safety-first + debuff cure + retreat | — | — | — |
 
 **TFT game theory:** Nice (role default) → Retaliatory (on provoke from `GameEvent::DamageDealt`) → Forgiving (10% generous TFT + 5-tick timer). Each class retaliates differently: Knight intercepts, WhiteMage heals first then attacks, BlackMage bursts.
@@ -1042,7 +1044,7 @@ cargo clippy --all-targets --all-features --quiet
 | `go` | Go GameState + AutoGo API bridge + tournament + G-Zero self-play + AutoResearch (bandit + reqwest, Plan 065) |
 | `fft` | FFT Tactics Arena — ATB battle engine with status effects (Plan 053) |
 | `stepcode` | ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full` |
-| `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting (Plan 071, off by default) |
+| `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
@@ -1127,6 +1129,7 @@ src/
       wasm_state.rs    WASM state
       tft_player.rs    TftPlayer — game theory Tit-for-Tat bomber (Issue 056)
       g_zero_player.rs  GZeroPlayer — G-Zero self-play + delta bandit
+      rubric_player.rs   RubricPlayer — rubric-vector reward (Plan 071 T9)
       replay_backward.rs  BackwardSample, ReplayBackwardWalker — GFlowNet backward policy
       validator_agent.rs  Agent validator loop (Issue 052)
     game_state/      GameState forward model + generic MCTS (Plan 056 + 067):
@@ -1140,6 +1143,7 @@ src/
       players.rs       FftPlayer trait + Greedy, Validator, HL implementations
       status.rs        Status effects (Poison, Sleep, Haste, Slow, etc.)
       g_zero_player.rs GZeroFFTPlayer — template hints + δ bandit (Plan 053)
+      rubric_player.rs RubricFFTPlayer — rubric-vector reward (Plan 071 T10)
       tft_player.rs    TftFFTPlayer — Tit-for-Tat party AI (Plan 055)
     monopoly/        Monopoly FSM arena (bevy_ecs):
       mod.rs           Module root

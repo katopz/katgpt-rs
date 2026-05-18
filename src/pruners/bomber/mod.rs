@@ -14,6 +14,8 @@ pub mod validator_agent;
 
 #[cfg(feature = "g_zero")]
 pub mod g_zero_player;
+#[cfg(feature = "ropd_rubric")]
+pub mod rubric_player;
 #[cfg(feature = "g_zero")]
 pub mod tft_player;
 #[cfg(feature = "bomber-wasm")]
@@ -38,6 +40,8 @@ pub use crate::pruners::SharedBanditStats;
 pub use g_zero_player::GZeroPlayer;
 #[cfg(feature = "bomber-wasm")]
 pub use players::{LoraPlayer, LoraWasmPlayer, NNPlayer, create_players_with_wasm, is_safe_action};
+#[cfg(feature = "ropd_rubric")]
+pub use rubric_player::RubricPlayer;
 pub use systems::*;
 #[cfg(feature = "g_zero")]
 pub use tft_player::TftPlayer;

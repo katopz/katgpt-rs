@@ -115,6 +115,7 @@ src/
       players.rs    BomberPlayer trait, RandomPlayer, GreedyPlayer, ValidatorPlayer, HLPlayer, LoraPlayer, LoraWasmPlayer, NNPlayer
       g_zero_player.rs  GZeroPlayer — G-Zero self-play with template proposer + delta bandit
       tft_player.rs  TftPlayer — Tit-for-Tat with provocation detection
+      rubric_player.rs  RubricPlayer — rubric-vector reward (Plan 071 T9)
       replay.rs     ReplaySample, ReplayWriter — JSONL replay persistence
       replay_backward.rs  BackwardSample, ReplayBackwardWalker — GFlowNet backward policy
       systems.rs    init_world, spawn_players, run_tick
@@ -132,6 +133,7 @@ src/
       status.rs     StatusEffect (9), ActiveEffect, apply_tick_effects, can_cast, can_act, ct_fill_rate
       players.rs    FftPlayer trait, GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer
       g_zero_player.rs  GZeroFFTPlayer — G-Zero self-play for FFT
+      rubric_player.rs  RubricFFTPlayer — rubric-vector reward (Plan 071 T10)
       tft_player.rs  TftFFTPlayer — Tit-for-Tat FFT player
     go/             Go GameState + AutoGo API bridge + tournament ⛩
       mod.rs        Module root, re-exports

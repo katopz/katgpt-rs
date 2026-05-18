@@ -23,7 +23,7 @@
 
 ### Phase 0: Benchmark Baseline (MUST DO FIRST)
 
-- [ ] **T1: Create benchmark test** — `tests/bench_ropd_rubric_modelless.rs`
+- [x] **T1: Create benchmark test** — `tests/bench_ropd_rubric_modelless.rs`
   - Baseline: `DeltaGatedAbsorbCompress` + `DeltaBanditPruner` with scalar δ (existing)
   - Compare: `RubricGatedAbsorbCompress` + `RubricBanditPruner` with RubricVector
   - Metrics: DDTree nodes, latency, reward convergence (1000 episodes)
@@ -239,18 +239,18 @@ Replace `DeltaBanditPruner`'s scalar δ reward with rubric-weighted score.
 
 Wire rubric components into existing game arenas for real-world validation.
 
-- [ ] **T9: Implement `RubricPlayer` for Bomber arena** — `src/pruners/bomber/rubric_player.rs`
+- [x] **T9: Implement `RubricPlayer` for Bomber arena** — `src/pruners/bomber/rubric_player.rs`
   - Same structure as `GZeroPlayer` but with rubric components
   - Template: `RubricTemplate::bomber()` (survival + safety + efficiency)
   - Scorer: game-state-based (alive? in blast zone? used bombs efficiently?)
   - Compare: `GZeroPlayer` (δ) vs `RubricPlayer` (rubric) vs `GreedyPlayer`
 
-- [ ] **T10: Implement `RubricFFTPlayer` for FFT arena** — `src/pruners/fft/rubric_player.rs`
+- [x] **T10: Implement `RubricFFTPlayer` for FFT arena** — `src/pruners/fft/rubric_player.rs`
   - Template: `RubricTemplate::fft_tactics()` (role_fulfillment + team_coordination + survival)
   - Multi-axis domain where rubrics should help most
   - Compare: `GZeroFFTPlayer` (δ) vs `RubricFFTPlayer` (rubric) vs `TFTPlayer`
 
-- [ ] **T11: Run benchmarks + record results**
+- [x] **T11: Run benchmarks + record results**
   - `bench_ropd_rubric_modelless` — full comparison
   - Record in `.benchmarks/007_ropd_rubric_modelless.md`
   - **Decision gate:**
@@ -276,7 +276,7 @@ Wire rubric components into existing game arenas for real-world validation.
       rubric_bandit.rs    — RubricBanditPruner<P>
   ```
 
-- [ ] **T14: Update documentation**
+- [x] **T14: Update documentation**
   - `.docs/09_heuristic-learning.md` — add ROPD Modelless section
   - `README.md` — add ROPD Rubric Modelless entry
   - `.docs/01_overview.md` — update module structure

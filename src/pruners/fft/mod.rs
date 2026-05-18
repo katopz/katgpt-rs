@@ -30,3 +30,9 @@ pub mod tft_player;
 
 #[cfg(feature = "g_zero")]
 pub use tft_player::TftFFTPlayer;
+
+#[cfg(feature = "ropd_rubric")]
+pub mod rubric_player;
+
+#[cfg(feature = "ropd_rubric")]
+pub use rubric_player::RubricFFTPlayer;
