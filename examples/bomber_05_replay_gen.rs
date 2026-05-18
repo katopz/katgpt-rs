@@ -22,7 +22,7 @@ use microgpt_rs::pruners::bomber::{
 const ROUNDS: usize = 1000;
 const TICK_LIMIT: u32 = 200;
 const QUALITY_THRESHOLD: f32 = 0.5;
-const ACTION_NAMES: [&str; 6] = ["Up", "Down", "Left", "Right", "Bomb", "Wait"];
+const ACTION_NAMES: [&str; 7] = ["Up", "Down", "Left", "Right", "Bomb", "Wait", "Detonate"];
 
 // ── CLI ────────────────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ fn main() {
     println!("╚════════════════════════════════════════════════════════════╝");
     println!();
 
-    let mut action_counts = [0usize; 6];
+    let mut action_counts = [0usize; 7];
     let mut total_quality = 0.0f64;
     let mut total_samples = 0u64;
 

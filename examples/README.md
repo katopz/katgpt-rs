@@ -8,19 +8,20 @@ All examples run with `cargo run --example <name>`. Some require feature flags.
 |---|-------|----------|---------|
 | 1 | Bandit (RL) | 7 examples | `bandit` |
 | 2 | Heuristic Learning | 2 examples | `bandit` |
-| 3 | Bomberman Arena | 6 examples | `bomber`, `bomber-wasm` |
+| 3 | Bomberman Arena | 8 examples | `bomber`, `bomber-wasm`, `bomber-agent` |
 | 4 | Monopoly FSM | 4 examples | `monopoly` |
 | 5 | FFT Tactics Arena | 1 example | — |
 | 6 | GameState Forward Model | 2 examples | `game_state` |
 | 7 | Blue Bear | 2 examples | — |
 | 8 | Core | 4 examples | varies |
 | 9 | Dungeon | 2 examples | — |
-| 10 | Sudoku | 3 examples | `sudoku` |
+| 10 | Sudoku | 4 examples | `sudoku` |
 | 11 | Tactical AI | 6 examples | — |
 | 12 | Review | 1 example | `bandit` |
-| 14 | Go (AutoGo) | 1 example | `go` |
-| 15 | Getting Started | 1 example | — |
-| 16 | Stepwise Reward Shaping | 1 example | `stepcode` |
+| 13 | Percepta Comparison | 1 example | — |
+| 14 | Getting Started | 1 example | — |
+| 15 | Stepwise Reward Shaping | 1 example | `stepcode` |
+| 16 | Go (AutoGo) | 8 examples | `go` |
 
 ---
 
@@ -162,6 +163,22 @@ Enhanced replay generator with richer per-sample metrics: `danger_level`, `neare
 
 ```bash
 cargo run --example bomber_06_replay_gen_v2 --features bomber
+```
+
+### bomber_07_bomb_types
+
+Bomb type demo — showcases 4 bomb variants: Timed (standard fuse), Piercing (blast passes through walls), Remote (detonate on demand), and Landmine (proximity trigger). Each type demonstrated with tick-by-tick output.
+
+```bash
+cargo run --example bomber_07_bomb_types --features bomber
+```
+
+### bomber_08_agent_loop
+
+Agent validator optimization loop — evolves bomber safety rule sets using population-based search. Discovers optimal rule combinations (BlockOpponent, DistanceFromBomb, AvoidBlast, AvoidDeadEnd, SeekPowerUp) across generations with stagnation detection.
+
+```bash
+cargo run --example bomber_08_agent_loop --features bomber-agent
 ```
 
 ---
@@ -424,6 +441,20 @@ cargo run --example review_01_metrics --features bandit
 
 ## 13. Getting Started
 
+### sudoku_04_percepta_vs
+
+Percepta head-to-head comparison: Rust hull attention (O(log N) Graham Scan) vs Python+C++ transformer (WASM bytecodes). Benchmarks two Sudoku puzzles with unfair-but-informative speed comparison.
+
+**Results:** Rust backtracking ~350K steps/sec, 2500× faster than Percepta's 30K tok/s — mostly algorithmic advantage, not language.
+
+```bash
+cargo run --example sudoku_04_percepta_vs
+```
+
+---
+
+## 14. Getting Started
+
 ### hello_py2rs
 
 Python-to-Rust migration primer — demonstrates idiomatic Rust patterns for Python developers.
@@ -434,7 +465,7 @@ cargo run --example hello_py2rs
 
 ---
 
-## 14. Stepwise Reward Shaping (StepCodeReasoner Plan 054)
+## 15. Stepwise Reward Shaping (StepCodeReasoner Plan 054)
 
 Intra-trajectory reward shaping distilled from StepCodeReasoner (ICML 2026). Rewards bandit arms proportionally to how many downstream arms they enable.
 
@@ -448,9 +479,67 @@ cargo run --example stepcode_01_shaped_bandit --features stepcode
 
 ---
 
-## 14. Go (AutoGo)
+## 16. Go (AutoGo)
 
-Go game AI with 6 player strategies: Random, Greedy, Validator, HL, GZero, MCTS. Tromp-Taylor scoring on 9×9, 13×13, or 19×19 boards.
+Go game AI with 6 player strategies: Random, Greedy, Validator, HL, GZero, MCTS. Tromp-Taylor area scoring on 9×9, 13×13, or 19×19 boards. Full docs: [`.docs/15_go_arena.md`](../.docs/15_go_arena.md).
+
+### go_00_api_bridge
+
+REST API client for playing against an external AutoGo server. Requires running AutoGo server (`scripts/autogo_server.sh`). Plays random games against server agents via HTTP.
+
+```bash
+# Start AutoGo server first
+./scripts/autogo_server.sh
+cargo run --features go --example go_00_api_bridge
+```
+
+### go_01_mcts
+
+MCTS (budget=200) vs Random benchmark, 20 games on 9×9. **Result:** MCTS wins 55% — barely above random due to insufficient budget for Go's ~80 branching factor.
+
+```bash
+cargo run --features go --example go_01_mcts
+```
+
+### go_02_tournament
+
+Round-robin tournament: each player vs Random, 10 games. **Results:** Greedy/Validator/HL all 100%, MCTS 70%.
+
+```bash
+cargo run --features go --example go_02_tournament
+```
+
+### go_03_head_to_head
+
+Head-to-head matchups against external Go engines (e.g., GNU Go) via AutoGo REST API. Requires running server.
+
+```bash
+GO_GAMES=2 cargo run --features go --example go_03_head_to_head
+```
+
+### go_04_gzero
+
+GZero template-based self-play with delta-gating absorb-compress. 500 episodes. **Result:** Black wins 98.6% — massive first-move advantage. Template ranking: Capture (+0.0) > CornerStar (-7.25) > Tenuki (-9.50) > Defend (-50.22).
+
+```bash
+cargo run --features go --example go_04_gzero
+```
+
+### go_05_autoresearch
+
+Bandit-driven hyperparameter search. 10 arms, 50 evaluations, Greedy vs Random. **Result:** All configs win 100% (Random too easy for meaningful differentiation).
+
+```bash
+cargo run --features go --example go_05_autoresearch
+```
+
+### go_06_bench
+
+Comprehensive benchmark: advance performance (5µs 9×9, 23µs 19×19), MCTS throughput (~25K nodes/sec), player scaling laws.
+
+```bash
+cargo run --features go --example go_06_bench
+```
 
 ### go_07_tui
 
