@@ -159,6 +159,21 @@ src/
       delta_absorb.rs  DeltaGatedConfig, DeltaGatedAbsorbCompress<P>
       fft_templates.rs  FFTTemplate (10 strategies), FFTTemplateProposer
 
+    ropd_rubric/     ROPD rubric modelless distillation (Plan 071):
+      mod.rs           Module root + re-exports
+      template.rs      RubricCriterion, RubricTemplate (bomber/fft/generic)
+      types.rs         RubricVector (weighted_score, gap_vs_references)
+      scorer.rs        RubricScorer trait, PatternScorer, score_with_references
+      rubric_absorb.rs RubricGatedAbsorbCompress<P> (per-criterion gated absorb)
+      rubric_bandit.rs RubricBanditPruner<P> (rubric-weighted reward bandit)
+
+    sdar_gate.rs     SDAR sigmoid gate primitives (sdar_gate, sdar_modulate, sdar_gated_reward)
+
+    sdar/            SDAR gated distillation — modelless (Plan 072):
+      mod.rs           Module root + re-exports
+      sdar_bandit.rs   SdarBanditPruner<P> (sigmoid-gated reward updates)
+      sdar_absorb.rs   SdarGatedAbsorbCompress<P> (soft sigmoid promotion)
+
   tokenizer/        BPE tokenizer (encode/decode/train, Config::bpe())
     mod.rs          Re-exports: BpeTokenizerImpl, BpeTrainer, BpeTokenizer, MergeRule
     types.rs        BpeTokenizer, MergeRule

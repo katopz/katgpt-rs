@@ -845,6 +845,63 @@ Distills δ-mem's online associative memory (arXiv 2605.12357) into our modelles
 
 📖 See [`.plans/053_delta_mem_modelless.md`](.plans/053_delta_mem_modelless.md) for full plan, [`.research/24_Delta_Mem_Online_Associative_Memory.md`](.research/24_Delta_Mem_Online_Associative_Memory.md) for paper analysis.
 
+## 📋 ROPD Rubric Modelless Distillation (Plan 071)
+
+Distills ROPD's rubric-based scoring into our modelless stack. Replaces scalar [`HintDelta`](#-g-zero-verifier-free-self-play-plan-049) with structured [`RubricVector`] — multi-criteria reward without LLM judges. Template rubrics + pattern scorers provide per-criterion scoring at inference speed (~µs).
+
+### Key Innovation: Per-Criterion Gap Targeting
+
+- **Scalar δ**: `gate = mean_delta > threshold` (blind — *why* did it trigger?)
+- **Rubric**: `gate = any(high_weight_criterion_gap > threshold)` (targeted — "constraint #2 failed")
+
+### Multi-Reference Requirement
+
+ROPD ablation (Table 6): m=4→m=1 costs **−17.94 pts** — the single biggest impact. Single reference over-anchors rubric to one trajectory. Always use M ≥ 2 references.
+
+### Benchmark Results (`.benchmarks/007_ropd_rubric_modelless.md`)
+
+| Method | Throughput | Hot-path overhead |
+|--------|-----------|-------------------|
+| `observe_rubric()` (bomber) | 4.9M/sec | — |
+| `observe_rubric()` (generic) | 5.3M/sec | — |
+| `RubricBanditPruner::observe_rubric()` | 14.1M/sec | — |
+| `relevance()` (absorb) | — | ~0% (inlined) |
+| `relevance()` (bandit) | — | -2.7% (inlined) |
+
+| Targeting | Detected | Expected |
+|-----------|----------|----------|
+| High-weight gaps (w=4.0) | 20/20 | ✅ All |
+| Low-weight gaps (w=1.0) | 0/10 | ✅ Filtered |
+| No-gap arms | 0/55 | ✅ Excluded |
+
+**Feature gate:** `ropd_rubric = ["bandit"]` — off by default.
+
+## 🔀 SDAR Gated Distillation — Modelless (Plan 072)
+
+Adapts SDAR's token-level sigmoid gating pattern to our modelless distillation stack. Applies asymmetric trust (endorse positive gaps, attenuate negative) to bandit updates and absorb-compress promotions. No gradients — pure modelless signal gating.
+
+### Asymmetric Trust Principle
+
+- Positive gaps (endorsement) → gate opens → strong update signal
+- Negative gaps (rejection) → gate closes → attenuated update signal
+- Sigmoid gate: `σ(β·x)` with β=5.0 (paper-validated optimum)
+
+### Benchmark Results (`.benchmarks/008_sdar_gated_modelless.md`)
+
+| Method | Throughput | Hot-path overhead |
+|--------|-----------|-------------------|
+| `sdar_gate()` (pure sigmoid) | 2.4T/sec | — |
+| `SdarBanditPruner::update()` | 118M/sec | ~0% (inlined) |
+| `SdarGatedAbsorbCompress::observe()` | 112M/sec | +0.4% (inlined) |
+
+| Benefit ratio targeting (β=5.0) | Promotions | Rate |
+|-------------------------------|-----------|------|
+| High BR (1.5–2.0) | 195/200 | 97.5% |
+| Neutral BR (0.9–1.1) | 102/200 | 51.0% |
+| Low BR (0.0–0.4) | 0/0 | 0.0% |
+
+**Feature gate:** `sdar_gate = []` — off by default.
+
 ## 🏭 Productions
 
 MicroGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:
@@ -985,6 +1042,8 @@ cargo clippy --all-targets --all-features --quiet
 | `go` | Go GameState + AutoGo API bridge + tournament + G-Zero self-play + AutoResearch (bandit + reqwest, Plan 065) |
 | `fft` | FFT Tactics Arena — ATB battle engine with status effects (Plan 053) |
 | `stepcode` | ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full` |
+| `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting (Plan 071, off by default) |
+| `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
@@ -1046,6 +1105,18 @@ src/
       bomber_templates.rs  BomberTemplate (8 strategies), BomberTemplateProposer
       fft_templates.rs  FFTTemplate (10 strategies), FFTTemplateProposer
       types.rs         G-Zero types
+    ropd_rubric/     ROPD rubric modelless distillation (Plan 071):
+      mod.rs           Module root + re-exports
+      template.rs      RubricCriterion, RubricTemplate (bomber/fft/generic)
+      types.rs         RubricVector (weighted_score, gap_vs_references)
+      scorer.rs        RubricScorer trait, PatternScorer, score_with_references
+      rubric_absorb.rs RubricGatedAbsorbCompress<P> (per-criterion gated absorb)
+      rubric_bandit.rs RubricBanditPruner<P> (rubric-weighted reward bandit)
+    sdar_gate.rs     SDAR sigmoid gate primitives (sdar_gate, sdar_modulate, sdar_gated_reward)
+    sdar/            SDAR gated distillation — modelless (Plan 072):
+      mod.rs           Module root + re-exports
+      sdar_bandit.rs   SdarBanditPruner<P> (sigmoid-gated reward updates)
+      sdar_absorb.rs   SdarGatedAbsorbCompress<P> (soft sigmoid promotion)
     bomber/          Bomberman HL arena (bevy_ecs):
       mod.rs           Module root
       arena.rs         Arena setup

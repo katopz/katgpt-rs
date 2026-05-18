@@ -6,6 +6,10 @@
 >
 > **Status (Plan 036):** ReviewMetrics, ReviewStrategy, and benefit-ratio gating are implemented behind `--features bandit`. AbsorbCompress gates compression by benefit-risk ratio. `ppot_rescue_reviewed` provides structured review loops behind `--features bandit,ppot`. See example `review_01_metrics`.
 >
+> **Status (Plan 071):** ROPD Rubric modelless distillation — `RubricVector`, `RubricTemplate`, `RubricGatedAbsorbCompress`, `RubricBanditPruner` behind `--features ropd_rubric` (implies `bandit`). Per-criterion gap targeting replaces scalar δ with structured multi-criteria reward. Benchmark: 5.3M observe_rubric/sec, 20/20 targeting accuracy, zero regression. See `.benchmarks/007_ropd_rubric_modelless.md`.
+>
+> **Status (Plan 072):** SDAR Gated distillation modelless — `sdar_gate()`, `SdarBanditPruner`, `SdarGatedAbsorbCompress` behind `--features sdar_gate`. Asymmetric trust: sigmoid gate σ(β·x) endorses positive gaps, attenuates negative. β=5.0 paper-validated. Benchmark: 118M updates/sec, zero hot-path overhead, 97.5% targeting accuracy. See `.benchmarks/008_sdar_gated_modelless.md`.
+>
 > **Status (Plan 032):** TrialLog, AbsorbCompress, HotSwapPruner, and RegressionSuite are implemented behind `--features bandit`. See examples `hl_01_trial_log` and `hl_02_hotswap`.
 
 ## What is Heuristic Learning?
@@ -42,6 +46,11 @@ microgpt-rs is uniquely positioned for HL because of its **trait-based pruner ar
 | Self-Play Reward | `HintDelta` — intrinsic δ signal from model's own distribution (Plan 049) |
 | δ-Gated Compression | `DeltaGatedAbsorbCompress` — absorb only when hint reveals blind spot (Plan 049) |
 | δ-Reward Bandit | `DeltaBanditPruner` — δ as dense, immediate reward signal (Plan 049) |
+| Rubric-Gated Absorb | `RubricGatedAbsorbCompress` — per-criterion gap targeting (Plan 071) |
+| Rubric-Reward Bandit | `RubricBanditPruner` — rubric-weighted multi-criteria reward (Plan 071) |
+| SDAR Sigmoid Gate | `sdar_gate()` — asymmetric trust σ(β·x), β=5.0 optimum (Plan 072) |
+| SDAR-Gated Bandit | `SdarBanditPruner` — sigmoid-gated reward updates (Plan 072) |
+| SDAR-Gated Absorb | `SdarGatedAbsorbCompress` — soft sigmoid promotion gate (Plan 072) |
 
 ---
 
