@@ -97,7 +97,7 @@ Expected impact: MCTS at budget=200 should improve from ~60% to >80% vs Random o
   - Same config, verify no regression
   - MCTS(200) improved from 60% → 85%, Greedy dropped 100% → 70% (more positional)
 - [x] T9: Update `.docs/15_go_arena.md` with new heuristic weights and benchmark results
-- [ ] T10: Commit with message `feat(go): territorial opening heuristic with corner priority`
+- [x] T10: Commit with message `feat(go): territorial opening heuristic with corner priority`
 
 ## Key Insight
 
