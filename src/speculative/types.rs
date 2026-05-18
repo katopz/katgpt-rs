@@ -431,6 +431,49 @@ pub enum DraftEvent {
     },
 }
 
+// ── Decode Strategy (Plan 066 Phase 3.1) ──────────────────────
+
+/// Decode strategy for token generation.
+///
+/// Controls which decoding algorithm the generation loop uses:
+/// - **Autoregressive**: one token per forward pass (default, safest)
+/// - **Speculative**: draft-then-verify with a draft model (DFlash/DDTree)
+/// - **DiscreteDiffusion**: block-parallel denoising (D2F, feature-gated)
+///
+/// Use [`DecodeStrategy::recommend`] to auto-select based on task characteristics.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DecodeStrategy {
+    /// Standard autoregressive: one token per step.
+    #[default]
+    Autoregressive,
+    /// Speculative decoding with draft model (DFlash/DDTree).
+    Speculative,
+    /// Block-parallel discrete diffusion forcing (D2F).
+    #[cfg(feature = "dllm")]
+    DiscreteDiffusion,
+}
+
+impl DecodeStrategy {
+    /// Recommend a strategy based on task characteristics.
+    ///
+    /// Heuristic:
+    /// - If `dllm` feature is enabled **and** we have enough tokens to fill a block → D2F
+    /// - Else if a draft model is available → Speculative
+    /// - Otherwise → Autoregressive
+    #[allow(unused_variables)]
+    pub fn recommend(block_size: usize, n_tokens: usize, has_draft_model: bool) -> Self {
+        #[cfg(feature = "dllm")]
+        if n_tokens >= block_size {
+            return Self::DiscreteDiffusion;
+        }
+        if has_draft_model {
+            Self::Speculative
+        } else {
+            Self::Autoregressive
+        }
+    }
+}
+
 // ── PFlash Block-Sparse Prefill (Plan 044) ─────────────────────
 
 /// Whether to apply block-sparse prefill compression.
@@ -859,5 +902,61 @@ mod tests {
             RejectionReason::DivergedFromTarget,
         ];
         assert_eq!(reasons.len(), 4);
+    }
+
+    // ── DecodeStrategy Tests (Plan 066 Phase 3.1) ──────────────
+
+    #[test]
+    fn test_decode_strategy_default_is_autoregressive() {
+        assert_eq!(DecodeStrategy::default(), DecodeStrategy::Autoregressive);
+    }
+
+    #[test]
+    fn test_decode_strategy_recommend_no_draft_model() {
+        // Without draft model and without enough tokens → AR
+        let strategy = DecodeStrategy::recommend(8, 4, false);
+        assert_eq!(strategy, DecodeStrategy::Autoregressive);
+    }
+
+    #[test]
+    fn test_decode_strategy_recommend_with_draft_model() {
+        // With draft model → Speculative
+        let strategy = DecodeStrategy::recommend(8, 4, true);
+        assert_eq!(strategy, DecodeStrategy::Speculative);
+    }
+
+    #[test]
+    #[cfg(feature = "dllm")]
+    fn test_decode_strategy_recommend_discrete_diffusion_when_enough_tokens() {
+        // With dllm feature and enough tokens → DiscreteDiffusion
+        let strategy = DecodeStrategy::recommend(4, 8, false);
+        assert_eq!(strategy, DecodeStrategy::DiscreteDiffusion);
+    }
+
+    #[test]
+    #[cfg(feature = "dllm")]
+    fn test_decode_strategy_recommend_discrete_diffusion_over_speculative() {
+        // D2F takes priority over speculative when enough tokens
+        let strategy = DecodeStrategy::recommend(4, 8, true);
+        assert_eq!(strategy, DecodeStrategy::DiscreteDiffusion);
+    }
+
+    #[test]
+    #[cfg(feature = "dllm")]
+    fn test_decode_strategy_recommend_falls_through_when_tokens_less_than_block() {
+        // Not enough tokens for a block → falls through to speculative/AR
+        let strategy_ar = DecodeStrategy::recommend(16, 8, false);
+        assert_eq!(strategy_ar, DecodeStrategy::Autoregressive);
+
+        let strategy_spec = DecodeStrategy::recommend(16, 8, true);
+        assert_eq!(strategy_spec, DecodeStrategy::Speculative);
+    }
+
+    #[test]
+    fn test_decode_strategy_variants_are_copy() {
+        let a = DecodeStrategy::Autoregressive;
+        let b = a; // Copy, not move
+        let _c = a; // Still valid after copy
+        assert_eq!(a, b);
     }
 }

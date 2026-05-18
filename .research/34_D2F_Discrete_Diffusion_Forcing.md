@@ -202,6 +202,67 @@ All D2F code behind feature gates, zero impact on existing code:
 
 ---
 
+## 8. Phase 2 Results: D2F Inference Pipeline (Plan 066)
+
+### 8.1 Implementation Summary
+
+The D2F inference pipeline is implemented in `src/speculative/d2f.rs` behind the `dllm` feature gate. All Phase 0 proof tasks passed, confirming the approach is viable at our micro scale.
+
+**Key components:**
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `D2fContext` | `src/dllm.rs` | Pre-allocated flat buffers for zero-alloc denoising |
+| `D2fPipeline` | `src/speculative/d2f.rs` | Multi-block sequential decode with KV cache commit |
+| `D2fDecodeConfig` | `src/speculative/d2f.rs` | Thresholds, block sizes, denoising steps |
+| `D2fBlockState` | `src/speculative/d2f.rs` | SemiActivated → FullyActivated state machine |
+| `DecodeStrategy` | `src/speculative/types.rs` | Config-driven strategy selection (AR / Speculative / D2F) |
+
+### 8.2 Zero-Allocation Integration
+
+`D2fContext` avoids `Vec<Vec<f32>>` allocation per denoising step by using flat 2D buffers indexed by `[p * dim..(p+1) * dim]`:
+
+- `logits_flat: Vec<f32>` — `[max_seq * vocab_size]` instead of `Vec<Vec<f32>>`
+- `k_cache`, `v_cache: Vec<f32>` — `[max_seq * kv_dim]` flat KV storage
+- `x_norm`, `xr: Vec<f32>` — `[max_seq * n_embd]` for per-position embeddings
+
+`forward_block_causal_with()` writes directly into these pre-allocated buffers. The `D2fContext::commit(len)` method preserves KV entries for positions `[0..len)`, allowing subsequent blocks to skip recomputation.
+
+### 8.3 Test Results
+
+15/15 tests pass in `tests/test_d2f_decode.rs`:
+
+| Category | Tests | What They Verify |
+|----------|-------|-----------------|
+| Quality | `produces_non_mask_tokens`, `convergence_curve`, `target_accuracy` | Block decode outputs valid tokens, improves with steps |
+| Convergence | `steps_vs_quality` | More denoising steps → higher accuracy (monotonic) |
+| Pipeline | `multi_block_decode`, `prompt_context`, `partial_block` | Multi-block sequential decode with block-causal context |
+| Constraints | `constraint_pruner_restricts_vocab`, `no_repeat_constraint` | `ConstraintPruner` restricts vocab and reduces invalid tokens |
+| Temperature | `temperature_effects` | Temperature affects sampling diversity in denoising |
+| Benchmarks | `decode_block`, `pipeline`, `steps_sweep`, `constraint_overhead` | Throughput and overhead measurements |
+
+### 8.4 Key Measurements
+
+**Convergence:** Denoising quality improves monotonically with more steps. The `test_d2f_decode_steps_vs_quality` test verifies that accuracy at step T is ≥ accuracy at step T-1 for a trained model on pattern data.
+
+**Pipeline:** Multi-block decode works correctly — each block uses block-causal attention so previously decoded blocks provide causal context while the current block denoises bidirectionally. KV cache commit avoids recomputation across blocks.
+
+**Constraints:** `ConstraintPruner` integration restricts the vocabulary at each denoising step. Tests confirm pruned decode produces only valid tokens and reduces the space of invalid outputs.
+
+**Temperature:** Affects sampling diversity. Low temperature → more deterministic/greedy denoising. High temperature → more diverse but potentially noisier intermediate predictions.
+
+### 8.5 DecodeStrategy Auto-Switch
+
+`DecodeStrategy::recommend(block_size, n_tokens, has_draft_model)` implements a heuristic:
+
+1. If `dllm` feature enabled **and** `n_tokens >= block_size` → `DiscreteDiffusion`
+2. Else if `has_draft_model` → `Speculative`
+3. Else → `Autoregressive`
+
+This allows config-driven strategy selection without manual branching.
+
+---
+
 ## 7. Paper Metadata
 
 - **arXiv**: 2508.09192v1

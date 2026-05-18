@@ -1057,6 +1057,214 @@ pub fn forward_block_causal_positions(
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Zero-Alloc D2F Context + Forward
+// ═══════════════════════════════════════════════════════════════
+
+/// Pre-allocated buffers for zero-alloc D2F denoising.
+///
+/// Unlike `SpeculativeContext` (single-token autoregressive), D2F processes
+/// all positions in a block simultaneously, so we use flat 2D buffers
+/// indexed by `[p * dim..(p+1) * dim]`.
+pub struct D2fContext {
+    /// Flat KV cache: `[max_seq * kv_dim]`.
+    pub k_cache: Vec<f32>,
+    pub v_cache: Vec<f32>,
+    /// Normalized embeddings per position: `[max_seq * n_embd]`.
+    pub x_norm: Vec<f32>,
+    /// Residual (pre-norm) embeddings per position: `[max_seq * n_embd]`.
+    pub xr: Vec<f32>,
+    /// Flat logits: `[max_seq * vocab_size]`.
+    pub logits_flat: Vec<f32>,
+    /// Temp buffer for per-position embedding: `[n_embd]`.
+    pub x_buf: Vec<f32>,
+    /// Temp buffer for query: `[n_embd]`.
+    pub q_buf: Vec<f32>,
+    /// Temp buffer for key: `[kv_dim]`.
+    pub k_buf: Vec<f32>,
+    /// Temp buffer for value: `[kv_dim]`.
+    pub v_buf: Vec<f32>,
+    /// Temp buffer for attention projection: `[n_embd]`.
+    pub x_proj_buf: Vec<f32>,
+    /// Temp buffer for MLP hidden: `[mlp_hidden]`.
+    pub hidden_buf: Vec<f32>,
+    /// Temp buffer for MLP output: `[n_embd]`.
+    pub x_mlp_buf: Vec<f32>,
+    /// Temp buffer for single-position logits: `[vocab_size]`.
+    pub logits_buf: Vec<f32>,
+    /// Number of positions with committed KV cache entries.
+    /// Positions `[0..committed_len)` are valid and won't be recomputed.
+    pub committed_len: usize,
+}
+
+impl D2fContext {
+    /// Create a new context with buffers sized for the given config.
+    pub fn new(config: &Config) -> Self {
+        let n = config.n_embd;
+        let kvd = kv_dim(config);
+        let max_seq = config.block_size;
+        let vocab = config.vocab_size;
+        let hidden = config.mlp_hidden;
+
+        Self {
+            k_cache: vec![0.0f32; max_seq * kvd],
+            v_cache: vec![0.0f32; max_seq * kvd],
+            x_norm: vec![0.0f32; max_seq * n],
+            xr: vec![0.0f32; max_seq * n],
+            logits_flat: vec![0.0f32; max_seq * vocab],
+            x_buf: vec![0.0f32; n],
+            q_buf: vec![0.0f32; n],
+            k_buf: vec![0.0f32; kvd],
+            v_buf: vec![0.0f32; kvd],
+            x_proj_buf: vec![0.0f32; n],
+            hidden_buf: vec![0.0f32; hidden],
+            x_mlp_buf: vec![0.0f32; n],
+            logits_buf: vec![0.0f32; vocab],
+            committed_len: 0,
+        }
+    }
+
+    /// Reset flat buffers for a new forward pass.
+    ///
+    /// Temp buffers (`x_buf`, `q_buf`, etc.) need not be reset since they are
+    /// always fully written before being read.
+    pub fn reset(&mut self) {
+        self.k_cache.fill(0.0);
+        self.v_cache.fill(0.0);
+        self.x_norm.fill(0.0);
+        self.xr.fill(0.0);
+        self.logits_flat.fill(0.0);
+        self.committed_len = 0;
+    }
+
+    /// Commit KV cache entries for positions `[0..len)`.
+    /// After calling this, subsequent forward passes will skip KV computation
+    /// for these positions.
+    pub fn commit(&mut self, len: usize) {
+        self.committed_len = len;
+    }
+}
+
+/// Zero-alloc variant of [`forward_block_causal_positions`].
+///
+/// Writes logits into `ctx.logits_flat[p * vocab..(p+1) * vocab]` instead of
+/// returning `Vec<Vec<f32>>`. Attention weights are not computed since D2F
+/// denoising only needs logits.
+///
+/// Returns `seq_len` (the actual number of positions processed).
+pub fn forward_block_causal_with(
+    ctx: &mut D2fContext,
+    weights: &TransformerWeights,
+    tokens: &[usize],
+    config: &Config,
+    causal_block_size: usize,
+) -> usize {
+    let n = config.n_embd;
+    let hd = config.head_dim;
+    let kvd = kv_dim(config);
+    let seq_len = tokens.len().min(config.block_size);
+    let scale = 1.0 / (hd as f32).sqrt();
+    let vocab = config.vocab_size;
+    let layer = &weights.layers[0];
+
+    let committed = ctx.committed_len;
+
+    // Only clear logits for uncommitted positions
+    for p in committed..seq_len {
+        ctx.logits_flat[p * vocab..(p + 1) * vocab].fill(0.0);
+    }
+
+    // Phase A: Fill K/V cache, x_norm, xr for UNCOMMITTED positions only
+    for (p, &token) in tokens.iter().enumerate().take(seq_len).skip(committed) {
+        // Embedding = wte[token] + wpe[position]
+        for i in 0..n {
+            ctx.x_buf[i] = weights.wte[token * n + i] + weights.wpe[p * n + i];
+        }
+        // First rmsnorm → residual (xr)
+        rmsnorm(&mut ctx.x_buf);
+        ctx.xr[p * n..(p + 1) * n].copy_from_slice(&ctx.x_buf);
+        // Second rmsnorm → normalized embedding (x_norm)
+        rmsnorm(&mut ctx.x_buf);
+        ctx.x_norm[p * n..(p + 1) * n].copy_from_slice(&ctx.x_buf);
+
+        // K, V projections
+        matmul(&mut ctx.k_buf, &layer.attn_wk, &ctx.x_buf, kvd, n);
+        matmul(&mut ctx.v_buf, &layer.attn_wv, &ctx.x_buf, kvd, n);
+        ctx.k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&ctx.k_buf);
+        ctx.v_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&ctx.v_buf);
+    }
+
+    // Phase B: Block-causal attention + MLP + logits for UNCOMMITTED positions only
+    for p in committed..seq_len {
+        // Load normalized embedding
+        ctx.x_buf.copy_from_slice(&ctx.x_norm[p * n..(p + 1) * n]);
+
+        // Query projection
+        matmul(&mut ctx.q_buf, &layer.attn_wq, &ctx.x_buf, n, n);
+
+        // Block-causal: attend to positions [0..end_of_current_block]
+        let block_end = (p / causal_block_size + 1) * causal_block_size;
+        let t_n = block_end.min(seq_len);
+
+        // NOTE: attention_forward_safe still allocates internally.
+        // Future optimization: write attention output into a pre-allocated buffer.
+        let (attn_out, _attn_w) = attention_forward_safe(
+            &ctx.q_buf,
+            &ctx.k_cache,
+            &ctx.v_cache,
+            config.n_head,
+            config.n_kv_head,
+            hd,
+            kvd,
+            t_n,
+            scale,
+        );
+
+        // Attention output projection + residual connection
+        matmul(&mut ctx.x_proj_buf, &layer.attn_wo, &attn_out, n, n);
+        for i in 0..n {
+            ctx.x_proj_buf[i] += ctx.xr[p * n + i];
+        }
+
+        // Save residual before rmsnorm by reusing x_buf (no longer needed this iteration)
+        ctx.x_buf.copy_from_slice(&ctx.x_proj_buf);
+
+        // Post-attention rmsnorm
+        rmsnorm(&mut ctx.x_proj_buf);
+
+        // MLP: relu hidden → output projection + residual
+        matmul_relu(
+            &mut ctx.hidden_buf,
+            &layer.mlp_w1,
+            &ctx.x_proj_buf,
+            config.mlp_hidden,
+            n,
+        );
+        matmul(
+            &mut ctx.x_mlp_buf,
+            &layer.mlp_w2,
+            &ctx.hidden_buf,
+            n,
+            config.mlp_hidden,
+        );
+        for i in 0..n {
+            ctx.x_mlp_buf[i] += ctx.x_buf[i];
+        }
+
+        // Logits
+        matmul(
+            &mut ctx.logits_buf,
+            &weights.lm_head,
+            &ctx.x_mlp_buf,
+            vocab,
+            n,
+        );
+        ctx.logits_flat[p * vocab..(p + 1) * vocab].copy_from_slice(&ctx.logits_buf);
+    }
+
+    seq_len
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Task 0.5: Denoising Loop with Constraint
 // ═══════════════════════════════════════════════════════════════
 

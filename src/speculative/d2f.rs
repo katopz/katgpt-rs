@@ -19,7 +19,7 @@
 // Inner attributes apply to this module. Index `t` is needed for is_valid() checks alongside logits[t].
 #![allow(clippy::too_many_arguments, clippy::needless_range_loop)]
 
-use crate::dllm::{denoising_accuracy, forward_block_causal_positions};
+use crate::dllm::{D2fContext, denoising_accuracy, forward_block_causal_with};
 use crate::speculative::types::ConstraintPruner;
 use crate::transformer::TransformerWeights;
 use crate::types::Config;
@@ -188,7 +188,8 @@ pub fn d2f_decode_block(
     pruner: &dyn ConstraintPruner,
     rng: &mut Rng,
 ) -> D2fBlockResult {
-    d2f_decode_block_with_prompt(weights, config, decode_config, &[], pruner, rng)
+    let mut ctx = D2fContext::new(config);
+    d2f_decode_block_with_prompt_with(&mut ctx, weights, config, decode_config, &[], pruner, rng)
 }
 
 /// Decode a single block with optional prompt context.
@@ -203,6 +204,65 @@ pub fn d2f_decode_block_with_prompt(
     pruner: &dyn ConstraintPruner,
     rng: &mut Rng,
 ) -> D2fBlockResult {
+    let mut ctx = D2fContext::new(config);
+    d2f_decode_block_with_prompt_with(
+        &mut ctx,
+        weights,
+        config,
+        decode_config,
+        prompt,
+        pruner,
+        rng,
+    )
+}
+
+/// Decode block with ground truth for accuracy measurement (testing/benchmarking).
+pub fn d2f_decode_block_with_target(
+    weights: &TransformerWeights,
+    config: &Config,
+    decode_config: &D2fDecodeConfig,
+    target_tokens: &[usize],
+    pruner: &dyn ConstraintPruner,
+    rng: &mut Rng,
+) -> D2fBlockResult {
+    let mut result = d2f_decode_block(weights, config, decode_config, pruner, rng);
+    result.accuracy = Some(denoising_accuracy(&result.tokens, target_tokens));
+    result
+}
+
+/// Zero-alloc variant of [`d2f_decode_block`].
+///
+/// Convenience wrapper that decodes a single block without prompt context.
+/// Takes a pre-allocated [`D2fContext`] to avoid per-call heap allocations.
+pub fn d2f_decode_block_with(
+    dctx: &mut D2fContext,
+    weights: &TransformerWeights,
+    config: &Config,
+    decode_config: &D2fDecodeConfig,
+    pruner: &dyn ConstraintPruner,
+    rng: &mut Rng,
+) -> D2fBlockResult {
+    d2f_decode_block_with_prompt_with(dctx, weights, config, decode_config, &[], pruner, rng)
+}
+
+/// Zero-alloc variant of [`d2f_decode_block_with_prompt`].
+///
+/// Takes a pre-allocated [`D2fContext`] to avoid per-call heap allocations.
+/// The context is reset internally by the forward pass at each denoising step.
+///
+/// This is the preferred entry point for hot loops (e.g., `D2fPipeline::decode_all`).
+pub fn d2f_decode_block_with_prompt_with(
+    dctx: &mut D2fContext,
+    weights: &TransformerWeights,
+    config: &Config,
+    decode_config: &D2fDecodeConfig,
+    prompt: &[usize],
+    pruner: &dyn ConstraintPruner,
+    rng: &mut Rng,
+) -> D2fBlockResult {
+    // Standalone decode — no persistent KV across calls
+    dctx.committed_len = 0;
+
     let mask = config.mask_token;
     let vocab = config.vocab_size;
     let block_size = decode_config.block_size;
@@ -221,9 +281,9 @@ pub fn d2f_decode_block_with_prompt(
     let mut converged_step = max_steps;
 
     for step in 0..max_steps {
-        // Forward pass with block-causal attention
-        let (logits_all, _) =
-            forward_block_causal_positions(weights, &tokens[..seq_len], config, block_size);
+        // Zero-alloc forward pass with block-causal attention
+        let _seq_len_actual =
+            forward_block_causal_with(dctx, weights, &tokens[..seq_len], config, block_size);
 
         let mut n_confident = 0usize;
 
@@ -234,7 +294,10 @@ pub fn d2f_decode_block_with_prompt(
                 continue;
             }
 
-            let logits_p = &logits_all[p];
+            // Read logits from flat buffer instead of Vec<Vec<f32>>
+            let logits_start = p * vocab;
+            let logits_end = logits_start + vocab;
+            let logits_p = &dctx.logits_flat[logits_start..logits_end];
             let max_logit = logits_p.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
 
             // Depth and parent tokens relative to block start
@@ -328,8 +391,11 @@ pub fn d2f_decode_block_with_prompt(
     }
 }
 
-/// Decode block with ground truth for accuracy measurement (testing/benchmarking).
-pub fn d2f_decode_block_with_target(
+/// Zero-alloc variant of [`d2f_decode_block_with_target`].
+///
+/// Takes a pre-allocated [`D2fContext`] to avoid per-call heap allocations.
+pub fn d2f_decode_block_with_target_with(
+    dctx: &mut D2fContext,
     weights: &TransformerWeights,
     config: &Config,
     decode_config: &D2fDecodeConfig,
@@ -337,7 +403,8 @@ pub fn d2f_decode_block_with_target(
     pruner: &dyn ConstraintPruner,
     rng: &mut Rng,
 ) -> D2fBlockResult {
-    let mut result = d2f_decode_block(weights, config, decode_config, pruner, rng);
+    let mut result =
+        d2f_decode_block_with_prompt_with(dctx, weights, config, decode_config, &[], pruner, rng);
     result.accuracy = Some(denoising_accuracy(&result.tokens, target_tokens));
     result
 }
@@ -529,6 +596,7 @@ impl<'a> D2fPipeline<'a> {
         let tau_conf = self.decode_config.confidence_threshold;
         let temperature = self.decode_config.temperature;
         let vocab = self.config.vocab_size;
+        let mut ctx = D2fContext::new(self.config);
 
         let mut all_tokens = self.prompt.clone();
         let mut block_results = Vec::with_capacity(n_blocks);
@@ -551,7 +619,8 @@ impl<'a> D2fPipeline<'a> {
             let mut converged_step = max_steps;
 
             for step in 0..max_steps {
-                let (logits_all, _) = forward_block_causal_positions(
+                let _seq_len_actual = forward_block_causal_with(
+                    &mut ctx,
                     weights,
                     &seq_tokens[..seq_len],
                     self.config,
@@ -566,7 +635,9 @@ impl<'a> D2fPipeline<'a> {
                         continue;
                     }
 
-                    let logits_p = &logits_all[p];
+                    let logits_start = p * vocab;
+                    let logits_end = logits_start + vocab;
+                    let logits_p = &ctx.logits_flat[logits_start..logits_end];
                     let max_logit = logits_p.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
                     let depth = p - block_start;
                     let parent_tokens = &seq_tokens[block_start..p];
@@ -653,6 +724,11 @@ impl<'a> D2fPipeline<'a> {
 
             // Append decoded tokens for next block's context
             all_tokens.extend_from_slice(&block_tokens);
+
+            // Commit KV cache for all positions decoded so far.
+            // Subsequent blocks will skip recomputing KV for these positions,
+            // significantly reducing work for multi-block pipelines.
+            ctx.commit(all_tokens.len());
         }
 
         D2fPipelineResult {

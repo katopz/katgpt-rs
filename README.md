@@ -129,6 +129,17 @@ raven_recall (1000 noise)        9,252,063 tok/s       0.11           63.21
 
 📖 See [`.docs/04_performance.md`](.docs/04_performance.md) for per-benchmark explanations, zero-alloc improvements, and screening overhead analysis.
 
+## 🧩 D2F: Discrete Diffusion Forcing (Plan 066)
+
+Block-parallel decoding via iterative denoising — a third decode strategy alongside autoregressive and speculative. Feature-gated behind `dllm`.
+
+- **Block-causal attention**: bidirectional within block, causal across blocks → existing KV cache works
+- **`D2fContext`**: pre-allocated flat buffers, zero `Vec<Vec<f32>>` per denoising step
+- **`D2fPipeline`**: multi-block sequential decode with KV cache commit across blocks
+- **`DecodeStrategy::DiscreteDiffusion`**: config-driven auto-switch heuristic (AR → Speculative → D2F)
+
+📖 See [`.docs/03_speculative_decoding.md`](.docs/03_speculative_decoding.md) for D2F API details and [`.research/34_D2F_Discrete_Diffusion_Forcing.md`](.research/34_D2F_Discrete_Diffusion_Forcing.md) for experimental results.
+
 ## 🦅 Raven RSM: O(1) Routing Slot Memory
 
 Fixed-size slot memory with sparse Top-K routing. Unselected slots are **completely frozen** — 10K noise updates leave passkey slots untouched. 2.98× faster than flat attention at pos=8.
@@ -970,6 +981,7 @@ cargo clippy --all-targets --all-features --quiet
 | `g_zero` | G-Zero self-play + FFT arena + Bomber arena + TFT party AI (Plans 049–055). Phase 1 (modelless) + Phase 2 (GRPO/DPO in `riir-gpu`, Plan 059 ✅) |
 | `fft` | FFT Tactics Arena — ATB battle engine with status effects (Plan 053) |
 | `stepcode` | ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full` |
+| `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
 | `full` | Enable all features (excludes `stepcode`) |
 
 > **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit"]` targets production accuracy + sparsity. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.

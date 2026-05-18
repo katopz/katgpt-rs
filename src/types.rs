@@ -1,5 +1,7 @@
 // Shared configuration, RNG, and math utilities.
 
+use crate::speculative::DecodeStrategy;
+
 #[derive(Clone)]
 pub struct Config {
     pub vocab_size: usize,
@@ -517,6 +519,9 @@ impl Config {
         if let Some(v) = overrides.sp_kv_threshold {
             c.sp_kv_threshold = v;
         }
+        // Note: decode_strategy is a generation-time override, not a Config field.
+        // Callers should read it directly from InferenceOverrides, not via with_overrides().
+        let _ = overrides.decode_strategy;
         c
     }
 }
@@ -546,6 +551,8 @@ pub struct InferenceOverrides {
     pub mtp_cluster_size: Option<usize>,
     // SP-KV inference-time threshold knob (Plan 070)
     pub sp_kv_threshold: Option<f32>,
+    // Decode strategy override (Plan 066 Phase 3.1)
+    pub decode_strategy: Option<DecodeStrategy>,
 }
 
 impl Default for Config {
@@ -1301,6 +1308,7 @@ mod tests_types {
             mtp_shared_kv_prompt_threshold: None,
             mtp_cluster_size: None,
             sp_kv_threshold: None,
+            decode_strategy: None,
         };
         let result = config.with_overrides(&overrides);
         assert_eq!(result.tree_budget, 9999);

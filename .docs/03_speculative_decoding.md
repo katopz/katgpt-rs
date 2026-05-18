@@ -180,6 +180,90 @@ High-level entry points that compose the full speculative decoding pipeline.
 
 ---
 
+## D2F: Discrete Diffusion Forcing (`speculative/d2f.rs`, behind `"dllm"` feature)
+
+A third decode strategy alongside autoregressive and speculative. D2F decodes entire blocks of tokens in parallel via iterative denoising, using block-causal attention: **bidirectional within each block** (intra-block positions attend to each other), **causal across blocks** (inter-block attention is strictly left-to-right). This preserves standard KV cache semantics — previously decoded blocks accumulate KV entries that subsequent blocks reuse without recomputation.
+
+### How It Works
+
+```
+Step 0:  [prompt] [MASK] [MASK] [MASK] [MASK]    ← initialize block as masks
+Step 1:  [prompt] [tok_0] [MASK] [tok_2] [MASK]  ← forward_block_causal → sample → confidence remask
+Step 2:  [prompt] [tok_0] [tok_1] [tok_2] [MASK]  ← repeat until all unmasked or max steps
+Step 3:  [prompt] [tok_0] [tok_1] [tok_2] [tok_3] ← FullyActivated → commit KV, start next block
+```
+
+Each denoising step:
+1. `forward_block_causal_with()` — zero-alloc forward pass writing into `D2fContext` flat buffers
+2. Sample from logits at masked positions (temperature-scaled)
+3. Confidence remasking: keep tokens with probability ≥ `confidence_threshold`, re-mask others
+4. Early exit when all positions are unmasked
+
+### When to Use D2F
+
+| Condition | Recommended Strategy |
+|-----------|---------------------|
+| Generating 1–3 tokens | Autoregressive (no block benefit) |
+| Have draft model, need fast AR | Speculative (DFlash + DDTree) |
+| Generating blocks of 8+ tokens | D2F (parallel denoising) |
+| Need constraint-guided output | D2F (pruner integrates at each denoising step) |
+
+### API
+
+| Function | Description |
+|----------|-------------|
+| `d2f_decode_block(weights, config, decode_config, pruner, rng)` | Decode a single block. Returns `D2fBlockResult` with tokens, steps used, confidence history. |
+| `d2f_decode_block_with_prompt(weights, config, decode_config, prompt, pruner, rng)` | Decode with prompt context. Prompt positions are never masked. |
+| `d2f_decode_block_with(dctx, weights, config, decode_config, pruner, rng)` | Zero-alloc variant — reuses pre-allocated `D2fContext`. Preferred for hot loops. |
+| `d2f_decode_block_with_target(weights, config, decode_config, target, pruner, rng)` | With ground truth for accuracy measurement (testing/benchmarking). |
+
+### D2fPipeline — Multi-Block Decode
+
+```rust
+let pipeline = D2fPipeline::with_prompt(&config, decode_config, total_len, &prompt);
+let result = pipeline.decode_all(&weights, &NoPruner, &mut rng);
+// result.tokens — all decoded tokens
+// result.block_results — per-block breakdown
+// result.n_fully_activated — blocks that fully denoised
+```
+
+Pipeline decodes blocks sequentially. Each block uses block-causal attention, so previously decoded blocks provide causal context. After each block completes, `D2fContext::commit(len)` preserves KV entries — subsequent blocks skip recomputation for committed positions.
+
+### D2fDecodeConfig
+
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `denoise_steps` | 8 | Max denoising iterations per block |
+| `confidence_threshold` | 0.7 | Keep token if probability ≥ this, re-mask otherwise |
+| `activation_threshold` | 0.5 | Block confidence to count as "activated" |
+| `addition_threshold` | 0.3 | Block confidence to allow starting successor block |
+| `block_size` | 8 | Tokens per block (should match training) |
+| `max_pipeline_depth` | 4 | Max simultaneous in-flight blocks |
+| `temperature` | 1.0 | Sampling temperature during denoising |
+
+Presets: `D2fDecodeConfig::quality()` (16 steps, 0.9 confidence), `D2fDecodeConfig::speed()` (4 steps, 0.5 confidence).
+
+### DecodeStrategy — Automatic Selection
+
+```rust
+pub enum DecodeStrategy {
+    Autoregressive,         // 1 token/step
+    Speculative,            // DFlash + DDTree + verifier
+    DiscreteDiffusion,      // D2F block-parallel (behind "dllm" feature)
+}
+```
+
+`DecodeStrategy::recommend(block_size, n_tokens, has_draft_model)` auto-selects:
+1. `dllm` feature enabled **and** `n_tokens >= block_size` → `DiscreteDiffusion`
+2. `has_draft_model` → `Speculative`
+3. Otherwise → `Autoregressive`
+
+Set via `InferenceOverrides::decode_strategy` for explicit override.
+
+📖 See [`.research/34_D2F_Discrete_Diffusion_Forcing.md`](../.research/34_D2F_Discrete_Diffusion_Forcing.md) for experimental results and research context.
+
+---
+
 ## REST Bridge (behind `"rest"` feature)
 
 Augments speculative decoding with historically successful token sequences retrieved from an external vector store.
@@ -391,12 +475,13 @@ Pipeline steps:
 | `"validator"` | `SynPruner` — syntax-aware constrained decoding |
 | `"rest"` | REST bridge test + `merge_retrieved_branches` (client in `riir-ai/riir-rest`) |
 | `"feedback"` | E2E feedback loop — sends `InferenceResult` to REST endpoint |
+| `"dllm"` | D2F Discrete Diffusion Forcing — `D2fContext`, `D2fPipeline`, block-parallel decode (Plan 066) |
 
 ---
 
 ## Key Design Principles
 
-1. **Zero-allocation hot path:** All `_with` variants and `TreeBuilder` reuse pre-allocated buffers. No `Vec::push` in the inner loop — only `clear()` + index writes.
-2. **Separable pipeline stages:** DFlash → DDTree → Verifier are independent. Each can be swapped, benchmarked, or disabled independently.
-3. **Config-driven behavior:** `SpeculativeConfig` controls lookahead depth, tree budget, acceptance rates, and parallelism thresholds. No runtime branching on magic numbers.
-4. **Feature-gated complexity:** REST bridge and constraint pruners are behind feature flags. The default build stays lean.
+1. **Zero-allocation hot path:** All `_with` variants, `TreeBuilder`, and `D2fContext` reuse pre-allocated buffers. No `Vec::push` in the inner loop — only `clear()` + index writes. D2F uses flat 2D buffers (`[pos * dim..(pos+1) * dim]`) instead of `Vec<Vec<f32>>`.
+2. **Separable pipeline stages:** DFlash → DDTree → Verifier are independent. D2F is an alternative pipeline: `forward_block_causal` → confidence remasking → constraint pruning. Each can be swapped, benchmarked, or disabled independently.
+3. **Config-driven behavior:** `SpeculativeConfig` controls lookahead depth, tree budget, acceptance rates, and parallelism thresholds. `D2fDecodeConfig` controls denoising steps, confidence thresholds, and block size. `DecodeStrategy` auto-selects the optimal pipeline. No runtime branching on magic numbers.
+4. **Feature-gated complexity:** REST bridge, constraint pruners, and D2F are behind feature flags. The default build stays lean.

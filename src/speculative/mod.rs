@@ -35,9 +35,9 @@ pub use sampling::{
 };
 pub use step::{speculative_step, speculative_step_verifier};
 pub use types::{
-    BinaryScreeningPruner, BlockScores, ConstraintPruner, DDTreeBranchCache, DraftEvent,
-    DraftResult, FlashPrefillConfig, NoPruner, NoScreeningPruner, PrefillMode, RejectionReason,
-    ScreeningPruner, SpeculativeContext, TreeNode,
+    BinaryScreeningPruner, BlockScores, ConstraintPruner, DDTreeBranchCache, DecodeStrategy,
+    DraftEvent, DraftResult, FlashPrefillConfig, NoPruner, NoScreeningPruner, PrefillMode,
+    RejectionReason, ScreeningPruner, SpeculativeContext, TreeNode,
 };
 pub use verifier::{SimulatedVerifier, SpeculativeVerifier};
 
@@ -54,9 +54,13 @@ pub use flow_pruner::FlowPruner;
 
 // ── D2F Re-exports (Plan 066 Phase 2) ─────────────────────────
 #[cfg(feature = "dllm")]
+pub use crate::dllm::D2fContext;
+#[cfg(feature = "dllm")]
 pub use d2f::{
     D2fBlockResult, D2fBlockState, D2fDecodeConfig, D2fPipeline, D2fPipelineResult,
-    d2f_decode_block, d2f_decode_block_with_prompt, d2f_decode_block_with_target,
+    d2f_decode_block, d2f_decode_block_with, d2f_decode_block_with_prompt,
+    d2f_decode_block_with_prompt_with, d2f_decode_block_with_target,
+    d2f_decode_block_with_target_with,
 };
 
 #[cfg(feature = "sudoku")]

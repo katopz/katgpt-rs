@@ -108,7 +108,7 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 
 ---
 
-## Phase 2: Inference Pipeline (Feature-Gated)
+## Phase 2: Inference Pipeline (Feature-Gated) ✅
 
 ### Task 2.1: D2F Inference in microgpt-rs
 - [x] Feature flag `dllm` in `microgpt-rs/Cargo.toml` (already existed)
@@ -125,14 +125,14 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
   - `d2f_decode_block_with_prompt()` for prompt-context conditioning ✅
   - `d2f_decode_block_with_target()` for accuracy measurement ✅
 - [x] Re-exports in `speculative/mod.rs` behind `#[cfg(feature = "dllm")]`
-- [ ] Integrate with existing `SpeculativeContext` for zero-alloc buffer reuse (currently uses allocating `forward_block_causal_positions`)
-- [ ] KV cache commit: after block fully denoised, write to persistent KV cache
+- [x] Integrate with `D2fContext` for zero-alloc buffer reuse — `forward_block_causal_with()` writes into pre-allocated flat buffers
+- [x] KV cache commit: `D2fContext::commit(len)` preserves KV across blocks, pipeline skips recomputation for committed positions
 
 ### Task 2.2: ConstraintPruner Integration
 - [x] At each denoising step, call `pruner.is_valid(depth, token, path)` for each candidate — `sample_greedy()` and `sample_temperatured()` both filter via pruner
 - [x] Invalid tokens excluded from softmax denominator (skipped in `sum_exp` computation, effectively -inf)
 - [ ] For `ScreeningPruner`: use relevance score to weight sampling probabilities — deferred (needs relevance API integration)
-- [ ] Benchmark: denoising quality with vs without pruner — deferred to Task 2.3
+- [x] Benchmark: denoising quality with vs without pruner — `benchmark_constraint_pruner_overhead` in `tests/test_d2f_decode.rs`
 
 ### Task 2.3: Benchmark Suite ✅
 - [x] Create `tests/test_d2f_decode.rs` (feature-gated) — 15 tests: quality, pipeline, constraints, benchmarks
@@ -147,15 +147,15 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 
 ## Phase 3: Integration (If Results Are Good)
 
-### Task 3.1: Hybrid AR-D2F Pipeline
-- [ ] Config option to choose decode strategy: AR, DFlash, D2F
-- [ ] Auto-switch: use D2F for block-parallel tasks, AR for sequential tasks
-- [ ] Router integration: domain config can specify D2F as decode strategy
+### Task 3.1: Hybrid AR-D2F Pipeline ✅
+- [x] Config option to choose decode strategy: AR, DFlash, D2F — `DecodeStrategy` enum in `speculative/types.rs`
+- [x] Auto-switch: use D2F for block-parallel tasks, AR for sequential tasks — `DecodeStrategy::recommend()` heuristic
+- [x] Router integration: domain config can specify D2F as decode strategy — `InferenceOverrides::decode_strategy` field
 
-### Task 3.2: Documentation & Research Update
-- [ ] Update `.research/34_D2F_Discrete_Diffusion_Forcing.md` with benchmark results
-- [ ] Update `README.md` with D2F section (if results warrant)
-- [ ] Update `.docs/03_speculative_decoding.md` with D2F as decode option
+### Task 3.2: Documentation & Research Update ✅
+- [x] Update `.research/34_D2F_Discrete_Diffusion_Forcing.md` with benchmark results — added Section 8: Phase 2 Results
+- [x] Update `README.md` with D2F section — brief section + `dllm` feature flag in table
+- [x] Update `.docs/03_speculative_decoding.md` with D2F as decode option — full D2F section with API, comparison table, code examples
 
 ---
 
