@@ -84,6 +84,22 @@ pub use ropd_rubric::{
     ScoreResult, score_with_references, score_with_references_id,
 };
 
+#[cfg(feature = "sdar_gate")]
+pub mod sdar;
+#[cfg(feature = "sdar_gate")]
+pub mod sdar_gate;
+
+#[cfg(feature = "sdar_gate")]
+pub use sdar::{
+    GateStats, PromotionStats, SdarAbsorbConfig, SdarBanditConfig, SdarBanditPruner,
+    SdarGatedAbsorbCompress,
+};
+#[cfg(feature = "sdar_gate")]
+pub use sdar_gate::{
+    SDAR_BETA, SDAR_BETA_MAX, SDAR_BETA_MIN, sdar_benefit_gate, sdar_gate, sdar_gate_default,
+    sdar_gated_reward, sdar_modulate, sdar_modulate_default, sdar_should_promote,
+};
+
 #[cfg(feature = "stepcode")]
 pub mod stepcode;
 

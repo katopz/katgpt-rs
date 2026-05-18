@@ -38,6 +38,7 @@ bandit = []  # Multi-armed bandit adaptive ScreeningPruner (Plan 030)
 delta_mem = ["bandit"]  # δ-Mem modelless distillation — associative bandit memory (Plan 053)
 g_zero = ["bandit"]  # G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049)
 ropd_rubric = ["bandit"]  # ROPD rubric modelless distillation — multi-criteria reward (Plan 071)
+sdar_gate = []  # SDAR sigmoid gating for modelless distillation signals (Plan 072)
 fft = ["bandit"]     # FFT Tactics Arena — ATB battle engine with status effects (Plan 053)
 stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full`.
 bomber = ["bevy_ecs", "bandit"]  # Bomberman HL Arena (Plan 033)
