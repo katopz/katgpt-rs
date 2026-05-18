@@ -28,6 +28,11 @@ const NUM_CATEGORIES: usize = 8;
 const NUM_TEMPLATES: usize = 4;
 const DEFAULT_MCTS_BUDGET: usize = 200;
 const DEFAULT_MCTS_ROLLOUT_DEPTH: usize = 50;
+/// Recency decay half-life for credit assignment (in moves).
+/// With ~302 moves/game, half_life=50 means the last ~50 moves get most credit.
+const HL_RECENCY_HALF_LIFE: f32 = 50.0;
+/// Exploration rate decay per game (0.995 → ε halves every ~138 games).
+const HL_EPSILON_DECAY: f32 = 0.995;
 
 // ── Board Helpers ──────────────────────────────────────────────
 
@@ -586,10 +591,13 @@ impl GoMoveCategory {
 /// Blends heuristic evaluation (80%) with bandit Q-value (20%).
 /// Uses ε-greedy exploration (ε = 0.15, decaying to 0.05).
 /// Call `update_outcome(won)` after each game to reinforce/penalize categories.
+/// Distributes reward across ALL categories in trace with recency weighting.
 pub struct GoHLPlayer {
     bandit: BanditStats,
     epsilon: f32,
-    last_category: Option<GoMoveCategory>,
+    /// Trace of all move categories used in current game.
+    /// Used for recency-weighted credit assignment at game end.
+    category_trace: Vec<GoMoveCategory>,
 }
 
 impl GoHLPlayer {
@@ -598,23 +606,46 @@ impl GoHLPlayer {
         Self {
             bandit: BanditStats::new(NUM_CATEGORIES),
             epsilon: HL_EPSILON,
-            last_category: None,
+            category_trace: Vec::new(),
         }
     }
 
     /// Update bandit stats based on game outcome.
     ///
-    /// Call after each game. Rewards the category used in the last move.
+    /// Distributes reward across ALL categories in the trace with recency weighting.
+    /// Later moves get exponentially more credit (closer to game outcome).
+    /// Adapted from Bomber HLPlayer's decay-based credit assignment.
     pub fn update_outcome(&mut self, won: bool) {
-        if let Some(cat) = self.last_category {
-            let reward = match won {
-                true => 1.0,
-                false => 0.0,
-            };
-            self.bandit.update(cat as usize, reward);
+        if self.category_trace.is_empty() {
+            self.epsilon = (self.epsilon * HL_EPSILON_DECAY).max(0.05);
+            return;
         }
-        self.last_category = None;
-        self.epsilon = (self.epsilon * 0.995).max(0.05);
+
+        let base_reward = if won { 1.0 } else { 0.0 };
+        let total = self.category_trace.len();
+        let mut cat_rewards = [0.0f32; NUM_CATEGORIES];
+        let mut cat_weights = [0.0f32; NUM_CATEGORIES];
+
+        for (i, cat) in self.category_trace.iter().enumerate() {
+            // Exponential decay: later moves get more credit
+            // recency = 0.5^((total - 1 - i) / half_life)
+            let recency = 0.5_f32.powf((total - 1 - i) as f32 / HL_RECENCY_HALF_LIFE);
+            let idx = *cat as usize;
+            cat_rewards[idx] += base_reward * recency;
+            cat_weights[idx] += recency;
+        }
+
+        // Update Q-values with weighted rewards per category
+        for idx in 0..NUM_CATEGORIES {
+            if cat_weights[idx] == 0.0 {
+                continue;
+            }
+            let reward = cat_rewards[idx] / cat_weights[idx];
+            self.bandit.update(idx, reward);
+        }
+
+        self.category_trace.clear();
+        self.epsilon = (self.epsilon * HL_EPSILON_DECAY).max(0.05);
     }
 
     /// Current bandit Q-values (for inspection).
@@ -647,7 +678,7 @@ impl GoPlayer for GoHLPlayer {
         rng: &mut Rng,
     ) -> GoAction {
         if legal_moves.is_empty() {
-            self.last_category = Some(GoMoveCategory::Pass);
+            self.category_trace.push(GoMoveCategory::Pass);
             return GoAction::Pass;
         }
 
@@ -680,7 +711,7 @@ impl GoPlayer for GoHLPlayer {
                 .expect("scored is non-empty")
         };
 
-        self.last_category = Some(chosen.1);
+        self.category_trace.push(chosen.1);
         GoAction::Place(chosen.0.0, chosen.0.1)
     }
 
@@ -689,7 +720,7 @@ impl GoPlayer for GoHLPlayer {
     }
 
     fn reset(&mut self) {
-        self.last_category = None;
+        self.category_trace.clear();
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
@@ -1261,7 +1292,7 @@ mod tests {
         let legal = state.legal_moves();
         let mut player = GoHLPlayer::new();
         let _action = player.select_move(&state, &legal, &mut rng);
-        assert!(player.last_category.is_some());
+        assert!(!player.category_trace.is_empty());
     }
 
     #[test]
@@ -1272,14 +1303,67 @@ mod tests {
         let mut player = GoHLPlayer::new();
 
         let _action = player.select_move(&state, &legal, &mut rng);
-        let cat = player.last_category.unwrap();
+        let cat = *player.category_trace.last().unwrap();
         let q_before = player.bandit.q_value(cat as usize);
 
         player.update_outcome(true);
-        assert!(player.last_category.is_none());
+        assert!(player.category_trace.is_empty());
 
         let q_after = player.bandit.q_value(cat as usize);
         assert!(q_after > q_before, "Q-value should increase after win");
+    }
+
+    #[test]
+    fn hl_player_credit_assignment_distributes_across_trace() {
+        let mut rng = Rng::with_seed(42);
+        let mut state = GoState::new(9);
+        let mut player = GoHLPlayer::new();
+
+        // Simulate several moves to build a category trace
+        for _ in 0..10 {
+            let legal = state.legal_moves();
+            if legal.is_empty() {
+                break;
+            }
+            let action = player.select_move(&state, &legal, &mut rng);
+            match action {
+                GoAction::Place(r, c) => {
+                    state.play_move(r, c);
+                }
+                GoAction::Pass => state.play_pass(),
+            }
+        }
+
+        let trace_len = player.category_trace.len();
+        assert!(
+            trace_len > 1,
+            "Should have multiple categories in trace, got {trace_len}"
+        );
+
+        // Count unique categories in trace
+        let unique_cats: Vec<usize> = {
+            let mut cats: Vec<usize> = player.category_trace.iter().map(|c| *c as usize).collect();
+            cats.sort();
+            cats.dedup();
+            cats
+        };
+
+        let visits_before: Vec<u32> = unique_cats.iter().map(|&c| player.visits()[c]).collect();
+        player.update_outcome(true);
+        let visits_after: Vec<u32> = unique_cats.iter().map(|&c| player.visits()[c]).collect();
+
+        // All categories that appeared in trace should get at least one update
+        for (i, &cat) in unique_cats.iter().enumerate() {
+            assert!(
+                visits_after[i] > visits_before[i],
+                "Category {cat} should have visits updated: before={}, after={}",
+                visits_before[i],
+                visits_after[i],
+            );
+        }
+
+        // Trace should be cleared after update
+        assert!(player.category_trace.is_empty());
     }
 
     #[test]
@@ -1482,9 +1566,9 @@ mod tests {
 
         let mut hl = GoHLPlayer::new();
         hl.select_move(&state, &legal, &mut rng);
-        assert!(hl.last_category.is_some());
+        assert!(!hl.category_trace.is_empty());
         hl.reset();
-        assert!(hl.last_category.is_none());
+        assert!(hl.category_trace.is_empty());
 
         let mut gz = GoGZeroPlayer::new();
         gz.select_move(&state, &legal, &mut rng);
