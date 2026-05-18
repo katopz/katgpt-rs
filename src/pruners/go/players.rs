@@ -1367,6 +1367,76 @@ mod tests {
     }
 
     #[test]
+    fn hl_credit_assignment_q_values_differentiate_with_mixed_results() {
+        // Short rounds (5 moves each) with mixed outcomes → Q-values should differentiate.
+        // Avoids playing full 302-move games which are too slow for a unit test.
+        let mut rng = Rng::with_seed(42);
+        let mut player = GoHLPlayer::new();
+        assert!(
+            player.q_values().iter().all(|&q| q == 0.0),
+            "Q-values should start at zero"
+        );
+
+        // Round 1: play 5 moves, then report WIN
+        let mut state = GoState::new(9);
+        for _ in 0..5 {
+            let legal = state.legal_moves();
+            if legal.is_empty() {
+                break;
+            }
+            let action = player.select_move(&state, &legal, &mut rng);
+            match action {
+                GoAction::Place(r, c) => {
+                    state.play_move(r, c);
+                }
+                GoAction::Pass => state.play_pass(),
+            }
+        }
+        player.update_outcome(true); // win → reward 1.0
+
+        // After 1 win: Q-values for used categories should be > 0
+        let q_after_win = player.q_values().to_vec();
+        let _visits_after_win = player.visits().to_vec();
+        let any_positive = q_after_win.iter().any(|&q| q > 0.0);
+        assert!(
+            any_positive,
+            "After a win, some Q-values should be > 0, got {:?}",
+            q_after_win,
+        );
+
+        // Round 2: play 5 moves on fresh board, then report LOSS
+        let mut state2 = GoState::new(9);
+        for _ in 0..5 {
+            let legal = state2.legal_moves();
+            if legal.is_empty() {
+                break;
+            }
+            let action = player.select_move(&state2, &legal, &mut rng);
+            match action {
+                GoAction::Place(r, c) => {
+                    state2.play_move(r, c);
+                }
+                GoAction::Pass => state2.play_pass(),
+            }
+        }
+        player.update_outcome(false); // loss → reward 0.0
+
+        // After 1 win + 1 loss: Q-values should be strictly between 0 and 1
+        // (win pushed them toward 1.0, loss pulled them toward 0.0)
+        let q_mixed = player.q_values().to_vec();
+        let visits_mixed = player.visits().to_vec();
+        let any_mixed = q_mixed
+            .iter()
+            .zip(visits_mixed.iter())
+            .any(|(&q, &v)| v > 0 && q > 0.0 && q < 1.0);
+        assert!(
+            any_mixed,
+            "After mixed win/loss, some Q-values should be between 0 and 1, got {:?}",
+            q_mixed,
+        );
+    }
+
+    #[test]
     fn gzero_player_selects_template() {
         let mut rng = Rng::with_seed(42);
         let state = new_9x9();
