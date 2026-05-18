@@ -570,7 +570,7 @@ mod tests {
         // Should have some history
         assert!(!player.delta_history.is_empty());
         assert!(mean >= 0.0 || mean < 0.0); // just checking it's a valid f32
-        assert!(positive >= 0.0 && positive <= 1.0);
+        assert!((0.0..=1.0).contains(&positive));
     }
 
     #[test]

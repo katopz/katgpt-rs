@@ -320,7 +320,7 @@ mod tests {
             for dy in -1_i32..=1 {
                 for dx in -1_i32..=1 {
                     let (x, y) = (sx + dx, sy + dy);
-                    if x < 1 || x > 11 || y < 1 || y > 11 {
+                    if !(1..=11).contains(&x) || !(1..=11).contains(&y) {
                         continue;
                     }
                     match grid.cells[y as usize][x as usize] {
@@ -436,7 +436,7 @@ mod tests {
             for dy in -1_i32..=1 {
                 for dx in -1_i32..=1 {
                     let (x, y) = (sx + dx, sy + dy);
-                    if x < 1 || x > 11 || y < 1 || y > 11 {
+                    if !(1..=11).contains(&x) || !(1..=11).contains(&y) {
                         continue;
                     }
                     match grid.get(x, y) {

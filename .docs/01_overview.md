@@ -116,6 +116,7 @@ src/
       g_zero_player.rs  GZeroPlayer — G-Zero self-play with template proposer + delta bandit
       tft_player.rs  TftPlayer — Tit-for-Tat with provocation detection
       rubric_player.rs  RubricPlayer — rubric-vector reward (Plan 071 T9)
+      arena_runner.rs  BomberArenaConfig, run_bomber_game, run_bomber_matchup (Plan 077)
       replay.rs     ReplaySample, ReplayWriter — JSONL replay persistence
       replay_backward.rs  BackwardSample, ReplayBackwardWalker — GFlowNet backward policy
       systems.rs    init_world, spawn_players, run_tick
@@ -134,6 +135,7 @@ src/
       players.rs    FftPlayer trait, GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer
       g_zero_player.rs  GZeroFFTPlayer — G-Zero self-play for FFT
       rubric_player.rs  RubricFFTPlayer — rubric-vector reward (Plan 071 T10)
+      arena_runner.rs  FftArenaConfig, run_fft_battle, run_fft_matchup (Plan 077)
       tft_player.rs  TftFFTPlayer — Tit-for-Tat FFT player
     go/             Go GameState + AutoGo API bridge + tournament ⛩
       mod.rs        Module root, re-exports
@@ -161,6 +163,10 @@ src/
       delta_absorb.rs  DeltaGatedConfig, DeltaGatedAbsorbCompress<P>
       fft_templates.rs  FFTTemplate (10 strategies), FFTTemplateProposer
 
+    arena/           Cross-arena tournament infrastructure (Plan 077):
+      mod.rs        Module root + re-exports
+      types.rs      ArenaKind, GameResult, MatchupResult, Ranking, Leaderboard, EloCalculator
+      scheduler.rs  Matchup, round_robin_pairs, full_field_matchups
     ropd_rubric/     ROPD rubric modelless distillation (Plan 071):
       mod.rs           Module root + re-exports
       template.rs      RubricCriterion, RubricTemplate (bomber/fft/generic)
@@ -282,8 +288,10 @@ cargo run --example core_03_ppot --features ppot              # PPoT resampling 
 cargo run --example core_04_prefill                           # PFlash prefill demo
 cargo run --example bandit_01_basic --features bandit         # Bandit basics
 cargo run --example bomber_01_arena --features bomber         # Bomberman arena
+cargo run --example bomber_09_rubric_tournament --features ropd_rubric,g_zero,bomber  # Bomber rubric tournament (Plan 077)
 cargo run --example monopoly_01_arena --features monopoly     # Monopoly arena
 cargo run --example fft_01_arena --features fft               # FFT Tactics arena
+cargo run --example fft_02_rubric_tournament --features ropd_rubric,g_zero,fft  # FFT rubric tournament (Plan 077)
 cargo run --example go_06_bench --features go --release       # Go benchmark suite
 ```
 

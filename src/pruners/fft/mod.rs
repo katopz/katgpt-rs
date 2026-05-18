@@ -36,3 +36,7 @@ pub mod rubric_player;
 
 #[cfg(feature = "ropd_rubric")]
 pub use rubric_player::RubricFFTPlayer;
+
+pub mod arena_runner;
+
+pub use arena_runner::{FftArenaConfig, FftBattleResult, run_fft_battle, run_fft_matchup};

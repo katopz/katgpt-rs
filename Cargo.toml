@@ -150,6 +150,10 @@ required-features = ["bomber"]
 name = "bomber_08_agent_loop"
 required-features = ["bomber-agent"]
 
+[[example]]
+name = "bomber_09_rubric_tournament"
+required-features = ["ropd_rubric", "g_zero", "bomber"]
+
 # ── Monopoly FSM Arena ────────────────────────────────────────
 
 [[example]]
@@ -182,6 +186,10 @@ required-features = ["game_state"]
 
 [[example]]
 name = "fft_01_arena"
+
+[[example]]
+name = "fft_02_rubric_tournament"
+required-features = ["ropd_rubric", "g_zero", "fft"]
 
 # ── Blue Bear ──────────────────────────────────────────────────
 

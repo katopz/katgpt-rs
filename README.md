@@ -480,9 +480,11 @@ Run: `cargo test --features "stepcode" --test bench_stepcode_modelless -- --noca
 | Greedy 🐱 | Heuristic + 20% safe exploration | +131 | 5 |
 | Validator 🐶 | Static safety rules | -30 | 1 |
 | Random 🐰 | Blast-zone avoidance only | -55 | 9 |
-| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`bomber`) | — | — |
+| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`bomber`) | — | 8 (8.0%)* |
 
-📖 See [`.docs/10_bomber_arena.md`](.docs/10_bomber_arena.md).
+*\*Plan 077 tournament: Rubric ≈ GZero (8W each), confirming single-axis hypothesis. High FFA draw rate (~80%) limits decisive outcomes. See `.benchmarks/009_arena_integration.md`.*
+
+📖 See [`.docs/10_bomber_arena.md`](.docs/10_bomber_arena.md). Tournament infrastructure: `bomber_09_rubric_tournament` example.
 
 ## 🔮 GameState Forward Model — STRATEGA Distillation
 
@@ -583,15 +585,17 @@ Final Fantasy Tactics-inspired 4v4 ATB (Active Time Battle) arena with status ef
 | **TFT** 🦊 | Provocation FSM + role-based response | **99.0** | **95.7%** | **1.10** |
 | HL 🐵 | Bandit Q-learning over 9 action types | 91.5 | 85.9% | 0.88 |
 | Greedy 🐱 | Weakest-target + heal + potion | 56.1 | 35.7% | 0.83 |
-| GZero 🤖 | Template hints + δ bandit + heuristics | 15.8 | 61.9% | 0.16 |
-| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`fft`) | — | — | — |
-| Validator 🐶 | Safety-first + debuff cure + retreat | — | — | — |
+| GZero 🤖 | Template hints + δ bandit + heuristics | 60.0* | 61.9% | 0.16 |
+| Rubric 🎯 | Multi-criteria rubric reward + template hints + Q-learning (`ropd_rubric`+`g_zero`+`fft`) | 60.0* | — | — |
+| Validator 🐶 | Safety-first + debuff cure + retreat | 5.0* | — | — |
+
+*\*Plan 077 tournament (600 battles): Rubric ≡ GZero (identical 60% win rate, 100% draws head-to-head). The 3-criterion rubric collapses to scalar-equivalent signal. See `.benchmarks/009_arena_integration.md`.*
 
 **TFT game theory:** Nice (role default) → Retaliatory (on provoke from `GameEvent::DamageDealt`) → Forgiving (10% generous TFT + 5-tick timer). Each class retaliates differently: Knight intercepts, WhiteMage heals first then attacks, BlackMage bursts.
 
 **GvG Round-Robin** (250 rounds × 6 matchups): TFT 92.5% > HL 73.0% > Greedy 61.6%. Nash analysis confirms TFT is a dominant strategy.
 
-3 examples (arena, GvG tournament, A/B benchmark).
+4 examples (arena, rubric tournament, GvG tournament, A/B benchmark).
 📖 See [`.docs/09_heuristic-learning.md`](.docs/09_heuristic-learning.md) for full benchmark results.
 
 ## 🏟️ Go: AutoGo Distillation (Plan 065)

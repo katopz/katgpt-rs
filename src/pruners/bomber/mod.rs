@@ -12,6 +12,7 @@ pub mod systems;
 #[cfg(feature = "bomber-agent")]
 pub mod validator_agent;
 
+pub mod arena_runner;
 #[cfg(feature = "g_zero")]
 pub mod g_zero_player;
 #[cfg(feature = "ropd_rubric")]
@@ -36,6 +37,7 @@ pub use validator_agent::{
 #[cfg(feature = "bandit")]
 pub use crate::pruners::SharedBanditStats;
 
+pub use arena_runner::{BomberArenaConfig, BomberRoundResult, run_bomber_game, run_bomber_matchup};
 #[cfg(feature = "g_zero")]
 pub use g_zero_player::GZeroPlayer;
 #[cfg(feature = "bomber-wasm")]

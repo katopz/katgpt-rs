@@ -8,6 +8,8 @@
 >
 > **Status (Plan 071):** ROPD Rubric modelless distillation — `RubricVector`, `RubricTemplate`, `RubricGatedAbsorbCompress`, `RubricBanditPruner` behind `--features ropd_rubric` (implies `bandit`). Per-criterion gap targeting replaces scalar δ with structured multi-criteria reward. `RubricPlayer` (bomber, `g_zero`+`bomber`) and `RubricFFTPlayer` (FFT, `g_zero`+`fft`) integrate rubric reward into arena players (Plan 071 T9/T10). Benchmark: 5.3M observe_rubric/sec, 20/20 targeting accuracy, zero regression. See `.benchmarks/007_ropd_rubric_modelless.md`.
 >
+> **Status (Plan 077):** Arena Integration — cross-arena tournament infrastructure (`arena/types.rs`, `arena/scheduler.rs`, `bomber/arena_runner.rs`, `fft/arena_runner.rs`). Round-robin tournaments with ELO ratings confirm **Rubric ≈ GZero** in both Bomber (8W vs 8W) and FFT (60% vs 60%, 100% draws head-to-head). The 3-criterion rubric vector collapses to the same effective signal as scalar Hint-δ. See `.benchmarks/009_arena_integration.md`.
+>
 > **Status (Plan 072):** SDAR Gated distillation modelless — `sdar_gate()`, `SdarBanditPruner`, `SdarGatedAbsorbCompress` behind `--features sdar_gate`. Asymmetric trust: sigmoid gate σ(β·x) endorses positive gaps, attenuates negative. β=5.0 paper-validated. Benchmark: 118M updates/sec, zero hot-path overhead, 97.5% targeting accuracy. See `.benchmarks/008_sdar_gated_modelless.md`.
 >
 > **Status (Plan 032):** TrialLog, AbsorbCompress, HotSwapPruner, and RegressionSuite are implemented behind `--features bandit`. See examples `hl_01_trial_log` and `hl_02_hotswap`.
@@ -667,10 +669,21 @@ Same architecture as RubricPlayer but for multi-axis FFT domain. Uses `FFTTempla
 
 ### When Rubric Helps vs Scalar δ
 
+**Pre-tournament hypothesis (Plan 071):**
+
 | Domain | Axes | Expected Rubric Gain | Reason |
 |--------|------|---------------------|--------|
 | Bomber | 1 (survival) | Minimal | Single dominant axis — scalar δ captures it |
 | FFT | 4+ (damage, survival, support, position) | Significant | Multi-axis — scalar δ conflates, rubric separates |
+
+**Post-tournament results (Plan 077):**
+
+| Domain | GZero Win% | Rubric Win% | Δ | Verdict |
+|--------|-----------|-------------|---|---------|
+| Bomber | 8.0% | 8.0% | 0% | ✅ Confirmed: no rubric advantage |
+| FFT | 60.0% | 60.0% | 0% | ❌ Rejected: rubric ≡ GZeroFFT |
+
+GZero vs Rubric head-to-head in FFT: 40 games, **100% draws**. The rubric criteria (TaskFulfillment, Completeness, ConstraintSatisfaction) are all positively correlated with winning, causing the rubric vector to degenerate to a scalar equivalent. Future work: decorrelated criteria that trade off (aggression vs safety vs efficiency).
 
 ---
 

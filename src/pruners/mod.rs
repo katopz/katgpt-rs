@@ -157,6 +157,14 @@ pub use go::{
     run_tournament_batch,
 };
 
+#[cfg(any(feature = "bomber", feature = "fft"))]
+pub mod arena;
+
+#[cfg(any(feature = "bomber", feature = "fft"))]
+pub use arena::{
+    ArenaKind, EloCalculator, GameResult, Leaderboard, Matchup, MatchupResult, Ranking,
+};
+
 #[cfg(feature = "fft")]
 pub mod fft;
 

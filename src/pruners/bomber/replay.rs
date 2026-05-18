@@ -392,7 +392,7 @@ mod tests {
         let board = serialize_board(&grid);
 
         assert_eq!(board[0], 1); // (0,0) FixedWall
-        assert_eq!(board[1 * ARENA_W + 1], 2); // (1,1) DestructibleWall
+        assert_eq!(board[ARENA_W + 1], 2); // (1,1) DestructibleWall
         assert_eq!(board[2 * ARENA_W + 3], 3); // (3,2) PowerUpHidden
     }
 

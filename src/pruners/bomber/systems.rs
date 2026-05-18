@@ -983,7 +983,7 @@ mod tests {
         let events = world.resource::<Events<GameEvent>>();
         let mut cursor = events.get_cursor();
         let mut found_landmine_explosion = false;
-        for event in cursor.read(&events) {
+        for event in cursor.read(events) {
             match event {
                 GameEvent::BombExploded { pos, range } if *pos == landmine_pos => {
                     assert_eq!(*range, 1, "landmine should always have range 1");
