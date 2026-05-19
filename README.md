@@ -892,7 +892,7 @@ Adapts SDAR's token-level sigmoid gating pattern to our modelless distillation s
 - Negative gaps (rejection) → gate closes → attenuated update signal
 - Sigmoid gate: `σ(β·x)` with β=5.0 (paper-validated optimum)
 
-### Benchmark Results (`.benchmarks/008_sdar_gated_modelless.md`)
+### Component Benchmarks (`.benchmarks/008_sdar_gated_modelless.md`)
 
 | Method | Throughput | Hot-path overhead |
 |--------|-----------|-------------------|
@@ -905,6 +905,22 @@ Adapts SDAR's token-level sigmoid gating pattern to our modelless distillation s
 | High BR (1.5–2.0) | 195/200 | 97.5% |
 | Neutral BR (0.9–1.1) | 102/200 | 51.0% |
 | Low BR (0.0–0.4) | 0/0 | 0.0% |
+
+### Arena Results (`.benchmarks/010_sdar_arena.md`) — ⚠️ Negative Result
+
+**Bomber** (7 players, 5 matchups × 50 games):
+
+| Rank | Player | ELO | Win% |
+|------|--------|-----|------|
+| 4 | GZero | 981 | 7.0% |
+| 5 | Rubric | 955 | 5.0% |
+| 6 | **SDAR** | **954** | **6.0%** |
+
+**FFT** (7 strategies, 42 matchups × 20 games): SDAR draws 100% vs GZero and Rubric (40 games each). Win matrix identical — same action distributions.
+
+**Verdict:** SDAR modelless gating does **not** improve arena performance. The sigmoid gate modulates reward signal intensity (convergence rate), not action selection. In short tournament series, SDAR produces the same action distributions as Rubric and GZero.
+
+The infrastructure (sigmoid gate primitive, bandit wrapper, absorb wrapper) is production-quality and reusable for the gradient-based path (Plan 073).
 
 **Feature gate:** `sdar_gate = []` — off by default.
 

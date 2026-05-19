@@ -146,9 +146,10 @@ Apply SDAR gate to absorb-compress promotion decisions.
   ```
   - All new types behind `#[cfg(feature = "sdar_gate")]`
 
-- [ ] **T9: Update README.md** — add SDAR gating section
+- [x] **T9: Update README.md** — add SDAR gating section
   - Brief description, link to research doc, benchmark results
   - **NOTE:** Negative result — SDAR modelless gating shows no arena improvement. Document as infrastructure for model-based Plan 073.
+  - **DONE:** Arena results + negative result added to README.md SDAR section. Bomber ELO table, FFT draw results, and honest assessment documented. Infrastructure value noted for Plan 073.
 
 ---
 
