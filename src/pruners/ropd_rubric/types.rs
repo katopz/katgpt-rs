@@ -235,6 +235,68 @@ impl RubricVector {
     pub fn weight(&self, idx: usize) -> f32 {
         self.weights.get(idx).copied().unwrap_or(0.0)
     }
+
+    /// Per-criterion gap vector — all gaps, not filtered.
+    ///
+    /// Returns `Vec<f32>` where `gap[i] = max(reference.scores[i] - self.scores[i], 0.0)`.
+    /// Unlike [`gap_criteria()`] which filters and sorts, this preserves the full
+    /// criterion index mapping for reward computation.
+    ///
+    /// Use this when you need the raw gap vector for per-criterion reward signals.
+    /// Use [`gap_criteria()`] when you need sorted/filtered gaps for targeting.
+    pub fn per_criterion_gaps(&self, reference: &RubricVector) -> Vec<f32> {
+        let n = self.scores.len().min(reference.scores.len());
+        (0..n)
+            .map(|i| (reference.scores[i] - self.scores[i]).max(0.0))
+            .collect()
+    }
+
+    /// Quadratic weighted gap reward — fixes scalar collapse (Issue 061).
+    ///
+    /// Unlike [`to_scalar_delta()`] which collapses via `Σ(w_i × gap_i) / Σ(w_i)`,
+    /// this uses `Σ(w_i × gap_i²) / Σ(w_i)` — a **quadratic** weighted sum.
+    /// The quadratic form breaks permutation symmetry: concentrated gaps in one
+    /// criterion score higher than spread gaps across multiple criteria, even when
+    /// the linear weighted sum is identical.
+    ///
+    /// # Why Quadratic Fixes the Collapse
+    ///
+    /// Linear: `Σ(w_i × gap_i)` is symmetric — swapping gaps between criteria
+    /// leaves the sum unchanged. Two profiles with same `weighted_score` produce
+    /// identical reward regardless of gap distribution.
+    ///
+    /// Quadratic: `Σ(w_i × gap_i²)` penalizes large gaps in single criteria more
+    /// than small gaps across many. Swapping gaps between criteria with different
+    /// weights changes the result because `w_i × gap_i² ≠ w_j × gap_i²` when `w_i ≠ w_j`.
+    ///
+    /// # Formula
+    ///
+    /// `reward = Σ(w_i × gap_i²) / Σ(w_i)`
+    ///
+    /// # Example (Bomber: weights=[4.0, 2.0, 1.0], reference=perfect)
+    ///
+    /// | Profile | Scores | Gaps | `weighted_score` | `quadratic_reward` |
+    /// |---------|--------|------|------------------|--------------------|
+    /// | A | (1.0, 0.0, 0.0) | (0.0, 1.0, 1.0) | 0.571 | 0.429 |
+    /// | C | (0.5, 0.5, 1.0) | (0.5, 0.5, 0.0) | 0.571 | 0.214 |
+    ///
+    /// Same `weighted_score` (0.571) → **different** `quadratic_reward` (0.429 ≠ 0.214).
+    /// Profile A has concentrated failures (actionable) → higher reward → bandit explores more.
+    /// Profile C has spread failures (less actionable) → lower reward → bandit explores less.
+    pub fn quadratic_weighted_reward(&self, reference: &RubricVector) -> f32 {
+        let n = self.scores.len().min(reference.scores.len());
+        let total_weight: f32 = self.weights.iter().take(n).copied().sum();
+        if total_weight.abs() < f32::EPSILON || n == 0 {
+            return 0.0;
+        }
+
+        let mut reward = 0.0;
+        for i in 0..n {
+            let gap = (reference.scores[i] - self.scores[i]).max(0.0);
+            reward += self.weights[i] * gap * gap;
+        }
+        reward / total_weight
+    }
 }
 
 // ── Tests ───────────────────────────────────────────────────────

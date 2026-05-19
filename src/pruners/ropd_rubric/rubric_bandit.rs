@@ -118,12 +118,15 @@ impl RubricBanditConfig {
 ///   └── num_criteria: usize           (criteria count from template)
 /// ```
 ///
-/// # Reward Signal
+/// # Reward Signal (Issue 061 fix)
 ///
-/// `reward = max(reference.weighted_score() - student.weighted_score(), floor)`
+/// `reward = student.quadratic_weighted_reward(reference)` — uses quadratic weighted gaps
+/// instead of scalar `weighted_score()` difference. This preserves per-criterion identity:
+/// two `RubricVector`s with the same `weighted_score()` but different gap profiles produce
+/// **different** rewards, enabling the bandit to learn criterion-aware strategies.
 ///
-/// Positive gap (reference > student) → positive reward → bandit learns to avoid.
-/// Negative gap (student > reference) → clamped to floor → no penalty for good performance.
+/// Quadratic: `Σ(w_i × gap_i²) / Σ(w_i)` penalizes concentrated failures more than spread.
+/// This fixes the scalar collapse where `RubricPlayer ≡ GZeroPlayer`.
 pub struct RubricBanditPruner<P: ScreeningPruner> {
     /// Inner bandit pruner (delegates arm selection logic).
     inner: BanditPruner<P>,
@@ -175,8 +178,9 @@ impl<P: ScreeningPruner> RubricBanditPruner<P> {
 
     /// Feed a rubric observation as reward to the bandit.
     ///
-    /// Computes `reward = max(reference.weighted_score() - student.weighted_score(), floor)`.
-    /// If normalized, reward is divided by the maximum possible weighted score.
+    /// Uses [`RubricVector::quadratic_weighted_reward()`] to compute reward that preserves
+    /// per-criterion gap identity (fixes Issue 061 scalar collapse). Two rubrics with the
+    /// same `weighted_score()` but different gap profiles produce different rewards.
     ///
     /// The bandit's Q-value for this arm is updated incrementally.
     ///
@@ -257,15 +261,21 @@ impl<P: ScreeningPruner> RubricBanditPruner<P> {
         }
     }
 
-    /// Compute reward from student and reference rubrics.
+    /// Compute reward from student and reference rubrics using quadratic weighted gaps.
+    ///
+    /// Fixes Issue 061: uses [`RubricVector::quadratic_weighted_reward()`] which computes
+    /// `Σ(w_i × gap_i²) / Σ(w_i)` instead of scalar `weighted_score()` difference.
+    /// This breaks permutation symmetry — concentrated gaps in high-weight criteria
+    /// produce higher rewards than spread gaps, even when linear weighted sum is identical.
     fn compute_reward(&self, student: &RubricVector, reference: &RubricVector) -> f32 {
-        let gap = reference.weighted_score() - student.weighted_score();
+        let reward = student.quadratic_weighted_reward(reference);
 
         let reward = if self.config.normalize_reward {
-            // Normalize by max possible score (1.0 for perfect reference)
-            gap / 1.0
+            // Quadratic reward is already normalized by total weight.
+            // Cap at [0.0, 1.0] range for bandit stability.
+            reward.clamp(0.0, 1.0)
         } else {
-            gap
+            reward
         };
 
         reward.max(self.config.reward_floor)
@@ -409,9 +419,8 @@ mod tests {
         let mut pruner = make_pruner(3, 3);
         let reference = make_reference();
 
-        // Student: weighted_score = (4*0.3 + 2*0.3 + 1*0.3) / 7 = 0.3
-        // Reference: weighted_score = 1.0
-        // Gap = 1.0 - 0.3 = 0.7 (normalized)
+        // Student: scores=[0.3, 0.3, 0.3], gaps=[0.7, 0.7, 0.7]
+        // Quadratic: (4*0.7² + 2*0.7² + 1*0.7²) / 7 = (1.96+0.98+0.49)/7 = 3.43/7 ≈ 0.49
         let student = make_rubric(vec![0.3, 0.3, 0.3]);
         pruner.observe_rubric(0, &student, &reference);
 
@@ -420,7 +429,10 @@ mod tests {
             reward > 0.0,
             "Positive reward when student underperforms, got {reward}"
         );
-        assert!((reward - 0.7).abs() < 0.01, "Expected ~0.7, got {reward}");
+        assert!(
+            (reward - 0.49).abs() < 0.01,
+            "Expected ~0.49 (quadratic), got {reward}"
+        );
     }
 
     #[test]
@@ -442,18 +454,22 @@ mod tests {
 
     #[test]
     fn test_reward_custom_floor() {
-        let config = RubricBanditConfig::new().with_reward_floor(-1.0);
+        // Quadratic reward is always >= 0 (gaps clamped to max(0, ...)).
+        // Test positive floor: small gap student gets reward raised to floor.
+        let config = RubricBanditConfig::new().with_reward_floor(0.5);
         let mut pruner = make_pruner_with_config(3, 3, config);
-        let reference = make_rubric(vec![0.3, 0.3, 0.3]);
+        let reference = make_reference();
 
-        // Student outperforms → negative gap → clamped to floor=-1.0
-        let student = make_reference();
+        // Small gap: gaps=[0.2, 0.2, 0.2]
+        // quad = (4*0.04 + 2*0.04 + 1*0.04)/7 = 0.28/7 = 0.04
+        // With floor=0.5: reward = max(0.04, 0.5) = 0.5
+        let student = make_rubric(vec![0.8, 0.8, 0.8]);
         pruner.observe_rubric(0, &student, &reference);
 
         let reward = pruner.total_reward(0);
         assert!(
-            reward < 0.0,
-            "Negative reward with negative floor, got {reward}"
+            (reward - 0.5).abs() < 0.01,
+            "Reward clamped to floor=0.5, got {reward}"
         );
     }
 
@@ -554,10 +570,11 @@ mod tests {
         pruner.observe_rubric_multi(0, &student, &[ref_low, ref_high]);
 
         let reward = pruner.total_reward(0);
-        // Should use ref_high (gap = 1.0 - 0.3 = 0.7)
+        // Should use ref_high: gaps=[0.7, 0.7, 0.7]
+        // quad = (4*0.49 + 2*0.49 + 1*0.49)/7 = 3.43/7 ≈ 0.49
         assert!(
-            (reward - 0.7).abs() < 0.01,
-            "Should use best reference, got {reward}"
+            (reward - 0.49).abs() < 0.01,
+            "Should use best reference (quadratic ≈0.49), got {reward}"
         );
     }
 

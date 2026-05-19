@@ -264,6 +264,11 @@ impl<P: ScreeningPruner> RubricGatedAbsorbCompress<P> {
     /// Uses the weighted sum of gaps for high-weight criteria as the reward.
     /// This provides a richer signal than scalar δ — it encodes *which*
     /// criteria have gaps and how important they are.
+    /// Compute absorb reward using quadratic weighted gaps (Issue 061 fix).
+    ///
+    /// Uses `Σ(w_i × gap_i²)` instead of `Σ(w_i × gap_i)` — the quadratic form
+    /// breaks permutation symmetry, preserving per-criterion identity in the reward.
+    /// Concentrated gaps in high-weight criteria produce higher rewards than spread gaps.
     fn compute_absorb_reward(&self, arm: usize) -> f32 {
         let Some(state) = self.arm_states.get(arm) else {
             return 0.0;
@@ -274,7 +279,7 @@ impl<P: ScreeningPruner> RubricGatedAbsorbCompress<P> {
             .iter()
             .filter(|(_, _, weight)| *weight >= self.config.min_weight_for_absorb)
             .filter(|(_, gap, _)| *gap >= self.config.gap_threshold)
-            .map(|(_, gap, weight)| gap * weight)
+            .map(|(_, gap, weight)| gap * gap * weight)
             .sum()
     }
 

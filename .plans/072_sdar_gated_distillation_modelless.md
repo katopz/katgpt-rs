@@ -29,6 +29,7 @@
   - Domains: Bomber arena (single quality axis), Go 9×9 (positional multi-axis)
   - Hyperparameters from paper: β=5.0 (sigmoid sharpness), λ=0.01 (auxiliary weight analog)
   - **Gate:** Must show measurable improvement on at least one metric before Phase 2
+  - **UNBLOCKED (Issue 061 fixed):** Component benchmarks exist (`bench_sdar_gated_modelless.rs` — overhead, throughput, convergence, absorb). Results in `.benchmarks/008_sdar_gated_modelless.md` — 28% higher regret (cost of asymmetric trust on scalar). Arena integration (Bomber GvG, Go 9×9) was blocked by Issue 061 scalar collapse — now **fixed** via `quadratic_weighted_reward()` (`Σ(w_i × gap_i²) / Σ(w_i)`). Bomber arena shows Rubric ELO 985 > GZero ELO 974 (+11 ELO). SDAR gating on per-criterion rewards is now meaningful. Next: wire SDAR player, run full arena benchmarks.
 
 ### Phase 1: Sigmoid Gate Primitive
 
@@ -136,6 +137,7 @@ Apply SDAR gate to absorb-compress promotion decisions.
   - Domains: Bomber GvG (1000 rounds), Go 9×9 self-play (200 games)
   - Metrics: win rate, regret curve, DDTree accept rate
   - Record results in benchmark file
+  - **UNBLOCKED (Issue 061 fixed):** Was blocked by Issue 061 scalar collapse — now **fixed** via `quadratic_weighted_reward()`. Per-criterion rewards now differentiate gap profiles (2.00× reward ratio for concentrated vs spread gaps). No SDAR-gated player wired into arena examples yet. Next: create `SdarRubricPlayer`, wire into arena, run benchmarks.
 
 - [x] **T8: Feature gate** — `sdar_gate` feature in `Cargo.toml`
   ```toml
