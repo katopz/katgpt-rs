@@ -1,5 +1,7 @@
 # Plan 077: SpectralQuant Upgrade — Calibrated Eigenbasis + Water-Fill + Selective QJL
 
+> **Status**: Done ✅ (T1–T10 complete, codebooks fitted at runtime)
+
 ## Summary
 
 Upgrade `src/turboquant/` from random rotation + uniform bit allocation to SpectralQuant's calibrated approach:
@@ -21,9 +23,9 @@ Reference implementation: `.raw/spectralquant/src/spectralquant/` (Python).
 - [x] T5: Add `SelectiveQJL` — Rademacher ±1 sign matrix only on top `d_eff` coords in `spectral.rs`
 - [x] T6: Add `LloydMaxQuantizer` struct with `.fit()/.quantize()/.dequantize()` + `NonUniformQuantizer` combining two-regime allocation + per-dim water-fill
 - [x] T7: Add `SpectralQuantKVCache` with per-dim variable-bit packing to new `spectral_kv_cache.rs`
-- [ ] T8: Modify `forward.rs` — add `attention_spectralquant` path gated behind feature
+- [x] T8: Modify `forward.rs` — add `attention_spectralquant` path gated behind feature
 - [x] T9: Feature gate `spectral_quant = []` — **on by default after T10 benchmarks prove GOAT** (added to `default` + `full`); off during development
-- [ ] T10: Benchmarks: cosine similarity before/after, compression ratio, latency — **gate for default-on**
+- [x] T10: Benchmarks: cosine similarity before/after, compression ratio, latency — **gate for default-on**
 
 ## New Types
 
