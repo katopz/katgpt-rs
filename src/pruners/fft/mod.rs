@@ -37,6 +37,12 @@ pub mod rubric_player;
 #[cfg(feature = "ropd_rubric")]
 pub use rubric_player::RubricFFTPlayer;
 
+#[cfg(feature = "sdar_gate")]
+pub mod sdar_player;
+
+#[cfg(feature = "sdar_gate")]
+pub use sdar_player::SdarFFTPlayer;
+
 pub mod arena_runner;
 
 pub use arena_runner::{FftArenaConfig, FftBattleResult, run_fft_battle, run_fft_matchup};

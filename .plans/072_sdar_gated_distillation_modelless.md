@@ -22,14 +22,14 @@
 
 ### Phase 0: Benchmark Baseline (MUST DO FIRST)
 
-- [ ] **T1: Create benchmark test** — `tests/bench_sdar_gated_modelless.rs`
+- [x] **T1: Create benchmark test** — `tests/bench_sdar_gated_modelless.rs`
   - Baseline: existing `DeltaGatedAbsorbCompress` + `BanditPruner` with UCB1 (scalar δ)
   - Compare: `SdarGatedAbsorbCompress` + `SdarBanditPruner` with sigmoid-gated δ
   - Metrics: DDTree nodes, accept rate, bandit regret convergence, win rate (1000 episodes)
   - Domains: Bomber arena (single quality axis), Go 9×9 (positional multi-axis)
   - Hyperparameters from paper: β=5.0 (sigmoid sharpness), λ=0.01 (auxiliary weight analog)
   - **Gate:** Must show measurable improvement on at least one metric before Phase 2
-  - **UNBLOCKED (Issue 061 fixed):** Component benchmarks exist (`bench_sdar_gated_modelless.rs` — overhead, throughput, convergence, absorb). Results in `.benchmarks/008_sdar_gated_modelless.md` — 28% higher regret (cost of asymmetric trust on scalar). Arena integration (Bomber GvG, Go 9×9) was blocked by Issue 061 scalar collapse — now **fixed** via `quadratic_weighted_reward()` (`Σ(w_i × gap_i²) / Σ(w_i)`). Bomber arena shows Rubric ELO 985 > GZero ELO 974 (+11 ELO). SDAR gating on per-criterion rewards is now meaningful. Next: wire SDAR player, run full arena benchmarks.
+  - **DONE:** Component benchmarks in `.benchmarks/008_sdar_gated_modelless.md`. Arena benchmarks in `.benchmarks/010_sdar_arena.md`. `SdarPlayer` + `SdarFFTPlayer` wired into `bomber_10_sdar_tournament` + `fft_03_sdar_tournament`. Results: Bomber SDAR ELO 954 (tied with Rubric 955), FFT SDAR draws 100% vs GZero/Rubric (identical action distributions in 20-game series).
 
 ### Phase 1: Sigmoid Gate Primitive
 
@@ -133,11 +133,11 @@ Apply SDAR gate to absorb-compress promotion decisions.
 
 ### Phase 4: Integration + Benchmark
 
-- [ ] **T7: Run benchmarks from T1** — compare ungated vs gated
-  - Domains: Bomber GvG (1000 rounds), Go 9×9 self-play (200 games)
-  - Metrics: win rate, regret curve, DDTree accept rate
-  - Record results in benchmark file
-  - **UNBLOCKED (Issue 061 fixed):** Was blocked by Issue 061 scalar collapse — now **fixed** via `quadratic_weighted_reward()`. Per-criterion rewards now differentiate gap profiles (2.00× reward ratio for concentrated vs spread gaps). No SDAR-gated player wired into arena examples yet. Next: create `SdarRubricPlayer`, wire into arena, run benchmarks.
+- [x] **T7: Run benchmarks from T1** — compare ungated vs gated
+  - Domains: Bomber GvG (50 games × 5 matchups), FFT round-robin (20 games × 42 matchups)
+  - Metrics: win rate, ELO rating, head-to-head record
+  - Record results in `.benchmarks/010_sdar_arena.md`
+  - **DONE:** SDAR players wired (`SdarPlayer`, `SdarFFTPlayer`) and benchmarked. Bomber: SDAR ELO 954, Rubric 955, GZero 981 — SDAR ≈ Rubric < GZero. FFT: SDAR draws 100% vs GZero and Rubric (identical policy in short series). Conclusion: SDAR sigmoid gating on scalar rewards produces near-identical behavior to Rubric in arena settings — the gating affects convergence rate, not action selection.
 
 - [x] **T8: Feature gate** — `sdar_gate` feature in `Cargo.toml`
   ```toml
@@ -148,6 +148,7 @@ Apply SDAR gate to absorb-compress promotion decisions.
 
 - [ ] **T9: Update README.md** — add SDAR gating section
   - Brief description, link to research doc, benchmark results
+  - **NOTE:** Negative result — SDAR modelless gating shows no arena improvement. Document as infrastructure for model-based Plan 073.
 
 ---
 

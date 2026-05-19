@@ -17,6 +17,8 @@ pub mod arena_runner;
 pub mod g_zero_player;
 #[cfg(feature = "ropd_rubric")]
 pub mod rubric_player;
+#[cfg(feature = "sdar_gate")]
+pub mod sdar_player;
 #[cfg(feature = "g_zero")]
 pub mod tft_player;
 #[cfg(feature = "bomber-wasm")]
@@ -44,6 +46,8 @@ pub use g_zero_player::GZeroPlayer;
 pub use players::{LoraPlayer, LoraWasmPlayer, NNPlayer, create_players_with_wasm, is_safe_action};
 #[cfg(feature = "ropd_rubric")]
 pub use rubric_player::RubricPlayer;
+#[cfg(feature = "sdar_gate")]
+pub use sdar_player::SdarPlayer;
 pub use systems::*;
 #[cfg(feature = "g_zero")]
 pub use tft_player::TftPlayer;

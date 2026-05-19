@@ -18,6 +18,8 @@ use super::players::BomberPlayer;
 use super::players::HLPlayer;
 #[cfg(feature = "ropd_rubric")]
 use super::rubric_player::RubricPlayer;
+#[cfg(feature = "sdar_gate")]
+use super::sdar_player::SdarPlayer;
 use super::{ArenaGrid, GameEvent, init_world, init_world_with_arena, run_tick, spawn_players};
 
 // ── Config ─────────────────────────────────────────────────────
@@ -258,6 +260,8 @@ fn update_learning_players(players: &mut [Box<dyn BomberPlayer>], result: &Bombe
         update_if_g_zero(player, survived, killed, powerup_count);
         #[cfg(feature = "ropd_rubric")]
         update_if_rubric(player, survived, killed, powerup_count);
+        #[cfg(feature = "sdar_gate")]
+        update_if_sdar(player, survived, killed, powerup_count);
     }
 }
 
@@ -291,6 +295,14 @@ fn update_if_rubric(
 ) {
     if let Some(rp) = player.as_any_mut().downcast_mut::<RubricPlayer>() {
         rp.update_outcome(survived, killed, powerups);
+    }
+}
+
+/// Update [`SdarPlayer`] if the player is one.
+#[cfg(feature = "sdar_gate")]
+fn update_if_sdar(player: &mut Box<dyn BomberPlayer>, survived: bool, killed: bool, powerups: u32) {
+    if let Some(sp) = player.as_any_mut().downcast_mut::<SdarPlayer>() {
+        sp.update_outcome(survived, killed, powerups);
     }
 }
 

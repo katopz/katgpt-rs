@@ -154,6 +154,10 @@ required-features = ["bomber-agent"]
 name = "bomber_09_rubric_tournament"
 required-features = ["ropd_rubric", "g_zero", "bomber"]
 
+[[example]]
+name = "bomber_10_sdar_tournament"
+required-features = ["sdar_gate", "ropd_rubric", "g_zero", "bomber"]
+
 # ── Monopoly FSM Arena ────────────────────────────────────────
 
 [[example]]
@@ -190,6 +194,10 @@ name = "fft_01_arena"
 [[example]]
 name = "fft_02_rubric_tournament"
 required-features = ["ropd_rubric", "g_zero", "fft"]
+
+[[example]]
+name = "fft_03_sdar_tournament"
+required-features = ["sdar_gate", "ropd_rubric", "g_zero", "fft"]
 
 # ── Blue Bear ──────────────────────────────────────────────────
 
