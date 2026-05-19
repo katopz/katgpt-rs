@@ -924,6 +924,67 @@ The infrastructure (sigmoid gate primitive, bandit wrapper, absorb wrapper) is p
 
 **Feature gate:** `sdar_gate = []` — off by default.
 
+## 🏆 Bradley-Terry Pairwise Ranking (OpenDeepThink Distillation)
+
+Distilled from [OpenDeepThink: Parallel Reasoning via Bradley–Terry Aggregation](https://arxiv.org/pdf/2605.15177) (Zhou et al., 2026). The paper proves pairwise BT ranking (86% accuracy) dramatically outperforms pointwise scoring (59%) for candidate selection — the **untested variable** in our stack.
+
+### Why BT Over Pointwise?
+
+Our entire selection pipeline — `ScreeningPruner::relevance()`, `RubricScorer`, `BanditPruner` Q-values — scores each candidate independently (pointwise). BT replaces this with pairwise comparison + global ranking:
+
+```text
+Pointwise (current):  score(A) → pick max          ← positive bias, noisy
+Pairwise BT (new):    A vs B → σ(sA - sB) → rank   ← relative contrast, opponent-strength-adjusted
+```
+
+### We Already Have LoRA-as-Judge
+
+| Existing | Role | BT Enhancement |
+|----------|------|---------------|
+| `LeviathanVerifier` | LoRA target model verifies drafts via p/q rejection | Pairwise compare DDTree candidates → BT rank |
+| `RubricReward` | LLM rubric + verifier scores GRPO rollouts | BT advantage replaces scalar `(student - teacher) / max` |
+| `HintDelta` | Log-prob shift with/without hint | δ is already pairwise-adjacent — BT formalizes ranking |
+
+### GOAT Proof Results (`.benchmarks/011_bt_rank_goat.md`)
+
+Run: `cargo test --features bt_rank --test bench_bt_rank_goat -- --nocapture`
+
+| Proof | Result | Verdict |
+|-------|--------|---------|
+| BT > Pointwise (true best) | 33.6% vs 23.0%, Δ=+10.6pp | ✅ BT wins |
+| BT > Win Rate (Kendall τ) | 0.6354 vs 0.6196 | ✅ BT wins |
+| Sparse K=2 top-3 hit | 55.0% ≥ 50% | ✅ Graceful degradation |
+| Perfect oracle K=10 | 83.8% > 70%, monotonic | ✅ Scales with quality |
+
+### Key API
+
+```rust,ignore
+use microgpt_rs::pruners::{BtComparison, BtConfig, BtScores, bt_fit, bt_fit_from_fn};
+
+// From explicit comparisons
+let comparisons = vec![BtComparison::new(0, 1), BtComparison::new(1, 2)];
+let scores = bt_fit(&comparisons, 3, &BtConfig::default());
+let best = scores.top_k(1); // [0] — candidate 0 ranked highest
+
+// From pairwise comparison function (e.g., LeviathanVerifier log-probs)
+let scores = bt_fit_from_fn(20, 4, |a, b| compare_candidates(a, b), &BtConfig::default());
+let ranked = scores.rank(); // [best, ..., worst]
+```
+
+### Module Structure
+
+```
+src/pruners/
+    bt_rank.rs      ← BtComparison, BtConfig, BtScores, bt_fit, bt_fit_from_fn, sigmoid
+    mod.rs           ← #[cfg(feature = "bt_rank")]
+tests/
+    bench_bt_rank_goat.rs  ← 4-proof GOAT benchmark
+```
+
+**Feature gate:** `bt_rank = []` — off by default.
+
+📖 See [`.docs/16_opendeepthink_distillation.md`](.docs/16_opendeepthink_distillation.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
+
 ## 🏭 Productions
 
 MicroGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:

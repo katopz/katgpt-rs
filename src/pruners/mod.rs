@@ -100,6 +100,14 @@ pub use sdar_gate::{
     sdar_gated_reward, sdar_modulate, sdar_modulate_default, sdar_should_promote,
 };
 
+#[cfg(feature = "bt_rank")]
+pub mod bt_rank;
+
+#[cfg(feature = "bt_rank")]
+pub use bt_rank::{
+    BtComparison, BtConfig, BtOutcome, BtScores, bt_fit, bt_fit_from_fn, sigmoid as bt_sigmoid,
+};
+
 #[cfg(feature = "stepcode")]
 pub mod stepcode;
 
