@@ -981,9 +981,9 @@ tests/
     bench_bt_rank_goat.rs  ← 4-proof GOAT benchmark
 ```
 
-**Feature gate:** `bt_rank = []` — off by default.
+**Feature gate:** `bt_rank = []` — on by default.
 
-📖 See [`.docs/16_opendeepthink_distillation.md`](.docs/16_opendeepthink_distillation.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
+📖 See [`.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`](.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
 
 ## 🏭 Productions
 
