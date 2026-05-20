@@ -297,7 +297,7 @@ mod tests {
                 (0..head_dim)
                     .map(|i| {
                         let scale = if i < d_eff { 1.0 } else { 0.1 };
-                        rng.normal() as f32 * scale
+                        rng.normal() * scale
                     })
                     .collect()
             })

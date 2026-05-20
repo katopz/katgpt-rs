@@ -24,11 +24,12 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - SIMD-accelerated matmul/HLA kernels: 15.6M ops/s [16×16] NEON (Plan 060)
 - forward_hla: ~939K tok/s (single-core, 30K CCU feasible)
 - forward_ahla: ~1.2M tok/s (single-core)
-- TurboQuant 3-bit KV cache: 5.3× compression, 0.99 attention correlation
+- TurboQuant 3-bit KV cache: 5.3× compression, 0.99 attention correlation (legacy baseline)
+- SpectralQuant calibrated KV cache: eigenbasis + water-fill bit allocation — default KV compression (Plan 078)
 - dLLM Discrete Diffusion Forcing: block-parallel denoising (behind `"dllm"` feature, Plan 066)
 - SP-KV self-pruned KV attention: 3-10× KV reduction with utility prediction (behind `"sp_kv"` feature, Plan 070)
 - PFlash block-sparse prefill: up to 21.3× sequence reduction, 100% NIAH retrieval
-- 516 tests passing, zero clippy warnings
+- 600+ tests passing (37 test files), zero clippy warnings
 
 ## Module Structure
 
@@ -106,6 +107,7 @@ src/
     regression.rs   GoldenTrace, RegressionFailure, RegressionResult, RegressionSuite, ReplayReward trait ♭
     review_metrics.rs  ReviewSummary, ReviewMetrics, ReviewStrategy, EntropyAnomalySummary ♭
     stepcode.rs     PathStep, ShapedPath, shape_path, path_consistency ≋
+    variance_minimizer.rs  VarianceMinimizer, VarianceMinimizerConfig (Plan 078) ☀
     game_state/     GameState forward model trait + generic MCTS (Plan 056) ⎗
       mcts_search   mcts_search — Monte Carlo Tree Search
                     StateHeuristic trait, ActionSpaceLog
@@ -193,13 +195,22 @@ src/
     partial_parser.rs  PartialParser — bracket balance DFA (Tier 0)
     syn_pruner.rs   SynPruner — two-tier pruner (DFA + syn parse)
 
-  turboquant/      TurboQuant KV cache compression (arXiv:2504.19874):
+  turboquant/      TurboQuant KV cache compression — legacy baseline for bench/educate only (arXiv:2504.19874):
     mod.rs          Module root (re-exports)
     types.rs        TurboQuantCodebook, TurboQuantLayer, TurboQuantKVCacheConfig
     codebook.rs     Lloyd-Max codebook (compute_codebook, quantize, dequantize)
     rotation.rs     QR-based orthogonal rotation + QJL projection
     kv_cache.rs     TurboQuantKVCache (store_key, store_value, dequantize, bit-pack)
     forward.rs      attention_turboquant, dequantize_keys_flat/values_flat, cosine_similarity
+
+  spectralquant/   SpectralQuant calibrated KV compression — default (Plan 078) ⊛:
+    mod.rs          Module root (re-exports)
+    types.rs        LloydMaxCodebook, SpectralQuantCalibration, WaterfillAllocation, SpectralQuantLayer, SpectralQuantKVCacheConfig
+    spectral.rs     calibrate_eigenbasis, waterfill_bits, participation_ratio, spectral_gap, LloydMaxQuantizer
+    nonuniform_quant.rs  NonUniformQuantizer, CompressedVector — Lloyd-Max scalar quantizer
+    spectral_rotation.rs  SpectralRotation — eigenbasis rotation, RandomRotation (turboquant compat)
+    spectral_kv_cache.rs  SpectralQuantKVCache — full quantized KV cache implementation
+    forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat
 
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, corrupt_block, forward_bidirectional_positions, forward_block_causal_positions, denoise_loop, denoising_accuracy ⌂
   hla/             Higher-order Linear Attention — O(1) inference cache (Plan 057, SIMD Plan 060) ⎔
@@ -232,6 +243,12 @@ src/
   ⌂ behind --features dllm
   ≋ behind --features stepcode
   ⎗ behind --features game_state
+  ⊛ behind --features spectral_quant  (default)
+  ☀ behind --features replaid_schedules
+  ⊞ behind --features bt_rank         (default)
+  ⊘ behind --features sdar_gate
+  ⊡ behind --features ropd_rubric     (bandit)
+  ⚡ behind --features elf_sde
 ```
 
 ## Feature Flags
@@ -261,6 +278,13 @@ src/
 | `sp_kv` | — | SP-KV self-pruned key-value attention (Plan 070) |
 | `dllm` | — | D2F Discrete Diffusion Forcing — mini dLLM research (Plan 066) |
 | `stepcode` | `bandit` | Path shaping + consistency scoring (Plan 054, infrastructure only, no perf gain) |
+| `ropd_rubric` | `bandit` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting (Plan 071) |
+| `sdar_gate` | — | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072) |
+| `bt_rank` | — | Bradley-Terry pairwise ranking for DDTree selection (OpenDeepThink distillation) |
+| `spectral_quant` | — | SpectralQuant calibrated eigenbasis + water-fill bit allocation — default KV compression (Plan 078) |
+| `turboquant` | — | TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063) |
+| `replaid_schedules` | — | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
+| `elf_sde` | — | ELF SDE noise injection + logit-normal schedule — requires GOAT proof (Plan 079) |
 | `bomber-agent` | `bomber` | Coding agent validator loop (Issue 052) |
 | `game_state` | `bomber` | GameState forward model trait + generic MCTS (Plan 056) |
 | `bandit_mcts` | `game_state` | Bandit-guided MCTS rollout policy — NFSP/MCTS duality (Plan 067) |
@@ -271,7 +295,7 @@ src/
 | `percepta_compile` | `percepta_wasm`, `good_lp` | + MILP scheduling + weights + transformer + Futamura |
 | `full` | all above | Enable all features |
 
-Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit` (production best perf + accuracy, Plan 051).
+Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant` (production best perf + accuracy + pairwise ranking + calibrated KV compression, Plans 051, 078, 079).
 
 ## Quick Start
 
@@ -334,5 +358,4 @@ cargo run --example go_06_bench --features go --release       # Go benchmark sui
 | 11 | `11_monopoly_fsm.md` | Monopoly FSM arena (Plan 035) |
 | 12 | `12_fft_arena.md` | FFT Tactics Arena (Plan 053) |
 | 13 | `13_mtp_threshold_guide.md` | MTP threshold guide (Plan 055) |
-| 14 | `14_sp_kv_research.md` | SP-KV research note (Plan 070) |
-| 15 | `15_go_arena.md` | Go Arena (Plan 065) |
+| 14 | `14_go_arena.md` | Go Arena (Plan 065) |

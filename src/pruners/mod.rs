@@ -100,6 +100,12 @@ pub use sdar_gate::{
     sdar_gated_reward, sdar_modulate, sdar_modulate_default, sdar_should_promote,
 };
 
+#[cfg(feature = "replaid_schedules")]
+pub mod variance_minimizer;
+
+#[cfg(feature = "replaid_schedules")]
+pub use variance_minimizer::{VarianceMinimizer, VarianceMinimizerConfig};
+
 #[cfg(feature = "bt_rank")]
 pub mod bt_rank;
 

@@ -1236,6 +1236,27 @@ pub struct InferenceResult {
     pub screened: bool,
 }
 
+/// Shared interface for quantized KV caches.
+///
+/// Enables [`crate::transformer::forward_quantized`] to work with any
+/// compression backend (TurboQuant, SpectralQuant, or future methods).
+pub trait QuantizedKVCache {
+    /// Quantize and store a key vector at given layer and position.
+    fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]);
+    /// Quantize and store a value vector at given layer and position.
+    fn store_value(&mut self, layer: usize, pos: usize, value: &[f32]);
+    /// Dequantize a key into a pre-allocated buffer (zero-alloc hot path).
+    fn dequantize_key_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
+    /// Dequantize a value into a pre-allocated buffer (zero-alloc hot path).
+    fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
+    /// Reset cache for a new sequence.
+    fn reset(&mut self);
+    /// Current write position.
+    fn pos(&self) -> usize;
+    /// Set the current write position.
+    fn set_pos(&mut self, pos: usize);
+}
+
 #[cfg(test)]
 mod tests_types {
     use super::*;
@@ -1436,25 +1457,4 @@ mod tests_types {
         assert_eq!(c.lora_rank, 4);
         assert!(!c.lora_targets.is_empty(), "game config needs LoRA targets");
     }
-}
-
-/// Shared interface for quantized KV caches.
-///
-/// Enables [`crate::transformer::forward_quantized`] to work with any
-/// compression backend (TurboQuant, SpectralQuant, or future methods).
-pub trait QuantizedKVCache {
-    /// Quantize and store a key vector at given layer and position.
-    fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]);
-    /// Quantize and store a value vector at given layer and position.
-    fn store_value(&mut self, layer: usize, pos: usize, value: &[f32]);
-    /// Dequantize a key into a pre-allocated buffer (zero-alloc hot path).
-    fn dequantize_key_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
-    /// Dequantize a value into a pre-allocated buffer (zero-alloc hot path).
-    fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
-    /// Reset cache for a new sequence.
-    fn reset(&mut self);
-    /// Current write position.
-    fn pos(&self) -> usize;
-    /// Set the current write position.
-    fn set_pos(&mut self, pos: usize);
 }

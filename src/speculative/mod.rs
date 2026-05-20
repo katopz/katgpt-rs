@@ -17,9 +17,10 @@ pub mod d2f;
 
 // Re-exports — preserves existing import paths like `speculative::build_dd_tree`
 pub use dd_tree::{
-    TreeBuilder, build_dd_tree, build_dd_tree_balanced, build_dd_tree_pruned,
-    build_dd_tree_screened, build_inference_result, extract_best_path, extract_best_path_into,
-    extract_parent_tokens, merge_retrieved_branches,
+    TreeBuilder, build_dd_tree, build_dd_tree_balanced, build_dd_tree_balanced_sde,
+    build_dd_tree_pruned, build_dd_tree_screened, build_dd_tree_sde, build_inference_result,
+    extract_best_path, extract_best_path_into, extract_parent_tokens, inject_sde_noise,
+    merge_retrieved_branches,
 };
 pub use dflash::{
     dflash_predict, dflash_predict_ar, dflash_predict_ar_with, dflash_predict_conditioned,
@@ -37,7 +38,7 @@ pub use step::{speculative_step, speculative_step_verifier};
 pub use types::{
     BinaryScreeningPruner, BlockScores, ConstraintPruner, DDTreeBranchCache, DecodeStrategy,
     DraftEvent, DraftResult, FlashPrefillConfig, NoPruner, NoScreeningPruner, PrefillMode,
-    RejectionReason, ScreeningPruner, SpeculativeContext, TreeNode,
+    RejectionReason, ScreeningPruner, SdeConfig, SpeculativeContext, TreeNode,
 };
 pub use verifier::{SimulatedVerifier, SpeculativeVerifier};
 
@@ -57,7 +58,7 @@ pub use flow_pruner::FlowPruner;
 pub use crate::dllm::D2fContext;
 #[cfg(feature = "dllm")]
 pub use d2f::{
-    D2fBlockResult, D2fBlockState, D2fDecodeConfig, D2fPipeline, D2fPipelineResult,
+    D2fBlockResult, D2fBlockState, D2fDecodeConfig, D2fPipeline, D2fPipelineResult, ScheduleKind,
     d2f_decode_block, d2f_decode_block_with, d2f_decode_block_with_prompt,
     d2f_decode_block_with_prompt_with, d2f_decode_block_with_target,
     d2f_decode_block_with_target_with,

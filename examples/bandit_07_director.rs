@@ -215,6 +215,13 @@ impl Director {
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|(i, _)| i)
                 .unwrap_or(0),
+            BanditStrategy::VarianceEpsilon { epsilon, .. } => {
+                if rng.uniform() < *epsilon {
+                    (rng.uniform() * Encounter::ALL.len() as f32) as usize % Encounter::ALL.len()
+                } else {
+                    self.stats.best_arm()
+                }
+            }
         }
     }
 

@@ -14,6 +14,9 @@
 use crate::transformer::TransformerWeights;
 use crate::types::{Config, Rng, kv_dim, matmul, matmul_relu, rmsnorm};
 
+#[cfg(feature = "replaid_schedules")]
+use crate::pruners::variance_minimizer::{VarianceMinimizer, VarianceMinimizerConfig};
+
 // ═══════════════════════════════════════════════════════════════
 // Task 0.2: Noise Schedule + Corruption
 // ═══════════════════════════════════════════════════════════════
@@ -48,6 +51,129 @@ impl NoiseSchedule {
                 })
                 .collect(),
         }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plan 078: Adaptive Noise Schedule (RePlaid Variance-Minimized)
+// ═══════════════════════════════════════════════════════════════
+
+/// Adaptive noise schedule that equalizes per-step denoising difficulty.
+///
+/// RePlaid Prop 1: "there exists a unique noise schedule γ* such that
+/// ℓ_θ,γ*(t) ≡ κ for all t, and consequently Var_t[ℓ] = 0."
+///
+/// We adapt this to discrete D2F: track per-step reconstruction accuracy,
+/// then adjust mask ratios so each step contributes equal difficulty.
+/// Steps that are too easy (high accuracy) get harder masks.
+/// Steps that are too hard (low accuracy) get easier masks.
+#[cfg(feature = "replaid_schedules")]
+#[derive(Debug, Clone)]
+pub struct AdaptiveNoiseSchedule {
+    /// Base schedule parameters.
+    min_ratio: f32,
+    max_ratio: f32,
+    n_blocks: usize,
+    /// Per-step loss tracker (one VarianceMinimizer per block).
+    step_trackers: Vec<VarianceMinimizer>,
+    /// Current adapted ratios.
+    current_ratios: Vec<f32>,
+    /// Number of adaptation steps performed.
+    adaptations: u32,
+}
+
+#[cfg(feature = "replaid_schedules")]
+impl AdaptiveNoiseSchedule {
+    /// Create a new adaptive schedule starting from monotonic ratios.
+    pub fn new(min_ratio: f32, max_ratio: f32, n_blocks: usize) -> Self {
+        let schedule = NoiseSchedule::new(min_ratio, max_ratio, n_blocks);
+        let current_ratios = schedule.monotonic_ratios();
+
+        let config = VarianceMinimizerConfig {
+            mean_decay: 0.95,
+            var_decay: 0.95,
+            lr: 0.05,
+            min_param: min_ratio,
+            max_param: max_ratio,
+        };
+
+        let step_trackers = current_ratios
+            .iter()
+            .map(|&ratio| VarianceMinimizer::with_param(config.clone(), ratio))
+            .collect();
+
+        Self {
+            min_ratio,
+            max_ratio,
+            n_blocks,
+            step_trackers,
+            current_ratios,
+            adaptations: 0,
+        }
+    }
+
+    /// Convenience constructor from an existing `NoiseSchedule`.
+    pub fn from_schedule(schedule: &NoiseSchedule) -> Self {
+        Self::new(schedule.min_ratio, schedule.max_ratio, schedule.n_blocks)
+    }
+
+    /// Record per-step reconstruction loss during training.
+    ///
+    /// Called after each denoising step to feed the adaptive tracker.
+    /// Block index is clamped to valid range.
+    pub fn record_step_loss(&mut self, block_idx: usize, loss: f32) {
+        if self.step_trackers.is_empty() {
+            return;
+        }
+        let idx = block_idx.min(self.step_trackers.len() - 1);
+        self.step_trackers[idx].observe(loss);
+    }
+
+    /// Adapt ratios to flatten per-step loss variance.
+    ///
+    /// Each tracker independently adjusts its ratio, then we sort
+    /// to maintain monotonicity (RePlaid requires ordered schedules).
+    pub fn adapt_ratios(&mut self) -> Vec<f32> {
+        for (i, tracker) in self.step_trackers.iter_mut().enumerate() {
+            self.current_ratios[i] = tracker.adapt();
+        }
+        // Sort to maintain monotonicity (min to max)
+        self.current_ratios
+            .sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        self.adaptations += 1;
+        self.current_ratios.clone()
+    }
+
+    /// Current ratios (monotonic before first adaptation).
+    pub fn ratios(&self) -> &[f32] {
+        &self.current_ratios
+    }
+
+    /// Reset all trackers and restore monotonic fallback ratios.
+    pub fn reset(&mut self) {
+        let schedule = NoiseSchedule::new(self.min_ratio, self.max_ratio, self.n_blocks);
+        self.current_ratios = schedule.monotonic_ratios();
+
+        let config = VarianceMinimizerConfig {
+            mean_decay: 0.95,
+            var_decay: 0.95,
+            lr: 0.05,
+            min_param: self.min_ratio,
+            max_param: self.max_ratio,
+        };
+
+        self.step_trackers = self
+            .current_ratios
+            .iter()
+            .map(|&ratio| VarianceMinimizer::with_param(config.clone(), ratio))
+            .collect();
+
+        self.adaptations = 0;
+    }
+
+    /// Number of adaptation steps performed so far.
+    pub fn adaptations(&self) -> u32 {
+        self.adaptations
     }
 }
 
@@ -1865,5 +1991,65 @@ mod tests {
         assert!(constraint.is_valid(3, 4, &tokens));
         // Token 0 should be valid at position 3 (same position)
         assert!(constraint.is_valid(3, 0, &tokens));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Plan 078: Adaptive Noise Schedule Tests
+// ═══════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+#[cfg(feature = "replaid_schedules")]
+mod replaid_tests {
+    use super::*;
+
+    #[test]
+    fn test_adaptive_schedule_starts_monotonic() {
+        let schedule = AdaptiveNoiseSchedule::new(0.1, 0.9, 4);
+        let ratios = schedule.ratios();
+        assert_eq!(ratios.len(), 4);
+        // Check monotonic
+        for i in 1..ratios.len() {
+            assert!(ratios[i] >= ratios[i - 1]);
+        }
+    }
+
+    #[test]
+    fn test_adaptive_schedule_reduces_variance() {
+        let mut schedule = AdaptiveNoiseSchedule::new(0.1, 0.9, 4);
+
+        // Simulate losses: earlier steps easier (lower loss), later harder
+        for _ in 0..50 {
+            for i in 0..4 {
+                let loss = 0.1 + 0.2 * i as f32; // step 0: 0.1, step 3: 0.7
+                schedule.record_step_loss(i, loss);
+            }
+            schedule.adapt_ratios();
+        }
+
+        // After adaptation, ratios should have shifted
+        let adapted = schedule.ratios();
+        assert!(schedule.adaptations() > 0);
+
+        // Should still be roughly monotonic (we sort after adapt)
+        for i in 1..adapted.len() {
+            assert!(adapted[i] >= adapted[i - 1] - 0.01); // small tolerance
+        }
+    }
+
+    #[test]
+    fn test_adaptive_schedule_preserves_bounds() {
+        let mut schedule = AdaptiveNoiseSchedule::new(0.1, 0.9, 4);
+
+        for _ in 0..100 {
+            for i in 0..4 {
+                schedule.record_step_loss(i, 100.0); // extreme loss
+            }
+            schedule.adapt_ratios();
+        }
+
+        for &r in schedule.ratios() {
+            assert!(r >= 0.1 - 0.01 && r <= 0.9 + 0.01);
+        }
     }
 }

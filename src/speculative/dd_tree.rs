@@ -4,8 +4,8 @@ use std::collections::{BinaryHeap, HashMap};
 use super::types::BinaryScreeningPruner;
 #[cfg(test)]
 use super::types::NoScreeningPruner;
-use super::types::{ConstraintPruner, NoPruner, ScreeningPruner, TreeNode};
-use crate::types::InferenceResult;
+use super::types::{ConstraintPruner, NoPruner, ScreeningPruner, SdeConfig, TreeNode};
+use crate::types::{InferenceResult, Rng};
 use rayon::prelude::*;
 
 /// Extract tokens from `parent_path` bitfield for path-aware pruning.
@@ -40,6 +40,89 @@ pub fn extract_parent_tokens_into(
         *slot = ((parent_path >> ((num_tokens - 1 - k) * 16)) & 0xFFFF) as usize;
     }
     &buf[..num_tokens]
+}
+
+// ── SDE Noise Injection (ELF Plan 079) ──────────────────────────
+
+/// Inject SDE noise into marginals for DDTree expansion diversity (ELF Alg 6).
+///
+/// When `sde_config.gamma > 0`, adds log-space Gaussian noise to marginals
+/// to break greedy error accumulation and diversify tree paths.
+/// γ=0 returns marginals unchanged (zero-cost no-op).
+///
+/// # Algorithm
+///
+/// For each token probability `p` in each marginal:
+/// 1. If `p > confidence_floor`: convert to log-space, add `γ * N(0,1)`, convert back
+/// 2. Skip very confident tokens if `preserve_top1` is set (keep argmax unchanged)
+/// 3. Re-normalize to ensure probabilities sum to 1.0
+///
+/// # Arguments
+///
+/// * `marginals` — Per-depth token probability distributions
+/// * `sde_config` — SDE noise injection configuration
+/// * `rng` — Random number generator (must be deterministic for reproducibility)
+///
+/// # Returns
+///
+/// New `Vec<Vec<f32>>` with perturbed marginals, or clones if γ=0.
+pub fn inject_sde_noise(
+    marginals: &[&[f32]],
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+) -> Vec<Vec<f32>> {
+    if !sde_config.is_enabled() {
+        return marginals.iter().map(|m| m.to_vec()).collect();
+    }
+
+    marginals
+        .iter()
+        .map(|marginal| {
+            let mut perturbed = marginal.to_vec();
+
+            // Find argmax if preserve_top1
+            let top1_idx = if sde_config.preserve_top1 {
+                perturbed
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(i, _)| i)
+            } else {
+                None
+            };
+
+            // Convert to log-space, add noise, convert back
+            let mut sum = 0.0f32;
+            for (i, prob) in perturbed.iter_mut().enumerate() {
+                // Skip top-1 if preserving
+                if top1_idx == Some(i) {
+                    sum += *prob;
+                    continue;
+                }
+
+                // Skip below confidence floor
+                if *prob <= sde_config.confidence_floor {
+                    continue;
+                }
+
+                // Convert to log-space, add γ * N(0,1), convert back
+                let log_p = prob.ln();
+                let noisy_log_p = log_p + sde_config.gamma * rng.normal();
+                *prob = noisy_log_p.exp().max(0.0);
+                sum += *prob;
+            }
+
+            // Re-normalize
+            if sum > 0.0 {
+                let inv_sum = 1.0 / sum;
+                for prob in perturbed.iter_mut() {
+                    *prob *= inv_sum;
+                }
+            }
+
+            perturbed
+        })
+        .collect()
 }
 
 /// DDTree: Build verification tree from marginals using Best-First Search.
@@ -162,6 +245,54 @@ pub fn build_dd_tree_balanced(
         lambda_flow,
     );
     std::mem::take(&mut builder.tree)
+}
+
+// ── SDE-Aware DDTree Builders (ELF Plan 079) ────────────────────
+
+/// DDTree with SDE noise injection (ELF Plan 079).
+///
+/// Applies SDE noise to marginals before building the tree.
+/// When `sde_config.gamma == 0.0`, this is identical to `build_dd_tree_screened`.
+pub fn build_dd_tree_sde(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    screener: &dyn ScreeningPruner,
+    chain_seed: bool,
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+) -> Vec<TreeNode> {
+    let noisy_marginals = inject_sde_noise(marginals, sde_config, rng);
+    let noisy_slices: Vec<&[f32]> = noisy_marginals.iter().map(|m| m.as_slice()).collect();
+    build_dd_tree_screened(&noisy_slices, config, screener, chain_seed)
+}
+
+/// DDTree balanced with SDE noise injection (ELF Plan 079).
+///
+/// Applies SDE noise to marginals before building the balanced tree.
+/// When `sde_config.gamma == 0.0`, this is identical to `build_dd_tree_balanced`.
+#[allow(clippy::too_many_arguments)]
+pub fn build_dd_tree_balanced_sde(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    screener: &dyn ScreeningPruner,
+    chain_seed: bool,
+    stop_probs: &[f32],
+    backward_weight: f32,
+    lambda_flow: f32,
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+) -> Vec<TreeNode> {
+    let noisy_marginals = inject_sde_noise(marginals, sde_config, rng);
+    let noisy_slices: Vec<&[f32]> = noisy_marginals.iter().map(|m| m.as_slice()).collect();
+    build_dd_tree_balanced(
+        &noisy_slices,
+        config,
+        screener,
+        chain_seed,
+        stop_probs,
+        backward_weight,
+        lambda_flow,
+    )
 }
 
 /// Zero-alloc variant of `extract_best_path`.
@@ -2193,6 +2324,105 @@ mod tests {
                 window[0].score,
                 window[1].score
             );
+        }
+    }
+
+    // ── SDE Noise Tests (ELF Plan 079) ────────────────────────
+
+    #[test]
+    fn test_sde_noise_disabled_is_noop() {
+        let config = SdeConfig::default(); // gamma = 0.0
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3]];
+        let mut rng = Rng::new(42);
+        let noisy = inject_sde_noise(&marginals, &config, &mut rng);
+        for (orig, perturbed) in marginals.iter().zip(noisy.iter()) {
+            for (a, b) in orig.iter().zip(perturbed.iter()) {
+                assert!(
+                    (a - b).abs() < 1e-6,
+                    "disabled SDE should not change marginals"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_sde_noise_enabled_changes_marginals() {
+        let config = SdeConfig {
+            gamma: 1.0,
+            ..Default::default()
+        };
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3]];
+        let mut rng = Rng::new(42);
+        let noisy = inject_sde_noise(&marginals, &config, &mut rng);
+        // At least one value should differ
+        let mut any_changed = false;
+        for (orig, perturbed) in marginals.iter().zip(noisy.iter()) {
+            for (a, b) in orig.iter().zip(perturbed.iter()) {
+                if (a - b).abs() > 1e-6 {
+                    any_changed = true;
+                    break;
+                }
+            }
+        }
+        assert!(any_changed, "enabled SDE should change marginals");
+    }
+
+    #[test]
+    fn test_sde_noise_preserves_sum_to_one() {
+        let config = SdeConfig {
+            gamma: 2.0,
+            ..Default::default()
+        };
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3]];
+        let mut rng = Rng::new(42);
+        let noisy = inject_sde_noise(&marginals, &config, &mut rng);
+        for perturbed in &noisy {
+            let sum: f32 = perturbed.iter().sum();
+            assert!(
+                (sum - 1.0).abs() < 0.01,
+                "perturbed marginals should sum to ~1.0, got {sum}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sde_noise_preserve_top1() {
+        let config = SdeConfig {
+            gamma: 1.0,
+            preserve_top1: true,
+            confidence_floor: 0.0,
+        };
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6]]; // top-1 is index 2
+        let mut rng = Rng::new(42);
+        let noisy = inject_sde_noise(&marginals, &config, &mut rng);
+        // Top-1 should be preserved
+        assert_eq!(
+            noisy[0]
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                .map(|(i, _)| i),
+            Some(2),
+            "preserve_top1 should keep argmax unchanged"
+        );
+    }
+
+    #[test]
+    fn test_sde_noise_deterministic_with_seed() {
+        let config = SdeConfig {
+            gamma: 1.0,
+            ..Default::default()
+        };
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6]];
+
+        let mut rng1 = Rng::new(42);
+        let noisy1 = inject_sde_noise(&marginals, &config, &mut rng1);
+
+        let mut rng2 = Rng::new(42);
+        let noisy2 = inject_sde_noise(&marginals, &config, &mut rng2);
+
+        for (a, b) in noisy1[0].iter().zip(noisy2[0].iter()) {
+            assert!((a - b).abs() < 1e-6, "same seed should produce same noise");
         }
     }
 }

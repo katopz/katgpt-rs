@@ -346,6 +346,13 @@ fn select_arm(
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
             .unwrap_or(0),
+        BanditStrategy::VarianceEpsilon { epsilon: eps, .. } => {
+            if rng.uniform() < *eps {
+                (rng.uniform() * combat_arms as f32) as usize % combat_arms
+            } else {
+                stats.best_arm()
+            }
+        }
     }
 }
 

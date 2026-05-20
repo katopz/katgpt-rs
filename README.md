@@ -294,9 +294,9 @@ src/percepta/
 📁 `.research/32_percepta_distillation_strategy.md` — **Full RIIR verdict** (why take everything, Apache-2.0 → MIT)
 📁 `.research/31_percepta_deep_dive.md` — Gap analysis + **comparison table** (what each Python/C++ does better)
 
-## 🗜️ TurboQuant: Near-Optimal KV Cache Compression
+## 🗜️ TurboQuant: Near-Optimal KV Cache Compression (Legacy Baseline)
 
-Compresses KV cache from f32 (32 bits) to 2-4 bits per coordinate using random rotation + Lloyd-Max scalar quantization. Based on [TurboQuant (Zandieh et al., 2025)](https://arxiv.org/pdf/2504.19874).
+Legacy baseline for benchmarking and education. Superseded by **SpectralQuant** (default). Compresses KV cache from f32 (32 bits) to 2-4 bits per coordinate using random rotation + Lloyd-Max scalar quantization. Based on [TurboQuant (Zandieh et al., 2025)](https://arxiv.org/pdf/2504.19874).
 
 | Metric | Flat f32 | TQ 3-bit | TQ 4-bit |
 |--------|----------|----------|----------|
@@ -311,6 +311,27 @@ Architecture: random orthogonal rotation → Beta-distributed coordinates → Ll
 **Zero-alloc hot path (Plan 051):** Pre-allocated scratch buffers eliminate all heap allocations from `store_key`/`store_value`/`dequantize_key_into`/`dequantize_value_into`. Full store+dequant cycle **44.6% faster**, per-call dequantize **17-20% faster** at production kv_dim.
 
 📁 `src/turboquant/` — `codebook.rs`, `rotation.rs`, `kv_cache.rs`, `forward.rs`, `types.rs`
+🔧 Feature flag: `turboquant` (off by default, legacy baseline)
+
+## 🔬 SpectralQuant: Calibrated Eigenbasis KV Compression (Default)
+
+Data-driven spectral analysis replaces TurboQuant's random rotation with a calibrated eigenbasis. Near-optimal quantization via offline calibration → water-fill bit allocation → Lloyd-Max codebooks. **Default KV compression** (Plan 077). Tradeoff: 2× compression (10.7× vs 5.3×) but lower cosine (0.65 vs 0.97) vs TurboQuant.
+
+| Technique | What | Why Better Than TQ |
+|-----------|------|--------------------|
+| Eigenbasis rotation | Covariance → eigendecomposition | Rotates along data's natural axes, not random |
+| Water-fill allocation | Per-dim bits ∝ eigenvalue | High-energy dims get more bits, low-energy get fewer |
+| Two-regime quantization | Semantic (high-energy) + tail | Optimal non-uniform codebook per regime |
+| Participation ratio | d_eff = (Σλ_i)² / Σ(λ_i²) | Measures intrinsic dimensionality — typically 4–6 at d_h=128 |
+
+**Key properties:**
+- **Calibrated once:** `SpectralQuantCalibration` computed offline per (layer, head, kv_type), serialized with model weights
+- **Spectral gap detection:** λ_d_eff / λ_{d_eff+1} reveals when eigendecomposition captures most variance
+- **Cumulative variance thresholds:** `var_95`, `var_99` — min components for 95%/99% energy retention
+- **Zero-alloc hot path:** Same pre-allocated buffer strategy as TurboQuant
+
+📁 `src/spectralquant/` — `types.rs`, `spectral.rs`, `nonuniform_quant.rs`, `spectral_rotation.rs`, `spectral_kv_cache.rs`, `forward.rs`
+🔧 Feature flag: `spectral_quant` (**on by default**)
 
 ## ⚡ PFlash: Block-Sparse Speculative Prefill
 
@@ -1075,7 +1096,7 @@ cargo run --release --features sudoku
 # Run everything
 cargo run --release --all-features
 
-# Run all tests (674 total)
+# Run all tests (37 test files, 600+ cases)
 cargo test --quiet --workspace --all-features
 
 # Run Sudoku solver example
@@ -1128,9 +1149,12 @@ cargo clippy --all-targets --all-features --quiet
 | `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
+| `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 2× compression vs TQ, lower fidelity (Plan 077, default-on) |
+| `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
+| `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit"]` targets production accuracy + sparsity. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde"]` targets production accuracy + sparsity + pairwise ranking + calibrated KV compression. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -1173,6 +1197,7 @@ src/
     map_generator.rs    Procedural map generation
     pathfinder.rs      A* pathfinding
     stepcode.rs     Path shaping + consistency scoring (Plan 054, NO GAIN)
+    variance_minimizer.rs  VarianceMinimizer, VarianceMinimizerConfig (Plan 078, behind "replaid_schedules")
     delta_mem/      δ-Mem modelless distillation (Plan 053):
       mod.rs        Module root
       hash.rs       FeatureHasher, ContextFeatures, OutcomeFeatures
@@ -1200,6 +1225,10 @@ src/
       mod.rs           Module root + re-exports
       sdar_bandit.rs   SdarBanditPruner<P> (sigmoid-gated reward updates)
       sdar_absorb.rs   SdarGatedAbsorbCompress<P> (soft sigmoid promotion)
+    arena/           Cross-arena tournament infrastructure (Plan 076):
+      mod.rs           Module root + re-exports
+      types.rs         ArenaKind, GameResult, MatchupResult, Ranking, Leaderboard, EloCalculator
+      scheduler.rs     Matchup, round_robin_pairs, full_field_matchups
     bomber/          Bomberman HL arena (bevy_ecs):
       mod.rs           Module root
       arena.rs         Arena setup
@@ -1296,13 +1325,21 @@ src/
     types.rs        SpKvGateMode, SpKvConfig, SpKvLayerCache, SpKvCache, UtilityPredictorWeights, SpKvPredictors, GateBiasBuffer
     utility_predictor.rs  predict, predict_single_head, soft_gate_bias, hard_gate_bias, tahg_gate_bias, UtilityAggregation
     forward.rs      SpKvForwardContext, BiasProvider trait, forward_sp_kv
+  spectralquant/   SpectralQuant calibrated KV compression (Plan 078, default):
+    mod.rs          Module root (re-exports)
+    types.rs        LloydMaxCodebook, SpectralQuantCalibration, WaterfillAllocation, SpectralQuantLayer, SpectralQuantKVCacheConfig
+    spectral.rs     calibrate_eigenbasis, waterfill_bits, participation_ratio, spectral_gap, LloydMaxQuantizer
+    nonuniform_quant.rs  NonUniformQuantizer, CompressedVector — Lloyd-Max scalar quantizer
+    spectral_rotation.rs  SpectralRotation — eigenbasis rotation, RandomRotation (turboquant compat)
+    spectral_kv_cache.rs  SpectralQuantKVCache — full quantized KV cache implementation
+    forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, denoise_loop — dLLM research (behind "dllm" feature)
   alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
   feedback.rs       TTT feedback (feature-gated feedback)
   benchmark.rs      BenchResult, run_all, save_results_csv
   plot.rs           PNG horizontal bar chart
-examples/           39 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, raven, prefill)
-tests/              88+ integration tests + 9 benchmark suites (TurboQuant, PFlash NIAH)
+examples/           58 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode)
+tests/              37 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
 bench/              Auto-numbered PNG + CSV benchmark output
 ```
 

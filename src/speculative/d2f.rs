@@ -100,6 +100,8 @@ pub struct D2fDecodeConfig {
     /// Temperature for sampling during denoising.
     /// Lower = more deterministic, higher = more diverse.
     pub temperature: f32,
+    /// Noise schedule type for time step generation.
+    pub schedule: ScheduleKind,
 }
 
 impl Default for D2fDecodeConfig {
@@ -112,6 +114,7 @@ impl Default for D2fDecodeConfig {
             block_size: 8,
             max_pipeline_depth: 4,
             temperature: 1.0,
+            schedule: ScheduleKind::default(),
         }
     }
 }
@@ -144,6 +147,81 @@ impl D2fDecodeConfig {
         Self {
             block_size,
             ..Self::default()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ELF Logit-Normal Schedule (Plan 079)
+// ---------------------------------------------------------------------------
+
+/// D2F noise schedule type (ELF Appendix C.6).
+#[derive(Debug, Clone, Default)]
+pub enum ScheduleKind {
+    /// Uniform spacing between steps (current default).
+    #[default]
+    Uniform,
+    /// Logit-normal distribution — concentrates steps near t=0 (ELF: μ=-1.5, σ=0.8).
+    LogitNormal { mean: f32, std: f32 },
+}
+
+impl ScheduleKind {
+    /// ELF paper default: LogitNormal with μ=-1.5, σ=0.8.
+    pub fn elf_default() -> Self {
+        Self::LogitNormal {
+            mean: -1.5,
+            std: 0.8,
+        }
+    }
+
+    /// Generate time steps for denoising.
+    /// Returns sorted `Vec<f32>` in [0.0, 1.0] with `n_steps` entries.
+    pub fn generate_steps(&self, n_steps: usize, rng: &mut Rng) -> Vec<f32> {
+        match self {
+            Self::Uniform => {
+                // Uniform spacing: 0.0, 1/(n-1), 2/(n-1), ..., 1.0
+                match n_steps {
+                    0 => vec![],
+                    1 => vec![0.5],
+                    _ => (0..n_steps)
+                        .map(|i| i as f32 / (n_steps - 1) as f32)
+                        .collect(),
+                }
+            }
+            Self::LogitNormal { mean, std } => logit_normal_schedule(n_steps, *mean, *std, rng),
+        }
+    }
+}
+
+/// Sigmoid function: σ(x) = 1 / (1 + exp(-x)).
+fn sigmoid(x: f32) -> f32 {
+    match x >= 0.0 {
+        true => 1.0 / (1.0 + (-x).exp()),
+        false => {
+            let ex = x.exp();
+            ex / (1.0 + ex)
+        }
+    }
+}
+
+/// Generate logit-normal time steps.
+/// Samples t_i = sigmoid(N(μ, σ²)) and sorts ascending.
+fn logit_normal_schedule(n_steps: usize, mean: f32, std: f32, rng: &mut Rng) -> Vec<f32> {
+    match n_steps {
+        0 => vec![],
+        1 => vec![0.5],
+        _ => {
+            // Use Box-Muller for normal samples
+            let mut steps: Vec<f32> = (0..n_steps)
+                .map(|_| {
+                    let u1 = (rng.next() as f64 / u64::MAX as f64).max(1e-10) as f32;
+                    let u2 = (rng.next() as f64 / u64::MAX as f64) as f32;
+                    let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f32::consts::PI * u2).cos();
+                    sigmoid(mean + std * z)
+                })
+                .collect();
+            steps.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            steps
         }
     }
 }

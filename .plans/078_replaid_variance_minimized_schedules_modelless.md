@@ -1,5 +1,7 @@
 # Plan 078: RePlaid Variance-Minimized Schedules — Modelless Path
 
+> **Status (2025-07):** All tasks ✅. VarianceMinimizer: 10.8 ns/obs ✅ ship. AdaptiveNoiseSchedule: infrastructure ready. Bandit VarianceEpsilon + SdarLearnedBeta: partial (doesn't beat UCB1, hits bounds). Feature `replaid_schedules` kept off-default (partial GOAT).
+
 **Branch:** `develop/feature/078_replaid_variance_schedules_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 072 (SDAR Modelless)
 **Research:** `.research/41_RePlaid_Continuous_Diffusion_Scaling.md`
@@ -23,7 +25,7 @@
 
 ### Phase 0: Core Primitive — VarianceMinimizer
 
-- [ ] **T1: Implement `VarianceMinimizer` struct** — `src/pruners/variance_minimizer.rs`
+- [x] **T1: Implement `VarianceMinimizer` struct** — `src/pruners/variance_minimizer.rs`
   - Tracks running mean and variance of a signal across steps/episodes
   - Adapts a scalar schedule parameter to minimize variance (RePlaid Fig 8 simplified)
   - Exponential moving average (EMA) for online updates — no history storage
@@ -92,7 +94,7 @@
 
 ### Phase 1: D2F Variance-Minimized Noise Schedule
 
-- [ ] **T2: Add `AdaptiveNoiseSchedule` to `src/dllm.rs`**
+- [x] **T2: Add `AdaptiveNoiseSchedule` to `src/dllm.rs`**
   - Wraps existing `NoiseSchedule` with per-step loss tracking
   - During training, track reconstruction loss at each denoising step
   - After each training epoch, adapt mask ratios to equalize per-step difficulty
@@ -142,7 +144,7 @@
 
 ### Phase 2: Bandit Variance-Minimized Exploration
 
-- [ ] **T5: Add `VarianceEpsilon` strategy to `BanditStrategy` enum** — `src/pruners/bandit.rs`
+- [x] **T5: Add `VarianceEpsilon` strategy to `BanditStrategy` enum** — `src/pruners/bandit.rs`
   - New variant that adapts ε based on per-episode reward variance
   - High variance → increase exploration (haven't converged)
   - Low variance → decrease exploration (exploit learned Q-values)
@@ -173,7 +175,7 @@
   - `update_arm()` for `VarianceEpsilon`: track reward variance alongside Q-values
   - [x] **T5.1:** Unit test — `test_variance_epsilon_adapts` (synthetic: rewards converge → ε decreases; rewards diverge → ε increases)
 
-- [ ] **T6: Add `BanditStats::reward_variance()` method**
+- [x] **T6: Add `BanditStats::reward_variance()` method**
   - Track per-arm reward variance alongside Q-values
   - Returns variance for logging/diagnostics
   - Uses Welford's online algorithm for numerically stable variance
@@ -188,7 +190,7 @@
   }
   ```
 
-- [ ] **T7: Benchmark VarianceEpsilon vs EpsilonGreedy vs UCB1**
+- [x] **T7: Benchmark VarianceEpsilon vs EpsilonGreedy vs UCB1**
   - Run on Bomber arena (1000 episodes, seed=42)
   - Metrics: win rate, regret convergence, ε evolution over episodes
   - Compare against existing EpsilonGreedy (ε=0.3) and UCB1 baselines
@@ -196,7 +198,7 @@
 
 ### Phase 3: SDAR Learned β
 
-- [ ] **T8: Add `SdarLearnedBeta` to `src/pruners/sdar_gate.rs`**
+- [x] **T8: Add `SdarLearnedBeta` to `src/pruners/sdar_gate.rs`**
   - Replace fixed `SDAR_BETA = 5.0` with learned β that minimizes gated-signal variance
   - Track variance of `sdar_gate(gap, beta) * signal` across episodes
   - Adapt β to flatten this variance (same principle as Prop 1)
@@ -232,7 +234,7 @@
   - Call `observe_and_adapt()` at end of each episode
   - Feature-gated behind existing `sdar` feature
 
-- [ ] **T10: Benchmark Learned β vs Fixed β**
+- [x] **T10: Benchmark Learned β vs Fixed β**
   - Run on Go 9×9 arena (1000 episodes, seed=42)
   - Compare: fixed β=5.0, fixed β=3.0, fixed β=10.0, learned β
   - Metrics: win rate, DDTree nodes, β evolution over episodes
@@ -258,7 +260,7 @@ RePlaid Sec 4.2 shows DPM-Solver++(2M) — a second-order multistep solver — b
 
 ### Phase 4: Unified Benchmark + Feature Gate
 
-- [ ] **T11: Create comprehensive benchmark** — `tests/bench_replaid_variance_schedules.rs`
+- [x] **T11: Create comprehensive benchmark** — `tests/bench_replaid_variance_schedules.rs`
   - Three benchmarks in one file (D2F, Bandit, SDAR)
   - Each with before/after comparison
   - Record in `.benchmarks/012_replaid_variance_schedules.md`
@@ -267,7 +269,7 @@ RePlaid Sec 4.2 shows DPM-Solver++(2M) — a second-order multistep solver — b
     - If 1/3 improves → ship improving subsystem only, document others
     - If 0/3 improves → stop, document negative result, keep code feature-gated
 
-- [ ] **T12: Feature gate `replaid_schedules`** — `Cargo.toml`
+- [x] **T12: Feature gate `replaid_schedules`** — `Cargo.toml`
   - Default: off (experimental until benchmarks prove value)
   - Gated in: `src/pruners/variance_minimizer.rs`, `AdaptiveNoiseSchedule` in `src/dllm.rs`, `VarianceEpsilon` in `bandit.rs`, `SdarLearnedBeta` in `sdar_gate.rs`
   - Add to `full` feature set

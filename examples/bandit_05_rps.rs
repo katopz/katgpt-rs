@@ -75,6 +75,15 @@ fn select_arm(stats: &BanditStats, strategy: &BanditStrategy, rng: &mut Rng) -> 
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
             .unwrap_or(0),
+        BanditStrategy::VarianceEpsilon { epsilon, .. } => {
+            let mean_var = stats.mean_reward_variance();
+            let adapted_eps = (epsilon * (1.0 + 0.1 * mean_var.sqrt())).clamp(0.01, 1.0);
+            if rng.uniform() < adapted_eps {
+                (rng.uniform() * NUM_ARMS as f32) as usize % NUM_ARMS
+            } else {
+                stats.best_arm()
+            }
+        }
     }
 }
 

@@ -235,7 +235,9 @@ The benchmarks progress from individual components to full pipelines:
 | **forward_raven (16 slots)** | Forward pass through `RavenKVCache` — 16 fixed routing slots, O(1) attention. | Proves Raven is faster than flat forward (0.62 vs 0.83 μs). Slot memory wins. |
 | **raven_recall (1000 noise)** | Recall accuracy test: inject 1000 noise tokens, verify target tokens are recalled from frozen slots. | 9.25M tok/s with 63.21/64 recall — proves slot memory retains signal through noise. |
 
-## TurboQuant KV Cache Compression (Plan 043)
+## TurboQuant KV Cache Compression (Plan 043) — Legacy Baseline
+
+> **Note:** TurboQuant is now a legacy baseline for benchmarking/education. **SpectralQuant** (Plan 078, feature `spectral_quant`, on by default) replaces it with calibrated eigenbasis rotation + water-fill bit allocation. See `src/spectralquant/`.
 
 ### Memory Compression
 | Bits | Bytes/token | Compression | Key cos_sim | Attention corr |

@@ -65,6 +65,21 @@ pub enum BanditStrategy {
     /// Optimal asymptotic regret for Bernoulli rewards.
     /// Uses cached samples in [`BanditPruner`] (call `prepare_episode` first).
     ThompsonSampling,
+
+    /// Variance-minimized epsilon (RePlaid-inspired).
+    ///
+    /// Adapts exploration rate to equalize per-episode reward variance.
+    /// When reward variance is high, exploration increases.
+    /// When reward variance is low, exploration decreases.
+    /// Self-supervised — no hyperparameter tuning needed beyond initial ε.
+    VarianceEpsilon {
+        /// Initial epsilon.
+        epsilon: f32,
+        /// EMA decay for variance tracking (0.99 = slow).
+        var_decay: f32,
+        /// Learning rate for epsilon adaptation.
+        lr: f32,
+    },
 }
 
 impl fmt::Display for BanditStrategy {
@@ -75,6 +90,13 @@ impl fmt::Display for BanditStrategy {
                 write!(f, "ε-greedy(ε={epsilon:.3}, decay={decay:.3})")
             }
             Self::ThompsonSampling => write!(f, "Thompson"),
+            Self::VarianceEpsilon {
+                epsilon,
+                var_decay,
+                lr,
+            } => {
+                write!(f, "Var-ε(ε={epsilon:.3}, decay={var_decay:.3}, lr={lr:.3})")
+            }
         }
     }
 }
@@ -90,6 +112,10 @@ pub struct BanditStats {
     visits: Vec<u32>,
     total_pulls: u32,
     num_arms: usize,
+    /// Running M2 for Welford variance (per arm).
+    reward_m2: Vec<f32>,
+    /// Running mean reward for variance tracking (per arm).
+    reward_mean: Vec<f32>,
 }
 
 impl BanditStats {
@@ -100,6 +126,8 @@ impl BanditStats {
             visits: vec![0; num_arms],
             total_pulls: 0,
             num_arms,
+            reward_m2: vec![0.0; num_arms],
+            reward_mean: vec![0.0; num_arms],
         }
     }
 
@@ -115,6 +143,12 @@ impl BanditStats {
         self.total_pulls += 1;
         let n = self.visits[arm] as f32;
         self.q_values[arm] += (reward - self.q_values[arm]) / n;
+
+        // Welford's online algorithm for reward variance tracking
+        let old_mean = self.reward_mean[arm];
+        let new_mean = old_mean + (reward - old_mean) / self.visits[arm] as f32;
+        self.reward_m2[arm] += (reward - old_mean) * (reward - new_mean);
+        self.reward_mean[arm] = new_mean;
     }
 
     /// UCB1 score: `Q(a) + sqrt(2 * ln(N) / n(a))`.
@@ -189,6 +223,35 @@ impl BanditStats {
     /// Visit counts slice (for inspection/logging).
     pub fn visits(&self) -> &[u32] {
         &self.visits
+    }
+
+    /// Welford variance for a single arm.
+    ///
+    /// Returns 0.0 for unvisited arms or arms with fewer than 2 samples.
+    #[inline]
+    pub fn reward_variance(&self, arm: usize) -> f32 {
+        if arm >= self.num_arms || self.visits[arm] < 2 {
+            return 0.0;
+        }
+        self.reward_m2[arm] / (self.visits[arm] - 1) as f32
+    }
+
+    /// Mean reward variance across all visited arms.
+    ///
+    /// Arms with fewer than 2 samples are excluded from the average.
+    pub fn mean_reward_variance(&self) -> f32 {
+        let mut sum = 0.0;
+        let mut count = 0u32;
+        for i in 0..self.num_arms {
+            if self.visits[i] >= 2 {
+                sum += self.reward_variance(i);
+                count += 1;
+            }
+        }
+        match count {
+            0 => 0.0,
+            _ => sum / count as f32,
+        }
     }
 }
 
@@ -385,14 +448,22 @@ impl<P: ScreeningPruner> BanditPruner<P> {
 
     /// Prepare for a new episode. Call before each DDTree build.
     ///
-    /// For Thompson Sampling: draws posterior samples and caches them.
-    /// For other strategies: no-op.
+    /// - Thompson Sampling: draws posterior samples and caches them.
+    /// - VarianceEpsilon: adapts epsilon based on reward variance.
+    /// - Other strategies: no-op.
     pub fn prepare_episode(&mut self, rng: &mut Rng) {
-        if matches!(self.strategy, BanditStrategy::ThompsonSampling) {
-            let n = self.stats.num_arms;
-            for i in 0..n {
-                self.thompson_cache[i] = self.arm_thompson(i, rng);
+        match &self.strategy {
+            BanditStrategy::ThompsonSampling => {
+                let n = self.stats.num_arms;
+                for i in 0..n {
+                    self.thompson_cache[i] = self.arm_thompson(i, rng);
+                }
             }
+            BanditStrategy::VarianceEpsilon { .. } => {
+                // Variance-epsilon adapts dynamically during arm selection.
+                // No pre-computation needed — variance is tracked in BanditStats.
+            }
+            _ => {}
         }
     }
 
@@ -482,6 +553,9 @@ impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
                     .unwrap_or_else(|| self.arm_q(token_idx))
                     .clamp(0.0, 1.0)
                     .max(0.01)
+            }
+            BanditStrategy::VarianceEpsilon { .. } => {
+                self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01)
             }
         };
 
@@ -809,6 +883,7 @@ impl<E: BanditEnv> BanditSession<E> {
                 self.select_epsilon_greedy(*epsilon, rng)
             }
             BanditStrategy::ThompsonSampling => self.select_thompson(rng),
+            BanditStrategy::VarianceEpsilon { .. } => self.select_variance_epsilon(rng),
         }
     }
 
@@ -840,6 +915,27 @@ impl<E: BanditEnv> BanditSession<E> {
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(i, _)| i)
             .unwrap_or(0)
+    }
+
+    /// Variance-minimized epsilon selection (RePlaid-inspired).
+    ///
+    /// Adapts exploration rate based on mean reward variance across arms.
+    /// High variance → more exploration; low variance → more exploitation.
+    fn select_variance_epsilon(&self, rng: &mut Rng) -> usize {
+        let mean_var = self.stats.mean_reward_variance();
+        let adapted_eps = match &self.strategy {
+            BanditStrategy::VarianceEpsilon { epsilon, lr, .. } => {
+                let factor = 1.0 + lr * mean_var.sqrt();
+                (epsilon * factor).clamp(0.01, 1.0)
+            }
+            _ => 0.1,
+        };
+        let num_arms = self.env.num_arms();
+        if rng.uniform() < adapted_eps {
+            (rng.uniform() * num_arms as f32) as usize % num_arms
+        } else {
+            self.stats.best_arm()
+        }
     }
 
     /// Decay epsilon (EpsilonGreedy only).

@@ -174,6 +174,8 @@ pub struct SpeculativeContext {
     pub p_distributions_flat: Vec<f32>,
     /// Number of steps populated in last operation (for slicing).
     pub steps_populated: usize,
+    /// SDE noise injection config for DDTree expansion (ELF Plan 079).
+    pub sde_config: SdeConfig,
 }
 
 impl SpeculativeContext {
@@ -193,6 +195,7 @@ impl SpeculativeContext {
             residual_buf: vec![0.0f32; vocab_size],
             p_distributions_flat: vec![0.0f32; (draft_lookahead + 1) * vocab_size],
             steps_populated: 0,
+            sde_config: SdeConfig::default(),
         }
     }
 
@@ -471,6 +474,53 @@ impl DecodeStrategy {
         } else {
             Self::Autoregressive
         }
+    }
+}
+
+// ── SDE Noise Injection (ELF Plan 079) ─────────────────────────
+
+/// SDE noise injection config for DDTree expansion (ELF Alg 6 adaptation).
+///
+/// ELF shows that injecting small noise during continuous sampling breaks
+/// greedy error accumulation and improves quality in few-step regimes.
+/// We adapt this to DDTree: at each expansion depth, add Gaussian noise
+/// to logits before top-k selection.
+///
+/// γ=0 is identical to current behavior (safe default).
+/// γ>0 increases exploration diversity at potential cost to greedy optimality.
+#[derive(Debug, Clone)]
+pub struct SdeConfig {
+    /// Noise re-injection scale (ELF default: 1.0, our default: 0.0 = disabled).
+    pub gamma: f32,
+    /// Whether to apply noise only to non-top-1 candidates (preserve best, diversify rest).
+    pub preserve_top1: bool,
+    /// Minimum logit magnitude for noise application (skip very confident tokens).
+    pub confidence_floor: f32,
+}
+
+impl Default for SdeConfig {
+    fn default() -> Self {
+        Self {
+            gamma: 0.0, // disabled by default — must prove benefit first
+            preserve_top1: false,
+            confidence_floor: 0.0,
+        }
+    }
+}
+
+impl SdeConfig {
+    /// ELF paper default: γ=1.0.
+    pub fn elf_default() -> Self {
+        Self {
+            gamma: 1.0,
+            preserve_top1: false,
+            confidence_floor: 0.0,
+        }
+    }
+
+    /// Check if SDE noise is enabled (γ > 0).
+    pub fn is_enabled(&self) -> bool {
+        self.gamma > 0.0
     }
 }
 
