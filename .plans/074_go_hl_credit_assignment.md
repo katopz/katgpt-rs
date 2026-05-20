@@ -50,18 +50,18 @@ Adapt Bomber HLPlayer's decay-based credit assignment to Go.
 
 Intermediate rewards between moves (not just game-end binary win/loss).
 
-- [ ] **T5: Add per-move reward computation in `select_move()`**
+- [x] **T5: Add per-move reward computation in `select_move()`** ✅
   - Compute heuristic score delta (before/after move) as intermediate reward
   - Store alongside category in trace: `Vec<(GoMoveCategory, f32)>`
   - Per-move reward = normalized heuristic delta (captures, territory change)
 
-- [ ] **T6: Blend per-move and game-end rewards in `update_outcome()`**
+- [x] **T6: Blend per-move and game-end rewards in `update_outcome()`** ✅
   - Per-move reward: immediate signal (captures, territory)
   - Game-end reward: win/loss binary
   - Blend: `final_reward = α * per_move + (1-α) * game_end`
   - Start with α=0.3 (per-move is supplementary, game-end is primary)
 
-- [ ] **T7: Add test for per-move reward shaping**
+- [x] **T7: Add test for per-move reward shaping** ✅
 
 ### Phase 3: Benchmark + Validation
 
@@ -74,7 +74,7 @@ Intermediate rewards between moves (not just game-end binary win/loss).
 
 ## Success Criteria
 
-1. All 701 Go tests pass (was 699, +2 new tests)
+1. All 766 tests pass (was 699, +3 new tests from Phase 1+2)
 2. Q-values differentiate with mixed win/loss (test verifies: win→Q>0, mixed→0<Q<1)
 3. Win rate vs Random = 100% (no regression)
 4. TUI shows visits distributed across all 8 categories (was 1 per game, now ~8 per game)
