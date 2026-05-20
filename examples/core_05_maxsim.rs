@@ -7,6 +7,7 @@
 //! 4. Scale timing — SIMD speedup over naive materialized baseline
 //! 5. TurboQuant proof — `maxsim_score_turboquant` vs uncompressed (requires `turboquant` feature)
 //! 6. SpectralQuant proof — `maxsim_score_spectralquant` vs uncompressed (requires `spectral_quant` feature)
+//! 7. TurboQuant vs SpectralQuant head-to-head — quality + latency (requires `turboquant` + `spectral_quant` features)
 //!
 //! Run: cargo run --example core_05_maxsim --features maxsim --release
 //! With all proofs: cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release
@@ -352,6 +353,13 @@ fn main() {
     #[cfg(not(feature = "spectral_quant"))]
     println!("── 6. SpectralQuant: skipped (enable --features spectral_quant)\n");
 
+    // ── 7. TurboQuant vs SpectralQuant Head-to-Head ─────────────────
+    #[cfg(all(feature = "turboquant", feature = "spectral_quant"))]
+    section7_tq_vs_sq_benchmark();
+
+    #[cfg(not(all(feature = "turboquant", feature = "spectral_quant")))]
+    println!("── 7. TQ vs SQ: skipped (enable --features \"turboquant,spectral_quant\")\n");
+
     println!("✓ MaxSim demo complete — all primitives exercised.");
 }
 
@@ -524,6 +532,189 @@ fn section6_spectralquant_proof() {
         if roundtrip_match { "✓" } else { "✗" }
     );
 
+    println!();
+}
+
+/// Section 7: TurboQuant vs SpectralQuant head-to-head benchmark (Plan 080).
+///
+/// Directly compares TQ (4-bit uniform + random rotation) vs SQ (~3-bit spectral +
+/// variable-bit allocation) on the **same** synthetic data, measuring both quality
+/// (error vs uncompressed) and latency (µs/call). Multiple test configs show how
+/// each method scales with sequence length.
+#[cfg(all(feature = "turboquant", feature = "spectral_quant"))]
+fn section7_tq_vs_sq_benchmark() {
+    use microgpt_rs::spectralquant::forward::maxsim_score_spectralquant;
+    use microgpt_rs::spectralquant::{
+        SpectralQuantCalibration, SpectralQuantKVCache, SpectralQuantKVCacheConfig,
+        participation_ratio,
+    };
+    use microgpt_rs::turboquant::TurboQuantKVCache;
+    use microgpt_rs::turboquant::forward::maxsim_score_turboquant;
+    use microgpt_rs::types::Config;
+
+    println!("── 7. TurboQuant vs SpectralQuant Head-to-Head ─────────────────\n");
+
+    let config = Config::micro();
+    let kv_dim = microgpt_rs::types::kv_dim(&config);
+
+    // Build SQ calibration: identity eigenvectors + exponential eigenvalue decay.
+    // With identity eigenvectors, SQ falls back to random rotation → same quality as TQ.
+    let mut eigenvectors = vec![0.0f32; kv_dim * kv_dim];
+    for i in 0..kv_dim {
+        eigenvectors[i * kv_dim + i] = 1.0;
+    }
+    let eigenvalues: Vec<f32> = (0..kv_dim).map(|i| 10.0 * 0.8f32.powi(i as i32)).collect();
+    let d_eff = participation_ratio(&eigenvalues);
+    let cal = SpectralQuantCalibration {
+        eigenvectors,
+        eigenvalues,
+        d_eff,
+        spectral_gap: None,
+        var_95: 10,
+        var_99: 20,
+        n_samples: 100,
+        head_dim: kv_dim,
+    };
+
+    let sq_config = SpectralQuantKVCacheConfig {
+        avg_bits: 3.0,
+        min_tail_bits: 1,
+        max_bits: 8,
+        qjl_dim: 16,
+        lloyd_max_iter: 30,
+        calibration_samples: 100,
+        seed: 42,
+        use_water_fill: false,
+        wf_min_bits: 1,
+        wf_max_bits: 6,
+        n_layers: config.n_layer,
+        kv_dim,
+        max_seq_len: config.block_size,
+    };
+
+    // Test configs: (n_positions, lq, label)
+    let test_configs: &[(usize, usize, &str)] = &[(8, 2, "8pos×2q"), (16, 4, "16pos×4q")];
+
+    let bench_iters = 10_000u64;
+
+    println!("  kv_dim={kv_dim}, 10000 iterations per timing run");
+    println!();
+    println!("  ┌────────────────────────────────────────────────────────────────────────────┐");
+    println!("  │ Method        │ Config   │ Score   │ Error (%) │ Latency (µs) │ Bits/key │");
+    println!("  ├────────────────────────────────────────────────────────────────────────────┤");
+
+    for &(n_pos, lq, label) in test_configs {
+        // Same synthetic data for both
+        let queries: Vec<f32> = (0..lq * kv_dim).map(|i| (i as f32 * 0.1).sin()).collect();
+        let original_keys: Vec<Vec<f32>> = (0..n_pos)
+            .map(|t| {
+                (0..kv_dim)
+                    .map(|d| ((t * kv_dim + d) as f32 * 0.05).cos())
+                    .collect()
+            })
+            .collect();
+
+        // Uncompressed ground truth
+        let flat_keys: Vec<f32> = original_keys.iter().flatten().copied().collect();
+        let uncompressed = maxsim_score(&queries, &flat_keys, lq, n_pos, kv_dim);
+
+        // --- TurboQuant (4-bit uniform + random rotation) ---
+        let mut tq_cache = TurboQuantKVCache::new(&config, 4, 4);
+        for (t, key) in original_keys.iter().enumerate() {
+            tq_cache.store_key(0, t, key);
+        }
+
+        // TQ warmup + timing
+        for _ in 0..200 {
+            std::hint::black_box(maxsim_score_turboquant(
+                &queries,
+                &tq_cache,
+                0,
+                0..n_pos,
+                kv_dim,
+            ));
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..bench_iters {
+            std::hint::black_box(maxsim_score_turboquant(
+                &queries,
+                &tq_cache,
+                0,
+                0..n_pos,
+                kv_dim,
+            ));
+        }
+        let tq_us = start.elapsed().as_micros() as f64 / bench_iters as f64;
+        let tq_score = maxsim_score_turboquant(&queries, &tq_cache, 0, 0..n_pos, kv_dim);
+        let tq_error = if uncompressed.abs() > 1e-6 {
+            (tq_score - uncompressed).abs() / uncompressed.abs() * 100.0
+        } else {
+            0.0
+        };
+
+        // --- SpectralQuant (~3-bit spectral + variable-bit) ---
+        let mut sq_cache = SpectralQuantKVCache::from_calibration(
+            &sq_config,
+            &vec![cal.clone(); config.n_layer],
+            &vec![cal.clone(); config.n_layer],
+        );
+        for (t, key) in original_keys.iter().enumerate() {
+            sq_cache.store_key(0, t, key);
+        }
+
+        // SQ warmup + timing
+        for _ in 0..200 {
+            std::hint::black_box(maxsim_score_spectralquant(
+                &queries,
+                &mut sq_cache,
+                0,
+                0..n_pos,
+                kv_dim,
+            ));
+        }
+        let start = std::time::Instant::now();
+        for _ in 0..bench_iters {
+            std::hint::black_box(maxsim_score_spectralquant(
+                &queries,
+                &mut sq_cache,
+                0,
+                0..n_pos,
+                kv_dim,
+            ));
+        }
+        let sq_us = start.elapsed().as_micros() as f64 / bench_iters as f64;
+        let sq_score = maxsim_score_spectralquant(&queries, &mut sq_cache, 0, 0..n_pos, kv_dim);
+        let sq_error = if uncompressed.abs() > 1e-6 {
+            (sq_score - uncompressed).abs() / uncompressed.abs() * 100.0
+        } else {
+            0.0
+        };
+
+        // Print rows
+        println!(
+            "  │ TurboQuant    │ {label:8} │ {tq_score:7.4} │ {tq_error:8.2}% │ {tq_us:11.2} │        4 │",
+        );
+        println!(
+            "  │ SpectralQuant │ {label:8} │ {sq_score:7.4} │ {sq_error:8.2}% │ {sq_us:11.2} │       ~3 │",
+        );
+        println!(
+            "  │ Uncompressed  │ {label:8} │ {uncompressed:7.4} │    0.00% │           — │       32 │",
+        );
+        println!(
+            "  ├────────────────────────────────────────────────────────────────────────────┤"
+        );
+    }
+
+    println!("  └────────────────────────────────────────────────────────────────────────────┘");
+    println!();
+    println!("  Verdict:");
+    println!("  • TQ = 4-bit uniform quantization + random rotation (simple, fast)");
+    println!("  • SQ = ~3-bit spectral quantization + variable-bit allocation (25% less storage)");
+    println!("  • With identity eigenvectors (no calibration), SQ degrades to TQ-quality rotation");
+    println!(
+        "  • With real calibration data, SQ's eigenbasis decorrelation yields better compression"
+    );
+    println!("  • SQ latency overhead comes from variable-bit unpack + per-regime codebook lookup");
     println!();
 }
 

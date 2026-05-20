@@ -30,7 +30,7 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
 | T10 | Correctness: SQ maxsim streaming vs dequantized | ✅ PASS **exact match** | Bug fixed: identity eigenvectors → random rotation fallback + Python bit allocation formula. Streaming vs dequantized: 0.00% error |
 | T11 | GPU dispatch | ⏸ DEFERRED | 6 blockers documented below |
 | T12 | Quality: ≥2% better retrieval NDCG vs cosine | ⏳ Blocked | Depends on Plan 009 REST pathway |
-| T15 | Example demonstrates all primitives | ✅ PASS | `core_05_maxsim` — correctness ✓, packed ✓, separation ✓, speedup ✓ |
+| T15 | Example demonstrates all primitives | ✅ PASS | `core_05_maxsim` — correctness ✓, packed ✓, separation ✓, speedup ✓, TQ ✓, SQ ✓, TQ-vs-SQ ✓ |
 
 ---
 
@@ -172,14 +172,16 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
     2. Packed `maxsim_score_packed` — ragged batch, packed=sequential verification
     3. Block scoring — MaxSim vs mean-K, needle/noise separation table
     4. Scale timing — Lq=32, Ld=256, dim=128 throughput
-  - 6 sections:
+  - 7 sections:
     1. Core `maxsim_score` — correctness vs naive, per-token breakdown
     2. Packed `maxsim_score_packed` — ragged batch, packed=sequential verification
     3. Block scoring — MaxSim vs mean-K, needle/noise separation table
     4. Scale timing — Lq=32, Ld=256, dim=128 throughput
     5. TurboQuant proof — `maxsim_score_turboquant` vs uncompressed, quantization error (requires `turboquant` feature)
     6. SpectralQuant proof — `maxsim_score_spectralquant` vs uncompressed, spectral quantization error (requires `spectral_quant` feature)
-  - Results: correctness ✓, packed=sequential ✓, 4.71× separation, 7.45× speedup, TQ error 0.95% ✓, SQ roundtrip exact match ✓
+    7. TurboQuant vs SpectralQuant head-to-head — quality + latency on same data (requires `turboquant` + `spectral_quant` features)
+  - Results: correctness ✓, packed=sequential ✓, 4.71× separation, 7.53× speedup, TQ error 0.95% ✓, SQ roundtrip exact match ✓, TQ-vs-SQ benchmark ✓
+  - Benchmark results: `.benchmarks/013_turboquant_vs_spectralquant_maxsim.md`
   - Registered in `Cargo.toml` with `required-features = ["maxsim"]`
   - Run: `cargo run --example core_05_maxsim --features maxsim --release`
   - With all proofs: cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release
@@ -266,6 +268,7 @@ cargo test --features "maxsim,turboquant,spectral_quant" --lib --quiet
 
 ## References
 
+- `.benchmarks/013_turboquant_vs_spectralquant_maxsim.md` — TQ vs SQ CPU benchmark results (Section 7)
 - `.research/45_MaxSim_Memory_Efficient_Late_Interaction_Scoring.md` — research verdict
 - `.raw/maxsim/maxsim_metal/maxsim.metal` — Metal kernel source (reference only)
 - `.raw/maxsim/maxsim_metal/maxsim.mm` — Metal host-side dispatch (reference only)
