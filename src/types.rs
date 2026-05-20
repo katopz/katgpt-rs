@@ -46,6 +46,9 @@ pub struct Config {
     pub sp_kv_threshold: f32,
     pub sp_kv_predictor_hidden: usize,
     pub sp_kv_predictor_lr_mult: f32,
+    // PTRM width scaling (Plan 083)
+    pub width_rollouts: usize,
+    pub early_stop_threshold: f32,
 }
 
 /// Attention mode for HLA (Higher-order Linear Attention).
@@ -126,6 +129,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -195,6 +200,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -237,6 +244,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -280,6 +289,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -321,6 +332,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -364,6 +377,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -406,6 +421,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -448,6 +465,8 @@ impl Config {
             sp_kv_threshold: 0.5,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 5.0,
+            width_rollouts: 1,
+            early_stop_threshold: 0.0,
         }
     }
 
@@ -526,6 +545,12 @@ impl Config {
         // Note: decode_strategy is a generation-time override, not a Config field.
         // Callers should read it directly from InferenceOverrides, not via with_overrides().
         let _ = overrides.decode_strategy;
+        if let Some(v) = overrides.width_rollouts {
+            c.width_rollouts = v;
+        }
+        if let Some(v) = overrides.early_stop_threshold {
+            c.early_stop_threshold = v;
+        }
         c
     }
 }
@@ -550,6 +575,9 @@ pub struct InferenceOverrides {
     pub early_exit_gap: Option<f32>,
     // MTP Drafter overrides (Plan 055: Gemma 4 MTP)
     pub mtp_activation_threshold: Option<usize>,
+    // PTRM width scaling (Plan 083)
+    pub width_rollouts: Option<usize>,
+    pub early_stop_threshold: Option<f32>,
     pub mtp_cluster_vocab_threshold: Option<usize>,
     pub mtp_shared_kv_prompt_threshold: Option<usize>,
     pub mtp_cluster_size: Option<usize>,
@@ -1309,6 +1337,8 @@ mod tests_types {
             early_exit_patience: Some(10),
             early_exit_gap: Some(3.0),
             mtp_activation_threshold: None,
+            width_rollouts: None,
+            early_stop_threshold: None,
             mtp_cluster_vocab_threshold: None,
             mtp_shared_kv_prompt_threshold: None,
             mtp_cluster_size: None,

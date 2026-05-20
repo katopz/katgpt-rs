@@ -217,9 +217,9 @@ examples/cna_03_go_circuit.rs # Go end-to-end — STUB, pending (T8)
 | Modulation preserves quality | ✅ DONE | cna_02_steering: non-circuit RMSE = 0.000000 at all multipliers |
 | Forward hook zero-cost when off | ✅ DONE | `#[cfg(feature = "cna_steering")]` compiles out |
 | Feature gate in Cargo.toml | ✅ DONE | `cna_steering = ["bandit"]` wired |
-| Game domain pairs (T5) | 🔲 TODO | BomberContrastivePairs, GoContrastivePairs, FftContrastivePairs |
-| Go end-to-end example (T8) | 🔲 TODO | cna_03_go_circuit.rs is stub |
-| Benchmark GOAT proof (T9) | 🔲 TODO | `.benchmarks/015_cna_steering.md` not yet created |
+| Game domain pairs (T5) | ✅ DONE | BomberContrastivePairs, GoContrastivePairs, FftContrastivePairs |
+| Go end-to-end example (T8) | ✅ DONE | cna_03_go_circuit.rs — 4-phase pipeline, 4-neuron circuit from 20 games |
+| Benchmark GOAT proof (T9) | ✅ DONE | `tests/bench_cna_steering_goat.rs` — 4/4 GOAT (Bench 015) |
 
 ### Paper Validation Status
 
@@ -229,5 +229,5 @@ examples/cna_03_go_circuit.rs # Go end-to-end — STUB, pending (T8)
 | Late-layer concentration (~85%) | cna_01_discovery shows 100% in layer 4-5 of 6 | ✅ |
 | Quality preserved at all strengths | cna_02_steering: RMSE=0 for non-circuit neurons | ✅ |
 | Cross-layer isolation | cna_02_steering: modulating L5 doesn't affect L4 | ✅ |
-| Ablation changes behavior | Pending game domain integration (T5, T8) | 🔲 |
+| Ablation changes behavior | cna_02_steering: m=0 ablates, m=2 amplifies | ✅ |
 | MMLU preserved (general cap.) | Not applicable — we use game domains, not LLM benchmarks | N/A |

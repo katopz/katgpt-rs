@@ -305,3 +305,227 @@ pub fn compute_mlwr(trace: &[f32], moves: &[MoveRecord], winner: Option<GoCellSe
         0.0
     }
 }
+
+// ── Data Bridge: Natsukaze → Analytics (T0) ────────────────────
+
+/// Action type for raw Go samples, mirroring riir-gpu's `GoActionType`.
+///
+/// This decoupled type allows `samples_to_replay()` to work without
+/// a dependency on the riir-gpu crate.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RawGoAction {
+    /// Place a stone at (row, col).
+    Place { row: usize, col: usize },
+    /// Pass turn.
+    Pass,
+}
+
+/// Raw Go training sample, mirroring riir-gpu's `GoGameSample`.
+///
+/// Decoupled from the riir-gpu crate so that `samples_to_replay()`
+/// can live in microgpt-rs without a cross-project dependency.
+/// Convert from `GoGameSample` trivially:
+///
+/// ```ignore
+/// let raw = RawGoSample {
+///     board: sample.board.clone(),
+///     size: sample.size,
+///     action: match sample.action_type {
+///         GoActionType::Place { row, col } => RawGoAction::Place { row, col },
+///         GoActionType::Pass => RawGoAction::Pass,
+///     },
+///     quality: sample.quality,
+///     move_number: sample.move_number,
+///     legal_moves: sample.legal_moves,
+/// };
+/// ```
+#[derive(Clone, Debug)]
+pub struct RawGoSample {
+    /// Board state: `size * size` cells (0=Empty, 1=Black, 2=White).
+    pub board: Vec<u8>,
+    /// Board dimension (typically 9).
+    pub size: usize,
+    /// Action taken in this state.
+    pub action: RawGoAction,
+    /// Outcome quality: 0.0 (loss) to 1.0 (win) for the mover.
+    pub quality: f32,
+    /// Move number within the game (1-based).
+    pub move_number: usize,
+    /// Legal move count at this position.
+    pub legal_moves: usize,
+}
+
+/// Split a flat sample stream into per-game groups.
+///
+/// Detects game boundaries where `move_number` drops back to 1.
+/// Returns a Vec of games, where each game is a Vec of samples in order.
+///
+/// # Edge Cases
+///
+/// - Empty input returns empty Vec.
+/// - Samples with `move_number == 0` are skipped (invalid).
+pub fn split_samples_into_games(samples: &[RawGoSample]) -> Vec<Vec<&RawGoSample>> {
+    if samples.is_empty() {
+        return Vec::new();
+    }
+
+    let mut games: Vec<Vec<&RawGoSample>> = Vec::new();
+    let mut current: Vec<&RawGoSample> = Vec::new();
+
+    for sample in samples {
+        if sample.move_number == 0 {
+            continue; // Skip invalid
+        }
+
+        // New game starts when move_number drops to 1 and we already have samples
+        if sample.move_number == 1 && !current.is_empty() {
+            games.push(current);
+            current = Vec::new();
+        }
+
+        current.push(sample);
+    }
+
+    if !current.is_empty() {
+        games.push(current);
+    }
+
+    games
+}
+
+/// Convert raw Go samples (from Natsukaze `.flat.zip` pipeline) to a `GoReplay`.
+///
+/// Reconstructs a `MoveRecord` sequence from per-move sample data.
+/// Assumes samples belong to a single game (use `split_samples_into_games` first).
+///
+/// # Algorithm
+///
+/// 1. Player is inferred from `move_number` parity: odd = Black, even = White.
+/// 2. Winner is inferred from the last sample's `quality`:
+///    - `quality >= 0.5` → last mover won
+///    - `quality < 0.5` → last mover lost
+/// 3. Final score is computed by replaying all moves on a fresh `GoState`.
+///
+/// # Errors
+///
+/// Returns `Err` if:
+/// - Samples are empty
+/// - Move numbers are non-sequential (gap detected)
+/// - Board size is inconsistent across samples
+///
+/// # Example
+///
+/// ```ignore
+/// use microgpt_rs::pruners::go::analytics::{RawGoSample, RawGoAction, samples_to_replay};
+///
+/// let samples = vec![
+///     RawGoSample {
+///         board: vec![0; 81],
+///         size: 9,
+///         action: RawGoAction::Place { row: 4, col: 4 },
+///         quality: 1.0,
+///         move_number: 1,
+///         legal_moves: 80,
+///     },
+/// ];
+///
+/// let replay = samples_to_replay(&samples, 7.5).unwrap();
+/// assert_eq!(replay.moves.len(), 1);
+/// ```
+pub fn samples_to_replay(samples: &[RawGoSample], komi: f32) -> Result<GoReplay, String> {
+    if samples.is_empty() {
+        return Err("Cannot convert empty samples to replay".to_string());
+    }
+
+    let board_size = samples[0].size;
+    let mut moves: Vec<MoveRecord> = Vec::with_capacity(samples.len());
+
+    for (i, sample) in samples.iter().enumerate() {
+        // Validate board size consistency
+        if sample.size != board_size {
+            return Err(format!(
+                "Inconsistent board size at sample {i}: expected {board_size}, got {}",
+                sample.size
+            ));
+        }
+
+        // Validate sequential move numbers (allow gaps from filtered samples)
+        let expected = if moves.is_empty() {
+            sample.move_number
+        } else {
+            moves.last().unwrap().move_number as usize + 1
+        };
+
+        if sample.move_number != expected {
+            return Err(format!(
+                "Non-sequential move_number at sample {i}: expected {expected}, got {}",
+                sample.move_number
+            ));
+        }
+
+        // Infer player from move_number parity: odd = Black, even = White
+        let player = if sample.move_number % 2 == 1 {
+            GoCellSer::Black
+        } else {
+            GoCellSer::White
+        };
+
+        // Convert action
+        let action = match &sample.action {
+            RawGoAction::Place { row, col } => GoActionSer::Place {
+                row: *row,
+                col: *col,
+            },
+            RawGoAction::Pass => GoActionSer::Pass,
+        };
+
+        moves.push(MoveRecord {
+            action,
+            player,
+            move_number: sample.move_number as u32,
+            legal_move_count: sample.legal_moves,
+        });
+    }
+
+    // Infer winner from last sample's quality
+    let last = samples.last().unwrap();
+    let last_player = if last.move_number % 2 == 1 {
+        GoCellSer::Black
+    } else {
+        GoCellSer::White
+    };
+
+    let winner = if last.quality >= 0.5 {
+        Some(last_player)
+    } else {
+        // Last mover lost → opponent won
+        Some(match last_player {
+            GoCellSer::Black => GoCellSer::White,
+            GoCellSer::White => GoCellSer::Black,
+        })
+    };
+
+    // Compute final score by replaying all moves
+    let final_score = {
+        let mut state = GoState::with_komi(board_size, komi);
+        for record in &moves {
+            match &record.action {
+                GoActionSer::Place { row, col } => {
+                    state.play_move(*row, *col);
+                }
+                GoActionSer::Pass => {
+                    state.play_pass();
+                }
+            }
+        }
+        state.score()
+    };
+
+    Ok(GoReplay {
+        size: board_size,
+        komi,
+        moves,
+        winner,
+        final_score,
+    })
+}

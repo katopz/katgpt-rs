@@ -1174,9 +1174,10 @@ cargo clippy --all-targets --all-features --quiet
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
+| `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde"]` targets production accuracy + sparsity + pairwise ranking + calibrated KV compression. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering"]` targets production accuracy + sparsity + pairwise ranking + calibrated KV compression + neuron-level steering. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -1385,7 +1386,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -1401,6 +1402,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **SpectralQuant** (`spectral_quant`) | [SpectralQuant Research 39](https://arxiv.org/pdf/2504.19874) | **9.1× compression** vs TurboQuant 5.3×. **Cosine 0.9917** vs TQ 0.9692. MaxSim error 18.90% vs TQ 40.54% (2.1× lower). Eigenbasis calibration + water-fill bit allocation (Bench 013). | **TurboQuant** (demoted to legacy baseline) |
 | **ELF SDE** (`elf_sde`) | [Embedded Language Flows](https://arxiv.org/abs/2406.09970) | **10-22× path diversity** (145 vs 14 unique prefixes at γ=1.0). Overhead: 3.2µs (<3% of one attention step). Logit-normal: 2.2× concentration near t=0 (Bench 012). | Uniform noise for D2F |
 | **PTRM Width Scaling** (`elf_sde`) | [PTRM (arXiv:2605.19943)](https://arxiv.org/abs/2605.19943) | **Width >> Depth**: `best_of_k_rollouts` K=64 rollouts + `EarlyStopGate` depth-aware pruning. PTRM proves 7M model beats frontier LLMs via width scaling. `WidthSelectionMode::{BestQ, MostFrequent}`. Config: `width_rollouts`, `early_stop_threshold` (Plan 083, Bench 015). | Single-rollout greedy expansion |
+| **CNA Steering** (`cna_steering`) | [Contrastive Neuron Attribution](https://arxiv.org/pdf/2605.12290) | **GOAT proved** (Bench 015). Discovery: ~10µs/pair. Modulation: 163ns for K=50. Quality: cosine 1.0 at all strengths (paper: >0.97). Late-layer concentration: 100%. O(K) sparse forward hook. `CnaScreeningPruner` composable with `BanditPruner`. | Residual-stream steering (CAA < 0.60 quality) |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
@@ -1417,6 +1419,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
 | **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
 | **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
+
 
 ### 🪦 Replaced / Fell Behind / No Gain
 

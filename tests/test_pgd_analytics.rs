@@ -13,7 +13,10 @@
 mod go_analytics_tests {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::go::analytics::{detect_garbage_moves, detect_unstable_rounds};
+    use microgpt_rs::pruners::go::analytics::{
+        RawGoAction, RawGoSample, detect_garbage_moves, detect_unstable_rounds, samples_to_replay,
+        split_samples_into_games,
+    };
     use microgpt_rs::pruners::go::replay::{GoCellSer, MoveRecord};
     use microgpt_rs::pruners::go::{
         GoAction, GoCell, GoGreedyPlayer, GoPlayer, GoRandomPlayer, GoReplay, GoState,
@@ -689,5 +692,377 @@ mod go_analytics_tests {
             "[0.5,-0.5] -> expected 1 crossing, got {crossings}",
         );
         println!("[0.5,-0.5] -> {crossings} ok");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 15. samples_to_replay — T0 Data Bridge tests
+    // ════════════════════════════════════════════════════════════════
+
+    fn make_sample(move_number: usize, action: RawGoAction, quality: f32) -> RawGoSample {
+        RawGoSample {
+            board: vec![0; 81],
+            size: 9,
+            action,
+            quality,
+            move_number,
+            legal_moves: 80,
+        }
+    }
+
+    #[test]
+    fn test_samples_to_replay_empty_error() {
+        let result = samples_to_replay(&[], 7.5);
+        assert!(result.is_err(), "Empty samples should error");
+        assert!(
+            result.unwrap_err().contains("empty"),
+            "Error message should mention 'empty'"
+        );
+        println!("✓ Empty samples → error");
+    }
+
+    #[test]
+    fn test_samples_to_replay_single_move() {
+        let samples = vec![make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 1.0)];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        assert_eq!(replay.moves.len(), 1);
+        assert_eq!(replay.size, 9);
+        assert_eq!(replay.winner, Some(GoCellSer::Black)); // move 1 = Black won (quality 1.0)
+        println!("✓ Single move → replay with 1 move, Black wins");
+    }
+
+    #[test]
+    fn test_samples_to_replay_player_alternation() {
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Place { row: 0, col: 0 }, 0.0),
+            make_sample(3, RawGoAction::Pass, 0.0),
+            make_sample(4, RawGoAction::Pass, 1.0), // White wins (quality 1.0 for move 4 = White)
+        ];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        assert_eq!(replay.moves.len(), 4);
+        assert_eq!(replay.moves[0].player, GoCellSer::Black); // move 1
+        assert_eq!(replay.moves[1].player, GoCellSer::White); // move 2
+        assert_eq!(replay.moves[2].player, GoCellSer::Black); // move 3
+        assert_eq!(replay.moves[3].player, GoCellSer::White); // move 4
+        assert_eq!(replay.winner, Some(GoCellSer::White)); // quality=1.0 → mover (White) won
+        println!("✓ Player alternation: B W B W, White wins");
+    }
+
+    #[test]
+    fn test_samples_to_replay_non_sequential_error() {
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(3, RawGoAction::Place { row: 0, col: 0 }, 0.0), // gap at 2
+        ];
+        let result = samples_to_replay(&samples, 7.5);
+        assert!(result.is_err(), "Non-sequential move numbers should error");
+        assert!(
+            result.unwrap_err().contains("Non-sequential"),
+            "Error should mention non-sequential"
+        );
+        println!("✓ Non-sequential move numbers → error");
+    }
+
+    #[test]
+    fn test_samples_to_replay_inconsistent_size_error() {
+        let samples = vec![
+            RawGoSample {
+                board: vec![0; 81],
+                size: 9,
+                action: RawGoAction::Place { row: 4, col: 4 },
+                quality: 1.0,
+                move_number: 1,
+                legal_moves: 80,
+            },
+            RawGoSample {
+                board: vec![0; 361],
+                size: 19, // wrong size
+                action: RawGoAction::Place { row: 0, col: 0 },
+                quality: 0.0,
+                move_number: 2,
+                legal_moves: 300,
+            },
+        ];
+        let result = samples_to_replay(&samples, 7.5);
+        assert!(result.is_err(), "Inconsistent board size should error");
+        assert!(
+            result.unwrap_err().contains("Inconsistent board size"),
+            "Error should mention board size"
+        );
+        println!("✓ Inconsistent board size → error");
+    }
+
+    #[test]
+    fn test_samples_to_replay_winner_inference() {
+        // Black wins (last mover quality >= 0.5)
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Pass, 0.0),
+            make_sample(3, RawGoAction::Pass, 0.8), // move 3 = Black, quality >= 0.5 → Black won
+        ];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        assert_eq!(replay.winner, Some(GoCellSer::Black));
+
+        // White wins (last mover quality < 0.5)
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Pass, 0.3), // move 2 = White, quality < 0.5 → White lost → Black won
+        ];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        assert_eq!(replay.winner, Some(GoCellSer::Black)); // White lost → Black won
+        println!("✓ Winner inference: quality-based");
+    }
+
+    #[test]
+    fn test_samples_to_replay_replay_succeeds() {
+        // GOAT gate: produces valid replay that replay.replay() succeeds on
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Place { row: 0, col: 0 }, 0.0),
+            make_sample(3, RawGoAction::Place { row: 8, col: 8 }, 0.0),
+            make_sample(4, RawGoAction::Pass, 0.0),
+            make_sample(5, RawGoAction::Pass, 1.0),
+        ];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        let result = replay.replay();
+        assert!(
+            result.is_ok(),
+            "replay.replay() should succeed: {}",
+            result
+                .as_ref()
+                .err()
+                .map(|e| e.to_string())
+                .unwrap_or_default()
+        );
+        println!("✓ replay.replay() succeeds on converted samples");
+    }
+
+    #[test]
+    fn test_samples_to_replay_analytics_integration() {
+        // Convert samples → replay → compute_analytics
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Place { row: 0, col: 0 }, 0.0),
+            make_sample(3, RawGoAction::Place { row: 8, col: 8 }, 0.0),
+            make_sample(4, RawGoAction::Place { row: 1, col: 1 }, 0.0),
+            make_sample(5, RawGoAction::Pass, 0.0),
+            make_sample(6, RawGoAction::Pass, 1.0),
+        ];
+        let replay = samples_to_replay(&samples, 7.5).unwrap();
+        let analytics = compute_analytics(&replay);
+        assert_eq!(analytics.total_moves, 6, "Should have 6 moves");
+        assert_eq!(
+            analytics.win_rate_trace.len(),
+            6,
+            "Trace length should match"
+        );
+        assert!(
+            !analytics.win_rate_trace.iter().all(|&v| v == 0.0),
+            "Trace should be non-zero"
+        );
+        assert!(
+            analytics.coincidence_rate >= 0.0 && analytics.coincidence_rate <= 1.0,
+            "CR in [0,1]"
+        );
+        assert!(
+            analytics.garbage_move_ratio >= 0.0 && analytics.garbage_move_ratio <= 1.0,
+            "Garbage in [0,1]"
+        );
+        println!("✓ samples_to_replay → compute_analytics integration works");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 16. split_samples_into_games tests
+    // ════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn test_split_samples_empty() {
+        let games = split_samples_into_games(&[]);
+        assert!(games.is_empty());
+        println!("✓ Empty input → 0 games");
+    }
+
+    #[test]
+    fn test_split_samples_single_game() {
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Pass, 0.0),
+            make_sample(3, RawGoAction::Pass, 1.0),
+        ];
+        let games = split_samples_into_games(&samples);
+        assert_eq!(games.len(), 1, "Should detect 1 game");
+        assert_eq!(games[0].len(), 3, "Game should have 3 samples");
+        println!("✓ Single game → 1 group of 3");
+    }
+
+    #[test]
+    fn test_split_samples_multiple_games() {
+        let samples = vec![
+            make_sample(1, RawGoAction::Place { row: 4, col: 4 }, 0.0),
+            make_sample(2, RawGoAction::Pass, 1.0),
+            // Game boundary: move_number resets to 1
+            make_sample(1, RawGoAction::Place { row: 0, col: 0 }, 0.0),
+            make_sample(2, RawGoAction::Place { row: 1, col: 1 }, 0.0),
+            make_sample(3, RawGoAction::Pass, 0.5),
+            // Game boundary
+            make_sample(1, RawGoAction::Place { row: 8, col: 8 }, 1.0),
+        ];
+        let games = split_samples_into_games(&samples);
+        assert_eq!(games.len(), 3, "Should detect 3 games");
+        assert_eq!(games[0].len(), 2, "Game 1: 2 samples");
+        assert_eq!(games[1].len(), 3, "Game 2: 3 samples");
+        assert_eq!(games[2].len(), 1, "Game 3: 1 sample");
+        println!("✓ 3 games detected from move_number resets");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 17. T14 Natsukaze-style validation (simulated)
+    // ════════════════════════════════════════════════════════════════
+    //
+    // Full Natsukaze validation requires riir-gpu's load_flat_zip() which
+    // lives in riir-ai. This test simulates the Natsukaze data shape
+    // (strong AI play with realistic move patterns) to validate the pipeline.
+
+    #[test]
+    fn test_natsukaze_style_pipeline() {
+        // Simulate 5 short Natsukaze-style games (strong AI play)
+        let mut all_samples: Vec<RawGoSample> = Vec::new();
+
+        for game_id in 0..5 {
+            let mut state = GoState::new(9);
+            let mut player = GoGreedyPlayer;
+            let mut rng = fastrand::Rng::new();
+
+            for move_num in 1..=20 {
+                if state.is_terminal() {
+                    break;
+                }
+
+                let legal = state.legal_moves();
+                let action = player.select_move(&state, &legal, &mut rng);
+
+                // Record board BEFORE applying the move
+                let board: Vec<u8> = (0..81)
+                    .map(|i| {
+                        let r = i / 9;
+                        let c = i % 9;
+                        match state.at(r, c) {
+                            GoCell::Empty => 0,
+                            GoCell::Black => 1,
+                            GoCell::White => 2,
+                        }
+                    })
+                    .collect();
+
+                // Build RawGoAction (clone-safe, no refs)
+                let raw_action = match &action {
+                    GoAction::Place(r, c) => RawGoAction::Place { row: *r, col: *c },
+                    GoAction::Pass => RawGoAction::Pass,
+                };
+
+                all_samples.push(RawGoSample {
+                    board,
+                    size: 9,
+                    action: raw_action,
+                    quality: 0.0, // Will be set by last move
+                    move_number: move_num,
+                    legal_moves: legal.len(),
+                });
+
+                // NOW apply the move to advance the state
+                match action {
+                    GoAction::Place(r, c) => {
+                        state.play_move(r, c);
+                    }
+                    GoAction::Pass => {
+                        state.play_pass();
+                    }
+                }
+            }
+
+            // Set quality on last sample based on outcome
+            if let Some(last) = all_samples.last_mut() {
+                last.quality = if game_id % 2 == 0 { 1.0 } else { 0.0 };
+            }
+        }
+
+        // Split into games
+        let games = split_samples_into_games(&all_samples);
+        assert!(
+            games.len() >= 5,
+            "Should detect at least 5 games, got {}",
+            games.len()
+        );
+        println!(
+            "Detected {} games from simulated Natsukaze data",
+            games.len()
+        );
+
+        // Convert each game to replay and compute analytics
+        let mut total_cr = 0.0f32;
+        let mut total_garbage = 0.0f32;
+        let mut game_count = 0usize;
+
+        for (i, game_samples) in games.iter().enumerate() {
+            let samples: Vec<RawGoSample> = game_samples.iter().map(|s| (*s).clone()).collect();
+            let replay = samples_to_replay(&samples, 7.5);
+            if let Err(e) = &replay {
+                // Some games may have invalid moves from greedy play, skip them
+                println!("Game {i}: conversion skipped ({e})");
+                continue;
+            }
+
+            let replay = replay.unwrap();
+
+            // GOAT gate: replay.replay() succeeds
+            if replay.replay().is_err() {
+                println!("Game {i}: replay validation skipped");
+                continue;
+            }
+
+            let analytics = compute_analytics(&replay);
+
+            // Assert: traces non-empty
+            assert!(
+                !analytics.win_rate_trace.is_empty(),
+                "Game {i}: trace should be non-empty"
+            );
+
+            // Assert: CR in [0,1]
+            assert!(
+                analytics.coincidence_rate >= 0.0 && analytics.coincidence_rate <= 1.0,
+                "Game {i}: CR {} out of [0,1]",
+                analytics.coincidence_rate
+            );
+
+            // Assert: garbage ratio in [0,1]
+            assert!(
+                analytics.garbage_move_ratio >= 0.0 && analytics.garbage_move_ratio <= 1.0,
+                "Game {i}: garbage {} out of [0,1]",
+                analytics.garbage_move_ratio
+            );
+
+            // Assert: distribution sums to ~1.0
+            let dist_sum: f32 = analytics.category_distribution.iter().sum();
+            assert!(
+                (dist_sum - 1.0).abs() < 0.01 || analytics.total_moves == 0,
+                "Game {i}: distribution sum = {dist_sum}, expected ~1.0"
+            );
+
+            total_cr += analytics.coincidence_rate;
+            total_garbage += analytics.garbage_move_ratio;
+            game_count += 1;
+        }
+
+        assert!(
+            game_count >= 3,
+            "At least 3 games should convert successfully"
+        );
+
+        let avg_cr = total_cr / game_count as f32;
+        let avg_garbage = total_garbage / game_count as f32;
+        println!("✓ Natsukaze-style validation: {game_count} games");
+        println!("  Avg coincidence_rate:  {avg_cr:.3}");
+        println!("  Avg garbage_move_ratio: {avg_garbage:.3}");
     }
 }

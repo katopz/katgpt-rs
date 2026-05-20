@@ -384,3 +384,40 @@
 2026-05-16T16:13:30,d891ee4,sparse_mlp+domain_latent+ppot+bandit,infrastructure,TQ-3bit store+dequant (alloc),1624229,0.62,5.33
 2026-05-16T16:13:30,d891ee4,sparse_mlp+domain_latent+ppot+bandit,infrastructure,TQ-3bit store+dequant (zero-alloc),2338040,0.43,5.33
 2026-05-16T16:13:30,d891ee4,sparse_mlp+domain_latent+ppot+bandit,infrastructure,PFlash block_select (1024 blocks),1164192,0.86,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Transformer AR,1402205,0.71,1.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DFlash,510905,1.96,8.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DDTree Build,359427,2.78,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Speculative (Simulated),927926,5.39,5.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Speculative (AR Draft),1256209,5.57,7.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Leviathan (Algorithm 1),123773,9.52,1.18
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Leviathan (no rollback),123665,9.53,1.18
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Leviathan (w/ rollback),178709,6.58,1.18
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Spec (unconditioned),900481,5.55,5.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,Spec (conditioned),1017286,6.63,6.74
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,MTP OFF (BPE),2913,343.41,1.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,MTP ON truncate/pad (BPE),2847,351.27,1.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,MTP OFF shared KV (small),8555,701.36,6.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,speculative,MTP ON shared KV (small),4469,726.90,3.25
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,Prefill (no compress),286885,3.49,64.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,Prefill (compressed),266132,3.76,7.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DDTree (no chain),343316,2.91,16.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DDTree (chain-seed),373689,2.68,16.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DDTree (screened R=1.0),279284,3.58,16.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DDTree (screened adapter),275081,3.64,16.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,tree_build,DFlash (par),378086,2.64,8.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,forward (flat),1358860,0.74,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,forward_paged,1171410,0.85,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,forward_raven (16 slots),2580645,0.39,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,raven_recall (1000 noise, slot 12=9.9→6.3 acc=63%),23300790,0.04,63.21
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,,0,0.00,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,,0,0.00,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,PFlash block_select (1024 blocks),1137693,0.88,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,SQ-3bit dequant 16pos (seq),5907678,0.17,12.49
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,SQ-3bit dequant 16pos (par),361045,2.77,12.49
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=8, Ld=32, dim=64),731166,1.37,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=32, Ld=128, dim=64),46739,21.40,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=8, Ld=32, dim=128),359384,2.78,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=32, Ld=128, dim=128),21676,46.13,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=64, Ld=256, dim=128),5188,192.75,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,MaxSim score (Lq=32, Ld=1024, dim=128),2640,378.78,0.00
+2026-05-20T22:34:53,69de495,sparse_mlp+domain_latent+ppot+bandit,infrastructure,PFlash MaxSim block scoring (1024 tok, 32 blocks),9590,104.28,0.00

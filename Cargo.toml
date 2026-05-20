@@ -26,7 +26,7 @@ ratatui = "0.29"
 crossterm = "0.28"
 
 [features]
-default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, elf_sde Plan 079 GOAT proved)
+default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, elf_sde Plan 079, cna_steering Plan 087 GOAT proved)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 dllm = []  # D2F Discrete Diffusion Forcing — mini dLLM research (Plan 066)
 sudoku = []

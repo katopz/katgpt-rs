@@ -44,7 +44,10 @@ pub use players::{
 };
 
 // Analytics
-pub use analytics::{GoGameAnalytics, compute_analytics};
+pub use analytics::{
+    GoGameAnalytics, RawGoAction, RawGoSample, compute_analytics, samples_to_replay,
+    split_samples_into_games,
+};
 
 // G-Zero Self-Play
 pub use g_zero_player::{
