@@ -334,6 +334,33 @@ pub fn block_select_grid(
     (idx_out, cnt_out)
 }
 
+// ── MaxSim Block Scoring (Research 45, Plan 080 T6) ────────────
+
+/// Score block pairs using MaxSim late-interaction instead of mean-K dot.
+///
+/// Given query block Q ∈ [Lq, dim] and key block K ∈ [Lk, dim],
+/// computes `Σ_i max_j dot(Q[i], K[j])` — the MaxSim score.
+/// This replaces the standard mean dot-product block score with a
+/// score that captures the maximum activation per query token.
+///
+/// For PFlash block selection, this means blocks with spiky attention
+/// patterns (a few highly-activated key tokens) score higher than
+/// blocks with uniform but moderate activation — better needle detection.
+///
+/// # Feature flag
+/// `maxsim` — Plan 080
+#[cfg(feature = "maxsim")]
+#[inline]
+pub fn block_score_maxsim(
+    q_block: &[f32],
+    k_block: &[f32],
+    block_len_q: usize,
+    block_len_k: usize,
+    dim: usize,
+) -> f32 {
+    crate::simd::maxsim_score(q_block, k_block, block_len_q, block_len_k, dim)
+}
+
 /// Block-sparse attention scorer (CPU fallback for PFlash).
 ///
 /// Aggregates token-level attention scores into block-level importance,

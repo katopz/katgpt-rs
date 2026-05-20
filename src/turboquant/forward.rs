@@ -164,7 +164,6 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// Must match uncompressed `maxsim_score` within 1e-3.
 /// Latency overhead vs `attention_turboquant` softmax-sum mode must be ≤5%.
 #[cfg(all(feature = "turboquant", feature = "maxsim"))]
-#[allow(dead_code)] // Stub — wired in Plan 080 T9
 pub fn maxsim_score_turboquant(
     queries: &[f32],
     cache: &super::kv_cache::TurboQuantKVCache,

@@ -557,7 +557,6 @@ pub enum PrefillMode {
 /// # GOAT proof (Plan 080 T9-T11)
 /// MaxSim mode must match uncompressed `maxsim_score` within 1e-3.
 /// Latency overhead vs SoftmaxSum mode must be ≤5%.
-#[cfg(feature = "maxsim")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ScoreReduction {
     /// Standard attention: softmax-weighted sum (existing behavior).
@@ -565,6 +564,7 @@ pub enum ScoreReduction {
     SoftmaxSum,
     /// MaxSim: max per query token, then sum over query tokens.
     /// `score = Σ_i max_j dot(q_i, d_j)` — ColBERT/PyLate late-interaction.
+    #[cfg(feature = "maxsim")]
     MaxSim,
 }
 
@@ -586,6 +586,9 @@ pub struct FlashPrefillConfig {
     pub alpha: f32,
     /// Number of tail blocks to use for importance scoring.
     pub tail_window: usize,
+    /// Score reduction mode for block pair scoring.
+    /// When `maxsim` feature is disabled, always behaves as SoftmaxSum.
+    pub score_reduction: ScoreReduction,
 }
 
 impl Default for FlashPrefillConfig {
@@ -597,6 +600,7 @@ impl Default for FlashPrefillConfig {
             last_n_full: 1,
             alpha: 0.15,
             tail_window: 4,
+            score_reduction: ScoreReduction::default(),
         }
     }
 }
@@ -611,6 +615,7 @@ impl FlashPrefillConfig {
             last_n_full: 1,
             alpha: 0.15,
             tail_window: 4,
+            score_reduction: ScoreReduction::default(),
         }
     }
 
@@ -623,6 +628,7 @@ impl FlashPrefillConfig {
             last_n_full: 1,
             alpha: 0.85,
             tail_window: 8,
+            score_reduction: ScoreReduction::default(),
         }
     }
 
@@ -635,6 +641,7 @@ impl FlashPrefillConfig {
             last_n_full: 1,
             alpha: 0.12,
             tail_window: 2,
+            score_reduction: ScoreReduction::default(),
         }
     }
 }

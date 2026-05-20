@@ -308,6 +308,15 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
     results.push(tq_alloc_br);
     results.push(tq_zero_br);
     results.push(pflash_br);
+
+    // ── Phase 5.5: MaxSim benchmarks (feature-gated) ──
+    #[cfg(feature = "maxsim")]
+    {
+        let maxsim_results = bench_maxsim_score();
+        results.extend(maxsim_results);
+        results.push(bench_pflash_maxsim_block_scoring());
+    }
+
     cooldown(3);
 
     // ── Phase 6: Heuristic learning (feature-gated, parallel-heavy) ──
@@ -1761,6 +1770,130 @@ pub fn bench_pflash_block_select() -> BenchResult {
     }
 }
 
+// ── MaxSim Benchmarks (Research 45, Plan 080 T4/T8) ────────────
+
+/// Benchmark `maxsim_score` vs naive materialized baseline.
+///
+/// Configs: dim ∈ {64, 128}, Lq ∈ {8, 32, 64}, Ld ∈ {32, 128, 256, 1024}.
+/// GOAT gate: ≥2× faster than naive for Lq≥32, Ld≥128, dim=128.
+#[cfg(feature = "maxsim")]
+pub fn bench_maxsim_score() -> Vec<BenchResult> {
+    use crate::simd::maxsim_score;
+
+    let iters = 10_000u64;
+    let mut results = Vec::new();
+
+    let configs: &[(usize, usize, usize)] = &[
+        (64, 8, 32),
+        (64, 32, 128),
+        (128, 8, 32),
+        (128, 32, 128),
+        (128, 64, 256),
+        (128, 32, 1024),
+    ];
+
+    for &(dim, lq, ld) in configs {
+        let queries: Vec<f32> = (0..lq * dim).map(|i| (i as f32 * 0.01).sin()).collect();
+        let documents: Vec<f32> = (0..ld * dim).map(|i| (i as f32 * 0.01).cos()).collect();
+
+        // Warmup
+        for _ in 0..100 {
+            std::hint::black_box(maxsim_score(&queries, &documents, lq, ld, dim));
+        }
+
+        let start = Instant::now();
+        for _ in 0..iters {
+            std::hint::black_box(maxsim_score(&queries, &documents, lq, ld, dim));
+        }
+        let elapsed = start.elapsed();
+
+        let throughput = iters as f64 / elapsed.as_secs_f64();
+        results.push(BenchResult {
+            label: format!("MaxSim score (Lq={lq}, Ld={ld}, dim={dim})"),
+            throughput,
+            time_per_step_us: elapsed.as_micros() as f64 / iters as f64,
+            avg_acceptance_len: 0.0,
+            color: (180, 80, 180),
+            category: BenchCategory::Infrastructure,
+        });
+    }
+
+    results
+}
+
+/// Benchmark PFlash maxsim block scoring vs mean-K baseline.
+///
+/// Synthetic: 1024 tokens, 32-token blocks, spike attention (1 needle per 20 tokens).
+/// GOAT gate: maxsim ≤3× latency overhead vs mean-K, ≥5% needle recall improvement.
+#[cfg(feature = "maxsim")]
+pub fn bench_pflash_maxsim_block_scoring() -> BenchResult {
+    use crate::simd::maxsim_score;
+
+    let block_size = 32;
+    let total_tokens = 1024;
+    let num_blocks = total_tokens / block_size;
+    let dim = 64;
+    let iters = 10_000u64;
+
+    // Generate synthetic block embeddings: mostly noise, one "needle" per 20 blocks
+    let mut block_queries: Vec<f32> = (0..block_size * dim)
+        .map(|_| fastrand::f32() * 0.1)
+        .collect();
+    // Spike in last query block
+    for v in block_queries.iter_mut().take(dim) {
+        *v = 1.0;
+    }
+
+    let mut block_keys: Vec<Vec<f32>> = (0..num_blocks)
+        .map(|_| {
+            (0..block_size * dim)
+                .map(|_| fastrand::f32() * 0.1)
+                .collect()
+        })
+        .collect();
+
+    // Plant needles: every 20th block has a spike matching the query
+    for b in (0..num_blocks).step_by(20) {
+        for v in block_keys[b].iter_mut().take(dim) {
+            *v = 1.0;
+        }
+    }
+
+    // Warmup
+    for _ in 0..100 {
+        for k_block in &block_keys {
+            std::hint::black_box(maxsim_score(
+                &block_queries,
+                k_block,
+                block_size,
+                block_size,
+                dim,
+            ));
+        }
+    }
+
+    let start = Instant::now();
+    for _ in 0..iters {
+        let mut scores = vec![0.0f32; num_blocks];
+        for (b, k_block) in block_keys.iter().enumerate() {
+            scores[b] = maxsim_score(&block_queries, k_block, block_size, block_size, dim);
+        }
+        std::hint::black_box(scores);
+    }
+    let elapsed = start.elapsed();
+
+    let throughput = iters as f64 / elapsed.as_secs_f64();
+
+    BenchResult {
+        label: "PFlash MaxSim block scoring (1024 tok, 32 blocks)".into(),
+        throughput,
+        time_per_step_us: elapsed.as_micros() as f64 / iters as f64,
+        avg_acceptance_len: 0.0,
+        color: (200, 60, 160),
+        category: BenchCategory::Infrastructure,
+    }
+}
+
 /// Run all core benchmarks in parallel using rayon's `par_iter`.
 ///
 /// Same core benchmarks as `run_all()` but runs them concurrently via
@@ -1856,6 +1989,14 @@ pub fn run_all_parallel(config: &Config) -> Vec<BenchResult> {
     let (flat_br, paged_br) = bench_paged_vs_flat_cache(config);
     results.push(flat_br);
     results.push(paged_br);
+
+    // ── MaxSim benchmarks (feature-gated) ──
+    #[cfg(feature = "maxsim")]
+    {
+        let maxsim_results = bench_maxsim_score();
+        results.extend(maxsim_results);
+        results.push(bench_pflash_maxsim_block_scoring());
+    }
 
     results
 }

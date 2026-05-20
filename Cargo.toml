@@ -233,6 +233,10 @@ required-features = ["ppot"]
 [[example]]
 name = "core_04_prefill"
 
+[[example]]
+name = "core_05_maxsim"
+required-features = ["maxsim"]
+
 # ── Dungeon ────────────────────────────────────────────────────
 
 [[example]]

@@ -53,6 +53,9 @@ pub use step::{
 #[cfg(feature = "bandit")]
 pub use flow_pruner::FlowPruner;
 
+#[cfg(feature = "maxsim")]
+pub use prefill::block_score_maxsim;
+
 // ── D2F Re-exports (Plan 066 Phase 2) ─────────────────────────
 #[cfg(feature = "dllm")]
 pub use crate::dllm::D2fContext;

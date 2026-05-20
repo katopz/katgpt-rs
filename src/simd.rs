@@ -821,6 +821,57 @@ pub fn maxsim_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
     score
 }
 
+/// Packed/ragged MaxSim scoring: score N (query, doc) pairs with offset arrays.
+///
+/// Matches the Metal kernel's canonical API (maxsim README "Packed (ragged segments)").
+/// Each pair (pair_q_ids[i], pair_d_ids[i]) gets scored independently.
+///
+/// # Arguments
+/// - `queries`:        flat buffer, query_offsets[i]..query_offsets[i+1] is `[dim]`
+/// - `query_offsets`:  [num_queries + 1] prefix-sum offsets
+/// - `documents`:      flat buffer, doc_offsets[i]..doc_offsets[i+1] is `[dim]`
+/// - `doc_offsets`:    [num_docs + 1] prefix-sum offsets
+/// - `pair_q_ids`:     query index for each pair
+/// - `pair_d_ids`:     doc index for each pair
+/// - `dim`:            embedding dimension
+///
+/// # Returns
+/// Vec of scores, one per pair.
+///
+/// # Feature flag
+/// `maxsim` — Plan 080
+#[cfg(feature = "maxsim")]
+pub fn maxsim_score_packed(
+    queries: &[f32],
+    query_offsets: &[usize],
+    documents: &[f32],
+    doc_offsets: &[usize],
+    pair_q_ids: &[usize],
+    pair_d_ids: &[usize],
+    dim: usize,
+) -> Vec<f32> {
+    let num_pairs = pair_q_ids.len();
+    debug_assert_eq!(pair_d_ids.len(), num_pairs);
+    debug_assert!(query_offsets.len() >= *pair_q_ids.iter().max().unwrap_or(&0) + 2);
+    debug_assert!(doc_offsets.len() >= *pair_d_ids.iter().max().unwrap_or(&0) + 2);
+
+    let mut results = Vec::with_capacity(num_pairs);
+    for p in 0..num_pairs {
+        let q_id = pair_q_ids[p];
+        let d_id = pair_d_ids[p];
+        let q_start = query_offsets[q_id];
+        let q_end = query_offsets[q_id + 1];
+        let d_start = doc_offsets[d_id];
+        let d_end = doc_offsets[d_id + 1];
+        let q_data = &queries[q_start..q_end];
+        let d_data = &documents[d_start..d_end];
+        let lq = q_data.len() / dim;
+        let ld = d_data.len() / dim;
+        results.push(maxsim_score(q_data, d_data, lq, ld, dim));
+    }
+    results
+}
+
 // ── Scalar Fallbacks (new primitives) ─────────────────────────
 
 #[inline]
@@ -1759,6 +1810,197 @@ mod tests {
         // 0.5 * 1.0 + 0.5 * 2.0 = 1.5
         for val in &dst {
             assert!((val - 1.5).abs() < 1e-5);
+        }
+    }
+
+    // ── MaxSim Tests (Plan 080 T2) ────────────────────────────
+
+    /// Naive reference: materialize [Lq × Ld] then reduce.
+    #[cfg(feature = "maxsim")]
+    fn maxsim_naive(queries: &[f32], documents: &[f32], lq: usize, ld: usize, dim: usize) -> f32 {
+        let mut score = 0.0f32;
+        for i in 0..lq {
+            let q_row = &queries[i * dim..(i + 1) * dim];
+            let mut my_max = f32::NEG_INFINITY;
+            for j in 0..ld {
+                let d_row = &documents[j * dim..(j + 1) * dim];
+                let mut dot = 0.0f32;
+                for d in 0..dim {
+                    dot += q_row[d] * d_row[d];
+                }
+                my_max = my_max.max(dot);
+            }
+            score += my_max;
+        }
+        score
+    }
+
+    #[cfg(feature = "maxsim")]
+    mod maxsim_tests {
+        use super::*;
+
+        #[test]
+        fn maxsim_matches_naive() {
+            let lq = 8;
+            let ld = 16;
+            let dim = 32;
+            let mut queries = vec![0.0f32; lq * dim];
+            let mut documents = vec![0.0f32; ld * dim];
+            for i in 0..queries.len() {
+                queries[i] = fastrand::f32() * 2.0 - 1.0;
+            }
+            for i in 0..documents.len() {
+                documents[i] = fastrand::f32() * 2.0 - 1.0;
+            }
+            let naive = maxsim_naive(&queries, &documents, lq, ld, dim);
+            let fused = maxsim_score(&queries, &documents, lq, ld, dim);
+            assert!((naive - fused).abs() < 1e-4, "naive={naive}, fused={fused}");
+        }
+
+        #[test]
+        fn maxsim_single_query_token() {
+            let dim = 16;
+            let queries = (0..dim).map(|i| i as f32).collect::<Vec<f32>>();
+            let documents = (0..3 * dim)
+                .map(|i| (i as f32 * 0.1).sin())
+                .collect::<Vec<f32>>();
+            let result = maxsim_score(&queries, &documents, 1, 3, dim);
+            // Should equal max over all doc dots
+            let mut expected = f32::NEG_INFINITY;
+            for j in 0..3 {
+                let d_row = &documents[j * dim..(j + 1) * dim];
+                let dot = simd_dot_f32(&queries, d_row, dim);
+                expected = expected.max(dot);
+            }
+            assert!(
+                (result - expected).abs() < 1e-5,
+                "result={result}, expected={expected}"
+            );
+        }
+
+        #[test]
+        fn maxsim_single_doc_token() {
+            let dim = 16;
+            let lq = 4;
+            let queries = (0..lq * dim)
+                .map(|i| (i as f32 * 0.2).cos())
+                .collect::<Vec<f32>>();
+            let documents = (0..dim).map(|i| i as f32 * 0.5).collect::<Vec<f32>>();
+            let result = maxsim_score(&queries, &documents, lq, 1, dim);
+            // Ld=1: each query token has exactly one doc token to match
+            let mut expected = 0.0f32;
+            for i in 0..lq {
+                let q_row = &queries[i * dim..(i + 1) * dim];
+                expected += simd_dot_f32(q_row, &documents, dim);
+            }
+            assert!(
+                (result - expected).abs() < 1e-4,
+                "result={result}, expected={expected}"
+            );
+        }
+
+        #[test]
+        fn maxsim_symmetry_breaking() {
+            let dim = 8;
+            let lq = 4;
+            let ld = 4;
+            let queries = (0..lq * dim).map(|i| i as f32).collect::<Vec<f32>>();
+            let documents = (0..ld * dim)
+                .map(|i| (i as f32 * 0.3).sin())
+                .collect::<Vec<f32>>();
+            let maxsim = maxsim_score(&queries, &documents, lq, ld, dim);
+            // Diagonal sum: Σ dot(q_i, d_i)
+            let mut diagonal = 0.0f32;
+            for i in 0..lq.min(ld) {
+                let q_row = &queries[i * dim..(i + 1) * dim];
+                let d_row = &documents[i * dim..(i + 1) * dim];
+                diagonal += simd_dot_f32(q_row, d_row, dim);
+            }
+            // They should differ (MaxSim takes max over ALL j, not just j==i)
+            assert!(
+                (maxsim - diagonal).abs() > 1e-3,
+                "maxsim={maxsim} should differ from diagonal={diagonal}"
+            );
+        }
+
+        #[test]
+        fn maxsim_empty_doc() {
+            let dim = 16;
+            let queries = vec![1.0f32; dim];
+            let documents: Vec<f32> = vec![];
+            let result = maxsim_score(&queries, &documents, 1, 0, dim);
+            assert_eq!(result, 0.0, "empty doc should return 0.0");
+        }
+
+        #[test]
+        fn maxsim_large_dim_aligned() {
+            let dim = 128;
+            let lq = 4;
+            let ld = 8;
+            let queries: Vec<f32> = (0..lq * dim).map(|i| (i as f32 * 0.01).sin()).collect();
+            let documents: Vec<f32> = (0..ld * dim).map(|i| (i as f32 * 0.01).cos()).collect();
+            let naive = maxsim_naive(&queries, &documents, lq, ld, dim);
+            let fused = maxsim_score(&queries, &documents, lq, ld, dim);
+            assert!((naive - fused).abs() < 1e-3, "naive={naive}, fused={fused}");
+        }
+
+        #[test]
+        fn maxsim_packed_matches_sequential() {
+            let dim = 16;
+            // Two query sequences, three doc sequences
+            let q1: Vec<f32> = (0..2 * dim).map(|i| i as f32).collect();
+            let q2: Vec<f32> = (0..3 * dim).map(|i| (i as f32 * 0.5).sin()).collect();
+            let d1: Vec<f32> = (0..4 * dim).map(|i| (i as f32 * 0.3).cos()).collect();
+            let d2: Vec<f32> = (0..2 * dim).map(|i| i as f32 * 0.1).collect();
+            let d3: Vec<f32> = (0..5 * dim).map(|i| (i as f32 * 0.7).sin()).collect();
+
+            let queries: Vec<f32> = [q1.clone(), q2.clone()].concat();
+            let documents: Vec<f32> = [d1.clone(), d2.clone(), d3.clone()].concat();
+            let query_offsets = [0, q1.len(), q1.len() + q2.len()];
+            let doc_offsets = [
+                0,
+                d1.len(),
+                d1.len() + d2.len(),
+                d1.len() + d2.len() + d3.len(),
+            ];
+
+            // Score pairs: (q0,d0), (q0,d2), (q1,d1)
+            let pair_q_ids = [0usize, 0, 1];
+            let pair_d_ids = [0usize, 2, 1];
+
+            let packed = maxsim_score_packed(
+                &queries,
+                &query_offsets,
+                &documents,
+                &doc_offsets,
+                &pair_q_ids,
+                &pair_d_ids,
+                dim,
+            );
+
+            // Verify against sequential calls
+            let s0 = maxsim_score(&q1, &d1, 2, 4, dim);
+            let s1 = maxsim_score(&q1, &d3, 2, 5, dim);
+            let s2 = maxsim_score(&q2, &d2, 3, 2, dim);
+
+            assert!(
+                (packed[0] - s0).abs() < 1e-4,
+                "pair 0: packed={}, sequential={}",
+                packed[0],
+                s0
+            );
+            assert!(
+                (packed[1] - s1).abs() < 1e-4,
+                "pair 1: packed={}, sequential={}",
+                packed[1],
+                s1
+            );
+            assert!(
+                (packed[2] - s2).abs() < 1e-4,
+                "pair 2: packed={}, sequential={}",
+                packed[2],
+                s2
+            );
         }
     }
 

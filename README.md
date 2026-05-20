@@ -350,6 +350,27 @@ Composable with TurboQuant: TQ compresses the *precision* dimension (fewer bits)
 
 📁 `src/speculative/prefill.rs` — `block_select`, `block_select_grid`, `compress_prompt_blocks`, `BlockAttentionScorer`
 
+## 🎯 MaxSim: Late-Interaction Scoring (Plan 080)
+
+Memory-efficient `Σ_i max_j dot(q_i, d_j)` scoring ported from [erikkaum/maxsim](https://github.com/erikkaum/maxsim) (ColBERT/PyLate kernel). The key insight: streaming over doc tokens with a running max — never materializing the `[Lq × Ld]` similarity matrix — gives 3-4× speedup via cache locality (same math, less memory).
+
+**Three integration targets:**
+
+| Target | Function | What |
+|--------|----------|------|
+| Core primitive | `maxsim_score` | Standalone `Σ_i max_j dot(q_i, d_j)` using `simd_dot_f32` |
+| PFlash blocks | `block_score_maxsim` | MaxSim instead of mean-K dot for block pair scoring |
+| Compressed KV | `maxsim_score_turboquant` / `maxsim_score_spectralquant` | Lazy dequantize + running max, O(dim) peak memory |
+
+**Also includes:** `maxsim_score_packed` for ragged/offset-array batch scoring (matches Metal kernel API), `ScoreReduction` enum for switching between `SoftmaxSum` (standard attention) and `MaxSim` (late-interaction).
+
+📁 `src/simd.rs` — `maxsim_score`, `maxsim_score_packed`
+📁 `src/speculative/types.rs` — `ScoreReduction` enum
+📁 `src/speculative/prefill.rs` — `block_score_maxsim`
+📁 `src/turboquant/forward.rs` — `maxsim_score_turboquant`
+📁 `src/spectralquant/forward.rs` — `maxsim_score_spectralquant`
+🔧 Feature flag: `maxsim`
+
 ## 🧮 HLA: Higher-order Linear Attention (Plan 057)
 
 Replaces the growing KV cache with **constant-size O(d²) prefix sufficient statistics**. No context window limit — streaming is O(1) per token regardless of sequence length. Based on Zhang, Qin, Wang, Gu (2026) *"Higher-order Linear Attention"*.
@@ -1141,6 +1162,7 @@ cargo clippy --all-targets --all-features --quiet
 | `gpu` | Placeholder — GPU training lives in riir-ai/riir-gpu |
 | `game_domain` | Alias for `domain_latent` — game-specific Config presets (Plan 040) |
 | `language_domain` | Language domain: BPE vocab, LLM models (Plan 040, future) |
+| `maxsim` | MaxSim late-interaction scoring — `Σ_i max_j dot(q_i, d_j)` for CPU SIMD, PFlash blocks, compressed KV (Research 45, Plan 080) |
 | `delta_mem` | δ-Mem associative bandit memory — infrastructure only, no DDTree gain (Plan 053, off by default) |
 | `g_zero` | G-Zero self-play + FFT arena + Bomber arena + TFT party AI (Plans 049–055). Phase 1 (modelless) + Phase 2 (GRPO/DPO in `riir-gpu`, Plan 059 ✅) |
 | `go` | Go GameState + AutoGo API bridge + tournament + G-Zero self-play + AutoResearch (bandit + reqwest, Plan 065) |
