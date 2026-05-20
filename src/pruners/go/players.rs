@@ -251,7 +251,7 @@ fn connect_bonus(state: &GoState, row: usize, col: usize) -> f32 {
 // ── Scoring ────────────────────────────────────────────────────
 
 /// Greedy move score: captures, liberties, atari threats, center, edge, self-atari.
-fn greedy_score(state: &GoState, row: usize, col: usize) -> f32 {
+pub fn greedy_score(state: &GoState, row: usize, col: usize) -> f32 {
     let me = state.to_play;
     let opp = me.opponent();
     let size = state.size;
@@ -326,7 +326,7 @@ fn validate_move(state: &GoState, row: usize, col: usize) -> bool {
 }
 
 /// Categorize a move into one of 8 bandit categories.
-fn categorize_move(state: &GoState, row: usize, col: usize) -> GoMoveCategory {
+pub fn categorize_move(state: &GoState, row: usize, col: usize) -> GoMoveCategory {
     let me = state.to_play;
     let size = state.size;
     let idx = state.flat_index(row, col);

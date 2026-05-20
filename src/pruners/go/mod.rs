@@ -13,6 +13,7 @@
 //! - [`g_zero_player`] — G-Zero self-play with HintDelta and absorb-compress (Plan 065 Phase 4)
 //! - [`autoresearch`] — AutoResearch loop for automated hyperparameter search (Plan 065 Phase 5)
 
+pub mod analytics;
 pub mod autogo_client;
 pub mod autoresearch;
 pub mod g_zero_player;
@@ -41,6 +42,9 @@ pub use players::{
     GoGZeroPlayer, GoGreedyPlayer, GoHLPlayer, GoMctsPlayer, GoMoveCategory, GoPlayer,
     GoRandomPlayer, GoTemplate, GoValidatorPlayer,
 };
+
+// Analytics
+pub use analytics::{GoGameAnalytics, compute_analytics};
 
 // G-Zero Self-Play
 pub use g_zero_player::{

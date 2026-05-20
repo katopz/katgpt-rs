@@ -189,7 +189,12 @@ GoGameAnalytics is pure feature extraction with no side effects. It doesn't chan
 PGD uses KataGo win rate >90% (0.9). Our GoHeuristic ranges roughly [-1, 1]. We use absolute threshold 0.85 on the heuristic moving average, which corresponds to "clearly winning" in our scale. This threshold may need tuning — the GOAT proof will validate.
 
 ## Relationship to Model-Based Plan (riir-ai)
-Phase 2 (T10-T12) are integration tasks that use analytics features. The model-based path would train a predictor (GoOutcomePredictor, GoStyleEncoder) on these features (Research 47 "Model-Based Path", confidence 40-50%). The modelless path uses them directly for early termination, reward shaping, and style profiling.
+Phase 2 (T10-T12) are integration tasks that use analytics features. The model-based path trains a predictor (GoOutcomePredictor, GoStyleEncoder) on these features (Research 47 "Model-Based Path", confidence 40-50%). The modelless path uses them directly for early termination, reward shaping, and style profiling.
+
+**Model-Based Status (Plan 086, 2025-07):** T1–T5 all PASS. The model-based path used `extract_game_analytics()` (heuristic bridge in riir-gpu) instead of waiting for `compute_analytics()` + `samples_to_replay()`. Results:
+- T4: End-to-end pipeline (`go_11_analytics_predict.rs`) — 200/200 predictions valid ∈ [0,1], 97.5% accuracy (synthetic).
+- T5: Arena integration (`go_09_lora_arena.rs`) — 19/20 (95.0%) accuracy on 5-player arena tournament, trained on 60% / validated on 40%.
+- T6 (Natsukaze validation) remains BLOCKED — requires actual `.flat.zip` data. When available, replacing `extract_game_analytics()` with `compute_analytics()` from this plan should improve feature quality (GoHeuristic-based traces vs territory-estimate traces).
 
 ## Risk Register
 | Risk | Probability | Impact | Mitigation |
