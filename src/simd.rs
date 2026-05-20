@@ -745,6 +745,82 @@ pub fn simd_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f
     }
 }
 
+// ── MaxSim Late-Interaction Scoring (Research 45, Plan 080) ────
+
+/// Memory-efficient MaxSim scoring: `score = Σ_i max_j dot(q_i, d_j)`.
+///
+/// Late-interaction relevance score (ColBERT/PyLate style) computed without
+/// materializing the `[Lq × Ld]` similarity matrix. Each query token's max
+/// similarity across all doc tokens is found via running max, then summed.
+///
+/// This is the core scoring primitive distilled from erikkaum/maxsim (Research 45).
+/// The Metal kernel achieves 3-4× speedup over naive by streaming over doc tokens
+/// with a running max in shared memory — same O(Lq × Ld × dim) work, but with
+/// better cache locality and zero intermediate allocation.
+///
+/// Our CPU version composes existing `simd_dot_f32` + inline running max.
+/// The algorithm is provably equivalent to:
+/// ```text
+/// let mut sim = vec![0.0f32; lq * ld];
+/// for i in 0..lq {
+///     for j in 0..ld {
+///         sim[i * ld + j] = dot(q[i], d[j]);
+///     }
+/// }
+/// let score: f32 = (0..lq).map(|i| sim[i*ld..(i+1)*ld].iter().copied().fold(f32::NEG_INFINITY, f32::max)).sum();
+/// ```
+/// But without the `lq × ld` allocation.
+///
+/// # Arguments
+/// - `queries`:   `[Lq, dim]` row-major f32
+/// - `documents`: `[Ld, dim]` row-major f32
+/// - `lq`:        number of query tokens
+/// - `ld`:        number of document tokens
+/// - `dim`:       embedding dimension (e.g. 64, 128)
+///
+/// # Returns
+/// Scalar score (fp32 accumulated, matching Metal kernel design).
+///
+/// # Feature flag
+/// `maxsim` — Plan 080
+///
+/// # GOAT proof (Plan 080 T2)
+/// Must match naive materialized result within 1e-6.
+/// Must be ≥2× faster than naive for Lq≥32, Ld≥128, dim=128.
+#[cfg(feature = "maxsim")]
+#[inline]
+pub fn maxsim_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, dim: usize) -> f32 {
+    debug_assert!(
+        queries.len() >= lq * dim,
+        "maxsim_score: queries buffer too small: need {lq}*{dim}={}, have {}",
+        lq * dim,
+        queries.len()
+    );
+    debug_assert!(
+        documents.len() >= ld * dim,
+        "maxsim_score: documents buffer too small: need {ld}*{dim}={}, have {}",
+        ld * dim,
+        documents.len()
+    );
+
+    if ld == 0 {
+        return 0.0;
+    }
+
+    let mut score = 0.0f32;
+    for i in 0..lq {
+        let q_row = &queries[i * dim..(i + 1) * dim];
+        let mut my_max = f32::NEG_INFINITY;
+        for j in 0..ld {
+            let d_row = &documents[j * dim..(j + 1) * dim];
+            let dot = simd_dot_f32(q_row, d_row, dim);
+            my_max = my_max.max(dot);
+        }
+        score += my_max;
+    }
+    score
+}
+
 // ── Scalar Fallbacks (new primitives) ─────────────────────────
 
 #[inline]

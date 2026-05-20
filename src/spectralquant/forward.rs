@@ -105,6 +105,75 @@ pub fn attention_spectralquant(
     }
 }
 
+// ── MaxSim Late-Interaction Scoring on SpectralQuant KV (Research 45, Plan 080) ──
+
+/// MaxSim scoring directly on SpectralQuant-compressed KV cache.
+///
+/// Computes `score = Σ_i max_j dot(q_i, dequantize_key(j))` without allocating
+/// the full dequantized key matrix. Each position is lazy-dequantized inside the
+/// inner loop, keeping peak memory at O(dim) instead of O(Ld × dim).
+///
+/// # SpectralQuant Optimization: d_eff Truncation
+///
+/// SpectralQuant's key property (Research 39): d_eff ≈ 3-5% of head_dim for keys.
+/// After eigenbasis rotation, coordinates `[d_eff..dim]` are noise and contribute
+/// negligible dot-product signal. This function could be extended to only dequantize
+/// and score the semantic subspace `[0..d_eff]`, reducing per-position work by ~95%.
+///
+/// However, that optimization changes the *result* (not just the speed), so it
+/// requires its own GOAT proof. The current implementation scores all dimensions
+/// for correctness parity with the uncompressed `maxsim_score`.
+///
+/// # Relationship to TurboQuant (Research 20)
+///
+/// [`maxsim_score_turboquant`](crate::turboquant::forward::maxsim_score_turboquant)
+/// is the same pattern for TurboQuant's random-rotation + uniform-bit path.
+/// This SpectralQuant version uses calibrated eigenbasis + water-fill + selective QJL,
+/// giving higher fidelity at the same compression ratio. Both share the same
+/// running-max-over-lazy-dequantized-keys inner loop structure.
+///
+/// # Feature flag
+/// Requires both `spectralquant` and `maxsim` features.
+///
+/// # GOAT proof (Plan 080 T10)
+/// Must match uncompressed `maxsim_score` within 1e-3.
+/// Must match CPU reference within 1e-3.
+#[cfg(all(feature = "spectralquant", feature = "maxsim"))]
+#[allow(dead_code)] // Stub — wired in Plan 080 T10
+pub fn maxsim_score_spectralquant(
+    queries: &[f32],
+    cache: &mut SpectralQuantKVCache,
+    layer: usize,
+    pos_range: std::ops::Range<usize>,
+    dim: usize,
+) -> f32 {
+    let lq = queries.len() / dim;
+    if lq == 0 || pos_range.is_empty() {
+        return 0.0;
+    }
+
+    // Reusable buffer for lazy dequantize — avoids per-position allocation.
+    // Peak memory: O(dim) for the key buffer, matching maxsim.metal's design
+    // of streaming over doc tokens with only running state in shared memory.
+    let mut key_buf = vec![0.0f32; dim];
+
+    let mut score = 0.0f32;
+    for i in 0..lq {
+        let q_row = &queries[i * dim..(i + 1) * dim];
+        let mut my_max = f32::NEG_INFINITY;
+        for t in pos_range.clone() {
+            // Lazy dequantize into reusable buffer — spectral rotation +
+            // variable-bit unpack + codebook lookup all happen inside
+            // dequantize_key_into. Only one key vector in memory at a time.
+            cache.dequantize_key_into(layer, t, &mut key_buf);
+            let dot = crate::simd::simd_dot_f32(q_row, &key_buf, dim);
+            my_max = my_max.max(dot);
+        }
+        score += my_max;
+    }
+    score
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -41,6 +41,7 @@ ropd_rubric = ["bandit"]  # ROPD rubric modelless distillation — multi-criteri
 sdar_gate = []  # SDAR sigmoid gating for modelless distillation signals (Plan 072)
 replaid_schedules = []  # RePlaid variance-minimized adaptive schedules (Plan 078) — experimental, off by default
 elf_sde = []  # ELF SDE noise injection + logit-normal schedule (Plan 079) — GOAT proved: 10-22× diversity, default-on
+maxsim = []  # MaxSim late-interaction scoring (Research 45, Plan 080)
 spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 2× compression vs TQ, lower cosine
 turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
 bt_rank = []  # Bradley-Terry pairwise ranking for DDtree selection (OpenDeepThink distillation)
@@ -67,7 +68,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "bt_rank", "spectral_quant", "turboquant", "replaid_schedules", "elf_sde"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "bt_rank", "spectral_quant", "turboquant", "replaid_schedules", "elf_sde", "maxsim"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 

@@ -136,6 +136,65 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     dot / (na * nb)
 }
 
+// ── MaxSim Late-Interaction Scoring on Compressed KV (Research 45, Plan 080) ──
+
+/// MaxSim scoring directly on TurboQuant-compressed KV cache.
+///
+/// Computes `score = Σ_i max_j dot(q_i, dequantize_key(j))` without allocating
+/// the full dequantized key matrix. Each position is lazy-dequantized inside the
+/// inner loop, keeping peak memory at O(dim) instead of O(Ld × dim).
+///
+/// This is the TurboQuant counterpart to [`maxsim_score`](crate::simd::maxsim_score).
+/// The principle is identical (running max over doc tokens), but here each doc
+/// token's vector comes from the compressed KV cache rather than a flat buffer.
+///
+/// # Relationship to SpectralQuant (Research 39)
+///
+/// SpectralQuant's `spectralquant_attention.wgsl` already implements fused
+/// dequantize + scoring with softmax-sum reduction. Adding `ScoreReduction::MaxSim`
+/// to that kernel is the GPU equivalent of this function. This CPU path covers:
+/// - TurboQuant-only scenarios (no SpectralQuant calibration)
+/// - Testing / correctness validation for the GPU path
+/// - Small batch sizes where GPU dispatch overhead dominates
+///
+/// # Feature flag
+/// Requires both `turboquant` and `maxsim` features.
+///
+/// # GOAT proof (Plan 080 T9)
+/// Must match uncompressed `maxsim_score` within 1e-3.
+/// Latency overhead vs `attention_turboquant` softmax-sum mode must be ≤5%.
+#[cfg(all(feature = "turboquant", feature = "maxsim"))]
+#[allow(dead_code)] // Stub — wired in Plan 080 T9
+pub fn maxsim_score_turboquant(
+    queries: &[f32],
+    cache: &super::kv_cache::TurboQuantKVCache,
+    layer: usize,
+    pos_range: std::ops::Range<usize>,
+    dim: usize,
+) -> f32 {
+    let lq = queries.len() / dim;
+    if lq == 0 || pos_range.is_empty() {
+        return 0.0;
+    }
+
+    let mut score = 0.0f32;
+    for i in 0..lq {
+        let q_row = &queries[i * dim..(i + 1) * dim];
+        let mut my_max = f32::NEG_INFINITY;
+        for t in pos_range.clone() {
+            // Lazy dequantize: only one key vector in memory at a time.
+            // This is the "streaming over doc tokens" pattern from maxsim.metal —
+            // same O(dim) peak memory, but on CPU with simd_dot_f32 instead of
+            // Metal simdgroup_matrix.
+            let key = cache.dequantize_key(layer, t);
+            let dot = crate::simd::simd_dot_f32(q_row, &key, dim);
+            my_max = my_max.max(dot);
+        }
+        score += my_max;
+    }
+    score
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

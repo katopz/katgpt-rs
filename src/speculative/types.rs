@@ -538,6 +538,36 @@ pub enum PrefillMode {
     Always,
 }
 
+// ── Score Reduction Mode (Research 45, Plan 080) ──────────────
+
+/// Reduction mode for block/pair scoring and compressed attention.
+///
+/// Controls how dot-product scores are reduced in attention and block scoring.
+/// `SoftmaxSum` is standard attention (softmax-weighted value accumulation).
+/// `MaxSim` is late-interaction scoring: max per query token, then sum.
+///
+/// Distilled from erikkaum/maxsim (Research 45). The MaxSim kernel achieves
+/// 3-4× speedup over naive by streaming with running max — same principle
+/// applies to our PFlash block scoring and TurboQuant/SpectralQuant fused
+/// dequantize+scoring paths.
+///
+/// # Feature flag
+/// `maxsim` — Plan 080
+///
+/// # GOAT proof (Plan 080 T9-T11)
+/// MaxSim mode must match uncompressed `maxsim_score` within 1e-3.
+/// Latency overhead vs SoftmaxSum mode must be ≤5%.
+#[cfg(feature = "maxsim")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ScoreReduction {
+    /// Standard attention: softmax-weighted sum (existing behavior).
+    #[default]
+    SoftmaxSum,
+    /// MaxSim: max per query token, then sum over query tokens.
+    /// `score = Σ_i max_j dot(q_i, d_j)` — ColBERT/PyLate late-interaction.
+    MaxSim,
+}
+
 /// Configuration for PFlash block-sparse prefill scoring.
 ///
 /// Controls how prompts are compressed before target model prefill.
