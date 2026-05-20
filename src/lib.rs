@@ -12,6 +12,8 @@ pub mod percepta;
 pub mod plot;
 pub mod pruners;
 pub mod simd;
+#[cfg(feature = "maxsim")]
+pub mod rerank;
 #[cfg(feature = "sp_kv")]
 pub mod sp_kv;
 #[cfg(feature = "spectral_quant")]

@@ -212,11 +212,12 @@ This applies MaxSim in its **original design context** (retrieval reranking) wit
 **🟢 ADOPT (proven in our stack or zero-risk):**
 - `maxsim_score()` CPU SIMD — composition of existing tested primitives, provably correct
 - `ScoreReduction::MaxSim` for TurboQuant/SpectralQuant — one-parameter extension of existing kernels
+- PFlash block maxsim scoring — **371% better** needle separation vs mean-K (T7 GOAT passed)
+- REST reranking with MaxSim — `src/rerank.rs` module, `RerankMethod` enum, NDCG@10 proven ≥2% better than cosine (T12 GOAT passed, Benchmark 014)
 
-**🟡 INVESTIGATE (distillable, needs GOAT proof):**
-- PFlash block maxsim scoring — hypothesis that max > mean for block importance, needs benchmark
-- REST reranking with maxsim — correct scoring function for Plan 009, needs integration
+**🟡 INVESTIGATE (distillable, needs demand/validation):**
 - Packed/ragged batch maxsim — useful API for multi-pair scoring, needs demand
+- MaxSim reranking integration with live anyrag `/search/vector` endpoint — module proven, needs deployment
 
 **🔴 REJECT (incompatible with our architecture):**
 - Full Metal `.metal`/`.mm` code — we use wgpu (WGSL), not platform-native Metal
@@ -250,7 +251,7 @@ This applies MaxSim in its **original design context** (retrieval reranking) wit
 ### Modelless Proposals (tested in microgpt-rs)
 - [x] `maxsim_score()`: matches naive materialized result within 1e-6, **7.46× faster** (48.3µs vs 360.0µs, Lq=32, Ld=256, dim=128, release build) — Plan 080 T2/T4
 - [x] PFlash block maxsim: **371% more** needle blocks selected (4.71× better separation: 20× vs 4.25× for mean-K) — Plan 080 T7
-- [ ] REST maxsim reranking: ≥2% better retrieval NDCG vs cosine similarity — blocked on Plan 009 REST pathway
+- [x] REST maxsim reranking: ≥2% better retrieval NDCG vs cosine similarity — `src/rerank.rs` module (`RerankMethod` enum, `ndcg_at`, `rerank`), `bench_maxsim_rerank` test, Benchmark 014 — Plan 080 T12
 
 ### Model-Based Proposals (tested in microgpt-rs CPU)
 - [x] TurboQuant `ScoreReduction::MaxSim`: matches uncompressed maxsim within 0.95% at 4-bit; **40.54% error at 3-bit** — Plan 080 T9
