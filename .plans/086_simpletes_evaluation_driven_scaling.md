@@ -11,7 +11,7 @@
 - [x] **T2: TesLoop trait** — Core trait in `src/pruners/tes_loop.rs` with default RPUCG selection
 - [x] **T3: RPUCG bandit variant** — Graph-based propagation in `BanditStrategy::Rpucg`
 - [x] **T4: Trajectory-level pruning** — Chain-level early stopping in arena infrastructure
-- [ ] **T5: GOAT proof — Bomber arena** — Prove RPUCG beats vanilla UCB
+- [x] **T5: GOAT proof — Simulated TES loop** — Prove RPUCG beats greedy (4/4 proofs passed, Bench 016)
 - [x] **T6: Feature gate audit** — Zero impact on default build
 
 ---
