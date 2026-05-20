@@ -1,0 +1,278 @@
+# Research Verdict 45: MaxSim — Memory-Efficient Late-Interaction Scoring
+
+**Source:** [erikkaum/maxsim](https://github.com/erikkaum/maxsim) — Exact MaxSim kernel for ColBERT/PyLate late-interaction retrieval
+**Author:** Erik Kaum
+**Date:** 2026-05-20
+**Status:** 🟡 SELECTIVE ADOPTION — Core `maxsim_score` primitive is universally useful (CPU SIMD). PFlash block scoring upgrade is high-value. Compressed KV path is redundant with SpectralQuant (Research 39). Full GPU kernel is future work.
+
+---
+
+## 1. Core Technique
+
+MaxSim computes **late-interaction relevance scores** without materializing the full similarity matrix:
+
+```
+score(q, d) = Σ_i max_j dot(q_i, d_j)
+```
+
+For each query token, find the **max** similarity across all document tokens, then **sum** those per-query-token maxima. The key optimization: **never allocate `[Lq × Ld]`**. Each thread keeps a running `max(dot(q_i, d_j))` over its slice of doc tokens, tree-reduces in shared memory, then atomic-adds into the per-pair score.
+
+This is the standard scoring function for ColBERT/PyLate late-interaction retrieval and reranking.
+
+## 2. Key Findings
+
+### 2.1 The Algorithm is Three Primitives Composed (maxsim.metal)
+
+The entire kernel decomposes into operations we already have in `src/simd.rs`:
+
+| MaxSim Operation | Our Existing Primitive |
+|---|---|
+| Per-token dot product | `simd_dot_f32(a, b, len)` |
+| Running max across doc tokens | `simd_max_f32(x)` (but we need inline max, not over slice) |
+| Outer product Q×Kᵀ | `simd_outer_product_acc(...)` |
+| Row-wise matmul | `simd_matmul_rows(...)` |
+
+**Gap:** We have `dot` and `max` separately but no **fused max-dot** that computes `Σ_i max_j dot(q_i, d_j)` without materializing intermediates. This is a ~50 LOC composition, not a new subsystem.
+
+### 2.2 Memory Efficiency is the Real Win (README Benchmarks)
+
+The naive approach materializes `[Lq × Ld]` then reduces. MaxSim skips the allocation:
+
+| Workload (M3 Pro, fp16, dim=128) | Kernel | Naive | Speedup |
+|---|---|---|---|
+| SmallRerank (B=32, C=10, Lq=32, Ld=180) | 0.45ms | 1.44ms | **3.18×** |
+| HeavyRerank (B=32, C=100, Lq=32, Ld=256) | 4.34ms | 16.63ms | **3.83×** |
+| LongDocStress (B=8, C=16, Lq=64, Ld=1024) | 1.69ms | 3.70ms | **2.19×** |
+
+The speedup comes from **cache locality** (streaming over doc tokens) not algorithmic improvement. The same `O(Lq × Ld × dim)` work happens, just without the intermediate allocation.
+
+### 2.3 Metal simdgroup_matrix Provides 2x/4x Variants (maxsim.metal L200-400)
+
+The kernel has 2x and 4x MMA variants that share the A-fragment (query) across multiple B-slices (documents):
+
+- **2x:** Compute `Q @ D0ᵀ` and `Q @ D1ᵀ` in lockstep, sharing A-fragment load. Halves A-loads and barrier count.
+- **4x:** One A-fragment shared across four consecutive 8-row slices of D. Quarters A-loads.
+
+These fire when `dim % 8 == 0` (Metal) or `dim % 16 == 0` (CUDA). All typical embedding sizes (64, 96, 128) qualify.
+
+**Distillation:** The sharing pattern is the same principle as our `simd_sparse_dot_f32` gather-scatter — reuse loaded data across multiple accumulations.
+
+### 2.4 PFlash Mean-K Scoring is Suboptimal for Block Importance
+
+Current PFlash block scoring: `block_score[i][j] = dot(Q_block_mean[i], K_block_mean[j])`.
+
+Mean-pooling dilutes strong signals. If one query token has high affinity with one key token in a block, the mean buries it. MaxSim preserves the strongest signal:
+
+```
+Current: block_score = dot(mean(Q_block), mean(K_block))
+MaxSim:  block_score = Σ_i max_j dot(q_i, k_j)  // over Q-block × K-block
+```
+
+This is the most impactful application for our architecture.
+
+### 2.5 Compressed MaxSim is Redundant with SpectralQuant (Research 39)
+
+SpectralQuant already implements fused dequantize + scoring:
+
+| Proposed (MaxSim + compressed KV) | Already Exists (SpectralQuant) |
+|---|---|
+| Fused dequantize + dot per position | `waterfill_dequant.wgsl` |
+| Skip full dequantized matrix allocation | Selective dequant on d_eff subspace |
+| Per-position lazy decode | `spectralquant_attention.wgsl` |
+
+The **only** difference is the reduction: SpectralQuant uses `softmax(Q·K)·V` (sum), MaxSim uses `max_j` per query token. Adding a `ScoreReduction` enum (`SoftmaxSum` | `MaxSim`) to the existing kernel is a ~20 LOC change, not a new pipeline.
+
+Similarly for TurboQuant: `attention_turboquant` in `src/turboquant/forward.rs` already fuses dequantize + Q·K scoring. Adding a max-reduction mode is a minor extension.
+
+### 2.6 REST Retrieval Reranking is the Natural Use Case (Plan 009)
+
+Plan 009's `RestClient::retrieve()` queries anyrag with hidden-state embeddings and returns candidate sequences with similarity scores. When reranking multiple retrieved sequences, MaxSim is the correct scoring function:
+
+- Query = current hidden state sequence `[Lq, dim]`
+- Document = retrieved token sequence embeddings `[Ld, dim]`
+- Score = `Σ_i max_j dot(q_i, d_j)` — exactly MaxSim
+
+This applies MaxSim in its **original design context** (retrieval reranking) without any architectural changes.
+
+---
+
+## 3. What We Can Distill (Honest Assessment)
+
+### ✅ Distillable Without Architecture Changes
+
+| Technique | Target Module | Path | Risk |
+|---|---|---|---|
+| Fused `maxsim_score()` | `src/simd.rs` | CPU SIMD | Low — composing existing primitives |
+| PFlash maxsim block scoring | `src/speculative/prefill.rs` | CPU | Low — replace mean-K with maxsim |
+| REST reranking with maxsim | Plan 009 bridge | CPU | Low — scoring function change |
+| `ScoreReduction::MaxSim` mode | `src/turboquant/forward.rs` | CPU | Low — minor extension of existing kernel |
+| `ScoreReduction::MaxSim` mode | `riir-gpu` SpectralQuant | GPU | Low — minor extension of existing WGSL |
+
+### ⚠️ Distillable With Moderate Changes
+
+| Technique | Target Module | Path | Risk |
+|---|---|---|---|
+| Packed/ragged batch maxsim | `src/simd.rs` | CPU | Low — new API surface |
+| WGSL `maxsim_block_score` kernel | `riir-gpu` PFlash pipeline | GPU | Medium — new shader |
+
+### ❌ Not Distillable (Architecture Incompatibility)
+
+| Technique | Why Not |
+|---|---|
+| Full Metal `.metal` / `.mm` code | We target wgpu (WGSL), not platform-native Metal. Our GPU path is `riir-gpu`. |
+| CUDA WMMA path | We don't have CUDA; wgpu compiles to Metal/Vulkan/DX12. |
+| Python HuggingFace `kernels` packaging | We're Rust-native, no Python dependency. |
+| Backward pass | MaxSim explicitly doesn't implement it. Training uses different kernels. |
+| simdgroup_matrix 2x/4x sharing | GPU-specific optimization; our CPU path benefits from cache locality instead. |
+
+---
+
+## 4. Modelless Distillation Targets
+
+### 4.1 Fused `maxsim_score` — CPU SIMD (Primary Target)
+
+**Paper basis:** MaxSim kernel core algorithm (maxsim.metal L24-60).
+
+**Hypothesis:** Composing `simd_dot_f32` + inline running max provides memory-efficient late-interaction scoring for PFlash block importance and REST reranking, without allocating `[Lq × Ld]` intermediates.
+
+**GOAT proof required:**
+1. Correctness: `maxsim_score` matches naive materialized result within 1e-6
+2. Memory: peak allocation stays at `O(dim)` not `O(Lq × Ld)`
+3. Performance: ≥2× faster than materialized baseline for Lq≥32, Ld≥128
+4. Integration: PFlash block scoring with maxsim ≥2% perplexity improvement over mean-K
+
+**Risk assessment:** This is pure composition of existing tested primitives. The algorithm is provably equivalent to the naive version (same mathematical result). Failure mode is only performance, not correctness.
+
+### 4.2 PFlash Block MaxSim Scoring (Secondary Target)
+
+**Paper basis:** MaxSim's advantage over mean-pooling for relevance scoring.
+
+**Hypothesis:** Replacing `dot(Q_mean, K_mean)` with `Σ_i max_j dot(q_i, k_j)` in PFlash block scoring produces better block importance rankings, because max preserves the strongest per-token signal while mean dilutes it.
+
+**GOAT proof required:**
+1. Block selection: ≥5% more "needle" blocks selected in synthetic attention patterns
+2. Prefill quality: compressed prompt with maxsim block scoring ≥2% better downstream task score vs mean-K
+3. Latency: maxsim block scoring ≤3× slower than mean-K (acceptable since block scoring is not the hot path)
+
+**Connection to existing work:** PFlash (Plan 044) already has `FlashPrefillConfig` with pluggable scoring. MaxSim is a drop-in replacement for `block_select`'s importance function.
+
+### 4.3 Embedding ScreeningPruner (Exploratory)
+
+**Paper basis:** MaxSim's token-level similarity scoring.
+
+**Hypothesis:** A `ScreeningPruner` that uses token embedding dot products as relevance scores can provide graded domain-fit scoring, replacing binary constraint checks.
+
+**Status:** Conceptual only. Requires defining where embeddings come from at prune-time (they're normally computed during forward pass, not available during DDTree expansion). May be incompatible with the DDTree's lazy evaluation model.
+
+---
+
+## 5. Model-Based Distillation Targets
+
+### 5.1 TurboQuant/SpectralQuant ScoreReduction Mode (Primary Target)
+
+**Paper basis:** MaxSim's max-reduction vs standard attention's softmax-sum reduction.
+
+**Hypothesis:** Adding a `ScoreReduction::MaxSim` variant to the existing fused dequantize+scoring kernels (both CPU `attention_turboquant` and GPU `spectralquant_attention`) enables late-interaction scoring directly on compressed KV, without a new pipeline.
+
+**GOAT proof required:**
+1. CPU: `attention_turboquant` with maxsim mode matches uncompressed `maxsim_score` within 1e-3
+2. GPU: `spectralquant_attention` with maxsim mode matches CPU reference within 1e-3
+3. Latency: maxsim mode ≤5% slower than standard softmax-sum mode (same fused kernel, different reduction)
+
+**Risk assessment:** Very low. The fused dequantize+scoring path already exists. Adding `max` reduction alongside `softmax-sum` is a branch in the inner loop, not a new algorithm.
+
+### 5.2 WGSL MaxSim Block Score Kernel (Future Target)
+
+**Paper basis:** MaxSim Metal kernel architecture.
+
+**Hypothesis:** A dedicated WGSL compute shader for PFlash block scoring can accelerate the maxsim per-block computation on GPU, similar to the Metal kernel's 2-3× speedup over naive.
+
+**Status:** Deferred until CPU maxsim proves useful. GPU kernel is only warranted if PFlash block maxsim becomes a bottleneck.
+
+---
+
+## 6. Cross-Reference with Existing Research
+
+| Existing Research | MaxSim Connection | Compatibility |
+|---|---|---|
+| Research 39 (SpectralQuant) | **Primary overlap**: fused dequant+scoring already implemented. MaxSim only adds `max` reduction mode. | ✅ Compatible (minor extension) |
+| Research 20 (TurboQuant) | MaxSim on uncompressed TQ dequant; subsumed by SpectralQuant's selective path | ✅ Compatible (also extendable) |
+| Research 22 (Lighthouse Attention) | Both optimize attention scoring; MaxSim is orthogonal (batch dimension) | ✅ Orthogonal |
+| Research 44 (PFlash) | **Primary application**: replace mean-K block scoring with maxsim per-block | ✅ Direct upgrade |
+| Research 42 (SP-KV) | MaxSim can score selectively — only retained KV positions | ✅ Compatible |
+| Research 00-01 (RAG/REST) | MaxSim is the natural scoring function for retrieved sequences | ✅ Natural fit |
+| Research 37 (REAP) | Model-based/modelless duality — MaxSim enables modelless relevance scoring | ✅ Consistent |
+
+**Key insight:** MaxSim's core idea — **reduce-while-scoring without materializing the full matrix** — is exactly what our attention kernels already do in the **temporal** dimension (dot Q against all K positions, never store all pairwise scores). MaxSim applies the same principle in the **batch** dimension. The distillation is about **composing** existing SIMD primitives (`simd_dot_f32`, `simd_max_f32`) into the right fused pattern.
+
+---
+
+## 7. Verdict Summary
+
+**🟢 ADOPT (proven in our stack or zero-risk):**
+- `maxsim_score()` CPU SIMD — composition of existing tested primitives, provably correct
+- `ScoreReduction::MaxSim` for TurboQuant/SpectralQuant — one-parameter extension of existing kernels
+
+**🟡 INVESTIGATE (distillable, needs GOAT proof):**
+- PFlash block maxsim scoring — hypothesis that max > mean for block importance, needs benchmark
+- REST reranking with maxsim — correct scoring function for Plan 009, needs integration
+- Packed/ragged batch maxsim — useful API for multi-pair scoring, needs demand
+
+**🔴 REJECT (incompatible with our architecture):**
+- Full Metal `.metal`/`.mm` code — we use wgpu (WGSL), not platform-native Metal
+- CUDA WMMA path — we don't have CUDA
+- Python HuggingFace `kernels` packaging — we're Rust-native
+- Backward pass — MaxSim explicitly doesn't implement it
+- Argmax-position output — not critical for our scoring pipeline
+
+---
+
+## 8. Honest Caveats
+
+1. **MaxSim is O(Lq × Ld × dim) either way.** The speedup comes from cache locality (streaming over doc tokens) not algorithmic improvement. On CPU with large caches, the benefit may be smaller than on GPU.
+
+2. **The 3-4× speedup is GPU-measured.** Our CPU SIMD path may see less relative gain because scalar dot product is already cache-friendly. The real win is **memory avoidance** (no `[Lq × Ld]` allocation), not raw compute speed.
+
+3. **PFlash maxsim vs mean-K is a hypothesis, not proven.** Mean-pooling is theoretically better for capturing aggregate block similarity. MaxSim is theoretically better for capturing the strongest per-token signal. Which wins depends on the actual attention pattern distribution in our models.
+
+4. **ColBERT/PyLate context is retrieval, not inference.** MaxSim was designed for scoring (query, document) pairs in search pipelines. Applying it to PFlash block importance or attention scoring is an adaptation, not a direct port.
+
+5. **The compressed KV overlap with SpectralQuant is nearly complete.** We should not build a parallel "MaxSim on compressed KV" pipeline. The right approach is a `ScoreReduction` enum on the existing SpectralQuant/TurboQuant fused kernels.
+
+6. **dim alignment matters for SIMD paths.** The Metal kernel's fast path requires `dim % 8 == 0`. Our SIMD paths have no such constraint but benefit from aligned lengths. Typical embedding sizes (64, 128) are always aligned.
+
+---
+
+## 9. GOAT Proof Checklist
+
+Before any adoption, each proposal must pass:
+
+### Modelless Proposals (tested in microgpt-rs)
+- [ ] `maxsim_score()`: matches naive materialized result within 1e-6, ≥2× faster for Lq≥32 Ld≥128
+- [ ] PFlash block maxsim: ≥5% more needle blocks selected in synthetic attention, ≤3× latency overhead vs mean-K
+- [ ] REST maxsim reranking: ≥2% better retrieval NDCG vs cosine similarity
+
+### Model-Based Proposals (tested in riir-ai)
+- [ ] TurboQuant `ScoreReduction::MaxSim`: matches uncompressed maxsim within 1e-3, ≤5% latency overhead
+- [ ] SpectralQuant `ScoreReduction::MaxSim`: matches CPU reference within 1e-3, ≤5% latency overhead
+
+**Failure mode:** If PFlash block maxsim shows no improvement over mean-K (possible if attention patterns are smooth rather than spiky), then the PFlash application is dead. The CPU `maxsim_score` primitive remains useful for REST reranking regardless.
+
+---
+
+## References
+
+- Source: <https://github.com/erikkaum/maxsim>
+- Kernel repo: <https://huggingface.co/kernels/erikkaum/maxsim>
+- ColBERT paper: "Late Interaction over BERT" (Khattab & Zaharia, 2020)
+- PyLate: "PyLate: Flexible Retrieval with Late Interaction" (NUBES)
+- `.raw/maxsim/maxsim_metal/maxsim.metal` — Metal kernel source
+- `.raw/maxsim/maxsim_metal/maxsim.mm` — Metal host-side dispatch
+
+## Cross-References
+
+- **Plan 080** (MaxSim Late Interaction Scoring) — implementation plan for this research
+- **Research 39** (SpectralQuant) — primary overlap on compressed KV scoring
+- **Research 44** (PFlash) — primary application target for block maxsim
+- **Research 37** (REAP) — model-based/modelless duality framework
+- **Plan 009** (REST Speculative Decoding) — natural use case for maxsim reranking
