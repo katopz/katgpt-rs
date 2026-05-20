@@ -315,7 +315,7 @@ Architecture: random orthogonal rotation → Beta-distributed coordinates → Ll
 
 ## 🔬 SpectralQuant: Calibrated Eigenbasis KV Compression (Default)
 
-Data-driven spectral analysis replaces TurboQuant's random rotation with a calibrated eigenbasis. Near-optimal quantization via offline calibration → water-fill bit allocation → Lloyd-Max codebooks. **Default KV compression** (Plan 077). At same 3-bit budget with real calibration: SQ cosine=0.9917 > TQ 0.9692, SQ MaxSim error=3.88% < TQ 27.15%, SQ compression=9.1× > TQ 5.3×. SQ wins quality AND compression at matched budget.
+Data-driven spectral analysis replaces TurboQuant's random rotation with a calibrated eigenbasis. Near-optimal quantization via offline calibration → water-fill bit allocation → Lloyd-Max codebooks. **Default KV compression** (Plan 077). At same 3-bit budget with real calibration (Bench 013): SQ cosine=0.9845 > TQ 0.9715, SQ MaxSim error=18.90% < TQ 40.54% (2.1× lower), SQ compression=9.7× > TQ 5.3×. SQ wins quality AND compression at matched budget.
 
 | Technique | What | Why Better Than TQ |
 |-----------|------|--------------------|
@@ -1171,7 +1171,7 @@ cargo clippy --all-targets --all-features --quiet
 | `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
-| `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 2× compression vs TQ, lower fidelity (Plan 077, default-on) |
+| `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
@@ -1378,6 +1378,68 @@ Lessons from [NVIDIA Dynamo's agentic inference](https://developer.nvidia.com/bl
 | Catalog metadata shapes behavior | `TruncationPolicy` + `ReasoningRetention` per domain |
 | Per-request agent hints | `AgentHints` with latency_sensitivity, priority, speculative_prefill |
 | `/v1/tokenize` for context accounting | BPE-based tokenize/detokenize endpoint types |
+
+## 🧪 Tech Stack: Research → Code → Proof
+
+Every feature traced from research paper to implementation to benchmark. Separated by **GOAT** (default-on, production-proven) and **gated** (opt-in, conditional).
+
+### 🐐 Default GOAT (Production Stack)
+
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde"]`
+
+| Feature | Source | Real Gain (from code) | Replaced |
+|---------|--------|-----------------------|----------|
+| **LeviathanVerifier** | [Speculative Decoding (Leviathan 2022)](https://arxiv.org/pdf/2211.17192) | Always ≥1 token/step, up to γ+1 bonus. Identical output distribution via residual sampling. No feature gate — always compiled. | Single-model autoregressive |
+| **DFlash + DDTree** | [DFlash](https://arxiv.org/abs/2602.06036) + [DDTree](https://arxiv.org/abs/2604.12989) | Strategic DDTree: 4 nodes/160µs (small) → 125-step puzzles in ~70ms (Bench 001). Zero-alloc `SpeculativeContext` scratch buffers. | Linear draft chains |
+| **Raven RSM** | [Raven (Afzal 2025)](https://github.com/goombalab/raven) | O(1) attention: 16 slots always, regardless of seq_len. `bench_raven_recall()` tests passkey retrieval after 1000 noise updates. | Growing O(N) KV cache for draft model |
+| **ScreeningPruner** | [Screening Absolute Relevance](https://arxiv.org/abs/2604.12989) | Continuous relevance ∈ [0,1] via `ln(R)` blending. `BinaryScreeningPruner` blanket impl — backward compatible. `BanditPruner`: 100% goal rate vs 0% for binary at tight budget=64 (Bench 005). | Binary `ConstraintPruner` |
+| **Sparse MLP** (`sparse_mlp`) | [Sakana TwELL](https://arxiv.org/abs/2603.23198) | Skip dead ReLU neurons in w2 matmul. SIMD gather (`simd_sparse_matmul_rows` NEON/AVX2). Auto-fallback to dense when sparsity too low. `bench_sparse_mlp()` covers micro→large configs. | Dense w2 matmul on ~50% zeros |
+| **PPoT** (`ppot`) | [Probabilistic Programs of Thought](https://arxiv.org/abs/2604.17290) | CPU-only logit resampling at high-entropy positions. Zero additional forward passes. `TokenRule` enum cycles Digit→Compare→Arithmetic→Augment→All. `SessionKnowledge` accumulates rejection insights. | Greedy fallback on DDTree failure |
+| **Domain Latent** (`domain_latent`) | [Free Transformer Latent Injection](https://arxiv.org/abs/2406.09970) | Mid-layer K/V injection at layer `n_layer/2`. SIMD-accelerated (`simd_add_inplace`). BLAKE3 checksum on disk. 6 unit tests (roundtrip, zeros, invalid magic, checksum mismatch). | — (new capability) |
+| **Bandit + HL** (`bandit`) | [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) | Shared bandit: **+37.5pp survival** (95.4% vs 57.8%), Q-value reaches 85.5% by round 250 (Bench 006). Full HL pipeline at **1.16M cycles/sec**, zero hot-path overhead. `TrialLog` JSONL + `HotSwapPruner` + `RegressionSuite` + `AbsorbCompressLayer`. | Manual pruner tuning |
+| **BT Ranking** (`bt_rank`) | [OpenDeepThink (Bradley-Terry)](https://arxiv.org/abs/2504.02268) | **+10.6pp** over pointwise for finding true best (33.6% vs 23.0%). GOAT 4/4 passed. Kendall τ 0.6354 vs 0.6196. Sparse K=2: 3.7× random baseline (Bench 011). | Pointwise `ScreeningPruner` scoring |
+| **SpectralQuant** (`spectral_quant`) | [SpectralQuant Research 39](https://arxiv.org/pdf/2504.19874) | **9.1× compression** vs TurboQuant 5.3×. **Cosine 0.9917** vs TQ 0.9692. MaxSim error 18.90% vs TQ 40.54% (2.1× lower). Eigenbasis calibration + water-fill bit allocation (Bench 013). | **TurboQuant** (demoted to legacy baseline) |
+| **ELF SDE** (`elf_sde`) | [Embedded Language Flows](https://arxiv.org/abs/2406.09970) | **10-22× path diversity** (145 vs 14 unique prefixes at γ=1.0). Overhead: 3.2µs (<3% of one attention step). Logit-normal: 2.2× concentration near t=0 (Bench 012). | Uniform noise for D2F |
+
+### 🔒 Gated Features (Opt-In, Proven)
+
+| Feature | Source | Real Gain | Why Gated |
+|---------|--------|-----------|-----------|
+| **G-Zero** (`g_zero`) | [G-Zero Self-Play](https://arxiv.org/pdf/2605.09959) | 8.57M δ/sec, 1.76M pairs/sec, 1.16M cycles/sec (Bench 005). Hint-δ intrinsic reward, no external verifier. TemplateProposer for Bomber+FFT. | Bench-only; does NOT touch `forward()` hot path |
+| **Bomber** (`bomber`) | Plan 033 HL Arena | HL thesis proven: deterministic heuristics beat naive MCTS in complex games. `ReplayBackwardWalker`: 4.0 alternatives/tick. | Requires `bevy_ecs`, arena-specific |
+| **GameState** (`game_state`) | [STRATEGA](https://arxiv.org/abs/2605.09959) | Cross-game MCTS reuse: one `mcts_search()` works on Bomber, Go, any `GameState` impl. `BomberState` wraps ECS for snapshot/restore. | Depends on `bomber`, arena-specific |
+| **HLA/AHLA** (`hla_attention`) | [Higher-order Linear Attention](https://arxiv.org/abs/2605.09959) | AHLA: **95% of flat KV speed** (863K vs 910K tok/s), **88.3% memory savings** (640B vs 2048B/layer). Cosine 0.9537 vs SDPA (Bench Plan 057). | Alternative attention path, not yet default |
+| **Percepta** (`percepta`→`percepta_compile`) | [Percepta transformer-vm](https://www.percepta.ai/blog/can-llms-be-computers) | Full RIIR: 17 source files. CHT hull O(log h), parabolic encoding, ReGLU gates, Expression/Dimension DSL, WASM interpreter, MILP scheduling, Futamura projection. `Sudoku9x9` + `StreamingSolver` end-to-end. | Research-grade; production uses LoRA+bandit+validators |
+| **D2F** (`dllm`) | [Discrete Diffusion Forcing](https://arxiv.org/abs/2406.09970) | 15/15 tests pass. Mini dLLM reaches ≥80% accuracy. Block-causal + bidirectional attention. `DecodeStrategy::recommend()` auto-switches AR/Speculative/D2F. | Experimental decode strategy |
+| **ROPD Rubric** (`ropd_rubric`) | Research 36 | `observe_rubric()`: 4.9M/sec (49× target). Per-criterion pass rates: 20/20 high-weight, 0/10 low-weight (correctly filtered). Zero inter-dimensional regression. | Arena-specific learning player |
+| **MaxSim** (`maxsim`) | [MaxSim Research 45](https://arxiv.org/abs/2605.09959) | **7.46× SIMD** speedup (48.3µs vs 360µs). Block separation: 20× vs Mean-K 4.25× (**4.71× better** needle detection). | Amplifies quantization error 12-14×; best with SpectralQuant |
+| **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
+| **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
+| **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
+
+### 🪦 Replaced / Fell Behind / No Gain
+
+| Feature | Source | Verdict | Why |
+|---------|--------|---------|-----|
+| **TurboQuant** (`turboquant`) | [TurboQuant (Zandieh 2025)](https://arxiv.org/pdf/2504.19874) | **Demoted to legacy baseline** | SpectralQuant dominates: 9.1× vs 5.3× compression, 0.9917 vs 0.9692 cosine, 2.1× lower MaxSim error (Bench 013). Available for comparison/education. |
+| **StepCode** (`stepcode`) | Plan 054 Bi-Level GRPO | **NO GAIN proven** | Mathematically correct but paper's 7-14% gains come from training 7B model on dense stepwise rewards — modelless path only improves heuristic signal quality. Off by default, not in `full`. |
+| **δ-Mem** (`delta_mem`) | Plan 053 Associative Memory | **NO GAIN for DDTree** | Delta-rule converges (cosine ≤0.20 error after 200 updates), domain isolation works. BUT: **26× latency overhead** (682 calls/build). Corrections too small to flip branch ordering. |
+| **SDAR Arena** (`sdar_gate`) | Plan 072 Asymmetric Trust | **Negative arena result** | ELO 954 ≈ Rubric 955 — no improvement. 28% higher bandit regret. SDAR draws 100% vs GZero and Rubric in FFT. Reward modulation ≠ selection improvement. |
+| **Fast BLT** | [Fast BLT Research 17](https://arxiv.org/abs/2605.09959) | **Explicitly rejected** | Architecture mismatch: we use BPE tokens not bytes, no hierarchical architecture, already have `LeviathanVerifier` for speculative decoding. |
+| **AutoTTS** | [AutoTTS Research 16](https://arxiv.org/abs/2605.09959) | **Not implemented** | Manual `tree_budget` in `Config` serves same purpose. β parameterization was planned but never built. |
+| **EMO MoE** | [EMO Research 09](https://arxiv.org/abs/2406.08732) | **Concept only** | `domains.toml` exists as placeholder. No `PromptRouter`, no `ExpertRegistry`, no MoE architecture at our model scale. |
+| **Attractor Models** | [Attractor Research 35](https://arxiv.org/abs/2605.09959) | **Not implemented** | Fixed-point solver on DDTree already disproved (Plan 053). Bandit refinement serves propose+refine function. |
+| **rust-gpu** | [Rust GPU Feasibility Research 29](https://arxiv.org/abs/2605.09959) | **DEFERRED** | Nightly requirement, `spirv-std` API gaps, no CPU fallback. SIMD-first validated instead: ~3.6M tok/s on Apple M-series. |
+| **Dual-cutoff** | [FFO Research 30 P1](https://arxiv.org/abs/2605.09959) | **Harmful** | Cutoff=0.2 masks 17/27 arms (-49% relevance), eliminates exploration signal. UCB1 exploration bonus inflates low-Q scores. |
+
+### ⚠️ Potential Issues Found During Audit
+
+| Issue | Location | Details |
+|-------|----------|---------|
+| ~~`forward_sp_kv_tq` stub~~ → **`forward_sp_kv_quant` implemented** | `src/sp_kv/forward.rs` + `types.rs` | ✅ Resolved. Generic `SpKvQuantCache<C: QuantizedKVCache>` fuses SP-KV gating with any quant backend (TQ, SQ). `AttentionMode::SpKvQuant` dispatch. 8/8 tests pass. ~7856 tok/s (debug) |
+| MaxSim amplifies quantization error 12-14× | Bench 013 | Both TQ (14.2×) and SQ (12.2×) amplify — use MaxSim only with SpectralQuant's lower base error |
+| `SdarLearnedBeta` hits upper bound (50.0) | `src/pruners/sdar_gate.rs` | On sinusoidal test signals, beta saturates — may need clipping or different parameterization |
+| Domain latent uses `n_layer / 2` integer division | `src/transformer.rs` L588 | For odd layer counts, injection happens at layer below true midpoint |
 
 ## 📦 Related Crates
 
