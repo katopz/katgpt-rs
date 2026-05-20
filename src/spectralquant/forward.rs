@@ -138,7 +138,7 @@ pub fn attention_spectralquant(
 /// # GOAT proof (Plan 080 T10)
 /// Must match uncompressed `maxsim_score` within 1e-3.
 /// Must match CPU reference within 1e-3.
-#[cfg(all(feature = "spectralquant", feature = "maxsim"))]
+#[cfg(all(feature = "spectral_quant", feature = "maxsim"))]
 #[allow(dead_code)] // Stub — wired in Plan 080 T10
 pub fn maxsim_score_spectralquant(
     queries: &[f32],
