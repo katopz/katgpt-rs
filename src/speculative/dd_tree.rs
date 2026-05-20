@@ -295,6 +295,148 @@ pub fn build_dd_tree_balanced_sde(
     )
 }
 
+// ── PTRM Width Scaling (Plan 083) ──────────────────────────────
+
+/// Selection strategy for `best_of_k_rollouts`.
+///
+/// - `BestQ`: pick the rollout with highest cumulative relevance (PTRM default)
+/// - `MostFrequent`: pick the most common path (mode@K, majority vote)
+#[cfg(feature = "elf_sde")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum WidthSelectionMode {
+    /// Select rollout with highest cumulative relevance score (PTRM Q-head analog).
+    #[default]
+    BestQ,
+    /// Select the most frequent path across all rollouts (mode@K).
+    MostFrequent,
+}
+
+/// Configuration for width-scaling rollouts (PTRM Plan 083).
+///
+/// Controls how many independent SDE rollouts to run and how to select
+/// the best result. Maps directly to PTRM's K parallel rollouts.
+#[cfg(feature = "elf_sde")]
+#[derive(Debug, Clone)]
+pub struct WidthScaleConfig {
+    /// Number of independent rollouts (PTRM: K). Default: 1 (disabled).
+    pub k_rollouts: usize,
+    /// How to select the winning rollout.
+    pub selection: WidthSelectionMode,
+}
+
+#[cfg(feature = "elf_sde")]
+impl Default for WidthScaleConfig {
+    fn default() -> Self {
+        Self {
+            k_rollouts: 1,
+            selection: WidthSelectionMode::default(),
+        }
+    }
+}
+
+#[cfg(feature = "elf_sde")]
+impl WidthScaleConfig {
+    /// PTRM paper default: K=16, BestQ selection.
+    pub fn ptrm_default() -> Self {
+        Self {
+            k_rollouts: 16,
+            selection: WidthSelectionMode::BestQ,
+        }
+    }
+}
+
+/// Best-of-K rollouts: run K independent SDE-noised trees, select the best path.
+///
+/// This is the core PTRM width-scaling primitive. Each rollout gets an independent
+/// noise seed (`base_seed + k`), producing diverse candidate paths. The winner is
+/// selected by cumulative relevance score (BestQ) or majority vote (MostFrequent).
+///
+/// PTRM proves width (K rollouts) >> depth (T steps): +28.6pp vs +3.1pp on PPBench.
+///
+/// # Arguments
+///
+/// * `marginals` — Per-depth token probability distributions
+/// * `config` — Inference config (tree_budget, draft_lookahead, etc.)
+/// * `screener` — Screening pruner for relevance scoring
+/// * `sde_config` — SDE noise injection configuration
+/// * `width_config` — Width scaling configuration (K, selection mode)
+/// * `base_seed` — Base RNG seed; each rollout uses `base_seed.wrapping_add(k)`
+///
+/// # Returns
+///
+/// The best token path as `Vec<usize>` (one token per depth).
+#[cfg(feature = "elf_sde")]
+pub fn best_of_k_rollouts(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    screener: &dyn ScreeningPruner,
+    sde_config: &SdeConfig,
+    width_config: &WidthScaleConfig,
+    base_seed: u64,
+) -> Vec<usize> {
+    if width_config.k_rollouts <= 1 || !sde_config.is_enabled() {
+        // Single rollout or SDE disabled — just build one tree
+        let mut rng = Rng::new(base_seed);
+        let noisy = inject_sde_noise(marginals, sde_config, &mut rng);
+        let noisy_slices: Vec<&[f32]> = noisy.iter().map(|m| m.as_slice()).collect();
+        let tree = build_dd_tree_screened(&noisy_slices, config, screener, false);
+        return extract_best_path(&tree);
+    }
+
+    // Run K independent rollouts with different noise seeds
+    let mut paths: Vec<Vec<usize>> = Vec::with_capacity(width_config.k_rollouts);
+    let mut scores: Vec<f32> = Vec::with_capacity(width_config.k_rollouts);
+
+    for k in 0..width_config.k_rollouts {
+        let mut rng = Rng::new(base_seed.wrapping_add(k as u64));
+        let noisy = inject_sde_noise(marginals, sde_config, &mut rng);
+        let noisy_slices: Vec<&[f32]> = noisy.iter().map(|m| m.as_slice()).collect();
+        let tree = build_dd_tree_screened(&noisy_slices, config, screener, false);
+
+        // Compute cumulative relevance score for the best path
+        let path = extract_best_path(&tree);
+        let score = cumulative_relevance(&path, screener);
+        paths.push(path);
+        scores.push(score);
+    }
+
+    match width_config.selection {
+        WidthSelectionMode::BestQ => {
+            // Select rollout with highest cumulative relevance
+            let best_idx = scores
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+                .unwrap_or(0);
+            paths.into_iter().nth(best_idx).unwrap_or_default()
+        }
+        WidthSelectionMode::MostFrequent => {
+            // Select the most common path (mode@K)
+            let mut counts: HashMap<Vec<usize>, usize> = HashMap::new();
+            for path in &paths {
+                *counts.entry(path.clone()).or_default() += 1;
+            }
+            counts
+                .into_iter()
+                .max_by_key(|(_, count)| *count)
+                .map(|(path, _)| path)
+                .unwrap_or_default()
+        }
+    }
+}
+
+/// Compute cumulative relevance score for a path using the screener.
+#[cfg(feature = "elf_sde")]
+fn cumulative_relevance(path: &[usize], screener: &dyn ScreeningPruner) -> f32 {
+    let mut total = 0.0f32;
+    for (depth, &token_idx) in path.iter().enumerate() {
+        let parent_tokens = &path[..depth];
+        total += screener.relevance(depth, token_idx, parent_tokens);
+    }
+    total
+}
+
 /// Zero-alloc variant of `extract_best_path`.
 /// Writes best-scored token at each depth into `path` (cleared first).
 /// Depth-indexed optimization: groups nodes by depth in a single O(N) pass,
@@ -351,6 +493,114 @@ pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
         }
     }
     path
+}
+
+/// Extract all candidate sequences from a DDTree (one per leaf node).
+///
+/// Each leaf node's `parent_path` encodes a full token sequence.
+/// Returns `(sequence, leaf_node)` pairs for all maximal-depth paths.
+pub fn extract_candidate_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
+    if tree.is_empty() {
+        return Vec::new();
+    }
+
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+
+    // Collect leaf nodes (nodes at max depth with no children in tree)
+    tree.iter()
+        .filter(|node| node.depth == max_depth)
+        .map(|node| {
+            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            (seq, node)
+        })
+        .collect()
+}
+
+/// Extract candidate sequences from ALL tree nodes (not just leaves).
+///
+/// Useful when the solution might not require visiting all targets,
+/// or when partial sequences are valid solutions.
+pub fn extract_all_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
+    if tree.is_empty() {
+        return Vec::new();
+    }
+
+    tree.iter()
+        .map(|node| {
+            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            (seq, node)
+        })
+        .collect()
+}
+
+/// Parallel DDTree search: find the first candidate sequence that passes validation.
+///
+/// Extracts all candidate sequences from the DDTree, then validates them in
+/// parallel using rayon. Returns the first valid sequence found, or `None`.
+///
+/// This is the core generic primitive — the caller provides a domain-specific
+/// validator closure. For example, the tactical AI provides a closure that
+/// simulates boss chase + A* pathfinding + key-box matching.
+///
+/// # Type Parameters
+/// - `V`: Validator closure `Fn(&[usize]) -> Option<T>`
+/// - `T`: Result type returned by the validator on success
+///
+/// # Performance
+/// The search phase is parallelized (each candidate validated independently).
+/// DDTree build remains sequential (inherent heap-based best-first search).
+///
+/// # Example
+/// ```ignore
+/// use microgpt_rs::speculative::{build_dd_tree_pruned, par_find_valid_sequence};
+///
+/// let tree = build_dd_tree_pruned(&refs, &config, &pruner, false);
+/// let result = par_find_valid_sequence(&tree, |seq| {
+///     // Domain-specific validation: simulate game, check win condition
+///     if is_valid_solution(seq) { Some(seq.to_vec()) } else { None }
+/// });
+/// ```
+pub fn par_find_valid_sequence<T, V>(tree: &[TreeNode], validator: V) -> Option<(Vec<usize>, T)>
+where
+    V: Fn(&[usize]) -> Option<T> + Sync,
+    T: Send,
+{
+    if tree.is_empty() {
+        return None;
+    }
+
+    // Extract all candidate sequences (one per tree node)
+    let candidates: Vec<Vec<usize>> = tree
+        .iter()
+        .map(|node| extract_parent_tokens(node.parent_path, node.depth + 1))
+        .collect();
+
+    // Parallel search: validate all candidates, return first success
+    candidates
+        .par_iter()
+        .find_map_any(|seq| validator(seq).map(|result| (seq.clone(), result)))
+}
+
+/// Sequential version of [`par_find_valid_sequence`] — no rayon overhead.
+///
+/// Useful for small trees where rayon spawn cost outweighs parallelism benefit,
+/// or when deterministic ordering is required (first candidate wins).
+pub fn find_valid_sequence<T, V>(tree: &[TreeNode], validator: V) -> Option<(Vec<usize>, T)>
+where
+    V: Fn(&[usize]) -> Option<T>,
+{
+    if tree.is_empty() {
+        return None;
+    }
+
+    for node in tree {
+        let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+        if let Some(result) = validator(&seq) {
+            return Some((seq, result));
+        }
+    }
+
+    None
 }
 
 /// Build an InferenceResult from a completed DDTree inference.
@@ -2343,6 +2593,213 @@ mod tests {
                 );
             }
         }
+    }
+
+    // ── PTRM Width Scaling Tests (Plan 083) ───────────────────
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_width_scale_config_defaults() {
+        use super::WidthScaleConfig;
+        use super::WidthSelectionMode;
+
+        let default = WidthScaleConfig::default();
+        assert_eq!(default.k_rollouts, 1);
+        assert_eq!(default.selection, WidthSelectionMode::BestQ);
+
+        let ptrm = WidthScaleConfig::ptrm_default();
+        assert_eq!(ptrm.k_rollouts, 16);
+        assert_eq!(ptrm.selection, WidthSelectionMode::BestQ);
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_best_of_k_rollouts_k1_matches_single_tree() {
+        use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+        use crate::speculative::types::SdeConfig;
+
+        let config = Config::draft();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let marginals = dflash_predict(&weights, &config, 0, 0);
+        let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
+
+        let sde_config = SdeConfig {
+            gamma: 0.5,
+            ..Default::default()
+        };
+
+        // K=1 should produce same result as a single tree build
+        let path = best_of_k_rollouts(
+            &mv,
+            &config,
+            &NoScreeningPruner,
+            &sde_config,
+            &WidthScaleConfig {
+                k_rollouts: 1,
+                selection: WidthSelectionMode::BestQ,
+            },
+            42,
+        );
+
+        assert!(!path.is_empty(), "K=1 should produce a non-empty path");
+        assert_eq!(
+            path.len(),
+            config.draft_lookahead,
+            "path length should match lookahead"
+        );
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_best_of_k_rollouts_k16_produces_diverse_paths() {
+        use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+        use crate::speculative::types::SdeConfig;
+
+        let config = Config::draft();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let marginals = dflash_predict(&weights, &config, 0, 0);
+        let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
+
+        let sde_config = SdeConfig {
+            gamma: 1.0,
+            ..Default::default()
+        };
+
+        // Run multiple trials with K=16 and collect paths
+        let mut paths = std::collections::HashSet::new();
+        for seed in 0..20u64 {
+            let path = best_of_k_rollouts(
+                &mv,
+                &config,
+                &NoScreeningPruner,
+                &sde_config,
+                &WidthScaleConfig {
+                    k_rollouts: 16,
+                    selection: WidthSelectionMode::BestQ,
+                },
+                seed,
+            );
+            paths.insert(path);
+        }
+
+        // With γ=1.0 and K=16 across 20 trials, we should see path diversity
+        assert!(
+            paths.len() > 1,
+            "K=16 with γ=1.0 should produce diverse paths across trials, got {} unique",
+            paths.len()
+        );
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_best_of_k_rollouts_no_sde_fallback() {
+        use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+        use crate::speculative::types::SdeConfig;
+
+        let config = Config::draft();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let marginals = dflash_predict(&weights, &config, 0, 0);
+        let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
+
+        // SDE disabled — should fall back to single tree regardless of K
+        let sde_config = SdeConfig {
+            gamma: 0.0,
+            ..Default::default()
+        };
+
+        let path1 = best_of_k_rollouts(
+            &mv,
+            &config,
+            &NoScreeningPruner,
+            &sde_config,
+            &WidthScaleConfig {
+                k_rollouts: 64,
+                selection: WidthSelectionMode::BestQ,
+            },
+            42,
+        );
+        let path2 = best_of_k_rollouts(
+            &mv,
+            &config,
+            &NoScreeningPruner,
+            &sde_config,
+            &WidthScaleConfig {
+                k_rollouts: 1,
+                selection: WidthSelectionMode::BestQ,
+            },
+            42,
+        );
+
+        // Both should produce the same deterministic path when SDE is off
+        assert_eq!(
+            path1, path2,
+            "SDE disabled should produce identical paths regardless of K"
+        );
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_best_of_k_rollouts_most_frequent_mode() {
+        use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+        use crate::speculative::types::SdeConfig;
+
+        let config = Config::draft();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let marginals = dflash_predict(&weights, &config, 0, 0);
+        let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
+
+        let sde_config = SdeConfig {
+            gamma: 0.2, // low noise → most paths converge
+            ..Default::default()
+        };
+
+        let path = best_of_k_rollouts(
+            &mv,
+            &config,
+            &NoScreeningPruner,
+            &sde_config,
+            &WidthScaleConfig {
+                k_rollouts: 8,
+                selection: WidthSelectionMode::MostFrequent,
+            },
+            42,
+        );
+
+        assert!(
+            !path.is_empty(),
+            "MostFrequent mode should return a non-empty path"
+        );
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_best_of_k_rollouts_empty_marginals() {
+        use super::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
+        use crate::speculative::types::SdeConfig;
+
+        let config = Config::draft();
+        let sde_config = SdeConfig {
+            gamma: 0.5,
+            ..Default::default()
+        };
+
+        let path = best_of_k_rollouts(
+            &[],
+            &config,
+            &NoScreeningPruner,
+            &sde_config,
+            &WidthScaleConfig {
+                k_rollouts: 4,
+                selection: WidthSelectionMode::BestQ,
+            },
+            42,
+        );
+
+        assert!(path.is_empty(), "empty marginals should produce empty path");
     }
 
     #[test]

@@ -19,9 +19,13 @@ pub mod d2f;
 pub use dd_tree::{
     TreeBuilder, build_dd_tree, build_dd_tree_balanced, build_dd_tree_balanced_sde,
     build_dd_tree_pruned, build_dd_tree_screened, build_dd_tree_sde, build_inference_result,
-    extract_best_path, extract_best_path_into, extract_parent_tokens, inject_sde_noise,
-    merge_retrieved_branches,
+    extract_all_sequences, extract_best_path, extract_best_path_into, extract_candidate_sequences,
+    extract_parent_tokens, find_valid_sequence, inject_sde_noise, merge_retrieved_branches,
+    par_find_valid_sequence,
 };
+
+#[cfg(feature = "elf_sde")]
+pub use dd_tree::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
 pub use dflash::{
     dflash_predict, dflash_predict_ar, dflash_predict_ar_with, dflash_predict_conditioned,
     dflash_predict_conditioned_with, dflash_predict_parallel, dflash_predict_with,
@@ -40,6 +44,9 @@ pub use types::{
     DraftEvent, DraftResult, FlashPrefillConfig, NoPruner, NoScreeningPruner, PrefillMode,
     RejectionReason, ScreeningPruner, SdeConfig, SpeculativeContext, TreeNode,
 };
+
+#[cfg(feature = "elf_sde")]
+pub use types::EarlyStopGate;
 pub use verifier::{SimulatedVerifier, SpeculativeVerifier};
 
 pub use verifier::LeviathanVerifier;
