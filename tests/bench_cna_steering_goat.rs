@@ -37,6 +37,8 @@ fn bench_cna_steering_goat_proof() {
     /// Build synthetic contrastive activations for discovery benchmarks.
     /// Positive: signal in `signal_layers`, `signal_indices` get high activation.
     /// Negative: uniform low activation.
+    type ContrastivePairs = (Vec<Vec<f32>>, Vec<usize>, Vec<Vec<f32>>, Vec<usize>);
+
     fn build_contrastive_pairs(
         n_pairs: usize,
         _n_layers: usize,
@@ -44,7 +46,7 @@ fn bench_cna_steering_goat_proof() {
         signal_layers: &[usize],
         signal_indices: std::ops::Range<usize>,
         rng: &mut fastrand::Rng,
-    ) -> (Vec<Vec<f32>>, Vec<usize>, Vec<Vec<f32>>, Vec<usize>) {
+    ) -> ContrastivePairs {
         let mut pos_data = Vec::with_capacity(n_pairs * signal_layers.len());
         let mut pos_layers = Vec::with_capacity(n_pairs * signal_layers.len());
         let mut neg_data = Vec::with_capacity(n_pairs * signal_layers.len());
@@ -323,7 +325,7 @@ fn bench_cna_steering_goat_proof() {
 
     let circuit = cna_discover(&pos_refs, &neg_refs, N_LAYERS, MLP_HIDDEN, &config_wide);
 
-    let mut layer_counts = vec![0usize; N_LAYERS];
+    let mut layer_counts = [0usize; N_LAYERS];
     for n in &circuit.neurons {
         if n.layer < N_LAYERS {
             layer_counts[n.layer] += 1;
@@ -382,8 +384,8 @@ fn bench_cna_steering_goat_proof() {
                     let mut acts = vec![0.0f32; MLP_HIDDEN];
                     acts[42] = 100.0; // always-on neuron (dominant signal)
                     acts[99] = 100.0; // always-on neuron (dominant signal)
-                    for i in 0..MLP_HIDDEN {
-                        acts[i] += rng.f32() * 0.01; // minimal noise
+                    for val in acts.iter_mut() {
+                        *val += rng.f32() * 0.01; // minimal noise
                     }
                     (layer, acts)
                 })

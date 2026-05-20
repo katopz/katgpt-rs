@@ -42,8 +42,8 @@ fn main() {
     for _prompt in 0..10 {
         for layer in 4..6 {
             let mut acts = vec![0.1f32; mlp_hidden];
-            for i in 10..20 {
-                acts[i] = 2.0 + rng.f32();
+            for val in acts[10..20].iter_mut() {
+                *val = 2.0 + rng.f32();
             }
             pos_data.push(acts);
             pos_layers.push(layer);
@@ -129,8 +129,8 @@ fn main() {
                 .map(|layer| {
                     let mut acts = vec![0.0f32; mlp_hidden];
                     acts[50] = 5.0; // Always-on neuron
-                    for i in 0..mlp_hidden {
-                        acts[i] += rng.f32() * 0.1;
+                    for val in acts.iter_mut() {
+                        *val += rng.f32() * 0.1;
                     }
                     (layer, acts)
                 })
