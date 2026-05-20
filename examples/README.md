@@ -456,6 +456,14 @@ Ratatui TUI tactical map viewer with unit positions and terrain rendering.
 cargo run --example tactical_06_tui
 ```
 
+### tactical_07_strategic
+
+Strategic puzzle TUI with boss chase, traps, keys, boxes, levers, and bridge — a multi-layered constraint puzzle where the DDTree reasons about path avoidance, time pressure, hidden information, and sequence constraints. Uses rayon parallel search (22x speedup on candidate validation).
+
+```bash
+cargo run --example tactical_07_strategic
+```
+
 ---
 
 ## 12. Review

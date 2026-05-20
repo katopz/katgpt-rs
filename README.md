@@ -1400,6 +1400,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **BT Ranking** (`bt_rank`) | [OpenDeepThink (Bradley-Terry)](https://arxiv.org/abs/2504.02268) | **+10.6pp** over pointwise for finding true best (33.6% vs 23.0%). GOAT 4/4 passed. Kendall τ 0.6354 vs 0.6196. Sparse K=2: 3.7× random baseline (Bench 011). | Pointwise `ScreeningPruner` scoring |
 | **SpectralQuant** (`spectral_quant`) | [SpectralQuant Research 39](https://arxiv.org/pdf/2504.19874) | **9.1× compression** vs TurboQuant 5.3×. **Cosine 0.9917** vs TQ 0.9692. MaxSim error 18.90% vs TQ 40.54% (2.1× lower). Eigenbasis calibration + water-fill bit allocation (Bench 013). | **TurboQuant** (demoted to legacy baseline) |
 | **ELF SDE** (`elf_sde`) | [Embedded Language Flows](https://arxiv.org/abs/2406.09970) | **10-22× path diversity** (145 vs 14 unique prefixes at γ=1.0). Overhead: 3.2µs (<3% of one attention step). Logit-normal: 2.2× concentration near t=0 (Bench 012). | Uniform noise for D2F |
+| **PTRM Width Scaling** (`elf_sde`) | [PTRM (arXiv:2605.19943)](https://arxiv.org/abs/2605.19943) | **Width >> Depth**: `best_of_k_rollouts` K=64 rollouts + `EarlyStopGate` depth-aware pruning. PTRM proves 7M model beats frontier LLMs via width scaling. `WidthSelectionMode::{BestQ, MostFrequent}`. Config: `width_rollouts`, `early_stop_threshold` (Plan 083, Bench 015). | Single-rollout greedy expansion |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
