@@ -4,6 +4,9 @@ use crate::transformer::{
 use crate::types::Config;
 use std::cmp::Ordering;
 
+#[cfg(feature = "tes_loop")]
+use crate::pruners::bandit::BanditStrategy;
+
 // ── Constraint Pruner: Neuro-Symbolic Intercept ──────────────────
 
 /// Trait for pruning drafted tokens against deterministic constraints.
@@ -102,6 +105,55 @@ impl ScreeningPruner for NoScreeningPruner {
     #[inline]
     fn relevance(&self, _depth: usize, _token_idx: usize, _parent_tokens: &[usize]) -> f32 {
         1.0
+    }
+}
+
+/// Depth-aware early stopping gate (PTRM Plan 083).
+///
+/// Wraps any [`ScreeningPruner`] and adds depth-aware pruning: at depth > 0,
+/// if the inner pruner's relevance falls below `confidence_threshold`, the branch
+/// is pruned (relevance 0.0). At depth 0, always passthrough — we need at least
+/// one candidate to start.
+///
+/// Maps to PTRM's Q-head early stopping: prune trajectories whose cumulative
+/// quality decays past a threshold at deeper recursion levels.
+///
+/// Set `enabled = false` or `confidence_threshold = 0.0` to disable (passthrough).
+#[cfg(feature = "elf_sde")]
+#[derive(Debug, Clone)]
+pub struct EarlyStopGate<P> {
+    /// Inner screener to delegate relevance queries to.
+    pub inner: P,
+    /// Minimum relevance to continue at depth > 0. Default: 0.0 (disabled).
+    pub confidence_threshold: f32,
+    /// Runtime toggle. Default: true.
+    pub enabled: bool,
+}
+
+#[cfg(feature = "elf_sde")]
+impl<P: ScreeningPruner> ScreeningPruner for EarlyStopGate<P> {
+    #[inline]
+    fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+        let inner_rel = self.inner.relevance(depth, token_idx, parent_tokens);
+        if !self.enabled || self.confidence_threshold <= 0.0 || depth == 0 {
+            return inner_rel;
+        }
+        if inner_rel < self.confidence_threshold {
+            0.0
+        } else {
+            inner_rel
+        }
+    }
+}
+
+#[cfg(feature = "elf_sde")]
+impl<P: Default + ScreeningPruner> Default for EarlyStopGate<P> {
+    fn default() -> Self {
+        Self {
+            inner: P::default(),
+            confidence_threshold: 0.0,
+            enabled: true,
+        }
     }
 }
 
@@ -1045,5 +1097,210 @@ mod tests {
         let b = a; // Copy, not move
         let _c = a; // Still valid after copy
         assert_eq!(a, b);
+    }
+
+    // ── EarlyStopGate Tests (Plan 083) ────────────────────────
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_passthrough_at_depth_zero() {
+        // A screener that always returns 0.3 (below threshold)
+        struct LowRelevance;
+        impl ScreeningPruner for LowRelevance {
+            fn relevance(&self, _depth: usize, _token_idx: usize, _parent_tokens: &[usize]) -> f32 {
+                0.3
+            }
+        }
+
+        let gate = EarlyStopGate {
+            inner: LowRelevance,
+            confidence_threshold: 0.5,
+            enabled: true,
+        };
+
+        // Depth 0: always passthrough regardless of threshold
+        let rel = gate.relevance(0, 0, &[]);
+        assert!(
+            (rel - 0.3).abs() < 1e-6,
+            "depth 0 should passthrough inner relevance, got {rel}"
+        );
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_prunes_below_threshold() {
+        struct VariableRelevance;
+        impl ScreeningPruner for VariableRelevance {
+            fn relevance(&self, depth: usize, _token_idx: usize, _parent_token: &[usize]) -> f32 {
+                // Returns depth as relevance: 0.0, 0.1, 0.2, 0.3, ...
+                depth as f32 * 0.1
+            }
+        }
+
+        let gate = EarlyStopGate {
+            inner: VariableRelevance,
+            confidence_threshold: 0.25,
+            enabled: true,
+        };
+
+        // Depth 0: passthrough (relevance 0.0)
+        assert!((gate.relevance(0, 0, &[]) - 0.0).abs() < 1e-6);
+        // Depth 1: 0.1 < 0.25 → pruned to 0.0
+        assert!((gate.relevance(1, 0, &[]) - 0.0).abs() < 1e-6);
+        // Depth 2: 0.2 < 0.25 → pruned to 0.0
+        assert!((gate.relevance(2, 0, &[]) - 0.0).abs() < 1e-6);
+        // Depth 3: 0.3 >= 0.25 → passthrough
+        assert!((gate.relevance(3, 0, &[]) - 0.3).abs() < 1e-6);
+        // Depth 5: 0.5 >= 0.25 → passthrough
+        assert!((gate.relevance(5, 0, &[]) - 0.5).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_disabled_passthrough() {
+        struct LowRelevance;
+        impl ScreeningPruner for LowRelevance {
+            fn relevance(&self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> f32 {
+                0.1
+            }
+        }
+
+        let gate = EarlyStopGate {
+            inner: LowRelevance,
+            confidence_threshold: 0.5,
+            enabled: false,
+        };
+
+        // Even at depth > 0, disabled gate should passthrough
+        assert!((gate.relevance(5, 0, &[]) - 0.1).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_zero_threshold_passthrough() {
+        struct LowRelevance;
+        impl ScreeningPruner for LowRelevance {
+            fn relevance(&self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> f32 {
+                0.01
+            }
+        }
+
+        let gate = EarlyStopGate {
+            inner: LowRelevance,
+            confidence_threshold: 0.0,
+            enabled: true,
+        };
+
+        // threshold=0.0 means disabled → passthrough
+        assert!((gate.relevance(5, 0, &[]) - 0.01).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_default_values() {
+        let gate = EarlyStopGate {
+            inner: NoScreeningPruner,
+            confidence_threshold: 0.0,
+            enabled: true,
+        };
+        assert!(gate.enabled);
+        assert!((gate.confidence_threshold - 0.0).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "elf_sde")]
+    #[test]
+    fn test_early_stop_gate_wraps_no_screener() {
+        let gate = EarlyStopGate {
+            inner: NoScreeningPruner,
+            confidence_threshold: 0.5,
+            enabled: true,
+        };
+
+        // NoScreeningPruner always returns 1.0, which is >= any threshold
+        assert!((gate.relevance(0, 0, &[]) - 1.0).abs() < 1e-6);
+        assert!((gate.relevance(5, 0, &[]) - 1.0).abs() < 1e-6);
+    }
+}
+
+// ── SimpleTES Evaluation-Driven Scaling (Plan 086) ────────────
+
+/// SimpleTES configuration (C, L, K) hyperparameters.
+///
+/// C = global_width: parallel trajectories (default 32)
+/// L = refinement_depth: iterations per trajectory (default 100)
+/// K = local_sample_size: candidates per step (default 16)
+///
+/// Budget = C × L × K total evaluations per solve.
+#[cfg(feature = "tes_loop")]
+#[derive(Clone, Debug)]
+pub struct TesConfig {
+    /// C: parallel trajectories.
+    pub global_width: usize,
+    /// L: iterations per trajectory.
+    pub refinement_depth: usize,
+    /// K: candidates per step.
+    pub local_sample_size: usize,
+    /// Bandit strategy for proposal selection (Φ).
+    pub bandit_strategy: BanditStrategy,
+}
+
+#[cfg(feature = "tes_loop")]
+impl Default for TesConfig {
+    fn default() -> Self {
+        Self {
+            global_width: 32,
+            refinement_depth: 100,
+            local_sample_size: 16,
+            bandit_strategy: BanditStrategy::Rpucg {
+                gamma: 0.8,
+                lambda: 1.0,
+            },
+        }
+    }
+}
+
+#[cfg(feature = "tes_loop")]
+impl TesConfig {
+    /// Total evaluation budget: C × L × K.
+    pub fn budget(&self) -> usize {
+        self.global_width * self.refinement_depth * self.local_sample_size
+    }
+}
+
+/// Node in the TES evaluation graph.
+///
+/// Each node represents a candidate solution with:
+/// - Direct evaluation score `score`
+/// - Graph-propagated value `propagated_value` (max of own score and children's values)
+/// - Visit count for UCB exploration
+#[cfg(feature = "tes_loop")]
+#[derive(Clone, Debug)]
+pub struct TesNode {
+    /// The candidate tokens.
+    pub solution: Vec<usize>,
+    /// Evaluator score r.
+    pub score: f32,
+    /// Feedback text.
+    pub metadata: String,
+    /// Parent index for graph propagation.
+    pub parent_idx: Option<usize>,
+    /// Visit count for RPUCG exploration.
+    pub visit_count: usize,
+    /// Propagated value: U_i = max(r_i, γ · max_child_U).
+    pub propagated_value: f32,
+}
+
+#[cfg(feature = "tes_loop")]
+impl TesNode {
+    /// Create a new node with the given solution and parent reference.
+    pub fn new(solution: Vec<usize>, parent_idx: Option<usize>) -> Self {
+        Self {
+            solution,
+            score: 0.0,
+            metadata: String::new(),
+            parent_idx,
+            visit_count: 0,
+            propagated_value: 0.0,
+        }
     }
 }

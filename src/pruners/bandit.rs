@@ -80,6 +80,19 @@ pub enum BanditStrategy {
         /// Learning rate for epsilon adaptation.
         lr: f32,
     },
+    /// RPUCG: Rooted Propagation UCB on Graph (SimpleTES, Plan 086).
+    ///
+    /// Graph-based UCB with configurable exploration weight.
+    /// `gamma` is the propagation discount (0.8 default).
+    /// `lambda` is the exploration weight (1.0 default).
+    /// Feature-gated under `tes_loop`.
+    #[cfg(feature = "tes_loop")]
+    Rpucg {
+        /// Propagation discount γ (default 0.8).
+        gamma: f32,
+        /// Exploration weight λ (default 1.0).
+        lambda: f32,
+    },
 }
 
 impl fmt::Display for BanditStrategy {
@@ -96,6 +109,10 @@ impl fmt::Display for BanditStrategy {
                 lr,
             } => {
                 write!(f, "Var-ε(ε={epsilon:.3}, decay={var_decay:.3}, lr={lr:.3})")
+            }
+            #[cfg(feature = "tes_loop")]
+            Self::Rpucg { gamma, lambda } => {
+                write!(f, "RPUCG(γ={gamma:.2}, λ={lambda:.2})")
             }
         }
     }
@@ -557,6 +574,15 @@ impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
             BanditStrategy::VarianceEpsilon { .. } => {
                 self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01)
             }
+            #[cfg(feature = "tes_loop")]
+            BanditStrategy::Rpucg { gamma: _, lambda } => {
+                // RPUCG: Q + λ·√(ln(N+1) / (n+1)) — configurable exploration weight
+                let q = self.arm_q(token_idx);
+                let n = self.arm_visits(token_idx) as f32;
+                let total = self.arm_total_pulls() as f32;
+                let exploration = lambda * ((total + 1.0).ln() / (n + 1.0)).sqrt();
+                (q + exploration).clamp(0.0, 1.5) / 1.5
+            }
         };
 
         // Harmonic blend: domain × bandit
@@ -884,6 +910,8 @@ impl<E: BanditEnv> BanditSession<E> {
             }
             BanditStrategy::ThompsonSampling => self.select_thompson(rng),
             BanditStrategy::VarianceEpsilon { .. } => self.select_variance_epsilon(rng),
+            #[cfg(feature = "tes_loop")]
+            BanditStrategy::Rpucg { .. } => self.select_ucb1(), // Flat bandit fallback; graph propagation in TesLoop
         }
     }
 

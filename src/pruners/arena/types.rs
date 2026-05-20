@@ -172,6 +172,89 @@ impl EloCalculator {
     }
 }
 
+// ── SimpleTES Trajectory Pruning (Plan 086) ────────────────────
+
+/// Chain-level early stopping for TES evaluation loops.
+///
+/// At checkpoint fractions of total steps, rank trajectories by their
+/// current best propagated value and kill the bottom fraction. This
+/// reallocates budget from underperforming trajectories to promising ones.
+///
+/// Checkpoints default to [0.25, 0.5, 0.75] (quarter marks).
+/// Kill fraction defaults to 0.3 (kill bottom 30%).
+#[cfg(feature = "tes_loop")]
+#[derive(Clone, Debug)]
+pub struct TrajectoryPruner {
+    /// Checkpoint fractions (e.g., [0.25, 0.5, 0.75]).
+    pub checkpoints: Vec<f32>,
+    /// Fraction of trajectories to kill at each checkpoint.
+    pub kill_fraction: f32,
+}
+
+#[cfg(feature = "tes_loop")]
+impl Default for TrajectoryPruner {
+    fn default() -> Self {
+        Self {
+            checkpoints: vec![0.25, 0.5, 0.75],
+            kill_fraction: 0.3,
+        }
+    }
+}
+
+#[cfg(feature = "tes_loop")]
+impl TrajectoryPruner {
+    /// Create a new trajectory pruner with default settings.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a pruner with custom checkpoints and kill fraction.
+    pub fn with_config(checkpoints: Vec<f32>, kill_fraction: f32) -> Self {
+        Self {
+            checkpoints,
+            kill_fraction: kill_fraction.clamp(0.0, 0.9),
+        }
+    }
+
+    /// Check if current step is a checkpoint.
+    pub fn is_checkpoint(&self, step: usize, total_steps: usize) -> bool {
+        if total_steps == 0 {
+            return false;
+        }
+        self.checkpoints.iter().any(|&frac| {
+            let checkpoint_step = (frac * total_steps as f32) as usize;
+            step == checkpoint_step
+        })
+    }
+
+    /// Prune bottom trajectories by score.
+    ///
+    /// Takes a slice of propagated values (one per trajectory) and returns
+    /// indices of trajectories to kill (lowest scores first).
+    pub fn prune(&self, propagated_values: &[f32]) -> Vec<usize> {
+        if propagated_values.is_empty() {
+            return Vec::new();
+        }
+
+        let kill_count = ((propagated_values.len() as f32 * self.kill_fraction) as usize)
+            .min(propagated_values.len().saturating_sub(1));
+
+        let mut indexed: Vec<(usize, f32)> = propagated_values
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| (i, v))
+            .collect();
+
+        indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+
+        indexed
+            .into_iter()
+            .take(kill_count)
+            .map(|(i, _)| i)
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

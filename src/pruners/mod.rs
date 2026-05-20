@@ -100,6 +100,15 @@ pub use sdar_gate::{
     sdar_gated_reward, sdar_modulate, sdar_modulate_default, sdar_should_promote,
 };
 
+#[cfg(feature = "cna_steering")]
+pub mod cna;
+
+#[cfg(feature = "cna_steering")]
+pub use cna::{
+    CnaCircuit, CnaDiscoveryConfig, CnaModulator, CnaNeuron, CnaScreeningPruner, cna_discover,
+    cna_modulate, detect_universal_neurons,
+};
+
 #[cfg(feature = "replaid_schedules")]
 pub mod variance_minimizer;
 
@@ -129,6 +138,12 @@ pub use delta_mem::{
     DeltaMemoryState, FeatureHasher, MemorySteeredPruner, MultiDomainMemory,
     MultiDomainMemoryPruner, OutcomeFeatures, WriteGranularity,
 };
+
+#[cfg(feature = "tes_loop")]
+pub mod tes_loop;
+
+#[cfg(feature = "tes_loop")]
+pub use tes_loop::TesLoop;
 
 #[cfg(all(feature = "g_zero", feature = "fft"))]
 pub use g_zero::{FFTTemplate, FFTTemplateProposer};
@@ -171,13 +186,16 @@ pub use go::{
     run_tournament_batch,
 };
 
-#[cfg(any(feature = "bomber", feature = "fft"))]
+#[cfg(any(feature = "bomber", feature = "fft", feature = "tes_loop"))]
 pub mod arena;
 
 #[cfg(any(feature = "bomber", feature = "fft"))]
 pub use arena::{
     ArenaKind, EloCalculator, GameResult, Leaderboard, Matchup, MatchupResult, Ranking,
 };
+
+#[cfg(feature = "tes_loop")]
+pub use arena::TrajectoryPruner;
 
 #[cfg(feature = "fft")]
 pub mod fft;

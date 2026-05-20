@@ -7,3 +7,6 @@ pub mod types;
 
 pub use scheduler::*;
 pub use types::*;
+
+#[cfg(feature = "tes_loop")]
+pub use types::TrajectoryPruner;
