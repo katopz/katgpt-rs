@@ -149,31 +149,67 @@ impl SpectralQuantKVCache {
                 })
                 .collect();
 
-        // Fit codebooks from eigenvalue distribution.
-        // In the spectral (rotated) domain, dim i has variance λ_i.
-        // Generate synthetic samples and fit Lloyd-Max centroids.
-        let n_synthetic = config.calibration_samples.max(64);
+        // Detect identity eigenvectors (no real calibration) and substitute random rotation.
+        // When no calibration data is available, SQ degrades gracefully to TQ-quality
+        // by using a random rotation instead of the degenerate identity rotation.
+        // Identity rotation = no decorrelation = all coordinates in narrow range = poor quantization.
+        // Random rotation spreads coordinates ~ N(0, 1/d), giving codebooks much better coverage.
         for (layer_idx, layer) in layers.iter_mut().enumerate() {
-            let eigenvalues = &layer.calibration.eigenvalues;
+            if is_identity_matrix(&layer.calibration.eigenvectors, layer.calibration.head_dim) {
+                let random_rot = generate_random_rotation(
+                    layer.calibration.head_dim,
+                    config.seed.wrapping_add(layer_idx as u64 * 7919),
+                );
+                layer.calibration.eigenvectors = random_rot;
+            }
+        }
+
+        // Fit codebooks from the actual normalize→rotate→quantize pipeline.
+        //
+        // The quantize path is: normalize(x) → V^T * x_norm → quantize.
+        // So codebooks must be fitted for data that has been normalized to unit norm
+        // and rotated by eigenvectors. Generating N(0, λ_i) was wrong because:
+        //   1. Data is normalized BEFORE rotation, so ‖x_rotated‖ = 1, not N(0, λ_i)
+        //   2. The N(0, λ_i) assumption only holds for unnormalized data in expectation
+        //
+        // Fix: generate random unit-norm vectors, rotate by V^T, then fit codebooks.
+        // This matches the Python pipeline exactly (K_normed @ PiT → quantize_regime).
+        let n_synthetic = config.calibration_samples.max(256);
+        for (layer_idx, layer) in layers.iter_mut().enumerate() {
             let d_eff = layer.d_eff;
             let head_dim = layer.calibration.head_dim;
             let b_high = layer.b_high;
             let b_low = layer.b_low;
             let mut rng = crate::types::Rng::new(config.seed.wrapping_add(layer_idx as u64 * 31));
+            let eigenvectors = &layer.calibration.eigenvectors;
 
-            // Generate synthetic rotated data: rotated[i] ~ N(0, λ_i)
+            // Generate synthetic data matching the actual pipeline:
+            //   1. Random vector ~ N(0, I)
+            //   2. Normalize to unit norm (‖x‖ = 1)
+            //   3. Rotate by V^T (eigenvector transpose)
             let synthetic_rotated: Vec<Vec<f32>> = (0..n_synthetic)
                 .map(|_| {
-                    (0..head_dim)
-                        .map(|i| {
-                            let var = eigenvalues.get(i).copied().unwrap_or(1e-4).max(1e-8);
-                            rng.normal() * var.sqrt()
-                        })
-                        .collect()
+                    // Step 1: random vector
+                    let mut x: Vec<f32> = (0..head_dim).map(|_| rng.normal()).collect();
+                    // Step 2: normalize to unit norm
+                    let norm = x.iter().map(|v| v * v).sum::<f32>().sqrt().max(1e-8);
+                    for v in x.iter_mut() {
+                        *v /= norm;
+                    }
+                    // Step 3: rotate by V^T — output[j] = Σ_i x[i] * V[i*head_dim+j]
+                    let mut rotated = vec![0.0f32; head_dim];
+                    for j in 0..head_dim {
+                        let mut sum = 0.0f32;
+                        for i in 0..head_dim {
+                            sum += x[i] * eigenvectors[i * head_dim + j];
+                        }
+                        rotated[j] = sum;
+                    }
+                    rotated
                 })
                 .collect();
 
-            // Fit tail codebook (shared across all tail dims)
+            // Fit tail codebook from tail dims (d_eff..head_dim)
             let tail_data: Vec<f32> = synthetic_rotated
                 .iter()
                 .flat_map(|s| s.iter().skip(d_eff).copied())
@@ -186,8 +222,9 @@ impl SpectralQuantKVCache {
             tail_q.fit(&tail_data);
             layer.tail_codebook.centroids = tail_q.centroids().to_vec();
 
+            // Fit semantic codebook(s) from semantic dims (0..d_eff)
             if let Some(ref mut cb) = layer.semantic_codebook {
-                // v1: shared semantic codebook — collect all semantic dims
+                // v1: shared semantic codebook — all semantic dims pooled
                 let semantic_data: Vec<f32> = synthetic_rotated
                     .iter()
                     .flat_map(|s| s.iter().take(d_eff).copied())
@@ -688,6 +725,55 @@ fn simd_norm(v: &[f32]) -> f32 {
     v.iter().map(|&x| x * x).sum::<f32>().sqrt()
 }
 
+/// Check if a matrix is the identity matrix (diagonal 1s, off-diagonal 0s).
+fn is_identity_matrix(mat: &[f32], dim: usize) -> bool {
+    for i in 0..dim {
+        for j in 0..dim {
+            let expected = if i == j { 1.0f32 } else { 0.0f32 };
+            if (mat[i * dim + j] - expected).abs() > 1e-4 {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Generate a random orthogonal rotation matrix via Gram-Schmidt.
+/// Same quality as TurboQuant's random rotation — used as fallback when
+/// no real calibration data is available (identity eigenvectors).
+fn generate_random_rotation(dim: usize, seed: u64) -> Vec<f32> {
+    let mut rng = crate::types::Rng::new(seed);
+    let mut mat = vec![0.0f32; dim * dim];
+    for v in mat.iter_mut() {
+        *v = rng.normal();
+    }
+    // Gram-Schmidt orthogonalization: for each column, subtract projections
+    // onto all previous columns, then normalize to unit length.
+    for col in 0..dim {
+        for prev in 0..col {
+            let dot: f32 = (0..dim)
+                .map(|row| mat[row * dim + col] * mat[row * dim + prev])
+                .sum();
+            for row in 0..dim {
+                mat[row * dim + col] -= dot * mat[row * dim + prev];
+            }
+        }
+        let norm: f32 = (0..dim)
+            .map(|row| mat[row * dim + col] * mat[row * dim + col])
+            .sum::<f32>()
+            .sqrt();
+        if norm > 1e-8 {
+            for row in 0..dim {
+                mat[row * dim + col] /= norm;
+            }
+        } else {
+            // Degenerate column — set to basis vector
+            mat[col * dim + col] = 1.0;
+        }
+    }
+    mat
+}
+
 /// Find nearest centroid index for a value.
 fn quantize_to_idx(value: f32, centroids: &[f32]) -> u8 {
     centroids
@@ -861,10 +947,7 @@ mod tests {
 
         let orig_norm: f32 = key.iter().map(|x| x * x).sum::<f32>().sqrt();
         let rec_norm: f32 = recovered.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!(
-            rec_norm > 0.1,
-            "reconstructed norm too small: {rec_norm}"
-        );
+        assert!(rec_norm > 0.1, "reconstructed norm too small: {rec_norm}");
         // 3-bit quantization with synthetic codebooks: allow up to 2x norm distortion
         assert!(
             (orig_norm - rec_norm).abs() / orig_norm < 1.0,
@@ -892,10 +975,7 @@ mod tests {
 
         let orig_norm: f32 = value.iter().map(|x| x * x).sum::<f32>().sqrt();
         let rec_norm: f32 = recovered.iter().map(|x| x * x).sum::<f32>().sqrt();
-        assert!(
-            rec_norm > 0.1,
-            "reconstructed norm too small: {rec_norm}"
-        );
+        assert!(rec_norm > 0.1, "reconstructed norm too small: {rec_norm}");
         assert!(
             (orig_norm - rec_norm).abs() / orig_norm < 1.0,
             "norm changed too much: {orig_norm} -> {rec_norm}"

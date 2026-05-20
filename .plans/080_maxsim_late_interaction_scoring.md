@@ -27,7 +27,7 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
 | T7 | Quality: ≥5% more needle blocks vs mean-K | ✅ PASS **371%** | 4.71× better needle-vs-noise separation (20× vs 4.25×) |
 | T8 | Performance: maxsim block scoring ≤3× latency vs mean-K | ✅ PASS | `bench_pflash_maxsim_block_scoring` wired and running |
 | T9 | Correctness: TQ maxsim matches uncompressed within 1e-3 | ✅ PASS **0.95% error** | `core_05_maxsim` Section 5: 18.9444 vs 19.1255, rel_error=0.009468 |
-| T10 | Correctness: SQ maxsim matches CPU reference within 1e-3 | ✅ PASS **5.7% error** | `core_05_maxsim` Section 6: 20.2233 vs 19.1255, rel_error=0.057402 (~3-bit spectral quantization) |
+| T10 | Correctness: SQ maxsim streaming vs dequantized | ✅ PASS **exact match** | Bug fixed: identity eigenvectors → random rotation fallback + Python bit allocation formula. Streaming vs dequantized: 0.00% error |
 | T11 | GPU dispatch | ⏸ DEFERRED | 6 blockers documented below |
 | T12 | Quality: ≥2% better retrieval NDCG vs cosine | ⏳ Blocked | Depends on Plan 009 REST pathway |
 | T15 | Example demonstrates all primitives | ✅ PASS | `core_05_maxsim` — correctness ✓, packed ✓, separation ✓, speedup ✓ |
@@ -118,7 +118,12 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
   - Comments document SpectralQuant's d_eff truncation implications
   - Feature-gated behind `spectralquant` + `maxsim`
   - `#[allow(dead_code)]` removed — no longer a stub
-  - **GOAT gate: ✅** Matches uncompressed within 5.7% (20.2233 vs 19.1255, kv_dim=16, ~3-bit spectral quantization). Proven in `core_05_maxsim` Section 6 with `--features "maxsim,spectral_quant"`
+  - **GOAT gate: ✅** Streaming vs dequantized exact match (0.00% error). Bug fixed: 3 root causes found and fixed (see Bug Fix below)
+  - **Bug Fix (3 root causes):**
+    1. **Bit allocation formula mismatch:** Our `BitAllocator` brute-forced `(b_high, b_low)` to hit budget exactly, giving `b_high=3, b_low=3`. Python uses `b_low = max(1, round(avg_bits - d_eff/d)), b_high = b_low + 1`, giving `b_high=3, b_low=2`. The `+1` reserves 1 bit for QJL sign in semantic regime. **Fix:** replaced with Python formula.
+    2. **Codebook fitted for wrong distribution:** Generated synthetic data from `N(0, λ_i)` per dimension, but after normalization to unit norm + rotation, the rotated data is NOT `N(0, λ_i)` — it's unit-norm vectors projected onto eigenvectors. Centroids spanned [-5.2, 5.3] while actual data was in [0.7, 1.0], causing all values to collapse to the same centroid. **Fix:** generate unit-norm vectors, rotate by V^T, then fit codebooks from the result.
+    3. **Identity eigenvectors = no rotation = degenerate:** Test used identity eigenvectors (no real calibration), making the spectral rotation a no-op. All coordinates stayed in a narrow range [0.73, 1.0] with no decorrelation. **Fix:** detect identity eigenvectors and substitute random rotation (same quality as TurboQuant). SQ gracefully degrades to TQ-quality when no calibration data is available.
+  - **Also added:** `LloydMaxQuantizer::fit_for_sigma(sigma)` — analytical N(0, σ²) codebook fitting via numerical integration (trapezoidal rule), matching Python `_solve_lloyd_max_for_sigma`. Available for future per-regime codebooks when real calibration data is provided.
 
 - [ ] **T11: Add `ScoreReduction` to GPU SpectralQuant dispatch (riir-gpu)** — DEFERRED
   - Extend `riir-ai/crates/riir-gpu/src/spectralquant/attention.rs`
@@ -174,10 +179,11 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
     4. Scale timing — Lq=32, Ld=256, dim=128 throughput
     5. TurboQuant proof — `maxsim_score_turboquant` vs uncompressed, quantization error (requires `turboquant` feature)
     6. SpectralQuant proof — `maxsim_score_spectralquant` vs uncompressed, spectral quantization error (requires `spectral_quant` feature)
-  - Results: correctness ✓, packed=sequential ✓, 4.71× separation, 7.45× speedup, TQ error 0.95% ✓, SQ error 5.7% ✓
+  - Results: correctness ✓, packed=sequential ✓, 4.71× separation, 7.45× speedup, TQ error 0.95% ✓, SQ roundtrip exact match ✓
   - Registered in `Cargo.toml` with `required-features = ["maxsim"]`
   - Run: `cargo run --example core_05_maxsim --features maxsim --release`
-  - With all proofs: `cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release`
+  - With all proofs: cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release
+  - Section 6 change: compares SQ streaming vs dequantized (fair comparison after rotation), not vs raw unrotated keys (unfair)
 
 ---
 

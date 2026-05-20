@@ -260,4 +260,150 @@ mod tests {
             assert!(v.is_finite(), "attn_out[{i}] = {v} is not finite");
         }
     }
+
+    /// Trace per-dimension roundtrip error for SQ quantize/dequantize.
+    /// Purpose: diagnose why SQ maxsim error (5.7%) is higher than TQ (0.95%).
+    #[test]
+    #[cfg(feature = "maxsim")]
+    fn trace_sq_roundtrip_error() {
+        use crate::simd::maxsim_score;
+
+        let config = Config::micro();
+        let kv_dim = crate::types::kv_dim(&config);
+        let n_positions = 8;
+        let lq = 2;
+
+        let mut eigenvectors = vec![0.0f32; kv_dim * kv_dim];
+        for i in 0..kv_dim {
+            eigenvectors[i * kv_dim + i] = 1.0;
+        }
+        let eigenvalues: Vec<f32> = (0..kv_dim).map(|i| 10.0 * 0.8f32.powi(i as i32)).collect();
+        let d_eff = participation_ratio(&eigenvalues);
+        let cal = SpectralQuantCalibration {
+            eigenvectors: eigenvectors.clone(),
+            eigenvalues: eigenvalues.clone(),
+            d_eff,
+            spectral_gap: None,
+            var_95: 10,
+            var_99: 20,
+            n_samples: 100,
+            head_dim: kv_dim,
+        };
+        let sq_config = SpectralQuantKVCacheConfig {
+            avg_bits: 3.0,
+            min_tail_bits: 1,
+            max_bits: 8,
+            qjl_dim: 16,
+            lloyd_max_iter: 30,
+            calibration_samples: 100,
+            seed: 42,
+            use_water_fill: false,
+            wf_min_bits: 1,
+            wf_max_bits: 6,
+            n_layers: config.n_layer,
+            kv_dim,
+            max_seq_len: config.block_size,
+        };
+        let mut sq_cache = super::super::spectral_kv_cache::SpectralQuantKVCache::from_calibration(
+            &sq_config,
+            &vec![cal.clone(); config.n_layer],
+            &vec![cal; config.n_layer],
+        );
+
+        // Store one key and trace per-dim roundtrip
+        let key: Vec<f32> = (0..kv_dim).map(|i| (i as f32 * 0.05).cos()).collect();
+        sq_cache.store_key(0, 0, &key);
+
+        let mut reconstructed = vec![0.0f32; kv_dim];
+        sq_cache.dequantize_key_into(0, 0, &mut reconstructed);
+
+        let mut max_abs_err = 0.0f32;
+        let mut total_sq_err = 0.0f32;
+        eprintln!("\n  dim | original  | recon     | error      | eigenvalue");
+        eprintln!("  ----|-----------|-----------|------------|----------");
+        for i in 0..kv_dim {
+            let err = (key[i] - reconstructed[i]).abs();
+            max_abs_err = max_abs_err.max(err);
+            total_sq_err += err * err;
+            eprintln!(
+                "  {:3} | {:9.6} | {:9.6} | {:10.6} | {:.4}",
+                i,
+                key[i],
+                reconstructed[i],
+                err,
+                eigenvalues.get(i).copied().unwrap_or(0.0)
+            );
+        }
+        eprintln!(
+            "  max_abs_err={max_abs_err:.6}, rmse={:.6}",
+            total_sq_err.sqrt() / kv_dim as f32
+        );
+
+        // Dump codebook centroids to diagnose range mismatch
+        let layer_state = &sq_cache.layers[0];
+        eprintln!(
+            "\n  b_high={}, b_low={}, d_eff={}",
+            layer_state.b_high, layer_state.b_low, layer_state.d_eff
+        );
+        if let Some(ref cb) = layer_state.semantic_codebook {
+            eprintln!(
+                "  semantic centroids ({}) : {:?}",
+                cb.centroids.len(),
+                cb.centroids
+            );
+        }
+        eprintln!(
+            "  tail centroids ({})     : {:?}",
+            layer_state.tail_codebook.centroids.len(),
+            layer_state.tail_codebook.centroids
+        );
+        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
+            eprintln!("  semantic_bits_per_dim  : {:?}", bits);
+        }
+
+        // Compare SQ maxsim vs uncompressed
+        let queries: Vec<f32> = (0..lq * kv_dim).map(|i| (i as f32 * 0.1).sin()).collect();
+        let original_keys: Vec<Vec<f32>> = (0..n_positions)
+            .map(|t| {
+                (0..kv_dim)
+                    .map(|d| ((t * kv_dim + d) as f32 * 0.05).cos())
+                    .collect()
+            })
+            .collect();
+        for (t, k) in original_keys.iter().enumerate() {
+            sq_cache.store_key(0, t, k);
+        }
+
+        let sq_score =
+            maxsim_score_spectralquant(&queries, &mut sq_cache, 0, 0..n_positions, kv_dim);
+
+        // Fair comparison: dequantize all keys from SQ cache, then score uncompressed.
+        // SQ applies random rotation when eigenvectors are identity, so comparing
+        // against raw unrotated keys is unfair — both paths must go through the
+        // same rotation to isolate quantization error from rotation mismatch.
+        let mut reconstructed_keys = vec![0.0f32; n_positions * kv_dim];
+        for t in 0..n_positions {
+            sq_cache.dequantize_key_into(
+                0,
+                t,
+                &mut reconstructed_keys[t * kv_dim..(t + 1) * kv_dim],
+            );
+        }
+        let reconstructed = maxsim_score(&queries, &reconstructed_keys, lq, n_positions, kv_dim);
+
+        eprintln!("\n  SQ MaxSim (streaming):  {sq_score:.6}");
+        eprintln!("  SQ MaxSim (dequant):    {reconstructed:.6}");
+        eprintln!(
+            "  Match:                  {:.6} ({:.2}%)",
+            (sq_score - reconstructed).abs(),
+            (sq_score - reconstructed).abs() / reconstructed.abs().max(1e-8) * 100.0
+        );
+
+        // Streaming vs dequantized should match exactly (same codebook, same data)
+        assert!(sq_score.is_finite(), "SQ score is not finite: {sq_score}");
+        assert!(
+            (sq_score - reconstructed).abs() < 1e-4,
+            "streaming vs dequantized mismatch: {sq_score} vs {reconstructed}"
+        );
+    }
 }

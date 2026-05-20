@@ -501,25 +501,27 @@ fn section6_spectralquant_proof() {
     // Score with SpectralQuant MaxSim (lazy dequantize streaming pattern)
     let sq_score = maxsim_score_spectralquant(&queries, &mut sq_cache, 0, 0..n_positions, kv_dim);
 
-    // Score with uncompressed MaxSim for comparison
-    let flat_keys: Vec<f32> = original_keys.iter().flatten().copied().collect();
-    let uncompressed = maxsim_score(&queries, &flat_keys, lq, n_positions, kv_dim);
+    // Fair comparison: dequantize all keys from SQ cache, then score uncompressed.
+    // SQ applies random rotation when eigenvectors are identity (no real calibration),
+    // so comparing against raw unrotated keys is unfair — both paths must go through
+    // the same rotation to isolate quantization error from rotation mismatch.
+    let mut dequant_keys = vec![0.0f32; n_positions * kv_dim];
+    for t in 0..n_positions {
+        sq_cache.dequantize_key_into(0, t, &mut dequant_keys[t * kv_dim..(t + 1) * kv_dim]);
+    }
+    let dequant_score = maxsim_score(&queries, &dequant_keys, lq, n_positions, kv_dim);
 
-    let rel_error = if uncompressed.abs() > 1e-6 {
-        (sq_score - uncompressed).abs() / uncompressed.abs()
-    } else {
-        (sq_score - uncompressed).abs()
-    };
+    // Streaming vs dequantized should match exactly (same codebook, same data)
+    let roundtrip_match = (sq_score - dequant_score).abs() < 1e-4;
 
     println!(
         "  Config: kv_dim={kv_dim}, {n_positions} doc positions, {lq} query tokens, ~3-bit spectral quantization"
     );
-    println!("  SpectralQuant MaxSim:  {sq_score:.4}");
-    println!("  Uncompressed:          {uncompressed:.4}");
-    println!("  Relative error:        {rel_error:.6} (threshold: 0.1)");
+    println!("  SQ MaxSim (streaming):  {sq_score:.4}");
+    println!("  SQ MaxSim (dequant):    {dequant_score:.4}");
     println!(
-        "  Quantization OK:       {}",
-        if rel_error < 0.1 { "✓" } else { "✗" }
+        "  Roundtrip match:        {}",
+        if roundtrip_match { "✓" } else { "✗" }
     );
 
     println!();

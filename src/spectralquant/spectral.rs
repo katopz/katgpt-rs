@@ -250,41 +250,38 @@ pub fn calibrate_eigenbasis(samples: &[Vec<f32>], head_dim: usize) -> Calibratio
 /// Tries all valid `(b_high, b_low)` pairs, picks closest to budget.
 /// This is Step 1 of allocation — determines the per-regime bit widths.
 pub struct BitAllocator {
-    min_bits: u8,
+    _min_bits: u8,
     max_bits: u8,
 }
 
 impl BitAllocator {
     pub fn new(min_bits: u8, max_bits: u8) -> Self {
-        Self { min_bits, max_bits }
+        Self {
+            _min_bits: min_bits,
+            max_bits,
+        }
     }
 
     /// Allocate bits into two regimes: semantic (b_high) and tail (b_low).
     ///
-    /// Returns `(b_high, b_low)` or `(min_bits, min_bits)` if no valid split found.
+    /// Matches Python `_solve_bit_allocation` formula:
+    ///   b_low = max(1, round(avg_bits - d_eff / head_dim))
+    ///   b_high = b_low + 1
+    ///
+    /// Derivation: constraint is `d_eff * b_high + (d - d_eff) * b_low ≈ d * avg_bits`
+    /// with b_high = b_low + 1 → d * b_low + d_eff = d * avg_bits → b_low = avg_bits - d_eff/d.
+    /// The `+1` in b_high reserves one bit for QJL sign in the semantic regime.
     pub fn allocate(&self, d_eff: f32, avg_bits: f32, head_dim: usize) -> (u8, u8) {
         let d_eff_int = (d_eff.ceil() as usize).max(1).min(head_dim);
-        let tail_dim = head_dim.saturating_sub(d_eff_int);
-        let total_budget = avg_bits * head_dim as f32;
 
-        let mut best = (self.min_bits, self.min_bits);
-        let mut best_error = f32::MAX;
+        // Python formula: b_low = max(1, round(avg_bits - d_eff / d))
+        let b_low = (avg_bits - d_eff_int as f32 / head_dim as f32)
+            .round()
+            .max(1.0)
+            .min(self.max_bits as f32) as u8;
+        let b_high = (b_low + 1).min(self.max_bits);
 
-        // Try all valid (b_high, b_low) pairs
-        for b_high in self.min_bits..=self.max_bits {
-            for b_low in self.min_bits..=b_high {
-                let used = d_eff_int as f32 * b_high as f32 + tail_dim as f32 * b_low as f32;
-                let error = (used - total_budget).abs();
-                if error < best_error {
-                    best_error = error;
-                    best = (b_high, b_low);
-                }
-                if error < 0.01 {
-                    return best;
-                }
-            }
-        }
-        best
+        (b_high, b_low)
     }
 }
 
@@ -433,6 +430,87 @@ impl LloydMaxQuantizer {
         }
 
         self.centroids = Some(centroids);
+        self.is_fitted = true;
+        self
+    }
+
+    /// Fit codebook analytically for N(0, σ²) distribution.
+    ///
+    /// Matches Python `_solve_lloyd_max_for_sigma`: uses numerical integration
+    /// (trapezoidal rule) to compute optimal Lloyd-Max centroids for a Gaussian
+    /// with the given standard deviation. No synthetic data needed.
+    ///
+    /// This is the correct approach for SpectralQuant codebook fitting — after
+    /// spectral rotation, dimension `i` in the rotated domain has variance `λ_i`.
+    /// The per-regime codebook should target `σ = sqrt(mean(λ regime))`.
+    pub fn fit_for_sigma(&mut self, sigma: f32) -> &Self {
+        let sigma = sigma.max(1e-8);
+        let n_levels = self.n_levels;
+
+        // Gauss PDF: (1 / (σ√2π)) * exp(-x² / (2σ²))
+        let pdf = |x: f64| -> f64 {
+            let s = sigma as f64;
+            (-0.5 * (x / s) * (x / s)).exp() / (s * (2.0 * std::f64::consts::PI).sqrt())
+        };
+
+        // Initialize centroids uniformly in [-3.5σ, 3.5σ]
+        let lo = -3.5 * sigma as f64;
+        let hi = 3.5 * sigma as f64;
+        let mut centroids: Vec<f64> = (0..n_levels)
+            .map(|i| lo + (hi - lo) * (i as f64 + 0.5) / n_levels as f64)
+            .collect();
+
+        // Trapezoidal numerical integration
+        let trapz = |f: &dyn Fn(f64) -> f64, a: f64, b: f64, n: usize| -> f64 {
+            if n == 0 || b <= a {
+                return 0.0;
+            }
+            let h = (b - a) / n as f64;
+            let mut sum = (f(a) + f(b)) * 0.5;
+            for i in 1..n {
+                sum += f(a + i as f64 * h);
+            }
+            sum * h
+        };
+
+        let n_quad = 256; // integration points (more than enough for Gauss)
+
+        // Lloyd-Max iteration
+        for _ in 0..self.max_iter {
+            // Boundaries between adjacent centroids
+            let boundaries: Vec<f64> = (0..n_levels - 1)
+                .map(|i| (centroids[i] + centroids[i + 1]) * 0.5)
+                .collect();
+
+            // Edges: extend well beyond centroids
+            let edges: Vec<f64> = std::iter::once(lo * 3.0)
+                .chain(boundaries.iter().copied())
+                .chain(std::iter::once(hi * 3.0))
+                .collect();
+
+            let mut new_centroids = Vec::with_capacity(n_levels);
+            for i in 0..n_levels {
+                let a = edges[i];
+                let b = edges[i + 1];
+                let num = trapz(&|x| x * pdf(x), a, b, n_quad);
+                let den = trapz(&pdf, a, b, n_quad);
+                new_centroids.push(if den > 1e-15 { num / den } else { centroids[i] });
+            }
+
+            // Check convergence
+            let max_delta = centroids
+                .iter()
+                .zip(new_centroids.iter())
+                .map(|(a, b)| (a - b).abs())
+                .fold(0.0f64, f64::max);
+
+            centroids = new_centroids;
+            if max_delta < self.tol as f64 {
+                break;
+            }
+        }
+
+        self.centroids = Some(centroids.into_iter().map(|c| c as f32).collect());
         self.is_fitted = true;
         self
     }
@@ -810,9 +888,11 @@ mod tests {
     #[test]
     fn test_bit_allocator_uniform() {
         let alloc = BitAllocator::new(3, 8);
-        // When avg_bits == min_bits, both should be min_bits
+        // Python formula: b_high = b_low + 1 always.
+        // b_low = max(1, round(3.0 - 10/128)) = 3, b_high = 4.
         let (b_high, b_low) = alloc.allocate(10.0, 3.0, 128);
-        assert_eq!(b_high, b_low, "uniform budget should give equal bits");
+        assert_eq!(b_high, b_low + 1, "b_high should always be b_low + 1");
+        assert!(b_low >= 1, "b_low should be >= 1");
     }
 
     #[test]
