@@ -53,6 +53,9 @@ microgpt-rs is uniquely positioned for HL because of its **trait-based pruner ar
 | SDAR Sigmoid Gate | `sdar_gate()` — asymmetric trust σ(β·x), β=5.0 optimum (Plan 072) |
 | SDAR-Gated Bandit | `SdarBanditPruner` — sigmoid-gated reward updates (Plan 072) |
 | SDAR-Gated Absorb | `SdarGatedAbsorbCompress` — soft sigmoid promotion gate (Plan 072) |
+| Width Scaling | `best_of_k_rollouts()` — K parallel SDE rollouts, select best (PTRM Plan 083) |
+| Early Stop Gate | `EarlyStopGate<P>` — depth-aware pruning when relevance < threshold (PTRM Plan 083) |
+| Width Selection | `WidthSelectionMode::{BestQ, MostFrequent}` — rollout selection strategy (PTRM Plan 083) |
 
 ---
 
