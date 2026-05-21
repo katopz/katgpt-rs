@@ -1027,6 +1027,71 @@ tests/
 
 📖 See [`.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`](.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
 
+## 🧮 Deep Manifold: Fixed-Point Boundary Conditions (Research 51)
+
+Mathematical foundation from [Deep Manifold Part 2](https://arxiv.org/pdf/2512.06563) explaining WHY our three-layer trait stack works:
+
+| Paper Concept | Our Implementation | Feature Gate |
+|---------------|-------------------|-------------|
+| Fixed-point residual ‖f(x)-x‖ | HintDelta + `ManifoldResidual` trait | `deep_manifold` |
+| Three-stage boundaries | ROPD→SDAR→GRPO pipeline | `ropd_rubric`, `sdar_gate` |
+| Symmetric boundaries | BT pairwise ranking + `SymmetricBoundaryPair` | `bt_rank` |
+| Model CAP tradeoff | `BanditPruner` dynamic routing | `bandit` |
+| Manifold federation | `BoundaryAlignment` KL coupling | `federation` |
+
+### GOAT Proof Results
+
+Run: `cargo test --features deep_manifold --test goat_deep_manifold -- --nocapture`
+
+| Proof | Description | Verdict |
+|-------|-------------|---------|
+| P1 | L2 residual measures fixed-point distance | ✅ |
+| P2 | KL residual measures distributional distance | ✅ |
+| P3 | Convergence detection separates states | ✅ |
+| P4 | Blended scoring dominates pure relevance | ✅ |
+| P5 | Per-position residual identifies hotspots | ✅ |
+| P6 | Residual decreases under fixed-point iteration | ✅ |
+
+### Key API
+
+```rust,ignore
+use microgpt_rs::pruners::{L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer};
+
+// L2 residual: ‖candidate - base‖
+let scorer = L2ResidualScorer::default();
+let residual = scorer.residual(&candidate_logits, &base_logits);
+let converged = scorer.is_converged(residual, 1e-4);
+
+// Blended scoring: residual + relevance
+let composite = ResidualRelevanceScorer::new(L2ResidualScorer::default(), 0.5);
+let score = composite.score(&candidate, &base, relevance);
+```
+
+```rust,ignore
+use microgpt_rs::pruners::{BoundaryAlignment, KlBoundaryAligner};
+
+// Federated KL coupling between domain experts
+let aligner = KlBoundaryAligner::default();
+let penalty = aligner.boundary_penalty(&local_expert, &ensemble, lambda);
+```
+
+### Module Structure
+
+```
+src/pruners/
+    manifold_residual.rs   ← ManifoldResidual, L2ResidualScorer, KlResidualScorer, ResidualRelevanceScorer
+    boundary_alignment.rs  ← BoundaryAlignment, KlBoundaryAligner
+src/rerank.rs              ← SymmetricBoundaryPair (bt_rank gate)
+tests/
+    goat_deep_manifold.rs          ← 6-proof GOAT benchmark
+    bench_manifold_residual.rs     ← residual vs relevance benchmarks
+    bench_boundary_alignment.rs    ← KL coupling benchmarks
+```
+
+**Feature gates:** `deep_manifold = []`, `federation = ["bandit"]` — **default-on** (GOAT proved 6/6).
+
+📖 See [`.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`](.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md) for full distillation of arXiv:2512.06563.
+
 ## 🏭 Productions
 
 MicroGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:
@@ -1117,7 +1182,7 @@ cargo run --release --features sudoku
 # Run everything
 cargo run --release --all-features
 
-# Run all tests (37 test files, 600+ cases)
+# Run all tests (47 test files, 320+ cases)
 cargo test --quiet --workspace --all-features
 
 # Run Sudoku solver example
@@ -1176,9 +1241,12 @@ cargo clippy --all-targets --all-features --quiet
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
 | `tes_loop` | SimpleTES evaluation-driven scaling — RPUCG graph-based bandit + trajectory pruning + credit bridge. GOAT proved 8/8 (Bench 016+017). `BanditStrategy::Rpucg`, `SimpleTesLoop<E>`, `TrajectoryPruner`, `TrajectoryCredit` (Plan 086) |
+| `deep_manifold` | Deep Manifold fixed-point residual scoring — L2/KL residual traits + blended scorer (Research 51, Plan 085). **GOAT proved 6/6**, default-on |
+| `federation` | Deep Manifold federated boundary alignment — symmetric KL coupling between domain experts (Research 51, Plan 085). **GOAT proved 6/6**, default-on. Requires `bandit` |
+| `lattice_deduction` | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination. `AlphaTarget`, `alpha_intersect`, `is_consistent`, `EntropyConflictDetector`, `LdtPruneConfig` (Plan 088, off by default) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering"]` targets production accuracy + sparsity + pairwise ranking + calibrated KV compression + neuron-level steering. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering", "deep_manifold", "federation"]` targets production accuracy + sparsity + pairwise ranking + calibrated KV compression + neuron-level steering + fixed-point residual scoring + federated KL coupling. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -1190,6 +1258,7 @@ src/
   main.rs           Entry point (proof → bench → Percepta bench → plot)
   types.rs          Config, Rng, math kernels, LoraAdapter, LoraPair
   transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate
+  rerank.rs         MaxSim + Cosine reranking, NDCG evaluation, SymmetricBoundaryPair (behind "maxsim" feature)
   speculative/      SOLID decomposition:
     types.rs        TreeNode, ConstraintPruner, ScreeningPruner, SpeculativeContext
     dd_tree.rs      DDTree build (best-first + chain-seed + screened)
@@ -1199,6 +1268,7 @@ src/
     prefill.rs      Speculative prefill scoring + prompt compression
     sampling.rs     Temperature, top-k, top-p sampling strategies
     d2f.rs          D2F Discrete Diffusion Forcing — block-parallel denoising (behind "dllm" feature)
+    alpha.rs        LDT Lattice Deduction — α-intersection pruning + conflict detection (behind "lattice_deduction" feature, Plan 088)
     flow_pruner.rs  GFlowNet stop-probability regularization
     ppot/           PPoT CPU resampling:
       mod.rs         Module root
@@ -1222,6 +1292,11 @@ src/
     pathfinder.rs      A* pathfinding
     stepcode.rs     Path shaping + consistency scoring (Plan 054, NO GAIN)
     variance_minimizer.rs  VarianceMinimizer, VarianceMinimizerConfig (Plan 078, behind "replaid_schedules")
+    bt_rank.rs      BtOutcome, BtComparison, BtConfig, BtScores, bt_fit — Bradley-Terry pairwise ranking
+    cna.rs          CnaNeuron, CnaCircuit, CnaModulator, CnaScreeningPruner — Contrastive Neuron Attribution (Plan 087)
+    manifold_residual.rs  L2ResidualScorer, KlResidualScorer, ResidualRelevanceScorer — Deep Manifold fixed-point scoring (Plan 085)
+    boundary_alignment.rs  BoundaryAlignment trait, KlBoundaryAligner — federated KL coupling (Plan 085)
+    tes_loop.rs     TesLoop trait, SimpleTesLoop, TrajectoryPruner — SimpleTES RPUCG loop (Plan 086)
     delta_mem/      δ-Mem modelless distillation (Plan 053):
       mod.rs        Module root
       hash.rs       FeatureHasher, ContextFeatures, OutcomeFeatures
@@ -1264,6 +1339,8 @@ src/
       tft_player.rs    TftPlayer — game theory Tit-for-Tat bomber (Issue 056)
       g_zero_player.rs  GZeroPlayer — G-Zero self-play + delta bandit
       rubric_player.rs   RubricPlayer — rubric-vector reward (Plan 071 T9)
+      sdar_player.rs    SdarBomberPlayer — SDAR sigmoid-gated reward (Plan 072)
+      arena_runner.rs   BomberArenaConfig, run_bomber_game, run_bomber_matchup (Plan 076)
       replay_backward.rs  BackwardSample, ReplayBackwardWalker — GFlowNet backward policy
       validator_agent.rs  Agent validator loop (Issue 052)
     game_state/      GameState forward model + generic MCTS (Plan 056 + 067):
@@ -1278,6 +1355,8 @@ src/
       status.rs        Status effects (Poison, Sleep, Haste, Slow, etc.)
       g_zero_player.rs GZeroFFTPlayer — template hints + δ bandit (Plan 053)
       rubric_player.rs RubricFFTPlayer — rubric-vector reward (Plan 071 T10)
+      sdar_player.rs   SdarFFTPlayer — SDAR sigmoid-gated reward (Plan 072)
+      arena_runner.rs  FftArenaConfig, run_fft_battle, run_fft_matchup (Plan 076)
       tft_player.rs    TftFFTPlayer — Tit-for-Tat party AI (Plan 055)
     monopoly/        Monopoly FSM arena (bevy_ecs):
       mod.rs           Module root
@@ -1293,6 +1372,7 @@ src/
       tournament.rs GoTournamentConfig, GoTournamentResult, AutoGoProxyPlayer
       g_zero_player.rs  GoGZeroSelfPlay — Hint-δ + absorb-compress
       autoresearch.rs   AutoResearchLoop — UCB1 bandit over config arms
+      analytics.rs      Cross-domain analysis, scaling laws, player tier comparison
       autogo_client.rs  AutoGoClient — REST API bridge
   tokenizer/        BPE tokenizer (encode/decode/train):
     mod.rs           Module root
@@ -1355,15 +1435,15 @@ src/
     spectral.rs     calibrate_eigenbasis, waterfill_bits, participation_ratio, spectral_gap, LloydMaxQuantizer
     nonuniform_quant.rs  NonUniformQuantizer, CompressedVector — Lloyd-Max scalar quantizer
     spectral_rotation.rs  SpectralRotation — eigenbasis rotation, RandomRotation (turboquant compat)
-    spectral_kv_cache.rs  SpectralQuantKVCache — full quantized KV cache implementation
+    spectral_kv_cache.rs  SpectralQuantKVCache, DequantizeScratch — full quantized KV cache implementation
     forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, denoise_loop — dLLM research (behind "dllm" feature)
   alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
   feedback.rs       TTT feedback (feature-gated feedback)
   benchmark.rs      BenchResult, run_all, save_results_csv
   plot.rs           PNG horizontal bar chart
-examples/           58 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode)
-tests/              37 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
+examples/           63 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode, cna)
+tests/              47 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
 bench/              Auto-numbered PNG + CSV benchmark output
 ```
 
@@ -1387,7 +1467,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering", "deep_manifold", "federation"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -1404,6 +1484,8 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **ELF SDE** (`elf_sde`) | [Embedded Language Flows](https://arxiv.org/abs/2406.09970) | **10-22× path diversity** (145 vs 14 unique prefixes at γ=1.0). Overhead: 3.2µs (<3% of one attention step). Logit-normal: 2.2× concentration near t=0 (Bench 012). | Uniform noise for D2F |
 | **PTRM Width Scaling** (`elf_sde`) | [PTRM (arXiv:2605.19943)](https://arxiv.org/abs/2605.19943) | **Width >> Depth**: `best_of_k_rollouts` K=64 rollouts + `EarlyStopGate` depth-aware pruning. PTRM proves 7M model beats frontier LLMs via width scaling. `WidthSelectionMode::{BestQ, MostFrequent}`. Config: `width_rollouts`, `early_stop_threshold` (Plan 083, Bench 015). | Single-rollout greedy expansion |
 | **CNA Steering** (`cna_steering`) | [Contrastive Neuron Attribution](https://arxiv.org/pdf/2605.12290) | **GOAT proved** (Bench 015). Discovery: ~10µs/pair. Modulation: 163ns for K=50. Quality: cosine 1.0 at all strengths (paper: >0.97). Late-layer concentration: 100%. O(K) sparse forward hook. `CnaScreeningPruner` composable with `BanditPruner`. | Residual-stream steering (CAA < 0.60 quality) |
+| **Deep Manifold** (`deep_manifold`) | [Deep Manifold Part 2 (arXiv:2512.06563)](https://arxiv.org/pdf/2512.06563) | **GOAT 6/6** (Plan 085). L2/KL residual traits for explicit fixed-point distance. `ResidualRelevanceScorer` blends residual + relevance. Per-position hotspot analysis. O(n) SIMD-able. Default-on. | Implicit residual in `BanditPruner` Q-values |
+| **Federation** (`federation`) | [Deep Manifold Part 2 §7.6](https://arxiv.org/pdf/2512.06563) | **GOAT 6/6** (Plan 085). Symmetric KL coupling between domain experts. `KlBoundaryAligner` + `BoundaryAlignment` trait. No data exchange, no privacy concern. Default-on. | Independent expert training |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
@@ -1472,3 +1554,4 @@ Every feature traced from research paper to implementation to benchmark. Separat
 - [Luce PFlash: Speculative Prefill Compression for Long-Context Spec Decode](https://github.com/Luce-Org/lucebox-hub/) — lucebox-hub, 2026
 - [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) — Heuristic Learning paradigm
 - [G-Zero: Self-Play for Open-Ended Generation from Zero Data](https://arxiv.org/pdf/2605.09959) — Huang et al., 2026 — Verifier-free co-evolutionary self-play via Hint-δ, GRPO Proposer, length-normalized DPO Generator
+- [Deep Manifold Part 2: Neural Network Mathematics](https://arxiv.org/pdf/2512.06563) — Ma & Shi, 2025 — Fixed-point boundary conditions, three-stage boundary theory, Model CAP Theorem, manifold federation

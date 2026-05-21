@@ -25,11 +25,17 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - forward_hla: ~939K tok/s (single-core, 30K CCU feasible)
 - forward_ahla: ~1.2M tok/s (single-core)
 - TurboQuant 3-bit KV cache: 5.3× compression, 0.99 attention correlation (legacy baseline)
-- SpectralQuant calibrated KV cache: eigenbasis + water-fill bit allocation — default KV compression (Plan 078)
+- SpectralQuant calibrated KV cache: 9.1× compression, 0.9917 cosine — default KV compression (Plan 077)
+- ELF SDE noise injection: 10-22× path diversity, logit-normal schedule (Plan 079, default-on)
+- CNA Steering: contrastive neuron attribution + sparse modulation, GOAT proved (Plan 087, default-on)
+- Deep Manifold: L2/KL residual fixed-point scoring, GOAT 6/6 (Plan 085, default-on)
+- Federation: symmetric KL boundary alignment between experts (Plan 085, default-on)
 - dLLM Discrete Diffusion Forcing: block-parallel denoising (behind `"dllm"` feature, Plan 066)
 - SP-KV self-pruned KV attention: 3-10× KV reduction with utility prediction (behind `"sp_kv"` feature, Plan 070)
 - PFlash block-sparse prefill: up to 21.3× sequence reduction, 100% NIAH retrieval
-- 600+ tests passing (37 test files), zero clippy warnings
+- MaxSim late-interaction scoring: 7.46× SIMD speedup (behind `"maxsim"` feature, Plan 080)
+- SimpleTES RPUCG loop: wide>narrow budget scaling (behind `"tes_loop"` feature, Plan 086)
+- 320+ tests passing (47 test files), zero clippy warnings
 
 ## Module Structure
 
@@ -72,6 +78,7 @@ src/
         tokens.rs      Token mapping
   benchmark.rs      BenchCategory, BenchResult, run_all, run_all_parallel, save_results_csv, append_timeseries_csv, generate_batch
   plot.rs           plot_results → PNG, plot_timeseries
+  rerank.rs         RerankMethod (Cosine/MaxSim), RerankedDoc, ndcg_at, SymmetricBoundaryPair (behind "maxsim" + "bt_rank" features)
 
   speculative/      SOLID decomposition:
     mod.rs          Re-exports
@@ -84,6 +91,7 @@ src/
     prefill.rs      PrefillScorer trait, AttentionScorer, BlockAttentionScorer, compress_prompt, compress_prompt_blocks, block_select, block_select_grid, should_compress, speculative_prefill, speculative_prefill_block, speculative_prefill_adaptive
     flow_pruner.rs  FlowPruner<P> — GFlowNet-inspired stop-probability regularization ♭
     d2f.rs          D2fBlockState, D2fDecodeConfig, D2fBlockResult, D2fPipelineBlock, D2fPipeline, D2fPipelineResult, d2f_decode_block* (behind "dllm" feature)
+    alpha.rs        AlphaTarget, alpha_intersect, is_consistent — LDT α-intersection pruning + conflict detection (behind "lattice_deduction" feature, Plan 088) ⎌
     ppot/           PPoT (Plans 026 + 027) ○
       mod.rs        Module root, public API re-exports
       types.rs      TokenRule enum, PpotConfig
@@ -118,6 +126,7 @@ src/
       g_zero_player.rs  GZeroPlayer — G-Zero self-play with template proposer + delta bandit
       tft_player.rs  TftPlayer — Tit-for-Tat with provocation detection
       rubric_player.rs  RubricPlayer — rubric-vector reward (Plan 071 T9)
+      sdar_player.rs  SdarBomberPlayer — SDAR sigmoid-gated reward (Plan 072)
       arena_runner.rs  BomberArenaConfig, run_bomber_game, run_bomber_matchup (Plan 076)
       replay.rs     ReplaySample, ReplayWriter — JSONL replay persistence
       replay_backward.rs  BackwardSample, ReplayBackwardWalker — GFlowNet backward policy
@@ -137,6 +146,7 @@ src/
       players.rs    FftPlayer trait, GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer
       g_zero_player.rs  GZeroFFTPlayer — G-Zero self-play for FFT
       rubric_player.rs  RubricFFTPlayer — rubric-vector reward (Plan 071 T10)
+      sdar_player.rs  SdarFFTPlayer — SDAR sigmoid-gated reward (Plan 072)
       arena_runner.rs  FftArenaConfig, run_fft_battle, run_fft_matchup (Plan 076)
       tft_player.rs  TftFFTPlayer — Tit-for-Tat FFT player
     go/             Go GameState + AutoGo API bridge + tournament ⛩
@@ -149,6 +159,7 @@ src/
       tournament.rs GoTournamentConfig, GoTournamentResult, AutoGoProxyPlayer, run_tournament
       g_zero_player.rs  GoGZeroSelfPlay — HintDelta + absorb-compress self-play
       autoresearch.rs   AutoResearchLoop — UCB1 bandit over config arms, early stopping
+      analytics.rs  cross-domain analysis, scaling laws, player tier comparison
     delta_mem/      δ-Mem modelless distillation — associative bandit memory ⌘
       mod.rs        Module root, re-exports
       state.rs      DeltaMemoryConfig, DeltaMemoryState, DeltaMemorySnapshot
@@ -178,6 +189,11 @@ src/
       rubric_bandit.rs RubricBanditPruner<P> (rubric-weighted reward bandit)
 
     sdar_gate.rs     SDAR sigmoid gate primitives (sdar_gate, sdar_modulate, sdar_gated_reward)
+    bt_rank.rs       BtOutcome, BtComparison, BtConfig, BtScores, bt_fit, bt_fit_from_fn, bt_sigmoid — Bradley-Terry pairwise ranking ⊞
+    cna.rs           CnaNeuron, CnaCircuit, CnaDiscoveryConfig, CnaModulator, CnaScreeningPruner, cna_discover, cna_modulate — Contrastive Neuron Attribution 🔬
+    manifold_residual.rs  KlResidualScorer, L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer — Deep Manifold fixed-point scoring ∇
+    boundary_alignment.rs  BoundaryAlignment trait, KlBoundaryAligner — federated KL coupling ≋
+    tes_loop.rs      TesLoop trait, SimpleTesLoop<E>, TrajectoryPruner — SimpleTES RPUCG loop ⟳
 
     sdar/            SDAR gated distillation — modelless (Plan 072):
       mod.rs           Module root + re-exports
@@ -209,8 +225,8 @@ src/
     spectral.rs     calibrate_eigenbasis, waterfill_bits, participation_ratio, spectral_gap, LloydMaxQuantizer
     nonuniform_quant.rs  NonUniformQuantizer, CompressedVector — Lloyd-Max scalar quantizer
     spectral_rotation.rs  SpectralRotation — eigenbasis rotation, RandomRotation (turboquant compat)
-    spectral_kv_cache.rs  SpectralQuantKVCache — full quantized KV cache implementation
-    forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat
+    spectral_kv_cache.rs  SpectralQuantKVCache, DequantizeScratch — full quantized KV cache implementation
+    forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat, par_maxsim_score_spectralquant (behind "maxsim" feature)
 
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, corrupt_block, forward_bidirectional_positions, forward_block_causal_positions, denoise_loop, denoising_accuracy ⌂
   hla/             Higher-order Linear Attention — O(1) inference cache (Plan 057, SIMD Plan 060) ⎔
@@ -248,7 +264,18 @@ src/
   ⊞ behind --features bt_rank         (default)
   ⊘ behind --features sdar_gate
   ⊡ behind --features ropd_rubric     (bandit)
-  ⚡ behind --features elf_sde
+  ⚡ behind --features elf_sde         (default)
+  🔬 behind --features cna_steering    (default)
+  ∇ behind --features deep_manifold    (default)
+  ≋ behind --features federation       (default)
+  ⟳ behind --features tes_loop         (bandit)
+  ⬡ behind --features maxsim
+  ▣ behind --features percepta          (ordered-float)
+  ▣+ behind --features percepta_gates   (percepta)
+  ▣++ behind --features percepta_graph  (percepta_gates)
+  ▣+++ behind --features percepta_wasm  (percepta_graph)
+  ▣++++ behind --features percepta_compile (percepta_wasm + good_lp)
+  ⎌ behind --features lattice_deduction
 ```
 
 ## Feature Flags
@@ -284,7 +311,12 @@ src/
 | `spectral_quant` | — | SpectralQuant calibrated eigenbasis + water-fill bit allocation — default KV compression (Plan 078) |
 | `turboquant` | — | TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063) |
 | `replaid_schedules` | — | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
-| `elf_sde` | — | ELF SDE noise injection + logit-normal schedule — requires GOAT proof (Plan 079) |
+| `elf_sde` | — | ELF SDE noise injection + logit-normal schedule — 10-22× path diversity (Plan 079, default-on) |
+| `cna_steering` | `bandit` | CNA contrastive neuron attribution — sparse circuit discovery + runtime modulation (Plan 087, default-on, GOAT proved) |
+| `deep_manifold` | — | Deep Manifold L2/KL residual fixed-point scoring — ResidualRelevanceScorer (Plan 085, default-on, GOAT 6/6) |
+| `federation` | `bandit` | Deep Manifold federated KL boundary alignment — KlBoundaryAligner, no data exchange (Plan 085, default-on, GOAT 6/6) |
+| `tes_loop` | `bandit` | SimpleTES RPUCG loop — trajectory credit, TrajectoryPruner (Plan 086) |
+| `maxsim` | — | MaxSim late-interaction scoring — Σ max_j dot, SIMD-accelerated (Plan 080) |
 | `bomber-agent` | `bomber` | Coding agent validator loop (Issue 052) |
 | `game_state` | `bomber` | GameState forward model trait + generic MCTS (Plan 056) |
 | `bandit_mcts` | `game_state` | Bandit-guided MCTS rollout policy — NFSP/MCTS duality (Plan 067) |
@@ -293,14 +325,15 @@ src/
 | `percepta_graph` | `percepta_gates` | + Expression/Dimension DSL, ProgramGraph |
 | `percepta_wasm` | `percepta_graph` | + WASM decoder + lowering + interpreter (pure Rust) |
 | `percepta_compile` | `percepta_wasm`, `good_lp` | + MILP scheduling + weights + transformer + Futamura |
-| `full` | all above | Enable all features |
+| `lattice_deduction` | — | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination (Plan 088) |
+| `full` | all above (excludes `stepcode`, `sp_kv`) | Enable all features |
 
-Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant` (production best perf + accuracy + pairwise ranking + calibrated KV compression, Plans 051, 078, 079).
+Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation` (production best perf + accuracy, Plans 051, 077-079, 085, 087).
 
 ## Quick Start
 
 ```bash
-cargo test --quiet --workspace --all-features   # Run all 400+ tests
+cargo test --quiet --workspace --all-features   # Run all 320+ tests
 cargo run --release                             # Run benchmark suite (includes Leviathan verification)
 cargo run --example hello_py2rs                                # BPE + bidirectional prefill demo
 cargo run --example sudoku_01_9x9 --features sudoku           # Sudoku streaming solver

@@ -446,9 +446,214 @@ SDPA→HLA distillation experiment shows KL divergence does NOT converge:
 | Throughput | 939K tok/s single-core (NEON) |
 | 30K CCU @ 20Hz | ✅ 1 core sufficient (9.8× headroom on 8-core) |
 
+## Technique 6: SpectralQuant Calibrated KV Compression
+
+### Problem
+TurboQuant uses random rotation + uniform codebook — 5.3× compression but cosine 0.9692. The random rotation doesn't exploit the spectral structure of real KV activations, leaving compression quality on the table.
+
+### Solution
+SpectralQuant (Plan 077) replaces random rotation with eigenbasis rotation calibrated from activation statistics, then allocates bits per dimension via water-fill optimization.
+
+```rust
+// spectralquant/spectral.rs — eigenbasis calibration
+pub fn calibrate_eigenbasis(activations: &[Vec<f32>], n_components: usize) -> SpectralRotation
+pub fn waterfill_bits(variances: &[f32], total_budget: f32) -> WaterfillAllocation
+
+// spectralquant/nonuniform_quant.rs — Lloyd-Max scalar quantizer
+pub struct NonUniformQuantizer { /* codebook per dimension */ }
+pub struct CompressedVector { /* packed bits + metadata */ }
+```
+
+### Water-Fill Bit Allocation
+Each dimension gets bits proportional to its variance share. High-variance dimensions get more bits (preserving information), low-variance get fewer (saving space).
+
+### Forward Integration
+
+```rust
+// transformer.rs — quantized KV forward with SpectralQuant backend
+pub fn forward_quantized(ctx, weights, cache: &mut dyn QuantizedKVCache, ...)
+// AttentionMode::SpectralQuant dispatches to spectralquant::forward
+```
+
+### Performance (Bench 013)
+
+| Metric | SpectralQuant | TurboQuant |
+|--------|:-:|:-:|
+| Compression | **9.1×** | 5.3× |
+| Cosine similarity | **0.9917** | 0.9692 |
+| MaxSim error | **18.90%** | 40.54% |
+| Feature flag | `spectral_quant` (default) | `turboquant` (legacy) |
+
+📖 See [`.docs/08_lucebox_techniques.md`](.docs/08_lucebox_techniques.md) for TurboQuant→SpectralQuant migration.
+
+## Technique 7: ELF SDE Noise Injection
+
+### Problem
+DDTree builds homogeneous candidate trees — similar prefixes explored, wasting budget on near-duplicates. At γ=1.0, only 14 unique prefixes from 100 rollouts.
+
+### Solution
+ELF SDE (Plan 079) injects logit-normal noise during tree expansion, biasing exploration toward t=0 (early tokens) where diversity matters most.
+
+```rust
+// speculative/types.rs — SDE configuration (default-on)
+pub struct SdeConfig {
+    pub gamma: f32,           // noise scale
+    pub preserve_top1: bool,  // keep highest-prob token clean
+    pub confidence_floor: f32, // skip noise when confidence > floor
+}
+
+// speculative/dd_tree.rs — noise-augmented tree building
+pub fn build_dd_tree_sde(...)    // SDE-augmented expansion
+pub fn build_dd_tree_balanced_sde(...) // balanced + SDE
+```
+
+### Logit-Normal Schedule
+Noise concentrates near t=0 via logit-normal distribution: 2.2× concentration at early positions. Later positions receive diminishing noise, preserving coherent continuations.
+
+### Width Scaling (PTRM, Plan 083)
+
+```rust
+// speculative/types.rs — width scaling via best-of-K
+pub struct WidthScaleConfig {
+    pub width_rollouts: usize,        // K parallel rollouts
+    pub early_stop_threshold: f32,    // confidence gate
+}
+pub enum WidthSelectionMode { BestQ, MostFrequent }
+pub fn best_of_k_rollouts(...) -> Vec<TreeNode>
+```
+
+PTRM proves width >> depth for small models. K=64 rollouts + `EarlyStopGate` depth-aware pruning.
+
+### Performance (Bench 012)
+
+| Metric | ELF SDE | Baseline |
+|--------|:-:|:-:|
+| Unique prefixes (γ=1.0) | **145** | 14 |
+| Diversity gain | **10-22×** | — |
+| Overhead | 3.2µs (<3%) | — |
+
+## Technique 8: CNA Steering (Contrastive Neuron Attribution)
+
+### Problem
+Residual-stream steering (CAA) uses linear probes that ignore layer structure, achieving <0.60 cosine quality. No attribution of *which* MLP neurons matter for a given behavior.
+
+### Solution
+CNA Steering (Plan 087) discovers sparse MLP circuits via contrastive attribution, then modulates only the discovered neurons at runtime.
+
+```rust
+// pruners/cna.rs — circuit discovery + modulation
+pub struct CnaNeuron { pub layer: usize, pub neuron: usize, pub attribution: f64 }
+pub struct CnaCircuit { pub neurons: Vec<CnaNeuron> }
+pub struct CnaDiscoveryConfig { pub top_k: usize, pub contrast_threshold: f64 }
+pub struct CnaModulator { pub circuit: CnaCircuit, pub strength: f64 }
+
+pub fn cna_discover(positive: &[Vec<f32>], negative: &[Vec<f32>], config: &CnaDiscoveryConfig) -> CnaCircuit
+pub fn cna_modulate(hidden: &mut [f32], modulator: &CnaModulator)
+
+pub struct CnaScreeningPruner { /* composable with BanditPruner */ }
+```
+
+### Discovery → Modulation Pipeline
+1. **Discovery**: Contrast positive vs negative activations → top-K attributions (~10µs/pair)
+2. **Modulation**: Scale only discovered neurons — O(K) sparse forward hook (163ns for K=50)
+3. **Pruner Integration**: `CnaScreeningPruner` composes with existing `BanditPruner`
+
+### Performance (Bench 015, GOAT proved)
+
+| Metric | Value |
+|--------|-------|
+| Discovery speed | ~10µs/pair |
+| Modulation speed | 163ns (K=50) |
+| Cosine quality | **1.0** at all strengths |
+| Late-layer concentration | 100% |
+| Quality vs CAA | **1.0** vs <0.60 |
+
+## Technique 9: Deep Manifold + Federation
+
+### Problem
+BanditPruner Q-values implicitly encode residual distance, but without explicit fixed-point structure. For multi-expert setups, experts train independently with no coupling.
+
+### Solution
+Deep Manifold (Plan 085) makes residual distance explicit via L2/KL scoring. Federation adds symmetric KL boundary alignment between experts — no data exchange needed.
+
+```rust
+// pruners/manifold_residual.rs — fixed-point residual scoring
+pub trait ManifoldResidual {
+    fn l2_residual(&self, activation: &[f32], target: &[f32]) -> f64;
+    fn kl_residual(&self, probs: &[f32], target: &[f32]) -> f64;
+}
+pub struct L2ResidualScorer;
+pub struct KlResidualScorer;
+pub struct ResidualRelevanceScorer { /* blends residual + relevance */ }
+
+// pruners/boundary_alignment.rs — federated KL coupling
+pub trait BoundaryAlignment {
+    fn align(&self, expert_a: &[f32], expert_b: &[f32]) -> Vec<f32>;
+}
+pub struct KlBoundaryAligner { pub kl_weight: f64 }
+```
+
+### Per-Position Hotspot Analysis
+ResidualRelevanceScorer produces per-position scores: high residual = prediction far from fixed-point manifold. BanditPruner can use this to prioritize high-uncertainty positions.
+
+### Federation: No Privacy Concern
+Experts never exchange raw data — only KL boundary statistics. `KlBoundaryAligner` computes symmetric KL divergence between expert boundaries and adjusts toward consensus.
+
+### Performance (GOAT 6/6)
+
+| Metric | Value |
+|--------|-------|
+| GOAT tests | 6/6 passed |
+| L2 residual | O(n) SIMD-able |
+| KL coupling | No data exchange |
+| Default-on | ✅ |
+
+## Technique 10: SimpleTES Loop (RPUCG)
+
+### Problem
+Greedy DDTree expansion wastes budget on low-value branches. No trajectory-level credit assignment — each node scored independently.
+
+### Solution
+SimpleTES (Plan 086) implements RPUCG (Rollout Policy Using Credit-Guided search): full C×L×K budget loop with trajectory credit assignment bridging to G-Zero Phase 2.
+
+```rust
+// pruners/tes_loop.rs — SimpleTES loop
+pub trait TesLoop {
+    fn run_cycle(&mut self, context: &mut dyn ScreeningPruner) -> Vec<TrajectoryCredit>;
+}
+pub struct SimpleTesLoop<E: GameState> {
+    pub width: usize,     // C candidates
+    pub depth: usize,     // L levels
+    pub k: usize,         // K rollouts per candidate
+}
+
+// speculative/types.rs — trajectory credit
+pub struct TrajectoryCredit {
+    pub node_id: usize,
+    pub weight: f32,
+    pub score: f32,
+}
+pub fn TrajectoryCredit::from_trajectory_scores(...) -> Vec<TrajectoryCredit>
+```
+
+### Budget Scaling: Wide > Narrow
+Wide budget (24×5×8) achieves 0.9988 quality vs narrow (2×8×30) at 0.8266 (spread=0.17). RPUCG beats greedy: 42.8% vs 10.6% wins.
+
+### Bridge to G-Zero Phase 2
+`TrajectoryCredit` provides the credit signal needed for GRPO Proposer + length-normalized DPO Generator in G-Zero's model-based self-play.
+
+### Performance (Bench 016+017, GOAT 8/8)
+
+| Metric | Value |
+|--------|-------|
+| GOAT tests | 8/8 passed |
+| RPUCG vs greedy | **42.8%** vs 10.6% wins |
+| Wide vs narrow | 0.9988 vs 0.8266 |
+| Feature flag | `tes_loop` (requires `bandit`) |
+
 ## Interaction Matrix
 
-The five techniques compose without conflicts:
+All ten techniques compose without conflicts:
 
 | Technique | Affects Prefill | Affects Decode | Feature Flag |
 |-----------|:-:|:-:|-------------|
@@ -457,6 +662,12 @@ The five techniques compose without conflicts:
 | Sparse MLP | ✅ (if enabled) | ✅ (if enabled) | `sparse_mlp` |
 | Domain Latent | ✅ K/V at L/2 | ✅ K/V at L/2 | `domain_latent` |
 | HLA Streaming | — | ✅ replaces KV cache | `hla_attention` |
+| SpectralQuant | — | ✅ KV compression | `spectral_quant` (default) |
+| ELF SDE | — | ✅ tree diversity | `elf_sde` (default) |
+| CNA Steering | — | ✅ neuron modulation | `cna_steering` (default) |
+| Deep Manifold | — | ✅ residual scoring | `deep_manifold` (default) |
+| Federation | — | ✅ expert alignment | `federation` (default) |
+| SimpleTES | — | ✅ credit-guided search | `tes_loop` |
 
 All are additive and backward-compatible. Standard `forward()` with no features works exactly as before.
 
@@ -466,4 +677,11 @@ All are additive and backward-compatible. Standard `forward()` with no features 
 - [Sakana TwELL](https://sakana.ai/twell/) — Tile-wise ELLPACK sparse format (Plan 022 inspiration, GPU-specific; we use CPU index-packing)
 - [The Free Transformer](https://arxiv.org/abs/2503.23153) — Mid-layer latent injection via K/V modulation (Plan 038)
 - [Higher-Order Linear Attention](https://arxiv.org/abs/2504.13764) — O(1) streaming attention via outer-product state (Plan 057)
-- [TurboQuant](https://arxiv.org/abs/2504.19874) — KV cache compression via learned codebooks (Plan 043)
+- [TurboQuant](https://arxiv.org/abs/2504.19874) — KV cache compression via learned codebooks (Plan 043, legacy baseline)
+- [SpectralQuant](https://arxiv.org/pdf/2504.19874) — Calibrated eigenbasis + water-fill bit allocation (Plan 077, default)
+- [Embedded Language Flows](https://arxiv.org/abs/2406.09970) — SDE noise injection for path diversity (Plan 079)
+- [PTRM](https://arxiv.org/abs/2605.19943) — Width >> depth for small models (Plan 083)
+- [Contrastive Neuron Attribution](https://arxiv.org/pdf/2605.12290) — Sparse circuit discovery + modulation (Plan 087)
+- [Deep Manifold Part 2](https://arxiv.org/pdf/2512.06563) — Fixed-point boundary conditions, federation (Plan 085)
+- [SimpleTES](https://arxiv.org/abs/2604.19341) — Credit-guided trajectory search (Plan 086)
+- [G-Zero](https://arxiv.org/pdf/2605.09959) — Self-play distillation, Hint-δ, GRPO+DPO (Plan 049)
