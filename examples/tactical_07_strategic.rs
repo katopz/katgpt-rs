@@ -126,6 +126,7 @@ struct StrategicState {
     r: usize,
     c: usize,
     keys_held: u8,           // bitmask: bit i = key i currently held
+    keys_used: u8,           // bitmask: bit i = key i consumed (opened a box)
     boxes_opened: u8,        // bitmask: bit j = box j opened
     levers_pulled: u8,       // bitmask: bit k = lever k pulled
     lever_sequence: Vec<u8>, // order levers were pulled
@@ -184,60 +185,75 @@ impl StrategicGame {
     fn new(map_str: &str, seed: u64) -> Self {
         let mut grid = Vec::new();
         let mut start = (0, 0);
-        let mut boss_start = (0, 0);
-        let mut keys = Vec::new();
-        let mut boxes = Vec::new();
-        let mut levers = Vec::new();
-        let mut traps = HashSet::new();
-        let mut bridge = HashSet::new();
         let mut goal = (0, 0);
+        let mut bridge = HashSet::new();
+        let mut bridge_row = usize::MAX;
 
+        // Parse layout: walls, bridge, start, goal
         for (r, line) in map_str.lines().enumerate() {
             let mut row = Vec::new();
-            for (c, ch) in line.split_whitespace().enumerate() {
-                let ch = ch.chars().next().unwrap();
+            for (c, token) in line.split_whitespace().enumerate() {
+                let ch = token.chars().next().unwrap();
                 match ch {
                     'B' => {
                         start = (r, c);
                         row.push('.');
                     }
-                    'O' => {
-                        boss_start = (r, c);
-                        row.push('.');
-                    }
-                    'k' | 'j' => {
-                        keys.push((r, c));
-                        row.push('.');
-                    }
-                    'a' | 'b' => {
-                        boxes.push((r, c));
-                        row.push('.');
-                    }
-                    '1' | '2' | '3' => {
-                        levers.push((r, c));
-                        row.push('.');
-                    }
-                    '!' => {
-                        traps.insert((r, c));
-                        row.push('.');
-                    }
-                    '=' => {
-                        bridge.insert((r, c));
-                        row.push('=');
-                    }
                     'G' => {
                         goal = (r, c);
                         row.push('.');
                     }
-                    _ => row.push(ch),
+                    '=' => {
+                        bridge.insert((r, c));
+                        bridge_row = r;
+                        row.push('=');
+                    }
+                    '#' => row.push('#'),
+                    _ => row.push('.'),
                 }
             }
             grid.push(row);
         }
 
+        // Collect floor tiles by area (above/below bridge)
+        let mut upper_floors = Vec::new();
+        let mut lower_floors = Vec::new();
+        for (r, row) in grid.iter().enumerate() {
+            for (c, &cell) in row.iter().enumerate() {
+                if cell == '.' && (r, c) != start && (r, c) != goal {
+                    if r < bridge_row {
+                        upper_floors.push((r, c));
+                    } else if r > bridge_row {
+                        lower_floors.push((r, c));
+                    }
+                }
+            }
+        }
+
+        // Seeded LCG for position shuffling
+        let mut rng_s = seed;
+        for i in (1..upper_floors.len()).rev() {
+            rng_s = rng_s.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let j = (rng_s as usize) % (i + 1);
+            upper_floors.swap(i, j);
+        }
+        for i in (1..lower_floors.len()).rev() {
+            rng_s = rng_s.wrapping_mul(6364136223846793005).wrapping_add(1);
+            let j = (rng_s as usize) % (i + 1);
+            lower_floors.swap(i, j);
+        }
+
+        // Place items from shuffled positions
+        // Upper: boss(1) + levers(3) + traps(2) + keys(2) = 8
+        // Lower: boxes(2)
+        let boss_start = upper_floors[0];
+        let mut levers = vec![upper_floors[1], upper_floors[2], upper_floors[3]];
+        let traps: HashSet<_> = [upper_floors[4], upper_floors[5]].into_iter().collect();
+        let mut keys = vec![upper_floors[6], upper_floors[7]];
+        let mut boxes = vec![lower_floors[0], lower_floors[1]];
+        levers.sort();
         keys.sort();
         boxes.sort();
-        levers.sort();
 
         let (key_mapping, lever_order) = Self::generate_config(seed);
 
@@ -303,6 +319,7 @@ impl StrategicGame {
             r: self.start.0,
             c: self.start.1,
             keys_held: 0,
+            keys_used: 0,
             boxes_opened: 0,
             levers_pulled: 0,
             lever_sequence: Vec::new(),
@@ -420,6 +437,7 @@ impl StrategicGame {
                     if (state.keys_held & (1 << k)) != 0 && self.key_mapping[k] == j {
                         state.boxes_opened |= 1 << j;
                         state.keys_held &= !(1 << k);
+                        state.keys_used |= 1 << k;
                         break;
                     }
                 }
@@ -829,48 +847,25 @@ impl App {
     }
 
     /// Restart with a new random seed — new puzzle, new solve.
+    /// Retries with incremented seed if the random layout is unsolvable.
     fn restart(&mut self) {
-        let seed = SystemTime::now()
+        let mut seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos() as u64;
 
         self.round += 1;
+        let (game, solution) = loop {
+            let game = StrategicGame::new(MAP, seed);
+            if let Some(solution) = solve(&game) {
+                break (game, solution);
+            }
+            seed = seed.wrapping_add(1);
+        };
+
         self.seed = seed;
-        self.game = StrategicGame::new(MAP, seed);
-        eprintln!();
-        eprintln!(
-            "🎯 Config: key_mapping={:?}, lever_order={:?}",
-            self.game.key_mapping, self.game.lever_order,
-        );
-        self.solution = solve(&self.game).expect("Puzzle should be solvable");
-        eprintln!(
-            "🎯 Solution: {} steps, {} targets, {}ms, {} nodes",
-            self.solution.actions.len(),
-            self.solution.target_sequence.len(),
-            self.solution.solve_time_ms,
-            self.solution.tree_nodes,
-        );
-        eprintln!(
-            "   Targets: {}",
-            self.solution
-                .target_sequence
-                .iter()
-                .map(|&i| {
-                    let targets = enumerate_targets(
-                        self.game.keys.len(),
-                        self.game.boxes.len(),
-                        self.game.levers.len(),
-                    );
-                    target_label(&targets[i])
-                })
-                .collect::<Vec<_>>()
-                .join(" → ")
-        );
-        eprintln!(
-            "   Boss alive: {}",
-            self.solution.states.last().is_some_and(|s| s.boss_alive)
-        );
+        self.game = game;
+        self.solution = solution;
 
         self.current = 0;
         self.anim = None;
@@ -968,12 +963,20 @@ impl App {
 
 fn main() -> io::Result<()> {
     // Solve BEFORE TUI init so debug output is visible
-    let game = StrategicGame::new(MAP, 42);
-    eprintln!(
-        "🎯 Config: key_mapping={:?}, lever_order={:?}",
-        game.key_mapping, game.lever_order,
-    );
-    let solution = solve(&game).expect("Puzzle should be solvable");
+    // Retry seeds if random layout is unsolvable
+    let mut seed = 42u64;
+    let (game, solution) = loop {
+        let game = StrategicGame::new(MAP, seed);
+        eprintln!(
+            "🎯 Config: seed={seed}, key_mapping={:?}, lever_order={:?}",
+            game.key_mapping, game.lever_order,
+        );
+        if let Some(solution) = solve(&game) {
+            break (game, solution);
+        }
+        eprintln!("   ⚠ Unsolvable layout, retrying with seed {}", seed + 1);
+        seed = seed.wrapping_add(1);
+    };
     eprintln!(
         "🎯 Solution: {} steps, {} targets, {}ms, {} nodes",
         solution.actions.len(),
@@ -1002,7 +1005,7 @@ fn main() -> io::Result<()> {
 
     // Now init TUI
     let mut terminal = setup()?;
-    let mut app = App::new(game, solution, 42);
+    let mut app = App::new(game, solution, seed);
     let res = run_with(&mut terminal, &mut app);
     teardown(&mut terminal)?;
     res
@@ -1046,7 +1049,10 @@ fn run_with(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
         {
             match handle_key(app, key.code) {
                 KeyAction::Quit => return Ok(()),
-                KeyAction::Restart => continue,
+                KeyAction::Restart => {
+                    terminal.clear()?;
+                    continue;
+                }
                 KeyAction::Continue => {}
             }
         }
@@ -1206,9 +1212,12 @@ fn cell_render(
         return (BOSS_DEAD.into(), Style::default().fg(Color::DarkGray));
     }
 
-    // Keys (uncollected)
+    // Keys (uncollected, not consumed)
     for (i, &(kr, kc)) in game.keys.iter().enumerate() {
-        if (kr, kc) == (r, c) && (state.keys_held & (1 << i)) == 0 {
+        if (kr, kc) == (r, c)
+            && (state.keys_held & (1 << i)) == 0
+            && (state.keys_used & (1 << i)) == 0
+        {
             return (KEY_EMOJI.into(), Style::default().fg(Color::Yellow));
         }
     }
@@ -1340,6 +1349,8 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
         .map(|i| {
             if (state.keys_held & (1 << i)) != 0 {
                 format!("{KEY_EMOJI}{i}")
+            } else if (state.keys_used & (1 << i)) != 0 {
+                format!("{CHECK}{i}")
             } else {
                 format!("·{i}")
             }
