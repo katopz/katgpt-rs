@@ -1,0 +1,20 @@
+[package]
+name = "microgpt-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Shared types and SIMD kernels for microgpt-rs and riir-engine"
+
+[dependencies]
+fastrand = "2"
+rayon = "1.10"
+log = "0.4"
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+
+[features]
+default = ["sparse_mlp"]
+sparse_mlp = []
+domain_latent = []
+maxsim = []
+dllm = []  # Discrete diffusion language model support (Plan 068)

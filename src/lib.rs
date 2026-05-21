@@ -11,9 +11,9 @@ pub mod hla;
 pub mod percepta;
 pub mod plot;
 pub mod pruners;
-pub mod simd;
 #[cfg(feature = "maxsim")]
 pub mod rerank;
+pub mod simd;
 #[cfg(feature = "sp_kv")]
 pub mod sp_kv;
 #[cfg(feature = "spectral_quant")]
@@ -24,6 +24,8 @@ pub mod transformer;
 #[cfg(feature = "turboquant")]
 pub mod turboquant;
 pub mod types;
+#[cfg(feature = "unit_distance")]
+pub mod unit_distance;
 
 #[cfg(debug_assertions)]
 pub mod alloc;

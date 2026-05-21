@@ -1873,6 +1873,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "microgpt-core"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "fastrand",
+ "log",
+ "rayon",
+ "serde",
+]
+
+[[package]]
 name = "microgpt-rs"
 version = "0.1.0"
 dependencies = [
@@ -1882,6 +1893,7 @@ dependencies = [
  "fastrand",
  "good_lp",
  "log",
+ "microgpt-core",
  "ordered-float",
  "papaya",
  "plotters",
