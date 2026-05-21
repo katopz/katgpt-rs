@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use super::players::GoTemplate;
 use super::replay::GoReplay;
-use super::state::{DEFAULT_KOMI, GoState};
+use super::state::GoState;
 use super::types::{GoAction, GoCell};
 use crate::pruners::game_state::GameState;
 
@@ -662,6 +662,20 @@ pub struct GoGZeroSelfPlayConfig {
     pub delta_config: GoDeltaGatedConfig,
     /// Print progress every N episodes.
     pub progress_interval: usize,
+    /// Initial komi (default: 7.5).
+    pub initial_komi: f32,
+    /// Enable adaptive komi adjustment (default: true).
+    pub adaptive_komi: bool,
+    /// Komi adjustment step size (default: 2.0).
+    pub komi_adjustment_step: f32,
+    /// Minimum allowed komi (default: 0.0).
+    pub komi_min: f32,
+    /// Maximum allowed komi (default: 20.0).
+    pub komi_max: f32,
+    /// Number of episodes between komi adjustments (default: 100).
+    pub komi_window: usize,
+    /// Use score-based rewards instead of binary win/loss (default: true).
+    pub score_based_rewards: bool,
 }
 
 impl Default for GoGZeroSelfPlayConfig {
@@ -672,6 +686,13 @@ impl Default for GoGZeroSelfPlayConfig {
             use_delta_gating: true,
             delta_config: GoDeltaGatedConfig::default(),
             progress_interval: 50,
+            initial_komi: 7.5,
+            adaptive_komi: true,
+            komi_adjustment_step: 2.0,
+            komi_min: 0.0,
+            komi_max: 20.0,
+            komi_window: 100,
+            score_based_rewards: true,
         }
     }
 }
@@ -697,6 +718,12 @@ pub struct GoGZeroSelfPlayResults {
     pub promoted_templates: Vec<GoTemplate>,
     /// Total duration.
     pub duration: std::time::Duration,
+    /// Komi adjustment history: (episode, komi).
+    pub komi_history: Vec<(usize, f32)>,
+    /// Final komi value at end of self-play.
+    pub final_komi: f32,
+    /// Average score margin across all episodes.
+    pub avg_score_margin: f32,
 }
 
 /// Run G-Zero self-play.
@@ -729,6 +756,9 @@ pub fn run_gzero_selfplay(
     let mut draws = 0usize;
     let mut total_delta = 0.0_f32;
     let mut total_moves = 0usize;
+    let mut current_komi = config.initial_komi;
+    let mut komi_history: Vec<(usize, f32)> = Vec::new();
+    let mut total_score_margin = 0.0_f32;
 
     // Per-template delta evolution: (episode, mean_delta) per template
     let mut template_delta_history: Vec<Vec<(usize, f32)>> =
@@ -738,8 +768,8 @@ pub fn run_gzero_selfplay(
         let episode_num = episode_idx + 1;
         let episode_start = Instant::now();
 
-        let mut state = GoState::new(config.board_size);
-        let mut replay = GoReplay::new(config.board_size, DEFAULT_KOMI);
+        let mut state = GoState::with_komi(config.board_size, current_komi);
+        let mut replay = GoReplay::new(config.board_size, current_komi);
         let mut move_deltas: Vec<MoveDelta> = Vec::new();
 
         // Per-episode per-template delta accumulators
@@ -829,6 +859,15 @@ pub fn run_gzero_selfplay(
             _ => draws += 1,
         }
 
+        // Score-based reward tracking
+        let score = state.score();
+        let score_margin = if config.score_based_rewards {
+            score / score.abs().max(1.0) // normalized [-1, 1]
+        } else {
+            0.0
+        };
+        total_score_margin += score_margin;
+
         // Finalize replay
         replay.finalize(winner, state.score());
 
@@ -862,6 +901,34 @@ pub fn run_gzero_selfplay(
             }
         }
 
+        // Adaptive komi adjustment
+        if config.adaptive_komi && episode_num % config.komi_window == 0 && episode_num > 0 {
+            let window_start = episode_num.saturating_sub(config.komi_window);
+            let window_episodes = &episodes[window_start..episode_num];
+            let window_black_wins = window_episodes
+                .iter()
+                .filter(|e| e.winner == Some(GoCell::Black))
+                .count();
+            let window_total = window_episodes.len().max(1);
+            let black_wr = window_black_wins as f32 / window_total as f32;
+
+            let old_komi = current_komi;
+            if black_wr > 0.7 {
+                current_komi = (current_komi + config.komi_adjustment_step).min(config.komi_max);
+            } else if black_wr < 0.3 {
+                current_komi = (current_komi - config.komi_adjustment_step).max(config.komi_min);
+            }
+
+            if old_komi != current_komi {
+                let black_wr_pct = black_wr * 100.0;
+                eprintln!(
+                    "  [komi] Episode {episode_num}: {old_komi:.1} → {current_komi:.1} (B win rate: {black_wr_pct:.0}%)"
+                );
+            }
+
+            komi_history.push((episode_num, current_komi));
+        }
+
         // Progress print
         if episode_num % config.progress_interval == 0 {
             let total_games = black_wins + white_wins + draws;
@@ -879,7 +946,7 @@ pub fn run_gzero_selfplay(
             };
             let num_promoted = absorb_compress.promoted_templates().len();
             eprintln!(
-                "  [{episode_num}/{total}] B:{black_wr:.0}% W:{white_wr:.0}% D:{draws} avg_δ={avg_delta:.3} promoted={num_promoted}",
+                "  [{episode_num}/{total}] B:{black_wr:.0}% W:{white_wr:.0}% D:{draws} komi={current_komi:.1} avg_δ={avg_delta:.3} promoted={num_promoted}",
                 total = config.num_episodes
             );
             let _ = std::io::stderr().flush();
@@ -892,6 +959,11 @@ pub fn run_gzero_selfplay(
     };
 
     let promoted = absorb_compress.promoted_templates().to_vec();
+    let avg_score_margin = if episodes.is_empty() {
+        0.0
+    } else {
+        total_score_margin / episodes.len() as f32
+    };
 
     GoGZeroSelfPlayResults {
         episodes,
@@ -903,6 +975,9 @@ pub fn run_gzero_selfplay(
         template_delta_history,
         promoted_templates: promoted,
         duration: start.elapsed(),
+        komi_history,
+        final_komi: current_komi,
+        avg_score_margin,
     }
 }
 
@@ -1037,6 +1112,13 @@ mod tests {
             use_delta_gating: false,
             delta_config: GoDeltaGatedConfig::default(),
             progress_interval: 100,
+            initial_komi: 7.5,
+            adaptive_komi: false,
+            komi_adjustment_step: 2.0,
+            komi_min: 0.0,
+            komi_max: 20.0,
+            komi_window: 100,
+            score_based_rewards: false,
         };
 
         let results = run_gzero_selfplay(&config, &mut rng);
@@ -1069,6 +1151,13 @@ mod tests {
                 max_promotions: 1,
             },
             progress_interval: 100,
+            initial_komi: 7.5,
+            adaptive_komi: false,
+            komi_adjustment_step: 2.0,
+            komi_min: 0.0,
+            komi_max: 20.0,
+            komi_window: 100,
+            score_based_rewards: false,
         };
 
         let results = run_gzero_selfplay(&config, &mut rng);

@@ -75,6 +75,11 @@ impl GoState {
         state
     }
 
+    /// Set komi to a new value.
+    pub fn set_komi(&mut self, komi: f32) {
+        self.komi = komi;
+    }
+
     /// Create a board from an existing position (for testing / API sync).
     ///
     /// `board` is a flat array of `i8` values (0=empty, 1=black, 2=white).

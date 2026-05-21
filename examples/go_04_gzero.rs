@@ -41,7 +41,13 @@ const QUICK_EPISODES: usize = 10;
 // ── Output Formatting ─────────────────────────────────────────
 
 /// Print the experiment header.
-fn print_header(num_episodes: usize, board_size: usize, delta_gating: bool) {
+fn print_header(
+    num_episodes: usize,
+    board_size: usize,
+    delta_gating: bool,
+    adaptive_komi: bool,
+    initial_komi: f32,
+) {
     println!("╔══════════════════════════════════════════════════════════════╗");
     println!(
         "║       G-Zero Self-Play — {board_size}×{board_size}                          ║",
@@ -55,6 +61,10 @@ fn print_header(num_episodes: usize, board_size: usize, delta_gating: bool) {
     println!(
         "║  Delta-gating      : {delta_gating:<6}                              ║",
         delta_gating = if delta_gating { "YES" } else { "NO" }
+    );
+    println!(
+        "║  Adaptive komi     : {adaptive_komi:<6}  (initial={initial_komi:.1})           ║",
+        adaptive_komi = if adaptive_komi { "YES" } else { "NO" }
     );
     println!("║  Templates         : 4 (CornerStar, Capture, Defend, Tenuki) ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
@@ -102,6 +112,13 @@ fn section_quick_demo(board_size: usize) {
         use_delta_gating: false,
         delta_config: GoDeltaGatedConfig::default(),
         progress_interval: 5,
+        initial_komi: 7.5,
+        adaptive_komi: false,
+        komi_adjustment_step: 2.0,
+        komi_min: 0.0,
+        komi_max: 20.0,
+        komi_window: 100,
+        score_based_rewards: false,
     };
 
     let mut rng = fastrand::Rng::with_seed(42);
@@ -164,6 +181,13 @@ fn section_full_selfplay(num_episodes: usize, board_size: usize, delta_gating: b
             max_promotions: 1,
         },
         progress_interval: DEFAULT_PROGRESS,
+        initial_komi: 7.5,
+        adaptive_komi: true,
+        komi_adjustment_step: 2.0,
+        komi_min: 0.0,
+        komi_max: 20.0,
+        komi_window: 100,
+        score_based_rewards: true,
     };
 
     println!("  Running self-play...");
@@ -233,6 +257,7 @@ fn section_full_selfplay(num_episodes: usize, board_size: usize, delta_gating: b
         "  │  Draws          : {} ({draw_rate:.1}%)              │",
         results.draws
     );
+    println!("  │  Final komi     : {:<24.1} │", results.final_komi);
     println!(
         "  │  Avg moves/game : {avg_moves:<24.1} │",
         avg_moves = avg_moves
@@ -246,6 +271,15 @@ fn section_full_selfplay(num_episodes: usize, board_size: usize, delta_gating: b
         avg_delta = results.avg_delta_per_move
     );
     println!("  └────────────────────────────────────────────┘");
+
+    // Show komi adjustments
+    if !results.komi_history.is_empty() {
+        println!();
+        println!("  Komi adjustments:");
+        for (ep, k) in &results.komi_history {
+            println!("    Episode {ep}: komi = {k:.1}");
+        }
+    }
 
     // Show promoted templates
     if !results.promoted_templates.is_empty() {
@@ -276,6 +310,13 @@ fn section_delta_evolution(num_episodes: usize, board_size: usize) {
         use_delta_gating: false, // No gating — observe raw evolution
         delta_config: GoDeltaGatedConfig::default(),
         progress_interval: num_episodes, // No intermediate prints
+        initial_komi: 7.5,
+        adaptive_komi: false,
+        komi_adjustment_step: 2.0,
+        komi_min: 0.0,
+        komi_max: 20.0,
+        komi_window: 100,
+        score_based_rewards: false,
     };
 
     println!("  Collecting δ evolution data...");
@@ -366,6 +407,13 @@ fn section_absorb_compress(board_size: usize) {
             max_promotions: 2,     // Allow up to 2 promotions
         },
         progress_interval: 200, // Only print at end
+        initial_komi: 7.5,
+        adaptive_komi: false,
+        komi_adjustment_step: 2.0,
+        komi_min: 0.0,
+        komi_max: 20.0,
+        komi_window: 100,
+        score_based_rewards: false,
     };
 
     println!("  Running with aggressive absorb-compress settings...");
@@ -432,7 +480,7 @@ fn main() {
     // Select which sections to run
     let section_set = env::var("GO_SET").ok().unwrap_or_else(|| "all".to_string());
 
-    print_header(num_episodes, board_size, delta_gating);
+    print_header(num_episodes, board_size, delta_gating, true, 7.5);
 
     match section_set.as_str() {
         "quick" => {
