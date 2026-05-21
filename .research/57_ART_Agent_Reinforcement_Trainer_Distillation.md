@@ -244,7 +244,7 @@ Tasks:
 - [ ] T4: GOAT benchmark: CISPO vs PPO-clip on bomber arena (1000 rounds)
 - [ ] T5: If GOAT passes, default to CISPO; if not, keep as opt-in feature
 
-### Plan 086 (riir-ai): SFT→RL Pipeline Config
+### Plan 091 (riir-ai): SFT→RL Pipeline Config
 
 Tasks:
 - [ ] T1: Add `SftWarmupConfig` to `riir-gpu` (SFT epochs → GRPO rounds)
