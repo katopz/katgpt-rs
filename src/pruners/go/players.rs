@@ -35,8 +35,14 @@ const HL_RECENCY_HALF_LIFE: f32 = 50.0;
 const HL_EPSILON_DECAY: f32 = 0.995;
 /// Per-move reward weight (α) for blending with game-end reward.
 /// `final_reward = α * per_move + (1-α) * game_end`
-/// α=0.3: per-move is supplementary, game-end is primary.
-const HL_PER_MOVE_ALPHA: f32 = 0.3;
+/// α=1.0: pure per-move reward, no game-end blending.
+/// Game-end binary reward drowns per-move signal when losing 86% of games
+/// (all Q-values converge to ~0.25). Per-move heuristic delta has actual signal.
+const HL_PER_MOVE_ALPHA: f32 = 1.0;
+/// Heuristic delta amplification for per-move reward.
+/// Raw delta is typically ±0.01–0.06 → reward ~0.49–0.53 (no differentiation).
+/// 10× amplification: ±0.05 → reward 0.25–0.75, ±0.1 → reward 0.0–1.0.
+const HL_DELTA_AMPLIFICATION: f32 = 10.0;
 
 // ── Board Helpers ──────────────────────────────────────────────
 
@@ -746,8 +752,9 @@ impl GoPlayer for GoHLPlayer {
                 let h_normalized = (h_after + 1.0) / 2.0; // [-1,1] → [0,1]
                 let q_val = self.bandit.q_value(cat as usize);
                 let blended = HEURISTIC_WEIGHT * h_normalized + BANDIT_WEIGHT * q_val;
-                // Per-move reward: normalized heuristic delta, [0, 1]
-                let per_move_reward = (h_after - h_before + 1.0).clamp(0.0, 2.0) / 2.0;
+                // Per-move reward: amplified heuristic delta normalized to [0, 1]
+                let delta = h_after - h_before;
+                let per_move_reward = (delta * HL_DELTA_AMPLIFICATION + 1.0).clamp(0.0, 2.0) / 2.0;
                 ((r, c), cat, blended, per_move_reward)
             })
             .collect();
@@ -1586,12 +1593,10 @@ mod tests {
             "After win with per-move shaping, some Q-values should increase"
         );
 
-        // Per-move shaping means Q-values should be > pure game-end reward (1.0)
-        // for categories whose per_move_reward was > game_end (= 1.0 for win).
-        // With α=0.3: final_reward = 0.3 * per_move + 0.7 * 1.0
-        // If per_move=0.5: final_reward = 0.85
+        // With α=1.0: final_reward = per_move (pure per-move reward).
+        // If per_move=0.5: final_reward = 0.5
         // If per_move=1.0: final_reward = 1.0
-        // Both should push Q > 0 for newly updated categories.
+        // Should push Q > 0 for newly updated categories.
         let any_positive = q_after.iter().any(|&q| q > 0.0);
         assert!(any_positive, "Some Q-values should be positive after win");
 
@@ -1614,10 +1619,10 @@ mod tests {
         }
         player2.update_outcome(false); // loss
         let q_after_loss = player2.q_values().to_vec();
-        // With loss (game_end=0): final_reward = 0.3 * per_move + 0.7 * 0.0
-        // If per_move=0.5: final_reward = 0.15 → small positive Q
+        // With α=1.0: final_reward = per_move (pure per-move reward, game_end ignored).
+        // If per_move=0.5: final_reward = 0.5 → positive Q even on loss
         // If per_move=0.0: final_reward = 0.0 → Q stays 0
-        // So some Q-values may be slightly positive even on loss (per-move shaping effect)
+        // Key insight: per-move reward provides signal even on loss (unlike binary game-end)
         let any_nonzero = q_after_loss.iter().any(|&q| q > 0.0);
         // This is the key insight: per-move shaping provides signal even on loss
         assert!(
