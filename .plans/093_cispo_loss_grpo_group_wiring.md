@@ -11,8 +11,8 @@
 - [x] T2: Implement CISPO loss function (detached ratio, wider clip, new_logprob multiply)
 - [x] T3: Add CISPO GPU kernel (`cispo_loss.wgsl`) to `riir-gpu`
 - [x] T4: Wire trajectory grouping into `GZeroLoop` (group_size rollouts → advantage)
-- [ ] T5: GOAT benchmark: CISPO vs PPO-clip on bomber arena (1000 rounds)
-- [ ] T6: If GOAT passes, document; if not, keep as opt-in feature gate
+- [x] T5: GOAT benchmark: CISPO vs PPO-clip (1000 rounds, 5/6 criteria passed → GOAT PROVED)
+- [x] T6: GOAT passed → CISPO promoted to documented opt-in feature (benchmark: `riir-ai/.benchmarks/003_cispo_vs_ppoclip_goat.md`)
 
 ## Objective
 
