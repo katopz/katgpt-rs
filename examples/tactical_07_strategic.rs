@@ -23,7 +23,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{self, Stdout};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
@@ -257,6 +257,8 @@ impl StrategicGame {
     }
 
     /// Generate deterministic key-box mapping and lever order from seed.
+    /// Guarantees non-trivial config: key_mapping is a derangement,
+    /// lever_order is never identity — forcing the solver to explore.
     fn generate_config(seed: u64) -> ([usize; 2], [usize; 3]) {
         let mut s = seed;
         let mut next = || {
@@ -270,12 +272,20 @@ impl StrategicGame {
             let j = (next() as usize) % (i + 1);
             key_mapping.swap(i, j);
         }
+        // Ensure derangement: no key opens its same-index box
+        if key_mapping[0] == 0 {
+            key_mapping.swap(0, 1);
+        }
 
         // Fisher-Yates shuffle for lever order (3 levers)
         let mut lever_order = [0, 1, 2];
         for i in (1..3).rev() {
             let j = (next() as usize) % (i + 1);
             lever_order.swap(i, j);
+        }
+        // Ensure non-identity: rotate left if identity order
+        if lever_order == [0, 1, 2] {
+            lever_order.rotate_left(1);
         }
 
         (key_mapping, lever_order)
@@ -788,23 +798,83 @@ struct AnimState {
     duration_ms: u64,
 }
 
+/// Signal from key handler to the main loop.
+enum KeyAction {
+    Continue,
+    Restart,
+    Quit,
+}
+
 struct App {
     game: StrategicGame,
     solution: Solution,
     current: usize,
     anim: Option<AnimState>,
     auto_play: bool,
+    round: u32,
+    seed: u64,
 }
 
 impl App {
-    fn new(game: StrategicGame, solution: Solution) -> Self {
+    fn new(game: StrategicGame, solution: Solution, seed: u64) -> Self {
         Self {
             game,
             solution,
             current: 0,
             anim: None,
             auto_play: false,
+            round: 1,
+            seed,
         }
+    }
+
+    /// Restart with a new random seed — new puzzle, new solve.
+    fn restart(&mut self) {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos() as u64;
+
+        self.round += 1;
+        self.seed = seed;
+        self.game = StrategicGame::new(MAP, seed);
+        eprintln!();
+        eprintln!(
+            "🎯 Config: key_mapping={:?}, lever_order={:?}",
+            self.game.key_mapping, self.game.lever_order,
+        );
+        self.solution = solve(&self.game).expect("Puzzle should be solvable");
+        eprintln!(
+            "🎯 Solution: {} steps, {} targets, {}ms, {} nodes",
+            self.solution.actions.len(),
+            self.solution.target_sequence.len(),
+            self.solution.solve_time_ms,
+            self.solution.tree_nodes,
+        );
+        eprintln!(
+            "   Targets: {}",
+            self.solution
+                .target_sequence
+                .iter()
+                .map(|&i| {
+                    let targets = enumerate_targets(
+                        self.game.keys.len(),
+                        self.game.boxes.len(),
+                        self.game.levers.len(),
+                    );
+                    target_label(&targets[i])
+                })
+                .collect::<Vec<_>>()
+                .join(" → ")
+        );
+        eprintln!(
+            "   Boss alive: {}",
+            self.solution.states.last().is_some_and(|s| s.boss_alive)
+        );
+
+        self.current = 0;
+        self.anim = None;
+        self.auto_play = false;
     }
 
     fn current_state(&self) -> &StrategicState {
@@ -823,17 +893,20 @@ impl App {
     }
 
     /// Which target in the strategy sequence is currently being pursued.
+    /// Finds the last milestone whose step ≤ current — that's the active target.
     fn current_target_idx(&self) -> Option<usize> {
+        if self.is_at_end() {
+            return Some(self.solution.milestones.len());
+        }
+        let mut pursuing = 0;
         for (i, m) in self.solution.milestones.iter().enumerate() {
-            if m.step > self.current {
-                return Some(i);
+            if m.step <= self.current {
+                pursuing = i;
+            } else {
+                break;
             }
         }
-        if self.is_at_end() {
-            Some(self.solution.milestones.len())
-        } else {
-            None
-        }
+        Some(pursuing)
     }
 
     fn bear_pos(&self) -> (usize, usize) {
@@ -929,7 +1002,8 @@ fn main() -> io::Result<()> {
 
     // Now init TUI
     let mut terminal = setup()?;
-    let res = run_with(&mut terminal, game, solution);
+    let mut app = App::new(game, solution, 42);
+    let res = run_with(&mut terminal, &mut app);
     teardown(&mut terminal)?;
     res
 }
@@ -948,15 +1022,9 @@ fn teardown(terminal: &mut Terminal<CrosstermBackend<Stdout>>) -> io::Result<()>
     Ok(())
 }
 
-fn run_with(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
-    game: StrategicGame,
-    solution: Solution,
-) -> io::Result<()> {
-    let mut app = App::new(game, solution);
-
+fn run_with(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> io::Result<()> {
     loop {
-        terminal.draw(|f| draw(f, &app))?;
+        terminal.draw(|f| draw(f, app))?;
 
         let completed = app.tick_animation();
         if completed && app.auto_play && !app.is_at_end() {
@@ -975,20 +1043,22 @@ fn run_with(
         if event::poll(timeout)?
             && let Event::Key(key) = event::read()?
             && key.kind == KeyEventKind::Press
-            && handle_key(&mut app, key.code)
         {
-            return Ok(());
+            match handle_key(app, key.code) {
+                KeyAction::Quit => return Ok(()),
+                KeyAction::Restart => continue,
+                KeyAction::Continue => {}
+            }
         }
     }
 }
 
-fn handle_key(app: &mut App, code: KeyCode) -> bool {
+fn handle_key(app: &mut App, code: KeyCode) -> KeyAction {
     match code {
-        KeyCode::Char('q') | KeyCode::Esc => return true,
+        KeyCode::Char('q') | KeyCode::Esc => return KeyAction::Quit,
         KeyCode::Char('r') => {
-            app.anim = None;
-            app.auto_play = false;
-            app.current = 0;
+            app.restart();
+            return KeyAction::Restart;
         }
         KeyCode::Right | KeyCode::Enter | KeyCode::Char('n') => {
             if app.anim.is_none() && !app.is_at_end() {
@@ -1023,7 +1093,7 @@ fn handle_key(app: &mut App, code: KeyCode) -> bool {
         }
         _ => {}
     }
-    false
+    KeyAction::Continue
 }
 
 // ── Drawing ────────────────────────────────────────────────────
@@ -1053,7 +1123,7 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
     };
     let line = Line::from(vec![
         Span::styled(
-            " 🎯 Strategic Puzzle ",
+            format!(" 🎯 Round {} ", app.round),
             Style::default()
                 .fg(Color::Yellow)
                 .add_modifier(Modifier::BOLD),
@@ -1068,7 +1138,10 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
             ),
             Style::default().fg(Color::Cyan),
         ),
-        Span::styled(" ← → Space · Q Quit ", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            " ← → Space · R New · Q Quit ",
+            Style::default().fg(Color::DarkGray),
+        ),
     ]);
     let para = Paragraph::new(line).block(Block::default().borders(Borders::ALL));
     f.render_widget(para, area);
@@ -1365,8 +1438,8 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![Span::styled(
             format!(
-                "  Config: keys={:?} levers={:?}",
-                app.game.key_mapping, app.game.lever_order
+                "  Config: seed={} keys={:?} levers={:?}",
+                app.seed, app.game.key_mapping, app.game.lever_order
             ),
             Style::default().fg(Color::DarkGray),
         )]),
