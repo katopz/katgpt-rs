@@ -2,6 +2,12 @@
 //!
 //! Provides [`rerank`] with pluggable scoring methods and [`ndcg_at`] for
 //! retrieval quality evaluation (NDCG@k). Feature-gated behind `maxsim` (Plan 080).
+//!
+//! ## Deep Manifold: Symmetric Boundary Pair (Plan 085)
+//!
+//! [`SymmetricBoundaryPair`] provides symmetric boundary conditions for BT ranking,
+//! based on Deep Manifold Part 2 (arXiv:2512.06563, §2.6.2).
+//! Feature-gated behind `bt_rank`.
 
 use crate::simd::{maxsim_score, simd_dot_f32};
 
@@ -203,6 +209,63 @@ fn cosine_rerank_score(query: &[f32], lq: usize, doc: &[f32], ld: usize, dim: us
     match q_norm < 1e-12 || d_norm < 1e-12 {
         true => 0.0,
         false => dot / (q_norm * d_norm),
+    }
+}
+
+// ── Deep Manifold: Symmetric Boundary Pair (Plan 085) ─────────
+
+/// Deep Manifold §2.6.2: Symmetric boundary pair for BT ranking.
+///
+/// When fixed-point location is unknown, symmetric boundaries
+/// (positive attraction + negative repulsion) produce the narrowest
+/// convergence corridor. BT pairwise ranking IS symmetric boundary
+/// condition application.
+///
+/// # Feature Gate
+///
+/// Behind `bt_rank` — same gate as the BT ranking infrastructure.
+#[cfg(feature = "bt_rank")]
+#[derive(Debug, Clone, Copy)]
+pub struct SymmetricBoundaryPair {
+    /// Positive (chosen) boundary strength.
+    pub attraction: f32,
+    /// Negative (rejected) boundary strength.
+    pub repulsion: f32,
+}
+
+#[cfg(feature = "bt_rank")]
+impl SymmetricBoundaryPair {
+    /// Create a new symmetric boundary pair.
+    pub fn new(attraction: f32, repulsion: f32) -> Self {
+        Self {
+            attraction,
+            repulsion,
+        }
+    }
+
+    /// Paper Eq. 73: symmetric contrastive boundary strength.
+    ///
+    /// Higher = more symmetric = better convergence corridor.
+    /// Returns 0.0 if both boundaries are zero (no signal).
+    pub fn symmetry(&self) -> f32 {
+        let sum = self.attraction + self.repulsion;
+        if sum < 1e-8 {
+            return 0.0;
+        }
+        1.0 - (self.attraction - self.repulsion).abs() / sum
+    }
+
+    /// Adaptive β based on boundary quality.
+    ///
+    /// More symmetric pairs → higher β → stronger boundary enforcement.
+    /// Asymmetric pairs → lower β → weaker enforcement (trust the signal less).
+    pub fn adaptive_beta(&self, base_beta: f32) -> f32 {
+        base_beta * (0.5 + 0.5 * self.symmetry())
+    }
+
+    /// Check if the boundary pair is well-formed (both positive).
+    pub fn is_valid(&self) -> bool {
+        self.attraction >= 0.0 && self.repulsion >= 0.0
     }
 }
 

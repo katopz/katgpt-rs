@@ -109,6 +109,20 @@ pub use cna::{
     ContrastivePairProvider, cna_discover, cna_modulate, detect_universal_neurons,
 };
 
+#[cfg(feature = "deep_manifold")]
+pub mod manifold_residual;
+
+#[cfg(feature = "deep_manifold")]
+pub use manifold_residual::{
+    KlResidualScorer, L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer,
+};
+
+#[cfg(feature = "federation")]
+pub mod boundary_alignment;
+
+#[cfg(feature = "federation")]
+pub use boundary_alignment::{BoundaryAlignment, KlBoundaryAligner};
+
 #[cfg(feature = "replaid_schedules")]
 pub mod variance_minimizer;
 
