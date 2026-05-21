@@ -26,7 +26,7 @@ pub mod types;
 // ── Re-exports ─────────────────────────────────────────────────
 
 // Types
-pub use types::{GoAction, GoCell};
+pub use types::{GoAction, GoCell, GoFrozenBandit, GoFrozenTemplates};
 
 // State
 pub use state::{DEFAULT_KOMI, GoHeuristic, GoState};

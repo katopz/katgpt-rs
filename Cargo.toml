@@ -29,6 +29,7 @@ toml = "0.8"
 [dev-dependencies]
 ratatui = "0.29"
 crossterm = "0.28"
+tempfile = "3"
 
 [features]
 default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering", "deep_manifold", "federation"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, elf_sde Plan 079, cna_steering Plan 087 GOAT proved, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6)
@@ -308,6 +309,10 @@ required-features = ["go"]
 
 [[example]]
 name = "go_07_tui"
+required-features = ["go"]
+
+[[example]]
+name = "go_08_self_play_freeze"
 required-features = ["go"]
 
 # ── Tactical AI ────────────────────────────────────────────────

@@ -39,8 +39,8 @@ use crate::speculative::types::NoScreeningPruner;
 use super::players::BomberPlayer;
 use super::players::{in_blast_zone, score_action, should_place_bomb};
 use super::{
-    ARENA_H, ARENA_W, ArenaGrid, BOMB_FUSE_TICKS, BomberAction, Cell, DEFAULT_BLAST_RANGE,
-    GameEvent, GridPos,
+    ARENA_H, ARENA_W, ArenaGrid, BOMB_FUSE_TICKS, BomberAction, BomberFrozenBandit, Cell,
+    DEFAULT_BLAST_RANGE, GameEvent, GridPos,
 };
 
 // ── Constants ──────────────────────────────────────────────────
@@ -305,6 +305,52 @@ impl GZeroPlayer {
     /// Normalized pull distribution across templates.
     pub fn template_distribution(&self) -> Vec<(BomberTemplate, f32)> {
         self.template_proposer.template_distribution()
+    }
+
+    /// Freeze cross-round bandit knowledge into a `repr(C)` struct.
+    ///
+    /// Only captures Q-values and visit counts for the 7 bomber actions.
+    /// Template/delta/absorb state is per-round and not persisted.
+    pub fn freeze(&self) -> BomberFrozenBandit {
+        BomberFrozenBandit {
+            magic: BomberFrozenBandit::MAGIC,
+            version: BomberFrozenBandit::VERSION,
+            q_values: self.q_values,
+            visits: self.visits,
+            total_pulls: self.visits.iter().sum(),
+            compressed: [0; 7], // GZero doesn't use compress flags
+            reserved: [0; 16],
+        }
+    }
+
+    /// Thaw a GZeroPlayer from frozen bandit knowledge.
+    ///
+    /// Creates a fresh player with pre-loaded Q-values/visits.
+    /// Template proposer and delta components start from scratch.
+    pub fn thaw(frozen: &BomberFrozenBandit, id: u8) -> Result<Self, String> {
+        frozen.validate()?;
+        let bandit_inner =
+            BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, NUM_TEMPLATES);
+        let delta_bandit = DeltaBanditPruner::new(bandit_inner, NUM_TEMPLATES);
+        let absorb_inner =
+            AbsorbCompressLayer::new(NoScreeningPruner, NUM_TEMPLATES, CompressConfig::default());
+        let absorb_compress =
+            DeltaGatedAbsorbCompress::new(absorb_inner, NUM_TEMPLATES, DeltaGatedConfig::default());
+        Ok(Self {
+            _id: id,
+            known_bombs: Vec::new(),
+            known_powerups: Vec::new(),
+            known_opponents: Vec::new(),
+            last_dir: None,
+            template_proposer: BomberTemplateProposer::new(),
+            delta_bandit,
+            absorb_compress,
+            delta_history: Vec::new(),
+            round_actions: Vec::new(),
+            round_template_ids: Vec::new(),
+            q_values: frozen.q_values,
+            visits: frozen.visits,
+        })
     }
 }
 

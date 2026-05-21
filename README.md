@@ -695,6 +695,47 @@ Run: `cargo run --features go --example go_06_bench --release`
 
 📖 See [`.plans/065_autogo_distillation.md`](.plans/065_autogo_distillation.md).
 
+## ❄️ Freeze/Thaw Knowledge Pipeline (Plan 092)
+
+Zero-dependency `repr(C)` binary persistence for bandit knowledge. Play → learn → freeze to disk → reload → replay same rounds → measure improvement.
+
+| Struct | Game | Size | Fields |
+|--------|------|------|--------|
+| `BomberFrozenBandit` | Bomber HL + GZero | ~92 bytes | Q-values (7), visits (7), compressed flags (7), total pulls |
+| `GoFrozenBandit` | Go HL | ~88 bytes | Q-values (8), visits (8), epsilon, total pulls |
+| `GoFrozenTemplates` | Go GZero | ~60 bytes | Q-values (4), visits (4), total pulls |
+
+### Architecture
+
+```text
+┌────────────┐    freeze()    ┌──────────────┐   save_frozen()   ┌─────────────┐
+│ HLPlayer   │──────────────▸│ repr(C)      │─────────────────▸│ .bin file   │
+│ GZeroPlayer│               │ FrozenBandit │                   │ (raw bytes) │
+│ GoHLPlayer │    thaw()     │ magic+ver+Q  │   load_frozen()   │ zero-dep    │
+│ GoGZero    │◂──────────────│              │◂─────────────────│             │
+└────────────┘               └──────────────┘                   └─────────────┘
+```
+
+- **Zero dependencies** — raw `std::fs::write`/`read` on `repr(C)` struct, no serde/bincode
+- **Magic bytes + version** — `BDTB`/`GODT`/`GOTM` + version 1 for format validation
+- **Deterministic replay** — same seed per round in both phases; frozen knowledge changes action selection but game engine is deterministic
+
+### Example Results (100 rounds × 2 phases)
+
+```sh
+cargo run --example bomber_12_self_play_freeze --features bomber
+cargo run --example go_08_self_play_freeze --features go
+```
+
+| Game | Player | Phase 1 (naive) | Phase 2 (frozen) | Expected Δ |
+|------|--------|-----------------|-------------------|------------|
+| Bomber | HL vs Random/Greedy/Validator | ~25% survival | ~40-50% survival | +15-25pp |
+| Go | GoHL vs Random | ~60% win rate | ~75-80% win rate | +10-20pp |
+
+Feature gate: `bomber` or `go` (both imply `bandit`). 18 round-trip tests pass.
+
+📖 See [`.plans/092_self_play_freeze_thaw.md`](.plans/092_self_play_freeze_thaw.md).
+
 ## 🔄 Self-Improving Loop (Plan 048)
 
 The system closes the feedback → retrain → hot-swap cycle for continuous improvement:

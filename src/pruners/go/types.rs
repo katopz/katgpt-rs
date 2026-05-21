@@ -182,3 +182,124 @@ mod tests {
         assert_eq!(GoCell::default(), GoCell::Empty);
     }
 }
+
+// ── Frozen Knowledge (Plan 092) ────────────────────────────────
+
+/// Frozen Go bandit state for disk persistence (category-level learning).
+///
+/// Captures Q-values and visits for the 8 GoMoveCategory arms.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GoFrozenBandit {
+    /// Magic bytes: b"GODT" (GO DaTa)
+    pub magic: [u8; 4],
+    /// Format version: 1
+    pub version: u32,
+    /// Q-value estimates per move category (8 categories)
+    pub q_values: [f32; 8],
+    /// Visit counts per category
+    pub visits: [u32; 8],
+    /// Total bandit pulls
+    pub total_pulls: u32,
+    /// Current exploration rate ε
+    pub epsilon: f32,
+    /// Reserved for future use
+    pub reserved: [u8; 12],
+}
+
+impl GoFrozenBandit {
+    /// Magic bytes for Go bandit format.
+    pub const MAGIC: [u8; 4] = *b"GODT";
+    /// Current format version.
+    pub const VERSION: u32 = 1;
+
+    /// Create a new empty frozen bandit.
+    pub fn new_empty() -> Self {
+        Self {
+            magic: Self::MAGIC,
+            version: Self::VERSION,
+            q_values: [0.0; 8],
+            visits: [0; 8],
+            total_pulls: 0,
+            epsilon: 0.15,
+            reserved: [0; 12],
+        }
+    }
+
+    /// Validate magic bytes and version.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.magic != Self::MAGIC {
+            return Err(format!(
+                "Invalid magic: expected {:?}, got {:?}",
+                Self::MAGIC,
+                self.magic
+            ));
+        }
+        if self.version != Self::VERSION {
+            return Err(format!(
+                "Unsupported version: expected {}, got {}",
+                Self::VERSION,
+                self.version
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Frozen Go template state for disk persistence (G-Zero template learning).
+///
+/// Captures Q-values and visits for the 4 GoTemplate arms.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GoFrozenTemplates {
+    /// Magic bytes: b"GOTM" (GO TeMplates)
+    pub magic: [u8; 4],
+    /// Format version: 1
+    pub version: u32,
+    /// Q-value estimates per template (4 templates)
+    pub q_values: [f32; 4],
+    /// Visit counts per template
+    pub visits: [u32; 4],
+    /// Total bandit pulls
+    pub total_pulls: u32,
+    /// Reserved for future use
+    pub reserved: [u8; 16],
+}
+
+impl GoFrozenTemplates {
+    /// Magic bytes for Go template format.
+    pub const MAGIC: [u8; 4] = *b"GOTM";
+    /// Current format version.
+    pub const VERSION: u32 = 1;
+
+    /// Create a new empty frozen template.
+    pub fn new_empty() -> Self {
+        Self {
+            magic: Self::MAGIC,
+            version: Self::VERSION,
+            q_values: [0.0; 4],
+            visits: [0; 4],
+            total_pulls: 0,
+            reserved: [0; 16],
+        }
+    }
+
+    /// Validate magic bytes and version.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.magic != Self::MAGIC {
+            return Err(format!(
+                "Invalid magic: expected {:?}, got {:?}",
+                Self::MAGIC,
+                self.magic
+            ));
+        }
+        if self.version != Self::VERSION {
+            return Err(format!(
+                "Unsupported version: expected {}, got {}",
+                Self::VERSION,
+                self.version
+            ));
+        }
+        Ok(())
+    }
+}

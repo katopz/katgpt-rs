@@ -22,7 +22,7 @@ use crate::pruners::{SharedBanditStats, TrialRecord};
 #[cfg(feature = "bandit")]
 use crate::pruners::trial_log::SharedTrialLog;
 
-use super::{ArenaGrid, BomberAction, GameEvent, GridPos};
+use super::{ArenaGrid, BomberAction, BomberFrozenBandit, GameEvent, GridPos};
 
 #[cfg(feature = "bomber-wasm")]
 use crate::types::{LoraAdapter, lora_apply};
@@ -1445,6 +1445,50 @@ impl HLPlayer {
                 .collect::<Vec<_>>()
                 .join(" "),
         )
+    }
+
+    /// Freeze bandit knowledge into a `repr(C)` struct for disk persistence.
+    ///
+    /// Only captures learned knowledge (Q-values, visits, compressed flags).
+    /// Transient game state (bombs, positions, opponents) is NOT included.
+    pub fn freeze(&self) -> BomberFrozenBandit {
+        let mut compressed = [0u8; 7];
+        for (i, &c) in self.compressed.iter().enumerate() {
+            compressed[i] = if c { 1 } else { 0 };
+        }
+        BomberFrozenBandit {
+            magic: BomberFrozenBandit::MAGIC,
+            version: BomberFrozenBandit::VERSION,
+            q_values: self.q_values,
+            visits: self.visits,
+            total_pulls: self.total_pulls,
+            compressed,
+            reserved: [0; 16],
+        }
+    }
+
+    /// Thaw a player from frozen bandit knowledge.
+    ///
+    /// Creates a fresh player (no transient state) with pre-loaded bandit knowledge.
+    /// Validates magic bytes and version before reconstruction.
+    pub fn thaw(frozen: &BomberFrozenBandit, id: u8) -> Result<Self, String> {
+        frozen.validate()?;
+        Ok(Self {
+            _id: id,
+            known_bombs: Vec::new(),
+            known_powerups: Vec::new(),
+            known_opponents: Vec::new(),
+            q_values: frozen.q_values,
+            visits: frozen.visits,
+            total_pulls: frozen.total_pulls,
+            compressed: frozen.compressed.map(|c| c != 0),
+            round_actions: Vec::new(),
+            last_dir: None,
+            #[cfg(feature = "bandit")]
+            shared_stats: None,
+            #[cfg(feature = "bandit")]
+            shared_log: None,
+        })
     }
 }
 

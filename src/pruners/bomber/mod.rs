@@ -354,6 +354,72 @@ pub enum GameEvent {
     },
 }
 
+// ── Frozen Knowledge (Plan 092) ────────────────────────────────
+
+/// Frozen bomber bandit state for disk persistence.
+///
+/// Captures only learned knowledge (Q-values, visits, compressed flags).
+/// Transient game state (bombs, positions, opponents) is NOT persisted.
+///
+/// Uses `u8` instead of `bool` for compressed flags to avoid `repr(C)` padding issues.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BomberFrozenBandit {
+    /// Magic bytes: b"BDTB" (Bomber DaTa Bandit)
+    pub magic: [u8; 4],
+    /// Format version: 1
+    pub version: u32,
+    /// Q-value estimates per action (7 actions: Up/Down/Left/Right/Bomb/Wait/Detonate)
+    pub q_values: [f32; 7],
+    /// Visit counts per action
+    pub visits: [u32; 7],
+    /// Total bandit pulls across all actions
+    pub total_pulls: u32,
+    /// Compressed flags per action (0=active, 1=compressed)
+    pub compressed: [u8; 7],
+    /// Reserved for future use
+    pub reserved: [u8; 16],
+}
+
+impl BomberFrozenBandit {
+    /// Magic bytes for bomber bandit format.
+    pub const MAGIC: [u8; 4] = *b"BDTB";
+    /// Current format version.
+    pub const VERSION: u32 = 1;
+
+    /// Create a new empty frozen bandit with magic and version set.
+    pub fn new_empty() -> Self {
+        Self {
+            magic: Self::MAGIC,
+            version: Self::VERSION,
+            q_values: [0.0; 7],
+            visits: [0; 7],
+            total_pulls: 0,
+            compressed: [0; 7],
+            reserved: [0; 16],
+        }
+    }
+
+    /// Validate magic bytes and version.
+    pub fn validate(&self) -> Result<(), String> {
+        if self.magic != Self::MAGIC {
+            return Err(format!(
+                "Invalid magic: expected {:?}, got {:?}",
+                Self::MAGIC,
+                self.magic
+            ));
+        }
+        if self.version != Self::VERSION {
+            return Err(format!(
+                "Unsupported version: expected {}, got {}",
+                Self::VERSION,
+                self.version
+            ));
+        }
+        Ok(())
+    }
+}
+
 // ── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]

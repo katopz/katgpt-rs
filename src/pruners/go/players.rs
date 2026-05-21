@@ -14,7 +14,7 @@ use std::cmp::Ordering;
 use fastrand::Rng;
 
 use super::state::{GoHeuristic, GoState};
-use super::types::{GoAction, GoCell};
+use super::types::{GoAction, GoCell, GoFrozenBandit, GoFrozenTemplates};
 use crate::pruners::bandit::BanditStats;
 use crate::pruners::game_state::{GameState, StateHeuristic, mcts_search};
 
@@ -670,6 +670,48 @@ impl GoHLPlayer {
     pub fn epsilon(&self) -> f32 {
         self.epsilon
     }
+
+    /// Freeze bandit knowledge into a `repr(C)` struct for disk persistence.
+    pub fn freeze(&self) -> GoFrozenBandit {
+        let mut q_values = [0.0f32; 8];
+        let mut visits = [0u32; 8];
+        let bandit_q = self.bandit.q_values();
+        let bandit_v = self.bandit.visits();
+        let len = 8.min(bandit_q.len()).min(bandit_v.len());
+        q_values[..len].copy_from_slice(&bandit_q[..len]);
+        visits[..len].copy_from_slice(&bandit_v[..len]);
+        GoFrozenBandit {
+            magic: GoFrozenBandit::MAGIC,
+            version: GoFrozenBandit::VERSION,
+            q_values,
+            visits,
+            total_pulls: self.bandit.total_pulls(),
+            epsilon: self.epsilon,
+            reserved: [0; 12],
+        }
+    }
+
+    /// Thaw a GoHLPlayer from frozen bandit knowledge.
+    ///
+    /// Creates a fresh player with pre-loaded bandit knowledge.
+    /// Category trace is cleared (transient per-game state).
+    pub fn thaw(frozen: &GoFrozenBandit) -> Result<Self, String> {
+        frozen.validate()?;
+        let mut player = Self::new();
+        // Replay frozen knowledge into the bandit by setting visits then Q-values.
+        // BanditStats uses incremental mean, so calling update(arm, reward) with
+        // the target Q-value converges to that value after N identical updates.
+        for i in 0..8 {
+            let v = frozen.visits[i];
+            if v > 0 {
+                for _ in 0..v {
+                    player.bandit.update(i, frozen.q_values[i]);
+                }
+            }
+        }
+        player.epsilon = frozen.epsilon;
+        Ok(player)
+    }
 }
 
 impl Default for GoHLPlayer {
@@ -875,6 +917,46 @@ impl GoGZeroPlayer {
     /// Best template by UCB1 score.
     pub fn best_template(&self) -> GoTemplate {
         self.select_template()
+    }
+
+    /// Freeze template bandit knowledge into a `repr(C)` struct.
+    pub fn freeze(&self) -> GoFrozenTemplates {
+        let mut q_values = [0.0f32; 4];
+        let mut visits = [0u32; 4];
+        let sq = self.q_values();
+        let sv = self.template_visits();
+        let len = 4.min(sq.len()).min(sv.len());
+        q_values[..len].copy_from_slice(&sq[..len]);
+        visits[..len].copy_from_slice(&sv[..len]);
+        GoFrozenTemplates {
+            magic: GoFrozenTemplates::MAGIC,
+            version: GoFrozenTemplates::VERSION,
+            q_values,
+            visits,
+            total_pulls: self.total_pulls(),
+            reserved: [0; 16],
+        }
+    }
+
+    /// Thaw a GoGZeroPlayer from frozen template knowledge.
+    ///
+    /// Creates a fresh player with pre-loaded template stats.
+    /// Last template and own move are transient (cleared).
+    pub fn thaw(frozen: &GoFrozenTemplates) -> Result<Self, String> {
+        frozen.validate()?;
+        let mut player = Self::new();
+        // Replay frozen knowledge into template stats.
+        // TemplateStats uses incremental mean — identical reward updates converge
+        // to that value after N calls.
+        for i in 0..4 {
+            let v = frozen.visits[i];
+            if v > 0 {
+                for _ in 0..v {
+                    player.stats.update(i, frozen.q_values[i]);
+                }
+            }
+        }
+        Ok(player)
     }
 
     fn select_template(&self) -> GoTemplate {

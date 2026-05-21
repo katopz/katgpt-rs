@@ -20,6 +20,8 @@ pub mod bomber;
 
 pub mod game_state; // Always compiled — GameState trait has no bevy_ecs dependency (G1 fix, Plan 065)
 
+pub mod freeze;
+
 #[cfg(feature = "sudoku")]
 pub mod sudoku_pruner;
 
@@ -173,6 +175,8 @@ pub use bomber::{
 
 pub use game_state::{ActionSpaceLog, StateHeuristic, mcts_search};
 
+pub use freeze::{load_frozen, save_frozen};
+
 #[cfg(all(feature = "game_state", feature = "bomber"))]
 pub use game_state::{BombSnapshot, BomberHeuristic, BomberState, PlayerSnapshot};
 
@@ -203,10 +207,12 @@ pub use go::{
 #[cfg(any(feature = "bomber", feature = "fft", feature = "tes_loop"))]
 pub mod arena;
 
+#[cfg(all(any(feature = "bomber", feature = "fft"), not(feature = "go")))]
+pub use arena::GameResult;
+#[cfg(all(any(feature = "bomber", feature = "fft"), feature = "go"))]
+pub use arena::GameResult as ArenaGameResult;
 #[cfg(any(feature = "bomber", feature = "fft"))]
-pub use arena::{
-    ArenaKind, EloCalculator, GameResult, Leaderboard, Matchup, MatchupResult, Ranking,
-};
+pub use arena::{ArenaKind, EloCalculator, Leaderboard, Matchup, MatchupResult, Ranking};
 
 #[cfg(feature = "tes_loop")]
 pub use arena::TrajectoryPruner;
