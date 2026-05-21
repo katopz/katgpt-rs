@@ -1,10 +1,11 @@
 //! Plan 092: Self-Play Freeze/Thaw Knowledge Pipeline.
 //!
-//! Demonstrates GoHLPlayer freeze/thaw:
-//! 1. Phase 1 (LEARN): 100 games, naive GoHLPlayer (Black) vs GoRandomPlayer (White)
-//! 2. Freeze bandit knowledge to disk
-//! 3. Phase 2 (BATTLE): 100 games, thawed GoHLPlayer (Black) vs naive GoHLPlayer (White)
-//! 4. Compare Phase 1 vs Phase 2 results
+//! Demonstrates GoHLPlayer freeze/thaw with meaningful opponent:
+//! 1. Phase 1 (LEARN):    200 games, naive GoHL vs Validator — bandit learns from strong opponent
+//! 2. Phase 2 (FROZEN):   200 games, frozen GoHL vs Validator — test knowledge
+//! 3. Phase 3 (BASELINE): 200 games, naive GoHL vs Validator — no knowledge
+//!
+//! Phase 2 vs Phase 3 delta shows whether frozen knowledge transfers.
 //!
 //! ```sh
 //! cargo run --features go --example go_08_self_play_freeze
@@ -15,7 +16,7 @@ use std::path::Path;
 use fastrand::Rng;
 
 use microgpt_rs::pruners::go::{
-    GoAction, GoCell, GoFrozenBandit, GoHLPlayer, GoPlayer, GoRandomPlayer, GoState,
+    GoAction, GoCell, GoFrozenBandit, GoHLPlayer, GoPlayer, GoState, GoValidatorPlayer,
 };
 use microgpt_rs::pruners::{load_frozen, save_frozen};
 
@@ -44,8 +45,8 @@ struct GameResult {
 
 /// Play a single game between two players with deterministic RNG.
 fn play_game(
-    player1: &mut dyn GoPlayer,
-    player2: &mut dyn GoPlayer,
+    black: &mut dyn GoPlayer,
+    white: &mut dyn GoPlayer,
     board_size: usize,
     seed: u64,
 ) -> GameResult {
@@ -64,8 +65,8 @@ fn play_game(
         }
 
         let action = match state.to_play {
-            GoCell::Black => player1.select_move(&state, &legal_moves, &mut rng),
-            GoCell::White => player2.select_move(&state, &legal_moves, &mut rng),
+            GoCell::Black => black.select_move(&state, &legal_moves, &mut rng),
+            GoCell::White => white.select_move(&state, &legal_moves, &mut rng),
             GoCell::Empty => GoAction::Pass,
         };
 
@@ -98,76 +99,84 @@ fn play_game(
 
 // ── Phase Runner ───────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 struct PhaseStats {
+    /// Wins for the player we're tracking (first arg to run_phase).
     wins: usize,
     total_score_delta: f32,
     total_moves: usize,
 }
 
-/// Run ROUNDS games, returning aggregate stats.
-/// `update_hl` controls whether HL bandit gets updated after each game.
+/// Run ROUNDS games, alternating colors, returning aggregate stats.
+/// `track_player` is 0=black, 1=white — which arg to track wins for.
+/// `update_hl` optionally updates HL bandit after each game (learning phase).
 fn run_phase(
-    black_player: &mut dyn GoPlayer,
-    white_player: &mut dyn GoPlayer,
+    player_a: &mut dyn GoPlayer,
+    player_b: &mut dyn GoPlayer,
     update_hl: bool,
 ) -> PhaseStats {
-    let mut wins = 0usize;
-    let mut total_score_delta = 0.0f32;
-    let mut total_moves = 0usize;
+    let mut stats = PhaseStats::default();
 
     for round in 0..ROUNDS {
-        // Deterministic seed per round
         let seed = BASE_SEED.wrapping_add(round as u64);
 
-        // Reset trace between games
-        black_player.reset();
-        white_player.reset();
+        player_a.reset();
+        player_b.reset();
 
-        let result = play_game(black_player, white_player, BOARD_SIZE, seed);
+        // Alternate colors for fairness
+        let result = if round % 2 == 0 {
+            play_game(player_a, player_b, BOARD_SIZE, seed)
+        } else {
+            let r = play_game(player_b, player_a, BOARD_SIZE, seed);
+            // Flip perspective — player_a was White
+            // When White wins: score < 0, so -score > 0 → a_won = true
+            // Draw: score == 0 → a_won = false
+            GameResult {
+                black_won: r.score_delta < 0.0,
+                score_delta: -r.score_delta,
+                total_moves: r.total_moves,
+            }
+        };
 
         if result.black_won {
-            wins += 1;
+            stats.wins += 1;
         }
-        total_score_delta += result.score_delta;
-        total_moves += result.total_moves;
+        stats.total_score_delta += result.score_delta;
+        stats.total_moves += result.total_moves;
 
-        // Update HL bandit after each game (Phase 1 only)
+        // Update HL bandit after each game (Phase 1 learning only)
         if update_hl {
-            if let Some(hl) = black_player.as_any_mut().downcast_mut::<GoHLPlayer>() {
+            if let Some(hl) = player_a.as_any_mut().downcast_mut::<GoHLPlayer>() {
                 hl.update_outcome(result.black_won);
             }
         }
     }
 
-    PhaseStats {
-        wins,
-        total_score_delta,
-        total_moves,
-    }
+    stats
 }
 
 // ── Output Formatting ─────────────────────────────────────────
 
 fn print_header() {
     println!(
-        "╔═══ Self-Play Freeze/Thaw — Go {board_size}×{board_size} ({rounds} rounds × 2 phases) ═════╗",
+        "╔═══ Freeze/Thaw — Go {board_size}×{board_size} ({rounds} rounds × 3 phases) ═══════╗",
         board_size = BOARD_SIZE,
         rounds = ROUNDS,
     );
-    println!("║  Phase 1: LEARN   (naive GoHL) vs Random                       ║");
-    println!("║  Phase 2: BATTLE  (frozen GoHL) vs naive GoHL                  ║");
-    println!("╚═════════════════════════════════════════════════════════════════╝");
+    println!("║  Phase 1 LEARN:    naive GoHL vs Validator  (bandit learns)  ║");
+    println!("║  Phase 2 FROZEN:   frozen GoHL vs Validator  (test it)      ║");
+    println!("║  Phase 3 BASELINE: naive GoHL vs Validator   (no knowledge)  ║");
+    println!("╚════════════════════════════════════════════════════════════════╝");
     println!();
 }
 
-fn print_phase_results(label: &str, stats: &PhaseStats) {
+fn print_phase_results(label: &str, opponent: &str, stats: &PhaseStats) {
     let win_pct = stats.wins as f32 / ROUNDS as f32 * 100.0;
     let avg_delta = stats.total_score_delta / ROUNDS as f32;
     let avg_moves = stats.total_moves as f32 / ROUNDS as f32;
-    println!("  {label} Results:");
+    println!("  {label} Results (vs {opponent}):");
     println!(
-        "    Black Wins: {wins}/{rounds} ({pct:.1}%)  |  Avg Score Delta: {delta:+.1}  |  Avg Moves: {moves:.0}",
+        "    Wins: {wins}/{rounds} ({pct:.1}%)  |  Avg Score: {delta:+.1}  |  Avg Moves: {moves:.0}",
         wins = stats.wins,
         rounds = ROUNDS,
         pct = win_pct,
@@ -187,85 +196,73 @@ fn print_q_values(frozen: &GoFrozenBandit) {
     println!("  Total pulls: {}", frozen.total_pulls);
 }
 
-fn print_comparison(p1: &PhaseStats, p2: &PhaseStats) {
-    let p1_win_pct = p1.wins as f32 / ROUNDS as f32 * 100.0;
-    let p2_win_pct = p2.wins as f32 / ROUNDS as f32 * 100.0;
-    let p1_avg_delta = p1.total_score_delta / ROUNDS as f32;
-    let p2_avg_delta = p2.total_score_delta / ROUNDS as f32;
+fn print_verdict(frozen_stats: &PhaseStats, baseline_stats: &PhaseStats) {
+    let frozen_pct = frozen_stats.wins as f32 / ROUNDS as f32 * 100.0;
+    let baseline_pct = baseline_stats.wins as f32 / ROUNDS as f32 * 100.0;
+    let frozen_delta = frozen_stats.total_score_delta / ROUNDS as f32;
+    let baseline_delta = baseline_stats.total_score_delta / ROUNDS as f32;
 
-    let win_delta = p2_win_pct - p1_win_pct;
-    let score_delta = p2_avg_delta - p1_avg_delta;
+    let win_diff = frozen_pct - baseline_pct;
+    let score_diff = frozen_delta - baseline_delta;
 
-    let win_icon = match win_delta > 0.0 {
-        true => "✅",
-        false => "⚠️",
+    let win_icon = if win_diff > 0.0 {
+        "✅"
+    } else if win_diff == 0.0 {
+        "➖"
+    } else {
+        "❌"
     };
-    let score_icon = match score_delta > 0.0 {
-        true => "✅",
-        false => "⚠️",
+    let score_icon = if score_diff > 0.0 {
+        "✅"
+    } else if score_diff == 0.0 {
+        "➖"
+    } else {
+        "❌"
     };
 
-    println!("━━━ COMPARISON ━━━");
-    println!("  Metric          Phase 1    Phase 2    Δ");
+    println!("━━━ COMPARISON: Frozen vs Baseline (both vs Validator) ━━━");
+    println!();
+    println!("  Metric          Frozen    Baseline      Δ");
+    println!("  ──────────────────────────────────────────────────");
     println!(
-        "  Win Rate        {p1:>5.1}%    {p2:>5.1}%    {delta:+.1}pp  {icon}",
-        p1 = p1_win_pct,
-        p2 = p2_win_pct,
-        delta = win_delta,
+        "  Win Rate        {f:>5.1}%    {b:>5.1}%    {d:+.1}pp  {icon}",
+        f = frozen_pct,
+        b = baseline_pct,
+        d = win_diff,
         icon = win_icon,
     );
     println!(
-        "  Avg Δ Score     {p1:>+6.1}    {p2:>+6.1}    {delta:+.1}     {icon}",
-        p1 = p1_avg_delta,
-        p2 = p2_avg_delta,
-        delta = score_delta,
+        "  Avg Score       {f:>+6.1}    {b:>+6.1}    {d:+.1}     {icon}",
+        f = frozen_delta,
+        b = baseline_delta,
+        d = score_diff,
         icon = score_icon,
     );
     println!();
-    println!("  Phase 1: naive GoHL (Black) vs Random (White)");
-    println!("  Phase 2: frozen GoHL (Black) vs naive GoHL (White)");
-}
 
-fn print_verdict(p2: &PhaseStats) {
-    let win_pct = p2.wins as f32 / ROUNDS as f32 * 100.0;
-    let avg_delta = p2.total_score_delta / ROUNDS as f32;
-
-    println!("━━━ VERDICT ━━━");
-    println!();
-    println!("  Phase 1 vs Phase 2 comparison is misleading — different opponents.");
-    println!("  The meaningful metric is Phase 2 alone:");
-    println!();
-
-    if win_pct > 50.0 {
+    if win_diff > 5.0 {
         println!(
-            "  ✅ Frozen GoHL beats naive GoHL: {wins}/{rounds} ({pct:.0}%) as Black",
-            wins = p2.wins,
-            rounds = ROUNDS,
-            pct = win_pct,
+            "  ✅ Frozen knowledge helps! +{diff:.0}pp win rate vs Validator.",
+            diff = win_diff,
         );
-        println!("     Avg score margin: {delta:+.1}", delta = avg_delta,);
-    } else if win_pct >= 35.0 {
+    } else if win_diff > 0.0 {
         println!(
-            "  🟡 Frozen GoHL holds own vs naive GoHL: {wins}/{rounds} ({pct:.0}%) as Black",
-            wins = p2.wins,
-            rounds = ROUNDS,
-            pct = win_pct,
+            "  🟡 Marginal improvement: +{diff:.0}pp win rate. May need more learning rounds.",
+            diff = win_diff,
         );
-        println!("     Avg score margin: {delta:+.1}", delta = avg_delta,);
-        println!();
-        println!("     Against an equal-strength opponent, ~50% is expected.");
-        println!("     40% with frozen knowledge vs 0% base rate (random) shows transfer.");
+    } else if win_diff == 0.0 {
+        println!("  ➖ No difference — frozen knowledge has no measurable effect.");
+        println!("     Both GoHL players use the same category priors, so the bandit");
+        println!("     needs more rounds or finer granularity to matter vs Validator.");
     } else {
         println!(
-            "  ❌ Frozen GoHL underperforms: {wins}/{rounds} ({pct:.0}%) as Black",
-            wins = p2.wins,
-            rounds = ROUNDS,
-            pct = win_pct,
+            "  ❌ Frozen knowledge hurts: {diff:.0}pp worse. Possible overfitting.",
+            diff = win_diff,
         );
     }
 
     println!();
-    println!("  Frozen file: {path} (92 bytes)", path = FREEZE_PATH,);
+    println!("  Frozen file: {path} (92 bytes)", path = FREEZE_PATH);
 }
 
 // ── Main ───────────────────────────────────────────────────────
@@ -273,16 +270,14 @@ fn print_verdict(p2: &PhaseStats) {
 fn main() {
     print_header();
 
-    // ── Phase 1: LEARN ────────────────────────────────────────
+    // ── Phase 1: LEARN (HL vs Validator, bandit learns) ───────
     println!("━━━ Phase 1: LEARN ({rounds} rounds) ━━━", rounds = ROUNDS);
-    println!("  Matchup: naive GoHL (Black) vs Random (White)");
 
     let mut hl_player = GoHLPlayer::new();
-    let mut random_player = GoRandomPlayer;
+    let mut validator_learn = GoValidatorPlayer;
 
-    let p1_stats = run_phase(&mut hl_player, &mut random_player, true);
-    print_phase_results("Phase 1", &p1_stats);
-    println!();
+    let p1_stats = run_phase(&mut hl_player, &mut validator_learn, true);
+    print_phase_results("Phase 1", "Validator", &p1_stats);
 
     // Freeze knowledge
     let frozen = hl_player.freeze();
@@ -297,14 +292,12 @@ fn main() {
     print_q_values(&frozen);
     println!();
 
-    // ── Phase 2: BATTLE ───────────────────────────────────────
+    // ── Phase 2: FROZEN (thawed HL vs Validator) ──────────────
     println!(
-        "━━━ Phase 2: BATTLE ({rounds} rounds, frozen vs naive) ━━━",
+        "━━━ Phase 2: FROZEN ({rounds} rounds, thawed HL vs Validator) ━━━",
         rounds = ROUNDS,
     );
-    println!("  Matchup: frozen GoHL (Black) vs naive GoHL (White)");
 
-    // Load frozen knowledge
     let loaded: GoFrozenBandit = match load_frozen(path) {
         Ok(f) => f,
         Err(e) => {
@@ -313,13 +306,11 @@ fn main() {
         }
     };
 
-    // Validate
     if let Err(e) = loaded.validate() {
         eprintln!("  ERROR: Frozen knowledge validation failed: {e}");
         std::process::exit(1);
     }
 
-    // Thaw into new player (frozen knowledge)
     let mut thawed_hl = match GoHLPlayer::thaw(&loaded) {
         Ok(p) => p,
         Err(e) => {
@@ -327,16 +318,26 @@ fn main() {
             std::process::exit(1);
         }
     };
+    let mut validator = GoValidatorPlayer;
 
-    // Fresh naive HL opponent (no knowledge)
+    let p2_stats = run_phase(&mut thawed_hl, &mut validator, false);
+    print_phase_results("Phase 2", "Validator", &p2_stats);
+    println!();
+
+    // ── Phase 3: BASELINE (naive HL vs Validator) ─────────────
+    println!(
+        "━━━ Phase 3: BASELINE ({rounds} rounds, naive HL vs Validator) ━━━",
+        rounds = ROUNDS,
+    );
+
     let mut naive_hl = GoHLPlayer::new();
+    let mut validator2 = GoValidatorPlayer;
 
-    let p2_stats = run_phase(&mut thawed_hl, &mut naive_hl, false);
-    print_phase_results("Phase 2", &p2_stats);
+    let p3_stats = run_phase(&mut naive_hl, &mut validator2, false);
+    print_phase_results("Phase 3", "Validator", &p3_stats);
     println!();
 
-    // ── Comparison & Verdict ──────────────────────────────────
-    print_comparison(&p1_stats, &p2_stats);
+    // ── Verdict ───────────────────────────────────────────────
     println!();
-    print_verdict(&p2_stats);
+    print_verdict(&p2_stats, &p3_stats);
 }
