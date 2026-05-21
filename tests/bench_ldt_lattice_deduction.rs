@@ -66,6 +66,17 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             sp_kv_predictor_lr_mult: 0.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            model_arch: microgpt_rs::types::ModelArchitecture::Generic,
+            rms_norm_eps: 1e-5,
+            rms_norm_offset: false,
+            tied_embeddings: false,
+            use_rope: false,
+            rope_theta: 10000.0,
+            post_norm: false,
+            attn_logit_softcapping: 0.0,
+            final_logit_softcapping: 0.0,
+            weight_dtype: microgpt_rs::types::WeightDtype::F32,
+            d2f_block_size: 8,
         }
     }
 

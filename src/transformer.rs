@@ -634,6 +634,62 @@ fn depth_route(
     }
 }
 
+/// Compute delta routing softmax weights without modifying residual (Plan 097 T8).
+///
+/// Returns the routing weight distribution over sources for inspection.
+/// Used by GOAT sharpness tests to verify max_weight ≥ 0.4 in deep layers.
+#[cfg(feature = "delta_routing")]
+#[allow(clippy::needless_range_loop)]
+pub fn depth_route_weights(
+    sources: &[&[f32]],   // N delta vectors, each [n_embd]
+    query_weight: &[f32], // [n_embd] per-layer query
+    norm_weight: &[f32],  // [n_embd] RMSNorm gamma
+    n_embd: usize,
+) -> Vec<f32> {
+    let n_sources = sources.len();
+    if n_sources == 0 {
+        return Vec::new();
+    }
+
+    let eps = 1e-5f32;
+    let mut logits = vec![0.0f32; n_sources];
+    let mut max_logit = f32::NEG_INFINITY;
+
+    // 1. RMSNorm each source and compute dot product with query
+    for (i, &src) in sources.iter().enumerate() {
+        let mut sum_sq = 0.0f32;
+        for d in 0..n_embd {
+            sum_sq += src[d] * src[d];
+        }
+        let rms = (sum_sq / n_embd as f32 + eps).sqrt();
+        let inv_rms = 1.0 / rms;
+
+        let mut logit = 0.0f32;
+        for d in 0..n_embd {
+            let normalized = src[d] * inv_rms * norm_weight[d];
+            logit += query_weight[d] * normalized;
+        }
+
+        logits[i] = logit;
+        if logit > max_logit {
+            max_logit = logit;
+        }
+    }
+
+    // 2. Softmax
+    let mut sum_exp = 0.0f32;
+    for logit in &mut logits {
+        *logit = (*logit - max_logit).exp();
+        sum_exp += *logit;
+    }
+    let inv_sum = 1.0 / sum_exp;
+    for logit in &mut logits {
+        *logit *= inv_sum;
+    }
+
+    logits
+}
+
 /// Internal forward with optional LoRA and domain latent (writer LoRA during decode).
 /// Zero-alloc forward pass. Writes logits into `ctx.logits` and returns &mut to it.
 /// Multi-layer: RMSNorm → Attn → Res → RMSNorm → MLP → Res per layer, then LM Head.
