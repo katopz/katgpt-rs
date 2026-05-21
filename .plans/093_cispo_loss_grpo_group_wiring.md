@@ -9,8 +9,8 @@
 
 - [x] T1: Add `GrpoLossVariant` enum (`PpoClip`, `Cispo`) to `loss_grpo.rs`
 - [x] T2: Implement CISPO loss function (detached ratio, wider clip, new_logprob multiply)
-- [ ] T3: Add CISPO GPU kernel (`cispo_loss.wgsl`) to `riir-gpu`
-- [ ] T4: Wire trajectory grouping into `GZeroLoop` (group_size rollouts → advantage)
+- [x] T3: Add CISPO GPU kernel (`cispo_loss.wgsl`) to `riir-gpu`
+- [x] T4: Wire trajectory grouping into `GZeroLoop` (group_size rollouts → advantage)
 - [ ] T5: GOAT benchmark: CISPO vs PPO-clip on bomber arena (1000 rounds)
 - [ ] T6: If GOAT passes, document; if not, keep as opt-in feature gate
 
