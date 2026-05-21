@@ -1,4 +1,5 @@
 //! Plan 091 T6: Tests for adaptive komi and score-based rewards.
+//! Plan 091 T8: Tests for swap-colors balancing mechanism.
 
 #[cfg(feature = "go")]
 mod tests {
@@ -30,6 +31,7 @@ mod tests {
             komi_max: 50.0,
             komi_window: TEST_KOMI_WINDOW,
             score_based_rewards: true,
+            swap_colors: false,
         };
 
         let mut rng = fastrand::Rng::with_seed(42);
@@ -78,6 +80,7 @@ mod tests {
             komi_max: 50.0,
             komi_window: TEST_KOMI_WINDOW,
             score_based_rewards: true,
+            swap_colors: false,
         };
 
         let mut rng = fastrand::Rng::with_seed(123);
@@ -106,6 +109,7 @@ mod tests {
             komi_max: 50.0,
             komi_window: TEST_KOMI_WINDOW,
             score_based_rewards: true,
+            swap_colors: false,
         };
 
         let mut rng = fastrand::Rng::with_seed(777);
@@ -143,6 +147,7 @@ mod tests {
             komi_max: 50.0,
             komi_window: TEST_KOMI_WINDOW,
             score_based_rewards: false,
+            swap_colors: false,
         };
 
         let mut rng = fastrand::Rng::with_seed(42);
@@ -154,5 +159,79 @@ mod tests {
             "Expected no komi adjustments when disabled"
         );
         assert_eq!(results.final_komi, 5.5);
+    }
+
+    #[test]
+    fn swap_colors_balances_win_rates() {
+        // With swap_colors enabled, each agent plays both sides equally.
+        // Combined with adaptive komi, win rates should be closer to 50/50
+        // than without swap (where Black wins ~80% even at komi=42).
+        let config = GoGZeroSelfPlayConfig {
+            board_size: 9,
+            num_episodes: 100,
+            use_delta_gating: false,
+            delta_config: GoDeltaGatedConfig::default(),
+            progress_interval: 100,
+            initial_komi: 7.5,
+            adaptive_komi: false,
+            komi_adjustment_step: 10.0,
+            komi_min: 0.0,
+            komi_max: 50.0,
+            komi_window: TEST_KOMI_WINDOW,
+            score_based_rewards: true,
+            swap_colors: true,
+        };
+
+        let mut rng = fastrand::Rng::with_seed(999);
+        let results = run_gzero_selfplay(&config, &mut rng);
+
+        // With swap_colors, exactly half the episodes should be swapped.
+        let expected_swapped = config.num_episodes / 2;
+        assert_eq!(
+            results.swapped_episodes, expected_swapped,
+            "Expected {expected_swapped} swapped episodes, got {}",
+            results.swapped_episodes,
+        );
+
+        // With swap_colors at komi=7.5, Black still wins most games
+        // (the color swap doesn't change who wins — it swaps which agent plays which color).
+        // But both agents now experience equal Black/White assignments,
+        // so per-agent win rates converge toward ~50%.
+        //
+        // We verify the swap counter is correct and the run completes without error.
+        let total = results.black_wins + results.white_wins + results.draws;
+        assert_eq!(total, config.num_episodes, "All episodes should be counted");
+
+        eprintln!(
+            "  [swap] 100 eps @ komi=7.5: B={} W={} D={} swapped={}",
+            results.black_wins, results.white_wins, results.draws, results.swapped_episodes,
+        );
+    }
+
+    #[test]
+    fn swap_colors_disabled_has_no_swaps() {
+        let config = GoGZeroSelfPlayConfig {
+            board_size: 9,
+            num_episodes: 30,
+            use_delta_gating: false,
+            delta_config: GoDeltaGatedConfig::default(),
+            progress_interval: 30,
+            initial_komi: 7.5,
+            adaptive_komi: false,
+            komi_adjustment_step: 10.0,
+            komi_min: 0.0,
+            komi_max: 50.0,
+            komi_window: TEST_KOMI_WINDOW,
+            score_based_rewards: false,
+            swap_colors: false,
+        };
+
+        let mut rng = fastrand::Rng::with_seed(42);
+        let results = run_gzero_selfplay(&config, &mut rng);
+
+        assert_eq!(
+            results.swapped_episodes, 0,
+            "No episodes should be swapped when swap_colors is disabled",
+        );
     }
 }

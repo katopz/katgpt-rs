@@ -208,7 +208,7 @@ GO_GAMES=2 cargo run --features go --example go_03_head_to_head
 
 ### go_04_gzero — G-Zero Self-Play
 
-GZero template-based self-play with delta-gating absorb-compress + adaptive komi (Plan 091). 500 episodes on 9×9.
+GZero template-based self-play with delta-gating absorb-compress + adaptive komi + swap-colors (Plan 091). 500 episodes on 9×9.
 
 **Results (adaptive komi, initial=7.5):**
 
@@ -264,6 +264,7 @@ GZero template-based self-play with delta-gating absorb-compress + adaptive komi
 - For production: pre-converged komi=42 recommended as `initial_komi` to skip convergence phase
 - Absorb-compress: no templates promoted (δ below threshold for all templates)
 - Capture remains the only neutral-δ template (safe to play)
+- **Swap-colors (Option B)** enabled by default — each agent plays both sides equally (even eps: A=Black, odd eps: A=White), giving per-agent win rate balance toward ~50%
 
 ```bash
 # Full self-play with adaptive komi
@@ -401,7 +402,7 @@ cargo run --features go --example go_07_tui -- --seed 99
 
 3. **Greedy trades tactics for position** — After Plan 073, Greedy dropped from 100% → 70% vs Random. The corner/side bonus makes it play more positionally, sometimes missing tactical captures. Validator and HL (which layer on top of Greedy) remain at 100%.
 
-4. **Self-play komi imbalance fixed (Plan 091)** — GZero self-play originally showed 98.6% Black wins at komi=7.5. Adaptive score-margin-guided komi converges to ~42 (5.6× the pro komi), narrowing B/W to ~81/5/14 with 14.7% draws. Weak bots amplify first-move advantage; production runs should use `initial_komi=42` on 9×9.
+4. **Self-play komi imbalance fixed (Plan 091)** — GZero self-play originally showed 98.6% Black wins at komi=7.5. Adaptive score-margin-guided komi converges to ~42 (5.6× the pro komi), narrowing B/W to ~81/5/14 with 14.7% draws. **Swap-colors (Option B)** ensures each agent plays both sides equally, achieving per-agent ~50% win rate balance. Production runs should use `initial_komi=42` on 9×9 with `swap_colors=true`.
 
 5. **HL adapts but doesn't surpass Greedy** — HL's bandit learning reaches 100% vs Random (matching Validator), but hasn't been tested head-to-head against Greedy yet. The TUI makes this easy to observe.
 

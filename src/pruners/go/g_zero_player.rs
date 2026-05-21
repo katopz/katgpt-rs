@@ -757,8 +757,8 @@ pub fn run_gzero_selfplay(
     let start = Instant::now();
     let max_moves = config.board_size * config.board_size * MAX_MOVES_FACTOR;
 
-    let mut black_proposer = GoTemplateProposer::new();
-    let mut white_proposer = GoTemplateProposer::new();
+    let mut proposer_a = GoTemplateProposer::new();
+    let mut proposer_b = GoTemplateProposer::new();
     let mut absorb_compress = GoDeltaGatedAbsorbCompress::new(config.delta_config.clone());
 
     let mut episodes: Vec<GoSelfPlayResult> = Vec::with_capacity(config.num_episodes);
@@ -770,6 +770,7 @@ pub fn run_gzero_selfplay(
     let mut current_komi = config.initial_komi;
     let mut komi_history: Vec<(usize, f32)> = Vec::new();
     let mut total_score_margin = 0.0_f32;
+    let mut swapped_episodes = 0usize;
     // Raw (unnormalized) scores per episode for score-margin-guided komi.
     let mut episode_raw_scores: Vec<f32> = Vec::with_capacity(config.num_episodes);
 
@@ -792,6 +793,12 @@ pub fn run_gzero_selfplay(
 
         let mut moves_played = 0usize;
 
+        // Swap colors on odd episodes so each agent plays both sides equally.
+        let swapped = config.swap_colors && episode_idx % 2 == 1;
+        if swapped {
+            swapped_episodes += 1;
+        }
+
         while !state.is_terminal() && moves_played < max_moves {
             let legal_moves = state.legal_moves();
 
@@ -804,11 +811,12 @@ pub fn run_gzero_selfplay(
                 continue;
             }
 
-            // Select proposer based on current player
-            let proposer = match state.to_play {
-                GoCell::Black => &mut black_proposer,
-                GoCell::White => &mut white_proposer,
-                GoCell::Empty => continue,
+            // Select proposer based on current player and swap state.
+            // When swapped: Agent A plays White, Agent B plays Black.
+            let proposer = match (swapped, state.to_play) {
+                (false, GoCell::Black) | (true, GoCell::White) => &mut proposer_a,
+                (false, GoCell::White) | (true, GoCell::Black) => &mut proposer_b,
+                (_, GoCell::Empty) => continue,
             };
 
             // Select template via UCB1
@@ -1003,7 +1011,7 @@ pub fn run_gzero_selfplay(
         komi_history,
         final_komi: current_komi,
         avg_score_margin,
-        swapped_episodes: 0,
+        swapped_episodes,
     }
 }
 
@@ -1145,6 +1153,7 @@ mod tests {
             komi_max: 20.0,
             komi_window: 100,
             score_based_rewards: false,
+            swap_colors: false,
         };
 
         let results = run_gzero_selfplay(&config, &mut rng);
@@ -1184,6 +1193,7 @@ mod tests {
             komi_max: 20.0,
             komi_window: 100,
             score_based_rewards: false,
+            swap_colors: false,
         };
 
         let results = run_gzero_selfplay(&config, &mut rng);

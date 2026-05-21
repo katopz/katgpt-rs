@@ -119,6 +119,7 @@ fn section_quick_demo(board_size: usize) {
         komi_max: 20.0,
         komi_window: 100,
         score_based_rewards: false,
+        swap_colors: false,
     };
 
     let mut rng = fastrand::Rng::with_seed(42);
@@ -188,6 +189,7 @@ fn section_full_selfplay(num_episodes: usize, board_size: usize, delta_gating: b
         komi_max: 50.0,
         komi_window: 50,
         score_based_rewards: true,
+        swap_colors: true,
     };
 
     println!("  Running self-play...");
@@ -317,6 +319,7 @@ fn section_delta_evolution(num_episodes: usize, board_size: usize) {
         komi_max: 20.0,
         komi_window: 100,
         score_based_rewards: false,
+        swap_colors: false,
     };
 
     println!("  Collecting δ evolution data...");
@@ -414,6 +417,7 @@ fn section_absorb_compress(board_size: usize) {
         komi_max: 20.0,
         komi_window: 100,
         score_based_rewards: false,
+        swap_colors: false,
     };
 
     println!("  Running with aggressive absorb-compress settings...");

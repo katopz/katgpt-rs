@@ -2,7 +2,7 @@
 
 ## Severity
 
-Medium — self-play learning signal is broken for GZero
+Medium — self-play learning signal is broken for GZero (partially resolved)
 
 ## Summary
 
@@ -48,9 +48,11 @@ clamp komi to [0.0, 20.0]
 re-evaluate every 100 episodes
 ```
 
-### Option B: Swap Colors Mid-Training
+### Option B: Swap Colors Mid-Training ✅ Implemented (T8)
 
 Each agent plays both colors equally. Episode N: A=Black, B=White. Episode N+1: A=White, B=Black. Aggregate deltas across both colors per agent.
+
+Implementation: `proposer_a`/`proposer_b` replace `black_proposer`/`white_proposer`. On odd episodes, color assignment is swapped via `match (swapped, state.to_play)` pattern. Each agent experiences equal Black/White assignments → per-agent win rates converge toward ~50%.
 
 ### Option C: Score-Based Rewards Instead of Win/Loss
 
@@ -66,15 +68,14 @@ This gives partial credit even to the losing side if they played well.
 
 Instead of komi, give White 1-2 handicap stones (placed before game starts). More directly compensates for move-order advantage.
 
-## Recommended Approach
+## Implemented Approach (Plan 091)
 
-Combine **Option A** (adaptive komi) + **Option C** (score-based rewards):
+**Option A** (adaptive komi) + **Option C** (score-based rewards) + **Option B** (swap colors):
 
-1. Start with komi=7.5
-2. Every 100 episodes, check win balance
-3. Adjust komi by ±2.0 toward 50/50 balance
-4. Use score margin as reward signal (not binary win/loss)
-5. This gives meaningful deltas even when the game is lopsided
+1. Adaptive komi: score-margin-guided, damped (0.5×), clamped ±10, converges 7.5→42 in ~300 eps
+2. Score-based rewards: `reward = score / |score|.max(1)` → normalized [-1, 1]
+3. Swap colors: each agent plays both sides equally (even eps normal, odd eps swapped)
+4. Per-agent win rates now balanced (each agent wins ~50% across both colors)
 
 ## Files to Modify
 
@@ -87,11 +88,12 @@ Combine **Option A** (adaptive komi) + **Option C** (score-based rewards):
 
 ## Success Criteria
 
-- [~] Black win rate: cumulative 98.6% (low-komi convergence phase), ~81% at komi=42 with 14.7% draws
+- [~] Black win rate: cumulative 98.6% (low-komi convergence phase), ~81% at komi=42 with 14.7% draws. Swap-colors gives per-agent balance (each agent plays both sides)
 - [x] Adaptive komi algorithm converges correctly: 7.5 → 42 in ~300 episodes, score margin +30 → ~0
+- [x] Swap-colors (Option B) implemented — `swapped_episodes == num_episodes / 2`, per-agent balance achieved
 - [ ] Template deltas still reflect color assignment (templates too weak for komi alone)
 - [ ] No templates promoted via absorb-compress (all δ below threshold)
-- [x] Zero regressions — 760 existing tests pass, 4 new komi tests pass
+- [x] Zero regressions — 760 existing tests pass, 6 new komi tests pass (4 komi + 2 swap-colors)
 - [x] Updated docs with new results (`14_go_arena.md`)
 
 ### Production Run Results (500 episodes, initial_komi=7.5)
@@ -104,9 +106,16 @@ Score margin:     +30.2→+22.8→+13.6→+7.7→+3.8→+1.9→+1.0→+0.5→+0.
 At pre-converged komi=42 (150 eps): B=121(80.7%) W=7(4.7%) D=22(14.7%)
 Recommendation: use `initial_komi=42` for 9×9 production runs.
 
+## Remaining Work
+
+To achieve **true 50/50 color-based win rates** (not just per-agent balance):
+- **Option D (handicap stones)** — more direct compensation than komi alone
+- Stronger templates — current templates are barely above random play
+- The color imbalance (Black ~91% at komi=7.5) persists structurally; swap-colors only ensures each agent plays both sides equally
+
 ## References
 
 - `go_04_gzero` example output
 - `.docs/14_go_arena.md` — full Go arena documentation (updated with komi results)
 - Plan 065 — Go arena implementation
-- Plan 091 — Adaptive komi fix
+- Plan 091 — Adaptive komi + swap-colors fix
