@@ -15,6 +15,9 @@ pub mod flow_pruner;
 #[cfg(feature = "dllm")]
 pub mod d2f;
 
+#[cfg(feature = "tri_mode")]
+pub mod d2f_verifier;
+
 #[cfg(feature = "lattice_deduction")]
 pub mod alpha;
 
@@ -51,6 +54,9 @@ pub use types::{
 #[cfg(feature = "elf_sde")]
 pub use types::EarlyStopGate;
 
+#[cfg(feature = "tri_mode")]
+pub use types::SelfSpecConfig;
+
 // ── LDT Lattice Deduction Transformer re-exports (Plan 088) ──
 #[cfg(feature = "lattice_deduction")]
 pub use alpha::{AlphaTarget, alpha_intersect, is_consistent};
@@ -86,6 +92,10 @@ pub use d2f::{
     d2f_decode_block_with_prompt_with, d2f_decode_block_with_target,
     d2f_decode_block_with_target_with,
 };
+
+// ── D2F Drafter Verifier Re-exports (Plan 089, Tri-Mode) ───
+#[cfg(feature = "tri_mode")]
+pub use d2f_verifier::D2fDrafterVerifier;
 
 #[cfg(feature = "sudoku")]
 pub use crate::pruners::SudokuPruner;

@@ -506,6 +506,9 @@ pub enum DecodeStrategy {
     /// Block-parallel discrete diffusion forcing (D2F).
     #[cfg(feature = "dllm")]
     DiscreteDiffusion,
+    /// D2F drafts → AR verifies (self-speculation / tri-mode).
+    #[cfg(feature = "tri_mode")]
+    SelfSpeculation,
 }
 
 impl DecodeStrategy {
@@ -517,6 +520,10 @@ impl DecodeStrategy {
     /// - Otherwise → Autoregressive
     #[allow(unused_variables)]
     pub fn recommend(block_size: usize, n_tokens: usize, has_draft_model: bool) -> Self {
+        #[cfg(feature = "tri_mode")]
+        if has_draft_model && n_tokens >= block_size {
+            return Self::SelfSpeculation;
+        }
         #[cfg(feature = "dllm")]
         if n_tokens >= block_size {
             return Self::DiscreteDiffusion;
@@ -846,6 +853,29 @@ fn compute_entropy(probs: &[f32]) -> f32 {
         .filter(|&&p| p > 0.0)
         .map(|&p| -p * p.ln())
         .sum()
+}
+
+// ── Self-Speculation Config (Plan 089, Tri-Mode) ────────────
+
+/// Config for D2F-drafter self-speculation mode.
+/// Wraps D2F decode config + draft width for speculative step.
+#[cfg(feature = "tri_mode")]
+#[derive(Debug, Clone)]
+pub struct SelfSpecConfig {
+    /// Number of tokens per D2F draft block (default: 8).
+    pub draft_width: usize,
+    /// D2F decode parameters.
+    pub d2f_config: crate::speculative::d2f::D2fDecodeConfig,
+}
+
+#[cfg(feature = "tri_mode")]
+impl Default for SelfSpecConfig {
+    fn default() -> Self {
+        Self {
+            draft_width: 8,
+            d2f_config: crate::speculative::d2f::D2fDecodeConfig::default(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1210,11 +1240,19 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "dllm")]
+    #[cfg(all(feature = "dllm", not(feature = "tri_mode")))]
     fn test_decode_strategy_recommend_discrete_diffusion_over_speculative() {
-        // D2F takes priority over speculative when enough tokens
+        // D2F takes priority over speculative when enough tokens (dllm-only)
         let strategy = DecodeStrategy::recommend(4, 8, true);
         assert_eq!(strategy, DecodeStrategy::DiscreteDiffusion);
+    }
+
+    #[test]
+    #[cfg(feature = "tri_mode")]
+    fn test_decode_strategy_recommend_self_speculation_over_discrete_diffusion() {
+        // With tri_mode + draft model + enough tokens → SelfSpeculation wins
+        let strategy = DecodeStrategy::recommend(4, 8, true);
+        assert_eq!(strategy, DecodeStrategy::SelfSpeculation);
     }
 
     #[test]
@@ -1234,6 +1272,14 @@ mod tests {
         let b = a; // Copy, not move
         let _c = a; // Still valid after copy
         assert_eq!(a, b);
+
+        #[cfg(feature = "tri_mode")]
+        {
+            let s = DecodeStrategy::SelfSpeculation;
+            let s2 = s;
+            let _s3 = s;
+            assert_eq!(s, s2);
+        }
     }
 
     // ── EarlyStopGate Tests (Plan 083) ────────────────────────

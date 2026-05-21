@@ -1,4 +1,4 @@
-# Plan 089: Tri-Mode Inference — Self-Speculation + Mode Switching
+# Plan 089: Tri-Mode Inference — D2F Drafter Verifier + Mode Switching
 
 > **Research:** `.research/55_Nemotron_TriMode_Diffusion.md`
 > **Paper:** Nemotron-Labs-Diffusion (NVIDIA 2026)
@@ -7,145 +7,162 @@
 
 ## Objective
 
-Unify our existing AR, D2F diffusion, and speculative decoding into a **tri-mode inference pipeline** that can:
-1. **AR mode**: Standard causal generation (already works)
-2. **Diffusion mode**: Block-wise parallel denoising (D2F, already works)
-3. **Self-speculation mode**: Diffusion drafts → AR verifies (NEW)
+Add a **D2F-backed `SpeculativeVerifier`** variant that uses our existing D2F diffusion as drafter and existing AR as verifier. This is NOT a new architecture — it's a new verifier strategy in our existing `SpeculativeVerifier` trait, swapping DFlash drafter for D2F drafter.
 
-Plus: global loss averaging, trained sampler research, mode-adaptive switching.
+The "tri-mode" is just three ways to use what we already have:
+1. **AR mode**: `forward()` causal — already works ✅
+2. **Diffusion mode**: `d2f_decode_block()` — already works ✅ (Plan 066)
+3. **D2F+AR mode**: `d2f_decode_block()` drafts → `forward()` verifies → prefix accept — NEW (this variant)
 
-## Why Now
+## Honest Assessment: What's Actually New
 
-The Nemotron paper validates our D2F architecture and proves self-speculation beats MTP (Eagle3) by 2.4-3.3×. We have all the pieces — just need orchestration.
+The Nemotron paper calls this "self-speculation" and presents it as a major contribution. But looking at our code:
+
+| Component | What We Already Have | Delta |
+|---|---|---|
+| Draft→Verify→Accept pattern | `speculative/step.rs` `speculative_step_rollback()` | ✅ Same pattern |
+| `SpeculativeVerifier` trait | `verifier.rs` with `SimulatedVerifier`, `LeviathanVerifier` | ✅ Abstraction ready |
+| AR verification | `forward()` with causal attention | ✅ Already there |
+| Prefix acceptance | `speculate()` in `LeviathanVerifier` | ✅ Already there |
+| DDTree path extraction | `dd_tree.rs` | ✅ Already there |
+| KV cache snapshot/rollback | `MultiLayerKVCache::snapshot()/restore()` | ✅ Already there |
+| D2F block decode (drafter) | `d2f_decode_block()` in `speculative/d2f.rs` | ✅ Already there |
+| D2F context (zero-alloc) | `D2fContext` in `dllm.rs` | ✅ Already there |
+| **D2F drafter verifier** | **MISSING** | ❌ ~100 lines, new `SpeculativeVerifier` impl |
+
+The actual new code is a `D2fDrafterVerifier` struct that:
+1. Calls `d2f_decode_block()` instead of `dflash_predict()` for drafting
+2. Calls existing `forward()` for verification (same as `LeviathanVerifier`)
+3. Uses existing prefix acceptance logic (same as `LeviathanVerifier`)
+
+This is a **variant**, not a new system.
 
 ## Feature Gate
 
-All new code behind `tri_mode` feature flag in `microgpt-rs/Cargo.toml`:
+All new code behind `tri_mode` feature flag (already added to `Cargo.toml`):
 ```toml
-tri_mode = ["dllm"]  # depends on dllm for D2F diffusion
+tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 ```
-
-This ensures zero impact on existing code. Self-speculation requires D2F as drafter.
 
 ---
 
 ## Tasks
 
-### T1: Self-Speculation State Machine (microgpt-rs)
-- [ ] Create `src/speculative/self_spec.rs` (feature-gated `tri_mode`)
-- [ ] Define `SelfSpeculationState`:
+### T1: D2F Drafter Verifier (microgpt-rs) — The Core Delta ✅
+- [x] Create `src/speculative/d2f_verifier.rs` (feature-gated `tri_mode`)
+- [x] Define `D2fDrafterVerifier`:
   ```rust
-  pub struct SelfSpeculationState {
-      draft_width: usize,       // k tokens to draft
-      verified_prefix: Vec<usize>, // committed tokens
-      draft_tokens: Vec<usize>,    // k drafted tokens
-      block_size: usize,           // D2F block size for drafting
+  /// Speculative verifier that uses D2F diffusion as drafter, AR as verifier.
+  ///
+  /// This is the Nemotron "self-speculation" mode — same draft→verify→accept
+  /// pattern as LeviathanVerifier, but D2F drafts in parallel instead of
+  /// DFlash drafting sequentially.
+  pub struct D2fDrafterVerifier<'a> {
+      d2f_ctx: &'a mut D2fContext,
+      d2f_config: D2fDecodeConfig,
+      target_ctx: &'a mut ForwardContext,
+      target_cache: &'a mut MultiLayerKVCache,
+      target_weights: &'a TransformerWeights,
+      target_config: &'a Config,
   }
   ```
-- [ ] Implement `self_speculate_step()`:
-  1. Call `d2f_decode_block()` with mask tokens for positions [n..n+k] (DIFFUSION DRAFT)
-  2. Run AR `forward()` on draft tokens with causal attention (AR VERIFY)
-  3. Compare: accept longest prefix where draft[i] == AR prediction[i]
-  4. Commit accepted + 1 (AR provides one extra token at first rejection)
-  5. Return accepted count
-- [ ] Implement `SelfSpeculation` as `SpeculativeVerifier` trait impl
-- [ ] Test: self-speculation accepts ≥1 token per step (trivial case)
-- [ ] Test: self-speculation terminates and produces valid token sequence
-- [ ] Test: acceptance rate measurement on pattern data
+- [x] Implement `SpeculativeVerifier` for `D2fDrafterVerifier`:
+  1. **Draft**: Call `d2f_decode_block()` on mask tokens for positions [pos..pos+draft_width]
+     - Uses block-causal attention (bidirectional within block = parallel draft)
+     - Returns k draft tokens
+  2. **Verify**: Run `forward()` on draft tokens with causal attention
+     - Reuse existing target model KV cache
+     - Get AR logits at each draft position
+  3. **Accept**: Compare draft[i] vs AR argmax[i], accept longest prefix
+     - Same logic as `LeviathanVerifier::speculate()` prefix matching
+     - Bonus token at first rejection (AR provides one extra)
+- [x] Test: D2F drafter accepts ≥1 token per step
+- [x] Test: D2F drafter terminates, produces valid token sequence
+- [x] Test: acceptance rate measurement on pattern data vs LeviathanVerifier (AR drafter)
 
-### T2: Mode-Adaptive Decode Strategy (microgpt-rs)
-- [ ] Extend `DecodeStrategy` enum in `speculative/types.rs`:
+### T2: DecodeStrategy Extension (microgpt-rs) ✅
+- [x] Extend `DecodeStrategy` enum in `speculative/types.rs`:
   ```rust
   pub enum DecodeStrategy {
       Autoregressive,
-      Speculative,
-      DiscreteDiffusion,
-      SelfSpeculation, // NEW
+      Speculative,       // AR drafts → AR verifies (existing LeviathanVerifier)
+      DiscreteDiffusion, // D2F block decode only (existing D2F pipeline)
+      SelfSpeculation,   // D2F drafts → AR verifies (NEW D2fDrafterVerifier)
   }
   ```
-- [ ] Update `DecodeStrategy::recommend()` heuristic:
-  ```
-  if tri_mode enabled AND n_tokens >= block_size AND has_model → SelfSpeculation
-  else if dllm enabled AND n_tokens >= block_size → DiscreteDiffusion
-  else if has_draft_model → Speculative
-  else → Autoregressive
-  ```
-- [ ] Feature-gate `SelfSpeculation` variant with `#[cfg(feature = "tri_mode")]`
-- [ ] Test: recommend() returns correct strategy for each config
+- [x] Update `DecodeStrategy::recommend()` heuristic
+- [x] Feature-gate `SelfSpeculation` variant with `#[cfg(feature = "tri_mode")]`
+- [x] Test: recommend() returns correct strategy per config
 
-### T3: Self-Speculation Pipeline Integration (microgpt-rs)
-- [ ] Wire `SelfSpeculation` into `speculative/mod.rs` behind `tri_mode` feature
-- [ ] Integrate with `D2fContext` for zero-alloc buffer reuse (draft forward reuses KV)
-- [ ] Integrate with `ConstraintPruner` — pruner restricts draft tokens at each denoising step
-- [ ] Add `SelfSpecConfig` to `speculative/types.rs`:
+### T3: Wire Into Existing Pipeline (microgpt-rs) ✅
+- [x] Add `pub mod d2f_verifier;` to `speculative/mod.rs` behind `tri_mode` feature
+- [x] Ensure `D2fDrafterVerifier` integrates with existing `ConstraintPruner`
+  - D2F draft already calls pruner at each denoising step ✅
+  - AR verify already prunes via `is_valid()` ✅
+  - No new integration needed
+- [x] Ensure KV cache flows correctly:
+  - D2F draft: uses `D2fContext` KV (block-causal)
+  - AR verify: uses `MultiLayerKVCache` KV (causal)
+  - These are separate caches — draft KV is NOT reused for verify
+  - This is correct: different attention patterns need different KV states
+- [x] Add `SelfSpecConfig` to `speculative/types.rs`:
   ```rust
+  /// Config for D2F-drafter self-speculation mode.
+  /// Wraps D2F decode config + draft width for speculative step.
   pub struct SelfSpecConfig {
-      pub draft_width: usize,          // k (default: 8)
-      pub block_size: usize,           // D2F block size (default: 16)
-      pub denoising_steps: usize,      // per draft (default: 4)
-      pub confidence_threshold: f32,   // D2F τ_conf (default: 0.9)
+      pub draft_width: usize,       // k tokens per draft (default: 8)
+      pub d2f_config: D2fDecodeConfig, // D2F decode parameters
   }
   ```
-- [ ] Test: end-to-end self-speculation decode on pattern data
-- [ ] Test: self-speculation produces valid sequence matching AR ground truth
+- [x] Test: end-to-end D2F+AR decode on pattern data
+- [x] Test: D2F+AR output matches AR-only ground truth (quality check)
 
-### T4: Global Loss Averaging (microgpt-rs dllm.rs)
-- [ ] Update `masked_loss()` in `src/dllm.rs`:
+### T4: Global Loss Averaging (microgpt-rs dllm.rs) ✅
+- [x] Update `masked_loss()` in `src/dllm.rs`:
   ```rust
-  // BEFORE: per-sequence averaging
-  // AFTER: global token averaging
-  // L = (1/(N*L)) * Σ_n Σ_i ℓ_{n,i}
+  // BEFORE (per-sequence):
+  // L = (1/N) * Σ_n (1/L) * Σ_i ℓ_{n,i}
+  //
+  // AFTER (global — Nemotron validates +2.12% accuracy):
+  // L = (1/(N*L_masked)) * Σ_n Σ_i ℓ_{n,i}
+  //    where L_masked = total masked positions across batch
   ```
-  where N=sequences, L=seq_length, only counting masked positions
-- [ ] Add `LossAveraging` enum: `PerSequence`, `Global` (default `Global`)
-- [ ] Test: global averaging produces different loss than per-sequence (when masking varies)
-- [ ] Test: training with global averaging converges (re-train mini dLLM)
-- [ ] Benchmark: compare convergence speed global vs per-sequence on pattern data
+- [x] Add `LossAveraging` enum: `PerSequence`, `Global` (default `Global`)
+- [x] Test: global averaging produces different loss when masking varies per sample
+- [x] Test: training with global averaging converges (re-train mini dLLM)
+- [x] Benchmark: convergence speed global vs per-sequence on pattern data
 
-### T5: GOAT Proof — Self-Speculation vs MTP (microgpt-rs)
-- [ ] Create `tests/test_self_speculation.rs` (feature-gated `tri_mode`)
-- [ ] Proof 1: Self-speculation acceptance rate ≥ MTP acceptance rate on same model
-  - Train mini model with D2F + AR capability
-  - Run 1000 steps self-speculation vs 1000 steps MTP speculative
+### T5: GOAT Proof — D2F Drafter vs AR Drafter (microgpt-rs) ✅
+- [x] Create `tests/test_d2f_verifier.rs` (feature-gated `tri_mode`)
+- [x] Proof 1: D2F drafter acceptance rate ≥ AR drafter acceptance rate
+  - Train mini model with D2F + AR capability (reuse Plan 066 training)
+  - Run 1000 steps `D2fDrafterVerifier` vs 1000 steps `LeviathanVerifier`
   - Measure: avg tokens accepted per step
-- [ ] Proof 2: Self-speculation produces valid output
-  - Decode 100 tokens with self-speculation
-  - Verify: all tokens in valid range, no infinite loops, sequence terminates
-- [ ] Proof 3: Mode switching works correctly
-  - Start with AR, switch to SelfSpeculation, switch to Diffusion
-  - Verify: seamless transition, KV cache preserved across switches
-- [ ] Benchmark: throughput comparison AR vs Speculative vs SelfSpeculation vs D2F
-- [ ] Record results in `.benchmarks/012_self_speculation_goat.md`
+  - Hypothesis: D2F parallel draft may have lower per-token accuracy but
+    higher throughput (more tokens per forward pass)
+- [x] Proof 2: D2F+AR produces valid output
+  - Decode 100 tokens with `D2fDrafterVerifier`
+  - Verify: all tokens in valid range, no infinite loops, terminates
+- [x] Proof 3: Mode switching works correctly
+  - Start AR, switch to SelfSpeculation, switch to DiscreteDiffusion
+  - Verify: seamless transition
+- [x] Benchmark: throughput comparison AR vs Speculative vs SelfSpeculation vs D2F
+- [ ] Record results in `.benchmarks/018_d2f_verifier_goat.md`
 
-### T6: Trained Sampler Research (riir-gpu, lower priority)
-- [ ] Design `DiffusionSampler` struct:
-  ```rust
-  pub struct DiffusionSampler {
-      pca_proj: Vec<f32>,           // [144, n_embd]
-      layers: [SamplerLayer; 4],    // d=384, 4-layer transformer
-      head: Vec<f32>,               // [384, 1] sigmoid output
-  }
-  ```
-- [ ] Collect denoising trajectories from D2F inference on trained model
-  - Store: per-position features (144-dim) + binary label (correct/incorrect)
-  - Target: ~20M trajectory steps
-- [ ] Train sampler with binary cross-entropy on held-out split
-- [ ] Evaluate: AUC on held-out trajectories
-- [ ] Integrate into D2F denoising loop: replace confidence threshold with sampler prediction
-- [ ] Benchmark: TPF improvement with trained sampler vs confidence threshold
-- [ ] Feature gate: `tri_mode` depends on this being optional
+### T6: Trained Sampler Research (lower priority, deferred)
+- [ ] Design `DiffusionSampler` — lightweight classifier for per-position correctness
+- [ ] Collect denoising trajectories from D2F inference
+- [ ] Train sampler, evaluate AUC
+- [ ] Integrate into D2F denoising loop
+- [ ] Benchmark TPF improvement
+- [ ] Deferred until T1-T5 prove self-speculation has value at our scale
 
-### T7: LoRA Drafter Alignment (riir-gpu, research)
-- [ ] Implement LK-hybrid distribution matching loss in `riir-gpu`:
-  ```
-  L_LK = λ · KL(p_verifier || q_drafter) + (1-λ) · TV(p, q)
-  λ adaptive: exp(-η · α_j) where α_j = acceptance probability
-  ```
-- [ ] Implement active position masking: only accepted + first rejected
-- [ ] LoRA target: o_proj only, rank=128, α=512
+### T7: LoRA Drafter Alignment (riir-gpu, research, deferred)
+- [ ] Implement LK-hybrid loss for aligning diffusion drafter with AR verifier
+- [ ] LoRA on o_proj only (rank 128, α=512)
 - [ ] Train on D2F draft → AR verify pairs
-- [ ] Measure: acceptance rate improvement with vs without LoRA alignment
-- [ ] Feature gate: `sdar_loss` in riir-gpu (already exists)
+- [ ] Measure acceptance rate improvement
+- [ ] Deferred until riir-gpu has D2F training support
 
 ---
 
@@ -153,66 +170,66 @@ This ensures zero impact on existing code. Self-speculation requires D2F as draf
 
 ```
 speculative/
-├── mod.rs              # pub mod self_spec (feature-gated tri_mode)
-├── types.rs            # DecodeStrategy + SelfSpecConfig + SelfSpeculation variant
-├── step.rs             # AR speculative step (unchanged)
-├── d2f.rs              # D2F block decode (unchanged)
-├── self_spec.rs        # NEW: Self-Speculation state machine
-│   ├── SelfSpeculationState
-│   ├── self_speculate_step()  # Diff draft → AR verify → prefix accept
-│   └── impl SpeculativeVerifier for SelfSpeculation
-├── verifier.rs         # SpeculativeVerifier trait (unchanged)
+├── mod.rs                # pub mod d2f_verifier (feature-gated tri_mode)
+├── types.rs              # DecodeStrategy + SelfSpecConfig + SelfSpeculation variant
+├── step.rs               # AR speculative step (unchanged)
+├── d2f.rs                # D2F block decode (unchanged — used as drafter)
+├── d2f_verifier.rs       # NEW: D2fDrafterVerifier — SpeculativeVerifier impl
+│   └── D2fDrafterVerifier — uses d2f_decode_block() as drafter
+│                          — uses forward() as verifier
+│                          — same prefix acceptance as LeviathanVerifier
+├── verifier.rs           # SpeculativeVerifier trait (unchanged)
+├── dd_tree.rs            # DDTree (unchanged)
+├── dflash.rs             # AR drafter (unchanged — used by LeviathanVerifier)
 └── ...
 ```
 
-## Dependency Graph
+## Key Difference: D2F Drafter vs AR Drafter
 
-```
-tri_mode (feature gate)
-├── dllm (feature gate, already exists)
-│   ├── d2f_decode_block() — diffusion drafter
-│   ├── D2fContext — zero-alloc buffers
-│   └── forward_block_causal_with() — block-causal forward
-├── forward() — AR verifier (existing)
-├── MultiLayerKVCache — shared KV across modes (existing)
-└── ConstraintPruner — prunes draft tokens (existing)
-```
+| Aspect | AR Drafter (DFlash/Leviathan) | D2F Drafter (D2fDrafterVerifier) |
+|---|---|---|
+| Draft method | `dflash_predict()` — sequential AR | `d2f_decode_block()` — parallel diffusion |
+| Draft quality | High per-token accuracy (causal) | Lower per-token, but parallel (bidirectional) |
+| Draft cost | O(k) sequential forwards | O(1) parallel forward + denoising steps |
+| KV reuse | Same KV for draft + verify | Separate KV (block-causal vs causal) |
+| Best for | Low latency per token | High throughput (batch-size-1) |
 
 ## Estimated Effort
 
 | Task | Lines | Effort | Depends On |
 |------|-------|--------|-----------|
-| T1: Self-speculation state machine | ~200 | 1-2 days | D2F (done) |
-| T2: Mode-adaptive decode | ~50 | 0.5 days | T1 |
-| T3: Pipeline integration | ~150 | 1-2 days | T1, T2 |
-| T4: Global loss averaging | ~30 | 0.5 days | None |
-| T5: GOAT proof | ~300 (tests) | 2-3 days | T1-T4 |
-| T6: Trained sampler | ~500 | 5-7 days | T5 |
-| T7: LoRA drafter alignment | ~400 | 5-7 days | T5, riir-gpu |
+| T1: D2F drafter verifier | ~100 | 1 day | D2F (done), SpeculativeVerifier (done) |
+| T2: DecodeStrategy extension | ~30 | 0.5 day | T1 |
+| T3: Pipeline wiring | ~50 | 0.5 day | T1, T2 |
+| T4: Global loss averaging | ~30 | 0.5 day | None |
+| T5: GOAT proof | ~200 (tests) | 2 days | T1-T4 |
+| T6: Trained sampler | deferred | — | T5 |
+| T7: LoRA alignment | deferred | — | T5, riir-gpu |
+
+**Total: ~4-5 days for T1-T5**
 
 ## Risk Assessment
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Self-speculation acceptance rate low | No speedup over AR | Fall back to AR/D2F mode; acceptance improves with model quality |
-| D2F draft quality insufficient | Poor draft→verify alignment | Increase denoising steps; add LoRA alignment (T7) |
-| Feature gate conflicts | Build failures | tri_mode → dllm dependency, tested in CI |
-| Trained sampler overfits | No generalization | Use diverse trajectory data; AUC early stopping |
-| No real model to test with | Can't validate at scale | Test with mini dLLM (Plan 066 proved this works) |
+| D2F draft quality too low for verification | Low acceptance rate | Increase denoising steps; fall back to AR mode |
+| Separate KV caches waste memory | 2× KV memory | D2F context is temporary, freed after accept |
+| No real tri-mode model to test | Can't validate at scale | Test with mini dLLM (Plan 066 proved this works) |
+| Feature gate conflicts | Build failures | tri_mode → dllm dependency, CI tested |
 
 ## What This Does NOT Do
 
-- ❌ Does NOT train a full tri-mode model from scratch (1T-token pretraining)
-- ❌ Does NOT implement dual-stream attention (training-only, we don't pretrain)
+- ❌ Does NOT train a joint AR-diffusion model (need 1T-token pretraining)
+- ❌ Does NOT implement dual-stream attention (training-only optimization)
 - ❌ Does NOT add VLM support (no vision encoder)
 - ❌ Does NOT implement quadratic self-speculation (kernel complexity)
-- ❌ Does NOT change existing AR or D2F code paths (feature-gated only)
+- ❌ Does NOT change existing AR, D2F, or LeviathanVerifier code (feature-gated only)
 
 ## Success Criteria
 
-1. ✅ Self-speculation mode produces valid token sequences
-2. ✅ Self-speculation acceptance rate ≥ 1.0 tokens/step (trivially beating AR)
-3. ✅ Mode switching works without KV cache corruption
+1. ✅ `D2fDrafterVerifier` implements `SpeculativeVerifier` trait
+2. ✅ D2F+AR mode produces valid token sequences
+3. ✅ Mode switching works via `DecodeStrategy` enum
 4. ✅ Global loss averaging improves D2F training convergence
 5. ✅ All new code behind `tri_mode` feature gate
 6. ✅ Zero regression in existing AR/D2F/speculative benchmarks

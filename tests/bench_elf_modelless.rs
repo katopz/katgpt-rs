@@ -285,7 +285,7 @@ fn bench_d2f_schedule_comparison() {
     println!("\n🧪 D2F Schedule Comparison: Uniform vs Logit-Normal");
     println!("{}", "═".repeat(70));
 
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let n_trials = 50;
 
     for (name, schedule) in [

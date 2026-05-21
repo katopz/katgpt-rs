@@ -35,7 +35,7 @@ fn train_tiny_model(config: &Config, rng: &mut Rng) -> (TransformerWeights, Vec<
 
 #[test]
 fn test_d2f_decode_produces_non_mask_tokens() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(42);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -62,7 +62,7 @@ fn test_d2f_decode_produces_non_mask_tokens() {
 
 #[test]
 fn test_d2f_decode_convergence_curve() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(100);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -100,7 +100,7 @@ fn test_d2f_decode_convergence_curve() {
 
 #[test]
 fn test_d2f_decode_with_target_accuracy() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(200);
     let (weights, test_data) = train_tiny_model(&config, &mut rng);
 
@@ -137,7 +137,7 @@ fn test_d2f_decode_with_target_accuracy() {
 #[test]
 fn test_d2f_decode_steps_vs_quality() {
     // More denoising steps should generally produce equal or better quality
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(300);
     let (weights, test_data) = train_tiny_model(&config, &mut rng);
     let target = &test_data[0];
@@ -175,7 +175,7 @@ fn test_d2f_decode_steps_vs_quality() {
 
 #[test]
 fn test_d2f_decode_temperature_effects() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(400);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -222,7 +222,7 @@ fn test_d2f_decode_temperature_effects() {
 
 #[test]
 fn test_d2f_decode_prompt_conditioning() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(500);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -264,7 +264,7 @@ fn test_d2f_decode_prompt_conditioning() {
 
 #[test]
 fn test_pipeline_multi_block_decode() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(600);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -303,7 +303,7 @@ fn test_pipeline_multi_block_decode() {
 
 #[test]
 fn test_pipeline_with_prompt_context() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(700);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -336,7 +336,7 @@ fn test_pipeline_with_prompt_context() {
 #[test]
 fn test_pipeline_partial_block() {
     // Total length that doesn't divide evenly into blocks
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(800);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -390,7 +390,7 @@ impl microgpt_rs::speculative::ConstraintPruner for VocabRangePruner {
 
 #[test]
 fn test_constraint_pruner_restricts_vocab() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(900);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -440,7 +440,7 @@ impl microgpt_rs::speculative::ConstraintPruner for NoRepeatPruner {
 
 #[test]
 fn test_no_repeat_constraint_deduplicates() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(1000);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -489,7 +489,7 @@ fn test_no_repeat_constraint_deduplicates() {
 
 #[test]
 fn benchmark_d2f_decode_block() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(42);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -527,7 +527,7 @@ fn benchmark_d2f_decode_block() {
 
 #[test]
 fn benchmark_d2f_pipeline() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(42);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 
@@ -570,7 +570,7 @@ fn benchmark_d2f_pipeline() {
 
 #[test]
 fn benchmark_d2f_steps_sweep() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(42);
     let (weights, test_data) = train_tiny_model(&config, &mut rng);
     let target = &test_data[0];
@@ -611,7 +611,7 @@ fn benchmark_d2f_steps_sweep() {
 
 #[test]
 fn benchmark_constraint_pruner_overhead() {
-    let config = Config::dllm_micro();
+    let config = Config::micro_dllm();
     let mut rng = Rng::new(42);
     let (weights, _) = train_tiny_model(&config, &mut rng);
 

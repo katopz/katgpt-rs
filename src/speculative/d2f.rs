@@ -856,7 +856,7 @@ mod tests {
 
     #[test]
     fn test_decode_block_output_length() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let decode_config = D2fDecodeConfig::with_block_size(4);
         let mut rng = Rng::new(42);
 
@@ -871,7 +871,7 @@ mod tests {
 
     #[test]
     fn test_decode_block_with_prompt() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let decode_config = D2fDecodeConfig::with_block_size(4);
         let mut rng = Rng::new(42);
 
@@ -893,7 +893,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_decode_all() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let block_size = 4;
         let total_len = 8; // 2 blocks of 4
         let decode_config = D2fDecodeConfig::with_block_size(block_size);
@@ -913,7 +913,7 @@ mod tests {
 
     #[test]
     fn test_pipeline_with_prompt() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let block_size = 4;
         let total_len = 4; // 1 block
         let decode_config = D2fDecodeConfig::with_block_size(block_size);
@@ -932,7 +932,7 @@ mod tests {
 
     #[test]
     fn test_decode_with_trained_model() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let mut rng = Rng::new(123);
 
         let train_data =
@@ -965,7 +965,7 @@ mod tests {
 
     #[test]
     fn test_confidence_history_not_empty() {
-        let config = Config::dllm_micro();
+        let config = Config::micro_dllm();
         let decode_config = D2fDecodeConfig::with_block_size(4);
         let mut rng = Rng::new(42);
 
