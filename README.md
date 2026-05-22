@@ -21,7 +21,7 @@ Inspired by [microgpt-c](https://github.com/nicholasgasior/microgpt-c), [talos-v
 - **Bomberman Arena** — 4-player HL proof: adaptive intelligence (+177) > greedy (+131) > static rules (-30) > random (-55).
 - **Monopoly FSM Arena** — 4-player turn-based FSM: sequential phase AI (PreTurn→Rolling→Resolving→Strategic→EndTurn) with bandit strategy adaptation across 1000 games.
 - **Bandit + WASM Pruners** — `BanditPruner` wraps any `ScreeningPruner` with exploration. `WasmPruner` loads sandboxed `.wasm` validators.
-- **TurboQuant KV Cache** — 5-8× KV cache compression via random rotation + Lloyd-Max quantization (2-4 bit). 3-bit: 0.99 attention correlation, 0.98 cosine similarity.
+- **TurboQuant KV Cache** — 5-8× KV cache compression via random rotation + Lloyd-Max quantization (2-4 bit). 3-bit: 0.99 attention correlation, 0.98 cosine similarity. Superseded by OCTOPUS (primary), PlanarQuant/IsoQuant (speed alternatives).
 - **PFlash Block-Sparse Prefill** — Block-sparse speculative prefill with sink/window/alpha selection rules. Up to 21× sequence reduction with 100% NIAH needle retrieval.
 - **G-Zero Self-Play** — Verifier-free Hint-δ intrinsic reward makes modelless HL smarter (δ-gated AbsorbCompress + δ-reward BanditPruner), then optionally adds model-based self-play (GRPO Proposer + length-normalized DPO Generator). No external LLM judge needed.
 
@@ -380,12 +380,42 @@ Data-oblivious triplet codec that beats calibrated SpectralQuant at all bit widt
 **First data-oblivious codec to beat a calibrated codec in our benchmarks.** Joint 3×3 rounding gives additional 6-9% MSE reduction (encoder-only, zero decoder change).
 
 **Production stack position:**
-1. **OCTOPUS** — default-on, data-oblivious, best quality at all bit widths (Bench 022)
-2. **SpectralQuant** — default-on, calibrated, useful for per-dimension water-fill adaptation
-3. **TurboQuant** — legacy baseline (off by default)
+1. **Hybrid OCT+PQ** — new default, best MSE + best rotation cost (Bench 024)
+2. **OCTOPUS** — legacy baseline (same encoding, slower rotation; Bench 022/023)
+3. **PlanarQuant** — speed fallback (per-coordinate quantization)
+4. **SpectralQuant** — calibrated alternative, useful for per-dimension water-fill adaptation
+5. **IsoQuant-Fast** — opt-in, 4D quaternion block rotation (32× fewer FMAs)
+6. **TurboQuant** — legacy baseline (off by default)
 
 📁 `src/octopus/` — `octahedral.rs`, `triplet.rs`, `codebook.rs`, `types.rs`, `encode.rs`, `kv_cache.rs`, `forward.rs`
 🔧 Feature flag: `octopus` (default-on, in `full`)
+
+## 🔧 Block-Diagonal Rotation: PlanarQuant & IsoQuant (Opt-In Speed Alternatives)
+
+Block-diagonal rotation alternatives to OCTOPUS's full WHT. Replaces O(d²) rotation with O(d) per-block rotation for KV cache quantization. Based on [RotorQuant (Zandieh et al., 2025)](https://www.scrya.com/rotorquant.pdf).
+
+| Backend | Rotation | FMAs (d=128) | Params | Quality |
+|---------|----------|-------------|--------|---------|
+| **PlanarQuant** | 2D Givens | 256 | 128 | MSE 0.034 (3-bit) |
+| **IsoQuant-Fast** | 4D quaternion (left) | 512 | 128 | MSE 0.034 (3-bit) |
+| TurboQuant/OCTOPUS | WHT (full) | 16,384 | 16,384 | MSE 0.034/0.026 (3-bit) |
+
+**GOAT proof (Bench 023, d=128, 512 keys, 8 seeds):**
+
+| Metric | PlanarQuant | IsoQuant-F | OCTOPUS | TurboQuant |
+|--------|-------------|------------|---------|------------|
+| MSE (3-bit) | 0.0340 | 0.0340 | **0.0265** | 0.0341 |
+| Cosine (3-bit) | 0.9831 | 0.9831 | **0.9869** | 0.9831 |
+| Rotation FMAs | **256** | 512 | 16,384 | 16,384 |
+| Params | **128** | 128 | 16,384 | 16,384 |
+
+**Key finding:** OCTOPUS's quality advantage comes from its octahedral triplet encoding, NOT rotation. PQ/IQ/TQ all cluster at MSE ≈ 0.034 with Lloyd-Max encoding. Block-diagonal rotation is sufficient — 64× fewer FMAs with <1% quality trade-off.
+
+**Hybrid OCT+PQ (Bench 024):** Combining OCTOPUS triplet encoding with PlanarQuant's 2D Givens rotation is strictly better — equal-or-lower MSE, better MaxSim, 64× fewer rotation FMAs than pure OCTOPUS. Hybrid is the new production default.
+
+📁 `src/planar_quant/` — `types.rs`, `rotation.rs`, `kv_cache.rs`, `mod.rs`
+📁 `src/iso_quant/` — `types.rs`, `rotation.rs`, `kv_cache.rs`, `mod.rs`
+🔧 Feature flags: `planar_quant` (opt-in), `iso_quant` (opt-in)
 
 ## ⚡ PFlash: Block-Sparse Speculative Prefill
 

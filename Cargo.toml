@@ -61,6 +61,9 @@ maxsim = ["microgpt-core/maxsim"]  # MaxSim late-interaction scoring (Research 4
 spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
 turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
+planar_quant = ["turboquant"]  # PlanarQuant 2D Givens rotation KV cache — O(d) vs TQ O(d²), 256 FMAs for d=128
+iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
+hybrid_oct_pq = ["planar_quant", "octopus"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
 bt_rank = []  # Bradley-Terry pairwise ranking for DDtree selection (OpenDeepThink distillation)
 fft = ["bandit"]     # FFT Tactics Arena — ATB battle engine with status effects (Plan 053)
 stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full`.
@@ -85,7 +88,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "lattice_deduction", "unit_distance", "memo_reflections"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "lattice_deduction", "unit_distance", "memo_reflections"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 

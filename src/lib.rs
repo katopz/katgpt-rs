@@ -8,9 +8,15 @@ pub mod dllm;
 pub mod feedback;
 #[cfg(feature = "hla_attention")]
 pub mod hla;
+#[cfg(feature = "hybrid_oct_pq")]
+pub mod hybrid_oct_pq;
+#[cfg(feature = "iso_quant")]
+pub mod iso_quant;
 #[cfg(feature = "octopus")]
 pub mod octopus;
 pub mod percepta;
+#[cfg(feature = "planar_quant")]
+pub mod planar_quant;
 pub mod plot;
 pub mod pruners;
 #[cfg(feature = "maxsim")]
