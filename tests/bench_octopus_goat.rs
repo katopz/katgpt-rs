@@ -7,10 +7,10 @@
 //! 2. Cosine similarity (original vs reconstructed) — ↑ better
 //! 3. Inner-product absolute error — ↓ better
 //! 4. Compression ratio vs f32 baseline
-//! 5. Comparison vs TurboQuant at matched nominal bits
+//! 5. Comparison vs SpectralQuant (default) at matched nominal bits
 //!
 //! Run with:
-//!   cargo test -p microgpt-rs --features "octopus,turboquant" --test bench_octopus_goat -- --nocapture
+//!   cargo test -p microgpt-rs --features "octopus,spectral_quant" --test bench_octopus_goat -- --nocapture
 
 #![cfg(feature = "octopus")]
 
@@ -18,10 +18,19 @@ use microgpt_rs::octopus::{
     OctopusConfig, OctopusKVCache,
     forward::{cosine_similarity, ip_error, per_coord_mse},
 };
-use microgpt_rs::types::{Config, Rng};
+use microgpt_rs::types::Rng;
+
+#[cfg(feature = "turboquant")]
+use microgpt_rs::types::Config;
 
 #[cfg(feature = "turboquant")]
 use microgpt_rs::turboquant::TurboQuantKVCache;
+
+#[cfg(feature = "spectral_quant")]
+use microgpt_rs::spectralquant::SpectralQuantKVCache;
+
+#[cfg(feature = "spectral_quant")]
+use microgpt_rs::spectralquant::types::SpectralQuantKVCacheConfig;
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -327,29 +336,124 @@ fn goat_octopus_compression_ratio() {
 
 // ── T10b: OCTOPUS vs TurboQuant Quality at Matched Bits ──────
 
+#[cfg(feature = "spectral_quant")]
+#[test]
+fn goat_octopus_vs_spectralquant_quality() {
+    let dim = 128;
+    let bits_list = [2.0f32, 3.0, 4.0];
+    let n_keys = 512;
+    let n_calib = 256;
+
+    println!("\n🧪 GOAT 022: OCTOPUS vs SpectralQuant (default) Quality (d={dim}, {n_keys} keys)");
+    println!("  Note: SQ is calibrated ({n_calib} samples), OCTOPUS is data-oblivious (0 samples)");
+    println!("{}", "═".repeat(110));
+    println!(
+        "{:<5} {:>10} {:>10} {:>10} {:>10} {:>10} {:>10} {:>8}",
+        "bits", "SQ MSE", "OCT MSE", "MSE Δ%", "SQ Cos", "OCT Cos", "Cos Δ%", "Winner"
+    );
+    println!("{}", "-".repeat(110));
+
+    // Shared keys (same RNG seed for reproducibility)
+    let mut rng = Rng::new(42);
+    let keys: Vec<Vec<f32>> = (0..n_keys).map(|_| gaussian_vec(dim, &mut rng)).collect();
+
+    for &avg_bits in &bits_list {
+        let max_seq = n_keys + 16;
+
+        // SpectralQuant (default, calibrated)
+        let sq_config = SpectralQuantKVCacheConfig {
+            avg_bits,
+            min_tail_bits: 2,
+            max_bits: 8,
+            qjl_dim: dim / 4,
+            lloyd_max_iter: 20,
+            calibration_samples: n_calib,
+            seed: 42,
+            use_water_fill: true,
+            wf_min_bits: 2,
+            wf_max_bits: 8,
+            n_layers: 1,
+            kv_dim: dim,
+            max_seq_len: max_seq,
+        };
+        // Calibrate on first n_calib keys (realistic: prefill calibration)
+        let calib_keys = &keys[..n_calib];
+        let mut calib_rng = Rng::new(99);
+        let calib_vals: Vec<Vec<f32>> = (0..n_calib)
+            .map(|_| gaussian_vec(dim, &mut calib_rng))
+            .collect();
+        let mut sq_cache = SpectralQuantKVCache::from_keys(&sq_config, calib_keys, &calib_vals);
+        for (pos, key) in keys.iter().enumerate() {
+            sq_cache.store_key(0, pos, key);
+        }
+
+        // OCTOPUS (data-oblivious, no calibration)
+        let nominal_bits = avg_bits as u8;
+        let mut oct_cache = make_octopus_cache(dim, nominal_bits, nominal_bits, 1, max_seq, 42);
+        for (pos, key) in keys.iter().enumerate() {
+            oct_cache.store_key(0, pos, key);
+        }
+
+        // Measure
+        let mut sq_mse_vals = Vec::with_capacity(n_keys);
+        let mut oct_mse_vals = Vec::with_capacity(n_keys);
+        let mut sq_cos_vals = Vec::with_capacity(n_keys);
+        let mut oct_cos_vals = Vec::with_capacity(n_keys);
+
+        let mut sq_buf = vec![0.0f32; dim];
+        for (pos, orig) in keys.iter().enumerate() {
+            sq_cache.dequantize_key_into(0, pos, &mut sq_buf);
+            let sq_recon = sq_buf.clone();
+            let oct_recon = oct_cache.dequantize_key(0, pos);
+
+            sq_mse_vals.push(per_coord_mse(orig, &sq_recon) as f64);
+            oct_mse_vals.push(per_coord_mse(orig, &oct_recon) as f64);
+            sq_cos_vals.push(cosine_similarity(orig, &sq_recon) as f64);
+            oct_cos_vals.push(cosine_similarity(orig, &oct_recon) as f64);
+        }
+
+        let (sq_mse, _) = mean_std(&sq_mse_vals);
+        let (oct_mse, _) = mean_std(&oct_mse_vals);
+        let (sq_cos, _) = mean_std(&sq_cos_vals);
+        let (oct_cos, _) = mean_std(&oct_cos_vals);
+
+        let mse_delta = (oct_mse - sq_mse) / sq_mse * 100.0;
+        let cos_delta = (oct_cos - sq_cos) / sq_cos * 100.0;
+        let winner = if oct_mse < sq_mse { "OCTOPUS" } else { "SQ" };
+
+        println!(
+            "{:<5} {:>10.6} {:>10.6} {:>9.1}% {:>10.6} {:>10.6} {:>9.1}% {:>8}",
+            avg_bits, sq_mse, oct_mse, mse_delta, sq_cos, oct_cos, cos_delta, winner
+        );
+    }
+}
+
+// ── T10c: Legacy TurboQuant Reference (gated, for historical comparison) ──
 #[cfg(feature = "turboquant")]
 #[test]
-fn goat_octopus_vs_turboquant_quality() {
+fn goat_octopus_vs_turboquant_legacy() {
     let dim = 128;
     let bits_list = [2u8, 3, 4];
     let n_keys = 512;
 
-    println!("\n🧪 GOAT 022: OCTOPUS vs TurboQuant Quality (d={dim}, {n_keys} keys)");
-    println!("{}", "═".repeat(90));
+    println!("\n🧪 GOAT 022: OCTOPUS vs TurboQuant (legacy reference, d={dim}, {n_keys} keys)");
+    println!(
+        "  Note: TQ is demoted legacy baseline (off by default). For default comparison, see SQ test."
+    );
+    println!("{}", "═".repeat(100));
     println!(
         "{:<5} {:>12} {:>12} {:>10} {:>12} {:>12} {:>10}",
         "bits", "TQ MSE", "OCT MSE", "MSE Δ%", "TQ Cos", "OCT Cos", "Cos Δ%"
     );
-    println!("{}", "-".repeat(90));
+    println!("{}", "-".repeat(100));
 
     for &bits in &bits_list {
         let max_seq = n_keys + 16;
 
-        // Generate shared test keys
         let mut rng = Rng::new(42);
         let keys: Vec<Vec<f32>> = (0..n_keys).map(|_| gaussian_vec(dim, &mut rng)).collect();
 
-        // TurboQuant
+        // TurboQuant (legacy)
         let tq_config = Config {
             vocab_size: 27,
             block_size: max_seq,
@@ -372,7 +476,6 @@ fn goat_octopus_vs_turboquant_quality() {
             oct_cache.store_key(0, pos, key);
         }
 
-        // Measure
         let mut tq_mse_vals = Vec::with_capacity(n_keys);
         let mut oct_mse_vals = Vec::with_capacity(n_keys);
         let mut tq_cos_vals = Vec::with_capacity(n_keys);
@@ -403,7 +506,7 @@ fn goat_octopus_vs_turboquant_quality() {
     }
 }
 
-// ── T9c: Quality Across Dimensions ───────────────────────────
+// ── T11: Quality by Dimension ────────────────────────────────
 
 #[test]
 fn goat_octopus_quality_by_dimension() {

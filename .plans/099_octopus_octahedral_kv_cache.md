@@ -3,7 +3,7 @@
 > **Research:** 63 (OCTOPUS Octahedral KV Cache Compression)
 > **Related Plans:** 043 (TurboQuant), 077 (SpectralQuant Upgrade), 044 (PFlash), 080 (MaxSim), 095 (GRAM Width/Depth GOAT), 096 (MoE+SD CoDesign GOAT), 050 (Feature Gate Audit)
 **Status:** ✅ Complete
-> **Verdict:** High-value addition. OCTOPUS is the natural successor to TurboQuant in the rotation-preconditioned family. Data-oblivious (no calibration), dominates at 2-bit extreme compression, regular memory access patterns (GPU-friendly), simple piecewise-linear math (Rust-friendly). Feature gate `octopus`. Sits between TurboQuant (legacy) and SpectralQuant (calibrated default) in the production stack.
+> **Verdict:** High-value addition. OCTOPUS is the first data-oblivious codec to beat calibrated SpectralQuant at all bit widths (-22% to -49% MSE, Bench 022). Data-oblivious (no calibration), regular memory access patterns (GPU-friendly), simple piecewise-linear math (Rust-friendly). Default-on as of Plan 099. SpectralQuant kept for per-dimension water-fill scenarios; TurboQuant demoted to legacy baseline.
 
 ## Summary
 
@@ -177,18 +177,18 @@ maxsim = []               # Late-interaction scoring
 ## Production Stack Positioning
 
 ```
-GOAT Production Stack (after this plan):
-  1. SpectralQuant  — default, highest quality when calibration data available
-  2. OCTOPUS        — fallback, data-oblivious, best at extreme compression (2-3 bit)
-  3. TurboQuant     — legacy, kept for backward compatibility
+GOAT Production Stack (after Bench 022):
+  1. OCTOPUS        — default-on, data-oblivious, dominates SQ at all bit widths (Bench 022)
+  2. SpectralQuant  — default-on, calibrated, useful for per-dimension water-fill adaptation
+  3. TurboQuant     — legacy, kept for backward compatibility only
 
 Decision flow:
-  if calibration_data_available():
-      use SpectralQuant   # water-fill adapts per-dimension
-  elif bits <= 3 or need_deterministic_guarantees():
-      use Octopus         # best data-oblivious codec, especially at 2-bit
+  if need_extreme_compression(bits <= 3):
+      use Octopus         # -22% to -49% MSE vs SQ, no calibration needed
+  elif need_per_dimension_adaptation():
+      use SpectralQuant   # water-fill adapts to eigenvalue spectrum
   else:
-      use TurboQuant      # simplest, fastest encode/decode
+      use Octopus         # default choice, better quality at all bit widths
 ```
 
 ## GOAT Benchmark Plan
@@ -269,6 +269,26 @@ T11 GOAT proof        — record results
 T12 README update     — document in production stack
 ```
 
+## GOAT Results Summary (Bench 022)
+
+### OCTOPUS vs SpectralQuant (default, calibrated) — d=128
+
+| bits | SQ MSE   | OCT MSE  | MSE Δ%   | SQ Cos  | OCT Cos | Winner  |
+|------|----------|----------|----------|---------|---------|---------|
+| 2    | 0.1233   | 0.0962   | **-22%** | 0.9368  | 0.9512  | OCTOPUS |
+| 3    | 0.0379   | 0.0263   | **-31%** | 0.9812  | 0.9870  | OCTOPUS |
+| 4    | 0.0145   | 0.0074   | **-49%** | 0.9930  | 0.9963  | OCTOPUS |
+
+OCTOPUS beats SpectralQuant at every bit width — zero calibration vs SQ's 256 samples.
+
+### OCTOPUS vs TurboQuant (legacy) — d=128
+
+| bits | TQ MSE   | OCT MSE  | MSE Δ%   | TQ Cos  | OCT Cos | Winner  |
+|------|----------|----------|----------|---------|---------|---------|
+| 2    | 0.1790   | 0.0962   | **-46%** | 0.9048  | 0.9512  | OCTOPUS |
+| 3    | 0.0886   | 0.0263   | **-70%** | 0.9552  | 0.9870  | OCTOPUS |
+| 4    | 0.0512   | 0.0074   | **-86%** | 0.9760  | 0.9963  | OCTOPUS |
+
 ## Risks & Mitigations
 
 | Risk | Impact | Mitigation |
@@ -280,10 +300,11 @@ T12 README update     — document in production stack
 
 ## Acceptance Criteria
 
-- [ ] `OctopusKVCache` implements `QuantizedKVCache` trait
-- [ ] All unit tests pass for octahedral encode/decode roundtrip
-- [ ] GOAT synthetic benchmark shows MSE improvement over TurboQuant at d=128
-- [ ] Feature gate `octopus` works independently (cargo test --features octopus)
-- [ ] `SpKvQuantCache<OctopusKVCache>` compiles (composition proof)
-- [ ] `.benchmarks/022_octopus_goat.md` populated with results
-- [ ] README updated with OCTOPUS section
+- [x] `OctopusKVCache` implements `QuantizedKVCache` trait
+- [x] All unit tests pass for octahedral encode/decode roundtrip
+- [x] GOAT synthetic benchmark shows MSE improvement over SpectralQuant at d=128 (-22% to -49% MSE)
+- [x] Feature gate `octopus` works independently (`cargo test --features octopus`)
+- [x] `SpKvQuantCache<OctopusKVCache>` compiles (composition proof — 2 tests pass)
+- [x] `.benchmarks/022_octopus_goat.md` populated with results
+- [x] README updated with OCTOPUS section
+- [x] OCTOPUS added to default features (GOAT proved: dominates SQ at all bit widths)

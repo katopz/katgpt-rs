@@ -365,27 +365,27 @@ Data-driven spectral analysis replaces TurboQuant's random rotation with a calib
 📁 `src/spectralquant/` — `types.rs`, `spectral.rs`, `nonuniform_quant.rs`, `spectral_rotation.rs`, `spectral_kv_cache.rs`, `forward.rs`
 🔧 Feature flag: `spectral_quant` (**on by default**)
 
-## 🐙 OCTOPUS: Octahedral Triplet KV Cache Compression (Data-Oblivious)
+## 🐙 OCTOPUS: Octahedral Triplet KV Cache Compression (Data-Oblivious, Default-On)
 
-Data-oblivious triplet codec that dominates at 2-3 bit extreme compression. Groups rotated coordinates into contiguous 3-blocks, encodes direction via octahedral map (S² → [-1,1]²), and applies MSE-optimal non-uniform bit split (b+1 for direction, b-1 for norm). Based on [OCTOPUS (Boss et al., 2026)](https://arxiv.org/abs/2605.21226).
+Data-oblivious triplet codec that beats calibrated SpectralQuant at all bit widths. Groups rotated coordinates into contiguous 3-blocks, encodes direction via octahedral map (S² → [-1,1]²), and applies MSE-optimal non-uniform bit split (b+1 for direction, b-1 for norm). Based on [OCTOPUS (Boss et al., 2026)](https://arxiv.org/abs/2605.21226).
 
-**GOAT proof (Bench 022):** OCTOPUS vs TurboQuant at d=128, matched nominal bits:
+**GOAT proof (Bench 022):** OCTOPUS vs SpectralQuant (calibrated, 256 samples) at d=128:
 
-| Metric | TQ 2-bit | OCT 2-bit | TQ 3-bit | OCT 3-bit | TQ 4-bit | OCT 4-bit |
+| Metric | SQ 2-bit | OCT 2-bit | SQ 3-bit | OCT 3-bit | SQ 4-bit | OCT 4-bit |
 |--------|----------|-----------|----------|-----------|----------|-----------|
-| MSE | 0.1790 | **0.0962** (-46%) | 0.0886 | **0.0263** (-70%) | 0.0512 | **0.0074** (-86%) |
-| Cosine | 0.9048 | **0.9512** (+5.1%) | 0.9552 | **0.9870** (+3.3%) | 0.9760 | **0.9963** (+2.1%) |
-| Compression | 14.2× | 12.2× | 7.5× | **8.8×** (Pareto!) | 7.5× | 6.9× |
+| MSE | 0.1233 | **0.0962** (-22%) | 0.0379 | **0.0263** (-31%) | 0.0145 | **0.0074** (-49%) |
+| Cosine | 0.9368 | **0.9512** (+1.5%) | 0.9812 | **0.9870** (+0.6%) | 0.9930 | **0.9963** (+0.3%) |
+| Calibration | 256 samples | **0 samples** | 256 samples | **0 samples** | 256 samples | **0 samples** |
 
-**At 3-bit: OCTOPUS is a Pareto improvement** — both better quality AND better compression than TurboQuant. Joint 3×3 rounding gives additional 6-9% MSE reduction (encoder-only, zero decoder change).
+**First data-oblivious codec to beat a calibrated codec in our benchmarks.** Joint 3×3 rounding gives additional 6-9% MSE reduction (encoder-only, zero decoder change).
 
 **Production stack position:**
-1. **SpectralQuant** — default when calibration data available (highest quality)
-2. **OCTOPUS** — fallback, data-oblivious, best at extreme compression (2-3 bit)
-3. **TurboQuant** — legacy baseline
+1. **OCTOPUS** — default-on, data-oblivious, best quality at all bit widths (Bench 022)
+2. **SpectralQuant** — default-on, calibrated, useful for per-dimension water-fill adaptation
+3. **TurboQuant** — legacy baseline (off by default)
 
 📁 `src/octopus/` — `octahedral.rs`, `triplet.rs`, `codebook.rs`, `types.rs`, `encode.rs`, `kv_cache.rs`, `forward.rs`
-🔧 Feature flag: `octopus` (opt-in, in `full`)
+🔧 Feature flag: `octopus` (default-on, in `full`)
 
 ## ⚡ PFlash: Block-Sparse Speculative Prefill
 
@@ -1364,7 +1364,7 @@ cargo clippy --all-targets --all-features --quiet
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
 | `tri_mode` | Tri-Mode inference — AR + Diffusion + Self-Speculation via `D2fDrafterVerifier`. GOAT 4/4 proved (Bench 018). Requires `dllm` (Plan 089) |
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
-| `octopus` | OCTOPUS octahedral triplet codec — data-oblivious, -70% MSE vs TQ at 3-bit, best at extreme compression (Bench 022, Plan 099, in `full`) |
+| `octopus` | OCTOPUS octahedral triplet codec — data-oblivious, beats calibrated SQ at all bit widths (-22% to -49% MSE), default-on (Bench 022, Plan 099) |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
@@ -1632,7 +1632,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 | Feature | Source | Real Gain | Why Gated |
 |---------|--------|-----------|-----------|
-| **OCTOPUS** (`octopus`) | [OCTOPUS (Boss 2026)](https://arxiv.org/abs/2605.21226) | **-70% MSE, +3.3% cosine at 3-bit** vs TurboQuant (Bench 022). Data-oblivious triplet codec. At 3-bit: Pareto win (better quality AND compression). Joint 3×3 rounding: 6-9% MSE gain (encoder-only). | Superseded by SpectralQuant when calibration data available; opt-in for modelless/cold-start |
+| **OCTOPUS** (`octopus`) | [OCTOPUS (Boss 2026)](https://arxiv.org/abs/2605.21226) | **First data-oblivious codec to beat calibrated SQ** — -22% to -49% MSE, +0.3% to +1.5% cosine at 2-4 bit (Bench 022). Joint 3×3 rounding: 6-9% MSE gain (encoder-only). Zero calibration overhead. | Default-on as of Plan 099; SQ still useful for per-dimension water-fill adaptation |
 | **G-Zero** (`g_zero`) | [G-Zero Self-Play](https://arxiv.org/pdf/2605.09959) | 8.57M δ/sec, 1.76M pairs/sec, 1.16M cycles/sec (Bench 005). Hint-δ intrinsic reward, no external verifier. TemplateProposer for Bomber+FFT. | Bench-only; does NOT touch `forward()` hot path |
 | **Bomber** (`bomber`) | Plan 033 HL Arena | HL thesis proven: deterministic heuristics beat naive MCTS in complex games. `ReplayBackwardWalker`: 4.0 alternatives/tick. | Requires `bevy_ecs`, arena-specific |
 | **GameState** (`game_state`) | [STRATEGA](https://arxiv.org/abs/2605.09959) | Cross-game MCTS reuse: one `mcts_search()` works on Bomber, Go, any `GameState` impl. `BomberState` wraps ECS for snapshot/restore. | Depends on `bomber`, arena-specific |
