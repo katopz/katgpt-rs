@@ -1164,9 +1164,9 @@ fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 /// The reduced argument g is in [-0.5*ln2, 0.5*ln2] for minimal polynomial error.
 #[inline]
 fn cephes_exp_scalar(x: f32) -> f32 {
-    const LN2_HI: f32 = 6.9314575195e-01; // 0x3f317200
-    const LN2_LO: f32 = 1.4286067773e-06; // 0x35bfbe8e
-    const INV_LN2: f32 = 1.4426950216e+00; // 0x3fb8aa3b
+    const LN2_HI: f32 = 6.931_457_5e-1; // 0x3f317200
+    const LN2_LO: f32 = 1.428_606_8e-6; // 0x35bfbe8e
+    const INV_LN2: f32 = std::f32::consts::LOG2_E; // 1.4426950408889634
 
     // Range reduction: n = round(x / ln2)
     let n = (x * INV_LN2).round() as i32;
@@ -1441,9 +1441,9 @@ unsafe fn neon_exp_inplace(x: &mut [f32]) {
         vsubq_f32,
     };
     unsafe {
-        const LN2_HI: f32 = 6.9314575195e-01;
-        const LN2_LO: f32 = 1.4286067773e-06;
-        const INV_LN2: f32 = 1.4426950216e+00;
+        const LN2_HI: f32 = 6.931_457_5e-1;
+        const LN2_LO: f32 = 1.428_606_8e-6;
+        const INV_LN2: f32 = std::f32::consts::LOG2_E;
 
         let v_inv_ln2 = vdupq_n_f32(INV_LN2);
         let v_ln2_hi = vdupq_n_f32(LN2_HI);

@@ -916,19 +916,17 @@ pub fn softmax(x: &mut [f32]) {
     // Pass 1: find max for numerical stability (SIMD-accelerated)
     let max_val = crate::simd::simd_max_f32(x);
 
-    // Pass 2: x[i] -= max_val (scalar subtraction — fast, avoids allocation)
-    for val in x.iter_mut() {
-        *val -= max_val;
-    }
-
-    // Pass 3: exp(x) — SIMD-accelerated via Cephes polynomial approximation
-    crate::simd::simd_exp_inplace(x);
-
-    // Pass 4: accumulate sum + normalize
+    // Pass 2: exp(x - max) + accumulate sum
+    // Note: scalar libm expf is faster than Cephes SIMD on Apple Silicon NEON
+    // because hardware-accelerated expf + LLVM auto-vectorization beats our
+    // polynomial approximation with its scalar 2^n fallback.
     let mut sum = 0.0f32;
-    for &val in x.iter() {
-        sum += val;
+    for val in x.iter_mut() {
+        *val = (*val - max_val).exp();
+        sum += *val;
     }
+
+    // Pass 3: normalize
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }
@@ -948,19 +946,15 @@ pub fn softmax_scaled(x: &mut [f32], inv_temp: f32) {
     // Pass 1: find max for numerical stability (SIMD-accelerated)
     let max_val = crate::simd::simd_max_f32(x);
 
-    // Pass 2: x[i] = (x[i] - max_val) * inv_temp (fused subtract + scale)
-    for val in x.iter_mut() {
-        *val = (*val - max_val) * inv_temp;
-    }
-
-    // Pass 3: exp(x) — SIMD-accelerated via Cephes polynomial approximation
-    crate::simd::simd_exp_inplace(x);
-
-    // Pass 4: accumulate sum + normalize
+    // Pass 2: exp((x - max) * inv_temp) + accumulate sum
+    // Note: scalar libm expf is faster than Cephes SIMD on Apple Silicon NEON.
     let mut sum = 0.0f32;
-    for &val in x.iter() {
-        sum += val;
+    for val in x.iter_mut() {
+        *val = ((*val - max_val) * inv_temp).exp();
+        sum += *val;
     }
+
+    // Pass 3: normalize
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }

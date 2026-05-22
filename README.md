@@ -1345,10 +1345,10 @@ cargo clippy --all-targets --all-features --quiet
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
-| `tes_loop` | SimpleTES evaluation-driven scaling — RPUCG graph-based bandit + trajectory pruning + credit bridge. GOAT proved 8/8 (Bench 016+017). `BanditStrategy::Rpucg`, `SimpleTesLoop<E>`, `TrajectoryPruner`, `TrajectoryCredit` (Plan 086) |
+| `tes_loop` | SimpleTES evaluation-driven scaling — RPUCG graph-based bandit + trajectory pruning + credit bridge. GOAT proved 8/8 (Bench 016+017). `BanditStrategy::Rpucg`, `SimpleTesLoop<E>`, `TrajectoryPruner`, `TrajectoryCredit` (Plan 086, **default-on**) |
 | `deep_manifold` | Deep Manifold fixed-point residual scoring — L2/KL residual traits + blended scorer (Research 51, Plan 085). **GOAT proved 6/6**, default-on |
 | `federation` | Deep Manifold federated boundary alignment — symmetric KL coupling between domain experts (Research 51, Plan 085). **GOAT proved 6/6**, default-on. Requires `bandit` |
-| `lattice_deduction` | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination. `AlphaTarget`, `alpha_intersect`, `is_consistent`, `EntropyConflictDetector`, `LdtPruneConfig` (Plan 088, off by default) |
+| `lattice_deduction` | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination. `AlphaTarget`, `alpha_intersect`, `is_consistent`, `EntropyConflictDetector`, `LdtPruneConfig` (Plan 088, GOAT 7/7, **default-on**) |
 | `memo_reflections` | MeMo 5-step Reflection QA pipeline — compositional data synthesis with Reflect→Critique→Revise→Verify→Distill. Requires `bandit` (Plan 094, off by default) |
 | `spec_cost_model` | Amdahl cost model for LeviathanVerifier — overlap diagnostic + parallel speedup estimation (Research 59, Plan 096, off by default) |
 | `delta_routing` | Delta Block cross-layer routing — residual delta routing between transformer layers (Research 61, Plan 097, off by default) |
@@ -1582,7 +1582,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering", "deep_manifold", "federation"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -1601,6 +1601,9 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **CNA Steering** (`cna_steering`) | [Contrastive Neuron Attribution](https://arxiv.org/pdf/2605.12290) | **GOAT proved** (Bench 015). Discovery: ~10µs/pair. Modulation: 163ns for K=50. Quality: cosine 1.0 at all strengths (paper: >0.97). Late-layer concentration: 100%. O(K) sparse forward hook. `CnaScreeningPruner` composable with `BanditPruner`. | Residual-stream steering (CAA < 0.60 quality) |
 | **Deep Manifold** (`deep_manifold`) | [Deep Manifold Part 2 (arXiv:2512.06563)](https://arxiv.org/pdf/2512.06563) | **GOAT 6/6** (Plan 085). L2/KL residual traits for explicit fixed-point distance. `ResidualRelevanceScorer` blends residual + relevance. Per-position hotspot analysis. O(n) SIMD-able. Default-on. | Implicit residual in `BanditPruner` Q-values |
 | **Federation** (`federation`) | [Deep Manifold Part 2 §7.6](https://arxiv.org/pdf/2512.06563) | **GOAT 6/6** (Plan 085). Symmetric KL coupling between domain experts. `KlBoundaryAligner` + `BoundaryAlignment` trait. No data exchange, no privacy concern. Default-on. | Independent expert training |
+| **SimpleTES** (`tes_loop`) | [SimpleTES (arXiv:2604.19341)](https://arxiv.org/abs/2604.19341) | **GOAT 8/8** (Bench 016+017). RPUCG beats greedy: 42.8% vs 10.6% wins. Budget scaling: Wide(24×5×8)=0.9988 vs Narrow(2×8×30)=0.8266. `SimpleTesLoop<E>` C×L×K loop. `TrajectoryCredit` bridges to G-Zero Phase 2. Default-on. | Greedy bandit selection |
+| **Lattice Deduction** (`lattice_deduction`) | [LDT (arXiv:2505.12661)](https://arxiv.org/abs/2505.12661) | **GOAT 7/7** (Plan 088). α-intersection pruning, conflict detection, asymmetric elimination. Sudoku + Maze validated. `LdtPruneConfig` composable with `BanditPruner`. Default-on. | Manual constraint pruning |
+| **Delta Routing** (`delta_routing`) | [Delta Attention Residuals (NeurIPS 2026)](https://arxiv.org/abs/2605.19943) | **GOAT 6/6** (Plan 097). Cross-layer residual delta routing via `depth_route()`. Zero throughput overhead (0.97×). Gemma 2 2B validated: −1.62% PPL. Graceful no-op at n_layer<4. Default-on. | Cumulative hidden-state routing |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
@@ -1617,11 +1620,11 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
 | **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
 | **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
-| **SimpleTES** (`tes_loop`) | [SimpleTES (arXiv:2604.19341)](https://arxiv.org/abs/2604.19341) | **GOAT 8/8** (Bench 016+017). RPUCG beats greedy: 42.8% vs 10.6% wins, +0.08 avg score. Budget scaling: Wide(24×5×8)=0.9988 vs Narrow(2×8×30)=0.8266 (spread=0.17). `SimpleTesLoop<E>` full C×L×K loop. `TrajectoryCredit` bridges to G-Zero Phase 2. | Extends `bandit`; RPUCG advantage requires graph-based trajectory context |
+
 | **MeMo Reflections** (`memo_reflections`) | Research 60 | 5-step Reflection QA pipeline: Reflect→Critique→Revise→Verify→Distill. `src/pruners/reflection.rs`. TIES merging in `riir-gpu` (Plan 094). | Requires `bandit`; compositional data synthesis |
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |
 | **Spec Cost Model** (`spec_cost_model`) | Research 59 | Amdahl cost model for `LeviathanVerifier` — Raven overlap diagnostic + parallel speedup estimation. MoE+SD co-design (Plan 096). | Analytical model; no runtime overhead |
-| **Delta Routing** (`delta_routing`) | Research 61 | Delta Block cross-layer routing — residual delta routing between transformer layers via `depth_route()`. `src/transformer.rs` (Plan 097). | Experimental routing; off by default |
+
 
 
 ### 🪦 Replaced / Fell Behind / No Gain

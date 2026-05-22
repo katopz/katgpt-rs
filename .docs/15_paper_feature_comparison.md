@@ -33,14 +33,14 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 | KV Optimization | SpectralQuant (9.1×, 0.9917 cosine, **default**), SP-KV (3-10×), TurboQuant 3-bit (legacy) | ✓ Implemented |
 | Attention Innovation | forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim | ✓ Implemented |
 | Noise Scheduling | ELF SDE noise injection (10-22× path diversity, **default**), GRAM validates approach | ✓ Implemented |
-| Distillation/Compression | LoRA adapters, SpectralQuant, BT pairwise ranking (**default**), MeMo reflections, ROPD rubric | ✓ Partial (ASFT/CISPO/SLIME planned) |
-| Test-Time Compute | SimpleTES RPUCG loop (GOAT 8/8), BanditPruner adaptive arms, GRAM width scaling | ✓ Implemented |
-| Routing/MoE | Raven slot memories, MoE+SD Amdahl cost model, TIES merging (MeMo), Delta Block cross-layer | ✓ Implemented |
-| Diffusion/Denoising | dLLM D2F block-parallel denoising, Tri-Mode AR+Diffusion+Self-Speculation | ✓ Partial |
+| Distillation/Compression | LoRA adapters, SpectralQuant, BT pairwise ranking (**default**), MeMo reflections, ROPD rubric | ✓ Partial (ASFT/SLIME in riir-gpu, CISPO default GRPO variant) |
+| Test-Time Compute | SimpleTES RPUCG loop (GOAT 8/8, **default**), BanditPruner adaptive arms, GRAM width scaling | ✓ Implemented |
+| Routing/MoE | Raven slot memories, MoE+SD Amdahl cost model, TIES merging (MeMo), Delta Block cross-layer (**default**) | ✓ Implemented |
+| Diffusion/Denoising | dLLM D2F block-parallel denoising, Tri-Mode AR+Diffusion+Self-Speculation (GOAT 4/4) | ✓ Partial (untrained acceptance rate 1.0) |
 | Game/Self-Play | Sudoku, Go, Monopoly, Bomber, Unit Distance lattice constructions | ✓ Implemented |
-| SIMD/Perf | NEON SIMD matmul/HLA kernels, zero-alloc hot paths, Minkowski lattice embedding | ✓ Implemented |
+| SIMD/Perf | NEON SIMD matmul/HLA kernels, zero-alloc hot paths, Minkowski lattice embedding, LDT α-intersection (**default**) | ✓ Implemented |
 
-**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`
+**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`
 
 ---
 
