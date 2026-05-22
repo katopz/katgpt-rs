@@ -147,7 +147,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
   - Start AR, switch to SelfSpeculation, switch to DiscreteDiffusion
   - Verify: seamless transition
 - [x] Benchmark: throughput comparison AR vs Speculative vs SelfSpeculation vs D2F
-- [ ] Record results in `.benchmarks/018_d2f_verifier_goat.md`
+- [x] Record results in `.benchmarks/018_d2f_verifier_goat.md`
 
 ### T6: Trained Sampler Research (lower priority, deferred)
 - [ ] Design `DiffusionSampler` — lightweight classifier for per-position correctness

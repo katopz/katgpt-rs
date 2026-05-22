@@ -36,11 +36,30 @@ Hot-path Rust optimization patterns. Apply to any microsecond-sensitive code.
 - Keep inner loops branch-free (use `bool as usize` instead of `if`)
 - Verify with release build — SIMD benefits only appear with optimizations enabled
 
-### Parallelism
+### Parallelism / Rayon
 
 - Only parallelize when per-task work exceeds thread-pool overhead (~5μs for rayon)
 - Benchmark serial vs parallel at actual workload size before committing
 - Rule of thumb: parallelism wins only when per-iteration work > 10μs or count > 1000
+- Use `rayon::join(|| left(), || right())` for recursive divide-and-conquer — the primitive that powers Rayon; work-stealing ensures threads don't sit idle
+- Use `.par_sort()` and `.par_extend()` instead of manual `.par_iter().collect()` — Rayon provides optimized parallel versions of stdlib algorithms
+- Use custom `ThreadPool` to isolate core usage (e.g., reserve CPU for a web server):
+
+```text
+let pool = rayon::ThreadPoolBuilder::new().num_threads(4).build().unwrap();
+pool.install(|| { /* parallel code here */ });
+```
+
+- Prefer contiguous data (`Vec`, slices) — Rayon splits chunks efficiently; `LinkedList` forces traversal before splitting
+- Profile before and after with `criterion` — warm-up cost and orchestration overhead may negate gains
+
+#### Parallelism: When to Use What
+
+| Feature | `std::iter` | `rayon::par_iter` | `tokio::spawn` |
+|---|---|---|---|
+| **Best For** | Small data / Simple logic | Big data / CPU-heavy | I/O / Networking |
+| **Overhead** | Zero | Medium (task splitting) | High (runtime / context switch) |
+| **Execution** | Sequential | Multi-threaded (parallel) | Concurrent (event loop) |
 
 ### Allocation
 
@@ -142,6 +161,36 @@ let cache: Vec<f32> = positions.iter()
 Always benchmark before AND after adding parallelism. If the serial version is faster, keep serial.
 Parallel overhead: thread wake (~2μs) + work stealing (~3μs) + synchronization.
 If your total work is < 10μs, parallelism will make it slower.
+
+### Don't: Use Mutex in Rayon closures
+
+`Mutex` introduces contention — 16 threads fighting for one lock effectively run sequentially (or slower).
+Prefer atomic types or reduce/fold patterns:
+
+```text
+// BAD: shared Mutex — threads serialize on lock
+let results = Mutex::new(Vec::new());
+(0..1000).into_par_iter().for_each(|i| {
+    results.lock().unwrap().push(compute(i));  // contention!
+});
+
+// GOOD: map + collect — threads work independently, merge at end
+let results: Vec<_> = (0..1000).into_par_iter()
+    .map(|i| compute(i))
+    .collect();
+```
+
+### Don't: Ignore Rayon panic propagation
+
+If a closure inside a Rayon thread panics, Rayon propagates that panic to the calling thread.
+This can crash your entire application if not handled at the top level. Wrap parallel closures
+in `catch_unwind` or ensure invariants are validated before entering Rayon.
+
+### Don't: Ignore cache locality in parallel splits
+
+Splitting work too finely loses CPU cache benefits. Processing contiguous chunks is faster than
+jumping across memory addresses in parallel. Prefer chunk-based splitting over per-element parallelism
+when data is large but per-element work is small.
 
 ### Don't: Ignore binary bloat from feature flags
 
