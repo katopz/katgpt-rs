@@ -680,3 +680,130 @@ fn goat_octopus_storage_efficiency() {
         );
     }
 }
+
+// ── T10d: OCTOPUS vs SpectralQuant MaxSim ────────────────────
+
+#[cfg(all(feature = "spectral_quant", feature = "maxsim"))]
+#[test]
+fn goat_octopus_vs_spectralquant_maxsim() {
+    let dim = 128;
+    let bits_list = [2u8, 3, 4];
+    let n_keys = 512;
+    let lq = 4; // query tokens
+    let n_calib = 256;
+
+    println!(
+        "\n🧪 GOAT 022: OCTOPUS vs SpectralQuant MaxSim (d={dim}, {n_keys} keys, {lq} query tokens)"
+    );
+    println!("  SQ calibrated ({n_calib} samples), OCTOPUS data-oblivious (0 samples)");
+    println!(
+        "  Note: MaxSim amplifies quantization error 12-14× — lower base MSE → lower MaxSim error"
+    );
+    println!("{}", "═".repeat(110));
+    println!(
+        "{:<5} {:>12} {:>12} {:>12} {:>10} {:>10} {:>8}",
+        "bits", "SQ MS Err%", "OCT MS Err%", "MS Err Δ%", "SQ Cos", "OCT Cos", "Winner"
+    );
+    println!("{}", "-".repeat(110));
+
+    // Shared keys and queries (same RNG seed for reproducibility)
+    let mut rng = Rng::new(42);
+    let keys: Vec<Vec<f32>> = (0..n_keys).map(|_| gaussian_vec(dim, &mut rng)).collect();
+
+    let mut q_rng = Rng::new(77);
+    let queries: Vec<f32> = (0..lq)
+        .flat_map(|_| gaussian_vec(dim, &mut q_rng))
+        .collect();
+
+    // Ground-truth MaxSim on uncompressed flat keys
+    let flat_keys: Vec<f32> = keys.iter().flatten().copied().collect();
+    let gt_ms = microgpt_rs::simd::maxsim_score(&queries, &flat_keys, lq, n_keys, dim);
+
+    for &bits in &bits_list {
+        let max_seq = n_keys + 16;
+
+        // SpectralQuant cache (calibrated)
+        let avg_bits = bits as f32;
+        let sq_config = SpectralQuantKVCacheConfig {
+            avg_bits,
+            min_tail_bits: 2,
+            max_bits: 8,
+            qjl_dim: dim / 4,
+            lloyd_max_iter: 20,
+            calibration_samples: n_calib,
+            seed: 42,
+            use_water_fill: true,
+            wf_min_bits: 2,
+            wf_max_bits: 8,
+            n_layers: 1,
+            kv_dim: dim,
+            max_seq_len: max_seq,
+        };
+        let calib_keys = &keys[..n_calib];
+        let mut calib_rng = Rng::new(99);
+        let calib_vals: Vec<Vec<f32>> = (0..n_calib)
+            .map(|_| gaussian_vec(dim, &mut calib_rng))
+            .collect();
+        let mut sq_cache = SpectralQuantKVCache::from_keys(&sq_config, calib_keys, &calib_vals);
+        for (pos, key) in keys.iter().enumerate() {
+            sq_cache.store_key(0, pos, key);
+        }
+
+        // OCTOPUS cache (data-oblivious, no calibration)
+        let mut oct_cache = make_octopus_cache(dim, bits, bits, 1, max_seq, 42);
+        for (pos, key) in keys.iter().enumerate() {
+            oct_cache.store_key(0, pos, key);
+        }
+
+        // Compute MaxSim scores
+        let oct_ms = microgpt_rs::octopus::forward::maxsim_score_octopus(
+            &queries,
+            &oct_cache,
+            0,
+            0..n_keys,
+            dim,
+        );
+        let sq_ms = microgpt_rs::spectralquant::forward::maxsim_score_spectralquant(
+            &queries,
+            &mut sq_cache,
+            0,
+            0..n_keys,
+            dim,
+        );
+
+        // MaxSim error % vs ground truth
+        let sq_ms_err_pct = ((sq_ms - gt_ms).abs() / gt_ms.abs()) * 100.0;
+        let oct_ms_err_pct = ((oct_ms - gt_ms).abs() / gt_ms.abs()) * 100.0;
+        let ms_err_delta = oct_ms_err_pct - sq_ms_err_pct;
+
+        // Cosine similarity (sample 64 positions to keep runtime reasonable)
+        let sample_step = (n_keys / 64).max(1);
+        let mut sq_cos_vals = Vec::with_capacity(64);
+        let mut oct_cos_vals = Vec::with_capacity(64);
+        let mut sq_buf = vec![0.0f32; dim];
+        for pos in (0..n_keys).step_by(sample_step) {
+            let orig = &keys[pos];
+            sq_cache.dequantize_key_into(0, pos, &mut sq_buf);
+            let sq_recon = sq_buf.clone();
+            let oct_recon = oct_cache.dequantize_key(0, pos);
+
+            sq_cos_vals.push(cosine_similarity(orig, &sq_recon) as f64);
+            oct_cos_vals.push(cosine_similarity(orig, &oct_recon) as f64);
+        }
+        let (sq_cos, _) = mean_std(&sq_cos_vals);
+        let (oct_cos, _) = mean_std(&oct_cos_vals);
+
+        let winner = if oct_ms_err_pct < sq_ms_err_pct {
+            "OCTOPUS"
+        } else {
+            "SQ"
+        };
+
+        println!(
+            "{:<5} {:>11.2}% {:>11.2}% {:>11.2}% {:>10.6} {:>10.6} {:>8}",
+            bits, sq_ms_err_pct, oct_ms_err_pct, ms_err_delta, sq_cos, oct_cos, winner
+        );
+    }
+
+    println!("\n  Ground-truth MaxSim (f32): {gt_ms:.6}");
+}

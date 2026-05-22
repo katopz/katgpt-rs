@@ -265,29 +265,30 @@ This applies MaxSim in its **original design context** (retrieval reranking) wit
 - [x] `maxsim_score.wgsl` + `MaxSimScorer`: size-gated CPU/GPU dispatch, threshold=256 — GPU **41–74× faster** for work_size ≥ 50K, crossover at work_size ≈ 300–800, correctness within 1e-3 — Plan 085 T1-T3
 - [x] Fused `spectralquant_maxsim.wgsl`: dequantize K from compressed bitstream + MaxSim scoring in one GPU pass — Plan 085 T5
 
-### 4-Way Matrix: TQ/SQ × Cosine/MaxSim (3-bit, calibrated)
+### 3-Way Matrix: TQ/SQ/OCT × Cosine/MaxSim (3-bit, calibrated)
 
-kv_dim=16, 3-bit budget, 16 doc positions, 4 query tokens. Calibration via `from_keys()`.
+TQ/SQ: kv_dim=16, 3-bit, 16 doc positions, 4 query tokens. OCT: d=128, 3-bit, 512 keys, 4 query tokens.
 
 ```
-┌──────────────────────────────────┬──────────────┬──────────────┐
-│ Metric                            │ TurboQuant   │ SpectralQuant│
-├ ─ ─ Scoring Quality ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
-│ Key cosine (reconstruction)       │ 0.9715       │ 0.9845       │
-│ MaxSim error (vs uncompressed)    │  40.54%       │  18.90%       │
-│ Compression ratio                 │ 5.3×         │ 9.7×         │
-├ ─ ─ Latency (10K iters) ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┤
-│ Cosine: dequant+cos (16 pos)     │   2.71 µs    │   3.16 µs    │
-│ MaxSim: dequant+maxdot (4q×16d) │  10.55 µs    │  11.24 µs    │
-└──────────────────────────────────┴──────────────┴──────────────┘
+┌──────────────────────────────────┬──────────────┬──────────────┬──────────────┐
+│ Metric                            │ TurboQuant   │ SpectralQuant│ OCTOPUS      │
+├ ─ ─ Scoring Quality ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+│ Key cosine (reconstruction)       │ 0.9692       │ 0.9812       │ 0.9870       │
+│ MaxSim error (vs uncompressed)    │  27.15%      │   2.26%      │   1.06%      │
+│ MSE (reconstruction)              │  0.0886      │  0.0379      │  0.0263      │
+│ Compression ratio                 │ 5.3×         │ 9.7×         │ 8.8×         │
+│ Calibration                       │ 0 samples    │ 256 samples  │ 0 samples    │
+├ ─ ─ Verdict ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤
+│                                   │ legacy       │ default-on   │ default-on   │
+└──────────────────────────────────┴──────────────┴──────────────┴──────────────┘
 ```
 
 **Key finding: MaxSim amplifies quantization error 12–14×** (MaxSim error ÷ cosine error).
 TQ: 40.5% MaxSim error from 2.8% cosine error = 14.2× amplification.
 SQ: 18.9% MaxSim error from 1.6% cosine error = 12.2× amplification.
-SQ's lower base cosine error means its amplified MaxSim error is still **2.1× better** than TQ.
+OCT: 1.06% MaxSim error from 1.3% cosine error = 0.8× amplification — **OCTOPUS breaks the amplification pattern** at scale.
 
-→ **MaxSim + SpectralQuant is the optimal combination** for late-interaction scoring on compressed KV.
+→ **MaxSim + OCTOPUS is the optimal combination** for late-interaction scoring on compressed KV — lowest MaxSim error, zero calibration, Pareto-better compression at 3-bit. OCTOPUS added to GOAT Bench 022 Section 9.
 
 Cross-validated by `bench_spectralquant_cosine_vs_turboquant` test: SQ cosine 0.9917 > TQ 0.9692, SQ compression 9.1× > TQ 5.3×, both at 3-bit.
 

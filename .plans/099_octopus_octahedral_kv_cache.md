@@ -3,7 +3,7 @@
 > **Research:** 63 (OCTOPUS Octahedral KV Cache Compression)
 > **Related Plans:** 043 (TurboQuant), 077 (SpectralQuant Upgrade), 044 (PFlash), 080 (MaxSim), 095 (GRAM Width/Depth GOAT), 096 (MoE+SD CoDesign GOAT), 050 (Feature Gate Audit)
 **Status:** ✅ Complete
-> **Verdict:** High-value addition. OCTOPUS is the first data-oblivious codec to beat calibrated SpectralQuant at all bit widths (-22% to -49% MSE, Bench 022). Data-oblivious (no calibration), regular memory access patterns (GPU-friendly), simple piecewise-linear math (Rust-friendly). Default-on as of Plan 099. SpectralQuant kept for per-dimension water-fill scenarios; TurboQuant demoted to legacy baseline.
+> **Verdict:** High-value addition. OCTOPUS is the first data-oblivious codec to beat calibrated SpectralQuant at all bit widths (-22% to -49% MSE, Bench 022). Dominates MaxSim late-interaction scoring too (1.06% vs SQ 2.26% at 3-bit, Bench 022 §9). Data-oblivious (no calibration), regular memory access patterns (GPU-friendly), simple piecewise-linear math (Rust-friendly). Default-on as of Plan 099. SpectralQuant kept for per-dimension water-fill scenarios; TurboQuant demoted to legacy baseline.
 
 ## Summary
 
@@ -39,6 +39,7 @@ At 2-bit, OCTOPUS is the only codec that doesn't collapse on needle-in-a-haystac
 - [x] T10: Add GOAT benchmark — compression ratio comparison vs. TurboQuant at matched bits
 - [x] T11: Run GOAT proof, record results in `.benchmarks/022_octopus_goat.md`
 - [x] T12: Update `README.md` with OCTOPUS section + production stack ordering
+- [x] T13: Add MaxSim GOAT proof — OCTOPUS vs SQ MaxSim at d=128, 512 keys (Bench 022 §9)
 
 ## Architecture
 
