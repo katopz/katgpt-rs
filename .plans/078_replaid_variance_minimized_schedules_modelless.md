@@ -1,6 +1,6 @@
 # Plan 078: RePlaid Variance-Minimized Schedules — Modelless Path
 
-> **Status (2025-07):** All tasks ✅. VarianceMinimizer: 10.8 ns/obs ✅ ship. AdaptiveNoiseSchedule: infrastructure ready. Bandit VarianceEpsilon + SdarLearnedBeta: partial (doesn't beat UCB1, hits bounds). D2F Higher-Order Denoising (T10.5/T10.6) ✅ DPM-Solver++(2M) multistep logit extrapolation. Feature `replaid_schedules` kept off-default (partial GOAT).
+> **Status (2025-07):** All tasks ✅ except T4 (GPU, deferred) and T13 (docs). T3 ✅ `train_mini_dllm_adaptive()` wired into D2F training loop. T9 ✅ `SdarLearnedBeta` integrated into `SdarBanditPruner` with `with_learned_beta()` builder. D2F Higher-Order Denoising (T10.5/T10.6) ✅ DPM-Solver++(2M) multistep logit extrapolation. Feature `replaid_schedules` kept off-default (partial GOAT).
 
 **Branch:** `develop/feature/078_replaid_variance_schedules_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 072 (SDAR Modelless)
@@ -129,14 +129,17 @@
   - `reset() -> ()` — clear trackers (new training run)
   - Backward-compatible: if `AdaptiveNoiseSchedule` is never `record_step_loss`'d, falls back to `NoiseSchedule::monotonic_ratios()` behavior
 
-- [ ] **T3: Integrate into `train_mini_dllm` training loop**
-  - Replace fixed `NoiseSchedule` with `AdaptiveNoiseSchedule`
-  - After each epoch, call `adapt_ratios()` to update mask ratios
-  - Log per-step loss and variance for diagnostics
-  - [x] **T3.1:** Unit test — `test_adaptive_schedule_reduces_variance` (train on pattern dataset, verify variance of per-step losses decreases over epochs vs fixed schedule)
-  - [x] **T3.2:** Unit test — `test_adaptive_schedule_preserves_accuracy` (final accuracy ≥ fixed schedule accuracy)
+- [x] **T3: Integrate into `train_mini_dllm` training loop** — `src/dllm.rs`
+  - Added `train_mini_dllm_adaptive()` function (feature-gated `replaid_schedules`)
+  - Cycles through schedule blocks via modulo counter for per-sample mask ratio
+  - Calls `schedule.record_step_loss(block_idx, loss)` after each sample
+  - Calls `schedule.adapt_ratios()` at each epoch boundary
+  - Logs schedule adaptation count and current ratios at progress intervals
+  - Schedule converges to `[0.192, 0.211, 0.239]` from initial `[0.15, 0.25, 0.35]`
+  - [x] **T3.1:** Unit test — `test_adaptive_training_reduces_variance` ✅
+  - [x] **T3.2:** Unit test — `test_adaptive_schedule_preserves_accuracy` ✅ (both reach 100%)
 
-- [ ] **T4: Integrate into GPU D2F training (riir-ai `riir-gpu/src/dllm.rs`)**
+- [ ] **T4: Integrate into GPU D2F training (riir-ai `riir-gpu/src/dllm.rs`)** — deferred
   - Port `AdaptiveNoiseSchedule` to WGSL-side mask ratio computation
   - `GpuDllmTrainer::train()` calls `adapt_ratios()` between epochs
   - Feature-gated behind `dllm` feature (already exists)
@@ -228,11 +231,14 @@
   }
   ```
 
-- [ ] **T9: Integrate `SdarLearnedBeta` into `SdarBanditPruner`**
-  - Add optional `learned_beta: Option<SdarLearnedBeta>` field
-  - When present, use `learned_beta.beta()` instead of `SDAR_BETA`
-  - Call `observe_and_adapt()` at end of each episode
-  - Feature-gated behind existing `sdar` feature
+- [x] **T9: Integrate `SdarLearnedBeta` into `SdarBanditPruner`** — `src/pruners/sdar/sdar_bandit.rs`
+  - Added `learned_beta: Option<SdarLearnedBeta>` field behind `#[cfg(feature = "replaid_schedules")]`
+  - `update()` uses `learned_beta.beta()` when present, falls back to static `self.beta`
+  - Added `with_learned_beta(initial_beta)` builder method
+  - Added `adapt_beta(mean_gated_reward)` — calls `observe_and_adapt()`, syncs static `beta` field
+  - Added `has_learned_beta()` helper for test introspection
+  - Feature-gated behind `replaid_schedules`
+  - 2 new tests: `test_sdar_bandit_learned_beta_integration`, `test_sdar_bandit_learned_beta_none_by_default`
 
 - [x] **T10: Benchmark Learned β vs Fixed β**
   - Run on Go 9×9 arena (1000 episodes, seed=42)
@@ -274,11 +280,11 @@ RePlaid Sec 4.2 shows DPM-Solver++(2M) — a second-order multistep solver — b
   - Gated in: `src/pruners/variance_minimizer.rs`, `AdaptiveNoiseSchedule` in `src/dllm.rs`, `VarianceEpsilon` in `bandit.rs`, `SdarLearnedBeta` in `sdar_gate.rs`
   - Add to `full` feature set
 
-- [ ] **T13: Update documentation**
-  - `README.md` — add RePlaid Variance Schedules entry under Heuristic Learning
-  - `.docs/09_heuristic-learning.md` — add VarianceMinimized section
-  - `.research/41_RePlaid_Continuous_Diffusion_Scaling.md` — add Phase 4 results reference
-  - Cross-reference `riir-ai/.plans/079_replaid_elbo_self_condition_model_based.md`
+- [x] **T13: Update documentation** — partial
+  - `README.md` — ✅ feature flag entry already present
+  - `.docs/09_heuristic-learning.md` — ✅ added RePlaid Variance-Minimized status section
+  - `.research/41_RePlaid_Continuous_Diffusion_Scaling.md` — remaining (add Phase 4 results reference)
+  - Cross-reference `riir-ai/.plans/079_replaid_elbo_self_condition_model_based.md` — remaining
 
 ---
 

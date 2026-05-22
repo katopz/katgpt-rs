@@ -193,6 +193,10 @@ pub struct SdarBanditPruner<P: ScreeningPruner> {
     gate_stats: Vec<GateStats>,
     /// Whether gate statistics tracking is enabled.
     track_gate_stats: bool,
+    /// Optional learned β (RePlaid variance-minimized).
+    /// When present, β adapts per-episode based on gated reward variance.
+    #[cfg(feature = "replaid_schedules")]
+    learned_beta: Option<crate::pruners::sdar_gate::SdarLearnedBeta>,
 }
 
 impl<P: ScreeningPruner> SdarBanditPruner<P> {
@@ -214,6 +218,8 @@ impl<P: ScreeningPruner> SdarBanditPruner<P> {
                 Vec::new()
             },
             track_gate_stats: config.track_gate_stats,
+            #[cfg(feature = "replaid_schedules")]
+            learned_beta: None,
         }
     }
 
@@ -227,18 +233,26 @@ impl<P: ScreeningPruner> SdarBanditPruner<P> {
     #[inline]
     pub fn update(&mut self, arm: usize, reward: f32) {
         let q_value = self.inner.q_values().get(arm).copied().unwrap_or(0.0);
-        let gated = sdar_gated_reward(reward, q_value, self.beta);
+
+        // Use learned β when available, otherwise static β
+        #[cfg(feature = "replaid_schedules")]
+        let beta = self.learned_beta.as_ref().map_or(self.beta, |lb| lb.beta());
+        #[cfg(not(feature = "replaid_schedules"))]
+        let beta = self.beta;
+
+        let gated = sdar_gated_reward(reward, q_value, beta);
 
         // Track statistics if enabled
         if self.track_gate_stats
-            && let Some(stats) = self.gate_stats.get_mut(arm) {
-                let gate = sdar_gate_default(reward - q_value);
-                stats.update_count += 1;
-                stats.gate_sum += gate;
-                stats.original_reward_sum += reward;
-                stats.gated_reward_sum += gated;
-                stats.last_gate = gate;
-            }
+            && let Some(stats) = self.gate_stats.get_mut(arm)
+        {
+            let gate = sdar_gate_default(reward - q_value);
+            stats.update_count += 1;
+            stats.gate_sum += gate;
+            stats.original_reward_sum += reward;
+            stats.gated_reward_sum += gated;
+            stats.last_gate = gate;
+        }
 
         self.inner.update(arm, gated);
     }
@@ -265,6 +279,36 @@ impl<P: ScreeningPruner> SdarBanditPruner<P> {
     /// Can be adjusted at runtime for adaptive gating experiments.
     pub fn set_beta(&mut self, beta: f32) {
         self.beta = beta;
+    }
+
+    /// Enable learned β (RePlaid variance-minimized).
+    ///
+    /// When enabled, β adapts per-episode based on gated reward variance.
+    /// Call `adapt_beta()` after each episode to update.
+    #[cfg(feature = "replaid_schedules")]
+    pub fn with_learned_beta(mut self, initial_beta: f32) -> Self {
+        self.learned_beta = Some(crate::pruners::sdar_gate::SdarLearnedBeta::new(
+            initial_beta,
+        ));
+        self
+    }
+
+    /// Adapt learned β based on mean gated reward from this episode.
+    ///
+    /// Call after each episode. No-op when learned β is disabled.
+    #[cfg(feature = "replaid_schedules")]
+    pub fn adapt_beta(&mut self, mean_gated_reward: f32) {
+        if let Some(ref mut lb) = self.learned_beta {
+            lb.observe_and_adapt(mean_gated_reward);
+            // Sync the static beta field so beta() still works
+            self.beta = lb.beta();
+        }
+    }
+
+    /// Whether learned β (RePlaid variance-minimized) is active.
+    #[cfg(feature = "replaid_schedules")]
+    pub fn has_learned_beta(&self) -> bool {
+        self.learned_beta.is_some()
     }
 
     /// Access the inner bandit pruner.
@@ -700,5 +744,92 @@ mod tests {
             }
             _ => panic!("Expected EpsilonGreedy strategy"),
         }
+    }
+
+    // ── Learned Beta Integration Tests ──────────────────────────
+
+    #[cfg(feature = "replaid_schedules")]
+    #[test]
+    fn test_sdar_bandit_learned_beta_integration() {
+        let inner = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 3);
+        let pruner = SdarBanditPruner::new(inner, 3).with_learned_beta(5.0);
+
+        // Verify learned_beta is enabled
+        assert!(pruner.has_learned_beta(), "learned_beta should be Some");
+        assert!(
+            (pruner.beta() - 5.0).abs() < 1e-6,
+            "Initial beta should be 5.0, got {}",
+            pruner.beta()
+        );
+
+        let mut pruner = pruner;
+        let initial_beta = pruner.beta();
+
+        // Run 100 updates across 10 episodes with varying rewards
+        for episode in 0..10 {
+            let mut gated_sum = 0.0;
+            let mut gated_count = 0;
+            for step in 0..10 {
+                let arm = step % 3;
+                let reward = (episode as f32 * 0.1) + (step as f32 * 0.05) - 0.25;
+                let q_before = pruner.q_values().get(arm).copied().unwrap_or(0.0);
+                let gap = reward - q_before;
+                let gate = 1.0 / (1.0 + (-5.0 * gap).exp());
+                let gated_reward = reward * gate;
+                gated_sum += gated_reward;
+                gated_count += 1;
+                pruner.update(arm, reward);
+            }
+            let mean_gated = gated_sum / gated_count as f32;
+            pruner.adapt_beta(mean_gated);
+        }
+
+        // β should have changed from initial 5.0
+        let final_beta = pruner.beta();
+        assert!(
+            (final_beta - initial_beta).abs() > 0.01,
+            "β should adapt from initial {initial_beta}, got {final_beta}"
+        );
+    }
+
+    #[cfg(feature = "replaid_schedules")]
+    #[test]
+    fn test_sdar_bandit_learned_beta_none_by_default() {
+        let inner = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 3);
+        let pruner = SdarBanditPruner::new(inner, 3);
+
+        // Verify learned_beta is None by default
+        assert!(
+            !pruner.has_learned_beta(),
+            "learned_beta should be None by default"
+        );
+
+        let mut pruner = pruner;
+        let initial_beta = pruner.beta();
+
+        // Run many updates — β should stay unchanged
+        for _ in 0..100 {
+            for arm in 0..3 {
+                pruner.update(arm, 0.5);
+            }
+        }
+
+        assert_eq!(
+            pruner.beta(),
+            initial_beta,
+            "β should remain unchanged when learned_beta is None"
+        );
+        assert!(
+            (pruner.beta() - 5.0).abs() < 1e-6,
+            "Default β should be 5.0"
+        );
+
+        // adapt_beta is a no-op when learned_beta is None
+        pruner.adapt_beta(0.5);
+        assert_eq!(
+            pruner.beta(),
+            initial_beta,
+            "adapt_beta should be no-op when learned_beta is None"
+        );
     }
 }

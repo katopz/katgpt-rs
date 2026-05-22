@@ -12,6 +12,8 @@
 >
 > **Status (Plan 072):** SDAR Gated distillation modelless — `sdar_gate()`, `SdarBanditPruner`, `SdarGatedAbsorbCompress` behind `--features sdar_gate`. Asymmetric trust: sigmoid gate σ(β·x) endorses positive gaps, attenuates negative. β=5.0 paper-validated. Benchmark: 118M updates/sec, zero hot-path overhead, 97.5% targeting accuracy. See `.benchmarks/008_sdar_gated_modelless.md`.
 >
+> **Status (Plan 078):** RePlaid Variance-Minimized Schedules — `VarianceMinimizer`, `AdaptiveNoiseSchedule`, `train_mini_dllm_adaptive()`, `VarianceEpsilon` bandit strategy, `SdarLearnedBeta` integrated into `SdarBanditPruner` via `with_learned_beta()` builder. Self-supervised schedule optimization: minimizes per-step loss variance to equalize denoising difficulty (RePlaid Prop 1). Schedule converges from `[0.15, 0.25, 0.35]` → `[0.192, 0.211, 0.239]`. D2F Higher-Order Denoising (T10.5/T10.6): DPM-Solver++(2M) multistep logit extrapolation, potential 4× throughput. Behind `--features replaid_schedules` (off by default, experimental). See `.benchmarks/012_replaid_variance_schedules.md`.
+>
 > **Status (Plan 032):** TrialLog, AbsorbCompress, HotSwapPruner, and RegressionSuite are implemented behind `--features bandit`. See examples `hl_01_trial_log` and `hl_02_hotswap`.
 
 ## What is Heuristic Learning?
