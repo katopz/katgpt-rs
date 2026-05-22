@@ -372,16 +372,16 @@ Ensure all TES code is behind `tes_loop` feature gate with zero impact on defaul
 
 ### Checklist
 
-- [ ] `tes_loop = ["bandit"]` added to `Cargo.toml` features
-- [ ] All new types: `#[cfg(feature = "tes_loop")]`
-- [ ] All new files: `tes_loop.rs` conditionally included in `mod.rs`
-- [ ] `BanditStrategy::Rpucg` variant: `#[cfg(feature = "tes_loop")]`
-- [ ] `cargo build` — zero new code compiled, no warnings
-- [ ] `cargo build --features tes_loop` — all TES code active
-- [ ] `cargo test` (no features) — all existing tests pass
-- [ ] `cargo test --features tes_loop` — all tests pass including new
-- [ ] `cargo clippy --features tes_loop` — no warnings
-- [ ] No performance regression on default build
+- [x] `tes_loop = ["bandit"]` added to `Cargo.toml` features
+- [x] All new types: `#[cfg(feature = "tes_loop")]`
+- [x] All new files: `tes_loop.rs` conditionally included in `mod.rs`
+- [x] `BanditStrategy::Rpucg` variant: `#[cfg(feature = "tes_loop")]`
+- [x] `cargo build` — zero new code compiled, no warnings
+- [x] `cargo build --features tes_loop` — all TES code active
+- [x] `cargo test` (no features) — all existing tests pass
+- [x] `cargo test --features tes_loop` — all tests pass including new
+- [x] `cargo clippy --features tes_loop` — no warnings
+- [x] No performance regression on default build
 
 ---
 
