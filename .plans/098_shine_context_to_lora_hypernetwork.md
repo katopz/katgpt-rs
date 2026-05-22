@@ -2,22 +2,22 @@
 
 > **Research:** 62 (SHINE Scalable In-Context Hypernetwork)
 > **Related Plans:** 025 (Model vs Modelless Bandit), 050 (Feature Gate Audit), 092 (Freeze/Thaw), 094 (MeMo Reflections + TIES), 097 (Delta Routing)
-> **Status:** 📋 Draft
+**Status:** ✅ Done
 > **Verdict:** Technique extraction — two distillable components: Meta LoRA context-to-adapter + alternating sparse M2P attention. Fits model-based path. Feature gate `shine_hypernet` on riir-ai side.
 
 ## Tasks
 
-- [ ] T1: Add `Alternating2D` variant to `AttentionMode` in `microgpt-core/src/types.rs`
-- [ ] T2: Add alternating row/column attention dispatch in `riir-gpu` WGSL kernel
-- [ ] T3: Implement `MetaLoRAWeights` struct + memory extraction forward pass (riir-ai)
-- [ ] T4: Implement `M2PTransformer` with alternating column/row attention (riir-ai)
-- [ ] T5: Implement `context_to_lora()` end-to-end function (riir-ai)
-- [ ] T6: Add `shine_hypernet` feature gate to `riir-ai/crates/riir-gpu/Cargo.toml`
-- [ ] T7: Add `shine_routing` feature gate (lightweight: extraction → expert routing only)
-- [ ] T8: GOAT proof — `bomber_14_shine_expert` (context-generated LoRA vs baseline)
-- [ ] T9: GOAT proof — `go_11_shine_routing` (context-informed expert selection vs static routing)
-- [ ] T10: Benchmark `Alternating2D` attention vs full bidirectional on grid dimensions
-- [ ] T11: Update README.md + `.docs/15_paper_feature_comparison.md`
+- [x] T1: Add `Alternating2D` variant to `AttentionMode` in `microgpt-core/src/types.rs`
+- [x] T2: Add alternating row/column attention dispatch in `riir-gpu` WGSL kernel
+- [x] T3: Implement `MetaLoRAWeights` struct + memory extraction forward pass (riir-ai)
+- [x] T4: Implement `M2PTransformer` with alternating column/row attention (riir-ai)
+- [x] T5: Implement `context_to_lora()` end-to-end function (riir-ai)
+- [x] T6: Add `shine_hypernet` feature gate to `riir-ai/crates/riir-gpu/Cargo.toml`
+- [x] T7: Add `shine_routing` feature gate (lightweight: extraction → expert routing only)
+- [x] T8: GOAT proof — `bomber_14_shine_expert` (context-generated LoRA vs baseline)
+- [x] T9: GOAT proof — `go_11_shine_routing` (context-informed expert selection vs static routing)
+- [x] T10: Benchmark `Alternating2D` attention vs full bidirectional on grid dimensions
+- [x] T11: Update README.md + `.docs/15_paper_feature_comparison.md`
 
 ---
 
