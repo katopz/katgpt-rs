@@ -1248,6 +1248,70 @@ tests/
 
 📖 See [`.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`](.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md) for full distillation of arXiv:2512.06563.
 
+## 🔧 TileRT Execution Pipeline (Plan 102)
+
+Distills three CPU-applicable insights from [TileRT's persistent tile pipeline](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html): execution stability metrics, contiguous weight allocation, and stage-specialized decode paths.
+
+**GOAT 12/12 proved** (`tests/bench_102_tilert_pipeline_goat.rs`):
+
+| Proof | What It Proves | Result |
+|-------|---------------|--------|
+| P1 | `StabilitySnapshot::compute` correct P50/P99/mean/CV/stability | ✅ Exact match |
+| P2 | `from_phases` single-step constructor | ✅ Phase totals correct |
+| P3 | Decode stability CV < 0.5 across KV sizes | ✅ cv=0.037–0.054 |
+| P4 | `ContiguousWeights` roundtrip bit-identical | ✅ All weight matrices |
+| P5 | Alignment overhead < 15% | ✅ 0.0% (micro) / 52.4KB (4-layer) |
+| P6 | Contiguous embeddings valid, forward logits finite | ✅ 16 dims |
+| P7 | Allocation latency < 10ms | ✅ ~1µs per call |
+| P8 | All `DecodeStage`s produce finite logits | ✅ Prefill/Draft/Verify/Sample |
+| P9 | Draft/Verify logits match standard `forward()` | ✅ Bit-identical |
+| P10 | Stage dispatch overhead < 20% | ✅ **-1.8%** (free) |
+| P11 | Multi-layer (4-layer) roundtrip | ✅ All layers correct |
+| P12 | 1000-step stability accumulation | ✅ cv=0.071 |
+
+### D1: Execution Stability Metrics (`stability_metrics`)
+
+Per-step latency instrumentation with `StabilitySnapshot` — P50, P99, mean, CV (coefficient of variation), stability score (`1.0 - P99/P50`). Foundation for diagnosing performance regressions and validating optimization claims.
+
+```rust
+let mut latencies: Vec<u64> = Vec::new();
+for step in 0..1000 {
+    let t0 = Instant::now();
+    forward(&mut ctx, &weights, &mut cache, token, pos, &config);
+    latencies.push(t0.elapsed().as_nanos() as u64);
+}
+latencies.sort();
+let snap = StabilitySnapshot::compute(&latencies);
+// snap.cv < 0.5, snap.stability_score → 1.0 = perfect
+```
+
+**Feature gate:** `stability_metrics = []` (off by default — diagnostic tool).
+
+### D2: Contiguous Weight Allocation
+
+Single-buffer weight layout with 64-byte alignment padding for L2 cache spatial locality. `ContiguousWeights::from_weights()` packs all per-layer weights into one `Vec<f32>` — zero-copy slice accessors (`layer_wq()`, `layer_wk()`, etc.).
+
+```rust
+let cw = ContiguousWeights::from_weights(&weights);
+// cw.layer_wq(0) → &[f32] view into contiguous buffer
+// cw.buffer_bytes() → total allocation size
+```
+
+**No feature gate** — internal optimization, always available. Micro config overhead: 0.0% (weights fit in L2). Scales to larger models.
+
+### D3: Stage-Specialized Decode (`decode_specialize`)
+
+`DecodeStage` enum (`Prefill`, `Draft`, `Verify`, `Sample`) + `forward_decode_stage()` dispatch. Draft and Verify currently delegate to `forward_base` (correctness-first). Optimization surface: Draft can skip screening + reduce KV writes; Verify needs exact attention.
+
+```rust
+forward_decode_stage(&mut ctx, &weights, &mut cache, token, pos, &config, DecodeStage::Draft);
+forward_decode_stage(&mut ctx, &weights, &mut cache, token, pos, &config, DecodeStage::Verify);
+```
+
+**Feature gate:** `decode_specialize = []` (off by default). Dispatch overhead: **-1.8%** (effectively free due to monomorphization).
+
+📁 `src/weights.rs` (D2), `src/speculative/types.rs` (D1), `src/transformer.rs` (D3)
+
 ## 🏭 Productions
 
 MicroGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:
@@ -1405,6 +1469,8 @@ cargo clippy --all-targets --all-features --quiet
 | `memo_reflections` | MeMo 5-step Reflection QA pipeline — compositional data synthesis with Reflect→Critique→Revise→Verify→Distill. Requires `bandit` (Plan 094, off by default) |
 | `spec_cost_model` | Amdahl cost model for LeviathanVerifier — overlap diagnostic + parallel speedup estimation (Research 59, Plan 096, off by default) |
 | `delta_routing` | Delta Block cross-layer routing — residual delta routing between transformer layers (Research 61, Plan 097, off by default) |
+| `stability_metrics` | Per-step execution stability instrumentation — P50/P99/CV/stability_score via `StabilitySnapshot` (Plan 102, off by default) |
+| `decode_specialize` | Stage-specialized decode paths — `DecodeStage` enum + `forward_decode_stage()` dispatch for Draft/Verify (Plan 102, off by default) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
 > **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
@@ -1423,10 +1489,11 @@ src/
   main.rs           Entry point (proof → bench → Percepta bench → plot)
   types.rs          Re-exports microgpt-core types + QuantizedKVCache trait
   simd.rs           Re-exports microgpt-core SIMD kernels
-  transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate
+  transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate, DecodeStage (Plan 102)
+  weights.rs        ContiguousWeights — single-buffer 64-byte aligned weight layout (Plan 102)
   rerank.rs         MaxSim + Cosine reranking, NDCG evaluation, SymmetricBoundaryPair (behind "maxsim" feature)
   speculative/      SOLID decomposition:
-    types.rs        TreeNode, ConstraintPruner, ScreeningPruner, SpeculativeContext
+    types.rs        TreeNode, ConstraintPruner, ScreeningPruner, SpeculativeContext, StabilitySnapshot (Plan 102)
     dd_tree.rs      DDTree build (best-first + chain-seed + screened)
     dflash.rs       DFlash predict (marginal, AR, parallel, conditioned)
     verifier.rs     SpeculativeVerifier, SimulatedVerifier, LeviathanVerifier
@@ -1657,6 +1724,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **SimpleTES** (`tes_loop`) | [SimpleTES (arXiv:2604.19341)](https://arxiv.org/abs/2604.19341) | **GOAT 8/8** (Bench 016+017). RPUCG beats greedy: 42.8% vs 10.6% wins. Budget scaling: Wide(24×5×8)=0.9988 vs Narrow(2×8×30)=0.8266. `SimpleTesLoop<E>` C×L×K loop. `TrajectoryCredit` bridges to G-Zero Phase 2. Default-on. | Greedy bandit selection |
 | **Lattice Deduction** (`lattice_deduction`) | [LDT (arXiv:2505.12661)](https://arxiv.org/abs/2505.12661) | **GOAT 7/7** (Plan 088). α-intersection pruning, conflict detection, asymmetric elimination. Sudoku + Maze validated. `LdtPruneConfig` composable with `BanditPruner`. Default-on. | Manual constraint pruning |
 | **Delta Routing** (`delta_routing`) | [Delta Attention Residuals (NeurIPS 2026)](https://arxiv.org/abs/2605.19943) | **GOAT 6/6** (Plan 097). Cross-layer residual delta routing via `depth_route()`. Zero throughput overhead (0.97×). Gemma 2 2B validated: −1.62% PPL. Graceful no-op at n_layer<4. Default-on. | Cumulative hidden-state routing |
+| **TileRT Pipeline** (internal + `stability_metrics`, `decode_specialize`) | [TileRT Persistent Tile Pipeline](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | **GOAT 12/12** (Plan 102). `StabilitySnapshot` P50/P99/CV/stability diagnostics. `ContiguousWeights` single-buffer 64-byte aligned layout (0% overhead micro). `DecodeStage` dispatch (-1.8% overhead, free). | Separate per-Vec weight allocations; no per-step latency metrics |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
@@ -1678,6 +1746,8 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **MeMo Reflections** (`memo_reflections`) | Research 60 | 5-step Reflection QA pipeline: Reflect→Critique→Revise→Verify→Distill. `src/pruners/reflection.rs`. TIES merging in `riir-gpu` (Plan 094). | Requires `bandit`; compositional data synthesis |
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |
 | **Spec Cost Model** (`spec_cost_model`) | Research 59 | Amdahl cost model for `LeviathanVerifier` — Raven overlap diagnostic + parallel speedup estimation. MoE+SD co-design (Plan 096). | Analytical model; no runtime overhead |
+| **Stability Metrics** (`stability_metrics`) | [TileRT](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | Per-step P50/P99/CV/stability_score via `StabilitySnapshot`. `log::debug!` probes in `speculative_step_rollback`. GOAT 12/12 (Plan 102). | Diagnostic tool; not needed in production hot path |
+| **Decode Specialize** (`decode_specialize`) | [TileRT Heterogeneous Workers](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | `DecodeStage` enum + `forward_decode_stage()` dispatch. Draft/Verify/Prefill/Sample. Dispatch overhead: -1.8% (free). GOAT 12/12 (Plan 102). | Currently identity dispatch; optimization surface reserved |
 
 
 

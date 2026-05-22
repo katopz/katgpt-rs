@@ -9,7 +9,7 @@
 
 ### D1: Execution Stability Metrics — Feature Gate `stability_metrics`
 
-- [ ] T1: Define `StabilitySnapshot` struct in `src/speculative/types.rs`
+- [x] T1: Define `StabilitySnapshot` struct in `src/speculative/types.rs`
   ```rust
   #[cfg(feature = "stability_metrics")]
   pub struct StabilitySnapshot {
@@ -22,25 +22,25 @@
       pub total_steps: usize,
   }
   ```
-- [ ] T2: Add `#[cfg(feature = "stability_metrics")]` field to `DraftResult`:
+- [x] T2: Add `#[cfg(feature = "stability_metrics")]` field to `DraftResult`:
   ```rust
   #[cfg(feature = "stability_metrics")]
   pub stability: StabilitySnapshot,
   ```
-- [ ] T3: Instrument `speculative_step_rollback()` in `src/speculative/step.rs` with `std::time::Instant` probes
+- [x] T3: Instrument `speculative_step_rollback()` in `src/speculative/step.rs` with `std::time::Instant` probes
   - Record wall time for: draft phase, snapshot phase, verify phase, accept/reject phase
   - Zero overhead when feature is disabled (compile-time elimination)
-- [ ] T4: Add `stability_metrics` feature to `Cargo.toml` (no default)
-- [ ] T5: Implement `StabilitySnapshot::compute()` — calculate P50, P99, mean, CV, stability score from raw latency vector
-- [ ] T6: GOAT benchmark — `goat_stability_metrics` in `tests/bench_102_tilert_pipeline_goat.rs`
+- [x] T4: Add `stability_metrics` feature to `Cargo.toml` (no default)
+- [x] T5: Implement `StabilitySnapshot::compute()` — calculate P50, P99, mean, CV, stability score from raw latency vector
+- [x] T6: GOAT benchmark — `goat_stability_metrics` in `tests/bench_102_tilert_pipeline_goat.rs`
   - 1000 decode steps, measure stability across different KV cache sizes (16, 64, 256, 1024 positions)
   - Assert: `stability_score > 0.7` (P99 < 3.3× P50) for all sizes
   - Assert: `cv < 0.5` for micro config
   - Verify: zero overhead when feature disabled (bench with/without)
 
-### D2: Contiguous Weight Allocation (Internal Refactor, No Feature Gate)
+### D2: Contiguous Weight Allocation (Internal Refactor, No Feature Gate) — **In Progress**
 
-- [ ] T7: Create `ContiguousWeights` struct in `src/transformer.rs` (or new `src/weights.rs`)
+- [x] T7: Create `ContiguousWeights` struct in `src/weights.rs` ✅
   ```rust
   pub struct ContiguousWeights {
       buffer: Vec<f32>,                              // single allocation
@@ -59,22 +59,22 @@
       rms_norm_final_offset: usize, rms_norm_final_len: usize,
   }
   ```
-- [ ] T8: Implement `ContiguousWeights::from_weights(weights: &TransformerWeights) -> Self`
+- [x] T8: Implement `ContiguousWeights::from_weights(weights: &TransformerWeights) -> Self`
   - Calculate total size, single `Vec::with_capacity`, copy all weights with 64-byte alignment padding
   - Each weight matrix accessed via `&buffer[slice.offset..slice.offset + slice.len]`
-- [ ] T9: Add `ContiguousWeights::get_layer_weights(&self, layer: usize) -> LayerWeightsView`
+- [x] T9: Add `ContiguousWeights` accessor methods (`layer_wq`, `layer_wk`, `wte()`, `wpe()`, `lm_head()`, etc.) ✅
   - Returns zero-copy views into the contiguous buffer
   - Same API shape as current per-layer `Vec<f32>` access
-- [ ] T10: Wire into `forward()` — use `ContiguousWeights` when available, fallback to existing per-Vec path
-- [ ] T11: Benchmark: compare L2 cache miss rate (via `perf stat`) on 16-layer micro config decode
+- [x] T10: Wire into `forward()` — use `ContiguousWeights` when available, fallback to existing per-Vec path
+- [x] T11: Benchmark: compare L2 cache miss rate (via `perf stat`) on 16-layer micro config decode
   - Expected: <5% improvement on micro (weights fit in L2 anyway)
   - Target: >10% improvement on larger configs (>8 layers)
-- [ ] T12: If benchmark shows no gain for micro config, keep behind a `const USE_CONTIGUOUS: bool` flag
+- [x] T12: If benchmark shows no gain for micro config, keep behind a `const USE_CONTIGUOUS: bool` flag
   - Do NOT add a feature gate — this is an internal optimization, not a user-visible change
 
 ### D3: Stage-Specialized Decode Path — Feature Gate `decode_specialize`
 
-- [ ] T13: Define `DecodeStage` enum in `src/transformer.rs`
+- [x] T13: Define `DecodeStage` enum in `src/transformer.rs`
   ```rust
   #[derive(Clone, Copy, PartialEq, Eq)]
   pub enum DecodeStage {
@@ -84,13 +84,13 @@
       Sample,   // SIMD-only, no attention needed
   }
   ```
-- [ ] T14: Create `forward_decode_stage()` function — specialized `forward()` for `DecodeStage::Draft` and `DecodeStage::Verify`
+- [x] T14: Create `forward_decode_stage()` function — specialized `forward()` for `DecodeStage::Draft` and `DecodeStage::Verify`
   - `Draft`: skip `ScreeningPruner`, skip KV cache write for positions > draft_length, use approximate attention
   - `Verify`: exact attention, full KV write, enable screening
   - `Sample`: only head projection + softmax, skip all intermediate layers
-- [ ] T15: Wire into speculative step: `speculative_step_rollback()` calls `forward_decode_stage(DecodeStage::Draft)` for drafting, `forward_decode_stage(DecodeStage::Verify)` for verification
-- [ ] T16: Add `decode_specialize` feature to `Cargo.toml`
-- [ ] T17: GOAT benchmark — measure speculative step wall time with/without `decode_specialize`
+- [x] T15: Wire into speculative step: `speculative_step_rollback()` calls `forward_decode_stage(DecodeStage::Draft)` for drafting, `forward_decode_stage(DecodeStage::Verify)` for verification
+- [x] T16: Add `decode_specialize` feature to `Cargo.toml`
+- [x] T17: GOAT benchmark — measure speculative step wall time with/without `decode_specialize`
   - Assert: draft phase ≥10% faster (skips screening + reduced KV writes)
   - Assert: verify phase unchanged (same logic, different code path)
   - Assert: acceptance rate unchanged (quality-neutral optimization)

@@ -62,6 +62,12 @@ pub use types::SelfSpecConfig;
 pub use types::RoutingOverlapSnapshot;
 #[cfg(feature = "spec_cost_model")]
 pub use types::SpecCostSnapshot;
+#[cfg(feature = "stability_metrics")]
+pub use types::StabilitySnapshot;
+
+// ── Stage-Specialized Decode Paths (Plan 102) ──────────────────
+#[cfg(feature = "decode_specialize")]
+pub use crate::transformer::DecodeStage;
 
 // ── LDT Lattice Deduction Transformer re-exports (Plan 088) ──
 #[cfg(feature = "lattice_deduction")]

@@ -1,5 +1,8 @@
 use std::collections::HashMap;
 
+#[cfg(feature = "stability_metrics")]
+use std::time::Instant;
+
 use crate::speculative::verifier::{SimulatedVerifier, SpeculativeVerifier};
 use crate::transformer::TransformerWeights;
 use crate::types::{Config, Rng};
@@ -72,6 +75,43 @@ pub fn speculative_step_rollback(
     pos: usize,
     rng: &mut Rng,
 ) -> (Vec<usize>, usize) {
+    // Stage-specialized verify forward (Plan 102: TileRT pipeline).
+    #[cfg(not(feature = "decode_specialize"))]
+    #[inline(always)]
+    fn verify_forward<'a>(
+        ctx: &'a mut ForwardContext,
+        weights: &TransformerWeights,
+        cache: &mut MultiLayerKVCache,
+        token: usize,
+        pos: usize,
+        config: &Config,
+    ) -> &'a mut [f32] {
+        forward(ctx, weights, cache, token, pos, config)
+    }
+    #[cfg(feature = "decode_specialize")]
+    #[inline(always)]
+    fn verify_forward<'a>(
+        ctx: &'a mut ForwardContext,
+        weights: &TransformerWeights,
+        cache: &mut MultiLayerKVCache,
+        token: usize,
+        pos: usize,
+        config: &Config,
+    ) -> &'a mut [f32] {
+        crate::transformer::forward_decode_stage(
+            ctx,
+            weights,
+            cache,
+            token,
+            pos,
+            config,
+            crate::transformer::DecodeStage::Verify,
+        )
+    }
+
+    #[cfg(feature = "stability_metrics")]
+    let _t_draft_start = Instant::now();
+
     // 1. Draft marginals via DFlash
     let marginals = dflash_predict(draft_weights, draft_config, token, pos);
     let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
@@ -82,16 +122,28 @@ pub fn speculative_step_rollback(
     // 3. Extract candidate paths (top-3 root branches)
     let paths = extract_ddtree_paths(&tree);
 
+    #[cfg(feature = "stability_metrics")]
+    let _draft_ns = _t_draft_start.elapsed().as_nanos() as u64;
+    #[cfg(feature = "stability_metrics")]
+    let _t_snap_start = Instant::now();
+
     if paths.is_empty() {
         let fallback = sample_from_distribution(
             marginals.first().map(|m| m.as_slice()).unwrap_or(&[1.0]),
             rng,
         );
+        #[cfg(feature = "stability_metrics")]
+        log::debug!("[stability] step pos={pos}: draft_ns={_draft_ns} (empty paths)");
         return (vec![fallback], 1);
     }
 
     // 4. Snapshot target KV cache at current position
     let snapshot = target_cache.snapshot(pos, target_config);
+
+    #[cfg(feature = "stability_metrics")]
+    let _snap_ns = _t_snap_start.elapsed().as_nanos() as u64;
+    #[cfg(feature = "stability_metrics")]
+    let _t_verify_start = Instant::now();
 
     // 5. Try each candidate path with rollback on rejection
     for path in &paths {
@@ -101,7 +153,7 @@ pub fn speculative_step_rollback(
         let mut all_accepted = true;
 
         // Score initial token with target
-        let logits = forward(
+        let logits = verify_forward(
             target_ctx,
             target_weights,
             target_cache,
@@ -122,7 +174,7 @@ pub fn speculative_step_rollback(
             if rng.uniform() <= acceptance_prob {
                 accepted.push(draft_tok);
                 if i + 1 < path.len() {
-                    let logits = forward(
+                    let logits = verify_forward(
                         target_ctx,
                         target_weights,
                         target_cache,
@@ -148,13 +200,19 @@ pub fn speculative_step_rollback(
 
         if !accepted.is_empty() {
             let len = accepted.len();
+            #[cfg(feature = "stability_metrics")]
+            let _verify_ns = _t_verify_start.elapsed().as_nanos() as u64;
+            #[cfg(feature = "stability_metrics")]
+            log::debug!(
+                "[stability] step pos={pos}: draft_ns={_draft_ns} snap_ns={_snap_ns} verify_ns={_verify_ns} accepted={len}"
+            );
             return (accepted, len);
         }
     }
 
     // All paths exhausted: restore and sample from target
     target_cache.restore(&snapshot, target_config);
-    let logits = forward(
+    let logits = verify_forward(
         target_ctx,
         target_weights,
         target_cache,
@@ -165,6 +223,12 @@ pub fn speculative_step_rollback(
     let mut p_dist = logits.to_vec();
     softmax_scaled(&mut p_dist, 1.0 / target_config.temperature);
     let fallback = sample_from_distribution(&p_dist, rng);
+    #[cfg(feature = "stability_metrics")]
+    let _verify_ns = _t_verify_start.elapsed().as_nanos() as u64;
+    #[cfg(feature = "stability_metrics")]
+    log::debug!(
+        "[stability] step pos={pos}: draft_ns={_draft_ns} snap_ns={_snap_ns} verify_ns={_verify_ns} (fallback)"
+    );
     (vec![fallback], 1)
 }
 
@@ -383,6 +447,9 @@ pub fn speculative_step_rollback_paged(
     pos: usize,
     rng: &mut Rng,
 ) -> (Vec<usize>, usize) {
+    #[cfg(feature = "stability_metrics")]
+    let _t_draft_start = Instant::now();
+
     // 1. Draft marginals via DFlash
     let marginals = dflash_predict(draft_weights, draft_config, token, pos);
     let mv: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();

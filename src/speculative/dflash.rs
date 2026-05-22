@@ -266,6 +266,8 @@ pub fn dflash_predict_ar(
         routing_overlap: None,
         #[cfg(feature = "spec_cost_model")]
         cost_snapshot: None,
+        #[cfg(feature = "stability_metrics")]
+        stability: None,
     }
 }
 
@@ -307,6 +309,8 @@ pub fn dflash_predict_conditioned(
         routing_overlap: None,
         #[cfg(feature = "spec_cost_model")]
         cost_snapshot: None,
+        #[cfg(feature = "stability_metrics")]
+        stability: None,
     }
 }
 

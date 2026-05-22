@@ -34,6 +34,7 @@ pub mod turboquant;
 pub mod types;
 #[cfg(feature = "unit_distance")]
 pub mod unit_distance;
+pub mod weights;
 
 #[cfg(debug_assertions)]
 pub mod alloc;

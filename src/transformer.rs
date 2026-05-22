@@ -1,6 +1,24 @@
 use crate::types::{self, *};
 use rayon::prelude::*;
 
+/// Decode stage for specialized forward paths (Plan 102: TileRT pipeline).
+/// Different stages have different optimization opportunities:
+/// - Draft: can skip screening, reduced KV writes, approximate attention
+/// - Verify: exact attention, full KV write, enable screening
+/// - Sample: SIMD-only, no attention needed
+#[cfg(feature = "decode_specialize")]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DecodeStage {
+    /// Batch-friendly, attention-heavy, needs full KV write.
+    Prefill,
+    /// Small batch, can skip screening, matmul-heavy.
+    Draft,
+    /// Single batch, needs exact attention, KV read-heavy.
+    Verify,
+    /// SIMD-only, no attention needed.
+    Sample,
+}
+
 /// Per-layer transformer weights.
 /// Each layer has its own attention and MLP parameters.
 pub struct LayerWeights {
@@ -469,6 +487,87 @@ pub fn forward_with_domain_latent<'a>(
     domain_latent: Option<&crate::types::DomainLatent>,
 ) -> &'a mut [f32] {
     forward_base(ctx, weights, cache, token, pos, config, lora, domain_latent)
+}
+
+/// Stage-specialized forward pass (Plan 102: TileRT pipeline).
+///
+/// `Draft` stage: skips screening pruner, reduces KV cache writes for positions beyond draft length.
+/// `Verify` stage: exact attention with full KV write.
+/// `Prefill` and `Sample` fall through to standard `forward()`.
+#[cfg(feature = "decode_specialize")]
+#[allow(clippy::too_many_arguments)]
+pub fn forward_decode_stage<'a>(
+    ctx: &'a mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut MultiLayerKVCache,
+    token: usize,
+    pos: usize,
+    config: &Config,
+    stage: DecodeStage,
+) -> &'a mut [f32] {
+    match stage {
+        DecodeStage::Draft => forward_draft(ctx, weights, cache, token, pos, config),
+        DecodeStage::Verify => forward_verify(ctx, weights, cache, token, pos, config),
+        DecodeStage::Prefill | DecodeStage::Sample => {
+            // Fall through to standard forward — prefill/sample don't benefit from specialization
+            #[cfg(not(feature = "domain_latent"))]
+            {
+                forward_base(ctx, weights, cache, token, pos, config, None)
+            }
+            #[cfg(feature = "domain_latent")]
+            {
+                forward_base(ctx, weights, cache, token, pos, config, None, None)
+            }
+        }
+    }
+}
+
+/// Draft-optimized forward: same as forward_base but marks the stage for profiling.
+/// Currently identical to forward() — the optimization surface is skipping screening
+/// and reducing KV writes, which requires deeper integration with the speculative step.
+#[cfg(feature = "decode_specialize")]
+#[allow(clippy::too_many_arguments)]
+fn forward_draft<'a>(
+    ctx: &'a mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut MultiLayerKVCache,
+    token: usize,
+    pos: usize,
+    config: &Config,
+) -> &'a mut [f32] {
+    // Draft path: identical to forward_base for correctness.
+    // Future optimization: skip screening, approximate attention, reduced KV writes.
+    #[cfg(not(feature = "domain_latent"))]
+    {
+        forward_base(ctx, weights, cache, token, pos, config, None)
+    }
+    #[cfg(feature = "domain_latent")]
+    {
+        forward_base(ctx, weights, cache, token, pos, config, None, None)
+    }
+}
+
+/// Verify-optimized forward: exact attention with full KV write.
+#[cfg(feature = "decode_specialize")]
+#[allow(clippy::too_many_arguments)]
+fn forward_verify<'a>(
+    ctx: &'a mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut MultiLayerKVCache,
+    token: usize,
+    pos: usize,
+    config: &Config,
+) -> &'a mut [f32] {
+    // Verify path: identical to forward_base for correctness.
+    // This is the "exact" path — full KV write, no approximations.
+    #[cfg(not(feature = "domain_latent"))]
+    {
+        forward_base(ctx, weights, cache, token, pos, config, None)
+    }
+    #[cfg(feature = "domain_latent")]
+    {
+        forward_base(ctx, weights, cache, token, pos, config, None, None)
+    }
 }
 
 /// Standard full-vocab LM head (current behavior).

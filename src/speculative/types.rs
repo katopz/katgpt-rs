@@ -184,6 +184,104 @@ impl Ord for TreeNode {
     }
 }
 
+// ── Execution Stability Metrics (Plan 102) ─────────────────────
+
+/// Per-step execution stability metrics (Plan 102: TileRT pipeline).
+/// Zero overhead when `stability_metrics` feature is disabled.
+#[cfg(feature = "stability_metrics")]
+#[derive(Debug, Clone)]
+pub struct StabilitySnapshot {
+    /// Per-phase wall time in nanoseconds: [draft, snapshot, verify, accept_reject]
+    pub phase_latencies_ns: [u64; 4],
+    /// P50 latency across all steps (if accumulated)
+    pub p50_ns: u64,
+    /// P99 latency across all steps
+    pub p99_ns: u64,
+    /// Mean latency
+    pub mean_ns: u64,
+    /// Coefficient of variation (std/mean)
+    pub cv: f64,
+    /// Stability score: 1.0 - (P99 / P50), 1.0 = perfect
+    pub stability_score: f64,
+    /// Total steps recorded
+    pub total_steps: usize,
+}
+
+#[cfg(feature = "stability_metrics")]
+impl StabilitySnapshot {
+    /// Compute stability statistics from a sorted vector of step latencies.
+    /// Input MUST be sorted ascending.
+    pub fn compute(sorted_latencies_ns: &[u64]) -> Self {
+        let n = sorted_latencies_ns.len();
+        if n == 0 {
+            return Self {
+                phase_latencies_ns: [0; 4],
+                p50_ns: 0,
+                p99_ns: 0,
+                mean_ns: 0,
+                cv: 0.0,
+                stability_score: 1.0,
+                total_steps: 0,
+            };
+        }
+
+        let sum: u64 = sorted_latencies_ns.iter().sum();
+        let mean = sum as f64 / n as f64;
+
+        let p50_idx = n / 2;
+        let p99_idx = ((n as f64) * 0.99).floor() as usize;
+        let p99_idx = p99_idx.min(n - 1);
+        let p50 = sorted_latencies_ns[p50_idx];
+        let p99 = sorted_latencies_ns[p99_idx];
+
+        // Variance and CV
+        let variance = if n > 1 {
+            sorted_latencies_ns
+                .iter()
+                .map(|&v| {
+                    let diff = v as f64 - mean;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / (n as f64)
+        } else {
+            0.0
+        };
+        let std_dev = variance.sqrt();
+        let cv = if mean > 0.0 { std_dev / mean } else { 0.0 };
+
+        let stability_score = if p50 > 0 {
+            1.0 - (p99 as f64 / p50 as f64).min(1.0)
+        } else {
+            1.0
+        };
+
+        Self {
+            phase_latencies_ns: [0; 4],
+            p50_ns: p50,
+            p99_ns: p99,
+            mean_ns: mean as u64,
+            cv,
+            stability_score,
+            total_steps: n,
+        }
+    }
+
+    /// Create from individual phase timings (single step).
+    pub fn from_phases(draft_ns: u64, snapshot_ns: u64, verify_ns: u64, accept_ns: u64) -> Self {
+        let total = draft_ns + snapshot_ns + verify_ns + accept_ns;
+        Self {
+            phase_latencies_ns: [draft_ns, snapshot_ns, verify_ns, accept_ns],
+            p50_ns: total,
+            p99_ns: total,
+            mean_ns: total,
+            cv: 0.0,
+            stability_score: 1.0,
+            total_steps: 1,
+        }
+    }
+}
+
 // ── Draft Result ────────────────────────────────────────────────
 
 /// Result of autoregressive drafting: marginals + sampled tokens.
@@ -196,6 +294,9 @@ pub struct DraftResult {
     /// Amdahl cost model snapshot (Plan 096)
     #[cfg(feature = "spec_cost_model")]
     pub cost_snapshot: Option<SpecCostSnapshot>,
+    /// Execution stability metrics (Plan 102)
+    #[cfg(feature = "stability_metrics")]
+    pub stability: Option<StabilitySnapshot>,
 }
 
 // ── Pre-allocated Speculative Context ──────────────────────────
