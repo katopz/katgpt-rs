@@ -32,6 +32,8 @@
 
 This is the **first data-oblivious codec to beat a calibrated codec** in our GOAT benchmarks.
 
+> **⚠️ Synthetic data caveat:** All vectors are i.i.d. Gaussian — no real spectral structure for SQ's calibration to exploit. On real LLM activations with strong eigenvalue decay, SQ's calibrated eigenvectors may narrow the gap. OCTOPUS's advantage is structural (triplet geometry + asymmetric bit split), not data-dependent — but the margin may shrink on non-synthetic data.
+
 ## 2. Reconstruction Quality (↓ MSE, ↑ Cosine — better)
 
 | d   | bits | MSE (mean)  | MSE (std)   | Cosine (mean) | IP Error | Eff. bpc |
