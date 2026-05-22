@@ -1350,7 +1350,7 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
     unsafe {
         const LN2_HI: f32 = 6.9314575195e-01;
         const LN2_LO: f32 = 1.4286067773e-06;
-        const INV_LN2: f32 = 1.4426950216e+00;
+        const INV_LN2: f32 = std::f32::consts::LOG2_E;
         const ROUND_NEAREST: i32 = 0x00;
 
         let v_inv_ln2 = _mm256_set1_ps(INV_LN2);

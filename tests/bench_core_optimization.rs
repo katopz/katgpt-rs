@@ -980,10 +980,18 @@ fn bench_09_summary() {
     println!();
     println!("  SIMD level: {:?}", microgpt_rs::simd::simd_level());
     println!();
-    println!("  Optimization targets:");
-    println!("    1. softmax exp loop - scalar, candidate for SIMD");
-    println!("    2. rmsnorm_with_gamma - scalar sum_sq, candidate for simd_dot_f32");
-    println!("    3. avx2_dot_f32 - uses mul+add instead of FMA");
+    println!("  Completed optimizations:");
+    println!(
+        "    1. rmsnorm_with_gamma - simd_dot_f32 for sum_sq + simd_scale_mul_inplace for fused gamma (2-3x faster)"
+    );
+    println!(
+        "    2. simd_exp_inplace - Cephes 6th-order polynomial for NEON/AVX2 (kept as utility, libm faster on Apple Silicon)"
+    );
+    println!(
+        "    3. simd_scale_mul_inplace - new fused kernel for rmsnorm_with_gamma scale+gamma multiply"
+    );
+    println!();
+    println!("  Remaining candidates:");
     println!("    4. gegelu/gegelu_tanh - scalar elementwise, candidate for SIMD");
     println!("    5. sample_token - cumulative scan, candidate for SIMD comparison");
 }
