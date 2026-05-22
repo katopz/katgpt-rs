@@ -54,6 +54,7 @@ const KEY_EMOJI: &str = "🔑";
 const BOX_CLOSED: &str = "📦";
 const BOX_OPEN: &str = "📭";
 const LEVER: &str = "🔧";
+const LEVER_ON: &str = "🛠️";
 const BRIDGE_CLOSED: &str = "🌊";
 const BRIDGE_OPEN: &str = "🌉";
 const GOAL: &str = "🚪";
@@ -125,11 +126,10 @@ const MAP: &str = "\
 struct StrategicState {
     r: usize,
     c: usize,
-    keys_held: u8,           // bitmask: bit i = key i currently held
-    keys_used: u8,           // bitmask: bit i = key i consumed (opened a box)
-    boxes_opened: u8,        // bitmask: bit j = box j opened
-    levers_pulled: u8,       // bitmask: bit k = lever k pulled
-    lever_sequence: Vec<u8>, // order levers were pulled
+    keys_held: u8,    // bitmask: bit i = key i currently held
+    keys_used: u8,    // bitmask: bit i = key i consumed (opened a box)
+    boxes_opened: u8, // bitmask: bit j = box j opened
+    lever_state: u8,  // bitmask: bit k = lever k is ON (toggled)
     bridge_open: bool,
     boss_r: usize,
     boss_c: usize,
@@ -178,7 +178,7 @@ struct StrategicGame {
     bridge: HashSet<(usize, usize)>,
     goal: (usize, usize),
     key_mapping: [usize; 2], // key_mapping[i] = box index that key i opens
-    lever_order: [usize; 3], // correct lever pull order
+    target_lever_mask: u8,   // bitmask: which levers must be ON to open bridge
 }
 
 impl StrategicGame {
@@ -255,7 +255,7 @@ impl StrategicGame {
         keys.sort();
         boxes.sort();
 
-        let (key_mapping, lever_order) = Self::generate_config(seed);
+        let (key_mapping, target_lever_mask) = Self::generate_config(seed);
 
         Self {
             grid,
@@ -268,14 +268,14 @@ impl StrategicGame {
             bridge,
             goal,
             key_mapping,
-            lever_order,
+            target_lever_mask,
         }
     }
 
-    /// Generate deterministic key-box mapping and lever order from seed.
+    /// Generate deterministic key-box mapping and target lever mask from seed.
     /// Guarantees non-trivial config: key_mapping is a derangement,
-    /// lever_order is never identity — forcing the solver to explore.
-    fn generate_config(seed: u64) -> ([usize; 2], [usize; 3]) {
+    /// target_lever_mask is never 0b000 or 0b111 — forcing toggles.
+    fn generate_config(seed: u64) -> ([usize; 2], u8) {
         let mut s = seed;
         let mut next = || {
             s = s.wrapping_mul(6364136223846793005).wrapping_add(1);
@@ -293,18 +293,11 @@ impl StrategicGame {
             key_mapping.swap(0, 1);
         }
 
-        // Fisher-Yates shuffle for lever order (3 levers)
-        let mut lever_order = [0, 1, 2];
-        for i in (1..3).rev() {
-            let j = (next() as usize) % (i + 1);
-            lever_order.swap(i, j);
-        }
-        // Ensure non-identity: rotate left if identity order
-        if lever_order == [0, 1, 2] {
-            lever_order.rotate_left(1);
-        }
+        // Generate target lever mask (3 bits, non-trivial: not 0b000, not 0b111)
+        // Values 1..=6 → masks: 0b001, 0b010, 0b011, 0b100, 0b101, 0b110
+        let target_lever_mask = ((next() as usize) % 6 + 1) as u8;
 
-        (key_mapping, lever_order)
+        (key_mapping, target_lever_mask)
     }
 
     fn rows(&self) -> usize {
@@ -321,8 +314,7 @@ impl StrategicGame {
             keys_held: 0,
             keys_used: 0,
             boxes_opened: 0,
-            levers_pulled: 0,
-            lever_sequence: Vec::new(),
+            lever_state: 0,
             bridge_open: false,
             boss_r: self.boss_start.0,
             boss_c: self.boss_start.1,
@@ -444,24 +436,12 @@ impl StrategicGame {
             }
         }
 
-        // Pull lever
+        // Toggle lever (on ↔ off)
         for (l, &lpos) in self.levers.iter().enumerate() {
-            if lpos == pos && (state.levers_pulled & (1 << l)) == 0 {
-                state.levers_pulled |= 1 << l;
-                state.lever_sequence.push(l as u8);
-
-                if state.levers_pulled == (1 << self.levers.len()) - 1 {
-                    let correct = state
-                        .lever_sequence
-                        .iter()
-                        .zip(self.lever_order.iter())
-                        .all(|(&a, &b)| a == b as u8);
-                    if correct {
-                        state.bridge_open = true;
-                    }
-                    // Wrong order: bridge stays closed, levers stay pulled
-                    // DDTree will try a different lever ordering
-                }
+            if lpos == pos {
+                state.lever_state ^= 1 << l; // toggle bit
+                // Bridge reflects current lever combination (can close!)
+                state.bridge_open = state.lever_state == self.target_lever_mask;
             }
         }
     }
@@ -548,11 +528,11 @@ impl StrategicGame {
             if self.traps.contains(&(new_br, new_bc)) {
                 next.boss_alive = false;
             }
+        }
 
-            // Boss caught player → player dies
-            if next.boss_r == next.r && next.boss_c == next.c {
-                next.dead = true;
-            }
+        // Boss caught player → player dies (checked every step)
+        if next.boss_alive && next.boss_r == next.r && next.boss_c == next.c {
+            next.dead = true;
         }
 
         Some(next)
@@ -672,7 +652,8 @@ impl ConstraintPruner for StrategicPruner<'_> {
                 self.game.is_reachable((state.r, state.c), pos, &blocked)
             }
             Target::Lever(l) => {
-                if (state.levers_pulled & (1 << l)) != 0 {
+                // No reason to toggle levers once bridge is open
+                if state.bridge_open {
                     return false;
                 }
                 let pos = self.game.levers[*l];
@@ -968,8 +949,8 @@ fn main() -> io::Result<()> {
     let (game, solution) = loop {
         let game = StrategicGame::new(MAP, seed);
         eprintln!(
-            "🎯 Config: seed={seed}, key_mapping={:?}, lever_order={:?}",
-            game.key_mapping, game.lever_order,
+            "🎯 Config: seed={seed}, key_mapping={:?}, target_lever_mask=0b{:03b}",
+            game.key_mapping, game.target_lever_mask,
         );
         if let Some(solution) = solve(&game) {
             break (game, solution);
@@ -1235,8 +1216,11 @@ fn cell_render(
 
     // Levers (unpulled)
     for (l, &(lr, lc)) in game.levers.iter().enumerate() {
-        if (lr, lc) == (r, c) && (state.levers_pulled & (1 << l)) == 0 {
-            return (LEVER.into(), Style::default().fg(Color::Cyan));
+        if (lr, lc) == (r, c) {
+            let is_on = (state.lever_state & (1 << l)) != 0;
+            let color = if is_on { Color::Yellow } else { Color::Cyan };
+            let emoji = if is_on { LEVER_ON } else { LEVER };
+            return (emoji.into(), Style::default().fg(color));
         }
     }
 
@@ -1369,24 +1353,24 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
 
     let lever_strs: Vec<String> = (0..app.game.levers.len())
         .map(|l| {
-            if (state.levers_pulled & (1 << l)) != 0 {
-                format!("{LEVER}{l}")
+            if (state.lever_state & (1 << l)) != 0 {
+                format!("{LEVER_ON}{l}")
             } else {
                 format!("·{l}")
             }
         })
         .collect();
 
-    let seq_str = if state.lever_sequence.is_empty() {
-        "—".into()
-    } else {
-        state
-            .lever_sequence
-            .iter()
-            .map(|l| format!("{l}"))
-            .collect::<Vec<_>>()
-            .join("→")
-    };
+    let target_str: String = (0..app.game.levers.len())
+        .map(|l| {
+            if (app.game.target_lever_mask & (1 << l)) != 0 {
+                "ON "
+            } else {
+                "OFF"
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let lines = vec![
         Line::from(vec![
@@ -1444,13 +1428,13 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
             Span::styled(lever_strs.join(" "), Style::default().fg(Color::Cyan)),
         ]),
         Line::from(vec![
-            Span::styled("  Seq:    ", Style::default().fg(Color::DarkGray)),
-            Span::styled(seq_str, Style::default().fg(Color::Cyan)),
+            Span::styled("  Target: ", Style::default().fg(Color::DarkGray)),
+            Span::styled(target_str, Style::default().fg(Color::Cyan)),
         ]),
         Line::from(vec![Span::styled(
             format!(
-                "  Config: seed={} keys={:?} levers={:?}",
-                app.seed, app.game.key_mapping, app.game.lever_order
+                "  Config: seed={} keys={:?} target=0b{:03b}",
+                app.seed, app.game.key_mapping, app.game.target_lever_mask
             ),
             Style::default().fg(Color::DarkGray),
         )]),
