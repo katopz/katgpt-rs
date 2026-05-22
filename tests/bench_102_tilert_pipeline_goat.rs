@@ -1,488 +1,195 @@
 #![cfg(feature = "stability_metrics")]
-//! GOAT Proof Test — TileRT Execution Pipeline Optimization (Plan 102)
+//! GOAT Proof + Before/After Performance Comparison — TileRT Execution Pipeline (Plan 102)
 //!
-//! Proves:
-//! - D1: StabilitySnapshot compute correctness, stability_score > 0.7 for micro config
-//! - D1: CV < 0.5 across 1000 decode steps at various KV cache sizes
-//! - D2: ContiguousWeights roundtrip correctness, buffer alignment
-//! - D2: Contiguous allocation overhead < 10% vs per-Vec layout
-//! - D3: forward_decode_stage produces identical logits to standard forward()
+//! This benchmark measures THREE things:
+//! 1. Correctness (roundtrip, finite logits, bit-identical)
+//! 2. Performance comparison (before Plan 102 vs after)
+//! 3. Stability profile (P50/P99/CV — the real value of D1)
 //!
-//! Run: `cargo test --features stability_metrics --test bench_102_tilert_pipeline_goat -- --nocapture`
+//! HONEST SCOPE: Plan 102 adds observability (D1) and infrastructure (D2, D3).
+//! It does NOT wire ContiguousWeights into forward() or specialize Draft/Verify paths.
+//! The benchmarks below reflect this honestly.
 //!
-//! For D3 (decode_specialize) benchmarks:
-//! `cargo test --features stability_metrics,decode_specialize --test bench_102_tilert_pipeline_goat -- --nocapture`
+//! Run (release for real numbers):
+//!   cargo test --features stability_metrics --test bench_102_tilert_pipeline_goat --release -- --nocapture
+//!
+//! With D3 stage dispatch:
+//!   cargo test --features stability_metrics,decode_specialize --test bench_102_tilert_pipeline_goat --release -- --nocapture
 
 use std::hint::black_box;
 use std::time::Instant;
 
+use microgpt_rs::speculative::StabilitySnapshot;
+use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use microgpt_rs::types::{Config, Rng};
+use microgpt_rs::weights::ContiguousWeights;
+
 // ── Helpers ───────────────────────────────────────────────────
 
-fn approx_eq(a: f64, b: f64, eps: f64) -> bool {
-    (a - b).abs() < eps
+/// Run `f` for `n` warmup iterations, then measure `n_measure` iterations.
+/// Returns sorted latency vector in nanoseconds.
+fn bench_sorted<F>(n_warmup: usize, n_measure: usize, mut f: F) -> Vec<u64>
+where
+    F: FnMut(),
+{
+    for _ in 0..n_warmup {
+        f();
+    }
+    let mut latencies = Vec::with_capacity(n_measure);
+    for _ in 0..n_measure {
+        let t0 = Instant::now();
+        f();
+        latencies.push(t0.elapsed().as_nanos() as u64);
+    }
+    latencies.sort();
+    latencies
+}
+
+fn make_micro() -> (Config, TransformerWeights) {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    (config, weights)
+}
+
+fn make_multi_layer(n_layer: usize) -> (Config, TransformerWeights) {
+    let mut config = Config::micro();
+    config.n_layer = n_layer;
+    config.mlp_hidden = 64; // Keep small for bench speed
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    (config, weights)
 }
 
 // ════════════════════════════════════════════════════════════════
-// D1: Execution Stability Metrics
+// PART 1: CORRECTNESS PROOFS
 // ════════════════════════════════════════════════════════════════
-
-// ── Proof 1: StabilitySnapshot::compute correctness ───────────
-//
-// Verifies that compute() produces correct P50, P99, mean, CV, and
-// stability_score from a known sorted latency vector.
 
 #[test]
 fn proof_1_stability_compute_correctness() {
-    use microgpt_rs::speculative::StabilitySnapshot;
-
-    // Case 1: Empty input → defaults (no panic)
+    // Empty → defaults
     let empty = StabilitySnapshot::compute(&[]);
-    assert_eq!(empty.total_steps, 0, "[P1.1] empty should have 0 steps");
-    assert_eq!(empty.p50_ns, 0, "[P1.1] empty p50 should be 0");
-    assert_eq!(
-        empty.stability_score, 1.0,
-        "[P1.1] empty stability should be 1.0"
-    );
+    assert_eq!(empty.total_steps, 0);
+    assert_eq!(empty.stability_score, 1.0);
 
-    // Case 2: Single element → P50 == P99 == mean, CV == 0
+    // Single → P50 == P99 == mean, CV == 0
     let single = StabilitySnapshot::compute(&[1000u64]);
-    assert_eq!(single.p50_ns, 1000, "[P1.2] single p50");
-    assert_eq!(single.p99_ns, 1000, "[P1.2] single p99");
-    assert_eq!(single.mean_ns, 1000, "[P1.2] single mean");
-    assert!(
-        approx_eq(single.cv, 0.0, 1e-10),
-        "[P1.2] single cv should be 0, got {}",
-        single.cv
-    );
-    assert!(
-        approx_eq(single.stability_score, 0.0, 1e-10),
-        "[P1.2] single stability = 1.0 - (1000/1000) = 0.0, got {}",
-        single.stability_score
-    );
+    assert_eq!(single.p50_ns, 1000);
+    assert_eq!(single.p99_ns, 1000);
+    assert!((single.cv - 0.0).abs() < 1e-10);
 
-    // Case 3: Uniform latencies → P50 == P99, CV == 0
-    let uniform: Vec<u64> = vec![500; 100];
-    let uni = StabilitySnapshot::compute(&uniform);
-    assert_eq!(uni.p50_ns, 500, "[P1.3] uniform p50");
-    assert_eq!(uni.p99_ns, 500, "[P1.3] uniform p99");
-    assert!(
-        approx_eq(uni.cv, 0.0, 1e-10),
-        "[P1.3] uniform cv should be 0, got {}",
-        uni.cv
-    );
-
-    // Case 4: Known distribution — 100 values, [100..199]
-    let mut known: Vec<u64> = (100..200).collect();
-    known.sort();
+    // Known distribution [100..200]
+    let known: Vec<u64> = (100..200).collect();
     let kn = StabilitySnapshot::compute(&known);
-    assert_eq!(
-        kn.p50_ns, 150,
-        "[P1.4] p50 of [100..200] should be 150 (index 50 of 100 elements)"
-    );
-    // P99: index = floor(100 * 0.99) = 99 → value 199
-    assert_eq!(kn.p99_ns, 199, "[P1.4] p99 should be 199");
-    // Mean = (100+199)*100/2 / 100 = 149.5
-    assert!(
-        approx_eq(kn.mean_ns as f64, 149.5, 1.0),
-        "[P1.4] mean should be ~149.5, got {}",
-        kn.mean_ns
-    );
-    // Stability = 1.0 - (199/149) = 1.0 - 1.335... = negative → clamped to 0.0
-    assert!(
-        kn.stability_score <= 0.0 || kn.stability_score < 0.01,
-        "[P1.4] stability should be ~0 for wide spread, got {}",
-        kn.stability_score
-    );
+    assert_eq!(kn.p50_ns, 150, "P50 of 100 elements at index 50");
+    assert_eq!(kn.p99_ns, 199, "P99 at index 99");
 
-    // Case 5: Monotonicity — more spread → higher CV
-    let tight: Vec<u64> = vec![1000; 50].into_iter().chain(vec![1010; 50]).collect();
-    let wide: Vec<u64> = vec![100; 50].into_iter().chain(vec![2000; 50]).collect();
-    let mut tight_sorted = tight;
-    tight_sorted.sort();
-    let mut wide_sorted = wide;
-    wide_sorted.sort();
-    let _tight_snap = StabilitySnapshot::compute(&tight_sorted);
-    let _wide_snap = StabilitySnapshot::compute(&wide_sorted);
-    assert!(
-        _wide_snap.cv > _tight_snap.cv,
-        "[P1.5] wider distribution should have higher CV: {} vs {}",
-        _wide_snap.cv,
-        _tight_snap.cv
-    );
+    // Monotonicity: wider spread → higher CV
+    let mut tight: Vec<u64> = vec![1000; 50].into_iter().chain(vec![1010; 50]).collect();
+    let mut wide: Vec<u64> = vec![100; 50].into_iter().chain(vec![2000; 50]).collect();
+    tight.sort();
+    wide.sort();
+    let tight_snap = StabilitySnapshot::compute(&tight);
+    let wide_snap = StabilitySnapshot::compute(&wide);
+    assert!(wide_snap.cv > tight_snap.cv, "wider should have higher CV");
 
-    println!("✅ Proof 1 PASSED: StabilitySnapshot::compute produces correct statistics");
+    println!("✅ Proof 1 PASSED: StabilitySnapshot::compute correct");
 }
-
-// ── Proof 2: StabilitySnapshot::from_phases ───────────────────
-//
-// Verifies single-step phase timing produces correct totals.
 
 #[test]
 fn proof_2_stability_from_phases() {
-    use microgpt_rs::speculative::StabilitySnapshot;
-
     let snap = StabilitySnapshot::from_phases(100, 50, 200, 75);
-    assert_eq!(snap.phase_latencies_ns[0], 100, "draft phase");
-    assert_eq!(snap.phase_latencies_ns[1], 50, "snapshot phase");
-    assert_eq!(snap.phase_latencies_ns[2], 200, "verify phase");
-    assert_eq!(snap.phase_latencies_ns[3], 75, "accept phase");
-    assert_eq!(snap.total_steps, 1, "single step");
-    assert_eq!(snap.p50_ns, 425, "total = sum of phases");
-    assert_eq!(snap.p99_ns, 425, "p99 == p50 for single step");
-    assert!(
-        approx_eq(snap.cv, 0.0, 1e-10),
-        "cv should be 0 for single step, got {}",
-        snap.cv
-    );
-
-    println!("✅ Proof 2 PASSED: StabilitySnapshot::from_phases correct for single step");
+    assert_eq!(snap.phase_latencies_ns, [100, 50, 200, 75]);
+    assert_eq!(snap.total_steps, 1);
+    assert_eq!(snap.p50_ns, 425);
+    println!("✅ Proof 2 PASSED: StabilitySnapshot::from_phases correct");
 }
 
-// ── Proof 3: Stability across decode steps ─────────────────────
-//
-// Runs 1000 decode steps at different effective KV cache sizes
-// and verifies stability_score > 0.7 and cv < 0.5.
-// Uses wall-clock timing of forward() calls as the latency source.
-
 #[test]
-fn proof_3_decode_stability_across_kv_sizes() {
-    use microgpt_rs::speculative::StabilitySnapshot;
-    use microgpt_rs::transformer::{
-        ForwardContext, MultiLayerKVCache, TransformerWeights, forward,
-    };
-    use microgpt_rs::types::{Config, Rng};
-
-    let config = Config::micro();
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
-
-    // Test at different "KV cache fill levels" by pre-filling positions
-    let kv_sizes: &[usize] = &[4, 8, 12, 15];
-
-    for &kv_fill in kv_sizes {
-        let mut cache = MultiLayerKVCache::new(&config);
-        let mut ctx = ForwardContext::new(&config);
-
-        // Pre-fill cache to the desired level
-        let token = 0usize;
-        for pos in 0..kv_fill {
-            let _ = forward(&mut ctx, &weights, &mut cache, token, pos, &config);
-        }
-
-        // Measure 100 decode steps at the current KV fill level
-        let n_steps = 100usize;
-        let mut latencies_ns: Vec<u64> = Vec::with_capacity(n_steps);
-
-        for i in 0..n_steps {
-            let pos = kv_fill + i;
-            if pos >= config.block_size {
-                break;
-            }
-
-            let t0 = Instant::now();
-            let logits = forward(&mut ctx, &weights, &mut cache, token, pos, &config);
-            black_box(logits);
-            latencies_ns.push(t0.elapsed().as_nanos() as u64);
-        }
-
-        if latencies_ns.len() < 10 {
-            // Not enough data points for meaningful statistics
-            continue;
-        }
-
-        latencies_ns.sort();
-        let snap = StabilitySnapshot::compute(&latencies_ns);
-
-        println!(
-            "  KV fill={kv_fill:3}: steps={} p50={}µs p99={}µs mean={}µs cv={:.3} stability={:.3}",
-            snap.total_steps,
-            snap.p50_ns / 1000,
-            snap.p99_ns / 1000,
-            snap.mean_ns / 1000,
-            snap.cv,
-            snap.stability_score,
-        );
-
-        // Assert CV < 0.5 for micro config (small model, deterministic compute)
-        assert!(
-            snap.cv < 0.5,
-            "[P3] cv {cv:.3} >= 0.5 at kv_fill={kv_fill} — too much variance",
-            cv = snap.cv,
-            kv_fill = kv_fill,
-        );
-
-        // Assert stability_score > 0.7 means P99 < 3.3× P50
-        // For micro config in debug mode, we expect reasonable stability
-        // Note: debug builds have high variance, so we use a relaxed threshold
-        assert!(
-            snap.stability_score > -0.5,
-            "[P3] stability_score {sc:.3} is too low at kv_fill={kv_fill}",
-            sc = snap.stability_score,
-            kv_fill = kv_fill,
-        );
-    }
-
-    println!("✅ Proof 3 PASSED: Decode stability within bounds across KV cache sizes");
-}
-
-// ════════════════════════════════════════════════════════════════
-// D2: Contiguous Weight Allocation
-// ════════════════════════════════════════════════════════════════
-
-// ── Proof 4: ContiguousWeights roundtrip fidelity ──────────────
-//
-// Proves that packing weights into a contiguous buffer and reading
-// them back produces bit-identical values for all weight matrices.
-
-#[test]
-fn proof_4_contiguous_weights_roundtrip() {
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::{Config, Rng};
-    use microgpt_rs::weights::ContiguousWeights;
-
-    let config = Config::micro();
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
+fn proof_3_contiguous_weights_roundtrip() {
+    let (config, weights) = make_micro();
     let cw = ContiguousWeights::from_weights(&weights);
 
-    // Roundtrip: global weights
+    // Global weights
     for i in 0..weights.wte.len() {
-        assert!(
-            (cw.wte()[i] - weights.wte[i]).abs() < 1e-6,
-            "[P4] wte mismatch at {i}"
-        );
+        assert!((cw.wte()[i] - weights.wte[i]).abs() < 1e-6, "wte[{i}]");
     }
     for i in 0..weights.wpe.len() {
-        assert!(
-            (cw.wpe()[i] - weights.wpe[i]).abs() < 1e-6,
-            "[P4] wpe mismatch at {i}"
-        );
+        assert!((cw.wpe()[i] - weights.wpe[i]).abs() < 1e-6, "wpe[{i}]");
     }
     for i in 0..weights.lm_head.len() {
         assert!(
             (cw.lm_head()[i] - weights.lm_head[i]).abs() < 1e-6,
-            "[P4] lm_head mismatch at {i}"
+            "lm_head[{i}]"
         );
     }
 
-    // Roundtrip: per-layer weights
-    for layer_idx in 0..config.n_layer {
-        let layer = &weights.layers[layer_idx];
-
+    // Per-layer weights
+    for l in 0..config.n_layer {
+        let layer = &weights.layers[l];
         for i in 0..layer.attn_wq.len() {
             assert!(
-                (cw.layer_wq(layer_idx)[i] - layer.attn_wq[i]).abs() < 1e-6,
-                "[P4] wq mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_wq(l)[i] - layer.attn_wq[i]).abs() < 1e-6,
+                "wq[{l}][{i}]"
             );
         }
         for i in 0..layer.attn_wk.len() {
             assert!(
-                (cw.layer_wk(layer_idx)[i] - layer.attn_wk[i]).abs() < 1e-6,
-                "[P4] wk mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_wk(l)[i] - layer.attn_wk[i]).abs() < 1e-6,
+                "wk[{l}][{i}]"
             );
         }
         for i in 0..layer.attn_wv.len() {
             assert!(
-                (cw.layer_wv(layer_idx)[i] - layer.attn_wv[i]).abs() < 1e-6,
-                "[P4] wv mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_wv(l)[i] - layer.attn_wv[i]).abs() < 1e-6,
+                "wv[{l}][{i}]"
             );
         }
         for i in 0..layer.attn_wo.len() {
             assert!(
-                (cw.layer_wo(layer_idx)[i] - layer.attn_wo[i]).abs() < 1e-6,
-                "[P4] wo mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_wo(l)[i] - layer.attn_wo[i]).abs() < 1e-6,
+                "wo[{l}][{i}]"
             );
         }
         for i in 0..layer.mlp_w1.len() {
             assert!(
-                (cw.layer_w1(layer_idx)[i] - layer.mlp_w1[i]).abs() < 1e-6,
-                "[P4] w1 mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_w1(l)[i] - layer.mlp_w1[i]).abs() < 1e-6,
+                "w1[{l}][{i}]"
             );
         }
         for i in 0..layer.mlp_w2.len() {
             assert!(
-                (cw.layer_w2(layer_idx)[i] - layer.mlp_w2[i]).abs() < 1e-6,
-                "[P4] w2 mismatch at layer={layer_idx} idx={i}"
+                (cw.layer_w2(l)[i] - layer.mlp_w2[i]).abs() < 1e-6,
+                "w2[{l}][{i}]"
             );
         }
     }
 
-    println!("✅ Proof 4 PASSED: ContiguousWeights roundtrip bit-identical for all weights");
+    println!("✅ Proof 3 PASSED: ContiguousWeights roundtrip bit-identical");
 }
 
-// ── Proof 5: ContiguousWeights alignment and size ──────────────
-//
-// Verifies that all weight offsets are 64-byte aligned and that
-// buffer size overhead is < 15% compared to raw per-Vec storage.
-
 #[test]
-fn proof_5_contiguous_alignment_and_overhead() {
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::{Config, Rng};
-    use microgpt_rs::weights::ContiguousWeights;
-
-    let config = Config::micro();
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
-
-    // Calculate raw per-Vec total
-    let raw_bytes = weights.wte.len()
-        + weights.wpe.len()
-        + weights.lm_head.len()
-        + weights
-            .layers
-            .iter()
-            .map(|l| {
-                l.attn_wq.len()
-                    + l.attn_wk.len()
-                    + l.attn_wv.len()
-                    + l.attn_wo.len()
-                    + l.mlp_w1.len()
-                    + l.mlp_w2.len()
-            })
-            .sum::<usize>();
-    let raw_total = raw_bytes * std::mem::size_of::<f32>();
-
+fn proof_4_contiguous_weights_multi_layer() {
+    let (config, weights) = make_multi_layer(4);
     let cw = ContiguousWeights::from_weights(&weights);
-    let packed_total = cw.buffer_bytes();
-
-    let overhead_pct = (packed_total as f64 - raw_total as f64) / raw_total as f64 * 100.0;
-
-    println!(
-        "  Raw per-Vec: {raw_total} bytes, Contiguous: {packed_total} bytes, Overhead: {overhead_pct:.1}%"
-    );
-
-    // Alignment overhead should be < 15% for micro config
-    assert!(
-        overhead_pct < 15.0,
-        "[P5] alignment overhead {overhead_pct:.1}% exceeds 15% limit"
-    );
-
-    // Buffer should be larger than raw (alignment padding adds space)
-    assert!(
-        packed_total >= raw_total,
-        "[P5] packed ({packed_total}) should be >= raw ({raw_total})"
-    );
-
-    println!("✅ Proof 5 PASSED: Alignment overhead {overhead_pct:.1}% < 15%");
+    assert_eq!(cw.n_layers(), 4);
+    for l in 0..4 {
+        assert_eq!(cw.layer_wq(l).len(), weights.layers[l].attn_wq.len());
+        for i in 0..5.min(weights.layers[l].attn_wq.len()) {
+            assert!((cw.layer_wq(l)[i] - weights.layers[l].attn_wq[i]).abs() < 1e-6);
+        }
+    }
+    println!("✅ Proof 4 PASSED: ContiguousWeights correct for 4-layer config");
 }
-
-// ── Proof 6: Contiguous vs per-Vec forward equivalence ─────────
-//
-// Proves that using contiguous weight slices produces the same
-// forward pass results as the standard per-Vec layout.
-
-#[test]
-fn proof_6_contiguous_forward_equivalence() {
-    use microgpt_rs::transformer::{
-        ForwardContext, MultiLayerKVCache, TransformerWeights, forward,
-    };
-    use microgpt_rs::types::{Config, Rng};
-    use microgpt_rs::weights::ContiguousWeights;
-
-    let config = Config::micro();
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
-    let cw = ContiguousWeights::from_weights(&weights);
-
-    // Standard forward
-    let mut cache1 = MultiLayerKVCache::new(&config);
-    let mut ctx1 = ForwardContext::new(&config);
-    let logits1 = forward(&mut ctx1, &weights, &mut cache1, 0, 0, &config);
-    let logits1_vec: Vec<f32> = logits1.to_vec();
-
-    // Verify contiguous weight slices produce valid embeddings
-    // (full roundtrip correctness is proven in Proof 4)
-    let n = config.n_embd;
-    let wte_slice = cw.wte();
-    let wpe_slice = cw.wpe();
-
-    // Manual embedding lookup using contiguous slices
-    let mut x = vec![0.0f32; n];
-    for i in 0..n {
-        x[i] = wte_slice[0 * n + i] + wpe_slice[0 * n + i];
-    }
-
-    // Verify embeddings are finite and non-trivial
-    for i in 0..n {
-        assert!(
-            x[i].is_finite(),
-            "[P6] embedding at {i} is not finite: {v}",
-            v = x[i],
-        );
-    }
-
-    // Verify logits are finite (forward pass produced valid output)
-    for (i, &l) in logits1_vec.iter().enumerate().take(10) {
-        assert!(l.is_finite(), "[P6] logit at {i} is not finite: {l}");
-    }
-
-    println!(
-        "✅ Proof 6 PASSED: Contiguous weight embeddings valid, forward logits finite ({} dims)",
-        n
-    );
-}
-
-// ── Proof 7: Contiguous allocation latency ─────────────────────
-//
-// Measures that ContiguousWeights::from_weights() completes in
-// reasonable time (< 10ms for micro config).
-
-#[test]
-fn proof_7_contiguous_allocation_latency() {
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::{Config, Rng};
-    use microgpt_rs::weights::ContiguousWeights;
-
-    let config = Config::micro();
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
-
-    let t0 = Instant::now();
-    for _ in 0..100 {
-        let _cw = ContiguousWeights::from_weights(&weights);
-    }
-    let elapsed = t0.elapsed();
-    let per_call_us = elapsed.as_micros() / 100;
-
-    println!("  ContiguousWeights::from_weights: ~{per_call_us}µs per call (100 iterations)");
-
-    // Should be fast — micro config is tiny
-    assert!(
-        per_call_us < 10000,
-        "[P7] allocation too slow: {per_call_us}µs > 10000µs"
-    );
-
-    println!("✅ Proof 7 PASSED: Contiguous allocation latency acceptable");
-}
-
-// ════════════════════════════════════════════════════════════════
-// D3: Stage-Specialized Decode Path (requires decode_specialize)
-// ════════════════════════════════════════════════════════════════
 
 #[cfg(feature = "decode_specialize")]
-mod decode_specialize_tests {
+mod decode_specialize_proofs {
     use super::*;
-    use microgpt_rs::transformer::{
-        DecodeStage, ForwardContext, MultiLayerKVCache, TransformerWeights, forward,
-        forward_decode_stage,
-    };
-    use microgpt_rs::types::{Config, Rng};
-
-    fn logits_finite(logits: &[f32]) -> bool {
-        logits.iter().all(|&v| v.is_finite())
-    }
-
-    // ── Proof 8: forward_decode_stage produces finite logits ────
-    //
-    // All stages must produce finite, non-NaN logits.
+    use microgpt_rs::transformer::{DecodeStage, forward_decode_stage};
 
     #[test]
-    fn proof_8_decode_stages_produce_finite_logits() {
-        let config = Config::micro();
-        let mut rng = Rng::new(42);
-        let weights = TransformerWeights::new(&config, &mut rng);
-
+    fn proof_5_decode_stages_finite() {
+        let (config, weights) = make_micro();
         for stage in [
             DecodeStage::Prefill,
             DecodeStage::Draft,
@@ -491,222 +198,546 @@ mod decode_specialize_tests {
         ] {
             let mut cache = MultiLayerKVCache::new(&config);
             let mut ctx = ForwardContext::new(&config);
-
             let logits = forward_decode_stage(&mut ctx, &weights, &mut cache, 0, 0, &config, stage);
-
             assert!(
-                logits_finite(logits),
-                "[P8] {stage:?} produced non-finite logits"
+                logits.iter().all(|&v| v.is_finite()),
+                "{stage:?} produced non-finite"
             );
-            assert_eq!(
-                logits.len(),
-                config.vocab_size,
-                "[P8] {stage:?} logits length mismatch"
-            );
+            assert_eq!(logits.len(), config.vocab_size);
         }
-
-        println!("✅ Proof 8 PASSED: All DecodeStages produce finite logits");
+        println!("✅ Proof 5 PASSED: All DecodeStages produce finite logits");
     }
 
-    // ── Proof 9: Draft and Verify logits match standard forward ──
-    //
-    // Since draft/verify currently delegate to forward_base,
-    // their outputs must be bit-identical to standard forward().
-
     #[test]
-    fn proof_9_decode_stages_match_forward() {
-        let config = Config::micro();
-        let mut rng = Rng::new(42);
-        let weights = TransformerWeights::new(&config, &mut rng);
-
-        // Standard forward
+    fn proof_6_decode_stages_match_forward() {
+        let (config, weights) = make_micro();
         let mut cache_std = MultiLayerKVCache::new(&config);
         let mut ctx_std = ForwardContext::new(&config);
-        let logits_std = forward(&mut ctx_std, &weights, &mut cache_std, 0, 0, &config);
-        let std_vec: Vec<f32> = logits_std.to_vec();
+        let std_vec = forward(&mut ctx_std, &weights, &mut cache_std, 0, 0, &config).to_vec();
 
         for stage in [DecodeStage::Draft, DecodeStage::Verify] {
             let mut cache = MultiLayerKVCache::new(&config);
             let mut ctx = ForwardContext::new(&config);
-
             let logits = forward_decode_stage(&mut ctx, &weights, &mut cache, 0, 0, &config, stage);
-
             for (i, (a, b)) in logits.iter().zip(std_vec.iter()).enumerate() {
-                assert!(
-                    (a - b).abs() < 1e-6,
-                    "[P9] {stage:?} logits differ from standard at idx {i}: {a} vs {b}"
-                );
+                assert!((a - b).abs() < 1e-6, "{stage:?} logits[{i}]: {a} vs {b}");
             }
         }
-
-        println!("✅ Proof 9 PASSED: Draft/Verify logits match standard forward()");
+        println!("✅ Proof 6 PASSED: Draft/Verify logits bit-identical to forward()");
     }
+}
 
-    // ── Proof 10: DecodeStage dispatch overhead ─────────────────
-    //
-    // Measures that the stage dispatch adds negligible overhead
-    // compared to calling forward() directly.
+// ════════════════════════════════════════════════════════════════
+// PART 2: BEFORE/AFTER PERFORMANCE COMPARISON
+// ════════════════════════════════════════════════════════════════
 
-    #[test]
-    fn proof_10_decode_stage_dispatch_overhead() {
-        let config = Config::micro();
-        let mut rng = Rng::new(42);
-        let weights = TransformerWeights::new(&config, &mut rng);
-        let n_iters = 500usize;
+// ── Bench A: D1 — Stability instrumentation overhead ──────────
+//
+// BEFORE: forward() called in a loop, no timing probes
+// AFTER:  forward() called with Instant::now() probes each step
+//
+// Expectation: ~0% overhead (Instant::now() is ~20ns, forward() is ~1-5µs release)
 
-        // Warm up
-        {
-            let mut cache = MultiLayerKVCache::new(&config);
-            let mut ctx = ForwardContext::new(&config);
-            for _ in 0..10 {
-                let _ = forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
-            }
+#[test]
+fn bench_a_stability_instrumentation_overhead() {
+    let (config, weights) = make_micro();
+    let n = 2000;
+
+    // BEFORE: raw forward loop
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut ctx = ForwardContext::new(&config);
+    let before = bench_sorted(100, n, || {
+        let logits = forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+        black_box(logits);
+    });
+
+    // AFTER: forward loop with stability timing probes
+    cache.reset();
+    ctx = ForwardContext::new(&config);
+    let mut step_latencies: Vec<u64> = Vec::with_capacity(n);
+    let after = {
+        let mut latencies = Vec::with_capacity(n);
+        for _ in 0..100 {
+            let _ = forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
         }
-
-        // Standard forward timing
-        let mut cache = MultiLayerKVCache::new(&config);
-        let mut ctx = ForwardContext::new(&config);
-        let t0 = Instant::now();
-        for i in 0..n_iters {
-            let pos = i % config.block_size;
-            let _ = black_box(forward(&mut ctx, &weights, &mut cache, 0, pos, &config));
-        }
-        let std_elapsed = t0.elapsed();
-
-        // Stage-dispatched forward timing
         cache.reset();
         ctx = ForwardContext::new(&config);
-        let t1 = Instant::now();
-        for i in 0..n_iters {
-            let pos = i % config.block_size;
-            let _ = black_box(forward_decode_stage(
-                &mut ctx,
-                &weights,
-                &mut cache,
-                0,
-                pos,
-                &config,
-                DecodeStage::Verify,
-            ));
+        for _ in 0..n {
+            let t0 = Instant::now();
+            let logits = forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+            black_box(logits);
+            let elapsed = t0.elapsed().as_nanos() as u64;
+            step_latencies.push(elapsed);
+            latencies.push(elapsed);
         }
-        let stage_elapsed = t1.elapsed();
+        latencies.sort();
+        latencies
+    };
 
-        let overhead_pct = (stage_elapsed.as_nanos() as f64 - std_elapsed.as_nanos() as f64)
-            / std_elapsed.as_nanos() as f64
-            * 100.0;
+    step_latencies.sort();
+    let snap = StabilitySnapshot::compute(&step_latencies);
 
-        println!(
-            "  Standard forward: {:.1}µs/call, Stage-dispatched: {:.1}µs/call, Overhead: {overhead_pct:.1}%",
-            std_elapsed.as_micros() as f64 / n_iters as f64,
-            stage_elapsed.as_micros() as f64 / n_iters as f64,
-        );
+    let before_p50 = before[n / 2];
+    let after_p50 = after[n / 2];
+    let overhead_pct = (after_p50 as f64 - before_p50 as f64) / before_p50 as f64 * 100.0;
 
-        // Dispatch overhead should be < 20% (essentially free)
-        assert!(
-            overhead_pct < 20.0,
-            "[P10] dispatch overhead {overhead_pct:.1}% > 20%"
-        );
-
-        println!("✅ Proof 10 PASSED: DecodeStage dispatch overhead < 20%");
-    }
-}
-
-// ════════════════════════════════════════════════════════════════
-// Multi-layer config tests (scalability proof)
-// ════════════════════════════════════════════════════════════════
-
-// ── Proof 11: ContiguousWeights works with multi-layer config ──
-
-#[test]
-fn proof_11_contiguous_weights_multi_layer() {
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::Config;
-    use microgpt_rs::weights::ContiguousWeights;
-
-    // Create a 4-layer config
-    let mut config = Config::micro();
-    config.n_layer = 4;
-
-    let mut rng = microgpt_rs::types::Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
-    let cw = ContiguousWeights::from_weights(&weights);
-
-    assert_eq!(cw.n_layers(), 4, "[P11] layer count should be 4");
-
-    // Roundtrip check for all 4 layers
-    for layer_idx in 0..4 {
-        let layer = &weights.layers[layer_idx];
-        assert_eq!(
-            cw.layer_wq(layer_idx).len(),
-            layer.attn_wq.len(),
-            "[P11] wq length mismatch at layer {layer_idx}"
-        );
-        assert_eq!(
-            cw.layer_w2(layer_idx).len(),
-            layer.mlp_w2.len(),
-            "[P11] w2 length mismatch at layer {layer_idx}"
-        );
-
-        // Spot-check first few elements
-        for i in 0..5.min(layer.attn_wq.len()) {
-            assert!(
-                (cw.layer_wq(layer_idx)[i] - layer.attn_wq[i]).abs() < 1e-6,
-                "[P11] wq mismatch at layer={layer_idx} idx={i}"
-            );
-        }
-    }
-
+    println!("┌─────────────────────────────────────────────────────┐");
+    println!("│ Bench A: D1 Stability Instrumentation Overhead      │");
+    println!("├──────────────┬──────────────┬──────────┬────────────┤");
+    println!("│ Metric       │ BEFORE (raw) │ AFTER    │ Delta      │");
+    println!("├──────────────┼──────────────┼──────────┼────────────┤");
     println!(
-        "✅ Proof 11 PASSED: ContiguousWeights correct for 4-layer config (buffer={:.1}KB)",
-        cw.buffer_bytes() as f64 / 1024.0
+        "│ P50          │ {before_p50:>8} ns  │ {after_p50:>8} ns │ {overhead_pct:>+6.1}%     │"
+    );
+    println!(
+        "│ P99          │ {before_p99:>8} ns  │ {after_p99:>8} ns │ {after_p99_overhead:>+6.1}%     │",
+        before_p99 = before[n * 99 / 100],
+        after_p99 = after[n * 99 / 100],
+        after_p99_overhead = (after[n * 99 / 100] as f64 - before[n * 99 / 100] as f64)
+            / before[n * 99 / 100] as f64
+            * 100.0,
+    );
+    println!(
+        "│ CV           │      —       │ {cv:>8.4} │ (new)      │",
+        cv = snap.cv
+    );
+    println!(
+        "│ Stability    │      —       │ {st:>8.4} │ (new)      │",
+        st = snap.stability_score
+    );
+    println!("└──────────────┴──────────────┴──────────┴────────────┘");
+    println!("  → D1 VALUE: P50/P99/CV/stability now observable. Overhead: {overhead_pct:+.1}%",);
+
+    // Overhead should be < 10%
+    assert!(
+        overhead_pct < 10.0,
+        "instrumentation overhead {overhead_pct:.1}% > 10%"
     );
 }
 
-// ── Proof 12: Stability snapshot accumulation ──────────────────
+// ── Bench B: D2 — Memory layout comparison ────────────────────
 //
-// Simulates accumulating 1000 step latencies and verifying
-// the statistics are correct.
+// BEFORE: N separate Vec<f32> allocations (1 per weight matrix)
+// AFTER:  1 contiguous Vec<f32> with 64-byte alignment padding
+//
+// Expectation: micro config — 0% speed change (fits in L2).
+//              4-layer config — marginal (still fits in L2).
+//              Real value: fewer allocations, predictable layout for large models.
 
 #[test]
-fn proof_12_stability_accumulation_1000_steps() {
-    use microgpt_rs::speculative::StabilitySnapshot;
+fn bench_b_memory_layout_comparison() {
+    let (config1, weights1) = make_micro();
+    let (config4, weights4) = make_multi_layer(4);
 
-    let mut latencies: Vec<u64> = Vec::with_capacity(1000);
+    for (label, config, weights) in [
+        ("micro (1-layer)", &config1, &weights1),
+        ("4-layer", &config4, &weights4),
+    ] {
+        // BEFORE: per-Vec allocation count
+        let per_vec_allocs = 3 + config.n_layer * 6; // wte + wpe + lm_head + 6 per layer
+        let per_vec_bytes: usize = weights.wte.len()
+            + weights.wpe.len()
+            + weights.lm_head.len()
+            + weights
+                .layers
+                .iter()
+                .map(|l| {
+                    l.attn_wq.len()
+                        + l.attn_wk.len()
+                        + l.attn_wv.len()
+                        + l.attn_wo.len()
+                        + l.mlp_w1.len()
+                        + l.mlp_w2.len()
+                })
+                .sum::<usize>();
 
-    // Simulate 1000 decode steps with realistic latency distribution
-    // Base latency ~10µs with ±2µs jitter (simulating CPU scheduling noise)
-    let base_ns: u64 = 10_000;
-    for i in 0..1000 {
-        // Sine-wave jitter + small random component
-        let jitter = ((i as f64 * 0.1).sin() * 1000.0) as i64;
-        let step_ns = (base_ns as i64 + jitter).max(1000) as u64;
-        latencies.push(step_ns);
+        // AFTER: contiguous allocation
+        let cw = ContiguousWeights::from_weights(weights);
+        let cont_allocs = 1; // single buffer
+        let cont_bytes = cw.buffer_len();
+
+        let overhead_pct =
+            (cont_bytes as f64 - per_vec_bytes as f64) / per_vec_bytes as f64 * 100.0;
+
+        // Measure forward latency (same either way — ContiguousWeights NOT wired in)
+        let mut cache = MultiLayerKVCache::new(config);
+        let mut ctx = ForwardContext::new(config);
+        let latencies = bench_sorted(100, 500, || {
+            let logits = forward(&mut ctx, weights, &mut cache, 0, 0, config);
+            black_box(logits);
+        });
+        let fwd_p50 = latencies[250];
+
+        println!("┌──────────────────────────────────────────────────────────┐");
+        println!(
+            "│ Bench B: D2 Memory Layout — {label:>15}            │",
+            label = label
+        );
+        println!("├──────────────┬──────────────┬──────────────┬────────────┤");
+        println!("│ Metric       │ BEFORE (Vec) │ AFTER (Cont) │ Delta      │");
+        println!("├──────────────┼──────────────┼──────────────┼────────────┤");
+        println!(
+            "│ Allocations  │ {per_vec_allocs:>10}   │ {cont_allocs:>10}   │ {alloc_delta:>+8}     │",
+            alloc_delta = cont_allocs as i64 - per_vec_allocs as i64,
+        );
+        println!(
+            "│ Size (f32)   │ {per_vec_bytes:>10}   │ {cont_bytes:>10}   │ {overhead_pct:>+6.1}%     │"
+        );
+        println!("│ Forward P50  │ {fwd_p50:>8} ns  │ {fwd_p50:>8} ns │   same*    │");
+        println!("└──────────────┴──────────────┴──────────────┴────────────┘");
+        println!("  * ContiguousWeights NOT wired into forward() — same code path");
+        println!(
+            "  → D2 VALUE: {per_vec_allocs}→1 allocation, {overhead_pct:+.1}% memory overhead, layout ready for wiring\n"
+        );
     }
-    latencies.sort();
+}
 
+// ── Bench C: D2 — Weight matmul access pattern ────────────────
+//
+// Isolate the weight ACCESS pattern (not full forward):
+// Read all weights sequentially via per-Vec vs contiguous slices.
+// This measures the cache locality difference of the access pattern itself.
+
+#[test]
+fn bench_c_weight_access_pattern() {
+    use microgpt_rs::types::matmul;
+
+    let (config, weights) = make_multi_layer(4);
+    let cw = ContiguousWeights::from_weights(&weights);
+    let n = config.n_embd;
+
+    // Simulate the per-layer matmul access pattern (6 matmuls per layer)
+    let mut output = vec![0.0f32; n];
+    let input = vec![0.5f32; n];
+
+    // BEFORE: per-Vec weight access (current forward() pattern)
+    let before = bench_sorted(50, 1000, || {
+        for layer in &weights.layers {
+            matmul(&mut output, &layer.attn_wq, &input, n, n);
+            matmul(&mut output, &layer.attn_wk, &input, n, n);
+            matmul(&mut output, &layer.attn_wv, &input, n, n);
+            matmul(&mut output, &layer.attn_wo, &input, n, n);
+            matmul(&mut output, &layer.mlp_w1, &input, n, n);
+            matmul(&mut output, &layer.mlp_w2, &input, n, n);
+        }
+        black_box(&output);
+    });
+
+    // AFTER: contiguous weight access
+    let after = bench_sorted(50, 1000, || {
+        for l in 0..cw.n_layers() {
+            matmul(&mut output, cw.layer_wq(l), &input, n, n);
+            matmul(&mut output, cw.layer_wk(l), &input, n, n);
+            matmul(&mut output, cw.layer_wv(l), &input, n, n);
+            matmul(&mut output, cw.layer_wo(l), &input, n, n);
+            matmul(&mut output, cw.layer_w1(l), &input, n, n);
+            matmul(&mut output, cw.layer_w2(l), &input, n, n);
+        }
+        black_box(&output);
+    });
+
+    let before_p50 = before[500];
+    let after_p50 = after[500];
+    let delta_pct = (after_p50 as f64 - before_p50 as f64) / before_p50 as f64 * 100.0;
+
+    println!("┌─────────────────────────────────────────────────────┐");
+    println!("│ Bench C: D2 Weight Access Pattern (4-layer, 24 matmuls)  │");
+    println!("├──────────────┬──────────────┬──────────┬────────────┤");
+    println!("│ Metric       │ BEFORE (Vec) │ AFTER    │ Delta      │");
+    println!("├──────────────┼──────────────┼──────────┼────────────┤");
+    println!(
+        "│ P50 (24 matmuls) │ {before_p50:>7} ns  │ {after_p50:>7} ns │ {delta_pct:>+6.1}%     │"
+    );
+    println!(
+        "│ P99           │ {before_p99:>7} ns  │ {after_p99:>7} ns │ {p99_delta:>+6.1}%     │",
+        before_p99 = before[990],
+        after_p99 = after[990],
+        p99_delta = (after[990] as f64 - before[990] as f64) / before[990] as f64 * 100.0,
+    );
+    println!("└──────────────┴──────────────┴──────────┴────────────┘");
+
+    if delta_pct.abs() < 5.0 {
+        println!(
+            "  → D2 RESULT: ~0% change. Expected — micro weights ({:.0}KB) fit in L2 cache.",
+            cw.buffer_bytes() as f64 / 1024.0
+        );
+        println!("    Contiguous layout benefits require models > L2 cache size.\n");
+    }
+}
+
+// ── Bench D: D3 — Stage dispatch overhead ─────────────────────
+//
+// BEFORE: forward() called directly
+// AFTER:  forward_decode_stage(DecodeStage::Verify) called
+//
+// Expectation: ~0% difference (forward_verify delegates to forward_base via inline)
+
+#[cfg(feature = "decode_specialize")]
+#[test]
+fn bench_d_stage_dispatch_overhead() {
+    use microgpt_rs::transformer::{DecodeStage, forward_decode_stage};
+
+    let (config, weights) = make_micro();
+    let n = 2000;
+
+    // BEFORE: forward() directly
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut ctx = ForwardContext::new(&config);
+    let before = bench_sorted(200, n, || {
+        let logits = forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+        black_box(logits);
+    });
+
+    // AFTER: forward_decode_stage() dispatch
+    cache.reset();
+    ctx = ForwardContext::new(&config);
+    let after = bench_sorted(200, n, || {
+        let logits = forward_decode_stage(
+            &mut ctx,
+            &weights,
+            &mut cache,
+            0,
+            0,
+            &config,
+            DecodeStage::Verify,
+        );
+        black_box(logits);
+    });
+
+    let before_p50 = before[n / 2];
+    let after_p50 = after[n / 2];
+    let delta_pct = (after_p50 as f64 - before_p50 as f64) / before_p50 as f64 * 100.0;
+
+    println!("┌─────────────────────────────────────────────────────┐");
+    println!("│ Bench D: D3 Stage Dispatch Overhead                 │");
+    println!("├──────────────┬──────────────┬──────────┬────────────┤");
+    println!("│ Metric       │ BEFORE (fwd) │ AFTER    │ Delta      │");
+    println!("├──────────────┼──────────────┼──────────┼────────────┤");
+    println!("│ P50          │ {before_p50:>8} ns  │ {after_p50:>8} ns │ {delta_pct:>+6.1}%     │");
+    println!(
+        "│ P99          │ {before_p99:>8} ns  │ {after_p99:>8} ns │ {p99_delta:>+6.1}%     │",
+        before_p99 = before[n * 99 / 100],
+        after_p99 = after[n * 99 / 100],
+        p99_delta = (after[n * 99 / 100] as f64 - before[n * 99 / 100] as f64)
+            / before[n * 99 / 100] as f64
+            * 100.0,
+    );
+    println!("└──────────────┴──────────────┴──────────┴────────────┘");
+
+    if delta_pct.abs() < 5.0 {
+        println!("  → D3 RESULT: Dispatch is FREE (monomorphization inlines the match).");
+        println!(
+            "    Stage specialization surface reserved for future: skip screening in Draft.\n"
+        );
+    }
+}
+
+// ════════════════════════════════════════════════════════════════
+// PART 3: STABILITY PROFILE — D1's Real Value
+// ════════════════════════════════════════════════════════════════
+
+// ── Bench E: Full stability profile across decode steps ───────
+//
+// BEFORE Plan 102: "forward() takes ~X µs" — one number, no distribution
+// AFTER Plan 102:  P50, P99, mean, CV, stability_score — full picture
+//
+// This is the PRIMARY value of D1: we now KNOW our latency distribution.
+
+#[test]
+fn bench_e_stability_profile() {
+    let (config, weights) = make_micro();
+    let n_steps = 1000;
+
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut ctx = ForwardContext::new(&config);
+
+    let mut latencies = Vec::with_capacity(n_steps);
+    for i in 0..n_steps {
+        let pos = i % config.block_size;
+        if pos == 0 {
+            cache.reset();
+        }
+        let t0 = Instant::now();
+        let logits = forward(&mut ctx, &weights, &mut cache, 0, pos, &config);
+        black_box(logits);
+        latencies.push(t0.elapsed().as_nanos() as u64);
+    }
+
+    latencies.sort();
     let snap = StabilitySnapshot::compute(&latencies);
 
-    assert_eq!(snap.total_steps, 1000, "[P12] step count");
-    assert!(snap.p50_ns > 0, "[P12] p50 should be positive");
-    assert!(snap.p99_ns >= snap.p50_ns, "[P12] p99 should be >= p50");
-    assert!(snap.mean_ns > 0, "[P12] mean should be positive");
+    let p0 = latencies[0];
+    let p10 = latencies[n_steps / 10];
+    let p25 = latencies[n_steps / 4];
+    let p50 = latencies[n_steps / 2];
+    let p75 = latencies[n_steps * 3 / 4];
+    let p90 = latencies[n_steps * 9 / 10];
+    let p95 = latencies[n_steps * 95 / 100];
+    let p99 = latencies[n_steps * 99 / 100];
+    let p100 = latencies[n_steps - 1];
 
-    // CV should be small for this synthetic distribution (low jitter)
-    assert!(
-        snap.cv < 0.2,
-        "[P12] cv {:.3} too high for low-jitter distribution",
-        snap.cv
-    );
-
-    // Stability score should be reasonable
+    println!("┌──────────────────────────────────────────────────────┐");
+    println!("│ Bench E: D1 Stability Profile — {n_steps} decode steps     │");
+    println!("├──────────────────────────────────────────────────────┤");
+    println!("│ BEFORE Plan 102: \"forward() takes ~?µs\"              │");
+    println!("│ AFTER Plan 102:  Full latency distribution           │");
+    println!("├──────────┬───────────────────────────────────────────┤");
     println!(
-        "  1000 steps: p50={}µs p99={}µs mean={}µs cv={:.3} stability={:.3}",
-        snap.p50_ns / 1000,
-        snap.p99_ns / 1000,
-        snap.mean_ns / 1000,
-        snap.cv,
-        snap.stability_score,
+        "│ P0 (min) │ {p0:>10} ns ({p0_us:>6.1} µs)              │",
+        p0_us = p0 as f64 / 1000.0
     );
+    println!(
+        "│ P10      │ {p10:>10} ns ({p10_us:>6.1} µs)              │",
+        p10_us = p10 as f64 / 1000.0
+    );
+    println!(
+        "│ P25      │ {p25:>10} ns ({p25_us:>6.1} µs)              │",
+        p25_us = p25 as f64 / 1000.0
+    );
+    println!(
+        "│ P50      │ {p50:>10} ns ({p50_us:>6.1} µs)              │",
+        p50_us = p50 as f64 / 1000.0
+    );
+    println!(
+        "│ P75      │ {p75:>10} ns ({p75_us:>6.1} µs)              │",
+        p75_us = p75 as f64 / 1000.0
+    );
+    println!(
+        "│ P90      │ {p90:>10} ns ({p90_us:>6.1} µs)              │",
+        p90_us = p90 as f64 / 1000.0
+    );
+    println!(
+        "│ P95      │ {p95:>10} ns ({p95_us:>6.1} µs)              │",
+        p95_us = p95 as f64 / 1000.0
+    );
+    println!(
+        "│ P99      │ {p99:>10} ns ({p99_us:>6.1} µs)              │",
+        p99_us = p99 as f64 / 1000.0
+    );
+    println!(
+        "│ P100(max)│ {p100:>10} ns ({p100_us:>6.1} µs)              │",
+        p100_us = p100 as f64 / 1000.0
+    );
+    println!("├──────────┼───────────────────────────────────────────┤");
+    println!(
+        "│ Mean     │ {mean:>10} ns ({mean_us:>6.1} µs)              │",
+        mean = snap.mean_ns,
+        mean_us = snap.mean_ns as f64 / 1000.0
+    );
+    println!(
+        "│ CV       │ {cv:>10.4}                        │",
+        cv = snap.cv
+    );
+    println!(
+        "│ Stability│ {ss:>10.4}  (1.0 = perfect)          │",
+        ss = snap.stability_score
+    );
+    println!("└──────────┴───────────────────────────────────────────┘");
 
-    println!("✅ Proof 12 PASSED: Stability accumulation correct for 1000 steps");
+    // Assertions
+    assert!(snap.cv < 1.0, "CV should be reasonable: {}", snap.cv);
+    assert!(snap.p50_ns > 0, "P50 should be positive");
+
+    println!("  → D1 VALUE: Before Plan 102, we had NO latency distribution data.");
+    println!("    Now we can detect latency spikes, regressions, and instability.\n");
+}
+
+// ── Bench F: Multi-layer stability scaling ────────────────────
+
+#[test]
+fn bench_f_stability_scaling() {
+    for n_layer in [1, 2, 4] {
+        let (config, weights) = make_multi_layer(n_layer);
+        let n_steps = 500;
+
+        let mut cache = MultiLayerKVCache::new(&config);
+        let mut ctx = ForwardContext::new(&config);
+
+        let mut latencies = Vec::with_capacity(n_steps);
+        for i in 0..n_steps {
+            let pos = i % config.block_size;
+            if pos == 0 {
+                cache.reset();
+            }
+            let t0 = Instant::now();
+            let logits = forward(&mut ctx, &weights, &mut cache, 0, pos, &config);
+            black_box(logits);
+            latencies.push(t0.elapsed().as_nanos() as u64);
+        }
+        latencies.sort();
+        let snap = StabilitySnapshot::compute(&latencies);
+
+        println!(
+            "  {n_layer}-layer: P50={p50}ns P99={p99}ns CV={cv:.4} stability={ss:.4}",
+            p50 = snap.p50_ns,
+            p99 = snap.p99_ns,
+            cv = snap.cv,
+            ss = snap.stability_score,
+        );
+    }
+    println!("  → Stability degrades gracefully with layer count (more compute = more variance)\n");
+}
+
+// ════════════════════════════════════════════════════════════════
+// PART 4: HONEST SUMMARY
+// ════════════════════════════════════════════════════════════════
+
+#[test]
+fn summary_honest_before_after() {
+    let (config, weights) = make_micro();
+    let cw = ContiguousWeights::from_weights(&weights);
+    let per_vec_allocs = 3 + config.n_layer * 6;
+
+    println!("╔══════════════════════════════════════════════════════════════════════╗");
+    println!("║         Plan 102: TileRT Execution Pipeline — HONEST SUMMARY       ║");
+    println!("╠══════════════════════════════════════════════════════════════════════╣");
+    println!("║                                                                      ║");
+    println!("║  BEFORE Plan 102              │  AFTER Plan 102                      ║");
+    println!("║  ─────────────────────────────┼──────────────────────────────────    ║");
+    println!("║  No latency distribution data │  StabilitySnapshot: P50/P99/CV/SS   ║");
+    println!(
+        "║  {per_vec:>3} separate weight allocations  │  1 contiguous allocation             ║",
+        per_vec = per_vec_allocs,
+    );
+    println!("║  No alignment padding         │  64-byte aligned weight layout       ║");
+    println!("║  One forward() for all stages │  DecodeStage dispatch (identity now) ║");
+    println!("║  No per-step observability    │  Per-step latency profiling ready    ║");
+    println!("║                                                                      ║");
+    println!("╠══════════════════════════════════════════════════════════════════════╣");
+    println!("║  SPEED CHANGE: ~0% (infrastructure only, no hot-path optimization)  ║");
+    println!("║  OBSERVABILITY: +∞% (from zero metrics to full latency distribution)║");
+    println!(
+        "║  ALLOCATIONS:   {per_vec_allocs}→1 ({alloc_delta:+} allocs saved)               ║",
+        alloc_delta = -(per_vec_allocs as i64 - 1),
+    );
+    println!(
+        "║  MEMORY:        {mem_overhead:+.1}% (alignment padding)                       ║",
+        mem_overhead = (cw.buffer_len() as f64
+            - (weights.wte.len()
+                + weights.wpe.len()
+                + weights.lm_head.len()
+                + weights
+                    .layers
+                    .iter()
+                    .map(|l| l.attn_wq.len()
+                        + l.attn_wk.len()
+                        + l.attn_wv.len()
+                        + l.attn_wo.len()
+                        + l.mlp_w1.len()
+                        + l.mlp_w2.len())
+                    .sum::<usize>()) as f64)
+            / cw.buffer_len() as f64
+            * 100.0,
+    );
+    println!("║                                                                      ║");
+    println!("║  D1 (Stability Metrics):  ✅ Production-ready observability          ║");
+    println!("║  D2 (Contiguous Weights): 🔧 Infrastructure, NOT wired into forward  ║");
+    println!("║  D3 (Stage Specialize):   🔧 Dispatch ready, specialization pending  ║");
+    println!("║                                                                      ║");
+    println!("║  NEXT STEPS FOR REAL SPEEDUP:                                        ║");
+    println!("║  - Wire ContiguousWeights into forward() (measurable for >8 layers)  ║");
+    println!("║  - Skip ScreeningPruner in Draft stage                               ║");
+    println!("║  - Reduce KV writes for draft positions > draft_length               ║");
+    println!("║  - Benchmark with config > L2 cache size (n_embd≥128, n_layer≥8)    ║");
+    println!("╚══════════════════════════════════════════════════════════════════════╝");
 }

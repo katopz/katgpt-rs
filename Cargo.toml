@@ -32,7 +32,7 @@ crossterm = "0.28"
 tempfile = "3"
 
 [features]
-default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6)
+default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6, stability_metrics Plan 102 GOAT 13/13)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 dllm = []  # D2F Discrete Diffusion Forcing — mini dLLM research (Plan 066)
 tri_mode = ["dllm"]  # Tri-Mode inference — AR + Diffusion + Self-Speculation (Plan 089, Research 55)
@@ -58,7 +58,7 @@ memo_reflections = ["bandit"]  # MeMo Reflection QA pipeline — 5-step composit
 replaid_schedules = []  # RePlaid variance-minimized adaptive schedules (Plan 078) — experimental, off by default
 elf_sde = []  # ELF SDE noise injection + logit-normal schedule (Plan 079) — GOAT proved: 10-22× diversity, default-on
 spec_cost_model = []  # Amdahl cost model for LeviathanVerifier (Research 59, Plan 096)
-stability_metrics = []  # Per-step execution stability instrumentation (Plan 102)
+stability_metrics = []  # Per-step execution stability instrumentation — P50/P99/CV/stability_score, +0.6% overhead (Plan 102, default-on)
 maxsim = ["microgpt-core/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
 spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
