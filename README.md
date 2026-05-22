@@ -328,7 +328,7 @@ src/percepta/
 
 ## 🗜️ TurboQuant: Near-Optimal KV Cache Compression (Legacy Baseline)
 
-Legacy baseline for benchmarking and education. Superseded by **SpectralQuant** (default). Compresses KV cache from f32 (32 bits) to 2-4 bits per coordinate using random rotation + Lloyd-Max scalar quantization. Based on [TurboQuant (Zandieh et al., 2025)](https://arxiv.org/pdf/2504.19874).
+Legacy baseline for benchmarking and education. Superseded by **OCTOPUS** (primary default) and **SpectralQuant** (secondary). Compresses KV cache from f32 (32 bits) to 2-4 bits per coordinate using random rotation + Lloyd-Max scalar quantization. Based on [TurboQuant (Zandieh et al., 2025)](https://arxiv.org/pdf/2504.19874).
 
 | Metric | Flat f32 | TQ 3-bit | TQ 4-bit |
 |--------|----------|----------|----------|
@@ -345,9 +345,9 @@ Architecture: random orthogonal rotation → Beta-distributed coordinates → Ll
 📁 `src/turboquant/` — `codebook.rs`, `rotation.rs`, `kv_cache.rs`, `forward.rs`, `types.rs`
 🔧 Feature flag: `turboquant` (off by default, legacy baseline)
 
-## 🔬 SpectralQuant: Calibrated Eigenbasis KV Compression (Default)
+## 🔬 SpectralQuant: Calibrated Eigenbasis KV Compression (Secondary, Default-On)
 
-Data-driven spectral analysis replaces TurboQuant's random rotation with a calibrated eigenbasis. Near-optimal quantization via offline calibration → water-fill bit allocation → Lloyd-Max codebooks. **Default KV compression** (Plan 077). At same 3-bit budget with real calibration (Bench 013): SQ cosine=0.9845 > TQ 0.9715, SQ MaxSim error=18.90% < TQ 40.54% (2.1× lower), SQ compression=9.7× > TQ 5.3×. SQ wins quality AND compression at matched budget.
+Data-driven spectral analysis replaces TurboQuant's random rotation with a calibrated eigenbasis. Near-optimal quantization via offline calibration → water-fill bit allocation → Lloyd-Max codebooks. **Secondary KV compression** — useful for per-dimension water-fill adaptation (Plan 077). Superseded by OCTOPUS (primary default, zero calibration, -22% to -49% MSE vs SQ). At same 3-bit budget with real calibration (Bench 013): SQ cosine=0.9845 > TQ 0.9715, SQ MaxSim error=18.90% < TQ 40.54% (2.1× lower), SQ compression=9.7× > TQ 5.3×. SQ wins quality AND compression at matched budget vs TQ.
 
 | Technique | What | Why Better Than TQ |
 |-----------|------|--------------------|

@@ -668,7 +668,8 @@ All ten techniques compose without conflicts:
 | Sparse MLP | ✅ (if enabled) | ✅ (if enabled) | `sparse_mlp` |
 | Domain Latent | ✅ K/V at L/2 | ✅ K/V at L/2 | `domain_latent` |
 | HLA Streaming | — | ✅ replaces KV cache | `hla_attention` |
-| SpectralQuant | — | ✅ KV compression | `spectral_quant` (default) |
+| OCTOPUS | — | ✅ KV compression | `octopus` (default, primary) |
+| SpectralQuant | — | ✅ KV compression | `spectral_quant` (default, secondary) |
 | ELF SDE | — | ✅ tree diversity | `elf_sde` (default) |
 | CNA Steering | — | ✅ neuron modulation | `cna_steering` (default) |
 | Deep Manifold | — | ✅ residual scoring | `deep_manifold` (default) |
@@ -684,7 +685,8 @@ All are additive and backward-compatible. Standard `forward()` with no features 
 - [The Free Transformer](https://arxiv.org/abs/2503.23153) — Mid-layer latent injection via K/V modulation (Plan 038)
 - [Higher-Order Linear Attention](https://arxiv.org/abs/2504.13764) — O(1) streaming attention via outer-product state (Plan 057)
 - [TurboQuant](https://arxiv.org/abs/2504.19874) — KV cache compression via learned codebooks (Plan 043, legacy baseline)
-- [SpectralQuant](https://arxiv.org/pdf/2504.19874) — Calibrated eigenbasis + water-fill bit allocation (Plan 077, default)
+- [OCTOPUS](https://arxiv.org/abs/2605.21226) — Octahedral triplet KV compression, data-oblivious, -22% to -49% MSE vs SQ (Plan 099, primary default)
+- [SpectralQuant](https://arxiv.org/pdf/2504.19874) — Calibrated eigenbasis + water-fill bit allocation (Plan 077, secondary)
 - [Embedded Language Flows](https://arxiv.org/abs/2406.09970) — SDE noise injection for path diversity (Plan 079)
 - [PTRM](https://arxiv.org/abs/2605.19943) — Width >> depth for small models (Plan 083)
 - [Contrastive Neuron Attribution](https://arxiv.org/pdf/2605.12290) — Sparse circuit discovery + modulation (Plan 087)

@@ -25,7 +25,8 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - forward_hla: ~939K tok/s (single-core, 30K CCU feasible)
 - forward_ahla: ~1.2M tok/s (single-core)
 - TurboQuant 3-bit KV cache: 5.3× compression, 0.99 attention correlation (legacy baseline)
-- SpectralQuant calibrated KV cache: 9.1× compression, 0.9917 cosine — default KV compression (Plan 077)
+- OCTOPUS octahedral triplet KV cache: 12.2× compression, 0.9512 cosine at 2-bit, -22% to -49% MSE vs SQ — primary KV compression, zero calibration (Plan 099, default-on)
+- SpectralQuant calibrated KV cache: 9.1× compression, 0.9917 cosine — secondary KV compression, per-dimension water-fill (Plan 077, default-on)
 - ELF SDE noise injection: 10-22× path diversity, logit-normal schedule (Plan 079, default-on)
 - CNA Steering: contrastive neuron attribution + sparse modulation, GOAT proved (Plan 087, default-on)
 - Deep Manifold: L2/KL residual fixed-point scoring, GOAT 6/6 (Plan 085, default-on)
@@ -228,7 +229,17 @@ src/
     kv_cache.rs     TurboQuantKVCache (store_key, store_value, dequantize, bit-pack)
     forward.rs      attention_turboquant, dequantize_keys_flat/values_flat, cosine_similarity
 
-  spectralquant/   SpectralQuant calibrated KV compression — default (Plan 078) ⊛:
+  octopus/         OCTOPUS octahedral triplet KV compression — primary default (Plan 099) ⊛:
+    mod.rs          Module root (re-exports)
+    types.rs        OctopusConfig, OctopusLayer, OctopusCodebook, TripletIndices
+    octahedral.rs   oct_encode, oct_decode — S² ↔ [-1,1]² equal-area parameterization
+    triplet.rs      Triplet, decompose, recompose, recompose_into — 3-block grouping
+    codebook.rs     ScalarCodebook, build_norm_codebook, build_oct_codebook — Lloyd-Max codebooks
+    encode.rs       encode_triplet, joint_3x3_round, bit-pack/unpack — triplet encoder
+    kv_cache.rs     OctopusKVCache — QuantizedKVCache trait impl
+    forward.rs      maxsim_score_octopus, dequantize-to-flat — score-path decode (behind "maxsim" feature)
+
+  spectralquant/   SpectralQuant calibrated KV compression — secondary, per-dimension water-fill (Plan 077) ⊛:
     mod.rs          Module root (re-exports)
     types.rs        LloydMaxCodebook, SpectralQuantCalibration, WaterfillAllocation, SpectralQuantLayer, SpectralQuantKVCacheConfig
     spectral.rs     calibrate_eigenbasis, waterfill_bits, participation_ratio, spectral_gap, LloydMaxQuantizer
@@ -318,7 +329,8 @@ src/
 | `ropd_rubric` | `bandit` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting (Plan 071) |
 | `sdar_gate` | — | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072) |
 | `bt_rank` | — | Bradley-Terry pairwise ranking for DDTree selection (OpenDeepThink distillation) |
-| `spectral_quant` | — | SpectralQuant calibrated eigenbasis + water-fill bit allocation — default KV compression (Plan 078) |
+| `spectral_quant` | — | SpectralQuant calibrated eigenbasis + water-fill bit allocation — secondary KV compression, useful for per-dimension water-fill (Plan 077, default-on) |
+| `octopus` | — | OCTOPUS octahedral triplet codec — data-oblivious, primary KV compression: -22% to -49% MSE vs SQ, zero calibration (Bench 022, Plan 099, default-on) |
 | `turboquant` | — | TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063) |
 | `replaid_schedules` | — | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | — | ELF SDE noise injection + logit-normal schedule — 10-22× path diversity (Plan 079, default-on) |
@@ -335,12 +347,13 @@ src/
 | `percepta_graph` | `percepta_gates` | + Expression/Dimension DSL, ProgramGraph |
 | `percepta_wasm` | `percepta_graph` | + WASM decoder + lowering + interpreter (pure Rust) |
 | `percepta_compile` | `percepta_wasm`, `good_lp` | + MILP scheduling + weights + transformer + Futamura |
-| `lattice_deduction` | — | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination (Plan 088) |
+| `lattice_deduction` | — | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination (Plan 088, default-on, GOAT 7/7) |
+| `delta_routing` | — | Delta Block cross-layer routing — residual block importance routing (Plan 097, default-on, GOAT 6/6) |
 | `tri_mode` | `dllm` | Tri-Mode inference — AR + Diffusion + Self-Speculation, D2F Drafter Verifier (Plan 089) |
 | `unit_distance` | — | Unit Distance GOAT proof — number-theoretic lattice constructions (Plan 090) |
 | `full` | all above (excludes `stepcode`, `sp_kv`) | Enable all features |
 
-Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation` (production best perf + accuracy, Plans 051, 077-079, 085, 087).
+Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `octopus`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing` (production best perf + accuracy, Plans 051, 077-079, 085-089, 097, 099).
 
 ## Quick Start
 
