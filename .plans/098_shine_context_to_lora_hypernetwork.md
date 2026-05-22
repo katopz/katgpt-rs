@@ -4,7 +4,8 @@
 > **Related Plans:** 025 (Model vs Modelless Bandit), 050 (Feature Gate Audit), 092 (Freeze/Thaw), 094 (MeMo Reflections + TIES), 097 (Delta Routing)
 **Status:** ✅ Done
 > **Verdict:** Technique extraction — two distillable components: Meta LoRA context-to-adapter + alternating sparse M2P attention. Fits model-based path. Feature gate `shine_hypernet` on riir-ai side.
-> **Promoted:** `shine_hypernet` → default-on (GOAT proved, 62–77% FLOPs savings, 31 tests pass).
+> **NOT promoted:** `shine_hypernet` stays default-off. Stage 1 is placeholder, GPU dispatch unwired, random weights only.
+> **GOAT gate:** Plan 104 — E2E proof needed: real Stage 1 + GPU dispatch + trained weights.
 
 ### Benchmark Results (`alternating_2d_bench`, Criterion, release, Apple M-series)
 
@@ -16,7 +17,7 @@
 
 **Layer scaling** (hidden=64, heads=4): 4×8 → 1.0 ms, 8×16 → 4.1 ms, 12×24 → 9.4 ms, 16×32 → 17.0 ms.
 
-**GOAT verdict:** ✅ FLOPs savings validated (62–77%). CPU alternating is slower than naive full at small scales due to SwiGLU MLP + post-layernorm overhead per cell. GPU dispatch will show wall-clock wins at production scale. Both GOAT proofs pass — promoted to default-on.
+**GOAT verdict (Plan 098 partial):** ✅ FLOPs savings validated (62–77%). ✅ Architecture compiles, 31 tests pass. ⚠️ Stage 1 is placeholder (ignores context tokens, ignores Meta LoRA). ⚠️ GPU dispatch unwired (WGSL kernels exist but no Rust dispatch). ⚠️ Random weights produce structured but meaningless output. **Not promoted to default** — needs Plan 104 E2E GOAT proof.
 
 ## Tasks
 
