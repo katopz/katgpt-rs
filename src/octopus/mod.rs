@@ -20,8 +20,13 @@ pub mod triplet;
 pub use codebook::{ScalarCodebook, build_norm_codebook, build_oct_codebook};
 pub use octahedral::{oct_decode, oct_encode};
 pub use triplet::{Triplet, decompose, recompose};
+pub mod types;
 
-// TODO(T4): pub mod types;
-// TODO(T5): pub mod encode;
-// TODO(T6): pub mod kv_cache;
-// TODO(T7): pub mod forward;
+pub mod encode;
+
+pub use types::{OctopusCodebook, OctopusConfig, OctopusLayer, TripletIndices};
+
+pub mod forward;
+pub mod kv_cache;
+
+pub use kv_cache::OctopusKVCache;
