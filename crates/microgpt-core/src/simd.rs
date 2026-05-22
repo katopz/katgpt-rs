@@ -2310,10 +2310,10 @@ mod tests {
         // Compare f16 matmul vs f32 matmul on the same values
         let rows = 4;
         let cols = 6;
-        let weight_f32: Vec<f32> = (0..rows * cols).map(|i| (i as f32 * 0.01 - 0.1)).collect();
+        let weight_f32: Vec<f32> = (0..rows * cols).map(|i| i as f32 * 0.01 - 0.1).collect();
         let weight_f16: Vec<half::f16> =
             weight_f32.iter().map(|&v| half::f16::from_f32(v)).collect();
-        let input: Vec<f32> = (0..cols).map(|i| (i as f32 * 0.05)).collect();
+        let input: Vec<f32> = (0..cols).map(|i| i as f32 * 0.05).collect();
 
         let mut out_f32 = vec![0.0f32; rows];
         let mut out_f16 = vec![0.0f32; rows];
