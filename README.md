@@ -161,6 +161,17 @@ Block-parallel decoding via iterative denoising — a third decode strategy alon
 
 📖 See [`.docs/03_speculative_decoding.md`](.docs/03_speculative_decoding.md) for D2F API details and [`.research/34_D2F_Discrete_Diffusion_Forcing.md`](.research/34_D2F_Discrete_Diffusion_Forcing.md) for experimental results.
 
+### Tri-Mode: D2F+AR Self-Speculation (Plan 089)
+
+D2F drafts in parallel → AR verifies causally → accept longest prefix match. Feature-gated behind `tri_mode` (requires `dllm`).
+
+- **`D2fDrafterVerifier`**: `d2f_decode_block()` drafts → `forward()` verifies → prefix accept + bonus token
+- **`DecodeStrategy::SelfSpeculation`**: D2F+AR mode, auto-selected by `recommend()` when draft model available
+- **Global Loss Averaging**: `LossAveraging::Global` (Nemotron +2.12% accuracy vs per-sequence)
+- **GOAT 4/4 passed** (Bench 018): valid output, no infinite loops, correct mode switching, ~1030 tok/s untrained
+
+📖 See [`.benchmarks/018_d2f_verifier_goat.md`](.benchmarks/018_d2f_verifier_goat.md) for full GOAT proof results.
+
 ## 🦅 Raven RSM: O(1) Routing Slot Memory
 
 Fixed-size slot memory with sparse Top-K routing. Unselected slots are **completely frozen** — 10K noise updates leave passkey slots untouched. 2.98× faster than flat attention at pos=8.
@@ -1329,6 +1340,7 @@ cargo clippy --all-targets --all-features --quiet
 | `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
+| `tri_mode` | Tri-Mode inference — AR + Diffusion + Self-Speculation via `D2fDrafterVerifier`. GOAT 4/4 proved (Bench 018). Requires `dllm` (Plan 089) |
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
@@ -1599,7 +1611,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **GameState** (`game_state`) | [STRATEGA](https://arxiv.org/abs/2605.09959) | Cross-game MCTS reuse: one `mcts_search()` works on Bomber, Go, any `GameState` impl. `BomberState` wraps ECS for snapshot/restore. | Depends on `bomber`, arena-specific |
 | **HLA/AHLA** (`hla_attention`) | [Higher-order Linear Attention](https://arxiv.org/abs/2605.09959) | AHLA: **95% of flat KV speed** (863K vs 910K tok/s), **88.3% memory savings** (640B vs 2048B/layer). Cosine 0.9537 vs SDPA (Bench Plan 057). | Alternative attention path, not yet default |
 | **Percepta** (`percepta`→`percepta_compile`) | [Percepta transformer-vm](https://www.percepta.ai/blog/can-llms-be-computers) | Full RIIR: 17 source files. CHT hull O(log h), parabolic encoding, ReGLU gates, Expression/Dimension DSL, WASM interpreter, MILP scheduling, Futamura projection. `Sudoku9x9` + `StreamingSolver` end-to-end. | Research-grade; production uses LoRA+bandit+validators |
-| **D2F** (`dllm`) | [Discrete Diffusion Forcing](https://arxiv.org/abs/2406.09970) | 15/15 tests pass. Mini dLLM reaches ≥80% accuracy. Block-causal + bidirectional attention. `DecodeStrategy::recommend()` auto-switches AR/Speculative/D2F. | Experimental decode strategy |
+| **D2F** (`dllm`+`tri_mode`) | [Discrete Diffusion Forcing](https://arxiv.org/abs/2406.09970) + [Nemotron Tri-Mode](https://arxiv.org/abs/2605.12290) | 15/15 tests pass. Mini dLLM ≥80% accuracy. Block-causal + bidirectional attention. `DecodeStrategy::recommend()` auto-switches AR/Speculative/D2F/SelfSpeculation. **Tri-Mode GOAT 4/4** (Bench 018): `D2fDrafterVerifier` valid output, correct mode switching, ~1030 tok/s untrained. | Experimental decode strategy; untrained acceptance rate 1.0 (trained expected 60-80%) |
 | **ROPD Rubric** (`ropd_rubric`) | Research 36 | `observe_rubric()`: 4.9M/sec (49× target). Per-criterion pass rates: 20/20 high-weight, 0/10 low-weight (correctly filtered). Zero inter-dimensional regression. | Arena-specific learning player |
 | **MaxSim** (`maxsim`) | [MaxSim Research 45](https://arxiv.org/abs/2605.09959) | **7.46× SIMD** speedup (48.3µs vs 360µs). Block separation: 20× vs Mean-K 4.25× (**4.71× better** needle detection). | Amplifies quantization error 12-14×; best with SpectralQuant |
 | **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
