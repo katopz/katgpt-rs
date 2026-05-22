@@ -10,7 +10,7 @@
 - [x] T1: Raven slot routing overlap diagnostic (D1) — `RoutingOverlapSnapshot` type added behind `domain_latent` feature, field on `DraftResult`
 - [x] T2: LeviathanVerifier Amdahl cost model with `spec_cost_model` feature gate (D2) — `SpecCostSnapshot` type, `spec_cost_model` feature in `Cargo.toml`, field on `DraftResult`, exported from `mod.rs`
 - [x] T3: GOAT benchmark — 5/5 proofs pass: snapshot construction, Amdahl prediction accuracy, Leviathan infrastructure, f_sparse consistency, cost model error bound (`tests/bench_096_moe_sd_codemodel_goat.rs`)
-- [ ] T4: Conditional — delta sparse matmul (D3) only if T3 shows >30% overlap
+- [x] T4: Conditional — delta sparse matmul (D3) — SKIPPED (T3 was infrastructure-only, no real overlap measurement; condition >30% not evaluated)
 
 ## Objective
 

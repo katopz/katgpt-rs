@@ -24,9 +24,9 @@ MeMo validates our existing Raven RSM (O(1) retrieval) and G-Zero (multi-phase p
 - [x] T10: Add GOAT proof test in `tests/test_memo_reflections.rs`
 - [x] T11: Implement `ties_merge()` in `riir-ai/crates/riir-gpu/src/merging.rs` (or new crate)
 - [x] T12: Add `ties_merge` feature gate to riir-ai
-- [ ] T13: Create merge benchmark example
+- [x] T13: Create merge benchmark example
 - [x] T14: Run clippy + tests, fix diagnostics
-- [ ] T15: Update README.md (both repos) + research doc
+- [x] T15: Update README.md (both repos) + research doc
 
 ## Context
 

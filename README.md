@@ -127,6 +127,27 @@ raven_recall (1000 noise)        9,252,063 tok/s       0.11           63.21
 📈 Best speedup: 1.82x (Speculative AR Draft vs AR)
 ```
 
+### GRAM Width-vs-Depth (`.benchmarks/019_gram_width_depth.md`)
+
+Infrastructure benchmark validating width >> depth on DDTree with SDE noise. GOAT PENDING (1/3) — infrastructure validated, real game arenas needed for full proof.
+
+| Sweep | Result |
+|-------|--------|
+| Width K=1→20 | +0.15% quality (linear latency cost) |
+| Depth T=1→16 | -32.4% quality (diminishing returns) |
+
+### MoE+SD Cost Model (`.benchmarks/096_moe_sd_codemodel_goat.md`)
+
+Amdahl cost model for LeviathanVerifier speculative decoding. Feature gate: `spec_cost_model`.
+
+| Proof | Result |
+|-------|--------|
+| SpecCostSnapshot construction | ✅ |
+| Amdahl prediction accuracy | ✅ |
+| Leviathan infrastructure | ✅ |
+| f_sparse consistency | ✅ < 10% variance |
+| Cost model error bound | ✅ < 15% |
+
 📖 See [`.docs/04_performance.md`](.docs/04_performance.md) for per-benchmark explanations, zero-alloc improvements, and screening overhead analysis.
 
 ## 🧩 D2F: Discrete Diffusion Forcing (Plan 066)
@@ -746,6 +767,26 @@ Corner:0.80 Side:0.64 Center:0.74 Cap:0.75 Def:0.40 Ext:0.48 Inf:0.59 Pass:0.00
 Feature gate: `bomber` or `go` (both imply `bandit`). 19 round-trip tests pass (includes `hl_learning_vs_random_q_values_differentiate`).
 
 📖 See [`.plans/092_self_play_freeze_thaw.md`](.plans/092_self_play_freeze_thaw.md).
+
+## 🪞 MeMo Reflection QA Pipeline (Plan 094)
+
+Five-step data synthesis for generating compositional training data from game replays. Distilled from [MeMo: Memory as a Model](https://arxiv.org/abs/2605.15156).
+
+| Step | Function | Output |
+|------|----------|--------|
+| 1. Extract | `(state, action, outcome) → QA` | Direct + indirect facts |
+| 2. Consolidate | Merge related facts | Multi-fact questions |
+| 3. Verify | Self-containment check | Verified QA pairs |
+| 4. Surface | Entity-from-pattern | Reverse lookup QA |
+| 5. Cross-Game | Converging clues | Cross-domain QA |
+
+Feature gate: `memo_reflections`. Consumed by `BanditPruner` and `AbsorbCompress` — modelless path.
+
+```sh
+cargo run --example bomber_13_reflection_qa --features memo_reflections --release
+cargo run --example go_09_reflection_qa --features memo_reflections --release
+cargo test --features memo_reflections --test test_memo_reflections -- --nocapture
+```
 
 ## 🔄 Self-Improving Loop (Plan 048)
 
