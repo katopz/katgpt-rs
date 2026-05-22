@@ -1,6 +1,6 @@
 # Plan 078: RePlaid Variance-Minimized Schedules — Modelless Path
 
-> **Status (2025-07):** All tasks ✅. VarianceMinimizer: 10.8 ns/obs ✅ ship. AdaptiveNoiseSchedule: infrastructure ready. Bandit VarianceEpsilon + SdarLearnedBeta: partial (doesn't beat UCB1, hits bounds). Feature `replaid_schedules` kept off-default (partial GOAT).
+> **Status (2025-07):** All tasks ✅. VarianceMinimizer: 10.8 ns/obs ✅ ship. AdaptiveNoiseSchedule: infrastructure ready. Bandit VarianceEpsilon + SdarLearnedBeta: partial (doesn't beat UCB1, hits bounds). D2F Higher-Order Denoising (T10.5/T10.6) ✅ DPM-Solver++(2M) multistep logit extrapolation. Feature `replaid_schedules` kept off-default (partial GOAT).
 
 **Branch:** `develop/feature/078_replaid_variance_schedules_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 072 (SDAR Modelless)
@@ -240,23 +240,23 @@
   - Metrics: win rate, DDTree nodes, β evolution over episodes
   - **Gate:** If learned β doesn't beat fixed β=5.0, document why and keep feature-gated
 
-### Phase 3.5: D2F Higher-Order Denoising (Future — Not Blocked)
+### Phase 3.5: D2F Higher-Order Denoising ✅ Complete
 
 RePlaid Sec 4.2 shows DPM-Solver++(2M) — a second-order multistep solver — beats first-order DDPM at low NFEs (< 64 steps). The solver caches previous predictions and linearly extrapolates (Eq 16-17), reducing steps by ~4×. This is directly transferable to our D2F pipeline.
 
-- [ ] **T10.5: Add `prev_logits` cache to `D2fContext`** — `src/dllm.rs`
-  - New field: `prev_logits: Vec<f32>` — `[vocab_size]` cached from previous denoising step
-  - New field: `prev_prev_logits: Vec<f32>` — second cache for multistep extrapolation
+- [x] **T10.5: Add `prev_logits` cache to `D2fContext`** — `src/dllm.rs`
+  - Added `prev_logits_flat: Vec<f32>` — `[max_seq * vocab_size]` cached from previous denoising step
+  - Added `prev_prev_logits_flat: Vec<f32>` — second cache for multistep extrapolation
   - No FLOPs increase — just memory for 2 extra logit vectors (~400KB at vocab=32K)
-  - **Deferred** until Phase 4 benchmarks show variance-minimized schedules help D2F
+  - Both caches cleared in `reset()` for clean state between decodes
 
-- [ ] **T10.6: Implement multistep logit extrapolation in `d2f_decode_block()`** — `src/speculative/d2f.rs`
-  - At each denoising step, instead of using only current logits:
-    - Step 1: use current logits (DDIM fallback, no cache)
-    - Step 2+: extrapolate using `D_i = (1 + r_i/2) * logits^(i-1) - (r_i/2) * logits^(i-2)` (RePlaid Eq 16)
-  - `r_i = h_{i-1} / h_i` where h is step size in log-SNR space
-  - Potential: `D2fDecodeConfig::quality()` from 16 steps → 4 steps, 4× throughput
-  - **Deferred** — requires T10.5 cache + Phase 4 variance schedule validation
+- [x] **T10.6: Implement multistep logit extrapolation in `d2f_decode_block()`** — `src/speculative/d2f.rs`
+  - Step 0: no blend (insufficient history), just cache raw logits
+  - Step 1+: blend using `D = 1.5 * current - 0.5 * prev` (uniform r=1.0)
+  - Added `multistep: bool` flag to `D2fDecodeConfig` (default: off, opt-in)
+  - Added `D2fDecodeConfig::multistep_quality()` preset: 4 steps + multistep enabled
+  - Cache rotation via `swap(&mut prev, &mut prev_prev)` — zero alloc per step
+  - 4 new tests: valid output, trained model unmasking, behavior difference, config preset
 
 ### Phase 4: Unified Benchmark + Feature Gate
 

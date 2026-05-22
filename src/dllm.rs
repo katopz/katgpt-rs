@@ -1251,6 +1251,12 @@ pub struct D2fContext {
     /// Number of positions with committed KV cache entries.
     /// Positions `[0..committed_len)` are valid and won't be recomputed.
     pub committed_len: usize,
+    /// Cached logits from previous denoising step: `[max_seq * vocab_size]`.
+    /// Used by DPM-Solver++(2M) multistep extrapolation (Plan 078 T10.5).
+    pub prev_logits_flat: Vec<f32>,
+    /// Cached logits from two steps ago: `[max_seq * vocab_size]`.
+    /// Second cache for multistep logit extrapolation (Plan 078 T10.5).
+    pub prev_prev_logits_flat: Vec<f32>,
 }
 
 impl D2fContext {
@@ -1277,6 +1283,8 @@ impl D2fContext {
             x_mlp_buf: vec![0.0f32; n],
             logits_buf: vec![0.0f32; vocab],
             committed_len: 0,
+            prev_logits_flat: vec![0.0f32; max_seq * vocab],
+            prev_prev_logits_flat: vec![0.0f32; max_seq * vocab],
         }
     }
 
@@ -1291,6 +1299,8 @@ impl D2fContext {
         self.xr.fill(0.0);
         self.logits_flat.fill(0.0);
         self.committed_len = 0;
+        self.prev_logits_flat.fill(0.0);
+        self.prev_prev_logits_flat.fill(0.0);
     }
 
     /// Commit KV cache entries for positions `[0..len)`.
