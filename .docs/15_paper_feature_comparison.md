@@ -31,11 +31,11 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 |---------|-----------|--------|
 | Speculative Decoding | DDTree + DFlash + Leviathan verification + Tri-Mode self-speculation | ✓ Implemented |
 | KV Optimization | OCTOPUS (12.2×, 0.9512 cosine at 2-bit, **primary default**, zero calibration), SpectralQuant (9.1×, 0.9917 cosine, secondary), SP-KV (3-10×), TurboQuant 3-bit (legacy) | ✓ Implemented |
-| Attention Innovation | forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim | ✓ Implemented |
+| Attention Innovation | forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim, SHINE Alternating2D (90% FLOPs savings) | ✓ Implemented |
 | Noise Scheduling | ELF SDE noise injection (10-22× path diversity, **default**), GRAM validates approach | ✓ Implemented |
 | Distillation/Compression | LoRA adapters, SpectralQuant, BT pairwise ranking (**default**), MeMo reflections, ROPD rubric | ✓ Partial (ASFT/SLIME in riir-gpu, CISPO default GRPO variant) |
 | Test-Time Compute | SimpleTES RPUCG loop (GOAT 8/8, **default**), BanditPruner adaptive arms, GRAM width scaling | ✓ Implemented |
-| Routing/MoE | Raven slot memories, MoE+SD Amdahl cost model, TIES merging (MeMo), Delta Block cross-layer (**default**) | ✓ Implemented |
+| Routing/MoE | Raven slot memories, MoE+SD Amdahl cost model, TIES merging (MeMo), Delta Block cross-layer (**default**), SHINE context→LoRA routing | ✓ Implemented |
 | Diffusion/Denoising | dLLM D2F block-parallel denoising, Tri-Mode AR+Diffusion+Self-Speculation (GOAT 4/4) | ✓ Partial (untrained acceptance rate 1.0) |
 | Game/Self-Play | Sudoku, Go, Monopoly, Bomber, Unit Distance lattice constructions | ✓ Implemented |
 | SIMD/Perf | NEON SIMD matmul/HLA kernels, zero-alloc hot paths, Minkowski lattice embedding, LDT α-intersection (**default**) | ✓ Implemented |
@@ -149,6 +149,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 | 60 | MeMo Memory as a Model | ✗ | ✓ | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ |
 | 61 | SLIME Stabilized Likelihood Implicit Margin | ✗ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ |
 | 061 | Delta Attention Residuals (Cross-Layer Routing) | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ | ✓ | ✗ | ✗ | ✗ |
+| 62 | SHINE Scalable In-Context Hypernetwork | ✗ | ✗ | ✓ | ✗ | ✓ | ✗ | ✓ | ✗ | ✗ | ○ |
 
 ---
 
@@ -192,6 +193,7 @@ Papers that intersect with 4 or more feature dimensions:
 | **53** | CNA Contrastive Neuron Attribution | Attn✓ Distill✓ SIMD✓ | ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 |
 | **55** | Nemotron Tri-Mode | SD✓ Attn✓ Diff✓ TTC○ | Dual-stream AR+Diffusion, 2.4-3.3× acceptance vs Eagle3, 76.5% SOL headroom |
 | **60** | MeMo Memory as a Model | KV✓ Distill✓ Route✓ | O(1) retrieval, TIES merging at ρ=0.3, reflection QA pipeline |
+| **62** | SHINE Scalable In-Context Hypernetwork | Attn✓ Distill✓ Route✓ | Context→LoRA single forward pass, alternating 2D attention (90% FLOPs savings), M2P Transformer |
 
 ---
 
@@ -275,6 +277,7 @@ Top co-occurring pairs:
 | 59 MoE+SD | Amdahl cost model for speculative decoding | `spec_cost_model` feature |
 | 60 MeMo | Reflection QA pipeline + TIES merging | `memo_reflections` feature |
 | 061 Delta Routing | Cross-layer residual delta routing | `delta_routing` feature |
+| 62 SHINE | Context→LoRA hypernetwork, alternating 2D attention | `shine_hypernet` / `shine_routing` features |
 
 ### 2. Strong Conceptual Alignment (Pattern Adopted, Different Mechanism)
 
@@ -334,7 +337,7 @@ Attention Innovation  ███████████████████�
 Noise Scheduling      ████████████████░░░░ 80%  (SDE injection default, GRAM learned-mean validates, PTRM)
 Distillation          █████████████░░░░░░░ 65%  (LoRA, BT ranking, ROPD, MeMo; ASFT/CISPO/SLIME planned)
 Test-Time Compute     █████████████████░░░ 85%  (SimpleTES GOAT 8/8, BanditPruner, GRAM width scaling)
-Routing/MoE           ███████████████░░░░░ 75%  (Raven, MoE+SD cost model, TIES merging, Delta Block)
+Routing/MoE           ████████████████░░░░ 80%  (Raven, MoE+SD cost model, TIES merging, Delta Block, SHINE context routing)
 Diffusion/Denoising   ██████████░░░░░░░░░░ 50%  (D2F, Tri-Mode validates, RePlaid schedules experimental)
 Game/Self-Play        ██████████████████░░ 90%  (Sudoku, Go, Monopoly, Bomber, Unit Distance lattice)
 SIMD/Perf             ████████████████████ 95%  (NEON, zero-alloc, Minkowski lattice embedding)

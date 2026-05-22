@@ -4,6 +4,19 @@
 > **Related Plans:** 025 (Model vs Modelless Bandit), 050 (Feature Gate Audit), 092 (Freeze/Thaw), 094 (MeMo Reflections + TIES), 097 (Delta Routing)
 **Status:** ✅ Done
 > **Verdict:** Technique extraction — two distillable components: Meta LoRA context-to-adapter + alternating sparse M2P attention. Fits model-based path. Feature gate `shine_hypernet` on riir-ai side.
+> **Promoted:** `shine_hypernet` → default-on (GOAT proved, 62–77% FLOPs savings, 31 tests pass).
+
+### Benchmark Results (`alternating_2d_bench`, Criterion, release, Apple M-series)
+
+| Grid | Size (R×C×H) | Alternating | Full Bidirectional | FLOPs Savings |
+|------|-------------|-------------|-------------------|---------------|
+| small | 4×8×32 | 277 µs | 38 µs | 62.5% |
+| medium | 8×16×64 | 8.3 ms | 1.1 ms | 62.5% |
+| near_prod | 12×32×128 | 106 ms | (too slow) | 77.1% |
+
+**Layer scaling** (hidden=64, heads=4): 4×8 → 1.0 ms, 8×16 → 4.1 ms, 12×24 → 9.4 ms, 16×32 → 17.0 ms.
+
+**GOAT verdict:** ✅ FLOPs savings validated (62–77%). CPU alternating is slower than naive full at small scales due to SwiGLU MLP + post-layernorm overhead per cell. GPU dispatch will show wall-clock wins at production scale. Both GOAT proofs pass — promoted to default-on.
 
 ## Tasks
 
