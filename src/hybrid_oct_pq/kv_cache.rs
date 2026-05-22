@@ -412,7 +412,7 @@ mod tests {
 
     fn make_random_vec(dim: usize, seed: u64) -> Vec<f32> {
         let mut rng = crate::types::Rng::new(seed);
-        (0..dim).map(|_| rng.normal() as f32).collect()
+        (0..dim).map(|_| rng.normal()).collect()
     }
 
     fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
@@ -744,7 +744,7 @@ mod tests {
 
         let mut rng = crate::types::Rng::new(seed);
         let keys: Vec<Vec<f32>> = (0..n_keys)
-            .map(|_| (0..dim).map(|_| rng.normal() as f32).collect())
+            .map(|_| (0..dim).map(|_| rng.normal()).collect())
             .collect();
 
         // Hybrid MSE

@@ -289,7 +289,7 @@ mod tests {
         let norm = (0.25f32 + 0.25 + 0.5).sqrt();
         let t = Triplet {
             norm: 0.2,
-            dir: [0.5f32, 0.5, 0.7071].map(|v| v / norm),
+            dir: [0.5f32, 0.5, std::f32::consts::FRAC_1_SQRT_2].map(|v| v / norm),
         };
         let idx = encode_triplet_simple(&t, &cb);
         let recon = decode_triplet(&idx, &cb);
@@ -311,7 +311,7 @@ mod tests {
         let norm = (0.25f32 + 0.25 + 0.5).sqrt();
         let t = Triplet {
             norm: 0.2,
-            dir: [0.5f32, 0.5, 0.7071].map(|v| v / norm),
+            dir: [0.5f32, 0.5, std::f32::consts::FRAC_1_SQRT_2].map(|v| v / norm),
         };
         let idx = encode_triplet_joint(&t, &cb);
         let recon = decode_triplet(&idx, &cb);

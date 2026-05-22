@@ -176,7 +176,12 @@ mod tests {
     #[test]
     fn test_full_sandwich_roundtrip() {
         let q_l = [0.5f32, 0.5, 0.5, 0.5];
-        let q_r = [0.7071f32, 0.0, 0.7071, 0.0];
+        let q_r = [
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+            std::f32::consts::FRAC_1_SQRT_2,
+            0.0,
+        ];
         let v = [1.0f32, 2.0, 3.0, 4.0];
 
         let rotated = quat_sandwich_forward(&q_l, &v, &q_r);
@@ -212,8 +217,8 @@ mod tests {
 
     #[test]
     fn test_full_vector_rotation_roundtrip() {
-        let dim = 128;
-        let n_groups = (dim + 3) / 4;
+        let dim: usize = 128;
+        let n_groups = dim.div_ceil(4);
         let q_left = generate_unit_quaternions(n_groups, 42);
         let q_right = generate_unit_quaternions(n_groups, 43);
         let input: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -235,8 +240,8 @@ mod tests {
 
     #[test]
     fn test_fast_vector_rotation_roundtrip() {
-        let dim = 64;
-        let n_groups = (dim + 3) / 4;
+        let dim: usize = 64;
+        let n_groups = dim.div_ceil(4);
         let q_left = generate_unit_quaternions(n_groups, 99);
         let input: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).cos()).collect();
         let mut rotated = vec![0.0f32; dim];
@@ -257,8 +262,8 @@ mod tests {
 
     #[test]
     fn test_rotation_preserves_norm() {
-        let dim = 64;
-        let n_groups = (dim + 3) / 4;
+        let dim: usize = 64;
+        let n_groups = dim.div_ceil(4);
         let q_left = generate_unit_quaternions(n_groups, 77);
         let input: Vec<f32> = (0..dim).map(|i| (i as f32 + 1.0).sin()).collect();
         let mut rotated = vec![0.0f32; dim];
@@ -293,8 +298,8 @@ mod tests {
         // Zero-padded groups have higher roundtrip error because the padded
         // zeros are not preserved through the rotation, causing mixing artifacts.
         // First 8 indices (2 full groups) should be exact; last 2 are approximate.
-        let dim = 10;
-        let n_groups = (dim + 3) / 4;
+        let dim: usize = 10;
+        let n_groups = dim.div_ceil(4);
         assert_eq!(n_groups, 3);
 
         let q_left = generate_unit_quaternions(n_groups, 55);

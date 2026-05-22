@@ -238,11 +238,11 @@ mod tests {
             let z = theta.cos();
             let (xi, eta) = oct_encode(x, y, z);
             assert!(
-                xi >= -1.0 - 1e-6 && xi <= 1.0 + 1e-6,
+                (-1.0 - 1e-6..=1.0 + 1e-6).contains(&xi),
                 "xi out of range: {xi}"
             );
             assert!(
-                eta >= -1.0 - 1e-6 && eta <= 1.0 + 1e-6,
+                (-1.0 - 1e-6..=1.0 + 1e-6).contains(&eta),
                 "eta out of range: {eta}"
             );
         }

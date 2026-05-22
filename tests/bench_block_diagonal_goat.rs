@@ -53,7 +53,7 @@ fn ip_error(a: &[f32], b: &[f32], query: &[f32]) -> f32 {
 }
 
 fn gaussian_vec(dim: usize, rng: &mut Rng) -> Vec<f32> {
-    (0..dim).map(|_| rng.normal() as f32).collect()
+    (0..dim).map(|_| rng.normal()).collect()
 }
 
 fn mean_std(values: &[f64]) -> (f64, f64) {
@@ -537,6 +537,7 @@ fn goat_block_diagonal_pairwise_comparison() {
     }
 
     // Collect results per backend
+    #[allow(dead_code)]
     struct BackendMetrics {
         name: &'static str,
         mse: f64,
@@ -736,12 +737,12 @@ fn goat_rotation_cost_comparison() {
         let tq_params = dim * dim;
 
         // PlanarQuant: ceil(d/2) groups, 4 FMAs per group (2 for forward)
-        let pq_groups = (dim + 1) / 2;
+        let pq_groups = dim.div_ceil(2);
         let pq_fmas = pq_groups * 4; // 2 FMAs × 2 components per group
         let pq_params = pq_groups * 2; // (cos, sin) per group
 
         // IsoQuant Full: ceil(d/4) groups, 2 Hamilton products × 16 FMAs = 32 FMAs per group
-        let iq_groups = (dim + 3) / 4;
+        let iq_groups = dim.div_ceil(4);
         let iq_full_fmas = iq_groups * 32;
         let iq_full_params = iq_groups * 4 * 2; // q_L + q_R, 4 components each
 
@@ -921,7 +922,7 @@ fn goat_iso_quant_full_vs_fast() {
             agg.summary()
         };
 
-        let n_groups = (dim + 3) / 4;
+        let n_groups = dim.div_ceil(4);
         let full_fmas = n_groups * 32; // 2 Hamilton products × 16
         let fast_fmas = n_groups * 16; // 1 Hamilton product × 16
         let fmas_delta = format!("{} vs {}", full_fmas, fast_fmas);
@@ -1173,11 +1174,11 @@ fn goat_three_way_matrix() {
 
     // Rotation cost rows
     let tq_fmas = dim * dim;
-    let pq_fmas = ((dim + 1) / 2) * 4;
-    let iq_fmas = ((dim + 3) / 4) * 32;
+    let pq_fmas = dim.div_ceil(2) * 4;
+    let iq_fmas = dim.div_ceil(4) * 32;
     let tq_params = dim * dim;
-    let pq_params = ((dim + 1) / 2) * 2;
-    let iq_params = ((dim + 3) / 4) * 4 * 2;
+    let pq_params = dim.div_ceil(2) * 2;
+    let iq_params = dim.div_ceil(4) * 4 * 2;
 
     println!(
         "│ Rotation FMAs    │ {:>12} │ {:>12} │ {:>12} │ {:>12} │",
@@ -1280,9 +1281,13 @@ fn goat_production_stack_verdict() {
         available: bool,
     }
 
+    #[allow(unused_mut)]
     let mut tq = Summary::default();
+    #[allow(unused_mut)]
     let mut oct = Summary::default();
+    #[allow(unused_mut)]
     let mut pq = Summary::default();
+    #[allow(unused_mut)]
     let mut iqf = Summary::default();
 
     #[cfg(feature = "turboquant")]
@@ -1328,8 +1333,8 @@ fn goat_production_stack_verdict() {
         let (mse, _, cos, _) = agg.summary();
         pq.mse = mse;
         pq.cos = cos;
-        pq.fmas = ((dim + 1) / 2) * 4;
-        pq.params = ((dim + 1) / 2) * 2;
+        pq.fmas = dim.div_ceil(2) * 4;
+        pq.params = dim.div_ceil(2) * 2;
         pq.available = true;
     }
 
@@ -1352,8 +1357,8 @@ fn goat_production_stack_verdict() {
         let (mse, _, cos, _) = agg.summary();
         iqf.mse = mse;
         iqf.cos = cos;
-        iqf.fmas = ((dim + 3) / 4) * 32;
-        iqf.params = ((dim + 3) / 4) * 4 * 2;
+        iqf.fmas = dim.div_ceil(4) * 32;
+        iqf.params = dim.div_ceil(4) * 4 * 2;
         iqf.available = true;
     }
 
@@ -1907,10 +1912,11 @@ fn goat_hybrid_oct_pq_quality_sweep() {
         };
 
         // ── Print results ──
+        #[allow(unused_variables)]
         let na = "N/A";
         #[allow(unused_mut)]
         let mut winner = String::new();
-        #[allow(unused_mut)]
+        #[allow(unused_mut, unused_assignments)]
         let mut best_mse = f64::INFINITY;
 
         #[cfg(feature = "hybrid_oct_pq")]
@@ -1957,6 +1963,7 @@ fn goat_hybrid_oct_pq_quality_sweep() {
         }
 
         #[cfg(feature = "turboquant")]
+        #[allow(unused_assignments)]
         {
             let (t_mse, _, _t_cos, _t_ip) = tq_agg.summary();
             if t_mse < best_mse {
@@ -2064,6 +2071,7 @@ fn goat_hybrid_oct_pq_quality_sweep() {
 // GOAT Test 11: Hybrid OCT+PQ MaxSim (Plan 101, T12)
 // ══════════════════════════════════════════════════════════════
 
+#[cfg(feature = "maxsim")]
 #[test]
 fn goat_hybrid_maxsim_late_interaction() {
     use microgpt_rs::simd::maxsim_score;

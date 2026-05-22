@@ -38,7 +38,7 @@ use microgpt_rs::spectralquant::types::SpectralQuantKVCacheConfig;
 fn gaussian_vec(dim: usize, rng: &mut Rng) -> Vec<f32> {
     let mut v = Vec::with_capacity(dim);
     for _ in 0..dim {
-        v.push(rng.normal() as f32);
+        v.push(rng.normal());
     }
     v
 }
@@ -523,7 +523,7 @@ fn goat_octopus_quality_by_dimension() {
     println!("{}", "-".repeat(70));
 
     for &dim in &dims {
-        let n_tri = (dim + 2) / 3;
+        let n_tri = dim.div_ceil(3);
         let eff_bpc = OctopusConfig::effective_bits_per_scalar(bits);
         let max_seq = n_keys + 16;
 

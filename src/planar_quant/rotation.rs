@@ -118,8 +118,8 @@ mod tests {
 
     #[test]
     fn test_full_rotation_roundtrip() {
-        let dim = 128;
-        let n_groups = (dim + 1) / 2;
+        let dim: usize = 128;
+        let n_groups = dim.div_ceil(2);
         let rots = generate_givens_rotations(n_groups, 42);
         let input: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
         let mut rotated = vec![0.0f32; dim];
@@ -140,8 +140,8 @@ mod tests {
 
     #[test]
     fn test_rotation_preserves_vector_norm() {
-        let dim = 64;
-        let n_groups = (dim + 1) / 2;
+        let dim: usize = 64;
+        let n_groups = dim.div_ceil(2);
         let rots = generate_givens_rotations(n_groups, 77);
         let input: Vec<f32> = (0..dim).map(|i| (i as f32 + 1.0).sin()).collect();
         let mut rotated = vec![0.0f32; dim];
