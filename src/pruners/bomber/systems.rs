@@ -247,16 +247,20 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
             .collect()
     };
 
-    let player_map: HashMap<(i32, i32), (u8, Entity)> = {
+    // Vec to handle multiple players at the same position
+    let player_map: HashMap<(i32, i32), Vec<(u8, Entity)>> = {
         let mut q = world.query_filtered::<(Entity, &Player, &GridPos), With<Alive>>();
-        q.iter(world)
-            .map(|(e, p, pos)| ((pos.x, pos.y), (p.id, e)))
-            .collect()
+        let mut map: HashMap<(i32, i32), Vec<(u8, Entity)>> = HashMap::new();
+        for (e, p, pos) in q.iter(world) {
+            map.entry((pos.x, pos.y)).or_default().push((p.id, e));
+        }
+        map
     };
 
     // Map player entity → player id (for killer tracking)
     let player_id_map: HashMap<Entity, u8> = player_map
         .values()
+        .flat_map(|v| v.iter())
         .copied()
         .map(|(id, e)| (e, id))
         .collect();
@@ -278,8 +282,10 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
         blast_cells.push(exp.pos);
         owners_to_decrement.insert(exp.owner);
 
-        if let Some(&(pid, pe)) = player_map.get(&exp.pos) {
-            players_killed.push((pid, pe, killer_id));
+        if let Some(players) = player_map.get(&exp.pos) {
+            for &(pid, pe) in players {
+                players_killed.push((pid, pe, killer_id));
+            }
         }
 
         for (dx, dy) in DIRECTIONS {
@@ -293,8 +299,10 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                     Cell::DestructibleWall => {
                         blast_cells.push((cx, cy));
                         walls_destroyed.insert((cx, cy));
-                        if let Some(&(pid, pe)) = player_map.get(&(cx, cy)) {
-                            players_killed.push((pid, pe, killer_id));
+                        if let Some(players) = player_map.get(&(cx, cy)) {
+                            for &(pid, pe) in players {
+                                players_killed.push((pid, pe, killer_id));
+                            }
                         }
                         match exp.bomb_type {
                             BombType::Piercing => {} // continue through wall
@@ -305,15 +313,19 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                         blast_cells.push((cx, cy));
                         walls_destroyed.insert((cx, cy));
                         powerups_revealed.push((kind, (cx, cy)));
-                        if let Some(&(pid, pe)) = player_map.get(&(cx, cy)) {
-                            players_killed.push((pid, pe, killer_id));
+                        if let Some(players) = player_map.get(&(cx, cy)) {
+                            for &(pid, pe) in players {
+                                players_killed.push((pid, pe, killer_id));
+                            }
                         }
                         break;
                     }
                     Cell::Floor => {
                         blast_cells.push((cx, cy));
-                        if let Some(&(pid, pe)) = player_map.get(&(cx, cy)) {
-                            players_killed.push((pid, pe, killer_id));
+                        if let Some(players) = player_map.get(&(cx, cy)) {
+                            for &(pid, pe) in players {
+                                players_killed.push((pid, pe, killer_id));
+                            }
                         }
                         if processed.insert((cx, cy))
                             && let Some(&(be, br, bo, bt)) = bomb_map.get(&(cx, cy))
@@ -361,6 +373,14 @@ fn process_explosions(world: &mut World, queue: Vec<PendingExplosion>) -> Vec<(i
                 victim: pid,
                 killer,
             });
+
+            // Update ScoreBoard resource for real-time TUI display
+            let mut sb = world.resource_mut::<ScoreBoard>();
+            sb.add(pid, -3);
+            match killer {
+                Some(k) if k != pid => sb.add(k, 3),
+                _ => sb.add(pid, -2), // Suicide penalty
+            }
         }
     }
 
@@ -593,6 +613,10 @@ fn collect_powerups(world: &mut World) {
                 kind,
                 pos: pu_pos,
             });
+
+            // Update ScoreBoard resource for real-time TUI display
+            world.resource_mut::<ScoreBoard>().add(pid, 1);
+
             world.entity_mut(pu_entity).despawn();
         }
     }
@@ -1316,6 +1340,50 @@ mod tests {
         assert!(
             world.get::<Alive>(p2).is_none(),
             "piercing chain should continue through wall and kill player 2 at (4,1)"
+        );
+    }
+
+    #[test]
+    fn player_moving_into_blast_cell_survives() {
+        // Blast only kills during the explosion phase (step 3 of run_tick).
+        // Movement happens AFTER explosions (step 4), so a player who moves
+        // into a blast cell post-explosion correctly survives — the blast is over.
+        let mut world = init_world(42);
+        let [p0, p1, ..] = spawn_players(&mut world);
+
+        // Clear a horizontal corridor: (3,1) through (8,1)
+        {
+            let mut grid = world.resource_mut::<ArenaGrid>();
+            for x in 3..=8 {
+                grid.set(x, 1, Cell::Floor);
+            }
+        }
+
+        // Place player 1 at (8,1) — outside the blast zone
+        *world.get_mut::<GridPos>(p1).unwrap() = GridPos { x: 8, y: 1 };
+
+        // Place bomb at (5,1) with range 2, fuse=1 (explodes this tick)
+        // Blast will cover: (5,1), (6,1), (7,1) going right; (4,1), (3,1) going left
+        world.spawn((
+            Bomb::new(),
+            GridPos { x: 5, y: 1 },
+            BombFuse {
+                owner: p0,
+                ticks_remaining: 1,
+            },
+            BombRange { cells: 2 },
+        ));
+        world.get_mut::<BombCount>(p0).unwrap().active += 1;
+
+        // Player 1 moves LEFT from (8,1) to (7,1) — INTO a blast cell
+        let actions = [None, Some(BomberAction::Left), None, None];
+
+        // Run tick: bomb explodes → player 1 moves into blast → survives (blast is over)
+        let _ = run_tick(&mut world, actions);
+
+        assert!(
+            world.get::<Alive>(p1).is_some(),
+            "player 1 should survive — movement is after explosion, blast is instantaneous"
         );
     }
 }

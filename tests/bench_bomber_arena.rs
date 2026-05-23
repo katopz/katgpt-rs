@@ -625,78 +625,70 @@ fn test_late_game_bomb_placement_rate() {
 
 #[cfg(feature = "bomber")]
 #[test]
-fn test_scoreboard_resource_stays_zero_during_game() {
-    // Bug: ScoreBoard ECS resource is never updated during run_tick.
-    // The TUI reads from this resource for real-time display → always shows +0 pts.
-    // Scores are only computed post-game from event logs.
-    use bevy_ecs::event::Events;
+fn test_scoreboard_resource_updates_during_game() {
+    // ScoreBoard ECS resource should be updated during run_tick for real-time TUI display.
+    // process_explosions updates on kills, collect_powerups updates on powerup pickup.
+    // Run multiple games — at least one should have kills/powerups making ScoreBoard non-zero.
+    let mut any_nonzero = false;
 
-    let mut world = init_world(42);
-    let entities = spawn_players(&mut world);
-    let mut rng = Rng::with_seed(42);
+    for seed in 0u64..10 {
+        let mut world = init_world(seed);
+        let entities = spawn_players(&mut world);
+        let mut rng = Rng::with_seed(seed);
 
-    let mut players: Vec<Box<dyn BomberPlayer>> = vec![
-        Box::new(GreedyPlayer::new(0)),
-        Box::new(GreedyPlayer::new(1)),
-        Box::new(GreedyPlayer::new(2)),
-        Box::new(GreedyPlayer::new(3)),
-    ];
+        let mut players: Vec<Box<dyn BomberPlayer>> = vec![
+            Box::new(GreedyPlayer::new(0)),
+            Box::new(GreedyPlayer::new(1)),
+            Box::new(GreedyPlayer::new(2)),
+            Box::new(GreedyPlayer::new(3)),
+        ];
 
-    // Run 100 ticks
-    for _ in 0..100u32 {
-        let tick_events: Vec<GameEvent> = {
-            let mut event_reader = world.resource_mut::<Events<GameEvent>>();
-            event_reader.drain().collect()
-        };
+        for _ in 0..TICK_LIMIT {
+            let tick_events: Vec<GameEvent> = {
+                let mut event_reader = world.resource_mut::<bevy_ecs::event::Events<GameEvent>>();
+                event_reader.drain().collect()
+            };
 
-        let mut actions = [None; 4];
-        for (i, player) in players.iter_mut().enumerate() {
-            let pos = world
-                .get::<GridPos>(entities[i])
-                .copied()
-                .unwrap_or_default();
-            let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
-                .is_some();
-            if alive {
-                let grid = world.resource::<ArenaGrid>().clone();
-                actions[i] = Some(player.select_action(&grid, pos, &tick_events, &mut rng));
+            let mut actions = [None; 4];
+            for (i, player) in players.iter_mut().enumerate() {
+                let pos = world
+                    .get::<GridPos>(entities[i])
+                    .copied()
+                    .unwrap_or_default();
+                let alive = world
+                    .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                    .is_some();
+                if alive {
+                    let grid = world.resource::<ArenaGrid>().clone();
+                    actions[i] = Some(player.select_action(&grid, pos, &tick_events, &mut rng));
+                }
+            }
+
+            if !run_tick(&mut world, actions) {
+                break;
             }
         }
 
-        if !run_tick(&mut world, actions) {
-            break;
+        let scores = world
+            .resource::<microgpt_rs::pruners::bomber::ScoreBoard>()
+            .scores;
+
+        let nonzero = scores.iter().any(|&s| s != 0);
+        if nonzero {
+            any_nonzero = true;
         }
+        println!("  Game {seed}: ScoreBoard = {:?}", scores);
     }
-
-    // Drain final events and count kills/powerups
-    let final_events: Vec<GameEvent> = {
-        let mut event_reader = world.resource_mut::<Events<GameEvent>>();
-        event_reader.drain().collect()
-    };
-
-    let kills_in_events = final_events
-        .iter()
-        .filter(|e| matches!(e, GameEvent::PlayerKilled { .. }))
-        .count();
-
-    let scores = world
-        .resource::<microgpt_rs::pruners::bomber::ScoreBoard>()
-        .scores;
 
     println!("\n🧪 ScoreBoard Resource Sync Check");
     println!("{}", "═".repeat(60));
-    println!("ScoreBoard resource: {:?}", scores);
-    println!("Events in final drain: {} kills", kills_in_events);
+    println!("Any game with non-zero ScoreBoard: {any_nonzero}");
 
-    // This test DOCUMENTS the current bug: ScoreBoard is always [0,0,0,0]
-    // during gameplay because systems.rs never calls scoreboard.add().
-    // The TUI's record_round computes scores post-game from event logs instead.
-    assert_eq!(
-        scores, [0i32; 4],
-        "ScoreBoard resource should be [0,0,0,0] — systems.rs never updates it. \
-         If this fails, someone fixed the bug! Update this test to verify \
-         scores are non-zero when kills/powerups occur."
+    // At least one game out of 10 should have kills/powerups → non-zero ScoreBoard
+    assert!(
+        any_nonzero,
+        "ScoreBoard resource should be non-zero in at least 1 of 10 games — \
+         systems.rs must update ScoreBoard on kills and powerup collection"
     );
 }
 

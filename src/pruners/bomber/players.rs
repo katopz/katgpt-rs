@@ -480,21 +480,6 @@ pub(crate) fn should_place_bomb(grid: &ArenaGrid, pos: GridPos, bombs: &[KnownBo
         return false;
     }
 
-    // Count adjacent destructible walls
-    let wall_count = [(0i32, -1), (0, 1), (-1, 0), (1, 0)]
-        .iter()
-        .filter(|&&(dx, dy)| {
-            matches!(
-                grid.get(pos.x + dx, pos.y + dy),
-                super::Cell::DestructibleWall | super::Cell::PowerUpHidden(_)
-            )
-        })
-        .count();
-
-    if wall_count == 0 {
-        return false;
-    }
-
     // Player will move to an adjacent cell next tick (1 step used).
     // From that cell, has_escape_route checks if safety is reachable within
     // max_steps (3) — total 4 steps matches BOMB_FUSE_TICKS.
@@ -699,7 +684,12 @@ pub(crate) fn score_action(
             if !should_place_bomb(grid, pos, bombs) {
                 return f32::NEG_INFINITY;
             }
-            5.0 // Bomb is good when valid
+            // Prefer bombs near destructible walls; still allow strategic open-area bombs
+            if has_adjacent_wall(grid, pos) {
+                5.0
+            } else {
+                2.0 // Lower priority but not blocked — prevents late-game stall
+            }
         }
         BomberAction::Wait => {
             if in_blast_zone(pos, grid, bombs) {
@@ -819,15 +809,11 @@ fn lora_score_actions(
 /// Avoids walking into walls (up to 3 re-rolls, then Wait).
 pub struct RandomPlayer {
     _id: u8,
-    known_bombs: Vec<KnownBomb>,
 }
 
 impl RandomPlayer {
     pub fn new(id: u8) -> Self {
-        Self {
-            _id: id,
-            known_bombs: Vec::new(),
-        }
+        Self { _id: id }
     }
 }
 
@@ -836,30 +822,27 @@ impl BomberPlayer for RandomPlayer {
         &mut self,
         grid: &ArenaGrid,
         pos: GridPos,
-        events: &[GameEvent],
+        _events: &[GameEvent],
         rng: &mut Rng,
     ) -> BomberAction {
-        update_bombs(&mut self.known_bombs, events);
-
-        // Collect safe walkable moves (avoid walls + blast zones)
-        let safe_moves: Vec<BomberAction> = [
-            BomberAction::Up,
-            BomberAction::Down,
-            BomberAction::Left,
-            BomberAction::Right,
-        ]
-        .into_iter()
-        .filter(|&action| {
+        // Truly random baseline: pick any action with equal probability.
+        // Only avoids walking into walls (up to 3 re-rolls, then Wait).
+        // No blast zone avoidance, no bomb intelligence.
+        for _ in 0..4 {
+            let action = ALL_ACTIONS[rng.usize(0..ALL_ACTIONS.len())];
             let target = move_target(&action, pos);
-            grid.is_walkable(target.x, target.y) && !in_blast_zone(target, grid, &self.known_bombs)
-        })
-        .collect();
-
-        // Prefer safe moves, fall back to Wait
-        if !safe_moves.is_empty() {
-            return safe_moves[rng.usize(0..safe_moves.len())];
+            if matches!(
+                action,
+                BomberAction::Up | BomberAction::Down | BomberAction::Left | BomberAction::Right
+            ) {
+                if grid.is_walkable(target.x, target.y) {
+                    return action;
+                }
+            } else {
+                return action; // Bomb/Wait/Detonate — always valid
+            }
         }
-        BomberAction::Wait
+        BomberAction::Wait // All re-rolls hit walls
     }
 
     fn name(&self) -> &str {
@@ -870,9 +853,7 @@ impl BomberPlayer for RandomPlayer {
         "🐰"
     }
 
-    fn reset(&mut self) {
-        self.known_bombs.clear();
-    }
+    fn reset(&mut self) {}
 
     fn as_any(&self) -> &dyn Any {
         self
