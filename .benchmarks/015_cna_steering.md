@@ -113,5 +113,5 @@ Layer distribution when signal injected only in layers 4-5:
 ## References
 
 - Paper: [arXiv:2605.12290](https://arxiv.org/pdf/2605.12290)
-- Research: `.research/53_CNA_Contrastive_Neuron_Attribution.md`
+- Research: `.research/053_CNA_Contrastive_Neuron_Attribution.md`
 - Plan: `.plans/087_cna_contrastive_neuron_attribution.md`

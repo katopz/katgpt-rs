@@ -360,4 +360,4 @@ pub fn forward<'a>(
 
 - `.plans/007_constraint_validator.md` — Config::bpe(), validator scale (previously `007_compiler_in_the_loop_clora.md`, cLoRA scale)
 - `.plans/008_wgpu_lora_training.md` — GpuWeightBuffers, LoRA per-layer adapters
-- `.research/01_Advanced Neuro-Symbolic Rust Translation.md` — §Foundation Engine
+- `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — §Foundation Engine

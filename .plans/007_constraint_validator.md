@@ -742,8 +742,8 @@ validator = ["syn", "proc-macro2"]  # previously clora
 
 ## References
 
-- `.research/01_Advanced Neuro-Symbolic Rust Translation.md` — Grand Unification architecture
-- `.research/00_Neuro-Symbolic LLM Architecture.md` — Original Deterministic Validator concept (previously "cLoRA")
+- `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — Grand Unification architecture
+- `.research/000_Neuro-Symbolic LLM Architecture.md` — Original Deterministic Validator concept (previously "cLoRA")
 - `.plans/004_leviathan_distill.md` — SpeculativeVerifier trait pattern
 - `.plans/005_speculative_module_refactor.md` — ConstraintPruner trait, DDTree pruning
 - `anyrag/README.md` — RAG pipeline, concept sharding, JSONL export, `/knowledge/export`

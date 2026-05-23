@@ -186,7 +186,7 @@ mls_aggregate = []  # Plan 104: Sum last K layer residuals before LM head (Resea
 
 ## References
 
-- Research 68: `.research/68_RAEv2_Multi_Layer_Representation_Autoencoders.md`
+- Research 68: `.research/068_RAEv2_Multi_Layer_Representation_Autoencoders.md`
 - RAEv2 paper: arXiv:2605.18324
 - Related: Research 26 (MTP drafter), Research 38 (SDAR), Research 61 (Delta Routing)
 - Key files: `src/transformer.rs`, `crates/microgpt-core/src/types.rs`, `src/benchmark.rs`

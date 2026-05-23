@@ -3,7 +3,7 @@
 
 **Branch:** `develop/feature/062_ffo_distillation`
 **Depends on:** Plan 053 (δ-Mem Modelless Distillation — "NO GAIN" precedent), Plan 030 (Bandit)
-**Research:** `.research/30_FFO_First_Order_Differentiable_Optimization.md`
+**Research:** `.research/030_FFO_First_Order_Differentiable_Optimization.md`
 **Code:** `.raw/FFOLayer/` (local source audit — `ffocp_eq.py`, `ffoqp_eq.py`)
 **Goal:** Verify whether FFOLayer's active-set dual-cutoff masking (arXiv:2512.02494 §4.1) provides any gain over our existing `BanditPruner` which already blends `domain × bandit_q`. Benchmark-first: measure before, implement minimal change, measure after. **Expect "NO GAIN" like Plan 053.**
 
@@ -274,7 +274,7 @@ Schur:    Cholesky + Schur complement KKT solve (O(d² + m²) where m = constrai
 
 ## References
 
-- Research 30: `.research/30_FFO_First_Order_Differentiable_Optimization.md`
+- Research 30: `.research/030_FFO_First_Order_Differentiable_Optimization.md`
 - Paper: arXiv:2512.02494 — "A Fully First-Order Layer for Differentiable Optimization"
 - Code: `.raw/FFOLayer/src/ffolayer/` — ffocp_eq.py (L1248-1269 active masking), ffoqp_eq.py (L85-121 Schur)
 - Plan 053: δ-Mem Modelless Distillation — "NO GAIN" precedent, honest verdict pattern

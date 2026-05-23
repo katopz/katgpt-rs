@@ -1,8 +1,8 @@
 # Plan 066: D2F Discrete Diffusion Forcing — Mini dLLM Research
 
-> Research: `.research/34_D2F_Discrete_Diffusion_Forcing.md`
+> Research: `.research/034_D2F_Discrete_Diffusion_Forcing.md`
 > Paper: arXiv 2508.09192 — Discrete Diffusion Forcing
-> Precedent: `.research/10_ColaDLM_Continuous_Latent_Diffusion.md` (rejected continuous, this is discrete)
+> Precedent: `.research/010_ColaDLM_Continuous_Latent_Diffusion.md` (rejected continuous, this is discrete)
 
 ## Objective
 
@@ -153,7 +153,7 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 - [x] Router integration: domain config can specify D2F as decode strategy — `InferenceOverrides::decode_strategy` field
 
 ### Task 3.2: Documentation & Research Update ✅
-- [x] Update `.research/34_D2F_Discrete_Diffusion_Forcing.md` with benchmark results — added Section 8: Phase 2 Results
+- [x] Update `.research/034_D2F_Discrete_Diffusion_Forcing.md` with benchmark results — added Section 8: Phase 2 Results
 - [x] Update `README.md` with D2F section — brief section + `dllm` feature flag in table
 - [x] Update `.docs/03_speculative_decoding.md` with D2F as decode option — full D2F section with API, comparison table, code examples
 

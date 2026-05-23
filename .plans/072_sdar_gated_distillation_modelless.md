@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/072_sdar_gated_distillation_modelless`
 **Depends on:** Plan 049 (G-Zero Phase 1), Plan 032 (HL Infrastructure), Plan 030 (Bandit)
-**Research:** `.research/38_SDAR_Self_Distilled_Agentic_RL.md`
+**Research:** `.research/038_SDAR_Self_Distilled_Agentic_RL.md`
 **Model-Based Twin:** `riir-ai/.plans/073_sdar_gated_distillation_model_based.md`
 **Source:** https://github.com/ZJU-REAL/SDAR (audited: algorithm, ablations)
 **Goal:** Adapt SDAR's token-level sigmoid gating pattern to our modelless distillation stack. Apply asymmetric trust (endorse positive gaps, attenuate negative) to bandit updates and absorb-compress promotions. No gradients — pure modelless signal gating.
@@ -163,7 +163,7 @@ Apply SDAR gate to absorb-compress promotion decisions.
 ## Failure Mode
 
 If gated variants show no improvement over ungated baselines:
-- Document the negative result in `.research/38_SDAR_Self_Distilled_Agentic_RL.md`
+- Document the negative result in `.research/038_SDAR_Self_Distilled_Agentic_RL.md`
 - Keep `sdar_gate` module as infrastructure for model-based Plan 073
 - The gating pattern may still help at gradient level even if modelless signal gating doesn't
 

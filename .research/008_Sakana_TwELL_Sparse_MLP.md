@@ -265,5 +265,5 @@ Implementation status (all complete):
 - microgpt-rs MLP: `src/transformer.rs` lines 362-377 (forward), 487-506 (forward_paged), 1070-1089 (forward_raven)
 - microgpt-rs matmul: `src/types.rs` — `matmul()`, `matmul_relu()`
 - microgpt-rs GPU MLP: `src/gpu/forward.rs` — `dispatch_layer()` lines 555-585
-- Raven RSM: `.research/06_Raven_Routing_Slot_Memories.md`
-- Screening Pruner: `.research/07_Screening_Absolute_Relevance.md`
+- Raven RSM: `.research/006_Raven_Routing_Slot_Memories.md`
+- Screening Pruner: `.research/007_Screening_Absolute_Relevance.md`

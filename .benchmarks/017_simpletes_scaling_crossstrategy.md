@@ -162,6 +162,6 @@ Environment: **Gaussian(6 arms, means=[0.15..0.55], σ=0.20, optimal=0.55)**
 ## References
 
 - **Paper:** arXiv:2604.19341 — SimpleTES: Evaluation-Driven Scaling
-- **Research:** `.research/52_SimpleTES_Evaluation_Driven_Scaling.md`
+- **Research:** `.research/052_SimpleTES_Evaluation_Driven_Scaling.md`
 - **Previous:** `.benchmarks/016_simpletes_rpucg_goat.md` (T1-T6 GOAT proof)
 - **Related:** Plan 030 (BanditPruner), Plan 079 (BT Rank GOAT proof pattern)

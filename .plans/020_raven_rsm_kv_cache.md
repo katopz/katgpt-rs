@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** ✅ Complete
-**Depends on:** `.research/06_Raven_Routing_Slot_Memories.md`
+**Depends on:** `.research/006_Raven_Routing_Slot_Memories.md`
 **Target:** `microgpt-rs/src/transformer.rs` (draft model path)
 
 ---
@@ -25,7 +25,7 @@
 The draft model currently uses `MultiLayerKVCache` (growing flat array). For long inputs
 (5K+ tokens), the KV cache grows linearly and the per-token attention scan becomes the
 bottleneck. Raven RSM replaces this with a fixed-size slot memory updated via sparse
-Top-K routing. See `.research/06_Raven_Routing_Slot_Memories.md` for full analysis.
+Top-K routing. See `.research/006_Raven_Routing_Slot_Memories.md` for full analysis.
 
 ### Key Design Decisions
 
@@ -75,7 +75,7 @@ Record these specific metrics for regression comparison:
 /// Unselected slots are completely frozen — perfect for preserving struct
 /// definitions and imports while churning through syntax tokens.
 ///
-/// See `.research/06_Raven_Routing_Slot_Memories.md` for full derivation.
+/// See `.research/006_Raven_Routing_Slot_Memories.md` for full derivation.
 pub struct RavenKVCache {
     /// Number of memory slots (e.g., 16 for draft model)
     num_slots: usize,
@@ -367,7 +367,7 @@ git commit -m "feat: add Raven RSM (Routing Slot Memory) KV cache for draft mode
 - Add 8 unit tests for router, update, readout, and recall
 - No regressions to existing forward/dflash/speculative paths
 - Recall test: 95%+ accuracy after 1K noise updates (frozen slots)
-- See .research/06_Raven_Routing_Slot_Memories.md for derivation"
+- See .research/006_Raven_Routing_Slot_Memories.md for derivation"
 ```
 
 ---
@@ -398,7 +398,7 @@ feat: add Raven RSM (Routing Slot Memory) KV cache for draft model
 - No regressions to existing forward/dflash/speculative paths
 - forward_raven is 2.98x faster than forward (flat) at pos=8
 - Recall test: slot perfectly frozen after 1K noise updates
-- See .research/06_Raven_Routing_Slot_Memories.md for derivation
+- See .research/006_Raven_Routing_Slot_Memories.md for derivation
 ```
 
 ## Out of Scope (Future Plans)

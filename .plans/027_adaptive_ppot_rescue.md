@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/027_adaptive_ppot_rescue`
 **Depends on:** Plan 026 (PPoT Logit Resampling) — must be complete and benchmarked first
-**Research:** `.research/12_TRT_Test-time_Recursive_Thinking.md`
+**Research:** `.research/012_TRT_Test-time_Recursive_Thinking.md`
 **Status:** ✅ Complete
 
 ---
@@ -133,7 +133,7 @@ TRT proves three things we can apply at token level:
   - Report: acceptance rate delta, wall-clock delta, memory overhead
 
 - [x] **Task 8: Update docs**
-  - Update `.research/12_TRT_Test_time_Recursive_Thinking.md` with implementation notes
+  - Update `.research/012_TRT_Test_time_Recursive_Thinking.md` with implementation notes
   - Add `Adaptive PPoT Rescue (Plan 027)` section to README architecture
   - Update `src/speculative/ppot/` module docs
   - Reference Plan 026 baseline benchmarks
@@ -266,8 +266,8 @@ Combined with Plan 026 tests: **78 total PPoT tests**, all 242 project tests pas
 ## References
 
 - "Test-time Recursive Thinking" (arXiv:2602.03094) — Zhuang et al.
-- Research: `.research/12_TRT_Test_time_Recursive_Thinking.md`
+- Research: `.research/012_TRT_Test_time_Recursive_Thinking.md`
 - PPoT Plan: `.plans/026_ppot_logit_resampling.md`
-- PPoT Research: `.research/11_PPoT_Probabilistic_Programs_of_Thought.md`
+- PPoT Research: `.research/011_PPoT_Probabilistic_Programs_of_Thought.md`
 - Self-Consistency (Wang et al. 2022): arXiv:2203.11171
 - Screening Pruner: `.plans/021_screening_pruner.md`

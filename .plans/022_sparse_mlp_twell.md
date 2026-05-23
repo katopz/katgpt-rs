@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/022_sparse_mlp_twell`
 **Depends on:** None (feature-gated, backward compatible)
-**Research:** `.research/08_Sakana_TwELL_Sparse_MLP.md`
+**Research:** `.research/008_Sakana_TwELL_Sparse_MLP.md`
 
 ---
 

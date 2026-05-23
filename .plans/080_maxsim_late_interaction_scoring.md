@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/080_maxsim_scoring`
 **Depends on:** Plan 044 (PFlash), Research 45 (MaxSim)
-**Research:** `.research/45_MaxSim_Memory_Efficient_Late_Interaction_Scoring.md`
+**Research:** `.research/045_MaxSim_Memory_Efficient_Late_Interaction_Scoring.md`
 **Source:** [erikkaum/maxsim](https://github.com/erikkaum/maxsim) — ColBERT/PyLate late-interaction kernel
 **Goal:** Port MaxSim's memory-efficient `Σ_i max_j dot(q_i, d_j)` scoring to our CPU SIMD stack. Three targets: standalone `maxsim_score` primitive, PFlash block scoring upgrade (mean-K → maxsim), and `ScoreReduction::MaxSim` mode for TurboQuant/SpectralQuant fused kernels. All feature-gated under `maxsim`.
 
@@ -278,9 +278,9 @@ cargo test --features "maxsim,turboquant,spectral_quant" --lib --quiet
 
 - `.benchmarks/013_turboquant_vs_spectralquant_maxsim.md` — TQ vs SQ CPU benchmark results (Section 7)
 - `.benchmarks/014_maxsim_rerank_ndcg.md` — MaxSim vs Cosine reranking NDCG@10 (T12 GOAT proof)
-- `.research/45_MaxSim_Memory_Efficient_Late_Interaction_Scoring.md` — research verdict
+- `.research/045_MaxSim_Memory_Efficient_Late_Interaction_Scoring.md` — research verdict
 - `.raw/maxsim/maxsim_metal/maxsim.metal` — Metal kernel source (reference only)
 - `.raw/maxsim/maxsim_metal/maxsim.mm` — Metal host-side dispatch (reference only)
-- `.research/39_SpectralQuant_Calibrated_Eigenbasis_KV_Compression.md` — primary overlap
+- `.research/039_SpectralQuant_Calibrated_Eigenbasis_KV_Compression.md` — primary overlap
 - `riir-ai/crates/riir-gpu/src/kernels/spectralquant_attention.wgsl` — GPU kernel (T11 reference)
 - `riir-ai/crates/riir-gpu/src/spectralquant/attention.rs` — GPU host-side dispatch (T11 reference)

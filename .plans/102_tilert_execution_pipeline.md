@@ -176,7 +176,7 @@ Distill the three highest-value insights from TileRT's execution pipeline into o
 
 ## References
 
-- Research 66: `.research/66_TileRT_Persistent_Tile_Pipeline_Inference.md`
+- Research 66: `.research/066_TileRT_Persistent_Tile_Pipeline_Inference.md`
 - TileRT blog: https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html
 - TileRT code: `.raw/TileRT/python/` (verified dual-model MTP pipeline, contiguous allocation, algorithm enums)
 - Related research: 55 (Tri-Mode), 59 (MoE+SD Co-Design), 34 (D2F)

@@ -1,6 +1,6 @@
 # Plan 090: Unit Distance GOAT Proof — Number-Theoretic Lattice Constructions
 
-> **Research:** [56_OpenAI_Unit_Distance_Disproof.md](../.research/56_OpenAI_Unit_Distance_Disproof.md)
+> **Research:** [56_OpenAI_Unit_Distance_Disproof.md](../.research/056_OpenAI_Unit_Distance_Disproof.md)
 > **Source:** OpenAI autonomous proof (2026), Remarks by Alon, Bloom, Gowers et al. (2026)
 > **Feature Gate:** `unit_distance`
 > **Type:** Modelless (T1–T3) / Light model-based (T4) / Model-based (T5)

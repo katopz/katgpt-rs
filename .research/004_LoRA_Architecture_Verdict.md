@@ -3,7 +3,7 @@
 **Date:** 2025-06
 **Status:** Refined Strategy
 **Context:** microgpt-rs (MIT) + anyrag + Compiler-in-the-Loop
-**Terminology:** See `.research/05_Artifact_Definition.md` — "Computable LoRA" is deprecated.
+**Terminology:** See `.research/005_Artifact_Definition.md` — "Computable LoRA" is deprecated.
 
 ---
 

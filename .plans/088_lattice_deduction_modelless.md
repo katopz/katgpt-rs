@@ -1,6 +1,6 @@
 # Plan 088: Lattice Deduction Modelless Distillation
 
-> **Research:** [50_LDT_Lattice_Deduction_Transformer.md](../.research/50_LDT_Deduction_Transformer.md)
+> **Research:** [50_LDT_Lattice_Deduction_Transformer.md](../.research/050_LDT_Deduction_Transformer.md)
 > **Source:** [Lattice Deduction Transformers](https://arxiv.org/pdf/2605.08605) — Davis, Haller, Alfarano, Santolucito (2026)
 > **Feature Gate:** `lattice_deduction`
 > **Type:** Modelless (zero training for T1-T3)
@@ -460,6 +460,6 @@ Run tournament: MCTS + conflict cutoff vs MCTS baseline, 20 games, 9×9.
 ## References
 
 - Paper: https://arxiv.org/pdf/2605.08605
-- Research: `.research/50_LDT_Deduction_Transformer.md`
+- Research: `.research/050_LDT_Deduction_Transformer.md`
 - Related: Plan 049 (G-Zero self-play), Plan 057 (HLA recurrent), Plan 061 (entropy anomaly), Plan 066 (D2F), Plan 067 (NFSP/MCTS)
 - Benchmark: `tests/bench_ldt_lattice_deduction.rs`

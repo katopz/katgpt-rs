@@ -226,4 +226,4 @@ The WASM fixed-point encoding and backward compatibility layer make this adoptab
 - "Screening Is Enough" (arXiv:2604.01178)
 - microgpt-rs DDTree: `src/speculative/dd_tree.rs`, `src/speculative/types.rs`
 - riir-validator-sdk: `src/validator.rs`, `src/exports.rs`
-- Raven RSM: `.research/06_Raven_Routing_Slot_Memories.md`
+- Raven RSM: `.research/006_Raven_Routing_Slot_Memories.md`

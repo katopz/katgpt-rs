@@ -279,6 +279,6 @@ full = ["leviathan", "sudoku", "validator", "rest", "training", "gpu"]  # previo
 
 ## References
 
-- `.research/00_Neuro-Symbolic LLM Architecture.md` — §Part 2: "Free Embedding", REST
-- `.research/01_Advanced Neuro-Symbolic Rust Translation.md` — §Stage 2: Dual-Mode Speculative Drafting
+- `.research/000_Neuro-Symbolic LLM Architecture.md` — §Part 2: "Free Embedding", REST
+- `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — §Stage 2: Dual-Mode Speculative Drafting
 - `anyrag/README.md` — `/search/vector` endpoint, embedding API

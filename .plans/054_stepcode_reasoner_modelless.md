@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/054_stepcode_reasoner_modelless`
 **Depends on:** Plan 030 (Bandit), Plan 049 (G-Zero Phase 1), Plan 052 (GFlowNet)
-**Research:** `.research/25_StepCodeReasoner_BiLevel_GRPO.md`
+**Research:** `.research/025_StepCodeReasoner_BiLevel_GRPO.md`
 **Source:** [StepCodeReasoner (arXiv 2605.11922)](https://arxiv.org/pdf/2605.11922) — Wang et al., ICML 2026
 **Goal:** Distill StepCodeReasoner's intra-trajectory shaping advantage into our modelless bandit stack. After DDTree verification, scan the accepted path and boost rewards for arms that enabled correct downstream execution — replacing flat binary rewards with path-aware shaped rewards. No neural training required.
 

@@ -558,4 +558,4 @@ pub async fn routed_search(
 - Paper: "Raven: High-Recall Sequence Modeling with Sparse Memory Routing" (Afzal, Bick, Xing, Cevher, Gu — 2025)
 - Code: https://github.com/goombalab/raven (built on Flash Linear Attention)
 - Related: GDN (Gated Delta Network), GLA (Gated Linear Attention), Mamba-2
-- Our related research: `.research/05_Artifact_Definition.md` (Deterministic Validator pattern), `.research/02_Fast Inference from Transformers via Speculative Decoding.md` (DDTree)
+- Our related research: `.research/005_Artifact_Definition.md` (Deterministic Validator pattern), `.research/002_Fast Inference from Transformers via Speculative Decoding.md` (DDTree)

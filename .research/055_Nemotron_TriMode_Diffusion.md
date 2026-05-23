@@ -262,8 +262,8 @@ The SOL analysis is the most exciting finding: **diffusion decoding has 76.5% he
 ## References
 
 - Nemotron-Labs-Diffusion: https://d1qx31qr3h6wln.cloudfront.net/publications/Nemotron_Diffusion_Tech_Report_v1.pdf
-- D2F (our implementation): `.research/34_D2F_Discrete_Diffusion_Forcing.md`, Plan 066
-- MTP Drafter (our implementation): `.research/26_Gemma_4_MTP_Multi_Token_Prediction.md`, Plan 055
-- SDAR Gating (our implementation): `.research/38_SDAR_Self_Distilled_Agentic_RL.md`, Plan 072/073
+- D2F (our implementation): `.research/034_D2F_Discrete_Diffusion_Forcing.md`, Plan 066
+- MTP Drafter (our implementation): `.research/026_Gemma_4_MTP_Multi_Token_Prediction.md`, Plan 055
+- SDAR Gating (our implementation): `.research/038_SDAR_Self_Distilled_Agentic_RL.md`, Plan 072/073
 - Block Diffusion: arXiv:2503.09573
 - LK Losses: arXiv:2602.23881

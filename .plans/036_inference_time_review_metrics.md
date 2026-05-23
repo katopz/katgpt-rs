@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/036_inference_time_review_metrics`
 **Depends on:** Plan 030 (bandit), Plan 032 (HL infrastructure), Plan 021 (ScreeningPruner)
-**Research:** `.research/15_Reinforced_Agent_Inference_Time_Feedback.md` — arXiv:2604.27233
+**Research:** `.research/015_Reinforced_Agent_Inference_Time_Feedback.md` — arXiv:2604.27233
 **Goal:** Add Helpfulness-Harmfulness metrics and structured review loops to the existing pruner/bandit pipeline, enabling data-driven decisions about when reviewer intervention is net-positive.
 
 ---

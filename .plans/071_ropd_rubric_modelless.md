@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/071_ropd_rubric_modelless`
 **Depends on:** Plan 049 (G-Zero Phase 1), Plan 032 (HL Infrastructure)
-**Research:** `.research/36_ROPD_Rubric_OnPolicy_Distillation.md`
+**Research:** `.research/036_ROPD_Rubric_OnPolicy_Distillation.md`
 **Model-Based Twin:** `riir-ai/.plans/072_ropd_rubric_model_based.md`
 **Source:** `.raw/ROPD_official/` (audited: `algo/`, `prompts/`)
 **Goal:** Distill ROPD's rubric-based scoring into our modelless stack. Replace scalar HintDelta with structured RubricVector — multi-criteria reward without LLM judges. Template rubrics + WASM validators provide per-criterion scoring at inference speed (~µs).
@@ -357,7 +357,7 @@ Rationale: Same pattern as `delta_mem` and `g_zero`. Rubric modelless is experim
 
 ## References
 
-- `.research/36_ROPD_Rubric_OnPolicy_Distillation.md` — full codebase audit
+- `.research/036_ROPD_Rubric_OnPolicy_Distillation.md` — full codebase audit
 - `.raw/ROPD_official/` — ROPD source (prompts, algo, training)
 - Plan 049: G-Zero Self-Play (our intrinsic δ signal)
 - Plan 053: δ-Mem Modelless (vector correction precedent — no DDTree gain)

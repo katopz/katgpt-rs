@@ -291,7 +291,7 @@ microgpt-rs/
 - MoESD paper: https://arxiv.org/pdf/2505.19645
 - MagicDec: https://arxiv.org/abs/2408.11049
 - Expert routing correlation: https://arxiv.org/abs/2505.16056
-- Our Research 02 (Speculative Decoding): `.research/02_Fast Inference from Transformers via Speculative Decoding.md`
-- Our Research 06 (Raven RSM): `.research/06_Raven_Routing_Slot_Memories.md`
-- Our Research 08 (Sparse MLP): `.research/08_Sakana_TwELL_Sparse_MLP.md`
-- Our Research 09 (EMO): `.research/09_EMO_Emergent_Modularity.md` — same verdict: no MoE for us
+- Our Research 02 (Speculative Decoding): `.research/002_Fast Inference from Transformers via Speculative Decoding.md`
+- Our Research 06 (Raven RSM): `.research/006_Raven_Routing_Slot_Memories.md`
+- Our Research 08 (Sparse MLP): `.research/008_Sakana_TwELL_Sparse_MLP.md`
+- Our Research 09 (EMO): `.research/009_EMO_Emergent_Modularity.md` — same verdict: no MoE for us

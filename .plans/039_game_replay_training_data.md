@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/039_game_replay_training_data`
 **Depends on:** Plan 033 (Bomberman Arena), Plan 034 (Bomber WASM Validator — T2/T3 scaffolding)
-**Research:** `.research/17_Fast_BLT_Byte_Level_Transformer.md` (action-level = byte-level for games)
+**Research:** `.research/017_Fast_BLT_Byte_Level_Transformer.md` (action-level = byte-level for games)
 
 ---
 

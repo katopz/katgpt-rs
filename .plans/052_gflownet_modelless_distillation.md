@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/052_gflownet_modelless`
 **Depends on:** Plan 021 (ScreeningPruner), Plan 030 (Bandit), Plan 049 (G-Zero Phase 1)
-**Research:** `.research/23_GFlowNet_Shortest_Paths.md`
+**Research:** `.research/023_GFlowNet_Shortest_Paths.md`
 **Goal:** Distill the GFlowNet shortest-path theorem (minimize flow = shortest paths) into our existing ScreeningPruner + BanditPruner + DDTree stack without any new neural network training. Benchmark-first: measure before, implement, measure after, revert if no gain.
 
 ## Objective
@@ -175,7 +175,7 @@ Fractional relevance (R ∈ (0,1)) provides priority signal that binary relevanc
 
 - [x] **T11: Update `src/speculative/mod.rs`** — Export `FlowPruner`, `build_dd_tree_balanced`
 - [x] **T12: Update `README.md`** — Add GFlowNet distillation section
-- [x] **T13: Update `.research/23_GFlowNet_Shortest_Paths.md`** — Add actual benchmark results
+- [x] **T13: Update `.research/023_GFlowNet_Shortest_Paths.md`** — Add actual benchmark results
 - [x] **T14: Commit** — `feat: GFlowNet modelless distillation (Plan 052)` — commit `0ee4009`
 - [x] **T15: Real benchmark** — tight budget proves BanditPruner guides search where binary fails
 - [x] **T16: Commit T15** — `test: T15 real benchmark with TacticalPruner proves BanditPruner guides search (Plan 052)` — commit `a17f58b`
@@ -190,7 +190,7 @@ Fractional relevance (R ∈ (0,1)) provides priority signal that binary relevanc
 | `src/pruners/bomber/replay_backward.rs` | **New:** ReplayBackwardWalker |
 | `src/speculative/mod.rs` | Export FlowPruner, build_dd_tree_balanced |
 | `tests/bench_gflownet_modelless.rs` | **New:** Full benchmark suite |
-| `.research/23_GFlowNet_Shortest_Paths.md` | Update with benchmark results |
+| `.research/023_GFlowNet_Shortest_Paths.md` | Update with benchmark results |
 | `.plans/052_gflownet_modelless_distillation.md` | This file |
 
 ## Feature Gate

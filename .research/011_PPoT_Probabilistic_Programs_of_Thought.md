@@ -308,5 +308,5 @@ PPoT's core insight — **reusing discarded next-token distributions for cheap C
 - microgpt-rs DFlash: `src/speculative/dflash.rs`
 - microgpt-rs DDTree: `src/speculative/dd_tree.rs`
 - microgpt-rs Sampling: `src/speculative/sampling.rs`
-- Screening Pruner Research: `.research/07_Screening_Absolute_Relevance.md`
-- Leviathan Speculative Decoding: `.research/02_Fast_Inference_from_Transformers_via_Speculative_Decoding.md`
+- Screening Pruner Research: `.research/007_Screening_Absolute_Relevance.md`
+- Leviathan Speculative Decoding: `.research/002_Fast_Inference_from_Transformers_via_Speculative_Decoding.md`

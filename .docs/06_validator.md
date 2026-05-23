@@ -231,7 +231,7 @@ All phases complete:
 - ✅ Phase 3: Integration — examples, benchmarks
 
 ## Key References
-- `.research/00_Neuro-Symbolic LLM Architecture.md` — Original Validator concept
-- `.research/01_Advanced Neuro-Symbolic Rust Translation.md` — Grand Unification architecture
+- `.research/000_Neuro-Symbolic LLM Architecture.md` — Original Validator concept
+- `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — Grand Unification architecture
 - `syn` crate — Rust AST parser
 - `riir-burner` + `riir-gpu` — Training data pipeline (BPE training corpus)

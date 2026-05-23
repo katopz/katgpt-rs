@@ -345,7 +345,7 @@ Note: crate names in Cargo.toml use `-` (`ordered-float`, `good_lp`), but Rust c
 - `.raw/transformer-vm/scheduler/milp.py` — MILP scheduling (814 lines)
 - `.raw/transformer-vm/model/weights.py` — Weight construction (776 lines)
 - `.raw/transformer-vm/compilation/lower.py` — WASM lowering (1808 lines)
-- `.research/31_percepta_deep_dive.md` — Full gap analysis (9 gaps, P0–P6)
-- `.research/32_percepta_distillation_strategy.md` — Full RIIR strategy verdict
-- `.research/03_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy
+- `.research/031_percepta_deep_dive.md` — Full gap analysis (9 gaps, P0–P6)
+- `.research/032_percepta_distillation_strategy.md` — Full RIIR strategy verdict
+- `.research/003_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy
 - `.plans/063_percepta_cht_hull_kv_cache.md` — TG-A detailed plan (CHT upgrade)

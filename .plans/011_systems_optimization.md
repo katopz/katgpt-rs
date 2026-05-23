@@ -238,7 +238,7 @@ For a 4-layer model with `block_size=256`:
 
 ## References
 
-- `.research/01_Advanced Neuro-Symbolic Rust Translation.md` — §Paged Memory, §GQA
-- `.research/00_Neuro-Symbolic LLM Architecture.md` — §Hardware Improvements
+- `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — §Paged Memory, §GQA
+- `.research/000_Neuro-Symbolic LLM Architecture.md` — §Hardware Improvements
 - [GQA: Efficient Inference with GQA](https://arxiv.org/abs/2305.13245) — Ainslie et al., 2023
 - [vLLM PagedAttention](https://arxiv.org/abs/2309.06180) — Kwon et al., 2023

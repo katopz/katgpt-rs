@@ -1,6 +1,6 @@
 # Plan 087: CNA — Contrastive Neuron Attribution Steering
 
-> Research: `.research/53_CNA_Contrastive_Neuron_Attribution.md`
+> Research: `.research/053_CNA_Contrastive_Neuron_Attribution.md`
 > Paper: [arXiv:2605.12290](https://arxiv.org/pdf/2605.12290) — Targeted Neuron Modulation via Contrastive Pair Search
 > Date: 2025-07
 **Status: ✅ Complete** — All 10 tasks done. T1-T10 implemented, tested, clippy-clean.
@@ -201,7 +201,7 @@ examples/cna_03_go_circuit.rs # Go end-to-end — STUB, pending (T8)
 
 ## References
 
-- Research doc: `.research/53_CNA_Contrastive_Neuron_Attribution.md`
+- Research doc: `.research/053_CNA_Contrastive_Neuron_Attribution.md`
 - Paper: https://arxiv.org/pdf/2605.12290
 - Related plans: 021_screening_pruner, 022_sparse_mlp, 049_g_zero_self_play
 - Related research: 07_Screening, 08_Sparse_MLP, 37_REAP_Model_Based_Modelless

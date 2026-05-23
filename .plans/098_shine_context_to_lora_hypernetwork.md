@@ -456,4 +456,4 @@ microgpt-core/src/
 
 - Paper: https://arxiv.org/pdf/2602.06358
 - Code: https://github.com/MuLabPKU/SHINE
-- Research note: `.research/62_SHINE_Scalable_In_Context_Hypernetwork.md`
+- Research note: `.research/062_SHINE_Scalable_In_Context_Hypernetwork.md`

@@ -3,7 +3,7 @@
 > **Status:** ✅ Complete (T1–T6). All 10 sampler tests + 10 optimizer tests pass. 281/281 riir-gpu lib tests pass.
 > **Branch:** `develop/feature/082b_hrm_distill`
 > **Depends on:** Plan 082 (RowNormM, complete), Plan 066 (D2F, complete)
-> **Research:** `.research/48_HRM_Text_Hierarchical_Recurrent_Pretraining.md`
+> **Research:** `.research/048_HRM_Text_Hierarchical_Recurrent_Pretraining.md`
 > **Source:** https://github.com/sapientinc/HRM-Text
 > **Goal:** Distill 4 proven techniques from HRM-Text into our training stack: Adam-atan2 optimizer, multipack LPT batching, backprop warmup scheduling, and learned initial states.
 
@@ -133,7 +133,7 @@ HRM-Text achieves 1B-scale pretraining with ~$1000. While the hierarchical recur
 ## References
 
 - Source: https://github.com/sapientinc/HRM-Text
-- Research: `.research/48_HRM_Text_Hierarchical_Recurrent_Pretraining.md`
+- Research: `.research/048_HRM_Text_Hierarchical_Recurrent_Pretraining.md`
 - HRM-Text optimizer: `.raw/HRM-Text/models/adam_atan2.py`
 - HRM-Text sampler: `.raw/HRM-Text/multipack_sampler.py`
 - HRM-Text HRM model: `.raw/HRM-Text/models/baselines/hrm_nocarry_bp_warmup.py`

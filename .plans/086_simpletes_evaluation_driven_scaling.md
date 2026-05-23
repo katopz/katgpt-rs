@@ -1,6 +1,6 @@
 # Plan 086: SimpleTES Evaluation-Driven Scaling
 
-> **Research:** [52_SimpleTES_Evaluation_Driven_Scaling.md](../.research/52_SimpleTES_Evaluation_Driven_Scaling.md)
+> **Research:** [52_SimpleTES_Evaluation_Driven_Scaling.md](../.research/052_SimpleTES_Evaluation_Driven_Scaling.md)
 > **Source:** [SimpleTES](https://arxiv.org/abs/2604.19341) — Evaluation-Driven Scaling
 > **Feature Gate:** `tes_loop = ["bandit"]`
 > **Type:** Modelless
@@ -402,6 +402,6 @@ Ensure all TES code is behind `tes_loop` feature gate with zero impact on defaul
 ## References
 
 - **Paper**: arXiv:2604.19341 — SimpleTES: Evaluation-Driven Scaling
-- **Research**: `.research/52_SimpleTES_Evaluation_Driven_Scaling.md`
+- **Research**: `.research/052_SimpleTES_Evaluation_Driven_Scaling.md`
 - **Related**: Plan 030 (BanditPruner), Plan 050 (Feature Gate Audit), Plan 033 (Bomber Arena)
 - **Key files**: `src/pruners/bandit.rs`, `src/speculative/types.rs`, `src/pruners/arena/`

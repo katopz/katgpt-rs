@@ -1,6 +1,6 @@
 # Plan 089: Tri-Mode Inference — D2F Drafter Verifier + Mode Switching
 
-> **Research:** `.research/55_Nemotron_TriMode_Diffusion.md`
+> **Research:** `.research/055_Nemotron_TriMode_Diffusion.md`
 > **Paper:** Nemotron-Labs-Diffusion (NVIDIA 2026)
 > **Depends on:** Plan 066 (D2F, ✅ complete), Plan 055 (MTP, ✅ complete)
 > **Feature Gate:** `tri_mode` (opt-in, proofs required)

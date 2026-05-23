@@ -4,7 +4,7 @@
 
 **Branch:** `develop/feature/079_elf_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 049 (G-Zero)
-**Research:** `.research/44_ELF_Embedded_Language_Flows.md`
+**Research:** `.research/044_ELF_Embedded_Language_Flows.md`
 **Model-Based Twin:** `riir-ai/.plans/081_elf_embedded_language_flows_model_based.md`
 **Source:** arXiv:2605.10938 — ELF (Sec 3.2, Alg 6, Appendix C.1/C.6)
 **Goal:** Port ELF's SDE noise injection and logit-normal scheduling to our modelless DDTree/D2F stack. Two targets: DDTree exploration diversity (SDE γ) and D2F step allocation (logit-normal schedule). Both are additive, feature-gated, and require GOAT proof before adoption.

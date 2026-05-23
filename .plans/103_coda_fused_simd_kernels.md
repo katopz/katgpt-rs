@@ -229,7 +229,7 @@ forward_coda() per layer:
 
 - CODA paper: `.raw/coda-kernels/README.md` (local copy)
 - CODA code: `.raw/coda-kernels/kernels/gens/` (CuTeDSL implementations)
-- Research 67: `.research/67_CODA_GEMM_Epilogue_Programming.md`
+- Research 67: `.research/067_CODA_GEMM_Epilogue_Programming.md`
 - Plan 106: `riir-ai/.plans/106_cubecl_gpu_kernel_rewrite.md` (GPU epilogue patterns)
 - Plan 102: `.plans/102_tilert_execution_pipeline.md` (execution pipeline optimization)
 - Plan 060: `.plans/060_simd_matmul_hla.md` (SIMD matmul baseline)

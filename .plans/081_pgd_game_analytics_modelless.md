@@ -4,7 +4,7 @@
 > **Branch:** `develop/feature/081_pgd_analytics`
 > **Depends on:** Plan 065 (AutoGo), Plan 049 (G-Zero), Plan 030 (Bandit)
 > **Data Source:** Plan 083 (Natsukaze `.flat.zip`), Plan 084 (LoRA training pipeline) — riir-ai side
-> **Research:** `.research/47_PGD_Professional_Go_Dataset_Analytics.md`
+> **Research:** `.research/047_PGD_Professional_Go_Dataset_Analytics.md`
 > **Source:** arXiv:2205.00254 — PGD: A Large-scale Professional Go Dataset for Data-driven Analytics
 > **Model-Based Twin:** `riir-ai/.plans/086_pgd_game_analytics_model_based.md` (parallel execution)
 > **Goal:** Extract PGD-style in-game analytics features from GoReplay data using only GoHeuristic (modelless). Target: garbage move detection, coincidence rate, win rate trace, mean loss win rate, unstable round detection, and player style profiles.
@@ -212,7 +212,7 @@ Phase 2 (T10-T12) are integration tasks that use analytics features. The model-b
 | Komi mismatch (Natsukaze 7.0 vs our 7.5) | Low | Low | Store komi per-replay; analytics uses replay's komi for scoring |
 
 ## References
-- Research: `.research/47_PGD_Professional_Go_Dataset_Analytics.md`
+- Research: `.research/047_PGD_Professional_Go_Dataset_Analytics.md`
 - Paper: https://arxiv.org/abs/2205.00254
 - Dataset: https://github.com/Gifanan/Professional-Go-Dataset
 - **Our data source:** Natsukaze 9×9 via Plan 083 (`.flat.zip`), Plan 084 (LoRA training)

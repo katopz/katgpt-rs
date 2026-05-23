@@ -318,8 +318,8 @@ TRT's **"don'ts" knowledge accumulation** is the highest-value distillation. The
 
 - "Test-time Recursive Thinking" (arXiv:2602.03094) — Zhuang et al.
 - TRT Code: https://github.com/microsoft/TRT
-- PPoT Research: `.research/11_PPoT_Probabilistic_Programs_of_Thought.md`
+- PPoT Research: `.research/011_PPoT_Probabilistic_Programs_of_Thought.md`
 - PPoT Plan: `.plans/026_ppot_logit_resampling.md`
 - Self-Consistency (Wang et al. 2022): arXiv:2203.11171
 - Recursive Self-Aggregation (Venkatraman et al. 2025): arXiv:2509.26626
-- Screening Pruner Research: `.research/07_Screening_Absolute_Relevance.md`
+- Screening Pruner Research: `.research/007_Screening_Absolute_Relevance.md`

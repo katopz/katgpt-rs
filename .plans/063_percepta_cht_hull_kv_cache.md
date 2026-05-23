@@ -2,7 +2,7 @@
 
 Replace Graham Scan + Ternary Search with Dynamic Convex Hull Trick (CHT) / LineContainer, matching the reference implementation at `.raw/transformer-vm/attention/hull2d_cht.h`.
 
-**Distillation strategy:** Percepta's `transformer-vm` is Apache-2.0. We distill to Rust under MIT per `.research/32_percepta_distillation_strategy.md`. This is Phase A (P0–P2: CHT + cumulative sum + parabolic encoding). Phase B (P3: ReGLU/stepglu) follows. Phase C (P4–P6: full compiler) is a pivot decision.
+**Distillation strategy:** Percepta's `transformer-vm` is Apache-2.0. We distill to Rust under MIT per `.research/032_percepta_distillation_strategy.md`. This is Phase A (P0–P2: CHT + cumulative sum + parabolic encoding). Phase B (P3: ReGLU/stepglu) follows. Phase C (P4–P6: full compiler) is a pivot decision.
 
 ## Goal
 
@@ -172,6 +172,6 @@ The reference uses a **Dynamic Convex Hull Trick** (CHT) via `std::multiset<Line
 - `.raw/transformer-vm/attention/hull2d_cht.h` — CHT data structure (323 lines, Apache-2.0 © Percepta)
 - `.raw/transformer-vm/attention/hull_cache.py` — Python wrapper (44 lines)
 - `.raw/transformer-vm/graph/core.py` — `fetch()`, `fetch_sum()`, parabolic encoding
-- `.research/31_percepta_deep_dive.md` — Full gap analysis
-- `.research/32_percepta_distillation_strategy.md` — Phased distillation verdict (Phase A/B/C)
-- `.research/03_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy
+- `.research/031_percepta_deep_dive.md` — Full gap analysis
+- `.research/032_percepta_distillation_strategy.md` — Phased distillation verdict (Phase A/B/C)
+- `.research/003_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy

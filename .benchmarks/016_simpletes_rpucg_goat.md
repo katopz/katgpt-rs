@@ -97,5 +97,5 @@ SimpleTES adds three orthogonal improvements to flat bandit selection:
 ## References
 
 - **Paper:** arXiv:2604.19341 — SimpleTES: Evaluation-Driven Scaling
-- **Research:** `.research/52_SimpleTES_Evaluation_Driven_Scaling.md`
+- **Research:** `.research/052_SimpleTES_Evaluation_Driven_Scaling.md`
 - **Related:** Plan 030 (BanditPruner), Plan 079 (BT Rank GOAT proof pattern)

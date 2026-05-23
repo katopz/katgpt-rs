@@ -3,7 +3,7 @@
 > **Status:** ✅ Done
 > **Branch:** `develop/feature/083_ptrm_width_scaling`
 > **Depends on:** Plan 079 (ELF SDE, GOAT proved), Plan 030 (BanditPruner), Plan 080 (MaxSim)
-> **Research:** `.research/49_PTRM_Probabilistic_Tiny_Recursive_Model.md`
+> **Research:** `.research/049_PTRM_Probabilistic_Tiny_Recursive_Model.md`
 > **Source:** arXiv:2605.19943 — Probabilistic Tiny Recursive Model
 > **Goal:** Validate PTRM's width >> depth finding on our speculative decoding stack. Add `best_of_k_rollouts` convenience API and `EarlyStopGate` pruner. Benchmark K vs T scaling to produce GOAT proof.
 
@@ -130,9 +130,9 @@ No new feature flags. All additions are gated under existing `elf_sde`.
 ## References
 
 - **PTRM Paper**: arXiv:2605.19943 — Probabilistic Tiny Recursive Model
-- **Research 49**: `.research/49_PTRM_Probabilistic_Tiny_Recursive_Model.md`
-- **Research 44**: `.research/44_ELF_Embedded_Language_Flows.md` (SDE noise, Plan 079)
-- **Research 35**: `.research/35_Attractor_Models_Fixed_Point_Refinement.md` (attractor = recursive refinement)
+- **Research 49**: `.research/049_PTRM_Probabilistic_Tiny_Recursive_Model.md`
+- **Research 44**: `.research/044_ELF_Embedded_Language_Flows.md` (SDE noise, Plan 079)
+- **Research 35**: `.research/035_Attractor_Models_Fixed_Point_Refinement.md` (attractor = recursive refinement)
 - **Plan 079**: `.plans/079_elf_embedded_language_flows_modelless.md` (SDE GOAT proof)
 - **Plan 030**: `.plans/030_multi_armed_bandit.md` (BanditPruner)
 - **Key files**: `src/speculative/dd_tree.rs`, `src/speculative/types.rs`, `src/pruners/bandit.rs`

@@ -394,9 +394,9 @@ slime_loss = []
 - APRIL (built on Slime): https://arxiv.org/abs/2509.18521
 - SimPO: Meng et al., "SimPO: Simple Preference Optimization with a Reference-Free Reward"
 - DPO: Rafailov et al., "Direct Preference Optimization"
-- Our ASFT: `.research/54_ASFT_Anchored_SFT.md`
-- Our SDAR: `.research/38_SDAR_Self_Distilled_Agentic_RL.md`
-- Our BT Ranking: `.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`
+- Our ASFT: `.research/054_ASFT_Anchored_SFT.md`
+- Our SDAR: `.research/038_SDAR_Self_Distilled_Agentic_RL.md`
+- Our BT Ranking: `.research/040_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/060_simd_matmul_hla`
 **Depends on:** Plan 057 (HLA Implementation)
-**Research:** `.research/29_rust_gpu_feasibility.md` (SIMD vs GPU analysis)
+**Research:** `.research/029_rust_gpu_feasibility.md` (SIMD vs GPU analysis)
 **Goal:** Add NEON/AVX2 SIMD to `matmul`, `matmul_relu`, `sparse_matmul`, and HLA streaming kernels. Target: 4-8× throughput gain for 30K CCU @ 20Hz game server deployment.
 
 ---
@@ -104,7 +104,7 @@
   - HLA kernel tests (22/22 from Plan 057) must still pass
   - Run on both ARM (macOS) and x86_64 (CI) if possible
 
-- [x] T12: Update `.research/29_rust_gpu_feasibility.md` with benchmark results ✅
+- [x] T12: Update `.research/029_rust_gpu_feasibility.md` with benchmark results ✅
   - Measured NEON throughput: matmul 15.6M/s [16×16], hla_update 16.4M/s (hd=4), ahla_step 18.2M/s (hd=4)
   - E2E forward_hla: 939K tok/s (Config::micro, single-core NEON)
   - 30K CCU @ 20Hz: ✅ single-core handles it (939K > 600K, 9.8× headroom on 8-core)

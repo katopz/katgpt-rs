@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/032_heuristic_learning_infrastructure`
 **Depends on:** Plan 030 (bandit feature in microgpt-rs), Plan 021 (ScreeningPruner)
-**Research:** `.research/14_Learning_Beyond_Gradients.md`
+**Research:** `.research/014_Learning_Beyond_Gradients.md`
 **Goal:** Add the missing infrastructure for Heuristic Learning (HL) — trial persistence, absorb-compress cycle, hot-swap pruner, and regression suite. This enables the Bomberman arena (Plan 033) and future coding-agent-driven validator evolution.
 
 ---
@@ -193,5 +193,5 @@ src/pruners/
 
 - Plan 030: Multi-Armed Bandit implementation
 - Plan 021: ScreeningPruner (absolute relevance)
-- Research 14: "Learning Beyond Gradients" (`.research/14_Learning_Beyond_Gradients.md`)
+- Research 14: "Learning Beyond Gradients" (`.research/014_Learning_Beyond_Gradients.md`)
 - riir-validator-sdk: WASM validator SDK

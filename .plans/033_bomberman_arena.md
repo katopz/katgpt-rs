@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/033_bomberman_arena`
 **Depends on:** Plan 032 (HL Infrastructure), Plan 030 (Bandit), Plan 021 (ScreeningPruner)
-**Research:** `.research/14_Learning_Beyond_Gradients.md`
+**Research:** `.research/014_Learning_Beyond_Gradients.md`
 **Reference:** `raw/bomby/` — Fish Folk: Bomby (Bevy ECS + LDtk, Apache-2.0 / MIT)
 **Goal:** Build a 4-player Bomberman arena using `bevy_ecs` (standalone) + ratatui TUI where each player uses progressively more HL technology. The arena proves the value of each layer: model > random, validator > model, HL > static validator. **✅ HL thesis proven: HL (+177) > Greedy (+131) > Validator (-30) > Random (-55) in 100-round tournament.**
 

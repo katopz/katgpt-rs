@@ -289,7 +289,7 @@ pub enum DecodeStrategy {
 
 Set via `InferenceOverrides::decode_strategy` for explicit override.
 
-📖 See [`.research/34_D2F_Discrete_Diffusion_Forcing.md`](../.research/34_D2F_Discrete_Diffusion_Forcing.md) for experimental results and research context.
+📖 See [`.research/034_D2F_Discrete_Diffusion_Forcing.md`](../.research/034_D2F_Discrete_Diffusion_Forcing.md) for experimental results and research context.
 
 ---
 

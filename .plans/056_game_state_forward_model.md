@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/056_game_state_forward_model`
 **Depends on:** Plan 033 (Bomber Arena), Plan 030 (Bandit)
-**Research:** `.research/27_STRATEGA_General_Strategy_Games_Forward_Model.md`
+**Research:** `.research/027_STRATEGA_General_Strategy_Games_Forward_Model.md`
 **Goal:** Validate the `GameState` trait abstraction by implementing it for the Bomber arena and running a generic MCTS agent against it. Prove that one search algorithm works across game domains without code duplication. **Scope: trait + one arena + one algorithm — we are validating the abstraction, not building a framework.**
 
 ---

@@ -1,6 +1,6 @@
 # Plan 104: Auto-Dreamer Offline Memory Consolidation
 
-**Research**: `.research/69_AutoDreamer_Offline_Memory_Consolidation.md`
+**Research**: `.research/069_AutoDreamer_Offline_Memory_Consolidation.md`
 **Paper**: arXiv:2605.20616 — Auto-Dreamer: Learning Offline Memory Consolidation for Language Agents
 **Status**: 🟡 Planning
 
@@ -278,7 +278,7 @@ Expected:
 ## T11: Documentation Updates
 
 - Update `README.md` Dreamer section
-- Update `.research/69_AutoDreamer_Offline_Memory_Consolidation.md` with results
+- Update `.research/069_AutoDreamer_Offline_Memory_Consolidation.md` with results
 - Update feature flags table in README
 - Add `.docs/` for Dreamer API
 

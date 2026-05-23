@@ -556,7 +556,7 @@ No per-head mixing (destroys memory contiguity). Simple `if layer_idx < n_layer 
 
 ### What DeltaMemoryState Already Does (No Retraining Required)
 
-Our existing `DeltaMemoryState` (`.research/24_Delta_Mem_Online_Associative_Memory.md`) already provides:
+Our existing `DeltaMemoryState` (`.research/024_Delta_Mem_Online_Associative_Memory.md`) already provides:
 
 - O(1) fixed-size state (rank² = 256 bytes at rank=8)
 - Per-domain isolation (`MultiDomainMemory`)

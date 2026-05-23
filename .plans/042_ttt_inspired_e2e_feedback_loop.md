@@ -1,6 +1,6 @@
 # Plan 042: TTT-Inspired E2E Feedback Loop — Inference Results → Training Data
 
-> **Research:** `microgpt-rs/.research/19_TTT_Discover_Test_Time_Training.md`
+> **Research:** `microgpt-rs/.research/019_TTT_Discover_Test_Time_Training.md`
 > **Related:** Plan 041 (game training), anyrag Plan 003 (self-improving cycle), Plan 008 (inference budget)
 > **Branch:** `develop/feature/042_ttt_feedback_loop`
 

@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/057_higher_order_linear_attention`
 **Depends on:** Plan 010 (Multilayer Transformer), Plan 020 (Raven KV Cache — pattern reference)
-**Research:** `.research/28_Higher_order_Linear_Attention.md`
+**Research:** `.research/028_Higher_order_Linear_Attention.md`
 **Goal:** Implement second-order HLA (symmetric + asymmetric AHLA) as an alternative to standard KV-cache attention. Achieve O(1) per-token memory independent of sequence length. Benchmark against flat KV, Raven, and TurboQuant to quantify the tradeoff: constant memory vs quality (models must be trained with HLA from scratch).
 
 ---

@@ -375,7 +375,7 @@ Key: `probs.gather(1, target_ids)` extracts the model's own probability for the 
 - ASFT: He Zhu et al., "Anchored Supervised Fine-Tuning", ICLR 2026, arXiv:2509.23753
 - DFT: Yongliang Wu et al., "On the Generalization of SFT: A Reinforcement Learning Perspective with Reward Rectification", arXiv:2508.05629
 - RWR: Peters & Schaal, "Reinforcement Learning by Reward-Weighted Regression", ICML 2007
-- Our SDAR: `.research/38_SDAR_Self_Distilled_Agentic_RL.md`
-- Our ROPD: `.research/36_ROPD_Rubric_OnPolicy_Distillation.md`
+- Our SDAR: `.research/038_SDAR_Self_Distilled_Agentic_RL.md`
+- Our ROPD: `.research/036_ROPD_Rubric_OnPolicy_Distillation.md`
 - Our KL alignment: `microgpt-rs/src/pruners/boundary_alignment.rs`
 - Our SDAR gate: `microgpt-rs/src/pruners/sdar_gate.rs`

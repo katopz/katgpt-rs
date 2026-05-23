@@ -1,6 +1,6 @@
 # Plan 043: TurboQuant KV Cache Compression — Near-Optimal Vector Quantization for Inference
 
-> **Research:** `microgpt-rs/.research/20_TurboQuant_Online_Vector_Quantization.md`
+> **Research:** `microgpt-rs/.research/020_TurboQuant_Online_Vector_Quantization.md`
 > **Raw reference:** `.raw/turboquant/` (Python implementation with 35 passing tests)
 > **Related:** Plan 020 (Raven RSM), Plan 042 (TTT Feedback Loop), riir-gpu `attention_score.wgsl`
 > **Branch:** `develop/feature/043_turboquant_kv_cache`
@@ -334,7 +334,7 @@ Implements TurboQuant (arXiv:2504.19874) for KV cache compression:
 - Quality: cos_sim > 0.99 at 4-bit, > 0.95 at 3-bit
 - Compression: 8.5× at 3-bit vs f32 flat cache
 
-Refs: .research/20_TurboQuant_Online_Vector_Quantization.md"
+Refs: .research/020_TurboQuant_Online_Vector_Quantization.md"
 ```
 
 ---

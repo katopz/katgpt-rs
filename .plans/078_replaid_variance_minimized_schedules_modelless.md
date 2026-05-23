@@ -4,7 +4,7 @@
 
 **Branch:** `develop/feature/078_replaid_variance_schedules_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 072 (SDAR Modelless)
-**Research:** `.research/41_RePlaid_Continuous_Diffusion_Scaling.md`
+**Research:** `.research/041_RePlaid_Continuous_Diffusion_Scaling.md`
 **Model-Based Twin:** `riir-ai/.plans/079_replaid_elbo_self_condition_model_based.md`
 **Source:** arXiv:2605.18530 — RePlaid (Prop 1, Lemma 3, Sec 5.2)
 **Goal:** Port RePlaid's variance-minimized schedule optimization to our modelless stack. Three targets: D2F noise schedule, bandit exploration rate, SDAR sigmoid β. All self-supervised — no teacher, no gradients.
@@ -283,7 +283,7 @@ RePlaid Sec 4.2 shows DPM-Solver++(2M) — a second-order multistep solver — b
 - [x] **T13: Update documentation** — partial
   - `README.md` — ✅ feature flag entry already present
   - `.docs/09_heuristic-learning.md` — ✅ added RePlaid Variance-Minimized status section
-  - `.research/41_RePlaid_Continuous_Diffusion_Scaling.md` — remaining (add Phase 4 results reference)
+  - `.research/041_RePlaid_Continuous_Diffusion_Scaling.md` — remaining (add Phase 4 results reference)
   - Cross-reference `riir-ai/.plans/079_replaid_elbo_self_condition_model_based.md` — remaining
 
 ---
@@ -351,10 +351,10 @@ Same pattern as `g_zero`, `delta_mem`, `sdar`. Experimental until benchmarks pro
 
 ## References
 
-- Research 41: `.research/41_RePlaid_Continuous_Diffusion_Scaling.md` (this paper)
-- Research 10: `.research/10_ColaDLM_Continuous_Latent_Diffusion.md` (previous continuous diffusion, rejected)
-- Research 34: `.research/34_D2F_Discrete_Diffusion_Forcing.md` (our discrete diffusion)
-- Research 38: `.research/38_SDAR_Self_Distilled_Agentic_RL.md` (sigmoid gating)
+- Research 41: `.research/041_RePlaid_Continuous_Diffusion_Scaling.md` (this paper)
+- Research 10: `.research/010_ColaDLM_Continuous_Latent_Diffusion.md` (previous continuous diffusion, rejected)
+- Research 34: `.research/034_D2F_Discrete_Diffusion_Forcing.md` (our discrete diffusion)
+- Research 38: `.research/038_SDAR_Self_Distilled_Agentic_RL.md` (sigmoid gating)
 - Plan 066: D2F Discrete Diffusion Forcing (existing D2F infrastructure)
 - Plan 030: Multi-Armed Bandit (existing bandit infrastructure)
 - Plan 072: SDAR Gated Distillation Modelless (existing SDAR infrastructure)

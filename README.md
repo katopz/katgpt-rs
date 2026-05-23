@@ -159,7 +159,7 @@ Block-parallel decoding via iterative denoising — a third decode strategy alon
 - **`D2fPipeline`**: multi-block sequential decode with KV cache commit across blocks
 - **`DecodeStrategy::DiscreteDiffusion`**: config-driven auto-switch heuristic (AR → Speculative → D2F)
 
-📖 See [`.docs/03_speculative_decoding.md`](.docs/03_speculative_decoding.md) for D2F API details and [`.research/34_D2F_Discrete_Diffusion_Forcing.md`](.research/34_D2F_Discrete_Diffusion_Forcing.md) for experimental results.
+📖 See [`.docs/03_speculative_decoding.md`](.docs/03_speculative_decoding.md) for D2F API details and [`.research/034_D2F_Discrete_Diffusion_Forcing.md`](.research/034_D2F_Discrete_Diffusion_Forcing.md) for experimental results.
 
 ### Tri-Mode: D2F+AR Self-Speculation (Plan 089)
 
@@ -323,8 +323,8 @@ src/percepta/
 
 📁 `src/percepta/` — Full module: CHT, hull, encoding, cumsum, gates, graph, scheduler, weights, transformer, specialize, evaluator, runner, wasm/
 📁 `.plans/064_percepta_full_riir.md` — **Master plan**: all 11 task groups with tasks, module map, success criteria
-📁 `.research/32_percepta_distillation_strategy.md` — **Full RIIR verdict** (why take everything, Apache-2.0 → MIT)
-📁 `.research/31_percepta_deep_dive.md` — Gap analysis + **comparison table** (what each Python/C++ does better)
+📁 `.research/032_percepta_distillation_strategy.md` — **Full RIIR verdict** (why take everything, Apache-2.0 → MIT)
+📁 `.research/031_percepta_deep_dive.md` — Gap analysis + **comparison table** (what each Python/C++ does better)
 
 ## 🗜️ TurboQuant: Near-Optimal KV Cache Compression (Legacy Baseline)
 
@@ -639,7 +639,7 @@ Feature gate: `game_state` (implies `bomber`). 50 unit tests covering explosions
 
 Run: `cargo run --features game_state --example game_state_01_bomber_mcts`
 
-📖 See [`.plans/056_game_state_forward_model.md`](.plans/056_game_state_forward_model.md), [`.research/27_STRATEGA_General_Strategy_Games_Forward_Model.md`](.research/27_STRATEGA_General_Strategy_Games_Forward_Model.md).
+📖 See [`.plans/056_game_state_forward_model.md`](.plans/056_game_state_forward_model.md), [`.research/027_STRATEGA_General_Strategy_Games_Forward_Model.md`](.research/027_STRATEGA_General_Strategy_Games_Forward_Model.md).
 
 ### 🔄 NFSP/MCTS Duality (Plan 067)
 
@@ -1025,7 +1025,7 @@ Distills the GFlowNet shortest-path theorem — **minimize flow = shortest paths
 
 Run: `cargo test --features "bandit,g_zero,bomber" --test bench_gflownet_modelless -- --nocapture`
 
-📖 See [`.plans/052_gflownet_modelless_distillation.md`](.plans/052_gflownet_modelless_distillation.md) for full plan, [`.research/23_GFlowNet_Shortest_Paths.md`](.research/23_GFlowNet_Shortest_Paths.md) for paper analysis.
+📖 See [`.plans/052_gflownet_modelless_distillation.md`](.plans/052_gflownet_modelless_distillation.md) for full plan, [`.research/023_GFlowNet_Shortest_Paths.md`](.research/023_GFlowNet_Shortest_Paths.md) for paper analysis.
 
 ## 🧲 δ-Mem Modelless Distillation (Plan 053) — ⚠️ Infrastructure Only
 
@@ -1047,7 +1047,7 @@ Distills δ-mem's online associative memory (arXiv 2605.12357) into our modelles
 
 **Feature gate:** `delta_mem = ["bandit"]` — **off by default**, not in `default` features.
 
-📖 See [`.plans/053_delta_mem_modelless.md`](.plans/053_delta_mem_modelless.md) for full plan, [`.research/24_Delta_Mem_Online_Associative_Memory.md`](.research/24_Delta_Mem_Online_Associative_Memory.md) for paper analysis.
+📖 See [`.plans/053_delta_mem_modelless.md`](.plans/053_delta_mem_modelless.md) for full plan, [`.research/024_Delta_Mem_Online_Associative_Memory.md`](.research/024_Delta_Mem_Online_Associative_Memory.md) for paper analysis.
 
 ## 📋 ROPD Rubric Modelless Distillation (Plan 071)
 
@@ -1181,7 +1181,7 @@ tests/
 
 **Feature gate:** `bt_rank = []` — on by default.
 
-📖 See [`.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`](.research/40_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
+📖 See [`.research/040_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`](.research/040_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
 
 ## 🧮 Deep Manifold: Fixed-Point Boundary Conditions (Research 51)
 
@@ -1246,7 +1246,7 @@ tests/
 
 **Feature gates:** `deep_manifold = []`, `federation = ["bandit"]` — **default-on** (GOAT proved 6/6).
 
-📖 See [`.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`](.research/51_Deep_Manifold_Fixed_Point_Boundary_Conditions.md) for full distillation of arXiv:2512.06563.
+📖 See [`.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`](.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md) for full distillation of arXiv:2512.06563.
 
 ## 🔧 TileRT Execution Pipeline (Plan 102)
 

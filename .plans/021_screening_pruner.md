@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/021_screening_pruner`
 **Depends on:** None (backward compatible)
-**Research:** `.research/07_Screening_Absolute_Relevance.md`
+**Research:** `.research/007_Screening_Absolute_Relevance.md`
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/053_delta_mem_modelless`
 **Depends on:** Plan 030 (Bandit), Plan 049 (G-Zero Phase 1), Plan 020 (Raven RSM)
-**Research:** `.research/24_Delta_Mem_Online_Associative_Memory.md`
+**Research:** `.research/024_Delta_Mem_Online_Associative_Memory.md`
 **Source:** `.raw/delta-Mem/deltamem/` (audited `core/delta_impl.py`, `kernels/affine_scan.py`)
 **Goal:** Distill δ-mem's online associative memory into our modelless stack. Replace the paper's learned neural projections with feature-hashed state updates. The result: a compact, fixed-size memory matrix that evolves during inference and steers pruning decisions — without any gradient training.
 

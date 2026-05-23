@@ -231,6 +231,6 @@ Phase C (DO IT):   DSL → MILP → WASM interpreter → weights → Futamura
 
 - `.raw/transformer-vm/LICENSE` — Apache-2.0, Copyright 2026 Percepta
 - `.raw/transformer-vm/pyproject.toml` — `license = {text = "Apache-2.0"}`
-- `.research/31_percepta_deep_dive.md` — Full gap analysis (9 gaps, P0–P6)
+- `.research/031_percepta_deep_dive.md` — Full gap analysis (9 gaps, P0–P6)
 - `.plans/063_percepta_cht_hull_kv_cache.md` — CHT upgrade plan
-- `.research/03_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy
+- `.research/003_Commercial_Open_Source_Strategy_Verdict.md` — Engine/Fuel split strategy

@@ -2,7 +2,7 @@
 
 **Branch:** `feature/038_free_tf_domain_latent`
 **Depends on:** Plan 025 (Bidirectional Prefill + LoRA), Plan 023 (Expert Registry)
-**Research:** `.research/18_The_Free_Transformer_Latent_Injection.md`
+**Research:** `.research/018_The_Free_Transformer_Latent_Injection.md`
 
 ---
 

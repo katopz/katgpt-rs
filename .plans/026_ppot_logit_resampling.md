@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/026_ppot_logit_resampling`
 **Depends on:** Plan 021 (ScreeningPruner), Plan 013 (Zero-Alloc)
-**Research:** `.research/11_PPoT_Probabilistic_Programs_of_Thought.md`
+**Research:** `.research/011_PPoT_Probabilistic_Programs_of_Thought.md`
 
 ---
 
@@ -72,7 +72,7 @@ The primary integration point is **post-DDTree rescue**: when speculative decodi
   - Add `PPoT: Logit-Parameterized CPU Resampling (Plan 026)` section to architecture
   - Update Project Structure with `src/speculative/ppot/` directory
   - Update feature flags section with `ppot`
-  - Reference `.research/11_PPoT_Probabilistic_Programs_of_Thought.md`
+  - Reference `.research/011_PPoT_Probabilistic_Programs_of_Thought.md`
 
 ---
 
@@ -176,6 +176,6 @@ Uses existing sample_residual_distribution_into() with q = delta at original tok
 
 - "Probabilistic Programs of Thought" (arXiv:2604.17290)
 - PPoT Reference Implementation: `raw/PPoT/ppot/`
-- Research: `.research/11_PPoT_Probabilistic_Programs_of_Thought.md`
+- Research: `.research/011_PPoT_Probabilistic_Programs_of_Thought.md`
 - Screening Pruner: `.plans/021_screening_pruner.md`
 - Zero-Alloc: `.plans/013_zero_alloc_rayon.md`

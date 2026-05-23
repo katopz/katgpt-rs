@@ -2,7 +2,7 @@
 
 **Branch:** `develop/feature/059_hla_distillation_validation`
 **Depends on:** Plan 057 (HLA Implementation), Plan 008 (riir-gpu LoRA Training)
-**Research:** `.research/28_Higher_order_Linear_Attention.md` (Latent State RAG Analysis section)
+**Research:** `.research/028_Higher_order_Linear_Attention.md` (Latent State RAG Analysis section)
 **Goal:** Run SDPA→HLA distillation using CPU-only training in riir-gpu. Measure KL divergence at the LM head. If it converges to near-zero, HLA is viable for infinite-context inference. If it plateaus, kill the HLA training path and double down on `DeltaMemoryState`.
 
 ---
