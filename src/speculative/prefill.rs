@@ -278,6 +278,66 @@ pub fn block_select(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize
     selected
 }
 
+/// Adaptive block selection using α-entmax (α=1.5) sparse routing.
+///
+/// Unlike `block_select()` which uses fixed top-k via alpha threshold,
+/// this uses entmax to produce a sparse probability distribution over blocks
+/// and selects all blocks with non-zero probability — the support size
+/// varies per query, adapting to difficulty.
+///
+/// Rules:
+///   - sink:       k_block < attention_sink → always include
+///   - window:     |q_block - k_block| < window → include (recent context)
+///   - causal:     k_block <= q_block
+///   - entmax:     α-entmax produces sparse probs; select all with p > 0
+///
+/// # Arguments
+///
+/// * `block_scores` - Per-block importance scores (same as `block_select`)
+/// * `cfg` - PFlash config for sink/window rules
+///
+/// # Returns
+///
+/// Variable-length `Vec<usize>` of selected block indices. The number of
+/// selected blocks varies per query — hard queries select more, easy ones fewer.
+#[cfg(feature = "dash_attn")]
+pub fn block_select_entmax(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize> {
+    use crate::dash_attn::{entmax_1p5, entmax_support};
+
+    let num_blocks = block_scores.len();
+    if num_blocks == 0 {
+        return Vec::new();
+    }
+
+    let q_block = num_blocks - 1;
+
+    // Apply α-entmax routing to get sparse probability distribution
+    let (probs, _tau) = entmax_1p5(block_scores);
+    let entmax_selected = entmax_support(&probs);
+    let entmax_set: std::collections::HashSet<usize> = entmax_selected.into_iter().collect();
+
+    let mut selected: Vec<usize> = Vec::with_capacity(num_blocks);
+
+    for (k_block, _) in block_scores.iter().enumerate() {
+        if k_block > q_block {
+            continue;
+        }
+
+        // Sink + window rules are unconditional; entmax replaces the alpha threshold
+        let keep = k_block < cfg.attention_sink
+            || q_block.abs_diff(k_block) < cfg.window
+            || entmax_set.contains(&k_block);
+
+        if keep {
+            selected.push(k_block);
+        }
+    }
+
+    selected.sort();
+    selected.dedup();
+    selected
+}
+
 /// Full block-selection with per-(q_block, k_block, head) score grid.
 ///
 /// `score`: [M][N][H] row-major (M=q_blocks, N=k_blocks, H=heads).

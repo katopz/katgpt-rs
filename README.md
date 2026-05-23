@@ -447,6 +447,26 @@ Composable with TurboQuant: TQ compresses the *precision* dimension (fewer bits)
 
 📁 `src/speculative/prefill.rs` — `block_select`, `block_select_grid`, `compress_prompt_blocks`, `BlockAttentionScorer`
 
+## 🔥 DashAttention: Adaptive Sparse Hierarchical Attention (Plan 106)
+
+Replaces PFlash's fixed-budget top-k block selection with **α-entmax (α=1.5) adaptive routing**. Instead of a fixed number of selected blocks per query, entmax produces a sparse probability distribution where the support size varies per query — hard queries select more blocks, easy ones fewer. Includes learned chunk summaries via `head_cls` vectors (zero-init fallback = mean pooling, no training required for inference).
+
+| Component | Purpose |
+|-----------|---------|
+| `entmax_1p5()` | α=1.5 closed-form quadratic threshold — `p_i = max(0, 0.5·s_i − τ)²` |
+| `score_blocks_entmax()` | Adaptive sparse chunk routing with routing bias |
+| `block_select_entmax()` | Drop-in replacement for `block_select()` — variable-length output |
+| `ChunkSummaryCache` | Cached chunk summaries across layers (append-only during decode) |
+| `forward_dash_attn_prefill()` | Prefill with chunk summarization + entmax routing |
+
+**Key property:** entmax produces *exact zeros* (not ε-small values) — the sparse support is mathematically well-defined, not a thresholding artifact.
+
+Composable with PFlash: `block_select_entmax()` shares the same sink/window/causal rules but replaces the fixed `alpha` threshold with adaptive entmax support selection. Combined with SP-KV (token-level pruning) and TurboQuant (precision compression): **3-axis sparsity** (block × token × precision).
+
+📁 `src/dash_attn/` — `entmax`, `routing`, `chunk_summary`, `forward`
+📁 `src/speculative/prefill.rs` — `block_select_entmax`
+🔧 Feature flag: `dash_attn` (**default-on**)
+
 ## 🎯 MaxSim: Late-Interaction Scoring (Plan 080)
 
 Memory-efficient `Σ_i max_j dot(q_i, d_j)` scoring ported from [erikkaum/maxsim](https://github.com/erikkaum/maxsim) (ColBERT/PyLate kernel). The key insight: streaming over doc tokens with a running max — never materializing the `[Lq × Ld]` similarity matrix — gives 3-4× speedup via cache locality (same math, less memory).

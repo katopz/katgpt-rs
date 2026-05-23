@@ -38,20 +38,20 @@
 - [x] **T19**: Wire into `transformer.rs` forward dispatch — `match config.attention_mode { DashAttn => ... }`
 
 ### Phase 5: PFlash Integration (Drop-in Replacement)
-- [ ] **T20**: Create `block_select_entmax()` alternative to existing `block_select()` in `speculative/prefill.rs`
+- [x] **T20**: Create `block_select_entmax()` alternative to existing `block_select()` in `speculative/prefill.rs` — Feature-gated `#[cfg(feature = "dash_attn")]`, uses `entmax_1p5` + `entmax_support` for adaptive support selection, retains sink/window/causal rules
 - [ ] **T21**: Benchmark: PFlash top-k vs PFlash entmax at same sparsity target — measure (a) chunk selection quality (NIAH retrieval), (b) selection time (µs), (c) adaptive support variance (min/max/mean active chunks)
 - [ ] **T22**: Benchmark: learned chunk summary vs mean-K scoring — measure NIAH retrieval quality with synthetic data
 
 ### Phase 6: Benchmarks & GOAT Proof
 - [ ] **T23**: `bench_dash_attn_routing()` — Compare top-k (fixed 8 blocks) vs entmax (adaptive 1-16 blocks) across: (a) NIAH needle position sweep, (b) multi-needle retrieval, (c) random noise queries. Report: accuracy, average active blocks, min/max active blocks
 - [ ] **T24**: `bench_dash_attn_vs_pflash()` — End-to-end: PFlash standard prefill vs PFlash + entmax routing. Measure: TTFT, compression ratio, NIAH retrieval at various context lengths
-- [ ] **T25**: `bench_entmax_overhead()` — Measure α-entmax threshold finding time for n_chunks ∈ {64, 128, 256, 512}. Should be <50µs for 256 chunks
+- [x] **T25**: `bench_entmax_overhead()` — `tests/bench_106_dash_attn_entmax.rs`. 5 tests: 64/128/256/512 chunks + correctness. Release: 2.1µs median @256 (well under 50µs). Debug: ~55µs (relaxed assertion)
 - [ ] **T26**: GOAT proof test: entmax routing selects more chunks for hard queries, fewer for easy ones. Synthetic test with known difficulty labels. Assert: average active blocks for hard queries > 2× easy queries
 
 ### Phase 7: Documentation & Polish
-- [ ] **T27**: Update `README.md` — add DashAttention section after PFlash/SP-KV with: adaptive routing table, composability pipeline, feature flag
-- [ ] **T28**: Update `Cargo.toml` feature flags section in README
-- [ ] **T29**: Fix all clippy warnings: `cargo clippy --features dash_attn --fix --allow-dirty`
+- [x] **T27**: Update `README.md` — added `## 🔥 DashAttention` section after PFlash with component table, composability pipeline, file paths
+- [x] **T28**: Update `Cargo.toml` feature flags section in README — `dash_attn` already present in feature table and default list (L1571, L1580), confirmed accurate
+- [x] **T29**: Fix all clippy warnings: `cargo clippy --features dash_attn --fix --allow-dirty` — clean, no warnings or fixes applied
 - [ ] **T30**: Commit with message `feat(dash_attn): adaptive sparse hierarchical attention via α-entmax routing`
 
 ---
