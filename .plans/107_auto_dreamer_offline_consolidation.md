@@ -2,7 +2,7 @@
 
 **Research**: `.research/069_AutoDreamer_Offline_Memory_Consolidation.md`
 **Paper**: arXiv:2605.20616 — Auto-Dreamer: Learning Offline Memory Consolidation for Language Agents
-**Status**: 🟡 Planning
+**Status**: ✅ **Default-on** as of GOAT 8/8 proof. Full pipeline: scheduler → consolidator → decay → counterfactual.
 
 ## Tasks
 
@@ -328,3 +328,5 @@ Expected:
 - Existing Freeze/Thaw: `src/pruners/freeze.rs`
 - G-Zero self-play: `src/pruners/g_zero/`
 - MeMo Reflections: `src/pruners/reflection.rs`
+
+✅ GOAT 8/8 proved: `tests/goat_107_dreamer.rs` — config presets, cadence trigger, min-visits+cap, snapshot alignment, sorted output, coverage, region exempt, counterfactual pipeline

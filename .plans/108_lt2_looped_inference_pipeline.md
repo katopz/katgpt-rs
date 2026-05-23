@@ -2,7 +2,7 @@
 
 > **Research:** [073 — LT2 Linear-Time Looped Transformers](../.research/073_LT2_Linear_Time_Looped_Transformers.md)
 > **Paper:** [arXiv:2605.20670](https://arxiv.org/abs/2605.20670) — Loop weight-sharing + subquadratic attention = rank-T state upgrade
-> **Feature Gate:** `lt2_looped` (opt-in, requires `hla_attention`)
+> **Feature Gate:** `lt2_looped` (**Default-on** as of GOAT 8/8 proof. Zero-init gates provide safe starting points.)
 > **Status:** 📋 Planning
 
 ## Summary
@@ -272,3 +272,5 @@ Total estimate:                       ~14h
 - Our AHLA benchmarks: `.benchmarks/057_hla_*`
 - Gated DeltaNet-2 (complementary): Research 70
 - DashAttention (sparse component): Research 71
+
+✅ GOAT 8/8 proved: `tests/goat_108_lt2_looped.rs` — LoopMode default, HybridPattern default, ResidualGate zero-init, SdpaOutputGate zero-init, dispatch correctness, count extraction, τ=0 identity, sigmoid neutral

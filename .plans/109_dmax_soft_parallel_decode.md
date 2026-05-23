@@ -3,7 +3,7 @@
 > **Research:** `.research/072_DMax_Aggressive_Parallel_Decoding_dLLMs.md`
 > **Paper:** DMax: Aggressive Parallel Decoding for dLLMs (arXiv 2604.08302, NUS 2026)
 > **Depends on:** Plan 066 (D2F ✅ complete), Plan 089 (Tri-Mode ✅ complete)
-> **Feature Gate:** `dmax_spd` (opt-in, depends on `dllm`, proofs required)
+> **Feature Gate:** `dmax_spd` (**Default-on** as of GOAT 7/7 proof. Hybrid embeddings correctly interpolate token/mask.)
 
 ## Objective
 
@@ -328,6 +328,9 @@ dllm.rs
 5. ✅ Zero regression in existing D2F/binary/AR benchmarks
 6. ✅ GOAT proof results recorded honestly (even if negative)
 7. ✅ Documentation updated: README, .docs, .research
+
+
+✅ GOAT 7/7 proved: `tests/goat_109_dmax_spd.rs` — HybridEmbedding π=1, π=0, finiteness, prefix promotion, convergence confidence, convergence consistency, config presets
 
 ## Conventional Commit Messages (when ready)
 

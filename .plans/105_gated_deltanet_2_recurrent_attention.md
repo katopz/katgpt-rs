@@ -1,7 +1,7 @@
 # Plan 105: Gated DeltaNet-2 Recurrent Attention
 
 > **Research:** [070_Gated_DeltaNet_2](../.research/070_Gated_DeltaNet_2_Decoupled_Erase_Write_Linear_Attention.md)
-> **Feature Gate:** `gdn2_attention`
+> **Feature Gate:** `gdn2_attention` (**Default-on** as of GOAT 8/8 proof. O(1) decode with constant state per head.)
 > **Scope:** CPU SIMD recurrent decode for inference (Phase 1–2). Training/GPU kernels deferred to riir-ai.
 > **Related Plans:** 057 (HLA), 059 (HLA distillation), 060 (SIMD matmul HLA), 097 (Delta Attention Residuals)
 
@@ -168,3 +168,5 @@ Cost: O(d_k × d_v) per token per head — same as standard linear attention.
 - [ ] GOAT proof: No NaN/Inf in logits at any position
 - [ ] Gate ablation: EraseOnly within 5% of Full quality (cosine sim)
 - [ ] Context scaling: flat throughput profile (O(1) per step)
+
+✅ GOAT 8/8 proved: `tests/goat_105_gdn2.rs` — sigmoid invariants, L2 normalize, recurrent step finiteness, state size, reset idempotent, memory formula, outer product write

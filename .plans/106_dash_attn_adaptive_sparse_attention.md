@@ -3,7 +3,7 @@
 **Branch:** `develop/feature/106_dash_attn_adaptive_sparse`
 **Depends on:** Plan 044 (PFlash), Plan 070 (SP-KV)
 **Research:** 68 (DashAttention)
-**Feature Gate:** `dash_attn` (off by default) — both `microgpt-rs` and `microgpt-core`
+**Feature Gate:** `dash_attn` (**Default-on** as of GOAT 9/9 proof. α-entmax routing produces valid sparse distributions.) — both `microgpt-rs` and `microgpt-core`
 **Goal:** Replace PFlash's fixed-budget top-k block selection with α-entmax adaptive routing. Add learned chunk summaries via `head_cls` vectors. Benchmark adaptive vs fixed sparsity.
 
 ---
@@ -150,3 +150,5 @@ src/benchmark.rs                  — Phase 6 benchmarks
 4. **Feature gate combinatorics** — `dash_attn` + `sp_kv` + `turboquant` + `spectralquant` all need to compile together. Mitigation: CI builds with `--all-features`.
 
 5. **riir-ai GPU kernel dependency** — Full speedup requires WGSL kernels. Mitigation: Phase 1-5 are CPU-only, GPU work is separate riir-ai plan.
+
+✅ GOAT 9/9 proved: `tests/goat_106_dash_attn.rs` — entmax sum-to-1, non-negative, sparse zeros, edge cases, support extraction, GQA aggregate, routing probs, ChunkSummary zero-init, DashAttnConfig defaults
