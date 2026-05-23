@@ -149,20 +149,16 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Benchmark: throughput comparison AR vs Speculative vs SelfSpeculation vs D2F
 - [x] Record results in `.benchmarks/018_d2f_verifier_goat.md`
 
-### T6: Trained Sampler Research (lower priority, deferred)
-- [ ] Design `DiffusionSampler` — lightweight classifier for per-position correctness
-- [ ] Collect denoising trajectories from D2F inference
-- [ ] Train sampler, evaluate AUC
-- [ ] Integrate into D2F denoising loop
-- [ ] Benchmark TPF improvement
-- [ ] Deferred until T1-T5 prove self-speculation has value at our scale
+### T6: Trained Sampler Research → Consolidated into Plan 116
+- [ ] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T1-T4**
+- `diffusion_sampler.rs` created (43K, ~30 tests), needs wiring into `mod.rs`
+- Plan 116 T1: wire module, T2: run tests, T3: integrate into D2F loop, T4: GOAT benchmark
+- Deferred until T1-T5 prove self-speculation has value at our scale ✅ (proved)
 
-### T7: LoRA Drafter Alignment (riir-gpu, research, deferred)
-- [ ] Implement LK-hybrid loss for aligning diffusion drafter with AR verifier
-- [ ] LoRA on o_proj only (rank 128, α=512)
-- [ ] Train on D2F draft → AR verify pairs
-- [ ] Measure acceptance rate improvement
-- [ ] Deferred until riir-gpu has D2F training support
+### T7: LoRA Drafter Alignment → Consolidated into Plan 116
+- [ ] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T6**
+- Blocked on riir-gpu D2F training support
+- Plan 116 tracks as deferred task for visibility
 
 ---
 
