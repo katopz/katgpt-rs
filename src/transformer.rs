@@ -299,6 +299,17 @@ pub struct ForwardContext {
     mls_buf: Vec<f32>, // [n_embd] accumulator for last K layer residuals
     #[cfg(feature = "mls_aggregate")]
     mls_count: usize, // How many layers accumulated
+    // Tiled attention: pre-allocated repacking buffers for forward_prefill (Plan 115)
+    // Layout: [block_size × n_embd] (Q/out) or [block_size × kv_dim] (K/V)
+    // Data is repacked from (position, head) → (head, position) for tiled_attention_batched
+    #[cfg(feature = "tiled_attention")]
+    tiled_q: Vec<f32>, // [block_size × n_embd] repacked queries per head
+    #[cfg(feature = "tiled_attention")]
+    tiled_k: Vec<f32>, // [block_size × kv_dim] repacked keys per kv group
+    #[cfg(feature = "tiled_attention")]
+    tiled_v: Vec<f32>, // [block_size × kv_dim] repacked values per kv group
+    #[cfg(feature = "tiled_attention")]
+    tiled_out: Vec<f32>, // [block_size × n_embd] tiled output before transpose
 }
 
 impl ForwardContext {
@@ -343,6 +354,14 @@ impl ForwardContext {
             mls_buf: vec![0.0; config.n_embd],
             #[cfg(feature = "mls_aggregate")]
             mls_count: 0,
+            #[cfg(feature = "tiled_attention")]
+            tiled_q: vec![0.0; config.block_size * config.n_embd],
+            #[cfg(feature = "tiled_attention")]
+            tiled_k: vec![0.0; config.block_size * kvd],
+            #[cfg(feature = "tiled_attention")]
+            tiled_v: vec![0.0; config.block_size * kvd],
+            #[cfg(feature = "tiled_attention")]
+            tiled_out: vec![0.0; config.block_size * config.n_embd],
         }
     }
 
@@ -816,14 +835,42 @@ fn standard_lm_head(
     matmul(logits, lm_head, hidden, vocab_size, n_embd);
 }
 
+/// Select top-K indices from scores (Plan 117 T25).
+///
+/// Uses partial selection sort: O(N + K log K).
+/// Returns indices sorted by score descending (highest first).
+pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
+    let k = k.min(scores.len());
+    if k == 0 {
+        return Vec::new();
+    }
+
+    // Collect (index, score) pairs
+    let mut indexed: Vec<(usize, f32)> = scores.iter().copied().enumerate().collect();
+
+    // Partial sort to partition top K (unstable, O(N))
+    indexed.select_nth_unstable_by(k - 1, |a, b| {
+        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Sort the top K by score descending (O(K log K))
+    indexed[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    indexed[..k].iter().map(|(i, _)| *i).collect()
+}
+
 /// Two-stage clustered LM head for large vocabularies.
 ///
-/// Stage 1: predict cluster ID via classifier matmul + argmax.
-/// Stage 2: compute exact logits only for tokens in the winning cluster.
+/// Stage 1: predict cluster ID(s) via classifier matmul + top-K selection.
+/// Stage 2: compute exact logits only for tokens in the selected clusters.
+///
+/// When `topk=1`, behavior is identical to single-cluster argmax (backward compat).
+/// When `topk >= num_clusters`, all clusters are selected (no pruning).
 ///
 /// Only called when `vocab_size >= mtp_cluster_vocab_threshold` AND
 /// cluster weights are available.
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 fn clustered_lm_head(
     logits: &mut [f32],
     hidden: &[f32],
@@ -832,39 +879,44 @@ fn clustered_lm_head(
     cluster_map: &[Vec<usize>],
     vocab_size: usize,
     n_embd: usize,
+    topk: usize,
 ) {
     let num_clusters = cluster_map.len();
 
-    // Stage 1: predict cluster (argmax over classifier dot products)
-    let mut best_cluster = 0usize;
-    let mut best_score = f32::NEG_INFINITY;
-    for c in 0..num_clusters {
+    // Stage 1: compute cluster scores
+    let mut cluster_scores = vec![0.0f32; num_clusters];
+    for (c, score) in cluster_scores.iter_mut().enumerate() {
         let row_off = c * n_embd;
-        let dot = crate::simd::simd_dot_f32(
+        *score = crate::simd::simd_dot_f32(
             &cluster_classifier[row_off..row_off + n_embd],
             &hidden[..n_embd],
             n_embd,
         );
-        if dot > best_score {
-            best_score = dot;
-            best_cluster = c;
-        }
     }
 
-    // Stage 2: fill all logits with -inf, then compute exact for winning cluster
+    // Select top-K clusters (Plan 117 T27: skip selection if topk >= num_clusters)
+    let selected_clusters: Vec<usize> = if topk >= num_clusters {
+        (0..num_clusters).collect()
+    } else {
+        select_topk_indices(&cluster_scores, topk)
+    };
+
+    // Stage 2: fill all logits with -inf, then compute exact for selected clusters
     logits.fill(f32::NEG_INFINITY);
 
-    let cluster_tokens = &cluster_map[best_cluster];
-    for &token_idx in cluster_tokens {
-        if token_idx < vocab_size {
-            let row_off = token_idx * n_embd;
-            let dot = crate::simd::simd_dot_f32(
-                &lm_head[row_off..row_off + n_embd],
-                &hidden[..n_embd],
-                n_embd,
-            );
-            unsafe {
-                *logits.get_unchecked_mut(token_idx) = dot;
+    for &cluster_idx in &selected_clusters {
+        let cluster_tokens = &cluster_map[cluster_idx];
+        for &token_idx in cluster_tokens {
+            if token_idx < vocab_size {
+                let row_off = token_idx * n_embd;
+                let dot = crate::simd::simd_dot_f32(
+                    &lm_head[row_off..row_off + n_embd],
+                    &hidden[..n_embd],
+                    n_embd,
+                );
+                unsafe {
+                    *logits.get_unchecked_mut(token_idx) = dot;
+                }
             }
         }
     }
@@ -1269,6 +1321,7 @@ fn forward_base<'a>(
             cluster_map,
             config.vocab_size,
             n,
+            config.mtp_cluster_topk,
         );
     } else {
         standard_lm_head(
@@ -1550,6 +1603,7 @@ fn forward_coda<'a>(
             cluster_map,
             config.vocab_size,
             n,
+            config.mtp_cluster_topk,
         );
     } else {
         standard_lm_head(
@@ -2015,14 +2069,53 @@ pub fn forward_prefill<'a>(
         // ── Phase B: Bidirectional attention for ALL positions ──
         // Loads pre-computed Q and xr from fused Phase A, skipping redundant
         // hidden state load + double rmsnorm + Q matmul per position.
+
+        // Tiled attention: batch-compute all positions for large prompts (Plan 115)
+        // Avoids O(N²) score matrix materialization when prompt_len >= 128
+        #[cfg(feature = "tiled_attention")]
+        let use_tiled = prompt_len >= 128;
+
+        #[cfg(feature = "tiled_attention")]
+        if use_tiled {
+            let tiled_size = config.n_head * prompt_len * hd;
+            // Repack Q: (position, head) → (head, position) contiguous layout
+            for h in 0..config.n_head {
+                for p in 0..prompt_len {
+                    let src_off = p * n + h * hd;
+                    let dst_off = h * prompt_len * hd + p * hd;
+                    ctx.tiled_q[dst_off..dst_off + hd]
+                        .copy_from_slice(&prefill.queries[src_off..src_off + hd]);
+                }
+            }
+            // Repack K/V with GQA expansion: (position, kv_group) → (head, position)
+            for h in 0..config.n_head {
+                let kv_group = h * n_kv / config.n_head;
+                for p in 0..prompt_len {
+                    let kv_src = p * kvd + kv_group * hd;
+                    let dst_off = h * prompt_len * hd + p * hd;
+                    ctx.tiled_k[dst_off..dst_off + hd]
+                        .copy_from_slice(&layer_cache.key[kv_src..kv_src + hd]);
+                    ctx.tiled_v[dst_off..dst_off + hd]
+                        .copy_from_slice(&layer_cache.value[kv_src..kv_src + hd]);
+                }
+            }
+            microgpt_core::tiled_attention_batched(
+                &ctx.tiled_q[..tiled_size],
+                &ctx.tiled_k[..tiled_size],
+                &ctx.tiled_v[..tiled_size],
+                &mut ctx.tiled_out[..tiled_size],
+                1,
+                config.n_head,
+                prompt_len,
+                hd,
+            );
+        }
+
         for p in 0..prompt_len {
             let q_off = p * n;
+
+            // Load residual (xr) for output projection
             unsafe {
-                std::ptr::copy_nonoverlapping(
-                    prefill.queries.as_ptr().add(q_off),
-                    ctx.q.as_mut_ptr(),
-                    n,
-                );
                 std::ptr::copy_nonoverlapping(
                     prefill.residuals.as_ptr().add(q_off),
                     ctx.xr.as_mut_ptr(),
@@ -2030,25 +2123,75 @@ pub fn forward_prefill<'a>(
                 );
             }
 
-            // Bidirectional attention: t_n = prompt_len (full prompt range)
-            let scale = 1.0 / (hd as f32).sqrt();
+            // ── Attention computation (tiled or per-head) ──
             ctx.attn_out[..n].fill(0.0);
-            for h in 0..config.n_head {
-                let kv_group = h * n_kv / config.n_head;
+
+            #[cfg(feature = "tiled_attention")]
+            if use_tiled {
+                // Unpack tiled output: (head, position) → attn_out for this position
+                for h in 0..config.n_head {
+                    let src_off = h * prompt_len * hd + p * hd;
+                    let dst_off = h * hd;
+                    ctx.attn_out[dst_off..dst_off + hd]
+                        .copy_from_slice(&ctx.tiled_out[src_off..src_off + hd]);
+                }
+            } else {
+                // Per-head attention for small prompts (below threshold)
+                let scale = 1.0 / (hd as f32).sqrt();
                 unsafe {
-                    attention_head(
-                        &ctx.q,
-                        &layer_cache.key,
-                        &layer_cache.value,
-                        &mut ctx.attn_out,
-                        &mut ctx.scores,
-                        h * hd,
-                        kv_group * hd,
-                        kvd,
-                        hd,
-                        prompt_len, // ← BIDIRECTIONAL: full range, not pos+1
-                        scale,
+                    std::ptr::copy_nonoverlapping(
+                        prefill.queries.as_ptr().add(q_off),
+                        ctx.q.as_mut_ptr(),
+                        n,
                     );
+                }
+                for h in 0..config.n_head {
+                    let kv_group = h * n_kv / config.n_head;
+                    unsafe {
+                        attention_head(
+                            &ctx.q,
+                            &layer_cache.key,
+                            &layer_cache.value,
+                            &mut ctx.attn_out,
+                            &mut ctx.scores,
+                            h * hd,
+                            kv_group * hd,
+                            kvd,
+                            hd,
+                            prompt_len,
+                            scale,
+                        );
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "tiled_attention"))]
+            {
+                let scale = 1.0 / (hd as f32).sqrt();
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        prefill.queries.as_ptr().add(q_off),
+                        ctx.q.as_mut_ptr(),
+                        n,
+                    );
+                }
+                for h in 0..config.n_head {
+                    let kv_group = h * n_kv / config.n_head;
+                    unsafe {
+                        attention_head(
+                            &ctx.q,
+                            &layer_cache.key,
+                            &layer_cache.value,
+                            &mut ctx.attn_out,
+                            &mut ctx.scores,
+                            h * hd,
+                            kv_group * hd,
+                            kvd,
+                            hd,
+                            prompt_len,
+                            scale,
+                        );
+                    }
                 }
             }
 
@@ -5687,6 +5830,7 @@ mod tests {
             weights.mtp_cluster_map.as_ref().unwrap(),
             config.vocab_size,
             n,
+            1, // topk=1: backward compat (single cluster selection)
         );
 
         // Find winning cluster (the one with finite logits)
@@ -5743,6 +5887,7 @@ mod tests {
             weights.mtp_cluster_map.as_ref().unwrap(),
             config.vocab_size,
             n,
+            1, // topk=1: backward compat (single cluster selection)
         );
 
         // Find winning cluster
@@ -5761,7 +5906,9 @@ mod tests {
     #[test]
     fn test_forward_base_clustered_dispatch() {
         // Config::bpe() has vocab=4096, threshold=4096 → 4096 >= 4096 activates
-        let config = Config::bpe();
+        // Use topk=1 so only 1 cluster is selected (produces -inf for non-cluster tokens)
+        let mut config = Config::bpe();
+        config.mtp_cluster_topk = 1;
         let mut rng = Rng::new(42);
         let mut weights = TransformerWeights::new(&config, &mut rng);
 

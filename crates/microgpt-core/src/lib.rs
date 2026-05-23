@@ -32,6 +32,9 @@ pub use types::{
 #[cfg(feature = "domain_latent")]
 pub use types::DomainLatent;
 
+#[cfg(feature = "sr2am_configurator")]
+pub use types::{ConfiguratorContext, PlanningDecision};
+
 #[cfg(feature = "sparse_mlp")]
 pub use types::sparse_matmul;
 

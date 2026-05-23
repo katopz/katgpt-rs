@@ -356,6 +356,10 @@ pub struct Config {
     /// If remaining tokens < this threshold, MTP is skipped (single-token path).
     /// Prevents MoE overhead on short texts (Plan 117 Phase 2).
     pub mtp_min_output_tokens: usize,
+    /// Top-K cluster selection for clustered LM head (Plan 117 T20).
+    /// When K > 1, compute logits for tokens in top-K clusters instead of just top-1.
+    /// Default 1 = backward compatible (single cluster = current behavior).
+    pub mtp_cluster_topk: usize,
     // HLA Attention (Plan 057: Higher-order Linear Attention)
     pub hla_mode: HlaMode,
     pub hla_normalize: bool,
@@ -427,6 +431,7 @@ impl Config {
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
             mtp_min_output_tokens: usize::MAX,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -525,6 +530,7 @@ impl Config {
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
             mtp_min_output_tokens: usize::MAX,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -595,6 +601,7 @@ impl Config {
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
             mtp_min_output_tokens: usize::MAX,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -655,6 +662,7 @@ impl Config {
             mtp_shared_kv_prompt_threshold: usize::MAX,
             mtp_cluster_size: 512,
             mtp_min_output_tokens: usize::MAX,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -715,7 +723,8 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: 128,
             mtp_cluster_size: 512,
-            mtp_min_output_tokens: usize::MAX,
+            mtp_min_output_tokens: 16,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -774,7 +783,8 @@ impl Config {
             mtp_cluster_vocab_threshold: usize::MAX,
             mtp_shared_kv_prompt_threshold: 128,
             mtp_cluster_size: 512,
-            mtp_min_output_tokens: usize::MAX,
+            mtp_min_output_tokens: 16,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -835,7 +845,8 @@ impl Config {
             mtp_cluster_vocab_threshold: 4096,
             mtp_shared_kv_prompt_threshold: 64,
             mtp_cluster_size: 512,
-            mtp_min_output_tokens: usize::MAX,
+            mtp_min_output_tokens: 16,
+            mtp_cluster_topk: 8,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -896,6 +907,7 @@ impl Config {
             mtp_shared_kv_prompt_threshold: 64,
             mtp_cluster_size: 512,
             mtp_min_output_tokens: usize::MAX,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -957,7 +969,8 @@ impl Config {
             mtp_cluster_vocab_threshold: 256000,
             mtp_shared_kv_prompt_threshold: 8192,
             mtp_cluster_size: 1024,
-            mtp_min_output_tokens: usize::MAX,
+            mtp_min_output_tokens: 16,
+            mtp_cluster_topk: 1,
             hla_mode: HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 1.0,
@@ -1015,6 +1028,9 @@ impl Config {
         if self.model_arch == ModelArchitecture::Generic && self.mtp_cluster_size == 0 {
             return Err("mtp_cluster_size must be > 0".into());
         }
+        if self.mtp_cluster_topk == 0 {
+            return Err("mtp_cluster_topk must be >= 1".into());
+        }
         Ok(())
     }
 
@@ -1059,6 +1075,12 @@ impl Config {
         }
         if let Some(v) = overrides.mtp_cluster_size {
             c.mtp_cluster_size = v;
+        }
+        if let Some(v) = overrides.mtp_min_output_tokens {
+            c.mtp_min_output_tokens = v;
+        }
+        if let Some(v) = overrides.mtp_cluster_topk {
+            c.mtp_cluster_topk = v;
         }
         if let Some(v) = overrides.sp_kv_threshold {
             c.sp_kv_threshold = v;
@@ -1109,6 +1131,12 @@ pub struct InferenceOverrides {
     pub mtp_cluster_vocab_threshold: Option<usize>,
     pub mtp_shared_kv_prompt_threshold: Option<usize>,
     pub mtp_cluster_size: Option<usize>,
+    /// Minimum expected output tokens for MTP (Plan 117 T15).
+    /// When overridden, skips MTP when remaining tokens < threshold.
+    pub mtp_min_output_tokens: Option<usize>,
+    /// Top-K cluster selection for clustered LM head (Plan 117 T22).
+    /// When K > 1, compute logits for tokens in top-K clusters instead of just top-1.
+    pub mtp_cluster_topk: Option<usize>,
     // SP-KV inference-time threshold knob (Plan 070)
     pub sp_kv_threshold: Option<f32>,
     // PTRM width scaling (Plan 083)
@@ -2043,6 +2071,8 @@ mod tests_types {
             mtp_cluster_vocab_threshold: Some(6),
             mtp_shared_kv_prompt_threshold: Some(7),
             mtp_cluster_size: Some(8),
+            mtp_min_output_tokens: Some(10),
+            mtp_cluster_topk: Some(2),
             sp_kv_threshold: Some(0.5),
             width_rollouts: Some(9),
             early_stop_threshold: Some(0.6),
@@ -2064,6 +2094,8 @@ mod tests_types {
         assert_eq!(result.mtp_cluster_vocab_threshold, 6);
         assert_eq!(result.mtp_shared_kv_prompt_threshold, 7);
         assert_eq!(result.mtp_cluster_size, 8);
+        assert_eq!(result.mtp_min_output_tokens, 10);
+        assert_eq!(result.mtp_cluster_topk, 2);
         assert!((result.sp_kv_threshold - 0.5).abs() < 1e-6);
         assert_eq!(result.width_rollouts, 9);
         assert!((result.early_stop_threshold - 0.6).abs() < 1e-6);

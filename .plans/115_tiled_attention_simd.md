@@ -2,16 +2,16 @@
 
 ## Tasks
 
-- [ ] T1: Add `tiled_attention` feature gate to `microgpt-core/Cargo.toml`
-- [ ] T2: Create `microgpt-core/src/attention.rs` with tiled flash attention skeleton
-- [ ] T3: Implement `tiled_attention_forward()` — online softmax with SIMD tile iteration
-- [ ] T4: Implement `exp2` temperature scaling trick (avoid `exp()`, use `exp2()`)
-- [ ] T5: Add threshold heuristic — fall back to full materialization for small N
-- [ ] T6: Wire into `transformer.rs` forward pass behind feature gate
-- [ ] T7: Add benchmark `tests/bench_tiled_attention.rs` — before/after throughput + memory
-- [ ] T8: Add GOAT proof `tests/test_tiled_attention_goat.rs` — cosine similarity > 0.999
-- [ ] T9: Add benchmark result to `.benchmarks/012_tiled_attention_simd.md`
-- [ ] T10: Update `lib.rs` re-exports, update README, commit
+- [x] T1: Add `tiled_attention` feature gate to `microgpt-core/Cargo.toml`
+- [x] T2: Create `microgpt-core/src/attention.rs` with tiled flash attention skeleton
+- [x] T3: Implement `tiled_attention_forward()` — online softmax with SIMD tile iteration
+- [x] T4: Implement `exp2` temperature scaling trick (avoid `exp()`, use `exp2()`)
+- [x] T5: Add threshold heuristic — fall back to full materialization for small N
+- [x] T6: Wire into `transformer.rs` forward pass behind feature gate — integrated into `forward_prefill` Phase B with GQA support, repacks Q/K/V into per-head contiguous layout, threshold=128, compiles w/wo feature, 79 transformer tests pass
+- [x] T7: Add benchmark `tests/bench_tiled_attention.rs` — before/after throughput + memory
+- [x] T8: Add GOAT proof `tests/test_tiled_attention_goat.rs` — cosine similarity > 0.999
+- [x] T9: Add benchmark result to `.benchmarks/012_tiled_attention_simd.md` — cosine sim=1.00000 all configs, peak memory 4KB/head (vs N²×4B), debug throughput at parity
+- [x] T10: Update `lib.rs` re-exports, update README, commit
 
 ## Overview
 
