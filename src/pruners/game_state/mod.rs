@@ -3,204 +3,19 @@
 //! Distilled from STRATEGA framework (Plan 056, Research 27):
 //! - `GameState` trait: forward model API for any game domain
 //! - `StateHeuristic` trait: pluggable evaluation for non-terminal states
+//! - `RolloutPolicy` trait: pluggable action selection for MCTS rollouts
 //! - `ActionSpaceLog`: per-tick branching factor metrics
 //!
 //! Design: snapshot-based — implementors are lightweight `Clone` structs,
 //! NOT wrappers around `bevy_ecs::World` (which isn't `Clone`).
 
-use std::fmt;
+// ── Re-exported from microgpt-core (Plan 107 Phase 0) ─────────────
+// GameState, StateHeuristic, RolloutPolicy, RandomRolloutPolicy, ActionSpaceLog
+// consolidated into microgpt-core/src/traits.rs to eliminate duplication with riir-engine.
 
-use fastrand::Rng;
-
-// ── GameState Trait ────────────────────────────────────────────
-
-/// Forward model trait — any game state that supports what-if simulation.
-///
-/// Implementors must be cheaply cloneable snapshots (~KB, not MB).
-/// The arena converts its internal state → snapshot once per tick,
-/// then search algorithms work entirely on snapshots.
-///
-/// # Type Parameters
-/// - `Action`: the move type for this game domain
-///
-/// # Required Methods
-/// - `available_actions`: legal moves for a player
-/// - `advance`: pure successor state (no mutation)
-/// - `is_terminal`: game-over check
-/// - `reward`: terminal value for a player
-/// - `tick`: current turn number
-pub trait GameState: Clone {
-    /// Move type for this game domain (e.g., `BomberAction`, `fft::Action`).
-    type Action: Clone;
-
-    /// Legal actions for `player_id` in current state.
-    fn available_actions(&self, player_id: u8) -> Vec<Self::Action>;
-
-    /// Apply action, return successor state. Does NOT mutate `self`.
-    fn advance(&self, action: &Self::Action, player_id: u8) -> Self;
-
-    /// Is the game over?
-    fn is_terminal(&self) -> bool;
-
-    /// Terminal reward for `player_id` (higher = better, typically 0..1).
-    fn reward(&self, player_id: u8) -> f32;
-
-    /// Current tick/turn number.
-    fn tick(&self) -> u32;
-
-    /// Number of legal actions for `player_id`.
-    ///
-    /// Default implementation calls `available_actions().len()`.
-    /// Override if you can compute this cheaper than building the full vec.
-    fn action_space_size(&self, player_id: u8) -> usize {
-        self.available_actions(player_id).len()
-    }
-}
-
-// ── StateHeuristic Trait ───────────────────────────────────────
-
-/// Pluggable heuristic for evaluating non-terminal states.
-///
-/// Used by search algorithms (MCTS rollouts, RHEA fitness) when
-/// `is_terminal()` is false but we need a numeric evaluation.
-///
-/// Domain-specific heuristics beat generic search (STRATEGA finding),
-/// so each game provides its own implementation.
-pub trait StateHeuristic<S: GameState> {
-    /// Evaluate state for `player_id`. Higher = better.
-    fn evaluate(&self, state: &S, player_id: u8) -> f32;
-}
-
-// ── RolloutPolicy Trait ────────────────────────────────────────
-
-/// Pluggable rollout policy for MCTS.
-///
-/// Replaces hardcoded random selection with informed action choice.
-/// The default `RandomRolloutPolicy` preserves existing behavior.
-///
-/// # Implementors
-/// - `RandomRolloutPolicy`: uniform random (baseline)
-/// - `BanditRolloutPolicy<S>`: ε-greedy guided by bandit Q-values (Plan 067)
-pub trait RolloutPolicy<S: GameState> {
-    /// Select an action index from `actions` during MCTS rollout.
-    ///
-    /// # Arguments
-    /// * `state` — current rollout state
-    /// * `actions` — available actions for `player_id`
-    /// * `player_id` — which player is acting
-    /// * `rng` — RNG for stochastic policies
-    ///
-    /// # Returns
-    /// Index into `actions` (0..actions.len()).
-    fn select(&mut self, state: &S, actions: &[S::Action], player_id: u8, rng: &mut Rng) -> usize;
-}
-
-/// Uniform random rollout policy — baseline, identical to original MCTS behavior.
-///
-/// Every action has equal probability. Use this as a control group when
-/// comparing against informed rollout policies.
-pub struct RandomRolloutPolicy;
-
-impl<S: GameState> RolloutPolicy<S> for RandomRolloutPolicy {
-    #[inline]
-    fn select(
-        &mut self,
-        _state: &S,
-        actions: &[S::Action],
-        _player_id: u8,
-        rng: &mut Rng,
-    ) -> usize {
-        rng.usize(0..actions.len())
-    }
-}
-
-// ── ActionSpaceLog ─────────────────────────────────────────────
-
-/// Per-tick action space metrics for branching factor analysis.
-///
-/// Tracks how the action space evolves across ticks — useful for:
-/// - Validating search budget vs branching factor
-/// - Detecting game phases (opening → midgame → endgame)
-/// - Comparing action space across game domains
-#[derive(Clone, Debug, Default)]
-pub struct ActionSpaceLog {
-    /// (tick, player_id, action_count) entries.
-    entries: Vec<(u32, u8, usize)>,
-}
-
-impl ActionSpaceLog {
-    /// Create an empty log.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Record action space size for a player at the current tick.
-    pub fn record<S: GameState>(&mut self, state: &S, player_id: u8) {
-        self.entries
-            .push((state.tick(), player_id, state.action_space_size(player_id)));
-    }
-
-    /// Total number of recorded entries.
-    pub fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    /// Is the log empty?
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    /// Average action space size across all entries.
-    pub fn avg_action_space(&self) -> f32 {
-        match self.entries.is_empty() {
-            true => 0.0,
-            false => {
-                self.entries.iter().map(|&(_, _, n)| n as f32).sum::<f32>()
-                    / self.entries.len() as f32
-            }
-        }
-    }
-
-    /// Average action space size for a specific player.
-    pub fn avg_action_space_for(&self, player_id: u8) -> f32 {
-        let filtered: Vec<_> = self
-            .entries
-            .iter()
-            .filter(|&&(_, pid, _)| pid == player_id)
-            .collect();
-        match filtered.is_empty() {
-            true => 0.0,
-            false => {
-                filtered.iter().map(|&&(_, _, n)| n as f32).sum::<f32>() / filtered.len() as f32
-            }
-        }
-    }
-
-    /// Peak (maximum) action space size recorded.
-    pub fn peak_action_space(&self) -> usize {
-        self.entries.iter().map(|&(_, _, n)| n).max().unwrap_or(0)
-    }
-
-    /// Clear all entries.
-    pub fn clear(&mut self) {
-        self.entries.clear();
-    }
-}
-
-impl fmt::Display for ActionSpaceLog {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.entries.is_empty() {
-            true => write!(f, "ActionSpaceLog(empty)"),
-            false => write!(
-                f,
-                "ActionSpaceLog(entries={}, avg={:.1}, peak={})",
-                self.entries.len(),
-                self.avg_action_space(),
-                self.peak_action_space()
-            ),
-        }
-    }
-}
+pub use microgpt_core::traits::{
+    ActionSpaceLog, GameState, RandomRolloutPolicy, RolloutPolicy, StateHeuristic,
+};
 
 // ── Submodules ─────────────────────────────────────────────────
 
@@ -220,13 +35,6 @@ pub use mcts::BanditRolloutPolicy;
 
 #[cfg(all(feature = "bomber", feature = "bandit"))]
 pub use bomber_state::BanditBomberHeuristic;
-
-// Public types defined in this module (no pub use needed — already pub):
-// - `RolloutPolicy<S>` trait
-// - `RandomRolloutPolicy` struct
-// - `StateHeuristic<S>` trait
-// - `GameState` trait
-// - `ActionSpaceLog` struct
 
 // ── Tests ──────────────────────────────────────────────────────
 

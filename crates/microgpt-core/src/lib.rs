@@ -3,13 +3,21 @@
 //! This crate contains the common core shared between the two projects:
 //! - **types**: Config, Rng, math utilities, LoRA, DomainLatent
 //! - **simd**: NEON/AVX2 accelerated linear algebra kernels
+//! - **traits**: Shared traits for game AI and speculative decoding
 //!
 //! No feature flags on types — both projects get the full superset.
 
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 pub mod simd;
+pub mod traits;
 pub mod types;
+
+// Re-export consolidated traits (Plan 107 Phase 0)
+pub use traits::{
+    ActionSpaceLog, BinaryScreeningPruner, ConstraintPruner, GameState, NoPruner,
+    NoScreeningPruner, RandomRolloutPolicy, RolloutPolicy, ScreeningPruner, StateHeuristic,
+};
 
 // Re-export key types at crate root for convenience
 pub use types::{
