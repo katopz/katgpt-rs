@@ -23,7 +23,8 @@ use microgpt_rs::types::{Config, Rng};
 /// Create compatible target/draft configs for micro scale.
 /// Both have vocab_size=27 and block_size=16.
 fn micro_configs() -> (Config, Config) {
-    let target = Config::micro();
+    let mut target = Config::micro();
+    target.mtp_min_output_tokens = 1; // Enable speculative decoding in tests
     let mut draft = Config::draft();
     // Ensure same vocab/block for speculative decoding compatibility
     draft.vocab_size = target.vocab_size;
@@ -36,7 +37,8 @@ fn micro_configs() -> (Config, Config) {
 /// Target: game() with vocab=10, n_embd=16.
 /// Draft:  same vocab, n_embd=4 (4× smaller).
 fn game_configs() -> (Config, Config) {
-    let target = Config::game();
+    let mut target = Config::game();
+    target.mtp_min_output_tokens = 1; // Enable speculative decoding in tests
     let mut draft = target.clone();
     draft.n_embd = 4;
     draft.n_head = 2;

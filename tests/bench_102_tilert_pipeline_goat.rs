@@ -170,7 +170,7 @@ fn proof_3_contiguous_weights_roundtrip() {
 
 #[test]
 fn proof_4_contiguous_weights_multi_layer() {
-    let (config, weights) = make_multi_layer(4);
+    let (_config, weights) = make_multi_layer(4);
     let cw = ContiguousWeights::from_weights(&weights);
     assert_eq!(cw.n_layers(), 4);
     for l in 0..4 {

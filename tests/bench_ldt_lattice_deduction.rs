@@ -77,6 +77,11 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             final_logit_softcapping: 0.0,
             weight_dtype: microgpt_rs::types::WeightDtype::F32,
             d2f_block_size: 8,
+            mtp_min_output_tokens: usize::MAX,
+            mls_layers: 0,
+            loop_mode: microgpt_rs::types::LoopMode::None,
+            hybrid_pattern: microgpt_rs::types::HybridPattern::Uniform,
+            gated_attn: false,
         }
     }
 
