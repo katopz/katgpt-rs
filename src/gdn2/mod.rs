@@ -21,6 +21,20 @@
 //! | **Full** | Channel-wise [dk] | Channel-wise [dv] | Maximum quality |
 //! | **KDA** | Scalar β (tied) | Scalar β (tied) | Baseline comparison |
 //!
+//! # State Size Comparison
+//!
+//! | Config | Flat KV (O(N)) | AHLA (O(1)) | GDN2 (O(1)) | GDN2 Savings vs Flat |
+//! |--------|----------------|-------------|-------------|---------------------|
+//! | micro (hd=4, block=16) | 2,048 B | 640 B | 448 B | 78.1% |
+//! | game (hd=8, block=170) | 43,520 B | 2,304 B | 2,816 B | 93.5% |
+//! | bpe (hd=8, block=256) | 65,536 B | 2,304 B | 2,816 B | 95.7% |
+//!
+//! GDN2 state per head: d_k × d_v floats (persistent) + 2×d_k + d_v (projected per token, temp).
+//! For micro (d_k=d_v=4): 16 + 12 = 28 floats/head = 112 B.
+//! For game/bpe (d_k=d_v=8): 64 + 24 = 88 floats/head = 352 B.
+//!
+//! Both GDN2 and AHLA are O(1) constant — the key advantage over flat KV's O(N) growth.
+//!
 //! # Usage
 //!
 //! ```ignore
@@ -40,7 +54,7 @@
 //!
 //! Reference: Yang, Zhang, Kautz (2024). "Gated Delta Networks: Fast Recurrent
 //! Language Models with Constant-State Attention."
-//! See `.research/70_Gated_DeltaNet_2.md` for full derivation.
+//! See `.research/070_Gated_DeltaNet_2.md` for full derivation.
 
 pub mod forward;
 pub mod kernel;

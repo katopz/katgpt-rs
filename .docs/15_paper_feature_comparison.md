@@ -238,7 +238,7 @@ Top co-occurring pairs:
 ### Linear / Sub-Quadratic Attention
 | Papers | Count |
 |--------|-------|
-| 06 (Raven), 24 (Delta-Mem), 28 (HLA), 42 (SP-KV), 45 (MaxSim) | **5** |
+| 06 (Raven), 24 (Delta-Mem), 28 (HLA), 42 (SP-KV), 45 (MaxSim), 70 (GDN2) | **6** |
 
 ### Hybrid / Novel Architecture
 | Papers | Count |
@@ -263,6 +263,7 @@ Top co-occurring pairs:
 | 08 TwELL | Sparse MLP matmul for ReLU activations | `types.rs sparse_matmul` |
 | 20 TurboQuant | 3-bit KV cache quantization (legacy baseline) | `turboquant` module |
 | 28 HLA/AHLA | Second-order linear attention, 88% memory savings | `forward_hla`, `forward_ahla` |
+| 70 GDN2 | Gated DeltaNet-2, decoupled erase/write gates, O(1) decode, 78–96% memory savings | `src/gdn2/`, `gdn2_attention` feature |
 | 39 SpectralQuant | Eigenbasis rotation + water-fill (secondary KV, 9.1× compression) | `spectralquant` module |
 | 63 OCTOPUS | Octahedral triplet codec (**primary default**, 12.2× compression, -22% to -49% MSE vs SQ) | `octopus` module |
 | 40 BT Ranking | Bradley-Terry pairwise ranking (**default**, GOAT 4/4) | `pruners/bt_rank.rs` |
@@ -347,4 +348,4 @@ SIMD/Perf             ███████████████████�
 
 ## References
 
-All papers are located in `microgpt-rs/.research/` with filenames `{index}_{Title}.md` where index ranges from 00 to 61 (plus 061 for Delta Attention Residuals). See individual research files for full analysis, verdicts, and implementation details.
+All papers are located in `microgpt-rs/.research/` with filenames `{index}_{Title}.md` where index ranges from 00 to 73 (plus 061 for Delta Attention Residuals). See individual research files for full analysis, verdicts, and implementation details. Key post-62 papers: 70 (GDN2 recurrent attention), 71 (DashAttention sparse), 72 (DMax SPD), 73 (LT2 looped inference).

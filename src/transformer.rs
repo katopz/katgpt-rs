@@ -631,6 +631,7 @@ fn forward_looped<'a>(
     pos: usize,
     config: &Config,
     residual_gate: &crate::types::ResidualGate,
+    sdpa_gate: &crate::types::SdpaOutputGate,
 ) -> &'a mut [f32] {
     use crate::types::{HybridPattern, LoopMode};
 
@@ -745,14 +746,11 @@ fn forward_looped<'a>(
                 }
             }
 
-            // SDPA output gate (if configured)
+            // SDPA output gate (if configured): sigmoid(W_gate @ attn_out) ⊙ attn_out
+            // Zero-init weights → sigmoid(0) = 0.5 (neutral half-pass).
+            // Paper: +0.3–0.5 avg points on zero-shot benchmarks.
             if config.gated_attn && is_full {
-                // sigmoid gate with zero-init weights → sigmoid(0) = 0.5
-                for v in ctx.attn_out[..n].iter_mut() {
-                    // Simple elementwise gate: sigmoid(w·x) · x
-                    // At zero-init w=0: sigmoid(0) = 0.5, so output = 0.5 * attn_out
-                    *v *= 0.5; // Neutral gate at init
-                }
+                sdpa_gate.forward(&mut ctx.attn_out[..n], n, &mut ctx.scores[..n]);
             }
 
             // Output projection + residual

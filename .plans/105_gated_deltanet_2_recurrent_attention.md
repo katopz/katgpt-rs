@@ -69,9 +69,9 @@ Implement Gated DeltaNet-2 (GDN2) recurrent attention as an alternative to HLA/A
   3. `gdn2_logits_finite` (no NaN/Inf at any position)
 
 ### Phase 6: Documentation
-- [ ] **T19:** Update `README.md` — add GDN2 section under HLA, with benchmark table placeholder
-- [ ] **T20:** Update `.docs/15_paper_feature_comparison.md` — add GDN2 row
-- [ ] **T21:** Update `src/gdn2/mod.rs` doc comment with usage example and state size comparison table
+- [x] **T19:** Update `README.md` — add GDN2 section under HLA, with benchmark table placeholder
+- [x] **T20:** Update `.docs/15_paper_feature_comparison.md` — add GDN2 row
+- [x] **T21:** Update `src/gdn2/mod.rs` doc comment with usage example and state size comparison table
 
 ## Architecture
 

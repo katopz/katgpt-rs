@@ -201,6 +201,33 @@ impl SdpaOutputGate {
             w_gate: vec![0.0; n_heads * head_dim * dim],
         }
     }
+
+    /// Apply sigmoid-gated projection to attention output.
+    ///
+    /// Computes: gate[i] = sigmoid(W_gate[i] · attn_out), then attn_out[i] *= gate[i].
+    /// Zero-init weights produce sigmoid(0) = 0.5 for all (neutral half-pass).
+    /// Paper reference: +0.3–0.5 avg points on zero-shot benchmarks.
+    pub fn forward(&self, attn_out: &mut [f32], dim: usize, temp: &mut [f32]) {
+        let n = attn_out.len();
+        debug_assert!(temp.len() >= n, "temp buffer too small");
+        debug_assert!(self.w_gate.len() >= n * dim, "gate weights too small");
+
+        // Step 1: Compute gate signal = sigmoid(W_gate @ attn_out)
+        for (i, gate_val) in temp.iter_mut().enumerate().take(n) {
+            let w_off = i * dim;
+            let dot: f32 = self.w_gate[w_off..w_off + dim]
+                .iter()
+                .zip(attn_out.iter())
+                .map(|(w, a)| w * a)
+                .sum();
+            *gate_val = 1.0 / (1.0 + (-dot).exp()); // sigmoid
+        }
+
+        // Step 2: Apply gate elementwise
+        for (attn, gate) in attn_out.iter_mut().zip(temp.iter()) {
+            *attn *= gate;
+        }
+    }
 }
 
 /// Per-loop residual scaling gate.

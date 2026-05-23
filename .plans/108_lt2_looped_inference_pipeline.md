@@ -36,21 +36,21 @@ Our specific advantage: we already have AHLA (asymmetric second-order linear att
 - [x] T13: Update `TransformerWeights::new()` to generate residual gate params
 
 ### Phase 3: SDPA Output Gate
-- [ ] T14: Implement `SdpaOutputGate::forward()` — sigmoid gate after SDPA, before Wo
-- [ ] T15: Zero-init gate weights (starts at sigmoid(0) = 0.5 neutral)
-- [ ] T16: Integrate gate into attention path (gated_attn config flag)
+- [x] T14: Implement `SdpaOutputGate::forward()` — sigmoid gate after SDPA, before Wo
+- [x] T15: Zero-init gate weights (starts at sigmoid(0) = 0.5 neutral)
+- [x] T16: Integrate gate into attention path (gated_attn config flag)
 
 ### Phase 4: Hybrid Dispatch (SDPA + AHLA)
-- [ ] T17: Implement `HybridPattern` layer-type dispatch in forward loop
-- [ ] T18: Handle mixed KV cache: AHLA layers use constant state, SDPA layers use KV cache
-- [ ] T19: Implement `HybridPattern::Interleave { full_ratio: 5 }` (flagship 1:4 recipe)
-- [ ] T20: Implement `HybridPattern::Bookend` (full at top+bottom)
-- [ ] T21: Implement `HybridPattern::Uniform` (all linear or all full)
+- [x] T17: Implement `HybridPattern` layer-type dispatch in forward loop
+- [x] T18: Handle mixed KV cache: AHLA layers use constant state, SDPA layers use KV cache
+- [x] T19: Implement `HybridPattern::Interleave { full_ratio: 5 }` (flagship 1:4 recipe)
+- [x] T20: Implement `HybridPattern::Bookend` (full at top+bottom)
+- [x] T21: Implement `HybridPattern::Uniform` (all linear or all full)
 
 ### Phase 5: Looped AHLA State Carry
-- [ ] T22: Extend `AhlaState` to support cross-loop accumulation
-- [ ] T23: Implement rank-T state upgrade in AHLA recurrence (keys change per loop)
-- [ ] T24: Verify AHLA state isolation: each layer maintains independent state
+- [x] T22: Extend `AhlaState` to support cross-loop accumulation
+- [x] T23: Implement rank-T state upgrade in AHLA recurrence (keys change per loop)
+- [x] T24: Verify AHLA state isolation: each layer maintains independent state
 
 ### Phase 6: GOAT Proof & Benchmarks
 - [ ] T25: Benchmark looped AHLA (T=4) vs naive looped SDPA — `bench_lt2_ahla_loop`
