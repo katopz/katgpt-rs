@@ -1,0 +1,372 @@
+//! Learned chunk summaries via head_cls vectors.
+//!
+//! Each KV-head has a learnable `head_cls` query vector used to summarize a
+//! chunk of keys via local SDPA: k̄_c = softmax(q̄ · K_chunk / √d) · K_chunk.
+//! When `head_cls` is zero-initialized (default), this degenerates to mean
+//! pooling for backward compatibility.
+
+// ---------------------------------------------------------------------------
+// ChunkSummaryQuery
+// ---------------------------------------------------------------------------
+
+/// Per-KV-head learned query for chunk summarization.
+///
+/// `head_cls` layout: `[n_kv_head * head_dim]`.
+/// Zero-initialized by default → mean pooling (backward-compatible).
+/// After training, these vectors learn to attend to the most informative
+/// positions within each chunk.
+#[derive(Clone)]
+pub struct ChunkSummaryQuery {
+    /// Learned class token embeddings: flat `[n_kv_head * head_dim]`.
+    pub head_cls: Vec<f32>,
+    pub n_kv_head: usize,
+    pub head_dim: usize,
+}
+
+impl ChunkSummaryQuery {
+    /// Create with zero-initialized `head_cls` (mean-pooling mode).
+    pub fn new(n_kv_head: usize, head_dim: usize) -> Self {
+        Self {
+            head_cls: vec![0.0; n_kv_head * head_dim],
+            n_kv_head,
+            head_dim,
+        }
+    }
+
+    /// Create with random initialization for training.
+    pub fn new_random(n_kv_head: usize, head_dim: usize, rng: &mut crate::types::Rng) -> Self {
+        let scale = (2.0 / head_dim as f32).sqrt();
+        let mut head_cls = Vec::with_capacity(n_kv_head * head_dim);
+        for _ in 0..n_kv_head * head_dim {
+            head_cls.push(rng.normal() * scale);
+        }
+        Self {
+            head_cls,
+            n_kv_head,
+            head_dim,
+        }
+    }
+
+    /// Get query slice for a specific head.
+    #[inline]
+    pub fn head_query(&self, head_idx: usize) -> &[f32] {
+        let start = head_idx * self.head_dim;
+        &self.head_cls[start..start + self.head_dim]
+    }
+
+    /// Check if head_cls is effectively zero (mean-pooling mode).
+    pub fn is_zero_init(&self) -> bool {
+        self.head_cls.iter().all(|&x| x.abs() < 1e-8)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ChunkSummaryCache
+// ---------------------------------------------------------------------------
+
+/// Cache for completed chunk summaries: `[n_chunks][n_kv_head][head_dim]`.
+///
+/// Populated during prefill; reused during decode for routing.
+#[derive(Clone)]
+pub struct ChunkSummaryCache {
+    /// Summaries indexed by chunk: `[n_chunks][n_kv_head][head_dim]`.
+    pub summaries: Vec<Vec<Vec<f32>>>,
+    pub n_kv_head: usize,
+    pub head_dim: usize,
+}
+
+impl ChunkSummaryCache {
+    /// Create an empty cache.
+    pub fn new(n_kv_head: usize, head_dim: usize) -> Self {
+        Self {
+            summaries: Vec::new(),
+            n_kv_head,
+            head_dim,
+        }
+    }
+
+    /// Pre-allocate for a known number of chunks.
+    pub fn allocate(&mut self, n_chunks: usize) {
+        self.summaries = (0..n_chunks)
+            .map(|_| {
+                (0..self.n_kv_head)
+                    .map(|_| vec![0.0; self.head_dim])
+                    .collect()
+            })
+            .collect();
+    }
+
+    /// Append a single chunk summary (one entry per KV head).
+    pub fn append(&mut self, summary: Vec<Vec<f32>>) {
+        debug_assert_eq!(summary.len(), self.n_kv_head);
+        for head_summary in &summary {
+            debug_assert_eq!(head_summary.len(), self.head_dim);
+        }
+        self.summaries.push(summary);
+    }
+
+    /// View summaries for a specific chunk (all heads).
+    pub fn view(&self, chunk_idx: usize) -> &[Vec<f32>] {
+        &self.summaries[chunk_idx]
+    }
+
+    /// Number of cached chunks.
+    pub fn n_chunks(&self) -> usize {
+        self.summaries.len()
+    }
+
+    /// Clear for a new sequence.
+    pub fn reset(&mut self) {
+        self.summaries.clear();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Chunk summarization kernel
+// ---------------------------------------------------------------------------
+
+/// Summarize a chunk via local SDPA: k̄_c = softmax(q̄ · K_chunk / √d) · K_chunk.
+///
+/// At zero-init `head_cls`: returns mean pooling of all keys in the chunk.
+///
+/// # Arguments
+/// * `query` - The chunk summary query holding learned `head_cls` vectors.
+/// * `chunk_keys` - Flat key buffer `[chunk_size * head_dim]` for one KV head.
+/// * `chunk_size` - Number of tokens in this chunk.
+/// * `head_idx` - Which KV head to summarize.
+/// * `head_dim` - Dimension per head (must match query and key layout).
+#[inline]
+pub fn summarize_chunk(
+    query: &ChunkSummaryQuery,
+    chunk_keys: &[f32],
+    chunk_size: usize,
+    head_idx: usize,
+    head_dim: usize,
+) -> Vec<f32> {
+    let hd = head_dim;
+    let q = query.head_query(head_idx);
+
+    // Check if query is zero → mean pooling fallback
+    let q_norm: f32 = q.iter().map(|&x| x * x).sum::<f32>().sqrt();
+    if q_norm < 1e-8 {
+        return mean_pool_keys(chunk_keys, chunk_size, hd);
+    }
+
+    // Compute attention scores: q · k_t / sqrt(d)
+    let scale = 1.0 / (hd as f32).sqrt();
+    let mut scores = vec![0.0f32; chunk_size];
+    for t in 0..chunk_size {
+        let k_start = t * hd;
+        let mut dot = 0.0f32;
+        for d in 0..hd {
+            dot += q[d] * chunk_keys[k_start + d];
+        }
+        scores[t] = dot * scale;
+    }
+
+    // Softmax (numerically stable)
+    softmax_inplace(&mut scores);
+
+    // Weighted sum of keys → summary
+    let mut summary = vec![0.0f32; hd];
+    for t in 0..chunk_size {
+        let k_start = t * hd;
+        for d in 0..hd {
+            summary[d] += scores[t] * chunk_keys[k_start + d];
+        }
+    }
+
+    summary
+}
+
+/// Mean pooling over chunk keys (zero-init fallback).
+fn mean_pool_keys(chunk_keys: &[f32], chunk_size: usize, head_dim: usize) -> Vec<f32> {
+    let mut summary = vec![0.0f32; head_dim];
+    if chunk_size == 0 {
+        return summary;
+    }
+    for t in 0..chunk_size {
+        let k_start = t * head_dim;
+        for d in 0..head_dim {
+            summary[d] += chunk_keys[k_start + d];
+        }
+    }
+    let inv = 1.0 / chunk_size as f32;
+    for d in &mut summary {
+        *d *= inv;
+    }
+    summary
+}
+
+/// In-place softmax with max subtraction for numerical stability.
+fn softmax_inplace(scores: &mut [f32]) {
+    if scores.is_empty() {
+        return;
+    }
+    let max_val = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let mut sum_exp = 0.0f32;
+    for s in scores.iter_mut() {
+        *s = (*s - max_val).exp();
+        sum_exp += *s;
+    }
+    if sum_exp > 0.0 {
+        for s in scores.iter_mut() {
+            *s /= sum_exp;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const N_KV_HEAD: usize = 2;
+    const HEAD_DIM: usize = 4;
+
+    #[test]
+    fn test_chunk_summary_query_new_zero() {
+        let query = ChunkSummaryQuery::new(N_KV_HEAD, HEAD_DIM);
+        assert!(query.is_zero_init());
+        assert_eq!(query.head_cls.len(), N_KV_HEAD * HEAD_DIM);
+        assert_eq!(query.n_kv_head, N_KV_HEAD);
+        assert_eq!(query.head_dim, HEAD_DIM);
+    }
+
+    #[test]
+    fn test_chunk_summary_query_head_slices() {
+        let mut query = ChunkSummaryQuery::new(N_KV_HEAD, HEAD_DIM);
+        // Write different values per head
+        query.head_cls[0..HEAD_DIM].copy_from_slice(&[1.0, 2.0, 3.0, 4.0]);
+        query.head_cls[HEAD_DIM..2 * HEAD_DIM].copy_from_slice(&[5.0, 6.0, 7.0, 8.0]);
+
+        let h0 = query.head_query(0);
+        assert_eq!(h0, &[1.0, 2.0, 3.0, 4.0]);
+        let h1 = query.head_query(1);
+        assert_eq!(h1, &[5.0, 6.0, 7.0, 8.0]);
+    }
+
+    #[test]
+    fn test_chunk_summary_cache_allocate() {
+        let mut cache = ChunkSummaryCache::new(N_KV_HEAD, HEAD_DIM);
+        cache.allocate(3);
+        assert_eq!(cache.n_chunks(), 3);
+        // Each chunk has n_kv_head entries, each of length head_dim
+        for chunk in &cache.summaries {
+            assert_eq!(chunk.len(), N_KV_HEAD);
+            for head_summary in chunk {
+                assert_eq!(head_summary.len(), HEAD_DIM);
+                assert!(head_summary.iter().all(|&x| x == 0.0));
+            }
+        }
+    }
+
+    #[test]
+    fn test_chunk_summary_cache_append() {
+        let mut cache = ChunkSummaryCache::new(N_KV_HEAD, HEAD_DIM);
+        let summary = vec![vec![1.0, 2.0, 3.0, 4.0], vec![5.0, 6.0, 7.0, 8.0]];
+        cache.append(summary.clone());
+        assert_eq!(cache.n_chunks(), 1);
+        assert_eq!(cache.view(0)[0], &[1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_chunk_summary_cache_reset() {
+        let mut cache = ChunkSummaryCache::new(N_KV_HEAD, HEAD_DIM);
+        cache.append(vec![vec![0.0; HEAD_DIM]; N_KV_HEAD]);
+        cache.append(vec![vec![0.0; HEAD_DIM]; N_KV_HEAD]);
+        assert_eq!(cache.n_chunks(), 2);
+        cache.reset();
+        assert_eq!(cache.n_chunks(), 0);
+    }
+
+    #[test]
+    fn test_summarize_chunk_mean_pool_fallback() {
+        let query = ChunkSummaryQuery::new(1, HEAD_DIM);
+        // 3 tokens, each with known keys
+        let chunk_keys: Vec<f32> = vec![
+            1.0, 0.0, 0.0, 0.0, // token 0
+            0.0, 2.0, 0.0, 0.0, // token 1
+            0.0, 0.0, 3.0, 0.0, // token 2
+        ];
+        let summary = summarize_chunk(&query, &chunk_keys, 3, 0, HEAD_DIM);
+        // Mean of the 3 vectors: [1/3, 2/3, 1.0, 0.0]
+        let expected = [1.0 / 3.0, 2.0 / 3.0, 1.0, 0.0];
+        for (i, (&got, &exp)) in summary.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 1e-6,
+                "mean pool mismatch at dim {i}: got {got}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_summarize_chunk_with_learned_query() {
+        let mut query = ChunkSummaryQuery::new(1, HEAD_DIM);
+        // Use large magnitude so softmax concentrates sharply on matching token.
+        // [0, 100, 0, 0] · token 1 [0, 2, 0, 0] = 200 (dominant).
+        query.head_cls[0..HEAD_DIM].copy_from_slice(&[0.0, 100.0, 0.0, 0.0]);
+
+        let chunk_keys: Vec<f32> = vec![
+            1.0, 0.0, 0.0, 0.0, // token 0
+            0.0, 2.0, 0.0, 0.0, // token 1
+            0.0, 0.0, 3.0, 0.0, // token 2
+        ];
+        let summary = summarize_chunk(&query, &chunk_keys, 3, 0, HEAD_DIM);
+
+        // Attention should heavily concentrate on token 1 → summary ≈ [0, 2, 0, 0]
+        let expected = [0.0, 2.0, 0.0, 0.0];
+        for (i, (&got, &exp)) in summary.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (got - exp).abs() < 1e-2,
+                "learned query mismatch at dim {i}: got {got}, expected {exp}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_summarize_chunk_single_token() {
+        let query = ChunkSummaryQuery::new(1, HEAD_DIM);
+        let chunk_keys: Vec<f32> = vec![4.0, 5.0, 6.0, 7.0];
+        let summary = summarize_chunk(&query, &chunk_keys, 1, 0, HEAD_DIM);
+        // Single token mean pool = the token itself
+        assert_eq!(summary, &[4.0, 5.0, 6.0, 7.0]);
+    }
+
+    #[test]
+    fn test_mean_pool_keys_empty_chunk() {
+        let result = mean_pool_keys(&[], 0, 4);
+        assert_eq!(result, &[0.0; 4]);
+    }
+
+    #[test]
+    fn test_softmax_inplace_uniform() {
+        let mut scores = vec![1.0, 1.0, 1.0];
+        softmax_inplace(&mut scores);
+        // All equal → uniform 1/3
+        for &s in &scores {
+            assert!((s - 1.0 / 3.0).abs() < 1e-6, "expected 1/3, got {s}");
+        }
+    }
+
+    #[test]
+    fn test_softmax_inplace_peaked() {
+        let mut scores = vec![10.0, 0.0, 0.0];
+        softmax_inplace(&mut scores);
+        let dominant = scores[0];
+        assert!(
+            dominant > 0.99,
+            "expected near-1.0 for dominant, got {dominant}"
+        );
+        assert!(scores[1] < 0.01);
+        assert!(scores[2] < 0.01);
+        let sum: f32 = scores.iter().sum();
+        assert!(
+            (sum - 1.0).abs() < 1e-6,
+            "softmax must sum to 1.0, got {sum}"
+        );
+    }
+}
