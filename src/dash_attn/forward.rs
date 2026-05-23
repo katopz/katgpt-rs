@@ -290,7 +290,7 @@ mod tests {
         let mut summary_cache = ChunkSummaryCache::new(config.n_kv_head, config.head_dim);
 
         let tokens = vec![0, 1, 2];
-        let n_chunks = (tokens.len() + dash_config.chunk_size - 1) / dash_config.chunk_size + 1;
+        let n_chunks = tokens.len().div_ceil(dash_config.chunk_size) + 1;
         summary_cache.allocate(n_chunks.max(1));
 
         forward_dash_attn_prefill(

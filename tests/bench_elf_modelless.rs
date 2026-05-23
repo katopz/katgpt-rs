@@ -278,7 +278,7 @@ fn bench_logit_normal_schedule_overhead() {
 #[cfg(feature = "dllm")]
 #[test]
 fn bench_d2f_schedule_comparison() {
-    use microgpt_rs::speculative::d2f::{D2fBlockResult, d2f_decode_block};
+    use microgpt_rs::speculative::d2f::d2f_decode_block;
     use microgpt_rs::speculative::types::NoPruner;
     use microgpt_rs::types::Rng;
 

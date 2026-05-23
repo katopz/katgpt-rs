@@ -31,7 +31,7 @@ fn test_prefill_then_decode_integration() {
     let mut summary_cache = ChunkSummaryCache::new(config.n_kv_head, config.head_dim);
 
     let tokens = vec![0, 1, 2];
-    let n_chunks = (tokens.len() + dash_config.chunk_size - 1) / dash_config.chunk_size + 1;
+    let n_chunks = tokens.len().div_ceil(dash_config.chunk_size) + 1;
     summary_cache.allocate(n_chunks.max(1));
 
     forward_dash_attn_prefill(
@@ -340,7 +340,7 @@ fn test_chunk_summary_cache_lifecycle() {
     assert_eq!(cache.n_chunks(), 3);
 
     // Summarize and store
-    let keys = vec![1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+    let keys = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0];
     for c in 0..3 {
         for h in 0..n_kv {
             let offset = h * hd;
@@ -364,8 +364,10 @@ fn test_chunk_summary_cache_lifecycle() {
 fn test_prefill_multiple_chunk_boundaries() {
     let config = Config::micro();
     let weights = random_weights(&config);
-    let mut dash_config = DashAttnConfig::default();
-    dash_config.chunk_size = 2; // Small chunk for testing
+    let dash_config = DashAttnConfig {
+        chunk_size: 2,
+        ..DashAttnConfig::default()
+    };
 
     let summary_query = ChunkSummaryQuery::new(config.n_kv_head, config.head_dim);
     let mut summary_cache = ChunkSummaryCache::new(config.n_kv_head, config.head_dim);
@@ -375,7 +377,7 @@ fn test_prefill_multiple_chunk_boundaries() {
 
     // 6 tokens with chunk_size=2 → 3 chunk boundaries (pos 0, 2, 4)
     let tokens = vec![0, 1, 2, 3, 4, 5];
-    let n_chunks = (tokens.len() + dash_config.chunk_size - 1) / dash_config.chunk_size;
+    let n_chunks = tokens.len().div_ceil(dash_config.chunk_size);
     summary_cache.allocate(n_chunks);
 
     forward_dash_attn_prefill(
