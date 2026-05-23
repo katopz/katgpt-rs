@@ -1,13 +1,41 @@
 # 084 — Strategic Puzzle TUI: Boss Chase, Traps, Keys, Levers
 
+## Tasks
+
+- [x] Round 1: 🐻 BruteForce solver (exhaustive tree, uniform marginals)
+- [x] Round 2: 🐰 AI solver (belief-state lever discovery, weighted marginals)
+- [x] Round 3: 🦊 Hybrid solver (AI discovers levers, brute force ordering)
+- [x] Three-round TUI flow with auto-transition
+- [x] Nav bar comparison metrics across all rounds
+
 ## Overview
 
 Extend the tactical AI framework with a richer strategic puzzle game featuring:
 - **Traps** — deadly tiles the player must avoid (or lure boss into)
 - **Boss chase** — unkillable boss pursues player each step; must be lured into trap
-- **Random keys** — 3 keys for 3 boxes, unknown mapping (permutation search)
+- **Random keys** — 2 keys for 2 boxes, unknown mapping (permutation search)
 - **3 levers** — must be pulled in correct order to open bridge
 - **Bridge** — blocks path to goal until levers solved
+
+## Three-Round Solver Comparison
+
+| Round | Emoji | Strategy | Tree | Marginals | Research Insight |
+|-------|-------|----------|------|-----------|------------------|
+| 1 | 🐻 BruteForce | Visit ALL targets, enumerate all permutations | Full | Uniform 1/n | Baseline — exhaustive search |
+| 2 | 🐰 AI | Belief-state lever discovery, weighted marginals | Pruned | Zero for undiscovered levers | AI reasoning reduces search space |
+| 3 | 🦊 Hybrid | AI discovers levers, brute force ordering | Pruned (levers only) | Uniform for valid targets | AI for science, BF for logistics |
+
+### Round 3: 🦊 Hybrid — AI Reasoning + Brute Force Ordering
+
+The hybrid solver demonstrates that **intelligent problem-solving mixes reasoning with enumeration**:
+
+1. **AI does the "science"** — `discover_levers` uses hypothesis testing (Occam's razor) to determine which levers open the bridge
+2. **Brute force does the "logistics"** — uniform marginals let the tree explore visit orderings equally, no AI bias on sequencing
+3. **Result**: Tree is smaller than 🐻 (pruned levers) but marginals are uniform (no weighting like 🐰)
+
+This models real AI behavior: reason about *what* matters, enumerate *how* to arrange it.
+
+Expected outcome: 🦊 tree size between 🐰 and 🐻, steps similar to both (same optimal path), but demonstrates the cognitive budget concept — reasoning where it helps, brute force where the space is small enough.
 
 This creates a **multi-layered constraint puzzle** where the DDTree must reason about:
 - Path avoidance (traps)
@@ -17,8 +45,13 @@ This creates a **multi-layered constraint puzzle** where the DDTree must reason 
 
 ## Architecture
 
-### New File
-- `examples/tactical_07_strategic.rs` — self-contained strategic puzzle with TUI
+### File
+- `examples/tactical_07_strategic.rs` — self-contained strategic puzzle with 3-round TUI
+
+### Solver Functions
+- `solve()` — BruteForce: uniform marginals, `StrategicPruner`, parallel shortest sequence
+- `solve_ai()` — AI: `discover_levers` → `AiPruner`, weighted marginals, fallback with soft weights
+- `solve_hybrid()` — Hybrid: `discover_levers` → `AiPruner`, uniform marginals for valid targets, fallback to full BF
 
 ### Game State Extensions
 ```rust

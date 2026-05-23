@@ -65,6 +65,7 @@ const CHECK: &str = "✓";
 const ARROW: &str = "▸";
 const SKULL: &str = "☠";
 const RABBIT: &str = "🐰";
+const FOX: &str = "🦊";
 
 // ── Timing ─────────────────────────────────────────────────────
 
@@ -149,6 +150,7 @@ enum Target {
 }
 
 /// Record of when each target is reached (step index).
+#[derive(Clone)]
 struct Milestone {
     #[allow(dead_code)]
     target_idx: usize,
@@ -156,6 +158,7 @@ struct Milestone {
 }
 
 /// Computed solution with metadata.
+#[derive(Clone)]
 struct Solution {
     target_sequence: Vec<usize>,
     milestones: Vec<Milestone>,
@@ -911,6 +914,101 @@ impl ConstraintPruner for AiPruner<'_> {
 }
 
 /// AI solver: discovers lever combination through simulation, then solves.
+/// Hybrid solver: AI discovers which levers matter (reasoning),
+/// then brute-forces the visit ordering with uniform marginals (logistics).
+/// Tree is smaller than BF (pruned levers) but marginals are uniform (no AI bias).
+/// This models "AI for science, brute force for logistics."
+fn solve_hybrid(game: &StrategicGame) -> Option<Solution> {
+    let start = Instant::now();
+    let targets = enumerate_targets(game.keys.len(), game.boxes.len(), game.levers.len());
+    let num_targets = targets.len();
+
+    // Phase 1: AI reasoning — discover which levers to visit
+    let (discovered, observations) = discover_levers(game);
+    eprintln!(
+        "🦊 Hybrid: discovered lever subset {:?} in {}/{} hypotheses",
+        discovered,
+        observations,
+        (1u8 << game.levers.len()) - 2
+    );
+
+    // Phase 2: Brute force ordering — uniform marginals, but pruner skips undiscovered levers
+    let pruner = AiPruner::new(game, &discovered);
+
+    let mut config = Config::draft();
+    config.vocab_size = num_targets;
+    config.draft_lookahead = num_targets;
+    config.tree_budget = 100_000;
+
+    // Uniform marginals for ALL non-pruned targets — no AI weighting bias
+    // This is the "brute force ordering" part: the tree explores equally
+    let discovered_set: std::collections::HashSet<usize> = discovered.iter().copied().collect();
+    let mut probs = vec![0.0f32; num_targets];
+    for (i, target) in targets.iter().enumerate() {
+        let is_valid = match target {
+            Target::Lever(l) => discovered_set.contains(l),
+            _ => true,
+        };
+        if is_valid {
+            probs[i] = 1.0; // uniform — no distance-based bias
+        }
+    }
+    let sum: f32 = probs.iter().sum();
+    if sum > 0.0 {
+        for p in &mut probs {
+            *p /= sum;
+        }
+    }
+
+    let marginals = vec![probs; config.draft_lookahead];
+    let refs: Vec<&[f32]> = marginals.iter().map(|v| v.as_slice()).collect();
+
+    let tree = build_dd_tree_pruned(&refs, &config, &pruner, false);
+    let hybrid_nodes = tree.len();
+    eprintln!("🦊 DDTree: {hybrid_nodes} nodes (hybrid: AI-pruned levers, BF ordering)");
+
+    let result = par_find_shortest_sequence(
+        &tree,
+        |seq| try_sequence(game, seq, &targets),
+        |(actions, _, _)| actions.len(),
+    );
+
+    // Fallback: same as AI — retry with all levers if discovered-only fails
+    let (result, final_nodes) = match result {
+        some @ Some(_) => (some, hybrid_nodes),
+        None => {
+            let fallback_pruner = StrategicPruner::new(game);
+            let uniform = vec![1.0f32 / num_targets as f32; num_targets];
+            let fallback_marginals = vec![uniform; config.draft_lookahead];
+            let frefs: Vec<&[f32]> = fallback_marginals.iter().map(|v| v.as_slice()).collect();
+            let fallback_tree = build_dd_tree_pruned(&frefs, &config, &fallback_pruner, false);
+            let fb_nodes = fallback_tree.len();
+            eprintln!("🦊 DDTree: {fb_nodes} nodes (hybrid fallback — full BF)");
+            (
+                par_find_shortest_sequence(
+                    &fallback_tree,
+                    |seq| try_sequence(game, seq, &targets),
+                    |(actions, _, _)| actions.len(),
+                ),
+                fb_nodes,
+            )
+        }
+    };
+
+    let total = start.elapsed();
+    result.map(
+        |(target_sequence, (actions, states, milestones))| Solution {
+            target_sequence,
+            milestones,
+            actions,
+            states,
+            solve_time_ms: total.as_millis() as u64,
+            tree_nodes: final_nodes,
+            levers_discovered: observations,
+        },
+    )
+}
+
 fn solve_ai(game: &StrategicGame) -> Option<Solution> {
     let start = Instant::now();
     let targets = enumerate_targets(game.keys.len(), game.boxes.len(), game.levers.len());
@@ -1021,6 +1119,7 @@ fn solve_ai(game: &StrategicGame) -> Option<Solution> {
 enum SolveMode {
     BruteForce,
     Ai,
+    Hybrid,
 }
 
 enum Phase {
@@ -1048,6 +1147,7 @@ struct App {
     game: StrategicGame,
     bf: Solution,
     ai: Solution,
+    hybrid: Solution,
     mode: SolveMode,
     current: usize,
     anim: Option<AnimState>,
@@ -1056,11 +1156,12 @@ struct App {
 }
 
 impl App {
-    fn new(game: StrategicGame, bf: Solution, ai: Solution, seed: u64) -> Self {
+    fn new(game: StrategicGame, bf: Solution, ai: Solution, hybrid: Solution, seed: u64) -> Self {
         Self {
             game,
             bf,
             ai,
+            hybrid,
             mode: SolveMode::BruteForce,
             current: 0,
             anim: None,
@@ -1073,15 +1174,28 @@ impl App {
         match self.mode {
             SolveMode::BruteForce => &self.bf,
             SolveMode::Ai => &self.ai,
+            SolveMode::Hybrid => &self.hybrid,
         }
     }
 
     fn next_round(&mut self) {
-        if self.mode == SolveMode::BruteForce && self.is_at_end() {
-            self.mode = SolveMode::Ai;
-            self.current = 0;
-            self.anim = None;
-            self.auto_play = true;
+        if !self.is_at_end() {
+            return;
+        }
+        match self.mode {
+            SolveMode::BruteForce => {
+                self.mode = SolveMode::Ai;
+                self.current = 0;
+                self.anim = None;
+                self.auto_play = true;
+            }
+            SolveMode::Ai => {
+                self.mode = SolveMode::Hybrid;
+                self.current = 0;
+                self.anim = None;
+                self.auto_play = true;
+            }
+            SolveMode::Hybrid => {} // Final round — no transition
         }
     }
 
@@ -1093,10 +1207,11 @@ impl App {
             .unwrap_or_default()
             .as_nanos() as u64;
 
-        let (game, bf, ai) = loop {
+        let (game, bf, ai, hybrid) = loop {
             let game = StrategicGame::new(MAP, seed);
             if let (Some(bf), Some(ai)) = (solve(&game), solve_ai(&game)) {
-                break (game, bf, ai);
+                let hybrid = solve_hybrid(&game).unwrap_or_else(|| bf.clone());
+                break (game, bf, ai, hybrid);
             }
             seed = seed.wrapping_add(1);
         };
@@ -1105,6 +1220,7 @@ impl App {
         self.game = game;
         self.bf = bf;
         self.ai = ai;
+        self.hybrid = hybrid;
         self.mode = SolveMode::BruteForce;
         self.current = 0;
         self.anim = None;
@@ -1206,14 +1322,18 @@ fn main() -> io::Result<()> {
     // Solve BEFORE TUI init so debug output is visible
     // Retry seeds if random layout is unsolvable
     let mut seed = 42u64;
-    let (game, bf, ai) = loop {
+    let (game, bf, ai, hybrid) = loop {
         let game = StrategicGame::new(MAP, seed);
         eprintln!(
             "🎯 Config: seed={seed}, key_mapping={:?}, target_lever_mask=0b{:03b}",
             game.key_mapping, game.target_lever_mask,
         );
         if let (Some(bf), Some(ai)) = (solve(&game), solve_ai(&game)) {
-            break (game, bf, ai);
+            let hybrid = solve_hybrid(&game).unwrap_or_else(|| {
+                eprintln!("   ⚠ Hybrid unsolvable, using BF as fallback");
+                bf.clone()
+            });
+            break (game, bf, ai, hybrid);
         }
         eprintln!("   ⚠ Unsolvable layout, retrying with seed {}", seed + 1);
         seed = seed.wrapping_add(1);
@@ -1231,6 +1351,13 @@ fn main() -> io::Result<()> {
         ai.levers_discovered,
         ai.tree_nodes,
     );
+    eprintln!(
+        "🦊 Hybrid:      {} steps · {}ms · {} obs · {} nodes",
+        hybrid.actions.len(),
+        hybrid.solve_time_ms,
+        hybrid.levers_discovered,
+        hybrid.tree_nodes,
+    );
     let savings = if !bf.actions.is_empty() {
         100 - (ai.actions.len() * 100 / bf.actions.len())
     } else {
@@ -1241,7 +1368,7 @@ fn main() -> io::Result<()> {
 
     // Now init TUI
     let mut terminal = setup()?;
-    let mut app = App::new(game, bf, ai, seed);
+    let mut app = App::new(game, bf, ai, hybrid, seed);
     let res = run_with(&mut terminal, &mut app);
     teardown(&mut terminal)?;
     res
@@ -1320,7 +1447,7 @@ fn handle_key(app: &mut App, code: KeyCode) -> KeyAction {
             }
         }
         KeyCode::Char(' ') => {
-            if app.is_at_end() && app.mode == SolveMode::BruteForce {
+            if app.is_at_end() && app.mode != SolveMode::Hybrid {
                 app.next_round();
             } else {
                 app.auto_play = !app.auto_play;
@@ -1367,6 +1494,7 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
     let (icon, round, mode_label) = match app.mode {
         SolveMode::BruteForce => (BEAR, 1, "nodes"),
         SolveMode::Ai => (RABBIT, 2, "nodes"),
+        SolveMode::Hybrid => (FOX, 3, "nodes"),
     };
     let boss = if app.current_state().boss_alive {
         format!("{BOSS_LIVE} Alive")
@@ -1375,8 +1503,9 @@ fn draw_title(f: &mut Frame, area: Rect, app: &App) {
     };
     let sol = app.solution();
     let obs_tag = match app.mode {
-        SolveMode::Ai => format!("{} obs · ", app.ai.levers_discovered),
         SolveMode::BruteForce => String::new(),
+        SolveMode::Ai => format!("{} obs · ", app.ai.levers_discovered),
+        SolveMode::Hybrid => format!("{} obs · ", app.hybrid.levers_discovered),
     };
     let line = Line::from(vec![
         Span::styled(
@@ -1438,6 +1567,7 @@ fn draw_map(f: &mut Frame, area: Rect, app: &App) {
             let player_emoji = match app.mode {
                 SolveMode::BruteForce => BEAR,
                 SolveMode::Ai => RABBIT,
+                SolveMode::Hybrid => FOX,
             };
             let (emoji, style) = if is_bear {
                 (player_emoji.into(), Style::default())
@@ -1732,7 +1862,7 @@ fn draw_nav(f: &mut Frame, area: Rect, app: &App) {
             .fg(Color::White)
             .add_modifier(Modifier::BOLD)
     };
-    let next_style = if app.is_at_end() && app.mode == SolveMode::Ai {
+    let next_style = if app.is_at_end() && app.mode == SolveMode::Hybrid {
         Style::default().fg(Color::DarkGray)
     } else {
         Style::default()
@@ -1790,7 +1920,52 @@ fn draw_nav(f: &mut Frame, area: Rect, app: &App) {
 
                 format!(
                     "{RABBIT} steps {step_label} · tree {ai_nodes} vs {bf_nodes} ({node_pct}%↓) · \
-                     {discovered} obs · {ai_time}ms vs {bf_time}ms ({speed_pct}%↑)"
+                     {discovered} obs · {ai_time}ms vs {bf_time}ms ({speed_pct}%↑) · → Hybrid {FOX}"
+                )
+            }
+            SolveMode::Hybrid => {
+                let bf_steps = app.bf.actions.len();
+                let ai_steps = app.ai.actions.len();
+                let hy_steps = app.hybrid.actions.len();
+                let bf_nodes = app.bf.tree_nodes;
+                let hy_nodes = app.hybrid.tree_nodes;
+                let bf_time = app.bf.solve_time_ms;
+                let hy_time = app.hybrid.solve_time_ms;
+                let discovered = app.hybrid.levers_discovered;
+
+                let step_pct_vs_bf = if bf_steps > 0 {
+                    100 - (hy_steps * 100 / bf_steps)
+                } else {
+                    0
+                };
+                let node_pct_vs_bf = if bf_nodes > 0 {
+                    100 - (hy_nodes * 100 / bf_nodes)
+                } else {
+                    0
+                };
+                let speed_pct_vs_bf = if bf_time > 0 {
+                    (bf_time.saturating_sub(hy_time)) * 100 / bf_time
+                } else {
+                    0
+                };
+
+                let step_label = if step_pct_vs_bf > 0 {
+                    format!("⚡{step_pct_vs_bf}%↓")
+                } else {
+                    format!("{hy_steps}={bf_steps}")
+                };
+                let vs_ai = if hy_steps < ai_steps {
+                    format!(" · 🏆 <{RABBIT}")
+                } else if hy_steps > ai_steps {
+                    let pct = (hy_steps - ai_steps) * 100 / ai_steps;
+                    format!(" · +{pct}% vs {RABBIT}")
+                } else {
+                    String::new()
+                };
+
+                format!(
+                    "{FOX} steps {step_label}{vs_ai} · tree {hy_nodes} vs {bf_nodes} ({node_pct_vs_bf}%↓) · \
+                     {discovered} obs · {hy_time}ms vs {bf_time}ms ({speed_pct_vs_bf}%↑)"
                 )
             }
         }
