@@ -250,6 +250,36 @@ impl ResidualGate {
 }
 
 // ---------------------------------------------------------------------------
+// EqR Convergence Selection (Plan 119)
+// ---------------------------------------------------------------------------
+
+/// Selection strategy for width-scaled rollouts (EqR convergence-based selection).
+///
+/// Maps to [`WidthSelectionMode`](crate::speculative::dd_tree::WidthSelectionMode) at runtime.
+/// This enum lives in `microgpt-core` so Config can reference it without depending on
+/// the speculative decode module.
+///
+/// - `BestQ`: Highest cumulative relevance (PTRM default, no behavior change)
+/// - `MajorityVote`: Most common path across rollouts (mode@K)
+/// - `Top1Converged`: Smallest final residual ∥p_{d+1} − p_d∥ (EqR proxy)
+/// - `BtRank`: Pairwise Bradley-Terry ranking (requires `bt_rank` feature)
+///
+/// **Precondition:** `Top1Converged` is only reliable after landscape shaping
+/// (RI + NI training). See Research 079 (EqR) for theoretical justification.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ConvergenceSelector {
+    /// Select rollout with highest cumulative relevance score (PTRM Q-head analog).
+    #[default]
+    BestQ,
+    /// Select the most frequent path across all rollouts (mode@K, majority vote).
+    MajorityVote,
+    /// Select rollout with smallest marginal-change residual ∥p_{d+1} − p_d∥ (EqR proxy).
+    Top1Converged,
+    /// Pairwise Bradley-Terry ranking across rollouts (requires `bt_rank` feature).
+    BtRank,
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -316,6 +346,8 @@ pub struct Config {
     // PTRM width scaling (Plan 083)
     pub width_rollouts: usize,
     pub early_stop_threshold: f32,
+    // EqR Convergence Selection (Plan 119)
+    pub convergence_selector: ConvergenceSelector,
     // D2F block size for discrete diffusion forcing
     pub d2f_block_size: usize,
     // MLS Multi-Layer Sum aggregation (Plan 104: Research 68)
@@ -380,6 +412,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 8,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -477,6 +510,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 8,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -546,6 +580,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 8,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -605,6 +640,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 8,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -665,6 +701,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 16,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -723,6 +760,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 16,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -783,6 +821,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 16,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -842,6 +881,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 16,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -903,6 +943,7 @@ impl Config {
             sp_kv_predictor_lr_mult: 5.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
+            convergence_selector: ConvergenceSelector::default(),
             d2f_block_size: 16,
             mls_layers: 0,
             loop_mode: LoopMode::None,
@@ -992,6 +1033,9 @@ impl Config {
         if let Some(v) = overrides.early_stop_threshold {
             c.early_stop_threshold = v;
         }
+        if let Some(v) = overrides.convergence_selector {
+            c.convergence_selector = v;
+        }
         if let Some(v) = overrides.mls_layers {
             c.mls_layers = v;
         }
@@ -1034,6 +1078,8 @@ pub struct InferenceOverrides {
     // PTRM width scaling (Plan 083)
     pub width_rollouts: Option<usize>,
     pub early_stop_threshold: Option<f32>,
+    // EqR Convergence Selection (Plan 119)
+    pub convergence_selector: Option<ConvergenceSelector>,
     // MLS Multi-Layer Sum override (Plan 104)
     pub mls_layers: Option<usize>,
     // Drafter LoRA path (Plan 117: MTP LoRA Drafter)
@@ -1897,6 +1943,7 @@ mod tests_types {
             sp_kv_threshold: Some(0.5),
             width_rollouts: Some(9),
             early_stop_threshold: Some(0.6),
+            convergence_selector: Some(ConvergenceSelector::Top1Converged),
             mls_layers: Some(3),
             // drafter_lora_path is consumed by the caller, not applied to Config
             drafter_lora_path: None,
@@ -1917,6 +1964,10 @@ mod tests_types {
         assert!((result.sp_kv_threshold - 0.5).abs() < 1e-6);
         assert_eq!(result.width_rollouts, 9);
         assert!((result.early_stop_threshold - 0.6).abs() < 1e-6);
+        assert_eq!(
+            result.convergence_selector,
+            ConvergenceSelector::Top1Converged
+        );
         assert_eq!(result.mls_layers, 3);
     }
 

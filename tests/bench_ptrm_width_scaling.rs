@@ -384,6 +384,8 @@ fn bench_ptrm_selection_modes() {
             let mode_str = match mode {
                 WidthSelectionMode::BestQ => "BestQ",
                 WidthSelectionMode::MostFrequent => "MostFreq",
+                #[cfg(feature = "eqr_convergence")]
+                WidthSelectionMode::Top1Converged => "Top1Conv",
             };
 
             println!(

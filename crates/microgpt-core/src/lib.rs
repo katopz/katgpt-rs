@@ -7,6 +7,8 @@
 //!
 //! No feature flags on types — both projects get the full superset.
 
+#[cfg(feature = "tiled_attention")]
+pub mod attention;
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 pub mod simd;
@@ -21,10 +23,10 @@ pub use traits::{
 
 // Re-export key types at crate root for convenience
 pub use types::{
-    AttentionMode, Config, DashAttnConfig, HlaMode, HybridPattern, InferenceOverrides,
-    InferenceResult, LoopMode, ModelArchitecture, ResidualGate, Rng, SdpaOutputGate, WeightDtype,
-    kv_dim, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel, matmul_relu, rmsnorm,
-    sample_token, softmax, softmax_scaled,
+    AttentionMode, Config, ConvergenceSelector, DashAttnConfig, HlaMode, HybridPattern,
+    InferenceOverrides, InferenceResult, LoopMode, ModelArchitecture, ResidualGate, Rng,
+    SdpaOutputGate, WeightDtype, kv_dim, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel,
+    matmul_relu, rmsnorm, sample_token, softmax, softmax_scaled,
 };
 
 #[cfg(feature = "domain_latent")]
@@ -38,5 +40,8 @@ pub use coda::{
     GateActivation, compute_rstd, simd_matmul_residual, simd_matmul_residual_partial_rms,
     simd_matmul_rmsnorm_activation, simd_matmul_rmsnorm_rope, simd_matmul_rmsnorm_swiglu,
 };
+
+#[cfg(feature = "tiled_attention")]
+pub use attention::{tiled_attention_batched, tiled_attention_forward};
 
 pub use simd::SimdLevel;

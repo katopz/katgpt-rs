@@ -1,3 +1,13 @@
+//! Decision-Diffusion Tree (DDTree) for speculative decoding.
+//!
+//! Implements width-scaled rollout selection with multiple strategies:
+//! - **BestQ** (PTRM default): highest cumulative relevance score
+//! - **MostFrequent** (mode@K): most common path across rollouts
+//! - **Top1Converged** (EqR, Plan 119): smallest marginal-change residual ∥p_{d+1} − p_d∥₂
+//!
+//! EqR convergence selection is only reliable after landscape shaping (RI + NI training).
+//! See Research 079 (EqR, arXiv:2605.21488) for theoretical justification.
+
 use std::collections::{BinaryHeap, HashMap};
 
 #[cfg(test)]
@@ -309,6 +319,12 @@ pub enum WidthSelectionMode {
     BestQ,
     /// Select the most frequent path across all rollouts (mode@K).
     MostFrequent,
+    /// Select rollout with smallest final residual ∥p_{d+1} − p_d∥₂ (EqR proxy, Plan 119).
+    ///
+    /// Only reliable after landscape shaping (RI + NI training).
+    /// Falls back to BestQ if no residual data available.
+    #[cfg(feature = "eqr_convergence")]
+    Top1Converged,
 }
 
 /// Configuration for width-scaling rollouts (PTRM Plan 083).
@@ -342,6 +358,83 @@ impl WidthScaleConfig {
             k_rollouts: 16,
             selection: WidthSelectionMode::BestQ,
         }
+    }
+}
+
+/// Convert Config-level [`ConvergenceSelector`] to runtime [`WidthSelectionMode`].
+///
+/// `MajorityVote` maps to `MostFrequent` (same semantics, different naming convention).
+/// `BtRank` falls back to `BestQ` when `bt_rank` feature is off.
+#[cfg(feature = "eqr_convergence")]
+impl From<microgpt_core::ConvergenceSelector> for WidthSelectionMode {
+    fn from(selector: microgpt_core::ConvergenceSelector) -> Self {
+        match selector {
+            microgpt_core::ConvergenceSelector::BestQ => WidthSelectionMode::BestQ,
+            microgpt_core::ConvergenceSelector::MajorityVote => WidthSelectionMode::MostFrequent,
+            microgpt_core::ConvergenceSelector::Top1Converged => WidthSelectionMode::Top1Converged,
+            microgpt_core::ConvergenceSelector::BtRank => {
+                #[cfg(feature = "bt_rank")]
+                {
+                    WidthSelectionMode::BestQ // TODO: BtRank variant when bt_rank integrates
+                }
+                #[cfg(not(feature = "bt_rank"))]
+                WidthSelectionMode::BestQ
+            }
+        }
+    }
+}
+
+// ── EqR Convergence Selection (Plan 119) ──────────────────────
+
+/// Per-rollout residual tracker for EqR convergence-based selection.
+///
+/// Tracks ∥p_{d+1} − p_d∥₂ across DDTree expansion depths as a proxy
+/// for EqR's fixed-point residual ∥fθ(z;x) − z∥. Only valid after
+/// landscape shaping (RI + NI training).
+///
+/// See Research 079 (EqR) for theoretical justification.
+#[cfg(feature = "eqr_convergence")]
+#[derive(Debug, Clone)]
+pub struct ResidualTracker {
+    /// ∥p_{d+1} − p_d∥₂ at each expansion depth.
+    residuals: Vec<f32>,
+}
+
+#[cfg(feature = "eqr_convergence")]
+impl ResidualTracker {
+    /// Create a new tracker with pre-allocated capacity.
+    pub fn new(max_depths: usize) -> Self {
+        Self {
+            residuals: Vec::with_capacity(max_depths),
+        }
+    }
+
+    /// Record a marginal-change step: compute ∥z_curr − z_prev∥₂.
+    pub fn record_step(&mut self, z_prev: &[f32], z_curr: &[f32]) {
+        let diff: f32 = z_prev
+            .iter()
+            .zip(z_curr.iter())
+            .map(|(a, b)| (a - b) * (a - b))
+            .sum();
+        self.residuals.push(diff.sqrt());
+    }
+
+    /// Last recorded residual (0.0 if empty) — the EqR convergence proxy.
+    pub fn final_residual(&self) -> f32 {
+        self.residuals.last().copied().unwrap_or(0.0)
+    }
+
+    /// Average residual across all recorded steps.
+    pub fn mean_residual(&self) -> f32 {
+        if self.residuals.is_empty() {
+            return 0.0;
+        }
+        self.residuals.iter().sum::<f32>() / self.residuals.len() as f32
+    }
+
+    /// Check if the rollout has converged below the given threshold.
+    pub fn is_converged(&self, threshold: f32) -> bool {
+        self.final_residual() < threshold
     }
 }
 
@@ -386,6 +479,9 @@ pub fn best_of_k_rollouts(
     // Run K independent rollouts with different noise seeds
     let mut paths: Vec<Vec<usize>> = Vec::with_capacity(width_config.k_rollouts);
     let mut scores: Vec<f32> = Vec::with_capacity(width_config.k_rollouts);
+    // EqR convergence: track marginal-change residual per rollout (Plan 119)
+    #[cfg(feature = "eqr_convergence")]
+    let mut final_residuals: Vec<f32> = Vec::with_capacity(width_config.k_rollouts);
 
     for k in 0..width_config.k_rollouts {
         let mut rng = Rng::new(base_seed.wrapping_add(k as u64));
@@ -398,6 +494,16 @@ pub fn best_of_k_rollouts(
         let score = cumulative_relevance(&path, screener);
         paths.push(path);
         scores.push(score);
+
+        // EqR convergence: compute marginal-change residual for this rollout
+        #[cfg(feature = "eqr_convergence")]
+        {
+            let mut tracker = ResidualTracker::new(noisy.len().saturating_sub(1));
+            for d in 0..noisy.len().saturating_sub(1) {
+                tracker.record_step(&noisy[d], &noisy[d + 1]);
+            }
+            final_residuals.push(tracker.final_residual());
+        }
     }
 
     match width_config.selection {
@@ -422,6 +528,29 @@ pub fn best_of_k_rollouts(
                 .max_by_key(|(_, count)| *count)
                 .map(|(path, _)| path)
                 .unwrap_or_default()
+        }
+        #[cfg(feature = "eqr_convergence")]
+        WidthSelectionMode::Top1Converged => {
+            // Select rollout with smallest final residual (EqR convergence proxy).
+            // Fallback to BestQ if no residual data (e.g., single depth).
+            let best_idx = if final_residuals.is_empty()
+                || final_residuals.iter().all(|&r| r == 0.0)
+            {
+                scores
+                    .iter()
+                    .enumerate()
+                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0)
+            } else {
+                final_residuals
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .map(|(i, _)| i)
+                    .unwrap_or(0)
+            };
+            paths.into_iter().nth(best_idx).unwrap_or_default()
         }
     }
 }

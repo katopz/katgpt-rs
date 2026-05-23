@@ -34,6 +34,8 @@ pub use dd_tree::{
     par_find_shortest_sequence, par_find_valid_sequence,
 };
 
+#[cfg(feature = "eqr_convergence")]
+pub use dd_tree::ResidualTracker;
 #[cfg(feature = "elf_sde")]
 pub use dd_tree::{WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts};
 pub use dflash::{
