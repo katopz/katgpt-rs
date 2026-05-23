@@ -141,7 +141,7 @@ fn proof_1_ep_accuracy_k_correctness() {
 fn proof_2_mls_averaging_arithmetic_mean() {
     // Case 1: Single vector → mean equals the vector itself
     let v1 = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-    let result = mls_accumulate(&[v1.clone()]);
+    let result = mls_accumulate(std::slice::from_ref(&v1));
     for (i, (&r, &e)) in result.iter().zip(v1.iter()).enumerate() {
         assert!(
             approx_eq(r, e, 1e-6),

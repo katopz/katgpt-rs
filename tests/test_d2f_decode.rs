@@ -558,7 +558,7 @@ fn benchmark_d2f_pipeline() {
 
     eprintln!(
         "\n  Benchmark: D2fPipeline ({} blocks × {block_size} tokens, steps={})",
-        (total_len + block_size - 1) / block_size,
+        total_len.div_ceil(block_size),
         decode_config.denoise_steps
     );
     eprintln!("    {us_per_pipeline:.1} µs/pipeline ({n_iters} iters)");
