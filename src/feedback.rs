@@ -70,6 +70,8 @@ mod tests {
             screened: false,
             #[cfg(feature = "sr2am_configurator")]
             planning_decision: None,
+            #[cfg(feature = "sr2am_configurator")]
+            plan_horizon_used: 0,
         };
         // Should not panic or error when url is None
         send_feedback(&config, &result);
@@ -92,6 +94,8 @@ mod tests {
             screened: true,
             #[cfg(feature = "sr2am_configurator")]
             planning_decision: None,
+            #[cfg(feature = "sr2am_configurator")]
+            plan_horizon_used: 0,
         };
         send_feedback(&config, &result);
         // Thread spawned but reward too low — no actual POST happens

@@ -244,8 +244,8 @@ MTP = "predict ahead with a small model, verify with the big model." This maps t
 ### Phase 4: Integration Tests + Overrides
 
 - [x] **T33**: Update `test_with_overrides_all_fields` to include `mtp_cluster_topk` and `mtp_min_output_tokens`
-- [ ] **T34**: Test: `test_mtp_lora_gated_integration` — LoRA drafter + output-length gate + Top-K all compose correctly
-- [ ] **T35**: Test: `test_mtp_game_config_disabled` — all game configs produce identical output with/without MTP infrastructure present
+- [x] **T34**: Test: `test_mtp_lora_gated_integration` — LoRA drafter + output-length gate + Top-K all compose correctly
+- [x] **T35**: Test: `test_mtp_game_config_disabled` — all game configs produce identical output with/without MTP infrastructure present
 
 ### Phase 5: Sync + Benchmark
 

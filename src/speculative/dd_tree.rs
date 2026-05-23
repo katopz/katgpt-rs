@@ -807,6 +807,8 @@ pub fn build_inference_result(
         screened: reward < screening_threshold,
         #[cfg(feature = "sr2am_configurator")]
         planning_decision: None,
+        #[cfg(feature = "sr2am_configurator")]
+        plan_horizon_used: 0, // caller sets after entropy truncation
     }
 }
 

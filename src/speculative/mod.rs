@@ -102,6 +102,9 @@ pub use step::{
     speculative_step_rollback_with,
 };
 
+#[cfg(feature = "sr2am_configurator")]
+pub use step::speculative_step_with_configurator;
+
 #[cfg(feature = "bandit")]
 pub use flow_pruner::FlowPruner;
 

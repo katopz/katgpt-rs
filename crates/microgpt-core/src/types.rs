@@ -1097,6 +1097,10 @@ impl Config {
         if let Some(v) = overrides.mls_layers {
             c.mls_layers = v;
         }
+        // SR²AM horizon truncation override (Plan 112 T11)
+        if let Some(v) = overrides.max_plan_horizon {
+            c.draft_lookahead = c.draft_lookahead.min(v);
+        }
         c
     }
 }
@@ -1148,6 +1152,8 @@ pub struct InferenceOverrides {
     pub mls_layers: Option<usize>,
     // Drafter LoRA path (Plan 117: MTP LoRA Drafter)
     pub drafter_lora_path: Option<std::path::PathBuf>,
+    // SR²AM horizon truncation override (Plan 112 T11)
+    pub max_plan_horizon: Option<usize>,
 }
 
 impl Default for Config {
@@ -1956,6 +1962,9 @@ pub struct InferenceResult {
     /// SR²AM configurator planning decision for this turn (Plan 112).
     #[cfg(feature = "sr2am_configurator")]
     pub planning_decision: Option<PlanningDecision>,
+    /// Actual planning horizon used this turn (after entropy truncation, Plan 112 T13).
+    #[cfg(feature = "sr2am_configurator")]
+    pub plan_horizon_used: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -2084,6 +2093,7 @@ mod tests_types {
             mls_layers: Some(3),
             // drafter_lora_path is consumed by the caller, not applied to Config
             drafter_lora_path: None,
+            max_plan_horizon: Some(5),
         };
         let result = config.with_overrides(&overrides);
         assert_eq!(result.tree_budget, 1);
@@ -2108,6 +2118,8 @@ mod tests_types {
             ConvergenceSelector::Top1Converged
         );
         assert_eq!(result.mls_layers, 3);
+        // max_plan_horizon caps draft_lookahead when lower (Plan 112 T11)
+        assert_eq!(result.draft_lookahead, 2); // 2 (from override) < 5 (horizon cap), stays 2
     }
 
     #[test]
