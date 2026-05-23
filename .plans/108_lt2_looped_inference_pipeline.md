@@ -3,7 +3,7 @@
 > **Research:** [073 — LT2 Linear-Time Looped Transformers](../.research/073_LT2_Linear_Time_Looped_Transformers.md)
 > **Paper:** [arXiv:2605.20670](https://arxiv.org/abs/2605.20670) — Loop weight-sharing + subquadratic attention = rank-T state upgrade
 > **Feature Gate:** `lt2_looped` (**Default-on** as of GOAT 8/8 proof. Zero-init gates provide safe starting points.)
-> **Status:** 📋 Planning
+**Status:** 🔄 In Progress (Phase 0 + Phase 6 partial complete, 10/10 GOAT proofs)
 
 ## Summary
 
@@ -16,9 +16,9 @@ Our specific advantage: we already have AHLA (asymmetric second-order linear att
 ## Tasks
 
 ### Phase 0: Baseline Benchmarking
-- [ ] T0: Benchmark current single-pass SDPA forward (tok/s, µs/step, mem/layer) — `bench_forward_baseline`
-- [ ] T1: Benchmark current single-pass AHLA forward — `bench_ahla_baseline`
-- [ ] T2: Benchmark naive 4× looped SDPA (4 full passes, KV cache ×4) — `bench_naive_loop`
+- [x] T0: Benchmark current single-pass SDPA forward (tok/s, µs/step, mem/layer) — `bench_forward_baseline` — `tests/bench_108_lt2_looped.rs`
+- [x] T1: Benchmark current single-pass AHLA forward — `bench_ahla_baseline` — `tests/bench_108_lt2_looped.rs`
+- [x] T2: Benchmark naive 4× looped SDPA (4 full passes, KV cache ×4) — `bench_naive_loop` — `tests/bench_108_lt2_looped.rs`
 
 ### Phase 1: Core Types & Enums (microgpt-core)
 - [x] T3: Add `LoopMode` enum to `microgpt-core/src/types.rs`
@@ -55,15 +55,15 @@ Our specific advantage: we already have AHLA (asymmetric second-order linear att
 ### Phase 6: GOAT Proof & Benchmarks
 - [ ] T25: Benchmark looped AHLA (T=4) vs naive looped SDPA — `bench_lt2_ahla_loop`
 - [ ] T26: Benchmark hybrid 1:4 (SDPA+AHLA, T=4) — `bench_lt2_hybrid`
-- [ ] T27: GOAT proof test: looped inference produces finite, non-NaN logits at T=4
+- [x] T27: GOAT proof test: looped inference produces finite, non-NaN logits at T=4 — `proof_9_looped_logits_finite_t4`
 - [ ] T28: GOAT proof test: looped hybrid (1:4) throughput ≥ 50% of single-pass SDPA
-- [ ] T29: GOAT proof test: AHLA memory constant across T (no growth with loop count)
+- [x] T29: GOAT proof test: AHLA memory constant across T (no growth with loop count) — `proof_10_ahla_memory_constant_across_t`
 - [ ] T30: Write benchmark results to `.benchmarks/108_lt2_looped_inference.md`
 
 ### Phase 7: Documentation & Cleanup
 - [ ] T31: Update `README.md` with LT2 section (looped inference + hybrid results)
 - [ ] T32: Update `.docs/02_architecture.md` with looped forward pass diagram
-- [ ] T33: Run `cargo clippy --fix --allow-dirty` on all changed files
+- [x] T33: Run `cargo clippy --fix --allow-dirty` on all changed files — clean, no warnings
 - [ ] T34: Commit with message: `feat(lt2): looped inference pipeline with hybrid SDPA+AHLA`
 
 ---
@@ -273,4 +273,4 @@ Total estimate:                       ~14h
 - Gated DeltaNet-2 (complementary): Research 70
 - DashAttention (sparse component): Research 71
 
-✅ GOAT 8/8 proved: `tests/goat_108_lt2_looped.rs` — LoopMode default, HybridPattern default, ResidualGate zero-init, SdpaOutputGate zero-init, dispatch correctness, count extraction, τ=0 identity, sigmoid neutral
+✅ GOAT 10/10 proved: `tests/goat_108_lt2_looped.rs` — LoopMode default, HybridPattern default, ResidualGate zero-init, SdpaOutputGate zero-init, dispatch correctness, count extraction, τ=0 identity, sigmoid neutral, looped logits finite T=4, AHLA memory constant T=1..8
