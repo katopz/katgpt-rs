@@ -1,5 +1,6 @@
 pub mod dd_tree;
 pub mod dflash;
+pub mod drafter_lora;
 pub mod prefill;
 pub mod sampling;
 pub mod step;
@@ -85,6 +86,12 @@ pub use verifier::{SimulatedVerifier, SpeculativeVerifier};
 
 pub use verifier::LeviathanVerifier;
 
+// ── Drafter LoRA re-exports (Plan 117: MTP LoRA Drafter) ──────
+pub use drafter_lora::{
+    DrafterForwardContext, DrafterLoraWeights, TrainingPair, generate_synthetic_pairs,
+    generate_training_pairs_from_replays, load_drafter_lora, save_drafter_lora, train_drafter_lora,
+};
+
 #[allow(deprecated)]
 pub use step::{
     speculative_step_conditioned, speculative_step_conditioned_with, speculative_step_rollback,
@@ -106,6 +113,13 @@ pub use d2f::{
     d2f_decode_block, d2f_decode_block_with, d2f_decode_block_with_prompt,
     d2f_decode_block_with_prompt_with, d2f_decode_block_with_target,
     d2f_decode_block_with_target_with,
+};
+
+// ── DMax Soft Parallel Decode Re-exports (Plan 109, feature: dmax_spd) ──
+#[cfg(feature = "dmax_spd")]
+pub use d2f::{
+    BlockConvergence, HybridEmbedding, SoftDecodeConfig, check_block_convergence,
+    contiguous_prefix_promote, d2f_decode_block_soft,
 };
 
 // ── D2F Drafter Verifier Re-exports (Plan 089, Tri-Mode) ───

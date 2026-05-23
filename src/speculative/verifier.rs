@@ -6,6 +6,7 @@ use crate::transformer::TransformerWeights;
 use crate::types::{Config, Rng};
 
 use crate::speculative::dflash::dflash_predict_ar_with;
+use crate::speculative::drafter_lora::{DrafterForwardContext, DrafterLoraWeights};
 use crate::speculative::sampling::sample_residual_distribution_into;
 use crate::transformer::{
     ForwardContext, MultiLayerKVCache, forward, preload_kv_cache, project_target_activation,
@@ -132,6 +133,12 @@ pub struct LeviathanVerifier<'a> {
     draft_sctx: SpeculativeContext,
     #[allow(dead_code)] // Pre-allocated for future tree-based Leviathan variants
     tree_builder: TreeBuilder,
+    /// LoRA-trained drafter weights (Plan 117: MTP LoRA Drafter).
+    /// When present, overrides the standard MTP conditioning path with a
+    /// LoRA-aware forward that directly predicts target outputs.
+    drafter_lora: Option<DrafterLoraWeights>,
+    /// Pre-allocated forward context for LoRA drafter (avoids re-allocation).
+    drafter_fwd_ctx: Option<DrafterForwardContext>,
 }
 
 impl<'a> LeviathanVerifier<'a> {
@@ -147,7 +154,34 @@ impl<'a> LeviathanVerifier<'a> {
             target_cache: MultiLayerKVCache::new(target_config),
             draft_sctx: SpeculativeContext::new(draft_config),
             tree_builder: TreeBuilder::new(draft_config),
+            drafter_lora: None,
+            drafter_fwd_ctx: None,
         }
+    }
+
+    /// Attach a LoRA-trained drafter to this verifier (Plan 117 T4).
+    ///
+    /// When set, the speculate() method uses the LoRA-aware forward path
+    /// instead of the standard MTP conditioning + shared KV preloading.
+    /// The LoRA drafter learns to predict target outputs directly from
+    /// training pairs, making MTP conditioning unnecessary.
+    pub fn with_drafter_lora(mut self, lora: DrafterLoraWeights, draft_config: &Config) -> Self {
+        let rank = lora.q_lora.rank;
+        self.drafter_fwd_ctx = Some(DrafterForwardContext::new(draft_config, rank));
+        self.drafter_lora = Some(lora);
+        self
+    }
+
+    /// Set drafter LoRA on an existing verifier (non-consuming variant).
+    pub fn set_drafter_lora(&mut self, lora: DrafterLoraWeights, draft_config: &Config) {
+        let rank = lora.q_lora.rank;
+        self.drafter_fwd_ctx = Some(DrafterForwardContext::new(draft_config, rank));
+        self.drafter_lora = Some(lora);
+    }
+
+    /// Check if a LoRA-trained drafter is attached.
+    pub fn has_drafter_lora(&self) -> bool {
+        self.drafter_lora.is_some()
     }
 }
 
@@ -182,53 +216,84 @@ impl SpeculativeVerifier for LeviathanVerifier<'_> {
                 .copy_from_slice(&self.draft_sctx.probs_buf);
         }
 
-        // Project target hidden state → drafter context buffer
-        project_target_activation(
-            &mut self.draft_sctx.ctx.mtp_context_buf,
-            &self.target_ctx.hidden_state,
-            self.target_weights.mtp_activation_proj.as_ref(),
-            self.target_config.n_embd,
-            draft_config.n_embd,
-            self.target_config.mtp_activation_threshold,
-        );
-
-        // Determine if MTP conditioning is active (threshold gate)
-        let mtp_active = self.target_config.n_embd >= self.target_config.mtp_activation_threshold;
-
-        // Phase 1: AR draft with optional MTP conditioning
+        // Phase 1: AR draft
         self.draft_sctx.reset();
 
-        // Preload drafter's KV cache from target's pre-computed KV
-        // (hybrid: shared past positions + drafter computes own new positions)
-        // Only active when prompt is long enough to benefit and kv_dim matches
-        if pos > self.target_config.mtp_shared_kv_prompt_threshold {
-            preload_kv_cache(
-                &mut self.draft_sctx.cache,
-                &self.target_cache,
-                pos,
-                self.target_config,
-                draft_config,
-            );
-        }
+        let use_lora = self.drafter_lora.is_some() && self.drafter_fwd_ctx.is_some();
 
-        // Copy MTP context to stack (zero-alloc, avoids borrow conflict with &mut self.draft_sctx)
-        let mut mtp_stack = [0.0f32; 256];
-        let mtp_buf: Option<&[f32]> = if mtp_active {
-            let n = draft_config.n_embd.min(mtp_stack.len());
-            mtp_stack[..n].copy_from_slice(&self.draft_sctx.ctx.mtp_context_buf[..n]);
-            Some(&mtp_stack[..n])
+        let gamma = if use_lora {
+            // LoRA-trained drafter path (Plan 117 T5):
+            // LoRA learns to predict target outputs directly, so MTP conditioning
+            // and shared KV preloading are unnecessary.
+            let lora = self.drafter_lora.as_ref().unwrap();
+            let fwd_ctx = self.drafter_fwd_ctx.as_mut().unwrap();
+            let max_steps = draft_config
+                .draft_lookahead
+                .min(draft_config.block_size.saturating_sub(pos));
+            let temperature = draft_config.temperature;
+            let mut cur_token = token;
+
+            for step in 0..max_steps {
+                let logits =
+                    fwd_ctx.forward_lora(draft_config, draft_weights, lora, cur_token, pos + step);
+                self.draft_sctx.probs_buf.copy_from_slice(logits);
+                softmax_scaled(&mut self.draft_sctx.probs_buf, 1.0 / temperature);
+
+                let next_token = sample_from_distribution(&self.draft_sctx.probs_buf, rng);
+                let start = step * vocab_size;
+                self.draft_sctx.marginals_flat[start..start + vocab_size]
+                    .copy_from_slice(&self.draft_sctx.probs_buf);
+                self.draft_sctx.sampled_tokens[step] = next_token;
+                cur_token = next_token;
+            }
+            self.draft_sctx.steps_populated = max_steps;
+            max_steps
         } else {
-            None
+            // Standard drafter path: MTP conditioning + shared KV preloading
+            project_target_activation(
+                &mut self.draft_sctx.ctx.mtp_context_buf,
+                &self.target_ctx.hidden_state,
+                self.target_weights.mtp_activation_proj.as_ref(),
+                self.target_config.n_embd,
+                draft_config.n_embd,
+                self.target_config.mtp_activation_threshold,
+            );
+
+            let mtp_active =
+                self.target_config.n_embd >= self.target_config.mtp_activation_threshold;
+
+            // Preload drafter's KV cache from target's pre-computed KV
+            // (hybrid: shared past positions + drafter computes own new positions)
+            // Only active when prompt is long enough to benefit and kv_dim matches
+            if pos > self.target_config.mtp_shared_kv_prompt_threshold {
+                preload_kv_cache(
+                    &mut self.draft_sctx.cache,
+                    &self.target_cache,
+                    pos,
+                    self.target_config,
+                    draft_config,
+                );
+            }
+
+            // Copy MTP context to stack (zero-alloc, avoids borrow conflict)
+            let mut mtp_stack = [0.0f32; 256];
+            let mtp_buf: Option<&[f32]> = if mtp_active {
+                let n = draft_config.n_embd.min(mtp_stack.len());
+                mtp_stack[..n].copy_from_slice(&self.draft_sctx.ctx.mtp_context_buf[..n]);
+                Some(&mtp_stack[..n])
+            } else {
+                None
+            };
+            dflash_predict_ar_with(
+                &mut self.draft_sctx,
+                draft_weights,
+                draft_config,
+                token,
+                pos,
+                rng,
+                mtp_buf,
+            )
         };
-        let gamma = dflash_predict_ar_with(
-            &mut self.draft_sctx,
-            draft_weights,
-            draft_config,
-            token,
-            pos,
-            rng,
-            mtp_buf,
-        );
 
         if gamma == 0 {
             // Already have softmaxed target logits in probs_buf from Phase 0
