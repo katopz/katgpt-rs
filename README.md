@@ -531,24 +531,32 @@ Replaces the growing KV cache with a **fixed-size state matrix S ∈ R^{d_k × d
 
 | Config | Flat KV (O(N)) | GDN2 (O(1)) | GDN2 Savings |
 |--------|---------------|-------------|-------------|
-| micro (hd=4, block=16) | 2,048 B | 448 B | 78.1% |
-| game (hd=8, block=170) | 43,520 B | 2,816 B | 93.5% |
-| bpe (hd=8, block=256) | 65,536 B | 2,816 B | 95.7% |
+| micro (hd=4, block=16) | 2,048 B | 256 B | 87.5% |
+| game (hd=8, block=170) | 43,520 B | 1,024 B | 97.6% |
+| bpe (hd=8, block=256) | 65,536 B | 1,024 B | 98.4% |
 
-### Benchmark Results (micro config, release)
+### Benchmark Results — GOAT 14/14 ✅ (8 proofs + 6 benchmarks)
 
-| Method | tok/s | µs/step | mem/layer |
-|--------|-------|---------|-----------|
-| Flat KV (SDPA) | 910,018 | 1.10 | 2,048 B |
-| AHLA (asymmetric) | 863,775 | 1.16 | 640 B |
-| **GDN2 (Full)** | **~860K** | **~1.16** | **448 B** |
+Validated by `tests/goat_105_gdn2.rs` + `tests/bench_105_gdn2_goat.rs`.
 
-GDN2 achieves comparable throughput to AHLA with **78–96% memory savings** vs flat KV.
+| Metric | Result | Threshold |
+|--------|--------|-----------|
+| GDN2/AHLA throughput ratio | **99.4%** | ≥ 90% ✅ |
+| GDN2 memory vs flat KV (all configs) | **87.5–98.4% savings** | < flat KV ✅ |
+| No NaN/Inf in logits | **All positions, all configs** | All finite ✅ |
+| EraseOnly vs Full (cosine sim) | **1.000** | ≥ 0.95 ✅ |
+| O(1) context scaling (spread) | **0.070** | < 0.30 ✅ |
+
+Run: `cargo test --features "gdn2_attention,hla_attention" --test bench_105_gdn2_goat -- --nocapture`
+
+GDN2 achieves **99.4% of AHLA throughput** with **87–98% memory savings** vs flat KV. Single-step decode cost is constant regardless of position (O(1)).
 
 > ⚠️ **Not a drop-in replacement.** GDN2 computes a different function than softmax attention. Models must be **trained with GDN2 from scratch** for quality.
 
 📁 `src/gdn2/` — `types.rs`, `kernel.rs`, `forward.rs`, `mod.rs`
-🔧 Feature flag: `gdn2_attention`
+🧪 `tests/goat_105_gdn2.rs` — 8 mathematical proofs (sigmoid, L2, finiteness, state size, reset, memory, outer product)
+🧪 `tests/bench_105_gdn2_goat.rs` — 6 benchmark validations (throughput, memory, finiteness, ablation, scaling)
+🔧 Feature flag: `gdn2_attention` (**default-on**, GOAT 14/14)
 
 ### Gemma 4 MTP Drafter (Plan 055)
 
@@ -1549,7 +1557,7 @@ cargo clippy --all-targets --all-features --quiet
 | `stability_metrics` | Per-step execution stability instrumentation — P50/P99/CV/stability_score via `StabilitySnapshot` (Plan 102, GOAT 13/13, **default-on**) |
 | `decode_specialize` | Stage-specialized decode paths — `DecodeStage` enum + `forward_decode_stage()` dispatch for Draft/Verify (Plan 102, off by default) |
 | `mls_aggregate` | MLS Multi-Layer Sum — average last K transformer layer residuals before LM head for training-free quality boost (Research 68, Plan 104, GOAT 6/6, **default-on**) |
-| `gdn2_attention` | Gated DeltaNet-2 recurrent attention — O(1) decode with decoupled erase/write gates, constant state S∈R^{dk×dv} per head (Research 70, Plan 105, GOAT 8/8, **default-on**) |
+| `gdn2_attention` | Gated DeltaNet-2 recurrent attention — O(1) decode with decoupled erase/write gates, constant state S∈R^{dk×dv} per head (Research 70, Plan 105, GOAT 14/14, **default-on**) |
 | `dash_attn` | DashAttention adaptive sparse attention — α-entmax routing with learned chunk summaries, replaces fixed-budget top-k block selection (Research 68, Plan 106, GOAT 9/9, **default-on**) |
 | `dreamer` | Auto-Dreamer offline consolidation — cadence-based scheduler, O(n log n) Q-value clustering, access-based decay, counterfactual MC dropout utility (Research 69, Plan 107, GOAT 8/8, **default-on**). Requires `bandit` |
 | `lt2_looped` | LT2 looped inference — weight-shared T-pass loop, hybrid SDPA+AHLA dispatch, zero-init residual gating (Research 73, Plan 108, GOAT 8/8, **default-on**). Requires `hla_attention` |
@@ -1827,7 +1835,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
 | **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
 | **MLS Aggregate** (`mls_aggregate`) | Research 68 | **GOAT 6/6** (Plan 104). Average last K transformer layer residuals before LM head. Training-free, zero new parameters. `ep_accuracy_k()` metric helper. Default-on. | Disabled via `Config.mls_layers = 0`; requires GOAT sweep for K |
-| **GDN2** (`gdn2_attention`) | [Gated DeltaNet-2 (Yang 2024)](https://arxiv.org/abs/2605.09959) | **GOAT 8/8** (Plan 105). O(1) decode with constant state S∈R^{dk×dv} per head. SIMD-accelerated decay/read/update/readout. 3 gate configs: EraseOnly, Full, Kda. `src/gdn2/`. Default-on. | Models must be trained with GDN2 from scratch |
+| **GDN2** (`gdn2_attention`) | [Gated DeltaNet-2 (Yang 2024)](https://arxiv.org/abs/2605.09959) | **GOAT 14/14** (Plan 105: 8 proofs + 6 benchmarks). O(1) decode with constant state S∈R^{dk×dv} per head. SIMD-accelerated decay/read/update/readout. 3 gate configs: EraseOnly, Full, Kda. 99.4% of AHLA throughput, 87–98% memory savings vs flat KV. `src/gdn2/`. Default-on. | Models must be trained with GDN2 from scratch |
 | **DashAttention** (`dash_attn`) | [Peters 2019] + [Correia 2019] α-entmax | **GOAT 9/9** (Plan 106). Adaptive sparse hierarchical attention via α=1.5 entmax routing. Learned chunk summaries. Replaces fixed-budget top-k block selection. `src/dash_attn/`. Default-on. | Requires chunk summary prefill; PFlash integration pending |
 | **Auto-Dreamer** (`dreamer`) | Research 69 | **GOAT 8/8** (Plan 107). Offline memory consolidation: cadence scheduler, O(n log n) Q-value clustering, access-based decay, counterfactual MC dropout utility. `dreamer_goat.rs` (5 proofs, runs by default): 2 generic + 3 Go-scale (81→57 arms, strategic preserved, monotonic consolidation). `bomber_dreamer_goat.rs` (1 proof, `--features "dreamer,bomber"`): bomber arena integration. `src/pruners/dreamer/`. Default-on. | Requires `bandit` |
 | **LT2 Looped** (`lt2_looped`) | Research 73 | **GOAT 8/8** (Plan 108). Weight-shared T-pass loop over all layers. Hybrid SDPA+AHLA dispatch (Uniform/Interleave/Bookend). Zero-init residual gating. Default-on. | Requires `hla_attention`; SDPA gate weight training pending |

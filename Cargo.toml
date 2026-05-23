@@ -32,7 +32,7 @@ crossterm = "0.28"
 tempfile = "3"
 
 [features]
-default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6, stability_metrics Plan 102 GOAT 13/13, mls_aggregate Plan 104 GOAT 6/6, gdn2_attention Plan 105 GOAT 8/8, dash_attn Plan 106 GOAT 9/9, dreamer Plan 107 GOAT 8/8, lt2_looped Plan 108 GOAT 8/8, dmax_spd Plan 109 GOAT 7/7)
+default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6, stability_metrics Plan 102 GOAT 13/13, mls_aggregate Plan 104 GOAT 6/6, gdn2_attention Plan 105 GOAT 14/14, dash_attn Plan 106 GOAT 9/9, dreamer Plan 107 GOAT 8/8, lt2_looped Plan 108 GOAT 8/8, dmax_spd Plan 109 GOAT 7/7, eqr_convergence Plan 119, subterranean Plan 110)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 dash_attn = []  # DashAttention adaptive sparse hierarchical attention via α-entmax routing (Plan 106, Research 68)
 mls_aggregate = []  # MLS Multi-Layer Sum aggregation of last K layer residuals (Plan 104, Research 68)
@@ -48,6 +48,7 @@ bandit = []  # Multi-armed bandit adaptive ScreeningPruner (Plan 030)
 delta_mem = ["bandit"]  # δ-Mem modelless distillation — associative bandit memory (Plan 053)
 g_zero = ["bandit"]  # G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049)
 dreamer = ["bandit"]  # Auto-Dreamer offline memory consolidation scheduler (Plan 107, Research 69)
+subterranean = ["bandit"]  # Procedure graph compilation — compiling workflows into weights (Plan 110, Research 074)
 ropd_rubric = ["bandit"]  # ROPD rubric modelless distillation — multi-criteria reward (Plan 071)
 tes_loop = ["bandit"]  # SimpleTES evaluation-driven scaling — RPUCG bandit + trajectory pruning (Plan 086, GOAT 8/8, default-on)
 cna_steering = ["bandit"]  # CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + modulation (Plan 087)
@@ -61,6 +62,7 @@ sdar_gate = []  # SDAR sigmoid gating for modelless distillation signals (Plan 0
 memo_reflections = ["bandit"]  # MeMo Reflection QA pipeline — 5-step compositional data synthesis (Research 60, Plan 094)
 replaid_schedules = []  # RePlaid variance-minimized adaptive schedules (Plan 078) — experimental, off by default
 elf_sde = []  # ELF SDE noise injection + logit-normal schedule (Plan 079) — GOAT proved: 10-22× diversity, default-on
+eqr_convergence = ["elf_sde"]  # EqR convergence-based rollout selection — Top1Converged residual proxy (Plan 119, Research 79)
 spec_cost_model = []  # Amdahl cost model for LeviathanVerifier (Research 59, Plan 096)
 stability_metrics = []  # Per-step execution stability instrumentation — P50/P99/CV/stability_score, +0.6% overhead (Plan 102, default-on)
 coda_fusion = ["microgpt-core/coda_fusion"]  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation in single-pass (Plan 103)
@@ -97,7 +99,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "coda_fusion"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "coda_fusion"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 

@@ -31,7 +31,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 |---------|-----------|--------|
 | Speculative Decoding | DDTree + DFlash + Leviathan verification + Tri-Mode self-speculation | ✓ Implemented |
 | KV Optimization | **Hybrid OCT+PQ** (OCT triplet + PQ 2D Givens, best MSE all bits, 64× fewer FMAs, **primary default**, Plan 101), OCTOPUS (legacy, same encoding slower rotation), SpectralQuant (9.1×, 0.9917 cosine, calibrated alternative), SP-KV (3-10×), TurboQuant 3-bit (legacy) | ✓ Implemented |
-| Attention Innovation | forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim, SHINE Alternating2D (90% FLOPs savings) | ✓ Implemented |
+| Attention Innovation | **GDN2** (GOAT 14/14, **default-on**, 99.4% AHLA throughput, 87–98% memory savings), forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim, SHINE Alternating2D (90% FLOPs savings) | ✓ Implemented |
 | Noise Scheduling | ELF SDE noise injection (10-22× path diversity, **default**), GRAM validates approach | ✓ Implemented |
 | Distillation/Compression | LoRA adapters, SpectralQuant, BT pairwise ranking (**default**), MeMo reflections, ROPD rubric | ✓ Partial (ASFT/SLIME in riir-gpu, CISPO default GRPO variant) |
 | Test-Time Compute | SimpleTES RPUCG loop (GOAT 8/8, **default**), BanditPruner adaptive arms, GRAM width scaling | ✓ Implemented |
@@ -40,7 +40,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 | Game/Self-Play | Sudoku, Go, Monopoly, Bomber, Unit Distance lattice constructions | ✓ Implemented |
 | SIMD/Perf | NEON SIMD matmul/HLA kernels, zero-alloc hot paths, Minkowski lattice embedding, LDT α-intersection (**default**), TileRT execution pipeline — contiguous weights + stability metrics + stage-specialized decode (GOAT 12/12, Plan 102) | ✓ Implemented |
 
-**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`
+**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`
 
 ---
 
@@ -263,7 +263,7 @@ Top co-occurring pairs:
 | 08 TwELL | Sparse MLP matmul for ReLU activations | `types.rs sparse_matmul` |
 | 20 TurboQuant | 3-bit KV cache quantization (legacy baseline) | `turboquant` module |
 | 28 HLA/AHLA | Second-order linear attention, 88% memory savings | `forward_hla`, `forward_ahla` |
-| 70 GDN2 | Gated DeltaNet-2, decoupled erase/write gates, O(1) decode, 78–96% memory savings | `src/gdn2/`, `gdn2_attention` feature |
+| 70 GDN2 | Gated DeltaNet-2, decoupled erase/write gates, O(1) decode, 99.4% AHLA throughput, 87–98% memory savings, GOAT 14/14 (**default-on**) | `src/gdn2/`, `gdn2_attention` feature |
 | 39 SpectralQuant | Eigenbasis rotation + water-fill (secondary KV, 9.1× compression) | `spectralquant` module |
 | 63 OCTOPUS | Octahedral triplet codec (**primary default**, 12.2× compression, -22% to -49% MSE vs SQ) | `octopus` module |
 | 40 BT Ranking | Bradley-Terry pairwise ranking (**default**, GOAT 4/4) | `pruners/bt_rank.rs` |
@@ -334,7 +334,7 @@ Our implementation status per feature dimension:
 ```
 Speculative Decoding  ████████████████████ 95%  (DDTree, DFlash, Leviathan, MTP, Tri-Mode self-speculation)
 KV Optimization       ████████████████████ 95%  (OCTOPUS primary default, SpectralQuant secondary, SP-KV, TurboQuant legacy)
-Attention Innovation  ████████████████████ 90%  (HLA, AHCLA, Percepta, MaxSim, Tri-Mode dual-stream)
+Attention Innovation  ████████████████████ 95%  (GDN2 GOAT 14/14 default-on, HLA, AHLA, Percepta, MaxSim, Tri-Mode dual-stream)
 Noise Scheduling      ████████████████░░░░ 80%  (SDE injection default, GRAM learned-mean validates, PTRM)
 Distillation          █████████████░░░░░░░ 65%  (LoRA, BT ranking, ROPD, MeMo; ASFT/CISPO/SLIME planned)
 Test-Time Compute     █████████████████░░░ 85%  (SimpleTES GOAT 8/8, BanditPruner, GRAM width scaling)
