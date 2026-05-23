@@ -66,6 +66,8 @@ struct FogState {
     discovered_traps: HashSet<(usize, usize)>,
     goal_pos: Option<(usize, usize)>,
     bridge_seen: bool,
+    boss_last_known: Option<(usize, usize)>,
+    boss_alive: Option<bool>,
 }
 
 impl FogState {
@@ -79,6 +81,8 @@ impl FogState {
             discovered_traps: HashSet::new(),
             goal_pos: None,
             bridge_seen: false,
+            boss_last_known: None,
+            boss_alive: None,
         }
     }
 
@@ -86,7 +90,7 @@ impl FogState {
         &mut self,
         visible: &HashSet<(usize, usize)>,
         game: &StrategicGame,
-        _state: &StrategicState,
+        state: &StrategicState,
     ) {
         self.visible = visible.clone();
         self.seen.extend(visible.iter());
@@ -115,6 +119,21 @@ impl FogState {
             }
             if game.bridge.contains(&pos) {
                 self.bridge_seen = true;
+            }
+        }
+
+        // Track boss position when visible
+        if state.boss_alive {
+            let boss_pos = (state.boss_r, state.boss_c);
+            if visible.contains(&boss_pos) {
+                self.boss_last_known = Some(boss_pos);
+                self.boss_alive = Some(true);
+            }
+        } else {
+            // Boss is dead in game state
+            if self.boss_alive.is_none() || self.boss_alive == Some(true) {
+                self.boss_alive = Some(false);
+                self.boss_last_known = None;
             }
         }
     }
@@ -759,6 +778,75 @@ impl Explorer for BfExplorer {
     }
 }
 
+/// Dodge only when the boss is visible at distance ≤1 and preferred action steps
+/// onto the boss tile (certain death). Picks the best alternative direction that
+/// moves away from the boss. Minimal intervention — only prevents immediate collision.
+fn dodge_boss_if_adjacent(
+    game: &StrategicGame,
+    state: &StrategicState,
+    fog: &FogState,
+    preferred: usize,
+) -> usize {
+    let Some(boss_pos) = fog.boss_last_known else {
+        return preferred;
+    };
+    let Some(alive) = fog.boss_alive else {
+        return preferred;
+    };
+    if !alive || !fog.visible.contains(&boss_pos) {
+        return preferred;
+    }
+
+    // Check if preferred action steps directly onto the boss tile
+    let (dr, dc) = DIR_DELTA[preferred];
+    let new_r = state.r as isize + dr;
+    let new_c = state.c as isize + dc;
+    if new_r < 0 || new_c < 0 {
+        return preferred;
+    }
+    let new_pos = (new_r as usize, new_c as usize);
+    if new_pos != boss_pos {
+        return preferred; // not stepping on boss — no dodge needed
+    }
+
+    // Stepping onto boss — find best alternative that doesn't step on boss
+    let mut best_action = preferred;
+    let mut best_dist = 0i32;
+
+    for (action, &(adr, adc)) in DIR_DELTA.iter().enumerate() {
+        let ar = state.r as isize + adr;
+        let ac = state.c as isize + adc;
+        if ar < 0 || ac < 0 {
+            continue;
+        }
+        let ar = ar as usize;
+        let ac = ac as usize;
+        if ar >= game.rows() || ac >= game.cols() {
+            continue;
+        }
+        if game.grid[ar][ac] == '#' {
+            continue;
+        }
+        if game.bridge.contains(&(ar, ac)) && !state.bridge_open {
+            continue;
+        }
+        if fog.discovered_traps.contains(&(ar, ac)) {
+            continue;
+        }
+        if (ar, ac) == boss_pos {
+            continue; // skip boss tile
+        }
+
+        let alt_dist = manhattan_dist((ar, ac), boss_pos);
+        if alt_dist as i32 > best_dist {
+            best_dist = alt_dist as i32;
+            best_action = action;
+        }
+    }
+
+    best_action
+}
+
 // ── AiExplorer ─────────────────────────────────────────────────
 
 struct AiExplorer;
@@ -886,10 +974,11 @@ impl Explorer for AiExplorer {
                     state,
                     &fog.discovered_traps,
                 ) {
-                    return Some(action);
+                    return Some(dodge_boss_if_adjacent(game, state, fog, action));
                 }
             }
 
+            // Fallback: try all frontiers as a set
             let target_set: HashSet<_> = frontiers.into_iter().collect();
             if let Some(action) = bfs_first_action(
                 game,
@@ -899,7 +988,7 @@ impl Explorer for AiExplorer {
                 state,
                 &fog.discovered_traps,
             ) {
-                return Some(action);
+                return Some(dodge_boss_if_adjacent(game, state, fog, action));
             }
         }
 
@@ -965,6 +1054,7 @@ impl Explorer for HybridExplorer {
             });
 
             if let Some(cluster) = best_cluster {
+                // BF: find nearest frontier in the best cluster
                 let target_set: HashSet<_> = cluster.iter().copied().collect();
                 if let Some(action) = bfs_first_action(
                     game,
@@ -974,10 +1064,11 @@ impl Explorer for HybridExplorer {
                     state,
                     &fog.discovered_traps,
                 ) {
-                    return Some(action);
+                    return Some(dodge_boss_if_adjacent(game, state, fog, action));
                 }
             }
 
+            // Fallback: try all frontiers
             let target_set: HashSet<_> = frontiers.into_iter().collect();
             if let Some(action) = bfs_first_action(
                 game,
@@ -987,15 +1078,13 @@ impl Explorer for HybridExplorer {
                 state,
                 &fog.discovered_traps,
             ) {
-                return Some(action);
+                return Some(dodge_boss_if_adjacent(game, state, fog, action));
             }
         }
 
         navigate_to_known_target(game, state, fog)
     }
 }
-
-// ── Solve Function ─────────────────────────────────────────────
 
 fn solve_exploring<E: Explorer>(game: &StrategicGame, explorer: &mut E) -> SolveResult {
     let mut state = game.initial_state();

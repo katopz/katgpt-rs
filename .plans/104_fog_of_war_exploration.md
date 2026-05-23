@@ -11,7 +11,7 @@
 - [x] TUI with fog visualization (dim unseen, bright visible, remembered faded)
 - [x] Headless benchmark across seeds (tactical_10_fog_bench.rs)
 - [x] Three-round TUI flow with comparison metrics
-- [ ] Boss avoidance heuristics for AI/Hybrid (smarter ≠ deadlier)
+- [x] Boss avoidance heuristics for AI/Hybrid — adjacent dodge (plan 113)
 - [ ] Larger map / more rooms for richer exploration decisions
 
 ## Problem Statement
