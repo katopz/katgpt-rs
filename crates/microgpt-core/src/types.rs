@@ -250,6 +250,42 @@ impl ResidualGate {
 }
 
 // ---------------------------------------------------------------------------
+// SR²AM Configurator Bandit (Plan 112, Research 076)
+// ---------------------------------------------------------------------------
+
+/// SR²AM Configurator decision — learned per-turn planning regulation.
+///
+/// The configurator selects one of these arms per inference turn based on
+/// context (domain + entropy bin). UCB1 balances exploration vs exploitation.
+///
+/// - `PlanNew`: reset tree, full budget allocation (high uncertainty, new sub-problem)
+/// - `PlanExtend`: keep tree, extend depth by one level (moderate uncertainty, continuing)
+/// - `PlanSkip`: skip tree search, direct token sampling (low uncertainty, confident)
+#[cfg(feature = "sr2am_configurator")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum PlanningDecision {
+    /// Reset tree, full budget allocation (high uncertainty, new sub-problem).
+    PlanNew,
+    /// Keep tree, extend depth by one level (moderate uncertainty, continuing).
+    PlanExtend,
+    /// Skip tree search, direct token sampling (low uncertainty, confident).
+    PlanSkip,
+}
+
+/// Context key for configurator bandit — coarse entropy binning.
+///
+/// Entropy is discretized into 10 bins via `floor(entropy * 10.0)` clamped to 0..9.
+/// Combined with domain index, this provides context-aware arm selection.
+#[cfg(feature = "sr2am_configurator")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ConfiguratorContext {
+    /// Domain index from bandit infrastructure.
+    pub domain: usize,
+    /// Coarse entropy bin: `floor(entropy * 10.0)`, clamped to 0..9.
+    pub entropy_bin: usize,
+}
+
+// ---------------------------------------------------------------------------
 // EqR Convergence Selection (Plan 119)
 // ---------------------------------------------------------------------------
 
@@ -1889,6 +1925,73 @@ pub struct InferenceResult {
     pub timestamp: i64,
     /// Was this result screened out (reward below threshold)?
     pub screened: bool,
+    /// SR²AM configurator planning decision for this turn (Plan 112).
+    #[cfg(feature = "sr2am_configurator")]
+    pub planning_decision: Option<PlanningDecision>,
+}
+
+// ---------------------------------------------------------------------------
+// Data Gate — Self-Play Stability (Plan 111, T1)
+// ---------------------------------------------------------------------------
+
+/// Discriminator for different self-play task types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskType {
+    /// Python code output prediction
+    CodeIO,
+    /// DSL expression evaluation
+    DslExpr,
+    /// Game action (Bomber, Go, FFT, Monopoly)
+    GameAction,
+    /// Open-ended generation
+    OpenEnded,
+}
+
+/// A task proposed by the self-play proposer, before solver evaluation.
+#[derive(Debug, Clone)]
+pub struct ProposerTask {
+    /// Task identifier for diagnostics.
+    pub id: usize,
+    /// The problem/query text.
+    pub query: String,
+    /// Optional code or DSL expression to execute.
+    pub program: Option<String>,
+    /// Optional input for the program.
+    pub program_input: Option<String>,
+    /// Task type discriminator.
+    pub task_type: TaskType,
+}
+
+/// Gate admission decision.
+///
+/// Decides whether a proposer-generated task should enter the training pool
+/// BEFORE the solver attempts it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GateDecision {
+    /// Task passes the gate — admitted to training pool.
+    Admit,
+    /// Task rejected with reason.
+    Reject(String),
+}
+
+/// Task-level admission gate for self-play training pool.
+///
+/// Decides whether a proposer-generated task should enter the training pool
+/// BEFORE the solver attempts it. This is the binding constraint for self-play
+/// stability (Survive or Collapse, Pu et al. 2026).
+///
+/// Key finding: a strict gate is sufficient for stability under every reward
+/// variant; no reward variant is sufficient once the gate is removed.
+pub trait DataGate {
+    /// Admit or reject a proposed task.
+    ///
+    /// Returns `GateDecision::Admit` if the task passes the gate,
+    /// `GateDecision::Reject(reason)` if not.
+    fn admit(&self, task: &ProposerTask) -> GateDecision;
+
+    /// Current leak rate ε (fraction of failed tasks admitted).
+    /// ε=0 means strict gate (optimal). ε=1 means gate off (collapse).
+    fn leak_rate(&self) -> f32;
 }
 
 // ---------------------------------------------------------------------------

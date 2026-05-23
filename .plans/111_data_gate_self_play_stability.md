@@ -8,7 +8,7 @@
 
 ## Tasks
 
-- [ ] T1: Add `DataGate` trait + `GateDecision` enum to `microgpt-core/src/types.rs`
+- [x] T1: Add `DataGate` trait + `GateDecision` enum to `microgpt-core/src/types.rs` ✅ — Added `TaskType`, `ProposerTask`, `GateDecision`, `DataGate` trait. No feature gate (ungated in core, per plan). Clippy clean.
 - [ ] T2: Add `SolverRewardMode` enum to `riir-gpu/src/loss_grpo.rs` (Grounded, IntrinsicSelfConsistency)
 - [ ] T3: Implement `ExecutionGate` (sandbox exec + determinism check) in `riir-gpu/src/data_gate.rs`
 - [ ] T4: Implement `LeakyGate<G: DataGate>` (ε-Bernoulli relaxation) for phase diagram experiments
