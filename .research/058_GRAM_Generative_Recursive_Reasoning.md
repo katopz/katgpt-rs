@@ -129,32 +129,33 @@ This directly validates PTRM's finding (Research 49): width >> depth. 20 paralle
 
 | GRAM Concept | Our Equivalent | Location | Status |
 |---|---|---|---|
-| Stochastic latent transition h_t = u_t + ε_t | `inject_sde_noise()` on marginals | `src/speculative/dd_tree.rs:69-110` | ✅ Implemented |
-| Zero-mean noise N(0, σ²) | `SdeConfig.gamma` × N(0,1) | `src/speculative/types.rs:492-499` | ✅ ELF default γ=1.0 |
+| Stochastic latent transition h_t = u_t + ε_t | `inject_sde_noise()` on marginals | `src/speculative/dd_tree.rs:79-136` | ✅ Implemented |
+| Zero-mean noise N(0, σ²) | `SdeConfig.gamma` × N(0,1) | `src/speculative/types.rs:565-572` | ✅ ELF default γ=1.0 |
 | **Learned mean** N(μ_θ(u_t), σ²) | **Not yet** (zero-mean only) | — | 🟡 Small gain (see §7.1) |
-| Noise scale σ_θ(u_t) | `SdeConfig.gamma` (fixed) | `src/speculative/types.rs:492-499` | ✅ Configurable |
-| Preserve top-1 token | `SdeConfig.preserve_top1` | `src/speculative/types.rs:495` | ✅ Implemented |
-| Confidence floor | `SdeConfig.confidence_floor` | `src/speculative/types.rs:496` | ✅ Implemented |
-| N parallel trajectories | `DDTreeBranchCache` with K branches | `src/speculative/types.rs:301-305` | ✅ Implemented |
-| Branch forking | `DDTreeBranchCache::fork_branch()` | `src/speculative/types.rs:320+` | ✅ Copy-on-write KV |
-| Width scaling (N samples) | `max_branches` config | `src/speculative/types.rs:307-317` | ✅ Configurable |
-| Trajectory selection (LPRM) | `BanditPruner<P>` Q-values | `src/pruners/bandit.rs:289+` | ✅ Online Q-learning |
+| Noise scale σ_θ(u_t) | `SdeConfig.gamma` (fixed) | `src/speculative/types.rs:565-572` | ✅ Configurable |
+| Preserve top-1 token | `SdeConfig.preserve_top1` | `src/speculative/types.rs:569` | ✅ Implemented |
+| Confidence floor | `SdeConfig.confidence_floor` | `src/speculative/types.rs:571` | ✅ Implemented |
+| N parallel trajectories | `DDTreeBranchCache` with K branches | `src/speculative/types.rs:367-371` | ✅ Implemented |
+| Branch forking | `DDTreeBranchCache::fork_branch()` | `src/speculative/types.rs:387-394` | ✅ Copy-on-write KV |
+| Width scaling (N samples) | `max_branches` field | `src/speculative/types.rs:370` | ✅ Configurable |
+| Trajectory selection (LPRM) | `BanditPruner<P>` Q-values | `src/pruners/bandit.rs:297+` | ✅ Online Q-learning |
 | Majority voting | `extract_best_path()` | `src/speculative/dd_tree.rs` | ✅ Best path extraction |
-| Richer pairwise selection | `BtRank` (Bradley-Terry) | `src/pruners/bt_rank.rs` | ✅ Feature `bt_rank` |
-| Flow-based exploration | `FlowPruner<P>` (GFlowNet) | `src/speculative/flow_pruner.rs:43-52` | ✅ GRAM doesn't have this |
-| Sigmoid-gated selection | `SdarBanditPruner<P>` | `src/pruners/sdar/sdar_bandit.rs:187-196` | ✅ SDAR gate |
+| Richer pairwise selection | `BtScores`/`bt_fit()` (Bradley-Terry) | `src/pruners/bt_rank.rs` | ✅ Feature `bt_rank` |
+| Flow-based exploration | `FlowPruner<P>` (GFlowNet) | `src/speculative/flow_pruner.rs:43-55` | ✅ GRAM doesn't have this |
+| Sigmoid-gated selection | `SdarBanditPruner<P>` | `src/pruners/sdar/sdar_bandit.rs:187-197` | ✅ SDAR gate |
 | ACT early exit | `domain_latent` feature | Feature flag | ✅ Implemented |
-| Deep supervision (N_sup steps) | Plan 049 deep supervision | `.plans/` | ✅ Planned |
+| Deep supervision (N_sup steps) | DPO/GRPO intermediate state training | `riir-ai/.plans/059_gzero_dpo_grpo.md` (Plan 059 ✅) | ✅ Model-based path |
 | Feature flag | `elf_sde`, `bandit`, `bt_rank` | `Cargo.toml` features | ✅ All default-on |
 
 ### 4.2 Model-Based Path (riir-ai, Opt-In)
 
 | GRAM Concept | Our Equivalent | Location | Status |
 |---|---|---|---|
-| ELBO variational training | DPO loss | riir-gpu (Plan 059) | 🟡 Planned |
-| Posterior q_φ(τ\|x,y) | GRPO proposer | riir-gpu (Plan 059) | 🟡 Planned |
+| ELBO variational training | DPO loss | riir-gpu (`riir-ai/.plans/059_gzero_dpo_grpo.md`) | ✅ Complete (76 tests) |
+| Posterior q_φ(τ\|x,y) | GRPO proposer | riir-gpu (`riir-ai/.plans/059_gzero_dpo_grpo.md`) | ✅ Complete |
+| Deep supervision (N_sup steps) | DPO/GRPO on intermediate states | `riir-ai/.plans/059_gzero_dpo_grpo.md` | ✅ Same as §4.1 |
 | KL balance coefficient (0.8) | DPO β parameter | riir-gpu config | 🟡 See §7.3 |
-| Model weight updates | LoRA training | riir-gpu | 🟡 Planned |
+| Model weight updates | LoRA training (ASFT anchored, Plan 090) | riir-gpu | ✅ Complete (Research 006 NPC Dialog) |
 | Learned mean μ_θ | Logit-shift in LoRA | riir-gpu | 🟡 Small gain |
 
 ### 4.3 Structural Equivalence
@@ -195,7 +196,7 @@ The mapping is near-1:1 with one difference: our noise is zero-mean (N(0, γ²))
 
 GRAM's core innovation is injecting stochastic transitions at each recursive step. Our `inject_sde_noise` does exactly this:
 
-```src/speculative/dd_tree.rs#L69-79
+```src/speculative/dd_tree.rs#L79-89
 pub fn inject_sde_noise(
     marginals: &[&[f32]],
     sde_config: &SdeConfig,
@@ -214,11 +215,11 @@ GRAM validates: noise injection is non-negotiable. Their ablation shows 0% N-Que
 
 GRAM proves N=20 at 16 iters beats deterministic at 320 iters. Our `DDTreeBranchCache` with `max_branches=K` is the same mechanism:
 
-```src/speculative/types.rs#L301-317
+```src/speculative/types.rs#L367-371
 pub struct DDTreeBranchCache {
     paged: PagedKVCache,
     branch_count: usize,
-    max_branches: usize,  // This is GRAM's N
+    max_branches: usize,
 }
 ```
 
@@ -228,7 +229,7 @@ More branches >> deeper lookahead. Research 49 (PTRM) showed +28.6pp from K=64 v
 
 GRAM uses LPRM (Latent Process Reward Model) to score trajectories. Our `BanditPruner<P>` does the same with online Q-learning:
 
-```src/pruners/bandit.rs#L289-293
+```src/pruners/bandit.rs#L297-307
 pub struct BanditPruner<P: ScreeningPruner> {
     inner: P,
     strategy: BanditStrategy,
@@ -239,13 +240,13 @@ pub struct BanditPruner<P: ScreeningPruner> {
 
 Key advantage: BanditPruner learns online (no separate training phase), adapts to distribution shift, and supports multiple strategies (UCB1, ε-greedy). This is richer than GRAM's static LPRM.
 
-### 5.4 BtRank Pairwise = Richer Than GRAM's Best-of-N ✅
+### 5.4 BtScores Pairwise = Richer Than GRAM's Best-of-N ✅
 
-GRAM selects trajectories via LPRM scoring or majority vote — both pointwise methods. Our `BtRank` (Bradley-Terry) uses pairwise comparisons that internalize relative strength:
+GRAM selects trajectories via LPRM scoring or majority vote — both pointwise methods. Our `BtScores`/`bt_fit()` (Bradley-Terry) uses pairwise comparisons that internalize relative strength:
 
 ```src/pruners/bt_rank.rs
-// BtRank: pairwise ranking with Bradley-Terry model
-// Each comparison updates both candidates' ratings
+// bt_fit(): pairwise ranking with Bradley-Terry model
+// Each comparison updates both candidates' ratings via BtScores
 // More robust than pointwise scoring
 ```
 
@@ -255,7 +256,7 @@ Where GRAM says "pick the highest LPRM score," we say "compare all pairs, rank b
 
 GRAM explores via parallel noisy trajectories. Our `FlowPruner<P>` adds GFlowNet flow-based exploration:
 
-```src/speculative/flow_pruner.rs#L43-52
+```src/speculative/flow_pruner.rs#L43-55
 pub struct FlowPruner<P: ScreeningPruner> {
     inner: P,
     lambda: f32,  // Flow regularization
@@ -278,7 +279,14 @@ Both mechanisms allow the model to stop early when confident, saving compute.
 
 ### 5.7 Deep Supervision = GRAM's N_sup Supervision Steps ✅
 
-GRAM uses N_sup supervision steps in its ELBO training. Plan 049 (deep supervision) brings the same concept: supervise intermediate recursive states, not just the final output. This is already in our roadmap.
+GRAM uses N_sup supervision steps in its ELBO training — supervising intermediate recursive states, not just the final output. Our model-based path (riir-gpu) implements the same concept:
+
+- **DPO loss** (Plan 059 ✅ Complete) trains on preference pairs from intermediate trajectories via `LengthNormalizedDpo` + `dpo_log_ratio.wgsl` + `dpo_reduce.wgsl`
+- **GRPO advantage** (Plan 059 ✅ Complete) computes group-normalized rewards per intermediate step via `group_advantage()`, `length_penalty()`, `duplication_penalty()`
+- **GZeroLoop** orchestrates self-play rounds with crash recovery — each round produces intermediate state supervision from Hint-δ signal
+- **LoRA training** (Research 006, Plan 090 ASFT) applies anchored fine-tuning for NPC dialog, game domains — intermediate anchoring prevents drift (λ=0.03)
+
+The modelless path (microgpt-rs) doesn't train weights — it's inference-time only. But the model-based path (riir-gpu) provides full deep supervision through DPO/GRPO on intermediate recursive states, exactly mirroring GRAM's N_sup. Our approach is richer because `DeltaFilter` (6-stage: δ percentile, length, ratio, zlib, echo, role markers) provides higher-quality supervision signal than GRAM's single ELBO objective.
 
 ---
 
@@ -385,35 +393,13 @@ impl SdeConfig {
 
 **Priority: LOW.** Add as optional `SdeConfig.guided` field, default `false`. No new feature flag.
 
-### 7.2 Explicit Width-vs-Depth Benchmark (Validation)
+### 7.2 Explicit Width-vs-Depth Benchmark (Validation) ✅ Plan 095
 
 GRAM proves N=20 at 16 iters beats all deterministic at 320 iters. PTRM (Research 49) proves K=64 gives +28.6pp vs T=64 giving +3.1pp. Two independent papers, same conclusion: width >> depth.
 
-We should benchmark this explicitly on our arenas to get concrete numbers for our specific domains:
+This is already implemented in **Plan 095** (`095_gram_width_vs_depth.goat.md`): width sweep K=[1,5,10,20] and depth sweep T=[1,4,8,16] with infrastructure validated. GOAT verdict PENDING 1/3 — G2 passed, G1/G3 need stochastic game domains (Bomber arena) for full proof.
 
-```/dev/null/bench_gram_width.rs#L1-35
-/// Benchmark: GRAM-style width vs depth scaling on our domains.
-///
-/// Measures how much gain comes from:
-/// - Width: K=1, 2, 4, 8, 16, 32, 64 branches (noise seeds)
-/// - Depth: T=1, 2, 4, 8 draft_lookahead steps
-///
-/// Feature gate: `#[cfg(all(feature = "elf_sde", feature = "bandit"))]`
-///
-/// Expected result (from GRAM + PTRM):
-/// - Width K=1→20: +15-25pp on constrained tasks
-/// - Depth T=1→16: +3-8pp
-/// - Width-dominant across all tasks
-///
-/// Domains to test:
-/// 1. Go (19×19): win rate vs fixed opponent
-/// 2. Bomber: score on procedurally generated levels
-/// 3. FFT puzzles: solve rate
-///
-/// Run: cargo bench --features "elf_sde bandit" --bench gram_width_scaling
-```
-
-**Priority: MEDIUM.** Validates our SDE infrastructure against two independent papers. Provides concrete numbers for our specific game domains.
+**Status: INFRASTRUCTURE COMPLETE.** Awaiting game-domain arenas for final GOAT proof.
 
 ### 7.3 KL Balance Coefficient for riir-gpu DPO Training (Model-Based Path)
 
@@ -436,7 +422,7 @@ The following might seem tempting based on GRAM but are explicitly not worth pur
 3. **Separate LPRM training**: `BanditPruner` online learning is superior.
 4. **Reparameterization trick**: Not needed in modelless path.
 5. **Q-learning halt head**: `domain_latent` ACT-style exit already covers this.
-6. **Majority voting**: `BtRank` pairwise is strictly better than majority vote.
+6. **Majority voting**: `BtScores`/`bt_fit()` pairwise is strictly better than majority vote.
 7. **Naive stochasticity (random init / stochastic decode)**: GRAM's own ablation shows these give zero improvement. The gain comes from the variational framework.
 
 ---
@@ -452,7 +438,7 @@ GRAM independently validates our existing design from a completely different ang
 | `inject_sde_noise` with γ=1.0 | Stochastic transitions essential (0% without) | ✅ Core mechanism confirmed |
 | `DDTreeBranchCache` with K branches | N=20 at shallow depth beats deep deterministic | ✅ Width >> depth confirmed |
 | `BanditPruner` Q-values | LPRM predicts trajectory quality | ✅ Selection mechanism confirmed |
-| `BtRank` pairwise comparison | — | ✅ We go beyond GRAM |
+| `BtScores`/`bt_fit()` pairwise comparison | — | ✅ We go beyond GRAM |
 | `FlowPruner` GFlowNet exploration | — | ✅ We go beyond GRAM |
 | `SdeConfig.preserve_top1` | Keep high-confidence tokens stable | ✅ Engineering practice confirmed |
 | `elf_sde` default-on | Stochasticity should be default | ✅ Deployment confirmed |
@@ -464,8 +450,8 @@ GRAM independently validates our existing design from a completely different ang
 | Item | Effort | Impact | Priority | Target |
 |---|---|---|---|---|
 | 7.1 `SdeConfig.guided` flag | Small | Low | LOW | `src/speculative/types.rs` |
-| 7.2 Width-vs-depth benchmark | Medium | High | MEDIUM | `tests/bench_gram_width.rs` |
-| 7.3 KL balance note for DPO | Trivial | Low | LOW | Plan 059 update |
+| 7.2 Width-vs-depth benchmark | Medium | High | ✅ DONE | Plan 095 (infrastructure complete, GOAT pending) |
+| 7.3 KL balance note for DPO | Trivial | Low | LOW | riir-ai Plan 059 update |
 
 ### 8.3 What NOT To Do
 
@@ -487,7 +473,7 @@ GRAM independently validates our existing design from a completely different ang
 | Research 21 (G-Zero) | Self-play loop structure similar to GRAM's multi-trajectory exploration. g_zero already does unconditional generation via self-play. |
 | Research 44 (ELF/SDE) | Our SDE noise injection IS GRAM's stochastic guidance. ELF was our original distillation; GRAM validates from a different angle. |
 | Research 37 (REAP) | Model-based/modelless duality: GRAM's ELBO training is model-based, our `inject_sde_noise` is modelless. Same effect, different paths. |
-| Research 40 (Bradley-Terry) | BtRank pairwise comparison is richer than GRAM's best-of-N selection. We go beyond. |
+| Research 40 (Bradley-Terry) | `BtScores`/`bt_fit()` pairwise comparison is richer than GRAM's best-of-N selection. We go beyond. |
 | Research 34 (D2F) | Block-wise diffusion similar to GRAM's supervision steps. Both exploit multi-scale refinement. |
 | Research 38 (SDAR) | Sigmoid-gated bandit selection is a richer trajectory selector than GRAM's majority vote. |
 
@@ -512,10 +498,10 @@ GRAM independently validates our existing design from a completely different ang
 | File | Role |
 |---|---|
 | `src/speculative/dd_tree.rs` | `inject_sde_noise`, `build_dd_tree_sde`, `extract_best_path` |
-| `src/speculative/types.rs` | `SdeConfig`, `DDTreeBranchCache`, `ScreeningPruner`, `ConstraintPruner` |
+| `src/speculative/types.rs` | `SdeConfig`, `DDTreeBranchCache` (re-exports `ScreeningPruner`, `ConstraintPruner` from `microgpt_core::traits`) |
 | `src/speculative/verifier.rs` | `SpeculativeVerifier` trait |
 | `src/pruners/bandit.rs` | `BanditPruner<P>` with Q-values and strategies |
-| `src/pruners/bt_rank.rs` | `BtRank` Bradley-Terry pairwise ranking |
+| `src/pruners/bt_rank.rs` | `BtScores`, `BtConfig`, `bt_fit()` — Bradley-Terry pairwise ranking |
 | `src/speculative/flow_pruner.rs` | `FlowPruner<P>` GFlowNet flow bonus |
 | `src/pruners/sdar/sdar_bandit.rs` | `SdarBanditPruner<P>` sigmoid-gated bandit |
 | `src/pruners/sdar/sdar_absorb.rs` | `SdarGatedAbsorbCompress<P>` sigmoid-gated absorb-compress |
