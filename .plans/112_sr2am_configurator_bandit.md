@@ -25,7 +25,7 @@
 ### Phase 2: DDTree Integration (Modelless)
 
 - [x] T6: Add `planning_decision: Option<PlanningDecision>` to `InferenceResult`
-- [ ] T7: Wire `ConfiguratorBandit` into speculative decode path
+- [x] T7: Wire `ConfiguratorBandit` into speculative decode path
   - Before DDTree `build()`: query configurator → get `PlanningDecision`
   - `PlanNew` → reset tree, allocate full `tree_budget`
   - `PlanExtend` → keep existing tree, `draft_lookahead += 1`
@@ -41,12 +41,12 @@
 
 ### Phase 3: Uncertainty-Aware Horizon Truncation (Modelless)
 
-- [ ] T11: Add `max_plan_horizon: Option<usize>` to `InferenceOverrides`
+- [x] T11: Add `max_plan_horizon: Option<usize>` to `InferenceOverrides`
   - When set, caps `draft_lookahead` to this value regardless of domain config
 - [x] T12: Implement `entropy_truncate_horizon()` helper
   - If `entropy > threshold` (default 2.5 nats), cap `draft_lookahead` at 2
   - Maps directly to SR²AM's finding that web tasks benefit from short horizons
-- [ ] T13: Add `plan_horizon_used` metric to `InferenceResult`
+- [x] T13: Add `plan_horizon_used` metric to `InferenceResult`
 - [x] T14: Tests for horizon truncation edge cases (entropy boundary, override precedence)
 
 ### Phase 4: GOAT Proof (Bomber/Go Arena)
