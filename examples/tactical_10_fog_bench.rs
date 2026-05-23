@@ -12,7 +12,7 @@ use std::time::Instant;
 
 // ── Constants ──────────────────────────────────────────────────
 
-const BOSS_SPEED: u32 = 3;
+const BOSS_SPEED: u32 = 2;
 const VISION_RADIUS: usize = 4;
 const MAX_STEPS: usize = 500;
 
@@ -54,6 +54,7 @@ struct StrategicState {
     boss_alive: bool,
     total_cost: u32,
     dead: bool,
+    boss_last_seen_player: Option<(usize, usize)>,
 }
 
 #[derive(Clone, Debug)]
@@ -319,19 +320,48 @@ impl StrategicGame {
             boss_alive: true,
             total_cost: 0,
             dead: false,
+            boss_last_seen_player: None,
         }
     }
 
-    fn boss_next_move(&self, state: &StrategicState) -> (usize, usize) {
+    fn boss_next_move(&self, state: &mut StrategicState) -> (usize, usize) {
         if !state.boss_alive {
             return (state.boss_r, state.boss_c);
         }
-        let start = (state.boss_r, state.boss_c);
-        let target = (state.r, state.c);
+        let boss_pos = (state.boss_r, state.boss_c);
+        let player_pos = (state.r, state.c);
+        if boss_pos == player_pos {
+            return boss_pos;
+        }
+
+        // Compute boss's vision from its position
+        let boss_vision = compute_visible(&self.grid, boss_pos, state.bridge_open, &self.bridge);
+
+        if boss_vision.contains(&player_pos) {
+            // CHASE: player is visible → remember position, BFS toward player
+            state.boss_last_seen_player = Some(player_pos);
+            self.bfs_boss_step(boss_pos, player_pos)
+        } else if let Some(last_seen) = state.boss_last_seen_player {
+            if last_seen == boss_pos {
+                // Reached last known position, can't see player → go idle
+                state.boss_last_seen_player = None;
+                boss_pos
+            } else {
+                // INVESTIGATE: move toward last known player position
+                self.bfs_boss_step(boss_pos, last_seen)
+            }
+        } else {
+            // IDLE: no player info → stay put
+            boss_pos
+        }
+    }
+
+    /// BFS from boss toward target. Boss does NOT avoid traps — it can be lured!
+    /// Only walls and closed bridges block movement.
+    fn bfs_boss_step(&self, start: (usize, usize), target: (usize, usize)) -> (usize, usize) {
         if start == target {
             return start;
         }
-
         let rows = self.rows();
         let cols = self.cols();
         let mut queue = VecDeque::new();
@@ -368,6 +398,7 @@ impl StrategicGame {
                 if self.bridge.contains(&next) {
                     continue;
                 }
+                // Boss does NOT avoid traps — player can lure boss through them
                 visited.insert(next);
                 came_from.insert(next, pos);
                 queue.push_back(next);
@@ -439,7 +470,7 @@ impl StrategicGame {
         self.interact(&mut next);
 
         if next.boss_alive && next.total_cost.is_multiple_of(BOSS_SPEED) {
-            let (new_br, new_bc) = self.boss_next_move(&next);
+            let (new_br, new_bc) = self.boss_next_move(&mut next);
             next.boss_r = new_br;
             next.boss_c = new_bc;
             if self.traps.contains(&(new_br, new_bc)) {
@@ -611,11 +642,105 @@ trait Explorer {
     ) -> Option<usize>;
 }
 
+/// Try to lure the boss to a trap. The player positions adjacent to a trap
+/// on the FAR side from the boss, so the boss's BFS path goes through the trap.
+/// Returns None if no lure opportunity exists.
+fn lure_boss_to_trap(
+    game: &StrategicGame,
+    state: &StrategicState,
+    fog: &FogState,
+) -> Option<usize> {
+    // Only lure when boss is visible and close enough to chase
+    let boss_pos = fog.boss_last_known?;
+    let alive = fog.boss_alive?;
+    if !alive || !fog.visible.contains(&boss_pos) {
+        return None;
+    }
+
+    let boss_dist = manhattan_dist((state.r, state.c), boss_pos);
+    // Only consider luring when boss is reasonably close (within 8 tiles)
+    if boss_dist > 8 {
+        return None;
+    }
+
+    // For each discovered trap, find if there's a position on the far side
+    // that would make the boss path through the trap
+    let mut best_action = None;
+    let mut best_score = i32::MIN;
+
+    for &trap_pos in &fog.discovered_traps {
+        // Find positions adjacent to the trap that are:
+        // 1. Passable (floor, not trap)
+        // 2. On the far side from the boss (manhattan dist from boss > trap dist from boss)
+        // 3. Reachable from current position without stepping on traps
+        for &(dr, dc) in &DIR_DELTA {
+            let adj_r = trap_pos.0 as isize + dr;
+            let adj_c = trap_pos.1 as isize + dc;
+            if adj_r < 0 || adj_c < 0 {
+                continue;
+            }
+            let adj = (adj_r as usize, adj_c as usize);
+            if adj.0 >= game.rows() || adj.1 >= game.cols() {
+                continue;
+            }
+            if game.grid[adj.0][adj.1] == '#' {
+                continue;
+            }
+            if game.bridge.contains(&adj) && !state.bridge_open {
+                continue;
+            }
+            if fog.discovered_traps.contains(&adj) {
+                continue; // don't step on other traps
+            }
+            if !fog.seen.contains(&adj) {
+                continue; // must be explored territory
+            }
+
+            // Check if this position is on the far side of the trap from the boss
+            let trap_to_boss = manhattan_dist(trap_pos, boss_pos);
+            let adj_to_boss = manhattan_dist(adj, boss_pos);
+
+            // "Far side" means: boss→trap→adj is the natural chase direction
+            // adj should be farther from boss than the trap
+            if adj_to_boss <= trap_to_boss {
+                continue;
+            }
+
+            // Score: closer to current position is better (faster to reach)
+            let dist_to_lure = manhattan_dist((state.r, state.c), adj) as i32;
+            let score = -dist_to_lure;
+
+            if score > best_score {
+                best_score = score;
+                let target_set = HashSet::from([adj]);
+                best_action = bfs_first_action(
+                    game,
+                    (state.r, state.c),
+                    &target_set,
+                    &fog.seen,
+                    state,
+                    &fog.discovered_traps,
+                );
+            }
+        }
+    }
+
+    best_action
+}
+
 fn navigate_to_known_target(
     game: &StrategicGame,
     state: &StrategicState,
     fog: &FogState,
 ) -> Option<usize> {
+    // Priority 0: Lure boss to trap (when boss is chasing and trap is between boss and player)
+    if state.boss_alive
+        && !fog.discovered_traps.is_empty()
+        && let Some(action) = lure_boss_to_trap(game, state, fog)
+    {
+        return Some(action);
+    }
+
     // 1. Uncollected keys
     let keys: HashSet<_> = game
         .keys
