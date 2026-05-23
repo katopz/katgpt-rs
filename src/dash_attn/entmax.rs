@@ -32,12 +32,12 @@ pub fn entmax_1p5(scores: &[f32]) -> (Vec<f32>, f32) {
     let mut tau = 0.0f32;
     let mut support_size = 0usize;
 
-    for k in 0..n {
-        cumsum += sorted[k].1;
+    for (k, &(_, score)) in sorted.iter().enumerate() {
+        cumsum += score;
         let t = (cumsum - 1.0) / ((k + 1) as f32);
         // Extend support while sorted[k] > threshold candidate τ_k.
         // The last valid k gives the maximal support and final τ.
-        if sorted[k].1 > t {
+        if score > t {
             tau = t;
             support_size = k + 1;
         }
@@ -97,19 +97,19 @@ pub fn entmax_gqa_aggregate(
     let mut result = vec![vec![0.0f32; n_chunks]; n_kv_heads];
     let mut counts = vec![0usize; n_kv_heads];
 
-    for h in 0..n_query_heads {
+    for (h, head_prob) in head_probs.iter().enumerate() {
         let kv_group = h * n_kv_heads / n_query_heads;
         counts[kv_group] += 1;
-        for c in 0..n_chunks {
-            result[kv_group][c] += head_probs[h][c];
+        for (c, &prob) in head_prob.iter().enumerate() {
+            result[kv_group][c] += prob;
         }
     }
 
     for g in 0..n_kv_heads {
         if counts[g] > 0 {
             let inv = 1.0 / counts[g] as f32;
-            for c in 0..n_chunks {
-                result[g][c] *= inv;
+            for val in &mut result[g] {
+                *val *= inv;
             }
         }
     }

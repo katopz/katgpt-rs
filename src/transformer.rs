@@ -621,7 +621,7 @@ fn forward_verify<'a>(
 ///
 /// Feature gate: `lt2_looped` (requires `hla_attention`).
 #[cfg(feature = "lt2_looped")]
-#[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
+#[allow(dead_code, clippy::too_many_arguments, clippy::needless_range_loop)]
 fn forward_looped<'a>(
     ctx: &'a mut ForwardContext,
     weights: &TransformerWeights,

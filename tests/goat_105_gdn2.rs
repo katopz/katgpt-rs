@@ -11,8 +11,7 @@
 //! Run: `cargo test --features gdn2_attention --test goat_105_gdn2 -- --nocapture`
 
 use microgpt_rs::gdn2::{
-    Gdn2GateConfig, Gdn2HeadState, Gdn2LayerState, MultiLayerGdn2Cache, gdn2_recurrent_step,
-    l2_normalize, sigmoid,
+    Gdn2GateConfig, Gdn2HeadState, MultiLayerGdn2Cache, gdn2_recurrent_step, l2_normalize, sigmoid,
 };
 use microgpt_rs::types::Config;
 
@@ -463,11 +462,11 @@ fn proof_8_outer_product_write() {
         "[P8.3] s[3] should be 1.0 (k[0]*v[3]), got {}",
         s[3]
     );
-    for i in dk..dk * dv {
+    for (offset, &val) in s[dk..dk * dv].iter().enumerate() {
+        let i = dk + offset;
         assert!(
-            approx_eq(s[i], 0.0, 1e-6),
-            "[P8.4] s[{i}] should be 0.0, got {}",
-            s[i]
+            approx_eq(val, 0.0, 1e-6),
+            "[P8.4] s[{i}] should be 0.0, got {val}",
         );
     }
 

@@ -730,8 +730,6 @@ mod tests {
         let hd = 2;
         let mut sk = vec![0.0; hd * hd];
         let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
-        let mut tmp_k_cqv = vec![0.0; hd];
-        let mut tmp_q_g = vec![0.0; hd];
 
         // Manually set state for predictable readout
         // SK = [[1, 0], [0, 1]] (identity)
@@ -894,7 +892,7 @@ mod tests {
             &mut tmp_k_cqv,
             &mut tmp_q_g,
         );
-        let sk_no_decay = sk[0];
+        let _sk_no_decay = sk[0];
 
         // Reset and update with gamma=0.5
         sk.fill(0.0);

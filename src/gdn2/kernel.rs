@@ -314,8 +314,9 @@ mod tests {
         // S should be k ⊗ v (row 0 = [0,0,0,1], rest zero)
         assert!((s[0] - 0.0).abs() < 1e-6, "s[0] should be 0");
         assert!((s[3] - 1.0).abs() < 1e-6, "s[3] should be 1.0 (k[0]*v[3])");
-        for i in dk..dk * dv {
-            assert!(s[i].abs() < 1e-6, "s[{i}] should be 0, got {}", s[i]);
+        for (offset, &val) in s[dk..dk * dv].iter().enumerate() {
+            let i = dk + offset;
+            assert!(val.abs() < 1e-6, "s[{i}] should be 0, got {val}");
         }
     }
 

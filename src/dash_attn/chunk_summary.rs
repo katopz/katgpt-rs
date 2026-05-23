@@ -155,11 +155,10 @@ pub fn summarize_chunk(
     // Compute attention scores: q · k_t / sqrt(d)
     let scale = 1.0 / (hd as f32).sqrt();
     let mut scores = vec![0.0f32; chunk_size];
-    for t in 0..chunk_size {
-        let k_start = t * hd;
+    for (t, key_chunk) in chunk_keys.chunks_exact(hd).enumerate() {
         let mut dot = 0.0f32;
         for d in 0..hd {
-            dot += q[d] * chunk_keys[k_start + d];
+            dot += q[d] * key_chunk[d];
         }
         scores[t] = dot * scale;
     }
@@ -169,10 +168,9 @@ pub fn summarize_chunk(
 
     // Weighted sum of keys → summary
     let mut summary = vec![0.0f32; hd];
-    for t in 0..chunk_size {
-        let k_start = t * hd;
+    for (score, key_chunk) in scores.iter().zip(chunk_keys.chunks_exact(hd)) {
         for d in 0..hd {
-            summary[d] += scores[t] * chunk_keys[k_start + d];
+            summary[d] += score * key_chunk[d];
         }
     }
 
