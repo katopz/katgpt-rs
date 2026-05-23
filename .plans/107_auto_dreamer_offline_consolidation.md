@@ -263,7 +263,7 @@ Expected:
 ## T10: Go GOAT Proof
 
 ```bash
-cargo test -p microgpt-rs --test go_dreamer_goat --features dreamer
+cargo test -p microgpt-rs --test dreamer_goat --features dreamer
 ```
 
 Design:
@@ -330,5 +330,5 @@ Expected:
 - MeMo Reflections: `src/pruners/reflection.rs`
 
 ✅ GOAT 8/8 proved: `tests/goat_107_dreamer.rs` — config presets, cadence trigger, min-visits+cap, snapshot alignment, sorted output, coverage, region exempt, counterfactual pipeline
-✅ Bomber GOAT proof: `tests/bomber_dreamer_goat.rs` — arm reduction 40%, Q competitive, reward within 30%
-✅ Go GOAT proof: `tests/go_dreamer_goat.rs` — 81→57 arms, Q competitive, strategic moves preserved, monotonic consolidation
+✅ Dreamer GOAT proof: `tests/dreamer_goat.rs` (5 proofs, runs by default) — 2 generic + 3 Go-scale (81→57 arms, strategic preserved, monotonic consolidation)
+✅ Bomber GOAT proof: `tests/bomber_dreamer_goat.rs` (1 proof, `--features "dreamer,bomber"`) — bomber arena integration
