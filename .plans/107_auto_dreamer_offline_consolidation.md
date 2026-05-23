@@ -12,11 +12,11 @@
 - [x] T4: Implement region rewriting consolidator (deterministic modelless merge)
 - [x] T5: Implement memory decay/forgetting policy
 - [x] T6: Implement counterfactual dropout utility estimation
-- [ ] T7: Integrate Dreamer into existing bandit/δ-mem pipeline
-- [ ] T8: Add Freeze/Thaw support for consolidated banks
-- [ ] T9: Bomber GOAT proof — dreamer vs no-dreamer (1000 rounds)
-- [ ] T10: Go GOAT proof — dreamer vs no-dreamer (20 games)
-- [ ] T11: Update README + .docs + .research
+- [x] T7: Integrate Dreamer into existing bandit/δ-mem pipeline
+- [x] T8: Add Freeze/Thaw support for consolidated banks
+- [x] T9: Bomber GOAT proof — dreamer vs no-dreamer (1000 rounds)
+- [x] T10: Go GOAT proof — dreamer vs no-dreamer (20 games)
+- [x] T11: Update README + .docs + .research
 
 ---
 
@@ -330,3 +330,5 @@ Expected:
 - MeMo Reflections: `src/pruners/reflection.rs`
 
 ✅ GOAT 8/8 proved: `tests/goat_107_dreamer.rs` — config presets, cadence trigger, min-visits+cap, snapshot alignment, sorted output, coverage, region exempt, counterfactual pipeline
+✅ Bomber GOAT proof: `tests/bomber_dreamer_goat.rs` — arm reduction 40%, Q competitive, reward within 30%
+✅ Go GOAT proof: `tests/go_dreamer_goat.rs` — 81→57 arms, Q competitive, strategic moves preserved, monotonic consolidation

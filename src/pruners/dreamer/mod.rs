@@ -24,11 +24,15 @@
 pub mod consolidator;
 pub mod counterfactual;
 pub mod decay;
+pub mod frozen;
+pub mod pipeline;
 pub mod scheduler;
 pub mod types;
 
 pub use consolidator::DreamerConsolidator;
 pub use counterfactual::CounterfactualEstimator;
 pub use decay::MemoryDecay;
+pub use frozen::{DreamerFrozenBank, load_frozen_dreamer, save_frozen_dreamer};
+pub use pipeline::{ConsolidationResult, DreamerPipeline};
 pub use scheduler::DreamerScheduler;
 pub use types::{DecayPolicy, DreamerConfig, ReplacementSet, WorkingRegion};

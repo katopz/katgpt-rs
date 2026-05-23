@@ -51,8 +51,9 @@ pub mod dreamer;
 
 #[cfg(feature = "dreamer")]
 pub use dreamer::{
-    CounterfactualEstimator, DecayPolicy, DreamerConfig, DreamerConsolidator, DreamerScheduler,
-    MemoryDecay, ReplacementSet, WorkingRegion,
+    ConsolidationResult, CounterfactualEstimator, DecayPolicy, DreamerConfig, DreamerConsolidator,
+    DreamerFrozenBank, DreamerPipeline, DreamerScheduler, MemoryDecay, ReplacementSet,
+    WorkingRegion, load_frozen_dreamer, save_frozen_dreamer,
 };
 
 #[cfg(feature = "bandit")]
