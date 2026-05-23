@@ -127,15 +127,16 @@ fn proof_2_d2f_drafter_produces_valid_sequence() {
 fn proof_3_mode_switching_recommend() {
     // (block_size, n_tokens, has_draft_model) → expected strategy
     //
-    // Tri-mode logic (order matters):
-    //   1. has_draft_model && n_tokens >= block_size → SelfSpeculation
-    //   2. n_tokens >= block_size                     → DiscreteDiffusion
-    //   3. has_draft_model                            → Speculative
-    //   4. else                                       → Autoregressive
+    // Decode strategy priority (order matters, dmax_spd is default-on):
+    //   1. has_draft_model && n_tokens >= block_size → SelfSpeculation (tri_mode)
+    //   2. n_tokens >= block_size                     → DiscreteDiffusionSoft (dmax_spd)
+    //   3. n_tokens >= block_size                     → DiscreteDiffusion (dllm, fallback)
+    //   4. has_draft_model                            → Speculative
+    //   5. else                                       → Autoregressive
 
     let cases: Vec<(usize, usize, bool, DecodeStrategy)> = vec![
-        // Case 1: No draft model, enough tokens → DiscreteDiffusion
-        (4, 8, false, DecodeStrategy::DiscreteDiffusion),
+        // Case 1: No draft model, enough tokens → DiscreteDiffusionSoft (dmax_spd default-on)
+        (4, 8, false, DecodeStrategy::DiscreteDiffusionSoft),
         // Case 2: Has draft model, enough tokens → SelfSpeculation (tri-mode wins)
         (4, 8, true, DecodeStrategy::SelfSpeculation),
         // Case 3: Has draft model, NOT enough tokens → Speculative
