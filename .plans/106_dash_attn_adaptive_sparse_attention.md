@@ -1,6 +1,6 @@
-# Plan 104: DashAttention — Adaptive Sparse Hierarchical Attention
+# Plan 106: DashAttention — Adaptive Sparse Hierarchical Attention
 
-**Branch:** `develop/feature/104_dash_attn_adaptive_sparse`
+**Branch:** `develop/feature/106_dash_attn_adaptive_sparse`
 **Depends on:** Plan 044 (PFlash), Plan 070 (SP-KV)
 **Research:** 68 (DashAttention)
 **Feature Gate:** `dash_attn` (off by default) — both `microgpt-rs` and `microgpt-core`

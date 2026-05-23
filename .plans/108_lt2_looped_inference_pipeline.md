@@ -1,0 +1,274 @@
+# Plan 108: LT2 Looped Inference Pipeline
+
+> **Research:** [073 — LT2 Linear-Time Looped Transformers](../.research/073_LT2_Linear_Time_Looped_Transformers.md)
+> **Paper:** [arXiv:2605.20670](https://arxiv.org/abs/2605.20670) — Loop weight-sharing + subquadratic attention = rank-T state upgrade
+> **Feature Gate:** `lt2_looped` (opt-in, requires `hla_attention`)
+> **Status:** 📋 Planning
+
+## Summary
+
+Implement looped transformer inference where the same layer weights are applied T times in succession, yielding effective depth T×n_layer with no extra parameters. Key insight from LT2: looping uniquely synergizes with subquadratic attention — T loops turn rank-1 DPLR state updates into rank-T updates, and turn window-w sparse attention into effective receptive field T·w.
+
+Our specific advantage: we already have AHLA (asymmetric second-order linear attention, Research 28) with O(d·dv) constant state. Looping AHLA T=4 times gives 4× effective depth with rank-4 state updates, at constant memory. Combined with 1:4 hybrid (1 full SDPA layer per 5 layers), we get near-full-attention quality with ~75% KV cache reduction.
+
+---
+
+## Tasks
+
+### Phase 0: Baseline Benchmarking
+- [ ] T0: Benchmark current single-pass SDPA forward (tok/s, µs/step, mem/layer) — `bench_forward_baseline`
+- [ ] T1: Benchmark current single-pass AHLA forward — `bench_ahla_baseline`
+- [ ] T2: Benchmark naive 4× looped SDPA (4 full passes, KV cache ×4) — `bench_naive_loop`
+
+### Phase 1: Core Types & Enums (microgpt-core)
+- [ ] T3: Add `LoopMode` enum to `microgpt-core/src/types.rs`
+- [ ] T4: Add `HybridPattern` enum to `microgpt-core/src/types.rs`
+- [ ] T5: Add `SdpaOutputGate` struct to `microgpt-core/src/types.rs`
+- [ ] T6: Add `ResidualGate` struct (per-loop learned gate ρ_τ) to `microgpt-core/src/types.rs`
+- [ ] T7: Update `Config` struct with loop/hybrid fields + defaults
+- [ ] T8: Add `lt2_looped` feature gate to `microgpt-core/Cargo.toml`
+
+### Phase 2: Looped Forward Pass (microgpt-rs)
+- [ ] T9: Add `lt2_looped` feature gate to `microgpt-rs/Cargo.toml` (depends on `hla_attention`)
+- [ ] T10: Implement `forward_looped()` in `transformer.rs` — weight-shared T-pass loop
+- [ ] T11: Implement per-loop residual gate: `h^(τ) = h̃^(τ) + ρ_τ ⊙ h^(τ-1)`
+- [ ] T12: Implement `DecodeStage` dispatch for looped inference (prefill vs decode)
+- [ ] T13: Update `TransformerWeights::new()` to generate residual gate params
+
+### Phase 3: SDPA Output Gate
+- [ ] T14: Implement `SdpaOutputGate::forward()` — sigmoid gate after SDPA, before Wo
+- [ ] T15: Zero-init gate weights (starts at sigmoid(0) = 0.5 neutral)
+- [ ] T16: Integrate gate into attention path (gated_attn config flag)
+
+### Phase 4: Hybrid Dispatch (SDPA + AHLA)
+- [ ] T17: Implement `HybridPattern` layer-type dispatch in forward loop
+- [ ] T18: Handle mixed KV cache: AHLA layers use constant state, SDPA layers use KV cache
+- [ ] T19: Implement `HybridPattern::Interleave { full_ratio: 5 }` (flagship 1:4 recipe)
+- [ ] T20: Implement `HybridPattern::Bookend` (full at top+bottom)
+- [ ] T21: Implement `HybridPattern::Uniform` (all linear or all full)
+
+### Phase 5: Looped AHLA State Carry
+- [ ] T22: Extend `AhlaState` to support cross-loop accumulation
+- [ ] T23: Implement rank-T state upgrade in AHLA recurrence (keys change per loop)
+- [ ] T24: Verify AHLA state isolation: each layer maintains independent state
+
+### Phase 6: GOAT Proof & Benchmarks
+- [ ] T25: Benchmark looped AHLA (T=4) vs naive looped SDPA — `bench_lt2_ahla_loop`
+- [ ] T26: Benchmark hybrid 1:4 (SDPA+AHLA, T=4) — `bench_lt2_hybrid`
+- [ ] T27: GOAT proof test: looped inference produces finite, non-NaN logits at T=4
+- [ ] T28: GOAT proof test: looped hybrid (1:4) throughput ≥ 50% of single-pass SDPA
+- [ ] T29: GOAT proof test: AHLA memory constant across T (no growth with loop count)
+- [ ] T30: Write benchmark results to `.benchmarks/108_lt2_looped_inference.md`
+
+### Phase 7: Documentation & Cleanup
+- [ ] T31: Update `README.md` with LT2 section (looped inference + hybrid results)
+- [ ] T32: Update `.docs/02_architecture.md` with looped forward pass diagram
+- [ ] T33: Run `cargo clippy --fix --allow-dirty` on all changed files
+- [ ] T34: Commit with message: `feat(lt2): looped inference pipeline with hybrid SDPA+AHLA`
+
+---
+
+## Architecture
+
+### Looped Forward Pass (Main Loop)
+
+```
+Input: x ∈ R^{L×d}
+For τ = 1..T:
+  For ℓ = 1..n_layer:
+    is_full = match hybrid_pattern {
+      Uniform => false,
+      Interleave(5) => (ℓ % 5) == 4,
+      Bookend => ℓ == 0 || ℓ == n_layer - 1,
+    }
+    h' = h + Mixer_ℓ(h, is_full)    // AHLA or SDPA
+    h  = h' + FFN_ℓ(h')             // shared FFN
+  h = h̃ + ρ_τ ⊙ h_prev             // per-loop residual gate
+Output: lm_head(h)
+```
+
+### Memory Layout
+
+| Component | Per Layer | T=4 Total | Notes |
+|-----------|-----------|-----------|-------|
+| SDPA KV cache | O(L·d) | O(L·d) × full_layers | Only full-attention layers |
+| AHLA state | O(d·dv) | O(d·dv) × linear_layers | Constant, no growth with L |
+| Residual gate ρ_τ | O(d) | O(d) × T | Zero-init learned |
+| SDPA output gate | O(n_heads·head_dim·d) | Same (shared) | Zero-init learned |
+
+### Key Enums (in `microgpt-core/src/types.rs`)
+
+```rust
+/// Looped transformer mode.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LoopMode {
+    /// Standard single-pass (no looping).
+    #[default]
+    None,
+    /// Weight-shared looping: same layers applied T times.
+    /// Effective depth = n_layer × loop_count.
+    WeightShared { loop_count: usize },
+}
+
+/// Hybrid attention pattern for looped inference.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum HybridPattern {
+    /// All layers use the same attention mode.
+    #[default]
+    Uniform,
+    /// Depth-level interleave: every Nth layer uses full SDPA.
+    /// e.g., Interleave { full_ratio: 5 } = every 5th layer is full.
+    /// Paper optimal: 1:4 ratio (full_ratio=5).
+    Interleave { full_ratio: usize },
+    /// Bookend: first and last layers are full, middle is linear.
+    Bookend,
+}
+```
+
+### New Structs
+
+```rust
+/// Head-specific sigmoid gate after SDPA, before Wo.
+/// Zero-initialized → starts at sigmoid(0) = 0.5 (neutral multiplicative identity).
+/// Paper: +0.3–0.5 avg points on zero-shot benchmarks.
+pub struct SdpaOutputGate {
+    /// Gate weights: [n_heads * head_dim, dim]
+    /// Zero-init so gate starts at sigmoid(0) = 0.5
+    pub w_gate: Vec<f32>,
+}
+
+/// Per-loop residual scaling gate.
+/// h^(τ) = h̃^(τ) + ρ_τ ⊙ h^(τ-1)
+/// Zero-init so first iteration is h̃^(1) (no residual from "previous").
+pub struct ResidualGate {
+    /// Per-loop gates: [loop_count, dim]
+    /// Each ρ_τ is element-wise, zero-init
+    pub gates: Vec<f32>,
+}
+```
+
+---
+
+## Config Changes
+
+```toml
+# Config additions for LT2 (micro config example)
+
+[model.lt2]
+loop_mode = "WeightShared"  # or "None"
+loop_count = 4              # T (paper default)
+hybrid_pattern = "Interleave"  # or "Uniform", "Bookend"
+full_ratio = 5              # every 5th layer is full SDPA
+gated_attn = true           # SDPA output gate (recommended)
+use_residual = true         # per-loop residual gate ρ_τ (recommended)
+```
+
+---
+
+## Feature Gates
+
+### microgpt-core/Cargo.toml
+```toml
+[features]
+default = ["sparse_mlp"]
+sparse_mlp = []
+domain_latent = []
+maxsim = []
+dllm = []
+coda_fusion = []
+lt2_looped = []  # LoopMode, HybridPattern, SdpaOutputGate, ResidualGate
+```
+
+### microgpt-rs/Cargo.toml
+```tomt
+[features]
+default = []
+lt2_looped = ["microgpt-core/lt2_looped", "hla_attention"]
+```
+
+---
+
+## Benchmark Plan
+
+### Before Implementation (Phase 0)
+
+| Benchmark | Config | Metric | Expected |
+|-----------|--------|--------|----------|
+| `bench_forward_baseline` | micro, SDPA, T=1 | tok/s | ~910K (existing) |
+| `bench_ahla_baseline` | micro, AHLA, T=1 | tok/s | ~864K (existing) |
+| `bench_naive_loop` | micro, SDPA, T=4 | tok/s | ~230K (4× slowdown) |
+
+### After Implementation (Phase 6)
+
+| Benchmark | Config | Metric | Target |
+|-----------|--------|--------|--------|
+| `bench_lt2_ahla_loop` | micro, AHLA, T=4 | tok/s | ≥200K |
+| `bench_lt2_hybrid` | micro, hybrid 1:4, T=4 | tok/s | ≥400K |
+| `bench_lt2_memory` | micro, hybrid 1:4, T=4 | mem/layer | AHLA layers constant |
+| `bench_lt2_quality` | micro, hybrid 1:4, T=4 | cos-sim vs SDPA | >0.85 |
+
+### GOAT Proof Criteria
+
+1. **Stability**: All logits finite, non-NaN, non-Inf at T=4 ✓
+2. **Throughput**: Hybrid 1:4 looped ≥ 50% of single-pass SDPA ✓
+3. **Memory**: AHLA layers show constant memory (no growth with T) ✓
+4. **No regression**: Non-`lt2_looped` builds unchanged ✓
+
+---
+
+## Testing Strategy
+
+### Unit Tests (in `tests/`)
+
+- `test_loop_mode_default`: `LoopMode::default()` is `None` (backward compat)
+- `test_hybrid_pattern_interleave`: 5-layer interleave produces correct full/linear sequence
+- `test_hybrid_pattern_bookend`: first and last are full, middle is linear
+- `test_residual_gate_zero_init`: gate starts at 0, sigmoid(0)=0.5
+- `test_sdpa_output_gate_shape`: gate output matches attention output shape
+- `test_looped_forward_stability`: T=4 looped forward produces finite logits
+- `test_looped_ahla_state_carry`: AHLA state accumulates correctly across loops
+- `test_looped_no_growth`: memory usage flat across T=1,2,4,8 for AHLA layers
+
+### GOAT Proof Tests
+
+- `goat_lt2_loop_stability`: 1000 decode steps, T=4, all finite
+- `goat_lt2_hybrid_throughput`: hybrid 1:4 ≥ 50% SDPA throughput
+- `goat_lt2_memory_constant`: AHLA mem unchanged from T=1 to T=8
+
+---
+
+## Implementation Order
+
+```
+Phase 0: Baseline benchmarks          [~1h]
+Phase 1: Core types (microgpt-core)   [~2h]
+Phase 2: Looped forward pass          [~3h]  ← main work
+Phase 3: SDPA output gate             [~1h]
+Phase 4: Hybrid dispatch              [~2h]
+Phase 5: AHLA state carry             [~2h]
+Phase 6: GOAT benchmarks              [~2h]
+Phase 7: Docs & cleanup               [~1h]
+────────────────────────────────────────────
+Total estimate:                       ~14h
+```
+
+---
+
+## Dependencies
+
+- `hla_attention` feature (Plan 057) — AHLA forward pass
+- `microgpt-core` types — Config, enums, SIMD kernels
+- No new external crates required
+
+---
+
+## References
+
+- LT2 paper: https://arxiv.org/abs/2605.20670
+- LT2 reference code: `.raw/LT2/apps/LT2/transformer.py`
+- Our HLA implementation: `src/hla/` (Plan 057)
+- Our AHLA benchmarks: `.benchmarks/057_hla_*`
+- Gated DeltaNet-2 (complementary): Research 70
+- DashAttention (sparse component): Research 71

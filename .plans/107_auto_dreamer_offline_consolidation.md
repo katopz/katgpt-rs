@@ -1,4 +1,4 @@
-# Plan 104: Auto-Dreamer Offline Memory Consolidation
+# Plan 107: Auto-Dreamer Offline Memory Consolidation
 
 **Research**: `.research/069_AutoDreamer_Offline_Memory_Consolidation.md`
 **Paper**: arXiv:2605.20616 — Auto-Dreamer: Learning Offline Memory Consolidation for Language Agents

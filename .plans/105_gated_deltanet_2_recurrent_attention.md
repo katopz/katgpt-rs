@@ -1,4 +1,4 @@
-# Plan 104: Gated DeltaNet-2 Recurrent Attention
+# Plan 105: Gated DeltaNet-2 Recurrent Attention
 
 > **Research:** [070_Gated_DeltaNet_2](../.research/070_Gated_DeltaNet_2_Decoupled_Erase_Write_Linear_Attention.md)
 > **Feature Gate:** `gdn2_attention`
