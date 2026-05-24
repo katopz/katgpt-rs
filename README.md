@@ -1048,6 +1048,51 @@ Feature gate: `bomber` or `go` (both imply `bandit`). 19 round-trip tests pass (
 
 📖 See [`.plans/092_self_play_freeze_thaw.md`](.plans/092_self_play_freeze_thaw.md).
 
+## 📋 Event Log — Game Trace Fork-Diff (Plan 124)
+
+Append-only event-sourced game traces with fork-and-diff for counterfactual strategy exploration.
+
+- **Deterministic replay** — any game byte-reproducible from event log
+- **Cheap forking** — branch at move N without re-executing prefix
+- **Structural diff** — compare two game traces event-by-event
+- **Eval cache** — content-addressed evaluation with blake3 hashing
+
+Feature gate: `event_log`
+
+```rust
+use katgpt_rs::pruners::event_log::*;
+
+let mut log: EventLog<String> = EventLog::new();
+log.push(EventType::GameStart, "start".into(), Actor::Runtime, None);
+
+// Fork at event 3 for counterfactual
+let forked = log.fork(EventId(3));
+let diff = log.diff(&forked);
+```
+
+### GOAT Proofs (22/22 ✅)
+
+| # | Proof | Status |
+|---|-------|--------|
+| 1 | Push/get/iter/len monotonic IDs | ✅ |
+| 2 | Deterministic replay (100 games) | ✅ |
+| 3 | Fork shares exact prefix events | ✅ |
+| 4 | Structural diff identifies divergence | ✅ |
+| 5 | Identical logs diff to empty | ✅ |
+| 6 | Different length diff | ✅ |
+| 7 | Causal chain via `caused_by` | ✅ |
+| 8 | EvalCache insert/get/hit_rate | ✅ |
+| 9 | Boundary fork (at end, past end) | ✅ |
+
+### Game-Specific Wrappers
+
+| Game | Wrapper | Actions |
+|------|---------|---------|
+| Bomber | `BomberEventLog` | `record_move`, `record_bomb`, `record_eval`, `record_game_start/end` |
+| Go | `GoEventLog` | `record_place_stone`, `record_pass`, `record_resign`, `record_eval` |
+
+📖 See [`.plans/124_event_log_game_trace_fork_diff.md`](.plans/124_event_log_game_trace_fork_diff.md).
+
 ## 🪞 MeMo Reflection QA Pipeline (Plan 094)
 
 Five-step data synthesis for generating compositional training data from game replays. Distilled from [MeMo: Memory as a Model](https://arxiv.org/abs/2605.15156).
@@ -1772,6 +1817,7 @@ cargo clippy --all-targets --all-features --quiet
 | `subterranean` | Subterranean procedure compilation — user-defined token-rewriting procedures compiled to zero-cost native code (Plan 110, **default-on**). Requires `bandit` |
 | `sr2am_configurator` | SR²AM Configurator Bandit — per-turn planning regulation via UCB1 over PlanNew/PlanExtend/PlanSkip arms, entropy-aware horizon truncation (Research 76, Plan 112, 29 tests, **default-on**). Requires `bandit` |
 | `data_gate` | Data Gate — self-play stability via task-level filtering before solver, ε-Bernoulli relaxation, execution-based gating (Research 75, Plan 111, **default-on**). Requires `bandit` |
+| `event_log` | Event-sourced game traces with fork-and-diff — append-only log, deterministic replay, structural diff, eval cache. Game wrappers: `BomberEventLog`, `GoEventLog` (Plan 124, GOAT 22/22 ✅) |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
 > **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating. All 25 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.

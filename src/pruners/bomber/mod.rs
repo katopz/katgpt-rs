@@ -32,6 +32,9 @@ pub mod wasm_pruner;
 #[cfg(feature = "bomber-wasm")]
 pub mod wasm_state;
 
+#[cfg(feature = "event_log")]
+pub mod event_log_player;
+
 pub use arena::ArenaGrid;
 pub use players::{BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer};
 pub use replay_backward::{BackwardSample, BackwardWalkResult, ReplayBackwardWalker};
@@ -65,6 +68,9 @@ pub use tft_player::TftPlayer;
 pub use vpd_player::VpdPlayer;
 #[cfg(feature = "bomber-wasm")]
 pub use wasm_state::{ZeroCopyStateBuffer, serialize_grid_only, serialize_into_buffer};
+
+#[cfg(feature = "event_log")]
+pub use event_log_player::{BomberEventLog, BomberForkDiff, BomberPos};
 
 use std::fmt;
 
