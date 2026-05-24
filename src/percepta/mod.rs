@@ -63,7 +63,7 @@ pub mod graph;
 pub mod wasm;
 
 /// MILP scheduler: 4-phase layer assignment minimizing `d_model`.
-#[cfg(all(feature = "percepta_graph", feature = "good_lp"))]
+#[cfg(feature = "percepta_compile")]
 pub mod scheduler;
 
 /// Analytical weight construction: graph + schedule → transformer weight tensors.
@@ -126,7 +126,7 @@ pub use graph::{
 
 // ── Re-exports from scheduler (feature-gated) ──────────────────
 
-#[cfg(all(feature = "percepta_graph", feature = "good_lp"))]
+#[cfg(feature = "percepta_compile")]
 pub use scheduler::{
     DepGraph, OpKey, Phase, Schedule, ScheduleError, StdLayer, build_dep_graph, interval_coloring,
     milp_schedule, min_layers,

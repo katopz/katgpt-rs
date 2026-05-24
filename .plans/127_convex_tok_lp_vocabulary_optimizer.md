@@ -4,21 +4,21 @@
 **Depends on:** Plan 122 (ToaST split-tree tokenizer — completed)
 **Research:** 087 (ConvexTok — Tokenisation via Convex Relaxations)
 **Paper:** [Tokenisation via Convex Relaxations](https://arxiv.org/pdf/2605.22821) (Tempus et al., 2026)
-**Status:** 🔲 Planned
+**Status:** ✅ Complete (T1–T9, 12 GOAT proofs)
 
 ---
 
 ## Tasks
 
-- [ ] T1: Tokenisation graph types (`tokenizer/convex_types.rs`)
-- [ ] T2: Tokenisation graph construction from pretokenized corpus (`tokenizer/convex_graph.rs`)
-- [ ] T3: LP formulation via `good_lp`/HiGHS (`tokenizer/convex_solver.rs`)
-- [ ] T4: Rounding schemes — Det / Bias / Int (`tokenizer/convex_rounding.rs`)
-- [ ] T5: Optimality certification — LP bound + gap computation (`tokenizer/convex_certify.rs`)
-- [ ] T6: ConvexTok → ToaST vocabulary import (`tokenizer/convex_toast_bridge.rs`)
-- [ ] T7: Feature gate `convex_tok` + module glue
-- [ ] T8: GOAT proof — 12/12 tests (types, construction, LP solve, rounding, certification, ToaST interop)
-- [ ] T9: Benchmark — compression vs BPE vs manual ToaST on synthetic corpus
+- [x] T1: Tokenisation graph types (`tokenizer/convex_types.rs`) ✅
+- [x] T2: Tokenisation graph construction from pretokenized corpus (`tokenizer/convex_graph.rs`) ✅
+- [x] T3: LP formulation via `good_lp`/HiGHS (`tokenizer/convex_solver.rs`) ✅
+- [x] T4: Rounding schemes — Det / Bias / Int (`tokenizer/convex_rounding.rs`) ✅
+- [x] T5: Optimality certification — LP bound + gap computation (`tokenizer/convex_certify.rs`) ✅
+- [x] T6: ConvexTok → ToaST vocabulary import (`tokenizer/convex_toast_bridge.rs`) ✅
+- [x] T7: Feature gate `convex_tok` + module glue ✅
+- [x] T8: GOAT proof — 12/12 tests (types, construction, LP solve, rounding, certification, ToaST interop) ✅
+- [x] T9: Benchmark — compression vs BPE vs manual ToaST on synthetic corpus ✅
 
 ---
 
