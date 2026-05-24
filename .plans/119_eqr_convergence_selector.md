@@ -1,6 +1,6 @@
 # Plan 119: EqR Convergence-Based Selection for Breadth Scaling
 
-> **Status:** ⬜ Not Started
+> **Status:** ✅ Complete
 > **Branch:** `develop/feature/119_eqr_convergence_selector`
 > **Depends on:** Plan 079 (ELF SDE ✅), Plan 083 (PTRM width scaling ✅), Plan 030 (BanditPruner ✅)
 > **Research:** `.research/079_EqR_Equilibrium_Reasoners.md` (pending creation)

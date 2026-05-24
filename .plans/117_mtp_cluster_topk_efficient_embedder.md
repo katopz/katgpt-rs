@@ -1,6 +1,6 @@
 # Plan 117: MTP LoRA-Trained Drafter + Top-K + Output-Length Gating
 
-> **Status:** 🔧 Ready
+> **Status:** ✅ Complete
 > **Branch:** `develop/feature/117_mtp_lora_drafter`
 > **Feature Gate:** None needed — runtime config fields + existing LoRA infrastructure
 > **Depends on:** Plan 055 ✅ (MTP infrastructure), Plan 008 ✅ (LoRA training in riir-ai)
