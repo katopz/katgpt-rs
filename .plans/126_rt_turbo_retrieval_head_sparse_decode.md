@@ -19,10 +19,10 @@
 - [x] **T6**: Register `#[cfg(feature = "rt_turbo")]` gate in `Cargo.toml` features, add `pub mod rt_turbo` in `lib.rs`, require `dash_attn` feature
 
 ### Phase 2: Low-Dimensional Pre-RoPE Projection
-- [ ] **T7**: Create `src/rt_turbo/projection.rs` — `RetrievalProjection` struct with `w_q: Vec<f32>` and `w_k: Vec<f32>` per retrieval head (shape `[head_dim, low_dim]`)
-- [ ] **T8**: Implement `project_score()` — compute low-dim relevance: `s(m,n) = (W_Q · q_pre)ᵀ · (W_K · k_pre)` for pre-RoPE query/key vectors
-- [ ] **T9**: Implement `batch_project_scores()` — vectorized scoring over full KV cache for a single retrieval head using SIMD. Returns `Vec<f32>` of scores `[seq_len]`
-- [ ] **T10**: Unit tests: zero-initialized projection → uniform scores, identity projection → matches full-dim dot product on first 16 dims, dimensionality check
+- [x] **T7**: Create `src/rt_turbo/projection.rs` — `RetrievalProjection` struct with `w_q: Vec<f32>` and `w_k: Vec<f32>` per retrieval head (shape `[head_dim, low_dim]`)
+- [x] **T8**: Implement `project_score()` — compute low-dim relevance: `s(m,n) = (W_Q · q_pre)ᵀ · (W_K · k_pre)` for pre-RoPE query/key vectors
+- [x] **T9**: Implement `batch_project_scores()` — vectorized scoring over full KV cache for a single retrieval head using SIMD. Returns `Vec<f32>` of scores `[seq_len]`
+- [x] **T10**: Unit tests: zero-initialized projection → uniform scores, identity projection → matches full-dim dot product on first 16 dims, dimensionality check — 31 projection tests passing
 
 ### Phase 3: Dynamic Top-P Token Selection
 - [ ] **T11**: Create `src/rt_turbo/top_p.rs` — sort-free top-p selector for CPU
