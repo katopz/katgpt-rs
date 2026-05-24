@@ -392,7 +392,7 @@ Mathematical foundation from [Deep Manifold Part 2](https://arxiv.org/pdf/2512.0
 
 ## T10: Update Research 51
 
-Add benchmark results section to `microgpt-rs/.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`:
+Add benchmark results section to `katgpt-rs/.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`:
 
 - Residual scoring benchmark results
 - Federation alignment benchmark results

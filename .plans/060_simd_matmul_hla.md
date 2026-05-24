@@ -12,7 +12,7 @@
 ### Phase 1: SIMD Infrastructure
 
 - [x] T0: Add SIMD detection and dispatch module
-  - Create `microgpt-rs/src/simd.rs` with feature-gated SIMD backends
+  - Create `katgpt-rs/src/simd.rs` with feature-gated SIMD backends
   - `SimdLevel` enum: `Scalar`, `Neon`, `Avx2`
   - Runtime detection via `#[cfg(target_arch = "aarch64")]` / `#[cfg(target_arch = "x86_64")]`
   - `is_simd_available()` → `SimdLevel`
@@ -118,7 +118,7 @@
 ### File Layout
 
 ```text
-microgpt-rs/src/
+katgpt-rs/src/
 ├── simd.rs                 — NEW: SIMD detection + dispatch
 ├── types.rs                — MODIFY: matmul/matmul_relu use SIMD dispatch
 ├── hla/

@@ -12,13 +12,13 @@
 fn bench_ropd_rubric_overhead() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompress, AbsorbCompressLayer, BanditPruner, BanditStrategy, CompressConfig,
         RubricBanditPruner, RubricGatedAbsorbCompress, RubricGatedConfig, RubricTemplate,
         RubricVector,
     };
-    use microgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let warmup = 1000;
@@ -253,12 +253,12 @@ fn bench_ropd_rubric_overhead() {
 fn bench_ropd_rubric_throughput() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompressLayer, BanditPruner, BanditStrategy, CompressConfig, RubricBanditPruner,
         RubricGatedAbsorbCompress, RubricGatedConfig, RubricTemplate, RubricVector,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let warmup = 1000;
@@ -472,11 +472,11 @@ fn bench_ropd_rubric_throughput() {
 fn bench_ropd_rubric_convergence() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         BanditPruner, BanditStrategy, RubricBanditPruner, RubricTemplate, RubricVector,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 10;
     let episodes = 1000;
@@ -615,12 +615,12 @@ fn bench_ropd_rubric_convergence() {
 fn bench_ropd_rubric_absorb_quality() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompress, AbsorbCompressLayer, CompressConfig, RubricGatedAbsorbCompress,
         RubricGatedConfig, RubricTemplate, RubricVector,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let observations = 1000;
@@ -818,7 +818,7 @@ fn bench_ropd_rubric_absorb_quality() {
 
 #[cfg(feature = "ropd_rubric")]
 fn select_ucb1_arm(
-    bandit: &microgpt_rs::pruners::BanditPruner<microgpt_rs::speculative::types::NoScreeningPruner>,
+    bandit: &katgpt_rs::pruners::BanditPruner<katgpt_rs::speculative::types::NoScreeningPruner>,
     episode: usize,
 ) -> usize {
     if episode == 0 {
@@ -853,8 +853,8 @@ fn select_ucb1_arm(
 
 #[cfg(feature = "ropd_rubric")]
 fn select_ucb1_arm_rubric(
-    bandit: &microgpt_rs::pruners::RubricBanditPruner<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    bandit: &katgpt_rs::pruners::RubricBanditPruner<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     episode: usize,
 ) -> usize {
@@ -891,7 +891,7 @@ fn select_ucb1_arm_rubric(
 
 #[cfg(feature = "ropd_rubric")]
 fn is_best_arm_most_visited(
-    bandit: &microgpt_rs::pruners::BanditPruner<microgpt_rs::speculative::types::NoScreeningPruner>,
+    bandit: &katgpt_rs::pruners::BanditPruner<katgpt_rs::speculative::types::NoScreeningPruner>,
     optimal_arm: usize,
 ) -> bool {
     let visits = bandit.visits();
@@ -910,8 +910,8 @@ fn is_best_arm_most_visited(
 
 #[cfg(feature = "ropd_rubric")]
 fn is_best_arm_most_visited_rubric(
-    bandit: &microgpt_rs::pruners::RubricBanditPruner<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    bandit: &katgpt_rs::pruners::RubricBanditPruner<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     optimal_arm: usize,
 ) -> bool {
@@ -931,12 +931,12 @@ fn is_best_arm_most_visited_rubric(
 
 #[cfg(feature = "ropd_rubric")]
 fn count_absorbed_arms(
-    layer: &microgpt_rs::pruners::AbsorbCompressLayer<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    layer: &katgpt_rs::pruners::AbsorbCompressLayer<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     num_arms: usize,
 ) -> usize {
-    use microgpt_rs::pruners::AbsorbCompress;
+    use katgpt_rs::pruners::AbsorbCompress;
     (0..num_arms)
         .filter(|&arm| layer.compressed_arms().contains(&arm))
         .count()

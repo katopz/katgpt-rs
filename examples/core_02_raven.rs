@@ -10,11 +10,11 @@
 //!
 //! Run: `cargo run --example core_02_raven`
 
-use microgpt_rs::transformer::{
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, RavenKVCache, TransformerWeights, forward, forward_raven,
     raven_update,
 };
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 /// Inline kv_dim calculation (n_kv_head × head_dim).

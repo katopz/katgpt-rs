@@ -313,7 +313,7 @@ SDE rollout:      noisy_logits = logits + gamma * randn
 
 Before any adoption, each proposal must pass:
 
-### Modelless Proposals (tested in microgpt-rs)
+### Modelless Proposals (tested in katgpt-rs)
 - [ ] SDE noise injection: ≥2% win rate in ≥2 game domains, ≤3% latency overhead
 - [ ] Logit-normal D2F schedule: ≥5% higher confidence at same step budget
 

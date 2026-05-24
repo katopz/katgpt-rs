@@ -123,11 +123,11 @@ Key finding: Progressive Feedback (r5) achieves highest average, but v1 prompts 
 
 ---
 
-## Application to microgpt-rs
+## Application to katgpt-rs
 
 ### Direct Mappings
 
-| Paper Concept | microgpt-rs Equivalent | Status |
+| Paper Concept | katgpt-rs Equivalent | Status |
 |---|---|---|
 | Reviewer Agent (evaluate before execute) | `ScreeningPruner::relevance()` — graded [0.0, 1.0] per token | ✅ Strong |
 | Hard rejection (binary) | `ConstraintPruner::is_valid()` — binary accept/reject | ✅ Strong |

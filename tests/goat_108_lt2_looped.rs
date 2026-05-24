@@ -7,11 +7,11 @@
 //!
 //! Run: `cargo test --features lt2_looped --test goat_108_lt2_looped -- --nocapture`
 
-use microgpt_rs::hla::MultiLayerAhlaCache;
-use microgpt_rs::transformer::{
+use katgpt_rs::hla::MultiLayerAhlaCache;
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, TransformerWeights, forward_looped,
 };
-use microgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, Rng, SdpaOutputGate};
+use katgpt_rs::types::{Config, HybridPattern, LoopMode, ResidualGate, Rng, SdpaOutputGate};
 
 // ── Helpers ───────────────────────────────────────────────────
 

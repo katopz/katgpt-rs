@@ -8,9 +8,9 @@
 #[cfg(feature = "ppot")]
 #[test]
 fn prefix_stability_bench() {
-    use microgpt_rs::speculative::{SpeculativeContext, dflash_predict_with};
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::{Config, Rng};
+    use katgpt_rs::speculative::{SpeculativeContext, dflash_predict_with};
+    use katgpt_rs::transformer::TransformerWeights;
+    use katgpt_rs::types::{Config, Rng};
     use std::time::Instant;
 
     /// Stable prefix: fixed system prompt tokens prepended every step.

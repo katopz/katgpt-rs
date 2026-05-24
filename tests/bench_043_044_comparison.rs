@@ -4,21 +4,21 @@
 //! - Plan 043 (TurboQuant): flat f32 KV cache vs bit-packed quantized cache
 //! - Plan 044 (PFlash): full prefill vs block-sparse speculative prefill
 //!
-//! Run with: cargo test -p microgpt-rs --features turboquant --test bench_043_044_comparison -- --nocapture
+//! Run with: cargo test -p katgpt-rs --features turboquant --test bench_043_044_comparison -- --nocapture
 
 #![cfg(feature = "turboquant")]
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::speculative::types::FlashPrefillConfig;
-use microgpt_rs::speculative::{block_select, block_select_grid, compress_prompt_blocks};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::turboquant::TurboQuantKVCache;
-use microgpt_rs::turboquant::forward::{
+use katgpt_rs::speculative::types::FlashPrefillConfig;
+use katgpt_rs::speculative::{block_select, block_select_grid, compress_prompt_blocks};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::turboquant::forward::{
     attention_turboquant, cosine_similarity, dequantize_keys_flat, dequantize_values_flat,
 };
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 /// Generate sparse importance scores: mostly hay (0.01) with a few needle peaks (1.0).
 /// Simulates real attention patterns where most tokens are unimportant.

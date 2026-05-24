@@ -34,7 +34,7 @@ pub fn is_consistent(current: &[Option<usize>], solution: &[usize]) -> bool {
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::speculative::alpha::alpha_intersect;
+/// use katgpt_rs::speculative::alpha::alpha_intersect;
 ///
 /// let current = vec![Some(0), None, Some(2)];
 /// let solutions = vec![

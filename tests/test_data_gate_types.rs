@@ -1,5 +1,5 @@
 #[cfg(feature = "data_gate")]
-use microgpt_core::{DataGate, GateDecision, ProposerTask, TaskType};
+use katgpt_core::{DataGate, GateDecision, ProposerTask, TaskType};
 
 #[test]
 #[cfg(feature = "data_gate")]

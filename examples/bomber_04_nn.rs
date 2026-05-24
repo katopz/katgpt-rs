@@ -28,10 +28,10 @@ use std::time::Instant;
 use fastrand::Rng;
 
 #[cfg(feature = "bomber-wasm")]
-use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+use katgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
 
 #[cfg(feature = "bomber-wasm")]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, NNPlayer, RandomPlayer,
     ValidatorPlayer, init_world, init_world_with_arena, run_tick, spawn_players,
 };
@@ -337,17 +337,17 @@ fn run_round(
         let mut actions = [None; 4];
         for (i, player) in players.iter_mut().enumerate() {
             let pos = world
-                .get::<microgpt_rs::pruners::bomber::GridPos>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::GridPos>(entities[i])
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 actions[i] = Some(
                     player.select_action(
                         &world
-                            .resource::<microgpt_rs::pruners::bomber::ArenaGrid>()
+                            .resource::<katgpt_rs::pruners::bomber::ArenaGrid>()
                             .clone(),
                         pos,
                         &tick_events,
@@ -416,7 +416,7 @@ fn run_round(
     };
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     RoundResult {

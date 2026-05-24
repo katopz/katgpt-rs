@@ -99,7 +99,7 @@ The paper notes TODO: try GRU/gating or "fixed" gating that doesn't depend on hi
 
 ### D1: PrefixLM Attention — Already Implemented ✅
 
-We already have bidirectional prefill in both `microgpt-rs` and `riir-engine`:
+We already have bidirectional prefill in both `katgpt-rs` and `riir-engine`:
 - `forward_bidirectional_positions()` in `dllm.rs`
 - `forward_prefill()` with Phase B bidirectional attention
 - D2F (Plan 068) uses block-causal + intra-block bidirectional
@@ -195,7 +195,7 @@ A single projection produces (gate, Q, K, V), and the sigmoid gate multiplicativ
 |---|---|---|---|---|
 | **P1** | Adam-atan2 optimizer | riir-gpu (WGSL kernel) | Low — 1 line change | Better training stability |
 | **P2** | Multipack LPT batching | riir-gpu (training pipeline) | Medium — new sampler | ~30% better training throughput |
-| **P2** | Backprop warmup | microgpt-rs (MCTS, HLA) | Low — scheduling formula | Faster early training |
+| **P2** | Backprop warmup | katgpt-rs (MCTS, HLA) | Low — scheduling formula | Faster early training |
 | **P3** | Learned initial state | Both (HLA, Raven) | Low — init change | Richer starting states |
 | **P3** | Gated attention | riir-engine (transformer) | Medium — new projection | Better attention quality |
 | **—** | HRM architecture | N/A | High | Outside our scope |

@@ -6,8 +6,8 @@
 //!
 //! Run: `cargo test --features sr2am_configurator --test bench_112_sr2am_configurator_goat -- --nocapture`
 
-use microgpt_core::{ConfiguratorContext, PlanningDecision};
-use microgpt_rs::pruners::ConfiguratorBandit;
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
+use katgpt_rs::pruners::ConfiguratorBandit;
 
 const ROUNDS: usize = 1000;
 const BETA: f32 = 0.1;

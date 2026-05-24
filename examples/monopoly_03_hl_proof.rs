@@ -8,7 +8,7 @@
 //! Run: `cargo run --example monopoly_03_hl_proof --features monopoly`
 
 use fastrand::Rng;
-use microgpt_rs::pruners::monopoly::{
+use katgpt_rs::pruners::monopoly::{
     GameEvent, GreedyPlayer, HLPlayer, MonopolyPlayer, RandomPlayer, Strategy, ValidatorPlayer,
     run_game,
 };

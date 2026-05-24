@@ -251,7 +251,7 @@ SPD is orthogonal to both: it doesn't need verification (self-correcting) and do
 
 ## 6. Feature Gate Strategy
 
-### `microgpt-rs`
+### `katgpt-rs`
 ```toml
 [features]
 dmax_spd = ["dllm"]  # Soft Parallel Decoding, depends on D2F
@@ -285,9 +285,9 @@ Feature-gated code:
 | Component | Where | Impact |
 |---|---|---|
 | OPUT training | riir-gpu D2F trainer | +12% accuracy under aggressive parallelism (paper's Table 3) |
-| SPD inference | microgpt-rs d2f.rs | +22% accuracy at τ=0 (68.2% → 90.4%) |
-| Contiguous prefix | microgpt-rs d2f.rs | Enables τ=0 without collapse |
-| Convergence check | microgpt-rs d2f.rs | Reduces unnecessary forward passes |
+| SPD inference | katgpt-rs d2f.rs | +22% accuracy at τ=0 (68.2% → 90.4%) |
+| Contiguous prefix | katgpt-rs d2f.rs | Enables τ=0 without collapse |
+| Convergence check | katgpt-rs d2f.rs | Reduces unnecessary forward passes |
 
 **ROI:** ~300 lines total for potentially 2-3× TPF improvement under aggressive parallelism. This is our highest-ROI D2F enhancement.
 

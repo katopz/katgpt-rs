@@ -1,4 +1,4 @@
-# microgpt-rs: Constraint Validator
+# katgpt-rs: Constraint Validator
 
 ## What is Validator?
 Deterministic validation — a neuro-symbolic inference system where `rustc`/`syn` acts as the deterministic referee inside the speculative decoding loop. The LLM drafts token sequences; a rules engine validates them against the Rust AST before target model verification.
@@ -9,7 +9,7 @@ Deterministic validation — a neuro-symbolic inference system where `rustc`/`sy
 ┌─────────────────────────────────────────────────────────────────┐
 │                    INFERENCE (Production)                        │
 │                                                                  │
-│  User Prompt ──► BPE Encode ──► Draft Model (microgpt-rs)       │
+│  User Prompt ──► BPE Encode ──► Draft Model (katgpt-rs)       │
 │                                      │                           │
 │                               DDTree Branches                   │
 │                                      │                           │

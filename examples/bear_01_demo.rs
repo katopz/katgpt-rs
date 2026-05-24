@@ -9,9 +9,9 @@
 //!
 //! Run: `cargo run --example blue_bear`
 
-use microgpt_rs::pruners::tactical_pruner::{GameState, TacticalPruner};
-use microgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
-use microgpt_rs::types::Config;
+use katgpt_rs::pruners::tactical_pruner::{GameState, TacticalPruner};
+use katgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
+use katgpt_rs::types::Config;
 
 // ── Emoji Map ──────────────────────────────────────────────────
 

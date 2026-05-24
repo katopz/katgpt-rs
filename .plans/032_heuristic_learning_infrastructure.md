@@ -1,7 +1,7 @@
 # Plan 032: Heuristic Learning Infrastructure
 
 **Branch:** `develop/feature/032_heuristic_learning_infrastructure`
-**Depends on:** Plan 030 (bandit feature in microgpt-rs), Plan 021 (ScreeningPruner)
+**Depends on:** Plan 030 (bandit feature in katgpt-rs), Plan 021 (ScreeningPruner)
 **Research:** `.research/014_Learning_Beyond_Gradients.md`
 **Goal:** Add the missing infrastructure for Heuristic Learning (HL) — trial persistence, absorb-compress cycle, hot-swap pruner, and regression suite. This enables the Bomberman arena (Plan 033) and future coding-agent-driven validator evolution.
 
@@ -109,7 +109,7 @@ Round N+m:   Agent writes new validator.rs → compile .wasm → HotSwapPruner.r
   - ~150 lines
 
 - [x] **Task 9: Update docs**
-  - Update `microgpt-rs/README.md` with HL section
+  - Update `katgpt-rs/README.md` with HL section
   - Update `.docs/09_heuristic_learning.md` (Plan 033 dependency)
   - Update `src/pruners/mod.rs` with new module exports
 

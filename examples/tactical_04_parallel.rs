@@ -7,12 +7,12 @@
 
 use std::collections::HashSet;
 
-use microgpt_rs::pruners::map_generator::MapGenerator;
-use microgpt_rs::pruners::pathfinder::{Target, enumerate_targets, find_path};
-use microgpt_rs::pruners::tactical_pruner::{GameState, TacticalPruner};
-use microgpt_rs::speculative::types::ConstraintPruner;
-use microgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
-use microgpt_rs::types::Config;
+use katgpt_rs::pruners::map_generator::MapGenerator;
+use katgpt_rs::pruners::pathfinder::{Target, enumerate_targets, find_path};
+use katgpt_rs::pruners::tactical_pruner::{GameState, TacticalPruner};
+use katgpt_rs::speculative::types::ConstraintPruner;
+use katgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
+use katgpt_rs::types::Config;
 use rayon::prelude::*;
 
 // ── Strategic Pruner (local copy from tactical_bench.rs) ───────

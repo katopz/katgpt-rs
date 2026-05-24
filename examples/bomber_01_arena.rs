@@ -12,11 +12,11 @@ use std::path::PathBuf;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
-use microgpt_rs::pruners::bomber::replay::{
+use katgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+use katgpt_rs::pruners::bomber::replay::{
     ReplaySample, ReplayWriter, serialize_board, serialize_bombs, serialize_powerups,
 };
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer,
     init_world, init_world_with_arena, run_tick, spawn_players,
 };
@@ -287,17 +287,17 @@ fn run_round(
         let mut actions = [None; 4];
         for (i, player) in players.iter_mut().enumerate() {
             let pos = world
-                .get::<microgpt_rs::pruners::bomber::GridPos>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::GridPos>(entities[i])
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 actions[i] = Some(
                     player.select_action(
                         &world
-                            .resource::<microgpt_rs::pruners::bomber::ArenaGrid>()
+                            .resource::<katgpt_rs::pruners::bomber::ArenaGrid>()
                             .clone(),
                         pos,
                         &tick_events,
@@ -310,20 +310,20 @@ fn run_round(
         // Capture replay data for all alive players
         if capture_replay {
             let board =
-                serialize_board(world.resource::<microgpt_rs::pruners::bomber::ArenaGrid>());
+                serialize_board(world.resource::<katgpt_rs::pruners::bomber::ArenaGrid>());
             let bombs = serialize_bombs(&mut world);
             let powerups = serialize_powerups(&mut world);
             let tick = world
-                .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+                .resource::<katgpt_rs::pruners::bomber::TickCounter>()
                 .tick;
 
             for i in 0..4 {
                 let pos = world
-                    .get::<microgpt_rs::pruners::bomber::GridPos>(entities[i])
+                    .get::<katgpt_rs::pruners::bomber::GridPos>(entities[i])
                     .copied()
                     .unwrap_or_default();
                 let alive = world
-                    .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                    .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                     .is_some();
                 if alive && actions[i].is_some() {
                     pending.push(PendingCapture {
@@ -409,7 +409,7 @@ fn run_round(
     };
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     // Compute quality and write replay samples

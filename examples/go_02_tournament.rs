@@ -15,7 +15,7 @@ use std::env;
 use std::time::Instant;
 
 use fastrand::Rng;
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::go::{
     DEFAULT_KOMI, GoAction, GoCell, GoGZeroPlayer, GoGreedyPlayer, GoHLPlayer, GoMctsPlayer,
     GoPlayer, GoRandomPlayer, GoReplay, GoState, GoValidatorPlayer,
 };

@@ -712,8 +712,8 @@ impl ProgramGraph {
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::percepta::graph::GraphBuilder;
-/// use microgpt_rs::percepta::TieBreak;
+/// use katgpt_rs::percepta::graph::GraphBuilder;
+/// use katgpt_rs::percepta::TieBreak;
 ///
 /// let mut builder = GraphBuilder::new();
 /// let pos = builder.position;

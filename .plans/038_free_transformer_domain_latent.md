@@ -149,7 +149,7 @@ Cost: 2 × kv_dim additions. Zero allocations, zero RNG calls.
   - ✅ Added `domain_latent: Option<DomainLatent>` to `ExpertBundle` (feature-gated)
   - ✅ Added `resolve_domain_latent()` in `ExpertRegistry` — loads `.dlat` file, graceful degradation on failure
   - ✅ Threaded through `from_config()` — all bundles get domain_latent loaded at registry build time
-  - ✅ Added `domain_latent` feature to `riir-router/Cargo.toml` (enables `microgpt-rs/domain_latent`)
+  - ✅ Added `domain_latent` feature to `riir-router/Cargo.toml` (enables `katgpt-rs/domain_latent`)
   - ✅ 2 tests: `test_domain_latent_none_for_domain_without_path`, `test_domain_latent_missing_file_graceful_degradation`
   - ✅ All existing tests updated with `#[cfg(feature = "domain_latent")] domain_latent_path: None`
   - ✅ 35 tests pass with feature, 33 without (2 new tests are feature-gated)
@@ -171,7 +171,7 @@ Cost: 2 × kv_dim additions. Zero allocations, zero RNG calls.
 | `riir-gpu/examples/train_bomber.rs` | Train LoRA + domain latent, export both | ✅ Done |
 | `riir-burner/train_lora.py` | Language model training (future) | ⏳ Deferred |
 
-**Tests:** 260 pass (microgpt-rs with `domain_latent`), 255 pass (without). 5 domain_latent tests.
+**Tests:** 260 pass (katgpt-rs with `domain_latent`), 255 pass (without). 5 domain_latent tests.
 riir-router: 35 pass (with `domain_latent`), 33 pass (without). 2 new domain_latent tests.
 
 ---

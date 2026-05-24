@@ -10,11 +10,11 @@
 //!
 //! Run: `cargo test --features dash_attn --test goat_106_dash_attn -- --nocapture`
 
-use microgpt_rs::dash_attn::{
+use katgpt_rs::dash_attn::{
     ChunkSummaryCache, ChunkSummaryQuery, entmax_1p5, entmax_gqa_aggregate, entmax_support,
     score_blocks_entmax,
 };
-use microgpt_rs::types::DashAttnConfig;
+use katgpt_rs::types::DashAttnConfig;
 
 // ── Helpers ───────────────────────────────────────────────────
 

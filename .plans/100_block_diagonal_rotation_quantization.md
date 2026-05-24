@@ -54,7 +54,7 @@ Core innovations vs. our existing stack:
 ### Module Structure
 
 ```
-microgpt-rs/src/
+katgpt-rs/src/
 ├── turboquant/              # Existing: WHT rotation + Lloyd-Max (legacy baseline)
 ├── spectralquant/           # Existing: calibrated eigenbasis (default-on)
 ├── octopus/                 # Existing: octahedral triplet (default-on, best MSE)
@@ -157,7 +157,7 @@ pub fn rot2_inverse(cos_sin: &[f32; 2], v0: f32, v1: f32) -> (f32, f32) {
 /// Generate random 2D rotation parameters (cos θ, sin θ) per group.
 /// n_groups = ceil(kv_dim / 2).
 pub fn generate_givens_rotations(n_groups: usize, seed: u64) -> Vec<[f32; 2]> {
-    use microgpt_core::Rng;
+    use katgpt_core::Rng;
     let mut rng = Rng::new(seed);
     (0..n_groups)
         .map(|_| {

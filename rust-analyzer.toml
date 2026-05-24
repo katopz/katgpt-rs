@@ -1,6 +1,6 @@
-# rust-analyzer configuration for microgpt-rs workspace
+# rust-analyzer configuration for katgpt-rs workspace
 # Enables the `bomber` feature on the root package so the LSP resolves
 # feature-gated imports in examples like bomber_12_self_play_freeze.rs
 
 [cargo]
-features = ["microgpt-rs/bomber"]
+features = ["katgpt-rs/bomber"]

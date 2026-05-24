@@ -10,9 +10,9 @@
 
 #![cfg(feature = "spec_cost_model")]
 
-use microgpt_rs::speculative::{LeviathanVerifier, SpecCostSnapshot, SpeculativeVerifier};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::{LeviathanVerifier, SpecCostSnapshot, SpeculativeVerifier};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 
 // ── Proof 1: SpecCostSnapshot Construction ────────────────────
 

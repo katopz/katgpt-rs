@@ -6,7 +6,7 @@
 > **Benchmark Repo:** `.raw/tk_attention/` (LCF attention kernel vs FA2/FA3)
 > **Date:** 2026-05-21 (article), distilled 2026-05-23
 > **Related:** Research 66 (TileRT), Research 67 (CODA), Research 29 (Rust GPU), Research 71 (DashAttention), Research 22 (Lighthouse Attention), Plan 106 (riir-ai CubeCL rewrite)
-> **Verdict: CONCEPTUAL ADOPTION — TK's hardware-specific primitives (WGMMA, TMA, TMEM, SMEM swizzling) are NOT portable to our wgpu/Metal/CubeCL stack. However, three architectural patterns ARE portable: (1) tile-structured attention with online softmax (CPU SIMD path in microgpt-core), (2) LCF producer-consumer pipeline template (guides CubeCL kernel structure in Plan 106), (3) persistent tile scheduling with super-grouping for cache locality. Feature-gate: `tiled_attention` in microgpt-core for CPU flash attention; guide Plan 106 T2.5+ for GPU tiled path.**
+> **Verdict: CONCEPTUAL ADOPTION — TK's hardware-specific primitives (WGMMA, TMA, TMEM, SMEM swizzling) are NOT portable to our wgpu/Metal/CubeCL stack. However, three architectural patterns ARE portable: (1) tile-structured attention with online softmax (CPU SIMD path in katgpt-core), (2) LCF producer-consumer pipeline template (guides CubeCL kernel structure in Plan 106), (3) persistent tile scheduling with super-grouping for cache locality. Feature-gate: `tiled_attention` in katgpt-core for CPU flash attention; guide Plan 106 T2.5+ for GPU tiled path.**
 
 ---
 
@@ -16,7 +16,7 @@ ThunderKittens (TK) is a CUDA-embedded DSL from Stanford's Hazy Research that ab
 
 **The punchline for our stack:** We do NOT have NVIDIA Tensor Cores, TMA, or TMEM. Our GPU path is wgpu → Metal/Vulkan via CubeCL. Our CPU path is NEON/AVX2 SIMD. But TK's *architectural patterns* — not its hardware-specific instructions — are what we should distill:
 
-1. **CPU (microgpt-core):** TK's online-softmax flash attention algorithm maps directly to our SIMD matmul pipeline. We already have `softmax_scaled()` and `matmul()` in `microgpt-core/src/types.rs`. What we lack is the *tiled iteration* pattern that avoids materializing the full `N×N` attention score matrix. This is a pure algorithmic improvement, independent of GPU hardware.
+1. **CPU (katgpt-core):** TK's online-softmax flash attention algorithm maps directly to our SIMD matmul pipeline. We already have `softmax_scaled()` and `matmul()` in `katgpt-core/src/types.rs`. What we lack is the *tiled iteration* pattern that avoids materializing the full `N×N` attention score matrix. This is a pure algorithmic improvement, independent of GPU hardware.
 
 2. **GPU (riir-ai):** CubeCL already provides a tiled matmul pipeline (Plan 106 T2.4 complete). TK's LCF (load-compute-finish) template shows how to structure a *kernel template* with producer/consumer roles, pipelined SMEM staging, and persistent task scheduling. This guides our CubeCL kernel architecture.
 
@@ -43,7 +43,7 @@ ThunderKittens (TK) is a CUDA-embedded DSL from Stanford's Hazy Research that ab
 | TK Operation | What It Does | Our Analog |
 |:---|:---|:---|
 | `warpgroup::mm<A, B>` | Warpgroup-level MMA (4 warps, 128 threads) | CubeCL `cubecl::matmul::tiled` (Plan 106 T2.4) |
-| `warp::sum<axis::COL>(tile)` | Column-wise reduction via shuffle tree | `simd_horizontal_sum()` in `microgpt-core` |
+| `warp::sum<axis::COL>(tile)` | Column-wise reduction via shuffle tree | `simd_horizontal_sum()` in `katgpt-core` |
 | `warp::max<axis::COL>(tile)` | Column-wise max reduction | Our `softmax_scaled` already does this per-row |
 | `warp::exp2(...)` | Elementwise exp2 on register tile | `f32::exp()` in our SIMD loops |
 | `warp::add(a, b, dst)` | Elementwise add on shared/register tiles | `simd_add_f32()` in our NEON/AVX2 backends |
@@ -157,7 +157,7 @@ After all tiles:
 
 ## 4. Distillations for Our Stack
 
-### 4.1 CPU SIMD Path (microgpt-core)
+### 4.1 CPU SIMD Path (katgpt-core)
 
 **What we can adopt:**
 
@@ -209,7 +209,7 @@ The **super-grouping** traversal (group `SUPER_M` rows, traverse columns within 
 
 ## 5. Feature Gate Proposal
 
-### 5.1 microgpt-core: `tiled_attention`
+### 5.1 katgpt-core: `tiled_attention`
 
 ```toml
 [features]
@@ -217,7 +217,7 @@ tiled_attention = []  # Tiled online-softmax flash attention for CPU SIMD
 ```
 
 **Scope:**
-- Tiled attention function in `microgpt-core/src/attention.rs` (new file)
+- Tiled attention function in `katgpt-core/src/attention.rs` (new file)
 - Processes Q in SIMD-width row tiles, K/V in column tiles
 - Online softmax with exp2 trick
 - Falls back to current `softmax_scaled()` for small N where tiling overhead dominates
@@ -258,9 +258,9 @@ Being honest about the limitations:
 
 ## 8. Concrete Next Steps
 
-### For microgpt-rs (CPU SIMD):
-1. Add `tiled_attention` feature gate to `microgpt-core/Cargo.toml`
-2. Implement tiled online-softmax attention in `microgpt-core/src/attention.rs`
+### For katgpt-rs (CPU SIMD):
+1. Add `tiled_attention` feature gate to `katgpt-core/Cargo.toml`
+2. Implement tiled online-softmax attention in `katgpt-core/src/attention.rs`
 3. Benchmark: compare throughput and memory usage vs current full-materialization path
 4. GOAT proof: cosine similarity > 0.999 vs reference SDPA
 

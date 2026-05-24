@@ -15,10 +15,10 @@ use std::path::Path;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::go::{
     GoAction, GoCell, GoFrozenBandit, GoHLPlayer, GoPlayer, GoState, GoValidatorPlayer,
 };
-use microgpt_rs::pruners::{load_frozen, save_frozen};
+use katgpt_rs::pruners::{load_frozen, save_frozen};
 
 // ── Constants ──────────────────────────────────────────────────
 

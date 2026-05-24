@@ -8,7 +8,7 @@
 //!
 //! Run: cargo test --features federation --test bench_boundary_alignment -- --nocapture
 
-use microgpt_rs::pruners::{BoundaryAlignment, KlBoundaryAligner};
+use katgpt_rs::pruners::{BoundaryAlignment, KlBoundaryAligner};
 
 // ── Helpers ───────────────────────────────────────────────────
 

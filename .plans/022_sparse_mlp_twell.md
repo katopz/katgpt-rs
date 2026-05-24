@@ -77,12 +77,12 @@ Add a CPU sparse matmul path for the MLP's second weight matrix (`w2 @ hidden`),
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/src/types.rs` | Add `sparse_matmul()` function |
-| `microgpt-rs/Cargo.toml` | Add `sparse_mlp` feature |
-| `microgpt-rs/src/transformer.rs` | Add buffers to `ForwardContext`, sparse path in forward functions |
-| `microgpt-rs/src/benchmark.rs` | Add sparse vs dense benchmark |
-| `microgpt-rs/src/gpu/forward.rs` | Add docs comment for GPU sparse rationale |
-| `microgpt-rs/README.md` | Add TwELL Sparse MLP section |
+| `katgpt-rs/src/types.rs` | Add `sparse_matmul()` function |
+| `katgpt-rs/Cargo.toml` | Add `sparse_mlp` feature |
+| `katgpt-rs/src/transformer.rs` | Add buffers to `ForwardContext`, sparse path in forward functions |
+| `katgpt-rs/src/benchmark.rs` | Add sparse vs dense benchmark |
+| `katgpt-rs/src/gpu/forward.rs` | Add docs comment for GPU sparse rationale |
+| `katgpt-rs/README.md` | Add TwELL Sparse MLP section |
 
 ---
 
@@ -112,6 +112,6 @@ GPU stays dense. Unstructured sparsity causes warp divergence. If GPU sparse is 
 
 - GPU sparse matmul (requires structured sparsity, separate plan)
 - Structured N:M sparsity (2:4, 4:8 patterns — hardware-specific)
-- Training with L1 regularization (Candle/Unsloth side, not microgpt-rs)
+- Training with L1 regularization (Candle/Unsloth side, not katgpt-rs)
 - Sparse w1 matmul (input isn't sparse, no benefit)
 - Quantization-aware sparse (future research)

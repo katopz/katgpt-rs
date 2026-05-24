@@ -9,7 +9,7 @@
 //!
 //! Run: `cargo test --features dmax_spd --test goat_109_dmax_spd -- --nocapture`
 
-use microgpt_rs::speculative::d2f::{
+use katgpt_rs::speculative::d2f::{
     BlockConvergence, HybridEmbedding, SoftDecodeConfig, check_block_convergence,
     contiguous_prefix_promote,
 };

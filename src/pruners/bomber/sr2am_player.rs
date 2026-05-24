@@ -33,7 +33,7 @@ use std::any::Any;
 use std::cmp::Ordering;
 
 use fastrand::Rng;
-use microgpt_core::{ConfiguratorContext, PlanningDecision};
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
 
 use crate::pruners::absorb_compress::{AbsorbCompress, AbsorbCompressLayer, CompressConfig};
 use crate::pruners::bandit::{BanditPruner, BanditStrategy};

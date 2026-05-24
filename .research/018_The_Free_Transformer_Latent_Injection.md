@@ -57,13 +57,13 @@ Pattern: **Biggest gains on reasoning-heavy tasks. Negligible on common-sense ta
 
 ---
 
-## What Applies to microgpt-rs
+## What Applies to katgpt-rs
 
 ### 1. Mid-Layer Conditioning ↔ KV Cache Priming (Plan 024)
 
 The paper validates injecting conditioning information at the middle layer via K/V modulation. Our `forward_base` layer loop has a natural injection point:
 
-```microgpt-rs/src/transformer.rs#L370-371
+```katgpt-rs/src/transformer.rs#L370-371
 for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
 ```
 
@@ -75,7 +75,7 @@ At `layer_idx == config.n_layer / 2`, we could add a latent vector to K/V. The p
 
 Gemini correctly identifies that our `forward_prefill` already does **non-causal attention**:
 
-```microgpt-rs/src/transformer.rs#L632-635
+```katgpt-rs/src/transformer.rs#L632-635
 // Bidirectional attention: t_n = prompt_len (full prompt range)
 prompt_len, // ← BIDIRECTIONAL: full range, not pos+1
 ```

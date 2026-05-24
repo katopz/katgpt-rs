@@ -2,7 +2,7 @@
 
 **Date:** 2025-07-05
 **Plan:** 100 (Block-Diagonal Rotation Quantization)
-**Command:** `cargo test -p microgpt-rs --features "planar_quant,iso_quant,octopus,turboquant" --test bench_block_diagonal_goat -- --nocapture`
+**Command:** `cargo test -p katgpt-rs --features "planar_quant,iso_quant,octopus,turboquant" --test bench_block_diagonal_goat -- --nocapture`
 **Machine:** macOS (Apple Silicon)
 **Rust:** edition 2024, debug profile
 

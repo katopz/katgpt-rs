@@ -91,7 +91,7 @@ impl GoPlayerType {
 /// ## Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::go::tournament::{GoTournamentConfig, GoPlayerType};
+/// use katgpt_rs::pruners::go::tournament::{GoTournamentConfig, GoPlayerType};
 ///
 /// let config = GoTournamentConfig {
 ///     board_size: 9,

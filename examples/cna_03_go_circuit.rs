@@ -12,9 +12,9 @@
 //! cargo run --example cna_03_go_circuit --features "cna_steering,go"
 //! ```
 
-use microgpt_rs::pruners::game_state::StateHeuristic;
-use microgpt_rs::pruners::go::{GoAction, GoCell, GoHeuristic, GoState};
-use microgpt_rs::pruners::{CnaDiscoveryConfig, CnaModulator, cna_discover, cna_modulate};
+use katgpt_rs::pruners::game_state::StateHeuristic;
+use katgpt_rs::pruners::go::{GoAction, GoCell, GoHeuristic, GoState};
+use katgpt_rs::pruners::{CnaDiscoveryConfig, CnaModulator, cna_discover, cna_modulate};
 
 // ── Constants ──────────────────────────────────────────────────
 

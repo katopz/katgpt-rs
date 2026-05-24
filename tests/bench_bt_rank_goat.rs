@@ -10,7 +10,7 @@
 #[test]
 fn bench_bt_rank_goat_proof() {
     use fastrand::Rng;
-    use microgpt_rs::pruners::{BtComparison, BtConfig, BtOutcome, bt_fit};
+    use katgpt_rs::pruners::{BtComparison, BtConfig, BtOutcome, bt_fit};
 
     // ── Helpers ──────────────────────────────────────────────────
 

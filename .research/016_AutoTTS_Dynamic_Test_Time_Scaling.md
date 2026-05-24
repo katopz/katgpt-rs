@@ -100,7 +100,7 @@ History augmentation: alongside β-sweep results, full action-by-action trajecto
 
 ---
 
-## What Maps to microgpt-rs
+## What Maps to katgpt-rs
 
 ### What Actually Applies
 
@@ -189,11 +189,11 @@ A proposed POC suggested `prompt_context.contains("async")` to set `tree_budget`
 
 ---
 
-## Application to microgpt-rs
+## Application to katgpt-rs
 
 ### Direct Mappings
 
-| Paper Concept | microgpt-rs Equivalent | Status |
+| Paper Concept | katgpt-rs Equivalent | Status |
 |---|---|---|
 | **Dynamic budget per query** | `DomainConfig.inference_budget` → `Config::with_overrides()` | ❌ Missing |
 | **β parameterization** | `InferenceBudget::from_beta()` — single scalar → budget/lookahead/threshold | ❌ Missing |
@@ -218,7 +218,7 @@ A proposed POC suggested `prompt_context.contains("async")` to set `tree_budget`
 
 1. **`InferenceBudget` struct**: Optional overrides for `tree_budget`, `draft_lookahead`, `screening_threshold`, `temperature`. Lives in `DomainConfig` behind `#[serde(default)]`.
 
-2. **`Config::with_overrides()`**: Clones self, applies non-None overrides. ~10 lines in `microgpt-rs/src/types.rs`.
+2. **`Config::with_overrides()`**: Clones self, applies non-None overrides. ~10 lines in `katgpt-rs/src/types.rs`.
 
 3. **`InferenceBudget::from_beta()`**: Optional convenience — derive all params from single scalar. Our own β mapping, not CMC's.
 
@@ -233,8 +233,8 @@ A proposed POC suggested `prompt_context.contains("async")` to set `tree_budget`
 | `riir-ai` Plan 023 (Prompt Router) | **Infrastructure consumer.** Router selects domain → we need budget overrides to flow with it |
 | `anyrag` Plan 005 (Domain Classifier) | **Signal source.** `/classify/domain` determines which domain → which budget |
 | `anyrag` Plan 007 (Catalog-Driven Shaping) | **Config host.** Already proposes `[domain.truncation]` and `[domain.reasoning]` — `[domain.inference]` is the natural addition |
-| `microgpt-rs` Plan 021 (ScreeningPruner) | **Verifier.** Already provides graded relevance — the "reviewer" in AutoTTS terms |
-| `microgpt-rs` Plan 030 (Multi-Armed Bandit) | **Adaptive learning.** BanditPruner learns across episodes — could learn optimal budget over time |
+| `katgpt-rs` Plan 021 (ScreeningPruner) | **Verifier.** Already provides graded relevance — the "reviewer" in AutoTTS terms |
+| `katgpt-rs` Plan 030 (Multi-Armed Bandit) | **Adaptive learning.** BanditPruner learns across episodes — could learn optimal budget over time |
 
 ### System Architecture Mapping
 

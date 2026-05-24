@@ -8,11 +8,11 @@ use std::path::PathBuf;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
-use microgpt_rs::pruners::bomber::replay::{
+use katgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+use katgpt_rs::pruners::bomber::replay::{
     ReplaySample, ReplayWriter, serialize_board, serialize_bombs, serialize_powerups,
 };
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer,
     init_world, init_world_with_arena, run_tick, spawn_players,
 };
@@ -248,27 +248,27 @@ fn run_round(
         let mut actions = [None; 4];
         for (i, player) in players.iter_mut().enumerate() {
             let pos = world
-                .get::<microgpt_rs::pruners::bomber::GridPos>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::GridPos>(entities[i])
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world
-                    .resource::<microgpt_rs::pruners::bomber::ArenaGrid>()
+                    .resource::<katgpt_rs::pruners::bomber::ArenaGrid>()
                     .clone();
                 let action = player.select_action(&grid, pos, &tick_events, rng);
                 actions[i] = Some(action);
 
                 // Capture P3 (Validator, index 2) and P4 (HL, index 3) only
                 if i == 2 || i == 3 {
-                    let grid_ref = world.resource::<microgpt_rs::pruners::bomber::ArenaGrid>();
+                    let grid_ref = world.resource::<katgpt_rs::pruners::bomber::ArenaGrid>();
                     let board = serialize_board(grid_ref);
                     let bombs = serialize_bombs(&mut world);
                     let powerups = serialize_powerups(&mut world);
                     let tick = world
-                        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+                        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
                         .tick;
 
                     pending_samples.push(PendingSample {
@@ -341,7 +341,7 @@ fn run_round(
     }
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     let result = RoundResult {

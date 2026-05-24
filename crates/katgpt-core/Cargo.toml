@@ -1,9 +1,9 @@
 [package]
-name = "microgpt-core"
+name = "katgpt-core"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Shared types and SIMD kernels for microgpt-rs and riir-engine"
+description = "Shared types and SIMD kernels for katgpt-rs and riir-engine"
 
 [dependencies]
 fastrand = "2"

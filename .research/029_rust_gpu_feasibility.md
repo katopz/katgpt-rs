@@ -6,7 +6,7 @@
 
 ## Context
 
-We maintain **27 WGSL compute shaders** in `riir-gpu/src/kernels/` and **parallel CPU implementations** in `microgpt-rs/src/types.rs`. The duplication is a maintenance burden. rust-gpu (Rust→SPIR-V compiler) promises to eliminate it by compiling the same Rust code to both GPU and CPU.
+We maintain **27 WGSL compute shaders** in `riir-gpu/src/kernels/` and **parallel CPU implementations** in `katgpt-rs/src/types.rs`. The duplication is a maintenance burden. rust-gpu (Rust→SPIR-V compiler) promises to eliminate it by compiling the same Rust code to both GPU and CPU.
 
 The question: **Is rust-gpu production-ready for our use case today?**
 

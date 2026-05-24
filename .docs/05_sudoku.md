@@ -1,4 +1,4 @@
-# microgpt-rs: Sudoku Domain — Solver, Constraint Pruning, TUI
+# katgpt-rs: Sudoku Domain — Solver, Constraint Pruning, TUI
 
 ## Overview
 Sudoku serves as the proof-of-concept domain for Deterministic Validator — demonstrating that a deterministic rules engine can validate LLM-drafted tokens inside the speculative decoding loop. The 9×9 solver with streaming output matches the web-demo experience from the Percepta blog.

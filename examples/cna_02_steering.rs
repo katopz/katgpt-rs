@@ -20,7 +20,7 @@
 //! - **Behavioral change** — requires real model output measurement.
 //! - **Quality at scale** — synthetic activations, not real transformer output.
 
-use microgpt_rs::pruners::{CnaCircuit, CnaModulator, CnaNeuron, cna_modulate};
+use katgpt_rs::pruners::{CnaCircuit, CnaModulator, CnaNeuron, cna_modulate};
 
 fn main() {
     println!("=== CNA Steering Example ===\n");

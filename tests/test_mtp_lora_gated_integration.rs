@@ -7,9 +7,9 @@
 
 #![cfg(feature = "dllm")]
 
-use microgpt_rs::speculative::{DrafterLoraWeights, LeviathanVerifier, SpeculativeVerifier};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::{DrafterLoraWeights, LeviathanVerifier, SpeculativeVerifier};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 
 // ── T34: Output-length gating + LoRA drafter ──────────────────
 //

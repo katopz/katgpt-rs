@@ -100,7 +100,7 @@ The following changes have landed since this plan was written:
 ┌─────────────────────────────────────────────────────────────────┐
 │                    INFERENCE (Production)                        │
 │                                                                  │
-│  User Prompt ──► BPE Encode ──► Draft Model (microgpt-rs)       │
+│  User Prompt ──► BPE Encode ──► Draft Model (katgpt-rs)       │
 │                                      │                           │
 │                               DDTree Branches                   │
 │                                      │                           │

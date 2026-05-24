@@ -20,9 +20,9 @@ use std::hint::black_box;
 use std::path::Path;
 use std::time::Instant;
 
-use microgpt_rs::pruners::bomber::wasm_pruner::BomberWasmPruner;
-use microgpt_rs::pruners::bomber::wasm_state::{ZeroCopyStateBuffer, serialize_game_state};
-use microgpt_rs::pruners::bomber::{ArenaGrid, BomberAction, GridPos, is_safe_action};
+use katgpt_rs::pruners::bomber::wasm_pruner::BomberWasmPruner;
+use katgpt_rs::pruners::bomber::wasm_state::{ZeroCopyStateBuffer, serialize_game_state};
+use katgpt_rs::pruners::bomber::{ArenaGrid, BomberAction, GridPos, is_safe_action};
 
 // ── Config ──────────────────────────────────────────────────────
 

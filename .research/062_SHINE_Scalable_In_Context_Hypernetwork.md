@@ -222,17 +222,17 @@ pub fn context_to_lora(
 
 **Priority:** Medium — requires riir-gpu infrastructure. Useful for session-adaptive experts but not critical for current game domain benchmarks.
 
-### D2: Alternating Sparse Attention Pattern — Modelless (microgpt-core)
+### D2: Alternating Sparse Attention Pattern — Modelless (katgpt-core)
 
 **What:** The row/column alternating attention decomposition from SHINE's M2P Transformer. A general-purpose sparse attention primitive for processing 2D token grids.
 
 **Why it fits:** We already have `AttentionMode` enum with `Causal`, `Bidirectional`, `BlockCausal`, `SpKv`. Adding `Alternating2D` captures the M2P pattern for any grid-structured processing (not just LoRA generation).
 
-**Where it lives:** `microgpt-core/src/types.rs` (extend `AttentionMode` enum).
+**Where it lives:** `katgpt-core/src/types.rs` (extend `AttentionMode` enum).
 
 **Architecture sketch:**
 ```rust
-// In microgpt-core/src/types.rs
+// In katgpt-core/src/types.rs
 pub enum AttentionMode {
     // ... existing variants ...
     
@@ -389,9 +389,9 @@ Key findings:
 
 ## Feature Gate Design
 
-### microgpt-rs (modelless side)
+### katgpt-rs (modelless side)
 
-No feature gate needed. The alternating attention pattern (D2) would extend `AttentionMode` in `microgpt-core/src/types.rs` — available to all consumers.
+No feature gate needed. The alternating attention pattern (D2) would extend `AttentionMode` in `katgpt-core/src/types.rs` — available to all consumers.
 
 ### riir-ai (model-based side)
 
@@ -413,7 +413,7 @@ The `shine_routing` feature enables only the memory extraction + embedding compa
 ### GOAT Proof Examples
 
 ```toml
-# microgpt-rs/Cargo.toml
+# katgpt-rs/Cargo.toml
 [[example]]
 name = "bomber_14_shine_expert"
 required-features = ["bomber"]  # Uses riir-gpu via REST for LoRA generation

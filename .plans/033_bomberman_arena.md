@@ -26,7 +26,7 @@ The competitive format makes the proof self-contained: no external baselines nee
 We extract game logic patterns from `raw/bomby/` but use **only `bevy_ecs`** (the standalone ECS crate), not the full Bevy engine. Rendering uses ratatui with emoji/ASCII art — same pattern as `dungeon_01_tui.rs`.
 
 ```
-raw/bomby/ (reference)              →  microgpt-rs bomberman (ours)
+raw/bomby/ (reference)              →  katgpt-rs bomberman (ours)
 ──────────────────────────────────────────────────────────────────
 bevy (full engine)                  →  bevy_ecs (standalone ECS only)
 bevy_ecs_ldtk (LDtk level loading)  →  ProceduralArena (grid generator)

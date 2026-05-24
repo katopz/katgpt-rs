@@ -77,7 +77,7 @@ pub const SDAR_BETA_MAX: f32 = 50.0;
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::pruners::sdar_gate::{sdar_gate, SDAR_BETA};
+/// use katgpt_rs::pruners::sdar_gate::{sdar_gate, SDAR_BETA};
 ///
 /// // Positive input → gate opens (≈ 0.92)
 /// let open = sdar_gate(0.5, SDAR_BETA);
@@ -124,7 +124,7 @@ pub fn sdar_gate_default(x: f32) -> f32 {
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::pruners::sdar_gate::{sdar_modulate, SDAR_BETA};
+/// use katgpt_rs::pruners::sdar_gate::{sdar_modulate, SDAR_BETA};
 ///
 /// // Positive gap: signal passes through with high weight
 /// let strong = sdar_modulate(1.0, 0.5, SDAR_BETA);
@@ -161,7 +161,7 @@ pub fn sdar_modulate_default(signal: f32, gap: f32) -> f32 {
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::pruners::sdar_gate::{sdar_benefit_gate, SDAR_BETA};
+/// use katgpt_rs::pruners::sdar_gate::{sdar_benefit_gate, SDAR_BETA};
 ///
 /// // High benefit → gate ≈ 1.0
 /// let promote = sdar_benefit_gate(3.0, SDAR_BETA);

@@ -1,9 +1,9 @@
-use microgpt_rs::{benchmark, benchmark::BenchCategory, percepta, plot, transformer, types};
+use katgpt_rs::{benchmark, benchmark::BenchCategory, percepta, plot, transformer, types};
 
 fn main() {
     let config = types::Config::micro();
 
-    println!("🚀 MicroGPT-RS: Transformer + Speculative Decoding Benchmark");
+    println!("🚀 KatGPT-RS: Transformer + Speculative Decoding Benchmark");
     println!("{}", "═".repeat(60));
 
     // ── 1. Transformer Output with Proof ──────────────────────────
@@ -274,7 +274,7 @@ fn percepta_benchmark() {
 /// O(N) full rebuild. Both use O(log H) query (binary/ternary search on hull).
 #[cfg(feature = "percepta")]
 fn percepta_cht_benchmark() {
-    use microgpt_rs::percepta::{HardAttentionHead, TieBreak};
+    use katgpt_rs::percepta::{HardAttentionHead, TieBreak};
 
     let trace_sizes = [1_000, 10_000, 100_000];
 

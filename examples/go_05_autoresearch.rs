@@ -26,7 +26,7 @@
 
 use std::env;
 
-use microgpt_rs::pruners::go::autoresearch::{
+use katgpt_rs::pruners::go::autoresearch::{
     AutoResearchConfig, BaselinePlayer, run_autoresearch,
 };
 
@@ -122,7 +122,7 @@ fn print_eval_table_header() {
 }
 
 /// Print a single evaluation row.
-fn print_eval_row(idx: usize, trial: &microgpt_rs::pruners::go::autoresearch::TrialLog) {
+fn print_eval_row(idx: usize, trial: &katgpt_rs::pruners::go::autoresearch::TrialLog) {
     println!(
         "  {:>4}  {:>5}  {:>30}  {:>6}  {:>6}  {:>6.1}%",
         idx + 1,
@@ -135,7 +135,7 @@ fn print_eval_row(idx: usize, trial: &microgpt_rs::pruners::go::autoresearch::Tr
 }
 
 /// Print per-arm leaderboard.
-fn print_leaderboard(result: &microgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
+fn print_leaderboard(result: &katgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
     let mut arms: Vec<_> = result.arms.iter().filter(|a| a.pulls > 0).collect();
 
     arms.sort_by(|a, b| {
@@ -164,8 +164,8 @@ fn print_leaderboard(result: &microgpt_rs::pruners::go::autoresearch::AutoResear
 
     for (rank, arm) in arms.iter().enumerate() {
         let status = match arm.status {
-            microgpt_rs::pruners::go::autoresearch::ArmStatus::Active => "Active",
-            microgpt_rs::pruners::go::autoresearch::ArmStatus::Dropped => "Dropped",
+            katgpt_rs::pruners::go::autoresearch::ArmStatus::Active => "Active",
+            katgpt_rs::pruners::go::autoresearch::ArmStatus::Dropped => "Dropped",
         };
         println!(
             "  {:>4}  {:>4}  {:>30}  {:>6.1}%  {:>6}  {:>6}  {:>6.1}%  {:>8}",
@@ -182,7 +182,7 @@ fn print_leaderboard(result: &microgpt_rs::pruners::go::autoresearch::AutoResear
 }
 
 /// Print win rate evolution over evaluations.
-fn print_win_rate_evolution(result: &microgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
+fn print_win_rate_evolution(result: &katgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
     println!();
     println!("  Win Rate Evolution (cumulative mean per evaluation):");
 
@@ -208,7 +208,7 @@ fn print_win_rate_evolution(result: &microgpt_rs::pruners::go::autoresearch::Aut
 }
 
 /// Print convergence analysis.
-fn print_convergence(result: &microgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
+fn print_convergence(result: &katgpt_rs::pruners::go::autoresearch::AutoResearchResult) {
     let trials = &result.trials;
     if trials.len() < 4 {
         return;

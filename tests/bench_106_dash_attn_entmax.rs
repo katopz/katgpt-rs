@@ -9,7 +9,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::dash_attn::entmax_1p5;
+use katgpt_rs::dash_attn::entmax_1p5;
 
 const WARMUP: usize = 100;
 const ITERS: usize = 1000;

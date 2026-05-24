@@ -68,7 +68,7 @@ Key equation: `B* = (B \ R) ∪ Cθ(R, T_R)` — region replacement, not per-ent
 
 ## Distillation Strategy
 
-### Modelless Path (microgpt-rs, CPU, no gradients)
+### Modelless Path (katgpt-rs, CPU, no gradients)
 
 This is where Auto-Dreamer's ideas have the **most immediate applicability**. We don't need LLM-based consolidation — we can apply the principles to our bandit/δ-mem system:
 

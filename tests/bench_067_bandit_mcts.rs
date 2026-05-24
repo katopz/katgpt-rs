@@ -12,7 +12,7 @@ use std::time::Instant;
 use fastrand::Rng;
 
 #[cfg(feature = "bandit_mcts")]
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     ArenaGrid, BanditStats, BomberAction, BomberHeuristic, BomberState, StateHeuristic,
     game_state::{
         BanditBomberHeuristic, BanditRolloutPolicy, GameState, RandomRolloutPolicy, mcts_search,
@@ -355,7 +355,7 @@ fn bench_067_mcts_baseline() {
 #[cfg(feature = "bandit_mcts")]
 #[test]
 fn bench_067_rollout_policy_micro() {
-    use microgpt_rs::pruners::game_state::RolloutPolicy;
+    use katgpt_rs::pruners::game_state::RolloutPolicy;
 
     let state = BomberState::from_grid(&ArenaGrid::generate(42));
     let actions = state.available_actions(0);

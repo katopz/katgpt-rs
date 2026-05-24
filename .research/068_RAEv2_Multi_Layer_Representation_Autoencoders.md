@@ -113,7 +113,7 @@ The pattern is: strong prediction + (strong - weak) contrast = guided output. Th
 
 Our `forward_base` currently runs all layers and uses only the **final** `ctx.x` for the LM head:
 
-```microgpt-rs/src/transformer.rs#L823-1040
+```katgpt-rs/src/transformer.rs#L823-1040
 fn forward_base<'a>(
     ctx: &'a mut ForwardContext,
     weights: &TransformerWeights,
@@ -489,7 +489,7 @@ RAEv2's core ideas transfer to LLM inference at the **mechanism level** (multi-l
 | File | Role |
 |---|---|
 | `src/transformer.rs` | `forward_base` layer loop, `standard_lm_head`, `TransformerWeights`, `LayerWeights` |
-| `crates/microgpt-core/src/types.rs` | `Config` with `early_exit_*`, `mtp_*` fields, `InferenceOverrides` |
+| `crates/katgpt-core/src/types.rs` | `Config` with `early_exit_*`, `mtp_*` fields, `InferenceOverrides` |
 | `src/speculative/verifier.rs` | `SpeculativeVerifier` trait |
 | `src/speculative/dd_tree.rs` | `inject_sde_noise`, `build_dd_tree_sde`, early exit logic |
 | `src/speculative/types.rs` | `SdeConfig`, `DDTreeBranchCache`, screening types |

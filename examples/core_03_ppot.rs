@@ -4,17 +4,17 @@
 //! Separated from the main binary to avoid icache regression (72KB binary bloat
 //! causing 7-15% regression in unrelated DDTree benchmarks).
 
-use microgpt_rs::benchmark::{BenchCategory, BenchResult};
-use microgpt_rs::speculative::ppot::{
+use katgpt_rs::benchmark::{BenchCategory, BenchResult};
+use katgpt_rs::speculative::ppot::{
     PpotConfig, SessionKnowledge, TokenRule, identify_high_entropy_positions, ppot_resample,
     ppot_resample_different_value, ppot_resample_with_support, ppot_rescue, ppot_rescue_adaptive,
     token_entropy,
 };
-use microgpt_rs::speculative::{
+use katgpt_rs::speculative::{
     NoScreeningPruner, SpeculativeContext, dflash_predict_with, sample_from_distribution,
 };
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 fn main() {

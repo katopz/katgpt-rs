@@ -1,4 +1,4 @@
-# microgpt-rs: Overview
+# katgpt-rs: Overview
 
 ## What It Is
 
@@ -37,13 +37,13 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - MaxSim late-interaction scoring: 7.46× SIMD speedup (behind `"maxsim"` feature, Plan 080)
 - SimpleTES RPUCG loop: wide>narrow budget scaling (behind `"tes_loop"` feature, Plan 086)
 - 320+ tests passing (47 test files), zero clippy warnings
-- Shared `microgpt-core` crate: types (Config, enums, math utilities), SIMD kernels — extracted for multi-crate reuse
+- Shared `katgpt-core` crate: types (Config, enums, math utilities), SIMD kernels — extracted for multi-crate reuse
 
 ## Module Structure
 
 ```
 crates/
-  microgpt-core/    Shared types + SIMD kernels (multi-crate reuse):
+  katgpt-core/    Shared types + SIMD kernels (multi-crate reuse):
     types.rs        Config (all presets + with_overrides + validate), Rng, HlaMode, AttentionMode (Causal/Bidirectional/BlockCausal/SpKv/SpKvQuant), ModelArchitecture (Generic/Gemma2), WeightDtype (F32/F16/BF16), InferenceOverrides, InferenceResult, kv_dim, softmax, softmax_scaled, rmsnorm, rmsnorm_with_gamma, rmsnorm_with_gamma_eps, gegelu, gegelu_tanh, matmul, matmul_relu, sparse_matmul, sample_token, LoraAdapter, LoraPair, DomainLatent
     simd.rs         SimdLevel (Scalar/Neon/Avx2), simd_level(), simd_dot_f32, simd_fma_row, simd_outer_product_acc, simd_matvec, simd_matmul_rows, simd_matmul_relu_rows, simd_sparse_dot_f32, simd_sparse_matmul_rows, simd_scale_inplace
     lib.rs          Feature gates: default=["sparse_mlp"], sparse_mlp, domain_latent, maxsim, dllm
@@ -51,7 +51,7 @@ crates/
 src/
   lib.rs            Module index + debug tracking allocator
   main.rs           Entry point (proof → bench → Percepta bench → plot)
-  types.rs          Re-exports microgpt_core::types::* + QuantizedKVCache trait (interface for TurboQuant/SpectralQuant KV caches)
+  types.rs          Re-exports katgpt_core::types::* + QuantizedKVCache trait (interface for TurboQuant/SpectralQuant KV caches)
   simd.rs          SimdLevel (Scalar/Neon/Avx2), simd_level(), simd_dot_f32, simd_fma_row, simd_outer_product_acc, simd_matvec, simd_matmul_rows, simd_matmul_relu_rows, simd_sparse_dot_f32, simd_sparse_matmul_rows, simd_scale_inplace (Plan 060)
   transformer.rs    TransformerWeights (+ mtp projections), LayerWeights, KVCache, MultiLayerKVCache, KVSnapshot, PagedKVCache, RavenKVCache, ForwardContext (+ sparse buffers + lora_buf + mtp_context_buf + tq_dequant_pos), PrefillContext, forward, forward_with_domain_latent, forward_prefill, forward_paged, forward_raven, forward_turboquant, generate, generate_into, generate_batch, generate_with_prefill, tokens_to_string, project_target_activation, cluster_map_round_robin, cluster_map_from_embeddings, raven_compute_router, raven_update, raven_readout, preload_kv_cache
   feedback.rs       FeedbackConfig, send_feedback ⌁

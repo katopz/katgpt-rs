@@ -69,26 +69,26 @@ Increased ε-greedy from 5% to 15% for better exploration.
 ## Fixes Applied
 
 ### F1: Argmax δ instead of mean δ
-- File: `microgpt-rs/src/pruners/bomber/g_zero_player.rs`
+- File: `katgpt-rs/src/pruners/bomber/g_zero_player.rs`
 - `compute_game_delta()` now finds argmax of hinted_scores and returns δ at that index only
 
 ### F2: Position-aware hint_score_override
-- File: `microgpt-rs/src/pruners/g_zero/bomber_templates.rs`
+- File: `katgpt-rs/src/pruners/g_zero/bomber_templates.rs`
 - Added `powerups: &[(i32, i32)]` parameter to `hint_score_override`
 - `hint_powerup_hunt`: +2.5 toward powerup, -1.0 away, 0.0 if none known
 - All other templates unchanged (already position-aware)
 
 ### F3: Weak query heuristic + strong safety filter
-- File: `microgpt-rs/src/pruners/bomber/g_zero_player.rs`
+- File: `katgpt-rs/src/pruners/bomber/g_zero_player.rs`
 - query_scores use simple heuristic (walkability, mild powerup attraction, bomb distance penalty)
 - Safety filter: when in blast zone, override with `score_action`'s BFS escape guidance
 - When safe, block moves INTO blast zones
 
 ### F4: Outcome-based bandit reward
-- File: `microgpt-rs/src/pruners/bomber/g_zero_player.rs`
+- File: `katgpt-rs/src/pruners/bomber/g_zero_player.rs`
 - Added `round_template_ids: Vec<usize>` to track all templates per round
 - `update_outcome()` distributes reward across all templates via `observe_outcome(tid, share)`
-- File: `microgpt-rs/src/pruners/g_zero/bomber_templates.rs`
+- File: `katgpt-rs/src/pruners/g_zero/bomber_templates.rs`
 - Added `observe_outcome(template_id, reward)` to `BomberTemplateProposer`
 - UCB1 uses `total_outcome / outcome_count` instead of `mean_delta` as reward signal
 - Increased ε-greedy from 5% to 15%
@@ -153,6 +153,6 @@ All players: 61-65% survival, balanced competition
 
 ## Files Modified
 
-- `microgpt-rs/src/pruners/g_zero/bomber_templates.rs` — F2: position-aware hints, F4: observe_outcome, outcome-based UCB1
-- `microgpt-rs/src/pruners/bomber/g_zero_player.rs` — F1: argmax δ, F3: weak query + strong safety, F4: round_template_ids, outcome reward distribution
-- `microgpt-rs/src/pruners/bomber/players.rs` — Made helpers pub(crate) for reuse
+- `katgpt-rs/src/pruners/g_zero/bomber_templates.rs` — F2: position-aware hints, F4: observe_outcome, outcome-based UCB1
+- `katgpt-rs/src/pruners/bomber/g_zero_player.rs` — F1: argmax δ, F3: weak query + strong safety, F4: round_template_ids, outcome reward distribution
+- `katgpt-rs/src/pruners/bomber/players.rs` — Made helpers pub(crate) for reuse

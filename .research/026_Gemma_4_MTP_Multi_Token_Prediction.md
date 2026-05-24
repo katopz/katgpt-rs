@@ -183,7 +183,7 @@ For our purposes, **round-robin is the zero-cost default** (no training, no look
 
 - **Joint training** — We don't train models jointly. The projection weights must be trained separately (Plan 016 in `riir-burner`).
 
-- **SIMD-group coordination** — Gemma 4 uses NVIDIA warp-level primitives for drafter coordination. We're CPU-only (no GPU inference in `microgpt-rs`).
+- **SIMD-group coordination** — Gemma 4 uses NVIDIA warp-level primitives for drafter coordination. We're CPU-only (no GPU inference in `katgpt-rs`).
 
 - **Vocabulary clustering from training** — Gemma 4's clusters are learned during pretraining. We must compute clusters offline from embedding similarity or use round-robin.
 
@@ -335,6 +335,6 @@ Low-Medium.
 - Research 06 (Raven RSM) — alternative KV cache strategy (O(1) slot memory vs shared full KV)
 - Research 20 (TurboQuant) — KV cache compression, compatible with shared KV
 - Research 22 (Lighthouse Attention) — attention efficiency, orthogonal to MTP
-- Plan 055 (MTP Drafter) — implementation plan in `microgpt-rs`
+- Plan 055 (MTP Drafter) — implementation plan in `katgpt-rs`
 - Plan 016 (MTP Projection Training) — training pipeline in `riir-burner`
 - Plan 057 (MTP Budget Propagation) — router integration in `riir-ai`

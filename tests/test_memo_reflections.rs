@@ -9,7 +9,7 @@
 #[cfg(feature = "memo_reflections")]
 #[test]
 fn test_memo_reflections_goat_pair_count() {
-    use microgpt_rs::pruners::{GameStateSnapshot, ReflectionDomain, synthesize_reflections};
+    use katgpt_rs::pruners::{GameStateSnapshot, ReflectionDomain, synthesize_reflections};
 
     // Generate 100 rounds of synthetic game data
     let states: Vec<GameStateSnapshot> = (0..100)

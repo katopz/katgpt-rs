@@ -105,7 +105,7 @@ Dynamo extracted standalone crates: `dynamo-protocols`, `dynamo-parsers`, `dynam
 
 ## Mapping to Our Stack
 
-### microgpt-rs (Speculative Decoding Engine)
+### katgpt-rs (Speculative Decoding Engine)
 
 | Dynamo Insight | Our Equivalent | Status | Opportunity |
 |---|---|---|---|

@@ -3,12 +3,12 @@
 > **Research:** 075 (Survive or Collapse — Data Gating in Self-Play RL)
 > **Paper:** [arXiv:2605.22217](https://arxiv.org/abs/2605.22217) — Pu et al., May 2026
 > **Depends:** Plan 059 (GZeroLoop ✅), Plan 093 (CISPO GRPO ✅), Plan 049 (G-Zero ✅)
-> **Feature Gate:** `data_gate = ["dep:fastrand", "dep:log"]` (local types — riir-gpu does not depend on microgpt-core)
+> **Feature Gate:** `data_gate = ["dep:fastrand", "dep:log"]` (local types — riir-gpu does not depend on katgpt-core)
 > **Status:** Complete ✅
 
 ## Tasks
 
-- [x] T1: Add `DataGate` trait + `GateDecision` enum to `microgpt-core/src/types.rs` ✅ — Added `TaskType`, `ProposerTask`, `GateDecision`, `DataGate` trait. No feature gate (ungated in core, per plan). Clippy clean.
+- [x] T1: Add `DataGate` trait + `GateDecision` enum to `katgpt-core/src/types.rs` ✅ — Added `TaskType`, `ProposerTask`, `GateDecision`, `DataGate` trait. No feature gate (ungated in core, per plan). Clippy clean.
 - [x] T2: Add `SolverRewardMode` enum to `riir-gpu/src/loss_grpo.rs` ✅ — `Grounded` (default) + `IntrinsicSelfConsistency`. Added to `GrpoConfig` with `Default` impl. Clippy clean.
 - [x] T3: Implement `ExecutionGate` (sandbox exec + determinism check) in `riir-gpu/src/data_gate.rs` ✅ — `TaskExecutor` trait, `NoopExecutor` (games), `ExecutionGate::new/without_determinism/for_games`. Double-run determinism check. 6 unit tests.
 - [x] T4: Implement `LeakyGate<G: DataGate>` (ε-Bernoulli relaxation) for phase diagram experiments ✅ — `LeakyGate<G>` with Bernoulli(ε) relaxation, `AlwaysAdmit` baseline. ε ∈ [0,1] assert. 4 unit tests.
@@ -75,7 +75,7 @@ Both filters are needed. But the paper proves the **upstream gate** is the bindi
 
 ## T1: `DataGate` Trait
 
-**File:** `microgpt-core/src/types.rs` (shared between both crates)
+**File:** `katgpt-core/src/types.rs` (shared between both crates)
 
 ```rust
 /// Task-level admission gate for self-play training pool.
@@ -311,13 +311,13 @@ pub mod data_gate;
 pub use data_gate::{ExecutionGate, LeakyGate};
 ```
 
-The `DataGate` trait itself goes in `microgpt-core/src/types.rs` (ungated — both projects need it, like `ScreeningPruner`).
+The `DataGate` trait itself goes in `katgpt-core/src/types.rs` (ungated — both projects need it, like `ScreeningPruner`).
 
 ---
 
 ## T8: GOAT Proof — Bomber Arena
 
-**File:** `microgpt-rs/tests/data_gate_bomber.rs` (new test)
+**File:** `katgpt-rs/tests/data_gate_bomber.rs` (new test)
 
 Prove the paper's finding in our domain:
 
@@ -361,7 +361,7 @@ Sweep ε ∈ {0.0, 0.2, 0.5, 1.0} with II config:
 1. **Gate BEFORE solver, not after** — the paper proves this is the binding constraint, not downstream filtering
 2. **ε=0 is default** — paper proves strict gate is optimal; no reason to leak bad tasks
 3. **Grounded reward is default** — safest option; intrinsic SC only with gate-on
-4. **Trait in microgpt-core** — like `ScreeningPruner`, both projects need it
+4. **Trait in katgpt-core** — like `ScreeningPruner`, both projects need it
 5. **Feature gated** — always gated regardless of GOAT outcome (per project convention)
 6. **No training pool yet** — T5 adds gate to per-round flow; persistent pool with FIFO eviction is a future extension (the paper's pool with cap B=16,384)
 7. **Game domains get implicit gate** — deterministic game rules provide natural gate; explicit gate catches edge cases
@@ -372,14 +372,14 @@ Sweep ε ∈ {0.0, 0.2, 0.5, 1.0} with II config:
 
 | File | Action | Scope |
 |------|--------|-------|
-| `microgpt-core/src/types.rs` | Add `DataGate`, `GateDecision`, `ProposerTask`, `TaskType` | T1 |
+| `katgpt-core/src/types.rs` | Add `DataGate`, `GateDecision`, `ProposerTask`, `TaskType` | T1 |
 | `riir-gpu/src/loss_grpo.rs` | Add `SolverRewardMode`, extend `GrpoConfig` | T2 |
 | `riir-gpu/src/data_gate.rs` | New file: `ExecutionGate`, `LeakyGate<G>` | T3-T4 |
 | `riir-gpu/src/gzero_loop.rs` | Wire gate, add gap metric to `RoundMetrics` | T5-T6 |
 | `riir-gpu/src/lib.rs` | Add `mod data_gate` + re-exports | T7 |
 | `riir-gpu/Cargo.toml` | Add `data_gate` feature | T7 |
-| `microgpt-rs/tests/data_gate_bomber.rs` | GOAT proof test | T8 |
-| `microgpt-rs/README.md` | Update with DataGate section | T9 |
+| `katgpt-rs/tests/data_gate_bomber.rs` | GOAT proof test | T8 |
+| `katgpt-rs/README.md` | Update with DataGate section | T9 |
 | `riir-ai/README.md` | Update with DataGate section | T9 |
 
 ---

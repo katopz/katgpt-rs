@@ -11,12 +11,12 @@
 //!   cargo test --test test_drafter_lora.goat -- --nocapture
 //!   cargo test --test test_drafter_lora.goat -- benchmark --nocapture
 
-use microgpt_rs::speculative::{
+use katgpt_rs::speculative::{
     DrafterForwardContext, DrafterLoraWeights, LeviathanVerifier, SpeculativeVerifier,
     TrainingPair, generate_synthetic_pairs, train_drafter_lora,
 };
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -316,7 +316,7 @@ fn test_game_pipeline_drafter_lora() {
         .collect();
 
     // Generate training pairs from target
-    let pairs = microgpt_rs::speculative::generate_training_pairs_from_replays(
+    let pairs = katgpt_rs::speculative::generate_training_pairs_from_replays(
         &target_config,
         &target_weights,
         &sequences,
@@ -372,7 +372,7 @@ fn test_bpe_pipeline_drafter_lora() {
         .collect();
 
     // Generate training pairs
-    let pairs = microgpt_rs::speculative::generate_training_pairs_from_replays(
+    let pairs = katgpt_rs::speculative::generate_training_pairs_from_replays(
         &target_config,
         &target_weights,
         &sequences,

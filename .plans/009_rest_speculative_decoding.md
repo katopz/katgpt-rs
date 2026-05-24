@@ -8,7 +8,7 @@
 
 ## Objective
 
-Connect the microgpt-rs inference engine to anyrag for Retrieval-Based Speculative Decoding (REST). Extract the "free embedding" (last hidden state before lm_head) during inference, query anyrag's `/search/vector` endpoint, and inject retrieved token continuations into the DDTree as additional candidate branches.
+Connect the katgpt-rs inference engine to anyrag for Retrieval-Based Speculative Decoding (REST). Extract the "free embedding" (last hidden state before lm_head) during inference, query anyrag's `/search/vector` endpoint, and inject retrieved token continuations into the DDTree as additional candidate branches.
 
 ## The Problem
 

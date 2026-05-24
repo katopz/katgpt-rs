@@ -252,12 +252,12 @@ This applies MaxSim in its **original design context** (retrieval reranking) wit
 
 ## 9. GOAT Proof Checklist
 
-### Modelless Proposals (tested in microgpt-rs)
+### Modelless Proposals (tested in katgpt-rs)
 - [x] `maxsim_score()`: matches naive materialized result within 1e-6, **7.46× faster** (48.3µs vs 360.0µs, Lq=32, Ld=256, dim=128, release build) — Plan 080 T2/T4
 - [x] PFlash block maxsim: **371% more** needle blocks selected (4.71× better separation: 20× vs 4.25× for mean-K) — Plan 080 T7
 - [x] REST maxsim reranking: ≥2% better retrieval NDCG vs cosine similarity — `src/rerank.rs` module (`RerankMethod` enum, `ndcg_at`, `rerank`), `bench_maxsim_rerank` test, Benchmark 014 — Plan 080 T12
 
-### Model-Based Proposals (tested in microgpt-rs CPU)
+### Model-Based Proposals (tested in katgpt-rs CPU)
 - [x] TurboQuant `ScoreReduction::MaxSim`: matches uncompressed maxsim within 0.95% at 4-bit; **40.54% error at 3-bit** — Plan 080 T9
 - [x] SpectralQuant `ScoreReduction::MaxSim`: streaming vs dequantized **exact match (0.00%)**; **18.90% error at 3-bit** (2.1× less than TQ) — Plan 080 T10
 

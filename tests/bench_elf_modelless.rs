@@ -8,11 +8,11 @@
 //! Both are additive, feature-gated, and require GOAT proof before adoption.
 
 #[cfg(feature = "dllm")]
-use microgpt_rs::speculative::d2f::{D2fDecodeConfig, ScheduleKind};
-use microgpt_rs::speculative::dd_tree::{build_dd_tree_sde, inject_sde_noise};
-use microgpt_rs::speculative::types::{NoScreeningPruner, SdeConfig};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::d2f::{D2fDecodeConfig, ScheduleKind};
+use katgpt_rs::speculative::dd_tree::{build_dd_tree_sde, inject_sde_noise};
+use katgpt_rs::speculative::types::{NoScreeningPruner, SdeConfig};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 
 // ── 1. SDE Noise Injection: Marginals Perturbation ───────────────
 
@@ -23,7 +23,7 @@ fn bench_sde_noise_injection_overhead() {
     let weights = TransformerWeights::new(&config, &mut rng);
 
     // Generate marginals via dflash
-    let marginals = microgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
+    let marginals = katgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
     let marginals_refs: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
 
     println!("\n🧪 SDE Noise Injection Overhead Benchmark");
@@ -76,7 +76,7 @@ fn bench_sde_noise_path_diversity() {
     let mut rng = Rng::new(42);
     let weights = TransformerWeights::new(&config, &mut rng);
 
-    let marginals = microgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
+    let marginals = katgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
     let marginals_refs: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
     let screener = NoScreeningPruner;
 
@@ -140,7 +140,7 @@ fn bench_sde_noise_quality() {
     let mut rng = Rng::new(42);
     let weights = TransformerWeights::new(&config, &mut rng);
 
-    let marginals = microgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
+    let marginals = katgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
     let marginals_refs: Vec<&[f32]> = marginals.iter().map(|s| s.as_slice()).collect();
     let screener = NoScreeningPruner;
 
@@ -278,9 +278,9 @@ fn bench_logit_normal_schedule_overhead() {
 #[cfg(feature = "dllm")]
 #[test]
 fn bench_d2f_schedule_comparison() {
-    use microgpt_rs::speculative::d2f::d2f_decode_block;
-    use microgpt_rs::speculative::types::NoPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::d2f::d2f_decode_block;
+    use katgpt_rs::speculative::types::NoPruner;
+    use katgpt_rs::types::Rng;
 
     println!("\n🧪 D2F Schedule Comparison: Uniform vs Logit-Normal");
     println!("{}", "═".repeat(70));

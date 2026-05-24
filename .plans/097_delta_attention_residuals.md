@@ -3,7 +3,7 @@
 **Status:** ✅ Complete (Gemma 2 2B validated)
 **Research:** 061 (Delta Attention Residuals)
 **Related Plans:** 057 (HLA), 070 (SP-KV), 022 (Sparse MLP), 085 (Deep Manifold)
-**Feature Gate:** `delta_routing` (off by default) — both `microgpt-rs` and `riir-engine`
+**Feature Gate:** `delta_routing` (off by default) — both `katgpt-rs` and `riir-engine`
 
 ## Context
 
@@ -17,8 +17,8 @@ For our stack:
 
 ## Tasks
 
-- [x] T1: Add `delta_routing` feature flag to `Cargo.toml` (microgpt-rs) and `microgpt-core` types
-- [x] T2: Add `DeltaRoutingConfig` to `microgpt-core/src/types.rs` — block_size, mode enum (Off/DeltaBlock/DeltaAttnRes)
+- [x] T1: Add `delta_routing` feature flag to `Cargo.toml` (katgpt-rs) and `katgpt-core` types
+- [x] T2: Add `DeltaRoutingConfig` to `katgpt-core/src/types.rs` — block_size, mode enum (Off/DeltaBlock/DeltaAttnRes)
 - [x] T3: Add delta routing buffers to `ForwardContext` in `transformer.rs` — block_deltas Vec, delta_query weights, delta_rmsnorm weights
 - [x] T4: Implement `depth_route()` function in `transformer.rs` — softmax over delta sources, additive to residual
 - [x] T5: Integrate `depth_route()` into `forward_base()` layer loop — compute per-sublayer deltas, store block deltas, call routing at block boundaries
@@ -58,7 +58,7 @@ In our forward_base():
 ### Files Modified
 
 1. `Cargo.toml` — added `delta_routing = []` feature, added to `full` feature list
-2. `crates/microgpt-core/src/types.rs` — added `DeltaRoutingMode` enum and `DeltaRoutingConfig` struct
+2. `crates/katgpt-core/src/types.rs` — added `DeltaRoutingMode` enum and `DeltaRoutingConfig` struct
 4. `src/transformer.rs` — added:
    - `delta_routing_query` and `delta_routing_norm` fields to `TransformerWeights`
    - `block_deltas` and `delta_routing_logits` buffers to `ForwardContext`

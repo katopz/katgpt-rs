@@ -17,8 +17,8 @@
 //!
 //! Run: `cargo run --example bandit_07_director --features bandit`
 
-use microgpt_rs::pruners::{BanditStats, BanditStrategy};
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::{BanditStats, BanditStrategy};
+use katgpt_rs::types::Rng;
 
 // ── Encounter Types (6 arms, index 0-5) ───────────────────────
 

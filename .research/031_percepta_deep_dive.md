@@ -576,11 +576,11 @@ The Percepta reference compiles C → WASM → token prefix → transformer exec
 
 ---
 
-## Comparison: microgpt-rs vs transformer-vm
+## Comparison: katgpt-rs vs transformer-vm
 
 ### What We Do Better
 
-| Category | microgpt-rs | transformer-vm | Why We Win |
+| Category | katgpt-rs | transformer-vm | Why We Win |
 |----------|-------------|----------------|------------|
 | **Full inference stack** | DDTree, DFlash, Leviathan, speculative decoding, TurboQuant, PFlash, Raven, Sparse MLP — production pipeline | Standalone proof-of-concept executor | We have a real inference engine; they have a research artifact |
 | **Throughput** | 4.2M tok/s (DFlash), 1.6M tok/s (speculative), 19.4M tok/s (prefill) | ~30K tok/s (CPU, hull attention) | **140× faster** on decoding, **640× faster** on prefill |
@@ -597,7 +597,7 @@ The Percepta reference compiles C → WASM → token prefix → transformer exec
 
 ### What Percepta Does Better
 
-| Category | transformer-vm | microgpt-rs | Why They Win |
+| Category | transformer-vm | katgpt-rs | Why They Win |
 |----------|----------------|-------------|--------------|
 | **Hull attention algorithm** | Dynamic CHT (LineContainer): upper + lower hull, arbitrary 2D points, O(log n) insert AND query, sublinear memory (only hull vertices + HullMeta) | Graham Scan upper hull + ternary search: requires monotonic X, upper hull only, O(N) memory, broken for qy < 0 queries | **Fundamentally better algorithm.** Their CHT handles arbitrary point distributions, dual hull directions, and sublinear memory. Our Graham Scan is a special-case optimization. |
 | **Tie-breaking** | `LATEST` (most recent tied value) + `AVERAGE` (mean of tied values) via `HullMeta` aggregation | None — returns first maximum found | Tie-breaking enables cumulative sum (AVERAGE) and latest-write semantics (LATEST). Without it we can't do state machine tracking via attention. |
@@ -616,7 +616,7 @@ The Percepta reference compiles C → WASM → token prefix → transformer exec
 
 ### The Core Tradeoff
 
-| | microgpt-rs | transformer-vm |
+| | katgpt-rs | transformer-vm |
 |---|---|---|
 | **Philosophy** | Neural inference **with** deterministic assistance | Deterministic execution **as** neural inference |
 | **Goal** | Make LLMs faster and more reliable | Prove transformers can be computers |

@@ -1,4 +1,4 @@
-# microgpt-rs: Bomberman HL Arena — 4-Player Heuristic Learning Proof
+# katgpt-rs: Bomberman HL Arena — 4-Player Heuristic Learning Proof
 
 ## Overview
 

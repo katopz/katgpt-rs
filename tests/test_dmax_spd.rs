@@ -13,15 +13,15 @@
 
 #![cfg(feature = "dmax_spd")]
 
-use microgpt_rs::dllm::{
+use katgpt_rs::dllm::{
     D2fContext, denoising_accuracy, generate_pattern_dataset, train_mini_dllm,
 };
-use microgpt_rs::speculative::d2f::{
+use katgpt_rs::speculative::d2f::{
     D2fDecodeConfig, SoftDecodeConfig, d2f_decode_block, d2f_decode_block_soft,
 };
-use microgpt_rs::speculative::types::NoPruner;
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::types::NoPruner;
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 
 // ---------------------------------------------------------------------------
 // Helpers

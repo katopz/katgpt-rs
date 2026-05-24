@@ -131,7 +131,7 @@ This is critical for our LoRA adapter placement on SwiGLU blocks.
 |---|---|---|---|
 | **P1** | RowNormM WGSL kernel | Modelless (riir-gpu) | Low — just row norm + scale |
 | **P1** | Per-role LR configuration | Both | Low — config change |
-| **P2** | Router centering in bandit | Modelless (microgpt-rs) | Low — project out mean |
+| **P2** | Router centering in bandit | Modelless (katgpt-rs) | Low — project out mean |
 | **P2** | SwiGLU row/column-aware updates | Model-based (riir-gpu) | Medium — need transpose handling |
 | **P3** | Newton-Schulz Gram invsqrt | Model-based (riir-gpu) | Medium — ~5 iteration WGSL kernel |
 | **P3** | Hybrid row-norm/spectral | Model-based (riir-gpu) | High — compose P1 + P3 |

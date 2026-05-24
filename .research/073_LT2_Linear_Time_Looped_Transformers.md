@@ -299,8 +299,8 @@ for tau in 0..loop_count {
 
 | Gate | Scope | Description |
 |------|-------|-------------|
-| `lt2_looped` | microgpt-rs | Looped forward pass with weight sharing + hybrid dispatch + SDPA output gate |
-| `lt2_looped` | microgpt-core | `LoopMode`, `HybridPattern` enums, `SdpaOutputGate` struct |
+| `lt2_looped` | katgpt-rs | Looped forward pass with weight sharing + hybrid dispatch + SDPA output gate |
+| `lt2_looped` | katgpt-core | `LoopMode`, `HybridPattern` enums, `SdpaOutputGate` struct |
 
 Dependencies: `lt2_looped` requires `hla_attention` (for AHLA linear layers in hybrid mode).
 

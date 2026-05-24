@@ -12,8 +12,8 @@
 
 use std::time::Instant;
 
-use microgpt_rs::speculative::types::FlashPrefillConfig;
-use microgpt_rs::speculative::{block_select, compress_prompt_blocks};
+use katgpt_rs::speculative::types::FlashPrefillConfig;
+use katgpt_rs::speculative::{block_select, compress_prompt_blocks};
 
 // ── Constants (matching niah_gen.py) ─────────────────────────
 

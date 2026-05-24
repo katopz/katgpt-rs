@@ -16,10 +16,10 @@
 
 use std::sync::Arc;
 
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     BanditEnv, BanditSession, BanditStrategy, BernoulliEnv, ReviewMetrics, ReviewStrategy,
 };
-use microgpt_rs::types::Rng;
+use katgpt_rs::types::Rng;
 
 fn main() {
     println!("=== Inference-Time Review Metrics Demo ===\n");
@@ -160,7 +160,7 @@ fn main() {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
-fn print_row(name: &str, result: &microgpt_rs::pruners::BanditResult, optimal: usize) {
+fn print_row(name: &str, result: &katgpt_rs::pruners::BanditResult, optimal: usize) {
     let found = if result.best_arm == optimal {
         "✓ YES  "
     } else {
@@ -175,7 +175,7 @@ fn print_row(name: &str, result: &microgpt_rs::pruners::BanditResult, optimal: u
 fn print_metrics_detail(
     name: &str,
     metrics: &ReviewMetrics,
-    result: &microgpt_rs::pruners::BanditResult,
+    result: &katgpt_rs::pruners::BanditResult,
 ) {
     let summary = metrics.summary();
     let ratio_str = if summary.benefit_ratio.is_infinite() {
@@ -205,7 +205,7 @@ fn print_metrics_detail(
     println!();
 }
 
-fn print_q_values(name: &str, result: &microgpt_rs::pruners::BanditResult, true_probs: &[f32]) {
+fn print_q_values(name: &str, result: &katgpt_rs::pruners::BanditResult, true_probs: &[f32]) {
     println!("  {name}:");
     for (arm, (q, visits)) in result.q_values.iter().zip(result.visits.iter()).enumerate() {
         let true_p = true_probs.get(arm).copied().unwrap_or(0.0);

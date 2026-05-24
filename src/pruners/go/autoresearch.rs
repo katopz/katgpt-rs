@@ -771,7 +771,7 @@ impl Default for AutoResearchConfig {
 /// ## Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::go::autoresearch::{
+/// use katgpt_rs::pruners::go::autoresearch::{
 ///     AutoResearchConfig, BaselinePlayer, run_autoresearch,
 /// };
 ///

@@ -1,4 +1,4 @@
-//! Comprehensive core hot-path benchmark for microgpt-core + src/ optimization.
+//! Comprehensive core hot-path benchmark for katgpt-core + src/ optimization.
 //!
 //! Measures all SIMD kernels, math utilities, and transformer forward pass
 //! to identify optimization targets. Follows optimization.md profiling template:
@@ -13,14 +13,14 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_core::{
+use katgpt_core::{
     Config, Rng, SimdLevel, matmul, matmul_relu, rmsnorm, sample_token, softmax, softmax_scaled,
 };
-use microgpt_rs::simd::{
+use katgpt_rs::simd::{
     simd_add_inplace, simd_add_into, simd_dot_f32, simd_max_f32, simd_scale_inplace,
 };
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{gegelu, gegelu_tanh, matmul_parallel, rmsnorm_with_gamma};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{gegelu, gegelu_tanh, matmul_parallel, rmsnorm_with_gamma};
 
 const WARMUP: usize = 200;
 const ITERS: usize = 10_000;
@@ -55,7 +55,7 @@ fn bench_mut(label: &str, warmup: usize, iters: usize, mut f: impl FnMut()) -> f
 
 #[test]
 fn bench_01_simd_detection() {
-    let level = microgpt_rs::simd::simd_level();
+    let level = katgpt_rs::simd::simd_level();
 
     let name = match level {
         SimdLevel::Scalar => "Scalar (no SIMD)",
@@ -349,7 +349,7 @@ fn bench_04_matmul_kernels() {
 
         // Sparse
         for _ in 0..WARMUP {
-            microgpt_rs::types::sparse_matmul(
+            katgpt_rs::types::sparse_matmul(
                 &mut output_sparse,
                 &weight,
                 &input,
@@ -361,7 +361,7 @@ fn bench_04_matmul_kernels() {
         }
         let start = Instant::now();
         for _ in 0..ITERS {
-            microgpt_rs::types::sparse_matmul(
+            katgpt_rs::types::sparse_matmul(
                 &mut output_sparse,
                 &weight,
                 &input,
@@ -978,7 +978,7 @@ fn bench_09_summary() {
     println!("    Forward (pos=0):          {:.2} us/tok", fwd_us);
     println!("    Forward throughput:       {:.0} tok/s", 1000.0 / fwd_us);
     println!();
-    println!("  SIMD level: {:?}", microgpt_rs::simd::simd_level());
+    println!("  SIMD level: {:?}", katgpt_rs::simd::simd_level());
     println!();
     println!("  Completed optimizations:");
     println!(

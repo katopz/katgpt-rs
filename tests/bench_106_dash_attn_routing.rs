@@ -9,8 +9,8 @@
 //!
 //! Run: `cargo test --features dash_attn --test bench_106_dash_attn_routing -- --nocapture`
 
-use microgpt_rs::dash_attn::score_blocks_entmax;
-use microgpt_rs::types::DashAttnConfig;
+use katgpt_rs::dash_attn::score_blocks_entmax;
+use katgpt_rs::types::DashAttnConfig;
 
 // ── Helpers ───────────────────────────────────────────────────
 

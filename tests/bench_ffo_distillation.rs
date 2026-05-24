@@ -4,17 +4,17 @@
 //! T5: A/B benchmark — dual_cutoff=0.0 vs 0.2 vs 0.5
 //!
 //! ```sh
-//! RUST_LOG=info cargo test -p microgpt-rs --test bench_ffo_distillation --features bandit -- --nocapture
+//! RUST_LOG=info cargo test -p katgpt-rs --test bench_ffo_distillation --features bandit -- --nocapture
 //! ```
 
 #[cfg(feature = "bandit")]
-use microgpt_rs::pruners::{BanditPruner, BanditStrategy};
+use katgpt_rs::pruners::{BanditPruner, BanditStrategy};
 #[cfg(feature = "bandit")]
-use microgpt_rs::speculative::ScreeningPruner;
+use katgpt_rs::speculative::ScreeningPruner;
 #[cfg(feature = "bandit")]
-use microgpt_rs::speculative::types::NoScreeningPruner;
+use katgpt_rs::speculative::types::NoScreeningPruner;
 #[cfg(feature = "bandit")]
-use microgpt_rs::types::Rng;
+use katgpt_rs::types::Rng;
 
 // ── Helpers ──────────────────────────────────────────────────────
 

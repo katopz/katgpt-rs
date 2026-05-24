@@ -48,7 +48,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 
 ## Tasks
 
-### T1: D2F Drafter Verifier (microgpt-rs) — The Core Delta ✅
+### T1: D2F Drafter Verifier (katgpt-rs) — The Core Delta ✅
 - [x] Create `src/speculative/d2f_verifier.rs` (feature-gated `tri_mode`)
 - [x] Define `D2fDrafterVerifier`:
   ```rust
@@ -80,7 +80,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Test: D2F drafter terminates, produces valid token sequence
 - [x] Test: acceptance rate measurement on pattern data vs LeviathanVerifier (AR drafter)
 
-### T2: DecodeStrategy Extension (microgpt-rs) ✅
+### T2: DecodeStrategy Extension (katgpt-rs) ✅
 - [x] Extend `DecodeStrategy` enum in `speculative/types.rs`:
   ```rust
   pub enum DecodeStrategy {
@@ -94,7 +94,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Feature-gate `SelfSpeculation` variant with `#[cfg(feature = "tri_mode")]`
 - [x] Test: recommend() returns correct strategy per config
 
-### T3: Wire Into Existing Pipeline (microgpt-rs) ✅
+### T3: Wire Into Existing Pipeline (katgpt-rs) ✅
 - [x] Add `pub mod d2f_verifier;` to `speculative/mod.rs` behind `tri_mode` feature
 - [x] Ensure `D2fDrafterVerifier` integrates with existing `ConstraintPruner`
   - D2F draft already calls pruner at each denoising step ✅
@@ -117,7 +117,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Test: end-to-end D2F+AR decode on pattern data
 - [x] Test: D2F+AR output matches AR-only ground truth (quality check)
 
-### T4: Global Loss Averaging (microgpt-rs dllm.rs) ✅
+### T4: Global Loss Averaging (katgpt-rs dllm.rs) ✅
 - [x] Update `masked_loss()` in `src/dllm.rs`:
   ```rust
   // BEFORE (per-sequence):
@@ -132,7 +132,7 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Test: training with global averaging converges (re-train mini dLLM)
 - [x] Benchmark: convergence speed global vs per-sequence on pattern data
 
-### T5: GOAT Proof — D2F Drafter vs AR Drafter (microgpt-rs) ✅
+### T5: GOAT Proof — D2F Drafter vs AR Drafter (katgpt-rs) ✅
 - [x] Create `tests/test_d2f_verifier.rs` (feature-gated `tri_mode`)
 - [x] Proof 1: D2F drafter acceptance rate ≥ AR drafter acceptance rate
   - Train mini model with D2F + AR capability (reuse Plan 066 training)

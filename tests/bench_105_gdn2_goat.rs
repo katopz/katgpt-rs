@@ -14,10 +14,10 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::gdn2::{Gdn2GateConfig, MultiLayerGdn2Cache, forward_gdn2, generate_gdn2_into};
-use microgpt_rs::hla::{MultiLayerAhlaCache, forward_ahla};
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::gdn2::{Gdn2GateConfig, MultiLayerGdn2Cache, forward_gdn2, generate_gdn2_into};
+use katgpt_rs::hla::{MultiLayerAhlaCache, forward_ahla};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 const WARMUP: usize = 50;
 const ITERS: usize = 500;

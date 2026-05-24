@@ -9,7 +9,7 @@
 
 ## Overview
 
-Distill "Test-time Recursive Thinking" (arXiv:2602.03094) into microgpt-rs on top of PPoT rescue (Plan 026). The core idea: when PPoT resamples token variants and the `ConstraintPruner` rejects them, record structured "don't" insights that bias future resampling within the same generation session. This makes PPoT adaptive rather than random.
+Distill "Test-time Recursive Thinking" (arXiv:2602.03094) into katgpt-rs on top of PPoT rescue (Plan 026). The core idea: when PPoT resamples token variants and the `ConstraintPruner` rejects them, record structured "don't" insights that bias future resampling within the same generation session. This makes PPoT adaptive rather than random.
 
 TRT proves three things we can apply at token level:
 1. **"Don'ts" beat "dos"** — recording failure patterns outperforms recording successes (Figure 8)

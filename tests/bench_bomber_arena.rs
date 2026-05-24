@@ -7,7 +7,7 @@ use std::time::Instant;
 use fastrand::Rng;
 
 #[cfg(feature = "bomber")]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberAction, BomberPlayer, GameEvent, GreedyPlayer, GridPos, HLPlayer,
     RandomPlayer, TICK_LIMIT, ValidatorPlayer, init_world, run_tick, spawn_players,
 };
@@ -155,7 +155,7 @@ struct GameEventLog {
     players_killed: Vec<(u8, Option<u8>)>, // (victim, killer)
     walls_destroyed: Vec<(i32, i32)>,
     powerups_collected: Vec<(u8, (i32, i32))>,
-    powerups_revealed: Vec<((i32, i32), microgpt_rs::pruners::bomber::PowerUpKind)>,
+    powerups_revealed: Vec<((i32, i32), katgpt_rs::pruners::bomber::PowerUpKind)>,
     round_ends: u32,
 }
 
@@ -239,7 +239,7 @@ fn run_game_collecting_events(
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world.resource::<ArenaGrid>().clone();
@@ -263,7 +263,7 @@ fn run_game_collecting_events(
     }
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
     (log, ticks)
 }
@@ -290,7 +290,7 @@ fn run_game_per_tick_events(
 
     for _tick in 0..tick_limit {
         let current_tick = world
-            .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+            .resource::<katgpt_rs::pruners::bomber::TickCounter>()
             .tick;
 
         // Drain events from previous tick
@@ -332,7 +332,7 @@ fn run_game_per_tick_events(
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world.resource::<ArenaGrid>().clone();
@@ -356,7 +356,7 @@ fn run_game_per_tick_events(
     }
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
     (log, tick_log, ticks)
 }
@@ -656,7 +656,7 @@ fn test_scoreboard_resource_updates_during_game() {
                     .copied()
                     .unwrap_or_default();
                 let alive = world
-                    .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                    .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                     .is_some();
                 if alive {
                     let grid = world.resource::<ArenaGrid>().clone();
@@ -670,7 +670,7 @@ fn test_scoreboard_resource_updates_during_game() {
         }
 
         let scores = world
-            .resource::<microgpt_rs::pruners::bomber::ScoreBoard>()
+            .resource::<katgpt_rs::pruners::bomber::ScoreBoard>()
             .scores;
 
         let nonzero = scores.iter().any(|&s| s != 0);

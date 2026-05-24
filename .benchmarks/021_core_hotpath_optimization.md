@@ -9,7 +9,7 @@
 
 ## Summary
 
-Optimized `microgpt-core` and `src/` hot-path functions. Profiling identified `rmsnorm_with_gamma`
+Optimized `katgpt-core` and `src/` hot-path functions. Profiling identified `rmsnorm_with_gamma`
 as the biggest win (scalar sum-of-squares + scalar gamma loop vs SIMD). Applied three optimizations:
 
 1. **`rmsnorm_with_gamma_eps`**: Replaced scalar `sum_sq` with `simd_dot_f32(x, x, n)` — **2–3× faster**
@@ -138,8 +138,8 @@ pub fn simd_exp_inplace(x: &mut [f32])
 
 | File | Change |
 |------|--------|
-| `crates/microgpt-core/src/simd.rs` | Added `simd_scale_mul_inplace`, `simd_exp_inplace`, NEON/AVX2/scalar backends |
-| `crates/microgpt-core/src/types.rs` | `rmsnorm_with_gamma_eps`: `simd_dot_f32` for sum_sq, `simd_scale_mul_inplace` for fused scale+gamma |
+| `crates/katgpt-core/src/simd.rs` | Added `simd_scale_mul_inplace`, `simd_exp_inplace`, NEON/AVX2/scalar backends |
+| `crates/katgpt-core/src/types.rs` | `rmsnorm_with_gamma_eps`: `simd_dot_f32` for sum_sq, `simd_scale_mul_inplace` for fused scale+gamma |
 | `tests/bench_core_optimization.rs` | New comprehensive benchmark (9 sections, all hot-path components) |
 
 ## Remaining Optimization Candidates

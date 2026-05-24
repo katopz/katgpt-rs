@@ -11,12 +11,12 @@
 
 use std::time::Instant;
 
-use microgpt_rs::speculative::{
+use katgpt_rs::speculative::{
     DrafterLoraWeights, LeviathanVerifier, SpeculativeVerifier, generate_synthetic_pairs,
     train_drafter_lora,
 };
-use microgpt_rs::transformer::{TransformerWeights, cluster_map_round_robin, select_topk_indices};
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::{TransformerWeights, cluster_map_round_robin, select_topk_indices};
+use katgpt_rs::types::{Config, Rng};
 
 // ── Helpers ──────────────────────────────────────────────────
 

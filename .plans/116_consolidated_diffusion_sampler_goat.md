@@ -12,7 +12,7 @@ Consolidate three open tasks into a single ordered plan:
 
 | Source | Task | Scope | Priority |
 |--------|------|-------|----------|
-| **Plan 089 T6** | DiffusionSampler wiring + tests + GOAT | `microgpt-rs` speculative | P0 |
+| **Plan 089 T6** | DiffusionSampler wiring + tests + GOAT | `katgpt-rs` speculative | P0 |
 | **Plan 086 T6** | Natsukaze Go analytics validation | `riir-ai` riir-examples | P1 |
 | **Plan 089 T7** | LoRA Drafter Alignment | `riir-ai` riir-gpu | P2 (deferred) |
 
@@ -169,9 +169,9 @@ crates/riir-examples/examples/
 ## References
 
 ### Parent Plans
-- `microgpt-rs/.plans/089_tri_mode_inference.md` — Tri-Mode Inference (T1-T5 ✅, T6→here, T7→T6 here)
+- `katgpt-rs/.plans/089_tri_mode_inference.md` — Tri-Mode Inference (T1-T5 ✅, T6→here, T7→T6 here)
 - `riir-ai/.plans/086_pgd_game_analytics_model_based.md` — PGD Model-Based (T1-T5 ✅, T6→T5 here)
-- `microgpt-rs/.plans/081_pgd_game_analytics_modelless.md` — PGD Modelless (✅ Complete, data bridge)
+- `katgpt-rs/.plans/081_pgd_game_analytics_modelless.md` — PGD Modelless (✅ Complete, data bridge)
 
 ### Key Files
 - `src/speculative/diffusion_sampler.rs` — DiffusionSampler implementation (43K, ~30 tests)

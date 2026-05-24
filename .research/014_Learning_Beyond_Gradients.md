@@ -96,11 +96,11 @@ This is the same pattern as speculative decoding: draft model proposes, target m
 
 ---
 
-## Application to microgpt-rs
+## Application to katgpt-rs
 
 ### Direct Mappings
 
-| HL Concept | microgpt-rs Equivalent | Status |
+| HL Concept | katgpt-rs Equivalent | Status |
 |---|---|---|
 | Heuristic Policy | `ConstraintPruner::is_valid()` | ✅ Strong |
 | Feedback signal | `SolveEvent` (Accept/Reject/Prune/Score) | ✅ Strong |

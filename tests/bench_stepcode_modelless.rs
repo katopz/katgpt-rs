@@ -6,21 +6,21 @@
 use std::time::Instant;
 
 #[cfg(feature = "stepcode")]
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     BanditEnv, BanditPruner, BanditSession, BanditStats, BanditStrategy, BernoulliEnv, PathStep,
     ShapedPath, path_consistency, shape_path,
 };
 
 #[cfg(feature = "stepcode")]
-use microgpt_rs::pruners::tactical_pruner::TacticalPruner;
+use katgpt_rs::pruners::tactical_pruner::TacticalPruner;
 
 #[cfg(feature = "stepcode")]
-use microgpt_rs::speculative::{
+use katgpt_rs::speculative::{
     BinaryScreeningPruner, TreeNode, build_dd_tree_screened, extract_parent_tokens,
 };
 
 #[cfg(feature = "stepcode")]
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::types::{Config, Rng};
 
 // ── Bench 1: Shape Path Overhead ────────────────────────────────
 

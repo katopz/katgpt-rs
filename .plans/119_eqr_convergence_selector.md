@@ -28,10 +28,10 @@ EqR proves that after **landscape shaping** (RI + NI training), the fixed-point 
 | `inject_sde_noise()` | `src/speculative/dd_tree.rs` | Noise injection (EqR NI analog) |
 | `BanditPruner<P>` with UCB1 | `src/pruners/bandit.rs` | Q-value trajectory selection |
 | `DDTreeBranchCache` with `max_branches` | `src/speculative/types.rs` | Breadth scaling |
-| `width_rollouts` in Config | `crates/microgpt-core/src/types.rs` | Rollout count configuration |
-| `LoopMode::WeightShared` | `crates/microgpt-core/src/types.rs` | Weight-shared iteration |
-| `ResidualGate` | `crates/microgpt-core/src/types.rs` | Per-loop residual gate |
-| `SdpaOutputGate` | `crates/microgpt-core/src/types.rs` | Attention sink suppression |
+| `width_rollouts` in Config | `crates/katgpt-core/src/types.rs` | Rollout count configuration |
+| `LoopMode::WeightShared` | `crates/katgpt-core/src/types.rs` | Weight-shared iteration |
+| `ResidualGate` | `crates/katgpt-core/src/types.rs` | Per-loop residual gate |
+| `SdpaOutputGate` | `crates/katgpt-core/src/types.rs` | Attention sink suppression |
 | HLA/AHLA linear attention | `src/attention/` | Constant-state latent recursion |
 | `WidthSelectionMode` enum | `src/speculative/dd_tree.rs` | BestQ, MostFrequent selection |
 
@@ -50,8 +50,8 @@ EqR proves that after **landscape shaping** (RI + NI training), the fixed-point 
 
 ## Tasks
 
-- [x] **T1: Add `ConvergenceSelector` enum** — Selection strategy taxonomy ✅ `crates/microgpt-core/src/types.rs` (4 variants, default BestQ)
-  - Location: `crates/microgpt-core/src/types.rs` (after `ResidualGate`)
+- [x] **T1: Add `ConvergenceSelector` enum** — Selection strategy taxonomy ✅ `crates/katgpt-core/src/types.rs` (4 variants, default BestQ)
+  - Location: `crates/katgpt-core/src/types.rs` (after `ResidualGate`)
   - Feature gate: `#[cfg(feature = "eqr_convergence")]`
   - Variants:
     - `BestQ` — Highest cumulative relevance (current default, PTRM)
@@ -103,7 +103,7 @@ EqR proves that after **landscape shaping** (RI + NI training), the fixed-point 
     The marginal-change proxy ∥p_{depth+1} − p_{depth}∥ is a reasonable discrete analog.
 
 - [x] **T4: Add `convergence_selector` to Config** — Configuration wiring ✅ Config field + InferenceOverrides + with_overrides() + test_with_overrides_all_fields
-  - Location: `crates/microgpt-core/src/types.rs`
+  - Location: `crates/katgpt-core/src/types.rs`
   - Feature gate: `#[cfg(feature = "eqr_convergence")]`
   - Add field: `pub convergence_selector: ConvergenceSelector` (default: `BestQ`)
   - Add to `InferenceOverrides`: `pub convergence_selector: Option<ConvergenceSelector>`
@@ -316,8 +316,8 @@ eqr_convergence = ["elf_sde"]
 
 | File | Change | Lines (est.) |
 |------|--------|-------------|
-| `crates/microgpt-core/src/types.rs` | Add `ConvergenceSelector` + Config field | ~25 |
-| `crates/microgpt-core/src/lib.rs` | Export `ConvergenceSelector` | ~1 |
+| `crates/katgpt-core/src/types.rs` | Add `ConvergenceSelector` + Config field | ~25 |
+| `crates/katgpt-core/src/lib.rs` | Export `ConvergenceSelector` | ~1 |
 | `src/speculative/dd_tree.rs` | Add `ResidualTracker` + Top1Converged selection | ~70 |
 | `src/speculative/mod.rs` | Export `ResidualTracker` | ~1 |
 | `Cargo.toml` (workspace + crate) | Add `eqr_convergence` feature | ~3 |

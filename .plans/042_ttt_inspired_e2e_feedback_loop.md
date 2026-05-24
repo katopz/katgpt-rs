@@ -1,6 +1,6 @@
 # Plan 042: TTT-Inspired E2E Feedback Loop — Inference Results → Training Data
 
-> **Research:** `microgpt-rs/.research/019_TTT_Discover_Test_Time_Training.md`
+> **Research:** `katgpt-rs/.research/019_TTT_Discover_Test_Time_Training.md`
 > **Related:** Plan 041 (game training), anyrag Plan 003 (self-improving cycle), Plan 008 (inference budget)
 > **Branch:** `develop/feature/042_ttt_feedback_loop`
 
@@ -19,7 +19,7 @@ riir-burner trains LoRA from that JSONL, riir-ai deploys the adapter.
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                                                                          │
 │  ┌──────────┐   classify    ┌─────────┐   inference   ┌──────────────┐  │
-│  │  anyrag  │──────────────▶│ Domain  │──────────────▶│  microgpt-rs │  │
+│  │  anyrag  │──────────────▶│ Domain  │──────────────▶│  katgpt-rs │  │
 │  │          │               │ Config  │               │  DDTree      │  │
 │  └──────────┘               └─────────┘               └──────┬───────┘  │
 │       ▲                                                      │          │
@@ -143,8 +143,8 @@ riir-burner already reads JSONL. The only addition: optional `reward` field for 
 
 ## Tasks
 
-- [x] **Task 1: `InferenceResult` type in microgpt-rs**
-  - Add `InferenceResult` struct to `microgpt-rs/src/types.rs`
+- [x] **Task 1: `InferenceResult` type in katgpt-rs**
+  - Add `InferenceResult` struct to `katgpt-rs/src/types.rs`
   - Fields: domain, reward, tree_budget_used, budget, prompt_hash, output, timestamp, screened
   - Derive `Serialize, Deserialize, Clone`
   - `InferenceBudget` already exists in anyrag — use same type or mirror
@@ -161,7 +161,7 @@ riir-burner already reads JSONL. The only addition: optional `reward` field for 
     - `screened`: reward < screening_threshold
   - Return `InferenceResult` alongside the generated text
   - Minimal change to DDTree API: wrap return in `(String, InferenceResult)`
-  - ~20 lines in `microgpt-rs/src/ddtree.rs`
+  - ~20 lines in `katgpt-rs/src/ddtree.rs`
 
 - [x] **Task 3: Solution cache in anyrag**
   - New module: `crates/lib/src/cache/mod.rs` + `crates/lib/src/cache/solution_cache.rs`
@@ -194,18 +194,18 @@ riir-burner already reads JSONL. The only addition: optional `reward` field for 
   - Without flag, uniform sampling (backward compatible)
   - ~40 lines in `riir-burner/src/pipeline.rs`
 
-- [x] **Task 6: Wire feedback in microgpt-rs**
+- [x] **Task 6: Wire feedback in katgpt-rs**
   - After inference, if `solution-cache` feature is enabled:
     1. Build `InferenceResult` from DDTree output
     2. POST to anyrag `/cache/ingest` (or direct call if embedded)
   - Make this opt-in via config: `feedback_url: Option<String>` in `Config`
   - If `feedback_url` is None, skip (no behavior change)
   - If set, fire-and-forget POST (don't block inference on cache write)
-  - ~30 lines in `microgpt-rs/src/feedback.rs` (new file)
+  - ~30 lines in `katgpt-rs/src/feedback.rs` (new file)
 
 - [x] **Task 7: E2E validation** *(manual — requires running servers end-to-end)*
   - Run anyrag with `solution-cache` feature
-  - Run microgpt-rs with `feedback_url` pointing to anyrag
+  - Run katgpt-rs with `feedback_url` pointing to anyrag
   - Execute 10+ inference requests in a domain (e.g., py2rs code translation)
   - Verify cache entries appear in `/cache/stats`
   - Export JSONL via `/cache/export`
@@ -224,16 +224,16 @@ riir-burner already reads JSONL. The only addition: optional `reward` field for 
 | `anyrag/crates/lib/src/cache/mod.rs` | ~5 | Module index | anyrag |
 | `anyrag/crates/lib/src/cache/solution_cache.rs` | ~120 | Cache with PUCT scoring | anyrag |
 | `anyrag/crates/server/src/handlers/cache.rs` | ~60 | Cache API endpoints | anyrag |
-| `microgpt-rs/src/feedback.rs` | ~30 | Fire-and-forget cache write | microgpt-rs |
-| `microgpt-rs/.docs/12_ttt_feedback_loop_results.md` | ~50 | E2E validation results | microgpt-rs |
+| `katgpt-rs/src/feedback.rs` | ~30 | Fire-and-forget cache write | katgpt-rs |
+| `katgpt-rs/.docs/12_ttt_feedback_loop_results.md` | ~50 | E2E validation results | katgpt-rs |
 
 ### Modified files
 
 | File | Change | Repo |
 |------|--------|------|
-| `microgpt-rs/src/types.rs` | Add `InferenceResult` struct (~30 lines) | microgpt-rs |
-| `microgpt-rs/src/ddtree.rs` | Return `InferenceResult` alongside output (~20 lines) | microgpt-rs |
-| `microgpt-rs/src/lib.rs` | `pub mod feedback;` | microgpt-rs |
+| `katgpt-rs/src/types.rs` | Add `InferenceResult` struct (~30 lines) | katgpt-rs |
+| `katgpt-rs/src/ddtree.rs` | Return `InferenceResult` alongside output (~20 lines) | katgpt-rs |
+| `katgpt-rs/src/lib.rs` | `pub mod feedback;` | katgpt-rs |
 | `anyrag/crates/lib/src/lib.rs` | `pub mod cache;` + feature gate | anyrag |
 | `anyrag/crates/lib/Cargo.toml` | Add `solution-cache` feature | anyrag |
 | `anyrag/crates/server/Cargo.toml` | Add `solution-cache` feature | anyrag |

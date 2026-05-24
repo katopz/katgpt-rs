@@ -10,8 +10,8 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng, rmsnorm, softmax, softmax_scaled};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng, rmsnorm, softmax, softmax_scaled};
 
 const WARMUP: usize = 100;
 const ITERS: usize = 10000;
@@ -193,7 +193,7 @@ fn bench_hot_path_057() {
         game_config.n_layer,
         game_config.block_size
     );
-    println!("  SIMD level: {:?}", microgpt_rs::simd::simd_level());
+    println!("  SIMD level: {:?}", katgpt_rs::simd::simd_level());
     println!();
     println!("  Component                  | μs/call   | calls/token | μs/token");
     println!("  ---------------------------|-----------|-------------|----------");

@@ -2,16 +2,16 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs inference engine (CPU + GPU paths)
+**Context:** katgpt-rs inference engine (CPU + GPU paths)
 **Paper:** "Sparser, Faster, Lighter Transformer Language Models" (arXiv:2603.23198) — Sakana AI & NVIDIA
 
 ---
 
 ## TL;DR
 
-MLP layers account for ~67% of FLOPs during single-token decode (attention dominates at longer sequences). With ReLU activation (which microgpt-rs already uses), ~50% of hidden neurons are exactly `0.0` by definition (negative half). With L1 regularization during training, sparsity can reach 90-99%. Standard dense matmul wastes cycles computing `0 × weight`. The paper's TwELL (Tile-wise ELLPACK) is a GPU-specific tiled sparse format — we use the CPU-equivalent concept: runtime index packing to skip dead neurons.
+MLP layers account for ~67% of FLOPs during single-token decode (attention dominates at longer sequences). With ReLU activation (which katgpt-rs already uses), ~50% of hidden neurons are exactly `0.0` by definition (negative half). With L1 regularization during training, sparsity can reach 90-99%. Standard dense matmul wastes cycles computing `0 × weight`. The paper's TwELL (Tile-wise ELLPACK) is a GPU-specific tiled sparse format — we use the CPU-equivalent concept: runtime index packing to skip dead neurons.
 
-Applied to microgpt-rs: replace the `w2 @ hidden` matmul in the MLP with a sparse variant that only processes the non-zero (alive) neurons. The `active_indices` + `active_values` buffers live in `ForwardContext` for zero-alloc execution. Feature-gated behind `sparse_mlp`, with runtime fallback to dense when sparsity is too low.
+Applied to katgpt-rs: replace the `w2 @ hidden` matmul in the MLP with a sparse variant that only processes the non-zero (alive) neurons. The `active_indices` + `active_values` buffers live in `ForwardContext` for zero-alloc execution. Feature-gated behind `sparse_mlp`, with runtime fallback to dense when sparsity is too low.
 
 ---
 
@@ -203,7 +203,7 @@ The MLP has two matmuls:
                            │
                            ▼
               ┌─────────────────────────┐
-              │   microgpt-rs Engine    │
+              │   katgpt-rs Engine    │
               │                         │
               │   Attention: Raven RSM  │
               │   Branching: Screening  │
@@ -262,8 +262,8 @@ Implementation status (all complete):
 ## References
 
 - "Sparser, Faster, Lighter Transformer Language Models" (arXiv:2603.23198) — Sakana AI & NVIDIA
-- microgpt-rs MLP: `src/transformer.rs` lines 362-377 (forward), 487-506 (forward_paged), 1070-1089 (forward_raven)
-- microgpt-rs matmul: `src/types.rs` — `matmul()`, `matmul_relu()`
-- microgpt-rs GPU MLP: `src/gpu/forward.rs` — `dispatch_layer()` lines 555-585
+- katgpt-rs MLP: `src/transformer.rs` lines 362-377 (forward), 487-506 (forward_paged), 1070-1089 (forward_raven)
+- katgpt-rs matmul: `src/types.rs` — `matmul()`, `matmul_relu()`
+- katgpt-rs GPU MLP: `src/gpu/forward.rs` — `dispatch_layer()` lines 555-585
 - Raven RSM: `.research/006_Raven_Routing_Slot_Memories.md`
 - Screening Pruner: `.research/007_Screening_Absolute_Relevance.md`

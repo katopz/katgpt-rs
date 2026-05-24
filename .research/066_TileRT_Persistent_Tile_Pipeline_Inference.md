@@ -288,7 +288,7 @@ This validates our entire performance-oriented architecture (SIMD kernels, zero-
 If we implement the distillations, the feature gates would be:
 
 ```toml
-# Cargo.toml (microgpt-rs)
+# Cargo.toml (katgpt-rs)
 
 # D1: Tile-pipelined speculative decode (zero-gap draft→verify)
 tile_pipeline = []          # depends on existing speculative features

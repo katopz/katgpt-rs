@@ -7,12 +7,12 @@
 //! Run: `cargo test --features "dreamer,bomber" --test bomber_dreamer_goat -- --nocapture`
 
 use fastrand::Rng as FastrandRng;
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     BomberArenaConfig, BomberPlayer, RandomPlayer, run_bomber_game,
 };
-use microgpt_rs::pruners::dreamer::pipeline::DreamerPipeline;
-use microgpt_rs::pruners::dreamer::types::DreamerConfig;
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::dreamer::pipeline::DreamerPipeline;
+use katgpt_rs::pruners::dreamer::types::DreamerConfig;
+use katgpt_rs::types::Rng;
 
 // ── Constants ─────────────────────────────────────────────────
 

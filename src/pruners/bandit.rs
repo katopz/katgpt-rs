@@ -1,7 +1,7 @@
 //! Multi-Armed Bandit (MAB) — Adaptive ScreeningPruner
 //!
 //! Implements bandit strategies that plug into the DDTree screening pipeline
-//! via the [`ScreeningPruner`] trait, demonstrating how microgpt-rs's trait-based
+//! via the [`ScreeningPruner`] trait, demonstrating how katgpt-rs's trait-based
 //! architecture extends to sequential decision-making under uncertainty.
 //!
 //! # Architecture

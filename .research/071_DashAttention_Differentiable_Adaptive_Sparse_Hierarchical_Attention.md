@@ -239,10 +239,10 @@ fn entmax_gqa_aggregate(
 
 ## Architecture Integration
 
-### Where It Lives (microgpt-rs)
+### Where It Lives (katgpt-rs)
 
 ```
-microgpt-rs/src/
+katgpt-rs/src/
 ├── sp_kv/                    # EXISTING — utility predictor, gated cache
 ├── speculative/
 │   └── prefill.rs            # EXISTING — PFlash block scoring

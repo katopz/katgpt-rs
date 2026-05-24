@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs + anyrag + riir-validator-sdk neuro-symbolic architecture
+**Context:** katgpt-rs + anyrag + riir-validator-sdk neuro-symbolic architecture
 **Paper:** "Screening Is Enough" (arXiv:2604.01178) — Skipping Top-K for Absolute Relevance
 
 ---
@@ -11,7 +11,7 @@
 
 Standard attention/RAG systems use softmax, which **forces competition** — it must distribute probability mass that sums to 1.0. If you provide 5 garbage documents, the LLM *has* to pay attention to at least one. "Screening Is Enough" replaces this with **absolute relevance thresholds**: each item independently passes or fails a screening filter, bypassing softmax competition entirely.
 
-Applied to microgpt-rs: upgrade the binary `ConstraintPruner` (`is_valid -> bool`) into a continuous `ScreeningPruner` (`relevance -> f32 ∈ [0.0, 1.0]`). This blends LLM semantic probabilities with deterministic relevance scores in log-probability space.
+Applied to katgpt-rs: upgrade the binary `ConstraintPruner` (`is_valid -> bool`) into a continuous `ScreeningPruner` (`relevance -> f32 ∈ [0.0, 1.0]`). This blends LLM semantic probabilities with deterministic relevance scores in log-probability space.
 
 ---
 
@@ -77,7 +77,7 @@ The log-space addition means:
 
 ## Integration Points Across Repos
 
-### microgpt-rs: DDTree Upgrade
+### katgpt-rs: DDTree Upgrade
 - `ConstraintPruner` trait in `src/speculative/types.rs` gains `relevance()` method
 - `build()` in `src/speculative/dd_tree.rs` adds `relevance.ln()` to score
 - All existing pruners (sudoku, blue bear, dungeon, tactical) get backward-compat blanket impl
@@ -104,7 +104,7 @@ The log-space addition means:
                            │
                            ▼
               ┌─────────────────────────┐
-              │   microgpt-rs DDTree    │
+              │   katgpt-rs DDTree    │
               │   Speculative Decoding  │
               │   + Screening Scorer    │
               └─────────────────────────┘
@@ -215,7 +215,7 @@ The Screening Pruner is a strict superset of the current binary ConstraintPruner
 - **Preserves all existing behavior** via backward-compat blanket impl
 - **Enables new capabilities** (graded relevance, metadata-aware RAG, heuristic search)
 - **Has clean math** (log-space addition, no special cases)
-- **Cross-cuts all three repos** (microgpt-rs engine, anyrag RAG, riir-validator-sdk WASM)
+- **Cross-cuts all three repos** (katgpt-rs engine, anyrag RAG, riir-validator-sdk WASM)
 
 The WASM fixed-point encoding and backward compatibility layer make this adoptable incrementally without breaking existing validators.
 
@@ -224,6 +224,6 @@ The WASM fixed-point encoding and backward compatibility layer make this adoptab
 ## References
 
 - "Screening Is Enough" (arXiv:2604.01178)
-- microgpt-rs DDTree: `src/speculative/dd_tree.rs`, `src/speculative/types.rs`
+- katgpt-rs DDTree: `src/speculative/dd_tree.rs`, `src/speculative/types.rs`
 - riir-validator-sdk: `src/validator.rs`, `src/exports.rs`
 - Raven RSM: `.research/006_Raven_Routing_Slot_Memories.md`

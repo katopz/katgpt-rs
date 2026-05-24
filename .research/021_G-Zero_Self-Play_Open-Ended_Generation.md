@@ -166,7 +166,7 @@ In plain English: as long as the Proposer explores enough (`α_S`) and the δ-fi
 
 ### Where Plan 042 (TTT Feedback Loop) and Plan 048 (Self-Improving Loop) currently stop
 
-Plan 042 wires `microgpt-rs/src/feedback.rs` → anyrag `/cache/export` → `riir-gpu/feedback_consumer.rs` → retraining. The **shape** of the loop is in place. The **reward signal**, however, is currently:
+Plan 042 wires `katgpt-rs/src/feedback.rs` → anyrag `/cache/export` → `riir-gpu/feedback_consumer.rs` → retraining. The **shape** of the loop is in place. The **reward signal**, however, is currently:
 - Game-domain: win/loss (Bomberman, Monopoly).
 - Code-domain: compile success, validator pass.
 - Generic: `InferenceResult.reward` = max relevance from the screening pruner.
@@ -188,7 +188,7 @@ Hint-δ needs two log-prob evaluations per token: `log π_G(a_t | q, a_<t)` and 
 
 Implementation surface:
 - New helper `compute_hint_delta(q, h, a) -> f32` in `riir-gpu` using two passes through `loss.rs::log_probs_buf`.
-- New field `InferenceResult.hint_delta: Option<f32>` in `microgpt-rs/src/types.rs` (alongside existing `reward`).
+- New field `InferenceResult.hint_delta: Option<f32>` in `katgpt-rs/src/types.rs` (alongside existing `reward`).
 - Pipe it through the existing `feedback.rs` → anyrag flow.
 
 ##### 1b. DeltaGatedAbsorbCompress (High Value, Smart Modelless)
@@ -202,7 +202,7 @@ Current `AbsorbCompress` promotes heuristics based on raw environment reward (di
 
 ##### 1c. DeltaBanditPruner (High Value, Dense Reward)
 
-`microgpt-rs/src/pruners/bandit.rs` (UCB1 / Thompson / ε-greedy) already does exploration. G-Zero's δ gives it a **denser, more informative reward**:
+`katgpt-rs/src/pruners/bandit.rs` (UCB1 / Thompson / ε-greedy) already does exploration. G-Zero's δ gives it a **denser, more informative reward**:
 
 - Arm = (domain, hint-template).
 - Reward = Hint-δ (immediate, per-token, no episode completion needed).
@@ -292,7 +292,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 | **δ as absorb gate** | `DeltaGatedAbsorbCompress` wrapping existing `AbsorbCompressLayer` | 1 | ❌ Need to build |
 | **δ as bandit reward** | `DeltaBanditPruner` wrapping existing `BanditPruner` | 1 | ❌ Need to build |
 | **Template-based Proposer** | `TemplateProposer` (rule-based, bandit-weighted) | 1 | ❌ Need to build |
-| **Generator model** | Main inference model in `microgpt-rs` (draft + target) | Both | ✅ Exists |
+| **Generator model** | Main inference model in `katgpt-rs` (draft + target) | Both | ✅ Exists |
 | **Bandit as Proposer** | `pruners/bandit.rs` UCB1/Thompson (80% of GRPO at our scale) | 1 | ✅ Exists |
 | **Episode history** | `TrialLog` (JSONL) | Both | ✅ Direct reuse |
 | **Reward hacking defense** | `ReviewMetrics` benefit-ratio gate | Both | ✅ Similar philosophy |
@@ -323,7 +323,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 
 ##### Priority 2: DeltaGatedAbsorbCompress (~100 LOC)
 
-`microgpt-rs/src/pruners/delta_absorb_compress.rs`:
+`katgpt-rs/src/pruners/delta_absorb_compress.rs`:
 - Wraps existing `AbsorbCompressLayer<P>`.
 - Absorb gate: `δ ≥ delta_threshold` (default: 0.02).
 - Dual gate with `ReviewMetrics` benefit-ratio.
@@ -331,7 +331,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 
 ##### Priority 3: DeltaBanditPruner (~100 LOC)
 
-`microgpt-rs/src/pruners/delta_bandit.rs`:
+`katgpt-rs/src/pruners/delta_bandit.rs`:
 - Wraps existing `BanditPruner<P>`.
 - `observe_delta(arm, δ)` — feed δ as dense reward.
 - `blind_spot_arms(top_k)` — arms with highest accumulated δ.
@@ -339,7 +339,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 
 ##### Priority 4: TemplateProposer (~150 LOC)
 
-`microgpt-rs/src/pruners/template_proposer.rs`:
+`katgpt-rs/src/pruners/template_proposer.rs`:
 - 6 categories from G-Zero Appendix A (Writing, Explanation, Advice, Analysis, Coding, Reasoning ≤1/6).
 - UCB1-weighted template selection biased toward `blind_spot_arms()`.
 - Emits `(query, hint)` pairs — no neural model needed.
@@ -369,7 +369,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 
 ##### Priority 8: GRPO Proposer (~200 LOC)
 
-`microgpt-rs/src/pruners/grpo_proposer.rs`:
+`katgpt-rs/src/pruners/grpo_proposer.rs`:
 - Replace `TemplateProposer` when modelless plateaus.
 - Group of K rollouts, advantage standardization, clipped surrogate.
 - Full GRPO as described in paper §2.

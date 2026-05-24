@@ -93,8 +93,8 @@ Data flow:
 
 ## Tasks
 
-- [x] **Task 1: `Config::game()` in microgpt-rs** ✅
-  - Add `Config::game()` to `microgpt-rs/src/types.rs`
+- [x] **Task 1: `Config::game()` in katgpt-rs** ✅
+  - Add `Config::game()` to `katgpt-rs/src/types.rs`
   - vocab=10, block=170, n_embd=32, n_head=4, head_dim=8, mlp_hidden=128, n_layer=1
   - Include LoRA defaults: rank=4, alpha=8.0, targets=[q,k,v,o,mlp1,mlp2]
   - Tests: verify param counts, verify block_size >= game_seq_len
@@ -162,7 +162,7 @@ Data flow:
 
 | Repo | Hash | Message |
 |------|------|---------|
-| microgpt-rs | `138779d0c` | `feat(types): add Config::game() for Bomberman LoRA training (Plan 041 T1)` |
+| katgpt-rs | `138779d0c` | `feat(types): add Config::game() for Bomberman LoRA training (Plan 041 T1)` |
 | riir-ai | `b0bd4b3` | `feat(riir-gpu): real game training pipeline — Trainer, data adapter, no dummy grads (Plan 041 T2-T4)` |
 | riir-ai | `0073cf2` | `feat(riir-gpu): add --max-samples/--limit-epochs CLI for train_bomber, E2E validation (Plan 041 T5)` |
 
@@ -179,7 +179,7 @@ Data flow:
 
 | File | Change | Target |
 |------|--------|--------|
-| `microgpt-rs/src/types.rs` | Add `Config::game()` (~20 lines) | microgpt-rs |
+| `katgpt-rs/src/types.rs` | Add `Config::game()` (~20 lines) | katgpt-rs |
 | `riir-gpu/src/game/mod.rs` | Add `pub mod trainer;` | riir-ai |
 | `riir-gpu/src/lib.rs` | Export game trainer types | riir-ai |
 | `riir-gpu/examples/train_bomber.rs` | Rewrite: real Trainer, no dummy grads (~200→150 lines) | riir-ai |

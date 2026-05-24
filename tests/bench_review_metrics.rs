@@ -13,9 +13,9 @@
 use std::sync::Arc;
 
 #[cfg(feature = "bandit")]
-use microgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv, ReviewMetrics};
+use katgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv, ReviewMetrics};
 #[cfg(feature = "bandit")]
-use microgpt_rs::types::Rng;
+use katgpt_rs::types::Rng;
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -279,8 +279,8 @@ fn bench_benefit_ratio() {
 #[cfg(all(feature = "bandit", feature = "ppot"))]
 #[test]
 fn bench_rescue_reviewed_overhead() {
-    use microgpt_rs::speculative::ppot::{PpotConfig, ppot_rescue, ppot_rescue_reviewed};
-    use microgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::speculative::ppot::{PpotConfig, ppot_rescue, ppot_rescue_reviewed};
+    use katgpt_rs::speculative::types::NoScreeningPruner;
 
     let vocab_size = 27;
     let seq_len = 8;

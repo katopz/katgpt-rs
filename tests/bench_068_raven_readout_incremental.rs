@@ -6,19 +6,19 @@
 //!
 //! Quality gates: outputs must match within 1e-6.
 //!
-//! Run: cargo test -p microgpt-rs --features turboquant --test bench_068_raven_readout_incremental -- --nocapture
+//! Run: cargo test -p katgpt-rs --features turboquant --test bench_068_raven_readout_incremental -- --nocapture
 
 #![cfg(feature = "turboquant")]
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::transformer::{
+use katgpt_rs::transformer::{
     ForwardContext, RavenKVCache, TransformerWeights, forward_turboquant, raven_readout,
     raven_readout_into, raven_update,
 };
-use microgpt_rs::turboquant::TurboQuantKVCache;
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 // ─── Raven Readout Benchmark ─────────────────────────────────────
 

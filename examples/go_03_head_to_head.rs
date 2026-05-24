@@ -19,7 +19,7 @@
 
 use std::env;
 
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::go::{
     GoPlayerType, GoTournamentConfig, TournamentDef, print_batch_table, run_tournament_batch,
 };
 

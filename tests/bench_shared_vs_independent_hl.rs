@@ -3,7 +3,7 @@
 //! Compares convergence speed, win rate, survival rate, and average score
 //! between agents sharing a Q-table vs agents with independent Q-tables.
 //!
-//! Run: `cargo test -p microgpt-rs --test bench_shared_vs_independent_hl
+//! Run: `cargo test -p katgpt-rs --test bench_shared_vs_independent_hl
 //!       --features "bomber,bandit" -- --nocapture`
 
 #[cfg(feature = "bomber")]
@@ -13,16 +13,16 @@ use std::sync::Arc;
 use fastrand::Rng;
 
 #[cfg(feature = "bomber")]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberPlayer, GameEvent, GridPos, HLPlayer, init_world_with_arena, run_tick,
     spawn_players,
 };
 
 #[cfg(feature = "bomber")]
-use microgpt_rs::pruners::bomber::arena::STANDARD_ARENA;
+use katgpt_rs::pruners::bomber::arena::STANDARD_ARENA;
 
 #[cfg(all(feature = "bomber", feature = "bandit"))]
-use microgpt_rs::pruners::bomber::SharedBanditStats;
+use katgpt_rs::pruners::bomber::SharedBanditStats;
 
 // ── Constants ──────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ fn run_game(players: &mut [Box<dyn BomberPlayer>], rng: &mut Rng) -> GameResult 
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world.resource::<ArenaGrid>().clone();

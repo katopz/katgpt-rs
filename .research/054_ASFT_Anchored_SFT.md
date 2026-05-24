@@ -196,7 +196,7 @@ ASFT and SDAR are **complementary**, not competing:
 - SDAR improves multi-model distillation (teacher guidance)
 - Could combine: ASFT reweighting + SDAR gating + KL anchoring
 
-### Modelless Path (microgpt-rs)
+### Modelless Path (katgpt-rs)
 
 **Direct applicability**: LOW (no neural network training)
 
@@ -245,7 +245,7 @@ However, the **theoretical insights** are valuable:
 - Integration into `TrainingConfig` and training loop
 - GOAT proof: ASFT vs SFT in LoRA arena (Bomber/Go domains)
 
-### ⏸ HOLD for microgpt-rs (modelless)
+### ⏸ HOLD for katgpt-rs (modelless)
 
 **Why**:
 - No neural network training in modelless path
@@ -377,5 +377,5 @@ Key: `probs.gather(1, target_ids)` extracts the model's own probability for the 
 - RWR: Peters & Schaal, "Reinforcement Learning by Reward-Weighted Regression", ICML 2007
 - Our SDAR: `.research/038_SDAR_Self_Distilled_Agentic_RL.md`
 - Our ROPD: `.research/036_ROPD_Rubric_OnPolicy_Distillation.md`
-- Our KL alignment: `microgpt-rs/src/pruners/boundary_alignment.rs`
-- Our SDAR gate: `microgpt-rs/src/pruners/sdar_gate.rs`
+- Our KL alignment: `katgpt-rs/src/pruners/boundary_alignment.rs`
+- Our SDAR gate: `katgpt-rs/src/pruners/sdar_gate.rs`

@@ -111,7 +111,7 @@ The layer replaces f(x, y*) with cᵀy*(x) where c = detach(∂F/∂y*). This me
 
 ---
 
-## Distillable Gains for microgpt-rs / riir-ai
+## Distillable Gains for katgpt-rs / riir-ai
 
 | Priority | Technique | Target Component | Gain | Effort |
 |----------|-----------|-----------------|------|--------|
@@ -355,7 +355,7 @@ Pure-Rust Cholesky decomposition (no LAPACK dependency) for small matrices (d �
 
 ### P1: Dual-Cutoff Active Masking — ❌ NO GAIN (Plan 062)
 
-**Implemented in** `microgpt-rs/src/pruners/bandit.rs` (`dual_cutoff` field, default 0.0 = disabled)
+**Implemented in** `katgpt-rs/src/pruners/bandit.rs` (`dual_cutoff` field, default 0.0 = disabled)
 
 The plan hypothesized that ≥80% of bandit arms would already have near-zero relevance via soft `domain × bandit_q` blending, making hard cutoff redundant. **This was wrong** — with UCB1, 0% of arms had near-zero relevance because the exploration bonus inflates low-Q arm scores.
 

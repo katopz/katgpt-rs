@@ -10,27 +10,27 @@
 //! 5. Comparison vs SpectralQuant (default) at matched nominal bits
 //!
 //! Run with:
-//!   cargo test -p microgpt-rs --features "octopus,spectral_quant" --test bench_octopus_goat -- --nocapture
+//!   cargo test -p katgpt-rs --features "octopus,spectral_quant" --test bench_octopus_goat -- --nocapture
 
 #![cfg(feature = "octopus")]
 
-use microgpt_rs::octopus::{
+use katgpt_rs::octopus::{
     OctopusConfig, OctopusKVCache,
     forward::{cosine_similarity, ip_error, per_coord_mse},
 };
-use microgpt_rs::types::Rng;
+use katgpt_rs::types::Rng;
 
 #[cfg(feature = "turboquant")]
-use microgpt_rs::types::Config;
+use katgpt_rs::types::Config;
 
 #[cfg(feature = "turboquant")]
-use microgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::turboquant::TurboQuantKVCache;
 
 #[cfg(feature = "spectral_quant")]
-use microgpt_rs::spectralquant::SpectralQuantKVCache;
+use katgpt_rs::spectralquant::SpectralQuantKVCache;
 
 #[cfg(feature = "spectral_quant")]
-use microgpt_rs::spectralquant::types::SpectralQuantKVCacheConfig;
+use katgpt_rs::spectralquant::types::SpectralQuantKVCacheConfig;
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -717,7 +717,7 @@ fn goat_octopus_vs_spectralquant_maxsim() {
 
     // Ground-truth MaxSim on uncompressed flat keys
     let flat_keys: Vec<f32> = keys.iter().flatten().copied().collect();
-    let gt_ms = microgpt_rs::simd::maxsim_score(&queries, &flat_keys, lq, n_keys, dim);
+    let gt_ms = katgpt_rs::simd::maxsim_score(&queries, &flat_keys, lq, n_keys, dim);
 
     for &bits in &bits_list {
         let max_seq = n_keys + 16;
@@ -756,14 +756,14 @@ fn goat_octopus_vs_spectralquant_maxsim() {
         }
 
         // Compute MaxSim scores
-        let oct_ms = microgpt_rs::octopus::forward::maxsim_score_octopus(
+        let oct_ms = katgpt_rs::octopus::forward::maxsim_score_octopus(
             &queries,
             &oct_cache,
             0,
             0..n_keys,
             dim,
         );
-        let sq_ms = microgpt_rs::spectralquant::forward::maxsim_score_spectralquant(
+        let sq_ms = katgpt_rs::spectralquant::forward::maxsim_score_spectralquant(
             &queries,
             &mut sq_cache,
             0,

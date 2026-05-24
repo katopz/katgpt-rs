@@ -381,7 +381,7 @@ impl Default for SubterraneanTrainingMode {
 }
 ```
 
-**Note:** Actual full fine-tuning implementation belongs in `riir-ai` (riir-gpu). This task only adds the config type and feature gate in microgpt-rs.
+**Note:** Actual full fine-tuning implementation belongs in `riir-ai` (riir-gpu). This task only adds the config type and feature gate in katgpt-rs.
 
 ---
 
@@ -432,7 +432,7 @@ full = [..., "subterranean"]
 |---|---|
 | Path enumeration exponential blowup | `max_depth` safety limit, early termination |
 | Graph doesn't match self-play trajectories | Measure coverage, not exact match |
-| Full FT requires GPU training | Config type only in microgpt-rs; actual training in riir-ai |
+| Full FT requires GPU training | Config type only in katgpt-rs; actual training in riir-ai |
 | LoRA vs Full FT only matters at scale | Feature gate keeps it optional |
 
 ## Success Criteria

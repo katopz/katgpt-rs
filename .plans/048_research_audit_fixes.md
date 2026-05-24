@@ -24,24 +24,24 @@ These gaps mean: training may produce incorrect gradients, distillation quality 
 
 | # | Paper | Where | Status |
 |---|-------|-------|--------|
-| 00 | Neuro-Symbolic Architecture | `microgpt-rs/src/speculative/` | ✅ DFlash, DDTree, Percepta |
-| 01 | Advanced Neuro-Symbolic | `microgpt-rs/src/transformer.rs` | ✅ PagedKV, GQA, SIMD hints |
-| 02 | Speculative Decoding (Leviathan) | `microgpt-rs/src/speculative/verifier.rs` | ✅ Full rejection sampling |
+| 00 | Neuro-Symbolic Architecture | `katgpt-rs/src/speculative/` | ✅ DFlash, DDTree, Percepta |
+| 01 | Advanced Neuro-Symbolic | `katgpt-rs/src/transformer.rs` | ✅ PagedKV, GQA, SIMD hints |
+| 02 | Speculative Decoding (Leviathan) | `katgpt-rs/src/speculative/verifier.rs` | ✅ Full rejection sampling |
 | 03 | Commercial Strategy | 4-repo architecture split | ✅ Engine/Fuel separation |
 | 04 | LoRA Architecture | `riir-gpu/src/lora.rs` | ✅ 6 targets/layer, BLAKE3 |
 | 05 | Artifact Definition | `riir-validator-sdk/` | ✅ 10 WASM validators |
-| 06 | Raven RSM | `microgpt-rs/src/transformer.rs` | ✅ O(1) KV cache |
-| 07 | Screening Absolute Relevance | `microgpt-rs/src/speculative/types.rs` | ✅ Continuous [0,1] |
-| 08 | TwELL Sparse MLP | `microgpt-rs/src/types.rs` | ✅ Feature-gated sparse GEMV |
+| 06 | Raven RSM | `katgpt-rs/src/transformer.rs` | ✅ O(1) KV cache |
+| 07 | Screening Absolute Relevance | `katgpt-rs/src/speculative/types.rs` | ✅ Continuous [0,1] |
+| 08 | TwELL Sparse MLP | `katgpt-rs/src/types.rs` | ✅ Feature-gated sparse GEMV |
 | 09 | EMO Emergent Modularity | `riir-ai/crates/riir-router/` | ✅ ExpertRegistry + routing |
-| 11 | PPoT | `microgpt-rs/src/speculative/ppot/` | ✅ CPU logit resampling |
-| 12 | TRT (rejection knowledge) | `microgpt-rs/src/speculative/ppot/knowledge.rs` | ✅ Adaptive patterns |
-| 14 | Learning Beyond Gradients | `microgpt-rs/src/pruners/absorb_compress.rs` | ✅ Absorb+Compress |
-| 15 | Reinforced Agent (reviewer) | `microgpt-rs/src/pruners/review_metrics.rs` | ✅ Helpfulness/Harmfulness |
+| 11 | PPoT | `katgpt-rs/src/speculative/ppot/` | ✅ CPU logit resampling |
+| 12 | TRT (rejection knowledge) | `katgpt-rs/src/speculative/ppot/knowledge.rs` | ✅ Adaptive patterns |
+| 14 | Learning Beyond Gradients | `katgpt-rs/src/pruners/absorb_compress.rs` | ✅ Absorb+Compress |
+| 15 | Reinforced Agent (reviewer) | `katgpt-rs/src/pruners/review_metrics.rs` | ✅ Helpfulness/Harmfulness |
 | 16 | AutoTTS (β parameterization) | `riir-gpu/src/training_config.rs` | ✅ BetaConfig |
-| 18 | Free Transformer Latent Injection | `microgpt-rs/src/types.rs` (DomainLatent), `riir-gpu/src/domain_latent.rs` | 🟡 Full VAE ❌, mid-layer K/V domain embedding ✅ (Plan 038) |
-| 19 | TTT Test-Time Training | `microgpt-rs/src/feedback.rs`, `riir-burner/` | 🟡 Feedback sends, not consumed |
-| 20 | TurboQuant | `microgpt-rs/src/turboquant/` | ✅ CPU path, GPU kernel exists |
+| 18 | Free Transformer Latent Injection | `katgpt-rs/src/types.rs` (DomainLatent), `riir-gpu/src/domain_latent.rs` | 🟡 Full VAE ❌, mid-layer K/V domain embedding ✅ (Plan 038) |
+| 19 | TTT Test-Time Training | `katgpt-rs/src/feedback.rs`, `riir-burner/` | 🟡 Feedback sends, not consumed |
+| 20 | TurboQuant | `katgpt-rs/src/turboquant/` | ✅ CPU path, GPU kernel exists |
 
 ### Correctly Rejected (1/21 papers)
 
@@ -161,7 +161,7 @@ pub struct GpuPipelines {
 
 **Files:** `riir-ai/crates/riir-gpu/src/kernels/mod.rs`, `riir-ai/crates/riir-gpu/src/forward.rs`
 **Problem:** `attention_score_tq.wgsl` exists but is not in `GpuPipelines` or dispatched.
-**Context:** CPU `forward_turboquant()` in `microgpt-rs` works. GPU path would accelerate the dequantize→score→attention step.
+**Context:** CPU `forward_turboquant()` in `katgpt-rs` works. GPU path would accelerate the dequantize→score→attention step.
 **Fix:**
 1. Add `attention_score_tq: PipelineBundle` to `GpuPipelines`
 2. Create uniform buffer for TQ params (centroids, boundaries, bits, scale)
@@ -176,12 +176,12 @@ pub struct GpuPipelines {
 #### Task 6: Feedback Consumer Service
 
 **File:** `riir-ai/crates/riir-gpu/src/feedback.rs` (new) or extend `riir-ai/crates/riir-rest/`
-**Problem:** `microgpt-rs/src/feedback.rs` POSTs `InferenceResult` to cache endpoint (Plan 042 Task 6 ✅), but nothing reads from that endpoint to trigger retraining. Feedback goes into a void.
+**Problem:** `katgpt-rs/src/feedback.rs` POSTs `InferenceResult` to cache endpoint (Plan 042 Task 6 ✅), but nothing reads from that endpoint to trigger retraining. Feedback goes into a void.
 **Context:** Plan 042 implemented the send side. This task implements the receive side.
 
 **Architecture:**
 ```
-microgpt-rs (inference)
+katgpt-rs (inference)
     │ POST InferenceResult
     ▼
 anyrag /cache/ingest (Plan 042 ✅)
@@ -195,7 +195,7 @@ riir-gpu feedback consumer (THIS TASK)
     │ 4. Export new lora.bin
     │ 5. Signal hot-swap (write to watched path)
     ▼
-microgpt-rs HotSwapPruner (Plan 032 ✅)
+katgpt-rs HotSwapPruner (Plan 032 ✅)
     │ BLAKE3 change detected → reload lora.bin
     ▼
 Next inference uses updated LoRA
@@ -271,7 +271,7 @@ Run all fixes together to prove the full loop works:
    - Add GpuFlashPrefillPass to module layout
    - Add FeedbackConsumer to module layout
    - Update known issues (all resolved)
-3. Update `microgpt-rs/README.md`:
+3. Update `katgpt-rs/README.md`:
    - Add "Self-Improving Loop" section referencing Plan 048
 4. Create `riir-ai/.docs/13_research_audit_results.md`:
    - Full research↔implementation cross-reference table
@@ -363,7 +363,7 @@ Separate commits per logical unit:
 | `riir-gpu/examples/feedback_consumer.rs` | CLI for running consumer | ~40 |
 | `riir-ai/.docs/13_research_audit_results.md` | Full audit report | ~120 |
 
-### Modified files (microgpt-rs)
+### Modified files (katgpt-rs)
 
 | File | Change | Lines |
 |------|--------|-------|
@@ -383,7 +383,7 @@ Distillation is an offline operation run once per training cycle. CPU KL diverge
 
 ### 3. PFlash GPU dispatch alongside CPU
 
-Both paths coexist. `GpuFlashPrefillPass` is optional — if GPU context is available, use GPU; otherwise fall back to existing CPU path in `microgpt-rs/src/speculative/prefill.rs`. No behavior change without explicit opt-in.
+Both paths coexist. `GpuFlashPrefillPass` is optional — if GPU context is available, use GPU; otherwise fall back to existing CPU path in `katgpt-rs/src/speculative/prefill.rs`. No behavior change without explicit opt-in.
 
 ### 4. Fix backward, don't rewrite
 

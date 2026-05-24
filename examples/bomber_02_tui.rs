@@ -29,8 +29,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
-use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+use katgpt_rs::pruners::bomber::{
     Alive, ArenaGrid, BombFuse, BomberPlayer, Cell, GameEvent, GreedyPlayer, GridPos, HLPlayer,
     PlayerEntities, PowerUpKind, RandomPlayer, ValidatorPlayer, init_world, init_world_with_arena,
     run_tick, spawn_players,
@@ -139,7 +139,7 @@ fn record_round(
     let mut snapshots = Vec::new();
     let mut all_events: Vec<GameEvent> = Vec::new();
 
-    for _ in 0..microgpt_rs::pruners::bomber::TICK_LIMIT {
+    for _ in 0..katgpt_rs::pruners::bomber::TICK_LIMIT {
         // Snapshot current state
         let snap = capture_snapshot(&mut world, &all_events);
         snapshots.push(snap);
@@ -156,7 +156,7 @@ fn record_round(
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world.resource::<ArenaGrid>().clone();
@@ -227,10 +227,10 @@ fn capture_snapshot(world: &mut bevy_ecs::world::World, events: &[GameEvent]) ->
     let grid = world.resource::<ArenaGrid>().clone();
     let entity_list: [bevy_ecs::entity::Entity; 4] = world.resource::<PlayerEntities>().entities;
     let scores = world
-        .resource::<microgpt_rs::pruners::bomber::ScoreBoard>()
+        .resource::<katgpt_rs::pruners::bomber::ScoreBoard>()
         .scores;
     let tick = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     // Entity lookups — world.get takes &self, all resource borrows already released
@@ -251,20 +251,20 @@ fn capture_snapshot(world: &mut bevy_ecs::world::World, events: &[GameEvent]) ->
 
     {
         let mut q = world
-            .query_filtered::<(&GridPos, &BombFuse), With<microgpt_rs::pruners::bomber::Bomb>>();
+            .query_filtered::<(&GridPos, &BombFuse), With<katgpt_rs::pruners::bomber::Bomb>>();
         for (pos, fuse) in q.iter(world) {
             bombs.push(((pos.x, pos.y), fuse.ticks_remaining));
         }
     }
     {
-        let mut q = world.query_filtered::<&GridPos, With<microgpt_rs::pruners::bomber::Blast>>();
+        let mut q = world.query_filtered::<&GridPos, With<katgpt_rs::pruners::bomber::Blast>>();
         for pos in q.iter(world) {
             blasts.push((pos.x, pos.y));
         }
     }
     {
         let mut q =
-            world.query_filtered::<(&GridPos, &microgpt_rs::pruners::bomber::PowerUp), ()>();
+            world.query_filtered::<(&GridPos, &katgpt_rs::pruners::bomber::PowerUp), ()>();
         for (pos, pu) in q.iter(world) {
             powerups.push(((pos.x, pos.y), pu.kind));
         }

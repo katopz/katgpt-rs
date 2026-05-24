@@ -69,7 +69,7 @@ Results are "preliminary qualitative evidence of feasibility" trained on limited
 
 ## 3. Why We Reject the Mechanism
 
-Replacing microgpt-rs with a DiT + VAE architecture would destroy our current performance profile:
+Replacing katgpt-rs with a DiT + VAE architecture would destroy our current performance profile:
 
 1. **Diffusion requires multi-step denoising.** Even with block-causal DiT and 8-10 steps, this is far too heavy for ultra-fast sparse CPU execution with TwELL matmuls.
 
@@ -137,12 +137,12 @@ Replacing microgpt-rs with a DiT + VAE architecture would destroy our current pe
 **What's missing (the data pipeline):**
 1. anyrag endpoint returning embedding vectors alongside text (search currently returns `SearchResult` with text, not raw vectors)
 2. Dimension mapping: embedding dim (model-dependent, e.g. 768) → draft model `n_embd` (e.g. 16) — requires a simple linear projection or truncation/padding
-3. `EmbeddingRouter` in microgpt-rs: `PromptRouter` impl that calls anyrag `/classify/domain` + retrieves top embedding for KV cache priming, with `KeywordRouter` fallback when anyrag is unavailable
-4. "Hot context" protocol: IDE tells microgpt-rs "editing `auth.rs`" → microgpt-rs primes draft model
+3. `EmbeddingRouter` in katgpt-rs: `PromptRouter` impl that calls anyrag `/classify/domain` + retrieves top embedding for KV cache priming, with `KeywordRouter` fallback when anyrag is unavailable
+4. "Hot context" protocol: IDE tells katgpt-rs "editing `auth.rs`" → katgpt-rs primes draft model
 
 **What this is NOT:** Cola DLM's per-position latent diffusion. This is **KV cache priming with retrieved semantic context** — one vector, all layers, position 0. Useful for short completions (function body), not whole-file generation.
 
-**Status:** Plan 024 created. The pipeline is well-scoped: extend anyrag search to optionally return embeddings, add dimension projection, wire `EmbeddingRouter` in microgpt-rs. Depends on LM Studio API (local, already supported by anyrag).
+**Status:** Plan 024 created. The pipeline is well-scoped: extend anyrag search to optionally return embeddings, add dimension projection, wire `EmbeddingRouter` in katgpt-rs. Depends on LM Studio API (local, already supported by anyrag).
 
 ### 5.2 The Multimodal Bridge — 🔴 OUT OF SCOPE
 
@@ -157,21 +157,21 @@ Replacing microgpt-rs with a DiT + VAE architecture would destroy our current pe
 
 **If ever pursued, two layers (keep separate):**
 
-*Layer 1 — Ingestion-only (anyrag-github, no microgpt-rs changes):*
+*Layer 1 — Ingestion-only (anyrag-github, no katgpt-rs changes):*
 - Detect image references in markdown during extraction
 - Send images to LM Studio vision API (local, already supported by anyrag providers)
 - Store descriptions as text alongside code examples in turso
-- No changes to microgpt-rs inference path
+- No changes to katgpt-rs inference path
 - Scope: extension to `anyrag/crates/github/src/ingest/extractor.rs`
 
-*Layer 2 — Inference-time (microgpt-rs, Cola DLM-style MMDiT):*
+*Layer 2 — Inference-time (katgpt-rs, Cola DLM-style MMDiT):*
 - Vision encoder running alongside draft model
 - Shared latent space for image + text tokens
 - Would destroy our CPU/sub-millisecond performance profile
 - The paper's Image VAE encoder (64 channels, 16x downsampling) is GPU-only
 - **DO NOT pursue until we have GPU inference with real models**
 
-**Status:** Out of scope. Text-only architecture is already complex enough. Layer 1 (ingestion) is a quality-of-life improvement for anyrag that doesn't touch microgpt-rs. Layer 2 (inference) contradicts our performance goals. Neither is planned.
+**Status:** Out of scope. Text-only architecture is already complex enough. Layer 1 (ingestion) is a quality-of-life improvement for anyrag that doesn't touch katgpt-rs. Layer 2 (inference) contradicts our performance goals. Neither is planned.
 
 ### 5.3 Embedding-Based Domain Classification — 🟡 IN PROGRESS
 

@@ -44,7 +44,7 @@ riir-gpu/examples/train_bomber.rs         (riir-ai repo)
   ▼
 output/game_lora.bin                       (Secret A — real trained weights)
   │
-  │  cp to microgpt-rs or load at runtime
+  │  cp to katgpt-rs or load at runtime
   │
   ▼
 NNPlayer → DDTree(marginals, config, bomber_validator.wasm)
@@ -164,7 +164,7 @@ Each line is one `(board_state, action, quality)` sample:
   - Compare NNPlayer win rate vs RandomPlayer (should be > 0%)
 
 - [x] **Task 10: Update docs**
-  - Update `microgpt-rs/.docs/10_bomber_arena.md` with replay pipeline
+  - Update `katgpt-rs/.docs/10_bomber_arena.md` with replay pipeline
   - Update `riir-ai/.docs/09_training_data_pipeline.md` with game training section
   - Update `riir-ai/.plans/034_bomber_wasm_validator.md` — unblock T3
 
@@ -172,7 +172,7 @@ Each line is one `(board_state, action, quality)` sample:
 
 ## File Changes
 
-### microgpt-rs (engine — replay generation)
+### katgpt-rs (engine — replay generation)
 
 | File | Action | Description |
 |------|--------|-------------|
@@ -276,9 +276,9 @@ The replay dump is opt-in (`--replay-dir` flag). Without it, the arena runs exac
 
 | Project | Plan | Relationship |
 |---------|------|-------------|
-| `microgpt-rs` | Plan 033 (Bomberman Arena) | ✅ Complete — arena runs games, produces events |
-| `microgpt-rs` | Plan 034 (Bomber WASM Validator) | ✅ T1-T10 done — WASM validator ready, NNPlayer ready |
-| `microgpt-rs` | Plan 038 (Free Transformer Domain Latent) | ✅ Done — `DomainLatent` type + mid-layer injection; `train_bomber` exports `.dlat` |
+| `katgpt-rs` | Plan 033 (Bomberman Arena) | ✅ Complete — arena runs games, produces events |
+| `katgpt-rs` | Plan 034 (Bomber WASM Validator) | ✅ T1-T10 done — WASM validator ready, NNPlayer ready |
+| `katgpt-rs` | Plan 038 (Free Transformer Domain Latent) | ✅ Done — `DomainLatent` type + mid-layer injection; `train_bomber` exports `.dlat` |
 | `riir-ai` | Plan 038 (riir-gpu domain_latent) | ✅ Done — `GpuDomainLatent` + `export_domain_latent()` + CPU AdamW fallback |
 | `riir-ai` | Plan 034 T2/T3 (replay.rs, train_bomber) | Scaffolding exists — this plan unblocks it |
 | `riir-ai` | Plan 026 (AutoTTS) | ✅ Complete — early exit + dynamic budget for game inference |

@@ -6,9 +6,9 @@
 //!
 //! Run: `cargo test --features sr2am_configurator --test test_sr2am_configurator.goat -- --nocapture`
 
-use microgpt_core::{ConfiguratorContext, PlanningDecision};
-use microgpt_rs::pruners::ConfiguratorBandit;
-use microgpt_rs::speculative::entropy_truncate_horizon;
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
+use katgpt_rs::pruners::ConfiguratorBandit;
+use katgpt_rs::speculative::entropy_truncate_horizon;
 
 // ── Helpers ───────────────────────────────────────────────────
 

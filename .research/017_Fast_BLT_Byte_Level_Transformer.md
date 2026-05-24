@@ -8,7 +8,7 @@
 
 Fast BLT introduces three inference acceleration techniques for **byte-level language models** (BLT-D, BLT-S, BLT-DV). All three exploit BLT's hierarchical architecture (Local Encoder → Global Transformer → Local Decoder) to reduce memory bandwidth by 50-92%. The methods are rigorous and the results are strong for byte-level models.
 
-**However, `microgpt-rs` does not use a byte-level model, does not have BLT's hierarchical architecture, and already solves the stated problems through different mechanisms.** This research is recorded as a negative result to prevent future confusion.
+**However, `katgpt-rs` does not use a byte-level model, does not have BLT's hierarchical architecture, and already solves the stated problems through different mechanisms.** This research is recorded as a negative result to prevent future confusion.
 
 ---
 
@@ -61,13 +61,13 @@ Combines BLT-D's parallel drafting with autoregressive verification. Diffusion p
 
 ---
 
-## Why This Does NOT Apply to microgpt-rs
+## Why This Does NOT Apply to katgpt-rs
 
 ### Reason 1: We Use BPE Tokens, Not Bytes
 
 Our entire stack operates on token indices:
 
-```microgpt-rs/src/types.rs#L4-16
+```katgpt-rs/src/types.rs#L4-16
 pub struct Config {
     pub vocab_size: usize,     // 27 (micro) or 256+ (BPE)
     pub block_size: usize,
@@ -91,7 +91,7 @@ This is not a "distillation" — it's a complete system replacement.
 
 BLT's speedup comes from having a **lightweight Local Decoder** that can draft independently from the **heavy Global Transformer**. Our model is a standard monolithic Transformer:
 
-```microgpt-rs/src/speculative/verifier.rs#L124-131
+```katgpt-rs/src/speculative/verifier.rs#L124-131
 pub struct LeviathanVerifier<'a> {
     pub target_weights: &'a TransformerWeights,
     pub target_config: &'a Config,
@@ -108,7 +108,7 @@ pub struct LeviathanVerifier<'a> {
 
 BLT-S's core mechanism (draft cheaply → verify expensively → accept up to first mismatch) is **exactly what `LeviathanVerifier` does**:
 
-```microgpt-rs/src/speculative/verifier.rs#L151-210
+```katgpt-rs/src/speculative/verifier.rs#L151-210
 impl SpeculativeVerifier for LeviathanVerifier<'_> {
     fn speculate(&mut self, draft_weights, draft_config, token, pos, rng) -> Vec<usize> {
         // Phase 1: AR draft (cheap — draft model)
@@ -129,7 +129,7 @@ Both achieve the same effect. Ours doesn't require a hierarchical model.
 
 The claim that validators struggle with token IDs is addressed by our `SynPruner`:
 
-```microgpt-rs/src/validator/syn_pruner.rs#L63-74
+```katgpt-rs/src/validator/syn_pruner.rs#L63-74
 impl ConstraintPruner for SynPruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
         let mut all_tokens = parent_tokens.to_vec();

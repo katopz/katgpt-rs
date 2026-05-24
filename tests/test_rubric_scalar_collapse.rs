@@ -23,7 +23,7 @@
 #[cfg(feature = "ropd_rubric")]
 #[test]
 fn test_quadratic_reward_differentiates_same_weighted_score() {
-    use microgpt_rs::pruners::{RubricTemplate, RubricVector};
+    use katgpt_rs::pruners::{RubricTemplate, RubricVector};
 
     let template = RubricTemplate::bomber();
     let weights: Vec<f32> = template.criteria.iter().map(|(_, w)| *w).collect();
@@ -131,11 +131,11 @@ fn test_quadratic_reward_differentiates_same_weighted_score() {
 #[cfg(all(feature = "ropd_rubric", feature = "g_zero"))]
 #[test]
 fn test_rubric_bandit_no_longer_equivalent_to_scalar() {
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         BanditPruner, BanditStrategy, DeltaBanditPruner, RubricBanditPruner, RubricTemplate,
         RubricVector,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
 
     let template = RubricTemplate::bomber();
     let weights: Vec<f32> = template.criteria.iter().map(|(_, w)| *w).collect();
@@ -234,8 +234,8 @@ fn test_rubric_bandit_no_longer_equivalent_to_scalar() {
 #[cfg(feature = "ropd_rubric")]
 #[test]
 fn test_rubric_bandit_converges_toward_concentrated_gaps() {
-    use microgpt_rs::pruners::{BanditPruner, BanditStrategy, RubricBanditPruner, RubricVector};
-    use microgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::pruners::{BanditPruner, BanditStrategy, RubricBanditPruner, RubricVector};
+    use katgpt_rs::speculative::types::NoScreeningPruner;
 
     // Two arms with same weighted_score but different gap distributions.
     // The bandit should prefer the arm with concentrated gaps (higher quadratic reward)
@@ -326,11 +326,11 @@ fn test_rubric_bandit_converges_toward_concentrated_gaps() {
 #[cfg(feature = "ropd_rubric")]
 #[test]
 fn test_rubric_absorb_reward_uses_quadratic() {
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompressLayer, CompressConfig, RubricGatedAbsorbCompress, RubricGatedConfig,
         RubricTemplate, RubricVector,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
 
     let template = RubricTemplate::bomber();
     let weights: Vec<f32> = template.criteria.iter().map(|(_, w)| *w).collect();

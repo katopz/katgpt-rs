@@ -14,12 +14,12 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::simd::{
+use katgpt_rs::simd::{
     simd_add_inplace, simd_add_into, simd_dot_f32, simd_fused_decay_write, simd_max_f32,
     simd_scale_inplace,
 };
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng};
 
 const WARMUP: usize = 100;
 const ITERS: usize = 50000;
@@ -32,7 +32,7 @@ fn bench_residual_simd_062() {
     let num_slots = 16;
 
     // ── Print SIMD level ──
-    let level = microgpt_rs::simd::simd_level();
+    let level = katgpt_rs::simd::simd_level();
     println!("=== bench_residual_simd_062 ===");
     println!("SIMD level: {level:?}");
     println!("n_embd={n}, kv_dim={kv_dim}, num_slots={num_slots}");

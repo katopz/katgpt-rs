@@ -10,8 +10,8 @@
 
 use bevy_ecs::event::Events;
 use bevy_ecs::prelude::{Entity, World};
-use microgpt_rs::pruners::bomber::arena::EMPTY_ARENA;
-use microgpt_rs::pruners::bomber::*;
+use katgpt_rs::pruners::bomber::arena::EMPTY_ARENA;
+use katgpt_rs::pruners::bomber::*;
 
 fn main() {
     println!("Bomber Arena — Bomb Types Demo");

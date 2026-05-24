@@ -1467,7 +1467,7 @@ fn forward_coda<'a>(
         // D = wo @ attn_out + xr  → stored in ctx.xr2 (residual for down_proj)
         // O = D * gamma          → stored in ctx.x (input to MLP, gamma=identity)
         // partial_sums = Σ D[i]²  → for rstd computation
-        microgpt_core::coda::simd_matmul_residual_partial_rms(
+        katgpt_core::coda::simd_matmul_residual_partial_rms(
             &mut ctx.xr2[..n],          // output_d: D = matmul + residual
             &mut ctx.x[..n],            // output_o: O = D * gamma (gamma=identity)
             &mut ctx.coda_partial_sums, // partial RMS accumulation
@@ -1483,17 +1483,17 @@ fn forward_coda<'a>(
 
         // ── CODA AUXILIARY REDUCTION: compute rstd ─────────────────────
         // rstd = 1 / sqrt(mean(D²) + eps) — tiny reduction, O(1) for single block
-        let rstd = microgpt_core::coda::compute_rstd(&ctx.coda_partial_sums, n, 1e-5);
+        let rstd = katgpt_core::coda::compute_rstd(&ctx.coda_partial_sums, n, 1e-5);
 
         // ── CODA FUSED KERNEL 2: MLP matmul + delayed RMS + activation ─
         // Replaces: rmsnorm(x) + matmul_relu(hidden, w1, x)
         // hidden[i] = activation(dot(w1[i], O) * rstd)  — delayed RMS scale
-        microgpt_core::coda::simd_matmul_rmsnorm_activation(
+        katgpt_core::coda::simd_matmul_rmsnorm_activation(
             &mut ctx.hidden,                           // output
             &layer_weights.mlp_w1,                     // weight
             &ctx.x[..n],                               // input (O from kernel 1)
             rstd,                                      // delayed RMS scale
-            microgpt_core::coda::GateActivation::Relu, // matches baseline matmul_relu
+            katgpt_core::coda::GateActivation::Relu, // matches baseline matmul_relu
             config.mlp_hidden,                         // rows
             n,                                         // cols
         );
@@ -1508,7 +1508,7 @@ fn forward_coda<'a>(
         // Replaces: matmul(x, w2, hidden) + add(x, xr2)
         // x[i] = dot(w2[i], hidden) + xr2[i]
         #[cfg(not(feature = "sparse_mlp"))]
-        microgpt_core::coda::simd_matmul_residual(
+        katgpt_core::coda::simd_matmul_residual(
             &mut ctx.x[..n],       // output
             &layer_weights.mlp_w2, // weight
             &ctx.hidden,           // input
@@ -1531,7 +1531,7 @@ fn forward_coda<'a>(
             );
             if (alive as f32 / config.mlp_hidden as f32) > (1.0 - config.sparse_threshold) {
                 // Too dense for sparse, use fused dense + residual
-                microgpt_core::coda::simd_matmul_residual(
+                katgpt_core::coda::simd_matmul_residual(
                     &mut ctx.x[..n],
                     &layer_weights.mlp_w2,
                     &ctx.hidden,
@@ -2099,7 +2099,7 @@ pub fn forward_prefill<'a>(
                         .copy_from_slice(&layer_cache.value[kv_src..kv_src + hd]);
                 }
             }
-            microgpt_core::tiled_attention_batched(
+            katgpt_core::tiled_attention_batched(
                 &ctx.tiled_q[..tiled_size],
                 &ctx.tiled_k[..tiled_size],
                 &ctx.tiled_v[..tiled_size],

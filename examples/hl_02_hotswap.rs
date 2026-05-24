@@ -13,12 +13,12 @@
 use std::fs;
 use std::path::Path;
 
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     AbsorbCompress, AbsorbCompressLayer, BanditEnv, BanditStats, BernoulliEnv, CompressConfig,
     GoldenTrace, HotSwapPruner, RegressionSuite, ReplayReward, TrialLog, TrialRecord,
 };
-use microgpt_rs::speculative::types::ScreeningPruner;
-use microgpt_rs::types::Rng;
+use katgpt_rs::speculative::types::ScreeningPruner;
+use katgpt_rs::types::Rng;
 
 // ── Config ──────────────────────────────────────────────────────
 

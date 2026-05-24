@@ -12,7 +12,7 @@
 //!
 //! Run: `cargo run --example game_state_02_bomber_gvg --features game_state`
 
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     ArenaGrid, BomberAction, BomberState, game_state::GameState, mcts_search,
 };
 

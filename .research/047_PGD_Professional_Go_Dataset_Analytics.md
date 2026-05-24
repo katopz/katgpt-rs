@@ -62,7 +62,7 @@ Win/loss records, matchup history, and streak detection are countable from tourn
 
 ## Distillation: Model-Based vs Modelless
 
-### Modelless Path (microgpt-rs)
+### Modelless Path (katgpt-rs)
 
 **All PGD in-game features are computable without a neural model.** This is the highest-value, lowest-risk distillation:
 
@@ -152,14 +152,14 @@ fn coincidence_rate(replay: &GoReplay, state_seq: &[GoState]) -> f32 {
    - Could condition LoRA training (already have `riir-gpu` LoRA stack)
    - Maps to PGD Section VI.B: "behavior and style modeling"
 
-3. **Analytics Training Pipeline** — bridge from microgpt-rs features to riir-ai training
+3. **Analytics Training Pipeline** — bridge from katgpt-rs features to riir-ai training
    - Collect features from `go_*` examples during tournament runs
    - Serialize to training format (already have `GoReplay::to_json()`)
    - Train predictor on historical data
 
 ## Actionable Plan
 
-### Phase 1: Modelless Analytics (microgpt-rs, High Value, Low Risk)
+### Phase 1: Modelless Analytics (katgpt-rs, High Value, Low Risk)
 
 **File:** `src/pruners/go/analytics.rs` (new, ~300 lines)
 
@@ -232,7 +232,7 @@ Black win rate drops from 55.5% (komi=4.5) to 46.9% (komi=7.5). **Our G-Zero sel
 ## Existing Code Mapping
 
 ```
-microgpt-rs/src/pruners/go/
+katgpt-rs/src/pruners/go/
 ├── state.rs          → GoHeuristic (our "KataGo lite")
 ├── replay.rs         → GoReplay (temporal data source)
 ├── players.rs        → GoGreedyPlayer (CR reference), GoHLPlayer (style trace)

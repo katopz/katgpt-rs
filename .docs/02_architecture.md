@@ -1,9 +1,9 @@
-# microgpt-rs: Core Architecture
+# katgpt-rs: Core Architecture
 
 ## Overview
 The transformer is a from-scratch GPT-2 style implementation. No frameworks — weights are `Vec<f32>`, ops are hand-written matmul/softmax/rmsnorm. Supports multi-layer, grouped-query attention (GQA), and zero-allocation inference.
 
-## Config (`crates/microgpt-core/src/types.rs`, re-exported via `src/types.rs`)
+## Config (`crates/katgpt-core/src/types.rs`, re-exported via `src/types.rs`)
 ```rust
 pub struct Config {
     pub vocab_size: usize,
@@ -66,7 +66,7 @@ pub struct Config {
 - Validation: `n_head % n_kv_head == 0`, `n_embd == n_head * head_dim`
 - `kv_dim()` helper returns `n_kv_head * head_dim`
 
-### Key Enums (`crates/microgpt-core/src/types.rs`)
+### Key Enums (`crates/katgpt-core/src/types.rs`)
 
 ```rust
 #[repr(u8)]
@@ -99,7 +99,7 @@ pub enum WeightDtype {
 }
 ```
 
-### InferenceOverrides (`crates/microgpt-core/src/types.rs`)
+### InferenceOverrides (`crates/katgpt-core/src/types.rs`)
 
 Runtime override fields that can be applied per-inference call without modifying the base `Config`:
 
@@ -128,7 +128,7 @@ pub struct InferenceOverrides {
 
 Overrides are merged onto a base `Config` at inference time, allowing per-request parameter tuning without cloning or mutating the shared config.
 
-### InferenceResult (`crates/microgpt-core/src/types.rs`)
+### InferenceResult (`crates/katgpt-core/src/types.rs`)
 
 Output of a single inference pass with reward signal for feedback loop:
 
@@ -147,7 +147,7 @@ pub struct InferenceResult {
 
 ### QuantizedKVCache (`src/types.rs`)
 
-Shared interface for quantized KV caches, microgpt-rs–specific (not in microgpt-core):
+Shared interface for quantized KV caches, katgpt-rs–specific (not in katgpt-core):
 
 ```rust
 pub trait QuantizedKVCache {
@@ -278,7 +278,7 @@ When `n_kv_head < n_head`, K/V heads are shared:
 - K/V projection outputs `kv_dim` instead of `n_embd`
 - 4× KV cache reduction for `n_head=8, n_kv_head=2`
 
-## Math Kernels (`crates/microgpt-core/src/types.rs`)
+## Math Kernels (`crates/katgpt-core/src/types.rs`)
 All hot-path kernels are `#[inline(always)]` with `unsafe get_unchecked`:
 - `matmul(out, w, x, rows, cols)` — out = W @ x — SIMD-accelerated via `simd_dot_f32` (Plan 060)
 - `matmul_relu(out, w, x, rows, cols)` — fused matmul + ReLU — SIMD-accelerated with fused ReLU zero-clamp (Plan 060)
@@ -294,7 +294,7 @@ All hot-path kernels are `#[inline(always)]` with `unsafe get_unchecked`:
 - `rmsnorm_with_gamma(x, gamma)` — RMSNorm with learnable gain parameter
 - `rmsnorm_with_gamma_eps(x, gamma, eps)` — RMSNorm with gain and custom epsilon
 
-## SIMD Kernels (`crates/microgpt-core/src/simd.rs`, Plan 060)
+## SIMD Kernels (`crates/katgpt-core/src/simd.rs`, Plan 060)
 
 Runtime SIMD detection and dispatch for hot-path operations:
 - `SimdLevel` enum: `Scalar`, `Neon` (ARM), `Avx2` (x86_64)
@@ -347,7 +347,7 @@ For τ = 1..T:
 Output: lm_head(h)
 ```
 
-**Key types** (`crates/microgpt-core/src/types.rs`):
+**Key types** (`crates/katgpt-core/src/types.rs`):
 
 | Type | Description |
 |------|-------------|

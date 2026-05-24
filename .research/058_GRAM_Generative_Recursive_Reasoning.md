@@ -125,7 +125,7 @@ This directly validates PTRM's finding (Research 49): width >> depth. 20 paralle
 
 ## 4. Mapping to Our Architecture
 
-### 4.1 Modelless Path (microgpt-rs, Primary)
+### 4.1 Modelless Path (katgpt-rs, Primary)
 
 | GRAM Concept | Our Equivalent | Location | Status |
 |---|---|---|---|
@@ -286,7 +286,7 @@ GRAM uses N_sup supervision steps in its ELBO training — supervising intermedi
 - **GZeroLoop** orchestrates self-play rounds with crash recovery — each round produces intermediate state supervision from Hint-δ signal
 - **LoRA training** (Research 006, Plan 090 ASFT) applies anchored fine-tuning for NPC dialog, game domains — intermediate anchoring prevents drift (λ=0.03)
 
-The modelless path (microgpt-rs) doesn't train weights — it's inference-time only. But the model-based path (riir-gpu) provides full deep supervision through DPO/GRPO on intermediate recursive states, exactly mirroring GRAM's N_sup. Our approach is richer because `DeltaFilter` (6-stage: δ percentile, length, ratio, zlib, echo, role markers) provides higher-quality supervision signal than GRAM's single ELBO objective.
+The modelless path (katgpt-rs) doesn't train weights — it's inference-time only. But the model-based path (riir-gpu) provides full deep supervision through DPO/GRPO on intermediate recursive states, exactly mirroring GRAM's N_sup. Our approach is richer because `DeltaFilter` (6-stage: δ percentile, length, ratio, zlib, echo, role markers) provides higher-quality supervision signal than GRAM's single ELBO objective.
 
 ---
 
@@ -498,7 +498,7 @@ GRAM independently validates our existing design from a completely different ang
 | File | Role |
 |---|---|
 | `src/speculative/dd_tree.rs` | `inject_sde_noise`, `build_dd_tree_sde`, `extract_best_path` |
-| `src/speculative/types.rs` | `SdeConfig`, `DDTreeBranchCache` (re-exports `ScreeningPruner`, `ConstraintPruner` from `microgpt_core::traits`) |
+| `src/speculative/types.rs` | `SdeConfig`, `DDTreeBranchCache` (re-exports `ScreeningPruner`, `ConstraintPruner` from `katgpt_core::traits`) |
 | `src/speculative/verifier.rs` | `SpeculativeVerifier` trait |
 | `src/pruners/bandit.rs` | `BanditPruner<P>` with Q-values and strategies |
 | `src/pruners/bt_rank.rs` | `BtScores`, `BtConfig`, `bt_fit()` — Bradley-Terry pairwise ranking |

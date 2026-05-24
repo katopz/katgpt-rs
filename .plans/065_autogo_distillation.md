@@ -3,7 +3,7 @@
 **Branch:** `develop/feature/065_autogo_distillation`
 **Depends on:** Plan 056 (GameState Forward Model), Plan 049 (G-Zero Self-Play), Plan 030 (Bandit)
 **Research:** `.research/033_autogo_distillation_strategy.md`
-**Reference:** `microgpt-rs/.raw/autogo/` (local AutoGo codebase)
+**Reference:** `katgpt-rs/.raw/autogo/` (local AutoGo codebase)
 **Goal:** Implement Go (9×9) as a `GameState` trait impl, build REST API bridge to play head-to-head against AutoGo's agents, run G-Zero self-play, and benchmark research velocity. Prove our generic, Rust-based, bandit-driven system produces competitive game AI faster than a Go-specific, Python-based pipeline.
 
 ---

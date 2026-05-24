@@ -237,7 +237,7 @@ This gives **progressively tighter supervision** as search commits to particular
 
 ## 5. Distillation Strategy
 
-### 5.1 Modelless Path (microgpt-rs, feature-gated)
+### 5.1 Modelless Path (katgpt-rs, feature-gated)
 
 All behind `lattice_deduction` feature gate:
 
@@ -349,7 +349,7 @@ Train with BCE against game outcomes. At inference, use for early MCTS pruning.
 ## 6. Feature Gate Design
 
 ```toml
-# microgpt-rs/Cargo.toml
+# katgpt-rs/Cargo.toml
 [features]
 # LDT-inspired lattice deduction enhancements
 lattice_deduction = []  # Enables:
@@ -426,9 +426,9 @@ LDT adds 3 new techniques we should adopt:
 
 | Task | Project | Feature Gate | Priority | Effort |
 |------|---------|-------------|----------|--------|
-| T1: LDT θ_elim threshold | microgpt-rs | `lattice_deduction` | P1 | 1 day |
-| T2: ConflictDetector trait | microgpt-rs | `lattice_deduction` | P1 | 2 days |
-| T3: alpha_intersect | microgpt-rs | `lattice_deduction` | P2 | 2 days |
+| T1: LDT θ_elim threshold | katgpt-rs | `lattice_deduction` | P1 | 1 day |
+| T2: ConflictDetector trait | katgpt-rs | `lattice_deduction` | P1 | 2 days |
+| T3: alpha_intersect | katgpt-rs | `lattice_deduction` | P2 | 2 days |
 | T4: Asymmetric BCE WGSL | riir-gpu | `lattice_deduction` | P2 | 1 day |
 | T5: ConflictHead | riir-engine | `lattice_deduction` | P3 | 3 days |
 

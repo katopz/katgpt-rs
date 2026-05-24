@@ -15,9 +15,9 @@
 //!
 //! Run: `cargo run --example bandit_03_slot --features bandit`
 
-use microgpt_rs::pruners::{BanditPruner, BanditStrategy};
-use microgpt_rs::speculative::{ScreeningPruner, build_dd_tree_screened, extract_best_path_into};
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::pruners::{BanditPruner, BanditStrategy};
+use katgpt_rs::speculative::{ScreeningPruner, build_dd_tree_screened, extract_best_path_into};
+use katgpt_rs::types::{Config, Rng};
 
 // ── Constants ──────────────────────────────────────────────────
 

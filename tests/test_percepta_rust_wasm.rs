@@ -9,12 +9,12 @@
 
 use std::collections::HashMap;
 
-use microgpt_rs::percepta::compile::{
+use katgpt_rs::percepta::compile::{
     CompileError, compile_rust_program, compile_rust_to_wasm, find_rustc, rust_template,
 };
-use microgpt_rs::percepta::graph::types::{Expression, GraphBuilder, ProgramGraph};
-use microgpt_rs::percepta::runner::{Runner, RunnerError};
-use microgpt_rs::percepta::wasm::interpreter::{self, Opcode, ProgramInstruction};
+use katgpt_rs::percepta::graph::types::{Expression, GraphBuilder, ProgramGraph};
+use katgpt_rs::percepta::runner::{Runner, RunnerError};
+use katgpt_rs::percepta::wasm::interpreter::{self, Opcode, ProgramInstruction};
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -946,7 +946,7 @@ fn parse_input_tokens(input_section: &str) -> Vec<String> {
 // I4: Verify Specialized Model vs Universal Model
 // ═══════════════════════════════════════════════════════════════
 
-use microgpt_rs::percepta::specialize;
+use katgpt_rs::percepta::specialize;
 
 /// Simple program: load 72 ('H'), output, halt.
 fn simple_output_program() -> Vec<ProgramInstruction> {

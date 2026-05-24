@@ -19,7 +19,7 @@
 
 use std::time::{Duration, Instant};
 
-use microgpt_rs::percepta::{SolveEvent, StreamingSolver, Sudoku9x9};
+use katgpt_rs::percepta::{SolveEvent, StreamingSolver, Sudoku9x9};
 
 /// Format duration with appropriate precision: µs when < 1ms, decimal ms when < 1s, else seconds.
 fn fmt_duration(d: Duration) -> String {

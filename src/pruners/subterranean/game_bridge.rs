@@ -73,7 +73,7 @@ pub struct NodeStateMapping<NodeId, StateDesc> {
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::subterranean::game_bridge::ProcedureGameState;
+/// use katgpt_rs::pruners::subterranean::game_bridge::ProcedureGameState;
 ///
 /// struct MyGameBridge { /* ... */ }
 ///

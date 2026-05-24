@@ -5,7 +5,7 @@
 > **Local:** `.raw/coda-kernels/` (upstream Python/CuTeDSL)
 > **Date:** 2026-05-20, distilled 2026-05
 > **Related:** Research 29 (Rust GPU), Research 55 (Tri-Mode), Research 59 (MoE+SD), Research 66 (TileRT), Research 39 (SpectralQuant)
-> **Verdict: ALGEBRAIC REPARAMETERIZATION — Three distillations: (1) delay RMSNorm past next GEMM (algebraic identity, zero-cost), (2) fused matmul+residual+rmsnorm+activation CPU SIMD kernels for microgpt-rs, (3) epilogue visitor pattern for riir-ai CubeCL rewrite. The GPU epilogue fusion (CODA's primary contribution) is hardware-specific to NVIDIA Hopper TMA/WGMMA and NOT directly portable to wgpu/Metal. The algebraic reparameterization IS portable to both CPU SIMD and GPU. Feature gate: `coda_fusion` in microgpt-rs for fused CPU kernels; guide Plan 106 (CubeCL) for GPU epilogue patterns.**
+> **Verdict: ALGEBRAIC REPARAMETERIZATION — Three distillations: (1) delay RMSNorm past next GEMM (algebraic identity, zero-cost), (2) fused matmul+residual+rmsnorm+activation CPU SIMD kernels for katgpt-rs, (3) epilogue visitor pattern for riir-ai CubeCL rewrite. The GPU epilogue fusion (CODA's primary contribution) is hardware-specific to NVIDIA Hopper TMA/WGMMA and NOT directly portable to wgpu/Metal. The algebraic reparameterization IS portable to both CPU SIMD and GPU. Feature gate: `coda_fusion` in katgpt-rs for fused CPU kernels; guide Plan 106 (CubeCL) for GPU epilogue patterns.**
 
 ---
 
@@ -15,7 +15,7 @@ CODA reparameterizes Transformer computation as GEMM-plus-epilogue programs. The
 
 **The punchline for us:** We don't have Hopper Tensor Cores or TMA. But the *algebraic reparameterization* is hardware-independent. Specifically:
 
-1. **CPU (microgpt-rs):** Our `forward_base()` does `matmul → write output → rmsnorm → write output → matmul → write output → residual add → write output`. Each `write output` is a full-buffer store. CODA shows we can fuse matmul+residual+rmsnorm into a single SIMD pass, eliminating 2-3 intermediate buffer writes per layer.
+1. **CPU (katgpt-rs):** Our `forward_base()` does `matmul → write output → rmsnorm → write output → matmul → write output → residual add → write output`. Each `write output` is a full-buffer store. CODA shows we can fuse matmul+residual+rmsnorm into a single SIMD pass, eliminating 2-3 intermediate buffer writes per layer.
 
 2. **GPU (riir-ai):** Plan 106 (CubeCL rewrite) gets CODA's epilogue visitor pattern — composable primitives that plug into the tiled matmul pipeline. This is the *architectural* contribution, not just the math.
 
@@ -85,7 +85,7 @@ RMSNorm backward is the one exception — it needs a row-wise statistic. CODA mo
 
 ## 2. Applicability to Our Stack
 
-### 2.1 CPU (microgpt-rs) — SIMD Fusion
+### 2.1 CPU (katgpt-rs) — SIMD Fusion
 
 Our current `forward_base()` per layer:
 
@@ -170,7 +170,7 @@ CubeCL Matmul Pipeline
 
 ## 3. Distillation Targets
 
-### D1: Algebraic Reparameterization (CPU, microgpt-rs)
+### D1: Algebraic Reparameterization (CPU, katgpt-rs)
 
 The key identity: `RMSNorm(x@W + z) * gamma @ W' = r * ((x@W + z) * gamma) @ W'`
 
@@ -179,7 +179,7 @@ This lets us delay the row-wise scale `r` past the next GEMM. On CPU SIMD for BS
 - Fuse `matmul + row_scale + SwiGLU` into one loop over weight rows
 - Fuse `matmul + residual_add` into one loop over weight rows
 
-**Feature gate:** `coda_fusion` in microgpt-rs
+**Feature gate:** `coda_fusion` in katgpt-rs
 
 ### D2: Epilogue Visitor Pattern (GPU, riir-ai)
 

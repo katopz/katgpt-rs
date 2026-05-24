@@ -30,7 +30,7 @@ Optimize the Bomber WASM Validator (Plan 034) with three complementary improveme
 
 ## Tasks
 
-### Phase 1: Zero-Copy Serialization (microgpt-rs only)
+### Phase 1: Zero-Copy Serialization (katgpt-rs only)
 
 - [x] T1: Create `wasm_state::serialize_into_buffer()` that writes u32 LE tokens directly into a `&mut [u8]` slice (no `Vec` allocation)
 - [x] T2: Create `wasm_state::serialize_grid_only()` for batch API (no player data in state)
@@ -42,11 +42,11 @@ Optimize the Bomber WASM Validator (Plan 034) with three complementary improveme
 - [x] T5: Add `batch_is_valid` export to `bomber_validator.rs` (riir-ai) — internally loops over all N×M combinations, reusing parsed grid
 - [x] T6: Add `batch_relevance` export to `bomber_validator.rs` (riir-ai) — Q16.16 scores
 - [x] T7: Batch exports added as raw `#[no_mangle]` functions (bomber-specific, not in generic SDK macro)
-- [x] T8: Add `BomberWasmPruner::batch_validate()` in `wasm_pruner.rs` (microgpt-rs) — returns `BatchResult` with `is_valid(player_idx, action_idx)`
+- [x] T8: Add `BomberWasmPruner::batch_validate()` in `wasm_pruner.rs` (katgpt-rs) — returns `BatchResult` with `is_valid(player_idx, action_idx)`
 - [x] T9: Add `BomberWasmPruner::batch_relevance()` — returns `BatchRelevanceResult` with Q16.16 scores
 - [x] T10: `NNPlayer::select_action()` can use batch API (wired through `BomberWasmPruner`)
 
-### Phase 3: Papaya Instance Pool (microgpt-rs)
+### Phase 3: Papaya Instance Pool (katgpt-rs)
 
 - [x] T11: Add `papaya` dependency to `Cargo.toml` (under `bomber-wasm` feature, always-on for bomber-wasm)
 - [x] T12: Create per-thread WASM instance pool using `papaya::HashMap<ThreadId, Mutex<BomberInner>>` — `with_inner()` lazily creates per-thread instances, lock-free reads for existing entries
@@ -98,7 +98,7 @@ WASM Memory Layout for batch call:
 
 ## Files Created/Modified
 
-### microgpt-rs
+### katgpt-rs
 | File | Change |
 |------|--------|
 | `Cargo.toml` | Added `papaya` dep under `bomber-wasm` feature |

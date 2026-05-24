@@ -14,12 +14,12 @@
 fn bench_sdar_gated_overhead() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompress, AbsorbCompressLayer, BanditPruner, BanditStrategy, CompressConfig,
         SdarAbsorbConfig, SdarBanditPruner, SdarGatedAbsorbCompress,
     };
-    use microgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let warmup = 1000;
@@ -231,12 +231,12 @@ fn bench_sdar_gated_overhead() {
 fn bench_sdar_gated_throughput() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompressLayer, BanditPruner, BanditStrategy, CompressConfig, SDAR_BETA,
         SdarAbsorbConfig, SdarBanditPruner, SdarGatedAbsorbCompress, sdar_gate,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let warmup = 1000;
@@ -403,9 +403,9 @@ fn bench_sdar_gated_throughput() {
 fn bench_sdar_gated_convergence() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{BanditPruner, BanditStrategy, SdarBanditPruner};
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::pruners::{BanditPruner, BanditStrategy, SdarBanditPruner};
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 10;
     let episodes = 1000;
@@ -571,12 +571,12 @@ fn bench_sdar_gated_convergence() {
 fn bench_sdar_gated_absorb_promotion() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         AbsorbCompress, AbsorbCompressLayer, CompressConfig, SdarAbsorbConfig,
         SdarGatedAbsorbCompress,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let observations = 1000;
@@ -908,7 +908,7 @@ fn bench_sdar_gated_absorb_promotion() {
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
 fn select_ucb1_arm_scalar(
-    bandit: &microgpt_rs::pruners::BanditPruner<microgpt_rs::speculative::types::NoScreeningPruner>,
+    bandit: &katgpt_rs::pruners::BanditPruner<katgpt_rs::speculative::types::NoScreeningPruner>,
     episode: usize,
     num_arms: usize,
 ) -> usize {
@@ -943,8 +943,8 @@ fn select_ucb1_arm_scalar(
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
 fn select_ucb1_arm_sdar(
-    bandit: &microgpt_rs::pruners::SdarBanditPruner<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    bandit: &katgpt_rs::pruners::SdarBanditPruner<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     episode: usize,
     num_arms: usize,
@@ -980,7 +980,7 @@ fn select_ucb1_arm_sdar(
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
 fn is_best_arm_most_visited_scalar(
-    bandit: &microgpt_rs::pruners::BanditPruner<microgpt_rs::speculative::types::NoScreeningPruner>,
+    bandit: &katgpt_rs::pruners::BanditPruner<katgpt_rs::speculative::types::NoScreeningPruner>,
     optimal_arm: usize,
     num_arms: usize,
 ) -> bool {
@@ -1000,8 +1000,8 @@ fn is_best_arm_most_visited_scalar(
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
 fn is_best_arm_most_visited_sdar(
-    bandit: &microgpt_rs::pruners::SdarBanditPruner<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    bandit: &katgpt_rs::pruners::SdarBanditPruner<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     optimal_arm: usize,
     num_arms: usize,
@@ -1022,12 +1022,12 @@ fn is_best_arm_most_visited_sdar(
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
 fn count_compressed(
-    layer: &microgpt_rs::pruners::AbsorbCompressLayer<
-        microgpt_rs::speculative::types::NoScreeningPruner,
+    layer: &katgpt_rs::pruners::AbsorbCompressLayer<
+        katgpt_rs::speculative::types::NoScreeningPruner,
     >,
     num_arms: usize,
 ) -> usize {
-    use microgpt_rs::pruners::AbsorbCompress;
+    use katgpt_rs::pruners::AbsorbCompress;
     (0..num_arms)
         .filter(|&arm| layer.compressed_arms().contains(&arm))
         .count()

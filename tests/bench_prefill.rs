@@ -8,8 +8,8 @@
 
 use std::time::Instant;
 
-use microgpt_rs::speculative::types::FlashPrefillConfig;
-use microgpt_rs::speculative::{block_select, block_select_grid, compress_prompt_blocks};
+use katgpt_rs::speculative::types::FlashPrefillConfig;
+use katgpt_rs::speculative::{block_select, block_select_grid, compress_prompt_blocks};
 
 // ── Helpers ───────────────────────────────────────────────────
 

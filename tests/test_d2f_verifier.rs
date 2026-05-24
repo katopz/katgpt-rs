@@ -12,12 +12,12 @@
 
 #![cfg(feature = "tri_mode")]
 
-use microgpt_rs::speculative::d2f::D2fDecodeConfig;
-use microgpt_rs::speculative::d2f_verifier::D2fDrafterVerifier;
-use microgpt_rs::speculative::types::DecodeStrategy;
-use microgpt_rs::speculative::verifier::SpeculativeVerifier;
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::d2f::D2fDecodeConfig;
+use katgpt_rs::speculative::d2f_verifier::D2fDrafterVerifier;
+use katgpt_rs::speculative::types::DecodeStrategy;
+use katgpt_rs::speculative::verifier::SpeculativeVerifier;
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------

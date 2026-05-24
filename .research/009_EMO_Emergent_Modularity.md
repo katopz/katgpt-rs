@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs + anyrag + riir-validator-sdk neuro-symbolic architecture
+**Context:** katgpt-rs + anyrag + riir-validator-sdk neuro-symbolic architecture
 **Paper:** "EMO: Pretraining Mixture of Experts for Emergent Modularity" (2025)
 
 ---
@@ -100,7 +100,7 @@ The constraint is applied during **training**, not just inference. This is the k
 
 | Barrier | Why |
 |---------|-----|
-| **No MoE architecture** | `microgpt-rs` uses dense MLP layers (`mlp_w1`, `mlp_w2`). No router, no expert FFNs, no `W_router`. Adding MoE requires replacing the entire forward pass. |
+| **No MoE architecture** | `katgpt-rs` uses dense MLP layers (`mlp_w1`, `mlp_w2`). No router, no expert FFNs, no `W_router`. Adding MoE requires replacing the entire forward pass. |
 | **Models too small** | Current configs: `n_embd=16-64`, `mlp_hidden=16-256`. MoE with 128 experts would mean 128 separate MLPs, each needing enough capacity to be useful. At our scale, one dense MLP is more efficient than 8 tiny experts. |
 | **EMO is a training-time constraint** | The document-level pool must be applied during pretraining. We don't have a training pipeline for MoE models. This is not an inference-only optimization. |
 | **No pretrained EMO model** | There is no open-weight EMO model we can download and use. The paper proves the concept but doesn't ship a usable checkpoint. |
@@ -116,9 +116,9 @@ Ours:    Prompt → Domain Classification     → Select pruner + LoRA adapter
 
 | EMO Concept | Our Distillation | Where |
 |-------------|-----------------|-------|
-| Document pool selection | `PromptRouter` trait — classify prompt once per request | `microgpt-rs` Plan 023 |
-| Constrained routing to pool | `ExpertRegistry` — lock pruner+LoRA for entire generation | `microgpt-rs` Plan 023 |
-| Modular expert subsets | `ExpertBundle` — `Box<dyn ScreeningPruner>` + `Option<PathBuf>` for LoRA | `microgpt-rs` Plan 023 |
+| Document pool selection | `PromptRouter` trait — classify prompt once per request | `katgpt-rs` Plan 023 |
+| Constrained routing to pool | `ExpertRegistry` — lock pruner+LoRA for entire generation | `katgpt-rs` Plan 023 |
+| Modular expert subsets | `ExpertBundle` — `Box<dyn ScreeningPruner>` + `Option<PathBuf>` for LoRA | `katgpt-rs` Plan 023 |
 | Domain-specialized experts | Curator `.wasm` validators + `.bin` LoRA adapters | Marketplace |
 | Expert marketplace | Curators upload domain bundles, users load only what they need | Strategy doc |
 
@@ -154,7 +154,7 @@ The key difference: EMO's "experts" are neural network weight slices. Our "exper
 
 2. **Batch-level routing is weaker than EMO routing.** EMO forces every token through domain-specific neural pathways. Our batch-level routing forces every token through the same *pruner*, but the neural network weights are the same (unless LoRA is loaded). The constraint is at the validation level, not the computation level.
 
-3. **Future MoE integration is possible but far off.** If microgpt-rs eventually scales to models where MoE makes sense (1B+ params, 128+ experts), the `PromptRouter` + `ExpertRegistry` architecture from Plan 023 naturally extends — the registry would hold neural expert slices instead of WASM pruners. The trait interface doesn't change.
+3. **Future MoE integration is possible but far off.** If katgpt-rs eventually scales to models where MoE makes sense (1B+ params, 128+ experts), the `PromptRouter` + `ExpertRegistry` architecture from Plan 023 naturally extends — the registry would hold neural expert slices instead of WASM pruners. The trait interface doesn't change.
 
 4. **The "99% performance with 8/128 experts" claim requires EMO-trained models.** You can't get this with standard MoE models. If you extract 8 experts from Mixtral, performance tanks. EMO's training constraint is what makes extraction work.
 

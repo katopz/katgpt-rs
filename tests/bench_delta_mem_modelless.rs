@@ -10,10 +10,10 @@
 
 use std::time::Instant;
 
-use microgpt_rs::pruners::delta_mem::*;
-use microgpt_rs::speculative::build_dd_tree_screened;
-use microgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
-use microgpt_rs::types::Config;
+use katgpt_rs::pruners::delta_mem::*;
+use katgpt_rs::speculative::build_dd_tree_screened;
+use katgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
+use katgpt_rs::types::Config;
 
 // ── Phase 1: DeltaMemoryState Benchmarks ───────────────────────
 

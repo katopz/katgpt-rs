@@ -1,14 +1,14 @@
-// microgpt-rs types: re-exports from microgpt-core + project-specific items.
+// katgpt-rs types: re-exports from katgpt-core + project-specific items.
 //
 // All shared types (Config, Rng, InferenceOverrides, math utilities, LoRA,
-// DomainLatent) are defined in microgpt-core and re-exported here.
-// This module adds only microgpt-rs-specific items.
+// DomainLatent) are defined in katgpt-core and re-exported here.
+// This module adds only katgpt-rs-specific items.
 
 // Re-export all shared types from core
-pub use microgpt_core::types::*;
+pub use katgpt_core::types::*;
 
 // ---------------------------------------------------------------------------
-// QuantizedKVCache — microgpt-rs only
+// QuantizedKVCache — katgpt-rs only
 // ---------------------------------------------------------------------------
 
 /// Shared interface for quantized KV caches.

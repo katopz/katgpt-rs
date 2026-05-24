@@ -31,7 +31,7 @@ use std::fmt;
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::subterranean::training_mode::SubterraneanTrainingMode;
+/// use katgpt_rs::pruners::subterranean::training_mode::SubterraneanTrainingMode;
 ///
 /// let mode = SubterraneanTrainingMode::default(); // FullFineTune
 /// assert!(mode.is_full_finetune());

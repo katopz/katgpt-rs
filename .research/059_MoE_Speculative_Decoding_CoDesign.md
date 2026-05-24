@@ -102,10 +102,10 @@ Shared experts reduce verification cost at low BS but raise effective k/N, pushi
 | Cohere Concept | Our Equivalent | Location | Match |
 |----------------|---------------|----------|-------|
 | MoE top-k expert routing | Raven RSM: top-k slot routing | `transformer.rs` `raven_update` | ✅ Structural analog |
-| Sparse expert activation | Sparse MLP: index packing for alive neurons | `microgpt-core/types.rs` `sparse_matmul` | ✅ Unstructured analog |
+| Sparse expert activation | Sparse MLP: index packing for alive neurons | `katgpt-core/types.rs` `sparse_matmul` | ✅ Unstructured analog |
 | Speculative decoding verification | `LeviathanVerifier` | `speculative/verifier.rs` | ✅ Direct match |
 | Draft model (small, fast) | `Config::draft()` / `Config::bpe_draft()` | `types.rs` | ✅ Direct match |
-| Arithmetic intensity (k/N) | Sparsity ratio in `sparse_matmul` alive count | `microgpt-core/types.rs` | 🟡 Analogous concept |
+| Arithmetic intensity (k/N) | Sparsity ratio in `sparse_matmul` alive count | `katgpt-core/types.rs` | 🟡 Analogous concept |
 | Batch-size regimes | Domain inference budget (`tree_budget`, `beta`) | riir-ai Plan 026 | 🟡 Config-level only |
 | Temporal correlation | Raven slot reuse across positions | Not measured | ❌ Gap (T1 below) |
 | Amdahl decomposition | Not modeled for LeviathanVerifier | Not implemented | ❌ Gap (T2 below) |
@@ -198,7 +198,7 @@ unique_ratio = how many "unique" sparse operations are needed vs single-token
 2. For subsequent tokens, only compute new neurons not in the set
 3. Accumulate output from shared + delta neurons
 
-**Scope**: Enhancement to `sparse_matmul` in `microgpt-core`. No new feature gate — enhancement of existing `sparse_mlp` feature.
+**Scope**: Enhancement to `sparse_matmul` in `katgpt-core`. No new feature gate — enhancement of existing `sparse_mlp` feature.
 
 **Note**: This is speculative. The benefit depends on actual temporal correlation in ReLU activation patterns, which we haven't measured. D1 (overlap metric) should be done first to validate the assumption.
 

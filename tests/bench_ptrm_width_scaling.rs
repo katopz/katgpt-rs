@@ -12,13 +12,13 @@
 
 #![cfg(all(feature = "elf_sde", feature = "bandit"))]
 
-use microgpt_rs::speculative::dd_tree::{
+use katgpt_rs::speculative::dd_tree::{
     WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts, build_dd_tree_sde, extract_best_path,
     inject_sde_noise,
 };
-use microgpt_rs::speculative::types::{EarlyStopGate, NoScreeningPruner, SdeConfig};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::types::{EarlyStopGate, NoScreeningPruner, SdeConfig};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 use std::collections::HashSet;
 
 /// Generate marginals from a real model for benchmarking.
@@ -26,7 +26,7 @@ fn make_marginals() -> (Config, Vec<Vec<f32>>) {
     let config = Config::draft();
     let mut rng = Rng::new(42);
     let weights = TransformerWeights::new(&config, &mut rng);
-    let marginals = microgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
+    let marginals = katgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
     (config, marginals)
 }
 
@@ -460,7 +460,7 @@ fn bench_ptrm_early_stop_gate() {
                 let noisy = inject_sde_noise(&marginals_refs, &sde_config, &mut rng);
                 let noisy_refs: Vec<&[f32]> = noisy.iter().map(|m| m.as_slice()).collect();
 
-                let tree = microgpt_rs::speculative::dd_tree::build_dd_tree_screened(
+                let tree = katgpt_rs::speculative::dd_tree::build_dd_tree_screened(
                     &noisy_refs,
                     &config,
                     &gate,

@@ -16,8 +16,8 @@
 //!
 //! Run: `cargo run --example bandit_05_rps --features bandit`
 
-use microgpt_rs::pruners::{BanditStats, BanditStrategy};
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::{BanditStats, BanditStrategy};
+use katgpt_rs::types::Rng;
 
 const NUM_ARMS: usize = 3;
 const ACTION_NAMES: [&str; NUM_ARMS] = ["Rock", "Paper", "Scissors"];

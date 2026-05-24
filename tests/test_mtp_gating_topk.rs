@@ -5,11 +5,11 @@
 //!
 //! Run: `cargo test --test test_mtp_gating_topk -- --nocapture`
 
-use microgpt_rs::speculative::{LeviathanVerifier, SpeculativeVerifier};
-use microgpt_rs::transformer::{
+use katgpt_rs::speculative::{LeviathanVerifier, SpeculativeVerifier};
+use katgpt_rs::transformer::{
     TransformerWeights, cluster_map_round_robin, forward, select_topk_indices,
 };
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::types::{Config, Rng};
 
 // ── T18: Output-length gating disables MTP on short output ─────
 //
@@ -168,8 +168,8 @@ fn test_clustered_lm_head_topk_equals_top1_when_k1() {
     weights.mtp_cluster_classifier = Some(classifier);
     weights.mtp_cluster_map = Some(cluster_map);
 
-    let mut ctx = microgpt_rs::transformer::ForwardContext::new(&config);
-    let mut cache = microgpt_rs::transformer::MultiLayerKVCache::new(&config);
+    let mut ctx = katgpt_rs::transformer::ForwardContext::new(&config);
+    let mut cache = katgpt_rs::transformer::MultiLayerKVCache::new(&config);
 
     let logits = forward(&mut ctx, &weights, &mut cache, config.bos_token, 0, &config);
 
@@ -215,8 +215,8 @@ fn test_clustered_lm_head_topk_covers_more_tokens() {
     weights.mtp_cluster_classifier = Some(classifier);
     weights.mtp_cluster_map = Some(cluster_map);
 
-    let mut ctx = microgpt_rs::transformer::ForwardContext::new(&config);
-    let mut cache = microgpt_rs::transformer::MultiLayerKVCache::new(&config);
+    let mut ctx = katgpt_rs::transformer::ForwardContext::new(&config);
+    let mut cache = katgpt_rs::transformer::MultiLayerKVCache::new(&config);
 
     let logits = forward(&mut ctx, &weights, &mut cache, config.bos_token, 0, &config);
 
@@ -258,8 +258,8 @@ fn test_clustered_lm_head_topk_all_clusters_when_k_ge_num_clusters() {
     weights.mtp_cluster_classifier = Some(classifier);
     weights.mtp_cluster_map = Some(cluster_map);
 
-    let mut ctx = microgpt_rs::transformer::ForwardContext::new(&config);
-    let mut cache = microgpt_rs::transformer::MultiLayerKVCache::new(&config);
+    let mut ctx = katgpt_rs::transformer::ForwardContext::new(&config);
+    let mut cache = katgpt_rs::transformer::MultiLayerKVCache::new(&config);
 
     let logits = forward(&mut ctx, &weights, &mut cache, config.bos_token, 0, &config);
 

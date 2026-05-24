@@ -12,7 +12,7 @@
 #[cfg(all(feature = "replaid_schedules", feature = "bandit"))]
 #[test]
 fn bench_variance_minimizer_overhead() {
-    use microgpt_rs::pruners::{VarianceMinimizer, VarianceMinimizerConfig};
+    use katgpt_rs::pruners::{VarianceMinimizer, VarianceMinimizerConfig};
     use std::time::Instant;
 
     let iters = 1_000_000;
@@ -51,7 +51,7 @@ fn bench_variance_minimizer_overhead() {
 #[cfg(all(feature = "replaid_schedules", feature = "bandit"))]
 #[test]
 fn bench_variance_minimizer_convergence() {
-    use microgpt_rs::pruners::{VarianceMinimizer, VarianceMinimizerConfig};
+    use katgpt_rs::pruners::{VarianceMinimizer, VarianceMinimizerConfig};
 
     println!("\n🧪 VarianceMinimizer Convergence Benchmark");
     println!("{}", "═".repeat(70));
@@ -92,7 +92,7 @@ fn bench_variance_minimizer_convergence() {
 #[cfg(all(feature = "replaid_schedules", feature = "dllm"))]
 #[test]
 fn bench_adaptive_noise_schedule() {
-    use microgpt_rs::dllm::AdaptiveNoiseSchedule;
+    use katgpt_rs::dllm::AdaptiveNoiseSchedule;
 
     println!("\n🧪 AdaptiveNoiseSchedule Benchmark");
     println!("{}", "═".repeat(70));
@@ -148,7 +148,7 @@ fn bench_adaptive_noise_schedule() {
 #[cfg(all(feature = "replaid_schedules", feature = "bandit"))]
 #[test]
 fn bench_variance_epsilon_convergence() {
-    use microgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv};
+    use katgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv};
 
     println!("\n🧪 Bandit VarianceEpsilon Convergence Benchmark");
     println!("{}", "═".repeat(70));
@@ -178,7 +178,7 @@ fn bench_variance_epsilon_convergence() {
 
     for (name, strategy) in strategies {
         let env = BernoulliEnv::new(&probs);
-        let mut rng = microgpt_rs::types::Rng::new(42);
+        let mut rng = katgpt_rs::types::Rng::new(42);
         let session = BanditSession::new(env, strategy);
         let (_events, result) = session.run(episodes, &mut rng);
 
@@ -196,7 +196,7 @@ fn bench_variance_epsilon_convergence() {
 #[cfg(all(feature = "replaid_schedules", feature = "sdar_gate"))]
 #[test]
 fn bench_sdar_learned_beta() {
-    use microgpt_rs::pruners::sdar_gate::{SDAR_BETA, SdarLearnedBeta};
+    use katgpt_rs::pruners::sdar_gate::{SDAR_BETA, SdarLearnedBeta};
     use std::time::Instant;
 
     println!("\n🧪 SDAR SdarLearnedBeta Benchmark");
@@ -226,7 +226,7 @@ fn bench_sdar_learned_beta() {
 #[cfg(all(feature = "replaid_schedules", feature = "sdar_gate"))]
 #[test]
 fn bench_sdar_learned_beta_vs_fixed() {
-    use microgpt_rs::pruners::sdar_gate::{SDAR_BETA, SdarLearnedBeta, sdar_gated_reward};
+    use katgpt_rs::pruners::sdar_gate::{SDAR_BETA, SdarLearnedBeta, sdar_gated_reward};
 
     println!("\n🧪 SDAR Learned β vs Fixed β Comparison");
     println!("{}", "═".repeat(70));

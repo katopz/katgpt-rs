@@ -8,13 +8,13 @@
 //! 5. Block size sensitivity (theoretical routing frequency)
 //! 6. Forward correctness across multi-position sequences
 //!
-//! Run: `cargo test -p microgpt-rs --test bench_097_delta_routing_throughput \
+//! Run: `cargo test -p katgpt-rs --test bench_097_delta_routing_throughput \
 //!       --features delta_routing --release -- --nocapture`
 
 #![cfg(feature = "delta_routing")]
 
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng, softmax};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng, softmax};
 use std::time::Instant;
 
 // ── Constants ───────────────────────────────────────────────────

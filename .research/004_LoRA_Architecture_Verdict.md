@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Refined Strategy
-**Context:** microgpt-rs (MIT) + anyrag + Compiler-in-the-Loop
+**Context:** katgpt-rs (MIT) + anyrag + Compiler-in-the-Loop
 **Terminology:** See `.research/005_Artifact_Definition.md` — "Computable LoRA" is deprecated.
 
 ---
@@ -42,7 +42,7 @@ The fix:
 
 This is well-established in speculative decoding literature (Leviathan et al., 2022; Liu et al., 2023). The math is sound. The implementation path is clear.
 
-**Current gap:** No LoRA implementation exists in microgpt-rs yet. The forward pass uses `TransformerWeights` directly. Adding LoRA means:
+**Current gap:** No LoRA implementation exists in katgpt-rs yet. The forward pass uses `TransformerWeights` directly. Adding LoRA means:
 - `lora_a: Vec<Vec<f32>>` and `lora_b: Vec<Vec<f32>>` per layer
 - Modified forward: `output = base_forward(x) + lora_a * lora_b * x`
 - Loading from `.safetensors` or custom binary format
@@ -76,7 +76,7 @@ This works because LoRA doesn't modify base weights — it adds low-rank deltas.
 **Verdict: Architecturally correct (S-LoRA, Sheng et al., 2023). But requires GPU infra + real model.**
 
 Current state:
-- microgpt-rs runs on CPU
+- katgpt-rs runs on CPU
 - Model: 27 vocab, 16 embd, 1 layer — a toy
 - No GPU inference path (wgpu feature exists but is minimal)
 - No safetensors loading for real model weights

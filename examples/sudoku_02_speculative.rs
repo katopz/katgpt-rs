@@ -10,12 +10,12 @@
 //!
 //! Run: cargo run --example sudoku_02_speculative
 
-use microgpt_rs::percepta::Sudoku9x9;
-use microgpt_rs::pruners::SudokuPruner;
-use microgpt_rs::speculative::{
+use katgpt_rs::percepta::Sudoku9x9;
+use katgpt_rs::pruners::SudokuPruner;
+use katgpt_rs::speculative::{
     ConstraintPruner, TreeNode, build_dd_tree, build_dd_tree_pruned, extract_parent_tokens,
 };
-use microgpt_rs::types::Config;
+use katgpt_rs::types::Config;
 
 // ── Static-Only Pruner: ignores parent_tokens (depth-0-only validation) ──
 

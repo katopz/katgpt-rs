@@ -26,8 +26,8 @@
 //!
 //! Run: `cargo run --example bandit_04_combat --features bandit`
 
-use microgpt_rs::pruners::{BanditStats, BanditStrategy};
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::{BanditStats, BanditStrategy};
+use katgpt_rs::types::Rng;
 
 // ── Constants ──────────────────────────────────────────────────
 

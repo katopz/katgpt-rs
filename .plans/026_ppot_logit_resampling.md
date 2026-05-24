@@ -8,7 +8,7 @@
 
 ## Overview
 
-Distill "Probabilistic Programs of Thought" (arXiv:2604.17290) into microgpt-rs. After DFlash produces marginals, identify high-entropy positions and resample variant programs using **only CPU** — no additional GPU forward passes. Feed resampled paths through existing `ConstraintPruner` / `ScreeningPruner` for verification.
+Distill "Probabilistic Programs of Thought" (arXiv:2604.17290) into katgpt-rs. After DFlash produces marginals, identify high-entropy positions and resample variant programs using **only CPU** — no additional GPU forward passes. Feed resampled paths through existing `ConstraintPruner` / `ScreeningPruner` for verification.
 
 The primary integration point is **post-DDTree rescue**: when speculative decoding rejects all tree paths, try PPoT resampling on the highest-scoring rejected path before falling back to greedy. This is the highest-ROI entry point because it activates only on failure (zero overhead on success path), marginals are already computed, and any valid path found is a pure win.
 
@@ -80,16 +80,16 @@ The primary integration point is **post-DDTree rescue**: when speculative decodi
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/src/speculative/ppot/mod.rs` | New: module root, public API, `PpotConfig` |
-| `microgpt-rs/src/speculative/ppot/types.rs` | New: `TokenRule` enum with support sets |
-| `microgpt-rs/src/speculative/ppot/entropy.rs` | New: entropy calculation, position identification |
-| `microgpt-rs/src/speculative/ppot/resample.rs` | New: CPU resampling core |
-| `microgpt-rs/src/speculative/mod.rs` | Add `pub mod ppot` (feature-gated) |
-| `microgpt-rs/src/speculative/step.rs` | Add `ppot_rescue()` integration |
-| `microgpt-rs/src/types.rs` | Add `PpotConfig` fields to `Config` |
-| `microgpt-rs/src/benchmark.rs` | Add PPoT benchmarks |
-| `microgpt-rs/Cargo.toml` | Add `[features] ppot = []` |
-| `microgpt-rs/README.md` | Add PPoT architecture section |
+| `katgpt-rs/src/speculative/ppot/mod.rs` | New: module root, public API, `PpotConfig` |
+| `katgpt-rs/src/speculative/ppot/types.rs` | New: `TokenRule` enum with support sets |
+| `katgpt-rs/src/speculative/ppot/entropy.rs` | New: entropy calculation, position identification |
+| `katgpt-rs/src/speculative/ppot/resample.rs` | New: CPU resampling core |
+| `katgpt-rs/src/speculative/mod.rs` | Add `pub mod ppot` (feature-gated) |
+| `katgpt-rs/src/speculative/step.rs` | Add `ppot_rescue()` integration |
+| `katgpt-rs/src/types.rs` | Add `PpotConfig` fields to `Config` |
+| `katgpt-rs/src/benchmark.rs` | Add PPoT benchmarks |
+| `katgpt-rs/Cargo.toml` | Add `[features] ppot = []` |
+| `katgpt-rs/README.md` | Add PPoT architecture section |
 
 ---
 

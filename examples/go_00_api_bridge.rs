@@ -15,7 +15,7 @@
 //! GO_URL=http://192.168.1.100:8765 cargo run --features go --example go_00_api_bridge
 //! ```
 
-use microgpt_rs::pruners::go::AutoGoClient;
+use katgpt_rs::pruners::go::AutoGoClient;
 
 /// Number of games to play.
 const NUM_GAMES: usize = 5;

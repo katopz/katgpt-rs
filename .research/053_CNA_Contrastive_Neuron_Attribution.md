@@ -2,7 +2,7 @@
 
 > Source: [Targeted Neuron Modulation via Contrastive Pair Search](https://arxiv.org/pdf/2605.12290) by Sam Herring, Jake Naviasky, Karan Malhotra (Nous Research), arXiv:2605.12290, May 2026
 > Date: 2026-05 (paper), distilled 2025-07
-> **Verdict: ADOPT — CNA maps directly to existing trait stack as a model-based ScreeningPruner. Feature gate `cna_steering` needed for forward-hook MLP activation capture. microgpt-rs is the correct home (model-level code, not riir-ai GPU training).**
+> **Verdict: ADOPT — CNA maps directly to existing trait stack as a model-based ScreeningPruner. Feature gate `cna_steering` needed for forward-hook MLP activation capture. katgpt-rs is the correct home (model-level code, not riir-ai GPU training).**
 
 ## TL;DR
 
@@ -255,7 +255,7 @@ This means for our models:
 
 ## riir-ai Impact
 
-CNA is primarily a **microgpt-rs** feature (model-level forward pass hooks). riir-ai's role is:
+CNA is primarily a **katgpt-rs** feature (model-level forward pass hooks). riir-ai's role is:
 
 1. **GPU kernel** (riir-gpu): If we want CNA on GPU models, the WGSL kernel needs a `modulate` pass on hidden activations. Trivial — one loop over sparse indices.
 

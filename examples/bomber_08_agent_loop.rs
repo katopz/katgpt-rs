@@ -6,7 +6,7 @@
 //!
 //! Run: `cargo run --example bomber_08_agent_loop --features bomber-agent --quiet`
 
-use microgpt_rs::pruners::bomber::{AgentLoop, ValidatorRule};
+use katgpt_rs::pruners::bomber::{AgentLoop, ValidatorRule};
 
 fn main() {
     println!("Bomber Arena — Agent Validator Loop");

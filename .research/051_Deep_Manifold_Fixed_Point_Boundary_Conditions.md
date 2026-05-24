@@ -3,7 +3,7 @@
 > **Paper:** [Deep Manifold Part 2: Neural Network Mathematics](https://arxiv.org/pdf/2512.06563) — Max Y. Ma & Gen-Hua Shi, Dec 2025 (81 pages)
 > **Date:** 2025-12, distilled 2025-12
 > **Related Research:** 35 (Attractor Fixed-Point), 37 (REAP Model-Based/Modelless), 38 (SDAR Gated), 49 (PTRM Recursive), 50 (LDT Lattice Deduction)
-> **Related Plans:** Plan 085 (microgpt-rs, Deep Manifold Boundary Conditions)
+> **Related Plans:** Plan 085 (katgpt-rs, Deep Manifold Boundary Conditions)
 
 ---
 

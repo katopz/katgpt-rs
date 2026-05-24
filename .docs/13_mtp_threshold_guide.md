@@ -164,7 +164,7 @@ MTP-Enhanced DFlash (this plan):
 
 - [Gemma 4 architecture](https://blog.google/technology/ai/gemma-technical-report/) — Multi-Token Prediction design
 - [DGX Spark Gemma 4 MTP benchmark](https://dev.classmethod.jp/articles/dgx-spark-gemma4-mtp-multi-token-prediction-bench/) — production params, short-text failure
-- Plan 055 — `microgpt-rs/.plans/055_gemma_mtp_drafter.md`
+- Plan 055 — `katgpt-rs/.plans/055_gemma_mtp_drafter.md`
 - Plan 056 — riir-burner cluster weight training
-- Plan 117 — `microgpt-rs/.plans/117_mtp_cluster_topk_efficient_embedder.md`
+- Plan 117 — `katgpt-rs/.plans/117_mtp_cluster_topk_efficient_embedder.md`
 - 🧪 `tests/bench_117_mtp_lora_topk_goat.rs` — LoRA acceptance, Top-K coverage, output-length gating (4/4 pass)

@@ -21,7 +21,7 @@
 
 ### Phase 0: Benchmark Baseline (DONE)
 
-- [x] **T0: Run baseline tests** — `cargo test -p microgpt-rs --features go --lib` → 699 passed
+- [x] **T0: Run baseline tests** — `cargo test -p katgpt-rs --features go --lib` → 699 passed
 
 ### Phase 1: Category Trace + Recency-Weighted Credit
 
@@ -65,7 +65,7 @@ Intermediate rewards between moves (not just game-end binary win/loss).
 
 ### Phase 3: Benchmark + Validation
 
-- [x] **T8: Run all Go tests** — `cargo test -p microgpt-rs --features go --lib` → 700 passed
+- [x] **T8: Run all Go tests** — `cargo test -p katgpt-rs --features go --lib` → 700 passed
 - [x] **T9: Run TUI** — TUI compiles, visits now distribute across all 8 categories (was 1). Q-values stay 0.00 when HL always loses (mathematically correct: `Q += (0-0)/n = 0`). Differentiation requires mixed win/loss.
 - [x] **T10: Run tournament** — HL vs Random = 10W/0L = 100%, no regression
 - [x] **T11: Run clippy** — `cargo clippy --features go --quiet` → 0 warnings

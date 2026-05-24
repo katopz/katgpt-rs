@@ -12,12 +12,12 @@
 
 #![cfg(all(feature = "elf_sde", feature = "bandit"))]
 
-use microgpt_rs::speculative::dd_tree::{
+use katgpt_rs::speculative::dd_tree::{
     WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts, build_dd_tree_sde, extract_best_path,
 };
-use microgpt_rs::speculative::types::{NoScreeningPruner, SdeConfig};
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::types::{NoScreeningPruner, SdeConfig};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 use std::collections::HashSet;
 
 // ── Sweep Configuration ─────────────────────────────────────────
@@ -113,7 +113,7 @@ fn make_marginals() -> (Config, Vec<Vec<f32>>) {
     let config = Config::draft();
     let mut rng = Rng::new(42);
     let weights = TransformerWeights::new(&config, &mut rng);
-    let marginals = microgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
+    let marginals = katgpt_rs::speculative::dflash::dflash_predict(&weights, &config, 0, 0);
     (config, marginals)
 }
 

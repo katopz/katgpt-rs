@@ -16,15 +16,15 @@
 
 use std::time::Instant;
 
-use microgpt_core::{Config, ConvergenceSelector, Rng};
-use microgpt_rs::speculative::NoScreeningPruner;
-use microgpt_rs::speculative::dd_tree::{
+use katgpt_core::{Config, ConvergenceSelector, Rng};
+use katgpt_rs::speculative::NoScreeningPruner;
+use katgpt_rs::speculative::dd_tree::{
     ResidualTracker, WidthScaleConfig, WidthSelectionMode, best_of_k_rollouts,
     build_dd_tree_screened, extract_best_path, inject_sde_noise,
 };
-use microgpt_rs::speculative::dflash::dflash_predict;
-use microgpt_rs::speculative::types::SdeConfig;
-use microgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::speculative::dflash::dflash_predict;
+use katgpt_rs::speculative::types::SdeConfig;
+use katgpt_rs::transformer::TransformerWeights;
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -296,7 +296,7 @@ fn bench_selection_latency() {
 
 #[test]
 fn bench_convergence_selector_override() {
-    use microgpt_core::InferenceOverrides;
+    use katgpt_core::InferenceOverrides;
 
     // Verify Config defaults to BestQ (no behavior change)
     let config = Config::draft();

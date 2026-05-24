@@ -15,7 +15,7 @@
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_01_qi_erdos_grid_baseline() {
-    use microgpt_rs::unit_distance::{MinkowskiLattice, count_unit_distances};
+    use katgpt_rs::unit_distance::{MinkowskiLattice, count_unit_distances};
 
     println!("🐐 GOAT PROOF 1: Q(i) Erdős Grid Baseline");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -68,7 +68,7 @@ fn goat_proof_01_qi_erdos_grid_baseline() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_02_q_sqrt5_i_pigeonhole() {
-    use microgpt_rs::unit_distance::{CmField, sum_of_two_squares, verify_pigeonhole_bound};
+    use katgpt_rs::unit_distance::{CmField, sum_of_two_squares, verify_pigeonhole_bound};
 
     println!("🐐 GOAT PROOF 2: Q(√5, i) Pigeonhole Verification");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -146,7 +146,7 @@ fn goat_proof_02_q_sqrt5_i_pigeonhole() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_03_explicit_delta_bound() {
-    use microgpt_rs::unit_distance::{CmField, count_unit_distances};
+    use katgpt_rs::unit_distance::{CmField, count_unit_distances};
 
     println!("🐐 GOAT PROOF 3: Explicit ν(n) ≥ n^(1+δ) for δ > 0");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -240,7 +240,7 @@ fn goat_proof_03_explicit_delta_bound() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_04_pro2_tower_structure() {
-    use microgpt_rs::unit_distance::{
+    use katgpt_rs::unit_distance::{
         CmField, compare_delta, enumerate_split_primes, select_split_primes,
     };
 
@@ -309,7 +309,7 @@ fn goat_proof_04_pro2_tower_structure() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_05_sum_of_two_squares_completeness() {
-    use microgpt_rs::unit_distance::sum_of_two_squares;
+    use katgpt_rs::unit_distance::sum_of_two_squares;
 
     println!("🐐 GOAT PROOF 5: Sum of Two Squares Completeness");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -349,7 +349,7 @@ fn goat_proof_05_sum_of_two_squares_completeness() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_06_packing_bound_accuracy() {
-    use microgpt_rs::unit_distance::MinkowskiLattice;
+    use katgpt_rs::unit_distance::MinkowskiLattice;
 
     println!("🐐 GOAT PROOF 6: Packing Bound Accuracy");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -410,7 +410,7 @@ fn goat_proof_06_packing_bound_accuracy() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_07_c64_arithmetic_consistency() {
-    use microgpt_rs::unit_distance::C64;
+    use katgpt_rs::unit_distance::C64;
 
     println!("🐐 GOAT PROOF 7: C64 Arithmetic Consistency");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -462,7 +462,7 @@ fn goat_proof_07_c64_arithmetic_consistency() {
 #[cfg(feature = "unit_distance")]
 #[test]
 fn goat_proof_08_full_construction_pipeline() {
-    use microgpt_rs::unit_distance::{CmField, select_split_primes};
+    use katgpt_rs::unit_distance::{CmField, select_split_primes};
 
     println!("🐐 GOAT PROOF 8: Full Construction Pipeline");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

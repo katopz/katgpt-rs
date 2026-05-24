@@ -9,16 +9,16 @@
 
 use std::collections::HashMap;
 
-use microgpt_rs::pruners::arena::types::EloCalculator;
-use microgpt_rs::pruners::bomber::arena_runner::{BomberArenaConfig, run_bomber_matchup};
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::arena::types::EloCalculator;
+use katgpt_rs::pruners::bomber::arena_runner::{BomberArenaConfig, run_bomber_matchup};
+use katgpt_rs::pruners::bomber::{
     BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer,
 };
 
 #[cfg(feature = "g_zero")]
-use microgpt_rs::pruners::bomber::GZeroPlayer;
+use katgpt_rs::pruners::bomber::GZeroPlayer;
 #[cfg(feature = "sr2am_configurator")]
-use microgpt_rs::pruners::bomber::Sr2amPlayer;
+use katgpt_rs::pruners::bomber::Sr2amPlayer;
 
 // ── Constants ──────────────────────────────────────────────────
 

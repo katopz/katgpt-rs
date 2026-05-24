@@ -1,4 +1,4 @@
-# microgpt-rs: Go Arena — AI vs AI Auto-Play Engine (Plan 065)
+# katgpt-rs: Go Arena — AI vs AI Auto-Play Engine (Plan 065)
 
 ## Overview
 

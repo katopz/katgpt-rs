@@ -3,7 +3,7 @@
 > **Parent**: Research 68 (RAEv2 Multi-Layer Representation Autoencoders)
 > **Depends**: Plan 103 (CODA Fused SIMD Kernels) ✅
 > **Scope**: Sum last K transformer layer residuals before LM head for richer token representations
-> **Feature Gate**: `mls_aggregate` in microgpt-rs (**default-on**, GOAT 6/6 proved)
+> **Feature Gate**: `mls_aggregate` in katgpt-rs (**default-on**, GOAT 6/6 proved)
 > **Cross-project**: Guides riir-ai Plan 107 (if self-guidance pursued later)
 
 ## Motivation
@@ -46,7 +46,7 @@ For our LLM inference engine, the transfer is: intermediate transformer layers c
   mls_aggregate = []  # Multi-Layer Sum: aggregate last K layer residuals (Research 68)
   ```
 
-- [x] **T4**: Add MLS config fields to `crates/microgpt-core/src/types.rs`
+- [x] **T4**: Add MLS config fields to `crates/katgpt-core/src/types.rs`
   ```rust
   pub struct Config {
       // ... existing fields ...
@@ -149,7 +149,7 @@ For our LLM inference engine, the transfer is: intermediate transformer layers c
   Added Papers 63–69 section with 7 rows (63 OCTOPUS, 64 LlamaWeb, 65 RotorQuant, 66 TileRT, 67 CODA, 68 RAEv2, 69 AutoDreamer). Updated paper count from 62 to 69. Updated References section.
 
 - [x] **T15**: Run `cargo clippy --fix --allow-dirty` with `--features mls_aggregate` ✅
-  Clean — no warnings, no fixes applied. Both microgpt-core and microgpt-rs checked successfully.
+  Clean — no warnings, no fixes applied. Both katgpt-core and katgpt-rs checked successfully.
 
 - [x] **T16**: Run `cargo test --features mls_aggregate` — all tests pass ✅
   Full suite: 1178 lib tests + 45 integration tests passed (0 failed). GOAT 7/7 (6 proofs + summary) passed in 0.00s.
@@ -194,4 +194,4 @@ mls_aggregate = []  # Plan 104: Sum last K layer residuals before LM head (Resea
 - Research 68: `.research/068_RAEv2_Multi_Layer_Representation_Autoencoders.md`
 - RAEv2 paper: arXiv:2605.18324
 - Related: Research 26 (MTP drafter), Research 38 (SDAR), Research 61 (Delta Routing)
-- Key files: `src/transformer.rs`, `crates/microgpt-core/src/types.rs`, `src/benchmark.rs`
+- Key files: `src/transformer.rs`, `crates/katgpt-core/src/types.rs`, `src/benchmark.rs`

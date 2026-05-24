@@ -149,7 +149,7 @@ if utility >= tau || (pos as isize - t_n as isize).unsigned_abs() < window_size 
 ### 5.4 Where It Lives
 
 ```
-microgpt-rs/src/
+katgpt-rs/src/
 ├── sp_kv/                          # NEW module
 │   ├── mod.rs                      # Module index + re-exports
 │   ├── types.rs                    # SpKvConfig, SpKvCache, UtilityPredictorWeights

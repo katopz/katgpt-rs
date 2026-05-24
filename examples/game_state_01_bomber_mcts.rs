@@ -5,7 +5,7 @@
 //! - Print win rates and action space log
 //! - Validate: MCTS > Random (>60%), MCTS < HL (<40%)
 
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     ActionSpaceLog, ArenaGrid, BomberAction, BomberHeuristic, BomberState, StateHeuristic,
     game_state::GameState, mcts_search,
 };

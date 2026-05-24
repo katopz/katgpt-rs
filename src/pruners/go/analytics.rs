@@ -323,7 +323,7 @@ pub enum RawGoAction {
 /// Raw Go training sample, mirroring riir-gpu's `GoGameSample`.
 ///
 /// Decoupled from the riir-gpu crate so that `samples_to_replay()`
-/// can live in microgpt-rs without a cross-project dependency.
+/// can live in katgpt-rs without a cross-project dependency.
 /// Convert from `GoGameSample` trivially:
 ///
 /// ```ignore
@@ -416,7 +416,7 @@ pub fn split_samples_into_games(samples: &[RawGoSample]) -> Vec<Vec<&RawGoSample
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::go::analytics::{RawGoSample, RawGoAction, samples_to_replay};
+/// use katgpt_rs::pruners::go::analytics::{RawGoSample, RawGoAction, samples_to_replay};
 ///
 /// let samples = vec![
 ///     RawGoSample {

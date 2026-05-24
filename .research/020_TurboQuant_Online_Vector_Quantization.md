@@ -3,7 +3,7 @@
 > Source: [TurboQuant](https://arxiv.org/pdf/2504.19874) by Amir Zandieh, Majid Daliri, Majid Hadian, Vahab Mirrokni (Google Research · NYU · Google DeepMind)
 > Date: 2025-04, distilled 2025-07
 > Raw code: `.raw/turboquant/`
-> **Verdict: HIGH VALUE — KV Cache Compression for Production Inference, Direct Fit for microgpt-rs and riir-gpu**
+> **Verdict: HIGH VALUE — KV Cache Compression for Production Inference, Direct Fit for katgpt-rs and riir-gpu**
 
 ## Summary
 
@@ -121,11 +121,11 @@ TurboQuant achieves higher recall with **zero indexing time** vs hours for PQ/Ra
 
 ### What Actually Applies
 
-#### 1. KV Cache Compression for microgpt-rs (Highest Value, Direct Fit)
+#### 1. KV Cache Compression for katgpt-rs (Highest Value, Direct Fit)
 
 Our `MultiLayerKVCache` stores f32 keys and values in growing flat arrays. For long sequences, this is the memory bottleneck. TurboQuant at 3 bits gives ~10.7× compression with near-lossless quality.
 
-Current code in `microgpt-rs/src/transformer.rs`:
+Current code in `katgpt-rs/src/transformer.rs`:
 - `MultiLayerKVCache`: flat `Vec<KVCache>` — **prime target**
 - `PagedKVCache`: page pool — TQ compresses pages for longer context
 - `RavenKVCache`: fixed slots — already conceptually compressed, less gain
@@ -190,7 +190,7 @@ This is ~200 lines of pure Rust using `statrs` for Gamma functions and numeric i
 | TurboQuant Concept | Why It Doesn't Apply |
 |---|---|
 | **Triton kernels** | We use wgpu (WGSL), not CUDA Triton. Must write our own compute shaders. |
-| **vLLM integration** | We have our own inference stack (microgpt-rs + riir-gpu). |
+| **vLLM integration** | We have our own inference stack (katgpt-rs + riir-gpu). |
 | **Outlier channel splitting** | Only needed at production scale with large models. Our draft model has head_dim=4 (too small). |
 | **Entropy encoding of indices** | 5% gain at cost of complexity. Skip for now. |
 | **Hybrid decode (paged + compressed)** | Our PagedKVCache is a different architecture. Would need separate integration. |
@@ -249,14 +249,14 @@ QR decomposition of random d×d Gaussian matrix:
 
 ~50 lines.
 
-#### Priority 3: TurboQuantKVCache in microgpt-rs
+#### Priority 3: TurboQuantKVCache in katgpt-rs
 
 New KV cache variant alongside `MultiLayerKVCache`, `PagedKVCache`, `RavenKVCache`:
 - Stores bit-packed indices + norms instead of f32 arrays
 - Quantize on write (new token), dequantize on read (attention)
 - Or: score directly in quantized space (Priority 4)
 
-~300 lines in new file `microgpt-rs/src/turboquant.rs`.
+~300 lines in new file `katgpt-rs/src/turboquant.rs`.
 
 #### Priority 4: attention_score_tq.wgsl in riir-gpu
 

@@ -1,7 +1,7 @@
 //! D2F (Discrete Diffusion Forcing) Inference Pipeline
 //!
 //! Implements block-parallel decoding via iterative denoising with block-causal attention.
-//! Reference: Plan 066 Phase 2 — D2F inference in microgpt-rs.
+//! Reference: Plan 066 Phase 2 — D2F inference in katgpt-rs.
 //!
 //! # Architecture
 //!

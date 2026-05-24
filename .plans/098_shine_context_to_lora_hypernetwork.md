@@ -21,7 +21,7 @@
 
 ## Tasks
 
-- [x] T1: Add `Alternating2D` variant to `AttentionMode` in `microgpt-core/src/types.rs`
+- [x] T1: Add `Alternating2D` variant to `AttentionMode` in `katgpt-core/src/types.rs`
 - [x] T2: Add alternating row/column attention dispatch in `riir-gpu` WGSL kernel
 - [x] T3: Implement `MetaLoRAWeights` struct + memory extraction forward pass (riir-ai)
 - [x] T4: Implement `M2PTransformer` with alternating column/row attention (riir-ai)
@@ -109,9 +109,9 @@ IFT:
 
 ## Task Details
 
-### T1: `Alternating2D` Attention Mode (microgpt-core)
+### T1: `Alternating2D` Attention Mode (katgpt-core)
 
-Extend `AttentionMode` enum in `microgpt-core/src/types.rs`:
+Extend `AttentionMode` enum in `katgpt-core/src/types.rs`:
 
 ```rust
 /// Alternating row/column attention for 2D grids (SHINE M2P pattern).
@@ -416,7 +416,7 @@ riir-ai/crates/riir-gpu/src/
   kernels/
     m2p_attention.wgsl  — Column + row attention kernels (post-layernorm)
 
-microgpt-core/src/
+katgpt-core/src/
   types.rs              — AttentionMode::Alternating2D variant (T1)
 ```
 

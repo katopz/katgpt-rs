@@ -12,10 +12,10 @@
 use fastrand::Rng;
 
 #[cfg(feature = "bomber")]
-use microgpt_rs::pruners::bomber::arena::STANDARD_ARENA;
+use katgpt_rs::pruners::bomber::arena::STANDARD_ARENA;
 
 #[cfg(feature = "bomber")]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     Alive, ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, GridPos, HLPlayer, RandomPlayer,
     ValidatorPlayer, init_world, init_world_with_arena, run_tick, spawn_players,
 };

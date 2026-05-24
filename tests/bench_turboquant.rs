@@ -6,19 +6,19 @@
 //! 2. Round-trip quality: cos_sim(original, quantize→dequantize) for keys and values
 //! 3. Attention fidelity: correlation between flat and TQ attention scores
 //!
-//! Run with: cargo test -p microgpt-rs --features turboquant --test bench_turboquant -- --nocapture
+//! Run with: cargo test -p katgpt-rs --features turboquant --test bench_turboquant -- --nocapture
 
 #![cfg(feature = "turboquant")]
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::turboquant::TurboQuantKVCache;
-use microgpt_rs::turboquant::forward::{
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::turboquant::forward::{
     attention_turboquant, cosine_similarity, dequantize_keys_flat, dequantize_values_flat,
 };
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 /// Generate a synthetic key/value vector for position `pos`.
 fn synthetic_kv(kv_dim: usize, pos: usize) -> Vec<f32> {

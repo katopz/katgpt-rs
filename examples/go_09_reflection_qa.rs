@@ -5,7 +5,7 @@
 
 #[cfg(feature = "memo_reflections")]
 fn main() {
-    use microgpt_rs::pruners::{GameStateSnapshot, ReflectionDomain, synthesize_reflections};
+    use katgpt_rs::pruners::{GameStateSnapshot, ReflectionDomain, synthesize_reflections};
 
     // Generate synthetic Go game replay data (100 moves)
     let states: Vec<GameStateSnapshot> = (0..100)

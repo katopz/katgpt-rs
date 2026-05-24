@@ -87,9 +87,9 @@ impl From<GoCellSer> for GoCell {
 /// ## Example
 ///
 /// ```ignore
-/// use microgpt_rs::pruners::go::replay::GoReplay;
-/// use microgpt_rs::pruners::go::state::GoState;
-/// use microgpt_rs::pruners::go::types::{GoAction, GoCell};
+/// use katgpt_rs::pruners::go::replay::GoReplay;
+/// use katgpt_rs::pruners::go::state::GoState;
+/// use katgpt_rs::pruners::go::types::{GoAction, GoCell};
 ///
 /// let mut replay = GoReplay::new(9, 7.5);
 /// let mut state = GoState::new(9);

@@ -34,7 +34,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
-use microgpt_rs::pruners::monopoly::{
+use katgpt_rs::pruners::monopoly::{
     CardEffect, GameEvent, GreedyPlayer, HLPlayer, JailReason, MonopolyPlayer, PropertyGroup,
     RandomPlayer, ReleaseMethod, SquareKind, TaxKind, ValidatorPlayer, run_game, square_kind,
     square_name,

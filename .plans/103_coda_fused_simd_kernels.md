@@ -3,20 +3,20 @@
 > **Parent**: Research 67 (CODA GEMM-Epilogue Programming)
 > **Depends**: Plan 060 (SIMD Matmul HLA) ✅, Plan 069 (SIMD Scale Zero-Alloc Audit) ✅, Plan 102 (TileRT Pipeline) ✅
 > **Scope**: Algebraic reparameterization of matmul→residual→rmsnorm→activation into fused SIMD kernels
-> **Feature Gate**: `coda_fusion` in microgpt-rs (opt-in, proven via GOAT)
+> **Feature Gate**: `coda_fusion` in katgpt-rs (opt-in, proven via GOAT)
 > **Cross-project**: Guides riir-ai Plan 106 (CubeCL) epilogue patterns
 
 ## Tasks
 
 ### D1: Core Fused SIMD Kernels — Feature Gate `coda_fusion`
 
-- [x] **T1**: Add `coda_fusion` feature to `microgpt-rs/Cargo.toml` (no default)
+- [x] **T1**: Add `coda_fusion` feature to `katgpt-rs/Cargo.toml` (no default)
   ```toml
   [features]
   coda_fusion = []
   ```
 
-- [x] **T2**: Create `crates/microgpt-core/src/coda.rs` — fused SIMD kernel implementations
+- [x] **T2**: Create `crates/katgpt-core/src/coda.rs` — fused SIMD kernel implementations
   ```rust
   //! CODA-inspired fused SIMD kernels (Research 67).
   //!
@@ -116,7 +116,7 @@
   - Assert: output tokens are bit-identical (or within f32 epsilon for the partial RMS path)
   - Assert: zero overhead when `coda_fusion` feature is disabled
 
-- [x] **T12**: Create `microgpt-rs/.benchmarks/030_coda_fusion_simd.md`
+- [x] **T12**: Create `katgpt-rs/.benchmarks/030_coda_fusion_simd.md`
   - Report: baseline vs fused, per-layer breakdown, buffer write count comparison
   - Include: numerical accuracy comparison (cosine similarity of outputs)
 
@@ -200,10 +200,10 @@ forward_coda() per layer:
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/Cargo.toml` | Add feature gate: `coda_fusion` |
-| `crates/microgpt-core/src/coda.rs` | New: fused SIMD kernels (T3-T7) |
-| `crates/microgpt-core/src/lib.rs` | Add `pub mod coda;` behind feature gate |
-| `microgpt-rs/src/transformer.rs` | Add `forward_coda()` behind feature gate |
+| `katgpt-rs/Cargo.toml` | Add feature gate: `coda_fusion` |
+| `crates/katgpt-core/src/coda.rs` | New: fused SIMD kernels (T3-T7) |
+| `crates/katgpt-core/src/lib.rs` | Add `pub mod coda;` behind feature gate |
+| `katgpt-rs/src/transformer.rs` | Add `forward_coda()` behind feature gate |
 | `tests/bench_103_coda_fusion_goat.rs` | New: GOAT benchmark |
 | `.benchmarks/030_coda_fusion_simd.md` | New: results |
 

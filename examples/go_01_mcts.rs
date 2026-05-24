@@ -14,8 +14,8 @@
 use std::env;
 use std::time::Instant;
 
-use microgpt_rs::pruners::game_state::{GameState, StateHeuristic, mcts_search};
-use microgpt_rs::pruners::go::{DEFAULT_KOMI, GoAction, GoCell, GoHeuristic, GoReplay, GoState};
+use katgpt_rs::pruners::game_state::{GameState, StateHeuristic, mcts_search};
+use katgpt_rs::pruners::go::{DEFAULT_KOMI, GoAction, GoCell, GoHeuristic, GoReplay, GoState};
 
 /// Number of games to play.
 const DEFAULT_NUM_GAMES: usize = 20;

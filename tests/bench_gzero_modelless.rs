@@ -24,13 +24,13 @@ use std::time::Instant;
 use fastrand::Rng;
 
 #[cfg(all(feature = "g_zero", feature = "bomber"))]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     Alive, ArenaGrid, BomberPlayer, GameEvent, GreedyPlayer, GridPos, HLPlayer, RandomPlayer,
     TickCounter, ValidatorPlayer, init_world, run_tick, spawn_players,
 };
 
 #[cfg(all(feature = "g_zero", feature = "bomber"))]
-use microgpt_rs::pruners::bomber::GZeroPlayer;
+use katgpt_rs::pruners::bomber::GZeroPlayer;
 
 // ── Stats ──────────────────────────────────────────────────────
 

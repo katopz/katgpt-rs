@@ -2,14 +2,14 @@ https://arxiv.org/pdf/2211.17192
 
 I'll create a completely self-contained, heavily annotated Rust module that implements the exact algorithm described in **"Fast Inference from Transformers via Speculative Decoding" (Leviathan et al., 2022)**. 
 
-This implementation is designed to plug directly into your `microgpt-rs` ecosystem, using the existing `TransformerWeights`, `KVCache`, and `Config` structures. I've mapped the code directly to **Algorithm 1** from the paper, explaining the mathematics (like $p(x)$ vs $q(x)$ and the residual distribution) inline.
+This implementation is designed to plug directly into your `katgpt-rs` ecosystem, using the existing `TransformerWeights`, `KVCache`, and `Config` structures. I've mapped the code directly to **Algorithm 1** from the paper, explaining the mathematics (like $p(x)$ vs $q(x)$ and the residual distribution) inline.
 
 
 http://googleusercontent.com/immersive_entry_chip/0
 
 ### Key Educational Notes on the Implementation:
 
-1. **The Batched Target Pass Guarantee:** I placed a comment in Phase 2 explaining a critical implementation detail. In production systems (like `vLLM` or `TensorRT`), the target model does *not* loop autoregressively to verify. It takes the sequence `[last_token, draft_1, draft_2, draft_3]` and runs a single `forward` pass, yielding all 4 logits simultaneously. Because `microgpt-rs` uses a single-token `forward` signature, this code simulates it sequentially, but the *mathematics* and *cache states* match the paper perfectly.
+1. **The Batched Target Pass Guarantee:** I placed a comment in Phase 2 explaining a critical implementation detail. In production systems (like `vLLM` or `TensorRT`), the target model does *not* loop autoregressively to verify. It takes the sequence `[last_token, draft_1, draft_2, draft_3]` and runs a single `forward` pass, yielding all 4 logits simultaneously. Because `katgpt-rs` uses a single-token `forward` signature, this code simulates it sequentially, but the *mathematics* and *cache states* match the paper perfectly.
 2. **The Residual Distribution**: The `sample_residual_distribution` function is the actual "magic" of the paper. Without it, speculative decoding changes the output distribution. By sampling the replacement token from $\max(0, p - q)$, Leviathan et al. proved that the final generated sequence is statistically identical to generating directly from the large model.
 3. **The Bonus Token**: Notice that even if the target model accepts 100% of the drafted tokens, we still get $N+1$ tokens out of the step (Phase 4). The target model had to calculate the logits for the final drafted token anyway, meaning we get the *next* token for free!
 
@@ -83,7 +83,7 @@ pub fn speculative_decode_step(
     // ─────────────────────────────────────────────────────────
     // Note: In a production engine (like vLLM/FlashAttention), this is 
     // executed as a *single batched forward pass* over the entire drafted sequence. 
-    // For educational mapping to `microgpt-rs`, we simulate the parallel pass 
+    // For educational mapping to `katgpt-rs`, we simulate the parallel pass 
     // by evaluating them sequentially without sampling.
     
     let mut p_distributions = Vec::with_capacity(gamma + 1);
@@ -144,7 +144,7 @@ pub fn speculative_decode_step(
             // Critical: Because we rejected at step `i`, the remaining drafted tokens
             // are invalid. The KV caches for both models have advanced `gamma` steps, 
             // but the true sequence diverged here. 
-            // (In `microgpt-rs`, the caller will adjust the `pos` counter backwards 
+            // (In `katgpt-rs`, the caller will adjust the `pos` counter backwards 
             // based on `accepted_tokens.len()` on the next loop, effectively 
             // overwriting the stale KV cache states).
             break;

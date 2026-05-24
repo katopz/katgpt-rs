@@ -138,7 +138,7 @@ The mapping is 1:1. Our DDTree is PTRM's rollout mechanism with richer pruning.
 
 ## 5. What We Already Have (Validation)
 
-PTRM's findings validate several existing design decisions in microgpt-rs:
+PTRM's findings validate several existing design decisions in katgpt-rs:
 
 ### 5.1 SDE Noise Injection (Research 44, Plan 079)
 

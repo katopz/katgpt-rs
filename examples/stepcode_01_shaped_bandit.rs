@@ -9,12 +9,12 @@ use std::time::Instant;
 
 #[cfg(feature = "stepcode")]
 fn main() {
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         BanditEnv, BanditPruner, BanditSession, BanditStats, BanditStrategy, BernoulliEnv,
         PathStep, ShapedPath, path_consistency, shape_path,
     };
-    use microgpt_rs::speculative::types::NoScreeningPruner;
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::speculative::types::NoScreeningPruner;
+    use katgpt_rs::types::Rng;
 
     let episodes = 100;
     let probs = [0.1f32, 0.3, 0.5, 0.7, 0.9];
@@ -281,7 +281,7 @@ fn main() {
 }
 
 #[cfg(feature = "stepcode")]
-fn select_ucb1(stats: &microgpt_rs::pruners::BanditStats, num_arms: usize) -> usize {
+fn select_ucb1(stats: &katgpt_rs::pruners::BanditStats, num_arms: usize) -> usize {
     for i in 0..num_arms {
         if stats.visit_count(i) == 0 {
             return i;

@@ -6,7 +6,7 @@
 //!
 //! Run: `cargo test --features deep_manifold --test goat_deep_manifold -- --nocapture`
 
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     KlResidualScorer, L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer,
 };
 

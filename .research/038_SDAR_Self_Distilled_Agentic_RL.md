@@ -3,7 +3,7 @@
 > **Paper:** [Self-Distilled Agentic Reinforcement Learning](https://arxiv.org/abs/2605.15155) — Lu et al., 2026 (28 pages)
 > **Code:** https://github.com/ZJU-REAL/SDAR
 > **Date:** 2025-06-15
-> **Related Plans:** Plan 072 (microgpt-rs, modelless SDAR gate), Plan 073 (riir-ai, model-based SDAR loss)
+> **Related Plans:** Plan 072 (katgpt-rs, modelless SDAR gate), Plan 073 (riir-ai, model-based SDAR loss)
 > **Supersedes:** None — extends Plan 071/072 (ROPD) with token-level gated distillation
 
 ## Executive Summary
@@ -139,7 +139,7 @@ Three gating strategies compared (Figure 6):
 | KL divergence (reverse direction) | `riir-gpu/src/distill.rs` — `kl_divergence()` | ✅ Production |
 | LoRA-only training | `riir-gpu` full stack — wgpu | ✅ Production |
 | DPO loss | `riir-gpu/src/loss_dpo.rs` — `GpuDpoLoss` | ✅ Production |
-| Multi-arm bandit (UCB) | `microgpt-rs/src/pruners/bandit.rs` | ✅ Production |
+| Multi-arm bandit (UCB) | `katgpt-rs/src/pruners/bandit.rs` | ✅ Production |
 | Self-play loop | `riir-gpu/src/gzero_loop.rs` | ✅ Production |
 | Sigmoid activation | Various — standard math | ✅ Available |
 | **Token-level gap gating** | **MISSING** | ❌ Gap |

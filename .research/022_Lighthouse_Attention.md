@@ -102,7 +102,7 @@ k=2048 dilated: **0.76 mean retrieval** (vs 0.72 dense baseline). Lighthouse-tra
 ### Architecture Overlap Diagram
 
 ```
-Lighthouse Attention                    Our Stack (microgpt-rs + riir-ai)
+Lighthouse Attention                    Our Stack (katgpt-rs + riir-ai)
 ─────────────────────                   ─────────────────────────────────
 
 Pyramid Pool (Q,K,V)                    Raven RSM (flat slot memory)
@@ -175,7 +175,7 @@ Key insight: Lighthouse is **linear in T** at bounded k because only S tokens at
 
 ## Applicable Techniques for Each Project
 
-### microgpt-rs
+### katgpt-rs
 - **Pyramid scoring for PFlash**: Replace single-level block scoring with L-level pyramid. Coarser levels cost almost nothing (fewer entries) and guarantee every region contributes.
 - **L2-norm scorer**: Benchmark against our dot-product scorer. L2 norms are cheaper (no mean-Q × mean-K dot) and Lighthouse shows they work.
 - **Stratified top-K**: Lighthouse's chunked-bitonic naturally produces stratified selection (every region gets some tokens). Our `block_select` uses heuristic rules for similar effect.

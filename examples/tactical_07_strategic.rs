@@ -37,12 +37,12 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
-use microgpt_rs::pruners::pathfinder::{find_distance, find_path};
-use microgpt_rs::speculative::types::ConstraintPruner;
-use microgpt_rs::speculative::{
+use katgpt_rs::pruners::pathfinder::{find_distance, find_path};
+use katgpt_rs::speculative::types::ConstraintPruner;
+use katgpt_rs::speculative::{
     build_dd_tree_pruned, find_valid_sequence, par_find_shortest_sequence,
 };
-use microgpt_rs::types::Config;
+use katgpt_rs::types::Config;
 
 // ── Emoji ──────────────────────────────────────────────────────
 

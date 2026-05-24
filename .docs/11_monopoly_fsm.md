@@ -1,4 +1,4 @@
-# microgpt-rs: Monopoly FSM Arena — 4-Player Heuristic Learning Board Game Engine
+# katgpt-rs: Monopoly FSM Arena — 4-Player Heuristic Learning Board Game Engine
 
 ## Overview
 

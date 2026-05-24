@@ -13,11 +13,11 @@ use std::path::PathBuf;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
-use microgpt_rs::pruners::bomber::replay::{
+use katgpt_rs::pruners::bomber::arena::{EMPTY_ARENA, PILLAR_HEAVY_ARENA, STANDARD_ARENA};
+use katgpt_rs::pruners::bomber::replay::{
     ReplaySample, ReplayWriter, serialize_board, serialize_bombs, serialize_powerups,
 };
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     ArenaGrid, BomberAction, BomberPlayer, GameEvent, GreedyPlayer, GridPos, HLPlayer,
     RandomPlayer, ValidatorPlayer, init_world, init_world_with_arena, run_tick, spawn_players,
 };
@@ -183,11 +183,11 @@ fn run_round(
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world
-                    .resource::<microgpt_rs::pruners::bomber::ArenaGrid>()
+                    .resource::<katgpt_rs::pruners::bomber::ArenaGrid>()
                     .clone();
                 let action = player.select_action(&grid, pos, &tick_events, rng);
                 if i == 3 {
@@ -200,11 +200,11 @@ fn run_round(
         // Capture replay data for P3 (index 2) and P4 (index 3) only
         if capture_replay {
             let board =
-                serialize_board(world.resource::<microgpt_rs::pruners::bomber::ArenaGrid>());
+                serialize_board(world.resource::<katgpt_rs::pruners::bomber::ArenaGrid>());
             let bombs = serialize_bombs(&mut world);
             let powerups = serialize_powerups(&mut world);
             let tick = world
-                .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+                .resource::<katgpt_rs::pruners::bomber::TickCounter>()
                 .tick;
             let player_names = ["Random", "Greedy", "Validator", "HL"];
 
@@ -214,7 +214,7 @@ fn run_round(
                     .copied()
                     .unwrap_or_default();
                 let alive = world
-                    .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                    .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                     .is_some();
                 if alive && actions[i].is_some() {
                     pending.push(PendingCapture {
@@ -296,7 +296,7 @@ fn run_round(
     }
 
     let ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     // Compute quality and write filtered replay samples

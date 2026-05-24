@@ -119,7 +119,7 @@ Composes with existing QJL technique:
 ### Architecture Mapping
 
 ```
-microgpt-rs/src/
+katgpt-rs/src/
 ├── turboquant/          # Existing — legacy baseline
 ├── spectralquant/       # Existing — current default (eigenbasis + water-fill)
 └── octopus/             # NEW — triplet octahedral codec

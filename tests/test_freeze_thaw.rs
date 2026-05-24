@@ -7,8 +7,8 @@
 
 #[cfg(feature = "bomber")]
 mod bomber_hl {
-    use microgpt_rs::pruners::bomber::{BomberFrozenBandit, HLPlayer};
-    use microgpt_rs::pruners::{load_frozen, save_frozen};
+    use katgpt_rs::pruners::bomber::{BomberFrozenBandit, HLPlayer};
+    use katgpt_rs::pruners::{load_frozen, save_frozen};
     use tempfile::tempdir;
 
     #[test]
@@ -78,8 +78,8 @@ mod bomber_hl {
 
 #[cfg(feature = "g_zero")]
 mod bomber_gzero {
-    use microgpt_rs::pruners::bomber::{BomberFrozenBandit, GZeroPlayer};
-    use microgpt_rs::pruners::{load_frozen, save_frozen};
+    use katgpt_rs::pruners::bomber::{BomberFrozenBandit, GZeroPlayer};
+    use katgpt_rs::pruners::{load_frozen, save_frozen};
     use tempfile::tempdir;
 
     #[test]
@@ -132,8 +132,8 @@ mod bomber_gzero {
 
 #[cfg(feature = "go")]
 mod go_hl {
-    use microgpt_rs::pruners::go::{GoFrozenBandit, GoHLPlayer};
-    use microgpt_rs::pruners::{load_frozen, save_frozen};
+    use katgpt_rs::pruners::go::{GoFrozenBandit, GoHLPlayer};
+    use katgpt_rs::pruners::{load_frozen, save_frozen};
     use tempfile::tempdir;
 
     #[test]
@@ -222,8 +222,8 @@ mod go_hl {
 
 #[cfg(feature = "go")]
 mod go_gzero {
-    use microgpt_rs::pruners::go::{GoFrozenTemplates, GoGZeroPlayer};
-    use microgpt_rs::pruners::{load_frozen, save_frozen};
+    use katgpt_rs::pruners::go::{GoFrozenTemplates, GoGZeroPlayer};
+    use katgpt_rs::pruners::{load_frozen, save_frozen};
     use tempfile::tempdir;
 
     #[test]
@@ -303,7 +303,7 @@ mod go_gzero {
 fn frozen_struct_sizes_reasonable() {
     #[cfg(feature = "bomber")]
     {
-        let size = std::mem::size_of::<microgpt_rs::pruners::bomber::BomberFrozenBandit>();
+        let size = std::mem::size_of::<katgpt_rs::pruners::bomber::BomberFrozenBandit>();
         assert!(size > 0, "BomberFrozenBandit should have non-zero size");
         assert!(
             size <= 256,
@@ -313,14 +313,14 @@ fn frozen_struct_sizes_reasonable() {
 
     #[cfg(feature = "go")]
     {
-        let size = std::mem::size_of::<microgpt_rs::pruners::go::GoFrozenBandit>();
+        let size = std::mem::size_of::<katgpt_rs::pruners::go::GoFrozenBandit>();
         assert!(size > 0, "GoFrozenBandit should have non-zero size");
         assert!(
             size <= 256,
             "GoFrozenBandit should be <= 256 bytes, got {size}"
         );
 
-        let size = std::mem::size_of::<microgpt_rs::pruners::go::GoFrozenTemplates>();
+        let size = std::mem::size_of::<katgpt_rs::pruners::go::GoFrozenTemplates>();
         assert!(size > 0, "GoFrozenTemplates should have non-zero size");
         assert!(
             size <= 256,

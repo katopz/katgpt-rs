@@ -242,7 +242,7 @@ pub fn slime_loss(
 3. Integration into `TrainingConfig` alongside DPO/SDAR
 4. Can work with existing `PreferencePair` from `loss_dpo.rs`
 
-### Modelless Path (microgpt-rs)
+### Modelless Path (katgpt-rs)
 
 **Direct applicability**: LOW (no neural network training)
 
@@ -413,7 +413,7 @@ slime_loss = []
 
 **Implementation**: Plan 098, feature-gated `slime_loss`, default-off until GOAT-proven.
 
-### ⏸ HOLD for microgpt-rs (modelless)
+### ⏸ HOLD for katgpt-rs (modelless)
 
 **Why**: No neural network training in modelless path. Dual-margin concept has indirect value for bandit arm selection and BT ranking convergence, but no concrete implementation target.
 

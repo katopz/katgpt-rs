@@ -12,13 +12,13 @@
 
 #![cfg(feature = "hla_attention")]
 
-use microgpt_rs::hla::{
+use katgpt_rs::hla::{
     AhlaQHeadState, HlaQHeadState, MultiLayerAhlaCache, MultiLayerHlaCache, ahla_step,
     forward_ahla, forward_hla, hla_state_update,
 };
-use microgpt_rs::simd::{self, SimdLevel};
-use microgpt_rs::transformer::{ForwardContext, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::simd::{self, SimdLevel};
+use katgpt_rs::transformer::{ForwardContext, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -79,12 +79,12 @@ fn bench_simd_matmul() {
 
         // Warmup
         for _ in 0..warmup {
-            microgpt_rs::types::matmul(&mut output, &weight, &input, *dim, *dim);
+            katgpt_rs::types::matmul(&mut output, &weight, &input, *dim, *dim);
         }
 
         let start = Instant::now();
         for _ in 0..iters {
-            microgpt_rs::types::matmul(&mut output, &weight, &input, *dim, *dim);
+            katgpt_rs::types::matmul(&mut output, &weight, &input, *dim, *dim);
         }
         let elapsed = start.elapsed();
         let tps = iters as f64 / elapsed.as_secs_f64();
@@ -114,12 +114,12 @@ fn bench_simd_matmul_relu() {
         let mut output = vec![0.0f32; rows];
 
         for _ in 0..warmup {
-            microgpt_rs::types::matmul_relu(&mut output, &weight, &input, rows, cols);
+            katgpt_rs::types::matmul_relu(&mut output, &weight, &input, rows, cols);
         }
 
         let start = Instant::now();
         for _ in 0..iters {
-            microgpt_rs::types::matmul_relu(&mut output, &weight, &input, rows, cols);
+            katgpt_rs::types::matmul_relu(&mut output, &weight, &input, rows, cols);
         }
         let elapsed = start.elapsed();
         let tps = iters as f64 / elapsed.as_secs_f64();
@@ -169,7 +169,7 @@ fn bench_simd_sparse_matmul() {
         let mut active_values = vec![0.0f32; *cols];
 
         for _ in 0..warmup {
-            microgpt_rs::types::sparse_matmul(
+            katgpt_rs::types::sparse_matmul(
                 &mut output,
                 &weight,
                 &input,
@@ -182,7 +182,7 @@ fn bench_simd_sparse_matmul() {
 
         let start = Instant::now();
         for _ in 0..iters {
-            microgpt_rs::types::sparse_matmul(
+            katgpt_rs::types::sparse_matmul(
                 &mut output,
                 &weight,
                 &input,
@@ -225,7 +225,7 @@ fn bench_simd_sparse_matmul() {
 
     // Sparse
     for _ in 0..warmup {
-        microgpt_rs::types::sparse_matmul(
+        katgpt_rs::types::sparse_matmul(
             &mut output_sparse,
             &weight,
             &input,
@@ -237,7 +237,7 @@ fn bench_simd_sparse_matmul() {
     }
     let start = Instant::now();
     for _ in 0..iters {
-        microgpt_rs::types::sparse_matmul(
+        katgpt_rs::types::sparse_matmul(
             &mut output_sparse,
             &weight,
             &input,
@@ -251,11 +251,11 @@ fn bench_simd_sparse_matmul() {
 
     // Dense
     for _ in 0..warmup {
-        microgpt_rs::types::matmul(&mut output_dense, &weight, &input, rows, cols);
+        katgpt_rs::types::matmul(&mut output_dense, &weight, &input, rows, cols);
     }
     let start = Instant::now();
     for _ in 0..iters {
-        microgpt_rs::types::matmul(&mut output_dense, &weight, &input, rows, cols);
+        katgpt_rs::types::matmul(&mut output_dense, &weight, &input, rows, cols);
     }
     let dense_tps = iters as f64 / start.elapsed().as_secs_f64();
 
@@ -408,7 +408,7 @@ fn bench_simd_e2e_forward() {
     // SDPA (baseline)
     {
         let mut ctx = ForwardContext::new(&config);
-        let mut cache = microgpt_rs::transformer::MultiLayerKVCache::new(&config);
+        let mut cache = katgpt_rs::transformer::MultiLayerKVCache::new(&config);
 
         for _ in 0..warmup {
             cache.reset();

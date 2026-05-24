@@ -19,10 +19,10 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::speculative::StabilitySnapshot;
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng};
-use microgpt_rs::weights::ContiguousWeights;
+use katgpt_rs::speculative::StabilitySnapshot;
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng};
+use katgpt_rs::weights::ContiguousWeights;
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -185,7 +185,7 @@ fn proof_4_contiguous_weights_multi_layer() {
 #[cfg(feature = "decode_specialize")]
 mod decode_specialize_proofs {
     use super::*;
-    use microgpt_rs::transformer::{DecodeStage, forward_decode_stage};
+    use katgpt_rs::transformer::{DecodeStage, forward_decode_stage};
 
     #[test]
     fn proof_5_decode_stages_finite() {
@@ -400,7 +400,7 @@ fn bench_b_memory_layout_comparison() {
 
 #[test]
 fn bench_c_weight_access_pattern() {
-    use microgpt_rs::types::matmul;
+    use katgpt_rs::types::matmul;
 
     let (config, weights) = make_multi_layer(4);
     let cw = ContiguousWeights::from_weights(&weights);
@@ -475,7 +475,7 @@ fn bench_c_weight_access_pattern() {
 #[cfg(feature = "decode_specialize")]
 #[test]
 fn bench_d_stage_dispatch_overhead() {
-    use microgpt_rs::transformer::{DecodeStage, forward_decode_stage};
+    use katgpt_rs::transformer::{DecodeStage, forward_decode_stage};
 
     let (config, weights) = make_micro();
     let n = 2000;

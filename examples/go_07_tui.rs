@@ -36,7 +36,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::go::{
     GoAction, GoCell, GoGZeroPlayer, GoGreedyPlayer, GoHLPlayer, GoMctsPlayer, GoPlayer,
     GoRandomPlayer, GoState, GoValidatorPlayer,
 };

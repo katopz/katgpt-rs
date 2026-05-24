@@ -1,5 +1,5 @@
 // Shared configuration, RNG, and math utilities.
-// Superset of types from both microgpt-rs and riir-engine projects.
+// Superset of types from both katgpt-rs and riir-engine projects.
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -292,7 +292,7 @@ pub struct ConfiguratorContext {
 /// Selection strategy for width-scaled rollouts (EqR convergence-based selection).
 ///
 /// Maps to [`WidthSelectionMode`](crate::speculative::dd_tree::WidthSelectionMode) at runtime.
-/// This enum lives in `microgpt-core` so Config can reference it without depending on
+/// This enum lives in `katgpt-core` so Config can reference it without depending on
 /// the speculative decode module.
 ///
 /// - `BestQ`: Highest cumulative relevance (PTRM default, no behavior change)
@@ -319,7 +319,7 @@ pub enum ConvergenceSelector {
 // Config
 // ---------------------------------------------------------------------------
 
-/// Transformer model configuration — superset of both microgpt-rs and riir-engine.
+/// Transformer model configuration — superset of both katgpt-rs and riir-engine.
 #[derive(Clone)]
 pub struct Config {
     pub vocab_size: usize,
@@ -1112,7 +1112,7 @@ impl Config {
 /// Override DTO for applying per-domain inference budget to a [`Config`].
 ///
 /// All fields are `Option` — `None` means "keep Config's current value".
-/// This is a plain struct (no serde) to keep `microgpt-core` dependency-free
+/// This is a plain struct (no serde) to keep `katgpt-core` dependency-free
 /// from router/TOML types. Conversion from the router's `InferenceBudget`
 /// happens at the router boundary.
 ///
@@ -2132,7 +2132,7 @@ mod tests_types {
     #[test]
     #[cfg(feature = "domain_latent")]
     fn test_domain_latent_save_load_roundtrip() {
-        let tmp = std::env::temp_dir().join("microgpt_core_test_domain_latent.bin");
+        let tmp = std::env::temp_dir().join("katgpt_core_test_domain_latent.bin");
         let original = DomainLatent::from_vec(vec![1.0, 2.0, 3.0, 4.0]);
         original.save(&tmp).unwrap();
         let loaded = DomainLatent::load(&tmp).unwrap();
@@ -2151,7 +2151,7 @@ mod tests_types {
     #[test]
     #[cfg(feature = "domain_latent")]
     fn test_domain_latent_invalid_magic() {
-        let tmp = std::env::temp_dir().join("microgpt_core_test_bad_magic.bin");
+        let tmp = std::env::temp_dir().join("katgpt_core_test_bad_magic.bin");
         let mut buf = b"XXXX".to_vec();
         buf.push(1); // version
         buf.extend_from_slice(&4u32.to_le_bytes()); // kv_dim
@@ -2174,7 +2174,7 @@ mod tests_types {
     #[test]
     #[cfg(feature = "domain_latent")]
     fn test_domain_latent_checksum_mismatch() {
-        let tmp = std::env::temp_dir().join("microgpt_core_test_bad_checksum.bin");
+        let tmp = std::env::temp_dir().join("katgpt_core_test_bad_checksum.bin");
         let mut buf = b"DLAT".to_vec();
         buf.push(1); // version
         buf.extend_from_slice(&4u32.to_le_bytes()); // kv_dim
@@ -2188,7 +2188,7 @@ mod tests_types {
     #[test]
     #[cfg(feature = "domain_latent")]
     fn test_domain_latent_file_too_small() {
-        let tmp = std::env::temp_dir().join("microgpt_core_test_too_small.bin");
+        let tmp = std::env::temp_dir().join("katgpt_core_test_too_small.bin");
         std::fs::write(&tmp, b"DLAT").unwrap();
         assert!(DomainLatent::load(&tmp).is_err());
         let _ = std::fs::remove_file(&tmp);

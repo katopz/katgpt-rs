@@ -216,19 +216,19 @@ Our 16×16 tiles are suboptimal on some hardware. A small benchmark at startup c
 - Cache results per GPU device ID
 - Low priority since we primarily target Apple Metal (16×16 is decent)
 
-### Implications for microgpt-rs (model-based/modelless)
+### Implications for katgpt-rs (model-based/modelless)
 
-**No direct wgpu code** — microgpt-rs is pure CPU (SIMD, Rayon). The paper's lessons apply architecturally:
+**No direct wgpu code** — katgpt-rs is pure CPU (SIMD, Rayon). The paper's lessons apply architecturally:
 
-| Principle | CPU Analog in microgpt-rs |
+| Principle | CPU Analog in katgpt-rs |
 |-----------|--------------------------|
 | Dispatch overhead reduction | Batch operations, avoid per-token overhead |
 | Kernel fusion | Fused SIMD kernels (e.g., fused norm+activation) |
 | Memory planning | Pre-allocated scratch buffers, arena allocation |
-| Quantized inference | Q4_K dequant in `microgpt-rs/src/quantize/` |
+| Quantized inference | Q4_K dequant in `katgpt-rs/src/quantize/` |
 | Static pipeline state | Pre-warmed Rayon thread pool, pinned cores |
 
-**Indirect benefit:** riir-ai GPU improvements flow back to microgpt-rs through shared `riir-engine` types and quantization code.
+**Indirect benefit:** riir-ai GPU improvements flow back to katgpt-rs through shared `riir-engine` types and quantization code.
 
 ### Recommended Feature Gates
 

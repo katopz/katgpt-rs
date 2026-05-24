@@ -11,12 +11,12 @@
 #[cfg(feature = "tes_loop")]
 #[test]
 fn bench_simpletes_scaling_crossstrategy_goat() {
-    use microgpt_rs::pruners::bandit::{
+    use katgpt_rs::pruners::bandit::{
         BanditEnv, BanditSession, BanditStrategy, BernoulliEnv, GaussianEnv,
     };
-    use microgpt_rs::pruners::tes_loop::SimpleTesLoop;
-    use microgpt_rs::speculative::types::{TesConfig, TrajectoryCredit};
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::pruners::tes_loop::SimpleTesLoop;
+    use katgpt_rs::speculative::types::{TesConfig, TrajectoryCredit};
+    use katgpt_rs::types::Rng;
 
     const N_TRIALS: usize = 200;
     const SEED: u64 = 42;

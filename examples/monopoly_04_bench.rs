@@ -7,7 +7,7 @@
 use std::time::Instant;
 
 use fastrand::Rng;
-use microgpt_rs::pruners::monopoly::{
+use katgpt_rs::pruners::monopoly::{
     GreedyPlayer, HLPlayer, MonopolyPlayer, RandomPlayer, ValidatorPlayer, run_game,
 };
 

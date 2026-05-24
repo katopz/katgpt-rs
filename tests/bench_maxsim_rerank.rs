@@ -6,8 +6,8 @@
 
 #![cfg(feature = "maxsim")]
 
-use microgpt_rs::rerank::{RerankMethod, ndcg_at, rerank};
-use microgpt_rs::types::Rng;
+use katgpt_rs::rerank::{RerankMethod, ndcg_at, rerank};
+use katgpt_rs::types::Rng;
 
 // ── Constants ─────────────────────────────────────────────────
 

@@ -231,7 +231,7 @@ Dllm includes `p_masks` importance weighting for discrete diffusion. Interventio
 
 ## Why Modelless Side Has No Twin
 
-The modelless stack (microgpt-rs) is already structurally interventional:
+The modelless stack (katgpt-rs) is already structurally interventional:
 
 - Bandit `Q(a)` updates from **reward** (world observation), not from arm selection (agent intervention)
 - Absorb-compress promotes from **benefit ratio** (observation), not from promote decision (intervention)

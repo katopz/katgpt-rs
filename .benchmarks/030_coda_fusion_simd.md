@@ -116,9 +116,9 @@ cargo test                             # ✅ 79 transformer tests pass
 | File | Change |
 |------|--------|
 | `Cargo.toml` | Added `coda_fusion` feature gate |
-| `crates/microgpt-core/Cargo.toml` | Added `coda_fusion` feature |
-| `crates/microgpt-core/src/lib.rs` | Added `pub mod coda` behind feature gate |
-| `crates/microgpt-core/src/coda.rs` | **New**: 6 fused SIMD kernels + 12 unit tests |
+| `crates/katgpt-core/Cargo.toml` | Added `coda_fusion` feature |
+| `crates/katgpt-core/src/lib.rs` | Added `pub mod coda` behind feature gate |
+| `crates/katgpt-core/src/coda.rs` | **New**: 6 fused SIMD kernels + 12 unit tests |
 | `src/transformer.rs` | Added `forward_coda()` + `coda_partial_sums` buffer |
 | `tests/bench_103_coda_fusion_goat.rs` | **New**: 15 GOAT benchmark tests |
 
@@ -132,7 +132,7 @@ cargo test --features coda_fusion --test bench_103_coda_fusion_goat -- --nocaptu
 cargo test --features coda_fusion --test bench_103_coda_fusion_goat --release -- --nocapture
 
 # Unit tests only
-cargo test -p microgpt-core --features coda_fusion -- coda
+cargo test -p katgpt-core --features coda_fusion -- coda
 
 # Full transformer regression
 cargo test --features coda_fusion --lib -- transformer

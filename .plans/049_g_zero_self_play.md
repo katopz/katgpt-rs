@@ -656,7 +656,7 @@ Full G-Zero reference implementation at `.raw/G-Zero/g_zero/`:
 | `prompts.py` | Challenger/Solver prompt templates | `QueryTemplate` enum variants |
 
 Key architectural difference: The source runs on **Tinker** (cloud API with `SamplingClient` and `TrainingClient`). We map:
-- `SamplingClient.sample()` → `microgpt-rs` transformer forward + generate
+- `SamplingClient.sample()` → `katgpt-rs` transformer forward + generate
 - `SamplingClient.compute_logprobs()` → teacher-forced forward with log-prob extraction
 - `TrainingClient.forward_backward_custom()` → `riir-gpu` custom loss pipeline
 - `TrainingClient.optim_step()` → `riir-gpu/src/optimizer.rs` AdamW

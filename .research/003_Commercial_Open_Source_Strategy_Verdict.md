@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Refined Strategy
-**Context:** microgpt-rs (MIT) + anyrag + Compiler-in-the-Loop
+**Context:** katgpt-rs (MIT) + anyrag + Compiler-in-the-Loop
 
 ---
 
@@ -70,7 +70,7 @@ Nobody else has this loop. Competitors wrap GPT-4 and pray. We guarantee compila
 
 | Layer | What | Status | License |
 |-------|------|--------|---------|
-| Engine | microgpt-rs (DDTree, zero-alloc, ConstraintPruner trait) | ✅ Working | MIT (open) |
+| Engine | katgpt-rs (DDTree, zero-alloc, ConstraintPruner trait) | ✅ Working | MIT (open) |
 | Framework | anyrag (RAG pipeline, episodic memory, ingestion) | ✅ Exists | MIT (open) |
 | Validator | `SynPruner` + `PartialParser` + `CompilerFeedback` | ✅ Working | MIT (open) |
 | Validator SDK | `riir-validator-sdk` (WASM Validator trait + export macro) | ✅ Working | Private (internal) |
@@ -83,18 +83,18 @@ Nobody else has this loop. Competitors wrap GPT-4 and pray. We guarantee compila
 
 The "plumbing" is more than just technically impressive — it's **already proving the concept**. SynPruner is already pruning invalid Rust tokens. The Sudoku solver already proved constraint satisfaction works end-to-end.
 
-### 3. MIT License for microgpt-rs: Correct, Keep It
+### 3. MIT License for katgpt-rs: Correct, Keep It
 
 **Why MIT is the right choice:**
 
 1. **Maximum adoption.** Enterprises trust MIT. No legal review needed. This is top-of-funnel — you want as many devs touching the engine as possible.
-2. **The engine without `lora.bin` produces syntactically-valid-but-semantically-wrong Rust.** A competitor forks microgpt-rs, they get the DDTree, the zero-alloc context, the SynPruner. All proven. But without trained weights and the episode DB, the output compiles but does the wrong thing. They have a Ferrari with no gas.
+2. **The engine without `lora.bin` produces syntactically-valid-but-semantically-wrong Rust.** A competitor forks katgpt-rs, they get the DDTree, the zero-alloc context, the SynPruner. All proven. But without trained weights and the episode DB, the output compiles but does the wrong thing. They have a Ferrari with no gas.
 3. **Community flywheel.** MIT attracts contributors. Contributors become Curators. Curators fuel the marketplace.
 4. **No license drama.** Every company that switched from permissive to restrictive (HashiCorp, Elastic, Redis) burned community trust. MIT keeps it clean forever.
 
 **The closed-source layer does NOT need a license — it's SaaS.** You don't ship `lora.bin` or the orchestration backend. You host it. No license needed for code you never distribute.
 
-**Recommendation:** MIT for microgpt-rs and anyrag. Keep `riir-ai` (monorepo: SDK + orchestrator + semantic validator + curator API) as private repo. No license complexity.
+**Recommendation:** MIT for katgpt-rs and anyrag. Keep `riir-ai` (monorepo: SDK + orchestrator + semantic validator + curator API) as private repo. No license complexity.
 
 ### 4. riir-ai: Private Monorepo for SaaS Intelligence
 
@@ -140,7 +140,7 @@ anyrag is not a gist — it's a full RAG engine with:
 - Curator picks a public GitHub repo (or org/repo path) via Web UI or MCP agent
 - Platform validates the repo exists, is public, and has Python source
 - Platform generates a "Curator Claim" — reserving that repo for the Curator
-- Platform translates using microgpt-rs + anyrag + internal SDK
+- Platform translates using katgpt-rs + anyrag + internal SDK
 - Platform generates: `domain_lora.bin` + `domain_validator.wasm` + provenance (repo URL, commit hash, date)
 
 #### Method B: Link Resource (Web UI or MCP)
@@ -216,7 +216,7 @@ The OSS `SynPruner` proves this architecture works at the syntax level. The clos
 
 | Phase | What | Depends On |
 |-------|------|-----------|
-| **0. Foundation** | microgpt-rs stable, anyrag production-ready | ✅ Done |
+| **0. Foundation** | katgpt-rs stable, anyrag production-ready | ✅ Done |
 | **1. Single File** | Translate one Python file → one Rust file that compiles | lora.bin trained on initial Python→Rust pairs, cargo check loop |
 | **2. Single Repo** | Dependency graph analysis, multi-file translation, project-level cargo check | anyrag for context, orchestration layer |
 | **3. SaaS Launch** | GitHub Action integration, "Raw" translation (Option A), GPU billing | Infrastructure, billing, auth |
@@ -231,7 +231,7 @@ The OSS `SynPruner` proves this architecture works at the syntax level. The clos
 | Risk | Mitigation |
 |------|-----------|
 | Base model breakthrough makes speculative decoding unnecessary | The moat is constraint pruning + compiler feedback, not the decoder. Swap base model freely. |
-| Competitor forks microgpt-rs | They get the proven architecture but produce semantically-wrong Rust without lora.bin. Ferrari, no gas. |
+| Competitor forks katgpt-rs | They get the proven architecture but produce semantically-wrong Rust without lora.bin. Ferrari, no gas. |
 | Not enough Curators | Revenue share incentive + low barrier (pick from GitHub, no private infra needed) |
 | Translation quality not good enough | Architecture is proven. Quality = training data volume. Data flywheel solves this over time. |
 | License FUD from enterprises | MIT is the most enterprise-friendly license. Zero friction. |

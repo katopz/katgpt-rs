@@ -1,4 +1,4 @@
-# microgpt-rs: Heuristic Learning
+# katgpt-rs: Heuristic Learning
 
 > **Status (Plan 049):** G-Zero self-play distillation — both phases complete. Phase 1 (modelless): `HintDelta`, `DeltaGatedAbsorbCompress`, `DeltaBanditPruner`, `TemplateProposer` behind `--features g_zero` (implies `bandit`). Phase 2 (model-based): `LengthNormalizedDPO`, `GRPO`, `DeltaFilter` (6-stage), `GZeroLoop` in `riir-gpu` (Plan 059, 3,369 lines, 76 tests, 2 DPO WGSL kernels). See `src/pruners/g_zero/` and `riir-gpu/src/`.
 >
@@ -33,11 +33,11 @@ The coding agent changes the **maintenance cost curve** for heuristics. Rules th
 
 ---
 
-## HL in microgpt-rs
+## HL in katgpt-rs
 
-microgpt-rs is uniquely positioned for HL because of its **trait-based pruner architecture** and **WASM sandbox**:
+katgpt-rs is uniquely positioned for HL because of its **trait-based pruner architecture** and **WASM sandbox**:
 
-| HL Concept | microgpt-rs Component |
+| HL Concept | katgpt-rs Component |
 |---|---|
 | Heuristic Policy | `ConstraintPruner::is_valid()` — masks invalid tokens/actions |
 | Relevance Scoring | `ScreeningPruner::relevance()` — prioritizes good actions |
@@ -204,7 +204,7 @@ TrialLog → Agent reads failures → Writes new validator → compile .wasm →
 ### Architecture
 
 ```
-raw/bomby/ (reference)              →  microgpt-rs bomberman (ours)
+raw/bomby/ (reference)              →  katgpt-rs bomberman (ours)
 ──────────────────────────────────────────────────────────────────
 bevy (full engine)                  →  bevy_ecs (standalone ECS only)
 bevy_ecs_ldtk (LDtk level loading)  →  ProceduralArena (grid generator)
@@ -255,7 +255,7 @@ See [Plan 033](/.plans/033_bomberman_arena.md) for full implementation details.
 ## Quick Start
 
 ```rust
-use microgpt_rs::pruners::{
+use katgpt_rs::pruners::{
     BanditPruner, BanditStrategy, AbsorbCompress, TrialLog, CompressConfig,
 };
 
@@ -431,7 +431,7 @@ The paper found **3.1:1** for o3-mini. Our default threshold is **2.0:1** (conse
 
 ```rust,ignore
 use std::sync::Arc;
-use microgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv, ReviewMetrics};
+use katgpt_rs::pruners::{BanditSession, BanditStrategy, BernoulliEnv, ReviewMetrics};
 
 let metrics = Arc::new(ReviewMetrics::new());
 
@@ -606,7 +606,7 @@ Matchup              Left Win%  Right Win%  Left Surv  Right Surv
 ### Quick Start
 
 ```rust,ignore
-use microgpt_rs::pruners::*;
+use katgpt_rs::pruners::*;
 
 // 1. Create δ-gated absorb-compress
 let inner = AbsorbCompressLayer::new(NoScreeningPruner, 10, CompressConfig::default());
@@ -795,7 +795,7 @@ After episode completion, `write(context, outcome)` stores the correction signal
 ### Quick Start
 
 ```rust,ignore
-use microgpt_rs::pruners::delta_mem::*;
+use katgpt_rs::pruners::delta_mem::*;
 
 // Create a memory-steered pruner
 let config = DeltaMemoryConfig { rank: 8, beta_init: 0.1, couple_gates: true };
@@ -869,8 +869,8 @@ The bandit learns **domain-specific policies via context isolation**: same entro
 ### Quick Start
 
 ```rust,ignore
-use microgpt_rs::pruners::ConfiguratorBandit;
-use microgpt_core::{ConfiguratorContext, PlanningDecision};
+use katgpt_rs::pruners::ConfiguratorBandit;
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
 
 let mut bandit = ConfiguratorBandit::new();
 

@@ -46,7 +46,7 @@ At 2-bit, OCTOPUS is the only codec that doesn't collapse on needle-in-a-haystac
 ### Module Structure
 
 ```
-microgpt-rs/src/
+katgpt-rs/src/
 ├── types.rs                 # Existing: QuantizedKVCache trait (unchanged)
 ├── turboquant/              # Existing: legacy baseline (unchanged)
 ├── spectralquant/           # Existing: current default (unchanged)

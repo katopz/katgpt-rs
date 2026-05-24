@@ -3,7 +3,7 @@
 > **Paper:** [Rubric-based On-policy Distillation](https://arxiv.org/abs/2605.07396) — Fang et al., 2026 (27 pages)
 > **Source:** `.raw/ROPD_official/` — full codebase + paper audited
 > **Date:** 2025-06-01
-> **Related Plans:** Plan 071 (microgpt-rs, modelless), Plan 072 (riir-ai, model-based)
+> **Related Plans:** Plan 071 (katgpt-rs, modelless), Plan 072 (riir-ai, model-based)
 
 ## Executive Summary
 
@@ -334,7 +334,7 @@ Key design decisions from code:
 
 ### Two Integration Paths
 
-#### Path A: Modelless (microgpt-rs, Plan 071)
+#### Path A: Modelless (katgpt-rs, Plan 071)
 
 Replace LLM rubricator/verifier with **template rubrics + WASM validators**:
 

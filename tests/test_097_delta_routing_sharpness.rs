@@ -8,14 +8,14 @@
 //! - End-to-end forward pass sharpness vs zero-query baseline
 //! - Block boundary routing fires correctly
 //!
-//! Run: `cargo test -p microgpt-rs --test test_097_delta_routing_sharpness --features delta_routing -- --nocapture`
+//! Run: `cargo test -p katgpt-rs --test test_097_delta_routing_sharpness --features delta_routing -- --nocapture`
 
 #![cfg(feature = "delta_routing")]
 
-use microgpt_rs::transformer::{
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, TransformerWeights, depth_route_weights, forward,
 };
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::types::{Config, Rng};
 
 fn make_config(n_layer: usize) -> Config {
     let mut config = Config::micro();

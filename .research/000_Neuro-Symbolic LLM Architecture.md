@@ -2,19 +2,19 @@
 
 **Project Focus:** "Rewrite it in Rust" (RIIR) Translation Service
 
-**Core Technologies:** microgpt-rs, anyrag, Turso SQLite, Percepta In-Model Execution
+**Core Technologies:** katgpt-rs, anyrag, Turso SQLite, Percepta In-Model Execution
 
 ## **Abstract**
 
 This document outlines a novel architecture for an edge-capable, highly optimized Large Language Model (LLM) inference engine. The goal is to build a "Rewrite it in Rust" (RIIR) service that guarantees syntactically correct output with extremely low latency. The architecture merges three cutting-edge AI paradigms:
 
-1. **Speculative Decoding** via micro-transformers (microgpt-rs).  
+1. **Speculative Decoding** via micro-transformers (katgpt-rs).  
 2. **Retrieval-Based Speculative Decoding & Self-Improving RAG** using vector databases (anyrag \+ Turso).  
 3. **In-Model Computation / Computable LoRA** via deterministic execution traces and ![][image1] attention (Percepta concept).
 
-## **Part 1: The Engine Foundation (microgpt-rs)**
+## **Part 1: The Engine Foundation (katgpt-rs)**
 
-The base of the architecture is inspired by microgpt-rs, a high-performance Rust implementation of a micro-Transformer utilizing speculative decoding.
+The base of the architecture is inspired by katgpt-rs, a high-performance Rust implementation of a micro-Transformer utilizing speculative decoding.
 
 ### **Core Mechanics**
 
@@ -24,7 +24,7 @@ The base of the architecture is inspired by microgpt-rs, a high-performance Rust
 
 ### **Known Bottlenecks & Hardware Improvements**
 
-Currently, a raw microgpt-rs implementation yields a \~0.91x speedup because an untrained draft model only has a \~75% acceptance rate. To push this to \>1.0x, the following optimizations are required:
+Currently, a raw katgpt-rs implementation yields a \~0.91x speedup because an untrained draft model only has a \~75% acceptance rate. To push this to \>1.0x, the following optimizations are required:
 
 * **Hardware:** Implementation of SIMD intrinsics (ARM NEON / AVX2), Apple Metal Performance Shaders (MPS), or WGPU compute shaders.  
 * **Architecture:** Introduction of Grouped-Query Attention (GQA) to shrink the KV cache size, INT8/4-bit quantization, and a Paged KV Cache to manage the DDTree branching without memory fragmentation.
@@ -79,7 +79,7 @@ How a request ("Rewrite this Python class in Rust") flows through the completed 
 
 1. **Prompt Ingestion & RAG:** The user submits Python code. anyrag queries Turso/GitHub to retrieve 3 examples of idiomatic Rust structs and traits, appending them to the system prompt.  
 2. **Drafting (The Shim):**  
-   * The microgpt-rs engine begins drafting tokens.  
+   * The katgpt-rs engine begins drafting tokens.  
    * Simultaneously, the engine queries Turso using the current hidden state to retrieve highly probable token sequences from past successful compilations.  
    * These sequences populate the DDTree (Dynamic Draft Tree).  
 3. **Rule Pruning (Computable LoRA):**  

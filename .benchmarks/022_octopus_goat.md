@@ -2,7 +2,7 @@
 
 **Date:** 2025-06-28 (updated 2025-07-05)
 **Plan:** 099 (OCTOPUS Octahedral Triplet KV Cache)
-**Command:** `cargo test -p microgpt-rs --features "octopus,spectral_quant,turboquant" --test bench_octopus_goat -- --nocapture`
+**Command:** `cargo test -p katgpt-rs --features "octopus,spectral_quant,turboquant" --test bench_octopus_goat -- --nocapture`
 **Machine:** macOS (Apple Silicon)
 **Rust:** edition 2024, debug profile
 

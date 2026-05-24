@@ -1,4 +1,4 @@
-//! microgpt-core: Shared types and SIMD kernels for microgpt-rs and riir-engine.
+//! katgpt-core: Shared types and SIMD kernels for katgpt-rs and riir-engine.
 //!
 //! This crate contains the common core shared between the two projects:
 //! - **types**: Config, Rng, math utilities, LoRA, DomainLatent

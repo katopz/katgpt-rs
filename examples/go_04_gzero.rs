@@ -20,7 +20,7 @@
 use std::env;
 use std::io::Write;
 
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::go::{
     GoCell, GoDeltaGatedConfig, GoGZeroSelfPlayConfig, GoTemplate, run_gzero_selfplay,
 };
 

@@ -12,8 +12,8 @@
 //! Run: cargo run --example core_05_maxsim --features maxsim --release
 //! With all proofs: cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release
 
-use microgpt_rs::simd::{maxsim_score, maxsim_score_packed, simd_dot_f32};
-use microgpt_rs::speculative::block_score_maxsim;
+use katgpt_rs::simd::{maxsim_score, maxsim_score_packed, simd_dot_f32};
+use katgpt_rs::speculative::block_score_maxsim;
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════════╗");
@@ -370,9 +370,9 @@ fn main() {
 /// streaming pattern works on compressed caches.
 #[cfg(feature = "turboquant")]
 fn section5_turboquant_proof() {
-    use microgpt_rs::turboquant::TurboQuantKVCache;
-    use microgpt_rs::turboquant::forward::maxsim_score_turboquant;
-    use microgpt_rs::types::Config;
+    use katgpt_rs::turboquant::TurboQuantKVCache;
+    use katgpt_rs::turboquant::forward::maxsim_score_turboquant;
+    use katgpt_rs::types::Config;
 
     println!("── 5. TurboQuant MaxSim Scoring ────────────────────────────────\n");
 
@@ -435,17 +435,17 @@ fn section5_turboquant_proof() {
 /// as the SpectralQuant test suite.
 #[cfg(feature = "spectral_quant")]
 fn section6_spectralquant_proof() {
-    use microgpt_rs::spectralquant::forward::maxsim_score_spectralquant;
-    use microgpt_rs::spectralquant::{
+    use katgpt_rs::spectralquant::forward::maxsim_score_spectralquant;
+    use katgpt_rs::spectralquant::{
         SpectralQuantCalibration, SpectralQuantKVCache, SpectralQuantKVCacheConfig,
         participation_ratio,
     };
-    use microgpt_rs::types::Config;
+    use katgpt_rs::types::Config;
 
     println!("── 6. SpectralQuant MaxSim Scoring ─────────────────────────────\n");
 
     let config = Config::micro();
-    let kv_dim = microgpt_rs::types::kv_dim(&config);
+    let kv_dim = katgpt_rs::types::kv_dim(&config);
     let n_positions = 8;
 
     // Build calibration with identity eigenvectors + exponential eigenvalue decay
@@ -546,16 +546,16 @@ fn section6_spectralquant_proof() {
 /// Uses `from_keys()` so calibration cannot be accidentally skipped.
 #[cfg(all(feature = "turboquant", feature = "spectral_quant"))]
 fn section7_tq_vs_sq_benchmark() {
-    use microgpt_rs::spectralquant::forward::maxsim_score_spectralquant;
-    use microgpt_rs::spectralquant::{SpectralQuantKVCache, SpectralQuantKVCacheConfig};
-    use microgpt_rs::turboquant::TurboQuantKVCache;
-    use microgpt_rs::turboquant::forward::{cosine_similarity, maxsim_score_turboquant};
-    use microgpt_rs::types::{Config, Rng};
+    use katgpt_rs::spectralquant::forward::maxsim_score_spectralquant;
+    use katgpt_rs::spectralquant::{SpectralQuantKVCache, SpectralQuantKVCacheConfig};
+    use katgpt_rs::turboquant::TurboQuantKVCache;
+    use katgpt_rs::turboquant::forward::{cosine_similarity, maxsim_score_turboquant};
+    use katgpt_rs::types::{Config, Rng};
 
     println!("── 7. 4-Way Matrix: TQ/SQ × Cosine/MaxSim (3-bit, calibrated) ─────────\n");
 
     let config = Config::micro();
-    let kv_dim = microgpt_rs::types::kv_dim(&config);
+    let kv_dim = katgpt_rs::types::kv_dim(&config);
     let n_positions = 16;
     let bits: u8 = 3;
 

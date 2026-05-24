@@ -5,7 +5,7 @@
 **Source:** Plan 054 (Player A/B Benchmark) + Game Theory Analysis
 **Commit:** `feat(bomber): TftPlayer — game theory Tit-for-Tat (Issue 056)`
 
-> **Bomber TFT:** `TftPlayer` implemented in `microgpt-rs/src/pruners/bomber/tft_player.rs`.
+> **Bomber TFT:** `TftPlayer` implemented in `katgpt-rs/src/pruners/bomber/tft_player.rs`.
 > Uses wall-aware blast zone detection for provocation (conservative — only retaliates when
 > actually in danger). Mixed tournament benchmark at `g_zero_05_tft_mixed`.
 
@@ -156,7 +156,7 @@ by being more aggressive (already loses). TFT is stable.
 ## Tasks
 
 ### Phase 1: TftPlayer Implementation
-- [x] **T1**: Create `microgpt-rs/src/pruners/bomber/tft_player.rs`
+- [x] **T1**: Create `katgpt-rs/src/pruners/bomber/tft_player.rs`
   - `TftMode` enum: `Nice` | `Retaliatory { ticks_left: u8 }`
   - `TftPlayer` struct implementing `BomberPlayer` trait
   - `is_provoked(events, pos, opponents, radius) -> bool` — detect nearby hostile bombs
@@ -169,7 +169,7 @@ by being more aggressive (already loses). TFT is stable.
   - `update_outcome` — track outcomes for stats (no bandit needed for TFT)
   - Gate behind `#[cfg(feature = "g_zero")]` (reuses bomber + g_zero infra)
 
-- [x] **T2**: Wire `TftPlayer` into `microgpt-rs/src/pruners/bomber/mod.rs`
+- [x] **T2**: Wire `TftPlayer` into `katgpt-rs/src/pruners/bomber/mod.rs`
   - `#[cfg(feature = "g_zero")] pub mod tft_player;`
   - `#[cfg(feature = "g_zero")] pub use tft_player::TftPlayer;`
 
@@ -192,7 +192,7 @@ by being more aggressive (already loses). TFT is stable.
 - [x] **T5**: Verify TFT survival ≥ Greedy survival (hypothesis: 68-75%) — Result: 58.4% (below target, noted for future tuning)
 - [x] **T6**: Verify TFT kills > Greedy kills (hypothesis: 0.15-0.20) — Result: 0.32 (✅ exceeds target)
 - [x] **T7**: `cargo clippy --fix --allow-dirty` — zero warnings
-- [x] **T8**: `cargo test -p microgpt-rs --features g_zero` — all 599 tests pass
+- [x] **T8**: `cargo test -p katgpt-rs --features g_zero` — all 599 tests pass
 - [x] **T9**: Commit with message: `feat(bomber): TftPlayer — game theory Tit-for-Tat (Issue 056)` — `bb119ce`
 
 ---
@@ -258,7 +258,7 @@ This is the **Generous Tit-for-Tat** strategy that dominates iterated games.
 ## File Map
 
 ```
-microgpt-rs/
+katgpt-rs/
   src/pruners/bomber/
     tft_player.rs                     ← T1: TftPlayer implementation
     mod.rs                            ← T2: add pub mod tft_player

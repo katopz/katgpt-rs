@@ -7,12 +7,12 @@
 //! - Multiple layer counts
 //! - Weight initialization correctness
 //!
-//! Run: `cargo test -p microgpt-rs --test test_delta_routing --features delta_routing -- --nocapture`
+//! Run: `cargo test -p katgpt-rs --test test_delta_routing --features delta_routing -- --nocapture`
 
 #![cfg(feature = "delta_routing")]
 
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng};
 
 fn make_multilayer_config(n_layer: usize) -> Config {
     let mut config = Config::micro();

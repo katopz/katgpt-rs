@@ -3,7 +3,7 @@
 **Branch:** `develop/feature/040_cross_training_game_domain`
 **Depends on:** Plan 038 (Domain Latent), Plan 039 (Game Replay Training Data)
 **Research:** `.research/04`, `.research/07`, `.research/14`, `.research/15`, `.research/16`
-**Target:** `riir-gpu` (wgpu game training) + `microgpt-rs` (feature flags)
+**Target:** `riir-gpu` (wgpu game training) + `katgpt-rs` (feature flags)
 
 ---
 
@@ -22,7 +22,7 @@ backends are unstable future work. `unsloth-mlx` is an external dependency we ca
 |----------|------|--------|-----------|
 | Game training | `riir-gpu` | ✅ Stable, modifiable | **Focus here** |
 | Language training | `riir-burner` | ❌ Unstable (both RS+PY) | ❌ Deferred |
-| Language inference | `microgpt-rs` | ✅ Works | Feature flag only |
+| Language inference | `katgpt-rs` | ✅ Works | Feature flag only |
 
 ### Why Game Domain Only
 
@@ -91,7 +91,7 @@ game_replay.jsonl (Plan 039)
 └───────────────────────────────┘
 ```
 
-### microgpt-rs Feature Flag
+### katgpt-rs Feature Flag
 
 ```toml
 # Cargo.toml — separate game from language concerns
@@ -309,7 +309,7 @@ pub struct GameTrainingReport {
   - Implements Research 04 P3 for game domain ✅
   - After training target LoRA, distill a smaller draft LoRA ✅
     - SVD initialization: truncate target LoRA effective weight to draft rank ✅
-    - Draft is smaller → faster inference in microgpt-rs speculative decoding ✅
+    - Draft is smaller → faster inference in katgpt-rs speculative decoding ✅
   - `distill_draft()` standalone function — SVD-based, CPU-only, no GPU forward pass needed ✅
   - Export both: `game_lora.bin` (target) + `game_draft_lora.bin` (draft) ✅
   - Output `DistillReport` with KL divergence, ranks, sample count ✅
@@ -337,7 +337,7 @@ pub struct GameTrainingReport {
   - This enables cross-run comparison and tracking training quality over time ✅
   - Tests: JSON roundtrip, all fields present ✅
 
-- [x] **Task 8: `game_domain` feature flag in microgpt-rs** (`microgpt-rs`) ✅
+- [x] **Task 8: `game_domain` feature flag in katgpt-rs** (`katgpt-rs`) ✅
   - Add `game_domain` feature flag to `Cargo.toml` ✅
   - Feature enables: `domain_latent` (already exists) ✅
   - `language_domain` feature flag added as placeholder (no code yet, just the flag) ✅
@@ -371,15 +371,15 @@ pub struct GameTrainingReport {
 | `riir-gpu/src/game/replay.rs` | `parse_jsonl()`, `parse_jsonl_filtered()`, `parse_jsonl_dir()` | riir-gpu |
 | `riir-gpu/src/game/trainer.rs` | `encode_game_samples()`, `decode_action_token()`, `BOARD_VOCAB`, `ACTION_OFFSET`, `GAME_SEQ_LEN` | riir-gpu |
 | `riir-gpu/examples/train_bomber.rs` | Real pipeline (Plan 041), BetaConfig, ReviewMetrics, compress Phase 6, screening Phase 4a (`--lora-top-k`) | riir-gpu |
-| `microgpt-rs/src/types.rs` | `Config::game()` for Bomberman LoRA training (Plan 041) | microgpt-rs |
-| `microgpt-rs/Cargo.toml` | Add `game_domain` and `language_domain` feature flags | microgpt-rs |
+| `katgpt-rs/src/types.rs` | `Config::game()` for Bomberman LoRA training (Plan 041) | katgpt-rs |
+| `katgpt-rs/Cargo.toml` | Add `game_domain` and `language_domain` feature flags | katgpt-rs |
 
 ### Done (Task 9) ✅
 
 | File | Change | Target |
 |------|--------|--------|
 | `riir-gpu/tests/bench_cross_training.rs` | New: 5 benchmarks — BetaConfig vs manual, SVD+KL, screening top-K, domain latent, pipeline overhead (Task 9) | riir-gpu |
-| `microgpt-rs/bench/056_results.csv` | Benchmark results for Plan 040 cross-training techniques | microgpt-rs |
+| `katgpt-rs/bench/056_results.csv` | Benchmark results for Plan 040 cross-training techniques | katgpt-rs |
 
 ---
 
@@ -451,7 +451,7 @@ Different scales, different pipelines, different feature flags.
 |-----------|-------------|------|
 | DomainLatent for burn (038 T5b) | riir-burner unstable | When burn backend matures |
 | Multi-LoRA stacking (04) | Needs stable adapter format | When both backends stabilize |
-| Reader/Writer LoRA pairs (025) | Needs runtime support in microgpt-rs | When Plan 025 is implemented |
+| Reader/Writer LoRA pairs (025) | Needs runtime support in katgpt-rs | When Plan 025 is implemented |
 | EMO data routing (09) | Needs multi-domain training data | When game has multiple sub-domains |
 | S-LoRA multi-tenant (04) | Needs GPU infra + real model | Far future |
 | Gemma 4 LoRA training (011) | riir-burner Rust backend unstable | When burn backend matures |

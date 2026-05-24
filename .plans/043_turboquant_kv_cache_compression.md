@@ -1,6 +1,6 @@
 # Plan 043: TurboQuant KV Cache Compression — Near-Optimal Vector Quantization for Inference
 
-> **Research:** `microgpt-rs/.research/020_TurboQuant_Online_Vector_Quantization.md`
+> **Research:** `katgpt-rs/.research/020_TurboQuant_Online_Vector_Quantization.md`
 > **Raw reference:** `.raw/turboquant/` (Python implementation with 35 passing tests)
 > **Related:** Plan 020 (Raven RSM), Plan 042 (TTT Feedback Loop), riir-gpu `attention_score.wgsl`
 > **Branch:** `develop/feature/043_turboquant_kv_cache`
@@ -136,7 +136,7 @@ pub struct TurboQuantKVCache {
 Before any changes, capture current KV cache metrics:
 
 ```bash
-cd microgpt-rs && cargo bench --quiet 2>&1 | tee .plans/043_baseline.txt
+cd katgpt-rs && cargo bench --quiet 2>&1 | tee .plans/043_baseline.txt
 ```
 
 | Metric | How to Extract | Target for Comparison |
@@ -151,7 +151,7 @@ cd microgpt-rs && cargo bench --quiet 2>&1 | tee .plans/043_baseline.txt
 
 Port `.raw/turboquant/turboquant/codebook.py` to Rust.
 
-**File:** `microgpt-rs/src/turboquant/codebook.rs`
+**File:** `katgpt-rs/src/turboquant/codebook.rs`
 
 ```rust
 /// Compute Lloyd-Max optimal codebook for Beta distribution on [-1, 1].
@@ -178,7 +178,7 @@ Test plan:
 
 Port `.raw/turboquant/turboquant/rotation.py` to Rust.
 
-**File:** `microgpt-rs/src/turboquant/rotation.rs`
+**File:** `katgpt-rs/src/turboquant/rotation.rs`
 
 ```rust
 /// Generate random orthogonal matrix via QR decomposition.
@@ -203,7 +203,7 @@ Test plan:
 
 ### Task 4: Implement `TurboQuantKVCache`
 
-**File:** `microgpt-rs/src/turboquant/kv_cache.rs`
+**File:** `katgpt-rs/src/turboquant/kv_cache.rs`
 
 ```rust
 impl TurboQuantKVCache {
@@ -247,7 +247,7 @@ Test plan:
 
 ### Task 5: Implement `forward_turboquant()` Attention Path
 
-**File:** `microgpt-rs/src/turboquant/forward.rs`
+**File:** `katgpt-rs/src/turboquant/forward.rs`
 
 ```rust
 /// Forward pass using TurboQuantKVCache.
@@ -345,21 +345,21 @@ Refs: .research/020_TurboQuant_Online_Vector_Quantization.md"
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `microgpt-rs/src/turboquant/mod.rs` | ~15 | Module index |
-| `microgpt-rs/src/turboquant/types.rs` | ~60 | Structs: TurboQuantCodebook, TurboQuantLayer, TurboQuantKVCache |
-| `microgpt-rs/src/turboquant/codebook.rs` | ~200 | Lloyd-Max scalar quantizer for Beta distribution |
-| `microgpt-rs/src/turboquant/rotation.rs` | ~80 | Random rotation + QJL matrix generation |
-| `microgpt-rs/src/turboquant/kv_cache.rs` | ~250 | Compressed KV cache: quantize, store, dequantize |
-| `microgpt-rs/src/turboquant/forward.rs` | ~150 | forward_turboquant() attention path |
+| `katgpt-rs/src/turboquant/mod.rs` | ~15 | Module index |
+| `katgpt-rs/src/turboquant/types.rs` | ~60 | Structs: TurboQuantCodebook, TurboQuantLayer, TurboQuantKVCache |
+| `katgpt-rs/src/turboquant/codebook.rs` | ~200 | Lloyd-Max scalar quantizer for Beta distribution |
+| `katgpt-rs/src/turboquant/rotation.rs` | ~80 | Random rotation + QJL matrix generation |
+| `katgpt-rs/src/turboquant/kv_cache.rs` | ~250 | Compressed KV cache: quantize, store, dequantize |
+| `katgpt-rs/src/turboquant/forward.rs` | ~150 | forward_turboquant() attention path |
 | `riir-ai/crates/riir-gpu/src/kernels/attention_score_tq.wgsl` | ~100 | GPU kernel for quantized attention scoring |
 
 ### Modified files
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/src/lib.rs` | Add `pub mod turboquant;` |
-| `microgpt-rs/src/benchmark.rs` | Add `bench_turboquant_vs_flat_cache`, `bench_turboquant_quality` |
-| `microgpt-rs/Cargo.toml` | Add `statrs`, `nalgebra` dependencies |
+| `katgpt-rs/src/lib.rs` | Add `pub mod turboquant;` |
+| `katgpt-rs/src/benchmark.rs` | Add `bench_turboquant_vs_flat_cache`, `bench_turboquant_quality` |
+| `katgpt-rs/Cargo.toml` | Add `statrs`, `nalgebra` dependencies |
 | `riir-ai/crates/riir-gpu/src/lib.rs` | Export TQ attention |
 | `riir-ai/crates/riir-gpu/src/kernels/mod.rs` | Register `attention_score_tq` pipeline |
 | `riir-ai/crates/riir-gpu/src/forward.rs` | Add `dispatch_attention_tq()` |
@@ -397,7 +397,7 @@ for simplicity. The gain is marginal and adds complexity to bit-packing.
 
 ### 6. Feature-gated
 
-Everything behind `#[cfg(feature = "turboquant")]` in microgpt-rs. Zero overhead when disabled.
+Everything behind `#[cfg(feature = "turboquant")]` in katgpt-rs. Zero overhead when disabled.
 
 ---
 

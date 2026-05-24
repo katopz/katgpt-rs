@@ -1,7 +1,7 @@
 //! Shared traits for game AI and speculative decoding.
 //!
-//! Consolidated from microgpt-rs and riir-engine to eliminate duplication.
-//! Both crates depend on `microgpt-core`, so moving traits here requires
+//! Consolidated from katgpt-rs and riir-engine to eliminate duplication.
+//! Both crates depend on `katgpt-core`, so moving traits here requires
 //! zero new dependency edges.
 //!
 //! # Traits

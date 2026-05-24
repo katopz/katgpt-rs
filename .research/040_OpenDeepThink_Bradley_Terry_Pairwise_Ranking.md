@@ -34,7 +34,7 @@ OpenDeepThink is a **population-based test-time compute** framework that:
 
 ---
 
-## Modelless Path (microgpt-rs)
+## Modelless Path (katgpt-rs)
 
 ### What Maps
 
@@ -252,7 +252,7 @@ This aligns with our architecture: game domains have **ground truth** (win/loss)
 
 | Priority | Idea | Target | Effort | Expected Gain |
 |----------|------|--------|--------|---------------|
-| **P1** | PairwisePruner + BT ranking | microgpt-rs DDTree | 3 days | **High** — addresses selection bottleneck |
+| **P1** | PairwisePruner + BT ranking | katgpt-rs DDTree | 3 days | **High** — addresses selection bottleneck |
 | **P2** | BT-augmented GRPO advantage | riir-ai GZeroLoop | 2 days | Medium — replaces scalar reward |
 | **P3** | PairwiseValidator compare() | riir-validator-sdk | 1 day | Low — ABI extension, future-proofing |
 | **P4** | Critique-conditioned DPO | riir-ai loss pipeline | 3 days | Medium — if P1/P2 show gain |

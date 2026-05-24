@@ -20,8 +20,8 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
-use microgpt_rs::types::{Config, Rng, matmul, matmul_relu, rmsnorm};
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
+use katgpt_rs::types::{Config, Rng, matmul, matmul_relu, rmsnorm};
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -87,7 +87,7 @@ fn forward_reference(
 ) -> Vec<f32> {
     let n = config.n_embd;
     let hd = config.head_dim;
-    let kvd = microgpt_rs::types::kv_dim(config);
+    let kvd = katgpt_rs::types::kv_dim(config);
     let n_kv = config.n_kv_head;
 
     // Allocate buffers
@@ -542,7 +542,7 @@ fn proof_g3_buffer_write_analysis() {
 fn proof_lora_fallback_works() {
     // When LoRA is active, forward_coda falls back to forward_base.
     // This test verifies the fallback path works.
-    use microgpt_rs::types::LoraAdapter;
+    use katgpt_rs::types::LoraAdapter;
 
     let (config, weights) = make_4layer();
     let mut ctx = ForwardContext::new(&config);
@@ -557,7 +557,7 @@ fn proof_lora_fallback_works() {
         out_dim: config.n_embd,
     };
 
-    let logits = microgpt_rs::transformer::forward_with_domain_latent(
+    let logits = katgpt_rs::transformer::forward_with_domain_latent(
         &mut ctx,
         &weights,
         &mut cache,

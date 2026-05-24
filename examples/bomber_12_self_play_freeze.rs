@@ -12,11 +12,11 @@ use std::path::Path;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     BomberFrozenBandit, BomberPlayer, GameEvent, GreedyPlayer, GridPos, HLPlayer, RandomPlayer,
     ValidatorPlayer, init_world, run_tick, spawn_players,
 };
-use microgpt_rs::pruners::{load_frozen, save_frozen};
+use katgpt_rs::pruners::{load_frozen, save_frozen};
 
 // ── Config ─────────────────────────────────────────────────────
 
@@ -141,11 +141,11 @@ fn run_round(seed: u64, players: &mut [Box<dyn BomberPlayer>], rng: &mut Rng) ->
                 .copied()
                 .unwrap_or_default();
             let alive = world
-                .get::<microgpt_rs::pruners::bomber::Alive>(entities[i])
+                .get::<katgpt_rs::pruners::bomber::Alive>(entities[i])
                 .is_some();
             if alive {
                 let grid = world
-                    .resource::<microgpt_rs::pruners::bomber::ArenaGrid>()
+                    .resource::<katgpt_rs::pruners::bomber::ArenaGrid>()
                     .clone();
                 let action = player.select_action(&grid, pos, &tick_events, rng);
                 actions[i] = Some(action);
@@ -211,7 +211,7 @@ fn run_round(seed: u64, players: &mut [Box<dyn BomberPlayer>], rng: &mut Rng) ->
 
     result.survivors = survivors;
     result.ticks = world
-        .resource::<microgpt_rs::pruners::bomber::TickCounter>()
+        .resource::<katgpt_rs::pruners::bomber::TickCounter>()
         .tick;
 
     result

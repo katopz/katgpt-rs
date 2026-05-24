@@ -7,7 +7,7 @@
 //!
 //! Run: cargo run --example sudoku_01_9x9
 
-use microgpt_rs::percepta::{StreamingSolver, Sudoku9x9, SymbolicValidator, Vec2};
+use katgpt_rs::percepta::{StreamingSolver, Sudoku9x9, SymbolicValidator, Vec2};
 
 fn main() {
     println!("🧠 Symbolic Validator: 9×9 Sudoku Solver");

@@ -27,7 +27,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use microgpt_rs::pruners::subterranean::{
+//! use katgpt_rs::pruners::subterranean::{
 //!     ProcedureGraph, PathEnumerator, PathSampler, ProcedureCostModel,
 //! };
 //!

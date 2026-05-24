@@ -14,11 +14,11 @@
 #[cfg(feature = "cna_steering")]
 #[test]
 fn bench_cna_steering_goat_proof() {
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         CnaCircuit, CnaDiscoveryConfig, CnaModulator, CnaNeuron, CnaScreeningPruner, cna_discover,
         cna_modulate, detect_universal_neurons,
     };
-    use microgpt_rs::speculative::types::ScreeningPruner;
+    use katgpt_rs::speculative::types::ScreeningPruner;
     use std::hint::black_box;
     use std::time::Instant;
 

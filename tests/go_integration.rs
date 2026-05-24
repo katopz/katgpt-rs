@@ -16,7 +16,7 @@
 mod go_integration {
     use std::env;
 
-    use microgpt_rs::pruners::go::{AutoGoClient, AutoGoGameState};
+    use katgpt_rs::pruners::go::{AutoGoClient, AutoGoGameState};
 
     /// Default AutoGo server URL (matches `python -m alpha_go.play --port 8765`).
     const DEFAULT_AUTOGO_URL: &str = "http://localhost:8765";

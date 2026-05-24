@@ -289,7 +289,7 @@ The review loop is a PPoT concern (rescue with structured feedback). Adding it t
 
 ## Out of Scope
 
-- ~~[-]~~ LLM-based reviewer agent (the paper uses o3-mini; our WASM validators are the distilled equivalent — no LLM inference path in microgpt-rs)
+- ~~[-]~~ LLM-based reviewer agent (the paper uses o3-mini; our WASM validators are the distilled equivalent — no LLM inference path in katgpt-rs)
 - ~~[-]~~ GEPA implementation for automated prompt optimization (AbsorbCompress + HotSwapPruner serve this role at code level — no prompt mutation loop exists)
 - ~~[-]~~ RAG query reviewer gate for riir-rest (`EmbeddingRouter` now exists in riir-router with three-tier fallback, but no `ReviewMetrics` gate wired — future plan could add `BenefitRatioGate` to tier decisions)
 - ~~[-]~~ Cross-domain metric transfer (metrics are per-pruner, not shared across domains — no cross-domain sharing architecture exists)

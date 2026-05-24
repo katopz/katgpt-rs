@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Canonical Terminology
-**Context:** microgpt-rs + anyrag neuro-symbolic architecture
+**Context:** katgpt-rs + anyrag neuro-symbolic architecture
 
 ---
 
@@ -10,7 +10,7 @@
 
 The term "Computable LoRA" (cLoRA) is an academic metaphor that should be avoided in engineering implementation. It conflates deterministic code execution with neural weight adaptation.
 
-In this neuro-symbolic architecture (microgpt-rs + anyrag), there are exactly **two distinct artifacts**. They operate in different phases and are made of fundamentally different materials.
+In this neuro-symbolic architecture (katgpt-rs + anyrag), there are exactly **two distinct artifacts**. They operate in different phases and are made of fundamentally different materials.
 
 ---
 
@@ -29,7 +29,7 @@ In this neuro-symbolic architecture (microgpt-rs + anyrag), there are exactly **
 | **How it works** | Intercepts the speculative draft tree (DDTree) and instantly assigns probability 0.0 to any tokens that violate strict rules (e.g., Rust syntax) |
 | **Why it's NOT a LoRA** | No neural weights, no matrix multiplication, cannot "learn". Only executes strict if/else logic and state transitions |
 
-### Existing Implementations in microgpt-rs
+### Existing Implementations in katgpt-rs
 
 | Implementation | Location | What it validates |
 |---------------|----------|-------------------|
@@ -65,7 +65,7 @@ Curators upload specialized `domain_validator.wasm` files that encode domain-spe
 
 | Component | Repo | License |
 |-----------|------|---------|
-| `ConstraintPruner` trait | `microgpt-rs` (core) | MIT |
+| `ConstraintPruner` trait | `katgpt-rs` (core) | MIT |
 | `WasmPruner` runtime | `crates/riir-wasm/` in `riir-ai` | Private (internal) |
 | `riir-validator-sdk` | `crates/riir-validator-sdk/` in `riir-ai` | Private (internal) |
 | Semantic validator | `crates/riir-semantic/` in `riir-ai` | Private (SaaS) |
@@ -110,7 +110,7 @@ Upload to riir-forge marketplace (hosted, Curator IP protected)
 
 ### Not Yet Implemented
 
-The Neural Adapter does not exist in microgpt-rs yet. This is the gap identified in `.research/03`.
+The Neural Adapter does not exist in katgpt-rs yet. This is the gap identified in `.research/03`.
 
 ### Curator Deliverable (Marketplace)
 
@@ -122,7 +122,7 @@ Curators upload specialized `domain_lora.bin` files:
 
 **License:** Proprietary (SaaS). Hosted on the platform, never distributed. This is the fuel for the engine.
 
-### .bin Production Pipeline (anyrag Plan 003 + microgpt-rs Plan 008)
+### .bin Production Pipeline (anyrag Plan 003 + katgpt-rs Plan 008)
 
 **The 32-day self-improving cycle:**
 
@@ -137,7 +137,7 @@ Curator::synthesize_training_data() filters successful episodes
        ↓
 KnowledgeExporter::export_for_lora() produces JSONL training data
        ↓
-microgpt-rs Plan 008: wgpu LoRA Trainer consumes JSONL → trains lora.bin
+katgpt-rs Plan 008: wgpu LoRA Trainer consumes JSONL → trains lora.bin
        ↓
 SelfImprovingCycle hot-reloads lora.bin into inference engine
        ↓
@@ -157,7 +157,7 @@ pub struct TranslationEpisode {
 }
 ```
 
-**Export format:** JSONL consumed by microgpt-rs wgpu trainer:
+**Export format:** JSONL consumed by katgpt-rs wgpu trainer:
 ```jsonl
 {"input": "def add(a, b): return a + b", "output": "fn add(a: i32, b: i32) -> i32 { a + b }", "verified": true}
 ```
@@ -225,7 +225,7 @@ Validator prunes → Valid code saved → Train Adapter → LLM gets smarter
 - [x] Update README to use "Deterministic Validator" and "Neural Adapter" terminology (completed in commit `939e430`)
 - [x] Design `.wasm` interface for Curator-uploaded Deterministic Validators (Plan 015)
 - [ ] Implement actual LoRA weight loading (rank-decomposed matrices A, B) — Plan 008
-- [ ] Implement `WasmPruner` runtime in microgpt-rs (`--features wasm`) — Plan 015 Phase 1
+- [ ] Implement `WasmPruner` runtime in katgpt-rs (`--features wasm`) — Plan 015 Phase 1
 - [ ] Create riir-ai monorepo (MIT) — Plan 015 Phase 2
 - [ ] Design `.safetensors` schema for Neural Adapter files — Plan 008
 - [ ] Implement anyrag `SelfImprovingCycle` (32-day loop) — anyrag Plan 003

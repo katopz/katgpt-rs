@@ -29,20 +29,20 @@ Currently each arena has its own ad-hoc tournament runner:
 ## Architecture
 
 ```
-microgpt-rs/src/pruners/arena/
+katgpt-rs/src/pruners/arena/
 ├── mod.rs              — re-exports
 ├── types.rs            — PlayerEntry, MatchupConfig, Leaderboard, ELO
 └── scheduler.rs        — RoundRobinScheduler, match scheduling
 
-microgpt-rs/src/pruners/bomber/
+katgpt-rs/src/pruners/bomber/
 ├── rubric_player.rs    — (exists) RubricPlayer
 └── arena_runner.rs     — BomberArenaRunner: runs N-round 4-player matches
 
-microgpt-rs/src/pruners/fft/
+katgpt-rs/src/pruners/fft/
 ├── rubric_player.rs    — (exists) RubricFFTPlayer
 └── arena_runner.rs     — FFTArenaRunner: runs N-round 8-unit battles
 
-microgpt-rs/examples/
+katgpt-rs/examples/
 ├── bomber_09_rubric_tournament.rs  — RubricPlayer vs all baselines
 └── fft_02_rubric_tournament.rs     — RubricFFTPlayer vs all baselines
 ```
@@ -64,7 +64,7 @@ microgpt-rs/examples/
 
 ## T1: `arena/types.rs` — Shared Tournament Types
 
-### File: `microgpt-rs/src/pruners/arena/types.rs`
+### File: `katgpt-rs/src/pruners/arena/types.rs`
 
 ```rust
 use std::fmt;
@@ -229,7 +229,7 @@ impl EloCalculator {
 
 ## T2: `arena/scheduler.rs` — Round-Robin Matchup Generator
 
-### File: `microgpt-rs/src/pruners/arena/scheduler.rs`
+### File: `katgpt-rs/src/pruners/arena/scheduler.rs`
 
 Generates all pairwise (or group) matchups for a tournament.
 
@@ -293,7 +293,7 @@ pub fn full_field_matchups(n: usize, field_size: usize) -> Vec<Matchup> {
 
 ## T3: `arena/mod.rs` — Module Index
 
-### File: `microgpt-rs/src/pruners/arena/mod.rs`
+### File: `katgpt-rs/src/pruners/arena/mod.rs`
 
 ```rust
 //! Cross-arena tournament infrastructure — scheduling, scoring, leaderboards.
@@ -307,7 +307,7 @@ pub use scheduler::*;
 pub use types::*;
 ```
 
-### File: `microgpt-rs/src/pruners/mod.rs` — add `arena` module
+### File: `katgpt-rs/src/pruners/mod.rs` — add `arena` module
 
 ```rust
 // Add after existing modules:
@@ -319,7 +319,7 @@ pub mod arena;
 
 ## T4: `bomber/arena_runner.rs` — BomberArenaRunner
 
-### File: `microgpt-rs/src/pruners/bomber/arena_runner.rs`
+### File: `katgpt-rs/src/pruners/bomber/arena_runner.rs`
 
 Runs a tournament between multiple BomberPlayer implementations.
 
@@ -415,7 +415,7 @@ pub fn run_bomber_matchup(
 
 ## T5: `fft/arena_runner.rs` — FFTArenaRunner
 
-### File: `microgpt-rs/src/pruners/fft/arena_runner.rs`
+### File: `katgpt-rs/src/pruners/fft/arena_runner.rs`
 
 Runs a tournament between FftPlayer implementations in 4v4 battles.
 
@@ -495,7 +495,7 @@ pub fn run_fft_matchup(
 
 ## T6: `bomber_09_rubric_tournament.rs` — Bomber Rubric Tournament Example
 
-### File: `microgpt-rs/examples/bomber_09_rubric_tournament.rs`
+### File: `katgpt-rs/examples/bomber_09_rubric_tournament.rs`
 
 ```rust
 //! Bomberman Rubric Tournament — RubricPlayer vs all baselines (Plan 076).
@@ -508,13 +508,13 @@ pub fn run_fft_matchup(
 //! Output: per-matchup results, ELO ratings, markdown leaderboard.
 
 use fastrand::Rng;
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, RubricPlayer, ValidatorPlayer,
 };
-use microgpt_rs::pruners::arena::types::*;
+use katgpt_rs::pruners::arena::types::*;
 
 #[cfg(feature = "g_zero")]
-use microgpt_rs::pruners::bomber::GZeroPlayer;
+use katgpt_rs::pruners::bomber::GZeroPlayer;
 
 // ... factory function, matchup loop, leaderboard output ...
 ```
@@ -533,7 +533,7 @@ required-features = ["ropd_rubric", "g_zero", "bomber"]
 
 ## T7: `fft_02_rubric_tournament.rs` — FFT Rubric Tournament Example
 
-### File: `microgpt-rs/examples/fft_02_rubric_tournament.rs`
+### File: `katgpt-rs/examples/fft_02_rubric_tournament.rs`
 
 ```rust
 //! FFT Rubric Tournament — RubricFFTPlayer vs all baselines (Plan 076).
@@ -542,13 +542,13 @@ required-features = ["ropd_rubric", "g_zero", "bomber"]
 //!
 //! Run: `cargo run --example fft_02_rubric_tournament --features ropd_rubric,g_zero,fft`
 
-use microgpt_rs::pruners::fft::{
+use katgpt_rs::pruners::fft::{
     FftPlayer, GreedyFFTPlayer, RubricFFTPlayer, ValidatorFFTPlayer,
 };
-use microgpt_rs::pruners::arena::types::*;
+use katgpt_rs::pruners::arena::types::*;
 
 #[cfg(feature = "g_zero")]
-use microgpt_rs::pruners::fft::GZeroFFTPlayer;
+use katgpt_rs::pruners::fft::GZeroFFTPlayer;
 
 // ... factory function, matchup loop, leaderboard output ...
 ```

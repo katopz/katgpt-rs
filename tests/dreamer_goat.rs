@@ -11,10 +11,10 @@
 //! Runs by default (dreamer is a default feature).
 //! Run: `cargo test --test dreamer_goat -- --nocapture`
 
-use microgpt_rs::pruners::dreamer::pipeline::{ConsolidationResult, DreamerPipeline};
-use microgpt_rs::pruners::dreamer::scheduler::ArmInfo;
-use microgpt_rs::pruners::dreamer::types::DreamerConfig;
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::dreamer::pipeline::{ConsolidationResult, DreamerPipeline};
+use katgpt_rs::pruners::dreamer::scheduler::ArmInfo;
+use katgpt_rs::pruners::dreamer::types::DreamerConfig;
+use katgpt_rs::types::Rng;
 
 // ── Shared Constants ──────────────────────────────────────────
 

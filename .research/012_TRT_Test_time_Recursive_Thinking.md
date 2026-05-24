@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs speculative decoding + PPoT (Plan 026) + ConstraintPruner architecture
+**Context:** katgpt-rs speculative decoding + PPoT (Plan 026) + ConstraintPruner architecture
 **Paper:** "Test-time Recursive Thinking: Self-Improvement without External Feedback" (arXiv:2602.03094) — Zhuang, Singh, Liu, Shen, Zhang, Shang, Gao, Chen (Microsoft Research / UC San Diego)
 
 ---
@@ -11,7 +11,7 @@
 
 LLMs can self-improve at test time by iterating three stages — **Generate** (with strategies + knowledge), **Select** (self-rank), **Reflect** (extract failure insights) — without external feedback. Open-source models reach 100% on AIME-25/24; o3 improves +14.8pp on LiveCodeBench hard problems. The key mechanisms are: (1) per-rollout strategy conditioning for diverse exploration, (2) compressed "don'ts" knowledge accumulation (<1.5% of context after 64 rounds), and (3) self-verification via mutual exclusivity (math) or test execution (code).
 
-Applied to microgpt-rs after PPoT: the highest-value distillation is **rejection knowledge accumulation** — when PPoT rescue resamples and the `ConstraintPruner` rejects variants, record structured "don't" patterns that bias future resampling within the same generation session. This makes PPoT adaptive rather than random. Secondary: cycle `TokenRule` strategies across PPoT's m samples so each explores a distinct hypothesis.
+Applied to katgpt-rs after PPoT: the highest-value distillation is **rejection knowledge accumulation** — when PPoT rescue resamples and the `ConstraintPruner` rejects variants, record structured "don't" patterns that bias future resampling within the same generation session. This makes PPoT adaptive rather than random. Secondary: cycle `TokenRule` strategies across PPoT's m samples so each explores a distinct hypothesis.
 
 ---
 
@@ -170,11 +170,11 @@ Higher-level execution insights (performance, edge cases, indexing) dominate ove
 
 ---
 
-## Mapping to microgpt-rs
+## Mapping to katgpt-rs
 
 ### What Already Exists (after PPoT Plan 026)
 
-| TRT Component | microgpt-rs Equivalent | Status |
+| TRT Component | katgpt-rs Equivalent | Status |
 |---|---|---|
 | Multiple rollout generation | PPoT m=10 CPU resampled variants | ✅ Plan 026 |
 | Strategy conditioning | `TokenRule` enum (Digit, Compare, Arithmetic, Augment, All) | ✅ Plan 026 |
@@ -281,7 +281,7 @@ This is a 5-line change to `PpotConfig` that captures TRT's adaptive exploration
 
 | TRT Concept | Why Skip |
 |---|---|
-| Multi-round LLM calls (T=64) | microgpt-rs is a single-pass token decoder, not a chat loop. No LLM API per round. |
+| Multi-round LLM calls (T=64) | katgpt-rs is a single-pass token decoder, not a chat loop. No LLM API per round. |
 | Model-generated strategy prompts | We don't have a "prompt the model to design strategies" loop. Static `TokenRule` enums are sufficient for token-level rescue. |
 | Test execution for selection | `WasmPruner` already provides deterministic verification. Generated tests would be slower and less reliable. |
 | Cross-problem knowledge | TRT accumulates per-problem. We accumulate per-generation-session. Different scope, same principle. |

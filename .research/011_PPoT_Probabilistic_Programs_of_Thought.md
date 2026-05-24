@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs speculative decoding + DDTree + ConstraintPruner architecture
+**Context:** katgpt-rs speculative decoding + DDTree + ConstraintPruner architecture
 **Paper:** "Probabilistic Programs of Thought" (arXiv:2604.17290) — Poorva Garg et al. (UCLA / Allen AI)
 
 ---
@@ -11,7 +11,7 @@
 
 After an LLM generates a program (1 GPU pass), the **next-token logits are already available but discarded**. PPoT identifies high-entropy "key tokens" (digits, operators, brackets), converts them into random variables parameterized by those saved logits, and samples exponentially many variant programs using **only CPU** — no additional GPU forward passes. Result: **2-7% accuracy gain with m=5 CPU-only samples, at near-zero compute cost**.
 
-Applied to microgpt-rs: the DFlash marginals in `SpeculativeContext` already capture the expensive part. The missing piece is a ~200-300 line module that identifies high-entropy positions and resamples from saved distributions on CPU, verified through existing `ConstraintPruner` / `ScreeningPruner`.
+Applied to katgpt-rs: the DFlash marginals in `SpeculativeContext` already capture the expensive part. The missing piece is a ~200-300 line module that identifies high-entropy positions and resamples from saved distributions on CPU, verified through existing `ConstraintPruner` / `ScreeningPruner`.
 
 ---
 
@@ -207,11 +207,11 @@ PPoT:  data1 = np.random.randn(6, 50)     # resampled 5→6, renders correctly
 
 ---
 
-## Mapping to microgpt-rs
+## Mapping to katgpt-rs
 
 ### What Already Exists
 
-| PPoT Component | microgpt-rs Equivalent | Status |
+| PPoT Component | katgpt-rs Equivalent | Status |
 |---|---|---|
 | Next-token logit capture | `DFlash` marginals in `SpeculativeContext::marginals_flat` | ✅ Done |
 | Categorical sampling | `sample_from_distribution()` in `src/speculative/sampling.rs` | ✅ Done |
@@ -270,7 +270,7 @@ The `digit`, `arithmetic`, `compare`, `augment` support sets can be a new `Scree
 `sample_residual_distribution(p, q, ...)` already samples from `max(0, p - q)`. Setting `q` to a Kronecker delta at the original token's position implements the different-value constraint naturally.
 
 ### 4. No Gumbel-Max Needed
-PPoT uses Gumbel-max sampling because PyTorch makes it convenient. Rust's `sample_from_distribution()` with CDF-based sampling is equivalent and already battle-tested in microgpt-rs.
+PPoT uses Gumbel-max sampling because PyTorch makes it convenient. Rust's `sample_from_distribution()` with CDF-based sampling is equivalent and already battle-tested in katgpt-rs.
 
 ### 5. Zero-Alloc Compatibility
 All resampling can use the existing `SpeculativeContext` scratch buffers (`residual_buf`, `probs_buf`). No new allocations in the hot path.
@@ -289,7 +289,7 @@ All resampling can use the existing `SpeculativeContext` scratch buffers (`resid
 
 ## Verdict: Adopt (Targeted)
 
-PPoT's core insight — **reusing discarded next-token distributions for cheap CPU resampling** — is architecturally clean and fits naturally into microgpt-rs's DFlash → DDTree pipeline. The implementation cost is low (~300 lines) and the existing `ConstraintPruner` / `ScreeningPruner` infrastructure handles verification.
+PPoT's core insight — **reusing discarded next-token distributions for cheap CPU resampling** — is architecturally clean and fits naturally into katgpt-rs's DFlash → DDTree pipeline. The implementation cost is low (~300 lines) and the existing `ConstraintPruner` / `ScreeningPruner` infrastructure handles verification.
 
 **Adopt for the "post-DDTree rescue" use case**: when speculative decoding fails (all paths rejected), try PPoT resampling before falling back to greedy. This is the highest-ROI integration point because:
 1. It only activates when needed (no overhead on success path)
@@ -305,8 +305,8 @@ PPoT's core insight — **reusing discarded next-token distributions for cheap C
 
 - "Probabilistic Programs of Thought" (arXiv:2604.17290) — Garg, Geh, Israel, Millstein, Richardson, Van den Broeck
 - PPoT Reference Implementation: `raw/PPoT/ppot/` in this repo
-- microgpt-rs DFlash: `src/speculative/dflash.rs`
-- microgpt-rs DDTree: `src/speculative/dd_tree.rs`
-- microgpt-rs Sampling: `src/speculative/sampling.rs`
+- katgpt-rs DFlash: `src/speculative/dflash.rs`
+- katgpt-rs DDTree: `src/speculative/dd_tree.rs`
+- katgpt-rs Sampling: `src/speculative/sampling.rs`
 - Screening Pruner Research: `.research/007_Screening_Absolute_Relevance.md`
 - Leviathan Speculative Decoding: `.research/002_Fast_Inference_from_Transformers_via_Speculative_Decoding.md`

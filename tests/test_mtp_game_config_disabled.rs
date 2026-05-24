@@ -8,7 +8,7 @@
 
 #![cfg(feature = "dllm")]
 
-use microgpt_rs::types::Config;
+use katgpt_rs::types::Config;
 
 // ── T35: Game configs have Top-K disabled (K=1) ────────────────
 //

@@ -366,13 +366,13 @@ impl WidthScaleConfig {
 /// `MajorityVote` maps to `MostFrequent` (same semantics, different naming convention).
 /// `BtRank` falls back to `BestQ` when `bt_rank` feature is off.
 #[cfg(feature = "eqr_convergence")]
-impl From<microgpt_core::ConvergenceSelector> for WidthSelectionMode {
-    fn from(selector: microgpt_core::ConvergenceSelector) -> Self {
+impl From<katgpt_core::ConvergenceSelector> for WidthSelectionMode {
+    fn from(selector: katgpt_core::ConvergenceSelector) -> Self {
         match selector {
-            microgpt_core::ConvergenceSelector::BestQ => WidthSelectionMode::BestQ,
-            microgpt_core::ConvergenceSelector::MajorityVote => WidthSelectionMode::MostFrequent,
-            microgpt_core::ConvergenceSelector::Top1Converged => WidthSelectionMode::Top1Converged,
-            microgpt_core::ConvergenceSelector::BtRank => {
+            katgpt_core::ConvergenceSelector::BestQ => WidthSelectionMode::BestQ,
+            katgpt_core::ConvergenceSelector::MajorityVote => WidthSelectionMode::MostFrequent,
+            katgpt_core::ConvergenceSelector::Top1Converged => WidthSelectionMode::Top1Converged,
+            katgpt_core::ConvergenceSelector::BtRank => {
                 #[cfg(feature = "bt_rank")]
                 {
                     WidthSelectionMode::BestQ // TODO: BtRank variant when bt_rank integrates
@@ -681,7 +681,7 @@ pub fn extract_all_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> 
 ///
 /// # Example
 /// ```ignore
-/// use microgpt_rs::speculative::{build_dd_tree_pruned, par_find_valid_sequence};
+/// use katgpt_rs::speculative::{build_dd_tree_pruned, par_find_valid_sequence};
 ///
 /// let tree = build_dd_tree_pruned(&refs, &config, &pruner, false);
 /// let result = par_find_valid_sequence(&tree, |seq| {
@@ -747,7 +747,7 @@ where
 /// # Example
 ///
 /// ```ignore
-/// use microgpt_rs::speculative::dd_tree::par_find_shortest_sequence;
+/// use katgpt_rs::speculative::dd_tree::par_find_shortest_sequence;
 ///
 /// let result = par_find_shortest_sequence(
 ///     &tree,

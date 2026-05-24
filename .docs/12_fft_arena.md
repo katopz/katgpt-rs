@@ -1,4 +1,4 @@
-# microgpt-rs: FFT Arena — 4v4 ATB Tactics Battle Engine
+# katgpt-rs: FFT Arena — 4v4 ATB Tactics Battle Engine
 
 ## Overview
 
@@ -343,7 +343,7 @@ These utility functions are used by multiple player types:
 
 ## Key Files
 
-### Core FFT Engine (microgpt-rs)
+### Core FFT Engine (katgpt-rs)
 
 | File | Purpose |
 |------|---------|

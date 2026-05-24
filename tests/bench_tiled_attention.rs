@@ -11,7 +11,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_core::tiled_attention_forward;
+use katgpt_core::tiled_attention_forward;
 
 // ── Config ────────────────────────────────────────────────────
 

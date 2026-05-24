@@ -5,7 +5,7 @@
 //! projection. When keys form a convex hull, finding the maximum attention score
 //! becomes ternary search over a unimodal (bitonic) sequence → O(log N).
 //!
-//! Integration points with microgpt-rs:
+//! Integration points with katgpt-rs:
 //! - DDTree branch pruning: validate drafted tokens before target verification
 //! - Deterministic Validator: encode state-machine rules as 2D key embeddings
 //! - "Free embedding" bridge: project hidden states to 2D for fast retrieval

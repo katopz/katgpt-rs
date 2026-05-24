@@ -32,11 +32,11 @@
 
 use std::time::Instant;
 
-use microgpt_rs::pruners::{BanditPruner, BanditStrategy};
-use microgpt_rs::speculative::{
+use katgpt_rs::pruners::{BanditPruner, BanditStrategy};
+use katgpt_rs::speculative::{
     NoScreeningPruner, ScreeningPruner, build_dd_tree_screened, extract_best_path_into,
 };
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::types::{Config, Rng};
 
 // ── Game Action Token Vocabulary (vocab_size=27) ──────────────
 

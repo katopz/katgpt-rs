@@ -1,4 +1,4 @@
-# microgpt-rs: Performance Engineering
+# katgpt-rs: Performance Engineering
 
 ## Benchmark Results (release build, 50K iterations, Apple Silicon)
 
@@ -40,7 +40,7 @@ Speedup: Speculative vs AR went from **0.72×** → **1.82×** after zero-alloc 
 - `get_unchecked` / `get_unchecked_mut` in inner matmul loops — eliminates bounds checks
 - `copy_nonoverlapping` for KV cache store — faster than `copy_from_slice` for known sizes
 - Edition 2024: explicit `unsafe {}` blocks inside `unsafe fn`
-- SIMD intrinsics (NEON/AVX2) in `crates/microgpt-core/src/simd.rs` (re-exported via `src/simd.rs`) — runtime detection, safe API wrapping `core::arch::{aarch64, x86_64}` (Plan 060)
+- SIMD intrinsics (NEON/AVX2) in `crates/katgpt-core/src/simd.rs` (re-exported via `src/simd.rs`) — runtime detection, safe API wrapping `core::arch::{aarch64, x86_64}` (Plan 060)
 
 ### Fused Kernels
 - **`matmul_relu`**: single-pass MLP hidden layer (avoids extra scan of hidden buffer) — SIMD-accelerated dot product + fused ReLU zero-clamp

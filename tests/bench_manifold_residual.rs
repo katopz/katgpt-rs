@@ -7,7 +7,7 @@
 
 #[cfg(feature = "deep_manifold")]
 mod tests {
-    use microgpt_rs::pruners::{
+    use katgpt_rs::pruners::{
         KlResidualScorer, L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer,
     };
     use std::time::Instant;

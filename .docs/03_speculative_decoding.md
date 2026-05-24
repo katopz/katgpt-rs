@@ -1,4 +1,4 @@
-# microgpt-rs: Speculative Decoding Engine
+# katgpt-rs: Speculative Decoding Engine
 
 ## Pipeline Overview
 
@@ -387,7 +387,7 @@ pub struct SelfSpecConfig {
 }
 ```
 
-Types re-export base primitives from `crate::types` (`Config`, `Rng`, `softmax_scaled`, etc.) — no direct `microgpt-core` dependency in the speculative module.
+Types re-export base primitives from `crate::types` (`Config`, `Rng`, `softmax_scaled`, etc.) — no direct `katgpt-core` dependency in the speculative module.
 
 ---
 

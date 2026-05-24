@@ -10,9 +10,9 @@
 #[test]
 fn bench_simpletes_rpucg_goat_proof() {
     use fastrand::Rng;
-    use microgpt_rs::pruners::arena::TrajectoryPruner;
-    use microgpt_rs::pruners::tes_loop::TesLoop;
-    use microgpt_rs::speculative::types::{TesConfig, TesNode};
+    use katgpt_rs::pruners::arena::TrajectoryPruner;
+    use katgpt_rs::pruners::tes_loop::TesLoop;
+    use katgpt_rs::speculative::types::{TesConfig, TesNode};
 
     // ── Helpers ──────────────────────────────────────────────────
 

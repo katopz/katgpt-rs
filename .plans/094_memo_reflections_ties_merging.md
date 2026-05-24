@@ -12,7 +12,7 @@ MeMo validates our existing Raven RSM (O(1) retrieval) and G-Zero (multi-phase p
 
 ## Tasks
 
-- [x] T1: Add `memo_reflections` feature gate to `microgpt-rs/Cargo.toml`
+- [x] T1: Add `memo_reflections` feature gate to `katgpt-rs/Cargo.toml`
 - [x] T2: Create `src/pruners/reflection.rs` with `ReflectionQA` struct and `synthesize_reflections()` skeleton
 - [x] T3: Implement Step 1 (Fact Extraction) — direct + indirect extraction from game state sequences
 - [x] T4: Implement Step 2 (Consolidation) — merge related facts into multi-fact questions
@@ -202,7 +202,7 @@ pub fn ties_merge(
 
 **Location:** `riir-ai/crates/riir-gpu/src/merging.rs` or new `riir-ai/crates/riir-merging/`
 
-**Why in riir-ai:** Requires trained LoRA adapters from GPU training pipeline. `microgpt-rs` is inference-only.
+**Why in riir-ai:** Requires trained LoRA adapters from GPU training pipeline. `katgpt-rs` is inference-only.
 
 ## GOAT Proof Strategy
 
@@ -217,7 +217,7 @@ Metric: Win rate improvement after same number of episodes
 ```
 
 **Pass criteria:**
-- [x] Reflection QA generates ≥100 compositional pairs from 100 rounds of game data — ✅ 138 pairs (test: `microgpt-rs/tests/test_memo_reflections.rs`)
+- [x] Reflection QA generates ≥100 compositional pairs from 100 rounds of game data — ✅ 138 pairs (test: `katgpt-rs/tests/test_memo_reflections.rs`)
 - [x] ≥50% of pairs pass self-containment verification (Step 3) — ✅ 100% verification rate
 - [ ] Cross-game synthesis produces ≥10 pairs connecting different game domains — ⚠️ Test uses ≥2 threshold (conservative for synthetic data), got 2 pairs. Plan threshold ≥10 not met with synthetic data alone.
 - [ ] Bandit trained on reflections shows measurable win rate improvement vs raw replay — Not tested (requires BanditPruner integration benchmark)
@@ -245,21 +245,21 @@ Prove that TIES merging at ρ=0.3 produces usable merged adapter:
 
 | File | Purpose |
 |------|---------|
-| `microgpt-rs/src/pruners/reflection.rs` | Reflection QA pipeline + types |
-| `microgpt-rs/examples/bomber_13_reflection_qa.rs` | Bomber reflection QA demo |
-| `microgpt-rs/examples/go_09_reflection_qa.rs` | Go reflection QA demo |
-| `microgpt-rs/tests/test_memo_reflections.rs` | GOAT proof tests |
+| `katgpt-rs/src/pruners/reflection.rs` | Reflection QA pipeline + types |
+| `katgpt-rs/examples/bomber_13_reflection_qa.rs` | Bomber reflection QA demo |
+| `katgpt-rs/examples/go_09_reflection_qa.rs` | Go reflection QA demo |
+| `katgpt-rs/tests/test_memo_reflections.rs` | GOAT proof tests |
 | `riir-ai/crates/riir-gpu/src/merging.rs` | TIES merge implementation |
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/Cargo.toml` | Add `memo_reflections` feature gate |
-| `microgpt-rs/src/pruners/mod.rs` | Add `reflection` module (gated) |
-| `microgpt-rs/src/lib.rs` | Add `reflection` module (gated) |
+| `katgpt-rs/Cargo.toml` | Add `memo_reflections` feature gate |
+| `katgpt-rs/src/pruners/mod.rs` | Add `reflection` module (gated) |
+| `katgpt-rs/src/lib.rs` | Add `reflection` module (gated) |
 | `riir-ai/Cargo.toml` (relevant crate) | Add `ties_merge` feature gate |
-| `microgpt-rs/README.md` | Add MeMo section |
+| `katgpt-rs/README.md` | Add MeMo section |
 | `riir-ai/README.md` | Add TIES merging section |
 
 ## Risks

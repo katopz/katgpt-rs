@@ -9,11 +9,11 @@
 //! Design: snapshot-based — implementors are lightweight `Clone` structs,
 //! NOT wrappers around `bevy_ecs::World` (which isn't `Clone`).
 
-// ── Re-exported from microgpt-core (Plan 107 Phase 0) ─────────────
+// ── Re-exported from katgpt-core (Plan 107 Phase 0) ─────────────
 // GameState, StateHeuristic, RolloutPolicy, RandomRolloutPolicy, ActionSpaceLog
-// consolidated into microgpt-core/src/traits.rs to eliminate duplication with riir-engine.
+// consolidated into katgpt-core/src/traits.rs to eliminate duplication with riir-engine.
 
-pub use microgpt_core::traits::{
+pub use katgpt_core::traits::{
     ActionSpaceLog, GameState, RandomRolloutPolicy, RolloutPolicy, StateHeuristic,
 };
 

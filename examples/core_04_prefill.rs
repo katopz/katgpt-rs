@@ -8,11 +8,11 @@
 //!
 //! Run: cargo run --example core_04_prefill
 
-use microgpt_rs::transformer::{
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, PrefillContext, TransformerWeights, forward,
     forward_prefill, generate_with_prefill,
 };
-use microgpt_rs::types::{Config, LoraAdapter, LoraPair, Rng, kv_dim};
+use katgpt_rs::types::{Config, LoraAdapter, LoraPair, Rng, kv_dim};
 
 fn main() {
     println!("╔══════════════════════════════════════════════════════════════════╗");

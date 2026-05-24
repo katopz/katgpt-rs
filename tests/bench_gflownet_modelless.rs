@@ -17,8 +17,8 @@ use std::time::Instant;
 #[cfg(feature = "bandit")]
 #[test]
 fn bench_d1_flow_pruner_overhead() {
-    use microgpt_rs::speculative::{FlowPruner, NoScreeningPruner, ScreeningPruner};
-    use microgpt_rs::types::Config;
+    use katgpt_rs::speculative::{FlowPruner, NoScreeningPruner, ScreeningPruner};
+    use katgpt_rs::types::Config;
 
     let config = Config::draft();
     let warmup = 1000;
@@ -68,8 +68,8 @@ fn bench_d1_flow_pruner_overhead() {
 #[cfg(feature = "bandit")]
 #[test]
 fn bench_d1_flow_pruner_ddtree_nodes() {
-    use microgpt_rs::speculative::{FlowPruner, NoScreeningPruner, build_dd_tree_screened};
-    use microgpt_rs::types::Config;
+    use katgpt_rs::speculative::{FlowPruner, NoScreeningPruner, build_dd_tree_screened};
+    use katgpt_rs::types::Config;
 
     let config = Config::draft();
     let iters = 100;
@@ -132,10 +132,10 @@ fn bench_d1_flow_pruner_ddtree_nodes() {
 #[cfg(feature = "bandit")]
 #[test]
 fn bench_d2_balanced_ddtree_sweep() {
-    use microgpt_rs::speculative::{
+    use katgpt_rs::speculative::{
         NoScreeningPruner, build_dd_tree_balanced, build_dd_tree_screened, extract_best_path_into,
     };
-    use microgpt_rs::types::Config;
+    use katgpt_rs::types::Config;
 
     let config = Config::draft();
     let iters = 100;
@@ -225,9 +225,9 @@ fn bench_d2_balanced_ddtree_sweep() {
 #[cfg(feature = "g_zero")]
 #[test]
 fn bench_d3_flow_weighted_bandit() {
-    use microgpt_rs::pruners::g_zero::DeltaBanditPruner;
-    use microgpt_rs::pruners::{BanditPruner, BanditStrategy};
-    use microgpt_rs::speculative::NoScreeningPruner;
+    use katgpt_rs::pruners::g_zero::DeltaBanditPruner;
+    use katgpt_rs::pruners::{BanditPruner, BanditStrategy};
+    use katgpt_rs::speculative::NoScreeningPruner;
 
     let episodes = 1000;
     let num_arms = 10;
@@ -332,10 +332,10 @@ fn bench_d3_flow_weighted_bandit() {
 #[cfg(feature = "bomber")]
 #[test]
 fn bench_d4_backward_replay_quality() {
-    use microgpt_rs::pruners::bomber::ArenaGrid;
-    use microgpt_rs::pruners::bomber::arena::EMPTY_ARENA;
-    use microgpt_rs::pruners::bomber::replay::ReplaySample;
-    use microgpt_rs::pruners::bomber::replay_backward::ReplayBackwardWalker;
+    use katgpt_rs::pruners::bomber::ArenaGrid;
+    use katgpt_rs::pruners::bomber::arena::EMPTY_ARENA;
+    use katgpt_rs::pruners::bomber::replay::ReplaySample;
+    use katgpt_rs::pruners::bomber::replay_backward::ReplayBackwardWalker;
 
     let grid = ArenaGrid::fixed(EMPTY_ARENA).expect("empty arena should parse");
     let walker = ReplayBackwardWalker::new(&grid);
@@ -436,13 +436,13 @@ B X T
 #[cfg(feature = "bandit")]
 #[test]
 fn bench_t15_real_screeners() {
-    use microgpt_rs::pruners::tactical_pruner::TacticalPruner;
-    use microgpt_rs::pruners::{BanditPruner, BanditStrategy};
-    use microgpt_rs::speculative::{
+    use katgpt_rs::pruners::tactical_pruner::TacticalPruner;
+    use katgpt_rs::pruners::{BanditPruner, BanditStrategy};
+    use katgpt_rs::speculative::{
         BinaryScreeningPruner, FlowPruner, ScreeningPruner, TreeNode, build_dd_tree_balanced,
         build_dd_tree_pruned, build_dd_tree_screened, extract_parent_tokens,
     };
-    use microgpt_rs::types::Config;
+    use katgpt_rs::types::Config;
 
     let iters = 100;
 

@@ -3,13 +3,13 @@
 **Branch:** `develop/feature/034_bomber_wasm_validator`
 **Status:** Moved to `riir-ai/.plans/034_bomber_wasm_validator.md`
 
-> This plan has been moved to the private `riir-ai` repo. The validator source code is a commercial secret (Secret A2) and lives alongside `riir-validator-sdk`. The WASM loader (`BomberWasmPruner`) remains in `microgpt-rs`.
+> This plan has been moved to the private `riir-ai` repo. The validator source code is a commercial secret (Secret A2) and lives alongside `riir-validator-sdk`. The WASM loader (`BomberWasmPruner`) remains in `katgpt-rs`.
 >
 > **See:** `riir-ai/.plans/034_bomber_wasm_validator.md` for the refined architecture.
 
 ---
 
-## What Stayed in microgpt-rs
+## What Stayed in katgpt-rs
 
 - `src/pruners/bomber/wasm_pruner.rs` — `BomberWasmPruner` (wasmtime loader)
 - `src/pruners/bomber/wasm_state.rs` — game state serialization for WASM ABI

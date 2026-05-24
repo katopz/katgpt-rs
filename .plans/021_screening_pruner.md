@@ -63,7 +63,7 @@ Upgrade the binary `ConstraintPruner` (`is_valid -> bool`) to a continuous `Scre
   - Host-side decode: `relevance_f32 = raw_u32 as f32 / 65536.0`
   - All 22 SDK tests pass (including new relevance + Q16.16 encoding tests)
 
-- [x] **Task 8: Update microgpt-rs WasmPruner host** (`src/wasm/`)
+- [x] **Task 8: Update katgpt-rs WasmPruner host** (`src/wasm/`)
   - Try to load `relevance` export; if missing, fall back to `is_valid` (binary 0/1 → 0.0/1.0)
   - Implement `ScreeningPruner` for `WasmPruner` via `call_relevance()`
   - Decode Q16.16 fixed-point from WASM return value, clamp to [0.0, 1.0]
@@ -86,14 +86,14 @@ Upgrade the binary `ConstraintPruner` (`is_valid -> bool`) to a continuous `Scre
 
 | File | Change |
 |------|--------|
-| `microgpt-rs/src/speculative/types.rs` | Add `ScreeningPruner` trait + blanket impl + `NoScreeningPruner` |
-| `microgpt-rs/src/types.rs` | Add `screening_threshold` to `Config` |
-| `microgpt-rs/src/speculative/dd_tree.rs` | Add `build_dd_tree_screened()`, update `TreeBuilder` |
-| `microgpt-rs/src/speculative/mod.rs` | Export new types |
-| `microgpt-rs/src/wasm/` | Update `WasmPruner` to support `ScreeningPruner` |
+| `katgpt-rs/src/speculative/types.rs` | Add `ScreeningPruner` trait + blanket impl + `NoScreeningPruner` |
+| `katgpt-rs/src/types.rs` | Add `screening_threshold` to `Config` |
+| `katgpt-rs/src/speculative/dd_tree.rs` | Add `build_dd_tree_screened()`, update `TreeBuilder` |
+| `katgpt-rs/src/speculative/mod.rs` | Export new types |
+| `katgpt-rs/src/wasm/` | Update `WasmPruner` to support `ScreeningPruner` |
 | `riir-validator-sdk/src/validator.rs` | Add `relevance()` to `Validator` trait with default |
 | `riir-validator-sdk/src/exports.rs` | Add `relevance` WASM export with Q16.16 |
-| `microgpt-rs/README.md` | Add ScreeningPruner architecture section |
+| `katgpt-rs/README.md` | Add ScreeningPruner architecture section |
 
 ---
 

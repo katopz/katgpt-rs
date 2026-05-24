@@ -47,9 +47,9 @@
 //! **This is a proof of mechanical compatibility, not a proof of value.**
 //! The bridge exists but no traffic has crossed it yet.
 
-use microgpt_rs::pruners::{BanditEnv, BanditPruner, BanditSession, BanditStrategy, BernoulliEnv};
-use microgpt_rs::speculative::ScreeningPruner;
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::{BanditEnv, BanditPruner, BanditSession, BanditStrategy, BernoulliEnv};
+use katgpt_rs::speculative::ScreeningPruner;
+use katgpt_rs::types::Rng;
 
 const EPISODES: usize = 1000;
 const SEED: u64 = 42;
@@ -128,7 +128,7 @@ fn run_strategy(
     let mut regret_curve = Vec::new();
     let mut reward_curve = Vec::new();
     for event in &events {
-        if let microgpt_rs::pruners::BanditEvent::EpisodeComplete {
+        if let katgpt_rs::pruners::BanditEvent::EpisodeComplete {
             cumulative_reward,
             cumulative_regret,
             ..

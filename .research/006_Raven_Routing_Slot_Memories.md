@@ -2,7 +2,7 @@
 
 **Date:** 2025-06
 **Status:** Research → Verdict
-**Context:** microgpt-rs + anyrag neuro-symbolic architecture
+**Context:** katgpt-rs + anyrag neuro-symbolic architecture
 **Paper:** "Raven: High-Recall Sequence Modeling with Sparse Memory Routing" (Afzal, Bick, Xing, Cevher, Gu — 2025)
 **Source:** https://github.com/goombalab/raven
 
@@ -101,23 +101,23 @@ Raven is the only architecture that maintains >99% recall from 1K through 16K to
 
 | Concept | Raven Paper | Our Distillation | Target Project |
 |---------|-------------|------------------|----------------|
-| Fixed slot memory | Neural hidden state H ∈ R^(slots × d_v) | `RavenKVCache` struct | `microgpt-rs` |
-| Sparse Top-K router | Linear projection + sigmoid | `compute_router()` | `microgpt-rs` |
-| Gated update | `exp(r_t × f_t)` decay | `update()` with per-slot decay | `microgpt-rs` |
-| Imbalanced routing | No load-balancing loss | Allow 90/10 slot specialization | `microgpt-rs` |
+| Fixed slot memory | Neural hidden state H ∈ R^(slots × d_v) | `RavenKVCache` struct | `katgpt-rs` |
+| Sparse Top-K router | Linear projection + sigmoid | `compute_router()` | `katgpt-rs` |
+| Gated update | `exp(r_t × f_t)` decay | `update()` with per-slot decay | `katgpt-rs` |
+| Imbalanced routing | No load-balancing loss | Allow 90/10 slot specialization | `katgpt-rs` |
 | Slot-based sharding | N/A — neural only | `RoutedRagDB` with named slots | `anyrag` |
 | Selective decay | Per-slot forget gate | Per-slot confidence decay in Turso | `anyrag` |
 | Routing-guided retrieval | N/A — single model | LLM `r_t` → RAG slot selection | `anyrag` |
 
 ---
 
-## Integration Plan: microgpt-rs
+## Integration Plan: katgpt-rs
 
 ### Current State
 
 The draft model in `transformer.rs` uses standard MHA with growing KV cache:
 
-```microgpt-rs/src/transformer.rs#L88-94
+```katgpt-rs/src/transformer.rs#L88-94
 pub struct KVCache {
     pub key: Vec<f32>,   // [block_size, kv_dim]
     pub value: Vec<f32>, // [block_size, kv_dim]
@@ -174,7 +174,7 @@ This mirrors the Hybrid-Raven approach from Table 4 — use the fast path when p
 ### PoC: RavenKVCache Implementation
 
 ```rust
-// microgpt-rs/src/transformer.rs (addition, not replacement)
+// katgpt-rs/src/transformer.rs (addition, not replacement)
 
 /// Sparse router: computes Top-K routing vector from raw logits.
 ///
@@ -528,7 +528,7 @@ pub async fn routed_search(
 
 ## Phased Implementation
 
-### Phase 1: RavenKVCache in microgpt-rs (Draft Model Only)
+### Phase 1: RavenKVCache in katgpt-rs (Draft Model Only)
 
 - [ ] Add `RavenKVCache` struct to `transformer.rs`
 - [ ] Add `compute_router`, `raven_update`, `raven_readout` functions

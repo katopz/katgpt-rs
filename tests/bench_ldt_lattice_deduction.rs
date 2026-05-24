@@ -16,11 +16,11 @@
 #[cfg(feature = "lattice_deduction")]
 #[test]
 fn bench_ldt_lattice_deduction_goat_proof() {
-    use microgpt_rs::speculative::{
+    use katgpt_rs::speculative::{
         AlphaTarget, ConflictDetector, EntropyConflictDetector, LDT_THETA_ELIM, LdtPruneConfig,
         NoScreeningPruner, alpha_intersect, build_dd_tree_screened, is_consistent,
     };
-    use microgpt_rs::types::Config;
+    use katgpt_rs::types::Config;
     use std::collections::HashSet;
     use std::hint::black_box;
     use std::time::Instant;
@@ -55,19 +55,19 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             mtp_cluster_vocab_threshold: 0,
             mtp_shared_kv_prompt_threshold: 0,
             mtp_cluster_size: 1,
-            hla_mode: microgpt_rs::types::HlaMode::Standard,
+            hla_mode: katgpt_rs::types::HlaMode::Standard,
             hla_normalize: false,
             hla_decay: 0.0,
             mask_token: 0,
-            attention_mode: microgpt_rs::types::AttentionMode::Causal,
+            attention_mode: katgpt_rs::types::AttentionMode::Causal,
             sp_kv_window: 0,
             sp_kv_threshold: 0.0,
             sp_kv_predictor_hidden: 0,
             sp_kv_predictor_lr_mult: 0.0,
             width_rollouts: 1,
             early_stop_threshold: 0.0,
-            convergence_selector: microgpt_rs::types::ConvergenceSelector::default(),
-            model_arch: microgpt_rs::types::ModelArchitecture::Generic,
+            convergence_selector: katgpt_rs::types::ConvergenceSelector::default(),
+            model_arch: katgpt_rs::types::ModelArchitecture::Generic,
             rms_norm_eps: 1e-5,
             rms_norm_offset: false,
             tied_embeddings: false,
@@ -76,13 +76,13 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             post_norm: false,
             attn_logit_softcapping: 0.0,
             final_logit_softcapping: 0.0,
-            weight_dtype: microgpt_rs::types::WeightDtype::F32,
+            weight_dtype: katgpt_rs::types::WeightDtype::F32,
             d2f_block_size: 8,
             mtp_min_output_tokens: usize::MAX,
             mtp_cluster_topk: 1,
             mls_layers: 0,
-            loop_mode: microgpt_rs::types::LoopMode::None,
-            hybrid_pattern: microgpt_rs::types::HybridPattern::Uniform,
+            loop_mode: katgpt_rs::types::LoopMode::None,
+            hybrid_pattern: katgpt_rs::types::HybridPattern::Uniform,
             gated_attn: false,
         }
     }

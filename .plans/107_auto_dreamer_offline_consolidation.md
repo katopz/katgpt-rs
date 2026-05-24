@@ -247,7 +247,7 @@ Extend `freeze.rs`:
 ## T9: Bomber GOAT Proof
 
 ```bash
-cargo test -p microgpt-rs --test bomber_dreamer_goat --features dreamer
+cargo test -p katgpt-rs --test bomber_dreamer_goat --features dreamer
 ```
 
 Design:
@@ -263,7 +263,7 @@ Expected:
 ## T10: Go GOAT Proof
 
 ```bash
-cargo test -p microgpt-rs --test dreamer_goat --features dreamer
+cargo test -p katgpt-rs --test dreamer_goat --features dreamer
 ```
 
 Design:

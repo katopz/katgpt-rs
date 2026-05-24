@@ -7,11 +7,11 @@ use std::cmp::Ordering;
 #[cfg(feature = "tes_loop")]
 use crate::pruners::bandit::BanditStrategy;
 
-// ── Re-exported from microgpt-core (Plan 107 Phase 0) ─────────────
+// ── Re-exported from katgpt-core (Plan 107 Phase 0) ─────────────
 // ConstraintPruner, ScreeningPruner, and companion structs consolidated
-// into microgpt-core/src/traits.rs to eliminate duplication with riir-engine.
+// into katgpt-core/src/traits.rs to eliminate duplication with riir-engine.
 
-pub use microgpt_core::traits::{
+pub use katgpt_core::traits::{
     BinaryScreeningPruner, ConstraintPruner, NoPruner, NoScreeningPruner, ScreeningPruner,
 };
 

@@ -9,12 +9,12 @@
 //!
 //! Run: `cargo test --features dreamer --test goat_107_dreamer -- --nocapture`
 
-use microgpt_rs::pruners::dreamer::consolidator::DreamerConsolidator;
-use microgpt_rs::pruners::dreamer::counterfactual::CounterfactualEstimator;
-use microgpt_rs::pruners::dreamer::decay::MemoryDecay;
-use microgpt_rs::pruners::dreamer::scheduler::{ArmInfo, DreamerScheduler};
-use microgpt_rs::pruners::dreamer::types::{DecayPolicy, DreamerConfig, WorkingRegion};
-use microgpt_rs::types::Rng;
+use katgpt_rs::pruners::dreamer::consolidator::DreamerConsolidator;
+use katgpt_rs::pruners::dreamer::counterfactual::CounterfactualEstimator;
+use katgpt_rs::pruners::dreamer::decay::MemoryDecay;
+use katgpt_rs::pruners::dreamer::scheduler::{ArmInfo, DreamerScheduler};
+use katgpt_rs::pruners::dreamer::types::{DecayPolicy, DreamerConfig, WorkingRegion};
+use katgpt_rs::types::Rng;
 
 // ── Helpers ───────────────────────────────────────────────────
 

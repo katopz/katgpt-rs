@@ -1,4 +1,4 @@
-# MicroGPT-RS
+# KatGPT-RS
 
 Speculative Decoding with DFlash & DDTree — a high-performance Rust implementation of a micro-Transformer with built-in benchmarking and visualization.
 
@@ -425,7 +425,7 @@ Opt-in via `mls_aggregate` feature gate. Sweeping K provides Pareto-optimal
 representation quality vs task specialization tradeoff.
 
 📁 `src/transformer.rs` — MLS accumulation in `forward_base` layer loop
-📁 `crates/microgpt-core/src/types.rs` — `mls_layers` config field
+📁 `crates/katgpt-core/src/types.rs` — `mls_layers` config field
 📁 `src/benchmark.rs` — `ep_accuracy_k` convergence metric
 📁 `tests/goat_104_mls_aggregate.rs` — GOAT 6/6 proofs passed ✅
 🔧 Feature flag: `mls_aggregate` (opt-in, controlled via `Config.mls_layers`)
@@ -526,7 +526,7 @@ Key results:
 ### Usage
 
 ```rust
-use microgpt_rs::types::{Config, LoopMode, HybridPattern};
+use katgpt_rs::types::{Config, LoopMode, HybridPattern};
 
 let mut config = Config::micro();
 config.loop_mode = LoopMode::WeightShared { loop_count: 4 };
@@ -1358,7 +1358,7 @@ Run: `cargo test --features bt_rank --test bench_bt_rank_goat -- --nocapture`
 ### Key API
 
 ```rust,ignore
-use microgpt_rs::pruners::{BtComparison, BtConfig, BtScores, bt_fit, bt_fit_from_fn};
+use katgpt_rs::pruners::{BtComparison, BtConfig, BtScores, bt_fit, bt_fit_from_fn};
 
 // From explicit comparisons
 let comparisons = vec![BtComparison::new(0, 1), BtComparison::new(1, 2)];
@@ -1412,7 +1412,7 @@ Run: `cargo test --features deep_manifold --test goat_deep_manifold -- --nocaptu
 ### Key API
 
 ```rust,ignore
-use microgpt_rs::pruners::{L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer};
+use katgpt_rs::pruners::{L2ResidualScorer, ManifoldResidual, ResidualRelevanceScorer};
 
 // L2 residual: ‖candidate - base‖
 let scorer = L2ResidualScorer::default();
@@ -1425,7 +1425,7 @@ let score = composite.score(&candidate, &base, relevance);
 ```
 
 ```rust,ignore
-use microgpt_rs::pruners::{BoundaryAlignment, KlBoundaryAligner};
+use katgpt_rs::pruners::{BoundaryAlignment, KlBoundaryAligner};
 
 // Federated KL coupling between domain experts
 let aligner = KlBoundaryAligner::default();
@@ -1547,7 +1547,7 @@ forward_decode_stage(&mut ctx, &weights, &mut cache, token, pos, &config, Decode
 
 ## 🏭 Productions
 
-MicroGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:
+KatGPT-RS is the **core inference library** — pure algorithms, zero side effects. It powers a broader production ecosystem:
 
 ### E2E Pipeline
 
@@ -1556,7 +1556,7 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
 │  RAG Engine  │    │  Training    │    │  Service Layer                   │
 │  ingest,     │───▸│  Pipeline    │───▸│  ┌──────────────────────────┐   │
 │  curate,     │JSON│  LoRA train  │.bin│  │  Transpiler Service      │   │
-│  export      │    │  + pack      │    │  │  (uses microgpt-rs lib)  │   │
+│  export      │    │  + pack      │    │  │  (uses katgpt-rs lib)  │   │
 └──────────────┘    └──────────────┘    │  └────────────┬─────────────┘   │
                                         │               │                  │
                                         │  ┌────────────▼─────────────┐   │
@@ -1588,7 +1588,7 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
 2. **Training Pipeline** (riir-burner) — LoRA fine-tuning for Gemma 4 E4B on Rust code corpus. Takes curated JSONL, trains LoRA adapters (Python→Rust pairs), produces compact `adapter.bin` with BLAKE3 checksum. Rust handles pack/verify; Python (unsloth/MLX) handles training. CLI subcommands: `pack`, `verify`, `train`, `pipeline`. Shell scripts: `lora.sh`, `pack.sh`.
 
 3. **Service Layer** (riir-ai, private) — Monorepo housing:
-   - **WASM Validator SDK** (riir-validator-sdk) — WASM Validator trait + `export_validator!` macro + streaming events ABI. Compiles to sandboxed `.wasm` modules that plug into microgpt-rs's `WasmPruner`.
+   - **WASM Validator SDK** (riir-validator-sdk) — WASM Validator trait + `export_validator!` macro + streaming events ABI. Compiles to sandboxed `.wasm` modules that plug into katgpt-rs's `WasmPruner`.
    - **WASM Runtime** — Host-side `WasmPruner` implementing `ConstraintPruner` + `ScreeningPruner`. Loads `.wasm`, calls `is_valid`/`relevance` in sandboxed wasmtime.
    - **Prompt Router + Expert Registry** — `KeywordRouter` (V1) + `EmbeddingRouter` (V2, 3-tier fallback via RAG) + `ExpertRegistry` mapping domains to pruner + LoRA pairs. Config-driven via `domains.toml` with domain inference budget (β). Routing strategies: keyword, embedding, combined.
    - **GPU Training** — ✅ Production-ready `wgpu` compute pipeline with 26 WGSL kernels. Forward, backward (LoRA grads only), AdamW optimizer, cross-entropy loss, PFlash block-sparse prefill (4 kernels), TurboQuant attention scoring, TTT feedback consumer, G-Zero Phase 2 (DPO loss + GRPO optimizer, Plan 059 ✅). Targets WebGPU, Metal, Vulkan, DX12. LoRA export/load.
@@ -1599,8 +1599,8 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
 
 | Layer | Repo | What | Status | License |
 |-------|------|------|--------|---------|
-| **Engine** | microgpt-rs | DDTree, zero-alloc, ConstraintPruner, ScreeningPruner | ✅ Working | MIT |
-| **Validator** | microgpt-rs | SynPruner + PartialParser + CompilerFeedback | ✅ Working | MIT |
+| **Engine** | katgpt-rs | DDTree, zero-alloc, ConstraintPruner, ScreeningPruner | ✅ Working | MIT |
+| **Validator** | katgpt-rs | SynPruner + PartialParser + CompilerFeedback | ✅ Working | MIT |
 | **RAG Engine** | anyrag | Plugin ingestion (`Ingestor` trait), episodic memory, slot management, catalog-driven domain shaping, inference budget API (β), Turso/SQLite storage | ✅ Working | MIT |
 | **Training Pipeline** | riir-burner | LoRA fine-tuning (Gemma 4 E4B), adapter packing (BLAKE3), corpus dedup, pack/verify/train/pipeline CLI | ✅ Working | MIT |
 | **WASM SDK** | riir-ai | Validator trait + export macro + streaming events ABI + CLI checker | ✅ Working | Private |
@@ -1612,7 +1612,7 @@ MicroGPT-RS is the **core inference library** — pure algorithms, zero side eff
 
 ### Key Insight
 
-The engine (microgpt-rs) is MIT and fully functional. But without trained LoRA adapters from riir-burner (the "fuel") and domain-specific WASM validators from riir-ai, it produces syntactically-valid-but-semantically-generic output. The private riir-ai monorepo holds the trained weights, validator SDK, and orchestration — the intelligence layer that makes the engine production-grade for specific domains like Python→Rust transpilation. anyrag's episodic memory accumulates edge cases per-translation, creating a data flywheel that improves accuracy over time.
+The engine (katgpt-rs) is MIT and fully functional. But without trained LoRA adapters from riir-burner (the "fuel") and domain-specific WASM validators from riir-ai, it produces syntactically-valid-but-semantically-generic output. The private riir-ai monorepo holds the trained weights, validator SDK, and orchestration — the intelligence layer that makes the engine production-grade for specific domains like Python→Rust transpilation. anyrag's episodic memory accumulates edge cases per-translation, creating a data flywheel that improves accuracy over time.
 
 ## 🛠️ Getting Started
 
@@ -1723,15 +1723,15 @@ cargo clippy --all-targets --all-features --quiet
 ## 📁 Project Structure
 
 ```
-crates/microgpt-core/   Shared types & SIMD kernels (used by microgpt-rs and riir-engine):
+crates/katgpt-core/   Shared types & SIMD kernels (used by katgpt-rs and riir-engine):
   lib.rs            Crate root (re-exports: Config, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, kv_dim, SimdLevel, …)
   types.rs          Config (micro/micro_lora/micro_dllm/game/game_go/draft/small_target/gqa_draft/bpe/bpe_draft/gemma2_2b), InferenceOverrides, InferenceResult, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, LoraAdapter, LoraPair, DomainLatent, math kernels (softmax, rmsnorm, gegelu, matmul, sparse_matmul, sample_token, …)
   simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_matmul_rows, simd_sparse_matmul_rows, maxsim_score, simd_fused_decay_write, simd_add_into (Plan 060)
 src/
   lib.rs            Module index + debug tracking allocator
   main.rs           Entry point (proof → bench → Percepta bench → plot)
-  types.rs          Re-exports microgpt-core types + QuantizedKVCache trait
-  simd.rs           Re-exports microgpt-core SIMD kernels
+  types.rs          Re-exports katgpt-core types + QuantizedKVCache trait
+  simd.rs           Re-exports katgpt-core SIMD kernels
   transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate, DecodeStage (Plan 102)
   weights.rs        ContiguousWeights — single-buffer 64-byte aligned weight layout (Plan 102)
   rerank.rs         MaxSim + Cosine reranking, NDCG evaluation, SymmetricBoundaryPair (behind "maxsim" feature)

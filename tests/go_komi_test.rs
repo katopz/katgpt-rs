@@ -3,7 +3,7 @@
 
 #[cfg(feature = "go")]
 mod tests {
-    use microgpt_rs::pruners::go::{GoDeltaGatedConfig, GoGZeroSelfPlayConfig, run_gzero_selfplay};
+    use katgpt_rs::pruners::go::{GoDeltaGatedConfig, GoGZeroSelfPlayConfig, run_gzero_selfplay};
 
     /// Komi adjusts every 25 episodes (faster convergence for tests).
     const TEST_KOMI_WINDOW: usize = 25;

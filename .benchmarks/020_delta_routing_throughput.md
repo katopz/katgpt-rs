@@ -192,8 +192,8 @@ sharper routing compared to cumulative hidden-state routing.
 ### Run Command
 
 ```sh
-cargo test -p microgpt-rs --test bench_097_delta_routing_throughput \
+cargo test -p katgpt-rs --test bench_097_delta_routing_throughput \
   --features delta_routing --release -- --nocapture
 
-cargo test -p microgpt-rs --test test_097_delta_routing_sharpness \
+cargo test -p katgpt-rs --test test_097_delta_routing_sharpness \
   --features delta_routing -- --nocapture

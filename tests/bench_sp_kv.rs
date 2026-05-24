@@ -15,11 +15,11 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::sp_kv::{
+use katgpt_rs::sp_kv::{
     GateBias, GateBiasBuffer, NoBias, SpKvCache, SpKvConfig, SpKvPredictors, UtilityAggregation,
     aggregate_utilities, attention_head_core, attention_head_gated, predict,
 };
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 /// Number of iterations for timing-based benchmarks.
 const BENCH_ITERS: usize = 1000;
@@ -618,13 +618,13 @@ fn test_palindrome_retention() {
 #[test]
 fn test_utility_predictor_gradient_flow() {
     // Verify that log(u) gate bias preserves gradient flow.
-    // We can't do autodiff in microgpt-rs, but we verify:
+    // We can't do autodiff in katgpt-rs, but we verify:
     // 1. Soft gate bias is finite and well-defined for all u ∈ (0,1)
     // 2. ∂bias/∂u = 1/(u+ε) is large when u is small (strong learning signal)
     // 3. TAHG annealing smoothly transitions from soft to hard
     // 4. Frozen predictor state is tracked correctly
 
-    use microgpt_rs::sp_kv::utility_predictor::{soft_gate_bias, tahg_gate_bias};
+    use katgpt_rs::sp_kv::utility_predictor::{soft_gate_bias, tahg_gate_bias};
 
     println!("\n🧪 T20: Utility Predictor Gradient Flow");
     println!("{}", "═".repeat(60));

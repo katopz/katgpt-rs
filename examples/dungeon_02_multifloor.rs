@@ -13,16 +13,16 @@
 
 use std::collections::HashMap;
 
-use microgpt_rs::pruners::dungeon_pathfinder::{
+use katgpt_rs::pruners::dungeon_pathfinder::{
     DungeonAction, MultiFloorBlocked, MultiFloorTarget, enumerate_multifloor_targets,
     find_path_multifloor,
 };
-use microgpt_rs::pruners::dungeon_pruner::{
+use katgpt_rs::pruners::dungeon_pruner::{
     DungeonMap, DungeonPruner, DungeonState, StairConnection,
 };
-use microgpt_rs::speculative::types::ConstraintPruner;
-use microgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
-use microgpt_rs::types::Config;
+use katgpt_rs::speculative::types::ConstraintPruner;
+use katgpt_rs::speculative::{build_dd_tree_pruned, extract_parent_tokens};
+use katgpt_rs::types::Config;
 
 // ── Emoji ──────────────────────────────────────────────────────
 

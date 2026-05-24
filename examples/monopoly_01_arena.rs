@@ -7,7 +7,7 @@
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::monopoly::{
+use katgpt_rs::pruners::monopoly::{
     GameEvent, GreedyPlayer, HLPlayer, MonopolyPlayer, RandomPlayer, Strategy, ValidatorPlayer,
     run_game,
 };

@@ -1,21 +1,21 @@
 //! SpectralQuant vs TurboQuant benchmarks (Plan 077 T10).
 //!
-//! Run: cargo test -p microgpt-rs --features spectral_quant --test bench_spectralquant -- --nocapture
+//! Run: cargo test -p katgpt-rs --features spectral_quant --test bench_spectralquant -- --nocapture
 
 #![cfg(feature = "spectral_quant")]
 
 use std::slice::from_ref;
 use std::time::Instant;
 
-use microgpt_rs::spectralquant::{
+use katgpt_rs::spectralquant::{
     SpectralQuantCalibration, SpectralQuantKVCache, SpectralQuantKVCacheConfig,
     calibrate_eigenbasis,
 };
 #[cfg(feature = "turboquant")]
-use microgpt_rs::turboquant::{TurboQuantKVCache, TurboQuantKVCacheConfig};
-use microgpt_rs::types::Rng;
+use katgpt_rs::turboquant::{TurboQuantKVCache, TurboQuantKVCacheConfig};
+use katgpt_rs::types::Rng;
 #[cfg(feature = "turboquant")]
-use microgpt_rs::types::{Config, kv_dim};
+use katgpt_rs::types::{Config, kv_dim};
 
 fn make_calibration(kv_dim: usize, n_samples: usize) -> SpectralQuantCalibration {
     let mut rng = Rng::new(42);

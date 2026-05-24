@@ -3,7 +3,7 @@
 ## Goal
 
 Add a multi-armed bandit (MAB) module that implements `ScreeningPruner` with adaptive relevance,
-demonstrating how microgpt-rs's trait-based architecture naturally extends to sequential
+demonstrating how katgpt-rs's trait-based architecture naturally extends to sequential
 decision-making under uncertainty.
 
 ## Context

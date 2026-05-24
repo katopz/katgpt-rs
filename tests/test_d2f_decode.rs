@@ -8,13 +8,13 @@
 
 #![cfg(feature = "dllm")]
 
-use microgpt_rs::dllm::{generate_pattern_dataset, train_mini_dllm};
-use microgpt_rs::speculative::{
+use katgpt_rs::dllm::{generate_pattern_dataset, train_mini_dllm};
+use katgpt_rs::speculative::{
     D2fDecodeConfig, D2fPipeline, NoPruner, d2f_decode_block, d2f_decode_block_with_prompt,
     d2f_decode_block_with_target,
 };
-use microgpt_rs::transformer::TransformerWeights;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::transformer::TransformerWeights;
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------
@@ -382,7 +382,7 @@ struct VocabRangePruner {
     max_token: usize,
 }
 
-impl microgpt_rs::speculative::ConstraintPruner for VocabRangePruner {
+impl katgpt_rs::speculative::ConstraintPruner for VocabRangePruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
         token_idx >= self.min_token && token_idx <= self.max_token
     }
@@ -429,7 +429,7 @@ struct NoRepeatPruner {
     mask_token: usize,
 }
 
-impl microgpt_rs::speculative::ConstraintPruner for NoRepeatPruner {
+impl katgpt_rs::speculative::ConstraintPruner for NoRepeatPruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
         if token_idx == self.mask_token {
             return false;

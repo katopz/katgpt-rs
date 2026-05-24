@@ -252,7 +252,7 @@ Prop 2 (near-linear CE) assumes a Bayes-optimal denoiser (Def 1). Our D2F models
 
 ## 7. Actionable Mappings
 
-### 7.1 Immediate (Modelless — microgpt-rs)
+### 7.1 Immediate (Modelless — katgpt-rs)
 
 | Code Location | Current | Change | Insight Source |
 |---|---|---|---|
@@ -298,7 +298,7 @@ RePlaid is significantly stronger than ColaDLM (Research 10) because its insight
 **The mechanism (continuous diffusion itself) is rejected** for the same reasons as Research 10: incompatible with DDTree speculative decoding.
 
 **Recommended next steps:**
-- Plan 078 (microgpt-rs modelless): Variance-minimized schedules for D2F noise + bandit exploration + SDAR β
+- Plan 078 (katgpt-rs modelless): Variance-minimized schedules for D2F noise + bandit exploration + SDAR β
 - Plan 079 (riir-ai model-based): Self-conditioning draft-refine loop + ELBO auxiliary loss for wgpu LoRA
 
 ---

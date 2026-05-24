@@ -31,7 +31,7 @@
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::percepta::gates::reglu;
+/// use katgpt_rs::percepta::gates::reglu;
 /// assert_eq!(reglu(3.0, 2.0), 6.0);   // a × b when b ≥ 0
 /// assert_eq!(reglu(3.0, -1.0), 0.0);  // gated off when b < 0
 /// assert_eq!(reglu(3.0, 0.0), 0.0);   // relu(0) = 0
@@ -58,7 +58,7 @@ pub fn reglu(a: f64, b: f64) -> f64 {
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::percepta::gates::stepglu;
+/// use katgpt_rs::percepta::gates::stepglu;
 /// // Integer b ≥ 0: passes a through
 /// assert_eq!(stepglu(5.0, 0.0), 5.0);
 /// assert_eq!(stepglu(5.0, 3.0), 5.0);
@@ -85,7 +85,7 @@ pub fn stepglu(a: f64, b: f64) -> f64 {
 /// # Examples
 ///
 /// ```
-/// use microgpt_rs::percepta::gates::multiply;
+/// use katgpt_rs::percepta::gates::multiply;
 /// assert_eq!(multiply(3.0, 4.0), 12.0);    // positive × positive
 /// assert_eq!(multiply(3.0, -2.0), -6.0);   // positive × negative
 /// assert_eq!(multiply(-3.0, 4.0), -12.0);  // negative × positive

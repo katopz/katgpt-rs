@@ -44,7 +44,7 @@ This maps directly to our speculative decoding and bandit architecture:
 
 Their Relative Propagation Upper Confidence Graph is our `BanditPruner` at trajectory level:
 
-```microgpt-rs/.research/052_SimpleTES_Evaluation_Driven_Scaling.md#L50-58
+```katgpt-rs/.research/052_SimpleTES_Evaluation_Driven_Scaling.md#L50-58
 // Propagated value: max(r_i, γ·max_child_U) — like our AbsorbCompress
 // Exploration bonus: λ·ρ·√(1+|S|)/(1+n_i) — like our UCB bandit
 // Greedy selection excluding one-hop neighbors — diversity enforcement
@@ -107,7 +107,7 @@ Maps to our `early_exit_patience` / `early_exit_gap` but applied at **trajectory
 
 #### Distillation A: `TesLoop` Trait (~80 LOC, Low Effort, High Value)
 
-```microgpt-rs/.research/052_SimpleTES_Evaluation_Driven_Scaling.md#L115-128
+```katgpt-rs/.research/052_SimpleTES_Evaluation_Driven_Scaling.md#L115-128
 // Feature-gated: tes_loop = ["bandit"]
 
 pub struct TesConfig {

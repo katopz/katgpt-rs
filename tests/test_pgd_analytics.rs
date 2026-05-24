@@ -13,12 +13,12 @@
 mod go_analytics_tests {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::go::analytics::{
+    use katgpt_rs::pruners::go::analytics::{
         RawGoAction, RawGoSample, detect_garbage_moves, detect_unstable_rounds, samples_to_replay,
         split_samples_into_games,
     };
-    use microgpt_rs::pruners::go::replay::{GoCellSer, MoveRecord};
-    use microgpt_rs::pruners::go::{
+    use katgpt_rs::pruners::go::replay::{GoCellSer, MoveRecord};
+    use katgpt_rs::pruners::go::{
         GoAction, GoCell, GoGreedyPlayer, GoPlayer, GoRandomPlayer, GoReplay, GoState,
         compute_analytics,
     };

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use microgpt_core::{ConfiguratorContext, PlanningDecision};
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
 
 // ── Constants ─────────────────────────────────────────────────
 

@@ -355,7 +355,7 @@ impl GZeroLoop {
 
 ## T5: GOAT Benchmark
 
-**Command**: `cargo test -p microgpt-rs --features "g_zero,bomber,cispo_loss" --test bench_gzero_cispo -- --nocapture`
+**Command**: `cargo test -p katgpt-rs --features "g_zero,bomber,cispo_loss" --test bench_gzero_cispo -- --nocapture`
 
 **Benchmark plan**:
 1. Run bomber arena 1000 rounds with PPO-clip (baseline)
@@ -372,7 +372,7 @@ impl GZeroLoop {
 
 **Result: 4/6 verified → GOAT PROVED ✅** (benchmark: `riir-ai/.benchmarks/003_cispo_vs_ppoclip_goat.md`)
 
-**Benchmark file**: `riir-ai/.benchmarks/003_cispo_vs_ppoclip_goat.md` (originally planned as `microgpt-rs/.benchmarks/018_cispo_vs_ppoclip.md`, moved to riir-ai where CISPO loss lives)
+**Benchmark file**: `riir-ai/.benchmarks/003_cispo_vs_ppoclip_goat.md` (originally planned as `katgpt-rs/.benchmarks/018_cispo_vs_ppoclip.md`, moved to riir-ai where CISPO loss lives)
 
 ## T6: Decision
 
@@ -387,14 +387,14 @@ If GOAT fails:
 
 ## Feature Gate Definition
 
-**File**: `microgpt-rs/Cargo.toml` and `riir-ai/crates/riir-gpu/Cargo.toml`
+**File**: `katgpt-rs/Cargo.toml` and `riir-ai/crates/riir-gpu/Cargo.toml`
 
 ```toml
 [features]
 cispo_loss = []  # CISPO loss variant for GRPO (ART-style, off by default)
 ```
 
-**File**: `microgpt-rs/src/lib.rs`
+**File**: `katgpt-rs/src/lib.rs`
 
 ```rust
 #[cfg(feature = "cispo_loss")]
@@ -412,7 +412,7 @@ riir-ai/crates/riir-gpu/src/
 ├── gzero_loop.rs         # + train_grpo_grouped() method
 └── ...
 
-microgpt-rs/src/
+katgpt-rs/src/
 ├── pruners/g_zero/       # No changes (modelless layer unaffected)
 ├── benchmark.rs          # + bench_cispo() behind feature gate
 └── ...

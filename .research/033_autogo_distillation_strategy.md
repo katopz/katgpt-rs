@@ -2,7 +2,7 @@
 
 **Source:** https://github.com/ericjang/autogo (Eric Jang, 2026)
 **Tutorial:** https://evjang.com/2026/04/28/autogo.html
-**Local code:** `microgpt-rs/.raw/autogo/`
+**Local code:** `katgpt-rs/.raw/autogo/`
 **Date:** 2026-05-17
 **Status:** Research → Plan 065
 
@@ -336,7 +336,7 @@ AutoGo already has a Docker setup. We can spin it up and call its REST API:
 
 ```bash
 # Build dev container (includes GNU Go + C++ extension)
-cd microgpt-rs/.raw/autogo
+cd katgpt-rs/.raw/autogo
 docker build -f .devcontainer/Dockerfile -t autogo-dev .
 
 # Run with Go web server on port 8000
@@ -356,7 +356,7 @@ Our Rust system calls AutoGo's API to play games head-to-head:
 
 ```text
 ┌─────────────────────────┐         HTTP          ┌─────────────────────┐
-│  microgpt-rs            │ ────────────────────── │  AutoGo Container   │
+│  katgpt-rs            │ ────────────────────── │  AutoGo Container   │
 │                         │  POST /api/new_game    │                     │
 │  GoGameState (our impl) │  POST /api/game/{id}/  │  GoBoard (C++)      │
 │  GoHLPlayer (our AI)    │       move             │  Agent (their AI)   │
@@ -388,7 +388,7 @@ Our Rust system calls AutoGo's API to play games head-to-head:
 If Docker is unavailable, run directly with Python:
 
 ```bash
-cd microgpt-rs/.raw/autogo
+cd katgpt-rs/.raw/autogo
 
 # Install dependencies
 pip install uv && uv sync
@@ -741,17 +741,17 @@ Plan 065 implements `go` feature gate (GoState + MCTS + HL + API bridge). Each s
 
 - AutoGo repo: https://github.com/ericjang/autogo
 - AutoGo tutorial: https://evjang.com/2026/04/28/autogo.html
-- AutoGo local code: `microgpt-rs/.raw/autogo/`
+- AutoGo local code: `katgpt-rs/.raw/autogo/`
 - Eric Jang: VP of AI at Google DeepMind (formerly NVIDIA)
 - Dario Amodei quote: "Machines of Loving Grace" essay
-- Our G-Zero implementation: `microgpt-rs/.plans/049_g_zero_self_play.md`
-- Our GameState trait: `microgpt-rs/.plans/056_game_state_forward_model.md`
-- Our HL thesis results: `microgpt-rs/.docs/10_bomber_arena.md`
-- FastGoBoard reference: `microgpt-rs/.raw/autogo/src/alpha_go/go.py`
-- GoBoard C++ reference: `microgpt-rs/.raw/autogo/src/alpha_go/cpp/go/go_game.h`
-- REST API server: `microgpt-rs/.raw/autogo/src/alpha_go/play.py`
-- MCTS reference: `microgpt-rs/.raw/autogo/src/alpha_go/mcts.py`
-- Model reference: `microgpt-rs/.raw/autogo/src/alpha_go/model.py`
+- Our G-Zero implementation: `katgpt-rs/.plans/049_g_zero_self_play.md`
+- Our GameState trait: `katgpt-rs/.plans/056_game_state_forward_model.md`
+- Our HL thesis results: `katgpt-rs/.docs/10_bomber_arena.md`
+- FastGoBoard reference: `katgpt-rs/.raw/autogo/src/alpha_go/go.py`
+- GoBoard C++ reference: `katgpt-rs/.raw/autogo/src/alpha_go/cpp/go/go_game.h`
+- REST API server: `katgpt-rs/.raw/autogo/src/alpha_go/play.py`
+- MCTS reference: `katgpt-rs/.raw/autogo/src/alpha_go/mcts.py`
+- Model reference: `katgpt-rs/.raw/autogo/src/alpha_go/model.py`
 - Fourier spatial MCTS: `riir-ai/crates/riir-engine/src/fourier/mcts.rs`
 - Fourier encoder: `riir-ai/crates/riir-engine/src/fourier/encoder.rs`
 - Generic MCTS: `riir-ai/crates/riir-engine/src/mcts.rs`
@@ -766,7 +766,7 @@ Plan 065 implements `go` feature gate (GoState + MCTS + HL + API bridge). Each s
 - WASM Validator SDK: `riir-ai/crates/riir-validator-sdk/`
 - WASM Pruner: `riir-ai/crates/riir-wasm/src/wasm_pruner.rs`
 - MTP projection cache: `riir-ai/crates/riir-router/src/mtp_cache.rs`
-- Bomber WASM pruner: `microgpt-rs/src/pruners/bomber/wasm_pruner.rs`
+- Bomber WASM pruner: `katgpt-rs/src/pruners/bomber/wasm_pruner.rs`
 
 ---
 
@@ -829,7 +829,7 @@ Flat array board with pre-computed neighbor offsets. Snapshot-based `Clone` desi
 
 ### 8.5 Comparison to AutoGo Python/C++
 
-| Metric | AutoGo (Python+C++) | microgpt-rs (Rust) |
+| Metric | AutoGo (Python+C++) | katgpt-rs (Rust) |
 |--------|---------------------|---------------------|
 | Board rep | numpy array | `Vec<GoCell>` flat array |
 | Ko rule | Simple | Simple (not superko) |

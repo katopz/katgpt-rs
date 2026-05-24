@@ -11,13 +11,13 @@
 
 ### Phase 0: Dependency Setup
 
-- [x] T0: Wire `riir-gpu` → `microgpt-rs` with HLA feature
+- [x] T0: Wire `riir-gpu` → `katgpt-rs` with HLA feature
   - Add `hla_attention` feature to `riir-gpu/Cargo.toml`:
     ```toml
     [features]
     default = []
     feedback-consumer = ["reqwest"]
-    hla_attention = ["microgpt-rs/hla_attention"]
+    hla_attention = ["katgpt-rs/hla_attention"]
     ```
   - Add `mod distill_attention;` to `riir-gpu/src/lib.rs` behind `#[cfg(feature = "hla_attention")]`
   - Verify: `cargo build -p riir-gpu --features hla_attention` compiles (no new code yet)
@@ -44,8 +44,8 @@
   - `forward_hla_with_lora()` — HLA student: apply LoRA to QKV, then call HLA update+readout, collect logits
   - `forward_ahla_with_lora()` — AHLA student: same pattern for AHLA
   - LoRA math: `q = matvec(W_Q, x) + lora_forward(A_q, B_q, x, rank, n, n, alpha)`
-  - Uses `ForwardContext`, `TransformerWeights` from microgpt-rs
-  - No changes to base `forward_hla()`/`forward_ahla()` in microgpt-rs — LoRA applied before HLA step
+  - Uses `ForwardContext`, `TransformerWeights` from katgpt-rs
+  - No changes to base `forward_hla()`/`forward_ahla()` in katgpt-rs — LoRA applied before HLA step
 
 - [x] T4: Implement CPU backprop via finite differences
   - `compute_lora_gradients_fd()` — finite difference gradient for all LoRA params
@@ -113,10 +113,10 @@
 
 ## Architecture
 
-### Why riir-gpu, Not microgpt-rs
+### Why riir-gpu, Not katgpt-rs
 
 ```text
-microgpt-rs  = inference engine (no training code)
+katgpt-rs  = inference engine (no training code)
 riir-gpu     = training engine (forward, backward, loss, optimizer, distill)
 ```
 
@@ -129,9 +129,9 @@ riir-gpu already has:
 | `lora_forward()` | `distill.rs` | ⚠️ Private → `pub(crate)` in T1 | Direct reuse after visibility fix |
 | `matvec()` | `distill.rs` | ⚠️ Private → `pub(crate)` in T1 | Direct reuse after visibility fix |
 | `CpuAdamWStep` | `optimizer.rs` | ✅ Direct reuse | CPU AdamW already implemented |
-| `ForwardContext` | microgpt-rs | ✅ Direct reuse | Shared context for forward passes |
-| `TransformerWeights` | microgpt-rs | ✅ Direct reuse | Random init via `Weights::new()` |
-| `forward_hla/ahla()` | microgpt-rs `hla/` | ✅ Direct reuse | Feature-gated behind `hla_attention` |
+| `ForwardContext` | katgpt-rs | ✅ Direct reuse | Shared context for forward passes |
+| `TransformerWeights` | katgpt-rs | ✅ Direct reuse | Random init via `Weights::new()` |
+| `forward_hla/ahla()` | katgpt-rs `hla/` | ✅ Direct reuse | Feature-gated behind `hla_attention` |
 | GPU backward pass | `backward.rs` | ❌ NOT usable | WGSL-only, no CPU variant exists |
 | GPU training loop | `training_loop.rs` | ❌ NOT usable | GPU-only, different architecture |
 
@@ -147,25 +147,25 @@ riir-ai/crates/riir-gpu/src/
 ├── optimizer.rs            — Existing: CpuAdamWStep (reused for AdamW updates)
 └── lib.rs                  — Add: #[cfg(feature = "hla_attention")] mod distill_attention;
 
-microgpt-rs/src/hla/
+katgpt-rs/src/hla/
 ├── forward.rs              — Existing: forward_hla(), forward_ahla() (no changes)
 ├── types.rs                — Existing: cache types (no changes)
-└── (no changes)            — LoRA applied at riir-gpu level, not in microgpt-rs
+└── (no changes)            — LoRA applied at riir-gpu level, not in katgpt-rs
 ```
 
 ### Dependency Chain
 
 ```text
 riir-gpu/Cargo.toml
-  └── microgpt-rs = { path = "../../../microgpt-rs" }  # always present
-  └── feature "hla_attention" → enables microgpt-rs/hla_attention
+  └── katgpt-rs = { path = "../../../katgpt-rs" }  # always present
+  └── feature "hla_attention" → enables katgpt-rs/hla_attention
 
 distill_attention.rs (feature-gated)
-  ├── use microgpt_rs::transformer::{forward, TransformerWeights, ForwardContext};
-  ├── use microgpt_rs::hla::{forward_hla, forward_ahla, MultiLayerHlaCache, MultiLayerAhlaCache};
+  ├── use katgpt_rs::transformer::{forward, TransformerWeights, ForwardContext};
+  ├── use katgpt_rs::hla::{forward_hla, forward_ahla, MultiLayerHlaCache, MultiLayerAhlaCache};
   ├── use crate::distill::{kl_divergence, softmax, lora_forward, matvec};  // pub(crate) after T1
   ├── use crate::optimizer::CpuAdamWStep;  // existing CPU AdamW
-  └── use microgpt_rs::types::{Config, Rng, MultiLayerKVCache};
+  └── use katgpt_rs::types::{Config, Rng, MultiLayerKVCache};
 ```
 
 ### Distillation Flow
@@ -353,9 +353,9 @@ The SDPA→SDPA control establishes the ceiling: same SDPA forward path, LoRA le
 
 7. **Temperature τ = 2.0** — Higher temperature softens the distributions, making KL gradient signal richer. Standard distillation practice (Hinton et al., 2015).
 
-8. **Code lives in riir-gpu** — Training infrastructure belongs in the training crate. microgpt-rs stays inference-only.
+8. **Code lives in riir-gpu** — Training infrastructure belongs in the training crate. katgpt-rs stays inference-only.
 
-9. **Feature gate `hla_attention`** — Matches existing microgpt-rs feature name. riir-gpu's `Cargo.toml` adds `hla_attention = ["microgpt-rs/hla_attention"]` to propagate the feature.
+9. **Feature gate `hla_attention`** — Matches existing katgpt-rs feature name. riir-gpu's `Cargo.toml` adds `hla_attention = ["katgpt-rs/hla_attention"]` to propagate the feature.
 
 ---
 

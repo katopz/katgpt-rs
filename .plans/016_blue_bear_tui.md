@@ -10,7 +10,7 @@ Additionally, refactor `sudoku_pruner` from `speculative/` into the new `pruners
 - [x] Create `src/pruners/blue_bear_pruner.rs` with GameState, BlueBearPruner, and ConstraintPruner impl
 - [x] Move `src/speculative/sudoku_pruner.rs` → `src/pruners/sudoku_pruner.rs` (refactor for consistency)
 - [x] Update `src/speculative/mod.rs` — remove module, keep backward-compatible re-export via `crate::pruners`
-- [x] Update example imports (`sudoku_speculative.rs`, `sudoku_tui.rs`) to use `microgpt_rs::pruners::SudokuPruner`
+- [x] Update example imports (`sudoku_speculative.rs`, `sudoku_tui.rs`) to use `katgpt_rs::pruners::SudokuPruner`
 - [x] Update `src/lib.rs` to include `pub mod pruners;`
 - [x] Create `examples/blue_bear.rs` — non-TUI solver/benchmark with emoji output
 - [x] Create `examples/blue_bear_tui.rs` with:

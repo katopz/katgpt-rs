@@ -90,7 +90,7 @@ Cohere batch-size regimes  →  Our domain inference budget (Plan 026)
 
 ### Location
 
-`microgpt-rs/src/speculative/verifier.rs` — inside `LeviathanVerifier::speculate()`
+`katgpt-rs/src/speculative/verifier.rs` — inside `LeviathanVerifier::speculate()`
 
 ### Implementation
 
@@ -129,7 +129,7 @@ Uses existing `domain_latent` feature (which gates Raven). No new feature gate n
 
 ### Location
 
-`microgpt-rs/src/speculative/verifier.rs` — new `SpecCostModel` struct
+`katgpt-rs/src/speculative/verifier.rs` — new `SpecCostModel` struct
 
 ### Feature Gate
 
@@ -188,7 +188,7 @@ The cost model output informs `InferenceOverrides::draft_lookahead` (Plan 026):
 
 ### Location
 
-`microgpt-rs/.benchmarks/096_moe_sd_codemodel_goat.md`
+`katgpt-rs/.benchmarks/096_moe_sd_codemodel_goat.md`
 
 ### Criteria
 
@@ -218,7 +218,7 @@ Only implement if T3 shows Raven slot overlap > 30% at step 1.
 
 ### Location
 
-`microgpt-rs/crates/microgpt-core/src/types.rs` — new function `sparse_matmul_delta()`
+`katgpt-rs/crates/katgpt-core/src/types.rs` — new function `sparse_matmul_delta()`
 
 ### Implementation Sketch
 
@@ -261,8 +261,8 @@ Enhances existing `sparse_mlp`, no new gate. But only active when `sparse_mlp` +
 ## Module Structure
 
 ```
-microgpt-rs/
-├── crates/microgpt-core/src/
+katgpt-rs/
+├── crates/katgpt-core/src/
 │   └── types.rs                    # sparse_matmul_delta() (T4)
 ├── src/
 │   ├── speculative/

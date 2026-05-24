@@ -6,18 +6,18 @@
 //! - dequantize_value (allocating) vs dequantize_value_into (zero-alloc)
 //! - Full forward_turboquant vs baseline forward
 //!
-//! Run: cargo test -p microgpt-rs --features turboquant --test bench_turboquant_zero_alloc -- --nocapture
+//! Run: cargo test -p katgpt-rs --features turboquant --test bench_turboquant_zero_alloc -- --nocapture
 
 #![cfg(feature = "turboquant")]
 
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::transformer::{
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, TransformerWeights, forward, forward_turboquant,
 };
-use microgpt_rs::turboquant::TurboQuantKVCache;
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 /// Generate synthetic KV vector for position `pos`.
 fn synthetic_kv(kv_dim: usize, pos: usize) -> Vec<f32> {

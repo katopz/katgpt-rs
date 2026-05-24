@@ -3,7 +3,7 @@
 **Date:** 2025-06
 **Status:** ✅ Complete
 **Depends on:** `.research/006_Raven_Routing_Slot_Memories.md`
-**Target:** `microgpt-rs/src/transformer.rs` (draft model path)
+**Target:** `katgpt-rs/src/transformer.rs` (draft model path)
 
 ---
 
@@ -41,7 +41,7 @@ Top-K routing. See `.research/006_Raven_Routing_Slot_Memories.md` for full analy
 Before touching any code, capture current draft model performance:
 
 ```bash
-cd microgpt-rs && \
+cd katgpt-rs && \
   cargo bench --quiet 2>&1 | tee .plans/020_baseline.txt
 ```
 

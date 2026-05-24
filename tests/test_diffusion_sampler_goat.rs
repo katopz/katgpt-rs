@@ -11,14 +11,14 @@
 
 #![cfg(feature = "tri_mode")]
 
-use microgpt_rs::dllm::{D2fContext, generate_pattern_dataset, train_mini_dllm};
-use microgpt_rs::speculative::d2f::D2fDecodeConfig;
-use microgpt_rs::speculative::d2f_decode_block_with_sampler;
-use microgpt_rs::speculative::diffusion_sampler::{
+use katgpt_rs::dllm::{D2fContext, generate_pattern_dataset, train_mini_dllm};
+use katgpt_rs::speculative::d2f::D2fDecodeConfig;
+use katgpt_rs::speculative::d2f_decode_block_with_sampler;
+use katgpt_rs::speculative::diffusion_sampler::{
     DiffusionSampler, SamplerVariant, collect_trajectories, train_logistic_on_patterns,
 };
-use microgpt_rs::speculative::types::NoPruner;
-use microgpt_rs::types::{Config, Rng};
+use katgpt_rs::speculative::types::NoPruner;
+use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;
 
 // ---------------------------------------------------------------------------
@@ -28,7 +28,7 @@ use std::time::Instant;
 /// Train a mini dLLM and return (config, weights, test_data).
 fn setup_trained_model() -> (
     Config,
-    microgpt_rs::transformer::TransformerWeights,
+    katgpt_rs::transformer::TransformerWeights,
     Vec<Vec<usize>>,
 ) {
     let config = Config::micro_dllm();
@@ -56,7 +56,7 @@ struct BenchResult {
 fn run_bench(
     label: &str,
     config: &Config,
-    weights: &microgpt_rs::transformer::TransformerWeights,
+    weights: &katgpt_rs::transformer::TransformerWeights,
     decode_config: &D2fDecodeConfig,
     targets: &[Vec<usize>],
     sampler: Option<&DiffusionSampler>,

@@ -12,7 +12,7 @@
 //!
 //! Run: `cargo test --features tiled_attention --test test_tiled_attention_goat -- --nocapture`
 
-use microgpt_core::tiled_attention_forward;
+use katgpt_core::tiled_attention_forward;
 
 // ── Helpers ───────────────────────────────────────────────────
 

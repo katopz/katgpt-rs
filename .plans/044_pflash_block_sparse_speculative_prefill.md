@@ -1243,7 +1243,7 @@ fn bench_block_selection_guarantees() {
 3. Update `speculative/mod.rs` — re-export `FlashPrefillConfig`, `PrefillMode`, `BlockScores`, `BlockAttentionScorer`, `block_select`, `block_select_grid`, `compress_prompt_blocks`, `speculative_prefill_block`, `speculative_prefill_adaptive`, `should_compress`
 4. Update `riir-ai/crates/riir-gpu/src/kernels/mod.rs` — register 4 new WGSL kernels
 5. Update `riir-ai/crates/riir-gpu/src/lib.rs` — export `GpuFlashPrefillPass`, `GpuFlashPrefillBuffers`
-6. Run `cargo clippy --fix --allow-dirty` on both `microgpt-rs` and `riir-gpu`
+6. Run `cargo clippy --fix --allow-dirty` on both `katgpt-rs` and `riir-gpu`
 7. Run `cargo test --quiet --workspace --all-features` — all tests pass
 8. Commit: `feat(speculative): Metal-accelerated PFlash block-sparse speculative prefill (Plan 044)`
 
@@ -1254,21 +1254,21 @@ fn bench_block_selection_guarantees() {
 ## File Change Summary
 
 ### New files
-- `microgpt-rs/tests/bench_prefill.rs` — baseline + NIAH + GPU benchmarks
+- `katgpt-rs/tests/bench_prefill.rs` — baseline + NIAH + GPU benchmarks
 - `riir-ai/crates/riir-gpu/src/kernels/flashprefill_mean_k.wgsl` — kernel 1
 - `riir-ai/crates/riir-gpu/src/kernels/flashprefill_block_score.wgsl` — kernel 2
 - `riir-ai/crates/riir-gpu/src/kernels/flashprefill_block_select.wgsl` — kernel 3
 - `riir-ai/crates/riir-gpu/src/kernels/flashprefill_sparse_forward.wgsl` — kernel 4
 
 ### Modified files
-- `microgpt-rs/src/speculative/types.rs` — add `FlashPrefillConfig`, `PrefillMode`, `BlockScores`
-- `microgpt-rs/src/speculative/prefill.rs` — add `BlockAttentionScorer`, `block_select`, `block_select_grid`, `compress_prompt_blocks`, `speculative_prefill_block`, `speculative_prefill_adaptive`, `should_compress`
-- `microgpt-rs/src/speculative/mod.rs` — re-export new types and functions
+- `katgpt-rs/src/speculative/types.rs` — add `FlashPrefillConfig`, `PrefillMode`, `BlockScores`
+- `katgpt-rs/src/speculative/prefill.rs` — add `BlockAttentionScorer`, `block_select`, `block_select_grid`, `compress_prompt_blocks`, `speculative_prefill_block`, `speculative_prefill_adaptive`, `should_compress`
+- `katgpt-rs/src/speculative/mod.rs` — re-export new types and functions
 - `riir-ai/crates/riir-gpu/src/forward.rs` — add `GpuFlashPrefillPass`, `GpuFlashPrefillBuffers`, GPU pipeline
 - `riir-ai/crates/riir-gpu/src/kernels/mod.rs` — register 4 new WGSL shaders
 - `riir-ai/crates/riir-gpu/src/lib.rs` — export GPU PFlash types
-- `microgpt-rs/.docs/08_lucebox_techniques.md` — document Metal PFlash
-- `microgpt-rs/.docs/01_overview.md` — update module structure
+- `katgpt-rs/.docs/08_lucebox_techniques.md` — document Metal PFlash
+- `katgpt-rs/.docs/01_overview.md` — update module structure
 
 ---
 

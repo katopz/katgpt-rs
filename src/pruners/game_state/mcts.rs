@@ -237,7 +237,7 @@ pub fn mcts_search<S: GameState>(
 ///
 /// # Example
 /// ```ignore
-/// use microgpt_rs::pruners::game_state::{mcts_search_informed, RandomRolloutPolicy, StateHeuristic};
+/// use katgpt_rs::pruners::game_state::{mcts_search_informed, RandomRolloutPolicy, StateHeuristic};
 ///
 /// struct MyHeuristic;
 /// impl StateHeuristic<MyState> for MyHeuristic {

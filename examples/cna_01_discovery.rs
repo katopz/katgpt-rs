@@ -22,7 +22,7 @@
 //! - **Real model steering** — requires actual transformer forward passes.
 //! - **Cross-architecture transfer** — uses synthetic activations, not real MLP output.
 
-use microgpt_rs::pruners::{CnaDiscoveryConfig, cna_discover, detect_universal_neurons};
+use katgpt_rs::pruners::{CnaDiscoveryConfig, cna_discover, detect_universal_neurons};
 
 fn main() {
     // Simulate a small transformer: 6 layers, 128 MLP hidden units.

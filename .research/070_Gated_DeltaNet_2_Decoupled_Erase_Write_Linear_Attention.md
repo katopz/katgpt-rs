@@ -5,7 +5,7 @@
 > **Date:** 2026-05, distilled 2025-07
 > **Related Research:** 28 (HLA), 061 (Delta Attention Residuals), 22 (Lighthouse Attention), 42 (SP-KV), 24 (δ-Mem), 48 (HRM-Text)
 > **Related Plans:** 104 (Gated DeltaNet-2 Recurrent Attention)
-> **Verdict: COMPLEMENTARY TO HLA — GDN2 solves a different problem than our HLA/AHLA: memory editing vs. memory compression. The channel-wise erase gate `b_t` (key-axis selective erasure) is the key innovation, accounting for ~90% of GDN2's gains over KDA. Best fit: riir-ai LoRA training pipeline where recurrent layers replace full attention for long-context. CPU SIMD recurrent decode is feasible for microgpt-rs. Feature-gate as `gdn2_attention` alongside `hla_attention`. Not a replacement for HLA — both address different linear attention axes.**
+> **Verdict: COMPLEMENTARY TO HLA — GDN2 solves a different problem than our HLA/AHLA: memory editing vs. memory compression. The channel-wise erase gate `b_t` (key-axis selective erasure) is the key innovation, accounting for ~90% of GDN2's gains over KDA. Best fit: riir-ai LoRA training pipeline where recurrent layers replace full attention for long-context. CPU SIMD recurrent decode is feasible for katgpt-rs. Feature-gate as `gdn2_attention` alongside `hla_attention`. Not a replacement for HLA — both address different linear attention axes.**
 
 ---
 
@@ -191,7 +191,7 @@ GDN2 retains near-flat scaling with only ~5% constant overhead vs KDA for the ad
 
 | Path | Current | GDN2 Role |
 |------|---------|-----------|
-| **microgpt-rs CPU inference** | SDPA / HLA / AHLA / SP-KV | Recurrent decode for long-context (O(1) per step) |
+| **katgpt-rs CPU inference** | SDPA / HLA / AHLA / SP-KV | Recurrent decode for long-context (O(1) per step) |
 | **riir-ai GPU LoRA training** | SDPA / wgpu attention | Recurrent mixer replacing full attention for long-context layers |
 | **Hybrid models** | D2F + SDPA | GDN2 + SWA (same hybrid pattern as paper) |
 
@@ -218,7 +218,7 @@ GDN2 retains near-flat scaling with only ~5% constant overhead vs KDA for the ad
 
 **Why valuable:** This single mechanism accounts for ~90% of GDN2's gains over KDA. It directly addresses the core problem of fixed-state recurrent attention: interference among many compressed associations.
 
-**Implementation for CPU SIMD (microgpt-rs):**
+**Implementation for CPU SIMD (katgpt-rs):**
 ```rust
 // In recurrent decode step:
 // 1. Project erase gate: b = sigmoid(w_erase @ x)  → d_k values
@@ -309,7 +309,7 @@ fn gdn2_recurrent_step(
 2. **Don't implement chunkwise WY training kernels in CPU Rust.** The WY forward/backward is GPU-specific (Triton). For CPU inference, token-by-token recurrent decode is sufficient.
 3. **Don't implement the full GDN2 block design (short conv, SiLU gate, L2 norm) all at once.** Start with the core recurrence (erase gate + write gate + channel decay), validate on micro config, then add architectural components.
 4. **Don't implement channel-wise decay before validating the erase gate alone.** The ablation shows b-only (with scalar decay) recovers 90% of the gain. Channel-wise decay is a second-order improvement.
-5. **Don't train GDN2 models in microgpt-rs.** Training belongs in riir-ai's GPU LoRA pipeline. microgpt-rs should only implement the recurrent decode path for inference.
+5. **Don't train GDN2 models in katgpt-rs.** Training belongs in riir-ai's GPU LoRA pipeline. katgpt-rs should only implement the recurrent decode path for inference.
 
 ---
 
@@ -331,8 +331,8 @@ fn gdn2_recurrent_step(
 
 | Phase | What | Where | Feature Gate |
 |-------|------|-------|-------------|
-| **Phase 1** | Recurrent decode only (E1: erase gate) | microgpt-rs | `gdn2_attention` |
-| **Phase 2** | Full recurrent step (E1+E2+E4) | microgpt-rs | `gdn2_attention` |
+| **Phase 1** | Recurrent decode only (E1: erase gate) | katgpt-rs | `gdn2_attention` |
+| **Phase 2** | Full recurrent step (E1+E2+E4) | katgpt-rs | `gdn2_attention` |
 | **Phase 3** | Training integration (chunkwise) | riir-ai | GPU kernel |
 | **Phase 4** | Hybrid GDN2 + SWA (E5) | riir-ai | GPU kernel |
 

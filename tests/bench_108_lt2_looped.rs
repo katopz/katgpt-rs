@@ -16,12 +16,12 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use microgpt_rs::hla::MultiLayerAhlaCache;
-use microgpt_rs::hla::forward_ahla;
-use microgpt_rs::transformer::{
+use katgpt_rs::hla::MultiLayerAhlaCache;
+use katgpt_rs::hla::forward_ahla;
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, TransformerWeights, forward, forward_looped,
 };
-use microgpt_rs::types::{
+use katgpt_rs::types::{
     Config, HlaMode, HybridPattern, LoopMode, ResidualGate, Rng, SdpaOutputGate, kv_dim,
 };
 

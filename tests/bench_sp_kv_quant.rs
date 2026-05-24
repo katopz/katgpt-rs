@@ -15,13 +15,13 @@
 
 use std::time::Instant;
 
-use microgpt_rs::sp_kv::forward::forward_sp_kv_quant;
-use microgpt_rs::sp_kv::{
+use katgpt_rs::sp_kv::forward::forward_sp_kv_quant;
+use katgpt_rs::sp_kv::{
     GateBiasBuffer, SpKvConfig, SpKvForwardContext, SpKvGateMode, SpKvPredictors, SpKvQuantCache,
 };
-use microgpt_rs::transformer::{ForwardContext, TransformerWeights};
-use microgpt_rs::turboquant::TurboQuantKVCache;
-use microgpt_rs::types::{Config, Rng, kv_dim};
+use katgpt_rs::transformer::{ForwardContext, TransformerWeights};
+use katgpt_rs::turboquant::TurboQuantKVCache;
+use katgpt_rs::types::{Config, Rng, kv_dim};
 
 /// Number of iterations for timing benchmarks.
 const BENCH_ITERS: usize = 50;

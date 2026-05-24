@@ -110,8 +110,8 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 
 ## Phase 2: Inference Pipeline (Feature-Gated) ✅
 
-### Task 2.1: D2F Inference in microgpt-rs
-- [x] Feature flag `dllm` in `microgpt-rs/Cargo.toml` (already existed)
+### Task 2.1: D2F Inference in katgpt-rs
+- [x] Feature flag `dllm` in `katgpt-rs/Cargo.toml` (already existed)
 - [x] New module `src/speculative/d2f.rs` (feature-gated, `#![allow]` for sampling helpers)
 - [x] Implement `d2f_decode_block()`:
   1. Initialize block with mask tokens ✅
@@ -173,7 +173,7 @@ Implemented in `riir-ai/crates/riir-gpu` (Plan 068).
 
 - Phase 0: No new dependencies (CPU only, existing infrastructure)
 - Phase 1: `riir-gpu` wgpu infrastructure (already production-ready)
-- Phase 2: `microgpt-rs` speculative module (already production-ready)
+- Phase 2: `katgpt-rs` speculative module (already production-ready)
 
 ## Estimated Timeline
 

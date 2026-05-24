@@ -21,7 +21,7 @@
 
 ## GOAT Proof
 
-Must validate all gates before Phase 2 integration. Run via `cargo test -p microgpt-rs --test test_pgd_analytics -- --nocapture` + manual benchmark.
+Must validate all gates before Phase 2 integration. Run via `cargo test -p katgpt-rs --test test_pgd_analytics -- --nocapture` + manual benchmark.
 
 | Task | Gate | Method | Pass Criteria |
 |------|------|--------|---------------|
@@ -170,7 +170,7 @@ Must validate all gates before Phase 2 integration. Run via `cargo test -p micro
   - Assertions: traces non-empty, CR ∈ [0,1], garbage ∈ [0,1], distribution sums ≈ 1.0
   - Results: avg CR ≈ 0.600 (Greedy self-play), avg garbage ≈ 0.000
   - Data files ready at `riir-ai/data/go_9x7514_games.flat.zip` (8.7MB) and `go_9x7514_puzzles.flat.zip` (99KB)
-  - Full Natsukaze `.flat.zip` validation requires riir-examples integration (cross-crate: riir-gpu `load_flat_zip()` + microgpt-rs `samples_to_replay()`)
+  - Full Natsukaze `.flat.zip` validation requires riir-examples integration (cross-crate: riir-gpu `load_flat_zip()` + katgpt-rs `samples_to_replay()`)
   - **GOAT gate:** ✅ PASS — Simulated pipeline test passes with 5 games, all assertions hold
 
 ---

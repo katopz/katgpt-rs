@@ -449,7 +449,7 @@ fn ahla_step(
 
 ## Key Insight for Implementation
 
-**AHLA is the better first target for microgpt-rs:**
+**AHLA is the better first target for katgpt-rs:**
 
 | Criterion | Symmetric HLA | AHLA |
 |---|---|---|
@@ -462,7 +462,7 @@ fn ahla_step(
 | Implementation complexity | Medium (5-tuple state) | Low (4-tuple state) |
 | Default choice? | For training quality | **For inference perf** |
 
-For microgpt-rs's tiny head_dims (4-16), AHLA's lower state overhead and simpler implementation make it the practical choice. Symmetric HLA can be added later for quality-sensitive scenarios.
+For katgpt-rs's tiny head_dims (4-16), AHLA's lower state overhead and simpler implementation make it the practical choice. Symmetric HLA can be added later for quality-sensitive scenarios.
 
 **Critical implementation note:** The update order matters! Cross-terms G,h must be computed using OLD CQV,mQ BEFORE updating them. This is the #1 correctness trap.
 

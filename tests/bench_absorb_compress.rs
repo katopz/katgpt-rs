@@ -15,9 +15,9 @@
 fn bench_absorb_compress_overhead() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{AbsorbCompress, AbsorbCompressLayer, BanditStats, CompressConfig};
-    use microgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
-    use microgpt_rs::types::Rng;
+    use katgpt_rs::pruners::{AbsorbCompress, AbsorbCompressLayer, BanditStats, CompressConfig};
+    use katgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
+    use katgpt_rs::types::Rng;
 
     let num_arms = 100;
     let warmup = 1000;
@@ -142,7 +142,7 @@ fn bench_absorb_compress_overhead() {
 fn bench_trial_log_throughput() {
     use std::time::Instant;
 
-    use microgpt_rs::pruners::{TrialLog, TrialRecord};
+    use katgpt_rs::pruners::{TrialLog, TrialRecord};
 
     let iters = 100_000;
     let path = std::env::temp_dir().join(format!(
@@ -213,8 +213,8 @@ fn bench_hot_swap_reload() {
     use std::path::Path;
     use std::time::Instant;
 
-    use microgpt_rs::pruners::HotSwapPruner;
-    use microgpt_rs::speculative::types::ScreeningPruner;
+    use katgpt_rs::pruners::HotSwapPruner;
+    use katgpt_rs::speculative::types::ScreeningPruner;
 
     let iters = 100;
     let path = std::env::temp_dir().join(format!(

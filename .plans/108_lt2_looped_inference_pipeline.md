@@ -20,16 +20,16 @@ Our specific advantage: we already have AHLA (asymmetric second-order linear att
 - [x] T1: Benchmark current single-pass AHLA forward — `bench_ahla_baseline` — `tests/bench_108_lt2_looped.rs`
 - [x] T2: Benchmark naive 4× looped SDPA (4 full passes, KV cache ×4) — `bench_naive_loop` — `tests/bench_108_lt2_looped.rs`
 
-### Phase 1: Core Types & Enums (microgpt-core)
-- [x] T3: Add `LoopMode` enum to `microgpt-core/src/types.rs`
-- [x] T4: Add `HybridPattern` enum to `microgpt-core/src/types.rs`
-- [x] T5: Add `SdpaOutputGate` struct to `microgpt-core/src/types.rs`
-- [x] T6: Add `ResidualGate` struct (per-loop learned gate ρ_τ) to `microgpt-core/src/types.rs`
+### Phase 1: Core Types & Enums (katgpt-core)
+- [x] T3: Add `LoopMode` enum to `katgpt-core/src/types.rs`
+- [x] T4: Add `HybridPattern` enum to `katgpt-core/src/types.rs`
+- [x] T5: Add `SdpaOutputGate` struct to `katgpt-core/src/types.rs`
+- [x] T6: Add `ResidualGate` struct (per-loop learned gate ρ_τ) to `katgpt-core/src/types.rs`
 - [x] T7: Update `Config` struct with loop/hybrid fields + defaults
-- [x] T8: Add `lt2_looped` feature gate to `microgpt-core/Cargo.toml`
+- [x] T8: Add `lt2_looped` feature gate to `katgpt-core/Cargo.toml`
 
-### Phase 2: Looped Forward Pass (microgpt-rs)
-- [x] T9: Add `lt2_looped` feature gate to `microgpt-rs/Cargo.toml` (depends on `hla_attention`)
+### Phase 2: Looped Forward Pass (katgpt-rs)
+- [x] T9: Add `lt2_looped` feature gate to `katgpt-rs/Cargo.toml` (depends on `hla_attention`)
 - [x] T10: Implement `forward_looped()` in `transformer.rs` — weight-shared T-pass loop
 - [x] T11: Implement per-loop residual gate: `h^(τ) = h̃^(τ) + ρ_τ ⊙ h^(τ-1)`
 - [x] T12: Implement `DecodeStage` dispatch for looped inference (prefill vs decode)
@@ -96,7 +96,7 @@ Output: lm_head(h)
 | Residual gate ρ_τ | O(d) | O(d) × T | Zero-init learned |
 | SDPA output gate | O(n_heads·head_dim·d) | Same (shared) | Zero-init learned |
 
-### Key Enums (in `microgpt-core/src/types.rs`)
+### Key Enums (in `katgpt-core/src/types.rs`)
 
 ```rust
 /// Looped transformer mode.
@@ -169,7 +169,7 @@ use_residual = true         # per-loop residual gate ρ_τ (recommended)
 
 ## Feature Gates
 
-### microgpt-core/Cargo.toml
+### katgpt-core/Cargo.toml
 ```toml
 [features]
 default = ["sparse_mlp"]
@@ -181,11 +181,11 @@ coda_fusion = []
 lt2_looped = []  # LoopMode, HybridPattern, SdpaOutputGate, ResidualGate
 ```
 
-### microgpt-rs/Cargo.toml
+### katgpt-rs/Cargo.toml
 ```tomt
 [features]
 default = []
-lt2_looped = ["microgpt-core/lt2_looped", "hla_attention"]
+lt2_looped = ["katgpt-core/lt2_looped", "hla_attention"]
 ```
 
 ---
@@ -243,7 +243,7 @@ lt2_looped = ["microgpt-core/lt2_looped", "hla_attention"]
 
 ```
 Phase 0: Baseline benchmarks          [~1h]
-Phase 1: Core types (microgpt-core)   [~2h]
+Phase 1: Core types (katgpt-core)   [~2h]
 Phase 2: Looped forward pass          [~3h]  ← main work
 Phase 3: SDPA output gate             [~1h]
 Phase 4: Hybrid dispatch              [~2h]
@@ -259,7 +259,7 @@ Total estimate:                       ~14h
 ## Dependencies
 
 - `hla_attention` feature (Plan 057) — AHLA forward pass
-- `microgpt-core` types — Config, enums, SIMD kernels
+- `katgpt-core` types — Config, enums, SIMD kernels
 - No new external crates required
 
 ---

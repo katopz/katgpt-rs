@@ -15,8 +15,8 @@ use std::io::Write;
 use std::time::Instant;
 
 use fastrand::Rng;
-use microgpt_rs::pruners::game_state::{GameState, StateHeuristic, mcts_search};
-use microgpt_rs::pruners::go::{
+use katgpt_rs::pruners::game_state::{GameState, StateHeuristic, mcts_search};
+use katgpt_rs::pruners::go::{
     GoAction, GoCell, GoGreedyPlayer, GoHLPlayer, GoHeuristic, GoMctsPlayer, GoPlayer,
     GoRandomPlayer, GoState, GoValidatorPlayer,
 };
@@ -378,7 +378,7 @@ fn bench_go_api() {
         }
     };
 
-    use microgpt_rs::pruners::go::AutoGoClient;
+    use katgpt_rs::pruners::go::AutoGoClient;
 
     let client = AutoGoClient::new(&api_url);
 

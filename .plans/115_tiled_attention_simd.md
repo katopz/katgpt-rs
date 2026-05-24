@@ -2,8 +2,8 @@
 
 ## Tasks
 
-- [x] T1: Add `tiled_attention` feature gate to `microgpt-core/Cargo.toml`
-- [x] T2: Create `microgpt-core/src/attention.rs` with tiled flash attention skeleton
+- [x] T1: Add `tiled_attention` feature gate to `katgpt-core/Cargo.toml`
+- [x] T2: Create `katgpt-core/src/attention.rs` with tiled flash attention skeleton
 - [x] T3: Implement `tiled_attention_forward()` — online softmax with SIMD tile iteration
 - [x] T4: Implement `exp2` temperature scaling trick (avoid `exp()`, use `exp2()`)
 - [x] T5: Add threshold heuristic — fall back to full materialization for small N
@@ -21,7 +21,7 @@ Distill ThunderKittens' (Research 077) online-softmax flash attention algorithm 
 
 **Branch:** `develop/feature/115_tiled_attention`
 **Depends on:** Research 077 (ThunderKittens distillation)
-**Target crate:** `microgpt-core`
+**Target crate:** `katgpt-core`
 **Feature gate:** `tiled_attention`
 **Related:** Plan 106 (riir-ai CubeCL GPU rewrite — GPU tiled attention goes there, not here)
 
@@ -101,7 +101,7 @@ Below `N=128`: use current `softmax_scaled()` + `matmul()` (already correct, fas
 ### File Structure
 
 ```text
-microgpt-core/src/
+katgpt-core/src/
 ├── attention.rs          # NEW: tiled flash attention (behind feature gate)
 ├── lib.rs                # MODIFIED: add mod attention + re-export
 ├── simd.rs               # UNCHANGED: existing SIMD kernels
@@ -111,7 +111,7 @@ microgpt-core/src/
 ### API
 
 ```rust
-// microgpt-core/src/attention.rs
+// katgpt-core/src/attention.rs
 
 /// Tiled online-softmax flash attention for CPU SIMD.
 ///
@@ -148,33 +148,33 @@ pub fn tiled_attention_batched(
 ### Integration Point
 
 ```rust
-// microgpt-rs/src/transformer.rs — in the attention forward section
+// katgpt-rs/src/transformer.rs — in the attention forward section
 
 #[cfg(feature = "tiled_attention")]
 {
     if seq_len >= TILED_ATTENTION_THRESHOLD {
-        microgpt_core::tiled_attention_batched(
+        katgpt_core::tiled_attention_batched(
             q_buf, k_buf, v_buf, attn_out_buf,
             batch, heads, seq_len, head_dim,
         );
     } else {
         // Fallback to current path for small N
-        microgpt_core::softmax_scaled(&mut scores, head_dim);
-        microgpt_core::matmul(&scores, v_transposed, &mut attn_out, ...);
+        katgpt_core::softmax_scaled(&mut scores, head_dim);
+        katgpt_core::matmul(&scores, v_transposed, &mut attn_out, ...);
     }
 }
 #[cfg(not(feature = "tiled_attention"))]
 {
     // Current path unchanged
-    microgpt_core::softmax_scaled(&mut scores, head_dim);
-    microgpt_core::matmul(&scores, v_transposed, &mut attn_out, ...);
+    katgpt_core::softmax_scaled(&mut scores, head_dim);
+    katgpt_core::matmul(&scores, v_transposed, &mut attn_out, ...);
 }
 ```
 
 ## Feature Gate
 
 ```toml
-# microgpt-core/Cargo.toml
+# katgpt-core/Cargo.toml
 
 [features]
 default = []

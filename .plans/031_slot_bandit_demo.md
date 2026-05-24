@@ -99,7 +99,7 @@ bandit learning.
 
 1. **Self-contained example** — all slot logic in one file, no new library modules needed.
    The point is demonstrating DDTree + BanditPruner with rules-based verification,
-   not adding a slot machine library to microgpt-rs.
+   not adding a slot machine library to katgpt-rs.
 
 2. **Graded rewards (not binary)** — unlike speculative decoding's accept/reject (1.0/0.0),
    the slot uses graded rewards (0.0, 0.2, 0.5, 0.6, 0.8, 1.0). This better exercises

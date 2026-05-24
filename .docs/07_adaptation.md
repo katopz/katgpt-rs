@@ -1,4 +1,4 @@
-# microgpt-rs: Model Adaptation Techniques
+# katgpt-rs: Model Adaptation Techniques
 
 Five production techniques that adapt the transformer to different tasks and domains **without modifying base weights**. All are feature-gated, zero-copy, and backward-compatible.
 
@@ -407,7 +407,7 @@ pub fn ahla_step(pkv, mk, q_head, q, k, v, hd, lr, out, tmp_r)
 
 ### SIMD Acceleration (Plan 060)
 
-All HLA kernels dispatch through `crates/microgpt-core/src/simd.rs` (re-exported via `src/simd.rs`) — runtime NEON/AVX2 detection:
+All HLA kernels dispatch through `crates/katgpt-core/src/simd.rs` (re-exported via `src/simd.rs`) — runtime NEON/AVX2 detection:
 
 | Operation | NEON Throughput (hd=4) |
 |-----------|----------------------|
@@ -521,7 +521,7 @@ pub struct WidthScaleConfig {
 pub enum WidthSelectionMode { BestQ, MostFrequent }
 pub fn best_of_k_rollouts(...) -> Vec<usize>
 
-// crates/microgpt-core/src/types.rs — Config convenience fields
+// crates/katgpt-core/src/types.rs — Config convenience fields
 pub struct Config {
     pub width_rollouts: usize,            // default: 1 (disabled)
     pub early_stop_threshold: f32,        // default: 0.0 (disabled)

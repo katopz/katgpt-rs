@@ -6,7 +6,7 @@
 //!
 //! Run: `cargo test --features mls_aggregate --test goat_104_mls_aggregate -- --nocapture`
 
-use microgpt_rs::benchmark::ep_accuracy_k;
+use katgpt_rs::benchmark::ep_accuracy_k;
 
 // ── Helpers ───────────────────────────────────────────────────
 

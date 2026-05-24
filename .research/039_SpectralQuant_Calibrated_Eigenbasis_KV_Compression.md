@@ -370,7 +370,7 @@ SpectralQuant sits at an interesting point on the model-based/modelless spectrum
 | Production model (7B+) | **SpectralQuant** (d_eff ≈ 4 at d=128 is huge gain) |
 | Streaming / online-only | **TurboQuant** (no offline phase) |
 
-For microgpt-rs specifically: our draft model has head_dim=4, making SpectralQuant's d_eff analysis irrelevant (d_eff would be ≈ d). But for any production model we serve with head_dim=64+, SpectralQuant is the right choice.
+For katgpt-rs specifically: our draft model has head_dim=4, making SpectralQuant's d_eff analysis irrelevant (d_eff would be ≈ d). But for any production model we serve with head_dim=64+, SpectralQuant is the right choice.
 
 ### What Can Be Distilled
 
@@ -680,7 +680,7 @@ Spectral rotation + per-dim codebooks + selective QJL together give the headline
 
 SpectralQuant is the strongest known improvement over TurboQuant for KV cache compression. It is well-motivated, well-tested, and the code is clean enough to port. The phased approach lets us start with the easy wins (water-fill allocator) and progress to the full system when we deploy production models with d_h ≥ 64.
 
-For microgpt-rs specifically: implement Phase 1 (water-fill) immediately as it's nearly free. Plan Phase 2–4 for when we integrate larger models. Phase 5 (WGSL kernel) depends on riir-gpu roadmap.
+For katgpt-rs specifically: implement Phase 1 (water-fill) immediately as it's nearly free. Plan Phase 2–4 for when we integrate larger models. Phase 5 (WGSL kernel) depends on riir-gpu roadmap.
 
 ---
 

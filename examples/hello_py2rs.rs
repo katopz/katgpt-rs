@@ -13,12 +13,12 @@
 //!
 //! Run: cargo run --example hello_py2rs
 
-use microgpt_rs::tokenizer::{BpeTokenizerImpl, BpeTrainer};
-use microgpt_rs::transformer::{
+use katgpt_rs::tokenizer::{BpeTokenizerImpl, BpeTrainer};
+use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, PrefillContext, TransformerWeights, forward,
     forward_prefill, generate_with_prefill,
 };
-use microgpt_rs::types::{Config, LoraAdapter, LoraPair, Rng};
+use katgpt_rs::types::{Config, LoraAdapter, LoraPair, Rng};
 
 // ---------------------------------------------------------------------------
 // Training corpus: Python + Rust code

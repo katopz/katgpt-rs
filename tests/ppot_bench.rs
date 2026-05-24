@@ -6,17 +6,17 @@
 #[cfg(feature = "ppot")]
 #[test]
 fn ppot_profile_components() {
-    use microgpt_rs::speculative::ppot::{
+    use katgpt_rs::speculative::ppot::{
         PpotConfig, RejectionInsight, SessionKnowledge, TokenRule, identify_high_entropy_positions,
         identify_positions_adaptive, ppot_resample, ppot_resample_different_value,
         ppot_resample_multi_strategy, ppot_rescue, ppot_rescue_adaptive, rank_by_consistency,
         token_entropy,
     };
-    use microgpt_rs::speculative::{
+    use katgpt_rs::speculative::{
         NoScreeningPruner, SpeculativeContext, dflash_predict_with, sample_from_distribution,
     };
-    use microgpt_rs::transformer::TransformerWeights;
-    use microgpt_rs::types::{Config, Rng};
+    use katgpt_rs::transformer::TransformerWeights;
+    use katgpt_rs::types::{Config, Rng};
     use std::time::Instant;
 
     let draft_config = Config::draft();

@@ -13,8 +13,8 @@ use std::collections::HashMap;
 
 use fastrand::Rng;
 
-use microgpt_rs::pruners::EloCalculator;
-use microgpt_rs::pruners::fft::{
+use katgpt_rs::pruners::EloCalculator;
+use katgpt_rs::pruners::fft::{
     Action, ActionType, BattleState, FftArenaConfig, FftPlayer, GZeroFFTPlayer, GreedyFFTPlayer,
     HLFFTPlayer, RubricFFTPlayer, ValidatorFFTPlayer, run_fft_matchup,
 };

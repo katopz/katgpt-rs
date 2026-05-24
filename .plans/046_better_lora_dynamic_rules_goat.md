@@ -45,7 +45,7 @@ absolutely dominates the arena. This inverts the v1 result where HL (+475) >> Lo
 
 ## Tasks
 
-### Phase 1: Data Quality Fix (microgpt-rs)
+### Phase 1: Data Quality Fix (katgpt-rs)
 
 - [x] **T1: `bomber_06_replay_gen_v2.rs` — Balanced replay generator**
   - Include ALL player types (Random, Greedy, Validator, HL)
@@ -95,7 +95,7 @@ absolutely dominates the arena. This inverts the v1 result where HL (+475) >> Lo
   - v2 LoRA-only (-182) is worse than v1 LoRA-only (-46) — model proposes riskier actions
   - WASM filter is essential: turns risky proposals into safe dominant play
 
-### Phase 3: Dynamic Rules Proof (microgpt-rs + riir-ai)
+### Phase 3: Dynamic Rules Proof (katgpt-rs + riir-ai)
 
 - [x] **T7: `FullHLPlayer` in riir-ai — composition-based Full HL** ✅
   - `riir-ai` defines `FullHLPlayer` struct in `crates/riir-examples/src/bomber_full_hl.rs`
@@ -157,7 +157,7 @@ absolutely dominates the arena. This inverts the v1 result where HL (+475) >> Lo
 ## Architecture: Composition Over Inheritance
 
 ```
-microgpt-rs (MIT):
+katgpt-rs (MIT):
   BomberPlayer trait          ← interface
   LoraAdapter::load()         ← CPU LoRA loading
   lora_apply()                ← CPU LoRA inference
@@ -182,7 +182,7 @@ riir-ai (Private):
 ```
 
 The key insight: `FullHLPlayer` lives entirely in `riir-ai`. It uses the public `BomberPlayer` trait
-and public `LoraAdapter`/`BomberWasmPruner` types from `microgpt-rs`, but the composition of all
+and public `LoraAdapter`/`BomberWasmPruner` types from `katgpt-rs`, but the composition of all
 three secrets (LoRA + WASM + Bandit) is the commercial product. MIT users get the pieces but not
 the assembled product — "Ferrari, no gas, no driver."
 
@@ -303,7 +303,7 @@ board-level patterns rather than token-level patterns — a valid learning strat
 
 ## File Changes
 
-### microgpt-rs (MIT engine) — Phase 1 ✅
+### katgpt-rs (MIT engine) — Phase 1 ✅
 
 ```
 src/pruners/bomber/

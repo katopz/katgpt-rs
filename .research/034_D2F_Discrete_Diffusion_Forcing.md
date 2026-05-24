@@ -186,7 +186,7 @@ We previously rejected ColaDLM (continuous latent diffusion) because:
 
 All D2F code behind feature gates, zero impact on existing code:
 
-### `microgpt-rs`
+### `katgpt-rs`
 - `dllm` feature: bidirectional attention mode, mask token, noise schedule, d2f inference
 - Feature-gated `forward_bidirectional()` alongside existing `forward()`
 - Feature-gated `d2f_decode()` in speculative module

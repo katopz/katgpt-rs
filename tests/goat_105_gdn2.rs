@@ -10,10 +10,10 @@
 //!
 //! Run: `cargo test --features gdn2_attention --test goat_105_gdn2 -- --nocapture`
 
-use microgpt_rs::gdn2::{
+use katgpt_rs::gdn2::{
     Gdn2GateConfig, Gdn2HeadState, MultiLayerGdn2Cache, gdn2_recurrent_step, l2_normalize, sigmoid,
 };
-use microgpt_rs::types::Config;
+use katgpt_rs::types::Config;
 
 // ── Helpers ───────────────────────────────────────────────────
 

@@ -128,7 +128,7 @@ All gates validated via `core_05_maxsim` example and `bench_maxsim_score` / `ben
 - [x] **T11: GPU MaxSim dispatch with size-gated CPU/GPU selection** ✅ — **Plan 085** (`riir-ai/.plans/085_maxsim_gpu_dispatch.md`) **COMPLETE**
   - `maxsim_score.wgsl` — 68 lines, workgroup_size(64), one invocation per batch item
   - `MaxSimScorer` — size-gated dispatch, `DEFAULT_MAXSIM_THRESHOLD = 256`
-  - CPU path: inline fallback (no microgpt-rs dependency)
+  - CPU path: inline fallback (no katgpt-rs dependency)
   - GPU path: upload → dispatch → download via wgpu
   - **GOAT gate: ✅ PASS** — GPU **41–74× faster** for work_size ≥ 50K (target was ≥ 5×)
   - **Crossover:** work_size ≈ 300–800 (GPU overhead at 160 is only ~450µs)

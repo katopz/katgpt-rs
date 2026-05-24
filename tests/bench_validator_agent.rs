@@ -3,7 +3,7 @@
 //! Run: `cargo test --features bomber-agent bench_validator_agent -- --nocapture`
 
 #[cfg(feature = "bomber-agent")]
-use microgpt_rs::pruners::bomber::{
+use katgpt_rs::pruners::bomber::{
     AgentLoop, ValidatorCandidate, ValidatorRule, evaluate_validator,
 };
 

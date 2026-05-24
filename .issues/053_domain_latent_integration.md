@@ -39,7 +39,7 @@ Add test in `src/transformer.rs` (behind `#[cfg(feature = "domain_latent")]`):
 
 ### Existing test pattern to follow
 
-```microgpt-rs/src/transformer.rs#L3293-3330
+```katgpt-rs/src/transformer.rs#L3293-3330
 #[cfg(feature = "domain_latent")]
 #[test]
 fn test_domain_latent_changes_logits() { ... }
@@ -70,7 +70,7 @@ fn test_domain_latent_changes_logits() { ... }
    ```rust
    pub domain_latent: Option<DomainLatent>,
    ```
-   Note: `DomainLatent` is in `microgpt-rs::types`, gated behind `domain_latent` feature. riir-router must add `microgpt-rs` as dep with `domain_latent` feature, OR re-export/abstract.
+   Note: `DomainLatent` is in `katgpt-rs::types`, gated behind `domain_latent` feature. riir-router must add `katgpt-rs` as dep with `domain_latent` feature, OR re-export/abstract.
 
 3. **`ExpertRegistry::resolve_domain_latent()`** — follow `resolve_lora_pair()` pattern (`riir-ai/crates/riir-router/src/registry.rs#L222-257`):
    ```rust
@@ -96,13 +96,13 @@ fn test_domain_latent_changes_logits() { ... }
 - `DomainConfig` struct: `riir-ai/crates/riir-router/src/types.rs#L186-219`
 - `ExpertBundle` struct: `riir-ai/crates/riir-router/src/types.rs#L114-125`
 - `resolve_lora_pair()` pattern: `riir-ai/crates/riir-router/src/registry.rs#L222-257`
-- `DomainLatent::load()`: `microgpt-rs/src/types.rs#L895-1005`
+- `DomainLatent::load()`: `katgpt-rs/src/types.rs#L895-1005`
 
 ### Cross-crate dependency concern
 
-`DomainLatent` lives in `microgpt-rs` behind `domain_latent` feature. `riir-router` would need either:
-- Add `microgpt-rs` as optional dep with `domain_latent` feature, OR
-- Define a `DomainLatent` trait/abstraction in riir-router and implement in microgpt-rs, OR
+`DomainLatent` lives in `katgpt-rs` behind `domain_latent` feature. `riir-router` would need either:
+- Add `katgpt-rs` as optional dep with `domain_latent` feature, OR
+- Define a `DomainLatent` trait/abstraction in riir-router and implement in katgpt-rs, OR
 - Move `DomainLatent` to a shared crate
 
 Decide on approach before implementing.
@@ -137,7 +137,7 @@ Algorithm: standard AdamW with bias correction, pure CPU (`adamw_step_cpu`). Exp
 1. Add `--domain-latent` flag to `train_lora.rs` CLI args — when set, train domain latent alongside LoRA
 2. Reuse existing `DomainLatentAdamWStep` + `adamw_step_cpu` from `riir-gpu::domain_latent` (no porting needed — already works with `&mut [f32]`)
 3. Follow `train_bomber.rs` Phase 5 pattern: extract features → `train_domain_latent_cpu()` → export `.dlat`
-4. Export trained embedding via `DomainLatent::save()` (`.dlat` binary, same format as microgpt-rs expects)
+4. Export trained embedding via `DomainLatent::save()` (`.dlat` binary, same format as katgpt-rs expects)
 5. Output: `lora.bin` + `domain_latent.dlat` side by side in output directory
 
 ### Approach
@@ -150,7 +150,7 @@ No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure 
 - Reference pattern (Phase 5 CPU training): `riir-ai/crates/riir-gpu/examples/train_bomber.rs#L299-340`
 - Target file to modify: `riir-ai/crates/riir-gpu/examples/train_lora.rs`
 - `Trainer` API: `riir-ai/crates/riir-gpu/src/trainer.rs`
-- Binary format spec: `microgpt-rs/src/types.rs` — `[DLAT 4B][VERSION 1B][KV_DIM 4B LE][EMBEDDING kv_dim×f32 LE][BLAKE3 32B]`
+- Binary format spec: `katgpt-rs/src/types.rs` — `[DLAT 4B][VERSION 1B][KV_DIM 4B LE][EMBEDDING kv_dim×f32 LE][BLAKE3 32B]`
 
 ---
 
@@ -158,7 +158,7 @@ No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure 
 
 | Task | Scope | Status | Est. Effort |
 |------|-------|--------|-------------|
-| A: Integration tests | `microgpt-rs/src/transformer.rs` | ✅ Done | Small (3 tests) |
+| A: Integration tests | `katgpt-rs/src/transformer.rs` | ✅ Done | Small (3 tests) |
 | B: ExpertRegistry + inference wiring | `riir-router/` + `transformer.rs` | ✅ Done | Medium |
 | C: riir-gpu domain latent training | `riir-ai/crates/riir-gpu/examples/train_lora.rs` | Open | Medium (follow bomber pattern) |
 
@@ -180,4 +180,4 @@ No new tensor API or external framework needed. `DomainLatentAdamWStep` is pure 
 - [x] C1: Add `--domain-latent` flag to `train_lora.rs` CLI args ✅ — `--domain-latent`, `--domain-latent-epochs`, `--domain-latent-lr`
 - [x] C2: Wire domain latent training into `train_lora.rs` (follow `train_bomber.rs` Phase 5 pattern) ✅ — `prepare_domain_latent_features()` + `train_domain_latent_cpu()`
 - [x] C3: Export `.dlat` binary alongside `lora.bin` via `write_domain_latent()` ✅ — `<stem>.dlat` next to `lora.bin`
-- [x] C4: E2E test: write `.dlat` → load in microgpt-rs → verify round-trip ✅ — 7 tests in `riir-gpu/tests/test_domain_latent_e2e.rs`
+- [x] C4: E2E test: write `.dlat` → load in katgpt-rs → verify round-trip ✅ — 7 tests in `riir-gpu/tests/test_domain_latent_e2e.rs`

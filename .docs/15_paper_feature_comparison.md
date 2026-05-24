@@ -2,11 +2,11 @@
 
 **Date:** 2025-07
 **Status:** Living Document
-**Scope:** All 69 research papers (00–069) in `.research/` mapped against microgpt-rs feature dimensions. Includes Research 061 (Delta Attention Residuals) mapped to `delta_routing`. Includes Research 068 (RAEv2) mapped to `mls_aggregate`.
+**Scope:** All 69 research papers (00–069) in `.research/` mapped against katgpt-rs feature dimensions. Includes Research 061 (Delta Attention Residuals) mapped to `delta_routing`. Includes Research 068 (RAEv2) mapped to `mls_aggregate`.
 
 ## Introduction
 
-This document provides a comprehensive feature-intersection matrix between our work (microgpt-rs) and all 69 researched papers. Each paper is evaluated across 10 feature dimensions derived from our core architecture:
+This document provides a comprehensive feature-intersection matrix between our work (katgpt-rs) and all 69 researched papers. Each paper is evaluated across 10 feature dimensions derived from our core architecture:
 
 | Column | Description |
 |--------|-------------|
@@ -25,7 +25,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 
 ---
 
-## Our Work: microgpt-rs Feature Summary
+## Our Work: katgpt-rs Feature Summary
 
 | Feature | Technique | Status |
 |---------|-----------|--------|
@@ -50,7 +50,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 
 | # | Paper / Feature | SD | KV | Attn | Noise | Distill | TTC | Route | Diff | Game | SIMD |
 |---|----------------|----|----|------|-------|---------|-----|-------|------|------|------|
-| — | **microgpt-rs (our work)** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** |
+| — | **katgpt-rs (our work)** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** | **✓** |
 
 ### Papers 00–09: Foundation & Architecture
 
@@ -331,7 +331,7 @@ Top co-occurring pairs:
 | Gap | Source Papers | Priority | Feature Plan |
 |-----|--------------|----------|--------------|
 | ASFT anchored SFT loss (self-prob weighting + KL anchor) | 54 (ASFT) | Medium | `asft_loss` planned for riir-gpu |
-| CISPO loss variant (wider clip ε=1.0/4.0 for GRPO) | 57 (ART) | Medium | `cipo_loss` planned for microgpt-rs |
+| CISPO loss variant (wider clip ε=1.0/4.0 for GRPO) | 57 (ART) | Medium | `cipo_loss` planned for katgpt-rs |
 | SLIME reference-free preference optimization | 61 (SLIME) | Medium | `slime_loss` planned for riir-gpu |
 | Interventional SFT causal masking | 43 (Interventional SFT) | Low — 1.19 nats/token gain | Not yet scheduled |
 | GRAM learned-mean SDE (μ_θ not zero) | 58 (GRAM) | Low — elf_sde covers zero-mean | Extends `elf_sde` |
@@ -360,4 +360,4 @@ SIMD/Perf             ███████████████████�
 
 ## References
 
-All papers are located in `microgpt-rs/.research/` with filenames `{index}_{Title}.md` where index ranges from 00 to 73 (plus 061 for Delta Attention Residuals). See individual research files for full analysis, verdicts, and implementation details. Papers 63–69 added: OCTOPUS (63), LlamaWeb (64), RotorQuant (65), TileRT (66), CODA (67), RAEv2 MLS (68), AutoDreamer (69). Key post-69 papers: 70 (GDN2 recurrent attention), 71 (DashAttention sparse), 72 (DMax SPD), 73 (LT2 looped inference).
+All papers are located in `katgpt-rs/.research/` with filenames `{index}_{Title}.md` where index ranges from 00 to 73 (plus 061 for Delta Attention Residuals). See individual research files for full analysis, verdicts, and implementation details. Papers 63–69 added: OCTOPUS (63), LlamaWeb (64), RotorQuant (65), TileRT (66), CODA (67), RAEv2 MLS (68), AutoDreamer (69). Key post-69 papers: 70 (GDN2 recurrent attention), 71 (DashAttention sparse), 72 (DMax SPD), 73 (LT2 looped inference).
