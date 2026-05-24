@@ -1444,24 +1444,30 @@ let player = VpdPlayer::with_config(0, config);
 
 Paper: arXiv:2605.15113 — Variational Policy Distillation (Salesforce AI Research, 2026)
 
-## 🎯 RMSD — Relevance-Masked Self-Distillation (Plan 125)
+## 🎯 RMSD — Relevance-Masked Self-Distillation (Plan 125) — ⚠️ Negative Result (Arena)
 
-Extends SDAR's uniform token gating with a two-step relevance mask: pre-filter T actions by |Q_teacher - Q_student| magnitude, then select S most informative actions. Only these S actions receive SDAR sigmoid gating updates.
+Two-step relevance mask on top of SDAR: pre-filter T=20 actions by |ΔQ| magnitude → select S=5 most informative → only those receive SDAR sigmoid gating. Adds `TeacherContinuation` (student → teacher snapshot on plateau).
 
-- **Two-step filter:** T=20 (magnitude pre-filter) → S=5 (judge selection)
-- **Signal concentration:** Selected actions have 5-10× higher |ΔQ| than rejected
-- **Teacher continuation:** Snapshots student Q-values as new teacher on plateau (patience=30)
-- **Top-K vocabulary KL:** Approximation using top-K=500 tokens instead of full softmax
-- **Non-degrading:** Within 10% relative gap of SDAR over 1000 bomber arena games
-- **44 GOAT proofs** (34 unit + 2 arena + 8 pipeline)
+### Arena Results (`.benchmarks/037_rmsd_goat.md`) — ⚠️ Negative Result
 
-Feature gate: `rmsd_distill` (requires `sdar_gate`, `bandit`)
+**Bomber** (1000 games, RMSD + Random vs SDAR + Random): RMSD within 10% relative gap of SDAR. Same conclusion as SDAR — the relevance mask affects convergence rate, not action selection.
+
+**Verdict:** RMSD does **not** improve arena performance over SDAR (which itself doesn't improve over GZero/Rubric). The two-step filter concentrates learning signal on high-magnitude actions, but in short tournament series both RMSD and SDAR produce the same action distributions.
+
+The infrastructure (relevance filter, magnitude judge, continuation, top-K KL approximation, `rmsd_loss`) is production-quality and reusable for the gradient-based path.
+
+| Component | Throughput | Hot-path overhead |
+|-----------|-----------|-------------------|
+| `RmsdRelevanceFilter::filter_actions()` | ~50M/sec | — |
+| `rmsd_loss()` | ~100M/sec | — |
+| `RmsdPlayer::select_action()` | ~10K/sec | +~5% vs SDAR |
+
+**46 GOAT proofs** (34 unit + 2 arena + 10 pipeline). Feature gate: `rmsd_distill` — **off by default**.
 
 ```rust
 use katgpt_rs::pruners::rmsd_relevance::{RmsdConfig, RmsdRelevanceFilter, rmsd_loss};
 use katgpt_rs::pruners::bomber::RmsdPlayer;
 
-// Create RMSD player with paper defaults (T=20, S=5)
 let player = RmsdPlayer::new(0);
 
 // Or use the filter directly
@@ -1469,12 +1475,6 @@ let filter = RmsdRelevanceFilter::new(20, 5);
 let (selected, metrics) = filter.filter_actions(&teacher_q, &student_q);
 let loss = rmsd_loss(&selected, &teacher_q, &student_q, 5.0);
 ```
-
-| Component | Throughput | Hot-path overhead |
-|-----------|-----------|-------------------|
-| `RmsdRelevanceFilter::filter_actions()` | ~50M/sec | — |
-| `rmsd_loss()` | ~100M/sec | — |
-| `RmsdPlayer::select_action()` | ~10K/sec | +~5% vs SDAR |
 
 📖 See `.benchmarks/037_rmsd_goat.md` for full GOAT proof results.
 Paper: [Relevance-Masked Self-Distillation](https://www.appliedcompute.com/research/relevance-masked-self-distillation) — Applied Compute, 2026
