@@ -421,14 +421,14 @@ Block-diagonal rotation alternatives to OCTOPUS's full WHT. Replaces O(d²) rota
 ## 📐 MLS: Multi-Layer Sum Aggregation (Plan 104)
 
 Training-free aggregation of last K layer residuals before LM head.
-Opt-in via `mls_aggregate` feature gate. Sweeping K provides Pareto-optimal
+Default-on via `mls_aggregate` feature gate (GOAT 6/6). Sweeping K provides Pareto-optimal
 representation quality vs task specialization tradeoff.
 
 📁 `src/transformer.rs` — MLS accumulation in `forward_base` layer loop
 📁 `crates/katgpt-core/src/types.rs` — `mls_layers` config field
 📁 `src/benchmark.rs` — `ep_accuracy_k` convergence metric
 📁 `tests/goat_104_mls_aggregate.rs` — GOAT 6/6 proofs passed ✅
-🔧 Feature flag: `mls_aggregate` (opt-in, controlled via `Config.mls_layers`)
+🔧 Feature flag: `mls_aggregate` (default-on, controlled via `Config.mls_layers`)
 
 ## ⚡ PFlash: Block-Sparse Speculative Prefill
 
@@ -1692,6 +1692,9 @@ cargo clippy --all-targets --all-features --quiet
 | `tri_mode` | Tri-Mode inference — AR + Diffusion + Self-Speculation via `D2fDrafterVerifier` + adaptive `DiffusionSampler`. GOAT 9/9 proved (Bench 018 + 019). Requires `dllm` (Plan 089, Plan 116) |
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `octopus` | OCTOPUS octahedral triplet codec — data-oblivious, beats calibrated SQ at all bit widths (-22% to -49% MSE). Legacy — use `hybrid_oct_pq` for best quality + speed (Bench 022, Plan 099) |
+| `hybrid_oct_pq` | Default KV codec — OCT triplet encoding + PQ 2D Givens rotation (Plan 101, default-on) |
+| `planar_quant` | 2D Givens rotation KV cache — O(d) rotation (behind "planar_quant") |
+| `iso_quant` | 4D quaternion rotation KV cache — O(d) rotation (behind "iso_quant") |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
@@ -1704,6 +1707,9 @@ cargo clippy --all-targets --all-features --quiet
 | `delta_routing` | Delta Block cross-layer routing — residual delta routing between transformer layers (Research 61, Plan 097, GOAT 6/6, **default-on**) |
 | `stability_metrics` | Per-step execution stability instrumentation — P50/P99/CV/stability_score via `StabilitySnapshot` (Plan 102, GOAT 13/13, **default-on**) |
 | `decode_specialize` | Stage-specialized decode paths — `DecodeStage` enum + `forward_decode_stage()` dispatch for Draft/Verify (Plan 102, off by default) |
+| `tiled_attention` | Tiled online-softmax flash attention for CPU SIMD (Plan 115) |
+| `coda_fusion` | CODA fused SIMD kernels — matmul+residual+rmsnorm+activation (Plan 103) |
+| `unit_distance` | Unit Distance GOAT proof (Plan 090) |
 | `mls_aggregate` | MLS Multi-Layer Sum — average last K transformer layer residuals before LM head for training-free quality boost (Research 68, Plan 104, GOAT 6/6, **default-on**) |
 | `gdn2_attention` | Gated DeltaNet-2 recurrent attention — O(1) decode with decoupled erase/write gates, constant state S∈R^{dk×dv} per head (Research 70, Plan 105, GOAT 14/14, **default-on**) |
 | `dash_attn` | DashAttention adaptive sparse attention — α-entmax routing with learned chunk summaries, replaces fixed-budget top-k block selection (Research 68, Plan 106, GOAT 9/9, **default-on**) |
@@ -1716,7 +1722,7 @@ cargo clippy --all-targets --all-features --quiet
 | `data_gate` | Data Gate — self-play stability via task-level filtering before solver, ε-Bernoulli relaxation, execution-based gating (Research 75, Plan 111, **default-on**). Requires `bandit` |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation. All 23 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating. All 25 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -1724,15 +1730,18 @@ cargo clippy --all-targets --all-features --quiet
 
 ```
 crates/katgpt-core/   Shared types & SIMD kernels (used by katgpt-rs and riir-engine):
-  lib.rs            Crate root (re-exports: Config, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, kv_dim, SimdLevel, …)
-  types.rs          Config (micro/micro_lora/micro_dllm/game/game_go/draft/small_target/gqa_draft/bpe/bpe_draft/gemma2_2b), InferenceOverrides, InferenceResult, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, LoraAdapter, LoraPair, DomainLatent, math kernels (softmax, rmsnorm, gegelu, matmul, sparse_matmul, sample_token, …)
-  simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_matmul_rows, simd_sparse_matmul_rows, maxsim_score, simd_fused_decay_write, simd_add_into (Plan 060)
+  lib.rs            Crate root (re-exports: Config, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, kv_dim, SimdLevel, …). Feature gates: coda_fusion, lt2_looped, tiled_attention, sr2am_configurator, data_gate
+  types.rs          Config (micro/micro_lora/micro_dllm/game/game_go/draft/small_target/gqa_draft/bpe/bpe_draft/gemma2_2b), InferenceOverrides, InferenceResult, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, LoraAdapter, LoraPair, DomainLatent, DashAttnConfig, DeltaRoutingConfig, DeltaRoutingMode, ConvergenceSelector, LoopMode, HybridPattern, SdpaOutputGate, ResidualGate, PlanningDecision, ConfiguratorContext, DataGate, GateDecision, ProposerTask, TaskType, math kernels (softmax, rmsnorm, gegelu, matmul, sparse_matmul, sample_token, …)
+  traits.rs         ConstraintPruner, ScreeningPruner, GameState, StateHeuristic, RolloutPolicy, ActionSpaceLog (consolidated from Plan 107 Phase 0)
+  attention.rs      Tiled online-softmax flash attention for CPU SIMD (Plan 115, behind "tiled_attention")
+  coda.rs           CODA fused SIMD kernels: GateActivation, simd_matmul_rmsnorm_swiglu, simd_matmul_residual, simd_matmul_rmsnorm_rope (Plan 103, behind "coda_fusion")
+  simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_dot_f16_f32, simd_matmul_rows, simd_matmul_rows_parallel, simd_sparse_matmul_rows, simd_matmul_f16_f32_rows_parallel, maxsim_score, maxsim_score_packed, simd_fused_decay_write, simd_scale_mul_inplace, simd_exp_inplace, simd_add_into (Plan 060)
 src/
   lib.rs            Module index + debug tracking allocator
   main.rs           Entry point (proof → bench → Percepta bench → plot)
   types.rs          Re-exports katgpt-core types + QuantizedKVCache trait
   simd.rs           Re-exports katgpt-core SIMD kernels
-  transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate, DecodeStage (Plan 102)
+  transformer.rs    Weights, KVCache (flat/paged/raven), ForwardContext, forward/generate, forward_looped, forward_coda, forward_decode_stage, DecodeStage, PrefillContext, depth_route, depth_route_weights (Plan 102+)
   weights.rs        ContiguousWeights — single-buffer 64-byte aligned weight layout (Plan 102)
   rerank.rs         MaxSim + Cosine reranking, NDCG evaluation, SymmetricBoundaryPair (behind "maxsim" feature)
   speculative/      SOLID decomposition:
@@ -1803,6 +1812,15 @@ src/
       mod.rs           Module root + re-exports
       sdar_bandit.rs   SdarBanditPruner<P> (sigmoid-gated reward updates)
       sdar_absorb.rs   SdarGatedAbsorbCompress<P> (soft sigmoid promotion)
+    dreamer/         Auto-Dreamer offline consolidation (Plan 107):
+      mod.rs           Module root + cadence scheduler
+      clustering.rs    O(n log n) Q-value clustering
+      decay.rs         Access-based decay
+      utility.rs       Counterfactual MC dropout utility
+    subterranean/    Procedure graph compilation (Plan 110):
+      mod.rs           Module root + procedure compiler
+      graph.rs         Procedure graph definition
+      compile.rs       Token-rewriting procedure → native code
     arena/           Cross-arena tournament infrastructure (Plan 076):
       mod.rs           Module root + re-exports
       types.rs         ArenaKind, GameResult, MatchupResult, Ranking, Leaderboard, EloCalculator
@@ -1917,9 +1935,33 @@ src/
     spectral_kv_cache.rs  SpectralQuantKVCache, DequantizeScratch — full quantized KV cache implementation
     forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat, par_maxsim_score_spectralquant (behind "maxsim" feature)
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, denoise_loop, forward_bidirectional_positions, forward_block_causal_positions, denoising_accuracy — dLLM research (behind "dllm" feature)
+  dash_attn/       DashAttention adaptive sparse hierarchical attention (Plan 106):
+    mod.rs          Module root
+    entmax.rs       α-entmax sparse attention kernel
+    routing.rs      Learned chunk routing
+    chunk_summary.rs Chunk summary computation
+    forward.rs      forward_dash_attn, DashAttnContext
+    tests.rs        Unit tests
+  gdn2/            Gated DeltaNet-2 recurrent attention (Plan 105):
+    mod.rs          Module root
+    types.rs        Gdn2Config, Gdn2GateConfig, Gdn2State
+    kernel.rs       SIMD-accelerated decay/read/update/readout
+    forward.rs      forward_gdn2, Gdn2ForwardContext
+  hybrid_oct_pq/   Hybrid OCT triplet + PlanarQuant rotation (Plan 101)
+  planar_quant/    2D Givens rotation KV cache:
+    types.rs        PlanarQuantConfig, GivensRotation
+    rotation.rs     2D Givens rotation kernels
+    kv_cache.rs     PlanarQuantKVCache
+    mod.rs          Module root
+  iso_quant/       4D quaternion rotation KV cache:
+    types.rs        IsoQuantConfig, QuaternionRotation
+    rotation.rs     4D quaternion rotation kernels
+    kv_cache.rs     IsoQuantKVCache
+    mod.rs          Module root
+  unit_distance/   Unit Distance GOAT proof (Plan 090)
   alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
   feedback.rs       TTT feedback (feature-gated feedback)
-  benchmark.rs      BenchResult, run_all, save_results_csv
+  benchmark.rs      BenchResult, run_all, save_results_csv, bench_hla_vs_flat_cache, bench_hla_memory, bench_hla_quality, bench_simd, bench_sparse_mlp
   plot.rs           PNG horizontal bar chart
 examples/           63 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode, cna)
 tests/              47 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
@@ -1946,7 +1988,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -1969,12 +2011,22 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **Lattice Deduction** (`lattice_deduction`) | [LDT (arXiv:2505.12661)](https://arxiv.org/abs/2505.12661) | **GOAT 7/7** (Plan 088). α-intersection pruning, conflict detection, asymmetric elimination. Sudoku + Maze validated. `LdtPruneConfig` composable with `BanditPruner`. Default-on. | Manual constraint pruning |
 | **Delta Routing** (`delta_routing`) | [Delta Attention Residuals (NeurIPS 2026)](https://arxiv.org/abs/2605.19943) | **GOAT 6/6** (Plan 097). Cross-layer residual delta routing via `depth_route()`. Zero throughput overhead (0.97×). Gemma 2 2B validated: −1.62% PPL. Graceful no-op at n_layer<4. Default-on. | Cumulative hidden-state routing |
 | **TileRT Pipeline** (`stability_metrics`, `decode_specialize`) | [TileRT Persistent Tile Pipeline](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | **GOAT 13/13** (Plan 102). D1 ✅: `StabilitySnapshot` P50/P99/CV/stability (+0.6% overhead, observability 0→full). D2 🔧: `ContiguousWeights` 27→1 alloc, 64-byte aligned, NOT yet wired into `forward()`. D3 🔧: `DecodeStage` dispatch free (-0.2%). Infrastructure — speed gain pending wire-in for n_layer≥8. | No per-step latency metrics; separate per-Vec allocations |
+| **Hybrid OCT+PQ** (`hybrid_oct_pq`) | [OCTOPUS (Boss 2026)](https://arxiv.org/abs/2605.21226) + [RotorQuant (Zandieh 2025)](https://www.scrya.com/rotorquant.pdf) | **GOAT proved** (Bench 024, Plan 101). Default KV codec — OCT triplet encoding + PQ 2D Givens rotation. 0.998× of pure OCT MSE, beats OCT MaxSim at bits ≥ 3, 64× fewer rotation FMAs (256 vs 16,384). Default-on. | Pure OCTOPUS rotation; separate TQ/SQ backends |
+| **MLS Aggregate** (`mls_aggregate`) | Research 68 | **GOAT 6/6** (Plan 104). Average last K transformer layer residuals before LM head. Training-free, zero new parameters. `ep_accuracy_k()` metric helper. Default-on. | Single-layer LM head output |
+| **GDN2** (`gdn2_attention`) | [Gated DeltaNet-2 (Yang 2024)](https://arxiv.org/abs/2605.09959) | **GOAT 14/14** (Plan 105). O(1) decode with constant state S∈R^{dk×dv} per head. SIMD-accelerated decay/read/update/readout. 3 gate configs. 99.4% of AHLA throughput, 87–98% memory savings. Default-on. | O(N) flat KV cache |
+| **DashAttention** (`dash_attn`) | [Peters 2019] + [Correia 2019] α-entmax | **GOAT 9/9** (Plan 106). Adaptive sparse hierarchical attention via α=1.5 entmax routing. Learned chunk summaries. Replaces fixed-budget top-k block selection. Default-on. | Fixed-budget top-k block selection |
+| **Auto-Dreamer** (`dreamer`) | Research 69 | **GOAT 8/8** (Plan 107). Offline memory consolidation: cadence scheduler, O(n log n) Q-value clustering, access-based decay, counterfactual MC dropout utility. Default-on. Requires `bandit`. | No memory consolidation; unbounded Q-value growth |
+| **LT2 Looped** (`lt2_looped`) | Research 73 | **GOAT 8/8** (Plan 108). Weight-shared T-pass loop over all layers. Hybrid SDPA+AHLA dispatch (Uniform/Interleave/Bookend). Zero-init residual gating. Default-on. Requires `hla_attention`. | Single-pass inference only |
+| **DMax SPD** (`dmax_spd`) | Research 72 | **GOAT 7/7** (Plan 109). Soft parallel decode with hybrid token/mask embeddings. Contiguous prefix promotion. Confidence + consistency convergence. Default-on. Requires `dllm`. | Single-token autoregressive decode |
+| **EqR Convergence** (`eqr_convergence`) | Plan 119 | **GOAT 7/7**. `Top1Converged` picks smallest marginal-change residual via `ResidualTracker`. Default-on. Requires `elf_sde`. | Single-rollout greedy expansion |
+| **Subterranean** (`subterranean`) | Plan 110 | User-defined token-rewriting procedures compiled to zero-cost native code. Default-on. Requires `bandit`. | Interpretation overhead for custom procedures |
+| **SR²AM Configurator** (`sr2am_configurator`) | Research 76, Plan 112 | Per-turn planning regulation via UCB1 over PlanNew/PlanExtend/PlanSkip arms, entropy-aware horizon truncation. 29 tests. Default-on. Requires `bandit`. | Fixed planning horizon |
+| **Data Gate** (`data_gate`) | Research 75, Plan 111 | Self-play stability via task-level filtering before solver, ε-Bernoulli relaxation, execution-based gating. Default-on. Requires `bandit`. | No task-level filtering; unstable self-play |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 
 | Feature | Source | Real Gain | Why Gated |
 |---------|--------|-----------|-----------|
-| **Hybrid OCT+PQ** (`hybrid_oct_pq`) | [OCTOPUS (Boss 2026)](https://arxiv.org/abs/2605.21226) + [RotorQuant (Zandieh 2025)](https://www.scrya.com/rotorquant.pdf) | **Default KV codec** — OCT triplet encoding + PQ 2D Givens rotation. Sweeps MSE at all bit widths (0.998× of pure OCT), beats OCT MaxSim at bits ≥ 3, 64× fewer rotation FMAs (256 vs 16,384). GOAT proved (Bench 024, Plan 101). | Default-on as of Plan 101; supersedes pure OCTOPUS as primary codec |
 | **G-Zero** (`g_zero`) | [G-Zero Self-Play](https://arxiv.org/pdf/2605.09959) | 8.57M δ/sec, 1.76M pairs/sec, 1.16M cycles/sec (Bench 005). Hint-δ intrinsic reward, no external verifier. TemplateProposer for Bomber+FFT. | Bench-only; does NOT touch `forward()` hot path |
 | **Bomber** (`bomber`) | Plan 033 HL Arena | HL thesis proven: deterministic heuristics beat naive MCTS in complex games. `ReplayBackwardWalker`: 4.0 alternatives/tick. | Requires `bevy_ecs`, arena-specific |
 | **GameState** (`game_state`) | [STRATEGA](https://arxiv.org/abs/2605.09959) | Cross-game MCTS reuse: one `mcts_search()` works on Bomber, Go, any `GameState` impl. `BomberState` wraps ECS for snapshot/restore. | Depends on `bomber`, arena-specific |
@@ -1986,12 +2038,6 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
 | **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
 | **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. **LoRA-trained drafter** (+12% acceptance). **Output-length gating** (`mtp_min_output_tokens`). **Top-K clusters** (`mtp_cluster_topk`, 32→98% recall). Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
-| **MLS Aggregate** (`mls_aggregate`) | Research 68 | **GOAT 6/6** (Plan 104). Average last K transformer layer residuals before LM head. Training-free, zero new parameters. `ep_accuracy_k()` metric helper. Default-on. | Disabled via `Config.mls_layers = 0`; requires GOAT sweep for K |
-| **GDN2** (`gdn2_attention`) | [Gated DeltaNet-2 (Yang 2024)](https://arxiv.org/abs/2605.09959) | **GOAT 14/14** (Plan 105: 8 proofs + 6 benchmarks). O(1) decode with constant state S∈R^{dk×dv} per head. SIMD-accelerated decay/read/update/readout. 3 gate configs: EraseOnly, Full, Kda. 99.4% of AHLA throughput, 87–98% memory savings vs flat KV. `src/gdn2/`. Default-on. | Models must be trained with GDN2 from scratch |
-| **DashAttention** (`dash_attn`) | [Peters 2019] + [Correia 2019] α-entmax | **GOAT 9/9** (Plan 106). Adaptive sparse hierarchical attention via α=1.5 entmax routing. Learned chunk summaries. Replaces fixed-budget top-k block selection. `src/dash_attn/`. Default-on. | Requires chunk summary prefill; PFlash integration pending |
-| **Auto-Dreamer** (`dreamer`) | Research 69 | **GOAT 8/8** (Plan 107). Offline memory consolidation: cadence scheduler, O(n log n) Q-value clustering, access-based decay, counterfactual MC dropout utility. `dreamer_goat.rs` (5 proofs, runs by default): 2 generic + 3 Go-scale (81→57 arms, strategic preserved, monotonic consolidation). `bomber_dreamer_goat.rs` (1 proof, `--features "dreamer,bomber"`): bomber arena integration. `src/pruners/dreamer/`. Default-on. | Requires `bandit` |
-| **LT2 Looped** (`lt2_looped`) | Research 73 | **GOAT 8/8** (Plan 108). Weight-shared T-pass loop over all layers. Hybrid SDPA+AHLA dispatch (Uniform/Interleave/Bookend). Zero-init residual gating. Default-on. | Requires `hla_attention`; SDPA gate weight training pending |
-| **DMax SPD** (`dmax_spd`) | Research 72 | **GOAT 7/7** (Plan 109). Soft parallel decode with hybrid token/mask embeddings. Contiguous prefix promotion. Confidence + consistency convergence. Default-on. | Requires `dllm`; best results with OPUT-trained models |
 
 | **MeMo Reflections** (`memo_reflections`) | Research 60 | 5-step Reflection QA pipeline: Reflect→Critique→Revise→Verify→Distill. `src/pruners/reflection.rs`. TIES merging in `riir-gpu` (Plan 094). | Requires `bandit`; compositional data synthesis |
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |

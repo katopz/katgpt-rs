@@ -58,8 +58,16 @@ pub struct Config {
     // PTRM width scaling (Plan 083)
     pub width_rollouts: usize,              // number of parallel rollouts
     pub early_stop_threshold: f32,          // stop early when reward exceeds this
+    // EqR Convergence Selection (Plan 119)
+    pub convergence_selector: ConvergenceSelector, // rollout selection strategy
     // D2F block size for discrete diffusion forcing
     pub d2f_block_size: usize,              // block size for D2F diffusion
+    // MLS Multi-Layer Sum aggregation (Plan 104: Research 68)
+    pub mls_layers: usize,                  // number of last layers to aggregate (0 = disabled)
+    // LT2 Looped Inference Pipeline (Plan 108, Research 73)
+    pub loop_mode: LoopMode,                // None or WeightShared { loop_count }
+    pub hybrid_pattern: HybridPattern,      // Uniform, Interleave, Bookend
+    pub gated_attn: bool,                   // whether to use SDPA output gate
 }
 ```
 - All configs constructed via factory methods: `Config::micro()`, `Config::micro_lora()`, `Config::draft()`, `Config::game()`, `Config::game_go()`, `Config::gemma2_2b()`, `Config::micro_dllm()`, `Config::bpe()`, `Config::bpe_draft()`, `Config::small_target()`, `Config::gqa_draft()`
@@ -67,6 +75,79 @@ pub struct Config {
 - `kv_dim()` helper returns `n_kv_head * head_dim`
 
 ### Key Enums (`crates/katgpt-core/src/types.rs`)
+
+```rust
+#[repr(u8)]
+pub enum ConvergenceSelector {
+    BestQ,          // Highest cumulative relevance (default)
+    MajorityVote,   // Most common path across rollouts (mode@K)
+    Top1Converged,  // Smallest residual ∥p_{d+1} − p_d∥ (EqR proxy)
+    BtRank,         // Pairwise Bradley-Terry ranking (requires `bt_rank` feature)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DashAttnConfig {
+    pub chunk_size: usize,          // tile size for chunked attention
+    pub alpha: f32,                 // mixing coefficient
+    pub scaling_factor: f32,        // attention scale override
+    pub sigma: f32,                 // smoothing parameter
+    pub estimate_diagonal: bool,    // whether to estimate diagonal terms
+}
+
+#[repr(u8)]
+pub enum DeltaRoutingMode {
+    Off,           // No delta routing (standard layer-by-layer)
+    DeltaBlock,    // Route accumulated block deltas
+    DeltaAttnRes,  // Route attention residual deltas
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeltaRoutingConfig {
+    pub mode: DeltaRoutingMode,     // routing mode
+    pub block_size: usize,          // layers per block (default 4)
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LoopMode {
+    #[default]
+    None,                                    // standard single-pass
+    WeightShared { loop_count: usize },      // T-pass weight-shared loop
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HybridPattern {
+    #[default]
+    Uniform,                                  // all layers use same attention
+    Interleave { full_ratio: usize },         // every Nth layer is full SDPA
+    Bookend,                                  // first+last layers are full SDPA
+}
+
+#[derive(Clone, Debug)]
+pub struct SdpaOutputGate {
+    pub w_gate: Vec<f32>,    // [n_embd] sigmoid gate weights (zero-init)
+}
+// forward(&self, attn_out, n_embd) — applies sigmoid gate after SDPA
+
+#[derive(Clone, Debug)]
+pub struct ResidualGate {
+    pub gates: Vec<f32>,     // [loop_count] per-loop learned gate ρ_τ (zero-init)
+}
+// new(loop_count, n_embd) — creates zero-init gates
+
+// Feature-gated: `sr2am_configurator`
+pub enum PlanningDecision {
+    PlanNew,      // reset tree, full budget (high uncertainty)
+    PlanExtend,   // keep tree, extend depth (moderate uncertainty)
+    PlanSkip,     // skip tree search, direct sample (low uncertainty)
+}
+
+// Feature-gated: `sr2am_configurator`
+pub struct ConfiguratorContext {
+    pub domain: usize,        // domain index from bandit infrastructure
+    pub entropy_bin: usize,   // coarse entropy bin: floor(entropy * 10.0), 0..9
+}
+```
+
 
 ```rust
 #[repr(u8)]
@@ -83,6 +164,7 @@ pub enum AttentionMode {
     BlockCausal,  // Bidirectional within block, causal across blocks — D2F student
     SpKv,         // Self-pruned key-value attention with learned utility (Plan 070)
     SpKvQuant,    // SP-KV + Quantized KV fusion (Plan 070 Phase 3, Task T12)
+    DashAttn,     // Chunked linear attention (Research 077, DashAttnConfig)
 }
 
 #[repr(u8)]
@@ -118,11 +200,21 @@ pub struct InferenceOverrides {
     pub mtp_cluster_vocab_threshold: Option<usize>,
     pub mtp_shared_kv_prompt_threshold: Option<usize>,
     pub mtp_cluster_size: Option<usize>,
+    pub mtp_min_output_tokens: Option<usize>,  // skip MTP when remaining tokens < threshold (Plan 117 T15)
+    pub mtp_cluster_topk: Option<usize>,       // compute logits for top-K clusters (Plan 117 T22)
     // SP-KV inference-time threshold knob (Plan 070)
     pub sp_kv_threshold: Option<f32>,
     // PTRM width scaling (Plan 083)
     pub width_rollouts: Option<usize>,
     pub early_stop_threshold: Option<f32>,
+    // EqR Convergence Selection (Plan 119)
+    pub convergence_selector: Option<ConvergenceSelector>,
+    // MLS Multi-Layer Sum override (Plan 104)
+    pub mls_layers: Option<usize>,
+    // Drafter LoRA path (Plan 117: MTP LoRA Drafter)
+    pub drafter_lora_path: Option<std::path::PathBuf>,
+    // SR²AM horizon truncation override (Plan 112 T11)
+    pub max_plan_horizon: Option<usize>,
 }
 ```
 
@@ -142,6 +234,9 @@ pub struct InferenceResult {
     pub output: String,
     pub timestamp: i64,
     pub screened: bool,
+    // Feature-gated: `sr2am_configurator` (Plan 112)
+    pub planning_decision: Option<PlanningDecision>,  // SR²AM planning decision
+    pub plan_horizon_used: usize,                     // actual horizon after entropy truncation
 }
 ```
 
@@ -213,6 +308,26 @@ pub struct ForwardContext {
     mtp_context_buf: Vec<f32>,    // MTP projection intermediate buffer
     // TurboQuant buffers
     tq_dequant_pos: Vec<f32>,     // dequantized KV for current position
+    // Paged KV cache: pre-allocated flat buffers for attention computation
+    paged_flat_key: Vec<f32>,     // [block_size * kv_dim]
+    paged_flat_value: Vec<f32>,   // [block_size * kv_dim]
+    // Raven: pre-allocated query buffer for per-head slot attention
+    raven_query_buf: Vec<f32>,    // [kv_dim]
+    // Quantized KV cache incremental dequant tracking
+    dequant_pos: Vec<usize>,      // [n_layer] last dequantized position per layer
+    // Delta routing (Plan 097, feature: `delta_routing`)
+    block_deltas: Vec<Vec<f32>>,  // [n_blocks][n_embd] accumulated deltas per block
+    delta_routing_logits: Vec<f32>, // [max_sources] routing logits temp buffer
+    // CODA fused kernels (Plan 103, feature: `coda_fusion`)
+    coda_partial_sums: Vec<f32>,  // [1] single-block RMS sum of squares
+    // MLS Multi-Layer Sum (Plan 104, feature: `mls_aggregate`)
+    mls_buf: Vec<f32>,            // [n_embd] accumulator for last K layer residuals
+    mls_count: usize,             // how many layers accumulated
+    // Tiled attention (Plan 115, feature: `tiled_attention`)
+    tiled_q: Vec<f32>,            // [block_size × n_embd] repacked queries per head
+    tiled_k: Vec<f32>,            // [block_size × kv_dim] repacked keys per kv group
+    tiled_v: Vec<f32>,            // [block_size × kv_dim] repacked values per kv group
+    tiled_out: Vec<f32>,          // [block_size × n_embd] tiled output before transpose
 }
 ```
 - Created once, reused across calls via `ctx.reset()`
@@ -323,6 +438,10 @@ Runtime SIMD detection and dispatch for hot-path operations:
 | `forward_with_domain_latent(ctx, weights, cache, token, pos, config, dl)` | Convenience wrapper — `forward_base` with domain latent only (no LoRA) |
 | `forward_sp_kv(ctx, weights, sp_kv_cache, token, pos, config, predictors, bias)` | SP-KV self-pruned KV forward — utility-gated attention with learned predictor MLP (Plan 070, `sp_kv`) |
 | `forward_looped(ctx, weights, cache, ahla_cache, token, pos, config, residual_gate, sdpa_gate)` | LT2 looped forward — weight-shared T-pass loop with hybrid SDPA+AHLA dispatch (Plan 108, `lt2_looped`) |
+| `forward_coda(ctx, weights, cache, token, pos, config, lora, domain_latent)` | CODA-fused forward — single-pass SIMD kernels eliminate intermediate buffer writes (Plan 103, `coda_fusion`) |
+| `forward_decode_stage(ctx, weights, cache, token, pos, config, stage)` | DecodeStage dispatch — routes to draft/target/coda based on stage enum |
+| `depth_route(residual, sources, query_weight, norm_weight, logits_buf, n_embd)` | Delta routing — softmax-weighted blend of accumulated block deltas (Plan 097) |
+| `depth_route_weights(sources, query_weight, norm_weight, n_embd)` | Returns routing weights without mutation (for analysis/logging) |
 
 > **Plan 059 Note**: HLA is inference-only — SDPA→HLA distillation via LoRA shows KL divergence does NOT converge. HLA provides streaming O(1) attention for inference but cannot be trained to approximate SDPA outputs. Use DeltaMemoryState for facts/retrieval.
 
@@ -618,5 +737,101 @@ pruner = "syn_validator.wasm"
 reader_lora = "python_reader.bin"   # active during bidirectional prefill
 writer_lora = "rust_writer.bin"     # active during causal decode
 ```
+
+## CODA Fusion Kernels (`crates/katgpt-core/src/coda.rs`, Plan 103)
+
+CODA-inspired fused SIMD kernels that algebraically reparameterize matmul+residual+rmsnorm+activation into single-pass SIMD loops, eliminating intermediate buffer writes.
+
+**Key identity (CODA §3.2.1):**
+```
+RMSNorm(x@W + z) * gamma @ W' = r * ((x@W + z) * gamma) @ W'
+```
+
+This delays the row-wise RMSNorm scale past the next GEMM.
+
+```rust
+#[repr(u8)]
+pub enum GateActivation {
+    Relu,        // max(0, x) — standard 2-layer MLP
+    Silu,        // x * sigmoid(x) — LLaMA SwiGLU
+    GegeluTanh,  // tanh-approx GELU — Gemma 2 GeGLU
+    Gegelu,      // sigmoid-approx GELU — standard GeGLU
+}
+```
+
+| Kernel | Description |
+|--------|-------------|
+| `simd_matmul_residual(out_d, out_o, partial_sums, w, x, residual, gamma, bias, rows, cols)` | Fused matmul + residual add + delayed RMSNorm (Plan 103 T3) |
+| `compute_rstd(partial_sums, n, eps)` | Compute reciprocal standard deviation from partial sums |
+| `simd_matmul_rmsnorm_swiglu(out, x, norm, w_gate, w_up, w_down, rstd, hidden_buf, n)` | Fused RMSNorm + SwiGLU MLP (SiLU activation) |
+| `simd_matmul_rmsnorm_activation(out, rstd, hidden, activation, n)` | Apply delayed activation with rstd scaling |
+| `simd_matmul_rmsnorm_rope(out, q_buf, k_buf, x, wq, wk, wv, rstd, pos, head_dim, n_heads, theta)` | Fused QKV projection + RoPE with delayed RMSNorm |
+
+**Feature gate:** `coda_fusion`
+
+**Buffer write savings per layer:** ~8 passes (baseline) → ~0 passes (CODA fused).
+
+## Tiled Attention (`crates/katgpt-core/src/attention.rs`, Plan 115)
+
+CPU SIMD tiled flash attention using online-softmax algorithm, adapted from ThunderKittens (Research 077). Processes Q in SIMD-width row tiles, K/V in column tiles — avoids materializing full N×N score matrix.
+
+```
+Tile sizes: BR=8 (query rows), BC=128 (key/value columns)
+Threshold: tiled path activates when N > 128 (score matrix > L1 cache)
+```
+
+| Function | Description |
+|----------|-------------|
+| `tiled_attention_forward(q, k, v, output, seq_len, head_dim, scale)` | Single-head tiled attention with online-softmax |
+| `tiled_attention_batched(q, k, v, output, batch, heads, seq_len, head_dim)` | Multi-head batched via rayon `par_chunks_mut` |
+
+**Online-softmax algorithm (per query tile):**
+1. Initialize: `o_tile = 0, max_tile = -inf, norm_tile = 0`
+2. For each K/V tile: score → update running max → correction factor → exp → accumulate
+3. Final normalize: `o_tile / norm_tile`
+
+**Feature gate:** `tiled_attention`
+
+## Consolidated Traits (`crates/katgpt-core/src/traits.rs`, Plan 107 Phase 0)
+
+Shared traits for game AI and speculative decoding, consolidated from katgpt-rs and riir-engine to eliminate duplication. Both crates depend on `katgpt-core`, so moving traits here requires zero new dependency edges.
+
+```rust
+pub trait ConstraintPruner: Send + Sync {
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool;
+    fn batch_is_valid(&self, depth, candidates, parent_tokens, results); // default: per-item
+}
+
+pub trait ScreeningPruner: Send + Sync {
+    fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32;
+}
+
+pub trait GameState: Clone {
+    type Action: Clone;
+    fn available_actions(&self, player_id: u8) -> Vec<Self::Action>;
+    fn advance(&self, action: &Self::Action, player_id: u8) -> Self;
+    fn is_terminal(&self) -> bool;
+    fn reward(&self, player_id: u8) -> f32;
+    fn tick(&self) -> u32;
+}
+
+pub trait StateHeuristic<S: GameState> {
+    fn evaluate(&self, state: &S, player_id: u8) -> f32;
+}
+
+pub trait RolloutPolicy<S: GameState> {
+    fn select(&mut self, state: &S, actions: &[S::Action], player_id: u8, rng: &mut Rng) -> usize;
+}
+```
+
+| Struct | Trait | Description |
+|--------|-------|-------------|
+| `NoPruner` | `ConstraintPruner` | Allows all tokens (baseline) |
+| `BinaryScreeningPruner<P>` | `ScreeningPruner` | Adapter: `ConstraintPruner` → binary `{0.0, 1.0}` relevance |
+| `NoScreeningPruner` | `ScreeningPruner` | Returns 1.0 for everything (no penalty) |
+| `RandomRolloutPolicy` | `RolloutPolicy` | Uniform random action selection |
+| `ActionSpaceLog` | — | Per-tick branching factor metrics for analysis |
+
+Re-exported from both `katgpt-core` and `katgpt-rs`.
 
 LoRA application is fused in-place after each projection: `output += (α/r) × B @ (A @ input)`. Zero intermediate buffers — the delta accumulates directly into the output.
