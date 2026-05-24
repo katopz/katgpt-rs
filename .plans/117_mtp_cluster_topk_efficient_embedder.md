@@ -249,8 +249,8 @@ MTP = "predict ahead with a small model, verify with the big model." This maps t
 
 ### Phase 5: Sync + Benchmark
 
-- [ ] **T36**: Sync `clustered_lm_head` changes to `riir-ai/crates/riir-engine/src/transformer.rs`
-- [ ] **T37**: Sync `Config` changes to `riir-ai/crates/riir-engine/src/types.rs`
+- [x] **T36**: Sync `clustered_lm_head` changes to `riir-ai/crates/riir-engine/src/transformer.rs` — added `select_topk_indices`, updated to Top-K selection, 627 riir-engine tests pass
+- [x] **T37**: Sync `Config` changes to `riir-ai/crates/riir-engine/src/types.rs` — already synced via `pub use microgpt_core::types::*` re-export
 - [ ] **T38**: Benchmark: `game()` + LoRA drafter — measure acceptance rate improvement over random baseline
 - [ ] **T39**: Benchmark: `bpe()` + LoRA drafter — measure acceptance rate and throughput
 - [ ] **T40**: Benchmark: `gemma2_2b` Top-1 vs Top-32 — measure candidate coverage
