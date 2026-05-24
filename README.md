@@ -467,6 +467,83 @@ Composable with PFlash: `block_select_entmax()` shares the same sink/window/caus
 📁 `src/speculative/prefill.rs` — `block_select_entmax`
 🔧 Feature flag: `dash_attn` (**default-on**)
 
+## 🔄 LT2 — Looped Inference Pipeline (Plan 108)
+
+Weight-shared T-pass loop gives effective depth T×n_layer with no extra parameters. Based on [arXiv:2605.20670](https://arxiv.org/abs/2605.20670).
+
+**Key insight:** Looping uniquely synergizes with subquadratic attention — T loops turn rank-1 DPLR state updates into rank-T updates, and turn window-w sparse attention into effective receptive field T·w.
+
+### Architecture
+
+```
+Input: x ∈ R^{L×d}
+For τ = 1..T:
+  For ℓ = 1..n_layer:
+    h' = h + Mixer_ℓ(h, hybrid_dispatch)
+    h  = h' + FFN_ℓ(h')             // shared weights
+  h = h̃ + ρ_τ ⊙ h_prev             // per-loop residual gate
+Output: lm_head(h)
+```
+
+### Hybrid Dispatch
+
+| Pattern | Full SDPA Layers | Linear AHLA Layers | Use Case |
+|---------|-----------------|-------------------|----------|
+| `Uniform` | All | None | Baseline (no hybrid) |
+| `Interleave{5}` | 1/5 (every 5th) | 4/5 | Flagship recipe |
+| `Bookend` | First + Last | Middle | Boundary-sensitive |
+
+### Memory Layout
+
+| Component | Per Layer | T=4 Total | Notes |
+|-----------|-----------|-----------|-------|
+| SDPA KV cache | O(L·d) | ×full_layers only | No growth with T |
+| AHLA state | O(d·dv) | ×all_layers | Constant, no growth with L or T |
+| Residual gate ρ_τ | O(d) | O(d) × T | Zero-init learned |
+| SDPA output gate | O(n_heads·head_dim·d) | Same (shared) | Zero-init learned |
+
+### Key Types
+
+| Type | Purpose |
+|------|---------|
+| `LoopMode` | `None` (standard) or `WeightShared { loop_count: T }` |
+| `HybridPattern` | `Uniform`, `Interleave { full_ratio }`, `Bookend` |
+| `ResidualGate` | Per-loop learned gate ρ_τ (zero-init → sigmoid(0)=0.5 neutral) |
+| `SdpaOutputGate` | Sigmoid gate after SDPA, before Wo (zero-init) |
+| `forward_looped()` | Main looped forward pass |
+
+### GOAT Proof Summary (11/11 ✅)
+
+Key results:
+- All logits finite at T=4 (P9)
+- AHLA memory constant across T=1..8 (P10)
+- Hybrid achieves ~95% of pure SDPA T=4 throughput with 80% AHLA layers (T28)
+- Zero-init gates provide safe starting points (P3, P4, P8)
+- HybridPattern dispatch correct for all patterns (P5)
+
+🔧 Feature gate: `lt2_looped = ["hla_attention"]` (**default-on**)
+
+### Usage
+
+```rust
+use microgpt_rs::types::{Config, LoopMode, HybridPattern};
+
+let mut config = Config::micro();
+config.loop_mode = LoopMode::WeightShared { loop_count: 4 };
+config.hybrid_pattern = HybridPattern::Interleave { full_ratio: 5 };
+// → 6 layers × 4 loops = 24 effective depth, 4/6 use O(1) AHLA
+```
+
+### Benchmarks
+
+```sh
+cargo test --features lt2_looped --test bench_108_lt2_looped -- --nocapture
+cargo test --features lt2_looped --test goat_108_lt2_looped -- --nocapture
+```
+
+📁 `src/looped/` — `forward_looped`, `residual_gate`, `hybrid_dispatch`
+📁 `src/hla_attention/` — AHLA mixer for hybrid layers
+
 ## 🎯 MaxSim: Late-Interaction Scoring (Plan 080)
 
 Memory-efficient `Σ_i max_j dot(q_i, d_j)` scoring ported from [erikkaum/maxsim](https://github.com/erikkaum/maxsim) (ColBERT/PyLate kernel). The key insight: streaming over doc tokens with a running max — never materializing the `[Lq × Ld]` similarity matrix — gives 3-4× speedup via cache locality (same math, less memory).

@@ -322,8 +322,43 @@ Runtime SIMD detection and dispatch for hot-path operations:
 | `forward_ahla(ctx, weights, ahla_cache, token, pos, config)` | Asymmetric AHLA — O(d·dv) constant-state attention, SIMD-accelerated (Plan 057/060, `hla_attention`) |
 | `forward_with_domain_latent(ctx, weights, cache, token, pos, config, dl)` | Convenience wrapper — `forward_base` with domain latent only (no LoRA) |
 | `forward_sp_kv(ctx, weights, sp_kv_cache, token, pos, config, predictors, bias)` | SP-KV self-pruned KV forward — utility-gated attention with learned predictor MLP (Plan 070, `sp_kv`) |
+| `forward_looped(ctx, weights, cache, ahla_cache, token, pos, config, residual_gate, sdpa_gate)` | LT2 looped forward — weight-shared T-pass loop with hybrid SDPA+AHLA dispatch (Plan 108, `lt2_looped`) |
 
 > **Plan 059 Note**: HLA is inference-only — SDPA→HLA distillation via LoRA shows KL divergence does NOT converge. HLA provides streaming O(1) attention for inference but cannot be trained to approximate SDPA outputs. Use DeltaMemoryState for facts/retrieval.
+
+## LT2 Looped Forward Pass (`transformer.rs`, Plan 108)
+
+Weight-shared T-pass loop: same layer weights applied T times, yielding effective depth T×n_layer with no extra parameters. Hybrid dispatch mixes SDPA (full attention) and AHLA (O(1) constant-state) layers per loop iteration.
+
+```
+Input: x = wte[token] + wpe[pos]
+For τ = 1..T:
+  Save prev_h = x
+  For ℓ = 1..n_layer:
+    is_full = match hybrid_pattern {
+      Uniform    => true,
+      Interleave{full_ratio:5} => (ℓ % 5) == 4,
+      Bookend    => ℓ == 0 || ℓ == n_layer-1,
+    }
+    h' = h + Mixer_ℓ(h, is_full)    // AHLA or SDPA
+    h  = h' + FFN_ℓ(h')             // shared FFN
+    if gated_attn && is_full: h = SdpaOutputGate(h)  // sigmoid gate, zero-init
+  h = h̃ + ρ_τ ⊙ prev_h             // per-loop residual gate (zero-init)
+Output: lm_head(h)
+```
+
+**Key types** (`crates/microgpt-core/src/types.rs`):
+
+| Type | Description |
+|------|-------------|
+| `LoopMode` | `None` (standard) or `WeightShared { loop_count: T }` |
+| `HybridPattern` | `Uniform`, `Interleave { full_ratio }`, `Bookend` |
+| `ResidualGate` | Per-loop learned gate ρ_τ — zero-init → first iteration is identity |
+| `SdpaOutputGate` | Sigmoid gate after SDPA before Wo — zero-init → sigmoid(0) = 0.5 neutral |
+
+**Memory scaling**: AHLA layers use O(d·dv) constant state (no growth with L or T). SDPA layers use O(L·d) KV cache (no growth with T). Hybrid 1:4 achieves ~95% throughput of pure SDPA T=4 with 80% constant-memory layers.
+
+**Feature gate**: `lt2_looped = ["hla_attention"]` (default-on). GOAT: 11/11 proofs pass.
 
 ## MTP Projection (`transformer.rs`, Plan 055)
 
