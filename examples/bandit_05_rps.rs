@@ -93,6 +93,15 @@ fn select_arm(stats: &BanditStats, strategy: &BanditStrategy, rng: &mut Rng) -> 
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .unwrap_or(0),
+        BanditStrategy::RandOptAdaptive {
+            density_threshold, ..
+        } => {
+            if rng.uniform() < *density_threshold {
+                (rng.uniform() * NUM_ARMS as f32) as usize % NUM_ARMS
+            } else {
+                stats.best_arm()
+            }
+        }
     }
 }
 

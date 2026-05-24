@@ -63,3 +63,44 @@ mod map_serde {
         Ok(vec.into_iter().collect())
     }
 }
+
+/// Serde module for `HashMap<Vec<u8>, usize>` — keys as hex strings for readability.
+/// Used by ToaST tokenizer (Plan 122). Feature-gated to avoid dead_code warnings.
+#[cfg(feature = "toast_tokenizer")]
+#[allow(dead_code)]
+pub mod map_serde_bytes {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::HashMap;
+
+    pub fn serialize<S: Serializer>(
+        map: &HashMap<Vec<u8>, usize>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        let vec: Vec<(String, usize)> = map.iter().map(|(k, &v)| (bytes_to_hex(k), v)).collect();
+        vec.serialize(s)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        d: D,
+    ) -> Result<HashMap<Vec<u8>, usize>, D::Error> {
+        let vec: Vec<(String, usize)> = Vec::deserialize(d)?;
+        Ok(vec
+            .into_iter()
+            .filter_map(|(hex, id)| hex_to_bytes(&hex).map(|bytes| (bytes, id)))
+            .collect())
+    }
+
+    fn bytes_to_hex(bytes: &[u8]) -> String {
+        bytes.iter().map(|b| format!("{b:02x}")).collect()
+    }
+
+    fn hex_to_bytes(hex: &str) -> Option<Vec<u8>> {
+        if !hex.len().is_multiple_of(2) {
+            return None;
+        }
+        (0..hex.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&hex[i..i + 2], 16).ok())
+            .collect()
+    }
+}

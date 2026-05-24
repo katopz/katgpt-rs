@@ -222,6 +222,17 @@ impl Director {
                     self.stats.best_arm()
                 }
             }
+            BanditStrategy::RandOptAdaptive {
+                density_threshold,
+                ..
+            } => {
+                if rng.uniform() < *density_threshold {
+                    (rng.uniform() * Encounter::ALL.len() as f32) as usize
+                        % Encounter::ALL.len()
+                } else {
+                    self.stats.best_arm()
+                }
+            }
             #[cfg(feature = "tes_loop")]
             BanditStrategy::Rpucg { .. } => (0..Encounter::ALL.len())
                 .max_by(|&a, &b| {
