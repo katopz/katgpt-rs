@@ -590,7 +590,7 @@ GDN2 achieves **99.4% of AHLA throughput** with **87–98% memory savings** vs f
 🧪 `tests/bench_105_gdn2_goat.rs` — 6 benchmark validations (throughput, memory, finiteness, ablation, scaling)
 🔧 Feature flag: `gdn2_attention` (**default-on**, GOAT 14/14)
 
-### Gemma 4 MTP Drafter (Plan 055)
+### Gemma 4 MTP Drafter (Plan 055 + Plan 117)
 
 Threshold-gated Multi-Token Prediction inspired by Gemma 4's architecture:
 
@@ -599,8 +599,13 @@ Threshold-gated Multi-Token Prediction inspired by Gemma 4's architecture:
 | Target Activations | `mtp_activation_threshold` | `n_embd >= threshold` | Richer drafter context |
 | Shared KV Cache | `mtp_shared_kv_prompt_threshold` | `pos > threshold` | Avoids re-computing past KV |
 | Clustered LM Head | `mtp_cluster_vocab_threshold` | `vocab_size >= threshold` + weights present | Reduces vocab matmul cost |
+| **LoRA-Trained Drafter** | — | `DrafterLoraWeights` loaded | +12% acceptance over random (Plan 117) |
+| **Output-Length Gating** | `mtp_min_output_tokens` | `remaining >= threshold` | Prevents 19% MoE slowdown on short texts |
+| **Top-K Cluster Selection** | `mtp_cluster_topk` | `topk > 1` + clustered LM head | 32 clusters → ~98% recall vs ~60% for Top-1 |
 
 Small configs (`micro`, `game`) pay **zero cost** — all thresholds are `usize::MAX`.
+
+🧪 `tests/bench_117_mtp_lora_topk_goat.rs` — LoRA acceptance, Top-K coverage, output-length gating (4/4 pass)
 
 📖 See [`.docs/055_mtp_threshold_guide.md`](.docs/055_mtp_threshold_guide.md).
 
@@ -1866,7 +1871,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **MaxSim** (`maxsim`) | [MaxSim Research 45](https://arxiv.org/abs/2605.09959) | **7.46× SIMD** speedup (48.3µs vs 360µs). Block separation: 20× vs Mean-K 4.25× (**4.71× better** needle detection). | Amplifies quantization error 12-14×; best with SpectralQuant |
 | **Go** (`go`) | [AutoGo Research 33](https://arxiv.org/abs/2605.09959) | `GoState::advance()`: ~1.2µs/move (9×9). MCTS: ~4,500 sim/s. ~5× faster than Python AutoGo. Scaling: Random 50% → MCTS(1K) 95%. | Requires `reqwest` + AutoGo server |
 | **SP-KV** (`sp_kv`) | [SP-KV Research 42](https://arxiv.org/abs/2605.09959) | Full forward pass with Soft/Hard/TAHG gate modes. Utility predictor (2-layer SiLU MLP). **Quant fusion** (`SpKvQuantCache<C>`): selective write + lossy quantize, works with TQ or SQ backend. `AttentionMode::SpKvQuant` dispatch. 8/8 tests. | Requires joint training (model-based path) |
-| **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
+| **MTP** (no gate) | [Gemma 4 MTP](https://arxiv.org/abs/2605.09959) | Target activation sharing via truncate/pad. Shared KV preloading. Clustered LM head. **LoRA-trained drafter** (+12% acceptance). **Output-length gating** (`mtp_min_output_tokens`). **Top-K clusters** (`mtp_cluster_topk`, 32→98% recall). Config thresholds (set `usize::MAX` = disabled). | Always compiled, controlled via `Config` thresholds |
 | **MLS Aggregate** (`mls_aggregate`) | Research 68 | **GOAT 6/6** (Plan 104). Average last K transformer layer residuals before LM head. Training-free, zero new parameters. `ep_accuracy_k()` metric helper. Default-on. | Disabled via `Config.mls_layers = 0`; requires GOAT sweep for K |
 | **GDN2** (`gdn2_attention`) | [Gated DeltaNet-2 (Yang 2024)](https://arxiv.org/abs/2605.09959) | **GOAT 14/14** (Plan 105: 8 proofs + 6 benchmarks). O(1) decode with constant state S∈R^{dk×dv} per head. SIMD-accelerated decay/read/update/readout. 3 gate configs: EraseOnly, Full, Kda. 99.4% of AHLA throughput, 87–98% memory savings vs flat KV. `src/gdn2/`. Default-on. | Models must be trained with GDN2 from scratch |
 | **DashAttention** (`dash_attn`) | [Peters 2019] + [Correia 2019] α-entmax | **GOAT 9/9** (Plan 106). Adaptive sparse hierarchical attention via α=1.5 entmax routing. Learned chunk summaries. Replaces fixed-budget top-k block selection. `src/dash_attn/`. Default-on. | Requires chunk summary prefill; PFlash integration pending |

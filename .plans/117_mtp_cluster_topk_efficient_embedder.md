@@ -258,8 +258,8 @@ MTP = "predict ahead with a small model, verify with the big model." This maps t
 
 ### Phase 6: Documentation
 
-- [ ] **T42**: Update `README.md` — add LoRA-trained drafter section, output-length gating, Top-K note
-- [ ] **T43**: Update `.docs/055_mtp_threshold_guide.md` — add new fields to threshold table
+- [x] **T42**: Update `README.md` — add LoRA-trained drafter section, output-length gating, Top-K note (MTP section + feature table updated)
+- [x] **T43**: Update `.docs/13_mtp_threshold_guide.md` — add LoRA, output-length gating, Top-K sections + threshold tables
 - [ ] **T44**: Commit with message `feat(mtp): add LoRA-trained drafter, output-length gating, top-K clusters (Plan 117)`
 
 ## Execution Order

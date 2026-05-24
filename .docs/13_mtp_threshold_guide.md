@@ -1,4 +1,4 @@
-# MTP Threshold Guide (Plan 055)
+# MTP Threshold Guide (Plan 055 + Plan 117)
 
 ## When Each Feature Activates
 
@@ -57,6 +57,60 @@
 
 **Cluster assignment**: Round-robin by token ID (baseline). K-means from embedding similarity planned for riir-burner (Plan 056).
 
+### LoRA-Trained Drafter (Plan 117 Phase 1)
+
+**Purpose**: Train a tiny LoRA adapter on the drafter using target outputs. At our scale, the "78M drafter" distills to **192 LoRA params** (rank-4 on `Config::draft()`).
+
+**How it works**: `DrafterLoraWeights` stores rank-4 LoRA matrices (A down-projection, B up-projection). Training uses finite-difference gradients on cross-entropy loss against target token predictions.
+
+**GOAT result**: +12% acceptance rate over random baseline at micro scale (0.157 vs 0.140).
+
+**Threshold values**:
+| Config | LoRA Params | Active? |
+|--------|------------|---------|
+| draft() | N/A (IS the drafter) | ❌ |
+| game() → draft() | 192 | ✅ (when loaded) |
+| bpe() → bpe_draft() | 768 | ✅ (when loaded) |
+
+**Serialization**: Binary format with `DLRA` magic + blake3 checksum via `save_drafter_lora()` / `load_drafter_lora()`.
+
+### Output-Length Gating (`mtp_min_output_tokens`) (Plan 117 Phase 2)
+
+**Purpose**: Disable MTP on short outputs to prevent the 19% MoE slowdown observed in production benchmarks at `max_tokens=8`.
+
+**Activation condition**: `remaining_tokens >= mtp_min_output_tokens` → MTP active. Otherwise, single-token path.
+
+**Threshold values**:
+| Config | `mtp_min_output_tokens` | Rationale |
+|--------|------------------------|-----------|
+| micro | `MAX` | Tiny vocab, short outputs |
+| game | `MAX` | 1-4 token actions |
+| game_go | `MAX` | 2-10 token moves |
+| draft | `MAX` | Already a drafter |
+| small_target | 16 | First config where MTP might help |
+| gqa_draft | 16 | Same |
+| bpe | 16 | Dense, need 16+ tokens to amortize |
+| bpe_draft | `MAX` | Already a drafter |
+| gemma2_2b | 16 | Dense, 256K vocab, main beneficiary |
+
+### Top-K Cluster Selection (`mtp_cluster_topk`) (Plan 117 Phase 3)
+
+**Purpose**: Upgrade `clustered_lm_head` from Top-1 (argmax, ~60% recall) to Top-K (32 clusters → ~98% recall), matching Gemma 4 production parameters.
+
+**Activation condition**: `mtp_cluster_topk > 1` AND clustered LM head is active (vocab threshold + weights present).
+
+**Threshold values**:
+| Config | `mtp_cluster_topk` | Rationale |
+|--------|--------------------|-----------|
+| micro | 1 | No clustering |
+| game | 1 | No clustering |
+| draft | 1 | No clustering |
+| bpe | 8 | Medium vocab |
+| bpe_draft | 8 | Medium vocab |
+| gemma2_2b | **32** | 256K vocab, main target |
+
+**Guard**: When `topk >= num_clusters`, all clusters are selected (no pruning, same as full vocab).
+
 ## Overriding at Inference Time
 
 All MTP thresholds can be overridden via `InferenceOverrides`:
@@ -65,6 +119,8 @@ All MTP thresholds can be overridden via `InferenceOverrides`:
 let overrides = InferenceOverrides {
     mtp_activation_threshold: Some(64),
     mtp_shared_kv_prompt_threshold: Some(128),
+    mtp_cluster_topk: Some(32),              // Plan 117: Top-32 cluster selection
+    mtp_min_output_tokens: Some(16),         // Plan 117: output-length gating
     ..Default::default()
 };
 let config = Config::bpe().with_overrides(&overrides);
@@ -74,6 +130,7 @@ let config = Config::bpe().with_overrides(&overrides);
 
 `Config::validate()` enforces:
 - `mtp_cluster_size > 0` — cluster size must be positive when clustered LM head is in use
+- `mtp_cluster_topk >= 1` — top-K must be at least 1 (Plan 117)
 
 Other thresholds use `usize::MAX` as "disabled" sentinel, which is valid and needs no special enforcement.
 
@@ -106,5 +163,8 @@ MTP-Enhanced DFlash (this plan):
 ## References
 
 - [Gemma 4 architecture](https://blog.google/technology/ai/gemma-technical-report/) — Multi-Token Prediction design
+- [DGX Spark Gemma 4 MTP benchmark](https://dev.classmethod.jp/articles/dgx-spark-gemma4-mtp-multi-token-prediction-bench/) — production params, short-text failure
 - Plan 055 — `microgpt-rs/.plans/055_gemma_mtp_drafter.md`
 - Plan 056 — riir-burner cluster weight training
+- Plan 117 — `microgpt-rs/.plans/117_mtp_cluster_topk_efficient_embedder.md`
+- 🧪 `tests/bench_117_mtp_lora_topk_goat.rs` — LoRA acceptance, Top-K coverage, output-length gating (4/4 pass)
