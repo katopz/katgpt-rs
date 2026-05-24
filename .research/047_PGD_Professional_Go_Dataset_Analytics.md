@@ -262,6 +262,28 @@ riir-ai/crates/riir-examples/examples/
 | Style classification useful for G-Zero | **70%** | `GoHLPlayer` categories already capture style; aggregating is straightforward |
 | Model-based prediction (LoRA) | **50%** | Architecture exists but untested for tabular/game prediction |
 
+## GOAT Proof Results (Plan 081)
+
+Plan 081 implemented modelless PGD analytics features and validated them with GOAT proofs.
+
+| Gate | Description | Result | Notes |
+|------|-------------|--------|-------|
+| T3 | Garbage move detection | ⚠️ Partial | Threshold ±0.85 too high for heuristic range; feature works but calibration needed |
+| T5 | MLWR as discriminative signal | ⚠️ Partial | Random vs Random MLWR not discriminative; needs stronger players for validation |
+| T6 | Style category distribution | ✅ Pass | Distribution sums to 1.0, all categories populated |
+| T7 | Analytics pipeline integration | ✅ Pass | `GoGameAnalytics` computes CR, MLWR, garbage, categories from replay |
+| T9 | GOAT proof tests (14/14) | ✅ Pass | All edge cases: empty game, single-move, zero-move replay |
+| T14 | Natsukaze validation | ✅ Pass | Simulated pipeline with Greedy self-play: avg CR≈0.600, garbage≈0.000 |
+
+**Performance:** 250-move replay in ~832ms debug (~300 moves/sec). Release build expected <100ms.
+
+**Key findings:**
+- Coincidence Rate (CR) is computable modelless — ✅ verified
+- Garbage move detection works but threshold needs domain-specific tuning
+- MLWR requires stronger players than Random to be discriminative
+- Style categories (aggressive/defensive/balanced) produce meaningful distributions
+- Natsukaze real-data validation consolidated into Plan 116 (T5 PASS: NK accuracy 100% > self-play 98%)
+
 ## References
 
 - Paper: https://arxiv.org/abs/2205.00254

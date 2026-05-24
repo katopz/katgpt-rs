@@ -162,10 +162,7 @@ Must validate all gates before Phase 2 integration. Run via `cargo test -p micro
   - Condition GoGZeroPlayer templates against specific opponent styles
   - **UNBLOCKED:** T7 GOAT gate passes (distribution sums to 1.0)
 
-- [ ] **T13: Update Research 47** — add GOAT proof results
-  - Mark each gate as pass/fail with numbers
-  - If rejected: add to Negative Results section
-  - Update confidence assessments based on actual measurements
+- [x] **T13: Update Research 47** — add GOAT proof results ✅ — Added GOAT Proof Results section to `.research/047_PGD_Professional_Go_Dataset_Analytics.md` with gate-by-gate results: T3 partial (threshold calibration), T5 partial (needs stronger players), T6/T7/T9/T14 all pass. Natsukaze validation consolidated into Plan 116.
 
 - [x] **T14: Validate against Natsukaze real data** — integration test
   - Simulated Natsukaze-style pipeline test using Greedy self-play (strong AI proxy)

@@ -71,7 +71,7 @@ Consolidate three open tasks into a single ordered plan:
 - [x] Cross-validation: NK-on-SP 32%, SP-on-NK 61% (domain-specific features)
 
 ### T6: LoRA Drafter Alignment → Superseded by Plan 108
-- [ ] **MOVED to `riir-ai/.plans/108_gemma2_d2f_block_causal_decode.md`**
+- [x] **MOVED to `riir-ai/.plans/108_gemma2_d2f_block_causal_decode.md`** — consolidated into Plan 108
 - Plan 108 proves DiffusionSampler at Gemma 2 2B scale (n_embd=2304)
 - Requires: `forward_gemma2_block_causal()` (CPU) + CubeCL block-causal attention + D2F decode loop
 - Feature gate: `gemma2_d2f` → requires `cubecl_runtime` + `dllm`

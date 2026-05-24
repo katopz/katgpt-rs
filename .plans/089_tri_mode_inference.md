@@ -150,13 +150,13 @@ tri_mode = ["dllm"]  # depends on dllm for D2F drafter
 - [x] Record results in `.benchmarks/018_d2f_verifier_goat.md`
 
 ### T6: Trained Sampler Research → Consolidated into Plan 116
-- [ ] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T1-T4**
+- [x] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T1-T4** — consolidated into Plan 116
 - `diffusion_sampler.rs` created (43K, ~30 tests), needs wiring into `mod.rs`
 - Plan 116 T1: wire module, T2: run tests, T3: integrate into D2F loop, T4: GOAT benchmark
 - Deferred until T1-T5 prove self-speculation has value at our scale ✅ (proved)
 
 ### T7: LoRA Drafter Alignment → Consolidated into Plan 116
-- [ ] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T6**
+- [x] **MOVED to `.plans/116_consolidated_diffusion_sampler_goat.md` T6** — consolidated into Plan 116
 - Blocked on riir-gpu D2F training support
 - Plan 116 tracks as deferred task for visibility
 
