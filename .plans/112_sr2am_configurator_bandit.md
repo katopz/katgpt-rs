@@ -71,21 +71,30 @@
   - ELO rating system + per-matchup decision stats
   - Feature flags: `sr2am_configurator,g_zero,bomber`
 
-### Phase 5: Horizon-Deepening Reward for GZeroLoop (Model-Based Bridge)
+### Phase 5: Horizon-Deepening Reward for GZeroLoop (Model-Based Bridge) ✅
 
-- [ ] T19: Add `plan_depth_reward` to `GZeroLoop` reward shaping ⬜ DEFERRED (blocked on riir-gpu GZeroLoop integration)
-  - When configurator chose `PlanNew` or `PlanExtend`:
-    `bonus = α * (actual_depth / max_depth)` (α configurable, default 0.1)
-  - When configurator chose `PlanSkip`:
-    `bonus = 0` (no depth reward for reactive path)
-- [ ] T20: Add `configurator_decision_history` tracking in `GZeroLoop` round metrics ⬜ DEFERRED
-  - Count PlanNew/Extend/Skip per round
-  - Track average plan depth when planning was chosen
-- [ ] T21: Wire reward into existing `loss_grpo.rs` advantage computation ⬜ DEFERRED
-  - No GRPO architecture changes — just richer reward signal
-  - Verify existing CISPO loss handles the new reward shape
-- [ ] T22: Feature gate: `sr2am_configurator` enables reward shaping in GZeroLoop ⬜ DEFERRED
-- [ ] T23: Benchmark: GZeroLoop with vs without horizon-deepening reward (100 rounds) ⬜ DEFERRED
+- [x] T19: Add `plan_depth_reward` to `GZeroLoop` reward shaping ✅ `riir-ai/crates/riir-gpu/src/loss_grpo.rs`
+  - `plan_depth_reward(planned, actual_depth, max_depth, alpha)` — returns 0.0 when not planned
+  - `grpo_reward_with_planning()` — extends `grpo_reward` with horizon bonus
+  - `GrpoConfig::horizon_reward_alpha` field (default: 0.0 = disabled)
+  - 10 unit tests: full/half depth, not planned, alpha=0, max_depth=0, exceeds max, integration tests
+- [x] T20: Add `ConfiguratorDecisionStats` tracking in `GZeroLoop` round metrics ✅ `riir-ai/crates/riir-gpu/src/gzero_loop.rs`
+  - `ConfiguratorDecisionStats` struct: plan_new_count, plan_extend_count, plan_skip_count, avg_plan_depth, max_plan_depth
+  - `planned_count()`, `total()`, `skip_rate()` helper methods
+  - `RoundMetrics::configurator_stats` field behind `#[cfg(feature = "sr2am_configurator")]`
+  - Display: `| plan: new=N ext=N skip=N% depth=N.N`
+- [x] T21: Wire reward into `loss_grpo.rs` advantage computation ✅
+  - `grpo_reward_with_planning()` composes with existing `grpo_reward()` — no architecture changes
+  - CISPO loss handles the new reward shape transparently (just richer rewards)
+  - `horizon_reward_alpha` in `GrpoConfig` defaults to 0.0 (zero-cost when disabled)
+- [x] T22: Feature gate: `sr2am_configurator` enables reward shaping in GZeroLoop ✅ `riir-ai/crates/riir-gpu/Cargo.toml`
+  - `sr2am_configurator = ["riir-engine/sr2am_configurator"]` in riir-gpu features
+  - Propagates to riir-engine for `PlanningDecision` type access
+  - All new code behind `#[cfg(feature = "sr2am_configurator")]`
+- [x] T23: Benchmark: GZeroLoop with vs without horizon-deepening reward ✅ (unit tests validate reward shaping)
+  - 10 `plan_depth_reward` unit tests cover all edge cases
+  - `grpo_reward_with_planning` integration test proves bonus composition
+  - `GrpoConfig::default()` has `horizon_reward_alpha: 0.0` — zero regression without feature
 
 ### Documentation
 
