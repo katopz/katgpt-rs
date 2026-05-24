@@ -93,6 +93,14 @@ pub enum BanditStrategy {
         /// Exploration weight λ (default 1.0).
         lambda: f32,
     },
+    /// Density-aware exploration from RandOpt (Neural Thickets).
+    /// High solution density → exploit, low → explore.
+    RandOptAdaptive {
+        /// Density threshold for switching (default: 0.3).
+        density_threshold: f32,
+        /// EMA decay for density tracking (default: 0.99).
+        decay: f32,
+    },
 }
 
 impl fmt::Display for BanditStrategy {
@@ -113,6 +121,12 @@ impl fmt::Display for BanditStrategy {
             #[cfg(feature = "tes_loop")]
             Self::Rpucg { gamma, lambda } => {
                 write!(f, "RPUCG(γ={gamma:.2}, λ={lambda:.2})")
+            }
+            Self::RandOptAdaptive {
+                density_threshold,
+                decay,
+            } => {
+                write!(f, "RandOpt(ρ={density_threshold:.2}, decay={decay:.2})")
             }
         }
     }
@@ -583,6 +597,10 @@ impl<P: ScreeningPruner> ScreeningPruner for BanditPruner<P> {
                 let exploration = lambda * ((total + 1.0).ln() / (n + 1.0)).sqrt();
                 (q + exploration).clamp(0.0, 1.5) / 1.5
             }
+            BanditStrategy::RandOptAdaptive { .. } => {
+                // Density-aware fallback: Q-value until density tracking implemented
+                self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01)
+            }
         };
 
         // Harmonic blend: domain × bandit
@@ -914,6 +932,12 @@ impl<E: BanditEnv> BanditSession<E> {
             BanditStrategy::VarianceEpsilon { .. } => self.select_variance_epsilon(rng),
             #[cfg(feature = "tes_loop")]
             BanditStrategy::Rpucg { .. } => self.select_ucb1(), // Flat bandit fallback; graph propagation in TesLoop
+            BanditStrategy::RandOptAdaptive {
+                density_threshold, ..
+            } => {
+                // Density-aware fallback: use threshold as epsilon until full implementation
+                self.select_epsilon_greedy(*density_threshold, rng)
+            }
         }
     }
 
@@ -1268,6 +1292,51 @@ impl SharedBanditStats {
         let inner = self.inner.lock().unwrap();
         inner.q_values.get(arm).copied().unwrap_or(0.0)
     }
+}
+
+// ── RandOpt Diagnostics (Plan 121) ──────────────────────────────
+
+/// Solution density: fraction of scores ≥ base_score + margin.
+/// From RandOpt (Neural Thickets) — measures how many perturbations improve over baseline.
+pub fn solution_density(scores: &[f32], base_score: f32, margin: f32) -> f32 {
+    match scores.is_empty() {
+        true => 0.0,
+        false => {
+            let threshold = base_score + margin;
+            let above = scores.iter().filter(|&&s| s >= threshold).count();
+            above as f32 / scores.len() as f32
+        }
+    }
+}
+
+/// Spectral discordance: measures specialist vs generalist distribution.
+/// D ∈ [0, 1], D→1 means specialists, D→0 means generalists.
+/// Input: N arms × M tasks percentile-rank matrix.
+pub fn spectral_discordance(performance_matrix: &[Vec<f32>]) -> f32 {
+    if performance_matrix.is_empty() {
+        return 0.0;
+    }
+    let n = performance_matrix.len();
+    let m = performance_matrix.first().map_or(0, |r| r.len());
+    if m <= 1 || n == 0 {
+        return 0.0;
+    }
+    // For each arm, compute variance across tasks
+    let variances: Vec<f32> = performance_matrix
+        .iter()
+        .map(|row| {
+            if row.len() <= 1 {
+                return 0.0;
+            }
+            let mean = row.iter().sum::<f32>() / row.len() as f32;
+            let var = row.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / row.len() as f32;
+            var
+        })
+        .collect();
+    // Normalize: max variance = 0.25 (for binary 0/1 with p=0.5)
+    let max_var = 0.25_f32;
+    let avg_normalized_var = variances.iter().sum::<f32>() / variances.len() as f32 / max_var;
+    avg_normalized_var.min(1.0)
 }
 
 // ── Tests ───────────────────────────────────────────────────────
