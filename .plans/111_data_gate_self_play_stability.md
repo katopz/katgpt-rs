@@ -3,18 +3,18 @@
 > **Research:** 075 (Survive or Collapse — Data Gating in Self-Play RL)
 > **Paper:** [arXiv:2605.22217](https://arxiv.org/abs/2605.22217) — Pu et al., May 2026
 > **Depends:** Plan 059 (GZeroLoop ✅), Plan 093 (CISPO GRPO ✅), Plan 049 (G-Zero ✅)
-> **Feature Gate:** `data_gate = ["bandit"]` (modelless path uses bandit infrastructure)
-> **Status:** Planning
+> **Feature Gate:** `data_gate = ["dep:fastrand", "dep:log"]` (local types — riir-gpu does not depend on microgpt-core)
+> **Status:** In Progress (T1–T7 ✅, T8–T9 remaining)
 
 ## Tasks
 
 - [x] T1: Add `DataGate` trait + `GateDecision` enum to `microgpt-core/src/types.rs` ✅ — Added `TaskType`, `ProposerTask`, `GateDecision`, `DataGate` trait. No feature gate (ungated in core, per plan). Clippy clean.
-- [ ] T2: Add `SolverRewardMode` enum to `riir-gpu/src/loss_grpo.rs` (Grounded, IntrinsicSelfConsistency)
-- [ ] T3: Implement `ExecutionGate` (sandbox exec + determinism check) in `riir-gpu/src/data_gate.rs`
-- [ ] T4: Implement `LeakyGate<G: DataGate>` (ε-Bernoulli relaxation) for phase diagram experiments
-- [ ] T5: Wire `DataGate` into `GZeroLoop` — gate tasks BEFORE solver attempts them
-- [ ] T6: Add `intrinsic_grounded_gap` metric tracking to `GZeroLoop` round metrics
-- [ ] T7: Add `data_gate` feature gate with `#[cfg(feature = "data_gate")]` on all new code
+- [x] T2: Add `SolverRewardMode` enum to `riir-gpu/src/loss_grpo.rs` ✅ — `Grounded` (default) + `IntrinsicSelfConsistency`. Added to `GrpoConfig` with `Default` impl. Clippy clean.
+- [x] T3: Implement `ExecutionGate` (sandbox exec + determinism check) in `riir-gpu/src/data_gate.rs` ✅ — `TaskExecutor` trait, `NoopExecutor` (games), `ExecutionGate::new/without_determinism/for_games`. Double-run determinism check. 6 unit tests.
+- [x] T4: Implement `LeakyGate<G: DataGate>` (ε-Bernoulli relaxation) for phase diagram experiments ✅ — `LeakyGate<G>` with Bernoulli(ε) relaxation, `AlwaysAdmit` baseline. ε ∈ [0,1] assert. 4 unit tests.
+- [x] T5: Wire `DataGate` into `GZeroLoop` — gate tasks BEFORE solver attempts them ✅ — `data_gate: Option<Box<dyn DataGate>>` field, `with_data_gate()` builder, gate loop in `run_round_mock`. Feature-gated.
+- [x] T6: Add `intrinsic_grounded_gap` metric tracking to `GZeroLoop` round metrics ✅ — `intrinsic_grounded_gap: Option<f32>` + `gate_admission_rate: f32` fields on `RoundMetrics`. Display shows gate % and gap. Feature-gated.
+- [x] T7: Add `data_gate` feature gate with `#[cfg(feature = "data_gate")]` on all new code ✅ — `data_gate = ["dep:fastrand", "dep:log"]` in Cargo.toml, `mod data_gate` + re-exports in lib.rs. All new code gated. 387 tests pass with feature, 0 regressions without.
 - [ ] T8: GOAT proof — Bomber arena: gate-on vs gate-off with intrinsic solver reward (1000 rounds)
 - [ ] T9: Update README, .docs, .research references
 
