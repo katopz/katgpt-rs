@@ -101,6 +101,7 @@ vpd_em_distill = ["sdar_gate", "bandit"]  # VPD EM-style co-evolutionary distill
 proof_sketch_evolution = ["bandit"]  # Proof Sketch Evolution — Elo-rated population + global goal cache (Plan 128, Research 088)
 opus_selection = ["bandit"]  # OPUS Boltzmann + redundancy selection — CountSketch + softmax sampling (Plan 129, Research 089)
 epiplexity_scoring = []  # Epiplexity structural information scoring — loss-curve area above final (Plan 130, Research 090)
+committee_boost = ["bt_rank", "bandit"]  # Committee Boost — oracle-gap recovery, debiased BtRank, budget sizing (Plan 132, Research 093)
 # ── Percepta (transformer-vm RIIR, Plan 064) ──────────────────
 percepta = ["ordered-float"]  # CHT hull cache: upper+lower, HullMeta, tie-break, cumsum (TG-A)
 percepta_gates = ["percepta"]  # + ReGLU, stepglu, multiply, persist primitives (TG-B)
@@ -114,7 +115,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost"]
 
 # ── Bandit (RL / Game Theory) ─────────────────────────────────
 

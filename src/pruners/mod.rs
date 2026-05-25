@@ -325,3 +325,13 @@ pub use epiplexity::{
     EpiplexityEstimator, EpiplexityScreeningPruner, EpiplexityWeight, FactorizationOrder,
     FactorizationScorer, LossCurveTracker, PerPositionLossTracker, TimeBoundedEntropy,
 };
+
+#[cfg(feature = "committee_boost")]
+pub mod committee_boost;
+
+#[cfg(feature = "committee_boost")]
+pub use committee_boost::{
+    BlindSpotEstimate, BudgetError, CommitteeBudget, ConvergenceFit, CoverageAction,
+    CoverageDiagnostic, DebiasedComparator, FailureMode, OracleGapRecovery, committee_budget,
+    coverage_diagnostic, debiased_compare, estimate_blind_spot_floor, fit_convergence,
+};
