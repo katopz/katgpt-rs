@@ -8,6 +8,7 @@
 //!
 //! Requires `proof_sketch_evolution` feature (depends on `bandit`).
 
+pub mod dtree_goal_cache;
 pub mod goal_cache;
 pub mod parallelism;
 pub mod plackett_luce;
@@ -15,6 +16,7 @@ pub mod sketch_population;
 pub mod sketch_sampler;
 pub mod sketch_types;
 
+pub use dtree_goal_cache::{DTreeCacheSnapshot, DTreeGoalCache, encode_constraint_key};
 pub use goal_cache::{GoalHash, GoalResult, ProofGoalCache, ProofGoalSnapshot};
 pub use parallelism::{
     ParallelismGuard, SketchSelectionStrategy, select_strategy, should_use_population,
