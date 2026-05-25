@@ -77,7 +77,7 @@ Our existing DDTree operates at **token granularity**. This plan extends specula
 - [x] **T40**: Add `spechop_01_pipeline` example — demonstrate 4-hop continuous speculation with cache speculator
 - [x] **T41**: Add `spechop_02_cost_model` example — show α/β/p → k* computation and RelLat prediction
 - [x] **T42**: Update `README.md` — add SpecHop section under speculative pipeline, document feature gate, link to benchmark results
-- [ ] **T43**: Update `.docs/` — add architecture diagram showing hop-level speculation flow
+- [x] **T43**: Update `.docs/` — add architecture diagram showing hop-level speculation flow
 - [ ] **T44**: Commit with message: `feat(spechop): continuous multi-hop speculation pipeline (Plan 131)`
 
 ---
