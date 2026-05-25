@@ -175,7 +175,7 @@ pub struct MonteCarloNull {
 
 ---
 
-- [ ] T5: Wire into SpectralQuant module
+- [x] T5: Wire into SpectralQuant module
 
 **Feature gate:** `stiff_anomaly`
 
@@ -227,7 +227,7 @@ Demonstrate:
 | G2 | Jaccard stability | Median ≥ 0.85 | ✅ |
 | G3 | FPR validation | 0.0% on stable | ✅ |
 | G4 | Null separation | σ ≥ 10.0 | ✅ |
-| G5 | SpectralQuant integration | k matches d_eff | ⏳ |
+| G5 | SpectralQuant integration | k matches d_eff | ✅ |
 | G6 | End-to-end example | All above pass | ✅ |
 
 ---

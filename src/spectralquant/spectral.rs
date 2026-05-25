@@ -183,6 +183,30 @@ pub struct CalibrationResult {
     pub head_dim: usize,
 }
 
+impl CalibrationResult {
+    /// Decompose calibrated eigenbasis into stiff/soft subspaces.
+    ///
+    /// Extracts eigenvectors (stored column-wise in the flat row-major matrix)
+    /// and delegates to [`crate::stiff_anomaly::subspace::decompose`].
+    ///
+    /// Returns a [`crate::stiff_anomaly::StiffSoftDecomposition`] partitioned
+    /// at the given `trace_mass` threshold (e.g., 0.90).
+    #[cfg(feature = "stiff_anomaly")]
+    pub fn stiff_soft_decomposition(
+        &self,
+        trace_mass: f32,
+    ) -> crate::stiff_anomaly::StiffSoftDecomposition {
+        let d = self.head_dim;
+        // Eigenvectors are stored as dim×dim row-major, columns = eigenvectors.
+        // Extract column i as a Vec<f32>.
+        let eigvecs: Vec<Vec<f32>> = (0..d)
+            .map(|col| (0..d).map(|row| self.eigenvectors[row * d + col]).collect())
+            .collect();
+
+        crate::stiff_anomaly::subspace::decompose(self.eigenvalues.clone(), eigvecs, trace_mass)
+    }
+}
+
 /// Offline calibration: collect KV vectors → covariance → eigendecompose.
 ///
 /// Computes the sample covariance matrix from the provided vectors,
@@ -1055,5 +1079,65 @@ mod tests {
         let s1 = generate_selective_qjl_signs(4, 4, 123);
         let s2 = generate_selective_qjl_signs(4, 4, 123);
         assert_eq!(s1, s2, "same seed should produce same signs");
+    }
+
+    // ── G5: StiffSoftDecomposition integration ─────────────────────────
+
+    #[cfg(feature = "stiff_anomaly")]
+    #[test]
+    fn test_g5_stiff_soft_from_calibration() {
+        // Synthetic samples with known variance structure:
+        // dim 0 has var≈50, dim 1 var≈30, dim 2 var≈15, dim 3 var≈5,
+        // dims 4-9 have var≈0.01 (noise floor).
+        // Expected: d_eff ≈ 4, k at 90% trace mass should be 3-4.
+        let head_dim = 10;
+        let n_samples = 200;
+        let variances = [50.0f32, 30.0, 15.0, 5.0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01];
+
+        let mut samples = Vec::new();
+        for i in 0..n_samples {
+            let seed = (i as u64)
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(9999);
+            let mut rng = crate::types::Rng::new(seed);
+            let v: Vec<f32> = variances
+                .iter()
+                .map(|&var| rng.normal() * var.sqrt())
+                .collect();
+            samples.push(v);
+        }
+
+        let cal = calibrate_eigenbasis(&samples, head_dim);
+        let decomp = cal.stiff_soft_decomposition(0.90);
+
+        // k should capture the effective dimension (3-5 range)
+        assert!(
+            decomp.k >= 3 && decomp.k <= 5,
+            "k should capture effective dimension, got {}",
+            decomp.k
+        );
+
+        // Stiff eigenvalues should dominate
+        assert_eq!(
+            decomp.stiff_eigenvalues.len(),
+            decomp.k,
+            "stiff eigenvalue count should match k"
+        );
+        assert_eq!(
+            decomp.soft_eigenvalues.len(),
+            head_dim - decomp.k,
+            "soft eigenvalue count should be dim - k"
+        );
+
+        // All eigenvalues present
+        assert_eq!(
+            decomp.eigenvalues.len(),
+            head_dim,
+            "total eigenvalue count should match dim"
+        );
+
+        // Eigenvectors should have correct dimensionality
+        assert_eq!(decomp.stiff_eigenvectors[0].len(), head_dim);
+        assert_eq!(decomp.soft_eigenvectors[0].len(), head_dim);
     }
 }
