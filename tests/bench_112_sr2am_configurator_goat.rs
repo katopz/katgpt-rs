@@ -274,6 +274,7 @@ fn proof_6_plan_skip_savings() {
             PlanningDecision::PlanSkip => skip_count += 1,
             PlanningDecision::PlanNew => new_count += 1,
             PlanningDecision::PlanExtend => extend_count += 1,
+            PlanningDecision::SpecHop { .. } => {}
         }
 
         let (quality, cost) = simulate_turn(decision, entropy);

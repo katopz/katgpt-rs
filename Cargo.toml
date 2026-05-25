@@ -84,6 +84,7 @@ fft = ["bandit"]     # FFT Tactics Arena — ATB battle engine with status effec
 stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full`.
 bomber = ["bevy_ecs", "bandit"]  # Bomberman HL Arena (Plan 033)
 spechop = ["bandit"]  # SpecHop continuous multi-hop speculation pipeline (Plan 131, Research 091)
+parallel_probe = []  # Parallel-Probe 2D controller — consensus-based parallel branch control (Plan 133, Research 094)
 bomber-agent = ["bomber"]  # Coding agent validator loop (Issue 052, Tasks C9-C10)
 bomber-wasm = ["bomber", "wasmtime", "papaya"]  # WASM bomber validator loader (Plan 034) + batch pool (Plan 037)
 game_state = ["bomber"]  # GameState forward model trait + generic MCTS (Plan 056)

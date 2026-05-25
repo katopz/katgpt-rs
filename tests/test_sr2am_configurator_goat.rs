@@ -223,13 +223,15 @@ fn test_configurator_bandit_explores_all_arms() {
     let mut seen_new = false;
     let mut seen_extend = false;
     let mut seen_skip = false;
+    let mut seen_spechop = false;
 
-    for _ in 0..3 {
+    for _ in 0..4 {
         let decision = bandit.select(ctx);
         match decision {
             PlanningDecision::PlanNew => seen_new = true,
             PlanningDecision::PlanExtend => seen_extend = true,
             PlanningDecision::PlanSkip => seen_skip = true,
+            PlanningDecision::SpecHop { .. } => seen_spechop = true,
         }
         bandit.update(ctx, decision, 0.5);
     }
@@ -237,6 +239,7 @@ fn test_configurator_bandit_explores_all_arms() {
     assert!(seen_new, "should have tried PlanNew");
     assert!(seen_extend, "should have tried PlanExtend");
     assert!(seen_skip, "should have tried PlanSkip");
+    assert!(seen_spechop, "should have tried SpecHop");
 }
 
 #[test]
@@ -279,6 +282,7 @@ fn test_configurator_bandit_selects_plan_skip_at_low_entropy() {
             PlanningDecision::PlanSkip => 0.9,
             PlanningDecision::PlanExtend => 0.3,
             PlanningDecision::PlanNew => 0.1,
+            PlanningDecision::SpecHop { .. } => 0.2,
         };
         bandit.update(ctx, decision, reward);
     }
@@ -306,6 +310,7 @@ fn test_configurator_bandit_selects_plan_new_at_high_entropy() {
             PlanningDecision::PlanNew => 0.9,
             PlanningDecision::PlanExtend => 0.3,
             PlanningDecision::PlanSkip => 0.1,
+            PlanningDecision::SpecHop { .. } => 0.2,
         };
         bandit.update(ctx, decision, reward);
     }

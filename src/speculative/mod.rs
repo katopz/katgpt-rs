@@ -25,6 +25,9 @@ pub mod diffusion_sampler;
 #[cfg(feature = "lattice_deduction")]
 pub mod alpha;
 
+#[cfg(feature = "parallel_probe")]
+pub mod parallel_probe;
+
 // Re-exports — preserves existing import paths like `speculative::build_dd_tree`
 pub use dd_tree::{
     TreeBuilder, build_dd_tree, build_dd_tree_balanced, build_dd_tree_balanced_sde,
@@ -154,4 +157,10 @@ pub use ppot::{
     identify_positions_by_rule_into, ppot_resample, ppot_resample_different_value,
     ppot_resample_multi_strategy, ppot_resample_with_support, ppot_rescue, ppot_rescue_adaptive,
     rank_by_consistency, rank_by_consistency_weighted, select_best_variant, token_entropy,
+};
+
+// ── Parallel-Probe 2D Controller re-exports (Plan 133, feature: parallel_probe) ──
+#[cfg(feature = "parallel_probe")]
+pub use parallel_probe::{
+    BranchProbeState, ParallelProbeConfig, ParallelProbeController, ProbeDecision, ProbingMatrix,
 };
