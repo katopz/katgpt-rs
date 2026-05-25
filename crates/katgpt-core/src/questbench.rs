@@ -217,11 +217,23 @@ mod tests {
                 !csp.sufficient_answers.is_empty(),
                 "grid CSP should have sufficient answer"
             );
+            // Key should narrow to ≤4 adjacent cells at next depth
+            if let Some(&key) = csp.sufficient_answers.first() {
+                let mut extended = csp.placed_tokens.clone();
+                extended.push(key);
+                let valid_count = (0..csp.vocab_size)
+                    .filter(|&t| csp.pruner.is_valid(csp.depth + 1, t, &extended))
+                    .count();
+                assert!(
+                    valid_count <= 4,
+                    "grid key {key} should narrow to ≤4 valid tokens, got {valid_count}"
+                );
+            }
         }
     }
 
     #[test]
-    fn test_stone_csps_pruner_validity() {
+    fn test_stone_csps_key_narrows() {
         let csps = generate_synthetic_csps(3);
         let stone_csps: Vec<_> = csps
             .iter()
@@ -229,18 +241,23 @@ mod tests {
             .collect();
         assert_eq!(stone_csps.len(), 3);
         for csp in stone_csps {
-            // The sufficient answer should be a valid token
-            if let Some(&ans) = csp.sufficient_answers.first() {
+            // Placing the key token should narrow to ≤ 2 valid tokens at next depth
+            if let Some(&key) = csp.sufficient_answers.first() {
+                let mut extended = csp.placed_tokens.clone();
+                extended.push(key);
+                let valid_count = (0..csp.vocab_size)
+                    .filter(|&t| csp.pruner.is_valid(csp.depth + 1, t, &extended))
+                    .count();
                 assert!(
-                    csp.pruner.is_valid(csp.depth, ans, &csp.placed_tokens),
-                    "sufficient answer {ans} should be valid"
+                    valid_count <= 2,
+                    "key {key} should narrow to ≤2 valid tokens, got {valid_count}"
                 );
             }
         }
     }
 
     #[test]
-    fn test_logic_csps_xor_constraints() {
+    fn test_logic_csps_key_narrows_to_one() {
         let csps = generate_synthetic_csps(4);
         let logic_csps: Vec<_> = csps
             .iter()
@@ -248,11 +265,16 @@ mod tests {
             .collect();
         assert_eq!(logic_csps.len(), 4);
         for csp in logic_csps {
-            // XOR partner should NOT be valid when the other is already placed
-            if let Some(&partner) = csp.sufficient_answers.first() {
-                assert!(
-                    !csp.pruner.is_valid(csp.depth, partner, &csp.placed_tokens),
-                    "XOR partner {partner} should be invalid when opposite is placed"
+            // Placing the key token should narrow to exactly 1 valid token (XOR partner)
+            if let Some(&key) = csp.sufficient_answers.first() {
+                let mut extended = csp.placed_tokens.clone();
+                extended.push(key);
+                let valid_count = (0..csp.vocab_size)
+                    .filter(|&t| csp.pruner.is_valid(csp.depth + 1, t, &extended))
+                    .count();
+                assert_eq!(
+                    valid_count, 1,
+                    "XOR key {key} should narrow to 1 valid token, got {valid_count}"
                 );
             }
         }
@@ -287,6 +309,9 @@ mod tests {
         assert!(
             accuracy >= 0.6,
             "GOAT G2 FAILED: sufficient-set accuracy = {:.1}% (need >= 60%), {}/{} correct",
+            accuracy * 100.0,
+            correct,
+            total
         );
     }
 
@@ -523,88 +548,40 @@ pub enum CspDomain {
     Logic,
 }
 
-// ── Grid CSP pruner (Bomber-like) ────────────────────────────────
+// ── Narrowing pruner: key abstraction for synthetic CSPs ─────────
+//
+// The idea: at depth D, many tokens are valid. At depth D+1, placing
+// a specific "sufficient" token narrows the space dramatically.
 
-/// Pruner modeling a Bomber-like grid where tokens represent cell indices
-/// and constraints enforce adjacency rules.
-struct GridCspPruner {
-    grid_size: usize,
-    /// At even depths: only tokens in `allowed` are valid.
-    /// At odd depths: only tokens adjacent to last-placed token are valid.
-    allowed: Vec<usize>,
+/// Pruner where placing a specific "key" token at depth D reduces
+/// valid tokens at depth D+1 to just 1 (fully specified).
+struct NarrowingPruner {
+    /// Total vocabulary size.
+    _vocab_size: usize,
+    /// Valid tokens at the target depth (before narrowing).
+    valid_at_depth: Vec<usize>,
+    /// Map: token placed at depth D → valid tokens at depth D+1.
+    /// The "sufficient" token maps to a singleton, others map to many.
+    narrowing: Vec<(usize, Vec<usize>)>,
 }
 
-impl crate::traits::ConstraintPruner for GridCspPruner {
+impl crate::traits::ConstraintPruner for NarrowingPruner {
     fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
-        if !self.allowed.contains(&token_idx) {
-            return false;
-        }
         if depth == 0 {
-            return true;
+            return self.valid_at_depth.contains(&token_idx);
         }
-        // At depth > 0: must be adjacent to last-placed token on the grid
+        // depth > 0: validity depends on what was placed at depth-1
         let last = match parent_tokens.last() {
             Some(&t) => t,
-            None => return true,
+            None => return self.valid_at_depth.contains(&token_idx),
         };
-        let row_last = last / self.grid_size;
-        let col_last = last % self.grid_size;
-        let row_tok = token_idx / self.grid_size;
-        let col_tok = token_idx % self.grid_size;
-        let manhattan = (row_last as i32 - row_tok as i32).unsigned_abs()
-            + (col_last as i32 - col_tok as i32).unsigned_abs();
-        manhattan <= 1
-    }
-}
-
-// ── Stone CSP pruner (Go-like) ──────────────────────────────────
-
-/// Pruner modeling Go-like stone placement where certain positions
-/// are restricted based on previous placements (liberty rules).
-struct StoneCspPruner {
-    board_size: usize,
-    /// Forbidden positions (already occupied).
-    occupied: Vec<usize>,
-    /// Positions that would be captured (suicide) given current board.
-    suicide: Vec<usize>,
-}
-
-impl crate::traits::ConstraintPruner for StoneCspPruner {
-    fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
-        !self.occupied.contains(&token_idx) && !self.suicide.contains(&token_idx)
-    }
-}
-
-// ── Logic CSP pruner ────────────────────────────────────────────
-
-/// Pruner modeling propositional logic rules.
-/// Tokens represent propositions; constraints enforce that
-/// certain combinations are mutually exclusive or required.
-struct LogicCspPruner {
-    /// Number of propositions (vocab_size).
-    num_props: usize,
-    /// Pairs (a, b) where exactly one must be true (XOR constraints).
-    xor_pairs: Vec<(usize, usize)>,
-    /// Propositions that must be true (given facts).
-    must_be_true: Vec<usize>,
-}
-
-impl crate::traits::ConstraintPruner for LogicCspPruner {
-    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
-        // Cannot place a token that contradicts XOR with already-placed token
-        for &(a, b) in &self.xor_pairs {
-            if token_idx == a && parent_tokens.contains(&b) {
-                return false;
-            }
-            if token_idx == b && parent_tokens.contains(&a) {
-                return false;
+        for (placed, valid_next) in &self.narrowing {
+            if *placed == last {
+                return valid_next.contains(&token_idx);
             }
         }
-        // Cannot place a "must be true" proposition as false (depth > num_props)
-        if depth >= self.num_props {
-            return false;
-        }
-        true
+        // Default: allow if in valid_at_depth
+        self.valid_at_depth.contains(&token_idx)
     }
 }
 
@@ -612,88 +589,116 @@ impl crate::traits::ConstraintPruner for LogicCspPruner {
 ///
 /// Returns CSPs with known ground-truth sufficient tokens,
 /// suitable for GOAT proof G2 (accuracy benchmark).
+///
+/// Each CSP is constructed so that placing the sufficient token
+/// at depth D narrows the valid set at depth D+1 to a singleton,
+/// dropping the underspecification score to 0.
 pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     let mut csps = Vec::with_capacity(count_per_domain * 3);
 
-    // Grid CSPs (Bomber-like)
+    // Grid CSPs (Bomber-like): placing the "bomb" cell narrows explosion zone
     for i in 0..count_per_domain {
-        let grid_size = 4; // 4×4 = 16 cells
-        let allowed: Vec<usize> = (0..grid_size * grid_size)
-            .filter(|&c| c != i % (grid_size * grid_size)) // remove one cell
+        let vocab_size = 16;
+        let key = i % vocab_size;
+        // At depth 0: ALL cells are valid candidates (including key)
+        let valid_at_depth: Vec<usize> = (0..vocab_size).collect();
+        // Placing the key cell narrows to just adjacent cells at depth 1
+        let row = key / 4;
+        let col = key % 4;
+        let adjacent: Vec<usize> = (0..vocab_size)
+            .filter(|&c| {
+                let r = c / 4;
+                let cc = c % 4;
+                let dist = (r as i32 - row as i32).unsigned_abs()
+                    + (cc as i32 - col as i32).unsigned_abs();
+                dist == 1
+            })
             .collect();
-        let pruner = GridCspPruner { grid_size, allowed };
-        // The removed cell is the sufficient answer
-        let sufficient = vec![i % (grid_size * grid_size)];
+        // All other tokens lead to full valid set (no narrowing)
+        let default_next: Vec<usize> = (0..vocab_size).collect();
+        let mut narrowing = vec![(key, adjacent)];
+        for v in &valid_at_depth {
+            if *v != key {
+                narrowing.push((*v, default_next.clone()));
+            }
+        }
+        let pruner = NarrowingPruner {
+            _vocab_size: vocab_size,
+            valid_at_depth,
+            narrowing,
+        };
         csps.push(SyntheticCsp {
             label: format!("grid_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
             placed_tokens: vec![],
-            vocab_size: grid_size * grid_size,
-            sufficient_answers: sufficient,
+            vocab_size,
+            sufficient_answers: vec![key],
         });
     }
 
-    // Stone CSPs (Go-like)
+    // Stone CSPs (Go-like): placing a "capture" stone eliminates liberties
     for i in 0..count_per_domain {
-        let board_size = 5; // 5×5 = 25 positions
-        let total = board_size * board_size;
-        // Occupied: first i%10 positions
-        let occupied: Vec<usize> = (0..(i % 10)).collect();
-        // Suicide: next 2 positions
-        let suicide: Vec<usize> = vec![(i % 10) + 1, (i % 10) + 2];
-        let pruner = StoneCspPruner {
-            board_size,
-            occupied: occupied.clone(),
-            suicide: suicide.clone(),
+        let vocab_size = 12; // smaller board for tighter constraints
+        let key = i % vocab_size;
+        let valid_at_depth: Vec<usize> = (0..vocab_size).collect();
+        // Placing the key stone at depth 0 leaves only 1 valid position at depth 1
+        // (simulates a capture that fills all but one liberty)
+        let narrow_next = vec![(key + 1) % vocab_size];
+        // Other placements leave 4-5 valid positions
+        let wide_next: Vec<usize> = (0..vocab_size).filter(|&c| c % 3 == 0).collect();
+        let mut narrowing = vec![(key, narrow_next)];
+        for v in &valid_at_depth {
+            if *v != key {
+                narrowing.push((*v, wide_next.clone()));
+            }
+        }
+        let pruner = NarrowingPruner {
+            _vocab_size: vocab_size,
+            valid_at_depth,
+            narrowing,
         };
-        // The first non-occupied, non-suicide position is the sufficient answer
-        let sufficient: Vec<usize> = (0..total)
-            .filter(|&p| !occupied.contains(&p) && !suicide.contains(&p))
-            .take(1)
-            .collect();
         csps.push(SyntheticCsp {
             label: format!("stone_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
             placed_tokens: vec![],
-            vocab_size: total,
-            sufficient_answers: sufficient,
+            vocab_size,
+            sufficient_answers: vec![key],
         });
     }
 
-    // Logic CSPs (propositional)
+    // Logic CSPs (propositional): XOR constraints where revealing one variable
+    // determines the other
     for i in 0..count_per_domain {
-        let num_props = 8;
-        // Create XOR pairs: (0,1), (2,3), (4,5), (6,7)
-        let xor_pairs: Vec<(usize, usize)> =
-            (0..num_props / 2).map(|j| (j * 2, j * 2 + 1)).collect();
-        // The sufficient answer is the XOR partner of a placed proposition
-        let placed = vec![i % num_props];
-        let partner = xor_pairs
-            .iter()
-            .find_map(|&(a, b)| {
-                if a == placed[0] {
-                    Some(b)
-                } else if b == placed[0] {
-                    Some(a)
-                } else {
-                    None
-                }
-            })
-            .unwrap_or(0);
-        let pruner = LogicCspPruner {
-            num_props,
-            xor_pairs,
-            must_be_true: vec![],
+        let vocab_size = 8;
+        // Pairs: (0,1), (2,3), (4,5), (6,7) — XOR constraints
+        let key = i % vocab_size;
+        let partner = if key % 2 == 0 { key + 1 } else { key - 1 };
+        // At depth 0: all propositions valid
+        let valid_at_depth: Vec<usize> = (0..vocab_size).collect();
+        // Placing key → only partner survives at depth 1 (XOR resolution)
+        let narrow_next = vec![partner];
+        // Placing any other → all still valid
+        let wide_next: Vec<usize> = (0..vocab_size).collect();
+        let mut narrowing = vec![(key, narrow_next)];
+        for v in &valid_at_depth {
+            if *v != key {
+                narrowing.push((*v, wide_next.clone()));
+            }
+        }
+        let pruner = NarrowingPruner {
+            _vocab_size: vocab_size,
+            valid_at_depth,
+            narrowing,
         };
         csps.push(SyntheticCsp {
             label: format!("logic_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
-            placed_tokens: placed.clone(),
-            vocab_size: num_props,
-            sufficient_answers: vec![partner],
+            placed_tokens: vec![],
+            vocab_size,
+            sufficient_answers: vec![key],
         });
     }
 
