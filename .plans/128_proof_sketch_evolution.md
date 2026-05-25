@@ -4,7 +4,7 @@
 **Depends on:** Plan 030 (Multi-armed bandit), Plan 080 (MaxSim late-interaction), Plan 040 (Bradley-Terry ranking)
 **Research:** 088 (AlphaProof Nexus — AI-Driven Formal Proof Search)
 **Paper:** [Advancing Mathematics Research with AI-Driven Formal Proof Search](https://arxiv.org/abs/2605.22763) (Tsoukalas et al., Google DeepMind, May 2026)
-**Status:** ✅ Complete (T1–T9, 46 GOAT proofs)
+**Status:** ✅ Complete (T1–T9, 46 GOAT unit tests pass) · Benchmark convergence criteria deferred (needs real arena runs)
 
 ---
 
@@ -211,10 +211,11 @@ katgpt-core/src/
 4. Target: cache hit rate ≥60% on structured domains (Bomber, Go)
 
 **GOAT proof checklist:**
-- [ ] Evolutionary converges ≥2× faster (rounds to 90% win rate)
-- [ ] Goal cache hit rate ≥60% (reduces verification calls 3×)
-- [ ] No regression on win rate ceiling (both reach same final quality)
-- [ ] Wall-clock overhead <10% (cache lookup is cheap)
+- [x] 46/46 unit + integration tests pass (cache dedup, population CRUD, Plackett-Luce, P-UCB, diversity, parallelism guard) ✅
+- [ ] **Benchmark**: Evolutionary converges ≥2× faster (rounds to 90% win rate) — needs real arena runs
+- [ ] **Benchmark**: Goal cache hit rate ≥60% (reduces verification calls 3×) — needs real arena runs
+- [ ] **Benchmark**: No regression on win rate ceiling (both reach same final quality) — needs real arena runs
+- [ ] **Benchmark**: Wall-clock overhead <10% (cache lookup is cheap) — needs real arena runs
 
 ### T9: Benchmark — Constraint Verification Reduction
 
