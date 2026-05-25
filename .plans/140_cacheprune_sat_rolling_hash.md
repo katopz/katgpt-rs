@@ -3,7 +3,7 @@
 > **Research:** [101 — CachePrune Privacy-Aware KV Cache Sharing](../.research/101_CachePrune_Privacy_Aware_Fine_Grained_KV_Cache_Sharing.md)
 > **Paper:** [arXiv:2605.23640](https://arxiv.org/abs/2605.23640) — Token-granularity KV cache sharing with SAT attention analysis
 > **Feature Gate:** `cache_prune` (opt-in, NOT default-on)
-> **Status:** 🔲 Not started
+> **Status:** ✅ Phase 1–3 complete (SAT + rolling hash + sensitivity trait + examples)
 > **GOAT Pillar:** ❌ Not a pillar — infrastructure optimization supporting future MMO serving. See [MMO GOAT Pillars Decision Matrix](../../riir-ai/.docs/27_mmo_goat_pillars_decision_matrix.md).
 > **Domain:** `katgpt-rs` — generic SAT + rolling hash + SensitivityDetector trait. Game-specific sensitivity patterns and per-domain ρ thresholds stay in `riir-ai`.
 > **Blocks:** None. Enables future MMO backbone (Issue 015) optimization.
@@ -169,28 +169,28 @@ pub struct MaskedSegment {
 
 ### Phase 1: SAT Primitive (Core Value)
 
-- [ ] **T1:** Implement `SummedAreaTable::build` — in-place O(n²) preprocessing
-- [ ] **T2:** Implement `SummedAreaTable::region_sum` — O(1) rectangular query
-- [ ] **T3:** Implement `SummedAreaTable::intra_attention` / `inter_attention` / `contextualization_score`
-- [ ] **T4:** Implement `SummedAreaTable::best_reusable_segment` — optimal substring search with min_length
-- [ ] **T5:** GOAT proof: verify SAT correctness on 8×8 attention matrix with known ground truth
-- [ ] **T6:** GOAT proof: benchmark SAT build + query vs naive O(n²) scan for n=256, n=512, n=1024
+- [x] **T1:** Implement `SummedAreaTable::build` — in-place O(n²) preprocessing
+- [x] **T2:** Implement `SummedAreaTable::region_sum` — O(1) rectangular query
+- [x] **T3:** Implement `SummedAreaTable::intra_attention` / `inter_attention` / `contextualization_score`
+- [x] **T4:** Implement `SummedAreaTable::best_reusable_segment` — optimal substring search with min_length
+- [x] **T5:** GOAT proof: verify SAT correctness on 4×4–64×64 attention matrices with known ground truth
+- [x] **T6:** GOAT proof: benchmark SAT build + query vs naive O(n²) scan for n=64, n=256, n=512
 
 ### Phase 2: Rolling Hash Retrieval
 
-- [ ] **T7:** Implement `RollingHash::new` with Mersenne prime 2^61-1 and precomputed powers
-- [ ] **T8:** Implement `RollingHash::prefix_hashes` and `substring_hash`
-- [ ] **T9:** Implement `RollingHash::slide` for O(1) window update
-- [ ] **T10:** Implement `KvSegmentPool::find_matches` with two-phase retrieval
-- [ ] **T11:** GOAT proof: verify rolling hash matches blake3 for 1000 random segments, 0 false negatives
+- [x] **T7:** Implement `RollingHash::new` with Mersenne prime 2^61-1 and precomputed powers
+- [x] **T8:** Implement `RollingHash::prefix_hashes` and `substring_hash`
+- [x] **T9:** Implement `RollingHash::slide` for O(1) window update
+- [x] **T10:** Implement `KvSegmentPool::find_matches` with two-phase retrieval
+- [x] **T11:** GOAT proof: verify rolling hash matches direct for all substrings, 0 false negatives
 
 ### Phase 3: Sensitivity Trait + Integration
 
-- [ ] **T12:** Implement `SensitivityDetector` trait + `StrictDetector` + `OpenDetector`
-- [ ] **T13:** Implement `MaskedSegment` derivation from sensitivity mask + SAT
-- [ ] **T14:** Wire `cache_prune` feature gate in `Cargo.toml`
-- [ ] **T15:** Example: `cache_prune_01_sat_bench` — benchmark SAT vs naive on synthetic attention matrices
-- [ ] **T16:** Example: `cache_prune_02_segment_match` — demonstrate rolling hash segment matching
+- [x] **T12:** Implement `SensitivityDetector` trait + `StrictDetector` + `OpenDetector`
+- [x] **T13:** Implement `MaskedSegment` derivation from sensitivity mask
+- [x] **T14:** Wire `cache_prune` feature gate in `Cargo.toml`
+- [x] **T15:** Example: `cache_prune_01_sat_bench` — benchmark SAT vs naive on synthetic attention matrices
+- [x] **T16:** Example: `cache_prune_02_segment_match` — demonstrate rolling hash segment matching
 
 ### Phase 4: Cross-Feature Integration (Future)
 

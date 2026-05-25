@@ -1,4 +1,6 @@
 pub mod benchmark;
+#[cfg(feature = "cache_prune")]
+pub mod cache_prune;
 #[cfg(feature = "dash_attn")]
 pub mod dash_attn;
 #[cfg(feature = "dllm")]
