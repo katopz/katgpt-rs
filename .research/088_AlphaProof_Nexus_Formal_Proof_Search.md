@@ -287,6 +287,84 @@ Add `ProofGoalCache` using `blake3` hashes of canonical goal representations, sh
 
 ---
 
+## Additional Insights (Supplementary Distillation)
+
+### Insight 4: EVOLVE-VALUE Parameter Co-Search
+
+The paper's optimization theory result is remarkable: the agent didn't just *verify* a fixed algorithm — it **discovered a novel parameter schedule** for anchored Gradient Descent-Ascent. The `EVOLVE-VALUE` markers allow the agent to search over parameter values simultaneously with the proof. This is not just proof search; it's **program synthesis with correctness guarantees**.
+
+**Our mapping:** Our `RandOpt` weight perturbation (Research 081, Plan 121) searches weight-space randomly. The EVOLVE-VALUE insight adds: **constrain the search to provably-correct regions**. For game arenas, this means searching over heuristic parameters (e.g., MCTS exploration constant, bandit ε) while simultaneously verifying that the resulting policy beats a threshold. The co-search pattern:
+
+```text
+EVOLVE-VALUE in our context:
+  1. Mark tunable parameters as evolvable (tree_budget, draft_lookahead, bandit ε)
+  2. Evolutionary search over parameter space
+  3. Each candidate evaluated by: run arena → verify win rate ≥ threshold
+  4. Parameter + arena result stored in SketchPopulation
+  5. P-UCB selects promising parameter configurations
+```
+
+**Priority:** Low — our current per-domain TOML config (riir-ai Plan 026) handles static parameter selection. Co-search would be a future upgrade for auto-tuning.
+
+### Insight 5: Misformalization Detection via Test Lemmas
+
+For the OEIS evaluation, the agent was required to prove **test lemmas** verifying the first few terms of each sequence against its formal definition before attempting the target conjecture. This caught autoformalization errors before wasting compute on wrong problem statements.
+
+**Our mapping:** Our validators (`ConstraintPruner`, `ScreeningPruner`) are trusted components. But they can have bugs. The test-lemma pattern applies: **before running a full arena benchmark, validate the validator against known game positions**. For example:
+
+```text
+Validator test lemmas for Bomber:
+  1. Known win position → assert validator returns true
+  2. Known loss position → assert validator returns false
+  3. Known illegal move → assert ConstraintPruner rejects
+  4. Edge case (simultaneous death) → assert correct handling
+```
+
+We partially do this in unit tests, but the paper's insight is to make test lemmas **part of the evolutionary loop** — if a sketch's test lemmas fail, it's discarded immediately without wasting rating compute.
+
+**Priority:** Low — our existing unit tests + GOAT proofs cover this. But adding `validate_validator()` calls at the start of each arena round would catch runtime bugs earlier.
+
+### Insight 6: Parallelism Requirement for Population Search
+
+The paper's ablation (Figure 10) reveals a critical finding: **running the full evolutionary method with only 1 generator underperforms the basic setup**. The population database only helps when multiple agents contribute asynchronously. With a single agent, sampling from the database is worse than just using the previous session's output.
+
+> "This suggests that sampling is not beneficial unless one has an asynchronous pipeline and uses the database as a way of coordinating agents."
+
+**Our mapping:** This means our `SketchPopulation` should only be activated when `rayon` parallelism is enabled and multiple DDTree branches are being explored simultaneously. For single-threaded decode (e.g., `NoScreeningPruner`), the population adds overhead without benefit.
+
+**Implication for Plan 128:** The feature gate should require both `proof_sketch_evolution` AND parallel execution. Single-threaded fallback should skip population lookup and use basic Q-value bandit.
+
+```text
+// Feature gate dependency
+proof_sketch_evolution = ["bandit_pruner"]  // needs bandit
+// Runtime guard:
+if rayon::current_num_threads() > 1 {
+    population.sample_p_ucb()  // use evolutionary
+} else {
+    bandit.select()            // fallback to basic UCB
+}
+```
+
+### Insight 7: Stochastic Diversity Injection
+
+The evolutionary controller injects diversity by **stochastically adding instructions** like:
+- "Decompose unsolved goals"
+- "Combine ideas from prior attempts"
+- "Try a completely new approach"
+
+This is cheap (no extra compute) and prevents the population from collapsing into a single lineage.
+
+**Our mapping:** Our `BanditPruner` explore arm currently picks random actions. The diversity injection pattern adds **structured exploration strategies**:
+- "Decompose" → split a complex move into sub-moves (applicable in Go)
+- "Combine" → merge two partial strategies (applicable in Bomber team tactics)
+- "New approach" → switch to a completely different opening/heuristic
+
+This maps to our `AbsorbCompress` heuristic promotion: instead of random perturbation, inject structured strategy hints.
+
+**Priority:** Low-Medium — our bandit already explores, but structured exploration hints could improve convergence on hard domains (Go).
+
+---
+
 ## Verdict
 
 **HIGH VALUE for architecture validation, MEDIUM VALUE for new code.**
@@ -296,9 +374,15 @@ The paper validates our existing model-based/modelless architecture:
 - **Evolutionary agent (model-based) = our `BanditPruner` path** — 2-5× better on hard problems
 - **The convergence finding is exactly our finding from Bomber/Go arenas**
 
-The three distillable concepts (Elo population, Plackett-Luce, goal cache) are genuine improvements but not urgent. The most actionable is the **Global Goal Cache** — it's a straightforward optimization that provides measurable speedup for DDTree.
+The three original distillable concepts (Elo population, Plackett-Luce, goal cache) are genuine improvements but not urgent. The most actionable is the **Global Goal Cache** — it's a straightforward optimization that provides measurable speedup for DDTree.
 
-**Recommended plan:** Plan 128 — implement `ProofGoalCache` and `SketchPopulation` behind `proof_sketch_evolution` feature gate, with GOAT proof measuring convergence speedup.
+**Supplementary insights** (4-7) are lower priority but worth noting:
+- **EVOLVE-VALUE co-search** — future auto-tuning of arena parameters
+- **Misformalization detection** — validator validation at arena start
+- **Parallelism requirement** — population search needs ≥2 threads
+- **Diversity injection** — structured exploration strategies for bandit
+
+**Recommended plan:** Plan 128 — implement `ProofGoalCache` and `SketchPopulation` behind `proof_sketch_evolution` feature gate, with GOAT proof measuring convergence speedup. Add runtime guard for parallelism requirement.
 
 ---
 
