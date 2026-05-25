@@ -52,3 +52,11 @@ pub use coda::{
 pub use attention::{tiled_attention_batched, tiled_attention_forward};
 
 pub use simd::SimdLevel;
+
+#[cfg(feature = "questbench")]
+pub mod questbench;
+#[cfg(feature = "questbench")]
+pub use questbench::{
+    CspDomain, MemoryTier, QuestBenchDecision, SyntheticCsp, UnderspecConfig, find_sufficient_set,
+    generate_synthetic_csps, tier_from_score, underspecification_score,
+};

@@ -335,3 +335,13 @@ pub use committee_boost::{
     CoverageDiagnostic, DebiasedComparator, FailureMode, OracleGapRecovery, committee_budget,
     coverage_diagnostic, debiased_compare, estimate_blind_spot_floor, fit_convergence,
 };
+
+#[cfg(feature = "mech_attribution")]
+pub mod mech_attribution;
+
+#[cfg(feature = "mech_attribution")]
+pub use mech_attribution::{
+    ActivationInfluenceProxy, CatalystPattern, CatalystTemplate, InfluenceConfig,
+    MechInfluenceScore, batch_influence_rank, catalyst_score, detect_catalyst_pattern,
+    extract_template, generate_synthetic,
+};
