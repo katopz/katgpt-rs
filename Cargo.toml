@@ -146,6 +146,16 @@ required-features = ["bandit"]
 name = "bandit_07_director"
 required-features = ["bandit"]
 
+# ── SpecHop ───────────────────────────────────────────────────
+
+[[example]]
+name = "spechop_01_pipeline"
+required-features = ["spechop"]
+
+[[example]]
+name = "spechop_02_cost_model"
+required-features = ["spechop"]
+
 # ── Heuristic Learning ────────────────────────────────────────
 
 [[example]]

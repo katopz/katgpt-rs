@@ -4,7 +4,7 @@
 > **Paper:** [arXiv:2605.21965](https://arxiv.org/pdf/2605.21965) — Continuous speculation for multi-hop retrieval agents
 > **Feature Gate:** `spechop` (**Opt-in**, requires GOAT proof before default-on promotion)
 > **Depends on:** Plan 030 (Bandit), speculative module (DDTree + verifier), Plan 112 (SR²AM configurator)
-> **Status:** ✅ Phase 1–7 Complete (T1–T32) · Phase 8+ planned
+> **Status:** ✅ Phase 1–7 + T40-T41 Complete (T1–T32, T40-T41) · Phase 8-9 remaining
 
 ## Summary
 
@@ -74,8 +74,8 @@ Our existing DDTree operates at **token granularity**. This plan extends specula
 
 ### Phase 9: Benchmarks & Documentation
 - [ ] **T39**: Create `.benchmarks/038_spechop_goat.md` — all 6 GOAT proof results with commands to reproduce
-- [ ] **T40**: Add `spechop_01_pipeline` example — demonstrate 4-hop continuous speculation with cache speculator
-- [ ] **T41**: Add `spechop_02_cost_model` example — show α/β/p → k* computation and RelLat prediction
+- [x] **T40**: Add `spechop_01_pipeline` example — demonstrate 4-hop continuous speculation with cache speculator
+- [x] **T41**: Add `spechop_02_cost_model` example — show α/β/p → k* computation and RelLat prediction
 - [ ] **T42**: Update `README.md` — add SpecHop section under speculative pipeline, document feature gate, link to benchmark results
 - [ ] **T43**: Update `.docs/` — add architecture diagram showing hop-level speculation flow
 - [ ] **T44**: Commit with message: `feat(spechop): continuous multi-hop speculation pipeline (Plan 131)`
