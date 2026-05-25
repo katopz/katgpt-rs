@@ -1,5 +1,7 @@
 # Plan 032: Heuristic Learning Infrastructure
 
+> **Status:** ✅ SUPERSEDED — All core tasks complete. Only remaining unchecked item (multi-agent HL) deferred to Issue 051. Proven by Plan 033 (HL thesis: +177 vs Greedy +131).
+
 **Branch:** `develop/feature/032_heuristic_learning_infrastructure`
 **Depends on:** Plan 030 (bandit feature in katgpt-rs), Plan 021 (ScreeningPruner)
 **Research:** `.research/014_Learning_Beyond_Gradients.md`

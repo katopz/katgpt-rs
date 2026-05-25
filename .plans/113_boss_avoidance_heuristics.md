@@ -1,5 +1,7 @@
 # 113 — Boss Avoidance Heuristics for AI/Hybrid Explorers
 
+> **Status:** ✅ SUPERSEDED — All boss-avoidance tasks complete. Only remaining unchecked item (Hybrid underperformance) is explicitly labeled "future work, separate from boss avoidance". Scope achieved.
+
 ## Tasks
 
 - [x] Plan design and threat model

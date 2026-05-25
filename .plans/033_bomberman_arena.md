@@ -1,5 +1,7 @@
 # Plan 033: Bomberman HL Arena — 4-Player Heuristic Learning Proof
 
+> **Status:** ✅ SUPERSEDED — HL thesis proven (+177 vs Greedy +131 vs Validator -30 vs Random -55). All arena tasks complete. Remaining unchecked items are explicitly out-of-scope, tracked in Issue 052.
+
 **Branch:** `develop/feature/033_bomberman_arena`
 **Depends on:** Plan 032 (HL Infrastructure), Plan 030 (Bandit), Plan 021 (ScreeningPruner)
 **Research:** `.research/014_Learning_Beyond_Gradients.md`

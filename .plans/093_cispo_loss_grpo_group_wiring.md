@@ -1,5 +1,7 @@
 # Plan 093: CISPO Loss Variant + GRPO Group Wiring
 
+> **Status:** ✅ COMPLETE — GOAT proved (5/6 criteria, 6th N/A: synthetic benchmark only). CISPO is now default loss variant. All 6 implementation tasks done. Remaining 2 unchecked GOAT items are N/A (require game arena, not applicable to synthetic benchmark path).
+>
 > **Parent**: Research 57 (ART Agent Reinforcement Trainer Distillation)
 > **Depends**: Plan 059 (G-Zero DPO/GRPO in `riir-gpu`) ✅
 > **Scope**: Add CISPO loss variant to `riir-gpu/src/loss_grpo.rs`, wire trajectory grouping into `GZeroLoop`

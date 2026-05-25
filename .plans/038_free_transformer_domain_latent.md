@@ -1,5 +1,7 @@
 # Plan 038: Free Transformer — Domain Latent Mid-Layer Injection
 
+> **Status:** ⏸️ STALE — Blocked on `DomainLatentAdamWStep` in riir-burner pipeline (Issue 053). No path forward without upstream burn infrastructure. Core idea validated in Research 018 but implementation requires training pipeline that doesn't exist.
+
 **Branch:** `feature/038_free_tf_domain_latent`
 **Depends on:** Plan 025 (Bidirectional Prefill + LoRA), Plan 023 (Expert Registry)
 **Research:** `.research/018_The_Free_Transformer_Latent_Injection.md`
