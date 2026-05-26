@@ -65,4 +65,6 @@ pub use questbench::{
 pub use types::{CacheStrategy, IterationMode, SubStepStrategy, TrainingFreeLoopConfig};
 
 #[cfg(feature = "plasma_path")]
+pub use simd::{simd_ternary_matmul_batch, simd_ternary_matvec, ternary_matvec_scalar};
+#[cfg(feature = "plasma_path")]
 pub use types::TernaryWeights;

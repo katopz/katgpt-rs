@@ -2687,3 +2687,238 @@ mod tests {
         }
     }
 }
+
+// ── Ternary SIMD Matvec (Plasma Path — Plan 148) ─────────────
+
+#[cfg(feature = "plasma_path")]
+use crate::types::TernaryWeights;
+
+/// Scalar reference ternary matvec: y[r] = row_scale[r] * Σ(col → sign(pos_bit, neg_bit) * x[col])
+#[cfg(feature = "plasma_path")]
+pub fn ternary_matvec_scalar(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
+    assert_eq!(x.len(), w.cols, "x vector length must match weight cols");
+    assert_eq!(y.len(), w.rows, "y vector length must match weight rows");
+    for r in 0..w.rows {
+        let mut sum = 0.0f32;
+        let row_base = r * w.blocks64;
+        for c in 0..w.cols {
+            let block = c >> 6;
+            let bit = c & 63;
+            let mask = 1u64 << bit;
+            let idx = row_base + block;
+            let pos = (w.pos_bits[idx] & mask) != 0;
+            let neg = (w.neg_bits[idx] & mask) != 0;
+            let sign = pos as i32 - neg as i32;
+            sum += sign as f32 * x[c];
+        }
+        y[r] = sum * w.row_scale[r];
+    }
+}
+
+#[cfg(all(feature = "plasma_path", target_arch = "aarch64"))]
+unsafe fn neon_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
+    // Safety: caller guarantees x.len()==w.cols and y.len()==w.rows
+    unsafe {
+        use core::arch::aarch64::*;
+        assert_eq!(x.len(), w.cols);
+        assert_eq!(y.len(), w.rows);
+
+        for r in 0..w.rows {
+            let row_base = r * w.blocks64;
+            let mut acc = vdupq_n_f32(0.0);
+
+            for b in 0..w.blocks64 {
+                let idx = row_base + b;
+                let pos_word = w.pos_bits[idx];
+                let neg_word = w.neg_bits[idx];
+
+                let base_col = b * 64;
+                let remaining = if base_col + 64 <= w.cols {
+                    64
+                } else {
+                    w.cols - base_col
+                };
+                let chunks = remaining / 4;
+
+                for chunk in 0..chunks {
+                    let col_off = base_col + chunk * 4;
+                    let bits4 = (pos_word >> (chunk * 4)) & 0xF;
+                    let neg_bits4 = (neg_word >> (chunk * 4)) & 0xF;
+
+                    // Load 4 x values
+                    let x_vals = vld1q_f32(x.as_ptr().add(col_off));
+
+                    // For each of the 4 lanes, test bit in bits4
+                    let lane_bits = [
+                        bits4 & 1,
+                        (bits4 >> 1) & 1,
+                        (bits4 >> 2) & 1,
+                        (bits4 >> 3) & 1,
+                    ];
+                    let neg_lane_bits = [
+                        neg_bits4 & 1,
+                        (neg_bits4 >> 1) & 1,
+                        (neg_bits4 >> 2) & 1,
+                        (neg_bits4 >> 3) & 1,
+                    ];
+
+                    // Build selection masks from lane bits
+                    let pos_mask_u32: [u32; 4] = [
+                        if lane_bits[0] != 0 { !0u32 } else { 0 },
+                        if lane_bits[1] != 0 { !0u32 } else { 0 },
+                        if lane_bits[2] != 0 { !0u32 } else { 0 },
+                        if lane_bits[3] != 0 { !0u32 } else { 0 },
+                    ];
+                    let neg_mask_u32: [u32; 4] = [
+                        if neg_lane_bits[0] != 0 { !0u32 } else { 0 },
+                        if neg_lane_bits[1] != 0 { !0u32 } else { 0 },
+                        if neg_lane_bits[2] != 0 { !0u32 } else { 0 },
+                        if neg_lane_bits[3] != 0 { !0u32 } else { 0 },
+                    ];
+
+                    let pos_sel = vreinterpretq_f32_u32(vld1q_u32(pos_mask_u32.as_ptr()));
+                    let neg_sel = vreinterpretq_f32_u32(vld1q_u32(neg_mask_u32.as_ptr()));
+
+                    // pos contribution: if bit set, add x[col], else 0
+                    let pos_val =
+                        vbslq_f32(vreinterpretq_u32_f32(pos_sel), x_vals, vdupq_n_f32(0.0));
+                    let neg_val =
+                        vbslq_f32(vreinterpretq_u32_f32(neg_sel), x_vals, vdupq_n_f32(0.0));
+
+                    acc = vaddq_f32(acc, vsubq_f32(pos_val, neg_val));
+                }
+
+                // Handle remaining elements (0-3) scalar
+                for i in (chunks * 4)..remaining {
+                    let c = base_col + i;
+                    let bit_mask = 1u64 << i;
+                    let pos = (pos_word & bit_mask) != 0;
+                    let neg = (neg_word & bit_mask) != 0;
+                    let sign = pos as u32 as f32 - neg as u32 as f32;
+                    let mut lanes = [0.0f32; 4];
+                    vst1q_f32(lanes.as_mut_ptr(), acc);
+                    lanes[0] += sign * x[c];
+                    acc = vld1q_f32(lanes.as_ptr());
+                }
+            }
+
+            // Horizontal sum
+            let mut lanes = [0.0f32; 4];
+            vst1q_f32(lanes.as_mut_ptr(), acc);
+            let sum = lanes[0] + lanes[1] + lanes[2] + lanes[3];
+            y[r] = sum * w.row_scale[r];
+        }
+    } // unsafe
+}
+
+#[cfg(all(feature = "plasma_path", target_arch = "x86_64"))]
+unsafe fn avx2_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
+    // Safety: caller guarantees x.len()==w.cols and y.len()==w.rows
+    unsafe {
+        use core::arch::x86_64::*;
+        assert_eq!(x.len(), w.cols);
+        assert_eq!(y.len(), w.rows);
+
+        for r in 0..w.rows {
+            let row_base = r * w.blocks64;
+            let mut acc = _mm256_setzero_ps();
+
+            for b in 0..w.blocks64 {
+                let idx = row_base + b;
+                let pos_word = w.pos_bits[idx];
+                let neg_word = w.neg_bits[idx];
+
+                let base_col = b * 64;
+                let remaining = if base_col + 64 <= w.cols {
+                    64
+                } else {
+                    w.cols - base_col
+                };
+                let chunks = remaining / 8;
+
+                for chunk in 0..chunks {
+                    let col_off = base_col + chunk * 8;
+
+                    // Test 8 bits at once
+                    let pos_byte = ((pos_word >> (chunk * 8)) & 0xFF) as u32;
+                    let neg_byte = ((neg_word >> (chunk * 8)) & 0xFF) as u32;
+
+                    // Broadcast bits to per-lane masks
+                    let lane_masks_pos = [
+                        if pos_byte & 1 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 2 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 4 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 8 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 16 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 32 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 64 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 128 != 0 { !0u32 } else { 0 },
+                    ];
+                    let lane_masks_neg = [
+                        if neg_byte & 1 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 2 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 4 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 8 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 16 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 32 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 64 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 128 != 0 { !0u32 } else { 0 },
+                    ];
+
+                    let x_vals = _mm256_loadu_ps(x.as_ptr().add(col_off));
+                    let pos_mask = _mm256_castsi256_ps(_mm256_loadu_si256(
+                        lane_masks_pos.as_ptr() as *const __m256i
+                    ));
+                    let neg_mask = _mm256_castsi256_ps(_mm256_loadu_si256(
+                        lane_masks_neg.as_ptr() as *const __m256i
+                    ));
+
+                    let pos_val = _mm256_and_ps(x_vals, pos_mask);
+                    let neg_val = _mm256_and_ps(x_vals, neg_mask);
+
+                    acc = _mm256_add_ps(acc, _mm256_sub_ps(pos_val, neg_val));
+                }
+
+                // Handle remaining elements (0-7) scalar
+                for i in (chunks * 8)..remaining {
+                    let c = base_col + i;
+                    let bit_mask = 1u64 << i;
+                    let pos = (pos_word & bit_mask) != 0;
+                    let neg = (neg_word & bit_mask) != 0;
+                    let sign = pos as u32 as f32 - neg as u32 as f32;
+                    let mut lanes = [0.0f32; 8];
+                    _mm256_storeu_ps(lanes.as_mut_ptr(), acc);
+                    lanes[0] += sign * x[c];
+                    acc = _mm256_loadu_ps(lanes.as_ptr());
+                }
+            }
+
+            y[r] = horizontal_sum_256(acc) * w.row_scale[r];
+        }
+    } // unsafe
+}
+
+/// SIMD-accelerated ternary matvec: y = W_ternary × x
+///
+/// Dispatches to NEON, AVX2, or scalar based on `simd_level()`.
+/// All paths produce bit-identical results to `ternary_matvec_scalar()`.
+#[cfg(feature = "plasma_path")]
+pub fn simd_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
+    match simd_level() {
+        #[cfg(target_arch = "aarch64")]
+        SimdLevel::Neon => unsafe { neon_ternary_matvec(w, x, y) },
+        #[cfg(target_arch = "x86_64")]
+        SimdLevel::Avx2 => unsafe { avx2_ternary_matvec(w, x, y) },
+        _ => ternary_matvec_scalar(w, x, y),
+    }
+}
+
+/// Batched ternary matmul: for each batch[i], compute y[i] = W × batch[i].
+#[cfg(feature = "plasma_path")]
+pub fn simd_ternary_matmul_batch(w: &TernaryWeights, x: &[f32], batch: usize, y: &mut [f32]) {
+    for b in 0..batch {
+        let x_off = b * w.cols;
+        let y_off = b * w.rows;
+        simd_ternary_matvec(w, &x[x_off..], &mut y[y_off..]);
+    }
+}

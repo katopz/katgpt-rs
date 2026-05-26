@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 half = "2"
 
 [features]
-default = ["sparse_mlp"]
+default = ["sparse_mlp", "plasma_path"]
 sparse_mlp = []
 domain_latent = []
 maxsim = []
