@@ -28,3 +28,4 @@ questbench = []  # QuestBench underspecification scoring for modelless architect
 tf_loop = ["lt2_looped"]  # Training-free loop wrapper — ODE-refined sub-stepping (Plan 136)
 plasma_path = []  # Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110)
 peira_distill = []  # PEIRA inter-view regressor alignment (Plan 153)
+dirichlet_energy = []  # Dirichlet Energy structural alignment diagnostic (Research 111, Plan 149)

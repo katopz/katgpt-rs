@@ -70,3 +70,15 @@ pub use types::{CacheStrategy, IterationMode, SubStepStrategy, TrainingFreeLoopC
 pub use simd::{simd_ternary_matmul_batch, simd_ternary_matvec, ternary_matvec_scalar};
 #[cfg(feature = "plasma_path")]
 pub use types::TernaryWeights;
+
+#[cfg(feature = "peira_distill")]
+pub mod peira;
+#[cfg(feature = "peira_distill")]
+pub use peira::{PeiraConfig, PeiraCovariance, peira_aux_loss};
+
+#[cfg(feature = "dirichlet_energy")]
+pub mod dirichlet;
+#[cfg(feature = "dirichlet_energy")]
+pub use dirichlet::{
+    consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
+};

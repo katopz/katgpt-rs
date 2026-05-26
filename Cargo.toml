@@ -33,7 +33,8 @@ tempfile = "3"
 
 [features]
 default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6, stability_metrics Plan 102 GOAT 13/13, mls_aggregate Plan 104 GOAT 6/6, gdn2_attention Plan 105 GOAT 14/14, dash_attn Plan 106 GOAT 9/9, dreamer Plan 107 GOAT 8/8, lt2_looped Plan 108 GOAT 8/8, dmax_spd Plan 109 GOAT 7/7, eqr_convergence Plan 119, subterranean Plan 110, sr2am_configurator Plan 112, data_gate Plan 111, plasma_path Plan 148 GOAT 5/5, parallel_probe Plan 133 26 unit tests, tf_loop Plan 136 GOAT 4/4)
-data_probe = []  # Data Probe Diagnostics — controlled information-theoretic validation (Plan 141)
+data_probe = ["katgpt-core/dirichlet_energy"]  # Data Probe Diagnostics — controlled information-theoretic validation (Plan 141)
+dirichlet_energy = ["katgpt-core/dirichlet_energy"]  # Dirichlet Energy structural alignment diagnostic (Research 111, Plan 149)
 ega_attn = []  # Energy-Gated Attention spectral salience gating (Plan 139)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
@@ -78,6 +79,7 @@ spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 07
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
 turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
 asymmetric_kv = ["turboquant"]  # Asymmetric K/V cache compression benchmarks (Plan 123, Research 081)
+shard_kv = ["spectral_quant", "turboquant"]  # ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard V path (Plan 147, Research 109)
 planar_quant = ["turboquant"]  # PlanarQuant 2D Givens rotation KV cache — O(d) vs TQ O(d²), 256 FMAs for d=128
 iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
 hybrid_oct_pq = ["planar_quant", "octopus"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
@@ -340,6 +342,10 @@ name = "core_04_prefill"
 [[example]]
 name = "core_05_maxsim"
 required-features = ["maxsim"]
+
+[[example]]
+name = "core_06_peira"
+required-features = ["peira_distill"]
 
 # ── Dungeon ────────────────────────────────────────────────────
 
