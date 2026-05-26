@@ -154,7 +154,12 @@ pub(crate) fn in_blast_zone(pos: GridPos, grid: &ArenaGrid, bombs: &[KnownBomb])
 }
 
 /// Check if position is in the blast zone of a single bomb (with wall blocking).
-fn is_in_single_blast(pos: GridPos, grid: &ArenaGrid, bomb_pos: (i32, i32), range: u32) -> bool {
+pub(crate) fn is_in_single_blast(
+    pos: GridPos,
+    grid: &ArenaGrid,
+    bomb_pos: (i32, i32),
+    range: u32,
+) -> bool {
     use super::Cell;
     let bx = bomb_pos.0;
     let by = bomb_pos.1;

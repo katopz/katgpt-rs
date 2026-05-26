@@ -9,15 +9,15 @@
 //! 2. **Retaliatory** — When opponent bomb blast threatens us, switch to HL attack tactics.
 //! 3. **Forgiving** — After `retaliation_duration` ticks, auto-reset to Nice.
 //! 4. **Clear** — Simple 2-state FSM; opponents can learn to cooperate.
-//! 5. **Generous** — 10% chance to forgive a provocation without retaliating.
+//! 5. **Generous** — 20% chance to forgive a provocation without retaliating.
 
 use std::any::Any;
 
 use fastrand::Rng;
 
 use super::players::{
-    BomberPlayer, count_escape_routes, in_blast_zone, intercept_score, is_safe_action, move_target,
-    predict_direction, score_action, trap_score,
+    BomberPlayer, count_escape_routes, in_blast_zone, intercept_score, is_in_single_blast,
+    is_safe_action, move_target, predict_direction, score_action, trap_score,
 };
 use super::{
     ArenaGrid, BOMB_FUSE_TICKS, BomberAction, Cell, DEFAULT_BLAST_RANGE, GameEvent, GridPos,
@@ -118,9 +118,9 @@ impl TftPlayer {
             known_powerups: Vec::new(),
             known_opponents: Vec::new(),
             mode: TftMode::Nice,
-            provocation_radius: 4,
-            retaliation_duration: 10,
-            forgiveness_chance: 0.10,
+            provocation_radius: 3,
+            retaliation_duration: 6,
+            forgiveness_chance: 0.20,
             last_dir: None,
             round_stats: TftRoundStats::default(),
         }
@@ -157,10 +157,11 @@ impl TftPlayer {
         &self.round_stats
     }
 
-    /// Check if provoked: we're actually in a blast zone AND an opponent is close.
+    /// Check if provoked: we're in a blast zone of a bomb that was likely placed
+    /// by a nearby opponent.
     ///
-    /// Conservative: only retaliates when genuinely threatened (in blast zone),
-    /// not just because bombs exist nearby. Uses wall-aware blast check.
+    /// Conservative: only retaliates when genuinely threatened by a bomb that's
+    /// near an opponent (implying the opponent placed it). Uses wall-aware blast check.
     fn is_provoked(
         pos: GridPos,
         grid: &ArenaGrid,
@@ -168,15 +169,17 @@ impl TftPlayer {
         opponents: &[KnownOpponent],
         radius: i32,
     ) -> bool {
-        // Must be in actual danger (wall-aware blast zone check)
-        if !in_blast_zone(pos, grid, bombs) {
-            return false;
-        }
-
-        // AND an opponent is close enough to be the aggressor
-        opponents
-            .iter()
-            .any(|(_, (ox, oy), _)| (pos.x - ox).abs() + (pos.y - oy).abs() <= radius)
+        // Must be in actual danger from a bomb that's likely placed by a nearby opponent.
+        // Check each bomb: is it threatening us AND near an opponent?
+        bombs.iter().any(|(bomb_pos, range, _)| {
+            if !is_in_single_blast(pos, grid, *bomb_pos, *range) {
+                return false;
+            }
+            // This bomb threatens us — is there an opponent near this bomb?
+            opponents.iter().any(|(_, (ox, oy), _)| {
+                (bomb_pos.0 - *ox).abs() + (bomb_pos.1 - *oy).abs() <= radius
+            })
+        })
     }
 
     /// Update known bomb list from events.
@@ -271,7 +274,7 @@ impl TftPlayer {
 
                 // Hunt: move toward opponent
                 if target_dist < current_dist {
-                    bonus += 1.5;
+                    bonus += 0.75;
                 }
 
                 // Intercept: move toward predicted position
@@ -281,7 +284,7 @@ impl TftPlayer {
                 if target_dist <= 3 {
                     let routes = count_escape_routes((target.x, target.y), grid);
                     if routes <= 1 {
-                        bonus += 1.0;
+                        bonus += 0.5;
                     }
                 }
             }
@@ -296,7 +299,7 @@ impl TftPlayer {
                         )
                     })
                     .count();
-                bonus += wall_count as f32 * 0.5;
+                bonus += wall_count as f32 * 0.25;
 
                 // Attack: trap scoring when opponent is nearby
                 bonus += trap_score((pos.x, pos.y), (ox, oy), grid, DEFAULT_BLAST_RANGE);
@@ -521,8 +524,8 @@ mod tests {
         assert_eq!(player.name(), "TFT");
         assert_eq!(player.emoji(), "🦊");
         assert_eq!(player.mode, TftMode::Nice);
-        assert_eq!(player.provocation_radius, 4);
-        assert_eq!(player.retaliation_duration, 10);
+        assert_eq!(player.provocation_radius, 3);
+        assert_eq!(player.retaliation_duration, 6);
     }
 
     #[test]
