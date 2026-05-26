@@ -192,11 +192,11 @@ pub struct MaskedSegment {
 - [x] **T15:** Example: `cache_prune_01_sat_bench` — benchmark SAT vs naive on synthetic attention matrices
 - [x] **T16:** Example: `cache_prune_02_segment_match` — demonstrate rolling hash segment matching
 
-### Phase 4: Cross-Feature Integration (Future)
+### Phase 4: Cross-Feature Integration
 
-- [ ] **T17:** Wire SAT into DashAttention for per-head sparsity analysis (requires `dash_attn`)
-- [ ] **T18:** Wire SAT into RTPurbo for retrieval head identification (requires `rt_turbo`)
-- [ ] **T19:** Wire rolling hash into SpecHop for sub-prompt matching (requires `spechop`)
+- [x] **T17:** Wire SAT into DashAttention for per-head sparsity analysis (requires `dash_attn`)
+- [x] **T18:** Wire SAT into RTPurbo for retrieval head identification (requires `rt_turbo`)
+- [x] **T19:** Wire rolling hash into SpecHop for sub-prompt matching (requires `spechop`)
 
 ---
 

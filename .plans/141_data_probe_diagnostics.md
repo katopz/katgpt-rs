@@ -1,7 +1,7 @@
 # Plan 141: Data Probe Diagnostics — Typical-Set Regime Classification
 
 **Research:** 102 (Data Probes — Synthetic Sequence Diagnostics)
-**Status:** 🔬 Research → Plan
+**Status:** ✅ COMPLETE (D1-D4 + GOAT G1-G6 done)
 **Feature Gate:** `data_probe` (off by default, opt-in GOAT proof)
 **Depends On:** None (pure modelless, no bandit dependency)
 **Domain:** katgpt-rs (modelless core)

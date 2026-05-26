@@ -139,7 +139,7 @@ This is the **generic** (MIT) implementation. Game-specific delay configs (per-g
   - Show α escalation over time
   - Show baseline regret stays bounded
   - Compare UCB1 vs SafePhased vs ε-greedy
-- [ ] T19: Benchmark `SafePhased` arm selection vs UCB1
+- [x] T19: Benchmark `SafePhased` arm selection vs UCB1
   - Micro-bench: single arm selection with SafePhased state
   - Assert: ≤ 20% overhead vs UCB1 (extra random draw + alpha check)
 
