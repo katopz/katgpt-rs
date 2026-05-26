@@ -38,6 +38,7 @@ fn effective_loop_count(mode: &LoopMode) -> usize {
     match mode {
         LoopMode::WeightShared { loop_count } => *loop_count,
         LoopMode::None => 1,
+        LoopMode::TrainingFree => 1, // training-free loop uses sub-stepping, not counted here
     }
 }
 
