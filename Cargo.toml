@@ -33,6 +33,7 @@ tempfile = "3"
 
 [features]
 default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]  # Production best perf + accuracy (Plan 051, bt_rank Plan 079, spectral_quant Plan 063, hybrid_oct_pq Plan 101 GOAT best MSE + 64x fewer FMAs vs OCT, elf_sde Plan 079, cna_steering Plan 087 GOAT, deep_manifold Plan 085 GOAT 6/6, federation Plan 085 GOAT 6/6, tes_loop Plan 086 GOAT 8/8, lattice_deduction Plan 088 GOAT 7/7, delta_routing Plan 097 GOAT 6/6, stability_metrics Plan 102 GOAT 13/13, mls_aggregate Plan 104 GOAT 6/6, gdn2_attention Plan 105 GOAT 14/14, dash_attn Plan 106 GOAT 9/9, dreamer Plan 107 GOAT 8/8, lt2_looped Plan 108 GOAT 8/8, dmax_spd Plan 109 GOAT 7/7, eqr_convergence Plan 119, subterranean Plan 110, sr2am_configurator Plan 112, data_gate Plan 111)
+data_probe = []  # Data Probe Diagnostics — controlled information-theoretic validation (Plan 141)
 ega_attn = []  # Energy-Gated Attention spectral salience gating (Plan 139)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
@@ -109,6 +110,10 @@ mech_attribution = ["cna_steering", "ropd_rubric", "bandit"]  # Mechanistic Data
 safe_bandit = ["bandit"]  # PrudentBanker Safe-Phased Bandit — delay-calibrated safe exploration (Plan 137)
 stiff_anomaly = []  # Stiff/Soft Subspace Anomaly Gate — generic eigenvalue decomposition anomaly detection (Plan 138)
 cache_prune = []  # CachePrune SAT + rolling hash + sensitivity masking (Plan 140, Research 101)
+state_source = ["bandit"]  # State-Source Modelless Distillation — state-visitation tracking + P-UCB + retention (Plan 142, Research 103)
+nexus_elo = ["state_source", "proof_sketch_evolution"]  # Nexus Elo — Plackett-Luce + P-UCB + goal cache for DDTree/SR²AM (Plan 143, Research 104)
+skill_opt = []  # SkillOpt text-space skill optimization — generic framework for game rule optimization (Plan 144, Research 105)
+proof_cert = []  # Hierarchical GOAT Proof Certificates — formal verification methodology (Plan 145, Research 106)
 tf_loop = ["katgpt-core/tf_loop", "lt2_looped"]  # Training-free loop wrapper — ODE-refined sub-stepping (Plan 136)
 # ── Percepta (transformer-vm RIIR, Plan 064) ──────────────────
 percepta = ["ordered-float"]  # CHT hull cache: upper+lower, HullMeta, tie-break, cumsum (TG-A)

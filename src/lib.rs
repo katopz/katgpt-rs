@@ -3,6 +3,8 @@ pub mod benchmark;
 pub mod cache_prune;
 #[cfg(feature = "dash_attn")]
 pub mod dash_attn;
+#[cfg(feature = "data_probe")]
+pub mod data_probe;
 #[cfg(feature = "dllm")]
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::too_many_lines)]
@@ -26,12 +28,16 @@ pub mod percepta;
 #[cfg(feature = "planar_quant")]
 pub mod planar_quant;
 pub mod plot;
+#[cfg(feature = "proof_cert")]
+pub mod proof_cert;
 pub mod pruners;
 #[cfg(feature = "maxsim")]
 pub mod rerank;
 #[cfg(feature = "rt_turbo")]
 pub mod rt_turbo;
 pub mod simd;
+#[cfg(feature = "skill_opt")]
+pub mod skill_opt;
 #[cfg(feature = "sp_kv")]
 pub mod sp_kv;
 #[cfg(feature = "spechop")]
