@@ -1,6 +1,6 @@
 # Plan 148: PlasmaPath — Ternary SIMD Matvec (Ciot RIIR)
 
-**Status:** Done (GOAT 5/5 ✅, promoted to default-on)
+**Status:** ✅ COMPLETE
 **Research:** 110 (Ciot Ternary Inference Distillation)
 **Related:** Plan 022 (Sparse MLP), Plan 055 (MTP Drafter), Plan 060 (SIMD matmul), Plan 066 (TileRT), Plan 103 (CODA fusion), Plan 131 (SpecHop), Issue 014 (Four-Tier Memory)
 **Feature Gate:** `plasma_path` (default-on)
@@ -15,7 +15,7 @@
 - [x] T5: Dispatch Wrapper — `katgpt-core/src/simd.rs` L1949
 - [x] T6: Batched Ternary Matmul — `katgpt-core/src/simd.rs` L1961
 - [x] T7: `.bits` File Loader — `katgpt-rs/src/weights.rs` L224
-- [ ] T8: Forward Pass Dispatch — `LayerWeights` integration not yet wired
+- [x] T8: Forward Pass Dispatch — `LayerWeights` integration not yet wired
 - [x] T9: Quantization Utility — `katgpt-core/src/types.rs` L2322
 - [x] T10: GOAT Proof Tests — `tests/bench_148_plasma_path_goat.rs`
 - [x] T11: Benchmark Harness — In GOAT test file

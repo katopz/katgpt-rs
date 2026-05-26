@@ -1,6 +1,7 @@
 # Plan 151: NITP Representation Geometry Diagnostics — Modelless
 
 **Date:** 2026-05-26
+**Status:** ✅ COMPLETE
 **Research:** 113 (NITP — Next Implicit Token Prediction)
 **Classification:** 🔧 **Utility — no feature gate needed**
 **Related:** Plan 061 (entropy anomaly), Plan 102 (TileRT), Plan 055 (MTP drafter)
@@ -10,11 +11,11 @@
 
 ## Task Index
 
-- [ ] T1: `effective_rank()` — Representation Dimensionality Metric
-- [ ] T2: `avg_cosine_similarity()` — Anisotropy Metric
-- [ ] T3: `representation_geometry_report()` — Combined Diagnostic
-- [ ] T4: GOAT Proof — Baseline Measurement
-- [ ] T5: Integration with `DataProbe` (Plan 141)
+- [x] T1: `effective_rank()` — Representation Dimensionality Metric
+- [x] T2: `avg_cosine_similarity()` — Anisotropy Metric
+- [x] T3: `representation_geometry_report()` — Combined Diagnostic
+- [x] T4: GOAT Proof — Baseline Measurement
+- [x] T5: Integration with `DataProbe` (Plan 141)
 
 ## Why This Plan Exists
 
@@ -26,7 +27,7 @@ This is the modelless first step: measure the problem before committing to the f
 
 ## Tasks
 
-- [ ] ### T1: `effective_rank()` — Representation Dimensionality Metric
+- [x] ### T1: `effective_rank()` — Representation Dimensionality Metric
 
 ```rust
 /// Compute the effective rank of a set of hidden state vectors.
@@ -43,7 +44,7 @@ pub fn effective_rank(hidden_states: &[Vec<f32>]) -> f32
 - Reuse: eigenvalue decomposition from `entropy_anomaly_detection` (Plan 061)
 - Location: `src/data_probe/` (already has diagnostics infrastructure)
 
-- [ ] ### T2: `avg_cosine_similarity()` — Anisotropy Metric
+- [x] ### T2: `avg_cosine_similarity()` — Anisotropy Metric
 
 ```rust
 /// Compute average pairwise cosine similarity between hidden states.
@@ -55,7 +56,7 @@ pub fn avg_cosine_similarity(hidden_states: &[Vec<f32>]) -> f32
 - Process: normalize → pairwise dot products → average
 - Location: `src/data_probe/`
 
-- [ ] ### T3: `representation_geometry_report()` — Combined Diagnostic
+- [x] ### T3: `representation_geometry_report()` — Combined Diagnostic
 
 ```rust
 /// Combined representation geometry report for a set of hidden states.
@@ -73,7 +74,7 @@ pub fn representation_geometry_report(
 ) -> GeometryReport
 ```
 
-- [ ] ### T4: GOAT Proof — Baseline Measurement
+- [x] ### T4: GOAT Proof — Baseline Measurement
 
 Run `effective_rank()` and `avg_cosine_similarity()` on:
 1. Random weights (before any training) — establish isotropic baseline
@@ -82,7 +83,7 @@ Run `effective_rank()` and `avg_cosine_similarity()` on:
 
 **GOAT threshold:** Effective rank > 0.5 * hidden_dim AND avg_cosine_sim < 0.7 for healthy representations.
 
-- [ ] ### T5: Integration with `DataProbe` (Plan 141)
+- [x] ### T5: Integration with `DataProbe` (Plan 141)
 
 Wire geometry metrics into the existing `DataProbe` infrastructure so they can be collected during benchmark runs without separate tooling.
 

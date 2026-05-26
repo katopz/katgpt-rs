@@ -1,6 +1,7 @@
 # Plan 144: SkillOpt — Text-Space Skill Optimization for Game Rules
 
 **Research:** 105 (SkillOpt Text-Space Skill Optimization)
+**Status:** ✅ COMPLETE
 **Related Plans:** 034 (Bomber WASM Validator), 092 (Freeze/Thaw), 124 (Event Log), 076 (Arena Integration)
 **Domain:** katgpt-rs (generic framework, MIT) + riir-ai (game artifacts, private)
 **Feature Gate:** `skill_opt` (katgpt-rs)
@@ -39,7 +40,7 @@ fn edit_budget_at_step()                Game-specific prompt templates
 
 ## Tasks
 
-- [ ] **T1: Generic Types & Traits (katgpt-rs, `skill_opt` feature)**
+- [x] **T1: Generic Types & Traits (katgpt-rs, `skill_opt` feature)**
 
 **Location:** `src/skill_opt/` (new module)
 
@@ -155,15 +156,15 @@ skill_opt = []
 ```
 
 **GOAT Proof (T1):**
-- [ ] `apply_edits()` correctly applies Append, InsertAfter, Replace, Delete
-- [ ] `EditBudgetSchedule::Cosine` decays from start to floor
-- [ ] `ValidationGate` correctly rejects ties and negative deltas
-- [ ] Module compiles with `--features skill_opt`
-- [ ] No compile impact without feature flag
+- [x] `apply_edits()` correctly applies Append, InsertAfter, Replace, Delete
+- [x] `EditBudgetSchedule::Cosine` decays from start to floor
+- [x] `ValidationGate` correctly rejects ties and negative deltas
+- [x] Module compiles with `--features skill_opt`
+- [x] No compile impact without feature flag
 
 ---
 
-- [ ] **T2: Edit Application Engine (katgpt-rs, `skill_opt` feature)**
+- [x] **T2: Edit Application Engine (katgpt-rs, `skill_opt` feature)**
 
 **Location:** `src/skill_opt/apply.rs`
 
@@ -188,18 +189,18 @@ pub fn apply_edits(skill: &str, edits: &[SkillEdit], budget: usize) -> ApplyResu
 **Protected section handling:** Any text between `<!-- SLOW_UPDATE_START -->` and `<!-- SLOW_UPDATE_END -->` markers is read-only for step-level edits.
 
 **GOAT Proof (T2):**
-- [ ] Append adds to end of document
-- [ ] InsertAfter finds target text and inserts after it
-- [ ] Replace finds target text and replaces with new content
-- [ ] Delete removes target text
-- [ ] Budget clipping works (applies top-N by support_count)
-- [ ] Protected sections are never modified
-- [ ] Non-existent targets are skipped gracefully
-- [ ] Fuzz test: random edits on random documents don't panic
+- [x] Append adds to end of document
+- [x] InsertAfter finds target text and inserts after it
+- [x] Replace finds target text and replaces with new content
+- [x] Delete removes target text
+- [x] Budget clipping works (applies top-N by support_count)
+- [x] Protected sections are never modified
+- [x] Non-existent targets are skipped gracefully
+- [x] Fuzz test: random edits on random documents don't panic
 
 ---
 
-- [ ] **T3: Rejected-Edit Buffer (katgpt-rs, `skill_opt` feature)**
+- [x] **T3: Rejected-Edit Buffer (katgpt-rs, `skill_opt` feature)**
 
 **Location:** `src/skill_opt/buffer.rs`
 
@@ -220,14 +221,14 @@ impl RejectedEditBuffer {
 ```
 
 **GOAT Proof (T3):**
-- [ ] Buffer stores rejected edits with failure patterns
-- [ ] `max_size` bounds memory usage (FIFO eviction)
-- [ ] JSONL round-trip is lossless
-- [ ] `clear()` resets at epoch boundary
+- [x] Buffer stores rejected edits with failure patterns
+- [x] `max_size` bounds memory usage (FIFO eviction)
+- [x] JSONL round-trip is lossless
+- [x] `clear()` resets at epoch boundary
 
 ---
 
-- [ ] **T4: Bomber Skill Optimizer (riir-ai, private) — SUPER GOAT 🔒**
+- [x] **T4: Bomber Skill Optimizer (riir-ai, private) — SUPER GOAT 🔒**
 
 **Location:** `crates/riir-games/src/bomber/skill_opt.rs` (new)
 
@@ -290,11 +291,11 @@ test_score = run_arena(bomber_ai, best_rules, seed_test)
 ```
 
 **GOAT Proof (T4) — the Super GOAT:**
-- [ ] Optimized rules beat hand-tuned rules in Bomber arena (≥1000 games)
-- [ ] Validation gate prevents regression (no accepted edit hurts held-out score)
-- [ ] Edit economy: <10 accepted edits achieve measurable improvement
-- [ ] Cross-seed generalization: rules optimized on train seeds improve test seeds
-- [ ] (Stretch) Cross-game transfer: Bomber-optimized patterns help Go
+- [x] Optimized rules beat hand-tuned rules in Bomber arena (≥1000 games)
+- [x] Validation gate prevents regression (no accepted edit hurts held-out score)
+- [x] Edit economy: <10 accepted edits achieve measurable improvement
+- [x] Cross-seed generalization: rules optimized on train seeds improve test seeds
+- [x] (Stretch) Cross-game transfer: Bomber-optimized patterns help Go
 
 **Benchmark targets:**
 - Training: 400 games (train seeds), 100 games (val seeds)
@@ -304,7 +305,7 @@ test_score = run_arena(bomber_ai, best_rules, seed_test)
 
 ---
 
-- [ ] **T5: Slow/Meta Update Infrastructure (riir-ai, private) 🔒**
+- [x] **T5: Slow/Meta Update Infrastructure (riir-ai, private) 🔒**
 
 **Location:** `crates/riir-games/src/skill_opt/` (new)
 
@@ -335,13 +336,13 @@ fn compute_epoch_comparison(
 ```
 
 **GOAT Proof (T5):**
-- [ ] Slow update correctly identifies regressions vs improvements
-- [ ] Protected region is preserved across step-level edits
-- [ ] Meta skill guidance improves future edit proposals (ablation: with vs without)
+- [x] Slow update correctly identifies regressions vs improvements
+- [x] Protected region is preserved across step-level edits
+- [x] Meta skill guidance improves future edit proposals (ablation: with vs without)
 
 ---
 
-- [ ] **T6: Skill Optimization Binary (riir-ai, private) 🔒**
+- [x] **T6: Skill Optimization Binary (riir-ai, private) 🔒**
 
 **Location:** `crates/riir-games/examples/bomber_skill_opt.rs`
 
@@ -375,10 +376,10 @@ outputs/bomber_skill_v1/
 ```
 
 **GOAT Proof (T6):**
-- [ ] Binary runs end-to-end without errors
-- [ ] Output structure matches spec
-- [ ] Can resume from interrupted run (checkpoint)
-- [ ] `best_skill.md` is a valid Bomber validator config
+- [x] Binary runs end-to-end without errors
+- [x] Output structure matches spec
+- [x] Can resume from interrupted run (checkpoint)
+- [x] `best_skill.md` is a valid Bomber validator config
 
 ---
 

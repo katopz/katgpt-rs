@@ -1,6 +1,7 @@
 # Plan 149: Dirichlet Energy Structural Alignment Diagnostic
 
 **Date:** 2026-05-26
+**Status:** ✅ COMPLETE
 **Research:** 111 (Emergent Analogical Reasoning in Transformers)
 **Related:** Research 051 (Deep Manifold), Research 039 (SpectralQuant), Plan 065 (AutoGo), Plan 104 (MLS), `27_mmo_goat_pillars_decision_matrix.md` (Pillar 1)
 **Feature Gate:** `dirichlet_energy` (opt-in, katgpt-rs open)
@@ -9,10 +10,10 @@
 
 ## Task Index
 
-- [ ] T1: `dirichlet_energy()` function — SIMD Dirichlet Energy computation
-- [ ] T2: Adjacency construction helpers — functor + game state adjacency
-- [ ] T3: Dirichlet Energy probe for KV cache — katgpt-rs `data_probe/`
-- [ ] T4: Generic integration test — synthetic structural alignment
+- [x] T1: `dirichlet_energy()` function — SIMD Dirichlet Energy computation
+- [x] T2: Adjacency construction helpers — functor + game state adjacency
+- [x] T3: Dirichlet Energy probe for KV cache — katgpt-rs `data_probe/`
+- [x] T4: Generic integration test — synthetic structural alignment
 
 ## Goal
 

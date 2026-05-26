@@ -1,7 +1,7 @@
 # Plan 142: State-Source Modelless Distillation
 
 **Research:** 103 (State Distribution View of Post-Training)
-**Status:** 🔬 Research → Plan
+**Status:** ✅ COMPLETE
 **Feature Gate:** `state_source` (off by default, opt-in GOAT proof)
 **Depends On:** `bandit`
 **Domain:** katgpt-rs (modelless core)
@@ -211,14 +211,14 @@ This plan directly supports the Decision Matrix's "heads you win, tails you don'
 
 | # | Task | Scope | Est. |
 |---|------|-------|------|
-- [ ] **T1:** Create `state_source/` module structure (Code, 0.5d)
-- [ ] **T2:** Implement `StateVisitationTracker` (Code, 0.5d)
-- [ ] **T3:** Implement `ValidatorContinuationScorer<V>` (Code, 1d)
-- [ ] **T4:** Implement `RetentionMetric` (Code, 0.5d)
-- [ ] **T5:** Integrate tracker into `BanditPruner` (Code, 0.5d)
-- [ ] **T6:** GOAT proof test (7 targets) (Test, 0.5d)
-- [ ] **T7:** Benchmark: bomber 1000 games with/without (Bench, 0.5d)
-- [ ] **T8:** Update README + feature gate docs (Docs, 0.5d)
+- [x] **T1:** Create `state_source/` module structure (Code, 0.5d)
+- [x] **T2:** Implement `StateVisitationTracker` (Code, 0.5d)
+- [x] **T3:** Implement `ValidatorContinuationScorer<V>` (Code, 1d)
+- [x] **T4:** Implement `RetentionMetric` (Code, 0.5d)
+- [x] **T5:** Integrate tracker into `BanditPruner` (Code, 0.5d)
+- [x] **T6:** GOAT proof test (7 targets) (Test, 0.5d)
+- [x] **T7:** Benchmark: bomber 1000 games with/without (Bench, 0.5d)
+- [x] **T8:** Update README + feature gate docs (Docs, 0.5d)
 
 **Total: ~4 days**
 

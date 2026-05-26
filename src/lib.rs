@@ -22,6 +22,8 @@ pub mod hla;
 pub mod hybrid_oct_pq;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
+#[cfg(feature = "newton_schulz")]
+pub mod newton_schulz;
 #[cfg(feature = "octopus")]
 pub mod octopus;
 pub mod percepta;
@@ -33,6 +35,8 @@ pub mod proof_cert;
 pub mod pruners;
 #[cfg(feature = "maxsim")]
 pub mod rerank;
+#[cfg(feature = "river_valley")]
+pub mod river_valley;
 #[cfg(feature = "rt_turbo")]
 pub mod rt_turbo;
 pub mod simd;

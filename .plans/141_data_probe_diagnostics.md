@@ -45,7 +45,7 @@ markov.rs ──→ nll.rs ──→ typical_set.rs
 
 ## Distillation Tasks
 
-- [ ] **D1: Markov Chain Probe Generator (`markov.rs`)**
+- [x] **D1: Markov Chain Probe Generator (`markov.rs`)**
 
 Generate transition matrices from Dirichlet distribution, compute entropy rate, select by target entropy.
 
@@ -80,7 +80,7 @@ pub fn sample_sequence(chain: &MarkovChain, n: usize, rng: &mut impl Rng) -> Vec
 
 **GOAT test:** Generated chain's empirical entropy (measured from 10K sampled sequences) is within 5% of computed `entropy_rate`.
 
-- [ ] **D2: NLL Computation (`nll.rs`)**
+- [x] **D2: NLL Computation (`nll.rs`)**
 
 Compute negative log-likelihood of a sequence against the known Markov chain distribution.
 
@@ -94,7 +94,7 @@ pub fn nll_profile(chain: &MarkovChain, sequence: &[usize]) -> Vec<f32>;
 
 **GOAT test:** NLL of 10K sequences from `sample_sequence` converges to `chain.entropy_rate` within ε=0.1.
 
-- [ ] **D3: Typical-Set Regime Classifier (`typical_set.rs`)**
+- [x] **D3: Typical-Set Regime Classifier (`typical_set.rs`)**
 
 Three-way classification based on NLL relative to entropy rate.
 
@@ -137,7 +137,7 @@ pub struct RegimeDistribution {
 2. Sampling with T≈1 from same chain → Typical regime > 60%.
 3. Random uniform sampling → Uncertain regime > 80%.
 
-- [ ] **D4: Claim Card Infrastructure (`claim.rs`)**
+- [x] **D4: Claim Card Infrastructure (`claim.rs`)**
 
 Structured claim tracking for formal C1–C4 validation.
 

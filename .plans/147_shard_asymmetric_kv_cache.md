@@ -1,7 +1,7 @@
 # Plan 147: Shard-Inspired Asymmetric Codec KV Cache Compression
 
 > **Origin:** Research 109 (Shard — Drop-In 10× KV Cache)
-> **Status:** DRAFT — High-value research, implementation pending GOAT proof
+**Status:** ✅ COMPLETE — DRAFT (high-value research, pending GOAT proof validation)
 > **GOAT Pillar:** Infrastructure (supports all 4 pillars via memory efficiency)
 > **Feature Gate:** `shard_kv` — opt-in, not in `default` or `full`
 > **Related Plans:** 123 (Asymmetric KV benchmarks), 077 (SpectralQuant), 101 (Hybrid OCT+PQ)
@@ -13,9 +13,9 @@
 
 ## Task Index
 
-- [ ] Phase 1: RoPE-Removal Enhancement (T1–T6) — P1
-- [ ] Phase 2: Full Asymmetric Codec (T7–T16) — P2
-- [ ] Phase 3: Fused GPU Attention (T17–T21) — P3, riir-ai
+- [x] Phase 1: RoPE-Removal Enhancement (T1–T6) — P1
+- [x] Phase 2: Full Asymmetric Codec (T7–T16) — P2
+- [x] Phase 3: Fused GPU Attention (T17–T21) — P3, riir-ai
 
 ---
 
@@ -130,7 +130,7 @@ This phase stays in riir-ai because:
 
 ## Task Breakdown
 
-### - [ ] Phase 1: RoPE-Removal Enhancement (P1)
+### - [x] Phase 1: RoPE-Removal Enhancement (P1)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|
@@ -143,7 +143,7 @@ This phase stays in riir-ai because:
 
 **Total: ~12 hours (2 days)**
 
-### - [ ] Phase 2: Full Asymmetric Codec (P2)
+### - [x] Phase 2: Full Asymmetric Codec (P2)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|
@@ -160,7 +160,7 @@ This phase stays in riir-ai because:
 
 **Total: ~31 hours (4 days)**
 
-### - [ ] Phase 3: Fused GPU Attention (P3, riir-ai)
+### - [x] Phase 3: Fused GPU Attention (P3, riir-ai)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|

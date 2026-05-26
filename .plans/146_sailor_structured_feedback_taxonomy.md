@@ -1,7 +1,7 @@
 # Plan 146: Sailor-Inspired Structured Feedback Taxonomy for SR²AM
 
 > **Origin:** Research 108 (Sailor — Static Analysis + LLM + SE)
-> **Status:** LOW PRIORITY — Architectural validation paper, no new primitives needed
+**Status:** ✅ COMPLETE — LOW PRIORITY (architectural validation, no new primitives needed)
 > **GOAT Pillar:** Pillar 2 (WASM Validators) — external academic validation
 > **Feature Gate:** None — enhancement to existing `sr2am_configurator` feature
 > **Related Plans:** 112 (SR²AM), 111 (Data Gate), 137 (PrudentBanker)
@@ -13,8 +13,8 @@
 
 ## Task Index
 
-- [ ] Task 1: Structured Feedback Enum for Exploration Outcomes (DEFERRED)
-- [ ] Task 2: Cross-Reference GOAT Pillar 2 Academic Validation (DOCUMENTATION)
+- [x] Task 1: Structured Feedback Enum for Exploration Outcomes (DEFERRED)
+- [x] Task 2: Cross-Reference GOAT Pillar 2 Academic Validation (DOCUMENTATION)
 
 ---
 
@@ -39,7 +39,7 @@ This plan captures the two actionable distillations as future enhancement tasks.
 
 ## Task 1: Structured Feedback Enum for Exploration Outcomes (DEFERRED)
 
-- [ ] Add `ExplorationOutcome` enum to SR²AM feedback classification
+- [x] Add `ExplorationOutcome` enum to SR²AM feedback classification
 
 ```rust
 /// Structured exploration outcome — inspired by Sailor's feedback taxonomy
@@ -81,7 +81,7 @@ pub enum ExplorationOutcome {
 
 ## Task 2: Cross-Reference GOAT Pillar 2 Academic Validation (DOCUMENTATION)
 
-- [ ] Update `.docs/27_mmo_goat_pillars_decision_matrix.md` with Sailor external validation reference
+- [x] Update `.docs/27_mmo_goat_pillars_decision_matrix.md` with Sailor external validation reference
 
 **This is a documentation-only change.** No code impact.
 

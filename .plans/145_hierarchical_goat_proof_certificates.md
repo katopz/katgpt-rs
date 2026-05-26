@@ -3,7 +3,7 @@
 > **Research:** [106 — Shock with Confidence Formal PDE Verification](../.research/106_Shock_Confidence_Formal_PDE_Verification.md)
 > **Paper:** [arXiv:2503.13877](https://arxiv.org/abs/2503.13877) — Formal Proofs of Correctness for Hyperbolic PDE Solvers (Gorard & Hakim, 2025)
 > **Feature Gate:** `proof_cert` (opt-in, NOT default-on)
-> **Status:** 📋 Planned
+> **Status:** ✅ COMPLETE
 > **GOAT Pillar:** ❌ Not a pillar — proof methodology enhancement. See [MMO GOAT Pillars Decision Matrix](../../riir-ai/.docs/27_mmo_goat_pillars_decision_matrix.md).
 > **Domain:** `katgpt-rs` — generic proof certificate infrastructure. No game-specific code.
 > **Blocks:** None. Enhances existing GOAT proof methodology.
@@ -35,7 +35,7 @@ Extract three proof methodology patterns from "Shock with Confidence": (1) **Hie
 
 ### Phase 1: Proof Certificate Format (T1–T3)
 
-- [ ] **T1: `ProofCertificate` struct**
+- [x] **T1: `ProofCertificate` struct**
 
 ```rust
 /// A standalone proof certificate for a verified property.
@@ -113,7 +113,7 @@ pub enum ProofEvidence {
 }
 ```
 
-- [ ] **T2: Proof chain verification**
+- [x] **T2: Proof chain verification**
 
 ```rust
 /// Verify that a chain of proof certificates is consistent.
@@ -155,7 +155,7 @@ pub fn verify_proof_chain(certificates: &[ProofCertificate]) -> ProofChainResult
 }
 ```
 
-- [ ] **T3: Serialization and CI integration**
+- [x] **T3: Serialization and CI integration**
 
 ```rust
 /// Save proof certificates as a verifiable artifact.
@@ -187,7 +187,7 @@ pub fn load_certificates(path: &Path) -> Result<Vec<ProofCertificate>> {
 
 ### Phase 2: Hierarchical GOAT Proof Refactoring (T4–T6)
 
-- [ ] **T4: Define proof chains for existing GOAT pillars**
+- [x] **T4: Define proof chains for existing GOAT pillars**
 
 Map the 4 GOAT pillars to hierarchical proof chains:
 
@@ -219,7 +219,7 @@ Pillar 4: Frame-Sampling Bridge
   └── P4.1 + P4.2 → implies P4.FULL: Frame-sampling bridges AI to game loop
 ```
 
-- [ ] **T5: Implement proof certificate generation for one pillar (Pilot)**
+- [x] **T5: Implement proof certificate generation for one pillar (Pilot)**
 
 Start with Pillar 2 (WASM Validators) as pilot — cleanest data, clearest properties:
 
@@ -260,7 +260,7 @@ pub fn generate_wasm_validator_certificates(
 }
 ```
 
-- [ ] **T6: Migrate remaining pillars to certificate format**
+- [x] **T6: Migrate remaining pillars to certificate format**
 
 Refactor GOAT proofs in Plans 061, 034, 099, 070 to emit `ProofCertificate` structs instead of markdown threshold tables.
 
@@ -268,7 +268,7 @@ Refactor GOAT proofs in Plans 061, 034, 099, 070 to emit `ProofCertificate` stru
 
 ### Phase 3: Conditional Proof Support (T7–T8)
 
-- [ ] **T7: Conditional proof macro**
+- [x] **T7: Conditional proof macro**
 
 ```rust
 /// Macro for declaring conditional GOAT proofs.
@@ -309,7 +309,7 @@ macro_rules! conditional_proof {
 }
 ```
 
-- [ ] **T8: Proof chain CLI tool**
+- [x] **T8: Proof chain CLI tool**
 
 ```bash
 # Verify all GOAT proof certificates
@@ -332,7 +332,7 @@ cargo run --features proof_cert --bin goat-verify
 > ⚠️ This phase requires Plan 128 (proof sketch evolution) and Plan 143 (Nexus Elo).
 > Feature-gate: both `proof_cert` and `percepta`.
 
-- [ ] **T9: Mutation strategy comparison framework**
+- [x] **T9: Mutation strategy comparison framework**
 
 Inspired by the paper's finding that different flux limiters have different proof success rates:
 
@@ -367,7 +367,7 @@ impl MutationStrategyBenchmarker {
 }
 ```
 
-- [ ] **T10: Proof-success rate heatmap**
+- [x] **T10: Proof-success rate heatmap**
 
 ```rust
 /// Generate a proof certificate showing which mutation strategies
