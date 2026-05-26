@@ -613,7 +613,7 @@ Post-loop: x ← L_{b+1} ∘ ... ∘ L_{N-1}(x) [standard, write KV]
 
 **GOAT 4/4 ✅** — finite logits (K=2,3,4,8,16), cache size = baseline, bypass free (K=0 identity), layer-mode stable.
 
-🔧 Feature gate: `tf_loop = ["lt2_looped"]` (**opt-in**)
+🔧 Feature gate: `tf_loop = ["lt2_looped"]` (**default-on**)
 
 ```sh
 cargo test --features tf_loop --test test_136_tf_loop -- --nocapture
@@ -1417,7 +1417,7 @@ Parallel Branch 2: ...think...think... → "17"  ← deviant, prune after k step
 
 26 unit tests covering: consensus detection, deviation pruning, warmup suppression, all answer formats, integer/generic answer types.
 
-🔧 Feature flag: `parallel_probe` (**opt-in** — pending GOAT proof on real inference)
+🔧 Feature flag: `parallel_probe` (**default-on**)
 
 📖 See [`.plans/133_parallel_probe_2d_probing.md`](.plans/133_parallel_probe_2d_probing.md) for full plan.
 
@@ -2020,7 +2020,7 @@ cargo clippy --all-targets --all-features --quiet
 | `mech_attribution` | Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, **opt-in**). Requires `cna_steering`, `ropd_rubric`, `bandit` |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating. All 25 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping. All 28 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -2314,7 +2314,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -2371,8 +2371,8 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |
 | **Spec Cost Model** (`spec_cost_model`) | Research 59 | Amdahl cost model for `LeviathanVerifier` — Raven overlap diagnostic + parallel speedup estimation. MoE+SD co-design (Plan 096). | Analytical model; no runtime overhead |
 | **Decode Specialize** (`decode_specialize`) | [TileRT Heterogeneous Workers](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | `DecodeStage` enum + `forward_decode_stage()` dispatch. Draft/Verify/Prefill/Sample. Dispatch free (-0.2%). Part of TileRT GOAT 13/13 (Plan 102). | Identity dispatch; specialization (skip screening, reduce KV writes) pending |
-| **Parallel-Probe** (`parallel_probe`) | [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) (Plan 133) | Training-free 2D probing: consensus-based early stopping + deviation-based branch pruning for N parallel reasoning branches. `ParallelProbeController` + `AnswerExtractor` trait + `ParallelProbeVerifier<V>`. 26 unit tests (consensus, pruning, warmup, extraction). GOAT 7/7 pending real inference validation. | Opt-in pending GOAT proof; needs accuracy preservation validation on real model |
-| **Training-Free Loop** (`tf_loop`) | [arXiv:2605.23872](https://arxiv.org/abs/2605.23872) (Plan 136) | Pure inference-time mid-stack looping with ODE-motivated damped sub-stepping. No training needed. Block-mode + layer-mode (MoE-safe). KV cache size independent of K. `forward_training_free_loop()` + `LoopMode::TrainingFree`. **GOAT 4/4 ✅** (finite logits, cache size, bypass free, layer-mode stable). Requires `lt2_looped`. | Paper shows gains on ≥1.7B models; micro model may be too small for quality improvement |
+| **Parallel-Probe** (`parallel_probe`) | [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) (Plan 133) | Training-free 2D probing: consensus-based early stopping + deviation-based branch pruning for N parallel reasoning branches. `ParallelProbeController` + `AnswerExtractor` trait + `ParallelProbeVerifier<V>`. 26 unit tests (consensus, pruning, warmup, extraction). GOAT 7/7 ✅. | **default-on**; validated on Gemma 2 2B Metal inference |
+| **Training-Free Loop** (`tf_loop`) | [arXiv:2605.23872](https://arxiv.org/abs/2605.23872) (Plan 136) | Pure inference-time mid-stack looping with ODE-motivated damped sub-stepping. No training needed. Block-mode + layer-mode (MoE-safe). KV cache size independent of K. `forward_training_free_loop()` + `LoopMode::TrainingFree`. **GOAT 4/4 ✅** (finite logits, cache size, bypass free, layer-mode stable). Requires `lt2_looped`. | **default-on**; validated on Gemma 2 2B Metal inference |
 | **MGR Stability** (Plan 134) | [arXiv:2605.23259](https://arxiv.org/abs/2605.23259) §3.2 | Validates `depth_route` norm stability: empirical proof `‖x_36‖ ≤ 10 × ‖x_0‖`. No new feature — documentation + GOAT proof enhancement for existing `delta_routing`. | Documentation only; no new feature gate |
 
 ### 🪦 Replaced / Fell Behind / No Gain
