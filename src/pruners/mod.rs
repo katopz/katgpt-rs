@@ -90,7 +90,7 @@ pub use trial_log::{SharedTrialLog, TrialLog, TrialRecord, TrialSummary};
 pub use safe_phased::SafePhasedState;
 
 #[cfg(feature = "sr2am_configurator")]
-pub use configurator_bandit::ConfiguratorBandit;
+pub use configurator_bandit::{ConfiguratorBandit, ExplorationOutcome};
 
 #[cfg(feature = "g_zero")]
 pub mod g_zero;
@@ -340,6 +340,15 @@ pub use committee_boost::{
     BlindSpotEstimate, BudgetError, CommitteeBudget, ConvergenceFit, CoverageAction,
     CoverageDiagnostic, DebiasedComparator, FailureMode, OracleGapRecovery, committee_budget,
     coverage_diagnostic, debiased_compare, estimate_blind_spot_floor, fit_convergence,
+};
+
+#[cfg(feature = "state_source")]
+pub mod state_source;
+
+#[cfg(feature = "state_source")]
+pub use state_source::{
+    ContinuationScore, ContinuationScorer, PUCBSelector, RetentionMetric, StateVisitationTracker,
+    adaptive_c,
 };
 
 #[cfg(feature = "mech_attribution")]
