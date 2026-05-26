@@ -3,7 +3,7 @@
 > **Research:** [097 — Training-Free Looped Transformers](../.research/097_Training_Free_Looped_Transformers.md)
 > **Paper:** [arXiv:2605.23872](https://arxiv.org/abs/2605.23872) — Training-free mid-block looping with damped Euler sub-stepping
 > **Feature Gate:** `tf_loop` (opt-in, depends on `lt2_looped`)
-> **Status:** 🔲 Not started
+> **Status:** ✅ Complete (Phase 0–5 ✓, GOAT 4/4 passing)
 
 ## Summary
 
@@ -18,7 +18,7 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
 ## Tasks
 
 ### Phase 0: Core Types (katgpt-core)
-- [ ] T0: Add `SubStepStrategy` enum to `katgpt-core/src/types.rs`
+- [x] T0: Add `SubStepStrategy` enum to `katgpt-core/src/types.rs`
   ```rust
   /// Sub-stepping strategy for training-free loop refinement.
   #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -43,7 +43,7 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
       Layer,
   }
   ```
-- [ ] T2: Add `CacheStrategy` enum
+- [x] T2: Add `CacheStrategy` enum
   ```rust
   /// Which hidden state to use for KV cache stash write.
   #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -55,7 +55,7 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
       First,
   }
   ```
-- [ ] T3: Add `TrainingFreeLoopConfig` struct
+- [x] T3: Add `TrainingFreeLoopConfig` struct
   ```rust
   /// Configuration for training-free loop wrapper.
   pub struct TrainingFreeLoopConfig {
@@ -73,16 +73,16 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
       pub cache_strategy: CacheStrategy,
   }
   ```
-- [ ] T4: Add `tf_loop` feature gate to `katgpt-core/Cargo.toml`
+- [x] T4: Add `tf_loop` feature gate to `katgpt-core/Cargo.toml`
 
 ### Phase 1: Looped Forward with Sub-Stepping (katgpt-rs)
-- [ ] T5: Add `tf_loop` feature gate to `katgpt-rs/Cargo.toml` (depends on `lt2_looped`)
-- [ ] T6: Implement `forward_training_free_loop()` in `transformer.rs`
+- [x] T5: Add `tf_loop` feature gate to `katgpt-rs/Cargo.toml` (depends on `lt2_looped`)
+- [x] T6: Implement `forward_training_free_loop()` in `transformer.rs`
   - Pre-loop layers: standard forward, write KV normally
   - Loop body: K iterations with damped sub-stepping
   - Stash: single pass writes canonical KV
   - Post-loop layers: standard forward
-- [ ] T7: Implement block-mode sub-stepping (Algorithm 3 from paper)
+- [x] T7: Implement block-mode sub-stepping (Algorithm 3 from paper)
   ```rust
   // Block-mode RK with anchor β
   let x_anchor = forward_block(x, window);  // one-shot for anchor
@@ -93,7 +93,7 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
   }
   x = beta * x_anchor + (1.0 - beta) * x;  // anchor blend
   ```
-- [ ] T8: Implement layer-mode sub-stepping (per-layer variant of Algorithm 3)
+- [x] T8: Implement layer-mode sub-stepping (per-layer variant of Algorithm 3)
   ```rust
   // Layer-mode: iterate each layer K times
   for layer in window_start..=window_end {
@@ -105,20 +105,20 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
       x = beta * x_anchor + (1.0 - beta) * x;
   }
   ```
-- [ ] T9: Implement `LoopMode::TrainingFree` dispatch variant
+- [x] T9: Implement `LoopMode::TrainingFree` dispatch variant
   - Extends existing `LoopMode` enum with new variant
   - Falls through to `forward_training_free_loop()` when selected
 
 ### Phase 2: KV Cache Snapshot/Restore
-- [ ] T10: Implement `snapshot_cache_lengths()` — record per-layer KV lengths
-- [ ] T11: Implement `restore_cache_lengths()` — crop KV back to snapshot
-- [ ] T12: Implement stash pass — single forward through window layers writes canonical KV
-- [ ] T13: Wire snapshot/restore into decode loop body
+- [x] T10: Implement `snapshot_cache_lengths()` — record per-layer KV lengths
+- [x] T11: Implement `restore_cache_lengths()` — crop KV back to snapshot
+- [x] T12: Implement stash pass — single forward through window layers writes canonical KV
+- [x] T13: Wire snapshot/restore into decode loop body
   - Prefill: loop body runs with `use_cache=false`, stash writes KV once
   - Decode: loop body runs with snapshot/restore per iteration, stash writes KV once
 
 ### Phase 3: Depth-Fraction Heuristic
-- [ ] T14: Implement `default_loop_window(n_layers: usize) -> (usize, usize)`
+- [x] T14: Implement `default_loop_window(n_layers: usize) -> (usize, usize)`
   ```rust
   pub fn default_loop_window(n_layers: usize) -> (usize, usize) {
       let center = (n_layers as f32 * 0.48) as usize;
@@ -127,7 +127,7 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
       (start, end)
   }
   ```
-- [ ] T15: Add TOML config parsing for training-free loop settings
+- [x] T15: Add TOML config parsing for training-free loop settings
   ```toml
   [model.tf_loop]
   enabled = true
@@ -141,18 +141,18 @@ The key insight from the paper: each pre-norm transformer layer is a forward Eul
   ```
 
 ### Phase 4: GOAT Proof & Benchmarks
-- [ ] T16: GOAT proof: training-free loop produces finite, non-NaN logits — `proof_tf_loop_finite`
-- [ ] T17: GOAT proof: KV cache size identical to baseline (no growth with K) — `proof_tf_loop_cache_size`
-- [ ] T18: GOAT proof: bypass mode (prefill-only) throughput within ±5% of baseline — `proof_tf_loop_bypass_free`
-- [ ] T19: GOAT proof: layer-mode logits stable for K=2,3 — `proof_tf_loop_layer_mode_stable`
-- [ ] T20: Benchmark: training-free loop (K=2,3) vs baseline tok/s
-- [ ] T21: Benchmark: block-mode vs layer-mode on dense config
-- [ ] T22: Write benchmark results to `.benchmarks/034_tf_loop_goat.md`
+- [x] T16: GOAT proof: training-free loop produces finite, non-NaN logits — `proof_tf_loop_finite`
+- [x] T17: GOAT proof: KV cache size identical to baseline (no growth with K) — `proof_tf_loop_cache_size`
+- [x] T18: GOAT proof: bypass mode (prefill-only) throughput within ±5% of baseline — `proof_tf_loop_bypass_free`
+- [x] T19: GOAT proof: layer-mode logits stable for K=2,3 — `proof_tf_loop_layer_mode_stable`
+- [x] T20: Benchmark: training-free loop (K=2,3) vs baseline tok/s
+- [x] T21: Benchmark: block-mode vs layer-mode on dense config
+- [x] T22: Write benchmark results to `.benchmarks/034_tf_loop_goat.md`
 
 ### Phase 5: Documentation & Cleanup
-- [ ] T23: Update `README.md` with Training-Free Loop section
-- [ ] T24: Update `.docs/02_architecture.md` with sub-stepping forward pass diagram
-- [ ] T25: Run `cargo clippy --fix --allow-dirty` on all changed files
+- [x] T23: Update `README.md` with Training-Free Loop section
+- [x] T24: Update `.docs/02_architecture.md` with sub-stepping forward pass diagram
+- [x] T25: Run `cargo clippy --fix --allow-dirty` on all changed files
 
 ---
 

@@ -4,7 +4,7 @@
 > **Paper:** [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) — Training-free controller for efficient parallel reasoning via global consensus + deviation pruning
 > **Feature Gate:** `parallel_probe` (**Opt-in**, requires GOAT proof before default-on promotion)
 > **Depends on:** Plan 010 (multilayer transformer), Plan 005 (speculative module)
-> **Status:** 🟡 In Progress (T1 ✓, T2–T4 pending)
+> **Status:** ✅ Complete (T1–T3 ✓, T4 GOAT benchmark recorded, pending real inference validation)
 
 ## Summary
 
@@ -75,22 +75,22 @@ The key insight: **answer-level consensus across parallel branches is a uniquely
 - [x] Unit tests: consensus detection, deviation pruning, warmup suppression, edge cases (all agree, all disagree, single branch)
 
 ### T2: Answer Extraction Trait
-- [ ] `AnswerExtractor` trait — `fn extract_answer(&self, tokens: &[usize], config: &Config) -> Option<String>`
-- [ ] `RegexAnswerExtractor` — regex-based extraction for `\boxed{...}`, `The answer is ...`, numeric patterns
-- [ ] `ThinkTokenExtractor` — `</think⟩` boundary detection (paper's native approach)
-- [ ] `DiscreteActionExtractor` — for game domains (Bomber actions, Go moves)
-- [ ] Unit tests: various answer formats, edge cases (no answer found, multiple answers)
+- [x] `AnswerExtractor` trait — `fn extract_answer(&self, tokens: &[usize], config: &Config) -> Option<String>`
+- [x] `RegexAnswerExtractor` — regex-based extraction for `\boxed{...}`, `The answer is ...`, numeric patterns
+- [x] `ThinkTokenExtractor` — `</think⟩` boundary detection (paper's native approach)
+- [x] `DiscreteActionExtractor` — for game domains (Bomber actions, Go moves)
+- [x] Unit tests: various answer formats, edge cases (no answer found, multiple answers)
 
 ### T3: Integration with Speculative Pipeline
-- [ ] `ParallelProbeVerifier` wrapping any inner `SpeculativeVerifier`
-- [ ] Integration with `DDTreeBranchCache` — call `discard_branch()` on pruned branches
-- [ ] Hook into `speculative_step` — periodic probe at probe_interval tokens
-- [ ] Wire `ProbeDecision` responses: stop → return consensus answer, prune → discard branches
+- [x] `ParallelProbeVerifier` wrapping any inner `SpeculativeVerifier`
+- [x] Integration with `DDTreeBranchCache` — call `discard_branch()` on pruned branches
+- [x] Hook into `speculative_step` — periodic probe at probe_interval tokens
+- [x] Wire `ProbeDecision` responses: stop → return consensus answer, prune → discard branches
 - [x] Feature gate `parallel_probe` in `Cargo.toml` + `speculative/mod.rs`
 
 ### T4: GOAT Proof + Benchmark
-- [ ] Benchmark: SCOUT-style offline simulation (pre-sample N=64 trajectories, simulate probe control)
-- [ ] GOAT proof targets (7/7):
+- [x] Benchmark: SCOUT-style offline simulation (pre-sample N=64 trajectories, simulate probe control)
+- [x] GOAT proof targets (7/7):
   1. Accuracy preservation: probe ≥ SC baseline (within 2%)
   2. Sequential token reduction: ≥ 25%
   3. Total token reduction: ≥ 15%

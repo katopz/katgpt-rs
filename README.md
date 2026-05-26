@@ -594,6 +594,33 @@ cargo test --features lt2_looped --test goat_108_lt2_looped -- --nocapture
 📁 `src/looped/` — `forward_looped`, `residual_gate`, `hybrid_dispatch`
 📁 `src/hla_attention/` — AHLA mixer for hybrid layers
 
+### Training-Free Loop (Plan 136)
+
+Pure inference-time mid-stack looping with ODE-motivated damped sub-stepping. Unlike LT2 (training-time weight-sharing), this requires **zero training** — it's a retrofit on frozen checkpoints.
+
+Based on [arXiv:2605.23872](https://arxiv.org/abs/2605.23872): each pre-norm transformer layer is a forward Euler step at h=1 on a residual ODE. Naive looping advances to t=K (catastrophic). Damped sub-stepping at h=1/K stays at t=1 but with better approximation.
+
+```
+Pre-loop: x ← L₀ ∘ ... ∘ L_{a-1}(x)     [standard, write KV]
+Anchor:   x̃ ← (L_b ∘ ... ∘ L_a)(x)       [one-shot for β blend]
+Loop K times:
+  y ← (L_b ∘ ... ∘ L_a)(x)              [forward window]
+  x ← x + (1/K)·(y - x)               [damped Euler sub-step]
+x ← β·x̃ + (1-β)·x                     [anchor blend]
+Stash: write canonical KV
+Post-loop: x ← L_{b+1} ∘ ... ∘ L_{N-1}(x) [standard, write KV]
+```
+
+**GOAT 4/4 ✅** — finite logits (K=2,3,4,8,16), cache size = baseline, bypass free (K=0 identity), layer-mode stable.
+
+🔧 Feature gate: `tf_loop = ["lt2_looped"]` (**opt-in**)
+
+```sh
+cargo test --features tf_loop --test test_136_tf_loop -- --nocapture
+```
+
+📁 `src/tf_loop.rs` — `default_loop_window`, `sub_step_damped_euler`, `anchor_blend`, cache snapshot/restore
+
 ## 🎯 MaxSim: Late-Interaction Scoring (Plan 080)
 
 Memory-efficient `Σ_i max_j dot(q_i, d_j)` scoring ported from [erikkaum/maxsim](https://github.com/erikkaum/maxsim) (ColBERT/PyLate kernel). The key insight: streaming over doc tokens with a running max — never materializing the `[Lq × Ld]` similarity matrix — gives 3-4× speedup via cache locality (same math, less memory).
@@ -1359,6 +1386,40 @@ cargo run --example spechop_02_cost_model --features spechop  # α/β/p → k* a
 🔧 Feature flag: `spechop = ["bandit"]` (**opt-in** — requires GOAT proof before default-on promotion)
 
 📖 See [`.plans/131_spechop_continuous_spec_pipeline.md`](.plans/131_spechop_continuous_spec_pipeline.md) for full plan (T1–T32, T40–T41 complete).
+
+## 🔍 Parallel-Probe 2D — Consensus-Based Parallel Branch Control (Plan 133)
+
+Training-free 2D probing controller for N parallel reasoning branches. Based on [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) — monitors branches via periodic answer extraction, uses **consensus-based early stopping** + **deviation-based branch pruning** to reduce sequential tokens by ~30%.
+
+The key insight: **answer-level consensus across parallel branches is O(N) per probe step** — uniquely cheap compared to EqR distribution residuals (O(N×V)) or trajectory bandit scores (requires reward signal).
+
+```text
+Parallel Branch 0: ...think...think... → "42"
+Parallel Branch 1: ...think...think... → "42"  ← consensus!
+Parallel Branch 2: ...think...think... → "17"  ← deviant, prune after k steps
+                     ↑
+              Probe every Δ tokens
+              → majority vote → stop if stable for u steps
+              → prune branches that disagree for k steps
+```
+
+### Components
+
+| Component | Purpose |
+|-----------|----------|
+| `ParallelProbeController<A>` | Generic controller: probe(), majority_vote(), should_stop(), should_prune() |
+| `ProbeDecision` | Continue / Stop / Prune / StopAndPrune |
+| `AnswerExtractor` trait | Pluggable answer extraction (regex, think-token, game actions) |
+| `RegexAnswerExtractor` | `\boxed{...}`, "The answer is ...", numeric patterns |
+| `ThinkTokenExtractor` | `</think>` boundary detection |
+| `DiscreteActionExtractor` | Game domain actions (Bomber, Go moves) |
+| `ParallelProbeVerifier<V>` | Wraps any `SpeculativeVerifier` with probe control |
+
+26 unit tests covering: consensus detection, deviation pruning, warmup suppression, all answer formats, integer/generic answer types.
+
+🔧 Feature flag: `parallel_probe` (**opt-in** — pending GOAT proof on real inference)
+
+📖 See [`.plans/133_parallel_probe_2d_probing.md`](.plans/133_parallel_probe_2d_probing.md) for full plan.
 
 ## 🌊 GFlowNet Modelless Distillation (Plan 052)
 
@@ -2310,6 +2371,9 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |
 | **Spec Cost Model** (`spec_cost_model`) | Research 59 | Amdahl cost model for `LeviathanVerifier` — Raven overlap diagnostic + parallel speedup estimation. MoE+SD co-design (Plan 096). | Analytical model; no runtime overhead |
 | **Decode Specialize** (`decode_specialize`) | [TileRT Heterogeneous Workers](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | `DecodeStage` enum + `forward_decode_stage()` dispatch. Draft/Verify/Prefill/Sample. Dispatch free (-0.2%). Part of TileRT GOAT 13/13 (Plan 102). | Identity dispatch; specialization (skip screening, reduce KV writes) pending |
+| **Parallel-Probe** (`parallel_probe`) | [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) (Plan 133) | Training-free 2D probing: consensus-based early stopping + deviation-based branch pruning for N parallel reasoning branches. `ParallelProbeController` + `AnswerExtractor` trait + `ParallelProbeVerifier<V>`. 26 unit tests (consensus, pruning, warmup, extraction). GOAT 7/7 pending real inference validation. | Opt-in pending GOAT proof; needs accuracy preservation validation on real model |
+| **Training-Free Loop** (`tf_loop`) | [arXiv:2605.23872](https://arxiv.org/abs/2605.23872) (Plan 136) | Pure inference-time mid-stack looping with ODE-motivated damped sub-stepping. No training needed. Block-mode + layer-mode (MoE-safe). KV cache size independent of K. `forward_training_free_loop()` + `LoopMode::TrainingFree`. **GOAT 4/4 ✅** (finite logits, cache size, bypass free, layer-mode stable). Requires `lt2_looped`. | Paper shows gains on ≥1.7B models; micro model may be too small for quality improvement |
+| **MGR Stability** (Plan 134) | [arXiv:2605.23259](https://arxiv.org/abs/2605.23259) §3.2 | Validates `depth_route` norm stability: empirical proof `‖x_36‖ ≤ 10 × ‖x_0‖`. No new feature — documentation + GOAT proof enhancement for existing `delta_routing`. | Documentation only; no new feature gate |
 
 ### 🪦 Replaced / Fell Behind / No Gain
 

@@ -1,7 +1,7 @@
 # Plan 135: HL Regularization Principles — Document Patch Acceptance Guidelines
 
 > **Source:** Research 096 — HL-ImageNet Symbolic Pipeline Overfitting
-> **Status:** 📝 Documentation Only — No New Feature Gate
+> **Status:** ✅ Complete (T1–T3 ✓)
 > **Priority:** Low — infrastructure quality assurance
 > **GOAT Pillar:** ❌ Not a pillar — see [MMO GOAT Pillars Decision Matrix](../../riir-ai/.docs/27_mmo_goat_pillars_decision_matrix.md). General HL design principles, not game-specific. Stays in `katgpt-rs` domain.
 > **Domain:** `katgpt-rs` — no game IP, no secret, no selling point. The regularization principles are public knowledge from the HL-ImageNet experiment.
@@ -15,30 +15,30 @@ The key insight from the paper: **reranking generalizes better than verify rules
 ## Tasks
 
 ### T1: Add Regularization Section to HL Docs ✏️
-- [ ] Add "Patch Regularization Principles" section to `.docs/09_heuristic-learning.md`
-- [ ] Document the generalization hierarchy: ScreeningPruner > AbsorbCompress patches
-- [ ] Document the 6 regularization criteria from Research 096 D1:
+- [x] Add "Patch Regularization Principles" section to `.docs/09_heuristic-learning.md`
+- [x] Document the generalization hierarchy: ScreeningPruner > AbsorbCompress patches
+- [x] Document the 6 regularization criteria from Research 096 D1:
   - **Support:** min episode count for arm acceptance
   - **Precision:** Q-value threshold (already have)
   - **Transfer:** held-out split (future — not implementing now)
   - **Complexity:** branch/threshold budget (future)
   - **Locality:** HotSwapPruner isolation (already have)
   - **Cascade risk:** compress phase handles stale (already have)
-- [ ] Cross-reference Research 014 (Learning Beyond Gradients) and Research 096
+- [x] Cross-reference Research 014 (Learning Beyond Gradients) and Research 096
 - **Files:** `.docs/09_heuristic-learning.md`
 - **No new code** — documentation only
 
 ### T2: Add Support Count Tracking to AbsorbCompress ✏️
-- [ ] Add `support_count: usize` field to the absorb log entry (already tracked implicitly via win count)
-- [ ] Document that `support_count` is available for future regularization gate
-- [ ] Do NOT add acceptance gate — just instrument for observability
+- [x] Add `support_count: usize` field to the absorb log entry (already tracked implicitly via win count)
+- [x] Document that `support_count` is available for future regularization gate
+- [x] Do NOT add acceptance gate — just instrument for observability
 - **Files:** `src/pruners/absorb_compress.rs` (doc comment + field documentation)
 - **No behavioral change** — documentation + observability only
 
 ### T3: GOAT Proof — Verify HL Loop Doesn't Overfit on Bomber 🐐
-- [ ] Run Bomber arena 1000 rounds with current `AbsorbCompress` config
-- [ ] Record win rate over time — verify no "train-only" degradation pattern
-- [ ] If degradation found → escalate to separate plan with held-out split
+- [x] Run Bomber arena 1000 rounds with current `AbsorbCompress` config
+- [x] Record win rate over time — verify no "train-only" degradation pattern
+- [x] If degradation found → escalate to separate plan with held-out split
 - **Files:** `katgpt-rs/.benchmarks/035_hl_regularization_goat.md` (new benchmark record)
 - **Dependency:** `--features bandit,bomber`
 

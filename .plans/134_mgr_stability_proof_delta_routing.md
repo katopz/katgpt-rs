@@ -1,7 +1,7 @@
 # Plan 134: MGR Stability Proof — Validate delta_routing Convex Combination
 
 > **Source:** Research 095 — MGR Multi-Gat Residuals (arXiv:2605.23259)
-> **Status:** ✅ Validation Only — No New Feature Gate
+> **Status:** ✅ Complete (T1–T3 ✓, GOAT norm stability proof passing)
 > **Priority:** Low — Documentation + GOAT proof enhancement
 > **GOAT Pillar:** ❌ Not a pillar — see [MMO GOAT Pillars Decision Matrix](../../riir-ai/.docs/27_mmo_goat_pillars_decision_matrix.md). General transformer architecture, not game-specific. Stays in `katgpt-rs` domain.
 > **Domain:** `katgpt-rs` — no game IP, no secret, no selling point. The multi-stream residual idea is public knowledge from the paper.
@@ -20,22 +20,22 @@ Answer: **Yes, partially.** Our routing is additive (`residual += weighted_sum`)
 ## Tasks
 
 ### T1: Document Stability Analysis in `depth_route` ✏️
-- [ ] Add doc comment to `depth_route()` referencing MGR §3.2
-- [ ] Note: our additive routing is **not** a convex combination (it's residual + weighted_sum), so the per-layer norm ceiling does NOT formally apply
-- [ ] Note: practical stability comes from RMSNorm + softmax normalization, not from convex-combination guarantee
+- [x] Add doc comment to `depth_route()` referencing MGR §3.2
+- [x] Note: our additive routing is **not** a convex combination (it's residual + weighted_sum), so the per-layer norm ceiling does NOT formally apply
+- [x] Note: practical stability comes from RMSNorm + softmax normalization, not from convex-combination guarantee
 - **Files:** `src/transformer.rs` (doc comments on `depth_route` at ~L964)
 - **No new code** — documentation only
 
 ### T2: GOAT Proof — Verify `depth_route` Norm Stability 🐐
-- [ ] Add a GOAT test that verifies activation norm doesn't grow unboundedly over 36+ layers with `depth_route` enabled
-- [ ] Test: forward pass through all layers, check `‖x_L‖ ≤ C × ‖x_0‖` for some reasonable constant C (e.g., C < 10)
-- [ ] This is an **empirical** stability check, not a formal proof (unlike MGR's theoretical guarantee)
-- **Files:** New test in `src/transformer.rs` or `tests/`
+- [x] Add a GOAT test that verifies activation norm doesn't grow unboundedly over 36+ layers with `depth_route` enabled
+- [x] Test: forward pass through all layers, check `‖x_L‖ ≤ C × ‖x_0‖` for some reasonable constant C (e.g., C < 10)
+- [x] This is an **empirical** stability check, not a formal proof (unlike MGR's theoretical guarantee)
+- **Files:** New test in `src/transformer.rs`
 - **Feature gate:** Uses existing `delta_routing` — no new gate needed
 
 ### T3: Record Bias Initialization Formula (Eq. 14) 📐
-- [ ] Add Eq. 14 as a comment in `depth_route` or `TransformerWeights::new`
-- [ ] Useful if/when we add training infrastructure
+- [x] Add Eq. 14 as a comment in `depth_route` or `TransformerWeights::new`
+- [x] Useful if/when we add training infrastructure
 - **Files:** `src/transformer.rs` — comment only
 
 ## What We're NOT Doing
