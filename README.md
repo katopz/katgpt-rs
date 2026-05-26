@@ -1971,20 +1971,29 @@ cargo clippy --all-targets --all-features --quiet
 | `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `vpd_em_distill` | VPD Variational Policy Distillation — EM-style co-evolutionary teacher-student distillation with BCO E-step + KL-gated M-step + dynamic prior. Player: `VpdPlayer` (+`g_zero`+`bomber`). +6.3% win rate over SDAR in bomber tournament (Plan 120, off by default). Requires `sdar_gate`, `bandit` |
+| `peira_distill` | PEIRA inter-view regressor alignment — collapse-free modelless distillation (Plan 153, Research 115). Requires `bandit`. **opt-in** |
+| `rmsd_distill` | RMSD relevance-masked self-distillation (Plan 125, Research 081). Requires `sdar_gate`, `bandit`. **opt-in** |
 | `dllm` | D2F Discrete Diffusion Forcing — mini dLLM + block-parallel decode (Plan 066) |
 | `tri_mode` | Tri-Mode inference — AR + Diffusion + Self-Speculation via `D2fDrafterVerifier` + adaptive `DiffusionSampler`. GOAT 9/9 proved (Bench 018 + 019). Requires `dllm` (Plan 089, Plan 116) |
+| `toast_tokenizer` | ToaST split-tree tokenization (Plan 122, Research 081). **opt-in** |
+| `convex_tok` | ConvexTok LP vocabulary optimizer (Plan 127, Research 087). Requires `good_lp`, `toast_tokenizer`. **opt-in** |
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `octopus` | OCTOPUS octahedral triplet codec — data-oblivious, beats calibrated SQ at all bit widths (-22% to -49% MSE). Legacy — use `hybrid_oct_pq` for best quality + speed (Bench 022, Plan 099) |
 | `hybrid_oct_pq` | Default KV codec — OCT triplet encoding + PQ 2D Givens rotation (Plan 101, default-on) |
 | `planar_quant` | 2D Givens rotation KV cache — O(d) rotation (behind "planar_quant") |
 | `iso_quant` | 4D quaternion rotation KV cache — O(d) rotation (behind "iso_quant") |
 | `asymmetric_kv` | Asymmetric K/V compression benchmarks — V compression is quality-free, K precision is critical. Recommended: key_bits=8, val_bits=3 (Plan 123, GOAT 25/25). Requires `turboquant` |
+| `shard_kv` | ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard V path (Plan 147, Research 109). Requires `spectral_quant`, `turboquant`. **opt-in** |
 | `replaid_schedules` | RePlaid variance-minimized adaptive schedules — experimental, off by default (Plan 078) |
 | `elf_sde` | ELF SDE noise injection + logit-normal schedule — GOAT proved: 10-22× diversity (Plan 079, default-on) |
 | `cna_steering` | CNA Contrastive Neuron Attribution — sparse MLP circuit discovery + runtime modulation. GOAT proved (Bench 015). ~10µs/pair discovery, 163ns K=50 modulation, quality cosine 1.0 (Plan 087) |
 | `epiplexity_scoring` | Epiplexity structural information scoring — prequential coding estimator, `EpiplexityScreeningPruner<P>` wrapper, `FactorizationScorer` for game traces. 48 tests (Plan 130, **opt-in**) |
+| `opus_selection` | OPUS Boltzmann + redundancy selection — CountSketch + softmax sampling (Plan 129, Research 089). Requires `bandit`. **opt-in** |
+| `committee_boost` | Committee Boost — oracle-gap recovery, debiased BtRank, budget sizing (Plan 132, Research 093). Requires `bt_rank`, `bandit`. **opt-in** |
+| `questbench` | QuestBench underspecification scoring for modelless architecture (Plan 110, Research 008). **opt-in** |
 | `tes_loop` | SimpleTES evaluation-driven scaling — RPUCG graph-based bandit + trajectory pruning + credit bridge. GOAT proved 8/8 (Bench 016+017). `BanditStrategy::Rpucg`, `SimpleTesLoop<E>`, `TrajectoryPruner`, `TrajectoryCredit` (Plan 086, **default-on**) |
 | `deep_manifold` | Deep Manifold fixed-point residual scoring — L2/KL residual traits + blended scorer (Research 51, Plan 085). **GOAT proved 6/6**, default-on |
+| `dirichlet_energy` | Dirichlet Energy structural alignment diagnostic (Research 111, Plan 149). **opt-in** |
 | `federation` | Deep Manifold federated boundary alignment — symmetric KL coupling between domain experts (Research 51, Plan 085). **GOAT proved 6/6**, default-on. Requires `bandit` |
 | `lattice_deduction` | LDT Lattice Deduction Transformer — α-intersection pruning, conflict detection, asymmetric elimination. `AlphaTarget`, `alpha_intersect`, `is_consistent`, `EntropyConflictDetector`, `LdtPruneConfig` (Plan 088, GOAT 7/7, **default-on**) |
 | `memo_reflections` | MeMo 5-step Reflection QA pipeline — compositional data synthesis with Reflect→Critique→Revise→Verify→Distill. Requires `bandit` (Plan 094, off by default) |
@@ -2000,8 +2009,11 @@ cargo clippy --all-targets --all-features --quiet
 | `dash_attn` | DashAttention adaptive sparse attention — α-entmax routing with learned chunk summaries, replaces fixed-budget top-k block selection (Research 68, Plan 106, GOAT 9/9, **default-on**) |
 | `rt_turbo` | RTPurbo retrieval head sparse decode — head-wise retrieval/local classification + dynamic top-p token selection, 16-dim pre-RoPE projection, offline calibration (Research 86, Plan 126, GOAT 6/6). Requires `dash_attn` |
 | `dreamer` | Auto-Dreamer offline consolidation — cadence-based scheduler, O(n log n) Q-value clustering, access-based decay, counterfactual MC dropout utility (Research 69, Plan 107, GOAT 8/8, **default-on**). Requires `bandit` |
+| `randopt_weight` | RandOpt weight-space perturbation ensembling (Plan 121, Research 080). Requires `bandit`. **opt-in** |
 | `lt2_looped` | LT2 looped inference — weight-shared T-pass loop, hybrid SDPA+AHLA dispatch, zero-init residual gating (Research 73, Plan 108, GOAT 8/8, **default-on**). Requires `hla_attention` |
 | `dmax_spd` | DMax Soft Parallel Decode — hybrid token/mask embeddings, contiguous prefix promotion, confidence+consistency convergence (Research 72, Plan 109, GOAT 7/7, **default-on**). Requires `dllm` |
+| `plasma_path` | Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110). **default-on** |
+| `tf_loop` | Training-free loop wrapper — ODE-refined sub-stepping (Plan 136). Requires `lt2_looped`. **default-on** |
 | `eqr_convergence` | EqR convergence-based rollout selection — `Top1Converged` picks smallest marginal-change residual ∥p_{d+1} − p_d∥₂ via `ResidualTracker`. `ConvergenceSelector` config + `WidthSelectionMode::Top1Converged`. GOAT 7/7 (Plan 119, **default-on**). Requires `elf_sde` |
 | `subterranean` | Subterranean procedure compilation — user-defined token-rewriting procedures compiled to zero-cost native code (Plan 110, **default-on**). Requires `bandit` |
 | `sr2am_configurator` | SR²AM Configurator Bandit — per-turn planning regulation via UCB1 over PlanNew/PlanExtend/PlanSkip arms, entropy-aware horizon truncation (Research 76, Plan 112, 29 tests, **default-on**). Requires `bandit` |
@@ -2018,7 +2030,9 @@ cargo clippy --all-targets --all-features --quiet
 | `skill_opt` | SkillOpt — text-space skill optimization framework for game rule auto-tuning (Plan 144, **opt-in**) |
 | `proof_cert` | Hierarchical GOAT Proof Certificates — formal verification methodology with certificate chains and WASM certificates (Plan 145, **opt-in**) |
 | `mech_attribution` | Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, **opt-in**). Requires `cna_steering`, `ropd_rubric`, `bandit` |
-| `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
+| `newton_schulz` | Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114). **opt-in** |
+| `river_valley` | River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114). **opt-in** |
+| `full` | Enable all features (excludes `stepcode`, `sp_kv`, `newton_schulz`, `river_valley`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`) |
 
 > **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping. All 28 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
