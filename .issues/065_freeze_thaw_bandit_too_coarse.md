@@ -1,5 +1,7 @@
 # Issue 065: Freeze/Thaw Bandit Too Coarse for Meaningful Knowledge Transfer
 
+> **Status:** ✅ Done — fixed with α=1.0 per-move reward + 10× delta amplification, +11pp win rate
+>
 > ~~Frozen GoHLPlayer knowledge hurts performance (-3pp)~~ **FIXED**: α=1.0 per-move reward + 10× delta amplification → +11pp win rate.
 
 ## Summary

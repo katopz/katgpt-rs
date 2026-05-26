@@ -1,5 +1,7 @@
 # Issue 064: SpectralQuant Rayon Parallel Batch Dequantize
 
+> **Status:** ✅ Done — all 7 tasks complete, rayon parallel dequant with threshold guard verified
+
 ## Problem
 
 SpectralQuant's batch dequantize operations loop sequentially over positions, leaving significant parallelism on the table. DFlash already has `dflash_predict_parallel` using rayon's `map_init` pattern — we should apply the same pattern here.

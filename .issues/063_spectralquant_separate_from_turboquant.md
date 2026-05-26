@@ -1,5 +1,7 @@
 # Issue 063: Separate SpectralQuant from TurboQuant
 
+> **Status:** ✅ Done — all 13 tasks complete, SpectralQuant promoted to default feature
+
 ## Problem
 
 Plan 077 placed all SpectralQuant code inside `src/turboquant/` — spectral files, types, and module registrations are all mixed into the TurboQuant module. These are fundamentally different quantization strategies:
