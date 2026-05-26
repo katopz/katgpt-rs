@@ -692,38 +692,51 @@ mod tests {
 
     #[test]
     fn test_config_zero_probe_interval() {
-        let mut c = ParallelProbeConfig::default();
-        c.probe_interval = 0;
+        let c = ParallelProbeConfig {
+            probe_interval: 0,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
     }
 
     #[test]
     fn test_config_zero_stability_patience() {
-        let mut c = ParallelProbeConfig::default();
-        c.stability_patience = 0;
+        let c = ParallelProbeConfig {
+            stability_patience: 0,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
     }
 
     #[test]
     fn test_config_zero_prune_patience() {
-        let mut c = ParallelProbeConfig::default();
-        c.prune_patience = 0;
+        let c = ParallelProbeConfig {
+            prune_patience: 0,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
     }
 
     #[test]
     fn test_config_zero_min_active() {
-        let mut c = ParallelProbeConfig::default();
-        c.min_active_branches = 0;
+        let c = ParallelProbeConfig {
+            min_active_branches: 0,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
     }
 
     #[test]
     fn test_config_bad_vote_ratio() {
-        let mut c = ParallelProbeConfig::default();
-        c.prune_vote_ratio = 0.0;
+        let c = ParallelProbeConfig {
+            prune_vote_ratio: 0.0,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
-        c.prune_vote_ratio = 1.5;
+        let c = ParallelProbeConfig {
+            prune_vote_ratio: 1.5,
+            ..Default::default()
+        };
         assert!(c.validate().is_err());
     }
 
