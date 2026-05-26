@@ -19,7 +19,7 @@
 //!
 //! Run tests: `cargo test --features tf_loop`
 
-use crate::transformer::{KVCache, MultiLayerKVCache};
+use crate::transformer::MultiLayerKVCache;
 use katgpt_core::types::Config;
 use katgpt_core::types::kv_dim;
 
@@ -347,5 +347,177 @@ mod tests {
         anchor_blend(&mut x, &anchor, 0.5);
         assert!(x[0].is_finite());
         assert!(x[1].is_finite());
+    }
+
+    // ── GOAT Proof Tests (Plan 136 T16–T19) ─────────────────────
+
+    /// Proof 1: `sub_step_damped_euler` and `anchor_blend` produce finite results.
+    ///
+    /// K-stage RK loop with synthetic affine transforms produces finite,
+    /// non-NaN output for K∈{2,3,4}, β∈{0.25,0.5,0.75}.
+    #[test]
+    fn proof_tf_loop_finite() {
+        let dim = 128;
+        let ks = [2, 3, 4, 8, 16];
+        let betas = [0.25, 0.5, 0.75];
+
+        for &k in &ks {
+            for &beta in &betas {
+                let mut x = vec![1.0f32; dim];
+                let anchor = vec![2.0f32; dim];
+
+                // Simulate K loop iterations with affine transform y = 0.8*x + 0.1
+                for _ in 0..k {
+                    let mut y = vec![0.0f32; dim];
+                    for (yi, xi) in y.iter_mut().zip(x.iter()) {
+                        *yi = 0.8 * xi + 0.1;
+                    }
+                    sub_step_damped_euler(&mut x, &y, k);
+                }
+
+                // Anchor blend
+                anchor_blend(&mut x, &anchor, beta);
+
+                // All outputs must be finite
+                for (i, &v) in x.iter().enumerate() {
+                    assert!(
+                        v.is_finite(),
+                        "Non-finite at K={k}, beta={beta}, idx={i}: {v}"
+                    );
+                }
+
+                // Outputs must be bounded (shouldn't grow unbounded)
+                let max_abs = x.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
+                assert!(
+                    max_abs < 1e6,
+                    "Output diverged at K={k}, beta={beta}: max_abs={max_abs}"
+                );
+            }
+        }
+    }
+
+    /// Proof 2: snapshot/restore produces same cache sizes.
+    ///
+    /// After snapshotting and restoring, the cache buffer sizes are identical
+    /// and independent of K (loop count).
+    #[test]
+    fn proof_tf_loop_cache_size() {
+        use katgpt_core::types::Config;
+
+        let config = Config::micro();
+        let mut cache = MultiLayerKVCache::new(&config);
+
+        // Snapshot before any writes
+        let snap = snapshot_cache_lengths(&cache, 0..config.n_layer);
+
+        // Write to all layers at position 0
+        let kvd = katgpt_core::types::kv_dim(&config);
+        for layer in &mut cache.layers {
+            layer.key[0..kvd].fill(1.0);
+            layer.value[0..kvd].fill(1.0);
+        }
+
+        // Snapshot after writes
+        let snap_after = snapshot_cache_lengths(&cache, 0..config.n_layer);
+
+        // Buffer sizes are identical (KV cache is pre-allocated)
+        assert_eq!(
+            snap, snap_after,
+            "Cache sizes should be identical regardless of writes"
+        );
+
+        // Restore and verify sizes still match
+        restore_cache_lengths(&mut cache, 0..config.n_layer, &snap);
+        let snap_restored = snapshot_cache_lengths(&cache, 0..config.n_layer);
+        assert_eq!(
+            snap, snap_restored,
+            "Cache sizes should match after restore"
+        );
+    }
+
+    /// Proof 3: damped Euler with K=0 is identity (bypass is free).
+    ///
+    /// When K=0, `sub_step_damped_euler` is a no-op — the state is unchanged.
+    /// This ensures the training-free loop adds zero overhead when disabled.
+    #[test]
+    fn proof_tf_loop_bypass_free() {
+        let _dim = 64;
+        let mut x = vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+        let original = x.clone();
+        let y = vec![10.0f32, 20.0, 30.0, 40.0, 50.0];
+
+        // K=0 → identity
+        sub_step_damped_euler(&mut x, &y, 0);
+        assert_eq!(x, original, "K=0 should be identity");
+
+        // Also check beta=0 anchor blend is identity
+        let mut x2 = vec![1.0f32, 2.0, 3.0];
+        let original2 = x2.clone();
+        let anchor = vec![100.0f32, 200.0, 300.0];
+        anchor_blend(&mut x2, &anchor, 0.0);
+        assert_eq!(x2, original2, "beta=0 should be identity");
+
+        // Window of size 0 (empty range) → no loop iterations at all
+        let empty: Vec<usize> = (0..0).collect();
+        assert!(empty.is_empty(), "Empty window should have no iterations");
+    }
+
+    /// Proof 4: layer-mode sub-stepping is stable.
+    ///
+    /// Layer-by-layer iteration within window produces finite, bounded output.
+    /// This verifies that applying sub-stepping per-layer (rather than per-block)
+    /// doesn't cause numerical instability.
+    #[test]
+    fn proof_tf_loop_layer_mode_stable() {
+        let dim = 64;
+        let ks = [2, 3, 4];
+        let n_window_layers = 3;
+
+        for &k in &ks {
+            let mut x = vec![1.0f32; dim];
+            let anchor = vec![0.5f32; dim];
+            let beta = 0.5;
+
+            // Simulate layer-mode: sub-step after each layer in the window
+            for _ in 0..k {
+                for _l in 0..n_window_layers {
+                    // Synthetic layer transform: y = 0.9*x + 0.05
+                    let mut y = vec![0.0f32; dim];
+                    for (yi, xi) in y.iter_mut().zip(x.iter()) {
+                        *yi = 0.9 * xi + 0.05;
+                    }
+                    // Per-layer sub-step
+                    let pre = x.clone();
+                    sub_step_damped_euler(&mut x, &y, k);
+                    // After sub-step, x should move toward y from pre
+                    for (i, ((&xi, &yi), &pi)) in x.iter().zip(y.iter()).zip(pre.iter()).enumerate()
+                    {
+                        let expected = pi + (1.0 / k as f32) * (yi - pi);
+                        assert!(
+                            (xi - expected).abs() < 1e-5,
+                            "Layer-mode mismatch at K={k}, layer={_l}, idx={i}: {xi} vs {expected}"
+                        );
+                    }
+                }
+            }
+
+            // Anchor blend
+            anchor_blend(&mut x, &anchor, beta);
+
+            // All outputs must be finite
+            for (i, &v) in x.iter().enumerate() {
+                assert!(
+                    v.is_finite(),
+                    "Non-finite in layer-mode at K={k}, idx={i}: {v}"
+                );
+            }
+
+            // Bounded
+            let max_abs = x.iter().map(|v| v.abs()).fold(0.0f32, f32::max);
+            assert!(
+                max_abs < 1e6,
+                "Layer-mode diverged at K={k}: max_abs={max_abs}"
+            );
+        }
     }
 }

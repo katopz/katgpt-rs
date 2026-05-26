@@ -63,3 +63,6 @@ pub use questbench::{
 
 #[cfg(feature = "tf_loop")]
 pub use types::{CacheStrategy, IterationMode, SubStepStrategy, TrainingFreeLoopConfig};
+
+#[cfg(feature = "plasma_path")]
+pub use types::TernaryWeights;

@@ -610,7 +610,7 @@ impl<V> ParallelProbeVerifier<V> {
 
         for (branch_id, text) in self.branch_texts.iter().enumerate() {
             let branch = self.controller.branch(branch_id);
-            if branch.map_or(true, |b| b.is_pruned || b.is_finished) {
+            if branch.is_none_or(|b| b.is_pruned || b.is_finished) {
                 answers.push(None);
             } else {
                 answers.push(self.extractor.extract_answer(&[], text));

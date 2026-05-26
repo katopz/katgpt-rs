@@ -1059,6 +1059,7 @@ pub fn forward_training_free_loop<'a>(
 ///
 /// Extracted from `forward_base` to be reusable by both standard and looped paths.
 #[cfg(feature = "tf_loop")]
+#[allow(clippy::too_many_arguments)]
 #[inline(always)]
 fn forward_single_layer(
     ctx: &mut ForwardContext,

@@ -210,6 +210,91 @@ impl ContiguousWeights {
     }
 }
 
+/// Load a ciot-format .bits ternary weight file.
+///
+/// Format (little-endian):
+///   magic      8 bytes  b"CIOTBIT1"
+///   rows       u32
+///   cols       u32
+///   blocks64   u32
+///   row_scale  rows × f32
+///   pos_bits   rows × blocks64 × u64
+///   neg_bits   rows × blocks64 × u64
+#[cfg(feature = "plasma_path")]
+pub fn load_ternary_bits(path: &std::path::Path) -> std::io::Result<katgpt_core::TernaryWeights> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path)?;
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf)?;
+
+    if buf.len() < 20 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file too small for header",
+        ));
+    }
+
+    // Magic
+    if &buf[0..8] != b"CIOTBIT1" {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "invalid magic",
+        ));
+    }
+
+    let rows = u32::from_le_bytes(buf[8..12].try_into().unwrap()) as usize;
+    let cols = u32::from_le_bytes(buf[12..16].try_into().unwrap()) as usize;
+    let blocks64 = u32::from_le_bytes(buf[16..20].try_into().unwrap()) as usize;
+
+    let expected_blocks = (cols + 63) / 64;
+    if blocks64 != expected_blocks {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("blocks64 mismatch: header={blocks64}, expected={expected_blocks}"),
+        ));
+    }
+
+    let scale_bytes = rows * 4;
+    let pos_bytes = rows * blocks64 * 8;
+    let neg_bytes = rows * blocks64 * 8;
+    let expected_len = 20 + scale_bytes + pos_bytes + neg_bytes;
+    if buf.len() < expected_len {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file truncated",
+        ));
+    }
+
+    let mut off = 20;
+    let mut row_scale = vec![0.0f32; rows];
+    for r in 0..rows {
+        row_scale[r] = f32::from_le_bytes(buf[off..off + 4].try_into().unwrap());
+        off += 4;
+    }
+
+    let pos_count = rows * blocks64;
+    let mut pos_bits = vec![0u64; pos_count];
+    for i in 0..pos_count {
+        pos_bits[i] = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
+        off += 8;
+    }
+
+    let mut neg_bits = vec![0u64; pos_count];
+    for i in 0..pos_count {
+        neg_bits[i] = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
+        off += 8;
+    }
+
+    Ok(katgpt_core::TernaryWeights {
+        rows,
+        cols,
+        blocks64,
+        pos_bits,
+        neg_bits,
+        row_scale,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

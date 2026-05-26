@@ -359,13 +359,11 @@ impl AnswerExtractor for DiscreteActionExtractor {
                 // Check word boundary.
                 let before_ok = start == 0 || !(bytes[start - 1] as char).is_ascii_alphanumeric();
                 let after_ok = i >= bytes.len() || !(bytes[i] as char).is_ascii_alphanumeric();
-                if before_ok && after_ok {
-                    if let Ok(val) = lower[start..i].parse::<usize>() {
-                        if val < self.max_actions {
+                if before_ok && after_ok
+                    && let Ok(val) = lower[start..i].parse::<usize>()
+                        && val < self.max_actions {
                             last_valid = Some(val);
                         }
-                    }
-                }
             } else {
                 i += 1;
             }
@@ -386,11 +384,10 @@ impl DiscreteActionExtractor {
                 while i < bytes.len() && (bytes[i] as char).is_ascii_digit() {
                     i += 1;
                 }
-                if let Ok(val) = text[start..i].parse::<usize>() {
-                    if val < max_actions {
+                if let Ok(val) = text[start..i].parse::<usize>()
+                    && val < max_actions {
                         return Some(val);
                     }
-                }
             } else {
                 i += 1;
             }

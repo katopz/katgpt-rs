@@ -26,3 +26,4 @@ sr2am_configurator = []  # SR²AM Configurator Bandit — learned per-turn plann
 data_gate = []  # Task-level data gating for self-play training stability (Plan 111, Research 075)
 questbench = []  # QuestBench underspecification scoring for modelless architecture (Plan 110, Research 008)
 tf_loop = ["lt2_looped"]  # Training-free loop wrapper — ODE-refined sub-stepping (Plan 136)
+plasma_path = []  # Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110)
