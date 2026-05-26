@@ -151,6 +151,39 @@ pub fn peira_alignment_score(sigma: &[f64], n_matrix: &[f64], k: usize) -> f64 {
     dot.abs() / denom
 }
 
+/// Compute a PEIRA-based planning quality signal for SR²AM integration.
+///
+/// Takes raw representation statistics and returns a quality score in [0, 1]
+/// that can be used as an additional reward signal in ConfiguratorBandit.
+///
+/// This is a lightweight version of the full PEIRA alignment score that
+/// doesn't require maintaining full covariance matrices — suitable for
+/// per-tick evaluation in the SR²AM loop.
+///
+/// Internally computes the cosine similarity between student and teacher
+/// score distributions as an alignment proxy.
+pub fn peira_planning_quality(student_scores: &[f32], teacher_scores: &[f32]) -> f32 {
+    if student_scores.is_empty() || teacher_scores.is_empty() {
+        return 0.0;
+    }
+    let mut dot = 0.0f64;
+    let mut norm_s = 0.0f64;
+    let mut norm_t = 0.0f64;
+    let k = student_scores.len().min(teacher_scores.len());
+    for i in 0..k {
+        let s = student_scores[i] as f64;
+        let t = teacher_scores[i] as f64;
+        dot += s * t;
+        norm_s += s * s;
+        norm_t += t * t;
+    }
+    let denom = norm_s.sqrt() * norm_t.sqrt();
+    if denom < 1e-15 {
+        return 0.0;
+    }
+    (dot / denom).clamp(0.0, 1.0) as f32
+}
+
 /// Power iteration to find the top eigenvector of a k×k matrix.
 ///
 /// Returns a unit-norm eigenvector corresponding to the largest eigenvalue.
@@ -306,5 +339,32 @@ mod tests {
         distiller.reset();
         assert_eq!(distiller.step_count(), 0);
         assert!(distiller.alignment_history().is_empty());
+    }
+
+    #[test]
+    fn peira_planning_quality_perfect_alignment() {
+        let scores = vec![1.0f32, 0.5, 0.0, -0.3];
+        let quality = peira_planning_quality(&scores, &scores);
+        assert!(
+            quality > 0.99,
+            "Perfect alignment should give ~1.0, got {quality}"
+        );
+    }
+
+    #[test]
+    fn peira_planning_quality_empty_inputs() {
+        assert_eq!(peira_planning_quality(&[], &[]), 0.0);
+        assert_eq!(peira_planning_quality(&[1.0], &[]), 0.0);
+        assert_eq!(peira_planning_quality(&[], &[1.0]), 0.0);
+    }
+
+    #[test]
+    fn peira_planning_quality_orthogonal() {
+        // Orthogonal vectors → cosine similarity = 0
+        let quality = peira_planning_quality(&[1.0, 0.0], &[0.0, 1.0]);
+        assert!(
+            quality < 0.01,
+            "Orthogonal vectors should give ~0.0, got {quality}"
+        );
     }
 }
