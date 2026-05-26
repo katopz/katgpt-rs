@@ -512,7 +512,7 @@ Head-wise retrieval/local classification + dynamic top-p token selection for dec
 - **Offline calibration** — one forward pass, serialized to JSON for disk reuse
 - **6/6 GOAT proofs passing** — calibration stability, top-p recall, low-dim accuracy, routing efficiency, accuracy preservation, compatibility
 
-📁 `src/rt_turbo/` — `calibration`, `projection`, `top_p`, `forward`
+📁 `src/rt_turbo/` — `calibration`, `projection`, `top_p`, `forward`, `sat_retrieval` (Plan 140 T18, behind cache_prune+rt_turbo)
 📁 `tests/test_126_rt_turbo_goat.rs` — 6 GOAT proofs
 📁 `.benchmarks/035_rt_turbo_goat.md` — Full benchmark results
 🔧 Feature flag: `rt_turbo` (requires `dash_attn`)
@@ -1345,7 +1345,8 @@ src/spechop/
 ├── speculator.rs       # HopSpeculator trait + CacheSpeculator + BanditSpeculator
 ├── window.rs           # SpecWindow k-bounded thread manager
 ├── pipeline.rs         # SpecHopPipeline continuous loop (Algorithm 1)
-└── hop_tree.rs         # Hop-level DDTree integration
+├── hop_tree.rs         # Hop-level DDTree integration
+└── segment_match.rs    # Rolling hash sub-sequence matching (Plan 140 T19, behind cache_prune+spechop)
 ```
 
 ### Examples
@@ -1946,6 +1947,16 @@ cargo clippy --all-targets --all-features --quiet
 | `data_gate` | Data Gate — self-play stability via task-level filtering before solver, ε-Bernoulli relaxation, execution-based gating (Research 75, Plan 111, **default-on**). Requires `bandit` |
 | `spechop` | SpecHop — continuous multi-hop speculation pipeline for tool-use agents. Hop-level DDTree, ObservationVerifier, k-bounded window, SR²AM `SpecHop { k }` arm. 170+ tests (Plan 131, **opt-in**). Requires `bandit` |
 | `event_log` | Event-sourced game traces with fork-and-diff — append-only log, deterministic replay, structural diff, eval cache. Game wrappers: `BomberEventLog`, `GoEventLog` (Plan 124, GOAT 22/22 ✅) |
+| `data_probe` | Data Probe Diagnostics — controlled information-theoretic validation with Markov chain analysis, NLL estimation, typical-set regime classification, and claim verification (Plan 141, **opt-in**) |
+| `ega_attn` | Energy-Gated Attention — spectral salience gating (Plan 139, **opt-in**) |
+| `safe_bandit` | PrudentBanker Safe-Phased Bandit — delay-calibrated safe exploration with bounded regret (Plan 137, **opt-in**). Requires `bandit` |
+| `stiff_anomaly` | Stiff/Soft Subspace Anomaly Gate — eigenvalue decomposition anomaly detection (Plan 138, **opt-in**) |
+| `cache_prune` | CachePrune — SAT + rolling hash + sensitivity masking for KV cache pruning (Plan 140, **opt-in**) |
+| `state_source` | State-Source Modelless Distillation — state-visitation tracking + P-UCB selector + retention metrics (Plan 142, **opt-in**). Requires `bandit` |
+| `nexus_elo` | Nexus Elo — Plackett-Luce + P-UCB + goal cache for DDTree/SR²AM (Plan 143, **opt-in**). Requires `state_source`, `proof_sketch_evolution` |
+| `skill_opt` | SkillOpt — text-space skill optimization framework for game rule auto-tuning (Plan 144, **opt-in**) |
+| `proof_cert` | Hierarchical GOAT Proof Certificates — formal verification methodology with certificate chains and WASM certificates (Plan 145, **opt-in**) |
+| `mech_attribution` | Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, **opt-in**). Requires `cna_steering`, `ropd_rubric`, `bandit` |
 | `full` | Enable all features (excludes `stepcode`, `sp_kv`) |
 
 > **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating. All 25 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
@@ -2047,6 +2058,12 @@ src/
       mod.rs           Module root + procedure compiler
       graph.rs         Procedure graph definition
       compile.rs       Token-rewriting procedure → native code
+    state_source/    State-Source Modelless Distillation (Plan 142):
+      mod.rs           Module root + re-exports
+      visitation.rs    StateVisitationTracker
+      pucb_selector.rs PUCBSelector with adaptive exploration constant
+      retention.rs     ContinuationScorer, RetentionMetric
+      continuation.rs  Continuation scoring
     arena/           Cross-arena tournament infrastructure (Plan 076):
       mod.rs           Module root + re-exports
       types.rs         ArenaKind, GameResult, MatchupResult, Ranking, Leaderboard, EloCalculator
@@ -2167,6 +2184,7 @@ src/
     routing.rs      Learned chunk routing
     chunk_summary.rs Chunk summary computation
     forward.rs      forward_dash_attn, DashAttnContext
+    sat_analysis.rs SAT per-head sparsity analysis (Plan 140 T17, behind cache_prune+dash_attn)
     tests.rs        Unit tests
   gdn2/            Gated DeltaNet-2 recurrent attention (Plan 105):
     mod.rs          Module root
@@ -2185,6 +2203,27 @@ src/
     kv_cache.rs     IsoQuantKVCache
     mod.rs          Module root
   unit_distance/   Unit Distance GOAT proof (Plan 090)
+  data_probe/      Data Probe Diagnostics — information-theoretic validation (Plan 141):
+    mod.rs          Module root
+    claim.rs        Claim verification
+    markov.rs       Markov chain analysis
+    nll.rs          NLL estimation
+    typical_set.rs  Typical-set regime classification
+  skill_opt/       SkillOpt text-space skill optimization (Plan 144):
+    mod.rs          Module root
+    apply.rs        Skill application
+    edit.rs         Edit operations
+    buffer.rs       Edit buffer
+    gate.rs         Validation gate
+    optimizer.rs    Optimizer loop
+    schedule.rs     Edit budget schedule
+  proof_cert/      Hierarchical GOAT Proof Certificates (Plan 145):
+    mod.rs          Module root
+    certificate.rs  Certificate types
+    chain.rs        Certificate chains
+    macros.rs       Declarative proof macros
+    serde_impls.rs  Serde serialization
+    wasm_certificates.rs  WASM certificate generation
   alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
   feedback.rs       TTT feedback (feature-gated feedback)
   benchmark.rs      BenchResult, run_all, save_results_csv, bench_hla_vs_flat_cache, bench_hla_memory, bench_hla_quality, bench_simd, bench_sparse_mlp
