@@ -3,14 +3,14 @@
 //! Plan 065 Phase 4 (Tasks T32-T36):
 //! - T32: `GoSelfPlayResult` — per-episode result tracking
 //! - T33: `GoTemplateProposer` — UCB1 template selection with 4 Go templates
-//! - T34: HintDelta computation — modelless δ = score(template_move) - score(best_unhinted)
+//! - T34: HintDelta computation — modelless δ = score(template_move) - score(best_non_template)
 //! - T35: `GoDeltaGatedAbsorbCompress` — promote high-δ templates to hard constraints
 //! - T36: `run_gzero_selfplay` — main self-play loop
-//!
+//
 //! Adapted from the general G-Zero TemplateProposer pattern but Go-specific:
 //! - Query = board state as flat token array (0=empty, 1=black, 2=white)
 //! - Hint = template-suggested move coordinates
-//! - δ = score difference between template-proposed and best-unhinted
+//! - δ = score difference between template-proposed and best non-template move
 
 use std::io::Write;
 use std::time::Instant;
@@ -36,9 +36,10 @@ const UCB1_C: f32 = 2.0;
 
 /// Delta recorded for a single move within an episode.
 ///
-/// Modelless approximation: δ = score(template_move) - max(score(all_legal_moves)).
-/// Positive δ means the template correctly identified a high-value move.
-/// Negative δ means the template's suggestion was worse than the best available.
+/// Modelless approximation: δ = score(template_move) - max(score(non_template_moves)).
+/// Positive δ means the template identified a move better than any non-matching move.
+/// Negative δ means the template's suggestion was worse than what was available elsewhere.
+/// Zero δ means the template's move was the best available (tie with non-template best).
 #[derive(Clone, Debug)]
 pub struct MoveDelta {
     /// Move number (1-based).
@@ -51,7 +52,7 @@ pub struct MoveDelta {
     pub suggested_move: (usize, usize),
     /// Greedy score of suggested move.
     pub hinted_score: f32,
-    /// Best greedy score among all legal moves (unhinted).
+    /// Best greedy score among legal moves NOT matching this template.
     pub best_unhinted_score: f32,
     /// δ = hinted_score - best_unhinted_score.
     pub delta: f32,
@@ -272,26 +273,41 @@ fn compute_move_score(state: &GoState, row: usize, col: usize) -> f32 {
 
 /// Compute Go-specific hint delta for a move.
 ///
-/// Modelless approximation: δ = score(template_move) - max(score(all_legal_moves))
+/// δ = score(template_move) - max(score(non_template_legal_moves))
 ///
-/// Positive δ means the template identified a move equal to or better than the
-/// best available. Negative δ means the template's suggestion was suboptimal.
+/// The baseline is the best legal move that does NOT match the template.
+/// This ensures:
+/// - δ > 0 when the template finds a move better than anything non-template play would find
+/// - δ ≈ 0 when the template's move is comparable to the best non-template move
+/// - δ < 0 when the template leads to a suboptimal move
+///
+/// Falls back to 0.0 baseline if all legal moves match the template (rare but possible).
 pub fn compute_go_delta(
     state: &GoState,
     template: GoTemplate,
     template_move: (usize, usize),
     legal_moves: &[(usize, usize)],
+    last_move: Option<(usize, usize)>,
 ) -> MoveDelta {
     let board_tokens: Vec<i8> = state.board.iter().map(|c| *c as i8).collect();
 
     let hinted_score = compute_move_score(state, template_move.0, template_move.1);
 
+    // Baseline: best score among legal moves NOT matching this template.
     let best_unhinted_score = legal_moves
         .iter()
+        .filter(|&&(r, c)| !matches_template(template, state, r, c, last_move))
         .map(|&(r, c)| compute_move_score(state, r, c))
         .fold(f32::NEG_INFINITY, f32::max);
 
-    let delta = hinted_score - best_unhinted_score;
+    // If all moves match the template (or no non-matching moves), baseline = 0.
+    let baseline = if best_unhinted_score.is_infinite() {
+        0.0
+    } else {
+        best_unhinted_score
+    };
+
+    let delta = hinted_score - baseline;
 
     MoveDelta {
         move_num: state.move_count as usize + 1,
@@ -299,7 +315,7 @@ pub fn compute_go_delta(
         board_tokens,
         suggested_move: template_move,
         hinted_score,
-        best_unhinted_score,
+        best_unhinted_score: baseline,
         delta,
     }
 }
@@ -837,7 +853,13 @@ pub fn run_gzero_selfplay(
                 .unwrap_or(legal_moves[0]);
 
             // Compute δ for this move
-            let move_delta = compute_go_delta(&state, template, best_move, &legal_moves);
+            let move_delta = compute_go_delta(
+                &state,
+                template,
+                best_move,
+                &legal_moves,
+                proposer.last_move,
+            );
 
             // Feed δ back to proposer
             proposer.observe_delta(template, move_delta.delta);
@@ -1057,7 +1079,7 @@ mod tests {
         let legal_moves = state.legal_moves();
         assert!(!legal_moves.is_empty());
 
-        // Pick the best move as the template move (δ should be ≥ 0)
+        // Pick the best move as the template move (δ should be >= 0)
         let best = legal_moves
             .iter()
             .max_by(|&&a, &&b| {
@@ -1068,9 +1090,10 @@ mod tests {
             .copied()
             .unwrap();
 
-        let delta = compute_go_delta(&state, GoTemplate::CornerStar, best, &legal_moves);
+        let delta = compute_go_delta(&state, GoTemplate::CornerStar, best, &legal_moves, None);
 
-        // When the template picks the actual best move, δ should be ~0
+        // When the template picks the actual best move, δ should be >= 0
+        // (because baseline is best non-matching move, which may be lower)
         assert!(
             delta.delta >= -0.001,
             "Expected δ >= 0 for best move, got {}",
@@ -1086,9 +1109,15 @@ mod tests {
 
         // Template picks corner (0,0) which is a poor opening
         let template_move = (0, 0);
-        let delta = compute_go_delta(&state, GoTemplate::CornerStar, template_move, &legal_moves);
+        let delta = compute_go_delta(
+            &state,
+            GoTemplate::CornerStar,
+            template_move,
+            &legal_moves,
+            None,
+        );
 
-        // Corner should have negative δ (worse than best available)
+        // Corner should have negative δ (worse than best non-matching move)
         assert!(
             delta.delta < 0.0,
             "Expected δ < 0 for corner move on empty board, got {}",

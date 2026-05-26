@@ -91,8 +91,8 @@ Instead of komi, give White 1-2 handicap stones (placed before game starts). Mor
 - [~] Black win rate: cumulative 98.6% (low-komi convergence phase), ~81% at komi=42 with 14.7% draws. Swap-colors gives per-agent balance (each agent plays both sides)
 - [x] Adaptive komi algorithm converges correctly: 7.5 → 42 in ~300 episodes, score margin +30 → ~0
 - [x] Swap-colors (Option B) implemented — `swapped_episodes == num_episodes / 2`, per-agent balance achieved
-- [ ] Template deltas still reflect color assignment (templates too weak for komi alone)
-- [ ] No templates promoted via absorb-compress (all δ below threshold)
+- [x] Template deltas now use non-template baseline (δ > 0 achievable for good templates)
+- [x] Templates can now be promoted via absorb-compress (Capture, Defend produce positive δ)
 - [x] Zero regressions — 760 existing tests pass, 6 new komi tests pass (4 komi + 2 swap-colors)
 - [x] Updated docs with new results (`14_go_arena.md`)
 
