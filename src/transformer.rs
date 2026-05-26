@@ -661,6 +661,7 @@ pub fn forward_looped<'a>(
     let loop_count = match config.loop_mode {
         LoopMode::WeightShared { loop_count } => loop_count,
         LoopMode::None => 1,
+        LoopMode::TrainingFree => 1,
     };
 
     // 1. Embedding: x = wte[token] + wpe[pos]
@@ -821,6 +822,325 @@ pub fn forward_looped<'a>(
     );
 
     &mut ctx.logits
+}
+
+// ---------------------------------------------------------------------------
+// Training-Free Loop Wrapper (Plan 136, Research 94)
+// ---------------------------------------------------------------------------
+
+/// Training-free loop forward pass — ODE-refined sub-stepping over a window.
+///
+/// Pure inference-time retrofit: re-applies a contiguous mid-stack block of
+/// layers K times with damped sub-stepping and anchor blending. No training needed.
+///
+/// # Algorithm (block-mode)
+///
+/// ```text
+/// 1. Embedding: x = wte[token] + wpe[pos]
+/// 2. Pre-loop:  for layer 0..window_start:  standard forward, write KV
+/// 3. Anchor:    forward window once → x_anchor
+/// 4. Loop K times:
+///      a. Forward window layers
+///      b. Sub-step: x += (1/K)·(y − x)  [damped Euler]
+/// 5. Blend with anchor: x = β·x_anchor + (1−β)·x
+/// 6. Stash:     single forward through window writes canonical KV
+/// 7. Post-loop: for layer window_end+1..n_layer: standard forward, write KV
+/// 8. LM head
+/// ```
+#[cfg(feature = "tf_loop")]
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
+pub fn forward_training_free_loop<'a>(
+    ctx: &'a mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut MultiLayerKVCache,
+    token: usize,
+    pos: usize,
+    config: &Config,
+    tf_config: &TrainingFreeLoopConfig,
+) -> &'a mut [f32] {
+    use crate::tf_loop::{anchor_blend, sub_step_damped_euler};
+    use katgpt_core::types::{CacheStrategy, IterationMode, SubStepStrategy};
+
+    let n = config.n_embd;
+    let hd = config.head_dim;
+    let kvd = types::kv_dim(config);
+    let n_kv = config.n_kv_head;
+    let n_layer = weights.layers.len();
+    let window_start = tf_config.window_start.min(n_layer);
+    let window_end = tf_config.window_end.min(n_layer - 1);
+    let k = tf_config.loop_count;
+    let beta = match tf_config.strategy {
+        SubStepStrategy::DampedEuler => 0.0, // no anchor blend for pure Euler
+        SubStepStrategy::KStageRK { beta } => beta,
+    };
+
+    // 1. Embedding: x = wte[token] + wpe[pos]
+    let tok_off = token * n;
+    let pos_off_emb = pos * n;
+    crate::simd::simd_add_into(
+        &mut ctx.x[..n],
+        &weights.wte[tok_off..tok_off + n],
+        &weights.wpe[pos_off_emb..pos_off_emb + n],
+    );
+
+    // 2. Pre-loop layers: standard forward with KV writes
+    for (layer_idx, layer_weights) in weights.layers[..window_start].iter().enumerate() {
+        forward_single_layer(
+            ctx,
+            layer_weights,
+            &mut cache.layers[layer_idx],
+            pos,
+            config,
+            n,
+            hd,
+            kvd,
+            n_kv,
+        );
+    }
+
+    // Save state before window for anchor computation
+    let x_pre_window = ctx.x[..n].to_vec();
+
+    // 3. Anchor: forward window once to get x_anchor
+    let x_anchor = if beta > 0.0 {
+        for layer_idx in window_start..=window_end {
+            forward_single_layer(
+                ctx,
+                &weights.layers[layer_idx],
+                &mut cache.layers[layer_idx],
+                pos,
+                config,
+                n,
+                hd,
+                kvd,
+                n_kv,
+            );
+        }
+        let anchor = ctx.x[..n].to_vec();
+        // Restore x to pre-window state for loop iterations
+        ctx.x[..n].copy_from_slice(&x_pre_window);
+        anchor
+    } else {
+        Vec::new() // no anchor needed when beta == 0
+    };
+
+    // Temp buffer for window output
+    let mut y_buf = vec![0.0f32; n];
+
+    // 4. Loop K times over the window with sub-stepping
+    match tf_config.iteration_mode {
+        IterationMode::Block => {
+            for _ in 0..k {
+                // Forward through window layers
+                for layer_idx in window_start..=window_end {
+                    forward_single_layer(
+                        ctx,
+                        &weights.layers[layer_idx],
+                        &mut cache.layers[layer_idx],
+                        pos,
+                        config,
+                        n,
+                        hd,
+                        kvd,
+                        n_kv,
+                    );
+                }
+                // Save window output
+                y_buf[..n].copy_from_slice(&ctx.x[..n]);
+                // Restore x to pre-window for sub-step computation
+                ctx.x[..n].copy_from_slice(&x_pre_window);
+                // Apply sub-step: x += (1/K)·(y − x)
+                sub_step_damped_euler(&mut ctx.x[..n], &y_buf[..n], k);
+            }
+        }
+        IterationMode::Layer => {
+            for _ in 0..k {
+                for layer_idx in window_start..=window_end {
+                    // Forward single layer
+                    forward_single_layer(
+                        ctx,
+                        &weights.layers[layer_idx],
+                        &mut cache.layers[layer_idx],
+                        pos,
+                        config,
+                        n,
+                        hd,
+                        kvd,
+                        n_kv,
+                    );
+                    // Sub-step per layer
+                    y_buf[..n].copy_from_slice(&ctx.x[..n]);
+                    ctx.x[..n].copy_from_slice(&x_pre_window);
+                    sub_step_damped_euler(&mut ctx.x[..n], &y_buf[..n], k);
+                }
+            }
+        }
+    }
+
+    // 5. Blend with anchor
+    if beta > 0.0 && !x_anchor.is_empty() {
+        anchor_blend(&mut ctx.x[..n], &x_anchor, beta);
+    }
+
+    // 6. Stash: single forward through window writes canonical KV entries
+    {
+        let stash_x = ctx.x[..n].to_vec();
+        match tf_config.cache_strategy {
+            CacheStrategy::Last => {
+                // Forward with final state → writes KV
+                for layer_idx in window_start..=window_end {
+                    forward_single_layer(
+                        ctx,
+                        &weights.layers[layer_idx],
+                        &mut cache.layers[layer_idx],
+                        pos,
+                        config,
+                        n,
+                        hd,
+                        kvd,
+                        n_kv,
+                    );
+                }
+            }
+            CacheStrategy::First => {
+                // Forward with pre-window state → writes KV
+                ctx.x[..n].copy_from_slice(&x_pre_window);
+                for layer_idx in window_start..=window_end {
+                    forward_single_layer(
+                        ctx,
+                        &weights.layers[layer_idx],
+                        &mut cache.layers[layer_idx],
+                        pos,
+                        config,
+                        n,
+                        hd,
+                        kvd,
+                        n_kv,
+                    );
+                }
+                // Restore the blended state
+                ctx.x[..n].copy_from_slice(&stash_x);
+            }
+        }
+    }
+
+    // 7. Post-loop layers: standard forward with KV writes
+    for layer_idx in (window_end + 1)..n_layer {
+        forward_single_layer(
+            ctx,
+            &weights.layers[layer_idx],
+            &mut cache.layers[layer_idx],
+            pos,
+            config,
+            n,
+            hd,
+            kvd,
+            n_kv,
+        );
+    }
+
+    // Snapshot hidden state
+    ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
+
+    // 8. LM Head
+    standard_lm_head(
+        &mut ctx.logits,
+        &ctx.x,
+        &weights.lm_head,
+        config.vocab_size,
+        n,
+    );
+
+    &mut ctx.logits
+}
+
+/// Single transformer layer forward: attention + MLP with KV cache write.
+///
+/// Extracted from `forward_base` to be reusable by both standard and looped paths.
+#[cfg(feature = "tf_loop")]
+#[inline(always)]
+fn forward_single_layer(
+    ctx: &mut ForwardContext,
+    layer_weights: &LayerWeights,
+    layer_cache: &mut KVCache,
+    pos: usize,
+    config: &Config,
+    n: usize,
+    hd: usize,
+    kvd: usize,
+    n_kv: usize,
+) {
+    // Pre-attention: RMSNorm → save residual → RMSNorm
+    types::rmsnorm(&mut ctx.x);
+    ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
+    types::rmsnorm(&mut ctx.x);
+
+    // QKV projections
+    types::matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+    types::matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+    types::matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+
+    // Store K,V in cache
+    let pos_off = pos * kvd;
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            ctx.k.as_ptr(),
+            layer_cache.key.as_mut_ptr().add(pos_off),
+            kvd,
+        );
+        std::ptr::copy_nonoverlapping(
+            ctx.v.as_ptr(),
+            layer_cache.value.as_mut_ptr().add(pos_off),
+            kvd,
+        );
+    }
+
+    // Multi-head attention with GQA
+    let scale = 1.0 / (hd as f32).sqrt();
+    ctx.attn_out[..n].fill(0.0);
+    let t_n = pos + 1;
+    for h in 0..config.n_head {
+        let kv_group = h * n_kv / config.n_head;
+        unsafe {
+            attention_head(
+                &ctx.q,
+                &layer_cache.key,
+                &layer_cache.value,
+                &mut ctx.attn_out,
+                &mut ctx.scores,
+                h * hd,
+                kv_group * hd,
+                kvd,
+                hd,
+                t_n,
+                scale,
+            );
+        }
+    }
+
+    // Output projection + residual
+    types::matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
+    crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+
+    // MLP: save residual → RMSNorm → MLP → residual
+    ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
+    types::rmsnorm(&mut ctx.x);
+    types::matmul_relu(
+        &mut ctx.hidden,
+        &layer_weights.mlp_w1,
+        &ctx.x,
+        config.mlp_hidden,
+        n,
+    );
+    types::matmul(
+        &mut ctx.x,
+        &layer_weights.mlp_w2,
+        &ctx.hidden,
+        n,
+        config.mlp_hidden,
+    );
+    crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 }
 
 /// Standard full-vocab LM head (current behavior).
@@ -5992,5 +6312,55 @@ mod tests {
         let map = cluster_map_from_embeddings(&wte, 100, 32, 25);
         let expected = cluster_map_round_robin(100, 25);
         assert_eq!(map, expected);
+    }
+
+    // ── Delta routing stability tests (Plan 134 T2) ─────────────
+
+    /// GOAT proof: verifies that `depth_route` norm stability holds empirically
+    /// across 36 simulated layers. See `depth_route` doc comment for the
+    /// theoretical argument (Plan 134 T1/T3, MGR §3.2).
+    #[test]
+    #[cfg(feature = "delta_routing")]
+    fn proof_depth_route_norm_stability() {
+        let n_embd = 32;
+        let n_sources = 4;
+
+        // Create initial residual (simulating embedding output)
+        let mut residual: Vec<f32> = (0..n_embd).map(|i| (i as f32 * 0.1).sin()).collect();
+        let initial_norm: f32 = residual.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        // Create synthetic sources (layer deltas), query weights, norm weights
+        let sources: Vec<Vec<f32>> = (0..n_sources)
+            .map(|s| {
+                (0..n_embd)
+                    .map(|i| ((i + s * 7) as f32 * 0.05).cos() * 0.1)
+                    .collect()
+            })
+            .collect();
+        let source_refs: Vec<&[f32]> = sources.iter().map(|s| s.as_slice()).collect();
+        let query_weight: Vec<f32> = (0..n_embd).map(|i| (i as f32 * 0.1).sin() * 0.01).collect();
+        let norm_weight: Vec<f32> = vec![1.0; n_embd];
+        let mut logits_buf = vec![0.0f32; n_sources];
+
+        // Simulate 36 layers of additive routing
+        for _ in 0..36 {
+            depth_route(
+                &mut residual,
+                &source_refs,
+                &query_weight,
+                &norm_weight,
+                &mut logits_buf,
+                n_embd,
+            );
+        }
+
+        let final_norm: f32 = residual.iter().map(|x| x * x).sum::<f32>().sqrt();
+        assert!(
+            final_norm <= 10.0 * initial_norm,
+            "Norm grew beyond 10x: initial={}, final={}, ratio={}",
+            initial_norm,
+            final_norm,
+            final_norm / initial_norm,
+        );
     }
 }

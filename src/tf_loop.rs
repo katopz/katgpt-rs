@@ -19,6 +19,10 @@
 //!
 //! Run tests: `cargo test --features tf_loop`
 
+use crate::transformer::{KVCache, MultiLayerKVCache};
+use katgpt_core::types::Config;
+use katgpt_core::types::kv_dim;
+
 /// Returns a sensible default loop window for a transformer with `n_layers` layers.
 ///
 /// Uses a depth-fraction heuristic: center at 48% depth, ±1 layer.
@@ -78,6 +82,102 @@ pub fn anchor_blend(x: &mut [f32], anchor: &[f32], beta: f32) {
     let one_minus_beta = 1.0 - beta;
     for (xi, ai) in x.iter_mut().zip(anchor.iter()) {
         *xi = beta * ai + one_minus_beta * *xi;
+    }
+}
+
+/// Records per-layer KV cache lengths for later restore.
+///
+/// For each layer in `layers`, records `key.len()` (which equals `block_size × kv_dim`).
+/// The snapshot can be restored via `restore_cache_lengths`.
+pub fn snapshot_cache_lengths(
+    cache: &MultiLayerKVCache,
+    layers: std::ops::Range<usize>,
+) -> Vec<usize> {
+    layers
+        .map(|i| {
+            if i < cache.layers.len() {
+                cache.layers[i].key.len()
+            } else {
+                0
+            }
+        })
+        .collect()
+}
+
+/// Crops KV cache back to snapshot lengths.
+///
+/// Zeros out entries beyond the snapshot length for each layer in `layers`.
+/// This effectively restores the cache to the state it was in when the snapshot was taken
+/// (assuming no entries were written beyond the snapshot boundary).
+pub fn restore_cache_lengths(
+    cache: &mut MultiLayerKVCache,
+    layers: std::ops::Range<usize>,
+    snapshot: &[usize],
+) {
+    for (i, &len) in layers.zip(snapshot.iter()) {
+        if i < cache.layers.len() {
+            let layer = &mut cache.layers[i];
+            // Zero everything beyond the snapshot point
+            if len < layer.key.len() {
+                layer.key[len..].fill(0.0);
+            }
+            if len < layer.value.len() {
+                layer.value[len..].fill(0.0);
+            }
+        }
+    }
+}
+
+/// Records per-layer KV cache fill position (in positions, not elements).
+///
+/// Unlike `snapshot_cache_lengths` which records total buffer sizes,
+/// this records how many positions are actually filled, which is more
+/// useful for tracking cache state during loop iterations.
+pub fn snapshot_cache_positions(
+    cache: &MultiLayerKVCache,
+    layers: std::ops::Range<usize>,
+    config: &Config,
+) -> Vec<usize> {
+    let kd = kv_dim(config);
+    layers
+        .map(|i| {
+            if i < cache.layers.len() {
+                // Find the last non-zero position
+                let key = &cache.layers[i].key;
+                let mut max_pos = 0;
+                for p in 0..config.block_size {
+                    let off = p * kd;
+                    if key[off..off + kd].iter().any(|&v| v != 0.0) {
+                        max_pos = p + 1;
+                    }
+                }
+                max_pos
+            } else {
+                0
+            }
+        })
+        .collect()
+}
+
+/// Restores KV cache to a snapshot of positions, zeroing beyond.
+pub fn restore_cache_positions(
+    cache: &mut MultiLayerKVCache,
+    layers: std::ops::Range<usize>,
+    positions: &[usize],
+    config: &Config,
+) {
+    let kd = kv_dim(config);
+    for (i, &pos) in layers.zip(positions.iter()) {
+        if i < cache.layers.len() {
+            let layer = &mut cache.layers[i];
+            let start = pos * kd;
+            if start < layer.key.len() {
+                layer.key[start..].fill(0.0);
+            }
+            if start < layer.value.len() {
+                layer.value[start..].fill(0.0);
+            }
+        }
     }
 }
 

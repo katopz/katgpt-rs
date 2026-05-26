@@ -122,7 +122,7 @@ This phase stays in riir-ai because:
 
 ## Task Breakdown
 
-### Phase 1: RoPE-Removal Enhancement (P1)
+### - [ ] Phase 1: RoPE-Removal Enhancement (P1)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|
@@ -135,7 +135,7 @@ This phase stays in riir-ai because:
 
 **Total: ~12 hours (2 days)**
 
-### Phase 2: Full Asymmetric Codec (P2)
+### - [ ] Phase 2: Full Asymmetric Codec (P2)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|
@@ -152,7 +152,7 @@ This phase stays in riir-ai because:
 
 **Total: ~31 hours (4 days)**
 
-### Phase 3: Fused GPU Attention (P3, riir-ai)
+### - [ ] Phase 3: Fused GPU Attention (P3, riir-ai)
 
 | Task | Description | Est. | Depends |
 |------|-------------|------|---------|

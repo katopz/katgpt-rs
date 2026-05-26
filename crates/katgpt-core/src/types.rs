@@ -227,6 +227,9 @@ pub enum LoopMode {
     /// Weight-shared looping: same layers applied T times.
     /// Effective depth = n_layer × loop_count.
     WeightShared { loop_count: usize },
+    /// Training-free loop: ODE-refined sub-stepping over a window of layers.
+    /// No extra parameters — pure inference-time retrofit (Plan 136).
+    TrainingFree,
 }
 
 /// Hybrid attention pattern for looped inference.
@@ -2188,6 +2191,31 @@ impl Default for TrainingFreeLoopConfig {
         Self {
             window_start: 0,
             window_end: 0,
+            loop_count: 2,
+            strategy: SubStepStrategy::KStageRK { beta: 0.5 },
+            iteration_mode: IterationMode::Block,
+            cache_strategy: CacheStrategy::First,
+        }
+    }
+}
+
+impl TrainingFreeLoopConfig {
+    /// Creates a config with sensible defaults for a given `Config`.
+    ///
+    /// Window heuristic: center at 48% depth, ±1 layer.
+    /// For small models (≤4 layers), defaults to (0, n_layer−1).
+    /// Uses the paper-recommended K-stage RK strategy with β=0.5.
+    pub fn from_config(config: &Config) -> Self {
+        let n = config.n_layer;
+        let (window_start, window_end) = if n <= 4 {
+            (0, n.saturating_sub(1))
+        } else {
+            let center = (n as f32 * 0.48) as usize;
+            (center.saturating_sub(1), (center + 2).min(n - 1))
+        };
+        Self {
+            window_start,
+            window_end,
             loop_count: 2,
             strategy: SubStepStrategy::KStageRK { beta: 0.5 },
             iteration_mode: IterationMode::Block,

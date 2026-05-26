@@ -24,6 +24,10 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use super::verifier::SpeculativeVerifier;
+use crate::transformer::TransformerWeights;
+use crate::types::{Config, Rng};
+
 // ── Configuration ─────────────────────────────────────────────
 
 /// Configuration for the Parallel-Probe controller.
@@ -635,6 +639,30 @@ impl<V> ParallelProbeVerifier<V> {
     /// Access the inner verifier mutably.
     pub fn inner_mut(&mut self) -> &mut V {
         &mut self.inner
+    }
+}
+
+// ── SpeculativeVerifier Integration ──────────────────────────
+
+#[cfg(feature = "parallel_probe")]
+impl<V: SpeculativeVerifier> SpeculativeVerifier for ParallelProbeVerifier<V> {
+    fn speculate(
+        &mut self,
+        draft_weights: &TransformerWeights,
+        draft_config: &Config,
+        token: usize,
+        pos: usize,
+        rng: &mut Rng,
+    ) -> Vec<usize> {
+        // Delegate to the inner verifier for actual speculative decoding.
+        let result = self
+            .inner
+            .speculate(draft_weights, draft_config, token, pos, rng);
+
+        // Track how many tokens were generated since the last probe.
+        self.record_tokens(result.len());
+
+        result
     }
 }
 
