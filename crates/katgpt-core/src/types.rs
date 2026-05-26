@@ -58,6 +58,7 @@ pub enum ModelArchitecture {
     #[default]
     Generic,
     Gemma2,
+    Llama,
 }
 
 /// Weight storage dtype (affects loading and dequantization).
@@ -1072,7 +1073,9 @@ impl Config {
             ));
         }
         // Gemma 2 intentionally has q_dim != n_embd (e.g., 8*256=2048 != 2304)
+        // LLaMA with GQA may also have q_dim != n_embd
         if self.model_arch != ModelArchitecture::Gemma2
+            && self.model_arch != ModelArchitecture::Llama
             && self.n_head * self.head_dim != self.n_embd
         {
             return Err(format!(
@@ -1086,7 +1089,7 @@ impl Config {
                 self.n_kv_head, self.head_dim, self.n_embd
             ));
         }
-        // MTP thresholds must be consistent (only for Generic arch; Gemma 2 doesn't use MTP)
+        // MTP thresholds must be consistent (only for Generic arch; Gemma 2 and Llama don't use MTP)
         if self.model_arch == ModelArchitecture::Generic && self.mtp_cluster_size == 0 {
             return Err("mtp_cluster_size must be > 0".into());
         }
@@ -1372,6 +1375,25 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         let inner = sqrt_2_over_pi * (g + 0.044715 * g * g * g);
         let gelu_val = 0.5 * g * (1.0 + inner.tanh());
         hidden[i] = gelu_val * up[i];
+    }
+}
+
+/// SiLU (Sigmoid Linear Unit) activation: x * sigmoid(x).
+/// Used in LLaMA, Mistral, and other LLaMA-family models for SwiGLU MLP.
+pub fn silu(x: &mut [f32]) {
+    for v in x.iter_mut() {
+        *v = *v / (1.0 + (-*v).exp());
+    }
+}
+
+/// SwiGLU activation: SiLU(gate) * up.
+/// Used in LLaMA-family models (gate_proj and up_proj are separate weights).
+/// Result stored in `hidden`: hidden[i] = silu(gate[i]) * up[i]
+pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
+    for i in 0..hidden.len() {
+        let g = gate[i];
+        let silu_val = g / (1.0 + (-g).exp());
+        hidden[i] = silu_val * up[i];
     }
 }
 
