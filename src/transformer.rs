@@ -549,24 +549,18 @@ unsafe fn attention_head(
     }
 
     // Pass 2: exp(scores - max) and accumulate sum
-    // Shift scores by max, then use SIMD exp for long sequences
+    // Shift scores by max using SIMD broadcast add, then SIMD exp
     let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    for s in scores_slice.iter_mut() {
-        *s -= max_score;
-    }
+    crate::simd::simd_add_scalar_inplace(scores_slice, -max_score);
     crate::simd::simd_exp_inplace(scores_slice);
-    let sum: f32 = scores_slice.iter().copied().sum();
+    let sum: f32 = crate::simd::simd_sum_f32(scores_slice);
 
     // Pass 3: normalize + weighted value accumulation (no write-back of scores)
-    // Pre-scale scores once
+    // Pre-scale scores once using SIMD
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(scores_slice, inv_sum);
     // Zero the output slice before accumulation
-    for d in 0..hd {
-        unsafe {
-            *attn_out.get_unchecked_mut(q_head_offset + d) = 0.0;
-        }
-    }
+    attn_out[q_head_offset..q_head_offset + hd].fill(0.0);
     // Accumulate: t outer → contiguous value_cache row access
     for t in 0..t_n {
         let s = unsafe { *scores_buf.get_unchecked(t) };
@@ -1256,7 +1250,8 @@ fn standard_lm_head(
 /// Uses partial selection sort: O(N + K log K).
 /// Returns indices sorted by score descending (highest first).
 ///
-/// Allocates internally. For hot-path code, prefer [`select_topk_indices_into_buf`].
+/// **Note:** This function allocates internally and is intended for tests/benchmarks only.
+/// For hot-path code, use [`select_topk_indices_into_buf`] which reuses pre-allocated buffers.
 pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
     let k = k.min(scores.len());
     if k == 0 {
@@ -1277,39 +1272,9 @@ pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
 }
 
 /// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
-///
-/// `indexed_buf` is cleared and filled with `(index, score)` pairs.
-/// Top-K indices are written into `output_buf` (cleared and filled),
-/// sorted by score descending (highest first).
-pub fn select_topk_indices_into(
-    scores: &[f32],
-    k: usize,
-    indexed_buf: &mut Vec<(usize, f32)>,
-    output_buf: &mut Vec<usize>,
-) {
-    let k = k.min(scores.len());
-    if k == 0 {
-        output_buf.clear();
-        return;
-    }
-
-    indexed_buf.clear();
-    indexed_buf.extend(scores.iter().copied().enumerate());
-
-    // Partial sort to partition top K (unstable, O(N))
-    indexed_buf.select_nth_unstable_by(k - 1, |a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Sort the top K by score descending (O(K log K))
-    indexed_buf[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    output_buf.clear();
-    output_buf.extend(indexed_buf[..k].iter().map(|(i, _)| *i));
-}
-
-/// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
 /// Writes top-K indices into `output_buf` (cleared and filled).
+///
+/// This is the preferred variant for hot-path code — no heap allocations.
 pub fn select_topk_indices_into_buf(
     scores: &[f32],
     k: usize,

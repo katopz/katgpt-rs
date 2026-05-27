@@ -859,6 +859,57 @@ unsafe fn avx2_scale_inplace(x: &mut [f32], scale: f32) {
     }
 }
 
+/// SIMD-accelerated in-place broadcast add: `x[i] += val` for all `i`.
+///
+/// Used for softmax max-subtraction: `scores[i] -= max_score`.
+/// NEON: 4× f32 per `vaddq_f32`. AVX2: 8× f32 per `_mm256_add_ps`.
+#[inline]
+pub fn simd_add_scalar_inplace(x: &mut [f32], val: f32) {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_add_scalar_inplace(x, val) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_add_scalar_inplace(x, val) }
+        } else {
+            scalar_add_scalar_inplace(x, val)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_add_scalar_inplace(x, val)
+    }
+}
+
+/// SIMD-accelerated horizontal sum: returns `x[0] + x[1] + ... + x[n-1]`.
+///
+/// Used for softmax denominator computation (sum of exp-shifted scores).
+/// NEON: uses `vaddvq_f32` for 4-lane horizontal sum. AVX2: uses 8-lane reduce.
+#[inline]
+pub fn simd_sum_f32(x: &[f32]) -> f32 {
+    if x.is_empty() {
+        return 0.0;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_sum_f32(x) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_sum_f32(x) }
+        } else {
+            scalar_sum_f32(x)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_sum_f32(x)
+    }
+}
+
 /// SIMD-accelerated in-place add: `dst[i] += src[i]` for all `i`.
 ///
 /// Used for residual connections in transformer forward pass (attn + MLP).
@@ -1179,6 +1230,24 @@ fn scalar_add_inplace(dst: &mut [f32], src: &[f32]) {
 
 #[inline]
 #[allow(dead_code)]
+fn scalar_add_scalar_inplace(x: &mut [f32], val: f32) {
+    for v in x.iter_mut() {
+        *v += val;
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_sum_f32(x: &[f32]) -> f32 {
+    let mut sum = 0.0f32;
+    for &v in x {
+        sum += v;
+    }
+    sum
+}
+
+#[inline]
+#[allow(dead_code)]
 fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
     for i in 0..dst.len() {
         unsafe {
@@ -1283,6 +1352,51 @@ unsafe fn neon_add_inplace(dst: &mut [f32], src: &[f32]) {
             *dst.get_unchecked_mut(i) += *src.get_unchecked(i);
             i += 1;
         }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_add_scalar_inplace(x: &mut [f32], val: f32) {
+    use core::arch::aarch64::{vaddq_f32, vdupq_n_f32, vld1q_f32, vst1q_f32};
+    unsafe {
+        let vv = vdupq_n_f32(val);
+        let mut i = 0;
+        let chunks = x.len() / 4;
+        for _ in 0..chunks {
+            let vx = vld1q_f32(x.as_ptr().add(i));
+            let result = vaddq_f32(vx, vv);
+            vst1q_f32(x.as_mut_ptr().add(i), result);
+            i += 4;
+        }
+        while i < x.len() {
+            *x.get_unchecked_mut(i) += val;
+            i += 1;
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_sum_f32(x: &[f32]) -> f32 {
+    use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vld1q_f32};
+    unsafe {
+        let mut i = 0;
+        let chunks = x.len() / 4;
+        // Accumulate 4-element partial sums, then horizontal reduce
+        let partials = [0.0f32; 4];
+        let mut acc = vld1q_f32(partials.as_ptr());
+        for _ in 0..chunks {
+            let vx = vld1q_f32(x.as_ptr().add(i));
+            acc = vaddq_f32(acc, vx);
+            i += 4;
+        }
+        let mut sum = vaddvq_f32(acc);
+        while i < x.len() {
+            sum += *x.get_unchecked(i);
+            i += 1;
+        }
+        sum
     }
 }
 
@@ -1616,6 +1730,49 @@ unsafe fn avx2_add_inplace(dst: &mut [f32], src: &[f32]) {
             *dst.get_unchecked_mut(i) += *src.get_unchecked(i);
             i += 1;
         }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_add_scalar_inplace(x: &mut [f32], val: f32) {
+    use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_set1_ps, _mm256_storeu_ps};
+    unsafe {
+        let vv = _mm256_set1_ps(val);
+        let mut i = 0;
+        let chunks = x.len() / 8;
+        for _ in 0..chunks {
+            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
+            let result = _mm256_add_ps(vx, vv);
+            _mm256_storeu_ps(x.as_mut_ptr().add(i), result);
+            i += 8;
+        }
+        while i < x.len() {
+            *x.get_unchecked_mut(i) += val;
+            i += 1;
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
+    use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_setzero_ps};
+    unsafe {
+        let mut i = 0;
+        let chunks = x.len() / 8;
+        let mut acc = _mm256_setzero_ps();
+        for _ in 0..chunks {
+            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
+            acc = _mm256_add_ps(acc, vx);
+            i += 8;
+        }
+        let mut sum = horizontal_sum_256(acc);
+        while i < x.len() {
+            sum += *x.get_unchecked(i);
+            i += 1;
+        }
+        sum
     }
 }
 
@@ -3061,6 +3218,93 @@ mod tests {
                 x_scalar[i]
             );
         }
+    }
+
+    // ── simd_add_scalar_inplace tests ────────────────────────
+
+    #[test]
+    fn add_scalar_aligned_len_8() {
+        let mut x = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        simd_add_scalar_inplace(&mut x, -10.0);
+        let expected = [-9.0, -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0];
+        for i in 0..8 {
+            assert!((x[i] - expected[i]).abs() < 1e-6, "x[{i}]={}", x[i]);
+        }
+    }
+
+    #[test]
+    fn add_scalar_non_aligned_len_13() {
+        let mut x = [1.0f32; 13];
+        simd_add_scalar_inplace(&mut x, 2.0);
+        for (i, &val) in x.iter().enumerate() {
+            assert!((val - 3.0).abs() < 1e-6, "x[{i}]={val}");
+        }
+    }
+
+    #[test]
+    fn add_scalar_empty() {
+        let mut x: [f32; 0] = [];
+        simd_add_scalar_inplace(&mut x, 1.0); // should not panic
+    }
+
+    #[test]
+    fn add_scalar_matches_scalar_impl() {
+        let mut x_simd: Vec<f32> = (0..97).map(|i| (i as f32 * 0.1).sin()).collect();
+        let mut x_scalar = x_simd.clone();
+        let val = -3.14f32;
+
+        simd_add_scalar_inplace(&mut x_simd, val);
+        scalar_add_scalar_inplace(&mut x_scalar, val);
+
+        for i in 0..x_simd.len() {
+            assert!(
+                (x_simd[i] - x_scalar[i]).abs() < 1e-6,
+                "x[{i}]: simd={}, scalar={}",
+                x_simd[i],
+                x_scalar[i]
+            );
+        }
+    }
+
+    // ── simd_sum_f32 tests ──────────────────────────────────────
+
+    #[test]
+    fn sum_aligned_len_8() {
+        let x = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0];
+        let result = simd_sum_f32(&x);
+        assert!((result - 36.0).abs() < 1e-4, "expected 36.0, got {result}");
+    }
+
+    #[test]
+    fn sum_non_aligned_len_13() {
+        let x = [1.0f32; 13];
+        let result = simd_sum_f32(&x);
+        assert!((result - 13.0).abs() < 1e-4, "expected 13.0, got {result}");
+    }
+
+    #[test]
+    fn sum_empty() {
+        let x: [f32; 0] = [];
+        let result = simd_sum_f32(&x);
+        assert!((result - 0.0).abs() < 1e-6, "expected 0.0, got {result}");
+    }
+
+    #[test]
+    fn sum_single_element() {
+        let x = [42.0f32];
+        let result = simd_sum_f32(&x);
+        assert!((result - 42.0).abs() < 1e-4, "expected 42.0, got {result}");
+    }
+
+    #[test]
+    fn sum_matches_scalar_impl() {
+        let x: Vec<f32> = (0..97).map(|i| (i as f32 * 0.1).sin()).collect();
+        let simd_result = simd_sum_f32(&x);
+        let scalar_result = scalar_sum_f32(&x);
+        assert!(
+            (simd_result - scalar_result).abs() < 1e-4,
+            "simd={simd_result}, scalar={scalar_result}"
+        );
     }
 
     // ── simd_add_inplace tests ────────────────────────────────
