@@ -20,8 +20,8 @@ use std::time::Instant;
 /// Returns BenchResult entries tagged with `feature_dim = "Route"`.
 pub fn bench_routing(_config: &Config) -> Vec<BenchResult> {
     let mut results = Vec::new();
-    let warmup = 1_000;
-    let iters = 50_000;
+    let warmup = 100;
+    let iters = 5_000;
 
     println!("\n🧭 Routing / MoE...");
     println!("   ({iters} iterations, {warmup} warmup)");
