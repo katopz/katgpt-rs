@@ -360,6 +360,28 @@ impl fmt::Display for ActionSpaceLog {
 //   leo_all_goals — LeoHead + AllGoalsUpdate + sigmoid_bounded_q
 //   dual_leo      — + DualLeoMixer + AutocurriculumSampler
 
+// ── LEO All-Goals Trait Framework (Plan 155) ────────────────────
+//
+// Architecture note — Batch Renormalization (BatchRenorm):
+//
+// The reference JAX implementation uses BatchRenorm (not standard BatchNorm
+// or LayerNorm) for network stability with highly off-policy data. Key params:
+//   - r_max = 3 (maximum correction ratio)
+//   - d_max = 5 (maximum correction difference)
+//   - warmup = 1000 steps (gradual correction ramp-up)
+//
+// BatchRenorm constrains the running-statistics correction to prevent
+// divergence when training on highly off-policy replay data — critical
+// for LEO's all-goals Q-learning where the same network processes
+// experiences from many different goal-conditioned policies.
+//
+// Implementors SHOULD use BatchRenorm (or an equivalent constrained
+// normalization) in their LeoHead network architectures. Standard
+// BatchNorm is insufficient; LayerNorm is acceptable but may underperform.
+//
+// Ref: Ioffe (2017) "Batch Renormalization" — arXiv:1702.03275
+// Ref: Matthews et al. (2026) "Learn Everything All at Once" — Section 5.1
+
 /// Bound Q-value estimates with sigmoid to prevent divergence.
 ///
 /// CRITICAL: Without this, LEO's Q-values frequently diverge due to
@@ -436,6 +458,124 @@ pub trait AllGoalsUpdate {
             .sum::<f32>()
             / predicted.len().max(1) as f32
     }
+
+    /// Compute all-goals Q(λ) TD target with eligibility traces.
+    ///
+    /// Multi-step TD with trace decay parameter λ:
+    ///   G(g) = R(g) + γ · [λ · G_next(g) + (1-λ) · max_a' Q(s',a',g)] · (1-done(g))
+    ///
+    /// - `rewards`: `[goals]` — R(s', g) for all g
+    /// - `next_q_max`: `[goals]` — max_a' Q(s', a', g) for all g (pre-computed)
+    /// - `next_lambda_return`: `[goals]` — G_next(g) λ-return from next timestep (0 for last step)
+    /// - `done`: `[goals]` — whether goal g is terminal
+    /// - `gamma`: discount factor
+    /// - `lambda`: trace decay (0 = one-step TD, 1 = Monte Carlo)
+    /// - Returns: `[goals]` — Q(λ) target per goal
+    fn td_target_lambda(
+        &self,
+        rewards: &[f32],
+        next_q_max: &[f32],
+        next_lambda_return: &[f32],
+        done: &[bool],
+        gamma: f32,
+        lambda: f32,
+    ) -> Vec<f32> {
+        rewards
+            .iter()
+            .zip(next_q_max.iter())
+            .zip(next_lambda_return.iter())
+            .zip(done.iter())
+            .map(|(((&r, &q_max), &g_next), &d)| {
+                if d {
+                    r
+                } else {
+                    r + gamma * (lambda * g_next + (1.0 - lambda) * q_max)
+                }
+            })
+            .collect()
+    }
+}
+
+/// Acting mode for dual LEO mixing.
+///
+/// Controls how LEO (teacher) and UVFA (student) Q-values are combined
+/// for action selection. From JAX `DUAL_LEO_ACTING_MODE` config.
+#[cfg(feature = "dual_leo")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ActingMode {
+    /// Linear combination: Q = (1-α)·Q_UVFA + α·Q_LEO.
+    /// Default mode, sweep winner on Craftax.
+    #[default]
+    Lc,
+    /// LEO-only ablation: Q = Q_LEO[:,:,g].
+    LeoOnly,
+    /// UVFA-only ablation: Q = Q_UVFA[:,g].
+    UvfaOnly,
+    /// Optimistic combining: Q = max(Q_LEO, Q_UVFA).
+    Max,
+    /// Pessimistic combining: Q = min(Q_LEO, Q_UVFA).
+    Min,
+}
+
+/// Schedule for the mixing coefficient α over training.
+#[cfg(feature = "dual_leo")]
+#[derive(Clone, Copy, Debug)]
+pub enum AlphaSchedule {
+    /// Constant α throughout training (default).
+    /// Sweep uses 0.3 with `anneal_lc_leo=false`.
+    Fixed(f32),
+    /// Linearly anneal α from `start` to `end` over training.
+    /// From JAX: coef = p * end + (1-p) * start, where p = step/total_steps.
+    LinearAnneal { start: f32, end: f32 },
+}
+
+#[cfg(feature = "dual_leo")]
+impl Default for AlphaSchedule {
+    fn default() -> Self {
+        AlphaSchedule::Fixed(0.3)
+    }
+}
+
+/// Behavioral cloning target source for BC regularization (PPO variant).
+#[cfg(feature = "dual_leo")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BcTarget {
+    /// Follow LEO's greedy (argmax) action.
+    #[default]
+    Argmax,
+}
+
+/// Behavioral cloning regularization config (Dual LEO PPO variant).
+///
+/// The UVFA student's policy is regularized toward LEO's argmax action
+/// early in training, then the BC coefficient decays to 0.
+///
+/// From `dual_leo_ppo.py`: bc_coef_policy=0.1, bc_coef_value=0.0,
+/// bc_policy_target="argmax", anneal_bc=true.
+#[cfg(feature = "dual_leo")]
+#[derive(Clone, Copy, Debug)]
+pub struct BcConfig {
+    /// PPO policy regularization coefficient toward LEO's action.
+    /// Default: 0.1
+    pub policy_coef: f32,
+    /// Value function BC coefficient. Default: 0.0 (disabled in sweep).
+    pub value_coef: f32,
+    /// Which action to use as BC target.
+    pub target: BcTarget,
+    /// Whether to anneal BC coefficient to 0 over training.
+    pub anneal: bool,
+}
+
+#[cfg(feature = "dual_leo")]
+impl Default for BcConfig {
+    fn default() -> Self {
+        Self {
+            policy_coef: 0.1,
+            value_coef: 0.0,
+            target: BcTarget::Argmax,
+            anneal: true,
+        }
+    }
 }
 
 /// Dual LEO mixing between teacher (LEO) and student (UVFA).
@@ -460,6 +600,50 @@ pub trait DualLeoMixer {
     fn default_alpha(&self) -> f32 {
         0.3
     }
+
+    /// Which acting mode to use. Default: Lc (sweep winner).
+    fn acting_mode(&self) -> ActingMode {
+        ActingMode::Lc
+    }
+
+    /// Alpha schedule over training. Default: Fixed(0.3).
+    fn alpha_schedule(&self) -> AlphaSchedule {
+        AlphaSchedule::Fixed(self.default_alpha())
+    }
+
+    /// Resolve alpha for the current training progress (0.0..=1.0).
+    fn alpha_at_progress(&self, progress: f32) -> f32 {
+        match self.alpha_schedule() {
+            AlphaSchedule::Fixed(a) => a,
+            AlphaSchedule::LinearAnneal { start, end } => {
+                progress.clamp(0.0, 1.0) * end + (1.0 - progress.clamp(0.0, 1.0)) * start
+            }
+        }
+    }
+
+    /// Combine Q-values using the configured acting mode.
+    fn combine(&self, q_leo: &[f32], q_uvfa: &[f32], alpha: f32) -> Vec<f32> {
+        match self.acting_mode() {
+            ActingMode::Lc => self.mix(q_leo, q_uvfa, alpha),
+            ActingMode::LeoOnly => q_leo.to_vec(),
+            ActingMode::UvfaOnly => q_uvfa.to_vec(),
+            ActingMode::Max => q_leo
+                .iter()
+                .zip(q_uvfa.iter())
+                .map(|(&ql, &qu)| ql.max(qu))
+                .collect(),
+            ActingMode::Min => q_leo
+                .iter()
+                .zip(q_uvfa.iter())
+                .map(|(&ql, &qu)| ql.min(qu))
+                .collect(),
+        }
+    }
+
+    /// BC regularization config (Dual LEO PPO variant). Default: no BC.
+    fn bc_config(&self) -> Option<BcConfig> {
+        None
+    }
 }
 
 /// Goal sampling from previously observed goals only.
@@ -480,6 +664,57 @@ pub trait AutocurriculumSampler {
 
     /// Total goals in the goal set.
     fn total_goal_count(&self) -> usize;
+
+    /// Update observed goals from a batch of observations.
+    ///
+    /// Checks which goals match any observation in the batch (union matching).
+    /// Returns the updated boolean mask over all goals.
+    ///
+    /// From JAX `get_goals_seen()`: a goal is "seen" if any obs in the batch
+    /// matches the goal's observation pattern (match_sum > 0).
+    ///
+    /// - `obs_batch`: batch of observation vectors
+    /// - `all_goals`: all goal observation patterns `[goals][features]`
+    /// - `current_mask`: current `[goals]` boolean mask (true = seen)
+    /// - Returns: updated `[goals]` boolean mask
+    fn update_goals_seen(
+        &self,
+        obs_batch: &[Vec<f32>],
+        all_goals: &[Vec<f32>],
+        current_mask: &[bool],
+    ) -> Vec<bool> {
+        let mut mask = current_mask.to_vec();
+        for obs in obs_batch {
+            for (g, goal_obs) in all_goals.iter().enumerate() {
+                if g < mask.len() && !mask[g] {
+                    // Union matching: normalized cosine-like similarity.
+                    // Threshold > 0.9 ensures only near-exact matches count.
+                    // JAX uses binary match_sum > 0 on discretized observations.
+                    let dot: f32 = obs.iter().zip(goal_obs.iter()).map(|(o, gi)| o * gi).sum();
+                    let norm_obs: f32 = obs.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    let norm_goal: f32 = goal_obs.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    let denom = norm_obs * norm_goal;
+                    if denom > 0.0 && dot / denom > 0.9 {
+                        mask[g] = true;
+                    }
+                }
+            }
+        }
+        mask
+    }
+
+    /// Number of goals completed in the current episode.
+    /// Enables "first return then explore" — after achieving one goal,
+    /// immediately sample another. Resets to 0 on episode end.
+    fn goals_completed_this_episode(&self) -> usize {
+        0
+    }
+
+    /// Whether to only sample from previously seen goals.
+    /// From JAX `ONLY_SAMPLE_FROM_SEEN_GOALS` config flag.
+    fn only_sample_from_seen(&self) -> bool {
+        true
+    }
 }
 
 // ── LEO Tests (Plan 155, T7) ────────────────────────────────────
@@ -611,6 +846,67 @@ mod tests_leo {
         assert!((mixer.default_alpha() - 0.3).abs() < 1e-6);
     }
 
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_acting_mode_default() {
+        assert_eq!(Mixer.acting_mode(), ActingMode::Lc);
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_acting_mode_combine_lc() {
+        let mixer = Mixer;
+        let q_leo = vec![0.4, 0.6];
+        let q_uvfa = vec![0.1, 0.9];
+        let combined = mixer.combine(&q_leo, &q_uvfa, 0.3);
+        // Same as mix: 0.3*0.4 + 0.7*0.1 = 0.19, 0.3*0.6 + 0.7*0.9 = 0.81
+        assert!((combined[0] - 0.19).abs() < 1e-6);
+        assert!((combined[1] - 0.81).abs() < 1e-6);
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_alpha_schedule_fixed() {
+        assert!(matches!(Mixer.alpha_schedule(), AlphaSchedule::Fixed(0.3)));
+        assert!((Mixer.alpha_at_progress(0.0) - 0.3).abs() < 1e-6);
+        assert!((Mixer.alpha_at_progress(0.5) - 0.3).abs() < 1e-6);
+        assert!((Mixer.alpha_at_progress(1.0) - 0.3).abs() < 1e-6);
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_alpha_schedule_linear_anneal() {
+        struct AnnealingMixer;
+        impl DualLeoMixer for AnnealingMixer {
+            fn alpha_schedule(&self) -> AlphaSchedule {
+                AlphaSchedule::LinearAnneal {
+                    start: 1.0,
+                    end: 0.0,
+                }
+            }
+        }
+        let m = AnnealingMixer;
+        assert!((m.alpha_at_progress(0.0) - 1.0).abs() < 1e-6);
+        assert!((m.alpha_at_progress(0.5) - 0.5).abs() < 1e-6);
+        assert!((m.alpha_at_progress(1.0) - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_bc_config_default() {
+        assert!(Mixer.bc_config().is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_bc_config_values() {
+        let bc = BcConfig::default();
+        assert!((bc.policy_coef - 0.1).abs() < 1e-6);
+        assert!((bc.value_coef - 0.0).abs() < 1e-6);
+        assert_eq!(bc.target, BcTarget::Argmax);
+        assert!(bc.anneal);
+    }
+
     // -- T4: AutocurriculumSampler --
 
     #[allow(dead_code)]
@@ -685,5 +981,100 @@ mod tests_leo {
             let g = ac.sample_goal(&mut rng);
             assert!(g == 3 || g == 7 || g == 9, "sampled unobserved goal: {g}");
         }
+    }
+
+    // -- T9d: Q(λ) tests --
+
+    #[test]
+    #[cfg(feature = "leo_all_goals")]
+    fn test_td_target_lambda_no_done() {
+        let upd = Updater;
+        let rewards = vec![1.0, 0.0];
+        let next_q_max = vec![0.5, 0.3];
+        let next_lambda_return = vec![0.0, 0.0]; // last step, no future λ-return
+        let done = vec![false, false];
+        // lambda=0: standard TD
+        let targets =
+            upd.td_target_lambda(&rewards, &next_q_max, &next_lambda_return, &done, 0.99, 0.0);
+        assert!((targets[0] - (1.0 + 0.99 * 0.5)).abs() < 1e-5);
+        assert!((targets[1] - (0.0 + 0.99 * 0.3)).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(feature = "leo_all_goals")]
+    fn test_td_target_lambda_with_done() {
+        let upd = Updater;
+        let rewards = vec![1.0, 0.5];
+        let next_q_max = vec![0.5, 0.3];
+        let next_lambda_return = vec![0.0, 0.0];
+        let done = vec![true, false];
+        let targets =
+            upd.td_target_lambda(&rewards, &next_q_max, &next_lambda_return, &done, 0.99, 0.5);
+        // done[0] = true → target = reward = 1.0
+        assert!((targets[0] - 1.0).abs() < 1e-5);
+        // done[1] = false, lambda=0.5 → r + γ*(0.5*0.0 + 0.5*0.3) = 0.5 + 0.99*0.15
+        assert!((targets[1] - (0.5 + 0.99 * 0.15)).abs() < 1e-5);
+    }
+
+    #[test]
+    #[cfg(feature = "leo_all_goals")]
+    fn test_td_target_lambda_with_future_return() {
+        let upd = Updater;
+        let rewards = vec![0.0];
+        let next_q_max = vec![0.2];
+        let next_lambda_return = vec![1.0]; // future λ-return accumulated
+        let done = vec![false];
+        // lambda=1.0: pure MC → r + γ * 1.0 * g_next = 0 + 0.99 * 1.0
+        let targets_mc =
+            upd.td_target_lambda(&rewards, &next_q_max, &next_lambda_return, &done, 0.99, 1.0);
+        assert!((targets_mc[0] - 0.99).abs() < 1e-5);
+        // lambda=0.0: one-step TD → r + γ * q_max = 0 + 0.99 * 0.2
+        let targets_td =
+            upd.td_target_lambda(&rewards, &next_q_max, &next_lambda_return, &done, 0.99, 0.0);
+        assert!((targets_td[0] - (0.99 * 0.2)).abs() < 1e-5);
+    }
+
+    // -- T9e: AutocurriculumSampler refinements --
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_update_goals_seen() {
+        let ac = SimpleAutocurriculum::new(3);
+        let obs_batch = vec![vec![1.0, 0.0, 0.0]];
+        let all_goals = vec![
+            vec![1.0, 0.0, 0.0], // matches obs
+            vec![0.0, 1.0, 0.0], // no match
+            vec![0.0, 0.0, 1.0], // no match
+        ];
+        let current_mask = vec![false; 3];
+        let updated = ac.update_goals_seen(&obs_batch, &all_goals, &current_mask);
+        assert!(updated[0], "goal 0 should be seen");
+        assert!(!updated[1], "goal 1 should not be seen");
+        assert!(!updated[2], "goal 2 should not be seen");
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_update_goals_seen_union() {
+        let ac = SimpleAutocurriculum::new(3);
+        let obs_batch = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
+        let all_goals = vec![
+            vec![1.0, 0.0, 0.0],
+            vec![0.0, 1.0, 0.0],
+            vec![0.0, 0.0, 1.0],
+        ];
+        let current_mask = vec![false; 3];
+        let updated = ac.update_goals_seen(&obs_batch, &all_goals, &current_mask);
+        assert!(updated[0], "goal 0 should be seen");
+        assert!(updated[1], "goal 1 should be seen");
+        assert!(!updated[2], "goal 2 should not be seen");
+    }
+
+    #[test]
+    #[cfg(feature = "dual_leo")]
+    fn test_autocurriculum_default_methods() {
+        let ac = SimpleAutocurriculum::new(5);
+        assert_eq!(ac.goals_completed_this_episode(), 0);
+        assert!(ac.only_sample_from_seen());
     }
 }

@@ -43,8 +43,8 @@ fn bench_matmul(results: &mut Vec<BenchResult>) {
     println!("── Dense vs Sparse Matmul ──────────────────────────────────");
 
     let sizes: [(usize, usize); 2] = [(64, 16), (128, 32)];
-    let warmup = 1000;
-    let iters = 50000;
+    let warmup = 100;
+    let iters = 5000;
 
     for &(rows, cols) in &sizes {
         // Weight matrix [rows × cols]
@@ -157,8 +157,8 @@ fn bench_plasma_path(results: &mut Vec<BenchResult>) {
 
     println!("── PlasmaPath Ternary SIMD Matvec ─────────────────────────");
 
-    let warmup = 1000;
-    let iters = 50000;
+    let warmup = 100;
+    let iters = 5000;
     let sizes: [(usize, usize); 3] = [(64, 64), (128, 128), (256, 256)];
 
     for &(rows, cols) in &sizes {
@@ -257,8 +257,8 @@ fn bench_forward_pass(results: &mut Vec<BenchResult>) {
 fn bench_lattice_lookup(results: &mut Vec<BenchResult>) {
     println!("── Minkowski Lattice Embedding Lookup ─────────────────────");
 
-    let warmup = 1000;
-    let iters = 50000;
+    let warmup = 100;
+    let iters = 5000;
     let dims = [8, 16, 32];
     let scale = 10.0f32;
 

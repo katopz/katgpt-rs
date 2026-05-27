@@ -127,8 +127,8 @@ fn bench_d2f_pipeline() -> BenchResult {
 /// Generates 256 random logits, applies softmax, then masks tokens below
 /// a confidence threshold of 0.5. Measures thresholds/sec throughput.
 fn bench_confidence_thresholding() -> BenchResult {
-    let warmup = 1_000;
-    let iters = 50_000;
+    let warmup = 100;
+    let iters = 5_000;
     let dim = 256;
     let threshold = 0.5f32;
 

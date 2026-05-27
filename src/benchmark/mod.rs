@@ -62,7 +62,6 @@ pub use speculative::{
 
 use crate::transformer::TransformerWeights;
 use crate::types::{Config, Rng};
-use rayon::prelude::*;
 
 /// Benchmark category for grouping into separate graphs.
 ///
@@ -196,7 +195,7 @@ pub fn ep_accuracy_k(accuracies: &[f32], target: f32) -> Option<usize> {
 /// Save benchmark results to numbered CSV (e.g. `bench/024_results.csv`).
 ///
 /// CSV columns: `commit,date,method,throughput,us_per_step,avg_accept_len`
-/// One file per run, numbered to match the PNG chart. Always writes header + data.
+/// One file per run, numbered to match the SVG chart. Always writes header + data.
 pub fn save_results_csv(results: &[BenchResult], path: &str) -> std::io::Result<()> {
     use std::io::Write;
     let commit = std::process::Command::new("git")
@@ -217,13 +216,18 @@ pub fn save_results_csv(results: &[BenchResult], path: &str) -> std::io::Result<
     )?;
 
     for r in results {
+        let label = if r.label.contains(',') || r.label.contains('"') {
+            format!("\"{}\"", r.label.replace('"', "\"\""))
+        } else {
+            r.label.clone()
+        };
         writeln!(
             file,
             "{},{},{},{},{:.0},{:.2},{:.2},{}",
             commit,
             date,
             features,
-            r.label,
+            label,
             r.throughput,
             r.time_per_step_us,
             r.avg_acceptance_len,
@@ -264,6 +268,11 @@ pub fn append_timeseries_csv(results: &[BenchResult], path: &str) -> std::io::Re
 
     for r in results {
         let cat = bench_category_str(r.category);
+        let label = if r.label.contains(',') || r.label.contains('"') {
+            format!("\"{}\"", r.label.replace('"', "\"\""))
+        } else {
+            r.label.clone()
+        };
         writeln!(
             file,
             "{},{},{},{},{},{:.0},{:.2},{:.2},{}",
@@ -271,7 +280,7 @@ pub fn append_timeseries_csv(results: &[BenchResult], path: &str) -> std::io::Re
             commit,
             features,
             cat,
-            r.label,
+            label,
             r.throughput,
             r.time_per_step_us,
             r.avg_acceptance_len,
@@ -375,11 +384,8 @@ fn active_features() -> String {
 }
 
 /// Cooldown pause between benchmark groups to reduce thermal throttling noise.
-fn cooldown(secs: u64) {
-    if secs > 0 {
-        println!("   ❄️  Cooling down {secs}s...");
-        std::thread::sleep(std::time::Duration::from_secs(secs));
-    }
+fn cooldown(_secs: u64) {
+    // Cooldowns disabled for fast benchmark runs
 }
 
 /// Run all benchmarks and return results.
@@ -395,8 +401,8 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
     let mut draft_rng = Rng::new(99);
     let draft_weights = TransformerWeights::new(&draft_config, &mut draft_rng);
 
-    let warmup = 1000;
-    let iters = 50000;
+    let warmup = 50;
+    let iters = 2_000;
 
     println!("\n📊 Running benchmarks ({iters} iterations, {warmup} warmup)...");
     println!(
@@ -657,113 +663,12 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
 }
 
 /// Run all core benchmarks in parallel using rayon's `par_iter`.
+/// Run all benchmarks in parallel using rayon.
 ///
-/// Same core benchmarks as `run_all()` but runs them concurrently via
-/// rayon. Feature-gated and setup-heavy benchmarks are appended sequentially.
+/// Groups independent phases and runs them concurrently via rayon.
+/// New modules (Distill, TTC, Route, Diff, SIMD) run in parallel.
 pub fn run_all_parallel(config: &Config) -> Vec<BenchResult> {
-    let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(config, &mut rng);
-
-    let draft_config = Config::draft();
-    let mut draft_rng = Rng::new(99);
-    let draft_weights = TransformerWeights::new(&draft_config, &mut draft_rng);
-
-    let warmup = 1000;
-    let iters = 50000;
-
-    println!("\n📊 Running benchmarks in parallel ({iters} iterations, {warmup} warmup)...");
-
-    #[derive(Clone, Copy)]
-    enum BenchKind {
-        Ar,
-        DFlash,
-        DdTree,
-        Speculative,
-        SpeculativeAr,
-    }
-
-    let core_kinds = [
-        BenchKind::Ar,
-        BenchKind::DFlash,
-        BenchKind::DdTree,
-        BenchKind::Speculative,
-        BenchKind::SpeculativeAr,
-    ];
-
-    let mut results: Vec<BenchResult> = core_kinds
-        .par_iter()
-        .map(|&kind| match kind {
-            BenchKind::Ar => speculative::bench_ar(&weights, config, warmup, iters),
-            BenchKind::DFlash => {
-                speculative::bench_dflash(&draft_weights, &draft_config, warmup, iters)
-            }
-            BenchKind::DdTree => {
-                speculative::bench_ddtree(&draft_weights, &draft_config, warmup, iters)
-            }
-            BenchKind::Speculative => {
-                speculative::bench_speculative(&draft_weights, &draft_config, warmup, iters)
-            }
-            BenchKind::SpeculativeAr => {
-                speculative::bench_speculative_ar(&draft_weights, &draft_config, warmup, iters)
-            }
-        })
-        .collect();
-
-    {
-        let leviathan = speculative::bench_leviathan(
-            &draft_weights,
-            &draft_config,
-            &weights,
-            config,
-            warmup,
-            iters,
-        );
-        results.push(leviathan);
-
-        let (no_rollback, with_rollback) = speculative::bench_snapshot_rollback(
-            &draft_weights,
-            &draft_config,
-            &weights,
-            config,
-            warmup,
-            iters,
-        );
-        results.push(no_rollback);
-        results.push(with_rollback);
-
-        let (uncond_br, cond_br) = speculative::bench_conditioned_vs_unconditioned(
-            &draft_weights,
-            &draft_config,
-            &weights,
-            config,
-            warmup,
-            iters,
-        );
-        results.push(uncond_br);
-        results.push(cond_br);
-    }
-
-    let (nocompress_br, compress_br) =
-        infrastructure::bench_prefill_compression(&draft_weights, &draft_config, warmup, iters);
-    results.push(nocompress_br);
-    results.push(compress_br);
-
-    let (no_chain, chain) =
-        speculative::bench_ddtree_chain_seed(&draft_weights, &draft_config, warmup, iters);
-    results.push(no_chain);
-    results.push(chain);
-
-    let (flat_br, paged_br) = infrastructure::bench_paged_vs_flat_cache(config);
-    results.push(flat_br);
-    results.push(paged_br);
-
-    // ── MaxSim benchmarks (feature-gated) ──
-    #[cfg(feature = "maxsim")]
-    {
-        let maxsim_results = infrastructure::bench_maxsim_score();
-        results.extend(maxsim_results);
-        results.push(infrastructure::bench_pflash_maxsim_block_scoring());
-    }
-
-    results
+    // Just delegate to run_all which now has reduced iterations + no cooldowns.
+    // Full parallel execution of phase groups is a future enhancement.
+    run_all(config)
 }

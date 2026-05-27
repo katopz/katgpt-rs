@@ -13,6 +13,12 @@ pub use katgpt_core::dirichlet::{
     consecutive_adjacency, dirichlet_energy, functor_adjacency, kv_cache_dirichlet_energy,
 };
 
+// Spectral hierarchy diagnostics (Plan 156, Research 121).
+#[cfg(feature = "spectral_hierarchy")]
+pub use katgpt_core::spectral_hierarchy::{
+    cauchy_interlacing_check, eigenspace_alignment, haar_wavelet_basis,
+};
+
 // ── Tests ─────────────────────────────────────────────────────
 
 #[cfg(test)]

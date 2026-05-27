@@ -172,6 +172,30 @@ fn main() {
             "G-Zero Heuristic Learning (Plan 049)",
             "Operations/s",
         ),
+        (
+            BenchCategory::Distillation,
+            "distillation",
+            "Distillation / Compression",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::TestTimeCompute,
+            "ttc",
+            "Test-Time Compute",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::Routing,
+            "routing",
+            "Routing / MoE",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::Diffusion,
+            "diffusion",
+            "Diffusion / Denoising",
+            "Operations/s",
+        ),
     ];
 
     for (cat, suffix, title, x_label) in &categories {
@@ -183,7 +207,7 @@ fn main() {
         if cat_results.is_empty() {
             continue;
         }
-        let plot_path = format!("bench/{:03}_{suffix}.png", index);
+        let plot_path = format!("bench/{:03}_{suffix}.svg", index);
         match plot::plot_results(&cat_results, &plot_path, title, x_label) {
             Ok(()) => println!("📈 {title} chart saved to: {plot_path}"),
             Err(e) => eprintln!("⚠️  Plot failed for {title}: {e}"),
@@ -204,7 +228,7 @@ fn main() {
     }
     match plot::plot_timeseries("bench/timeseries.csv", "bench") {
         Ok(regressions) => {
-            println!("📈 Time series charts saved to bench/timeseries_*.png");
+            println!("📈 Time series charts saved to bench/timeseries_*.svg");
             for msg in &regressions {
                 println!("{msg}");
             }
@@ -220,9 +244,9 @@ fn main() {
     let mut draft_rng = types::Rng::new(99);
     let draft_weights = transformer::TransformerWeights::new(&draft_config, &mut draft_rng);
 
-    let budgets = [4, 8, 12, 16, 20, 24, 32, 48, 64];
+    let budgets = [4, 8, 16, 32, 64];
     let sweep_results =
-        benchmark::bench_ddtree_budget_sweep(&draft_weights, &draft_config, &budgets, 100, 10000);
+        benchmark::bench_ddtree_budget_sweep(&draft_weights, &draft_config, &budgets, 50, 2_000);
 
     println!(
         "  {:<30} {:>12} {:>12} {:>12}",

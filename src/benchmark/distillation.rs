@@ -33,8 +33,8 @@ fn bench_bt_rank() -> Vec<BenchResult> {
     use fastrand::Rng;
     use std::hint::black_box;
 
-    let warmup = 1_000;
-    let iters = 50_000;
+    let warmup = 100;
+    let iters = 5_000;
     let n_candidates = 20;
     let k_per_candidate = 5;
 
@@ -112,8 +112,8 @@ fn bench_bandit() -> Vec<BenchResult> {
     use crate::types::Rng;
     use std::hint::black_box;
 
-    let warmup = 1_000;
-    let iters = 50_000;
+    let warmup = 100;
+    let iters = 5_000;
     let num_arms = 100;
 
     println!("   BanditPruner ({iters} iters, {warmup} warmup, {num_arms} arms)...");
@@ -194,8 +194,8 @@ fn bench_absorb_compress() -> Vec<BenchResult> {
     use crate::types::Rng;
     use std::hint::black_box;
 
-    let warmup = 1_000;
-    let iters = 50_000;
+    let warmup = 100;
+    let iters = 10_000;
     let num_arms = 6;
 
     println!("   AbsorbCompress ({iters} iters, {warmup} warmup, {num_arms} arms)...");
