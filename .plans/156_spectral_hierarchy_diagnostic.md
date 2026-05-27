@@ -16,13 +16,13 @@ Research 121 proves that hierarchical splitting geometry in co-occurrence Gram m
 
 ## Tasks
 
-- [ ] T1: Add `spectral_hierarchy` feature gate to `katgpt-rs-core/Cargo.toml`
-- [ ] T2: Implement `eigenspace_alignment(gram: &[Vec<f32>], reference: &[Vec<f32>], k: usize) -> f32` — top-k eigenspace alignment g(k) metric
-- [ ] T3: Implement `haar_wavelet_basis(depth: usize) -> (Vec<Vec<f32>>, Vec<Vec<Vec<f32>>>)` — scaling + wavelet modes for binary trees
-- [ ] T4: Implement `cauchy_interlacing_check(eigenvalues: &[Vec<f32>]) -> bool` — validate nested split block interlacing
-- [ ] T5: Wire `eigenspace_alignment` into `data_probe/dirichlet_energy.rs` as complementary metric
-- [ ] T6: GOAT proof — synthetic binary tree with exponential kernel → verify coarse-to-fine eigenvector ordering + interlacing + g(k) > 0.9
-- [ ] T7: Document in `27_mmo_goat_pillars_decision_matrix.md` that Research 010 KG extraction is now theoretically grounded (add cross-reference to Research 121)
+- [x] T1: Add `spectral_hierarchy` feature gate to `crates/katgpt-core/Cargo.toml`
+- [x] T2: Implement `eigenspace_alignment(gram: &[Vec<f32>], reference: &[Vec<f32>], k: usize) -> f32` — top-k eigenspace alignment g(k) metric
+- [x] T3: Implement `haar_wavelet_basis(depth: usize) -> (Vec<Vec<f32>>, Vec<Vec<Vec<f32>>>)` — scaling + wavelet modes for binary trees
+- [x] T4: Implement `cauchy_interlacing_check(eigenvalues: &[Vec<f32>]) -> bool` — validate nested split block interlacing
+- [x] T5: Wire `eigenspace_alignment` into `data_probe/dirichlet_energy.rs` as complementary metric
+- [x] T6: GOAT proof — synthetic binary tree with exponential kernel → verify coarse-to-fine eigenvector ordering + interlacing + g(k) > 0.9
+- [x] T7: Document in `27_mmo_goat_pillars_decision_matrix.md` that Research 010 KG extraction is now theoretically grounded (add cross-reference to Research 121)
 
 ---
 
