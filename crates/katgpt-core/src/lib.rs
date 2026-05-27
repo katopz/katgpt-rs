@@ -21,10 +21,12 @@ pub use traits::{
     NoScreeningPruner, RandomRolloutPolicy, RolloutPolicy, ScreeningPruner, StateHeuristic,
 };
 
+#[cfg(feature = "dual_leo")]
+pub use traits::{
+    ActingMode, AlphaSchedule, AutocurriculumSampler, BcConfig, BcTarget, DualLeoMixer,
+};
 #[cfg(feature = "leo_all_goals")]
 pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
-#[cfg(feature = "dual_leo")]
-pub use traits::{ActingMode, AlphaSchedule, AutocurriculumSampler, BcConfig, BcTarget, DualLeoMixer};
 
 // Re-export key types at crate root for convenience
 pub use types::{
@@ -92,3 +94,6 @@ pub use dirichlet::{
 pub mod spectral_hierarchy;
 #[cfg(feature = "spectral_hierarchy")]
 pub use spectral_hierarchy::{cauchy_interlacing_check, eigenspace_alignment, haar_wavelet_basis};
+
+#[cfg(feature = "sigmoid_margin")]
+pub use simd::{compute_retrieval_margin, dim_sufficiency_bound, sigmoid_margin_loss};

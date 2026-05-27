@@ -24,12 +24,12 @@ We already use sigmoid extensively (SDAR, EGA, SdpaOutputGate, GeGELU) but NOT f
 
 ## Task
 
-- [ ] T1: `sigmoid_margin_loss` function in `katgpt-core/src/simd.rs`
-- [ ] T2: `compute_retrieval_margin` diagnostic in `katgpt-core/src/simd.rs`
-- [ ] T3: `dim_sufficiency_bound` theoretical bound check
-- [ ] T4: GOAT proof (7/7)
-- [ ] T5: Feature gate `sigmoid_margin` in Cargo.toml
-- [ ] T6: After GOAT pass → default-on promotion
+- [x] T1: `sigmoid_margin_loss` function in `katgpt-core/src/simd.rs`
+- [x] T2: `compute_retrieval_margin` diagnostic in `katgpt-core/src/simd.rs`
+- [x] T3: `dim_sufficiency_bound` theoretical bound check
+- [x] T4: GOAT proof (7/7)
+- [x] T5: Feature gate `sigmoid_margin` in Cargo.toml
+- [x] T6: After GOAT pass → default-on promotion
 
 ### T1: Sigmoid Margin Loss
 
