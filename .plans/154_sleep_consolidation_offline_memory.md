@@ -4,7 +4,7 @@
 > **Paper:** [arXiv:2605.26099](https://arxiv.org/abs/2605.26099) — Lee et al., May 2026
 > **Feature Gate:** `sleep_consolidation` (depends on `lt2_looped`, `gdn2_attention`)
 > **Priority:** MEDIUM — Infrastructure improvement, not blocking any GOAT pillar
-> **Status:** ⏳ Pending GOAT proof
+> **Status:** ✅ Infrastructure complete — pending GOAT proof (T10–T13)
 
 ## Summary
 
@@ -16,20 +16,20 @@ Key insight: Sleep moves LT2's wake-time looping to eviction-time consolidation.
 
 ## Tasks
 
-- [ ] T1: Add `sleep_consolidation` feature gate to `katgpt-rs/Cargo.toml` (depends on `lt2_looped`, `gdn2_attention`)
-- [ ] T2: Create `src/sleep/` module scaffold (`mod.rs`, `types.rs`)
-- [ ] T3: Implement `SleepConfig` { sleep_passes: usize, eviction: EvictionStrategy, window_size: usize }
-- [ ] T4: Implement `EvictionStrategy` enum { HardEvict, SlidingWindow }
-- [ ] T5: Implement `consolidation_pass()` — single recurrent forward pass through all layers, carrying GDN2 fast-weight state
-- [ ] T6: Implement `sleep()` — N calls to `consolidation_pass()` at eviction boundary
-- [ ] T7: Implement `eviction::HardEvict` — clear entire KV cache after sleep
-- [ ] T8: Implement `eviction::SlidingWindow` — retain last L-1 tokens, evict older
-- [ ] T9: Integrate sleep hook into LT2 forward pass (Plan 108) at eviction boundary
+- [x] T1: Add `sleep_consolidation` feature gate to `katgpt-rs/Cargo.toml` (depends on `lt2_looped`, `gdn2_attention`)
+- [x] T2: Create `src/sleep/` module scaffold (`mod.rs`, `types.rs`)
+- [x] T3: Implement `SleepConfig` { sleep_passes: usize, eviction: EvictionStrategy, window_size: usize }
+- [x] T4: Implement `EvictionStrategy` enum { HardEvict, SlidingWindow }
+- [x] T5: Implement `consolidation_pass()` — single recurrent forward pass through all layers, carrying GDN2 fast-weight state
+- [x] T6: Implement `sleep()` — N calls to `consolidation_pass()` at eviction boundary
+- [x] T7: Implement `eviction::HardEvict` — clear entire KV cache after sleep
+- [x] T8: Implement `eviction::SlidingWindow` — retain last L-1 tokens, evict older
+- [x] T9: Integrate sleep hook into LT2 forward pass (Plan 108) at eviction boundary
 - [ ] T10: GOAT proof — sleep (N=2,4) vs no-sleep on multi-hop reasoning (synthetic graph task)
 - [ ] T11: GOAT proof — sleep + TurboQuant hybrid vs TurboQuant-only on long-context task
 - [ ] T12: GOAT proof — sleep on game context (long Bomber session >2000 tokens, long NPC dialog)
 - [ ] T13: Benchmark — sleep overhead (N=2,4,6) vs no-sleep vs LT2 wake-time (tok/s, µs/step)
-- [ ] T14: Update README + .docs with sleep consolidation section
+- [x] T14: Update README + .docs with sleep consolidation section
 
 ---
 

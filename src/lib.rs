@@ -44,6 +44,8 @@ pub mod rt_turbo;
 pub mod simd;
 #[cfg(feature = "skill_opt")]
 pub mod skill_opt;
+#[cfg(feature = "sleep_consolidation")]
+pub mod sleep;
 #[cfg(feature = "sp_kv")]
 pub mod sp_kv;
 #[cfg(feature = "spechop")]
