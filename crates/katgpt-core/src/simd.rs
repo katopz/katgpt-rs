@@ -3337,11 +3337,11 @@ mod tests {
             let dim = 32;
             let mut queries = vec![0.0f32; lq * dim];
             let mut documents = vec![0.0f32; ld * dim];
-            for i in 0..queries.len() {
-                queries[i] = fastrand::f32() * 2.0 - 1.0;
+            for q in queries.iter_mut() {
+                *q = fastrand::f32() * 2.0 - 1.0;
             }
-            for i in 0..documents.len() {
-                documents[i] = fastrand::f32() * 2.0 - 1.0;
+            for d in documents.iter_mut() {
+                *d = fastrand::f32() * 2.0 - 1.0;
             }
             let naive = maxsim_naive(&queries, &documents, lq, ld, dim);
             let fused = maxsim_score(&queries, &documents, lq, ld, dim);
@@ -3707,17 +3707,17 @@ mod tests {
             let mut documents = vec![0.0f32; n * dim];
 
             // query 0 → dim 0, query 1 → dim 1
-            queries[0 * dim + 0] = 0.3;
-            queries[1 * dim + 1] = 0.3;
+            queries[0] = 0.3;
+            queries[dim + 1] = 0.3;
 
             // Positive docs aligned with their query subspace
-            documents[0 * dim + 0] = 0.2;
-            documents[1 * dim + 0] = 0.15;
+            documents[0] = 0.2;
+            documents[dim] = 0.15;
             documents[2 * dim + 1] = 0.2;
             documents[3 * dim + 1] = 0.15;
             // Small cross-talk noise
-            documents[0 * dim + 1] = 0.02;
-            documents[2 * dim + 0] = 0.02;
+            documents[1] = 0.02;
+            documents[2 * dim] = 0.02;
 
             let adjacency: Vec<f32> = vec![1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0];
 
@@ -3831,14 +3831,14 @@ mod tests {
             // Doc 0: strong signal on dim 0
             documents[0] = 1.0;
             // Docs 1-3: weak/noise
-            documents[1 * dim + 1] = 0.1;
+            documents[dim + 1] = 0.1;
             documents[2 * dim + 2] = 0.1;
             documents[3 * dim + 3] = 0.1;
 
             // Query 0 (high margin): aligned with doc 0
             queries[0] = 1.0;
             // Query 0, token 1: also aligned
-            queries[1 * dim] = 0.9;
+            queries[dim] = 0.9;
 
             let neighborhoods = vec![0]; // query 0 → doc 0
 
