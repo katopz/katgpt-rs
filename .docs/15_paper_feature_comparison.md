@@ -27,18 +27,18 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 
 ## Our Work: katgpt-rs Feature Summary
 
-| Feature | GOAT (default-on) | NO GOAT (opt-in / legacy) |
-|---------|-------------------|--------------------------|
-| Speculative Decoding | DDTree + DFlash + Leviathan verification | Tri-Mode self-speculation (untrained accept rate 1.0) |
-| KV Optimization | **Hybrid OCT+PQ** (OCT triplet + PQ 2D Givens, best MSE all bits, 64× fewer FMAs, Plan 101) | OCTOPUS (legacy, same encoding slower rotation), SpectralQuant (9.1×, 0.9917 cosine, calibrated alternative), SP-KV (3-10×), TurboQuant 3-bit (legacy) |
-| Attention Innovation | **GDN2** (GOAT 14/14, 99.4% AHLA throughput, 87–98% memory savings) | forward_hla / forward_ahla (88% memory savings), Percepta 2D Convex Hull, MaxSim, SHINE Alternating2D (90% FLOPs savings) |
-| Noise Scheduling | ELF SDE noise injection (10-22× path diversity) | GRAM learned-mean SDE (validates approach) |
-| Distillation/Compression | BT pairwise ranking, SpectralQuant | LoRA adapters, MeMo reflections, ROPD rubric, ASFT/SLIME (in riir-gpu) |
-| Test-Time Compute | SimpleTES RPUCG loop (GOAT 8/8), BanditPruner adaptive arms | GRAM width scaling |
-| Routing/MoE | Delta Block cross-layer residual routing | Raven slot memories, MoE+SD Amdahl cost model, TIES merging (MeMo), SHINE context→LoRA routing |
-| Diffusion/Denoising | — | dLLM D2F block-parallel denoising, Tri-Mode AR+Diffusion+Self-Speculation (GOAT 4/4, partial — untrained accept rate 1.0) |
-| Game/Self-Play | LEO all-goals Q-value trait framework (SUPER GOAT, Plan 155), Dual LEO teacher/student mixing (SUPER GOAT, Plan 155) | Sudoku, Go, Monopoly, Bomber, Unit Distance lattice constructions |
-| SIMD/Perf | LDT α-intersection, TileRT execution pipeline (GOAT 13/13, Plan 102), PlasmaPath bit-plane ternary SIMD matvec (GOAT 5/5, Plan 148) | NEON SIMD matmul/HLA kernels, zero-alloc hot paths, Minkowski lattice embedding |
+| Feature | GOAT (default-on) | Gain | NO GOAT (opt-in / legacy) |
+|---------|-------------------|------|--------------------------|
+| Speculative Decoding | • DDTree + DFlash<br>• Leviathan verification | Always ≥1 token/step | • Tri-Mode self-speculation (untrained accept rate 1.0) |
+| KV Optimization | • **Hybrid OCT+PQ** (Plan 101) | Best MSE all bits, 64× fewer FMAs | • OCTOPUS (legacy)<br>• SpectralQuant (9.1×, 0.9917 cosine)<br>• SP-KV (3-10×)<br>• TurboQuant 3-bit (legacy) |
+| Attention Innovation | • **GDN2** (GOAT 14/14) | 99.4% AHLA throughput, 87-98% memory savings | • HLA / AHLA (88% memory savings)<br>• Percepta 2D Convex Hull<br>• MaxSim<br>• SHINE Alternating2D (90% FLOPs savings) |
+| Noise Scheduling | • ELF SDE noise injection | 10-22× path diversity | • GRAM learned-mean SDE (validates approach) |
+| Distillation / Compression | • BT pairwise ranking<br>• SpectralQuant | +10.6pp over pointwise; 9.1× compression | • LoRA adapters<br>• MeMo reflections<br>• ROPD rubric<br>• ASFT/SLIME (in riir-gpu) |
+| Test-Time Compute | • SimpleTES RPUCG loop (GOAT 8/8)<br>• BanditPruner adaptive arms | RPUCG 42.8% vs greedy 10.6% wins | • GRAM width scaling |
+| Routing / MoE | • Delta Block cross-layer residual routing | Zero throughput overhead (0.97×) | • Raven slot memories<br>• MoE+SD Amdahl cost model<br>• TIES merging (MeMo)<br>• SHINE context→LoRA routing |
+| Diffusion / Denoising | — | — | • dLLM D2F block-parallel denoising<br>• Tri-Mode AR+Diffusion+Self-Speculation (GOAT 4/4, partial) |
+| Game / Self-Play | • LEO all-goals Q-framework (Plan 155)<br>• Dual LEO teacher/student (Plan 155) | SUPER GOAT; all-goals Q(s)→R^{G×A} | • Sudoku, Go, Monopoly, Bomber<br>• Unit Distance lattice constructions |
+| SIMD / Perf | • LDT α-intersection<br>• TileRT pipeline (GOAT 13/13, Plan 102)<br>• PlasmaPath bit-plane (GOAT 5/5, Plan 148) | +0.6% overhead → full observability; multiplication-free matvec | • NEON SIMD matmul/HLA kernels<br>• zero-alloc hot paths<br>• Minkowski lattice embedding |
 
 **Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`
 
