@@ -194,14 +194,14 @@ fn proof_g3_throughput_1024() {
     let mut y_scalar = vec![0.0f32; 1024];
     let start = std::time::Instant::now();
     for _ in 0..iters {
-        for r in 0..1024 {
+        (0..1024).for_each(|r| {
             let mut sum = 0.0f32;
             let row_off = r * 1024;
             for c in 0..1024 {
                 sum += f32_w[row_off + c] * x[c];
             }
             y_scalar[r] = sum;
-        }
+        });
         consume_f32(y_scalar.iter().sum::<f32>());
     }
     let scalar_elapsed = start.elapsed();
