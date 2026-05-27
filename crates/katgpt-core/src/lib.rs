@@ -24,7 +24,7 @@ pub use traits::{
 #[cfg(feature = "leo_all_goals")]
 pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
 #[cfg(feature = "dual_leo")]
-pub use traits::{AutocurriculumSampler, DualLeoMixer};
+pub use traits::{ActingMode, AlphaSchedule, AutocurriculumSampler, BcConfig, BcTarget, DualLeoMixer};
 
 // Re-export key types at crate root for convenience
 pub use types::{
