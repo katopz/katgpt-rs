@@ -70,10 +70,21 @@ fn main() {
 
     for r in &results {
         let unit = match r.category {
-            BenchCategory::Speculative => "tok/s",
-            BenchCategory::TreeBuild => "ops/s",
-            BenchCategory::Infrastructure => "ops/s",
-            BenchCategory::HeuristicLearning => "ops/s",
+            BenchCategory::Speculative
+            | BenchCategory::SpecDecoding
+            | BenchCategory::Game
+            | BenchCategory::E2EGame => "tok/s",
+            BenchCategory::TreeBuild
+            | BenchCategory::Infrastructure
+            | BenchCategory::HeuristicLearning
+            | BenchCategory::KvOptimization
+            | BenchCategory::Attention
+            | BenchCategory::Noise
+            | BenchCategory::Distillation
+            | BenchCategory::TestTimeCompute
+            | BenchCategory::Routing
+            | BenchCategory::Diffusion
+            | BenchCategory::SimdPerf => "ops/s",
         };
         println!(
             "  {:<20} {:>12.0} {:>3} {:>12.2} {:>15.2}",
@@ -95,9 +106,52 @@ fn main() {
 
     let categories = [
         (
-            BenchCategory::Speculative,
+            BenchCategory::SpecDecoding,
             "speculative",
             "Speculative Decoding Throughput",
+            "Accepted tok/s",
+        ),
+        (
+            BenchCategory::KvOptimization,
+            "kv_optimization",
+            "KV Optimization Performance",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::Attention,
+            "attention",
+            "Attention Innovation Performance",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::Noise,
+            "noise",
+            "Noise / SDE Scheduling Performance",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::Game,
+            "game",
+            "Game / Self-Play Performance",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::SimdPerf,
+            "simd",
+            "SIMD / Perf Performance",
+            "Operations/s",
+        ),
+        (
+            BenchCategory::E2EGame,
+            "e2e_game",
+            "E2E Game Timing (Plasma/Hot/Warm/Cold)",
+            "tok/s",
+        ),
+        // Legacy categories for backward compat
+        (
+            BenchCategory::Speculative,
+            "speculative_legacy",
+            "Speculative Decoding Throughput (Legacy)",
             "Accepted tok/s",
         ),
         (

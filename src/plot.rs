@@ -1,7 +1,7 @@
-use crate::benchmark::BenchResult;
+use crate::benchmark::{BenchCategory, BenchResult, FEATURE_DIMS};
 use plotters::prelude::*;
 
-/// Plot benchmark results as a horizontal bar chart PNG.
+/// Plot benchmark results as a horizontal bar chart SVG.
 ///
 /// Each bar is colored per `BenchResult::color` with throughput + μs/step annotation.
 pub fn plot_results(
@@ -12,7 +12,7 @@ pub fn plot_results(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let n = results.len();
     if n == 0 {
-        let root = BitMapBackend::new(path, (800, 200)).into_drawing_area();
+        let root = SVGBackend::new(path, (800, 200)).into_drawing_area();
         root.fill(&WHITE)?;
         let style = TextStyle::from(("sans-serif", 18).into_font()).color(&BLACK);
         root.draw_text("No benchmark results", &style, (10, 80))?;
@@ -22,7 +22,7 @@ pub fn plot_results(
 
     let max_tp = results.iter().map(|r| r.throughput).fold(0.0f64, f64::max);
     if max_tp <= 0.0 {
-        let root = BitMapBackend::new(path, (800, 200)).into_drawing_area();
+        let root = SVGBackend::new(path, (800, 200)).into_drawing_area();
         root.fill(&WHITE)?;
         root.present()?;
         return Ok(());
@@ -35,7 +35,7 @@ pub fn plot_results(
     let img_h: u32 = (70 + n * (bar_px + gap_px) + 30) as u32;
     let max_val = max_tp * 1.45; // 45% room for annotations
 
-    let root = BitMapBackend::new(path, (img_w, img_h)).into_drawing_area();
+    let root = SVGBackend::new(path, (img_w, img_h)).into_drawing_area();
     root.fill(&WHITE)?;
 
     // Y axis: bar i centered at integer y=i, labels at each integer tick
@@ -117,6 +117,7 @@ struct TsRow {
     throughput: f64,
     us_per_step: f64,
     avg_accept_len: f64,
+    feature_dim: String,
 }
 
 /// Parse `bench/timeseries.csv` into rows.
@@ -124,13 +125,14 @@ fn parse_timeseries_csv(path: &str) -> Result<Vec<TsRow>, Box<dyn std::error::Er
     let content = std::fs::read_to_string(path)?;
     let mut rows = Vec::new();
     for line in content.lines().skip(1) {
-        let fields: Vec<&str> = line.splitn(9, ',').collect();
+        let fields: Vec<&str> = line.splitn(10, ',').collect();
         if fields.len() < 8 {
             continue;
         }
         let throughput = fields[5].parse::<f64>().ok();
         let us_per_step = fields[6].parse::<f64>().ok();
         let avg_accept_len = fields[7].parse::<f64>().ok();
+        let feature_dim = fields.get(8).unwrap_or(&"").to_string();
         match (throughput, us_per_step, avg_accept_len) {
             (Some(tp), Some(us), Some(aal)) => rows.push(TsRow {
                 run_date: fields[0].to_string(),
@@ -141,6 +143,7 @@ fn parse_timeseries_csv(path: &str) -> Result<Vec<TsRow>, Box<dyn std::error::Er
                 throughput: tp,
                 us_per_step: us,
                 avg_accept_len: aal,
+                feature_dim,
             }),
             _ => continue,
         }
@@ -181,7 +184,7 @@ fn check_regression(rows: &[TsRow], cat: &str) -> Vec<(String, f64, f64)> {
 }
 
 /// Plot time series line charts per category from cumulative CSV data.
-/// Generates one PNG per category showing throughput trend over runs.
+/// Generates one SVG per category showing throughput trend over runs.
 /// Returns list of detected regressions (method, max_tp, latest_tp).
 pub fn plot_timeseries(
     csv_path: &str,
@@ -192,16 +195,15 @@ pub fn plot_timeseries(
         return Ok(Vec::new());
     }
 
-    let cats = &[
-        ("speculative", "Speculative Decoding Throughput"),
-        ("tree_build", "DDTree Build Performance"),
-        ("infrastructure", "Infrastructure Primitives"),
-        ("heuristic_learning", "G-Zero Heuristic Learning"),
-    ];
+    // Collect all unique categories from the data
+    let mut cats: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for r in &rows {
+        cats.insert(&r.category);
+    }
 
     let mut all_regressions = Vec::new();
 
-    for (cat, title) in cats {
+    for cat in &cats {
         let cat_rows: Vec<_> = rows.iter().filter(|r| r.category == *cat).collect();
         if cat_rows.is_empty() {
             continue;
@@ -248,8 +250,8 @@ pub fn plot_timeseries(
         let img_w = 1200;
         let img_h = 400 + methods.len() as u32 * 20;
 
-        let png_path = format!("{bench_dir}/timeseries_{cat}.png");
-        let root = BitMapBackend::new(&png_path, (img_w, img_h)).into_drawing_area();
+        let svg_path = format!("{bench_dir}/timeseries_{cat}.svg");
+        let root = SVGBackend::new(&svg_path, (img_w, img_h)).into_drawing_area();
         root.fill(&WHITE)?;
 
         let max_tp = methods
@@ -263,11 +265,10 @@ pub fn plot_timeseries(
             .last()
             .map(|r| r.features.as_str())
             .unwrap_or("unknown");
+
+        let title = format!("{cat} — Time Series [{latest_features}]");
         let mut chart = ChartBuilder::on(&root)
-            .caption(
-                format!("{title} — Time Series [{latest_features}]"),
-                ("sans-serif", 20).into_font(),
-            )
+            .caption(&title, ("sans-serif", 20).into_font())
             .margin(12)
             .x_label_area_size(50)
             .y_label_area_size(90)
@@ -349,4 +350,170 @@ pub fn plot_timeseries(
     }
 
     Ok(all_regressions)
+}
+
+/// Plot feature-grouped bar charts: one SVG per feature dimension.
+///
+/// Groups benchmarks by their `feature_dim` tag and generates a horizontal bar chart
+/// for each of the 10 feature dimensions from the paper comparison matrix.
+/// Also generates an E2E game timing chart if any E2E results exist.
+pub fn plot_feature_grouped(
+    results: &[BenchResult],
+    bench_dir: &str,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut written = Vec::new();
+
+    // ── Feature-dimension charts ──
+    for feat_cat in &FEATURE_DIMS {
+        let cat_results: Vec<_> = results
+            .iter()
+            .filter(|r| r.category == *feat_cat)
+            .cloned()
+            .collect();
+        if cat_results.is_empty() {
+            continue;
+        }
+
+        let title = crate::benchmark::bench_category_title(*feat_cat);
+        let slug = crate::benchmark::bench_category_str(*feat_cat);
+        let path = format!("{bench_dir}/feature_{slug}.svg");
+
+        plot_results(&cat_results, &path, title, "ops/s")?;
+        written.push(format!("📈 {title} → {path}"));
+    }
+
+    // ── E2E game timing chart ──
+    let e2e_results: Vec<_> = results
+        .iter()
+        .filter(|r| r.category == BenchCategory::E2EGame)
+        .cloned()
+        .collect();
+    if !e2e_results.is_empty() {
+        let path = format!("{bench_dir}/e2e_game_timing.svg");
+        plot_results(
+            &e2e_results,
+            &path,
+            "E2E Game Timing (Plasma/Hot/Warm/Cold)",
+            "ops/s",
+        )?;
+        written.push(format!("📈 E2E Game Timing → {path}"));
+    }
+
+    // ── Summary: feature coverage radar chart ──
+    let radar_path = format!("{bench_dir}/feature_coverage_radar.svg");
+    plot_feature_radar(results, &radar_path)?;
+    written.push(format!("📈 Feature Coverage Radar → {radar_path}"));
+
+    Ok(written)
+}
+
+/// Plot a radar/spider chart showing benchmark coverage per feature dimension.
+///
+/// Each axis represents one feature dimension (SD, KV, Attn, etc.).
+/// The value is the number of benchmarks that fall under that dimension.
+/// This gives a visual "coverage" of how thoroughly each feature is benchmarked.
+fn plot_feature_radar(
+    results: &[BenchResult],
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let dims = &[
+        ("SD", "Speculative Decoding"),
+        ("KV", "KV Optimization"),
+        ("Attn", "Attention Innovation"),
+        ("Noise", "Noise Scheduling"),
+        ("Distill", "Distillation"),
+        ("TTC", "Test-Time Compute"),
+        ("Route", "Routing/MoE"),
+        ("Diff", "Diffusion"),
+        ("Game", "Game/Self-Play"),
+        ("SIMD", "SIMD/Perf"),
+    ];
+
+    // Count benchmarks per feature dimension
+    let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for (code, _) in dims {
+        counts.insert(code, 0);
+    }
+    for r in results {
+        if !r.feature_dim.is_empty() && counts.contains_key(r.feature_dim.as_str()) {
+            *counts.get_mut(r.feature_dim.as_str()).unwrap() += 1;
+        }
+    }
+
+    let max_count = counts.values().copied().max().unwrap_or(1).max(1);
+
+    // Draw as horizontal bar chart (radar is hard in plotters; bar gives same info clearly)
+    let n = dims.len();
+    let img_w = 900;
+    let img_h: u32 = (70 + n * 35 + 30) as u32;
+
+    let root = SVGBackend::new(path, (img_w, img_h)).into_drawing_area();
+    root.fill(&WHITE)?;
+
+    let max_val = max_count as f64 * 1.45;
+    let y_lo = -0.5f64;
+    let y_hi = n as f64 - 0.5;
+
+    let mut chart = ChartBuilder::on(&root)
+        .caption(
+            "Feature Coverage — Benchmarks per Dimension",
+            ("sans-serif", 20).into_font(),
+        )
+        .margin(10)
+        .y_label_area_size(200)
+        .x_label_area_size(45)
+        .build_cartesian_2d(0f64..max_val, y_lo..y_hi)?;
+
+    chart
+        .configure_mesh()
+        .y_label_formatter(&|&y: &f64| -> String {
+            let idx = y.round() as i64;
+            if idx >= 0 && (idx as usize) < n {
+                let (code, name) = dims[idx as usize];
+                format!("{code}: {name}")
+            } else {
+                String::new()
+            }
+        })
+        .y_labels(n)
+        .x_desc("# Benchmarks")
+        .x_label_style(("sans-serif", 11).into_font())
+        .y_label_style(("sans-serif", 11).into_font())
+        .draw()?;
+
+    // Color palette for feature dimensions
+    let dim_colors: Vec<RGBColor> = vec![
+        RGBColor(0, 114, 178),   // SD - blue
+        RGBColor(230, 159, 0),   // KV - orange
+        RGBColor(0, 158, 115),   // Attn - teal
+        RGBColor(240, 228, 66),  // Noise - yellow
+        RGBColor(204, 121, 167), // Distill - pink
+        RGBColor(86, 180, 233),  // TTC - light blue
+        RGBColor(213, 94, 0),    // Route - red-orange
+        RGBColor(0, 0, 0),       // Diff - black (few benchmarks)
+        RGBColor(128, 0, 128),   // Game - purple
+        RGBColor(70, 130, 180),  // SIMD - steel blue
+    ];
+
+    for (i, (code, _name)) in dims.iter().enumerate() {
+        let y = i as f64;
+        let count = counts[*code] as f64;
+        let color = dim_colors[i];
+
+        chart.draw_series(std::iter::once(Rectangle::new(
+            [(0.0, y - 0.4), (count, y + 0.4)],
+            color.filled(),
+        )))?;
+
+        let label = format!("{count}");
+        let text_x = count + max_val * 0.015;
+        chart.draw_series(std::iter::once(Text::new(
+            label,
+            (text_x, y),
+            ("sans-serif", 12).into_font(),
+        )))?;
+    }
+
+    root.present()?;
+    Ok(())
 }
