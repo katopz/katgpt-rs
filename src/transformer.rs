@@ -327,11 +327,14 @@ pub struct ForwardContext {
     #[cfg(feature = "tiled_attention")]
     tiled_out: Vec<f32>, // [block_size × n_embd] tiled output before transpose
     // Clustered LM head scratch buffers (avoid per-forward-pass allocation)
-    cluster_scores_buf: Vec<f32>, // [vocab_size] upper-bound for cluster scores
-    topk_indexed_buf: Vec<(usize, f32)>, // [vocab_size] indexed pairs for select_topk
+    cluster_scores_buf: Vec<f32>, // [num_clusters] cluster scores for clustered LM head
+    topk_indexed_buf: Vec<(usize, f32)>, // [num_clusters] indexed pairs for cluster top-K
     topk_output_buf: Vec<usize>,  // [topk] output indices buffer
+    // Loop residual: saves h^(τ-1) for residual gating across weight-shared loops
+    pub(crate) prev_h: Vec<f32>, // [n_embd]
     // GQA lookup: kv_group_lut[h] = h * n_kv_head / n_head (pre-computed once)
-    kv_group_lut: Vec<usize>, // [n_head]
+    kv_group_lut: [usize; 64], // fixed-size LUT for GQA head→kv_group mapping
+    kv_group_lut_count: usize, // actual number of heads (n_head)
     // Delta routing: pre-allocated source_refs index buffer (stores block indices, not slices)
     #[cfg(feature = "delta_routing")]
     delta_source_indices: Vec<usize>, // pre-allocated capacity for max sources
@@ -388,12 +391,26 @@ impl ForwardContext {
             tiled_v: vec![0.0; config.block_size * kvd],
             #[cfg(feature = "tiled_attention")]
             tiled_out: vec![0.0; config.block_size * config.n_embd],
-            cluster_scores_buf: vec![0.0; config.vocab_size],
-            topk_indexed_buf: vec![(0usize, 0.0f32); config.vocab_size],
+            prev_h: vec![0.0; config.n_embd],
+            cluster_scores_buf: vec![
+                0.0;
+                config.vocab_size.div_ceil(config.mtp_cluster_size.max(1))
+            ],
+            topk_indexed_buf: vec![
+                (0usize, 0.0f32);
+                config.vocab_size.div_ceil(config.mtp_cluster_size.max(1))
+            ],
             topk_output_buf: Vec::new(),
-            kv_group_lut: (0..config.n_head)
-                .map(|h| h * config.n_kv_head / config.n_head)
-                .collect(),
+            kv_group_lut: {
+                let n_head = config.n_head;
+                let n_kv_head = config.n_kv_head;
+                let mut lut = [0usize; 64];
+                for (h, slot) in lut.iter_mut().enumerate().take(n_head.min(64)) {
+                    *slot = h * n_kv_head / n_head;
+                }
+                lut
+            },
+            kv_group_lut_count: config.n_head,
             #[cfg(feature = "delta_routing")]
             delta_source_indices: {
                 let block_size = 4; // Default B=4
@@ -543,11 +560,7 @@ unsafe fn attention_head(
     // Pass 3: normalize + weighted value accumulation (no write-back of scores)
     // Pre-scale scores once
     let inv_sum = 1.0 / sum;
-    for t in 0..t_n {
-        unsafe {
-            *scores_buf.get_unchecked_mut(t) *= inv_sum;
-        }
-    }
+    crate::simd::simd_scale_inplace(scores_slice, inv_sum);
     // Zero the output slice before accumulation
     for d in 0..hd {
         unsafe {
@@ -560,11 +573,9 @@ unsafe fn attention_head(
         let v_row = unsafe {
             std::slice::from_raw_parts(value_cache.as_ptr().add(t * kv_dim + kv_group_offset), hd)
         };
-        for d in 0..hd {
-            unsafe {
-                *attn_out.get_unchecked_mut(q_head_offset + d) += s * v_row[d];
-            }
-        }
+        let out_slice =
+            unsafe { std::slice::from_raw_parts_mut(attn_out.as_mut_ptr().add(q_head_offset), hd) };
+        crate::simd::simd_fused_scale_acc(out_slice, v_row, s, hd);
     }
 }
 
@@ -761,13 +772,10 @@ pub fn forward_looped<'a>(
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
 
-    // Save initial embedding for residual gating across loops
-    let mut prev_h = vec![0.0f32; n];
-
     // 2. Outer loop: T passes over all layers
     for tau in 0..loop_count {
         // Save h^(τ-1) for residual gate
-        prev_h[..n].copy_from_slice(&ctx.x[..n]);
+        ctx.prev_h[..n].copy_from_slice(&ctx.x[..n]);
 
         // 3. Inner loop: weight-shared layer pass
         for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
@@ -810,7 +818,6 @@ pub fn forward_looped<'a>(
 
                 // Multi-head attention with GQA
                 let scale = ctx.attn_scale;
-                ctx.attn_out[..n].fill(0.0);
                 let t_n = pos + 1;
                 for h in 0..config.n_head {
                     let kv_group = ctx.kv_group_lut[h];
@@ -891,7 +898,7 @@ pub fn forward_looped<'a>(
             let gate_offset = tau * n;
             if gate_offset + n <= residual_gate.gates.len() {
                 for d in 0..n {
-                    ctx.x[d] += residual_gate.gates[gate_offset + d] * prev_h[d];
+                    ctx.x[d] += residual_gate.gates[gate_offset + d] * ctx.prev_h[d];
                 }
             }
         }
@@ -1188,7 +1195,6 @@ fn forward_single_layer(
 
     // Multi-head attention with GQA
     let scale = ctx.attn_scale;
-    ctx.attn_out[..n].fill(0.0);
     let t_n = pos + 1;
     for h in 0..config.n_head {
         let kv_group = ctx.kv_group_lut[h];
@@ -1249,6 +1255,8 @@ fn standard_lm_head(
 ///
 /// Uses partial selection sort: O(N + K log K).
 /// Returns indices sorted by score descending (highest first).
+///
+/// Allocates internally. For hot-path code, prefer [`select_topk_indices_into_buf`].
 pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
     let k = k.min(scores.len());
     if k == 0 {
@@ -1268,18 +1276,21 @@ pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
     indexed[..k].iter().map(|(i, _)| *i).collect()
 }
 
-/// In-place variant of [`select_topk_indices`] that reuses a pre-allocated buffer.
+/// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
 ///
 /// `indexed_buf` is cleared and filled with `(index, score)` pairs.
-/// Returns indices sorted by score descending (highest first).
+/// Top-K indices are written into `output_buf` (cleared and filled),
+/// sorted by score descending (highest first).
 pub fn select_topk_indices_into(
     scores: &[f32],
     k: usize,
     indexed_buf: &mut Vec<(usize, f32)>,
-) -> Vec<usize> {
+    output_buf: &mut Vec<usize>,
+) {
     let k = k.min(scores.len());
     if k == 0 {
-        return Vec::new();
+        output_buf.clear();
+        return;
     }
 
     indexed_buf.clear();
@@ -1293,7 +1304,8 @@ pub fn select_topk_indices_into(
     // Sort the top K by score descending (O(K log K))
     indexed_buf[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    indexed_buf[..k].iter().map(|(i, _)| *i).collect()
+    output_buf.clear();
+    output_buf.extend(indexed_buf[..k].iter().map(|(i, _)| *i));
 }
 
 /// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
@@ -1736,7 +1748,6 @@ fn forward_base<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
         let t_n = pos + 1;
 
         for h in 0..config.n_head {
@@ -2030,7 +2041,6 @@ fn forward_coda<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
         let t_n = pos + 1;
 
         for h in 0..config.n_head {
@@ -3120,7 +3130,6 @@ pub fn forward_paged<'a>(
 
             // Multi-head attention with GQA (reuse existing attention_head)
             let scale = ctx.attn_scale;
-            ctx.attn_out[..n].fill(0.0);
 
             for h in 0..config.n_head {
                 let kv_group = ctx.kv_group_lut[h];
@@ -4046,7 +4055,6 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
         // Multi-head attention with GQA using dequantized flat cache
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
 
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
