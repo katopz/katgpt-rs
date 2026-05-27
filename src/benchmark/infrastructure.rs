@@ -5,9 +5,7 @@ use crate::spectralquant::{
     par_dequantize_spectral_keys_flat,
 };
 use crate::speculative::types::FlashPrefillConfig;
-use crate::speculative::{
-    AttentionScorer, SpeculativeContext, block_select, compress_prompt, dflash_predict_with,
-};
+use crate::speculative::{AttentionScorer, SpeculativeContext, block_select, compress_prompt};
 use crate::transformer::{
     ForwardContext, MultiLayerKVCache, PagedKVCache, RavenKVCache, TransformerWeights, forward,
     forward_paged, forward_raven, raven_readout, raven_update,

@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 pub struct AsymmetricBenchResult {
     /// Configuration tested.
     pub key_bits: u8,

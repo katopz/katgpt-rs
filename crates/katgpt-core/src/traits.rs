@@ -486,6 +486,7 @@ pub trait AutocurriculumSampler {
 
 #[cfg(test)]
 mod tests_leo {
+    #[allow(unused_imports)]
     use super::*;
 
     // -- T5: sigmoid_bounded_q --
@@ -506,6 +507,7 @@ mod tests_leo {
     // -- T1: LeoHead default q_for_goal --
 
     /// Minimal LeoHead impl for testing.
+    #[allow(dead_code)]
     struct DummyLeoHead {
         goals: usize,
         actions: usize,
@@ -545,6 +547,7 @@ mod tests_leo {
 
     // -- T3: AllGoalsUpdate td_target + loss --
 
+    #[allow(dead_code)]
     struct Updater;
     #[cfg(feature = "leo_all_goals")]
     impl AllGoalsUpdate for Updater {}
@@ -580,6 +583,7 @@ mod tests_leo {
 
     // -- T2: DualLeoMixer --
 
+    #[allow(dead_code)]
     struct Mixer;
     #[cfg(feature = "dual_leo")]
     impl DualLeoMixer for Mixer {}
@@ -609,6 +613,7 @@ mod tests_leo {
 
     // -- T4: AutocurriculumSampler --
 
+    #[allow(dead_code)]
     struct SimpleAutocurriculum {
         observed: Vec<bool>,
     }

@@ -56,6 +56,7 @@ pub fn bench_elf_sde(_config: &Config) -> Vec<BenchResult> {
     }
 
     // ── T2: Noise schedule decay ──
+    #[allow(clippy::type_complexity)]
     let schedule_configs: &[(&str, fn(f32) -> f32)] = &[
         ("linear", |t| 1.0 - t),
         ("cosine", |t| ((1.0 - t) * std::f32::consts::PI * 0.5).cos()),
@@ -176,7 +177,7 @@ fn apply_noise_schedule(
 /// Measure path diversity: generate n_paths noisy variants and compute avg pairwise cosine distance.
 fn measure_path_diversity(n_paths: usize, dim: usize, rng: &mut fastrand::Rng) -> f32 {
     let base: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
-    let mut paths: Vec<Vec<f32>> = (0..n_paths)
+    let paths: Vec<Vec<f32>> = (0..n_paths)
         .map(|_| {
             let mut v = base.clone();
             inject_sde_noise_1d(&mut v, 0.1, rng);

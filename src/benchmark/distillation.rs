@@ -105,6 +105,7 @@ fn bench_bt_rank() -> Vec<BenchResult> {
 // ── BanditPruner ───────────────────────────────────────────────
 
 #[cfg(feature = "bandit")]
+#[allow(clippy::unit_arg)]
 fn bench_bandit() -> Vec<BenchResult> {
     use crate::pruners::bandit::{BanditPruner, BanditStrategy};
     use crate::speculative::types::NoScreeningPruner;
@@ -186,6 +187,7 @@ fn bench_bandit() -> Vec<BenchResult> {
 // ── AbsorbCompress ─────────────────────────────────────────────
 
 #[cfg(feature = "g_zero")]
+#[allow(clippy::unit_arg)]
 fn bench_absorb_compress() -> Vec<BenchResult> {
     use crate::pruners::absorb_compress::{AbsorbCompress, AbsorbCompressLayer, CompressConfig};
     use crate::speculative::types::NoScreeningPruner;

@@ -1,13 +1,13 @@
 use super::{BenchCategory, BenchResult};
 use crate::speculative::{
-    BinaryScreeningPruner, LeviathanVerifier, NoPruner, NoScreeningPruner, SimulatedVerifier,
-    SpeculativeContext, TreeBuilder, dflash_predict_ar_with, dflash_predict_parallel,
-    dflash_predict_with, extract_best_path_into, sample_from_distribution,
-    speculative_step_conditioned_with, speculative_step_rollback_with, speculative_step_verifier,
+    LeviathanVerifier, NoPruner, NoScreeningPruner, SimulatedVerifier, SpeculativeContext,
+    TreeBuilder, dflash_predict_ar_with, dflash_predict_parallel, dflash_predict_with,
+    extract_best_path_into, sample_from_distribution, speculative_step_conditioned_with,
+    speculative_step_rollback_with, speculative_step_verifier,
 };
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
 use crate::types::{Config, Rng, softmax_scaled};
-use rayon::prelude::*;
+
 use std::time::Instant;
 
 pub fn bench_ar(
