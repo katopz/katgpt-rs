@@ -1370,13 +1370,33 @@ pub fn rmsnorm(x: &mut [f32]) {
 /// GeGLU activation: hidden = gelu(gate) * up (elementwise).
 /// Uses approximate GELU: gelu(x) ≈ x * sigmoid(1.702 * x).
 /// `gate` and `up` are [mlp_hidden], output goes to `hidden`.
+///
+/// SIMD-accelerated: exp() computed via `simd_exp_inplace` on stack buffers.
 #[inline(always)]
 pub fn gegelu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
-    for i in 0..hidden.len() {
+    const CHUNK: usize = 64;
+    let mut buf = [0.0f32; CHUNK];
+
+    let mut i = 0;
+    while i + CHUNK <= hidden.len() {
+        // buf[j] = -1.702 * gate[j]
+        for j in 0..CHUNK {
+            buf[j] = -1.702 * gate[i + j];
+        }
+        // buf[j] = exp(-1.702 * gate[j]) via SIMD
+        crate::simd::simd_exp_inplace(&mut buf);
+        // hidden[j] = gate[j] * sigmoid(1.702 * gate[j]) * up[j]
+        for j in 0..CHUNK {
+            let sigmoid = 1.0 / (1.0 + buf[j]);
+            hidden[i + j] = gate[i + j] * sigmoid * up[i + j];
+        }
+        i += CHUNK;
+    }
+    // Scalar remainder
+    for i in i..hidden.len() {
         let g = gate[i];
         let sigmoid = 1.0 / (1.0 + (-1.702 * g).exp());
-        let gelu_val = g * sigmoid;
-        hidden[i] = gelu_val * up[i];
+        hidden[i] = g * sigmoid * up[i];
     }
 }
 
@@ -1396,8 +1416,28 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 
 /// SiLU (Sigmoid Linear Unit) activation: x * sigmoid(x).
 /// Used in LLaMA, Mistral, and other LLaMA-family models for SwiGLU MLP.
+///
+/// SIMD-accelerated: exp() computed via `simd_exp_inplace` on stack buffers.
 pub fn silu(x: &mut [f32]) {
-    for v in x.iter_mut() {
+    const CHUNK: usize = 64;
+    let mut buf = [0.0f32; CHUNK];
+
+    let mut i = 0;
+    while i + CHUNK <= x.len() {
+        // buf[j] = -x[j]
+        for j in 0..CHUNK {
+            buf[j] = -x[i + j];
+        }
+        // buf[j] = exp(-x[j]) via SIMD
+        crate::simd::simd_exp_inplace(&mut buf);
+        // x[j] = x[j] / (1 + exp(-x[j]))
+        for j in 0..CHUNK {
+            x[i + j] = x[i + j] / (1.0 + buf[j]);
+        }
+        i += CHUNK;
+    }
+    // Scalar remainder
+    for v in x[i..].iter_mut() {
         *v = *v / (1.0 + (-*v).exp());
     }
 }
@@ -1405,11 +1445,30 @@ pub fn silu(x: &mut [f32]) {
 /// SwiGLU activation: SiLU(gate) * up.
 /// Used in LLaMA-family models (gate_proj and up_proj are separate weights).
 /// Result stored in `hidden`: hidden[i] = silu(gate[i]) * up[i]
+///
+/// SIMD-accelerated: exp() computed via `simd_exp_inplace` on stack buffers.
 pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
-    for i in 0..hidden.len() {
+    const CHUNK: usize = 64;
+    let mut buf = [0.0f32; CHUNK];
+
+    let mut i = 0;
+    while i + CHUNK <= hidden.len() {
+        // buf[j] = -gate[j]
+        for j in 0..CHUNK {
+            buf[j] = -gate[i + j];
+        }
+        // buf[j] = exp(-gate[j]) via SIMD
+        crate::simd::simd_exp_inplace(&mut buf);
+        // hidden[j] = gate[j] / (1 + exp(-gate[j])) * up[j]
+        for j in 0..CHUNK {
+            hidden[i + j] = gate[i + j] / (1.0 + buf[j]) * up[i + j];
+        }
+        i += CHUNK;
+    }
+    // Scalar remainder
+    for i in i..hidden.len() {
         let g = gate[i];
-        let silu_val = g / (1.0 + (-g).exp());
-        hidden[i] = silu_val * up[i];
+        hidden[i] = g / (1.0 + (-g).exp()) * up[i];
     }
 }
 
@@ -1551,18 +1610,35 @@ pub fn sparse_matmul(
     alive
 }
 
-/// Sample a token index from a probability distribution using cumulative scan.
-#[inline(always)]
+/// Sample a token index from a probability distribution.
+///
+/// Builds a prefix-sum (CDF) then uses binary search for O(log V) lookup
+/// instead of the O(V/2) average of a linear scan.
 pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
     let r = rng.uniform();
-    let mut cumsum = 0.0;
-    for (i, &p) in probs.iter().enumerate() {
-        cumsum += p;
-        if r < cumsum {
-            return i;
-        }
+    let n = probs.len();
+    if n == 0 {
+        return 0;
     }
-    probs.len() - 1
+
+    // Build cumulative sum array
+    let mut cdf = Vec::with_capacity(n);
+    let mut sum = 0.0f32;
+    for &p in probs {
+        sum += p;
+        cdf.push(sum);
+    }
+
+    // Binary search: find the first index where cdf[i] > r
+    match cdf.binary_search_by(|&c| {
+        if c > r {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
+        }
+    }) {
+        Ok(i) | Err(i) => i.min(n - 1),
+    }
 }
 
 // ---------------------------------------------------------------------------

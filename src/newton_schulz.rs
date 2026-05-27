@@ -45,24 +45,23 @@ fn matmul_xtx(x: &[f32], m: usize, n: usize, a: &mut [f32]) {
 
 /// Compute `R = A * X` where A is `m × m` and X is `m × n`, result is `m × n`.
 /// Transposes X for contiguous inner-loop access, then uses SIMD dot products.
-fn matmul_ax(a: &[f32], x: &[f32], m: usize, n: usize, r: &mut [f32]) {
+/// Caller provides `xt_buf` (`m * n` elements) to avoid per-call allocation.
+fn matmul_ax(a: &[f32], x: &[f32], m: usize, n: usize, r: &mut [f32], xt_buf: &mut [f32]) {
     // Transpose X: columns become contiguous rows in xt (n × m).
-    let mut xt = vec![0.0f32; m * n];
-    transpose(x, m, n, &mut xt);
+    transpose(x, m, n, xt_buf);
 
     // r[i,j] = dot(a_row_i, xt_col_j) = dot(&a[i*m..], &xt[j*m..], m)
     for i in 0..m {
         let a_row = &a[i * m..(i + 1) * m];
         for j in 0..n {
-            r[i * n + j] = crate::simd::simd_dot_f32(a_row, &xt[j * m..(j + 1) * m], m);
+            r[i * n + j] = crate::simd::simd_dot_f32(a_row, &xt_buf[j * m..(j + 1) * m], m);
         }
     }
 }
 
 /// Frobenius norm of a flat matrix.
 fn frobenius_norm(m: &[f32]) -> f32 {
-    let sum_sq: f32 = m.iter().map(|v| v * v).sum();
-    sum_sq.sqrt()
+    crate::simd::simd_sum_sq(m, m.len()).sqrt()
 }
 
 // ── Public API ───────────────────────────────────────────────────
@@ -122,13 +121,14 @@ fn newton_schulz5_square(g: &[f32], m: usize, n: usize, out: &mut [f32]) {
     let mut a_mat = vec![0.0f32; m * m]; // X @ X^T (m × m)
     let mut b_mat = vec![0.0f32; m * m]; // b*A + c*A^2 (m × m)
     let mut bx = vec![0.0f32; m * n]; // B @ X (m × n)
+    let mut at = vec![0.0f32; m * m]; // A^T scratch (pre-allocated, Issue 083)
+    let mut xt_buf = vec![0.0f32; m * n]; // X^T scratch for matmul_ax
 
     for _ in 0..ITERS {
         // A = X @ X^T
         matmul_xtx(&x, m, n, &mut a_mat);
 
         // B = b*A + c*(A@A) — transpose A so rows of A^T are contiguous
-        let mut at = vec![0.0f32; m * m];
         transpose(&a_mat, m, m, &mut at);
         for i in 0..m {
             let a_row = &a_mat[i * m..(i + 1) * m];
@@ -139,7 +139,7 @@ fn newton_schulz5_square(g: &[f32], m: usize, n: usize, out: &mut [f32]) {
         }
 
         // BX = B @ X
-        matmul_ax(&b_mat, &x, m, n, &mut bx);
+        matmul_ax(&b_mat, &x, m, n, &mut bx, &mut xt_buf);
 
         // X = a*X + BX
         for i in 0..(m * n) {

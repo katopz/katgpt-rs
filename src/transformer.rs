@@ -327,14 +327,20 @@ pub struct ForwardContext {
     #[cfg(feature = "tiled_attention")]
     tiled_out: Vec<f32>, // [block_size × n_embd] tiled output before transpose
     // Clustered LM head scratch buffers (avoid per-forward-pass allocation)
-    cluster_scores_buf: Vec<f32>, // [vocab_size] upper-bound for cluster scores
-    topk_indexed_buf: Vec<(usize, f32)>, // [vocab_size] indexed pairs for select_topk
+    cluster_scores_buf: Vec<f32>, // [num_clusters] cluster scores for clustered LM head
+    topk_indexed_buf: Vec<(usize, f32)>, // [num_clusters] indexed pairs for cluster top-K
     topk_output_buf: Vec<usize>,  // [topk] output indices buffer
+    // Loop residual: saves h^(τ-1) for residual gating across weight-shared loops
+    pub(crate) prev_h: Vec<f32>, // [n_embd]
     // GQA lookup: kv_group_lut[h] = h * n_kv_head / n_head (pre-computed once)
-    kv_group_lut: Vec<usize>, // [n_head]
+    kv_group_lut: [usize; 64], // fixed-size LUT for GQA head→kv_group mapping
+    _kv_group_lut_count: usize, // actual number of heads (n_head)
     // Delta routing: pre-allocated source_refs index buffer (stores block indices, not slices)
     #[cfg(feature = "delta_routing")]
     delta_source_indices: Vec<usize>, // pre-allocated capacity for max sources
+    // Delta routing: scratch buffer for SIMD scaling in depth_route (Issue 082)
+    #[cfg(feature = "delta_routing")]
+    delta_scaled_buf: Vec<f32>, // [n_embd] scratch for pre-scaled dot products
 }
 
 impl ForwardContext {
@@ -388,18 +394,34 @@ impl ForwardContext {
             tiled_v: vec![0.0; config.block_size * kvd],
             #[cfg(feature = "tiled_attention")]
             tiled_out: vec![0.0; config.block_size * config.n_embd],
-            cluster_scores_buf: vec![0.0; config.vocab_size],
-            topk_indexed_buf: vec![(0usize, 0.0f32); config.vocab_size],
+            prev_h: vec![0.0; config.n_embd],
+            cluster_scores_buf: vec![
+                0.0;
+                config.vocab_size.div_ceil(config.mtp_cluster_size.max(1))
+            ],
+            topk_indexed_buf: vec![
+                (0usize, 0.0f32);
+                config.vocab_size.div_ceil(config.mtp_cluster_size.max(1))
+            ],
             topk_output_buf: Vec::new(),
-            kv_group_lut: (0..config.n_head)
-                .map(|h| h * config.n_kv_head / config.n_head)
-                .collect(),
+            kv_group_lut: {
+                let n_head = config.n_head;
+                let n_kv_head = config.n_kv_head;
+                let mut lut = [0usize; 64];
+                for (h, slot) in lut.iter_mut().enumerate().take(n_head.min(64)) {
+                    *slot = h * n_kv_head / n_head;
+                }
+                lut
+            },
+            _kv_group_lut_count: config.n_head,
             #[cfg(feature = "delta_routing")]
             delta_source_indices: {
                 let block_size = 4; // Default B=4
                 let n_blocks = config.n_layer.div_ceil(block_size);
                 Vec::with_capacity(n_blocks + 1)
             },
+            #[cfg(feature = "delta_routing")]
+            delta_scaled_buf: vec![0.0f32; config.n_embd],
         }
     }
 
@@ -443,6 +465,7 @@ impl ForwardContext {
             query_weight,
             norm_weight,
             &mut self.delta_routing_logits,
+            &mut self.delta_scaled_buf,
             n_embd,
         );
 
@@ -532,39 +555,27 @@ unsafe fn attention_head(
     }
 
     // Pass 2: exp(scores - max) and accumulate sum
-    // Shift scores by max, then use SIMD exp for long sequences
+    // Shift scores by max using SIMD broadcast add, then SIMD exp
     let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    for s in scores_slice.iter_mut() {
-        *s -= max_score;
-    }
+    crate::simd::simd_add_scalar_inplace(scores_slice, -max_score);
     crate::simd::simd_exp_inplace(scores_slice);
-    let sum: f32 = scores_slice.iter().copied().sum();
+    let sum: f32 = crate::simd::simd_sum_f32(scores_slice);
 
     // Pass 3: normalize + weighted value accumulation (no write-back of scores)
-    // Pre-scale scores once
+    // Pre-scale scores once using SIMD
     let inv_sum = 1.0 / sum;
-    for t in 0..t_n {
-        unsafe {
-            *scores_buf.get_unchecked_mut(t) *= inv_sum;
-        }
-    }
+    crate::simd::simd_scale_inplace(scores_slice, inv_sum);
     // Zero the output slice before accumulation
-    for d in 0..hd {
-        unsafe {
-            *attn_out.get_unchecked_mut(q_head_offset + d) = 0.0;
-        }
-    }
+    attn_out[q_head_offset..q_head_offset + hd].fill(0.0);
     // Accumulate: t outer → contiguous value_cache row access
     for t in 0..t_n {
         let s = unsafe { *scores_buf.get_unchecked(t) };
         let v_row = unsafe {
             std::slice::from_raw_parts(value_cache.as_ptr().add(t * kv_dim + kv_group_offset), hd)
         };
-        for d in 0..hd {
-            unsafe {
-                *attn_out.get_unchecked_mut(q_head_offset + d) += s * v_row[d];
-            }
-        }
+        let out_slice =
+            unsafe { std::slice::from_raw_parts_mut(attn_out.as_mut_ptr().add(q_head_offset), hd) };
+        crate::simd::simd_fused_scale_acc(out_slice, v_row, s, hd);
     }
 }
 
@@ -761,13 +772,10 @@ pub fn forward_looped<'a>(
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
 
-    // Save initial embedding for residual gating across loops
-    let mut prev_h = vec![0.0f32; n];
-
     // 2. Outer loop: T passes over all layers
     for tau in 0..loop_count {
         // Save h^(τ-1) for residual gate
-        prev_h[..n].copy_from_slice(&ctx.x[..n]);
+        ctx.prev_h[..n].copy_from_slice(&ctx.x[..n]);
 
         // 3. Inner loop: weight-shared layer pass
         for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
@@ -782,10 +790,9 @@ pub fn forward_looped<'a>(
                 HybridPattern::Bookend => layer_idx == 0 || layer_idx == weights.layers.len() - 1,
             };
 
-            // Pre-attention: RMSNorm → save residual → RMSNorm
+            // Pre-attention: RMSNorm → save residual
             crate::types::rmsnorm(&mut ctx.x);
             ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
-            crate::types::rmsnorm(&mut ctx.x);
 
             // QKV projections
             crate::types::matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
@@ -810,7 +817,6 @@ pub fn forward_looped<'a>(
 
                 // Multi-head attention with GQA
                 let scale = ctx.attn_scale;
-                ctx.attn_out[..n].fill(0.0);
                 let t_n = pos + 1;
                 for h in 0..config.n_head {
                     let kv_group = ctx.kv_group_lut[h];
@@ -891,7 +897,7 @@ pub fn forward_looped<'a>(
             let gate_offset = tau * n;
             if gate_offset + n <= residual_gate.gates.len() {
                 for d in 0..n {
-                    ctx.x[d] += residual_gate.gates[gate_offset + d] * prev_h[d];
+                    ctx.x[d] += residual_gate.gates[gate_offset + d] * ctx.prev_h[d];
                 }
             }
         }
@@ -1161,10 +1167,9 @@ fn forward_single_layer(
     kvd: usize,
     _n_kv: usize,
 ) {
-    // Pre-attention: RMSNorm → save residual → RMSNorm
+    // Pre-attention: RMSNorm → save residual
     types::rmsnorm(&mut ctx.x);
     ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
-    types::rmsnorm(&mut ctx.x);
 
     // QKV projections
     types::matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
@@ -1188,7 +1193,6 @@ fn forward_single_layer(
 
     // Multi-head attention with GQA
     let scale = ctx.attn_scale;
-    ctx.attn_out[..n].fill(0.0);
     let t_n = pos + 1;
     for h in 0..config.n_head {
         let kv_group = ctx.kv_group_lut[h];
@@ -1249,6 +1253,9 @@ fn standard_lm_head(
 ///
 /// Uses partial selection sort: O(N + K log K).
 /// Returns indices sorted by score descending (highest first).
+///
+/// **Note:** This function allocates internally and is intended for tests/benchmarks only.
+/// For hot-path code, use [`select_topk_indices_into_buf`] which reuses pre-allocated buffers.
 pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
     let k = k.min(scores.len());
     if k == 0 {
@@ -1268,36 +1275,10 @@ pub fn select_topk_indices(scores: &[f32], k: usize) -> Vec<usize> {
     indexed[..k].iter().map(|(i, _)| *i).collect()
 }
 
-/// In-place variant of [`select_topk_indices`] that reuses a pre-allocated buffer.
-///
-/// `indexed_buf` is cleared and filled with `(index, score)` pairs.
-/// Returns indices sorted by score descending (highest first).
-pub fn select_topk_indices_into(
-    scores: &[f32],
-    k: usize,
-    indexed_buf: &mut Vec<(usize, f32)>,
-) -> Vec<usize> {
-    let k = k.min(scores.len());
-    if k == 0 {
-        return Vec::new();
-    }
-
-    indexed_buf.clear();
-    indexed_buf.extend(scores.iter().copied().enumerate());
-
-    // Partial sort to partition top K (unstable, O(N))
-    indexed_buf.select_nth_unstable_by(k - 1, |a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Sort the top K by score descending (O(K log K))
-    indexed_buf[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    indexed_buf[..k].iter().map(|(i, _)| *i).collect()
-}
-
 /// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
 /// Writes top-K indices into `output_buf` (cleared and filled).
+///
+/// This is the preferred variant for hot-path code — no heap allocations.
 pub fn select_topk_indices_into_buf(
     scores: &[f32],
     k: usize,
@@ -1474,6 +1455,7 @@ fn depth_route(
     query_weight: &[f32],   // [n_embd] per-layer query
     norm_weight: &[f32],    // [n_embd] RMSNorm gamma
     logits_buf: &mut [f32], // [N] temp buffer
+    scaled_buf: &mut [f32], // [n_embd] scratch for SIMD dot
     n_embd: usize,
 ) {
     let n_sources = sources.len();
@@ -1486,20 +1468,16 @@ fn depth_route(
     let mut max_logit = f32::NEG_INFINITY;
 
     for (i, &src) in sources.iter().enumerate() {
-        // Compute RMSNorm of source
-        let mut sum_sq = 0.0f32;
-        for d in 0..n_embd {
-            sum_sq += src[d] * src[d];
-        }
+        // SIMD sum-of-squares for RMSNorm
+        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
-        // Dot product with query weight (on normalized source)
-        let mut logit = 0.0f32;
+        // Scale src * inv_rms * norm_weight into scratch, then SIMD dot with query
         for d in 0..n_embd {
-            let normalized = src[d] * inv_rms * norm_weight[d];
-            logit += query_weight[d] * normalized;
+            scaled_buf[d] = src[d] * inv_rms * norm_weight[d];
         }
+        let logit = crate::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
 
         logits_buf[i] = logit;
         if logit > max_logit {
@@ -1517,12 +1495,13 @@ fn depth_route(
     let inv_sum = 1.0 / sum_exp;
 
     // 3. Weighted sum of sources, added to residual (additive routing)
-    for d in 0..n_embd {
-        let mut weighted = 0.0f32;
-        for (i, &src) in sources.iter().enumerate() {
-            weighted += logits_buf[i] * inv_sum * src[d];
+    //    For each source: scale into scratch buf then SIMD-accumulate into residual
+    for (i, &src) in sources.iter().enumerate() {
+        let weight = logits_buf[i] * inv_sum;
+        for d in 0..n_embd {
+            scaled_buf[d] = weight * src[d];
         }
-        residual[d] += weighted;
+        crate::simd::simd_add_inplace(&mut residual[..n_embd], &scaled_buf[..n_embd]);
     }
 }
 
@@ -1536,6 +1515,7 @@ fn depth_route_with_indices(
     query_weight: &[f32],   // [n_embd] per-layer query
     norm_weight: &[f32],    // [n_embd] RMSNorm gamma
     logits_buf: &mut [f32], // [N] temp buffer
+    scaled_buf: &mut [f32], // [n_embd] scratch for SIMD dot
     n_embd: usize,
 ) {
     let n_sources = source_indices.len();
@@ -1549,20 +1529,16 @@ fn depth_route_with_indices(
 
     for (i, &src_idx) in source_indices.iter().enumerate() {
         let src = &block_deltas[src_idx];
-        // Compute RMSNorm of source
-        let mut sum_sq = 0.0f32;
-        for &val in src.iter() {
-            sum_sq += val * val;
-        }
+        // SIMD sum-of-squares for RMSNorm
+        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
-        // Dot product with query weight (on normalized source)
-        let mut logit = 0.0f32;
-        for ((&s, &nw), &qw) in src.iter().zip(norm_weight.iter()).zip(query_weight.iter()) {
-            let normalized = s * inv_rms * nw;
-            logit += qw * normalized;
+        // Scale src * inv_rms * norm_weight into scratch, then SIMD dot with query
+        for d in 0..n_embd {
+            scaled_buf[d] = src[d] * inv_rms * norm_weight[d];
         }
+        let logit = crate::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
 
         logits_buf[i] = logit;
         if logit > max_logit {
@@ -1580,12 +1556,14 @@ fn depth_route_with_indices(
     let inv_sum = 1.0 / sum_exp;
 
     // 3. Weighted sum of sources, added to residual (additive routing)
-    for d in 0..n_embd {
-        let mut weighted = 0.0f32;
-        for (i, &src_idx) in source_indices.iter().enumerate() {
-            weighted += logits_buf[i] * inv_sum * block_deltas[src_idx][d];
+    //    For each source: scale into scratch buf then SIMD-accumulate into residual
+    for (i, &src_idx) in source_indices.iter().enumerate() {
+        let src = &block_deltas[src_idx];
+        let weight = logits_buf[i] * inv_sum;
+        for d in 0..n_embd {
+            scaled_buf[d] = weight * src[d];
         }
-        residual[d] += weighted;
+        crate::simd::simd_add_inplace(&mut residual[..n_embd], &scaled_buf[..n_embd]);
     }
 }
 
@@ -1608,22 +1586,21 @@ pub fn depth_route_weights(
 
     let eps = 1e-5f32;
     let mut logits = vec![0.0f32; n_sources];
+    let mut scaled = vec![0.0f32; n_embd];
     let mut max_logit = f32::NEG_INFINITY;
 
     // 1. RMSNorm each source and compute dot product with query
     for (i, &src) in sources.iter().enumerate() {
-        let mut sum_sq = 0.0f32;
-        for d in 0..n_embd {
-            sum_sq += src[d] * src[d];
-        }
+        // SIMD sum-of-squares for RMSNorm
+        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
-        let mut logit = 0.0f32;
+        // Scale src * inv_rms * norm_weight into scratch, then SIMD dot with query
         for d in 0..n_embd {
-            let normalized = src[d] * inv_rms * norm_weight[d];
-            logit += query_weight[d] * normalized;
+            scaled[d] = src[d] * inv_rms * norm_weight[d];
         }
+        let logit = crate::simd::simd_dot_f32(&scaled[..n_embd], query_weight, n_embd);
 
         logits[i] = logit;
         if logit > max_logit {
@@ -1691,10 +1668,9 @@ fn forward_base<'a>(
             ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
         }
 
-        // Pre-attention: RMSNorm → save residual → RMSNorm
+        // Pre-attention: RMSNorm → save residual
         rmsnorm(&mut ctx.x);
         ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
-        rmsnorm(&mut ctx.x);
 
         // QKV projections from per-layer weights (GQA: K/V produce kv_dim outputs)
         matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
@@ -1736,7 +1712,6 @@ fn forward_base<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
         let t_n = pos + 1;
 
         for h in 0..config.n_head {
@@ -2030,7 +2005,6 @@ fn forward_coda<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
         let t_n = pos + 1;
 
         for h in 0..config.n_head {
@@ -2880,11 +2854,13 @@ pub fn forward_prefill<'a>(
                 let pos_in_block = layer_idx % block_size;
 
                 // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
-                for d in 0..n {
-                    let delta = ctx.x[d] - ctx.xr[d];
-                    if block_idx < ctx.block_deltas.len() {
-                        ctx.block_deltas[block_idx][d] += delta;
-                    }
+                if block_idx < ctx.block_deltas.len() {
+                    crate::simd::simd_fused_sub_acc(
+                        &mut ctx.block_deltas[block_idx][..n],
+                        &ctx.x[..n],
+                        &ctx.xr[..n],
+                        n,
+                    );
                 }
 
                 // At block boundary: route accumulated deltas from all completed blocks
@@ -3120,7 +3096,6 @@ pub fn forward_paged<'a>(
 
             // Multi-head attention with GQA (reuse existing attention_head)
             let scale = ctx.attn_scale;
-            ctx.attn_out[..n].fill(0.0);
 
             for h in 0..config.n_head {
                 let kv_group = ctx.kv_group_lut[h];
@@ -3995,10 +3970,9 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
     // 2. Layer loop
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
-        // Pre-attention: RMSNorm → save residual → RMSNorm
+        // Pre-attention: RMSNorm → save residual
         rmsnorm(&mut ctx.x);
         ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
-        rmsnorm(&mut ctx.x);
 
         // QKV projections from per-layer weights (GQA: K/V produce kv_dim outputs)
         matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
@@ -4046,7 +4020,6 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
         // Multi-head attention with GQA using dequantized flat cache
         let scale = ctx.attn_scale;
-        ctx.attn_out[..n].fill(0.0);
 
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
@@ -6563,6 +6536,7 @@ mod tests {
         let query_weight: Vec<f32> = (0..n_embd).map(|i| (i as f32 * 0.1).sin() * 0.01).collect();
         let norm_weight: Vec<f32> = vec![1.0; n_embd];
         let mut logits_buf = vec![0.0f32; n_sources];
+        let mut scaled_buf = vec![0.0f32; n_embd];
 
         // Simulate 36 layers of additive routing
         for _ in 0..36 {
@@ -6572,6 +6546,7 @@ mod tests {
                 &query_weight,
                 &norm_weight,
                 &mut logits_buf,
+                &mut scaled_buf,
                 n_embd,
             );
         }

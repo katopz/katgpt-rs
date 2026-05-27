@@ -9,7 +9,7 @@
 //! based on Deep Manifold Part 2 (arXiv:2512.06563, §2.6.2).
 //! Feature-gated behind `bt_rank`.
 
-use crate::simd::{maxsim_score, simd_dot_f32};
+use crate::simd::{maxsim_score, simd_add_inplace, simd_dot_f32, simd_scale_inplace};
 
 // ── Types ─────────────────────────────────────────────────────
 
@@ -141,6 +141,14 @@ pub fn cosine_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
     let mut total = 0.0f32;
     let mut count = 0usize;
 
+    // Pre-compute document norms once (O(ld) instead of O(lq*ld))
+    let d_norms: Vec<f32> = (0..ld)
+        .map(|j| {
+            let d_row = &documents[j * dim..(j + 1) * dim];
+            simd_dot_f32(d_row, d_row, dim).sqrt()
+        })
+        .collect();
+
     for i in 0..lq {
         let q_row = &queries[i * dim..(i + 1) * dim];
         let q_norm = simd_dot_f32(q_row, q_row, dim).sqrt();
@@ -149,7 +157,7 @@ pub fn cosine_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
         }
         for j in 0..ld {
             let d_row = &documents[j * dim..(j + 1) * dim];
-            let d_norm = simd_dot_f32(d_row, d_row, dim).sqrt();
+            let d_norm = d_norms[j];
             if d_norm < 1e-12 {
                 continue;
             }
@@ -194,27 +202,19 @@ fn cosine_rerank_score_into(
     q_mean[..dim].fill(0.0);
     for t in 0..lq {
         let offset = t * dim;
-        for d in 0..dim {
-            q_mean[d] += query[offset + d];
-        }
+        simd_add_inplace(&mut q_mean[..dim], &query[offset..offset + dim]);
     }
     let inv_lq = 1.0 / lq as f32;
-    for v in q_mean[..dim].iter_mut() {
-        *v *= inv_lq;
-    }
+    simd_scale_inplace(&mut q_mean[..dim], inv_lq);
 
     // Mean-pool document tokens into `d_mean`.
     d_mean[..dim].fill(0.0);
     for t in 0..ld {
         let offset = t * dim;
-        for d in 0..dim {
-            d_mean[d] += doc[offset + d];
-        }
+        simd_add_inplace(&mut d_mean[..dim], &doc[offset..offset + dim]);
     }
     let inv_ld = 1.0 / ld as f32;
-    for v in d_mean[..dim].iter_mut() {
-        *v *= inv_ld;
-    }
+    simd_scale_inplace(&mut d_mean[..dim], inv_ld);
 
     // Cosine similarity = dot(a, b) / (|a| × |b|)
     let dot = simd_dot_f32(&q_mean[..dim], &d_mean[..dim], dim);
