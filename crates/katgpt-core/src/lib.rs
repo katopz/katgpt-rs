@@ -21,6 +21,11 @@ pub use traits::{
     NoScreeningPruner, RandomRolloutPolicy, RolloutPolicy, ScreeningPruner, StateHeuristic,
 };
 
+#[cfg(feature = "leo_all_goals")]
+pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
+#[cfg(feature = "dual_leo")]
+pub use traits::{AutocurriculumSampler, DualLeoMixer};
+
 // Re-export key types at crate root for convenience
 pub use types::{
     AttentionMode, Config, ConvergenceSelector, DashAttnConfig, HlaMode, HybridPattern,

@@ -9,14 +9,14 @@
 
 # Task
 
-- [ ] T1: Add `LeoHead` trait to `katgpt-rs-core/src/traits.rs`
-- [ ] T2: Add `DualLeoMixer` trait + default impl
-- [ ] T3: Add `AllGoalsUpdate` trait + vectorized Bellman
-- [ ] T4: Add `AutocurriculumSampler` trait + default impl
-- [ ] T5: Add `sigmoid_bounded_q` utility
-- [ ] T6: Feature gate: `leo_all_goals`, `dual_leo`
-- [ ] T7: Unit tests for all traits
-- [ ] T8: GOAT proof — trait compilation + micro-bench
+- [x] T1: Add `LeoHead` trait to `katgpt-rs-core/src/traits.rs`
+- [x] T2: Add `DualLeoMixer` trait + default impl
+- [x] T3: Add `AllGoalsUpdate` trait + vectorized Bellman
+- [x] T4: Add `AutocurriculumSampler` trait + default impl
+- [x] T5: Add `sigmoid_bounded_q` utility
+- [x] T6: Feature gate: `leo_all_goals`, `dual_leo`
+- [x] T7: Unit tests for all traits
+- [x] T8: GOAT proof — trait compilation + micro-bench
 
 ---
 
