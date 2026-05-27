@@ -38,11 +38,11 @@ pub fn dirichlet_energy(embeddings: &[f32], dim: usize, adjacency: &[(usize, usi
 
         let row_i = i * dim;
         let row_j = j * dim;
-        let mut dist_sq = 0.0f32;
-        for d in 0..dim {
-            let diff = embeddings[row_i + d] - embeddings[row_j + d];
-            dist_sq += diff * diff;
-        }
+        let dist_sq = crate::simd::simd_dist_sq(
+            &embeddings[row_i..row_i + dim],
+            &embeddings[row_j..row_j + dim],
+            dim,
+        );
         energy += dist_sq;
     }
 

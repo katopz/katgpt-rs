@@ -17,7 +17,7 @@ const B: f32 = -4.7750;
 const C: f32 = 2.0315;
 const ITERS: usize = 5;
 
-// ── Matrix helpers (scalar, no SIMD) ─────────────────────────────
+// ── Matrix helpers ──────────────────────────────────────────────
 
 /// Transpose `rows × cols` matrix stored row-major from `src` into `dst`.
 fn transpose(src: &[f32], rows: usize, cols: usize, dst: &mut [f32]) {
@@ -29,14 +29,16 @@ fn transpose(src: &[f32], rows: usize, cols: usize, dst: &mut [f32]) {
 }
 
 /// Compute `A = X * X^T` for an `m × n` matrix X, producing an `m × m` result.
+/// Uses SIMD dot products and exploits symmetry (upper triangle + mirror).
 fn matmul_xtx(x: &[f32], m: usize, n: usize, a: &mut [f32]) {
     for i in 0..m {
-        for j in 0..m {
-            let mut sum = 0.0f32;
-            for k in 0..n {
-                sum += x[i * n + k] * x[j * n + k];
-            }
-            a[i * m + j] = sum;
+        // Diagonal
+        a[i * m + i] = crate::simd::simd_dot_f32(&x[i * n..(i + 1) * n], &x[i * n..(i + 1) * n], n);
+        // Upper triangle + mirror
+        for j in (i + 1)..m {
+            let dot = crate::simd::simd_dot_f32(&x[i * n..(i + 1) * n], &x[j * n..(j + 1) * n], n);
+            a[i * m + j] = dot;
+            a[j * m + i] = dot;
         }
     }
 }

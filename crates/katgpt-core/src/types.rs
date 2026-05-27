@@ -1308,17 +1308,16 @@ pub fn softmax(x: &mut [f32]) {
     // Pass 1: find max for numerical stability (SIMD-accelerated)
     let max_val = crate::simd::simd_max_f32(x);
 
-    // Pass 2: exp(x - max) + accumulate sum
-    // Note: scalar libm expf is faster than Cephes SIMD on Apple Silicon NEON
-    // because hardware-accelerated expf + LLVM auto-vectorization beats our
-    // polynomial approximation with its scalar 2^n fallback.
-    let mut sum = 0.0f32;
+    // Pass 2: subtract max (scalar, cheap)
     for val in x.iter_mut() {
-        *val = (*val - max_val).exp();
-        sum += *val;
+        *val -= max_val;
     }
 
-    // Pass 3: normalize
+    // Pass 3: SIMD exp
+    crate::simd::simd_exp_inplace(x);
+
+    // Pass 4: sum + normalize
+    let sum: f32 = x.iter().copied().sum();
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }
@@ -1338,21 +1337,22 @@ pub fn softmax_scaled(x: &mut [f32], inv_temp: f32) {
     // Pass 1: find max for numerical stability (SIMD-accelerated)
     let max_val = crate::simd::simd_max_f32(x);
 
-    // Pass 2: exp((x - max) * inv_temp) + accumulate sum
-    // Note: scalar libm expf is faster than Cephes SIMD on Apple Silicon NEON.
-    let mut sum = 0.0f32;
+    // Pass 2: shift and apply temperature (scalar, cheap)
     for val in x.iter_mut() {
-        *val = ((*val - max_val) * inv_temp).exp();
-        sum += *val;
+        *val = (*val - max_val) * inv_temp;
     }
 
-    // Pass 3: normalize
+    // Pass 3: SIMD exp
+    crate::simd::simd_exp_inplace(x);
+
+    // Pass 4: sum + normalize
+    let sum: f32 = x.iter().copied().sum();
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }
 
 /// In-place RMSNorm (no learnable gain).
-/// Two-pass: compute mean-square, then scale.
+/// Two-pass: compute sum-of-squares, then scale.
 #[inline(always)]
 pub fn rmsnorm(x: &mut [f32]) {
     if x.is_empty() {
@@ -1360,7 +1360,7 @@ pub fn rmsnorm(x: &mut [f32]) {
     }
 
     // Pass 1: sum of squares (SIMD-accelerated)
-    let sum_sq = crate::simd::simd_dot_f32(x, x, x.len());
+    let sum_sq = crate::simd::simd_sum_sq(x, x.len());
 
     // Pass 2: scale
     let inv_rms = 1.0 / (sum_sq / x.len() as f32 + 1e-5).sqrt();
@@ -1429,7 +1429,7 @@ pub fn rmsnorm_with_gamma_eps(x: &mut [f32], gamma: &[f32], eps: f64) {
     if n == 0 {
         return;
     }
-    let sum_sq = crate::simd::simd_dot_f32(x, x, n);
+    let sum_sq = crate::simd::simd_sum_sq(x, n);
     let inv_rms = 1.0 / (sum_sq / n as f32 + eps as f32).sqrt();
     crate::simd::simd_scale_mul_inplace(x, gamma, inv_rms);
 }

@@ -122,21 +122,45 @@ fn scalar_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
-    use core::arch::aarch64::{vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
+    use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
 
     unsafe {
-        let mut acc = vdupq_n_f32(0.0);
+        // 4 independent accumulators to hide FMA pipeline latency
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
         let mut i = 0;
-        let chunks = len / 4;
+        let chunks4 = len / 16;
 
-        for _ in 0..chunks {
-            let va = vld1q_f32(a.as_ptr().add(i));
-            let vb = vld1q_f32(b.as_ptr().add(i));
-            acc = vfmaq_f32(acc, va, vb);
-            i += 4;
+        for _ in 0..chunks4 {
+            acc0 = vfmaq_f32(
+                acc0,
+                vld1q_f32(a.as_ptr().add(i)),
+                vld1q_f32(b.as_ptr().add(i)),
+            );
+            acc1 = vfmaq_f32(
+                acc1,
+                vld1q_f32(a.as_ptr().add(i + 4)),
+                vld1q_f32(b.as_ptr().add(i + 4)),
+            );
+            acc2 = vfmaq_f32(
+                acc2,
+                vld1q_f32(a.as_ptr().add(i + 8)),
+                vld1q_f32(b.as_ptr().add(i + 8)),
+            );
+            acc3 = vfmaq_f32(
+                acc3,
+                vld1q_f32(a.as_ptr().add(i + 12)),
+                vld1q_f32(b.as_ptr().add(i + 12)),
+            );
+            i += 16;
         }
 
-        let mut sum = vaddvq_f32(acc);
+        // Horizontal reduce: acc0+acc1+acc2+acc3
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
+
+        // Handle remaining elements with single accumulator
         while i < len {
             sum += *a.get_unchecked(i) * *b.get_unchecked(i);
             i += 1;
@@ -149,21 +173,57 @@ unsafe fn neon_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
 #[cfg(target_arch = "x86_64")]
 #[inline]
 unsafe fn avx2_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
-    use core::arch::x86_64::{_mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps};
+    use core::arch::x86_64::{_mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps};
 
     unsafe {
-        let mut acc = _mm256_setzero_ps();
+        // 4 independent accumulators to hide FMA pipeline latency
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
         let mut i = 0;
-        let chunks = len / 8;
+        let chunks4 = len / 32;
 
-        for _ in 0..chunks {
+        for _ in 0..chunks4 {
+            acc0 = _mm256_fmadd_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i)),
+                _mm256_loadu_ps(b.as_ptr().add(i)),
+                acc0,
+            );
+            acc1 = _mm256_fmadd_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i + 8)),
+                _mm256_loadu_ps(b.as_ptr().add(i + 8)),
+                acc1,
+            );
+            acc2 = _mm256_fmadd_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i + 16)),
+                _mm256_loadu_ps(b.as_ptr().add(i + 16)),
+                acc2,
+            );
+            acc3 = _mm256_fmadd_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i + 24)),
+                _mm256_loadu_ps(b.as_ptr().add(i + 24)),
+                acc3,
+            );
+            i += 32;
+        }
+
+        // Horizontal reduce: acc0+acc1+acc2+acc3
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
+        // Handle remaining elements with single accumulator
+        let mut acc = _mm256_setzero_ps();
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
             let va = _mm256_loadu_ps(a.as_ptr().add(i));
             let vb = _mm256_loadu_ps(b.as_ptr().add(i));
             acc = _mm256_fmadd_ps(va, vb, acc);
             i += 8;
         }
-
-        let mut sum = horizontal_sum_256(acc);
+        sum += horizontal_sum_256(acc);
 
         while i < len {
             sum += *a.get_unchecked(i) * *b.get_unchecked(i);
@@ -2128,6 +2188,345 @@ pub fn dim_sufficiency_bound(k: usize, n: usize) -> usize {
     // d = ceil(1.5 * k * ln(n))  — conservative O(k log n) bound
     let bound = 1.5 * (k as f64) * (n as f64).ln();
     bound.ceil() as usize
+}
+
+// ── SIMD Sum of Squares (Issue 075) ──────────────────────────
+
+/// SIMD-accelerated sum of squares: `Σ x[i]²`.
+/// More efficient than `simd_dot_f32(x, x, len)` — loads data once instead of twice.
+#[inline]
+pub fn simd_sum_sq(x: &[f32], len: usize) -> f32 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_sum_sq(x, len) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_sum_sq(x, len) }
+        } else {
+            scalar_sum_sq(x, len)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_sum_sq(x, len)
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
+    let mut sum = 0.0f32;
+    for i in 0..len {
+        unsafe {
+            let v = *x.get_unchecked(i);
+            sum += v * v;
+        }
+    }
+    sum
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_sum_sq(x: &[f32], len: usize) -> f32 {
+    use core::arch::aarch64::{
+        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vmulq_f32,
+    };
+
+    unsafe {
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut i = 0;
+        let chunks2 = len / 8;
+
+        for _ in 0..chunks2 {
+            let v0 = vld1q_f32(x.as_ptr().add(i));
+            acc0 = vfmaq_f32(acc0, v0, v0);
+            let v1 = vld1q_f32(x.as_ptr().add(i + 4));
+            acc1 = vfmaq_f32(acc1, v1, v1);
+            i += 8;
+        }
+
+        let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
+
+        // Handle remaining 4-element chunk
+        if i + 4 <= len {
+            let v = vld1q_f32(x.as_ptr().add(i));
+            sum += vaddvq_f32(vmulq_f32(v, v));
+            i += 4;
+        }
+
+        while i < len {
+            let v = *x.get_unchecked(i);
+            sum += v * v;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
+    use core::arch::x86_64::{_mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps};
+
+    unsafe {
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut i = 0;
+        let chunks2 = len / 16;
+
+        for _ in 0..chunks2 {
+            let v0 = _mm256_loadu_ps(x.as_ptr().add(i));
+            acc0 = _mm256_fmadd_ps(v0, v0, acc0);
+            let v1 = _mm256_loadu_ps(x.as_ptr().add(i + 8));
+            acc1 = _mm256_fmadd_ps(v1, v1, acc1);
+            i += 16;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
+
+        // Handle remaining 8-element chunk
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            let v = _mm256_loadu_ps(x.as_ptr().add(i));
+            sum += horizontal_sum_256(_mm256_fmadd_ps(v, v, _mm256_setzero_ps()));
+            i += 8;
+        }
+
+        while i < len {
+            let v = *x.get_unchecked(i);
+            sum += v * v;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+// ── SIMD Distance² (Issue 076) ───────────────────────────────
+
+/// SIMD-accelerated squared distance: `Σ (a[i] - b[i])²`.
+/// Computes the elementwise difference, squares, and sums in one pass.
+#[inline]
+pub fn simd_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_dist_sq(a, b, len) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_dist_sq(a, b, len) }
+        } else {
+            scalar_dist_sq(a, b, len)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_dist_sq(a, b, len)
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
+    let mut sum = 0.0f32;
+    for i in 0..len {
+        unsafe {
+            let diff = *a.get_unchecked(i) - *b.get_unchecked(i);
+            sum += diff * diff;
+        }
+    }
+    sum
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
+    use core::arch::aarch64::{
+        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vsubq_f32,
+    };
+
+    unsafe {
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut i = 0;
+        let chunks2 = len / 8;
+
+        for _ in 0..chunks2 {
+            let d0 = vsubq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i)));
+            acc0 = vfmaq_f32(acc0, d0, d0);
+            let d1 = vsubq_f32(
+                vld1q_f32(a.as_ptr().add(i + 4)),
+                vld1q_f32(b.as_ptr().add(i + 4)),
+            );
+            acc1 = vfmaq_f32(acc1, d1, d1);
+            i += 8;
+        }
+
+        let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
+
+        if i + 4 <= len {
+            let d = vsubq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i)));
+            sum += vaddvq_f32(vmulq_f32_same(d, d));
+            i += 4;
+        }
+
+        while i < len {
+            let diff = *a.get_unchecked(i) - *b.get_unchecked(i);
+            sum += diff * diff;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+// NEON vmulq_f32 alias for clarity (same intrinsic)
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn vmulq_f32_same(
+    a: core::arch::aarch64::float32x4_t,
+    b: core::arch::aarch64::float32x4_t,
+) -> core::arch::aarch64::float32x4_t {
+    use core::arch::aarch64::vmulq_f32;
+    unsafe { vmulq_f32(a, b) }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps, _mm256_sub_ps,
+    };
+
+    unsafe {
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut i = 0;
+        let chunks2 = len / 16;
+
+        for _ in 0..chunks2 {
+            let d0 = _mm256_sub_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i)),
+                _mm256_loadu_ps(b.as_ptr().add(i)),
+            );
+            acc0 = _mm256_fmadd_ps(d0, d0, acc0);
+            let d1 = _mm256_sub_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i + 8)),
+                _mm256_loadu_ps(b.as_ptr().add(i + 8)),
+            );
+            acc1 = _mm256_fmadd_ps(d1, d1, acc1);
+            i += 16;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
+
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            let d = _mm256_sub_ps(
+                _mm256_loadu_ps(a.as_ptr().add(i)),
+                _mm256_loadu_ps(b.as_ptr().add(i)),
+            );
+            sum += horizontal_sum_256(_mm256_fmadd_ps(d, d, _mm256_setzero_ps()));
+            i += 8;
+        }
+
+        while i < len {
+            let diff = *a.get_unchecked(i) - *b.get_unchecked(i);
+            sum += diff * diff;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+// ── SIMD Fused Subtract-Accumulate (Issue 071) ──────────────
+
+/// SIMD-accelerated fused subtract-accumulate: `dst[i] += a[i] - b[i]`.
+/// Single-pass operation for MLS and delta routing accumulation.
+#[inline]
+pub fn simd_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_fused_sub_acc(dst, a, b, len) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_fused_sub_acc(dst, a, b, len) }
+        } else {
+            scalar_fused_sub_acc(dst, a, b, len)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_fused_sub_acc(dst, a, b, len)
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    for i in 0..len {
+        unsafe {
+            *dst.get_unchecked_mut(i) += *a.get_unchecked(i) - *b.get_unchecked(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    use core::arch::aarch64::{vaddq_f32, vld1q_f32, vst1q_f32, vsubq_f32};
+
+    unsafe {
+        let mut i = 0;
+        let chunks = len / 4;
+
+        for _ in 0..chunks {
+            let va = vld1q_f32(a.as_ptr().add(i));
+            let vb = vld1q_f32(b.as_ptr().add(i));
+            let vd = vld1q_f32(dst.as_ptr().add(i));
+            let result = vaddq_f32(vd, vsubq_f32(va, vb));
+            vst1q_f32(dst.as_mut_ptr().add(i), result);
+            i += 4;
+        }
+
+        while i < len {
+            *dst.get_unchecked_mut(i) += *a.get_unchecked(i) - *b.get_unchecked(i);
+            i += 1;
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+    use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_storeu_ps, _mm256_sub_ps};
+
+    unsafe {
+        let mut i = 0;
+        let chunks = len / 8;
+
+        for _ in 0..chunks {
+            let va = _mm256_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm256_loadu_ps(b.as_ptr().add(i));
+            let vd = _mm256_loadu_ps(dst.as_ptr().add(i));
+            let result = _mm256_add_ps(vd, _mm256_sub_ps(va, vb));
+            _mm256_storeu_ps(dst.as_mut_ptr().add(i), result);
+            i += 8;
+        }
+
+        while i < len {
+            *dst.get_unchecked_mut(i) += *a.get_unchecked(i) - *b.get_unchecked(i);
+            i += 1;
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────

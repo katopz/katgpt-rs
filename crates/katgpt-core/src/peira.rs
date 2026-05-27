@@ -89,6 +89,10 @@ pub struct PeiraCovariance {
     config: PeiraConfig,
     /// Number of EMA updates applied.
     step_count: usize,
+    /// Pre-allocated scratch for peira_aux_loss
+    sigma_sample: Vec<f64>,
+    n_sample: Vec<f64>,
+    pm: Vec<f64>,
 }
 
 impl PeiraCovariance {
@@ -100,6 +104,9 @@ impl PeiraCovariance {
             n: vec![0.0; k * k],
             config,
             step_count: 0,
+            sigma_sample: vec![0.0; k * k],
+            n_sample: vec![0.0; k * k],
+            pm: vec![0.0; k * k],
         }
     }
 
@@ -166,7 +173,7 @@ impl PeiraCovariance {
         }
 
         // Invert N + λI
-        let q_star = invert_matrix(&n_reg, k);
+        let q_star = invert_spd(&n_reg, k);
 
         // P* = Σ @ Q*
         let p_star = matmul(&self.sigma, &q_star, k);
@@ -188,6 +195,9 @@ impl PeiraCovariance {
     pub fn reset(&mut self) {
         self.sigma.fill(0.0);
         self.n.fill(0.0);
+        self.sigma_sample.fill(0.0);
+        self.n_sample.fill(0.0);
+        self.pm.fill(0.0);
         self.step_count = 0;
     }
 }
@@ -214,11 +224,17 @@ pub fn peira_aux_loss(
     p_star: &[f64],
     q_star: &[f64],
     lambda: f64,
+    sigma_sample: &mut [f64],
+    n_sample: &mut [f64],
+    pm: &mut [f64],
 ) -> f64 {
     let k = student.len();
     assert_eq!(teacher.len(), k);
     assert_eq!(p_star.len(), k * k);
     assert_eq!(q_star.len(), k * k);
+    assert_eq!(sigma_sample.len(), k * k);
+    assert_eq!(n_sample.len(), k * k);
+    assert_eq!(pm.len(), k * k);
 
     // Compute the auxiliary loss using the closed-form predictor:
     // L_aux = -½ Tr(Σ P*^T) + ¼ Tr(P* (N + λI) P*^T)
@@ -232,8 +248,8 @@ pub fn peira_aux_loss(
 
     // Compute sample cross-covariance: sigma_sample = u ⊗ v
     // and sample within-covariance: n_sample = (u ⊗ u + v ⊗ v) / 2
-    let mut sigma_sample = vec![0.0f64; k * k];
-    let mut n_sample = vec![0.0f64; k * k];
+    sigma_sample.fill(0.0);
+    n_sample.fill(0.0);
 
     for i in 0..k {
         let si = student[i] as f64;
@@ -257,7 +273,7 @@ pub fn peira_aux_loss(
     // Term 2: ¼ Tr(P* @ (N_sample + λI) @ P*^T)
     // = ¼ Tr(P* @ M @ P*^T) where M = N_sample + λI
     // P* @ M is k×k, then (P* @ M) @ P*^T trace
-    let mut pm = vec![0.0f64; k * k];
+    pm.fill(0.0);
     for i in 0..k {
         for j in 0..k {
             let mut sum = 0.0f64;
@@ -288,65 +304,61 @@ pub fn peira_aux_loss(
     term1 + term2 + reg
 }
 
-/// Compute k×k matrix inverse using Gauss-Jordan elimination.
-///
-/// Works on row-major flat layout. Suitable for small k (typically ≤ 512).
-fn invert_matrix(mat: &[f64], k: usize) -> Vec<f64> {
-    // Build augmented matrix [M | I]
-    let mut aug = vec![0.0f64; k * 2 * k];
+/// Invert a symmetric positive definite (SPD) matrix using Cholesky decomposition.
+/// More efficient than Gauss-Jordan for SPD matrices: exploits symmetry,
+/// no partial pivoting needed, uses half the memory.
+fn invert_spd(mat: &[f64], k: usize) -> Vec<f64> {
+    // Step 1: Cholesky decomposition — L such that L * L^T = mat
+    let mut l = vec![0.0f64; k * k];
+    for j in 0..k {
+        // Diagonal
+        let mut sum = 0.0f64;
+        for p in 0..j {
+            sum += l[j * k + p] * l[j * k + p];
+        }
+        let diag = mat[j * k + j] - sum;
+        assert!(
+            diag > 0.0,
+            "Matrix not positive definite in Cholesky decomposition"
+        );
+        l[j * k + j] = diag.sqrt();
+
+        // Off-diagonal (lower triangle only)
+        for i in (j + 1)..k {
+            let mut sum = 0.0f64;
+            for p in 0..j {
+                sum += l[i * k + p] * l[j * k + p];
+            }
+            l[i * k + j] = (mat[i * k + j] - sum) / l[j * k + j];
+        }
+    }
+
+    // Step 2: Invert lower triangular L → L_inv
+    let mut l_inv = vec![0.0f64; k * k];
     for i in 0..k {
-        for j in 0..k {
-            aug[i * 2 * k + j] = mat[i * k + j];
-        }
-        aug[i * 2 * k + k + i] = 1.0;
-    }
-
-    // Forward elimination with partial pivoting
-    for col in 0..k {
-        // Find pivot
-        let mut max_row = col;
-        let mut max_val = aug[col * 2 * k + col].abs();
-        for row in (col + 1)..k {
-            let val = aug[row * 2 * k + col].abs();
-            if val > max_val {
-                max_val = val;
-                max_row = row;
+        l_inv[i * k + i] = 1.0 / l[i * k + i];
+        for j in 0..i {
+            let mut sum = 0.0f64;
+            for p in j..i {
+                sum += l[i * k + p] * l_inv[p * k + j];
             }
-        }
-
-        // Swap rows
-        if max_row != col {
-            for j in 0..(2 * k) {
-                aug.swap(col * 2 * k + j, max_row * 2 * k + j);
-            }
-        }
-
-        // Scale pivot row
-        let pivot = aug[col * 2 * k + col];
-        assert!(pivot.abs() > 1e-12, "Singular matrix in PEIRA inversion");
-        for j in 0..(2 * k) {
-            aug[col * 2 * k + j] /= pivot;
-        }
-
-        // Eliminate column
-        for row in 0..k {
-            if row == col {
-                continue;
-            }
-            let factor = aug[row * 2 * k + col];
-            for j in 0..(2 * k) {
-                aug[row * 2 * k + j] -= factor * aug[col * 2 * k + j];
-            }
+            l_inv[i * k + j] = -sum / l[i * k + i];
         }
     }
 
-    // Extract inverse
+    // Step 3: M_inv = L_inv^T * L_inv (only lower triangle, then mirror)
     let mut inv = vec![0.0f64; k * k];
     for i in 0..k {
-        for j in 0..k {
-            inv[i * k + j] = aug[i * 2 * k + k + j];
+        for j in 0..=i {
+            let mut sum = 0.0f64;
+            for p in i..k {
+                sum += l_inv[p * k + i] * l_inv[p * k + j];
+            }
+            inv[i * k + j] = sum;
+            inv[j * k + i] = sum; // symmetric
         }
     }
+
     inv
 }
 
@@ -389,7 +401,7 @@ mod tests {
         let identity: Vec<f64> = (0..k)
             .flat_map(|i| (0..k).map(move |j| if i == j { 1.0 } else { 0.0 }))
             .collect();
-        let inv = invert_matrix(&identity, k);
+        let inv = invert_spd(&identity, k);
         for i in 0..k {
             for j in 0..k {
                 let expected = if i == j { 1.0 } else { 0.0 };
@@ -407,7 +419,7 @@ mod tests {
         // [[2, 1], [1, 3]] inverse is [[3/5, -1/5], [-1/5, 2/5]]
         let k = 2;
         let mat = vec![2.0, 1.0, 1.0, 3.0];
-        let inv = invert_matrix(&mat, k);
+        let inv = invert_spd(&mat, k);
         let expected = vec![0.6, -0.2, -0.2, 0.4];
         for i in 0..4 {
             assert!(
@@ -472,7 +484,19 @@ mod tests {
         let mut cov = PeiraCovariance::new(PeiraConfig::new(k));
         cov.update(&[1.0, 0.5, -0.3, 0.0], &[0.8, 0.4, -0.2, 0.1]);
         let (p, q) = cov.predictor();
-        let loss = peira_aux_loss(&[1.0, 0.5, -0.3, 0.0], &[0.8, 0.4, -0.2, 0.1], &p, &q, 0.1);
+        let mut sigma_sample = vec![0.0f64; k * k];
+        let mut n_sample = vec![0.0f64; k * k];
+        let mut pm = vec![0.0f64; k * k];
+        let loss = peira_aux_loss(
+            &[1.0, 0.5, -0.3, 0.0],
+            &[0.8, 0.4, -0.2, 0.1],
+            &p,
+            &q,
+            0.1,
+            &mut sigma_sample,
+            &mut n_sample,
+            &mut pm,
+        );
         assert!(loss.is_finite(), "Loss is not finite: {loss}");
     }
 }

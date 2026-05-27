@@ -329,6 +329,7 @@ pub struct ForwardContext {
     // Clustered LM head scratch buffers (avoid per-forward-pass allocation)
     cluster_scores_buf: Vec<f32>, // [vocab_size] upper-bound for cluster scores
     topk_indexed_buf: Vec<(usize, f32)>, // [vocab_size] indexed pairs for select_topk
+    topk_output_buf: Vec<usize>,  // [topk] output indices buffer
     // GQA lookup: kv_group_lut[h] = h * n_kv_head / n_head (pre-computed once)
     kv_group_lut: Vec<usize>, // [n_head]
     // Delta routing: pre-allocated source_refs index buffer (stores block indices, not slices)
@@ -389,6 +390,7 @@ impl ForwardContext {
             tiled_out: vec![0.0; config.block_size * config.n_embd],
             cluster_scores_buf: vec![0.0; config.vocab_size],
             topk_indexed_buf: vec![(0usize, 0.0f32); config.vocab_size],
+            topk_output_buf: Vec::new(),
             kv_group_lut: (0..config.n_head)
                 .map(|h| h * config.n_kv_head / config.n_head)
                 .collect(),
@@ -530,28 +532,38 @@ unsafe fn attention_head(
     }
 
     // Pass 2: exp(scores - max) and accumulate sum
-    let mut sum = 0.0f32;
-    for t in 0..t_n {
-        let exp_val = unsafe { (*scores_buf.get_unchecked(t) - max_score).exp() };
-        unsafe {
-            *scores_buf.get_unchecked_mut(t) = exp_val;
-        }
-        sum += exp_val;
+    // Shift scores by max, then use SIMD exp for long sequences
+    let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
+    for s in scores_slice.iter_mut() {
+        *s -= max_score;
     }
+    crate::simd::simd_exp_inplace(scores_slice);
+    let sum: f32 = scores_slice.iter().copied().sum();
 
     // Pass 3: normalize + weighted value accumulation (no write-back of scores)
+    // Pre-scale scores once
     let inv_sum = 1.0 / sum;
-    for d in 0..hd {
-        let mut val = 0.0f32;
-        for t in 0..t_n {
-            unsafe {
-                val += *scores_buf.get_unchecked(t)
-                    * inv_sum
-                    * *value_cache.get_unchecked(t * kv_dim + kv_group_offset + d);
-            }
-        }
+    for t in 0..t_n {
         unsafe {
-            *attn_out.get_unchecked_mut(q_head_offset + d) = val;
+            *scores_buf.get_unchecked_mut(t) *= inv_sum;
+        }
+    }
+    // Zero the output slice before accumulation
+    for d in 0..hd {
+        unsafe {
+            *attn_out.get_unchecked_mut(q_head_offset + d) = 0.0;
+        }
+    }
+    // Accumulate: t outer → contiguous value_cache row access
+    for t in 0..t_n {
+        let s = unsafe { *scores_buf.get_unchecked(t) };
+        let v_row = unsafe {
+            std::slice::from_raw_parts(value_cache.as_ptr().add(t * kv_dim + kv_group_offset), hd)
+        };
+        for d in 0..hd {
+            unsafe {
+                *attn_out.get_unchecked_mut(q_head_offset + d) += s * v_row[d];
+            }
         }
     }
 }
@@ -1284,6 +1296,33 @@ pub fn select_topk_indices_into(
     indexed_buf[..k].iter().map(|(i, _)| *i).collect()
 }
 
+/// In-place variant of [`select_topk_indices`] that reuses pre-allocated buffers.
+/// Writes top-K indices into `output_buf` (cleared and filled).
+pub fn select_topk_indices_into_buf(
+    scores: &[f32],
+    k: usize,
+    indexed_buf: &mut Vec<(usize, f32)>,
+    output_buf: &mut Vec<usize>,
+) {
+    let k = k.min(scores.len());
+    if k == 0 {
+        output_buf.clear();
+        return;
+    }
+
+    indexed_buf.clear();
+    indexed_buf.extend(scores.iter().copied().enumerate());
+
+    indexed_buf.select_nth_unstable_by(k - 1, |a, b| {
+        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    indexed_buf[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    output_buf.clear();
+    output_buf.extend(indexed_buf[..k].iter().map(|(i, _)| *i));
+}
+
 /// Two-stage clustered LM head for large vocabularies.
 ///
 /// Stage 1: predict cluster ID(s) via classifier matmul + top-K selection.
@@ -1307,6 +1346,7 @@ fn clustered_lm_head(
     topk: usize,
     cluster_scores_buf: &mut [f32],
     topk_indexed_buf: &mut Vec<(usize, f32)>,
+    topk_output_buf: &mut Vec<usize>,
 ) {
     let num_clusters = cluster_map.len();
 
@@ -1323,16 +1363,25 @@ fn clustered_lm_head(
     }
 
     // Select top-K clusters (Plan 117 T27: skip selection if topk >= num_clusters)
-    let selected_clusters: Vec<usize> = if topk >= num_clusters {
-        (0..num_clusters).collect()
+    let selected_clusters: &[usize] = if topk >= num_clusters {
+        // Fill output_buf with all cluster indices
+        topk_output_buf.clear();
+        topk_output_buf.extend(0..num_clusters);
+        topk_output_buf
     } else {
-        select_topk_indices_into(cluster_scores, topk, topk_indexed_buf)
+        select_topk_indices_into_buf(cluster_scores, topk, topk_indexed_buf, topk_output_buf);
+        topk_output_buf
     };
 
     // Stage 2: fill all logits with -inf, then compute exact for selected clusters
     logits.fill(f32::NEG_INFINITY);
 
-    for &cluster_idx in &selected_clusters {
+    // TODO(Issue #078): Batch per-token dot products to reduce simd_dot_f32 dispatch overhead.
+    // When cluster sizes are large (e.g. 10K+ tokens per cluster), the inner loop makes
+    // 10K+ individual function calls. A batched matmul over contiguous cluster tokens
+    // would amortize dispatch cost. Profile before implementing — optimization depends
+    // on actual cluster layout and hardware.
+    for &cluster_idx in selected_clusters {
         let cluster_tokens = &cluster_map[cluster_idx];
         for &token_idx in cluster_tokens {
             if token_idx < vocab_size {
@@ -1775,9 +1824,12 @@ fn forward_base<'a>(
         #[cfg(feature = "mls_aggregate")]
         {
             if config.mls_layers > 0 && layer_idx >= weights.layers.len() - config.mls_layers {
-                for d in 0..n {
-                    ctx.mls_buf[d] += ctx.x[d] - ctx.hidden_state[d];
-                }
+                crate::simd::simd_fused_sub_acc(
+                    &mut ctx.mls_buf[..n],
+                    &ctx.x[..n],
+                    &ctx.hidden_state[..n],
+                    n,
+                );
                 ctx.mls_count += 1;
             }
         }
@@ -1791,11 +1843,13 @@ fn forward_base<'a>(
 
             // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
             // Delta captures full layer contribution: attention + MLP residuals
-            for d in 0..n {
-                let delta = ctx.x[d] - ctx.xr[d];
-                if block_idx < ctx.block_deltas.len() {
-                    ctx.block_deltas[block_idx][d] += delta;
-                }
+            if block_idx < ctx.block_deltas.len() {
+                crate::simd::simd_fused_sub_acc(
+                    &mut ctx.block_deltas[block_idx][..n],
+                    &ctx.x[..n],
+                    &ctx.xr[..n],
+                    n,
+                );
             }
 
             // At block boundary: route accumulated deltas from all completed blocks
@@ -1816,9 +1870,7 @@ fn forward_base<'a>(
     #[cfg(feature = "mls_aggregate")]
     if ctx.mls_count > 0 {
         let scale = 1.0 / ctx.mls_count as f32;
-        for d in 0..n {
-            ctx.x[d] += ctx.mls_buf[d] * scale;
-        }
+        crate::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
     }
 
     // Snapshot hidden state (for Plan 009 compatibility)
@@ -1840,6 +1892,7 @@ fn forward_base<'a>(
             config.mtp_cluster_topk,
             &mut ctx.cluster_scores_buf,
             &mut ctx.topk_indexed_buf,
+            &mut ctx.topk_output_buf,
         );
     } else {
         standard_lm_head(
@@ -1899,7 +1952,12 @@ fn forward_coda<'a>(
     lora: Option<&crate::types::LoraAdapter>,
     #[cfg(feature = "domain_latent")] domain_latent: Option<&crate::types::DomainLatent>,
 ) -> &'a mut [f32] {
-    // Fall back to standard path when LoRA is active (T10: future fused LoRA support)
+    // TODO(Issue #080): Support LoRA passthrough through CODA fused kernels.
+    // LoRA is a small rank-8/16 additive perturbation that could be absorbed into
+    // the CODA kernel's bias parameter. Currently falls back to forward_base.
+    // Blockers: CODA kernel bias applies per-element, but LoRA has different shapes
+    // per projection (Q/K/V/O/W1/W2). Need to restructure how LoRA bias feeds into
+    // the fused matmul_residual_partial_rms kernel.
     if lora.is_some() {
         #[cfg(feature = "domain_latent")]
         return forward_base(ctx, weights, cache, token, pos, config, lora, domain_latent);
@@ -2084,9 +2142,12 @@ fn forward_coda<'a>(
         #[cfg(feature = "mls_aggregate")]
         {
             if config.mls_layers > 0 && layer_idx >= weights.layers.len() - config.mls_layers {
-                for d in 0..n {
-                    ctx.mls_buf[d] += ctx.x[d] - ctx.hidden_state[d];
-                }
+                crate::simd::simd_fused_sub_acc(
+                    &mut ctx.mls_buf[..n],
+                    &ctx.x[..n],
+                    &ctx.hidden_state[..n],
+                    n,
+                );
                 ctx.mls_count += 1;
             }
         }
@@ -2099,11 +2160,13 @@ fn forward_coda<'a>(
             let pos_in_block = layer_idx % block_size;
 
             // Compute delta: current x minus pre-layer residual
-            for d in 0..n {
-                let delta = ctx.x[d] - ctx.xr[d];
-                if block_idx < ctx.block_deltas.len() {
-                    ctx.block_deltas[block_idx][d] += delta;
-                }
+            if block_idx < ctx.block_deltas.len() {
+                crate::simd::simd_fused_sub_acc(
+                    &mut ctx.block_deltas[block_idx][..n],
+                    &ctx.x[..n],
+                    &ctx.xr[..n],
+                    n,
+                );
             }
 
             // At block boundary: route accumulated deltas from all completed blocks
@@ -2124,9 +2187,7 @@ fn forward_coda<'a>(
     #[cfg(feature = "mls_aggregate")]
     if ctx.mls_count > 0 {
         let scale = 1.0 / ctx.mls_count as f32;
-        for d in 0..n {
-            ctx.x[d] += ctx.mls_buf[d] * scale;
-        }
+        crate::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
     }
 
     // Snapshot hidden state (for Plan 009 compatibility)
@@ -2148,6 +2209,7 @@ fn forward_coda<'a>(
             config.mtp_cluster_topk,
             &mut ctx.cluster_scores_buf,
             &mut ctx.topk_indexed_buf,
+            &mut ctx.topk_output_buf,
         );
     } else {
         standard_lm_head(
@@ -5430,7 +5492,7 @@ mod tests {
         for i in 0..config.vocab_size {
             let diff = (logits1[i] - logits2[i]).abs();
             assert!(
-                diff < 1e-6,
+                diff < 5e-6,
                 "forward and forward_base(None) differ at {i}: {diff}"
             );
         }
@@ -6326,6 +6388,7 @@ mod tests {
             1, // topk=1: backward compat (single cluster selection)
             &mut vec![0.0f32; config.vocab_size],
             &mut vec![(0usize, 0.0f32); config.vocab_size],
+            &mut Vec::new(),
         );
 
         // Find winning cluster (the one with finite logits)
@@ -6385,6 +6448,7 @@ mod tests {
             1, // topk=1: backward compat (single cluster selection)
             &mut vec![0.0f32; config.vocab_size],
             &mut vec![(0usize, 0.0f32); config.vocab_size],
+            &mut Vec::new(),
         );
 
         // Find winning cluster
