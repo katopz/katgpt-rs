@@ -3251,7 +3251,7 @@ mod tests {
     fn add_scalar_matches_scalar_impl() {
         let mut x_simd: Vec<f32> = (0..97).map(|i| (i as f32 * 0.1).sin()).collect();
         let mut x_scalar = x_simd.clone();
-        let val = -3.14f32;
+        let val = -std::f32::consts::PI;
 
         simd_add_scalar_inplace(&mut x_simd, val);
         scalar_add_scalar_inplace(&mut x_scalar, val);

@@ -334,7 +334,7 @@ pub struct ForwardContext {
     pub(crate) prev_h: Vec<f32>, // [n_embd]
     // GQA lookup: kv_group_lut[h] = h * n_kv_head / n_head (pre-computed once)
     kv_group_lut: [usize; 64], // fixed-size LUT for GQA head→kv_group mapping
-    kv_group_lut_count: usize, // actual number of heads (n_head)
+    _kv_group_lut_count: usize, // actual number of heads (n_head)
     // Delta routing: pre-allocated source_refs index buffer (stores block indices, not slices)
     #[cfg(feature = "delta_routing")]
     delta_source_indices: Vec<usize>, // pre-allocated capacity for max sources
@@ -410,7 +410,7 @@ impl ForwardContext {
                 }
                 lut
             },
-            kv_group_lut_count: config.n_head,
+            _kv_group_lut_count: config.n_head,
             #[cfg(feature = "delta_routing")]
             delta_source_indices: {
                 let block_size = 4; // Default B=4
