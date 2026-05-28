@@ -1670,19 +1670,20 @@ pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
 /// Pass a `cdf` buffer (e.g. `ForwardContext::cdf`) to avoid a ~vocab_size allocation
 /// on every token decode. The buffer is cleared and refilled each call.
 pub fn sample_token_into(probs: &[f32], rng: &mut Rng, cdf: &mut Vec<f32>) -> usize {
-    cdf.clear();
-    cdf.reserve(probs.len());
     let r = rng.uniform();
     let n = probs.len();
     if n == 0 {
         return 0;
     }
+    cdf.resize(n, 0.0);
     let mut sum = 0.0f32;
-    for &p in probs {
+    for (i, &p) in probs.iter().enumerate() {
         sum += p;
-        cdf.push(sum);
+        unsafe {
+            *cdf.get_unchecked_mut(i) = sum;
+        }
     }
-    match cdf.binary_search_by(|&c| {
+    match cdf[..n].binary_search_by(|&c| {
         if c > r {
             std::cmp::Ordering::Greater
         } else {

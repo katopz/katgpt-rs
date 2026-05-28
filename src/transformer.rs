@@ -1263,7 +1263,10 @@ fn standard_lm_head(
     vocab_size: usize,
     n_embd: usize,
 ) {
-    matmul(logits, lm_head, hidden, vocab_size, n_embd);
+    // matmul_parallel has an internal threshold (512 rows) — for small vocab
+    // it falls back to serial automatically. For vocab_size >= 512 (e.g.
+    // small_target vocab=4096), this parallelizes across rayon threads.
+    matmul_parallel(logits, lm_head, hidden, vocab_size, n_embd);
 }
 
 /// Select top-K indices from scores (Plan 117 T25).
@@ -2922,8 +2925,8 @@ pub fn forward_prefill<'a>(
     // Snapshot hidden state (last position)
     ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
 
-    // LM Head
-    crate::types::matmul(
+    // LM Head (parallel for large vocab, serial fallback for small)
+    crate::types::matmul_parallel(
         &mut ctx.logits,
         &weights.lm_head,
         &ctx.x,

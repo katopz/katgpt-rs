@@ -411,35 +411,35 @@ pub fn find_sufficient_set(
     max_search_depth: usize,
 ) -> Vec<usize> {
     let mut sufficient = Vec::new();
-    let mut candidate_tokens: Vec<usize> = (0..vocab_size)
+    let candidate_tokens: Vec<usize> = (0..vocab_size)
         .filter(|&tok| pruner.is_valid(depth, tok, placed_tokens))
         .collect();
 
-    // Scratch buffers for sort comparison and count_valid_extensions
+    // Pre-compute extension counts for ALL candidates once (O(n × sample_size))
+    // instead of per-comparison during sort (O(n log n × sample_size))
     let mut ext_buf = placed_tokens.to_vec();
-    let mut ext_a = placed_tokens.to_vec();
-    let mut ext_b = placed_tokens.to_vec();
+    let mut counts: Vec<(usize, usize)> = candidate_tokens
+        .into_iter()
+        .map(|tok| {
+            ext_buf.clear();
+            ext_buf.extend_from_slice(placed_tokens);
+            ext_buf.push(tok);
+            let count = count_valid_extensions_with(pruner, depth + 1, &ext_buf);
+            (tok, count)
+        })
+        .collect();
 
-    // Sort by constraint tightness (tokens that appear in most constraints first)
-    // Heuristic: prefer tokens that are valid at deeper depths
-    candidate_tokens.sort_by(|&a, &b| {
-        ext_a.clear();
-        ext_a.extend_from_slice(placed_tokens);
-        ext_a.push(a);
-        ext_b.clear();
-        ext_b.extend_from_slice(placed_tokens);
-        ext_b.push(b);
-        let da = count_valid_extensions_with(pruner, depth + 1, &ext_a);
-        let db = count_valid_extensions_with(pruner, depth + 1, &ext_b);
-        da.cmp(&db) // ascending = tighter constraints first
-    });
+    // Sort by pre-computed counts (ascending = tighter constraints first)
+    counts.sort_by_key(|&(_, count)| count);
 
-    for tok in candidate_tokens.iter().take(max_search_depth) {
+    let mut relevance_buf = vec![0.0f32; vocab_size.min(256)];
+
+    for &(tok, _) in counts.iter().take(max_search_depth) {
         ext_buf.clear();
         ext_buf.extend_from_slice(placed_tokens);
-        ext_buf.push(*tok);
-        let score =
-            underspecification_score(&score_relevance(pruner, depth + 1, &ext_buf, vocab_size));
+        ext_buf.push(tok);
+        score_relevance_into(pruner, depth + 1, &ext_buf, vocab_size, &mut relevance_buf);
+        let score = underspecification_score(&relevance_buf);
         if score < 0.5 {
             sufficient.push(*tok);
             break; // found 1-sufficient
@@ -478,21 +478,37 @@ fn count_valid_extensions_with(
 }
 
 /// Compute relevance scores for all tokens at given depth.
+/// Writes results into `buf` (must have length >= min(vocab_size, 256)).
+fn score_relevance_into(
+    pruner: &dyn crate::traits::ConstraintPruner,
+    depth: usize,
+    placed_tokens: &[usize],
+    vocab_size: usize,
+    buf: &mut [f32],
+) {
+    let limit = vocab_size.min(256).min(buf.len());
+    for tok in 0..limit {
+        buf[tok] = if pruner.is_valid(depth, tok, placed_tokens) {
+            1.0
+        } else {
+            0.0
+        };
+    }
+    // Zero remaining entries
+    buf[limit..].fill(0.0);
+}
+
+/// Backward-compatible wrapper that allocates.
 fn score_relevance(
     pruner: &dyn crate::traits::ConstraintPruner,
     depth: usize,
     placed_tokens: &[usize],
     vocab_size: usize,
 ) -> Vec<f32> {
-    (0..vocab_size.min(256))
-        .map(|tok| {
-            if pruner.is_valid(depth, tok, placed_tokens) {
-                1.0
-            } else {
-                0.0
-            }
-        })
-        .collect()
+    let limit = vocab_size.min(256);
+    let mut buf = vec![0.0f32; limit];
+    score_relevance_into(pruner, depth, placed_tokens, vocab_size, &mut buf);
+    buf
 }
 
 // ── T4: QuestBenchDecision ───────────────────────────────────────

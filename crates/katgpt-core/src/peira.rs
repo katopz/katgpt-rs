@@ -837,8 +837,9 @@ pub fn peira_aux_loss(
     let term2 = 0.25 * simd_dot_f64(pm, p_star, k * k);
 
     // Add the regularization penalty: + λ/2 (||u||² + ||v||²)
-    let norm_sq_u: f64 = student.iter().map(|x| (*x as f64).powi(2)).sum();
-    let norm_sq_v: f64 = teacher.iter().map(|x| (*x as f64).powi(2)).sum();
+    // Use SIMD dot(x, x) = ||x||² instead of scalar .powi(2)
+    let norm_sq_u = crate::simd::simd_dot_f32(student, student, student.len()) as f64;
+    let norm_sq_v = crate::simd::simd_dot_f32(teacher, teacher, teacher.len()) as f64;
     let reg = lambda / 2.0 * (norm_sq_u + norm_sq_v);
 
     term1 + term2 + reg
