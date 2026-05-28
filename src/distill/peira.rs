@@ -4,7 +4,7 @@
 //! SC-PEIRA Algorithm 1 training loop (PeiraDistiller) plus the spectral
 //! alignment metric (peira_alignment_score) for GOAT proofs.
 
-use katgpt_core::{PeiraConfig, PeiraCovariance, peira_aux_loss};
+use katgpt_core::{PeiraConfig, PeiraCovariance};
 
 /// PEIRA-based modelless distiller implementing the SC-PEIRA Algorithm 1 loop.
 ///
@@ -24,25 +24,17 @@ pub struct PeiraDistiller {
     alignment_history: Vec<f64>,
     /// Running loss history.
     loss_history: Vec<f64>,
-    /// Pre-allocated scratch buffers for peira_aux_loss.
-    sigma_sample: Vec<f64>,
-    n_sample: Vec<f64>,
-    pm: Vec<f64>,
 }
 
 impl PeiraDistiller {
     /// Create a new distiller with the given configuration.
     pub fn new(config: PeiraConfig) -> Self {
-        let k = config.dim;
         let covariance = PeiraCovariance::new(config.clone());
         Self {
             covariance,
             config,
             alignment_history: Vec::new(),
             loss_history: Vec::new(),
-            sigma_sample: vec![0.0f64; k * k],
-            n_sample: vec![0.0f64; k * k],
-            pm: vec![0.0f64; k * k],
         }
     }
 
@@ -54,20 +46,8 @@ impl PeiraDistiller {
         // 1. Update EMA covariance estimates
         self.covariance.update(student, teacher);
 
-        // 2. Compute closed-form predictor
-        let (p_star, q_star) = self.covariance.predictor();
-
-        // 3. Compute auxiliary loss
-        let loss = peira_aux_loss(
-            student,
-            teacher,
-            &p_star,
-            &q_star,
-            self.config.lambda,
-            &mut self.sigma_sample,
-            &mut self.n_sample,
-            &mut self.pm,
-        );
+        // 2+3. Compute predictor + auxiliary loss (zero-alloc via pre-allocated scratch)
+        let (loss, _p_star, _q_star) = self.covariance.predict_and_loss(student, teacher);
 
         // 4. Compute alignment score
         let alignment = peira_alignment_score(
