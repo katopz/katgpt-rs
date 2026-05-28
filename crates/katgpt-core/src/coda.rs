@@ -21,7 +21,7 @@
 //! | residual add | 1 rmw | 0 (fused) |
 //! | **Total** | ~8 passes | ~0 passes |
 
-use crate::simd::simd_dot_f32;
+use crate::simd::{simd_dot_f32, simd_sum_f32};
 
 // ---------------------------------------------------------------------------
 // Activation Enum (Plan 103 T9: generic activation dispatch)
@@ -204,6 +204,9 @@ pub type MoaConfig = ();
 /// Compute MoA gating weights: π_k = sigmoid(u_k^T x) for k in [0..MOA_DICT_SIZE).
 ///
 /// Returns array of MOA_DICT_SIZE gating weights.
+///
+/// NOTE: Uses sigmoid, NOT softmax. Paper (arXiv 2605.26647) Table 2 shows
+/// sigmoid gating > softmax > tanh. Do not change to softmax.
 #[cfg(feature = "moa_inference")]
 #[inline(always)]
 fn compute_moa_gates(input: &[f32], gating: &[f32], d_model: usize) -> [f32; MOA_DICT_SIZE] {
@@ -231,6 +234,9 @@ fn moa_activate(k: usize, x: f32) -> f32 {
 ///
 /// where ρ_k = sigmoid(u_k^T input), π_ℓ = sigmoid(v_ℓ^T input) are
 /// token-adaptive gating weights computed from the input.
+///
+/// NOTE: Uses sigmoid gating, NOT softmax. Paper (arXiv 2605.26647) Table 2:
+/// sigmoid gating > softmax > tanh. Do not change to softmax.
 ///
 /// # Arguments
 ///
@@ -290,6 +296,9 @@ pub fn moa_swiglu(
 ///
 /// where ρ_k = sigmoid(u_k^T input), π_ℓ = sigmoid(v_ℓ^T input) are computed
 /// from the MoA gating vectors and the input.
+///
+/// NOTE: Uses sigmoid gating, NOT softmax. Paper (arXiv 2605.26647) Table 2:
+/// sigmoid gating > softmax > tanh. Do not change to softmax.
 ///
 /// This fuses 4 operations:
 /// 1. **Matmul**: gate and up projections from combined weight
@@ -494,7 +503,7 @@ pub fn compute_rstd(partial_sums: &[f32], n_elements: usize, eps: f32) -> f32 {
     if partial_sums.is_empty() || n_elements == 0 {
         return 1.0;
     }
-    let sum_sq: f32 = partial_sums.iter().copied().sum();
+    let sum_sq: f32 = simd_sum_f32(partial_sums);
     let mean_sq = sum_sq / n_elements as f32;
     1.0 / (mean_sq + eps).sqrt()
 }
