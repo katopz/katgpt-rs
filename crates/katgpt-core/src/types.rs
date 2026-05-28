@@ -327,6 +327,7 @@ impl ResidualGate {
 /// - `PlanSkip`: skip tree search, direct token sampling (low uncertainty, confident)
 #[cfg(feature = "sr2am_configurator")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
 pub enum PlanningDecision {
     /// Reset tree, full budget allocation (high uncertainty, new sub-problem).
     PlanNew,
@@ -2232,6 +2233,7 @@ pub struct ProposerTask {
 /// Decides whether a proposer-generated task should enter the training pool
 /// BEFORE the solver attempts it.
 #[cfg(feature = "data_gate")]
+#[repr(u8)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GateDecision {
     /// Task passes the gate — admitted to training pool.
