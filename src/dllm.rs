@@ -515,21 +515,23 @@ fn attention_forward_safe(
 // ═══════════════════════════════════════════════════════════════
 
 /// Saved activations from forward pass, needed for backward.
-struct ForwardActivations {
+///
+/// Borrows from `ForwardSaveContext` to avoid cloning all activations (Issue 110).
+struct ForwardActivations<'a> {
     seq_len: usize,
-    embeddings: Vec<f32>,     // [seq_len * n]
-    after_norm1: Vec<f32>,    // [seq_len * n] (= xr residual)
-    after_norm2: Vec<f32>,    // [seq_len * n]
-    q: Vec<f32>,              // [seq_len * n]
-    k: Vec<f32>,              // [seq_len * kvd]
-    v: Vec<f32>,              // [seq_len * kvd]
-    attn_weights: Vec<f32>,   // [seq_len * n_head * seq_len]
-    attn_out: Vec<f32>,       // [seq_len * n]
-    after_attn_res: Vec<f32>, // [seq_len * n]
-    after_mlp_norm: Vec<f32>, // [seq_len * n]
-    mlp_hidden: Vec<f32>,     // [seq_len * mlp_hidden]
-    hidden_final: Vec<f32>,   // [seq_len * n]
-    logits: Vec<f32>,         // [seq_len * vocab_size]
+    embeddings: &'a [f32],     // [seq_len * n]
+    after_norm1: &'a [f32],    // [seq_len * n] (= xr residual)
+    after_norm2: &'a [f32],    // [seq_len * n]
+    q: &'a [f32],              // [seq_len * n]
+    k: &'a [f32],              // [seq_len * kvd]
+    v: &'a [f32],              // [seq_len * kvd]
+    attn_weights: &'a [f32],   // [seq_len * n_head * seq_len]
+    attn_out: &'a [f32],       // [seq_len * n]
+    after_attn_res: &'a [f32], // [seq_len * n]
+    after_mlp_norm: &'a [f32], // [seq_len * n]
+    mlp_hidden: &'a [f32],     // [seq_len * mlp_hidden]
+    hidden_final: &'a [f32],   // [seq_len * n]
+    logits: &'a [f32],         // [seq_len * vocab_size]
 }
 
 /// Pre-allocated context for `forward_save`, avoiding per-call allocations.
@@ -665,11 +667,18 @@ struct BackwardContext {
     d_rmsnorm_buf: Vec<f32>,
     /// Scratch buffer for softmax_backward (avoids per-call allocation)
     d_softmax_buf: Vec<f32>,
+    /// Pre-allocated intermediate gradient buffers (Issue 109)
+    d_attn_out: Vec<f32>,
+    d_q: Vec<f32>,
+    d_k: Vec<f32>,
+    d_v: Vec<f32>,
+    d_after_norm2: Vec<f32>,
 }
 
 impl BackwardContext {
     fn new(config: &Config) -> Self {
         let n = config.n_embd;
+        let kvd = kv_dim(config);
         Self {
             d_logits: vec![0.0f32; config.vocab_size],
             d_hf: vec![0.0f32; n],
@@ -682,17 +691,22 @@ impl BackwardContext {
             d_after_norm1_final: vec![0.0f32; config.block_size * n],
             d_rmsnorm_buf: vec![0.0f32; n],
             d_softmax_buf: vec![0.0f32; config.block_size],
+            d_attn_out: vec![0.0f32; config.block_size * n],
+            d_q: vec![0.0f32; config.block_size * n],
+            d_k: vec![0.0f32; config.block_size * kvd],
+            d_v: vec![0.0f32; config.block_size * kvd],
+            d_after_norm2: vec![0.0f32; config.block_size * n],
         }
     }
 }
 
 /// Forward pass saving all activations for training.
-fn forward_save(
+fn forward_save<'a>(
     weights: &TransformerWeights,
     tokens: &[usize],
     config: &Config,
-    ctx: &mut ForwardSaveContext,
-) -> ForwardActivations {
+    ctx: &'a mut ForwardSaveContext,
+) -> ForwardActivations<'a> {
     let n = config.n_embd;
     let hd = config.head_dim;
     let kvd = kv_dim(config);
@@ -806,19 +820,19 @@ fn forward_save(
 
     ForwardActivations {
         seq_len,
-        embeddings: ctx.embeddings[..seq_len * n].to_vec(),
-        after_norm1: ctx.after_norm1[..seq_len * n].to_vec(),
-        after_norm2: ctx.after_norm2[..seq_len * n].to_vec(),
-        q: ctx.q_all[..seq_len * n].to_vec(),
-        k: ctx.k_all[..seq_len * kvd].to_vec(),
-        v: ctx.v_all[..seq_len * kvd].to_vec(),
-        attn_weights: ctx.attn_weights_all[..seq_len * config.n_head * seq_len].to_vec(),
-        attn_out: ctx.attn_out_all[..seq_len * n].to_vec(),
-        after_attn_res: ctx.after_attn_res[..seq_len * n].to_vec(),
-        after_mlp_norm: ctx.after_mlp_norm[..seq_len * n].to_vec(),
-        mlp_hidden: ctx.mlp_hidden_all[..seq_len * config.mlp_hidden].to_vec(),
-        hidden_final: ctx.hidden_final[..seq_len * n].to_vec(),
-        logits: ctx.logits_all[..seq_len * config.vocab_size].to_vec(),
+        embeddings: &ctx.embeddings[..seq_len * n],
+        after_norm1: &ctx.after_norm1[..seq_len * n],
+        after_norm2: &ctx.after_norm2[..seq_len * n],
+        q: &ctx.q_all[..seq_len * n],
+        k: &ctx.k_all[..seq_len * kvd],
+        v: &ctx.v_all[..seq_len * kvd],
+        attn_weights: &ctx.attn_weights_all[..seq_len * config.n_head * seq_len],
+        attn_out: &ctx.attn_out_all[..seq_len * n],
+        after_attn_res: &ctx.after_attn_res[..seq_len * n],
+        after_mlp_norm: &ctx.after_mlp_norm[..seq_len * n],
+        mlp_hidden: &ctx.mlp_hidden_all[..seq_len * config.mlp_hidden],
+        hidden_final: &ctx.hidden_final[..seq_len * n],
+        logits: &ctx.logits_all[..seq_len * config.vocab_size],
     }
 }
 
@@ -875,7 +889,7 @@ fn softmax_backward_into(weights: &[f32], dy: &[f32], out: &mut [f32]) {
 
 /// Backward pass: compute gradients from saved activations.
 fn backward(
-    act: &ForwardActivations,
+    act: &ForwardActivations<'_>,
     weights: &TransformerWeights,
     tokens: &[usize],
     is_masked: &[bool],
@@ -895,12 +909,12 @@ fn backward(
 
     let mut grads = TrainingGradients::zeros(config);
 
-    // Intermediate gradient buffers (once per call, not pre-allocated)
-    let mut d_attn_out = vec![0.0f32; seq_len * n];
-    let mut d_q = vec![0.0f32; seq_len * n];
-    let mut d_k = vec![0.0f32; seq_len * kvd];
-    let mut d_v = vec![0.0f32; seq_len * kvd];
-    let mut d_after_norm2 = vec![0.0f32; seq_len * n];
+    // Reuse pre-allocated intermediate gradient buffers (Issue 109)
+    bctx.d_attn_out[..seq_len * n].fill(0.0);
+    bctx.d_q[..seq_len * n].fill(0.0);
+    bctx.d_k[..seq_len * kvd].fill(0.0);
+    bctx.d_v[..seq_len * kvd].fill(0.0);
+    bctx.d_after_norm2[..seq_len * n].fill(0.0);
 
     // Zero the saved accumulation buffers
     bctx.d_after_attn_res_saved[..seq_len * n].fill(0.0);
@@ -996,7 +1010,7 @@ fn backward(
         // d_attn_out = wo^T @ d_after_attn_res
         for j in 0..n {
             for i in 0..n {
-                d_attn_out[p * n + j] += layer.attn_wo[i * n + j] * bctx.d_an1[i];
+                bctx.d_attn_out[p * n + j] += layer.attn_wo[i * n + j] * bctx.d_an1[i];
             }
         }
     }
@@ -1006,7 +1020,7 @@ fn backward(
         if !is_masked[p] {
             continue;
         }
-        let d_ao = &d_attn_out[p * n..(p + 1) * n];
+        let d_ao = &bctx.d_attn_out[p * n..(p + 1) * n];
         let aw = &act.attn_weights[p * n_head * seq_len..(p + 1) * n_head * seq_len];
 
         for h in 0..n_head {
@@ -1036,21 +1050,23 @@ fn backward(
             // d_v[t] += weights[t] * d_attn_out[h]
             for t in 0..seq_len {
                 for d in 0..hd {
-                    d_v[t * kvd + kv_off + d] += w_h[t] * d_ao[q_off + d];
+                    bctx.d_v[t * kvd + kv_off + d] += w_h[t] * d_ao[q_off + d];
                 }
             }
 
             // d_q[h] += d_scores[t] * k[t,h] * scale
             for t in 0..seq_len {
                 for d in 0..hd {
-                    d_q[p * n + q_off + d] += d_scores[t] * act.k[t * kvd + kv_off + d] * scale;
+                    bctx.d_q[p * n + q_off + d] +=
+                        d_scores[t] * act.k[t * kvd + kv_off + d] * scale;
                 }
             }
 
             // d_k[t,h] += d_scores[t] * q[p,h] * scale
             for t in 0..seq_len {
                 for d in 0..hd {
-                    d_k[t * kvd + kv_off + d] += d_scores[t] * act.q[p * n + q_off + d] * scale;
+                    bctx.d_k[t * kvd + kv_off + d] +=
+                        d_scores[t] * act.q[p * n + q_off + d] * scale;
                 }
             }
         }
@@ -1059,8 +1075,8 @@ fn backward(
     // ── Phase 3: QKV projections → RMSNorm → Embeddings ──
     for p in 0..seq_len {
         let has_grad = is_masked[p]
-            || d_k[p * kvd..(p + 1) * kvd].iter().any(|&g| g != 0.0)
-            || d_v[p * kvd..(p + 1) * kvd].iter().any(|&g| g != 0.0);
+            || bctx.d_k[p * kvd..(p + 1) * kvd].iter().any(|&g| g != 0.0)
+            || bctx.d_v[p * kvd..(p + 1) * kvd].iter().any(|&g| g != 0.0);
         if !has_grad {
             continue;
         }
@@ -1069,13 +1085,13 @@ fn backward(
         let an2 = &act.after_norm2[p * n..(p + 1) * n];
         for i in 0..n {
             for j in 0..n {
-                grads.attn_wq[i * n + j] += d_q[p * n + i] * an2[j];
+                grads.attn_wq[i * n + j] += bctx.d_q[p * n + i] * an2[j];
             }
         }
         for i in 0..kvd {
             for j in 0..n {
-                grads.attn_wk[i * n + j] += d_k[p * kvd + i] * an2[j];
-                grads.attn_wv[i * n + j] += d_v[p * kvd + i] * an2[j];
+                grads.attn_wk[i * n + j] += bctx.d_k[p * kvd + i] * an2[j];
+                grads.attn_wv[i * n + j] += bctx.d_v[p * kvd + i] * an2[j];
             }
         }
 
@@ -1083,14 +1099,14 @@ fn backward(
         bctx.d_an2[..n].fill(0.0);
         for j in 0..n {
             for i in 0..n {
-                bctx.d_an2[j] += layer.attn_wq[i * n + j] * d_q[p * n + i];
+                bctx.d_an2[j] += layer.attn_wq[i * n + j] * bctx.d_q[p * n + i];
             }
             for i in 0..kvd {
-                bctx.d_an2[j] += layer.attn_wk[i * n + j] * d_k[p * kvd + i];
-                bctx.d_an2[j] += layer.attn_wv[i * n + j] * d_v[p * kvd + i];
+                bctx.d_an2[j] += layer.attn_wk[i * n + j] * bctx.d_k[p * kvd + i];
+                bctx.d_an2[j] += layer.attn_wv[i * n + j] * bctx.d_v[p * kvd + i];
             }
         }
-        d_after_norm2[p * n..(p + 1) * n].copy_from_slice(&bctx.d_an2[..n]);
+        bctx.d_after_norm2[p * n..(p + 1) * n].copy_from_slice(&bctx.d_an2[..n]);
     }
 
     // Compute d_after_norm1 and d_embeddings using saved d_after_attn_res
@@ -1098,7 +1114,7 @@ fn backward(
         bctx.d_an1[..n].fill(0.0);
 
         // From norm2 backward
-        let an2_grad = &d_after_norm2[p * n..(p + 1) * n];
+        let an2_grad = &bctx.d_after_norm2[p * n..(p + 1) * n];
         if an2_grad.iter().any(|&g| g != 0.0) {
             let an1 = &act.after_norm1[p * n..(p + 1) * n];
             let an2 = &act.after_norm2[p * n..(p + 1) * n];

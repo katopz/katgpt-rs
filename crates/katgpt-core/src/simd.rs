@@ -476,19 +476,63 @@ fn scalar_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
-    use core::arch::aarch64::{vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
+    use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
 
     unsafe {
-        let mut acc = vdupq_n_f32(0.0);
+        // 4 independent accumulators to hide FMA pipeline latency
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
         let mut i = 0;
-        let chunks = len / 4;
+        let chunks4 = len / 16;
 
+        for _ in 0..chunks4 {
+            // Convert 4×4 f16 → f32 via scalar conversion (compiles to hardware fcvt on Apple Silicon)
+            // then vectorize the FMA. Each group of 4 f16 values becomes a NEON f32 vector.
+            let w0 = [
+                (*w.get_unchecked(i)).to_f32(),
+                (*w.get_unchecked(i + 1)).to_f32(),
+                (*w.get_unchecked(i + 2)).to_f32(),
+                (*w.get_unchecked(i + 3)).to_f32(),
+            ];
+            let w1 = [
+                (*w.get_unchecked(i + 4)).to_f32(),
+                (*w.get_unchecked(i + 5)).to_f32(),
+                (*w.get_unchecked(i + 6)).to_f32(),
+                (*w.get_unchecked(i + 7)).to_f32(),
+            ];
+            let w2 = [
+                (*w.get_unchecked(i + 8)).to_f32(),
+                (*w.get_unchecked(i + 9)).to_f32(),
+                (*w.get_unchecked(i + 10)).to_f32(),
+                (*w.get_unchecked(i + 11)).to_f32(),
+            ];
+            let w3 = [
+                (*w.get_unchecked(i + 12)).to_f32(),
+                (*w.get_unchecked(i + 13)).to_f32(),
+                (*w.get_unchecked(i + 14)).to_f32(),
+                (*w.get_unchecked(i + 15)).to_f32(),
+            ];
+            let vw0 = vld1q_f32(w0.as_ptr());
+            let vw1 = vld1q_f32(w1.as_ptr());
+            let vw2 = vld1q_f32(w2.as_ptr());
+            let vw3 = vld1q_f32(w3.as_ptr());
+
+            acc0 = vfmaq_f32(acc0, vw0, vld1q_f32(x.as_ptr().add(i)));
+            acc1 = vfmaq_f32(acc1, vw1, vld1q_f32(x.as_ptr().add(i + 4)));
+            acc2 = vfmaq_f32(acc2, vw2, vld1q_f32(x.as_ptr().add(i + 8)));
+            acc3 = vfmaq_f32(acc3, vw3, vld1q_f32(x.as_ptr().add(i + 12)));
+            i += 16;
+        }
+
+        // Horizontal reduce: acc0+acc1+acc2+acc3
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
+
+        // Handle remaining elements with single accumulator
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let chunks = (len - i) / 4;
         for _ in 0..chunks {
-            // Convert 4 f16 → f32 scalarly, then vectorize the FMA.
-            // Note: NEON vcvt_f32_f16 / fcvtl requires nightly or inline asm.
-            // The scalar conversion via half::f16::to_f32() compiles to hardware
-            // fcvt on Apple Silicon, so the per-element cost is ~1 cycle.
-            // The FMA accumulation is still vectorized (4-wide).
             let w32 = [
                 (*w.get_unchecked(i)).to_f32(),
                 (*w.get_unchecked(i + 1)).to_f32(),
@@ -497,12 +541,12 @@ unsafe fn neon_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
             ];
             let vw = vld1q_f32(w32.as_ptr());
             let vx = vld1q_f32(x.as_ptr().add(i));
-            acc = vfmaq_f32(acc, vw, vx);
+            acc_rem = vfmaq_f32(acc_rem, vw, vx);
             i += 4;
         }
+        sum += vaddvq_f32(acc_rem);
 
-        let mut sum = vaddvq_f32(acc);
-        // Handle remainder
+        // Scalar tail (0-3 elements)
         while i < len {
             sum += (*w.get_unchecked(i)).to_f32() * *x.get_unchecked(i);
             i += 1;
@@ -1204,8 +1248,7 @@ pub fn maxsim_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
 /// - `pair_d_ids`:     doc index for each pair
 /// - `dim`:            embedding dimension
 ///
-/// # Returns
-/// Vec of scores, one per pair.
+/// - `results`:        output buffer, must have length >= num_pairs
 ///
 /// # Feature flag
 /// `maxsim` — Plan 080
@@ -1218,13 +1261,14 @@ pub fn maxsim_score_packed(
     pair_q_ids: &[usize],
     pair_d_ids: &[usize],
     dim: usize,
-) -> Vec<f32> {
+    results: &mut [f32],
+) {
     let num_pairs = pair_q_ids.len();
     debug_assert_eq!(pair_d_ids.len(), num_pairs);
+    debug_assert!(results.len() >= num_pairs, "results buffer too short");
     debug_assert!(query_offsets.len() >= *pair_q_ids.iter().max().unwrap_or(&0) + 2);
     debug_assert!(doc_offsets.len() >= *pair_d_ids.iter().max().unwrap_or(&0) + 2);
 
-    let mut results = Vec::with_capacity(num_pairs);
     for p in 0..num_pairs {
         let q_id = pair_q_ids[p];
         let d_id = pair_d_ids[p];
@@ -1236,9 +1280,8 @@ pub fn maxsim_score_packed(
         let d_data = &documents[d_start..d_end];
         let lq = q_data.len() / dim;
         let ld = d_data.len() / dim;
-        results.push(maxsim_score(q_data, d_data, lq, ld, dim));
+        results[p] = maxsim_score(q_data, d_data, lq, ld, dim);
     }
-    results
 }
 
 // ── Scalar Fallbacks (new primitives) ─────────────────────────
@@ -2261,10 +2304,28 @@ pub fn simd_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
 /// Batched ternary matmul: for each batch[i], compute y[i] = W × batch[i].
 #[cfg(feature = "plasma_path")]
 pub fn simd_ternary_matmul_batch(w: &TernaryWeights, x: &[f32], batch: usize, y: &mut [f32]) {
-    for b in 0..batch {
-        let x_off = b * w.cols;
-        let y_off = b * w.rows;
-        simd_ternary_matvec(w, &x[x_off..], &mut y[y_off..]);
+    /// Minimum batch size before parallelizing. Below this, sequential is faster
+    /// due to rayon thread pool scheduling overhead (~1-5µs per task).
+    /// Each ternary matvec at 256×256+ already exceeds 10µs, so parallelism
+    /// wins for batch ≥ 2, but we use 4 to amortize the join overhead.
+    const PARALLEL_BATCH_MIN: usize = 4;
+
+    if batch < PARALLEL_BATCH_MIN {
+        for b in 0..batch {
+            let x_off = b * w.cols;
+            let y_off = b * w.rows;
+            simd_ternary_matvec(w, &x[x_off..], &mut y[y_off..]);
+        }
+    } else {
+        use rayon::prelude::*;
+        y.par_chunks_mut(w.rows)
+            .enumerate()
+            .for_each(|(b, y_chunk)| {
+                if b < batch {
+                    let x_off = b * w.cols;
+                    simd_ternary_matvec(w, &x[x_off..], y_chunk);
+                }
+            });
     }
 }
 
@@ -2550,6 +2611,114 @@ unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
             i += 1;
         }
 
+        sum
+    }
+}
+
+// ── SIMD Sum-|x| (Issue 120) ───────────────────────────────
+
+/// SIMD-accelerated sum of absolute values: `Σ |x[i]|`.
+#[inline]
+pub fn simd_sum_abs_f32(x: &[f32]) -> f32 {
+    if x.is_empty() {
+        return 0.0;
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_sum_abs_f32(x) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_sum_abs_f32(x) }
+        } else {
+            scalar_sum_abs_f32(x)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_sum_abs_f32(x)
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
+    x.iter().map(|v| v.abs()).sum()
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_sum_abs_f32(x: &[f32]) -> f32 {
+    use core::arch::aarch64::{vabsq_f32, vaddq_f32, vaddvq_f32, vld1q_f32};
+    unsafe {
+        let mut i = 0;
+        let chunks = x.len() / 4;
+        let mut acc0 = vaddq_f32(
+            vld1q_f32([0.0f32; 4].as_ptr()),
+            vld1q_f32([0.0f32; 4].as_ptr()),
+        );
+        // Use two accumulators for better pipeline utilization
+        let mut acc1 = vaddq_f32(
+            vld1q_f32([0.0f32; 4].as_ptr()),
+            vld1q_f32([0.0f32; 4].as_ptr()),
+        );
+        let chunks2 = chunks / 2;
+        for _ in 0..chunks2 {
+            let v0 = vld1q_f32(x.as_ptr().add(i));
+            acc0 = vaddq_f32(acc0, vabsq_f32(v0));
+            let v1 = vld1q_f32(x.as_ptr().add(i + 4));
+            acc1 = vaddq_f32(acc1, vabsq_f32(v1));
+            i += 8;
+        }
+        // Handle remaining 4-element chunk
+        if i + 4 <= x.len() {
+            let v = vld1q_f32(x.as_ptr().add(i));
+            acc0 = vaddq_f32(acc0, vabsq_f32(v));
+            i += 4;
+        }
+        let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
+        while i < x.len() {
+            sum += (*x.get_unchecked(i)).abs();
+            i += 1;
+        }
+        sum
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_sum_abs_f32(x: &[f32]) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_add_ps, _mm256_and_ps, _mm256_loadu_ps, _mm256_set1_ps, _mm256_setzero_ps,
+    };
+    unsafe {
+        // Mask to clear the sign bit: AND with this yields |x|
+        let abs_mask = _mm256_set1_ps(f32::from_bits(0x7fff_ffff));
+        let mut i = 0;
+        let chunks = x.len() / 8;
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let chunks2 = chunks / 2;
+        for _ in 0..chunks2 {
+            let v0 = _mm256_loadu_ps(x.as_ptr().add(i));
+            acc0 = _mm256_add_ps(acc0, _mm256_and_ps(v0, abs_mask));
+            let v1 = _mm256_loadu_ps(x.as_ptr().add(i + 8));
+            acc1 = _mm256_add_ps(acc1, _mm256_and_ps(v1, abs_mask));
+            i += 16;
+        }
+        // Handle remaining 8-element chunk
+        let remaining = (x.len() - i) / 8;
+        for _ in 0..remaining {
+            let v = _mm256_loadu_ps(x.as_ptr().add(i));
+            acc0 = _mm256_add_ps(acc0, _mm256_and_ps(v, abs_mask));
+            i += 8;
+        }
+        let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
+        while i < x.len() {
+            sum += (*x.get_unchecked(i)).abs();
+            i += 1;
+        }
         sum
     }
 }
@@ -3916,7 +4085,8 @@ mod tests {
             let pair_q_ids = [0usize, 0, 1];
             let pair_d_ids = [0usize, 2, 1];
 
-            let packed = maxsim_score_packed(
+            let mut packed = vec![0.0f32; pair_q_ids.len()];
+            maxsim_score_packed(
                 &queries,
                 &query_offsets,
                 &documents,
@@ -3924,6 +4094,7 @@ mod tests {
                 &pair_q_ids,
                 &pair_d_ids,
                 dim,
+                &mut packed,
             );
 
             // Verify against sequential calls
@@ -4530,5 +4701,43 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ── simd_sum_abs_f32 tests (Issue 120) ─────────────────
+
+    #[test]
+    fn sum_abs_mixed_values() {
+        let data: Vec<f32> = vec![1.0, -2.0, 3.0, -4.0, 5.0, -6.0, 7.0, -8.0];
+        let expected: f32 = data.iter().map(|v| v.abs()).sum();
+        let result = crate::simd::simd_sum_abs_f32(&data);
+        assert!(
+            (result - expected).abs() < 1e-6,
+            "got {result}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn sum_abs_non_aligned_len() {
+        let data: Vec<f32> = vec![1.0, -2.0, 3.0, -4.0, 5.0];
+        let expected: f32 = data.iter().map(|v| v.abs()).sum();
+        let result = crate::simd::simd_sum_abs_f32(&data);
+        assert!(
+            (result - expected).abs() < 1e-6,
+            "got {result}, expected {expected}"
+        );
+    }
+
+    #[test]
+    fn sum_abs_empty() {
+        let data: Vec<f32> = vec![];
+        let result = crate::simd::simd_sum_abs_f32(&data);
+        assert_eq!(result, 0.0);
+    }
+
+    #[test]
+    fn sum_abs_single_element() {
+        assert_eq!(crate::simd::simd_sum_abs_f32(&[-42.0]), 42.0);
+        assert_eq!(crate::simd::simd_sum_abs_f32(&[42.0]), 42.0);
+        assert_eq!(crate::simd::simd_sum_abs_f32(&[0.0]), 0.0);
     }
 }

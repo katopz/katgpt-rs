@@ -1410,11 +1410,9 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         buf[..CHUNK].copy_from_slice(&gate[i..i + CHUNK]);
         crate::simd::simd_scale_inplace(&mut buf, 0.044715); // buf = 0.044715 * g
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
-        // Finish cubic: 2*c*(g + 0.044715*g³) — only one scalar mul (g) remains
-        for j in 0..CHUNK {
-            let g = gate[i + j];
-            buf[j] = scale_2 * (g + buf[j] * g); // scale_2 * (g + 0.044715*g³)
-        }
+        // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
+        crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
+        crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], scale_2);
         // buf[j] = exp(2*inner[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = g * exp(2x) / (exp(2x) + 1) * up[j]
@@ -1645,12 +1643,14 @@ pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
         return 0;
     }
 
-    // Build cumulative sum array
-    let mut cdf = Vec::with_capacity(n);
+    // Build cumulative sum array — pre-fill to avoid push overhead
+    let mut cdf = vec![0.0f32; n];
     let mut sum = 0.0f32;
-    for &p in probs {
+    for (i, &p) in probs.iter().enumerate() {
         sum += p;
-        cdf.push(sum);
+        unsafe {
+            *cdf.get_unchecked_mut(i) = sum;
+        }
     }
 
     // Binary search: find the first index where cdf[i] > r
@@ -2464,7 +2464,7 @@ impl TernaryWeights {
             let row = &weights[row_start..row_start + cols];
 
             // Compute scale = mean(|row|)
-            let abs_sum: f32 = row.iter().map(|v| v.abs()).sum();
+            let abs_sum = crate::simd::simd_sum_abs_f32(row);
             let scale = abs_sum / cols as f32;
             tw.row_scale[r] = if scale > 0.0 { scale } else { 1.0 };
 
@@ -2493,18 +2493,15 @@ impl TernaryWeights {
     pub fn checksum(&self) -> f32 {
         let mut total = 0.0f32;
         for r in 0..self.rows {
-            let mut row_sum = 0.0f32;
+            // Accumulate as integer to avoid per-element f32 conversion overhead.
+            let mut row_sum: i32 = 0;
             let row_base = r * self.blocks64;
             for b in 0..self.blocks64 {
                 let idx = row_base + b;
-                let pos = self.pos_bits[idx];
-                let neg = self.neg_bits[idx];
-                // Count bits in this block (up to 64 elements)
-                let pos_count = pos.count_ones() as f32;
-                let neg_count = neg.count_ones() as f32;
-                row_sum += pos_count - neg_count;
+                row_sum += self.pos_bits[idx].count_ones() as i32;
+                row_sum -= self.neg_bits[idx].count_ones() as i32;
             }
-            total += self.row_scale[r] * row_sum;
+            total += self.row_scale[r] * row_sum as f32;
         }
         total
     }

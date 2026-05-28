@@ -266,24 +266,23 @@ pub fn load_ternary_bits(path: &std::path::Path) -> std::io::Result<katgpt_core:
     }
 
     let mut off = 20;
-    let mut row_scale = vec![0.0f32; rows];
-    for val in row_scale.iter_mut() {
-        *val = f32::from_le_bytes(buf[off..off + 4].try_into().unwrap());
-        off += 4;
-    }
+    let row_scale: Vec<f32> = buf[off..off + rows * 4]
+        .chunks_exact(4)
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    off += rows * 4;
 
     let pos_count = rows * blocks64;
-    let mut pos_bits = vec![0u64; pos_count];
-    for val in pos_bits.iter_mut() {
-        *val = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
-        off += 8;
-    }
+    let pos_bits: Vec<u64> = buf[off..off + pos_count * 8]
+        .chunks_exact(8)
+        .map(|c| u64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+        .collect();
+    off += pos_count * 8;
 
-    let mut neg_bits = vec![0u64; pos_count];
-    for val in neg_bits.iter_mut() {
-        *val = u64::from_le_bytes(buf[off..off + 8].try_into().unwrap());
-        off += 8;
-    }
+    let neg_bits: Vec<u64> = buf[off..off + pos_count * 8]
+        .chunks_exact(8)
+        .map(|c| u64::from_le_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]]))
+        .collect();
 
     Ok(katgpt_core::TernaryWeights {
         rows,

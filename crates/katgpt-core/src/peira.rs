@@ -670,6 +670,9 @@ pub struct PeiraCovariance {
     inv_l_inv_scratch: Vec<f64>,
     /// Pre-allocated scratch for matmul_into (transposed B)
     matmul_bt_scratch: Vec<f64>,
+    /// Pre-allocated output buffers for predictor_with_scratch
+    q_star: Vec<f64>,
+    p_star: Vec<f64>,
 }
 
 impl PeiraCovariance {
@@ -687,6 +690,8 @@ impl PeiraCovariance {
             inv_l_scratch: vec![0.0; k * k],
             inv_l_inv_scratch: vec![0.0; k * k],
             matmul_bt_scratch: vec![0.0; k * k],
+            q_star: vec![0.0; k * k],
+            p_star: vec![0.0; k * k],
         }
     }
 
@@ -729,12 +734,19 @@ impl PeiraCovariance {
     /// - Q* = (N + λI)⁻¹     — the regularized inverse
     ///
     /// Returns (P*, Q*) as flat k×k row-major vectors.
+    ///
+    /// # Performance
+    ///
+    /// This allocates on every call. For hot paths, prefer
+    /// [`predictor_with_scratch()`] or [`predict_and_loss()`] which reuse
+    /// pre-allocated internal buffers.
     pub fn predictor(&self) -> (Vec<f64>, Vec<f64>) {
         let k = self.config.dim;
         let lambda = self.config.lambda;
 
-        // Build N + λI
-        let mut n_reg = self.n.clone();
+        // Build N + λI (allocate once, copy — avoids self.n.clone() overhead)
+        let mut n_reg = vec![0.0f64; k * k];
+        n_reg.copy_from_slice(&self.n);
         for i in 0..k {
             n_reg[i * k + i] += lambda;
         }
@@ -753,11 +765,11 @@ impl PeiraCovariance {
         (p_star, q_star)
     }
 
-    /// Compute predictor matrices, reusing internal scratch buffer (zero-alloc for N).
+    /// Compute predictor matrices, fully zero-alloc using pre-allocated scratch.
     ///
-    /// Same as [`predictor()`] but avoids cloning N by writing N + λI into the
-    /// `pm` scratch buffer, which is otherwise only used in [`peira_aux_loss`].
-    pub fn predictor_with_scratch(&mut self) -> (Vec<f64>, Vec<f64>) {
+    /// Same as [`predictor()`] but avoids all allocations by using pre-allocated
+    /// internal buffers. Returns references valid until the next mutable call.
+    pub fn predictor_with_scratch(&mut self) -> (&[f64], &[f64]) {
         let k = self.config.dim;
         let lambda = self.config.lambda;
 
@@ -768,9 +780,8 @@ impl PeiraCovariance {
         }
 
         // Invert N + λI using pre-allocated scratch
-        let mut q_star = vec![0.0f64; k * k];
         invert_spd_into(
-            &mut q_star,
+            &mut self.q_star,
             &mut self.inv_l_scratch,
             &mut self.inv_l_inv_scratch,
             &self.pm[..k * k],
@@ -778,16 +789,65 @@ impl PeiraCovariance {
         );
 
         // P* = Σ @ Q* using pre-allocated scratch
-        let mut p_star = vec![0.0f64; k * k];
         matmul_into(
-            &mut p_star,
+            &mut self.p_star,
             &mut self.matmul_bt_scratch,
             &self.sigma,
-            &q_star,
+            &self.q_star,
             k,
         );
 
-        (p_star, q_star)
+        (&self.p_star, &self.q_star)
+    }
+
+    /// Combined predictor + auxiliary loss computation (zero-alloc hot path).
+    ///
+    /// Computes predictor matrices, then evaluates the auxiliary loss on the
+    /// given (student, teacher) pair, all using pre-allocated internal scratch.
+    /// Returns `(auxiliary_loss, p_star, q_star)` where the matrix references
+    /// are valid until the next mutable call.
+    pub fn predict_and_loss(&mut self, student: &[f32], teacher: &[f32]) -> (f64, &[f64], &[f64]) {
+        let k = self.config.dim;
+        let lambda = self.config.lambda;
+
+        // Build N + λI in scratch buffer
+        self.pm[..k * k].copy_from_slice(&self.n);
+        for i in 0..k {
+            self.pm[i * k + i] += lambda;
+        }
+
+        // Invert N + λI
+        invert_spd_into(
+            &mut self.q_star,
+            &mut self.inv_l_scratch,
+            &mut self.inv_l_inv_scratch,
+            &self.pm[..k * k],
+            k,
+        );
+
+        // P* = Σ @ Q*
+        matmul_into(
+            &mut self.p_star,
+            &mut self.matmul_bt_scratch,
+            &self.sigma,
+            &self.q_star,
+            k,
+        );
+
+        // Compute auxiliary loss using sigma_sample/n_sample scratch
+        // (pm is currently N + λI, will be overwritten by aux loss)
+        let loss = peira_aux_loss(
+            student,
+            teacher,
+            &self.p_star,
+            &self.q_star,
+            lambda,
+            &mut self.sigma_sample,
+            &mut self.n_sample,
+            &mut self.pm,
+        );
+
+        (loss, &self.p_star, &self.q_star)
     }
 
     /// Get a reference to the current Σ matrix (row-major).
@@ -800,6 +860,33 @@ impl PeiraCovariance {
         &self.n
     }
 
+    /// Compute the PEIRA auxiliary loss using internal scratch buffers.
+    ///
+    /// Zero-alloc convenience method that delegates to [`peira_aux_loss`]
+    /// with the pre-allocated `sigma_sample`, `n_sample`, and `pm` buffers.
+    ///
+    /// Note: `p_star` and `q_star` should come from a recent call to
+    /// [`predictor_with_scratch()`] for consistency.
+    pub fn compute_aux_loss(
+        &mut self,
+        student: &[f32],
+        teacher: &[f32],
+        p_star: &[f64],
+        q_star: &[f64],
+        lambda: f64,
+    ) -> f64 {
+        peira_aux_loss(
+            student,
+            teacher,
+            p_star,
+            q_star,
+            lambda,
+            &mut self.sigma_sample,
+            &mut self.n_sample,
+            &mut self.pm,
+        )
+    }
+
     /// Reset covariance estimates (e.g., at episode boundaries).
     pub fn reset(&mut self) {
         self.sigma.fill(0.0);
@@ -810,6 +897,8 @@ impl PeiraCovariance {
         self.inv_l_scratch.fill(0.0);
         self.inv_l_inv_scratch.fill(0.0);
         self.matmul_bt_scratch.fill(0.0);
+        self.q_star.fill(0.0);
+        self.p_star.fill(0.0);
         self.step_count = 0;
     }
 }
