@@ -128,18 +128,9 @@ Our SR²AM configurator already makes planning decisions. Adding a roofline cost
 
 ---
 
-## Tasks
+## Plan
 
-- [x] Audit FlashLib source code (kmeans, knn, pca, gemm, info)
-- [x] Map to our wgpu WGSL shaders
-- [x] Identify stealable algorithmic tricks
-- [x] Assess Super-GOAT potential
-- [ ] Implement dual-Gram routing in SpectralQuant calibration (Plan T1-T3)
-- [ ] Port roofline cost model to Rust (Plan T4-T5)
-- [ ] GOAT proof: calibration accuracy with dual-Gram vs without
-- [ ] GOAT proof: roofline predicted vs actual within ±20%
-- [ ] Feature gate: `dual_gram_pca` (default-on after GOAT pass)
-- [ ] Feature gate: `roofline_cost` (default-on after GOAT pass)
+→ [Plan 159: FlashLib Dual-Gram Routing + Roofline Cost Model](../.plans/159_flashlib_dual_gram_roofline.md)
 
 ---
 
