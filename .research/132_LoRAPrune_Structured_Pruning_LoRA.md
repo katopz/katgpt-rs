@@ -13,6 +13,8 @@ LoRAPrune prunes attention heads and FFN channels using only LoRA gradient Taylo
 
 **Verdict: NO GAIN** — Scale mismatch. Our models (micro: 5K–524K params, game LoRA rank 4) have nothing meaningful to structurally prune. PlasmaPath already delivers 20× memory compression at inference time. LoRAPrune is a training-time technique for 7B–65B models; our training pipeline (riir-gpu/Metal) runs tiny game adapters. If we ever deploy 7B+ to edge devices, LoRAPrune + PlasmaPath could compound, but that's a future decision.
 
+> **Browser context (1–2 GB WebGPU budget):** Our game models are 3–4 KB with PlasmaPath. AI total budget is ~2 MB for 100 concurrent NPCs. LoRAPrune saves bytes on 7B+ models; at our scale it saves hundreds of bytes — not worth the training pipeline complexity. SPEFT (riir-ai Research 022) is the right answer for our param budget: same quality gain, simpler implementation, naturally compact for browser.
+
 ---
 
 ## Core Mechanism
