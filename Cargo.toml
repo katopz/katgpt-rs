@@ -94,6 +94,8 @@ parallel_probe = []  # Parallel-Probe 2D controller — consensus-based parallel
 bomber-agent = ["bomber"]  # Coding agent validator loop (Issue 052, Tasks C9-C10)
 bomber-wasm = ["bomber", "wasmtime", "papaya"]  # WASM bomber validator loader (Plan 034) + batch pool (Plan 037)
 game_state = ["bomber"]  # GameState forward model trait + generic MCTS (Plan 056)
+dual_gram_pca = ["katgpt-core/dual_gram_pca"]  # Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159)
+roofline_cost = ["katgpt-core/roofline_cost"]  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159)
 bandit_mcts = ["game_state"]  # Bandit-guided MCTS rollout policy — NFSP/MCTS duality (Plan 067)
 hla_attention = []  # Higher-order Linear Attention — O(1) inference cache (Plan 057)
 gdn2_attention = []  # Gated DeltaNet-2 recurrent attention — O(1) decode (Plan 105, Research 70)
@@ -137,6 +139,7 @@ newton_schulz = []  # Newton-Schulz orthogonalization + Muon momentum (Plan 152,
 river_valley = []  # River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114)
 spectral_hierarchy = ["katgpt-core/spectral_hierarchy"]  # Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156)
 sigmoid_margin = ["katgpt-core/sigmoid_margin"]  # Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157)
+moa_inference = ["coda_fusion", "katgpt-core/moa_inference"]  # MoA Mixture of Activations — token-adaptive activation mixing (Research 126, Plan 158)
 gpu = []  # Placeholder — GPU training lives in riir-ai/riir-gpu
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
 full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy"]

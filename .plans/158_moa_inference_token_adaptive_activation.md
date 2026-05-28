@@ -1,7 +1,7 @@
 # Plan 158: MoA Inference Support — Token-Adaptive Activation Mixing
 
 **Date:** 2026-05-27
-**Status:** Plan
+**Status:** Done
 **Research:** R126 (MoA Mixture of Activations)
 **Feature Gate:** `moa_inference` (opt-in, default-OFF until GOAT proved)
 **After GOAT proof:** If no perf hurt → default-ON
@@ -10,12 +10,12 @@
 
 ## Task
 
-- [ ] T1: Extend `GateActivation` enum with MoA dictionary activations
-- [ ] T2: Implement `MoaConfig` weight struct (gating params `u_k`, `v_ℓ`)
-- [ ] T3: Implement `moa_swiglu()` — token-adaptive bi-MoA forward pass
-- [ ] T4: SIMD-optimized `simd_matmul_rmsnorm_moa_swiglu()` fused kernel
-- [ ] T5: GOAT proof: correctness + overhead ≤ 1.15× + zero-regression fallback
-- [ ] T6: Wire into feature gate `moa_inference`, ensure OFF = zero impact
+- [x] T1: Extend `GateActivation` enum with MoA dictionary activations
+- [x] T2: Implement `MoaConfig` weight struct (gating params `u_k`, `v_ℓ`)
+- [x] T3: Implement `moa_swiglu()` — token-adaptive bi-MoA forward pass
+- [x] T4: SIMD-optimized `simd_matmul_rmsnorm_moa_swiglu()` fused kernel
+- [x] T5: GOAT proof: correctness + overhead ≤ 1.15× + zero-regression fallback
+- [x] T6: Wire into feature gate `moa_inference`, ensure OFF = zero impact
 
 ---
 

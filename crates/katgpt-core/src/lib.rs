@@ -51,9 +51,13 @@ pub use types::sparse_matmul;
 
 #[cfg(feature = "coda_fusion")]
 pub use coda::{
-    GateActivation, compute_rstd, simd_matmul_residual, simd_matmul_residual_partial_rms,
-    simd_matmul_rmsnorm_activation, simd_matmul_rmsnorm_rope, simd_matmul_rmsnorm_swiglu,
+    GateActivation, MoaConfig, compute_rstd, simd_matmul_residual,
+    simd_matmul_residual_partial_rms, simd_matmul_rmsnorm_activation, simd_matmul_rmsnorm_rope,
+    simd_matmul_rmsnorm_swiglu,
 };
+
+#[cfg(all(feature = "coda_fusion", feature = "moa_inference"))]
+pub use coda::{MoaActivation, moa_swiglu, simd_matmul_rmsnorm_moa_swiglu};
 
 #[cfg(feature = "tiled_attention")]
 pub use attention::{
@@ -97,3 +101,14 @@ pub use spectral_hierarchy::{cauchy_interlacing_check, eigenspace_alignment, haa
 
 #[cfg(feature = "sigmoid_margin")]
 pub use simd::{compute_retrieval_margin, dim_sufficiency_bound, sigmoid_margin_loss};
+
+#[cfg(feature = "dual_gram_pca")]
+pub use simd::simd_gram_f32;
+
+#[cfg(feature = "roofline_cost")]
+pub mod roofline;
+#[cfg(feature = "roofline_cost")]
+pub use roofline::{
+    ComputeBound, Dtype, HardwarePeaks, OpType, RooflineCost, gemm_cost, gemv_cost, gram_cost,
+    roofline_estimate,
+};

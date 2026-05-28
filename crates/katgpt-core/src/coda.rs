@@ -74,6 +74,300 @@ impl GateActivation {
 }
 
 // ---------------------------------------------------------------------------
+// T1–T4: MoA Inference — Token-Adaptive Activation Mixing (Plan 158)
+// Gated behind `moa_inference` feature. When OFF, all MoA code eliminated.
+// ---------------------------------------------------------------------------
+
+#[cfg(feature = "moa_inference")]
+/// Number of activations in the MoA dictionary (fixed at 7).
+const MOA_DICT_SIZE: usize = 7;
+
+/// MoA (Mixture of Activations) dictionary entries.
+///
+/// Each activation is used in the token-adaptive mixing context where
+/// gating weights are computed per-token from input features.
+/// The mixing produces: Σ_k ρ_k σ_k(y) ⊙ Σ_ℓ π_ℓ σ_ℓ(z)
+///
+/// Separate from [`GateActivation`] since MoA activations are only used
+/// in the mixing context (Plan 158, Research 126).
+#[cfg(feature = "moa_inference")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum MoaActivation {
+    /// Identity: σ(x) = x
+    #[default]
+    Id,
+    /// ReLU: σ(x) = max(0, x)
+    Relu,
+    /// ReLU²: σ(x) = max(0, x)²
+    Relu2,
+    /// Leaky ReLU: σ(x) = max(x, ηx), η = 0.01
+    LeakyRelu,
+    /// GELU: σ(x) = xΦ(x) (sigmoid approximation)
+    Gelu,
+    /// SiLU/Swish: σ(x) = x · sigmoid(x)
+    Silu,
+    /// Tanh: σ(x) = tanh(x)
+    Tanh,
+}
+
+#[cfg(feature = "moa_inference")]
+impl MoaActivation {
+    /// Apply the MoA activation function to a single value.
+    #[inline(always)]
+    pub fn activate(&self, x: f32) -> f32 {
+        match self {
+            Self::Id => x,
+            Self::Relu => x.max(0.0),
+            Self::Relu2 => {
+                let r = x.max(0.0);
+                r * r
+            }
+            Self::LeakyRelu => {
+                const ETA: f32 = 0.01;
+                if x >= 0.0 { x } else { ETA * x }
+            }
+            Self::Gelu => {
+                // Sigmoid approximation: x * sigmoid(1.702 * x)
+                let sigmoid = 1.0 / (1.0 + (-1.702 * x).exp());
+                x * sigmoid
+            }
+            Self::Silu => {
+                let sigmoid = 1.0 / (1.0 + (-x).exp());
+                x * sigmoid
+            }
+            Self::Tanh => x.tanh(),
+        }
+    }
+
+    /// All MoA activations in canonical order (matches weight layout).
+    #[inline(always)]
+    pub const fn all() -> [MoaActivation; 7] {
+        [
+            MoaActivation::Id,
+            MoaActivation::Relu,
+            MoaActivation::Relu2,
+            MoaActivation::LeakyRelu,
+            MoaActivation::Gelu,
+            MoaActivation::Silu,
+            MoaActivation::Tanh,
+        ]
+    }
+}
+
+// ---------------------------------------------------------------------------
+// T2: MoA Config Weight Struct (Plan 158)
+// ---------------------------------------------------------------------------
+
+/// MoA gating parameters for a single FFN layer.
+/// Present only when model was trained with MoA.
+///
+/// If `None` in weight struct → fall back to standard SwiGLU. Zero regression.
+///
+/// Weight layout:
+/// - `gate_gating`: `[MOA_DICT_SIZE × d_model]` — u_k for each σ_k (gate branch)
+/// - `up_gating`: `[MOA_DICT_SIZE × d_model]` — v_ℓ for each σ_ℓ (up branch)
+#[cfg(feature = "moa_inference")]
+pub struct MoaConfig {
+    /// Gate branch mixing params: [MOA_DICT_SIZE × d_model]
+    pub gate_gating: Vec<f32>,
+    /// Up branch mixing params: [MOA_DICT_SIZE × d_model]
+    pub up_gating: Vec<f32>,
+    /// Input dimension d_model
+    pub d_model: usize,
+}
+
+#[cfg(feature = "moa_inference")]
+impl MoaConfig {
+    /// Create a new MoaConfig with the given dimensions.
+    ///
+    /// Gate and up gating vectors are initialized to zero (uniform mixing
+    /// after sigmoid → each activation gets equal weight).
+    pub fn new(d_model: usize) -> Self {
+        Self {
+            gate_gating: vec![0.0; MOA_DICT_SIZE * d_model],
+            up_gating: vec![0.0; MOA_DICT_SIZE * d_model],
+            d_model,
+        }
+    }
+}
+
+/// Zero-sized MoA sentinel for when feature is OFF.
+/// Eliminated entirely by the compiler.
+#[cfg(not(feature = "moa_inference"))]
+pub type MoaConfig = ();
+
+// ---------------------------------------------------------------------------
+// T3: MoA SwiGLU Forward Pass (Plan 158)
+// ---------------------------------------------------------------------------
+
+/// Compute MoA gating weights: π_k = sigmoid(u_k^T x) for k in [0..MOA_DICT_SIZE).
+///
+/// Returns array of MOA_DICT_SIZE gating weights.
+#[cfg(feature = "moa_inference")]
+#[inline(always)]
+fn compute_moa_gates(input: &[f32], gating: &[f32], d_model: usize) -> [f32; MOA_DICT_SIZE] {
+    let mut weights = [0.0f32; MOA_DICT_SIZE];
+    for (k, w) in weights.iter_mut().enumerate() {
+        let offset = k * d_model;
+        let dot = simd_dot_f32(&gating[offset..offset + d_model], input, d_model);
+        *w = 1.0 / (1.0 + (-dot).exp()); // sigmoid
+    }
+    weights
+}
+
+/// Apply k-th MoA activation from the dictionary.
+#[cfg(feature = "moa_inference")]
+#[inline(always)]
+fn moa_activate(k: usize, x: f32) -> f32 {
+    MoaActivation::all()[k].activate(x)
+}
+
+/// Token-adaptive bi-MoA SwiGLU forward pass.
+///
+/// Computes: hidden[i] = (Σ_k ρ_k σ_k(gate_proj[i])) * (Σ_ℓ π_ℓ σ_ℓ(up_proj[i]))
+///
+/// where ρ_k = sigmoid(u_k^T input), π_ℓ = sigmoid(v_ℓ^T input) are
+/// token-adaptive gating weights computed from the input.
+///
+/// # Arguments
+///
+/// * `hidden` - Output buffer `[d_ffn]`
+/// * `gate_proj` - Gate projection W₁x `[d_ffn]`
+/// * `up_proj` - Up projection W₂x `[d_ffn]`
+/// * `input` - Original input x `[d_model]` for gating computation
+/// * `moa` - MoA gating configuration
+#[cfg(feature = "moa_inference")]
+#[inline]
+pub fn moa_swiglu(
+    hidden: &mut [f32],
+    gate_proj: &[f32],
+    up_proj: &[f32],
+    input: &[f32],
+    moa: &MoaConfig,
+) {
+    let d = moa.d_model;
+    let n = gate_proj.len(); // d_ffn
+
+    debug_assert!(up_proj.len() >= n, "up_proj too short");
+    debug_assert!(hidden.len() >= n, "hidden too short");
+    debug_assert!(input.len() >= d, "input too short");
+
+    // Compute token-adaptive gating weights: π_k = sigmoid(u_k^T x)
+    let gate_weights = compute_moa_gates(input, &moa.gate_gating, d);
+    let up_weights = compute_moa_gates(input, &moa.up_gating, d);
+
+    // Mixed activations: Σ_k ρ_k σ_k(y) ⊙ Σ_ℓ π_ℓ σ_ℓ(z)
+    // Per-element to avoid extra allocation
+    for i in 0..n {
+        let y = gate_proj[i];
+        let z = up_proj[i];
+        let mut mixed_gate = 0.0f32;
+        let mut mixed_up = 0.0f32;
+        for j in 0..MOA_DICT_SIZE {
+            mixed_gate += gate_weights[j] * moa_activate(j, y);
+            mixed_up += up_weights[j] * moa_activate(j, z);
+        }
+        hidden[i] = mixed_gate * mixed_up;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// T4: SIMD Fused Kernel — matmul + MoA mixing + RMS scale (Plan 158)
+// ---------------------------------------------------------------------------
+
+/// Fused kernel: matmul + delayed RMSNorm scale + MoA token-adaptive activation.
+///
+/// For paired rows in the weight matrix:
+/// ```text
+/// gate[i] = dot(W_gate[i], input) * rstd
+/// up[i]   = dot(W_up[i], input)   * rstd
+/// output[i] = (Σ_k ρ_k σ_k(gate[i])) * (Σ_ℓ π_ℓ σ_ℓ(up[i]))
+/// ```
+///
+/// where ρ_k = sigmoid(u_k^T input), π_ℓ = sigmoid(v_ℓ^T input) are computed
+/// from the MoA gating vectors and the input.
+///
+/// This fuses 4 operations:
+/// 1. **Matmul**: gate and up projections from combined weight
+/// 2. **Delayed RMS scale**: multiply by `rstd`
+/// 3. **MoA gating**: sigmoid(u_k^T input) for each dictionary entry
+/// 4. **MoA mixing**: weighted sum over activation dictionary
+///
+/// The MoA mixing is O(d_ffn × |K|) = O(4d × 7) = O(28d) — negligible vs O(d²) matmul.
+///
+/// # Weight Layout
+///
+/// `weight` has shape `[2 * output_dim, input_dim]` in row-major order:
+/// - Rows `[0..output_dim]` = gate projection
+/// - Rows `[output_dim..2*output_dim]` = up projection
+///
+/// # Arguments
+///
+/// * `output` - Output buffer `[output_dim]`
+/// * `weight` - Combined gate+up weight `[2 * output_dim * input_dim]`
+/// * `input` - Input vector (gamma-scaled O from previous kernel) `[input_dim]`
+/// * `rstd` - Inverse RMS scale from [`compute_rstd`]
+/// * `moa` - MoA gating configuration (gating vectors + d_model)
+/// * `output_dim` - Output dimension (weight has `2 * output_dim` rows)
+/// * `input_dim` - Input dimension (weight cols)
+#[cfg(feature = "moa_inference")]
+#[inline(always)]
+pub fn simd_matmul_rmsnorm_moa_swiglu(
+    output: &mut [f32],
+    weight: &[f32],
+    input: &[f32],
+    rstd: f32,
+    moa: &MoaConfig,
+    output_dim: usize,
+    input_dim: usize,
+) {
+    debug_assert!(output.len() >= output_dim, "output too short");
+    debug_assert!(
+        weight.len() >= 2 * output_dim * input_dim,
+        "weight too short"
+    );
+    debug_assert!(input.len() >= input_dim, "input too short");
+
+    let d = moa.d_model;
+    debug_assert!(d <= input_dim, "d_model must be <= input_dim");
+
+    // Compute token-adaptive gating weights from input (using first d_model elements)
+    let gate_weights = compute_moa_gates(&input[..d], &moa.gate_gating, d);
+    let up_weights = compute_moa_gates(&input[..d], &moa.up_gating, d);
+
+    for i in 0..output_dim {
+        // Gate projection: rows [0..output_dim]
+        let gate_off = i * input_dim;
+        let gate_val = simd_dot_f32(
+            unsafe { weight.get_unchecked(gate_off..gate_off + input_dim) },
+            input,
+            input_dim,
+        ) * rstd;
+
+        // Up projection: rows [output_dim..2*output_dim]
+        let up_off = (output_dim + i) * input_dim;
+        let up_val = simd_dot_f32(
+            unsafe { weight.get_unchecked(up_off..up_off + input_dim) },
+            input,
+            input_dim,
+        ) * rstd;
+
+        // MoA mixed activation: (Σ_k ρ_k σ_k(gate)) * (Σ_ℓ π_ℓ σ_ℓ(up))
+        let mut mixed_gate = 0.0f32;
+        let mut mixed_up = 0.0f32;
+        for j in 0..MOA_DICT_SIZE {
+            mixed_gate += gate_weights[j] * moa_activate(j, gate_val);
+            mixed_up += up_weights[j] * moa_activate(j, up_val);
+        }
+
+        unsafe {
+            *output.get_unchecked_mut(i) = mixed_gate * mixed_up;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // T3: Fused matmul + residual + partial RMS + gamma scaling
 // ---------------------------------------------------------------------------
 
@@ -925,5 +1219,364 @@ mod tests {
     #[test]
     fn test_compute_rstd_empty() {
         assert!((compute_rstd(&[], 0, 1e-5) - 1.0).abs() < 1e-7);
+    }
+
+    // -----------------------------------------------------------------------
+    // T5: MoA tests (Plan 158) — gated behind moa_inference
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_activation_values() {
+        // Id
+        assert!((MoaActivation::Id.activate(2.0) - 2.0).abs() < 1e-7);
+        assert!((MoaActivation::Id.activate(-3.0) - (-3.0)).abs() < 1e-7);
+
+        // Relu
+        assert!((MoaActivation::Relu.activate(2.0) - 2.0).abs() < 1e-7);
+        assert!((MoaActivation::Relu.activate(-1.0)).abs() < 1e-7);
+
+        // Relu2
+        assert!((MoaActivation::Relu2.activate(3.0) - 9.0).abs() < 1e-7);
+        assert!((MoaActivation::Relu2.activate(-1.0)).abs() < 1e-7);
+
+        // LeakyRelu
+        assert!((MoaActivation::LeakyRelu.activate(2.0) - 2.0).abs() < 1e-7);
+        assert!((MoaActivation::LeakyRelu.activate(-2.0) - (-0.02)).abs() < 1e-7);
+
+        // Gelu(0) ≈ 0
+        assert!((MoaActivation::Gelu.activate(0.0)).abs() < 1e-7);
+
+        // Silu(0) = 0, Silu(1) ≈ 0.7311
+        assert!((MoaActivation::Silu.activate(0.0)).abs() < 1e-7);
+        assert!((MoaActivation::Silu.activate(1.0) - 0.7311).abs() < 0.01);
+
+        // Tanh(0) = 0, Tanh(1) ≈ 0.7616
+        assert!((MoaActivation::Tanh.activate(0.0)).abs() < 1e-7);
+        assert!((MoaActivation::Tanh.activate(1.0) - 1.0_f32.tanh()).abs() < 1e-7);
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_activation_dict_size() {
+        assert_eq!(MoaActivation::all().len(), 7);
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_config_new() {
+        let d = 4;
+        let cfg = MoaConfig::new(d);
+        assert_eq!(cfg.d_model, d);
+        assert_eq!(cfg.gate_gating.len(), MOA_DICT_SIZE * d);
+        assert_eq!(cfg.up_gating.len(), MOA_DICT_SIZE * d);
+        // All zeros initially
+        assert!(cfg.gate_gating.iter().all(|&v| v == 0.0));
+        assert!(cfg.up_gating.iter().all(|&v| v == 0.0));
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_compute_moa_gates_uniform() {
+        // With zero gating vectors, all sigmoid(0) = 0.5
+        let d = 4;
+        let gating = vec![0.0f32; MOA_DICT_SIZE * d];
+        let input = vec![1.0f32; d];
+        let weights = compute_moa_gates(&input, &gating, d);
+        for k in 0..MOA_DICT_SIZE {
+            assert!(
+                (weights[k] - 0.5).abs() < 1e-6,
+                "weight[{}] = {}, expected 0.5",
+                k,
+                weights[k]
+            );
+        }
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_compute_moa_gates_biased() {
+        // With large positive dot product → sigmoid ≈ 1
+        // With large negative dot product → sigmoid ≈ 0
+        let d = 2;
+        let mut gating = vec![0.0f32; MOA_DICT_SIZE * d];
+        // k=0: positive dot → ~1
+        gating[0] = 10.0;
+        gating[1] = 10.0;
+        // k=1: negative dot → ~0
+        gating[2] = -10.0;
+        gating[3] = -10.0;
+        let input = vec![1.0f32; d];
+        let weights = compute_moa_gates(&input, &gating, d);
+        assert!(weights[0] > 0.99, "k=0 should be ~1, got {}", weights[0]);
+        assert!(weights[1] < 0.01, "k=1 should be ~0, got {}", weights[1]);
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_swiglu_uniform_gates() {
+        // With all-zero gating → uniform 0.5 weights → equal mixing
+        let d_model = 4;
+        let d_ffn = 8;
+        let moa = MoaConfig::new(d_model);
+        let input = vec![1.0f32; d_model];
+        let gate_proj = vec![1.0f32; d_ffn];
+        let up_proj = vec![1.0f32; d_ffn];
+        let mut hidden = vec![0.0f32; d_ffn];
+
+        moa_swiglu(&mut hidden, &gate_proj, &up_proj, &input, &moa);
+
+        // All outputs should be identical (same gate/up values, same weights)
+        // With σ_k(1.0) for each activation, all weights = 0.5:
+        // mixed_gate = 0.5 * (Id(1) + Relu(1) + Relu2(1) + LeakyRelu(1) + Gelu(1) + Silu(1) + Tanh(1))
+        let activations_on_one: f32 = [
+            MoaActivation::Id.activate(1.0),
+            MoaActivation::Relu.activate(1.0),
+            MoaActivation::Relu2.activate(1.0),
+            MoaActivation::LeakyRelu.activate(1.0),
+            MoaActivation::Gelu.activate(1.0),
+            MoaActivation::Silu.activate(1.0),
+            MoaActivation::Tanh.activate(1.0),
+        ]
+        .iter()
+        .copied()
+        .sum();
+        let expected = (0.5 * activations_on_one) * (0.5 * activations_on_one);
+
+        for i in 0..d_ffn {
+            assert!(
+                (hidden[i] - expected).abs() < 1e-4,
+                "hidden[{}] = {}, expected {}",
+                i,
+                hidden[i],
+                expected
+            );
+        }
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_swiglu_fallback_to_silu() {
+        // When only Silu activation has weight ~1 and all others ~0,
+        // MoA should behave like standard SwiGLU with SiLU.
+        let d_model = 4;
+        let d_ffn = 4;
+        let mut moa = MoaConfig::new(d_model);
+
+        // Set Silu (k=5) gating to large positive → sigmoid → ~1
+        // Set all others to large negative → sigmoid → ~0
+        for k in 0..MOA_DICT_SIZE {
+            let val = if k == 5 { 10.0f32 } else { -10.0f32 };
+            for j in 0..d_model {
+                moa.gate_gating[k * d_model + j] = val;
+                moa.up_gating[k * d_model + j] = val;
+            }
+        }
+
+        let input = vec![1.0f32; d_model];
+        let gate_proj = vec![2.0f32; d_ffn];
+        let up_proj = vec![3.0f32; d_ffn];
+        let mut hidden = vec![0.0f32; d_ffn];
+
+        moa_swiglu(&mut hidden, &gate_proj, &up_proj, &input, &moa);
+
+        // Should approximate: silu(2.0) * 3.0 * silu(3.0) * 3.0... no wait
+        // Actually: (Σ_k ρ_k σ_k(2.0)) * (Σ_ℓ π_ℓ σ_ℓ(3.0))
+        // With only Silu active: silu(2.0) * silu(3.0) -- no, up is not activated with silu
+        // Hmm, let me reconsider. The MoA mixing is:
+        // hidden[i] = (Σ_k ρ_k σ_k(gate[i])) * (Σ_ℓ π_ℓ σ_ℓ(up[i]))
+        // With only Silu active for both gate and up:
+        // hidden[i] = silu(2.0) * silu(3.0)
+        let silu_2 = 2.0f32 / (1.0 + (-2.0f32).exp());
+        let silu_3 = 3.0f32 / (1.0 + (-3.0f32).exp());
+        let expected = silu_2 * silu_3;
+
+        for i in 0..d_ffn {
+            assert!(
+                (hidden[i] - expected).abs() < 1e-3,
+                "hidden[{}] = {}, expected {}",
+                i,
+                hidden[i],
+                expected
+            );
+        }
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_swiglu_correctness_elementwise() {
+        // Small test with known values, compute reference by hand
+        let d_model = 2;
+        let d_ffn = 3;
+        let mut moa = MoaConfig::new(d_model);
+
+        // Set specific gating values
+        // k=0 (Id): positive weight
+        moa.gate_gating[0] = 1.0;
+        moa.gate_gating[1] = 0.0;
+        moa.up_gating[0] = 0.5;
+        moa.up_gating[1] = 0.5;
+        // k=1 (Relu): negative weight (off)
+        moa.gate_gating[2] = -10.0;
+        moa.gate_gating[3] = 0.0;
+        moa.up_gating[2] = -10.0;
+        moa.up_gating[3] = 0.0;
+        // All other k: off
+        for k in 2..MOA_DICT_SIZE {
+            moa.gate_gating[k * d_model] = -10.0;
+            moa.gate_gating[k * d_model + 1] = -10.0;
+            moa.up_gating[k * d_model] = -10.0;
+            moa.up_gating[k * d_model + 1] = -10.0;
+        }
+
+        let input = vec![1.0f32, 0.0f32];
+        let gate_proj = vec![2.0f32, -1.0f32, 0.5f32];
+        let up_proj = vec![1.0f32, 1.0f32, 1.0f32];
+        let mut hidden = vec![0.0f32; d_ffn];
+
+        moa_swiglu(&mut hidden, &gate_proj, &up_proj, &input, &moa);
+
+        // gate_weights: k=0: sigmoid(1.0*1 + 0*0) = sigmoid(1.0) ≈ 0.7311
+        //               k=1..6: sigmoid(-10..) ≈ 0
+        let w0 = 1.0f32 / (1.0 + (-1.0f32).exp()); // ≈ 0.7311
+        // up_weights: k=0: sigmoid(0.5*1 + 0.5*0) = sigmoid(0.5) ≈ 0.6225
+        let u0 = 1.0f32 / (1.0 + (-0.5f32).exp()); // ≈ 0.6225
+
+        // For element 0: y=2.0, z=1.0
+        // mixed_gate ≈ w0 * Id(2.0) = 0.7311 * 2.0 = 1.4622
+        // mixed_up ≈ u0 * Id(1.0) = 0.6225 * 1.0 = 0.6225
+        let expected_0 = (w0 * 2.0f32) * (u0 * 1.0f32);
+        assert!(
+            (hidden[0] - expected_0).abs() < 1e-3,
+            "hidden[0] = {}, expected {}",
+            hidden[0],
+            expected_0
+        );
+
+        // For element 1: y=-1.0, z=1.0
+        let expected_1 = (w0 * (-1.0f32)) * (u0 * 1.0f32);
+        assert!(
+            (hidden[1] - expected_1).abs() < 1e-3,
+            "hidden[1] = {}, expected {}",
+            hidden[1],
+            expected_1
+        );
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_simd_matmul_rmsnorm_moa_swiglu_correctness() {
+        let output_dim = 4;
+        let input_dim = 4;
+        let weight: Vec<f32> = (0..2 * output_dim * input_dim)
+            .map(|i| i as f32 * 0.1)
+            .collect();
+        let input: Vec<f32> = (0..input_dim).map(|i| (i + 1) as f32).collect();
+        let rstd = 0.5;
+        let moa = MoaConfig::new(input_dim);
+
+        let mut output = vec![0.0f32; output_dim];
+        simd_matmul_rmsnorm_moa_swiglu(
+            &mut output,
+            &weight,
+            &input,
+            rstd,
+            &moa,
+            output_dim,
+            input_dim,
+        );
+
+        // With zero MoA gating → uniform 0.5 weights for all 7 activations
+        // Verify first element manually
+        let gate_val: f32 = weight[0..input_dim]
+            .iter()
+            .zip(input.iter())
+            .map(|(w, x)| w * x)
+            .sum::<f32>()
+            * rstd;
+        let up_val: f32 = weight[output_dim * input_dim..output_dim * input_dim + input_dim]
+            .iter()
+            .zip(input.iter())
+            .map(|(w, x)| w * x)
+            .sum::<f32>()
+            * rstd;
+
+        // All MoA weights = 0.5 (uniform)
+        let mixed_gate: f32 = MoaActivation::all()
+            .iter()
+            .map(|a| 0.5 * a.activate(gate_val))
+            .sum();
+        let mixed_up: f32 = MoaActivation::all()
+            .iter()
+            .map(|a| 0.5 * a.activate(up_val))
+            .sum();
+        let expected = mixed_gate * mixed_up;
+
+        assert!(
+            (output[0] - expected).abs() < 1e-3,
+            "MoA SwiGLU mismatch at 0: got {}, expected {expected}",
+            output[0]
+        );
+    }
+
+    #[cfg(feature = "moa_inference")]
+    #[test]
+    fn test_moa_vs_standard_silu_equivalence() {
+        // GOAT T5: When MoA config absent → same as standard SwiGLU
+        // This test verifies: if MoA only has Silu active, output matches standard SwiGLU
+        let output_dim = 4;
+        let input_dim = 4;
+        let weight: Vec<f32> = (0..2 * output_dim * input_dim)
+            .map(|i| i as f32 * 0.1)
+            .collect();
+        let input: Vec<f32> = (0..input_dim).map(|i| (i + 1) as f32).collect();
+        let rstd = 0.5;
+
+        // Standard SwiGLU
+        let mut output_standard = vec![0.0f32; output_dim];
+        simd_matmul_rmsnorm_swiglu(
+            &mut output_standard,
+            &weight,
+            &input,
+            rstd,
+            GateActivation::Silu,
+            output_dim,
+            input_dim,
+        );
+
+        // MoA with only Silu active
+        let mut moa = MoaConfig::new(input_dim);
+        for k in 0..MOA_DICT_SIZE {
+            let val = if k == 5 { 10.0f32 } else { -10.0f32 }; // k=5 = Silu
+            for j in 0..input_dim {
+                moa.gate_gating[k * input_dim + j] = val;
+                moa.up_gating[k * input_dim + j] = val;
+            }
+        }
+        let mut output_moa = vec![0.0f32; output_dim];
+        simd_matmul_rmsnorm_moa_swiglu(
+            &mut output_moa,
+            &weight,
+            &input,
+            rstd,
+            &moa,
+            output_dim,
+            input_dim,
+        );
+
+        // Should be close to standard SwiGLU (not exact because other activations
+        // have small but nonzero sigmoid(-10) ≈ 4.5e-5 contribution)
+        for i in 0..output_dim {
+            let diff = (output_moa[i] - output_standard[i]).abs();
+            let scale = output_standard[i].abs().max(1e-6);
+            assert!(
+                diff / scale < 0.01,
+                "MoA vs SwiGLU mismatch at {}: moa={}, standard={}, rel_diff={}",
+                i,
+                output_moa[i],
+                output_standard[i],
+                diff / scale
+            );
+        }
     }
 }

@@ -13,6 +13,9 @@ blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 half = "2"
 
+[dev-dependencies]
+serde_json = "1"
+
 [features]
 default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin"]
 sparse_mlp = []
@@ -33,3 +36,6 @@ leo_all_goals = []  # LEO all-goals Q-value framework — LeoHead + AllGoalsUpda
 dual_leo = ["leo_all_goals"]  # Dual LEO teacher-student — + DualLeoMixer + AutocurriculumSampler (Plan 155)
 spectral_hierarchy = []  # Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156)
 sigmoid_margin = ["maxsim"]  # Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157)
+dual_gram_pca = []  # Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159)
+roofline_cost = []  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159)
+moa_inference = []  # MoA Mixture of Activations — token-adaptive activation mixing (Research 126, Plan 158)
