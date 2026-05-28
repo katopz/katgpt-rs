@@ -72,10 +72,12 @@ LSTM-based Arctic Speculator predicts multiple tokens, target model verifies in 
 ### 1. Split Attention — Not Our Domain ❌
 
 Split attention is a **training** optimization for RL workloads with many rollouts per prompt. Our stack:
-- **katgpt-rs**: Pure inference. No RL training loop.
+- **katgpt-rs**: Pure inference. No RL training loop. Freeze/Thaw (Plan 092) persists bandit Q-values across sessions — replay with same seeds, but **1 rollout per game state** (R=1), so dedup factor = 1.0.
 - **riir-ai**: wgpu LoRA training is small-scale (rank-4, V=32, D=16). We don't have 16K prompts with 16 rollouts. Self-play generates diverse game states, not repeated identical prompts.
 
 The speedup formula `R × (P + R_len) / (P + R × R_len)` requires R >> 1 rollouts with identical long prompts. Our game AI domain has diverse game states (each "prompt" is unique), so deduplication ratio ≈ 1.0 (no gain).
+
+**Freeze/Thaw (Plan 092) specifically:** The LEARN→REPLAY pipeline replays the same deterministic seeds with thawed Q-values. Each round is a single game with deterministic RNG — one rollout per game state. DreamerFrozenBank persists consolidation stats (episode counter, arms_before/after), not attention intermediates. No shared prompt attention to deduplicate.
 
 ### 2. Forest Cascade — Different Scale ❌
 
