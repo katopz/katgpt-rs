@@ -117,7 +117,8 @@ fn main() {
     let pair_q = [0usize, 0, 1, 1];
     let pair_d = [0usize, 2, 0, 1];
 
-    let packed_scores = maxsim_score_packed(
+    let mut packed_scores = vec![0.0f32; pair_q.len()];
+    maxsim_score_packed(
         &all_queries,
         &query_offsets,
         &all_docs,
@@ -125,6 +126,7 @@ fn main() {
         &pair_q,
         &pair_d,
         dim,
+        &mut packed_scores,
     );
 
     println!("  Ragged batch: 2 query seqs, 3 doc seqs, 4 pairs");
