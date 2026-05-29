@@ -2651,19 +2651,13 @@ fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_sum_abs_f32(x: &[f32]) -> f32 {
-    use core::arch::aarch64::{vabsq_f32, vaddq_f32, vaddvq_f32, vld1q_f32};
+    use core::arch::aarch64::{vabsq_f32, vaddq_f32, vaddvq_f32, vdupq_n_f32, vld1q_f32};
     unsafe {
         let mut i = 0;
         let chunks = x.len() / 4;
-        let mut acc0 = vaddq_f32(
-            vld1q_f32([0.0f32; 4].as_ptr()),
-            vld1q_f32([0.0f32; 4].as_ptr()),
-        );
+        let mut acc0 = vdupq_n_f32(0.0);
         // Use two accumulators for better pipeline utilization
-        let mut acc1 = vaddq_f32(
-            vld1q_f32([0.0f32; 4].as_ptr()),
-            vld1q_f32([0.0f32; 4].as_ptr()),
-        );
+        let mut acc1 = vdupq_n_f32(0.0);
         let chunks2 = chunks / 2;
         for _ in 0..chunks2 {
             let v0 = vld1q_f32(x.as_ptr().add(i));
