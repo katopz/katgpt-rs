@@ -3020,10 +3020,8 @@ pub fn generate_with_prefill(
                 )
             }
         };
-        for logit in logits.iter_mut() {
-            *logit /= config.temperature;
-        }
-        crate::types::softmax(logits);
+        // softmax_scaled fuses temperature division + softmax, saving one pass vs manual divide
+        crate::types::softmax_scaled(logits, 1.0 / config.temperature);
 
         token = crate::types::sample_token_into(&ctx.logits, rng, &mut ctx.cdf);
         generated.push(token);

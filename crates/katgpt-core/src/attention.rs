@@ -51,7 +51,7 @@ pub fn tiled_attention_forward(
     head_dim: usize,
     scale: f32,
 ) {
-    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, None);
+    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, None, None);
 }
 
 /// Implementation that accepts an optional pre-allocated scores scratch buffer.
@@ -72,7 +72,7 @@ pub fn tiled_attention_forward_with_scores(
     scale: f32,
     scores_buf: Option<&mut [f32]>,
 ) {
-    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, scores_buf);
+    tiled_attention_forward_impl(q, k, v, output, seq_len, head_dim, scale, scores_buf, None);
 }
 
 #[cfg(feature = "tiled_attention")]
@@ -86,6 +86,7 @@ fn tiled_attention_forward_impl(
     head_dim: usize,
     scale: f32,
     scores_buf: Option<&mut [f32]>,
+    o_tile: Option<&mut [f32]>,
 ) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
@@ -104,7 +105,22 @@ fn tiled_attention_forward_impl(
         _ => {}
     }
 
-    tiled_attention_inner(q, k, v, output, seq_len, head_dim, scale);
+    // Allocate o_tile only if caller didn't provide one.
+    // Buffer must be at least BR * head_dim elements.
+    let tile_elems = BR * head_dim;
+    let mut local_o_tile;
+    let o_tile: &mut [f32] = match o_tile {
+        Some(buf) => {
+            debug_assert!(buf.len() >= tile_elems, "o_tile buffer too small");
+            buf
+        }
+        None => {
+            local_o_tile = vec![0.0f32; tile_elems];
+            &mut local_o_tile
+        }
+    };
+
+    tiled_attention_inner(q, k, v, output, seq_len, head_dim, scale, o_tile);
 }
 
 /// Inner tiled attention implementation with online-softmax.
@@ -128,14 +144,15 @@ fn tiled_attention_inner(
     seq_len: usize,
     head_dim: usize,
     scale: f32,
+    // Scratch buffer for output tile accumulation. Must be at least `BR * head_dim` elements.
+    // Zeroed at the start of each query tile.
+    o_tile: &mut [f32],
 ) {
     let log2e_scale = scale * std::f32::consts::LOG2_E;
     let q_tiles = seq_len.div_ceil(BR);
     let k_tiles = seq_len.div_ceil(BC);
 
-    // Pre-allocate output tile outside loop — reuse across query tiles (zero alloc)
     let tile_elems = BR * head_dim;
-    let mut o_tile = vec![0.0f32; tile_elems];
 
     for q_tile_idx in 0..q_tiles {
         let q_start = q_tile_idx * BR;
@@ -337,13 +354,15 @@ pub fn tiled_attention_batched(
     }
 
     let scores_buf_size = seq_len * seq_len;
+    let o_tile_size = BR * head_dim;
 
     if total <= 2 || seq_len * head_dim < 1024 {
         // Sequential fallback for tiny workloads — avoids Rayon scheduling overhead
         let mut scores_buf = vec![0.0f32; scores_buf_size];
+        let mut o_tile_buf = vec![0.0f32; o_tile_size];
         for idx in 0..total {
             let offset = idx * head_size;
-            tiled_attention_forward_with_scores(
+            tiled_attention_forward_impl(
                 &q[offset..offset + head_size],
                 &k[offset..offset + head_size],
                 &v[offset..offset + head_size],
@@ -352,13 +371,15 @@ pub fn tiled_attention_batched(
                 head_dim,
                 scale,
                 Some(&mut scores_buf[..scores_buf_size]),
+                Some(&mut o_tile_buf[..o_tile_size]),
             );
         }
     } else {
         // Parallel for larger workloads — Rayon overhead amortized
-        // Reuse a grow-only scores scratch buffer per OS thread via thread_local.
+        // Reuse grow-only scratch buffers per OS thread via thread_local.
         thread_local! {
             static SCORES_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+            static O_TILE_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
         }
 
         output
@@ -366,23 +387,30 @@ pub fn tiled_attention_batched(
             .enumerate()
             .for_each(|(idx, out_chunk)| {
                 let offset = idx * head_size;
-                SCORES_BUF.with(|buf| {
-                    let mut buf = buf.borrow_mut();
-                    if buf.len() < scores_buf_size {
-                        buf.resize(scores_buf_size, 0.0);
-                    } else {
-                        buf[..scores_buf_size].fill(0.0);
-                    }
-                    tiled_attention_forward_with_scores(
-                        &q[offset..offset + head_size],
-                        &k[offset..offset + head_size],
-                        &v[offset..offset + head_size],
-                        out_chunk,
-                        seq_len,
-                        head_dim,
-                        scale,
-                        Some(&mut buf[..scores_buf_size]),
-                    );
+                SCORES_BUF.with(|scores| {
+                    O_TILE_BUF.with(|o_tile| {
+                        let mut scores = scores.borrow_mut();
+                        let mut o_tile = o_tile.borrow_mut();
+                        if scores.len() < scores_buf_size {
+                            scores.resize(scores_buf_size, 0.0);
+                        } else {
+                            scores[..scores_buf_size].fill(0.0);
+                        }
+                        if o_tile.len() < o_tile_size {
+                            o_tile.resize(o_tile_size, 0.0);
+                        }
+                        tiled_attention_forward_impl(
+                            &q[offset..offset + head_size],
+                            &k[offset..offset + head_size],
+                            &v[offset..offset + head_size],
+                            out_chunk,
+                            seq_len,
+                            head_dim,
+                            scale,
+                            Some(&mut scores[..scores_buf_size]),
+                            Some(&mut o_tile[..o_tile_size]),
+                        );
+                    });
                 });
             });
     }
