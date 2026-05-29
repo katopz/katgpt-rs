@@ -586,7 +586,7 @@ fn horizontal_sum_256d(v: core::arch::x86_64::__m256d) -> f64 {
 ///
 /// Controls the regularization strength (λ), EMA momentum for covariance
 /// tracking, and representation dimension.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct PeiraConfig {
     /// Regularization parameter λ > 0.
     ///

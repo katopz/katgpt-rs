@@ -1253,6 +1253,7 @@ pub fn maxsim_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
 /// # Feature flag
 /// `maxsim` — Plan 080
 #[cfg(feature = "maxsim")]
+#[allow(clippy::too_many_arguments)]
 pub fn maxsim_score_packed(
     queries: &[f32],
     query_offsets: &[usize],

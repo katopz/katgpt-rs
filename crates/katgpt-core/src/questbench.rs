@@ -374,6 +374,7 @@ pub fn underspecification_score(relevance: &[f32]) -> f32 {
 /// Decision thresholds for underspecification-driven planning.
 ///
 /// Domain-configurable via TOML. Defaults from QuestBench paper §4.
+#[derive(Clone, Copy, Debug)]
 pub struct UnderspecConfig {
     /// Score above which a new plan is needed. Default: 0.8
     pub plan_new_threshold: f32,
@@ -410,13 +411,13 @@ pub fn find_sufficient_set(
     vocab_size: usize,
     max_search_depth: usize,
 ) -> Vec<usize> {
-    let mut sufficient = Vec::new();
+    let mut sufficient = Vec::with_capacity(max_search_depth);
 
     // Pre-compute extension counts for ALL candidates once (O(n × sample_size))
     // instead of per-comparison during sort (O(n log n × sample_size))
     // Single pass: filter valid tokens AND compute extension counts, avoiding
     // an intermediate Vec<usize> allocation.
-    let mut ext_buf = placed_tokens.to_vec();
+    let mut ext_buf = Vec::with_capacity(placed_tokens.len() + 1);
     let mut counts: Vec<(usize, usize)> = (0..vocab_size)
         .filter_map(|tok| {
             if !pruner.is_valid(depth, tok, placed_tokens) {

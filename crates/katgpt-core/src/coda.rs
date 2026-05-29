@@ -61,7 +61,7 @@ impl GateActivation {
             }
             Self::GegeluTanh => {
                 // Precomputed: sqrt(2/π) ≈ 0.7978845608
-                const SQRT_2_OVER_PI: f32 = 0.7978845608028654;
+                const SQRT_2_OVER_PI: f32 = 0.797_884_6;
                 let inner = SQRT_2_OVER_PI * (x + 0.044715 * x * x * x);
                 0.5 * x * (1.0 + inner.tanh())
             }
@@ -224,6 +224,7 @@ fn compute_moa_gates(input: &[f32], gating: &[f32], d_model: usize) -> [f32; MOA
 /// and calling `activations[k].activate(x)` directly to avoid repeated array construction.
 #[cfg(feature = "moa_inference")]
 #[inline(always)]
+#[allow(dead_code)]
 fn moa_activate(k: usize, x: f32) -> f32 {
     MoaActivation::all()[k].activate(x)
 }
@@ -419,6 +420,7 @@ pub fn simd_matmul_rmsnorm_moa_swiglu(
 /// * `cols` - Input dimension (weight cols)
 /// * `block_size` - Elements per partial_sum block (use `rows` for single block)
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub fn simd_matmul_residual_partial_rms(
     output_d: &mut [f32],
     output_o: &mut [f32],
@@ -712,6 +714,7 @@ pub fn simd_matmul_residual(
 /// * `pos` - Current position in sequence
 /// * `head_dim` - Dimension per attention head
 #[inline(always)]
+#[allow(clippy::too_many_arguments)]
 pub fn simd_matmul_rmsnorm_rope(
     output: &mut [f32],
     weight: &[f32],
@@ -727,7 +730,10 @@ pub fn simd_matmul_rmsnorm_rope(
     debug_assert!(output.len() >= rows, "output too short");
     debug_assert!(weight.len() >= rows * cols, "weight too short");
     debug_assert!(input.len() >= cols, "input too short");
-    debug_assert!(rows % 2 == 0, "rows must be even for paired RoPE features");
+    debug_assert!(
+        rows.is_multiple_of(2),
+        "rows must be even for paired RoPE features"
+    );
 
     let half_rows = rows / 2;
     for i in 0..half_rows {

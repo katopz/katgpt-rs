@@ -21,7 +21,7 @@ pub enum ComputeBound {
 }
 
 /// Result of a roofline cost estimate.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RooflineCost {
     /// Predicted runtime in milliseconds.
     pub runtime_ms: f64,
@@ -56,7 +56,7 @@ pub enum OpType {
 }
 
 /// Hardware peak throughput calibration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct HardwarePeaks {
     /// Peak compute throughput in GFLOP/s (f32).
     pub peak_gflops_f32: f64,
