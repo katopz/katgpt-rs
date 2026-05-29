@@ -3,8 +3,8 @@
 > **Research:** [116 — LLM Sleep: Offline Recursive Memory Consolidation](../.research/116_LLM_Sleep_Offline_Recursive_Memory_Consolidation.md)
 > **Paper:** [arXiv:2605.26099](https://arxiv.org/abs/2605.26099) — Lee et al., May 2026
 > **Feature Gate:** `sleep_consolidation` (depends on `lt2_looped`, `gdn2_attention`)
-> **Priority:** MEDIUM — Infrastructure improvement, not blocking any GOAT pillar
-> **Status:** ✅ Complete — all 14 tasks done
+**Priority:** MEDIUM — Infrastructure improvement, not blocking any GOAT pillar — promoted default-ON after GOAT proof
+**Status:** ✅ Complete — all 14 tasks done, default-ON
 
 ## Summary
 

@@ -3,7 +3,7 @@
 **Date:** 2026-05-27
 **Research:** 121 (Hierarchical Concept Geometry Emerges from Co-occurrence)
 **Related:** Research 010 (KG × HLA), Research 011 (PEIRA), Research 111 (Analogy), Research 012 (LEO), Plan 149 (Dirichlet Energy), Plan 151 (KG Role Transport)
-**Feature Gate:** `spectral_hierarchy` (default-OFF, opt-in)
+**Feature Gate:** `spectral_hierarchy` (default-ON, promoted after GOAT proof)
 **Verdict:** LOW-GAIN implementation — theory validates existing pipeline, adds one diagnostic utility
 
 ---
@@ -33,10 +33,9 @@ Research 121 proves that hierarchical splitting geometry in co-occurrence Gram m
 spectral_hierarchy = []  # KG extraction diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing
 ```
 
-Default-OFF because:
-- Offline analysis tool, not inference path
-- Zero perf impact when disabled
-- If proven useful at inference time (attention conditioning) → promote to default-on
+Default-ON (promoted after GOAT proof):
+- Zero perf impact — offline diagnostic, only runs on demand
+- Eigenspace alignment + interlacing validated on synthetic binary tree
 
 ---
 

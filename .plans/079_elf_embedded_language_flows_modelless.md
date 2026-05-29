@@ -137,19 +137,19 @@
 ### Phase 3: GOAT Proof Runs
 
 - [ ] **T8: Run Bomber arena (SDE)** — 7 players, 5 matchups × 50 games, seed=42
-  - **BLOCKED:** Requires bomber-agent setup. Infrastructure ready.
+  - **Ready:** Infrastructure exists. Bomber arena runs in seconds with synthetic data.
   - Baseline (γ=0) vs treatment (γ ∈ {0.5, 1.0, 2.0})
   - Record: ELO, win%, path diversity, latency
   - **Pass:** ≥2% win rate improvement in ≥2 matchups
 
 - [ ] **T9: Run Go 9×9 tournament (SDE)** — 20 games per matchup
-  - **BLOCKED:** Requires Go API bridge. Infrastructure ready.
+  - **Ready:** Go arena infrastructure exists. `train_go.rs` runs with `--self-play`.
   - Same γ sweep
   - Record: win rate, MCTS nodes explored, avg game length
   - **Pass:** ≥2% win rate improvement
 
 - [ ] **T10: Run FFT arena (SDE)** — 20 games per matchup
-  - **BLOCKED:** Requires FFT arena setup. Infrastructure ready.
+  - **Ready:** FFT arena infrastructure exists.
   - Same γ sweep
   - Record: win rate, strategy diversity
   - **Pass:** ≥2% win rate improvement

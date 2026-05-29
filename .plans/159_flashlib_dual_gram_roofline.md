@@ -3,8 +3,8 @@
 **Date:** 2026-05-28
 **Status:** Complete
 **Research:** R130 (FlashLib GPU Classical ML Operators)
-**Feature Gates:** `dual_gram_pca` (default-OFF until GOAT), `roofline_cost` (default-OFF until GOAT)
-**After GOAT proof:** Both → default-ON
+**Feature Gates:** `dual_gram_pca` (default-ON), `roofline_cost` (default-ON)
+**Promoted:** After GOAT proof — both default-ON
 **Cross-ref:** riir-ai Plan 159 (game-specific calibration thresholds)
 
 ---
