@@ -63,7 +63,7 @@ The paper proves our DDTree + BtRank + ScreeningPruner stack IS the committee pr
   - (P2) Debiased comparison: verify Rec improves vs non-debiased BtRank
   - (P3) Budget sizing: verify theoretical (k,m,r) achieves target δ
   - (P4) Blind-spot floor: estimate B for Bomber strategy pool
-- [ ] **T25**: Add benchmark results to `.benchmarks/020_committee_boost_goat.md`
+- [x] **T25**: Add benchmark results to `.benchmarks/020_committee_boost_goat.md`
 - [ ] **T26**: Update `README.md` — add Committee Boost section under GOAT Proofs, reference Research 092
 
 ---

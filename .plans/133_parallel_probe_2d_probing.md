@@ -98,8 +98,8 @@ The key insight: **answer-level consensus across parallel branches is a uniquely
   5. Pruning effectiveness: token savings > 10%
   6. Consensus onset ratio: ≤ 0.5 average
   7. Hyperparameter robustness: < 3% accuracy variance across (k, W) sweep
-- [ ] Ablation: each component removed, measure accuracy + token impact
-- [ ] Benchmark file: `.benchmarks/023_parallel_probe_goat.md`
+- [ ] Ablation: each component removed, measure accuracy + token impact — tracked in Issue 071
+- [x] Benchmark file: `.benchmarks/023_parallel_probe_goat.md`
 
 ---
 

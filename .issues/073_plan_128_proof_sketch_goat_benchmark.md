@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Plan:** 128
-**Status:** DEFERRED
+**Status:** OPEN
 **Priority:** MEDIUM
 **Feature Gate:** proof
 
@@ -23,4 +23,4 @@ The proof pruner core implementation exists in `src/pruners/proof/`. Proof-sketc
 
 ## Blockers
 
-Needs real arena runs with sufficient diversity of reasoning tasks. Convergence speedup is only measurable with multi-step generation benchmarks (e.g., chain-of-thought, mathematical reasoning).
+Needs riir-games arena for convergence benchmark.

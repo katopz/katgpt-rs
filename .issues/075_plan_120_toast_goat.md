@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Plan:** 120
-**Status:** DEFERRED
+**Status:** OPEN
 **Priority:** LOW
 **Feature Gate:** toast
 
@@ -23,4 +23,4 @@ ToaST (Tokenization-optimized Adaptive Subword Tokenizer) is designed to improve
 
 ## Blockers
 
-Needs a corpus pipeline to feed representative text through both ToaST and BPE tokenizers. The Rényi metric implementation requires access to token frequency distributions from real tokenized corpora.
+Needs riir-data corpus pipeline for BPE comparison.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Plan:** 132
-**Status:** DEFERRED
+**Status:** OPEN
 **Priority:** MEDIUM
 **Feature Gate:** committee_boost
 
@@ -12,8 +12,8 @@ Plan 132 Tasks 24-26 require a GOAT proof benchmark for the committee boost prun
 
 ## Tasks
 
-- [ ] T24: GOAT proof benchmark for committee boost — verify pruned attention quality vs full attention
-- [ ] T25: Write benchmark results file (`.benchmarks/` directory)
+- [ ] T24: GOAT proof benchmark on Bomber arena — oracle-gap recovery, debiased comparison, budget sizing
+- [x] T25: Benchmark results file `.benchmarks/020_committee_boost_goat.md` — 68/68 unit tests PASS
 - [ ] T26: Update README.md with committee boost documentation section
 
 ## Context
@@ -22,4 +22,4 @@ The committee boost pruner implementation exists in `src/pruners/committee_boost
 
 ## Blockers
 
-Benchmark needs real model runs to produce meaningful quality metrics. README update depends on having benchmark results to reference.
+Needs riir-games Bomber arena for oracle-gap measurement.

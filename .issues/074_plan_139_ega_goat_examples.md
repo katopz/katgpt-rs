@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Plan:** 139
-**Status:** DEFERRED
+**Status:** OPEN
 **Priority:** LOW
 **Feature Gate:** ega_attn
 
@@ -26,4 +26,4 @@ The core EGA attention mechanism exists in `src/ega_attn.rs`. Energy-gated atten
 
 ## Blockers
 
-Most examples require a trained LoRA adapter with EGA to demonstrate meaningful energy profiles and ablation effects. Without trained weights, the energy scores are untrained and examples would be synthetic/unrepresentative.
+Needs riir-gpu LoRA training pipeline for EGA w_proj training.
