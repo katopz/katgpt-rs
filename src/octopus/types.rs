@@ -18,10 +18,6 @@ use super::codebook::ScalarCodebook;
 /// This non-uniform split gives 31-41% MSE reduction over uniform at d=128.
 #[derive(Debug, Clone)]
 pub struct OctopusConfig {
-    /// Nominal bits per coordinate (actual split: dir=b+1, nrm=b-1).
-    pub key_bits: u8,
-    /// Nominal bits per value coordinate.
-    pub val_bits: u8,
     /// Deterministic rotation seed.
     pub seed: u64,
     /// Number of transformer layers.
@@ -30,6 +26,10 @@ pub struct OctopusConfig {
     pub kv_dim: usize,
     /// Maximum sequence length (block size).
     pub max_seq_len: usize,
+    /// Nominal bits per coordinate (actual split: dir=b+1, nrm=b-1).
+    pub key_bits: u8,
+    /// Nominal bits per value coordinate.
+    pub val_bits: u8,
     /// Enable QJL 1-bit residual for score-attention (adds ~0.5 bpc).
     pub use_qjl_residual: bool,
     /// Enable joint 3×3 rounding in encoder (6-14% MSE gain, encoder-only).
@@ -77,12 +77,12 @@ impl OctopusConfig {
     #[must_use]
     pub fn for_testing() -> Self {
         Self {
-            key_bits: 2,
-            val_bits: 2,
             seed: 42,
             n_layers: 4,
             kv_dim: 64,
             max_seq_len: 256,
+            key_bits: 2,
+            val_bits: 2,
             use_qjl_residual: false,
             use_joint_rounding: true,
         }

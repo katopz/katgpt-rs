@@ -480,6 +480,7 @@ fn attention_forward_safe_into(
 }
 
 /// Allocating wrapper — prefer `attention_forward_safe_into` in hot loops.
+#[allow(dead_code)]
 fn attention_forward_safe(
     q: &[f32],
     k_all: &[f32],
@@ -556,6 +557,10 @@ struct ForwardSaveContext {
     x_buf: Vec<f32>,
     x_proj_buf: Vec<f32>,
     x_mlp_buf: Vec<f32>,
+    // Attention scratch (reused across positions, avoids per-position allocation)
+    attn_scratch_out: Vec<f32>,
+    attn_scratch_weights: Vec<f32>,
+    attn_scratch_scores: Vec<f32>,
     // Dimension constants cached from config
     n: usize,
     kvd: usize,
@@ -587,6 +592,9 @@ impl ForwardSaveContext {
             x_buf: vec![0.0f32; n],
             x_proj_buf: vec![0.0f32; n],
             x_mlp_buf: vec![0.0f32; n],
+            attn_scratch_out: vec![0.0f32; n],
+            attn_scratch_weights: vec![0.0f32; config.n_head * bs],
+            attn_scratch_scores: vec![0.0f32; bs],
             n,
             kvd,
             vocab_size: config.vocab_size,
@@ -748,9 +756,9 @@ fn forward_save<'a>(
         );
     }
 
-    // Phase B: Bidirectional attention
+    // Phase B: Bidirectional attention (zero-alloc using pre-allocated scratch buffers)
     for p in 0..seq_len {
-        let (ao, aw) = attention_forward_safe(
+        attention_forward_safe_into(
             &ctx.q_all[p * n..(p + 1) * n],
             &ctx.k_all,
             &ctx.v_all,
@@ -760,10 +768,13 @@ fn forward_save<'a>(
             kvd,
             seq_len,
             scale,
+            &mut ctx.attn_scratch_out,
+            &mut ctx.attn_scratch_weights,
+            &mut ctx.attn_scratch_scores,
         );
-        ctx.attn_out_all[p * n..(p + 1) * n].copy_from_slice(&ao);
+        ctx.attn_out_all[p * n..(p + 1) * n].copy_from_slice(&ctx.attn_scratch_out);
         ctx.attn_weights_all[p * config.n_head * seq_len..(p + 1) * config.n_head * seq_len]
-            .copy_from_slice(&aw);
+            .copy_from_slice(&ctx.attn_scratch_weights[..config.n_head * seq_len]);
     }
 
     // Phase C: Output projection + residual + MLP
@@ -1205,9 +1216,9 @@ pub fn evaluate_accuracy(
 ) -> f32 {
     let mut correct = 0usize;
     let mut total = 0usize;
-    let mut corrupted_buf = Vec::new();
-    let mut is_masked_buf = Vec::new();
-    let mut positions_buf = Vec::new();
+    let mut corrupted_buf = Vec::with_capacity(config.block_size);
+    let mut is_masked_buf = Vec::with_capacity(config.block_size);
+    let mut positions_buf = Vec::with_capacity(config.block_size);
     for tokens in test_data {
         corrupt_block_into(
             tokens,
@@ -1498,39 +1509,50 @@ pub fn forward_block_causal_positions(
     let mut x_norm2_all = vec![0.0f32; seq_len * n];
     let mut xr_all = vec![0.0f32; seq_len * n];
 
+    // Pre-allocate scratch buffers (reused across positions)
+    let mut x_buf = vec![0.0f32; n];
+    let mut k_buf = vec![0.0f32; kvd];
+    let mut v_buf = vec![0.0f32; kvd];
+
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
-        let mut x = vec![0.0f32; n];
         for i in 0..n {
-            x[i] = weights.wte[token * n + i] + weights.wpe[p * n + i];
+            x_buf[i] = weights.wte[token * n + i] + weights.wpe[p * n + i];
         }
-        rmsnorm(&mut x);
-        xr_all[p * n..(p + 1) * n].copy_from_slice(&x);
-        rmsnorm(&mut x);
-        x_norm2_all[p * n..(p + 1) * n].copy_from_slice(&x);
-        let mut k = vec![0.0f32; kvd];
-        let mut v = vec![0.0f32; kvd];
-        matmul(&mut k, &layer.attn_wk, &x, kvd, n);
-        matmul(&mut v, &layer.attn_wv, &x, kvd, n);
-        k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&k);
-        v_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&v);
+        rmsnorm(&mut x_buf);
+        xr_all[p * n..(p + 1) * n].copy_from_slice(&x_buf);
+        rmsnorm(&mut x_buf);
+        x_norm2_all[p * n..(p + 1) * n].copy_from_slice(&x_buf);
+        matmul(&mut k_buf, &layer.attn_wk, &x_buf, kvd, n);
+        matmul(&mut v_buf, &layer.attn_wv, &x_buf, kvd, n);
+        k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&k_buf);
+        v_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&v_buf);
     }
 
     // Phase B: Block-causal attention
     let mut all_logits = Vec::with_capacity(seq_len);
     let mut all_attn_weights = Vec::with_capacity(seq_len);
 
+    // Pre-allocate Phase B scratch buffers (reused across positions)
+    let mut q_buf = vec![0.0f32; n];
+    let mut attn_out_buf = vec![0.0f32; n];
+    let mut attn_w_buf = vec![0.0f32; config.n_head * seq_len];
+    let mut scores_buf = vec![0.0f32; seq_len];
+    let mut padded_w = vec![0.0f32; config.n_head * seq_len];
+    let mut x_proj = vec![0.0f32; n];
+    let mut hidden = vec![0.0f32; config.mlp_hidden];
+    let mut x_mlp = vec![0.0f32; n];
+    let mut logits = vec![0.0f32; config.vocab_size];
+
     for p in 0..seq_len {
-        let mut x = vec![0.0f32; n];
-        x.copy_from_slice(&x_norm2_all[p * n..(p + 1) * n]);
-        let mut q = vec![0.0f32; n];
-        matmul(&mut q, &layer.attn_wq, &x, n, n);
+        x_buf.copy_from_slice(&x_norm2_all[p * n..(p + 1) * n]);
+        matmul(&mut q_buf, &layer.attn_wq, &x_buf, n, n);
 
         // Block-causal: attend to positions [0..end_of_current_block]
         let block_end = (p / causal_block_size + 1) * causal_block_size;
         let t_n = block_end.min(seq_len);
 
-        let (attn_out, attn_w) = attention_forward_safe(
-            &q,
+        attention_forward_safe_into(
+            &q_buf,
             &k_cache,
             &v_cache,
             config.n_head,
@@ -1539,36 +1561,35 @@ pub fn forward_block_causal_positions(
             kvd,
             t_n,
             scale,
+            &mut attn_out_buf,
+            &mut attn_w_buf,
+            &mut scores_buf,
         );
 
         // Pad attn_w to seq_len for consistent output
-        let mut padded_w = vec![0.0f32; config.n_head * seq_len];
+        padded_w[..config.n_head * seq_len].fill(0.0);
         for h in 0..config.n_head {
             for t in 0..t_n {
-                padded_w[h * seq_len + t] = attn_w[h * t_n + t];
+                padded_w[h * seq_len + t] = attn_w_buf[h * t_n + t];
             }
         }
 
-        let mut x_proj = vec![0.0f32; n];
-        matmul(&mut x_proj, &layer.attn_wo, &attn_out, n, n);
+        matmul(&mut x_proj, &layer.attn_wo, &attn_out_buf, n, n);
         for i in 0..n {
             x_proj[i] += xr_all[p * n + i];
         }
 
         let xr2 = x_proj.clone();
         rmsnorm(&mut x_proj);
-        let mut hidden = vec![0.0f32; config.mlp_hidden];
         matmul_relu(&mut hidden, &layer.mlp_w1, &x_proj, config.mlp_hidden, n);
-        let mut x_mlp = vec![0.0f32; n];
         matmul(&mut x_mlp, &layer.mlp_w2, &hidden, n, config.mlp_hidden);
         for i in 0..n {
             x_mlp[i] += xr2[i];
         }
 
-        let mut logits = vec![0.0f32; config.vocab_size];
         matmul(&mut logits, &weights.lm_head, &x_mlp, config.vocab_size, n);
-        all_logits.push(logits);
-        all_attn_weights.push(padded_w);
+        all_logits.push(logits.clone());
+        all_attn_weights.push(padded_w.clone());
     }
 
     (all_logits, all_attn_weights)
@@ -1609,6 +1630,12 @@ pub struct D2fContext {
     pub x_mlp_buf: Vec<f32>,
     /// Temp buffer for single-position logits: `[vocab_size]`.
     pub logits_buf: Vec<f32>,
+    /// Attention output buffer: `[n_head * head_dim]` (reused per position).
+    attn_out_buf: Vec<f32>,
+    /// Attention weights buffer: `[n_head * max_seq]` (reused per position).
+    attn_weights_buf: Vec<f32>,
+    /// Attention scores buffer: `[max_seq]` (reused per position).
+    attn_scores_buf: Vec<f32>,
     /// Number of positions with committed KV cache entries.
     /// Positions `[0..committed_len)` are valid and won't be recomputed.
     pub committed_len: usize,
@@ -1643,6 +1670,9 @@ impl D2fContext {
             hidden_buf: vec![0.0f32; hidden],
             x_mlp_buf: vec![0.0f32; n],
             logits_buf: vec![0.0f32; vocab],
+            attn_out_buf: vec![0.0f32; n],
+            attn_weights_buf: vec![0.0f32; config.n_head * max_seq],
+            attn_scores_buf: vec![0.0f32; max_seq],
             committed_len: 0,
             prev_logits_flat: vec![0.0f32; max_seq * vocab],
             prev_prev_logits_flat: vec![0.0f32; max_seq * vocab],
@@ -1733,9 +1763,8 @@ pub fn forward_block_causal_with(
         let block_end = (p / causal_block_size + 1) * causal_block_size;
         let t_n = block_end.min(seq_len);
 
-        // NOTE: attention_forward_safe still allocates internally.
-        // Future optimization: write attention output into a pre-allocated buffer.
-        let (attn_out, _attn_w) = attention_forward_safe(
+        // Zero-alloc attention using pre-allocated buffers in D2fContext
+        attention_forward_safe_into(
             &ctx.q_buf,
             &ctx.k_cache,
             &ctx.v_cache,
@@ -1745,10 +1774,13 @@ pub fn forward_block_causal_with(
             kvd,
             t_n,
             scale,
+            &mut ctx.attn_out_buf,
+            &mut ctx.attn_weights_buf,
+            &mut ctx.attn_scores_buf,
         );
 
         // Attention output projection + residual connection
-        matmul(&mut ctx.x_proj_buf, &layer.attn_wo, &attn_out, n, n);
+        matmul(&mut ctx.x_proj_buf, &layer.attn_wo, &ctx.attn_out_buf, n, n);
         for i in 0..n {
             ctx.x_proj_buf[i] += ctx.xr[p * n + i];
         }

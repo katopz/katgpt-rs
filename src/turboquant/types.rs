@@ -7,10 +7,10 @@ pub struct TurboQuantCodebook {
     pub centroids: Vec<f32>,
     /// Decision boundaries (2^bits - 1 entries).
     pub boundaries: Vec<f32>,
-    /// MSE per coordinate at this (dim, bits) setting.
-    pub mse_per_coord: f32,
     /// Dimension the codebook was computed for.
     pub dim: usize,
+    /// MSE per coordinate at this (dim, bits) setting.
+    pub mse_per_coord: f32,
     /// Bits per coordinate.
     pub bits: u8,
 }
@@ -31,10 +31,6 @@ pub struct TurboQuantLayer {
 /// Configuration for TurboQuant KV cache.
 #[derive(Debug, Clone)]
 pub struct TurboQuantKVCacheConfig {
-    /// Bits per key coordinate (default: 3).
-    pub key_bits: u8,
-    /// Bits per value coordinate (default: 3).
-    pub val_bits: u8,
     /// Random seed for rotation matrix (deterministic).
     pub seed: u64,
     /// Number of layers.
@@ -43,4 +39,8 @@ pub struct TurboQuantKVCacheConfig {
     pub kv_dim: usize,
     /// Maximum sequence length (block_size).
     pub max_seq_len: usize,
+    /// Bits per key coordinate (default: 3).
+    pub key_bits: u8,
+    /// Bits per value coordinate (default: 3).
+    pub val_bits: u8,
 }

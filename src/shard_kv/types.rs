@@ -23,14 +23,6 @@ pub struct VqCodebook {
 /// Configuration for ShardKV cache.
 #[derive(Debug, Clone)]
 pub struct ShardConfig {
-    /// Average bits per coordinate for K path.
-    pub avg_bits_k: f32,
-    /// Average bits per coordinate for V path (prefill, used for VQ sizing).
-    pub avg_bits_v: f32,
-    /// Minimum bits for tail dimensions (K path).
-    pub min_tail_bits: u8,
-    /// Maximum bits per dimension (K path).
-    pub max_bits: u8,
     /// Number of transformer layers.
     pub n_layers: usize,
     /// KV dimension (head_dim × n_kv_heads).
@@ -49,6 +41,14 @@ pub struct ShardConfig {
     pub v_vq_group_size: usize,
     /// VQ codebook size for V path (default: 256).
     pub v_vq_codebook_size: usize,
+    /// Average bits per coordinate for K path.
+    pub avg_bits_k: f32,
+    /// Average bits per coordinate for V path (prefill, used for VQ sizing).
+    pub avg_bits_v: f32,
+    /// Minimum bits for tail dimensions (K path).
+    pub min_tail_bits: u8,
+    /// Maximum bits per dimension (K path).
+    pub max_bits: u8,
     /// Bits per coordinate for decode streaming (default: 8 = lossless).
     pub decode_stream_bits: u8,
 }
@@ -56,10 +56,6 @@ pub struct ShardConfig {
 impl Default for ShardConfig {
     fn default() -> Self {
         Self {
-            avg_bits_k: 4.0,
-            avg_bits_v: 2.0,
-            min_tail_bits: 1,
-            max_bits: 8,
             n_layers: 1,
             kv_dim: 128,
             head_dim: 128,
@@ -69,6 +65,10 @@ impl Default for ShardConfig {
             seed: 42,
             v_vq_group_size: 4,
             v_vq_codebook_size: 256,
+            avg_bits_k: 4.0,
+            avg_bits_v: 2.0,
+            min_tail_bits: 1,
+            max_bits: 8,
             decode_stream_bits: 8,
         }
     }
@@ -82,10 +82,10 @@ pub struct ShardCalibration {
     pub k_eigenvectors: Vec<f32>,
     /// Eigenvalues sorted descending.
     pub k_eigenvalues: Vec<f32>,
-    /// Effective dimensionality: (Σλ_i)² / Σ(λ_i²).
-    pub k_d_eff: f32,
     /// Head dimension.
     pub head_dim: usize,
+    /// Effective dimensionality: (Σλ_i)² / Σ(λ_i²).
+    pub k_d_eff: f32,
 }
 
 /// Per-layer state for ShardKV: calibration + fitted codebooks.
@@ -93,12 +93,6 @@ pub struct ShardCalibration {
 pub struct ShardLayer {
     /// K-path calibration.
     pub calibration: ShardCalibration,
-    /// K-path effective dimensionality (integer ceiling of k_d_eff).
-    pub d_eff: usize,
-    /// K-path semantic (high-energy) bits per coordinate.
-    pub k_b_high: u8,
-    /// K-path tail bits per coordinate.
-    pub k_b_low: u8,
     /// K-path per-dim bit widths from water-fill (None for uniform).
     pub k_bits_per_dim: Option<Vec<u8>>,
     /// K-path per-dim semantic codebooks (water-fill path).
@@ -109,10 +103,16 @@ pub struct ShardLayer {
     pub k_tail_codebook: LloydMaxCodebook,
     /// V-path VQ codebook for prefill (Hadamard + K-means on groups of channels).
     pub v_vq_codebook: VqCodebook,
-    /// V-path effective bits per element from VQ (codebook_bits / group_size).
-    pub v_bits_per_elem: f32,
-    /// V-path decode streaming bits per coordinate (default 8 = lossless).
-    pub decode_stream_bits: u8,
     /// V-path decode streaming codebook (8-bit Lloyd-Max for Hadamard-rotated data).
     pub decode_v_codebook: LloydMaxCodebook,
+    /// K-path effective dimensionality (integer ceiling of k_d_eff).
+    pub d_eff: usize,
+    /// V-path effective bits per element from VQ (codebook_bits / group_size).
+    pub v_bits_per_elem: f32,
+    /// K-path semantic (high-energy) bits per coordinate.
+    pub k_b_high: u8,
+    /// K-path tail bits per coordinate.
+    pub k_b_low: u8,
+    /// V-path decode streaming bits per coordinate (default 8 = lossless).
+    pub decode_stream_bits: u8,
 }

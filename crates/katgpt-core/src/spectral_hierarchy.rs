@@ -276,12 +276,14 @@ fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<Vec<f32>> {
     // Return top-k eigenvectors (columns of v).
     let k = k.min(n);
     let mut result = Vec::with_capacity(k);
+    // Pre-allocate a single reuse buffer to avoid per-iteration allocation
+    let mut evec_buf = Vec::with_capacity(n);
     for &(col, _) in &indexed[..k] {
-        let mut evec = Vec::with_capacity(n);
+        evec_buf.clear();
         for row in 0..n {
-            evec.push(v[row * n + col] as f32);
+            evec_buf.push(v[row * n + col] as f32);
         }
-        result.push(evec);
+        result.push(evec_buf.clone());
     }
     result
 }

@@ -30,10 +30,6 @@ pub struct IsoQuantLayer {
 /// Configuration for IsoQuant KV cache.
 #[derive(Debug, Clone)]
 pub struct IsoQuantConfig {
-    /// Bits per key coordinate (2-4).
-    pub key_bits: u8,
-    /// Bits per value coordinate (2-4).
-    pub val_bits: u8,
     /// Random seed for quaternion generation (deterministic).
     pub seed: u64,
     /// Number of transformer layers.
@@ -44,4 +40,8 @@ pub struct IsoQuantConfig {
     pub max_seq_len: usize,
     /// Rotation mode: Full (6 DOF) or Fast (3 DOF).
     pub mode: IsoQuantMode,
+    /// Bits per key coordinate (2-4).
+    pub key_bits: u8,
+    /// Bits per value coordinate (2-4).
+    pub val_bits: u8,
 }

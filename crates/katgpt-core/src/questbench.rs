@@ -461,11 +461,9 @@ fn count_valid_extensions_with(
     vocab_size: usize,
 ) -> usize {
     let limit = 256.min(vocab_size);
-    let mut count = 0;
+    let mut count = 0usize;
     for tok in 0..limit {
-        if pruner.is_valid(depth, tok, extended) {
-            count += 1;
-        }
+        count += pruner.is_valid(depth, tok, extended) as usize;
     }
     count
 }
@@ -481,11 +479,7 @@ fn score_relevance_into(
 ) {
     let limit = vocab_size.min(256).min(buf.len());
     for (tok, slot) in buf.iter_mut().enumerate().take(limit) {
-        *slot = if pruner.is_valid(depth, tok, placed_tokens) {
-            1.0
-        } else {
-            0.0
-        };
+        *slot = pruner.is_valid(depth, tok, placed_tokens) as usize as f32;
     }
     // Zero remaining entries
     buf[limit..].fill(0.0);

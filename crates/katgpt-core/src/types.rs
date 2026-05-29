@@ -94,11 +94,11 @@ pub enum DeltaRoutingMode {
 /// Configuration for delta routing (Plan 097, Research 061).
 #[derive(Clone, Copy, Debug)]
 pub struct DeltaRoutingConfig {
-    /// Routing mode.
-    pub mode: DeltaRoutingMode,
     /// Block size for DeltaBlock mode (number of layers per block).
     /// Default: 4. Paper recommends B=4.
     pub block_size: usize,
+    /// Routing mode.
+    pub mode: DeltaRoutingMode,
 }
 
 impl Default for DeltaRoutingConfig {
@@ -129,6 +129,8 @@ impl DeltaRoutingConfig {
 
 /// Configuration for DashAttention adaptive sparse hierarchical attention.
 /// Controls α-entmax routing, chunk summarization, and routing bias.
+///
+/// Fields ordered by descending alignment to minimize padding.
 #[derive(Clone, Copy, Debug)]
 pub struct DashAttnConfig {
     /// Chunk size for block-level attention (default: 64).
@@ -181,10 +183,10 @@ pub enum RetrievalHeadRole {
 /// routing with per-head specialization.
 ///
 /// Must pass 6/6 GOAT proofs before default-on promotion.
+///
+/// Fields ordered by descending alignment to minimize padding.
 #[derive(Clone, Copy, Debug)]
 pub struct RtTurboConfig {
-    /// Fraction of heads classified as retrieval heads (default: 0.15).
-    /// Paper ablation: 15% is optimal balance of accuracy vs sparsity.
     /// Low-dimensional projection size for pre-RoPE scoring (default: 16).
     /// Paper ablation: dim=16 is the sweet spot for low-frequency retrieval.
     pub low_dim: usize,

@@ -12,10 +12,6 @@ use crate::octopus::types::OctopusCodebook;
 /// octahedral triplet encoding ((b+1, b-1) bit split).
 #[derive(Debug, Clone)]
 pub struct HybridOctPqConfig {
-    /// Nominal bits per key coordinate. OCTOPUS splits: dir=b+1, nrm=b-1.
-    pub key_bits: u8,
-    /// Nominal bits per value coordinate.
-    pub val_bits: u8,
     /// Random seed for 2D Givens rotation generation (deterministic).
     pub seed: u64,
     /// Number of transformer layers.
@@ -24,6 +20,10 @@ pub struct HybridOctPqConfig {
     pub kv_dim: usize,
     /// Maximum sequence length.
     pub max_seq_len: usize,
+    /// Nominal bits per key coordinate. OCTOPUS splits: dir=b+1, nrm=b-1.
+    pub key_bits: u8,
+    /// Nominal bits per value coordinate.
+    pub val_bits: u8,
     /// Enable joint 3×3 rounding in OCT encoder (6-14% MSE gain).
     pub use_joint_rounding: bool,
 }
@@ -33,12 +33,12 @@ impl HybridOctPqConfig {
     #[must_use]
     pub fn for_testing() -> Self {
         Self {
-            key_bits: 2,
-            val_bits: 2,
             seed: 42,
             n_layers: 2,
             kv_dim: 64,
             max_seq_len: 256,
+            key_bits: 2,
+            val_bits: 2,
             use_joint_rounding: true,
         }
     }

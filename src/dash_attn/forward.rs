@@ -130,6 +130,13 @@ pub fn forward_dash_attn_decode<'a>(
     simd::simd_add_inplace(&mut ctx.x[..n], &weights.wte[tok_off..tok_off + n]);
     simd::simd_add_inplace(&mut ctx.x[..n], &weights.wpe[pos_off..pos_off + n]);
 
+    // Pre-allocate summary references outside the layer loop to avoid
+    // per-layer Vec allocation (summaries don't change between layers).
+    let mut summary_refs: Vec<&Vec<f32>> = Vec::new();
+    if summary_cache.n_chunks() > 0 {
+        summary_refs.reserve(summary_cache.n_chunks());
+    }
+
     for layer_weights in &weights.layers {
         types::rmsnorm(&mut ctx.x);
         ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
@@ -156,13 +163,12 @@ pub fn forward_dash_attn_decode<'a>(
             let hd = config.head_dim;
             // Use first query head as representative for routing decision
             let q_head = &ctx.q[..hd];
-            // Collect references to summaries for first KV head as routing proxy
-            let summaries: Vec<&Vec<f32>> = summary_cache
-                .summaries
-                .iter()
-                .map(|chunk| &chunk[0])
-                .collect();
-            let _routing = score_blocks_entmax(q_head, &summaries, dash_config);
+            // Reuse pre-allocated summary reference buffer
+            summary_refs.clear();
+            for chunk in &summary_cache.summaries {
+                summary_refs.push(&chunk[0]);
+            }
+            let _routing = score_blocks_entmax(q_head, &summary_refs, dash_config);
             // TODO: Use routing.active_indices to select sparse KV blocks
         }
 
