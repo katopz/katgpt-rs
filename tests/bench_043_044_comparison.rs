@@ -340,8 +340,8 @@ fn bench_043_turboquant_before_after() {
             cache.store_value(0, pos, &vals[pos]);
         }
 
-        let tq_keys = dequantize_keys_flat(&cache, 0, n_positions - 1, kv_dim);
-        let tq_values = dequantize_values_flat(&cache, 0, n_positions - 1, kv_dim);
+        let tq_keys = dequantize_keys_flat(&mut cache, 0, n_positions - 1, kv_dim);
+        let tq_values = dequantize_values_flat(&mut cache, 0, n_positions - 1, kv_dim);
 
         let mut tq_scores = vec![0.0f32; n_positions];
         for t in 0..n_positions {

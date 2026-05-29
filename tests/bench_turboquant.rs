@@ -252,8 +252,8 @@ fn bench_turboquant_attention_fidelity() {
         }
 
         // Dequantize keys for TQ attention
-        let tq_keys = dequantize_keys_flat(&cache, 0, n_positions - 1, kv_dim);
-        let tq_values = dequantize_values_flat(&cache, 0, n_positions - 1, kv_dim);
+        let tq_keys = dequantize_keys_flat(&mut cache, 0, n_positions - 1, kv_dim);
+        let tq_values = dequantize_values_flat(&mut cache, 0, n_positions - 1, kv_dim);
 
         // Compute TQ attention scores for head 0
         let mut tq_scores = vec![0.0f32; n_positions];
