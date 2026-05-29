@@ -1057,17 +1057,12 @@ fn rotate_into(eigenvectors: &[f32], head_dim: usize, x: &[f32], out: &mut [f32]
 #[inline]
 #[allow(clippy::needless_range_loop)]
 fn unrotate_into(eigenvectors: &[f32], head_dim: usize, x: &[f32], out: &mut [f32]) {
-    for i in 0..head_dim {
-        let mut sum = 0.0f32;
-        for j in 0..head_dim {
-            sum += eigenvectors[i * head_dim + j] * x[j];
-        }
-        out[i] = sum;
-    }
+    // out[i] = dot(eigenvectors row i, x) — row-major access, SIMD-friendly
+    crate::simd::simd_matmul_rows(out, eigenvectors, x, head_dim, head_dim);
 }
 
 fn simd_norm(v: &[f32]) -> f32 {
-    v.iter().map(|&x| x * x).sum::<f32>().sqrt()
+    crate::simd::simd_sum_sq(v, v.len()).sqrt()
 }
 
 /// Check if a matrix is the identity matrix (diagonal 1s, off-diagonal 0s).
@@ -1168,6 +1163,12 @@ fn dequantize_idx(idx: u8, centroids: &[f32]) -> f32 {
 /// Each index uses `bits_per_dim[i]` bits. Output is written LSB-first.
 fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
     out.clear();
+    let total_bits: usize = indices
+        .iter()
+        .enumerate()
+        .map(|(i, _)| bits_per_dim.get(i).copied().unwrap_or(1) as usize)
+        .sum();
+    out.reserve(total_bits.div_ceil(8));
     let mut bit_buffer = 0u64;
     let mut bits_in_buffer = 0u32;
 

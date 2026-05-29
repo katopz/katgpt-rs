@@ -31,6 +31,8 @@ pub fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
     for i in 0..dim {
         // Subtract projections onto previous columns
         for j in 0..i {
+            // q is column-major: q[col * dim + row]. Original dot was q[k*dim+j] * v_flat[i*dim+k]
+            // = Q[j,k] * V[k,i] = (Q @ V)[j,i]. Can't directly use row-major simd_dot.
             let dot: f32 = (0..dim).map(|k| q[k * dim + j] * v_flat[i * dim + k]).sum();
             for k in 0..dim {
                 v_flat[i * dim + k] -= dot * q[k * dim + j];
@@ -38,11 +40,7 @@ pub fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
         }
 
         // Normalize column i to get q_i
-        let norm: f32 = v_flat[i * dim..i * dim + dim]
-            .iter()
-            .map(|x| x * x)
-            .sum::<f32>()
-            .sqrt();
+        let norm = crate::simd::simd_sum_sq(&v_flat[i * dim..i * dim + dim], dim).sqrt();
         if norm > 1e-8 {
             for k in 0..dim {
                 q[k * dim + i] = v_flat[i * dim + k] / norm;

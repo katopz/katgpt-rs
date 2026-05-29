@@ -98,8 +98,8 @@ impl PlanarQuantKVCache {
         debug_assert_eq!(key.len(), self.kv_dim);
         let layer_state = &self.layers[layer];
 
-        // Compute norm
-        let norm: f32 = key.iter().map(|x| x * x).sum::<f32>().sqrt();
+        // Compute norm via SIMD (avoids scalar iteration)
+        let norm = crate::simd::simd_sum_sq(key, key.len()).sqrt();
         self.key_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -141,7 +141,7 @@ impl PlanarQuantKVCache {
         debug_assert_eq!(value.len(), self.kv_dim);
         let layer_state = &self.layers[layer];
 
-        let norm: f32 = value.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let norm = crate::simd::simd_sum_sq(value, value.len()).sqrt();
         self.val_norms[layer][pos] = norm;
 
         if norm < 1e-8 {

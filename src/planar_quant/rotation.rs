@@ -43,24 +43,19 @@ pub fn generate_givens_rotations(n_groups: usize, seed: u64) -> Vec<[f32; 2]> {
 #[inline]
 pub fn apply_rotation(rotations: &[[f32; 2]], input: &[f32], output: &mut [f32]) {
     let n_groups = rotations.len();
-    for g in 0..n_groups {
-        let v0 = if g * 2 < input.len() {
-            input[g * 2]
-        } else {
-            0.0
-        };
-        let v1 = if g * 2 + 1 < input.len() {
-            input[g * 2 + 1]
-        } else {
-            0.0
-        };
-        let (r0, r1) = rot2_apply(&rotations[g], v0, v1);
-        if g * 2 < output.len() {
-            output[g * 2] = r0;
-        }
-        if g * 2 + 1 < output.len() {
-            output[g * 2 + 1] = r1;
-        }
+    let dim = input.len();
+    debug_assert_eq!(output.len(), dim);
+    let full_groups = dim / 2;
+    // Fast path: full pairs (no bounds checks needed)
+    for g in 0..full_groups {
+        let (r0, r1) = rot2_apply(&rotations[g], input[g * 2], input[g * 2 + 1]);
+        output[g * 2] = r0;
+        output[g * 2 + 1] = r1;
+    }
+    // Odd element: last group with only one element
+    if !dim.is_multiple_of(2) && full_groups < n_groups {
+        let (r0, _) = rot2_apply(&rotations[full_groups], input[full_groups * 2], 0.0);
+        output[full_groups * 2] = r0;
     }
 }
 
@@ -68,24 +63,19 @@ pub fn apply_rotation(rotations: &[[f32; 2]], input: &[f32], output: &mut [f32])
 #[inline]
 pub fn apply_inverse_rotation(rotations: &[[f32; 2]], input: &[f32], output: &mut [f32]) {
     let n_groups = rotations.len();
-    for g in 0..n_groups {
-        let v0 = if g * 2 < input.len() {
-            input[g * 2]
-        } else {
-            0.0
-        };
-        let v1 = if g * 2 + 1 < input.len() {
-            input[g * 2 + 1]
-        } else {
-            0.0
-        };
-        let (r0, r1) = rot2_inverse(&rotations[g], v0, v1);
-        if g * 2 < output.len() {
-            output[g * 2] = r0;
-        }
-        if g * 2 + 1 < output.len() {
-            output[g * 2 + 1] = r1;
-        }
+    let dim = input.len();
+    debug_assert_eq!(output.len(), dim);
+    let full_groups = dim / 2;
+    // Fast path: full pairs (no bounds checks needed)
+    for g in 0..full_groups {
+        let (r0, r1) = rot2_inverse(&rotations[g], input[g * 2], input[g * 2 + 1]);
+        output[g * 2] = r0;
+        output[g * 2 + 1] = r1;
+    }
+    // Odd element: last group with only one element
+    if !dim.is_multiple_of(2) && full_groups < n_groups {
+        let (r0, _) = rot2_inverse(&rotations[full_groups], input[full_groups * 2], 0.0);
+        output[full_groups * 2] = r0;
     }
 }
 

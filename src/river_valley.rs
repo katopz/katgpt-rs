@@ -204,9 +204,9 @@ fn jacobi_eigenvalues(mat: &[f32], n: usize) -> Vec<f32> {
     }
 
     // Eigenvalues are on the diagonal
-    let mut eigenvalues = Vec::with_capacity(n);
+    let mut eigenvalues = vec![0.0f32; n];
     for i in 0..n {
-        eigenvalues.push(a[i * n + i].max(0.0));
+        eigenvalues[i] = a[i * n + i].max(0.0);
     }
     eigenvalues
 }
