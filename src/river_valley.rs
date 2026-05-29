@@ -197,7 +197,11 @@ fn jacobi_eigenvalues(mat: &[f32], n: usize) -> Vec<f32> {
     }
 
     // Eigenvalues are on the diagonal
-    (0..n).map(|i| a[i * n + i].max(0.0)).collect()
+    let mut eigenvalues = Vec::with_capacity(n);
+    for i in 0..n {
+        eigenvalues.push(a[i * n + i].max(0.0));
+    }
+    eigenvalues
 }
 
 /// Average cosine similarity between consecutive updates.

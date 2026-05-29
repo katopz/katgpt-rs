@@ -68,13 +68,12 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Maximum absolute difference between two vectors.
+#[allow(dead_code)]
 fn max_abs_diff(a: &[f32], b: &[f32]) -> f32 {
-    let n = a.len().min(b.len());
-    let mut max_diff = 0.0f32;
-    for i in 0..n {
-        max_diff = max_diff.max((a[i] - b[i]).abs());
-    }
-    max_diff
+    a.iter()
+        .zip(b.iter())
+        .map(|(x, y)| (x - y).abs())
+        .fold(0.0f32, f32::max)
 }
 
 /// Reference forward pass (baseline behavior) for numerical comparison.
@@ -104,8 +103,12 @@ fn forward_reference(
     // Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    for i in 0..n {
-        x[i] = weights.wte[tok_off + i] + weights.wpe[pos_off_emb + i];
+    for (xi, (te, pe)) in x.iter_mut().zip(
+        weights.wte[tok_off..tok_off + n]
+            .iter()
+            .zip(&weights.wpe[pos_off_emb..pos_off_emb + n]),
+    ) {
+        *xi = te + pe;
     }
 
     // Layer loop (standard non-fused path)
@@ -531,7 +534,6 @@ fn proof_g3_buffer_write_analysis() {
     println!("  RESULT: PASS ✅ (50% > 30% > 20%)");
 
     // This is an analytical proof, always passes
-    assert!(true);
 }
 
 // ════════════════════════════════════════════════════════════════
