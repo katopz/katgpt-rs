@@ -61,6 +61,7 @@ pub fn tiled_attention_forward(
 /// The buffer must be at least `seq_len * seq_len` elements.
 /// When `None`, the buffer is allocated on demand.
 #[cfg(feature = "tiled_attention")]
+#[allow(clippy::too_many_arguments)]
 pub fn tiled_attention_forward_with_scores(
     q: &[f32],
     k: &[f32],
@@ -75,6 +76,7 @@ pub fn tiled_attention_forward_with_scores(
 }
 
 #[cfg(feature = "tiled_attention")]
+#[allow(clippy::too_many_arguments)]
 fn tiled_attention_forward_impl(
     q: &[f32],
     k: &[f32],
@@ -83,7 +85,7 @@ fn tiled_attention_forward_impl(
     seq_len: usize,
     head_dim: usize,
     scale: f32,
-    mut scores_buf: Option<&mut [f32]>,
+    scores_buf: Option<&mut [f32]>,
 ) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
@@ -95,7 +97,7 @@ fn tiled_attention_forward_impl(
         0 => return,
         n if n < TILED_ATTENTION_THRESHOLD => {
             let needed = seq_len * seq_len;
-            let buf = scores_buf.as_deref_mut();
+            let buf = scores_buf;
             attention_fallback(q, k, v, output, seq_len, head_dim, scale, buf, needed);
             return;
         }
@@ -199,8 +201,8 @@ fn tiled_attention_inner(
                 let rowsum = crate::simd::simd_sum_f32(p_row);
 
                 // Accumulate P̃[i][j] × V[j] into o_tile[i] (SIMD-accelerated)
-                for j in 0..actual_bc {
-                    let p = p_row[j];
+                for (j, p_row_j) in p_row.iter().enumerate().take(actual_bc) {
+                    let p = *p_row_j;
                     let v_off = (k_start + j) * head_dim;
                     crate::simd::simd_fused_scale_acc(
                         &mut o_tile[i * head_dim..],
@@ -217,8 +219,8 @@ fn tiled_attention_inner(
         }
 
         // 4. Final normalize: o_tile / norm_tile (fused copy+scale in single SIMD pass)
-        for i in 0..actual_br {
-            let inv_norm = 1.0 / norm_tile[i];
+        for (i, norm_tile_i) in norm_tile.iter().enumerate().take(actual_br) {
+            let inv_norm = 1.0 / *norm_tile_i;
             let o_off = i * head_dim;
             let out_off = (q_start + i) * head_dim;
             crate::simd::simd_fused_decay_write(
@@ -235,6 +237,7 @@ fn tiled_attention_inner(
 /// Uses existing `softmax_scaled` for numerically stable softmax.
 /// Called when seq_len < TILED_ATTENTION_THRESHOLD.
 #[cfg(feature = "tiled_attention")]
+#[allow(clippy::too_many_arguments)]
 fn attention_fallback(
     q: &[f32],
     k: &[f32],
@@ -355,7 +358,7 @@ pub fn tiled_attention_batched(
         // Parallel for larger workloads — Rayon overhead amortized
         // Reuse a grow-only scores scratch buffer per OS thread via thread_local.
         thread_local! {
-            static SCORES_BUF: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+            static SCORES_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
         }
 
         output

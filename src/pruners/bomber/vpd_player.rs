@@ -426,10 +426,10 @@ impl VpdPlayer {
         let mut best_id = 0;
         let mut best_score = f32::NEG_INFINITY;
 
-        for tid in 0..n_templates {
+        for (tid, sq) in student_q.iter().enumerate().take(n_templates) {
             let ucb1 = self.template_proposer.ucb1_score(tid, total_pulls);
             let q_norm = if q_range.abs() > 1e-6 {
-                (student_q[tid] - q_min) / q_range
+                (sq - q_min) / q_range
             } else {
                 0.5
             };

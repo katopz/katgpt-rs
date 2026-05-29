@@ -919,6 +919,7 @@ impl PeiraCovariance {
 ///
 /// # Returns
 /// The scalar auxiliary loss value.
+#[allow(clippy::too_many_arguments)]
 pub fn peira_aux_loss(
     student: &[f32],
     teacher: &[f32],
@@ -985,6 +986,7 @@ pub fn peira_aux_loss(
 /// Invert a symmetric positive definite (SPD) matrix using Cholesky decomposition.
 /// More efficient than Gauss-Jordan for SPD matrices: exploits symmetry,
 /// no partial pivoting needed, uses half the memory.
+#[allow(dead_code)]
 fn invert_spd(mat: &[f64], k: usize) -> Vec<f64> {
     let mut inv = vec![0.0f64; k * k];
     let mut l = vec![0.0f64; k * k];
@@ -1061,6 +1063,7 @@ fn invert_spd_into(
 
 /// Compute matrix product C = A @ B where all are k×k row-major.
 /// Uses SIMD f64 dot product for the inner accumulation loop.
+#[allow(dead_code)]
 fn matmul(a: &[f64], b: &[f64], k: usize) -> Vec<f64> {
     let mut c = vec![0.0f64; k * k];
     let mut bt = vec![0.0f64; k * k];

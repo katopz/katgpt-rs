@@ -7,7 +7,7 @@
 //! - T35: `GoDeltaGatedAbsorbCompress` — promote high-δ templates to hard constraints
 //! - T36: `run_gzero_selfplay` — main self-play loop
 //
-//! Adapted from the general G-Zero TemplateProposer pattern but Go-specific:
+//!   Adapted from the general G-Zero TemplateProposer pattern but Go-specific:
 //! - Query = board state as flat token array (0=empty, 1=black, 2=white)
 //! - Hint = template-suggested move coordinates
 //! - δ = score difference between template-proposed and best non-template move

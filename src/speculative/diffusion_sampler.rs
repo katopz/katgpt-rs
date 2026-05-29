@@ -36,8 +36,6 @@
 //! if p_correct >= tau_conf { ... }
 //! ```
 
-#![cfg(feature = "tri_mode")]
-
 use crate::dllm::{D2fContext, forward_block_causal_with};
 use crate::speculative::d2f::D2fDecodeConfig;
 use crate::transformer::TransformerWeights;
@@ -86,12 +84,12 @@ impl SamplerFeatures {
         // Softmax denominator over valid (non-mask) tokens
         let mut sum_exp = 0.0f32;
         let mut top_probs: Vec<f32> = Vec::with_capacity(vocab);
-        for t in 0..vocab {
+        for (t, &logit) in logits_p.iter().enumerate() {
             if t == mask {
                 top_probs.push(0.0);
                 continue;
             }
-            let prob = (logits_p[t] - max_logit).exp();
+            let prob = (logit - max_logit).exp();
             top_probs.push(prob);
             sum_exp += prob;
         }
@@ -108,15 +106,15 @@ impl SamplerFeatures {
         // Find top-1 and top-2
         let mut top1_prob = 0.0f32;
         let mut top2_prob = 0.0f32;
-        for t in 0..vocab {
+        for (t, &prob) in top_probs.iter().enumerate() {
             if t == mask {
                 continue;
             }
-            if top_probs[t] > top1_prob {
+            if prob > top1_prob {
                 top2_prob = top1_prob;
-                top1_prob = top_probs[t];
-            } else if top_probs[t] > top2_prob {
-                top2_prob = top_probs[t];
+                top1_prob = prob;
+            } else if prob > top2_prob {
+                top2_prob = prob;
             }
         }
 
@@ -138,11 +136,10 @@ impl SamplerFeatures {
 
         // Entropy: -Σ p·log(p)
         let mut entropy = 0.0f32;
-        for t in 0..vocab {
+        for (t, &p) in top_probs.iter().enumerate() {
             if t == mask {
                 continue;
             }
-            let p = top_probs[t];
             if p > 1e-10 {
                 entropy -= p * p.ln();
             }
@@ -236,8 +233,8 @@ impl LogisticSampler {
     pub fn predict(&self, features: &SamplerFeatures) -> f32 {
         let x = features.to_array();
         let mut logit = self.bias;
-        for i in 0..N_FEATURES {
-            logit += self.weights[i] * x[i];
+        for (&w, &xi) in self.weights.iter().zip(x.iter()) {
+            logit += w * xi;
         }
         sigmoid(logit)
     }
@@ -264,8 +261,8 @@ impl LogisticSampler {
                 let x = traj.features.to_array();
                 let logit = {
                     let mut z = self.bias;
-                    for i in 0..N_FEATURES {
-                        z += self.weights[i] * x[i];
+                    for (&w, &xi) in self.weights.iter().zip(x.iter()) {
+                        z += w * xi;
                     }
                     z
                 };
@@ -281,8 +278,8 @@ impl LogisticSampler {
                 let grad = pred - y;
 
                 // Update weights: w -= lr * grad * x_i
-                for i in 0..N_FEATURES {
-                    self.weights[i] -= lr * grad * x[i];
+                for (w, &xi) in self.weights.iter_mut().zip(x.iter()) {
+                    *w -= lr * grad * xi;
                 }
                 self.bias -= lr * grad;
 
@@ -349,17 +346,17 @@ impl MlpSampler {
     /// Forward pass: returns (hidden activations, output logit).
     fn forward(&self, x: &[f32; N_FEATURES]) -> (Vec<f32>, f32) {
         let h = &mut vec![0.0f32; self.hidden_dim];
-        for j in 0..self.hidden_dim {
+        for (j, h_j) in h.iter_mut().enumerate() {
             let mut sum = self.b1[j];
-            for i in 0..N_FEATURES {
-                sum += self.w1[j * N_FEATURES + i] * x[i];
+            for (i, &xi) in x.iter().enumerate() {
+                sum += self.w1[j * N_FEATURES + i] * xi;
             }
-            h[j] = relu(sum);
+            *h_j = relu(sum);
         }
 
         let mut logit = self.b2;
-        for j in 0..self.hidden_dim {
-            logit += self.w2[j] * h[j];
+        for (&w2j, &hj) in self.w2.iter().zip(h.iter()) {
+            logit += w2j * hj;
         }
 
         (h.clone(), logit)
@@ -401,16 +398,16 @@ impl MlpSampler {
                 let d_logit = pred - y;
 
                 // Update w2 and b2
-                for j in 0..self.hidden_dim {
-                    self.w2[j] -= lr * d_logit * hidden[j];
+                for (w2j, &hj) in self.w2.iter_mut().zip(hidden.iter()) {
+                    *w2j -= lr * d_logit * hj;
                 }
                 self.b2 -= lr * d_logit;
 
                 // Backprop through ReLU to w1 and b1
-                for j in 0..self.hidden_dim {
-                    let d_hidden = d_logit * self.w2[j] * relu_grad(hidden[j]);
-                    for i in 0..N_FEATURES {
-                        self.w1[j * N_FEATURES + i] -= lr * d_hidden * x[i];
+                for (j, &hj) in hidden.iter().enumerate() {
+                    let d_hidden = d_logit * self.w2[j] * relu_grad(hj);
+                    for (i, &xi) in x.iter().enumerate() {
+                        self.w1[j * N_FEATURES + i] -= lr * d_hidden * xi;
                     }
                     self.b1[j] -= lr * d_hidden;
                 }
@@ -711,12 +708,12 @@ pub fn collect_trajectories(
                 // Find top-1 prediction
                 let mut top1 = 0usize;
                 let mut top1_val = f32::NEG_INFINITY;
-                for t in 0..vocab {
+                for (t, &logit) in logits_p.iter().enumerate() {
                     if t == mask {
                         continue;
                     }
-                    if logits_p[t] > top1_val {
-                        top1_val = logits_p[t];
+                    if logit > top1_val {
+                        top1_val = logit;
                         top1 = t;
                     }
                 }
@@ -731,6 +728,7 @@ pub fn collect_trajectories(
             }
 
             // Sample tokens for next step (greedy for determinism)
+            #[allow(clippy::needless_range_loop)]
             for p in 0..seq_len {
                 if tokens[p] != mask {
                     continue;
@@ -741,12 +739,12 @@ pub fn collect_trajectories(
 
                 let mut top1 = 0usize;
                 let mut top1_val = f32::NEG_INFINITY;
-                for t in 0..vocab {
+                for (t, &logit) in logits_p.iter().enumerate() {
                     if t == mask {
                         continue;
                     }
-                    if logits_p[t] > top1_val {
-                        top1_val = logits_p[t];
+                    if logit > top1_val {
+                        top1_val = logit;
                         top1 = t;
                     }
                 }
@@ -783,6 +781,7 @@ pub fn collect_trajectories(
 /// 4. Trains the sampler
 ///
 /// Returns (trained sampler, final loss, auc).
+#[allow(clippy::too_many_arguments)]
 pub fn train_logistic_on_patterns(
     config: &Config,
     decode_config: &D2fDecodeConfig,

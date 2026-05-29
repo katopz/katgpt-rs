@@ -292,8 +292,13 @@ pub fn calibrate_eigenbasis_dual_gram(samples: &[Vec<f32>], head_dim: usize) -> 
     for i in 0..n_samples {
         for j in i..n_samples {
             let mut dot = 0.0f64;
-            for k in 0..head_dim {
-                dot += samples[i][k] as f64 * samples[j][k] as f64;
+            for ((_, sk_i), (_, sk_j)) in samples[i]
+                .iter()
+                .enumerate()
+                .take(head_dim)
+                .zip(samples[j].iter().enumerate().take(head_dim))
+            {
+                dot += *sk_i as f64 * *sk_j as f64;
             }
             gram[i * n_samples + j] = dot;
             gram[j * n_samples + i] = dot; // Symmetric

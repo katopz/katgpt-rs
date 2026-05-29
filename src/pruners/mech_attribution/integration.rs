@@ -27,7 +27,7 @@ pub fn score_with_influence(
     config: &InfluenceConfig,
 ) -> f32 {
     // Reuse catalyst_threshold as the blending factor (0.0 = pure rubric, 1.0 = pure catalyst)
-    let alpha = config.catalyst_threshold.min(1.0).max(0.0);
+    let alpha = config.catalyst_threshold.clamp(0.0, 1.0);
 
     // High-influence samples get a 50% boost on the catalyst component
     let influence_multiplier = if catalyst.is_high_influence { 1.5 } else { 1.0 };

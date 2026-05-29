@@ -75,12 +75,12 @@ impl DeltaMemoryState {
         let rank = self.config.rank;
         assert_eq!(query.len(), rank, "query dimension must match rank");
         let mut result = vec![0.0; rank];
-        for i in 0..rank {
+        for (i, result_slot) in result.iter_mut().enumerate().take(rank) {
             let mut sum = 0.0f32;
-            for j in 0..rank {
-                sum += self.state[i * rank + j] * query[j];
+            for (j, q_val) in query.iter().enumerate().take(rank) {
+                sum += self.state[i * rank + j] * q_val;
             }
-            result[i] = sum;
+            *result_slot = sum;
         }
         result
     }
@@ -111,11 +111,12 @@ impl DeltaMemoryState {
             let pred_i = predictions[i];
             let val_i = value[i];
 
-            for j in 0..rank {
-                let old = self.state[i * rank + j];
+            for (s_val, k_val) in self.state[i * rank..i * rank + rank]
+                .iter_mut()
+                .zip(key.iter())
+            {
                 // S'[i,j] = λ·S[i,j] - β·pred_i·k_j + β·v_i·k_j
-                self.state[i * rank + j] =
-                    lambda_i * old - beta_i * pred_i * key[j] + beta_i * val_i * key[j];
+                *s_val = lambda_i * *s_val - beta_i * pred_i * k_val + beta_i * val_i * k_val;
             }
 
             // Track prediction error for gate adaptation

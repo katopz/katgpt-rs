@@ -137,9 +137,9 @@ impl EgaGate {
         assert_eq!(x.len(), seq_len * dim, "x must have seq_len × dim elements");
         assert_eq!(dim, self.w_proj.len(), "dim must match w_proj length");
 
-        for i in 0..seq_len {
+        for (i, out_slot) in out.iter_mut().enumerate().take(seq_len) {
             let row_off = i * dim;
-            out[i] = crate::simd::simd_dot_f32(&x[row_off..row_off + dim], &self.w_proj, dim);
+            *out_slot = crate::simd::simd_dot_f32(&x[row_off..row_off + dim], &self.w_proj, dim);
         }
     }
 

@@ -1755,10 +1755,6 @@ fn forward_base<'a>(
         let scale = ctx.attn_scale;
         let t_n = pos + 1;
 
-        // Pre-zero attention output for contiguous memory sweep (attention_head
-        // still zeros per-head slice, but the pre-zero makes those writes cache-hot)
-        ctx.attn_out[..n].fill(0.0);
-
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
             unsafe {
@@ -2291,9 +2287,9 @@ pub fn project_target_activation(
             // proj_weights layout: [drafter_n_embd * target_n_embd]
             // out[i] = sum_j(proj_weights[i * target_n_embd + j] * target_hidden[j])
             let out_len = out_buf.len().min(drafter_n_embd);
-            for i in 0..out_len {
+            for (i, out_slot) in out_buf.iter_mut().enumerate().take(out_len) {
                 let row_off = i * target_n_embd;
-                out_buf[i] = crate::simd::simd_dot_f32(
+                *out_slot = crate::simd::simd_dot_f32(
                     &proj_weights[row_off..row_off + target_n_embd],
                     &target_hidden[..target_n_embd],
                     target_n_embd,

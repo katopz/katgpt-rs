@@ -480,8 +480,8 @@ fn score_relevance_into(
     buf: &mut [f32],
 ) {
     let limit = vocab_size.min(256).min(buf.len());
-    for tok in 0..limit {
-        buf[tok] = if pruner.is_valid(depth, tok, placed_tokens) {
+    for (tok, slot) in buf.iter_mut().enumerate().take(limit) {
+        *slot = if pruner.is_valid(depth, tok, placed_tokens) {
             1.0
         } else {
             0.0
@@ -492,6 +492,7 @@ fn score_relevance_into(
 }
 
 /// Backward-compatible wrapper that allocates.
+#[allow(dead_code)]
 fn score_relevance(
     pruner: &dyn crate::traits::ConstraintPruner,
     depth: usize,

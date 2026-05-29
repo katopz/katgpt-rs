@@ -612,9 +612,13 @@ impl BomberPlayer for RmsdPlayer {
         }
 
         // 11. Update teacher Q for next round's RMSD filtering
-        for i in 0..ACTION_COUNT {
-            if hinted_scores[i] > f32::NEG_INFINITY {
-                self.teacher_q[i] = hinted_scores[i];
+        for (hinted, teacher) in hinted_scores
+            .iter()
+            .zip(self.teacher_q.iter_mut())
+            .take(ACTION_COUNT)
+        {
+            if *hinted > f32::NEG_INFINITY {
+                *teacher = *hinted;
             }
         }
 

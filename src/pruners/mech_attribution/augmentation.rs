@@ -103,9 +103,9 @@ fn extract_xml_template(samples: Vec<&str>) -> String {
 
     // Replace text content between tags with placeholders
     // Simple approach: replace any >text< with >{}<
-    let re_placeholder = |s: &str| -> String {
-        let bytes = s.as_bytes();
-        let mut result = String::with_capacity(s.len());
+    {
+        let bytes = template.as_bytes();
+        let mut result = String::with_capacity(template.len());
         let mut i = 0;
         while i < bytes.len() {
             if bytes[i] == b'>' {
@@ -115,7 +115,7 @@ fn extract_xml_template(samples: Vec<&str>) -> String {
                 while i < bytes.len() && bytes[i] != b'<' {
                     i += 1;
                 }
-                let content = &s[start..i];
+                let content = &template[start..i];
                 if !content.is_empty() && !content.trim().is_empty() {
                     result.push_str("{}");
                 }
@@ -124,10 +124,8 @@ fn extract_xml_template(samples: Vec<&str>) -> String {
                 i += 1;
             }
         }
-        result
-    };
-
-    template = re_placeholder(&template);
+        template = result;
+    }
     template
 }
 

@@ -14,8 +14,6 @@
 //! The slack term ξ(D̂ₛ) = (√(8·D̂ₛ + 1) - 1) / δ accounts for delayed feedback
 //! by widening the phase-gap threshold, preventing premature escalation.
 
-#![cfg(feature = "safe_bandit")]
-
 use crate::types::Rng;
 
 /// Regret-budget constant C (PrudentBanker default).
@@ -195,7 +193,7 @@ impl SafePhasedState {
         let base = regret_budget as u32;
         // Each phase gets R̂ rounds, scaled by phase for more exploration
         let scaled = base * 2_u32.pow(phase.saturating_sub(1).min(10));
-        scaled.max(10).min(1000)
+        scaled.clamp(10, 1000)
     }
 
     // ── Update methods ─────────────────────────────────────────

@@ -59,17 +59,16 @@ impl FeatureHasher {
 
     /// Matrix-vector multiply: projection · features
     fn project(&self, features: &[f32]) -> Vec<f32> {
-        let dim = features.len();
         let mut result = vec![0.0; self.rank];
-        for i in 0..self.rank {
+        for (i, result_slot) in result.iter_mut().enumerate().take(self.rank) {
             let mut sum = 0.0f32;
-            for j in 0..dim {
+            for (j, feat) in features.iter().enumerate() {
                 if j * self.rank + i < self.projection.len() {
                     // Column-major access for projection[i, j]
-                    sum += self.projection[j * self.rank + i] * features[j];
+                    sum += self.projection[j * self.rank + i] * feat;
                 }
             }
-            result[i] = sum;
+            *result_slot = sum;
         }
         result
     }

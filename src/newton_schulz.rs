@@ -365,6 +365,7 @@ fn newton_schulz5_square_into(
 }
 
 /// Raw implementation operating on individual scratch slices.
+#[allow(clippy::too_many_arguments)]
 fn newton_schulz5_square_into_raw(
     g: &[f32],
     m: usize,
