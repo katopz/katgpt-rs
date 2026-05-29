@@ -199,11 +199,10 @@ impl StiffAnomalyGate {
         let z_scores = tracker.eigenspace_zscore(current);
 
         // Check for stiff collision: any eigenvalue z-score below threshold
-        if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min) {
-            if min_z < self.z_threshold {
+        if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min)
+            && min_z < self.z_threshold {
                 return GateResult::StiffCollision { z_score: min_z };
             }
-        }
 
         // Compute soft alignment ratio
         let decomp = decompose(current.to_vec(), eigenvectors.to_vec(), trace_mass);
@@ -233,11 +232,10 @@ impl StiffAnomalyGate {
         let mut false_positives = 0usize;
         for w in stable_windows {
             let z_scores = tracker.eigenspace_zscore(w);
-            if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min) {
-                if min_z < self.z_threshold {
+            if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min)
+                && min_z < self.z_threshold {
                     false_positives += 1;
                 }
-            }
         }
         false_positives as f32 / stable_windows.len() as f32
     }

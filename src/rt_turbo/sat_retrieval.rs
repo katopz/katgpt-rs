@@ -49,13 +49,11 @@ pub fn compute_retrieval_scores_sat(
         .map(|attn| {
             let n = attn.len();
             // Convert flat to 2D for SAT
-            let seq_len = (n > 0)
-                .then(|| {
+            let seq_len = if n > 0 { {
                     let sq = (n as f64).sqrt() as usize;
                     debug_assert_eq!(sq * sq, n, "attention matrix must be square (n² elements)");
                     sq
-                })
-                .unwrap_or(0);
+                } } else { 0 };
 
             if seq_len == 0 {
                 return 0.0;
