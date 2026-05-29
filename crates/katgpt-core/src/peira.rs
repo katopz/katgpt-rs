@@ -121,22 +121,31 @@ fn scalar_outer_product_ema_f64(
     alpha: f64,
     first_step: bool,
 ) {
-    let one_minus_alpha = 1.0 - alpha;
-    for i in 0..k {
-        let si = student[i] as f64;
-        let ti = teacher[i] as f64;
-        for j in 0..k {
-            let sj = student[j] as f64;
-            let tj = teacher[j] as f64;
-            let sigma_ij = si * tj;
-            let n_ij = (si * sj + ti * tj) / 2.0;
-            let idx = i * k + j;
-            if first_step {
-                dst_sigma[idx] = sigma_ij;
-                dst_n[idx] = n_ij;
-            } else {
-                dst_sigma[idx] = alpha * dst_sigma[idx] + one_minus_alpha * sigma_ij;
-                dst_n[idx] = alpha * dst_n[idx] + one_minus_alpha * n_ij;
+    if first_step {
+        // First step: direct assignment (no EMA blending)
+        for i in 0..k {
+            let si = student[i] as f64;
+            let ti = teacher[i] as f64;
+            for j in 0..k {
+                let sj = student[j] as f64;
+                let tj = teacher[j] as f64;
+                let idx = i * k + j;
+                dst_sigma[idx] = si * tj;
+                dst_n[idx] = (si * sj + ti * tj) / 2.0;
+            }
+        }
+    } else {
+        // Subsequent steps: EMA blending
+        let one_minus_alpha = 1.0 - alpha;
+        for i in 0..k {
+            let si = student[i] as f64;
+            let ti = teacher[i] as f64;
+            for j in 0..k {
+                let sj = student[j] as f64;
+                let tj = teacher[j] as f64;
+                let idx = i * k + j;
+                dst_sigma[idx] = alpha * dst_sigma[idx] + one_minus_alpha * (si * tj);
+                dst_n[idx] = alpha * dst_n[idx] + one_minus_alpha * ((si * sj + ti * tj) / 2.0);
             }
         }
     }
@@ -193,43 +202,79 @@ unsafe fn neon_outer_product_ema_f64(
     };
 
     unsafe {
-        let one_minus_alpha = 1.0 - alpha;
-        let v_alpha = vdupq_n_f64(alpha);
-        let v_oma = vdupq_n_f64(one_minus_alpha);
         let n_chunks = k / 2;
 
-        for i in 0..k {
-            let si = *student.get_unchecked(i) as f64;
-            let ti = *teacher.get_unchecked(i) as f64;
-            let v_si = vld1q_dup_f64(&si);
-            let v_ti = vld1q_dup_f64(&ti);
+        if first_step {
+            // First step: direct assignment (no EMA blending, no load from dst)
+            for i in 0..k {
+                let si = *student.get_unchecked(i) as f64;
+                let ti = *teacher.get_unchecked(i) as f64;
+                let v_si = vld1q_dup_f64(&si);
+                let v_ti = vld1q_dup_f64(&ti);
 
-            let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
-            let row_n = dst_n.as_mut_ptr().add(i * k);
+                let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
+                let row_n = dst_n.as_mut_ptr().add(i * k);
 
-            let mut j = 0;
-            for _ in 0..n_chunks {
-                // Load f32 pairs and convert to f64
-                let sj0 = *student.get_unchecked(j) as f64;
-                let sj1 = *student.get_unchecked(j + 1) as f64;
-                let v_sj = vld1q_f64([sj0, sj1].as_ptr());
+                let mut j = 0;
+                for _ in 0..n_chunks {
+                    let sj0 = *student.get_unchecked(j) as f64;
+                    let sj1 = *student.get_unchecked(j + 1) as f64;
+                    let v_sj = vld1q_f64([sj0, sj1].as_ptr());
 
-                let tj0 = *teacher.get_unchecked(j) as f64;
-                let tj1 = *teacher.get_unchecked(j + 1) as f64;
-                let v_tj = vld1q_f64([tj0, tj1].as_ptr());
+                    let tj0 = *teacher.get_unchecked(j) as f64;
+                    let tj1 = *teacher.get_unchecked(j + 1) as f64;
+                    let v_tj = vld1q_f64([tj0, tj1].as_ptr());
 
-                // sigma_ij = si * tj
-                let v_sigma = vmulq_f64(v_si, v_tj);
-                // n_ij = (si * sj + ti * tj) / 2
-                let v_n = vmulq_f64(v_si, v_sj);
-                let v_n = vmlaq_f64(v_n, v_ti, v_tj);
-                let half = vdupq_n_f64(0.5);
-                let v_n = vmulq_f64(v_n, half);
+                    let v_sigma = vmulq_f64(v_si, v_tj);
+                    let v_n = vmulq_f64(v_si, v_sj);
+                    let v_n = vmlaq_f64(v_n, v_ti, v_tj);
+                    let half = vdupq_n_f64(0.5);
+                    let v_n = vmulq_f64(v_n, half);
 
-                if first_step {
                     vst1q_f64(row_sigma.add(j), v_sigma);
                     vst1q_f64(row_n.add(j), v_n);
-                } else {
+                    j += 2;
+                }
+
+                while j < k {
+                    let sj = *student.get_unchecked(j) as f64;
+                    let tj = *teacher.get_unchecked(j) as f64;
+                    *dst_sigma.get_unchecked_mut(i * k + j) = si * tj;
+                    *dst_n.get_unchecked_mut(i * k + j) = (si * sj + ti * tj) * 0.5;
+                    j += 1;
+                }
+            }
+        } else {
+            // Subsequent steps: EMA blending
+            let one_minus_alpha = 1.0 - alpha;
+            let v_alpha = vdupq_n_f64(alpha);
+            let v_oma = vdupq_n_f64(one_minus_alpha);
+
+            for i in 0..k {
+                let si = *student.get_unchecked(i) as f64;
+                let ti = *teacher.get_unchecked(i) as f64;
+                let v_si = vld1q_dup_f64(&si);
+                let v_ti = vld1q_dup_f64(&ti);
+
+                let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
+                let row_n = dst_n.as_mut_ptr().add(i * k);
+
+                let mut j = 0;
+                for _ in 0..n_chunks {
+                    let sj0 = *student.get_unchecked(j) as f64;
+                    let sj1 = *student.get_unchecked(j + 1) as f64;
+                    let v_sj = vld1q_f64([sj0, sj1].as_ptr());
+
+                    let tj0 = *teacher.get_unchecked(j) as f64;
+                    let tj1 = *teacher.get_unchecked(j + 1) as f64;
+                    let v_tj = vld1q_f64([tj0, tj1].as_ptr());
+
+                    let v_sigma = vmulq_f64(v_si, v_tj);
+                    let v_n = vmulq_f64(v_si, v_sj);
+                    let v_n = vmlaq_f64(v_n, v_ti, v_tj);
+                    let half = vdupq_n_f64(0.5);
+                    let v_n = vmulq_f64(v_n, half);
+
                     let v_old_sigma = vld1q_f64(row_sigma.add(j));
                     let v_old_n = vld1q_f64(row_n.add(j));
                     vst1q_f64(
@@ -240,27 +285,21 @@ unsafe fn neon_outer_product_ema_f64(
                         row_n.add(j),
                         vmlaq_f64(vmulq_f64(v_alpha, v_old_n), v_oma, v_n),
                     );
+                    j += 2;
                 }
-                j += 2;
-            }
 
-            // Scalar tail
-            while j < k {
-                let sj = *student.get_unchecked(j) as f64;
-                let tj = *teacher.get_unchecked(j) as f64;
-                let sigma_ij = si * tj;
-                let n_ij = (si * sj + ti * tj) * 0.5;
-                if first_step {
-                    *dst_sigma.get_unchecked_mut(i * k + j) = sigma_ij;
-                    *dst_n.get_unchecked_mut(i * k + j) = n_ij;
-                } else {
+                while j < k {
+                    let sj = *student.get_unchecked(j) as f64;
+                    let tj = *teacher.get_unchecked(j) as f64;
                     let idx = i * k + j;
+                    let sigma_ij = si * tj;
+                    let n_ij = (si * sj + ti * tj) * 0.5;
                     *dst_sigma.get_unchecked_mut(idx) =
                         alpha * *dst_sigma.get_unchecked(idx) + one_minus_alpha * sigma_ij;
                     *dst_n.get_unchecked_mut(idx) =
                         alpha * *dst_n.get_unchecked(idx) + one_minus_alpha * n_ij;
+                    j += 1;
                 }
-                j += 1;
             }
         }
     }
@@ -376,47 +415,83 @@ unsafe fn avx2_outer_product_ema_f64(
     };
 
     unsafe {
-        let one_minus_alpha = 1.0 - alpha;
-        let v_alpha = _mm256_set1_pd(alpha);
-        let v_oma = _mm256_set1_pd(one_minus_alpha);
         let n_chunks = k / 4;
 
-        for i in 0..k {
-            let si = *student.get_unchecked(i) as f64;
-            let ti = *teacher.get_unchecked(i) as f64;
-            let v_si = _mm256_broadcast_sd(&si);
-            let v_ti = _mm256_broadcast_sd(&ti);
+        if first_step {
+            // First step: direct assignment (no EMA blending, no load from dst)
+            for i in 0..k {
+                let si = *student.get_unchecked(i) as f64;
+                let ti = *teacher.get_unchecked(i) as f64;
+                let v_si = _mm256_broadcast_sd(&si);
+                let v_ti = _mm256_broadcast_sd(&ti);
 
-            let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
-            let row_n = dst_n.as_mut_ptr().add(i * k);
+                let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
+                let row_n = dst_n.as_mut_ptr().add(i * k);
 
-            let mut j = 0;
-            for _ in 0..n_chunks {
-                // Load 4 student/teacher f32 values and broadcast to f64
-                let mut sj_buf = [0.0f64; 4];
-                let mut tj_buf = [0.0f64; 4];
-                for b in 0..4 {
-                    sj_buf[b] = *student.get_unchecked(j + b) as f64;
-                    tj_buf[b] = *teacher.get_unchecked(j + b) as f64;
-                }
-                let v_sj = _mm256_loadu_pd(sj_buf.as_ptr());
-                let v_tj = _mm256_loadu_pd(tj_buf.as_ptr());
+                let mut j = 0;
+                for _ in 0..n_chunks {
+                    let mut sj_buf = [0.0f64; 4];
+                    let mut tj_buf = [0.0f64; 4];
+                    for b in 0..4 {
+                        sj_buf[b] = *student.get_unchecked(j + b) as f64;
+                        tj_buf[b] = *teacher.get_unchecked(j + b) as f64;
+                    }
+                    let v_sj = _mm256_loadu_pd(sj_buf.as_ptr());
+                    let v_tj = _mm256_loadu_pd(tj_buf.as_ptr());
 
-                // sigma_ij = si * tj
-                let v_sigma = _mm256_mul_pd(v_si, v_tj);
-                // n_ij = (si * sj + ti * tj) / 2
-                let v_n = _mm256_mul_pd(v_si, v_sj);
-                let v_n = _mm256_add_pd(v_n, _mm256_mul_pd(v_ti, v_tj));
-                let half = _mm256_set1_pd(0.5);
-                let v_n = _mm256_mul_pd(v_n, half);
+                    let v_sigma = _mm256_mul_pd(v_si, v_tj);
+                    let v_n = _mm256_mul_pd(v_si, v_sj);
+                    let v_n = _mm256_add_pd(v_n, _mm256_mul_pd(v_ti, v_tj));
+                    let half = _mm256_set1_pd(0.5);
+                    let v_n = _mm256_mul_pd(v_n, half);
 
-                if first_step {
                     _mm256_storeu_pd(row_sigma.add(j), v_sigma);
                     _mm256_storeu_pd(row_n.add(j), v_n);
-                } else {
+                    j += 4;
+                }
+
+                while j < k {
+                    let sj = *student.get_unchecked(j) as f64;
+                    let tj = *teacher.get_unchecked(j) as f64;
+                    *dst_sigma.get_unchecked_mut(i * k + j) = si * tj;
+                    *dst_n.get_unchecked_mut(i * k + j) = (si * sj + ti * tj) * 0.5;
+                    j += 1;
+                }
+            }
+        } else {
+            // Subsequent steps: EMA blending
+            let one_minus_alpha = 1.0 - alpha;
+            let v_alpha = _mm256_set1_pd(alpha);
+            let v_oma = _mm256_set1_pd(one_minus_alpha);
+
+            for i in 0..k {
+                let si = *student.get_unchecked(i) as f64;
+                let ti = *teacher.get_unchecked(i) as f64;
+                let v_si = _mm256_broadcast_sd(&si);
+                let v_ti = _mm256_broadcast_sd(&ti);
+
+                let row_sigma = dst_sigma.as_mut_ptr().add(i * k);
+                let row_n = dst_n.as_mut_ptr().add(i * k);
+
+                let mut j = 0;
+                for _ in 0..n_chunks {
+                    let mut sj_buf = [0.0f64; 4];
+                    let mut tj_buf = [0.0f64; 4];
+                    for b in 0..4 {
+                        sj_buf[b] = *student.get_unchecked(j + b) as f64;
+                        tj_buf[b] = *teacher.get_unchecked(j + b) as f64;
+                    }
+                    let v_sj = _mm256_loadu_pd(sj_buf.as_ptr());
+                    let v_tj = _mm256_loadu_pd(tj_buf.as_ptr());
+
+                    let v_sigma = _mm256_mul_pd(v_si, v_tj);
+                    let v_n = _mm256_mul_pd(v_si, v_sj);
+                    let v_n = _mm256_add_pd(v_n, _mm256_mul_pd(v_ti, v_tj));
+                    let half = _mm256_set1_pd(0.5);
+                    let v_n = _mm256_mul_pd(v_n, half);
+
                     let v_old_sigma = _mm256_loadu_pd(row_sigma.add(j));
                     let v_old_n = _mm256_loadu_pd(row_n.add(j));
-                    // EMA: alpha * old + (1-alpha) * new
                     _mm256_storeu_pd(
                         row_sigma.add(j),
                         _mm256_add_pd(
@@ -428,27 +503,21 @@ unsafe fn avx2_outer_product_ema_f64(
                         row_n.add(j),
                         _mm256_add_pd(_mm256_mul_pd(v_alpha, v_old_n), _mm256_mul_pd(v_oma, v_n)),
                     );
+                    j += 4;
                 }
-                j += 4;
-            }
 
-            // Scalar tail
-            while j < k {
-                let sj = *student.get_unchecked(j) as f64;
-                let tj = *teacher.get_unchecked(j) as f64;
-                let sigma_ij = si * tj;
-                let n_ij = (si * sj + ti * tj) * 0.5;
-                if first_step {
-                    *dst_sigma.get_unchecked_mut(i * k + j) = sigma_ij;
-                    *dst_n.get_unchecked_mut(i * k + j) = n_ij;
-                } else {
+                while j < k {
+                    let sj = *student.get_unchecked(j) as f64;
+                    let tj = *teacher.get_unchecked(j) as f64;
                     let idx = i * k + j;
+                    let sigma_ij = si * tj;
+                    let n_ij = (si * sj + ti * tj) * 0.5;
                     *dst_sigma.get_unchecked_mut(idx) =
                         alpha * *dst_sigma.get_unchecked(idx) + one_minus_alpha * sigma_ij;
                     *dst_n.get_unchecked_mut(idx) =
                         alpha * *dst_n.get_unchecked(idx) + one_minus_alpha * n_ij;
+                    j += 1;
                 }
-                j += 1;
             }
         }
     }
