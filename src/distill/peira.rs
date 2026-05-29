@@ -29,7 +29,7 @@ pub struct PeiraDistiller {
 impl PeiraDistiller {
     /// Create a new distiller with the given configuration.
     pub fn new(config: PeiraConfig) -> Self {
-        let covariance = PeiraCovariance::new(config.clone());
+        let covariance = PeiraCovariance::new(config);
         Self {
             covariance,
             config,

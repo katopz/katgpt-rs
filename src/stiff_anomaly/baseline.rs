@@ -83,7 +83,7 @@ where
     let real_score = pipeline(&structured) as f64;
 
     let sigma_separation = if null_std > 1e-12 {
-        ((real_score - null_mean as f64) / null_std as f64) as f32
+        ((real_score - null_mean) / null_std as f64) as f32
     } else {
         0.0
     };
