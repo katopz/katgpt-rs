@@ -420,8 +420,10 @@ pub fn find_sufficient_set(
     let mut sufficient = Vec::with_capacity(max_search_depth);
 
     let limit = 256.min(vocab_size);
-    let candidates: Vec<usize> = (0..limit).collect();
-    let mut batch_buf = vec![false; limit];
+
+    // Stack-allocated candidate index array — avoids heap allocation for bounded vocab.
+    let candidates: [usize; 256] = std::array::from_fn(|i| i);
+    let mut batch_buf = [false; 256];
 
     // Pre-compute extension counts for ALL candidates once (O(n × sample_size))
     // instead of per-comparison during sort (O(n log n × sample_size))
@@ -442,8 +444,8 @@ pub fn find_sufficient_set(
                 depth + 1,
                 &ext_buf,
                 vocab_size,
-                &candidates,
-                &mut batch_buf,
+                &candidates[..limit],
+                &mut batch_buf[..limit],
             );
             Some((tok, count))
         })
@@ -452,12 +454,12 @@ pub fn find_sufficient_set(
     // Sort by pre-computed counts (ascending = tighter constraints first)
     counts.sort_by_key(|&(_, count)| count);
 
-    let mut relevance_buf = vec![0.0f32; limit];
+    let mut relevance_buf = [0.0f32; 256];
 
     for &(tok, _) in counts.iter().take(max_search_depth) {
         ext_buf[base_len] = tok; // Overwrite only the candidate slot (avoids clear + extend)
         score_relevance_into(pruner, depth + 1, &ext_buf, vocab_size, &mut relevance_buf);
-        let score = underspecification_score(&relevance_buf);
+        let score = underspecification_score(&relevance_buf[..limit]);
         if score < 0.5 {
             sufficient.push(tok);
             break; // found 1-sufficient

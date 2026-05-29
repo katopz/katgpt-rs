@@ -276,12 +276,22 @@ struct BidirectionalContext {
     hidden: Vec<f32>,
     x_mlp: Vec<f32>,
     logits: Vec<f32>,
+    // Attention scratch buffers (reused across positions)
+    attn_out_buf: Vec<f32>,
+    attn_weights_buf: Vec<f32>,
+    scores_buf: Vec<f32>,
+    // Cross-position buffers (resized per call, reused across calls)
+    k_cache: Vec<f32>,
+    v_cache: Vec<f32>,
+    x_norm2_all: Vec<f32>,
+    xr_all: Vec<f32>,
 }
 
 impl BidirectionalContext {
     fn new(config: &Config) -> Self {
         let n = config.n_embd;
         let kvd = kv_dim(config);
+        let bs = config.block_size;
         Self {
             x: vec![0.0f32; n],
             q: vec![0.0f32; n],
@@ -292,6 +302,13 @@ impl BidirectionalContext {
             hidden: vec![0.0f32; config.mlp_hidden],
             x_mlp: vec![0.0f32; n],
             logits: vec![0.0f32; config.vocab_size],
+            attn_out_buf: vec![0.0f32; n],
+            attn_weights_buf: vec![0.0f32; config.n_head * bs],
+            scores_buf: vec![0.0f32; bs],
+            k_cache: vec![0.0f32; bs * kvd],
+            v_cache: vec![0.0f32; bs * kvd],
+            x_norm2_all: vec![0.0f32; bs * n],
+            xr_all: vec![0.0f32; bs * n],
         }
     }
 }
@@ -304,22 +321,31 @@ pub fn forward_bidirectional_positions(
     tokens: &[usize],
     config: &Config,
 ) -> (Vec<f32>, Vec<f32>) {
+    let mut bctx = BidirectionalContext::new(config);
+    forward_bidirectional_positions_into(weights, tokens, config, &mut bctx)
+}
+
+/// Zero-alloc variant of [`forward_bidirectional_positions`] that reuses a pre-allocated context.
+///
+/// Pass a `BidirectionalContext` to avoid per-call heap allocation when calling in a loop
+/// (e.g., `denoise_loop`).
+fn forward_bidirectional_positions_into(
+    weights: &TransformerWeights,
+    tokens: &[usize],
+    config: &Config,
+    bctx: &mut BidirectionalContext,
+) -> (Vec<f32>, Vec<f32>) {
     let n = config.n_embd;
     let hd = config.head_dim;
     let kvd = kv_dim(config);
     let seq_len = tokens.len().min(config.block_size);
     let scale = 1.0 / (hd as f32).sqrt();
 
-    // Pre-allocate scratch buffers (reused across positions)
-    let mut bctx = BidirectionalContext::new(config);
-
     // Phase A: Compute K/V for all positions
-    let mut k_cache = vec![0.0f32; seq_len * kvd];
-    let mut v_cache = vec![0.0f32; seq_len * kvd];
-    // Store intermediate for attention: norm2 inputs per position
-    let mut x_norm2_all = vec![0.0f32; seq_len * n];
-    // Store residuals
-    let mut xr_all = vec![0.0f32; seq_len * n];
+    bctx.k_cache[..seq_len * kvd].fill(0.0);
+    bctx.v_cache[..seq_len * kvd].fill(0.0);
+    bctx.x_norm2_all[..seq_len * n].fill(0.0);
+    bctx.xr_all[..seq_len * n].fill(0.0);
 
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
         crate::simd::simd_add_into(
@@ -328,17 +354,17 @@ pub fn forward_bidirectional_positions(
             &weights.wpe[p * n..(p + 1) * n],
         );
         rmsnorm(&mut bctx.x);
-        xr_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
+        bctx.xr_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
         rmsnorm(&mut bctx.x);
-        x_norm2_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
+        bctx.x_norm2_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
 
         let layer = &weights.layers[0];
         bctx.k.fill(0.0);
         bctx.v.fill(0.0);
         matmul(&mut bctx.k, &layer.attn_wk, &bctx.x, kvd, n);
         matmul(&mut bctx.v, &layer.attn_wv, &bctx.x, kvd, n);
-        k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&bctx.k);
-        v_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&bctx.v);
+        bctx.k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&bctx.k);
+        bctx.v_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&bctx.v);
     }
 
     // Phase B: Bidirectional attention for all positions
@@ -348,36 +374,31 @@ pub fn forward_bidirectional_positions(
     let mut all_attn_weights = vec![0.0f32; seq_len * n_heads * seq_len];
     let layer = &weights.layers[0];
 
-    // Pre-allocate attention scratch buffers (reused across positions)
-    let n_embd = config.n_head * hd;
-    let mut attn_out_buf = vec![0.0f32; n_embd];
-    let mut attn_weights_buf = vec![0.0f32; config.n_head * seq_len];
-    let mut scores_buf = vec![0.0f32; seq_len];
-
     for p in 0..seq_len {
-        bctx.x.copy_from_slice(&x_norm2_all[p * n..(p + 1) * n]);
+        bctx.x
+            .copy_from_slice(&bctx.x_norm2_all[p * n..(p + 1) * n]);
 
         bctx.q.fill(0.0);
         matmul(&mut bctx.q, &layer.attn_wq, &bctx.x, n, n);
 
         attention_forward_safe_into(
             &bctx.q,
-            &k_cache,
-            &v_cache,
+            &bctx.k_cache,
+            &bctx.v_cache,
             config.n_head,
             config.n_kv_head,
             hd,
             kvd,
             seq_len,
             scale,
-            &mut attn_out_buf,
-            &mut attn_weights_buf,
-            &mut scores_buf,
+            &mut bctx.attn_out_buf,
+            &mut bctx.attn_weights_buf,
+            &mut bctx.scores_buf,
         );
 
         bctx.x_proj.fill(0.0);
-        matmul(&mut bctx.x_proj, &layer.attn_wo, &attn_out_buf, n, n);
-        crate::simd::simd_add_inplace(&mut bctx.x_proj, &xr_all[p * n..(p + 1) * n]);
+        matmul(&mut bctx.x_proj, &layer.attn_wo, &bctx.attn_out_buf, n, n);
+        crate::simd::simd_add_inplace(&mut bctx.x_proj, &bctx.xr_all[p * n..(p + 1) * n]);
 
         // MLP
         bctx.xr2.copy_from_slice(&bctx.x_proj);
@@ -410,7 +431,7 @@ pub fn forward_bidirectional_positions(
         );
         all_logits[p * vocab..(p + 1) * vocab].copy_from_slice(&bctx.logits);
         all_attn_weights[p * n_heads * seq_len..(p + 1) * n_heads * seq_len]
-            .copy_from_slice(&attn_weights_buf);
+            .copy_from_slice(&bctx.attn_weights_buf[..n_heads * seq_len]);
     }
 
     (all_logits, all_attn_weights)
@@ -1231,15 +1252,19 @@ fn masked_loss(
 ) -> f32 {
     let mut total = 0.0f32;
     let mut count = 0usize;
+    // Pre-allocate scratch buffer for SIMD exp (reused across masked positions)
+    let mut exp_buf = vec![0.0f32; vocab];
     for (p, &masked) in is_masked.iter().enumerate() {
         if !masked {
             continue;
         }
         let l = &logits[p * vocab..(p + 1) * vocab];
         // Log-softmax: log_softmax[i] = x[i] - max - ln(Σ exp(x - max))
-        // Avoids the exp / sum / ln roundtrip of the naive formulation.
         let max_l = crate::simd::simd_max_f32(l);
-        let sum_exp: f32 = l.iter().map(|x| (x - max_l).exp()).sum();
+        exp_buf[..vocab].copy_from_slice(l);
+        crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+        crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+        let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
         let log_sum_exp = sum_exp.ln();
         total -= l[targets[p]] - max_l - log_sum_exp;
         count += 1;
@@ -1915,12 +1940,16 @@ pub fn denoise_loop(
     let seq_len = target_tokens.len().min(config.block_size);
     let mask = config.mask_token;
 
+    // Pre-allocate context once — reused across all denoising steps
+    let mut bctx = BidirectionalContext::new(config);
+
     // Initialize with mask tokens
     let mut tokens = vec![mask; seq_len];
     let mut converged_step = n_steps;
 
     for step in 0..n_steps {
-        let (logits_flat, _) = forward_bidirectional_positions(weights, &tokens, config);
+        let (logits_flat, _) =
+            forward_bidirectional_positions_into(weights, &tokens, config, &mut bctx);
         let mut any_changed = false;
         let vocab = config.vocab_size;
 

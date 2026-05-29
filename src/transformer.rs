@@ -3604,8 +3604,8 @@ impl RavenKVCache {
             forget_rate: -1.0,
             keys: vec![0.0; num_slots * kvd],
             values: vec![0.0; num_slots * kvd],
-            router_scored: Vec::with_capacity(num_slots),
-            router_r_t: Vec::with_capacity(num_slots),
+            router_scored: vec![(0usize, 0.0f32); num_slots],
+            router_r_t: vec![0.0f32; num_slots],
             readout_scores: vec![0.0; num_slots],
             readout_output: vec![0.0; kvd],
         }
@@ -3636,17 +3636,16 @@ pub fn raven_compute_router_into(
     let num_slots = raw_logits.len();
     let top_k = top_k.min(num_slots);
 
-    // Reuse pre-allocated buffers: clear + fill
-    // Batch sigmoid via SIMD: negate → SIMD exp → 1/(1+exp)
-    scored.clear();
     // Negate logits in-place into r_t scratch buffer
     r_t.resize(num_slots, 0.0);
     for (i, &x) in raw_logits.iter().enumerate() {
         r_t[i] = -x;
     }
     crate::simd::simd_exp_inplace(&mut r_t[..num_slots]);
+    // Write directly into pre-sized scored buffer (avoids push reallocation)
+    scored.resize(num_slots, (0, 0.0));
     for (i, &e) in r_t[..num_slots].iter().enumerate() {
-        scored.push((i, 1.0 / (1.0 + e)));
+        scored[i] = (i, 1.0 / (1.0 + e));
     }
 
     // Partial sort: find Top-K by descending score (O(n) average)
@@ -3668,8 +3667,9 @@ pub fn raven_compute_router_into(
 
     // Normalize so selected slots sum to 1.0
     if sum > 0.0 {
-        for v in r_t.iter_mut() {
-            *v /= sum;
+        let inv_sum = 1.0 / sum;
+        for v in r_t[..num_slots].iter_mut() {
+            *v *= inv_sum;
         }
     }
 }

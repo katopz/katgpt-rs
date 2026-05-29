@@ -116,7 +116,8 @@ pub fn ndcg_at(ranking: &[RerankedDoc], ground_truth: &[f32], k: usize) -> f32 {
         .sum();
 
     // IDCG@k: ideal ranking from ground truth, sorted descending.
-    let mut ideal_rels: Vec<f64> = ground_truth.iter().map(|&r| r as f64).collect();
+    let mut ideal_rels: Vec<f64> = Vec::with_capacity(ground_truth.len());
+    ideal_rels.extend(ground_truth.iter().map(|&r| r as f64));
     ideal_rels.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
     let idcg: f64 = (0..k.min(ideal_rels.len()))
         .map(|i| (2.0f64.powf(ideal_rels[i]) - 1.0) / (i as f64 + 2.0).log2())
