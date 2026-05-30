@@ -451,12 +451,23 @@ pub fn find_sufficient_set(
     let base_len = placed_tokens.len();
     ext_buf.push(0); // Reserve slot for the candidate token
 
+    // Batch validity check — single virtual dispatch instead of vocab_size individual calls.
+    // Reuse batch_buf for the validity bitmap, then use it again for extension counting.
+    let mut valid_buf = [false; 256];
+    let check_limit = limit.min(vocab_size);
+    pruner.batch_is_valid(
+        depth,
+        &CANDIDATE_INDICES[..check_limit],
+        placed_tokens,
+        &mut valid_buf[..check_limit],
+    );
+
     // Pre-allocate counts with capacity up to vocab_size (bounded by limit).
     // Single pass: filter valid tokens AND compute extension counts, avoiding
     // an intermediate Vec<usize> allocation.
     let mut counts: Vec<(usize, usize)> = Vec::with_capacity(limit);
-    for tok in 0..vocab_size {
-        if !pruner.is_valid(depth, tok, placed_tokens) {
+    for tok in 0..check_limit {
+        if !valid_buf[tok] {
             continue;
         }
         ext_buf[base_len] = tok; // Overwrite only the candidate slot
@@ -508,9 +519,27 @@ fn count_valid_extensions_with(
         extended,
         &mut batch_buf[..limit],
     );
+    // SAFETY: bool is 1 byte with value 0 or 1 on all supported platforms.
+    // Casting the bool pointer to u8 pointer gives us byte values we can sum
+    // directly, which LLVM auto-vectorizes more aggressively than bool-as-usize.
+    let bytes: &[u8] =
+        unsafe { std::slice::from_raw_parts(batch_buf[..limit].as_ptr() as *const u8, limit) };
     let mut count = 0usize;
-    for &valid in &batch_buf[..limit] {
-        count += valid as usize;
+    // Chunked accumulation (8 at a time) for better auto-vectorization
+    let mut i = 0;
+    while i + 8 <= limit {
+        count += bytes[i] as usize;
+        count += bytes[i + 1] as usize;
+        count += bytes[i + 2] as usize;
+        count += bytes[i + 3] as usize;
+        count += bytes[i + 4] as usize;
+        count += bytes[i + 5] as usize;
+        count += bytes[i + 6] as usize;
+        count += bytes[i + 7] as usize;
+        i += 8;
+    }
+    for j in i..limit {
+        count += bytes[j] as usize;
     }
     count
 }
@@ -533,8 +562,22 @@ fn score_relevance_into(
         placed_tokens,
         &mut valid[..limit],
     );
-    for i in 0..limit {
+    // Chunked bool→f32 conversion (8 at a time) for AVX2 auto-vectorization.
+    // Uses `bool as usize` (0 or 1) for branch-free conversion.
+    let mut i = 0;
+    while i + 8 <= limit {
         buf[i] = valid[i] as usize as f32;
+        buf[i + 1] = valid[i + 1] as usize as f32;
+        buf[i + 2] = valid[i + 2] as usize as f32;
+        buf[i + 3] = valid[i + 3] as usize as f32;
+        buf[i + 4] = valid[i + 4] as usize as f32;
+        buf[i + 5] = valid[i + 5] as usize as f32;
+        buf[i + 6] = valid[i + 6] as usize as f32;
+        buf[i + 7] = valid[i + 7] as usize as f32;
+        i += 8;
+    }
+    for j in i..limit {
+        buf[j] = valid[j] as usize as f32;
     }
     buf[limit..].fill(0.0);
 }
@@ -704,7 +747,6 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     // valid_at_depth (all-true) and base narrowing structure (empty vecs).
     let grid_vocab = 16;
     let grid_valid: Vec<bool> = vec![true; grid_vocab];
-    let grid_base_narrowing: Vec<Vec<bool>> = vec![vec![]; grid_vocab];
     let mut adjacent_buf = vec![false; grid_vocab];
     for i in 0..count_per_domain {
         let vocab_size = grid_vocab;
@@ -721,8 +763,9 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
             let dist_sq = dr * dr + dc * dc;
             adjacent_buf[c] = dist_sq == 1;
         }
-        // Clone the pre-built base narrowing, then overwrite only the key slot
-        let mut narrowing = grid_base_narrowing.clone();
+        // Build narrowing directly — only the key slot is non-empty, avoiding
+        // cloning 16 empty Vecs from grid_base_narrowing.
+        let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| Vec::new()).collect();
         narrowing[key] = adjacent_buf.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
@@ -747,7 +790,6 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     let stone_vocab = 12;
     let stone_valid: Vec<bool> = vec![true; stone_vocab];
     let wide_next_bm: Vec<bool> = (0..stone_vocab).map(|c| c % 3 == 0).collect();
-    let stone_base_narrowing: Vec<Vec<bool>> = vec![vec![]; stone_vocab];
     // Pre-allocate reusable scratch for narrow bitmap
     let mut narrow_bm_scratch = vec![false; stone_vocab];
 
@@ -758,13 +800,16 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // (simulates a capture that fills all but one liberty)
         narrow_bm_scratch.fill(false);
         narrow_bm_scratch[(key + 1) % vocab_size] = true;
-        // Clone base narrowing, then set key slot and non-key slots
-        let mut narrowing = stone_base_narrowing.clone();
+        // OPT: Build narrowing in-place — start from empty vecs, set only what's needed.
+        // This avoids cloning the entire base narrowing array.
+        let mut narrowing: Vec<Vec<bool>> = Vec::with_capacity(vocab_size);
         for j in 0..vocab_size {
             if j == key {
-                narrowing[j] = narrow_bm_scratch.clone();
+                narrowing.push(narrow_bm_scratch.clone());
             } else {
-                narrowing[j] = wide_next_bm.clone();
+                // Clone the shared wide bitmap instead of the base narrowing's empty vec
+                // (wide_next_bm is identical for all non-key slots)
+                narrowing.push(wide_next_bm.clone());
             }
         }
         let pruner = NarrowingPruner {
@@ -789,7 +834,6 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     // determines the other
     let logic_vocab = 8;
     let logic_valid: Vec<bool> = vec![true; logic_vocab];
-    let logic_base_narrowing: Vec<Vec<bool>> = vec![vec![]; logic_vocab];
     let mut logic_bm_scratch = vec![false; logic_vocab];
 
     for i in 0..count_per_domain {
@@ -800,8 +844,8 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // Placing key → only partner survives at depth 1 (XOR resolution)
         logic_bm_scratch.fill(false);
         logic_bm_scratch[partner] = true;
-        // Clone base narrowing, overwrite only the key slot
-        let mut narrowing = logic_base_narrowing.clone();
+        // Build narrowing directly — only the key slot is non-empty.
+        let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| Vec::new()).collect();
         narrowing[key] = logic_bm_scratch.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
