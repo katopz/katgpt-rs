@@ -2041,14 +2041,14 @@ cargo clippy --all-targets --all-features --quiet
 | `mech_attribution` | Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, **opt-in**). Requires `cna_steering`, `ropd_rubric`, `bandit` |
 | `newton_schulz` | Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114, GOAT 25/25 Bench 050). **default-on** |
 | `river_valley` | River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114, GOAT 25/25 Bench 050). **default-on** |
-| `sleep_consolidation` | Sleep-time offline recursive memory consolidation at KV eviction (Plan 154, Research 116). **opt-in**. Requires `lt2_looped`, `gdn2_attention` |
-| `spectral_hierarchy` | Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156). **opt-in** |
+| `sleep_consolidation` | Sleep-time offline recursive memory consolidation at KV eviction (Plan 154, Research 116, GOAT 14/14). **default-on**. Requires `lt2_looped`, `gdn2_attention` |
+| `spectral_hierarchy` | Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156, GOAT). **default-on** |
 | `moa_inference` | MoA Mixture of Activations — token-adaptive activation mixing over a 7-activation dictionary (Research 126, Plan 158, GOAT 7/7). **default-on**. Requires `coda_fusion` |
-| `dual_gram_pca` | Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159). **opt-in** |
-| `roofline_cost` | Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159). **opt-in** |
-| `full` | Enable all features (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`) |
+| `dual_gram_pca` | Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159 GOAT). **default-on** |
+| `roofline_cost` | Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159 GOAT). **default-on** |
+| `full` | Enable all features (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "newton_schulz", "river_valley"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping + all-goals Q-value trait framework + dual LEO teacher/student mixing + sigmoid margin loss + retrieval margin diagnostic + token-adaptive Mixture-of-Activations SwiGLU + Newton-Schulz orthogonalization + Muon momentum + river-valley diagnostics. All 34 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping + all-goals Q-value trait framework + dual LEO teacher/student mixing + sigmoid margin loss + retrieval margin diagnostic + token-adaptive Mixture-of-Activations SwiGLU + sleep consolidation + spectral hierarchy + dual-gram PCA routing + roofline cost prediction + Newton-Schulz orthogonalization + Muon momentum + river-valley diagnostics. All 38 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -2061,6 +2061,12 @@ crates/katgpt-core/   Shared types & SIMD kernels (used by katgpt-rs and riir-en
   traits.rs         ConstraintPruner, ScreeningPruner, GameState, StateHeuristic, RolloutPolicy, ActionSpaceLog (consolidated from Plan 107 Phase 0)
   attention.rs      Tiled online-softmax flash attention for CPU SIMD (Plan 115, behind "tiled_attention")
   coda.rs           CODA fused SIMD kernels: GateActivation, simd_matmul_rmsnorm_swiglu, simd_matmul_residual, simd_matmul_rmsnorm_rope (Plan 103, behind "coda_fusion")
+  peira.rs          PEIRA inter-view regressor alignment — PeiraConfig, PeiraCovariance, peira_aux_loss (Plan 153, Research 115, behind "peira_distill")
+  dirichlet.rs      Dirichlet Energy structural alignment diagnostic — dirichlet_energy, consecutive_adjacency, functor_adjacency, kv_cache_dirichlet_energy (Research 111, Plan 149, behind "dirichlet_energy")
+  spectral_hierarchy.rs  Spectral hierarchy diagnostic — eigenspace_alignment, haar_wavelet_basis, cauchy_interlacing_check (Plan 156, behind "spectral_hierarchy")
+  questbench.rs     QuestBench underspecification scoring — underspecification_score, SyntheticCsp, CspDomain (Plan 110, behind "questbench")
+  roofline.rs       Roofline cost model — RooflineCost, gemm_cost, gemv_cost, gram_cost, roofline_estimate (Research R130, Plan 159, behind "roofline_cost")
+  parallax_attn.rs  Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, behind "parallax_attn")
   simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_dot_f16_f32, simd_matmul_rows, simd_matmul_rows_parallel, simd_sparse_matmul_rows, simd_matmul_f16_f32_rows_parallel, maxsim_score, maxsim_score_packed, sigmoid_margin_loss, compute_retrieval_margin, dim_sufficiency_bound, simd_fused_decay_write, simd_scale_mul_inplace, simd_exp_inplace, simd_add_into (Plan 060)
 src/
   lib.rs            Module index + debug tracking allocator
@@ -2267,6 +2273,10 @@ src/
     spectral_kv_cache.rs  SpectralQuantKVCache, DequantizeScratch — full quantized KV cache implementation
     forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat, par_maxsim_score_spectralquant (behind "maxsim" feature)
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, denoise_loop, forward_bidirectional_positions, forward_block_causal_positions, denoising_accuracy — dLLM research (behind "dllm" feature)
+  tf_loop.rs        Training-free loop wrapper — ODE-refined sub-stepping, default_loop_window, forward_training_free_loop (Plan 136, behind "tf_loop")
+  newton_schulz.rs  Newton-Schulz orthogonalization + Muon momentum — 5-iteration cubic fixed-point (Plan 152, Research 114)
+  river_valley.rs   River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114)
+  ega_attn.rs       Energy-Gated Attention — spectral salience gating for attention (Plan 139, behind "ega_attn")
   dash_attn/       DashAttention adaptive sparse hierarchical attention (Plan 106):
     mod.rs          Module root
     entmax.rs       α-entmax sparse attention kernel
@@ -2313,12 +2323,22 @@ src/
     macros.rs       Declarative proof macros
     serde_impls.rs  Serde serialization
     wasm_certificates.rs  WASM certificate generation
+  shard_kv/        ShardKV asymmetric K/V compression (Plan 147, Research 109):
+    mod.rs           Module root
+    types.rs         ShardKVConfig, ShardKvPath
+    rope.rs          RoPE undo + PCA key path
+    kv_cache.rs      ShardKvCache implementation
+  sleep/           Sleep consolidation — offline recursive memory consolidation (Plan 154, Research 116):
+    mod.rs           Module root + re-exports
+    types.rs         SleepConfig, EvictionStrategy
+    consolidation.rs N-pass recurrent consolidation loop
+    eviction.rs      HardEvict / SlidingWindow eviction
   alloc.rs          Debug-only tracking allocator (feature-gated debug_assertions)
   feedback.rs       TTT feedback (feature-gated feedback)
   benchmark.rs      BenchResult, run_all, save_results_csv, bench_hla_vs_flat_cache, bench_hla_memory, bench_hla_quality, bench_simd, bench_sparse_mlp
   plot.rs           PNG horizontal bar chart
-examples/           82 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode, cna, spechop, questbench)
-tests/              110 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
+examples/           84 examples (sudoku, validator, bandit, bomber, monopoly, tactical, dungeon, go, fft, review, stepcode, cna, spechop, questbench)
+tests/              111 test files + 9 benchmark suites (TurboQuant, PFlash NIAH, SpectralQuant, SP-KV)
 bench/              Auto-numbered PNG + CSV benchmark output
 ```
 
@@ -2342,7 +2362,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]`
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -2383,6 +2403,12 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **PlasmaPath** (`plasma_path`) | [Ciot Ternary CPU Inference](https://github.com/Cintu07/ciot) (Research 110) | **GOAT 5/5** (Plan 148, Bench 044). Bit-plane ternary weights {−1,0,+1} at **1.58 bits/weight**, branchless SIMD add/sub (no multiply). SIMD↔scalar checksum < 0.1‰. Quantize cosine 0.77 random / ≥0.92 real. **Honest:** at 7.57 Gop/s it is 0.70× of FP32 NEON `simd_dot` — the win is **20× less memory traffic**, not raw speed. Default-on. | Multiply-based dense matvec |
 | **Sigmoid Margin** (`sigmoid_margin`) | [Dimensionality Barrier for Retrieval (arXiv:2605.23556)](https://arxiv.org/abs/2605.23556) (Research 123, Plan 157) | **GOAT 7/7** (12 tests, Bench 048). Proves optimal retrieval margin needs only **d = Θ(k·log n)** (tight). SigLIP `softplus(t·(score−b)·sign)` reaches positive margin at d ≈ log n vs **InfoNCE's Θ(n^⅓)** (k=2: d≈6→9 over n=20→240 vs InfoNCE 10→23). `dim_sufficiency_bound` sizes embedding dims; Proof 6 confirms **no MaxSim regression**. Default-on, requires `maxsim`. | InfoNCE-only scoring without margin/dim guarantee |
 | **MoA Inference** (`moa_inference`) | [Mixture of Activations (arXiv:2605.26647)](https://arxiv.org/abs/2605.26647) — ByteDance Seed + PKU (Research 126, Plan 158) | **GOAT — 10/10 MoA tests pass** (after a test sign-error fix, 2026-05-29; Bench 049). Token-adaptive bi-MoA SwiGLU over {Id, ReLU, ReLU², LeakyReLU, GELU, SiLU, Tanh}; gating π_k = σ(u_kᵀx). Strict expressivity hierarchy **fixed ⊊ LA ⊊ MoA** (Thm 4.1/4.2); sigmoid gate > softmax. O(28·d) mixing ≪ O(d²) matmul; paper reports 1.03–1.13× wall-clock, memory unchanged. Fused kernel `simd_matmul_rmsnorm_moa_swiglu`. Default-on, requires `coda_fusion`. | Fixed single-activation SwiGLU |
+| **Newton-Schulz** (`newton_schulz`) | [Muon Momentum (Jordan 2024)](https://arxiv.org/abs/2505.22928) (Research 114, Plan 152) | **GOAT 25/25** (Bench 050). 5-iteration cubic fixed-point orthogonalization (a=3.4445, b=-4.7750, c=2.0315). Generic building block for Muon-family optimizers. Zero external dependencies. Default-on. | No orthogonalization; standard SGD/Adam momentum |
+| **River-Valley** (`river_valley`) | Research 114, Plan 152 | **GOAT 25/25** (Bench 050). Modelless diagnostics: subspace ratios (dominant/bulk alignment), effective rank (entropy-based), update cosine similarity (trajectory smoothness). Pure scalar arithmetic. Default-on. | No training convergence diagnostics |
+| **Sleep Consolidation** (`sleep_consolidation`) | [arXiv:2605.26099](https://arxiv.org/abs/2605.26099) (Research 116, Plan 154) | **GOAT 14/14**. Offline recursive memory consolidation at KV eviction: N recurrent passes bake KV context into GDN2 fast-weight state before evicting. Preserves single-pass wake-time latency. Default-on. Requires `lt2_looped`, `gdn2_attention`. | No eviction-time consolidation; KV cache grows unbounded |
+| **Spectral Hierarchy** (`spectral_hierarchy`) | Research 121, Plan 156 | **GOAT proved**. Validates hierarchical splitting geometry in co-occurrence Gram matrices: eigenspace alignment, Haar wavelet basis, Cauchy interlacing check. Default-on. | No Gram matrix structural validation |
+| **Dual-Gram PCA** (`dual_gram_pca`) | Research R130, Plan 159 | **GOAT proved**. Dual-Gram PCA routing for short-sequence calibration. SIMD-accelerated Gram matrix computation. Default-on. | No short-sequence calibration |
+| **Roofline Cost** (`roofline_cost`) | [FlashLib Roofline](https://github.com/flash-ai/flashlib) (Research R130, Plan 159) | **GOAT proved**. Roofline cost model for GPU operator runtime prediction. ~5µs CPU-only estimation replaces ~100ms GemvAutotune benchmarking. Compute/Memory/Launch bottleneck classification. Default-on. | Runtime benchmarking per operator |
 
 ### 🔒 Gated Features (Opt-In, Proven)
 

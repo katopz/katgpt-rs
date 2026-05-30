@@ -1,6 +1,6 @@
 # katgpt-rs: Model Adaptation Techniques
 
-Five production techniques that adapt the transformer to different tasks and domains **without modifying base weights**. All are feature-gated, zero-copy, and backward-compatible.
+Ten production techniques that adapt the transformer to different tasks and domains **without modifying base weights**. All are feature-gated, zero-copy, and backward-compatible.
 
 | # | Technique | Plan | Feature Flag | What It Does |
 |---|-----------|------|-------------|--------------|
@@ -9,6 +9,11 @@ Five production techniques that adapt the transformer to different tasks and dom
 | 3 | Sparse MLP (TwELL) | 022 | `sparse_mlp` | Skip dead ReLU neurons, O(alive) FLOPs |
 | 4 | Domain Latent Injection | 038 | `domain_latent` | Mid-layer K/V conditioning per domain |
 | 5 | HLA Streaming Attention | 057/060 | `hla_attention` | O(1) constant-state attention, SIMD-accelerated |
+| 6 | SpectralQuant KV Compression | 077 | `spectral_quant` | Calibrated eigenbasis + water-fill KV compression |
+| 7 | ELF SDE Noise Injection | 079 | `elf_sde` | Logit-normal noise for diverse speculative tree expansion |
+| 8 | CNA Steering | 087 | `cna_steering` | Contrastive neuron circuit discovery + modulation |
+| 9 | Deep Manifold + Federation | 085 | `deep_manifold` / `federation` | Fixed-point residual scoring + federated KL coupling |
+| 10 | SimpleTES Loop (RPUCG) | 086 | `tes_loop` | Credit-guided trajectory search with RPUCG bandit |
 
 ## Adaptation Pipeline
 
@@ -61,7 +66,9 @@ The existing `attention_head` already accepts `t_n: usize` (number of KV positio
 // transformer.rs — PrefillContext (Plan 025)
 pub struct PrefillContext {
     hidden: Vec<f32>,       // [max_prompt_len × n_embd] — multi-layer hidden states
-    lora_buf: Vec<f32>,     // [rank] — pre-allocated LoRA intermediate
+    queries: Vec<f32>,      // [max_prompt_len × n_embd] — fused Phase A Q projections
+    residuals: Vec<f32>,    // [max_prompt_len × n_embd] — pre-attention residuals (xr)
+    lora_buf: Vec<f32>,     // [lora_rank] — pre-allocated LoRA intermediate
     max_prompt_len: usize,
 }
 
@@ -82,8 +89,10 @@ pub fn forward_prefill(
 | Buffer | Size | Allocation | Reuse |
 |--------|------|------------|-------|
 | `ForwardContext::x, q, k, v, attn_out, hidden, scores, logits` | Existing | `ForwardContext::new()` (once) | Per-position |
-| `PrefillContext::hidden` | `prompt_len × n_embd` | `PrefillContext::new()` (once) | Between layers |
-| `PrefillContext::lora_buf` | `[rank]` | `PrefillContext::new()` (once) | Per LoRA application |
+| `PrefillContext::hidden` | `block_size × n_embd` | `PrefillContext::new()` (once) | Between layers |
+| `PrefillContext::queries` | `block_size × n_embd` | `PrefillContext::new()` (once) | Fused Phase A → B reuse |
+| `PrefillContext::residuals` | `block_size × n_embd` | `PrefillContext::new()` (once) | Fused Phase A → B reuse |
+| `PrefillContext::lora_buf` | `[lora_rank]` | `PrefillContext::new()` (once) | Per LoRA application |
 | `MultiLayerKVCache` | Existing | Already pre-allocated | K/V storage |
 
 **Single-layer optimization**: `PrefillContext::hidden` unused. Embeddings computed on-the-fly from `wte`/`wpe`. Zero extra memory.
@@ -95,7 +104,7 @@ pub fn forward_prefill(
 | Prefill overhead vs causal | ~2× (two passes per layer) |
 | Decode throughput impact | Zero (untouched code path) |
 | Memory overhead (single-layer) | Zero extra beyond `lora_buf` |
-| Memory overhead (multi-layer) | `prompt_len × n_embd × 4` bytes |
+| Memory overhead (multi-layer) | `3 × block_size × n_embd × 4` bytes (hidden + queries + residuals) |
 
 Prefill runs once per request. For 5K prompt → 500 generated tokens, prefill is 1 call, decode is 500. The 2× prefill overhead amortizes to near-zero.
 
@@ -108,7 +117,7 @@ Different phases of a task need different behavior. During prefill, the model re
 Load two LoRA adapters per domain — `reader_lora` (active during prefill) and `writer_lora` (active during decode). The switch is a reference swap at the prefill→decode boundary.
 
 ```rust
-// types.rs — LoRA pair (Plan 025)
+// crates/katgpt-core/src/types.rs — LoRA pair (Plan 025)
 pub struct LoraPair {
     /// Active during bidirectional prefill (e.g., Python Reader).
     pub reader: Option<LoraAdapter>,
@@ -120,14 +129,14 @@ pub struct LoraPair {
 ### LoRA Application — In-Place Delta
 
 ```rust
-// types.rs
+// crates/katgpt-core/src/types.rs
 pub struct LoraAdapter {
-    pub a: Vec<f32>,     // [in_dim × rank]
-    pub b: Vec<f32>,     // [rank × out_dim]
     pub rank: usize,
-    pub alpha: f32,
     pub in_dim: usize,
     pub out_dim: usize,
+    pub a: Vec<f32>,     // [rank × in_dim]
+    pub b: Vec<f32>,     // [out_dim × rank]
+    pub alpha: f32,
 }
 ```
 
@@ -138,7 +147,7 @@ Loading methods:
 ```rust
 /// Apply LoRA delta in-place: output += (α/r) × B @ (A @ input)
 /// `lora_buf` is pre-allocated [rank] intermediate, zero alloc in hot path.
-fn lora_apply(output: &mut [f32], lora: &LoraAdapter, input: &[f32], lora_buf: &mut [f32])
+pub fn lora_apply(output: &mut [f32], lora: &LoraAdapter, input: &[f32], lora_buf: &mut [f32])
 ```
 
 Applied after each Q/K/V/O/MLP projection when a LoRA is active. The delta is fused into the `matmul` output — no separate accumulation buffer.
@@ -177,7 +186,7 @@ ReLU zeros out ~50% of MLP neurons by definition. With L1 regularization during 
 CPU index-packing sparse matmul for the MLP's second weight matrix (`w2 @ hidden`). Skip dead neurons to reduce FLOPs.
 
 ```rust
-// types.rs — sparse_matmul (Plan 022)
+// crates/katgpt-core/src/types.rs — sparse_matmul (Plan 022)
 /// Pack alive neurons (input[c] > 0.0) and multiply only those.
 /// Returns alive count for diagnostics.
 pub fn sparse_matmul(
@@ -218,7 +227,7 @@ Even with `sparse_mlp` feature enabled, the actual sparsity is checked at runtim
 ### Config
 
 ```rust
-// types.rs
+// crates/katgpt-core/src/types.rs
 pub struct Config {
     pub sparse_threshold: f32,  // default: 0.8
     // ...
@@ -269,7 +278,7 @@ LoRA adapts weights per domain, but has no mechanism for injecting an explicit d
 Distill the Free Transformer's mid-layer latent injection into a LoRA-compatible mechanism. Inject a learned domain embedding at layer `L/2` via K/V modulation.
 
 ```rust
-// types.rs — DomainLatent (Plan 038)
+// crates/katgpt-core/src/types.rs — DomainLatent (Plan 038)
 pub struct DomainLatent {
     pub embedding: Vec<f32>,  // [kv_dim]
 }
@@ -400,9 +409,9 @@ Two variants implemented:
 
 ```rust
 // hla/kernel.rs — O(1) state update (Plan 057, SIMD-accelerated Plan 060)
-pub fn hla_state_update(sk, q_head, q, k, v, hd, lr, tmp_k_cqv, tmp_q_g)
-pub fn hla_readout(sk, q_head, q, hd, tmp_sk_cqv, tmp_q_g) -> f32
-pub fn ahla_step(pkv, mk, q_head, q, k, v, hd, lr, out, tmp_r)
+pub fn hla_state_update(sk: &mut [f32], q_head: &mut HlaQHeadState, q: &[f32], k: &[f32], v: &[f32], hd: usize, gamma: f32, tmp_k_cqv: &mut [f32], tmp_q_g: &mut [f32])
+pub fn hla_readout(q: &[f32], sk: &[f32], q_head: &HlaQHeadState, hd: usize, out: &mut [f32], tmp_u: &mut [f32])
+pub fn ahla_step(pkv: &mut [f32], mk: &mut [f32], q_head: &mut AhlaQHeadState, q: &[f32], k: &[f32], v: &[f32], hd: usize, gamma: f32, out: &mut [f32], tmp_r: &mut [f32])
 ```
 
 ### SIMD Acceleration (Plan 060)
@@ -421,9 +430,9 @@ Single ARM core handles 30K CCU @ 20Hz with 9.8× headroom.
 ### Forward Variants
 
 ```rust
-// transformer.rs — drop-in replacements for forward()
-pub fn forward_hla(ctx, weights, hla_cache, token, pos, config)  // symmetric HLA
-pub fn forward_ahla(ctx, weights, ahla_cache, token, pos, config) // asymmetric AHLA
+// hla/forward.rs — drop-in replacements for forward()
+pub fn forward_hla(ctx: &mut ForwardContext, weights: &TransformerWeights, cache: &mut MultiLayerHlaCache, token: usize, pos: usize, config: &Config) -> &mut [f32]
+pub fn forward_ahla(ctx: &mut ForwardContext, weights: &TransformerWeights, cache: &mut MultiLayerAhlaCache, token: usize, pos: usize, config: &Config) -> &mut [f32]
 ```
 
 Same weights, same API — swap `MultiLayerKVCache` for `MultiLayerHlaCache` / `MultiLayerAhlaCache`.
@@ -456,12 +465,12 @@ SpectralQuant (Plan 077) replaces random rotation with eigenbasis rotation calib
 
 ```rust
 // spectralquant/spectral.rs — eigenbasis calibration
-pub fn calibrate_eigenbasis(activations: &[Vec<f32>], n_components: usize) -> SpectralRotation
-pub fn waterfill_bits(variances: &[f32], total_budget: f32) -> WaterfillAllocation
+pub fn calibrate_eigenbasis(samples: &[Vec<f32>], head_dim: usize) -> CalibrationResult
+pub fn waterfill_bits(eigenvalues: &[f64], total_bits: usize, min_bits: u8, max_bits: Option<u8>) -> Vec<u8>
 
 // spectralquant/nonuniform_quant.rs — Lloyd-Max scalar quantizer
-pub struct NonUniformQuantizer { /* codebook per dimension */ }
-pub struct CompressedVector { /* packed bits + metadata */ }
+pub struct NonUniformQuantizer { /* eigenvalues, avg_bits, head_dim, per-dim codebooks */ }
+pub struct CompressedVector { /* semantic_indices, tail_indices, d_eff, bits metadata */ }
 ```
 
 ### Water-Fill Bit Allocation
@@ -470,8 +479,8 @@ Each dimension gets bits proportional to its variance share. High-variance dimen
 ### Forward Integration
 
 ```rust
-// transformer.rs — quantized KV forward, generic over QuantizedKVCache trait (src/types.rs)
-pub fn forward_quantized(ctx, weights, cache: &mut dyn QuantizedKVCache, ...)
+// transformer.rs — quantized KV forward, generic over QuantizedKVCache trait (crates/katgpt-core/src/traits.rs)
+pub fn forward_quantized<C: types::QuantizedKVCache>(ctx, weights, cache: &mut C, ...)
 // AttentionMode::SpectralQuant dispatches to spectralquant::forward
 ```
 
@@ -497,9 +506,9 @@ ELF SDE (Plan 079) injects logit-normal noise during tree expansion, biasing exp
 ```rust
 // speculative/types.rs — SDE configuration (default-on)
 pub struct SdeConfig {
-    pub gamma: f32,           // noise scale
+    pub gamma: f32,           // noise re-injection scale
+    pub confidence_floor: f32, // minimum logit magnitude for noise application
     pub preserve_top1: bool,  // keep highest-prob token clean
-    pub confidence_floor: f32, // skip noise when confidence > floor
 }
 
 // speculative/dd_tree.rs — noise-augmented tree building
@@ -518,8 +527,8 @@ pub struct WidthScaleConfig {
     pub k_rollouts: usize,                // K parallel rollouts
     pub selection: WidthSelectionMode,     // how to pick winner
 }
-pub enum WidthSelectionMode { BestQ, MostFrequent }
-pub fn best_of_k_rollouts(...) -> Vec<usize>
+pub enum WidthSelectionMode { BestQ, MostFrequent, Top1Converged }
+pub fn best_of_k_rollouts(marginals, config, screener, sde_config, width_config, base_seed) -> Vec<usize>
 
 // crates/katgpt-core/src/types.rs — Config convenience fields
 pub struct Config {
@@ -548,13 +557,20 @@ CNA Steering (Plan 087) discovers sparse MLP circuits via contrastive attributio
 
 ```rust
 // pruners/cna.rs — circuit discovery + modulation
-pub struct CnaNeuron { pub layer: usize, pub neuron: usize, pub attribution: f64 }
-pub struct CnaCircuit { pub neurons: Vec<CnaNeuron> }
-pub struct CnaDiscoveryConfig { pub top_k: usize, pub contrast_threshold: f64 }
-pub struct CnaModulator { pub circuit: CnaCircuit, pub strength: f64 }
+pub struct CnaNeuron { pub layer: usize, pub index: usize, pub delta: f32 }
+pub struct CnaCircuit {
+    pub neurons: Vec<CnaNeuron>,
+    pub universal_excluded: Vec<(usize, usize)>,
+    pub n_positive: usize,
+    pub n_negative: usize,
+    pub total_mlp_activations: usize,
+}
+pub struct CnaDiscoveryConfig { pub top_pct: f32, pub universal_threshold: f32, pub late_layer_fraction: f32 }
+pub struct CnaModulator { pub circuit: CnaCircuit, pub multiplier: f32 }
 
-pub fn cna_discover(positive: &[Vec<f32>], negative: &[Vec<f32>], config: &CnaDiscoveryConfig) -> CnaCircuit
-pub fn cna_modulate(hidden: &mut [f32], modulator: &CnaModulator)
+pub fn cna_discover(positive: &[(usize, &[f32])], negative: &[(usize, &[f32])], n_layers: usize, mlp_hidden: usize, config: &CnaDiscoveryConfig) -> CnaCircuit
+pub fn cna_modulate(hidden: &mut [f32], layer_idx: usize, modulator: &CnaModulator)
+pub fn detect_universal_neurons(diverse_activations: &[Vec<(usize, Vec<f32>)>], n_layers: usize, mlp_hidden: usize, threshold: f32) -> Vec<(usize, usize)>
 
 pub struct CnaScreeningPruner { /* composable with BanditPruner */ }
 ```
@@ -562,7 +578,8 @@ pub struct CnaScreeningPruner { /* composable with BanditPruner */ }
 ### Discovery → Modulation Pipeline
 1. **Discovery**: Contrast positive vs negative activations → top-K attributions (~10µs/pair)
 2. **Modulation**: Scale only discovered neurons — O(K) sparse forward hook (163ns for K=50)
-3. **Pruner Integration**: `CnaScreeningPruner` composes with existing `BanditPruner`
+3. **Universal Filtering**: `detect_universal_neurons` removes neurons that fire in ≥80% of diverse prompts
+4. **Pruner Integration**: `CnaScreeningPruner` composes with existing `BanditPruner`
 
 ### Performance (Bench 015, GOAT proved)
 
@@ -584,19 +601,22 @@ Deep Manifold (Plan 085) makes residual distance explicit via L2/KL scoring. Fed
 
 ```rust
 // pruners/manifold_residual.rs — fixed-point residual scoring
-pub trait ManifoldResidual {
-    fn l2_residual(&self, activation: &[f32], target: &[f32]) -> f64;
-    fn kl_residual(&self, probs: &[f32], target: &[f32]) -> f64;
+pub trait ManifoldResidual: Send + Sync {
+    fn residual(&self, candidate: &[f32], base: &[f32]) -> f32;
+    fn is_converged(&self, residual: f32, tolerance: f32) -> bool;
+    fn per_position_residual(&self, candidate: &[f32], base: &[f32]) -> Vec<f32>;
 }
-pub struct L2ResidualScorer;
-pub struct KlResidualScorer;
-pub struct ResidualRelevanceScorer { /* blends residual + relevance */ }
+pub struct L2ResidualScorer { pub tolerance: f32 }
+pub struct KlResidualScorer { pub tolerance: f32 }
+pub struct ResidualRelevanceScorer<R: ManifoldResidual> { pub residual_scorer: R, pub residual_weight: f32 }
 
 // pruners/boundary_alignment.rs — federated KL coupling
-pub trait BoundaryAlignment {
-    fn align(&self, expert_a: &[f32], expert_b: &[f32]) -> Vec<f32>;
+pub trait BoundaryAlignment: Send + Sync {
+    fn kl_divergence(&self, local: &[f32], ensemble: &[f32]) -> f32;
+    fn coupling_weight(&self, domain: &str, neighbors: &[&str]) -> f32;
+    fn boundary_penalty(&self, local: &[f32], ensemble: &[f32], lambda: f32) -> f32;
 }
-pub struct KlBoundaryAligner { pub kl_weight: f64 }
+pub struct KlBoundaryAligner { pub epsilon: f32 }
 ```
 
 ### Per-Position Hotspot Analysis
@@ -624,22 +644,31 @@ SimpleTES (Plan 086) implements RPUCG (Rollout Policy Using Credit-Guided search
 
 ```rust
 // pruners/tes_loop.rs — SimpleTES loop
-pub trait TesLoop {
-    fn run_cycle(&mut self, context: &mut dyn ScreeningPruner) -> Vec<TrajectoryCredit>;
+pub trait TesLoop: Send + Sync {
+    fn config(&self) -> &TesConfig;
+    fn budget(&self) -> usize;
+    fn select_inspirations(&self, history: &[TesNode], count: usize) -> Vec<usize>;
+    fn update_propagated_values(&self, history: &mut [TesNode], gamma: f32);
+    fn rpucg_score(&self, node: &TesNode, total_visits: usize, lambda: f32) -> f32;
+    fn select_rpucg(&self, history: &[TesNode], count: usize, lambda: f32) -> Vec<usize>;
 }
-pub struct SimpleTesLoop<E: GameState> {
-    pub width: usize,     // C candidates
-    pub depth: usize,     // L levels
-    pub k: usize,         // K rollouts per candidate
+pub struct SimpleTesLoop<E: BanditEnv> {
+    config: TesConfig,       // (C, L, K, Φ) parameters
+    env: E,                  // bandit environment
+    history: Vec<TesNode>,   // all evaluated nodes
+    best_score: f32,
+    best_idx: usize,
 }
 
 // speculative/types.rs — trajectory credit
 pub struct TrajectoryCredit {
-    pub node_id: usize,
-    pub weight: f32,
-    pub score: f32,
+    pub num_trajectories: usize,
+    pub best_score: f32,
+    pub worst_score: f32,
+    pub best_trajectory_idx: usize,
+    pub worst_trajectory_idx: usize,
 }
-pub fn TrajectoryCredit::from_trajectory_scores(...) -> Vec<TrajectoryCredit>
+pub fn TrajectoryCredit::from_trajectory_scores(scores: &[(usize, f32)]) -> Self
 ```
 
 ### Budget Scaling: Wide > Narrow

@@ -123,7 +123,8 @@ src/spechop/
 ├── speculator.rs       HopSpeculator trait + CacheSpeculator + BanditSpeculator
 ├── window.rs           SpecWindow thread pool manager (FIFO commit/rollback)
 ├── pipeline.rs         SpecHopPipeline continuous loop (Algorithm 1)
-└── hop_tree.rs         Hop-level DDTree integration (Phase 6)
+├── hop_tree.rs         Hop-level DDTree integration (Phase 6)
+└── segment_match.rs    Rolling-hash segment index for hop observations (requires spechop + cache_prune)
 ```
 
 ---
@@ -152,22 +153,42 @@ src/spechop/
                              │
                              │ feeds
                              ▼
-                    ┌──────────────────┐
-                    │   Hop-level      │
-                    │   DDTree         │
-                    ├──────────────────┤
-                    │ HopTreeNode      │
-                    │  - score (cum.)  │
-                    │  - depth         │
-                    │  - action        │
-                    │  - observation   │
-                    │  - parent_idx    │
-                    │  - verified      │
-                    ├──────────────────┤
-                    │ build_hop_dd_tree│
-                    │ verify_hop_tree  │
-                    │ extract_best_path│
-                    └──────────────────┘
+                    ┌──────────────────────┐
+                    │   Hop-level DDTree   │
+                    ├──────────────────────┤
+                    │ HopVerifyState       │
+                    │  Pending|Committed   │
+                    │  |RolledBack         │
+                    │ HopTreeNode          │
+                    │  - score (cum.)      │
+                    │  - depth             │
+                    │  - action            │
+                    │  - observation       │
+                    │  - parent_idx        │
+                    │  - verified          │
+                    │ HopCandidate         │
+                    │  - observation       │
+                    │  - confidence        │
+                    │ HopMarginal          │
+                    │  - action            │
+                    │  - candidates[]      │
+                    │ HopTreeConfig        │
+                    │  - tree_budget       │
+                    │  - confidence_floor  │
+                    │  - chain_seed        │
+                    │ VerifiedHopPath      │
+                    │  - path[]            │
+                    │  - commits/rollbacks │
+                    │  - direct_commits    │
+                    ├──────────────────────┤
+                    │ build_hop_dd_tree    │
+                    │ verify_hop_tree      │
+                    │ extract_best_hop_path│
+                    │ extract_deepest_hop_ │
+                    │  path                │
+                    │ build_and_verify_hop │
+                    │  _tree               │
+                    └──────────────────────┘
 ```
 
 ---
@@ -230,12 +251,13 @@ Where:
 
 ```
 SpecHop activates when ALL of:
-  1. α < 0.3    (speculator is fast enough)
-  2. β < 0.5    (tool latency dominates decode)
-  3. reward > 1.0  where reward = latency_reduction / α
-  4. observations ≥ 10  (enough data to estimate parameters)
+  1. observations ≥ 10  (enough data to estimate parameters)
+  2. α < 0.3           (speculator is fast enough)
+  3. β ≤ 0.8           (not decode-bound)
+  4. reward > 1.0       where reward = latency_reduction / α
 
 SpecHop SKIPS when β > 0.8 (decode-bound, speculation won't help)
+SpecHop SKIPS when α ≥ 0.3 (speculator too slow relative to target tool)
 ```
 
 ---
@@ -247,19 +269,22 @@ SpecHop SKIPS when β > 0.8 (decode-bound, speculation won't help)
 ```
 ┌────────────────────┐      ┌───────────────────┐
 │ ConfiguratorBandit │      │ InferenceStats    │
-│                    │      │  - alpha_ema       │
-│  Arms:            │      │  - beta_ema        │
-│  0: Baseline      │      │  - p_ema           │
-│  1: Speculative   │      │  - observation_count│
-│  2: MTP           │      └─────────┬─────────┘
-│  3: SpecHop       │◄── auto-k from │
-│                    │    measured stats│
-└────────────────────┘                 │
-                                       ▼
-                            ┌───────────────────┐
-                            │ PlanningDecision  │
-                            │ ::SpecHop { k }   │
-                            └───────────────────┘
+│                    │      │  - avg_spec_      │
+│  Arms:            │      │    latency_ns     │
+│  0: Baseline      │      │  - avg_target_    │
+│  1: Speculative   │      │    latency_ns     │
+│  2: MTP           │      │  - avg_decode_    │
+│  3: SpecHop       │      │    latency_ns     │
+│                    │      │  - avg_hit_rate   │
+│                    │      │  - observations   │
+│                    │◄─────┤  auto_k()         │
+│                    │      └─────────┬─────────┘
+└────────────────────┘                │
+                                      ▼
+                           ┌───────────────────┐
+                           │ PlanningDecision   │
+                           │ ::SpecHop { k }    │
+                           └───────────────────┘
 ```
 
 ### DDTree Comparison
@@ -357,6 +382,10 @@ spechop = ["bandit"]  # Continuous multi-hop speculation pipeline (Plan 131)
 // lib.rs
 #[cfg(feature = "spechop")]
 pub mod spechop;
+
+// spechop/mod.rs — segment_match is gated on both features
+#[cfg(all(feature = "spechop", feature = "cache_prune"))]
+pub mod segment_match;
 ```
 
 **Not in default features** until GOAT 6/6 proved (T33–T38).
@@ -366,6 +395,7 @@ pub mod spechop;
 | Feature | Status | Notes |
 |---------|--------|-------|
 | `bandit` | ✅ Required | BanditPruner feeds into speculator decisions |
+| `cache_prune` | ✅ Compatible | `segment_match` requires both `spechop` + `cache_prune` |
 | `bt_rank` | ✅ Compatible | Bradley-Terry ranking for branch selection |
 | `spectral_quant` | ✅ Compatible | KV cache compression orthogonal |
 | `dash_attn` | ✅ Compatible | Sparse attention + hop speculation complementary |

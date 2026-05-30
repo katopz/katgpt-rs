@@ -105,12 +105,12 @@ The doubles loop re-enters Rolling→Resolving when doubles are rolled (max 3 be
 | Component | Purpose |
 |-----------|---------|
 | `Player { id, cash, position, in_jail, ... }` | Player state with cash, position, jail tracking, GOOJ cards |
-| `Property { square, group, name, price, rents, ... }` | Street property data with rent table |
+| `Property { square, group, name, price, base_rent, monopoly_rent, house_cost, house_rent, mortgage_value }` | Street property data with rent table (5 house tiers) |
 | `Owned { owner, is_mortgaged, houses }` | Ownership + house count (0–4 houses, 5 = hotel) |
 | `Railroad` | Marker for railroad squares |
 | `Utility` | Marker for utility squares |
 | `CardDeck { cards, draw_index, is_chance }` | Card deck with circular draw |
-| `BoardSquare { index, kind }` | Square identity and kind |
+| `BoardSquare { index, kind }` | Square identity and kind (`SquareKind::Property(PropertyGroup)`, Railroad, Tax, etc.) |
 
 | Resource | Purpose |
 |----------|---------|
@@ -122,7 +122,7 @@ The doubles loop re-enters Rolling→Resolving when doubles are rolled (max 3 be
 
 ## Events
 
-21 `GameEvent` variants covering all game actions:
+23 `GameEvent` variants covering all game actions:
 
 ```rust
 enum GameEvent {
@@ -387,15 +387,15 @@ Key methods: `owns_complete_set()`, `count_in_group()`, `owned_in_group()`, `net
 ## Key Files
 
 | File | Lines | Purpose |
-|------|-------|---------|
+|------|-------|--------|
 | `src/pruners/monopoly/mod.rs` | 1052 | Module index: enums, components, resources, events, constants, board data, 26 tests |
 | `src/pruners/monopoly/board.rs` | 738 | Board initialization, 40-square `street_data()`, card decks, group helpers, 13 tests |
-| `src/pruners/monopoly/systems.rs` | 1126 | Game systems: `init_world`, `execute_turn`, `run_game`, rent/build/liquidation, 13 tests |
-| `src/pruners/monopoly/players.rs` | 1872 | `MonopolyPlayer` trait + 4 implementations + shared AI functions, 38 tests |
-| `examples/monopoly_01_arena.rs` | 137 | Headless 100-game tournament runner |
-| `examples/monopoly_02_tui.rs` | 695 | Animated ratatui TUI replay with three-panel layout |
-| `examples/monopoly_03_hl_proof.rs` | 237 | 1000-game HL proof experiment with stats |
-| `examples/monopoly_04_bench.rs` | 67 | Performance benchmark (throughput, latency distribution) |
+| `src/pruners/monopoly/systems.rs` | 1494 | Game systems: `init_world`, `execute_turn`, `run_game`, rent/build/liquidation, 13 tests |
+| `src/pruners/monopoly/players.rs` | 1977 | `MonopolyPlayer` trait + 4 implementations + shared AI functions, 38 tests |
+| `examples/monopoly_01_arena.rs` | 161 | Headless 100-game tournament runner |
+| `examples/monopoly_02_tui.rs` | 1125 | Animated ratatui TUI replay with three-panel layout |
+| `examples/monopoly_03_hl_proof.rs` | 243 | 1000-game HL proof experiment with stats |
+| `examples/monopoly_04_bench.rs` | 129 | Performance benchmark (throughput, latency distribution) |
 
 **Total: 90 tests across all 4 source files, 4 examples.**
 
@@ -478,7 +478,7 @@ cargo test --features monopoly -- test_full_game_completes
 
 3. **Even-building is the hardest rule** — the `can_build_house()` check must query all group siblings, compare house counts, respect mortgage breaks, and enforce the +1 differential. Getting this wrong breaks the game economy.
 
-4. **Card effects are composition, not inheritance** — `CardEffect` enum with 11 variants handles all classic cards via pattern matching in `execute_card_effect()`. Move-based cards chain into `resolve_card_move()` for secondary square resolution (e.g., Go To Jail).
+4. **Card effects are composition, not inheritance** — `CardEffect` enum with 10 variants handles all classic cards via pattern matching in `execute_card_effect()`. Move-based cards chain into `resolve_card_move()` for secondary square resolution (e.g., Go To Jail).
 
 5. **Bankruptcy cascades are complex** — `pay_debt()` → `liquidate_assets()` (sell houses half-price, mortgage properties) → if still short → `PlayerBankrupt` → `transfer_assets()` to creditor. The order matters: houses before mortgages, and houses on incomplete sets sell first.
 

@@ -50,12 +50,19 @@ let config = PeiraConfig::new(128)
 
 ### `PeiraCovariance` — `crates/katgpt-core/src/peira.rs`
 
-Tracks running EMA estimates of Σ and N:
+Tracks running EMA estimates of Σ and N. Pre-allocates all internal scratch buffers
+on construction for zero-alloc hot paths.
 
-- `update(student, teacher)` — updates EMA with one (u, v) pair
-- `predictor() -> (P*, Q*)` — closed-form optimal predictor matrices
-- `sigma()`, `n_matrix()` — read current covariance estimates
-- `reset()` — clear for new episode
+- `new(config)` — create zero-initialized tracker (allocates scratch)
+- `update(student, teacher)` — updates EMA with one (u, v) pair (SIMD-accelerated)
+- `dim() -> usize` — returns dimension k
+- `step_count() -> usize` — number of EMA updates applied
+- `predictor() -> (Vec<f64>, Vec<f64>)` — closed-form (P*, Q*) — allocates 5 vectors
+- `predictor_with_scratch() -> (&[f64], &[f64])` — zero-alloc version using internal buffers
+- `predict_and_loss(student, teacher) -> (f64, &[f64], &[f64])` — combined predictor + aux loss (zero-alloc hot path)
+- `compute_aux_loss(student, teacher, p_star, q_star, lambda) -> f64` — aux loss using internal scratch
+- `sigma()`, `n_matrix()` — read current covariance estimates as `&[f64]`
+- `reset()` — clear all buffers and reset step_count to 0
 
 ### `PeiraDistiller` — `src/distill/peira.rs`
 
@@ -68,24 +75,55 @@ for (student, teacher) in pairs {
 }
 ```
 
-- `step()` returns `(auxiliary_loss, alignment_score)`
-- `loss_history()`, `alignment_history()` — training curves
-- `predictor()` — current (P\*, Q\*)
+- `new(config)` — create distiller with internal `PeiraCovariance`
+- `step(&mut self, student: &[f32], teacher: &[f32]) -> (f64, f64)` — process one pair, returns `(auxiliary_loss, alignment_score)`. Internally calls `predict_and_loss` (zero-alloc)
+- `loss() -> f64` — most recent auxiliary loss
+- `alignment() -> f64` — most recent alignment score
+- `loss_history() -> &[f64]` — full loss curve
+- `alignment_history() -> &[f64]` — full alignment curve
+- `step_count() -> usize` — number of steps processed
+- `dim() -> usize` — representation dimension k
+- `predictor() -> (Vec<f64>, Vec<f64>)` — current (P\*, Q\*)
+- `reset()` — clear covariance + histories for a new episode
 
 ### `peira_alignment_score` — `src/distill/peira.rs`
+
+```rust
+pub fn peira_alignment_score(sigma: &[f64], n_matrix: &[f64], k: usize) -> f64
+```
 
 Spectral alignment metric α ∈ [0, 1]:
 
 - **1.0** = perfect canonical structure recovered
 - **0.0** = random alignment (early training)
 
-Uses power iteration to find top eigenvectors of Σ and N, then computes their cosine similarity.
+Uses 20-iteration power method to find top eigenvectors of Σ and N, then computes `|cos(θ)|`.
+
+### `peira_planning_quality` — `src/distill/peira.rs`
+
+```rust
+pub fn peira_planning_quality(student_scores: &[f32], teacher_scores: &[f32]) -> f32
+```
+
+Lightweight alignment proxy for SR²AM `ConfiguratorBandit` integration.
+Computes cosine similarity between student and teacher score distributions
+without maintaining full covariance matrices. Suitable for per-tick evaluation.
+Returns a quality score clamped to [0, 1].
 
 ## Auxiliary Loss
 
 L_aux = -½ Tr(Σ\_sample · P\*^T) + ¼ Tr(P\* · (N\_sample + λI) · P\*^T) + λ/2 (‖u‖² + ‖v‖²)
 
-Key property: no backpropagation through the matrix inverse. The inverse is computed once from EMA statistics, then the loss is evaluated against the current sample.
+```rust
+pub fn peira_aux_loss(
+    student: &[f32], teacher: &[f32],
+    p_star: &[f64], q_star: &[f64], lambda: f64,
+    sigma_sample: &mut [f64], n_sample: &mut [f64],
+    pm: &mut [f64], s_scratch: &mut [f64], t_scratch: &mut [f64],
+) -> f64
+```
+
+Key property: no backpropagation through the matrix inverse. The inverse is computed once from EMA statistics, then the loss is evaluated against the current sample. SIMD-accelerated via `simd_outer_product_f64` and `simd_dot_f64`.
 
 ## GOAT Proof Results
 
@@ -126,9 +164,9 @@ cargo clippy --features peira_distill --examples --quiet
 
 | File | Content |
 |------|---------|
-| `crates/katgpt-core/src/peira.rs` | `PeiraConfig`, `PeiraCovariance`, `peira_aux_loss`, matrix ops |
-| `crates/katgpt-core/src/lib.rs` | Feature-gated re-exports |
+| `crates/katgpt-core/src/peira.rs` | `PeiraConfig`, `PeiraCovariance`, `peira_aux_loss`, SIMD outer product / dot kernels |
+| `crates/katgpt-core/src/lib.rs` | Feature-gated re-exports (`PeiraConfig`, `PeiraCovariance`, `peira_aux_loss`) |
 | `crates/katgpt-core/Cargo.toml` | `peira_distill` feature gate |
-| `src/distill/peira.rs` | `PeiraDistiller`, `peira_alignment_score`, `synthetic_cca_sample` |
-| `src/distill/mod.rs` | Feature-gated module |
+| `src/distill/peira.rs` | `PeiraDistiller`, `peira_alignment_score`, `peira_planning_quality`, `synthetic_cca_sample` |
+| `src/distill/mod.rs` | `#[cfg(feature = "peira_distill")]` module |
 | `examples/core_06_peira.rs` | GOAT proof demo |

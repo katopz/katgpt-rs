@@ -9,7 +9,7 @@ Techniques distilled from [Luce-Org/lucebox-hub](https://github.com/Luce-Org/luc
 Plan 009 (REST)              Plan 010 (Multi-Layer)        Plan 011 (GQA + Paged)
      │                              │                            │
      │ hidden_state                 │ MultiLayerKVCache          │ n_kv_head, kv_dim()
-     │ RestClient                   │ LayerWeights               │ PagedKVCache (pending)
+     │ RestClient                   │ LayerWeights               │ PagedKVCache
      │ merge_retrieved_branches()   │ Config::small_target()     │ Config::gqa_draft()
      │                              │ Config.n_layer             │
      ▼                              ▼                            ▼
@@ -17,6 +17,7 @@ Plan 009 (REST)              Plan 010 (Multi-Layer)        Plan 011 (GQA + Paged
 │                     Lucebox Techniques (This Doc)                       │
 │                                                                         │
 │  Chain-Seed DDTree ────── uses build_dd_tree_pruned() +                │
+│                           build_dd_tree_screened/balanced/sde           │
 │                           coexists with merge_retrieved_branches        │
 │                                                                         │
 │  Budget Sweep ─────────── uses Config.tree_budget,                     │
@@ -24,7 +25,7 @@ Plan 009 (REST)              Plan 010 (Multi-Layer)        Plan 011 (GQA + Paged
 │                                                                         │
 │  KV Snapshot/Rollback ─── uses MultiLayerKVCache.layers,               │
 │                           kv_dim(), forward() per layer                 │
-│                           future: PagedKVCache.fork()                   │
+│                           PagedKVCache.fork()/rollback() (Plan 014)     │
 │                                                                         │
 │  Speculative Prefill ──── uses hidden_state for scoring,                │
 │                           draft model + MultiLayerKVCache,              │
@@ -36,8 +37,15 @@ Plan 009 (REST)              Plan 010 (Multi-Layer)        Plan 011 (GQA + Paged
 │                           random rotation + Lloyd-Max codebook           │
 │                           composable with PFlash (precision × seq)      │
 │                                                                         │
+│  SpectralQuant KV Cache ─ data-driven eigenbasis + water-fill bits,    │
+│                            two-regime (semantic/tail) quantization      │
+│                            composable with PFlash + MaxSim               │
+│                                                                         │
 │  PFlash Block-Sparse ─── block-level importance scoring (sink+window+   │
-│                           last_n_full+alpha), compress_prompt_blocks()  │
+│                           last_n_full+tail_window+alpha),               │
+│                           entmax sparse routing (dash_attn),            │
+│                           MaxSim late-interaction scoring (maxsim),     │
+│                           block_select_grid for per-(q,k,head) scoring  │
 │                           ported from lucebox-hub C++/CUDA              │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -55,11 +63,35 @@ Two-phase tree construction:
 ```rust
 // dd_tree.rs — chain_seed parameter
 build_dd_tree_pruned(marginals, config, pruner, chain_seed: bool)
+build_dd_tree_screened(marginals, config, screener, chain_seed: bool)
+build_dd_tree_balanced(marginals, config, screener, chain_seed, stop_probs, backward_weight, lambda_flow)
+build_dd_tree_sde(marginals, config, screener, chain_seed, sde_config, rng)
+build_dd_tree_balanced_sde(marginals, config, screener, chain_seed, stop_probs, backward_weight, lambda_flow, sde_config, rng)
 ```
 
 - Chain nodes consume budget: if chain length = L, remaining = tree_budget - L
 - Chain broken by constraint → fall through to standard best-first
 - Coexists with `merge_retrieved_branches()` (REST merge adds branches AFTER chain-seed build)
+- **Screened** variant blends LLM log-probs with relevance `R ∈ [0.0, 1.0]` via `ln(R)` penalty
+- **Balanced** variant adds GFlowNet backward-weighted scoring + flow bonus
+- **SDE** variants inject Gaussian noise (γ > 0) before tree building for diversity
+
+### SDE Noise Injection (ELF Plan 079)
+```rust
+// dd_tree.rs
+pub struct SdeConfig {
+    pub gamma: f32,            // noise scale (default: 0.0 = disabled)
+    pub confidence_floor: f32, // skip noise on confident tokens
+    pub preserve_top1: bool,   // keep best token noise-free
+}
+```
+
+### Width Scaling (PTRM Plan 083)
+```rust
+pub enum WidthSelectionMode { BestQ, MostFrequent, Top1Converged }
+pub struct WidthScaleConfig { pub k_rollouts: usize, pub selection: WidthSelectionMode }
+pub fn best_of_k_rollouts(...)  // build k trees, select best path
+```
 
 ### Results
 | Config | DDTree (no chain) | DDTree (chain-seed) |
@@ -98,21 +130,26 @@ DDTree branch verification writes to shared KV cache. On reject, stale data corr
 ```rust
 // transformer.rs
 pub struct KVSnapshot {
-    pub layers: Vec<KVLayerSnapshot>,
     pub pos: usize,
+    pub layers: Vec<KVLayerSnapshot>,
+}
+
+pub struct KVLayerSnapshot {
+    pub key: Vec<f32>,
+    pub value: Vec<f32>,
 }
 
 impl MultiLayerKVCache {
     pub fn snapshot(&self, pos: usize, config: &Config) -> KVSnapshot {
-        // Copies only filled slots [0..pos * kv_dim] per layer
+        // Copies only filled slots [0..pos * kv_dim) per layer
     }
     pub fn restore(&mut self, snapshot: &KVSnapshot, config: &Config) {
-        // Writes snapshot back + zeros stale positions
+        // Writes snapshot data back (no zeroing — each position written before read)
     }
 }
 ```
 
-- Cheap: copies only `[0..pos * kv_dim]` per layer, not entire `[block_size * kv_dim]`
+- Cheap: copies only `[0..pos * kv_dim)` per layer, not entire `[block_size * kv_dim]`
 - Micro config: ~2 KB per snapshot
 - small_target (4 layers, kv_dim=64): ~128 KB per snapshot
 
@@ -121,18 +158,30 @@ impl MultiLayerKVCache {
 1. Snapshot KV cache before verifying each DDTree branch
 2. Run forward passes for branch tokens
 3. On reject at position k: restore snapshot, try next branch
-4. Extracts top-3 candidate paths, verifies each with rollback
+4. Extracts top-3 candidate paths (sorted by score), verifies each with rollback
+
+### PagedKVCache fork-based rollback (Plan 014+)
+```rust
+// transformer.rs
+pub struct PagedKVCache { /* paged KV storage with reference counting */ }
+
+impl PagedKVCache {
+    pub fn fork(&self) -> Self;            // shares prefix pages (copy-on-write)
+    pub fn rollback(&mut self, pos: usize); // frees exclusive pages, restores shared
+    pub fn write_kv(&mut self, layer, pos, key, value, config);
+    pub fn read_kv(&self, layer, pos, config) -> (&[f32], &[f32]);
+}
+```
+
+- `fork()` shares prefix pages (copy-on-write via `page_ref_counts`)
+- `rollback()` frees exclusive pages, restores shared prefix
+- Used by `speculative_step_rollback_paged()` in `step.rs`
 
 ### Results
 | Method | Throughput | Notes |
 |--------|-----------|-------|
 | Leviathan (no rollback) | 108,827 tok/s | Corrupts cache on reject |
 | **Leviathan (w/ rollback)** | **161,324 tok/s** | **+49% per accepted token** |
-
-### Future: PagedKVCache fork-based rollback
-- `PagedKVCache.fork()` shares prefix pages (copy-on-write)
-- Only new pages allocated after fork point
-- Deferred to Plan 014 — currently uses flat snapshot/restore
 
 ## Technique 4: Speculative Prefill (PFlash-Inspired)
 
@@ -146,16 +195,32 @@ Use draft model's attention scores to identify important tokens, compress prompt
 // speculative/prefill.rs
 pub trait PrefillScorer: Send + Sync {
     fn score(&self, draft_weights, draft_config, prompt_tokens) -> Vec<f32>;
+    fn score_into(&self, draft_weights, draft_config, prompt_tokens, scores: &mut [f32]);
 }
-pub struct AttentionScorer;  // Q·K attention importance (PFlash-inspired)
-pub struct RandomScorer;     // Baseline
-pub struct UniformScorer;    // Baseline: keep every Nth token
+pub struct AttentionScorer;       // Q·K attention importance (PFlash-inspired)
+pub struct RandomScorer { pub seed: u64 };  // Baseline
+pub struct UniformScorer;         // Baseline: equal importance for all tokens
+pub struct BlockAttentionScorer { pub config: FlashPrefillConfig };  // Block-level aggregation
 ```
 
 ### Pipeline
 1. `score_token_importance()` — run draft model forward per token, extract Q·K attention scores
-2. `compress_prompt(tokens, scores, keep_ratio)` — always keep first/last N, select top middle spans
-3. `speculative_prefill()` — target model forward on compressed prompt → filled KV cache
+2. `compress_prompt(importance_scores, keep_ratio, prefix_len, suffix_len)` — always keep first/last N, select top middle spans
+3. `speculative_prefill(scorer, draft_weights, draft_config, prompt_tokens, keep_ratio, prefix_len, suffix_len)` — target model forward on compressed prompt → filled KV cache
+
+### Block-Sparse Pipeline
+4. `speculative_prefill_block(scorer, draft_weights, draft_config, prompt_tokens, cfg, prefix_len, suffix_len)` — PFlash compression with block scoring
+5. `speculative_prefill_adaptive(scorer, ..., mode: PrefillMode, threshold, cfg, ...)` — adaptive threshold selection
+6. `should_compress(mode: PrefillMode, prompt_len, threshold)` — whether to apply compression
+
+### PrefillMode
+```rust
+pub enum PrefillMode {
+    Off,     // Never compress
+    Auto,    // Compress when prompt length >= threshold
+    Always,  // Always compress (even short prompts)
+}
+```
 
 ### Results
 | Method | Throughput | Effective Tokens | Notes |
@@ -178,12 +243,15 @@ Seed draft model's KV cache with target hidden state:
 ```rust
 // dflash.rs
 pub fn dflash_predict_conditioned(
-    weights, config, token, pos, hidden_state: &[f32]
-) -> Vec<Vec<f32>>
+    draft_weights, config, token, pos,
+    target_hidden_state: &[f32],
+    rng: &mut Rng,
+) -> DraftResult
 ```
 - Projects target `hidden_state` to draft `kv_dim`
 - Seeds draft KV cache with projected hidden state
 - Draft model conditions on real target features, not its own noisy predictions
+- Returns `DraftResult` with marginals + sampled_tokens (+ optional routing_overlap, cost_snapshot, stability via feature gates)
 
 ### Integration
 `speculative_step_conditioned()` — target forward → hidden state → conditioned draft → DDTree → simulated acceptance
@@ -213,10 +281,34 @@ Compress each KV coordinate from 32-bit f32 to 2-4 bits using TurboQuant (Zandie
 pub struct TurboQuantKVCache { /* bit-packed indices + norms + rotation matrices */ }
 
 impl TurboQuantKVCache {
+    pub fn new(config: &Config) -> Self;
+    pub fn new_asymmetric(key_bits: u8, val_bits: u8, config: &Config) -> Self;
+    pub fn with_config(cfg: &TurboQuantKVCacheConfig) -> Self;
     pub fn store_key(&mut self, layer, pos, key: &[f32]);    // quantize + pack
+    pub fn store_value(&mut self, layer, pos, value: &[f32]);
     pub fn dequantize_key(&self, layer, pos) -> Vec<f32>;     // unpack + rotate back
+    pub fn dequantize_value(&self, layer, pos) -> Vec<f32>;
+    pub fn dequantize_key_into(&self, layer, pos, out: &mut [f32]);
+    pub fn dequantize_value_into(&self, layer, pos, out: &mut [f32]);
     pub fn bytes_per_token(&self) -> usize;                    // packed size
     pub fn compression_ratio(&self) -> f64;                    // flat / packed
+    pub fn pos(&self) -> usize;
+    pub fn set_pos(&mut self, pos: usize);
+    pub fn kv_dim(&self) -> usize;
+    pub fn reset(&mut self);
+}
+```
+
+### Configuration
+```rust
+// turboquant/types.rs
+pub struct TurboQuantKVCacheConfig {
+    pub n_layers: usize,
+    pub kv_dim: usize,
+    pub max_seq_len: usize,
+    pub seed: u64,
+    pub key_bits: u8,   // default: 3
+    pub val_bits: u8,   // default: 3
 }
 ```
 
@@ -224,7 +316,7 @@ impl TurboQuantKVCache {
 - **Data-oblivious**: No calibration data needed, works on any distribution
 - **Online**: Per-token quantization, no preprocessing
 - **Unbiased**: E[estimated ⟨Q,K⟩] = true ⟨Q,K⟩ (Algorithm 2 guarantee)
-- **Composable**: Orthogonal to Raven (sequence compression) and PFlash (token reduction)
+- **Composable**: Orthogonal to Raven (sequence compression), SpectralQuant, and PFlash (token reduction)
 
 ### Results
 | Bits | Compression | Key cos_sim | Attention corr | Output cos_sim |
@@ -240,9 +332,57 @@ At 32K context (hypothetical hd=128): **1073.7 MB → 151.0 MB (7.1× compressio
 - `turboquant/rotation.rs` — QR-based orthogonal rotation + QJL projection
 - `turboquant/kv_cache.rs` — Bit-packed compressed KV cache (implements `QuantizedKVCache` trait from `src/types.rs`)
 - `turboquant/forward.rs` — Dequantization + attention forward path
-- `spectralquant/spectral_kv_cache.rs` — SpectralQuant KV cache (also implements `QuantizedKVCache` trait)
+- `turboquant/types.rs` — `TurboQuantCodebook`, `TurboQuantLayer`, `TurboQuantKVCacheConfig`
 
-## Technique 7: PFlash Block-Sparse Speculative Prefill (Plan 044)
+## Technique 7: SpectralQuant KV Cache Compression (Plan 078)
+
+### Problem
+TurboQuant uses data-oblivious (random) rotation — optimal on average but suboptimal for any specific model. Real KV cache distributions have strong spectral structure: a few eigenvalues dominate.
+
+### Solution
+Data-driven eigenbasis quantization:
+1. **Offline calibration**: Collect KV samples → covariance eigendecomposition → eigenbasis V
+2. **Two-regime allocation**: Semantic (top d_eff eigenvalues) get more bits; tail gets fewer
+3. **Water-fill bit allocation**: Per-dim bits ∝ eigenvalue (Lagrange multiplier optimization)
+4. **Lloyd-Max codebook**: Per-dim non-uniform scalar quantizer for each regime
+5. **QJL projection**: Subspace residual estimation for quantization error bounds
+
+```rust
+// spectralquant/spectral_kv_cache.rs
+pub struct SpectralQuantKVCache {
+    pub layers: Vec<SpectralQuantLayer>,
+    // variable-bit packed key/val indices, norms, scratch buffers
+}
+
+// spectralquant/types.rs
+pub struct SpectralQuantLayer {
+    pub calibration: SpectralQuantCalibration,
+    pub qjl_signs: Vec<f32>,
+    pub tail_codebook: LloydMaxCodebook,
+    pub semantic_codebook: Option<LloydMaxCodebook>,      // v1 uniform
+    pub per_dim_semantic_codebooks: Option<Vec<LloydMaxCodebook>>, // v2 water-fill
+    pub d_eff: usize,
+    pub b_high: u8,  // semantic regime bits
+    pub b_low: u8,   // tail regime bits
+}
+```
+
+### Calibration
+```rust
+pub fn calibrate_eigenbasis(kv_samples, config) -> CalibrationResult;
+pub fn waterfill_bits(eigenvalues, total_budget, min_bits, max_bits) -> WaterfillAllocation;
+pub fn generate_selective_qjl_signs(d_eff, qjl_dim, seed) -> Vec<f32>;
+```
+
+### Modules
+- `spectralquant/spectral.rs` — Eigenbasis calibration, water-fill, bit allocation
+- `spectralquant/nonuniform_quant.rs` — Non-uniform scalar quantizer (`NonUniformQuantizer`, `CompressedVector`)
+- `spectralquant/spectral_rotation.rs` — Eigenbasis rotation (`SpectralRotation`), random rotation (`RandomRotation`, gated by `turboquant` feature)
+- `spectralquant/spectral_kv_cache.rs` — SpectralQuant KV cache (implements `QuantizedKVCache`)
+- `spectralquant/forward.rs` — Dequantization + attention, parallel dequantize, MaxSim scoring (gated by `maxsim` feature)
+- `spectralquant/types.rs` — `LloydMaxCodebook`, `SpectralQuantCalibration`, `WaterfillAllocation`, `SpectralQuantKVCacheConfig`
+
+## Technique 8: PFlash Block-Sparse Speculative Prefill (Plan 044)
 
 ### Problem
 Long-context prefill is O(S²). Vanilla llama.cpp on RTX 3090 takes ~257s to prefill 131K tokens. User waits 4+ minutes before first token.
@@ -253,8 +393,10 @@ Score per-block importance using draft model's tail attention, then select impor
 ```rust
 // speculative/prefill.rs
 pub fn block_select(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize>;
-pub fn block_select_grid(grid: &[f32], m: usize, n: usize, h: usize, cfg: &FlashPrefillConfig) -> Vec<usize>;
-pub fn compress_prompt_blocks(scores: &[f32], cfg: &FlashPrefillConfig, prefix: usize, suffix: usize) -> Vec<usize>;
+pub fn block_select_grid(score: &[f32], num_q_blocks, num_k_blocks, num_heads, cfg: &FlashPrefillConfig) -> (Vec<i32>, Vec<i32>);
+pub fn block_select_entmax(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize>;  // gated by dash_attn
+pub fn block_score_maxsim(q_block: &[f32], k_block: &[f32], block_len_q, block_len_k, dim) -> f32;  // gated by maxsim
+pub fn compress_prompt_blocks(importance_scores: &[f32], cfg: &FlashPrefillConfig, prefix_len: usize, suffix_len: usize) -> Vec<usize>;
 ```
 
 ### Block Selection Rules
@@ -262,13 +404,21 @@ pub fn compress_prompt_blocks(scores: &[f32], cfg: &FlashPrefillConfig, prefix: 
 2. **Window rule**: Blocks within `window` of query position always kept (local context)
 3. **last_n_full**: When query is in last N blocks, keep all (short prompt safety)
 4. **Alpha rule**: Keep blocks with `score >= max_score × alpha` (importance threshold)
+5. **Entmax rule** (`dash_attn` feature): α-entmax (α=1.5) sparse routing — variable support size adapts to query difficulty
+6. **MaxSim scoring** (`maxsim` feature): Late-interaction `Σ_i max_j dot(Q[i], K[j])` replaces mean dot-product for better needle detection
 
 ### Pipeline
 ```
 prompt tokens
     │
     ▼
-block_select (sink + window + last_n + alpha)
+block_select / block_select_entmax (sink + window + last_n + alpha/entmax)
+    │
+    ▼
+block_select_grid (per-(q_block, k_block, head) selection)  [optional]
+    │
+    ▼
+block_score_maxsim (MaxSim late-interaction scoring)  [maxsim feature]
     │
     ▼
 compress_prompt_blocks (prefix + suffix + selected blocks)
@@ -277,12 +427,41 @@ compress_prompt_blocks (prefix + suffix + selected blocks)
 target model prefill on compressed tokens
 ```
 
+### Config
+```rust
+// speculative/types.rs
+pub struct FlashPrefillConfig {
+    pub block_size: usize,          // tokens per block (default: 32)
+    pub attention_sink: usize,      // initial blocks to keep (default: 1)
+    pub window: usize,              // adjacent blocks to keep (default: 2)
+    pub last_n_full: usize,         // final blocks getting full attention (default: 1)
+    pub tail_window: usize,         // tail blocks for importance scoring (default: 4)
+    pub alpha: f32,                 // importance threshold (default: 0.15)
+    pub score_reduction: ScoreReduction,  // SoftmaxSum or MaxSim
+}
+
+pub enum ScoreReduction {
+    SoftmaxSum,  // standard attention (default)
+    MaxSim,      // late-interaction (gated by maxsim feature)
+}
+```
+
 ### Config Presets
 ```rust
-FlashPrefillConfig::default()        // block_size=32, sink=1, window=2, last_n=1, alpha=0.15
+FlashPrefillConfig::default()        // block_size=32, sink=1, window=2, last_n=1, tail_window=4, alpha=0.15
 FlashPrefillConfig::metal()          // block_size=64, optimized for Apple Silicon
-FlashPrefillConfig::long_context()   // aggressive compression for 64K+ ctx
-FlashPrefillConfig::short_context()  // conservative for <4K ctx
+FlashPrefillConfig::long_context()   // block_size=64, alpha=0.85, tail_window=8, aggressive compression for 64K+ ctx
+FlashPrefillConfig::short_context()  // block_size=32, alpha=0.12, tail_window=2, conservative for <4K ctx
+```
+
+### BlockScores
+```rust
+pub struct BlockScores {
+    pub num_blocks: usize,
+    pub block_size: usize,
+    pub scores: Vec<f32>,
+    pub selected: Vec<usize>,
+}
 ```
 
 ### Results
@@ -304,16 +483,102 @@ C++ reference (RTX 3090, BSA): 128K → 2.6K (50× reduction), TTFT 257s → 24.
 
 Both reductions multiply: PFlash reduces tokens, TurboQuant reduces bits per token.
 
+## Additional Types
+
+### DraftResult
+```rust
+// speculative/types.rs
+pub struct DraftResult {
+    pub marginals: Vec<Vec<f32>>,
+    pub sampled_tokens: Vec<usize>,
+    pub routing_overlap: Option<RoutingOverlapSnapshot>,   // gated by domain_latent
+    pub cost_snapshot: Option<SpecCostSnapshot>,            // gated by spec_cost_model
+    pub stability: Option<StabilitySnapshot>,               // gated by stability_metrics
+}
+```
+
+### SpeculativeContext
+```rust
+pub struct SpeculativeContext {
+    pub ctx: ForwardContext,
+    pub cache: MultiLayerKVCache,
+    pub marginals_flat: Vec<f32>,
+    pub probs_buf: Vec<f32>,
+    pub sampled_tokens: Vec<usize>,
+    pub accepted_buf: Vec<usize>,
+    pub path_buf: Vec<usize>,
+    pub residual_buf: Vec<usize>,
+    pub p_distributions_flat: Vec<f32>,
+    pub steps_populated: usize,
+    pub sde_config: SdeConfig,
+}
+```
+
+### DDTreeBranchCache
+```rust
+pub struct DDTreeBranchCache { /* paged KV cache with branch fork/rollback */ }
+impl DDTreeBranchCache {
+    pub fn new(config: &Config) -> Self;
+    pub fn fork_branch(&mut self, config: &Config) -> Option<usize>;
+    pub fn forward_branch(&mut self, branch: usize, ...);
+    pub fn rollback_branch(&mut self, branch: usize);
+    pub fn discard_branch(&mut self, branch: usize);
+    pub fn reset(&mut self);
+}
+```
+
+### DecodeStrategy
+```rust
+pub enum DecodeStrategy {
+    Autoregressive,                                          // default
+    Speculative,                                             // draft model
+    DiscreteDiffusion,                                       // gated by dllm
+    DiscreteDiffusionSoft,                                   // gated by dmax_spd
+    SelfSpeculation,                                         // gated by tri_mode
+}
+```
+
+### LDT Pruning
+```rust
+pub const LDT_THETA_ELIM: f32 = ...;
+pub struct LdtPruneConfig { pub theta_elim: f32, pub enabled: bool }
+```
+
+### Self-Speculation (Tri-Mode)
+```rust
+pub struct SelfSpecConfig { pub draft_width: usize, pub d2f_config: D2FConfig, pub sampler: ... }
+```
+
+### Conflict Detection
+```rust
+pub trait ConflictDetector { fn is_conflicted(&self, logits: &[f32], ...original: &[f32]) -> bool; }
+pub struct EntropyConflictDetector { pub max_prune_rate: f32, pub entropy_floor: f32 }
+```
+
+### Trajectory Credit (PTRM)
+```rust
+pub struct TrajectoryCredit { pub num_trajectories, best_score, worst_score, best_trajectory_idx, worst_trajectory_idx }
+impl TrajectoryCredit { pub fn from_trajectory_scores(...), pub fn node_weight(...), pub fn all_weights(...), pub fn assign_credit(...) }
+```
+
+### TES Config (PTRM)
+```rust
+pub struct TesConfig { pub global_width, refinement_depth, local_sample_size, bandit_strategy }
+pub struct TesNode { pub solution, score, metadata, parent_idx, visit_count, propagated_value }
+```
+
 ## Architecture Decisions
 
 1. **Chain-seed is additive** — `build_dd_tree()` works as before (chain_seed=false)
 2. **Prefill is a new module** — `speculative/prefill.rs`, no feature flag needed
 3. **KV snapshot copies only filled slots** — cheap at our scale, uses `kv_dim()` for GQA
 4. **Target conditioning via KV seed** — simplest option, no weight changes
-5. **Flat cache first** — PagedKVCache integration deferred to Plan 014
+5. **Flat cache + PagedKVCache** — `PagedKVCache` with fork/rollback now implemented (Plan 014+)
 6. **No new model weights** — reuses draft model attention + target hidden_state
 7. **TurboQuant is a separate module** — not extension of existing KV cache, lives in `src/turboquant/`
-8. **PFlash uses FlashPrefillConfig** — config-driven, no feature flag, CPU path with GPU kernel reserved for future
+8. **SpectralQuant is a separate module** — data-driven alternative to TurboQuant, lives in `src/spectralquant/`
+9. **PFlash uses FlashPrefillConfig** — config-driven, no feature flag for core path
+10. **Feature gates for research extensions** — `dash_attn` (entmax), `maxsim` (MaxSim scoring), `elf_sde` (noise injection), `dllm` / `dmax_spd` / `tri_mode` (decode strategies), `spectral_quant` (SpectralQuant), `domain_latent` / `spec_cost_model` / `stability_metrics` (telemetry)
 
 ## Key References
 - [Luce-Org/lucebox-hub](https://github.com/Luce-Org/lucebox-hub/) — Open LLM Inference, Rewritten by Hand for One Specific Chip at a Time

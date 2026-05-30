@@ -771,6 +771,39 @@ pub enum GateActivation {
 
 **Buffer write savings per layer:** ~8 passes (baseline) → ~0 passes (CODA fused).
 
+### MoA — Mixture of Activations (Plan 158)
+
+Token-adaptive activation mixing gated behind `moa_inference`. Instead of a single fixed activation, computes a weighted mixture over a dictionary of 7 activations per element, with gating weights determined per-token via sigmoid dot-product.
+
+```rust
+// 7-activation MoA dictionary
+pub enum MoaActivation {
+    Id,        // σ(x) = x
+    Relu,      // max(0, x)
+    Relu2,     // max(0, x)²
+    LeakyRelu, // max(x, ηx), η = 0.01
+    Gelu,      // xΦ(x) (sigmoid approx)
+    Silu,      // x · sigmoid(x)
+    Tanh,      // tanh(x)
+}
+
+pub struct MoaConfig {
+    pub d_model: usize,
+    pub gate_gating: Vec<f32>,  // [MOA_DICT_SIZE × d_model]
+    pub up_gating: Vec<f32>,   // [MOA_DICT_SIZE × d_model]
+}
+```
+
+**Key design choice:** Uses sigmoid gating (NOT softmax) — paper (arXiv 2605.26647) Table 2 shows sigmoid > softmax > tanh.
+
+| Function | Description |
+|----------|-------------|
+| `compute_moa_gates(input, gating, d_model)` | Compute π_k = sigmoid(u_k^T x) for k ∈ [0..7) |
+| `moa_swiglu(hidden, gate_proj, up_proj, input, moa)` | Token-adaptive bi-MoA SwiGLU: Σ_k ρ_k σ_k(y) ⊙ Σ_ℓ π_ℓ σ_ℓ(z) |
+| `simd_matmul_moa(...)` | Fused kernel: matmul + delayed RMSNorm + MoA mixing |
+
+**Feature gate:** `moa_inference` (opt-in)
+
 ## Tiled Attention (`crates/katgpt-core/src/attention.rs`, Plan 115)
 
 CPU SIMD tiled flash attention using online-softmax algorithm, adapted from ThunderKittens (Research 077). Processes Q in SIMD-width row tiles, K/V in column tiles — avoids materializing full N×N score matrix.
@@ -791,6 +824,169 @@ Threshold: tiled path activates when N > 128 (score matrix > L1 cache)
 3. Final normalize: `o_tile / norm_tile`
 
 **Feature gate:** `tiled_attention`
+
+## Newton-Schulz Orthogonalization (`src/newton_schulz.rs`, Plan 152, Research 114)
+
+5-iteration cubic fixed-point iteration that projects any matrix to its nearest orthogonal factor. Generic building block for Muon-family optimizers.
+
+**Newton-Schulz iteration:**
+```
+X = G / ||G||_F
+for 5 iters: A = X @ X^T; X = a*X + (b*A + c*A@A) @ X
+```
+
+Constants from the AMUSE paper (converges for σ ∈ [0, 1]):
+- `a = 3.4445`, `b = -4.7750`, `c = 2.0315`
+- 5 iterations (fixed)
+
+| Function | Description |
+|----------|-------------|
+| `transpose(src, rows, cols, dst)` | Row-major transpose, 4-row unrolled for auto-vectorization |
+| `matmul_xtx(x, m, n, a)` | Symmetric X·Xᵀ via SIMD dot products (upper triangle + mirror) |
+| `newton_schulz(g, rows, cols, out)` | Full orthogonalization: normalize → 5 cubic iterations |
+
+**Feature gate:** `newton_schulz` (default-on)
+
+**GOAT:** 25/25 (Bench 050)
+
+## River-Valley Diagnostics (`src/river_valley.rs`, Plan 152, Research 114)
+
+Modelless training diagnostics that reveal why optimization is (or isn't) converging. Pure scalar arithmetic, no external dependencies.
+
+| Metric | Description |
+|--------|-------------|
+| `subspace_ratios(gradient, dominant_eigvecs)` | Dominant vs bulk gradient alignment: `r_dom = ||U_k^T g|| / ||g||`, `r_bulk = sqrt(1 - r_dom²)` |
+| `effective_rank(w, rows, cols)` | Entropy-based rank measure from singular value distribution |
+| `update_cosine_similarity(w_old, w_new)` | Trajectory smoothness via cosine similarity of flattened weight updates |
+
+**Feature gate:** `river_valley` (default-on)
+
+**GOAT:** 25/25 (Bench 050)
+
+## Energy-Gated Attention (`src/ega_attn.rs`, Plan 139)
+
+Spectral salience gating for attention. Gates value aggregation by the spectral energy of key token embeddings — each key position's attention weight is scaled by a learned sigmoid gate derived from dot-product energy of the input embedding with a learned projection vector.
+
+**Algorithm (Algorithm 1 from paper):**
+```
+Q, K, V ← XW_Q, XW_K, XW_V
+S ← QKᵀ/√d + causal_mask;  A ← softmax(S)
+e ← X · w_proj                    // [seq_len] energy scores
+ẽ ← (e - μ) / (σ + ε)             // z-normalize
+g ← σ(α · (ẽ - τ))                // sigmoid gate [seq_len]
+Âᵢⱼ ← Aᵢⱼ · gⱼ                   // gate each key position
+Âᵢⱼ ← Âᵢⱼ / Σₖ(Âᵢₖ + ε)          // renormalize (sum-to-one)
+Y ← Â · V                         // value aggregation
+```
+
+**Per-head parameter overhead:** `d + 2` (`w_proj`: d, `alpha`: 1, `tau`: 1). Paper converges to α ≈ 2.2, τ ≈ 0.35.
+
+| Function | Description |
+|----------|-------------|
+| `sigmoid(x)` | Standard sigmoid σ(x) = 1/(1+exp(-x)) |
+| `z_normalize(scores)` | In-place z-normalization with SIMD sum-of-squares |
+| `ega_forward(q, k, v, x, w_proj, alpha, tau, ...)` | Full EGA attention forward pass |
+
+**Feature gate:** `ega_attn` (opt-in)
+
+## ShardKV (`src/shard_kv/`, Plan 147, Research 109)
+
+Asymmetric K/V cache compression inspired by the Shard paper. K and V have different structural properties requiring different compression methods.
+
+**Compression paths:**
+
+| Path | Prefill | Decode |
+|------|---------|--------|
+| K | undo RoPE → PCA rotation → water-fill bit allocation → Lloyd-Max quantize | Hadamard rotation → 8-bit Lloyd-Max streaming (guaranteed lossless) |
+| V | Hadamard rotation → K-means VQ (groups of 4, 256 codebook) → 2 bits/elem | Hadamard rotation → 8-bit Lloyd-Max streaming (guaranteed lossless) |
+
+Sink + window: attention sinks and recency window stored losslessly.
+
+Reuses `spectralquant`'s `SpectralRotation`, `LloydMaxQuantizer`, `BitAllocator`, and `waterfill_bits` for the K path.
+
+| Module | Description |
+|--------|-------------|
+| `kv_cache` | `ShardKVCache` implementation |
+| `rope` | `undo_rope` / `reapply_rope` with `RopeFreqs` |
+| `types` | `ShardConfig`, `ShardCalibration`, `ShardLayer`, `VqCodebook` |
+
+**Feature gate:** `shard_kv` (opt-in, requires `spectral_quant`, `turboquant`)
+
+## Sleep Consolidation (`src/sleep/`, Plan 154, Research 116)
+
+Offline recursive memory consolidation at KV eviction boundary. When the KV cache fills, performs N offline recurrent passes to consolidate context into GDN2 fast weights, then evicts. Preserves single-pass wake-time latency for real-time constraints (20Hz frame sampling).
+
+```
+Existing LT2 Pipeline:
+  Input → [SDPA → GDN2 → SDPA → GDN2 → ...]×T (wake-time loops) → Output
+
+With Sleep:
+  Input → Context fills → [SDPA → GDN2 → ...]×N (sleep-time consolidation) → Evict KV → Continue
+         ↑ Single-pass at wake time (T=1)                    ↑ N-pass at eviction boundary
+```
+
+| Type | Description |
+|------|-------------|
+| `SleepConfig` | Configuration: consolidation passes, eviction threshold, etc. |
+| `EvictionStrategy` | `HardEvict` / `SlidingWindow` eviction policy |
+| `consolidation_pass(...)` | Single recurrent consolidation pass via GDN2 fast weights |
+| `sleep(ctx, weights, kv_cache, gdn2_cache, config, ...)` | Full sleep cycle: N-pass consolidation + eviction |
+
+| Module | Description |
+|--------|-------------|
+| `consolidation` | Core consolidation loop and `sleep` entry point |
+| `eviction` | Eviction strategy implementations |
+| `types` | `SleepConfig`, `EvictionStrategy` |
+
+**Feature gate:** `sleep_consolidation` (default-on, requires `lt2_looped`, `gdn2_attention`)
+
+## Spectral Hierarchy (`crates/katgpt-core/src/spectral_hierarchy.rs`, Plan 156, Research 121)
+
+Validates that hierarchical splitting geometry in co-occurrence Gram matrices emerges under the decay assumptions (Theorems 1–2 from Research 121). Three diagnostics:
+
+| Function | Description |
+|----------|-------------|
+| `eigenspace_alignment(gram, reference, n, k)` | Top-k eigenspace alignment g(k) = (1/k) Σ |⟨vᵢᴬ, vᵢᴮ⟩|. Values > 0.9 indicate strong alignment |
+| `haar_wavelet_basis(depth)` | Constructs Haar wavelet basis (scaling + wavelet modes) for a depth-D binary tree |
+| `cauchy_interlacing_check(full_eigenvalues, sub_eigenvalues)` | Validates Cauchy interlacing inequality for nested split blocks |
+
+**Feature gate:** `spectral_hierarchy` (default-on)
+
+## Roofline Cost (`crates/katgpt-core/src/roofline.rs`, Research R130, Plan 159)
+
+GPU operator runtime prediction, ported from FlashLib's `info/roofline.py`. Predicts operator runtime in ~5µs CPU-only estimation, replacing ~100ms GemvAutotune benchmarking.
+
+```rust
+pub enum ComputeBound {
+    Compute,  // FLOP throughput limited
+    Memory,   // Bandwidth limited
+    Launch,   // Too small; launch overhead dominates
+}
+
+pub struct RooflineCost {
+    pub runtime_ms: f64,
+    pub flops: u64,
+    pub bytes_moved: u64,
+    pub bound: ComputeBound,
+}
+```
+
+Operator types: `Gemv`, `Gemm`, `Elementwise`, `Reduction`. Calibrated via `HardwarePeaks` throughput parameters.
+
+**Feature gate:** `roofline_cost` (default-on)
+
+## Dual-Gram PCA (`crates/katgpt-core/src/simd.rs`, Research R130, Plan 159)
+
+Dual-Gram PCA routing for short-sequence calibration. When `seq_len < 4 * head_dim`, computes the Gram matrix G = X·Xᵀ (seq_len × seq_len) instead of the covariance C = Xᵀ·X (d_h × d_h), yielding correct eigenvectors without O(d²) work.
+
+| Function | Description |
+|----------|-------------|
+| `simd_gram_f32(x, seq_len, d_h, gram_out)` | SIMD-accelerated Gram matrix computation G = X·Xᵀ |
+| `calibrate_eigenbasis_dual_gram(samples, head_dim)` | Full dual-Gram calibration pipeline (in `spectralquant::spectral`) |
+
+Reference: FlashLib `primitives/pca/triton/pca.py` L73–116 (Research R130).
+
+**Feature gate:** `dual_gram_pca` (default-on)
 
 ## Consolidated Traits (`crates/katgpt-core/src/traits.rs`, Plan 107 Phase 0)
 
@@ -831,6 +1027,45 @@ pub trait RolloutPolicy<S: GameState> {
 | `NoScreeningPruner` | `ScreeningPruner` | Returns 1.0 for everything (no penalty) |
 | `RandomRolloutPolicy` | `RolloutPolicy` | Uniform random action selection |
 | `ActionSpaceLog` | — | Per-tick branching factor metrics for analysis |
+
+### LEO All-Goals Traits (Plan 155)
+
+Goal-conditioned RL traits for agents that learn all goals simultaneously (LEO — Learning Everything Omnisciently). Feature-gated:
+- `leo_all_goals` — `LeoHead`, `AllGoalsUpdate`, `sigmoid_bounded_q`
+- `dual_leo` — additionally `DualLeoMixer`, `AutocurriculumSampler`
+
+```rust
+// Feature gate: leo_all_goals
+pub trait LeoHead {
+    fn all_goals_q(&self, state: &[f32]) -> Vec<f32>;  // [goals × actions] flattened
+    fn goal_count(&self) -> usize;
+    fn action_count(&self) -> usize;
+    fn q_for_goal(&self, all_q: &[f32], goal: usize) -> &[f32]; // slice into row
+}
+
+pub trait AllGoalsUpdate {
+    fn td_target(&self, rewards: &[f32], next_q: &[Vec<f32>], gamma: f32) -> Vec<f32>;
+    fn loss(predicted: &[Vec<f32>], target: &[f32]) -> f32;  // MSE over goals
+}
+
+// Feature gate: dual_leo
+pub trait DualLeoMixer {
+    fn mix(&self, q_leo: &[f32], q_uvfa: &[f32], alpha: f32) -> Vec<f32>;  // α·Q_LEO + (1-α)·Q_UVFA
+    fn combine_into(&self, out, q_leo, q_uvfa, alpha);  // ActingMode dispatch
+    fn acting_mode(&self) -> ActingMode;   // Lc | LeoOnly | UvfaOnly | Max | Min
+    fn alpha_schedule(&self) -> AlphaSchedule;  // Fixed(a) | LinearAnneal { start, end }
+    fn bc_config(&self) -> Option<BcConfig>;    // BC regularization for Dual LEO PPO
+}
+
+pub trait AutocurriculumSampler {
+    fn sample_goal(&self, rng: &mut Rng) -> usize;
+    fn observe_goal(&mut self, goal: usize);
+    fn update_goals_seen(&self, obs_batch, all_goals, current_mask) -> Vec<bool>;
+    fn goals_completed_this_episode(&self) -> usize;
+}
+```
+
+**Architecture note:** Implementors should use BatchRenorm (r_max=3, d_max=5, warmup=1000) rather than standard BatchNorm, for stability with highly off-policy replay data.
 
 Re-exported from both `katgpt-core` and `katgpt-rs`.
 

@@ -119,16 +119,18 @@ struct Stats {
 }
 
 struct Unit {
-    id: u8, class: Class, team: Team,
-    hp: i32, mp: i32, stats: Stats,
-    pos: Pos, ct: f32, alive: bool,
+   id: u8, class: Class, team: Team,
+   hp: i32, mp: i32, stats: Stats,
+   pos: Pos, alive: bool,
+   defending: bool, has_potion: bool,
+   ct_gauge: f32,
 }
 
 struct Pos { x: i32, y: i32 }
 
 struct Action {
-    actor: u8, action: ActionType,
-    target: Option<u8>, move_to: Option<Pos>,
+   action_type: ActionType,
+   target_id: Option<u8>, move_to: Option<Pos>,
 }
 ```
 
@@ -141,12 +143,12 @@ enum GameEvent {
     DamageDealt { attacker: u8, target: u8, damage: i32 },
     Healed { healer: u8, target: u8, amount: i32 },
     Missed { attacker: u8, target: u8 },
-    UnitDied { unit: u8, killer: Option<u8> },
-    EffectApplied { target: u8, effect: StatusEffect, duration: u8 },
-    EffectExpired { target: u8, effect: StatusEffect },
-    EffectTicked { target: u8, effect: StatusEffect, damage: i32 },
-    DebuffCured { healer: u8, target: u8, effect: StatusEffect },
-    BuffDispelled { caster: u8, target: u8, effect: StatusEffect },
+    UnitDied { unit: u8, killer: u8 },
+    EffectApplied { target: u8, effect: String, duration: u8 },
+    EffectExpired { target: u8, effect: String },
+    EffectTicked { target: u8, effect: String, damage: i32 },
+    DebuffCured { healer: u8, target: u8, effect: String },
+    BuffDispelled { caster: u8, target: u8, effect: String },
 }
 ```
 
@@ -170,13 +172,13 @@ enum GameEvent {
 
 | Function | Purpose |
 |----------|---------|
-| `apply_tick_effects(effects, units, events)` | Process poison/regen ticks, decrement durations, expire finished effects |
-| `can_cast(unit, action)` | Returns false if Silenced and action is magic |
-| `can_act(unit)` | Returns false if Sleeping |
-| `ct_fill_rate(unit)` | Returns `BASE_CT_FILL × ct_speed × haste_modifier / slow_modifier` |
-| `effective_phys_def(unit)` | Returns `def × protect_modifier` (+50% if Protect active) |
-| `effective_mag_def(unit)` | Returns `mag_def × shell_modifier` (+50% if Shell active) |
-| `effective_hit_rate(unit, base)` | Returns `base × blind_modifier` (-50% if Blind active) |
+| `apply_tick_effects(units, effects)` | Process poison/regen ticks, decrement durations, expire finished effects |
+| `can_cast(unit, effects)` | Returns false if Silenced or Asleep |
+| `can_act(unit, effects)` | Returns false if Sleeping |
+| `ct_fill_rate(unit, effects)` | Returns `ct_speed × BASE_CT_FILL × haste/slow modifiers` |
+| `effective_phys_def(unit, effects)` | Returns `def × 1.5` if Protect active |
+| `effective_mag_def(unit, effects)` | Returns `def × 1.5` if Shell active |
+| `effective_hit_rate(unit, effects)` | Returns `BASE_HIT_RATE × 0.5` if Blind active |
 
 ## Player Types (6 AI Strategies)
 
@@ -219,8 +221,8 @@ enum GameEvent {
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
-| `epsilon` | 0.15 (decaying) | Exploration rate, decays per round |
-| `alpha` | 0.1 | Learning rate for Q-value updates |
+| `epsilon` | 0.15 (decaying to 0.05) | Exploration rate, decays by ×0.995 per round |
+| `alpha` | `1/√(1+visits)` | Adaptive learning rate for Q-value updates |
 | Arms | 9 | One per ActionType |
 
 #### Reward Shaping
@@ -228,10 +230,10 @@ enum GameEvent {
 | Signal | Reward |
 |--------|--------|
 | Survive round | +1.0 |
-| Kill enemy | +0.5 |
+| Kill enemy | +0.5 per kill |
 | Damage dealt | +0.01 per HP |
-| Healing done | +0.01 per HP |
-| Die | -1.0 |
+| Healing done | +0.005 per HP |
+| Die | -2.0 |
 
 #### Decision Flow
 
@@ -255,8 +257,12 @@ GZeroFFTPlayer
   ├── template_proposer: FFTTemplateProposer   (UCB1 over 10 templates)
   ├── delta_bandit: DeltaBanditPruner           (δ-reward for arms)
   ├── absorb_compress: DeltaGatedAbsorbCompress (δ-gated compression)
+  ├── delta_history: Vec<f32>                    (rolling δ across episodes)
+  ├── round_actions: Vec<(ActionType, f32)>     (episode tracking)
   ├── q_values: [f32; 9]                        (per-action Q-learning)
-  └── round_actions: Vec<(ActionType, f32)>     (episode tracking)
+  ├── visits: [u32; 9]                          (per-action visit counts)
+  ├── last_template: Option<FFTTemplate>         (last selected template)
+  └── id: u8                                     (player identifier)
 ```
 
 #### Decision Flow (per unit turn)
@@ -269,7 +275,7 @@ GZeroFFTPlayer
 | 4 | `HintDelta::compute` | δ = mean absolute score shift vs baseline |
 | 5 | Safety filter | Override with heal/potion when HP critical |
 | 6 | Blend | Hinted scores (80%) + Q-values (20%) |
-| 7 | ε-greedy | 10% random safe exploration |
+| 7 | ε-greedy | 5% random safe exploration |
 
 #### Templates (10 strategy archetypes)
 
@@ -295,18 +301,22 @@ GZeroFFTPlayer
 #### TFT State Model
 
 ```rust
-enum TftMode { Nice, Retaliatory }
+enum TftMode { Nice, Retaliatory { target: u8, ticks_left: u8 } }
+
+enum ProvokeLevel { None, Personal(u8), Team(u8), Escalated(u8) }
 
 struct PartyTftState {
-    mode: TftMode,
-    provocateur: Option<u8>,
+    provoked_by: Option<u8>,
+    provoke_level: ProvokeLevel,
     forgive_timer: u8,
+    escalation_count: u8,
+    generous_chance: f32,
 }
 
 struct UnitTftState {
     mode: TftMode,
     last_attacker: Option<u8>,
-    generous_chance: f32,
+    class: Class,
 }
 ```
 
@@ -315,13 +325,15 @@ struct UnitTftState {
 | Mode | Trigger | Behavior |
 |------|---------|----------|
 | **Nice** | Default start | Role-based: heal if WhiteMage, attack if Knight, support if TimeMage |
-| **Retaliatory** | Ally takes damage from enemy | Target the provocateur, +2.0 attack priority |
+| **Retaliatory (Personal)** | Ally takes damage from enemy | Target the provocateur, +2.0 attack priority |
+| **Retaliatory (Team)** | Multiple allies attacked | Full team retaliation against provocateur |
+| **Retaliatory (Escalated)** | Ally killed by enemy | Highest priority — focus fire on killer |
 | **Forgive** | `forgive_timer` expires OR `generous_chance` roll | Return to Nice mode |
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
 | `FORGIVE_DURATION` | 5 ticks | Auto-reset timer for retaliation |
-| `generous_chance` | 10% | Random forgiveness probability |
+| `generous_chance` | 10% | Random forgiveness probability (in `PartyTftState`) |
 | `TFT_EPSILON` | 0.05 | ε-greedy exploration rate |
 
 #### Key Insight: Clear Provocation Signal
@@ -333,34 +345,39 @@ Unlike Bomberman where "who caused the blast" is ambiguous, FFT's `GameEvent::Da
 These utility functions are used by multiple player types:
 
 | Function | Purpose | Used By |
-|----------|---------|---------|
+|----------|---------|----------|
 | `weakest_target(state, targets)` | Find lowest HP enemy from target list | Greedy, Validator, HL |
 | `lowest_hp_ally(state, allies)` | Find lowest HP ally from ally list | Greedy, Validator, HL, GZero |
-| `most_debuffed_ally(state, allies)` | Find ally with most active debuffs | Validator, HL, GZero |
-| `nearest_enemy_pos(state, unit)` | Get closest enemy position for movement | Greedy, HL, GZero |
-| `move_toward(from, to, move_range)` | Calculate optimal move position toward target | All |
-| `move_away(from, threat, move_range)` | Calculate retreat position away from threat | Validator, TFT |
+| `most_debuffed_ally(state, effects, allies)` | Find ally with most active debuffs | Validator, HL, GZero |
+| `nearest_enemy_pos(state, pos, team)` | Get closest enemy position for movement | Greedy, HL, GZero |
+| `move_toward(reachable, target)` | Calculate optimal move position toward target | All |
+| `move_away(reachable, threat)` | Calculate retreat position away from threat | Validator, TFT |
 
 ## Key Files
 
 ### Core FFT Engine (katgpt-rs)
 
 | File | Purpose |
-|------|---------|
-| `src/pruners/fft/types.rs` | Core types: Class (6), ActionType (9), Stats, Unit, Pos, Action, GameEvent, TftMode, PartyTftState, UnitTftState |
-| `src/pruners/fft/battle.rs` | BattleState with ATB: `new_with_config`, `new_random_8`, `new_random_n`, `advance_ct`, `ready_units`, `reset_ct`, `tick_effects`, `resolve_action`, `should_forgive` |
+|------|----------|
+| `src/pruners/fft/types.rs` | Core types: Class (6), ActionType (9), Stats, Unit, Pos, Action, GameEvent, TftMode, ProvokeLevel, PartyTftState, UnitTftState |
+| `src/pruners/fft/battle.rs` | BattleState with ATB: `new`, `new_with_config`, `new_random_8`, `new_random_n`, `advance_ct`, `ready_units`, `reset_ct`, `tick_effects`, `resolve_action`, `should_forgive` |
 | `src/pruners/fft/status.rs` | StatusEffect enum (9), ActiveEffect, `apply_tick_effects`, `can_cast`, `can_act`, `ct_fill_rate`, `effective_phys_def`, `effective_mag_def`, `effective_hit_rate` |
 | `src/pruners/fft/players.rs` | `FftPlayer` trait + 3 implementations (Greedy, Validator, HL) + shared AI helpers |
 | `src/pruners/fft/g_zero_player.rs` | `GZeroFFTPlayer` — G-Zero self-play with template hints + Hint-δ (feature: `g_zero`) |
-| `src/pruners/fft/tft_player.rs` | `TftFFTPlayer` — game theory Tit-for-Tat (feature: `g_zero`) |
-| `src/pruners/fft/mod.rs` | Module exports, feature-gated: `g_zero` enables GZeroFFTPlayer + TftFFTPlayer |
+| `src/pruners/fft/tft_player.rs` | `TftFFTPlayer` — game theory Tit-for-Tat with ProvokeLevel escalation (feature: `g_zero`) |
+| `src/pruners/fft/rubric_player.rs` | `RubricFFTPlayer` — ROPD rubric-vector-aware player (feature: `ropd_rubric`) |
+| `src/pruners/fft/sdar_player.rs` | `SdarFFTPlayer` — SDAR sigmoid-gated reward player (feature: `sdar_gate`) |
+| `src/pruners/fft/arena_runner.rs` | `FftArenaConfig`, `FftBattleResult`, `run_fft_battle`, `run_fft_matchup` — N-battle match runner |
+| `src/pruners/fft/mod.rs` | Module exports, feature-gated: `g_zero` enables GZeroFFTPlayer + TftFFTPlayer, `ropd_rubric` enables RubricFFTPlayer, `sdar_gate` enables SdarFFTPlayer |
 | `src/pruners/g_zero/fft_templates.rs` | `FFTTemplate` + `FFTTemplateProposer` — 10 strategy archetypes |
 | `examples/fft_01_arena.rs` | Standalone FFT arena (Plan 047, original 4-class version) |
+| `examples/fft_02_rubric_tournament.rs` | Rubric vs GZero tournament (features: `ropd_rubric`, `g_zero`, `fft`) |
+| `examples/fft_03_sdar_tournament.rs` | SDAR vs Rubric vs GZero tournament (features: `sdar_gate`, `ropd_rubric`, `g_zero`, `fft`) |
 
 ### Shared Infrastructure (riir-ai)
 
 | File | Purpose |
-|------|---------|
+|------|----------|
 | `riir-examples/src/fft_arena.rs` | Shared battle runner: `BattleResult`, `BattleStats`, `run_battle`, `run_battle_default`, `extract_kills`, `extract_unit_stats`, `run_tournament` |
 | `riir-examples/examples/g_zero_fft_01_arena.rs` | 100-round ATB tournament: Greedy vs Validator vs HL vs GZero |
 | `riir-examples/examples/g_zero_fft_02_priority_proof.rs` | Priority dilemma regression test (poison/cure, kill/heal, silence/potion) |
@@ -462,14 +479,22 @@ Player      │ Win% │ Avg Kills │ Avg Deaths │ P50 (μs) │ P95 (μs) �
 
 | Feature | Enables | Dependencies |
 |---------|---------|-------------|
-| `fft` (default) | GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer, status effects, ATB | `bandit` |
-| `g_zero` | GZeroFFTPlayer, TftFFTPlayer, FFTTemplateProposer | `fft`, `g_zero` core |
+| `fft` (default) | GreedyFFTPlayer, ValidatorFFTPlayer, HLFFTPlayer, status effects, ATB, arena_runner | `bandit` |
+| `g_zero` | GZeroFFTPlayer, TftFFTPlayer, FFTTemplateProposer | `bandit` |
+| `ropd_rubric` | RubricFFTPlayer (rubric-vector-aware GZero variant) | `bandit` |
+| `sdar_gate` | SdarFFTPlayer (sigmoid-gated reward GZero variant) | none |
 
 ## How to Run
 
 ```bash
 # Original FFT arena (standalone, no features)
 cargo run --example fft_01_arena
+
+# Rubric vs GZero tournament (requires ropd_rubric + g_zero + fft)
+cargo run --example fft_02_rubric_tournament --features "ropd_rubric,g_zero,fft"
+
+# SDAR vs Rubric vs GZero tournament (requires sdar_gate + ropd_rubric + g_zero + fft)
+cargo run --example fft_03_sdar_tournament --features "sdar_gate,ropd_rubric,g_zero,fft"
 
 # G-Zero FFT examples (requires g_zero feature)
 cargo run -p riir-examples --example g_zero_fft_01_arena --features g_zero

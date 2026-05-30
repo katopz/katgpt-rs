@@ -12,9 +12,14 @@ pub struct Sudoku9x9 {
 ```
 
 ### Key Methods
+- `new(grid: [[u8; 9]; 9]) -> Self` — create from grid (0 = empty)
+- `arto_inkala() -> Self` — Arto Inkala's "World's Hardest Sudoku" (21 clues)
+- `percepta_reference() -> Self` — puzzle from Percepta transformer-vm manifest (30 clues)
 - `is_valid_move(row, col, digit) -> bool` — row/col/3×3 box checks
+- `clue_count() -> usize` — count non-zero cells
 - `solve(&mut self, cache: &mut KVCache2D, step: &mut usize) -> bool` — backtracking solver
 - `is_solved() -> bool`
+- `next_empty() -> Option<(usize, usize)>` — find next empty cell
 - `display() -> String` — pretty-printed grid with box separators
 
 ### Reference Puzzle (Arto Inkala, 21 clues)
@@ -49,34 +54,51 @@ pub enum SolveEvent {
     Backtrack { row: usize, col: usize, depth: usize },
     Solved { steps: usize, hull_size: usize, total_trace: usize },
 }
+
+pub struct StreamingSolver {
+    pub state: Sudoku9x9,
+    pub cache: KVCache2D,
+    pub step: usize,
+    pub events: Vec<SolveEvent>,
+    #[cfg(feature = "percepta")]
+    pub cht_head: super::hull::HardAttentionHead,
+}
 ```
 
 - `format_events()` produces concise web-demo-style output
 - Shows first 4 placements, evenly spaced middle, last 5
+- `cht_head` mirrors the `(step, filled)` trace for O(log N) hard attention queries (gated behind `"percepta"` feature)
 
-## SudokuPruner (`pruners/sudoku_pruner.rs`, behind "sudoku" feature)
+## SudokuPruner (`pruners/sudoku_pruner.rs`, behind `"sudoku"` feature)
 
-Implements `ConstraintPruner` for DDTree branch validation:
+Implements `ConstraintPruner` (from `katgpt-core::traits`) for DDTree branch validation:
 
-### Static Pruning (v1)
-- Checks each token against the **initial** board state
-- Maps DDTree depth → (row, col) position, validates digit against row/col/box
-- Result: 52% of branches valid → prunes 48% invalid
-
-### Path-Aware Pruning (v2)
-- Extended signature: `is_valid(depth, token_idx, parent_tokens: &[usize])`
+### Path-Aware Pruning
+- Signature: `is_valid(depth, token_idx, parent_tokens: &[usize])`
 - Checks digit against initial board AND all parent tokens in the path
 - Catches cross-depth conflicts: depth 0 places `4` at (0,1), depth 1 tries `4` at (0,2) → pruned
 - Result: **100% valid branches** (all cross-depth conflicts eliminated)
 
 ```rust
+#[cfg(feature = "sudoku")]
 pub struct SudokuPruner {
-    initial_grid: [[u8; 9]; 9],
-    cell_order: Vec<(usize, usize)>,  // depth → (row, col) mapping
+    board: Sudoku9x9,
+    positions: Vec<(usize, usize)>,  // depth → (row, col) mapping
 }
 ```
 
-- `conflicts_with_parent(depth, digit, parent_tokens) -> bool`
+### Key Methods
+- `new(board: Sudoku9x9) -> Self` — auto-discovers empty cells in row-major order
+- `empty_count() -> usize` — number of empty cells (= max DDTree depth)
+- `position_at(depth) -> Option<(usize, usize)>` — depth → (row, col) mapping
+- `board() -> &Sudoku9x9` — access underlying board state
+
+### ConstraintPruner Implementation
+Path-aware conflict checking is inline in `is_valid()`:
+1. Reject token 0 (empty/padding)
+2. Map depth → (row, col) via `positions`
+3. Check digit against initial board (`board.is_valid_move`)
+4. Iterate parent tokens: if same digit shares row/col/box with any parent → reject
 - Incremental: O(parent_tokens.len()) per check = O(lookahead) — negligible
 
 ## DDTree Integration
@@ -95,22 +117,28 @@ pub struct SudokuPruner {
 
 ## Examples
 
-### `sudoku_9x9.rs`
+### `sudoku_01_9x9.rs`
 - Solves Arto Inkala puzzle with streaming "thinking" output
 - Shows hull compression stats and O(log N) attention
 - No feature flag required (Sudoku9x9 is always public)
+- Run: `cargo run --example sudoku_01_9x9`
 
-### `sudoku_speculative.rs` (behind "sudoku" feature)
+### `sudoku_02_speculative.rs` (behind `"sudoku"` feature)
 - Simulated draft model marginals (uniform over valid digits)
 - Compares DDTree: without vs with Deterministic Validator pruning
 - Token distribution table shows which digits pruned per depth
+- Run: `cargo run --features sudoku --example sudoku_02_speculative`
 
-### `sudoku_tui.rs` (behind "sudoku" feature)
+### `sudoku_03_tui.rs` (behind `"sudoku"` feature)
 - Ratatui-based TUI with real-time solver visualization
 - Color-coded cells: Green (clue), Cyan (accepted), Yellow (trying), Red (contradiction)
 - Two tabs: 9×9 solver vs Speculative mode
 - Channel-based: `mpsc` for streaming events from solver thread
 - Stats bar: tok/s, tokens, lines/s
+- Run: `cargo run --features sudoku --release --example sudoku_03_tui`
+
+### `sudoku_04_percepta_vs.rs` (behind `"sudoku"` feature)
+- Compares native vs Percepta execution approaches
 
 ## Design Lessons
 1. **ConstraintPruner is domain-agnostic** — same trait serves Sudoku and Rust AST (SynPruner)

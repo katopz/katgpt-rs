@@ -56,7 +56,7 @@ Speedup: Speculative vs AR went from **0.72×** → **1.82×** after zero-alloc 
 
 ## SIMD Acceleration (Plan 060)
 
-NEON (ARM) / AVX2 (x86_64) SIMD dispatch for matmul, matmul_relu, HLA streaming, MaxSim scoring, fused decay/write, and vectorized add kernels.
+NEON (ARM) / AVX2 (x86_64) SIMD dispatch via `katgpt-core/src/simd.rs` (re-exported through `src/simd.rs`). All kernels use runtime `SimdLevel` detection and provide scalar fallbacks. Public API:
 
 ### Kernel-Level Throughput (NEON, Apple Silicon, release)
 
@@ -71,6 +71,42 @@ NEON (ARM) / AVX2 (x86_64) SIMD dispatch for matmul, matmul_relu, HLA streaming,
 | maxsim_score_packed | — | batched MaxSim |
 | simd_fused_decay_write | — | fused dst=α·dst+β·src |
 | simd_add_into | — | vectorized dst=a+b |
+
+### Additional SIMD Kernels (Plan 060+)
+
+| Kernel | Description | Feature gate |
+|--------|-------------|-------------|
+| `simd_dot_f32` | Dot product (NEON/AVX2/scalar) | — |
+| `simd_outer_product_acc` | Outer product accumulation | — |
+| `simd_matvec` | Matrix-vector multiply | — |
+| `simd_matmul_rows` | Row-parallel matmul | — |
+| `simd_matmul_rows_parallel` | Rayon-parallel matmul (threshold-gated) | — |
+| `simd_matmul_relu_rows` | Row-parallel matmul + ReLU clamp | — |
+| `simd_fma_row` | Fused multiply-accumulate row | — |
+| `simd_dot_f16_f32` | f16/f32 mixed-precision dot product | — |
+| `simd_matmul_f16_f32_rows` | f16 weight / f32 input matmul | — |
+| `simd_matmul_f16_f32_rows_parallel` | Rayon-parallel f16/f32 matmul | — |
+| `simd_sparse_dot_f32` | Sparse dot product (alive mask) | — |
+| `simd_sparse_matmul_rows` | Sparse matmul with index tracking | — |
+| `simd_scale_inplace` | In-place scalar multiply | — |
+| `simd_add_scalar_inplace` | In-place scalar addition | — |
+| `simd_fused_sub_scale_inplace` | Fused dst = (a - b) * s | — |
+| `simd_sum_f32` | Horizontal sum | — |
+| `simd_add_inplace` | In-place vector add | — |
+| `simd_max_f32` | Horizontal max | — |
+| `simd_scale_mul_inplace` | Fused element-wise scale-multiply | — |
+| `simd_exp_inplace` | Cephes-based exp approximation | — |
+| `simd_fused_sub_acc` | Fused dst += a - b | — |
+| `simd_fused_scale_acc` | Fused dst += α·src | — |
+| `simd_gram_f32` | Gram matrix A^T A (upper triangle) | — |
+| `simd_sum_sq` | Sum of squares | — |
+| `simd_sum_abs_f32` | Sum of absolute values | — |
+| `simd_dist_sq` | Squared Euclidean distance | — |
+| `simd_ternary_matvec` | Ternary weight matvec (PlasmaPath) | `plasma_path` |
+| `simd_ternary_matmul_batch` | Batched ternary matmul (Rayon) | `plasma_path` |
+| `sigmoid_margin_loss` | Retrieval margin loss (MaxSim scoring) | — |
+| `compute_retrieval_margin` | Retrieval quality margin | — |
+| `dim_sufficiency_bound` | Dimension sufficiency theoretical bound | — |
 
 ### End-to-End Forward Throughput (Config::micro, 8 positions)
 
@@ -160,9 +196,16 @@ DDTree branches clone entire `MultiLayerKVCache` → most data is shared prefix:
 ### Solution
 ```rust
 pub struct PagedKVCache {
-    pages: Vec<Vec<f32>>,                     // pool of [PAGE_SIZE * kv_dim] pages
+    pages: Vec<Vec<f32>>,                     // pool of [PAGE_SIZE * kv_dim * 2] pages (K|V)
     layer_page_tables: Vec<Vec<Vec<usize>>>,  // [layer][seq] → page indices
-    free_pages: Vec<usize>,
+    free_pages: Vec<usize>,                   // free list for page reuse
+    kv_dim: usize,                            // n_kv_head * head_dim
+    total_pages: usize,                       // monotonically increasing
+    deficits: Vec<usize>,                     // scratch: per-layer page deficits
+    new_pages: Vec<Vec<usize>>,               // scratch: per-layer new page indices
+    all_new_buf: Vec<usize>,                  // scratch: flat buffer for ensure_pages()
+    page_ref_counts: Vec<u32>,                // O(1) rollback (replaces HashSet scan)
+    rollback_removed: Vec<usize>,             // scratch: drained page indices
 }
 ```
 - PAGE_SIZE = 16 tokens (power of 2)
@@ -172,7 +215,8 @@ pub struct PagedKVCache {
 
 ### Status
 - Struct implemented and tested (Plan 011)
-- DDTree integration pending (Plan 014)
+- O(1) rollback via `page_ref_counts` (Issue 053)
+- Zero-alloc hot path via scratch buffers (`deficits`, `new_pages`, `all_new_buf`, `rollback_removed`)
 - Currently DDTree uses flat `snapshot()/restore()` which works but copies more data
 
 ### ScreeningPruner Overhead (Plan 021)
@@ -189,7 +233,25 @@ Overhead is expected: screening calls `relevance()` + computes `ln(R)` for every
 
 ## What each benchmark measures
 
-The benchmarks progress from individual components to full pipelines:
+The benchmarks progress from individual components to full pipelines. Benchmark categories (`BenchCategory` enum in `src/benchmark/mod.rs`):
+
+| Category | Tag | Module | Description |
+|----------|-----|--------|-------------|
+| Speculative | `speculative` | `speculative.rs` | Speculative decoding throughput |
+| TreeBuild | `tree_build` | `speculative.rs` | DDTree build performance |
+| Infrastructure | `infrastructure` | `infrastructure.rs` | KV cache, prefill, recall primitives |
+| HeuristicLearning | `heuristic_learning` | `heuristic.rs` | G-Zero self-play components |
+| SpecDecoding | `SD` | `speculative.rs` | Draft/verify, tree search, MTP |
+| KvOptimization | `KV` | `infrastructure.rs` | Cache compression, pruning, quantization |
+| Attention | `Attn` | `hla.rs` | Novel attention, linear attention |
+| Noise | `Noise` | `noise.rs` | SDE injection, diffusion schedules |
+| Distillation | `Distill` | `distillation.rs` | LoRA, quantization, knowledge transfer |
+| TestTimeCompute | `TTC` | `ttc.rs` | Adaptive budget, bandit exploration |
+| Routing | `Route` | `routing.rs` | Raven slot routing, delta routing |
+| Diffusion | `Diff` | `diffusion.rs` | D2F block/pipeline denoising |
+| Game | `Game` | `games.rs` | E2E game timing (Sudoku/Go/Monopoly/Bomber) |
+| SimdPerf | `SIMD` | `simd.rs` | Dense/sparse matmul, ternary, lattice |
+| E2EGame | `e2e_game` | `batch.rs` | E2E timing through plasma/hot/warm/cold cache states |
 
 ### Core Components
 
@@ -243,6 +305,10 @@ The benchmarks progress from individual components to full pipelines:
 
 > **Note:** TurboQuant is now a legacy baseline for benchmarking/education. **SpectralQuant** (Plan 078, feature `spectral_quant`, on by default) replaces it with calibrated eigenbasis rotation + water-fill bit allocation. See `src/spectralquant/`.
 
+Files: `src/turboquant/{mod,codebook,forward,kv_cache,rotation,types}.rs`
+
+Feature gate: `turboquant` (opt-in, NOT in default features)
+
 ### Memory Compression
 | Bits | Bytes/token | Compression | Key cos_sim | Attention corr |
 |:----:|:----------:|:-----------:|:-----------:|:--------------:|
@@ -257,6 +323,63 @@ The benchmarks progress from individual components to full pipelines:
 
 ### Trade-off
 Store+dequantize has ~200× compute overhead vs flat f32 copy. Net win at long contexts where memory bandwidth is the bottleneck, not compute.
+
+## SpectralQuant KV Cache Compression (Plan 078) — Default
+
+Calibrated eigenbasis quantization that replaces TurboQuant as the default KV cache compression method.
+
+Files: `src/spectralquant/{mod,forward,spectral,spectral_kv_cache,spectral_rotation,nonuniform_quant,types}.rs`
+
+Feature gate: `spectral_quant` (**on by default** in `Cargo.toml`)
+
+### Architecture
+1. **Offline calibration**: covariance → eigendecomposition → eigenbasis (`spectral.rs`)
+2. **Two-regime allocation**: semantic (top `d_eff` dims after rotation) + tail dims (`nonuniform_quant.rs`)
+3. **Water-fill**: per-dim bit allocation proportional to eigenvalue (`spectral.rs::waterfill_bits`)
+4. **Lloyd-Max**: optimal non-uniform scalar quantizer per regime (`spectral.rs::LloydMaxQuantizer`)
+5. **Variable-bit packing**: compressed storage with per-dim bit widths (`spectral_kv_cache.rs`)
+
+### Key Types
+
+```rust
+// Per-layer calibration state (spectralquant/types.rs)
+pub struct SpectralQuantLayer {
+    calibration: SpectralQuantCalibration,  // eigenvectors, eigenvalues, d_eff
+    qjl_signs: Vec<f32>,                    // QJL projection
+    tail_codebook: LloydMaxCodebook,
+    semantic_codebook: Option<LloydMaxCodebook>,          // v1 uniform
+    per_dim_semantic_codebooks: Option<Vec<LloydMaxCodebook>>, // v2 water-fill
+    d_eff: usize, b_high: u8, b_low: u8,
+}
+
+// Zero-alloc compressed KV cache (spectralquant/spectral_kv_cache.rs)
+pub struct SpectralQuantKVCache {
+    layers: Vec<SpectralQuantLayer>,
+    key_indices: Vec<Vec<Vec<u8>>>,  // variable-bit packed
+    key_norms: Vec<Vec<f32>>,
+    val_indices: Vec<Vec<Vec<u8>>>,  // variable-bit packed
+    val_norms: Vec<Vec<f32>>,
+    // Scratch buffers (zero-alloc hot path)
+    scratch_normalized, scratch_rotated, scratch_unrotated,
+    scratch_semantic_indices, scratch_tail_indices,
+    scratch_all_indices, scratch_all_bits,
+    pos, n_layers, kv_dim, max_seq_len,
+}
+```
+
+### Key Functions
+- `calibrate_eigenbasis()` — offline calibration from sample covariance
+- `calibrate_eigenbasis_dual_gram()` — dual Gram PCA calibration (feature `dual_gram_pca`)
+- `waterfill_bits()` — per-dim bit allocation
+- `participation_ratio()` — effective dimensionality `d_eff = (Σλ)² / Σ(λ²)`
+- `spectral_gap()` — `λ_{d_eff} / λ_{d_eff+1}`
+- `attention_spectralquant()` — self-contained attention scoring with dequantization
+- `par_dequantize_spectral_keys_flat()` — Rayon-parallel dequantization (feature `maxsim`)
+- `par_maxsim_score_spectralquant()` — parallel MaxSim scoring (features `spectral_quant` + `maxsim`)
+
+### Rotation
+- `SpectralRotation` (`spectral_rotation.rs`) — data-driven orthogonal rotation using calibrated eigenvectors
+- `RandomRotation` — TurboQuant-compatible fallback (feature `turboquant`)
 
 ## PFlash Block-Sparse Prefill (Plan 044)
 
@@ -339,5 +462,5 @@ Core model benchmarks ±2% stable. Infrastructure (`forward (flat)`, `forward_pa
 | Rayon parallel matmul | n_embd=16, mlp=64 — thread pool overhead dominates |
 | `std::simd` / `portable_simd` | Nightly-only; we use `core::arch` intrinsics directly (Plan 060) |
 | Cache tiling for attention | block_size=16 already fits L1 |
-| f16/bf16 weights | Would halve memory bandwidth but requires `half` crate; sketched for future |
+| f16/bf16 weights | Would halve memory bandwidth but requires `half` crate; `simd_dot_f16_f32` kernels exist for mixed-precision matmul |
 | GPU compute in inference | CPU-only for inference; GPU training is out of scope |

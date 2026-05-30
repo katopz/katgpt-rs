@@ -13,11 +13,17 @@ Feature flag: `go = ["bandit", "dep:reqwest"]` (reqwest for AutoGo API bridge).
 ### Game Engine (`src/pruners/go/`)
 
 | Module | Purpose |
-|--------|---------|
-| `types.rs` | `GoState`, `GoAction`, `GoCell`, `GoScore` |
-| `state.rs` | Board state, legal moves, advance, scoring |
-| `players/` | 6 AI player implementations |
-| `autogo.rs` | REST API client for external Go engines |
+|--------|----------|
+| `types.rs` | `GoAction`, `GoCell`, `GoFrozenBandit`, `GoFrozenTemplates` |
+| `state.rs` | `GoState` board state, legal moves, advance, Tromp-Taylor scoring, `GoHeuristic`, `GameState` trait impl |
+| `players.rs` | `GoPlayer` trait + 6 AI player implementations (Random, Greedy, Validator, HL, GZero, MCTS) |
+| `autogo_client.rs` | REST API client for external Go engines |
+| `replay.rs` | Game recording and deterministic playback (`GoReplay`, `MoveRecord`) |
+| `tournament.rs` | Head-to-head tournament runner against AutoGo agents |
+| `g_zero_player.rs` | G-Zero self-play with HintDelta and absorb-compress |
+| `autoresearch.rs` | AutoResearch loop for automated hyperparameter search |
+| `analytics.rs` | Game analytics, sample computation, replay conversion |
+| `event_log_player.rs` | Event-sourced game traces with fork-and-diff (feature: `event_log`) |
 
 ### Core Types
 
@@ -27,18 +33,18 @@ GoState
   ├─ size: usize               // 9, 13, or 19
   ├─ to_play: GoCell           // current player
   ├─ ko_point: Option<usize>   // simple ko rule
-  ├─ captures: [u32; 2]        // prisoners per color
-  └─ move_history: Vec<GoAction>
+  ├─ consecutive_passes: u8    // game ends at ≥ 2
+  ├─ move_count: u32           // total moves (including passes)
+  ├─ komi: f32                 // compensation (default 7.5)
+  ├─ captured_black: u32       // stones captured BY Black
+  └─ captured_white: u32       // stones captured BY White
 
 GoAction
-  ├─ Place(coord)              // stone placement
+  ├─ Place(usize, usize)       // stone placement (row, col)
   └─ Pass                      // pass turn
 
-GoScore (Tromp-Taylor)
-  ├─ black_area: f64           // stones + territory
-  ├─ white_area: f64           // stones + territory
-  ├─ komi: f64                 // compensation (default 7.5)
-  └─ winner: GoCell            // Black or White
+Scoring: score() returns f32 (black_score - white_score, komi included)
+  get_winner() returns Option<GoCell> (None = draw)
 ```
 
 ### Scoring: Tromp-Taylor Area
@@ -94,7 +100,7 @@ Win rate vs Random: 100% (10/10 games)
 Bandit Q-learning over 8 move categories with AbsorbCompress.
 
 ```text
-Categories: Capture, Defend, Extend, Invade, Atari, Connect, Tenuki, Pass
+Categories: CornerStar, SideApproach, CenterControl, Capture, Defend, Extend, Influence, Pass
 Strategy: UCB1 over category Q-values → pick best legal move in category
 Adaptation: Q-values update per game outcome, cross-game learning
 Win rate vs Random: 100% (10/10 games)
