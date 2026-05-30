@@ -24,19 +24,19 @@ pub struct SpKvConfig {
     /// Local sliding window always retained (default: 128).
     /// Positions within `window` of the current token are never gated out.
     pub window: usize,
+    /// Utility predictor hidden dimension (default: d_model / 4).
+    pub predictor_hidden: usize,
+    /// TAHG annealing steps (default: 500).
+    pub tahg_anneal_steps: usize,
     /// Gate threshold τ for hard gating at inference (default: 0.5).
     /// Higher τ = more aggressive sparsity (fewer KV retained).
     pub threshold: f32,
-    /// Utility predictor hidden dimension (default: d_model / 4).
-    pub predictor_hidden: usize,
     /// Utility predictor learning rate multiplier (default: 5.0).
     /// Paper ablation: 1× → more density, 0.1× → 82% density (barely sparsifies).
     pub predictor_lr_mult: f32,
     /// Initial bias for utility predictor (default: 5.0).
     /// σ(5) ≈ 0.993 → gates start nearly fully open.
     pub predictor_init_bias: f32,
-    /// TAHG annealing steps (default: 500).
-    pub tahg_anneal_steps: usize,
     /// TAHG starts at this fraction of training (default: 0.75).
     pub tahg_start_fraction: f32,
 }
@@ -45,11 +45,11 @@ impl Default for SpKvConfig {
     fn default() -> Self {
         Self {
             window: 128,
-            threshold: 0.5,
             predictor_hidden: 0, // resolved from config.n_embd / 4 at init
+            tahg_anneal_steps: 500,
+            threshold: 0.5,
             predictor_lr_mult: 5.0,
             predictor_init_bias: 5.0,
-            tahg_anneal_steps: 500,
             tahg_start_fraction: 0.75,
         }
     }

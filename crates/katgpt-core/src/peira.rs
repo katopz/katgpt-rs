@@ -657,6 +657,9 @@ fn horizontal_sum_256d(v: core::arch::x86_64::__m256d) -> f64 {
 /// tracking, and representation dimension.
 #[derive(Debug, Clone, Copy)]
 pub struct PeiraConfig {
+    /// Representation dimension k.
+    /// All internal matrices are k×k.
+    pub dim: usize,
     /// Regularization parameter λ > 0.
     ///
     /// Controls the effective rank of recovered CCA subspace:
@@ -671,17 +674,14 @@ pub struct PeiraConfig {
     ///
     /// Default: 0.9
     pub ema_rate: f64,
-    /// Representation dimension k.
-    /// All internal matrices are k×k.
-    pub dim: usize,
 }
 
 impl Default for PeiraConfig {
     fn default() -> Self {
         Self {
+            dim: 8,
             lambda: 0.1,
             ema_rate: 0.9,
-            dim: 8,
         }
     }
 }
@@ -722,6 +722,10 @@ impl PeiraConfig {
 /// Both are k×k matrices stored in row-major flat layout.
 #[derive(Debug, Clone)]
 pub struct PeiraCovariance {
+    /// Configuration.
+    config: PeiraConfig,
+    /// Number of EMA updates applied.
+    step_count: usize,
     /// Cross-view covariance Σ (k×k), row-major.
     sigma: Vec<f64>,
     /// Within-view covariance N (k×k), row-major.
@@ -738,10 +742,6 @@ pub struct PeiraCovariance {
     /// Pre-allocated output buffers for predictor_with_scratch
     q_star: Vec<f64>,
     p_star: Vec<f64>,
-    /// Configuration.
-    config: PeiraConfig,
-    /// Number of EMA updates applied.
-    step_count: usize,
 }
 
 impl PeiraCovariance {
@@ -749,6 +749,8 @@ impl PeiraCovariance {
     pub fn new(config: PeiraConfig) -> Self {
         let k = config.dim;
         Self {
+            config,
+            step_count: 0,
             sigma: vec![0.0; k * k],
             n: vec![0.0; k * k],
             sigma_sample: vec![0.0; k * k],
@@ -759,8 +761,6 @@ impl PeiraCovariance {
             matmul_bt_scratch: vec![0.0; k * k],
             q_star: vec![0.0; k * k],
             p_star: vec![0.0; k * k],
-            config,
-            step_count: 0,
         }
     }
 
@@ -806,9 +806,9 @@ impl PeiraCovariance {
     ///
     /// # Performance
     ///
-    /// This allocates on every call. For hot paths, prefer
-    /// [`predictor_with_scratch()`] or [`predict_and_loss()`] which reuse
-    /// pre-allocated internal buffers.
+    /// **This method allocates 5 vectors on every call.** For hot paths,
+    /// prefer [`predictor_with_scratch()`] or [`predict_and_loss()`] which
+    /// reuse pre-allocated internal buffers and are zero-alloc.
     pub fn predictor(&self) -> (Vec<f64>, Vec<f64>) {
         let k = self.config.dim;
         let lambda = self.config.lambda;

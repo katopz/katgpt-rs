@@ -31,14 +31,14 @@ pub struct TurboQuantLayer {
 /// Configuration for TurboQuant KV cache.
 #[derive(Debug, Clone)]
 pub struct TurboQuantKVCacheConfig {
-    /// Random seed for rotation matrix (deterministic).
-    pub seed: u64,
     /// Number of layers.
     pub n_layers: usize,
     /// KV dimension (head_dim × n_kv_head).
     pub kv_dim: usize,
     /// Maximum sequence length (block_size).
     pub max_seq_len: usize,
+    /// Random seed for rotation matrix (deterministic).
+    pub seed: u64,
     /// Bits per key coordinate (default: 3).
     pub key_bits: u8,
     /// Bits per value coordinate (default: 3).

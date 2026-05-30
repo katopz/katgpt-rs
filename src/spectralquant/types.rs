@@ -44,14 +44,14 @@ pub struct WaterfillAllocation {
     pub d_eff: usize,
     /// Total bits allocated to semantic subspace.
     pub total_semantic_bits: usize,
-    /// Whether water-fill is enabled (v2 path).
-    pub use_water_fill: bool,
     /// Per-dim minimum bits.
     pub min_bits: u8,
     /// Formula version tag for serialization.
     pub formula_version: u8,
     /// Per-dim maximum bits (None = uncapped).
     pub max_bits: Option<u8>,
+    /// Whether water-fill is enabled (v2 path).
+    pub use_water_fill: bool,
 }
 
 /// Per-layer SpectralQuant state: calibration + fitted codebooks.
@@ -61,14 +61,14 @@ pub struct SpectralQuantLayer {
     pub calibration: SpectralQuantCalibration,
     /// QJL sign matrix: (qjl_dim × d_eff) Rademacher ±1.
     pub qjl_signs: Vec<f32>,
-    /// Per-dim semantic bits (v2 water-fill path, None for v1).
-    pub semantic_bits_per_dim: Option<Vec<u8>>,
-    /// Per-dim semantic codebooks (v2 water-fill path, None for v1).
-    pub per_dim_semantic_codebooks: Option<Vec<LloydMaxCodebook>>,
-    /// Shared semantic codebook (v1 uniform path, None for v2).
-    pub semantic_codebook: Option<LloydMaxCodebook>,
     /// Tail regime codebook (shared across all tail dims).
     pub tail_codebook: LloydMaxCodebook,
+    /// Shared semantic codebook (v1 uniform path, None for v2).
+    pub semantic_codebook: Option<LloydMaxCodebook>,
+    /// Per-dim semantic codebooks (v2 water-fill path, None for v1).
+    pub per_dim_semantic_codebooks: Option<Vec<LloydMaxCodebook>>,
+    /// Per-dim semantic bits (v2 water-fill path, None for v1).
+    pub semantic_bits_per_dim: Option<Vec<u8>>,
     /// Effective dimensionality (integer ceiling of d_eff).
     pub d_eff: usize,
     /// Semantic regime bits per coordinate.
@@ -80,22 +80,22 @@ pub struct SpectralQuantLayer {
 /// Configuration for SpectralQuant KV cache.
 #[derive(Debug, Clone)]
 pub struct SpectralQuantKVCacheConfig {
-    /// QJL projection dimension.
-    pub qjl_dim: usize,
-    /// Max Lloyd-Max iterations.
-    pub lloyd_max_iter: usize,
-    /// Number of calibration samples to collect.
-    pub calibration_samples: usize,
-    /// Random seed for reproducibility.
-    pub seed: u64,
     /// Number of layers.
     pub n_layers: usize,
     /// KV dimension (head_dim × n_kv_head).
     pub kv_dim: usize,
     /// Maximum sequence length.
     pub max_seq_len: usize,
-    /// Whether to use water-fill allocation (v2).
-    pub use_water_fill: bool,
+    /// Max Lloyd-Max iterations.
+    pub lloyd_max_iter: usize,
+    /// Number of calibration samples to collect.
+    pub calibration_samples: usize,
+    /// QJL projection dimension.
+    pub qjl_dim: usize,
+    /// Random seed for reproducibility.
+    pub seed: u64,
+    /// Average bits per coordinate across all dimensions.
+    pub avg_bits: f32,
     /// Minimum bits for tail dimensions.
     pub min_tail_bits: u8,
     /// Maximum bits per dimension.
@@ -104,6 +104,6 @@ pub struct SpectralQuantKVCacheConfig {
     pub wf_min_bits: u8,
     /// Water-fill maximum bits per dim.
     pub wf_max_bits: u8,
-    /// Average bits per coordinate across all dimensions.
-    pub avg_bits: f32,
+    /// Whether to use water-fill allocation (v2).
+    pub use_water_fill: bool,
 }

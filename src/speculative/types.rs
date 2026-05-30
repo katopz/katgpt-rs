@@ -67,12 +67,15 @@ impl<P: Default + ScreeningPruner> Default for EarlyStopGate<P> {
 // ── DDTree Node ────────────────────────────────────────────────
 
 /// DDTree node for Best-First Search.
+///
+/// Field order: largest alignment first (u128, usize) → f32 last.
+/// Eliminates 4 bytes of padding between `score` and `depth` on 64-bit targets.
 #[derive(Copy, Clone, PartialEq)]
 pub struct TreeNode {
-    pub score: f32,
+    pub parent_path: u128,
     pub depth: usize,
     pub token_idx: usize,
-    pub parent_path: u128,
+    pub score: f32,
 }
 
 impl Eq for TreeNode {}

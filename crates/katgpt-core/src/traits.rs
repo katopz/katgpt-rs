@@ -272,11 +272,13 @@ impl<S: GameState> RolloutPolicy<S> for RandomRolloutPolicy {
 /// - Validating search budget vs branching factor
 /// - Detecting game phases (opening → midgame → endgame)
 /// - Comparing action space across game domains
+///
 /// Per-player aggregate tracked during insert for O(1) reads.
 #[derive(Clone, Debug, Default)]
 struct PlayerAgg {
-    sum: f32,
+    // OPT: usize first avoids 4 bytes of padding between f32 and usize
     count: usize,
+    sum: f32,
 }
 
 #[derive(Clone, Debug, Default)]

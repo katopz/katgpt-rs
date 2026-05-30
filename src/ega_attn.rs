@@ -81,6 +81,8 @@ pub fn compute_energy_gate_into(energy: &[f32], alpha: f32, tau: f32, out: &mut 
     // sigmoid(x) = 1/(1+exp(-x)). Negate then exp for SIMD-friendly batch exp.
     crate::simd::simd_scale_inplace(&mut out[..len], -1.0);
     crate::simd::simd_exp_inplace(&mut out[..len]);
+    // Branch-free reciprocal: out[i] = 1.0 / (1.0 + out[i])
+    // No if/else — every iteration is the same.
     for o in out[..len].iter_mut() {
         *o = 1.0 / (1.0 + *o);
     }
@@ -94,15 +96,17 @@ pub fn compute_energy_gate_into(energy: &[f32], alpha: f32, tau: f32, out: &mut 
 /// - `w_proj` (d): energy projection vector
 /// - `alpha` (1): gate sharpness (paper converges to ~2.2)
 /// - `tau` (1): energy threshold (paper converges to ~0.35)
+///
+/// Field order: Vec (ptr, len, cap = 24 bytes) before f32s eliminates padding.
 #[derive(Clone, Debug)]
 pub struct EgaGate {
     /// Learned energy projection vector [head_dim].
     pub w_proj: Vec<f32>,
+    /// Gate sharpness parameter. Higher α → sharper gate transition.
+    pub alpha: f32,
     /// Energy threshold. Tokens with energy above τ are preserved,
     /// tokens below are suppressed.
     pub tau: f32,
-    /// Gate sharpness parameter. Higher α → sharper gate transition.
-    pub alpha: f32,
 }
 
 impl EgaGate {

@@ -38,10 +38,13 @@ pub trait SpeculativeVerifier: Send + Sync {
 ///
 /// Uses pre-allocated `SpeculativeContext` and `TreeBuilder` for zero-alloc
 /// hot paths. Create once with `new(acceptance_rate, config)`, reuse across calls.
+///
+/// Field order: large structs (SpeculativeContext, TreeBuilder) before f32
+/// eliminates 4 bytes of padding on 64-bit targets.
 pub struct SimulatedVerifier {
-    pub acceptance_rate: f32,
     sctx: SpeculativeContext,
     tree_builder: TreeBuilder,
+    pub acceptance_rate: f32,
 }
 
 impl SimulatedVerifier {
@@ -119,7 +122,8 @@ impl SpeculativeVerifier for SimulatedVerifier {
             self.sctx.accepted_buf.push(bonus);
         }
 
-        self.sctx.accepted_buf.clone()
+        // OPT: avoid clone — move buffer contents out, leaving empty Vec for next call
+        std::mem::take(&mut self.sctx.accepted_buf)
     }
 }
 
@@ -391,7 +395,8 @@ impl SpeculativeVerifier for LeviathanVerifier<'_> {
                 .push(sample_from_distribution(p_dist, rng));
         }
 
-        self.draft_sctx.accepted_buf.clone()
+        // OPT: avoid clone — move buffer contents out, leaving empty Vec for next call
+        std::mem::take(&mut self.draft_sctx.accepted_buf)
     }
 }
 

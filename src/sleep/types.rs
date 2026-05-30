@@ -55,25 +55,23 @@ pub struct SleepConfig {
     /// consolidating the full context into the fast-weight state S.
     /// Paper shows N=2-4 provides most of the benefit.
     pub sleep_passes: usize,
-
-    /// Eviction strategy after consolidation.
-    ///
-    /// Determines what happens to the KV cache after sleep finishes.
-    pub eviction: EvictionStrategy,
-
     /// KV cache capacity threshold that triggers sleep.
     ///
     /// When the cache reaches this many tokens, sleep consolidation fires.
     /// Should be ≤ `Config::block_size`.
     pub window_size: usize,
+    /// Eviction strategy after consolidation.
+    ///
+    /// Determines what happens to the KV cache after sleep finishes.
+    pub eviction: EvictionStrategy,
 }
 
 impl Default for SleepConfig {
     fn default() -> Self {
         Self {
             sleep_passes: 2,
-            eviction: EvictionStrategy::default(),
             window_size: 512,
+            eviction: EvictionStrategy::default(),
         }
     }
 }

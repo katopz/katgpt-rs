@@ -43,11 +43,13 @@ pub enum LossAveraging {
 
 /// Noise schedule for discrete diffusion.
 /// Produces monotonically increasing mask ratios for block-based corruption.
+///
+/// Field order: usize (8-byte) before f32 (4-byte) to eliminate padding.
 #[derive(Debug, Clone)]
 pub struct NoiseSchedule {
+    pub n_blocks: usize,
     pub min_ratio: f32,
     pub max_ratio: f32,
-    pub n_blocks: usize,
 }
 
 impl NoiseSchedule {
@@ -85,15 +87,17 @@ impl NoiseSchedule {
 /// then adjust mask ratios so each step contributes equal difficulty.
 /// Steps that are too easy (high accuracy) get harder masks.
 /// Steps that are too hard (low accuracy) get easier masks.
+///
+/// Field order: grouped by alignment (Vec/usize then f32) to minimize padding.
 #[cfg(feature = "replaid_schedules")]
 #[derive(Debug, Clone)]
 pub struct AdaptiveNoiseSchedule {
-    /// Base schedule parameters.
-    n_blocks: usize,
     /// Per-step loss tracker (one VarianceMinimizer per block).
     step_trackers: Vec<VarianceMinimizer>,
     /// Current adapted ratios.
     current_ratios: Vec<f32>,
+    /// Base schedule parameters.
+    n_blocks: usize,
     /// Number of adaptation steps performed.
     adaptations: u32,
     min_ratio: f32,
@@ -121,9 +125,9 @@ impl AdaptiveNoiseSchedule {
             .collect();
 
         Self {
-            n_blocks,
             step_trackers,
             current_ratios,
+            n_blocks,
             adaptations: 0,
             min_ratio,
             max_ratio,
@@ -323,19 +327,28 @@ pub fn forward_bidirectional_positions(
     config: &Config,
 ) -> (Vec<f32>, Vec<f32>) {
     let mut bctx = BidirectionalContext::new(config);
-    forward_bidirectional_positions_into(weights, tokens, config, &mut bctx)
+    let (logits_len, attn_len) =
+        forward_bidirectional_positions_into(weights, tokens, config, &mut bctx);
+    (
+        bctx.all_logits[..logits_len].to_vec(),
+        bctx.all_attn_weights[..attn_len].to_vec(),
+    )
 }
 
 /// Zero-alloc variant of [`forward_bidirectional_positions`] that reuses a pre-allocated context.
 ///
 /// Pass a `BidirectionalContext` to avoid per-call heap allocation when calling in a loop
 /// (e.g., `denoise_loop`).
+///
+/// Writes results into `bctx.all_logits` and `bctx.all_attn_weights` and returns
+/// `(logits_len, attn_len)` so the caller can index the context buffers directly.
+/// This avoids lifetime issues when the caller needs to reuse other fields from `bctx`.
 fn forward_bidirectional_positions_into(
     weights: &TransformerWeights,
     tokens: &[usize],
     config: &Config,
     bctx: &mut BidirectionalContext,
-) -> (Vec<f32>, Vec<f32>) {
+) -> (usize, usize) {
     let n = config.n_embd;
     let hd = config.head_dim;
     let kvd = kv_dim(config);
@@ -437,10 +450,7 @@ fn forward_bidirectional_positions_into(
             .copy_from_slice(&bctx.attn_weights_buf[..n_heads * seq_len]);
     }
 
-    (
-        bctx.all_logits[..logits_len].to_vec(),
-        bctx.all_attn_weights[..attn_len].to_vec(),
-    )
+    (logits_len, attn_len)
 }
 
 /// Safe bidirectional attention for one query position.
@@ -484,15 +494,13 @@ fn attention_forward_safe_into(
             }
         }
 
-        // Softmax
-        let mut sum_exp = 0.0f32;
-        for t in 0..seq_len {
-            scores[t] = (scores[t] - max_score).exp();
-            sum_exp += scores[t];
-        }
+        // Softmax (SIMD batch exp + sum)
+        crate::simd::simd_add_scalar_inplace(&mut scores[..seq_len], -max_score);
+        crate::simd::simd_exp_inplace(&mut scores[..seq_len]);
+        let sum_exp = crate::simd::simd_sum_f32(&scores[..seq_len]);
         let inv_sum = 1.0 / sum_exp;
+        crate::simd::simd_scale_inplace(&mut scores[..seq_len], inv_sum);
         for t in 0..seq_len {
-            scores[t] *= inv_sum;
             all_weights[h * seq_len + t] = scores[t];
         }
 
@@ -553,8 +561,9 @@ fn attention_forward_safe(
 /// Saved activations from forward pass, needed for backward.
 ///
 /// Borrows from `ForwardSaveContext` to avoid cloning all activations (Issue 110).
+///
+/// Field order: all references (8-byte) grouped, then usize to eliminate padding.
 struct ForwardActivations<'a> {
-    seq_len: usize,
     embeddings: &'a [f32],     // [seq_len * n]
     after_norm1: &'a [f32],    // [seq_len * n] (= xr residual)
     after_norm2: &'a [f32],    // [seq_len * n]
@@ -568,11 +577,15 @@ struct ForwardActivations<'a> {
     mlp_hidden: &'a [f32],     // [seq_len * mlp_hidden]
     hidden_final: &'a [f32],   // [seq_len * n]
     logits: &'a [f32],         // [seq_len * vocab_size]
+    seq_len: usize,
 }
 
 /// Pre-allocated context for `forward_save`, avoiding per-call allocations.
+///
+/// Field order: all Vec<f32> (24-byte, 8-byte aligned) before usize fields
+/// to eliminate inter-field padding.
 struct ForwardSaveContext {
-    seq_len: usize,
+    // Vec fields grouped first (all 24 bytes, 8-byte aligned)
     embeddings: Vec<f32>,
     after_norm1: Vec<f32>,
     after_norm2: Vec<f32>,
@@ -594,12 +607,14 @@ struct ForwardSaveContext {
     attn_scratch_out: Vec<f32>,
     attn_scratch_weights: Vec<f32>,
     attn_scratch_scores: Vec<f32>,
+    // usize fields last (8-byte aligned)
     // Dimension constants cached from config
     n: usize,
     kvd: usize,
     vocab_size: usize,
     mlp_hidden: usize,
     n_head: usize,
+    seq_len: usize,
 }
 
 impl ForwardSaveContext {
@@ -608,7 +623,6 @@ impl ForwardSaveContext {
         let kvd = kv_dim(config);
         let bs = config.block_size;
         Self {
-            seq_len: 0,
             embeddings: vec![0.0f32; bs * n],
             after_norm1: vec![0.0f32; bs * n],
             after_norm2: vec![0.0f32; bs * n],
@@ -633,6 +647,7 @@ impl ForwardSaveContext {
             vocab_size: config.vocab_size,
             mlp_hidden: config.mlp_hidden,
             n_head: config.n_head,
+            seq_len: 0,
         }
     }
 
@@ -868,7 +883,6 @@ fn forward_save<'a>(
     }
 
     ForwardActivations {
-        seq_len,
         embeddings: &ctx.embeddings[..seq_len * n],
         after_norm1: &ctx.after_norm1[..seq_len * n],
         after_norm2: &ctx.after_norm2[..seq_len * n],
@@ -882,6 +896,7 @@ fn forward_save<'a>(
         mlp_hidden: &ctx.mlp_hidden_all[..seq_len * config.mlp_hidden],
         hidden_final: &ctx.hidden_final[..seq_len * n],
         logits: &ctx.logits_all[..seq_len * config.vocab_size],
+        seq_len,
     }
 }
 
@@ -1298,6 +1313,7 @@ fn masked_loss_into(
 }
 
 /// Allocating wrapper — prefer `masked_loss_into` in hot paths.
+#[allow(dead_code)]
 fn masked_loss(
     logits: &[f32],
     targets: &[usize],
@@ -1322,6 +1338,8 @@ pub fn evaluate_accuracy(
     let mut corrupted_buf = Vec::with_capacity(config.block_size);
     let mut is_masked_buf = Vec::with_capacity(config.block_size);
     let mut positions_buf = Vec::with_capacity(config.block_size);
+    // OPT: pre-allocate bidirectional context to avoid per-sample heap allocation
+    let mut bctx = BidirectionalContext::new(config);
     for tokens in test_data {
         corrupt_block_into(
             tokens,
@@ -1332,19 +1350,17 @@ pub fn evaluate_accuracy(
             &mut is_masked_buf,
             &mut positions_buf,
         );
-        let (logits_flat, _) = forward_bidirectional_positions(weights, &corrupted_buf, config);
+        let _ = forward_bidirectional_positions_into(weights, &corrupted_buf, config, &mut bctx);
         let vocab = config.vocab_size;
         for (p, &masked) in is_masked_buf.iter().enumerate() {
             if !masked {
                 continue;
             }
-            let logits_p = &logits_flat[p * vocab..(p + 1) * vocab];
-            let predicted = logits_p
-                .iter()
-                .enumerate()
-                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+            let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
+            // SIMD argmax: find max value via simd_max_f32, then linear scan
+            // for the first match — much faster than partial_cmp per element.
+            let max_val = crate::simd::simd_max_f32(logits_p);
+            let predicted = logits_p.iter().position(|&v| v == max_val).unwrap_or(0);
             if predicted == tokens[p] {
                 correct += 1;
             }
@@ -1744,15 +1760,16 @@ pub struct D2fContext {
     attn_weights_buf: Vec<f32>,
     /// Attention scores buffer: `[max_seq]` (reused per position).
     attn_scores_buf: Vec<f32>,
-    /// Number of positions with committed KV cache entries.
-    /// Positions `[0..committed_len)` are valid and won't be recomputed.
-    pub committed_len: usize,
     /// Cached logits from previous denoising step: `[max_seq * vocab_size]`.
     /// Used by DPM-Solver++(2M) multistep extrapolation (Plan 078 T10.5).
     pub prev_logits_flat: Vec<f32>,
     /// Cached logits from two steps ago: `[max_seq * vocab_size]`.
     /// Second cache for multistep logit extrapolation (Plan 078 T10.5).
     pub prev_prev_logits_flat: Vec<f32>,
+    // usize fields after all Vec<f32> fields to eliminate inter-field padding.
+    /// Number of positions with committed KV cache entries.
+    /// Positions `[0..committed_len)` are valid and won't be recomputed.
+    pub committed_len: usize,
 }
 
 impl D2fContext {
@@ -1781,9 +1798,9 @@ impl D2fContext {
             attn_out_buf: vec![0.0f32; n],
             attn_weights_buf: vec![0.0f32; config.n_head * max_seq],
             attn_scores_buf: vec![0.0f32; max_seq],
-            committed_len: 0,
             prev_logits_flat: vec![0.0f32; max_seq * vocab],
             prev_prev_logits_flat: vec![0.0f32; max_seq * vocab],
+            committed_len: 0,
         }
     }
 
@@ -1987,8 +2004,7 @@ pub fn denoise_loop(
     let mut converged_step = n_steps;
 
     for step in 0..n_steps {
-        let (logits_flat, _) =
-            forward_bidirectional_positions_into(weights, &tokens, config, &mut bctx);
+        let _ = forward_bidirectional_positions_into(weights, &tokens, config, &mut bctx);
         let mut any_changed = false;
         let vocab = config.vocab_size;
 
@@ -1997,9 +2013,14 @@ pub fn denoise_loop(
                 continue;
             }
 
-            let logits_p = &logits_flat[p * vocab..(p + 1) * vocab];
+            let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
             let max_l = crate::simd::simd_max_f32(logits_p);
-            let sum_exp: f32 = logits_p.iter().map(|l| (l - max_l).exp()).sum();
+            // OPT: compute exp once, reuse for both sum and argmax
+            let exp_buf = &mut bctx.all_attn_weights[..vocab]; // reuse attn weights as scratch
+            exp_buf[..vocab].copy_from_slice(logits_p);
+            crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+            crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+            let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
             // Find highest-confidence valid token
@@ -2012,7 +2033,7 @@ pub fn denoise_loop(
                 if !constraint.is_valid(p, t, &tokens) {
                     continue;
                 }
-                let prob = (logits_p[t] - max_l).exp() * inv_sum;
+                let prob = exp_buf[t] * inv_sum;
                 if prob > best_prob {
                     best_prob = prob;
                     best_token = t;

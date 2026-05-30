@@ -24,12 +24,15 @@ pub enum RerankMethod {
 }
 
 /// A document with its reranking score and original index.
+///
+/// Field order: usize (8-byte aligned) before f32 (4-byte aligned)
+/// eliminates 4 bytes of padding on 64-bit targets.
 #[derive(Debug, Clone)]
 pub struct RerankedDoc {
-    /// Computed relevance score (higher = more relevant).
-    pub score: f32,
     /// Index into the original `docs` slice.
     pub doc_index: usize,
+    /// Computed relevance score (higher = more relevant).
+    pub score: f32,
 }
 
 // ── Core Functions ────────────────────────────────────────────
