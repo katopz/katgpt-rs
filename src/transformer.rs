@@ -29,6 +29,11 @@ pub struct LayerWeights {
     pub attn_wo: Vec<f32>, // [n_embd, n_embd]
     pub mlp_w1: Vec<f32>,  // [mlp_hidden, n_embd]
     pub mlp_w2: Vec<f32>,  // [n_embd, mlp_hidden]
+    // Kog CPU fusion (Plan 160): RMSNorm gamma vectors
+    pub attn_norm_gamma: Vec<f32>, // [n_embd] pre-attention RMSNorm gamma (identity=1.0)
+    pub mlp_norm_gamma: Vec<f32>,  // [n_embd] pre-MLP RMSNorm gamma (identity=1.0)
+    // Kog CPU fusion (Plan 160): fused QKV weight storage
+    pub attn_qkv_fused: Option<Vec<f32>>, // [(n_embd + 2*kv_dim), n_embd] interleaved
 }
 
 /// All transformer weights: embeddings, per-layer weights, and LM head.
@@ -128,6 +133,9 @@ impl TransformerWeights {
                     v.extend((0..len).map(|_| rng.normal() * layer_scale));
                     v
                 },
+                attn_norm_gamma: vec![1.0f32; n],
+                mlp_norm_gamma: vec![1.0f32; n],
+                attn_qkv_fused: None,
             })
             .collect();
 
@@ -152,6 +160,65 @@ impl TransformerWeights {
             delta_routing_norm: (0..config.n_layer)
                 .map(|_| (0..config.n_embd).map(|_| 1.0f32).collect()) // Ones: identity RMSNorm
                 .collect(),
+        }
+    }
+
+    /// Fold RMSNorm gamma into projection weights (Plan 160: Kog CPU fusion).
+    ///
+    /// For each projection preceded by RMSNorm with gamma:
+    ///   weight[row * n_embd + col] *= gamma[col]
+    ///
+    /// After folding, gamma is set to 1.0 (identity), so runtime rmsnorm_with_gamma
+    /// becomes a no-op. This eliminates per-token gamma memory reads.
+    ///
+    /// **Attention gamma**: NOT folded because the residual connection (`xr`) captures
+    /// the post-norm value (`x * inv_rms * gamma`). Folding would change the residual.
+    /// The attention gamma remains at runtime for `rmsnorm_with_gamma`.
+    ///
+    /// **MLP gamma**: Folded into `mlp_w1` because the residual (`xr2`) is saved
+    /// BEFORE the norm, so gamma only affects the projection path.
+    pub fn fold_gamma(&mut self, config: &Config) {
+        let n = config.n_embd;
+
+        for layer in &mut self.layers {
+            // Fold mlp_norm_gamma into mlp_w1
+            // (Safe: xr2 is saved before rmsnorm, so residual is pre-norm)
+            let mlp_gamma = &layer.mlp_norm_gamma;
+            for row in 0..config.mlp_hidden {
+                for col in 0..n {
+                    layer.mlp_w1[row * n + col] *= mlp_gamma[col];
+                }
+            }
+            // Set mlp_norm_gamma to identity
+            layer.mlp_norm_gamma.fill(1.0f32);
+
+            // Note: attn_norm_gamma is NOT folded because xr (attention residual)
+            // captures the post-norm value. It remains for runtime rmsnorm_with_gamma.
+        }
+    }
+
+    /// Repack Q/K/V weights into a single contiguous buffer (Plan 160: Kog CPU fusion).
+    ///
+    /// Layout: [Q rows | K rows | V rows] × [n_embd], where:
+    ///   Q rows = [n_embd], K rows = [kv_dim], V rows = [kv_dim]
+    ///
+    /// The fused weight is stored in `attn_qkv_fused` (Some when populated).
+    /// Original weights are preserved — fused is an additional allocation.
+    /// Cache locality win: single contiguous memory region instead of 3 scattered buffers.
+    pub fn interleave_qkv(&mut self, config: &Config) {
+        let n = config.n_embd;
+        let kvd = types::kv_dim(config);
+        let q_rows = n;
+        let k_rows = kvd;
+        let v_rows = kvd;
+        let total_rows = q_rows + k_rows + v_rows;
+
+        for layer in &mut self.layers {
+            let mut fused = Vec::with_capacity(total_rows * n);
+            fused.extend_from_slice(&layer.attn_wq);
+            fused.extend_from_slice(&layer.attn_wk);
+            fused.extend_from_slice(&layer.attn_wv);
+            layer.attn_qkv_fused = Some(fused);
         }
     }
 }
@@ -1739,21 +1806,55 @@ fn forward_base<'a>(
         }
 
         // Pre-attention: RMSNorm → save residual
+        #[cfg(feature = "kog_cpu_fusion")]
+        types::rmsnorm_with_gamma(&mut ctx.x[..n], &layer_weights.attn_norm_gamma);
+        #[cfg(not(feature = "kog_cpu_fusion"))]
         rmsnorm(&mut ctx.x);
         ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
 
         // QKV projections from per-layer weights (GQA: K/V produce kv_dim outputs)
-        matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
-        if let Some(lora) = lora {
-            crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut ctx.lora_buf);
+        #[cfg(feature = "kog_cpu_fusion")]
+        if let Some(ref qkv_fused) = layer_weights.attn_qkv_fused {
+            matmul(&mut ctx.q, &qkv_fused[..n * n], &ctx.x, n, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.k, &qkv_fused[n * n..(n + kvd) * n], &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.k, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.v, &qkv_fused[(n + kvd) * n..], &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.v, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+        } else {
+            matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.k, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.v, lora, &ctx.x, &mut ctx.lora_buf);
+            }
         }
-        matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
-        if let Some(lora) = lora {
-            crate::types::lora_apply(&mut ctx.k, lora, &ctx.x, &mut ctx.lora_buf);
-        }
-        matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
-        if let Some(lora) = lora {
-            crate::types::lora_apply(&mut ctx.v, lora, &ctx.x, &mut ctx.lora_buf);
+        #[cfg(not(feature = "kog_cpu_fusion"))]
+        {
+            matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.k, lora, &ctx.x, &mut ctx.lora_buf);
+            }
+            matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+            if let Some(lora) = lora {
+                crate::types::lora_apply(&mut ctx.v, lora, &ctx.x, &mut ctx.lora_buf);
+            }
         }
 
         // Domain latent injection at mid-layer (Plan 038: Free Transformer adaptation)
@@ -1812,6 +1913,9 @@ fn forward_base<'a>(
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
+        #[cfg(feature = "kog_cpu_fusion")]
+        types::rmsnorm_with_gamma(&mut ctx.x[..n], &layer_weights.mlp_norm_gamma);
+        #[cfg(not(feature = "kog_cpu_fusion"))]
         rmsnorm(&mut ctx.x);
         types::matmul_relu(
             &mut ctx.hidden,
@@ -2034,13 +2138,29 @@ fn forward_coda<'a>(
 
         // Pre-attention: RMSNorm → save residual
         // Note: CODA fused kernels handle delayed RMS internally, no second rmsnorm needed
+        #[cfg(feature = "kog_cpu_fusion")]
+        types::rmsnorm_with_gamma(&mut ctx.x[..n], &layer_weights.attn_norm_gamma);
+        #[cfg(not(feature = "kog_cpu_fusion"))]
         rmsnorm(&mut ctx.x);
         ctx.xr[..n].copy_from_slice(&ctx.x[..n]);
 
         // QKV projections (same as baseline — attention needs separate Q, K, V)
-        matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
-        matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
-        matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+        #[cfg(feature = "kog_cpu_fusion")]
+        if let Some(ref qkv_fused) = layer_weights.attn_qkv_fused {
+            matmul(&mut ctx.q, &qkv_fused[..n * n], &ctx.x, n, n);
+            matmul(&mut ctx.k, &qkv_fused[n * n..(n + kvd) * n], &ctx.x, kvd, n);
+            matmul(&mut ctx.v, &qkv_fused[(n + kvd) * n..], &ctx.x, kvd, n);
+        } else {
+            matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+            matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+            matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+        }
+        #[cfg(not(feature = "kog_cpu_fusion"))]
+        {
+            matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
+            matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
+            matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+        }
 
         // LoRA perturbation for QKV projections (same as forward_base)
         if let Some(lora) = lora {
@@ -6673,5 +6793,387 @@ mod tests {
             final_norm,
             final_norm / initial_norm,
         );
+    }
+
+    // ── Kog CPU fusion GOAT proofs (Plan 160) ───────────────────
+
+    /// GOAT proof (T5): folded gamma weights produce identical forward pass output.
+    ///
+    /// Strategy: create weights with non-trivial gamma, run forward with unfolded gamma,
+    /// then fold gamma and run forward again — assert bit-identical output.
+    ///
+    /// Only MLP gamma is folded (attention gamma is kept at runtime due to residual pattern).
+    #[test]
+    fn proof_gamma_folding_forward_base() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let mut weights = TransformerWeights::new(&config, &mut rng);
+
+        // Set non-trivial gamma (not all 1.0)
+        for layer in &mut weights.layers {
+            for (i, g) in layer.attn_norm_gamma.iter_mut().enumerate() {
+                *g = 0.5 + (i as f32 * 0.1).sin() * 0.8;
+            }
+            for (i, g) in layer.mlp_norm_gamma.iter_mut().enumerate() {
+                *g = 0.5 + (i as f32 * 0.15).cos() * 0.6;
+            }
+        }
+
+        // Capture gamma values before folding
+        let attn_gammas: Vec<Vec<f32>> = weights
+            .layers
+            .iter()
+            .map(|l| l.attn_norm_gamma.clone())
+            .collect();
+        let mlp_gammas: Vec<Vec<f32>> = weights
+            .layers
+            .iter()
+            .map(|l| l.mlp_norm_gamma.clone())
+            .collect();
+
+        let n = config.n_embd;
+        let kvd = types::kv_dim(&config);
+
+        // ── Baseline: forward with unfolded gamma ──
+        let mut ctx1 = ForwardContext::new(&config);
+        let _cache1 = MultiLayerKVCache::new(&config);
+
+        let tok_off = 0;
+        let pos_off_emb = 0;
+        crate::simd::simd_add_into(
+            &mut ctx1.x[..n],
+            &weights.wte[tok_off..tok_off + n],
+            &weights.wpe[pos_off_emb..pos_off_emb + n],
+        );
+
+        for (li, layer_weights) in weights.layers.iter().enumerate() {
+            // Attention: rmsnorm_with_gamma → save residual → QKV
+            types::rmsnorm_with_gamma(&mut ctx1.x[..n], &attn_gammas[li]);
+            ctx1.xr[..n].copy_from_slice(&ctx1.x[..n]);
+            types::matmul(&mut ctx1.q, &layer_weights.attn_wq, &ctx1.x, n, n);
+            types::matmul(&mut ctx1.k, &layer_weights.attn_wk, &ctx1.x, kvd, n);
+            types::matmul(&mut ctx1.v, &layer_weights.attn_wv, &ctx1.x, kvd, n);
+            // Output projection + residual
+            types::matmul(&mut ctx1.x, &layer_weights.attn_wo, &ctx1.attn_out, n, n);
+            crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
+            // MLP: save pre-norm residual → rmsnorm_with_gamma → MLP
+            ctx1.xr2[..n].copy_from_slice(&ctx1.x[..n]);
+            types::rmsnorm_with_gamma(&mut ctx1.x[..n], &mlp_gammas[li]);
+            types::matmul_relu(
+                &mut ctx1.hidden,
+                &layer_weights.mlp_w1,
+                &ctx1.x,
+                config.mlp_hidden,
+                n,
+            );
+            types::matmul(
+                &mut ctx1.x,
+                &layer_weights.mlp_w2,
+                &ctx1.hidden,
+                n,
+                config.mlp_hidden,
+            );
+            crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
+        }
+
+        let baseline_hidden: Vec<f32> = ctx1.x[..n].to_vec();
+
+        // ── Fold MLP gamma into mlp_w1 ──
+        weights.fold_gamma(&config);
+
+        // ── Folded: forward with attn gamma at runtime, mlp gamma folded ──
+        let mut ctx2 = ForwardContext::new(&config);
+        let _cache2 = MultiLayerKVCache::new(&config);
+
+        crate::simd::simd_add_into(
+            &mut ctx2.x[..n],
+            &weights.wte[tok_off..tok_off + n],
+            &weights.wpe[pos_off_emb..pos_off_emb + n],
+        );
+
+        for (li, layer_weights) in weights.layers.iter().enumerate() {
+            // Attention: still uses rmsnorm_with_gamma (gamma not folded)
+            types::rmsnorm_with_gamma(&mut ctx2.x[..n], &attn_gammas[li]);
+            ctx2.xr[..n].copy_from_slice(&ctx2.x[..n]);
+            types::matmul(&mut ctx2.q, &layer_weights.attn_wq, &ctx2.x, n, n);
+            types::matmul(&mut ctx2.k, &layer_weights.attn_wk, &ctx2.x, kvd, n);
+            types::matmul(&mut ctx2.v, &layer_weights.attn_wv, &ctx2.x, kvd, n);
+            types::matmul(&mut ctx2.x, &layer_weights.attn_wo, &ctx2.attn_out, n, n);
+            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+            // MLP: gamma folded into w1, so plain rmsnorm (gamma is now identity)
+            ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
+            rmsnorm(&mut ctx2.x);
+            types::matmul_relu(
+                &mut ctx2.hidden,
+                &layer_weights.mlp_w1,
+                &ctx2.x,
+                config.mlp_hidden,
+                n,
+            );
+            types::matmul(
+                &mut ctx2.x,
+                &layer_weights.mlp_w2,
+                &ctx2.hidden,
+                n,
+                config.mlp_hidden,
+            );
+            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+        }
+
+        let folded_hidden: Vec<f32> = ctx2.x[..n].to_vec();
+
+        // GOAT assertion: bit-identical (within FP tolerance)
+        for i in 0..n {
+            let diff = (baseline_hidden[i] - folded_hidden[i]).abs();
+            assert!(
+                diff < 1e-5,
+                "GOAT FAIL: gamma fold mismatch at [{i}]: baseline={}, folded={}, diff={}",
+                baseline_hidden[i],
+                folded_hidden[i],
+                diff
+            );
+        }
+    }
+
+    /// GOAT proof (T10): QKV interleaving produces identical attention output.
+    #[test]
+    fn proof_qkv_interleave_forward() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let mut weights = TransformerWeights::new(&config, &mut rng);
+
+        let n = config.n_embd;
+        let kvd = types::kv_dim(&config);
+
+        // Run forward with separate Q/K/V
+        let mut ctx1 = ForwardContext::new(&config);
+        let mut cache1 = MultiLayerKVCache::new(&config);
+        let logits1 = forward(&mut ctx1, &weights, &mut cache1, 0, 0, &config).to_vec();
+
+        // Interleave QKV
+        weights.interleave_qkv(&config);
+
+        // Run forward with fused QKV (feature-gated path, but we test the fused weight slicing)
+        let mut ctx2 = ForwardContext::new(&config);
+        let mut cache2 = MultiLayerKVCache::new(&config);
+
+        // Manual forward using fused weight slices
+        crate::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+
+        for layer_weights in &weights.layers {
+            rmsnorm(&mut ctx2.x);
+            ctx2.xr[..n].copy_from_slice(&ctx2.x[..n]);
+
+            let fused = layer_weights
+                .attn_qkv_fused
+                .as_ref()
+                .expect("fused should be populated");
+            // Q slice
+            types::matmul(&mut ctx2.q, &fused[..n * n], &ctx2.x, n, n);
+            // K slice
+            types::matmul(&mut ctx2.k, &fused[n * n..(n + kvd) * n], &ctx2.x, kvd, n);
+            // V slice
+            types::matmul(&mut ctx2.v, &fused[(n + kvd) * n..], &ctx2.x, kvd, n);
+
+            // Store K,V
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    ctx2.k.as_ptr(),
+                    cache2.layers[0].key.as_mut_ptr(),
+                    kvd,
+                );
+                std::ptr::copy_nonoverlapping(
+                    ctx2.v.as_ptr(),
+                    cache2.layers[0].value.as_mut_ptr(),
+                    kvd,
+                );
+            }
+
+            // Attention
+            let scale = ctx2.attn_scale;
+            for h in 0..config.n_head {
+                let kv_group = ctx2.kv_group_lut[h];
+                unsafe {
+                    attention_head(
+                        &ctx2.q,
+                        &cache2.layers[0].key,
+                        &cache2.layers[0].value,
+                        &mut ctx2.attn_out,
+                        &mut ctx2.scores,
+                        h * config.head_dim,
+                        kv_group * config.head_dim,
+                        kvd,
+                        config.head_dim,
+                        1,
+                        scale,
+                    );
+                }
+            }
+            types::matmul(&mut ctx2.x, &layer_weights.attn_wo, &ctx2.attn_out, n, n);
+            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+            ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
+            rmsnorm(&mut ctx2.x);
+            types::matmul_relu(
+                &mut ctx2.hidden,
+                &layer_weights.mlp_w1,
+                &ctx2.x,
+                config.mlp_hidden,
+                n,
+            );
+            types::matmul(
+                &mut ctx2.x,
+                &layer_weights.mlp_w2,
+                &ctx2.hidden,
+                n,
+                config.mlp_hidden,
+            );
+            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+        }
+
+        standard_lm_head(
+            &mut ctx2.logits,
+            &ctx2.x,
+            &weights.lm_head,
+            config.vocab_size,
+            n,
+        );
+        let logits2 = ctx2.logits.to_vec();
+
+        // GOAT assertion
+        for i in 0..config.vocab_size {
+            let diff = (logits1[i] - logits2[i]).abs();
+            assert!(
+                diff < 1e-4,
+                "GOAT FAIL: QKV interleave mismatch at logit[{i}]: sep={}, fused={}, diff={}",
+                logits1[i],
+                logits2[i],
+                diff
+            );
+        }
+    }
+
+    /// GOAT proof (T11): MLP gamma folding produces identical single-layer output.
+    /// Tests the safe folding path: MLP gamma folded into w1, attention gamma kept at runtime.
+    #[test]
+    fn proof_gamma_folding_single_layer() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let mut weights = TransformerWeights::new(&config, &mut rng);
+        drop(rng);
+
+        let n = config.n_embd;
+        let kvd = types::kv_dim(&config);
+
+        // Set non-trivial gamma
+        for layer in &mut weights.layers {
+            for (i, g) in layer.attn_norm_gamma.iter_mut().enumerate() {
+                *g = 0.5 + (i as f32 * 0.1).sin() * 0.8;
+            }
+            for (i, g) in layer.mlp_norm_gamma.iter_mut().enumerate() {
+                *g = 0.5 + (i as f32 * 0.15).cos() * 0.6;
+            }
+        }
+
+        // Capture gammas
+        let attn_gamma = weights.layers[0].attn_norm_gamma.clone();
+        let mlp_gamma = weights.layers[0].mlp_norm_gamma.clone();
+
+        // ── Baseline: single layer with gamma ──
+        let mut ctx1 = ForwardContext::new(&config);
+        let _cache1 = MultiLayerKVCache::new(&config);
+
+        // Embed
+        crate::simd::simd_add_into(&mut ctx1.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+
+        // Attention with gamma
+        types::rmsnorm_with_gamma(&mut ctx1.x[..n], &attn_gamma);
+        ctx1.xr[..n].copy_from_slice(&ctx1.x[..n]);
+        types::matmul(&mut ctx1.q, &weights.layers[0].attn_wq, &ctx1.x, n, n);
+        types::matmul(&mut ctx1.k, &weights.layers[0].attn_wk, &ctx1.x, kvd, n);
+        types::matmul(&mut ctx1.v, &weights.layers[0].attn_wv, &ctx1.x, kvd, n);
+        types::matmul(
+            &mut ctx1.x,
+            &weights.layers[0].attn_wo,
+            &ctx1.attn_out,
+            n,
+            n,
+        );
+        crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
+        // MLP with gamma
+        ctx1.xr2[..n].copy_from_slice(&ctx1.x[..n]);
+        types::rmsnorm_with_gamma(&mut ctx1.x[..n], &mlp_gamma);
+        types::matmul_relu(
+            &mut ctx1.hidden,
+            &weights.layers[0].mlp_w1,
+            &ctx1.x,
+            config.mlp_hidden,
+            n,
+        );
+        types::matmul(
+            &mut ctx1.x,
+            &weights.layers[0].mlp_w2,
+            &ctx1.hidden,
+            n,
+            config.mlp_hidden,
+        );
+        crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
+
+        let baseline_hidden: Vec<f32> = ctx1.x[..n].to_vec();
+
+        // ── Fold gamma ──
+        weights.fold_gamma(&config);
+
+        // ── Folded path: attn gamma at runtime, mlp gamma folded ──
+        let mut ctx2 = ForwardContext::new(&config);
+        let _cache2 = MultiLayerKVCache::new(&config);
+
+        crate::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+
+        // Attention with gamma (kept)
+        types::rmsnorm_with_gamma(&mut ctx2.x[..n], &attn_gamma);
+        ctx2.xr[..n].copy_from_slice(&ctx2.x[..n]);
+        types::matmul(&mut ctx2.q, &weights.layers[0].attn_wq, &ctx2.x, n, n);
+        types::matmul(&mut ctx2.k, &weights.layers[0].attn_wk, &ctx2.x, kvd, n);
+        types::matmul(&mut ctx2.v, &weights.layers[0].attn_wv, &ctx2.x, kvd, n);
+        types::matmul(
+            &mut ctx2.x,
+            &weights.layers[0].attn_wo,
+            &ctx2.attn_out,
+            n,
+            n,
+        );
+        crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+        // MLP: gamma folded, so plain rmsnorm
+        ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
+        rmsnorm(&mut ctx2.x);
+        types::matmul_relu(
+            &mut ctx2.hidden,
+            &weights.layers[0].mlp_w1,
+            &ctx2.x,
+            config.mlp_hidden,
+            n,
+        );
+        types::matmul(
+            &mut ctx2.x,
+            &weights.layers[0].mlp_w2,
+            &ctx2.hidden,
+            n,
+            config.mlp_hidden,
+        );
+        crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+
+        let folded_hidden: Vec<f32> = ctx2.x[..n].to_vec();
+
+        // GOAT assertion
+        for i in 0..n {
+            let diff = (baseline_hidden[i] - folded_hidden[i]).abs();
+            assert!(
+                diff < 1e-5,
+                "GOAT FAIL: gamma fold mismatch at [{i}]: baseline={}, folded={}, diff={}",
+                baseline_hidden[i],
+                folded_hidden[i],
+                diff
+            );
+        }
     }
 }

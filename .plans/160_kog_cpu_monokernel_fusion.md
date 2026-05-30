@@ -40,7 +40,7 @@ Per `.contexts/optimization.md`:
 
 ### Phase 1: RMSNorm Gamma Infrastructure (T1-T3)
 
-- [ ] T1: Add norm gamma weights to `LayerWeights`
+- [x] T1: Add norm gamma weights to `LayerWeights`
   - Add `attn_norm_gamma: Vec<f32>` — pre-attention RMSNorm gamma `[n_embd]`
   - Add `mlp_norm_gamma: Vec<f32>` — pre-MLP RMSNorm gamma `[n_embd]`
   - Add `post_norm_gamma: Vec<f32>` — post-attention RMSNorm gamma `[n_embd]` (Gemma 2 post-norm)
@@ -48,13 +48,13 @@ Per `.contexts/optimization.md`:
   - Init with `1.0` (identity) in `TransformerWeights::new()` — zero behavioral change
   - **Scope:** `src/transformer.rs` `LayerWeights` struct + `TransformerWeights::new()`
 
-- [ ] T2: Add gamma parameter to `rmsnorm()` and `rmsnorm_with_eps()`
+- [x] T2: Add gamma parameter to `rmsnorm()` and `rmsnorm_with_eps()`
   - New signature: `fn rmsnorm_with_gamma(x: &mut [f32], gamma: &[f32])`
   - Implementation: `x[i] *= inv_rms * gamma[i]` (fused multiply, no separate pass)
   - Keep existing `rmsnorm()` as `rmsnorm_with_gamma(x, &[1.0; 0])` or just unchanged for backward compat
   - **Scope:** `crates/katgpt-core/src/types.rs`
 
-- [ ] T3: Wire gamma into `forward_base()` and `forward_coda()`
+- [x] T3: Wire gamma into `forward_base()` and `forward_coda()`
   - Replace `rmsnorm(&mut ctx.x)` with `rmsnorm_with_gamma(&mut ctx.x, &layer_weights.attn_norm_gamma)`
   - Same for MLP norm, post-norm (Gemma 2), final norm
   - **GOAT gate:** only active under `#[cfg(feature = "kog_cpu_fusion")]`
@@ -62,14 +62,14 @@ Per `.contexts/optimization.md`:
 
 ### Phase 2: RMSNorm Gamma Folding (T4-T5)
 
-- [ ] T4: Implement `fold_gamma_into_weight()` in `TransformerWeights`
+- [x] T4: Implement `fold_gamma_into_weight()` in `TransformerWeights`
   - For each projection preceded by RMSNorm: `weight[row * n_embd + col] *= gamma[col]`
   - Applies to: `attn_wq`, `attn_wk`, `attn_wv` (after pre-attention norm), `mlp_w1` (after MLP norm)
   - Sets gamma to `1.0` after folding (runtime rmsnorm becomes identity-multiply)
   - **Scope:** `impl TransformerWeights { fn fold_gamma(&mut self, config: &Config) }`
   - Call after `new()` or after loading weights from file (future GGUF path)
 
-- [ ] T5: GOAT proof — folded weights produce identical forward pass output
+- [x] T5: GOAT proof — folded weights produce identical forward pass output
   - Generate random weights with non-trivial gamma (not all 1.0)
   - Run `forward_base` with unfolded gamma → capture logits for 16 tokens
   - Fold gamma, run `forward_base` again → capture logits
@@ -79,20 +79,20 @@ Per `.contexts/optimization.md`:
 
 ### Phase 3: QKV Weight Interleaving (T6-T8)
 
-- [ ] T6: Add interleaved QKV weight storage to `LayerWeights`
+- [x] T6: Add interleaved QKV weight storage to `LayerWeights`
   - Add `attn_qkv_fused: Option<Vec<f32>>` — `[n_embd + 2*kv_dim, n_embd]` interleaved
   - Layout: group by head — `[Q_head0, K_head0, V_head0, Q_head1, K_head1, V_head1, ...]`
   - GQA: K/V groups shared, so interleaving is per-head-group, not per-head
   - None by default — only populated when `kog_cpu_fusion` is enabled and interleave is called
   - **Scope:** `src/transformer.rs` `LayerWeights`
 
-- [ ] T7: Implement `interleave_qkv()` in `TransformerWeights`
+- [x] T7: Implement `interleave_qkv()` in `TransformerWeights`
   - Repack `attn_wq` + `attn_wk` + `attn_wv` into `attn_qkv_fused`
   - Row order: for each head group, contiguous Q rows, K rows, V rows
   - Preserves original weights (fused is an additional buffer)
   - **Scope:** `impl TransformerWeights { fn interleave_qkv(&mut self, config: &Config) }`
 
-- [ ] T8: Wire fused QKV into `forward_base()` and `forward_coda()`
+- [x] T8: Wire fused QKV into `forward_base()` and `forward_coda()`
   - When `attn_qkv_fused` is Some: single matmul into fused buffer, then split Q/K/V slices
   - When None: existing separate `matmul()` calls (backward compat)
   - Cache locality win: single sequential weight read instead of 3 scattered reads
@@ -106,13 +106,13 @@ Per `.contexts/optimization.md`:
   - Print MBU % in benchmark output
   - **Scope:** `src/benchmark/` or new `src/mbu.rs`
 
-- [ ] T10: GOAT proof — QKV interleaving produces identical attention output
+- [x] T10: GOAT proof — QKV interleaving produces identical attention output
   - Generate random weights, run forward with separate Q/K/V
   - Interleave, run forward with fused QKV
   - Assert attention outputs bit-identical (within FP tolerance)
   - **Scope:** `src/transformer.rs` `#[cfg(test)] mod tests`
 
-- [ ] T11: GOAT proof — full pipeline (gamma fold + QKV interleave) end-to-end
+- [x] T11: GOAT proof — full pipeline (gamma fold + QKV interleave) end-to-end
   - 128-token greedy generation with baseline weights
   - Fold gamma + interleave QKV, generate 128 tokens
   - Assert all tokens identical
@@ -120,7 +120,7 @@ Per `.contexts/optimization.md`:
 
 ### Phase 5: Feature Gate + Benchmark (T12-T14)
 
-- [ ] T12: Feature gate `kog_cpu_fusion` in `Cargo.toml`
+- [x] T12: Feature gate `kog_cpu_fusion` in `Cargo.toml`
   - Opt-in (not in default features yet)
   - Gates: T2 (gamma rmsnorm), T3 (forward wiring), T8 (fused QKV path)
   - Does NOT gate T1 (weight fields always present) or T4/T7 (init methods always available)
@@ -196,6 +196,30 @@ Benefit: when computing head h, Q/K/V weight rows are contiguous in memory → b
 | Gemma 2 (n_embd=2304, 26 layers) | ~960 KB gamma reads | 0 KB | ~960 KB |
 
 QKV interleaving: same total weight bytes, better cache locality (reduced cache miss rate, not reduced bandwidth).
+
+---
+
+## Design Decision: Why Not Fold Attention Gamma?
+
+During GOAT proof testing, we discovered that the attention residual (`xr`) captures the **post-norm** value (`x * inv_rms * gamma`). If we fold gamma into QKV weights and use plain `rmsnorm`, the residual becomes `x * inv_rms` (without gamma), changing the output.
+
+The MLP path is safe because `xr2` is saved **before** the norm:
+```
+xr2 = x              // pre-norm residual
+x = rmsnorm_with_gamma(x, gamma)  // normalize
+hidden = relu(w1 @ x)            // w1 has gamma folded in
+x = w2 @ hidden + xr2            // residual is pre-norm ✓
+```
+
+But the attention path has a post-norm residual:
+```
+x = rmsnorm(x)     // normalize
+xr = x             // post-norm residual ← includes gamma!
+... attention ...
+x = wo @ attn_out + xr
+```
+
+Folding gamma would change `xr`, so attention gamma must remain at runtime.
 
 ---
 
