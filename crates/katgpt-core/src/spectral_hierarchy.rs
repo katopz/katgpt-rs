@@ -49,8 +49,11 @@ pub fn eigenspace_alignment(gram: &[f32], reference: &[f32], n: usize, k: usize)
 
     let mut alignment_sum = 0.0f64;
     for i in 0..k {
+        // Flat buffer: eigenvector i starts at offset i * n
+        let gram_evec = &gram_evecs[i * n..(i + 1) * n];
+        let ref_evec = &ref_evecs[i * n..(i + 1) * n];
         // Use SIMD dot product for O(n) alignment with hardware acceleration
-        let dot = crate::simd::simd_dot_f32(&gram_evecs[i], &ref_evecs[i], n) as f64;
+        let dot = crate::simd::simd_dot_f32(gram_evec, ref_evec, n) as f64;
         alignment_sum += dot.abs();
     }
 
@@ -179,11 +182,11 @@ pub fn cauchy_interlacing_check(eigenvalues: &[Vec<f32>]) -> bool {
 
 /// Compute top-k eigenvectors of a symmetric matrix using Jacobi iteration.
 ///
-/// Returns eigenvectors sorted by eigenvalue descending.
-///
-/// Uses a flat output buffer (k rows × n cols, row-major) to avoid per-eigenvector
-/// Vec allocations. The caller receives contiguous memory for better cache locality.
-fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<Vec<f32>> {
+/// Returns a flat buffer of `k * n` f32 values in row-major layout, where each
+/// row is an eigenvector sorted by eigenvalue descending. This avoids per-eigenvector
+/// `Vec` allocations — a single contiguous buffer is better for cache locality and
+/// enables SIMD-accelerated dot products in [`eigenspace_alignment`].
+fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
     let k = k.min(n);
     if k == 0 {
         return Vec::new();
@@ -280,15 +283,14 @@ fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<Vec<f32>> {
     let mut indexed: Vec<(usize, f64)> = (0..n).map(|i| (i, a[i * n + i])).collect();
     indexed.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Return top-k eigenvectors (columns of v).
-    // Build result directly — avoids intermediate flat buffer + k .to_vec() calls.
-    let mut result = Vec::with_capacity(k);
-    for &(src_col, _) in indexed[..k].iter() {
-        let mut evec = vec![0.0f32; n];
-        for row in 0..n {
-            evec[row] = v[row * n + src_col] as f32;
+    // Return top-k eigenvectors as a flat buffer [k * n], row-major.
+    // Single allocation instead of k separate Vec<f32> allocations.
+    let mut result = vec![0.0f32; k * n];
+    for (out_row, &(src_col, _)) in indexed[..k].iter().enumerate() {
+        let row_off = out_row * n;
+        for col in 0..n {
+            result[row_off + col] = v[col * n + src_col] as f32;
         }
-        result.push(evec);
     }
     result
 }
@@ -411,7 +413,7 @@ mod tests {
         let top_evecs = top_k_eigenvectors(&gram_flat, n, n);
 
         // The top eigenvector should be approximately uniform (scaling mode).
-        let scaling = &top_evecs[0];
+        let scaling = &top_evecs[0..n];
         let mean = scaling.iter().sum::<f32>() / n as f32;
         for &v in scaling {
             assert!(
@@ -421,7 +423,8 @@ mod tests {
         }
 
         // Remaining eigenvectors should have zero mean (wavelet modes).
-        for evec in &top_evecs[1..] {
+        for evec_idx in 1..n {
+            let evec = &top_evecs[evec_idx * n..(evec_idx + 1) * n];
             let sum: f32 = evec.iter().sum();
             assert!(
                 sum.abs() < 0.3,
@@ -445,9 +448,9 @@ mod tests {
         let top_evecs = top_k_eigenvectors(&gram_flat, n, n);
 
         // Compute actual eigenvalues λ_i = v_i^T G v_i.
-        let eigenvalues: Vec<f32> = top_evecs
-            .iter()
-            .map(|v| {
+        let eigenvalues: Vec<f32> = (0..n)
+            .map(|evec_idx| {
+                let v = &top_evecs[evec_idx * n..(evec_idx + 1) * n];
                 let mut lam = 0.0f32;
                 for i in 0..n {
                     for j in 0..n {
@@ -484,9 +487,9 @@ mod tests {
 
         // Full matrix eigenvalues.
         let full_evecs = top_k_eigenvectors(&gram_flat, n, n);
-        let full_eigs: Vec<f32> = full_evecs
-            .iter()
-            .map(|v| {
+        let full_eigs: Vec<f32> = (0..n)
+            .map(|evec_idx| {
+                let v = &full_evecs[evec_idx * n..(evec_idx + 1) * n];
                 let mut lam = 0.0f32;
                 for i in 0..n {
                     for j in 0..n {
@@ -505,9 +508,9 @@ mod tests {
             .collect();
         let sub_flat = flatten_matrix(&sub_gram);
         let sub_evecs = top_k_eigenvectors(&sub_flat, half, half);
-        let sub_eigs: Vec<f32> = sub_evecs
-            .iter()
-            .map(|v| {
+        let sub_eigs: Vec<f32> = (0..half)
+            .map(|evec_idx| {
+                let v = &sub_evecs[evec_idx * half..(evec_idx + 1) * half];
                 let mut lam = 0.0f32;
                 for i in 0..half {
                     for j in 0..half {
@@ -593,11 +596,13 @@ mod tests {
         // Compute ‖V_A^T V_B‖_F^2 = sum of squared singular values of V_A^T V_B
         // which equals sum of squared dot products of all pairs.
         let mut frob_sq = 0.0f64;
-        for a in &gram_evecs {
-            for b in &ref_evecs {
-                let dot: f64 = a
+        for a_idx in 0..k {
+            let a_row = &gram_evecs[a_idx * n..(a_idx + 1) * n];
+            for b_idx in 0..k {
+                let b_row = &ref_evecs[b_idx * n..(b_idx + 1) * n];
+                let dot: f64 = a_row
                     .iter()
-                    .zip(b.iter())
+                    .zip(b_row.iter())
                     .map(|(&x, &y)| (x as f64) * (y as f64))
                     .sum();
                 frob_sq += dot * dot;

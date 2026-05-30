@@ -1157,6 +1157,76 @@ pub fn simd_exp_inplace(x: &mut [f32]) {
     }
 }
 
+/// SIMD-accelerated in-place reciprocal: `x[i] = 1.0 / x[i]`.
+///
+/// Used by sigmoid computation in activation functions (SiLU, SwiGLU, GeGLU)
+/// to replace scalar reciprocal loops with vectorized division.
+#[inline]
+pub fn simd_reciprocal_inplace(x: &mut [f32]) {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_reciprocal_inplace(x) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_reciprocal_inplace(x) }
+        } else {
+            scalar_reciprocal_inplace(x)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_reciprocal_inplace(x)
+    }
+}
+
+#[inline]
+#[allow(dead_code)]
+fn scalar_reciprocal_inplace(x: &mut [f32]) {
+    for val in x.iter_mut() {
+        *val = 1.0 / *val;
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_reciprocal_inplace(x: &mut [f32]) {
+    use std::arch::aarch64::*;
+    unsafe {
+        let len = x.len();
+        let chunks = len / 4;
+        let ones = vdupq_n_f32(1.0);
+        for i in 0..chunks {
+            let v = vld1q_f32(x.as_ptr().add(i * 4));
+            let r = vdivq_f32(ones, v);
+            vst1q_f32(x.as_mut_ptr().add(i * 4), r);
+        }
+        for i in (chunks * 4)..len {
+            *x.get_unchecked_mut(i) = 1.0 / *x.get_unchecked(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_reciprocal_inplace(x: &mut [f32]) {
+    use std::arch::x86_64::*;
+    unsafe {
+        let len = x.len();
+        let chunks = len / 8;
+        let ones = _mm256_set1_ps(1.0);
+        for i in 0..chunks {
+            let v = _mm256_loadu_ps(x.as_ptr().add(i * 8));
+            let r = _mm256_div_ps(ones, v);
+            _mm256_storeu_ps(x.as_mut_ptr().add(i * 8), r);
+        }
+        for i in (chunks * 8)..len {
+            *x.get_unchecked_mut(i) = 1.0 / *x.get_unchecked(i);
+        }
+    }
+}
+
 // ── MaxSim Late-Interaction Scoring (Research 45, Plan 080) ────
 
 /// Memory-efficient MaxSim scoring: `score = Σ_i max_j dot(q_i, d_j)`.

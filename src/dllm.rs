@@ -50,8 +50,8 @@ pub enum LossAveraging {
 #[derive(Debug, Clone)]
 pub struct NoiseSchedule {
     pub n_blocks: usize,
-    pub min_ratio: f32,
     pub max_ratio: f32,
+    pub min_ratio: f32,
 }
 
 impl NoiseSchedule {
@@ -106,8 +106,8 @@ pub struct AdaptiveNoiseSchedule {
     n_blocks: usize,
     /// Number of adaptation steps performed.
     adaptations: u32,
-    min_ratio: f32,
     max_ratio: f32,
+    min_ratio: f32,
 }
 
 #[cfg(feature = "replaid_schedules")]

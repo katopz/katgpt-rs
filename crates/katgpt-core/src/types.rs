@@ -294,9 +294,7 @@ impl SdpaOutputGate {
         crate::simd::simd_exp_inplace(&mut temp[..n]);
         crate::simd::simd_add_scalar_inplace(&mut temp[..n], 1.0);
         // temp now = 1 + exp(-x), invert: temp = 1/temp = sigmoid
-        for t in &mut temp[..n] {
-            *t = 1.0 / *t;
-        }
+        crate::simd::simd_reciprocal_inplace(&mut temp[..n]);
 
         // Step 2: Apply gate elementwise via SIMD scale-mul (fused)
         // attn_out[i] *= temp[i] is element-wise multiply
@@ -1507,9 +1505,7 @@ pub fn silu(x: &mut [f32]) {
         // x[j] = x[j] / (1 + exp(-x[j]))
         // SIMD: buf = 1 + exp(-x), then buf = 1/buf, then x *= buf elementwise
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
-        for t in &mut buf {
-            *t = 1.0 / *t;
-        }
+        crate::simd::simd_reciprocal_inplace(&mut buf);
         crate::simd::simd_scale_mul_inplace(&mut x[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
