@@ -312,6 +312,7 @@ pub fn build_dd_tree_balanced_sde(
 /// - `BestQ`: pick the rollout with highest cumulative relevance (PTRM default)
 /// - `MostFrequent`: pick the most common path (mode@K, majority vote)
 #[cfg(feature = "elf_sde")]
+#[repr(u8)]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WidthSelectionMode {
     /// Select rollout with highest cumulative relevance score (PTRM Q-head analog).

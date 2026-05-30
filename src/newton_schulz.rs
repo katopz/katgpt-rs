@@ -85,69 +85,15 @@ pub fn newton_schulz5(g: &[f32], rows: usize, cols: usize, out: &mut [f32]) {
     assert_eq!(g.len(), rows * cols, "input matrix size mismatch");
     assert_eq!(out.len(), rows * cols, "output buffer size mismatch");
 
-    // Handle non-square: if rows > cols, transpose, orthogonalize, transpose back
-    if rows > cols {
-        let mut gt = vec![0.0f32; cols * rows];
-        transpose(g, rows, cols, &mut gt);
-
-        let mut ort = vec![0.0f32; cols * rows];
-        newton_schulz5_square(&gt, cols, rows, &mut ort);
-
-        transpose(&ort, cols, rows, out);
-        return;
+    // Delegate to scratch-reusing variant via thread-local scratch.
+    use std::cell::RefCell;
+    thread_local! {
+        static SCRATCH: RefCell<NewtonSchulzScratch> = RefCell::new(NewtonSchulzScratch::new(0, 0));
     }
-
-    newton_schulz5_square(g, rows, cols, out);
-}
-
-/// Core Newton-Schulz for square-ish matrices (rows ≤ cols).
-fn newton_schulz5_square(g: &[f32], m: usize, n: usize, out: &mut [f32]) {
-    // Step 1: normalize by Frobenius norm
-    let norm = frobenius_norm(g);
-    if norm < 1e-12 {
-        // Zero or near-zero matrix → output zeros
-        out.fill(0.0);
-        return;
-    }
-    let inv_norm = 1.0 / norm;
-    let mut x = vec![0.0f32; m * n];
-    for (i, &v) in g.iter().enumerate() {
-        x[i] = v * inv_norm;
-    }
-
-    // Step 2: 5 fixed-point iterations
-    // Newton-Schulz cubic iteration: X_{k+1} = a*X + (b*(X@X^T) + c*(X@X^T)^2) @ X
-    // Polynomial on singular values: φ(σ) = aσ + bσ³ + cσ⁵
-    let mut a_mat = vec![0.0f32; m * m]; // X @ X^T (m × m)
-    let mut b_mat = vec![0.0f32; m * m]; // b*A + c*A^2 (m × m)
-    let mut bx = vec![0.0f32; m * n]; // B @ X (m × n)
-    let mut at = vec![0.0f32; m * m]; // A^T scratch (pre-allocated, Issue 083)
-    let mut xt_buf = vec![0.0f32; m * n]; // X^T scratch for matmul_ax
-
-    for _ in 0..ITERS {
-        // A = X @ X^T
-        matmul_xtx(&x, m, n, &mut a_mat);
-
-        // B = b*A + c*(A@A) — transpose A so rows of A^T are contiguous
-        transpose(&a_mat, m, m, &mut at);
-        for i in 0..m {
-            let a_row = &a_mat[i * m..(i + 1) * m];
-            for j in 0..m {
-                let a2_ij = crate::simd::simd_dot_f32(a_row, &at[j * m..(j + 1) * m], m);
-                b_mat[i * m + j] = B * a_mat[i * m + j] + C * a2_ij;
-            }
-        }
-
-        // BX = B @ X
-        matmul_ax(&b_mat, &x, m, n, &mut bx, &mut xt_buf);
-
-        // X = a*X + BX (fused SIMD scale-accumulate)
-        let mn = m * n;
-        crate::simd::simd_scale_inplace(&mut x[..mn], A);
-        crate::simd::simd_add_inplace(&mut x[..mn], &bx[..mn]);
-    }
-
-    out.copy_from_slice(&x);
+    SCRATCH.with(|s| {
+        let mut s = s.borrow_mut();
+        newton_schulz5_into(g, rows, cols, out, &mut s);
+    });
 }
 
 /// Muon optimizer update: momentum + Newton-Schulz orthogonalization + scaling.

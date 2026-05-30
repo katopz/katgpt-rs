@@ -411,7 +411,9 @@ impl ForwardContext {
                 (0usize, 0.0f32);
                 config.vocab_size.div_ceil(config.mtp_cluster_size.max(1))
             ],
-            topk_output_buf: Vec::new(),
+            topk_output_buf: Vec::with_capacity(
+                config.vocab_size.div_ceil(config.mtp_cluster_size.max(1)),
+            ),
             prev_h: vec![0.0; config.n_embd],
             #[cfg(feature = "delta_routing")]
             delta_source_indices: {
@@ -2987,7 +2989,8 @@ pub fn generate_with_prefill(
     crate::types::softmax_scaled(logits, 1.0 / config.temperature);
     let mut token = crate::types::sample_token_into(&ctx.logits, rng, &mut ctx.cdf);
 
-    let mut generated = vec![token];
+    let mut generated = Vec::with_capacity(max_gen_tokens);
+    generated.push(token);
     let mut pos = prompt_tokens.len();
 
     // 3. Causal decode with writer LoRA
@@ -3092,10 +3095,10 @@ pub fn forward_paged<'a>(
     paged_cache.ensure_pages(seq_idx, pos);
 
     // Flat KV cache for attention computation (pre-allocated, reused from ForwardContext)
+    // Note: no initial fill(0.0) needed — the inner loop below reads every position
+    // from the paged cache and overwrites the flat buffer for each layer.
     let t_n = pos + 1;
     let flat_kv_len = t_n * kvd;
-    ctx.paged_flat_key[..flat_kv_len].fill(0.0);
-    ctx.paged_flat_value[..flat_kv_len].fill(0.0);
 
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
@@ -3394,14 +3397,14 @@ impl PagedKVCache {
                         .collect()
                 })
                 .collect(),
-            free_pages: Vec::new(),
+            free_pages: Vec::with_capacity(initial_pages_per_layer * config.n_layer),
             kv_dim: kvd,
             total_pages: initial_pages_per_layer * config.n_layer,
             deficits: Vec::with_capacity(config.n_layer),
             new_pages: vec![Vec::new(); config.n_layer],
-            all_new_buf: Vec::new(),
+            all_new_buf: Vec::with_capacity(initial_pages_per_layer * config.n_layer),
             page_ref_counts: vec![config.n_layer as u32; initial_pages_per_layer * config.n_layer],
-            rollback_removed: Vec::new(),
+            rollback_removed: Vec::with_capacity(initial_pages_per_layer),
         }
     }
 
@@ -3582,8 +3585,6 @@ pub struct RavenKVCache {
     pub kv_dim: usize,
     /// Top-K slots to update per token
     pub top_k: usize,
-    /// Forget rate for gated update (negative = slower decay)
-    pub forget_rate: f32,
     /// Key memory: [num_slots × kv_dim]
     pub keys: Vec<f32>,
     /// Value memory: [num_slots × kv_dim]
@@ -3595,6 +3596,8 @@ pub struct RavenKVCache {
     readout_scores: Vec<f32>,
     /// Pre-allocated output buffer for raven_readout_into [kv_dim]
     readout_output: Vec<f32>,
+    /// Forget rate for gated update (negative = slower decay)
+    pub forget_rate: f32,
 }
 
 impl RavenKVCache {
@@ -3604,13 +3607,13 @@ impl RavenKVCache {
             num_slots,
             kv_dim: kvd,
             top_k,
-            forget_rate: -1.0,
             keys: vec![0.0; num_slots * kvd],
             values: vec![0.0; num_slots * kvd],
             router_scored: vec![(0usize, 0.0f32); num_slots],
             router_r_t: vec![0.0f32; num_slots],
             readout_scores: vec![0.0; num_slots],
             readout_output: vec![0.0; kvd],
+            forget_rate: -1.0,
         }
     }
 
@@ -3858,8 +3861,9 @@ pub fn forward_raven<'a>(
         // For PoC: use first num_slots elements of K repeated as logits.
         // In production, this would be a learned linear projection: W_route × x_t
         // Reuse pre-allocated query buffer for router logits (zero-alloc)
-        ctx.raven_query_buf.resize(cache.num_slots, 0.0);
-        for (i, slot) in ctx.raven_query_buf.iter_mut().enumerate() {
+        // Buffer is pre-sized in ForwardContext::new() to max(kv_dim, 64, num_slots).
+        let num_slots = cache.num_slots;
+        for (i, slot) in ctx.raven_query_buf[..num_slots].iter_mut().enumerate() {
             *slot = ctx.k[i % kvd];
         }
 

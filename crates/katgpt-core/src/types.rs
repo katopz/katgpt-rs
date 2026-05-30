@@ -130,7 +130,8 @@ impl DeltaRoutingConfig {
 /// Configuration for DashAttention adaptive sparse hierarchical attention.
 /// Controls α-entmax routing, chunk summarization, and routing bias.
 ///
-/// Fields ordered by descending alignment to minimize padding.
+/// Fields ordered by descending alignment to minimize padding:
+/// usize (8B) → f32 (4B) → bool (1B) — 24 bytes total, no wasted padding.
 #[derive(Clone, Copy, Debug)]
 pub struct DashAttnConfig {
     /// Chunk size for block-level attention (default: 64).
@@ -184,7 +185,8 @@ pub enum RetrievalHeadRole {
 ///
 /// Must pass 6/6 GOAT proofs before default-on promotion.
 ///
-/// Fields ordered by descending alignment to minimize padding.
+/// Fields ordered by descending alignment to minimize padding:
+/// usize (8B) → f32 (4B) — no padding between groups.
 #[derive(Clone, Copy, Debug)]
 pub struct RtTurboConfig {
     /// Low-dimensional projection size for pre-RoPE scoring (default: 16).
@@ -1724,7 +1726,8 @@ pub fn sample_token_into(probs: &[f32], rng: &mut Rng, cdf: &mut Vec<f32>) -> us
 ///
 /// Zero-copy: loaded once per domain, reference-passed during inference.
 ///
-/// Fields ordered by descending alignment to minimize padding.
+/// Fields ordered by descending alignment to minimize padding:
+/// usize/Vec (8-byte) → f32 (4-byte).
 pub struct LoraAdapter {
     /// LoRA rank.
     pub rank: usize,
@@ -1732,12 +1735,12 @@ pub struct LoraAdapter {
     pub in_dim: usize,
     /// Output dimension.
     pub out_dim: usize,
-    /// Scaling factor (alpha / rank).
-    pub alpha: f32,
     /// Down-projection: [rank × in_dim]
     pub a: Vec<f32>,
     /// Up-projection: [out_dim × rank]
     pub b: Vec<f32>,
+    /// Scaling factor (alpha / rank).
+    pub alpha: f32,
 }
 
 impl LoraAdapter {
@@ -1798,16 +1801,52 @@ impl LoraAdapter {
             return Err("Truncated adapter data".into());
         }
 
-        let a: Vec<f32> = payload[offset..offset + a_bytes]
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-            .collect();
+        let a: Vec<f32> = {
+            #[cfg(target_endian = "little")]
+            {
+                let mut v = Vec::with_capacity(a_count);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        payload[offset..].as_ptr(),
+                        v.as_mut_ptr() as *mut u8,
+                        a_bytes,
+                    );
+                    v.set_len(a_count);
+                }
+                v
+            }
+            #[cfg(not(target_endian = "little"))]
+            {
+                payload[offset..offset + a_bytes]
+                    .chunks_exact(4)
+                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                    .collect()
+            }
+        };
         offset += a_bytes;
 
-        let b: Vec<f32> = payload[offset..offset + b_bytes]
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-            .collect();
+        let b: Vec<f32> = {
+            #[cfg(target_endian = "little")]
+            {
+                let mut v = Vec::with_capacity(b_count);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        payload[offset..].as_ptr(),
+                        v.as_mut_ptr() as *mut u8,
+                        b_bytes,
+                    );
+                    v.set_len(b_count);
+                }
+                v
+            }
+            #[cfg(not(target_endian = "little"))]
+            {
+                payload[offset..offset + b_bytes]
+                    .chunks_exact(4)
+                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                    .collect()
+            }
+        };
 
         Ok(Self {
             rank,
@@ -1912,10 +1951,28 @@ impl LoraAdapter {
                     return Err("Truncated A matrix data".into());
                 }
 
-                let a: Vec<f32> = file_data[offset..offset + a_bytes]
-                    .chunks_exact(4)
-                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-                    .collect();
+                let a: Vec<f32> = {
+                    #[cfg(target_endian = "little")]
+                    {
+                        let mut v = Vec::with_capacity(a_count);
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                file_data[offset..].as_ptr(),
+                                v.as_mut_ptr() as *mut u8,
+                                a_bytes,
+                            );
+                            v.set_len(a_count);
+                        }
+                        v
+                    }
+                    #[cfg(not(target_endian = "little"))]
+                    {
+                        file_data[offset..offset + a_bytes]
+                            .chunks_exact(4)
+                            .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                            .collect()
+                    }
+                };
                 offset += a_bytes;
 
                 // B matrix: [out_dim × rank]
@@ -1928,10 +1985,28 @@ impl LoraAdapter {
                     return Err("Truncated B matrix data".into());
                 }
 
-                let b: Vec<f32> = file_data[offset..offset + b_bytes]
-                    .chunks_exact(4)
-                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-                    .collect();
+                let b: Vec<f32> = {
+                    #[cfg(target_endian = "little")]
+                    {
+                        let mut v = Vec::with_capacity(b_count);
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                file_data[offset..].as_ptr(),
+                                v.as_mut_ptr() as *mut u8,
+                                b_bytes,
+                            );
+                            v.set_len(b_count);
+                        }
+                        v
+                    }
+                    #[cfg(not(target_endian = "little"))]
+                    {
+                        file_data[offset..offset + b_bytes]
+                            .chunks_exact(4)
+                            .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                            .collect()
+                    }
+                };
                 offset += b_bytes;
 
                 let in_dim = a_cols;

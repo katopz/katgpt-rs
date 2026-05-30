@@ -272,11 +272,21 @@ impl<S: GameState> RolloutPolicy<S> for RandomRolloutPolicy {
 /// - Validating search budget vs branching factor
 /// - Detecting game phases (opening → midgame → endgame)
 /// - Comparing action space across game domains
+/// Per-player aggregate tracked during insert for O(1) reads.
+#[derive(Clone, Debug, Default)]
+struct PlayerAgg {
+    sum: f32,
+    count: usize,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct ActionSpaceLog {
     /// (tick, player_id, action_count) entries.
     /// Field order: usize (8B) → u32 (4B) → u8 (1B) = 16B vs 24B with (u32, u8, usize).
     entries: Vec<(usize, u32, u8)>,
+    /// Per-player running aggregates for O(1) avg_action_space_for().
+    /// Indexed by player_id (u8, so max 256 entries). Lazy-initialized on first record.
+    player_aggs: Vec<PlayerAgg>,
 }
 
 impl ActionSpaceLog {
@@ -291,13 +301,23 @@ impl ActionSpaceLog {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             entries: Vec::with_capacity(capacity),
+            player_aggs: Vec::new(),
         }
     }
 
     /// Record action space size for a player at the current tick.
+    /// Maintains per-player aggregates for O(1) avg_action_space_for().
     pub fn record<S: GameState>(&mut self, state: &S, player_id: u8) {
-        self.entries
-            .push((state.action_space_size(player_id), state.tick(), player_id));
+        let n = state.action_space_size(player_id);
+        let pid = player_id as usize;
+        // Extend player_aggs if needed (at most 256 entries)
+        if self.player_aggs.len() <= pid {
+            self.player_aggs
+                .resize(pid + 1, PlayerAgg { sum: 0.0, count: 0 });
+        }
+        self.player_aggs[pid].sum += n as f32;
+        self.player_aggs[pid].count += 1;
+        self.entries.push((n, state.tick(), player_id));
     }
 
     /// Total number of recorded entries.
@@ -322,17 +342,14 @@ impl ActionSpaceLog {
     }
 
     /// Average action space size for a specific player.
-    /// Single-pass accumulation — zero allocation.
+    /// O(1) via pre-tracked per-player aggregates — no linear scan.
     pub fn avg_action_space_for(&self, player_id: u8) -> f32 {
-        let mut sum = 0.0f32;
-        let mut count = 0usize;
-        for &(n, _, pid) in &self.entries {
-            if pid == player_id {
-                sum += n as f32;
-                count += 1;
-            }
-        }
-        if count == 0 { 0.0 } else { sum / count as f32 }
+        let pid = player_id as usize;
+        let agg = match self.player_aggs.get(pid) {
+            Some(a) if a.count > 0 => a,
+            _ => return 0.0,
+        };
+        agg.sum / agg.count as f32
     }
 
     /// Peak (maximum) action space size recorded.
@@ -340,9 +357,13 @@ impl ActionSpaceLog {
         self.entries.iter().map(|&(n, _, _)| n).max().unwrap_or(0)
     }
 
-    /// Clear all entries.
+    /// Clear all entries and reset per-player aggregates.
     pub fn clear(&mut self) {
         self.entries.clear();
+        for agg in &mut self.player_aggs {
+            agg.sum = 0.0;
+            agg.count = 0;
+        }
     }
 }
 

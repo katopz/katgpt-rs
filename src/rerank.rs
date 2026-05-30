@@ -26,10 +26,10 @@ pub enum RerankMethod {
 /// A document with its reranking score and original index.
 #[derive(Debug, Clone)]
 pub struct RerankedDoc {
-    /// Index into the original `docs` slice.
-    pub doc_index: usize,
     /// Computed relevance score (higher = more relevant).
     pub score: f32,
+    /// Index into the original `docs` slice.
+    pub doc_index: usize,
 }
 
 // ── Core Functions ────────────────────────────────────────────

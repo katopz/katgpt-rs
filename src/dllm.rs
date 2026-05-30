@@ -65,12 +65,8 @@ impl NoiseSchedule {
             0 => Vec::new(),
             1 => vec![(self.min_ratio + self.max_ratio) / 2.0],
             n => {
-                let mut ratios = Vec::with_capacity(n);
                 let step = (self.max_ratio - self.min_ratio) / (n - 1) as f32;
-                for i in 0..n {
-                    ratios.push(self.min_ratio + i as f32 * step);
-                }
-                ratios
+                (0..n).map(|i| self.min_ratio + i as f32 * step).collect()
             }
         }
     }
@@ -246,9 +242,9 @@ pub fn corrupt_block(
     mask_token: usize,
     rng: &mut Rng,
 ) -> (Vec<usize>, Vec<bool>) {
-    let mut corrupted = Vec::new();
-    let mut is_masked = Vec::new();
-    let mut positions = Vec::new();
+    let mut corrupted = Vec::with_capacity(tokens.len());
+    let mut is_masked = Vec::with_capacity(tokens.len());
+    let mut positions = Vec::with_capacity(tokens.len());
     corrupt_block_into(
         tokens,
         mask_ratio,
@@ -285,6 +281,9 @@ struct BidirectionalContext {
     v_cache: Vec<f32>,
     x_norm2_all: Vec<f32>,
     xr_all: Vec<f32>,
+    // Output buffers (pre-allocated to max capacity, sliced per call)
+    all_logits: Vec<f32>,
+    all_attn_weights: Vec<f32>,
 }
 
 impl BidirectionalContext {
@@ -309,6 +308,8 @@ impl BidirectionalContext {
             v_cache: vec![0.0f32; bs * kvd],
             x_norm2_all: vec![0.0f32; bs * n],
             xr_all: vec![0.0f32; bs * n],
+            all_logits: vec![0.0f32; bs * config.vocab_size],
+            all_attn_weights: vec![0.0f32; bs * config.n_head * bs],
         }
     }
 }
@@ -370,8 +371,10 @@ fn forward_bidirectional_positions_into(
     // Phase B: Bidirectional attention for all positions
     let vocab = config.vocab_size;
     let n_heads = config.n_head;
-    let mut all_logits = vec![0.0f32; seq_len * vocab];
-    let mut all_attn_weights = vec![0.0f32; seq_len * n_heads * seq_len];
+    let logits_len = seq_len * vocab;
+    let attn_len = seq_len * n_heads * seq_len;
+    bctx.all_logits[..logits_len].fill(0.0);
+    bctx.all_attn_weights[..attn_len].fill(0.0);
     let layer = &weights.layers[0];
 
     for p in 0..seq_len {
@@ -429,12 +432,15 @@ fn forward_bidirectional_positions_into(
             config.vocab_size,
             n,
         );
-        all_logits[p * vocab..(p + 1) * vocab].copy_from_slice(&bctx.logits);
-        all_attn_weights[p * n_heads * seq_len..(p + 1) * n_heads * seq_len]
+        bctx.all_logits[p * vocab..(p + 1) * vocab].copy_from_slice(&bctx.logits);
+        bctx.all_attn_weights[p * n_heads * seq_len..(p + 1) * n_heads * seq_len]
             .copy_from_slice(&bctx.attn_weights_buf[..n_heads * seq_len]);
     }
 
-    (all_logits, all_attn_weights)
+    (
+        bctx.all_logits[..logits_len].to_vec(),
+        bctx.all_attn_weights[..attn_len].to_vec(),
+    )
 }
 
 /// Safe bidirectional attention for one query position.
@@ -1391,7 +1397,7 @@ pub fn train_mini_dllm(
 ) -> (TransformerWeights, Vec<f32>) {
     let mut rng = Rng::new(seed);
     let mut weights = TransformerWeights::new(config, &mut rng);
-    let mut loss_history = Vec::new();
+    let mut loss_history = Vec::with_capacity(n_epochs);
     let mut fwd_ctx = ForwardSaveContext::new(config);
     let mut bwd_ctx = BackwardContext::new(config);
     let mut corrupted_buf = Vec::with_capacity(config.block_size);
@@ -1487,7 +1493,7 @@ pub fn train_mini_dllm_adaptive(
 ) -> (TransformerWeights, Vec<f32>) {
     let mut rng = Rng::new(seed);
     let mut weights = TransformerWeights::new(config, &mut rng);
-    let mut loss_history = Vec::new();
+    let mut loss_history = Vec::with_capacity(n_epochs);
     let n_blocks = schedule.ratios().len().max(1);
     let mut fwd_ctx = ForwardSaveContext::new(config);
     let mut bwd_ctx = BackwardContext::new(config);

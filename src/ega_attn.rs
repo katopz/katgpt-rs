@@ -98,11 +98,11 @@ pub fn compute_energy_gate_into(energy: &[f32], alpha: f32, tau: f32, out: &mut 
 pub struct EgaGate {
     /// Learned energy projection vector [head_dim].
     pub w_proj: Vec<f32>,
-    /// Gate sharpness parameter. Higher α → sharper gate transition.
-    pub alpha: f32,
     /// Energy threshold. Tokens with energy above τ are preserved,
     /// tokens below are suppressed.
     pub tau: f32,
+    /// Gate sharpness parameter. Higher α → sharper gate transition.
+    pub alpha: f32,
 }
 
 impl EgaGate {

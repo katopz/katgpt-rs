@@ -361,6 +361,11 @@ pub fn underspecification_score(relevance: &[f32]) -> f32 {
         return 1.0; // degenerate = underspecified
     }
 
+    let max_entropy = (relevance.len() as f32).log2();
+    if max_entropy <= 0.0 {
+        return 0.0;
+    }
+
     let mut entropy = 0.0f32;
     let inv_sum = 1.0 / sum;
     for &r in relevance {
@@ -370,11 +375,6 @@ pub fn underspecification_score(relevance: &[f32]) -> f32 {
         if p > 0.0 {
             entropy -= p * p.log2();
         }
-    }
-
-    let max_entropy = (relevance.len() as f32).log2();
-    if max_entropy <= 0.0 {
-        return 0.0;
     }
 
     entropy / max_entropy
@@ -630,6 +630,7 @@ pub enum CspDomain {
 // a specific "sufficient" token narrows the space dramatically.
 
 /// Convert a list of token indices to a boolean bitmap.
+#[allow(dead_code)]
 fn to_bitmap(indices: &[usize], vocab_size: usize) -> Vec<bool> {
     let mut bm = vec![false; vocab_size];
     fill_bitmap(&mut bm, indices);
@@ -637,6 +638,7 @@ fn to_bitmap(indices: &[usize], vocab_size: usize) -> Vec<bool> {
 }
 
 /// Fill a pre-allocated bitmap buffer from a list of token indices.
+#[allow(dead_code)]
 fn fill_bitmap(buf: &mut [bool], indices: &[usize]) {
     buf.fill(false);
     for &idx in indices {
@@ -699,16 +701,15 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // Placing the key cell narrows to just adjacent cells at depth 1
         let row = key / 4;
         let col = key % 4;
-        let adjacent: Vec<usize> = (0..vocab_size)
-            .filter(|&c| {
-                let r = c / 4;
-                let cc = c % 4;
-                let dist = (r as i32 - row as i32).unsigned_abs()
-                    + (cc as i32 - col as i32).unsigned_abs();
-                dist == 1
-            })
-            .collect();
-        let adjacent_bm = to_bitmap(&adjacent, vocab_size);
+        // Branch-free Manhattan distance check into stack bitmap — avoids Vec allocation
+        let mut adjacent_bm = vec![false; vocab_size];
+        for c in 0..vocab_size {
+            let dr = (c / 4) as i32 - row as i32;
+            let dc = (c % 4) as i32 - col as i32;
+            // dist = |dr| + |dc| == 1 is equivalent to (dr^2 + dc^2 == 1)
+            let dist_sq = dr * dr + dc * dc;
+            adjacent_bm[c] = dist_sq == 1;
+        }
         // Only allocate the key-specific narrowing bitmap; non-key entries use empty
         // Vec which falls through to valid_at_depth (all-true) in NarrowingPruner.
         let mut narrowing: Vec<Vec<bool>> = vec![vec![]; vocab_size];
@@ -729,20 +730,23 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     }
 
     // Stone CSPs (Go-like): placing a "capture" stone eliminates liberties
+    // Pre-compute the wide bitmap once (identical for all stone CSPs)
+    let stone_vocab = 12;
+    let wide_next_bm: Vec<bool> = (0..stone_vocab).map(|c| c % 3 == 0).collect();
+    // Pre-allocate reusable scratch for narrow bitmap
+    let mut narrow_bm_scratch = vec![false; stone_vocab];
+
     for i in 0..count_per_domain {
-        let vocab_size = 12; // smaller board for tighter constraints
+        let vocab_size = stone_vocab; // smaller board for tighter constraints
         let key = i % vocab_size;
         let valid_at_depth = vec![true; vocab_size];
         // Placing the key stone at depth 0 leaves only 1 valid position at depth 1
         // (simulates a capture that fills all but one liberty)
-        let narrow_next = vec![(key + 1) % vocab_size];
-        let narrow_next_bm = to_bitmap(&narrow_next, vocab_size);
-        // Other placements leave 4-5 valid positions
-        let wide_next: Vec<usize> = (0..vocab_size).filter(|&c| c % 3 == 0).collect();
-        let wide_next_bm = to_bitmap(&wide_next, vocab_size);
+        narrow_bm_scratch.fill(false);
+        narrow_bm_scratch[(key + 1) % vocab_size] = true;
         // Pre-fill narrowing: default is wide, then set key entry to narrow
         let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| wide_next_bm.clone()).collect();
-        narrowing[key] = narrow_next_bm;
+        narrowing[key] = narrow_bm_scratch.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
             valid_at_depth,
@@ -760,20 +764,23 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
 
     // Logic CSPs (propositional): XOR constraints where revealing one variable
     // determines the other
+    let logic_vocab = 8;
+    let mut logic_bm_scratch = vec![false; logic_vocab];
+
     for i in 0..count_per_domain {
-        let vocab_size = 8;
+        let vocab_size = logic_vocab;
         // Pairs: (0,1), (2,3), (4,5), (6,7) — XOR constraints
         let key = i % vocab_size;
         let partner = if key % 2 == 0 { key + 1 } else { key - 1 };
         // At depth 0: all propositions valid
         let valid_at_depth = vec![true; vocab_size];
         // Placing key → only partner survives at depth 1 (XOR resolution)
-        let narrow_next = vec![partner];
-        let narrow_next_bm = to_bitmap(&narrow_next, vocab_size);
+        logic_bm_scratch.fill(false);
+        logic_bm_scratch[partner] = true;
         // Only allocate the key-specific narrowing bitmap; non-key entries use empty
         // Vec which falls through to valid_at_depth (all-true) in NarrowingPruner.
         let mut narrowing: Vec<Vec<bool>> = vec![vec![]; vocab_size];
-        narrowing[key] = narrow_next_bm;
+        narrowing[key] = logic_bm_scratch.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
             valid_at_depth,
