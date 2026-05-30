@@ -289,6 +289,8 @@ pub struct ActionSpaceLog {
     /// Per-player running aggregates for O(1) avg_action_space_for().
     /// Indexed by player_id (u8, so max 256 entries). Lazy-initialized on first record.
     player_aggs: Vec<PlayerAgg>,
+    /// Running peak across all entries, tracked during record() for O(1) peak_action_space().
+    peak: usize,
 }
 
 impl ActionSpaceLog {
@@ -304,6 +306,7 @@ impl ActionSpaceLog {
         Self {
             entries: Vec::with_capacity(capacity),
             player_aggs: Vec::new(),
+            peak: 0,
         }
     }
 
@@ -319,6 +322,9 @@ impl ActionSpaceLog {
         }
         self.player_aggs[pid].sum += n as f32;
         self.player_aggs[pid].count += 1;
+        if n > self.peak {
+            self.peak = n;
+        }
         self.entries.push((n, state.tick(), player_id));
     }
 
@@ -355,8 +361,9 @@ impl ActionSpaceLog {
     }
 
     /// Peak (maximum) action space size recorded.
+    /// O(1) via running peak tracked during record().
     pub fn peak_action_space(&self) -> usize {
-        self.entries.iter().map(|&(n, _, _)| n).max().unwrap_or(0)
+        self.peak
     }
 
     /// Clear all entries and reset per-player aggregates.
@@ -366,6 +373,7 @@ impl ActionSpaceLog {
             agg.sum = 0.0;
             agg.count = 0;
         }
+        self.peak = 0;
     }
 }
 
