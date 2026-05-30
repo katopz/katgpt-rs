@@ -40,7 +40,7 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 | Game / Self-Play | • LEO all-goals Q-framework (Plan 155)<br>• Dual LEO teacher/student (Plan 155) | SUPER GOAT; all-goals Q(s)→R^{G×A} | • Sudoku, Go, Monopoly, Bomber<br>• Unit Distance lattice constructions |
 | SIMD / Perf | • LDT α-intersection<br>• TileRT pipeline (GOAT 13/13, Plan 102)<br>• PlasmaPath bit-plane (GOAT 5/5, Plan 148) | +0.6% overhead → full observability; multiplication-free matvec | • NEON SIMD matmul/HLA kernels<br>• zero-alloc hot paths<br>• Minkowski lattice embedding |
 
-**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`
+**Default feature set:** `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`
 
 ---
 
