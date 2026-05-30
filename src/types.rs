@@ -74,12 +74,14 @@ impl AsymmetricKVConfig {
     }
 
     /// Whether this config is asymmetric (key_bits ≠ val_bits).
+    #[inline]
     pub fn is_asymmetric(&self) -> bool {
         self.key_bits != self.val_bits
     }
 
     /// Theoretical compression ratio vs fp32 (32 bits per element).
     /// Returns ratio of fp32 size to quantized size.
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         let fp32_bits = 32.0;
         let avg_bits = (self.key_bits as f32 + self.val_bits as f32) / 2.0;
@@ -87,6 +89,7 @@ impl AsymmetricKVConfig {
     }
 
     /// Total bits per KV pair.
+    #[inline]
     pub fn total_bits(&self) -> u8 {
         self.key_bits + self.val_bits
     }

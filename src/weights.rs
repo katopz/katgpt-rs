@@ -52,6 +52,7 @@ fn align_up(offset: usize) -> usize {
 }
 
 /// Write weight data into buffer at offset, returning the slice descriptor.
+#[inline]
 fn write_weight(buffer: &mut [f32], offset: usize, data: &[f32]) -> WeightSlice {
     buffer[offset..offset + data.len()].copy_from_slice(data);
     WeightSlice {

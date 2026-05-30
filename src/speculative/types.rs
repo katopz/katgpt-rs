@@ -442,6 +442,7 @@ impl DDTreeBranchCache {
 
 /// Reason a drafted branch was rejected during verification.
 #[derive(Debug, Clone, PartialEq)]
+#[repr(u8)]
 pub enum RejectionReason {
     /// Token probability below acceptance threshold.
     LowProbability,

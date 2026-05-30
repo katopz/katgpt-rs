@@ -98,7 +98,7 @@ pub fn compute_energy_gate_into(energy: &[f32], alpha: f32, tau: f32, out: &mut 
 /// - `alpha` (1): gate sharpness (paper converges to ~2.2)
 /// - `tau` (1): energy threshold (paper converges to ~0.35)
 ///
-/// Field order: Vec (ptr, len, cap = 24 bytes) before f32s eliminates padding.
+/// Field order: Vec (24 bytes) before f32s (4 bytes each) eliminates padding.
 #[derive(Clone, Debug)]
 pub struct EgaGate {
     /// Learned energy projection vector [head_dim].

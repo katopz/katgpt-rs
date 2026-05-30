@@ -10,6 +10,7 @@
 // ── Helpers ──────────────────────────────────────────────────────
 
 /// Dot product of two vectors.
+#[inline]
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     crate::simd::simd_dot_f32(a, b, a.len())
 }
