@@ -49,5 +49,6 @@ pub use kernel::{
 };
 pub use types::{
     AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState, HlaVariant, MultiLayerAhlaCache,
-    MultiLayerHlaCache,
+    MultiLayerHlaCache, MultiLayerParallaxAhlaCache, ParallaxAhlaLayerState,
+    ParallaxAhlaQHeadState,
 };

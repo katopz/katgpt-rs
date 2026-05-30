@@ -11,6 +11,8 @@
 pub mod attention;
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
+#[cfg(feature = "parallax_attn")]
+pub mod parallax_attn;
 pub mod simd;
 pub mod traits;
 pub mod types;
@@ -62,6 +64,11 @@ pub use coda::{MoaActivation, moa_swiglu, simd_matmul_rmsnorm_moa_swiglu};
 #[cfg(feature = "tiled_attention")]
 pub use attention::{
     tiled_attention_batched, tiled_attention_forward, tiled_attention_forward_with_scores,
+};
+
+#[cfg(feature = "parallax_attn")]
+pub use parallax_attn::{
+    ParallaxConfig, compute_rho, parallax_correction, tiled_attention_parallax_forward,
 };
 
 pub use simd::SimdLevel;

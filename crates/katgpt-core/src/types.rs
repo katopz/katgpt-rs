@@ -92,6 +92,9 @@ pub enum DeltaRoutingMode {
 }
 
 /// Configuration for delta routing (Plan 097, Research 061).
+///
+/// Fields ordered by descending alignment to minimize padding:
+/// usize (8B) → repr(u8) enum (1B) — 16 bytes total, no wasted padding.
 #[derive(Clone, Copy, Debug)]
 pub struct DeltaRoutingConfig {
     /// Block size for DeltaBlock mode (number of layers per block).
@@ -104,8 +107,8 @@ pub struct DeltaRoutingConfig {
 impl Default for DeltaRoutingConfig {
     fn default() -> Self {
         Self {
-            mode: DeltaRoutingMode::Off,
             block_size: 4,
+            mode: DeltaRoutingMode::Off,
         }
     }
 }
@@ -481,6 +484,13 @@ pub struct Config {
     pub use_rope: bool,
     pub post_norm: bool,
     pub gated_attn: bool,
+    // Parallax Attention (Plan 135: Parameterized Local Linear Attention)
+    /// Parallax covariance correction gate scale. 0.0 = disabled (pure softmax),
+    /// 1.0 = full correction. Only meaningful when `parallax_attn` feature is enabled
+    /// and R projection weights are loaded.
+    pub parallax_gate_scale: f32,
+    /// Whether W_R starts zeroed (true = recover exact softmax at init).
+    pub parallax_zero_init: bool,
 }
 
 impl Config {
@@ -543,6 +553,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -642,6 +654,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -713,6 +727,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -774,6 +790,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -836,6 +854,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -896,6 +916,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -958,6 +980,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -1019,6 +1043,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -1082,6 +1108,8 @@ impl Config {
             loop_mode: LoopMode::None,
             hybrid_pattern: HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 
@@ -1396,10 +1424,17 @@ pub fn gegelu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // buf[j] = exp(-1.702 * gate[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = gate[j] * sigmoid(1.702 * gate[j]) * up[j]
-        for j in 0..CHUNK {
-            let sigmoid = 1.0 / (1.0 + buf[j]);
-            hidden[i + j] = gate[i + j] * sigmoid * up[i + j];
+        // SIMD: buf = 1 + buf, then buf = 1/buf (sigmoid), then fused gate*sigmoid*up
+        crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
+        for t in &mut buf {
+            *t = 1.0 / *t;
         }
+        // buf[j] = sigmoid; hidden[j] = gate[j] * sigmoid * up[j]
+        // Fused as: hidden = gate * up, then hidden *= sigmoid (elementwise)
+        for j in 0..CHUNK {
+            hidden[i + j] = gate[i + j] * up[i + j];
+        }
+        crate::simd::simd_scale_mul_inplace(&mut hidden[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
     // Scalar remainder
@@ -1418,8 +1453,8 @@ pub fn gegelu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 #[inline(always)]
 pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
     const CHUNK: usize = 64;
-    let sqrt_2_over_pi = (2.0f32 / std::f32::consts::PI).sqrt(); // ≈0.7979
-    let scale_2 = 2.0 * sqrt_2_over_pi;
+    const SQRT_2_OVER_PI: f32 = 0.797_884_6; // (2.0f32 / π).sqrt()
+    const SCALE_2: f32 = 1.595_769_2; // 2.0 * SQRT_2_OVER_PI
     let mut buf = [0.0f32; CHUNK];
     let mut buf2 = [0.0f32; CHUNK];
 
@@ -1431,22 +1466,28 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
         // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
-        crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], scale_2);
+        crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], SCALE_2);
         // buf[j] = exp(2*inner[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = g * exp(2x) / (exp(2x) + 1) * up[j]
-        // Compute denominator (exp + 1) via SIMD, then scalar div + mul
+        // Compute denominator (exp + 1) via SIMD, then SIMD tanh + fused mul
         buf2[..CHUNK].copy_from_slice(&buf);
         crate::simd::simd_add_scalar_inplace(&mut buf2, 1.0); // buf2 = exp + 1
+        // buf = exp(2x) / (exp(2x) + 1) = tanh(inner)
         for j in 0..CHUNK {
-            hidden[i + j] = gate[i + j] * up[i + j] * buf[j] / buf2[j];
+            buf[j] /= buf2[j];
         }
+        // hidden = gate * up, then hidden *= tanh(inner)
+        for j in 0..CHUNK {
+            hidden[i + j] = gate[i + j] * up[i + j];
+        }
+        crate::simd::simd_scale_mul_inplace(&mut hidden[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
     // Scalar remainder
     for i in i..hidden.len() {
         let g = gate[i];
-        let inner = sqrt_2_over_pi * (g + 0.044715 * g * g * g);
+        let inner = SQRT_2_OVER_PI * (g + 0.044715 * g * g * g);
         let gelu_val = 0.5 * g * (1.0 + inner.tanh());
         hidden[i] = gelu_val * up[i];
     }
@@ -1469,9 +1510,12 @@ pub fn silu(x: &mut [f32]) {
         // buf[j] = exp(-x[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // x[j] = x[j] / (1 + exp(-x[j]))
-        for j in 0..CHUNK {
-            x[i + j] /= 1.0 + buf[j];
+        // SIMD: buf = 1 + exp(-x), then buf = 1/buf, then x *= buf elementwise
+        crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
+        for t in &mut buf {
+            *t = 1.0 / *t;
         }
+        crate::simd::simd_scale_mul_inplace(&mut x[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
     // Scalar remainder
@@ -1498,9 +1542,16 @@ pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // buf[j] = exp(-gate[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = gate[j] / (1 + exp(-gate[j])) * up[j]
-        for j in 0..CHUNK {
-            hidden[i + j] = gate[i + j] / (1.0 + buf[j]) * up[i + j];
+        // SIMD: buf = 1 + exp(-gate), then buf = 1/buf (sigmoid), then fused mul
+        crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
+        for t in &mut buf {
+            *t = 1.0 / *t;
         }
+        // hidden = gate * up, then hidden *= sigmoid(gate)
+        for j in 0..CHUNK {
+            hidden[i + j] = gate[i + j] * up[i + j];
+        }
+        crate::simd::simd_scale_mul_inplace(&mut hidden[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
     // Scalar remainder
@@ -1653,8 +1704,8 @@ pub fn sparse_matmul(
 /// Builds a prefix-sum (CDF) then uses binary search for O(log V) lookup
 /// instead of the O(V/2) average of a linear scan.
 ///
-/// **Note:** This allocates a CDF Vec internally. For decode loops, prefer
-/// [`sample_token_into()`] to avoid per-token heap allocation.
+/// **Allocates a CDF buffer on every call.** For the hot decode loop, prefer
+/// [`sample_token_into`] which reuses a pre-allocated buffer.
 pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
     let r = rng.uniform();
     let n = probs.len();

@@ -25,6 +25,7 @@ dllm = []  # Discrete diffusion language model support (Plan 068)
 coda_fusion = []  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation (Plan 103)
 lt2_looped = []  # LT2 looped inference types — LoopMode, HybridPattern, SdpaOutputGate, ResidualGate (Plan 108)
 tiled_attention = []  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
+parallax_attn = ["tiled_attention"]  # Parallax parameterized local linear attention — R projection + covariance branch (Plan 135, Research 135) — opt-in
 sr2am_configurator = []  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076)
 data_gate = []  # Task-level data gating for self-play training stability (Plan 111, Research 075)
 questbench = []  # QuestBench underspecification scoring for modelless architecture (Plan 110, Research 008)

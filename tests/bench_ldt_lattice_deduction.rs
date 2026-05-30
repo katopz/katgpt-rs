@@ -84,6 +84,8 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             loop_mode: katgpt_rs::types::LoopMode::None,
             hybrid_pattern: katgpt_rs::types::HybridPattern::Uniform,
             gated_attn: false,
+            parallax_gate_scale: 0.0,
+            parallax_zero_init: true,
         }
     }
 

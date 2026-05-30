@@ -366,6 +366,125 @@ impl HlaVariant {
     }
 }
 
+// ── Parallax AHLA Covariance Extension (Plan 135) ────────────
+
+/// Per-Q-head state for Parallax covariance correction on top of AHLA.
+///
+/// Maintains the softmax-weighted KV cross-covariance Σ_KV ∈ R^{hd × hd}
+/// alongside AHLA's existing statistics. This is the "streaming covariance branch"
+/// from Parallax (Research 135): o_PLX = o_SA − Σ_KV · ρ where ρ = W_R · x.
+///
+/// State size per head: 2 × hd² + 2 × hd = 2hd² + 2hd floats.
+/// This is O(d²) per head, the same order as AHLA's existing E matrix.
+#[derive(Clone)]
+pub struct ParallaxAhlaQHeadState {
+    /// Softmax-weighted KV cross-covariance: Σ p_ij (v_j − v̄)(k_j − k̄)ᵀ ∈ R^{hd × hd}
+    /// where p_ij are softmax attention weights.
+    pub sigma_kv: Vec<f32>,
+    /// Weighted key mean: Σ p_ij k_j ∈ R^{hd}
+    pub weighted_k_mean: Vec<f32>,
+    /// Weighted value mean: Σ p_ij v_j ∈ R^{hd}
+    pub weighted_v_mean: Vec<f32>,
+    /// Softmax weight sum: Σ p_ij (scalar per position, used for normalization)
+    pub weight_sum: f32,
+}
+
+impl ParallaxAhlaQHeadState {
+    /// Allocate zeroed state for one Q head.
+    pub fn new(hd: usize) -> Self {
+        let hd2 = hd * hd;
+        Self {
+            sigma_kv: vec![0.0; hd2],
+            weighted_k_mean: vec![0.0; hd],
+            weighted_v_mean: vec![0.0; hd],
+            weight_sum: 0.0,
+        }
+    }
+
+    /// Reset to zeroed state (reuse allocations).
+    pub fn reset(&mut self) {
+        self.sigma_kv.fill(0.0);
+        self.weighted_k_mean.fill(0.0);
+        self.weighted_v_mean.fill(0.0);
+        self.weight_sum = 0.0;
+    }
+}
+
+/// Per-layer Parallax covariance state for AHLA.
+///
+/// GQA-aware: covariance heads align with Q heads (each Q head tracks its own Σ_KV).
+#[derive(Clone)]
+pub struct ParallaxAhlaLayerState {
+    /// Per-Q-head covariance state.
+    pub heads: Vec<ParallaxAhlaQHeadState>,
+}
+
+impl ParallaxAhlaLayerState {
+    /// Allocate zeroed state for one layer given config.
+    pub fn new(config: &Config) -> Self {
+        Self {
+            heads: (0..config.n_head)
+                .map(|_| ParallaxAhlaQHeadState::new(config.head_dim))
+                .collect(),
+        }
+    }
+
+    /// Reset to zeroed state (reuse allocations).
+    pub fn reset(&mut self) {
+        for head in &mut self.heads {
+            head.reset();
+        }
+    }
+}
+
+/// Multi-layer cache for Parallax covariance statistics on top of AHLA.
+///
+/// Streaming update: for each new token with attention weights p_ij:
+///   weighted_k_mean += Σ_j p_ij k_j
+///   weighted_v_mean += Σ_j p_ij v_j
+///   sigma_kv += Σ_j p_ij (v_j − v̄)(k_j − k̄)ᵀ
+///
+/// Final readout: correction = sigma_kv · ρ (where ρ = W_R · x from Parallax R projection)
+#[derive(Clone)]
+pub struct MultiLayerParallaxAhlaCache {
+    /// Per-layer state.
+    pub layers: Vec<ParallaxAhlaLayerState>,
+    /// Exponential decay factor γ ∈ (0, 1]. Default: 1.0 (no decay).
+    pub gamma: f32,
+}
+
+impl MultiLayerParallaxAhlaCache {
+    /// Allocate zeroed cache for all layers.
+    pub fn new(config: &Config) -> Self {
+        Self {
+            layers: (0..config.n_layer)
+                .map(|_| ParallaxAhlaLayerState::new(config))
+                .collect(),
+            gamma: 1.0,
+        }
+    }
+
+    /// Reset all layers to zeroed state (reuse allocations).
+    pub fn reset(&mut self) {
+        for layer in &mut self.layers {
+            layer.reset();
+        }
+    }
+
+    /// Total cache size in bytes.
+    pub fn memory_bytes(&self) -> usize {
+        let mut total = 0;
+        for layer in &self.layers {
+            for head in &layer.heads {
+                total += head.sigma_kv.len() * 4;
+                total += head.weighted_k_mean.len() * 4;
+                total += head.weighted_v_mean.len() * 4;
+            }
+        }
+        total
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,5 +575,32 @@ mod tests {
         assert_eq!(cache.gamma, 1.0);
         let cache_ahla = MultiLayerAhlaCache::new(&config);
         assert_eq!(cache_ahla.gamma, 1.0);
+    }
+
+    #[test]
+    fn parallax_ahla_state_new_reset() {
+        let hd = 8;
+        let mut state = ParallaxAhlaQHeadState::new(hd);
+        assert_eq!(state.sigma_kv.len(), hd * hd);
+        assert_eq!(state.weighted_k_mean.len(), hd);
+        assert_eq!(state.weighted_v_mean.len(), hd);
+        assert!(state.sigma_kv.iter().all(|&x| x == 0.0));
+        assert_eq!(state.weight_sum, 0.0);
+
+        state.sigma_kv[0] = 1.0;
+        state.weight_sum = 1.0;
+        state.reset();
+        assert!(state.sigma_kv.iter().all(|&x| x == 0.0));
+        assert_eq!(state.weight_sum, 0.0);
+    }
+
+    #[test]
+    fn parallax_ahla_cache_memory_bytes() {
+        let config = Config::micro(); // hd=4, n_head=4, n_layer=1
+        let cache = MultiLayerParallaxAhlaCache::new(&config);
+        let bytes = cache.memory_bytes();
+        // Per head: hd² + 2×hd = 16 + 8 = 24 floats
+        // Per layer: 4 heads × 24 = 96 floats
+        assert_eq!(bytes, 96 * 4);
     }
 }
