@@ -55,8 +55,12 @@ pub fn dirichlet_energy(embeddings: &[f32], dim: usize, adjacency: &[(usize, usi
 ///
 /// For N pairs (a_i, b_i), creates edges: (a_0, b_0), (a_1, b_1), ...
 /// This is the paper's A_{ij} = 1 iff entities i,j are related by functor.
-pub fn functor_adjacency(pairs: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
-    pairs
+///
+/// Returns a new Vec to decouple the caller's allocation from the adjacency
+/// lifetime. For zero-alloc hot paths, pass the pairs slice directly to
+/// [`dirichlet_energy`] since `&[(usize, usize)]` is the adjacency type.
+pub fn functor_adjacency(pairs: &[(usize, usize)]) -> Vec<(usize, usize)> {
+    pairs.to_vec()
 }
 
 /// Build position-neighbor adjacency from consecutive positions.
