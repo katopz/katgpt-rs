@@ -38,9 +38,9 @@ Latent-prediction SSL (data2vec, JEPA) requires only O(m³) samples — **expone
 
 ## Why No Gain for katgpt-rs
 
-1. **Training paradigm, not inference**: The paper proves sample efficiency for *learning* representations. katgpt-rs is an inference engine — it doesn't train models.
+1. **Training paradigm, not inference**: The paper proves sample efficiency for *learning* representations. katgpt-rs is an inference engine — it doesn't train models. The training impact is in riir-ai (wgpu LoRA, ROPD, SDAR, SHINE pipeline).
 2. **No inference path impact**: Whether a model was trained with token-level or latent-prediction SSL doesn't change how inference works. The KV cache, attention, and speculation pipelines are identical.
-3. **Self-distillation already covered**: Our SDAR (Plan 072) and ROPD (Plan 071) already implement teacher-student distillation with latent targets. The paper validates this design but doesn't improve it.
+3. **Self-distillation already covered**: Our SDAR (Plan 073) and ROPD (Plan 072) in riir-ai already implement teacher-student distillation with latent targets. The paper validates this design but doesn't improve inference.
 4. **Screening pruner**: Synonym clustering could theoretically improve `ScreeningPruner::relevance()` by grouping semantically identical candidates, but the overhead of computing cousin context vectors at inference time violates optimization.md (no allocation in hot loops).
 
 ## What We Already Have That This Validates
