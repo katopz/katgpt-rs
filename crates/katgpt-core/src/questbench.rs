@@ -533,8 +533,8 @@ fn score_relevance_into(
         placed_tokens,
         &mut valid[..limit],
     );
-    for (i, slot) in buf.iter_mut().enumerate().take(limit) {
-        *slot = valid[i] as usize as f32;
+    for i in 0..limit {
+        buf[i] = valid[i] as usize as f32;
     }
     buf[limit..].fill(0.0);
 }
@@ -700,30 +700,33 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     let mut label_buf = String::with_capacity(16);
 
     // Grid CSPs (Bomber-like): placing the "bomb" cell narrows explosion zone
+    // Pre-allocate constant structures once — all grid CSPs share the same
+    // valid_at_depth (all-true) and base narrowing structure (empty vecs).
+    let grid_vocab = 16;
+    let grid_valid: Vec<bool> = vec![true; grid_vocab];
+    let grid_base_narrowing: Vec<Vec<bool>> = vec![vec![]; grid_vocab];
+    let mut adjacent_buf = vec![false; grid_vocab];
     for i in 0..count_per_domain {
-        let vocab_size = 16;
+        let vocab_size = grid_vocab;
         let key = i % vocab_size;
-        // At depth 0: ALL cells are valid candidates (including key)
-        let valid_at_depth = vec![true; vocab_size];
         // Placing the key cell narrows to just adjacent cells at depth 1
         let row = key / 4;
         let col = key % 4;
-        // Branch-free Manhattan distance check into stack bitmap — avoids Vec allocation
-        let mut adjacent_bm = vec![false; vocab_size];
+        // Branch-free Manhattan distance check — reuse scratch buffer
+        adjacent_buf.fill(false);
         for c in 0..vocab_size {
             let dr = (c / 4) as i32 - row as i32;
             let dc = (c % 4) as i32 - col as i32;
             // dist = |dr| + |dc| == 1 is equivalent to (dr^2 + dc^2 == 1)
             let dist_sq = dr * dr + dc * dc;
-            adjacent_bm[c] = dist_sq == 1;
+            adjacent_buf[c] = dist_sq == 1;
         }
-        // Only allocate the key-specific narrowing bitmap; non-key entries use empty
-        // Vec which falls through to valid_at_depth (all-true) in NarrowingPruner.
-        let mut narrowing: Vec<Vec<bool>> = vec![vec![]; vocab_size];
-        narrowing[key] = adjacent_bm;
+        // Clone the pre-built base narrowing, then overwrite only the key slot
+        let mut narrowing = grid_base_narrowing.clone();
+        narrowing[key] = adjacent_buf.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth,
+            valid_at_depth: grid_valid.clone(),
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
@@ -742,31 +745,31 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     // Stone CSPs (Go-like): placing a "capture" stone eliminates liberties
     // Pre-compute the wide bitmap once (identical for all stone CSPs)
     let stone_vocab = 12;
+    let stone_valid: Vec<bool> = vec![true; stone_vocab];
     let wide_next_bm: Vec<bool> = (0..stone_vocab).map(|c| c % 3 == 0).collect();
+    let stone_base_narrowing: Vec<Vec<bool>> = vec![vec![]; stone_vocab];
     // Pre-allocate reusable scratch for narrow bitmap
     let mut narrow_bm_scratch = vec![false; stone_vocab];
 
     for i in 0..count_per_domain {
         let vocab_size = stone_vocab; // smaller board for tighter constraints
         let key = i % vocab_size;
-        let valid_at_depth = vec![true; vocab_size];
         // Placing the key stone at depth 0 leaves only 1 valid position at depth 1
         // (simulates a capture that fills all but one liberty)
         narrow_bm_scratch.fill(false);
         narrow_bm_scratch[(key + 1) % vocab_size] = true;
-        // OPT: fill narrowing — clone narrow bitmap for key slot, wide for rest
-        let narrowing: Vec<Vec<bool>> = (0..vocab_size)
-            .map(|j| {
-                if j == key {
-                    narrow_bm_scratch.clone()
-                } else {
-                    wide_next_bm.clone()
-                }
-            })
-            .collect();
+        // Clone base narrowing, then set key slot and non-key slots
+        let mut narrowing = stone_base_narrowing.clone();
+        for j in 0..vocab_size {
+            if j == key {
+                narrowing[j] = narrow_bm_scratch.clone();
+            } else {
+                narrowing[j] = wide_next_bm.clone();
+            }
+        }
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth,
+            valid_at_depth: stone_valid.clone(),
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
@@ -785,6 +788,8 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     // Logic CSPs (propositional): XOR constraints where revealing one variable
     // determines the other
     let logic_vocab = 8;
+    let logic_valid: Vec<bool> = vec![true; logic_vocab];
+    let logic_base_narrowing: Vec<Vec<bool>> = vec![vec![]; logic_vocab];
     let mut logic_bm_scratch = vec![false; logic_vocab];
 
     for i in 0..count_per_domain {
@@ -792,18 +797,15 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // Pairs: (0,1), (2,3), (4,5), (6,7) — XOR constraints
         let key = i % vocab_size;
         let partner = if key % 2 == 0 { key + 1 } else { key - 1 };
-        // At depth 0: all propositions valid
-        let valid_at_depth = vec![true; vocab_size];
         // Placing key → only partner survives at depth 1 (XOR resolution)
         logic_bm_scratch.fill(false);
         logic_bm_scratch[partner] = true;
-        // Only allocate the key-specific narrowing bitmap; non-key entries use empty
-        // Vec which falls through to valid_at_depth (all-true) in NarrowingPruner.
-        let mut narrowing: Vec<Vec<bool>> = vec![vec![]; vocab_size];
+        // Clone base narrowing, overwrite only the key slot
+        let mut narrowing = logic_base_narrowing.clone();
         narrowing[key] = logic_bm_scratch.clone();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth,
+            valid_at_depth: logic_valid.clone(),
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
