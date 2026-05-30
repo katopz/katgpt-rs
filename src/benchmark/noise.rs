@@ -97,13 +97,29 @@ pub fn bench_elf_sde(_config: &Config) -> Vec<BenchResult> {
         let dim = 64;
         let mut rng = fastrand::Rng::with_seed(42);
 
+        // Pre-allocate buffers to avoid per-iteration allocation
+        let mut base_buf: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
+        let mut paths_buf: Vec<Vec<f32>> = vec![vec![0.0f32; dim]; n_paths];
+
         for _ in 0..warmup {
-            let _ = measure_path_diversity(n_paths, dim, &mut rng);
+            let _ = measure_path_diversity_with_buffers(
+                n_paths,
+                dim,
+                &mut rng,
+                &mut base_buf,
+                &mut paths_buf,
+            );
         }
 
         let start = Instant::now();
         for _ in 0..iters {
-            let _ = measure_path_diversity(n_paths, dim, &mut rng);
+            let _ = measure_path_diversity_with_buffers(
+                n_paths,
+                dim,
+                &mut rng,
+                &mut base_buf,
+                &mut paths_buf,
+            );
         }
         let elapsed = start.elapsed();
         let tp = iters as f64 / elapsed.as_secs_f64();
@@ -175,15 +191,23 @@ fn apply_noise_schedule(
 }
 
 /// Measure path diversity: generate n_paths noisy variants and compute avg pairwise cosine distance.
-fn measure_path_diversity(n_paths: usize, dim: usize, rng: &mut fastrand::Rng) -> f32 {
-    let base: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
-    let paths: Vec<Vec<f32>> = (0..n_paths)
-        .map(|_| {
-            let mut v = base.clone();
-            inject_sde_noise_1d(&mut v, 0.1, rng);
-            v
-        })
-        .collect();
+/// Uses pre-allocated buffers to avoid per-call allocation.
+fn measure_path_diversity_with_buffers(
+    n_paths: usize,
+    _dim: usize,
+    rng: &mut fastrand::Rng,
+    base: &mut [f32],
+    paths: &mut [Vec<f32>],
+) -> f32 {
+    // Reinitialize base vector in-place
+    for (i, b) in base.iter_mut().enumerate() {
+        *b = (i as f32 * 0.1).sin();
+    }
+    // Generate noisy variants into pre-allocated paths
+    for path in paths.iter_mut() {
+        path.copy_from_slice(base);
+        inject_sde_noise_1d(path, 0.1, rng);
+    }
 
     // Average pairwise cosine distance
     let mut total_dist = 0.0f32;
@@ -199,6 +223,14 @@ fn measure_path_diversity(n_paths: usize, dim: usize, rng: &mut fastrand::Rng) -
     } else {
         0.0
     }
+}
+
+/// Original allocating version kept for non-hot-path callers.
+#[allow(dead_code)]
+fn measure_path_diversity(n_paths: usize, dim: usize, rng: &mut fastrand::Rng) -> f32 {
+    let mut base: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.1).sin()).collect();
+    let mut paths: Vec<Vec<f32>> = vec![vec![0.0f32; dim]; n_paths];
+    measure_path_diversity_with_buffers(n_paths, dim, rng, &mut base, &mut paths)
 }
 
 fn cosine_distance(a: &[f32], b: &[f32]) -> f32 {

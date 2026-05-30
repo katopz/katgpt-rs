@@ -69,11 +69,27 @@ pub fn forward_dash_attn_prefill(
             // Compute chunk summaries at chunk boundaries
             if pos % dash_config.chunk_size == 0 {
                 let chunk_idx = pos / dash_config.chunk_size;
-                for h in 0..config.n_kv_head {
-                    let k_h = &ctx.k[h * hd..(h + 1) * hd];
-                    let summary = summarize_chunk(summary_query, k_h, 1, h, hd);
-                    if chunk_idx < summary_cache.n_chunks() {
-                        summary_cache.summaries[chunk_idx][h] = summary;
+                if chunk_idx < summary_cache.n_chunks() {
+                    for h in 0..config.n_kv_head {
+                        let k_h = &ctx.k[h * hd..(h + 1) * hd];
+                        // Reuse per-head Vecs: clear + write in-place avoids realloc
+                        let slot = &mut summary_cache.summaries[chunk_idx][h];
+                        slot.resize(hd, 0.0);
+                        // Inline mean-pool for the common zero-init case (avoids alloc)
+                        if summary_query.is_zero_init() {
+                            let inv = if k_h.len() == hd && hd > 0 {
+                                1.0 / hd as f32
+                            } else {
+                                1.0
+                            };
+                            slot[..hd].copy_from_slice(k_h);
+                            for v in slot[..hd].iter_mut() {
+                                *v *= inv;
+                            }
+                        } else {
+                            let summary = summarize_chunk(summary_query, k_h, 1, h, hd);
+                            slot.copy_from_slice(&summary);
+                        }
                     }
                 }
             }

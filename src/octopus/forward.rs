@@ -20,16 +20,14 @@ use super::kv_cache::OctopusKVCache;
 ///
 /// Returns `(flat_keys, pos_count)`.
 pub fn dequantize_keys_flat(
-    cache: &OctopusKVCache,
+    cache: &mut OctopusKVCache,
     layer: usize,
     pos: usize,
     kv_dim: usize,
 ) -> Vec<f32> {
     let mut flat = vec![0.0f32; (pos + 1) * kv_dim];
-    for t in 0..=pos {
-        let recon = cache.dequantize_key(layer, t);
-        flat[t * kv_dim..(t + 1) * kv_dim].copy_from_slice(&recon);
-    }
+    // OPT: use _into variant to avoid per-position Vec allocation
+    dequantize_keys_flat_into(cache, layer, pos, kv_dim, &mut flat);
     flat
 }
 
@@ -38,16 +36,14 @@ pub fn dequantize_keys_flat(
 /// Layout: `[(pos + 1) * kv_dim]` row-major, compatible with the
 /// attention kernel's expected `value_cache` layout.
 pub fn dequantize_values_flat(
-    cache: &OctopusKVCache,
+    cache: &mut OctopusKVCache,
     layer: usize,
     pos: usize,
     kv_dim: usize,
 ) -> Vec<f32> {
     let mut flat = vec![0.0f32; (pos + 1) * kv_dim];
-    for t in 0..=pos {
-        let recon = cache.dequantize_value(layer, t);
-        flat[t * kv_dim..(t + 1) * kv_dim].copy_from_slice(&recon);
-    }
+    // OPT: use _into variant to avoid per-position Vec allocation
+    dequantize_values_flat_into(cache, layer, pos, kv_dim, &mut flat);
     flat
 }
 
@@ -269,7 +265,7 @@ mod tests {
         cache.store_key(0, 0, &key);
         cache.store_key(0, 1, &key);
 
-        let flat = dequantize_keys_flat(&cache, 0, 1, kv_dim);
+        let flat = dequantize_keys_flat(&mut cache, 0, 1, kv_dim);
         assert_eq!(flat.len(), 2 * kv_dim);
         // Same key should reconstruct to similar vectors
         let cos = cosine_similarity(&flat[0..kv_dim], &flat[kv_dim..]);
@@ -298,8 +294,8 @@ mod tests {
         dequantize_values_flat_into(&mut cache, 0, 1, kv_dim, &mut flat_vals);
 
         // Compare with non-into versions
-        let ref_keys = dequantize_keys_flat(&cache, 0, 1, kv_dim);
-        let ref_vals = dequantize_values_flat(&cache, 0, 1, kv_dim);
+        let ref_keys = dequantize_keys_flat(&mut cache, 0, 1, kv_dim);
+        let ref_vals = dequantize_values_flat(&mut cache, 0, 1, kv_dim);
 
         for i in 0..flat_keys.len() {
             assert!(
@@ -331,8 +327,8 @@ mod tests {
             cache.store_value(0, pos, &kv);
         }
 
-        let flat_keys = dequantize_keys_flat(&cache, 0, 3, kv_dim);
-        let flat_values = dequantize_values_flat(&cache, 0, 3, kv_dim);
+        let flat_keys = dequantize_keys_flat(&mut cache, 0, 3, kv_dim);
+        let flat_values = dequantize_values_flat(&mut cache, 0, 3, kv_dim);
 
         let q: Vec<f32> = (0..n_embd).map(|i| (i as f32 * 0.03).sin()).collect();
         let mut attn_out = vec![0.0f32; n_embd];
@@ -414,8 +410,8 @@ mod tests {
             cache.store_value(0, pos, &value);
         }
 
-        let flat_keys = dequantize_keys_flat(&cache, 0, 3, kv_dim);
-        let flat_values = dequantize_values_flat(&cache, 0, 3, kv_dim);
+        let flat_keys = dequantize_keys_flat(&mut cache, 0, 3, kv_dim);
+        let flat_values = dequantize_values_flat(&mut cache, 0, 3, kv_dim);
 
         let q = vec![0.5f32; n_embd];
         let mut attn_out = vec![0.0f32; n_embd];

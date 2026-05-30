@@ -70,26 +70,30 @@ impl StandardCache {
             return [0.0, 0.0];
         }
 
-        // Compute scores: dot(query, key) for each entry
-        let scores: Vec<f64> = self.entries.iter().map(|e| query.dot(&e.key)).collect();
+        // Single-pass softmax: compute scores, find max, accumulate exp-weighted values
+        let mut max_score = f64::NEG_INFINITY;
+        for e in &self.entries {
+            let s = query.dot(&e.key);
+            if s > max_score {
+                max_score = s;
+            }
+        }
 
-        // Softmax: exp(score - max_score) for numerical stability
-        let max_score = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
-        let exps: Vec<f64> = scores.iter().map(|&s| (s - max_score).exp()).collect();
-        let sum_exp: f64 = exps.iter().sum();
+        let mut sum_exp = 0.0;
+        let mut out = [0.0, 0.0];
+        for e in &self.entries {
+            let exp_val = (query.dot(&e.key) - max_score).exp();
+            sum_exp += exp_val;
+            out[0] += exp_val * e.val[0];
+            out[1] += exp_val * e.val[1];
+        }
 
         if sum_exp == 0.0 {
             return [0.0, 0.0];
         }
 
-        // Weighted average
-        let mut out = [0.0, 0.0];
-        for (i, &e) in exps.iter().enumerate() {
-            let w = e / sum_exp;
-            out[0] += w * self.entries[i].val[0];
-            out[1] += w * self.entries[i].val[1];
-        }
+        out[0] /= sum_exp;
+        out[1] /= sum_exp;
         out
     }
 
@@ -104,27 +108,30 @@ impl StandardCache {
 
         let inv_temp = 1.0 / temperature;
 
-        let scores: Vec<f64> = self
-            .entries
-            .iter()
-            .map(|e| query.dot(&e.key) * inv_temp)
-            .collect();
+        // Single-pass softmax: compute scaled scores, find max, accumulate
+        let mut max_score = f64::NEG_INFINITY;
+        for e in &self.entries {
+            let s = query.dot(&e.key) * inv_temp;
+            if s > max_score {
+                max_score = s;
+            }
+        }
 
-        let max_score = scores.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-
-        let exps: Vec<f64> = scores.iter().map(|&s| (s - max_score).exp()).collect();
-        let sum_exp: f64 = exps.iter().sum();
+        let mut sum_exp = 0.0;
+        let mut out = [0.0, 0.0];
+        for e in &self.entries {
+            let exp_val = (query.dot(&e.key) * inv_temp - max_score).exp();
+            sum_exp += exp_val;
+            out[0] += exp_val * e.val[0];
+            out[1] += exp_val * e.val[1];
+        }
 
         if sum_exp == 0.0 {
             return [0.0, 0.0];
         }
 
-        let mut out = [0.0, 0.0];
-        for (i, &e) in exps.iter().enumerate() {
-            let w = e / sum_exp;
-            out[0] += w * self.entries[i].val[0];
-            out[1] += w * self.entries[i].val[1];
-        }
+        out[0] /= sum_exp;
+        out[1] /= sum_exp;
         out
     }
 

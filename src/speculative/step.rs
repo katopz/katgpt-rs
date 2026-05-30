@@ -328,16 +328,15 @@ pub fn speculative_step_rollback_with(
     rng: &mut Rng,
 ) -> (Vec<usize>, usize) {
     // 1. Draft marginals via DFlash (zero-alloc into draft_sctx flat buffer)
-    let num_steps = dflash_predict_with(draft_sctx, draft_weights, draft_config, token, pos);
+    let _num_steps = dflash_predict_with(draft_sctx, draft_weights, draft_config, token, pos);
     let vocab_size = draft_config.vocab_size;
 
-    // Convert flat marginals to Vec<&[f32]> for tree builder (borrowed slices, no alloc)
-    let marginals: Vec<&[f32]> = (0..num_steps)
-        .map(|step| draft_sctx.marginal_slice(step, vocab_size))
-        .collect();
+    // OPT: stack-allocated marginals view (avoids Vec allocation per call)
+    let mut marginals_buf: [&[f32]; 64] = [&[]; 64];
+    let marginals = draft_sctx.marginals_into(&mut marginals_buf, vocab_size);
 
     // 2. Build DDTree (reuses pre-allocated heap/tree buffers)
-    let tree = tree_builder.build(&marginals, draft_config, &NoPruner, false);
+    let tree = tree_builder.build(marginals, draft_config, &NoPruner, false);
 
     // 3. Extract candidate paths (top-3 root branches)
     let paths = extract_ddtree_paths(tree);
@@ -636,7 +635,7 @@ pub fn speculative_step_conditioned_with(
 
     // 2. Conditioned draft using target hidden state (no clone — borrow directly)
     let hidden = &target_ctx.hidden_state;
-    let num_steps = dflash_predict_conditioned_with(
+    let _num_steps = dflash_predict_conditioned_with(
         draft_sctx,
         draft_weights,
         draft_config,
@@ -647,17 +646,16 @@ pub fn speculative_step_conditioned_with(
     );
     let vocab_size = draft_config.vocab_size;
 
-    // Convert flat marginals to Vec<&[f32]> for tree builder (borrowed slices, no alloc)
-    let marginals: Vec<&[f32]> = (0..num_steps)
-        .map(|step| draft_sctx.marginal_slice(step, vocab_size))
-        .collect();
+    // OPT: stack-allocated marginals view (avoids Vec allocation per call)
+    let mut marginals_buf: [&[f32]; 64] = [&[]; 64];
+    let marginals = draft_sctx.marginals_into(&mut marginals_buf, vocab_size);
 
     // Pre-extract marginals info before releasing immutable borrow on draft_sctx
     let has_marginals = !marginals.is_empty();
     let last_marginal = marginals.last().copied().unwrap_or(&[]);
 
     // 3. Build DDTree (reuses pre-allocated heap/tree buffers)
-    let tree = tree_builder.build(&marginals, draft_config, &NoPruner, false);
+    let tree = tree_builder.build(marginals, draft_config, &NoPruner, false);
 
     // Extract best path (small Vec alloc acceptable — avoids borrow conflict with marginals)
     let path = extract_best_path(tree);
@@ -695,19 +693,37 @@ fn extract_ddtree_paths(tree: &[crate::speculative::types::TreeNode]) -> Vec<Vec
         return Vec::new();
     }
 
-    // Build depth index: O(N) single pass instead of O(D×N) repeated scans
-    let mut by_depth: HashMap<usize, Vec<&crate::speculative::types::TreeNode>> = HashMap::new();
+    // Single pass: find roots, compute max depth, and build parent-path → node index
+    // for O(1) child lookups instead of O(N) linear scans per depth.
+    //
+    // For each node at depth > 0, index by (parent_path >> 16) so we can
+    // look up children by the parent's parent_path value.
+    let mut max_depth: usize = 0;
+    let mut roots: Vec<&crate::speculative::types::TreeNode> = Vec::new();
+    // Index: (depth, parent_path >> 16) → best node (highest score)
+    let mut child_index: HashMap<(usize, u128), &crate::speculative::types::TreeNode> =
+        HashMap::new();
+
     for node in tree.iter() {
-        by_depth.entry(node.depth).or_default().push(node);
+        if node.depth > max_depth {
+            max_depth = node.depth;
+        }
+        if node.depth == 0 {
+            roots.push(node);
+        } else {
+            let key = (node.depth, node.parent_path >> 16);
+            child_index
+                .entry(key)
+                .and_modify(|existing| {
+                    if node.score > existing.score {
+                        *existing = node;
+                    }
+                })
+                .or_insert(node);
+        }
     }
 
-    let max_depth = *by_depth.keys().max().unwrap_or(&0);
-
-    // Collect root nodes (depth 0), sorted by score descending
-    let mut roots: Vec<_> = match by_depth.get(&0) {
-        Some(nodes) => nodes.clone(),
-        None => return Vec::new(),
-    };
+    // Sort roots by score descending, keep top 3
     roots.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
@@ -721,16 +737,9 @@ fn extract_ddtree_paths(tree: &[crate::speculative::types::TreeNode]) -> Vec<Vec
         let mut path = vec![root.token_idx];
         let mut current_path = root.parent_path;
 
+        // O(1) lookup per depth instead of O(N) linear scan
         for depth in 1..=max_depth {
-            let child = match by_depth.get(&depth) {
-                Some(nodes) => nodes
-                    .iter()
-                    .filter(|n| n.parent_path >> 16 == current_path)
-                    .max_by_key(|n| (n.score * 1e6) as i64),
-                None => break,
-            };
-
-            match child {
+            match child_index.get(&(depth, current_path)) {
                 Some(node) => {
                     path.push(node.token_idx);
                     current_path = node.parent_path;
@@ -797,7 +806,7 @@ pub fn speculative_step_with_configurator(
     let num_steps = dflash_predict_with(draft_sctx, draft_weights, draft_config, token, pos);
     let vocab_size = draft_config.vocab_size;
 
-    // Convert flat marginals to Vec<&[f32]> for entropy + tree builder
+    // Build marginals view — Vec needed to avoid borrow conflict with draft_sctx.accepted_buf
     let marginals: Vec<&[f32]> = (0..num_steps)
         .map(|step| draft_sctx.marginal_slice(step, vocab_size))
         .collect();

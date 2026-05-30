@@ -44,6 +44,10 @@ pub fn consolidation_pass(
     let hd = config.head_dim;
     let kvd = types::kv_dim(config);
 
+    // Scratch buffer for L2-normalized k — reused across all iterations to avoid
+    // per-(layer, pos, head) heap allocation.
+    let mut k_normalized = vec![0.0f32; hd];
+
     for (layer_idx, layer_cache) in kv_cache.layers.iter().enumerate() {
         let gdn2_layer = &mut gdn2_cache.layers[layer_idx];
         let gate_config = gdn2_layer.gate_config;
@@ -60,8 +64,8 @@ pub fn consolidation_pass(
                 let k_h = &layer_cache.key[pos_off + head_off..pos_off + head_off + hd];
                 let v_h = &layer_cache.value[pos_off + head_off..pos_off + head_off + hd];
 
-                // L2 normalize k (stability requirement for recurrent attention)
-                let mut k_normalized = k_h.to_vec();
+                // L2 normalize k into scratch buffer (stability requirement)
+                k_normalized.copy_from_slice(k_h);
                 l2_normalize(&mut k_normalized);
 
                 // Use q = k for consolidation (self-consolidation pass)

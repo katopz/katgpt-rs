@@ -21,8 +21,6 @@ pub struct ChunkSummaryQuery {
     pub head_cls: Vec<f32>,
     pub n_kv_head: usize,
     pub head_dim: usize,
-    /// Cached result of `is_zero_init()` to avoid scanning all elements every call.
-    zero_initialized: bool,
 }
 
 impl ChunkSummaryQuery {
@@ -32,7 +30,6 @@ impl ChunkSummaryQuery {
             head_cls: vec![0.0; n_kv_head * head_dim],
             n_kv_head,
             head_dim,
-            zero_initialized: true,
         }
     }
 
@@ -47,7 +44,6 @@ impl ChunkSummaryQuery {
             head_cls,
             n_kv_head,
             head_dim,
-            zero_initialized: false,
         }
     }
 
@@ -60,9 +56,11 @@ impl ChunkSummaryQuery {
 
     /// Check if head_cls is effectively zero (mean-pooling mode).
     ///
-    /// Returns a cached result computed at construction time.
+    /// Scans the vector to detect any mutation since construction.
+    /// The scan cost is negligible relative to the attention computation it guards
+    /// (once per chunk per head during prefill).
     pub fn is_zero_init(&self) -> bool {
-        self.zero_initialized
+        self.head_cls.iter().all(|&v| v == 0.0)
     }
 }
 
@@ -93,13 +91,23 @@ impl ChunkSummaryCache {
 
     /// Pre-allocate for a known number of chunks.
     pub fn allocate(&mut self, n_chunks: usize) {
-        self.summaries = (0..n_chunks)
-            .map(|_| {
-                (0..self.n_kv_head)
-                    .map(|_| vec![0.0; self.head_dim])
-                    .collect()
-            })
-            .collect();
+        // Reuse existing allocation if already the right size
+        if self.summaries.len() == n_chunks {
+            // Clear in-place without deallocating
+            for chunk in &mut self.summaries {
+                for head in chunk.iter_mut() {
+                    head.fill(0.0);
+                }
+            }
+        } else {
+            self.summaries = (0..n_chunks)
+                .map(|_| {
+                    (0..self.n_kv_head)
+                        .map(|_| vec![0.0; self.head_dim])
+                        .collect()
+                })
+                .collect();
+        }
     }
 
     /// Append a single chunk summary (one entry per KV head).
@@ -141,6 +149,8 @@ impl ChunkSummaryCache {
 /// * `chunk_size` - Number of tokens in this chunk.
 /// * `head_idx` - Which KV head to summarize.
 /// * `head_dim` - Dimension per head (must match query and key layout).
+///
+/// Prefer [`summarize_chunk_into`] on hot paths to avoid per-call allocation.
 #[inline]
 pub fn summarize_chunk(
     query: &ChunkSummaryQuery,
@@ -179,8 +189,8 @@ pub fn summarize_chunk_into(
     let q = query.head_query(head_idx);
 
     // Check if query is zero → mean pooling fallback
-    let q_norm: f32 = q.iter().map(|&x| x * x).sum::<f32>().sqrt();
-    if q_norm < 1e-8 {
+    // Use cached result instead of scanning
+    if query.is_zero_init() {
         mean_pool_keys_into(chunk_keys, chunk_size, hd, out);
         return;
     }
@@ -189,11 +199,25 @@ pub fn summarize_chunk_into(
     let scale = 1.0 / (hd as f32).sqrt();
     debug_assert!(scores_buf.len() >= chunk_size);
     for (t, key_chunk) in chunk_keys.chunks_exact(hd).enumerate() {
+        let dot: f32 = q.iter().zip(key_chunk.iter()).map(|(a, b)| a * b).sum();
+        scores_buf[t] = dot * scale;
+    }
+    // Handle remainder if hd doesn't evenly divide
+    let remainder_start = chunk_keys.chunks_exact(hd).len() * hd;
+    if remainder_start < chunk_keys.len() {
+        let t = chunk_keys.chunks_exact(hd).len();
         let mut dot = 0.0f32;
         for d in 0..hd {
-            dot += q[d] * key_chunk[d];
+            let k_val = if remainder_start + d < chunk_keys.len() {
+                chunk_keys[remainder_start + d]
+            } else {
+                0.0
+            };
+            dot += q[d] * k_val;
         }
-        scores_buf[t] = dot * scale;
+        if t < scores_buf.len() {
+            scores_buf[t] = dot * scale;
+        }
     }
 
     // Softmax (numerically stable)
@@ -225,12 +249,14 @@ fn mean_pool_keys_into(chunk_keys: &[f32], chunk_size: usize, head_dim: usize, o
     if chunk_size == 0 {
         return;
     }
+    // Accumulate all tokens
     for t in 0..chunk_size {
         let k_start = t * head_dim;
         for d in 0..head_dim {
             out[d] += chunk_keys[k_start + d];
         }
     }
+    // Scale once at the end
     let inv = 1.0 / chunk_size as f32;
     for d in out[..head_dim].iter_mut() {
         *d *= inv;

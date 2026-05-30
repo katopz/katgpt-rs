@@ -220,13 +220,16 @@ fn compute_moa_gates(input: &[f32], gating: &[f32], d_model: usize) -> [f32; MOA
 }
 
 /// Apply k-th MoA activation from the dictionary.
-/// Note: For tight inner loops, prefer hoisting `MoaActivation::all()` outside the loop
-/// and calling `activations[k].activate(x)` directly to avoid repeated array construction.
+///
+/// # Performance
+/// This is a convenience function. For tight inner loops, hoist
+/// `let activations = MoaActivation::all();` outside the loop and call
+/// `activations[k].activate(x)` directly to avoid repeated array construction.
 #[cfg(feature = "moa_inference")]
 #[inline(always)]
 #[allow(dead_code)]
-fn moa_activate(k: usize, x: f32) -> f32 {
-    MoaActivation::all()[k].activate(x)
+fn moa_activate(k: usize, x: f32, activations: &[MoaActivation; 7]) -> f32 {
+    activations[k].activate(x)
 }
 
 /// Token-adaptive bi-MoA SwiGLU forward pass.

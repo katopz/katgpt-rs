@@ -201,10 +201,10 @@ pub fn bt_fit(comparisons: &[BtComparison], n_candidates: usize, config: &BtConf
     }
 
     let step = 0.1f32;
+    let mut grad = vec![0.0f32; n_candidates];
 
     for _ in 0..config.max_iterations {
-        // Compute gradient for each score
-        let mut grad = vec![0.0f32; n_candidates];
+        grad.fill(0.0f32);
 
         for comp in comparisons {
             let diff = scores[comp.winner] - scores[comp.loser];

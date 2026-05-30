@@ -8,6 +8,8 @@
 //!
 //! **Feature gate:** `spechop` + `cache_prune`
 
+use std::collections::VecDeque;
+
 use crate::cache_prune::RollingHash;
 
 // ---------------------------------------------------------------------------
@@ -55,7 +57,7 @@ pub struct SegmentMatch {
 /// hash from `cache_prune`.
 pub struct HopSegmentIndex {
     roller: RollingHash,
-    pool: Vec<IndexedSegment>,
+    pool: VecDeque<IndexedSegment>,
     max_segments: usize,
 }
 
@@ -68,7 +70,7 @@ impl HopSegmentIndex {
     pub fn new(max_segment_length: usize) -> Self {
         Self {
             roller: RollingHash::new(max_segment_length),
-            pool: Vec::new(),
+            pool: VecDeque::new(),
             max_segments: 1024,
         }
     }
@@ -94,16 +96,16 @@ impl HopSegmentIndex {
         }
         let full_hash: [u8; 32] = hasher.finalize().into();
 
-        self.pool.push(IndexedSegment {
+        self.pool.push_back(IndexedSegment {
             hop_idx,
             token_hashes: tokens.to_vec(),
             rolling_hash,
             full_hash,
         });
 
-        // Evict oldest if over capacity.
+        // Evict oldest if over capacity — O(1) with VecDeque pop_front.
         if self.pool.len() > self.max_segments {
-            self.pool.remove(0);
+            self.pool.pop_front();
         }
     }
 

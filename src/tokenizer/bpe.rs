@@ -11,40 +11,51 @@ impl BpeTokenizerImpl {
             return Vec::new();
         }
 
-        // Start with character-level tokens
+        // Start with character-level tokens — avoid per-char String allocation
         let mut tokens: Vec<String> = text.chars().map(|c| c.to_string()).collect();
+        let mut new_tokens = Vec::with_capacity(tokens.len());
 
         // Iteratively merge the highest-priority (lowest-rank) pair
         loop {
-            let mut best_pair: Option<(usize, (String, String))> = None;
+            let mut best_pair: Option<(usize, usize, usize)> = None; // (rank, left_idx, right_idx)
 
             for i in 0..tokens.len().saturating_sub(1) {
-                let pair = (tokens[i].clone(), tokens[i + 1].clone());
-                if let Some(&rank) = tokenizer.merge_ranks.get(&pair) {
+                if let Some(&rank) = tokenizer
+                    .merge_ranks
+                    .get(&(tokens[i].clone(), tokens[i + 1].clone()))
+                {
                     match best_pair {
-                        Some((best_rank, _)) if best_rank <= rank => {}
-                        _ => best_pair = Some((rank, pair.clone())),
+                        Some((best_rank, _, _)) if best_rank <= rank => {}
+                        _ => best_pair = Some((rank, i, i + 1)),
                     }
                 }
             }
 
-            let Some((_rank, (left, right))) = best_pair else {
+            let Some((_rank, left_idx, _right_idx)) = best_pair else {
                 break;
             };
 
+            let left = tokens[left_idx].clone();
+            let right = tokens[left_idx + 1].clone();
+            let merged_len = left.len() + right.len();
+
             // Merge all occurrences of this pair
-            let mut new_tokens = Vec::with_capacity(tokens.len());
+            new_tokens.clear();
             let mut i = 0;
             while i < tokens.len() {
                 if i + 1 < tokens.len() && tokens[i] == left && tokens[i + 1] == right {
-                    new_tokens.push(format!("{left}{right}"));
+                    // Merge in-place by concatenating left + right
+                    let mut merged = String::with_capacity(merged_len);
+                    merged.push_str(&left);
+                    merged.push_str(&right);
+                    new_tokens.push(merged);
                     i += 2;
                 } else {
                     new_tokens.push(tokens[i].clone());
                     i += 1;
                 }
             }
-            tokens = new_tokens;
+            std::mem::swap(&mut tokens, &mut new_tokens);
         }
 
         // Map tokens to IDs
@@ -57,15 +68,14 @@ impl BpeTokenizerImpl {
 
     /// Decode token IDs back to string.
     pub fn decode(tokenizer: &BpeTokenizer, ids: &[usize]) -> String {
-        ids.iter()
-            .map(|&id| {
-                tokenizer
-                    .id_to_vocab
-                    .get(id)
-                    .cloned()
-                    .unwrap_or_else(|| "�".to_string())
-            })
-            .collect()
+        let mut result = String::with_capacity(ids.len() * 4); // estimate ~4 bytes per token
+        for &id in ids {
+            match tokenizer.id_to_vocab.get(id) {
+                Some(s) => result.push_str(s),
+                None => result.push('\u{fffd}'), // replacement character
+            }
+        }
+        result
     }
 }
 

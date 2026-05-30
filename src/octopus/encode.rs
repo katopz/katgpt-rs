@@ -237,6 +237,35 @@ pub fn pack_triplet_indices(indices: &[TripletIndices], dir_bits: u8, nrm_bits: 
     packed
 }
 
+/// Pack triplet indices into a pre-allocated byte buffer (zero-alloc hot path).
+///
+/// Clears and resizes `out` as needed. Equivalent to [`pack_triplet_indices`] but avoids allocation.
+pub fn pack_triplet_indices_into(
+    indices: &[TripletIndices],
+    dir_bits: u8,
+    nrm_bits: u8,
+    out: &mut Vec<u8>,
+) {
+    let bits_per_triplet = 2 * dir_bits as usize + nrm_bits as usize;
+    let total_bits = indices.len() * bits_per_triplet;
+    let byte_len = total_bits.div_ceil(8);
+    out.clear();
+    out.resize(byte_len, 0);
+
+    let dir_mask = ((1u16 << dir_bits) - 1) as u32;
+    let nrm_mask = ((1u16 << nrm_bits) - 1) as u32;
+
+    let mut bit_pos = 0usize;
+    for idx in indices {
+        pack_bits(out, bit_pos, idx.i_xi as u32 & dir_mask, dir_bits);
+        bit_pos += dir_bits as usize;
+        pack_bits(out, bit_pos, idx.i_eta as u32 & dir_mask, dir_bits);
+        bit_pos += dir_bits as usize;
+        pack_bits(out, bit_pos, idx.i_rho as u32 & nrm_mask, nrm_bits);
+        bit_pos += nrm_bits as usize;
+    }
+}
+
 /// Unpack triplet indices from a flat byte buffer.
 ///
 /// Inverse of [`pack_triplet_indices`].

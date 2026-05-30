@@ -247,7 +247,8 @@ impl<P: ScreeningPruner> AbsorbCompress for AbsorbCompressLayer<P> {
         // Find candidate arms: visited enough, low Q, not already compressed
         let mut candidates: Vec<(usize, f32)> = (0..self.arm_visits.len())
             .filter(|&arm| {
-                self.arm_visits[arm] >= self.config.min_visits && !self.compressed.contains(&arm)
+                self.arm_visits[arm] >= self.config.min_visits
+                    && !self.compressed_set.contains(&arm)
             })
             .map(|arm| (arm, self.arm_q_value(arm)))
             .filter(|(_, q)| *q < self.config.q_threshold)

@@ -6,7 +6,7 @@
 
 use crate::types::DashAttnConfig;
 
-use super::entmax::{entmax_1p5_into, entmax_gqa_aggregate, entmax_support};
+use super::entmax::{entmax_1p5_into, entmax_gqa_aggregate, entmax_support_into};
 
 /// Result of entmax routing for one query head.
 #[derive(Debug)]
@@ -42,6 +42,12 @@ pub struct RoutingScratch {
     sorted: Vec<(usize, f32)>,
     /// Probabilities buffer for entmax: [n_chunks].
     probs: Vec<f32>,
+    /// Log-weights buffer for active indices (reused across calls).
+    log_weights: Vec<f32>,
+    /// Active indices buffer (reused across calls).
+    active_indices: Vec<usize>,
+    /// Bias buffer (reused across calls).
+    bias: Vec<f32>,
 }
 
 impl RoutingScratch {
@@ -51,6 +57,9 @@ impl RoutingScratch {
             logits: vec![0.0; n_chunks],
             sorted: Vec::with_capacity(n_chunks),
             probs: vec![0.0; n_chunks],
+            log_weights: Vec::with_capacity(n_chunks),
+            active_indices: Vec::with_capacity(n_chunks),
+            bias: Vec::with_capacity(n_chunks),
         }
     }
 }
@@ -91,49 +100,53 @@ pub fn score_blocks_entmax_into(
         &mut scratch.probs[..n],
     );
 
-    // Extract support
-    let active_indices = entmax_support(&scratch.probs[..n]);
+    // Extract support into pre-allocated buffer
+    entmax_support_into(&scratch.probs[..n], &mut scratch.active_indices);
 
     // Compute routing bias: (log w - μ) / σ on active indices
-    let log_weights: Vec<f32> = active_indices
-        .iter()
-        .map(|&i| {
+    scratch.log_weights.clear();
+    scratch
+        .log_weights
+        .extend(scratch.active_indices.iter().map(|&i| {
             if scratch.probs[i] > 1e-10 {
                 scratch.probs[i].ln()
             } else {
                 -23.0 // ln(1e-10)
             }
-        })
-        .collect();
+        }));
 
-    let mean_lw = if log_weights.is_empty() {
+    let mean_lw = if scratch.log_weights.is_empty() {
         0.0
     } else {
-        log_weights.iter().sum::<f32>() / log_weights.len() as f32
+        scratch.log_weights.iter().sum::<f32>() / scratch.log_weights.len() as f32
     };
 
-    let var_lw: f32 = if log_weights.len() <= 1 {
+    let var_lw: f32 = if scratch.log_weights.len() <= 1 {
         1.0
     } else {
-        log_weights
+        scratch
+            .log_weights
             .iter()
             .map(|&x| (x - mean_lw).powi(2))
             .sum::<f32>()
-            / (log_weights.len() - 1) as f32
+            / (scratch.log_weights.len() - 1) as f32
     };
     let std_lw = var_lw.sqrt().max(1e-6);
 
-    let bias: Vec<f32> = log_weights
-        .iter()
-        .map(|&lw| (lw - mean_lw) / std_lw)
-        .collect();
+    scratch.bias.clear();
+    scratch.bias.extend(
+        scratch
+            .log_weights
+            .iter()
+            .map(|&lw| (lw - mean_lw) / std_lw),
+    );
 
     // Clone probs for the result since we may reuse the scratch buffer
     let probs = scratch.probs[..n].to_vec();
 
     RoutingResult {
-        active_indices,
-        bias,
+        active_indices: scratch.active_indices.clone(),
+        bias: scratch.bias.clone(),
         probs,
     }
 }

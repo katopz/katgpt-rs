@@ -70,9 +70,26 @@ impl CountSketch {
     ///
     /// E[estimate] = ⟨a, b⟩. Variance ≈ O(2/m) · ‖a‖² · ‖b‖².
     pub fn inner_product_estimate(&self, a: &[f32], b: &[f32]) -> f32 {
-        let sa = self.sketch(a);
-        let sb = self.sketch(b);
-        dot(&sa, &sb)
+        // Sketch both vectors into a single allocation to avoid two heap allocs
+        let mut buf = vec![0.0f32; self.sketch_dim * 2];
+        let (sa, sb) = buf.split_at_mut(self.sketch_dim);
+        self.sketch_into(a, sa);
+        self.sketch_into(b, sb);
+        dot(sa, sb)
+    }
+
+    /// Project a vector from O(d) to O(m), writing into a caller-provided buffer.
+    ///
+    /// Time: O(input_dim). Each element is added (with random sign) to one bucket.
+    fn sketch_into(&self, vec: &[f32], out: &mut [f32]) {
+        out.fill(0.0f32);
+        for (i, &val) in vec.iter().enumerate() {
+            if i >= self.hash_indices.len() {
+                break;
+            }
+            let bucket = self.hash_indices[i];
+            out[bucket] += self.signs[i] * val;
+        }
     }
 
     /// Number of sketch dimensions.

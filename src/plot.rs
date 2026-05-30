@@ -123,7 +123,8 @@ struct TsRow {
 /// Parse `bench/timeseries.csv` into rows.
 fn parse_timeseries_csv(path: &str) -> Result<Vec<TsRow>, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
-    let mut rows = Vec::new();
+    let line_count = content.lines().count();
+    let mut rows = Vec::with_capacity(line_count.saturating_sub(1));
     for line in content.lines().skip(1) {
         let fields: Vec<&str> = line.splitn(10, ',').collect();
         if fields.len() < 8 {

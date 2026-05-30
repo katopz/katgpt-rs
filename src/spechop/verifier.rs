@@ -10,6 +10,7 @@
 //! - Refusal pattern detection
 
 use std::collections::HashSet;
+use std::sync::LazyLock;
 
 /// Trait for verifying speculative observations against target observations.
 ///
@@ -49,6 +50,10 @@ const STOPWORDS: &[&str] = &[
     "these", "those", "it", "its", "he", "she", "they", "them", "we", "you", "i", "me", "my",
     "your", "his", "her", "our", "their",
 ];
+
+/// Pre-computed HashSet of stopwords for O(1) lookups instead of O(n) linear scan.
+static STOPWORD_SET: LazyLock<HashSet<&'static str>> =
+    LazyLock::new(|| STOPWORDS.iter().copied().collect());
 
 /// Rule-based verifier implementing paper Appendix D.4 heuristics.
 ///
@@ -204,7 +209,7 @@ fn numeric_consistent(target: &str, spec: &str) -> bool {
 fn tokenize_set<'a>(text: &'a str, scratch: &mut HashSet<&'a str>) {
     scratch.clear();
     text.split_whitespace()
-        .filter(|word| !STOPWORDS.contains(word))
+        .filter(|word| !STOPWORD_SET.contains(word))
         .for_each(|word| {
             scratch.insert(word);
         });

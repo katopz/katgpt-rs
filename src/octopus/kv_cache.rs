@@ -14,7 +14,7 @@
 //! 4. Inverse rotate, scale by stored norm
 
 use super::encode::{
-    decode_vector_into, encode_vector, pack_triplet_indices, unpack_triplet_indices,
+    decode_vector_into, encode_vector_into, pack_triplet_indices_into, unpack_triplet_indices,
     unpack_triplet_indices_into,
 };
 use super::triplet::n_triplets;
@@ -139,7 +139,8 @@ impl OctopusKVCache {
     pub fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         debug_assert_eq!(key.len(), self.kv_dim);
         self.max_used_pos = self.max_used_pos.max(pos + 1);
-        let norm: f32 = key.iter().map(|x| x * x).sum::<f32>().sqrt();
+        // SIMD norm computation (avoids scalar iteration)
+        let norm = crate::simd::simd_sum_sq(key, self.kv_dim).sqrt();
         self.key_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -159,21 +160,30 @@ impl OctopusKVCache {
             &mut self.scratch_workspace[..self.kv_dim],
         );
 
-        // Encode triplets + pack
+        // Encode triplets into scratch_indices (zero-alloc)
         let cb = &self.layers[layer].key_codebook;
-        let indices = encode_vector(
-            &self.scratch_workspace[..self.kv_dim],
+        let triplets = super::triplet::decompose(&self.scratch_workspace[..self.kv_dim]);
+        encode_vector_into(
+            &triplets,
             cb,
             self.use_joint_rounding,
+            &mut self.scratch_indices,
         );
-        self.key_packed[layer][pos] = pack_triplet_indices(&indices, cb.dir_bits, cb.nrm_bits);
+        // Pack into pre-allocated buffer (zero-alloc)
+        pack_triplet_indices_into(
+            &self.scratch_indices,
+            cb.dir_bits,
+            cb.nrm_bits,
+            &mut self.key_packed[layer][pos],
+        );
     }
 
     /// Quantize and store a value vector at given layer and position.
     pub fn store_value(&mut self, layer: usize, pos: usize, value: &[f32]) {
         debug_assert_eq!(value.len(), self.kv_dim);
         self.max_used_pos = self.max_used_pos.max(pos + 1);
-        let norm: f32 = value.iter().map(|x| x * x).sum::<f32>().sqrt();
+        // SIMD norm computation (avoids scalar iteration)
+        let norm = crate::simd::simd_sum_sq(value, self.kv_dim).sqrt();
         self.val_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -191,13 +201,22 @@ impl OctopusKVCache {
             &mut self.scratch_workspace[..self.kv_dim],
         );
 
+        // Encode triplets into scratch_indices (zero-alloc)
         let cb = &self.layers[layer].val_codebook;
-        let indices = encode_vector(
-            &self.scratch_workspace[..self.kv_dim],
+        let triplets = super::triplet::decompose(&self.scratch_workspace[..self.kv_dim]);
+        encode_vector_into(
+            &triplets,
             cb,
             self.use_joint_rounding,
+            &mut self.scratch_indices,
         );
-        self.val_packed[layer][pos] = pack_triplet_indices(&indices, cb.dir_bits, cb.nrm_bits);
+        // Pack into pre-allocated buffer (zero-alloc)
+        pack_triplet_indices_into(
+            &self.scratch_indices,
+            cb.dir_bits,
+            cb.nrm_bits,
+            &mut self.val_packed[layer][pos],
+        );
     }
 
     /// Dequantize key at position. Returns reconstructed key vector.
@@ -471,11 +490,9 @@ fn mat_vec_t_into(mat: &[f32], input: &[f32], out: &mut [f32]) {
     }
 }
 
-/// Scale buffer in-place.
+/// Scale buffer in-place using SIMD.
 fn scale_inplace(buf: &mut [f32], s: f32) {
-    for v in buf.iter_mut() {
-        *v *= s;
-    }
+    crate::simd::simd_scale_inplace(buf, s);
 }
 
 /// Compute packed byte length for n_triplets with given nominal bits.

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 /// Kind of text edit to apply to a skill document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum EditOp {
     /// Append content to end of the skill document.
     Append,
@@ -17,6 +18,7 @@ pub enum EditOp {
 
 /// Origin of an edit proposal — determines priority and trust level.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum EditSource {
     /// Proposed from a failed trajectory — low confidence.
     Failure,

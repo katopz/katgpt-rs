@@ -371,10 +371,12 @@ pub fn underspecification_score(relevance: &[f32]) -> f32 {
     for &r in relevance {
         let mask = (r > 0.0) as u32 as f32;
         let p = r * mask * inv_sum;
-        // log2(0) = -inf but 0 * -inf = 0, so branch-free is safe when mask=0
-        if p > 0.0 {
-            entropy -= p * p.log2();
-        }
+        // Branch-free entropy: use f32::from(p > 0.0) mask to avoid NaN.
+        // p=0 → log2(1)=0, masked contribution = 0 * 0 = 0.
+        // p>0 → log2(p) valid, contribution = p * log2(p).
+        let log_mask = f32::from(p > 0.0);
+        let safe_p = p * log_mask + (1.0 - log_mask); // p if p>0, else 1.0
+        entropy -= p * safe_p.log2();
     }
 
     entropy / max_entropy
@@ -448,23 +450,26 @@ pub fn find_sufficient_set(
     ext_buf.extend_from_slice(placed_tokens); // Pre-fill once; only last element changes per iteration
     let base_len = placed_tokens.len();
     ext_buf.push(0); // Reserve slot for the candidate token
-    let mut counts: Vec<(usize, usize)> = (0..vocab_size)
-        .filter_map(|tok| {
-            if !pruner.is_valid(depth, tok, placed_tokens) {
-                return None;
-            }
-            ext_buf[base_len] = tok; // Overwrite only the candidate slot
-            let count = count_valid_extensions_with(
-                pruner,
-                depth + 1,
-                &ext_buf,
-                vocab_size,
-                &CANDIDATE_INDICES[..limit],
-                &mut batch_buf[..limit],
-            );
-            Some((tok, count))
-        })
-        .collect();
+
+    // Pre-allocate counts with capacity up to vocab_size (bounded by limit).
+    // Single pass: filter valid tokens AND compute extension counts, avoiding
+    // an intermediate Vec<usize> allocation.
+    let mut counts: Vec<(usize, usize)> = Vec::with_capacity(limit);
+    for tok in 0..vocab_size {
+        if !pruner.is_valid(depth, tok, placed_tokens) {
+            continue;
+        }
+        ext_buf[base_len] = tok; // Overwrite only the candidate slot
+        let count = count_valid_extensions_with(
+            pruner,
+            depth + 1,
+            &ext_buf,
+            vocab_size,
+            &CANDIDATE_INDICES[..limit],
+            &mut batch_buf[..limit],
+        );
+        counts.push((tok, count));
+    }
 
     // Sort by pre-computed counts (ascending = tighter constraints first)
     counts.sort_by_key(|&(_, count)| count);
@@ -598,16 +603,16 @@ pub fn tier_from_score(score: f32, config: &UnderspecConfig) -> MemoryTier {
 /// Each CSP has a known "sufficient" variable — the single token that,
 /// if revealed, would reduce underspecification below the threshold.
 pub struct SyntheticCsp {
-    /// Human-readable label for the CSP domain.
-    pub label: String,
     /// The pruner that encodes the CSP constraints.
     pub pruner: Box<dyn crate::traits::ConstraintPruner>,
     /// Depth at which the CSP is posed.
     pub depth: usize,
-    /// Tokens already placed (known facts).
-    pub placed_tokens: Vec<usize>,
     /// Total vocabulary/domain size.
     pub vocab_size: usize,
+    /// Human-readable label for the CSP domain.
+    pub label: String,
+    /// Tokens already placed (known facts).
+    pub placed_tokens: Vec<usize>,
     /// The ground-truth sufficient token(s).
     pub sufficient_answers: Vec<usize>,
 }
@@ -691,6 +696,8 @@ impl crate::traits::ConstraintPruner for NarrowingPruner {
 /// dropping the underspecification score to 0.
 pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     let mut csps = Vec::with_capacity(count_per_domain * 3);
+    // OPT: reuse label buffer across loop iterations to avoid per-iteration String allocation
+    let mut label_buf = String::with_capacity(16);
 
     // Grid CSPs (Bomber-like): placing the "bomb" cell narrows explosion zone
     for i in 0..count_per_domain {
@@ -719,12 +726,15 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
             valid_at_depth,
             narrowing,
         };
+        // OPT: reuse label_buf instead of format!() per iteration
+        label_buf.clear();
+        core::fmt::write(&mut label_buf, format_args!("grid_{i}")).unwrap();
         csps.push(SyntheticCsp {
-            label: format!("grid_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
-            placed_tokens: vec![],
             vocab_size,
+            label: label_buf.clone(),
+            placed_tokens: vec![],
             sufficient_answers: vec![key],
         });
     }
@@ -744,20 +754,30 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // (simulates a capture that fills all but one liberty)
         narrow_bm_scratch.fill(false);
         narrow_bm_scratch[(key + 1) % vocab_size] = true;
-        // Pre-fill narrowing: default is wide, then set key entry to narrow
-        let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| wide_next_bm.clone()).collect();
-        narrowing[key] = narrow_bm_scratch.clone();
+        // OPT: fill narrowing — clone narrow bitmap for key slot, wide for rest
+        let narrowing: Vec<Vec<bool>> = (0..vocab_size)
+            .map(|j| {
+                if j == key {
+                    narrow_bm_scratch.clone()
+                } else {
+                    wide_next_bm.clone()
+                }
+            })
+            .collect();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
             valid_at_depth,
             narrowing,
         };
+        // OPT: reuse label_buf instead of format!() per iteration
+        label_buf.clear();
+        core::fmt::write(&mut label_buf, format_args!("stone_{i}")).unwrap();
         csps.push(SyntheticCsp {
-            label: format!("stone_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
-            placed_tokens: vec![],
             vocab_size,
+            label: label_buf.clone(),
+            placed_tokens: vec![],
             sufficient_answers: vec![key],
         });
     }
@@ -786,12 +806,15 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
             valid_at_depth,
             narrowing,
         };
+        // OPT: reuse label_buf instead of format!() per iteration
+        label_buf.clear();
+        core::fmt::write(&mut label_buf, format_args!("logic_{i}")).unwrap();
         csps.push(SyntheticCsp {
-            label: format!("logic_{i}"),
             pruner: Box::new(pruner),
             depth: 0,
-            placed_tokens: vec![],
             vocab_size,
+            label: label_buf.clone(),
+            placed_tokens: vec![],
             sufficient_answers: vec![key],
         });
     }

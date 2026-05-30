@@ -132,19 +132,16 @@ impl PartialParser {
                     }
                 }
                 '<' => {
-                    // Only count as angle bracket if not comparison
-                    // Simple heuristic: count if preceded by identifier or closing bracket
                     self.angle_depth += 1;
                 }
                 '>' => {
                     self.angle_depth -= 1;
                     if self.angle_depth < 0 {
-                        self.angle_depth = 0; // Don't reject on angle bracket mismatch
+                        self.angle_depth = 0;
                     }
                 }
                 '"' => self.in_string = true,
                 '\'' => {
-                    // Could be char literal or lifetime
                     // Heuristic: if followed by a char then ', it's a char literal
                     if i + 2 < len && chars[i + 2] == '\'' {
                         self.in_char = true;

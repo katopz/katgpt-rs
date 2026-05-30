@@ -85,12 +85,21 @@ pub fn entmax_1p5_into(
 /// Returns indices of non-zero probability entries, representing the
 /// adaptively selected support set.
 pub fn entmax_support(probs: &[f32]) -> Vec<usize> {
-    probs
-        .iter()
-        .enumerate()
-        .filter(|(_, p)| **p > 1e-8)
-        .map(|(i, _)| i)
-        .collect()
+    let mut result = Vec::with_capacity(probs.len());
+    entmax_support_into(probs, &mut result);
+    result
+}
+
+/// Zero-alloc variant of [`entmax_support`].
+///
+/// Appends active indices to `buf` (cleared first).
+pub fn entmax_support_into(probs: &[f32], buf: &mut Vec<usize>) {
+    buf.clear();
+    for (i, &p) in probs.iter().enumerate() {
+        if p > 1e-8 {
+            buf.push(i);
+        }
+    }
 }
 
 /// Average entmax probabilities across query heads in the same GQA group.
@@ -120,8 +129,10 @@ pub fn entmax_gqa_aggregate<T: AsRef<[f32]>>(
     for (h, head_prob) in head_probs.iter().enumerate() {
         let kv_group = h * n_kv_heads / n_query_heads;
         counts[kv_group] += 1;
-        for (c, &prob) in head_prob.as_ref().iter().enumerate() {
-            result[kv_group][c] += prob;
+        let group = &mut result[kv_group];
+        let hp = head_prob.as_ref();
+        for (&prob, dest) in hp.iter().zip(group.iter_mut()) {
+            *dest += prob;
         }
     }
 

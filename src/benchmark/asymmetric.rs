@@ -104,10 +104,18 @@ pub fn bench_asymmetric_cross_method(
         let mut cos_v_sum = 0.0f32;
         let samples = n_kv_heads * seq_len;
 
+        // Pre-allocate key/value buffers outside the loop
+        let mut key = vec![0.0f32; head_dim];
+        let mut value = vec![0.0f32; head_dim];
+
         for _ in 0..samples {
-            // Generate random K and V vectors in [-1, 1]
-            let key: Vec<f32> = (0..head_dim).map(|_| rng.f32() * 2.0 - 1.0).collect();
-            let value: Vec<f32> = (0..head_dim).map(|_| rng.f32() * 2.0 - 1.0).collect();
+            // Fill random K and V vectors in-place
+            for k in key.iter_mut() {
+                *k = rng.f32() * 2.0 - 1.0;
+            }
+            for v in value.iter_mut() {
+                *v = rng.f32() * 2.0 - 1.0;
+            }
 
             // Quantize + dequantize with respective bit widths
             let recon_k = quantize_dequantize(&key, key_bits);
