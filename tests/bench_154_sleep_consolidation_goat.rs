@@ -118,7 +118,7 @@ fn gdn2_reconstruction_quality(
     fill_pos: usize,
     config: &Config,
 ) -> f32 {
-    use katgpt_rs::gdn2::kernel::{gdn2_recurrent_step, l2_normalize};
+    use katgpt_rs::gdn2::kernel::l2_normalize;
     let hd = config.head_dim;
     let kvd = kv_dim(config);
 
@@ -172,7 +172,7 @@ fn gdn2_reconstruction_quality(
 #[test]
 fn goat_t10_sleep_vs_nosleep_multihop() {
     let config = test_config();
-    let weights = random_weights(&config);
+    let _weights = random_weights(&config);
 
     println!("\n🐐 GOAT T10: Sleep vs No-Sleep — Multi-hop Reasoning");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -314,7 +314,7 @@ fn goat_t10b_longer_chain_consolidation() {
 #[test]
 fn goat_t11_sleep_with_quantized_context() {
     let config = test_config();
-    let weights = random_weights(&config);
+    let _weights = random_weights(&config);
 
     println!("\n🐐 GOAT T11: Sleep + Quantized Context");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -324,10 +324,7 @@ fn goat_t11_sleep_with_quantized_context() {
     let n_tokens = 12;
 
     // Helper: quantize to N levels (simulates TurboQuant compression)
-    let quantize = |v: f32, levels: u32| -> f32 {
-        let q = (v * levels as f32).round() / levels as f32;
-        q
-    };
+    let quantize = |v: f32, levels: u32| -> f32 { (v * levels as f32).round() / levels as f32 };
 
     // ── Full precision + sleep ──
     let mut kv_full = MultiLayerKVCache::new(&config);
@@ -449,7 +446,7 @@ fn goat_t12_game_context_long_session() {
     let n_cycles = 4; // Number of fill→sleep→evict cycles
 
     // Sleep config with sliding window to retain some recent context
-    let sleep_config_sliding = SleepConfig {
+    let _sleep_config_sliding = SleepConfig {
         sleep_passes: 2,
         eviction: EvictionStrategy::SlidingWindow { retain: 8 },
         window_size: block_size,
@@ -642,7 +639,7 @@ fn goat_t13_sleep_overhead_benchmark() {
 
     for &n_passes in &pass_counts {
         let mut kv = MultiLayerKVCache::new(&config);
-        let mut gdn2 = MultiLayerGdn2Cache::new(&config);
+        let _gdn2 = MultiLayerGdn2Cache::new(&config);
         fill_random_kv(&mut kv, &config, block_size - 1, 42);
         let fp = kv.fill_pos();
 
@@ -668,7 +665,7 @@ fn goat_t13_sleep_overhead_benchmark() {
 
     // ── Measure full sleep() with eviction ──
     let mut kv_full = MultiLayerKVCache::new(&config);
-    let mut gdn2_full = MultiLayerGdn2Cache::new(&config);
+    let _gdn2_full = MultiLayerGdn2Cache::new(&config);
     fill_random_kv(&mut kv_full, &config, block_size - 1, 42);
 
     let sleep_config = SleepConfig {
