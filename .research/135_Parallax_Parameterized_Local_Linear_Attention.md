@@ -62,7 +62,7 @@ Extra state: (d2, O2) alongside FA's (m, d1, O1). No extra HBM I/O per iteration
 | Attention mechanism | SDPA (default), HLA (O(1) cache), GDN2 (O(1) recurrent), DashAttention (sparse) | GOAT proved |
 | Streaming algorithm | PFlash block-sparse prefill, tiled_attention (CPU SIMD) | Available |
 | R projection | None | — |
-| Muon optimizer | `newton_schulz` feature flag (Plan 152) | GOAT proved 25/25 (Bench 050), still opt-in |
+| Muon optimizer | `newton_schulz` feature flag (Plan 152) | GOAT proved 25/25 (Bench 050), default-on |
 
 ### Distillation Opportunities
 
@@ -118,6 +118,6 @@ The core idea (learned covariance correction) is sound and theoretically grounde
 3. **No pretrained Parallax models exist** — can't validate quality at our scale
 4. **The AHLA covariance extension** is the only extractable idea, but it's speculative
 
-**Recommendation:** Monitor. If Muon becomes our training optimizer (currently `newton_schulz` is opt-in), re-evaluate. The post-training adaptation path (W_R = 0 init + LoRA fine-tune) is viable for future LoRA distillation targets.
+**Recommendation:** `newton_schulz` is now default-on. Re-evaluate Parallax when a Muon-trained model is available. The post-training adaptation path (W_R = 0 init + LoRA fine-tune) is viable for future LoRA distillation targets.
 
 **Plan:** [`.plans/135_parallax_attn.md`](../.plans/135_parallax_attn.md)

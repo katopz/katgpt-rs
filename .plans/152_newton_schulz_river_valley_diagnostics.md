@@ -4,8 +4,9 @@
 **Status:** ✅ COMPLETE
 **Source:** Research 114 (AMUSE — Anytime Muon with Stable Gradient Evaluation)
 **Related:** Plan 149 (riir-ai — AMUSE game LoRA optimizer), Research 113 (NITP — representation geometry)
-**Feature Gates:** `newton_schulz` (opt-in), `river_valley` (opt-in)
+**Feature Gates:** `newton_schulz` (default-on), `river_valley` (default-on)
 **GOAT Target:** Newton-Schulz convergence ≤5 iters, river-valley diagnostics on D2F mini training
+**GOAT Result:** ✅ PROVED 25/25 (Bench 050, 2026-05-30). Both features promoted to **default-on** — GOAT proved, no perf regression, zero-cost until APIs are called.
 
 ---
 
@@ -130,11 +131,11 @@ Replace the `sgd_update` in D2F mini training with a Muon-style update for matri
 
 ```toml
 [features]
-newton_schulz = []      # Newton-Schulz orthogonalization + Muon momentum
-river_valley = []       # River-valley diagnostic metrics (opt-in)
+newton_schulz = []      # Newton-Schulz orthogonalization + Muon momentum — default-ON (GOAT 25/25)
+river_valley = []       # River-valley diagnostic metrics — default-ON (GOAT 25/25)
 ```
 
-Neither is default-on. They're infrastructure for downstream consumers (riir-ai Plan 149, or external users).
+Both are default-on after GOAT proof passed (Bench 050, 25/25). Zero-cost until APIs are called.
 
 ---
 

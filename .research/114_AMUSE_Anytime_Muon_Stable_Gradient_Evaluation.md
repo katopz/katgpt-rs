@@ -112,10 +112,10 @@ AMUSE is ~1.067× AdamW per iteration (Newton-Schulz overhead). Same overhead as
 
 | Component | Type | Feature Gate | GOAT Path |
 |-----------|------|-------------|-----------|
-| Newton-Schulz orthogonalization | Infrastructure | `newton_schulz` | Micro-bench: convergence in ≤5 iters, cosine → 1.0 |
-| River-valley diagnostic metrics | Modelless | `river_valley` (opt-in) | Dominant/bulk ratio computation |
-| Dominant/bulk subspace projection | Diagnostic | `river_valley` | Effective rank, cosine similarity |
-| Muon momentum buffer | Infrastructure | `newton_schulz` | Update magnitude ratio vs SGD/Adam |
+| Newton-Schulz orthogonalization | Infrastructure | `newton_schulz` | GOAT proved 25/25 (Bench 050) |
+| River-valley diagnostic metrics | Modelless | `river_valley` (opt-in) | GOAT proved 25/25 (Bench 050) |
+| Dominant/bulk subspace projection | Diagnostic | `river_valley` | GOAT proved 25/25 (Bench 050) |
+| Muon momentum buffer | Infrastructure | `newton_schulz` | GOAT proved 25/25 (Bench 050) |
 | Schedule-Free interpolate/average | Infrastructure | `schedule_free` | Convergence trajectory tracking |
 
 **Why katgpt-rs:** These are generic optimizer building blocks. Newton-Schulz is a standalone matrix operation. River-valley diagnostics apply to any training. The open engine ships trait definitions + generic defaults.
