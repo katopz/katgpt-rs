@@ -1,6 +1,6 @@
 # katgpt-rs: Sleep Consolidation — Offline Recursive Memory Consolidation at Eviction
 
-> **Plan 154** · **Feature gate:** `sleep_consolidation` (opt-in, requires `lt2_looped` + `gdn2_attention`)
+> **Plan 154** · **Feature gate:** `sleep_consolidation` (default-ON, requires `lt2_looped` + `gdn2_attention`)
 > **Reference:** arXiv:2605.26099 — Lee et al., May 2026
 
 ## 1. Overview
@@ -14,8 +14,8 @@ Sleep consolidation moves LT2's wake-time looping to **eviction-time consolidati
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
 | `sleep_passes` | 2 | Number of recurrent consolidation passes at eviction boundary |
-| `eviction` | `HardEvict` | Strategy for clearing KV cache after consolidation |
 | `window_size` | 512 | KV cache capacity threshold that triggers sleep |
+| `eviction` | `HardEvict` | Strategy for clearing KV cache after consolidation |
 
 ---
 
@@ -85,13 +85,20 @@ if config.should_sleep(current_pos) {
 }
 ```
 
+### `SleepConfig` Constructors
+
+```rust
+let config = SleepConfig::new(4);                    // 4 passes, default eviction + window
+let config = SleepConfig::with_sliding_window(4, 8); // 4 passes, SlidingWindow { retain: 8 }
+```
+
 ### `consolidation_pass(kv_cache, gdn2_cache, fill_pos, config)`
 
-Single recurrent pass: replays all cached K/V pairs through `gdn2_recurrent_step()`, updating fast-weight state S in-place. Uses K as both key and query (self-consolidation) with L2 normalization.
+Single recurrent pass: replays all cached K/V pairs through `gdn2_recurrent_step()`, updating fast-weight state S in-place. Uses K as both key and query (self-consolidation) with L2 normalization via `gdn2::kernel::l2_normalize`.
 
 ### `sleep(ctx, weights, kv_cache, gdn2_cache, sleep_config, config) → usize`
 
-Main entry point: N× `consolidation_pass()` + `evict()`. Returns the number of passes performed (0 if cache was empty).
+Main entry point: N× `consolidation_pass()` + `evict()`. Returns the number of passes performed (0 if cache was empty). Note: `ctx` (`ForwardContext`) and `weights` (`TransformerWeights`) are currently unused but reserved for future layer-norm passes.
 
 ### `EvictionStrategy`
 
@@ -106,10 +113,14 @@ Main entry point: N× `consolidation_pass()` + `evict()`. Returns the number of 
 
 | Component | Change | Gate |
 |-----------|--------|------|
-| `Cargo.toml` | `sleep_consolidation = ["lt2_looped", "gdn2_attention"]` | Feature |
+| `Cargo.toml` | `sleep_consolidation = ["lt2_looped", "gdn2_attention"]` (default-ON) | Feature |
 | `src/lib.rs` | `pub mod sleep;` | `#[cfg(feature = "sleep_consolidation")]` |
 | `gdn2::kernel::gdn2_recurrent_step` | Core consolidation primitive (already exists) | `gdn2_attention` |
-| `transformer::MultiLayerKVCache` | KV cache with fill_pos, reset(), advance_pos() | `lt2_looped` |
+| `gdn2::kernel::l2_normalize` | L2 normalization for self-consolidation stability | `gdn2_attention` |
+| `gdn2::types::MultiLayerGdn2Cache` | GDN2 fast-weight state per layer/head with scratch buffers | `gdn2_attention` |
+| `transformer::MultiLayerKVCache` | KV cache with fill_pos(), reset(), advance_pos() | `lt2_looped` |
+| `transformer::ForwardContext` | Forward context (reserved, currently unused) | `lt2_looped` |
+| `transformer::TransformerWeights` | Weights (reserved, currently unused) | `lt2_looped` |
 
 ---
 
@@ -134,7 +145,7 @@ cargo test --features sleep_consolidation --lib -- sleep::
 cargo check --features full
 ```
 
-12 unit tests cover: `SleepConfig` defaults and boundary conditions, `EvictionStrategy` variants, `consolidation_pass` state updates and finiteness, `sleep()` with hard/empty caches, multi-pass strengthening.
+12 unit tests cover: `SleepConfig` defaults, boundary conditions, and constructors (`new`, `with_sliding_window`), `EvictionStrategy` variants (hard evict zeros all, sliding window retains recent, noop when under retain), `consolidation_pass` state updates and finiteness, `sleep()` with hard/empty caches, multi-pass strengthening. Distributed across `types.rs` (4 tests), `consolidation.rs` (5 tests), `eviction.rs` (3 tests).
 
 ---
 
