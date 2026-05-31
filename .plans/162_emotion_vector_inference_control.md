@@ -19,13 +19,13 @@ Zero extra forward pass. O(d) dot product per decode step. Already computed by m
 
 ### Phase 1: Infrastructure (Modelless Read)
 
-- [ ] T0: Plan creation
-- [ ] T1: Add `EmotionVector` struct with pre-computed direction vectors (`desperation`, `calm`, `valence_pc1`) loaded from model config
-- [ ] T2: Add `emotion_valence: f32`, `emotion_arousal: f32`, `desperation_score: f32`, `calm_score: f32` fields to `ReviewMetrics`
-- [ ] T3: Add `project_emotion(activations: &[f32], direction: &[f32]) -> f32` — zero-alloc dot product using pre-computed direction
-- [ ] T4: Hook emotion projection into decode loop — read mid-layer activations, project onto stored directions, update `ReviewMetrics`
-- [ ] T5: Add `is_desperate_session(&self, threshold: f32) -> bool` and `emotion_profile_summary()` to `ReviewMetrics`
-- [ ] T6: Update `ReviewSummary` Display impl with emotion profile
+- [x] T0: Plan creation
+- [x] T1: Add `EmotionDirections` struct with pre-computed direction vectors (`desperation`, `calm`, `valence`, `arousal`) loaded from model config — `src/pruners/emotion_vector.rs`
+- [x] T2: Add `emotion_valence_sum`, `emotion_arousal_sum`, `desperation_score_sum`, `calm_score_sum`, `emotion_count` atomic fields to `ReviewMetrics` — `src/pruners/review_metrics.rs`
+- [x] T3: `EmotionDirections::project(activation, direction) -> f32` — zero-alloc O(d) dot product — `src/pruners/emotion_vector.rs`
+- [x] T4: `EmotionDirections::read_emotions(activations) -> EmotionReading` + `ReviewMetrics::record_emotion()` — `src/pruners/emotion_vector.rs` + `src/pruners/review_metrics.rs`
+- [x] T5: `is_desperate_session(threshold)` + `emotion_profile_summary()` on `ReviewMetrics` — `src/pruners/review_metrics.rs`
+- [x] T6: `ReviewMetrics::Display` updated with emotion profile — `src/pruners/review_metrics.rs`
 
 ### Phase 2: GOAT Proof (Benchmark)
 

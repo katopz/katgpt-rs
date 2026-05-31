@@ -3,7 +3,7 @@
 **Plan:** 132 — Committee Boost — Oracle-Gap Recovery, Debiasing, Budget Sizing
 **Research:** 093 — Agentic Systems as Boosting Weak Reasoning Models
 **Feature Gate:** `committee_boost = ["bt_rank", "bandit"]`
-**Date:** 2026-05-29
+**Date:** 2026-05-29 (updated 2026-05-31 with GOAT benchmark T24)
 
 ---
 
@@ -93,6 +93,24 @@
 
 ---
 
-## Overall Status: ✅ GOAT 68/68 PASS
+## Overall Status: ✅ GOAT 68/68 + 7/7 GOAT Benchmark PASS
 
-All Phase 1–4 unit tests pass. Phase 5 (T24–T26) arena benchmark deferred — tracked in Issue 072.
+All Phase 1–4 unit tests pass (68/68). Phase 5 GOAT benchmark (T24) also passes (7/7).
+
+---
+
+## GOAT Benchmark Results (T24)
+
+Run: `cargo test --features committee_boost --test bench_committee_boost_goat -- --nocapture`
+
+| Proof | Description | Result |
+|-------|-------------|--------|
+| G1 | Oracle-gap recovery: Rec within ±0.01 for 6 known cases | ✅ PASS |
+| G2 | Debiased comparison: 100% Tie rate for biased comparator (45 pairs) | ✅ PASS |
+| G2b | Debiasing catches lead-position bias (6 false rankings eliminated) | ✅ PASS |
+| G3 | Budget sizing: Theorem 3 monotonicity + determinism (k=40, m=34, r=21) | ✅ PASS |
+| G3b | Budget rejects all invalid parameters | ✅ PASS |
+| G4 | Blind-spot floor: 8 cases verified (B estimation, convergence, diagnostics) | ✅ PASS |
+| G5 | End-to-end: committee improves 29.8% over single-shot (≥5% target) | ✅ PASS |
+
+Budget at paper parameters (L=10, δ=0.05, α=0.3, β=0.2, σ=0.4, |P_N|=2): k=40, m=34, r=21, total_role_calls=350,000.

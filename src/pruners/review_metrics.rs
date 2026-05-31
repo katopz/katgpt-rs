@@ -103,6 +103,17 @@ pub struct ReviewMetrics {
     entropy_count: AtomicU64,
     /// Maximum entropy spike observed × 10000 (Plan 061).
     entropy_max: AtomicU64,
+    // ── Emotion Vector Fields (Plan 162: Emotion Vector Inference Control) ──
+    /// Running sum of valence projections × 10000 (Plan 162).
+    emotion_valence_sum: AtomicU64,
+    /// Running sum of arousal projections × 10000 (Plan 162).
+    emotion_arousal_sum: AtomicU64,
+    /// Running sum of desperation projections × 10000 (Plan 162).
+    desperation_score_sum: AtomicU64,
+    /// Running sum of calm projections × 10000 (Plan 162).
+    calm_score_sum: AtomicU64,
+    /// Number of emotion observations recorded (Plan 162).
+    emotion_count: AtomicU64,
 }
 
 impl ReviewMetrics {
@@ -120,6 +131,11 @@ impl ReviewMetrics {
             entropy_sum: AtomicU64::new(0),
             entropy_count: AtomicU64::new(0),
             entropy_max: AtomicU64::new(0),
+            emotion_valence_sum: AtomicU64::new(0),
+            emotion_arousal_sum: AtomicU64::new(0),
+            desperation_score_sum: AtomicU64::new(0),
+            calm_score_sum: AtomicU64::new(0),
+            emotion_count: AtomicU64::new(0),
         }
     }
 
@@ -192,6 +208,11 @@ impl ReviewMetrics {
         self.entropy_sum.store(0, Ordering::Relaxed);
         self.entropy_count.store(0, Ordering::Relaxed);
         self.entropy_max.store(0, Ordering::Relaxed);
+        self.emotion_valence_sum.store(0, Ordering::Relaxed);
+        self.emotion_arousal_sum.store(0, Ordering::Relaxed);
+        self.desperation_score_sum.store(0, Ordering::Relaxed);
+        self.calm_score_sum.store(0, Ordering::Relaxed);
+        self.emotion_count.store(0, Ordering::Relaxed);
     }
 
     /// Compute a snapshot of all metrics for display/logging.
@@ -335,6 +356,51 @@ impl ReviewMetrics {
         let summary = self.entropy_anomaly_summary();
         summary.count > 0 && summary.mean > threshold
     }
+
+    // ── Emotion Vector (Plan 162: Emotion Vector Inference Control) ─────
+
+    /// Record an emotion reading from mid-layer activation projection.
+    ///
+    /// Thread-safe: atomic updates, no lock. Precision: stored as `v * 10000`
+    /// in u64 (4 decimal places), matching entropy convention.
+    pub fn record_emotion(&self, valence: f32, arousal: f32, desperation: f32, calm: f32) {
+        self.emotion_valence_sum
+            .fetch_add((valence * 10000.0) as u64, Ordering::Relaxed);
+        self.emotion_arousal_sum
+            .fetch_add((arousal * 10000.0) as u64, Ordering::Relaxed);
+        self.desperation_score_sum
+            .fetch_add((desperation * 10000.0) as u64, Ordering::Relaxed);
+        self.calm_score_sum
+            .fetch_add((calm * 10000.0) as u64, Ordering::Relaxed);
+        self.emotion_count.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Snapshot of emotion profile statistics for this session (Plan 162).
+    ///
+    /// Returns running means of valence, arousal, desperation, and calm scores.
+    pub fn emotion_profile_summary(&self) -> EmotionProfileSummary {
+        let count = self.emotion_count.load(Ordering::Relaxed);
+        if count == 0 {
+            return EmotionProfileSummary::default();
+        }
+        let scale = count as f64 * 10000.0;
+        EmotionProfileSummary {
+            valence: self.emotion_valence_sum.load(Ordering::Relaxed) as f64 / scale,
+            arousal: self.emotion_arousal_sum.load(Ordering::Relaxed) as f64 / scale,
+            desperation: self.desperation_score_sum.load(Ordering::Relaxed) as f64 / scale,
+            calm: self.calm_score_sum.load(Ordering::Relaxed) as f64 / scale,
+            count,
+        }
+    }
+
+    /// Whether the session's mean desperation score exceeds a threshold (Plan 162).
+    ///
+    /// High desperation correlates with reward-hacking-prone regimes.
+    /// Use domain-specific threshold; a reasonable starting point is 0.5.
+    pub fn is_desperate_session(&self, threshold: f32) -> bool {
+        let profile = self.emotion_profile_summary();
+        profile.count > 0 && profile.desperation > threshold as f64
+    }
 }
 
 impl Default for ReviewMetrics {
@@ -367,16 +433,22 @@ impl fmt::Display for ReviewMetrics {
             format!("{:.1}:1", s.benefit_ratio)
         };
         let entropy = self.entropy_anomaly_summary();
+        let emotion = self.emotion_profile_summary();
         write!(
             f,
-            "helpful={:.1}% harmful={:.1}% ratio={} n={} entropy_mean={:.3} entropy_max={:.3} entropy_n={}",
+            "helpful={:.1}% harmful={:.1}% ratio={} n={} entropy_mean={:.3} entropy_max={:.3} entropy_n={} valence={:.3} arousal={:.3} desperation={:.3} calm={:.3} emotion_n={}",
             s.helpfulness,
             s.harmfulness,
             ratio_str,
             s.total,
             entropy.mean,
             entropy.max,
-            entropy.count
+            entropy.count,
+            emotion.valence,
+            emotion.arousal,
+            emotion.desperation,
+            emotion.calm,
+            emotion.count,
         )
     }
 }
@@ -405,6 +477,36 @@ impl fmt::Display for PathConsistencySummary {
             f,
             "faithful={} hacking={} total={} avg_consistency={:.2}",
             self.fully_faithful, self.reward_hacking, self.total_paths, self.avg_consistency
+        )
+    }
+}
+
+// ── Emotion Profile Summary (Plan 162: Emotion Vector Inference Control) ──
+
+/// Snapshot of emotion vector statistics for a session (Plan 162).
+///
+/// Running means of valence, arousal, desperation, and calm projections
+/// from mid-layer activations during decode.
+#[derive(Clone, Debug, Default)]
+pub struct EmotionProfileSummary {
+    /// Mean valence across all recorded decode steps.
+    pub valence: f64,
+    /// Mean arousal across all recorded decode steps.
+    pub arousal: f64,
+    /// Mean desperation score across all recorded decode steps.
+    pub desperation: f64,
+    /// Mean calm score across all recorded decode steps.
+    pub calm: f64,
+    /// Number of emotion observations recorded.
+    pub count: u64,
+}
+
+impl fmt::Display for EmotionProfileSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "valence={:.3} arousal={:.3} desperation={:.3} calm={:.3} n={}",
+            self.valence, self.arousal, self.desperation, self.calm, self.count
         )
     }
 }

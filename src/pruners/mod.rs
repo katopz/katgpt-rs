@@ -25,6 +25,8 @@ pub mod subterranean;
 
 pub mod freeze;
 
+pub mod emotion_vector;
+
 #[cfg(feature = "sudoku")]
 pub mod sudoku_pruner;
 
@@ -75,7 +77,9 @@ pub use bandit::{
 };
 
 #[cfg(feature = "bandit")]
-pub use review_metrics::{EntropyAnomalySummary, ReviewMetrics, ReviewStrategy, ReviewSummary};
+pub use review_metrics::{
+    EmotionProfileSummary, EntropyAnomalySummary, ReviewMetrics, ReviewStrategy, ReviewSummary,
+};
 
 #[cfg(feature = "bandit")]
 pub use hot_swap::HotSwapPruner;
