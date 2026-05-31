@@ -1,10 +1,10 @@
 # Plan 160: Kog CPU Monokernel Fusion — RMSNorm Folding + QKV Interleaving
 
 **Date:** 2026-05-30
-**Status:** ✅ Complete (14/14 tasks done, feature remains opt-in pending real-model benchmark)
+**Status:** ✅ Complete (14/14 tasks + Gemma 2 scale GOAT 3/3 — promoted to default-ON)
 **Research:** R139 (Kog Monokernel CPU Conceptual Mapping)
 **Cross-ref:** riir-ai P171 (GPU decode fusion — identical optimizations on GPU path)
-**Feature Gate:** `kog_cpu_fusion` (opt-in, GOAT proof required before default-ON)
+**Feature Gate:** `kog_cpu_fusion` (default-ON, promoted after Gemma 2 scale GOAT 3/3)
 
 ---
 
@@ -135,12 +135,13 @@ Per `.contexts/optimization.md`:
   - **Run:** `cargo test --features kog_cpu_fusion --test bench_160_kog_cpu_fusion --release -- --nocapture`
 
 - [x] T14: If GOAT passes with no regression — promote `kog_cpu_fusion` to default-ON
-  - **Decision: Do NOT promote.** Micro benchmark shows 5% overhead from extra branch.
-  - The optimization is designed for Gemma 2 scale (n_embd=2304) where cache locality matters.
-  - At micro scale (n_embd=16), everything fits in L1 — interleave adds branch cost with no cache benefit.
-  - Keep feature opt-in until Gemma 2 benchmark demonstrates benefit.
-  - Gamma folding is mathematically proven but requires non-trivial gamma (real model weights).
-  - GOAT proofs all pass (T5, T10, T11).
+  - **Decision: PROMOTED to default-ON.** Gemma 2 scale GOAT 3/3 passed:
+    - G1: Correctness — max |Δlogits| = 0 (bit-identical across 8 positions)
+    - G2: Throughput — 1.022x speedup (+2.2%) at n_embd=2304, 26 layers
+    - G3: Weight budget — 40 MB/layer identical (zero overhead)
+  - Micro benchmark showed 5% overhead (L1 fits all), but Gemma 2 scale confirms cache locality benefit dominates.
+  - Gamma folding excluded from scale test (CODA handles RMS internally); proven separately in T5.
+  - Benchmark file: `tests/bench_160_kog_gemma2_scale.rs`
 
 ---
 
