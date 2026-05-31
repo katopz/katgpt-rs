@@ -13,6 +13,10 @@
 //! Uses `core::arch` intrinsics directly — stable on both `aarch64` and `x86_64`.
 //! No nightly features, no external SIMD crates.
 
+const CEPHES_LN2_HI: f32 = 6.931_457_5e-1;
+const CEPHES_LN2_LO: f32 = 1.428_606_8e-6;
+const CEPHES_INV_LN2: f32 = std::f32::consts::LOG2_E;
+
 /// SIMD capability level detected at runtime.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,7 +165,18 @@ unsafe fn neon_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
         // Horizontal reduce: acc0+acc1+acc2+acc3
         let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
 
-        // Handle remaining elements with single accumulator
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            acc_rem = vfmaq_f32(
+                acc_rem,
+                vld1q_f32(a.as_ptr().add(i)),
+                vld1q_f32(b.as_ptr().add(i)),
+            );
+            i += 4;
+        }
+        sum += vaddvq_f32(acc_rem);
+
         while i < len {
             sum += *a.get_unchecked(i) * *b.get_unchecked(i);
             i += 1;
@@ -1322,6 +1337,7 @@ pub fn maxsim_score(queries: &[f32], documents: &[f32], lq: usize, ld: usize, di
 /// # Feature flag
 /// `maxsim` — Plan 080
 #[cfg(feature = "maxsim")]
+#[inline]
 #[allow(clippy::too_many_arguments)]
 pub fn maxsim_score_packed(
     queries: &[f32],
@@ -1441,13 +1457,9 @@ fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 /// The reduced argument g is in [-0.5*ln2, 0.5*ln2] for minimal polynomial error.
 #[inline]
 fn cephes_exp_scalar(x: f32) -> f32 {
-    const LN2_HI: f32 = 6.931_457_5e-1; // 0x3f317200
-    const LN2_LO: f32 = 1.428_606_8e-6; // 0x35bfbe8e
-    const INV_LN2: f32 = std::f32::consts::LOG2_E; // 1.4426950408889634
-
     // Range reduction: n = round(x / ln2)
-    let n = (x * INV_LN2).round() as i32;
-    let g = x - n as f32 * LN2_HI - n as f32 * LN2_LO;
+    let n = (x * CEPHES_INV_LN2).round() as i32;
+    let g = x - n as f32 * CEPHES_LN2_HI - n as f32 * CEPHES_LN2_LO;
 
     // 6th-order Cephes polynomial for exp(g) in [-0.5*ln2, 0.5*ln2]
     // Q(g) = 1 + g*(1 + g/2*(1 + g/3*(1 + g/4*(1 + g/5*(1 + g/6)))))
@@ -1692,14 +1704,11 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
         _mm256_storeu_ps, _mm256_sub_ps,
     };
     unsafe {
-        const LN2_HI: f32 = 6.9314575195e-01;
-        const LN2_LO: f32 = 1.4286067773e-06;
-        const INV_LN2: f32 = std::f32::consts::LOG2_E;
         const ROUND_NEAREST: i32 = 0x00;
 
-        let v_inv_ln2 = _mm256_set1_ps(INV_LN2);
-        let v_ln2_hi = _mm256_set1_ps(LN2_HI);
-        let v_ln2_lo = _mm256_set1_ps(LN2_LO);
+        let v_inv_ln2 = _mm256_set1_ps(CEPHES_INV_LN2);
+        let v_ln2_hi = _mm256_set1_ps(CEPHES_LN2_HI);
+        let v_ln2_lo = _mm256_set1_ps(CEPHES_LN2_LO);
         let v_one = _mm256_set1_ps(1.0);
         let v_half = _mm256_set1_ps(0.5);
         let v_third = _mm256_set1_ps(1.0 / 3.0);
@@ -1785,13 +1794,9 @@ unsafe fn neon_exp_inplace(x: &mut [f32]) {
         vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndq_f32, vshlq_n_s32, vst1q_f32, vsubq_f32,
     };
     unsafe {
-        const LN2_HI: f32 = 6.931_457_5e-1;
-        const LN2_LO: f32 = 1.428_606_8e-6;
-        const INV_LN2: f32 = std::f32::consts::LOG2_E;
-
-        let v_inv_ln2 = vdupq_n_f32(INV_LN2);
-        let v_ln2_hi = vdupq_n_f32(LN2_HI);
-        let v_ln2_lo = vdupq_n_f32(LN2_LO);
+        let v_inv_ln2 = vdupq_n_f32(CEPHES_INV_LN2);
+        let v_ln2_hi = vdupq_n_f32(CEPHES_LN2_HI);
+        let v_ln2_lo = vdupq_n_f32(CEPHES_LN2_LO);
         let v_one = vdupq_n_f32(1.0);
         let v_half = vdupq_n_f32(0.5);
         let v_third = vdupq_n_f32(1.0 / 3.0);
@@ -2363,6 +2368,7 @@ unsafe fn avx2_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
 /// Dispatches to NEON, AVX2, or scalar based on `simd_level()`.
 /// All paths produce bit-identical results to `ternary_matvec_scalar()`.
 #[cfg(feature = "plasma_path")]
+#[inline]
 pub fn simd_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
     match simd_level() {
         #[cfg(target_arch = "aarch64")]
@@ -2375,6 +2381,7 @@ pub fn simd_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
 
 /// Batched ternary matmul: for each batch[i], compute y[i] = W × batch[i].
 #[cfg(feature = "plasma_path")]
+#[inline]
 pub fn simd_ternary_matmul_batch(w: &TernaryWeights, x: &[f32], batch: usize, y: &mut [f32]) {
     /// Minimum batch size before parallelizing. Below this, sequential is faster
     /// due to rayon thread pool scheduling overhead (~1-5µs per task).
@@ -2442,6 +2449,7 @@ fn softplus(x: f32) -> f32 {
 /// # Feature flag
 /// `sigmoid_margin` — Plan 157
 #[cfg(feature = "sigmoid_margin")]
+#[inline]
 pub fn sigmoid_margin_loss(
     scores: &[f32],
     adjacency: &[f32],
@@ -2491,6 +2499,7 @@ pub fn sigmoid_margin_loss(
 /// # Feature flag
 /// `sigmoid_margin` — Plan 157
 #[cfg(feature = "sigmoid_margin")]
+#[inline]
 pub fn compute_retrieval_margin(
     queries: &[f32],
     documents: &[f32],
@@ -2612,9 +2621,7 @@ fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_sum_sq(x: &[f32], len: usize) -> f32 {
-    use core::arch::aarch64::{
-        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vmulq_f32,
-    };
+    use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32};
 
     unsafe {
         let mut acc0 = vdupq_n_f32(0.0);
@@ -2632,12 +2639,14 @@ unsafe fn neon_sum_sq(x: &[f32], len: usize) -> f32 {
 
         let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
 
-        // Handle remaining 4-element chunk
-        if i + 4 <= len {
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
             let v = vld1q_f32(x.as_ptr().add(i));
-            sum += vaddvq_f32(vmulq_f32(v, v));
+            acc_rem = vfmaq_f32(acc_rem, v, v);
             i += 4;
         }
+        sum += vaddvq_f32(acc_rem);
 
         while i < len {
             let v = *x.get_unchecked(i);
@@ -2831,7 +2840,7 @@ fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 #[inline]
 unsafe fn neon_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
     use core::arch::aarch64::{
-        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vsubq_f32,
+        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vmulq_f32, vsubq_f32,
     };
 
     unsafe {
@@ -2855,7 +2864,7 @@ unsafe fn neon_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 
         if i + 4 <= len {
             let d = vsubq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i)));
-            sum += vaddvq_f32(vmulq_f32_same(d, d));
+            sum += vaddvq_f32(vmulq_f32(d, d));
             i += 4;
         }
 
@@ -2867,17 +2876,6 @@ unsafe fn neon_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 
         sum
     }
-}
-
-// NEON vmulq_f32 alias for clarity (same intrinsic)
-#[cfg(target_arch = "aarch64")]
-#[inline]
-unsafe fn vmulq_f32_same(
-    a: core::arch::aarch64::float32x4_t,
-    b: core::arch::aarch64::float32x4_t,
-) -> core::arch::aarch64::float32x4_t {
-    use core::arch::aarch64::vmulq_f32;
-    unsafe { vmulq_f32(a, b) }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -3104,6 +3102,7 @@ unsafe fn avx2_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: us
 /// Uses existing `simd_dot_f32` for each dot product.
 ///
 /// `x` is row-major (seq_len × d_h), `gram_out` is row-major (seq_len × seq_len).
+#[inline]
 pub fn simd_gram_f32(x: &[f32], seq_len: usize, d_h: usize, gram_out: &mut [f32]) {
     assert!(
         x.len() == seq_len * d_h,

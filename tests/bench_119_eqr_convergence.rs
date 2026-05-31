@@ -311,7 +311,7 @@ fn bench_convergence_selector_override() {
         convergence_selector: Some(ConvergenceSelector::Top1Converged),
         ..Default::default()
     };
-    let overridden = config.with_overrides(&overrides);
+    let overridden = config.clone().with_overrides(&overrides);
     assert_eq!(
         overridden.convergence_selector,
         ConvergenceSelector::Top1Converged,

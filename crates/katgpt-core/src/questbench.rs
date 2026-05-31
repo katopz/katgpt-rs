@@ -348,6 +348,7 @@ mod tests {
 /// - `1.0` = fully underspecified (uniform distribution)
 ///
 /// This is a pure function over a relevance slice — no model inference needed.
+#[inline]
 pub fn underspecification_score(relevance: &[f32]) -> f32 {
     // Two-pass: first accumulate sum, then compute entropy.
     // Uses explicit loops instead of iterator chain for better auto-vectorization.
@@ -503,6 +504,7 @@ pub fn find_sufficient_set(
 ///
 /// Caps iteration at `min(256, vocab_size)` to avoid checking phantom tokens
 /// when the vocabulary is small.
+#[inline]
 fn count_valid_extensions_with(
     pruner: &dyn crate::traits::ConstraintPruner,
     depth: usize,
@@ -546,6 +548,7 @@ fn count_valid_extensions_with(
 
 /// Compute relevance scores for all tokens at given depth.
 /// Writes results into `buf` (must have length >= min(vocab_size, 256)).
+#[inline]
 fn score_relevance_into(
     pruner: &dyn crate::traits::ConstraintPruner,
     depth: usize,
@@ -609,6 +612,7 @@ pub enum QuestBenchDecision {
 }
 
 impl QuestBenchDecision {
+    #[inline]
     pub fn from_score(score: f32, config: &UnderspecConfig) -> Self {
         match score {
             s if s > config.plan_new_threshold => QuestBenchDecision::PlanNew,
@@ -630,6 +634,7 @@ pub enum MemoryTier {
     Freeze, // external knowledge
 }
 
+#[inline]
 pub fn tier_from_score(score: f32, config: &UnderspecConfig) -> MemoryTier {
     match score {
         s if s >= config.cold_tier_threshold + 0.2 => MemoryTier::Freeze,

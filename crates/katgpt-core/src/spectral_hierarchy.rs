@@ -89,6 +89,7 @@ pub fn haar_wavelet_basis(depth: usize) -> (Vec<Vec<f32>>, Vec<Vec<Vec<f32>>>) {
         let n_blocks = 1 << level; // number of parent blocks at this level
         let mut level_wavelets = Vec::with_capacity(n_blocks);
 
+        let inv_sqrt_bs = (1.0 / block_size as f64).sqrt() as f32;
         for block in 0..n_blocks {
             let mut wavelet = vec![0.0f32; n];
             let start = block * block_size;
@@ -96,7 +97,6 @@ pub fn haar_wavelet_basis(depth: usize) -> (Vec<Vec<f32>>, Vec<Vec<Vec<f32>>>) {
 
             // First half: +1/sqrt(block_size)
             // Second half: -1/sqrt(block_size)
-            let inv_sqrt_bs = (1.0 / block_size as f64).sqrt() as f32;
             for j in 0..half {
                 wavelet[start + j] = inv_sqrt_bs;
                 wavelet[start + half + j] = -inv_sqrt_bs;

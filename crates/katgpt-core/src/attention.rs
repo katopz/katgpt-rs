@@ -165,13 +165,19 @@ fn tiled_attention_inner(
         let mut max_tile = [f32::NEG_INFINITY; BR];
         let mut norm_tile = [0.0f32; BR];
 
+        let mut s_tile = [f32::NEG_INFINITY; BR * BC];
         for k_tile_idx in 0..k_tiles {
             let k_start = k_tile_idx * BC;
             let k_end = (k_start + BC).min(seq_len);
             let actual_bc = k_end - k_start;
 
+            for i in 0..actual_br {
+                for j in 0..actual_bc {
+                    s_tile[i * BC + j] = f32::NEG_INFINITY;
+                }
+            }
+
             // 1. Score tile: S = q_tile @ k_tile.T (BR × BC)
-            let mut s_tile = [f32::NEG_INFINITY; BR * BC];
             for i in 0..actual_br {
                 let q_off = (q_start + i) * head_dim;
                 for j in 0..actual_bc {
@@ -186,17 +192,12 @@ fn tiled_attention_inner(
             }
             // i >= actual_br: stays -inf (boundary query rows)
 
-            // 2. Row max for this tile + update running max (only actual rows)
-            let mut max_new = max_tile;
+            // 2+3. Row max + correction + P̃ + accumulate (fused per row)
             for i in 0..actual_br {
                 let rm = crate::simd::simd_max_f32(&s_tile[i * BC..i * BC + actual_bc]);
-                max_new[i] = max_tile[i].max(rm);
-            }
-
-            // 3. Apply correction, compute P̃, accumulate (only actual rows)
-            for i in 0..actual_br {
                 let m_old = max_tile[i];
-                let m_new = max_new[i];
+                let m_new = m_old.max(rm);
+                max_tile[i] = m_new;
 
                 // Correction factor: exp2((m_old - m_new) * log2e_scale)
                 let correction = ((m_old - m_new) * log2e_scale).exp2();
@@ -232,8 +233,6 @@ fn tiled_attention_inner(
 
                 norm_tile[i] += rowsum;
             }
-
-            max_tile = max_new;
         }
 
         // 4. Final normalize: o_tile / norm_tile (fused copy+scale in single SIMD pass)

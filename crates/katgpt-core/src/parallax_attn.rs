@@ -335,15 +335,14 @@ pub fn tiled_attention_parallax_forward(
 
     // Phase 1: Compute o_SA and accumulate column sums in one pass
     for i in 0..n {
-        let q_off = i * d;
-        let out_off = i * d;
-        output[out_off..out_off + d].fill(0.0);
+        let row_off = i * d;
+        output[row_off..row_off + d].fill(0.0);
 
         // Compute scores for row i: scores[j] = q_i · k_j * scale
         for j in 0..n {
             let k_off = j * d;
             scratch.scores[j] =
-                simd::simd_dot_f32(&q[q_off..q_off + d], &k[k_off..k_off + d], d) * scale;
+                simd::simd_dot_f32(&q[row_off..row_off + d], &k[k_off..k_off + d], d) * scale;
         }
 
         // Normalize attention weights (softmax or sigmoid)
@@ -355,7 +354,7 @@ pub fn tiled_attention_parallax_forward(
             let p = scratch.scores[j];
             let v_off = j * d;
             simd::simd_fused_scale_acc(
-                &mut output[out_off..out_off + d],
+                &mut output[row_off..row_off + d],
                 &v[v_off..v_off + d],
                 p,
                 d,
@@ -408,6 +407,7 @@ pub fn tiled_attention_parallax_forward(
 /// Accepts an optional pre-allocated `scores` scratch buffer (length >= seq_len)
 /// to avoid per-call heap allocation. When `None`, allocates on demand.
 #[allow(clippy::too_many_arguments)]
+#[inline]
 fn tiled_attention_core(
     q: &[f32],
     k: &[f32],

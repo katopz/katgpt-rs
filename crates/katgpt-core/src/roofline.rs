@@ -130,6 +130,7 @@ impl HardwarePeaks {
 /// ```
 ///
 /// The bottleneck determines the `bound` classification.
+#[inline]
 pub fn roofline_estimate(
     _op: OpType,
     dtype: Dtype,

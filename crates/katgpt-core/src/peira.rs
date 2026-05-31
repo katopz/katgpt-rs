@@ -811,6 +811,7 @@ impl PeiraCovariance {
     /// Update EMA covariance estimates with a student-teacher pair.
     ///
     /// Both slices must have length `dim`.
+    #[inline]
     pub fn update(&mut self, student: &[f32], teacher: &[f32]) {
         let k = self.config.dim;
         assert_eq!(student.len(), k, "student repr length mismatch");
@@ -1031,6 +1032,7 @@ impl PeiraCovariance {
 /// # Returns
 /// The scalar auxiliary loss value.
 #[allow(clippy::too_many_arguments)]
+#[inline]
 pub fn peira_aux_loss(
     student: &[f32],
     teacher: &[f32],
@@ -1125,6 +1127,7 @@ fn invert_spd(mat: &[f64], k: usize) -> Vec<f64> {
 /// - `l_inv_scratch`: k×k scratch for L⁻¹
 /// - `mat`: input k×k SPD matrix
 /// - `k`: matrix dimension
+#[inline]
 fn invert_spd_into(
     inv: &mut [f64],
     l_scratch: &mut [f64],

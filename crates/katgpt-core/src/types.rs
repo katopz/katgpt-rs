@@ -1150,70 +1150,69 @@ impl Config {
     ///
     /// `None` fields are left unchanged; `Some` fields replace the current value.
     /// Used by the router to inject domain-specific budgets from TOML config.
-    pub fn with_overrides(&self, overrides: &InferenceOverrides) -> Self {
-        let mut c = self.clone();
+    pub fn with_overrides(mut self, overrides: &InferenceOverrides) -> Self {
         if let Some(v) = overrides.tree_budget {
-            c.tree_budget = v;
+            self.tree_budget = v;
         }
         if let Some(v) = overrides.draft_lookahead {
-            c.draft_lookahead = v;
+            self.draft_lookahead = v;
         }
         if let Some(v) = overrides.parallel_threshold {
-            c.parallel_threshold = v;
+            self.parallel_threshold = v;
         }
         if let Some(v) = overrides.screening_threshold {
-            c.screening_threshold = v;
+            self.screening_threshold = v;
         }
         if let Some(v) = overrides.temperature {
-            c.temperature = v;
+            self.temperature = v;
         }
         if let Some(v) = overrides.sparse_threshold {
-            c.sparse_threshold = v;
+            self.sparse_threshold = v;
         }
         if let Some(v) = overrides.early_exit_patience {
-            c.early_exit_patience = v;
+            self.early_exit_patience = v;
         }
         if let Some(v) = overrides.early_exit_gap {
-            c.early_exit_gap = v;
+            self.early_exit_gap = v;
         }
         if let Some(v) = overrides.mtp_activation_threshold {
-            c.mtp_activation_threshold = v;
+            self.mtp_activation_threshold = v;
         }
         if let Some(v) = overrides.mtp_cluster_vocab_threshold {
-            c.mtp_cluster_vocab_threshold = v;
+            self.mtp_cluster_vocab_threshold = v;
         }
         if let Some(v) = overrides.mtp_shared_kv_prompt_threshold {
-            c.mtp_shared_kv_prompt_threshold = v;
+            self.mtp_shared_kv_prompt_threshold = v;
         }
         if let Some(v) = overrides.mtp_cluster_size {
-            c.mtp_cluster_size = v;
+            self.mtp_cluster_size = v;
         }
         if let Some(v) = overrides.mtp_min_output_tokens {
-            c.mtp_min_output_tokens = v;
+            self.mtp_min_output_tokens = v;
         }
         if let Some(v) = overrides.mtp_cluster_topk {
-            c.mtp_cluster_topk = v;
+            self.mtp_cluster_topk = v;
         }
         if let Some(v) = overrides.sp_kv_threshold {
-            c.sp_kv_threshold = v;
+            self.sp_kv_threshold = v;
         }
         if let Some(v) = overrides.width_rollouts {
-            c.width_rollouts = v;
+            self.width_rollouts = v;
         }
         if let Some(v) = overrides.early_stop_threshold {
-            c.early_stop_threshold = v;
+            self.early_stop_threshold = v;
         }
         if let Some(v) = overrides.convergence_selector {
-            c.convergence_selector = v;
+            self.convergence_selector = v;
         }
         if let Some(v) = overrides.mls_layers {
-            c.mls_layers = v;
+            self.mls_layers = v;
         }
         // SR²AM horizon truncation override (Plan 112 T11)
         if let Some(v) = overrides.max_plan_horizon {
-            c.draft_lookahead = c.draft_lookahead.min(v);
+            self.draft_lookahead = self.draft_lookahead.min(v);
         }
-        c
+        self
     }
 }
 
@@ -1326,7 +1325,7 @@ impl Rng {
     }
 
     /// Standard normal via Box-Muller transform.
-    #[inline]
+    #[inline(always)]
     pub fn normal(&mut self) -> f32 {
         let u1 = self.uniform().max(1e-10);
         let u2 = self.uniform();
@@ -1490,7 +1489,7 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 /// Used in LLaMA, Mistral, and other LLaMA-family models for SwiGLU MLP.
 ///
 /// SIMD-accelerated: exp() computed via `simd_exp_inplace` on stack buffers.
-#[inline]
+#[inline(always)]
 pub fn silu(x: &mut [f32]) {
     const CHUNK: usize = 64;
     let mut buf = [0.0f32; CHUNK];
@@ -1520,7 +1519,7 @@ pub fn silu(x: &mut [f32]) {
 /// Result stored in `hidden`: hidden[i] = silu(gate[i]) * up[i]
 ///
 /// SIMD-accelerated: exp() computed via `simd_exp_inplace` on stack buffers.
-#[inline]
+#[inline(always)]
 pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
     const CHUNK: usize = 64;
     let mut buf = [0.0f32; CHUNK];
@@ -2707,10 +2706,13 @@ mod tests_types {
     fn test_with_overrides_none_unchanged() {
         let config = Config::draft();
         let overrides = InferenceOverrides::default();
+        let original_tb = config.tree_budget;
+        let original_temp = config.temperature;
+        let original_dl = config.draft_lookahead;
         let result = config.with_overrides(&overrides);
-        assert_eq!(result.tree_budget, config.tree_budget);
-        assert_eq!(result.temperature, config.temperature);
-        assert_eq!(result.draft_lookahead, config.draft_lookahead);
+        assert_eq!(result.tree_budget, original_tb);
+        assert_eq!(result.temperature, original_temp);
+        assert_eq!(result.draft_lookahead, original_dl);
     }
 
     #[test]
@@ -2721,11 +2723,12 @@ mod tests_types {
             temperature: Some(0.123),
             ..Default::default()
         };
+        let original_dl = config.draft_lookahead;
         let result = config.with_overrides(&overrides);
         assert_eq!(result.tree_budget, 99);
         assert!((result.temperature - 0.123).abs() < 1e-6);
         // Non-overridden fields stay the same
-        assert_eq!(result.draft_lookahead, config.draft_lookahead);
+        assert_eq!(result.draft_lookahead, original_dl);
     }
 
     #[test]

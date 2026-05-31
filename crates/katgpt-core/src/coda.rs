@@ -250,7 +250,7 @@ fn moa_activate(k: usize, x: f32, activations: &[MoaActivation; 7]) -> f32 {
 /// * `input` - Original input x `[d_model]` for gating computation
 /// * `moa` - MoA gating configuration
 #[cfg(feature = "moa_inference")]
-#[inline]
+#[inline(always)]
 pub fn moa_swiglu(
     hidden: &mut [f32],
     gate_proj: &[f32],
@@ -440,10 +440,8 @@ pub fn simd_matmul_residual_partial_rms(
     debug_assert!(output_d.len() >= rows, "output_d too short");
     debug_assert!(output_o.len() >= rows, "output_o too short");
     let bs = block_size.max(1);
-    debug_assert!(
-        partial_sums.len() >= rows.div_ceil(bs),
-        "partial_sums too short"
-    );
+    let n_blocks = rows.div_ceil(bs);
+    debug_assert!(partial_sums.len() >= n_blocks, "partial_sums too short");
     if let Some(g) = gamma {
         debug_assert!(g.len() >= rows, "gamma too short");
     }
@@ -452,9 +450,10 @@ pub fn simd_matmul_residual_partial_rms(
     }
 
     // Zero partial sums for fresh accumulation
-    let n_blocks = rows.div_ceil(bs);
     partial_sums[..n_blocks].fill(0.0);
 
+    let mut block_counter = 0usize;
+    let mut block_idx = 0usize;
     for i in 0..rows {
         let row_off = i * cols;
         let acc = simd_dot_f32(
@@ -468,9 +467,13 @@ pub fn simd_matmul_residual_partial_rms(
         let d = acc + b + r;
 
         // Accumulate partial RMS (sum of squares, divided by n later in compute_rstd)
-        let block_idx = i / bs;
         unsafe {
             *partial_sums.get_unchecked_mut(block_idx) += d * d;
+        }
+        block_counter += 1;
+        if block_counter == bs {
+            block_counter = 0;
+            block_idx += 1;
         }
 
         // Gamma scaling (identity if gamma is None)
@@ -740,6 +743,7 @@ pub fn simd_matmul_rmsnorm_rope(
 
     let half_rows = rows / 2;
     let pos_base = pos * head_dim;
+    let mut dim_idx = 0usize;
     for i in 0..half_rows {
         let even_row = 2 * i;
         let odd_row = 2 * i + 1;
@@ -760,7 +764,11 @@ pub fn simd_matmul_rmsnorm_rope(
         ) * rstd;
 
         // RoPE rotation: index into precomputed table
-        let rope_idx = pos_base + (i % head_dim);
+        let rope_idx = pos_base + dim_idx;
+        dim_idx += 1;
+        if dim_idx == head_dim {
+            dim_idx = 0;
+        }
         debug_assert!(rope_idx < cos_table.len(), "RoPE cos index out of bounds");
         debug_assert!(rope_idx < sin_table.len(), "RoPE sin index out of bounds");
         // Safety: tables are pre-sized to max_seq_len × head_dim; index verified above

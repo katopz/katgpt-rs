@@ -22,6 +22,7 @@
 ///
 /// # Panics
 /// Panics if any adjacency index is out of bounds for the embedding matrix.
+#[inline]
 pub fn dirichlet_energy(embeddings: &[f32], dim: usize, adjacency: &[(usize, usize)]) -> f32 {
     let n_entities = embeddings.len() / dim;
     let mut energy = 0.0f32;
@@ -56,11 +57,10 @@ pub fn dirichlet_energy(embeddings: &[f32], dim: usize, adjacency: &[(usize, usi
 /// For N pairs (a_i, b_i), creates edges: (a_0, b_0), (a_1, b_1), ...
 /// This is the paper's A_{ij} = 1 iff entities i,j are related by functor.
 ///
-/// Returns a new Vec to decouple the caller's allocation from the adjacency
-/// lifetime. For zero-alloc hot paths, pass the pairs slice directly to
-/// [`dirichlet_energy`] since `&[(usize, usize)]` is the adjacency type.
-pub fn functor_adjacency(pairs: &[(usize, usize)]) -> Vec<(usize, usize)> {
-    pairs.to_vec()
+/// Returns the pairs slice directly since `&[(usize, usize)]` is the
+/// adjacency type accepted by [`dirichlet_energy`].
+pub fn functor_adjacency(pairs: &[(usize, usize)]) -> &[(usize, usize)] {
+    pairs
 }
 
 /// Build position-neighbor adjacency from consecutive positions.
@@ -91,6 +91,7 @@ pub fn consecutive_adjacency(n_positions: usize) -> Vec<(usize, usize)> {
 ///
 /// # Returns
 /// (energy, normalized_energy) where normalized = energy / max(n_edges, 1).
+#[inline]
 pub fn kv_cache_dirichlet_energy(
     keys: &[f32],
     kv_dim: usize,
