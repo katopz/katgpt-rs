@@ -3,13 +3,18 @@
 > Source: [Multi-LoRA Training for Continual Learning](https://trajectory.ai/field-notes/multi-lora-training-for-continual-learning) by Trajectory AI (collaboration with UC Berkeley Sky Lab, Anyscale)
 > Repo: [NovaSky-AI/SkyRL](https://github.com/NovaSky-AI/SkyRL)
 > Date: 2026-05
-> **Verdict: NO GAIN — Training infrastructure idea, not applicable to our inference-first stack.**
+> **Verdict: CONDITIONAL GAIN — Fused multi-LoRA dispatch kernel reduces per-layer dispatch count 6×. Multi-experiment scheduling not applicable.**
 
 ---
 
 ## TL;DR
 
-Trajectory/SkyRL built C-LoRA: a concurrent, multi-LoRA RL training platform that achieves **2.81× end-to-end experiment throughput** by multiplexing N LoRA adapters on a shared inference + training engine. The key enablers are SGMV fused decode kernels (vLLM), adapter swapping from pinned CPU memory, and cross-job load balancing. While impressive for large-scale RLHF on H200 clusters, this is **training infrastructure** — it does not apply to our inference-time architecture. Our equivalent "continual learning" loop (G-Zero self-play → Freeze/Thaw → LoRA export) already captures the concept at our scale.
+Trajectory/SkyRL built C-LoRA: a concurrent, multi-LoRA RL training platform that achieves **2.81× end-to-end experiment throughput** by multiplexing N LoRA adapters on a shared inference + training engine. The key enablers are SGMV fused decode kernels (vLLM), adapter swapping from pinned CPU memory, and cross-job load balancing.
+
+Two distinct ideas to distill:
+
+1. **Multi-experiment scheduling** — NO GAIN. We're inference-first, single-node, game-domain. Not applicable.
+2. **Fused multi-LoRA kernel (SGMV)** — GAIN. Our current per-layer LoRA merge does 12 separate GPU dispatches (6 targets × 2 passes). Fusing into 2 dispatches per layer cuts dispatch overhead 6×. On Metal, unified memory makes adapter swap zero-cost (just rebind). CubeCL plane kernels already give us the SIMD primitive.
 
 ---
 
@@ -48,52 +53,74 @@ Traditional RL training runs one experiment per GPU allocation. Each run require
 
 ## Distillation to Our Architecture
 
-### Mapping C-LoRA Concepts → Our Stack
+### Idea 1: Multi-Experiment Scheduling — NO GAIN
 
-| C-LoRA Concept | Our Equivalent | Gap |
-|----------------|---------------|-----|
-| Multi-LoRA inference (SGMV) | `GpuLoraBuffers` per-adapter A/B matrices | ✅ Have adapter multiplexing at inference time |
-| Adapter swap from pinned CPU | `GpuLoraBuffers` load/export cycle | ✅ Can load different adapters between runs |
-| Cross-job load balancing | N/A — single-node training | ❌ We don't have distributed training |
-| Always-hot engine | N/A — training is batch, not service | ❌ Different paradigm |
-| Per-tenant AdapterStore | `GpuLoraAdapter` (A, B, grad, optimizer state) | ✅ Already exists per-adapter |
-| Weight sync to inference | `export_lora()` → `load_lora()` | ✅ Already working |
-| Continual learning loop | G-Zero self-play → Freeze/Thaw → LoRA export | ✅ Already captured |
+| C-LoRA Assumption | Our Reality |
+|---|---|
+| 8×H200 GPU clusters | Apple Silicon single-node (wgpu/Metal) |
+| 4B+ param LLMs | Micro-transformers (V=32, D=16) |
+| Distributed RLHF training service | Batch-mode game-domain LoRA training |
+| Multi-experiment hyperparameter sweeps | Single-config game-domain runs |
+| CUDA SGMV tensor cores | cubecl gemv plane kernels |
 
-### Why NO GAIN
+We already have the scheduling concepts:
+- **Multi-LoRA inference**: `GpuLoraBuffers` handles 6 adapter targets per layer
+- **Continual learning**: G-Zero self-play (Plan 049) + Freeze/Thaw (Plan 092)
+- **Adapter composition**: TIES merging (Plan 094)
 
-1. **We're inference-first, not training-service.** katgpt-rs has no training loop. riir-ai's `riir-gpu` trains single adapters in batch mode, not as a persistent multi-tenant service.
+### Idea 2: Fused Multi-LoRA Dispatch — GAIN
 
-2. **No CUDA/Multi-GPU.** We're on wgpu/Metal (Apple Silicon). SGMV kernels require CUDA tensor cores. Our `gemv_cubecl.rs` already handles single-adapter LoRA merge efficiently on Metal.
+**The problem:**
+Current `dispatch_lora_merge()` (forward.rs:2707) does 12 GPU dispatches per transformer layer:
+- 6 LoRA targets (Q, K, V, O, Mlp1, Mlp2) × 2 passes each (A @ x, then B @ intermediate)
+- Each dispatch = `begin_compute_pass()` + `set_pipeline()` + `set_bind_group()` + `dispatch_workgroups()` ≈ 5-10μs on Metal
+- 26 layers × 12 dispatches = **312 dispatches per forward pass**
+- Pure dispatch overhead: 312 × 7.5μs ≈ **2.3ms per forward pass**
 
-3. **Scale mismatch.** C-LoRA targets 8×H200 clusters with 4B+ parameter models. Our training is on micro-transformers (V=32, D=16) for game-domain adapters.
+**The fix — SGMV-style fused batched LoRA:**
+Pack all 6 adapters into contiguous buffers, launch 2 kernels per layer instead of 12:
 
-4. **Continual learning already captured.** Our G-Zero pipeline (Plan 049) already does continual learning: self-play → validator feedback → LoRA update → better play. Freeze/Thaw (Plan 092) handles the knowledge retention problem. Neither needs multi-tenant training infrastructure.
+```
+Dispatch 1: sgmv_lora_a — all 6 A matrices @ input → [6 × rank] intermediates
+Dispatch 2: sgmv_lora_b — all 6 B matrices @ intermediates → accumulated deltas, add to base output
+```
 
-5. **No multi-experiment sweep need.** C-LoRA's value is running N hyperparameter sweeps simultaneously. Our experiments are game-domain, single-config runs. We don't need experiment multiplexing.
+Result: 26 × 2 = **52 dispatches** (6× reduction). Saves ~1.9ms of dispatch overhead per forward pass.
 
-### What We Already Have That's Better for Our Scale
+**Why Metal makes this better than CUDA:**
+- **Unified memory** — no pinned vs device memory distinction. Adapter swap = rebind pointer, zero-copy.
+- **SIMD-group ops** — `simdgroup_matrix` (8×8×8 MMA) via CubeCL CMMA, equivalent to CUDA `wmma`.
+- **Plane cooperative GEMV** — our `gemv_plane_f32` already uses `plane_sum()` for cooperative dot products. Extend to batched multi-adapter with adapter stride.
 
-| Our Feature | C-LoRA Equivalent | Our Advantage |
-|-------------|-------------------|---------------|
-| `GpuLoraBuffers` (6 adapters per layer) | AdapterStore per tenant | We already multiplex 6 adapter targets per layer |
-| `TuningMethod` enum (LoRA/QLoRA/IA3/OFT/SPEFT) | Single LoRA only | We support 5 PEFT methods |
-| G-Zero self-play loop | RL training loop | Our loop is domain-specific and validator-guided |
-| Freeze/Thaw pipeline | N/A | We handle knowledge retention explicitly |
-| TIES merging (Plan 094) | N/A | We can merge trained adapters |
+**Current kernel infrastructure we can reuse:**
+- `gemv_plane_f32` — cooperative dot product with SIMD reduction (primary)
+- `gemv_tile_f32` — shared memory tiled fallback
+- `matmul_tiled_f32` — 16×16 tiled matmul for prefill
+- CODA epilogue pipeline — fused GEMV + activation + residual in single dispatch
+- `GpuLoraBuffers::adapter_index()` — maps (layer, target) → flat index, already packs 6 adapters
+
+### What We Already Have vs What's Needed
+
+| Component | Status | Action |
+|-----------|--------|--------|
+| Per-adapter A/B buffers in unified memory | ✅ | No change |
+| Per-adapter bind groups | ✅ | Replace with packed batch bind groups |
+| `dispatch_lora_merge()` 12×/layer | ✅ Current | Replace with `dispatch_lora_fused()` 2×/layer |
+| CubeCL plane GEMV kernel | ✅ | Extend with adapter stride |
+| CubeCL tiled matmul | ✅ | Extend with batched LoRA B pass |
+| CODA epilogue (fused activation) | ✅ | Wire into fused dispatch |
+| `GpuForwardPass::new()` bind group setup | ✅ | Add fused bind group variant |
+| Training backward pass | ✅ | No change (backward uses per-adapter already) |
 
 ---
 
 ## Honest Assessment
 
-C-LoRA is a well-executed systems paper for **large-scale RLHF infrastructure**. The engineering is impressive (SGMV kernels, pinned memory adapter swapping, cross-job load balancing). But it solves a problem we don't have:
+C-LoRA's multi-experiment scheduling is irrelevant to our stack. But the **SGMV kernel insight** — batching multiple LoRA adapter operations into fewer GPU dispatches — is directly applicable and achievable with our existing CubeCL infrastructure. The gain is primarily in **dispatch overhead reduction** (6× fewer kernel launches per layer), not in compute throughput. This matters most for decode where per-token latency is critical.
 
-- We don't run distributed RL training on GPU clusters
-- We don't need multi-experiment sweeps
-- Our training is single-node, game-domain, batch-mode
-- Our "continual learning" is G-Zero self-play, not live production feedback
+Unified memory on Apple Silicon gives us an additional advantage C-LoRA doesn't have on CUDA: adapter state swap is a pointer rebinding, not a DMA transfer.
 
-**If we ever scale to multi-GPU RLHF training (unlikely given our game-domain focus), the adapter swapping pattern from C-LoRA could inform our design. But that's a Phase 6+ concern per our execution roadmap in Research 003.**
+**If GOAT proves the fused dispatch is faster (or at least no slower), it should be default-on. If it regresses, the existing per-adapter dispatch remains as fallback.**
 
 ---
 
@@ -104,3 +131,4 @@ C-LoRA is a well-executed systems paper for **large-scale RLHF infrastructure**.
 - SGMV paper: https://arxiv.org/pdf/2310.18547
 - Related our research: `004_LoRA_Architecture_Verdict.md`, `037_REAP_Model-Based_Modelless_Duality.md`
 - Related our plans: `049_g_zero_self_play.md` (G-Zero), `092_self_play_freeze_thaw.md` (Freeze/Thaw), `094_memo_reflections_ties_merging.md` (TIES)
+- Related our code: `riir-ai/crates/riir-gpu/src/gemv_cubecl.rs`, `riir-ai/crates/riir-gpu/src/forward.rs` (L2707 dispatch_lora_merge)
