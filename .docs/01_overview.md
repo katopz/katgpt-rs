@@ -54,7 +54,13 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - Spectral Hierarchy: eigenspace alignment + Haar wavelets + Cauchy interlacing for KG extraction validation (Plan 156, default-on)
 - Roofline Cost Model: GPU operator runtime prediction via calibrated peak throughput, ~5µs CPU estimate (Plan 159, default-on)
 - Tiled Attention: tiled online-softmax flash attention for CPU SIMD (Plan 115)
+- Parallax Attention: streaming covariance-corrected local linear attention (Plan 135, opt-in)
 - CODA Fusion: fused SIMD kernels matmul+residual+rmsnorm+activation (Plan 103)
+- MoA Inference: token-adaptive Mixture-of-Activations SwiGLU over 7-activation dictionary (Plan 158, default-on, GOAT)
+- LEO All-Goals: goal-conditioned Q-value trait framework — LeoHead + vectorized Bellman (Plan 155, default-on, SUPER GOAT)
+- Dual LEO: teacher-student Q-value mixing + autocurriculum sampling (Plan 155, default-on, SUPER GOAT)
+- Sigmoid Margin: SigLIP-style softplus margin loss + dimension sufficiency bound (Plan 157, default-on, GOAT 7/7)
+- Kog CPU Fusion: RMSNorm gamma folding + QKV interleaving for monokernel throughput (Plan 160, opt-in)
 - Hybrid OCT+PQ: default KV codec — OCT triplet + PlanarQuant 2D Givens rotation (Plan 101, default-on)
 - 740+ tests passing (111 test files), zero clippy warnings
 - Shared `katgpt-core` crate: types (Config, enums, math utilities), SIMD kernels — extracted for multi-crate reuse
@@ -66,7 +72,7 @@ crates/
   katgpt-core/    Shared types + SIMD kernels (multi-crate reuse):
     types.rs        Config (all presets + with_overrides + validate), Rng, HlaMode, AttentionMode (Causal/Bidirectional/BlockCausal/SpKv/SpKvQuant/DashAttn), ModelArchitecture (Generic/Gemma2), WeightDtype (F32/F16/BF16), InferenceOverrides, InferenceResult, DashAttnConfig, DeltaRoutingConfig, DeltaRoutingMode, ConvergenceSelector, LoopMode, HybridPattern, SdpaOutputGate, ResidualGate, PlanningDecision, ConfiguratorContext, DataGate, GateDecision, ProposerTask, TaskType, kv_dim, softmax, softmax_scaled, rmsnorm, rmsnorm_with_gamma, rmsnorm_with_gamma_eps, gegelu, gegelu_tanh, matmul, matmul_relu, sparse_matmul, sample_token, LoraAdapter, LoraPair, DomainLatent
     simd.rs         SimdLevel (Scalar/Neon/Avx2), simd_level(), simd_dot_f32, simd_dot_f16_f32, simd_fma_row, simd_outer_product_acc, simd_matvec, simd_matmul_rows, simd_matmul_rows_parallel, simd_matmul_relu_rows, simd_matmul_f16_f32_rows, simd_matmul_f16_f32_rows_parallel, simd_sparse_dot_f32, simd_sparse_matmul_rows, simd_scale_inplace, simd_fused_decay_write, simd_scale_mul_inplace, simd_exp_inplace, maxsim_score, maxsim_score_packed
-    lib.rs          Feature gates: default=["sparse_mlp"], sparse_mlp, domain_latent, maxsim, dllm, coda_fusion, lt2_looped, tiled_attention, sr2am_configurator, data_gate, peira_distill, spectral_hierarchy, dual_gram_pca, roofline_cost
+    lib.rs          Feature gates: tiled_attention, coda_fusion, parallax_attn, leo_all_goals, dual_leo, questbench, tf_loop, plasma_path, peira_distill, dirichlet_energy, spectral_hierarchy, sigmoid_margin, dual_gram_pca, roofline_cost, domain_latent, sr2am_configurator, data_gate, sparse_mlp
     traits.rs       ConstraintPruner, ScreeningPruner, GameState, StateHeuristic, RolloutPolicy, NoPruner, NoScreeningPruner, BinaryScreeningPruner, RandomRolloutPolicy, ActionSpaceLog (Plan 107 Phase 0, consolidated from both crates)
     attention.rs    Tiled online-softmax flash attention for CPU SIMD (Plan 115, behind "tiled_attention" feature)
     coda.rs         CODA fused SIMD kernels: simd_matmul_rmsnorm_swiglu, simd_matmul_residual, simd_matmul_rmsnorm_rope, simd_matmul_rmsnorm_activation, GateActivation (Plan 103, behind "coda_fusion" feature)
@@ -496,7 +502,9 @@ src/
 | `sr2am_configurator` | `bandit`, `g_zero` | SR²AM Configurator Bandit — learned per-turn planning regulation via UCB1 (Plan 112, default-on) |
 | `data_gate` | `bandit` | Task-level data gating for self-play training stability (Plan 111, default-on) |
 | `tiled_attention` | — | Tiled online-softmax flash attention for CPU SIMD (Plan 115) |
+| `parallax_attn` | `tiled_attention`, `newton_schulz`, `katgpt-core/parallax_attn` | Parallax parameterized local linear attention — streaming covariance correction (Plan 135, opt-in) |
 | `coda_fusion` | — | CODA fused SIMD kernels — matmul+residual+rmsnorm+activation in single-pass (Plan 103) |
+| `moa_inference` | `coda_fusion`, `katgpt-core/moa_inference` | MoA Mixture of Activations — token-adaptive activation mixing over 7-activation dictionary (Plan 158, default-on, GOAT) |
 | `stability_metrics` | — | Per-step execution stability instrumentation — P50/P99/CV/stability_score (Plan 102, default-on) |
 | `decode_specialize` | — | Stage-specialized decode paths for speculative decoding (Plan 102) |
 | `tri_mode` | `dllm` | Tri-Mode inference — AR + Diffusion + Self-Speculation, D2F Drafter Verifier (Plan 089) |
@@ -516,8 +524,14 @@ src/
 | `mech_attribution` | `cna_steering`, `ropd_rubric`, `bandit` | Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, opt-in) |
 | `event_log` | `bandit` | Event-sourced game traces with fork-and-diff (Plan 124, GOAT 22/22) |
 | `epiplexity_scoring` | `bandit` | Epiplexity structural information scoring — prequential coding estimator (Plan 130, opt-in) |
+| `leo_all_goals` | `katgpt-core/leo_all_goals` | LEO All-Goals Q-value trait framework — `LeoHead`, `AllGoalsUpdate`, `sigmoid_bounded_q` (Plan 155, default-on, SUPER GOAT) |
+| `dual_leo` | `leo_all_goals`, `katgpt-core/dual_leo` | Dual LEO teacher-student mixing — `DualLeoMixer` + `AutocurriculumSampler` (Plan 155, default-on, SUPER GOAT) |
+| `sigmoid_margin` | `katgpt-core/sigmoid_margin` | Sigmoid margin loss + retrieval margin diagnostic — SigLIP-style softplus, `dim_sufficiency_bound` (Plan 157, Research 123, default-on, GOAT 7/7) |
 | `newton_schulz` | — | Newton-Schulz orthogonalization + Muon momentum — 5-iteration cubic fixed-point for optimizer weight matrices (Plan 152, default-on, GOAT 25/25) |
 | `river_valley` | — | River-valley diagnostic metrics — subspace ratios, effective rank, update cosine similarity (Plan 152, default-on, GOAT 25/25) |
+| `proof_sketch_evolution` | `bandit` | Proof Sketch Evolution — Elo-rated proof population + global goal cache for DDTree/SR²AM (Plan 128, Research 088, opt-in) |
+| `datrie_vocab` | — | Double-array trie vocab lookup — zero-alloc trie for ToaST tokenizer (Research 137, opt-in, pending benchmark) |
+| `kog_cpu_fusion` | — | Kog AI monokernel CPU fusion — RMSNorm gamma folding + QKV interleaving (Plan 160, Research 139, opt-in) |
 | `shard_kv` | `spectral_quant`, `turboquant` | ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard + K-means V path (Plan 147, opt-in) |
 | `sleep_consolidation` | `lt2_looped`, `gdn2_attention` | Sleep Consolidation — offline recursive memory consolidation at KV eviction into GDN2 fast weights (Plan 154, default-on, GOAT 14/14) |
 | `spectral_hierarchy` | `katgpt-core/spectral_hierarchy` | Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing for KG extraction validation (Plan 156, default-on, GOAT) |
@@ -525,9 +539,9 @@ src/
 | `roofline_cost` | `katgpt-core/roofline_cost` | Roofline cost model for GPU operator runtime prediction — compute/memory/launch bottleneck estimation (Plan 159, default-on, GOAT) |
 | `peira_distill` | `katgpt-core/peira_distill`, `bandit` | PEIRA inter-view regressor alignment — collapse-free modelless distillation via EMA covariance (Plan 153, opt-in) |
 | `parallax_attn` | `tiled_attention`, `newton_schulz`, `katgpt-core/parallax_attn` | Parallax parameterized local linear attention — streaming covariance correction (Plan 135, opt-in) |
-| `full` | all above (excludes `stepcode`, `sp_kv`) | Enable all features |
+| `full` | all above (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`, `sigmoid_margin`, `moa_inference`, `dual_gram_pca`, `roofline_cost`, `leo_all_goals`, `dual_leo`, `stability_metrics`, `asymmetric_kv`, `kog_cpu_fusion`) | Enable all features |
 
-Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley` (production best perf + accuracy, Plans 051, 077-079, 085-089, 097, 099, 101-112, 119, 131, 133, 136, 152, 154, 156, 159).
+Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley` (38 default features — production best perf + accuracy, Plans 051, 077-079, 085-089, 097, 099, 101-112, 119, 131, 133, 136, 148, 152, 154-159).
 
 ## Quick Start
 

@@ -171,6 +171,20 @@ Legend: ✓ = direct feature, ○ = partial/conceptual alignment, ✗ = not appl
 
 **Feature gates:** `leo_all_goals` (LeoHead + AllGoalsUpdate + sigmoid_bounded_q), `dual_leo` (+ DualLeoMixer + AutocurriculumSampler, requires `leo_all_goals`). Both **default-on** — SUPER GOAT, zero perf overhead. Framework only — depends on riir-ai Plan 155 for game-specific implementations.
 
+### Papers 142–144: Diffusion Training, Retrieval Representations, Functional Emotions
+
+| Paper | Title | Feature Match |
+|-------|-------|--------------|
+| R142 | JLT: Clean-Latent Prediction in Latent Diffusion Transformers (Fu et al. 2026) | D2F clean prediction (CE), LT2 layer loop (TF-Loop), EMA alignment |
+| R143 | Latent Terms: Dense Retrievers Contain Extractable BM25-Ready Vocabularies (Clavié et al. 2026) | MaxSim (validates Plan 080 > Latent Terms), ScreeningPruner |
+| R144 | Functional Emotions as Linear Representations (Sofroniew et al. / Anthropic 2026) | Emotion Vector Inference (Plan 162), ReviewMetrics desperation monitor |
+
+**R142 — JLT:** Validates our D2F clean prediction (CE on original tokens is the correct target parameterization; v-prediction is strictly harder per Var(v|z) = Var(x|z)/(1-t)²). Also validates LT2 layer loop — JLT uses identical `loop_indices/loop_count` pattern independently. **Decision: NO NEW PLAN** — existing D2F and LT2 already implement the validated techniques.
+
+**R143 — Latent Terms:** Shows dense retrievers contain BM25-searchable latent vocabularies extractable via SAE. MaxSim (Plan 080) outperforms Latent Terms for multi-vector models (GTE-MC: MaxSim 0.547 vs LT 0.500). No gain for speculative decoding pipeline — SAE→BM25 is document-retrieval-specific. **Decision: NO GAIN** — validates MaxSim choice.
+
+**R144 — Functional Emotions:** 171 emotion concepts with linear representations in Claude Sonnet 4.5 activation space (valence PC1, arousal PC2). Causal steering: desperation +0.1 → 14× reward-hacking increase. `calm` direction is protective (0% blackmail). Operationalized as `EmotionDirections` / `EmotionReading` in Plan 162 for zero-cost decode-time desperation monitoring.
+
 ---
 
 ## Feature Intersection Heatmap (Count per Dimension)
@@ -214,6 +228,7 @@ Papers that intersect with 4 or more feature dimensions:
 | **55** | Nemotron Tri-Mode | SD✓ Attn✓ Diff✓ TTC○ | Dual-stream AR+Diffusion, 2.4-3.3× acceptance vs Eagle3, 76.5% SOL headroom |
 | **60** | MeMo Memory as a Model | KV✓ Distill✓ Route✓ | O(1) retrieval, TIES merging at ρ=0.3, reflection QA pipeline |
 | **62** | SHINE Scalable In-Context Hypernetwork | Attn✓ Distill✓ Route✓ | Context→LoRA single forward pass, alternating 2D attention (90% FLOPs savings), M2P Transformer |
+| **R144** | Functional Emotions as Linear Representations (Sofroniew et al. / Anthropic 2026) | Distill○ TTC○ Route○ | Emotion vector inference (Plan 162), zero-cost desperation monitoring via linear probes in activation space |
 
 ---
 
@@ -370,3 +385,7 @@ SIMD/Perf             ███████████████████�
 ## References
 
 All papers are located in `katgpt-rs/.research/` with filenames `{index}_{Title}.md` where index ranges from 00 to 73 (plus 061 for Delta Attention Residuals). See individual research files for full analysis, verdicts, and implementation details. Papers 63–69 added: OCTOPUS (63), LlamaWeb (64), RotorQuant (65), TileRT (66), CODA (67), RAEv2 MLS (68), AutoDreamer (69). Key post-69 papers: 70 (GDN2 recurrent attention), 71 (DashAttention sparse), 72 (DMax SPD), 73 (LT2 looped inference). Recent additions: Research 110 (PlasmaPath, Plan 148), Research 094 (Parallel-Probe, Plan 133), Research 073 / feature `tf_loop` (Training-Free Loop, Plan 136), Research 118 / Plan 155 (LEO All-Goals Trait Framework — Matthews et al. 2026).
+
+- R142: Fu et al. (2026) — JLT: Clean-Latent Prediction in Latent Diffusion Transformers. arXiv:2605.27102
+- R143: Clavié et al. (2026) — Latent Terms: Dense Retrievers Contain Extractable BM25-Ready Vocabularies. arXiv:2605.29384
+- R144: Sofroniew et al. / Anthropic (2026) — Emotion Concepts and their Function in a Large Language Model (Transformer Circuits Thread)

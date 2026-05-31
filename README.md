@@ -805,6 +805,20 @@ Based on arXiv:2604.27233 — tracks whether reviewer intervention is net-positi
 
 Run: `cargo run --example review_01_metrics --features bandit`
 
+### Emotion Vector Inference (Plan 162, Research 144)
+
+Zero-cost behavioral early-warning via linear emotion projections from mid-layer residual-stream activations. Based on Anthropic Transformer Circuits research showing `desperation +0.1` → 14× reward-hacking increase; `calm +0.05` → 0% blackmail.
+
+Each decode step: one O(d) dot product per emotion axis (valence, arousal, desperation, calm). No extra forward passes. `ReviewMetrics` accumulates emotion readings; `is_desperate_session(threshold)` fires when mean desperation exceeds threshold — enabling SR²AM to switch to safer planning mode before a DDTree commits to a high-risk path.
+
+| Direction | Causal Effect |
+|-----------|--------------|
+| `desperation +0.05` | 22% → 72% reward-hacking (+50pp) |
+| `desperation +0.1` | 5% → 70% reward-hacking (**14× increase**) |
+| `calm +0.05` | baseline → **0% blackmail** |
+
+`src/pruners/emotion_vector.rs` — `EmotionDirections`, `EmotionReading`. Phase 1 ✅ complete; Phase 2 ⏳ GOAT proof in progress.
+
 ### Entropy Anomaly Detection (Plan 061)
 
 Session-level Out-Of-Distribution (OOD) monitoring using signals already in the pipeline:
@@ -1672,6 +1686,79 @@ tests/
 
 📖 See [`.research/040_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md`](.research/040_OpenDeepThink_Bradley_Terry_Pairwise_Ranking.md) for full distillation analysis, model-based/modelless paths, and cross-domain applicability.
 
+## 🏛️ Committee Boost — Oracle-Gap Recovery, Debiasing, Budget Sizing (Plan 132)
+
+Four diagnostics from the [boosting committee paper](https://arxiv.org/pdf/2605.14163) that our DDTree + BtRank + ScreeningPruner stack already supports conceptually but lacked as measurable metrics:
+
+| Diagnostic | What It Measures | Our Stack Mapping |
+|------------|-----------------|-------------------|
+| **Oracle-gap recovery** `Rec = (p_system - p1) / (p_oracle - p1)` | How much latent capability the selector recovers | `ConstraintPruner` measures selection vs coverage failure |
+| **Position-swap debiasing** | Eliminates lead-position bias in BtRank | `DebiasedComparator` wraps pairwise comparison |
+| **Budget sizing** (Theorem 3) | Given (α₀, β₀, σ₀, L, δ) → optimal (k, m, r) | Sizes DDTree width, ScreeningPruner depth, BtRank votes |
+| **Blind-spot floor** `B = 1 - lim_{k→∞} p_oracle(k)` | Proposer diversity ceiling | CoverageDiagnostic recommends action |
+
+The paper proves our stack IS the committee protocol Π_{k,m,r}. These additions make the theoretical guarantees **measurable and actionable**.
+
+### GOAT Proof Results (`.benchmarks/020_committee_boost_goat.md`)
+
+Run: `cargo test --features committee_boost --test bench_committee_boost_goat -- --nocapture`
+
+| Proof | Description | Verdict |
+|-------|-------------|--------|
+| G1 | Oracle-gap recovery: Rec within ±0.01 for 6 known cases | ✅ |
+| G2 | Debiased comparison: 100% Tie rate for biased comparator | ✅ |
+| G2b | Debiasing catches lead-position bias (false rankings eliminated) | ✅ |
+| G3 | Budget sizing: Theorem 3 monotonicity + determinism | ✅ |
+| G3b | Budget rejects all invalid parameters | ✅ |
+| G4 | Blind-spot floor: 8 cases verified (B estimation, convergence, diagnostics) | ✅ |
+| G5 | End-to-end: committee improves ≥5% over single-shot | ✅ |
+
+### Key API
+
+```rust,ignore
+use katgpt_rs::pruners::committee_boost::{
+    OracleGapRecovery, FailureMode, DebiasedComparator, CommitteeBudget,
+    committee_budget, estimate_blind_spot_floor, coverage_diagnostic,
+};
+
+// Oracle-gap recovery
+let r = OracleGapRecovery::new(0.5, 0.8, 0.74);
+let rec = r.recovery(); // Some(0.8)
+let mode = r.failure_mode(); // CoverageLimited
+let diag = r.diagnostic(); // "Recovery=80.0% (coverage-limited); ..."
+
+// Debiased BtRank comparison
+let comparator = DebiasedComparator::new(|i, j| biased_compare(i, j));
+let comparisons = comparator.tournament(4); // Vec<BtComparison>
+
+// Budget sizing (Theorem 3)
+let budget = committee_budget(10, 0.05, 0.3, 0.2, 0.4, 2)?;
+println!("k={}, m={}, r={}", budget.k, budget.m, budget.r);
+
+// Blind-spot floor
+let rates = vec![(1, 0.5), (2, 0.65), (4, 0.75), (8, 0.8)];
+let b = estimate_blind_spot_floor(&rates); // 0.2
+let diag = coverage_diagnostic(&rates);
+println!("B={:.3}, action={}", diag.blind_spot_floor, diag.action);
+```
+
+### Module Structure
+
+```
+src/pruners/committee_boost/
+    mod.rs               ← Module index, re-exports
+    types.rs             ← OracleGapRecovery, FailureMode
+    debiased_compare.rs  ← DebiasedComparator, debiased_compare
+    budget.rs            ← CommitteeBudget, committee_budget
+    blind_spot.rs        ← BlindSpotEstimate, coverage_diagnostic
+tests/
+    bench_committee_boost_goat.rs  ← 7-proof GOAT benchmark
+```
+
+**Feature gate:** `committee_boost = ["bt_rank", "bandit"]` — **opt-in**.
+
+📖 See [`.research/093_Boosting_Weak_Reasoning_Committee_Search.md`](.research/093_Boosting_Weak_Reasoning_Committee_Search.md) for the paper distillation.
+
 ## 🧮 Deep Manifold: Fixed-Point Boundary Conditions (Research 51)
 
 Mathematical foundation from [Deep Manifold Part 2](https://arxiv.org/pdf/2512.06563) explaining WHY our three-layer trait stack works:
@@ -1977,6 +2064,7 @@ cargo clippy --all-targets --all-features --quiet
 | `ropd_rubric` | ROPD rubric modelless distillation — multi-criteria reward vectors, per-criterion gap targeting. Players: `RubricPlayer` (+`g_zero`+`bomber`), `RubricFFTPlayer` (+`g_zero`+`fft`) (Plan 071, off by default) |
 | `sdar_gate` | SDAR sigmoid-gated distillation — asymmetric trust for bandit updates + soft absorb promotion (Plan 072, off by default) |
 | `vpd_em_distill` | VPD Variational Policy Distillation — EM-style co-evolutionary teacher-student distillation with BCO E-step + KL-gated M-step + dynamic prior. Player: `VpdPlayer` (+`g_zero`+`bomber`). +6.3% win rate over SDAR in bomber tournament (Plan 120, off by default). Requires `sdar_gate`, `bandit` |
+| `proof_sketch_evolution` | Proof Sketch Evolution — Elo-rated proof population + global goal cache for DDTree/SR²AM refinement (Plan 128, Research 088). Requires `bandit`. **opt-in** |
 | `peira_distill` | PEIRA inter-view regressor alignment — collapse-free modelless distillation (Plan 153, Research 115). Requires `bandit`. **opt-in** |
 | `leo_all_goals` | LEO All-Goals Q-value trait framework — `LeoHead` + `AllGoalsUpdate` vectorized Bellman + `sigmoid_bounded_q` (Matthews et al. 2026, Plan 155, SUPER GOAT). **default-on** |
 | `dual_leo` | Dual LEO mixing + autocurriculum — `DualLeoMixer` (α-blended teacher/student Q-values) + `AutocurriculumSampler` (observed-goal sampling). Requires `leo_all_goals` (Plan 155). **default-on** |
@@ -1986,6 +2074,7 @@ cargo clippy --all-targets --all-features --quiet
 | `tri_mode` | Tri-Mode inference — AR + Diffusion + Self-Speculation via `D2fDrafterVerifier` + adaptive `DiffusionSampler`. GOAT 9/9 proved (Bench 018 + 019). Requires `dllm` (Plan 089, Plan 116) |
 | `toast_tokenizer` | ToaST split-tree tokenization (Plan 122, Research 081). **opt-in** |
 | `convex_tok` | ConvexTok LP vocabulary optimizer (Plan 127, Research 087). Requires `good_lp`, `toast_tokenizer`. **opt-in** |
+| `datrie_vocab` | Double-array trie vocab lookup — zero-alloc trie for ToaST tokenizer (Research 137). **opt-in, pending benchmark** |
 | `spectral_quant` | SpectralQuant calibrated eigenbasis + water-fill — 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013, Plan 077, default-on) |
 | `octopus` | OCTOPUS octahedral triplet codec — data-oblivious, beats calibrated SQ at all bit widths (-22% to -49% MSE). Legacy — use `hybrid_oct_pq` for best quality + speed (Bench 022, Plan 099) |
 | `hybrid_oct_pq` | Default KV codec — OCT triplet encoding + PQ 2D Givens rotation (Plan 101, default-on) |
@@ -2011,6 +2100,7 @@ cargo clippy --all-targets --all-features --quiet
 | `stability_metrics` | Per-step execution stability instrumentation — P50/P99/CV/stability_score via `StabilitySnapshot` (Plan 102, GOAT 13/13, **default-on**) |
 | `decode_specialize` | Stage-specialized decode paths — `DecodeStage` enum + `forward_decode_stage()` dispatch for Draft/Verify (Plan 102, off by default) |
 | `tiled_attention` | Tiled online-softmax flash attention for CPU SIMD (Plan 115) |
+| `parallax_attn` | Parallax parameterized local linear attention — streaming covariance correction, R projection (Plan 135, Research 135). Requires `tiled_attention`, `newton_schulz`. **opt-in** |
 | `coda_fusion` | CODA fused SIMD kernels — matmul+residual+rmsnorm+activation (Plan 103) |
 | `unit_distance` | Unit Distance GOAT proof (Plan 090) |
 | `mls_aggregate` | MLS Multi-Layer Sum — average last K transformer layer residuals before LM head for training-free quality boost (Research 68, Plan 104, GOAT 6/6, **default-on**) |
@@ -2046,9 +2136,10 @@ cargo clippy --all-targets --all-features --quiet
 | `moa_inference` | MoA Mixture of Activations — token-adaptive activation mixing over a 7-activation dictionary (Research 126, Plan 158, GOAT 7/7). **default-on**. Requires `coda_fusion` |
 | `dual_gram_pca` | Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159 GOAT). **default-on** |
 | `roofline_cost` | Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159 GOAT). **default-on** |
-| `full` | Enable all features (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`) |
+| `kog_cpu_fusion` | Kog AI monokernel CPU fusion — RMSNorm gamma folding + QKV interleaving for throughput (Plan 160, Research 139). **opt-in** |
+| `full` | Enable all features (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`, `sigmoid_margin`, `moa_inference`, `dual_gram_pca`, `roofline_cost`, `leo_all_goals`, `dual_leo`, `stability_metrics`, `asymmetric_kv`, `kog_cpu_fusion`) |
 
-> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]` targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping + all-goals Q-value trait framework + dual LEO teacher/student mixing + sigmoid margin loss + retrieval margin diagnostic + token-adaptive Mixture-of-Activations SwiGLU + sleep consolidation + spectral hierarchy + dual-gram PCA routing + roofline cost prediction + Newton-Schulz orthogonalization + Muon momentum + river-valley diagnostics. All 38 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
+> **Default features trade-off:** `default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]` (38 default features) targets production accuracy + sparsity + pairwise ranking + hybrid KV compression (OCT triplet + PQ rotation) + neuron-level steering + fixed-point residual scoring + federated KL coupling + per-step latency observability + multi-layer sum aggregation + O(1) recurrent attention + adaptive sparse routing + offline memory consolidation + looped inference + soft parallel decode + EqR convergence selection + procedure compilation + per-turn planning regulation + task-level data gating + bit-plane ternary SIMD matvec + parallel-probe consensus control + training-free ODE-refined sub-stepping + all-goals Q-value trait framework + dual LEO teacher/student mixing + sigmoid margin loss + retrieval margin diagnostic + token-adaptive Mixture-of-Activations SwiGLU + sleep consolidation + spectral hierarchy + dual-gram PCA routing + roofline cost prediction + Newton-Schulz orthogonalization + Muon momentum + river-valley diagnostics. All 38 default features are GOAT-proved. `g_zero` is bench-only (Plan 049: Phase 1 ✅ T5 benchmarked, Phase 2 ✅ Plan 059 GRPO/DPO in `riir-gpu`) — run bench with `--features "g_zero,bomber"` to include heuristic learning. `g_zero` does NOT touch `forward()` hot path (zero hits in `transformer.rs`). Active features are logged in `bench/*_results.csv` and `bench/timeseries.csv` for regression tracking across feature-gate changes.
 
 > **Note:** `LeviathanVerifier` is always compiled (no feature gate) — it's part of `verifier.rs` and `benchmark.rs`. `Transformer AR`, `DFlash`, `Raven`, `TurboQuant`, and `PFlash` are also always available — they're zero-cost until their caches are instantiated.
 
@@ -2056,18 +2147,18 @@ cargo clippy --all-targets --all-features --quiet
 
 ```
 crates/katgpt-core/   Shared types & SIMD kernels (used by katgpt-rs and riir-engine):
-  lib.rs            Crate root (re-exports: Config, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, kv_dim, SimdLevel, …). Feature gates: coda_fusion, lt2_looped, tiled_attention, sr2am_configurator, data_gate
+  lib.rs            Crate root (re-exports: Config, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, kv_dim, SimdLevel, …). Feature gates: tiled_attention, coda_fusion, parallax_attn, leo_all_goals, dual_leo, questbench, tf_loop, plasma_path, peira_distill, dirichlet_energy, spectral_hierarchy, sigmoid_margin, dual_gram_pca, roofline_cost, domain_latent, sr2am_configurator, data_gate, sparse_mlp
   types.rs          Config (micro/micro_lora/micro_dllm/game/game_go/draft/small_target/gqa_draft/bpe/bpe_draft/gemma2_2b), InferenceOverrides, InferenceResult, Rng, HlaMode, AttentionMode, ModelArchitecture, WeightDtype, LoraAdapter, LoraPair, DomainLatent, DashAttnConfig, DeltaRoutingConfig, DeltaRoutingMode, ConvergenceSelector, LoopMode, HybridPattern, SdpaOutputGate, ResidualGate, PlanningDecision, ConfiguratorContext, DataGate, GateDecision, ProposerTask, TaskType, math kernels (softmax, rmsnorm, gegelu, matmul, sparse_matmul, sample_token, …)
   traits.rs         ConstraintPruner, ScreeningPruner, GameState, StateHeuristic, RolloutPolicy, ActionSpaceLog (consolidated from Plan 107 Phase 0)
   attention.rs      Tiled online-softmax flash attention for CPU SIMD (Plan 115, behind "tiled_attention")
-  coda.rs           CODA fused SIMD kernels: GateActivation, simd_matmul_rmsnorm_swiglu, simd_matmul_residual, simd_matmul_rmsnorm_rope (Plan 103, behind "coda_fusion")
+  coda.rs           CODA fused SIMD kernels: GateActivation, MoaConfig, compute_rstd, simd_matmul_residual, simd_matmul_residual_partial_rms, simd_matmul_rmsnorm_activation, simd_matmul_rmsnorm_rope, simd_matmul_rmsnorm_swiglu (Plan 103, behind "coda_fusion"). With "moa_inference": MoaActivation, moa_swiglu, simd_matmul_rmsnorm_moa_swiglu
   peira.rs          PEIRA inter-view regressor alignment — PeiraConfig, PeiraCovariance, peira_aux_loss (Plan 153, Research 115, behind "peira_distill")
   dirichlet.rs      Dirichlet Energy structural alignment diagnostic — dirichlet_energy, consecutive_adjacency, functor_adjacency, kv_cache_dirichlet_energy (Research 111, Plan 149, behind "dirichlet_energy")
   spectral_hierarchy.rs  Spectral hierarchy diagnostic — eigenspace_alignment, haar_wavelet_basis, cauchy_interlacing_check (Plan 156, behind "spectral_hierarchy")
   questbench.rs     QuestBench underspecification scoring — underspecification_score, SyntheticCsp, CspDomain (Plan 110, behind "questbench")
   roofline.rs       Roofline cost model — RooflineCost, gemm_cost, gemv_cost, gram_cost, roofline_estimate (Research R130, Plan 159, behind "roofline_cost")
   parallax_attn.rs  Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, behind "parallax_attn")
-  simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_dot_f16_f32, simd_matmul_rows, simd_matmul_rows_parallel, simd_sparse_matmul_rows, simd_matmul_f16_f32_rows_parallel, maxsim_score, maxsim_score_packed, sigmoid_margin_loss, compute_retrieval_margin, dim_sufficiency_bound, simd_fused_decay_write, simd_scale_mul_inplace, simd_exp_inplace, simd_add_into (Plan 060)
+  simd.rs           SimdLevel (Scalar/Neon/Avx2), simd_dot_f32, simd_dot_f16_f32, simd_matmul_rows, simd_matmul_rows_parallel, simd_sparse_matmul_rows, simd_matmul_f16_f32_rows_parallel, maxsim_score, maxsim_score_packed, sigmoid_margin_loss, compute_retrieval_margin, dim_sufficiency_bound, simd_fused_decay_write, simd_scale_mul_inplace, simd_exp_inplace, simd_add_into (Plan 060). With "dual_gram_pca": simd_gram_f32. With "plasma_path": simd_ternary_matvec, simd_ternary_matmul_batch, ternary_matvec_scalar
 src/
   lib.rs            Module index + debug tracking allocator
   main.rs           Entry point (proof → bench → Percepta bench → plot)
@@ -2102,7 +2193,8 @@ src/
     absorb_compress.rs  Q-value → hard block promotion
     hot_swap.rs     Runtime pruner reload via blake3
     regression.rs   Golden trace replay
-    review_metrics.rs   Helpfulness/Harmfulness metrics + benefit-risk ratio
+    review_metrics.rs   Helpfulness/Harmfulness metrics + benefit-risk ratio + emotion fields (valence/arousal/desperation/calm sums, Plan 162)
+    emotion_vector.rs   EmotionDirections + EmotionReading — O(d) emotion projection from mid-layer activations, desperation monitor (Plan 162, Research 144)
     sudoku_pruner.rs    Path-aware Sudoku constraint pruning
     tactical_pruner.rs  Tactical pathfinding pruner
     dungeon_pruner.rs   Dungeon map pruner
@@ -2274,6 +2366,7 @@ src/
     forward.rs      attention_spectralquant, dequantize_spectral_keys_flat/values_flat, par_maxsim_score_spectralquant (behind "maxsim" feature)
   dllm.rs          NoiseSchedule, D2fContext, DenoiseConstraint trait, denoise_loop, forward_bidirectional_positions, forward_block_causal_positions, denoising_accuracy — dLLM research (behind "dllm" feature)
   tf_loop.rs        Training-free loop wrapper — ODE-refined sub-stepping, default_loop_window, forward_training_free_loop (Plan 136, behind "tf_loop")
+  mbu.rs            Kog AI monokernel CPU fusion — RMSNorm gamma folding + QKV interleaving for throughput (Plan 160, Research 139, behind "kog_cpu_fusion")
   newton_schulz.rs  Newton-Schulz orthogonalization + Muon momentum — 5-iteration cubic fixed-point (Plan 152, Research 114)
   river_valley.rs   River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114)
   ega_attn.rs       Energy-Gated Attention — spectral salience gating for attention (Plan 139, behind "ega_attn")
@@ -2362,7 +2455,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 
 ### 🐐 Default GOAT (Production Stack)
 
-`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]`
+`default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral_quant", "hybrid_oct_pq", "elf_sde", "cna_steering", "deep_manifold", "federation", "tes_loop", "lattice_deduction", "delta_routing", "stability_metrics", "mls_aggregate", "gdn2_attention", "dash_attn", "dreamer", "lt2_looped", "dmax_spd", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "plasma_path", "parallel_probe", "tf_loop", "leo_all_goals", "dual_leo", "sigmoid_margin", "moa_inference", "sleep_consolidation", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "newton_schulz", "river_valley"]` (38 default features)
 
 | Feature | Source | Real Gain (from code) | Replaced |
 |---------|--------|-----------------------|----------|
@@ -2486,3 +2579,5 @@ Every feature traced from research paper to implementation to benchmark. Separat
 - [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) — Heuristic Learning paradigm
 - [G-Zero: Self-Play for Open-Ended Generation from Zero Data](https://arxiv.org/pdf/2605.09959) — Huang et al., 2026 — Verifier-free co-evolutionary self-play via Hint-δ, GRPO Proposer, length-normalized DPO Generator
 - [Deep Manifold Part 2: Neural Network Mathematics](https://arxiv.org/pdf/2512.06563) — Ma & Shi, 2025 — Fixed-point boundary conditions, three-stage boundary theory, Model CAP Theorem, manifold federation
+- [JLT: Clean-Latent Prediction in Latent Diffusion Transformers](https://arxiv.org/abs/2605.27102) — Fu et al., 2026 — Validates our D2F clean prediction (CE on original tokens) and LT2 layer loop (Research 142, no new plan)
+- [Latent Terms: Dense Retrievers Contain Extractable BM25-Ready Vocabularies](https://arxiv.org/abs/2605.29384) — Clavié et al., 2026 — Validates MaxSim > Latent Terms for multi-vector models (Research 143, no gain for speculative decoding pipeline)

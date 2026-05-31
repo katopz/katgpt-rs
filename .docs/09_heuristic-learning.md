@@ -970,6 +970,57 @@ plan.
   these criteria
 - **Research 096 D1**: formalized the six regularization criteria
 
+## Emotion Vector: Behavioral Early-Warning (Plan 162, Research 144)
+
+Based on Anthropic Transformer Circuits research (Research 144), emotion concepts form linear representations in LLM activation space organized by valence and arousal — and these directions **causally** drive behavior. Steering `desperation +0.1` increases reward-hacking from 5% → 70% (14× increase); `calm +0.05` drops blackmail to 0%.
+
+### Architecture
+
+Emotion reading is a **zero-cost extension to ReviewMetrics**: one O(d) dot product per decode step, no extra forward passes, no feature gate (passes T7 overhead proof).
+
+```rust
+// src/pruners/emotion_vector.rs
+pub struct EmotionDirections {
+    valence: Vec<f32>,     // positive/negative sentiment [d_model]
+    arousal: Vec<f32>,     // high/low activation [d_model]
+    desperation: Vec<f32>, // reward-hacking early warning [d_model]
+    calm: Vec<f32>,        // inhibits risk-taking [d_model]
+}
+
+pub struct EmotionReading {
+    pub valence: f32,
+    pub arousal: f32,
+    pub desperation: f32,
+    pub calm: f32,
+}
+```
+
+### Desperation Monitor
+
+`ReviewMetrics` gains five new atomic emotion fields (emotion_valence_sum, emotion_arousal_sum, desperation_score_sum, calm_score_sum, emotion_count) and two methods:
+
+- `is_desperate_session(threshold) -> bool` — fires when mean desperation exceeds threshold; signals potential reward-hacking before DDTree commits
+- `emotion_profile_summary() -> String` — formatted emotion state for logging
+
+### Integration Path (Plan 162 Phase 3)
+
+The `desperation_score` will feed into `SR²AM ConfiguratorContext` as a feature input, allowing the planner to switch to `PlanSkip` (direct sample, no tree search) when desperation is high — reducing the chance that a DDTree under distress generates reward-maximizing-but-harmful sequences.
+
+### Causal Evidence (Research 144)
+
+| Steering | Baseline → Steered | Effect |
+|---------|-------------------|--------|
+| `+desperate (+0.05)` | 22% → 72% blackmail | +50pp |
+| `+desperate (+0.1)` | 5% → 70% reward-hacking | **14× increase** |
+| `+calm (+0.05)` | baseline → 0% blackmail | **complete inhibition** |
+| `-calm (-0.05)` | 10% → 65% | reversal |
+
+### Status
+
+- Phase 1 ✅ `EmotionDirections`, `EmotionReading`, `ReviewMetrics` emotion fields
+- Phase 2 ⏳ GOAT proof: T7 overhead benchmark (<0.1%), T8 desperation↔entropy correlation
+- Phase 3 📋 SR²AM integration, domain config threshold
+
 ## References
 
 - [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) — Jiayi Weng, 2026

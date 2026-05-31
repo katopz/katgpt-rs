@@ -1070,3 +1070,90 @@ pub trait AutocurriculumSampler {
 Re-exported from both `katgpt-core` and `katgpt-rs`.
 
 LoRA application is fused in-place after each projection: `output += (α/r) × B @ (A @ input)`. Zero intermediate buffers — the delta accumulates directly into the output.
+
+## Parallax Attention (`crates/katgpt-core/src/parallax_attn.rs`, Plan 135)
+
+Streaming covariance-correction layer on top of tiled online-softmax flash attention. Reduces the regression gap between local-linear kernel attention and full SDPA from O(N²) computation to O(N) outer products via column-sum factorization.
+
+**Formula:**
+```
+o_PLX = o_SA − gate_scale · Σ_KV · ρ
+```
+- `o_SA` = attention output under chosen activation (Softmax or Sigmoid)
+- `Σ_KV = Σ_j c_j · v_j ⊗ k_j^T` — KV cross-covariance from column sums (O(N) outer products)
+- `ρ = W_R · x` — learned probe from input residual via projection
+
+**Column-Sum Factorization:** Computes `c_j = Σ_i p(i,j)` (column marginals) in one pass over the Q×K score matrix, then reconstructs Σ_KV as N outer products — avoiding the full N×N weight matrix.
+
+```rust
+pub enum ParallaxActivation {
+    Softmax,  // Gaussian-like with attention sinks (backward compat)
+    Sigmoid,  // Default — sink-free, better numerical stability
+}
+
+pub struct ParallaxConfig {
+    pub gate_scale: f32,           // correction scaling (anneal to 0.0 to disable)
+    pub zero_init: bool,           // W_R starts zeroed → plain attention fallback
+    pub activation: ParallaxActivation,
+}
+
+pub struct ParallaxScratch {
+    // Pre-allocated scratch buffers for zero-alloc hot paths
+    // rho, col_sums, scores, sigma_kv, pv_buf, correction
+}
+```
+
+| Function | Description |
+|----------|-------------|
+| `compute_rho(r_proj, x, out)` | ρ = W_R · x — matrix-vector product |
+| `parallax_correction(sigma_kv, rho, out)` | correction = Σ_KV · ρ |
+| `tiled_attention_parallax_forward(q, k, v, output, seq_len, head_dim, scale, r, x, config, scratch)` | Full forward: tiled flash attention + Parallax covariance correction |
+| `ParallaxScratch::new(seq_len, head_dim)` | Pre-allocate scratch buffers |
+| `ParallaxScratch::ensure_capacity(seq_len, head_dim)` | Resize when dimensions change |
+
+**Zero-Init Fallback:** When `gate_scale = 0.0` or `W_R` is zero, skips Σ_KV computation entirely and falls back to plain tiled attention — performance equals base `tiled_attention_forward`.
+
+**Sigmoid vs Softmax:** Sigmoid normalization (`σ(q·k·s) / Σ σ(q·k·s)`) avoids attention sinks common in softmax, improving COR (Covariance Over Representation) capacity. Softmax variant is provided for backward compatibility.
+
+**Feature gate:** `parallax_attn` (requires `tiled_attention`, `newton_schulz`). **opt-in** — requires Muon-trained W_R weights.
+
+## Emotion Vector Inference (`src/pruners/emotion_vector.rs`, Plan 162, Research 144)
+
+Zero-cost read of emotion directions from mid-layer residual-stream activations during speculative decoding. Based on Anthropic Transformer Circuits research showing linear emotion representations causally drive behavior (desperation steering → 14× reward-hacking increase at +0.1 offset).
+
+**Core Idea:** Pre-compute direction vectors for valence, arousal, desperation, and calm during training/calibration. At decode time, each read is a single O(d) dot product per step — zero additional forward passes, no feature gate required (enabled by default if T7 GOAT proof shows <0.1% overhead).
+
+```rust
+pub struct EmotionDirections {
+    // Pre-computed direction vectors [d_model] for each emotion axis
+    // valence, arousal, desperation, calm
+}
+
+pub struct EmotionReading {
+    pub valence: f32,       // positive/negative sentiment projection
+    pub arousal: f32,       // high/low activation projection
+    pub desperation: f32,   // reward-hacking early-warning signal
+    pub calm: f32,          // inverse of desperation; inhibits risk-taking
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `EmotionDirections::zeros(d_model)` | Create zero-initialized directions (placeholder) |
+| `EmotionDirections::new(valence, arousal, desperation, calm)` | Constructor with dimension validation |
+| `EmotionDirections::project(activation, direction)` → f32 | O(d) dot product, zero-alloc, `#[inline(always)]` |
+| `EmotionDirections::read_emotions(activations)` → `EmotionReading` | Project activations onto all four directions |
+
+**Integration with ReviewMetrics:** Five new atomic fields on `ReviewMetrics`: `emotion_valence_sum`, `emotion_arousal_sum`, `desperation_score_sum`, `calm_score_sum`, `emotion_count`. Methods:
+- `record_emotion(&EmotionReading)` — accumulate emotion projection values
+- `is_desperate_session(threshold)` — returns `true` when mean desperation exceeds threshold
+- `emotion_profile_summary()` — formatted string for logging
+
+**Desperation Monitor:** When a session's `desperation_score` exceeds a configurable threshold, it signals potential reward-hacking behavior — allowing SR²AM configurator or the bandit to adjust planning strategy before the DDTree commits to a high-risk path.
+
+**From Research 144:** Anthropic found 171 emotion concepts in LLM activation space organized by valence (PC1: 26% variance) and arousal (PC2: 15% variance) axes. Causal steering of `desperation` in blackmail scenario: +0.05 → 22% → 72% rate (+50pp), +0.1 → 5% → 70% rate (14× increase). `calm` direction is protective: +0.05 → 0% blackmail.
+
+**Plan 162 Phase Status:**
+- Phase 1 ✅ — Infrastructure complete (EmotionDirections, ReviewMetrics integration)
+- Phase 2 ⏳ — GOAT proof: T7 overhead (<0.1%), T8 desperation↔entropy correlation
+- Phase 3 📋 — Integrate into SR²AM ConfiguratorContext as feature input
