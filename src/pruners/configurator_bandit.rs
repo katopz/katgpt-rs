@@ -13,7 +13,12 @@ use katgpt_core::{ConfiguratorContext, PlanningDecision};
 // ── Constants ─────────────────────────────────────────────────
 
 /// Number of arms in the configurator bandit (PlanNew, PlanExtend, PlanSkip, SpecHop).
+#[cfg(not(feature = "sia_feedback"))]
 const NUM_ARMS: usize = 4;
+
+/// Number of arms with FeedbackBandit extensions (+ HarnessUpdate, WeightUpdate).
+#[cfg(feature = "sia_feedback")]
+const NUM_ARMS: usize = 6;
 
 /// Default k (speculative thread count) when SpecHop is selected.
 const DEFAULT_SPECHOP_K: usize = 4;
@@ -38,6 +43,10 @@ fn arm_index(decision: PlanningDecision) -> usize {
         PlanningDecision::PlanExtend => 1,
         PlanningDecision::PlanSkip => 2,
         PlanningDecision::SpecHop { .. } => 3,
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::HarnessUpdate => 4,
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::WeightUpdate => 5,
     }
 }
 
@@ -47,9 +56,18 @@ fn from_arm_index(idx: usize) -> PlanningDecision {
         0 => PlanningDecision::PlanNew,
         1 => PlanningDecision::PlanExtend,
         2 => PlanningDecision::PlanSkip,
+        #[cfg(not(feature = "sia_feedback"))]
         _ => PlanningDecision::SpecHop {
             k: DEFAULT_SPECHOP_K,
         },
+        #[cfg(feature = "sia_feedback")]
+        3 => PlanningDecision::SpecHop {
+            k: DEFAULT_SPECHOP_K,
+        },
+        #[cfg(feature = "sia_feedback")]
+        4 => PlanningDecision::HarnessUpdate,
+        #[cfg(feature = "sia_feedback")]
+        _ => PlanningDecision::WeightUpdate,
     }
 }
 
@@ -349,6 +367,11 @@ mod tests {
         assert_eq!(arm_index(PlanningDecision::PlanExtend), 1);
         assert_eq!(arm_index(PlanningDecision::PlanSkip), 2);
         assert_eq!(arm_index(PlanningDecision::SpecHop { k: 4 }), 3);
+        #[cfg(feature = "sia_feedback")]
+        {
+            assert_eq!(arm_index(PlanningDecision::HarnessUpdate), 4);
+            assert_eq!(arm_index(PlanningDecision::WeightUpdate), 5);
+        }
 
         assert_eq!(from_arm_index(0), PlanningDecision::PlanNew);
         assert_eq!(from_arm_index(1), PlanningDecision::PlanExtend);
@@ -357,6 +380,12 @@ mod tests {
             from_arm_index(3),
             PlanningDecision::SpecHop { .. }
         ));
+        #[cfg(feature = "sia_feedback")]
+        {
+            assert!(matches!(from_arm_index(4), PlanningDecision::HarnessUpdate));
+            assert!(matches!(from_arm_index(5), PlanningDecision::WeightUpdate));
+            assert!(matches!(from_arm_index(99), PlanningDecision::WeightUpdate));
+        }
     }
 
     // ── Entropy binning ───────────────────────────────────────
@@ -524,6 +553,10 @@ mod tests {
                 PlanningDecision::PlanExtend => 0.3,
                 PlanningDecision::PlanNew => 0.1,
                 PlanningDecision::SpecHop { .. } => 0.2,
+                #[cfg(feature = "sia_feedback")]
+                PlanningDecision::HarnessUpdate => 0.2,
+                #[cfg(feature = "sia_feedback")]
+                PlanningDecision::WeightUpdate => 0.1,
             };
             bandit.update(ctx, decision, reward);
         }
@@ -551,6 +584,10 @@ mod tests {
                 PlanningDecision::PlanExtend => 0.3,
                 PlanningDecision::PlanSkip => 0.1,
                 PlanningDecision::SpecHop { .. } => 0.2,
+                #[cfg(feature = "sia_feedback")]
+                PlanningDecision::HarnessUpdate => 0.2,
+                #[cfg(feature = "sia_feedback")]
+                PlanningDecision::WeightUpdate => 0.1,
             };
             bandit.update(ctx, decision, reward);
         }

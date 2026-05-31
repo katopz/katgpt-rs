@@ -223,6 +223,10 @@ fn planning_cost(decision: PlanningDecision) -> f32 {
         PlanningDecision::PlanExtend => 0.3,
         PlanningDecision::PlanSkip => 0.0,
         PlanningDecision::SpecHop { k } => 0.1 * (k.min(8) as f32),
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::HarnessUpdate => 0.5,
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::WeightUpdate => 2.0, // Training is expensive
     }
 }
 
@@ -260,6 +264,10 @@ pub struct Sr2amPlayer {
     plan_new_count: usize,
     plan_extend_count: usize,
     plan_spechop_count: usize,
+    #[cfg(feature = "sia_feedback")]
+    plan_harness_count: usize,
+    #[cfg(feature = "sia_feedback")]
+    plan_weight_count: usize,
 }
 
 impl Sr2amPlayer {
@@ -296,6 +304,10 @@ impl Sr2amPlayer {
             plan_new_count: 0,
             plan_extend_count: 0,
             plan_spechop_count: 0,
+            #[cfg(feature = "sia_feedback")]
+            plan_harness_count: 0,
+            #[cfg(feature = "sia_feedback")]
+            plan_weight_count: 0,
         }
     }
 
@@ -406,10 +418,14 @@ impl Sr2amPlayer {
             plan_new_count: 0,
             plan_extend_count: 0,
             plan_spechop_count: 0,
+            #[cfg(feature = "sia_feedback")]
+            plan_harness_count: 0,
+            #[cfg(feature = "sia_feedback")]
+            plan_weight_count: 0,
         })
     }
 
-    /// Get planning decision distribution: (plan_new, plan_extend, plan_skip) counts.
+    /// Get planning decision distribution: (plan_new, plan_extend, plan_skip, spechop, harness, weight) counts.
     pub fn decision_stats(&self) -> (usize, usize, usize, usize) {
         (
             self.plan_new_count,
@@ -417,6 +433,12 @@ impl Sr2amPlayer {
             self.plan_skip_count,
             self.plan_spechop_count,
         )
+    }
+
+    /// Get FeedbackBandit decision counts: (harness, weight).
+    #[cfg(feature = "sia_feedback")]
+    pub fn feedback_decision_stats(&self) -> (usize, usize) {
+        (self.plan_harness_count, self.plan_weight_count)
     }
 
     /// Compute query_scores — weak heuristic baseline (same as GZero).
@@ -598,6 +620,32 @@ impl BomberPlayer for Sr2amPlayer {
                 // The speculator handles prediction independently; use query_scores as base.
                 (query_scores, None)
             }
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => {
+                // HarnessUpdate: use current best template (like PlanExtend)
+                // AbsorbCompress promote + HotSwapPruner reload handled by caller.
+                match self.last_template {
+                    Some(template) => {
+                        let tid = self.last_template_id.unwrap_or(0);
+                        self.round_template_ids.push(tid);
+                        let hinted = Self::apply_template_hints(
+                            template,
+                            &query_scores,
+                            pos,
+                            &bomb_positions,
+                            &opponent_positions,
+                        );
+                        (hinted, Some(tid))
+                    }
+                    None => (query_scores, None),
+                }
+            }
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => {
+                // WeightUpdate: defer to Q-values (no template search)
+                // Training trigger handled by caller via WeightUpdateRequest event.
+                (query_scores, None)
+            }
         };
 
         // 6. Compute δ (game-domain Hint-δ)
@@ -623,6 +671,10 @@ impl BomberPlayer for Sr2amPlayer {
             PlanningDecision::PlanExtend => self.plan_extend_count += 1,
             PlanningDecision::PlanSkip => self.plan_skip_count += 1,
             PlanningDecision::SpecHop { .. } => self.plan_spechop_count += 1,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => self.plan_harness_count += 1,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => self.plan_weight_count += 1,
         }
         self.decision_history.push(decision);
 
@@ -949,6 +1001,11 @@ mod tests {
         assert_eq!(planning_cost(PlanningDecision::PlanSkip), 0.0);
         assert!((planning_cost(PlanningDecision::SpecHop { k: 4 }) - 0.4).abs() < f32::EPSILON);
         assert!((planning_cost(PlanningDecision::SpecHop { k: 8 }) - 0.8).abs() < f32::EPSILON);
+        #[cfg(feature = "sia_feedback")]
+        {
+            assert!((planning_cost(PlanningDecision::HarnessUpdate) - 0.5).abs() < f32::EPSILON);
+            assert!((planning_cost(PlanningDecision::WeightUpdate) - 2.0).abs() < f32::EPSILON);
+        }
     }
 
     #[test]

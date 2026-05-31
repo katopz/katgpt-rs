@@ -347,6 +347,14 @@ pub enum PlanningDecision {
     /// Activate SpecHop continuous speculation with k speculative threads (Plan 131).
     /// Selected when speculator latency α is low and tool ratio β is moderate.
     SpecHop { k: usize },
+    /// Harness update: AbsorbCompress promote + HotSwapPruner reload (Plan 163 T5).
+    /// Selected when harness has plateaued and a compressed arm set may improve.
+    #[cfg(feature = "sia_feedback")]
+    HarnessUpdate,
+    /// Weight update: trigger riir-gpu training step on accumulated TrialLog (Plan 163 T6).
+    /// Selected when stall detection fires — reward plateau suggests weights need updating.
+    #[cfg(feature = "sia_feedback")]
+    WeightUpdate,
 }
 
 /// Context key for configurator bandit — coarse entropy binning.

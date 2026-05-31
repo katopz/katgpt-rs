@@ -57,6 +57,9 @@ pub mod safe_phased;
 #[cfg(feature = "sr2am_configurator")]
 pub mod configurator_bandit;
 
+#[cfg(feature = "sia_feedback")]
+pub mod feedback_bandit;
+
 #[cfg(feature = "dreamer")]
 pub mod dreamer;
 
@@ -95,6 +98,11 @@ pub use safe_phased::SafePhasedState;
 
 #[cfg(feature = "sr2am_configurator")]
 pub use configurator_bandit::{ConfiguratorBandit, ExplorationOutcome};
+
+#[cfg(feature = "sia_feedback")]
+pub use feedback_bandit::{
+    FeedbackBandit, FeedbackBanditConfig, RlAlgorithmHint, TrajectorySummary, WeightUpdateRequest,
+};
 
 #[cfg(feature = "g_zero")]
 pub mod g_zero;

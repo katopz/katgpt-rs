@@ -214,6 +214,10 @@ fn test_configurator_bandit_explores_all_arms() {
             PlanningDecision::PlanExtend => seen_extend = true,
             PlanningDecision::PlanSkip => seen_skip = true,
             PlanningDecision::SpecHop { .. } => seen_spechop = true,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => {}
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => {}
         }
         bandit.update(ctx, decision, 0.5);
     }
@@ -259,6 +263,10 @@ fn test_configurator_bandit_selects_plan_skip_at_low_entropy() {
             PlanningDecision::PlanExtend => 0.3,
             PlanningDecision::PlanNew => 0.1,
             PlanningDecision::SpecHop { .. } => 0.2,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => 0.2,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => 0.1,
         };
         bandit.update(ctx, decision, reward);
     }
@@ -284,6 +292,10 @@ fn test_configurator_bandit_selects_plan_new_at_high_entropy() {
             PlanningDecision::PlanExtend => 0.3,
             PlanningDecision::PlanSkip => 0.1,
             PlanningDecision::SpecHop { .. } => 0.2,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => 0.2,
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => 0.1,
         };
         bandit.update(ctx, decision, reward);
     }

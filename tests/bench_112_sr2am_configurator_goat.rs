@@ -36,6 +36,16 @@ fn simulate_turn(decision: PlanningDecision, entropy: f32) -> (f32, f32) {
             let cost = 0.1 * (k.min(8) as f32);
             (quality, cost)
         }
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::HarnessUpdate => {
+            // Harness update: moderate cost, medium quality
+            (0.4, 0.5)
+        }
+        #[cfg(feature = "sia_feedback")]
+        PlanningDecision::WeightUpdate => {
+            // Weight update: high cost, good quality when stalled
+            (0.6, 2.0)
+        }
     }
 }
 
@@ -257,6 +267,10 @@ fn proof_6_plan_skip_savings() {
             PlanningDecision::PlanNew => new_count += 1,
             PlanningDecision::PlanExtend => extend_count += 1,
             PlanningDecision::SpecHop { .. } => {}
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::HarnessUpdate => {}
+            #[cfg(feature = "sia_feedback")]
+            PlanningDecision::WeightUpdate => {}
         }
 
         let (quality, cost) = simulate_turn(decision, entropy);
