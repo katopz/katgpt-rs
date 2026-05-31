@@ -5,6 +5,7 @@
 **Research:** `.research/115_PEIRA_Inter_View_Regressor_Alignment.md`
 **Source:** arXiv:2605.17671
 **Goal:** Implement PEIRA's auxiliary loss (Laux) as an alternative distillation option for model-based/modelless alignment. Feature-gated under `peira_distill`.
+**Status:** ✅ GOAT 7/7 Passed — promoted to default-ON + `full`
 
 **Key insight:** PEIRA provides a theoretically grounded, collapse-free distillation loss. The core computation is:
 1. Maintain EMA estimates of k×k covariance matrices Σ (cross-view) and N (within-view)
