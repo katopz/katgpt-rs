@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-29
 **Plan:** 139
-**Status:** OPEN
+**Status:** CLOSED
 **Priority:** LOW
 **Feature Gate:** ega_attn
 
@@ -12,18 +12,21 @@ Plan 139 Tasks 5-11 require GOAT proof examples demonstrating various EGA (Energ
 
 ## Tasks
 
-- [ ] T5: GOAT proof example — validation loss ablation (with vs without EGA gating)
-- [ ] T6: GOAT proof example — energy profile over sequence (show gating activation patterns)
-- [ ] T7: GOAT proof example — eviction behavior (demonstrate energy-based token eviction)
-- [ ] T8: GOAT proof example — combined scenario (EGA + eviction + profile)
-- [ ] T9: Generate example outputs with plots/charts
-- [ ] T10: Write example documentation
-- [ ] T11: Integrate examples into test suite or benchmark runner
+- [x] T5: GOAT proof example — validation loss ablation (with vs without EGA gating)
+- [x] T6: GOAT proof example — energy profile over sequence (show gating activation patterns)
+- [x] T7: GOAT proof example — eviction behavior (demonstrate energy-based token eviction)
+- [x] T8: GOAT proof example — combined scenario (EGA + eviction + profile)
+- [x] T9: Generate example outputs with plots/charts — energy profile table + eviction simulation
+- [x] T10: Write example documentation — `.benchmarks/046_ega_examples_goat.md`
+- [x] T11: Integrate examples into test suite or benchmark runner — `tests/test_139_ega_examples.rs`
 
 ## Context
 
 The core EGA attention mechanism exists in `src/ega_attn.rs`. Energy-gated attention uses learned energy scores to dynamically gate attention computation, enabling adaptive compute allocation per token. The implementation is complete for inference.
 
-## Blockers
+## Completion
 
-Needs riir-gpu LoRA training pipeline for EGA w_proj training.
+All T5-T11 tasks complete. Modelless GOAT proof examples demonstrate EGA gating ablation, energy profiles, eviction behavior, and combined pipeline.
+
+- Test: `tests/test_139_ega_examples.rs` — 11/11 PASS
+- Benchmark: `.benchmarks/046_ega_examples_goat.md`
