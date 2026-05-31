@@ -907,7 +907,7 @@ unsafe fn avx2_scale_inplace(x: &mut [f32], scale: f32) {
 ///
 /// Used for softmax max-subtraction: `scores[i] -= max_score`.
 /// NEON: 4× f32 per `vaddq_f32`. AVX2: 8× f32 per `_mm256_add_ps`.
-#[inline]
+#[inline(always)]
 pub fn simd_add_scalar_inplace(x: &mut [f32], val: f32) {
     #[cfg(target_arch = "aarch64")]
     {
@@ -931,7 +931,7 @@ pub fn simd_add_scalar_inplace(x: &mut [f32], val: f32) {
 ///
 /// Fuses two operations into one pass, saving one full SIMD traversal vs separate
 /// `simd_add_scalar_inplace` + `simd_scale_inplace`.
-#[inline]
+#[inline(always)]
 pub fn simd_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
     #[cfg(target_arch = "aarch64")]
     {
@@ -982,7 +982,7 @@ pub fn simd_sum_f32(x: &[f32]) -> f32 {
 ///
 /// Used for residual connections in transformer forward pass (attn + MLP).
 /// NEON: 4× f32 per `vaddq_f32`. AVX2: 8× f32 per `_mm256_add_ps`.
-#[inline]
+#[inline(always)]
 pub fn simd_add_inplace(dst: &mut [f32], src: &[f32]) {
     debug_assert_eq!(
         dst.len(),
@@ -1011,7 +1011,7 @@ pub fn simd_add_inplace(dst: &mut [f32], src: &[f32]) {
 ///
 /// Used for embedding addition (wte + wpe) in transformer forward pass.
 /// NEON: 4× f32 per `vaddq_f32`. AVX2: 8× f32 per `_mm256_add_ps`.
-#[inline]
+#[inline(always)]
 pub fn simd_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
     debug_assert_eq!(
         dst.len(),
@@ -1072,7 +1072,7 @@ pub fn simd_max_f32(x: &[f32]) -> f32 {
 ///
 /// Used for Raven KV cache update (exponential moving average with gating).
 /// NEON: fused via `vfmaq_f32`. AVX2: fused via `_mm256_fmadd_ps`.
-#[inline]
+#[inline(always)]
 pub fn simd_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
     debug_assert_eq!(
         dst.len(),
@@ -1105,7 +1105,7 @@ pub fn simd_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f
 ///
 /// NEON: fused via `vmulq_f32` (2 multiplies per 4 elements).
 /// AVX2: fused via `_mm256_mul_ps` (2 multiplies per 8 elements).
-#[inline]
+#[inline(always)]
 pub fn simd_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
     debug_assert_eq!(
         x.len(),
@@ -1137,7 +1137,7 @@ pub fn simd_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 /// where inputs are shifted by max (range [0, ~30]).
 ///
 /// NEON: 4× f32 per iteration. AVX2: 8× f32 per iteration.
-#[inline]
+#[inline(always)]
 pub fn simd_exp_inplace(x: &mut [f32]) {
     #[cfg(target_arch = "aarch64")]
     {
@@ -1161,7 +1161,7 @@ pub fn simd_exp_inplace(x: &mut [f32]) {
 ///
 /// Used by sigmoid computation in activation functions (SiLU, SwiGLU, GeGLU)
 /// to replace scalar reciprocal loops with vectorized division.
-#[inline]
+#[inline(always)]
 pub fn simd_reciprocal_inplace(x: &mut [f32]) {
     #[cfg(target_arch = "aarch64")]
     {
@@ -2933,7 +2933,7 @@ unsafe fn avx2_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 
 /// SIMD-accelerated fused subtract-accumulate: `dst[i] += a[i] - b[i]`.
 /// Single-pass operation for MLS and delta routing accumulation.
-#[inline]
+#[inline(always)]
 pub fn simd_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
     #[cfg(target_arch = "aarch64")]
     {
@@ -3017,7 +3017,7 @@ unsafe fn avx2_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) 
 ///
 /// Used in attention value accumulation where a scalar weight broadcasts across a value row.
 /// NEON: fused via `vfmaq_f32`. AVX2: fused via `_mm256_fmadd_ps`.
-#[inline]
+#[inline(always)]
 pub fn simd_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize) {
     #[cfg(target_arch = "aarch64")]
     {

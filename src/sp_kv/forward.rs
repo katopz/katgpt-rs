@@ -204,9 +204,7 @@ pub unsafe fn attention_head_core<B: BiasProvider>(
         unsafe {
             *scores_buf.get_unchecked_mut(t) = score;
         }
-        if score > max_score {
-            max_score = score;
-        }
+        max_score = max_score.max(score);
     }
 
     // Pass 2: exp(scores - max) and accumulate sum

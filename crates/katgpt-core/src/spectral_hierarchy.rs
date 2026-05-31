@@ -192,10 +192,8 @@ fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
         return Vec::new();
     }
 
-    // Convert to flat f64 symmetric matrix — pre-allocate to avoid rehashing
-    let nn = n * n;
-    let mut a: Vec<f64> = Vec::with_capacity(nn);
-    a.extend(mat.iter().map(|&x| x as f64));
+    // Convert to flat f64 symmetric matrix — collect() uses exact size_hint from slice iter
+    let mut a: Vec<f64> = mat.iter().map(|&x| x as f64).collect();
     debug_assert_eq!(a.len(), n * n);
 
     // Initialize eigenvector matrix as identity.

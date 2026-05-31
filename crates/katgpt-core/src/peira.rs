@@ -1137,12 +1137,16 @@ fn invert_spd_into(
     for j in 0..k {
         let j_row = j * k;
 
-        // Diagonal
-        let mut sum = 0.0f64;
-        for p in 0..j {
-            let val = l_scratch[j_row + p];
-            sum += val * val;
-        }
+        // Diagonal: sum of squares of L[j, 0..j]
+        let sum = if j > 0 {
+            simd_dot_f64(
+                &l_scratch[j_row..j_row + j],
+                &l_scratch[j_row..j_row + j],
+                j,
+            )
+        } else {
+            0.0
+        };
         let diag = mat[j_row + j] - sum;
         assert!(
             diag > 0.0,
@@ -1154,10 +1158,15 @@ fn invert_spd_into(
         // Off-diagonal (lower triangle only)
         for i in (j + 1)..k {
             let i_row = i * k;
-            let mut sum = 0.0f64;
-            for p in 0..j {
-                sum += l_scratch[i_row + p] * l_scratch[j_row + p];
-            }
+            let sum = if j > 0 {
+                simd_dot_f64(
+                    &l_scratch[i_row..i_row + j],
+                    &l_scratch[j_row..j_row + j],
+                    j,
+                )
+            } else {
+                0.0
+            };
             l_scratch[i_row + j] = (mat[i_row + j] - sum) / diag_sqrt;
         }
     }
@@ -1169,10 +1178,12 @@ fn invert_spd_into(
         let inv_diag = 1.0 / l_scratch[i_row + i];
         l_inv_scratch[i_row + i] = inv_diag;
         for j in 0..i {
-            let mut sum = 0.0f64;
-            for p in j..i {
-                sum += l_scratch[i_row + p] * l_inv_scratch[p * k + j];
-            }
+            // j < i always true in this loop; use SIMD for the inner dot product
+            let sum = simd_dot_f64(
+                &l_scratch[i_row + j..i_row + i],
+                &l_inv_scratch[j * k + j..j * k + i],
+                i - j,
+            );
             l_inv_scratch[i_row + j] = -sum * inv_diag;
         }
     }

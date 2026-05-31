@@ -672,9 +672,7 @@ unsafe fn attention_head(
         unsafe {
             *scores_buf.get_unchecked_mut(t) = score;
         }
-        if score > max_score {
-            max_score = score;
-        }
+        max_score = max_score.max(score);
     }
 
     // Pass 2: exp(scores - max) and accumulate sum
@@ -1461,7 +1459,6 @@ fn clustered_lm_head(
 
     // Stage 1: compute cluster scores (reuse pre-allocated buffer)
     let cluster_scores = &mut cluster_scores_buf[..num_clusters];
-    cluster_scores.fill(0.0f32);
     for (c, score) in cluster_scores.iter_mut().enumerate() {
         let row_off = c * n_embd;
         *score = crate::simd::simd_dot_f32(
@@ -2856,6 +2853,9 @@ pub fn forward_prefill<'a>(
         #[cfg(feature = "tiled_attention")]
         let use_tiled = prompt_len >= 128;
 
+        // Hoist constant scale outside per-position loop (Pattern 3: avoid recomputing unchanged values)
+        let attn_scale = ctx.attn_scale;
+
         #[cfg(feature = "tiled_attention")]
         if use_tiled {
             let tiled_size = config.n_head * prompt_len * hd;
@@ -2918,7 +2918,6 @@ pub fn forward_prefill<'a>(
                 }
             } else {
                 // Per-head attention for small prompts (below threshold)
-                let scale = ctx.attn_scale;
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         prefill.queries.as_ptr().add(q_off),
@@ -2940,7 +2939,7 @@ pub fn forward_prefill<'a>(
                             kvd,
                             hd,
                             prompt_len,
-                            scale,
+                            attn_scale,
                         );
                     }
                 }
@@ -2948,7 +2947,6 @@ pub fn forward_prefill<'a>(
 
             #[cfg(not(feature = "tiled_attention"))]
             {
-                let scale = ctx.attn_scale;
                 unsafe {
                     std::ptr::copy_nonoverlapping(
                         prefill.queries.as_ptr().add(q_off),
@@ -2970,7 +2968,7 @@ pub fn forward_prefill<'a>(
                             kvd,
                             hd,
                             prompt_len,
-                            scale,
+                            attn_scale,
                         );
                     }
                 }

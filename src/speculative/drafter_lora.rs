@@ -335,9 +335,7 @@ fn forward_drafter_with_lora(
             }
             let score = dot * scale;
             scores[t] = score;
-            if score > max_score {
-                max_score = score;
-            }
+            max_score = max_score.max(score);
         }
 
         // Pass 2: exp and accumulate sum

@@ -440,6 +440,7 @@ fn mat_vec(m: &[f32], v: &[f32]) -> Vec<f32> {
 }
 
 /// In-place matrix-vector multiply: out = M * v (zero-alloc, Plan 051).
+#[inline]
 fn mat_vec_into(m: &[f32], v: &[f32], out: &mut [f32]) {
     let dim = v.len();
     debug_assert_eq!(out.len(), dim);
@@ -459,6 +460,7 @@ fn mat_vec_t(m: &[f32], v: &[f32]) -> Vec<f32> {
 /// M is dim×dim row-major, so M^T * v = Σ_j M[j*dim + i] * v[j].
 /// SIMD dot product doesn't directly apply to column-wise access, so we keep
 /// the scalar loop but use unsafe for bounds-elision.
+#[inline]
 fn mat_vec_t_into(m: &[f32], v: &[f32], out: &mut [f32]) {
     let dim = v.len();
     debug_assert_eq!(out.len(), dim);
@@ -476,6 +478,7 @@ fn mat_vec_t_into(m: &[f32], v: &[f32], out: &mut [f32]) {
 // ── Bit packing ──────────────────────────────────────────────
 
 /// Packed byte length for n values at given bits per value.
+#[inline]
 fn packed_len(n: usize, bits: u8) -> usize {
     match bits {
         2 => n.div_ceil(4),
@@ -533,6 +536,7 @@ fn pack_indices(indices: &[u8], bits: u8) -> Vec<u8> {
 }
 
 /// Pack indices into pre-allocated buffer (zero-alloc, Plan 051).
+#[inline]
 fn pack_indices_into(indices: &[u8], bits: u8, out: &mut [u8]) {
     match bits {
         2 => {
@@ -630,6 +634,7 @@ fn unpack_indices(packed: &[u8], bits: u8, n: usize) -> Vec<u8> {
 }
 
 /// Unpack indices into pre-allocated buffer (zero-alloc, Plan 051).
+#[inline]
 fn unpack_indices_into(packed: &[u8], bits: u8, n: usize, out: &mut [u8]) {
     debug_assert!(out.len() >= n);
     match bits {

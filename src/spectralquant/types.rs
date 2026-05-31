@@ -89,8 +89,13 @@ pub struct SpectralQuantLayer {
 }
 
 /// Configuration for SpectralQuant KV cache.
+///
+/// Field order: u64 (8B) → usize (8B) → f32 (4B) → u8/bool (1B, packed).
+/// Eliminates inter-field padding on 64-bit targets.
 #[derive(Debug, Clone)]
 pub struct SpectralQuantKVCacheConfig {
+    /// Random seed for reproducibility.
+    pub seed: u64,
     /// Number of layers.
     pub n_layers: usize,
     /// KV dimension (head_dim × n_kv_head).
@@ -103,8 +108,6 @@ pub struct SpectralQuantKVCacheConfig {
     pub calibration_samples: usize,
     /// QJL projection dimension.
     pub qjl_dim: usize,
-    /// Random seed for reproducibility.
-    pub seed: u64,
     /// Average bits per coordinate across all dimensions.
     pub avg_bits: f32,
     /// Minimum bits for tail dimensions.

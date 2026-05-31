@@ -943,22 +943,16 @@ impl SpectralQuantKVCache {
             return flat;
         }
 
-        // Parallel: each rayon worker gets its own scratch + output buffer
-        let rows: Vec<Vec<f32>> = (0..n)
-            .into_par_iter()
-            .map_init(
-                || (DequantizeScratch::new(kv_dim), vec![0.0f32; kv_dim]),
-                |(scratch, buf), t| {
-                    self.dequantize_key_into_with_scratch(layer, t, scratch, buf);
-                    buf.clone()
-                },
-            )
-            .collect();
-
-        let mut flat = Vec::with_capacity(n * kv_dim);
-        for row in rows {
-            flat.extend_from_slice(&row);
-        }
+        // Parallel: pre-allocate flat output, write directly from rayon workers.
+        // Each worker dequantizes into a per-thread scratch buffer then copies
+        // into its disjoint row of the flat output — avoids Vec<Vec<f32>> allocation.
+        let mut flat = vec![0.0f32; n * kv_dim];
+        flat.par_chunks_mut(kv_dim).enumerate().for_each_init(
+            || DequantizeScratch::new(kv_dim),
+            |scratch, (t, row)| {
+                self.dequantize_key_into_with_scratch(layer, t, scratch, row);
+            },
+        );
         flat
     }
 
@@ -990,21 +984,14 @@ impl SpectralQuantKVCache {
             return flat;
         }
 
-        let rows: Vec<Vec<f32>> = (0..n)
-            .into_par_iter()
-            .map_init(
-                || (DequantizeScratch::new(kv_dim), vec![0.0f32; kv_dim]),
-                |(scratch, buf), t| {
-                    self.dequantize_value_into_with_scratch(layer, t, scratch, buf);
-                    buf.clone()
-                },
-            )
-            .collect();
-
-        let mut flat = Vec::with_capacity(n * kv_dim);
-        for row in rows {
-            flat.extend_from_slice(&row);
-        }
+        // Parallel: pre-allocate flat output, write directly from rayon workers.
+        let mut flat = vec![0.0f32; n * kv_dim];
+        flat.par_chunks_mut(kv_dim).enumerate().for_each_init(
+            || DequantizeScratch::new(kv_dim),
+            |scratch, (t, row)| {
+                self.dequantize_value_into_with_scratch(layer, t, scratch, row);
+            },
+        );
         flat
     }
 }

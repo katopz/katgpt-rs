@@ -563,21 +563,21 @@ fn score_relevance_into(
         &mut valid[..limit],
     );
     // Chunked bool→f32 conversion (8 at a time) for AVX2 auto-vectorization.
-    // Uses `bool as usize` (0 or 1) for branch-free conversion.
+    // Uses `f32::from(bool as u8)` for branch-free conversion (0 or 1).
     let mut i = 0;
     while i + 8 <= limit {
-        buf[i] = valid[i] as usize as f32;
-        buf[i + 1] = valid[i + 1] as usize as f32;
-        buf[i + 2] = valid[i + 2] as usize as f32;
-        buf[i + 3] = valid[i + 3] as usize as f32;
-        buf[i + 4] = valid[i + 4] as usize as f32;
-        buf[i + 5] = valid[i + 5] as usize as f32;
-        buf[i + 6] = valid[i + 6] as usize as f32;
-        buf[i + 7] = valid[i + 7] as usize as f32;
+        buf[i] = valid[i] as u8 as f32;
+        buf[i + 1] = valid[i + 1] as u8 as f32;
+        buf[i + 2] = valid[i + 2] as u8 as f32;
+        buf[i + 3] = valid[i + 3] as u8 as f32;
+        buf[i + 4] = valid[i + 4] as u8 as f32;
+        buf[i + 5] = valid[i + 5] as u8 as f32;
+        buf[i + 6] = valid[i + 6] as u8 as f32;
+        buf[i + 7] = valid[i + 7] as u8 as f32;
         i += 8;
     }
     for j in i..limit {
-        buf[j] = valid[j] as usize as f32;
+        buf[j] = valid[j] as u8 as f32;
     }
     buf[limit..].fill(0.0);
 }

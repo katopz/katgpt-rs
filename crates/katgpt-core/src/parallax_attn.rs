@@ -299,13 +299,21 @@ pub fn tiled_attention_parallax_forward(
         }
     };
 
+    let d = head_dim;
+    let n = seq_len;
+
     // Compute ρ = W_R · x (reuse scratch buffer)
     compute_rho(r, x, &mut scratch.rho);
 
     // If gate_scale is zero, or ρ is all zeros (zero_init with zeroed W_R),
     // plain softmax attention is sufficient.
-    let rho_is_zero = scratch.rho.iter().all(|&v| v == 0.0);
-    if parallax_config.gate_scale == 0.0 || rho_is_zero {
+    // Perf: skip O(d) linear scan when gate_scale is already zero.
+    let rho_is_zero = if parallax_config.gate_scale == 0.0 {
+        true // gate_scale=0 makes correction zero regardless of ρ
+    } else {
+        scratch.rho[..d].iter().all(|&v| v == 0.0)
+    };
+    if rho_is_zero {
         tiled_attention_core(
             q,
             k,
@@ -319,9 +327,6 @@ pub fn tiled_attention_parallax_forward(
         );
         return;
     }
-
-    let d = head_dim;
-    let n = seq_len;
 
     // Zero column sums before accumulation — scratch may be reused across calls
     scratch.col_sums[..n].fill(0.0);
@@ -370,8 +375,9 @@ pub fn tiled_attention_parallax_forward(
         }
         let v_off = j * d;
         let k_off = j * d;
-        scratch.pv_buf[..d].copy_from_slice(&v[v_off..v_off + d]);
-        simd::simd_scale_inplace(&mut scratch.pv_buf, c_j);
+        // Perf: fused scale-copy (pv_buf = c_j * v[j]) in single SIMD pass,
+        // instead of separate copy + scale (two passes over d elements).
+        simd::simd_fused_decay_write(&mut scratch.pv_buf, 0.0, &v[v_off..v_off + d], c_j);
         simd::simd_outer_product_acc(
             scratch.sigma_kv.as_mut(),
             &scratch.pv_buf,

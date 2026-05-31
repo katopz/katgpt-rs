@@ -85,6 +85,27 @@ fn frobenius_norm(m: &[f32]) -> f32 {
     crate::simd::simd_sum_sq(m, m.len()).sqrt()
 }
 
+/// Grow a Vec to `new_len` without zeroing the new tail.
+///
+/// The caller must guarantee that the new elements will be fully written
+/// before being read (e.g., in the Newton-Schulz iteration loop where every
+/// buffer element is overwritten each iteration).
+///
+/// Avoids the O(n) memset that `Vec::resize()` performs on the new tail.
+#[inline]
+fn grow_no_zero(v: &mut Vec<f32>, new_len: usize) {
+    if v.len() >= new_len {
+        return;
+    }
+    v.reserve(new_len - v.len());
+    // SAFETY: We reserved enough capacity above, and the new elements
+    // will be overwritten before being read (all NS scratch buffers are
+    // fully written each iteration via copy_from_slice or matmul output).
+    unsafe {
+        v.set_len(new_len);
+    }
+}
+
 // ── Public API ───────────────────────────────────────────────────
 
 /// Newton-Schulz 5-iteration orthogonalization.
@@ -213,33 +234,21 @@ impl NewtonSchulzScratch {
     }
 
     /// Ensure internal buffers are large enough for `m × n`.
+    ///
+    /// Uses growth-only reallocation: reserves capacity and sets length without
+    /// zeroing (the new tail will be overwritten before use). This avoids O(n)
+    /// memset on every capacity increase during the Newton-Schulz iteration loop.
     pub fn ensure_capacity(&mut self, m: usize, n: usize) {
         let mn = m * n;
         let mm = m * m;
-        if self.x.len() < mn {
-            self.x.resize(mn, 0.0);
-        }
-        if self.a_mat.len() < mm {
-            self.a_mat.resize(mm, 0.0);
-        }
-        if self.b_mat.len() < mm {
-            self.b_mat.resize(mm, 0.0);
-        }
-        if self.bx.len() < mn {
-            self.bx.resize(mn, 0.0);
-        }
-        if self.at.len() < mm {
-            self.at.resize(mm, 0.0);
-        }
-        if self.xt_buf.len() < mn {
-            self.xt_buf.resize(mn, 0.0);
-        }
-        if self.gt_buf.len() < mn {
-            self.gt_buf.resize(mn, 0.0);
-        }
-        if self.ort_buf.len() < mn {
-            self.ort_buf.resize(mn, 0.0);
-        }
+        grow_no_zero(&mut self.x, mn);
+        grow_no_zero(&mut self.a_mat, mm);
+        grow_no_zero(&mut self.b_mat, mm);
+        grow_no_zero(&mut self.bx, mn);
+        grow_no_zero(&mut self.at, mm);
+        grow_no_zero(&mut self.xt_buf, mn);
+        grow_no_zero(&mut self.gt_buf, mn);
+        grow_no_zero(&mut self.ort_buf, mn);
     }
 }
 

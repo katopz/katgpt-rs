@@ -10,7 +10,7 @@
 #[cfg(feature = "tiled_attention")]
 use rayon::prelude::*;
 #[cfg(feature = "tiled_attention")]
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 
 /// Threshold: use tiled attention when N > 128 (score matrix > L1 cache).
 /// L1 ≈ 32 KB. Score = N × N × 4B. sqrt(32K / 4) ≈ 90, round up to 128.
@@ -378,9 +378,12 @@ pub fn tiled_attention_batched(
     } else {
         // Parallel for larger workloads — Rayon overhead amortized
         // Reuse grow-only scratch buffers per OS thread via thread_local.
+        // Perf: UnsafeCell avoids RefCell's runtime borrow-check overhead.
+        // Safety: Each Rayon worker thread gets its own thread_local slot,
+        // so there is no actual concurrent access to the same cell.
         thread_local! {
-            static SCORES_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-            static O_TILE_BUF: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+            static SCORES_BUF: UnsafeCell<Vec<f32>> = const { UnsafeCell::new(Vec::new()) };
+            static O_TILE_BUF: UnsafeCell<Vec<f32>> = const { UnsafeCell::new(Vec::new()) };
         }
 
         output
@@ -390,8 +393,10 @@ pub fn tiled_attention_batched(
                 let offset = idx * head_size;
                 SCORES_BUF.with(|scores| {
                     O_TILE_BUF.with(|o_tile| {
-                        let mut scores = scores.borrow_mut();
-                        let mut o_tile = o_tile.borrow_mut();
+                        // Safety: thread_local guarantees exclusive per-thread access.
+                        // Rayon's work-stealing ensures each closure runs on one thread.
+                        let scores = unsafe { &mut *scores.get() };
+                        let o_tile = unsafe { &mut *o_tile.get() };
                         if scores.len() < scores_buf_size {
                             scores.resize(scores_buf_size, 0.0);
                         } else {
