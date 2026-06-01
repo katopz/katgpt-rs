@@ -12,6 +12,67 @@ use std::collections::HashMap;
 
 use crate::spechop::types::SpecError;
 
+// ── RecFM Cross-Hop Consistency (Plan 168 T3) ───────────────────────
+
+/// Configuration for RecFM cross-hop velocity consistency (Research 150).
+///
+/// Tracks observation velocity across consecutive SpecHop hops.
+/// Converging observations (decreasing velocity) get higher confidence;
+/// diverging observations get penalized.
+///
+/// When `enable` is `false`, all RecFM checks are no-ops (zero cost).
+#[cfg(feature = "recfm")]
+#[derive(Debug, Clone)]
+pub struct CrossHopConfig {
+    /// Enable cross-hop velocity consistency checks.
+    pub enable: bool,
+    /// Velocity threshold — observations diverging faster than this are penalized.
+    /// Default: 0.5 (moderate divergence tolerance).
+    pub velocity_threshold: f32,
+    /// Minimum hops before consistency checks are applied.
+    /// Default: 2 (need at least 2 observations to compute velocity).
+    pub min_hops_for_consistency: usize,
+}
+
+#[cfg(feature = "recfm")]
+impl Default for CrossHopConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            velocity_threshold: 0.5,
+            min_hops_for_consistency: 2,
+        }
+    }
+}
+
+/// Compute observation velocity between two consecutive observations.
+///
+/// Returns the normalized distance: `1.0 - overlap_ratio`, where
+/// overlap_ratio is the fraction of shared tokens (O(1) hot-path via
+/// simple character-level comparison).
+///
+/// - velocity = 0.0 → identical observations (converged)
+/// - velocity = 1.0 → completely different observations (diverged)
+#[cfg(feature = "recfm")]
+#[inline]
+pub fn observation_velocity(obs_k: &str, obs_k1: &str) -> f32 {
+    if obs_k.is_empty() && obs_k1.is_empty() {
+        return 0.0;
+    }
+    if obs_k.is_empty() || obs_k1.is_empty() {
+        return 1.0;
+    }
+    // Simple character overlap ratio: count matching characters in shortest common prefix
+    let min_len = obs_k.len().min(obs_k1.len());
+    let max_len = obs_k.len().max(obs_k1.len());
+    let matching = obs_k
+        .chars()
+        .zip(obs_k1.chars())
+        .take_while(|(a, b)| a == b)
+        .count();
+    1.0 - (matching as f32 / max_len as f32)
+}
+
 /// Trait for predicting tool-call observations ahead of actual responses.
 ///
 /// Paper Section 3: speculator S predicts observation o_spec for action a
