@@ -187,7 +187,14 @@ fn goat_t10_sleep_vs_nosleep_multihop() {
     let fill_pos = kv_cache_nosleep.fill_pos();
 
     // Single pass only (no sleep)
-    consolidation_pass(&kv_cache_nosleep, &mut gdn2_nosleep, fill_pos, &config);
+    let mut k_normalized = vec![0.0f32; config.head_dim];
+    consolidation_pass(
+        &kv_cache_nosleep,
+        &mut gdn2_nosleep,
+        fill_pos,
+        &config,
+        &mut k_normalized,
+    );
 
     let energy_nosleep = gdn2_state_energy(&gdn2_nosleep);
     let quality_nosleep =
@@ -198,8 +205,15 @@ fn goat_t10_sleep_vs_nosleep_multihop() {
     let mut gdn2_2 = MultiLayerGdn2Cache::new(&config);
     fill_chain_kv(&mut kv_cache_2, &config, chain_length, 42);
 
+    let mut k_normalized = vec![0.0f32; config.head_dim];
     for _ in 0..2 {
-        consolidation_pass(&kv_cache_2, &mut gdn2_2, fill_pos, &config);
+        consolidation_pass(
+            &kv_cache_2,
+            &mut gdn2_2,
+            fill_pos,
+            &config,
+            &mut k_normalized,
+        );
     }
 
     let energy_2 = gdn2_state_energy(&gdn2_2);
@@ -210,8 +224,15 @@ fn goat_t10_sleep_vs_nosleep_multihop() {
     let mut gdn2_4 = MultiLayerGdn2Cache::new(&config);
     fill_chain_kv(&mut kv_cache_4, &config, chain_length, 42);
 
+    let mut k_normalized = vec![0.0f32; config.head_dim];
     for _ in 0..4 {
-        consolidation_pass(&kv_cache_4, &mut gdn2_4, fill_pos, &config);
+        consolidation_pass(
+            &kv_cache_4,
+            &mut gdn2_4,
+            fill_pos,
+            &config,
+            &mut k_normalized,
+        );
     }
 
     let energy_4 = gdn2_state_energy(&gdn2_4);
@@ -277,15 +298,17 @@ fn goat_t10b_longer_chain_consolidation() {
         let mut gdn2_1 = MultiLayerGdn2Cache::new(&config);
         fill_chain_kv(&mut kv_1, &config, cl, 42);
         let fp = kv_1.fill_pos();
-        consolidation_pass(&kv_1, &mut gdn2_1, fp, &config);
+        let mut k_normalized = vec![0.0f32; config.head_dim];
+        consolidation_pass(&kv_1, &mut gdn2_1, fp, &config, &mut k_normalized);
         let e1 = gdn2_state_energy(&gdn2_1);
 
         let mut kv_4 = MultiLayerKVCache::new(&config);
         let mut gdn2_4 = MultiLayerGdn2Cache::new(&config);
         fill_chain_kv(&mut kv_4, &config, cl, 42);
         let fp = kv_4.fill_pos();
+        let mut k_normalized = vec![0.0f32; config.head_dim];
         for _ in 0..4 {
-            consolidation_pass(&kv_4, &mut gdn2_4, fp, &config);
+            consolidation_pass(&kv_4, &mut gdn2_4, fp, &config, &mut k_normalized);
         }
         let e4 = gdn2_state_energy(&gdn2_4);
 
@@ -331,8 +354,9 @@ fn goat_t11_sleep_with_quantized_context() {
     let mut gdn2_full = MultiLayerGdn2Cache::new(&config);
     fill_chain_kv(&mut kv_full, &config, n_tokens, 42);
     let fp = kv_full.fill_pos();
+    let mut k_normalized = vec![0.0f32; config.head_dim];
     for _ in 0..4 {
-        consolidation_pass(&kv_full, &mut gdn2_full, fp, &config);
+        consolidation_pass(&kv_full, &mut gdn2_full, fp, &config, &mut k_normalized);
     }
     let energy_full = gdn2_state_energy(&gdn2_full);
 
@@ -352,8 +376,9 @@ fn goat_t11_sleep_with_quantized_context() {
         }
     }
     let fp = kv_q8.fill_pos();
+    let mut k_normalized = vec![0.0f32; config.head_dim];
     for _ in 0..4 {
-        consolidation_pass(&kv_q8, &mut gdn2_q8, fp, &config);
+        consolidation_pass(&kv_q8, &mut gdn2_q8, fp, &config, &mut k_normalized);
     }
     let energy_q8 = gdn2_state_energy(&gdn2_q8);
 
@@ -372,8 +397,9 @@ fn goat_t11_sleep_with_quantized_context() {
         }
     }
     let fp = kv_q4.fill_pos();
+    let mut k_normalized = vec![0.0f32; config.head_dim];
     for _ in 0..4 {
-        consolidation_pass(&kv_q4, &mut gdn2_q4, fp, &config);
+        consolidation_pass(&kv_q4, &mut gdn2_q4, fp, &config, &mut k_normalized);
     }
     let energy_q4 = gdn2_state_energy(&gdn2_q4);
 
@@ -392,7 +418,14 @@ fn goat_t11_sleep_with_quantized_context() {
         }
     }
     let fp = kv_q4_nosleep.fill_pos();
-    consolidation_pass(&kv_q4_nosleep, &mut gdn2_q4_nosleep, fp, &config);
+    let mut k_normalized = vec![0.0f32; config.head_dim];
+    consolidation_pass(
+        &kv_q4_nosleep,
+        &mut gdn2_q4_nosleep,
+        fp,
+        &config,
+        &mut k_normalized,
+    );
     let energy_q4_nosleep = gdn2_state_energy(&gdn2_q4_nosleep);
 
     println!("  ┌────────────────────────────┬───────────┐");
@@ -646,8 +679,9 @@ fn goat_t13_sleep_overhead_benchmark() {
         // Warmup sleep
         for _ in 0..WARMUP {
             let mut gdn2_warmup = MultiLayerGdn2Cache::new(&config);
+            let mut k_normalized = vec![0.0f32; config.head_dim];
             for _ in 0..n_passes {
-                consolidation_pass(&kv, &mut gdn2_warmup, fp, &config);
+                consolidation_pass(&kv, &mut gdn2_warmup, fp, &config, &mut k_normalized);
             }
         }
 
@@ -655,8 +689,9 @@ fn goat_t13_sleep_overhead_benchmark() {
         let start = Instant::now();
         for _ in 0..ITERS {
             let mut gdn2_meas = MultiLayerGdn2Cache::new(&config);
+            let mut k_normalized = vec![0.0f32; config.head_dim];
             for _ in 0..n_passes {
-                consolidation_pass(&kv, &mut gdn2_meas, fp, &config);
+                consolidation_pass(&kv, &mut gdn2_meas, fp, &config, &mut k_normalized);
             }
         }
         let elapsed = start.elapsed().as_micros() as f64 / ITERS as f64;
@@ -765,8 +800,9 @@ fn goat_t13b_sleep_passes_scale_linearly() {
         let start = Instant::now();
         for _ in 0..ITERS {
             let mut gdn2 = MultiLayerGdn2Cache::new(&config);
+            let mut k_normalized = vec![0.0f32; config.head_dim];
             for _ in 0..n_passes {
-                consolidation_pass(&kv, &mut gdn2, fp, &config);
+                consolidation_pass(&kv, &mut gdn2, fp, &config, &mut k_normalized);
             }
         }
         let elapsed = start.elapsed().as_micros() as f64 / ITERS as f64;

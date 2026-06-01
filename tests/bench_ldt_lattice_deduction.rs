@@ -87,6 +87,20 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             parallax_gate_scale: 0.0,
             parallax_zero_init: true,
             emotion_desperation_threshold: 0.5,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: vec![],
+            #[cfg(feature = "deltanet_inference")]
+            layer_types: vec![],
+            #[cfg(feature = "deltanet_inference")]
+            deltanet_conv_kernel_size: 0,
+            #[cfg(feature = "deltanet_inference")]
+            deltanet_state_dim: 0,
+            #[cfg(feature = "deltanet_inference")]
+            deltanet_linear_head_dim: 0,
+            #[cfg(feature = "deltanet_inference")]
+            deltanet_linear_n_heads: 0,
+            #[cfg(feature = "deltanet_inference")]
+            deltanet_linear_n_value_heads: 0,
         }
     }
 
