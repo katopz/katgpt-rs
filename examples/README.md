@@ -288,7 +288,18 @@ cargo run --example bomber_08_agent_loop --features bomber-agent
 > **Insight:** Bomber is single-axis (survival) — rubric adds little when survival is dominant. Random benefits from high variance in FFA.
 
 ```bash
+
 cargo run --example bomber_09_rubric_tournament --features "ropd_rubric,g_zero,bomber"
+```
+
+### bomber_17_feedback_goat
+
+FeedbackBandit 1000-round GOAT regression proof (Plan 178, T16). Runs 4000 games with `Sr2amPlayer` (6-arm `ConfiguratorBandit` via `sia_feedback`) against baselines. Measures win rate, survival rate, ELO, and FeedbackBandit arm distribution.
+
+**Results:** ❌ REGRESSION — 18.6% win rate vs 29.0% 4-arm baseline. 6-arm UCB1 dilutes PlanNew convergence.
+
+```bash
+cargo run --example bomber_17_feedback_goat --features "sia_feedback,g_zero,bomber" --release
 ```
 
 ---
@@ -357,6 +368,16 @@ cargo run --example fft_01_arena
 
 ```bash
 cargo run --example fft_02_rubric_tournament --features "ropd_rubric,g_zero,fft"
+```
+
+### fft_04_feedback_goat
+
+FFT Tactics 1000-round baseline GOAT (Plan 178, T17). Establishes score baselines across 4 strategies (Greedy, Validator, HL, GZero) with 12,000 total battles.
+
+**Results:** ✅ PASS — Greedy 63.3% > HL 33.7% > GZero 13.7% > Validator 11.9%. No degenerate dominance, bounded score variance.
+
+```bash
+cargo run --example fft_04_feedback_goat --features "g_zero,fft" --release
 ```
 
 ---
