@@ -28,33 +28,43 @@ impl SpectralRotation {
     /// Forward rotation: out = V^T @ x.
     /// V is stored row-major, V^T[j][i] = V[i][j].
     /// out[j] = Σ_i V[i][j] * x[i]
-    #[allow(clippy::needless_range_loop)]
+    ///
+    /// Implemented as transpose-and-accumulate: iterate over rows of V,
+    /// scaling each row by x[i] and accumulating into `out`. This gives
+    /// contiguous reads from V and contiguous writes to out, which is
+    /// SIMD-friendly and cache-friendly.
     pub fn rotate(&self, x: &[f32], out: &mut [f32]) {
         assert_eq!(x.len(), self.head_dim);
         assert_eq!(out.len(), self.head_dim);
-        for j in 0..self.head_dim {
-            let mut sum = 0.0f32;
-            for i in 0..self.head_dim {
-                // V^T[j][i] = V[i][j] = eigenvectors[i * head_dim + j]
-                sum += self.eigenvectors[i * self.head_dim + j] * x[i];
+        out.fill(0.0);
+        let hd = self.head_dim;
+        for i in 0..hd {
+            let xi = x[i];
+            let row = &self.eigenvectors[i * hd..i * hd + hd];
+            // out[j] += row[j] * xi — contiguous for both read and write
+            for j in 0..hd {
+                unsafe {
+                    *out.get_unchecked_mut(j) += *row.get_unchecked(j) * xi;
+                }
             }
-            out[j] = sum;
         }
     }
 
     /// Inverse rotation: out = V @ x.
     /// out[i] = Σ_j V[i][j] * x[j]
-    #[allow(clippy::needless_range_loop)]
+    ///
+    /// Uses SIMD-accelerated row dot-products via `simd_matmul_rows` for
+    /// ~4-8× speedup over scalar on NEON/AVX2 targets.
     pub fn unrotate(&self, x: &[f32], out: &mut [f32]) {
         assert_eq!(x.len(), self.head_dim);
         assert_eq!(out.len(), self.head_dim);
-        for i in 0..self.head_dim {
-            let mut sum = 0.0f32;
-            for j in 0..self.head_dim {
-                sum += self.eigenvectors[i * self.head_dim + j] * x[j];
-            }
-            out[i] = sum;
-        }
+        crate::simd::simd_matmul_rows(
+            out,
+            &self.eigenvectors,
+            x,
+            self.head_dim,
+            self.head_dim,
+        );
     }
 }
 
