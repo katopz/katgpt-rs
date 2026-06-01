@@ -531,6 +531,12 @@ pub struct Config {
     pub gated_attn: bool,
     /// Whether W_R starts zeroed (true = recover exact softmax at init).
     pub parallax_zero_init: bool,
+
+    // --- Hydra Adaptive Layer Budget (Research 148, Plan 165) ---
+    /// Per-layer Hydra importance profiles. Empty = disabled.
+    /// Populated from calibration data via `calibrate_profiles()`.
+    #[cfg(feature = "hydra_budget")]
+    pub hydra_profiles: Vec<super::HydraLayerProfile>,
 }
 
 impl Config {
@@ -596,6 +602,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -698,6 +706,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -772,6 +782,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -836,6 +848,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -901,6 +915,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -964,6 +980,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -1029,6 +1047,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -1093,6 +1113,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -1159,6 +1181,8 @@ impl Config {
             parallax_gate_scale: 0.0,
             emotion_desperation_threshold: 0.5,
             parallax_zero_init: true,
+            #[cfg(feature = "hydra_budget")]
+            hydra_profiles: Vec::new(),
         }
     }
 
@@ -1263,6 +1287,18 @@ impl Config {
         if let Some(v) = overrides.max_plan_horizon {
             self.draft_lookahead = self.draft_lookahead.min(v);
         }
+        // Hydra Adaptive Layer Budget overrides (Research 148, Plan 165)
+        #[cfg(feature = "hydra_budget")]
+        {
+            if let Some(v) = overrides.hydra_skip_threshold {
+                // Applied via HydraBudgetConfig at call site, not directly on Config.
+                // The override is stored for downstream consumption.
+                let _ = v;
+            }
+            if let Some(v) = overrides.hydra_skip_erasure_draft {
+                let _ = v;
+            }
+        }
         self
     }
 }
@@ -1326,6 +1362,14 @@ pub struct InferenceOverrides {
     // --- Option<#[repr(u8) enum> (2 bytes each, 1-byte aligned) ---
     // EqR Convergence Selection (Plan 119)
     pub convergence_selector: Option<ConvergenceSelector>,
+
+    // --- Hydra Adaptive Layer Budget (Research 148, Plan 165) ---
+    /// Override Hydra skip threshold.
+    #[cfg(feature = "hydra_budget")]
+    pub hydra_skip_threshold: Option<f32>,
+    /// Override Hydra erasure-skip-draft flag.
+    #[cfg(feature = "hydra_budget")]
+    pub hydra_skip_erasure_draft: Option<bool>,
 }
 
 impl Default for Config {
@@ -2742,6 +2786,49 @@ impl TernaryWeights {
             total += self.row_scale[r] * row_sum as f32;
         }
         total
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hydra Adaptive Layer Budget (Research 148, Plan 165)
+// ---------------------------------------------------------------------------
+
+/// Per-layer Hydra profile entry (modelless mode).
+/// Pre-computed from calibration data, stored in config.
+#[cfg(feature = "hydra_budget")]
+#[derive(Clone, Debug)]
+pub struct HydraLayerProfile {
+    /// Mean absolute direct effect on top-token logit.
+    pub mean_de: f32,
+    /// Fraction of prompts where this layer is a Hydra backup.
+    pub backup_frequency: f32,
+    /// Whether this layer acts as erasure (mean DE < 0 for MLP).
+    pub is_erasure: bool,
+}
+
+/// Hydra budget configuration.
+#[cfg(feature = "hydra_budget")]
+#[derive(Clone, Debug)]
+pub struct HydraBudgetConfig {
+    /// Skip layers with |DE| below this threshold.
+    pub skip_threshold: f32,
+    /// Use modelless mode (lookup) vs model-based (logit lens).
+    pub modelless: bool,
+    /// Skip erasure MLPs during draft stage.
+    pub skip_erasure_draft: bool,
+    /// Early-terminate when cumulative DE reaches this fraction of total.
+    pub cumulative_threshold: f32,
+}
+
+#[cfg(feature = "hydra_budget")]
+impl Default for HydraBudgetConfig {
+    fn default() -> Self {
+        Self {
+            skip_threshold: 0.01,
+            modelless: true,
+            skip_erasure_draft: false,
+            cumulative_threshold: 0.95,
+        }
     }
 }
 

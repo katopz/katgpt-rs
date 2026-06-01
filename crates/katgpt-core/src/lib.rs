@@ -74,6 +74,9 @@ pub use parallax_attn::{
 
 pub use simd::SimdLevel;
 
+#[cfg(feature = "hydra_budget")]
+pub use types::{HydraBudgetConfig, HydraLayerProfile};
+
 #[cfg(feature = "questbench")]
 pub mod questbench;
 #[cfg(feature = "questbench")]

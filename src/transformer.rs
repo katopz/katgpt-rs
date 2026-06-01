@@ -445,6 +445,10 @@ pub struct ForwardContext {
     _kv_group_lut_count: usize, // actual number of heads (n_head)
     #[cfg(feature = "mls_aggregate")]
     mls_count: usize, // How many layers accumulated
+    // Hydra Adaptive Layer Budget: pre-computed skip plan (Research 148, Plan 165)
+    // None = disabled (no profiles loaded). Some(plan) = modelless skip decisions.
+    #[cfg(feature = "hydra_budget")]
+    pub(crate) hydra_skip_plan: Option<crate::pruners::HydraSkipPlan>,
     // ── f32 fields last (4-byte aligned, no padding before) ──────────
     /// Pre-computed attention scale: `1.0 / sqrt(head_dim)`. Constant per config.
     attn_scale: f32,
@@ -543,6 +547,8 @@ impl ForwardContext {
             _kv_group_lut_count: config.n_head,
             #[cfg(feature = "mls_aggregate")]
             mls_count: 0,
+            #[cfg(feature = "hydra_budget")]
+            hydra_skip_plan: None,
             attn_scale: 1.0 / (config.head_dim as f32).sqrt(),
         }
     }
@@ -1801,6 +1807,19 @@ fn forward_base<'a>(
     // 2. Layer loop
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
         let layer_cache = &mut cache.layers[layer_idx];
+
+        // Hydra Adaptive Layer Budget: skip non-contributing layers (Research 148, Plan 165)
+        // Modelless mode — zero overhead (single bool check on pre-computed plan).
+        // When skipped, x passes through unchanged (z^l = z^{l-1}).
+        #[cfg(feature = "hydra_budget")]
+        if let Some(ref skip_plan) = ctx.hydra_skip_plan {
+            if crate::pruners::should_skip_layer(skip_plan, layer_idx) {
+                // Skip this layer entirely — x passes through as-is.
+                // Still need to copy x → hidden_state for snapshot consistency.
+                ctx.hidden_state[..n].copy_from_slice(&ctx.x[..n]);
+                continue;
+            }
+        }
 
         // MLS: save pre-layer state for delta computation (Plan 104)
         #[cfg(feature = "mls_aggregate")]

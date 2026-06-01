@@ -41,3 +41,4 @@ dual_gram_pca = []  # Dual-Gram PCA routing for short-sequence calibration (Rese
 roofline_cost = []  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159)
 moa_inference = []  # MoA Mixture of Activations — token-adaptive activation mixing (Research 126, Plan 158)
 sia_feedback = ["sr2am_configurator"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
+hydra_budget = []  # Hydra-Aware Adaptive Layer Budget types (Research 148, Plan 165)
