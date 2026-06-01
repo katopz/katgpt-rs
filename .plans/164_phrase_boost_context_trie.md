@@ -17,23 +17,23 @@ Implement a `PhraseBoostPruner` that wraps any `ScreeningPruner` and adds domain
 ## Tasks
 
 ### T1: PhraseTrie — Compact Token-Level Trie
-- [ ] Create `src/pruners/phrase_trie.rs` behind `#[cfg(feature = "phrase_boost")]`
-- [ ] `PhraseTrieNode` with `children: Vec<Option<usize>>` (vocab-indexed, O(1) child lookup)
-- [ ] `PhraseTrie::insert(token_ids: &[usize])` — insert single phrase
-- [ ] `PhraseTrie::build(phrases: &[&str], encode_fn)` — bulk build from strings
-- [ ] `PhraseTrie::get_boosted_tokens(active: &FixedBitSet) -> Vec<usize>` — union of children
-- [ ] `PhraseTrie::advance(active: &mut FixedBitSet, token_id: usize)` — advance active states
-- [ ] Unit tests: insert + lookup + advance roundtrip
+- [x] Create `src/pruners/phrase_trie.rs` behind `#[cfg(feature = "phrase_boost")]`
+- [x] `PhraseTrieNode` with `children: Vec<Option<usize>>` (vocab-indexed, O(1) child lookup)
+- [x] `PhraseTrie::insert(token_ids: &[usize])` — insert single phrase
+- [x] `PhraseTrie::build(phrases: &[&str], encode_fn)` — bulk build from strings
+- [x] `PhraseTrie::get_boosted_tokens(active: &[usize]) -> Vec<usize>` — union of children
+- [x] `PhraseTrie::advance(active: &[usize], token_id: usize)` — advance active states
+- [x] Unit tests: insert + lookup + advance roundtrip
 
 ### T2: PhraseBoostPruner — ScreeningPruner Wrapper
-- [ ] Create `src/pruners/phrase_boost.rs` behind `#[cfg(feature = "phrase_boost")]`
-- [ ] `PhraseBoostPruner<P: ScreeningPruner>` wrapping any inner pruner
-- [ ] `relevance()` delegates to inner, adds normalized boost for boosted tokens
-- [ ] Boost normalization: `boost_score / (1.0 + boost_score)` to stay in [0, 1+]
-- [ ] Active state tracking: `HashMap<u128, FixedBitSet>` keyed by DDTree parent_path
-- [ ] Pre-allocate FixedBitSet per path on first access, reuse with `clear()`
-- [ ] Default `boost_score = 0.833` (= 5.0 / 6.0, matching parakeet's 5.0 in [0,1] scale)
-- [ ] Register in `src/pruners/mod.rs` behind feature gate
+- [x] Create `src/pruners/phrase_boost.rs` behind `#[cfg(feature = "phrase_boost")]`
+- [x] `PhraseBoostPruner<P: ScreeningPruner>` wrapping any inner pruner
+- [x] `relevance()` delegates to inner, adds normalized boost for boosted tokens
+- [x] Boost normalization: `boost_score / (1.0 + boost_score)` to stay in [0, 1+]
+- [x] Active state tracking: `RwLock<HashMap<u128, Vec<usize>>>` keyed by DDTree parent_path
+- [x] Pre-allocate active states per path on first access, reuse via RwLock
+- [x] Default `boost_score = 5.0` (normalizes to 5/6 ≈ 0.833, matching parakeet's 5.0 in [0,1] scale)
+- [x] Register in `src/pruners/mod.rs` behind feature gate
 
 ### T3: GOAT Proof — Bomber Arena
 - [ ] Add `phrase_boost` to test feature flags

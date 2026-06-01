@@ -562,6 +562,53 @@ impl TemplateProposer {
 
         (query, hint)
     }
+
+    // ── Hint Variant Evolution (GEPA-D, Research 146, Plan 164) ──
+
+    /// Generate a query-hint pair guided by a GEPA-D config variant.
+    ///
+    /// The variant's `template_hint` field selects which hint style to use,
+    /// overriding the default bandit selection. This allows GEPA-D to
+    /// evolve hint strategies across episodes.
+    #[cfg(feature = "gepa_reflective")]
+    pub fn propose_with_variant(
+        &mut self,
+        variant: &super::super::gepa_reflective::ConfigVariant,
+    ) -> GeneratedPair {
+        // Use variant's template hint to select a template, with fallback
+        // to UCB1 bandit selection if the hint index is out of range.
+        let template_id = if (variant.template_hint as usize) < self.templates.len() {
+            variant.template_hint as usize
+        } else {
+            self.bandit_weighted_template()
+        };
+
+        let mut pair = self.generate_from_template(template_id);
+
+        // Vary the hint style based on epsilon — higher ε = more creative hints
+        let epsilon = variant.epsilon();
+        if epsilon > 0.2 {
+            // High exploration: append a creativity prompt to the hint
+            pair.hint = format!("{}. Consider alternative approaches.", pair.hint);
+        }
+
+        self.stats[template_id].pulls += 1;
+        self.total_proposals += 1;
+
+        pair
+    }
+
+    /// Observe hint-δ for a specific variant index.
+    ///
+    /// Tracks which hint variant indices produce the best δ signals.
+    /// Maps variant_idx back to the template index and updates stats.
+    #[cfg(feature = "gepa_reflective")]
+    pub fn observe_hint_delta(&mut self, variant_idx: usize, delta: f32) {
+        // Map variant index to template: use modular arithmetic
+        // (NUM_TEMPLATE_HINTS variants map to templates cyclically)
+        let template_id = variant_idx % self.templates.len();
+        self.observe_delta(template_id, delta);
+    }
 }
 
 // ── Tests ───────────────────────────────────────────────────────
@@ -796,5 +843,30 @@ mod tests {
 
         let _ = proposer.propose_targeted(0);
         assert_eq!(proposer.pull_count(0), 2);
+    }
+
+    // ── GEPA-D Hint Variant Evolution Tests ──
+
+    #[cfg(feature = "gepa_reflective")]
+    #[test]
+    fn test_hint_variants_evolve_toward_high_delta() {
+        let mut proposer = make_proposer();
+
+        // Simulate: variant 0 (template_hint=0) gets high δ, variant 1 gets low δ
+        for _ in 0..20 {
+            proposer.observe_hint_delta(0, 0.8);
+        }
+        for _ in 0..20 {
+            proposer.observe_hint_delta(1, 0.1);
+        }
+
+        // Template 0 should now have higher mean δ than template 1
+        // (variant 0 maps to template 0, variant 1 maps to template 1)
+        let delta_0 = proposer.mean_delta(0);
+        let delta_1 = proposer.mean_delta(1);
+        assert!(
+            delta_0 > delta_1,
+            "template 0 (δ={delta_0}) should have higher delta than template 1 (δ={delta_1})"
+        );
     }
 }

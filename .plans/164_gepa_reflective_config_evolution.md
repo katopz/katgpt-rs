@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-31
 **Research:** `.research/146_RLM_GEPA_Reflective_Prompt_Evolution.md`
-**Status:** Planned
+**Status:** Implementing
 **Feature Gate:** `gepa_reflective = ["bandit", "memo_reflections"]` — **off by default** until GOAT proof
 
 ---
@@ -48,33 +48,33 @@ Episode → TrialLog → MeMo Reflection
 
 ### Phase 1: Core Types & Reflection Score
 
-- [ ] Define `ConfigVariant` enum with our configurable knobs (rubric weights, bandit ε, template hint index, absorb threshold)
-- [ ] Define `ReflectionScore` struct — maps MeMo `ReflectionResult` to a scalar config-evaluation score
-- [ ] Implement `ReflectionScore::from_reflection(result: &ReflectionResult) -> f32`
-- [ ] Unit test: known reflection → expected score
+- [x] Define `ConfigVariant` enum with our configurable knobs (rubric weights, bandit ε, template hint index, absorb threshold)
+- [x] Define `ReflectionScore` struct — maps MeMo `ReflectionResult` to a scalar config-evaluation score
+- [x] Implement `ReflectionScore::from_reflection(result: &ReflectionResult) -> f32`
+- [x] Unit test: known reflection → expected score
 
 ### Phase 2: Pareto Config Frontier
 
-- [ ] Define `ParetoConfigFrontier` — fixed-size array of Pareto-optimal `(ConfigVariant, reward, cost)` triples
-- [ ] Implement `insert()` with Pareto dominance check (reward ↑, cost ↓)
-- [ ] Implement `best()` — returns highest-reward config from current frontier
-- [ ] Unit test: insert dominated variant → dominated variant not in frontier
-- [ ] Unit test: insert non-dominated variant → frontier expands correctly
+- [x] Define `ParetoConfigFrontier` — fixed-size array of Pareto-optimal `(ConfigVariant, reward, cost)` triples
+- [x] Implement `insert()` with Pareto dominance check (reward ↑, cost ↓)
+- [x] Implement `best()` — returns highest-reward config from current frontier
+- [x] Unit test: insert dominated variant → dominated variant not in frontier
+- [x] Unit test: insert non-dominated variant → frontier expands correctly
 
 ### Phase 3: Reflective Bandit Pruner
 
-- [ ] Define `ReflectiveBanditPruner<P: ScreeningPruner>` wrapping `BanditPruner<P>`
-- [ ] Each arm maps to a `ConfigVariant`
-- [ ] `observe_reflection(arm, reflection_result)` — compute `ReflectionScore`, feed as bandit reward
-- [ ] `best_config()` — returns config from `ParetoConfigFrontier` for next episode
-- [ ] Unit test: observe good reflection for arm 0, bad for arm 1 → arm 0 config preferred
+- [x] Define `ReflectiveBanditPruner<P: ScreeningPruner>` wrapping `BanditPruner<P>`
+- [x] Each arm maps to a `ConfigVariant`
+- [x] `observe_reflection(arm, reflection_result)` — compute `ReflectionScore`, feed as bandit reward
+- [x] `best_config()` — returns config from `ParetoConfigFrontier` for next episode
+- [x] Unit test: observe good reflection for arm 0, bad for arm 1 → arm 0 config preferred
 
 ### Phase 4: Template Hint Evolution
 
-- [ ] Extend `TemplateProposer` with a hint variant pool (instead of static hints)
-- [ ] `propose_with_variant(variant: &ConfigVariant)` — select hint based on config
-- [ ] `observe_hint_delta(variant_idx, delta)` — track which hint variants work best
-- [ ] Unit test: hint variants evolve toward high-δ templates
+- [x] Extend `TemplateProposer` with a hint variant pool (instead of static hints)
+- [x] `propose_with_variant(variant: &ConfigVariant)` — select hint based on config
+- [x] `observe_hint_delta(variant_idx, delta)` — track which hint variants work best
+- [x] Unit test: hint variants evolve toward high-δ templates
 
 ### Phase 5: GOAT Proof
 
@@ -86,8 +86,8 @@ Episode → TrialLog → MeMo Reflection
 
 ### Phase 6: Feature Gate & Default Decision
 
-- [ ] Feature gate: `gepa_reflective = ["bandit", "memo_reflections"]`
-- [ ] Add to `Cargo.toml` features — **off by default**
+- [x] Feature gate: `gepa_reflective = ["bandit", "memo_reflections"]`
+- [x] Add to `Cargo.toml` features — **off by default**
 - [ ] If GOAT proof shows gain with no perf hurt → switch to default-on
 - [ ] Update README with GEPA-D section
 
