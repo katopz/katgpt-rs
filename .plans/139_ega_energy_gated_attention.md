@@ -3,7 +3,7 @@
 > **Research:** [100 — EGA Energy-Gated Attention](../.research/100_EGA_Energy_Gated_Attention_Spectral_Salience.md)
 > **Paper:** [arXiv:2605.21842](https://arxiv.org/abs/2605.21842) — Spectral salience as inductive bias for transformer attention
 > **Feature Gate:** `ega_attn` (opt-in, NOT default-on)
-> **Status:** ✅ Phase 1 complete (core implementation)
+> **Status:** ✅ Phase 2 complete (GOAT proof examples)
 > **GOAT Pillar:** ❌ Not a pillar — secondary bet, model-based, depends on LoRA quality. See [MMO GOAT Pillars Decision Matrix](../../riir-ai/.docs/27_mmo_goat_pillars_decision_matrix.md).
 > **Domain:** `katgpt-rs` — generic energy-gated attention. Game-specific τ tuning and per-domain w_proj LoRA stay in `riir-ai`.
 
@@ -128,10 +128,10 @@ Train micro config (L=6, H=8, d=256) with and without EGA on character-level dat
 - [x] T4: Add energy score computation + z-normalize + sigmoid gate utilities
 
 ### Phase 2: GOAT Proof
-- [ ] T5: `ega_01_quality` example — val loss ablation on micro config
-- [ ] T6: `ega_02_energy_profile` example — visualize energy distribution over sequence
-- [ ] T7: `ega_03_eviction` example — KV eviction experiment using energy threshold
-- [ ] T8: `ega_04_combined` example — EGA + DashAttn + SdpaOutputGate combined ablation
+- [x] T5: `ega_01_quality` example — val loss ablation on micro config
+- [x] T6: `ega_02_energy_profile` example — visualize energy distribution over sequence
+- [x] T7: `ega_03_eviction` example — KV eviction experiment using energy threshold
+- [x] T8: `ega_04_combined` example — EGA + DashAttn + SdpaOutputGate combined ablation
 
 ### Phase 3: riir-ai Integration (if GOAT passes)
 - [ ] T9: Game-domain τ discovery — run energy profiling on Bomber/Go/FFT game states
