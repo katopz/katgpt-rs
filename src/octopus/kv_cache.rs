@@ -39,25 +39,6 @@ pub struct OctopusKVCache {
     val_packed: Vec<Vec<Vec<u8>>>,
     /// Per-position value L2 norms: [layer][pos].
     val_norms: Vec<Vec<f32>>,
-    /// Current write position.
-    pos: usize,
-    /// Highest position ever written (for efficient reset).
-    max_used_pos: usize,
-    /// Number of transformer layers.
-    n_layers: usize,
-    /// KV dimension (head_dim × n_kv_heads).
-    kv_dim: usize,
-    /// Nominal bits per key coordinate.
-    key_bits: u8,
-    /// Nominal bits per value coordinate.
-    val_bits: u8,
-    /// Maximum sequence length.
-    #[allow(dead_code)]
-    max_seq_len: usize,
-    /// Use joint 3×3 rounding in encoder.
-    use_joint_rounding: bool,
-    /// Number of triplets: ⌈kv_dim/3⌉.
-    n_triplets: usize,
     // ── Scratch buffers for hot path ──
     /// [kv_dim] — normalized vector / inverse rotation output.
     scratch_normalized: Vec<f32>,
@@ -67,6 +48,27 @@ pub struct OctopusKVCache {
     scratch_triplets: Vec<super::triplet::Triplet>,
     /// [n_triplets] — reusable buffer for unpacked triplet indices.
     scratch_indices: Vec<TripletIndices>,
+    // ── usize fields (grouped for alignment) ──
+    /// Current write position.
+    pos: usize,
+    /// Highest position ever written (for efficient reset).
+    max_used_pos: usize,
+    /// Number of transformer layers.
+    n_layers: usize,
+    /// KV dimension (head_dim × n_kv_heads).
+    kv_dim: usize,
+    /// Maximum sequence length.
+    #[allow(dead_code)]
+    max_seq_len: usize,
+    /// Number of triplets: ⌈kv_dim/3⌉.
+    n_triplets: usize,
+    // ── Small fields at end to minimize padding ──
+    /// Nominal bits per key coordinate.
+    key_bits: u8,
+    /// Nominal bits per value coordinate.
+    val_bits: u8,
+    /// Use joint 3×3 rounding in encoder.
+    use_joint_rounding: bool,
 }
 
 impl OctopusKVCache {
@@ -461,14 +463,45 @@ fn generate_qjl_matrix(dim: usize, seed: u64) -> Vec<f32> {
 // Column-major storage: mat[col * dim + row].
 
 /// Matrix-vector multiply: out = mat · in (column-major).
+///
+/// Optimized with 4-column-at-a-time processing for register reuse
+/// and unsafe access to eliminate bounds checks in the inner loop.
 fn mat_vec_into(mat: &[f32], input: &[f32], out: &mut [f32]) {
     let dim = input.len();
     out[..dim].fill(0.0);
-    for col in 0..dim {
-        let m = mat[col * dim..(col + 1) * dim].as_ref();
-        let x = input[col];
-        for row in 0..dim {
-            out[row] += m[row] * x;
+    let chunks4 = dim / 4;
+
+    // Process 4 columns at a time — keeps 4 column scalars in registers
+    // and amortizes the row-loop overhead across 4 FMAs per iteration.
+    for c in 0..chunks4 {
+        let base = c * 4;
+        unsafe {
+            let x0 = *input.get_unchecked(base);
+            let x1 = *input.get_unchecked(base + 1);
+            let x2 = *input.get_unchecked(base + 2);
+            let x3 = *input.get_unchecked(base + 3);
+            let col0 = base * dim;
+            let col1 = (base + 1) * dim;
+            let col2 = (base + 2) * dim;
+            let col3 = (base + 3) * dim;
+            for r in 0..dim {
+                *out.get_unchecked_mut(r) +=
+                    *mat.get_unchecked(col0 + r) * x0
+                    + *mat.get_unchecked(col1 + r) * x1
+                    + *mat.get_unchecked(col2 + r) * x2
+                    + *mat.get_unchecked(col3 + r) * x3;
+            }
+        }
+    }
+
+    // Handle remaining columns (0..3)
+    for c in (chunks4 * 4)..dim {
+        let col_base = c * dim;
+        unsafe {
+            let x = *input.get_unchecked(c);
+            for r in 0..dim {
+                *out.get_unchecked_mut(r) += *mat.get_unchecked(col_base + r) * x;
+            }
         }
     }
 }

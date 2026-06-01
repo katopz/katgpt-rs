@@ -526,9 +526,16 @@ fn matvec(w: &[Vec<f64>], x: &[f64], y: &mut [f64]) {
 }
 
 /// Dot product of two f64 slices.
+///
+/// Written as an index-based accumulation loop to help LLVM auto-vectorize.
 #[inline]
 fn dot_product(a: &[f64], b: &[f64]) -> f64 {
-    a.iter().zip(b.iter()).map(|(&ai, &bi)| ai * bi).sum()
+    let len = a.len().min(b.len());
+    let mut sum = 0.0f64;
+    for i in 0..len {
+        sum += a[i] * b[i];
+    }
+    sum
 }
 
 // ── Token Encoding / Decoding ──────────────────────────────────

@@ -12,9 +12,10 @@ pub struct ProofChainResult {
 /// Verify that a chain of proof certificates is consistent.
 /// If certificate A implies B, and B implies C, then A's proof implies C.
 pub fn verify_proof_chain(certificates: &[ProofCertificate]) -> ProofChainResult {
-    let mut proven: HashSet<String> = HashSet::new();
-    let mut failed: Vec<String> = Vec::new();
-    let mut conditional: HashSet<String> = HashSet::new();
+    let n = certificates.len();
+    let mut proven: HashSet<String> = HashSet::with_capacity(n);
+    let mut failed: Vec<String> = Vec::with_capacity(n);
+    let mut conditional: HashSet<String> = HashSet::with_capacity(n);
 
     // Topological sort by dependencies
     let sorted = topological_sort(certificates);
@@ -85,8 +86,10 @@ fn topological_sort(certificates: &[ProofCertificate]) -> Vec<&ProofCertificate>
         .collect();
 
     let mut result = Vec::with_capacity(certificates.len());
+    let mut result_indices = Vec::with_capacity(certificates.len());
     while let Some(i) = queue.pop_front() {
         result.push(&certificates[i]);
+        result_indices.push(i);
         for &j in &adj[i] {
             in_degree[j] -= 1;
             if in_degree[j] == 0 {
@@ -95,10 +98,13 @@ fn topological_sort(certificates: &[ProofCertificate]) -> Vec<&ProofCertificate>
         }
     }
 
-    // Add any remaining (cycle) items — O(n) with HashSet lookup
-    let added: HashSet<&str> = result.iter().map(|c| c.id.as_str()).collect();
-    for cert in certificates {
-        if !added.contains(cert.id.as_str()) {
+    // Add any remaining (cycle) items — O(n) with bool vec instead of HashSet
+    let mut added = vec![false; certificates.len()];
+    for &idx in &result_indices {
+        added[idx] = true;
+    }
+    for (i, cert) in certificates.iter().enumerate() {
+        if !added[i] {
             result.push(cert);
         }
     }

@@ -18,9 +18,11 @@
 /// Standard `f32::signum()` returns 0.0 for zero, which breaks bijectivity
 /// of the octahedral map at coordinate-zero boundaries (equator edges).
 /// Using `sign_positive(0) = 1` ensures the map is bijective everywhere.
+///
+/// Branch-free: uses `bool as u8 as f32` to avoid branch misprediction.
 #[inline]
 fn sign_positive(x: f32) -> f32 {
-    if x >= 0.0 { 1.0 } else { -1.0 }
+    1.0f32 - 2.0 * (x < 0.0) as u8 as f32
 }
 
 /// Encode a unit vector on S² to octahedral coordinates in [-1,1]².
@@ -45,14 +47,13 @@ pub fn oct_encode(x: f32, y: f32, z: f32) -> (f32, f32) {
     let py = y / l1;
     let pz = z / l1;
 
-    if pz >= 0.0 {
-        (px, py)
-    } else {
-        (
-            sign_positive(px) * (1.0 - py.abs()),
-            sign_positive(py) * (1.0 - px.abs()),
-        )
-    }
+    // Branch-free hemisphere selection: avoids branch misprediction.
+    // top=1.0 when pz>=0, bottom=1.0 when pz<0
+    let top = (pz >= 0.0) as u8 as f32;
+    let bottom = 1.0 - top;
+    let xi = px * top + sign_positive(px) * (1.0 - py.abs()) * bottom;
+    let eta = py * top + sign_positive(py) * (1.0 - px.abs()) * bottom;
+    (xi, eta)
 }
 
 /// Decode octahedral coordinates in [-1,1]² back to a unit vector on S².
@@ -72,15 +73,12 @@ pub fn oct_encode(x: f32, y: f32, z: f32) -> (f32, f32) {
 pub fn oct_decode(xi: f32, eta: f32) -> (f32, f32, f32) {
     let r = 1.0 - xi.abs() - eta.abs();
 
-    let (x, y, z) = if r >= 0.0 {
-        (xi, eta, r)
-    } else {
-        (
-            sign_positive(xi) * (1.0 - eta.abs()),
-            sign_positive(eta) * (1.0 - xi.abs()),
-            r,
-        )
-    };
+    // Branch-free hemisphere reconstruction
+    let top = (r >= 0.0) as u8 as f32;
+    let bottom = 1.0 - top;
+    let x = xi * top + sign_positive(xi) * (1.0 - eta.abs()) * bottom;
+    let y = eta * top + sign_positive(eta) * (1.0 - xi.abs()) * bottom;
+    let z = r;
 
     let norm = (x * x + y * y + z * z).sqrt();
     if norm < 1e-10 {

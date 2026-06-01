@@ -42,6 +42,14 @@ impl HullHalf {
         }
     }
 
+    /// Create a new hull half with pre-allocated capacity.
+    pub fn with_capacity(upper: bool, capacity: usize) -> Self {
+        Self {
+            cht: CHT::with_capacity(capacity),
+            is_upper: upper,
+        }
+    }
+
     /// Number of lines on this hull half's envelope.
     pub fn size(&self) -> usize {
         self.cht.len()
@@ -342,6 +350,13 @@ impl BruteAttentionHead {
         }
     }
 
+    /// Create an empty brute-force attention head with pre-allocated capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            entries: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Number of inserted entries.
     pub fn size(&self) -> usize {
         self.entries.len()
@@ -369,8 +384,9 @@ impl BruteAttentionHead {
 
     /// Query for the value maximizing `q · k` (O(N) scan).
     ///
-    /// Finds the maximum score, collects all tied entries into a [`HullMeta`],
-    /// then resolves with the given tie-breaking mode.
+    /// Single-pass: tracks the running max and accumulates tied entries
+    /// into a [`HullMeta`], resetting on a new max. Resolves with the
+    /// given tie-breaking mode.
     pub fn query(&self, q: [f64; 2], tb: TieBreak) -> Option<[f64; 2]> {
         if self.entries.is_empty() {
             return None;
@@ -379,19 +395,21 @@ impl BruteAttentionHead {
         let qx = q[0];
         let qy = q[1];
 
-        // Find max score across all entries
-        let max_score = self
-            .entries
-            .iter()
-            .map(|e| qx * e.kx + qy * e.ky)
-            .fold(f64::NEG_INFINITY, f64::max);
-
-        // Collect all tied entries into a single HullMeta
+        // Single pass: track max score and collect ties
+        let mut max_score = f64::NEG_INFINITY;
         let mut meta = HullMeta::new();
         for e in &self.entries {
             let s = qx * e.kx + qy * e.ky;
-            if s == max_score {
-                meta.add(e.val, e.seq);
+            match s.partial_cmp(&max_score) {
+                Some(std::cmp::Ordering::Greater) => {
+                    max_score = s;
+                    meta = HullMeta::new();
+                    meta.add(e.val, e.seq);
+                }
+                Some(std::cmp::Ordering::Equal) => {
+                    meta.add(e.val, e.seq);
+                }
+                _ => {}
             }
         }
 

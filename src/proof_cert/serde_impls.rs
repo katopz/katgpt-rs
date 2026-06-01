@@ -8,10 +8,10 @@ pub fn save_certificates(
     certificates: &[ProofCertificate],
     path: &Path,
 ) -> Result<blake3::Hash, String> {
-    let json = serde_json::to_string_pretty(certificates)
+    let json_bytes = serde_json::to_vec_pretty(certificates)
         .map_err(|e| format!("Serialization error: {e}"))?;
-    let hash = blake3::hash(json.as_bytes());
-    std::fs::write(path, json.as_bytes()).map_err(|e| format!("Write error: {e}"))?;
+    let hash = blake3::hash(&json_bytes);
+    std::fs::write(path, &json_bytes).map_err(|e| format!("Write error: {e}"))?;
     Ok(hash)
 }
 
@@ -27,8 +27,8 @@ pub fn load_certificates(path: &Path) -> Result<Vec<ProofCertificate>, String> {
 
 /// Verify blake3 checksum of a certificate file.
 pub fn verify_checksum(path: &Path, expected: &blake3::Hash) -> bool {
-    let Ok(json) = std::fs::read_to_string(path) else {
+    let Ok(bytes) = std::fs::read(path) else {
         return false;
     };
-    &blake3::hash(json.as_bytes()) == expected
+    &blake3::hash(&bytes) == expected
 }

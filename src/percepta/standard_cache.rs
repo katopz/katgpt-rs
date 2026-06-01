@@ -65,42 +65,49 @@ impl StandardCache {
     /// Query with softmax attention.
     ///
     /// Returns the softmax-weighted average of values, or `[0.0, 0.0]` if empty.
+    ///
+    /// Uses online softmax: single pass with running max correction for
+    /// numerical stability. Equivalent to the two-pass approach but avoids
+    /// iterating twice over the entries.
     pub fn query(&self, query: &Vec2) -> [f64; 2] {
         if self.entries.is_empty() {
             return [0.0, 0.0];
         }
 
-        // Single-pass softmax: compute scores, find max, accumulate exp-weighted values
+        // Online softmax: maintain running max and correction factor
         let mut max_score = f64::NEG_INFINITY;
+        let mut sum_exp = 0.0f64;
+        let mut out = [0.0f64; 2];
+
         for e in &self.entries {
             let s = query.dot(&e.key);
-            if s > max_score {
-                max_score = s;
-            }
-        }
+            let new_max = max_score.max(s);
+            // Rescale accumulated values when max changes
+            let correction = (max_score - new_max).exp();
+            sum_exp *= correction;
+            out[0] *= correction;
+            out[1] *= correction;
 
-        let mut sum_exp = 0.0;
-        let mut out = [0.0, 0.0];
-        for e in &self.entries {
-            let exp_val = (query.dot(&e.key) - max_score).exp();
+            let exp_val = (s - new_max).exp();
             sum_exp += exp_val;
             out[0] += exp_val * e.val[0];
             out[1] += exp_val * e.val[1];
+            max_score = new_max;
         }
 
         if sum_exp == 0.0 {
             return [0.0, 0.0];
         }
 
-        out[0] /= sum_exp;
-        out[1] /= sum_exp;
-        out
+        [out[0] / sum_exp, out[1] / sum_exp]
     }
 
     /// Query with scaled softmax attention (temperature parameter).
     ///
     /// `temperature` > 1.0 makes the distribution sharper (closer to hard attention),
     /// `temperature` < 1.0 makes it smoother.
+    ///
+    /// Uses online softmax: single pass with running max correction.
     pub fn query_scaled(&self, query: &Vec2, temperature: f64) -> [f64; 2] {
         if self.entries.is_empty() {
             return [0.0, 0.0];
@@ -108,31 +115,32 @@ impl StandardCache {
 
         let inv_temp = 1.0 / temperature;
 
-        // Single-pass softmax: compute scaled scores, find max, accumulate
+        // Online softmax: maintain running max and correction factor
         let mut max_score = f64::NEG_INFINITY;
+        let mut sum_exp = 0.0f64;
+        let mut out = [0.0f64; 2];
+
         for e in &self.entries {
             let s = query.dot(&e.key) * inv_temp;
-            if s > max_score {
-                max_score = s;
-            }
-        }
+            let new_max = max_score.max(s);
+            // Rescale accumulated values when max changes
+            let correction = (max_score - new_max).exp();
+            sum_exp *= correction;
+            out[0] *= correction;
+            out[1] *= correction;
 
-        let mut sum_exp = 0.0;
-        let mut out = [0.0, 0.0];
-        for e in &self.entries {
-            let exp_val = (query.dot(&e.key) * inv_temp - max_score).exp();
+            let exp_val = (s - new_max).exp();
             sum_exp += exp_val;
             out[0] += exp_val * e.val[0];
             out[1] += exp_val * e.val[1];
+            max_score = new_max;
         }
 
         if sum_exp == 0.0 {
             return [0.0, 0.0];
         }
 
-        out[0] /= sum_exp;
-        out[1] /= sum_exp;
-        out
+        [out[0] / sum_exp, out[1] / sum_exp]
     }
 
     /// Query with hard attention (argmax).

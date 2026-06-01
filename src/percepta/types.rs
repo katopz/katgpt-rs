@@ -29,10 +29,10 @@ pub struct HullMeta {
     pub vsum: [f64; 2],
     /// Most recent value by sequence number.
     pub vlast: [f64; 2],
-    /// Number of merged points.
-    pub count: usize,
     /// Highest sequence number seen.
     pub last_seq: i64,
+    /// Number of merged points.
+    pub count: usize,
 }
 
 impl Default for HullMeta {

@@ -68,6 +68,18 @@ impl ProofCertificate {
         result: ProofResult,
         evidence: ProofEvidence,
     ) -> Self {
+        Self::with_timestamp(id, property, result, evidence, now_epoch_secs())
+    }
+
+    /// Create a certificate with an explicit timestamp.
+    /// Use this for batch creation to avoid repeated syscalls.
+    pub fn with_timestamp(
+        id: impl Into<String>,
+        property: ProofProperty,
+        result: ProofResult,
+        evidence: ProofEvidence,
+        timestamp: u64,
+    ) -> Self {
         Self {
             id: id.into(),
             property,
@@ -76,7 +88,7 @@ impl ProofCertificate {
             implies: Vec::new(),
             explanation: String::new(),
             evidence,
-            timestamp: now_epoch_secs(),
+            timestamp,
         }
     }
 

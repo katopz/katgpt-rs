@@ -52,6 +52,13 @@ impl CHT {
         Self { lines: Vec::new() }
     }
 
+    /// Create an empty CHT with pre-allocated capacity.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            lines: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Whether the envelope is empty.
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()

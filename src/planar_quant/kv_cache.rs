@@ -260,12 +260,13 @@ impl PlanarQuantKVCache {
             &mut self.scratch_indices,
         );
 
-        // Zero-pad indices area, then dequantize → scratch_rotated
-        self.scratch_rotated.fill(0.0);
-        for (i, &idx) in self.scratch_indices[..self.kv_dim].iter().enumerate() {
+        // Dequantize → scratch_rotated (only clear padding, the kv_dim range
+        // will be fully overwritten by the dequantize loop)
+        self.scratch_rotated[self.kv_dim..].fill(0.0);
+        for i in 0..self.kv_dim {
             unsafe {
                 *self.scratch_rotated.get_unchecked_mut(i) =
-                    dequantize_index(idx, &layer_state.key_centroids);
+                    dequantize_index(*self.scratch_indices.get_unchecked(i), &layer_state.key_centroids);
             }
         }
 
@@ -301,12 +302,12 @@ impl PlanarQuantKVCache {
             &mut self.scratch_indices,
         );
 
-        // Dequantize → scratch_rotated
-        self.scratch_rotated.fill(0.0);
-        for (i, &idx) in self.scratch_indices[..self.kv_dim].iter().enumerate() {
+        // Dequantize → scratch_rotated (only clear padding)
+        self.scratch_rotated[self.kv_dim..].fill(0.0);
+        for i in 0..self.kv_dim {
             unsafe {
                 *self.scratch_rotated.get_unchecked_mut(i) =
-                    dequantize_index(idx, &layer_state.val_centroids);
+                    dequantize_index(*self.scratch_indices.get_unchecked(i), &layer_state.val_centroids);
             }
         }
 
@@ -403,19 +404,26 @@ impl crate::types::QuantizedKVCache for PlanarQuantKVCache {
 /// Quantize a value to an index using decision boundaries.
 ///
 /// Returns index in `[0, boundaries.len()]`.
-#[inline]
-/// Quantize a value by finding its bucket via binary search.
-/// `partition_point` returns the first index where `value >= b` is false,
-/// i.e., the first boundary where `value < b` — equivalent to the linear scan.
+/// For small codebooks (2-4 bits = 4-16 levels), a branchless linear scan
+/// beats binary search due to cache locality and reduced overhead.
 #[inline]
 fn quantize_index(value: f32, boundaries: &[f32]) -> u8 {
+    // Fast path for small codebooks (2-4 bits = 4-16 levels)
+    if boundaries.len() <= 15 {
+        let mut idx = 0u8;
+        for &b in boundaries {
+            idx += (value >= b) as u8;
+        }
+        return idx;
+    }
     boundaries.partition_point(|&b| value >= b) as u8
 }
 
 /// Dequantize an index back to centroid value.
+/// Uses unchecked access since indices are validated during quantization.
 #[inline]
 fn dequantize_index(index: u8, centroids: &[f32]) -> f32 {
-    centroids.get(index as usize).copied().unwrap_or(0.0)
+    unsafe { *centroids.get_unchecked(index as usize) }
 }
 
 // ── Bit packing ──────────────────────────────────────────────
@@ -424,7 +432,9 @@ fn dequantize_index(index: u8, centroids: &[f32]) -> f32 {
 fn packed_len(n: usize, bits: u8) -> usize {
     match bits {
         2 => n.div_ceil(4),
-        3 | 4 => n.div_ceil(2), // 3-bit stored as 4-bit (2 per u8)
+        // 3-bit quantization is stored as 4-bit (wastes 1 bit per index but
+        // avoids the complexity of non-power-of-2 packing).
+        3 | 4 => n.div_ceil(2),
         8 => n,
         _ => (n * bits as usize).div_ceil(8),
     }
