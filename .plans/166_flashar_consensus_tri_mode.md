@@ -1,9 +1,9 @@
 # Plan 166: FlashAR Consensus Tri-Mode with Ternary Thermal Paths
 
 **Source:** Research 149 — FlashAR Diagonal-Step Parallel Decoding
-**Status:** In Progress
+**Status:** ✅ COMPLETE (T1-T10 done, promoted to default-on; T11 stretch goal pending under `flashar_anchor`)
 **Feature Gate:** `flashar_consensus` (requires `tri_mode` + `dllm` + `plasma_path`)
-**Default:** Off until GOAT proof
+**Default:** On (promoted after GOAT proof passed)
 
 ---
 
