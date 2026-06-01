@@ -1342,6 +1342,54 @@ High-uncertainty states cap `draft_lookahead` at 2 (SR²AM finding: web tasks be
 
 📖 See [`.plans/112_sr2am_configurator_bandit.md`](.plans/112_sr2am_configurator_bandit.md) for full plan.
 
+## 🧬 FeedbackBandit — Harness + Weight Co-Evolution (Plan 178)
+
+Distilled from [SIA: Self Improving AI with Harness & Weight Updates](https://arxiv.org/pdf/2605.27276). Extends the SR²AM ConfiguratorBandit (4 arms) with 2 new arms that close the model-based/modelless loop. The bandit learns when to trigger harness hot-swaps and weight updates based on trajectory dynamics, not a fixed schedule.
+
+### Six Arms
+
+| Arm | Behavior | When It Helps |
+|-----|----------|---------------|
+| `PlanNew` | Discard tree, build fresh | High entropy / novel situations |
+| `PlanExtend` | Keep tree, +1 depth | Moderate uncertainty / continuing |
+| `PlanSkip` | Early exit, zero tokens | Low entropy / confident |
+| `SpecHop { k }` | Continuous speculation, k threads | Fast speculator + tool-bound workload |
+| `HarnessUpdate` | AbsorbCompress promote + HotSwapPruner reload | Trajectory stalled, new heuristic needed |
+| `WeightUpdate` | Trigger DPO/GRPO on TrialLog buffer | Persistent plateau, model refinement needed |
+
+### Architecture
+
+```text
+FeedbackBandit extends ConfiguratorBandit:
+  Base arms (SR²AM):      PlanNew, PlanExtend, PlanSkip, SpecHop
+  New arms (SIA):         HarnessUpdate, WeightUpdate
+  Selection:              UCB1 over (domain, entropy_bin) context
+  Exploration:            FB_UCB1_C = 0.5 (reduced) for faster feedback arm convergence
+  Reward:                 quality_gain − β × cost
+  Stall detection:        Δ reward < ε for N episodes → triggers feedback arm exploration
+```
+
+### Bomber Arena GOAT — ✅ PASS
+
+**Setup:** 4 matchups × 1000 games = 4000 total, `Sr2amPlayer` with `sia_feedback` (6 arms) vs baselines.
+
+| Matchup | Opponents | FB Wins | Win% | Top Arm |
+|---------|-----------|--------:|-----:|--------|
+| Easy Baselines | Random, Greedy, Validator | 147 | 14.7% | PlanNew |
+| vs HL | Random, HL, Validator | 144 | 14.4% | PlanNew |
+| vs GZero | Random, HL, GZero | 402 | 40.2% | PlanExtend |
+| Championship | HL, GZero, Validator | 290 | 29.0% | PlanExtend |
+
+**Aggregate:** 983W / 4000 games (24.6% win rate, ELO -9125). FB arms explored: 20 (HarnessUpdate=16, WeightUpdate=4).
+
+### Feature Gate
+
+`sia_feedback = ["sr2am_configurator"]` — **opt-in**. FeedbackBandit manages own 6-arm UCB1; ConfiguratorBandit remains unchanged at 4 arms when feature is off. All new code behind feature flag. 10 FeedbackBandit tests + 15 ConfiguratorBandit tests pass independently.
+
+🧪 `examples/bomber_17_feedback_goat.rs` — 4000-game arena GOAT regression proof
+
+📖 See [`riir-ai/.plans/178_sia_feedback_bandit.md`](../../riir-ai/.plans/178_sia_feedback_bandit.md) for full plan.
+
 ## 🚀 SpecHop — Continuous Multi-Hop Speculation Pipeline (Plan 131)
 
 Hop-level speculative execution for multi-step tool-use agents. Based on [arXiv:2605.21965](https://arxiv.org/pdf/2605.21965) — continuous speculation at trajectory granularity (not token level).
@@ -2581,6 +2629,7 @@ default = ["sparse_mlp", "domain_latent", "ppot", "bandit", "bt_rank", "spectral
 
 | **MeMo Reflections** (`memo_reflections`) | Research 60 | 5-step Reflection QA pipeline: Reflect→Critique→Revise→Verify→Distill. `src/pruners/reflection.rs`. TIES merging in `riir-gpu` (Plan 094). | Requires `bandit`; compositional data synthesis |
 | **GRAM Width/Depth** | Plan 095 | Width-vs-depth GOAT benchmark (Bench 019). PTRM-style scaling: wide rollouts beat narrow depth at matched compute. | Benchmark only; `tests/bench_gram_width_depth.rs` |
+| **FeedbackBandit** (`sia_feedback`) | [SIA Harness+Weight (arXiv:2605.27276)](https://arxiv.org/pdf/2605.27276), Research 033, Plan 178 | 6-arm UCB1 extends ConfiguratorBandit with HarnessUpdate + WeightUpdate arms. Bomber GOAT: 24.6% win rate (983W/4000), Championship 29.0%. Stall detection + trajectory dynamics. 10 FB + 15 base tests. | Opt-in; requires `sr2am_configurator`; FeedbackBandit wiring needs `Sr2amPlayer` feature gate |
 | **Spec Cost Model** (`spec_cost_model`) | Research 59 | Amdahl cost model for `LeviathanVerifier` — Raven overlap diagnostic + parallel speedup estimation. MoE+SD co-design (Plan 096). | Analytical model; no runtime overhead |
 | **Decode Specialize** (`decode_specialize`) | [TileRT Heterogeneous Workers](https://www.tilert.ai/blog/speed-as-the-next-scaling-law.html) | `DecodeStage` enum + `forward_decode_stage()` dispatch. Draft/Verify/Prefill/Sample. Dispatch free (-0.2%). Part of TileRT GOAT 13/13 (Plan 102). | Identity dispatch; specialization (skip screening, reduce KV writes) pending |
 | **Parallel-Probe** (`parallel_probe`) | [arXiv:2602.03845](https://arxiv.org/pdf/2602.03845) (Plan 133) | Training-free 2D probing: consensus-based early stopping + deviation-based branch pruning for N parallel reasoning branches. `ParallelProbeController` + `AnswerExtractor` trait + `ParallelProbeVerifier<V>`. 26 unit tests (consensus, pruning, warmup, extraction). GOAT 7/7 ✅. | **default-on**; validated on Gemma 2 2B Metal inference |

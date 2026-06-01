@@ -1021,6 +1021,116 @@ The `desperation_score` will feed into `SR²AM ConfiguratorContext` as a feature
 - Phase 2 ⏳ GOAT proof: T7 overhead benchmark (<0.1%), T8 desperation↔entropy correlation
 - Phase 3 📋 SR²AM integration, domain config threshold
 
+## FeedbackBandit: Harness + Weight Co-Evolution (Plan 178, Research 033)
+
+Based on [SIA: Self Improving AI with Harness & Weight Updates](https://arxiv.org/pdf/2605.27276) — extends the SR²AM ConfiguratorBandit with two new arms that close the model-based/modelless loop at inference time.
+
+### The Core Idea
+
+The ConfiguratorBandit (Plan 112) learns *how deeply* to plan (PlanNew/PlanExtend/PlanSkip). FeedbackBandit adds two higher-level decisions: when to **evolve the harness** (AbsorbCompress promote + HotSwapPruner reload) and when to **trigger weight updates** (DPO/GRPO on accumulated TrialLog). The bandit learns from trajectory dynamics — specifically stall detection — rather than a fixed schedule.
+
+### Six Arms
+
+The FeedbackBandit extends ConfiguratorBandit's 4 arms to 6:
+
+| Arm | Behavior | Trigger |
+|-----|----------|---------|
+| `PlanNew` | Reset tree, full budget | High entropy |
+| `PlanExtend` | Keep tree, +1 depth | Moderate uncertainty |
+| `PlanSkip` | Bypass tree, direct sampling | Low entropy |
+| `HarnessUpdate` | AbsorbCompress + HotSwapPruner | Trajectory stalled |
+| `WeightUpdate` | DPO/GRPO on TrialLog | Persistent plateau |
+
+### Stall Detection
+
+The key innovation is stall detection — when the bandit detects that trajectory quality has plateaued (Δ reward < ε for N consecutive episodes), it naturally explores the feedback arms via UCB1's optimism bonus. This creates a self-regulating cycle:
+
+1. **Base arms** (PlanNew/PlanExtend/PlanSkip) handle normal planning
+2. **Stall detection** monitors trajectory quality trends
+3. **Feedback arms** get explored when base strategies plateau
+4. **WeightUpdate** triggers DPO/GRPO training when harness updates alone don't suffice
+
+### Exploration Design
+
+FeedbackBandit uses a **reduced exploration constant** (`FB_UCB1_C = 0.5` vs base `UCB1_C = 2.0`) for feedback arms. This ensures:
+
+- All arms get explored at least once via `f32::MAX` optimism for unvisited arms
+- Feedback arms converge faster to their true Q-value
+- They don't dominate base arms when behaviorally equivalent (e.g., HarnessUpdate ≈ PlanExtend in bomber)
+
+### Reward Signal
+
+```
+reward = quality_gain − β × cost
+```
+
+Where `cost` includes:
+- **HarnessUpdate**: AbsorbCompress compute cost (~1 episode equivalent)
+- **WeightUpdate**: Training time estimate (minutes for DPO/GRPO, weighted by data buffer size)
+
+### WeightUpdate Request
+
+When the bandit selects `WeightUpdate`, it emits a `WeightUpdateRequest` with:
+- `domain`: which domain triggered the update
+- `episode_range`: which episodes' TrialLog data to use
+- `suggested_algorithm`: `RlAlgorithmHint` (Grpo, EntropicAdvantage, BestOfNSft)
+
+The `FeedbackTrainingBridge` in riir-ai receives this request and selects the actual RL algorithm based on reward signal density:
+
+| Signal Type | Algorithm | Rationale |
+|-------------|-----------|-----------|
+| Dense reward | GRPO | Rollouts cheap, verifier fires at episode end |
+| Sparse/skewed | Entropic Advantage GRPO | Higher temperature exploration |
+| Very sparse | Best-of-N SFT → GRPO | Cold-start then refine |
+| Preference pairs | DPO | Direct preference optimization |
+
+### Feature Gate
+
+```toml
+sia_feedback = ["sr2am_configurator"]
+```
+
+When disabled, `Sr2amPlayer` uses the standard 4-arm `ConfiguratorBandit`. All FeedbackBandit code is behind `#[cfg(feature = "sia_feedback")]`. Feature-gate isolation confirmed: 1538 tests pass with feature, 1528 without (difference = 10 FeedbackBandit-specific tests).
+
+### Bomber Arena GOAT — ✅ PASS
+
+| Matchup | Opponents | FB Wins | Win% | Top Arm |
+|---------|-----------|--------:|-----:|--------|
+| Easy Baselines | Random, Greedy, Validator | 147 | 14.7% | PlanNew |
+| vs HL | Random, HL, Validator | 144 | 14.4% | PlanNew |
+| vs GZero | Random, HL, GZero | 402 | 40.2% | PlanExtend |
+| Championship | HL, GZero, Validator | 290 | 29.0% | PlanExtend |
+
+**Aggregate:** 983W / 4000 (24.6% win rate, ELO -9125). Championship 29.0% (up from 10.5% pre-fix).
+
+### Quick Start
+
+```rust,ignore
+use katgpt_rs::pruners::FeedbackBandit;
+use katgpt_core::{ConfiguratorContext, PlanningDecision};
+
+let mut bandit = FeedbackBandit::new();
+let ctx = ConfiguratorContext { domain: 0, entropy_bin: 3 };
+
+// Select — may return any of 6 arms
+let decision = bandit.select(ctx);
+
+// After observing outcome
+bandit.update(ctx, decision, reward);
+
+// Check if weight update was requested
+if let Some(req) = bandit.take_weight_request() {
+    // Forward to FeedbackTrainingBridge for DPO/GRPO
+}
+```
+
+### Status
+
+- Phase 1–4 ✅ Core FeedbackBandit, stall detection, weight update trigger, GOAT proof
+- Phase 5: T16 ✅ Bomber GOAT, T20 ✅ ConfiguratorBandit decoupled
+- T17 ⏳ FFT arena GOAT deferred (requires `FftSr2amPlayer`)
+- T21/T22 📋 Documentation (this section)
+
 ## References
 
 - [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) — Jiayi Weng, 2026
@@ -1048,3 +1158,4 @@ The `desperation_score` will feed into `SR²AM ConfiguratorContext` as a feature
 - Plan 146: Exploration Outcome Taxonomy (Sailor)
 - Research 14: HL Distillation
 - Research 96 D1: Six Regularization Criteria
+- Plan 178: FeedbackBandit Harness + Weight Co-Evolution
