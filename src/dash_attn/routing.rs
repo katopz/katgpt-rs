@@ -183,6 +183,32 @@ pub fn compute_routing_bias(
     per_head
 }
 
+/// Zero-alloc variant of [`compute_routing_bias`].
+///
+/// Accepts a reusable scratch buffer to avoid per-call heap allocation.
+/// The returned `RoutingResult`s still own their data (cloned from scratch)
+/// for API simplicity.
+pub fn compute_routing_bias_into(
+    queries: &[Vec<f32>],
+    summaries: &[Vec<f32>],
+    n_kv_heads: usize,
+    config: &DashAttnConfig,
+    scratch: &mut RoutingScratch,
+) -> Vec<RoutingResult> {
+    let n_query_heads = queries.len();
+    let n_chunks = summaries.len();
+
+    let per_head: Vec<RoutingResult> = queries
+        .iter()
+        .map(|q| score_blocks_entmax_into(q, summaries, config, scratch))
+        .collect();
+
+    let head_probs: Vec<&[f32]> = per_head.iter().map(|r| r.probs.as_slice()).collect();
+    let _agg_probs = entmax_gqa_aggregate(&head_probs, n_query_heads, n_kv_heads, n_chunks);
+
+    per_head
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

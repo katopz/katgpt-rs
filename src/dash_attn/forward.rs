@@ -11,7 +11,7 @@ use crate::simd;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
 use crate::types::{self, Config, DashAttnConfig};
 
-use super::chunk_summary::{ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk};
+use super::chunk_summary::{ChunkSummaryCache, ChunkSummaryQuery, summarize_chunk_into};
 use super::routing::score_blocks_entmax_into;
 
 // ---------------------------------------------------------------------------
@@ -37,6 +37,12 @@ pub fn forward_dash_attn_prefill(
 ) {
     let n = config.n_embd;
     let hd = config.head_dim;
+
+    // Cache once — avoids O(n_kv_head * head_dim) scan per position per head per layer
+    let zero_init = summary_query.is_zero_init();
+    // Pre-allocate scratch buffers for the non-zero-init summarize path
+    let mut summarize_out = vec![0.0f32; hd];
+    let mut summarize_scores_buf = vec![0.0f32; 1]; // chunk_size=1 at boundaries
 
     for (pos, &token) in tokens.iter().enumerate() {
         let tok_off = token * n;
@@ -75,8 +81,8 @@ pub fn forward_dash_attn_prefill(
                         // Reuse per-head Vecs: clear + write in-place avoids realloc
                         let slot = &mut summary_cache.summaries[chunk_idx][h];
                         slot.resize(hd, 0.0);
-                        // Inline mean-pool for the common zero-init case (avoids alloc)
-                        if summary_query.is_zero_init() {
+                        if zero_init {
+                            // Inline mean-pool for the common zero-init case (avoids alloc)
                             let inv = if k_h.len() == hd && hd > 0 {
                                 1.0 / hd as f32
                             } else {
@@ -87,8 +93,16 @@ pub fn forward_dash_attn_prefill(
                                 *v *= inv;
                             }
                         } else {
-                            let summary = summarize_chunk(summary_query, k_h, 1, h, hd);
-                            slot.copy_from_slice(&summary);
+                            summarize_chunk_into(
+                                summary_query,
+                                k_h,
+                                1,
+                                h,
+                                hd,
+                                &mut summarize_out,
+                                &mut summarize_scores_buf,
+                            );
+                            slot[..hd].copy_from_slice(&summarize_out[..hd]);
                         }
                     }
                 }

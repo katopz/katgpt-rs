@@ -21,6 +21,10 @@ pub struct ChunkSummaryQuery {
     pub head_cls: Vec<f32>,
     pub n_kv_head: usize,
     pub head_dim: usize,
+    /// Cached result of scanning `head_cls` for all-zeros.
+    /// Updated on construction; call [`recompute_zero_init_cache`] after any
+    /// direct mutation of `head_cls`.
+    zero_init_cache: bool,
 }
 
 impl ChunkSummaryQuery {
@@ -30,6 +34,7 @@ impl ChunkSummaryQuery {
             head_cls: vec![0.0; n_kv_head * head_dim],
             n_kv_head,
             head_dim,
+            zero_init_cache: true,
         }
     }
 
@@ -44,6 +49,7 @@ impl ChunkSummaryQuery {
             head_cls,
             n_kv_head,
             head_dim,
+            zero_init_cache: false,
         }
     }
 
@@ -56,11 +62,16 @@ impl ChunkSummaryQuery {
 
     /// Check if head_cls is effectively zero (mean-pooling mode).
     ///
-    /// Scans the vector to detect any mutation since construction.
-    /// The scan cost is negligible relative to the attention computation it guards
-    /// (once per chunk per head during prefill).
+    /// Returns a cached bool — O(1) instead of scanning the entire vector.
+    /// Call [`recompute_zero_init_cache`] after any direct mutation of `head_cls`.
+    #[inline]
     pub fn is_zero_init(&self) -> bool {
-        self.head_cls.iter().all(|&v| v == 0.0)
+        self.zero_init_cache
+    }
+
+    /// Recompute the cached `is_zero_init` result after mutating `head_cls`.
+    pub fn recompute_zero_init_cache(&mut self) {
+        self.zero_init_cache = self.head_cls.iter().all(|&v| v == 0.0);
     }
 }
 
@@ -374,6 +385,7 @@ mod tests {
         // Use large magnitude so softmax concentrates sharply on matching token.
         // [0, 100, 0, 0] · token 1 [0, 2, 0, 0] = 200 (dominant).
         query.head_cls[0..HEAD_DIM].copy_from_slice(&[0.0, 100.0, 0.0, 0.0]);
+        query.recompute_zero_init_cache();
 
         let chunk_keys: Vec<f32> = vec![
             1.0, 0.0, 0.0, 0.0, // token 0

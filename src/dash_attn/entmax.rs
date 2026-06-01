@@ -48,7 +48,7 @@ pub fn entmax_1p5_into(
 
     sorted_buf.clear();
     sorted_buf.extend(scores.iter().copied().enumerate());
-    sorted_buf.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    sorted_buf.sort_by(|a, b| b.1.total_cmp(&a.1));
 
     let mut cumsum = 0.0f32;
     let mut tau = 0.0f32;
@@ -146,6 +146,47 @@ pub fn entmax_gqa_aggregate<T: AsRef<[f32]>>(
     }
 
     result
+}
+
+/// Zero-alloc variant of [`entmax_gqa_aggregate`].
+///
+/// Writes aggregated probabilities into `result` and uses `counts` as scratch.
+/// Both must be pre-sized to at least `n_kv_heads` length; each `result[i]`
+/// must have at least `n_chunks` elements.
+pub fn entmax_gqa_aggregate_into<T: AsRef<[f32]>>(
+    head_probs: &[T],
+    n_query_heads: usize,
+    n_kv_heads: usize,
+    n_chunks: usize,
+    result: &mut [Vec<f32>],
+    counts: &mut [usize],
+) {
+    debug_assert!(result.len() >= n_kv_heads);
+    debug_assert!(counts.len() >= n_kv_heads);
+
+    counts[..n_kv_heads].fill(0);
+    for row in result.iter_mut().take(n_kv_heads) {
+        row[..n_chunks].fill(0.0);
+    }
+
+    for (h, head_prob) in head_probs.iter().enumerate() {
+        let kv_group = h * n_kv_heads / n_query_heads;
+        counts[kv_group] += 1;
+        let group = &mut result[kv_group];
+        let hp = head_prob.as_ref();
+        for (&prob, dest) in hp.iter().zip(group.iter_mut()) {
+            *dest += prob;
+        }
+    }
+
+    for g in 0..n_kv_heads {
+        if counts[g] > 0 {
+            let inv = 1.0 / counts[g] as f32;
+            for val in &mut result[g][..n_chunks] {
+                *val *= inv;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

@@ -51,6 +51,9 @@ pub fn head_sparsity_profile(attention: &[Vec<f32>], head_count: usize) -> Vec<H
     let segment_len = n / head_count;
 
     // SAT mutates in-place — clone to preserve the caller's data.
+    // This is necessary because SummedAreaTable::build requires &mut data for
+    // in-place prefix-sum construction. The caller could instead provide a
+    // pre-allocated mutable copy to avoid this allocation.
     let mut sat_data = attention.to_vec();
     let sat = SummedAreaTable::build(&mut sat_data);
 
