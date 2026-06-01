@@ -21,10 +21,6 @@ pub struct IsoQuantLayer {
     pub val_q_left: Vec<[f32; 4]>,
     /// Value right quaternions: only for Full mode.
     pub val_q_right: Option<Vec<[f32; 4]>>,
-    /// Lloyd-Max codebook centroids for keys (2^bits entries).
-    pub key_centroids: Vec<f32>,
-    /// Lloyd-Max codebook centroids for values.
-    pub val_centroids: Vec<f32>,
 }
 
 /// Configuration for IsoQuant KV cache.

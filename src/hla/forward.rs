@@ -59,7 +59,6 @@ pub fn forward_hla<'a>(
     // Pre-allocate temp buffers once (reused across layers)
     // Size: head_dim floats each — negligible for hd=4..16
     let mut tmp_k_cqv = vec![0.0f32; hd];
-    let mut tmp_q_g = vec![0.0f32; hd];
     let mut tmp_u = vec![0.0f32; hd];
 
     // 1. Embedding: x = wte[token] + wpe[pos]
@@ -98,7 +97,6 @@ pub fn forward_hla<'a>(
             config,
             cache.gamma,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
 
         // Readout: o_t = qᵀ(SK·CQV − G) with optional normalization

@@ -38,7 +38,6 @@ use crate::simd;
 /// * `hd` - Head dimension
 /// * `gamma` - Exponential decay (1.0 = no decay)
 /// * `tmp_k_cqv` - Pre-allocated temp buffer [hd] (avoided heap alloc)
-/// * `tmp_q_g` - Pre-allocated temp buffer [hd] (avoided heap alloc)
 #[allow(clippy::too_many_arguments)]
 #[inline]
 pub fn hla_state_update(
@@ -50,7 +49,6 @@ pub fn hla_state_update(
     hd: usize,
     gamma: f32,
     tmp_k_cqv: &mut [f32],
-    _tmp_q_g: &mut [f32],
 ) {
     debug_assert_eq!(sk.len(), hd * hd);
     debug_assert_eq!(q_head.cqv.len(), hd * hd);
@@ -61,7 +59,6 @@ pub fn hla_state_update(
     debug_assert_eq!(k.len(), hd);
     debug_assert_eq!(v.len(), hd);
     debug_assert!(tmp_k_cqv.len() >= hd);
-    debug_assert!(_tmp_q_g.len() >= hd);
 
     // ── Step 1: Cross-terms using OLD state ──
 
@@ -131,7 +128,6 @@ fn hla_per_head_update(
     hd: usize,
     gamma: f32,
     tmp_k_cqv: &mut [f32],
-    _tmp_q_g: &mut [f32],
 ) {
     // Step 1: Cross-terms using OLD CQV, mQ (before decay/accumulation)
 
@@ -275,6 +271,70 @@ pub fn hla_denom(
     denom
 }
 
+/// Combined symmetric HLA readout with normalization.
+///
+/// Computes `tmp_u = qᵀ·SK` once, then derives both the readout output
+/// and the normalization denominator from it, avoiding a redundant
+/// `qᵀ·SK` computation (saves hd² FLOPs per head).
+///
+/// ```text
+/// u = q_tᵀ · SK_t
+/// out[j] = (u · CQV[:,j]) − (q · G[:,j])
+/// denom = u · mQ − q · h + ε
+/// out /= denom
+/// ```
+#[inline]
+pub fn hla_readout_normalized(
+    q: &[f32],
+    sk: &[f32],
+    q_head: &HlaQHeadState,
+    hd: usize,
+    eps: f32,
+    out: &mut [f32],
+    tmp_u: &mut [f32],
+) {
+    debug_assert_eq!(sk.len(), hd * hd);
+    debug_assert!(out.len() >= hd);
+    debug_assert!(tmp_u.len() >= hd);
+
+    // u = q_tᵀ · SK (shared between readout and denominator)
+    tmp_u[..hd].fill(0.0);
+    for i in 0..hd {
+        let qi = unsafe { *q.get_unchecked(i) };
+        let sk_row = &sk[i * hd..i * hd + hd];
+        for j in 0..hd {
+            unsafe {
+                *tmp_u.get_unchecked_mut(j) += qi * *sk_row.get_unchecked(j);
+            }
+        }
+    }
+
+    // out[j] = (u · CQV[:,j]) − (q · G[:,j])
+    for j in 0..hd {
+        let mut val = 0.0f32;
+        for i in 0..hd {
+            unsafe {
+                val += *tmp_u.get_unchecked(i) * *q_head.cqv.get_unchecked(i * hd + j);
+                val -= *q.get_unchecked(i) * *q_head.g.get_unchecked(i * hd + j);
+            }
+        }
+        unsafe {
+            *out.get_unchecked_mut(j) = val;
+        }
+    }
+
+    // denom = u · mQ − q · h + ε
+    let mut denom = eps;
+    denom += simd::simd_dot_f32(&tmp_u[..hd], &q_head.mq, hd);
+    denom -= simd::simd_dot_f32(q, &q_head.h, hd);
+
+    if denom.abs() > 1e-8 {
+        for x in out.iter_mut() {
+            *x /= denom;
+        }
+    }
+}
+
 // ── Asymmetric AHLA Kernel ────────────────────────────────────
 
 /// AHLA streaming update and readout for one Q head.
@@ -389,13 +449,7 @@ pub fn ahla_step(
 /// ```
 #[inline]
 pub fn ahla_denom(q: &[f32], q_head: &AhlaQHeadState, hd: usize, eps: f32) -> f32 {
-    let mut denom = eps;
-    for i in 0..hd {
-        unsafe {
-            denom += *q.get_unchecked(i) * *q_head.n.get_unchecked(i);
-        }
-    }
-    denom
+    eps + simd::simd_dot_f32(q, &q_head.n, hd)
 }
 
 // ── Full-Layer Helpers ────────────────────────────────────────
@@ -412,7 +466,6 @@ pub fn ahla_denom(q: &[f32], q_head: &AhlaQHeadState, hd: usize, eps: f32) -> f3
 /// * `config` - Model config for GQA mapping
 /// * `gamma` - Exponential decay
 /// * `tmp_k_cqv` - Pre-allocated temp [hd] (reused across heads)
-/// * `tmp_q_g` - Pre-allocated temp [hd] (reused across heads)
 #[allow(clippy::too_many_arguments)]
 pub fn hla_layer_update(
     layer: &mut HlaLayerState,
@@ -422,7 +475,6 @@ pub fn hla_layer_update(
     config: &crate::types::Config,
     gamma: f32,
     tmp_k_cqv: &mut [f32],
-    tmp_q_g: &mut [f32],
 ) {
     let hd = config.head_dim;
     let n_kv = config.n_kv_head;
@@ -453,7 +505,6 @@ pub fn hla_layer_update(
             hd,
             gamma,
             tmp_k_cqv,
-            tmp_q_g,
         );
     }
 }
@@ -488,29 +539,25 @@ pub fn hla_layer_readout(
         let q_slice = &q[h * hd..(h + 1) * hd];
         let out_slice = &mut attn_out[h * hd..(h + 1) * hd];
 
-        hla_readout(
-            q_slice,
-            &layer.sk[kv_group],
-            &layer.heads[h],
-            hd,
-            out_slice,
-            tmp_u,
-        );
-
         if normalize {
-            let denom = hla_denom(
+            hla_readout_normalized(
                 q_slice,
                 &layer.sk[kv_group],
                 &layer.heads[h],
                 hd,
                 eps,
+                out_slice,
                 tmp_u,
             );
-            if denom.abs() > 1e-8 {
-                for x in out_slice.iter_mut() {
-                    *x /= denom;
-                }
-            }
+        } else {
+            hla_readout(
+                q_slice,
+                &layer.sk[kv_group],
+                &layer.heads[h],
+                hd,
+                out_slice,
+                tmp_u,
+            );
         }
     }
 }
@@ -670,7 +717,6 @@ mod tests {
         let mut sk = vec![0.0; hd * hd];
         let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
-        let mut tmp_q_g = vec![0.0; hd];
 
         let q = [1.0, 0.0, 0.0, 0.0];
         let k = [0.0, 1.0, 0.0, 0.0];
@@ -686,7 +732,6 @@ mod tests {
             hd,
             1.0,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
 
         // G should be zero because CQV was zero before this update
@@ -712,7 +757,6 @@ mod tests {
             hd,
             1.0,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
 
         // G should now have k2 · (k2ᵀ · CQV_old)
@@ -874,7 +918,6 @@ mod tests {
         let mut sk = vec![0.0; hd * hd];
         let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
-        let mut tmp_q_g = vec![0.0; hd];
 
         let q = [1.0, 1.0];
         let k = [1.0, 1.0];
@@ -890,7 +933,6 @@ mod tests {
             hd,
             1.0,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
         let _sk_no_decay = sk[0];
 
@@ -906,7 +948,6 @@ mod tests {
             hd,
             0.5,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
         // With gamma=0.5, state is decayed before adding. Since initial state is 0,
         // first update is same as no decay. Let's do a second update.
@@ -921,7 +962,6 @@ mod tests {
             hd,
             0.5,
             &mut tmp_k_cqv,
-            &mut tmp_q_g,
         );
         let sk_after_second = sk[0];
 
@@ -940,7 +980,6 @@ mod tests {
         let mut sk = vec![0.0; hd * hd];
         let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
-        let mut tmp_q_g = vec![0.0; hd];
         let mut tmp_u = vec![0.0; hd];
         let mut out = vec![0.0; hd];
 
@@ -959,7 +998,6 @@ mod tests {
                 hd,
                 1.0,
                 &mut tmp_k_cqv,
-                &mut tmp_q_g,
             );
         }
 

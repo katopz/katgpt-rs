@@ -45,7 +45,7 @@ pub mod types;
 pub use forward::{forward_ahla, forward_hla, generate_ahla_into, generate_hla_into};
 pub use kernel::{
     ahla_denom, ahla_layer_step, ahla_step, hla_denom, hla_layer_readout, hla_layer_update,
-    hla_readout, hla_state_update,
+    hla_readout, hla_readout_normalized, hla_state_update,
 };
 pub use types::{
     AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState, HlaVariant, MultiLayerAhlaCache,

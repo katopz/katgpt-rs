@@ -91,6 +91,39 @@ pub fn decompose(vec: &[f32]) -> Vec<Triplet> {
     triplets
 }
 
+/// Decompose a d-dimensional vector into a pre-allocated buffer (zero-alloc hot path).
+///
+/// Clears and fills `out` with ⌈d/3⌉ triplets.
+/// Equivalent to [`decompose`] but avoids allocation.
+///
+/// # Panics
+/// Panics if `vec` is empty.
+pub fn decompose_into(vec: &[f32], out: &mut Vec<Triplet>) {
+    assert!(!vec.is_empty(), "cannot decompose empty vector");
+
+    let d = vec.len();
+    let n = d.div_ceil(3);
+    out.clear();
+    out.reserve(n);
+
+    for i in 0..n {
+        let base = i * 3;
+        let x = vec.get(base).copied().unwrap_or(0.0);
+        let y = vec.get(base + 1).copied().unwrap_or(0.0);
+        let z = vec.get(base + 2).copied().unwrap_or(0.0);
+
+        let norm = (x * x + y * y + z * z).sqrt();
+        if norm < 1e-10 {
+            out.push(Triplet::zero());
+        } else {
+            out.push(Triplet {
+                norm,
+                dir: [x / norm, y / norm, z / norm],
+            });
+        }
+    }
+}
+
 /// Recompose triplets back into a d-dimensional vector.
 ///
 /// The output vector has length `triplets.len() * 3`, which may be

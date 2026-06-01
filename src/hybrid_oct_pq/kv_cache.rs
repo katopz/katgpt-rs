@@ -19,9 +19,11 @@
 use super::types::{HybridOctPqConfig, HybridOctPqLayer};
 use crate::octopus::OctopusConfig;
 use crate::octopus::encode::{
-    decode_vector_into, encode_vector, pack_triplet_indices, unpack_triplet_indices,
+    decode_vector_into, encode_vector_into, pack_triplet_indices_into, unpack_triplet_indices,
+    unpack_triplet_indices_into,
 };
-use crate::octopus::triplet::n_triplets;
+use crate::octopus::triplet::{Triplet, decompose_into, n_triplets};
+use crate::octopus::types::TripletIndices;
 use crate::planar_quant::rotation::{
     apply_inverse_rotation, apply_rotation, generate_givens_rotations,
 };
@@ -36,6 +38,7 @@ use crate::simd::simd_scale_inplace;
 /// Rotation uses PlanarQuant's O(d) 2D Givens (256 FMAs for d=128)
 /// instead of OCTOPUS's O(d²) full matrix (16,384 FMAs).
 pub struct HybridOctPqKVCache {
+    // ── Storage fields (Vec: 24 bytes each, pointer-aligned) ──
     /// Per-layer PQ rotations + OCT codebooks.
     pub layers: Vec<HybridOctPqLayer>,
     /// Packed key triplet indices: [layer][pos][packed_bytes].
@@ -46,6 +49,18 @@ pub struct HybridOctPqKVCache {
     val_packed: Vec<Vec<Vec<u8>>>,
     /// Per-position value L2 norms: [layer][pos].
     val_norms: Vec<Vec<f32>>,
+    // ── Scratch buffers for zero-alloc hot path ──
+    /// [kv_dim_padded] — normalized vector / PQ rotation input.
+    scratch_normalized: Vec<f32>,
+    /// [kv_dim_padded] — PQ rotation output / encode input.
+    scratch_rotated: Vec<f32>,
+    /// [n_triplets * 3] — OCT triplet decode workspace.
+    scratch_workspace: Vec<f32>,
+    /// [n_triplets] — scratch for triplet decomposition output.
+    scratch_triplets: Vec<Triplet>,
+    /// [n_triplets] — scratch for encoded triplet indices.
+    scratch_indices: Vec<TripletIndices>,
+    // ── Scalar config (usize: 8 bytes each) ──
     /// Current write position.
     pos: usize,
     /// Number of transformer layers.
@@ -54,23 +69,17 @@ pub struct HybridOctPqKVCache {
     kv_dim: usize,
     /// KV dimension padded to even (for PQ rotation).
     kv_dim_padded: usize,
+    /// Maximum sequence length.
+    max_seq_len: usize,
+    /// Number of triplets: ⌈kv_dim/3⌉.
+    n_triplets: usize,
+    // ── Small fields at end (packed, 3 bytes + 5 padding) ──
     /// Nominal bits per key coordinate.
     key_bits: u8,
     /// Nominal bits per value coordinate.
     val_bits: u8,
-    /// Maximum sequence length.
-    max_seq_len: usize,
     /// Use joint 3×3 rounding in encoder.
     use_joint_rounding: bool,
-    /// Number of triplets: ⌈kv_dim/3⌉.
-    n_triplets: usize,
-    // ── Scratch buffers for zero-alloc hot path ──
-    /// [kv_dim_padded] — normalized vector / PQ rotation input.
-    scratch_normalized: Vec<f32>,
-    /// [kv_dim_padded] — PQ rotation output / encode input.
-    scratch_rotated: Vec<f32>,
-    /// [n_triplets * 3] — OCT triplet decode workspace.
-    scratch_workspace: Vec<f32>,
 }
 
 impl HybridOctPqKVCache {
@@ -113,18 +122,20 @@ impl HybridOctPqKVCache {
             key_norms: vec![vec![0.0f32; cfg.max_seq_len]; cfg.n_layers],
             val_packed: vec![vec![vec![0u8; packed_val_len]; cfg.max_seq_len]; cfg.n_layers],
             val_norms: vec![vec![0.0f32; cfg.max_seq_len]; cfg.n_layers],
+            scratch_normalized: vec![0.0f32; kv_dim_padded],
+            scratch_rotated: vec![0.0f32; kv_dim_padded],
+            scratch_workspace: vec![0.0f32; n_tri * 3],
+            scratch_triplets: Vec::with_capacity(n_tri),
+            scratch_indices: Vec::with_capacity(n_tri),
             pos: 0,
             n_layers: cfg.n_layers,
             kv_dim: cfg.kv_dim,
             kv_dim_padded,
+            max_seq_len: cfg.max_seq_len,
+            n_triplets: n_tri,
             key_bits: cfg.key_bits,
             val_bits: cfg.val_bits,
-            max_seq_len: cfg.max_seq_len,
             use_joint_rounding: cfg.use_joint_rounding,
-            n_triplets: n_tri,
-            scratch_normalized: vec![0.0f32; kv_dim_padded],
-            scratch_rotated: vec![0.0f32; kv_dim_padded],
-            scratch_workspace: vec![0.0f32; n_tri * 3],
         }
     }
 
@@ -154,16 +165,26 @@ impl HybridOctPqKVCache {
             &mut self.scratch_rotated,
         );
 
-        // 3+4. OCT encode triplets from rotated vector (first kv_dim elements)
+        // 3+4. Decompose → encode triplets (zero-alloc via scratch buffers)
         let cb = &self.layers[layer].key_codebook;
-        let indices = encode_vector(
+        decompose_into(
             &self.scratch_rotated[..self.kv_dim],
+            &mut self.scratch_triplets,
+        );
+        encode_vector_into(
+            &self.scratch_triplets,
             cb,
             self.use_joint_rounding,
+            &mut self.scratch_indices,
         );
 
-        // 5. Bit-pack triplet indices
-        self.key_packed[layer][pos] = pack_triplet_indices(&indices, cb.dir_bits, cb.nrm_bits);
+        // 5. Bit-pack triplet indices directly into packed buffer
+        pack_triplet_indices_into(
+            &self.scratch_indices,
+            cb.dir_bits,
+            cb.nrm_bits,
+            &mut self.key_packed[layer][pos],
+        );
     }
 
     /// Quantize and store a value vector at given layer and position.
@@ -189,13 +210,23 @@ impl HybridOctPqKVCache {
         );
 
         let cb = &self.layers[layer].val_codebook;
-        let indices = encode_vector(
+        decompose_into(
             &self.scratch_rotated[..self.kv_dim],
+            &mut self.scratch_triplets,
+        );
+        encode_vector_into(
+            &self.scratch_triplets,
             cb,
             self.use_joint_rounding,
+            &mut self.scratch_indices,
         );
 
-        self.val_packed[layer][pos] = pack_triplet_indices(&indices, cb.dir_bits, cb.nrm_bits);
+        pack_triplet_indices_into(
+            &self.scratch_indices,
+            cb.dir_bits,
+            cb.nrm_bits,
+            &mut self.val_packed[layer][pos],
+        );
     }
 
     /// Dequantize key at position. Returns reconstructed key vector.
@@ -266,15 +297,16 @@ impl HybridOctPqKVCache {
         }
 
         let cb = &self.layers[layer].key_codebook;
-        let indices = unpack_triplet_indices(
+        unpack_triplet_indices_into(
             &self.key_packed[layer][pos],
             self.n_triplets,
             cb.dir_bits,
             cb.nrm_bits,
+            &mut self.scratch_indices,
         );
 
         // OCT decode triplets into workspace
-        decode_vector_into(&indices, cb, &mut self.scratch_workspace);
+        decode_vector_into(&self.scratch_indices, cb, &mut self.scratch_workspace);
 
         // Copy + zero-pad to even for PQ inverse rotation
         self.scratch_rotated.fill(0.0);
@@ -303,14 +335,15 @@ impl HybridOctPqKVCache {
         }
 
         let cb = &self.layers[layer].val_codebook;
-        let indices = unpack_triplet_indices(
+        unpack_triplet_indices_into(
             &self.val_packed[layer][pos],
             self.n_triplets,
             cb.dir_bits,
             cb.nrm_bits,
+            &mut self.scratch_indices,
         );
 
-        decode_vector_into(&indices, cb, &mut self.scratch_workspace);
+        decode_vector_into(&self.scratch_indices, cb, &mut self.scratch_workspace);
 
         self.scratch_rotated.fill(0.0);
         self.scratch_rotated[..self.kv_dim].copy_from_slice(&self.scratch_workspace[..self.kv_dim]);

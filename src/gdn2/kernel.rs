@@ -116,6 +116,101 @@ pub fn gdn2_recurrent_step(
     }
 }
 
+/// GDN2 state update: steps 1–3 (decay, read, update).
+///
+/// Updates state S in-place with the new k/v pair. Does NOT produce output.
+/// Split out from `gdn2_recurrent_step` so that with GQA the state can be
+/// updated once per KV group and then read by multiple Q heads.
+#[allow(clippy::too_many_arguments)]
+pub fn gdn2_state_update(
+    s: &mut [f32],
+    k: &[f32],
+    v: &[f32],
+    alpha: &[f32],
+    b: &[f32],
+    w_val: f32,
+    w: &[f32],
+    temp: &mut [f32],
+    delta: &mut [f32],
+    dk: usize,
+    dv: usize,
+    gate_config: Gdn2GateConfig,
+) {
+    debug_assert_eq!(k.len(), dk);
+    debug_assert_eq!(v.len(), dv);
+    debug_assert_eq!(s.len(), dk * dv);
+    debug_assert_eq!(alpha.len(), dk);
+    debug_assert_eq!(b.len(), dk);
+    debug_assert!(w.len() >= dv || gate_config != Gdn2GateConfig::Full);
+    debug_assert_eq!(temp.len(), dv);
+    debug_assert_eq!(delta.len(), dv);
+
+    // Step 1: Decay S *= Diag(alpha) — row-wise scale
+    for (row, &alpha_row) in alpha.iter().enumerate() {
+        let row_start = row * dv;
+        simd_scale_inplace(&mut s[row_start..row_start + dv], alpha_row);
+    }
+
+    // Step 2: Read r = Sᵀ(b ⊙ k) — gated matvec
+    temp.fill(0.0);
+    for i in 0..dk {
+        let bk_i = b[i] * k[i];
+        if bk_i == 0.0 {
+            continue;
+        }
+        let row_start = i * dv;
+        for j in 0..dv {
+            unsafe {
+                *temp.get_unchecked_mut(j) += *s.get_unchecked(row_start + j) * bk_i;
+            }
+        }
+    }
+
+    // Step 3: Update S += k ⊗ (w⊙v − r)
+    delta.fill(0.0);
+    match gate_config {
+        Gdn2GateConfig::EraseOnly | Gdn2GateConfig::Kda => {
+            for j in 0..dv {
+                delta[j] = w_val * v[j] - temp[j];
+            }
+        }
+        Gdn2GateConfig::Full => {
+            for j in 0..dv {
+                delta[j] = w[j] * v[j] - temp[j];
+            }
+        }
+    }
+    simd_outer_product_acc(s, k, delta, dk, dv);
+}
+
+/// GDN2 readout: step 4 only (o = Sᵀ q).
+///
+/// Reads the current state without modifying it. Safe to call multiple times
+/// for different Q heads sharing the same KV group.
+pub fn gdn2_state_readout(
+    s: &[f32],
+    q: &[f32],
+    out: &mut [f32],
+    dk: usize,
+    dv: usize,
+) {
+    debug_assert_eq!(q.len(), dk);
+    debug_assert_eq!(s.len(), dk * dv);
+    debug_assert_eq!(out.len(), dv);
+
+    for j in 0..dv {
+        let mut sum = 0.0f32;
+        for i in 0..dk {
+            unsafe {
+                sum += *s.get_unchecked(i * dv + j) * *q.get_unchecked(i);
+            }
+        }
+        unsafe {
+            *out.get_unchecked_mut(j) = sum;
+        }
+    }
+}
+
 /// Sigmoid function for gate projections.
 #[inline]
 pub fn sigmoid(x: f32) -> f32 {
@@ -399,5 +494,145 @@ mod tests {
             "s[5] should be ~1.0 from second token, got {}",
             s[5]
         );
+    }
+
+    /// Verify split functions produce same result as combined step.
+    #[test]
+    fn split_functions_match_combined() {
+        let dk = 4;
+        let dv = 4;
+        let k = vec![0.25, 0.5, 0.75, 1.0];
+        let v = vec![1.0, 2.0, 3.0, 4.0];
+        let q = vec![0.1, 0.2, 0.3, 0.4];
+        let alpha = vec![0.99; dk];
+        let b = vec![0.8; dk];
+        let w_channel = vec![0.9; dv];
+
+        // Combined step
+        let mut s_combined = vec![0.5; dk * dv];
+        let mut out_combined = vec![0.0; dv];
+        let mut temp1 = vec![0.0; dv];
+        let mut delta1 = vec![0.0; dv];
+        gdn2_recurrent_step(
+            &k,
+            &v,
+            &q,
+            &mut s_combined,
+            &alpha,
+            &b,
+            1.0,
+            &w_channel,
+            &mut out_combined,
+            &mut temp1,
+            &mut delta1,
+            dk,
+            dv,
+            Gdn2GateConfig::EraseOnly,
+        );
+
+        // Split: update + readout
+        let mut s_split = vec![0.5; dk * dv];
+        let mut temp2 = vec![0.0; dv];
+        let mut delta2 = vec![0.0; dv];
+        gdn2_state_update(
+            &mut s_split,
+            &k,
+            &v,
+            &alpha,
+            &b,
+            1.0,
+            &w_channel,
+            &mut temp2,
+            &mut delta2,
+            dk,
+            dv,
+            Gdn2GateConfig::EraseOnly,
+        );
+        let mut out_split = vec![0.0; dv];
+        gdn2_state_readout(&s_split, &q, &mut out_split, dk, dv);
+
+        // State should match
+        for (i, (a, b)) in s_combined.iter().zip(s_split.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "s[{i}] mismatch: combined={a}, split={b}"
+            );
+        }
+        // Output should match
+        for (i, (a, b)) in out_combined.iter().zip(out_split.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "out[{i}] mismatch: combined={a}, split={b}"
+            );
+        }
+    }
+
+    /// Verify split functions produce same result for Full gate config.
+    #[test]
+    fn split_functions_match_combined_full() {
+        let dk = 4;
+        let dv = 4;
+        let k = vec![0.25, 0.5, 0.75, 1.0];
+        let v = vec![1.0, 2.0, 3.0, 4.0];
+        let q = vec![0.1, 0.2, 0.3, 0.4];
+        let alpha = vec![0.95; dk];
+        let b = vec![0.7; dk];
+        let w_channel = vec![0.8; dv];
+
+        // Combined
+        let mut s_combined = vec![0.3; dk * dv];
+        let mut out_combined = vec![0.0; dv];
+        let mut temp1 = vec![0.0; dv];
+        let mut delta1 = vec![0.0; dv];
+        gdn2_recurrent_step(
+            &k,
+            &v,
+            &q,
+            &mut s_combined,
+            &alpha,
+            &b,
+            1.0,
+            &w_channel,
+            &mut out_combined,
+            &mut temp1,
+            &mut delta1,
+            dk,
+            dv,
+            Gdn2GateConfig::Full,
+        );
+
+        // Split
+        let mut s_split = vec![0.3; dk * dv];
+        let mut temp2 = vec![0.0; dv];
+        let mut delta2 = vec![0.0; dv];
+        gdn2_state_update(
+            &mut s_split,
+            &k,
+            &v,
+            &alpha,
+            &b,
+            1.0,
+            &w_channel,
+            &mut temp2,
+            &mut delta2,
+            dk,
+            dv,
+            Gdn2GateConfig::Full,
+        );
+        let mut out_split = vec![0.0; dv];
+        gdn2_state_readout(&s_split, &q, &mut out_split, dk, dv);
+
+        for (i, (a, b)) in s_combined.iter().zip(s_split.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "s[{i}] mismatch (Full): combined={a}, split={b}"
+            );
+        }
+        for (i, (a, b)) in out_combined.iter().zip(out_split.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "out[{i}] mismatch (Full): combined={a}, split={b}"
+            );
+        }
     }
 }

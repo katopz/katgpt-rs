@@ -90,8 +90,6 @@ impl IsoQuantKVCache {
                     key_q_right,
                     val_q_left,
                     val_q_right,
-                    key_centroids: key_codebook.centroids.clone(),
-                    val_centroids: val_codebook.centroids.clone(),
                 }
             })
             .collect();
@@ -200,6 +198,9 @@ impl IsoQuantKVCache {
     }
 
     /// Dequantize key at position. Returns reconstructed key vector.
+    ///
+    /// Only available in tests — prefer `dequantize_key_into` for production.
+    #[cfg(test)]
     pub fn dequantize_key(&self, layer: usize, pos: usize) -> Vec<f32> {
         let layer_state = &self.layers[layer];
         let norm = self.key_norms[layer][pos];
@@ -209,9 +210,10 @@ impl IsoQuantKVCache {
         }
 
         let indices = unpack_indices(&self.key_indices[layer][pos], self.key_bits, self.kv_dim);
+        let centroids = &self.key_codebook.centroids;
         let rotated: Vec<f32> = indices
             .iter()
-            .map(|&i| layer_state.key_centroids[i as usize])
+            .map(|&i| centroids[i as usize])
             .collect();
 
         let mut normalized = vec![0.0f32; self.kv_dim];
@@ -226,6 +228,9 @@ impl IsoQuantKVCache {
     }
 
     /// Dequantize value at position. Returns reconstructed value vector.
+    ///
+    /// Only available in tests — prefer `dequantize_value_into` for production.
+    #[cfg(test)]
     pub fn dequantize_value(&self, layer: usize, pos: usize) -> Vec<f32> {
         let layer_state = &self.layers[layer];
         let norm = self.val_norms[layer][pos];
@@ -235,9 +240,10 @@ impl IsoQuantKVCache {
         }
 
         let indices = unpack_indices(&self.val_indices[layer][pos], self.val_bits, self.kv_dim);
+        let centroids = &self.val_codebook.centroids;
         let rotated: Vec<f32> = indices
             .iter()
-            .map(|&i| layer_state.val_centroids[i as usize])
+            .map(|&i| centroids[i as usize])
             .collect();
 
         let mut normalized = vec![0.0f32; self.kv_dim];
@@ -273,11 +279,12 @@ impl IsoQuantKVCache {
             &mut self.scratch_indices,
         );
 
-        // Dequantize into scratch_rotated
+        // Dequantize into scratch_rotated using shared codebook centroids
+        let key_centroids = &self.key_codebook.centroids;
         for (i, &idx) in self.scratch_indices.iter().enumerate() {
             unsafe {
                 *self.scratch_rotated.get_unchecked_mut(i) =
-                    layer_state.key_centroids[idx as usize];
+                    *key_centroids.get_unchecked(idx as usize);
             }
         }
 
@@ -315,10 +322,11 @@ impl IsoQuantKVCache {
             &mut self.scratch_indices,
         );
 
+        let val_centroids = &self.val_codebook.centroids;
         for (i, &idx) in self.scratch_indices.iter().enumerate() {
             unsafe {
                 *self.scratch_rotated.get_unchecked_mut(i) =
-                    layer_state.val_centroids[idx as usize];
+                    *val_centroids.get_unchecked(idx as usize);
             }
         }
 

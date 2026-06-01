@@ -61,5 +61,5 @@ pub mod kernel;
 pub mod types;
 
 pub use forward::{forward_gdn2, generate_gdn2_into};
-pub use kernel::{gdn2_recurrent_step, l2_normalize, sigmoid};
+pub use kernel::{gdn2_recurrent_step, gdn2_state_readout, gdn2_state_update, l2_normalize, sigmoid};
 pub use types::{Gdn2GateConfig, Gdn2HeadState, Gdn2LayerState, MultiLayerGdn2Cache};

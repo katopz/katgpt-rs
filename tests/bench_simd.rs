@@ -289,7 +289,6 @@ fn bench_simd_hla_kernels() {
             let k = vec![0.3f32; hd];
             let v = vec![0.7f32; hd];
             let mut tmp_k_cqv = vec![0.0f32; hd];
-            let mut tmp_q_g = vec![0.0f32; hd];
 
             for _ in 0..warmup {
                 hla_state_update(
@@ -301,7 +300,6 @@ fn bench_simd_hla_kernels() {
                     hd,
                     1.0,
                     &mut tmp_k_cqv,
-                    &mut tmp_q_g,
                 );
             }
 
@@ -316,7 +314,6 @@ fn bench_simd_hla_kernels() {
                     hd,
                     1.0,
                     &mut tmp_k_cqv,
-                    &mut tmp_q_g,
                 );
             }
             let elapsed = start.elapsed();
