@@ -6,6 +6,35 @@
 
 use katgpt_core::{PeiraConfig, PeiraCovariance};
 
+/// Pre-allocated scratch buffers for power iteration, reused across calls.
+///
+/// Avoids 2× `Vec<f64>` allocation per `power_iteration` invocation.
+pub struct PowerIterationScratch {
+    /// Current eigenvector estimate (unit-norm).
+    v: Vec<f64>,
+    /// Scratch buffer for mat-vec result.
+    v_new: Vec<f64>,
+}
+
+impl PowerIterationScratch {
+    /// Create scratch buffers sized for `k`-dimensional power iteration.
+    pub fn new(k: usize) -> Self {
+        Self {
+            v: vec![1.0f64 / (k as f64).sqrt(); k],
+            v_new: vec![0.0f64; k],
+        }
+    }
+
+    /// Reset `v` to uniform unit-norm and zero `v_new`, reusing existing capacity.
+    fn reset(&mut self, k: usize) {
+        let inv_sqrt = 1.0f64 / (k as f64).sqrt();
+        self.v.clear();
+        self.v.resize(k, inv_sqrt);
+        self.v_new.clear();
+        self.v_new.resize(k, 0.0);
+    }
+}
+
 /// PEIRA-based modelless distiller implementing the SC-PEIRA Algorithm 1 loop.
 ///
 /// The distiller:
@@ -24,17 +53,24 @@ pub struct PeiraDistiller {
     alignment_history: Vec<f64>,
     /// Running loss history.
     loss_history: Vec<f64>,
+    /// Pre-allocated scratch for σ power iteration.
+    sigma_scratch: PowerIterationScratch,
+    /// Pre-allocated scratch for N power iteration.
+    n_scratch: PowerIterationScratch,
 }
 
 impl PeiraDistiller {
     /// Create a new distiller with the given configuration.
     pub fn new(config: PeiraConfig) -> Self {
         let covariance = PeiraCovariance::new(config);
+        let k = config.dim;
         Self {
             covariance,
             config,
-            alignment_history: Vec::new(),
-            loss_history: Vec::new(),
+            alignment_history: Vec::with_capacity(1024),
+            loss_history: Vec::with_capacity(1024),
+            sigma_scratch: PowerIterationScratch::new(k),
+            n_scratch: PowerIterationScratch::new(k),
         }
     }
 
@@ -49,11 +85,13 @@ impl PeiraDistiller {
         // 2+3. Compute predictor + auxiliary loss (zero-alloc via pre-allocated scratch)
         let (loss, _p_star, _q_star) = self.covariance.predict_and_loss(student, teacher);
 
-        // 4. Compute alignment score
-        let alignment = peira_alignment_score(
+        // 4. Compute alignment score (zero-alloc via pre-allocated scratch)
+        let alignment = peira_alignment_score_into(
             self.covariance.sigma(),
             self.covariance.n_matrix(),
             self.config.dim,
+            &mut self.sigma_scratch,
+            &mut self.n_scratch,
         );
 
         self.loss_history.push(loss);
@@ -102,6 +140,9 @@ impl PeiraDistiller {
         self.covariance.reset();
         self.alignment_history.clear();
         self.loss_history.clear();
+        let k = self.config.dim;
+        self.sigma_scratch.reset(k);
+        self.n_scratch.reset(k);
     }
 }
 
@@ -121,30 +162,58 @@ impl PeiraDistiller {
 /// * `sigma` — Cross-view covariance Σ (k×k row-major)
 /// * `n_matrix` — Within-view covariance N (k×k row-major)
 /// * `k` — Dimension
+///
+/// ---
+///
+/// Zero-allocation variant that reuses pre-allocated scratch buffers for power iteration.
+/// Use this in hot loops (e.g. `PeiraDistiller::step()`) to avoid per-step allocations.
+pub fn peira_alignment_score_into(
+    sigma: &[f64],
+    n_matrix: &[f64],
+    k: usize,
+    sigma_scratch: &mut PowerIterationScratch,
+    n_scratch: &mut PowerIterationScratch,
+) -> f64 {
+    assert_eq!(sigma.len(), k * k);
+    assert_eq!(n_matrix.len(), k * k);
+
+    sigma_scratch.reset(k);
+    n_scratch.reset(k);
+
+    let sigma_eigvec = power_iteration_into(sigma, k, 20, sigma_scratch);
+    let n_eigvec = power_iteration_into(n_matrix, k, 20, n_scratch);
+
+    cosine_similarity(sigma_eigvec, n_eigvec)
+}
+
+/// Allocating variant — uses internal `Vec` allocation per call.
+/// Suitable for infrequent / one-shot use outside hot loops.
 pub fn peira_alignment_score(sigma: &[f64], n_matrix: &[f64], k: usize) -> f64 {
     assert_eq!(sigma.len(), k * k);
     assert_eq!(n_matrix.len(), k * k);
 
-    // Power iteration to find top eigenvector of Σ
     let sigma_eigvec = power_iteration(sigma, k, 20);
-    // Power iteration to find top eigenvector of N
     let n_eigvec = power_iteration(n_matrix, k, 20);
 
-    // Alignment = |cos(θ)| between the two eigenvectors
-    let mut dot = 0.0f64;
-    let mut norm_s = 0.0f64;
-    let mut norm_n = 0.0f64;
-    for i in 0..k {
-        dot += sigma_eigvec[i] * n_eigvec[i];
-        norm_s += sigma_eigvec[i] * sigma_eigvec[i];
-        norm_n += n_eigvec[i] * n_eigvec[i];
-    }
+    cosine_similarity(&sigma_eigvec, &n_eigvec)
+}
 
-    let denom = norm_s.sqrt() * norm_n.sqrt();
+/// Cosine similarity of two slices, returned as |cos(θ)| ∈ [0, 1].
+/// Returns 0.0 if either vector has near-zero norm.
+#[inline]
+fn cosine_similarity(a: &[f64], b: &[f64]) -> f64 {
+    let mut dot = 0.0f64;
+    let mut norm_a = 0.0f64;
+    let mut norm_b = 0.0f64;
+    for i in 0..a.len() {
+        dot += a[i] * b[i];
+        norm_a += a[i] * a[i];
+        norm_b += b[i] * b[i];
+    }
+    let denom = norm_a.sqrt() * norm_b.sqrt();
     if denom < 1e-15 {
         return 0.0;
     }
-
     dot.abs() / denom
 }
 
@@ -159,6 +228,7 @@ pub fn peira_alignment_score(sigma: &[f64], n_matrix: &[f64], k: usize) -> f64 {
 ///
 /// Internally computes the cosine similarity between student and teacher
 /// score distributions as an alignment proxy.
+#[inline]
 pub fn peira_planning_quality(student_scores: &[f32], teacher_scores: &[f32]) -> f32 {
     if student_scores.is_empty() || teacher_scores.is_empty() {
         return 0.0;
@@ -181,36 +251,50 @@ pub fn peira_planning_quality(student_scores: &[f32], teacher_scores: &[f32]) ->
     (dot / denom).clamp(0.0, 1.0) as f32
 }
 
-/// Power iteration to find the top eigenvector of a k×k matrix.
+/// Zero-allocation power iteration using pre-allocated scratch buffers.
 ///
-/// Returns a unit-norm eigenvector corresponding to the largest eigenvalue.
-fn power_iteration(mat: &[f64], k: usize, iterations: usize) -> Vec<f64> {
-    // Start with uniform vector
-    let mut v = vec![1.0f64 / (k as f64).sqrt(); k];
-    let mut v_new = vec![0.0f64; k];
-
+/// Borrows `scratch.v` and `scratch.v_new` to avoid per-call `Vec` allocation.
+/// The caller must ensure `scratch` is sized for `k` (via `PowerIterationScratch::new(k)`
+/// or `PowerIterationScratch::reset(k)`).
+///
+/// Returns a reference to the result eigenvector stored in `scratch.v`.
+fn power_iteration_into<'a>(
+    mat: &[f64],
+    k: usize,
+    iterations: usize,
+    scratch: &'a mut PowerIterationScratch,
+) -> &'a [f64] {
     for _ in 0..iterations {
         // v_new = mat @ v
         for i in 0..k {
             let mut sum = 0.0f64;
             for j in 0..k {
-                sum += mat[i * k + j] * v[j];
+                sum += mat[i * k + j] * scratch.v[j];
             }
-            v_new[i] = sum;
+            scratch.v_new[i] = sum;
         }
 
         // Normalize
-        let norm: f64 = v_new.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let norm: f64 = scratch.v_new[..k].iter().map(|x| x * x).sum::<f64>().sqrt();
         if norm < 1e-15 {
-            return v;
+            return &scratch.v[..k];
         }
-        for x in v_new.iter_mut() {
+        for x in scratch.v_new[..k].iter_mut() {
             *x /= norm;
         }
-        std::mem::swap(&mut v, &mut v_new);
+        std::mem::swap(&mut scratch.v, &mut scratch.v_new);
     }
 
-    v
+    &scratch.v[..k]
+}
+
+/// Allocating power iteration — convenience wrapper for one-shot use.
+///
+/// For hot loops, prefer `power_iteration_into` with a pre-allocated `PowerIterationScratch`.
+fn power_iteration(mat: &[f64], k: usize, iterations: usize) -> Vec<f64> {
+    let mut scratch = PowerIterationScratch::new(k);
+    let result = power_iteration_into(mat, k, iterations, &mut scratch);
+    result.to_vec()
 }
 
 /// Generate synthetic CCA data for testing.
