@@ -256,7 +256,10 @@ pub struct Sr2amPlayer {
     q_values: [f32; ACTION_COUNT],
     visits: [u32; ACTION_COUNT],
     // SR²AM additions
+    #[cfg(not(feature = "sia_feedback"))]
     configurator: ConfiguratorBandit,
+    #[cfg(feature = "sia_feedback")]
+    configurator: crate::pruners::feedback_bandit::FeedbackBandit,
     last_template: Option<BomberTemplate>,
     last_template_id: Option<usize>,
     decision_history: Vec<PlanningDecision>,
@@ -296,7 +299,10 @@ impl Sr2amPlayer {
             round_template_ids: Vec::new(),
             q_values: [0.0; ACTION_COUNT],
             visits: [0; ACTION_COUNT],
+            #[cfg(not(feature = "sia_feedback"))]
             configurator: ConfiguratorBandit::new(),
+            #[cfg(feature = "sia_feedback")]
+            configurator: crate::pruners::feedback_bandit::FeedbackBandit::new(),
             last_template: None,
             last_template_id: None,
             decision_history: Vec::new(),
@@ -410,7 +416,10 @@ impl Sr2amPlayer {
             round_template_ids: Vec::new(),
             q_values: frozen.q_values,
             visits: frozen.visits,
+            #[cfg(not(feature = "sia_feedback"))]
             configurator: ConfiguratorBandit::new(),
+            #[cfg(feature = "sia_feedback")]
+            configurator: crate::pruners::feedback_bandit::FeedbackBandit::new(),
             last_template: None,
             last_template_id: None,
             decision_history: Vec::new(),

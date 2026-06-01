@@ -173,7 +173,7 @@ impl FeedbackContextStats {
     }
 
     #[inline]
-    fn ucb1_score(&self, arm: usize, base_total: usize) -> f32 {
+    fn ucb1_score(&self, arm: usize, base_total: usize, c: f32) -> f32 {
         let (n, q) = (self.visits[arm], self.q_values[arm]);
         // Use max(feedback_pulls, base_total) for the exploration bonus denominator
         let total = base_total.max(self.feedback_pulls).max(1);
@@ -181,7 +181,7 @@ impl FeedbackContextStats {
             0 => f32::MAX,
             _ => {
                 let ln_total = (total as f32).ln();
-                q + (UCB1_C * ln_total / n as f32).sqrt()
+                q + (c * ln_total / n as f32).sqrt()
             }
         }
     }
@@ -223,30 +223,10 @@ pub struct FeedbackBandit {
     episode_count: usize,
 }
 
-/// Compute UCB1 score for a feedback arm with conservative unvisited penalty.
-///
-/// Unvisited feedback arms get `best_base_score - penalty` instead of `f32::MAX`,
-/// ensuring they're only explored after base arms converge. When stalled,
-/// the penalty is waived and feedback arms get `f32::MAX` for immediate exploration.
-#[inline]
-fn feedback_ucb1_score_conservative(
-    fb_stats: &FeedbackContextStats,
-    arm: usize,
-    base_total: usize,
-    best_base_score: f32,
-    penalty: f32,
-    stalled: bool,
-) -> f32 {
-    if fb_stats.visits[arm] == 0 {
-        if stalled {
-            f32::MAX
-        } else {
-            (best_base_score - penalty).max(f32::NEG_INFINITY)
-        }
-    } else {
-        fb_stats.ucb1_score(arm, base_total)
-    }
-}
+/// UCB1 exploration constant for feedback arms (reduced from base 2.0).
+/// Feedback arms use a lower constant to converge faster, preventing
+/// over-exploration of arms that are equivalent to base arms in cost-shaping.
+const FB_UCB1_C: f32 = 0.5;
 
 impl FeedbackBandit {
     /// Create a new FeedbackBandit with default configuration.
@@ -317,19 +297,15 @@ impl FeedbackBandit {
 
     /// 6-arm UCB1 selection combining inner bandit (arms 0-3) and feedback arms (4-5).
     ///
-    /// Feedback arms use a **conservative exploration policy**:
-    /// - Unvisited feedback arms get score = best_base_score − penalty (not `f32::MAX`)
-    /// - Visited feedback arms use normal UCB1
-    /// - The penalty ensures feedback arms are only explored after base arms converge
-    /// - When stalled, the penalty is waived (feedback arms get `f32::MAX` for unvisited)
+    /// All arms use standard UCB1 optimism: unvisited arms get `f32::MAX`,
+    /// guaranteeing every arm is explored at least once. After first visit,
+    /// normal UCB1 scores apply — poor arms naturally decay via low Q-values.
     fn select_6arm_ucb1(&mut self, context: ConfiguratorContext) -> PlanningDecision {
         let base_total = self.inner.total_pulls(context).max(1);
-        let stalled = self.trajectory.is_stalled(&self.config);
 
-        // Score all base arms first
+        // Score all base arms (0-3) from inner ConfiguratorBandit
         let mut best_arm = 0;
         let mut best_score = f32::NEG_INFINITY;
-        let mut best_base_score = f32::NEG_INFINITY;
 
         for arm in 0..4 {
             let decision = crate::pruners::configurator_bandit::from_arm_index(arm);
@@ -346,28 +322,15 @@ impl FeedbackBandit {
                 best_score = score;
                 best_arm = arm;
             }
-            // Track best visited base arm score for feedback arm seeding
-            if visits > 0 && score > best_base_score {
-                best_base_score = score;
-            }
         }
 
-        // Collect feedback arm scores
-        // Unvisited feedback arms: score = best_base_score − penalty (unless stalled)
-        // This prevents feedback arms from being explored before base arms converge.
-        let fb_penalty = 0.5; // Must be 0.5 better than best base arm to explore
-        let fb_scores: [f32; 2] = {
-            let key = (context.domain, context.entropy_bin, context.desperation_bin);
-            let fb_stats = self.feedback_stats.entry(key).or_insert_with(FeedbackContextStats::new);
-            [
-                feedback_ucb1_score_conservative(fb_stats, 0, base_total, best_base_score, fb_penalty, stalled),
-                feedback_ucb1_score_conservative(fb_stats, 1, base_total, best_base_score, fb_penalty, stalled),
-            ]
-        };
+        // Score feedback arms (4-5) using standard UCB1
+        let key = (context.domain, context.entropy_bin, context.desperation_bin);
+        let fb_stats = self.feedback_stats.entry(key).or_insert_with(FeedbackContextStats::new);
 
         for fb_arm in 0..2 {
             let arm = ARM_HARNESS + fb_arm;
-            let score = fb_scores[fb_arm];
+            let score = fb_stats.ucb1_score(fb_arm, base_total, FB_UCB1_C);
             if score > best_score {
                 best_score = score;
                 best_arm = arm;
