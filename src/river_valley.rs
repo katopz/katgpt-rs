@@ -7,6 +7,7 @@
 //!
 //! No external dependencies. Pure scalar arithmetic.
 
+#![allow(clippy::empty_line_after_doc_comments)]
 // ── Helpers ──────────────────────────────────────────────────────
 
 /// Dot product of two vectors.

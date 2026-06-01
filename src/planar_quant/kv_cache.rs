@@ -35,6 +35,7 @@ pub struct PlanarQuantKVCache {
     /// Value bits per coordinate.
     val_bits: u8,
     /// Maximum sequence length.
+    #[allow(dead_code)] // future: bounded reset, overflow checks
     max_seq_len: usize,
     /// Highest position ever written (for efficient reset).
     max_used_pos: usize,
