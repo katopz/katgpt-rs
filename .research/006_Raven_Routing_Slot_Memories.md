@@ -530,24 +530,24 @@ pub async fn routed_search(
 
 ### Phase 1: RavenKVCache in katgpt-rs (Draft Model Only)
 
-- [ ] Add `RavenKVCache` struct to `transformer.rs`
-- [ ] Add `compute_router`, `raven_update`, `raven_readout` functions
-- [ ] Wire into draft model path in `speculative/step.rs`
-- [ ] Benchmark: draft speed on 5K-token input vs standard KV
-- [ ] Test: recall of first 100 tokens after processing 5000 tokens
+- [x] Add `RavenKVCache` struct to `transformer.rs` — implemented at L3749 with keys, values, router_scored, router_r_t, readout_scores, readout_output
+- [x] Add `compute_router`, `raven_update`, `raven_readout` functions — all three implemented: `raven_compute_router`, `raven_update`, `raven_readout`, plus `forward_raven`
+- [ ] Wire into draft model path in `speculative/step.rs` — `DraftResult` has `routing_overlap` field but Raven is not wired as default draft path
+- [x] Benchmark: draft speed on 5K-token input vs standard KV — `bench_raven_vs_flat_cache` in `benchmark/infrastructure.rs`
+- [x] Test: recall of first 100 tokens after processing 5000 tokens — `bench_raven_recall` in `benchmark/infrastructure.rs`
 
 ### Phase 2: Routed Slot Schema in anyrag
 
-- [ ] Add `rag_slots` and `slot_documents` tables to migration
-- [ ] Implement keyword-based `route_document()` function
-- [ ] Implement `decay_slot()` selective decay
-- [ ] Define default slots: architecture, types, apis, dependencies, tests, chatter
+- [x] Add `rag_slots` and `slot_documents` tables to migration — SQL constants in `anyrag/lib/providers/db/sqlite/sql.rs`
+- [x] Implement keyword-based `route_document()` function — `KeywordRouter::route()` in `anyrag/lib/slots/router.rs`
+- [x] Implement `decay_slot()` selective decay — `decayed_score()` in `anyrag/lib/slots/decay.rs`
+- [x] Define default slots: architecture, types, apis, dependencies, tests, chatter — `seed_default_slots()` in `anyrag/lib/slots/seeder.rs`
 - [ ] Benchmark: retrieval accuracy at 100K docs vs monolithic
 
 ### Phase 3: Routed Speculation (Connect Both)
 
-- [ ] Export `r_t` from draft model's RavenKVCache
-- [ ] Add `routed_search()` to anyrag's search API
+- [ ] Export `r_t` from draft model's RavenKVCache — `router_r_t` stored internally but no public accessor/export
+- [ ] Add `routed_search()` to anyrag's search API — `/search/slots` exists but is keyword-driven, not LLM-routing-vector-driven
 - [ ] Wire DDTree rejection → routed RAG retrieval → context injection
 - [ ] End-to-end benchmark: Python→Rust translation with routed context
 

@@ -140,19 +140,19 @@ Dynamo extracted standalone crates: `dynamo-protocols`, `dynamo-parsers`, `dynam
 ## Actionable Items
 
 ### High Priority
-- [ ] Benchmark: measure TTFT with stable vs unstable prefix on speculative pipeline
-- [ ] Generalize `SolveEvent` → `DraftEvent` for streaming speculative decoding steps
-- [ ] Add domain-level truncation policy to `domains.toml` (tokens vs bytes, limit)
+- [x] Benchmark: measure TTFT with stable vs unstable prefix on speculative pipeline — `tests/prefix_stability_bench.rs`
+- [x] Generalize `SolveEvent` → `DraftEvent` for streaming speculative decoding steps — `DraftEvent` enum in `speculative/types.rs` L465
+- [x] Add domain-level truncation policy to `domains.toml` (tokens vs bytes, limit) — `truncation = { mode = "tokens", limit = 10000 }` in `domains.toml`
 
 ### Medium Priority
-- [ ] Per-request agent hints in REST module (`latency_sensitivity`, `speculative_prefill`)
-- [ ] Add `/v1/tokenize` endpoint to REST module for pre-request token counting
-- [ ] Configurable R thresholds per domain (soft relevance vs hard trim)
+- [x] Per-request agent hints in REST module (`latency_sensitivity`, `speculative_prefill`) — `AgentHints` struct in `riir-rest/types.rs` and `DomainHints` in anyrag
+- [x] Add `/v1/tokenize` endpoint to REST module for pre-request token counting — `tokenize_handler` in anyrag `handlers/catalog.rs`
+- [ ] Configurable R thresholds per domain (soft relevance vs hard trim) — `screening_threshold` exists in `SdeConfig`/`build_screened()` but not exposed as per-domain TOML setting
 
 ### Low Priority / Future
-- [ ] Validate embedding quality: do anyrag embeddings actually improve draft acceptance rate?
-- [ ] Add `/v1/models/{domain}` metadata endpoint to anyrag
-- [ ] Document: DDTree branch ordering preserves reasoning sequence (like Dynamo's interleaved fix)
+- [ ] Validate embedding quality: do anyrag embeddings actually improve draft acceptance rate? — building blocks exist (`EmbeddingExpertBundle`, acceptance benchmarks) but no end-to-end A/B test
+- [x] Add `/v1/models/{domain}` metadata endpoint to anyrag — `get_domain_model_handler` in `handlers/catalog.rs`
+- [x] Document: DDTree branch ordering preserves reasoning sequence (like Dynamo's interleaved fix) — documented in `dd_tree.rs` L143
 
 ---
 

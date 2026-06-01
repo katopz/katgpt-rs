@@ -406,7 +406,7 @@ Re-evaluate if **all** of these conditions are met:
 - [ ] rust-gpu reaches **v1.0 stable** with backward compatibility guarantees
 - [ ] **Stable Rust** support (no nightly requirement)
 - [ ] **WASM compute shader** example tested and documented
-- [ ] Our shader count grows beyond 50+ (duplication pain exceeds build complexity)
+- [x] Our shader count grows beyond 50+ (duplication pain exceeds build complexity) — 85 WGSL shaders in `riir-gpu/src/kernels/`
 - [ ] We need **shared CPU/GPU algorithm** code (e.g., for testing GPU against CPU reference)
 
 ### What to Do Instead

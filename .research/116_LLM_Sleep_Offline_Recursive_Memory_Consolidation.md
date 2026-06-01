@@ -348,18 +348,18 @@ src/sleep/
 
 ### Tasks
 
-- [ ] T1: Add `sleep_consolidation` feature gate to `Cargo.toml` (depends on `lt2_looped`, `gdn2_attention`)
-- [ ] T2: Implement `SleepConfig`, `EvictionStrategy` types in `src/sleep/types.rs`
-- [ ] T3: Implement `consolidation_pass()` — single recurrent pass through all layers with fast-weight carry
-- [ ] T4: Implement `sleep()` — N calls to `consolidation_pass()` at eviction boundary
-- [ ] T5: Implement `eviction::HardEvict` — clear full KV cache after sleep
-- [ ] T6: Implement `eviction::SlidingWindow` — retain last L-1 tokens after sleep
-- [ ] T7: Integrate sleep into LT2 forward pass (eviction boundary hook)
-- [ ] T8: GOAT proof — sleep vs no-sleep on synthetic reasoning task (Depo-style multi-hop)
-- [ ] T9: GOAT proof — sleep + TurboQuant hybrid vs TurboQuant-only on long-context task
-- [ ] T10: GOAT proof — sleep on game context (long Bomber session, long NPC dialog)
-- [ ] T11: Benchmark — sleep overhead (N=2,4,6) vs no-sleep vs LT2-wake-time
-- [ ] T12: Update README + .docs
+- [x] T1: Add `sleep_consolidation` feature gate to `Cargo.toml` (depends on `lt2_looped`, `gdn2_attention`) — `Cargo.toml` L107-108, in default features
+- [x] T2: Implement `SleepConfig`, `EvictionStrategy` types in `src/sleep/types.rs` — `SleepConfig` + `EvictionStrategy { HardEvict, SlidingWindow { retain } }`
+- [x] T3: Implement `consolidation_pass()` — single recurrent pass through all layers with fast-weight carry — `src/sleep/consolidation.rs` L39
+- [x] T4: Implement `sleep()` — N calls to `consolidation_pass()` at eviction boundary — `src/sleep/consolidation.rs` L116
+- [x] T5: Implement `eviction::HardEvict` — clear full KV cache after sleep — `src/sleep/eviction.rs::hard_evict()`, `#[default]`
+- [x] T6: Implement `eviction::SlidingWindow` — retain last L-1 tokens after sleep — `src/sleep/eviction.rs::sliding_window_evict()`
+- [ ] T7: Integrate sleep into LT2 forward pass (eviction boundary hook) — sleep module exists but NOT wired into `forward_looped()` in `transformer.rs`
+- [x] T8: GOAT proof — sleep vs no-sleep on synthetic reasoning task (Depo-style multi-hop) — `tests/bench_154_sleep_consolidation_goat.rs::goat_t10_sleep_vs_nosleep_multihop()`
+- [x] T9: GOAT proof — sleep + TurboQuant hybrid vs TurboQuant-only on long-context task — `tests/bench_154_sleep_consolidation_goat.rs::goat_t11_sleep_with_quantized_context()`
+- [x] T10: GOAT proof — sleep on game context (long Bomber session, long NPC dialog) — `tests/bench_154_sleep_consolidation_goat.rs::goat_t12_game_context_long_session()`
+- [x] T11: Benchmark — sleep overhead (N=2,4,6) vs no-sleep vs LT2-wake-time — `tests/bench_154_sleep_consolidation_goat.rs::goat_t13_sleep_overhead_benchmark()`
+- [x] T12: Update README + .docs — `.docs/18_sleep_consolidation.md`
 
 ### Priority: MEDIUM
 

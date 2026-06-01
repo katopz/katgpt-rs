@@ -238,18 +238,18 @@ The one genuinely useful idea is **CISPO** — the detached-ratio loss variant. 
 **Feature gate: `cipo_loss`** (off by default, proof via GOAT benchmark)
 
 Tasks:
-- [ ] T1: Add `GrpoLossVariant` enum (`PpoClip`, `Cispo`) to `loss_grpo.rs`
-- [ ] T2: Implement CISPO loss function (detached ratio, wider clip, new_logprob multiply)
-- [ ] T3: Wire trajectory grouping into `GZeroLoop` (group_size rollouts → advantage)
-- [ ] T4: GOAT benchmark: CISPO vs PPO-clip on bomber arena (1000 rounds)
-- [ ] T5: If GOAT passes, default to CISPO; if not, keep as opt-in feature
+- [x] T1: Add `GrpoLossVariant` enum (`PpoClip`, `Cispo`) to `loss_grpo.rs` — in `riir-gpu/src/loss_grpo.rs` L21-29 with `#[default] Cispo`
+- [x] T2: Implement CISPO loss function (detached ratio, wider clip, new_logprob multiply) — `cispo_loss()` in `riir-gpu/src/loss_grpo.rs` L262-318 + GPU shaders `cispo_loss.wgsl`, `cispo_reduce.wgsl`
+- [x] T3: Wire trajectory grouping into `GZeroLoop` (group_size rollouts → advantage) — `train_grpo_grouped()` in `riir-gpu/src/gzero_loop.rs` L663-668
+- [x] T4: GOAT benchmark: CISPO vs PPO-clip on bomber arena (1000 rounds) — `riir-gpu/tests/bench_cispo_goat.rs`
+- [x] T5: If GOAT passes, default to CISPO; if not, keep as opt-in feature — CISPO is `#[default]`, GOAT proved 5/6 (1473× more stable than PPO-clip)
 
 ### Plan 091 (riir-ai): SFT→RL Pipeline Config
 
 Tasks:
-- [ ] T1: Add `SftWarmupConfig` to `riir-gpu` (SFT epochs → GRPO rounds)
-- [ ] T2: Wire sequential SFT→GRPO in example script
-- [ ] T3: Document in `.docs/`
+- [x] T1: Add `SftWarmupConfig` to `riir-gpu` (SFT epochs → GRPO rounds) — `SftWarmupConfig` in `riir-gpu/src/config.rs` L14-24
+- [x] T2: Wire sequential SFT→GRPO in example script — `SftRlPipeline` in `riir-gpu/src/pipeline.rs`
+- [x] T3: Document in `.docs/` — `riir-ai/.docs/23_sft_rl_pipeline.md`
 
 ---
 

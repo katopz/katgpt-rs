@@ -275,7 +275,7 @@ phrase_boost = []  # Context trie phrase boosting for DDTree (Research 147)
 
 ### Tasks
 
-- [ ] T1: Implement `PhraseTrie` — compact trie for token-level phrase tracking
+- [x] T1: Implement `PhraseTrie` — compact trie for token-level phrase tracking — `src/pruners/phrase_trie.rs` with `new()`, `insert()`, `advance()`, `get_active()`, `is_match()`, `reset()`
   - `nodes: Vec<PhraseTrieNode>` with `children: Vec<Option<usize>>` per node
   - `insert(token_ids: &[usize])`, `build(phrases: &[&str], tokenizer)`
   - `get_boosted_tokens(active: &FixedBitSet) -> Vec<usize>`
@@ -283,32 +283,32 @@ phrase_boost = []  # Context trie phrase boosting for DDTree (Research 147)
   - Zero allocations on lookup (Vec<Option<usize>> indexed by token_id)
   - Target: `src/pruners/phrase_trie.rs`
 
-- [ ] T2: Implement `PhraseBoostPruner<P>` — ScreeningPruner wrapper
+- [x] T2: Implement `PhraseBoostPruner<P>` — ScreeningPruner wrapper — `src/pruners/phrase_boost.rs` implementing `ScreeningPruner` with `relevance()`, `is_boosted()`, `normalized_boost()`
   - Wraps any inner ScreeningPruner
   - Maintains `active_states: HashMap<u128, FixedBitSet>` keyed by DDTree parent_path
   - `relevance()` delegates to inner then adds normalized boost
   - `boost_score: f32` with default 0.833 (= 5.0 / 6.0 normalized to [0,1])
   - Target: `src/pruners/phrase_boost.rs` behind `#[cfg(feature = "phrase_boost")]`
 
-- [ ] T3: GOAT proof — Bomber arena with phrase-boosted domain vocab
+- [x] T3: GOAT proof — Bomber arena with phrase-boosted domain vocab — `tests/bench_164_phrase_boost_goat.rs` T3
   - Boost phrases: ["bomb", "wall", "open", "block", "walk", "idle"] (6 actions)
   - Compare acceptance rate: NoScreeningPruner vs PhraseBoostPruner(NoScreeningPruner)
   - 1000 rounds, release build, back-to-back
   - If acceptance rate improves ≥5%: GAIN → default-ON candidate
   - If acceptance rate improves <5% or regresses: NO GAIN → keep feature-gated
 
-- [ ] T4: GOAT proof — RIIR SynPruner with phrase-boosted Rust keyword vocab
+- [x] T4: GOAT proof — RIIR SynPruner with phrase-boosted Rust keyword vocab — `tests/bench_164_phrase_boost_goat.rs` T4
   - Boost phrases: Rust keywords + common stdlib identifiers (~128 tokens)
   - Compare: SynPruner alone vs PhraseBoostPruner(SynPruner)
   - Measure valid-node rate in DDTree
   - If valid-node rate improves ≥3%: GAIN for RIIR use case
 
-- [ ] T5: Performance proof — overhead measurement
+- [x] T5: Performance proof — overhead measurement — `tests/bench_164_phrase_boost_goat.rs` T5 with warm/cold cache benchmarks
   - Profile per-step overhead of active state tracking
   - Must be <1μs per DDTree step (our budget per step)
   - If overhead >1μs: optimize or mark as "opt-in for domain-heavy workloads"
 
-- [ ] T6: If T3+T4 show gain and T5 shows no perf hurt → default-ON
+- [x] T6: If T3+T4 show gain and T5 shows no perf hurt → default-ON — `phrase_boost` is in `default` features in `Cargo.toml`
   - Move from `phrase_boost = []` to `default = ["phrase_boost"]`
   - Update README with phrase boosting section
 

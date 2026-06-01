@@ -224,9 +224,9 @@ Validator prunes → Valid code saved → Train Adapter → LLM gets smarter
 - [x] Rename `ComputableLora` struct to `SymbolicValidator` (completed in commit `939e430`)
 - [x] Update README to use "Deterministic Validator" and "Neural Adapter" terminology (completed in commit `939e430`)
 - [x] Design `.wasm` interface for Curator-uploaded Deterministic Validators (Plan 015)
-- [ ] Implement actual LoRA weight loading (rank-decomposed matrices A, B) — Plan 008
-- [ ] Implement `WasmPruner` runtime in katgpt-rs (`--features wasm`) — Plan 015 Phase 1
-- [ ] Create riir-ai monorepo (MIT) — Plan 015 Phase 2
-- [ ] Design `.safetensors` schema for Neural Adapter files — Plan 008
-- [ ] Implement anyrag `SelfImprovingCycle` (32-day loop) — anyrag Plan 003
-- [ ] Implement anyrag `KnowledgeExporter::export_for_lora()` — anyrag Plan 003
+- [x] Implement actual LoRA weight loading (rank-decomposed matrices A, B) — Plan 008 — `LoraAdapter` with `a`/`b` fields, `lora_apply()`, GPU variants in riir-gpu
+- [x] Implement `WasmPruner` runtime in katgpt-rs (`--features bomber-wasm`) — Plan 015 Phase 1 — `BomberWasmPruner` with wasmi/papaya pool
+- [x] Create riir-ai monorepo (MIT) — Plan 015 Phase 2 — 12+ crate workspace at /Users/katopz/git/riir-ai
+- [ ] Design `.safetensors` schema for Neural Adapter files — Plan 008 — safetensors loader exists for model weights; adapters use custom `.bin` format instead
+- [x] Implement anyrag `SelfImprovingCycle` (32-day loop) — anyrag Plan 003 — full state machine in `cycle.rs`
+- [x] Implement anyrag `KnowledgeExporter::export_for_lora()` — anyrag Plan 003 — implemented as `Curator::export_training_jsonl()`
