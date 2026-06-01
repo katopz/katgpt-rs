@@ -92,20 +92,22 @@ pub fn anchor_blend(x: &mut [f32], anchor: &[f32], beta: f32) {
 ///
 /// For each layer in `layers`, records `key.len()` (which equals `block_size × kv_dim`).
 /// The snapshot can be restored via `restore_cache_lengths`.
+///
+/// Reuses `buf` across calls to avoid per-call allocation.
 #[inline]
 pub fn snapshot_cache_lengths(
     cache: &MultiLayerKVCache,
     layers: std::ops::Range<usize>,
-) -> Vec<usize> {
-    layers
-        .map(|i| {
-            if i < cache.layers.len() {
-                cache.layers[i].key.len()
-            } else {
-                0
-            }
-        })
-        .collect()
+    buf: &mut Vec<usize>,
+) {
+    buf.clear();
+    buf.extend(layers.map(|i| {
+        if i < cache.layers.len() {
+            cache.layers[i].key.len()
+        } else {
+            0
+        }
+    }));
 }
 
 /// Crops KV cache back to snapshot lengths.
@@ -133,39 +135,36 @@ pub fn restore_cache_lengths(
     }
 }
 
-/// Records per-layer KV cache fill position (in positions, not elements).
+/// Returns the current KV cache fill position (in positions, not elements).
 ///
 /// Unlike `snapshot_cache_lengths` which records total buffer sizes,
-/// this records how many positions are actually filled, which is more
-/// useful for tracking cache state during loop iterations.
+/// this returns the single tracked fill position that applies uniformly
+/// to all layers — O(1) with zero allocation.
 ///
-/// Uses the `fill_pos` tracker on MultiLayerKVCache for O(1) per layer
+/// Uses the `fill_pos` tracker on MultiLayerKVCache for O(1) lookup
 /// instead of scanning all positions for non-zero entries.
 #[inline]
 pub fn snapshot_cache_positions(
     cache: &MultiLayerKVCache,
-    layers: std::ops::Range<usize>,
+    _layers: std::ops::Range<usize>,
     _config: &Config,
-) -> Vec<usize> {
-    let tracked = cache.fill_pos();
-    layers
-        .map(|i| if i < cache.layers.len() { tracked } else { 0 })
-        .collect()
+) -> usize {
+    cache.fill_pos()
 }
 
-/// Restores KV cache to a snapshot of positions, zeroing beyond.
+/// Restores KV cache to a snapshot position, zeroing beyond.
 #[inline]
 pub fn restore_cache_positions(
     cache: &mut MultiLayerKVCache,
     layers: std::ops::Range<usize>,
-    positions: &[usize],
+    pos: usize,
     config: &Config,
 ) {
     let kd = kv_dim(config);
-    for (i, &pos) in layers.zip(positions.iter()) {
+    let start = pos * kd;
+    for i in layers {
         if i < cache.layers.len() {
             let layer = &mut cache.layers[i];
-            let start = pos * kd;
             if start < layer.key.len() {
                 layer.key[start..].fill(0.0);
             }
@@ -403,7 +402,8 @@ mod tests {
         let mut cache = MultiLayerKVCache::new(&config);
 
         // Snapshot before any writes
-        let snap = snapshot_cache_lengths(&cache, 0..config.n_layer);
+        let mut snap = Vec::new();
+        snapshot_cache_lengths(&cache, 0..config.n_layer, &mut snap);
 
         // Write to all layers at position 0
         let kvd = katgpt_core::types::kv_dim(&config);
@@ -412,8 +412,9 @@ mod tests {
             layer.value[0..kvd].fill(1.0);
         }
 
-        // Snapshot after writes
-        let snap_after = snapshot_cache_lengths(&cache, 0..config.n_layer);
+        // Snapshot after writes (reusing same buffer)
+        let mut snap_after = Vec::new();
+        snapshot_cache_lengths(&cache, 0..config.n_layer, &mut snap_after);
 
         // Buffer sizes are identical (KV cache is pre-allocated)
         assert_eq!(
@@ -423,7 +424,8 @@ mod tests {
 
         // Restore and verify sizes still match
         restore_cache_lengths(&mut cache, 0..config.n_layer, &snap);
-        let snap_restored = snapshot_cache_lengths(&cache, 0..config.n_layer);
+        let mut snap_restored = Vec::new();
+        snapshot_cache_lengths(&cache, 0..config.n_layer, &mut snap_restored);
         assert_eq!(
             snap, snap_restored,
             "Cache sizes should match after restore"

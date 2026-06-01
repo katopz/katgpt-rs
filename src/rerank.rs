@@ -61,9 +61,12 @@ pub fn rerank(
 
     let lq = query.len() / dim;
 
-    // Pre-allocate scratch buffers for cosine rerank (avoids per-doc allocation)
-    let mut q_mean = vec![0.0f32; dim];
-    let mut d_mean = vec![0.0f32; dim];
+    // Pre-allocate scratch buffers for cosine rerank (avoids per-doc allocation).
+    // MaxSim path doesn't need these — skip 2 heap allocations.
+    let (mut q_mean, mut d_mean) = match method {
+        RerankMethod::Cosine => (vec![0.0f32; dim], vec![0.0f32; dim]),
+        RerankMethod::MaxSim => (Vec::new(), Vec::new()),
+    };
 
     let mut results: Vec<RerankedDoc> = docs
         .iter()
@@ -119,10 +122,20 @@ pub fn ndcg_at(ranking: &[RerankedDoc], ground_truth: &[f32], k: usize) -> f32 {
         .sum();
 
     // IDCG@k: ideal ranking from ground truth, sorted descending.
+    // Use partial sort when k < n to avoid sorting the full array.
     let mut ideal_rels: Vec<f64> = Vec::with_capacity(ground_truth.len());
     ideal_rels.extend(ground_truth.iter().map(|&r| r as f64));
-    ideal_rels.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-    let idcg: f64 = (0..k.min(ideal_rels.len()))
+    let k_eff = k.min(ideal_rels.len());
+    if k_eff > 0 {
+        if k_eff < ideal_rels.len() {
+            // Partial sort O(n) — only partition top-k, then sort prefix O(k log k).
+            ideal_rels.select_nth_unstable_by(k_eff - 1, |a, b| {
+                b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        ideal_rels[..k_eff].sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    }
+    let idcg: f64 = (0..k_eff)
         .map(|i| (2.0f64.powf(ideal_rels[i]) - 1.0) / (i as f64 + 2.0).log2())
         .sum();
 

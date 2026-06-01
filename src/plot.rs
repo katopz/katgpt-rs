@@ -125,8 +125,9 @@ struct TsRow {
 /// Parse `bench/timeseries.csv` into rows.
 fn parse_timeseries_csv(path: &str) -> Result<Vec<TsRow>, Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
-    let line_count = content.lines().count();
-    let mut rows = Vec::with_capacity(line_count.saturating_sub(1));
+    // Estimate row count from byte length (avg ~80 bytes/line) to avoid double scan.
+    let estimated_rows = (content.len() / 80).max(64);
+    let mut rows = Vec::with_capacity(estimated_rows);
     for line in content.lines().skip(1) {
         let fields: Vec<&str> = line.splitn(10, ',').collect();
         if fields.len() < 8 {
@@ -155,8 +156,14 @@ fn parse_timeseries_csv(path: &str) -> Result<Vec<TsRow>, Box<dyn std::error::Er
 }
 
 /// Detect regression: if latest throughput dropped >15% from the max seen for this method.
+#[allow(dead_code)]
 fn check_regression(rows: &[TsRow], cat: &str) -> Vec<(String, f64, f64)> {
     let cat_rows: Vec<_> = rows.iter().filter(|r| r.category == cat).collect();
+    check_regression_filtered(&cat_rows, cat)
+}
+
+/// Check regressions using pre-filtered rows (avoids redundant filtering).
+fn check_regression_filtered(cat_rows: &[&TsRow], _cat: &str) -> Vec<(String, f64, f64)> {
     if cat_rows.is_empty() {
         return Vec::new();
     }
@@ -164,11 +171,11 @@ fn check_regression(rows: &[TsRow], cat: &str) -> Vec<(String, f64, f64)> {
     // Group by method
     let mut methods: std::collections::BTreeMap<&str, Vec<&TsRow>> =
         std::collections::BTreeMap::new();
-    for r in &cat_rows {
+    for r in cat_rows {
         methods.entry(&r.method).or_default().push(r);
     }
 
-    let mut regressions = Vec::new();
+    let mut regressions = Vec::with_capacity(methods.len());
     for (method, entries) in &methods {
         if entries.len() < 2 {
             continue;
@@ -204,7 +211,7 @@ pub fn plot_timeseries(
         cats.insert(&r.category);
     }
 
-    let mut all_regressions = Vec::new();
+    let mut all_regressions = Vec::with_capacity(cats.len());
 
     for cat in &cats {
         let cat_rows: Vec<_> = rows.iter().filter(|r| r.category == *cat).collect();
@@ -212,8 +219,8 @@ pub fn plot_timeseries(
             continue;
         }
 
-        // Detect regressions first
-        let regressions = check_regression(&rows, cat);
+        // Detect regressions — pass pre-filtered cat_rows to avoid redundant filtering
+        let regressions = check_regression_filtered(&cat_rows, cat);
         for (method, max_tp, latest) in &regressions {
             let drop_pct = (max_tp - latest) / max_tp * 100.0;
             all_regressions.push(format!(
@@ -300,7 +307,7 @@ pub fn plot_timeseries(
             .draw()?;
 
         // Color palette for methods
-        let palette: Vec<RGBColor> = vec![
+        let palette: [RGBColor; 10] = [
             BLUE,
             RED,
             GREEN,
@@ -316,20 +323,19 @@ pub fn plot_timeseries(
         let mut legend_x = 100i32;
         let mut legend_y = img_h as i32 - 30;
 
-        for (mi, (method, points)) in methods.iter().enumerate() {
+        for (mi, (method, mut points)) in methods.into_iter().enumerate() {
             let color = palette[mi % palette.len()];
-            let mut sorted_pts = points.clone();
-            sorted_pts.sort_by_key(|(idx, _)| *idx);
+            points.sort_by_key(|(idx, _)| *idx);
 
             // Draw line
-            let data: Vec<(usize, f64)> = sorted_pts;
-            if data.len() >= 2 {
-                chart.draw_series(LineSeries::new(data.iter().map(|&(x, y)| (x, y)), &color))?;
+            if points.len() >= 2 {
+                chart.draw_series(LineSeries::new(points.iter().map(|&(x, y)| (x, y)), &color))?;
             }
 
             // Draw dots
             chart.draw_series(
-                data.iter()
+                points
+                    .iter()
                     .map(|&(x, y)| Circle::new((x, y), 3, color.filled())),
             )?;
 
@@ -489,7 +495,7 @@ fn plot_feature_radar(
         .draw()?;
 
     // Color palette for feature dimensions
-    let dim_colors: Vec<RGBColor> = vec![
+    let dim_colors: [RGBColor; 10] = [
         RGBColor(0, 114, 178),   // SD - blue
         RGBColor(230, 159, 0),   // KV - orange
         RGBColor(0, 158, 115),   // Attn - teal

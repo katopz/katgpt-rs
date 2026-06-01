@@ -878,6 +878,10 @@ pub fn forward_looped<'a>(
     let hd = config.head_dim;
     let kvd = crate::types::kv_dim(config);
 
+    // Loop-invariant values hoisted outside all loops
+    let scale = ctx.attn_scale;
+    let t_n = pos + 1;
+
     let loop_count = match config.loop_mode {
         LoopMode::WeightShared { loop_count } => loop_count,
         LoopMode::None => 1,
@@ -937,8 +941,6 @@ pub fn forward_looped<'a>(
                 }
 
                 // Multi-head attention with GQA
-                let scale = ctx.attn_scale;
-                let t_n = pos + 1;
                 for h in 0..config.n_head {
                     let kv_group = ctx.kv_group_lut[h];
                     unsafe {
@@ -1792,6 +1794,10 @@ fn forward_base<'a>(
         ctx.mls_count = 0;
     }
 
+    // Loop-invariant values hoisted outside the layer loop
+    let scale = ctx.attn_scale;
+    let t_n = pos + 1;
+
     // 2. Layer loop
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
         let layer_cache = &mut cache.layers[layer_idx];
@@ -1879,9 +1885,6 @@ fn forward_base<'a>(
         }
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
-        let scale = ctx.attn_scale;
-        let t_n = pos + 1;
-
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
             unsafe {
@@ -2123,6 +2126,10 @@ fn forward_coda<'a>(
         ctx.mls_count = 0;
     }
 
+    // Loop-invariant values hoisted outside the layer loop
+    let scale = ctx.attn_scale;
+    let t_n = pos + 1;
+
     // 2. Layer loop with CODA-fused kernels
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
         let layer_cache = &mut cache.layers[layer_idx];
@@ -2191,9 +2198,6 @@ fn forward_coda<'a>(
         }
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
-        let scale = ctx.attn_scale;
-        let t_n = pos + 1;
-
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
             unsafe {
@@ -3242,6 +3246,9 @@ pub fn forward_paged<'a>(
     let t_n = pos + 1;
     let flat_kv_len = t_n * kvd;
 
+    // Loop-invariant values hoisted outside the layer loop
+    let scale = ctx.attn_scale;
+
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
@@ -3277,8 +3284,6 @@ pub fn forward_paged<'a>(
             }
 
             // Multi-head attention with GQA (reuse existing attention_head)
-            let scale = ctx.attn_scale;
-
             for h in 0..config.n_head {
                 let kv_group = ctx.kv_group_lut[h];
                 unsafe {
@@ -3979,6 +3984,9 @@ pub fn forward_raven<'a>(
     let kvd = types::kv_dim(config);
     let _n_kv = config.n_kv_head;
 
+    // Loop-invariant value hoisted outside the layer loop
+    let scale = ctx.attn_scale;
+
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
@@ -4040,7 +4048,6 @@ pub fn forward_raven<'a>(
         );
 
         // Raven: readout via attention over fixed slots (O(num_slots) not O(pos))
-        let scale = ctx.attn_scale;
         ctx.attn_out[..n].fill(0.0);
 
         ctx.raven_query_buf[..kvd].fill(0.0);
@@ -4190,6 +4197,10 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
     let kvd = types::kv_dim(config);
     let _n_kv = config.n_kv_head;
 
+    // Loop-invariant values hoisted outside the layer loop
+    let scale = ctx.attn_scale;
+    let t_n = pos + 1;
+
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
@@ -4218,7 +4229,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
         // Tracks per-layer progress: if tq_dequant_pos[layer] == pos - 1, the flat buffer
         // already contains positions 0..pos-1 from the previous decode step for this layer.
         // On mismatch (first call, layer switch, reset, pos jump), rebuild all positions.
-        let t_n = pos + 1;
+        // t_n is hoisted outside the layer loop (loop-invariant).
         let last_pos = ctx.dequant_pos[layer_idx];
         if last_pos + 1 == pos && pos > 0 {
             // Incremental: only dequant the new position
@@ -4250,8 +4261,6 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
         ctx.dequant_pos[layer_idx] = pos;
 
         // Multi-head attention with GQA using dequantized flat cache
-        let scale = ctx.attn_scale;
-
         for h in 0..config.n_head {
             let kv_group = ctx.kv_group_lut[h];
             unsafe {

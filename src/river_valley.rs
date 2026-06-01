@@ -191,18 +191,19 @@ fn jacobi_eigenvalues_into(mat: &[f32], n: usize, out: &mut [f32], scratch: &mut
                 a[p * n + q] = 0.0;
                 a[q * n + p] = 0.0;
 
-                // Update off-diagonal (branch-free: skip p/q via mask)
+                // Update off-diagonal — skip p/q explicitly to avoid wasted masking math.
                 for r in 0..n {
-                    let is_pq = (r == p) as usize | (r == q) as usize;
-                    // is_pq==0 → update, is_pq==1 → skip (keep old value)
+                    if r == p || r == q {
+                        continue;
+                    }
                     let arp = a[r * n + p];
                     let arq = a[r * n + q];
                     let new_rp = c * arp - s * arq;
                     let new_rq = s * arp + c * arq;
-                    a[r * n + p] = arp * is_pq as f32 + new_rp * (1.0 - is_pq as f32);
-                    a[p * n + r] = a[r * n + p];
-                    a[r * n + q] = arq * is_pq as f32 + new_rq * (1.0 - is_pq as f32);
-                    a[q * n + r] = a[r * n + q];
+                    a[r * n + p] = new_rp;
+                    a[p * n + r] = new_rp;
+                    a[r * n + q] = new_rq;
+                    a[q * n + r] = new_rq;
                 }
             }
         }
@@ -238,14 +239,19 @@ pub fn update_cosine_similarity(updates: &[Vec<f32>]) -> f32 {
     let mut total = 0.0f32;
     let mut count = 0usize;
 
-    let norms: Vec<f32> = updates.iter().map(|u| l2_norm(u)).collect();
+    // Rolling norm: compute each norm once, reuse as prev in next iteration.
+    // Eliminates Vec allocation vs. collecting all norms upfront.
+    let mut prev_norm = l2_norm(&updates[0]);
     for i in 0..(updates.len() - 1) {
-        if norms[i] < 1e-12 || norms[i + 1] < 1e-12 {
+        let curr_norm = l2_norm(&updates[i + 1]);
+        if prev_norm < 1e-12 || curr_norm < 1e-12 {
+            prev_norm = curr_norm;
             continue;
         }
-        let cos = dot(&updates[i], &updates[i + 1]) / (norms[i] * norms[i + 1]);
+        let cos = dot(&updates[i], &updates[i + 1]) / (prev_norm * curr_norm);
         total += cos;
         count += 1;
+        prev_norm = curr_norm;
     }
 
     if count == 0 {

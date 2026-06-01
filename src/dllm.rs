@@ -1015,15 +1015,14 @@ fn backward(
         let logits_p = &act.logits[p * vocab..(p + 1) * vocab];
         let target = tokens[p];
         let max_l = crate::simd::simd_max_f32(logits_p);
-        // Compute exp(logits - max) once into d_logits, then reuse for sum and gradient
-        for i in 0..vocab {
-            bctx.d_logits[i] = (logits_p[i] - max_l).exp();
-        }
+        // Compute exp(logits - max) once into d_logits using SIMD, then reuse for sum and gradient
+        bctx.d_logits[..vocab].copy_from_slice(logits_p);
+        crate::simd::simd_add_scalar_inplace(&mut bctx.d_logits[..vocab], -max_l);
+        crate::simd::simd_exp_inplace(&mut bctx.d_logits[..vocab]);
         let sum_exp = crate::simd::simd_sum_f32(&bctx.d_logits[..vocab]);
         let inv_sum = 1.0 / sum_exp;
-        for i in 0..vocab {
-            bctx.d_logits[i] = bctx.d_logits[i] * inv_sum - if i == target { 1.0 } else { 0.0 };
-        }
+        crate::simd::simd_scale_inplace(&mut bctx.d_logits[..vocab], inv_sum);
+        bctx.d_logits[target] -= 1.0;
 
         // LM Head: d_lm_head += outer(d_logits, hidden_final)
         let hf = &act.hidden_final[p * n..(p + 1) * n];
@@ -1709,12 +1708,11 @@ pub fn forward_block_causal_positions(
             &mut scores_buf,
         );
 
-        // Pad attn_w to seq_len for consistent output (write directly into output)
-        all_attn_weights[p][..config.n_head * seq_len].fill(0.0);
+        // Pad attn_w to seq_len for consistent output (zero-fill then slice-copy per head)
+        all_attn_weights[p].fill(0.0f32);
         for h in 0..config.n_head {
-            for t in 0..t_n {
-                all_attn_weights[p][h * seq_len + t] = attn_w_buf[h * t_n + t];
-            }
+            all_attn_weights[p][h * seq_len..h * seq_len + t_n]
+                .copy_from_slice(&attn_w_buf[h * t_n..h * t_n + t_n]);
         }
 
         matmul(&mut x_proj, &layer.attn_wo, &attn_out_buf, n, n);
