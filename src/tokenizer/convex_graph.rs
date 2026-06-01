@@ -50,8 +50,11 @@ impl GraphBuilder {
         }
 
         let mut next_vertex: u32 = 0;
-        let mut free_edges: Vec<(VertexId, VertexId)> = Vec::new();
-        let mut priced_edges: Vec<(VertexId, VertexId, ColourId)> = Vec::new();
+        let total_bytes: usize = pretokens.iter().map(|p| p.len()).sum();
+        let mut free_edges: Vec<(VertexId, VertexId)> = Vec::with_capacity(total_bytes);
+        let mut priced_edges: Vec<(VertexId, VertexId, ColourId)> = Vec::with_capacity(
+            total_bytes.saturating_sub(pretokens.len()) * max_token_len.max(2).saturating_sub(1),
+        );
 
         // Colour deduplication: byte-substring → ColourId
         // Use borrowed slices during construction to avoid allocating Vec<u8>

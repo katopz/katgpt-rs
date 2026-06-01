@@ -17,7 +17,7 @@ impl ToastTokenizerImpl {
         }
 
         let bytes = text.as_bytes();
-        let mut token_ids = Vec::new();
+        let mut token_ids = Vec::with_capacity(bytes.len());
 
         // Simple pretokenization: split on whitespace boundaries.
         // Each "word" is a pretoken, whitespace is its own token(s).

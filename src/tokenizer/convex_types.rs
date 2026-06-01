@@ -127,6 +127,7 @@ pub struct RoundedVocabulary {
 
 /// Rounding scheme variants (Section 4 of the paper).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum RoundingScheme {
     /// Deterministic: top-K colours by LP value c.
     /// Best for BpB (bits-per-byte) metric.
@@ -161,10 +162,10 @@ pub struct OptimalityCert {
     pub actual_compression: f64,
     /// Optimality gap: (actual - lp) / lp × 100%.
     pub gap_percent: f64,
-    /// Whether the tokeniser is within 1% of optimal.
-    pub within_one_percent: bool,
     /// Fraction of LP solution that was already integral.
     pub integrality_fraction: f64,
+    /// Whether the tokeniser is within 1% of optimal.
+    pub within_one_percent: bool,
 }
 
 impl std::fmt::Display for OptimalityCert {

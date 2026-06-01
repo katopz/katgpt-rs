@@ -146,18 +146,18 @@ impl std::fmt::Display for C64 {
 /// in the unit distance construction.
 #[derive(Clone, Debug)]
 pub struct CmFieldParams {
-    /// Degree [L:Q] of the totally real subfield.
-    /// Total degree of K is 2·f.
-    pub degree: usize,
+    /// Root discriminant rd(K).
+    pub root_discriminant: f64,
 
     /// Rational primes that split completely in K (must be ≡ 1 mod 4).
     pub split_primes: Vec<u64>,
 
+    /// Degree [L:Q] of the totally real subfield.
+    /// Total degree of K is 2·f.
+    pub degree: usize,
+
     /// Ideal class number h(K).
     pub class_number: u64,
-
-    /// Root discriminant rd(K).
-    pub root_discriminant: f64,
 
     /// Denominator D for lattice embedding D^(-1)·O_K.
     pub denominator: u64,
@@ -204,6 +204,9 @@ impl PrimePair {
 /// |σ(u)| = 1 for all embeddings σ is at least Π(k_s + 1) / h(K).
 #[derive(Clone, Debug)]
 pub struct PigeonholeResult {
+    /// Root discriminant rd(K).
+    pub root_discriminant: f64,
+
     /// Number of conjugate prime pairs used.
     pub num_prime_pairs: usize,
 
@@ -218,9 +221,6 @@ pub struct PigeonholeResult {
 
     /// Denominator D for D^(-1)·O_K lattice embedding.
     pub denominator: u64,
-
-    /// Root discriminant rd(K).
-    pub root_discriminant: f64,
 }
 
 /// Point set in C (the complex plane) with unit-distance statistics.
@@ -266,14 +266,17 @@ impl PointSet {
 /// within tolerance `eps`.
 pub fn count_unit_distances(points: &[C64], eps: f64) -> u64 {
     let mut count: u64 = 0;
-    // |d - 1| < eps ⟺ (1-eps)² < d² < (1+eps)² ⟺ |d² - 1| < 2·eps + eps²
     let sq_eps = 2.0 * eps + eps * eps;
     for i in 0..points.len() {
+        let pi = points[i];
+        let pi_re = pi.re;
+        let pi_im = pi.im;
         for j in (i + 1)..points.len() {
-            let d_sq = (points[i] - points[j]).norm_sq();
-            if (d_sq - 1.0).abs() < sq_eps {
-                count += 1;
-            }
+            let pj = points[j];
+            let dr = pi_re - pj.re;
+            let di = pi_im - pj.im;
+            let d_sq = dr * dr + di * di;
+            count += ((d_sq - 1.0).abs() < sq_eps) as u64;
         }
     }
     count
@@ -295,14 +298,14 @@ pub struct DeltaEstimate {
     /// B = 2·log(4·R·D).
     pub b_param: f64,
 
+    /// Root discriminant R.
+    pub root_discriminant: f64,
+
     /// Number of split prime pairs t.
     pub t: usize,
 
     /// Class number h.
     pub h: u64,
-
-    /// Root discriminant R.
-    pub root_discriminant: f64,
 
     /// Denominator D.
     pub denominator: u64,

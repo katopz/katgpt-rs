@@ -117,9 +117,10 @@ impl BpeTrainer {
             .collect();
 
         // Learn merge rules
+        let mut pair_counts: HashMap<(String, String), usize> = HashMap::new();
         for _ in 0..num_merges {
             // Count all adjacent pairs
-            let mut pair_counts: HashMap<(String, String), usize> = HashMap::new();
+            pair_counts.clear();
             for word in &words {
                 let tokens = Self::apply_merges(word, &merges);
                 for i in 0..tokens.len().saturating_sub(1) {
@@ -129,7 +130,7 @@ impl BpeTrainer {
             }
 
             // Find most frequent pair
-            let best_pair = pair_counts.into_iter().max_by_key(|(_, count)| *count);
+            let best_pair = pair_counts.drain().max_by_key(|(_, count)| *count);
 
             let Some((pair, count)) = best_pair else {
                 break;
@@ -170,22 +171,23 @@ impl BpeTrainer {
 
     /// Apply existing merge rules to a sequence of tokens.
     fn apply_merges(tokens: &[String], merges: &[MergeRule]) -> Vec<String> {
-        let mut result = tokens.to_vec();
+        let mut buf_a = tokens.to_vec();
+        let mut buf_b = Vec::with_capacity(tokens.len());
         for rule in merges {
-            let mut new_result = Vec::with_capacity(result.len());
+            buf_b.clear();
             let mut i = 0;
-            while i < result.len() {
-                if i + 1 < result.len() && result[i] == rule.left && result[i + 1] == rule.right {
-                    new_result.push(rule.merged.clone());
+            while i < buf_a.len() {
+                if i + 1 < buf_a.len() && buf_a[i] == rule.left && buf_a[i + 1] == rule.right {
+                    buf_b.push(rule.merged.clone());
                     i += 2;
                 } else {
-                    new_result.push(result[i].clone());
+                    buf_b.push(buf_a[i].clone());
                     i += 1;
                 }
             }
-            result = new_result;
+            std::mem::swap(&mut buf_a, &mut buf_b);
         }
-        result
+        buf_a
     }
 }
 

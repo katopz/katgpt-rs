@@ -13,6 +13,7 @@ use std::sync::Arc;
 pub struct SynPruner {
     tokenizer: Arc<BpeTokenizer>,
     parser: Mutex<PartialParser>,
+    scratch_tokens: Mutex<Vec<usize>>,
 }
 
 impl SynPruner {
@@ -20,6 +21,7 @@ impl SynPruner {
         Self {
             tokenizer,
             parser: Mutex::new(PartialParser::new()),
+            scratch_tokens: Mutex::new(Vec::with_capacity(64)),
         }
     }
 
@@ -54,11 +56,12 @@ impl SynPruner {
 
 impl ConstraintPruner for SynPruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
-        // Decode tokens to string for validation
-        let mut all_tokens = parent_tokens.to_vec();
+        let mut all_tokens = self.scratch_tokens.lock().unwrap();
+        all_tokens.clear();
+        all_tokens.extend_from_slice(parent_tokens);
         all_tokens.push(token_idx);
 
-        let code = BpeTokenizerImpl::decode(&self.tokenizer, &all_tokens);
+        let code = BpeTokenizerImpl::decode(&self.tokenizer, &*all_tokens);
 
         // Only do Tier 0 (bracket balance) in the hot path.
         // Tier 1 (syn) is too expensive for every DDTree node.

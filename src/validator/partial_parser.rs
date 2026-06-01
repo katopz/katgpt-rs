@@ -137,10 +137,7 @@ impl PartialParser {
                     self.angle_depth += 1;
                 }
                 b'>' => {
-                    self.angle_depth -= 1;
-                    if self.angle_depth < 0 {
-                        self.angle_depth = 0;
-                    }
+                    self.angle_depth = (self.angle_depth - 1).max(0);
                 }
                 b'"' => self.in_string = true,
                 b'\'' => {

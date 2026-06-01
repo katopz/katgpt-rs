@@ -662,14 +662,8 @@ fn unpack_indices_into(packed: &[u8], bits: u8, n: usize, out: &mut [u8]) {
             for i in 0..n {
                 let byte = i / 4;
                 let shift = (i % 4) * 2;
-                if byte < packed.len() {
-                    unsafe {
-                        *out.get_unchecked_mut(i) = (*packed.get_unchecked(byte) >> shift) & 0x3;
-                    }
-                } else {
-                    unsafe {
-                        *out.get_unchecked_mut(i) = 0;
-                    }
+                unsafe {
+                    *out.get_unchecked_mut(i) = (*packed.get_unchecked(byte) >> shift) & 0x3;
                 }
             }
         }
@@ -677,14 +671,8 @@ fn unpack_indices_into(packed: &[u8], bits: u8, n: usize, out: &mut [u8]) {
             for i in 0..n {
                 let byte = i / 2;
                 let shift = (i % 2) * 4;
-                if byte < packed.len() {
-                    unsafe {
-                        *out.get_unchecked_mut(i) = (*packed.get_unchecked(byte) >> shift) & 0xF;
-                    }
-                } else {
-                    unsafe {
-                        *out.get_unchecked_mut(i) = 0;
-                    }
+                unsafe {
+                    *out.get_unchecked_mut(i) = (*packed.get_unchecked(byte) >> shift) & 0xF;
                 }
             }
         }
@@ -699,18 +687,12 @@ fn unpack_indices_into(packed: &[u8], bits: u8, n: usize, out: &mut [u8]) {
             for i in 0..n {
                 let byte_pos = bit_pos / 8;
                 let shift = bit_pos % 8;
-                if byte_pos < packed.len() {
-                    unsafe {
-                        *out.get_unchecked_mut(i) =
-                            (*packed.get_unchecked(byte_pos) >> shift) & mask;
-                        if shift + bits as usize > 8 && byte_pos + 1 < packed.len() {
-                            *out.get_unchecked_mut(i) |=
-                                (*packed.get_unchecked(byte_pos + 1) << (8 - shift)) & mask;
-                        }
-                    }
-                } else {
-                    unsafe {
-                        *out.get_unchecked_mut(i) = 0;
+                unsafe {
+                    *out.get_unchecked_mut(i) =
+                        (*packed.get_unchecked(byte_pos) >> shift) & mask;
+                    if shift + bits as usize > 8 {
+                        *out.get_unchecked_mut(i) |=
+                            (*packed.get_unchecked(byte_pos + 1) << (8 - shift)) & mask;
                     }
                 }
                 bit_pos += bits as usize;

@@ -120,25 +120,26 @@ impl ClassGroupPigeonhole {
     /// the ideal class structure.
     fn generate_qi_units(&self) -> Vec<C64> {
         // Base units: 4th roots of unity
-        let base_units: Vec<C64> = (0..4)
-            .map(|k| {
-                let angle = std::f64::consts::FRAC_PI_2 * k as f64;
-                C64::new(angle.cos(), angle.sin())
-            })
-            .collect();
+        let base_units: [C64; 4] = [
+            C64::new(1.0, 0.0),
+            C64::new(0.0, 1.0),
+            C64::new(-1.0, 0.0),
+            C64::new(0.0, -1.0),
+        ];
 
         // If we have split primes, generate additional unit translations
         // via the pigeonhole construction
         let lower_bound = self.unit_set_lower_bound() as usize;
 
         if lower_bound <= base_units.len() {
-            return base_units;
+            return base_units.to_vec();
         }
 
         // Generate more units using products of base units
         // (in Q(i) these are the only ones, but for the construction
         // we can use rotations that approximate the pigeonhole elements)
-        let mut units = base_units.clone();
+        let mut units: Vec<C64> = Vec::with_capacity(lower_bound.max(base_units.len()));
+        units.extend_from_slice(&base_units);
 
         // Use the split primes to generate additional elements
         // For Q(i) with q ≡ 1 (mod 4) split prime q:
@@ -149,7 +150,7 @@ impl ClassGroupPigeonhole {
                     a as f64 / (pp.prime as f64).sqrt(),
                     b as f64 / (pp.prime as f64).sqrt(),
                 );
-                if (z.norm() - 1.0).abs() < 1e-10
+                if (z.norm_sq() - 1.0).abs() < 2e-10
                     && !units
                         .iter()
                         .any(|u| (u.re - z.re).abs() < 1e-10 && (u.im - z.im).abs() < 1e-10)
@@ -187,19 +188,18 @@ impl ClassGroupPigeonhole {
 
         // 12th roots of unity (all have |u| = 1 in every embedding of Q(√5, i))
         let base_count = 12;
-        let mut units: Vec<C64> = (0..base_count)
-            .map(|k| {
-                let angle = 2.0 * std::f64::consts::PI * k as f64 / base_count as f64;
-                C64::new(angle.cos(), angle.sin())
-            })
-            .collect();
+        let mut units: Vec<C64> = Vec::with_capacity(lower_bound.max(base_count));
+        for k in 0..base_count {
+            let angle = 2.0 * std::f64::consts::PI * k as f64 / base_count as f64;
+            units.push(C64::new(angle.cos(), angle.sin()));
+        }
 
         // Add pigeonhole-generated units from split primes
         for pp in &self.prime_pairs {
             if let Some((a, b)) = sum_of_two_squares(pp.prime) {
                 let norm = (pp.prime as f64).sqrt();
                 let z = C64::new(a as f64 / norm, b as f64 / norm);
-                if (z.norm() - 1.0).abs() < 1e-10 {
+                if (z.norm_sq() - 1.0).abs() < 2e-10 {
                     // Add this and its rotations by existing units
                     let current_len = units.len();
                     for i in 0..current_len.min(12) {
@@ -231,16 +231,13 @@ impl ClassGroupPigeonhole {
         let lower_bound = self.unit_set_lower_bound() as usize;
 
         // Start with roots of unity of order proportional to lower_bound
-        let n_roots = lower_bound.max(4).next_power_of_two();
-        let mut units: Vec<C64> = (0..n_roots)
-            .map(|k| {
-                let angle = 2.0 * std::f64::consts::PI * k as f64 / n_roots as f64;
-                C64::new(angle.cos(), angle.sin())
-            })
-            .collect();
-
-        // Trim to lower_bound if we have too many
-        units.truncate(lower_bound.max(4));
+        let final_count = lower_bound.max(4);
+        let n_roots = final_count.next_power_of_two();
+        let mut units = Vec::with_capacity(final_count);
+        for k in 0..final_count.min(n_roots) {
+            let angle = 2.0 * std::f64::consts::PI * k as f64 / n_roots as f64;
+            units.push(C64::new(angle.cos(), angle.sin()));
+        }
         units
     }
 }

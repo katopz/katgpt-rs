@@ -306,6 +306,15 @@ pub struct FieldVerification {
     /// Name of the field.
     pub field_name: String,
 
+    /// The computed δ value (if δ > 0).
+    pub delta_value: Option<f64>,
+
+    /// Number of generated unit elements.
+    pub unit_count: usize,
+
+    /// Pigeonhole lower bound on unit elements.
+    pub unit_lower_bound: u64,
+
     /// All split primes are ≡ 1 (mod 4).
     pub split_primes_valid: bool,
 
@@ -320,15 +329,6 @@ pub struct FieldVerification {
 
     /// δ > 0 (construction yields counterexample).
     pub delta_positive: bool,
-
-    /// The computed δ value (if δ > 0).
-    pub delta_value: Option<f64>,
-
-    /// Number of generated unit elements.
-    pub unit_count: usize,
-
-    /// Pigeonhole lower bound on unit elements.
-    pub unit_lower_bound: u64,
 
     /// Whether all checks passed.
     pub all_passed: bool,
