@@ -112,6 +112,11 @@ pub struct GraphEvaluator {
     attention_entries: HashMap<LookupId, Vec<AttentionEntry>>,
     /// Sorted dimension IDs for deterministic evaluation order.
     dim_order: Vec<DimId>,
+    /// Scratch buffer: reused HashMap for dimension values across step() calls.
+    /// Avoids re-allocating bucket storage on every step.
+    scratch_vals: HashMap<DimId, f64>,
+    /// Scratch buffer for attention tie-breaking totals.
+    scratch_attn_total: Vec<f64>,
 }
 
 impl GraphEvaluator {
@@ -149,6 +154,8 @@ impl GraphEvaluator {
             cumsum_accum,
             attention_entries: HashMap::new(),
             dim_order,
+            scratch_vals: HashMap::with_capacity(dim_order.len()),
+            scratch_attn_total: Vec::new(),
         }
     }
 
@@ -162,6 +169,8 @@ impl GraphEvaluator {
             *accum = 0.0;
         }
         self.attention_entries.clear();
+        self.scratch_vals.clear();
+        self.scratch_attn_total.clear();
     }
 
     /// Process a single token: update dimension values.
@@ -177,8 +186,11 @@ impl GraphEvaluator {
             .get(token_name)
             .ok_or_else(|| EvalError::UnknownToken(token_name.to_string()))?;
 
+        // Reuse scratch buffer for dimension values (avoids re-allocating buckets)
+        let vals = &mut self.scratch_vals;
+        vals.clear();
+
         // Initialize values from embedding terms
-        let mut vals: HashMap<DimId, f64> = HashMap::with_capacity(self.dim_order.len());
         for (&dim, &coeff) in &embedding.terms {
             vals.insert(dim, coeff);
         }
@@ -273,7 +285,7 @@ impl GraphEvaluator {
                     // Input dims should already be set via embedding
                 }
                 DimWorkItem::CumSum { dim_id, value_expr } => {
-                    let value = value_expr.evaluate(&vals);
+                    let value = value_expr.evaluate(vals);
                     let accum = self
                         .cumsum_accum
                         .get_mut(&dim_id)
@@ -286,12 +298,12 @@ impl GraphEvaluator {
                     a_expr,
                     b_expr,
                 } => {
-                    let a = a_expr.evaluate(&vals);
-                    let b = b_expr.evaluate(&vals);
+                    let a = a_expr.evaluate(vals);
+                    let b = b_expr.evaluate(vals);
                     vals.insert(dim_id, a * b.max(0.0));
                 }
                 DimWorkItem::Persist { dim_id, expr } => {
-                    vals.insert(dim_id, expr.evaluate(&vals));
+                    vals.insert(dim_id, expr.evaluate(vals));
                 }
                 DimWorkItem::LookUp {
                     dim_id,
@@ -304,7 +316,7 @@ impl GraphEvaluator {
                             let lookup = lookup_data
                                 .get(&lookup_id)
                                 .expect("lookup_id exists in graph");
-                            let result = self.attention_insert_and_query(lookup, &vals);
+                            let result = self.attention_insert_and_query(lookup, vals);
                             processed_lookups.insert(lookup_id, result.clone());
                             result
                         }
@@ -320,7 +332,7 @@ impl GraphEvaluator {
         }
 
         self.position += 1;
-        Ok(vals)
+        Ok(vals.clone())
     }
 
     /// Insert current entry into attention cache and query for best match.
@@ -361,52 +373,52 @@ impl GraphEvaluator {
         let qx = lookup.query_exprs_2d[0].evaluate(vals);
         let qy = lookup.query_exprs_2d[1].evaluate(vals);
 
-        // Find best attention score (max dot product)
-        let best_score = entries
-            .iter()
-            .map(|e| qx * e.kx + qy * e.ky)
-            .fold(f64::NEG_INFINITY, f64::max);
+        // Single-pass: find best score AND accumulate tie-break data
+        let n_values = lookup.value_exprs.len();
+        let mut best_score = f64::NEG_INFINITY;
+        let total = &mut self.scratch_attn_total;
+        total.clear();
+        total.resize(n_values, 0.0);
+        let mut count = 0usize;
+        let mut latest_entry: Option<&AttentionEntry> = None;
+
+        for entry in entries.iter() {
+            let score = qx * entry.kx + qy * entry.ky;
+            if score > best_score + 1e-9 {
+                // New best — reset accumulators
+                best_score = score;
+                total.iter_mut().for_each(|t| *t = 0.0);
+                count = 0;
+                latest_entry = None;
+            }
+            if (score - best_score).abs() <= 1e-9 {
+                for (j, v) in entry.values.iter().enumerate() {
+                    total[j] += v;
+                }
+                count += 1;
+                match latest_entry {
+                    None => latest_entry = Some(entry),
+                    Some(prev) if entry.seq > prev.seq => latest_entry = Some(entry),
+                    _ => {}
+                }
+            }
+        }
 
         // Resolve ties according to tie-break mode
-        let n_values = lookup.value_exprs.len();
         match lookup.tie_break {
             TieBreak::Average => {
-                let mut total = vec![0.0; n_values];
-                let mut count = 0usize;
-                for entry in entries.iter() {
-                    let score = qx * entry.kx + qy * entry.ky;
-                    if (score - best_score).abs() <= 1e-9 {
-                        for (j, v) in entry.values.iter().enumerate() {
-                            total[j] += v;
-                        }
-                        count += 1;
-                    }
-                }
                 if count > 0 {
                     let inv = 1.0 / count as f64;
                     for t in total.iter_mut() {
                         *t *= inv;
                     }
                 }
-                total
+                total.clone()
             }
-            TieBreak::Latest => {
-                let mut best_entry: Option<&AttentionEntry> = None;
-                for entry in entries.iter() {
-                    let score = qx * entry.kx + qy * entry.ky;
-                    if (score - best_score).abs() <= 1e-9 {
-                        match best_entry {
-                            None => best_entry = Some(entry),
-                            Some(prev) if entry.seq > prev.seq => best_entry = Some(entry),
-                            _ => {}
-                        }
-                    }
-                }
-                match best_entry {
-                    Some(e) => e.values.clone(),
-                    None => vec![0.0; n_values],
-                }
-            }
+            TieBreak::Latest => match latest_entry {
+                Some(e) => e.values.clone(),
+                None => vec![0.0; n_values],
+            },
         }
     }
 
