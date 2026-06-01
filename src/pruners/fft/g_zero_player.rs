@@ -443,6 +443,10 @@ impl FftPlayer for GZeroFFTPlayer {
         self.last_template = None;
     }
 
+    fn on_game_end(&mut self, _unit_id: u8, survived: bool, kills: u32, damage: i32, healing: i32) {
+        self.update_outcome(survived, kills, damage, healing);
+    }
+
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }

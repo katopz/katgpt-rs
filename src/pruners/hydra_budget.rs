@@ -20,11 +20,11 @@ const MAX_LAYERS: usize = 128;
 #[derive(Clone, Debug)]
 pub struct HydraSkipPlan {
     /// Bitmask: skip_layers[l] = true ⇒ skip layer l.
-    skip_layers: Vec<bool>,
+    pub skip_layers: Vec<bool>,
     /// Cumulative DE thresholds for early termination.
-    cumulative_de: Vec<f32>,
+    pub cumulative_de: Vec<f32>,
     /// Total DE across all layers.
-    total_de: f32,
+    pub total_de: f32,
 }
 
 /// Result of adaptive budget computation.
@@ -130,6 +130,43 @@ pub fn should_skip_layer(skip_plan: &HydraSkipPlan, layer_idx: usize) -> bool {
         .get(layer_idx)
         .copied()
         .unwrap_or(false)
+}
+
+// ── Stage-Aware Skip (T14, Plan 165) ─────────────────────────
+
+/// Check if layer should be skipped based on decode stage.
+/// During Draft stage, erasure MLPs can be skipped (they remove info needed for quality,
+/// but draft only needs direction). During other stages, use full skip plan.
+#[cfg(feature = "decode_specialize")]
+pub fn should_skip_layer_stage(
+    skip_plan: &HydraSkipPlan,
+    layer_idx: usize,
+    stage: crate::transformer::DecodeStage,
+) -> bool {
+    use crate::transformer::DecodeStage;
+
+    let base_skip = should_skip_layer(skip_plan, layer_idx);
+
+    match stage {
+        DecodeStage::Draft => {
+            // During draft, also skip erasure layers even if base plan doesn't.
+            // Check if this layer has erasure flag set.
+            if base_skip {
+                return true;
+            }
+            // Check cumulative_de to see if this layer's contribution is negligible
+            // relative to total — if so, skip in draft mode for speed.
+            let de_ratio = if skip_plan.total_de > 0.0 && layer_idx < skip_plan.cumulative_de.len()
+            {
+                skip_plan.cumulative_de[layer_idx] / skip_plan.total_de
+            } else {
+                1.0
+            };
+            // Skip if cumulative DE at this layer already captures > 90% of total
+            de_ratio > 0.90
+        }
+        DecodeStage::Prefill | DecodeStage::Verify | DecodeStage::Sample => base_skip,
+    }
 }
 
 /// Calibrate HydraLayerProfile from a direct-effect matrix.
@@ -264,6 +301,36 @@ pub fn adaptive_depth_gate(layer_scores: &[f32], cumulative_threshold: f32) -> O
         }
     }
     None
+}
+
+// ── Profile Calibration Tool (T7, Plan 165) ─────────────────
+
+/// Run logit lens calibration on a set of prompts, producing HydraLayerProfile per layer.
+/// This is an offline tool — run once, store profiles in config.
+///
+/// `hidden_states_per_prompt[prompt][layer][n_embd]` = hidden state at each layer for each prompt.
+/// `lm_head` = `[vocab_size × n_embd]` language model head weights.
+pub fn calibrate_from_prompts(
+    hidden_states_per_prompt: &[Vec<Vec<f32>>],
+    lm_head: &[f32],
+    vocab_size: usize,
+    n_embd: usize,
+) -> Vec<HydraLayerProfile> {
+    if hidden_states_per_prompt.is_empty() {
+        return Vec::new();
+    }
+
+    // Collect per-layer scores across all prompts into a DE matrix.
+    let _n_layers = hidden_states_per_prompt[0].len();
+    let mut de_matrix: Vec<Vec<f32>> = Vec::with_capacity(hidden_states_per_prompt.len());
+
+    for prompt_hidden in hidden_states_per_prompt {
+        // Use token 0 as the top token for scoring (representative token).
+        let score = logit_lens_score(prompt_hidden, lm_head, 0, vocab_size, n_embd);
+        de_matrix.push(score.layer_scores);
+    }
+
+    calibrate_profiles(&de_matrix)
 }
 
 // ── Erasure Detection (Phase 4, Plan 165) ────────────────────
@@ -437,6 +504,35 @@ mod tests {
     }
 
     // ── Phase 4: Erasure Detection Tests ──
+
+    #[test]
+    fn test_calibrate_from_prompts() {
+        // 2 prompts × 2 layers × 4 dims
+        let hidden_states = vec![
+            // Prompt 0
+            vec![
+                vec![1.0, 0.0, 0.0, 0.0], // layer 0
+                vec![0.0, 1.0, 0.0, 0.0], // layer 1
+            ],
+            // Prompt 1
+            vec![
+                vec![0.8, 0.0, 0.0, 0.0], // layer 0
+                vec![0.0, 0.9, 0.0, 0.0], // layer 1
+            ],
+        ];
+        // lm_head: 4 tokens × 4 dims
+        let lm_head = vec![
+            1.0, 0.0, 0.0, 0.0, // token 0
+            0.0, 1.0, 0.0, 0.0, // token 1
+            0.0, 0.0, 1.0, 0.0, // token 2
+            0.0, 0.0, 0.0, 1.0, // token 3
+        ];
+        let profiles = calibrate_from_prompts(&hidden_states, &lm_head, 4, 4);
+
+        assert_eq!(profiles.len(), 2);
+        // Layer 0 aligned with token 0 → high mean_de
+        assert!(profiles[0].mean_de > 0.5);
+    }
 
     #[test]
     fn test_detect_erasure_layers() {

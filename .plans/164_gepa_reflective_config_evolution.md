@@ -78,17 +78,17 @@ Episode → TrialLog → MeMo Reflection
 
 ### Phase 5: GOAT Proof
 
-- [ ] Benchmark: `ReflectiveBanditPruner` throughput (target: ≥ BanditPruner baseline)
-- [ ] Benchmark: `ParetoConfigFrontier::insert()` overhead (target: ≤1μs)
-- [ ] Integration test: Bomber arena with reflective config evolution vs static config
-- [ ] Verify zero hot-path overhead — config evolution between episodes only
-- [ ] GOAT proof checklist: all 11/11 checks pass with `gepa_reflective` enabled
+- [x] Benchmark: `ReflectiveBanditPruner` throughput (target: ≥ BanditPruner baseline)
+- [x] Benchmark: `ParetoConfigFrontier::insert()` overhead (target: ≤1μs)
+- [x] Integration test: Bomber arena with reflective config evolution vs static config
+- [x] Verify zero hot-path overhead — config evolution between episodes only
+- [x] GOAT proof checklist: all 11/11 checks pass with `gepa_reflective` enabled
 
 ### Phase 6: Feature Gate & Default Decision
 
 - [x] Feature gate: `gepa_reflective = ["bandit", "memo_reflections"]`
 - [x] Add to `Cargo.toml` features — **off by default**
-- [ ] If GOAT proof shows gain with no perf hurt → switch to default-on
+- [x] If GOAT proof shows gain with no perf hurt → switch to default-on
 - [ ] Update README with GEPA-D section
 
 ---

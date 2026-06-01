@@ -3,6 +3,7 @@
 //! Provides `run_fft_battle` for a single ATB fight and `run_fft_matchup`
 //! for a full N-game series between two teams of `FftPlayer` strategies.
 
+use std::cmp::Ordering;
 use std::time::Instant;
 
 use fastrand::Rng;
@@ -11,7 +12,7 @@ use crate::pruners::arena::types::{ArenaKind, GameResult, MatchupResult};
 
 use super::battle::{BattleState, resolve_action};
 use super::players::FftPlayer;
-use super::types::{TURN_LIMIT, Team};
+use super::types::{Action, GameEvent, TURN_LIMIT, Team};
 
 /// Configuration for an FFT arena tournament matchup.
 #[derive(Clone, Debug)]
@@ -44,6 +45,8 @@ pub struct FftBattleResult {
     pub party_survivors: usize,
     /// Enemy units surviving.
     pub enemy_survivors: usize,
+    /// Game events (damage, heals, kills, etc.) for learning players.
+    pub events: Vec<GameEvent>,
     /// Wall-clock duration of the battle.
     pub duration: std::time::Duration,
 }
@@ -66,38 +69,47 @@ pub fn run_fft_battle(
 
     for _ in 0..turn_limit {
         battle.advance_ct();
+
+        // Tick status effects first (same order as riir-examples runner)
+        battle.tick_effects();
+
         let ready = battle.ready_units();
 
         if ready.is_empty() {
             ticks += 1;
-            battle.tick_effects();
             continue;
         }
 
-        for unit_id in ready {
+        // Collect all actions first, then resolve (deterministic)
+        let mut actions: Vec<(u8, Action)> = Vec::with_capacity(8);
+        for &unit_id in &ready {
+            // Clear defending flag each turn
+            battle.units[unit_id as usize].defending = false;
+
             let unit = &battle.units[unit_id as usize];
             if !unit.alive {
                 continue;
             }
 
-            // Select player based on team: ids 0–3 = party, 4–7 = enemy
             let player = match unit.team {
                 Team::Party => &mut party_players[unit_id as usize],
                 Team::Enemy => &mut enemy_players[(unit_id - 4) as usize],
             };
 
-            // Reset CT for the acting unit
-            battle.reset_ct(&[unit_id]);
-
             let action = player.select_action(unit_id, &battle, rng);
-            resolve_action(&mut battle, unit_id, &action, rng);
+            actions.push((unit_id, action));
+        }
 
+        // Resolve actions in order
+        for (unit_id, action) in &actions {
+            resolve_action(&mut battle, *unit_id, action, rng);
             if battle.check_winner().is_some() {
                 break;
             }
         }
 
-        battle.tick_effects();
+        // Reset CT for acted units
+        battle.reset_ct(&ready);
         ticks += 1;
 
         if battle.check_winner().is_some() {
@@ -105,7 +117,16 @@ pub fn run_fft_battle(
         }
     }
 
-    let winner = battle.check_winner();
+    let winner = battle.check_winner().or_else(|| {
+        // Timeout: compare HP to determine winner (same as riir-examples runner)
+        let party_hp = battle.team_hp(Team::Party);
+        let enemy_hp = battle.team_hp(Team::Enemy);
+        match party_hp.cmp(&enemy_hp) {
+            Ordering::Greater => Some(Team::Party),
+            Ordering::Less => Some(Team::Enemy),
+            Ordering::Equal => None,
+        }
+    });
     let party_survivors = battle
         .units
         .iter()
@@ -135,6 +156,7 @@ pub fn run_fft_battle(
         ticks,
         party_survivors,
         enemy_survivors,
+        events: battle.events,
         duration: start.elapsed(),
     }
 }
@@ -160,12 +182,53 @@ pub fn run_fft_matchup(
             Team::Enemy => 1,
         });
 
+        // Extract per-unit outcome stats for learning players
+        let unit_outcomes: Vec<(bool, u32, i32, i32)> = (0u8..8)
+            .map(|uid| {
+                let survived = result.scores[uid as usize] > 0;
+                let kills = result
+                    .events
+                    .iter()
+                    .filter(|e| matches!(e, GameEvent::UnitDied { killer, .. } if *killer == uid))
+                    .count() as u32;
+                let damage: i32 = result
+                    .events
+                    .iter()
+                    .filter_map(|e| match e {
+                        GameEvent::DamageDealt {
+                            attacker, damage, ..
+                        } if *attacker == uid => Some(*damage),
+                        _ => None,
+                    })
+                    .sum();
+                let healing: i32 = result
+                    .events
+                    .iter()
+                    .filter_map(|e| match e {
+                        GameEvent::Healed { healer, amount, .. } if *healer == uid => Some(*amount),
+                        _ => None,
+                    })
+                    .sum();
+                (survived, kills, damage, healing)
+            })
+            .collect();
+
         games.push(GameResult {
             winner,
             scores: result.scores,
             ticks: result.ticks,
             duration: result.duration,
         });
+
+        // Feed game outcome to learning players (survival, kills, damage, healing)
+        for (idx, p) in party_players.iter_mut().enumerate() {
+            let (survived, kills, damage, healing) = unit_outcomes[idx];
+            p.on_game_end(idx as u8, survived, kills, damage, healing);
+        }
+        for (idx, p) in enemy_players.iter_mut().enumerate() {
+            let (survived, kills, damage, healing) = unit_outcomes[idx + 4];
+            p.on_game_end((idx + 4) as u8, survived, kills, damage, healing);
+        }
 
         // Reset players between games (bandit Q-values persist across resets)
         for p in party_players.iter_mut() {

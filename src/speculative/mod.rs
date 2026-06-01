@@ -165,6 +165,16 @@ pub use ppot::{
     rank_by_consistency, rank_by_consistency_weighted, select_best_variant, token_entropy,
 };
 
+// ── FlashAR Consensus Tri-Mode re-exports (Plan 166, feature: flashar_consensus) ──
+#[cfg(feature = "flashar_consensus")]
+pub mod flashar_consensus;
+
+#[cfg(feature = "flashar_consensus")]
+pub use flashar_consensus::{
+    ConsensusConfig, ConsensusResult, DualPathResult, FlashARConsensusVerifier, MAX_DRAFT_WIDTH,
+    ThermalPath, compute_ternary_consensus, dual_path_draft, route_thermal_paths,
+};
+
 // ── Parallel-Probe 2D Controller re-exports (Plan 133, feature: parallel_probe) ──
 #[cfg(feature = "parallel_probe")]
 pub use parallel_probe::{

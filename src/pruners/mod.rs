@@ -394,10 +394,13 @@ pub mod hydra_budget;
 
 #[cfg(feature = "hydra_budget")]
 pub use hydra_budget::{
-    HydraBudgetResult, HydraSkipPlan, LogitLensScore, adaptive_depth_gate, calibrate_profiles,
-    detect_erasure_layers, hydra_adaptive_budget, hydra_layer_skip, logit_lens_score,
-    should_skip_layer,
+    HydraBudgetResult, HydraSkipPlan, LogitLensScore, adaptive_depth_gate, calibrate_from_prompts,
+    calibrate_profiles, detect_erasure_layers, hydra_adaptive_budget, hydra_layer_skip,
+    logit_lens_score, should_skip_layer,
 };
+
+#[cfg(all(feature = "hydra_budget", feature = "decode_specialize"))]
+pub use hydra_budget::should_skip_layer_stage;
 
 #[cfg(feature = "mech_attribution")]
 pub mod mech_attribution;

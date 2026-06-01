@@ -21,6 +21,19 @@ pub trait FftPlayer {
     fn name(&self) -> &'static str;
     fn reset(&mut self) {}
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Called after each game with per-unit outcome stats.
+    /// Learning players override this to update Q-values.
+    /// `unit_id` is the global unit index (0–3 party, 4–7 enemy).
+    fn on_game_end(
+        &mut self,
+        _unit_id: u8,
+        _survived: bool,
+        _kills: u32,
+        _damage: i32,
+        _healing: i32,
+    ) {
+    }
 }
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -462,6 +475,10 @@ impl FftPlayer for HLFFTPlayer {
 
     fn reset(&mut self) {
         self.last_action = None;
+    }
+
+    fn on_game_end(&mut self, _unit_id: u8, survived: bool, kills: u32, damage: i32, healing: i32) {
+        self.update_outcome(survived, kills, damage, healing);
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
