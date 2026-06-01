@@ -113,15 +113,29 @@ pub fn compute_retrieval_score(
         return 0.0;
     }
 
-    let mut total_mass: f32 = 0.0;
+    // Accumulate into 4 f64 registers to aid auto-vectorization (4-wide SIMD).
+    // f64 avoids precision loss when summing many small attention weights.
+    let mut acc = [0.0f64; 4];
 
     for t in post_needle_start..post_needle_end {
-        let row_offset = t * seq_len;
-        for j in needle_start..needle_end {
-            total_mass += attention[row_offset + j];
+        let row_start = t * seq_len + needle_start;
+        let row_end = t * seq_len + needle_end;
+        let row = &attention[row_start..row_end];
+        let chunks = row.chunks_exact(4);
+        let remainder = chunks.remainder();
+
+        for chunk in chunks {
+            acc[0] += chunk[0] as f64;
+            acc[1] += chunk[1] as f64;
+            acc[2] += chunk[2] as f64;
+            acc[3] += chunk[3] as f64;
+        }
+        for (i, &v) in remainder.iter().enumerate() {
+            acc[i] += v as f64;
         }
     }
 
+    let total_mass = (acc[0] + acc[1] + acc[2] + acc[3]) as f32;
     total_mass / (post_len * pre_len) as f32
 }
 

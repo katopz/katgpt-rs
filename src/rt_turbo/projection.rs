@@ -381,20 +381,30 @@ impl RetrievalProjection {
         let q_proj = &mut q_proj[..self.low_dim];
         self.project_query_into(head_local_idx, q_pre, q_proj);
 
-        // Step 2: For each key, project and dot with q_proj
+        // Step 2: For each key, project into stack buffer and dot with q_proj.
+        // Loops are structured so the inner j-loop accesses w_k[row+j] sequentially
+        // (row-major), improving cache locality vs the column-major access pattern
+        // of the naive transpose.
         let w_k = self.w_k_for_head(head_local_idx);
         let mut scores = vec![0.0f32; seq_len];
 
         #[allow(clippy::needless_range_loop)] // multi-dim indexing: k_cache[n * head_dim + i]
         for n in 0..seq_len {
             let k_off = n * self.head_dim;
+            // Project key into stack buffer
+            let mut k_proj = [0.0f32; 64];
+            let k_proj = &mut k_proj[..self.low_dim];
+            for i in 0..self.head_dim {
+                let ki = k_cache[k_off + i];
+                let row = i * self.low_dim;
+                for j in 0..self.low_dim {
+                    k_proj[j] += ki * w_k[row + j]; // sequential access — cache-friendly
+                }
+            }
+            // Dot product with projected query
             let mut score = 0.0f32;
             for j in 0..self.low_dim {
-                let mut kj = 0.0f32;
-                for i in 0..self.head_dim {
-                    kj += k_cache[k_off + i] * w_k[i * self.low_dim + j];
-                }
-                score += q_proj[j] * kj;
+                score += q_proj[j] * k_proj[j];
             }
             scores[n] = score;
         }

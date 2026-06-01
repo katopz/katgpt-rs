@@ -202,6 +202,144 @@ pub fn forward_rt_turbo_decode(
     }
 }
 
+/// Grouped scratch buffers for [`forward_rt_turbo_decode_with_scratch`],
+/// pre-allocated and reused across decode calls.
+struct DecodeScratch {
+    /// Key extraction buffer: `[seq_len * head_dim]`, reused across retrieval heads.
+    k_cache_buf: Vec<f32>,
+    /// Cached sink indices, rebuilt when seq_len changes.
+    sink_indices: Vec<usize>,
+    /// Scratch buffer for merging top-p results with sink indices.
+    merged_buf: Vec<usize>,
+}
+
+impl DecodeScratch {
+    fn new(head_dim: usize, sink_tokens: usize) -> Self {
+        Self {
+            k_cache_buf: Vec::with_capacity(256 * head_dim),
+            sink_indices: Vec::with_capacity(sink_tokens),
+            merged_buf: Vec::with_capacity(256),
+        }
+    }
+}
+
+/// Scratch-buffer variant of [`forward_rt_turbo_decode`].
+///
+/// Reuses caller-owned scratch buffers across calls to avoid per-step allocation.
+/// This is the preferred entry point when called repeatedly (e.g. from [`RtTurboCache::decode`]).
+///
+/// The scratch buffers are grown as needed but never shrunk; call sites can
+/// reuse the same buffers indefinitely.
+fn forward_rt_turbo_decode_with_scratch(
+    calibration: &HeadCalibration,
+    projection: &RetrievalProjection,
+    config: &RtTurboConfig,
+    kv_cache: &[Vec<f32>],
+    query: &[Vec<f32>],
+    key_pre_rope: &[Vec<f32>],
+    scratch: &mut DecodeScratch,
+) -> RtTurboDecodeResult {
+    let seq_len = kv_cache.len();
+    let n_heads = calibration.n_heads();
+    let head_dim = projection.head_dim();
+
+    // Validate dimensions
+    assert_eq!(
+        query.len(),
+        n_heads,
+        "query length ({}) must match n_heads ({n_heads})",
+        query.len(),
+    );
+    assert_eq!(
+        key_pre_rope.len(),
+        seq_len,
+        "key_pre_rope length ({}) must match kv_cache length ({seq_len})",
+        key_pre_rope.len(),
+    );
+    assert_eq!(
+        projection.n_retrieval_heads(),
+        calibration.n_retrieval(),
+        "projection n_retrieval_heads ({}) must match calibration ({})",
+        projection.n_retrieval_heads(),
+        calibration.n_retrieval(),
+    );
+    if !key_pre_rope.is_empty() {
+        assert_eq!(
+            key_pre_rope[0].len(),
+            n_heads * head_dim,
+            "key_pre_rope[0] length ({}) must match n_heads ({n_heads}) * head_dim ({head_dim})",
+            key_pre_rope[0].len(),
+        );
+    }
+
+    // Step 1: Local window [max(0, seq_len - sliding_window), seq_len)
+    let local_window_start = seq_len.saturating_sub(config.sliding_window);
+    let local_window = (local_window_start, seq_len);
+
+    // Step 2: Sink tokens — rebuild into pre-allocated buffer
+    let sink_count = config.sink_tokens.min(seq_len);
+    sink_indices.clear();
+    sink_indices.extend(0..sink_count);
+
+    // Step 3: Resize key cache buffer if needed
+    let needed = seq_len * head_dim;
+    if k_cache_buf.len() < needed {
+        k_cache_buf.resize(needed, 0.0f32);
+    }
+    // Zero only the portion we'll read (handles shrink case via truncation)
+    k_cache_buf.truncate(needed);
+
+    let mut selected_indices: Vec<Vec<usize>> = Vec::with_capacity(calibration.n_retrieval());
+
+    for (retrieval_idx, &global_head) in calibration.retrieval_set.iter().enumerate() {
+        // Get pre-RoPE query for this head
+        let q_pre = &query[global_head];
+        assert_eq!(
+            q_pre.len(),
+            head_dim,
+            "query[{global_head}] dimension ({}) must match head_dim ({head_dim})",
+            q_pre.len(),
+        );
+
+        // Extract pre-RoPE keys for this head from all positions into pre-allocated buffer.
+        for (t, pos_keys) in key_pre_rope.iter().enumerate() {
+            let offset = global_head * head_dim;
+            k_cache_buf[t * head_dim..(t + 1) * head_dim]
+                .copy_from_slice(&pos_keys[offset..offset + head_dim]);
+        }
+
+        // Compute low-dim scores via projection
+        let scores = projection.batch_project_scores(retrieval_idx, q_pre, k_cache_buf);
+
+        // Select top-p tokens via blockwise selection
+        let top_p_result = select_top_p_blockwise(&scores, config.top_p, config.block_size);
+
+        // Merge with sink indices (union of top-p selected + sinks) into scratch buffer
+        merged_buf.clear();
+        merged_buf.extend_from_slice(&top_p_result.selected_indices);
+        merged_buf.sort_unstable();
+        for &sink in sink_indices.iter() {
+            if merged_buf.binary_search(&sink).is_err() {
+                merged_buf.push(sink);
+            }
+        }
+        merged_buf.sort_unstable();
+
+        selected_indices.push(merged_buf.clone());
+    }
+
+    // Clone sink_indices into result (it's our scratch buffer, caller keeps ownership)
+    let sink_indices_clone = sink_indices.clone();
+
+    RtTurboDecodeResult {
+        selected_indices,
+        local_window,
+        sink_indices: sink_indices_clone,
+        n_retrieval_heads: calibration.n_retrieval(),
+        n_local_heads: calibration.n_local(),
+    }
+}
+
 /// Prefill-phase RTPurbo routing: all heads attend densely.
 ///
 /// During prefill, the sparsity optimization does not apply — all heads
@@ -257,6 +395,12 @@ pub fn forward_rt_turbo_prefill(
 /// 2. Call [`RtTurboCache::prefill`] during prompt processing
 /// 3. Call [`RtTurboCache::decode`] each decode step
 /// 4. Call [`RtTurboCache::update_selected_indices`] to cache results
+///
+/// # Scratch Buffers
+///
+/// The cache owns pre-allocated scratch buffers (`k_cache_buf`, `sink_indices`,
+/// `merged_buf`) that are reused across decode calls to avoid per-step heap
+/// allocation. These grow as needed but never shrink.
 #[derive(Clone, Debug)]
 pub struct RtTurboCache {
     /// Calibration result (head classification).
@@ -269,6 +413,13 @@ pub struct RtTurboCache {
     pub last_selected_indices: Vec<Vec<usize>>,
     /// Layer index this cache is for.
     pub layer_idx: usize,
+    // -- Scratch buffers (reused across decode calls) --
+    /// Key extraction buffer: `[seq_len * head_dim]`, reused across retrieval heads.
+    k_cache_buf: Vec<f32>,
+    /// Cached sink indices, rebuilt only when seq_len changes.
+    sink_indices: Vec<usize>,
+    /// Scratch buffer for merging top-p results with sink indices.
+    merged_buf: Vec<usize>,
 }
 
 impl RtTurboCache {
@@ -287,32 +438,43 @@ impl RtTurboCache {
         layer_idx: usize,
     ) -> Self {
         let n_retrieval = calibration.n_retrieval();
+        let head_dim = projection.head_dim();
         Self {
             calibration,
             projection,
             config,
             last_selected_indices: vec![vec![]; n_retrieval],
             layer_idx,
+            // Scratch buffers start empty; first decode call sizes them.
+            k_cache_buf: Vec::with_capacity(256 * head_dim),
+            sink_indices: Vec::with_capacity(config.sink_tokens),
+            merged_buf: Vec::with_capacity(256),
         }
     }
 
     /// Execute decode-phase routing for this layer.
     ///
+    /// Uses pre-allocated scratch buffers owned by this cache to avoid
+    /// per-step heap allocation. Buffers grow as needed but never shrink.
+    ///
     /// Delegates to [`forward_rt_turbo_decode`] with this cache's
     /// calibration, projection, and config.
     pub fn decode(
-        &self,
+        &mut self,
         kv_cache: &[Vec<f32>],
         query: &[Vec<f32>],
         key_pre_rope: &[Vec<f32>],
     ) -> RtTurboDecodeResult {
-        forward_rt_turbo_decode(
+        forward_rt_turbo_decode_with_scratch(
             &self.calibration,
             &self.projection,
             &self.config,
             kv_cache,
             query,
             key_pre_rope,
+            &mut self.k_cache_buf,
+            &mut self.sink_indices,
+            &mut self.merged_buf,
         )
     }
 

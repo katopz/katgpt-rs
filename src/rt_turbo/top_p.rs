@@ -152,12 +152,12 @@ pub fn select_top_p(scores: &[f32], top_p: f32) -> DynamicTopPResult {
     let mut probs = vec![0.0f32; n_total];
     softmax_scores_into(scores, &mut probs);
 
-    // Sort by probability descending, keeping original indices
-    let mut indexed: Vec<IndexedScore> = probs
-        .iter()
-        .enumerate()
-        .map(|(idx, &prob)| IndexedScore { idx, prob })
-        .collect();
+    // Sort by probability descending, keeping original indices.
+    // Use with_capacity to avoid re-allocation during collection.
+    let mut indexed: Vec<IndexedScore> = Vec::with_capacity(n_total);
+    for (idx, &prob) in probs.iter().enumerate() {
+        indexed.push(IndexedScore { idx, prob });
+    }
     indexed.sort_unstable_by(|a, b| {
         b.prob
             .partial_cmp(&a.prob)
@@ -166,8 +166,8 @@ pub fn select_top_p(scores: &[f32], top_p: f32) -> DynamicTopPResult {
 
     // Accumulate until cumulative mass >= threshold
     let mut cumsum = 0.0f32;
-    let mut selected_indices = Vec::with_capacity(indexed.len());
-    let mut selected_probs = Vec::with_capacity(indexed.len());
+    let mut selected_indices = Vec::with_capacity(n_total);
+    let mut selected_probs = Vec::with_capacity(n_total);
 
     for entry in &indexed {
         selected_indices.push(entry.idx);
@@ -244,20 +244,22 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
     let mut block_scores: Vec<f32> = vec![f32::NEG_INFINITY; n_blocks];
     for (i, &s) in scores.iter().enumerate() {
         let block_idx = i / block_size;
-        if s > block_scores[block_idx] {
-            block_scores[block_idx] = s;
-        }
+        // Branchless max to help auto-vectorization
+        block_scores[block_idx] = if s > block_scores[block_idx] {
+            s
+        } else {
+            block_scores[block_idx]
+        };
     }
 
     // Stage 2: Softmax + top-p at block level
     let mut block_probs = vec![0.0f32; n_blocks];
     softmax_scores_into(&block_scores, &mut block_probs);
 
-    let mut block_indexed: Vec<IndexedScore> = block_probs
-        .iter()
-        .enumerate()
-        .map(|(idx, &prob)| IndexedScore { idx, prob })
-        .collect();
+    let mut block_indexed: Vec<IndexedScore> = Vec::with_capacity(n_blocks);
+    for (idx, &prob) in block_probs.iter().enumerate() {
+        block_indexed.push(IndexedScore { idx, prob });
+    }
     block_indexed.sort_unstable_by(|a, b| {
         b.prob
             .partial_cmp(&a.prob)
@@ -267,7 +269,7 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
     // Accumulate block probabilities until threshold
     let threshold = top_p.clamp(0.0, 1.0);
     let mut cumsum = 0.0f32;
-    let mut selected_block_indices = Vec::new();
+    let mut selected_block_indices = Vec::with_capacity(n_blocks);
 
     for entry in &block_indexed {
         selected_block_indices.push(entry.idx);
@@ -277,13 +279,22 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
         }
     }
 
-    // Stage 3: Collect all token scores from selected blocks
-    let mut candidate_entries: Vec<(usize, f32)> = Vec::new();
+    // Stage 3: Collect all token scores from selected blocks.
+    // Pre-compute total candidate count for pre-allocation.
+    let candidate_count: usize = selected_block_indices
+        .iter()
+        .map(|&bi| {
+            let start = bi * block_size;
+            std::cmp::min(start + block_size, n_total) - start
+        })
+        .sum();
+    let mut candidate_entries: Vec<(usize, f32)> = Vec::with_capacity(candidate_count);
     for &block_idx in &selected_block_indices {
         let start = block_idx * block_size;
         let end = std::cmp::min(start + block_size, n_total);
-        for (pos, &score) in scores.iter().enumerate().take(end).skip(start) {
-            candidate_entries.push((pos, score));
+        for pos in start..end {
+            // SAFETY: start..end is within bounds by construction
+            candidate_entries.push((pos, scores[pos]));
         }
     }
 
@@ -296,16 +307,38 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
         };
     }
 
-    // Stage 4: Fine-grained top-p on candidate scores
-    let candidate_score_values: Vec<f32> = candidate_entries.iter().map(|&(_, s)| s).collect();
-    let mut candidate_probs = vec![0.0f32; candidate_entries.len()];
-    softmax_scores_into(&candidate_score_values, &mut candidate_probs);
-
-    let mut candidate_indexed: Vec<IndexedScore> = candidate_probs
+    // Stage 4: Fine-grained top-p on candidate scores.
+    // Compute softmax in-place to save one allocation: fill probs with raw
+    // scores, then rewrite with exp values and normalize.
+    let candidate_len = candidate_entries.len();
+    let mut candidate_probs = vec![0.0f32; candidate_len];
+    for (i, &(_, s)) in candidate_entries.iter().enumerate() {
+        candidate_probs[i] = s;
+    }
+    // In-place softmax: find max, rewrite as exp, normalize.
+    let max_val = candidate_probs
         .iter()
-        .enumerate()
-        .map(|(idx, &prob)| IndexedScore { idx, prob })
-        .collect();
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
+    let mut sum = 0.0f32;
+    for v in &mut candidate_probs {
+        let e = (*v - max_val).exp();
+        *v = e;
+        sum += e;
+    }
+    if sum > 0.0 {
+        let inv = 1.0 / sum;
+        for v in &mut candidate_probs {
+            *v *= inv;
+        }
+    } else {
+        candidate_probs.fill(0.0);
+    }
+
+    let mut candidate_indexed: Vec<IndexedScore> = Vec::with_capacity(candidate_len);
+    for (idx, &prob) in candidate_probs.iter().enumerate() {
+        candidate_indexed.push(IndexedScore { idx, prob });
+    }
     candidate_indexed.sort_unstable_by(|a, b| {
         b.prob
             .partial_cmp(&a.prob)
@@ -313,8 +346,8 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
     });
 
     let mut cumsum = 0.0f32;
-    let mut selected_indices = Vec::new();
-    let mut selected_probs = Vec::new();
+    let mut selected_indices = Vec::with_capacity(candidate_len);
+    let mut selected_probs = Vec::with_capacity(candidate_len);
 
     for entry in &candidate_indexed {
         let (global_pos, _) = candidate_entries[entry.idx];
