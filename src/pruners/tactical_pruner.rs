@@ -13,16 +13,21 @@
 
 use crate::speculative::types::ConstraintPruner;
 
+/// Branch-free direction deltas: 0=Up(-1,0), 1=Down(1,0), 2=Left(0,-1), 3=Right(0,1).
+const DIR_DELTAS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+
 /// Represents the deterministic state of a grid-based tactical puzzle.
+///
+/// Fields ordered by alignment (u64/u32 → u8) to minimize padding.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GameState {
+    pub total_cost: u32,
+    pub killed_monsters: u32,
+    pub collected_treasures: u32,
+    pub dropped_items: u32,
     pub r: usize,
     pub c: usize,
-    pub inventory: u8,            // Limited inventory (max 2 items)
-    pub killed_monsters: u32,     // Bitmask of killed monsters
-    pub collected_treasures: u32, // Bitmask of collected treasures
-    pub dropped_items: u32,       // Bitmask of items currently on the floor
-    pub total_cost: u32,          // Accumulated movement cost
+    pub inventory: u8,
 }
 
 impl GameState {
@@ -152,21 +157,8 @@ impl TacticalPruner {
 
         match action {
             0..=3 => {
-                // MOVE ACTION
-                let dr = if action == 0 {
-                    -1
-                } else if action == 1 {
-                    1
-                } else {
-                    0
-                };
-                let dc = if action == 2 {
-                    -1
-                } else if action == 3 {
-                    1
-                } else {
-                    0
-                };
+                // MOVE ACTION — branch-free direction lookup
+                let (dr, dc) = DIR_DELTAS[action];
 
                 let nr = next.r as isize + dr;
                 let nc = next.c as isize + dc;
@@ -201,6 +193,7 @@ impl TacticalPruner {
                 for (i, &m_pos) in self.monsters.iter().enumerate() {
                     if m_pos == (nr, nc) && (next.killed_monsters & (1 << i)) == 0 {
                         live_monster_here = true;
+                        break;
                     }
                 }
 

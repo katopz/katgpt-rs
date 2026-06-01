@@ -112,13 +112,36 @@ impl EmotionDirections {
     ///
     /// This is the core primitive: a single dot product between the mid-layer
     /// activation and a pre-computed emotion direction.
+    ///
+    /// Uses 4-wide chunked accumulation to help LLVM auto-vectorize.
     #[inline]
     pub fn project(activation: &[f32], direction: &[f32]) -> f32 {
-        activation
-            .iter()
-            .zip(direction.iter())
-            .map(|(a, d)| a * d)
-            .sum()
+        let len = activation.len().min(direction.len());
+        let chunks = len / 4;
+
+        let mut sum0 = 0.0f32;
+        let mut sum1 = 0.0f32;
+        let mut sum2 = 0.0f32;
+        let mut sum3 = 0.0f32;
+
+        let act = &activation[..len];
+        let dir = &direction[..len];
+
+        for i in 0..chunks {
+            let base = i * 4;
+            sum0 += act[base] * dir[base];
+            sum1 += act[base + 1] * dir[base + 1];
+            sum2 += act[base + 2] * dir[base + 2];
+            sum3 += act[base + 3] * dir[base + 3];
+        }
+
+        let mut total = sum0 + sum1 + sum2 + sum3;
+
+        for i in (chunks * 4)..len {
+            total += act[i] * dir[i];
+        }
+
+        total
     }
 
     /// Project activations onto all four emotion directions.

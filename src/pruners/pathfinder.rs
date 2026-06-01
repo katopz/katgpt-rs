@@ -103,10 +103,11 @@ pub fn find_path(
 
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
+    let area = rows * cols;
 
-    let mut open = BinaryHeap::new();
-    let mut visited = HashSet::new();
-    let mut came_from = std::collections::HashMap::new();
+    let mut open = BinaryHeap::with_capacity(area);
+    let mut visited = HashSet::with_capacity(area);
+    let mut came_from = std::collections::HashMap::with_capacity(area);
 
     open.push(Node {
         pos: from,
@@ -175,8 +176,8 @@ pub fn find_distance(
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
 
-    let mut open = BinaryHeap::new();
-    let mut visited = HashSet::new();
+    let mut open = BinaryHeap::with_capacity(rows * cols);
+    let mut visited = HashSet::with_capacity(rows * cols);
 
     open.push(Node {
         pos: from,
@@ -226,8 +227,9 @@ pub fn reachable_positions(
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
 
-    let mut visited = HashSet::new();
-    let mut queue = std::collections::VecDeque::new();
+    let area = rows * cols;
+    let mut visited = HashSet::with_capacity(area);
+    let mut queue = std::collections::VecDeque::with_capacity(area);
 
     queue.push_back(from);
     visited.insert(from);

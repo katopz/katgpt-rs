@@ -41,17 +41,19 @@ const MAX_TREE_SIZE: usize = 10_000;
 /// for cache-friendly traversal. Action indices refer to the parent
 /// node's `available_actions()` list — the inline state tracker
 /// maintains the correct action list at each level.
+///
+/// Fields ordered by size/alignment (u32 → usize → Vec → Option) to minimize padding.
 struct MCTSNode {
+    /// Accumulated reward from backpropagation.
+    total_reward: f32,
+    /// Number of visits through this node.
+    visits: usize,
     /// Action index that led to this node (None for root).
     action_index: Option<usize>,
     /// Parent node index (None for root).
     parent: Option<usize>,
     /// Child node indices.
     children: Vec<usize>,
-    /// Accumulated reward from backpropagation.
-    total_reward: f32,
-    /// Number of visits through this node.
-    visits: usize,
     /// Indices of actions not yet expanded into children.
     unexpanded: Vec<usize>,
 }

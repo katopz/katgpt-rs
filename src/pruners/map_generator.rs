@@ -371,21 +371,25 @@ impl GeneratedMap {
     ///
     /// Tiles are space-separated, rows are newline-separated.
     pub fn to_map_string(&self) -> String {
-        let mut lines = Vec::with_capacity(self.grid.len());
+        let cols = self.grid.first().map_or(0, |r| r.len());
+        let row_len = cols * 2; // char + space per tile
+        let estimated = row_len * self.grid.len();
+        let mut out = String::with_capacity(estimated);
 
         for r in 0..self.grid.len() {
-            let mut parts = Vec::with_capacity(self.grid[r].len());
-
             for c in 0..self.grid[r].len() {
                 let ch = self.tile_char(r, c);
-                parts.push(ch);
+                if c > 0 {
+                    out.push(' ');
+                }
+                out.push(ch);
             }
-
-            let line: Vec<String> = parts.iter().map(|c| format!("{c}")).collect();
-            lines.push(line.join(" "));
+            if r + 1 < self.grid.len() {
+                out.push('\n');
+            }
         }
 
-        lines.join("\n")
+        out
     }
 
     /// Returns the display character for a tile at `(r, c)`.

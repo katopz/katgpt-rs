@@ -149,8 +149,9 @@ pub fn find_path_multifloor(
 
     // Same floor — simple delegation
     if from_floor == to_floor {
-        let floor_blocked = blocked.get(&from_floor).cloned().unwrap_or_default();
-        let path = find_path_on_floor(dungeon, from_floor, from_pos, to_pos, &floor_blocked)?;
+        let empty = HashSet::new();
+        let floor_blocked = blocked.get(&from_floor).unwrap_or(&empty);
+        let path = find_path_on_floor(dungeon, from_floor, from_pos, to_pos, floor_blocked)?;
         return Some(path.into_iter().map(DungeonAction::Move).collect());
     }
 
@@ -167,7 +168,8 @@ pub fn find_path_multifloor(
             find_best_stair(dungeon, current_floor, next_floor, current_pos, blocked)?;
 
         // Path from current position to stairs entrance on current floor
-        let floor_blocked = blocked.get(&current_floor).cloned().unwrap_or_default();
+        let empty = HashSet::new();
+        let floor_blocked = blocked.get(&current_floor).unwrap_or(&empty);
         let path_to_stairs = find_path_on_floor(
             dungeon,
             current_floor,
@@ -190,7 +192,8 @@ pub fn find_path_multifloor(
     }
 
     // Final segment: from last stair destination to target on destination floor
-    let floor_blocked = blocked.get(&current_floor).cloned().unwrap_or_default();
+    let empty = HashSet::new();
+    let floor_blocked = blocked.get(&current_floor).unwrap_or(&empty);
     let final_path =
         find_path_on_floor(dungeon, current_floor, current_pos, to_pos, &floor_blocked)?;
 
@@ -207,6 +210,8 @@ pub fn find_path_multifloor(
 ///
 /// Returns the sequence of floors to visit (excluding `from_floor`, including
 /// `to_floor`), or `None` if no floor path exists.
+///
+/// Uses predecessor map instead of path cloning to avoid O(n²) allocation.
 fn bfs_floor_sequence(
     dungeon: &DungeonMap,
     from_floor: usize,
@@ -225,26 +230,35 @@ fn bfs_floor_sequence(
         adjacent.entry(b).or_default().push(a);
     }
 
+    let mut predecessor: HashMap<usize, usize> = HashMap::new();
     let mut visited = HashSet::new();
     let mut queue = VecDeque::new();
 
-    queue.push_back((from_floor, Vec::new()));
+    queue.push_back(from_floor);
     visited.insert(from_floor);
 
-    while let Some((floor, path)) = queue.pop_front() {
+    while let Some(floor) = queue.pop_front() {
         if floor == to_floor {
+            // Reconstruct path from predecessor map
+            let mut path = Vec::new();
+            let mut cur = to_floor;
+            while cur != from_floor {
+                path.push(cur);
+                cur = predecessor[&cur];
+            }
+            path.reverse();
             return Some(path);
         }
 
-        let neighbors = adjacent.get(&floor).cloned().unwrap_or_default();
-        for next_floor in neighbors {
-            if visited.contains(&next_floor) {
-                continue;
+        if let Some(neighbors) = adjacent.get(&floor) {
+            for &next_floor in neighbors {
+                if visited.contains(&next_floor) {
+                    continue;
+                }
+                visited.insert(next_floor);
+                predecessor.insert(next_floor, floor);
+                queue.push_back(next_floor);
             }
-            visited.insert(next_floor);
-            let mut new_path = path.clone();
-            new_path.push(next_floor);
-            queue.push_back((next_floor, new_path));
         }
     }
 
@@ -267,7 +281,8 @@ fn find_best_stair(
     current_pos: (usize, usize),
     blocked: &MultiFloorBlocked,
 ) -> Option<StairTraversal> {
-    let floor_blocked = blocked.get(&from_floor).cloned().unwrap_or_default();
+    let empty = HashSet::new();
+    let floor_blocked = blocked.get(&from_floor).unwrap_or(&empty);
     let grid = dungeon.floors.get(from_floor)?;
 
     let mut best: Option<StairCandidate> = None;
