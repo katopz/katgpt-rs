@@ -5,7 +5,7 @@ pub mod cache_prune;
 pub mod dash_attn;
 #[cfg(feature = "data_probe")]
 pub mod data_probe;
-#[cfg(feature = "peira_distill")]
+#[cfg(any(feature = "peira_distill", feature = "ilc_distill"))]
 pub mod distill;
 #[cfg(feature = "dllm")]
 #[allow(clippy::too_many_arguments)]
@@ -43,6 +43,8 @@ pub mod rerank;
 pub mod river_valley;
 #[cfg(feature = "rt_turbo")]
 pub mod rt_turbo;
+#[cfg(feature = "shard_kv")]
+pub mod shard_kv;
 pub mod simd;
 #[cfg(feature = "skill_opt")]
 pub mod skill_opt;
@@ -55,8 +57,6 @@ pub mod spechop;
 #[cfg(feature = "spectral_quant")]
 pub mod spectralquant;
 pub mod speculative;
-#[cfg(feature = "shard_kv")]
-pub mod shard_kv;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
 pub mod tokenizer;

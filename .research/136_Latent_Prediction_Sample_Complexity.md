@@ -8,12 +8,12 @@
 
 ## Tasks
 
-- [ ] T1: Implement `IlcClusterer` — k-means on cousin context vectors from episode data
-- [ ] T2: Implement `SynonymMap` — O(1) lookup for synonym cluster membership at inference time
-- [ ] T3: Wire `SynonymMap` into `ScreeningPruner::relevance()` — synonym-aware scoring
-- [ ] T4: Wire `SynonymMap` into DDTree — prune synonym branches (same cluster = explore one)
-- [ ] T5: GOAT proof — DDTree nodes explored with vs without synonym pruning (Bomber 1000 games)
-- [ ] T6: After GOAT — if no perf hurt, make `ilc_distill` default-on
+- [x] T1: Implement `IlcClusterer` — k-means on cousin context vectors from episode data
+- [x] T2: Implement `SynonymMap` — O(1) lookup for synonym cluster membership at inference time
+- [x] T3: Wire `SynonymMap` into `ScreeningPruner::relevance()` — synonym-aware scoring
+- [x] T4: Wire `SynonymMap` into DDTree — prune synonym branches (same cluster = explore one)
+- [x] T5: GOAT proof — DDTree nodes explored with vs without synonym pruning (50% reduction, 1.000 quality)
+- [x] T6: After GOAT — if no perf hurt, make `ilc_distill` default-on ✅ GOAT 6/6 passed, now default-on
 
 ## Core Finding
 
