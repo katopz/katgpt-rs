@@ -61,15 +61,13 @@ fn sliding_window_evict(cache: &mut MultiLayerKVCache, config: &Config, retain: 
         layer.value[copy_len..].fill(0.0);
     }
 
-    // Update fill position to reflect shifted entries
+    // Update fill position: reset clears to 0, then set to `retain`.
+    // advance_pos(pos) sets fill_pos = max(fill_pos, pos + 1), so with
+    // retain > 0 this correctly sets fill_pos = retain.
     cache.reset();
-    // After sliding, fill_pos should be `retain` (those positions are now occupied)
-    for _ in 0..retain {
-        cache.advance_pos(0); // We need a different approach
+    if retain > 0 {
+        cache.advance_pos(retain - 1);
     }
-    // More accurately: manually set fill_pos by advancing to retain-1
-    // Since advance_pos tracks max(pos+1), calling with pos=retain-1 sets it
-    cache.advance_pos(retain.saturating_sub(1));
 }
 
 // ── Tests ──────────────────────────────────────────────────────
