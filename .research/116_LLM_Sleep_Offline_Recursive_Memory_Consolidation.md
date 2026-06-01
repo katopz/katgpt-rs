@@ -354,7 +354,7 @@ src/sleep/
 - [x] T4: Implement `sleep()` — N calls to `consolidation_pass()` at eviction boundary — `src/sleep/consolidation.rs` L116
 - [x] T5: Implement `eviction::HardEvict` — clear full KV cache after sleep — `src/sleep/eviction.rs::hard_evict()`, `#[default]`
 - [x] T6: Implement `eviction::SlidingWindow` — retain last L-1 tokens after sleep — `src/sleep/eviction.rs::sliding_window_evict()`
-- [ ] T7: Integrate sleep into LT2 forward pass (eviction boundary hook) — sleep module exists but NOT wired into `forward_looped()` in `transformer.rs`
+- [x] T7: Integrate sleep into LT2 forward pass (eviction boundary hook) — `forward_looped()` in `transformer.rs` wired with `Option<&mut MultiLayerGdn2Cache>` + `Option<&SleepConfig>`, hook after LM head
 - [x] T8: GOAT proof — sleep vs no-sleep on synthetic reasoning task (Depo-style multi-hop) — `tests/bench_154_sleep_consolidation_goat.rs::goat_t10_sleep_vs_nosleep_multihop()`
 - [x] T9: GOAT proof — sleep + TurboQuant hybrid vs TurboQuant-only on long-context task — `tests/bench_154_sleep_consolidation_goat.rs::goat_t11_sleep_with_quantized_context()`
 - [x] T10: GOAT proof — sleep on game context (long Bomber session, long NPC dialog) — `tests/bench_154_sleep_consolidation_goat.rs::goat_t12_game_context_long_session()`

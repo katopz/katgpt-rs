@@ -549,9 +549,9 @@ After 1000 rounds, P4's absorb-compress should show:
 
 - ~~[-]~~ Real-time multiplayer (human keyboard input — future: add bevy_input)
 - ~~[-]~~ Network play
-- [ ] ~~Complex bomb types (remote, landmine, piercing)~~ Tracked in Issue 052 Task A
-- [ ] ~~Custom maps (fixed arena for reproducibility)~~ Tracked in Issue 052 Task B
-- [ ] ~~Coding agent writing validators~~ Tracked in Issue 052 Task C
+- [-] ~~Complex bomb types (remote, landmine, piercing)~~ Tracked in Issue 052 Task A
+- [-] ~~Custom maps (fixed arena for reproducibility)~~ Tracked in Issue 052 Task B
+- [-] ~~Coding agent writing validators~~ Tracked in Issue 052 Task C
 - ~~[-]~~ Full Bevy renderer (intentional: staying with ratatui TUI)
 - ~~[-]~~ bevy_audio (intentional: staying silent)
 

@@ -1,6 +1,6 @@
 # Plan 078: RePlaid Variance-Minimized Schedules — Modelless Path
 
-> **Status (2025-07):** All tasks ✅ except T4 (GPU, deferred) and T13 (docs). T3 ✅ `train_mini_dllm_adaptive()` wired into D2F training loop. T9 ✅ `SdarLearnedBeta` integrated into `SdarBanditPruner` with `with_learned_beta()` builder. D2F Higher-Order Denoising (T10.5/T10.6) ✅ DPM-Solver++(2M) multistep logit extrapolation. Feature `replaid_schedules` kept off-default (partial GOAT).
+> **Status (2025-07):** All tasks ✅ except T13 (docs). T3 ✅ `train_mini_dllm_adaptive()` wired into D2F training loop. T4 ✅ `AdaptiveNoiseSchedule` ported to GPU `GpuDllmTrainer::train()` with per-block loss tracking and epoch-boundary ratio adaptation. T9 ✅ `SdarLearnedBeta` integrated into `SdarBanditPruner` with `with_learned_beta()` builder. D2F Higher-Order Denoising (T10.5/T10.6) ✅ DPM-Solver++(2M) multistep logit extrapolation. Feature `replaid_schedules` kept off-default (partial GOAT).
 
 **Branch:** `develop/feature/078_replaid_variance_schedules_modelless`
 **Depends on:** Plan 066 (D2F), Plan 030 (Bandit), Plan 072 (SDAR Modelless)
@@ -139,11 +139,14 @@
   - [x] **T3.1:** Unit test — `test_adaptive_training_reduces_variance` ✅
   - [x] **T3.2:** Unit test — `test_adaptive_schedule_preserves_accuracy` ✅ (both reach 100%)
 
-- [ ] **T4: Integrate into GPU D2F training (riir-ai `riir-gpu/src/dllm.rs`)** — deferred
-  - Port `AdaptiveNoiseSchedule` to WGSL-side mask ratio computation
-  - `GpuDllmTrainer::train()` calls `adapt_ratios()` between epochs
-  - Feature-gated behind `dllm` feature (already exists)
-  - [x] **T4.1:** Integration test — `test_gpu_adaptive_d2f_training` (verify GPU training completes with adaptive schedule)
+- [x] **T4: Integrate into GPU D2F training (riir-ai `riir-gpu/src/dllm.rs`)**
+  - Ported `AdaptiveNoiseSchedule` + `VarianceMinimizer` to `replaid_schedule` module in `dllm.rs`
+  - `GpuDllmTrainer::train()` uses `AdaptiveNoiseSchedule` for ratio computation (cfg-gated)
+  - Per-block loss recorded via `record_step_loss()` after each training step
+  - `adapt_ratios()` called at epoch boundaries to flatten per-step variance
+  - Epoch summary logs adapted ratios and adaptation count
+  - Feature-gated behind `replaid_schedules` feature (depends on `dllm`)
+  - [x] **T4.1:** Integration test — `test_gpu_adaptive_d2f_training_wiring` + 5 unit tests ✅
 
 ### Phase 2: Bandit Variance-Minimized Exploration
 

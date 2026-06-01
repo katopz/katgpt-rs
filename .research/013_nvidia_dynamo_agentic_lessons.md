@@ -147,10 +147,10 @@ Dynamo extracted standalone crates: `dynamo-protocols`, `dynamo-parsers`, `dynam
 ### Medium Priority
 - [x] Per-request agent hints in REST module (`latency_sensitivity`, `speculative_prefill`) — `AgentHints` struct in `riir-rest/types.rs` and `DomainHints` in anyrag
 - [x] Add `/v1/tokenize` endpoint to REST module for pre-request token counting — `tokenize_handler` in anyrag `handlers/catalog.rs`
-- [ ] Configurable R thresholds per domain (soft relevance vs hard trim) — `screening_threshold` exists in `SdeConfig`/`build_screened()` but not exposed as per-domain TOML setting
+- [-] Configurable R thresholds per domain (soft relevance vs hard trim) — `screening_threshold` exists in `SdeConfig`/`build_screened()` but not exposed as per-domain TOML setting — DEFERRED
 
 ### Low Priority / Future
-- [ ] Validate embedding quality: do anyrag embeddings actually improve draft acceptance rate? — building blocks exist (`EmbeddingExpertBundle`, acceptance benchmarks) but no end-to-end A/B test
+- [-] Validate embedding quality: do anyrag embeddings actually improve draft acceptance rate? — building blocks exist (`EmbeddingExpertBundle`, acceptance benchmarks) but no end-to-end A/B test — DEFERRED
 - [x] Add `/v1/models/{domain}` metadata endpoint to anyrag — `get_domain_model_handler` in `handlers/catalog.rs`
 - [x] Document: DDTree branch ordering preserves reasoning sequence (like Dynamo's interleaved fix) — documented in `dd_tree.rs` L143
 

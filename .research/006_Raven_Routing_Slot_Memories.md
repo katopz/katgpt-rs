@@ -542,14 +542,14 @@ pub async fn routed_search(
 - [x] Implement keyword-based `route_document()` function — `KeywordRouter::route()` in `anyrag/lib/slots/router.rs`
 - [x] Implement `decay_slot()` selective decay — `decayed_score()` in `anyrag/lib/slots/decay.rs`
 - [x] Define default slots: architecture, types, apis, dependencies, tests, chatter — `seed_default_slots()` in `anyrag/lib/slots/seeder.rs`
-- [ ] Benchmark: retrieval accuracy at 100K docs vs monolithic
+- [-] Benchmark: retrieval accuracy at 100K docs vs monolithic — DEFERRED
 
 ### Phase 3: Routed Speculation (Connect Both)
 
-- [ ] Export `r_t` from draft model's RavenKVCache — `router_r_t` stored internally but no public accessor/export
-- [ ] Add `routed_search()` to anyrag's search API — `/search/slots` exists but is keyword-driven, not LLM-routing-vector-driven
-- [ ] Wire DDTree rejection → routed RAG retrieval → context injection
-- [ ] End-to-end benchmark: Python→Rust translation with routed context
+- [x] Export `r_t` from draft model's RavenKVCache — added `r_t()` accessor + `RoutingSnapshot` + wired into `DraftResult.routing_overlap`
+- [-] Add `routed_search()` to anyrag's search API — DEFERRED — `/search/slots` exists but is keyword-driven, not LLM-routing-vector-driven
+- [-] Wire DDTree rejection → routed RAG retrieval → context injection — DEFERRED
+- [-] End-to-end benchmark: Python→Rust translation with routed context — DEFERRED
 
 ---
 

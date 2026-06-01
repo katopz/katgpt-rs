@@ -139,7 +139,7 @@ Cost: 2 × kv_dim additions. Zero allocations, zero RNG calls.
   - CPU fallback when no GPU available
   - 4 tests: zeros init, from_vec roundtrip, export format, AdamW convergence
 
-- [ ] ~~**Task 5b: riir-burner training support (language domain)**~~ Deferred — riir-burner domain_latent training path blocked; tracked in Issue 053 Section C
+- [-] ~~**Task 5b: riir-burner training support (language domain)**~~ Deferred — riir-burner domain_latent training path blocked; tracked in Issue 053 Section C
   - For larger language models (4B+ params) that need Python training pipeline
   - ~~LoRA training pipeline has matured (riir-burner supports Gemma 2/4 LoRA) — but no domain_latent training path exists yet~~
   - Needs: `DomainLatentAdamWStep` equivalent added to burn pipeline (riir-gpu has it, riir-burner does not)

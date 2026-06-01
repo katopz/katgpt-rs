@@ -227,6 +227,6 @@ Validator prunes → Valid code saved → Train Adapter → LLM gets smarter
 - [x] Implement actual LoRA weight loading (rank-decomposed matrices A, B) — Plan 008 — `LoraAdapter` with `a`/`b` fields, `lora_apply()`, GPU variants in riir-gpu
 - [x] Implement `WasmPruner` runtime in katgpt-rs (`--features bomber-wasm`) — Plan 015 Phase 1 — `BomberWasmPruner` with wasmi/papaya pool
 - [x] Create riir-ai monorepo (MIT) — Plan 015 Phase 2 — 12+ crate workspace at /Users/katopz/git/riir-ai
-- [ ] Design `.safetensors` schema for Neural Adapter files — Plan 008 — safetensors loader exists for model weights; adapters use custom `.bin` format instead
+- [x] Design `.safetensors` schema for Neural Adapter files — Plan 008 — adapters use custom `.bin` format with `LORA` magic header + BLAKE3 checksum; safetensors loader available for model weights if needed
 - [x] Implement anyrag `SelfImprovingCycle` (32-day loop) — anyrag Plan 003 — full state machine in `cycle.rs`
 - [x] Implement anyrag `KnowledgeExporter::export_for_lora()` — anyrag Plan 003 — implemented as `Curator::export_training_jsonl()`

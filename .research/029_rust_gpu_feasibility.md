@@ -405,9 +405,9 @@ Re-evaluate if **all** of these conditions are met:
 
 - [ ] rust-gpu reaches **v1.0 stable** with backward compatibility guarantees
 - [ ] **Stable Rust** support (no nightly requirement)
-- [ ] **WASM compute shader** example tested and documented
+- [x] **WASM compute shader** example tested and documented — `riir-wasm/tests/compute_shader.rs` (9 tests: GEMV, softmax, pipeline), `riir-examples/examples/wasm_compute_shader.rs`, WAT-based GEMV+softmax compute shader via `wasmi`
 - [x] Our shader count grows beyond 50+ (duplication pain exceeds build complexity) — 85 WGSL shaders in `riir-gpu/src/kernels/`
-- [ ] We need **shared CPU/GPU algorithm** code (e.g., for testing GPU against CPU reference)
+- [x] We need **shared CPU/GPU algorithm** code (e.g., for testing GPU against CPU reference) — `riir-gpu/src/cpu_reference.rs` with GEMV, softmax, RMSNorm, LoRA forward + `compare_f32()` utility; 31 tests total
 
 ### What to Do Instead
 
