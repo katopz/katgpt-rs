@@ -2,8 +2,6 @@
 //!
 //! **Source:** Schmidt et al. (2026). Tokenization with Split Trees. arXiv:2605.22705
 
-use std::collections::HashMap;
-
 use super::toast_types::{SplitTree, ToastTokenizer};
 
 /// ToaST tokenizer encoder/decoder implementation.
@@ -28,9 +26,9 @@ impl ToastTokenizerImpl {
                 if start < i {
                     Self::encode_pretoken(tokenizer, &bytes[start..i], &mut token_ids);
                 }
-                // Encode whitespace byte directly
-                match tokenizer.vocab_to_id.get(&bytes[i..i + 1]) {
-                    Some(&id) => token_ids.push(id),
+                // Encode whitespace byte directly via routed lookup
+                match tokenizer.vocab_lookup(&bytes[i..i + 1]) {
+                    Some(id) => token_ids.push(id),
                     None => token_ids.push(tokenizer.unk_id),
                 }
                 start = i + 1;
@@ -45,8 +43,8 @@ impl ToastTokenizerImpl {
     }
 
     fn encode_pretoken(tokenizer: &ToastTokenizer, pretoken: &[u8], token_ids: &mut Vec<usize>) {
-        // Check if full pretoken is in vocab
-        if let Some(&id) = tokenizer.vocab_to_id.get(pretoken) {
+        // Check if full pretoken is in vocab via routed lookup
+        if let Some(id) = tokenizer.vocab_lookup(pretoken) {
             token_ids.push(id);
             return;
         }
@@ -54,20 +52,13 @@ impl ToastTokenizerImpl {
         // Look up split tree
         match tokenizer.trees.get(pretoken) {
             Some(tree) => {
-                Self::recursive_descent(
-                    tree,
-                    0,
-                    &tokenizer.vocab_to_id,
-                    token_ids,
-                    tokenizer.unk_id,
-                );
+                Self::recursive_descent(tree, 0, tokenizer, token_ids, tokenizer.unk_id);
             }
             None => {
                 // Fallback: encode byte by byte
                 for &b in pretoken {
-                    let byte_slice = &[b] as &[u8];
-                    match tokenizer.vocab_to_id.get(byte_slice) {
-                        Some(&id) => token_ids.push(id),
+                    match tokenizer.vocab_lookup(&[b]) {
+                        Some(id) => token_ids.push(id),
                         None => token_ids.push(tokenizer.unk_id),
                     }
                 }
@@ -78,7 +69,7 @@ impl ToastTokenizerImpl {
     fn recursive_descent(
         tree: &SplitTree,
         node_idx: u32,
-        vocab: &HashMap<Vec<u8>, usize>,
+        tokenizer: &ToastTokenizer,
         tokens: &mut Vec<usize>,
         unk_id: usize,
     ) {
@@ -88,7 +79,7 @@ impl ToastTokenizerImpl {
         let span = &tree.pretoken[start..end];
 
         // If this span is in vocabulary, emit it and stop
-        if let Some(&id) = vocab.get(span) {
+        if let Some(id) = tokenizer.vocab_lookup(span) {
             tokens.push(id);
             return;
         }
@@ -96,13 +87,13 @@ impl ToastTokenizerImpl {
         // Otherwise, recurse into children
         match (node.left, node.right) {
             (Some(l), Some(r)) => {
-                Self::recursive_descent(tree, l, vocab, tokens, unk_id);
-                Self::recursive_descent(tree, r, vocab, tokens, unk_id);
+                Self::recursive_descent(tree, l, tokenizer, tokens, unk_id);
+                Self::recursive_descent(tree, r, tokenizer, tokens, unk_id);
             }
             _ => {
                 // Leaf node (single byte) — must be in vocab by construction
-                match vocab.get(span) {
-                    Some(&id) => tokens.push(id),
+                match tokenizer.vocab_lookup(span) {
+                    Some(id) => tokens.push(id),
                     None => tokens.push(unk_id),
                 }
             }

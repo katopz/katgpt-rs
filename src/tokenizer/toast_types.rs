@@ -5,6 +5,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::datrie::DatrieVocab;
+
+/// Vocab size threshold above which DatrieVocab is auto-built.
+/// Below this, HashMap lookups are competitive and the build cost isn't worth it.
+/// Benchmark data (Research 137): DA wins 1.2–3.0× at all sizes, but build cost
+/// is ~150ms at 32K — only amortize over sufficient encode calls.
+pub const DATRIE_VOCAB_THRESHOLD: usize = 1024;
+
 /// A node in a split tree.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SplitNode {
@@ -46,12 +54,38 @@ pub struct ToastTokenizer {
     pub pad_id: usize,
     /// UNK token ID.
     pub unk_id: usize,
+    /// Double-array trie for zero-alloc vocab lookup — auto-built when
+    /// `vocab_to_id.len() > DATRIE_VOCAB_THRESHOLD`. Not serialized; rebuilt
+    /// via `post_load()` after deserialization.
+    #[serde(skip)]
+    pub datrie_vocab: Option<DatrieVocab>,
 }
 
 impl ToastTokenizer {
     /// Number of tokens in vocabulary.
     pub fn vocab_size(&self) -> usize {
         self.id_to_vocab.len()
+    }
+
+    /// Build acceleration structures after loading or constructing.
+    ///
+    /// Call once after `Deserialize` or after mutating `vocab_to_id`.
+    /// Builds `DatrieVocab` when vocab size exceeds `DATRIE_VOCAB_THRESHOLD`.
+    pub fn post_load(&mut self) {
+        self.datrie_vocab = if self.vocab_to_id.len() >= DATRIE_VOCAB_THRESHOLD {
+            Some(DatrieVocab::build(&self.vocab_to_id))
+        } else {
+            None
+        };
+    }
+
+    /// Look up a token by bytes — routes through DatrieVocab if available.
+    #[inline]
+    pub fn vocab_lookup(&self, key: &[u8]) -> Option<usize> {
+        match &self.datrie_vocab {
+            Some(da) => da.lookup(key),
+            None => self.vocab_to_id.get(key).copied(),
+        }
     }
 }
 

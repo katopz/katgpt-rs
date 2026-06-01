@@ -115,7 +115,7 @@ go = ["bandit", "dep:reqwest"]  # AutoGo API bridge + Go GameState (Plan 065)
 randopt_weight = ["bandit"]  # RandOpt weight-space perturbation ensembling (Plan 121, Research 080)
 toast_tokenizer = []  # ToaST split-tree tokenization (Plan 122, Research 081)
 convex_tok = ["dep:good_lp", "toast_tokenizer"]  # ConvexTok LP vocabulary optimizer (Plan 127, Research 087)
-datrie_vocab = []  # Double-array trie vocab lookup — zero-alloc trie for ToaST tokenizer (Research 137, opt-in pending benchmark)
+datrie_vocab = ["toast_tokenizer"]  # Alias: enables toast_tokenizer (datrie is auto-routed) + benchmark examples (Research 137)
 event_log = []  # Event-sourced game traces with fork-and-diff (Plan 124, Research 081)
 vpd_em_distill = ["sdar_gate", "bandit"]  # VPD EM-style co-evolutionary distillation (Plan 120, Research 080)
 proof_sketch_evolution = ["bandit"]  # Proof Sketch Evolution — Elo-rated population + global goal cache (Plan 128, Research 088)
@@ -502,3 +502,25 @@ required-features = ["cache_prune"]
 [[example]]
 name = "cache_prune_02_segment_match"
 required-features = ["cache_prune"]
+
+# ── EGA Energy-Gated Attention (Plan 139) ────────────────────────
+
+[[example]]
+name = "ega_01_quality"
+required-features = ["ega_attn"]
+
+[[example]]
+name = "ega_02_energy_profile"
+required-features = ["ega_attn"]
+
+[[example]]
+name = "ega_03_eviction"
+required-features = ["ega_attn"]
+
+[[example]]
+name = "ega_04_combined"
+required-features = ["ega_attn"]
+
+[[example]]
+name = "datrie_01_bench"
+required-features = ["datrie_vocab"]

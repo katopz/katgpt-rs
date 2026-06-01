@@ -18,7 +18,17 @@ pub use toast_builder::SplitTreeBuilder;
 #[cfg(feature = "toast_tokenizer")]
 pub use toast_inference::ToastTokenizerImpl;
 #[cfg(feature = "toast_tokenizer")]
-pub use toast_types::{SplitNode, SplitTree, ToastTokenizer};
+pub use toast_types::{DATRIE_VOCAB_THRESHOLD, SplitNode, SplitTree, ToastTokenizer};
+
+// ── Double-Array Trie Vocab Lookup (Plan 137, Research 137) ──
+//
+// Compiled under `toast_tokenizer` — auto-built when vocab > DATRIE_VOCAB_THRESHOLD.
+// Threshold-routed: no separate feature gate needed.
+
+#[cfg(feature = "toast_tokenizer")]
+mod datrie;
+#[cfg(feature = "toast_tokenizer")]
+pub use datrie::{DatrieTreeIndex, DatrieVocab};
 
 // ── ConvexTok LP Vocabulary Optimizer (Plan 127, Research 087) ──
 
