@@ -55,6 +55,8 @@ pub mod spechop;
 #[cfg(feature = "spectral_quant")]
 pub mod spectralquant;
 pub mod speculative;
+#[cfg(feature = "shard_kv")]
+pub mod shard_kv;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
 pub mod tokenizer;

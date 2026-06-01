@@ -292,8 +292,9 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
     for &block_idx in &selected_block_indices {
         let start = block_idx * block_size;
         let end = std::cmp::min(start + block_size, n_total);
+        // SAFETY: start..end is within bounds by construction
+        #[allow(clippy::needless_range_loop)] // indexing is faster than .skip().take() iterator chain
         for pos in start..end {
-            // SAFETY: start..end is within bounds by construction
             candidate_entries.push((pos, scores[pos]));
         }
     }

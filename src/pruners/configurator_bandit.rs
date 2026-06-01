@@ -13,12 +13,11 @@ use katgpt_core::{ConfiguratorContext, PlanningDecision};
 // ── Constants ─────────────────────────────────────────────────
 
 /// Number of arms in the configurator bandit (PlanNew, PlanExtend, PlanSkip, SpecHop).
-#[cfg(not(feature = "sia_feedback"))]
+///
+/// Always 4 — FeedbackBandit manages its own extended arm set (arms 4-5)
+/// independently, keeping the base bandit's convergence behavior unchanged
+/// when the `sia_feedback` feature is enabled.
 const NUM_ARMS: usize = 4;
-
-/// Number of arms with FeedbackBandit extensions (+ HarnessUpdate, WeightUpdate).
-#[cfg(feature = "sia_feedback")]
-const NUM_ARMS: usize = 6;
 
 /// Default k (speculative thread count) when SpecHop is selected.
 const DEFAULT_SPECHOP_K: usize = 4;
@@ -31,43 +30,39 @@ const NUM_ENTROPY_BINS: usize = 10;
 const DEFAULT_BETA: f32 = 0.1;
 
 /// UCB1 exploration constant (sqrt(2) from Auer et al.).
-const UCB1_C: f32 = 2.0;
+pub(crate) const UCB1_C: f32 = 2.0;
 
 // ── Arm Index Mapping ─────────────────────────────────────────
 
 /// Map `PlanningDecision` to arm index for Q-value arrays.
 #[inline]
-fn arm_index(decision: PlanningDecision) -> usize {
+/// Map `PlanningDecision` to arm index for Q-value arrays.
+/// Only maps the 4 base SR²AM arms. FeedbackBandit handles arms 4-5.
+#[inline]
+pub(crate) fn arm_index(decision: PlanningDecision) -> usize {
     match decision {
         PlanningDecision::PlanNew => 0,
         PlanningDecision::PlanExtend => 1,
         PlanningDecision::PlanSkip => 2,
         PlanningDecision::SpecHop { .. } => 3,
         #[cfg(feature = "sia_feedback")]
-        PlanningDecision::HarnessUpdate => 4,
-        #[cfg(feature = "sia_feedback")]
-        PlanningDecision::WeightUpdate => 5,
+        PlanningDecision::HarnessUpdate | PlanningDecision::WeightUpdate => {
+            unreachable!("FeedbackBandit arms should not be routed to ConfiguratorBandit")
+        }
     }
 }
 
 /// Map arm index back to `PlanningDecision`.
-fn from_arm_index(idx: usize) -> PlanningDecision {
+/// Map arm index back to `PlanningDecision` (base 4 arms only).
+#[inline]
+pub(crate) fn from_arm_index(idx: usize) -> PlanningDecision {
     match idx {
         0 => PlanningDecision::PlanNew,
         1 => PlanningDecision::PlanExtend,
         2 => PlanningDecision::PlanSkip,
-        #[cfg(not(feature = "sia_feedback"))]
         _ => PlanningDecision::SpecHop {
             k: DEFAULT_SPECHOP_K,
         },
-        #[cfg(feature = "sia_feedback")]
-        3 => PlanningDecision::SpecHop {
-            k: DEFAULT_SPECHOP_K,
-        },
-        #[cfg(feature = "sia_feedback")]
-        4 => PlanningDecision::HarnessUpdate,
-        #[cfg(feature = "sia_feedback")]
-        _ => PlanningDecision::WeightUpdate,
     }
 }
 
