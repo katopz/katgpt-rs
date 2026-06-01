@@ -383,7 +383,10 @@ pub fn forward_sp_kv<'a>(
     let hd = config.head_dim;
     let kvd = kv_dim(config);
     let n_kv = config.n_kv_head;
-    let sp_config = &sp_cache.config;
+    // Copy scalar config fields to locals to avoid holding a reference across mutable borrows.
+    let sp_predictor_hidden = sp_cache.config.predictor_hidden;
+    let sp_window = sp_cache.config.window;
+    let sp_threshold = sp_cache.config.threshold;
 
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
@@ -405,14 +408,16 @@ pub fn forward_sp_kv<'a>(
         rmsnorm(&mut ctx.x);
 
         // ── SP-KV: Predict utility from hidden state (after RMSNorm, before QKV) ──
+        // Zero-alloc: writes directly into pre-allocated head_utilities buffer.
         let predictor = &predictors.layers[layer_idx];
-        sp_ctx.head_utilities = crate::sp_kv::utility_predictor::predict(
+        crate::sp_kv::utility_predictor::predict_into(
             predictor,
             &ctx.x,
             n,
-            sp_config.predictor_hidden,
+            sp_predictor_hidden,
             n_kv,
             &mut sp_ctx.predictor_buf,
+            &mut sp_ctx.head_utilities,
         );
 
         // Aggregate per-head utilities to single scalar for cache write decision
@@ -456,7 +461,7 @@ pub fn forward_sp_kv<'a>(
             pos_utility,
             pos,
             true, // current pos always in window
-            sp_config.threshold,
+            sp_threshold,
             kvd,
         );
 
@@ -466,8 +471,8 @@ pub fn forward_sp_kv<'a>(
             &layer_cache.utilities,
             &layer_cache.retained,
             pos,
-            sp_config.window,
-            sp_config.threshold,
+            sp_window,
+            sp_threshold,
             gate_mode,
         );
 
@@ -630,7 +635,10 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
     let hd = config.head_dim;
     let kvd = kv_dim(config);
     let n_kv = config.n_kv_head;
-    let sp_config = cache.config.clone();
+    // Copy scalar config fields to avoid borrowing cache.config across mutable cache calls.
+    let sp_predictor_hidden = cache.config.predictor_hidden;
+    let sp_window = cache.config.window;
+    let sp_threshold = cache.config.threshold;
 
     // Ensure flat dequant buffers are allocated
     sp_ctx.ensure_quant_bufs(config.block_size, kvd);
@@ -653,14 +661,16 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
         rmsnorm(&mut ctx.x);
 
         // ── SP-KV: Predict utility from hidden state (after RMSNorm, before QKV) ──
+        // Zero-alloc: writes directly into pre-allocated head_utilities buffer.
         let predictor = &predictors.layers[layer_idx];
-        sp_ctx.head_utilities = crate::sp_kv::utility_predictor::predict(
+        crate::sp_kv::utility_predictor::predict_into(
             predictor,
             &ctx.x,
             n,
-            sp_config.predictor_hidden,
+            sp_predictor_hidden,
             n_kv,
             &mut sp_ctx.predictor_buf,
+            &mut sp_ctx.head_utilities,
         );
 
         // Aggregate per-head utilities to single scalar for cache write decision
@@ -705,7 +715,7 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
             pos_utility,
             pos,
             true, // current pos always in window
-            sp_config.threshold,
+            sp_threshold,
         );
 
         // ── SP-KV: Build gate biases for all past positions ──
@@ -714,8 +724,8 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
             &cache.meta[layer_idx].utilities,
             &cache.meta[layer_idx].retained,
             pos,
-            sp_config.window,
-            sp_config.threshold,
+            sp_window,
+            sp_threshold,
             gate_mode,
         );
 
