@@ -19,7 +19,7 @@
 
 use super::eviction;
 use super::types::SleepConfig;
-use crate::gdn2::kernel::{gdn2_recurrent_step, l2_normalize};
+use crate::gdn2::kernel::{gdn2_state_update, l2_normalize};
 use crate::gdn2::types::MultiLayerGdn2Cache;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
 use crate::types::{self, Config};
@@ -66,25 +66,21 @@ pub fn consolidation_pass(
                 k_normalized.copy_from_slice(k_h);
                 l2_normalize(k_normalized);
 
-                // Use q = k for consolidation (self-consolidation pass)
-                // During sleep, we want the state to absorb the cached content,
-                // so we use k as the query to strengthen existing associations.
-                let q_h = &k_normalized;
+                // Self-consolidation uses q = k, but consolidation only needs the
+                // updated state S — the step-4 readout output is discarded. So we
+                // call the state-update half (steps 1–3) and skip the readout matvec
+                // entirely. This is bit-identical to the full recurrent step's effect
+                // on S (verified by gdn2 split_functions_match_combined tests).
                 let s = &mut gdn2_layer.heads[kv_group].s;
 
-                // Recurrent step: updates S in-place
-                // Note: out_buf, temp_buf, delta are filled inside gdn2_recurrent_step
-                // before use, so pre-filling here would be redundant.
-                gdn2_recurrent_step(
+                gdn2_state_update(
+                    s,
                     k_normalized,
                     v_h,
-                    q_h,
-                    s,
                     &gdn2_layer.decay_alpha,
                     &gdn2_layer.erase_b,
                     1.0, // scalar write weight
                     &gdn2_layer.write_w_channel,
-                    &mut gdn2_layer.out_buf,
                     &mut gdn2_layer.temp_buf,
                     &mut gdn2_layer.delta,
                     hd,

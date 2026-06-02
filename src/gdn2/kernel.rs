@@ -62,24 +62,29 @@ pub fn gdn2_recurrent_step(
     debug_assert_eq!(temp.len(), dv);
     debug_assert_eq!(delta.len(), dv);
 
-    // Step 1: Decay S *= Diag(alpha) — row-wise scale
-    for (row, &alpha_row) in alpha.iter().enumerate() {
-        let row_start = row * dv;
-        simd_scale_inplace(&mut s[row_start..row_start + dv], alpha_row);
-    }
-
-    // Step 2: Read r = Sᵀ(b ⊙ k) — gated matvec
-    // Compute b_k[i] = b[i] * k[i], then r[j] = Σ_i S[i*dv+j] * b_k[i]
+    // Steps 1+2 fused: decay each row of S by alpha[i] AND accumulate the gated
+    // read r = Sᵀ(b ⊙ k) in a single pass over S. Decay must precede the read
+    // (the read uses post-decay values), which the per-row ordering preserves
+    // exactly. Fusing halves memory traffic over S and removes `dk` per-row
+    // function calls vs. the previous decay-then-read two-pass form.
     temp.fill(0.0);
     for i in 0..dk {
-        let bk_i = b[i] * k[i];
-        if bk_i == 0.0 {
-            continue;
-        }
+        let alpha_row = unsafe { *alpha.get_unchecked(i) };
+        let bk_i = unsafe { *b.get_unchecked(i) * *k.get_unchecked(i) };
         let row_start = i * dv;
-        for j in 0..dv {
-            unsafe {
-                *temp.get_unchecked_mut(j) += *s.get_unchecked(row_start + j) * bk_i;
+        let row = &mut s[row_start..row_start + dv];
+        if bk_i != 0.0 {
+            for j in 0..dv {
+                unsafe {
+                    let sv = *row.get_unchecked(j) * alpha_row;
+                    *row.get_unchecked_mut(j) = sv;
+                    *temp.get_unchecked_mut(j) += sv * bk_i;
+                }
+            }
+        } else {
+            // Row still decays even when the read contribution is gated off.
+            for sv in row.iter_mut() {
+                *sv *= alpha_row;
             }
         }
     }
@@ -103,15 +108,18 @@ pub fn gdn2_recurrent_step(
     simd_outer_product_acc(s, k, delta, dk, dv);
 
     // Step 4: Readout o = Sᵀ q
-    for j in 0..dv {
-        let mut sum = 0.0f32;
-        for i in 0..dk {
+    // Row-major accumulation: contiguous inner loop over j (vectorizable),
+    // outer loop over rows i. For each out[j] the i-contributions are summed
+    // in the same 0..dk order as the column-strided form, so the result is
+    // bit-identical while the memory access becomes cache- and SIMD-friendly.
+    out.fill(0.0);
+    for i in 0..dk {
+        let qi = unsafe { *q.get_unchecked(i) };
+        let row_start = i * dv;
+        for j in 0..dv {
             unsafe {
-                sum += *s.get_unchecked(i * dv + j) * *q.get_unchecked(i);
+                *out.get_unchecked_mut(j) += *s.get_unchecked(row_start + j) * qi;
             }
-        }
-        unsafe {
-            *out.get_unchecked_mut(j) = sum;
         }
     }
 }
@@ -145,23 +153,26 @@ pub fn gdn2_state_update(
     debug_assert_eq!(temp.len(), dv);
     debug_assert_eq!(delta.len(), dv);
 
-    // Step 1: Decay S *= Diag(alpha) — row-wise scale
-    for (row, &alpha_row) in alpha.iter().enumerate() {
-        let row_start = row * dv;
-        simd_scale_inplace(&mut s[row_start..row_start + dv], alpha_row);
-    }
-
-    // Step 2: Read r = Sᵀ(b ⊙ k) — gated matvec
+    // Steps 1+2 fused: decay each row of S by alpha[i] AND accumulate the gated
+    // read r = Sᵀ(b ⊙ k) in a single pass over S (see gdn2_recurrent_step for the
+    // semantics-preserving rationale).
     temp.fill(0.0);
     for i in 0..dk {
-        let bk_i = b[i] * k[i];
-        if bk_i == 0.0 {
-            continue;
-        }
+        let alpha_row = unsafe { *alpha.get_unchecked(i) };
+        let bk_i = unsafe { *b.get_unchecked(i) * *k.get_unchecked(i) };
         let row_start = i * dv;
-        for j in 0..dv {
-            unsafe {
-                *temp.get_unchecked_mut(j) += *s.get_unchecked(row_start + j) * bk_i;
+        let row = &mut s[row_start..row_start + dv];
+        if bk_i != 0.0 {
+            for j in 0..dv {
+                unsafe {
+                    let sv = *row.get_unchecked(j) * alpha_row;
+                    *row.get_unchecked_mut(j) = sv;
+                    *temp.get_unchecked_mut(j) += sv * bk_i;
+                }
+            }
+        } else {
+            for sv in row.iter_mut() {
+                *sv *= alpha_row;
             }
         }
     }
@@ -198,15 +209,17 @@ pub fn gdn2_state_readout(
     debug_assert_eq!(s.len(), dk * dv);
     debug_assert_eq!(out.len(), dv);
 
-    for j in 0..dv {
-        let mut sum = 0.0f32;
-        for i in 0..dk {
+    // Row-major accumulation (contiguous inner loop, vectorizable). Per-output
+    // i-contributions are summed in the same 0..dk order as the column-strided
+    // form, so results are bit-identical.
+    out.fill(0.0);
+    for i in 0..dk {
+        let qi = unsafe { *q.get_unchecked(i) };
+        let row_start = i * dv;
+        for j in 0..dv {
             unsafe {
-                sum += *s.get_unchecked(i * dv + j) * *q.get_unchecked(i);
+                *out.get_unchecked_mut(j) += *s.get_unchecked(row_start + j) * qi;
             }
-        }
-        unsafe {
-            *out.get_unchecked_mut(j) = sum;
         }
     }
 }
