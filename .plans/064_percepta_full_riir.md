@@ -327,7 +327,7 @@ Note: crate names in Cargo.toml use `-` (`ordered-float`, `good_lp`), but Rust c
 
 ## Success Criteria
 
-- [ ] Rust example programs compile via `cargo build --target wasm32-unknown-unknown` and execute correctly through the Rust transformer — *blocked on: Rust→WASM compile pipeline wiring*
+- [x] Rust example programs compile via `cargo build --target wasm32-unknown-unknown` and execute correctly through the Rust transformer — ✅ `compile_rust_to_wasm()` + 10+ tests in `test_percepta_rust_wasm.rs` (F6/H5/H6)
 - [ ] ⏭️ Output matches Python reference exactly (C→WASM programs from Percepta Docker) — *deferred: needs Percepta Docker, copy `.wasm` out for comparison*
 - [ ] ⏭️ Futamura specialization works (specialized model produces same output as universal) — *deferred: needs full Rust→WASM pipeline*
 - [ ] ⏭️ Rust transformer is faster than Python transformer (obvious) and competitive with C++ transformer — *deferred: needs C-compiled WASM from Percepta Docker for fair comparison*
