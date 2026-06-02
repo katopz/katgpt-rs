@@ -92,7 +92,7 @@ planar_quant = ["turboquant"]  # PlanarQuant 2D Givens rotation KV cache — O(d
 iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
 hybrid_oct_pq = ["planar_quant", "octopus"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
 bt_rank = []  # Bradley-Terry pairwise ranking for DDtree selection (OpenDeepThink distillation)
-fft = ["bandit"]     # FFT Tactics Arena — ATB battle engine with status effects (Plan 053)
+fft = ["bandit", "sr2am_configurator"]     # FFT Tactics Arena — ATB battle engine with status effects (Plan 053)
 stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full`.
 bomber = ["bevy_ecs", "bandit"]  # Bomberman HL Arena (Plan 033)
 spechop = ["bandit"]  # SpecHop continuous multi-hop speculation pipeline (Plan 131, Research 091)

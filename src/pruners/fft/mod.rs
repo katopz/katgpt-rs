@@ -43,6 +43,12 @@ pub mod sdar_player;
 #[cfg(feature = "sdar_gate")]
 pub use sdar_player::SdarFFTPlayer;
 
+#[cfg(feature = "sr2am_configurator")]
+pub mod sr2am_player;
+
+#[cfg(feature = "sr2am_configurator")]
+pub use sr2am_player::FftSr2amPlayer;
+
 pub mod arena_runner;
 
 pub use arena_runner::{FftArenaConfig, FftBattleResult, run_fft_battle, run_fft_matchup};
