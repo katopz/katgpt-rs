@@ -1567,17 +1567,37 @@ unsafe fn neon_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
 unsafe fn neon_sum_f32(x: &[f32]) -> f32 {
     use core::arch::aarch64::{vaddq_f32, vaddvq_f32, vdupq_n_f32, vld1q_f32};
     unsafe {
+        // 4 independent accumulators to hide FADD pipeline latency.
+        // The serial single-accumulator reduction is latency-bound (each add
+        // depends on the previous); 4 lanes let the pipeline stay full.
+        // Same associativity-reorder already used by `neon_dot_f32`.
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
         let mut i = 0;
-        let chunks = x.len() / 4;
-        // Accumulate 4-element partial sums, then horizontal reduce
-        let mut acc = vdupq_n_f32(0.0);
-        for _ in 0..chunks {
-            let vx = vld1q_f32(x.as_ptr().add(i));
-            acc = vaddq_f32(acc, vx);
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            acc0 = vaddq_f32(acc0, vld1q_f32(x.as_ptr().add(i)));
+            acc1 = vaddq_f32(acc1, vld1q_f32(x.as_ptr().add(i + 4)));
+            acc2 = vaddq_f32(acc2, vld1q_f32(x.as_ptr().add(i + 8)));
+            acc3 = vaddq_f32(acc3, vld1q_f32(x.as_ptr().add(i + 12)));
+            i += 16;
+        }
+
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
+
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            acc_rem = vaddq_f32(acc_rem, vld1q_f32(x.as_ptr().add(i)));
             i += 4;
         }
-        let mut sum = vaddvq_f32(acc);
-        while i < x.len() {
+        sum += vaddvq_f32(acc_rem);
+
+        while i < len {
             sum += *x.get_unchecked(i);
             i += 1;
         }
@@ -1624,11 +1644,25 @@ unsafe fn neon_max_f32(x: &[f32]) -> f32 {
             return max;
         }
 
-        let mut vmax = vld1q_f32(x.as_ptr());
-        let mut i = 4;
-        for _ in 1..chunks {
-            let vx = vld1q_f32(x.as_ptr().add(i));
-            vmax = vmaxq_f32(vmax, vx);
+        // 4 independent vector-max accumulators to hide the max-op latency.
+        // max is associative + commutative, so this is bit-identical to serial.
+        let mut vmax0 = vld1q_f32(x.as_ptr());
+        let mut vmax1 = vmax0;
+        let mut vmax2 = vmax0;
+        let mut vmax3 = vmax0;
+        let mut i = 0;
+        let chunks4 = len / 16;
+        for _ in 0..chunks4 {
+            vmax0 = vmaxq_f32(vmax0, vld1q_f32(x.as_ptr().add(i)));
+            vmax1 = vmaxq_f32(vmax1, vld1q_f32(x.as_ptr().add(i + 4)));
+            vmax2 = vmaxq_f32(vmax2, vld1q_f32(x.as_ptr().add(i + 8)));
+            vmax3 = vmaxq_f32(vmax3, vld1q_f32(x.as_ptr().add(i + 12)));
+            i += 16;
+        }
+        let mut vmax = vmaxq_f32(vmaxq_f32(vmax0, vmax1), vmaxq_f32(vmax2, vmax3));
+        // Remaining 4-element chunks
+        while i + 4 <= len {
+            vmax = vmaxq_f32(vmax, vld1q_f32(x.as_ptr().add(i)));
             i += 4;
         }
 
@@ -1966,16 +2000,38 @@ unsafe fn avx2_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
 unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_setzero_ps};
     unsafe {
+        // 4 independent accumulators to hide FADD pipeline latency.
+        // Same associativity-reorder already used by `avx2_dot_f32`.
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
         let mut i = 0;
-        let chunks = x.len() / 8;
+        let len = x.len();
+        let chunks4 = len / 32;
+
+        for _ in 0..chunks4 {
+            acc0 = _mm256_add_ps(acc0, _mm256_loadu_ps(x.as_ptr().add(i)));
+            acc1 = _mm256_add_ps(acc1, _mm256_loadu_ps(x.as_ptr().add(i + 8)));
+            acc2 = _mm256_add_ps(acc2, _mm256_loadu_ps(x.as_ptr().add(i + 16)));
+            acc3 = _mm256_add_ps(acc3, _mm256_loadu_ps(x.as_ptr().add(i + 24)));
+            i += 32;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
         let mut acc = _mm256_setzero_ps();
-        for _ in 0..chunks {
-            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
-            acc = _mm256_add_ps(acc, vx);
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            acc = _mm256_add_ps(acc, _mm256_loadu_ps(x.as_ptr().add(i)));
             i += 8;
         }
-        let mut sum = horizontal_sum_256(acc);
-        while i < x.len() {
+        sum += horizontal_sum_256(acc);
+
+        while i < len {
             sum += *x.get_unchecked(i);
             i += 1;
         }
@@ -2022,11 +2078,25 @@ unsafe fn avx2_max_f32(x: &[f32]) -> f32 {
             return max;
         }
 
-        let mut vmax = _mm256_loadu_ps(x.as_ptr());
-        let mut i = 8;
-        for _ in 1..chunks {
-            let vx = _mm256_loadu_ps(x.as_ptr().add(i));
-            vmax = _mm256_max_ps(vmax, vx);
+        // 4 independent vector-max accumulators to hide the max-op latency.
+        // max is associative + commutative, so this is bit-identical to serial.
+        let mut vmax0 = _mm256_loadu_ps(x.as_ptr());
+        let mut vmax1 = vmax0;
+        let mut vmax2 = vmax0;
+        let mut vmax3 = vmax0;
+        let mut i = 0;
+        let chunks4 = len / 32;
+        for _ in 0..chunks4 {
+            vmax0 = _mm256_max_ps(vmax0, _mm256_loadu_ps(x.as_ptr().add(i)));
+            vmax1 = _mm256_max_ps(vmax1, _mm256_loadu_ps(x.as_ptr().add(i + 8)));
+            vmax2 = _mm256_max_ps(vmax2, _mm256_loadu_ps(x.as_ptr().add(i + 16)));
+            vmax3 = _mm256_max_ps(vmax3, _mm256_loadu_ps(x.as_ptr().add(i + 24)));
+            i += 32;
+        }
+        let mut vmax = _mm256_max_ps(_mm256_max_ps(vmax0, vmax1), _mm256_max_ps(vmax2, vmax3));
+        // Remaining 8-element chunks
+        while i + 8 <= len {
+            vmax = _mm256_max_ps(vmax, _mm256_loadu_ps(x.as_ptr().add(i)));
             i += 8;
         }
 
