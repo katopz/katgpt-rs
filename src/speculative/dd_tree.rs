@@ -3624,4 +3624,268 @@ mod tests {
             assert!((a - b).abs() < 1e-6, "same seed should produce same noise");
         }
     }
+
+    // ── GOAT Timing Benchmark: FrozenBaseGuard (Plan 171 T6) ─────
+    //
+    // Measures actual wall-clock latency difference between:
+    //   1. PrunerSchedule::Uniform — screener.relevance() called for every token
+    //   2. PrunerSchedule::FrozenBaseGuard — NoScreeningPruner at intermediate hops
+    //
+    // Uses a deliberately expensive screener to demonstrate the win.
+
+    /// Simulated expensive screener — models a WASM validator or bandit Q-table lookup.
+    ///
+    /// Each `relevance()` call does O(work_factor) work to simulate:
+    /// - Hash-based lookup (like BanditPruner Q-table)
+    /// - Small computation (like WasmPruner sandbox execution)
+    ///
+    /// This is NOT how a real screener works — it's intentionally slow to
+    /// measure the overhead FrozenBaseGuard avoids at intermediate hops.
+    struct ExpensiveScreener {
+        /// Simulated work per relevance() call: number of hash rounds.
+        work_factor: usize,
+        /// Accumulator to prevent the compiler from optimizing away the work.
+        /// Uses AtomicF32 for Sync safety.
+        sink: std::sync::atomic::AtomicU32,
+    }
+
+    impl ExpensiveScreener {
+        fn new(work_factor: usize) -> Self {
+            Self {
+                work_factor,
+                sink: std::sync::atomic::AtomicU32::new(0),
+            }
+        }
+    }
+
+    impl ScreeningPruner for ExpensiveScreener {
+        fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+            // Simulate expensive work: hash-based computation that can't be optimized away
+            let mut acc = (depth as f32) * 0.001 + (token_idx as f32) * 0.0001;
+            for (i, &t) in parent_tokens.iter().enumerate() {
+                acc += (i as f32) * (t as f32) * 0.00001;
+            }
+            // Simulated work: repeated hashing (models Q-table lookup or WASM call)
+            for _ in 0..self.work_factor {
+                acc = (acc * 1.0001 + 0.1).fract();
+            }
+            // Sink the result to prevent dead-code elimination
+            let bits = acc.to_bits();
+            self.sink
+                .fetch_xor(bits, std::sync::atomic::Ordering::Relaxed);
+            // Return relevance slightly below 1.0 so the tree actually uses it
+            1.0 - acc.abs().min(0.1)
+        }
+    }
+
+    /// Generate synthetic marginals for benchmarking.
+    /// vocab_size tokens per depth, draft_lookahead depths.
+    fn bench_marginals(vocab_size: usize, draft_lookahead: usize) -> Vec<Vec<f32>> {
+        let mut rng = Rng::new(42);
+        (0..draft_lookahead)
+            .map(|_| {
+                let mut probs: Vec<f32> = (0..vocab_size).map(|_| rng.uniform()).collect();
+                let sum: f32 = probs.iter().sum();
+                for p in probs.iter_mut() {
+                    *p /= sum;
+                }
+                probs
+            })
+            .collect()
+    }
+
+    /// GOAT T6a: FrozenBaseGuard produces identical output at single hop.
+    ///
+    /// With 1 hop, FrozenBaseGuard should produce the same tree as Uniform
+    /// (the only hop IS the final hop).
+    #[cfg(feature = "thinking_prune")]
+    #[test]
+    fn test_goat_schedule_single_hop_identical() {
+        use crate::pruners::PrunerSchedule;
+
+        let config = Config::draft();
+        let marginals_raw = bench_marginals(config.vocab_size, config.draft_lookahead);
+        let slices: Vec<&[f32]> = marginals_raw.iter().map(|m| m.as_slice()).collect();
+        let screener = ExpensiveScreener::new(100);
+
+        let uniform = build_dd_tree_screened_with_schedule(
+            &slices,
+            &config,
+            &screener,
+            true,
+            PrunerSchedule::Uniform,
+            0,
+            1,
+        );
+        let frozen = build_dd_tree_screened_with_schedule(
+            &slices,
+            &config,
+            &screener,
+            true,
+            PrunerSchedule::FrozenBaseGuard,
+            0,
+            1,
+        );
+
+        assert_eq!(
+            uniform.len(),
+            frozen.len(),
+            "single hop should produce same tree size"
+        );
+    }
+
+    /// GOAT T6b: FrozenBaseGuard produces >= nodes than Uniform.
+    ///
+    /// At intermediate hops with FrozenBaseGuard, NoScreeningPruner returns 1.0
+    /// for all tokens, so no branches are trimmed by relevance. This means
+    /// the tree can explore MORE of the candidate space.
+    #[cfg(feature = "thinking_prune")]
+    #[test]
+    fn test_goat_schedule_intermediate_produces_more() {
+        use crate::pruners::PrunerSchedule;
+
+        let config = Config {
+            screening_threshold: 0.5, // aggressive threshold — rejects many branches
+            ..Config::draft()
+        };
+        let marginals_raw = bench_marginals(config.vocab_size, config.draft_lookahead);
+        let slices: Vec<&[f32]> = marginals_raw.iter().map(|m| m.as_slice()).collect();
+        let screener = ExpensiveScreener::new(100);
+
+        // Intermediate hop (hop 0 of 3) — FrozenBaseGuard skips screening
+        let frozen_intermediate = build_dd_tree_screened_with_schedule(
+            &slices,
+            &config,
+            &screener,
+            true,
+            PrunerSchedule::FrozenBaseGuard,
+            0,
+            3,
+        );
+
+        // Uniform — applies screening at every hop
+        let uniform_intermediate = build_dd_tree_screened_with_schedule(
+            &slices,
+            &config,
+            &screener,
+            true,
+            PrunerSchedule::Uniform,
+            0,
+            3,
+        );
+
+        assert!(
+            frozen_intermediate.len() >= uniform_intermediate.len(),
+            "FrozenBaseGuard intermediate ({}) should produce >= Uniform ({}) nodes",
+            frozen_intermediate.len(),
+            uniform_intermediate.len()
+        );
+    }
+
+    /// GOAT T6c: Timing benchmark — FrozenBaseGuard is faster at intermediate hops.
+    ///
+    /// Measures wall-clock time for 100 iterations of DDTree build with:
+    ///   - ExpensiveScreener (work_factor=500, simulates WASM/bandit overhead)
+    ///   - 3 hops × (vocab_size=27 tokens × draft_lookahead=5 depths)
+    ///   - Uniform: screener called at every hop → 3× the relevance() calls
+    ///   - FrozenBaseGuard: NoScreeningPruner at hops 0-1, full screener at hop 2
+    ///
+    /// Prints results for GOAT proof audit.
+    #[cfg(feature = "thinking_prune")]
+    #[test]
+    fn test_goat_timing_frozen_base_guard_faster() {
+        use crate::pruners::PrunerSchedule;
+        use std::time::Instant;
+
+        let config = Config::draft();
+        let marginals_raw = bench_marginals(config.vocab_size, config.draft_lookahead);
+        let slices: Vec<&[f32]> = marginals_raw.iter().map(|m| m.as_slice()).collect();
+
+        let work_factor = 500; // Simulate expensive WASM/bandit validation
+        let total_hops = 3;
+        let iterations = 100;
+
+        let screener = ExpensiveScreener::new(work_factor);
+
+        // ── Warmup (3 iterations) ──
+        for _ in 0..3 {
+            for hop in 0..total_hops {
+                build_dd_tree_screened_with_schedule(
+                    &slices,
+                    &config,
+                    &screener,
+                    true,
+                    PrunerSchedule::Uniform,
+                    hop,
+                    total_hops,
+                );
+                build_dd_tree_screened_with_schedule(
+                    &slices,
+                    &config,
+                    &screener,
+                    true,
+                    PrunerSchedule::FrozenBaseGuard,
+                    hop,
+                    total_hops,
+                );
+            }
+        }
+
+        // ── Benchmark Uniform ──
+        let start = Instant::now();
+        for _ in 0..iterations {
+            for hop in 0..total_hops {
+                let _tree = build_dd_tree_screened_with_schedule(
+                    &slices,
+                    &config,
+                    &screener,
+                    true,
+                    PrunerSchedule::Uniform,
+                    hop,
+                    total_hops,
+                );
+                std::hint::black_box(&_tree);
+            }
+        }
+        let uniform_ns = start.elapsed().as_nanos();
+
+        // ── Benchmark FrozenBaseGuard ──
+        let start = Instant::now();
+        for _ in 0..iterations {
+            for hop in 0..total_hops {
+                let _tree = build_dd_tree_screened_with_schedule(
+                    &slices,
+                    &config,
+                    &screener,
+                    true,
+                    PrunerSchedule::FrozenBaseGuard,
+                    hop,
+                    total_hops,
+                );
+                std::hint::black_box(&_tree);
+            }
+        }
+        let frozen_ns = start.elapsed().as_nanos();
+
+        let uniform_ms = uniform_ns as f64 / 1_000_000.0;
+        let frozen_ms = frozen_ns as f64 / 1_000_000.0;
+        let speedup = uniform_ms / frozen_ms;
+
+        eprintln!(
+            "\n=== GOAT T6c: FrozenBaseGuard Timing ===\n\
+             Uniform:          {uniform_ms:.2} ms ({iterations} iters × {total_hops} hops)\n\
+             FrozenBaseGuard:  {frozen_ms:.2} ms ({iterations} iters × {total_hops} hops)\n\
+             Speedup:          {speedup:.2}×\n\
+             Per-hop saving:   intermediate hops skip ExpensiveScreener ({work_factor} work factor)\n"
+        );
+
+        // GOAT assertion: FrozenBaseGuard must be measurably faster.
+        // With 3 hops and expensive screener, 2 of 3 hops skip screening → ~2× speedup.
+        // In practice the speedup is less than 2× because NoScreeningPruner still
+        // has some overhead (branch misprediction, function call). We assert >= 1.3×.
+        assert!(
+            speedup >= 1.3,
+            "FrozenBaseGuard should be >= 1.3× faster, got {speedup:.2}×"
+        );
+    }
 }

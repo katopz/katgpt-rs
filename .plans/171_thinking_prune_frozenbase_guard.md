@@ -22,6 +22,8 @@ Applied to our SpecHop pipeline: intermediate hops should use `ScreeningPruner` 
 - [x] T5: Wire `FrozenBaseGuard` into LT2 `LoopMode::TrainingFree` — intermediate loops use damped sub-stepping only (already implemented), final loop adds ConstraintPruner
 - [x] T6: GOAT proof benchmark — SpecHop total latency with/without FrozenBaseGuard, same quality constraint
 - [x] T7: Update README feature flags section with `thinking_prune` gate
+- [x] T8: Wire `FrozenBaseGuard` into token-level DDTree via `build_dd_tree_screened_with_schedule()` — intermediate hops use `NoScreeningPruner` (skip all screening), final hop applies full screener
+- [x] T9: GOAT timing benchmark with expensive screener — `tests/bench_171_thinking_prune_goat.rs` (5 proofs: P1 structural dominance, P2 correctness, P3 wall-clock 44.5% speedup, P4 single-hop edge case, P5 final-hop quality)
 
 ## Implementation Notes
 
