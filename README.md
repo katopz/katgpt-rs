@@ -102,45 +102,7 @@ Path-Aware:  100 nodes, 100 accumulated-valid (100.0%)
 
 ## 📊 Benchmark Results
 
-Run on Apple Silicon (single-threaded, `--release`, 2000 iterations + 50 warmup, **zero-alloc hot paths**). Latest run: **2026-05-29**, default features.
-
-**Models:** Target (embd=16, heads=4, mlp=64) · Draft (embd=4, heads=2, mlp=16) · `cargo run --release`
-
-```
-Method                         Throughput         μs/step  Avg Accept Len
-───────────────────────────────────────────────────────────────────────────────
-Transformer AR                  1,711,230 tok/s       0.58            1.00
-DFlash                            423,396 tok/s       2.36            8.00
-DDTree Build                      370,225 trees/s      2.70            —
-Speculative (Simulated)           854,281 tok/s       5.85            5.00
-Speculative (AR Draft)          1,144,103 tok/s       6.12            7.00
-Leviathan (Algorithm 1)         1,630,214 tok/s       0.61            1.00
-Leviathan (w/ rollback)           173,560 tok/s       6.75            1.17
-Spec (conditioned)                933,739 tok/s       7.23            6.75
-Prefill (no compress)             217,825 ops/s       4.59           64.00
-Prefill (compressed)              207,760 ops/s       4.81            7.00
-DDTree (chain-seed)               386,835 trees/s      2.58           16.00
-DDTree (screened R=1.0)           296,927 trees/s      3.37           16.00
-forward_raven (16 slots)        2,019,460 ops/s        0.49            —
-raven_recall (1000 noise)      22,944,726 ops/s        0.04           63.21
-───────────────────────────────────────────────────────────────────────────────
-```
-
-> **Reading the gain honestly:** at this micro scale the target forward pass is so cheap that
-> plain AR has the highest raw `tok/s`. Speculative decoding's real win is the **avg accept
-> length** — 7–8 tokens verified per target pass (DFlash 8.0, AR-draft 7.0, conditioned 6.75) —
-> which is what amortizes a large target model. The headline `Speedup` line printed by `main.rs`
-> compares `raven_recall` ops/s against `forward(flat)` ops/s (mislabeled as "Speculative vs AR"),
-> so treat the per-row accept length, not that single number, as the speculative-decoding metric.
-
-### GRAM Width-vs-Depth (`.benchmarks/019_gram_width_depth.md`)
-
-Infrastructure benchmark validating width >> depth on DDTree with SDE noise. GOAT PENDING (1/3) — infrastructure validated, real game arenas needed for full proof.
-
-| Sweep | Result |
-|-------|--------|
-| Width K=1→20 | +0.15% quality (linear latency cost) |
-| Depth T=1→16 | -32.4% quality (diminishing returns) |
+📖 Raw throughput tables, GRAM width-vs-depth (GOAT PENDING), and per-benchmark explanations are in [`.docs/04_performance.md`](.docs/04_performance.md).
 
 ### MoE+SD Cost Model (`.benchmarks/096_moe_sd_codemodel_goat.md`)
 
@@ -153,8 +115,6 @@ Amdahl cost model for LeviathanVerifier speculative decoding. Feature gate: `spe
 | Leviathan infrastructure | ✅ |
 | f_sparse consistency | ✅ < 10% variance |
 | Cost model error bound | ✅ < 15% |
-
-📖 See [`.docs/04_performance.md`](.docs/04_performance.md) for per-benchmark explanations, zero-alloc improvements, and screening overhead analysis.
 
 ## 🧩 D2F: Discrete Diffusion Forcing (Plan 066)
 
@@ -1638,15 +1598,15 @@ let player = VpdPlayer::with_config(0, config);
 
 Paper: arXiv:2605.15113 — Variational Policy Distillation (Salesforce AI Research, 2026)
 
-## 🎯 RMSD — Relevance-Masked Self-Distillation (Plan 125) — ⚠️ Negative Result (Arena)
+## 🎯 RMSD — Relevance-Masked Self-Distillation (Plan 125) — ❌ NO GOAT
 
 Two-step relevance mask on top of SDAR: pre-filter T=20 actions by |ΔQ| magnitude → select S=5 most informative → only those receive SDAR sigmoid gating. Adds `TeacherContinuation` (student → teacher snapshot on plateau).
 
-### Arena Results (`.benchmarks/037_rmsd_goat.md`) — ⚠️ Negative Result
+### Arena Results (`.benchmarks/037_rmsd_goat.md`) — ❌ NO GOAT
 
 **Bomber** (1000 games, RMSD + Random vs SDAR + Random): RMSD within 10% relative gap of SDAR. Same conclusion as SDAR — the relevance mask affects convergence rate, not action selection.
 
-**Verdict:** RMSD does **not** improve arena performance over SDAR (which itself doesn't improve over GZero/Rubric). The two-step filter concentrates learning signal on high-magnitude actions, but in short tournament series both RMSD and SDAR produce the same action distributions.
+**Verdict:** RMSD does **not** improve arena performance over SDAR (which itself doesn't improve over GZero/Rubric). Negative arena result = NO GOAT, regardless of 46 structural proofs passing. The two-step filter concentrates learning signal on high-magnitude actions, but in short tournament series both RMSD and SDAR produce the same action distributions.
 
 The infrastructure (relevance filter, magnitude judge, continuation, top-K KL approximation, `rmsd_loss`) is production-quality and reusable for the gradient-based path.
 
@@ -1656,7 +1616,7 @@ The infrastructure (relevance filter, magnitude judge, continuation, top-K KL ap
 | `rmsd_loss()` | ~100M/sec | — |
 | `RmsdPlayer::select_action()` | ~10K/sec | +~5% vs SDAR |
 
-**46 GOAT proofs** (34 unit + 2 arena + 10 pipeline). Feature gate: `rmsd_distill` — **off by default**.
+46 structural proofs (34 unit + 2 arena + 10 pipeline) — code correctness only, not GOAT. Feature gate: `rmsd_distill` — **off by default**, excluded from `full`.
 
 ```rust
 use katgpt_rs::pruners::rmsd_relevance::{RmsdConfig, RmsdRelevanceFilter, rmsd_loss};
@@ -1670,7 +1630,7 @@ let (selected, metrics) = filter.filter_actions(&teacher_q, &student_q);
 let loss = rmsd_loss(&selected, &teacher_q, &student_q, 5.0);
 ```
 
-📖 See `.benchmarks/037_rmsd_goat.md` for full GOAT proof results.
+📖 See `.benchmarks/037_rmsd_goat.md` for full results (NO GOAT — negative arena).
 Paper: [Relevance-Masked Self-Distillation](https://www.appliedcompute.com/research/relevance-masked-self-distillation) — Applied Compute, 2026
 
 ## 🏆 Bradley-Terry Pairwise Ranking (OpenDeepThink Distillation)
@@ -2676,6 +2636,7 @@ Every feature traced from research paper to implementation to benchmark. Separat
 | **StepCode** (`stepcode`) | Plan 054 Bi-Level GRPO | **NO GAIN proven** | Mathematically correct but paper's 7-14% gains come from training 7B model on dense stepwise rewards — modelless path only improves heuristic signal quality. Off by default, not in `full`. |
 | **δ-Mem** (`delta_mem`) | Plan 053 Associative Memory | **NO GAIN for DDTree** | Delta-rule converges (cosine ≤0.20 error after 200 updates), domain isolation works. BUT: **26× latency overhead** (682 calls/build). Corrections too small to flip branch ordering. |
 | **SDAR Arena** (`sdar_gate`) | Plan 072 Asymmetric Trust | **Negative arena result** | ELO 954 ≈ Rubric 955 — no improvement. 28% higher bandit regret. SDAR draws 100% vs GZero and Rubric in FFT. Reward modulation ≠ selection improvement. |
+| **RMSD** (`rmsd_distill`) | Plan 125 Relevance-Masked Self-Distillation | **Negative arena result — NO GOAT** | 46/46 structural proofs pass (code correctness), but RMSD within 10% of SDAR over 1000 bomber games — no improvement. Same fate as SDAR: reward signal modulation does not improve action selection. Infrastructure reusable for gradient-based path. |
 | **Fast BLT** | [Fast BLT Research 17](https://arxiv.org/abs/2605.09959) | **Explicitly rejected** | Architecture mismatch: we use BPE tokens not bytes, no hierarchical architecture, already have `LeviathanVerifier` for speculative decoding. |
 | **AutoTTS** | [AutoTTS Research 16](https://arxiv.org/abs/2605.09959) | **Not implemented** | Manual `tree_budget` in `Config` serves same purpose. β parameterization was planned but never built. |
 | **EMO MoE** | [EMO Research 09](https://arxiv.org/abs/2406.08732) | **Concept only** | `domains.toml` exists as placeholder. No `PromptRouter`, no `ExpertRegistry`, no MoE architecture at our model scale. |

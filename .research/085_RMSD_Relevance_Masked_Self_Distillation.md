@@ -223,9 +223,15 @@ This tests whether distillation can elicit OOD behavior without breaking existin
 
 ---
 
-## Verdict: HIGH VALUE — Precision Filter for Existing Distillation Stack
+## Verdict: ❌ NO GOAT — Negative Arena Result
 
-**RMSD fills a specific, validated gap:** Our SDAR gates all tokens uniformly, but RMSD proves most tokens carry noise. The two-step relevance mask is the missing precision instrument in our distillation toolbox.
+**Post-implementation update:** RMSD was implemented (Plan 125) and 46/46 structural proofs pass, but **arena testing showed no improvement over SDAR**. RMSD within 10% relative gap of SDAR over 1000 bomber games — no improvement. Same fate as SDAR: reward signal modulation does not improve action selection in short tournament series. Demoted to 🪦.
+
+The original research assessment (below) was wrong about the practical impact. The code infrastructure remains production-quality and reusable.
+
+**Original assessment (pre-implementation):**
+
+RMSD fills a specific, validated gap: Our SDAR gates all tokens uniformly, but RMSD proves most tokens carry noise. The two-step relevance mask is the missing precision instrument in our distillation toolbox.
 
 ### What We Gain
 
@@ -240,7 +246,7 @@ This tests whether distillation can elicit OOD behavior without breaking existin
 2. **Hyperparameters** — T=20, S=5 need domain-specific tuning
 3. **Top-K vocabulary** — new kernel for efficient top-K logprob selection
 
-### Priority: HIGH
+### Priority: ~~HIGH~~ ❌ NO GOAT (post-arena)
 
 RMSD is the **precision scalpel** to SDAR's **broad sword**. Our existing SDAR handles the asymmetric trust problem (positive endorsement vs negative rejection). RMSD handles the **relevance problem** (which tokens matter at all). They compose naturally:
 
@@ -257,7 +263,7 @@ Implement as **Plan 121** with feature gate `rmsd_distill`:
 - **Model-based (riir-ai):** `loss_rmsd.rs` extending `loss_sdar.rs` with two-step filtering
 - **Modelless (katgpt-rs):** `rmsd_relevance.rs` extending `sdar_gate.rs` with magnitude pre-filter
 - **Benchmark:** Game-domain OOD test (bomber position preference, Go opening override)
-- **GOAT proof:** RMSD ≥ SDAR on OOD elicitation + capability preservation
+- ~~**GOAT proof:** RMSD ≥ SDAR on OOD elicitation + capability preservation~~ ❌ Failed: no improvement in arena
 
 ---
 

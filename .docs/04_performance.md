@@ -1,37 +1,48 @@
 # katgpt-rs: Performance Engineering
 
-## Benchmark Results (release build, 50K iterations, Apple Silicon)
+## Benchmark Results (release build, Apple Silicon)
 
-**Models:** Target (embd=16, heads=4, mlp=64) · Draft (embd=4, heads=2, mlp=16) · Benchmark run `047` (commit `4a6b592`)
+Run on Apple Silicon (single-threaded, `--release`, 2000 iterations + 50 warmup, **zero-alloc hot paths**). Latest run: **2026-05-29**, default features.
+
+**Models:** Target (embd=16, heads=4, mlp=64) · Draft (embd=4, heads=2, mlp=16) · `cargo run --release`
 
 ```
 Method                         Throughput         μs/step  Avg Accept Len
 ───────────────────────────────────────────────────────────────────────────────
-Transformer AR                    900,464 tok/s       1.11            1.00
-DFlash                           4,231,267 tok/s       1.89            8.00
-DDTree Build                      430,911 trees/s      2.32            —
-Speculative (Simulated)          1,143,669 tok/s       4.37            5.00
-Speculative (AR Draft)           1,643,545 tok/s       4.26            7.00
-Leviathan (Algorithm 1)           114,387 tok/s      10.31            1.18
-Leviathan (no rollback)           114,085 tok/s      10.33            1.18
-Leviathan (w/ rollback)           206,605 tok/s       5.69            1.18
-Spec (unconditioned)             1,145,669 tok/s       4.36            5.00
-Spec (conditioned)               1,157,438 tok/s       5.83            6.74
-Prefill (no compress)           19,425,142 tok/s       3.29           64.00
-Prefill (compressed)             1,962,114 tok/s       3.57            7.00
-DDTree (no chain)                  433,000 trees/s      2.31           16.00
-DDTree (chain-seed)                447,251 trees/s      2.24           16.00
-DDTree (screened R=1.0)            338,390 trees/s      2.96           16.00
-DDTree (screened adapter)          340,539 trees/s      2.94           16.00
-forward (flat)                   1,200,263 trees/s      0.83            —
-forward_paged                    1,008,350 trees/s      0.99            —
-forward_raven (16 slots)         1,617,183 trees/s      0.62            —
-raven_recall (1000 noise)        9,252,063 tok/s       0.11           63.21
+Transformer AR                  1,711,230 tok/s       0.58            1.00
+DFlash                            423,396 tok/s       2.36            8.00
+DDTree Build                      370,225 trees/s      2.70            —
+Speculative (Simulated)           854,281 tok/s       5.85            5.00
+Speculative (AR Draft)          1,144,103 tok/s       6.12            7.00
+Leviathan (Algorithm 1)         1,630,214 tok/s       0.61            1.00
+Leviathan (w/ rollback)           173,560 tok/s       6.75            1.17
+Spec (conditioned)                933,739 tok/s       7.23            6.75
+Prefill (no compress)             217,825 ops/s       4.59           64.00
+Prefill (compressed)              207,760 ops/s       4.81            7.00
+DDTree (chain-seed)               386,835 trees/s      2.58           16.00
+DDTree (screened R=1.0)           296,927 trees/s      3.37           16.00
+forward_raven (16 slots)        2,019,460 ops/s        0.49            —
+raven_recall (1000 noise)      22,944,726 ops/s        0.04           63.21
 ───────────────────────────────────────────────────────────────────────────────
-📈 Best speedup: 1.82x (Speculative AR Draft vs AR)
 ```
 
-Speedup: Speculative vs AR went from **0.72×** → **1.82×** after zero-alloc optimization.
+> **Reading the gain honestly:** at this micro scale the target forward pass is so cheap that
+> plain AR has the highest raw `tok/s`. Speculative decoding's real win is the **avg accept
+> length** — 7–8 tokens verified per target pass (DFlash 8.0, AR-draft 7.0, conditioned 6.75) —
+> which is what amortizes a large target model. The headline `Speedup` line printed by `main.rs`
+> compares `raven_recall` ops/s against `forward(flat)` ops/s (mislabeled as "Speculative vs AR"),
+> so treat the per-row accept length, not that single number, as the speculative-decoding metric.
+
+Speedup: Speculative vs AR went from **0.72×** → **1.82×** after zero-alloc optimization (earlier run `047`, commit `4a6b592`).
+
+### GRAM Width-vs-Depth (`.benchmarks/019_gram_width_depth.md`)
+
+Infrastructure benchmark validating width >> depth on DDTree with SDE noise. GOAT PENDING (1/3) — infrastructure validated, real game arenas needed for full proof.
+
+| Sweep | Result |
+|-------|--------|
+| Width K=1→20 | +0.15% quality (linear latency cost) |
+| Depth T=1→16 | -32.4% quality (diminishing returns) |
 
 ## Hot Path Optimizations
 

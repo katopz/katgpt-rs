@@ -254,9 +254,9 @@ Variational Posterior Distillation player using EM-cycle bandit updates.
 - **Configurable:** `VpdConfig` for E-step frequency and reward shaping.
 - **Feature gate:** `--features vpd_em_distill`.
 
-### P11 📐 RmsdPlayer — RMSD Relevance Distillation Bomber
+### P11 📐 RmsdPlayer — RMSD Relevance Distillation Bomber (❌ NO GOAT)
 
-RMSD (Root Mean Square Deviation) filtering player that concentrates updates on most informative actions.
+RMSD (Root Mean Square Deviation) filtering player that concentrates updates on most informative actions. **Negative arena result** — no improvement over SDAR in tournament play. Kept for infrastructure reuse.
 
 - **Tech:** GZero base + `SdarBanditPruner` + `SdarGatedAbsorbCompress` + RMSD delta filtering.
 - **Bandit:** SDAR sigmoid-gated with RMSD-based delta concentration — filters high-variance updates for faster convergence.

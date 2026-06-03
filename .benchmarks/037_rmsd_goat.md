@@ -1,7 +1,7 @@
-# RMSD Relevance-Masked Self-Distillation — GOAT Proof (Plan 125)
+# RMSD Relevance-Masked Self-Distillation — NO GOAT (Plan 125)
 
-> **Status:** ⚠️ GOAT 46/46 passed, but **negative arena result** (no improvement over SDAR)
-> **Feature gate:** `rmsd_distill` — **off by default**
+> **Status:** ❌ NO GOAT — 46/46 structural proofs passed, but **negative arena result** (no improvement over SDAR)
+> **Feature gate:** `rmsd_distill` — **off by default**, excluded from `full`
 > **Research:** Research 085 — RMSD two-step relevance mask: pre-filter T by magnitude, judge selects S
 > **Date:** 2025-06
 
@@ -16,16 +16,19 @@ Same conclusion as SDAR itself — the signal quality affects convergence rate, 
 - **Continuation works:** Teacher snapshot mechanism activates after plateau_patience rounds
 - **Mask density:** S/ACTION_COUNT = 5/7 ≈ 0.71 — 71% of actions receive SDAR gating
 
-### Verdict
+### Verdict — NO GOAT
 
-RMSD extends SDAR with relevance filtering, but inherits SDAR's fundamental limitation:
-both modulate reward signal intensity (convergence rate), not action selection.
-In short tournament series, RMSD produces the same action distributions as SDAR, GZero, and Rubric.
+Negative arena result means RMSD fails the GOAT gate. The 46 structural proofs validate
+code correctness (math, filters, infrastructure), but GOAT requires **measured improvement**.
+RMSD produces identical action distributions to SDAR, GZero, and Rubric in tournament play.
+
+Same fate as SDAR itself — reward signal modulation does not improve action selection.
+Demoted to 🪦 alongside SDAR Arena.
 
 The infrastructure (relevance filter, magnitude judge, continuation, top-K KL approximation, `rmsd_loss`)
-is production-quality and reusable for the gradient-based path.
+remains production-quality and reusable for the gradient-based path.
 
-## GOAT Proof Results (46 proofs)
+## Structural Proofs (46/46 passed — code correctness only)
 
 ### Unit Proofs (34 — T1 through existing GOAT proofs)
 

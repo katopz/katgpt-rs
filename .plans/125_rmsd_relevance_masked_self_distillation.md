@@ -1,6 +1,6 @@
 # Plan 121: RMSD — Relevance-Masked Self-Distillation
 
-> **Status:** ✅ Complete (T1–T13 all done, 44 GOAT proofs)
+> **Status:** ❌ NO GOAT — Complete (T1–T13 all done, 46 structural proofs pass), but **negative arena result**: RMSD does not improve over SDAR in tournament play. Demoted to 🪦.
 > **Branch:** `develop/feature/121_rmsd_distill`
 > **Depends on:** Plan 072 (SDAR gate ✅), Plan 073 (SDAR loss ✅), Plan 074 (Interventional SFT ✅), Plan 080 (BT rank ✅)
 > **Research:** `.research/081_RMSD_Relevance_Masked_Self_Distillation.md`
