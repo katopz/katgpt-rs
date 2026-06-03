@@ -217,3 +217,26 @@ pub use parallel_probe::{
 pub use answer_extract::{
     AnswerExtractor, DiscreteActionExtractor, RegexAnswerExtractor, ThinkTokenExtractor,
 };
+
+// ── DFlare Modelless Inference re-exports (Plan 174, feature: dflare_fusion) ──
+#[cfg(feature = "dflare_fusion")]
+pub use dflash::marginal_fusion_blend;
+#[cfg(feature = "dflare_fusion")]
+pub use types::MarginalFusionConfig;
+
+// ── DFlare KV Routing re-exports (Plan 174, feature: dflare_kv_routing) ──
+#[cfg(feature = "dflare_kv_routing")]
+pub use types::KvRoutingConfig;
+
+// ── DFlare Progressive Budget re-exports (Plan 174, feature: dflare_progressive_budget) ──
+#[cfg(feature = "dflare_progressive_budget")]
+pub use types::PositionWeightedBudget;
+
+// ── Adaptive CoT Thinking Controller (Plan 194, feature: thinking_cot) ──
+#[cfg(feature = "thinking_cot")]
+pub mod thinking_controller;
+
+#[cfg(feature = "thinking_cot")]
+pub use thinking_controller::{
+    Rng, ThinkingBanditFrozen, ThinkingConfig, ThinkingController, ThinkingMode, ThinkingSelector,
+};
