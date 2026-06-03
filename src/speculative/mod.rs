@@ -3,6 +3,7 @@ pub mod dd_tree;
 pub mod dflash;
 pub mod drafter_lora;
 pub mod prefill;
+pub mod residency_audit;
 pub mod sampling;
 pub mod step;
 pub mod types;
@@ -174,7 +175,7 @@ pub use budget_compat::{effective_tree_budget, scaled_draft_lookahead};
 
 // ── Budget Adaptation Re-exports (Plan 167, feature: budget_adaptation) ──
 #[cfg(feature = "budget_adaptation")]
-pub use budget::{adaptive_tree_budget, compression_ratio};
+pub use budget::{adaptive_tree_budget, compression_ratio, entropy_signal, shannon_entropy};
 #[cfg(feature = "budget_adaptation")]
 pub use prefill::block_compression_ratio;
 

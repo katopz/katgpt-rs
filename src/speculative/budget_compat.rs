@@ -121,9 +121,10 @@ mod tests {
     }
 
     #[test]
-    fn test_effective_tree_budget_entropy_returns_base() {
-        let result = effective_tree_budget(100, 0.5, BudgetAdaptation::Entropy);
-        assert_eq!(result, 100);
+    fn test_effective_tree_budget_entropy_adapts() {
+        let result = effective_tree_budget(100, 1.5, BudgetAdaptation::Entropy);
+        // H=1.5: half of threshold → scale = 0.5 + 1.5*0.5 = 1.25 → 125
+        assert_eq!(result, 125);
     }
 
     #[cfg(feature = "budget_adaptation")]
