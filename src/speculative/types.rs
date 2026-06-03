@@ -635,20 +635,29 @@ pub struct MarginalFusionConfig {
 
 #[cfg(feature = "dflare_fusion")]
 impl MarginalFusionConfig {
+    /// Create a disabled config (fusion inactive).
+    pub fn disabled() -> Self {
+        Self {
+            alpha_weights: vec![],
+            condition_layer_ids: vec![],
+            enabled: false,
+        }
+    }
+
     /// Create a two-source config with equal weights (0.5/0.5).
     ///
     /// Source 0: early target layers (first third).
     /// Source 1: late target layers (last third).
     pub fn balanced(num_target_layers: usize) -> Self {
         let n = num_target_layers;
-        let early_end = (n + 2) / 3;
-        let late_start = n - (n / 3);
+        // Need at least 2 layers to split into two non-empty sources.
+        if n < 2 {
+            return Self::disabled();
+        }
+        let mid = n / 2;
         Self {
             alpha_weights: vec![0.5, 0.5],
-            condition_layer_ids: vec![
-                (1..early_end).collect(),
-                (late_start..n.saturating_sub(2)).collect(),
-            ],
+            condition_layer_ids: vec![(0..mid).collect(), (mid..n).collect()],
             enabled: true,
         }
     }

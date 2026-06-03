@@ -300,6 +300,9 @@ Proven features behind feature flags — not in default set:
 | **Percepta** (full) | Transformer-VM with WASM interpreter in weights | Research-grade |
 | **SP-KV** | Self-pruned KV attention with learned utility | Requires joint training |
 | **MaxSim** | Late-interaction scoring, 7.46× SIMD | Amplifies quantization error |
+| **DFlare Fusion** (`dflare_fusion`) | Multi-source marginal blending (Plan 174) | Structural ✅, improvement < GOAT threshold |
+| **DFlare KV Routing** (`dflare_kv_routing`) | Pruner-confidence KV routing (Plan 174) | Structural ✅, improvement < GOAT threshold |
+| **DFlare Progressive Budget** (`dflare_progressive_budget`) | Position-weighted DDTree budget (Plan 174) | Structural ✅, improvement < GOAT threshold |
 
 📖 **Full detail for ALL opt-in features:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md).
 
@@ -498,6 +501,9 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 | `peira_distill` | PEIRA inter-view alignment (**default-on**) |
 | `kog_cpu_fusion` | Monokernel CPU fusion (**default-on**) |
 | `recfm` | Recursive Cross-Scale Consistency (opt-in) |
+| `dflare_fusion` | DFlare Marginal Fusion — multi-source conditioning blend (Plan 174, opt-in) |
+| `dflare_kv_routing` | DFlare Pruner-Confidence KV Routing (Plan 174, opt-in) |
+| `dflare_progressive_budget` | DFlare Position-Weighted DDTree Budget (Plan 174, opt-in) |
 | `full` | Enable all features (excludes some opt-in) |
 
 </details>
