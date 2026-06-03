@@ -34,6 +34,9 @@ pub struct LayerWeights {
     pub mlp_norm_gamma: Vec<f32>,  // [n_embd] pre-MLP RMSNorm gamma (identity=1.0)
     // Kog CPU fusion (Plan 160): fused QKV weight storage
     pub attn_qkv_fused: Option<Vec<f32>>, // [(n_embd + 2*kv_dim), n_embd] interleaved
+    // Wall Attention gate projection weights (Plan 173)
+    #[cfg(feature = "wall_attention")]
+    pub attn_wg: Vec<f32>, // [kv_dim] gate projection per KV head dimension
 }
 
 /// All transformer weights: embeddings, per-layer weights, and LM head.
@@ -74,6 +77,43 @@ pub struct TransformerWeights {
     pub delta_routing_query: Vec<Vec<f32>>, // [n_layer][n_embd] per-layer query vectors
     #[cfg(feature = "delta_routing")]
     pub delta_routing_norm: Vec<Vec<f32>>, // [n_layer][n_embd] per-layer RMSNorm weights (gamma)
+}
+
+// ---------------------------------------------------------------------------
+// RiM Reasoning Buffer Slots — Plan 172 helpers
+// ---------------------------------------------------------------------------
+
+/// Extend a token sequence with RiM reasoning buffer tokens (Plan 172).
+/// Appends K×M buffer token IDs after the original prompt tokens.
+/// Returns the extended token Vec. No-op when rim is disabled.
+#[cfg(feature = "rim_slots")]
+pub fn rim_extend_tokens(tokens: &[usize], config: &Config) -> Vec<usize> {
+    if !config.rim_enabled() {
+        return tokens.to_vec();
+    }
+    let buf_count = config.rim_total_buffer_tokens();
+    let mut extended = Vec::with_capacity(tokens.len() + buf_count);
+    extended.extend_from_slice(tokens);
+    let buf_token = if config.rim_buffer_token == 0 {
+        config.bos_token // fallback to BOS when rim_buffer_token unset
+    } else {
+        config.rim_buffer_token
+    };
+    extended.resize(tokens.len() + buf_count, buf_token);
+    extended
+}
+
+/// Returns the index from which to read logits when RiM buffer slots are active.
+/// When enabled, readout is at the LAST buffer position.
+/// When disabled, readout is at the last prompt token position.
+#[cfg(feature = "rim_slots")]
+#[inline]
+pub fn rim_readout_index(prompt_len: usize, config: &Config) -> usize {
+    if config.rim_enabled() {
+        prompt_len + config.rim_total_buffer_tokens() - 1
+    } else {
+        prompt_len - 1
+    }
 }
 
 impl TransformerWeights {
@@ -136,6 +176,13 @@ impl TransformerWeights {
                 attn_norm_gamma: vec![1.0f32; n],
                 mlp_norm_gamma: vec![1.0f32; n],
                 attn_qkv_fused: None,
+                #[cfg(feature = "wall_attention")]
+                attn_wg: {
+                    let len = kvd;
+                    let mut v = Vec::with_capacity(len);
+                    v.extend((0..len).map(|_| rng.normal() * layer_scale));
+                    v
+                },
             })
             .collect();
 
@@ -449,6 +496,10 @@ pub struct ForwardContext {
     // None = disabled (no profiles loaded). Some(plan) = modelless skip decisions.
     #[cfg(feature = "hydra_budget")]
     pub(crate) hydra_skip_plan: Option<crate::pruners::HydraSkipPlan>,
+    // Wall Attention: per-head prefix sum state for diagonal forget gates (Plan 173).
+    // Pre-allocated, zero alloc in hot path. Updated incrementally each token.
+    #[cfg(feature = "wall_attention")]
+    pub(crate) wall_prefix: WallPrefixState,
     // ── f32 fields last (4-byte aligned, no padding before) ──────────
     /// Pre-computed attention scale: `1.0 / sqrt(head_dim)`. Constant per config.
     attn_scale: f32,
@@ -549,6 +600,8 @@ impl ForwardContext {
             mls_count: 0,
             #[cfg(feature = "hydra_budget")]
             hydra_skip_plan: None,
+            #[cfg(feature = "wall_attention")]
+            wall_prefix: WallPrefixState::new(config),
             attn_scale: 1.0 / (config.head_dim as f32).sqrt(),
         }
     }
@@ -706,8 +759,167 @@ unsafe fn attention_head(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Wall Attention — Diagonal Forget Gates Replacing RoPE (Plan 173)
+// ---------------------------------------------------------------------------
+
+/// Wall Attention prefix sum state — incremental P_t tracking (Plan 173).
+///
+/// Maintains a running prefix sum of gate values per dimension.
+/// Updated O(head_dim) per token during decode, computed once during prefill.
+/// All buffers pre-allocated — zero alloc in hot path.
+#[cfg(feature = "wall_attention")]
+pub struct WallPrefixState {
+    /// Per-layer, per-head prefix sums: [n_layer × n_kv_head × head_dim].
+    /// P_t^l[d] = Σ_{s=0}^{t} gate_s^l[d] for layer l, dimension d.
+    /// Each layer maintains independent prefix sums (different keys → different gates).
+    prefix_sums: Vec<f32>,
+    /// Gate projection buffer: [head_dim]. Pre-allocated, reused each token.
+    gate_buf: Vec<f32>,
+    /// Rescaled query buffer: [n_embd]. Pre-allocated, reused each token.
+    rescaled_q: Vec<f32>,
+    /// Rescaled key buffer: [kv_dim]. Pre-allocated, reused each token.
+    rescaled_k: Vec<f32>,
+    /// Number of KV heads.
+    n_kv_head: usize,
+    /// Head dimension.
+    head_dim: usize,
+    /// Number of layers.
+    n_layer: usize,
+}
+
+#[cfg(feature = "wall_attention")]
+impl WallPrefixState {
+    pub fn new(config: &Config) -> Self {
+        let hd = config.head_dim;
+        let n_kv = config.n_kv_head;
+        let kvd = crate::types::kv_dim(config);
+        Self {
+            prefix_sums: vec![0.0; config.n_layer * n_kv * hd],
+            gate_buf: vec![0.0; hd],
+            rescaled_q: vec![0.0; config.n_embd],
+            rescaled_k: vec![0.0; kvd],
+            n_kv_head: n_kv,
+            head_dim: hd,
+            n_layer: config.n_layer,
+        }
+    }
+
+    /// Reset prefix sums for a new sequence.
+    pub fn reset(&mut self) {
+        self.prefix_sums.fill(0.0);
+    }
+
+    /// Compute gate from key and update prefix sum in one call.
+    /// `layer_idx` selects the per-layer prefix sum slice.
+    /// Avoids borrow conflicts by combining gate computation and prefix update.
+    #[inline]
+    pub fn compute_gate_and_update(
+        &mut self,
+        layer_idx: usize,
+        kv_head: usize,
+        key: &[f32],
+        w_g: &[f32],
+        bias: f32,
+        gate_max: f32,
+    ) {
+        let hd = self.head_dim;
+        Self::compute_gate_from_key(&mut self.gate_buf[..hd], key, w_g, bias, gate_max);
+        let offset = layer_idx * self.n_kv_head * hd + kv_head * hd;
+        for d in 0..hd {
+            self.prefix_sums[offset + d] += self.gate_buf[d];
+        }
+    }
+
+    /// Update prefix sum with new gate values for a given layer and KV head.
+    /// gate: [head_dim] gate values for this head at this position.
+    /// O(head_dim).
+    #[inline]
+    pub fn update_prefix(&mut self, layer_idx: usize, kv_head: usize, gate: &[f32]) {
+        let offset = layer_idx * self.n_kv_head * self.head_dim + kv_head * self.head_dim;
+        for (d, &g) in gate.iter().enumerate() {
+            self.prefix_sums[offset + d] += g;
+        }
+    }
+
+    /// Rescale query: q̃ = exp(P) ⊙ q for each query head.
+    /// For GQA, multiple Q heads share the same KV head prefix sum.
+    /// q: [n_embd] query vector (all heads).
+    /// kv_group_lut: maps Q head → KV head.
+    #[inline]
+    pub fn rescale_query(
+        &self,
+        layer_idx: usize,
+        q: &mut [f32],
+        kv_group_lut: &[usize; 128],
+        n_head: usize,
+    ) {
+        let hd = self.head_dim;
+        let layer_off = layer_idx * self.n_kv_head * hd;
+        for h in 0..n_head {
+            let kv_h = kv_group_lut[h];
+            let q_off = h * hd;
+            let p_off = layer_off + kv_h * hd;
+            for d in 0..hd {
+                q[q_off + d] *= self.prefix_sums[p_off + d].exp();
+            }
+        }
+    }
+
+    /// Rescale key: k̃ = exp(-P) ⊙ k for each KV head.
+    /// k: [kv_dim] key vector (all KV heads).
+    #[inline]
+    pub fn rescale_key(&self, layer_idx: usize, k: &mut [f32]) {
+        let hd = self.head_dim;
+        let layer_off = layer_idx * self.n_kv_head * hd;
+        for h in 0..self.n_kv_head {
+            let k_off = h * hd;
+            let p_off = layer_off + h * hd;
+            for d in 0..hd {
+                k[k_off + d] *= (-self.prefix_sums[p_off + d]).exp();
+            }
+        }
+    }
+
+    /// Compute gate values from key projection (key-projected variant).
+    /// gate_buf: [head_dim] output gate values (log-sigmoid, clamped).
+    /// key: [head_dim] key slice for one head.
+    /// w_g: [head_dim] gate projection weights for this head.
+    /// bias: gate bias (default 6.0).
+    /// gate_max: maximum clamp value (default 0.87).
+    #[inline]
+    pub fn compute_gate_from_key(
+        gate_buf: &mut [f32],
+        key: &[f32],
+        w_g: &[f32],
+        bias: f32,
+        gate_max: f32,
+    ) {
+        let hd = key.len();
+        for d in 0..hd {
+            // Raw gate logit: w_g · k + bias
+            let logit = w_g[d] * key[d] + bias;
+            // Log-sigmoid: -softplus(-logit) = -log(1 + exp(-logit))
+            let neg_logit = -logit;
+            let log_sig = if neg_logit > 0.0 {
+                // -log(1 + exp(-logit)) when -logit > 0
+                -(1.0 + neg_logit.exp()).ln()
+            } else {
+                // logit - log(1 + exp(logit)) when logit >= 0 (more stable)
+                logit - (1.0 + logit.exp()).ln()
+            };
+            // Clamp to (-gate_max, 0]
+            gate_buf[d] = log_sig.clamp(-gate_max, 0.0);
+        }
+    }
+}
+
 /// Causal decode: single token forward with optional LoRA adapter.
 /// Backward-compatible wrapper that passes `None` for LoRA.
+///
+/// Wall Attention (Plan 173): when wall_config is Some and feature is enabled,
+/// Wall gate projection + Q/K rescaling replaces RoPE rotation.
+/// Attention kernels unchanged — they receive pre-rescaled Q/K.
 #[inline(always)]
 pub fn forward<'a>(
     ctx: &'a mut ForwardContext,
@@ -1808,6 +2020,14 @@ fn forward_base<'a>(
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
 
+    // Wall Attention: reset prefix sums at sequence start (Plan 173).
+    // Prefix sums accumulate per-layer, per-head across the sequence.
+    // Must reset when pos=0 to avoid stale state from previous sequences.
+    #[cfg(feature = "wall_attention")]
+    if pos == 0 {
+        ctx.wall_prefix.reset();
+    }
+
     // MLS: reset accumulator at start of forward call (Plan 104)
     #[cfg(feature = "mls_aggregate")]
     {
@@ -1901,6 +2121,33 @@ fn forward_base<'a>(
         {
             crate::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
             crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
+        }
+
+        // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
+        // Replaces RoPE rotation when wall_config is Some. Factorized form means
+        // attention kernels are unchanged — they receive pre-rescaled Q and K.
+        // Gate is derived from K (key-projected variant, zero KV cache overhead).
+        #[cfg(feature = "wall_attention")]
+        if let Some(ref wall_cfg) = config.wall_config {
+            let n_kv = config.n_kv_head;
+            let hd = config.head_dim;
+            for kv_h in 0..n_kv {
+                let k_off = kv_h * hd;
+                let w_g = &layer_weights.attn_wg[k_off..k_off + hd];
+                let k_slice = &ctx.k[k_off..k_off + hd];
+                // Compute gate from key, then update prefix sum in one call.
+                ctx.wall_prefix.compute_gate_and_update(
+                    layer_idx,
+                    kv_h,
+                    k_slice,
+                    w_g,
+                    wall_cfg.gate_bias,
+                    wall_cfg.gate_max,
+                );
+            }
+            ctx.wall_prefix
+                .rescale_query(layer_idx, &mut ctx.q, &ctx.kv_group_lut, config.n_head);
+            ctx.wall_prefix.rescale_key(layer_idx, &mut ctx.k);
         }
 
         // Store K,V in per-layer cache (kv_dim elements per position)
@@ -2153,6 +2400,12 @@ fn forward_coda<'a>(
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
 
+    // Wall Attention: reset prefix sums at sequence start (Plan 173).
+    #[cfg(feature = "wall_attention")]
+    if pos == 0 {
+        ctx.wall_prefix.reset();
+    }
+
     // MLS: reset accumulator at start of forward call (Plan 104)
     #[cfg(feature = "mls_aggregate")]
     {
@@ -2214,6 +2467,30 @@ fn forward_coda<'a>(
         {
             crate::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
             crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
+        }
+
+        // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
+        // Same integration as forward_base — Wall is path-agnostic.
+        #[cfg(feature = "wall_attention")]
+        if let Some(ref wall_cfg) = config.wall_config {
+            let n_kv = config.n_kv_head;
+            let hd = config.head_dim;
+            for kv_h in 0..n_kv {
+                let k_off = kv_h * hd;
+                let w_g = &layer_weights.attn_wg[k_off..k_off + hd];
+                let k_slice = &ctx.k[k_off..k_off + hd];
+                ctx.wall_prefix.compute_gate_and_update(
+                    layer_idx,
+                    kv_h,
+                    k_slice,
+                    w_g,
+                    wall_cfg.gate_bias,
+                    wall_cfg.gate_max,
+                );
+            }
+            ctx.wall_prefix
+                .rescale_query(layer_idx, &mut ctx.q, &ctx.kv_group_lut, config.n_head);
+            ctx.wall_prefix.rescale_key(layer_idx, &mut ctx.k);
         }
 
         // Store K,V in per-layer cache (kv_dim elements per position)
@@ -2762,6 +3039,10 @@ mod mtp_projection_binary_tests {
 ///
 /// Zero-copy: no allocations. Reuses ForwardContext buffers per-position,
 /// PrefillContext::hidden for multi-layer inter-layer state.
+///
+/// For RiM buffer slots (Plan 172): use `rim_extend_tokens()` to append buffer
+/// tokens before calling this function. The logit readout will naturally come
+/// from the last buffer position.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::too_many_arguments)]
 pub fn forward_prefill<'a>(
@@ -2801,6 +3082,12 @@ pub fn forward_prefill<'a>(
                 &weights.wpe[pos_off..pos_off + n],
             );
         }
+    }
+
+    // Wall Attention: reset prefix sums at prefill start (Plan 173).
+    #[cfg(feature = "wall_attention")]
+    if config.wall_config.is_some() {
+        ctx.wall_prefix.reset();
     }
 
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
@@ -2845,6 +3132,29 @@ pub fn forward_prefill<'a>(
                 crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
             }
 
+            // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
+            // Prefill processes positions sequentially, accumulating prefix sums per-layer.
+            // K is rescaled before cache storage; Q is rescaled before Phase B reuse.
+            #[cfg(feature = "wall_attention")]
+            if let Some(ref wall_cfg) = config.wall_config {
+                let n_kv = config.n_kv_head;
+                let hd = config.head_dim;
+                for kv_h in 0..n_kv {
+                    let k_off = kv_h * hd;
+                    let w_g = &layer_weights.attn_wg[k_off..k_off + hd];
+                    let k_slice = &ctx.k[k_off..k_off + hd];
+                    ctx.wall_prefix.compute_gate_and_update(
+                        layer_idx,
+                        kv_h,
+                        k_slice,
+                        w_g,
+                        wall_cfg.gate_bias,
+                        wall_cfg.gate_max,
+                    );
+                }
+                ctx.wall_prefix.rescale_key(layer_idx, &mut ctx.k);
+            }
+
             // Store K/V in cache
             let pos_off = p * kvd;
             unsafe {
@@ -2864,6 +3174,17 @@ pub fn forward_prefill<'a>(
             crate::types::matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
             if let Some(lora) = lora {
                 crate::types::lora_apply(&mut ctx.q, lora, &ctx.x, &mut prefill.lora_buf);
+            }
+
+            // Wall Attention: rescale Q with accumulated prefix sum (Plan 173).
+            #[cfg(feature = "wall_attention")]
+            if config.wall_config.is_some() {
+                ctx.wall_prefix.rescale_query(
+                    layer_idx,
+                    &mut ctx.q,
+                    &ctx.kv_group_lut,
+                    config.n_head,
+                );
             }
 
             // Store Q and xr for Phase B reuse
@@ -3292,6 +3613,12 @@ pub fn forward_paged<'a>(
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
 
+    // Wall Attention: reset prefix sums at sequence start (Plan 173).
+    #[cfg(feature = "wall_attention")]
+    if pos == 0 {
+        ctx.wall_prefix.reset();
+    }
+
     // 2. Layer loop
     for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
         // Pre-attention: RMSNorm → save residual → RMSNorm
@@ -3303,6 +3630,29 @@ pub fn forward_paged<'a>(
         matmul(&mut ctx.q, &layer_weights.attn_wq, &ctx.x, n, n);
         matmul(&mut ctx.k, &layer_weights.attn_wk, &ctx.x, kvd, n);
         matmul(&mut ctx.v, &layer_weights.attn_wv, &ctx.x, kvd, n);
+
+        // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
+        #[cfg(feature = "wall_attention")]
+        if let Some(ref wall_cfg) = config.wall_config {
+            let n_kv = config.n_kv_head;
+            let hd = config.head_dim;
+            for kv_h in 0..n_kv {
+                let k_off = kv_h * hd;
+                let w_g = &layer_weights.attn_wg[k_off..k_off + hd];
+                let k_slice = &ctx.k[k_off..k_off + hd];
+                ctx.wall_prefix.compute_gate_and_update(
+                    layer_idx,
+                    kv_h,
+                    k_slice,
+                    w_g,
+                    wall_cfg.gate_bias,
+                    wall_cfg.gate_max,
+                );
+            }
+            ctx.wall_prefix
+                .rescale_query(layer_idx, &mut ctx.q, &ctx.kv_group_lut, config.n_head);
+            ctx.wall_prefix.rescale_key(layer_idx, &mut ctx.k);
+        }
 
         // Write K,V to paged cache
         paged_cache.write_kv(layer_idx, seq_idx, pos, &ctx.k, &ctx.v);

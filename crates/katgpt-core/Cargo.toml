@@ -43,3 +43,5 @@ moa_inference = []  # MoA Mixture of Activations — token-adaptive activation m
 sia_feedback = ["sr2am_configurator"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
 hydra_budget = []  # Hydra-Aware Adaptive Layer Budget types (Research 148, Plan 165)
 deltanet_inference = []  # DeltaNet GPU inference — hybrid DeltaNet/Attention decode (Plan 182, Research R036)
+rim_slots = []  # RiM Reasoning Buffer Slots — fixed latent workspace for DDTree (Plan 172, Research 192)
+wall_attention = []  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention)

@@ -88,6 +88,9 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             parallax_gate_scale: 0.0,
             parallax_zero_init: true,
             emotion_desperation_threshold: 0.5,
+            rim_block_count: 0,
+            rim_tokens_per_block: 2,
+            rim_buffer_token: 0,
             #[cfg(feature = "hydra_budget")]
             hydra_profiles: vec![],
             #[cfg(feature = "deltanet_inference")]

@@ -454,6 +454,49 @@ pub enum ConvergenceSelector {
 }
 
 // ---------------------------------------------------------------------------
+// Wall Attention — Diagonal Forget Gates Replacing RoPE (Plan 173)
+// ---------------------------------------------------------------------------
+
+/// Wall Attention configuration (Plan 173, Research: Wall Attention paper).
+///
+/// Wall replaces RoPE with diagonal forget gates applied as factorized Q/K rescaling:
+/// `q̃_i = exp(P_i) ⊙ q_i`, `k̃_j = exp(-P_j) ⊙ k_j`.
+/// This means attention kernels are UNCHANGED — they receive pre-rescaled Q and K.
+///
+/// Only applicable to Wall-trained models (requires W_g gate projection weights).
+#[derive(Clone, Debug)]
+#[cfg(feature = "wall_attention")]
+pub struct WallConfig {
+    /// Gate bias initialization value. Default 6.0 = open gate (vanilla attention behavior).
+    /// Lower values → more active forgetting (gate_bias=0 → retention ≈ 0.62).
+    pub gate_bias: f32,
+    /// Maximum gate log-sigmoid clamp value. Default 0.87 (matches paper).
+    /// Gates are clamped to (-gate_max, 0] after log-sigmoid.
+    pub gate_max: f32,
+    /// Use key-projected gate variant (derive gate from K projection).
+    /// Preferred for zero KV cache overhead — gate is computed from key, not hidden state.
+    pub use_key_projected: bool,
+}
+
+#[cfg(feature = "wall_attention")]
+impl Default for WallConfig {
+    fn default() -> Self {
+        Self {
+            gate_bias: 6.0,
+            gate_max: 0.87,
+            use_key_projected: true,
+        }
+    }
+}
+
+#[cfg(feature = "wall_attention")]
+impl WallConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -584,6 +627,22 @@ pub struct Config {
     /// Usually equals `deltanet_linear_n_heads`.
     #[cfg(feature = "deltanet_inference")]
     pub deltanet_linear_n_value_heads: usize,
+
+    // --- RiM Reasoning Buffer Slots (Plan 172, Research 192) ---
+    /// Number of reasoning buffer blocks (K in RiM paper). 0 = disabled.
+    #[cfg(feature = "rim_slots")]
+    pub rim_block_count: usize,
+    /// Tokens per buffer block (M in RiM paper). Default 2.
+    #[cfg(feature = "rim_slots")]
+    pub rim_tokens_per_block: usize,
+    /// Token ID used for buffer positions (default: bos_token, reused as buffer).
+    #[cfg(feature = "rim_slots")]
+    pub rim_buffer_token: usize,
+
+    // --- Wall Attention (Plan 173) ---
+    /// Wall attention config. None = use RoPE/fallback.
+    #[cfg(feature = "wall_attention")]
+    pub wall_config: Option<WallConfig>,
 }
 
 impl Config {
@@ -663,6 +722,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -779,6 +846,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -867,6 +942,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -945,6 +1028,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1024,6 +1115,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1101,6 +1200,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1180,6 +1287,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1258,6 +1373,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1338,6 +1461,14 @@ impl Config {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1420,6 +1551,14 @@ impl Config {
             deltanet_linear_head_dim: head_dim,
             deltanet_linear_n_heads: n_head,
             deltanet_linear_n_value_heads: n_kv_head,
+            #[cfg(feature = "rim_slots")]
+            rim_block_count: 0,
+            #[cfg(feature = "rim_slots")]
+            rim_tokens_per_block: 2,
+            #[cfg(feature = "rim_slots")]
+            rim_buffer_token: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -1443,7 +1582,8 @@ impl Config {
                     if !self.layer_types.is_empty() && self.layer_types.len() != self.n_layer {
                         return Err(format!(
                             "layer_types length ({}) must match n_layer ({})",
-                            self.layer_types.len(), self.n_layer
+                            self.layer_types.len(),
+                            self.n_layer
                         ));
                     }
                     // deltanet_state_dim must be head_dim^2
@@ -1462,8 +1602,7 @@ impl Config {
                 false
             }
         };
-        if !arch_exempt && self.n_head * self.head_dim != self.n_embd
-        {
+        if !arch_exempt && self.n_head * self.head_dim != self.n_embd {
             return Err(format!(
                 "n_head ({}) * head_dim ({}) must equal n_embd ({})",
                 self.n_head, self.head_dim, self.n_embd
@@ -1487,6 +1626,32 @@ impl Config {
 
     /// Apply per-domain inference overrides, returning a new Config.
     ///
+    /// Total number of buffer tokens when RiM slots are active: K × M.
+    /// Returns 0 when disabled (rim_block_count == 0).
+    #[cfg(feature = "rim_slots")]
+    #[inline]
+    pub fn rim_total_buffer_tokens(&self) -> usize {
+        if self.rim_block_count == 0 {
+            0
+        } else {
+            self.rim_block_count * self.rim_tokens_per_block
+        }
+    }
+
+    /// Whether RiM buffer slots are active.
+    #[cfg(feature = "rim_slots")]
+    #[inline]
+    pub fn rim_enabled(&self) -> bool {
+        self.rim_block_count > 0
+    }
+
+    /// Whether Wall Attention is active (Plan 173).
+    /// True when feature is enabled AND config has wall_config set.
+    #[cfg(feature = "wall_attention")]
+    pub fn wall_enabled(&self) -> bool {
+        self.wall_config.is_some()
+    }
+
     /// `None` fields are left unchanged; `Some` fields replace the current value.
     /// Used by the router to inject domain-specific budgets from TOML config.
     pub fn with_overrides(mut self, overrides: &InferenceOverrides) -> Self {
