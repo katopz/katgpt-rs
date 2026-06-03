@@ -500,6 +500,7 @@ fn proof_8_chunk_summary_zero_init() {
     // Case 3: After mutation, no longer zero-init
     let mut query2 = ChunkSummaryQuery::new(2, 4);
     query2.head_cls[0] = 0.001;
+    query2.recompute_zero_init_cache(); // is_zero_init() reads a cache; refresh after direct mutation
     assert!(
         !query2.is_zero_init(),
         "[P8.3] mutated query should not be zero-init"
