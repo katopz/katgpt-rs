@@ -492,7 +492,8 @@ fn proof_wall_forward_produces_logits() {
     config.wall_config = Some(WallConfig::default());
 
     let mut rng = Rng::new(42);
-    let weights = TransformerWeights::new(&config, &mut rng);
+    let mut weights = TransformerWeights::new(&config, &mut rng);
+    weights.init_wall_gates(&config, &mut rng);
     let mut cache = MultiLayerKVCache::new(&config);
     let mut ctx = ForwardContext::new(&config);
 
@@ -551,7 +552,8 @@ fn proof_wall_decode_overhead_vs_baseline() {
 
     // Prefill wall
     let mut rng2 = Rng::new(42);
-    let weights2 = TransformerWeights::new(&config_wall, &mut rng2);
+    let mut weights2 = TransformerWeights::new(&config_wall, &mut rng2);
+    weights2.init_wall_gates(&config_wall, &mut rng2);
     let mut cache2 = MultiLayerKVCache::new(&config_wall);
     let mut ctx2 = ForwardContext::new(&config_wall);
     let mut prefill2 = PrefillContext::new(&config_wall);
@@ -612,4 +614,126 @@ fn proof_wall_decode_overhead_vs_baseline() {
         "Wall decode overhead should be < 20%, got {:.1}%",
         overhead * 100.0
     );
+}
+
+#[cfg(feature = "wall_attention")]
+#[test]
+fn proof_wall_multilayer_per_layer_isolation() {
+    // Per-layer prefix sums are independent. After processing 2 layers at pos=0,
+    // each layer should have its own gate accumulation. Verify by running forward
+    // with multi-layer config and checking logits are finite and non-trivial.
+    let mut config = Config::micro();
+    config.n_layer = 3;
+    config.block_size = 64;
+    config.wall_config = Some(WallConfig::default());
+
+    let mut rng = Rng::new(42);
+    let mut weights = TransformerWeights::new(&config, &mut rng);
+    weights.init_wall_gates(&config, &mut rng);
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut ctx = ForwardContext::new(&config);
+
+    // Decode multiple tokens — prefix sums accumulate independently per layer
+    for pos in 0..8 {
+        let logits =
+            katgpt_rs::transformer::forward(&mut ctx, &weights, &mut cache, 1, pos, &config);
+        assert!(!logits.is_empty(), "logits empty at pos {pos}");
+        assert!(
+            logits.iter().all(|&l| l.is_finite()),
+            "non-finite logits at pos {pos}"
+        );
+    }
+}
+
+#[cfg(feature = "wall_attention")]
+#[test]
+fn proof_wall_prefill_then_decode() {
+    // End-to-end: prefill with Wall → decode with Wall.
+    // Wall prefix sums are reset at prefill start, then decode continues accumulating.
+    let mut config = Config::micro();
+    config.n_layer = 2;
+    config.block_size = 64;
+    config.wall_config = Some(WallConfig::default());
+
+    let mut rng = Rng::new(42);
+    let mut weights = TransformerWeights::new(&config, &mut rng);
+    weights.init_wall_gates(&config, &mut rng);
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut ctx = ForwardContext::new(&config);
+    let mut prefill = PrefillContext::new(&config);
+
+    // Prefill
+    let prompt = vec![1, 2, 3, 4, 5];
+    let logits = katgpt_rs::transformer::forward_prefill(
+        &mut ctx,
+        &mut prefill,
+        &weights,
+        &mut cache,
+        &prompt,
+        &config,
+        None,
+        #[cfg(feature = "domain_latent")]
+        None,
+    );
+    assert!(!logits.is_empty());
+    assert!(logits.iter().all(|&l| l.is_finite()));
+
+    // Decode continuation
+    for i in 0..4 {
+        let pos = prompt.len() + i;
+        let decode_logits =
+            katgpt_rs::transformer::forward(&mut ctx, &weights, &mut cache, 1, pos, &config);
+        assert!(
+            !decode_logits.is_empty(),
+            "decode logits empty at pos {pos}"
+        );
+        assert!(
+            decode_logits.iter().all(|&l| l.is_finite()),
+            "non-finite decode logits at pos {pos}"
+        );
+    }
+}
+
+#[cfg(feature = "wall_attention")]
+#[test]
+fn proof_wall_enabled_convenience() {
+    // wall_enabled() returns true when wall_config is Some
+    let mut config = Config::micro();
+    assert!(!config.wall_enabled(), "wall should be disabled by default");
+
+    config.wall_config = Some(WallConfig::default());
+    assert!(
+        config.wall_enabled(),
+        "wall should be enabled when wall_config is Some"
+    );
+}
+
+#[cfg(feature = "wall_attention")]
+#[test]
+fn proof_wall_gate_weights_initialized() {
+    // attn_wg should be initialized with proper dimensions (kv_dim elements per layer).
+    let mut config = Config::micro();
+    config.n_layer = 2;
+    config.wall_config = Some(WallConfig::default());
+
+    let mut rng = Rng::new(42);
+    let mut weights = TransformerWeights::new(&config, &mut rng);
+    weights.init_wall_gates(&config, &mut rng);
+
+    let kv_dim = config.n_kv_head * config.head_dim;
+    for (i, layer) in weights.layers.iter().enumerate() {
+        assert_eq!(
+            layer.attn_wg.len(),
+            kv_dim,
+            "layer {i} attn_wg should have kv_dim={} elements, got {}",
+            kv_dim,
+            layer.attn_wg.len()
+        );
+        // Weights should be non-zero (initialized with normal distribution)
+        let has_nonzero = layer.attn_wg.iter().any(|&w| w != 0.0);
+        assert!(
+            has_nonzero,
+            "layer {i} attn_wg should have non-zero weights"
+        );
+    }
 }

@@ -177,12 +177,7 @@ impl TransformerWeights {
                 mlp_norm_gamma: vec![1.0f32; n],
                 attn_qkv_fused: None,
                 #[cfg(feature = "wall_attention")]
-                attn_wg: {
-                    let len = kvd;
-                    let mut v = Vec::with_capacity(len);
-                    v.extend((0..len).map(|_| rng.normal() * layer_scale));
-                    v
-                },
+                attn_wg: vec![0.0; kvd], // Initialized to zeros; gate not active unless wall_config is Some
             })
             .collect();
 
@@ -207,6 +202,18 @@ impl TransformerWeights {
             delta_routing_norm: (0..config.n_layer)
                 .map(|_| (0..config.n_embd).map(|_| 1.0f32).collect()) // Ones: identity RMSNorm
                 .collect(),
+        }
+    }
+
+    /// Initialize Wall Attention gate weights with random values (Plan 173).
+    /// Call when `wall_config` is `Some` — populates `attn_wg` with proper scaling.
+    /// This is separate from `new()` to avoid consuming RNG when Wall is disabled.
+    #[cfg(feature = "wall_attention")]
+    pub fn init_wall_gates(&mut self, config: &Config, rng: &mut Rng) {
+        let kvd = types::kv_dim(config);
+        let layer_scale = (2.0 / (config.n_embd as f32 * config.n_layer as f32)).sqrt();
+        for layer in &mut self.layers {
+            layer.attn_wg = (0..kvd).map(|_| rng.normal() * layer_scale).collect();
         }
     }
 
@@ -776,16 +783,10 @@ pub struct WallPrefixState {
     prefix_sums: Vec<f32>,
     /// Gate projection buffer: [head_dim]. Pre-allocated, reused each token.
     gate_buf: Vec<f32>,
-    /// Rescaled query buffer: [n_embd]. Pre-allocated, reused each token.
-    rescaled_q: Vec<f32>,
-    /// Rescaled key buffer: [kv_dim]. Pre-allocated, reused each token.
-    rescaled_k: Vec<f32>,
     /// Number of KV heads.
     n_kv_head: usize,
     /// Head dimension.
     head_dim: usize,
-    /// Number of layers.
-    n_layer: usize,
 }
 
 #[cfg(feature = "wall_attention")]
@@ -793,15 +794,11 @@ impl WallPrefixState {
     pub fn new(config: &Config) -> Self {
         let hd = config.head_dim;
         let n_kv = config.n_kv_head;
-        let kvd = crate::types::kv_dim(config);
         Self {
             prefix_sums: vec![0.0; config.n_layer * n_kv * hd],
             gate_buf: vec![0.0; hd],
-            rescaled_q: vec![0.0; config.n_embd],
-            rescaled_k: vec![0.0; kvd],
             n_kv_head: n_kv,
             head_dim: hd,
-            n_layer: config.n_layer,
         }
     }
 
@@ -856,8 +853,7 @@ impl WallPrefixState {
     ) {
         let hd = self.head_dim;
         let layer_off = layer_idx * self.n_kv_head * hd;
-        for h in 0..n_head {
-            let kv_h = kv_group_lut[h];
+        for (h, &kv_h) in kv_group_lut.iter().enumerate().take(n_head) {
             let q_off = h * hd;
             let p_off = layer_off + kv_h * hd;
             for d in 0..hd {

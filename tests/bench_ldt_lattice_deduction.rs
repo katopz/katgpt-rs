@@ -105,6 +105,8 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             deltanet_linear_n_heads: 0,
             #[cfg(feature = "deltanet_inference")]
             deltanet_linear_n_value_heads: 0,
+            #[cfg(feature = "wall_attention")]
+            wall_config: None,
         }
     }
 
@@ -616,7 +618,7 @@ fn bench_ldt_lattice_deduction_goat_proof() {
 #[test]
 fn bench_ldt_phase2_goat_proof() {
     use katgpt_rs::speculative::{
-        AlphaTarget, AlphaScreeningPruner, ConflictClauseDB, ConflictDetector,
+        AlphaScreeningPruner, AlphaTarget, ConflictClauseDB, ConflictDetector,
         EntropyConflictDetector, ScreeningPruner,
     };
     use std::collections::HashSet;
