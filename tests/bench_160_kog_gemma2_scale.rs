@@ -34,6 +34,7 @@ fn gemma2_scale_config() -> Config {
 }
 
 #[test]
+#[ignore = "Gemma-2-2B-scale throughput bench (26 layers, n_embd=2304) ~34min in debug and only meaningful optimized; run with: cargo test --features kog_cpu_fusion --test bench_160_kog_gemma2_scale --release -- --ignored --nocapture"]
 fn bench_kog_gemma2_scale_goat() {
     let config = gemma2_scale_config();
     let n = config.n_embd;
