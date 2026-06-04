@@ -9,6 +9,9 @@ pub mod step;
 pub mod types;
 pub mod verifier;
 
+#[cfg(feature = "trust_region_spec")]
+pub mod trust_region;
+
 #[cfg(feature = "budget_adaptation")]
 pub mod budget;
 
@@ -253,3 +256,10 @@ pub mod vocab_coreset;
 
 #[cfg(feature = "vocab_coreset")]
 pub use vocab_coreset::{should_use_delta_sparse, vocab_coreset};
+
+// ── Trust-Region Adaptive Speculation (Plan 182, Research 162) ──
+#[cfg(feature = "trust_region_spec")]
+pub use trust_region::{
+    TrustArm, TrustRegionConfig, TrustRegionState, TrustTracker, adaptive_window, blend_sample,
+    find_blend_beta,
+};
