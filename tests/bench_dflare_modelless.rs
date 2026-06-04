@@ -7,10 +7,35 @@
 //! T6: Position-Weighted DDTree Budget — exponential decay allocation
 //! T7: Integration — all three combined
 
+#[cfg(any(
+    feature = "dflare_fusion",
+    feature = "dflare_kv_routing",
+    feature = "dflare_progressive_budget"
+))]
 use katgpt_rs::speculative::dd_tree::build_dd_tree_screened;
+#[cfg(any(
+    feature = "dflare_fusion",
+    feature = "dflare_kv_routing",
+    feature = "dflare_progressive_budget"
+))]
 use katgpt_rs::speculative::dflash::dflash_predict_ar;
+#[cfg(any(
+    feature = "dflare_fusion",
+    feature = "dflare_kv_routing",
+    feature = "dflare_progressive_budget"
+))]
 use katgpt_rs::speculative::types::{NoScreeningPruner, SpeculativeContext};
+#[cfg(any(
+    feature = "dflare_fusion",
+    feature = "dflare_kv_routing",
+    feature = "dflare_progressive_budget"
+))]
 use katgpt_rs::transformer::TransformerWeights;
+#[cfg(any(
+    feature = "dflare_fusion",
+    feature = "dflare_kv_routing",
+    feature = "dflare_progressive_budget"
+))]
 use katgpt_rs::types::{Config, Rng};
 
 // ── T4: GOAT Proof — Marginal Fusion ───────────────────────────

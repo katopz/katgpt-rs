@@ -2244,8 +2244,8 @@ mod tests {
                 .map(|_| {
                     let mut m = vec![0.01; vocab];
                     // 3 "good" tokens get ~80% of mass
-                    for i in 0..3 {
-                        m[i] = 0.27;
+                    for v in m.iter_mut().take(3) {
+                        *v = 0.27;
                     }
                     let sum: f32 = m.iter().sum();
                     m.iter_mut().for_each(|p| *p /= sum);
