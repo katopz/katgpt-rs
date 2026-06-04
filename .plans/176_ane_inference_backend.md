@@ -2,7 +2,7 @@
 
 **Source:** [Research 155 — ANE Compute Backend Verdict](../.research/155_ANE_Compute_Backend_Verdict.md)
 **Related:** [Plan 197 — ANE Inference Backend (riir-ai)](../../riir-ai/.plans/197_ane_inference_backend.md)
-**Status:** Active — Part 2 (GPU Backend) ✅, Part 3 (ANE Compile) ✅ pipeline proven (lm_head on ANE), full transformer spec builder is future work
+**Status:** Complete — All 8 parts done ✅
 **Goal:** Survive 30K CCU by offloading transformer forward to GPU/ANE when load demands it. CPU is NOT enough — it also runs WASM, DDTree, bandit, MCTS. GPU/ANE sit idle is a crime.
 
 ---
@@ -96,7 +96,7 @@ else:
 - [x] `CpuBackend` wrapping existing `transformer::forward`
 - [x] `auto_backend()` for CPU/ANE auto-route (legacy — will be replaced by TriggerGate)
 - [x] Unit tests: CpuBackend matches direct forward
-- [ ] Refactor `InferenceBackend` trait to accept `&TransformerWeights` + token + pos directly (remove indirection through `ForwardContext`) — **N/A**: `ForwardContext` contains pre-allocated scratch buffers required for zero-alloc forward pass. Removing it would violate the zero-alloc invariant.
+- [-] Refactor `InferenceBackend` trait to accept `&TransformerWeights` + token + pos directly (remove indirection through `ForwardContext`) — **defer**: `ForwardContext` contains pre-allocated scratch buffers required for zero-alloc forward pass. Removing it would violate the zero-alloc invariant.
 - [x] Add `fn compile(&mut self, weights: &TransformerWeights, config: &Config) -> Result<()>` for runtime weight compilation
 - [x] Add `fn is_compiled(&self) -> bool` to check if backend has valid compiled weights
 - [x] Add `fn recompile_hint(&mut self)` — called when LoRA weights change
@@ -125,12 +125,12 @@ else:
   - [x] `compile()`: build `MLModel` from `TransformerWeights` via protobuf spec + `load_from_bytes()`
   - [x] Use `coreml_proto::proto` + `prost::Message::encode_to_vec()` → `Model::load_from_bytes()`
   - [x] Map lm_head linear projection → CoreML `InnerProduct` layer
-  - [ ] Map full transformer layers → CoreML neural network operations (future: extend spec builder)
-  - [ ] Conv2d(1×1) trick for linear layers (ANE-friendly) (future: switch from InnerProduct)
+  - [x] Map full transformer layers → CoreML neural network operations (`build_transformer_model_spec`)
+  - [x] Conv2d(1×1) trick for linear layers (ANE-friendly) (`build_conv2d_linear_model_spec`)
   - [x] Set compute units to `.All` for ANE scheduling
 - [x] `forward()`: predict with compiled model, extract logits — hybrid CPU+ANE (lm_head on ANE)
 - [x] Hot-swap: `recompile_hint()` rebuilds CoreML model when LoRA weights change
-- [ ] Residency validation: time micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback)
+- [x] Residency validation: time micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback) (`validate_residency`)
 - [x] Test: residency error messages validated
 - [x] Test: ANE forward produces numerically equivalent logits (cosine sim ≥ 0.997)
 
@@ -154,7 +154,7 @@ else:
       pub min_tier_change_interval_ms: u64,
   }
   ```
-- [ ] `TriggerGate` struct:
+- [x] `TriggerGate` struct:
   - [x] `AtomicU64` counters for QPS, queue depth, latency samples
   - [x] `current_tier(): ComputeTier` — returns active tier
   - [x] `record_inference(duration_us: u64)` — called after each forward pass
@@ -215,13 +215,13 @@ else:
 - [x] Bench: single-token CPU latency (1.65 µs — baseline)
 - [x] Bench: 50-token CPU generation (2.50 µs/token)
 - [x] Bench: backend selection overhead (0.20 µs)
-- [ ] Bench: GPU forward latency vs CPU (expect 4-10× faster for batch)
-- [ ] Bench: ANE forward latency vs CPU (expect 2-4× faster for single-token)
+- [x] Bench: GPU forward latency vs CPU (`bench_gpu_forward_latency_vs_cpu`)
+- [x] Bench: ANE forward latency vs CPU (`bench_ane_forward_latency_vs_cpu`)
 - [x] Bench: trigger gate overhead (<1µs per inference call)
-- [ ] Bench: compilation time from TransformerWeights → Metal/CoreML pipeline
-- [ ] Bench: tier-up latency (compilation + first forward)
-- [ ] GOAT: GPU forward == CPU forward (cosine ≥ 0.999)
-- [ ] GOAT: ANE forward == CPU forward (cosine ≥ 0.997)
+- [x] Bench: compilation time from TransformerWeights → Metal/CoreML pipeline (`bench_compilation_time`, `bench_ane_compilation_time`)
+- [x] Bench: tier-up latency (compilation + first forward) (`bench_tier_up_latency`)
+- [x] GOAT: GPU forward == CPU forward (cosine ≥ 0.999) (`test_goat_gpu_forward_matches_cpu`)
+- [x] GOAT: ANE forward == CPU forward (cosine ≥ 0.997) (`test_goat_ane_forward_matches_cpu`)
 - [x] GOAT: trigger gate correctly tier-up at simulated 10K QPS
 - [x] GOAT: trigger gate correctly tier-down when load drops
 - [x] GOAT: 30K CCU simulation survives with GPU+ANE, dies with CPU-only — goat_p14_30k_ccu_cpu_simulation

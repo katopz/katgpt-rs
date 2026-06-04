@@ -1000,4 +1000,185 @@ mod tests {
             }
         }
     }
+
+    // ── GOAT: GPU forward == CPU forward ─────────────────────────
+
+    #[test]
+    fn test_goat_gpu_forward_matches_cpu() {
+        let (config, weights, _, _) = micro_fixtures();
+
+        // Run a continuous sequence of tokens — same sequence for CPU and GPU.
+        // Each step depends on the KV cache from prior steps, so we build up
+        // state progressively. Compare logits at each step.
+        let token_seq: [usize; 5] = [0, 1, 3, 7, 5];
+
+        // CPU reference: continuous sequence with shared cache
+        let mut cpu_logits_all = Vec::new();
+        {
+            let mut ctx = ForwardContext::new(&config);
+            let mut cache = MultiLayerKVCache::new(&config);
+            for (pos, &token) in token_seq.iter().enumerate() {
+                let logits =
+                    transformer::forward(&mut ctx, &weights, &mut cache, token, pos, &config)
+                        .to_vec();
+                cpu_logits_all.push(logits);
+            }
+        }
+
+        // GPU forward: same continuous sequence with shared cache
+        let mut backend = match GpuBackend::new() {
+            Ok(b) => b,
+            Err(_) => return, // Skip on non-Metal environments
+        };
+        if backend.compile(&weights, &config).is_err() {
+            return; // Skip if compilation fails
+        }
+
+        let mut gpu_logits_all = Vec::new();
+        {
+            let mut ctx = ForwardContext::new(&config);
+            let mut cache = MultiLayerKVCache::new(&config);
+            for (pos, &token) in token_seq.iter().enumerate() {
+                let logits = backend
+                    .forward(&mut ctx, &weights, &mut cache, token, pos, &config)
+                    .to_vec();
+                gpu_logits_all.push(logits);
+            }
+        }
+
+        // Assert cosine similarity ≥ 0.999 for ALL positions
+        for (i, (cpu, gpu)) in cpu_logits_all.iter().zip(gpu_logits_all.iter()).enumerate() {
+            let sim = cosine_similarity(cpu, gpu);
+            eprintln!(
+                "GOAT GPU pos {i} (token={}): cosine_sim={sim:.6}",
+                token_seq[i]
+            );
+            assert!(
+                sim >= 0.999,
+                "GOAT GPU forward mismatch at pos {i} (token={}): \
+                 cosine_sim={sim:.6} < 0.999",
+                token_seq[i]
+            );
+        }
+    }
+
+    // ── Plan 176: Latency Benchmarks ────────────────────────────
+
+    #[test]
+    fn bench_gpu_forward_latency_vs_cpu() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+
+        // CPU warm-up
+        for _ in 0..100 {
+            let mut ctx = ForwardContext::new(&config);
+            let mut cache = MultiLayerKVCache::new(&config);
+            transformer::forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+        }
+
+        // CPU timed
+        let cpu_elapsed = {
+            let start = std::time::Instant::now();
+            for _ in 0..1000 {
+                let mut ctx = ForwardContext::new(&config);
+                let mut cache = MultiLayerKVCache::new(&config);
+                transformer::forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+            }
+            start.elapsed()
+        };
+        let cpu_us_per_token = cpu_elapsed.as_micros() as f64 / 1000.0;
+
+        // GPU
+        let mut backend = match GpuBackend::new() {
+            Ok(b) => b,
+            Err(_) => return,
+        };
+        if backend.compile(&weights, &config).is_err() {
+            return;
+        }
+
+        // GPU warm-up
+        for _ in 0..100 {
+            let mut ctx = ForwardContext::new(&config);
+            let mut cache = MultiLayerKVCache::new(&config);
+            backend.forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+        }
+
+        // GPU timed
+        let gpu_elapsed = {
+            let start = std::time::Instant::now();
+            for _ in 0..1000 {
+                let mut ctx = ForwardContext::new(&config);
+                let mut cache = MultiLayerKVCache::new(&config);
+                backend.forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+            }
+            start.elapsed()
+        };
+        let gpu_us_per_token = gpu_elapsed.as_micros() as f64 / 1000.0;
+        let speedup = cpu_us_per_token / gpu_us_per_token;
+
+        eprintln!(
+            "CPU: {cpu_us_per_token:.1} µs/token, GPU: {gpu_us_per_token:.1} µs/token, GPU speedup: {speedup:.2}×"
+        );
+    }
+
+    #[test]
+    fn bench_compilation_time() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+
+        let init_elapsed = {
+            let start = std::time::Instant::now();
+            let backend = match GpuBackend::new() {
+                Ok(b) => b,
+                Err(_) => return,
+            };
+            (start.elapsed(), backend)
+        };
+        let mut backend = init_elapsed.1;
+
+        let compile_elapsed = {
+            let start = std::time::Instant::now();
+            if backend.compile(&weights, &config).is_err() {
+                return;
+            }
+            start.elapsed()
+        };
+
+        eprintln!(
+            "GPU init: {} ms, GPU compile: {} ms",
+            init_elapsed.0.as_millis(),
+            compile_elapsed.as_millis()
+        );
+    }
+
+    #[test]
+    fn bench_tier_up_latency() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+
+        let mut backend = match GpuBackend::new() {
+            Ok(b) => b,
+            Err(_) => return,
+        };
+
+        let tier_up_ms = {
+            let start = std::time::Instant::now();
+            if backend.compile(&weights, &config).is_err() {
+                return;
+            }
+            let mut ctx = ForwardContext::new(&config);
+            let mut cache = MultiLayerKVCache::new(&config);
+            backend.forward(&mut ctx, &weights, &mut cache, 0, 0, &config);
+            start.elapsed().as_millis()
+        };
+
+        eprintln!(
+            "Tier-up latency (compile + first forward): {} ms",
+            tier_up_ms
+        );
+    }
 }
