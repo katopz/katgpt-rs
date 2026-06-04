@@ -14,7 +14,7 @@ use std::time::Instant;
 use crate::inference_backend::InferenceBackend;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
 use crate::trigger_gate::{ComputeTier, TriggerGate, TriggerGateConfig};
-use crate::types::Config;
+use crate::types::{Config, Rng, sample_token_into, softmax_scaled};
 
 // ---------------------------------------------------------------------------
 // RouterStats
@@ -248,6 +248,48 @@ impl InferenceRouter {
     /// Delegate queue-depth recording to the gate.
     pub fn record_queue_depth(&self, depth: usize) {
         self.gate.record_queue_depth(depth);
+    }
+
+    /// Generate tokens autoregressively using the routed forward path.
+    ///
+    /// Mirrors [`crate::transformer::generate_into`] but routes each forward pass
+    /// through [`Self::forward`], recording queue depth for load estimation.
+    pub fn generate_routed(
+        &mut self,
+        ctx: &mut ForwardContext,
+        cache: &mut MultiLayerKVCache,
+        weights: &TransformerWeights,
+        rng: &mut Rng,
+        max_tokens: usize,
+        tokens: &mut Vec<usize>,
+    ) {
+        tokens.clear();
+        let mut token = self.config.bos_token;
+        let mut pos = 0;
+
+        for _ in 0..max_tokens {
+            if pos >= self.config.block_size {
+                cache.reset();
+                pos = 0;
+                token = self.config.bos_token;
+            }
+
+            self.record_queue_depth(1);
+            self.forward(ctx, weights, cache, token, pos);
+            softmax_scaled(&mut ctx.logits, 1.0 / self.config.temperature);
+
+            let next_token = sample_token_into(&ctx.logits, rng, &mut ctx.cdf);
+            tokens.push(next_token);
+
+            if next_token == self.config.bos_token {
+                cache.reset();
+                pos = 0;
+                token = self.config.bos_token;
+            } else {
+                token = next_token;
+                pos += 1;
+            }
+        }
     }
 }
 

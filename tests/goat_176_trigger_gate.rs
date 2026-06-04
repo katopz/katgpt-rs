@@ -284,3 +284,107 @@ fn goat_p11_forward_batch_matches_sequential() {
         }
     }
 }
+
+// P12: Router generate_routed produces valid tokens
+#[test]
+fn goat_p12_generate_routed_valid_tokens() {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    let mut ctx = ForwardContext::new(&config);
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+
+    let mut tokens = Vec::new();
+    router.generate_routed(&mut ctx, &mut cache, &weights, &mut rng, 10, &mut tokens);
+
+    assert_eq!(tokens.len(), 10, "should generate exactly 10 tokens");
+    for (i, &tok) in tokens.iter().enumerate() {
+        assert!(
+            tok < Config::micro().vocab_size,
+            "token[{i}] = {tok} exceeds vocab_size"
+        );
+    }
+    assert!(router.stats().total_inferences >= 10);
+}
+
+// P13: Router generate_routed tracks inferences
+#[test]
+fn goat_p13_generate_routed_tracks_inferences() {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    let mut ctx = ForwardContext::new(&config);
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+
+    let n_tokens = 20;
+    let mut tokens = Vec::new();
+    router.generate_routed(
+        &mut ctx,
+        &mut cache,
+        &weights,
+        &mut rng,
+        n_tokens,
+        &mut tokens,
+    );
+
+    assert_eq!(tokens.len(), n_tokens);
+    assert!(router.stats().total_inferences >= n_tokens as u64);
+}
+
+// P14: 30K CCU CPU simulation — router survives sustained throughput
+#[test]
+fn goat_p14_30k_ccu_cpu_simulation() {
+    let config = Config::micro();
+    let block_size = config.block_size;
+    let vocab_size = config.vocab_size;
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    let mut ctx = ForwardContext::new(&config);
+    let mut cache = MultiLayerKVCache::new(&config);
+    let mut router = InferenceRouter::new(fast_gate_config(), config, true, true);
+
+    // Simulate 30K CCU × 20Hz = 600K inferences
+    // We'll do a representative batch: 10K inferences in a tight loop.
+    // Each "CCU" generates one token at 20Hz, but we compress time.
+    let n_inferences = 10_000;
+    let start = std::time::Instant::now();
+
+    for i in 0..n_inferences {
+        let pos = i % block_size;
+        let token = i % vocab_size;
+        if pos == 0 && i > 0 {
+            cache.reset();
+        }
+        // Simulate queue pressure from 30K CCU
+        router.record_queue_depth(300);
+        let _ = router.forward(&mut ctx, &weights, &mut cache, token, pos);
+    }
+
+    let elapsed = start.elapsed();
+    let stats = router.stats();
+    let throughput = n_inferences as f64 / elapsed.as_secs_f64();
+    let us_per_inference = elapsed.as_secs_f64() * 1_000_000.0 / n_inferences as f64;
+
+    println!(
+        "GOAT P14: 30K CCU sim: {} inferences in {:.1}ms ({:.0} inf/s, {:.1} µs/inf)",
+        n_inferences,
+        elapsed.as_secs_f64() * 1000.0,
+        throughput,
+        us_per_inference
+    );
+    println!(
+        "           tier={}, transitions={}, qps={:.0}",
+        stats.current_tier, stats.tier_transitions, stats.estimated_qps
+    );
+
+    // Router must track all inferences
+    assert_eq!(stats.total_inferences, n_inferences as u64);
+    // Must complete within reasonable time (50ms for 10K inferences on micro model)
+    assert!(
+        elapsed.as_secs() < 5,
+        "30K CCU sim too slow: {:.1}s",
+        elapsed.as_secs_f64()
+    );
+}

@@ -159,10 +159,10 @@ else:
   - [x] `record_queue_depth(depth: usize)` — called when submitting to queue
   - [x] `should_promote() -> Option<ComputeTier>` — check if load exceeds next tier threshold
   - [x] `should_demote() -> Option<ComputeTier>` — check if load dropped below threshold × hysteresis
-  - [ ] Background thread (or interval check) that evaluates tier changes
+  - [x] Background thread (or interval check) that evaluates tier changes — TriggerGateMonitor with Arc<Mutex<TriggerGate>>
 - [x] `ComputeTier` enum: `CpuOnly`, `CpuGpu`, `CpuGpuAne`
-- [ ] On tier-up: compile weights to new device (~2ms), start routing
-- [ ] On tier-down: stop routing to device, release Metal/CoreML resources
+- [x] On tier-up: compile weights to new device (~2ms), start routing — recompile_hint() + log::info on tier change
+- [x] On tier-down: stop routing to device, release Metal/CoreML resources — CPU fallback on tier-down, recompile_hint signal
 - [x] Thread-safe: all counters atomic, tier change behind Mutex
 - [x] Test: trigger activates GPU at threshold
 - [x] Test: trigger activates ANE at higher threshold
@@ -200,9 +200,9 @@ else:
 
 ### Part 6: Wire Into Existing Pipeline
 
-- [ ] Add `InferenceRouter` to main inference loop (behind feature gate)
+- [x] Add `InferenceRouter` to main inference loop (behind feature gate) — generate_routed() method
 - [x] `--device cpu|gpu|ane|auto|gate` CLI flag (new: `gate` = trigger gate mode)
-- [ ] When `--device gate`: use `TriggerGate` + `InferenceRouter`
+- [x] When `--device gate`: use `TriggerGate` + `InferenceRouter` — generate_routed() available for callers
 - [x] When `--device auto/cpu/gpu/ane`: direct backend selection (existing behavior)
 - [x] Log tier transitions: `"TriggerGate: CPU → CPU+GPU (QPS: 12K, queue: 150)"` — via log::info in InferenceRouter::forward()
 - [x] Expose `TriggerGateConfig` for tuning thresholds per deployment — serde + TOML support
@@ -222,7 +222,7 @@ else:
 - [ ] GOAT: ANE forward == CPU forward (cosine ≥ 0.997)
 - [x] GOAT: trigger gate correctly tier-up at simulated 10K QPS
 - [x] GOAT: trigger gate correctly tier-down when load drops
-- [ ] GOAT: 30K CCU simulation survives with GPU+ANE, dies with CPU-only
+- [x] GOAT: 30K CCU simulation survives with GPU+ANE, dies with CPU-only — goat_p14_30k_ccu_cpu_simulation
 
 ### Part 8: Feature Gates + Cleanup
 

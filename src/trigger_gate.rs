@@ -4,9 +4,9 @@
 //! to CPU+GPU to CPU+GPU+ANE, with hysteresis to prevent thrashing.
 
 use std::fmt;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU8, AtomicU64, Ordering};
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 // ---------------------------------------------------------------------------
 // ComputeTier
@@ -288,6 +288,86 @@ impl TriggerGate {
 }
 
 // ---------------------------------------------------------------------------
+// TriggerGateMonitor
+// ---------------------------------------------------------------------------
+
+/// Background monitor that periodically evaluates tier changes on a [`TriggerGate`].
+///
+/// Wraps the gate in `Arc<Mutex<TriggerGate>>` so it can be shared between the
+/// background thread and the caller (e.g. the inference router).
+pub struct TriggerGateMonitor {
+    gate: Arc<Mutex<TriggerGate>>,
+    stop: Arc<AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+}
+
+impl TriggerGateMonitor {
+    /// Create a new monitor that takes ownership of `gate` and immediately starts
+    /// a background evaluation thread.
+    ///
+    /// The thread sleeps for `interval` between evaluations. A sensible default
+    /// is `config.min_tier_change_interval_ms` converted to a [`Duration`].
+    pub fn new(gate: TriggerGate, interval: Duration) -> Self {
+        let gate = Arc::new(Mutex::new(gate));
+        let stop = Arc::new(AtomicBool::new(false));
+
+        let gate_clone = Arc::clone(&gate);
+        let stop_clone = Arc::clone(&stop);
+
+        let handle = std::thread::Builder::new()
+            .name("trigger-gate-monitor".into())
+            .spawn(move || {
+                log::info!("trigger-gate-monitor: background thread started");
+                while !stop_clone.load(Ordering::Acquire) {
+                    std::thread::sleep(interval);
+                    if stop_clone.load(Ordering::Acquire) {
+                        break;
+                    }
+                    let guard = gate_clone.lock().unwrap();
+                    let old_tier = guard.current_tier();
+                    if let Some(new_tier) = guard.evaluate() {
+                        log::info!(
+                            "trigger-gate-monitor: tier changed {} -> {new_tier}",
+                            old_tier,
+                        );
+                    }
+                    drop(guard);
+                }
+                log::info!("trigger-gate-monitor: background thread stopping");
+            })
+            .expect("failed to spawn trigger-gate-monitor thread");
+
+        Self {
+            gate,
+            stop,
+            handle: Some(handle),
+        }
+    }
+
+    /// Signal the background thread to stop and wait for it to finish.
+    pub fn stop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+    }
+
+    /// Access the shared gate for recording metrics from the hot path.
+    ///
+    /// Returns a cloned `Arc<Mutex<TriggerGate>>` so the caller can lock it
+    /// without borrowing `self`.
+    pub fn gate(&self) -> Arc<Mutex<TriggerGate>> {
+        Arc::clone(&self.gate)
+    }
+}
+
+impl Drop for TriggerGateMonitor {
+    fn drop(&mut self) {
+        self.stop();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -543,5 +623,85 @@ min_tier_change_interval_ms = 200
         assert_eq!(cfg.queue_depth_trigger, 50);
         assert_eq!(cfg.latency_p99_trigger_us, 3000);
         assert_eq!(cfg.min_tier_change_interval_ms, 200);
+    }
+
+    // 13. TriggerGateMonitor starts, runs, and stops cleanly.
+    #[test]
+    fn test_monitor_start_stop() {
+        let gate = fast_gate(true, true);
+        let interval = Duration::from_millis(10);
+        let mut monitor = TriggerGateMonitor::new(gate, interval);
+
+        // Let the background thread run a couple of cycles.
+        thread::sleep(Duration::from_millis(50));
+
+        // Should be at CpuOnly still (no inferences recorded).
+        let shared = monitor.gate();
+        let guard = shared.lock().unwrap();
+        assert_eq!(guard.current_tier(), ComputeTier::CpuOnly);
+        drop(guard);
+
+        monitor.stop();
+    }
+
+    // 14. TriggerGateMonitor detects a tier promotion in the background.
+    #[test]
+    fn test_monitor_detects_promotion() {
+        let gate = fast_gate(true, false);
+        let interval = Duration::from_millis(10);
+        let mut monitor = TriggerGateMonitor::new(gate, interval);
+
+        let shared = monitor.gate();
+
+        // Continuously record inferences on a helper thread so QPS stays high
+        // across multiple monitor evaluation cycles.
+        let stop_load = Arc::new(AtomicBool::new(false));
+        let load_shared = Arc::clone(&shared);
+        let load_stop = Arc::clone(&stop_load);
+        let load_handle = thread::spawn(move || {
+            while !load_stop.load(Ordering::Relaxed) {
+                let guard = load_shared.lock().unwrap();
+                for _ in 0..5_000 {
+                    guard.record_inference(50);
+                }
+                drop(guard);
+                thread::sleep(Duration::from_millis(1));
+            }
+        });
+
+        // Wait long enough for the monitor to evaluate and promote.
+        thread::sleep(Duration::from_millis(150));
+
+        let tier = {
+            let guard = shared.lock().unwrap();
+            guard.current_tier()
+        };
+
+        // Stop the load generator first, then the monitor.
+        stop_load.store(true, Ordering::Relaxed);
+        load_handle.join().unwrap();
+        monitor.stop();
+
+        assert_eq!(
+            tier,
+            ComputeTier::CpuGpu,
+            "monitor should have promoted to CpuGpu under sustained load"
+        );
+    }
+
+    // 15. TriggerGateMonitor::drop stops the background thread.
+    #[test]
+    fn test_monitor_drop_stops_thread() {
+        let gate = fast_gate(true, true);
+        let interval = Duration::from_millis(10);
+        let shared;
+        {
+            let monitor = TriggerGateMonitor::new(gate, interval);
+            shared = monitor.gate();
+            // Dropping monitor should stop the thread.
+        }
+        // Verify the gate is still usable after the monitor is gone.
+        let guard = shared.lock().unwrap();
+        assert_eq!(guard.current_tier(), ComputeTier::CpuOnly);
     }
 }
