@@ -10,7 +10,9 @@
 //! This is a **test-only** module — zero runtime overhead. Run in CI to catch silent
 //! degradation the same way the ANE `MLComputePlan` catches silent CPU fallback.
 
-use super::types::{ConstraintPruner, NoPruner, NoScreeningPruner, ScreeningPruner};
+#[cfg(test)]
+use super::types::NoPruner;
+use super::types::{ConstraintPruner, NoScreeningPruner, ScreeningPruner};
 use crate::types::Config;
 use std::time::Instant;
 
