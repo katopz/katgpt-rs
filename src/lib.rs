@@ -30,6 +30,8 @@ pub mod inference_backend;
 pub mod inference_router;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
+#[cfg(feature = "kvarn")]
+pub mod kvarn;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
 #[cfg(feature = "newton_schulz")]
@@ -84,6 +86,9 @@ pub mod alloc;
 #[cfg(debug_assertions)]
 #[global_allocator]
 static GLOBAL_ALLOC: alloc::TrackingAllocator = alloc::TrackingAllocator;
+
+#[cfg(feature = "mux_demux")]
+pub mod mux_demux;
 
 #[cfg(feature = "validator")]
 pub mod validator;

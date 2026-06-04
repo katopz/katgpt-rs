@@ -417,6 +417,24 @@ pub use hydra_budget::{
 #[cfg(all(feature = "hydra_budget", feature = "decode_specialize"))]
 pub use hydra_budget::should_skip_layer_stage;
 
+#[cfg(feature = "mux_pruner")]
+pub mod mux_span;
+
+#[cfg(feature = "mux_pruner")]
+pub use mux_span::MuxSpanPruner;
+
+#[cfg(feature = "mux_ddtree")]
+pub mod mux_ddtree;
+
+#[cfg(feature = "mux_ddtree")]
+pub use mux_ddtree::{MuxDdTree, MuxNode};
+
+#[cfg(feature = "mux_bandit_width")]
+pub mod mux_bandit;
+
+#[cfg(feature = "mux_bandit_width")]
+pub use mux_bandit::MuxBanditWidth;
+
 #[cfg(feature = "mech_attribution")]
 pub mod mech_attribution;
 
