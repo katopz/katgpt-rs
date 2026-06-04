@@ -293,6 +293,11 @@ pub struct ThinkingController {
     bandit: ThinkingBandit,
     /// GPU load monitor — reads from external load signal.
     gpu_load: GpuLoadSignal,
+    /// Trust signal from speculative verifier (0.0 = low trust, 1.0 = high trust).
+    /// Low trust → prefer thinking mode. High trust → prefer direct mode.
+    /// Updated externally via `set_trust_signal()` (Plan 182).
+    /// Value of -1.0 means "not set" — trust override is inactive.
+    trust_signal: f32,
 }
 
 impl ThinkingController {
@@ -302,6 +307,7 @@ impl ThinkingController {
             config,
             bandit: ThinkingBandit::new(),
             gpu_load: GpuLoadSignal::Unavailable,
+            trust_signal: -1.0,
         }
     }
 
@@ -311,6 +317,7 @@ impl ThinkingController {
             config,
             bandit: ThinkingBandit::new(),
             gpu_load: GpuLoadSignal::Dynamic(gpu_load),
+            trust_signal: -1.0,
         }
     }
 
@@ -320,6 +327,7 @@ impl ThinkingController {
             config,
             bandit: ThinkingBandit::new(),
             gpu_load: GpuLoadSignal::Threshold(threshold),
+            trust_signal: -1.0,
         }
     }
 
@@ -333,12 +341,26 @@ impl ThinkingController {
             config,
             bandit,
             gpu_load: GpuLoadSignal::Unavailable,
+            trust_signal: -1.0,
         })
     }
 
     /// Update the GPU load value.
     pub fn set_gpu_load(&mut self, load: f32) {
         self.gpu_load = GpuLoadSignal::Dynamic(load);
+    }
+
+    /// Update the trust signal from speculative verification (Plan 182).
+    ///
+    /// Low trust (< 0.4) biases toward thinking modes.
+    /// High trust (> 0.8) biases toward direct mode.
+    pub fn set_trust_signal(&mut self, trust: f32) {
+        self.trust_signal = trust;
+    }
+
+    /// Get current trust signal. Returns -1.0 if not set.
+    pub fn trust_signal(&self) -> f32 {
+        self.trust_signal
     }
 
     /// Decide thinking mode for this query.
@@ -363,9 +385,28 @@ impl ThinkingController {
                 // 2. Thompson sample from bandit posterior
                 let arm = self.bandit.sample(exploration_rate, rng);
 
-                // 3. Override with heuristic if bandit is cold (few episodes)
+                // 3. Trust-triggered override (Plan 182)
+                // Only active when trust_signal has been explicitly set (>= 0).
+                // Low trust → prefer thinking. High trust → prefer direct.
+                let trust_override = if self.trust_signal >= 0.0 && self.trust_signal < 0.4 {
+                    // Low trust: force some form of thinking
+                    if gpu_loaded {
+                        Some(ThinkingMode::CpuResample)
+                    } else {
+                        Some(ThinkingMode::Latent)
+                    }
+                } else if self.trust_signal > 0.8 {
+                    // High trust: force direct (skip thinking)
+                    Some(ThinkingMode::Direct)
+                } else {
+                    None
+                };
+
+                // 4. Combine: trust override, cold-start heuristic, or bandit decision
                 let cold = self.bandit.total_pulls() < 10;
-                if cold && first_pass_confidence < self.config.confidence_threshold {
+                if let Some(mode) = trust_override {
+                    mode
+                } else if cold && first_pass_confidence < self.config.confidence_threshold {
                     // Heuristic: low confidence → think
                     if gpu_loaded {
                         ThinkingMode::CpuResample

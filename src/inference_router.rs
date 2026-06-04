@@ -33,6 +33,8 @@ pub struct RouterStats {
     pub last_backend: &'static str,
     /// Number of tier transitions since creation.
     pub tier_transitions: u64,
+    /// Current trust signal (0.0 = low trust, 1.0 = high trust).
+    pub trust_signal: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +57,9 @@ pub struct InferenceRouter {
     /// Number of tier transitions since creation.
     tier_transitions: AtomicU64,
     last_backend: &'static str,
+    /// Trust signal from speculative verification (0.0 = low trust, 1.0 = high trust).
+    /// Updated externally via `update_trust()`. Influences tier transitions.
+    trust_signal: f32,
 }
 
 impl InferenceRouter {
@@ -88,6 +93,7 @@ impl InferenceRouter {
             total_inferences: AtomicU64::new(0),
             tier_transitions: AtomicU64::new(0),
             last_backend: "CPU",
+            trust_signal: 1.0,
         }
     }
 
@@ -157,12 +163,42 @@ impl InferenceRouter {
         // Snapshot the current tier before routing.
         let tier = self.gate.current_tier();
 
+        // Trust-triggered tier adjustment (Plan 182)
+        let tier_after_trust = if self.trust_signal < 0.4 && tier == ComputeTier::CpuOnly {
+            // Low trust on CPU → tier up to GPU if available
+            if self.gpu.is_some() {
+                log::info!(
+                    "Router trust-triggered tier-up: trust={:.2}, CPU→CPU+GPU",
+                    self.trust_signal
+                );
+                ComputeTier::CpuGpu
+            } else {
+                tier
+            }
+        } else if self.trust_signal > 0.8 && tier == ComputeTier::CpuGpu {
+            // High trust on GPU → allow tier down to CPU
+            // Only if GPU is not under load (check estimated QPS)
+            if self.gate.estimated_qps()
+                < self.gate.config().gpu_activate_qps * self.gate.config().hysteresis_factor
+            {
+                log::info!(
+                    "Router trust-triggered tier-down: trust={:.2}, CPU+GPU→CPU",
+                    self.trust_signal
+                );
+                ComputeTier::CpuOnly
+            } else {
+                tier
+            }
+        } else {
+            tier
+        };
+
         // Route to the appropriate backend.
         //
         // We populate ctx.logits via forward(), then return a borrow of ctx.logits
         // (not from self) to satisfy the lifetime constraint that the returned slice
         // borrows from `ctx`.
-        let backend_name = match tier {
+        let backend_name = match tier_after_trust {
             ComputeTier::CpuOnly => {
                 crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
                 "CPU"
@@ -182,6 +218,16 @@ impl InferenceRouter {
 
         // Return logits borrowed from ctx (not from self).
         &ctx.logits[..self.config.vocab_size]
+    }
+
+    /// Update trust signal from verifier (called after each speculative decode).
+    pub fn update_trust(&mut self, trust: f32) {
+        self.trust_signal = trust;
+    }
+
+    /// Get current trust signal.
+    pub fn trust_signal(&self) -> f32 {
+        self.trust_signal
     }
 
     /// Signal that weights have changed; GPU/ANE backends should recompile.
@@ -231,6 +277,7 @@ impl InferenceRouter {
             estimated_qps: self.gate.estimated_qps(),
             last_backend: self.last_backend,
             tier_transitions: self.tier_transitions.load(Ordering::Relaxed),
+            trust_signal: self.trust_signal,
         }
     }
 
