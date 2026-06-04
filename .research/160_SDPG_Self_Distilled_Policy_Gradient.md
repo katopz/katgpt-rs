@@ -3,7 +3,7 @@
 > **Paper:** [Self-Distilled Policy Gradient](https://arxiv.org/abs/2606.04036) — Liu et al., UCLA/Princeton, 2026
 > **Code:** `.raw/SDPG/` — full codebase + paper audited
 > **Date:** 2026-06-04
-> **Related Plans:** Plan 200 (katgpt-rs, modelless SDPG bandit)
+**Related Plans:** Plan 180 (katgpt-rs, modelless SDPG bandit)
 > **Related Research:** R038 (SDAR), R036 (ROPD), R122 (EDGE-OPD), R103 (State Distribution), R075 (Data Gate), R119 (KPop)
 
 ## Executive Summary

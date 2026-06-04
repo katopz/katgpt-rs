@@ -1,4 +1,4 @@
-# Plan 201: dMoE Modelless — Block-Level Coreset Distillation
+# Plan 181: dMoE Modelless — Block-Level Coreset Distillation
 
 > **Parent**: Research 161 (dMoE Block-Level Expert Routing)
 > **Depends**: Plan 030 (BanditPruner) ✅, Plan 176 (Three-Way Compute / TriggerGate) ✅, Plan 096 (MoE SD — T4 delta sparse) ⚠️
@@ -213,7 +213,7 @@ for arm in &arms {
 ## T3: D2 GOAT Benchmark
 
 ### Location
-`katgpt-rs/tests/bench_201_dmoe_bandit_top_p_goat.rs`
+`katgpt-rs/tests/bench_181_dmoe_bandit_top_p_goat.rs`
 
 ### Criteria
 
@@ -317,7 +317,7 @@ if let Some(coreset_mask) = &self.vocab_coreset_mask {
 ## T5: D1 GOAT Benchmark
 
 ### Location
-`katgpt-rs/tests/bench_201_dmoe_vocab_coreset_goat.rs`
+`katgpt-rs/tests/bench_181_dmoe_vocab_coreset_goat.rs`
 
 ### Criteria
 
@@ -385,8 +385,8 @@ katgpt-rs/
 │   └── speculative/
 │       └── vocab_coreset.rs              # vocab_coreset() (T4)
 ├── tests/
-│   ├── bench_201_dmoe_bandit_top_p_goat.rs   # T3
-│   └── bench_201_dmoe_vocab_coreset_goat.rs  # T5
+│   ├── bench_181_dmoe_bandit_top_p_goat.rs   # T3
+│   └── bench_181_dmoe_vocab_coreset_goat.rs  # T5
 └── .benchmarks/
     └── 049_dmoe_block_coreset_goat.md        # Results
 ```

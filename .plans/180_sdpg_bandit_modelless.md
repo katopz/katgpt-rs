@@ -1,6 +1,6 @@
-# Plan 200: SDPG Bandit — Modelless Self-Distilled Policy Gradient
+# Plan 180: SDPG Bandit — Modelless Self-Distilled Policy Gradient
 
-**Branch:** `develop/feature/200_sdpg_bandit_modelless`
+**Branch:** `develop/feature/180_sdpg_bandit_modelless`
 **Depends on:** Plan 030 (Bandit), Plan 049 (G-Zero Phase 1), Plan 071 (ROPD Rubric), Plan 072 (SDAR Gate)
 **Research:** `.research/160_SDPG_Self_Distilled_Policy_Gradient.md`
 **Goal:** Distill SDPG's Proposition 3.1 (full-vocab OPD ≡ policy gradient with centered log-ratio advantage) into modelless bandit credit assignment. Dense per-arm signal from oracle-informed teacher Q-values, positive-advantage gating, β warmup-decay schedule, and unnormalized KL anchoring. No neural model — pure bandit computation.

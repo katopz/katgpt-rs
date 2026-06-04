@@ -1,4 +1,4 @@
-# Plan 178: KVarN — Variance-Normalized KV-Cache Quantization
+# Plan 179: KVarN — Variance-Normalized KV-Cache Quantization
 
 > **Research:** 159 (KVarN Verdict)
 > **Related Plans:** 070 (SP-KV), 109 (Asymmetric KV), 123 (Asymmetric KV benchmarks), 148 (Plasma Path), 194 (Adaptive CoT), 165 (Hydra Layer Budget)
