@@ -42,21 +42,13 @@ graph TD
 
 ## Tasks
 
-### T1: `TrustRegionVerifier` Trait — Extension Point
-
-**Where:** `katgpt-rs/src/speculative/verifier.rs`
-
-- [ ] Define `TrustRegionVerifier` trait extending `SpeculativeVerifier`
+- [x] T1: `TrustRegionVerifier` Trait — Extension Point
 - [ ] Add `trust_metric(&self) -> f32` — running average of P_accept
 - [ ] Add `adaptive_window(&self, base: usize) -> usize` — expand/shrink based on trust
 - [ ] Add `blend_sample(&mut self, beta: f32, rng: &mut Rng) -> usize` — TRB μ_β sampling
 - [ ] Feature-gate behind `trust_region_spec`
 
-### T2: `TrustRegionLeviathanVerifier` — Implementation
-
-**Where:** `katgpt-rs/src/speculative/verifier.rs`
-
-- [ ] Implement `TrustRegionVerifier` for `LeviathanVerifier`
+- [x] T2: `TrustRegionLeviathanVerifier` — Implementation
 - [ ] Track running acceptance rate per decode call (sliding window of 16 tokens)
 - [ ] Adaptive window: trust > 0.85 → base_window × 1.5, trust < 0.5 → window = 1
 - [ ] Blend on rejection: compute β via binary search (10 iterations max), sample from μ_β
@@ -81,20 +73,12 @@ graph TD
 - [ ] High trust → prefer direct mode (skip thinking)
 - [ ] Combine with existing entropy and bandit signals
 
-### T5: Bandit Learning for Trust Patterns
-
-**Where:** `katgpt-rs/src/pruners/bandit.rs`
-
-- [ ] Add trust-bandit arm: `TrustArm { domain, avg_trust, window, tier }`
+- [x] T5: Bandit Learning for Trust Patterns
 - [ ] Reward: successful decode (tokens accepted without quality regression)
 - [ ] Freeze/thaw: persist trust-bandit knowledge per domain
 - [ ] Self-improving: bandit adapts trust thresholds per query type
 
-### T6: Test — Before/After Trust-Region Speculation
-
-**Where:** `katgpt-rs/examples/trust_region_spec_demo.rs` (new)
-
-- [ ] Test 1: Fixed-window speculation (baseline) — measure acceptance rate + output quality
+- [x] T6: Test — Before/After Trust-Region Speculation
 - [ ] Test 2: TRAS adaptive window — measure acceptance rate + output quality
 - [ ] Assert: TRAS acceptance rate ≥ 15% higher than baseline
 - [ ] Assert: Output quality (valid sequences) not regressed
