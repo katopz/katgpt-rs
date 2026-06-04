@@ -247,3 +247,9 @@ pub mod thinking_controller;
 pub use thinking_controller::{
     Rng, ThinkingBanditFrozen, ThinkingConfig, ThinkingController, ThinkingMode, ThinkingSelector,
 };
+
+#[cfg(feature = "vocab_coreset")]
+pub mod vocab_coreset;
+
+#[cfg(feature = "vocab_coreset")]
+pub use vocab_coreset::{should_use_delta_sparse, vocab_coreset};

@@ -1528,6 +1528,61 @@ pub fn spectral_discordance(performance_matrix: &[Vec<f32>]) -> f32 {
     avg_normalized_var.min(1.0)
 }
 
+// ---------------------------------------------------------------------------
+// Adaptive Top-p Arm Selection (dMoE distillation, Research 161, Plan 181)
+// ---------------------------------------------------------------------------
+
+/// Adaptive top-p arm selection for BanditPruner.
+///
+/// Replaces fixed top-k with dynamic arm budget based on score concentration.
+/// When scores are concentrated (clear winner) → selects fewer arms → faster.
+/// When scores are dispersed (uncertain) → selects more arms → better exploration.
+///
+/// # Arguments
+/// * `q_values` - Bandit Q-values for each arm
+/// * `ucb_bonus` - UCB exploration bonus for each arm
+/// * `p` - Cumulative probability threshold (default: 0.85)
+///
+/// # Returns
+/// Indices of selected arms, sorted by score descending.
+#[cfg(feature = "bandit_top_p")]
+pub fn select_arms_top_p(q_values: &[f32], ucb_bonus: &[f32], p: f32) -> Vec<usize> {
+    let scores: Vec<f32> = q_values
+        .iter()
+        .zip(ucb_bonus.iter())
+        .map(|(&q, &u)| q + u)
+        .collect();
+    let n = scores.len();
+
+    if n == 0 {
+        return vec![];
+    }
+
+    // Sort by score descending
+    let mut indices: Vec<usize> = (0..n).collect();
+    indices.sort_by(|&a, &b| {
+        scores[b]
+            .partial_cmp(&scores[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    let total: f32 = scores.iter().map(|s| s.max(0.0)).sum();
+    if total <= 0.0 {
+        return indices;
+    }
+
+    let mut cumsum = 0.0f32;
+    let mut selected = Vec::with_capacity(n);
+    for &idx in &indices {
+        cumsum += scores[idx].max(0.0) / total;
+        selected.push(idx);
+        if cumsum >= p {
+            break;
+        }
+    }
+    selected
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]

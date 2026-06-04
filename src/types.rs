@@ -94,3 +94,99 @@ impl AsymmetricKVConfig {
         self.key_bits + self.val_bits
     }
 }
+
+// ---------------------------------------------------------------------------
+// Adaptive Top-p Coreset Selection (dMoE distillation, Research 161, Plan 181)
+// ---------------------------------------------------------------------------
+
+/// Adaptive top-p coreset selection.
+///
+/// Given a slice of scores, returns a boolean mask selecting the minimal
+/// set of indices whose cumulative probability mass >= `p`.
+///
+/// Algorithm:
+/// 1. Sort scores descending
+/// 2. Normalize to probability distribution
+/// 3. Cumulative sum
+/// 4. Select all indices where cumsum < p (plus the first that crosses)
+///
+/// # Arguments
+/// * `scores` - Score values for each element
+/// * `p` - Cumulative probability threshold (0.0 to 1.0)
+/// * `scratch_indices` - Pre-allocated scratch buffer for indices (caller-owned)
+/// * `scratch_sorted` - Pre-allocated scratch buffer for sorted scores (caller-owned)
+/// * `mask` - Output boolean mask (caller-owned, initialized by this function)
+///
+/// # Returns
+/// Number of selected elements.
+#[inline]
+pub fn top_p_coreset(
+    scores: &[f32],
+    p: f32,
+    scratch_indices: &mut [usize],
+    scratch_sorted: &mut [f32],
+    mask: &mut [bool],
+) -> usize {
+    let n = scores.len();
+    debug_assert_eq!(scratch_indices.len(), n);
+    debug_assert_eq!(scratch_sorted.len(), n);
+    debug_assert_eq!(mask.len(), n);
+
+    // Initialize indices
+    for (i, idx) in scratch_indices.iter_mut().enumerate() {
+        *idx = i;
+    }
+
+    // Sort by score descending
+    scratch_indices.sort_by(|&a, &b| {
+        scores[b]
+            .partial_cmp(&scores[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // Compute total and normalize
+    let total: f32 = scratch_indices.iter().map(|&i| scores[i].max(0.0)).sum();
+
+    if total <= 0.0 {
+        // Degenerate: select all
+        for m in mask.iter_mut() {
+            *m = true;
+        }
+        return n;
+    }
+
+    let mut cumsum = 0.0f32;
+    let mut selected = 0usize;
+    for (rank, &idx) in scratch_indices.iter().enumerate() {
+        let prob = scores[idx].max(0.0) / total;
+        cumsum += prob;
+        mask[idx] = true;
+        selected += 1;
+        if cumsum >= p {
+            // Fill remaining with false
+            for &remaining_idx in &scratch_indices[rank + 1..] {
+                mask[remaining_idx] = false;
+            }
+            break;
+        }
+    }
+
+    selected
+}
+
+/// Convenience version of `top_p_coreset` that allocates internally.
+/// Use this for non-hot-path calls. For hot paths, use `top_p_coreset` with pre-allocated buffers.
+pub fn top_p_coreset_allocating(scores: &[f32], p: f32) -> (Vec<bool>, usize) {
+    let n = scores.len();
+    let mut scratch_indices = vec![0usize; n];
+    let mut scratch_sorted = vec![0.0f32; n];
+    let mut mask = vec![false; n];
+    let count = top_p_coreset(
+        scores,
+        p,
+        &mut scratch_indices,
+        &mut scratch_sorted,
+        &mut mask,
+    );
+    (mask, count)
+}
