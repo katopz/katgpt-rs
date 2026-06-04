@@ -64,6 +64,7 @@ pub mod speculative;
 pub mod stiff_anomaly;
 pub mod tokenizer;
 pub mod transformer;
+pub mod trigger_gate;
 #[cfg(feature = "turboquant")]
 pub mod turboquant;
 pub mod types;

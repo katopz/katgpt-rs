@@ -5,8 +5,39 @@
 //!
 //! The default [`CpuBackend`] delegates to [`crate::transformer::forward`].
 
+use std::fmt;
+
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
 use crate::types::Config;
+
+/// Error type for backend weight compilation.
+#[derive(Debug)]
+pub enum CompileError {
+    /// The backend does not support runtime weight compilation.
+    UnsupportedBackend(String),
+    /// Compilation failed on the target device.
+    DeviceError(String),
+    /// Invalid weight dimensions for the target device.
+    InvalidWeights(String),
+}
+
+impl fmt::Display for CompileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompileError::UnsupportedBackend(msg) => {
+                write!(f, "unsupported backend: {msg}")
+            }
+            CompileError::DeviceError(msg) => {
+                write!(f, "device error: {msg}")
+            }
+            CompileError::InvalidWeights(msg) => {
+                write!(f, "invalid weights: {msg}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CompileError {}
 
 /// Backend for transformer forward pass inference.
 ///
@@ -36,6 +67,29 @@ pub trait InferenceBackend {
 
     /// Reset any backend-specific state for a new sequence.
     fn reset(&mut self) {}
+
+    /// Compile weights into a device-specific pipeline.
+    ///
+    /// Default: no-op (CPU doesn't need compilation).
+    fn compile(
+        &mut self,
+        _weights: &TransformerWeights,
+        _config: &Config,
+    ) -> Result<(), CompileError> {
+        Ok(())
+    }
+
+    /// Check if backend has valid compiled weights.
+    ///
+    /// Default: `true` (CPU is always "compiled").
+    fn is_compiled(&self) -> bool {
+        true
+    }
+
+    /// Signal that LoRA weights changed; backend should recompile on next forward.
+    ///
+    /// Default: no-op (CPU doesn't need recompilation).
+    fn recompile_hint(&mut self) {}
 }
 
 // ---------------------------------------------------------------------------
@@ -95,12 +149,14 @@ pub enum BackendKind {
 ///
 /// Logic:
 /// 1. If `kind` is `Cpu`, always return `CpuBackend`.
-/// 2. If `kind` is `Ane`, try to load `.mlmodelc` and create `AneBackend`.
+/// 2. If `kind` is `Ane`, try to create an uncompiled `AneBackend`.
 /// 3. If `kind` is `Auto`:
 ///    - On macOS with `ane` feature: try ANE, fall back to CPU on failure.
 ///    - Otherwise: use CPU.
 ///
 /// Logs which backend was selected via `log::info!`.
+///
+/// TODO: Remove `model_path` parameter — no longer needed with runtime compilation.
 pub fn auto_backend(
     kind: BackendKind,
     model_path: Option<&std::path::Path>,
@@ -128,46 +184,23 @@ pub fn auto_backend(
 }
 
 /// Attempt to create an ANE backend. Returns error message on failure.
+///
+/// Creates an uncompiled `AneBackend` — the caller must call `compile()`
+/// before the first `forward()` pass.
 fn try_ane_backend(
-    model_path: Option<&std::path::Path>,
+    _model_path: Option<&std::path::Path>,
 ) -> Result<Box<dyn InferenceBackend>, String> {
     #[cfg(all(target_os = "macos", feature = "ane"))]
     {
-        use crate::ane_backend::{AneBackend, AneError};
+        use crate::ane_backend::AneBackend;
 
-        let path = match model_path {
-            Some(p) => p,
-            None => std::path::Path::new("model.mlmodelc"),
-        };
-
-        if !path.exists() {
-            return Err(format!("model not found: {}", path.display()));
-        }
-
-        match AneBackend::new(path) {
-            Ok(backend) => {
-                // Residency check: verify ANE placement (<1ms threshold)
-                match backend.check_residency(1000) {
-                    Ok(latency_us) => {
-                        log::info!("Backend: ANE (residency OK, {}μs)", latency_us);
-                        Ok(Box::new(backend))
-                    }
-                    Err(AneError::ResidencyFailed {
-                        latency_us,
-                        threshold_us,
-                    }) => Err(format!(
-                        "residency check failed: {latency_us}μs > {threshold_us}μs"
-                    )),
-                    Err(e) => Err(e.to_string()),
-                }
-            }
-            Err(e) => Err(e.to_string()),
-        }
+        let backend = AneBackend::new();
+        log::info!("Backend: ANE (available, awaiting compile())");
+        Ok(Box::new(backend))
     }
 
     #[cfg(not(all(target_os = "macos", feature = "ane")))]
     {
-        let _ = model_path;
         Err("ANE not available (requires macOS + 'ane' feature)".to_string())
     }
 }
@@ -264,5 +297,37 @@ mod tests {
     #[test]
     fn test_backend_kind_default() {
         assert_eq!(BackendKind::default(), BackendKind::Auto);
+    }
+
+    #[test]
+    fn test_compile_error_display() {
+        let e = CompileError::UnsupportedBackend("ane".into());
+        assert_eq!(e.to_string(), "unsupported backend: ane");
+
+        let e = CompileError::DeviceError("timeout".into());
+        assert_eq!(e.to_string(), "device error: timeout");
+
+        let e = CompileError::InvalidWeights("dim mismatch".into());
+        assert_eq!(e.to_string(), "invalid weights: dim mismatch");
+    }
+
+    #[test]
+    fn test_cpu_backend_is_compiled() {
+        let backend = CpuBackend::new();
+        assert!(backend.is_compiled());
+    }
+
+    #[test]
+    fn test_cpu_backend_compile_noop() {
+        let (config, weights, _, _) = micro_fixtures();
+        let mut backend = CpuBackend::new();
+        assert!(backend.compile(&weights, &config).is_ok());
+    }
+
+    #[test]
+    fn test_cpu_backend_recompile_hint_noop() {
+        let mut backend = CpuBackend::new();
+        // Should not panic
+        backend.recompile_hint();
     }
 }

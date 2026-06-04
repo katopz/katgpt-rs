@@ -97,9 +97,9 @@ else:
 - [x] `auto_backend()` for CPU/ANE auto-route (legacy — will be replaced by TriggerGate)
 - [x] Unit tests: CpuBackend matches direct forward
 - [ ] Refactor `InferenceBackend` trait to accept `&TransformerWeights` + token + pos directly (remove indirection through `ForwardContext`)
-- [ ] Add `fn compile(&mut self, weights: &TransformerWeights, config: &Config) -> Result<()>` for runtime weight compilation
-- [ ] Add `fn is_compiled(&self) -> bool` to check if backend has valid compiled weights
-- [ ] Add `fn recompile_hint(&mut self)` — called when LoRA weights change
+- [x] Add `fn compile(&mut self, weights: &TransformerWeights, config: &Config) -> Result<()>` for runtime weight compilation
+- [x] Add `fn is_compiled(&self) -> bool` to check if backend has valid compiled weights
+- [x] Add `fn recompile_hint(&mut self)` — called when LoRA weights change
 
 ### Part 2: GPU Backend via Metal Compute
 
@@ -119,23 +119,23 @@ else:
 
 ### Part 3: ANE Backend via Runtime CoreML Compilation
 
-- [ ] Keep `coreml-native = { version = "0.2", optional = true }` dependency
-- [ ] Refactor `AneBackend` from `.mlmodelc` loader → runtime weight compiler:
-  - [ ] `compile()`: build `MLModel` from `TransformerWeights` programmatically
+- [x] Keep `coreml-native = { version: "0.2", optional = true }` dependency
+- [x] Refactor `AneBackend` from `.mlmodelc` loader → runtime weight compiler:
+  - [ ] `compile()`: build `MLModel` from `TransformerWeights` programmatically (blocked on coreml-native API)
   - [ ] Use `coreml_native::Model::from_spec()` or equivalent runtime API
   - [ ] Map transformer layers → CoreML neural network operations
   - [ ] Conv2d(1×1) trick for linear layers (ANE-friendly)
   - [ ] Set compute units to `.All` and verify ANE placement via residency check
-- [ ] `forward()`: predict with compiled model, extract logits from output
-- [ ] Hot-swap: `recompile_hint()` rebuilds CoreML model when LoRA weights change
+- [ ] `forward()`: predict with compiled model, extract logits from output (blocked on compile)
+- [x] Hot-swap: `recompile_hint()` rebuilds CoreML model when LoRA weights change
 - [ ] Residency validation: time micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback)
-- [ ] Test: residency error messages validated
+- [x] Test: residency error messages validated
 - [ ] Test: ANE forward produces numerically equivalent logits (cosine sim ≥ 0.997)
 
 ### Part 4: Trigger Gate
 
-- [ ] Create `src/trigger_gate.rs`
-- [ ] `TriggerGateConfig` with thresholds:
+- [x] Create `src/trigger_gate.rs`
+- [x] `TriggerGateConfig` with thresholds:
   ```rust
   pub struct TriggerGateConfig {
       /// Activate GPU when QPS exceeds this (default: 10K inferences/sec)
@@ -153,21 +153,21 @@ else:
   }
   ```
 - [ ] `TriggerGate` struct:
-  - [ ] `AtomicU64` counters for QPS, queue depth, latency samples
-  - [ ] `current_tier(): ComputeTier` — returns active tier
-  - [ ] `record_inference(duration_us: u64)` — called after each forward pass
-  - [ ] `record_queue_depth(depth: usize)` — called when submitting to queue
-  - [ ] `should_promote() -> Option<ComputeTier>` — check if load exceeds next tier threshold
-  - [ ] `should_demote() -> Option<ComputeTier>` — check if load dropped below threshold × hysteresis
+  - [x] `AtomicU64` counters for QPS, queue depth, latency samples
+  - [x] `current_tier(): ComputeTier` — returns active tier
+  - [x] `record_inference(duration_us: u64)` — called after each forward pass
+  - [x] `record_queue_depth(depth: usize)` — called when submitting to queue
+  - [x] `should_promote() -> Option<ComputeTier>` — check if load exceeds next tier threshold
+  - [x] `should_demote() -> Option<ComputeTier>` — check if load dropped below threshold × hysteresis
   - [ ] Background thread (or interval check) that evaluates tier changes
-- [ ] `ComputeTier` enum: `CpuOnly`, `CpuGpu`, `CpuGpuAne`
+- [x] `ComputeTier` enum: `CpuOnly`, `CpuGpu`, `CpuGpuAne`
 - [ ] On tier-up: compile weights to new device (~2ms), start routing
 - [ ] On tier-down: stop routing to device, release Metal/CoreML resources
-- [ ] Thread-safe: all counters atomic, tier change behind Mutex
-- [ ] Test: trigger activates GPU at threshold
-- [ ] Test: trigger activates ANE at higher threshold
-- [ ] Test: hysteresis prevents tier thrashing under oscillating load
-- [ ] Test: tier-down requires load < threshold × hysteresis_factor
+- [x] Thread-safe: all counters atomic, tier change behind Mutex
+- [x] Test: trigger activates GPU at threshold
+- [x] Test: trigger activates ANE at higher threshold
+- [x] Test: hysteresis prevents tier thrashing under oscillating load
+- [x] Test: tier-down requires load < threshold × hysteresis_factor
 
 ### Part 5: InferenceRouter (The Glue)
 
@@ -229,8 +229,8 @@ else:
 - [x] `ane = ["dep:coreml-native"]` feature flag
 - [ ] `gpu_inference = ["dep:metal"]` feature flag
 - [ ] `inference_router = ["gpu_inference", "ane"]` — pulls in everything
-- [ ] Remove `.mlmodelc` file-loading code from `AneBackend`
-- [ ] Remove `scripts/convert_to_coreml.py` (no longer needed — runtime compilation)
+- [x] Remove `.mlmodelc` file-loading code from `AneBackend`
+- [x] Remove `scripts/convert_to_coreml.py` (no longer needed — runtime compilation)
 - [ ] Default: all features off (CPU-only), opt-in GPU/ANE
 - [ ] Document trigger gate + three-way compute in README.md
 
