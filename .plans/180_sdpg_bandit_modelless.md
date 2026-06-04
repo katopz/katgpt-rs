@@ -27,7 +27,7 @@
 
 The mathematical heart of SDPG — Proposition 3.1 translated to bandits.
 
-- [ ] **T2: Implement `SdpgAdvantage` trait + `centered_log_ratio` function** — `src/pruners/sdpg/advantage.rs`
+- [x] **T2: Implement `SdpgAdvantage` trait + `centered_log_ratio` function** — `src/pruners/sdpg/advantage.rs`
   ```rust
   //! SDPG Proposition 3.1: centered log-ratio advantage for bandits.
   //!
@@ -89,7 +89,7 @@ The mathematical heart of SDPG — Proposition 3.1 translated to bandits.
   }
   ```
 
-- [ ] **T3: Implement `BetaSchedule` struct** — `src/pruners/sdpg/schedule.rs`
+- [x] **T3: Implement `BetaSchedule` struct** — `src/pruners/sdpg/schedule.rs`
   ```rust
   /// β warmup-decay schedule from SDPG paper.
   ///
@@ -118,7 +118,7 @@ The mathematical heart of SDPG — Proposition 3.1 translated to bandits.
 
 Wrap existing `BanditPruner` with oracle-informed teacher and centered log-ratio advantage.
 
-- [ ] **T4: Implement `SdpgBanditPruner<P>`** — `src/pruners/sdpg/mod.rs`
+- [x] **T4: Implement `SdpgBanditPruner<P>`** — `src/pruners/sdpg/mod.rs`
   ```rust
   //! SDPG Bandit Pruner — modelless self-distilled policy gradient.
   //!
@@ -143,7 +143,7 @@ Wrap existing `BanditPruner` with oracle-informed teacher and centered log-ratio
   - Teacher Q-values loaded from replay data at construction time
   - Reference Q-values snapshot at construction (for KL anchoring)
 
-- [ ] **T5: Implement positive-advantage gating** — in `SdpgBanditPruner::update`
+- [x] **T5: Implement positive-advantage gating** — in `SdpgBanditPruner::update`
   - `m_i = 1[arena_outcome > 0]` — only apply SDPG signal when game was won
   - When `m_i = 0`: only apply KL anchor (stability), no teacher signal
   - Reuse arena outcome signal from existing bomber replay infrastructure
@@ -152,7 +152,7 @@ Wrap existing `BanditPruner` with oracle-informed teacher and centered log-ratio
 
 Unnormalized KL regularization for bandit Q-values.
 
-- [ ] **T6: Implement `KlAnchor` enum** — `src/pruners/sdpg/anchor.rs`
+- [x] **T6: Implement `KlAnchor` enum** — `src/pruners/sdpg/anchor.rs`
   ```rust
   //! Unnormalized KL anchoring for bandit Q-values.
   //!
@@ -175,7 +175,7 @@ Unnormalized KL regularization for bandit Q-values.
 
 ### Phase 4: Feature Gate + Module Wiring
 
-- [ ] **T7: Add feature flag `sdpg_bandit`** — `Cargo.toml` + `src/pruners/mod.rs`
+- [x] **T7: Add feature flag `sdpg_bandit`** — `Cargo.toml` + `src/pruners/mod.rs`
   ```toml
   [features]
   sdpg_bandit = []  # SDPG bandit + KL anchoring (default-on candidate)
@@ -196,7 +196,7 @@ Unnormalized KL regularization for bandit Q-values.
 
 ### Phase 6: Unit Tests
 
-- [ ] **T9: Unit tests for all components** — `src/pruners/sdpg/` inline test modules
+- [x] **T9: Unit tests for all components** — `src/pruners/sdpg/` inline test modules (21/21 passing)
   - `centered_log_ratio` tests:
     - Identical Q-values → all advantages ≈ 0
     - Teacher strongly prefers arm A → positive advantage for A

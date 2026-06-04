@@ -7,10 +7,10 @@
 
 ## Tasks
 
-- [ ] T1: Implement `top_p_coreset()` generic utility in `src/types.rs` — sort, cumsum, threshold → coreset mask
-- [ ] T2: D2 — Adaptive top-p for BanditPruner arm selection (`bandit_top_p` feature, default ON)
+- [x] T1: Implement `top_p_coreset()` generic utility in `src/types.rs` — sort, cumsum, threshold → coreset mask
+- [x] T2: D2 — Adaptive top-p for BanditPruner arm selection (`bandit_top_p` feature, default ON)
 - [ ] T3: D2 GOAT benchmark — 4-player bomber: top-p vs fixed top-k arm selection, measure arm count + win rate + WASM call count
-- [ ] T4: D1 — DDTree vocab coreset during speculative decode (`vocab_coreset` feature, opt-in)
+- [x] T4: D1 — DDTree vocab coreset during speculative decode (`vocab_coreset` feature, opt-in)
 - [ ] T5: D1 GOAT benchmark — spec decode: vocab coreset vs full vocab, measure branching factor + tree depth + acceptance rate
 - [ ] T6: D3 — Delta sparse overlap gate: reuse Plan 096 T1 `RoutingOverlapSnapshot`, add top-p threshold for delta sparse enable/disable
 
