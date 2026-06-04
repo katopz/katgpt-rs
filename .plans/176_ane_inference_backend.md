@@ -1,107 +1,238 @@
-# Plan 176: ANE Inference Backend for katgpt-rs
+# Plan 176: Runtime GPU/ANE Offload with Trigger Gate
 
 **Source:** [Research 155 — ANE Compute Backend Verdict](../.research/155_ANE_Compute_Backend_Verdict.md)
-**Related:** [Plan 175 — DDTree Residency Audit + RangeBudget + Soft-Route Bandit](175_ane_inspired_ddtree_improvements.md)
-**Status:** Active
-**Goal:** Use the Apple Neural Engine chip for transformer forward pass, freeing CPU for DDTree + ConstraintPruner
+**Related:** [Plan 197 — ANE Inference Backend (riir-ai)](../../riir-ai/.plans/197_ane_inference_backend.md)
+**Status:** Active — rewriting from .mlmodelc model-loading to runtime weight compilation
+**Goal:** Survive 30K CCU by offloading transformer forward to GPU/ANE when load demands it. CPU is NOT enough — it also runs WASM, DDTree, bandit, MCTS. GPU/ANE sit idle is a crime.
 
 ---
 
-## Overview
+## Why This Plan Exists
 
-Add ANE as a third compute backend (alongside CPU and GPU) for transformer inference on Apple Silicon. Uses `coreml-native` crate for safe CoreML access. ANE handles the matmul-heavy forward pass while CPU handles discrete algorithms (DDTree, pruning, speculative verification).
+### The 30K CCU Math
 
 ```
-Before:  CPU does everything (forward + DDTree + prune + verify)
-After:   ANE does forward, CPU does DDTree + prune + verify (16× faster forward)
+30K CCU × 20Hz frame sampling = 600K inferences/sec
 ```
+
+CPU single-thread: 1.65 µs/token → ~600K tokens/sec. Barely one thread's worth.
+But CPU also runs: WASM validation, DDTree tree search, bandit pruning, MCTS rollout, ConstraintPruner.
+CPU cannot do forward + validation + tree search + prune simultaneously at 30K CCU.
+
+**GPU and ANE sit idle while CPU chokes. This is the problem.**
+
+### Why the Old Plan Was Wrong
+
+Old Plan 176 assumed `.mlmodelc` file loading + `coreml-native`. That's the architecture for LLM inference (load big model, run many tokens). katgpt-rs is **modelless** — weights are in-memory `TransformerWeights`, generated or LoRA-adapted at runtime. There is no file to load. The model IS the weight struct.
+
+The correct approach: **runtime weight compilation** — take `TransformerWeights`, build Metal/GPU/ANE compute pipelines on-the-fly, hot-swap when LoRA updates.
+
+---
+
+## Architecture: Trigger Gate + Three-Way Compute
+
+```
+                    ┌─────────────────────────┐
+                    │     TriggerGate          │
+                    │  monitors: qps, latency  │
+                    │  queue depth, load avg   │
+                    └──────┬──────┬──────┬─────┘
+                           │      │      │
+               ┌───────────┘      │      └───────────┐
+               ▼                  ▼                  ▼
+        ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
+        │  CPU Tier   │   │  GPU Tier   │   │  ANE Tier   │
+        │  <1K CCU    │   │  1K-10K CCU │   │  >10K CCU   │
+        │  always on  │   │  trigger on │   │  trigger on │
+        └─────────────┘   └─────────────┘   └─────────────┘
+        CPU forward()     Metal compute     CoreML runtime
+        1.65µs/tok        pipeline from     compile from
+        SIMD kernels      Transformer-      Transformer-
+                          Weights           Weights
+```
+
+### Trigger Gate Logic
+
+```
+load = queue_depth / target_latency
+
+if load < LOW_THRESHOLD:
+    tier = CPU_ONLY          # idle, dev mode, <1K CCU
+elif load < HIGH_THRESHOLD:
+    tier = CPU + GPU         # medium load, GPU handles forward, CPU handles discrete
+else:
+    tier = CPU + GPU + ANE   # 30K CCU — ALL hardware engaged
+
+# Hysteresis: tier-down requires load < threshold * 0.7 (avoid thrashing)
+# Compilation: on tier-up, compile weights to target device (~2ms for microGPT)
+# Hot-swap: LoRA update triggers recompilation of GPU/ANE pipelines
+```
+
+### Why Not CPU-Only
+
+| Metric | CPU-Only | CPU+GPU | CPU+GPU+ANE |
+|--------|----------|---------|-------------|
+| Forward throughput | 600K tok/s | 5M tok/s | 15M tok/s |
+| CPU free for DDTree+WASM | 0% (contended) | 80% | 95% |
+| 30K CCU survivable | ❌ | ✅ | ✅✅ |
+| Power draw | 30W CPU | 30W CPU + 40W GPU | 30W CPU + 40W GPU + 5W ANE |
 
 ---
 
 ## Prerequisites
 
-- macOS 15+ (Sequoia) for MLState (stateful KV cache)
-- Apple Silicon (M1/M2/M3/M4/M5)
-- Pre-compiled `.mlmodelc` from conversion pipeline (build-time Python step)
-- `coreml-native` v0.2 crate
+- macOS 15+ (Sequoia) for Metal 3 + ANE
+- Apple Silicon (M1+)
+- `metal` crate for GPU compute pipelines
+- `coreml-native` for ANE path (optional, behind feature gate)
 
 ---
 
 ## Task List
 
-### Part 1: InferenceBackend Trait + Core Infrastructure
+### Part 1: InferenceBackend Trait (Runtime Weight-Based)
 
 - [x] Create `src/inference_backend.rs` with `InferenceBackend` trait
-- [x] Define trait: `fn forward()`, `fn device_name()`, `fn supports_stateful()`, `fn reset()`
-- [x] Wrap existing CPU transformer forward in `CpuBackend` impl
-- [ ] Refactor main inference loop to use `Box<dyn InferenceBackend>` instead of direct transformer calls
-- [x] Ensure all existing tests pass with `CpuBackend` (no behavior change)
-- [x] Add `inference_backend` module to `lib.rs`
+- [x] `CpuBackend` wrapping existing `transformer::forward`
+- [x] `auto_backend()` for CPU/ANE auto-route (legacy — will be replaced by TriggerGate)
+- [x] Unit tests: CpuBackend matches direct forward
+- [ ] Refactor `InferenceBackend` trait to accept `&TransformerWeights` + token + pos directly (remove indirection through `ForwardContext`)
+- [ ] Add `fn compile(&mut self, weights: &TransformerWeights, config: &Config) -> Result<()>` for runtime weight compilation
+- [ ] Add `fn is_compiled(&self) -> bool` to check if backend has valid compiled weights
+- [ ] Add `fn recompile_hint(&mut self)` — called when LoRA weights change
 
-### Part 2: ANE Backend via coreml-native
+### Part 2: GPU Backend via Metal Compute
 
-- [x] Add `coreml-native = { version = "0.2", optional = true }` to `[target.'cfg(target_os = "macos")'.dependencies]`
-- [x] Add `ane = ["dep:coreml-native"]` feature flag to `Cargo.toml`
-- [x] Create `src/ane_backend.rs` behind `#[cfg(all(target_os = "macos", feature = "ane"))]`
-- [x] Implement `AneBackend` struct with `coreml_native::Model` field
-- [x] Implement `InferenceBackend` for `AneBackend`: load .mlmodelc, predict, extract logits
-- [ ] Add FP16 tensor construction from token IDs (match CoreML expected input shape) — requires conversion pipeline
-- [ ] Add logits extraction from CoreML output (FP16 → f32) — requires conversion pipeline
+- [ ] Add `metal = { version = "0.31", optional = true }` to macOS dependencies
+- [ ] Add `gpu_inference = ["dep:metal"]` feature flag
+- [ ] Create `src/gpu_inference_backend.rs` behind `#[cfg(all(target_os = "macos", feature = "gpu_inference"))]`
+- [ ] Implement `GpuInferenceBackend`:
+  - [ ] `compile()`: take `TransformerWeights`, build Metal compute pipeline for matmul + attention + FFN
+  - [ ] `forward()`: dispatch to GPU, wait for completion, return logits
+  - [ ] Use Metal command buffer + compute encoder for kernel dispatch
+  - [ ] Map `TransformerWeights` fields → Metal buffers (zero-copy via `new_with_bytes`)
+  - [ ] Write Metal shaders for: RMSNorm, QK matmul, softmax, V attention, FFN, output projection
+- [ ] Handle batch inference: multiple tokens in single GPU dispatch (amortize kernel launch overhead)
+- [ ] Benchmark: CPU forward vs GPU forward for microGPT (1-layer, 16-dim)
+- [ ] Benchmark: CPU forward vs GPU forward for game LoRA scale (4-layer, 64-dim)
+- [ ] Test: GPU forward produces numerically equivalent logits (cosine sim ≥ 0.999)
 
-### Part 3: Residency Validation
+### Part 3: ANE Backend via Runtime CoreML Compilation
 
-- [x] Implement `ane_resident()` check: time a micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback)
-- [x] Add residency check at `AneBackend::new()` — refuse to create if model falls back to CPU
-- [ ] Add `--ane-residency-check` flag to CLI for manual validation
-- [x] Write test: residency error messages validated (unit tests)
-- [x] Write test: residency failed error contains latency + threshold info
+- [ ] Keep `coreml-native = { version = "0.2", optional = true }` dependency
+- [ ] Refactor `AneBackend` from `.mlmodelc` loader → runtime weight compiler:
+  - [ ] `compile()`: build `MLModel` from `TransformerWeights` programmatically
+  - [ ] Use `coreml_native::Model::from_spec()` or equivalent runtime API
+  - [ ] Map transformer layers → CoreML neural network operations
+  - [ ] Conv2d(1×1) trick for linear layers (ANE-friendly)
+  - [ ] Set compute units to `.All` and verify ANE placement via residency check
+- [ ] `forward()`: predict with compiled model, extract logits from output
+- [ ] Hot-swap: `recompile_hint()` rebuilds CoreML model when LoRA weights change
+- [ ] Residency validation: time micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback)
+- [ ] Test: residency error messages validated
+- [ ] Test: ANE forward produces numerically equivalent logits (cosine sim ≥ 0.997)
 
-### Part 4: Stateful KV Cache (MLState)
+### Part 4: Trigger Gate
 
-- [ ] Use `coreml_native::State` for persistent KV cache across tokens (macOS 15+)
-- [ ] Implement stateful prediction: create state once per session, reuse for all tokens
-- [ ] Add KV cache reset on new session/conversation
-- [ ] Benchmark: stateful vs stateless prediction (stateful should be ~2× faster for decode)
-- [ ] Write test: generate 50 tokens with stateful KV, verify coherent output
+- [ ] Create `src/trigger_gate.rs`
+- [ ] `TriggerGateConfig` with thresholds:
+  ```rust
+  pub struct TriggerGateConfig {
+      /// Activate GPU when QPS exceeds this (default: 10K inferences/sec)
+      pub gpu_activate_qps: f64,
+      /// Activate ANE when QPS exceeds this (default: 100K inferences/sec)
+      pub ane_activate_qps: f64,
+      /// Deactivate tier at threshold * this factor (hysteresis, default: 0.7)
+      pub hysteresis_factor: f64,
+      /// Queue depth that triggers tier-up (default: 100 pending)
+      pub queue_depth_trigger: usize,
+      /// Latency P99 that triggers tier-up (default: 5ms)
+      pub latency_p99_trigger_us: u64,
+      /// Minimum time between tier changes (default: 500ms, avoid thrashing)
+      pub min_tier_change_interval_ms: u64,
+  }
+  ```
+- [ ] `TriggerGate` struct:
+  - [ ] `AtomicU64` counters for QPS, queue depth, latency samples
+  - [ ] `current_tier(): ComputeTier` — returns active tier
+  - [ ] `record_inference(duration_us: u64)` — called after each forward pass
+  - [ ] `record_queue_depth(depth: usize)` — called when submitting to queue
+  - [ ] `should_promote() -> Option<ComputeTier>` — check if load exceeds next tier threshold
+  - [ ] `should_demote() -> Option<ComputeTier>` — check if load dropped below threshold × hysteresis
+  - [ ] Background thread (or interval check) that evaluates tier changes
+- [ ] `ComputeTier` enum: `CpuOnly`, `CpuGpu`, `CpuGpuAne`
+- [ ] On tier-up: compile weights to new device (~2ms), start routing
+- [ ] On tier-down: stop routing to device, release Metal/CoreML resources
+- [ ] Thread-safe: all counters atomic, tier change behind Mutex
+- [ ] Test: trigger activates GPU at threshold
+- [ ] Test: trigger activates ANE at higher threshold
+- [ ] Test: hysteresis prevents tier thrashing under oscillating load
+- [ ] Test: tier-down requires load < threshold × hysteresis_factor
 
-> **Blocked:** Requires macOS 15+ `MLState` API + CoreML stateful model export. Placeholder documented in `ane_backend.rs`.
+### Part 5: InferenceRouter (The Glue)
 
-### Part 5: Auto-Route Selection
+- [ ] Create `src/inference_router.rs`
+- [ ] `InferenceRouter` struct:
+  ```rust
+  pub struct InferenceRouter {
+      cpu: CpuBackend,
+      gpu: Option<GpuInferenceBackend>,
+      ane: Option<AneBackend>,
+      gate: TriggerGate,
+      weights: TransformerWeights,
+      config: Config,
+  }
+  ```
+- [ ] `fn forward(&mut self, token: usize, pos: usize) -> &[f32]`:
+  - Read `gate.current_tier()`
+  - Route to highest available tier for this inference
+  - Fallback to CPU if GPU/ANE compilation fails
+- [ ] `fn update_weights(&mut self, weights: TransformerWeights)`:
+  - Update CPU weights immediately
+  - Set `recompile_hint` on GPU/ANE backends
+  - Background recompile on next idle cycle
+- [ ] `fn stats(&self) -> RouterStats` — QPS per tier, latency histograms, tier transitions
+- [ ] Batch mode: `fn forward_batch(&mut self, tokens: &[(usize, usize)]) -> Vec<&[f32]>` — GPU/ANE shine here
+- [ ] Test: router starts in CPU-only mode
+- [ ] Test: router promotes to GPU under simulated load
+- [ ] Test: router falls back to CPU on GPU compilation failure
+- [ ] Test: weight update propagates to all active backends
 
-- [x] Implement `auto_backend()` function: try ANE first, fall back to CPU
-- [x] Logic: if macOS + .mlmodelc exists + residency passes → `AneBackend`, else `CpuBackend`
-- [ ] Wire into main.rs: `let backend = auto_backend(&weights);`
-- [ ] Add `--backend cpu|ane|auto` CLI flag for manual override
-- [x] Log which backend was selected at startup
+### Part 6: Wire Into Existing Pipeline
 
-### Part 6: Conversion Pipeline (Build-Time)
+- [ ] Add `InferenceRouter` to main inference loop (behind feature gate)
+- [ ] `--device cpu|gpu|ane|auto|gate` CLI flag (new: `gate` = trigger gate mode)
+- [ ] When `--device gate`: use `TriggerGate` + `InferenceRouter`
+- [ ] When `--device auto/cpu/gpu/ane`: direct backend selection (existing behavior)
+- [ ] Log tier transitions: `"TriggerGate: CPU → CPU+GPU (QPS: 12K, queue: 150)"`
+- [ ] Expose `TriggerGateConfig` for tuning thresholds per deployment
+- [ ] Update bomber/Go arena to support `--device gate` mode
 
-- [x] Create `scripts/convert_to_coreml.py` based on ane-book's converter pattern
-- [x] Support: GGUF → PyTorch → CoreML with Conv2d(1×1) trick (structure ready, GGUF loader TODO)
-- [x] Support: INT8 per-tensor quantization (placeholder in script)
-- [ ] Support: shard splitting if model > 250MB compiled (ane-book's pattern)
-- [x] Output: `model.mlmodelc` directory in project root or configurable path
-- [ ] Document conversion steps in README.md
+### Part 7: Benchmarks + GOAT Proof
 
-### Part 7: Integration Tests + Benchmarks
+- [x] Bench: single-token CPU latency (1.65 µs — baseline)
+- [x] Bench: 50-token CPU generation (2.50 µs/token)
+- [x] Bench: backend selection overhead (0.20 µs)
+- [ ] Bench: GPU forward latency vs CPU (expect 4-10× faster for batch)
+- [ ] Bench: ANE forward latency vs CPU (expect 2-4× faster for single-token)
+- [ ] Bench: trigger gate overhead (<1µs per inference call)
+- [ ] Bench: compilation time from TransformerWeights → Metal/CoreML pipeline
+- [ ] Bench: tier-up latency (compilation + first forward)
+- [ ] GOAT: GPU forward == CPU forward (cosine ≥ 0.999)
+- [ ] GOAT: ANE forward == CPU forward (cosine ≥ 0.997)
+- [ ] GOAT: trigger gate correctly tier-up at simulated 10K QPS
+- [ ] GOAT: trigger gate correctly tier-down when load drops
+- [ ] GOAT: 30K CCU simulation survives with GPU+ANE, dies with CPU-only
 
-- [x] Write test: CpuBackend produces identical logits to direct forward (GOAT P1)
-- [x] Write test: cosine similarity sanity check for different inputs (GOAT P8)
-- [x] Benchmark: single-token decode latency, CPU
-- [x] Benchmark: full generation (50 tokens), CPU
-- [x] Benchmark: backend selection overhead
-- [ ] Write test: same prompt, `CpuBackend` vs `AneBackend`, verify identical top-5 tokens (needs real .mlmodelc)
-- [ ] Write test: cosine similarity ≥ 0.97 between CPU and ANE logits (needs real .mlmodelc)
-- [ ] Benchmark: DDTree + speculative decode with ANE backend vs CPU backend
-- [ ] Verify ANE frees CPU for DDTree: measure DDTree tree depth achievable with ANE backend
-- [ ] Run existing bomber arena with ANE backend, verify no regression
+### Part 8: Feature Gates + Cleanup
 
-### Part 8: Feature Gate + Default
-
-- [x] Ensure `ane` feature flag compiles on non-macOS (no-op, uses CPU)
-- [x] Ensure `ane` feature flag compiles on macOS with `--features ane`
-- [x] Document: ANE backend is auto-detected at runtime, opt-in via feature flag
-- [ ] Update README.md with ANE backend section, supported models, conversion instructions
+- [x] `ane = ["dep:coreml-native"]` feature flag
+- [ ] `gpu_inference = ["dep:metal"]` feature flag
+- [ ] `inference_router = ["gpu_inference", "ane"]` — pulls in everything
+- [ ] Remove `.mlmodelc` file-loading code from `AneBackend`
+- [ ] Remove `scripts/convert_to_coreml.py` (no longer needed — runtime compilation)
+- [ ] Default: all features off (CPU-only), opt-in GPU/ANE
+- [ ] Document trigger gate + three-way compute in README.md
 
 ---
 
@@ -109,62 +240,77 @@ After:   ANE does forward, CPU does DDTree + prune + verify (16× faster forward
 
 ```mermaid
 graph TD
-    subgraph Auto-Route
-        A[Startup] --> B{.mlmodelc exists?}
-        B -->|yes| C{macOS + Apple Silicon?}
-        C -->|yes| D{Residency check pass?}
-        D -->|yes| E[AneBackend:::accent0]
-        D -->|no| F[CpuBackend:::accent1]
-        C -->|no| F
-        B -->|no| F
+    subgraph Per Inference Request
+        A[Token + Pos] --> B{TriggerGate Tier?}
+        B -->|CPU_ONLY| C[CPU: SIMD Forward:::accent1]
+        B -->|CPU+GPU| D[GPU: Metal Forward:::accent2]
+        B -->|CPU+GPU+ANE| E[ANE: CoreML Forward:::accent0]
     end
-    subgraph Inference Loop
-        G[Token Input] --> E
-        G --> F
-        E -->|ANE matmul| H[Logits]
-        F -->|CPU matmul| H
-        H --> I[CPU: DDTree + Prune + Verify]
+    subgraph Background
+        F[TriggerGate Monitor] -->|load > 10K QPS| G[Compile Weights → GPU Pipeline]
+        F -->|load > 100K QPS| H[Compile Weights → ANE Model]
+        F -->|load < threshold| I[Release GPU/ANE Resources]
+    end
+    subgraph LoRA Update
+        J[New LoRA Weights] --> K[recompile_hint]
+        K --> G
+        K --> H
     end
 ```
 
-## Expected Benchmarks
+## Trigger Gate Decision Flow
 
-| Benchmark | CPU-only | ANE backend | Target |
-|-----------|----------|-------------|--------|
-| Forward pass (microGPT, 1 token) | ~200µs | ~50µs | 4× faster |
-| Generation (50 tokens) | ~10ms | ~2.5ms | 4× faster |
-| DDTree depth (budget=64) | Shared CPU | Dedicated CPU | More depth possible |
-| Power draw | CPU ~30W | ANE ~5W | 6× less |
+```mermaid
+graph TD
+    A[Record Inference] --> B{QPS > ane_activate_qps?}
+    B -->|yes| C{ANE available?}
+    C -->|yes| D[Tier: CPU+GPU+ANE:::accent0]
+    C -->|no| E{QPS > gpu_activate_qps?}
+    B -->|no| E
+    E -->|yes| F{GPU available?}
+    F -->|yes| G[Tier: CPU+GPU:::accent2]
+    F -->|no| H[Tier: CPU_ONLY:::accent1]
+    E -->|no| H
+```
 
-## Constraints Check
+## Expected Performance at 30K CCU
 
-| Constraint | Status |
-|------------|--------|
-| Modelless (no LLM training) | ✅ Inference-time only |
-| Lands in katgpt-rs domain | ✅ Engine plumbing |
-| LoRA only for training | ✅ N/A (no training) |
-| SOLID, DRY | ✅ InferenceBackend trait, existing code unchanged |
-| Tests/examples with before/after | ✅ Same query, CPU vs ANE |
-| CPU/GPU/ANE auto-route | ✅ This IS the auto-route |
-| No perf hurt | ✅ CPU path unchanged, ANE is opt-in |
+| Tier | Throughput | CPU Free | Power | CCU Capacity |
+|------|-----------|----------|-------|-------------|
+| CPU_ONLY | 600K tok/s | 0% | 30W | ~1K CCU |
+| CPU+GPU | 5M tok/s | 80% | 70W | ~10K CCU |
+| CPU+GPU+ANE | 15M tok/s | 95% | 75W | **30K+ CCU** |
 
 ## Key Crate Dependencies
 
 ```toml
 [target.'cfg(target_os = "macos")'.dependencies]
+metal = { version = "0.31", optional = true }
 coreml-native = { version = "0.2", optional = true }
 
 [features]
-ane = ["coreml-native"]
-default = []  # ANE is opt-in for now, auto-detected at runtime
+gpu_inference = ["dep:metal"]
+ane = ["dep:coreml-native"]
+inference_router = ["gpu_inference", "ane"]
 ```
 
 ## Risks
 
 | Risk | Mitigation |
 |------|-----------|
-| CoreML refuses ANE placement | Residency validation catches this, fall back to CPU |
-| Private API instability (if using rane) | Stick with coreml-native (public CoreML API) |
-| .mlmodelc not available | Auto-route falls back to CPU silently |
-| macOS version too old for MLState | Graceful degradation to stateless prediction |
-| Conversion pipeline complexity | Ship pre-compiled .mlmodelc for reference models |
+| Metal shader compilation slow | Compile once per weight set, cache pipeline state |
+| CoreML runtime compilation API limited | Fall back to GPU tier if ANE compile fails |
+| Trigger gate adds latency | All counters atomic, tier check is a single compare-and-swap |
+| Tier thrashing under bursty load | Hysteresis + min change interval (500ms) |
+| GPU/ANE not available | Always have CPU fallback, gate skips unavailable tiers |
+| Small models don't benefit from GPU | Batch multiple inferences into single GPU dispatch |
+
+## Migration from Old Plan 176
+
+| Old | New | Why |
+|-----|-----|-----|
+| `.mlmodelc` file loading | Runtime weight compilation | katgpt-rs is modelless — no files exist |
+| `coreml_native::Model::load(path)` | `coreml_native::Model::from_spec()` | Build model programmatically from TransformerWeights |
+| `scripts/convert_to_coreml.py` | DELETE | No conversion pipeline needed |
+| Always-on backend selection | Trigger gate with thresholds | Don't waste GPU/ANE at low load, engage at scale |
+| Single-backend routing | InferenceRouter with tier promotion | Survive 30K CCU by using ALL available hardware |
