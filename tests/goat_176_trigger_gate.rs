@@ -1,0 +1,220 @@
+//! GOAT Proof: Trigger Gate + Inference Router (Plan 176)
+//!
+//! Tests that:
+//! - TriggerGate correctly tier-up at simulated high QPS
+//! - TriggerGate correctly tier-down when load drops
+//! - InferenceRouter starts at CPU-only and routes correctly
+//! - InferenceRouter forward produces valid logits
+//! - BackendKind::Gate variant exists
+//! - Router stats are accurate
+
+use katgpt_rs::inference_backend::BackendKind;
+use katgpt_rs::inference_router::InferenceRouter;
+use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
+use katgpt_rs::trigger_gate::{ComputeTier, TriggerGate, TriggerGateConfig};
+use katgpt_rs::types::{Config, Rng};
+
+fn fast_gate_config() -> TriggerGateConfig {
+    TriggerGateConfig {
+        gpu_activate_qps: 10_000.0,
+        ane_activate_qps: 100_000.0,
+        hysteresis_factor: 0.7,
+        queue_depth_trigger: 100,
+        latency_p99_trigger_us: 5000,
+        min_tier_change_interval_ms: 10,
+    }
+}
+
+fn micro_fixtures() -> (TransformerWeights, ForwardContext, MultiLayerKVCache) {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+    let ctx = ForwardContext::new(&config);
+    let cache = MultiLayerKVCache::new(&config);
+    (weights, ctx, cache)
+}
+
+// P1: TriggerGate starts at CPU_ONLY
+#[test]
+fn goat_p1_trigger_gate_starts_cpu_only() {
+    let gate = TriggerGate::new(TriggerGateConfig::default(), true, true);
+    assert_eq!(gate.current_tier(), ComputeTier::CpuOnly);
+}
+
+// P2: TriggerGate promotes to CPU+GPU under high QPS
+#[test]
+fn goat_p2_trigger_gate_promotes_to_gpu() {
+    let gate = TriggerGate::new(fast_gate_config(), true, false);
+
+    // Simulate high QPS by recording many inferences
+    for _ in 0..50_000 {
+        gate.record_inference(1);
+    }
+    gate.record_queue_depth(200);
+
+    let promote = gate.should_promote();
+    assert!(
+        promote.is_some(),
+        "should promote to GPU under high QPS + queue depth"
+    );
+    assert_eq!(promote.unwrap(), ComputeTier::CpuGpu);
+}
+
+// P3: TriggerGate promotes to CPU+GPU+ANE at highest QPS
+#[test]
+fn goat_p3_trigger_gate_promotes_to_ane() {
+    let gate = TriggerGate::new(fast_gate_config(), true, true);
+
+    // Simulate extremely high QPS + queue depth to trigger ANE promotion.
+    // should_promote() checks from current_tier; we need to be at CpuGpu first.
+    // Record enough inferences and queue depth to exceed both thresholds.
+    for _ in 0..50_000 {
+        gate.record_inference(1);
+    }
+    gate.record_queue_depth(200);
+
+    // At CpuOnly with gpu_available, this should promote to CpuGpu
+    let promote = gate.should_promote();
+    assert_eq!(promote, Some(ComputeTier::CpuGpu));
+
+    // Commit the tier change via evaluate() so we can test ANE promotion.
+    // Need to wait for min_tier_change_interval_ms.
+    std::thread::sleep(std::time::Duration::from_millis(15));
+    let result = gate.evaluate();
+    assert_eq!(
+        result,
+        Some(ComputeTier::CpuGpu),
+        "evaluate should promote to CpuGpu"
+    );
+
+    // Now at CpuGpu — record more inferences to exceed ane_activate_qps
+    for _ in 0..500_000 {
+        gate.record_inference(1);
+    }
+    gate.record_queue_depth(500);
+
+    // Should now promote to CpuGpuAne
+    let ane_promote = gate.should_promote();
+    assert_eq!(
+        ane_promote,
+        Some(ComputeTier::CpuGpuAne),
+        "should promote to CPU+GPU+ANE at CpuGpu tier with high QPS"
+    );
+}
+
+// P4: TriggerGate tier-down with hysteresis
+#[test]
+fn goat_p4_trigger_gate_demotes_with_hysteresis() {
+    let config = TriggerGateConfig {
+        gpu_activate_qps: 10_000.0,
+        ane_activate_qps: 100_000.0,
+        hysteresis_factor: 0.7,
+        queue_depth_trigger: 100,
+        latency_p99_trigger_us: 5000,
+        min_tier_change_interval_ms: 10,
+    };
+    let gate = TriggerGate::new(config, true, false);
+
+    // Record lots of inferences to simulate high QPS
+    for _ in 0..50_000 {
+        gate.record_inference(1);
+    }
+    gate.record_queue_depth(200);
+
+    // Wait for min interval so evaluate() can fire
+    std::thread::sleep(std::time::Duration::from_millis(15));
+    let promoted = gate.evaluate();
+    assert_eq!(promoted, Some(ComputeTier::CpuGpu));
+
+    // After evaluate(), counters reset and QPS drops to 0.
+    // With 0 QPS, should_demote should fire because 0 < 10000 * 0.7
+    let demote = gate.should_demote();
+    assert!(
+        demote.is_some(),
+        "should demote from CpuGpu when QPS drops to 0"
+    );
+    assert_eq!(demote.unwrap(), ComputeTier::CpuOnly);
+}
+
+// P5: InferenceRouter starts at CPU-only mode
+#[test]
+fn goat_p5_router_starts_cpu_only() {
+    let router = InferenceRouter::new(fast_gate_config(), Config::micro(), true, true);
+    assert_eq!(router.gate().current_tier(), ComputeTier::CpuOnly);
+    let stats = router.stats();
+    assert_eq!(stats.current_tier, ComputeTier::CpuOnly);
+}
+
+// P6: InferenceRouter forward produces valid logits
+#[test]
+fn goat_p6_router_forward_valid_logits() {
+    let config = Config::micro();
+    let (weights, mut ctx, mut cache) = micro_fixtures();
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+
+    let logits = router.forward(&mut ctx, &weights, &mut cache, 0, 0);
+    assert_eq!(
+        logits.len(),
+        Config::micro().vocab_size,
+        "logits length should match vocab_size"
+    );
+
+    // Verify logits are finite (no NaN/Inf)
+    for (i, &v) in logits.iter().enumerate() {
+        assert!(v.is_finite(), "logit[{i}] is not finite: {v}");
+    }
+}
+
+// P7: InferenceRouter matches direct transformer::forward
+#[test]
+fn goat_p7_router_matches_direct_forward() {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+
+    // Direct forward
+    let mut ctx1 = ForwardContext::new(&config);
+    let mut cache1 = MultiLayerKVCache::new(&config);
+    let direct =
+        katgpt_rs::transformer::forward(&mut ctx1, &weights, &mut cache1, 0, 0, &config).to_vec();
+
+    // Router forward
+    let mut ctx2 = ForwardContext::new(&config);
+    let mut cache2 = MultiLayerKVCache::new(&config);
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+    let routed = router
+        .forward(&mut ctx2, &weights, &mut cache2, 0, 0)
+        .to_vec();
+
+    assert_eq!(direct.len(), routed.len(), "logits length mismatch");
+    for (i, (a, b)) in direct.iter().zip(routed.iter()).enumerate() {
+        assert!(
+            (a - b).abs() < 1e-6,
+            "logits mismatch at index {i}: {a} vs {b}"
+        );
+    }
+}
+
+// P8: BackendKind::Gate variant exists
+#[test]
+fn goat_p8_backend_kind_gate_variant() {
+    let kind = BackendKind::Gate;
+    assert_ne!(kind, BackendKind::Auto);
+    assert_ne!(kind, BackendKind::Cpu);
+    assert_ne!(kind, BackendKind::Ane);
+}
+
+// P9: Router tracks inferences correctly
+#[test]
+fn goat_p9_router_tracks_inferences() {
+    let config = Config::micro();
+    let (weights, mut ctx, mut cache) = micro_fixtures();
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+
+    for i in 0..5 {
+        let _ = router.forward(&mut ctx, &weights, &mut cache, 0, i);
+    }
+
+    let stats = router.stats();
+    assert_eq!(stats.total_inferences, 5);
+}

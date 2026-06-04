@@ -1,3 +1,5 @@
+#[cfg(all(target_os = "macos", feature = "ane"))]
+pub mod ane_backend;
 pub mod benchmark;
 #[cfg(feature = "cache_prune")]
 pub mod cache_prune;
@@ -23,8 +25,7 @@ pub mod hla;
 #[cfg(feature = "hybrid_oct_pq")]
 pub mod hybrid_oct_pq;
 pub mod inference_backend;
-#[cfg(all(target_os = "macos", feature = "ane"))]
-pub mod ane_backend;
+pub mod inference_router;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
 #[cfg(feature = "kog_cpu_fusion")]

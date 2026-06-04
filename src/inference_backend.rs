@@ -143,6 +143,8 @@ pub enum BackendKind {
     Cpu,
     /// Force ANE backend (error if unavailable).
     Ane,
+    /// Use TriggerGate + InferenceRouter for dynamic tier selection.
+    Gate,
 }
 
 /// Select the best available inference backend.
@@ -179,6 +181,12 @@ pub fn auto_backend(
                     Box::new(CpuBackend::new())
                 }
             }
+        }
+        BackendKind::Gate => {
+            // Gate mode uses InferenceRouter, not a bare backend.
+            // Return CpuBackend as placeholder — caller should use InferenceRouter instead.
+            log::info!("Backend: CPU (gate mode — use InferenceRouter for dynamic routing)");
+            Box::new(CpuBackend::new())
         }
     }
 }

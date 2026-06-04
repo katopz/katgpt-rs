@@ -171,8 +171,8 @@ else:
 
 ### Part 5: InferenceRouter (The Glue)
 
-- [ ] Create `src/inference_router.rs`
-- [ ] `InferenceRouter` struct:
+- [x] Create `src/inference_router.rs`
+- [x] `InferenceRouter` struct:
   ```rust
   pub struct InferenceRouter {
       cpu: CpuBackend,
@@ -183,27 +183,27 @@ else:
       config: Config,
   }
   ```
-- [ ] `fn forward(&mut self, token: usize, pos: usize) -> &[f32]`:
+- [x] `fn forward(&mut self, token: usize, pos: usize) -> &[f32]`:
   - Read `gate.current_tier()`
   - Route to highest available tier for this inference
   - Fallback to CPU if GPU/ANE compilation fails
-- [ ] `fn update_weights(&mut self, weights: TransformerWeights)`:
+- [x] `fn update_weights(&mut self, weights: TransformerWeights)`:
   - Update CPU weights immediately
   - Set `recompile_hint` on GPU/ANE backends
   - Background recompile on next idle cycle
-- [ ] `fn stats(&self) -> RouterStats` — QPS per tier, latency histograms, tier transitions
+- [x] `fn stats(&self) -> RouterStats` — QPS per tier, latency histograms, tier transitions
 - [ ] Batch mode: `fn forward_batch(&mut self, tokens: &[(usize, usize)]) -> Vec<&[f32]>` — GPU/ANE shine here
-- [ ] Test: router starts in CPU-only mode
-- [ ] Test: router promotes to GPU under simulated load
-- [ ] Test: router falls back to CPU on GPU compilation failure
-- [ ] Test: weight update propagates to all active backends
+- [x] Test: router starts in CPU-only mode
+- [x] Test: router promotes to GPU under simulated load
+- [x] Test: router falls back to CPU on GPU compilation failure
+- [x] Test: weight update propagates to all active backends
 
 ### Part 6: Wire Into Existing Pipeline
 
 - [ ] Add `InferenceRouter` to main inference loop (behind feature gate)
-- [ ] `--device cpu|gpu|ane|auto|gate` CLI flag (new: `gate` = trigger gate mode)
+- [x] `--device cpu|gpu|ane|auto|gate` CLI flag (new: `gate` = trigger gate mode)
 - [ ] When `--device gate`: use `TriggerGate` + `InferenceRouter`
-- [ ] When `--device auto/cpu/gpu/ane`: direct backend selection (existing behavior)
+- [x] When `--device auto/cpu/gpu/ane`: direct backend selection (existing behavior)
 - [ ] Log tier transitions: `"TriggerGate: CPU → CPU+GPU (QPS: 12K, queue: 150)"`
 - [ ] Expose `TriggerGateConfig` for tuning thresholds per deployment
 - [ ] Update bomber/Go arena to support `--device gate` mode
@@ -215,13 +215,13 @@ else:
 - [x] Bench: backend selection overhead (0.20 µs)
 - [ ] Bench: GPU forward latency vs CPU (expect 4-10× faster for batch)
 - [ ] Bench: ANE forward latency vs CPU (expect 2-4× faster for single-token)
-- [ ] Bench: trigger gate overhead (<1µs per inference call)
+- [x] Bench: trigger gate overhead (<1µs per inference call)
 - [ ] Bench: compilation time from TransformerWeights → Metal/CoreML pipeline
 - [ ] Bench: tier-up latency (compilation + first forward)
 - [ ] GOAT: GPU forward == CPU forward (cosine ≥ 0.999)
 - [ ] GOAT: ANE forward == CPU forward (cosine ≥ 0.997)
-- [ ] GOAT: trigger gate correctly tier-up at simulated 10K QPS
-- [ ] GOAT: trigger gate correctly tier-down when load drops
+- [x] GOAT: trigger gate correctly tier-up at simulated 10K QPS
+- [x] GOAT: trigger gate correctly tier-down when load drops
 - [ ] GOAT: 30K CCU simulation survives with GPU+ANE, dies with CPU-only
 
 ### Part 8: Feature Gates + Cleanup
