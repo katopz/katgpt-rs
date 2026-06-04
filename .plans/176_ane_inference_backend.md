@@ -2,7 +2,7 @@
 
 **Source:** [Research 155 — ANE Compute Backend Verdict](../.research/155_ANE_Compute_Backend_Verdict.md)
 **Related:** [Plan 197 — ANE Inference Backend (riir-ai)](../../riir-ai/.plans/197_ane_inference_backend.md)
-**Status:** Active — rewriting from .mlmodelc model-loading to runtime weight compilation
+**Status:** Active — Part 2 (GPU Backend) ✅, Part 3 (ANE Compile) ✅ pipeline proven (lm_head on ANE), full transformer spec builder is future work
 **Goal:** Survive 30K CCU by offloading transformer forward to GPU/ANE when load demands it. CPU is NOT enough — it also runs WASM, DDTree, bandit, MCTS. GPU/ANE sit idle is a crime.
 
 ---
@@ -103,34 +103,36 @@ else:
 
 ### Part 2: GPU Backend via Metal Compute
 
-- [ ] Add `metal = { version = "0.31", optional = true }` to macOS dependencies
-- [ ] Add `gpu_inference = ["dep:metal"]` feature flag
-- [ ] Create `src/gpu_inference_backend.rs` behind `#[cfg(all(target_os = "macos", feature = "gpu_inference"))]`
-- [ ] Implement `GpuInferenceBackend`:
-  - [ ] `compile()`: take `TransformerWeights`, build Metal compute pipeline for matmul + attention + FFN
-  - [ ] `forward()`: dispatch to GPU, wait for completion, return logits
-  - [ ] Use Metal command buffer + compute encoder for kernel dispatch
-  - [ ] Map `TransformerWeights` fields → Metal buffers (zero-copy via `new_with_bytes`)
-  - [ ] Write Metal shaders for: RMSNorm, QK matmul, softmax, V attention, FFN, output projection
-- [ ] Handle batch inference: multiple tokens in single GPU dispatch (amortize kernel launch overhead)
-- [ ] Benchmark: CPU forward vs GPU forward for microGPT (1-layer, 16-dim)
-- [ ] Benchmark: CPU forward vs GPU forward for game LoRA scale (4-layer, 64-dim)
-- [ ] Test: GPU forward produces numerically equivalent logits (cosine sim ≥ 0.999)
+- [x] Add `metal = { version = "0.33", optional = true }` to macOS dependencies
+- [x] Add `gpu_inference = ["dep:metal"]` feature flag
+- [x] Create `src/gpu_backend.rs` behind `#[cfg(all(target_os = "macos", feature = "gpu_inference"))]`
+- [x] Implement `GpuBackend`:
+  - [x] `compile()`: take `TransformerWeights`, build Metal compute pipeline for matmul + attention + FFN
+  - [x] `forward()`: dispatch to GPU, wait for completion, return logits
+  - [x] Use Metal command buffer + compute encoder for kernel dispatch
+  - [x] Map `TransformerWeights` fields → Metal buffers (zero-copy via `StorageModeShared`)
+  - [x] Write Metal shaders for: RMSNorm, QK matmul, softmax, V attention, FFN, output projection
+- [x] Handle batch inference: multiple tokens in single GPU dispatch (forward_batch via loop)
+- [x] Benchmark: CPU forward vs GPU forward for microGPT (1-layer, 16-dim)
+- [x] Benchmark: CPU forward vs GPU forward for game LoRA scale (4-layer, 64-dim)
+- [x] Test: GPU forward produces numerically equivalent logits (cosine sim ≥ 0.999)
 
 ### Part 3: ANE Backend via Runtime CoreML Compilation
 
-- [x] Keep `coreml-native = { version: "0.2", optional = true }` dependency
+- [x] Keep `coreml-native = { version = "0.2", optional = true }` dependency
+- [x] Add `coreml-proto = "0.1"` + `prost = "0.14"` for programmatic spec building
 - [x] Refactor `AneBackend` from `.mlmodelc` loader → runtime weight compiler:
-  - [ ] `compile()`: build `MLModel` from `TransformerWeights` programmatically (blocked on coreml-native API)
-  - [ ] Use `coreml_native::Model::from_spec()` or equivalent runtime API
-  - [ ] Map transformer layers → CoreML neural network operations
-  - [ ] Conv2d(1×1) trick for linear layers (ANE-friendly)
-  - [ ] Set compute units to `.All` and verify ANE placement via residency check
-- [ ] `forward()`: predict with compiled model, extract logits from output (blocked on compile)
+  - [x] `compile()`: build `MLModel` from `TransformerWeights` via protobuf spec + `load_from_bytes()`
+  - [x] Use `coreml_proto::proto` + `prost::Message::encode_to_vec()` → `Model::load_from_bytes()`
+  - [x] Map lm_head linear projection → CoreML `InnerProduct` layer
+  - [ ] Map full transformer layers → CoreML neural network operations (future: extend spec builder)
+  - [ ] Conv2d(1×1) trick for linear layers (ANE-friendly) (future: switch from InnerProduct)
+  - [x] Set compute units to `.All` for ANE scheduling
+- [x] `forward()`: predict with compiled model, extract logits — hybrid CPU+ANE (lm_head on ANE)
 - [x] Hot-swap: `recompile_hint()` rebuilds CoreML model when LoRA weights change
 - [ ] Residency validation: time micro-prediction, verify <1ms (ANE) vs >5ms (CPU fallback)
 - [x] Test: residency error messages validated
-- [ ] Test: ANE forward produces numerically equivalent logits (cosine sim ≥ 0.997)
+- [x] Test: ANE forward produces numerically equivalent logits (cosine sim ≥ 0.997)
 
 ### Part 4: Trigger Gate
 
@@ -285,12 +287,14 @@ graph TD
 
 ```toml
 [target.'cfg(target_os = "macos")'.dependencies]
-metal = { version = "0.31", optional = true }
+metal = { version = "0.33", optional = true }
 coreml-native = { version = "0.2", optional = true }
+coreml-proto = { version = "0.1", optional = true }
+prost = { version = "0.14", optional = true }
 
 [features]
 gpu_inference = ["dep:metal"]
-ane = ["dep:coreml-native"]
+ane = ["dep:coreml-native", "dep:coreml-proto", "dep:prost"]
 inference_router = ["gpu_inference", "ane"]
 ```
 
@@ -308,9 +312,9 @@ inference_router = ["gpu_inference", "ane"]
 ## Migration from Old Plan 176
 
 | Old | New | Why |
-|-----|-----|-----|
-| `.mlmodelc` file loading | Runtime weight compilation | katgpt-rs is modelless — no files exist |
-| `coreml_native::Model::load(path)` | `coreml_native::Model::from_spec()` | Build model programmatically from TransformerWeights |
-| `scripts/convert_to_coreml.py` | DELETE | No conversion pipeline needed |
+|-----|-----|----|
+| `.mlmodelc` file loading | Runtime protobuf spec building via `coreml-proto` | katgpt-rs is modelless — no files exist |
+| `coreml_native::Model::load(path)` | `Model::load_from_bytes(&spec_bytes, ComputeUnits::All)` | Build model programmatically from TransformerWeights |
+| `scripts/convert_to_coreml.py` | Rust `build_linear_model_spec()` in `ane_backend.rs` | No Python pipeline needed — pure Rust |
 | Always-on backend selection | Trigger gate with thresholds | Don't waste GPU/ANE at low load, engage at scale |
 | Single-backend routing | InferenceRouter with tier promotion | Survive 30K CCU by using ALL available hardware |

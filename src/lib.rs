@@ -20,6 +20,8 @@ pub mod ega_attn;
 pub mod feedback;
 #[cfg(feature = "gdn2_attention")]
 pub mod gdn2;
+#[cfg(all(target_os = "macos", feature = "gpu_inference"))]
+pub mod gpu_backend;
 #[cfg(feature = "hla_attention")]
 pub mod hla;
 #[cfg(feature = "hybrid_oct_pq")]

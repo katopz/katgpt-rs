@@ -61,23 +61,66 @@ impl InferenceRouter {
     /// Create a new router.
     ///
     /// Starts at [`ComputeTier::CpuOnly`] with a [`CpuBackend`].
-    /// GPU and ANE backends are initialised as `None` — they will be plugged in
-    /// when the corresponding hardware backends are implemented.
+    /// GPU backend is initialised if `gpu_available` and the `gpu_inference` feature
+    /// is enabled with a Metal device present. ANE backend uses the same pattern.
     pub fn new(
         gate_config: TriggerGateConfig,
         model_config: Config,
         gpu_available: bool,
         ane_available: bool,
     ) -> Self {
+        let gpu = if gpu_available {
+            Self::try_create_gpu_backend()
+        } else {
+            None
+        };
+        let ane = if ane_available {
+            Self::try_create_ane_backend()
+        } else {
+            None
+        };
+
         Self {
-            gpu: None,
-            ane: None,
+            gpu,
+            ane,
             gate: TriggerGate::new(gate_config, gpu_available, ane_available),
             config: model_config,
             total_inferences: AtomicU64::new(0),
             tier_transitions: AtomicU64::new(0),
             last_backend: "CPU",
         }
+    }
+
+    /// Try to create a GPU backend.
+    #[cfg(all(target_os = "macos", feature = "gpu_inference"))]
+    fn try_create_gpu_backend() -> Option<Box<dyn InferenceBackend>> {
+        match crate::gpu_backend::GpuBackend::new() {
+            Ok(backend) => {
+                log::info!("InferenceRouter: GPU backend created (awaiting compile)");
+                Some(Box::new(backend))
+            }
+            Err(e) => {
+                log::info!("InferenceRouter: GPU unavailable ({e})");
+                None
+            }
+        }
+    }
+
+    #[cfg(not(all(target_os = "macos", feature = "gpu_inference")))]
+    fn try_create_gpu_backend() -> Option<Box<dyn InferenceBackend>> {
+        None
+    }
+
+    /// Try to create an ANE backend.
+    #[cfg(all(target_os = "macos", feature = "ane"))]
+    fn try_create_ane_backend() -> Option<Box<dyn InferenceBackend>> {
+        log::info!("InferenceRouter: ANE backend created (awaiting compile)");
+        Some(Box::new(crate::ane_backend::AneBackend::new()))
+    }
+
+    #[cfg(not(all(target_os = "macos", feature = "ane")))]
+    fn try_create_ane_backend() -> Option<Box<dyn InferenceBackend>> {
+        None
     }
 
     /// Run one forward pass, routing to the appropriate backend.
@@ -115,35 +158,19 @@ impl InferenceRouter {
         let tier = self.gate.current_tier();
 
         // Route to the appropriate backend.
-        // NOTE: We call transformer::forward directly (instead of through the
-        // InferenceBackend trait) so the returned slice borrows from `ctx` rather
-        // than from `self`, allowing us to update counters afterward.
-        let (logits, backend_name) = match tier {
+        //
+        // We populate ctx.logits via forward(), then return a borrow of ctx.logits
+        // (not from self) to satisfy the lifetime constraint that the returned slice
+        // borrows from `ctx`.
+        let backend_name = match tier {
             ComputeTier::CpuOnly => {
-                let out =
-                    crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
-                (out, "CPU")
+                crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
+                "CPU"
             }
-            ComputeTier::CpuGpu => {
-                if self.gpu.is_some() {
-                    // TODO: route to GPU backend when available.
-                    log::info!("Router: GPU backend not available, falling back to CPU");
-                }
-                let out =
-                    crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
-                (out, "CPU")
-            }
+            ComputeTier::CpuGpu => self.dispatch_gpu_or_cpu(ctx, weights, cache, token, pos),
             ComputeTier::CpuGpuAne => {
-                if self.ane.is_some() {
-                    // TODO: route to ANE backend when available.
-                    log::info!("Router: ANE backend not available, falling back to CPU");
-                } else if self.gpu.is_some() {
-                    // TODO: route to GPU backend when available.
-                    log::info!("Router: GPU backend not available, falling back to CPU");
-                }
-                let out =
-                    crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
-                (out, "CPU")
+                // ANE compile not yet implemented; route to GPU if available.
+                self.dispatch_gpu_or_cpu(ctx, weights, cache, token, pos)
             }
         };
 
@@ -153,7 +180,8 @@ impl InferenceRouter {
         self.total_inferences.fetch_add(1, Ordering::Relaxed);
         self.last_backend = backend_name;
 
-        logits
+        // Return logits borrowed from ctx (not from self).
+        &ctx.logits[..self.config.vocab_size]
     }
 
     /// Signal that weights have changed; GPU/ANE backends should recompile.
@@ -164,6 +192,35 @@ impl InferenceRouter {
         if let Some(ref mut ane) = self.ane {
             ane.recompile_hint();
         }
+    }
+
+    /// Try GPU forward, fall back to CPU. Returns the backend name used.
+    ///
+    /// Central routing point for GPU dispatch:
+    /// 1. Auto-compiles weights on first use (lazy compile)
+    /// 2. Dispatches to GPU if compiled, else falls back to CPU
+    fn dispatch_gpu_or_cpu(
+        &mut self,
+        ctx: &mut ForwardContext,
+        weights: &TransformerWeights,
+        cache: &mut MultiLayerKVCache,
+        token: usize,
+        pos: usize,
+    ) -> &'static str {
+        if let Some(ref mut gpu) = self.gpu {
+            if !gpu.is_compiled() {
+                match gpu.compile(weights, &self.config) {
+                    Ok(()) => log::info!("TriggerGate: CPU → CPU+GPU (compiled)"),
+                    Err(e) => log::info!("Router: GPU compile failed ({e}), falling back to CPU"),
+                }
+            }
+            if gpu.is_compiled() {
+                gpu.forward(ctx, weights, cache, token, pos, &self.config);
+                return "GPU";
+            }
+        }
+        crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
+        "CPU"
     }
 
     /// Return a snapshot of router statistics.
