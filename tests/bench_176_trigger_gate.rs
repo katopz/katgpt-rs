@@ -203,3 +203,71 @@ fn bench_176_router_under_load() {
         "throughput too low: {throughput:.0} calls/sec"
     );
 }
+
+#[test]
+fn bench_176_router_forward_batch() {
+    let (config, weights, mut ctx, mut cache) = micro_fixtures();
+    let block_size = config.block_size;
+    let vocab_size = config.vocab_size;
+    let mut router = InferenceRouter::new(fast_gate_config(), Config::micro(), false, false);
+
+    // --- Baseline: sequential forward calls ---
+    let batch_size = 8;
+    let n_batches = 500;
+    let start = Instant::now();
+    for b in 0..n_batches {
+        for i in 0..batch_size {
+            let pos = (b * batch_size + i) % block_size;
+            if pos == 0 && (b * batch_size + i) > 0 {
+                cache.reset();
+            }
+            let _ = katgpt_rs::transformer::forward(
+                &mut ctx,
+                &weights,
+                &mut cache,
+                i % vocab_size,
+                pos,
+                &config,
+            );
+        }
+    }
+    let baseline_elapsed = start.elapsed();
+    let baseline_us = baseline_elapsed.as_secs_f64() * 1e6 / (n_batches * batch_size) as f64;
+
+    cache.reset();
+
+    // --- Routed batch ---
+    let start = Instant::now();
+    for b in 0..n_batches {
+        let offset = b * batch_size;
+        let batch: Vec<(usize, usize)> = (0..batch_size)
+            .map(|i| {
+                let pos = (offset + i) % block_size;
+                (i % vocab_size, pos)
+            })
+            .collect();
+        let _ = router.forward_batch(&mut ctx, &weights, &mut cache, &batch);
+    }
+    let batch_elapsed = start.elapsed();
+    let batch_us = batch_elapsed.as_secs_f64() * 1e6 / (n_batches * batch_size) as f64;
+
+    let overhead_pct = ((batch_us - baseline_us) / baseline_us) * 100.0;
+
+    println!(
+        "Bench 176: forward_batch (batch_size={batch_size}): {:.2} µs/token (baseline: {:.2} µs, overhead: {:.1}%)",
+        batch_us, baseline_us, overhead_pct
+    );
+
+    // Batch overhead should be < 15% (single evaluate() for entire batch).
+    assert!(
+        overhead_pct < 15.0,
+        "Batch overhead too high: {overhead_pct:.1}%"
+    );
+
+    let stats = router.stats();
+    assert_eq!(
+        stats.total_inferences,
+        (n_batches * batch_size) as u64,
+        "batch router should track all inferences"
+    );
+}

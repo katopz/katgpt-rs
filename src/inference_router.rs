@@ -177,6 +177,69 @@ impl InferenceRouter {
         }
     }
 
+    /// Run a batch of forward passes, amortizing tier evaluation across all items.
+    ///
+    /// For GPU/ANE backends, batch mode allows a single kernel dispatch for multiple
+    /// tokens, reducing per-inference overhead. On CPU, this is equivalent to calling
+    /// `forward()` in a loop but with a single tier evaluation.
+    ///
+    /// Returns a vector of logit vectors, one per `(token, pos)` pair.
+    /// Unlike `forward()`, this returns owned `Vec<f32>` because the borrow checker
+    /// doesn't allow holding multiple mutable borrows of `ctx` across loop iterations.
+    pub fn forward_batch(
+        &mut self,
+        ctx: &mut ForwardContext,
+        weights: &TransformerWeights,
+        cache: &mut MultiLayerKVCache,
+        tokens: &[(usize, usize)],
+    ) -> Vec<Vec<f32>> {
+        if tokens.is_empty() {
+            return Vec::new();
+        }
+
+        // Single tier evaluation for the entire batch.
+        if let Some(new_tier) = self.gate.evaluate() {
+            log::info!("Router batch tier transition → {new_tier}");
+            self.tier_transitions.fetch_add(1, Ordering::Relaxed);
+            if matches!(new_tier, ComputeTier::CpuGpu | ComputeTier::CpuGpuAne) {
+                if let Some(ref mut gpu) = self.gpu {
+                    gpu.recompile_hint();
+                }
+            }
+            if matches!(new_tier, ComputeTier::CpuGpuAne) {
+                if let Some(ref mut ane) = self.ane {
+                    ane.recompile_hint();
+                }
+            }
+        }
+
+        let tier = self.gate.current_tier();
+        let config = &self.config;
+        let mut results = Vec::with_capacity(tokens.len());
+
+        match tier {
+            ComputeTier::CpuOnly | ComputeTier::CpuGpu | ComputeTier::CpuGpuAne => {
+                // CPU path: iterate through tokens sequentially.
+                // GPU/ANE TODO: when backends exist, dispatch entire batch at once.
+                let batch_start = Instant::now();
+                for &(token, pos) in tokens {
+                    let logits =
+                        crate::transformer::forward(ctx, weights, cache, token, pos, config);
+                    results.push(logits.to_vec());
+                }
+                let elapsed_us = batch_start.elapsed().as_micros() as u64;
+                // Record total batch time as a single inference for QPS estimation.
+                self.gate.record_inference(elapsed_us);
+            }
+        }
+
+        self.total_inferences
+            .fetch_add(tokens.len() as u64, Ordering::Relaxed);
+        self.last_backend = "CPU";
+
+        results
+    }
+
     /// Borrow the inner [`TriggerGate`].
     pub fn gate(&self) -> &TriggerGate {
         &self.gate
@@ -331,5 +394,112 @@ mod tests {
         // should_promote considers QPS too, but the queue depth alone is enough.
         // Since we have 0 QPS, the queue_depth_trigger path should fire.
         assert!(router.gate().should_promote().is_some());
+    }
+
+    #[test]
+    fn test_forward_batch_empty() {
+        let mut router = fast_router(false, false);
+        let (weights, mut ctx, mut cache) = micro_fixtures();
+
+        let results = router.forward_batch(&mut ctx, &weights, &mut cache, &[]);
+        assert!(results.is_empty());
+        assert_eq!(router.stats().total_inferences, 0);
+    }
+
+    #[test]
+    fn test_forward_batch_single_token() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let mut ctx = ForwardContext::new(&config);
+        let mut cache = MultiLayerKVCache::new(&config);
+
+        let mut router = fast_router(false, false);
+
+        let results = router.forward_batch(&mut ctx, &weights, &mut cache, &[(0, 0)]);
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].len(), config.vocab_size);
+        assert_eq!(router.stats().total_inferences, 1);
+    }
+
+    #[test]
+    fn test_forward_batch_multiple_tokens() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let mut ctx = ForwardContext::new(&config);
+        let mut cache = MultiLayerKVCache::new(&config);
+
+        let mut router = fast_router(false, false);
+
+        // Build a batch of 5 tokens within block_size.
+        let batch: Vec<(usize, usize)> = (0..5).map(|i| (i, i)).collect();
+        let results = router.forward_batch(&mut ctx, &weights, &mut cache, &batch);
+
+        assert_eq!(results.len(), 5);
+        for (i, logits) in results.iter().enumerate() {
+            assert_eq!(
+                logits.len(),
+                config.vocab_size,
+                "logits[{}] wrong length",
+                i
+            );
+        }
+        assert_eq!(router.stats().total_inferences, 5);
+    }
+
+    #[test]
+    fn test_forward_batch_matches_sequential_forward() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+
+        // Sequential forward (one at a time).
+        let mut ctx1 = ForwardContext::new(&config);
+        let mut cache1 = MultiLayerKVCache::new(&config);
+        let mut router1 = fast_router(false, false);
+        let mut sequential_logits = Vec::new();
+        for i in 0..3 {
+            let logits = router1.forward(&mut ctx1, &weights, &mut cache1, i, i);
+            sequential_logits.push(logits.to_vec());
+        }
+
+        // Batch forward.
+        let mut ctx2 = ForwardContext::new(&config);
+        let mut cache2 = MultiLayerKVCache::new(&config);
+        let mut router2 = fast_router(false, false);
+        let batch: Vec<(usize, usize)> = (0..3).map(|i| (i, i)).collect();
+        let batch_logits = router2.forward_batch(&mut ctx2, &weights, &mut cache2, &batch);
+
+        assert_eq!(sequential_logits.len(), batch_logits.len());
+        for (i, (seq, batch)) in sequential_logits
+            .iter()
+            .zip(batch_logits.iter())
+            .enumerate()
+        {
+            for (j, (a, b)) in seq.iter().zip(batch.iter()).enumerate() {
+                assert!(
+                    (a - b).abs() < 1e-6,
+                    "logits mismatch at [{i}][{j}]: {a} vs {b}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_forward_batch_records_all_inferences() {
+        let config = Config::micro();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+        let mut ctx = ForwardContext::new(&config);
+        let mut cache = MultiLayerKVCache::new(&config);
+        let mut router = fast_router(false, false);
+
+        assert_eq!(router.stats().total_inferences, 0);
+
+        let batch: Vec<(usize, usize)> = (0..4).map(|i| (i, i)).collect();
+        let _ = router.forward_batch(&mut ctx, &weights, &mut cache, &batch);
+
+        assert_eq!(router.stats().total_inferences, 4);
     }
 }

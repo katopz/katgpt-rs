@@ -218,3 +218,69 @@ fn goat_p9_router_tracks_inferences() {
     let stats = router.stats();
     assert_eq!(stats.total_inferences, 5);
 }
+
+// P10: Router forward_batch produces correct logits
+#[test]
+fn goat_p10_forward_batch_valid_logits() {
+    let config = Config::micro();
+    let (weights, mut ctx, mut cache) = micro_fixtures();
+    let mut router = InferenceRouter::new(fast_gate_config(), config, false, false);
+
+    let batch: Vec<(usize, usize)> = (0..5).map(|i| (i, i)).collect();
+    let results = router.forward_batch(&mut ctx, &weights, &mut cache, &batch);
+
+    assert_eq!(results.len(), 5);
+    for (i, logits) in results.iter().enumerate() {
+        assert_eq!(
+            logits.len(),
+            Config::micro().vocab_size,
+            "batch logits[{}] wrong length",
+            i
+        );
+        for (j, &v) in logits.iter().enumerate() {
+            assert!(
+                v.is_finite(),
+                "batch logits[{}][{}] not finite: {}",
+                i,
+                j,
+                v
+            );
+        }
+    }
+    assert_eq!(router.stats().total_inferences, 5);
+}
+
+// P11: Router forward_batch matches sequential forward
+#[test]
+fn goat_p11_forward_batch_matches_sequential() {
+    let config = Config::micro();
+    let mut rng = Rng::new(42);
+    let weights = TransformerWeights::new(&config, &mut rng);
+
+    // Sequential forward.
+    let mut ctx1 = ForwardContext::new(&config);
+    let mut cache1 = MultiLayerKVCache::new(&config);
+    let mut router1 = InferenceRouter::new(fast_gate_config(), config.clone(), false, false);
+    let mut sequential = Vec::new();
+    for i in 0..4 {
+        let logits = router1.forward(&mut ctx1, &weights, &mut cache1, i, i);
+        sequential.push(logits.to_vec());
+    }
+
+    // Batch forward.
+    let mut ctx2 = ForwardContext::new(&config);
+    let mut cache2 = MultiLayerKVCache::new(&config);
+    let mut router2 = InferenceRouter::new(fast_gate_config(), config, false, false);
+    let batch: Vec<(usize, usize)> = (0..4).map(|i| (i, i)).collect();
+    let batch_results = router2.forward_batch(&mut ctx2, &weights, &mut cache2, &batch);
+
+    assert_eq!(sequential.len(), batch_results.len());
+    for (i, (seq, batch)) in sequential.iter().zip(batch_results.iter()).enumerate() {
+        for (j, (a, b)) in seq.iter().zip(batch.iter()).enumerate() {
+            assert!(
+                (a - b).abs() < 1e-6,
+                "batch mismatch at [{i}][{j}]: {a} vs {b}"
+            );
+        }
+    }
+}

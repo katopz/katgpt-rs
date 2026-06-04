@@ -192,7 +192,7 @@ else:
   - Set `recompile_hint` on GPU/ANE backends
   - Background recompile on next idle cycle
 - [x] `fn stats(&self) -> RouterStats` — QPS per tier, latency histograms, tier transitions
-- [ ] Batch mode: `fn forward_batch(&mut self, tokens: &[(usize, usize)]) -> Vec<&[f32]>` — GPU/ANE shine here
+- [x] Batch mode: `fn forward_batch(&mut self, tokens: &[(usize, usize)]) -> Vec<Vec<f32>>` — GPU/ANE shine here
 - [x] Test: router starts in CPU-only mode
 - [x] Test: router promotes to GPU under simulated load
 - [x] Test: router falls back to CPU on GPU compilation failure
@@ -227,8 +227,8 @@ else:
 ### Part 8: Feature Gates + Cleanup
 
 - [x] `ane = ["dep:coreml-native"]` feature flag
-- [ ] `gpu_inference = ["dep:metal"]` feature flag
-- [ ] `inference_router = ["gpu_inference", "ane"]` — pulls in everything
+- [x] `gpu_inference = []` feature flag (placeholder — pending metal crate)
+- [x] `inference_router = ["gpu_inference", "ane"]` — pulls in everything
 - [x] Remove `.mlmodelc` file-loading code from `AneBackend`
 - [x] Remove `scripts/convert_to_coreml.py` (no longer needed — runtime compilation)
 - [ ] Default: all features off (CPU-only), opt-in GPU/ANE
