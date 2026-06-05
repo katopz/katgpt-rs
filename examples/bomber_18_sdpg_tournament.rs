@@ -1,5 +1,3 @@
-#![cfg(feature = "bomber")]
-
 //! Bomberman SDPG Tournament — SdpgPlayer vs all baselines (Plan 180).
 //!
 //! Round-robin tournament pitting 8 player types in 4-player matches:
