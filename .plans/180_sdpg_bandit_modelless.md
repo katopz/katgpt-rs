@@ -15,7 +15,7 @@
 
 ### Phase 0: Benchmark Baseline (MUST DO FIRST)
 
-- [ ] **T1: Create benchmark test** — `tests/bench_sdpg_bandit_modelless.rs`
+- [x] T1: Create benchmark test — `tests/bench_sdpg_bandit_modelless.rs`
   - Baseline: existing `BanditPruner` with UCB1 (scalar δ reward)
   - Compare: `SdpgBanditPruner` with oracle-informed centered log-ratio advantage
   - Metrics: bandit regret convergence, optimal arm selection rate, Q-value stability over 1000 games
@@ -186,7 +186,7 @@ Unnormalized KL regularization for bandit Q-values.
 
 ### Phase 5: Arena Example
 
-- [ ] **T8: Create bomber arena example** — `examples/bomber_11_sdpg_tournament.rs`
+- [x] T8: Create bomber arena example — `examples/bomber_18_sdpg_tournament.rs`
   - Players: `SdpgPlayer` (SDPG Bandit), `HLPlayer`, `GZeroPlayer`, `RubricPlayer`, `SdarPlayer`, `RandomPlayer`
   - Oracle: load replay data from `bomber_04_replay_gen` output
   - 50 games × 15 matchups = 750 total games
@@ -221,11 +221,7 @@ Unnormalized KL regularization for bandit Q-values.
 
 ### Phase 7: GOAT Proof
 
-- [ ] **T10: Run arena, verify SDPG > HL > Random**
-  - Run `bomber_11_sdpg_tournament` with full player roster
-  - Record ELO ratings and win rates in `.benchmarks/011_sdpg_bandit_arena.md`
-  - If SDPG ≤ HL: document negative result, keep as infrastructure for future
-  - If SDPG > HL: mark as GOAT proof passed, recommend default-on
+- [x] T10: Run arena, verify SDPG > HL > Random — **NEGATIVE RESULT**: SDPG 12% win rate < HL 29.6%. Root cause: uniform teacher Q-values (no oracle data). Keep as opt-in infrastructure. See `.benchmarks/011_sdpg_bandit_arena.md`
 
 ---
 

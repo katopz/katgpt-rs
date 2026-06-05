@@ -22,6 +22,8 @@ pub mod rmsd_player;
 pub mod rubric_player;
 #[cfg(feature = "sdar_gate")]
 pub mod sdar_player;
+#[cfg(feature = "sdpg_bandit")]
+pub mod sdpg_player;
 #[cfg(feature = "sr2am_configurator")]
 pub mod sr2am_player;
 #[cfg(feature = "g_zero")]
@@ -61,6 +63,8 @@ pub use rmsd_player::RmsdPlayer;
 pub use rubric_player::RubricPlayer;
 #[cfg(feature = "sdar_gate")]
 pub use sdar_player::SdarPlayer;
+#[cfg(feature = "sdpg_bandit")]
+pub use sdpg_player::SdpgPlayer;
 #[cfg(feature = "sr2am_configurator")]
 pub use sr2am_player::Sr2amPlayer;
 pub use systems::*;
