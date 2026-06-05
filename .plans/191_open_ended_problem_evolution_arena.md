@@ -38,12 +38,12 @@ graph TD
 
 ### Phase 1: `PartialScorer` Trait + Bandit Integration
 
-- [ ] **T1.1** Create `PartialScorer` trait in `katgpt-core/src/traits.rs`
+- [x] **T1.1** Create `PartialScorer` trait in `katgpt-core/src/traits.rs`
   - `fn partial_score(&self, trace: &GameTrace) -> f32` — graduated [0.0, 1.0]
   - `fn score_breakdown(&self, trace: &GameTrace) -> Vec<(&str, f32)>` — per-criteria
   - Feature gate: `partial_scoring`
-- [ ] **T1.2** Implement `WinLossScorer` — adapter: binary win/loss → {0.0, 1.0} (backward compat)
-- [ ] **T1.3** Implement `BomberPartialScorer` — bomber-specific partial scoring
+- [x] **T1.2** Implement `WinLossScorer` — adapter: binary win/loss → {0.0, 1.0} (backward compat)
+- [x] **T1.3** Implement `BomberPartialScorer` — bomber-specific partial scoring
   - Score = weighted blend: survival (0.4) + kills (0.3) + bombs_avoided (0.2) + efficiency (0.1)
   - Normalized against trivial baseline (stay still) and reference solution (HL bandit)
 - [ ] **T1.4** Extend `BanditPruner` to accept `PartialScorer` reward
@@ -56,11 +56,11 @@ graph TD
 
 ### Phase 2: `ProblemMutator` Trait + Config Mutation
 
-- [ ] **T2.1** Create `ProblemMutator` trait in `katgpt-core/src/traits.rs`
+- [x] **T2.1** Create `ProblemMutator` trait in `katgpt-core/src/traits.rs`
   - `fn mutate(&self, seed: &GameConfig) -> Vec<MutantConfig>`
   - `MutationKind` enum: `GoalReweight`, `ConstrainOutputs`, `GeneralizeInputs`
-- [ ] **T2.2** Create `MutantConfig` struct with `difficulty_delta` estimate
-- [ ] **T2.3** Implement `BomberConfigMutator` — deterministic bomber config mutation
+- [x] **T2.2** Create `MutantConfig` struct with `difficulty_delta` estimate
+- [x] **T2.3** Implement `BomberConfigMutator` — deterministic bomber config mutation
   - `GoalReweight`: shift kill weight vs survival weight
   - `ConstrainOutputs`: add max-steps, forbidden zones, power-up limits
   - `GeneralizeInputs`: vary grid size (9→15→21), opponent count (1→4→8), wall density
@@ -77,7 +77,7 @@ graph TD
 
 ### Phase 3: `IdeaDivergence` Metric + Collapse Prevention
 
-- [ ] **T3.1** Create `IdeaDivergence` struct in `katgpt-core/src/traits.rs` or new module
+- [x] **T3.1** Create `IdeaDivergence` struct in `src/pruners/idea_divergence.rs`
   - Score vector storage: `arm_scores: Vec<Vec<f32>>`
   - `fn divergence(arm_a, arm_b) -> f32` — normalized L2 distance (FrontierSmith eq. 3)
   - `fn is_novel(new_arm_scores) -> bool` — min divergence > threshold
