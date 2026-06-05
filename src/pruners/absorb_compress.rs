@@ -227,6 +227,34 @@ impl<P: ScreeningPruner> AbsorbCompressLayer<P> {
     pub fn arm_visits(&self, arm: usize) -> usize {
         self.arm_visits.get(arm).copied().unwrap_or(0)
     }
+
+    /// Record a compression event to the pruner's memory ring buffer.
+    /// `arm` is the arm being absorbed, `reward` is the observed reward,
+    /// `is_edge_case` marks outlier rewards, `is_failure` marks low-reward events.
+    #[cfg(feature = "skill_lifecycle")]
+    pub fn record_compression_event(
+        &self,
+        arm: u16,
+        reward: f32,
+        is_edge_case: bool,
+        is_failure: bool,
+    ) {
+        let ts = self.memory.total_entries();
+        self.memory
+            .append(MemoryEntry::new(arm, reward, is_edge_case, is_failure, ts));
+    }
+
+    /// Retrieve the last K experiences from memory.
+    #[cfg(feature = "skill_lifecycle")]
+    pub fn recent_experiences(&self, k: usize) -> Vec<MemoryEntry> {
+        self.memory.recent(k)
+    }
+
+    /// Access the underlying PrunerMemory.
+    #[cfg(feature = "skill_lifecycle")]
+    pub fn pruner_memory(&self) -> &PrunerMemory {
+        &self.memory
+    }
 }
 
 impl<P: ScreeningPruner> ScreeningPruner for AbsorbCompressLayer<P> {
@@ -448,5 +476,64 @@ mod tests {
 
         layer.absorb(99, 0.5); // Out of bounds — should be ignored
         assert_eq!(layer.total_absorbed(), 0);
+    }
+
+    // ── Skill Lifecycle Tests ────────────────────────────────────
+
+    #[cfg(feature = "skill_lifecycle")]
+    mod skill_lifecycle_tests {
+        use super::*;
+
+        fn make_layer(num_arms: usize, config: CompressConfig) -> AbsorbCompressLayer<AllowAll> {
+            AbsorbCompressLayer::new(AllowAll, num_arms, config)
+        }
+
+        #[test]
+        fn test_absorb_compress_records_memory() {
+            let config = CompressConfig::default();
+            let mut layer = make_layer(5, config);
+
+            layer.absorb(0, 0.01);
+            layer.record_compression_event(0, 0.01, false, true);
+
+            layer.absorb(1, 0.9);
+            layer.record_compression_event(1, 0.9, false, false);
+
+            assert_eq!(layer.pruner_memory().total_entries(), 2);
+
+            let recent = layer.recent_experiences(2);
+            assert_eq!(recent.len(), 2);
+            assert_eq!(recent[0].arm, 0);
+            assert!(recent[0].is_failure);
+            assert_eq!(recent[1].arm, 1);
+            assert!(!recent[1].is_failure);
+
+            // Verify identity
+            assert!(layer.pruner_memory().verify_identity("absorb_compress"));
+        }
+
+        #[test]
+        fn test_absorb_compress_memory_bounded() {
+            let config = CompressConfig::default();
+            let layer = make_layer(3, config);
+            // Capacity is 128 (next power of 2)
+            assert_eq!(layer.pruner_memory().capacity(), 128);
+
+            // Fill beyond capacity
+            for i in 0..200u64 {
+                layer.record_compression_event((i % 3) as u16, i as f32, i % 10 == 0, false);
+            }
+
+            assert_eq!(layer.pruner_memory().total_entries(), 200);
+
+            // Only last 128 should be retrievable
+            let recent = layer.recent_experiences(200);
+            assert_eq!(recent.len(), 128);
+
+            // First entry: i=72 (200-128=72), 72%3=0
+            assert_eq!(recent[0].arm, 0);
+            // Last entry: i=199, 199%3=1
+            assert_eq!(recent[127].arm, 1);
+        }
     }
 }
