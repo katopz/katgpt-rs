@@ -147,10 +147,10 @@ pub fn prisoners_dilemma(a: u8, b: u8) -> (f64, f64) {
 - [x] Implement `RuliologyPruner` — filter by payoff + complexity thresholds
 - [x] Add feature gate `ruliology` depending on `bandit`
 
-### Phase 2: RuliologyBandit Integration (modelless)
+### Phase 2: RuliologyBandit Integration (modelless) — Partial
 
-- [ ] Implement `RuliologyBandit` — `BanditPruner` adapter over pre-filtered FSM arms
-- [ ] Implement `RuliologyArm` — wraps `FsmStrategy` as bandit arm with payoff tracking
+- [x] Implement `RuliologyBandit` — `BanditPruner` adapter over pre-filtered FSM arms
+- [x] Implement `RuliologyArm` — wraps `FsmStrategy` as bandit arm with payoff tracking
 - [ ] Connect to `AbsorbCompress` — promote FSMs with stable positive payoff
 - [ ] Integration test: 22 FSMs compete in matching pennies, verify machine 26 wins (Wolfram result)
 - [ ] Integration test: 22 FSMs compete in PD, verify machine 30 (grim trigger) wins
