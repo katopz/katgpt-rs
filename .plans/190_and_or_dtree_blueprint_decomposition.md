@@ -200,13 +200,13 @@ GOAT proof criteria:
 4. Blueprint pre-pass adds **< 5% overhead** to total decode time
 5. ProofGoalCache hit rate **≥ 30%** on tasks with repeated subgoals
 
-- [ ] Add `and_or_dtree` feature to `Cargo.toml` with dependencies
-- [ ] Create `tests/and_or_goat.rs` with GOAT proof tests
-- [ ] Test 1: Node count comparison (AND-OR < flat for complex tasks)
-- [ ] Test 2: Quality parity (AND-OR ≈ flat for simple tasks)
-- [ ] Test 3: Dead-end detection (reviewer catches unproductive branches)
-- [ ] Test 4: Blueprint overhead (< 5% decode time)
-- [ ] Test 5: Cache hit rate (≥ 30% on tasks with repeated subgoals)
+- [x] Add `and_or_dtree` feature to `Cargo.toml` with dependencies
+- [x] Create `tests/and_or_goat.rs` with GOAT proof tests
+- [x] Test 1: Node count comparison (AND-OR < flat for complex tasks)
+- [x] Test 2: Quality parity (AND-OR ≈ flat for simple tasks)
+- [x] Test 3: Dead-end detection (reviewer catches unproductive branches)
+- [x] Test 4: Blueprint overhead (< 5% decode time)
+- [x] Test 5: Cache hit rate (≥ 30% on tasks with repeated subgoals)
 
 ### T7: Documentation + Examples
 

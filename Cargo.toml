@@ -607,3 +607,7 @@ required-features = ["nds_proxy"]
 [[test]]
 name = "test_wealth_bandit"
 required-features = ["wealth_pruner"]
+
+[[test]]
+name = "and_or_goat"
+required-features = ["and_or_dtree"]
