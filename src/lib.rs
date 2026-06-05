@@ -30,6 +30,8 @@ pub mod inference_backend;
 pub mod inference_router;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
+#[cfg(feature = "kv_share")]
+pub mod kv_share;
 #[cfg(feature = "kvarn")]
 pub mod kvarn;
 #[cfg(feature = "kog_cpu_fusion")]

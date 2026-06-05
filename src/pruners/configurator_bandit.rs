@@ -366,6 +366,11 @@ pub enum PrunerSchedule {
     /// This is the new default — pure speedup, no quality loss.
     #[default]
     FrozenBaseGuard,
+    /// Route by per-token entropy: high-entropy → relaxed, low-entropy → tight.
+    /// Uses same threshold as EntropyBifurcatedPruner.
+    /// Stored as `u32` bits for `Eq`/`Hash` compatibility; use `threshold_f32()` to decode.
+    #[cfg(feature = "directional_credit")]
+    EntropyRouted { threshold: u32 },
 }
 
 impl PrunerSchedule {
@@ -385,11 +390,33 @@ impl PrunerSchedule {
     ///
     /// For `FrozenBaseGuard`: only true when `hop_index == total_hops - 1`.
     /// For `Uniform`: always true.
+    /// For `EntropyRouted`: always true (routing happens at pruner level).
     #[inline]
     pub fn should_screen_full(&self, hop_index: usize, total_hops: usize) -> bool {
         match self {
             Self::Uniform => true,
             Self::FrozenBaseGuard => hop_index >= total_hops.saturating_sub(1),
+            #[cfg(feature = "directional_credit")]
+            Self::EntropyRouted { .. } => true,
+        }
+    }
+
+    /// Get the entropy threshold as `f32` (only meaningful for `EntropyRouted`).
+    #[cfg(feature = "directional_credit")]
+    #[inline]
+    pub fn threshold_f32(&self) -> Option<f32> {
+        match self {
+            Self::EntropyRouted { threshold } => Some(f32::from_bits(*threshold)),
+            _ => None,
+        }
+    }
+
+    /// Construct an `EntropyRouted` schedule from an `f32` threshold.
+    #[cfg(feature = "directional_credit")]
+    #[inline]
+    pub fn entropy_routed(threshold: f32) -> Self {
+        Self::EntropyRouted {
+            threshold: threshold.to_bits(),
         }
     }
 }

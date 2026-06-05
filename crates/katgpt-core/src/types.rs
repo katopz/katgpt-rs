@@ -66,6 +66,30 @@ pub enum ModelArchitecture {
     QwenDeltaNet,
 }
 
+/// Attention projection configuration.
+/// Controls whether K and V projections share weights (Q-K=V tying).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(u8)]
+pub enum AttentionProjection {
+    /// Standard Q, K, V (3 projections, full KV cache)
+    #[default]
+    Full,
+    /// Q-K=V: K and V share projection (2 projections, K-only cache).
+    /// 50% KV cache reduction, ~3% perplexity cost.
+    /// Post-hoc weight merging: W_kv = (W_k + W_v) / 2.
+    SharedKV,
+}
+
+/// KV cache layout (derived from AttentionProjection).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CacheLayout {
+    /// Store both K and V (standard)
+    KV,
+    /// Store K only, V = K at read (SharedKV)
+    K,
+}
+
 /// Weight storage dtype (affects loading and dequantization).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]

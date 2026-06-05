@@ -401,6 +401,19 @@ pub use gepa_reflective::{
 
 // ── PhraseBoost Context Trie (Research 147, Plan 164) ──
 
+#[cfg(feature = "curvature_alloc")]
+pub mod curvature_alloc;
+
+#[cfg(feature = "curvature_alloc")]
+pub use curvature_alloc::{
+    CurvatureInfluenceScorer, CurvatureWeightedBudget, EosProxyScorer, verification_depth,
+};
+
+#[cfg(all(feature = "curvature_alloc", feature = "nds_proxy"))]
+pub use curvature_alloc::NdsAwareScorer;
+
+// ── PhraseBoost Context Trie (Research 147, Plan 164) ──
+
 #[cfg(feature = "phrase_boost")]
 pub mod phrase_boost;
 
@@ -458,6 +471,14 @@ pub mod mux_bfs;
 #[cfg(feature = "mux_bfs")]
 pub use mux_bfs::MuxBfs;
 
+// ── Direction-Adaptive Credit — Entropy-Bifurcated Pruning (Plan 184) ──
+
+#[cfg(feature = "directional_credit")]
+pub mod entropy_bifurcated;
+
+#[cfg(feature = "directional_credit")]
+pub use entropy_bifurcated::{EntropyBifurcatedPruner, EntropyState, SelfDrivenTokenTracker};
+
 #[cfg(feature = "mech_attribution")]
 pub mod mech_attribution;
 
@@ -466,4 +487,16 @@ pub use mech_attribution::{
     ActivationInfluenceProxy, CatalystPattern, CatalystTemplate, InfluenceConfig,
     MechInfluenceScore, batch_influence_rank, catalyst_score, detect_catalyst_pattern,
     extract_template, generate_synthetic,
+};
+
+// ── NDS Curvature Proxy — Modelless Inference-Time Budget Control (Plan 186) ──
+
+#[cfg(feature = "nds_proxy")]
+pub mod nds_proxy;
+
+#[cfg(feature = "nds_proxy")]
+pub use nds_proxy::{
+    LayerDepth, NdsBudgetModifier, SpectralFlatnessBudget, layer_nds_depth,
+    nds_proxy as compute_nds_proxy, nds_scaled_budget, spectral_balance_bonus,
+    spectral_balance_score,
 };

@@ -1,6 +1,0 @@
-{
-  "timestamp": "2026-06-02T11:23:48.781520+07:00",
-  "commit": "c4eaaeac48",
-  "iteration": 2,
-  "reason": "evaluation started (stop_reason=EndTurn, used_tools=false)"
-}

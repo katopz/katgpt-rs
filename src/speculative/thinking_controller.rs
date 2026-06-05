@@ -81,6 +81,20 @@ impl Default for ThinkingConfig {
     }
 }
 
+impl ThinkingConfig {
+    /// Bias thinking mode selection based on entropy signal.
+    /// High entropy (low top-1 prob) → bias toward Latent mode.
+    /// Low entropy (high top-1 prob) → bias toward Direct mode.
+    #[cfg(feature = "directional_credit")]
+    pub fn entropy_bias(&self, top1_prob: f32) -> ThinkingMode {
+        if top1_prob < self.confidence_threshold {
+            ThinkingMode::Latent
+        } else {
+            ThinkingMode::Direct
+        }
+    }
+}
+
 // ── T2: ThinkingBandit ─────────────────────────────────────────────────
 
 /// Lightweight bandit with 3 arms: Direct, Latent, CpuResample.

@@ -173,6 +173,8 @@ gpu_inference = ["dep:metal"]  # GPU inference backend via Metal compute pipelin
 inference_router = ["gpu_inference", "ane"]  # Full inference routing: TriggerGate + InferenceRouter + GPU + ANE (Plan 176)
 thinking_cot = ["rim_slots", "thinking_prune", "parallel_probe", "ppot", "bt_rank", "bandit"]  # Adaptive CoT thinking — self-learning when to think (Plan 194)
 bandit_top_p = ["bandit"]  # Adaptive top-p bandit arm selection (Plan 181, default ON candidate)
+curvature_alloc = ["bandit"]  # Curvature-influence allocation — EoS proxy budget control (Plan 183)
+nds_proxy = ["bandit"]  # NDS curvature proxy — modelless inference budget control (Plan 186)
 vocab_coreset = []  # DDTree vocab coreset for speculative decode (Plan 181, opt-in)
 trust_region_spec = ["bandit"]  # Trust-Region Adaptive Speculation — adaptive window + blend + routing (Plan 182, Research 162)
 spec_reconciliation = []  # Speculative Reconciliation Engine — verify offline trajectories against plausibility manifolds (Plan 177)
@@ -183,6 +185,8 @@ mux_bfs = ["mux_ddtree"]  # MUX BFS — superposition-guided parallel tree searc
 mux_freeze_thaw = ["mux_pruner"]  # MUX Freeze/Thaw — persistent superposition patterns (Research 158)
 mux_demux = []  # MuxDemux Verifier — deterministic superposition recovery (Research 158, MUX)
 kvarn = []  # KVarN variance-normalized KV-cache quantization (Research 159)
+directional_credit = []  # Entropy-bifurcated screening — direction-adaptive credit (Plan 184, default on candidate)
+kv_share = []  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
 full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy", "newton_schulz", "river_valley", "peira_distill", "kog_cpu_fusion", "datrie_vocab", "gepa_reflective", "phrase_boost", "hydra_budget", "budget_adaptation", "recfm", "ilc_distill", "thinking_prune", "rim_slots", "wall_attention", "ane", "inference_router", "thinking_cot", "kvarn"]
 
@@ -573,3 +577,19 @@ required-features = ["spec_reconciliation"]
 [[example]]
 name = "octpq_kvarn_fusion"
 required-features = ["kvarn", "hybrid_oct_pq"]
+
+[[test]]
+name = "directional_credit_goat"
+required-features = ["directional_credit"]
+
+[[test]]
+name = "proof_curvature_alloc_goat"
+required-features = ["curvature_alloc"]
+
+[[test]]
+name = "kv_share_goat"
+required-features = ["kv_share"]
+
+[[test]]
+name = "nds_proxy_goat"
+required-features = ["nds_proxy"]

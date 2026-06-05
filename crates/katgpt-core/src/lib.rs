@@ -32,11 +32,11 @@ pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
 
 // Re-export key types at crate root for convenience
 pub use types::{
-    AttentionMode, Config, ConvergenceSelector, DashAttnConfig, HlaMode, HybridPattern,
-    InferenceOverrides, InferenceResult, LoopMode, ModelArchitecture, ResidualGate,
-    RetrievalHeadRole, Rng, RtTurboConfig, SdpaOutputGate, WeightDtype, kv_dim, matmul, matmul_f16,
-    matmul_f16_parallel, matmul_parallel, matmul_relu, rmsnorm, sample_token, sample_token_into,
-    softmax, softmax_scaled,
+    AttentionMode, AttentionProjection, CacheLayout, Config, ConvergenceSelector, DashAttnConfig,
+    HlaMode, HybridPattern, InferenceOverrides, InferenceResult, LoopMode, ModelArchitecture,
+    ResidualGate, RetrievalHeadRole, Rng, RtTurboConfig, SdpaOutputGate, WeightDtype, kv_dim,
+    matmul, matmul_f16, matmul_f16_parallel, matmul_parallel, matmul_relu, rmsnorm, sample_token,
+    sample_token_into, softmax, softmax_scaled,
 };
 
 #[cfg(feature = "domain_latent")]

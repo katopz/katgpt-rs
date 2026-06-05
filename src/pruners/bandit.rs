@@ -123,6 +123,20 @@ pub enum BanditStrategy {
         /// Initial delay estimate D̂₀.
         estimated_delay: u32,
     },
+    /// EoS-aware arm selection inspired by arXiv:2606.04212.
+    ///
+    /// When score concentration exceeds `concentration_threshold`, the top
+    /// arm's score is boosted proportionally. All arms are guaranteed at
+    /// least `floor` × max_score.
+    ///
+    /// Feature-gated under `curvature_alloc`.
+    #[cfg(feature = "curvature_alloc")]
+    CurvatureInfluence {
+        /// Floor guarantee: all arms get at least `floor` × max_score.
+        floor: f32,
+        /// Concentration threshold for boost activation.
+        concentration_threshold: f32,
+    },
 }
 
 impl fmt::Display for BanditStrategy {
@@ -160,6 +174,13 @@ impl fmt::Display for BanditStrategy {
                     f,
                     "SafePhased(base={baseline_arm}, δ={delta:.2}, D̂={estimated_delay})"
                 )
+            }
+            #[cfg(feature = "curvature_alloc")]
+            Self::CurvatureInfluence {
+                floor,
+                concentration_threshold,
+            } => {
+                write!(f, "CIAB(floor={floor:.2}, c={concentration_threshold:.2})")
             }
         }
     }
@@ -638,6 +659,35 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             }
             #[cfg(feature = "safe_bandit")]
             BanditStrategy::SafePhased { .. } => self.arm_ucb1(token_idx).clamp(0.0, 1.5) / 1.5,
+            #[cfg(feature = "curvature_alloc")]
+            BanditStrategy::CurvatureInfluence {
+                floor,
+                concentration_threshold,
+            } => {
+                let q = self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01);
+                // Compute concentration across all arms
+                let num_arms = self.stats.num_arms;
+                let scores: Vec<f32> = (0..num_arms)
+                    .map(|a| self.arm_q(a).clamp(0.0, 1.0).max(0.01))
+                    .collect();
+                let max_score = scores.iter().copied().fold(0.0f32, f32::max);
+                let sum: f32 = scores.iter().sum();
+                let concentration = if sum > 0.0 && max_score > 0.0 {
+                    max_score / sum
+                } else {
+                    1.0 / num_arms as f32
+                };
+                // Boost if concentration exceeds threshold
+                let boosted = if concentration > *concentration_threshold {
+                    let boost = concentration / *concentration_threshold;
+                    q * boost
+                } else {
+                    q
+                };
+                // Floor guarantee
+                let min_score = floor * max_score.max(q);
+                boosted.max(min_score).clamp(0.0, 1.0)
+            }
         }
     }
 
@@ -1078,6 +1128,8 @@ impl<E: BanditEnv> BanditSession<E> {
             }
             #[cfg(feature = "safe_bandit")]
             BanditStrategy::SafePhased { .. } => self.select_safe_phased(rng),
+            #[cfg(feature = "curvature_alloc")]
+            BanditStrategy::CurvatureInfluence { .. } => self.select_ucb1(), // UCB1 base with CIAB scoring override
         }
     }
 
