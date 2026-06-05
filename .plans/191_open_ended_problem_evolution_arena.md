@@ -46,7 +46,7 @@ graph TD
 - [x] **T1.3** Implement `BomberPartialScorer` — bomber-specific partial scoring
   - Score = weighted blend: survival (0.4) + kills (0.3) + bombs_avoided (0.2) + efficiency (0.1)
   - Normalized against trivial baseline (stay still) and reference solution (HL bandit)
-- [ ] **T1.4** Extend `BanditPruner` to accept `PartialScorer` reward
+- [x] **T1.4** Extend `BanditPruner` to accept `PartialScorer` reward
   - When `partial_scoring` feature enabled: reward = `partial_score()` not `win/loss`
   - When disabled: existing binary behavior unchanged
 - [ ] **T1.5** GOAT proof: bomber arena with partial scoring ≥ binary scoring
