@@ -1142,6 +1142,7 @@ mod tests_leo {
 
     #[cfg(feature = "dual_leo")]
     impl SimpleAutocurriculum {
+        #[allow(dead_code)]
         fn new(total: usize) -> Self {
             Self {
                 observed: vec![false; total],

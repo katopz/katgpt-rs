@@ -424,6 +424,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             partial_scorer: None,
             #[cfg(feature = "idea_divergence")]
             idea_divergence: None,
+            #[cfg(feature = "idea_divergence")]
+            arm_score_vectors: vec![vec![]; num_arms],
         }
     }
 
@@ -452,6 +454,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             partial_scorer: None,
             #[cfg(feature = "idea_divergence")]
             idea_divergence: None,
+            #[cfg(feature = "idea_divergence")]
+            arm_score_vectors: vec![vec![]; num_arms],
         }
     }
 
@@ -480,6 +484,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             partial_scorer: Some(scorer),
             #[cfg(feature = "idea_divergence")]
             idea_divergence: None,
+            #[cfg(feature = "idea_divergence")]
+            arm_score_vectors: vec![vec![]; num_arms],
         }
     }
 
@@ -509,21 +515,24 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             #[cfg(feature = "partial_scoring")]
             partial_scorer: None,
             idea_divergence: Some(IdeaDivergence::new(threshold)),
+            arm_score_vectors: vec![vec![]; num_arms],
         }
     }
 
     /// Update the divergence tracker after an arm update.
     ///
-    /// Reads the current Q-value for the arm and appends the score vector
-    /// to the divergence tracker. Call this after `update_with_trace()` or `update()`.
+    /// Reads the current Q-value for the arm and updates the per-arm score vector.
+    /// Call this after `update_with_trace()` or `update()`.
     #[cfg(feature = "idea_divergence")]
     pub fn update_divergence(&mut self, arm: usize) {
-        let score_vec = self
-            .idea_divergence
-            .as_ref()
-            .map(|_| vec![self.arm_q(arm), self.arm_visits(arm) as f32]);
-        if let (Some(div), Some(scores)) = (&mut self.idea_divergence, score_vec) {
-            div.add_arm(scores);
+        if self.idea_divergence.is_none() {
+            return;
+        }
+        let q = self.arm_q(arm);
+        let visits = self.arm_visits(arm);
+        let score_vec = vec![q, visits as f32];
+        if arm < self.arm_score_vectors.len() {
+            self.arm_score_vectors[arm] = score_vec;
         }
     }
 
@@ -748,11 +757,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             return 0.0;
         }
 
-        #[cfg(feature = "idea_divergence")]
-        let mut score;
-        #[cfg(not(feature = "idea_divergence"))]
-        let score;
-        score = match &self.strategy {
+        #[allow(unused_mut)]
+        let mut score = match &self.strategy {
             BanditStrategy::Ucb1 => self.arm_ucb1(token_idx).clamp(0.0, 1.5) / 1.5,
             BanditStrategy::EpsilonGreedy { .. } => self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01),
             BanditStrategy::ThompsonSampling => self
@@ -811,14 +817,22 @@ impl<P: ScreeningPruner> BanditPruner<P> {
 
         // Strategic novelty penalty: non-novel arms get reduced selection probability.
         #[cfg(feature = "idea_divergence")]
-        {
-            if let Some(ref div) = self.idea_divergence {
-                let q = self.arm_q(token_idx);
-                let visits = self.arm_visits(token_idx);
-                let score_vec = [q, visits as f32];
-                if !div.is_novel(&score_vec) {
-                    score *= 0.5;
+        if let Some(ref div) = self.idea_divergence {
+            let q = self.arm_q(token_idx);
+            let visits = self.arm_visits(token_idx);
+            let score_vec = [q, visits as f32];
+            // Check divergence against all OTHER arms' score vectors
+            let mut min_dist = f32::MAX;
+            for (i, other) in self.arm_score_vectors.iter().enumerate() {
+                if i != token_idx && !other.is_empty() {
+                    let d = IdeaDivergence::divergence(&score_vec, other);
+                    if d < min_dist {
+                        min_dist = d;
+                    }
                 }
+            }
+            if min_dist <= div.threshold() {
+                score *= 0.5;
             }
         }
 
@@ -2799,11 +2813,18 @@ mod tests {
         use super::*;
         use crate::speculative::types::NoScreeningPruner;
 
-        /// Two arms with identical Q-values: non-novel arm gets lower bandit score.
+        /// Two arms with identical Q-values: both non-novel arms get lower bandit scores.
         #[test]
         fn test_idea_divergence_penalizes_convergent_arms() {
-            let mut bp =
-                BanditPruner::with_idea_divergence(NoScreeningPruner, BanditStrategy::Ucb1, 2, 0.1);
+            let mut bp = BanditPruner::with_idea_divergence(
+                NoScreeningPruner,
+                BanditStrategy::EpsilonGreedy {
+                    epsilon: 0.1,
+                    decay: 1.0,
+                },
+                3,
+                0.1,
+            );
 
             // Update arm 0 with a reward, register its score vector
             bp.update(0, 0.8);
@@ -2813,21 +2834,36 @@ mod tests {
             bp.update(1, 0.8);
             bp.update_divergence(1);
 
-            // Arm 1's score vector [0.8, 1.0] should be non-novel
-            // (close to arm 0's [0.8, 1.0])
-            let score_0 = bp.arm_bandit_score(0);
-            let score_1 = bp.arm_bandit_score(1);
+            // Arm 2: different reward — divergent
+            bp.update(2, 0.1);
+            bp.update_divergence(2);
 
+            // Arm 0's score vector [0.8, 1.0] compared to arm 1 [0.8, 1.0]: distance=0 < threshold → penalized
+            let score_0 = bp.arm_bandit_score(0);
+            // Arm 1's score vector [0.8, 1.0] compared to arm 0 [0.8, 1.0]: distance=0 < threshold → penalized
+            let score_1 = bp.arm_bandit_score(1);
+            // Arm 2's score vector [0.1, 1.0] compared to arms 0,1 [0.8, 1.0]: distance=0.7 > threshold → unpenalized
+            let score_2 = bp.arm_bandit_score(2);
+
+            // Base EpsilonGreedy score for Q=0.8: 0.8.clamp(0.0, 1.0).max(0.01) = 0.8
+            // After penalty: 0.8 * 0.5 = 0.4
+            let base_08 = 0.8f32.clamp(0.0, 1.0).max(0.01);
             assert!(
-                score_1 < score_0,
-                "convergent arm 1 ({score_1}) should score lower than arm 0 ({score_0})"
+                (score_0 - base_08 * 0.5).abs() < 0.01,
+                "convergent arm 0 should be penalized: expected {}, got {score_0}",
+                base_08 * 0.5
+            );
+            assert!(
+                (score_1 - base_08 * 0.5).abs() < 0.01,
+                "convergent arm 1 should be penalized: expected {}, got {score_1}",
+                base_08 * 0.5
             );
 
-            // The penalty is 50%
-            let ratio = score_1 / score_0;
+            // Arm 2 is novel (different Q-value)
+            let base_01 = 0.1f32.clamp(0.0, 1.0).max(0.01);
             assert!(
-                (ratio - 0.5).abs() < 0.01,
-                "expected ~0.5 penalty ratio, got {ratio}"
+                (score_2 - base_01).abs() < 0.01,
+                "novel arm 2 should be unpenalized: expected {base_01}, got {score_2}"
             );
         }
 
@@ -2848,7 +2884,7 @@ mod tests {
             bp.update(0, 0.2);
             bp.update_divergence(0);
 
-            // Arm 1: score [0.8, 1.0] — far from arm 0, should be novel
+            // Arm 1: score [0.8, 1.0] — L2 distance to arm 0 = sqrt(0.36) = 0.6 > threshold 0.5
             bp.update(1, 0.8);
             bp.update_divergence(1);
 
@@ -2856,16 +2892,18 @@ mod tests {
             let score_1 = bp.arm_bandit_score(1);
 
             // Both should be unpenalized (novel relative to each other)
-            assert!(
-                score_1 > 0.0,
-                "novel arm 1 should have positive score, got {score_1}"
-            );
+            // arm 0: Q=0.2, base = 0.2.clamp(0.0, 1.0).max(0.01) = 0.2
+            // arm 1: Q=0.8, base = 0.8.clamp(0.0, 1.0).max(0.01) = 0.8
+            let base_0 = 0.2f32.clamp(0.0, 1.0).max(0.01);
+            let base_1 = 0.8f32.clamp(0.0, 1.0).max(0.01);
 
-            // score_1 should NOT be halved — it's novel
-            let expected = 0.8f32.clamp(0.0, 1.0).max(0.01);
             assert!(
-                (score_1 - expected).abs() < 0.01,
-                "novel arm 1 should match base score {expected}, got {score_1}"
+                (score_0 - base_0).abs() < 0.01,
+                "novel arm 0 should be unpenalized: expected {base_0}, got {score_0}"
+            );
+            assert!(
+                (score_1 - base_1).abs() < 0.01,
+                "novel arm 1 should be unpenalized: expected {base_1}, got {score_1}"
             );
         }
 
@@ -2877,8 +2915,11 @@ mod tests {
             assert_eq!(bp.q_values().len(), 4);
             assert_eq!(bp.visits().len(), 4);
             assert!(bp.idea_divergence.is_some());
-            assert_eq!(bp.idea_divergence.as_ref().unwrap().arm_count(), 0);
             assert_eq!(bp.idea_divergence.as_ref().unwrap().threshold(), 0.3);
+            assert_eq!(bp.arm_score_vectors.len(), 4);
+            for v in &bp.arm_score_vectors {
+                assert!(v.is_empty(), "initial arm score vectors should be empty");
+            }
         }
 
         /// Default BanditPruner (no divergence feature): scores unchanged.
