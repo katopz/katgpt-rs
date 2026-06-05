@@ -184,8 +184,8 @@ pub fn build_dd_tree_and_or<P: ScreeningPruner>(
 - [x] Add `build_dd_tree_and_or()` function to `dd_tree.rs`
 - [x] Wire blueprint pre-pass → AND-OR builder → decomposition reviewer → mini-DDTree
 - [x] Fallback to flat DDTree when no decomposition needed
-- [ ] Integration test: AND-OR tree produces valid output
-- [ ] Benchmark: node count vs flat DDTree on complex tasks
+- [x] Integration test: AND-OR tree produces valid output (covered by GOAT tests + and_or_sudoku example)
+- [ ] Benchmark: node count vs flat DDTree on complex tasks (pending real model weights)
 
 ### T6: Feature gate + GOAT proof
 
@@ -215,7 +215,7 @@ GOAT proof criteria:
 - [x] Example: `and_or_sudoku.rs` — Sudoku with AND-OR decomposition (rows → cells)
 - [x] Example: `and_or_demo.rs` — API walkthrough for AndOrNode construction
 - [x] Update README with AND-OR DDTree section under "Key Features"
-- [ ] Benchmark report: `.benchmarks/040_and_or_dtree_goat.md`
+- [x] Benchmark report: `.benchmarks/040_and_or_dtree_goat.md`
 
 ---
 
