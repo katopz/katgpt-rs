@@ -64,9 +64,10 @@ graph TD
   - `GoalReweight`: shift kill weight vs survival weight
   - `ConstrainOutputs`: add max-steps, forbidden zones, power-up limits
   - `GeneralizeInputs`: vary grid size (9→15→21), opponent count (1→4→8), wall density
-- [ ] **T2.4** Implement `GoConfigMutator` — go-specific mutation
+- [x] **T2.4** Implement `GoConfigMutator` — go-specific mutation
   - `GoalReweight`: territory vs capture weight
-  - `ConstrainInputs`: board size variation, komi shifting
+  - `ConstrainOutputs`: board size variation (9→13→19)
+  - `GeneralizeInputs`: handicap variation (+1/+2/+3 opponent_count)
 - [ ] **T2.5** Integrate with arena scheduler — `ProblemMutator` feeds configs to round-robin
   - New arena mode: `EvolutionArena` — mutates base config between rounds
   - Feature gate: `problem_mutator`

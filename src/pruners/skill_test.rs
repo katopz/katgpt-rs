@@ -324,4 +324,141 @@ mod tests {
     }
 }
 
-// TL;DR: PrunerTestGate trait + BomberTestGate + SimpleTestGate — validates pruner skills against known game states before promotion. Coverage threshold gate, pre-built bomber test cases.
+// ── NoveltyTestGate ──────────────────────────────────────────────
+
+#[cfg(feature = "idea_divergence")]
+use super::idea_divergence::IdeaDivergence;
+
+/// Test gate that requires both functional correctness AND strategic novelty.
+///
+/// Wraps an inner test gate and adds an IdeaDivergence novelty check.
+/// A skill passes only if:
+/// 1. The inner test gate validates it (functional correctness)
+/// 2. Its score vector is sufficiently novel vs existing catalog entries
+///
+/// This prevents catalog pollution with near-duplicate skills.
+#[cfg(feature = "idea_divergence")]
+pub struct NoveltyTestGate {
+    inner: Box<dyn PrunerTestGate>,
+    divergence: IdeaDivergence,
+}
+
+#[cfg(feature = "idea_divergence")]
+impl NoveltyTestGate {
+    /// Create a new novelty test gate wrapping `inner` with the given divergence threshold.
+    pub fn new(inner: Box<dyn PrunerTestGate>, threshold: f32) -> Self {
+        Self {
+            inner,
+            divergence: IdeaDivergence::new(threshold),
+        }
+    }
+
+    /// Validate with novelty check.
+    ///
+    /// First runs the inner test gate for functional correctness.
+    /// If that passes, checks that `candidate_scores` is sufficiently novel
+    /// vs all `existing_scores` (L2 distance > threshold).
+    pub fn validate_novel(
+        &mut self,
+        test_cases: &[TestCase],
+        existing_scores: &[Vec<f32>],
+        candidate_scores: &[f32],
+    ) -> TestResult {
+        // Fail fast on functional test
+        let mut result = self.inner.validate(test_cases);
+        if !result.passed {
+            return result;
+        }
+
+        // Register existing scores
+        self.divergence.clear();
+        for scores in existing_scores {
+            self.divergence.add_arm(scores.clone());
+        }
+
+        // Novelty check
+        if !self.divergence.is_novel(candidate_scores) {
+            result.passed = false;
+            result.failures.push(
+                "Novelty check failed: candidate is not strategically novel vs existing catalog"
+                    .into(),
+            );
+        }
+
+        result
+    }
+}
+
+// ── NoveltyTestGate Tests ────────────────────────────────────────
+
+#[cfg(all(test, feature = "idea_divergence"))]
+mod novelty_tests {
+    use super::*;
+
+    fn make_passing_cases() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                input: vec![1, 2, 3],
+                expected_valid: vec![0],
+                description: "pass_a".into(),
+            },
+            TestCase {
+                input: vec![4, 5, 6],
+                expected_valid: vec![1],
+                description: "pass_b".into(),
+            },
+        ]
+    }
+
+    fn make_failing_cases() -> Vec<TestCase> {
+        vec![TestCase {
+            input: vec![],
+            expected_valid: vec![0],
+            description: "empty_input".into(),
+        }]
+    }
+
+    #[test]
+    fn test_novelty_gate_passes_novel_correct_skill() {
+        let mut gate = NoveltyTestGate::new(Box::new(SimpleTestGate::new()), 0.5);
+        let existing: Vec<Vec<f32>> = vec![vec![1.0, 0.0, 0.0]];
+        let candidate = vec![0.0, 1.0, 0.0]; // far from existing
+        let result = gate.validate_novel(&make_passing_cases(), &existing, &candidate);
+        assert!(result.passed, "should pass: functional + novel");
+        assert!(result.failures.is_empty());
+    }
+
+    #[test]
+    fn test_novelty_gate_fails_non_novel_skill() {
+        let mut gate = NoveltyTestGate::new(Box::new(SimpleTestGate::new()), 0.5);
+        let existing: Vec<Vec<f32>> = vec![vec![1.0, 0.5, 0.3]];
+        let candidate = vec![1.0, 0.5, 0.3]; // identical to existing
+        let result = gate.validate_novel(&make_passing_cases(), &existing, &candidate);
+        assert!(!result.passed, "should fail: not novel");
+        assert_eq!(result.failures.len(), 1);
+        assert!(result.failures[0].contains("Novelty check failed"));
+    }
+
+    #[test]
+    fn test_novelty_gate_fails_incorrect_skill() {
+        let mut gate = NoveltyTestGate::new(Box::new(SimpleTestGate::new()), 0.5);
+        let existing: Vec<Vec<f32>> = vec![];
+        let candidate = vec![0.0, 1.0, 0.0];
+        let result = gate.validate_novel(&make_failing_cases(), &existing, &candidate);
+        assert!(!result.passed, "should fail: functional test fails first");
+        // Failure is from functional test, not novelty
+        assert!(!result.failures[0].contains("Novelty check failed"));
+    }
+
+    #[test]
+    fn test_novelty_gate_empty_catalog_always_novel() {
+        let mut gate = NoveltyTestGate::new(Box::new(SimpleTestGate::new()), 0.5);
+        let existing: Vec<Vec<f32>> = vec![]; // empty catalog
+        let candidate = vec![1.0, 0.0, 0.0]; // any scores
+        let result = gate.validate_novel(&make_passing_cases(), &existing, &candidate);
+        assert!(result.passed, "empty catalog should always be novel");
+        assert!(result.failures.is_empty());
+    }
+}
+
+// TL;DR: PrunerTestGate trait + BomberTestGate + SimpleTestGate + NoveltyTestGate — validates pruner skills against known game states before promotion. NoveltyTestGate adds IdeaDivergence filter behind `idea_divergence` feature.

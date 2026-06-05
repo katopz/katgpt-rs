@@ -35,6 +35,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use super::absorb_compress::AbsorbCompress;
+#[cfg(feature = "idea_divergence")]
+use super::idea_divergence::IdeaDivergence;
 use super::review_metrics::ReviewMetrics;
 #[cfg(feature = "safe_bandit")]
 use super::safe_phased::SafePhasedState;
@@ -392,6 +394,15 @@ pub struct BanditPruner<P: ScreeningPruner> {
     /// When `Some`, `update_with_trace` uses `partial_score` instead of binary reward.
     #[cfg(feature = "partial_scoring")]
     partial_scorer: Option<Box<dyn katgpt_core::PartialScorer>>,
+    /// Strategic novelty filter to prevent bandit arm convergence.
+    ///
+    /// When `Some`, non-novel arms receive an exploration penalty.
+    #[cfg(feature = "idea_divergence")]
+    idea_divergence: Option<IdeaDivergence>,
+    /// Per-arm score vectors for divergence tracking. Indexed by arm.
+    /// Updated via `update_divergence()`, compared during `arm_bandit_score()`.
+    #[cfg(feature = "idea_divergence")]
+    arm_score_vectors: Vec<Vec<f32>>,
 }
 
 impl<P: ScreeningPruner> BanditPruner<P> {
@@ -411,6 +422,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             soft_route_tau: 1.0,
             #[cfg(feature = "partial_scoring")]
             partial_scorer: None,
+            #[cfg(feature = "idea_divergence")]
+            idea_divergence: None,
         }
     }
 
@@ -437,6 +450,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             soft_route_tau: 1.0,
             #[cfg(feature = "partial_scoring")]
             partial_scorer: None,
+            #[cfg(feature = "idea_divergence")]
+            idea_divergence: None,
         }
     }
 
@@ -463,6 +478,52 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             soft_route: true,
             soft_route_tau: 1.0,
             partial_scorer: Some(scorer),
+            #[cfg(feature = "idea_divergence")]
+            idea_divergence: None,
+        }
+    }
+
+    // ── Idea Divergence (Plan 191 T3.2) ────────────────────────────
+
+    /// Create a bandit pruner with strategic novelty filter.
+    ///
+    /// Non-novel arms (those converging to similar strategies) receive
+    /// a 50% exploration penalty during arm selection.
+    #[cfg(feature = "idea_divergence")]
+    pub fn with_idea_divergence(
+        inner: P,
+        strategy: BanditStrategy,
+        num_arms: usize,
+        threshold: f32,
+    ) -> Self {
+        Self {
+            inner,
+            strategy,
+            stats: BanditStats::new(num_arms),
+            thompson_cache: vec![0.0; num_arms],
+            #[cfg(feature = "bandit")]
+            shared_stats: None,
+            dual_cutoff: 0.0,
+            soft_route: true,
+            soft_route_tau: 1.0,
+            #[cfg(feature = "partial_scoring")]
+            partial_scorer: None,
+            idea_divergence: Some(IdeaDivergence::new(threshold)),
+        }
+    }
+
+    /// Update the divergence tracker after an arm update.
+    ///
+    /// Reads the current Q-value for the arm and appends the score vector
+    /// to the divergence tracker. Call this after `update_with_trace()` or `update()`.
+    #[cfg(feature = "idea_divergence")]
+    pub fn update_divergence(&mut self, arm: usize) {
+        let score_vec = self
+            .idea_divergence
+            .as_ref()
+            .map(|_| vec![self.arm_q(arm), self.arm_visits(arm) as f32]);
+        if let (Some(div), Some(scores)) = (&mut self.idea_divergence, score_vec) {
+            div.add_arm(scores);
         }
     }
 
@@ -687,7 +748,11 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             return 0.0;
         }
 
-        match &self.strategy {
+        #[cfg(feature = "idea_divergence")]
+        let mut score;
+        #[cfg(not(feature = "idea_divergence"))]
+        let score;
+        score = match &self.strategy {
             BanditStrategy::Ucb1 => self.arm_ucb1(token_idx).clamp(0.0, 1.5) / 1.5,
             BanditStrategy::EpsilonGreedy { .. } => self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01),
             BanditStrategy::ThompsonSampling => self
@@ -742,7 +807,22 @@ impl<P: ScreeningPruner> BanditPruner<P> {
                 let min_score = floor * max_score.max(q);
                 boosted.max(min_score).clamp(0.0, 1.0)
             }
+        };
+
+        // Strategic novelty penalty: non-novel arms get reduced selection probability.
+        #[cfg(feature = "idea_divergence")]
+        {
+            if let Some(ref div) = self.idea_divergence {
+                let q = self.arm_q(token_idx);
+                let visits = self.arm_visits(token_idx);
+                let score_vec = [q, visits as f32];
+                if !div.is_novel(&score_vec) {
+                    score *= 0.5;
+                }
+            }
         }
+
+        score
     }
 
     /// Soft-route relevance: softmax-weighted blend of all arm bandit scores.
@@ -2708,6 +2788,116 @@ mod tests {
             assert!(
                 (q - 0.3).abs() < 0.01,
                 "expected ~0.3 for partial survival, got {q}"
+            );
+        }
+    }
+
+    // ── Idea Divergence Integration Tests (Plan 191 T3.2) ──────────
+
+    #[cfg(feature = "idea_divergence")]
+    mod idea_divergence_tests {
+        use super::*;
+        use crate::speculative::types::NoScreeningPruner;
+
+        /// Two arms with identical Q-values: non-novel arm gets lower bandit score.
+        #[test]
+        fn test_idea_divergence_penalizes_convergent_arms() {
+            let mut bp =
+                BanditPruner::with_idea_divergence(NoScreeningPruner, BanditStrategy::Ucb1, 2, 0.1);
+
+            // Update arm 0 with a reward, register its score vector
+            bp.update(0, 0.8);
+            bp.update_divergence(0);
+
+            // Update arm 1 with the same reward — convergent
+            bp.update(1, 0.8);
+            bp.update_divergence(1);
+
+            // Arm 1's score vector [0.8, 1.0] should be non-novel
+            // (close to arm 0's [0.8, 1.0])
+            let score_0 = bp.arm_bandit_score(0);
+            let score_1 = bp.arm_bandit_score(1);
+
+            assert!(
+                score_1 < score_0,
+                "convergent arm 1 ({score_1}) should score lower than arm 0 ({score_0})"
+            );
+
+            // The penalty is 50%
+            let ratio = score_1 / score_0;
+            assert!(
+                (ratio - 0.5).abs() < 0.01,
+                "expected ~0.5 penalty ratio, got {ratio}"
+            );
+        }
+
+        /// Arm with unique Q-value pattern: no penalty.
+        #[test]
+        fn test_idea_divergence_novel_arm_unpenalized() {
+            let mut bp = BanditPruner::with_idea_divergence(
+                NoScreeningPruner,
+                BanditStrategy::EpsilonGreedy {
+                    epsilon: 0.1,
+                    decay: 1.0,
+                },
+                3,
+                0.5,
+            );
+
+            // Arm 0: score [0.2, 1.0]
+            bp.update(0, 0.2);
+            bp.update_divergence(0);
+
+            // Arm 1: score [0.8, 1.0] — far from arm 0, should be novel
+            bp.update(1, 0.8);
+            bp.update_divergence(1);
+
+            let score_0 = bp.arm_bandit_score(0);
+            let score_1 = bp.arm_bandit_score(1);
+
+            // Both should be unpenalized (novel relative to each other)
+            assert!(
+                score_1 > 0.0,
+                "novel arm 1 should have positive score, got {score_1}"
+            );
+
+            // score_1 should NOT be halved — it's novel
+            let expected = 0.8f32.clamp(0.0, 1.0).max(0.01);
+            assert!(
+                (score_1 - expected).abs() < 0.01,
+                "novel arm 1 should match base score {expected}, got {score_1}"
+            );
+        }
+
+        /// Constructor produces a valid BanditPruner with divergence enabled.
+        #[test]
+        fn test_with_idea_divergence_constructor() {
+            let bp =
+                BanditPruner::with_idea_divergence(NoScreeningPruner, BanditStrategy::Ucb1, 4, 0.3);
+            assert_eq!(bp.q_values().len(), 4);
+            assert_eq!(bp.visits().len(), 4);
+            assert!(bp.idea_divergence.is_some());
+            assert_eq!(bp.idea_divergence.as_ref().unwrap().arm_count(), 0);
+            assert_eq!(bp.idea_divergence.as_ref().unwrap().threshold(), 0.3);
+        }
+
+        /// Default BanditPruner (no divergence feature): scores unchanged.
+        #[test]
+        fn test_divergence_disabled_no_impact() {
+            // This test runs WITH the feature, but constructs a default BanditPruner
+            // (no divergence) to verify backward compatibility.
+            let mut bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 2);
+
+            bp.update(0, 0.5);
+            bp.update(1, 0.5);
+
+            let score_0 = bp.arm_bandit_score(0);
+            let score_1 = bp.arm_bandit_score(1);
+
+            // Without divergence enabled, both arms should get identical scores
+            assert!(
+                (score_0 - score_1).abs() < f32::EPSILON,
+                "without divergence, identical Q-values should get identical scores: {score_0} vs {score_1}"
             );
         }
     }
