@@ -497,6 +497,28 @@ pub mod wealth_bandit;
 #[cfg(feature = "wealth_pruner")]
 pub use wealth_bandit::{ChainCreditAssigner, WealthArm, WealthBanditPruner, WealthPrunerConfig};
 
+// ── Inference-Time Skill Evolution (Plan 192, Research 172) ──
+
+#[cfg(feature = "skill_lifecycle")]
+pub mod skill_memory;
+
+#[cfg(feature = "skill_lifecycle")]
+pub mod skill_test;
+
+#[cfg(feature = "skill_lifecycle")]
+pub mod skill_catalog;
+
+#[cfg(feature = "skill_lifecycle")]
+pub use skill_memory::{MemoryEntry, PrunerMemory, compute_hash};
+
+#[cfg(feature = "skill_lifecycle")]
+pub use skill_test::{
+    BomberTestGate, PrunerTestGate, SimpleTestGate, TestCase, TestResult, TestStatus,
+};
+
+#[cfg(feature = "skill_lifecycle")]
+pub use skill_catalog::{SkillCatalog, SkillDescriptor};
+
 // ── NDS Curvature Proxy — Modelless Inference-Time Budget Control (Plan 186) ──
 
 #[cfg(feature = "nds_proxy")]
@@ -508,3 +530,23 @@ pub use nds_proxy::{
     nds_proxy as compute_nds_proxy, nds_scaled_budget, spectral_balance_bonus,
     spectral_balance_score,
 };
+
+// ── Open-Ended Problem Evolution Arena (Plan 191, Research 171) ──
+
+#[cfg(feature = "partial_scoring")]
+pub mod partial_scorer;
+
+#[cfg(feature = "partial_scoring")]
+pub use partial_scorer::{BomberPartialScorer, WinLossScorer};
+
+#[cfg(feature = "problem_mutator")]
+pub mod problem_mutator;
+
+#[cfg(feature = "problem_mutator")]
+pub use problem_mutator::BomberConfigMutator;
+
+#[cfg(feature = "idea_divergence")]
+pub mod idea_divergence;
+
+#[cfg(feature = "idea_divergence")]
+pub use idea_divergence::IdeaDivergence;
