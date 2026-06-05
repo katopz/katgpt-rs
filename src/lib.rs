@@ -27,6 +27,8 @@ pub mod hla;
 #[cfg(feature = "hybrid_oct_pq")]
 pub mod hybrid_oct_pq;
 pub mod inference_backend;
+#[cfg(feature = "freq_bandit")]
+pub mod freq_bandit;
 pub mod inference_router;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
