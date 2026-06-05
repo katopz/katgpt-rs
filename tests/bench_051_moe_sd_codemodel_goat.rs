@@ -1,4 +1,4 @@
-//! MoE+SD Co-Design GOAT Proof (Plan 096).
+//! MoE+SD Co-Design GOAT Proof (Plan 051).
 //!
 //! Tests Raven slot routing overlap diagnostic and Amdahl cost model.
 //!
@@ -6,7 +6,7 @@
 //! - Raven slot overlap > 20% OR cost model error < 15%
 //! - f_sparse consistency < 10% variance
 //!
-//! Run: cargo test --features spec_cost_model --test bench_096_moe_sd_codemodel_goat -- --nocapture
+//! Run: cargo test --features spec_cost_model --test bench_051_moe_sd_codemodel_goat -- --nocapture
 
 #![cfg(feature = "spec_cost_model")]
 

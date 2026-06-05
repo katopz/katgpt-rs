@@ -9,7 +9,7 @@
 
 - [x] T1: Raven slot routing overlap diagnostic (D1) — `RoutingOverlapSnapshot` type added behind `domain_latent` feature, field on `DraftResult`
 - [x] T2: LeviathanVerifier Amdahl cost model with `spec_cost_model` feature gate (D2) — `SpecCostSnapshot` type, `spec_cost_model` feature in `Cargo.toml`, field on `DraftResult`, exported from `mod.rs`
-- [x] T3: GOAT benchmark — 5/5 proofs pass: snapshot construction, Amdahl prediction accuracy, Leviathan infrastructure, f_sparse consistency, cost model error bound (`tests/bench_096_moe_sd_codemodel_goat.rs`)
+- [x] T3: GOAT benchmark — 5/5 proofs pass: snapshot construction, Amdahl prediction accuracy, Leviathan infrastructure, f_sparse consistency, cost model error bound (`tests/bench_051_moe_sd_codemodel_goat.rs`)
 - [x] T4: Conditional — delta sparse matmul (D3) — SKIPPED (T3 was infrastructure-only, no real overlap measurement; condition >30% not evaluated)
 
 ## Objective
@@ -77,7 +77,7 @@ Cohere batch-size regimes  →  Our domain inference budget (Plan 026)
 │                                                                 │
 │  T3: GOAT Benchmark                                            │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │  bench/096_moe_sd_codemodel.goat.md                      │  │
+│  │  bench/051_moe_sd_codemodel.goat.md                      │  │
 │  │    - Raven overlap ratio (step 1-4) for draft/bpe_draft  │  │
 │  │    - Amdahl f_sparse, unique_ratio for K=3,5,7           │  │
 │  │    - Predicted vs actual verification cost                │  │
@@ -188,7 +188,7 @@ The cost model output informs `InferenceOverrides::draft_lookahead` (Plan 026):
 
 ### Location
 
-`katgpt-rs/.benchmarks/096_moe_sd_codemodel_goat.md`
+`katgpt-rs/.benchmarks/051_moe_sd_codemodel_goat.md`
 
 ### Criteria
 
@@ -270,7 +270,7 @@ katgpt-rs/
 │   │   └── types.rs                # RoutingOverlapSnapshot + SpecCostSnapshot in DraftResult
 │   └── benchmark.rs                # bench_routing_overlap() (T3)
 ├── .benchmarks/
-│   └── 096_moe_sd_codemodel_goat.md  # GOAT results
+│   └── 051_moe_sd_codemodel_goat.md  # GOAT results
 ├── .research/
 │   └── 59_MoE_Speculative_Decoding_CoDesign.md  # Parent research
 └── .plans/
@@ -282,7 +282,7 @@ katgpt-rs/
 | Gate | Scope | Default | Plan |
 |------|-------|---------|------|
 | `domain_latent` | T1 (Raven overlap) | ✅ Default-on | 038 |
-| `spec_cost_model` | T2 (Amdahl cost model) | ❌ Opt-in | **096 (NEW)** |
+| `spec_cost_model` | T2 (Amdahl cost model) | ❌ Opt-in | **096** |
 | `sparse_mlp` | T4 (Delta sparse) | ✅ Default-on | 022 |
 
 ## References

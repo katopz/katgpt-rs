@@ -1,10 +1,10 @@
-# Benchmark 096: MoE+SD Co-Design Cost Model — GOAT Proof
+# Benchmark 051: MoE+SD Co-Design Cost Model — GOAT Proof
 
 **Date:** 2025-06
 **Plan:** 096 (MoE+SD Co-Design Model Distillation)
 **Source:** Research 59 (MoE + Speculative Decoding Co-Design)
 **Features:** `spec_cost_model` (opt-in diagnostic)
-**Command:** `cargo test --features spec_cost_model --test bench_096_moe_sd_codemodel_goat -- --nocapture`
+`cargo test --features spec_cost_model --test bench_051_moe_sd_codemodel_goat -- --nocapture`
 
 ## GOAT Proof Results
 
