@@ -73,10 +73,10 @@ pub enum AndOrNode<G, S> {
 }
 ```
 
-- [ ] Create `katgpt-core/src/and_or/mod.rs` with module declarations
-- [ ] Create `katgpt-core/src/and_or/types.rs` with `AndOrNode<G, S>` enum
-- [ ] Add `#[cfg(feature = "and_or_dtree")]` module gate in `katgpt-core/src/lib.rs`
-- [ ] Unit tests: tree construction, child access, solved status propagation
+- [x] Create `katgpt-core/src/and_or/mod.rs` with module declarations
+- [x] Create `katgpt-core/src/and_or/types.rs` with `AndOrNode<G, S>` enum
+- [x] Add `#[cfg(feature = "and_or_dtree")]` module gate in `katgpt-core/src/lib.rs`
+- [x] Unit tests: tree construction, child access, solved status propagation
 
 ### T2: `AndOrBuilder` — Decomposition logic for DDTree marginals
 
@@ -127,10 +127,10 @@ impl BlueprintPass {
 }
 ```
 
-- [ ] Create `blueprint.rs` with `BlueprintPass`
-- [ ] Implement `generate()` — greedy argmax from marginals
-- [ ] Implement `compatibility()` — blueprint scoring function
-- [ ] Unit tests: blueprint generation, compatibility scoring
+- [x] Create `blueprint.rs` with `BlueprintPass`
+- [x] Implement `generate()` — greedy argmax from marginals
+- [x] Implement `compatibility()` — blueprint scoring function
+- [x] Unit tests: blueprint generation, compatibility scoring
 
 ### T4: Decomposition Reviewer — Progress signal for dead-end detection
 
