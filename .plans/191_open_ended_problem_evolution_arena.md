@@ -71,7 +71,7 @@ graph TD
 - [x] **T2.5** Integrate with arena scheduler — `ProblemMutator` feeds configs to round-robin
   - New arena mode: `EvolutionArena` — mutates base config between rounds
   - Feature gate: `problem_mutator`
-- [ ] **T2.6** GOAT proof: mutated configs produce ≥1.5× arm diversity
+- [x] **T2.6** GOAT proof: mutated configs produce ≥1.5× arm diversity
   - Test: run bandit on 100 mutated bomber configs vs 100 fixed configs
   - Metric: number of distinct arms with >10% selection rate
   - Expected: ≥1.5× more active arms with mutation
@@ -89,7 +89,7 @@ graph TD
 - [x] **T3.3** Integrate with MUSE `PrunerTestGate` (Plan 189)
   - `IdeaDivergence` becomes a gate in skill registration: new skills must be strategically novel
   - Prevents catalog pollution with near-duplicate skills
-- [ ] **T3.4** GOAT proof: bandit with divergence filter converges faster and to better optimum
+- [x] **T3.4** GOAT proof: bandit with divergence filter converges faster and to better optimum
   - Test: bomber arena, 1000 rounds, with vs without divergence filter
   - Metrics: convergence time, final reward, arm diversity at convergence
   - Expected: convergence time ↓ ≥20%, final reward ≥ same, arm diversity ≥ 2× active arms
