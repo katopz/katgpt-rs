@@ -155,10 +155,10 @@ pub fn prisoners_dilemma(a: u8, b: u8) -> (f64, f64) {
 - [ ] Integration test: 22 FSMs compete in matching pennies, verify machine 26 wins (Wolfram result)
 - [ ] Integration test: 22 FSMs compete in PD, verify machine 30 (grim trigger) wins
 
-### Phase 3: Cross-Paradigm Arena (modelless + model-based)
+### Phase 3: Cross-Paradigm Arena (modelless + model-based) — Partial
 
-- [ ] Implement `CaStrategy` — CA rule as `SimpleProgram` (16 rules for 2-color)
-- [ ] Implement `TmStrategy` — 1-state TM as `SimpleProgram` (16 machines)
+- [x] Implement `CaStrategy` — CA rule as `SimpleProgram` (256 rules, ~88 distinct)
+- [x] Implement `TmStrategy` — 1-state TM as `SimpleProgram` (36 machines)
 - [ ] Cross-paradigm tournament: FSM vs CA vs TM in matching pennies
 - [ ] Verify Wolfram result: rule 14 wins among 2-color CAs
 - [ ] Cross-paradigm tournament in PD

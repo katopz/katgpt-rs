@@ -23,13 +23,17 @@
 //! ```
 
 pub mod bandit;
+pub mod ca;
 pub mod fsm;
 pub mod payoff;
+pub mod tm;
 pub mod types;
 
 pub use bandit::{RuliologyArm, RuliologyBandit};
+pub use ca::CaStrategy;
 pub use fsm::{FsmEnumerator, FsmStrategy, MAX_STATES};
 pub use payoff::{matching_pennies, prisoners_dilemma};
+pub use tm::TmStrategy;
 pub use types::{RuliologyPruner, SimpleProgram, WinMatrix};
 
-// TL;DR: Ruliology module — exhaustive simple-program enumeration (FSM/CA/TM) as bandit arms. Phase 1: core types + FSM enumerator.
+// TL;DR: Ruliology module — exhaustive simple-program enumeration (FSM/CA/TM) as bandit arms. Phase 3: FSM + CA + TM strategies.
