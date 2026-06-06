@@ -34,7 +34,6 @@ pub mod inference_router;
 pub mod iso_quant;
 #[cfg(feature = "kv_share")]
 pub mod kv_share;
-#[cfg(feature = "kvarn")]
 pub mod kvarn;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
