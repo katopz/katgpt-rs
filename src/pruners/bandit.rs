@@ -133,8 +133,7 @@ pub enum BanditStrategy {
     /// arm's score is boosted proportionally. All arms are guaranteed at
     /// least `floor` × max_score.
     ///
-    /// Feature-gated under `curvature_alloc`.
-    #[cfg(feature = "curvature_alloc")]
+    /// Default-on (Plan 183 GOAT 6/6).
     CurvatureInfluence {
         /// Floor guarantee: all arms get at least `floor` × max_score.
         floor: f32,
@@ -179,7 +178,6 @@ impl fmt::Display for BanditStrategy {
                     "SafePhased(base={baseline_arm}, δ={delta:.2}, D̂={estimated_delay})"
                 )
             }
-            #[cfg(feature = "curvature_alloc")]
             Self::CurvatureInfluence {
                 floor,
                 concentration_threshold,
@@ -819,7 +817,6 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             }
             #[cfg(feature = "safe_bandit")]
             BanditStrategy::SafePhased { .. } => self.arm_ucb1(token_idx).clamp(0.0, 1.5) / 1.5,
-            #[cfg(feature = "curvature_alloc")]
             BanditStrategy::CurvatureInfluence {
                 floor,
                 concentration_threshold,
@@ -1311,7 +1308,6 @@ impl<E: BanditEnv> BanditSession<E> {
             }
             #[cfg(feature = "safe_bandit")]
             BanditStrategy::SafePhased { .. } => self.select_safe_phased(rng),
-            #[cfg(feature = "curvature_alloc")]
             BanditStrategy::CurvatureInfluence { .. } => self.select_ucb1(), // UCB1 base with CIAB scoring override
         }
     }

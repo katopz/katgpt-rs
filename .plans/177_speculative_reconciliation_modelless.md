@@ -1,6 +1,6 @@
 # Plan 177: Speculative Reconciliation Engine — Modelless Implementation
 
-> **Status:** ✅ Done
+> **Status:** ✅ Complete — GOAT G1-G8 — Default ON
 > **Research:** [Research 156](../.research/156_Speculative_Reconciliation_Engine.md)
 > **Depends On:** Plan 032 ✅ (HL), Plan 053 ✅ (DeltaMemory), Plan 155 ✅ (LEO), Plan 194 ✅ (Adaptive CoT)
 > **Feature Gate:** `spec_reconciliation`
@@ -90,6 +90,5 @@ Parallelizable: T2 + T3 + T4 can run concurrently after T1.
 ## Default Behavior
 
 Per constraint "if gain and no perf hurt must be on by default":
-- `spec_reconciliation` starts as opt-in feature gate
-- After T7 GOAT proof passes (G5 latency <1ms, G6 false positive <1%), promote to **default-on**
+- Promoted to default-on after GOAT proof (G5 latency <1ms, G6 false positive <1%). All tests pass.
 - Performance audit: verify no regression on existing speculative decoding benchmarks when feature enabled

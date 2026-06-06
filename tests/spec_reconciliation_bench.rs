@@ -6,7 +6,7 @@
 //!
 //! Run: `cargo test --features spec_reconciliation --test spec_reconciliation_bench -- --nocapture`
 
-#![cfg(feature = "spec_reconciliation")]
+
 
 use std::time::Instant;
 

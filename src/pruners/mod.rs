@@ -401,15 +401,13 @@ pub use gepa_reflective::{
 
 // ── PhraseBoost Context Trie (Research 147, Plan 164) ──
 
-#[cfg(feature = "curvature_alloc")]
 pub mod curvature_alloc;
 
-#[cfg(feature = "curvature_alloc")]
 pub use curvature_alloc::{
     CurvatureInfluenceScorer, CurvatureWeightedBudget, EosProxyScorer, verification_depth,
 };
 
-#[cfg(all(feature = "curvature_alloc", feature = "nds_proxy"))]
+#[cfg(feature = "nds_proxy")]
 pub use curvature_alloc::NdsAwareScorer;
 
 // ── PhraseBoost Context Trie (Research 147, Plan 164) ──

@@ -102,7 +102,6 @@ fn select_arm(stats: &BanditStats, strategy: &BanditStrategy, rng: &mut Rng) -> 
                 stats.best_arm()
             }
         }
-        #[cfg(feature = "curvature_alloc")]
         BanditStrategy::CurvatureInfluence { .. } => (0..NUM_ARMS)
             .max_by(|&a, &b| {
                 stats

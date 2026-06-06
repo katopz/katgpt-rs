@@ -18,6 +18,8 @@ pub mod dllm;
 pub mod ega_attn;
 #[cfg(feature = "feedback")]
 pub mod feedback;
+#[cfg(feature = "freq_bandit")]
+pub mod freq_bandit;
 #[cfg(feature = "gdn2_attention")]
 pub mod gdn2;
 #[cfg(all(target_os = "macos", feature = "gpu_inference"))]
@@ -27,8 +29,6 @@ pub mod hla;
 #[cfg(feature = "hybrid_oct_pq")]
 pub mod hybrid_oct_pq;
 pub mod inference_backend;
-#[cfg(feature = "freq_bandit")]
-pub mod freq_bandit;
 pub mod inference_router;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
@@ -66,7 +66,6 @@ pub mod skill_opt;
 pub mod sleep;
 #[cfg(feature = "sp_kv")]
 pub mod sp_kv;
-#[cfg(feature = "spec_reconciliation")]
 pub mod spec_reconciliation;
 #[cfg(feature = "spechop")]
 pub mod spechop;

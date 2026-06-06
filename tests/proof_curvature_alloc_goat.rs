@@ -1,9 +1,7 @@
-#![cfg(feature = "curvature_alloc")]
-
 //! GOAT Proof Tests for Curvature-Influence Allocation Bandit (Plan 183)
 //!
 //! 6/6 proofs required for GOAT qualification.
-//! Run: `cargo test --features curvature_alloc --test proof_curvature_alloc_goat`
+//! Run: `cargo test --test proof_curvature_alloc_goat`
 
 use katgpt_rs::pruners::{CurvatureInfluenceScorer, CurvatureWeightedBudget, EosProxyScorer};
 

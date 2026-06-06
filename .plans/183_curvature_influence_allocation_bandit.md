@@ -4,8 +4,8 @@
 > **Paper:** [arXiv:2606.04212](https://arxiv.org/abs/2606.04212) — Kwag et al., Jun 2026
 > **Depends:** Plan 130 (Epiplexity ✅), Plan 030 (Bandit ✅), Plan 131 (SpecHop ✅)
 > **Feature Gate:** `curvature_alloc = ["bandit", "epiplexity"]`
-> **Status:** Active
-> **Default-on:** Yes (after GOAT proof) — zero perf overhead, proven gain
+> **Status:** ✅ Complete — GOAT 6/6 — Default ON
+> **Default-on:** ✅ Yes — GOAT proof passed, promoted to default
 
 ---
 

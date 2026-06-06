@@ -16,7 +16,6 @@
 /// (how much a group's loss deviates from its running mean) with alignment
 /// (how concentrated the score distribution is). High influence positions
 /// get more DDTree budget.
-#[cfg(feature = "curvature_alloc")]
 pub trait CurvatureInfluenceScorer: Send + Sync {
     /// Return the cached curvature-influence score for group `k`, normalized to [0, 1].
     fn curvature_influence(&self, group: usize) -> f32;
@@ -36,7 +35,6 @@ pub trait CurvatureInfluenceScorer: Send + Sync {
 /// - **Persistence** = EMA of |loss − running_mean|. High when loss oscillates.
 /// - **Alignment** = 1 − normalized_entropy(softmax(scores)). High when scores concentrate.
 /// - **Influence** = persistence × alignment, normalized to [0, 1].
-#[cfg(feature = "curvature_alloc")]
 pub struct EosProxyScorer {
     /// EMA loss residual per group (persistence).
     persistence: Vec<f32>,
@@ -50,7 +48,6 @@ pub struct EosProxyScorer {
     influence: Vec<f32>,
 }
 
-#[cfg(feature = "curvature_alloc")]
 impl EosProxyScorer {
     /// Create a new scorer for `num_groups` depth positions.
     ///
@@ -98,7 +95,6 @@ impl EosProxyScorer {
     }
 }
 
-#[cfg(feature = "curvature_alloc")]
 impl CurvatureInfluenceScorer for EosProxyScorer {
     fn curvature_influence(&self, group: usize) -> f32 {
         match self.influence.get(group) {
@@ -162,7 +158,6 @@ impl CurvatureInfluenceScorer for EosProxyScorer {
 ///
 /// Allocates more DDTree budget to high-influence depth positions
 /// while guaranteeing a floor for every position.
-#[cfg(feature = "curvature_alloc")]
 pub struct CurvatureWeightedBudget {
     /// Minimum fraction of budget guaranteed for each position (default 0.1).
     pub floor_ratio: f32,
@@ -170,7 +165,6 @@ pub struct CurvatureWeightedBudget {
     pub max_boost: f32,
 }
 
-#[cfg(feature = "curvature_alloc")]
 impl CurvatureWeightedBudget {
     /// Create with default parameters.
     pub fn new() -> Self {
@@ -247,7 +241,6 @@ impl CurvatureWeightedBudget {
     }
 }
 
-#[cfg(feature = "curvature_alloc")]
 impl Default for CurvatureWeightedBudget {
     fn default() -> Self {
         Self::new()
@@ -257,7 +250,6 @@ impl Default for CurvatureWeightedBudget {
 /// Curvature-informed verification depth selector.
 /// High curvature influence → full verification (deep)
 /// Low curvature influence → fast-path (shallow)
-#[cfg(feature = "curvature_alloc")]
 #[inline]
 pub fn verification_depth(
     position: usize,
@@ -271,7 +263,7 @@ pub fn verification_depth(
 
 /// NDS-aware curvature influence scorer that composes NDS proxy signal
 /// with the existing persistence × alignment metric.
-#[cfg(all(feature = "curvature_alloc", feature = "nds_proxy"))]
+#[cfg(feature = "nds_proxy")]
 pub struct NdsAwareScorer<S: CurvatureInfluenceScorer> {
     /// Inner scorer providing base curvature influence.
     pub inner: S,
@@ -279,7 +271,7 @@ pub struct NdsAwareScorer<S: CurvatureInfluenceScorer> {
     pub nds_weight: f32,
 }
 
-#[cfg(all(feature = "curvature_alloc", feature = "nds_proxy"))]
+#[cfg(feature = "nds_proxy")]
 impl<S: CurvatureInfluenceScorer> NdsAwareScorer<S> {
     pub fn new(inner: S, nds_weight: f32) -> Self {
         Self {
@@ -289,7 +281,7 @@ impl<S: CurvatureInfluenceScorer> NdsAwareScorer<S> {
     }
 }
 
-#[cfg(all(feature = "curvature_alloc", feature = "nds_proxy"))]
+#[cfg(feature = "nds_proxy")]
 impl<S: CurvatureInfluenceScorer> CurvatureInfluenceScorer for NdsAwareScorer<S> {
     fn curvature_influence(&self, group: usize) -> f32 {
         self.inner.curvature_influence(group)
@@ -313,7 +305,7 @@ impl<S: CurvatureInfluenceScorer> CurvatureInfluenceScorer for NdsAwareScorer<S>
 
 // ── Inline Unit Tests ───────────────────────────────────────────
 
-#[cfg(all(feature = "curvature_alloc", test))]
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -371,7 +371,6 @@ fn select_arm(
                     .unwrap_or(std::cmp::Ordering::Equal)
             })
             .unwrap_or(0),
-        #[cfg(feature = "curvature_alloc")]
         BanditStrategy::CurvatureInfluence { .. } => (0..combat_arms)
             .max_by(|&a, &b| {
                 stats

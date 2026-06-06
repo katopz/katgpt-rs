@@ -240,7 +240,6 @@ impl Director {
                         .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .unwrap_or(0),
-            #[cfg(feature = "curvature_alloc")]
             BanditStrategy::CurvatureInfluence { .. } => (0..Encounter::ALL.len())
                 .max_by(|&a, &b| {
                     self.stats

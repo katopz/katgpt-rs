@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo test --features spec_reconciliation --test spec_reconciliation_proof -- --nocapture
 
-#![cfg(feature = "spec_reconciliation")]
+
 
 use std::f32::consts::TAU;
 use std::time::Instant;

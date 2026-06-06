@@ -1,5 +1,3 @@
-#![cfg(feature = "spec_reconciliation")]
-
 //! Speculative Reconciliation Interactive Demo
 //!
 //! Demonstrates 4 scenarios of the reconciliation engine plus an adaptive bandit demo.

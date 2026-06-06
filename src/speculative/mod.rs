@@ -9,7 +9,6 @@ pub mod step;
 pub mod types;
 pub mod verifier;
 
-#[cfg(feature = "trust_region_spec")]
 pub mod trust_region;
 
 #[cfg(feature = "budget_adaptation")]
@@ -287,7 +286,6 @@ pub mod and_or_builder;
 pub use and_or_builder::{AndOrBuilder, Subgoal};
 
 // ── Trust-Region Adaptive Speculation (Plan 182, Research 162) ──
-#[cfg(feature = "trust_region_spec")]
 pub use trust_region::{
     TrustArm, TrustRegionConfig, TrustRegionState, TrustTracker, adaptive_window, blend_sample,
     find_blend_beta,

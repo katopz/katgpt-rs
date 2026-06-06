@@ -1,9 +1,9 @@
 # Plan 182: Trust-Region Adaptive Speculation (TRAS)
 
 > **Research:** 162 (Trust-Region Adaptive Speculation)
-> **Status:** ACTIVE
+> **Status:** ✅ Complete — GOAT T6 acceptance ≥15% — Default ON
 > **Feature gate:** `trust_region_spec` — depends on `speculative`, optionally `bandit`, `inference_router`, `thinking_cot`
-> **Default-on:** After GOAT proof — trust-region speculation must show ≥15% acceptance-rate improvement with zero quality regression
+> **Default-on:** ✅ Yes — GOAT proof passed (≥15% acceptance improvement), promoted to default
 > **Commercial alignment:** Per Verdict 003 — modelless inference trust in MIT engine (katgpt-rs), LoRA training trust in private SaaS (riir-ai)
 
 ---
@@ -108,7 +108,7 @@ graph TD
 trust_region_spec = ["speculative", "bandit"]
 ```
 
-After GOAT proof (T6 passes), add to default features.
+GOAT proof passed (T6 acceptance ≥15%). Promoted to default features in Cargo.toml.
 
 ---
 

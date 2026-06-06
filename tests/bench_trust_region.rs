@@ -5,7 +5,6 @@
 //! 2. Binary search for β: 10 iterations over KL computation
 //! 3. Overall trust region state overhead
 
-#[cfg(feature = "trust_region_spec")]
 mod benches {
     use katgpt_rs::speculative::{
         TrustArm, TrustRegionConfig, TrustRegionState, TrustTracker, adaptive_window, blend_sample,
