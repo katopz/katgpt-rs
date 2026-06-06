@@ -326,12 +326,15 @@ const EXPECTED_2_STATE_COUNT: usize = 26;
 
 // ── Cross-paradigm tournament helpers ──────────────────────────────
 
+#[cfg(test)]
 use crate::ruliology::ca::CaStrategy;
+#[cfg(test)]
 use crate::ruliology::tm::TmStrategy;
 
 /// Play two SimpleProgram strategies against each other for `rounds` rounds.
 ///
 /// Returns the total payoff for player A.
+#[cfg(test)]
 fn play_match<A: SimpleProgram, B: SimpleProgram>(
     a: &mut A,
     b: &mut B,
