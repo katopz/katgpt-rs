@@ -199,8 +199,7 @@ fn run_round(
 
         // Capture replay data for P3 (index 2) and P4 (index 3) only
         if capture_replay {
-            let board =
-                serialize_board(world.resource::<katgpt_rs::pruners::bomber::ArenaGrid>());
+            let board = serialize_board(world.resource::<katgpt_rs::pruners::bomber::ArenaGrid>());
             let bombs = serialize_bombs(&mut world);
             let powerups = serialize_powerups(&mut world);
             let tick = world
@@ -233,6 +232,7 @@ fn run_round(
                             danger_level: 0,
                             nearest_opponent_dist: 0,
                             escape_routes: 0,
+                            template_id: 255, // not set
                         },
                     });
                 }

@@ -65,3 +65,22 @@ Despite the negative arena result, the SDPG infrastructure has independent value
 - Keep `sdpg_bandit` as **opt-in** feature (not default)
 - The KL anchoring component should be considered for extraction as independent bandit stability utility
 - Future work: integrate with actual oracle replay data pipeline for meaningful teacher Q-values
+
+## Update (Phase 8-9: Sigmoid + Oracle Pipeline)
+
+| Change | Impact |
+|--------|--------|
+| Fixed `update_if_sdpg` missing from `arena_runner.rs` | SDPG 12% → 15.3% (bug fix, not oracle) |
+| Added `sigmoid_advantage` / `raw_delta_advantage` modes | No improvement with uniform teacher Q |
+| Added `template_id` to ReplaySample | Infrastructure for future template-level oracle |
+| Added `bomber_19_sdpg_replay_gen` (burn-in + GOAT) | SDPG(oracle) still 14% < HL 28% |
+
+### Why oracle doesn't help
+
+All 8 templates converge to Q~0.88 (variance <0.04) during burn-in.
+Bomberman outcomes depend on **action execution** (safety filter, bomb timing) not **template selection**.
+SDPG's template-level oracle signal is the wrong abstraction for this domain.
+
+### What actually helped
+
+The `update_if_sdpg` fix in `arena_runner.rs` was the real win — the bandit was never learning from outcomes in prior tournaments.

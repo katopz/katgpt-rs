@@ -318,6 +318,48 @@ impl SdpgPlayer {
         })
     }
 
+    /// Create SdpgPlayer with pre-built oracle teacher Q-values.
+    ///
+    /// Use this when teacher Q-values are known from prior burn-in or replay analysis.
+    pub fn with_teacher_q(id: u8, teacher_q: Vec<f32>) -> Self {
+        assert_eq!(
+            teacher_q.len(),
+            NUM_TEMPLATES,
+            "teacher_q length must match NUM_TEMPLATES ({NUM_TEMPLATES})"
+        );
+        let bandit_inner =
+            BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, NUM_TEMPLATES);
+        let sdpg_bandit = SdpgBanditPruner::with_defaults(bandit_inner, teacher_q);
+
+        let absorb =
+            AbsorbCompressLayer::new(NoScreeningPruner, NUM_TEMPLATES, CompressConfig::default());
+
+        Self {
+            _id: id,
+            known_bombs: Vec::new(),
+            known_powerups: Vec::new(),
+            known_opponents: Vec::new(),
+            last_dir: None,
+            alive: true,
+            powerups_collected: 0,
+            template_proposer: BomberTemplateProposer::new(),
+            sdpg_bandit,
+            absorb,
+            round_actions: Vec::new(),
+            round_template_ids: Vec::new(),
+            q_values: [0.0; ACTION_COUNT],
+            visits: [0; ACTION_COUNT],
+            last_arena_outcome: None,
+        }
+    }
+
+    /// Get a reference to the inner SDPG bandit pruner.
+    ///
+    /// Use this to extract learned Q-values after burn-in.
+    pub fn sdpg_bandit(&self) -> &SdpgBanditPruner<NoScreeningPruner> {
+        &self.sdpg_bandit
+    }
+
     /// Update Q-values from round outcome + feed outcome reward to SDPG bandit.
     ///
     /// Computes scalar outcome reward from survival/powerup stats and feeds to

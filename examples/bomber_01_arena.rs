@@ -402,6 +402,7 @@ fn run_round(
                             danger_level: 0,            // backfilled later
                             nearest_opponent_dist: 255, // backfilled later
                             escape_routes: 0,           // backfilled later
+                            template_id: 255,           // not set (non-template player)
                         },
                     });
                 }

@@ -255,6 +255,7 @@ mod tests {
             nearest_opponent_dist: 255,
             escape_routes: 4,
             bomb_types: vec![],
+            template_id: 255,
         }
     }
 

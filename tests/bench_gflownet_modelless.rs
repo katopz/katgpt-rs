@@ -379,6 +379,7 @@ fn bench_d4_backward_replay_quality() {
             danger_level: 0,
             nearest_opponent_dist: 255,
             escape_routes: 4,
+            template_id: 255,
         });
     }
 

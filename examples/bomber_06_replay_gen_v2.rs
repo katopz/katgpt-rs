@@ -175,6 +175,7 @@ fn main() {
                     &ps.opponent_positions,
                 ),
                 escape_routes: compute_escape_routes(ps.player_pos, &grid),
+                template_id: 255, // not set
             };
 
             writer.write_sample(&sample).ok();

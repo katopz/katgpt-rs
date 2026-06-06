@@ -235,6 +235,19 @@ Root cause analysis showed softmax-based KL has poor resolution for 5-10 bandit 
 - [x] T16: Add `SdpgPlayer::with_replay()` — constructs player with oracle replay data
 - [x] T17: All 30 SDPG lib tests + 9 sdpg_player tests passing
 
+### Phase 9: Oracle Pipeline + Bug Fix
+
+- [x] T18: Fix critical bug — `update_if_sdpg` missing from `arena_runner.rs`, SDPG bandit never learned from outcomes. This alone improved SDPG from 12% → 15.3%.
+- [x] T19: Add `template_id: u8` to `ReplaySample` (backward compat, serde default=255)
+- [x] T20: Add `SdpgPlayer::with_teacher_q()` constructor for oracle Q injection
+- [x] T21: Add `SdpgPlayer::sdpg_bandit()` accessor for Q-value extraction
+- [x] T22: Create `bomber_19_sdpg_replay_gen` — two-phase burn-in + GOAT gate example
+- [x] T23: Run oracle pipeline — **STILL NEGATIVE**: SDPG(oracle) 14% < HL 28%
+  - Root cause: all 8 templates converge to Q~0.88 (variance <0.04) — domain has no meaningful template-level differentiation
+  - Bomber outcomes depend on action execution (safety filter, bomb placement), not template choice
+  - SDPG's template-level oracle signal is the wrong abstraction for this domain
+  - **update_if_sdpg fix** was the real win (12% → 15.3%)
+
 ---
 
 ## Files Modified

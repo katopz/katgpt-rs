@@ -164,6 +164,7 @@ fn main() {
                     danger_level: 0,
                     nearest_opponent_dist: 255,
                     escape_routes: 0,
+                    template_id: 255, // not set
                 };
                 writer.write_sample(&sample).ok();
                 action_counts[ps.action as usize] += 1;

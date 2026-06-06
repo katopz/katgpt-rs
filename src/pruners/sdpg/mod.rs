@@ -251,10 +251,15 @@ fn load_teacher_q_from_replay(
     for line in reader.lines() {
         let line = line?;
         if let Ok(sample) = ReplaySample::from_json(&line) {
-            let action_idx = sample.action as usize;
-            if action_idx < num_arms {
-                quality_sums[action_idx] += sample.quality;
-                counts[action_idx] += 1;
+            // Use template_id when available (0-7), fall back to action
+            let idx = if sample.template_id < num_arms as u8 {
+                sample.template_id as usize
+            } else {
+                sample.action as usize
+            };
+            if idx < num_arms {
+                quality_sums[idx] += sample.quality;
+                counts[idx] += 1;
             }
         }
     }

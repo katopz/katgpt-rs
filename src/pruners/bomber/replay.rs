@@ -36,6 +36,14 @@ pub struct ReplaySample {
     /// Defaults to empty for backward compat (old replays → all Timed).
     #[serde(default)]
     pub bomb_types: Vec<u8>,
+    /// Strategy template ID (0-7). Only set by template-using players (GZero/Rubric/SDAR/SDPG).
+    /// 255 = not set (raw action player like Random/Greedy/Validator/HL).
+    #[serde(default = "default_template_id")]
+    pub template_id: u8,
+}
+
+fn default_template_id() -> u8 {
+    255
 }
 
 impl ReplaySample {
@@ -85,6 +93,7 @@ impl ReplaySample {
             nearest_opponent_dist,
             escape_routes,
             bomb_types: vec![0; bomb_count],
+            template_id: 255,
         }
     }
 
@@ -348,6 +357,7 @@ mod tests {
             nearest_opponent_dist: 0,
             escape_routes: 0,
             bomb_types: vec![0],
+            template_id: 255,
         };
 
         let json = sample.to_json();
@@ -419,6 +429,7 @@ mod tests {
             nearest_opponent_dist: 0,
             escape_routes: 0,
             bomb_types: vec![],
+            template_id: 255,
         };
 
         {
@@ -594,5 +605,17 @@ mod tests {
         assert_eq!(sample.nearest_opponent_dist, 0);
         assert_eq!(sample.escape_routes, 0);
         assert!(sample.bomb_types.is_empty());
+    }
+
+    #[test]
+    fn enriched_backward_compat_json_without_template_id() {
+        // Old JSON without template_id field — should default to 255
+        let old_json = r#"{"board":[0,0,0],"player_pos":[1,1],"player_id":0,"bombs":[],"powerups":[],"action":0,"quality":0.5,"tick":1,"round":1,"player_type":"Old","danger_level":0,"nearest_opponent_dist":0,"escape_routes":0,"bomb_types":[]}"#;
+
+        let sample = ReplaySample::from_json(old_json).expect("should parse old format");
+        assert_eq!(
+            sample.template_id, 255,
+            "template_id should default to 255 for old replays"
+        );
     }
 }

@@ -20,6 +20,8 @@ use super::players::HLPlayer;
 use super::rubric_player::RubricPlayer;
 #[cfg(feature = "sdar_gate")]
 use super::sdar_player::SdarPlayer;
+#[cfg(feature = "sdpg_bandit")]
+use super::sdpg_player::SdpgPlayer;
 #[cfg(feature = "skill_lifecycle")]
 use super::skill_lifecycle_player::SkillLifecyclePlayer;
 use super::{ArenaGrid, GameEvent, init_world, init_world_with_arena, run_tick, spawn_players};
@@ -266,6 +268,8 @@ fn update_learning_players(players: &mut [Box<dyn BomberPlayer>], result: &Bombe
         update_if_rubric(player, survived, killed, powerup_count);
         #[cfg(feature = "sdar_gate")]
         update_if_sdar(player, survived, killed, powerup_count);
+        #[cfg(feature = "sdpg_bandit")]
+        update_if_sdpg(player, survived, killed, powerup_count);
     }
 }
 
@@ -323,7 +327,15 @@ fn update_if_sdar(player: &mut Box<dyn BomberPlayer>, survived: bool, killed: bo
     }
 }
 
-// ── Tests ──────────────────────────────────────────────────────
+/// Update [`SdpgPlayer`] if the player is one.
+#[cfg(feature = "sdpg_bandit")]
+fn update_if_sdpg(player: &mut Box<dyn BomberPlayer>, survived: bool, killed: bool, powerups: u32) {
+    if let Some(sp) = player.as_any_mut().downcast_mut::<SdpgPlayer>() {
+        sp.update_outcome(survived, killed, powerups);
+    }
+}
+
+// ── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
