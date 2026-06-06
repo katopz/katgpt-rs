@@ -22,8 +22,8 @@ use crate::pruners::game_state::{GameState, StateHeuristic, mcts_search};
 
 const PASS_PROBABILITY: f32 = 0.02;
 const HL_EPSILON: f32 = 0.15;
-const HEURISTIC_WEIGHT: f32 = 0.8;
-const BANDIT_WEIGHT: f32 = 0.2;
+pub const HEURISTIC_WEIGHT: f32 = 0.8;
+pub const BANDIT_WEIGHT: f32 = 0.2;
 const NUM_CATEGORIES: usize = 8;
 const NUM_TEMPLATES: usize = 4;
 const DEFAULT_MCTS_BUDGET: usize = 200;

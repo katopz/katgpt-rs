@@ -509,6 +509,10 @@ required-features = ["go"]
 name = "go_09_reflection_qa"
 required-features = ["memo_reflections", "go"]
 
+[[example]]
+name = "go_10_sdpg_tournament"
+required-features = ["go", "sdpg_bandit"]
+
 # ── Tactical AI ────────────────────────────────────────────────
 
 [[example]]

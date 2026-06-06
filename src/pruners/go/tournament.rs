@@ -24,6 +24,8 @@ use super::players::{
     GoGZeroPlayer, GoGreedyPlayer, GoHLPlayer, GoMctsPlayer, GoPlayer, GoRandomPlayer,
     GoValidatorPlayer,
 };
+#[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+use super::sdpg_player::GoSdpgPlayer;
 use super::state::GoState;
 use super::types::{GoAction, GoCell};
 
@@ -51,6 +53,9 @@ pub enum GoPlayerType {
         /// Maximum rollout depth.
         rollout_depth: usize,
     },
+    /// SDPG oracle-informed self-distilled policy gradient (Plan 194).
+    #[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+    Sdpg,
 }
 
 impl GoPlayerType {
@@ -67,6 +72,8 @@ impl GoPlayerType {
                 budget,
                 rollout_depth,
             } => Box::new(GoMctsPlayer::new(*budget, *rollout_depth)),
+            #[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+            Self::Sdpg => Box::new(GoSdpgPlayer::new()),
         }
     }
 
@@ -80,6 +87,8 @@ impl GoPlayerType {
             Self::GZero => "GZero",
             Self::MCTS => "MCTS",
             Self::MctsCustom { .. } => "MCTS-Custom",
+            #[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+            Self::Sdpg => "SDPG",
         }
     }
 }

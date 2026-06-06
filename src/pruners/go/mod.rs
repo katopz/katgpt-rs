@@ -26,6 +26,9 @@ pub mod types;
 #[cfg(feature = "event_log")]
 pub mod event_log_player;
 
+#[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+pub mod sdpg_player;
+
 // ── Re-exports ─────────────────────────────────────────────────
 
 // Types
@@ -74,3 +77,7 @@ pub use autoresearch::{
 // Event Log (Plan 124)
 #[cfg(feature = "event_log")]
 pub use event_log_player::{GoEventLog, GoForkDiff};
+
+// SDPG Player (Plan 194)
+#[cfg(all(feature = "sdpg_bandit", feature = "go"))]
+pub use sdpg_player::GoSdpgPlayer;
