@@ -175,7 +175,7 @@ pub struct SkillCatalog {
   - Phase 4: Evolve — Simulated improvement and re-validation (Validated → Active)
   - Phase 5: Summary with edge cases, failures, best arm Q-value
 - [x] Feature gate: `#![cfg(feature = "skill_lifecycle")]`
-- [ ] Integration test: full lifecycle — append memory → compress → test gate → catalog → bandit select → verify
+- [x] Integration test: full lifecycle — append memory → compress → test gate → catalog → bandit select → verify
 
 ## File Layout
 
