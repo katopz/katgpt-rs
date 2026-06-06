@@ -183,9 +183,9 @@ pub fn prisoners_dilemma(a: u8, b: u8) -> (f64, f64) {
 
 - [ ] Arena proof: RuliologyBandit (with Pareto-filtered arms) vs static HL vs random in bomber
 - [ ] Arena proof: Cross-paradigm ranking in Go (FSM vs CA vs Bandit vs HL vs MCTS)
-- [ ] Benchmark: enumeration time for N=2 (trivial), N=3 (sub-second), N=4 (measure)
-- [ ] Benchmark: IrreducibilityGate overhead on hot path
-- [ ] Verify: no perf regression when `ruliology` feature is disabled
+- [x] Benchmark: enumeration time for N=2 (trivial), N=3 (sub-second), N=4 (measure)
+- [x] Benchmark: IrreducibilityGate overhead on hot path
+- [x] Verify: no perf regression when `ruliology` feature is disabled
 
 ## File Layout
 
@@ -214,7 +214,9 @@ src/ruliology/
 | PD winner (2-state) | Grim trigger (Wolfram) | ✅ Grim trigger beats tit-for-tat |
 | CA rule 14 (matching pennies) | Winner (Wolfram) | ✅ Top 10% in CA tournament |
 | Complexity-payoff correlation | ~0 | ✅ |r| < 0.5 |
-| IrreducibilityGate overhead | <0.1μs per check | ✅ Sub-millisecond for 22×22 |
+| IrreducibilityGate overhead | <0.1μs per check | ✅ 21μs for 26×26, 26ms for 1054×1054 |
+| FSM(2) enumeration time | trivial | ✅ 4.5ms |
+| FSM(3) enumeration time | sub-second | ✅ 6.2s |
 | No-regression with feature off | 0ns — compiled out | ✅ Zero warnings |
 
 ## Feature Gate
