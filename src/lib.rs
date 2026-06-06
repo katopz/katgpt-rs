@@ -42,6 +42,8 @@ pub mod mbu;
 pub mod newton_schulz;
 #[cfg(feature = "octopus")]
 pub mod octopus;
+#[cfg(feature = "osc_kv")]
+pub mod osc_kv;
 pub mod percepta;
 #[cfg(feature = "planar_quant")]
 pub mod planar_quant;

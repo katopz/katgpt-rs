@@ -51,16 +51,16 @@ Distill OSSM-PINN's oscillatory state-space principles into katgpt-rs as modelle
 
 ### Phase 2: OscKV — Conditional, Opt-In — **DEFERRED: complex, opt-in**
 
-- [-] Implement `OscKVCache` struct in `src/osc_kv.rs`
-  - `OscKVState { y: Vec<f32>, z: Vec<f32>, omega_sq: Vec<f32>, beta: Vec<f32> }`
+- [x] Implement `OscKVCache` struct in `src/osc_kv.rs`
+  - `OscKVLayer { y: Vec<f32>, z: Vec<f32>, omega_sq: Vec<f32>, beta: Vec<f32> }`
   - IMEX discretization (symplectic, energy-preserving)
   - Bandit-learned ω from inference-time feedback
 
-- [ ] Implement `QuantizedKVCache` trait for `OscKVCache`
+- [x] Implement `QuantizedKVCache` trait for `OscKVCache`
   - `store_key`, `store_value` → update oscillatory state
   - `dequantize_key_into`, `dequantize_value_into` → reconstruct from oscillatory state
 
-- [ ] Wire into `Config` as `OscKVCache` variant
+- [x] Wire into `Config` as `OscKVCache` variant
   - Feature gate: `osc_kv` (opt-in, NOT default)
   - Only active when both `osc_kv` and `bandit` features enabled
 
