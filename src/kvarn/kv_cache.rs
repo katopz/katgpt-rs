@@ -231,8 +231,8 @@ impl KVarNKVCache {
         let pos_in_tile = pos % self.tile_size;
 
         // Buffer layout: [kv_dim, tile_size] row-major, so row=channel, col=token
-        for ch in 0..self.kv_dim {
-            self.key_buffer[ch * self.tile_size + pos_in_tile] = key[ch];
+        for (ch, &k) in key.iter().enumerate().take(self.kv_dim) {
+            self.key_buffer[ch * self.tile_size + pos_in_tile] = k;
         }
 
         let tile = &mut self.key_tiles[layer][tile_idx];
@@ -895,8 +895,8 @@ fn unpack_row(row: &[u8], bits: usize, out: &mut [u32]) {
         }
         _ => {
             // Fallback to per-element
-            for i in 0..n {
-                out[i] = unpack_value(row, i, bits);
+            for (i, slot) in out.iter_mut().enumerate().take(n) {
+                *slot = unpack_value(row, i, bits);
             }
         }
     }
@@ -1166,7 +1166,7 @@ mod tests {
 
                 // Pack known values
                 for pos in 0..cols {
-                    let val = ((pos as u32 * 7 + 3) % levels) as u32;
+                    let val = (pos as u32 * 7 + 3) % levels;
                     pack_value(&mut row, pos, val, bits as usize);
                 }
 
@@ -1175,12 +1175,11 @@ mod tests {
                 unpack_row(&row, bits as usize, &mut batch_out);
 
                 // Compare with per-element unpack
-                for pos in 0..cols {
+                for (pos, got) in batch_out.iter().enumerate().take(cols) {
                     let expected = unpack_value(&row, pos, bits as usize);
                     assert_eq!(
-                        batch_out[pos], expected,
-                        "unpack_row mismatch at pos={pos}, bits={bits}, cols={cols}: got {}, expected {}",
-                        batch_out[pos], expected
+                        got, &expected,
+                        "unpack_row mismatch at pos={pos}, bits={bits}, cols={cols}: got {got}, expected {expected}"
                     );
                 }
             }
@@ -1300,7 +1299,7 @@ mod tests {
         }
 
         // Approximate scale overhead per tile (conservative)
-        let n_tiles = (config.max_seq_len + config.tile_size - 1) / config.tile_size;
+        let n_tiles = config.max_seq_len.div_ceil(config.tile_size);
         // Key tile: [kv_dim, tile_size] → s_col(tile_size), s_row(kv_dim), rtn_scales(kv_dim), rtn_zp(kv_dim)
         let key_tile_overhead = (config.tile_size + config.kv_dim * 3) * 4; // f32 bytes
         // Val tile: [tile_size, kv_dim] → s_col(kv_dim), s_row(tile_size), rtn_scales(tile_size), rtn_zp(tile_size)

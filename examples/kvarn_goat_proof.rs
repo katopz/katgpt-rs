@@ -330,8 +330,7 @@ fn main() {
     // ── Phase 2: Benchmark RTN dequant-only (no quantize in the loop) ──
     for _ in 0..n_warmup {
         let mut out = vec![0.0f32; kv_dim];
-        for i in 0..bench_seq_len * 2 {
-            let (q, scale, zp) = &rtn_quantized[i];
+        for (q, scale, zp) in rtn_quantized.iter().take(bench_seq_len * 2) {
             for (o, &qv) in out.iter_mut().zip(q.iter()) {
                 *o = zp + qv as f32 * scale;
             }
@@ -340,8 +339,7 @@ fn main() {
     let start_rtn = Instant::now();
     for _ in 0..n_iters {
         let mut out = vec![0.0f32; kv_dim];
-        for i in 0..bench_seq_len * 2 {
-            let (q, scale, zp) = &rtn_quantized[i];
+        for (q, scale, zp) in rtn_quantized.iter().take(bench_seq_len * 2) {
             for (o, &qv) in out.iter_mut().zip(q.iter()) {
                 *o = zp + qv as f32 * scale;
             }

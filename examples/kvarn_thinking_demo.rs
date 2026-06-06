@@ -57,9 +57,9 @@ impl SeedRng {
 /// shines (variance normalization equalizes them).
 fn gen_thinking_vector(rng: &mut SeedRng, dim: usize, token_idx: usize) -> Vec<f32> {
     // Every ~16 tokens, produce a high-magnitude "reasoning step"
-    let is_reasoning_step = token_idx % 16 == 0;
+    let is_reasoning_step = token_idx.is_multiple_of(16);
     // Some tokens get moderate boost
-    let is_transition = token_idx % 7 == 0;
+    let is_transition = token_idx.is_multiple_of(7);
 
     let magnitude = if is_reasoning_step {
         10.0 // Large spike — simulates reasoning focus
@@ -271,7 +271,7 @@ fn main() {
     let tile_size: usize = 128;
     let context_lengths: [usize; 4] = [512, 1024, 2048, 4096];
     let bit_levels: [u8; 2] = [2, 4];
-    let seed: u64 = 0xC0FFEE_DEAD_BEEF;
+    let seed: u64 = 0x00C0_FFEE_DEAD_BEEF;
 
     let mut results: Vec<ScenarioResult> = Vec::new();
 

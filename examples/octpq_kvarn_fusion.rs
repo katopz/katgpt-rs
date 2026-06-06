@@ -91,7 +91,7 @@ fn row_stds(tile: &[f32], rows: usize, cols: usize) -> Vec<f32> {
         return result;
     }
     let inv_cols = 1.0 / cols as f32;
-    for i in 0..rows {
+    for (i, res) in result.iter_mut().enumerate() {
         let mut mean = 0.0f32;
         let off = i * cols;
         for j in 0..cols {
@@ -103,7 +103,7 @@ fn row_stds(tile: &[f32], rows: usize, cols: usize) -> Vec<f32> {
             let d = tile[off + j] - mean;
             var += d * d;
         }
-        result[i] = (var * inv_cols).sqrt();
+        *res = (var * inv_cols).sqrt();
     }
     result
 }

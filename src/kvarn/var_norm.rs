@@ -200,7 +200,7 @@ pub(crate) fn row_stds(tile: &[f32], rows: usize, cols: usize) -> Vec<f32> {
         return result;
     }
     let inv_cols = 1.0 / cols as f32;
-    for i in 0..rows {
+    for (i, res) in result.iter_mut().enumerate() {
         let mut mean = 0.0f32;
         let off = i * cols;
         for j in 0..cols {
@@ -212,7 +212,7 @@ pub(crate) fn row_stds(tile: &[f32], rows: usize, cols: usize) -> Vec<f32> {
             let d = tile[off + j] - mean;
             var += d * d;
         }
-        result[i] = (var * inv_cols).sqrt();
+        *res = (var * inv_cols).sqrt();
     }
     result
 }
@@ -254,8 +254,8 @@ mod tests {
         let mut tile = vec![0.0f32; rows * cols];
         // Row 0: large values, Row 3: small values
         for j in 0..cols {
-            tile[0 * cols + j] = 100.0 * (j as f32 + 1.0);
-            tile[1 * cols + j] = 10.0 * (j as f32 + 1.0);
+            tile[j] = 100.0 * (j as f32 + 1.0);
+            tile[cols + j] = 10.0 * (j as f32 + 1.0);
             tile[2 * cols + j] = 1.0 * (j as f32 + 1.0);
             tile[3 * cols + j] = 0.1 * (j as f32 + 1.0);
         }

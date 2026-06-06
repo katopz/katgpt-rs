@@ -225,7 +225,7 @@ mod tests {
 
         let result = pseudo_decode_eval(&keys, &values, tile_size, bits, &config);
 
-        let n_tiles = (seq_len + tile_size - 1) / tile_size;
+        let n_tiles = seq_len.div_ceil(tile_size);
         assert_eq!(result.per_tile_mse.len(), n_tiles);
         assert_eq!(result.cumulative_mse.len(), n_tiles);
         assert_eq!(result.per_tile_cosine.len(), n_tiles);
@@ -242,7 +242,7 @@ mod tests {
         // All cosine similarities should be in [0, 1] (positive for random data)
         for &cos in &result.per_tile_cosine {
             assert!(
-                cos >= -0.1 && cos <= 1.01,
+                (-0.1..=1.01).contains(&cos),
                 "cosine should be in [-0.1, 1.0]: {cos}"
             );
         }
@@ -279,7 +279,13 @@ mod tests {
         let key = make_random_vec(kv_dim, 42);
         let val = make_random_vec(kv_dim, 43);
 
-        let result = pseudo_decode_eval(&[key.clone()], &[val.clone()], 1, 4, &config);
+        let result = pseudo_decode_eval(
+            std::slice::from_ref(&key),
+            std::slice::from_ref(&val),
+            1,
+            4,
+            &config,
+        );
         assert_eq!(result.per_tile_mse.len(), 1);
         assert_eq!(result.per_tile_cosine.len(), 1);
         assert!(result.per_tile_mse[0].is_finite());

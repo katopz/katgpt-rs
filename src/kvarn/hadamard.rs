@@ -157,9 +157,9 @@ mod tests {
         hadamard_transform_inplace(&mut empty);
         assert!(empty.is_empty());
 
-        let mut single = vec![3.14f32];
+        let mut single = vec![1.5f32];
         hadamard_transform_inplace(&mut single);
-        assert!((single[0] - 3.14).abs() < 1e-6);
+        assert!((single[0] - 1.5).abs() < 1e-6);
     }
 
     #[test]
