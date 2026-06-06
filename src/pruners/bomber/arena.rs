@@ -368,10 +368,10 @@ mod tests {
     fn test_from_cells_missing_border() {
         let mut cells = vec![vec![Cell::Floor; 13]; 13];
         // Set proper borders
-        for y in 0..13 {
-            for x in 0..13 {
+        for (y, row) in cells.iter_mut().enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
                 if x == 0 || x == 12 || y == 0 || y == 12 {
-                    cells[y][x] = Cell::FixedWall;
+                    *cell = Cell::FixedWall;
                 }
             }
         }

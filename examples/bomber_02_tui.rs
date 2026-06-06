@@ -359,6 +359,10 @@ fn render_arena(f: &mut Frame, snap: &TickSnapshot, area: Rect) {
     f.render_widget(paragraph, area);
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "TUI render helper: each parameter is a distinct widget input; bundling into a struct would add indirection without clarity"
+)]
 fn render_scoreboard(
     f: &mut Frame,
     snap: &TickSnapshot,
@@ -381,9 +385,9 @@ fn render_scoreboard(
         };
         lines.push(Line::from(Span::styled(
             format!(
-                " {} {} {:<10} {:>+4} pts  {}",
+                " {} P{} {:<10} {:>+4} pts  {}",
                 P_EMOJI[i],
-                format!("P{}", i + 1),
+                i + 1,
                 names[i],
                 snap.scores[i],
                 alive,

@@ -225,7 +225,7 @@ mod tests {
 
         let result = pseudo_decode_eval(&keys, &values, tile_size, bits, &config);
 
-        let n_tiles = (seq_len as usize).div_ceil(tile_size as usize);
+        let n_tiles = (seq_len as usize).div_ceil(tile_size);
         assert_eq!(result.per_tile_mse.len(), n_tiles);
         assert_eq!(result.cumulative_mse.len(), n_tiles);
         assert_eq!(result.per_tile_cosine.len(), n_tiles);

@@ -259,11 +259,11 @@ fn main() {
     for i in 0..4 {
         let total_kills: u32 = kill_matrix[i].iter().sum();
         print!("  {} {:<6}", emoji[i], names[i]);
-        for j in 0..4 {
+        for (j, &kills) in kill_matrix[i].iter().enumerate() {
             if i == j {
                 print!("    ---   ");
             } else {
-                print!("  {:>8} ", kill_matrix[i][j]);
+                print!("  {kills:>8} ");
             }
         }
         println!("  {}", total_kills);
@@ -276,11 +276,11 @@ fn main() {
     }
 
     // Router stats (gate mode only)
-    if cli.device_gate {
-        if let Some(gate_player) = players[3]
+    if cli.device_gate
+        && let Some(gate_player) = players[3]
             .as_any()
             .downcast_ref::<katgpt_rs::pruners::bomber::GatePlayer>()
-        {
+    {
             let stats = gate_player.router_stats();
             println!();
             println!("═══ InferenceRouter Stats ═══");
@@ -290,7 +290,6 @@ fn main() {
             println!("  Tier transitions: {}", stats.tier_transitions);
             println!("  Last backend: {}", stats.last_backend);
             println!("  Total routed calls: {}", gate_player.total_routed());
-        }
     }
 }
 
