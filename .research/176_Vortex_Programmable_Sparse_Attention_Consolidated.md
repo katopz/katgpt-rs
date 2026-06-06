@@ -5,7 +5,7 @@
 **Status:** Consolidated GOAT Verdict
 **Supersedes:** Research 001 (Vortex Fusion Analysis), Research 175 (Vortex Distilled)
 **Related Research:** 071 (DashAttention), 086 (RTPurbo), 100 (EGA), 145 (Wall Attention), 070 (GDN2), 042 (SP-KV), 048 (MuxDdTree), 028 (HLA)
-**Related Plans:** 106 (DashAttention), 126 (RTPurbo), 139 (EGA), 173 (Wall Attention), 195 (VortexFlow Trait), riir-ai Plan 229 (Meta-Routing Game AI)
+**Related Plans:** 106 (DashAttention), 126 (RTPurbo), 139 (EGA), 173 (Wall Attention), 196 (VortexFlow Trait), riir-ai Plan 229 (Meta-Routing Game AI)
 
 ---
 
