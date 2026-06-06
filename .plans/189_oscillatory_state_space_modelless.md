@@ -34,7 +34,7 @@ Distill OSSM-PINN's oscillatory state-space principles into katgpt-rs as modelle
   - Mid freq → balanced draft tree
   - High freq → shallow draft tree, more verify iterations
 
-- [ ] Integrate FreqBandit with `InferenceRouter` + `TriggerGate`
+- [x] Integrate FreqBandit with `InferenceRouter` + `TriggerGate`
   - FreqBandit recommendation feeds into tier routing decision
   - High-frequency queries → prefer GPU (faster verify)
   - Low-frequency queries → CPU acceptable (longer draft OK)

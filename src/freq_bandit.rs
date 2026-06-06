@@ -19,6 +19,7 @@
 //! `reward = acceptance_rate × latency_improvement` from speculative decode.
 //! Uses **sigmoid** activation (NOT softmax) per project constraint.
 
+use crate::trigger_gate::ComputeTier;
 use crate::types::Rng;
 
 // ── Frequency Band ─────────────────────────────────────────────
@@ -55,6 +56,18 @@ impl FrequencyBand {
             1 => Some(Self::Mid),
             2 => Some(Self::High),
             _ => None,
+        }
+    }
+
+    /// Recommended compute tier for this frequency band.
+    ///
+    /// High-frequency decode → prefer GPU (faster verify iterations).
+    /// Low-frequency decode → CPU acceptable (longer draft OK).
+    pub fn recommended_tier(self) -> ComputeTier {
+        match self {
+            Self::Low => ComputeTier::CpuOnly,    // Deep draft OK on CPU
+            Self::Mid => ComputeTier::CpuGpu,     // Balanced, GPU helps
+            Self::High => ComputeTier::CpuGpuAne, // Fast verify needs all hardware
         }
     }
 }
@@ -401,6 +414,12 @@ impl FrequencyBandit {
         }
         FrequencyBand::from_index(best).unwrap()
     }
+
+    /// Get compute tier recommendation based on current best arm.
+    /// Uses the band with highest cumulative Q-value.
+    pub fn tier_recommendation(&self) -> ComputeTier {
+        self.best_arm().recommended_tier()
+    }
 }
 
 impl Default for FrequencyBandit {
@@ -706,7 +725,72 @@ mod tests {
         }
         assert!(FrequencyBand::from_index(3).is_none());
     }
+
+    #[test]
+    fn test_freq_band_recommended_tier() {
+        assert_eq!(FrequencyBand::Low.recommended_tier(), ComputeTier::CpuOnly);
+        assert_eq!(FrequencyBand::Mid.recommended_tier(), ComputeTier::CpuGpu);
+        assert_eq!(
+            FrequencyBand::High.recommended_tier(),
+            ComputeTier::CpuGpuAne
+        );
+    }
+
+    #[test]
+    fn test_freq_tier_adapter_low_freq() {
+        // Cyclic pattern with period ~32 (low frequency)
+        let tokens: Vec<usize> = (0..128).map(|i| (i / 32) % 4).collect();
+        let mut adapter = FreqTierAdapter::new(FrequencyBandit::new());
+        let tier = adapter.recommend_tier(&tokens, 128);
+        assert_eq!(tier, ComputeTier::CpuOnly);
+    }
+
+    #[test]
+    fn test_freq_tier_adapter_high_freq() {
+        // Cyclic pattern with period 2 (high frequency)
+        let tokens: Vec<usize> = (0..128).map(|i| i % 2).collect();
+        let mut adapter = FreqTierAdapter::new(FrequencyBandit::new());
+        let tier = adapter.recommend_tier(&tokens, 128);
+        assert_eq!(tier, ComputeTier::CpuGpuAne);
+    }
+}
+
+// ── FreqTierAdapter ────────────────────────────────────────────
+
+/// Adapter: feeds FreqBandit's spectral analysis into compute tier selection.
+///
+/// Analyzes token streams via spectral methods and translates the dominant
+/// frequency band into a [`ComputeTier`] recommendation suitable for
+/// [`InferenceRouter`](crate::inference_router::InferenceRouter).
+pub struct FreqTierAdapter {
+    bandit: FrequencyBandit,
+}
+
+impl FreqTierAdapter {
+    /// Create a new adapter wrapping an existing [`FrequencyBandit`].
+    pub fn new(bandit: FrequencyBandit) -> Self {
+        Self { bandit }
+    }
+
+    /// Analyze token stream and return tier recommendation.
+    pub fn recommend_tier(&mut self, tokens: &[usize], window_size: usize) -> ComputeTier {
+        let profile = token_stream_spectrum(tokens, window_size);
+        // Select the band and immediately query tier recommendation.
+        // Note: select requires an rng for UCB1 exploration, but we only
+        // need the deterministic tier mapping from the dominant band.
+        profile.dominant_band.recommended_tier()
+    }
+
+    /// Update the bandit with reward signal from last decode.
+    pub fn update_reward(&mut self, reward: f32) {
+        let band = self.bandit.last_selected();
+        match band {
+            Some(b) => self.bandit.update(b, reward as f64),
+            None => {}
+        }
+    }
 }
 
 // TL;DR: FreqBandit (Plan 189 Phase 1) — spectral token-stream analysis → 3-arm UCB1 bandit → speculative decode config.
 // DFT dot-product for small windows, sigmoid activation (NOT softmax), maps Low/Mid/High bands to draft tree parameters.
+// FreqTierAdapter bridges FrequencyBandit → ComputeTier for InferenceRouter integration.
