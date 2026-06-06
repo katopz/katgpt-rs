@@ -2,7 +2,10 @@ use crate::types::{self, *};
 use rayon::prelude::*;
 
 #[cfg(feature = "wall_attention")]
-use crate::simd::{simd_add_inplace, simd_exp_inplace, simd_scale_inplace, simd_scale_mul_inplace};
+use crate::simd::{
+    simd_add_inplace, simd_add_scalar_inplace, simd_exp_inplace, simd_scale_inplace,
+    simd_scale_mul_inplace,
+};
 
 /// Decode stage for specialized forward paths (Plan 102: TileRT pipeline).
 /// Different stages have different optimization opportunities:
@@ -511,7 +514,7 @@ pub struct ForwardContext {
     #[cfg(feature = "tf_loop")]
     tf_stash_x: Vec<f32>, // [n_embd] stash for KV cache write
     // GQA lookup: kv_group_lut[h] = h * n_kv_head / n_head (pre-computed once)
-    kv_group_lut: [usize; 128], // fixed-size LUT for GQA head→kv_group mapping (up to 128 heads)
+    kv_group_lut: [u8; 128], // fixed-size LUT for GQA head→kv_group mapping (up to 128 heads)
     _kv_group_lut_count: usize, // actual number of heads (n_head)
     #[cfg(feature = "mls_aggregate")]
     mls_count: usize, // How many layers accumulated
@@ -612,9 +615,9 @@ impl ForwardContext {
                     n_head <= 128,
                     "n_head ({n_head}) exceeds kv_group_lut capacity (128)"
                 );
-                let mut lut = [0usize; 128];
+                let mut lut = [0u8; 128];
                 for (h, slot) in lut.iter_mut().enumerate().take(n_head) {
-                    *slot = h * n_kv_head / n_head;
+                    *slot = (h * n_kv_head / n_head) as u8;
                 }
                 lut
             },
@@ -740,8 +743,7 @@ unsafe fn attention_head(
     t_n: usize,
     scale: f32,
 ) {
-    // Pass 1: compute Q·K scores and find max for numerical stability
-    let mut max_score = f32::NEG_INFINITY;
+    // Pass 1: compute Q·K scores into buffer (no per-element scalar max)
     for t in 0..t_n {
         let k_off = t * kv_dim + kv_group_offset;
         // SAFETY: q_head_offset + hd <= n_embd (head_dim * n_head), k_off + hd <= block_size * kv_dim
@@ -750,12 +752,16 @@ unsafe fn attention_head(
             let k_slice = std::slice::from_raw_parts(key_cache.as_ptr().add(k_off), hd);
             crate::simd::simd_dot_f32(q_slice, k_slice, hd)
         };
-        let score = dot * scale;
         unsafe {
-            *scores_buf.get_unchecked_mut(t) = score;
+            *scores_buf.get_unchecked_mut(t) = dot;
         }
-        max_score = max_score.max(score);
     }
+    // Fuse scale + find max: one SIMD scale pass + one SIMD max reduction
+    // replaces N scalar (dot * scale) and N scalar max operations
+    let scores_raw = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
+    crate::simd::simd_scale_inplace(scores_raw, scale);
+    let max_score =
+        crate::simd::simd_max_f32(unsafe { std::slice::from_raw_parts(scores_buf.as_ptr(), t_n) });
 
     // Pass 2: exp(scores - max) and accumulate sum
     // Shift scores by max using SIMD broadcast add, then SIMD exp
@@ -867,14 +873,14 @@ impl WallPrefixState {
         &mut self,
         layer_idx: usize,
         q: &mut [f32],
-        kv_group_lut: &[usize; 128],
+        kv_group_lut: &[u8; 128],
         n_head: usize,
     ) {
         let hd = self.head_dim;
         let layer_off = layer_idx * self.n_kv_head * hd;
         for (h, &kv_h) in kv_group_lut.iter().enumerate().take(n_head) {
             let q_off = h * hd;
-            let p_off = layer_off + kv_h * hd;
+            let p_off = layer_off + kv_h as usize * hd;
             // Copy prefix sums to temp buffer, exp in-place, then element-wise multiply.
             self.gate_exp_buf[..hd].copy_from_slice(&self.prefix_sums[p_off..p_off + hd]);
             simd_exp_inplace(&mut self.gate_exp_buf[..hd]);
@@ -914,19 +920,29 @@ impl WallPrefixState {
         gate_max: f32,
     ) {
         let hd = key.len();
+        debug_assert_eq!(gate_buf.len(), hd);
+        debug_assert_eq!(w_g.len(), hd);
+
+        // Step 1: gate_buf = w_g * key  (SIMD element-wise multiply)
+        gate_buf[..hd].copy_from_slice(&key[..hd]);
+        simd_scale_mul_inplace(&mut gate_buf[..hd], w_g, 1.0);
+
+        // Step 2: gate_buf += bias  (SIMD broadcast add)
+        simd_add_scalar_inplace(&mut gate_buf[..hd], bias);
+
+        // Step 3: gate_buf = -gate_buf  (SIMD negate)
+        simd_scale_inplace(&mut gate_buf[..hd], -1.0);
+
+        // Step 4: gate_buf = exp(gate_buf) = exp(-logit)  (SIMD Cephes exp)
+        simd_exp_inplace(&mut gate_buf[..hd]);
+
+        // Step 5: gate_buf += 1 → gate_buf = 1 + exp(-logit) = softplus(-logit)
+        simd_add_scalar_inplace(&mut gate_buf[..hd], 1.0);
+
+        // Step 6: ln + negate + clamp (scalar — ln not yet SIMD-accelerated)
+        // log_sigmoid(logit) = -ln(1 + exp(-logit)) = -softplus(-logit)
         for d in 0..hd {
-            // Raw gate logit: w_g · k + bias
-            let logit = w_g[d] * key[d] + bias;
-            // Log-sigmoid: -softplus(-logit) = -log(1 + exp(-logit))
-            let neg_logit = -logit;
-            let log_sig = if neg_logit > 0.0 {
-                // -log(1 + exp(-logit)) when -logit > 0
-                -(1.0 + neg_logit.exp()).ln()
-            } else {
-                // logit - log(1 + exp(logit)) when logit >= 0 (more stable)
-                logit - (1.0 + logit.exp()).ln()
-            };
-            // Clamp to (-gate_max, 0]
+            let log_sig = -gate_buf[d].ln();
             gate_buf[d] = log_sig.clamp(-gate_max, 0.0);
         }
     }
@@ -1182,7 +1198,7 @@ pub fn forward_looped<'a>(
 
                 // Multi-head attention with GQA
                 for h in 0..config.n_head {
-                    let kv_group = ctx.kv_group_lut[h];
+                    let kv_group = ctx.kv_group_lut[h] as usize;
                     unsafe {
                         attention_head(
                             &ctx.q,
@@ -1205,7 +1221,7 @@ pub fn forward_looped<'a>(
                 ctx.attn_out[..n].fill(0.0);
 
                 for h in 0..config.n_head {
-                    let kv_group = ctx.kv_group_lut[h];
+                    let kv_group = ctx.kv_group_lut[h] as usize;
                     let head_state = &mut ahla_layer.heads[h];
 
                     crate::hla::ahla_step(
@@ -1571,7 +1587,7 @@ fn forward_single_layer(
     let scale = ctx.attn_scale;
     let t_n = pos + 1;
     for h in 0..config.n_head {
-        let kv_group = ctx.kv_group_lut[h];
+        let kv_group = ctx.kv_group_lut[h] as usize;
         unsafe {
             attention_head(
                 &ctx.q,
@@ -2185,7 +2201,7 @@ fn forward_base<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         for h in 0..config.n_head {
-            let kv_group = ctx.kv_group_lut[h];
+            let kv_group = ctx.kv_group_lut[h] as usize;
             unsafe {
                 attention_head(
                     &ctx.q,
@@ -2528,7 +2544,7 @@ fn forward_coda<'a>(
 
         // Multi-head attention with GQA: fused score → softmax → weighted value per head
         for h in 0..config.n_head {
-            let kv_group = ctx.kv_group_lut[h];
+            let kv_group = ctx.kv_group_lut[h] as usize;
             unsafe {
                 attention_head(
                     &ctx.q,
@@ -3247,7 +3263,7 @@ pub fn forward_prefill<'a>(
             }
             // Repack K/V with GQA expansion: (position, kv_group) → (head, position)
             for h in 0..config.n_head {
-                let kv_group = ctx.kv_group_lut[h];
+                let kv_group = ctx.kv_group_lut[h] as usize;
                 for p in 0..prompt_len {
                     let kv_src = p * kvd + kv_group * hd;
                     let dst_off = h * prompt_len * hd + p * hd;
@@ -3303,7 +3319,7 @@ pub fn forward_prefill<'a>(
                     );
                 }
                 for h in 0..config.n_head {
-                    let kv_group = ctx.kv_group_lut[h];
+                    let kv_group = ctx.kv_group_lut[h] as usize;
                     unsafe {
                         attention_head(
                             &ctx.q,
@@ -3332,7 +3348,7 @@ pub fn forward_prefill<'a>(
                     );
                 }
                 for h in 0..config.n_head {
-                    let kv_group = ctx.kv_group_lut[h];
+                    let kv_group = ctx.kv_group_lut[h] as usize;
                     unsafe {
                         attention_head(
                             &ctx.q,
@@ -3687,7 +3703,7 @@ pub fn forward_paged<'a>(
 
             // Multi-head attention with GQA (reuse existing attention_head)
             for h in 0..config.n_head {
-                let kv_group = ctx.kv_group_lut[h];
+                let kv_group = ctx.kv_group_lut[h] as usize;
                 unsafe {
                     attention_head(
                         &ctx.q,
@@ -4466,7 +4482,7 @@ pub fn forward_raven<'a>(
             // Each head reads from the slot memory using its query slice
             let head_query = &ctx.q[q_off..q_off + hd];
             // Pad/reshape query to kv_dim for slot attention (reuse pre-allocated buffer)
-            let kv_group = ctx.kv_group_lut[h];
+            let kv_group = ctx.kv_group_lut[h] as usize;
             for (d, &hq) in head_query.iter().enumerate() {
                 ctx.raven_query_buf[kv_group * hd + d] = hq * scale;
             }
@@ -4672,7 +4688,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
         // Multi-head attention with GQA using dequantized flat cache
         for h in 0..config.n_head {
-            let kv_group = ctx.kv_group_lut[h];
+            let kv_group = ctx.kv_group_lut[h] as usize;
             unsafe {
                 attention_head(
                     &ctx.q,
@@ -7414,7 +7430,7 @@ mod tests {
             // Attention
             let scale = ctx2.attn_scale;
             for h in 0..config.n_head {
-                let kv_group = ctx2.kv_group_lut[h];
+                let kv_group = ctx2.kv_group_lut[h] as usize;
                 unsafe {
                     attention_head(
                         &ctx2.q,
