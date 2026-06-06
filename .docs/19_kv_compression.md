@@ -116,7 +116,40 @@ Block-diagonal rotation alternatives to OCTOPUS's full WHT. Replaces O(d²) rota
 
 ---
 
-## 5. Asymmetric K/V Compression
+## 5. KVarN — Variance-Normalized KV Cache
+
+## 📐 KVarN: Variance-Normalized KV Cache Compression (Default-On)
+
+Variance normalization (Sinkhorn-style dual-scaling) + sub-channel group quantization for KV-cache compression. First method in the stack that directly targets **error accumulation in autoregressive decoding** — critical for reasoning/CoT workloads. The variance normalization is orthogonal to all existing methods and composable with SpectralQuant, Shard, and Plasma ternary.
+
+**GOAT proof (Bench 053, Plan 179):** ALL PASS — promoted to default-on.
+
+| Criterion | Measured | Target | Status |
+|-----------|----------|--------|--------|
+| 2-bit cosine | **0.9894** | ≥ 0.98 | ✅ |
+| 4-bit cosine | **0.9979** | ≥ 0.98 | ✅ |
+| Error accumulation ratio | **1.0116** | ≤ 1.5× | ✅ |
+| Quantize overhead | **0.57%** | ≤ 1% | ✅ |
+| Dequant overhead vs RTN | **+0.0%** | ≤ 2% | ✅ |
+
+**KVarN vs RTN at 2-bit:** 0.9894 vs 0.9563 (+3.5% cosine). At 4-bit: parity (0.9979). KVarN dominates at the aggressive compression end.
+
+**Key insight:** At 2-bit (4 quantization levels), variance normalization's dual-scale reconstruction compounds multiplicative errors. The fix: skip VarN at ≤2-bit, use sub-channel group quantization (group_size=4) instead — each group of 4 elements gets its own scale/zp, giving 32× more scales per tile but dramatically tighter quantization ranges.
+
+**Production stack position:**
+1. **Hybrid OCT+PQ** — default-on, best MSE + best rotation cost (Bench 024, Plan 101)
+2. **KVarN** — default-on, best 2-bit quality + error accumulation resistance (Bench 053, Plan 179)
+3. **SpectralQuant** — calibrated alternative, per-dimension water-fill adaptation
+4. **OCTOPUS** — legacy baseline (same encoding, slower rotation)
+5. **PlanarQuant/IsoQuant** — speed fallback (block-diagonal rotation)
+6. **TurboQuant** — legacy baseline (off by default)
+
+📁 `src/kvarn/` — `variance_norm.rs`, `kv_cache.rs`, `pseudo_decode.rs`, `mod.rs`
+🔧 Feature flag: `kvarn` (**default-on**)
+
+---
+
+## 6. Asymmetric K/V Compression
 
 ## 🗜️ Asymmetric K/V Cache Compression (Plan 123, Research 081)
 
