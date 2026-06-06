@@ -38,6 +38,9 @@ pub mod wasm_state;
 #[cfg(feature = "event_log")]
 pub mod event_log_player;
 
+#[cfg(feature = "skill_lifecycle")]
+pub mod skill_lifecycle_player;
+
 pub use arena::ArenaGrid;
 pub use gate_player::GatePlayer;
 pub use players::{BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer};
@@ -77,6 +80,9 @@ pub use wasm_state::{ZeroCopyStateBuffer, serialize_grid_only, serialize_into_bu
 
 #[cfg(feature = "event_log")]
 pub use event_log_player::{BomberEventLog, BomberForkDiff, BomberPos};
+
+#[cfg(feature = "skill_lifecycle")]
+pub use skill_lifecycle_player::{LifecycleStats, SkillLifecyclePlayer};
 
 use std::fmt;
 
