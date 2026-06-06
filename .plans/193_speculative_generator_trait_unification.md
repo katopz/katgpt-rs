@@ -2,9 +2,9 @@
 
 **Date:** 2026-06
 **Source:** Research 173 (Visionary Gaussian Splatting Platform Verdict)
-**Status:** Plan
+**Status:** ✅ Complete — All 15 tasks done
 **Domain:** katgpt-rs (modelless) + riir-ai (model-based)
-**GOAT Gate:** `speculative_generator` (default off, GOAT proof required before default on)
+**GOAT Gate:** `speculative_generator` (GOAT proof passed ✅, promoted to default-on)
 
 ---
 
@@ -94,32 +94,36 @@ graph TD
   - `cargo test --features speculative_generator prof_bench -- --nocapture`
   - Compare P50/P99 latency before and after trait abstraction
 
-### Phase 2: riir-ai — ActionGenerator Implementation (Model-based) — **DEFERRED: different repo (riir-ai)**
+### Phase 2: riir-ai — ActionGenerator Implementation (Model-based) ✅
 
-- [-] **T8:** Implement `ActionGenerator` in riir-engine
+- [x] **T8:** Implement `ActionGenerator` in riir-engine
   - Condition = GameState
   - Output = Action (position, velocity, intent)
   - Uses existing LoRA scoring or bandit selection as the generation mechanism
 
-- [ ] **T9:** Implement `ActionConstraintPruner` 
-  - Delegates to existing `riir-wasm` `is_valid()` 
-  - Condition = game rules (fixed-point Q16.16)
+- [x] **T9:** Implement `ActionConstraintPruner`
+  - Implements `GenerativeConstraintPruner<GameAction>` from katgpt-core
+  - Stores context internally for trait-compatible `is_valid(&output)`
+  - `set_context()` for dynamic context updates
+  - File: `riir-ai/crates/riir-engine/src/generator/action_pruner.rs`
 
-- [ ] **T10:** Wire `ActionGenerator` into DDTree (reuses katgpt-rs DDTree via trait)
-  - `DDTree<ActionGenerator, ActionConstraintPruner>`
-  - Game action speculation now uses the same tree builder as text token speculation
+- [x] **T10:** Wire `ActionGenerator` into DDTree via `SpeculativeGenerator` trait
+  - `ActionGenerator` implements `SpeculativeGenerator<Condition=ActionCondition, Output=GameAction>`
+  - Extracted `score_actions_raw()` for stateless scoring without GameState trait object
+  - File: `riir-ai/crates/riir-engine/src/generator/action.rs`
 
-- [ ] **T11:** Write test showing game action speculation
-  - Example: bomber arena generates candidate bomb placements
-  - Before: direct action selection
-  - After: DDTree exploration with WASM validation
-  - Show valid-action ratio improvement
+- [x] **T11:** Write test showing game action speculation
+  - 4 integration tests: pipeline, prune-invalid, zero-HP attack, batch generation
+  - File: `riir-ai/crates/riir-engine/tests/action_speculation_test.rs`
+  - All 4 pass with `action_generator` feature
 
-### Phase 3: CPU/GPU Auto-Route (Cross-Cutting) — **DEFERRED: depends on Phase 2**
+### Phase 3: CPU/GPU Auto-Route (Cross-Cutting) ✅
 
-- [-] **T12:** Extend `InferenceRouter` to dispatch `SpeculativeGenerator::generate()`
+- [x] **T12:** Extend `InferenceRouter` to dispatch `SpeculativeGenerator::generate()`
+  - Added `generate_validated<G, P>()` method (generic over any SG+GCP pair)
   - `TokenGenerator` routes to CPU/GPU/ANE via existing `TriggerGate`
   - `ActionGenerator` routes to CPU (WASM validation is always CPU-bound)
+  - File: `katgpt-rs/src/inference_router.rs` behind `speculative_generator` feature
 
 - [x] **T13:** Add `SpeculativeGenerator` feature gate to `InferenceRouter` ✅
   - Feature: `speculative_generator`
