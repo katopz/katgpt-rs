@@ -5,22 +5,29 @@
 //!
 //! Run: `cargo run --features "partial_scoring" --example partial_scoring_demo`
 
-#![cfg(feature = "partial_scoring")]
-
+#[cfg(feature = "partial_scoring")]
 use katgpt_core::GameTrace;
+#[cfg(feature = "partial_scoring")]
 use katgpt_core::PartialScorer;
+#[cfg(feature = "partial_scoring")]
 use katgpt_rs::pruners::{BanditStats, BomberPartialScorer, WinLossScorer};
+#[cfg(feature = "partial_scoring")]
 use katgpt_rs::types::Rng;
 
+#[cfg(feature = "partial_scoring")]
 const MAX_TICKS: u32 = 200;
+#[cfg(feature = "partial_scoring")]
 const NUM_ARMS: usize = 4;
+#[cfg(feature = "partial_scoring")]
 const EPISODES: usize = 200;
+#[cfg(feature = "partial_scoring")]
 const SNAPSHOT_EPISODES: [usize; 4] = [10, 50, 100, 200];
 
 /// Arm profiles: (mean_survival_ticks, mean_kills, win_rate).
 ///
 /// Arm 0 is the GOAT (high survival + kills even in loss),
 /// descending to Arm 3 which is objectively terrible.
+#[cfg(feature = "partial_scoring")]
 const ARM_PROFILES: [(f32, f32, f32); NUM_ARMS] = [
     (180.0, 3.0, 0.80), // Arm 0: dominant
     (120.0, 1.5, 0.60), // Arm 1: decent
@@ -29,6 +36,7 @@ const ARM_PROFILES: [(f32, f32, f32); NUM_ARMS] = [
 ];
 
 /// Simulate a game episode for a given arm, producing a noisy `GameTrace`.
+#[cfg(feature = "partial_scoring")]
 fn simulate_episode(arm: usize, rng: &mut Rng) -> GameTrace {
     let (mean_surv, mean_kills, win_rate) = ARM_PROFILES[arm];
 
@@ -56,6 +64,7 @@ fn simulate_episode(arm: usize, rng: &mut Rng) -> GameTrace {
 }
 
 /// UCB1 arm selection: unvisited arms first, then highest UCB1 score.
+#[cfg(feature = "partial_scoring")]
 fn select_ucb1(stats: &BanditStats) -> usize {
     for i in 0..stats.num_arms() {
         if stats.visit_count(i) == 0 {

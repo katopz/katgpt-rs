@@ -8,28 +8,35 @@
 //!
 //! Run: `cargo run --features "skill_lifecycle" --example skill_lifecycle_demo`
 
-#![cfg(feature = "skill_lifecycle")]
-
+#[cfg(feature = "skill_lifecycle")]
 use katgpt_rs::pruners::{
     BanditEnv, BanditPruner, BanditSession, BanditStrategy, BernoulliEnv, BomberTestGate,
     MemoryEntry, PrunerMemory, PrunerTestGate, SkillCatalog, SkillDescriptor, TestStatus,
 };
+#[cfg(feature = "skill_lifecycle")]
 use katgpt_rs::speculative::NoScreeningPruner;
+#[cfg(feature = "skill_lifecycle")]
 use katgpt_rs::types::Rng;
 
 // ── Constants ────────────────────────────────────────────────────────
 
+#[cfg(feature = "skill_lifecycle")]
 const NUM_ARMS: usize = 4;
+#[cfg(feature = "skill_lifecycle")]
 const PHASE1_EPISODES: usize = 100;
+#[cfg(feature = "skill_lifecycle")]
 const PHASE4_EPISODES: usize = 50;
+#[cfg(feature = "skill_lifecycle")]
 const SEED: u64 = 42;
 
 // Arm win rates: arm 0 is best (MUSE-optimal).
+#[cfg(feature = "skill_lifecycle")]
 const ARM_PROBS: [f32; NUM_ARMS] = [0.85, 0.5, 0.3, 0.6];
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
 /// Count edge cases and failures in recent memory.
+#[cfg(feature = "skill_lifecycle")]
 fn count_flags(memory: &PrunerMemory) -> (u64, usize, usize) {
     let total = memory.total_entries();
     let entries = memory.recent(total as usize);
@@ -39,6 +46,7 @@ fn count_flags(memory: &PrunerMemory) -> (u64, usize, usize) {
 }
 
 /// Simulate episodes, writing experiences to PrunerMemory.
+#[cfg(feature = "skill_lifecycle")]
 fn simulate_episodes(
     env: &BernoulliEnv,
     memory: &PrunerMemory,
@@ -93,6 +101,7 @@ fn simulate_episodes(
 
 // ── Main ─────────────────────────────────────────────────────────────
 
+#[cfg(feature = "skill_lifecycle")]
 fn main() {
     println!("=== Plan 192: Skill Lifecycle Demo ===");
     println!();
@@ -265,3 +274,10 @@ fn main() {
 }
 
 // TL;DR: skill_lifecycle_demo — demonstrates full MUSE lifecycle: learn (PrunerMemory) → validate (BomberTestGate) → register (SkillCatalog) → evolve (improved episodes) → summary. Shows edge case accumulation, test-gated promotion, and status progression from Validated → Active.
+
+#[cfg(not(feature = "skill_lifecycle"))]
+fn main() {
+    eprintln!(
+        "Enable skill_lifecycle feature: cargo run --features skill_lifecycle --example skill_lifecycle_demo"
+    );
+}

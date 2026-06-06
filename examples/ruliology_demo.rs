@@ -17,8 +17,7 @@
 //! - **Exhaustive enumeration finds winners** that hand-design misses
 //! - **Cross-paradigm diversity**: CA rule 14 competes with FSMs and TMs
 
-#![cfg(feature = "ruliology")]
-
+#[cfg(feature = "ruliology")]
 use katgpt_rs::ruliology::{
     CaStrategy, FsmEnumerator, FsmStrategy, FsmTemplateProposer, IrreducibilityGate,
     RuliologyAbsorbCompress, RuliologyBandit, RuliologyPruner, SimpleProgram, TmStrategy,
@@ -27,10 +26,12 @@ use katgpt_rs::ruliology::{
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn separator() {
     println!("{}", "─".repeat(70));
 }
 
+#[cfg(feature = "ruliology")]
 fn section(title: &str) {
     separator();
     println!("  {title}");
@@ -38,6 +39,7 @@ fn section(title: &str) {
 }
 
 /// Run a generic tournament for any set of strategies that implement SimpleProgram.
+#[cfg(feature = "ruliology")]
 fn generic_tournament<S: SimpleProgram>(
     strategies: &[S],
     rounds: u32,
@@ -76,6 +78,7 @@ fn generic_tournament<S: SimpleProgram>(
 }
 
 /// Find grim trigger FSM: state 0 = cooperate, state 1 = defect (absorbing).
+#[cfg(feature = "ruliology")]
 fn find_grim_trigger(fsms: &[FsmStrategy]) -> Option<usize> {
     // Grim trigger: cooperate until opponent defects, then defect forever.
     // State 0: output=0 (cooperate), on input 0 → stay, on input 1 → state 1
@@ -106,6 +109,7 @@ fn find_grim_trigger(fsms: &[FsmStrategy]) -> Option<usize> {
 }
 
 /// Find tit-for-tat FSM.
+#[cfg(feature = "ruliology")]
 fn find_tit_for_tat(fsms: &[FsmStrategy]) -> Option<usize> {
     // TFT: state 0 = cooperate, state 1 = defect.
     // Transition: opponent's action → go to that state.
@@ -130,6 +134,7 @@ fn find_tit_for_tat(fsms: &[FsmStrategy]) -> Option<usize> {
 
 // ── Phase 1: FSM Enumeration ────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase1_enumeration() -> Vec<FsmStrategy> {
     section("Phase 1: FSM Enumeration");
 
@@ -171,6 +176,7 @@ fn phase1_enumeration() -> Vec<FsmStrategy> {
 
 // ── Phase 2: Tournament ────────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase2_tournament(fsm2: &[FsmStrategy]) {
     section("Phase 2: Tournament (Matching Pennies)");
 
@@ -227,6 +233,7 @@ fn phase2_tournament(fsm2: &[FsmStrategy]) {
 
 // ── Phase 3: Cross-Paradigm ────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase3_cross_paradigm() {
     section("Phase 3: Cross-Paradigm (FSM vs CA vs TM)");
 
@@ -304,6 +311,7 @@ fn phase3_cross_paradigm() {
 
 // ── Phase 4: Pareto + Irreducibility ───────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase4_pareto_irreducibility(fsm2: &[FsmStrategy]) {
     section("Phase 4: Pareto Front + Irreducibility");
 
@@ -351,6 +359,7 @@ fn phase4_pareto_irreducibility(fsm2: &[FsmStrategy]) {
 
 // ── Phase 5: Bandit + AbsorbCompress ───────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase5_bandit(fsm2: &[FsmStrategy]) {
     section("Phase 5: RuliologyBandit + AbsorbCompress");
 
@@ -423,6 +432,7 @@ fn phase5_bandit(fsm2: &[FsmStrategy]) {
 
 // ── Phase 6: Co-Evolution ──────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn phase6_co_evolution() {
     section("Phase 6: Co-Evolution (FSM Mutation)");
 
@@ -498,6 +508,7 @@ fn phase6_co_evolution() {
 
 // ── Complexity-Payoff Correlation ──────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn show_complexity_payoff_correlation() {
     section("Complexity-Payoff Correlation");
 
@@ -546,6 +557,7 @@ fn show_complexity_payoff_correlation() {
 
 // ── Main ────────────────────────────────────────────────────────────
 
+#[cfg(feature = "ruliology")]
 fn main() {
     println!();
     println!("╔══════════════════════════════════════════════════════════════════╗");
@@ -595,3 +607,8 @@ fn main() {
 }
 
 // TL;DR: Complete ruliology demo — enumerate FSMs/CA/TM, run tournaments, Pareto filter, bandit selection, co-evolution. Validates Wolfram's key findings.
+
+#[cfg(not(feature = "ruliology"))]
+fn main() {
+    eprintln!("Enable ruliology feature: cargo run --features ruliology --example ruliology_demo");
+}

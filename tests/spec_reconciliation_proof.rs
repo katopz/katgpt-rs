@@ -2,8 +2,6 @@
 //!
 //! Run with: cargo test --features spec_reconciliation --test spec_reconciliation_proof -- --nocapture
 
-
-
 use std::f32::consts::TAU;
 use std::time::Instant;
 
@@ -163,7 +161,7 @@ fn make_direction_hack(h_last: &TrajectoryPoint, seed: u64) -> Vec<TrajectoryPoi
             2.0,
             0.0,
             1.0,
-            3.14, // facing opposite to movement
+            std::f32::consts::PI, // facing opposite to movement
         ),
     ]
 }

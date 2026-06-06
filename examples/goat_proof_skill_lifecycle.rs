@@ -13,12 +13,14 @@
 //!
 //! Run: `cargo run --features "skill_lifecycle,bomber" --example goat_proof_skill_lifecycle`
 
-#![cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
-
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 use std::collections::HashMap;
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 use katgpt_rs::pruners::arena::types::{ArenaKind, EloCalculator, Ranking};
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 use katgpt_rs::pruners::bomber::arena_runner::{BomberArenaConfig, run_bomber_matchup};
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 use katgpt_rs::pruners::bomber::{
     BomberPlayer, GreedyPlayer, HLPlayer, LifecycleStats, SkillLifecyclePlayer, ValidatorPlayer,
 };
@@ -29,17 +31,24 @@ use katgpt_rs::pruners::bomber::{
 /// With 4-player FFA, expected baseline is 25%. Need N large enough
 /// to detect a 5pp improvement (25% → 30%) at p<0.05.
 /// Power analysis: N=200 gives ~80% power for 5pp delta.
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const GAMES_PER_MATCHUP: usize = 200;
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const ELO_K: f64 = 32.0;
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const ELO_BASE: f64 = 1000.0;
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const VARIANT_LIFECYCLE: &str = "HL+Lifecycle";
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const VARIANT_HL: &str = "HL";
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 const VARIANT_HL_WASM: &str = "HL+WASM";
 
 // ── Team Builder ───────────────────────────────────────────────
 
 /// Build a 4-player team: 1x test player (index 0) + 3x GreedyPlayer opponents.
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn build_team(test_player: Box<dyn BomberPlayer>) -> Vec<Box<dyn BomberPlayer>> {
     let mut team = Vec::with_capacity(4);
     team.push(test_player);
@@ -51,6 +60,7 @@ fn build_team(test_player: Box<dyn BomberPlayer>) -> Vec<Box<dyn BomberPlayer>> 
 
 // ── Matchup Runner ─────────────────────────────────────────────
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 struct MatchupOutput {
     label: &'static str,
     test_wins: usize,
@@ -66,6 +76,7 @@ struct MatchupOutput {
 }
 
 /// Run a single matchup and extract stats for player index 0.
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn run_variant(
     label: &'static str,
     players: Vec<Box<dyn BomberPlayer>>,
@@ -111,6 +122,7 @@ fn run_variant(
 
 // ── Lifecycle Stats Printer ────────────────────────────────────
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn print_lifecycle_stats(stats: &LifecycleStats, episode_count: usize) {
     println!("\n  ┌─ SkillLifecycle Stats ──────────────────────┐");
     println!("  │ Episodes:       {episode_count:>6}                       │");
@@ -134,6 +146,7 @@ fn print_lifecycle_stats(stats: &LifecycleStats, episode_count: usize) {
 }
 
 /// Print arm-level Q-values from SkillLifecyclePlayer.
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn print_arm_details(player: &SkillLifecyclePlayer) {
     let inner = player.inner();
     println!("\n  ┌─ Arm Q-values & Lifecycle ─────────────────┐");
@@ -166,6 +179,7 @@ fn print_arm_details(player: &SkillLifecyclePlayer) {
 
 // ── Leaderboard ────────────────────────────────────────────────
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn build_leaderboard(
     elos: &HashMap<String, f64>,
     win_counts: &HashMap<String, usize>,
@@ -211,6 +225,7 @@ fn build_leaderboard(
 
 // ── Main ───────────────────────────────────────────────────────
 
+#[cfg(all(feature = "skill_lifecycle", feature = "bomber"))]
 fn main() {
     println!();
     println!("══════════════════════════════════════════════════════════════");
@@ -480,5 +495,12 @@ fn main() {
         } else {
             "NOT GOAT ❌"
         }
+    );
+}
+
+#[cfg(not(all(feature = "skill_lifecycle", feature = "bomber")))]
+fn main() {
+    eprintln!(
+        "Enable skill_lifecycle+bomber features: cargo run --features \"skill_lifecycle,bomber\" --example goat_proof_skill_lifecycle"
     );
 }

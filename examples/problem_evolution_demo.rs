@@ -5,14 +5,16 @@
 //!
 //! Run: `cargo run --features "problem_mutator" --example problem_evolution_demo`
 
-#![cfg(feature = "problem_mutator")]
-
+#[cfg(feature = "problem_mutator")]
 use std::collections::HashSet;
 
+#[cfg(feature = "problem_mutator")]
 use katgpt_core::GameConfig;
+#[cfg(feature = "problem_mutator")]
 use katgpt_rs::pruners::problem_mutator::{BomberConfigMutator, EvolutionArena, GoConfigMutator};
 
 /// A lightweight fingerprint for deduplicating configs by their observable fields.
+#[cfg(feature = "problem_mutator")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 struct ConfigFingerprint {
     grid_size: u32,
@@ -22,6 +24,7 @@ struct ConfigFingerprint {
     kill_weight_bits: u32,
 }
 
+#[cfg(feature = "problem_mutator")]
 impl From<&GameConfig> for ConfigFingerprint {
     fn from(c: &GameConfig) -> Self {
         Self {
@@ -34,6 +37,7 @@ impl From<&GameConfig> for ConfigFingerprint {
     }
 }
 
+#[cfg(feature = "problem_mutator")]
 fn main() {
     println!("=== Plan 191: Problem Evolution Demo ===\n");
 
@@ -133,3 +137,10 @@ fn main() {
 
 // TL;DR: Demonstrates EvolutionArena cycling through BomberConfigMutator (3×5 rounds)
 // and GoConfigMutator (5 rounds), printing config parameters and diversity metrics.
+
+#[cfg(not(feature = "problem_mutator"))]
+fn main() {
+    eprintln!(
+        "Enable problem_mutator feature: cargo run --features problem_mutator --example problem_evolution_demo"
+    );
+}

@@ -14,35 +14,45 @@
 //!
 //! Run: `cargo run --features "idea_divergence" --example idea_divergence_demo`
 
-#![cfg(feature = "idea_divergence")]
-
+#[cfg(feature = "idea_divergence")]
 use katgpt_rs::pruners::{BanditPruner, BanditStats, BanditStrategy, IdeaDivergence};
+#[cfg(feature = "idea_divergence")]
 use katgpt_rs::speculative::{NoScreeningPruner, ScreeningPruner};
+#[cfg(feature = "idea_divergence")]
 use katgpt_rs::types::Rng;
 
+#[cfg(feature = "idea_divergence")]
 const ARMS: usize = 10;
+#[cfg(feature = "idea_divergence")]
 const EPISODES: usize = 300;
+#[cfg(feature = "idea_divergence")]
 const SEED: u64 = 42;
 /// Novelty threshold — arms within this L2 distance in score-space are "too similar".
+#[cfg(feature = "idea_divergence")]
 const DIVERGENCE_THRESHOLD: f32 = 0.3;
 /// Exploration rate for the *without* session (low → collapse-prone).
+#[cfg(feature = "idea_divergence")]
 const EPSILON_GREEDY: f32 = 0.05;
 /// Exploration rate for the *with* session (same base + divergence).
+#[cfg(feature = "idea_divergence")]
 const EPSILON_FILTERED: f32 = 0.05;
 
 // ── Helpers ─────────────────────────────────────────────────────
 
 /// Generate true Q-values: [0.90, 0.88, 0.86, ..., 0.72]
+#[cfg(feature = "idea_divergence")]
 fn arm_probs() -> Vec<f32> {
     (0..ARMS).map(|i| 0.90 - i as f32 * 0.02).collect()
 }
 
 /// Simulate a Bernoulli pull: reward 1.0 with probability `p`, else 0.0.
+#[cfg(feature = "idea_divergence")]
 fn bernoulli(p: f32, rng: &mut Rng) -> f32 {
     if rng.uniform() < p { 1.0 } else { 0.0 }
 }
 
 /// Epsilon-greedy arm selection from BanditStats (baseline, no filter).
+#[cfg(feature = "idea_divergence")]
 fn select_epsilon_greedy(stats: &BanditStats, rng: &mut Rng) -> usize {
     if rng.uniform() < EPSILON_GREEDY {
         (rng.uniform() * ARMS as f32) as usize % ARMS
@@ -56,6 +66,7 @@ fn select_epsilon_greedy(stats: &BanditStats, rng: &mut Rng) -> usize {
 /// After the cold-start round, arms whose score vector `[q, visit_density]`
 /// is too close to other arms get a probability penalty, redistributing
 /// exploration toward under-explored regions.
+#[cfg(feature = "idea_divergence")]
 fn select_epsilon_greedy_with_divergence(
     stats: &BanditStats,
     arm_scores: &[Vec<f32>],
@@ -114,6 +125,7 @@ fn select_epsilon_greedy_with_divergence(
 }
 
 /// Run a plain epsilon-greedy session (no divergence filter).
+#[cfg(feature = "idea_divergence")]
 fn run_without_filter(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
     let mut rng = Rng::new(seed);
     let mut stats = BanditStats::new(ARMS);
@@ -130,6 +142,7 @@ fn run_without_filter(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
 }
 
 /// Run epsilon-greedy *with* IdeaDivergence filter.
+#[cfg(feature = "idea_divergence")]
 fn run_with_filter(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
     let mut rng = Rng::new(seed);
     let mut stats = BanditStats::new(ARMS);
@@ -154,6 +167,7 @@ fn run_with_filter(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
 }
 
 /// Also run using BanditPruner's integrated divergence.
+#[cfg(feature = "idea_divergence")]
 fn run_with_bandit_pruner(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
     let mut rng = Rng::new(seed);
     let mut pruner = BanditPruner::with_idea_divergence(
@@ -186,6 +200,7 @@ fn run_with_bandit_pruner(probs: &[f32], seed: u64) -> (Vec<u32>, Vec<f32>) {
 }
 
 /// Count arms with >10% of total visits.
+#[cfg(feature = "idea_divergence")]
 fn active_arms(visits: &[u32]) -> usize {
     let total: u32 = visits.iter().sum();
     if total == 0 {
@@ -198,6 +213,7 @@ fn active_arms(visits: &[u32]) -> usize {
 }
 
 /// Top arm visit count and percentage.
+#[cfg(feature = "idea_divergence")]
 fn top_arm_stats(visits: &[u32]) -> (u32, f32) {
     let total: u32 = visits.iter().sum();
     let &max = visits.iter().max().unwrap_or(&0);
@@ -210,6 +226,7 @@ fn top_arm_stats(visits: &[u32]) -> (u32, f32) {
 }
 
 /// Print a divergence matrix for a subset of arms.
+#[cfg(feature = "idea_divergence")]
 fn print_divergence_matrix(q_values: &[f32], visits: &[u32], subset: usize) {
     let n = subset.min(q_values.len());
     let total: u32 = visits.iter().sum();
@@ -244,6 +261,7 @@ fn print_divergence_matrix(q_values: &[f32], visits: &[u32], subset: usize) {
 }
 
 /// Print visit distribution bars.
+#[cfg(feature = "idea_divergence")]
 fn print_visit_distribution(visits: &[u32]) {
     let total: u32 = visits.iter().sum();
     for (i, &v) in visits.iter().enumerate() {
@@ -260,6 +278,7 @@ fn print_visit_distribution(visits: &[u32]) {
 
 // ── Main ────────────────────────────────────────────────────────
 
+#[cfg(feature = "idea_divergence")]
 fn main() {
     let probs = arm_probs();
 
@@ -340,3 +359,10 @@ fn main() {
 }
 
 // TL;DR: Demonstrates IdeaDivergence preventing bandit collapse — 10-arm epsilon-greedy with filter maintains more diverse arm selection vs plain.
+
+#[cfg(not(feature = "idea_divergence"))]
+fn main() {
+    eprintln!(
+        "Enable idea_divergence feature: cargo run --features idea_divergence --example idea_divergence_demo"
+    );
+}
