@@ -55,56 +55,56 @@ Five fusions from Research 186:
 
 ### Phase 1: Three-Mode Router Core (F1 — P0)
 
-- [ ] **F1.1:** Create `src/pruners/three_mode_bandit.rs` with `NeuroSymbolicMode` enum
+- [x] **F1.1:** Create `src/pruners/three_mode_bandit.rs` with `NeuroSymbolicMode` enum
   - `#[derive(Debug, Clone, Copy, PartialEq, Eq)]` + `#[repr(u8)]` — 1 byte, 6 variants
   - Variants: `PureL4R, PureR4L, PureLR, Balanced, R4LHeavy, L4RHeavy`
 
-- [ ] **F1.2:** Define `ModeFeatures` struct — 4× f32 (16 bytes, cache-line friendly)
+- [x] **F1.2:** Define `ModeFeatures` struct — 4× f32 (16 bytes, cache-line friendly)
   - `constraint_density: f32` — active ConstraintPruner rules / max rules
   - `marginal_entropy: f32` — Shannon entropy of DDTree token distribution
   - `episode_hit_rate: f32` — EpisodePruner cache hit ratio (rolling window, last N steps)
   - `verif_success_rate: f32` — compilation success / attempts (rolling window, last M steps)
 
-- [ ] **F1.3:** Define `BanditArm` struct per mode
+- [x] **F1.3:** Define `BanditArm` struct per mode
   - `visits: u32`, `reward_sum: f32` — UCB1 state (12 bytes per arm)
   - 6 arms total (one per `NeuroSymbolicMode` variant)
 
-- [ ] **F1.4:** Implement `ThreeModeBandit` struct
+- [x] **F1.4:** Implement `ThreeModeBandit` struct
   - `arms: [BanditArm; 6]` — 72 bytes
   - `exploration_constant: f32` — UCB1 c parameter (default: √2)
   - `feature_weights: [f32; 4]` — linear context weights for mode preference
 
-- [ ] **F1.5:** Implement `select_mode(&self, features: &ModeFeatures) -> NeuroSymbolicMode`
+- [x] **F1.5:** Implement `select_mode(&self, features: &ModeFeatures) -> NeuroSymbolicMode`
   - UCB1 scoring: `mean_reward + c × √(ln(total_visits) / arm_visits)`
   - Context-aware: boost arm scores by `dot(feature_weights, features)` offset
   - O(1) — fixed 6 arms, no allocation
 
-- [ ] **F1.6:** Implement `compute_mixing_weights(&self, features: &ModeFeatures) -> [f32; 3]`
+- [x] **F1.6:** Implement `compute_mixing_weights(&self, features: &ModeFeatures) -> [f32; 3]`
   - Independent sigmoid per axis: `w_l4r = sigmoid(…)`, `w_r4l = sigmoid(…)`, `w_lr = sigmoid(…)`
   - Normalize: `w_i / (w_l4r + w_r4l + w_lr)` → probability simplex
   - NOT softmax — sigmoid is independent per weight
 
-- [ ] **F1.7:** Implement `update(&mut self, mode: NeuroSymbolicMode, reward: f32)`
+- [x] **F1.7:** Implement `update(&mut self, mode: NeuroSymbolicMode, reward: f32)`
   - Standard UCB1 update: increment visits, add reward
   - Reward: 1.0 for compilation success, -0.5 for failure, 0.0 for no verification
 
-- [ ] **F1.8:** Wire mode selection into DDTree step loop
+- [x] **F1.8:** Wire mode selection into DDTree step loop
   - Before token selection: compute ModeFeatures from current state
   - Select mode → apply mixing weights to ConstraintPruner / SynPruner / EpisodePruner influence
   - After verification: call `bandit.update(mode, reward)`
 
-- [ ] **F1.9:** Feature gate: `three_mode_router` in `Cargo.toml` features
+- [x] **F1.9:** Feature gate: `three_mode_router` in `Cargo.toml` features
   - Default-off until GOAT gate passes
   - When disabled: use existing `Balanced` mode (current behavior)
 
-- [ ] **F1.10:** Test: mode switches on high-entropy vs low-entropy synthetic inputs
+- [x] **F1.10:** Test: mode switches on high-entropy vs low-entropy synthetic inputs
   - High entropy (>2.0) → expect L4R or L4RHeavy mode selected
   - Low entropy (<0.5) with high constraint density → expect R4L or R4LHeavy
 
-- [ ] **F1.11:** Test: R4L weight increases when constraint density is high
+- [x] **F1.11:** Test: R4L weight increases when constraint density is high
   - Feed synthetic ModeFeatures with constraint_density=0.9 → verify R4L arm wins
 
-- [ ] **F1.12:** Benchmark: mode selection overhead < 50ns per step
+- [x] **F1.12:** Benchmark: mode selection overhead < 50ns per step
   - Criterion bench on `select_mode()` with typical ModeFeatures
   - Profile with `perf` / Instruments — no allocation in hot path
 
