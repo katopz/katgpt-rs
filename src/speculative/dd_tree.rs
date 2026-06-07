@@ -339,6 +339,83 @@ where
     build_dd_tree_screened(&slices, config, &NoScreeningPruner, false)
 }
 
+/// DDTree with Kurtosis Gate filtering (Plan 203b).
+///
+/// Wraps [`build_dd_tree_speculative`] with per-position excess kurtosis gating.
+/// Positions where the draft marginal has low kurtosis (flat/uncertain)
+/// are rejected and fall back to autoregressive decoding.
+///
+/// Feature-gated behind both `speculative_generator` and `kurtosis_gate`.
+#[cfg(all(feature = "speculative_generator", feature = "kurtosis_gate"))]
+pub fn build_dd_tree_speculative_kurtosis<P>(
+    generator: &mut super::spec_generator::MarginalTokenGenerator,
+    pruner: &super::spec_generator::TokenConstraintPruner<P>,
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    rng: &mut fastrand::Rng,
+    kurtosis_threshold: f32,
+) -> (Vec<TreeNode>, Vec<super::types::RejectionReason>)
+where
+    P: ConstraintPruner + Send + Sync,
+{
+    use super::spec_generator::TokenCondition;
+    use katgpt_core::{GenerativeConstraintPruner, SpeculativeGenerator};
+
+    let mut filtered_marginals: Vec<Vec<f32>> = Vec::with_capacity(marginals.len());
+    let mut rejections: Vec<super::types::RejectionReason> = Vec::new();
+
+    for (depth, marginal) in marginals.iter().enumerate() {
+        // ── Kurtosis gate: reject flat positions before candidate generation ──
+        let kurtosis = super::kurtosis_gate::excess_kurtosis(marginal);
+        if kurtosis <= kurtosis_threshold {
+            rejections.push(super::types::RejectionReason::KurtosisRejection {
+                kurtosis,
+                threshold: kurtosis_threshold,
+            });
+            // Skip this position entirely — tree will not expand here
+            continue;
+        }
+
+        let condition = TokenCondition {
+            parent_tokens: vec![],
+            depth,
+            marginals: marginal.to_vec(),
+        };
+
+        let candidates = match generator.generate(&condition, rng) {
+            Ok(c) => c,
+            Err(_) => {
+                filtered_marginals.push(marginal.to_vec());
+                continue;
+            }
+        };
+
+        // Keep marginals only for valid candidates
+        let mut filtered = vec![0.0f32; marginal.len()];
+        for candidate in &candidates {
+            if pruner.is_valid(candidate) && candidate.token_idx < filtered.len() {
+                filtered[candidate.token_idx] = marginal[candidate.token_idx];
+            }
+        }
+
+        // Re-normalize
+        let sum: f32 = filtered.iter().sum();
+        if sum > f32::EPSILON {
+            for v in &mut filtered {
+                *v /= sum;
+            }
+        } else {
+            filtered = marginal.to_vec();
+        }
+
+        filtered_marginals.push(filtered);
+    }
+
+    let slices: Vec<&[f32]> = filtered_marginals.iter().map(|m| m.as_slice()).collect();
+    let tree = build_dd_tree_screened(&slices, config, &NoScreeningPruner, false);
+    (tree, rejections)
+}
+
 /// DDTree with Best Buddies mutual agreement filtering (Plan 199).
 ///
 /// Combines the SpeculativeGenerator candidate pipeline with cross-model

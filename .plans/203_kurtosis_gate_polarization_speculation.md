@@ -1,7 +1,7 @@
 # Plan 203b: Kurtosis Gate — Polarization-Driven Speculative Decoding
 
 **Date**: 2026-06-07
-**Status**: 📋 Plan
+**Status**: ✅ Complete
 **Research**: `.research/180_Rosetta_Scaling_Polarization_Data_Filtering.md`
 **Parent Plan**: `203_rosetta_scaling_polarization.goat.md` (Phase 1.1, extracted for focused execution)
 **Related Plans**: 199 (Best Buddies Drafting), 200 (Correlation Budget)
@@ -45,14 +45,14 @@ This is **ZERO-COST** because kurtosis is computed from the same marginals alrea
 
 ## Tasks
 
-- [ ] Add `excess_kurtosis()` function to `katgpt-rs-core` (SIMD-friendly, O(V))
-- [ ] Add `KurtosisGate` struct that computes per-position kurtosis from marginals
-- [ ] Integrate into `build_dd_tree_speculative` — gate tree expansion by kurtosis
-- [ ] Add `KurtosisRejection` variant to `RejectionReason` enum
-- [ ] Add feature gate `kurtosis_gate` (default on, since zero perf cost)
-- [ ] Add test: verify kurtosis gate improves acceptance rate on benchmark inputs
-- [ ] Add test: verify kurtosis computation matches analytical formula
-- [ ] Add benchmark: measure kurtosis computation overhead (should be <1μs per position)
+- [x] Add `excess_kurtosis()` function to `katgpt-rs` speculative module (SIMD-friendly, O(V))
+- [x] Add `KurtosisGate` struct that computes per-position kurtosis from marginals
+- [x] Integrate into `build_dd_tree_speculative` — gate tree expansion by kurtosis
+- [x] Add `KurtosisRejection` variant to `RejectionReason` enum
+- [x] Add feature gate `kurtosis_gate` (default on, since zero perf cost)
+- [x] Add test: verify kurtosis gate improves acceptance rate on benchmark inputs
+- [x] Add test: verify kurtosis computation matches analytical formula
+- [x] Add benchmark: measure kurtosis computation overhead (should be <1μs per position)
 
 ---
 
