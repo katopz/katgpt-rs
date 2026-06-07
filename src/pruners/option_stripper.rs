@@ -367,4 +367,47 @@ mod tests {
         frozen.gamma = 0.5;
         assert!(frozen.validate().is_ok());
     }
+
+    // ── T7: GOAT Tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_end_to_end_two_pass() {
+        // Full workflow: strip options, run two-pass scoring, verify min-bottleneck.
+        let mut stripper = OptionStripper::new(NoScreeningPruner);
+        let prompt = "What is the capital of France?\nA) yes\nB) no\nC) maybe";
+
+        // Step 1: Strip options from the prompt.
+        let stripped = stripper.strip_options(prompt);
+        assert!(stripper.is_stripped());
+        assert!(!stripped.contains("A) yes"));
+        assert!(!stripped.contains("B) no"));
+        assert!(!stripped.contains("C) maybe"));
+        assert!(stripped.contains("What is the capital of France?"));
+
+        // Step 2: Pure pass — score without options (NoScreeningPruner returns 1.0).
+        let pure_score = stripper.verify_pure(0, 0, &[]);
+        assert_eq!(
+            pure_score, 1.0,
+            "Pure score should be 1.0 from NoScreeningPruner"
+        );
+
+        // Step 3: Matched pass — answer matches an option → 1.0.
+        let matched_score = stripper.verify_matched(0, 0, &[], true);
+        assert_eq!(
+            matched_score, 1.0,
+            "Matched score should be 1.0 when answer matches"
+        );
+
+        // Step 4: Two-pass with match → min(1.0, 1.0) = 1.0.
+        let two_pass_matched = stripper.two_pass_score(0, 0, &[], true);
+        assert_eq!(two_pass_matched, 1.0, "Two-pass matched should be 1.0");
+
+        // Step 5: Two-pass without match → min(1.0, 0.0) = 0.0.
+        // This is the key anti-shortcut: the min-bottleneck blocks shortcuts.
+        let two_pass_unmatched = stripper.two_pass_score(0, 0, &[], false);
+        assert_eq!(
+            two_pass_unmatched, 0.0,
+            "Two-pass unmatched must be 0.0 — shortcut blocked by min-bottleneck"
+        );
+    }
 }

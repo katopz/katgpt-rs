@@ -79,6 +79,9 @@ pub use simd::SimdLevel;
 #[cfg(feature = "hydra_budget")]
 pub use types::{HydraBudgetConfig, HydraLayerProfile};
 
+#[cfg(feature = "collapse_aware_thinking")]
+pub use types::ThinkingBudget;
+
 #[cfg(feature = "questbench")]
 pub mod questbench;
 #[cfg(feature = "questbench")]

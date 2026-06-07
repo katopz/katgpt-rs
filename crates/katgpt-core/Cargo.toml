@@ -58,3 +58,4 @@ partial_scoring = []  # PartialScorer graduated reward for game episodes (Plan 1
 problem_mutator = []  # ProblemMutator game config evolution (Plan 191, Research 171)
 idea_divergence = ["partial_scoring"]  # IdeaDivergence strategic novelty filter (Plan 191, Research 171)
 modal_spec = []  # ModalSpec drafter — LinOSS cell + Fourier basis speculative decoding (Plan 189 Phase 3, experimental)
+collapse_aware_thinking = []  # Collapse-Aware Adaptive Thinking — CollapseDetector trait (Plan 212)

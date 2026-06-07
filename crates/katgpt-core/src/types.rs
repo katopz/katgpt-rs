@@ -521,6 +521,38 @@ impl WallConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Collapse-Aware Adaptive Thinking (Plan 212)
+// ---------------------------------------------------------------------------
+
+/// Per-instance adaptive budget for collapse-aware thinking.
+///
+/// Controls when mid-reasoning early exit triggers and how efficiency rewards
+/// are shaped. Feature-gated behind `collapse_aware_thinking`.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct ThinkingBudget {
+    /// Maximum thinking tokens before forced termination.
+    pub max_tokens: u32,
+    /// Hesitation count threshold τ — collapse triggers when exceeded.
+    pub collapse_threshold: u32,
+    /// Efficiency–accuracy trade-off for reward shaping.
+    /// Higher γ penalizes longer traces more aggressively.
+    /// Range: [0.0, 1.0].
+    pub efficiency_gamma: f32,
+}
+
+#[cfg(feature = "collapse_aware_thinking")]
+impl Default for ThinkingBudget {
+    fn default() -> Self {
+        Self {
+            max_tokens: 4096,
+            collapse_threshold: 3,
+            efficiency_gamma: 0.5,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -667,6 +699,11 @@ pub struct Config {
     /// Wall attention config. None = use RoPE/fallback.
     #[cfg(feature = "wall_attention")]
     pub wall_config: Option<WallConfig>,
+
+    // --- Collapse-Aware Adaptive Thinking (Plan 212) ---
+    /// Per-instance adaptive budget for collapse-aware thinking.
+    #[cfg(feature = "collapse_aware_thinking")]
+    pub collapse_budget: ThinkingBudget,
 }
 
 impl Config {
@@ -754,6 +791,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -878,6 +917,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -974,6 +1015,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1060,6 +1103,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1147,6 +1192,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1232,6 +1279,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1319,6 +1368,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1405,6 +1456,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1493,6 +1546,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 
@@ -1583,6 +1638,8 @@ impl Config {
             rim_buffer_token: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: ThinkingBudget::default(),
         }
     }
 

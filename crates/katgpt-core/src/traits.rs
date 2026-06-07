@@ -250,6 +250,28 @@ impl ScreeningPruner for NoScreeningPruner {
     }
 }
 
+// ── Collapse-Aware Adaptive Thinking (Plan 212) ────────────────────
+
+/// Monitors the token stream during reasoning and triggers early exit when
+/// reasoning collapse is detected (hesitation patterns, repetitive tokens).
+///
+/// Modelless inference-time feature behind `collapse_aware_thinking` feature gate.
+/// Integrates with `ThinkingController` to cut wasted budget on degenerate traces.
+#[cfg(feature = "collapse_aware_thinking")]
+pub trait CollapseDetector: Send + Sync {
+    /// Returns `true` if the current trace exhibits collapse symptoms.
+    fn check_collapse(&mut self, token_id: u32, position: usize) -> bool;
+
+    /// Reset internal state between traces. May update self-tuning parameters.
+    fn reset(&mut self);
+
+    /// Number of hesitation tokens observed in the current trace.
+    fn hesitation_count(&self) -> u32;
+
+    /// Current collapse threshold τ.
+    fn threshold(&self) -> u32;
+}
+
 // ── GameState ───────────────────────────────────────────────────
 
 /// Forward model trait — any game state that supports what-if simulation.

@@ -107,6 +107,8 @@ fn bench_ldt_lattice_deduction_goat_proof() {
             deltanet_linear_n_value_heads: 0,
             #[cfg(feature = "wall_attention")]
             wall_config: None,
+            #[cfg(feature = "collapse_aware_thinking")]
+            collapse_budget: katgpt_rs::types::ThinkingBudget::default(),
         }
     }
 

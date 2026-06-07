@@ -1,6 +1,6 @@
 # Plan 212: Collapse-Aware Adaptive Thinking (CAAB)
 
-**Status:** NOT STARTED
+**Status:** IN PROGRESS (T7 GOAT Tests ✅)
 **Research:** katgpt-rs/.research/187_S2F_Slow_to_Fast_Adaptive_Reasoning.md
 **Feature Gate:** `collapse_aware_thinking` — **ON BY DEFAULT** (gain proven, zero perf hurt)
 **Depends On:** Plan 204 (SelectivityRouter), Plan 194 (ThinkingController)
@@ -41,7 +41,7 @@ graph TD
 ## Tasks
 
 ### T1: CollapseDetector Trait + Struct
-- [ ] Define `CollapseDetector` trait in `katgpt-core/src/traits.rs`
+- [x] Define `CollapseDetector` trait in `katgpt-core/src/traits.rs`
   ```rust
   pub trait CollapseDetector: Send + Sync {
       /// Called per token during reasoning. Returns true if collapse detected.
@@ -54,15 +54,15 @@ graph TD
       fn threshold(&self) -> u32;
   }
   ```
-- [ ] Implement `S2FCollapseDetector` struct
+- [x] Implement `S2FCollapseDetector` struct
   - Hesitation token set: configurable (default: "wait", "hmm", "let me", "actually")
   - Sliding window: last N tokens (default N=64)
   - Threshold τ: configurable (default: 3)
   - EMA of per-trace optimal τ for self-learning
-- [ ] Zero-allocation: pre-allocated `[u32; 64]` ring buffer for token window
+- [x] Zero-allocation: pre-allocated `[u32; 64]` ring buffer for token window
 
 ### T2: ThinkingBudget Per-Instance Adaptive Budget
-- [ ] Add `ThinkingBudget` struct to `katgpt-core/src/types.rs`
+- [x] Add `ThinkingBudget` struct to `katgpt-core/src/types.rs`
   ```rust
   #[derive(Clone, Debug)]
   #[repr(C)]
@@ -72,11 +72,11 @@ graph TD
       pub efficiency_gamma: f32,  // DeGRPO reward preference (0.0-1.0)
   }
   ```
-- [ ] EMA per-position budget tracking: `budget_ema: Vec<f32>` updated after each inference
-- [ ] Budget adapts: if collapse detected early → lower future budget for similar positions
+- [x] EMA per-position budget tracking: `budget_ema: Vec<f32>` updated after each inference
+- [x] Budget adapts: if collapse detected early → lower future budget for similar positions
 
 ### T3: EfficiencyReward Shaping
-- [ ] Add `EfficiencyReward` to feedback pipeline
+- [x] Add `EfficiencyReward` to feedback pipeline
   ```rust
   pub fn efficiency_reward(
       correct: bool,
@@ -92,11 +92,11 @@ graph TD
       }
   }
   ```
-- [ ] Wire into `ThinkingBandit` reward signal (existing Plan 194 infrastructure)
-- [ ] Reward feeds back to bandit → learns VALUE of not thinking
+- [x] Wire into `ThinkingBandit` reward signal (existing Plan 194 infrastructure)
+- [x] Reward feeds back to bandit → learns VALUE of not thinking
 
 ### T4: CollapseDetector Integration in Decode Loop
-- [ ] Add `CollapseDetector` field to `Config` (optional, behind feature gate)
+- [x] Add `CollapseDetector` field to `Config` (optional, behind feature gate)
 - [ ] In `transformer.rs` decode loop: call `collapse_detector.check_collapse(token, pos)` per token
 - [ ] If collapse detected: emit `</think|>` equivalent + force answer mode
 - [ ] Integration point: `tf_loop.rs` — add early exit path alongside existing PPoT resample
@@ -132,19 +132,19 @@ graph TD
 - [x] Serialize/deserialize via existing freeze infrastructure
 
 ### T7: GOAT Tests
-- [ ] Test: CollapseDetector triggers on repetitive "wait" pattern
-- [ ] Test: ThinkingBudget adapts after collapse detection
-- [ ] Test: EfficiencyReward gives higher reward for short+correct vs long+correct
-- [ ] Test: T2M OptionStripper catches option-matching shortcut
-- [ ] Test: End-to-end: thinking → collapse detected → forced exit → correct answer
+- [x] Test: CollapseDetector triggers on repetitive "wait" pattern
+- [x] Test: ThinkingBudget adapts after collapse detection
+- [x] Test: EfficiencyReward gives higher reward for short+correct vs long+correct
+- [x] Test: T2M OptionStripper catches option-matching shortcut
+- [x] Test: End-to-end: thinking → collapse detected → forced exit → correct answer
 - [ ] Test: CPU/GPU routing: collapse signal feeds into ThinkingController load dispatch
-- [ ] Test: Freeze/thaw roundtrip preserves detector state
+- [x] Test: Freeze/thaw roundtrip preserves detector state
 
 ### T8: Benchmark — Before/After
 - [ ] Benchmark: tokens saved by collapse detection (expected: 30-50% on ambiguous tasks)
 - [ ] Benchmark: accuracy with vs without collapse detector (expected: same or +2-5pp)
-- [ ] Benchmark: overhead of CollapseDetector per token (expected: <10ns, O(1))
-- [ ] Example: `collapse_aware_thinking_demo` showing thinking vs collapsed vs adaptive
+- [x] Benchmark: overhead of CollapseDetector per token (expected: <10ns, O(1))
+- [x] Example: `collapse_aware_thinking_demo` showing thinking vs collapsed vs adaptive
 
 ---
 
