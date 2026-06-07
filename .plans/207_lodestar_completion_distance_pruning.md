@@ -33,13 +33,15 @@ adaptive-CoT budget  ∝ d(root)   +   CPU/GPU route on (d, budget, bw-pressure)
 
 ## Task
 
-> **Status 2026-06-07:** GOAT proof + core + DDTree integration + Adaptive CoT complete. Standalone
-> demo proves the idea (**100% vs 13.9%** valid-in-budget, **4.82 vs 7.66** steps). `CompletionHorizon` trait,
-> `LodestarAutomaton`/`LodestarPruner`, `build_dd_tree_lodestar` with budget mask (A), jump-ahead (B),
-> and A\* ordering (C) are all in the core behind the `lodestar` feature; **34 lib tests PASS**,
-> clippy clean. **Bench 055 GOAT 5/5** (per-call ~4-8ns, default-0 +4.3%). **Promoted to default-ON**.
-> `AdaptiveCoTBudget` (T9) adds EMA bandit budget scaling, 8 tests PASS. Remaining:
-> CPU/GPU route hook (T10), riir-ai Research 072 stub (T15).
+> **Status 2026-06-07:** GOAT proof + core + DDTree integration + Adaptive CoT + route hook complete.
+> Standalone demo proves the idea (**100% vs 13.9%** valid-in-budget, **4.82 vs 7.66** steps).
+> `CompletionHorizon` trait, `LodestarAutomaton`/`LodestarPruner`, `build_dd_tree_lodestar` with budget
+> mask (A), jump-ahead (B), and A\* ordering (C) are all in the core behind the `lodestar` feature;
+> **35 lib tests PASS**, clippy clean. **Bench 055 GOAT 5/5** (per-call ~4-8ns, default-0 +4.3%).
+> **Promoted to default-ON**. `AdaptiveCoTBudget` (T9) adds EMA bandit budget scaling (8 tests).
+> `InferenceRouter::observe_lodestar` (T10) exposes distance/budget to compute routing (1 test).
+> Remaining: riir-ai Research 072 stub (T15).
+> **ALL 15/15 TASKS COMPLETE. Plan 207 DONE.**
 
 ### Phase 1 — Core (engine, MIT)
 - [x] T1. Add `lodestar` feature to `Cargo.toml` (off by default until full GOAT proof). ✅
@@ -71,7 +73,8 @@ adaptive-CoT budget  ∝ d(root)   +   CPU/GPU route on (d, budget, bw-pressure)
   8/8 tests PASS.
 - [x] T10. CPU/GPU route hook: expose `(d, budget_remaining)` to `inference_router` / Plan 202
   RV gate; constraint-bounded CPU fallback emits a guaranteed valid-in-budget partial. ✅
-  `observe_lodestar`, `lodestar_suggests_cpu`, `reset_lodestar` in `InferenceRouter`; 1 test PASS.
+  `InferenceRouter::observe_lodestar(d_root, budget_remaining)` + `lodestar_suggests_cpu()`.
+  1 test PASS.
 
 ### Phase 4 — GOAT + gain proof (constraint #6)
 - [x] T11. `examples/lodestar_demo.rs`: header + nested-array grammar. Before/after table under
@@ -91,8 +94,9 @@ adaptive-CoT budget  ∝ d(root)   +   CPU/GPU route on (d, budget, bw-pressure)
   `CompletionHorizon` by default (default-0 keeps non-implementers a no-op). Update README
   (§ Deterministic Validator / Opt-In features) + Documentation Index. ✅
   Added to `default` and `full` features in `Cargo.toml`.
-- [ ] T15. `riir-ai` Research 072 stub: proof-conditioned LoRA warm-start from distance tables
-  (model-based fuel side; keeps commercial split intact).
+- [x] T15. `riir-ai` Research 072 stub: proof-conditioned LoRA warm-start from distance tables
+  (model-based fuel side; keeps commercial split intact). ✅
+  Created `riir-ai/.research/078_Lodestar_Distance_Conditioned_LoRA_Warm_Start.md`.
 
 ---
 

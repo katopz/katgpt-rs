@@ -593,6 +593,12 @@ pub mod lodestar;
 #[cfg(feature = "lodestar")]
 pub use lodestar::{LodestarAutomaton, LodestarConfig, LodestarPruner, UNREACHABLE};
 
+#[cfg(feature = "lodestar")]
+mod lodestar_cot;
+
+#[cfg(feature = "lodestar")]
+pub use lodestar_cot::{AdaptiveCoTBudget, AdaptiveCoTConfig};
+
 // ── Self-Distilling Pruner Bandit — Episode-Guided Arm Selection (Plan 208) ──
 
 #[cfg(feature = "self_distilling_bandit")]
