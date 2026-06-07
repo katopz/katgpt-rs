@@ -609,3 +609,76 @@ pub use self_distilling_bandit::{
     ConvergenceMetrics, EpisodeRewardComputer, SelfDistillingBandit, SelfDistillingConfig,
     compute_match_ratio,
 };
+
+// ── FOL Logical Rule Inference (Plan 209) ────────────────────────────────
+
+#[cfg(feature = "fol_constraints")]
+pub mod fol_pruner;
+
+#[cfg(feature = "fol_constraints")]
+pub use fol_pruner::{FolConstraint, FolPruner, extract_fol_constraints};
+
+#[cfg(feature = "rule_extraction")]
+pub mod rule_extractor;
+
+#[cfg(feature = "rule_extraction")]
+pub use rule_extractor::{ExtractedRule, RuleExtractor, TreeNode, deduplicate_rules};
+
+#[cfg(feature = "decision_trace")]
+pub mod decision_trace;
+
+#[cfg(feature = "decision_trace")]
+pub use decision_trace::{DecisionTrace, DecisionTraceBuilder};
+
+#[cfg(feature = "decision_explain")]
+pub mod decision_explainer;
+
+#[cfg(feature = "decision_explain")]
+pub use decision_explainer::{
+    CandidateRecord, DecisionExplainer, DecisionExplanation, PerturbationExplainer,
+    PrunerAttribution, RejectedAlternative, TokenChoice, TraceNode,
+};
+
+#[cfg(feature = "reward_mem")]
+pub mod reward_mem_pruner;
+
+#[cfg(feature = "reward_mem")]
+pub use reward_mem_pruner::{CompileOutcome, PatternHasher, RewardMemPruner};
+
+// ── Symbolic Expression Distillation (Plan 210 F1) ───────────────────────
+
+#[cfg(feature = "symbolic_distill")]
+pub mod symbolic_expression;
+
+#[cfg(feature = "symbolic_distill")]
+pub mod expression_pruner;
+
+#[cfg(feature = "symbolic_distill")]
+pub use expression_pruner::{DefaultFeatureExtractor, ExpressionPruner, FeatureExtractor};
+
+#[cfg(feature = "symbolic_distill")]
+pub use symbolic_expression::{
+    BasisFn, SymbolicExpression, SymbolicExpressionFitter, Term, TraceDataset, TraceRecord,
+    TraceRecorder,
+};
+
+// ── Reward-Gated Pruner Calibration (Plan 210 F4) ─────────────────────
+
+#[cfg(feature = "reward_calibrator")]
+pub mod reward_calibrator;
+
+#[cfg(feature = "reward_calibrator")]
+pub use reward_calibrator::{
+    CalibrationStep, CalibratorConfig, ParameterKey, ParameterStats, RewardGatedCalibrator,
+};
+
+// ── Concept Grounding — Template-Based Pruner Explanation (Plan 210 F2) ──
+
+#[cfg(feature = "concept_grounding")]
+pub mod concept_grounding;
+
+#[cfg(feature = "concept_grounding")]
+pub use concept_grounding::{
+    ConceptGrounding, ConceptMapping, GroundingSource, PolicyExplanation, PrunerState,
+    TemplateGrounding,
+};

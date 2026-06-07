@@ -215,6 +215,16 @@ best_buddies = []  # Best Buddies Drafting — mutual NN filter for speculative 
 egcs = []  # Episode-Guided Constraint Synthesis — reference-based structural constraint injection (Plan 206, GOAT candidate)
 self_distilling_bandit = ["egcs"]  # Self-Distilling Pruner Bandit — episode-guided arm selection (Plan 208 GOAT 4/4, default-ON)
 lodestar = []  # Lodestar Completion-Distance Pruning — shortest-accepting-distance powers budget-aware masking + jump-ahead + A* termination (Plan 207, Research 183, GOAT 5/5 Bench 055, default-ON)
+reward_calibrator = []  # Reward-Gated Pruner Calibration — sigmoid-bounded Q-values + Welford variance + blake3 audit (Plan 210 F4)
+reward_mem = ["egcs", "bandit"]  # Reward-Weighted Branch Memorization — blake3 pattern hashing + EMA reward tracking (Plan 209 T3, GOAT candidate)
+fol_constraints = []  # FOL constraint extraction from prompts — keyword table + FolPruner (Plan 209 T1)
+rule_extraction = []  # Logical rule extraction from DDTree paths — ExtractedRule + RuleExtractor (Plan 209 T2)
+decision_trace = ["rule_extraction"]  # Interpretable decision traces — opt-in debug/audit (Plan 209 T4)
+symbolic_distill = []  # Symbolic Expression Distillation — compact polynomial expressions for DDTree boundaries (Plan 210 F1, GOAT candidate)
+decision_explain = []  # Perturbation-based decision explanation via sensitivity analysis (Plan 210 Phase 4)
+concept_grounding = ["symbolic_distill"]  # Concept Grounding — template-based pruner rule explanation (Plan 210 F2)
+insight_explain = ["symbolic_distill", "concept_grounding", "decision_explain", "reward_calibrator"]  # INSIGHT Symbolic Distillation & Explanation (Plan 210)
+fol_lnn = ["fol_constraints", "rule_extraction", "reward_mem"]  # FOL-LNN all fusions convenience (Plan 209)
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
 full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy", "newton_schulz", "river_valley", "peira_distill", "kog_cpu_fusion", "datrie_vocab", "gepa_reflective", "phrase_boost", "hydra_budget", "budget_adaptation", "recfm", "ilc_distill", "thinking_prune", "rim_slots", "wall_attention", "ane", "inference_router", "thinking_cot", "kvarn", "freq_bandit", "directional_credit", "kv_share", "nds_proxy", "wealth_pruner", "and_or_dtree", "speculative_generator", "selectivity_router", "lodestar"]
 

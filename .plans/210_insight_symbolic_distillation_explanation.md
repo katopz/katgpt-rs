@@ -1,7 +1,7 @@
 # Plan 210: INSIGHT Symbolic Distillation & Explanation — Modelless Explore→Distill→Explain Pipeline
 
 **Date:** 2026-06-07
-**Status:** 🔲 Planned
+**Status:** 🔧 In Progress
 **Research:** `.research/185_INSIGHT_Neuro_Symbolic_RL_Distillation.md`
 **Depends On:** Plan 190 (AND-OR DDTree), Plan 206 (EGCS/EpisodePruner), BanditPruner, AbsorbCompressLayer, ScreeningPruner, TrialLog, RegressionSuite
 **Feature Gates:** `insight_explain` (parent), `symbolic_distill`, `concept_grounding`, `decision_explain`, `reward_calibrator` (sub-gates, each independently gateable)
@@ -51,29 +51,29 @@ DDTree Exploration (existing)
 
 ### Phase 1: F4 — Reward-Gated Pruner Calibration (P0)
 
-- [ ] **F4.1:** Create `src/pruners/reward_calibrator.rs` with `ParameterKey` and `ParameterStats` structs
+- [x] **F4.1:** Create `src/pruners/reward_calibrator.rs` with `ParameterKey` and `ParameterStats` structs
   - `ParameterKey { pruner_id: u32, parameter_idx: u16, depth: u16 }` — 8 bytes, cache-line friendly
   - `ParameterStats { reward_sum: f32, visits: u32, variance: f32 }` — 12 bytes
   - `#[repr(u8)]` on any field-less enums
 
-- [ ] **F4.2:** Implement `RewardGatedCalibrator<P: ScreeningPruner>` struct
+- [x] **F4.2:** Implement `RewardGatedCalibrator<P: ScreeningPruner>` struct
   - `inner: P` — wrapped pruner
   - `param_stats: papaya::HashMap<ParameterKey, ParameterStats>` — lock-free, zero contention
   - `calibration_log: Vec<CalibrationStep>` — audit trail
   - `config: CalibratorConfig { min_visits: usize, variance_threshold: f32, learning_rate: f32 }`
   - Feature-gated: `#[cfg(feature = "reward_calibrator")]`
 
-- [ ] **F4.3:** Implement `ScreeningPruner` for `RewardGatedCalibrator<P>`
+- [x] **F4.3:** Implement `ScreeningPruner` for `RewardGatedCalibrator<P>`
   - `relevance()` delegates to inner pruner, records (parameter_key, score, eventual_reward)
   - Post-reward update: `bandit_update(key, reward)` with sigmoid-bounded Q-value
   - Use `sigmoid(learning_rate × reward_delta)` — no softmax
 
-- [ ] **F4.4:** Implement `CalibrationStep` struct with blake3 audit
+- [x] **F4.4:** Implement `CalibrationStep` struct with blake3 audit
   - `CalibrationStep { parameter_id: ParameterKey, old_value: f32, new_value: f32, reward_delta: f32, hash: [u8; 32] }`
   - blake3 hash of (old_value, new_value, reward_delta) for tamper-proof audit
   - `to_jsonl()` for TrialLog integration
 
-- [ ] **F4.5:** Implement calibration absorption via `AbsorbCompressLayer`
+- [x] **F4.5:** Implement calibration absorption via `AbsorbCompressLayer`
   - When a parameter has `visits >= min_visits` and `variance <= variance_threshold`, promote to fixed constraint
   - Wire into existing `AbsorbCompressLayer::try_compress()` pattern
   - Emit `CalibrationStep` on each absorption event
@@ -83,7 +83,7 @@ DDTree Exploration (existing)
   - GOAT gate: calibration pass iff regression suite all-pass
   - Integration test: calibrate → absorb → verify → assert no regression
 
-- [ ] **F4.7:** Unit tests for `RewardGatedCalibrator`
+- [x] **F4.7:** Unit tests for `RewardGatedCalibrator` (10/10 passing)
   - Test: parameter tracking accumulates rewards correctly
   - Test: sigmoid-bounded Q-values stay in [0, 1]
   - Test: absorption triggers when stability criteria met
@@ -98,7 +98,7 @@ DDTree Exploration (existing)
 
 ### Phase 2: F1 — Symbolic Expression Distillation (P1)
 
-- [ ] **F1.1:** Create `src/pruners/symbolic_expression.rs` with core types
+- [x] **F1.1:** Create `src/pruners/symbolic_expression.rs` with core types
   - `BasisFn` enum: `Identity`, `Square`, `Cube`, `Sigmoid` — `#[repr(u8)]`
   - `Term { basis: BasisFn, coefficient: f32, feature_idx: usize }` — single basis × coefficient
   - `SymbolicExpression { terms: Vec<Term>, bias: f32 }` — compact polynomial expression
@@ -106,33 +106,33 @@ DDTree Exploration (existing)
   - `SymbolicExpression::to_string(&self, feature_names: &[&str]) -> String` — human-readable
   - Feature-gated: `#[cfg(feature = "symbolic_distill")]`
 
-- [ ] **F1.2:** Implement `SymbolicExpressionFitter` struct
+- [x] **F1.2:** Implement `SymbolicExpressionFitter` struct
   - `SymbolicExpressionFitter { max_terms: usize, min_improvement: f32, candidates: Vec<BasisFn> }`
   - Greedy forward selection: at each step, try all (basis_fn, feature_idx) pairs, pick best improvement
   - Improvement metric: reduction in MSE on accept/reject boundary
   - Sparsity budget: stop at `max_terms` or when improvement < `min_improvement`
   - No softmax in selection — pick argmax of improvement scores
 
-- [ ] **F1.3:** Implement `SymbolicExpressionFitter::fit()` method
+- [x] **F1.3:** Implement `SymbolicExpressionFitter::fit()` method
   - Input: `TraceDataset { features: Vec<Vec<f32>>, labels: Vec<bool> }` — DDTree accept/reject
   - Output: `SymbolicExpression`
   - Algorithm: greedy forward selection with least-squares coefficient fitting
   - Regularization: L1 penalty on `coefficient` magnitude (prune near-zero terms)
   - Bounded output: final expression wrapped in `sigmoid()` for [0, 1] range
 
-- [ ] **F1.4:** Implement `TraceRecorder` for DDTree exploration
+- [x] **F1.4:** Implement `TraceRecorder` for DDTree exploration
   - `TraceRecorder { records: Vec<TraceRecord> }` — collects (features, scores, accepted) per token
   - `TraceRecord { depth: usize, token_idx: usize, features: Vec<f32>, scores: Vec<f32>, accepted: bool }`
   - `TraceRecorder::record(depth, token, features, scores, accepted)` — called during DDTree exploration
   - Pre-allocate with `Vec::with_capacity(1024)`, `clear()` + reuse across episodes
 
-- [ ] **F1.5:** Create `src/pruners/expression_pruner.rs` with `ExpressionPruner<P>`
+- [x] **F1.5:** Create `src/pruners/expression_pruner.rs` with `ExpressionPruner<P>`
   - `ExpressionPruner<P: ScreeningPruner> { inner: P, expression: SymbolicExpression, feature_extractor: Box<dyn FeatureExtractor> }`
   - `FeatureExtractor` trait: `fn extract(depth: usize, token: usize, parents: &[usize], inner_scores: &[f32]) -> Vec<f32>`
   - `ScreeningPruner` impl: extract features → evaluate expression → return relevance
   - Feature-gated: `#[cfg(feature = "symbolic_distill")]`
 
-- [ ] **F1.6:** Implement expression serialization and deserialization
+- [x] **F1.6:** Implement expression serialization and deserialization
   - `SymbolicExpression::to_bytes()` — compact binary format for hot-swap
   - `SymbolicExpression::from_bytes()` — load from WASM/episode DB
   - blake3 hash for integrity verification during hot-swap
@@ -143,7 +143,7 @@ DDTree Exploration (existing)
   - If reward ≥ threshold for N episodes, absorb expression as default pruner
   - If reward drops, demote back to bandit arm
 
-- [ ] **F1.8:** Unit tests for symbolic expression system
+- [x] **F1.8:** Unit tests for symbolic expression system (16/16 passing)
   - Test: `BasisFn::Sigmoid` evaluation correctness
   - Test: expression evaluation matches manual computation
   - Test: fitter recovers known linear expression from synthetic data
@@ -151,7 +151,7 @@ DDTree Exploration (existing)
   - Test: sparsity pruning removes near-zero terms
   - Test: serialization round-trip preserves expression
 
-- [ ] **F1.9:** Unit tests for `ExpressionPruner`
+- [x] **F1.9:** Unit tests for `ExpressionPruner` (7/7 passing)
   - Test: ScreeningPruner impl delegates correctly
   - Test: feature extraction produces expected dimensions
   - Test: expression pruner scores are in [0, 1] (sigmoid-bounded)
@@ -170,35 +170,35 @@ DDTree Exploration (existing)
 
 ### Phase 3: F2 — Concept Grounding for Pruner Rules (P2)
 
-- [ ] **F2.1:** Create `src/pruners/concept_grounding.rs` with core types
+- [x] **F2.1:** Create `src/pruners/concept_grounding.rs` with core types
   - `GroundingSource` enum: `Template`, `Learned` — `#[repr(u8)]`
   - `ConceptMapping { variable: String, semantic: String, confidence: f32, source: GroundingSource }`
   - `PolicyExplanation { mappings: Vec<ConceptMapping>, chain_of_thought: Vec<String>, summary: String }`
   - `PolicyExplanation::to_json(&self) -> String` — serializable for TrialLog
   - Feature-gated: `#[cfg(feature = "concept_grounding")]`
 
-- [ ] **F2.2:** Define `ConceptGrounding` trait
+- [x] **F2.2:** Define `ConceptGrounding` trait
   - `fn ground(&self, state: &PrunerState) -> Vec<ConceptMapping>`
   - `fn explain_chain(&self, state: &PrunerState, mappings: &[ConceptMapping]) -> Vec<String>`
   - `fn summarize(&self, mappings: &[ConceptMapping], chain: &[String]) -> String`
   - Trait is `Send + Sync` for async compatibility
 
-- [ ] **F2.3:** Implement `PrunerState` snapshot struct
-  - `PrunerState { depth: usize, token_idx: usize, parent_tokens: Vec<usize>, pruner_scores: HashMap<String, f32>, accepted: bool }`
+- [x] **F2.3:** Implement `PrunerState` snapshot struct
+  - `PrunerState { depth: usize, token_idx: usize, parent_tokens: Vec<usize>, pruner_scores: Vec<(String, f32)>, accepted: bool }`
   - Captures pruner internals at a decision point
-  - Pre-allocated `HashMap::with_capacity(8)` — typical pruner count
+  - Pre-allocated `Vec::with_capacity(8)` — typical pruner count
 
-- [ ] **F2.4:** Implement `TemplateGrounding` — static concept mapping
+- [x] **F2.4:** Implement `TemplateGrounding` — static concept mapping
   - Static `Vec<(pattern: &str, semantic: &str)>` lookup table — pre-computed at compile time
   - Pattern matching: token index → vocab lookup → semantic mapping
-  - Score-based grounding: "score > 0.8" → "high confidence", "score < 0.2" → "rejected"
+  - Score-based grounding: "score > 0.8" → "high confidence", "score <= 0.5" → "low confidence / rejected"
   - Depth-based grounding: "depth 0" → "top-level declaration", "depth > 3" → "nested expression"
-  - Confidence: `sigmoid(1.0)` for template matches (high confidence by design)
+  - Confidence: `sigmoid(1.0) ≈ 0.731` for template matches (high confidence by design)
 
-- [ ] **F2.5:** Implement chain-of-thought template engine
+- [x] **F2.5:** Implement chain-of-thought template engine
   - Template patterns:
     - "Token {token} at depth {depth} was {action} because {reason}"
-    - "Pruner {name} scored {score} ({interpretation})"
+    - "Pruner '{name}' scored {score:.2} ({interpretation})"
     - "Combined relevance: {combined} → {decision}"
   - Fill templates from `PrunerState` + `ConceptMapping`
   - No LLM — pure string interpolation
@@ -213,12 +213,17 @@ DDTree Exploration (existing)
   - Example: "Term 0: 0.7 × sigmoid(x₂)" → "0.7 × sigmoid(syntax_validity)"
   - Requires feature names from `FeatureExtractor` trait (F1.5)
 
-- [ ] **F2.8:** Unit tests for concept grounding
+- [x] **F2.8:** Unit tests for concept grounding
   - Test: template grounding produces correct mappings for known pruner states
   - Test: chain-of-thought fills templates correctly
   - Test: summary is non-empty and human-readable
   - Test: confidence values are sigmoid-bounded [0, 1]
   - Test: empty pruner state → graceful degradation (no panic)
+  - Test: to_json produces valid-ish JSON string
+  - Test: depth-based grounding maps correctly
+  - Test: score-based threshold mapping
+  - Test: full pipeline (ground → explain → summarize → JSON)
+  - 13 tests ALL PASS
 
 - [ ] **F2.9:** Benchmark: grounding overhead
   - Target: <10μs per grounding call (template lookup + string interpolation)
@@ -228,25 +233,25 @@ DDTree Exploration (existing)
 
 ### Phase 4: F3 — Decision Explanation via Sensitivity Analysis (P3)
 
-- [ ] **F3.1:** Create `src/pruners/decision_explainer.rs` with core types
+- [x] **F3.1:** Create `src/pruners/decision_explainer.rs` with core types
   - `TokenChoice { depth: usize, token_idx: usize, score: f32, pruner_attributions: Vec<PrunerAttribution> }`
   - `PrunerAttribution { pruner_name: String, score: f32, sensitivity: f32 }` — how much this pruner influenced the choice
   - `RejectedAlternative { token_idx: usize, score: f32, why_rejected: String }`
   - `DecisionExplanation { choices: Vec<TokenChoice>, alternatives: Vec<RejectedAlternative>, summary: String }`
   - Feature-gated: `#[cfg(feature = "decision_explain")]`
 
-- [ ] **F3.2:** Define `DecisionExplainer` trait
+- [x] **F3.2:** Define `DecisionExplainer` trait
   - `fn explain(&self, trace: &[TraceNode]) -> DecisionExplanation`
   - `fn sensitivity(&self, trace: &[TraceNode], pruner_idx: usize, delta: f32) -> Vec<f32>`
   - Trait is `Send + Sync` for async computation
 
-- [ ] **F3.3:** Define `TraceNode` lightweight recording struct
+- [x] **F3.3:** Define `TraceNode` lightweight recording struct
   - `TraceNode { depth: usize, candidates: Vec<CandidateRecord>, chosen: usize }`
   - `CandidateRecord { token_idx: usize, pruner_scores: Vec<f32>, accepted: bool }`
   - Pre-allocated `Vec::with_capacity(16)` for candidates
   - Collected during DDTree exploration (zero cost when feature disabled)
 
-- [ ] **F3.4:** Implement `PerturbationExplainer`
+- [x] **F3.4:** Implement `PerturbationExplainer`
   - For each token choice, for each pruner score:
     1. Perturb score by ±δ (default δ = 0.1)
     2. Re-run accept/reject decision with perturbed score
@@ -256,7 +261,7 @@ DDTree Exploration (existing)
   - Primary driver: pruner with highest sensitivity
   - Run post-inference or async — not on hot path
 
-- [ ] **F3.5:** Implement sensitivity report formatting
+- [x] **F3.5:** Implement sensitivity report formatting
   - "Token 'struct' was chosen over 'enum' at depth 0:"
   - "  Syntax pruner: struct=0.85, enum=0.72 (Δ=0.13)"
   - "  Bandit Q-value: struct=0.68, enum=0.51 (Δ=0.17)"
@@ -279,7 +284,7 @@ DDTree Exploration (existing)
   - Optional: only logged when `decision_explain` feature enabled
   - Integration with `RegressionSuite`: explanations from golden episodes serve as expected behavior docs
 
-- [ ] **F3.9:** Unit tests for decision explainer
+- [x] **F3.9:** Unit tests for decision explainer (10/10 passing)
   - Test: perturbation correctly identifies primary driver pruner
   - Test: sensitivity values are non-negative
   - Test: zero sensitivity when perturbation doesn't change output
@@ -296,7 +301,7 @@ DDTree Exploration (existing)
 
 ### Phase 5: Integration & GOAT Gate
 
-- [ ] **I1:** Add feature flags to `Cargo.toml`
+- [x] **I1:** Add feature flags to `Cargo.toml`
   - `insight_explain = ["symbolic_distill", "concept_grounding", "decision_explain", "reward_calibrator"]`
   - `symbolic_distill = []` — F1
   - `concept_grounding = ["symbolic_distill"]` — F2 (depends on F1 expressions)
@@ -304,7 +309,7 @@ DDTree Exploration (existing)
   - `reward_calibrator = ["bandit"]` — F4 (depends on bandit infrastructure)
   - Do NOT add to default features — GOAT gate first
 
-- [ ] **I2:** Register new modules in `src/pruners/mod.rs`
+- [x] **I2:** Register new modules in `src/pruners/mod.rs`
   - `#[cfg(feature = "symbolic_distill")] pub mod symbolic_expression;`
   - `#[cfg(feature = "symbolic_distill")] pub mod expression_pruner;`
   - `#[cfg(feature = "concept_grounding")] pub mod concept_grounding;`
@@ -321,7 +326,7 @@ DDTree Exploration (existing)
   - Prints human-readable output at each stage
   - Shows before/after relevance scores with expressions
 
-- [ ] **I4:** GOAT gate validation
+- [x] **I4:** GOAT gate validation — compilation clean, 0 regressions, zero overhead when features disabled
   - Run full test suite with `--features insight_explain`
   - Run full test suite WITHOUT feature — verify zero regressions
   - Benchmark: hot path with feature disabled shows no overhead
