@@ -778,13 +778,19 @@ pub use bfcp_pruner::BFCPPruner;
 pub mod bfcp_preimage;
 
 #[cfg(feature = "bfcf_tree")]
-pub use bfcp_preimage::{compute_preimage, refine_partition};
+pub use bfcp_preimage::{acceptance_rate, compute_preimage, maybe_rate, refine_partition};
 
 #[cfg(feature = "bfcf_tree")]
 pub mod pwc_bandit;
 
 #[cfg(feature = "bfcf_tree")]
 pub use pwc_bandit::RegionBandit;
+
+#[cfg(feature = "bfcf_tree")]
+pub mod percept_router;
+
+#[cfg(feature = "bfcf_tree")]
+pub use percept_router::{ComputePath, PerceptRouter, PerceptRouterConfig, SigmoidPerceptRouter};
 
 #[cfg(feature = "bfcf_tree")]
 pub use bfcf_types::BfcpPartition;

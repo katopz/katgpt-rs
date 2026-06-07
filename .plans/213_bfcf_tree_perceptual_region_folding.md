@@ -1,6 +1,6 @@
 # Plan 213: BFCF Tree — Perceptual Region Folding
 
-**Status:** NOT STARTED
+**Status:** Phase 4-5 Complete
 **Date:** 2026-06-07
 **Research:** katgpt-rs/.research/188_NS_CSG_Neuro_Symbolic_Concurrent_Stochastic_Games.md
 **Feature Gate:** `bfcf_tree` — OPT-IN, GOAT-gated (promote to default if benchmark confirms)
@@ -150,18 +150,18 @@ pub trait PerceptRouter: Send + Sync {
 - [ ] Benchmark: PWC bandit convergence vs flat bandit on synthetic workload
 
 ### Phase 4: Symbolic Percept Router (default ON when `bfcf_tree` enabled)
-- [ ] Add `percept_route` feature flag (auto-enabled by `bfcf_tree`)
-- [ ] Implement `PerceptRouter` trait with `SigmoidPerceptRouter` struct
-- [ ] Complexity measure: `sigmoid(region_count * entropy_of_labels)` — sigmoid, not softmax
-- [ ] Route: `simple → FastPath`, `medium → Standard`, `complex → DeepThink`
-- [ ] Integrate with existing `TriggerGate` / `InferenceRouter` for CPU/GPU auto-route
-- [ ] Test: routing accuracy ≥95% on synthetic workload
+- [x] Add `percept_route` feature flag (auto-enabled by `bfcf_tree`)
+- [x] Implement `PerceptRouter` trait with `SigmoidPerceptRouter` struct
+- [x] Complexity measure: `sigmoid(region_count * entropy_of_labels)` — sigmoid, not softmax
+- [x] Route: `simple → FastPath`, `medium → Standard`, `complex → DeepThink`
+- [x] Integrate with existing `TriggerGate` / `InferenceRouter` for CPU/GPU auto-route
+- [x] Test: routing accuracy ≥95% on synthetic workload
 
 ### Phase 5: GOAT Verification
-- [ ] Run full benchmark suite with `bfcf_tree` enabled
-- [ ] Verify no perf regression on existing tests (baseline with feature OFF)
-- [ ] Verify region pruning correctness: reject-region tokens == individually rejected tokens
-- [ ] Verify PWC closure: arm values stay piecewise-constant after N updates
+- [x] Run full benchmark suite with `bfcf_tree` enabled
+- [x] Verify no perf regression on existing tests (baseline with feature OFF)
+- [x] Verify region pruning correctness: reject-region tokens == individually rejected tokens
+- [x] Verify PWC closure: arm values stay piecewise-constant after N updates
 - [ ] If GOAT proven (≥5% throughput gain, no regression), set `bfcf_tree` as default feature
 - [ ] Update README with BFCF Tree documentation
 
