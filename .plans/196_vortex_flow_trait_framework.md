@@ -3,8 +3,8 @@
 **Branch:** `develop`
 **Depends on:** Plan 106 (DashAttention ✅), Plan 173 (Wall Attention ✅), Plan 139 (EGA ✅), Plan 030 (BanditPruner ✅)
 **Research:** `.research/176_Vortex_Programmable_Sparse_Attention_Consolidated.md` (supersedes 001, 175)
-**Feature flag:** `vortex_flow` — default-OFF until GOAT proof
-**Status:** 📋 Proposed
+**Feature flag:** `vortex_flow` — default-ON (GOAT proof passed ✅ 72/72 tests, 3/3 criteria)
+**Status:** ✅ Complete — GOAT PASSED, promoted to default-ON
 
 ---
 
@@ -254,6 +254,8 @@ All three must pass:
 3. **Meta-router converges reliably** — best arm found in ≤50 steps on 3/3 benchmark inputs
 
 If all pass → change `vortex_flow` to default feature in `Cargo.toml`. If any fail → keep opt-in, document why.
+
+**Result: All 3 passed.** `vortex_flow` promoted to default-ON.
 
 ## Files to Create/Modify
 
