@@ -327,6 +327,23 @@ pub mod correlation_budget;
 #[cfg(feature = "corr_budget")]
 pub use correlation_budget::CorrelationBudgetAllocator;
 
+// ── Self-Learning Selectivity Router (Plan 204, feature: selectivity_router) ──
+#[cfg(feature = "selectivity_router")]
+pub mod selectivity_router;
+
+#[cfg(feature = "selectivity_router")]
+pub use selectivity_router::{ComputeRoute, ProfileError, SelectivityRouter};
+
+// ── Kurtosis Gate — Polarization-Driven Speculative Decoding (Plan 203b) ──
+#[cfg(feature = "kurtosis_gate")]
+pub mod kurtosis_gate;
+
+#[cfg(feature = "kurtosis_gate")]
+pub use kurtosis_gate::{KurtosisGate, excess_kurtosis};
+
+#[cfg(all(feature = "speculative_generator", feature = "kurtosis_gate"))]
+pub use dd_tree::build_dd_tree_speculative_kurtosis;
+
 // ── Domino Causal Correction re-exports (Plan 197, feature: domino_correction) ──
 #[cfg(feature = "domino_correction")]
 pub use dd_tree::build_dd_tree_domino;

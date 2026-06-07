@@ -1,7 +1,7 @@
 # Plan 204: Self-Learning Selectivity Router — Adaptive CoT
 
 **Date**: 2026-06-07
-**Status**: 📋 Plan
+**Status**: ✅ Implemented (T1-T8 complete, integration deferred to pipeline wiring)
 **Research**: `.research/180_Rosetta_Scaling_Polarization_Data_Filtering.md` (Section 3.1)
 **Extracted From**: Plan 203 (Phase 2.2 — Selectivity Router)
 **GOAT Rank**: #1 (self-learning, zero training, adaptive CoT)
@@ -156,17 +156,17 @@ crates/katgpt-core/src/
 
 ### Implementation
 
-- [ ] Create `crates/katgpt-core/src/polarization/selectivity_router.rs`
-  - [ ] Implement `SelectivityRouter` struct with `position_kurtosis: Vec<f32>`, `kurtosis_threshold: f32`, `alpha: f32`
-  - [ ] Implement `new()` with defaults (threshold=1.0, alpha=0.1)
-  - [ ] Implement `with_capacity(max_positions: usize)` for pre-allocation
-  - [ ] Implement `should_think(position) -> bool` — O(1) lookup, low kurtosis → CoT
-  - [ ] Implement `observe(position, kurtosis)` — per-position EMA update
-  - [ ] Implement `kurtosis_at(position) -> Option<f32>` — read current EMA
-  - [ ] Implement `reset()` — clear all tracking
-  - [ ] Implement `ComputeRoute` enum (`CpuSpeculative`, `GpuAutoregressive`)
-  - [ ] Implement `recommend_route(position) -> ComputeRoute`
-- [ ] Wire `selectivity_router` module into `polarization/mod.rs` behind `#[cfg(feature = "selectivity_router")]`
+- [x] Create `src/speculative/selectivity_router.rs`
+  - [x] Implement `SelectivityRouter` struct with `position_kurtosis: Vec<f32>`, `kurtosis_threshold: f32`, `alpha: f32`
+  - [x] Implement `new()` with defaults (threshold=1.0, alpha=0.1)
+  - [x] Implement `with_capacity(max_positions: usize)` for pre-allocation
+  - [x] Implement `should_think(position) -> bool` — O(1) lookup, low kurtosis → CoT
+  - [x] Implement `observe(position, kurtosis)` — per-position EMA update
+  - [x] Implement `kurtosis_at(position) -> Option<f32>` — read current EMA
+  - [x] Implement `reset()` — clear all tracking
+  - [x] Implement `ComputeRoute` enum (`CpuSpeculative`, `GpuAutoregressive`)
+  - [x] Implement `recommend_route(position) -> ComputeRoute`
+- [x] Wire `selectivity_router` module into `speculative/mod.rs` behind `#[cfg(feature = "selectivity_router")]`
 
 ### Integration
 
@@ -174,37 +174,45 @@ crates/katgpt-core/src/
 - [ ] Add integration point: before generation, check `router.should_think(position)` → route direct vs CoT
 - [ ] Wire `recommend_route()` into CPU/GPU dispatch (if applicable to current inference pipeline)
 
+> **Note**: Integration points deferred — requires downstream pipeline wiring beyond the scope of this plan's standalone module.
+
 ### Persistence
 
-- [ ] Implement `serialize() -> Vec<u8>` — bincode or simple f32 slice dump
-- [ ] Implement `deserialize(data: &[u8]) -> Result<Self, ProfileError>`
-- [ ] Add `ProfileError` enum (`InvalidMagic`, `VersionMismatch`, `TruncatedData`)
-- [ ] Add save/load to disk helper: `save_profile(path: &Path)` / `load_profile(path: &Path)`
-- [ ] Cold start recovery: load saved profile on startup, falls back to fresh router if no file
+- [x] Implement `serialize() -> Vec<u8>` — bytemuck f32 slice dump with magic+version header
+- [x] Implement `deserialize(data: &[u8]) -> Result<Self, ProfileError>`
+- [x] Add `ProfileError` enum (`InvalidMagic`, `VersionMismatch`, `TruncatedData`)
+- [x] Add save/load to disk helper: `save_profile(path: &Path)` / `load_profile(path: &Path)` (via existing `save_frozen`/`load_frozen` + `serialize`/`deserialize`)
+- [x] Cold start recovery: load saved profile on startup, falls back to fresh router if no file
 
 ### Feature Gate
 
-- [ ] Add `selectivity_router = []` feature to `Cargo.toml`
-- [ ] All new types behind `#[cfg(feature = "selectivity_router")]`
-- [ ] Add to `polarization_all` bundle feature
+- [x] Add `selectivity_router = []` feature to `Cargo.toml`
+- [x] All new types behind `#[cfg(feature = "selectivity_router")]` (module + re-exports in `mod.rs`)
+- [x] Add to `full` bundle feature
 - [ ] GOAT gate: default-on after verification (see below)
 
 ### Tests
 
-- [ ] Test: fresh router — no observations → `should_think` returns `false` for all positions (optimistic direct mode, since kurtosis defaults to MAX)
-- [ ] Test: after observing high kurtosis (3.0+) → `should_think` returns `false` (direct mode)
-- [ ] Test: after observing low kurtosis (0.0-) → `should_think` returns `true` (CoT mode)
-- [ ] Test: EMA convergence — recent observations dominate over old ones
-- [ ] Test: router converges to correct routing after N observations (N=100)
-- [ ] Test: cold start from saved profile — serialize → deserialize → identical routing decisions
-- [ ] Test: `recommend_route()` maps correctly to `ComputeRoute` variants
-- [ ] Test: `with_capacity()` pre-allocates without reallocation
+- [x] Test: fresh router — no observations → `should_think` returns `false` for all positions (optimistic direct mode)
+- [x] Test: after observing high kurtosis (3.0+) → `should_think` returns `false` (direct mode)
+- [x] Test: after observing low kurtosis (0.0-) → `should_think` returns `true` (CoT mode)
+- [x] Test: EMA convergence — recent observations dominate over old ones
+- [x] Test: router converges to correct routing after N observations (N=100)
+- [x] Test: cold start from saved profile — serialize → deserialize → identical routing decisions
+- [x] Test: `recommend_route()` maps correctly to `ComputeRoute` variants
+- [x] Test: `with_capacity()` pre-allocates without reallocation
+- [x] Test: `reset()` clears all tracking
+- [x] Test: `ProfileError` display formatting
+- [x] Test: deserialize rejects invalid magic, version mismatch, truncated data
+- [x] Test: EMA formula correctness (mathematical verification)
+- [x] Test: `Default` trait impl
+- [x] Test: large profile (1K positions) roundtrip
 
 ### Benchmarks
 
-- [ ] Benchmark: `should_think()` overhead < 100ns per decision (target: O(1) lookup)
-- [ ] Benchmark: `observe()` overhead < 100ns per call (target: O(1) amortized)
-- [ ] Benchmark: `serialize()` / `deserialize()` on profiles with 1K, 10K, 100K positions
+- [x] Benchmark: `should_think()` overhead < 100ns per decision ✅ PASS
+- [x] Benchmark: `observe()` overhead < 100ns per call ✅ PASS
+- [x] Benchmark: `serialize()` / `deserialize()` on profiles with 1K, 10K, 100K positions ✅ PASS
 
 ### Example
 

@@ -453,6 +453,14 @@ pub enum RejectionReason {
     LowRelevance { score: f32 },
     /// Branch diverged from target model's preference.
     DivergedFromTarget,
+    /// Kurtosis gate rejected — draft distribution too flat for speculation (Plan 203b).
+    #[cfg(feature = "kurtosis_gate")]
+    KurtosisRejection {
+        /// Excess kurtosis of draft marginal at this position.
+        kurtosis: f32,
+        /// Threshold that was not met.
+        threshold: f32,
+    },
 }
 
 /// Streaming event emitted during speculative decoding steps.
@@ -1569,13 +1577,21 @@ mod tests {
 
     #[test]
     fn test_rejection_reason_variants() {
-        let reasons = [
+        let mut reasons = vec![
             RejectionReason::LowProbability,
             RejectionReason::ConstraintViolation,
             RejectionReason::LowRelevance { score: 0.0 },
             RejectionReason::DivergedFromTarget,
         ];
+        #[cfg(feature = "kurtosis_gate")]
+        reasons.push(RejectionReason::KurtosisRejection {
+            kurtosis: -1.0,
+            threshold: 0.0,
+        });
+        #[cfg(not(feature = "kurtosis_gate"))]
         assert_eq!(reasons.len(), 4);
+        #[cfg(feature = "kurtosis_gate")]
+        assert_eq!(reasons.len(), 5);
     }
 
     // ── DecodeStrategy Tests (Plan 066 Phase 3.1) ──────────────
