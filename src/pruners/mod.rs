@@ -824,3 +824,12 @@ pub mod editable_constraint;
 pub use editable_constraint::{
     DivergenceError, EditableConstraintPruner, PrunerSnapshot, RuleEdit, parse_rules,
 };
+
+#[cfg(feature = "coexplain_riir")]
+pub mod riir_feedback;
+
+#[cfg(feature = "coexplain_riir")]
+pub use riir_feedback::{
+    CuratorIngestion, CuratorRule, RuleBandit, TranslationRule, WorkloadRoute, classify_workload,
+    extract_translation_rules,
+};

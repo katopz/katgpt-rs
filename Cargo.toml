@@ -233,8 +233,9 @@ percept_route = []  # Symbolic Percept Router — compute routing from BFCP comp
 bfcf_tree = ["and_or_dtree", "bandit", "percept_route"]  # BFCF Tree — perceptual region folding for O(regions) pruning (Plan 213, GOAT candidate)
 ted_lite = []  # TED-Lite Divergence Metric — pruner drift measurement (Plan 214 P1)
 coexplain_pruner = ["ted_lite", "bandit"]  # Self-Refining + Editable ConstraintPruner (Plan 214 P2+3)
+coexplain_riir = ["coexplain_pruner"]  # RIIR Feedback Loop — Curator marketplace enabler (Plan 214 P4)
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
-full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy", "newton_schulz", "river_valley", "peira_distill", "kog_cpu_fusion", "datrie_vocab", "gepa_reflective", "phrase_boost", "hydra_budget", "budget_adaptation", "recfm", "ilc_distill", "thinking_prune", "rim_slots", "wall_attention", "ane", "inference_router", "thinking_cot", "kvarn", "freq_bandit", "directional_credit", "kv_share", "nds_proxy", "wealth_pruner", "and_or_dtree", "speculative_generator", "selectivity_router", "lodestar", "collapse_aware_thinking", "three_mode_router", "auto_constraint_synthesis", "safe_exploration_budget", "bfcf_tree", "ted_lite", "coexplain_pruner"]
+full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy", "newton_schulz", "river_valley", "peira_distill", "kog_cpu_fusion", "datrie_vocab", "gepa_reflective", "phrase_boost", "hydra_budget", "budget_adaptation", "recfm", "ilc_distill", "thinking_prune", "rim_slots", "wall_attention", "ane", "inference_router", "thinking_cot", "kvarn", "freq_bandit", "directional_credit", "kv_share", "nds_proxy", "wealth_pruner", "and_or_dtree", "speculative_generator", "selectivity_router", "lodestar", "collapse_aware_thinking", "three_mode_router", "auto_constraint_synthesis", "safe_exploration_budget", "bfcf_tree", "ted_lite", "coexplain_pruner", "coexplain_riir"]
 
 # ── Percepta transformer-VM ───────────────────────────────────
 
@@ -747,3 +748,11 @@ required-features = ["bfcf_tree"]
 [[test]]
 name = "bfcf_tree_goat"
 required-features = ["bfcf_tree"]
+
+[[test]]
+name = "coexplain_goat"
+required-features = ["coexplain_riir"]
+
+[[example]]
+name = "coexplain_demo"
+required-features = ["coexplain_riir"]

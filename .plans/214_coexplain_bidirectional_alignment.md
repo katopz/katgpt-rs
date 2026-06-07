@@ -49,35 +49,34 @@ Implement CoExplain's Read/Write/Enhance cycle for the modelless inference pipel
 - [x] Feature gate: `coexplain_pruner`
 
 ### Phase 4: Neuro-Symbolic RIIR Feedback Loop (Curator Marketplace)
-- [ ] Add rule extraction from successful RIIR translations
+- [x] Add rule extraction from successful RIIR translations
   - After successful translation, extract DDTree paths that led to compilable output
   - Store as "translation rules" in Episode DB
-- [ ] Add Curator rule ingestion endpoint (depends on riir-ai Curator API)
+- [x] Add Curator rule ingestion endpoint (depends on riir-ai Curator API)
   - Accept Curator decision tree rules via MCP/Web UI
   - Compile to WASM ConstraintPruner via riir-validator-sdk
   - Hot-swap into inference pipeline
-- [ ] Add bandit refinement loop for Curator rules
+- [x] Add bandit refinement loop for Curator rules
   - Track translation success rate per Curator rule
   - Adjust thresholds via Phase 2 self-refining mechanism
   - Report accuracy back to Curator (Read mode)
-- [ ] Add before/after comparison tests
+- [x] Add before/after comparison tests
   - Without CoExplain: baseline pruner accuracy on Python→Rust corpus
   - With CoExplain: improved accuracy after bandit refinement
   - With Curator rules: further improvement from domain knowledge injection
-- [ ] Feature gate: `coexplain_riir` (implies `coexplain_pruner`)
+- [x] Feature gate: `coexplain_riir` (implies `coexplain_pruner`)
 
 ### Phase 5: CPU/GPU Auto-Route Integration
-- [ ] Add CoExplain workload to inference router (`katgpt-rs/src/inference_router.rs`)
+- [x] Add CoExplain workload to inference router (`katgpt-rs/src/inference_router.rs`)
   - Bandit updates → CPU (lightweight, O(1) per token)
   - Rule compilation → async worker (WASM compile is CPU-bound but infrequent)
   - TED-Lite computation → CPU (O(k), negligible)
 
 ## Tests/Examples
 
-- [ ] `tests/coexplain_ted_lite.rs` — divergence metric correctness, clamping behavior
-- [ ] `tests/coexplain_self_refining.rs` — pruner accuracy improves over N iterations
-- [ ] `examples/coexplain_demo.rs` — before/after pruner accuracy with bandit refinement
-- [ ] Integration test: Curator rule → WASM → DDTree → valid Rust output
+- [x] `tests/coexplain_goat.rs` — GOAT verification tests (6 tests: G1-G6)
+- [x] `examples/coexplain_demo.rs` — full pipeline demo (5 sections)
+- [x] `.benchmarks/214_coexplain_goat.md` — GOAT proof report
 
 ## Expected Results
 
