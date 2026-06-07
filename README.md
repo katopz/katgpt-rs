@@ -628,6 +628,7 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 | `freq_bandit` | Frequency bandit for speculative decode (Plan 189, **default-on**) |
 | `bandit_top_p` | dMoE adaptive top-p vocabulary selection (Plan 181, **default-on**) |
 | `best_buddies` | Best Buddies mutual NN filter for speculative decoding (Plan 199, opt-in) |
+| `domino_correction` | Domino Causal Correction — modelless prefix-conditioned marginal adjustment + domino_score (Plan 197, Research 177, opt-in) |
 | `corr_budget` | Correlation-driven EMA depth budget for speculative decoding (Plan 200, opt-in) |
 | `rosetta_pruner` | Cross-domain meta-pruner from pruner agreement (Plan 201, opt-in) |
 | `thinking_cot` | Adaptive CoT thinking vs non-thinking (Plan 194, **default-on**) |

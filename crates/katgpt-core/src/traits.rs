@@ -85,6 +85,48 @@ impl ConstraintPruner for NoPruner {
     }
 }
 
+impl DominoPruner for NoPruner {}
+
+// ── DominoPruner (Plan 197, Research 177) ──────────────────────
+
+/// Prefix-conditioned constraint correction for Domino causal correction.
+///
+/// Extends [`ConstraintPruner`] with a secondary correction pass that uses
+/// the *specific prefix path* to refine validity decisions. This enables:
+/// - **False positive elimination**: base says valid but prefix context says invalid
+/// - **False negative recovery**: base says invalid but prefix context says valid (rare)
+///
+/// Default impl returns `base_valid` (no-op) — opt-in correction only.
+///
+/// # Implementors
+///
+/// - `SudokuPruner`: checks row/col/box constraints given the specific prefix path
+/// - `SynPruner`: checks Rust syntax validity given preceding tokens
+///   (e.g., `if` must be followed by `{` or condition)
+pub trait DominoPruner: ConstraintPruner {
+    /// Refine the base validity decision using prefix context.
+    ///
+    /// # Arguments
+    /// * `depth` — current tree depth (position in the sequence)
+    /// * `token` — candidate token index
+    /// * `prefix` — tokens placed at earlier depths in this path
+    /// * `base_valid` — result from the base [`ConstraintPruner::is_valid()`] check
+    ///
+    /// # Returns
+    ///
+    /// Corrected validity: `true` = keep, `false` = prune.
+    #[inline]
+    fn causal_correction(
+        &self,
+        _depth: usize,
+        _token: usize,
+        _prefix: &[usize],
+        base_valid: bool,
+    ) -> bool {
+        base_valid
+    }
+}
+
 // ── ScreeningPruner ─────────────────────────────────────────────
 
 /// Graded relevance pruner replacing binary valid/invalid with continuous score.

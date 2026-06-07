@@ -100,6 +100,11 @@ impl ConstraintPruner for SudokuPruner {
     }
 }
 
+/// SudokuPruner implements DominoPruner with default (no-op) causal correction.
+/// Path-aware cross-depth constraint checking is already handled by `is_valid`.
+#[cfg(feature = "domino_correction")]
+impl katgpt_core::traits::DominoPruner for SudokuPruner {}
+
 #[cfg(all(test, feature = "sudoku"))]
 mod tests {
     use super::*;

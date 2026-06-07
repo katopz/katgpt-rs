@@ -583,6 +583,70 @@ pub fn dflash_predict_ar_with_fusion(
     max_steps
 }
 
+// ── Domino Causal Correction (Plan 197, feature: domino_correction) ──
+
+/// Apply prefix-conditioned logit residual correction to marginals.
+///
+/// For each depth `i > 0`:
+/// 1. Compute prefix hash from `sampled_tokens[0..i]`
+/// 2. Look up correction vector from the table
+/// 3. Apply as logit residual: `marginals[i][v] += correction[v]`
+/// 4. Clamp to non-negative and re-normalize
+///
+/// # Zero Allocation
+///
+/// All operations are in-place on `marginals`.
+///
+/// # Guard
+///
+/// If `table.is_empty()`, returns immediately with no work done.
+#[cfg(feature = "domino_correction")]
+pub fn domino_correct_marginals(
+    marginals: &mut [Vec<f32>],
+    sampled_tokens: &[usize],
+    table: &super::domino::PrefixCorrectionTable,
+) {
+    if table.is_empty() {
+        return;
+    }
+
+    let vocab_size = table.vocab_size();
+
+    for (depth, marginal) in marginals.iter_mut().enumerate() {
+        if depth == 0 {
+            continue;
+        }
+        if depth > sampled_tokens.len() {
+            break;
+        }
+
+        let hash = super::domino::prefix_hash(&sampled_tokens[..depth]);
+        let correction = table.lookup(hash);
+
+        if correction.is_empty() {
+            continue;
+        }
+
+        // Apply logit residual in-place
+        let len = marginal.len().min(correction.len()).min(vocab_size);
+        for v in 0..len {
+            marginal[v] += correction[v];
+            // Clamp to non-negative (logit residual can push below 0)
+            if marginal[v] < 0.0 {
+                marginal[v] = 0.0;
+            }
+        }
+
+        // Re-normalize
+        let sum: f32 = marginal.iter().sum();
+        if sum > f32::EPSILON {
+            for v in marginal.iter_mut() {
+                *v /= sum;
+            }
+        }
+    }
+}
+
 /// Blend multiple marginal slices into a single fused marginal.
 ///
 /// For each position k and vocab entry v:
@@ -1521,6 +1585,125 @@ mod tests {
                 let base = sctx_base.marginal_slice(step, vocab_size);
                 assert_eq!(routed, base);
             }
+        }
+    }
+
+    // ── Domino Causal Correction tests (Plan 197) ─────────────────
+    #[cfg(feature = "domino_correction")]
+    mod domino_correction {
+        use crate::speculative::domino::PrefixCorrectionTable;
+
+        #[test]
+        fn test_domino_correct_empty_table_noop() {
+            let mut marginals = vec![vec![0.5, 0.5], vec![0.3, 0.7]];
+            let original = marginals.clone();
+            let table = PrefixCorrectionTable::new(2);
+            let sampled = [0usize];
+
+            super::domino_correct_marginals(&mut marginals, &sampled, &table);
+
+            assert_eq!(marginals, original, "Empty table should be no-op");
+        }
+
+        #[test]
+        fn test_domino_correct_applies_residual() {
+            let mut marginals = vec![
+                vec![0.5, 0.5], // depth 0 — untouched
+                vec![0.3, 0.7], // depth 1 — gets correction
+            ];
+
+            // Correction for prefix [0]: suppress token 0, boost token 1
+            let correction = vec![-0.1f32, 0.2];
+            let table = PrefixCorrectionTable::builder(2)
+                .add_correction(&[0], &correction)
+                .build();
+
+            let sampled = [0usize]; // prefix at depth 1 is [0]
+            super::domino_correct_marginals(&mut marginals, &sampled, &table);
+
+            // Depth 0 should be unchanged
+            assert_eq!(marginals[0], vec![0.5, 0.5]);
+
+            // Depth 1 should have correction applied and re-normalized
+            // Raw: [0.3 - 0.1, 0.7 + 0.2] = [0.2, 0.9], sum=1.1
+            // Normalized: [0.2/1.1, 0.9/1.1] ≈ [0.1818, 0.8182]
+            let sum: f32 = marginals[1].iter().sum();
+            assert!((sum - 1.0).abs() < 1e-5, "Should sum to 1.0, got {sum}");
+            assert!(marginals[1][1] > 0.8, "Token 1 should be boosted");
+            assert!(marginals[1][0] < 0.2, "Token 0 should be suppressed");
+        }
+
+        #[test]
+        fn test_domino_correct_clamps_negative() {
+            let mut marginals = vec![vec![0.5, 0.5], vec![0.1, 0.9]];
+
+            // Large negative correction that would push below 0
+            let correction = vec![-1.0f32, 0.5];
+            let table = PrefixCorrectionTable::builder(2)
+                .add_correction(&[0], &correction)
+                .build();
+
+            let sampled = [0usize];
+            super::domino_correct_marginals(&mut marginals, &sampled, &table);
+
+            // Token 0 clamped to 0, token 1 = 0.9 + 0.5 = 1.4
+            // After normalize: [0.0, 1.0]
+            assert!((marginals[1][0]).abs() < 1e-5, "Should be clamped to 0");
+            assert!(
+                (marginals[1][1] - 1.0).abs() < 1e-5,
+                "Should be normalized to 1.0"
+            );
+        }
+
+        #[test]
+        fn test_domino_correct_multi_depth() {
+            let mut marginals = vec![
+                vec![0.5, 0.5], // depth 0
+                vec![0.3, 0.7], // depth 1, prefix [0]
+                vec![0.6, 0.4], // depth 2, prefix [0, 1]
+            ];
+
+            // Correction for prefix [0]
+            let correction1 = vec![0.1f32, -0.1];
+            // Correction for prefix [0, 1]
+            let correction2 = vec![-0.2f32, 0.3];
+
+            let table = PrefixCorrectionTable::builder(2)
+                .add_correction(&[0], &correction1)
+                .add_correction(&[0, 1], &correction2)
+                .build();
+
+            let sampled = [0usize, 1];
+            super::domino_correct_marginals(&mut marginals, &sampled, &table);
+
+            // All marginals should still sum to 1.0
+            for (depth, m) in marginals.iter().enumerate() {
+                let sum: f32 = m.iter().sum();
+                assert!(
+                    (sum - 1.0).abs() < 1e-5,
+                    "Depth {depth} should sum to 1.0, got {sum}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_domino_correct_missing_prefix_no_change() {
+            let mut marginals = vec![vec![0.5, 0.5], vec![0.3, 0.7]];
+            let original = marginals.clone();
+
+            // Correction for prefix [99] — won't match our sampled tokens
+            let correction = vec![0.5f32, 0.5];
+            let table = PrefixCorrectionTable::builder(2)
+                .add_correction(&[99], &correction)
+                .build();
+
+            let sampled = [0usize];
+            super::domino_correct_marginals(&mut marginals, &sampled, &table);
+
+            assert_eq!(
+                marginals, original,
+                "Missing prefix should not change marginals"
+            );
         }
     }
 }

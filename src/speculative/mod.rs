@@ -2,6 +2,8 @@ pub mod budget_compat;
 
 pub mod dd_tree;
 pub mod dflash;
+#[cfg(feature = "domino_correction")]
+pub mod domino;
 #[cfg(feature = "domino_lora")]
 pub mod domino_lora;
 pub mod drafter_lora;
@@ -76,6 +78,7 @@ pub use dflash::{
     dflash_predict, dflash_predict_ar, dflash_predict_ar_with, dflash_predict_conditioned,
     dflash_predict_conditioned_with, dflash_predict_parallel, dflash_predict_with,
 };
+pub use katgpt_core::traits::DominoPruner;
 pub use prefill::{
     AttentionScorer, BlockAttentionScorer, PrefillScorer, RandomScorer, UniformScorer,
     block_select, block_select_grid, compress_prompt, compress_prompt_blocks, should_compress,
@@ -323,3 +326,14 @@ pub mod correlation_budget;
 
 #[cfg(feature = "corr_budget")]
 pub use correlation_budget::CorrelationBudgetAllocator;
+
+// ── Domino Causal Correction re-exports (Plan 197, feature: domino_correction) ──
+#[cfg(feature = "domino_correction")]
+pub use dd_tree::build_dd_tree_domino;
+#[cfg(feature = "domino_correction")]
+pub use dflash::domino_correct_marginals;
+#[cfg(feature = "domino_correction")]
+pub use domino::{
+    PrefixCorrectionTable, PrefixCorrectionTableBuilder, compute_prefix_strength, domino_score,
+    prefix_hash,
+};

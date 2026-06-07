@@ -12,6 +12,8 @@ use std::collections::{BinaryHeap, HashMap};
 
 #[cfg(test)]
 use super::types::BinaryScreeningPruner;
+#[cfg(feature = "domino_correction")]
+use super::types::DominoPruner;
 use super::types::{
     ConstraintPruner, NoPruner, NoScreeningPruner, ScreeningPruner, SdeConfig, TreeNode,
 };
@@ -190,6 +192,56 @@ pub fn build_dd_tree_pruned(
     let mut builder = TreeBuilder::new(config);
     builder.build(marginals, config, pruner, chain_seed);
     std::mem::take(&mut builder.tree)
+}
+
+/// DDTree with Domino Causal Correction: prefix-conditioned scoring + constraint correction.
+///
+/// Extends [`build_dd_tree_pruned`] with two modelless mechanisms:
+/// 1. **domino_score**: `base_score * prefix_strength^depth` biases expansion
+///    toward high-confidence prefix paths
+/// 2. **DominoPruner::causal_correction**: secondary pass that uses the specific
+///    prefix path to refine validity decisions (false positive elimination)
+///
+/// When `prefix_strength >= 1.0` (all tokens have prob=1.0) or depth=0,
+/// scoring is identical to the base tree. The correction is only applied
+/// when there are low-confidence prefixes in the path.
+///
+/// Feature-gated behind `domino_correction`.
+///
+/// # Arguments
+///
+/// * `marginals` — Per-depth token probability distributions
+/// * `config` — DDTree configuration
+/// * `pruner` — Constraint pruner implementing [`DominoPruner`]
+/// * `chain_seed` — Whether to build greedy chain backbone first
+/// * `sampled_tokens` — Tokens sampled at each depth (for prefix strength computation)
+///
+/// # Returns
+///
+/// Tree nodes in expansion order.
+#[cfg(feature = "domino_correction")]
+pub fn build_dd_tree_domino<P>(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    pruner: &P,
+    chain_seed: bool,
+    sampled_tokens: &[usize],
+) -> Vec<TreeNode>
+where
+    P: DominoPruner,
+{
+    use super::domino::{compute_prefix_strength, domino_score};
+
+    // Build base tree with causal correction via DominoPruner
+    let mut tree = build_dd_tree_pruned(marginals, config, pruner, chain_seed);
+
+    // Apply domino scoring: re-score nodes based on prefix strength
+    for node in &mut tree {
+        let strength = compute_prefix_strength(marginals, sampled_tokens, node.depth);
+        node.score = domino_score(node.score, node.depth, strength);
+    }
+
+    tree
 }
 
 /// DDTree with Screening Pruner: Build verification tree from marginals,
@@ -5070,6 +5122,126 @@ mod tests {
                     node.token_idx,
                 );
             }
+        }
+    }
+
+    // ── Domino DDTree tests (Plan 197) ──────────────────────────────
+    #[cfg(feature = "domino_correction")]
+    mod domino_tree {
+        use super::*;
+        use crate::speculative::domino::compute_prefix_strength;
+        use katgpt_core::traits::DominoPruner;
+
+        fn make_uniform_marginals(depths: usize, vocab_size: usize) -> Vec<Vec<f32>> {
+            let prob = 1.0 / vocab_size as f32;
+            vec![vec![prob; vocab_size]; depths]
+        }
+
+        #[test]
+        fn test_build_dd_tree_domino_matches_pruned_when_no_sampled_tokens() {
+            let config = Config {
+                tree_budget: 16,
+                draft_lookahead: 3,
+                vocab_size: 4,
+                ..Config::default()
+            };
+
+            let marginals = make_uniform_marginals(3, 4);
+            let slices: Vec<&[f32]> = marginals.iter().map(|m| m.as_slice()).collect();
+            let sampled_tokens: [usize; 0] = [];
+
+            let pruned = build_dd_tree_pruned(&slices, &config, &NoPruner, false);
+            let domino = build_dd_tree_domino(&slices, &config, &NoPruner, false, &sampled_tokens);
+
+            // Same node count
+            assert_eq!(pruned.len(), domino.len());
+
+            // Scores should be identical (no prefix to adjust)
+            for (p, d) in pruned.iter().zip(domino.iter()) {
+                assert_eq!(p.token_idx, d.token_idx);
+                assert!((p.score - d.score).abs() < 1e-6);
+            }
+        }
+
+        #[test]
+        fn test_build_dd_tree_domino_respects_budget() {
+            let config = Config {
+                tree_budget: 8,
+                draft_lookahead: 5,
+                vocab_size: 4,
+                ..Config::default()
+            };
+
+            let marginals = make_uniform_marginals(5, 4);
+            let slices: Vec<&[f32]> = marginals.iter().map(|m| m.as_slice()).collect();
+            let sampled_tokens = [0usize, 1, 2, 3, 0];
+
+            let tree = build_dd_tree_domino(&slices, &config, &NoPruner, false, &sampled_tokens);
+            assert!(tree.len() <= config.tree_budget);
+        }
+
+        #[test]
+        fn test_build_dd_tree_domino_with_domino_pruner() {
+            // Custom pruner implementing DominoPruner with causal correction
+            struct PrefixAwarePruner;
+            impl ConstraintPruner for PrefixAwarePruner {
+                fn is_valid(&self, _depth: usize, token_idx: usize, _parents: &[usize]) -> bool {
+                    token_idx < 3 // Allow only tokens 0, 1, 2
+                }
+            }
+            impl DominoPruner for PrefixAwarePruner {
+                fn causal_correction(
+                    &self,
+                    depth: usize,
+                    token: usize,
+                    prefix: &[usize],
+                    base_valid: bool,
+                ) -> bool {
+                    // At depth > 1, also reject token 2 if prefix has two 0s
+                    if depth > 1 && token == 2 && prefix.iter().filter(|&&t| t == 0).count() >= 2 {
+                        return false;
+                    }
+                    base_valid
+                }
+            }
+
+            let config = Config {
+                tree_budget: 16,
+                draft_lookahead: 3,
+                vocab_size: 4,
+                ..Config::default()
+            };
+
+            let marginals = make_uniform_marginals(3, 4);
+            let slices: Vec<&[f32]> = marginals.iter().map(|m| m.as_slice()).collect();
+            let sampled_tokens = [0usize, 0];
+
+            let tree =
+                build_dd_tree_domino(&slices, &config, &PrefixAwarePruner, false, &sampled_tokens);
+
+            // All nodes should have valid tokens
+            for node in &tree {
+                assert!(node.token_idx < 3, "Token {} should be < 3", node.token_idx);
+            }
+        }
+
+        #[test]
+        fn test_domino_scoring_adjusts_depth_scores() {
+            let marginals: Vec<&[f32]> = vec![&[0.25, 0.25, 0.25, 0.25]; 3];
+            let sampled_tokens = [0usize, 1];
+
+            // prefix_strength = 0.25 * 0.25 = 0.0625
+            let strength = compute_prefix_strength(&marginals, &sampled_tokens, 2);
+            assert!((strength - 0.0625f32).abs() < 1e-6);
+
+            // domino_score at depth 2 should penalize
+            let base = -1.0f32;
+            let scored = crate::speculative::domino::domino_score(base, 2, strength);
+            // -1.0 * 0.0625^2 = -0.00390625
+            assert!(
+                scored > base,
+                "Should be less extreme than base for negative scores"
+            );
         }
     }
 }

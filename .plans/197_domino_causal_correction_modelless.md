@@ -48,21 +48,21 @@ No model training. No LoRA. Pure inference-time pattern extraction.
 
 ### Phase 1: DominoCorrector Core
 
-- [ ] **T1: Add `PrefixCorrectionTable` struct in `speculative/types.rs`**
+- [x] **T1: Add `PrefixCorrectionTable` struct in `speculative/types.rs`**
   - Pre-computed table of prefix-token → correction vectors
   - Hash-based: `HashMap<u64, Vec<f32>>` where key = blake3(prefix_tokens) truncated to u64
   - Correction vectors are small: only top-K token adjustments (sparse, not full vocab)
   - Zero-alloc lookup: `fn lookup(&self, prefix_hash: u64) -> &[f32]`
   - Builder pattern for construction from constraint rules
 
-- [ ] **T2: Add `domino_correct_marginals` function in `speculative/dflash.rs`**
+- [x] **T2: Add `domino_correct_marginals` function in `speculative/dflash.rs`**
   - Signature: `fn domino_correct_marginals(marginals: &mut [Vec<f32>], sampled_tokens: &[usize], table: &PrefixCorrectionTable)`
   - For depth i > 0: compute prefix hash from `sampled_tokens[0..i]`, lookup correction, apply as logit residual
   - Re-normalize each marginal after correction
   - Zero allocation: correction is applied in-place on marginals
   - Guard: if table is empty, no-op (zero cost)
 
-- [ ] **T3: Add `domino_score` tree expansion priority in `speculative/dd_tree.rs`**
+- [x] **T3: Add `domino_score` tree expansion priority in `speculative/dd_tree.rs`**
   - New scoring function alongside existing `score` in TreeNode
   - `domino_score = base_score * prefix_strength^depth` where prefix_strength = product of parent marginal probs
   - Integrate into `build_dd_tree_pruned` as an option
@@ -70,13 +70,13 @@ No model training. No LoRA. Pure inference-time pattern extraction.
 
 ### Phase 2: DominoPruner Trait Extension
 
-- [ ] **T4: Add `DominoPruner` trait extending `ConstraintPruner` in `katgpt-core/src/traits.rs`**
+- [x] **T4: Add `DominoPruner` trait extending `ConstraintPruner` in `katgpt-core/src/traits.rs`**
   - `fn causal_correction(&self, depth: usize, token: usize, prefix: &[usize], base_valid: bool) -> bool`
   - Default impl: returns `base_valid` (no-op)
   - SudokuPruner impl: checks row/col/box constraints given the *specific prefix path*
   - SynPruner impl: checks Rust syntax validity given preceding tokens (e.g., `if` must be followed by `{` or condition)
 
-- [ ] **T5: Wire `DominoPruner::causal_correction` into `build_dd_tree_pruned`**
+- [x] **T5: Wire `DominoPruner::causal_correction` into `build_dd_tree_pruned`**
   - After base `is_valid` check, apply `causal_correction` to refine
   - If base says valid but correction says invalid → prune (false positive eliminated)
   - If base says invalid but correction says valid → un-prune (false negative recovered, rare)
@@ -84,19 +84,19 @@ No model training. No LoRA. Pure inference-time pattern extraction.
 
 ### Phase 3: Examples & Benchmarks
 
-- [ ] **T6: Add `examples/domino_sudoku.rs`**
+- [x] **T6: Add `examples/domino_sudoku.rs`**
   - Before: standard DDTree with SudokuPruner (100% valid, known result)
   - After: DDTree with DominoPruner showing *same* validity but *fewer nodes explored*
   - Metric: nodes_explored, valid_rate, time_per_tree
   - Expected: same 100% valid, ~10-20% fewer nodes (prefix-aware pruning eliminates branches earlier)
 
-- [ ] **T7: Add `examples/domino_code.rs` (feature: validator)**
+- [x] **T7: Add `examples/domino_code.rs` (feature: validator)**
   - Before: SynPruner DDTree (bracket balancing + AST parsing)
   - After: SynPruner + DominoPruner (prefix-conditioned syntax correction)
   - Show: `if` token followed by `{` gets boosted, `if` followed by `fn` gets suppressed
   - Metric: acceptance_rate, valid_rust_ratio
 
-- [ ] **T8: Benchmark: `domino_correction` ON vs OFF**
+- [x] **T8: Benchmark: `domino_correction` ON vs OFF**
   - `cargo test --features domino_correction prof_domino -- --nocapture`
   - Measure: DDTree build time, nodes explored, acceptance rate
   - Must show: no regression (>0% change acceptable, >5% improvement expected)
@@ -104,11 +104,11 @@ No model training. No LoRA. Pure inference-time pattern extraction.
 
 ### Phase 4: Integration
 
-- [ ] **T9: Add `domino_correction` feature to `Cargo.toml`**
+- [x] **T9: Add `domino_correction` feature to `Cargo.toml`**
   - Default ON after T8 proves no regression
   - No new dependencies (uses existing HashMap, blake3 already in tree)
 
-- [ ] **T10: Update `README.md`**
+- [x] **T10: Update `README.md`**
   - Add Domino section under "🔀 Opt-In & Gated Features"
   - Reference Research 177
 
