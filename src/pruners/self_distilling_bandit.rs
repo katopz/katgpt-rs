@@ -424,6 +424,7 @@ impl<P: ScreeningPruner, L: EpisodeLookup> ScreeningPruner for SelfDistillingBan
 mod tests {
     use super::*;
     use crate::pruners::bandit::BanditStrategy;
+    use crate::pruners::episode_pruner::Episode;
     use crate::speculative::types::NoScreeningPruner;
 
     /// Simple in-memory episode lookup for tests.
