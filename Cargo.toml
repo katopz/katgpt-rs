@@ -212,6 +212,7 @@ rv_gated_routing = []  # RV-Gated Compute Routing — AcceptanceVarianceTracker 
 rv_gated_thinking = ["rv_gated_routing"]  # RV-Gated Thinking — ThinkingController RV bias (Plan 202 GOAT, default-ON via rv_gated_routing)
 rv_bandit_pruning = []  # RV Bandit Pruning — FrequencyBandit top-ρ arm suppression (Plan 202 GOAT, default-ON via rv_gated_routing)
 best_buddies = []  # Best Buddies Drafting — mutual NN filter for speculative decoding (Plan 199 GOAT +32.19% acceptance, default-ON)
+egcs = []  # Episode-Guided Constraint Synthesis — reference-based structural constraint injection (Plan 206, GOAT candidate)
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
 full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "g_zero", "fft", "bomber", "bomber-agent", "bomber-wasm", "game_state", "bandit_mcts", "hla_attention", "gdn2_attention", "lt2_looped", "dash_attn", "mls_aggregate", "dmax_spd", "dreamer", "monopoly", "go", "randopt_weight", "feedback", "rest", "embedding_router", "gpu", "game_domain", "language_domain", "percepta_compile", "dllm", "tri_mode", "bt_rank", "spectral_quant", "octopus", "turboquant", "planar_quant", "iso_quant", "hybrid_oct_pq", "replaid_schedules", "elf_sde", "maxsim", "cna_steering", "deep_manifold", "federation", "delta_routing", "decode_specialize", "lattice_deduction", "unit_distance", "memo_reflections", "eqr_convergence", "subterranean", "sr2am_configurator", "data_gate", "coda_fusion", "tiled_attention", "vpd_em_distill", "proof_sketch_evolution", "convex_tok", "opus_selection", "epiplexity_scoring", "committee_boost", "questbench", "cache_prune", "sleep_consolidation", "spectral_hierarchy", "newton_schulz", "river_valley", "peira_distill", "kog_cpu_fusion", "datrie_vocab", "gepa_reflective", "phrase_boost", "hydra_budget", "budget_adaptation", "recfm", "ilc_distill", "thinking_prune", "rim_slots", "wall_attention", "ane", "inference_router", "thinking_cot", "kvarn", "freq_bandit", "directional_credit", "kv_share", "nds_proxy", "wealth_pruner", "and_or_dtree", "speculative_generator", "selectivity_router"]
 
@@ -690,3 +691,7 @@ required-features = ["and_or_dtree"]
 [[test]]
 name = "freq_bandit_goat_proof"
 required-features = ["freq_bandit"]
+
+[[example]]
+name = "egcs_demo"
+required-features = ["egcs"]

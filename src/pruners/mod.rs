@@ -567,3 +567,20 @@ pub mod acceptance_variance;
 
 #[cfg(feature = "rv_gated_routing")]
 pub use acceptance_variance::AcceptanceVarianceTracker;
+
+// ── Episode-Guided Constraint Synthesis — EpisodePruner (Plan 206) ──
+
+#[cfg(feature = "egcs")]
+pub mod episode_pruner;
+
+#[cfg(feature = "egcs")]
+pub use episode_pruner::{
+    ConstraintSynthesizer, Episode, EpisodeLookup, EpisodeMetadata, EpisodePruner,
+    MemoryEpisodeLookup, StructuralDiffSynthesizer, SynthesizedConstraint,
+};
+
+#[cfg(feature = "egcs")]
+pub mod vr_loop;
+
+#[cfg(feature = "egcs")]
+pub use vr_loop::{VrGenerator, VrLoop, VrLoopResult, VrRoundFeedback, VrVerifier};
