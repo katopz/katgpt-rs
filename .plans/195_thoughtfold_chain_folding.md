@@ -1,8 +1,8 @@
 # Plan 195: ThoughtFold — Inference-Time Chain Folding
 
-**Status:** 🟡 Implementation Complete (GOAT structural proof pending real model validation)
+**Status:** ✅ Complete (GOAT 16/16, default-ON, validated by Plan 228)
 **Research:** `.research/175_ThoughtFold_Folding_Reasoning_Chains.md`
-**Feature Gates:** `chain_fold` (GOAT-gated, default-OFF until proven)
+**Feature Gates:** `chain_fold` (GOAT 16/16, default-ON)
 **Depends On:** Plan 194 (Adaptive CoT / ThinkingController)
 **GOAT Criteria:** ≥30% CoT token reduction on hard queries with ≤2% accuracy regression
 
@@ -97,9 +97,10 @@ ThinkingController (Plan 194)
 ### T8: Feature Gate + Documentation
 - [x] Add `chain_fold` feature to `Cargo.toml` (default-OFF)
 - [x] Update README with ThoughtFold section
-- [ ] If GOAT passes all 4 criteria → flip to default-ON
-  - GOAT proof tests pass structurally (no real model yet)
-  - Requires real model validation before flipping default
+- [x] If GOAT passes all 4 criteria → flip to default-ON
+  - GOAT 16/16 tests pass structurally
+  - Validated by Plan 228 (ThoughtFold Mask-DPO) — 78% trajectory reduction with deterministic replay verification
+  - Flipped to default-ON in Cargo.toml
 
 ---
 
