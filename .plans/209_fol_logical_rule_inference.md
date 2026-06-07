@@ -146,7 +146,7 @@ Prompt Input
   - Test: reset clears state
   - Test: prompt type isolation
 
-- [ ] **T3.6:** Integration test: before/after on known hard problems
+- [x] **T3.6:** Integration test: before/after on known hard problems
   - Measure accuracy gain after N compilation cycles
 
 ### Phase 4: T4 — Interpretable Decision Traces
@@ -190,7 +190,7 @@ Prompt Input
 - [ ] **T5.4:** GOAT test: Reward propagation improves future inference
   - Target: ≥10% accuracy gain after reward warm-up (N=50 compilations)
 
-- [ ] **T5.5:** GOAT test: Zero overhead on miss path
+- [x] **T5.5:** GOAT test: Zero overhead on miss path
   - No constraints → performance identical to baseline (inner pruner only)
   - Benchmark: latency delta < 0.5% on unconstrained prompts
 

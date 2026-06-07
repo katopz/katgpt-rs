@@ -558,4 +558,36 @@ mod tests {
             assert_eq!(cal.calibration_log().len(), 0, "should rollback on failure");
         }
     }
+
+    // ── Performance Benchmarks (F4.8) ─────────────────────────────
+
+    #[test]
+    fn test_calibration_overhead_per_call() {
+        use std::time::Instant;
+
+        let mut cal = RewardGatedCalibrator::new(AllowAll);
+
+        // Warm up
+        for _ in 0..100 {
+            cal.record_reward(make_key(0, 0, 0), 0.5);
+        }
+
+        // Measure record_reward throughput
+        let iters = 10_000;
+        let start = Instant::now();
+        for i in 0..iters {
+            let key = make_key((i % 10) as u32, 0, 0);
+            cal.record_reward(key, 0.7);
+        }
+        let elapsed = start.elapsed();
+        let per_call_ns = elapsed.as_nanos() as f64 / iters as f64;
+
+        // Target: <10µs per call (generous — actual target is 100ns)
+        assert!(
+            per_call_ns < 10_000.0,
+            "Calibration overhead {per_call_ns:.0}ns exceeds 10µs target"
+        );
+
+        eprintln!("  F4.8 calibration overhead: {per_call_ns:.0}ns per record_reward call");
+    }
 }

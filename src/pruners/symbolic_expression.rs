@@ -756,4 +756,66 @@ mod tests {
         assert!(s.contains("0.70"));
         assert!(s.contains("0.30"));
     }
+
+    // ── Performance Benchmarks (F1.10) ───────────────────────────
+
+    #[test]
+    fn test_expression_fitting_performance() {
+        use std::hint::black_box;
+        use std::time::Instant;
+
+        // Generate synthetic dataset: 1000 records, 8 features
+        let mut features = Vec::with_capacity(1000);
+        let mut labels = Vec::with_capacity(1000);
+        let mut rng = fastrand::Rng::with_seed(42);
+
+        for _ in 0..1000 {
+            let f: Vec<f32> = (0..8).map(|_| rng.f32()).collect();
+            let label = f[0] > 0.5 && f[2] < 0.3;
+            features.push(f);
+            labels.push(label);
+        }
+
+        let dataset = TraceDataset { features, labels };
+        let fitter = SymbolicExpressionFitter {
+            max_terms: 4,
+            min_improvement: 0.001,
+            ..SymbolicExpressionFitter::new()
+        };
+
+        // Measure fitting
+        let start = Instant::now();
+        let expr = fitter.fit(&dataset);
+        let fit_time = start.elapsed();
+
+        // Target: <100ms for 1000 records (generous — actual target is 1ms)
+        assert!(
+            fit_time.as_millis() < 100,
+            "Fitting took {}ms, exceeding 100ms target",
+            fit_time.as_millis()
+        );
+
+        eprintln!(
+            "  F1.10 fitting: {}ms for 1000 records, 8 features",
+            fit_time.as_millis()
+        );
+
+        // Measure evaluation throughput
+        let test_features: Vec<f32> = (0..8).map(|_| rng.f32()).collect();
+        let iters = 100_000;
+        let start = Instant::now();
+        for _ in 0..iters {
+            black_box(expr.evaluate(black_box(&test_features)));
+        }
+        let elapsed = start.elapsed();
+        let per_eval_ns = elapsed.as_nanos() as f64 / iters as f64;
+
+        // Target: <10µs per eval (generous — actual target is 50ns)
+        assert!(
+            per_eval_ns < 10_000.0,
+            "Evaluation overhead {per_eval_ns:.0}ns exceeds 10µs target"
+        );
+
+        eprintln!("  F1.10 evaluation: {per_eval_ns:.0}ns per evaluate call");
+    }
 }

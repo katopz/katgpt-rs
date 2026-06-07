@@ -349,6 +349,68 @@ mod tests {
         assert_eq!(boost, 0.0, "reset should clear rewards");
     }
 
+    // ── Integration: Before/After Accuracy (Plan 209, T3.6) ──────────
+
+    #[test]
+    fn test_reward_mem_improves_accuracy_over_cycles() {
+        let mut pruner = RewardMemPruner::new(AcceptAll);
+        pruner.set_prompt_type("rust_fn");
+
+        // "Good" paths that should compile, "bad" paths that shouldn't.
+        let good_paths: &[&[usize]] = &[&[0, 1, 2], &[0, 3, 4], &[0, 5, 6]];
+        let bad_paths: &[&[usize]] = &[&[1, 9, 9], &[2, 8, 7], &[3, 0, 0]];
+
+        // Phase 1: Before — all boosts are zero (no history)
+        let before_good_avg: f32 = good_paths
+            .iter()
+            .map(|p| pruner.get_boost(p.len(), p[p.len() - 1], &p[..p.len() - 1]))
+            .sum::<f32>()
+            / good_paths.len() as f32;
+        let before_bad_avg: f32 = bad_paths
+            .iter()
+            .map(|p| pruner.get_boost(p.len(), p[p.len() - 1], &p[..p.len() - 1]))
+            .sum::<f32>()
+            / bad_paths.len() as f32;
+
+        assert_eq!(before_good_avg, 0.0, "no history → zero boost");
+        assert_eq!(before_bad_avg, 0.0, "no history → zero boost");
+
+        // Phase 2: Warm-up — feed compilation outcomes
+        for _ in 0..20 {
+            for &path in good_paths {
+                pruner.reward_path(path, &CompileOutcome::Success);
+            }
+            for &path in bad_paths {
+                pruner.reward_path(path, &CompileOutcome::Error("type mismatch".into()));
+            }
+        }
+
+        // Phase 3: After — good paths have positive boost, bad paths negative
+        let after_good_avg: f32 = good_paths
+            .iter()
+            .map(|p| pruner.get_boost(p.len(), p[p.len() - 1], &p[..p.len() - 1]))
+            .sum::<f32>()
+            / good_paths.len() as f32;
+        let after_bad_avg: f32 = bad_paths
+            .iter()
+            .map(|p| pruner.get_boost(p.len(), p[p.len() - 1], &p[..p.len() - 1]))
+            .sum::<f32>()
+            / bad_paths.len() as f32;
+
+        assert!(
+            after_good_avg > before_good_avg,
+            "rewarded paths should improve: before={before_good_avg} after={after_good_avg}"
+        );
+        assert!(
+            after_bad_avg < before_bad_avg,
+            "penalized paths should degrade: before={before_bad_avg} after={after_bad_avg}"
+        );
+        assert!(
+            after_good_avg - after_bad_avg > 0.5,
+            "good/bad separation should be significant: good={after_good_avg} bad={after_bad_avg}"
+        );
+    }
+
     #[test]
     fn test_ema_convergence() {
         let mut pruner = RewardMemPruner::new(AcceptAll);

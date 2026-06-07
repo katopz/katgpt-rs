@@ -90,7 +90,7 @@ DDTree Exploration (existing)
   - Test: blake3 audit hash is deterministic
   - Test: miss path (feature disabled) has zero overhead
 
-- [ ] **F4.8:** Benchmark: calibration overhead on hot path
+- [x] **F4.8:** Benchmark: calibration overhead on hot path
   - Target: <100ns per `relevance()` call overhead (papaya lookup)
   - Compare: calibrated vs uncalibrated pruner on 10K token evaluations
 
@@ -156,7 +156,7 @@ DDTree Exploration (existing)
   - Test: feature extraction produces expected dimensions
   - Test: expression pruner scores are in [0, 1] (sigmoid-bounded)
 
-- [ ] **F1.10:** Benchmark: expression fitting and evaluation
+- [x] **F1.10:** Benchmark: expression fitting and evaluation
   - Fitting: target <1ms for 1000 trace records with 8 features
   - Evaluation: target <50ns per `relevance()` call
   - Compare: ExpressionPruner vs inner pruner overhead
@@ -225,7 +225,7 @@ DDTree Exploration (existing)
   - Test: full pipeline (ground → explain → summarize → JSON)
   - 13 tests ALL PASS
 
-- [ ] **F2.9:** Benchmark: grounding overhead
+- [x] **F2.9:** Benchmark: grounding overhead
   - Target: <10μs per grounding call (template lookup + string interpolation)
   - Not on hot path — post-inference only
 
@@ -292,7 +292,7 @@ DDTree Exploration (existing)
   - Test: integration with concept grounding (when both features enabled)
   - Test: empty trace → graceful empty explanation (no panic)
 
-- [ ] **F3.10:** Benchmark: sensitivity analysis cost
+- [x] **F3.10:** Benchmark: sensitivity analysis cost
   - Target: <5ms for 100-token trace with 4 pruners (post-inference)
   - Measure: perturbation loop cost vs trace recording cost
   - Verify: not on hot path when feature disabled

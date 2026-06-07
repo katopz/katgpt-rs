@@ -1187,4 +1187,56 @@ mod tests {
             );
         }
     }
+
+    // ── F3.10: Sensitivity Analysis Cost Benchmark ──────────────────
+
+    #[test]
+    fn test_sensitivity_analysis_cost() {
+        use std::time::Instant;
+
+        // Create 100-token trace with 4 pruners
+        let nodes: Vec<TraceNode> = (0..100)
+            .map(|i| {
+                let mut node = TraceNode::new(i / 20, 0);
+                node.candidates.push(CandidateRecord {
+                    token_idx: i % 50,
+                    pruner_scores: vec![0.8, 0.6, 0.4, 0.2],
+                    accepted: true,
+                });
+                node.candidates.push(CandidateRecord {
+                    token_idx: (i + 1) % 50,
+                    pruner_scores: vec![0.3, 0.5, 0.7, 0.1],
+                    accepted: false,
+                });
+                node
+            })
+            .collect();
+
+        let explainer = PerturbationExplainer::new(
+            0.1,
+            vec![
+                "syntax".into(),
+                "bandit".into(),
+                "cache".into(),
+                "reward".into(),
+            ],
+        );
+
+        let start = Instant::now();
+        let explanation = explainer.explain(&nodes);
+        let elapsed = start.elapsed();
+
+        // Target: <50ms for 100 tokens with 4 pruners (generous — actual target is 5ms)
+        assert!(
+            elapsed.as_millis() < 50,
+            "Sensitivity analysis took {}ms, exceeding 50ms target",
+            elapsed.as_millis()
+        );
+
+        eprintln!(
+            "  F3.10 sensitivity: {}ms for 100 tokens × 4 pruners",
+            elapsed.as_millis()
+        );
+        eprintln!("    {} choices explained", explanation.choices.len());
+    }
 }

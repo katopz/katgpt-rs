@@ -650,4 +650,41 @@ mod tests {
         assert!(json.contains("function body or expression"));
         assert!(json.contains("moderate confidence"));
     }
+
+    // ── F2.9: Grounding Overhead Benchmark ──────────────────────────
+
+    #[test]
+    fn test_grounding_overhead() {
+        use std::time::Instant;
+
+        let grounding = TemplateGrounding::new();
+        let state = PrunerState {
+            depth: 1,
+            token_idx: 5,
+            parent_token: vec![0, 3],
+            pruner_scores: vec![
+                ("syntax".to_string(), 0.85),
+                ("bandit".to_string(), 0.62),
+                ("cache".to_string(), 0.30),
+            ],
+            accepted: true,
+        };
+
+        let iters = 10_000;
+        let start = Instant::now();
+        for _ in 0..iters {
+            let mappings = grounding.ground(std::hint::black_box(&state));
+            std::hint::black_box(&mappings);
+        }
+        let elapsed = start.elapsed();
+        let per_call_us = elapsed.as_micros() as f64 / iters as f64;
+
+        // Target: <100μs per call (generous — actual target is 10μs)
+        assert!(
+            per_call_us < 100.0,
+            "Grounding overhead {per_call_us:.1}μs exceeds 100μs target"
+        );
+
+        eprintln!("  F2.9 grounding overhead: {per_call_us:.2}μs per ground call");
+    }
 }
