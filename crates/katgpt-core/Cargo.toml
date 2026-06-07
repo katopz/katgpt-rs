@@ -50,6 +50,7 @@ mux_ddtree = ["mux_pruner"]  # MuxDdTree — superposition branch DDTree nodes (
 mux_bandit_width = []  # MuxBanditWidth — adaptive superposition width (Research 158, MUX)
 mux_bfs = ["mux_ddtree"]  # MUX BFS — superposition-guided parallel tree search (Research 158)
 mux_freeze_thaw = ["mux_pruner"]  # MUX Freeze/Thaw — persistent superposition patterns (Research 158)
+comp_width = []  # Compositional DDTree partner-entropy width — continuous replacement for PEAK_DOMINANCE_RATIO (Plan 205, Research 181)
 mux_demux = []  # MuxDemux Verifier — deterministic superposition recovery (Research 158, MUX)
 and_or_dtree = []  # AND-OR DDTree — generic AND-OR tree for hierarchical goal decomposition (Plan 190, Research 170)
 speculative_generator = []  # SpeculativeGenerator trait unification — generic generate+validate contract (Plan 193)

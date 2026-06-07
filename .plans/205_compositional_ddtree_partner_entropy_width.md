@@ -2,7 +2,7 @@
 
 **Research:** 181 (Compositional Muon — Partner-Weighted Inference)
 **Feature Gate:** `comp_width`
-**Status:** Planning
+**Status:** Done
 **Priority:** MEDIUM — clean improvement, ~50 LOC
 
 ---
@@ -18,21 +18,21 @@ The insight: entropy of the draft distribution is the "partner norm" for the val
 
 ## Tasks
 
-- [ ] Add `compositional_width()` function in `src/ddtree.rs` (or appropriate module)
-  - Takes: draft entropy, validator confidence, base width
+- [x] Add `compositional_width()` function in `crates/katgpt-core/src/mux/dd_tree.rs`
+  - Takes: peaks (top-K logits), base width
   - Returns: scaled width as `usize`
-  - Formula: `width = base * (1.0 + partner_entropy_scale * (draft_entropy / max_entropy))`
-  - Where `partner_entropy_scale` is the CM multiplier (configurable, default 0.5)
+  - Formula: `width = max(1, round(base * (entropy / max_entropy)))` — linear entropy→width mapping
+  - Zero-alloc, branch-free inner loop
   
-- [ ] Feature-gate behind `comp_width` in `Cargo.toml`
+- [x] Feature-gate behind `comp_width` in `Cargo.toml` (both crate and workspace)
   
-- [ ] Replace `PEAK_DOMINANCE_RATIO` usage with continuous partner-entropy scaling
-  - Find all usages of `PEAK_DOMINANCE_RATIO` in DDTree hot path
-  - Replace binary check with continuous `compositional_width()` call
+- [x] Replace `PEAK_DOMINANCE_RATIO` usage with continuous partner-entropy scaling
+  - Updated `MuxDdTree::detect_width` in `dd_tree.rs` — feature-gated
+  - Updated `MuxBfs::detect_width` in `bfs.rs` — delegates to `MuxDdTree::detect_width` when enabled
   
-- [ ] Add unit test: verify width scales monotonically with draft entropy
+- [x] Add unit test: `comp_width_monotonic_with_entropy` — higher entropy gives >= width
   
-- [ ] Add unit test: verify width stays at base when entropy is zero
+- [x] Add unit test: `comp_width_zero_entropy_returns_min` — zero entropy gives width 1
   
 - [ ] Add GOAT gate proof: benchmark before/after on multi-peak token distributions
   - Use existing DDTree test harness

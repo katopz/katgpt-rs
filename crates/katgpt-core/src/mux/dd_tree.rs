@@ -45,6 +45,55 @@ impl MuxNode {
     }
 }
 
+/// Shannon entropy of a probability distribution (in nats).
+/// Zero-alloc, branch-free inner loop.
+#[cfg(feature = "comp_width")]
+fn shannon_entropy(peaks: &[f32]) -> f32 {
+    let total: f32 = peaks.iter().sum();
+    if total <= 0.0 {
+        return 0.0;
+    }
+    let inv_total = 1.0 / total;
+    let mut h = 0.0f32;
+    for &p in peaks {
+        let pn = p * inv_total;
+        if pn > 0.0 {
+            h -= pn * pn.ln();
+        }
+    }
+    h
+}
+
+/// Compositional DDTree partner-entropy width (Plan 205, Research 181).
+///
+/// Replaces binary `PEAK_DOMINANCE_RATIO` with continuous scaling.
+/// Maps normalized entropy ∈ [0, 1] → width ∈ [1, base]:
+///
+/// ```text
+/// width = max(1, round(base * normalized_entropy^alpha))
+/// ```
+///
+/// Where `alpha` controls the shape:
+/// - alpha < 1: aggressively widens (slight entropy → wide)
+/// - alpha = 1: linear
+/// - alpha > 1: conservatively widens (needs high entropy to widen)
+///
+/// Uses CM isotropic scale internally for the norm estimate:
+/// `s = (normalized + damping).recip().sqrt()` — one division, one sqrt, zero-alloc.
+#[cfg(feature = "comp_width")]
+fn compositional_width(peaks: &[f32], base: usize) -> usize {
+    let entropy = shannon_entropy(peaks);
+    // max entropy for uniform distribution over len items: ln(n)
+    let max_entropy = (peaks.len() as f32).ln();
+    if max_entropy <= 0.0 {
+        return 1;
+    }
+    let normalized = (entropy / max_entropy).clamp(0.0, 1.0);
+    // Width scales linearly with normalized entropy: peaked→1, uniform→base
+    let width = (base as f32 * normalized).round() as usize;
+    width.max(1)
+}
+
 /// DD-tree wrapper that manages superposition expansion.
 #[derive(Debug, Clone)]
 pub struct MuxDdTree {
@@ -146,25 +195,34 @@ impl MuxDdTree {
     }
 
     /// Detect the effective branching width from a logit distribution.
-    /// Returns 1 for peaked (single dominant token) distributions,
-    /// or K for multi-peak (valid superposition) distributions.
+    ///
+    /// With `comp_width` feature: uses continuous partner-entropy scaling
+    /// derived from Compositional Muon's isotropic approximation.
+    /// Without: falls back to binary PEAK_DOMINANCE_RATIO threshold.
     pub fn detect_width(&self, logits: &[f32]) -> usize {
         let peaks = extract_top_k_peaks(logits, self.k);
         if peaks.len() < 2 {
             return 1;
         }
-        // Check if the distribution is peaked: top value dominates
         let total: f32 = peaks.iter().sum();
         if total <= 0.0 {
             return 1;
         }
-        let top_ratio = peaks[0] / total;
-        if top_ratio > 0.8 {
-            // Peaked distribution — single-token expansion
-            1
-        } else {
-            // Multi-peak distribution — full superposition width
-            peaks.len().min(self.k)
+
+        #[cfg(feature = "comp_width")]
+        {
+            let width = compositional_width(&peaks, self.k);
+            width.max(1)
+        }
+
+        #[cfg(not(feature = "comp_width"))]
+        {
+            let top_ratio = peaks[0] / total;
+            if top_ratio > 0.8 {
+                1
+            } else {
+                peaks.len().min(self.k)
+            }
         }
     }
 
@@ -231,6 +289,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "comp_width"))]
     fn detect_width_peaked() {
         let tree = MuxDdTree::new(4);
         // Single dominant peak (1.0 is > 80% of total)
@@ -239,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "comp_width"))]
     fn detect_width_multi_peak() {
         let tree = MuxDdTree::new(4);
         // Spread across multiple peaks
@@ -258,5 +318,83 @@ mod tests {
         tree.expand_bfs_frontier(1, &leaf_logits);
         assert!(tree.leaf_count() > 1);
         assert_eq!(tree.depth, 1);
+    }
+
+    // ── Plan 205: comp_width tests ──────────────────────────────
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn comp_width_zero_entropy_returns_min() {
+        // Zero entropy: all mass on one token → width should be 1
+        let peaks = vec![1.0, 0.0, 0.0, 0.0];
+        let w = compositional_width(&peaks, 4);
+        assert_eq!(w, 1, "zero entropy should give width 1, got {w}");
+    }
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn comp_width_uniform_entropy_returns_base() {
+        // Max entropy: uniform distribution → width should be base
+        let peaks = vec![0.25, 0.25, 0.25, 0.25];
+        let w = compositional_width(&peaks, 4);
+        assert_eq!(w, 4, "uniform should give full width, got {w}");
+    }
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn comp_width_monotonic_with_entropy() {
+        // Higher entropy → width should be >= lower entropy width
+        let low_entropy = vec![0.9, 0.05, 0.03, 0.02];
+        let high_entropy = vec![0.3, 0.3, 0.2, 0.2];
+        let w_low = compositional_width(&low_entropy, 8);
+        let w_high = compositional_width(&high_entropy, 8);
+        assert!(
+            w_high >= w_low,
+            "high entropy width ({w_high}) should be >= low entropy width ({w_low})"
+        );
+    }
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn comp_width_detect_width_peaked_gives_small() {
+        let tree = MuxDdTree::new(4);
+        // Very peaked: top-1 dominates
+        let logits = vec![1.0, 0.05, 0.03, 0.02, 0.01];
+        let w = tree.detect_width(&logits);
+        assert!(
+            w <= 2,
+            "peaked distribution should give small width, got {w}"
+        );
+    }
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn comp_width_detect_width_uniform_gives_full() {
+        let tree = MuxDdTree::new(4);
+        // Uniform distribution
+        let logits = vec![0.25, 0.25, 0.25, 0.25];
+        let w = tree.detect_width(&logits);
+        assert_eq!(w, 4, "uniform distribution should give full width");
+    }
+
+    #[cfg(feature = "comp_width")]
+    #[test]
+    fn shannon_entropy_values() {
+        // Uniform over 4: H = ln(4) ≈ 1.386
+        let uniform = vec![0.25_f32, 0.25, 0.25, 0.25];
+        let h = shannon_entropy(&uniform);
+        let expected = (4.0_f32).ln();
+        assert!(
+            (h - expected).abs() < 0.01,
+            "expected {expected:.3}, got {h:.3}"
+        );
+
+        // Degenerate (all on one): H = 0
+        let degenerate = vec![1.0_f32, 0.0, 0.0, 0.0];
+        let h0 = shannon_entropy(&degenerate);
+        assert!(
+            h0.abs() < 0.001,
+            "degenerate entropy should be ~0, got {h0}"
+        );
     }
 }

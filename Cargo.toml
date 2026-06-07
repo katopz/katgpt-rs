@@ -152,6 +152,7 @@ partial_scoring = ["bandit", "katgpt-core/partial_scoring"]  # PartialScorer gra
 problem_mutator = ["bandit", "katgpt-core/problem_mutator"]  # ProblemMutator game config evolution (Plan 191, Research 171)
 idea_divergence = ["bandit", "partial_scoring", "katgpt-core/idea_divergence"]  # IdeaDivergence strategic novelty filter (Plan 191, Research 171)
 speculative_generator = ["katgpt-core/speculative_generator"]  # SpeculativeGenerator trait unification — generic generate+validate contract (Plan 193 Phase 1)
+comp_width = ["mux_bfs", "katgpt-core/comp_width"]  # Compositional DDTree partner-entropy width — continuous replacement for PEAK_DOMINANCE_RATIO (Plan 205, Research 181)
 # ── Percepta (transformer-vm RIIR, Plan 064) ──────────────────
 percepta = ["ordered-float"]  # CHT hull cache: upper+lower, HullMeta, tie-break, cumsum (TG-A)
 percepta_gates = ["percepta"]  # + ReGLU, stepglu, multiply, persist primitives (TG-B)

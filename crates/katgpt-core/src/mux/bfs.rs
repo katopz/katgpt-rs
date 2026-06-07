@@ -4,8 +4,10 @@
 //! at each depth of the DD-tree.
 
 use crate::mux::dd_tree::MuxDdTree;
+#[cfg(not(feature = "comp_width"))]
 use crate::mux::top_k::extract_top_k_peaks;
 
+#[cfg(not(feature = "comp_width"))]
 /// Ratio threshold for deciding peaked vs multi-peak distribution.
 const PEAK_DOMINANCE_RATIO: f32 = 0.8;
 
@@ -23,22 +25,32 @@ impl MuxBfs {
 
     /// Detect effective branching width from a logit distribution.
     ///
-    /// Returns `1` for peaked distributions (single dominant token),
-    /// or up to `k` for multi-peak (valid superposition) distributions.
+    /// With `comp_width` feature: delegates to `MuxDdTree::detect_width`
+    /// which uses continuous partner-entropy scaling.
+    /// Without: binary threshold on top-1 dominance ratio.
     pub fn detect_width(&self, logits: &[f32]) -> usize {
-        let peaks = extract_top_k_peaks(logits, self.k);
-        if peaks.len() < 2 {
-            return 1;
+        #[cfg(feature = "comp_width")]
+        {
+            let tree = MuxDdTree::new(self.k);
+            tree.detect_width(logits)
         }
-        let total: f32 = peaks.iter().sum();
-        if total <= 0.0 {
-            return 1;
-        }
-        let top_ratio = peaks[0] / total;
-        if top_ratio > PEAK_DOMINANCE_RATIO {
-            1
-        } else {
-            peaks.len().min(self.k)
+
+        #[cfg(not(feature = "comp_width"))]
+        {
+            let peaks = extract_top_k_peaks(logits, self.k);
+            if peaks.len() < 2 {
+                return 1;
+            }
+            let total: f32 = peaks.iter().sum();
+            if total <= 0.0 {
+                return 1;
+            }
+            let top_ratio = peaks[0] / total;
+            if top_ratio > PEAK_DOMINANCE_RATIO {
+                1
+            } else {
+                peaks.len().min(self.k)
+            }
         }
     }
 
