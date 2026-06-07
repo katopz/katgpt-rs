@@ -55,6 +55,9 @@ pub use dd_tree::{
     par_find_shortest_sequence, par_find_valid_sequence,
 };
 
+#[cfg(feature = "lodestar")]
+pub use dd_tree::build_dd_tree_lodestar;
+
 #[cfg(feature = "thinking_prune")]
 pub use dd_tree::build_dd_tree_screened_with_schedule;
 

@@ -12,8 +12,8 @@ use crate::pruners::bandit::BanditStrategy;
 // into katgpt-core/src/traits.rs to eliminate duplication with riir-engine.
 
 pub use katgpt_core::traits::{
-    BinaryScreeningPruner, ConstraintPruner, DominoPruner, NoPruner, NoScreeningPruner,
-    ScreeningPruner,
+    BinaryScreeningPruner, CompletionHorizon, ConstraintPruner, DominoPruner, NoPruner,
+    NoScreeningPruner, ScreeningPruner,
 };
 
 /// Depth-aware early stopping gate (PTRM Plan 083).

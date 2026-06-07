@@ -585,6 +585,14 @@ pub mod vr_loop;
 #[cfg(feature = "egcs")]
 pub use vr_loop::{VrGenerator, VrLoop, VrLoopResult, VrRoundFeedback, VrVerifier};
 
+// ── Lodestar — Completion-Distance Pruning (Plan 207, Research 183) ──
+
+#[cfg(feature = "lodestar")]
+pub mod lodestar;
+
+#[cfg(feature = "lodestar")]
+pub use lodestar::{LodestarAutomaton, LodestarConfig, LodestarPruner, UNREACHABLE};
+
 // ── Self-Distilling Pruner Bandit — Episode-Guided Arm Selection (Plan 208) ──
 
 #[cfg(feature = "self_distilling_bandit")]

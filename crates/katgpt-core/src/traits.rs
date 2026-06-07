@@ -127,6 +127,62 @@ pub trait DominoPruner: ConstraintPruner {
     }
 }
 
+// ── CompletionHorizon (Plan 207, Research 183) ──────────────────
+
+/// Admissible "distance to a complete, valid output" for budget-aware pruning.
+///
+/// Extends [`ConstraintPruner`] with the **shortest-accepting-distance** `d(s)`:
+/// a lower bound on how many *additional* tokens are needed, from the automaton
+/// state reached after placing `token_idx` at `depth` (following `parent_tokens`),
+/// to reach a complete & valid output. One precomputed integer per state powers
+/// three things at once (Research 183):
+///
+/// - **(A) budget-aware masking** — prune any token whose successor cannot still
+///   complete within the remaining token budget (TRUNCPROOF guarantee). This is
+///   the property `build_dd_tree_lodestar` relies on.
+/// - **(B) jump-ahead** — deterministic singular spans can be emitted in one step.
+/// - **(C) A\* ordering + termination** — `d` is a monotone, admissible heuristic.
+///
+/// The novel equivalence (no single source states it): *min-completion-length ≡
+/// remaining lattice height ≡ an admissible A\* heuristic.*
+///
+/// Default impls return `0` (no horizon info) so every existing
+/// [`ConstraintPruner`] keeps working unchanged and pays **zero** overhead —
+/// Lodestar is pure opt-in.
+///
+/// # Contract
+///
+/// `min_completion_distance` MUST be *admissible* (never overestimate the true
+/// remaining length) for the budget guarantee to hold. Return [`u32::MAX`] to
+/// signal "no valid completion reachable" — callers treat it as a hard prune.
+pub trait CompletionHorizon: ConstraintPruner {
+    /// Admissible lower bound on additional tokens needed to reach a complete,
+    /// valid output *after* placing `token_idx` at `depth` following
+    /// `parent_tokens` (the tokens at depths `0..depth`).
+    ///
+    /// Returns `0` by default (no horizon ⇒ budget masking is a no-op).
+    #[inline]
+    fn min_completion_distance(
+        &self,
+        _depth: usize,
+        _token_idx: usize,
+        _parent_tokens: &[usize],
+    ) -> u32 {
+        0
+    }
+
+    /// Length of the deterministic singular-path span starting at the state
+    /// reached after `parent_tokens` — `0` means the next step is a real branch.
+    /// Enables jump-ahead. Default `0`.
+    #[inline]
+    fn singular_span_len(&self, _depth: usize, _parent_tokens: &[usize]) -> u32 {
+        0
+    }
+}
+
+/// `NoPruner` has no horizon — budget masking is a no-op (returns 0).
+impl CompletionHorizon for NoPruner {}
+
 // ── ScreeningPruner ─────────────────────────────────────────────
 
 /// Graded relevance pruner replacing binary valid/invalid with continuous score.
