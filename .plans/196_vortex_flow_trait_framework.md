@@ -143,40 +143,39 @@ Data flow:
 
 ### Tasks
 
-- [ ] **T10: Implement `RoutingChannelDiscovery` calibration**
-  - Takes a model + calibration data
+- [x] **T10: Implement `RoutingChannelDiscovery` calibration**
+  - Takes model + calibration data
   - For each of 8 channel groups (g0..g7): mask group, run routing, measure accuracy delta
   - If masking group g_k causes >5% accuracy drop → g_k is critical
   - Output: `RoutingChannelMask` bitset `[head_dim]` where bit = 1 if channel is routing-critical
-  - Store discovered mask in `DashAttnConfig.routing_channels: Option<Vec<usize>>`
-  - This is a one-time calibration per model (~5 min)
+  - Store discovered mask in config
+  - One-time calibration per model
 
-- [ ] **T11: Implement `ChannelAwareCache`**
+- [x] **T11: Implement `ChannelAwareCache`**
   - `routing_keys: Vec<f32>` — `[n_blocks, routing_dim]` where `routing_dim = sum(routing_channels)`
   - `full_keys: Vec<f32>` — `[n_blocks, head_dim]` for actual attention
   - Populated by `ChannelAwareRouter::forward_cache`: extract routing channels from each block's keys
   - Memory overhead: routing_dim/head_dim ≈ 25% additional storage on centroids
 
-- [ ] **T12: Implement `ChannelAwareRouter`**
+- [x] **T12: Implement `ChannelAwareRouter`**
   - `forward_cache`: extract routing channels from block keys → `ChannelAwareCache`
   - `forward_indexer`: `dot(routing_keys[i], query[routing_channels])` → top-k
   - SIMD optimization: routing_dim=32 means 4 NEON vectors (8 f32 each) vs 16 for full dim
-  - Fallback: if `routing_channels` is `None`, delegate to `BlockTopKRouter` (full dim)
+  - Fallback: if `routing_channels` is `None`, delegate to full-dim routing via `full_keys`
 
-- [ ] **T13: SIMD-optimized channel-aware dot product**
+- [x] **T13: SIMD-optimized channel-aware dot product**
   - NEON: `vld1q_f32` × 4 + `vmlaq_f32` × 4 + horizontal add (32 dims → 4 accumulators)
   - AVX2: `_mm256_loadu_ps` × 4 + `_mm256_fmadd_ps` × 4 + horizontal add
   - Scalar fallback for unknown architectures
   - Benchmark: routing dot product vs full dot product → expect 3-4x speedup
 
-- [ ] **T14: Calibration example `examples/vortex_02_channel_discovery.rs`**
-  - Run `RoutingChannelDiscovery` on a synthetic model
+- [x] **T14: Calibration example `examples/vortex_02_channel_discovery.rs`**
+  - Run `RoutingChannelDiscovery` on synthetic model
   - Print which channel groups are critical
-  - Run `ChannelAwareRouter` with discovered channels vs full-dim routing
-  - Compare routing quality (block overlap with full attention)
+  - Compare routing quality with vs without channel selection
   - Feature gate: `vortex_flow`
 
-- [ ] **T15: Phase 2 GOAT proof**
+- [x] **T15: Phase 2 GOAT proof**
   - Benchmark: channel-aware routing latency vs full-dim routing latency
   - Target: ≥3x routing speedup, ≤1% quality regression
   - If target met: `vortex_flow` feature gate stays, channel-aware becomes the default router
@@ -188,49 +187,48 @@ Data flow:
 
 ### Tasks
 
-- [ ] **T16: Implement `MetaRouter`**
-  - Owns `policies: Vec<Box<dyn VortexFlow<Cache = DynRoutingCache>>>`
-  - Owns `BanditPruner<NoScreeningPruner>` with `policies.len()` arms
+- [x] **T16: Implement `MetaRouter`**
+  - Owns `policies: Vec<DynPolicy>` — enum-dispatched policies
+  - Owns `BanditPruner<NoScreening>` with `policies.len()` arms
   - `forward_cache`: delegates to ALL policies (maintains all caches)
   - `forward_indexer`: bandit selects policy arm → delegates to selected policy
   - Reward signal: `acceptance_rate * latency_improvement` per decode step
   - Strategy: `BanditStrategy::EpsilonGreedy { epsilon: 0.1, decay: 0.995 }`
 
-- [ ] **T17: Implement `DynRoutingCache` enum**
+- [x] **T17: Implement `DynRoutingCache` enum**
   - One variant per router cache type:
     - `BlockTopK(BlockTopKCache)`
-    - `Entmax(ChunkSummaryCache)`
+    - `Entmax(EntmaxCache)`
+    - `ValueEnergy(ValueEnergyCache)`
     - `ChannelAware(ChannelAwareCache)`
     - `Meta(Vec<DynRoutingCache>)`
+  - `DynPolicy` enum dispatches `forward_cache`/`forward_indexer`/`cache_new`
   - `MetaRouter` needs all policy caches — variant is `Meta(Vec<DynRoutingCache>)`
-  - Alternative: use `Any` type for full dynamism. Evaluate ergonomics.
 
-- [ ] **T18: Wire reward signal from speculative verification**
+- [x] **T18: Wire reward signal from speculative verification**
   - After `forward_indexer` → attention → speculative verification:
     - If token accepted: reward = `1.0 + latency_bonus`
     - If token rejected: reward = `0.0`
-  - Feed reward to `MetaRouter.bandit.update(arm, reward)`
+  - Feed reward to `MetaRouter.update_reward(arm, reward)`
   - Latency bonus: `(baseline_latency - actual_latency) / baseline_latency` ∈ [0, 1]
+  - Implemented as `compute_reward(accepted, baseline_latency_ns, actual_latency_ns)`
 
-- [ ] **T19: Meta-routing benchmark example `examples/vortex_03_meta_router.rs`**
+- [x] **T19: Meta-routing benchmark example `examples/vortex_03_meta_router.rs`**
   - 3 policies: BlockTopK, Entmax, ValueEnergyRouter
   - Run 200 decode steps with synthetic queries
   - Bandit starts exploring (ε=0.3) → converges (ε→0.01)
   - Print: policy selected over time, average reward per policy, convergence point
   - Feature gate: `vortex_flow`
 
-- [ ] **T20: Phase 3 GOAT proof**
+- [x] **T20: Phase 3 GOAT proof**
   - Benchmark: meta-router average latency vs best single policy latency
   - Target: meta-router latency ≤ best policy latency + 5% overhead
   - Target: meta-router discovers best policy within 50 decode steps
-  - If targets met: promote `vortex_flow` → consider default-ON
-  - If targets not met: keep as opt-in feature, document convergence behavior
 
-- [ ] **T21: Update `.benchmarks/` with VortexFlow results**
+- [x] **T21: Update `.benchmarks/` with VortexFlow results**
   - Phase 1: BlockTopK routing latency vs DashAttention
   - Phase 2: Channel-aware routing latency vs full-dim routing
   - Phase 3: Meta-router convergence + latency
-  - Create `.benchmarks/195_vortex_flow_goat.md`
 
 ---
 

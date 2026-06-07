@@ -41,7 +41,11 @@ pub use sat_analysis::{HeadSparsityInfo, head_sparsity_profile};
 #[cfg(feature = "vortex_flow")]
 pub mod block_topk;
 #[cfg(feature = "vortex_flow")]
+pub mod channel_aware;
+#[cfg(feature = "vortex_flow")]
 pub mod entmax_router;
+#[cfg(feature = "vortex_flow")]
+pub mod meta_router;
 #[cfg(feature = "vortex_flow")]
 pub mod value_energy;
 #[cfg(feature = "vortex_flow")]
@@ -50,7 +54,14 @@ pub mod vortex_flow;
 #[cfg(feature = "vortex_flow")]
 pub use block_topk::{BlockTopKCache, BlockTopKRouter};
 #[cfg(feature = "vortex_flow")]
+pub use channel_aware::{
+    ChannelAwareCache, ChannelAwareRouter, RoutingChannelDiscovery, RoutingChannelMask,
+    simd_dot_f32,
+};
+#[cfg(feature = "vortex_flow")]
 pub use entmax_router::{EntmaxCache, EntmaxRouter};
+#[cfg(feature = "vortex_flow")]
+pub use meta_router::{DynPolicy, DynRoutingCache, MetaRouter, compute_reward};
 #[cfg(feature = "vortex_flow")]
 pub use value_energy::{ValueEnergyCache, ValueEnergyRouter};
 #[cfg(feature = "vortex_flow")]

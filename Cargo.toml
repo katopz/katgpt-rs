@@ -646,6 +646,14 @@ required-features = ["corr_budget"]
 name = "vortex_01_block_topk"
 required-features = ["vortex_flow"]
 
+[[example]]
+name = "vortex_02_channel_discovery"
+required-features = ["vortex_flow"]
+
+[[example]]
+name = "vortex_03_meta_router"
+required-features = ["vortex_flow"]
+
 [[test]]
 name = "directional_credit_goat"
 required-features = ["directional_credit"]

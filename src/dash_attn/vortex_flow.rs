@@ -9,7 +9,9 @@
 use std::fmt::Debug;
 
 use super::block_topk::{BlockTopKCache, BlockTopKRouter};
+use super::channel_aware::{ChannelAwareCache, ChannelAwareRouter};
 use super::entmax_router::{EntmaxCache, EntmaxRouter};
+use super::meta_router::{DynPolicy, DynRoutingCache, MetaRouter};
 use super::value_energy::{ValueEnergyCache, ValueEnergyRouter};
 
 // ---------------------------------------------------------------------------
@@ -86,6 +88,10 @@ pub enum VortexFlowConfig {
     Entmax,
     /// Use ValueEnergyRouter (centroid · ‖v‖ gating).
     ValueEnergy,
+    /// Use ChannelAwareRouter (SIMD-optimized channel-aware routing).
+    ChannelAware,
+    /// Use MetaRouter (bandit-based policy selection).
+    Meta,
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +147,10 @@ pub enum VortexRouter {
     Entmax(EntmaxRouter),
     /// ValueEnergy router (centroid · ‖v‖ gating).
     ValueEnergy(ValueEnergyRouter),
+    /// Channel-aware router (SIMD-optimized routing over critical channels).
+    ChannelAware(ChannelAwareRouter),
+    /// Meta-router (bandit-based policy selection over multiple routers).
+    Meta(MetaRouter),
 }
 
 /// Cache storage for [`VortexRouter`] — mirrors the enum variants.
@@ -152,6 +162,10 @@ pub enum VortexRouterCache {
     Entmax(EntmaxCache),
     /// ValueEnergy cache.
     ValueEnergy(ValueEnergyCache),
+    /// Channel-aware cache.
+    ChannelAware(ChannelAwareCache),
+    /// Meta-router cache (dynamic routing cache).
+    Meta(DynRoutingCache),
 }
 
 impl VortexRouterCache {
@@ -161,6 +175,8 @@ impl VortexRouterCache {
             Self::BlockTopK(c) => c.n_blocks,
             Self::Entmax(c) => c.summaries.len(),
             Self::ValueEnergy(c) => c.n_blocks,
+            Self::ChannelAware(c) => c.n_blocks,
+            Self::Meta(c) => c.n_blocks(),
         }
     }
 }
@@ -172,6 +188,12 @@ impl VortexRouter {
             VortexFlowConfig::BlockTopK => Self::BlockTopK(BlockTopKRouter::new(true)),
             VortexFlowConfig::Entmax => Self::Entmax(EntmaxRouter::default_router()),
             VortexFlowConfig::ValueEnergy => Self::ValueEnergy(ValueEnergyRouter::new(true)),
+            VortexFlowConfig::ChannelAware => Self::ChannelAware(ChannelAwareRouter::new(true)),
+            VortexFlowConfig::Meta => Self::Meta(MetaRouter::new_default(vec![
+                DynPolicy::BlockTopK(BlockTopKRouter::new(true)),
+                DynPolicy::Entmax(EntmaxRouter::default_router()),
+                DynPolicy::ValueEnergy(ValueEnergyRouter::new(true)),
+            ])),
             VortexFlowConfig::DashAttn => {
                 unreachable!("DashAttn does not produce a VortexRouter; check is_vortex() first")
             }
@@ -200,6 +222,12 @@ impl VortexFlow for VortexRouter {
             (Self::ValueEnergy(r), VortexRouterCache::ValueEnergy(c)) => {
                 r.forward_cache(c, keys, values, block_idx, head_dim)
             }
+            (Self::ChannelAware(r), VortexRouterCache::ChannelAware(c)) => {
+                r.forward_cache(c, keys, values, block_idx, head_dim)
+            }
+            (Self::Meta(r), VortexRouterCache::Meta(c)) => {
+                r.forward_cache(c, keys, values, block_idx, head_dim)
+            }
             _ => panic!("VortexRouter/Cache variant mismatch"),
         }
     }
@@ -222,6 +250,12 @@ impl VortexFlow for VortexRouter {
             (Self::ValueEnergy(r), VortexRouterCache::ValueEnergy(c)) => {
                 r.forward_indexer(query, c, n_blocks, top_k, scratch)
             }
+            (Self::ChannelAware(r), VortexRouterCache::ChannelAware(c)) => {
+                r.forward_indexer(query, c, n_blocks, top_k, scratch)
+            }
+            (Self::Meta(r), VortexRouterCache::Meta(c)) => {
+                r.forward_indexer(query, c, n_blocks, top_k, scratch)
+            }
             _ => panic!("VortexRouter/Cache variant mismatch"),
         }
     }
@@ -235,6 +269,10 @@ impl VortexFlow for VortexRouter {
             Self::ValueEnergy(r) => {
                 VortexRouterCache::ValueEnergy(r.cache_new(n_blocks_capacity, head_dim))
             }
+            Self::ChannelAware(r) => {
+                VortexRouterCache::ChannelAware(r.cache_new(n_blocks_capacity, head_dim))
+            }
+            Self::Meta(r) => VortexRouterCache::Meta(r.cache_new(n_blocks_capacity, head_dim)),
         }
     }
 }
@@ -460,6 +498,18 @@ mod tests {
         assert!(ext.is_vortex());
     }
 
+    #[test]
+    fn test_vortex_flow_ext_channel_aware_is_vortex() {
+        let ext = VortexFlowExt::new(VortexFlowConfig::ChannelAware);
+        assert!(ext.is_vortex());
+    }
+
+    #[test]
+    fn test_vortex_flow_ext_meta_is_vortex() {
+        let ext = VortexFlowExt::new(VortexFlowConfig::Meta);
+        assert!(ext.is_vortex());
+    }
+
     // -----------------------------------------------------------------------
     // VortexRouter enum dispatch tests
     // -----------------------------------------------------------------------
@@ -479,6 +529,40 @@ mod tests {
         let query = vec![1.0, 0.0, 0.0, 0.0];
         let decision = router.forward_indexer(&query, &cache, 1, 1, &mut scratch);
         assert_eq!(decision.blocks, vec![0]);
+    }
+
+    #[test]
+    fn test_vortex_router_channel_aware_dispatch() {
+        let router = VortexRouter::from_config(VortexFlowConfig::ChannelAware);
+        let mut cache = router.cache_new(2, HD);
+        let mut scratch = VortexScratch::new(2);
+
+        let keys = vec![1.0, 0.0, 0.0, 0.0];
+        let vals = vec![0.0; HD];
+        router.forward_cache(&mut cache, &keys, &vals, 0, HD);
+
+        let query = vec![1.0, 0.0, 0.0, 0.0];
+        let decision = router.forward_indexer(&query, &cache, 1, 1, &mut scratch);
+        assert_eq!(decision.blocks, vec![0]);
+    }
+
+    #[test]
+    fn test_vortex_router_meta_dispatch() {
+        let router = VortexRouter::from_config(VortexFlowConfig::Meta);
+        let mut cache = router.cache_new(2, HD);
+        let mut scratch = VortexScratch::new(2);
+
+        let keys0 = vec![1.0, 0.0, 0.0, 0.0];
+        let vals0 = vec![1.0, 1.0, 1.0, 1.0];
+        router.forward_cache(&mut cache, &keys0, &vals0, 0, HD);
+
+        let keys1 = vec![0.0, 1.0, 0.0, 0.0];
+        let vals1 = vec![1.0, 1.0, 1.0, 1.0];
+        router.forward_cache(&mut cache, &keys1, &vals1, 1, HD);
+
+        let query = vec![1.0, 0.0, 0.0, 0.0];
+        let decision = router.forward_indexer(&query, &cache, 2, 1, &mut scratch);
+        assert!(!decision.is_empty());
     }
 
     #[test]
@@ -550,6 +634,26 @@ mod tests {
         match router {
             VortexRouter::ValueEnergy(_) => {}
             _ => panic!("expected ValueEnergy variant"),
+        }
+    }
+
+    #[test]
+    fn test_build_vortex_router_returns_some_for_channel_aware() {
+        let (router, _cache) = build_vortex_router(VortexFlowConfig::ChannelAware, 4, HD)
+            .expect("ChannelAware should build");
+        match router {
+            VortexRouter::ChannelAware(_) => {}
+            _ => panic!("expected ChannelAware variant"),
+        }
+    }
+
+    #[test]
+    fn test_build_vortex_router_returns_some_for_meta() {
+        let (router, _cache) =
+            build_vortex_router(VortexFlowConfig::Meta, 4, HD).expect("Meta should build");
+        match router {
+            VortexRouter::Meta(_) => {}
+            _ => panic!("expected Meta variant"),
         }
     }
 }
