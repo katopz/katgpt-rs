@@ -553,3 +553,9 @@ pub mod idea_divergence;
 
 #[cfg(feature = "idea_divergence")]
 pub use idea_divergence::IdeaDivergence;
+
+#[cfg(feature = "rosetta_pruner")]
+pub mod rosetta;
+
+#[cfg(feature = "rosetta_pruner")]
+pub use rosetta::{ConstraintConcept, RosettaPruner};
