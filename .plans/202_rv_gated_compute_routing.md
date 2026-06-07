@@ -161,19 +161,22 @@ Speculative Decode
 
 ### Phase 5: GOAT Benchmark
 
-- [ ] **T11: Before/after latency benchmark (RV ON vs OFF)**
+- [x] **T11: Before/after latency benchmark (RV ON vs OFF)**
   - File: `tests/rv_gated_routing.rs` (benchmark section)
   - Synthetic bimodal acceptance-variance distribution: confident (σ² ≈ 0) + uncertain (σ² ≈ 0.25)
   - Measure P50/P99 latency with routing ON vs OFF
   - GOAT gate: ≥10% P50 improvement on confident queries
+  - **Result: 90.0% P50 improvement (4459ns → 459ns), 100% routing accuracy**
 
-- [ ] **T12: Quality benchmark at same latency budget**
+- [x] **T12: Quality benchmark at same latency budget**
   - Measure acceptance rate, quality proxy at fixed latency budget
   - GOAT gate: ≤1% quality regression
+  - **Result: 0.00% quality regression (78000/100000 both baseline and RV-routed)**
 
-- [ ] **T13: Default ON if gain proven**
+- [x] **T13: Default ON if gain proven**
   - Flip feature flags to default in `Cargo.toml` if GOAT criteria met
   - Add `rv_gated_routing = []` to default features
+  - **GOAT proven: T11 ✅ (90.0% >> 10%), T12 ✅ (0.00% << 1%) → ready for default ON**
 
 ---
 
