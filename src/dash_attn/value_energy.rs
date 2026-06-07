@@ -151,10 +151,10 @@ impl VortexFlow for ValueEnergyRouter {
         let scores = &mut scratch.scores[..n_blocks];
 
         // Compute gated scores: dot(centroid, query) * v_energy
-        for i in 0..n_blocks {
+        for (i, score) in scores.iter_mut().enumerate().take(n_blocks) {
             let centroid = cache.centroid(i);
             let dot: f32 = query.iter().zip(centroid.iter()).map(|(a, b)| a * b).sum();
-            scores[i] = dot * scale * cache.v_energy[i];
+            *score = dot * scale * cache.v_energy[i];
         }
 
         // Partial sort to find top-k

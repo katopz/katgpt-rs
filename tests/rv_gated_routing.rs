@@ -514,9 +514,7 @@ mod goat_benchmarks {
 
             // Track routing correctness
             // Confident queries should go to CPU, uncertain to GPU
-            if is_confident && went_cpu {
-                correct_routes += 1;
-            } else if !is_confident && !went_cpu {
+            if (is_confident && went_cpu) || (!is_confident && !went_cpu) {
                 correct_routes += 1;
             }
         }

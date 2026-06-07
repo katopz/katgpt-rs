@@ -121,7 +121,7 @@ impl RoutingChannelDiscovery {
         );
 
         // Test each group
-        let group_size = (head_dim + self.n_groups - 1) / self.n_groups;
+        let group_size = head_dim.div_ceil(self.n_groups);
         let mut critical = vec![false; head_dim];
 
         for g in 0..self.n_groups {
@@ -147,8 +147,8 @@ impl RoutingChannelDiscovery {
             let delta = baseline_accuracy - accuracy;
             if delta > self.critical_threshold {
                 // Masking this group hurt → channels in this group are critical
-                for d in g_start..g_end {
-                    critical[d] = true;
+                for c in critical.iter_mut().take(g_end).skip(g_start) {
+                    *c = true;
                 }
             }
         }
@@ -162,6 +162,7 @@ impl RoutingChannelDiscovery {
     }
 
     /// Measure routing accuracy as block overlap with full-dim selection.
+    #[allow(clippy::too_many_arguments)]
     fn measure_accuracy(
         &self,
         head_dim: usize,
@@ -314,6 +315,7 @@ pub struct ChannelAwareRouter {
     /// Apply `1/sqrt(head_dim)` scaling to dot products.
     pub scale: bool,
     /// Fallback router for when no routing channels are set.
+    #[allow(dead_code)]
     fallback: BlockTopKRouter,
 }
 
@@ -406,9 +408,9 @@ impl VortexFlow for ChannelAwareRouter {
         match cache.routing_channels.is_empty() {
             // Fallback: full-dim routing using full_keys
             true => {
-                for i in 0..n_blocks {
+                for (i, score) in scores.iter_mut().enumerate().take(n_blocks) {
                     let full_key = cache.full_key(i);
-                    scores[i] = simd_dot_f32(query, full_key) * scale;
+                    *score = simd_dot_f32(query, full_key) * scale;
                 }
             }
             // Channel-aware: route using only critical channels
@@ -422,9 +424,9 @@ impl VortexFlow for ChannelAwareRouter {
                     routing_query[ri] = query[ch];
                 }
 
-                for i in 0..n_blocks {
+                for (i, score) in scores.iter_mut().enumerate().take(n_blocks) {
                     let routing_key = cache.routing_key(i);
-                    scores[i] = simd_dot_f32(&routing_query, routing_key) * scale;
+                    *score = simd_dot_f32(&routing_query, routing_key) * scale;
                 }
             }
         }
@@ -486,7 +488,7 @@ pub fn simd_dot_f32(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 
-/// Scalar fallback dot product.
+#[allow(dead_code)]
 #[inline]
 fn simd_dot_scalar(a: &[f32], b: &[f32], n: usize) -> f32 {
     // Chunked loop for auto-vectorization (4-wide)

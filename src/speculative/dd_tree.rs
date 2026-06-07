@@ -5458,7 +5458,7 @@ mod tests {
             struct RejectEvenPruner;
             impl ConstraintPruner for RejectEvenPruner {
                 fn is_valid(&self, _depth: usize, token_idx: usize, _parents: &[usize]) -> bool {
-                    token_idx % 2 != 0
+                    !token_idx.is_multiple_of(2)
                 }
             }
 

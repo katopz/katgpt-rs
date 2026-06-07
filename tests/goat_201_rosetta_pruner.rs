@@ -35,7 +35,7 @@ struct ModPruner {
 
 impl ConstraintPruner for ModPruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
-        token_idx % self.modulus == 0
+        token_idx.is_multiple_of(self.modulus)
     }
 }
 

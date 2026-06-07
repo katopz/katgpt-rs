@@ -78,9 +78,8 @@ impl KurtosisGate {
     ///
     /// Returns `false` for empty or degenerate inputs.
     pub fn should_speculate(&mut self, logits: &[f32]) -> bool {
-        match logits.len() {
-            0..=3 => return false,
-            _ => {}
+        if let 0..=3 = logits.len() {
+            return false;
         }
 
         self.scratch.clear();

@@ -37,8 +37,8 @@ fn main() {
     );
     println!();
     println!(
-        "  {:>4}  {:>10}  {:>8}  {}",
-        "Step", "Token Pos", "Anchor", "Context"
+        "  {:>4}  {:>10}  {:>8}  Context",
+        "Step", "Token Pos", "Anchor"
     );
     println!("  {:-<4}  {:-<10}  {:-<8}  {:-<20}", "", "", "", "");
 
@@ -78,7 +78,7 @@ fn main() {
     let scorer = AttentionImportance::new();
     let importance = scorer.score_steps(&raw_attention, &boundaries);
 
-    println!("  {:>4}  {:>12}  {}", "Step", "Importance", "Category");
+    println!("  {:>4}  {:>12}  Category", "Step", "Importance");
     println!("  {:-<4}  {:-<12}  {:-<20}", "", "", "");
     for (i, &score) in importance.iter().enumerate() {
         let category = if score > 0.7 {

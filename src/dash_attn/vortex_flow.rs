@@ -103,18 +103,10 @@ pub enum VortexFlowConfig {
 /// Since `DashAttnConfig` lives in `katgpt-core` (immutable from katgpt-rs),
 /// this wrapper carries the VortexFlow-specific configuration alongside
 /// the standard DashAttention config.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VortexFlowExt {
     /// Which router to use during decode.
     pub config: VortexFlowConfig,
-}
-
-impl Default for VortexFlowExt {
-    fn default() -> Self {
-        Self {
-            config: VortexFlowConfig::default(),
-        }
-    }
 }
 
 impl VortexFlowExt {

@@ -306,7 +306,7 @@ mod tests {
     fn test_domino_score_penalizes_low_strength() {
         let score = domino_score(-1.0, 2, 0.5);
         // -1.0 * 0.5^2 = -1.0 * 0.25 = -0.25
-        let expected = -1.0f32 * 0.25f32;
+        let expected = -0.25f32;
         assert!(
             (score - expected).abs() < 1e-6,
             "Expected {expected}, got {score}"

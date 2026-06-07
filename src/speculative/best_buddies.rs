@@ -48,7 +48,7 @@ impl MarginalBestBuddyAligner {
     /// re-normalized to a valid probability distribution.
     ///
     /// Returns filtered marginals owned by the caller.
-    pub fn filter_marginals<'a>(
+    pub fn filter_marginals(
         &mut self,
         draft_marginals: &[&[f32]],
         target_marginals: &[&[f32]],
@@ -70,9 +70,8 @@ impl MarginalBestBuddyAligner {
         // EMA-smooth with cached scores from previous step
         if !self.cached_scores.is_empty() {
             let prev_len = self.cached_scores.len().min(seq_len);
-            for i in 0..prev_len {
-                confidence[i] =
-                    self.ema_alpha * confidence[i] + (1.0 - self.ema_alpha) * self.cached_scores[i];
+            for (i, conf) in confidence.iter_mut().enumerate().take(prev_len) {
+                *conf = self.ema_alpha * *conf + (1.0 - self.ema_alpha) * self.cached_scores[i];
             }
         }
         self.cached_scores = confidence.clone();
@@ -99,8 +98,8 @@ impl MarginalBestBuddyAligner {
                     row.push(blended);
                 }
                 // Copy remaining draft tokens if target is shorter
-                for j in len..src.len() {
-                    row.push(src[j] * (1.0 - blend_factor));
+                for val in src.iter().skip(len) {
+                    row.push(*val * (1.0 - blend_factor));
                 }
                 // Re-normalize to valid probability distribution
                 let sum: f32 = row.iter().sum();
@@ -151,16 +150,16 @@ impl BestBuddyAligner for MarginalBestBuddyAligner {
             return;
         }
 
-        for i in 0..seq_len {
+        for (i, result) in results.iter_mut().enumerate().take(seq_len) {
             let offset = i * vocab_size;
             let draft_end = draft_logits.len().min(offset + vocab_size);
             let target_end = target_logits.len().min(offset + vocab_size);
             let len = draft_end.min(target_end) - offset;
             if len == 0 {
-                results[i] = 0.0;
+                *result = 0.0;
                 continue;
             }
-            results[i] = pearson_correlation(
+            *result = pearson_correlation(
                 &draft_logits[offset..offset + len],
                 &target_logits[offset..offset + len],
             );

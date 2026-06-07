@@ -66,7 +66,7 @@ fn main() {
     let routing_channels = mask.routing_channels();
     let routing_dim = routing_channels.len();
     for group in 0..discovery.n_groups {
-        let group_size = (HEAD_DIM + discovery.n_groups - 1) / discovery.n_groups;
+        let group_size = HEAD_DIM.div_ceil(discovery.n_groups);
         let g_start = group * group_size;
         let g_end = (g_start + group_size).min(HEAD_DIM);
         let critical_in_group = (g_start..g_end).filter(|&d| mask.channels[d]).count();

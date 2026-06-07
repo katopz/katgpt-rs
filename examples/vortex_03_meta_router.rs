@@ -172,7 +172,7 @@ fn main() {
     }
 
     // Arm selection distribution
-    let arm_counts = vec![
+    let arm_counts = [
         arm_history.iter().filter(|&&a| a == 0).count(),
         arm_history.iter().filter(|&&a| a == 1).count(),
         arm_history.iter().filter(|&&a| a == 2).count(),

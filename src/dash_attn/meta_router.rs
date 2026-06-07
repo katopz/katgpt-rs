@@ -310,9 +310,8 @@ impl VortexFlow for MetaRouter {
         };
 
         for (i, policy) in self.policies.iter().enumerate() {
-            match caches.get_mut(i) {
-                Some(c) => policy.forward_cache(c, keys, values, block_idx, head_dim),
-                None => {}
+            if let Some(c) = caches.get_mut(i) {
+                policy.forward_cache(c, keys, values, block_idx, head_dim);
             }
         }
     }

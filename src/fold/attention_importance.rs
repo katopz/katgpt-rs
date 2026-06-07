@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test_default_trait() {
-        let _ai = AttentionImportance::default();
+        let _ai = AttentionImportance;
     }
 
     #[test]

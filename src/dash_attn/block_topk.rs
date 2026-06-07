@@ -124,10 +124,10 @@ impl VortexFlow for BlockTopKRouter {
         let scores = &mut scratch.scores[..n_blocks];
 
         // Compute dot(query, centroid[i]) for each block
-        for i in 0..n_blocks {
+        for (i, score) in scores.iter_mut().enumerate().take(n_blocks) {
             let centroid = cache.centroid(i);
             let dot: f32 = query.iter().zip(centroid.iter()).map(|(a, b)| a * b).sum();
-            scores[i] = dot * scale;
+            *score = dot * scale;
         }
 
         // Partial sort to find top-k
@@ -174,9 +174,8 @@ pub fn argtopk(scores: &[f32], k: usize, indices: &mut Vec<usize>) {
         // Find max in remaining unsorted portion
         let mut best = i;
         for j in (i + 1)..n {
-            match pairs[j].1 > pairs[best].1 {
-                true => best = j,
-                false => {}
+            if pairs[j].1 > pairs[best].1 {
+                best = j;
             }
         }
         pairs.swap(i, best);

@@ -52,7 +52,7 @@ pub fn detect_step_boundaries(text: &str) -> Vec<StepBoundary> {
     }
 
     // Always include position 0 as the first step boundary.
-    if raw_boundaries.first().map_or(true, |&(pos, _)| pos > 0) {
+    if raw_boundaries.first().is_none_or(|&(pos, _)| pos > 0) {
         raw_boundaries.insert(0, (0, true));
     }
 
@@ -69,10 +69,7 @@ pub fn detect_step_boundaries(text: &str) -> Vec<StepBoundary> {
 /// Check if a marker is an anchor (must-keep reasoning boundary).
 #[inline]
 fn is_anchor_marker(marker: &str) -> bool {
-    match marker {
-        "<think" | "</think" => true,
-        _ => false,
-    }
+    matches!(marker, "<think" | "</think")
 }
 
 /// Count the number of reasoning steps in text.
