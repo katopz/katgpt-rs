@@ -299,6 +299,57 @@ impl<P: ConstraintPruner + ?Sized> ConstraintPruner for RosettaPruner<P> {
     }
 }
 
+// ── ScreeningPruner impl (Plan 201) ──────────────────────────────
+// Agreement-weighted relevance: universal concepts get relevance 1.0,
+// contested get weighted by majority agreement ratio, rejected get 0.0.
+
+#[cfg(feature = "papaya")]
+impl<P: ConstraintPruner + ?Sized> crate::speculative::types::ScreeningPruner for RosettaPruner<P> {
+    fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+        let pin = self.concept_map.pin();
+        if let Some(&agreement) = pin.get(&(depth, token_idx)) {
+            if agreement >= self.threshold {
+                return 1.0; // Universal concept
+            }
+            if agreement <= (1.0 - self.threshold) {
+                return 0.0; // Universal rejection
+            }
+            // Contested: return agreement as soft relevance
+            return agreement;
+        }
+
+        // Not in concept map: compute on-the-fly
+        let valid_count = self
+            .pruners
+            .iter()
+            .filter(|p| p.is_valid(depth, token_idx, parent_tokens))
+            .count();
+        valid_count as f32 / self.n_pruners as f32
+    }
+}
+
+#[cfg(not(feature = "papaya"))]
+impl<P: ConstraintPruner + ?Sized> crate::speculative::types::ScreeningPruner for RosettaPruner<P> {
+    fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+        if let Some(agreement) = self.lookup_concept(depth, token_idx) {
+            if agreement >= self.threshold {
+                return 1.0;
+            }
+            if agreement <= (1.0 - self.threshold) {
+                return 0.0;
+            }
+            return agreement;
+        }
+
+        let valid_count = self
+            .pruners
+            .iter()
+            .filter(|p| p.is_valid(depth, token_idx, parent_tokens))
+            .count();
+        valid_count as f32 / self.n_pruners as f32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,5 +469,50 @@ mod tests {
         assert!(results[1]);
         assert!(results[2]);
         assert!(results[3]);
+    }
+
+    #[test]
+    fn test_rosetta_screening_universal_accept() {
+        use crate::speculative::types::ScreeningPruner;
+
+        let pruners: Vec<Arc<dyn ConstraintPruner>> =
+            vec![Arc::new(AcceptAllPruner), Arc::new(AcceptAllPruner)];
+        let mut rosetta = RosettaPruner::new(pruners);
+        rosetta.mine_concepts(2, &[0, 1, 2], &[]);
+        // Universal acceptance → relevance 1.0
+        assert!((rosetta.relevance(0, 0, &[]) - 1.0).abs() < 0.01);
+        assert!((rosetta.relevance(1, 2, &[]) - 1.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_rosetta_screening_universal_reject() {
+        use crate::speculative::types::ScreeningPruner;
+
+        let pruners: Vec<Arc<dyn ConstraintPruner>> =
+            vec![Arc::new(RejectAllPruner), Arc::new(RejectAllPruner)];
+        let mut rosetta = RosettaPruner::new(pruners);
+        rosetta.mine_concepts(1, &[0, 1], &[]);
+        // Universal rejection → relevance 0.0
+        assert!((rosetta.relevance(0, 0, &[]) - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_rosetta_screening_contested() {
+        use crate::speculative::types::ScreeningPruner;
+
+        // 2 accept, 1 reject → agreement = 0.667
+        let pruners: Vec<Arc<dyn ConstraintPruner>> = vec![
+            Arc::new(AcceptAllPruner),
+            Arc::new(AcceptAllPruner),
+            Arc::new(RejectAllPruner),
+        ];
+        let mut rosetta = RosettaPruner::new(pruners);
+        rosetta.mine_concepts(1, &[0], &[]);
+        // Contested: relevance should be agreement ratio ≈ 0.667
+        let rel = rosetta.relevance(0, 0, &[]);
+        assert!(
+            (rel - 0.667).abs() < 0.05,
+            "contested relevance should be ~0.667, got {rel}"
+        );
     }
 }

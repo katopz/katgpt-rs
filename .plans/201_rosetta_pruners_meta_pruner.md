@@ -65,17 +65,17 @@ impl<P: ConstraintPruner> ConstraintPruner for RosettaPruner<P> {
 
 ## Tasks
 
-- [ ] Add `ConstraintConcept`, `RosettaPruner<P>` structs to `katgpt-rs/src/pruners/`
-- [ ] Implement `RosettaPruner::mine_concepts()` — run probe inputs through all pruners, compute agreement
-- [ ] Implement `ConstraintPruner` for `RosettaPruner` with fast-path concept map lookup
-- [ ] Implement `ScreeningPruner` for `RosettaPruner` with agreement-weighted relevance
-- [ ] Add `RosettaPruner` to `build_dd_tree_pruned` integration path
-- [ ] Add feature flag `rosetta_pruner` (opt-in initially, default-on after GOAT proof)
-- [ ] Write test: verify RosettaPruner matches majority vote, fast-path hits for universal concepts
-- [ ] Write benchmark: measure DDTree build time with vs without RosettaPruner
-- [ ] Write example: Sudoku with RosettaPruner combining row/col/box constraints
+- [x] Add `ConstraintConcept`, `RosettaPruner<P>` structs to `katgpt-rs/src/pruners/`
+- [x] Implement `RosettaPruner::mine_concepts()` — run probe inputs through all pruners, compute agreement
+- [x] Implement `ConstraintPruner` for `RosettaPruner` with fast-path concept map lookup
+- [x] Implement `ScreeningPruner` for `RosettaPruner` with agreement-weighted relevance
+- [x] Add `RosettaPruner` to `build_dd_tree_pruned` integration path
+- [x] Add feature flag `rosetta_pruner` (opt-in initially, default-on after GOAT proof)
+- [x] Write test: verify RosettaPruner matches majority vote, fast-path hits for universal concepts
+- [x] Write benchmark: measure DDTree build time with vs without RosettaPruner
+- [x] Write example: Sudoku with RosettaPruner combining row/col/box constraints
 - [ ] GOAT gate: measure DDTree build time reduction. If ≥ 20% → default-on.
-- [ ] Update README feature flags section
+- [x] Update README feature flags section
 
 ---
 

@@ -327,6 +327,9 @@ pub mod correlation_budget;
 #[cfg(feature = "corr_budget")]
 pub use correlation_budget::CorrelationBudgetAllocator;
 
+#[cfg(feature = "corr_budget")]
+pub use dd_tree::build_dd_tree_screened_corr;
+
 // ── Self-Learning Selectivity Router (Plan 204, feature: selectivity_router) ──
 #[cfg(feature = "selectivity_router")]
 pub mod selectivity_router;

@@ -1,7 +1,7 @@
 # Plan 200: Correlation Budget Allocation — Data-Driven Speculative Depth
 
 **Date**: 2026-06-07
-**Status**: Plan
+**Status**: ✅ Implemented
 **Research**: `.research/178_Rosetta_Neurons_Cross_Model_Alignment.md` (Section 4.2)
 **GOAT Rank**: #6 (quick win)
 
@@ -56,13 +56,13 @@ impl CorrelationBudgetAllocator {
 
 ## Tasks
 
-- [ ] Implement `CorrelationBudgetAllocator` in `katgpt-rs/src/speculative/`
-- [ ] Add EMA update hook in speculative decode loop (after acceptance check)
-- [ ] Replace `PositionWeightedBudget` usage with `CorrelationBudgetAllocator` behind feature flag `corr_budget`
-- [ ] Write test: verify budget converges to correct allocation after N steps
-- [ ] Write benchmark: compare acceptance rate with heuristic vs correlation-based budget
+- [x] Implement `CorrelationBudgetAllocator` in `katgpt-rs/src/speculative/`
+- [x] Add EMA update hook in speculative decode loop (after acceptance check)
+- [x] Replace `PositionWeightedBudget` usage with `CorrelationBudgetAllocator` behind feature flag `corr_budget`
+- [x] Write test: verify budget converges to correct allocation after N steps
+- [x] Write benchmark: compare acceptance rate with heuristic vs correlation-based budget
 - [ ] GOAT gate: measure acceptance rate delta. If ≥ 3% → default-on.
-- [ ] Update README feature flags section
+- [x] Update README feature flags section
 
 ---
 
