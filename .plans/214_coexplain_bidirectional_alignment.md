@@ -14,39 +14,39 @@ Implement CoExplain's Read/Write/Enhance cycle for the modelless inference pipel
 ## Tasks
 
 ### Phase 1: TED-Lite Divergence Metric (Enabling Infrastructure)
-- [ ] Add `PrunerDivergence` struct to `katgpt-rs/src/speculative/types.rs`
+- [x] Add `PrunerDivergence` struct to `katgpt-rs/src/pruners/ted_lite.rs`
   - `threshold_divergence: f32` — Σ |τ_current - τ_original| / N
   - `topology_divergence: f32` — Hamming distance on branch existence vectors
   - `lambda_t: f32` — developer-configurable divergence clamp (default: 0.1)
-- [ ] Implement `PrunerDivergence::compute()` — O(k) per pruner
-- [ ] Add `PrunerDivergence::clamp_adjustment()` — reject bandit updates that exceed lambda_t
-- [ ] Add diagnostic log: emit divergence metrics per N tokens (behind `tracing`)
+- [x] Implement `PrunerDivergence::compute()` — O(k) per pruner
+- [x] Add `PrunerDivergence::clamp_adjustment()` — reject bandit updates that exceed lambda_t
+- [x] Add diagnostic log: emit divergence metrics per N tokens (behind `log`)
 
 ### Phase 2: Self-Refining Pruner (Extends BanditPruner)
-- [ ] Add `PrunerAccuracy` tracker to `katgpt-rs/src/freq_bandit.rs` or new module
+- [x] Add `PrunerAccuracy` tracker to `katgpt-rs/src/pruners/self_refining.rs`
   - Track TP, TN, FP, FN per pruner slot
   - Compute precision, recall, F1 per slot
-- [ ] Implement threshold mode: adjust SynPruner rejection threshold based on FP/FN ratio
+- [x] Implement threshold mode: adjust SynPruner rejection threshold based on FP/FN ratio
   - `threshold_adjustment = sigmoid(α * (FP_rate - FN_rate))` where α is learning rate
   - Clamp via TED-Lite lambda_t
-- [ ] Implement topology mode: prune low-value DDTree branches (acceptance rate < ε)
+- [x] Implement topology mode: prune low-value DDTree branches (acceptance rate < ε)
   - Expand high-value branches (acceptance rate > 1-ε)
   - Clamp via TED-Lite lambda_t
-- [ ] Feature gate: `coexplain_pruner`
+- [x] Feature gate: `coexplain_pruner`
 
 ### Phase 3: CoEditable ConstraintPruner (Bidirectional)
-- [ ] Add `EditableConstraintPruner` trait extending `ConstraintPruner`
+- [x] Add `EditableConstraintPruner` trait extending `ConstraintPruner` in `katgpt-rs/src/pruners/editable_constraint.rs`
   - `fn edit_threshold(&mut self, slot: usize, new_threshold: f32) -> Result<(), DivergenceError>`
   - `fn edit_topology(&mut self, branch: &[usize], action: TopologyAction) -> Result<(), DivergenceError>`
   - `fn snapshot(&self) -> PrunerSnapshot` — captures golden reference for TED-Lite
   - `fn divergence(&self) -> &PrunerDivergence` — current divergence from snapshot
-- [ ] Implement `SynPruner` changes to support `EditableConstraintPruner`
+- [x] Implement `PrunerSnapshot` with blake3 integrity hashing
   - Dynamic threshold adjustment (Tier 0 bracket balancer thresholds)
   - Topology changes (add/remove validation rules)
-- [ ] Add rule editor backend: accept JSON rule format → compile to ConstraintPruner config
+- [x] Add rule editor backend: accept JSON rule format → compile to ConstraintPruner config
   - Input: `{"rules": [{"attribute": "bracket_depth", "threshold": 0, "action": "reject"}]}`
   - Output: Updated SynPruner config
-- [ ] Feature gate: `coexplain_pruner`
+- [x] Feature gate: `coexplain_pruner`
 
 ### Phase 4: Neuro-Symbolic RIIR Feedback Loop (Curator Marketplace)
 - [ ] Add rule extraction from successful RIIR translations

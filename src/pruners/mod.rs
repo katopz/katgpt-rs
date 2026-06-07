@@ -794,3 +794,33 @@ pub use percept_router::{ComputePath, PerceptRouter, PerceptRouterConfig, Sigmoi
 
 #[cfg(feature = "bfcf_tree")]
 pub use bfcf_types::BfcpPartition;
+
+// ── CoExplain Bidirectional Alignment (Plan 214) ──────────────
+//
+// Read/Write/Enhance cycle for self-refining pruners.
+// TED-Lite divergence metric + bandit-driven threshold/topology adjustment +
+// editable ConstraintPruner with bidirectional editing.
+//
+// Feature gates: `ted_lite` (P1), `coexplain_pruner` (P2+3)
+
+#[cfg(feature = "ted_lite")]
+pub mod ted_lite;
+
+#[cfg(feature = "ted_lite")]
+pub use ted_lite::PrunerDivergence;
+
+#[cfg(feature = "coexplain_pruner")]
+pub mod self_refining;
+
+#[cfg(feature = "coexplain_pruner")]
+pub use self_refining::{
+    PrunerAccuracy, TopologyAction, adjust_topology, compute_threshold_adjustment,
+};
+
+#[cfg(feature = "coexplain_pruner")]
+pub mod editable_constraint;
+
+#[cfg(feature = "coexplain_pruner")]
+pub use editable_constraint::{
+    DivergenceError, EditableConstraintPruner, PrunerSnapshot, RuleEdit, parse_rules,
+};
