@@ -48,8 +48,8 @@ fn select_arm_epsilon_greedy(
 ) -> usize {
     let n = visits.len();
     // Cold start: play each unvisited arm once
-    for i in 0..n {
-        if visits[i] == 0 {
+    for (i, &v) in visits.iter().enumerate() {
+        if v == 0 {
             return i;
         }
     }

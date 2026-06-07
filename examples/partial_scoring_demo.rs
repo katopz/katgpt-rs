@@ -139,10 +139,7 @@ fn main() {
     // ── Print learning curve table ──────────────────────────────────
     println!("━━━ Learning Curve: Binary Q-values vs Partial Q-values ━━━━━━━━━━━━━");
     println!();
-    println!(
-        "  {:>8} | {:<26} | {:<26} | {}",
-        "Episode", "Binary Q-values", "Partial Q-values", "Best Arm"
-    );
+    println!("  Episode | Binary Q-values           | Partial Q-values          | Best Arm");
     println!(
         "  {}─┼─{}─┼─{}─┼──────────",
         "─".repeat(8),
