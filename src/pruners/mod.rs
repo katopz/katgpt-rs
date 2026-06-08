@@ -708,7 +708,10 @@ pub use concept_grounding::{
 pub mod collapse_detector;
 
 #[cfg(feature = "collapse_aware_thinking")]
-pub use collapse_detector::{CollapseDetectorFrozen, S2FCollapseDetector, efficiency_reward};
+pub use collapse_detector::{
+    CollapseAction, CollapseDetectorFrozen, S2FCollapseDetector, check_collapse_action,
+    efficiency_reward,
+};
 
 // ── Collapse-Aware Adaptive Thinking — T2M Option Stripper (Plan 212 T5/T6) ──
 
@@ -832,4 +835,13 @@ pub mod riir_feedback;
 pub use riir_feedback::{
     CuratorIngestion, CuratorRule, RuleBandit, TranslationRule, WorkloadRoute, classify_workload,
     extract_translation_rules,
+};
+
+#[cfg(feature = "regime_transition")]
+pub mod regime_transition;
+
+#[cfg(feature = "regime_transition")]
+pub use regime_transition::{
+    CollapseClassifier, CollapseType, DDTreeStats, GateResult, ProvenanceChain, ProvenanceStep,
+    PrunerType, RegimeCollapseClassifier, RegimeTransitionGate, TransportResult,
 };
