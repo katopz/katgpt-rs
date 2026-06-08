@@ -27,7 +27,7 @@ Entropy-triggered solver switching during DDTree construction. When marginal ent
   - `DpmSolver2M` remains default for non-critical steps
   - `QSample` activated when `H > H_critical`
 
-- [ ] T3: Implement q-sampling solver in D2F denoising (stub done — `q_sample_step` in dllm_solver.rs)
+- [x] T3: Implement q-sampling solver in D2F denoising (stub done — `q_sample_step` in dllm_solver.rs)
   - Formula: `x_{t-1} = sqrt(alpha_{t-1}) * x_0_hat + sqrt(1 - alpha_{t-1}) * noise`
   - Adapted for mask-based discrete diffusion:
     ```
