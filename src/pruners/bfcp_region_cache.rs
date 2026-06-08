@@ -38,7 +38,7 @@ fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
 }
 
-fn blake3_logit_hash(logits: &[f32]) -> [u8; 32] {
+pub fn blake3_logit_hash(logits: &[f32]) -> [u8; 32] {
     let mut hasher = blake3::Hasher::new();
     // SAFETY: reading byte representation of &[f32] — no alignment issues on
     // x86/ARM since f32 and u8 share address boundaries. Read-only.

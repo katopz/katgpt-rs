@@ -809,7 +809,7 @@ pub use bfcf_types::BfcpPartition;
 pub mod bfcp_region_cache;
 
 #[cfg(feature = "bfcf_lfu_shard")]
-pub use bfcp_region_cache::{BfcpRegionCache, FreqTier, RegionCaching};
+pub use bfcp_region_cache::{BfcpRegionCache, FreqTier, RegionCaching, blake3_logit_hash};
 
 // ── SubstrateGate — Inference-Time Capability Substrate Routing (Plan 216) ──
 //

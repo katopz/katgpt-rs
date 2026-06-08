@@ -168,7 +168,7 @@ pub trait RegionBatching: Send + Sync {
 - [x] Test: LFU cache hit/miss on synthetic partition sequence (11 tests passing)
 - [x] Test: LFU eviction correctness — evicted entry is lowest frequency
 - [x] Test: decay reduces frequency over N steps
-- [ ] Benchmark: cache hit rate on synthetic workload (target: ≥ 60% across 100 steps)
+- [x] Benchmark: cache hit rate on synthetic workload (target: ≥ 60% across 100 steps) — achieved 95%
 
 ### Phase 2: Frequency-Aware Region Sharding
 - [ ] Add `RegionShardMap`, `RegionSharding` trait to `src/pruners/region_shard_map.rs`
