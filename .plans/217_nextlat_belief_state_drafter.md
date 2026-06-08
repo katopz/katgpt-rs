@@ -90,7 +90,9 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
 - [x] Integrate into `SpeculativeGenerator` trait as new drafter variant
 - [x] Add `DecodeStage::BeliefDraft` variant to forward pipeline
 - [x] Add `belief_drafter_path` to `Config` / `InferenceOverrides`
-- [x] Integration test: belief drafter produces valid token sequences
+- [x] Add `belief_drafter_entropy_threshold` to Config (default: 2.0)
+- [x] Add `belief_drafter` feature to katgpt-core/Cargo.toml + forward from katgpt-rs
+- [x] Integration test: belief drafter produces valid token sequences (19 tests passing)
 
 ### Phase 2: DDTree Fusion
 - [ ] Wire BeliefDrafter output into DDTree branch initialization
