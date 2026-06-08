@@ -20,7 +20,7 @@ Inspired by [microgpt-c](https://github.com/nicholasgasior/microgpt-c), [talos-v
 - **G-Zero Self-Play** — Verifier-free Hint-δ intrinsic reward — no external LLM judge needed.
 - **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), SIMD kernels (`simd.rs`), tiled attention, CODA fusion, parallax attention, QuestBench, PEIRA, Dirichlet energy, spectral hierarchy, roofline cost model, LinOSS modal spec, AND-OR DDTree, and MUX superposition pruning.
 - **QwenDeltaNet** — Model architecture support for DeltaNet-style hybrid decode.
-- **150+ Feature Flags** — Granular feature gates for every subsystem; 65+ default-on (all GOAT-proved).
+- **150+ Feature Flags** — Granular feature gates for every subsystem; 66+ default-on (all GOAT-proved).
 - **Tactical Grid Game & Dungeon Crawler** — Arena examples for game AI research.
 
 📖 **Deep dives:** [`.docs/`](.docs/) for architecture, speculative decoding, performance, sudoku, validator, HL, arena, and all research detail.
@@ -373,6 +373,36 @@ Makes modelless HL smarter with Hint-δ intrinsic reward — no external verifie
 Two phases: **Phase 1** (modelless — δ → AbsorbCompress + BanditPruner, no gradients) → **Phase 2** (model-based — GRPO + DPO in riir-gpu).
 
 📖 **Full detail:** [`.docs/23_hl_arena_detail.md`](.docs/23_hl_arena_detail.md) §11.
+
+## 🧠 NextLat Belief-State Speculative Drafter (Plan 217)
+
+Replaces the separate draft model with a lightweight 3-layer residual MLP that predicts next hidden states from `(h_t, x_{t+1})`, enabling variable-length self-speculative decoding at near-zero overhead. Distilled from [arXiv:2511.05963](https://arxiv.org/abs/2511.05963) (NextLat).
+
+| Component | Description |
+|-----------|-------------|
+| **LatentDynamicsMLP** | 3-layer residual MLP: LayerNorm → FC1 → GELU → FC2 → GELU → FC3 → residual add. ~1.5K params at n_embd=16. |
+| **BeliefDrafter** | Entropy-gated variable-length draft loop. Stops when entropy exceeds threshold. Produces `Vec<BeliefDraftToken>`. |
+| **BeliefRankPruner** | `ScreeningPruner` using participation ratio of hidden states. Low rank → confident → accept; high rank → uncertain → reject. |
+| **LatentTransitionCache** | Lock-free LRU cache (`papaya::HashMap` + `blake3` keys) for `(h_t, x_{t+1}) → ĥ_{t+1}` predictions. 5× speedup on repeated patterns. |
+| **DDTree Fusion** | `build_dd_tree_belief()` converts draft tokens to peaked marginals → feeds DDTree. Collapse-aware variant adjusts threshold from prior entropy. |
+
+### GOAT Proof (43 tests + 7 benchmarks)
+
+| Gate | Result |
+|------|--------|
+| B1: Belief vs MTP overhead | 2.2× (134 μs vs 60 μs) — MLP forward internally |
+| B2: Variable-length adapts | Tight threshold → 1 token, loose → 5 tokens |
+| B3: MLP forward per step | 17 μs/step at n_embd=16 |
+| B4: BeliefRankPruner quality | Peaked 0.993 > 0.5, diverse 0.001 < 0.5 |
+| B5: Cache hit rate | Walk cycle 100%, mixed 66.3% |
+| B6: Cached vs uncached | 5× speedup (15 μs vs 90 μs) |
+| G1: Acceptance rate | Both produce valid 64-node trees |
+| G2: Variable-length speedup | Variable adapts correctly |
+| G3: No regression | Feature gates verified, clean without features |
+
+Feature gate: `belief_drafter` (**default-ON**).
+
+📖 **Plan:** [`.plans/217_nextlat_belief_state_drafter.md`](.plans/217_nextlat_belief_state_drafter.md).
 
 ## 🔀 Opt-In & Gated Features
 

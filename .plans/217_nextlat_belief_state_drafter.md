@@ -1,8 +1,8 @@
 # Plan 217: NextLat Belief-State Speculative Drafter
 
 **Research**: R192 (NextLat Belief-State Latent Dynamics)
-**Status**: Phase 0+1+2+3+4+5(GOAT) COMPLETE (43 lib tests, 7 benchmark tests passing). T4(default-on) and T5(docs) pending.
-**Feature Gate**: `belief_drafter` (off by default until GOAT proof)
+**Status**: COMPLETE — Phase 0-5 all done. `belief_drafter` default-ON (43 lib tests, 7 benchmarks, GOAT proved).
+**Feature Gate**: `belief_drafter` (default-ON, GOAT proved)
 **Depends on**: Plan 055 (MTP Drafter infrastructure), Plan 195 (ThoughtFold), Plan 212 (Collapse-Aware Adaptive Thinking)
 
 ---
@@ -134,8 +134,12 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
   - G2: Fixed 500 tokens vs Variable 200 tokens. Variable adapts correctly. PASS.
 - [x] GOAT proof test: no perf regression on non-speculative path
   - G3: Feature gates verified. `cargo check` without features = clean. PASS.
-- [ ] If all pass: flip `belief_drafter` to default-on
-- [ ] Update README, docs, feature flag table
+- [x] If all pass: flip `belief_drafter` to default-on
+  - Added to `default` feature list in `Cargo.toml`. 46 default features total.
+- [x] Update README, docs, feature flag table
+  - README: new section "NextLat Belief-State Speculative Drafter" with GOAT proof table
+  - `.docs/01_overview.md`: added `belief_drafter` to feature flag table + default features list
+  - Updated feature count: 65+ → 66+ default-on
 
 ---
 
