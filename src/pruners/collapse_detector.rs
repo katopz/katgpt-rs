@@ -280,6 +280,37 @@ pub fn efficiency_reward(
     }
 }
 
+// ── Decode-Loop Integration (Plan 212 T4) ──────────────────────────
+
+/// Result of a collapse check during decode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CollapseAction {
+    /// No collapse detected — continue normal decoding.
+    Continue,
+    /// Collapse detected — force early exit from thinking mode.
+    ForceExit,
+}
+
+/// Per-token hook for the decode loop. Returns `ForceExit` when
+/// the detector's threshold is exceeded, signaling that the current CoT trace
+/// is degenerate and should be terminated early.
+#[inline]
+pub fn check_collapse_action(
+    detector: &mut dyn CollapseDetector,
+    token_id: u32,
+    position: usize,
+    thinking_mode: bool,
+) -> CollapseAction {
+    if !thinking_mode {
+        return CollapseAction::Continue;
+    }
+    match detector.check_collapse(token_id, position) {
+        true => CollapseAction::ForceExit,
+        false => CollapseAction::Continue,
+    }
+}
+
 // ── Unit Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]

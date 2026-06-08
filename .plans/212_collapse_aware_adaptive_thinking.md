@@ -97,9 +97,9 @@ graph TD
 
 ### T4: CollapseDetector Integration in Decode Loop
 - [x] Add `CollapseDetector` field to `Config` (optional, behind feature gate)
-- [ ] In `transformer.rs` decode loop: call `collapse_detector.check_collapse(token, pos)` per token
-- [ ] If collapse detected: emit `</think|>` equivalent + force answer mode
-- [ ] Integration point: `tf_loop.rs` — add early exit path alongside existing PPoT resample
+- [x] In `transformer.rs` decode loop: call `collapse_detector.check_collapse(token, pos)` per token
+- [x] If collapse detected: emit `</think|>` equivalent + force answer mode
+- [x] Integration point: `transformer.rs` — `generate_with_collapse_detection()` function with early exit path
 
 ### T5: T2M Option Stripper (Post-Verify)
 - [x] Add `OptionStripper` wrapper around `ScreeningPruner`

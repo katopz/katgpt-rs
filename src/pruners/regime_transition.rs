@@ -24,6 +24,8 @@ use super::decision_trace::DecisionTrace;
 // ── Sigmoid ────────────────────────────────────────────────────────
 
 /// Sigmoid function: `1 / (1 + exp(-x))`. Bounded to (0, 1).
+/// Used in tests and available for future gating logic.
+#[cfg(test)]
 #[inline]
 fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
@@ -326,6 +328,102 @@ impl ProvenanceChain {
 }
 
 // ════════════════════════════════════════════════════════════════════
+// T4: AdversarialBreaker
+// ════════════════════════════════════════════════════════════════════
+
+use std::collections::HashMap;
+use std::sync::Mutex;
+
+use katgpt_core::traits::ConstraintPruner;
+
+/// Token sequence that failed validation, recorded for adversarial analysis.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FailurePattern {
+    /// Token sequence that failed validation.
+    pub tokens: Vec<usize>,
+    /// Depth at which failure occurred.
+    pub failure_depth: usize,
+}
+
+/// Wrapper around any [`ConstraintPruner`] that tracks failure patterns and
+/// generates synthetic edge cases for adversarial testing.
+///
+/// When the same failure pattern recurs enough times (≥ `threshold`), it
+/// is considered "hot" — a systematic weakness worth probing further via
+/// [`AdversarialBreaker::generate_synthetic`] perturbations.
+pub struct AdversarialBreaker<P: ConstraintPruner> {
+    inner: P,
+    failure_counts: Mutex<HashMap<FailurePattern, u32>>,
+    threshold: u32,
+}
+
+impl<P: ConstraintPruner> AdversarialBreaker<P> {
+    /// Create a new wrapper with the given inner pruner and failure threshold.
+    pub fn new(inner: P, threshold: u32) -> Self {
+        Self {
+            inner,
+            failure_counts: Mutex::new(HashMap::new()),
+            threshold,
+        }
+    }
+
+    /// Create with the default threshold of 5.
+    pub fn with_default_threshold(inner: P) -> Self {
+        Self::new(inner, 5)
+    }
+
+    /// Record a failure and check if it exceeds the pattern threshold.
+    /// Returns `true` if the pattern count *just* reached the threshold.
+    pub fn record_failure(&self, pattern: FailurePattern) -> bool {
+        let mut map = self.failure_counts.lock().unwrap();
+        let count = map.entry(pattern).or_insert(0);
+        *count += 1;
+        *count == self.threshold
+    }
+
+    /// Generate synthetic edge cases from a failure pattern.
+    ///
+    /// Perturbs the failing token sequence by ±1 at each position,
+    /// producing `2 * tokens.len()` variants.
+    pub fn generate_synthetic(&self, pattern: &FailurePattern) -> Vec<Vec<usize>> {
+        let mut variants = Vec::with_capacity(pattern.tokens.len() * 2);
+        for i in 0..pattern.tokens.len() {
+            let mut plus = pattern.tokens.clone();
+            plus[i] = plus[i].wrapping_add(1);
+            variants.push(plus);
+            let mut minus = pattern.tokens.clone();
+            minus[i] = minus[i].wrapping_sub(1);
+            variants.push(minus);
+        }
+        variants
+    }
+
+    /// Return all failure patterns whose count has reached the threshold.
+    pub fn hot_patterns(&self) -> Vec<FailurePattern> {
+        let map = self.failure_counts.lock().unwrap();
+        map.iter()
+            .filter(|&(_, &count)| count >= self.threshold)
+            .map(|(pattern, _)| pattern.clone())
+            .collect()
+    }
+}
+
+impl<P: ConstraintPruner> ConstraintPruner for AdversarialBreaker<P> {
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
+        let result = self.inner.is_valid(depth, token_idx, parent_tokens);
+        if !result {
+            let mut tokens = parent_tokens.to_vec();
+            tokens.push(token_idx);
+            self.record_failure(FailurePattern {
+                tokens,
+                failure_depth: depth,
+            });
+        }
+        result
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
 // Tests
 // ════════════════════════════════════════════════════════════════════
 
@@ -575,5 +673,120 @@ mod tests {
                 s
             );
         }
+    }
+
+    // ── T4: AdversarialBreaker Tests ──────────────────────────────────
+
+    /// A pruner that rejects token 3 at any depth/parents.
+    struct RejectThree;
+
+    impl ConstraintPruner for RejectThree {
+        fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
+            token_idx != 3
+        }
+    }
+
+    #[test]
+    fn adversarial_record_failure_increments_count() {
+        let inner = RejectThree;
+        let ab = AdversarialBreaker::new(inner, 5);
+        let pattern = FailurePattern {
+            tokens: vec![1, 2, 3],
+            failure_depth: 2,
+        };
+        assert!(!ab.record_failure(pattern.clone()));
+        assert!(!ab.record_failure(pattern.clone()));
+        assert!(!ab.record_failure(pattern.clone()));
+        assert!(!ab.record_failure(pattern.clone()));
+        // 5th call should return true (just reached threshold)
+        assert!(ab.record_failure(pattern.clone()));
+        // 6th should return false (already exceeded)
+        assert!(!ab.record_failure(pattern));
+    }
+
+    #[test]
+    fn adversarial_threshold_detection() {
+        let inner = RejectThree;
+        let ab = AdversarialBreaker::new(inner, 3);
+        let p1 = FailurePattern {
+            tokens: vec![1, 2],
+            failure_depth: 1,
+        };
+        let p2 = FailurePattern {
+            tokens: vec![4, 5],
+            failure_depth: 1,
+        };
+        // p1 hits threshold
+        ab.record_failure(p1.clone());
+        ab.record_failure(p1.clone());
+        assert!(ab.record_failure(p1.clone()));
+        // p2 below threshold
+        ab.record_failure(p2.clone());
+
+        let hot = ab.hot_patterns();
+        assert_eq!(hot.len(), 1);
+        assert_eq!(hot[0], p1);
+    }
+
+    #[test]
+    fn adversarial_synthetic_generation() {
+        let inner = RejectThree;
+        let ab = AdversarialBreaker::with_default_threshold(inner);
+        let pattern = FailurePattern {
+            tokens: vec![10, 20],
+            failure_depth: 1,
+        };
+        let variants = ab.generate_synthetic(&pattern);
+        // 2 tokens * 2 perturbations = 4 variants
+        assert_eq!(variants.len(), 4);
+        assert_eq!(variants[0], vec![11, 20]); // +1 on pos 0
+        assert_eq!(variants[1], vec![9, 20]); // -1 on pos 0
+        assert_eq!(variants[2], vec![10, 21]); // +1 on pos 1
+        assert_eq!(variants[3], vec![10, 19]); // -1 on pos 1
+    }
+
+    #[test]
+    fn adversarial_is_valid_delegates_and_records() {
+        let ab = AdversarialBreaker::new(RejectThree, 2);
+        // token 3 is rejected
+        assert!(!ab.is_valid(0, 3, &[]));
+        assert!(!ab.is_valid(1, 3, &[1]));
+        // token 1 is accepted
+        assert!(ab.is_valid(0, 1, &[]));
+
+        // Two different patterns, each recorded once
+        let hot = ab.hot_patterns();
+        assert!(hot.is_empty());
+
+        // Same pattern again should make it hot
+        assert!(!ab.is_valid(0, 3, &[]));
+        let hot = ab.hot_patterns();
+        assert_eq!(hot.len(), 1);
+        assert_eq!(hot[0].tokens, vec![3]);
+        assert_eq!(hot[0].failure_depth, 0);
+    }
+
+    #[test]
+    fn adversarial_hot_patterns_returns_only_at_threshold() {
+        let ab = AdversarialBreaker::new(RejectThree, 3);
+        let p1 = FailurePattern {
+            tokens: vec![3],
+            failure_depth: 0,
+        };
+        let p2 = FailurePattern {
+            tokens: vec![1, 3],
+            failure_depth: 1,
+        };
+        // p1 to threshold
+        ab.record_failure(p1.clone());
+        ab.record_failure(p1.clone());
+        ab.record_failure(p1.clone());
+        // p2 below threshold
+        ab.record_failure(p2.clone());
+
+        let hot = ab.hot_patterns();
+        assert_eq!(hot.len(), 1);
+        assert!(hot.contains(&p1));
+        assert!(!hot.contains(&p2));
     }
 }

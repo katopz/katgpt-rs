@@ -18,7 +18,7 @@ Inspired by [microgpt-c](https://github.com/nicholasgasior/microgpt-c), [talos-v
 - **BPE Tokenizer** — Train/encode/decode with Config::bpe() preset for code generation.
 - **Bomberman Arena** — 4-player HL proof: adaptive intelligence (+177) > greedy (+131) > static rules (-30) > random (-55).
 - **G-Zero Self-Play** — Verifier-free Hint-δ intrinsic reward — no external LLM judge needed.
-- **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), and SIMD kernels (`simd.rs`).
+- **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), SIMD kernels (`simd.rs`), tiled attention, CODA fusion, parallax attention, QuestBench, PEIRA, Dirichlet energy, spectral hierarchy, roofline cost model, LinOSS modal spec, AND-OR DDTree, and MUX superposition pruning.
 - **QwenDeltaNet** — Model architecture support for DeltaNet-style hybrid decode.
 - **150+ Feature Flags** — Granular feature gates for every subsystem; 65+ default-on (all GOAT-proved).
 - **Tactical Grid Game & Dungeon Crawler** — Arena examples for game AI research.
@@ -70,7 +70,16 @@ pub trait SpeculativeGenerator: Send + Sync {
 Additional core traits:
 - **`GameState`** — Forward model trait for game tree search (MCTS, bandit rollout).
 - **`RolloutPolicy`** — Generic rollout selection for arena play.
+- **`StateHeuristic`** — Heuristic evaluation for game states.
 - **`LeoHead`** / **`DualLeoMixer`** — LEO all-goals Q-value head and teacher-student mixing.
+- **`AllGoalsUpdate`** — TD(λ) all-goals Bellman update.
+- **`AutocurriculumSampler`** — Goal sampling with observation tracking.
+- **`DominoPruner`** — Causal correction for prefix-conditioned marginals.
+- **`CompletionHorizon`** — Singular span / min completion distance.
+- **`GenerativeConstraintPruner`** — Combines generation + constraint validation.
+- **`PartialScorer`** — Graduated episode reward breakdown.
+- **`ProblemMutator`** — Arena config evolution via mutation.
+- **`BestBuddyAligner`** — Mutual NN filter with batch alignment confidence.
 
 ### Routing & Conditioning
 
@@ -723,21 +732,23 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 ## 📁 Project Structure
 
 ```
-crates/katgpt-core/   Shared types + SIMD kernels
-  types.rs            Decoupled structs & impls
-  traits.rs           Core trait definitions (ConstraintPruner, ScreeningPruner, SpeculativeGenerator)
-  simd.rs             SIMD kernel implementations
-  attention.rs        Attention mode implementations
-  coda.rs             CODA fused kernels
+crates/katgpt-core/   Shared types + SIMD kernels + traits
+  types.rs            Decoupled structs & impls (Config, Rng, LoraAdapter, DomainLatent, etc.)
+  traits.rs           Core trait definitions (22+ traits: ConstraintPruner, ScreeningPruner,
+                        SpeculativeGenerator, GameState, LeoHead, DualLeoMixer, DominoPruner,
+                        CompletionHorizon, PartialScorer, ProblemMutator, BestBuddyAligner, etc.)
+  simd.rs             SIMD kernel implementations (NEON/AVX2)
+  attention.rs        Tiled online-softmax flash attention
+  coda.rs             CODA fused SIMD kernels (RMSNorm + matmul + SwiGLU fusion)
   parallax_attn.rs    Parallax parameterized local linear attention
   questbench.rs       QuestBench underspecification scoring
-  peira.rs            PEIRA inter-view regressor
-  dirichlet.rs        Dirichlet energy diagnostic
-  spectral_hierarchy.rs  Spectral hierarchy diagnostic
-  roofline.rs         Roofline cost model
+  peira.rs            PEIRA inter-view regressor alignment
+  dirichlet.rs        Dirichlet energy structural diagnostic
+  spectral_hierarchy.rs  Spectral hierarchy (eigenspace, Haar, Cauchy interlacing)
+  roofline.rs         Roofline cost model (GEMM/GEMV/GRAM estimation)
   linoss.rs           LinOSS cell for modal speculative decoding
-  and_or/             AND-OR DDTree decomposition
-  mux/                MUX superposition pruning
+  and_or/             AND-OR DDTree blueprint decomposition
+  mux/                MUX superposition pruning (span pruner, DDTree, BFS, bandit width, freeze/thaw, demux)
 src/
   lib.rs              Module index + debug tracking allocator
   main.rs             Entry point (proof → bench → plot)
@@ -747,12 +758,30 @@ src/
   inference_backend.rs  InferenceBackend trait + CpuBackend + auto-route
   trigger_gate.rs     TriggerGate tier promotion + TriggerGateConfig
   inference_router.rs InferenceRouter three-way routing + batch forward
+  ane_backend.rs      Apple Neural Engine backend (macOS + ane feature)
+  gpu_backend.rs      GPU Metal compute backend (macOS + gpu_inference feature)
+  alloc.rs            Debug-only tracking allocator
+  simd.rs             Project-level SIMD utilities
+  plot.rs             SVG chart generation for benchmarks
+  dllm.rs             D2F discrete diffusion forcing
+  tf_loop.rs          Training-free loop
+  ega_attn.rs         Energy-Gated Attention spectral salience gating
+  feedback.rs         E2E feedback loop — REST endpoint
+  freq_bandit.rs      Frequency bandit for speculative decode
+  kv_share.rs         Q-K=V projection sharing (50% KV reduction)
+  mbu.rs              Monokernel CPU fusion (kog_cpu_fusion)
+  mux_demux.rs        MuxDemux deterministic superposition recovery
+  newton_schulz.rs    Newton-Schulz cubic orthogonalization + Muon
+  osc_kv.rs           Oscillatory KV cache
+  rerank.rs           MaxSim late-interaction scoring
+  river_valley.rs     River-valley subspace diagnostics
   speculative/        DDTree, DFlash, Verifier, Prefill, D2F, budget, flashar
   spec_reconciliation/  Speculative reconciliation engine
   pruners/            BanditPruner, TrialLog, HotSwap, BT Rank, CNA, G-Zero, Arena
   tokenizer/          BPE tokenizer
   validator/          SynPruner + PartialParser
   percepta/           Transformer-VM (CHT, hull, WASM interpreter, MILP)
+  benchmark/          Benchmark framework (multi-category, CSV timeseries)
   turboquant/         TurboQuant KV compression (legacy)
   hla/                Higher-order Linear Attention
   gdn2/               Gated DeltaNet-2 recurrent attention
@@ -760,18 +789,23 @@ src/
   hybrid_oct_pq/      Default KV codec (OCT + PlanarQuant)
   planar_quant/       2D Givens rotation
   spectralquant/      Calibrated eigenbasis compression
+  iso_quant/          4D quaternion rotation KV cache
+  octopus/            OCTOPUS octahedral triplet codec
   shard_kv/           Asymmetric K/V cache compression
+  sp_kv/              SP-KV self-pruned key-value attention
   kvarn/              Variance-normalized KV-cache quantization
   spechop/            Continuous multi-hop speculation pipeline
   rt_turbo/           Retrieval-head sparse decode
   ruliology/          Simple-program strategy enumeration
   skill_opt/          Text-space skill optimization
+  proof_cert/         Hierarchical GOAT proof certificates
+  data_probe/         Data probing utilities
+  distill/            Distillation (PEIRA + ILC)
   cache_prune/        SAT + rolling-hash cache pruning
   stiff_anomaly/      Eigenvalue subspace anomaly gate
   sleep/              Sleep consolidation
   fold/               ThoughtFold chain folding
-  dllm.rs             D2F discrete diffusion
-  tf_loop.rs          Training-free loop
+  unit_distance/      Unit-distance number-theoretic GOAT proof
 examples/            111 examples (see examples/README.md)
 tests/               167 integration test & benchmark files (~87 bench suites)
 ```
