@@ -157,17 +157,17 @@ pub trait RegionBatching: Send + Sync {
 ## Tasks
 
 ### Phase 1: LFU Region Cache
-- [ ] Add `FreqTier`, `CachedRegion`, `BfcpRegionCache` types to `src/pruners/bfcp_region_cache.rs`
-- [ ] Implement `BfcpRegionCache::lookup()` — BLAKE3 hash lookup via papaya lock-free HashMap
-- [ ] Implement `BfcpRegionCache::insert()` — insert with LFU eviction when full
-- [ ] Implement `BfcpRegionCache::decay()` — multiply all freq counters by λ = 0.99
-- [ ] Implement `RegionCaching` trait for `BfcpLfuShard`
-- [ ] Implement `blake3_region_hash()` — hash BorelRegion constraints into [u8; 32]
-- [ ] Implement sigmoid admission gate: only cache regions where `sigmoid(freq / threshold) > 0.5`
-- [ ] Add `bfcf_lfu_shard` feature flag to `Cargo.toml` (auto-enables `bfcf_tree`)
-- [ ] Test: LFU cache hit/miss on synthetic partition sequence
-- [ ] Test: LFU eviction correctness — evicted entry is lowest frequency
-- [ ] Test: decay reduces frequency over N steps
+- [x] Add `FreqTier`, `CachedRegion`, `BfcpRegionCache` types to `src/pruners/bfcp_region_cache.rs`
+- [x] Implement `BfcpRegionCache::lookup()` — BLAKE3 hash lookup via papaya lock-free HashMap
+- [x] Implement `BfcpRegionCache::insert()` — insert with LFU eviction when full
+- [x] Implement `BfcpRegionCache::decay()` — multiply all freq counters by λ = 0.99
+- [x] Implement `RegionCaching` trait for `BfcpRegionCache`
+- [x] Implement `blake3_logit_hash()` — hash logit vector into [u8; 32] via BLAKE3
+- [x] Implement sigmoid admission gate: only cache regions where `sigmoid(freq / threshold) > 0.5`
+- [x] Add `bfcf_lfu_shard` feature flag to `Cargo.toml` (auto-enables `bfcf_tree` + `papaya`)
+- [x] Test: LFU cache hit/miss on synthetic partition sequence (11 tests passing)
+- [x] Test: LFU eviction correctness — evicted entry is lowest frequency
+- [x] Test: decay reduces frequency over N steps
 - [ ] Benchmark: cache hit rate on synthetic workload (target: ≥ 60% across 100 steps)
 
 ### Phase 2: Frequency-Aware Region Sharding
