@@ -769,6 +769,10 @@ required-features = ["coexplain_riir"]
 name = "bench_218_bfcf_lfu_shard"
 required-features = ["bfcf_lfu_shard", "speculative_generator"]
 
+[[test]]
+name = "bfcf_lfu_shard_goat"
+required-features = ["bfcf_lfu_shard"]
+
 [[example]]
 name = "coexplain_demo"
 required-features = ["coexplain_riir"]
