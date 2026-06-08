@@ -90,6 +90,85 @@ impl AlignedWeightMatrix {
         (0..self.num_rows).map(|i| self.dot_row(x, i)).collect()
     }
 
+    /// Quantize a float row into the aligned matrix.
+    /// Uses cache-line-aligned writes for SIMD-friendly layout.
+    pub fn quantize_row(&mut self, row_idx: usize, data: &[f32]) {
+        assert!(row_idx < self.num_rows, "row index out of bounds");
+        let start = self.offsets[row_idx];
+        let copy_len = data.len().min(self.row_dim);
+        self.data[start..start + copy_len].copy_from_slice(&data[..copy_len]);
+        // Zero-pad remainder
+        for i in copy_len..self.padded_dim {
+            self.data[start + i] = 0.0;
+        }
+    }
+
+    /// Dequantize a row from the aligned matrix back to a target buffer.
+    /// Only copies the original (unpadded) dimensions.
+    pub fn dequantize_row(&self, row_idx: usize, out: &mut [f32]) {
+        assert!(row_idx < self.num_rows, "row index out of bounds");
+        let start = self.offsets[row_idx];
+        let copy_len = out.len().min(self.row_dim);
+        out[..copy_len].copy_from_slice(&self.data[start..start + copy_len]);
+    }
+
+    /// Batch matvec with pre-allocated output buffer (zero-alloc on repeated calls).
+    pub fn matvec_into(&self, x: &[f32], out: &mut [f32]) {
+        assert_eq!(out.len(), self.num_rows, "output length mismatch");
+        for i in 0..self.num_rows {
+            out[i] = self.dot_row(x, i);
+        }
+    }
+
+    /// Convert from ternary weight representation to aligned float matrix.
+    /// Each ternary value {-1, 0, +1} is converted to f32, then aligned.
+    pub fn from_ternary(
+        pos_bits: &[u64],
+        neg_bits: &[u64],
+        row_scale: &[f32],
+        rows: usize,
+        cols: usize,
+        blocks64: usize,
+    ) -> Self {
+        let row_dim = cols;
+        let padded_dim = Self::pad_dim(row_dim);
+
+        let mut data = Vec::with_capacity(padded_dim * rows);
+        let mut offsets = Vec::with_capacity(rows);
+
+        for r in 0..rows {
+            offsets.push(data.len());
+            let scale = row_scale[r];
+            for c in 0..cols {
+                let block = c >> 6;
+                let bit = c & 63;
+                let mask = 1u64 << bit;
+                let idx = r * blocks64 + block;
+
+                let val = if pos_bits[idx] & mask != 0 {
+                    scale
+                } else if neg_bits[idx] & mask != 0 {
+                    -scale
+                } else {
+                    0.0
+                };
+                data.push(val);
+            }
+            // Pad to cache line
+            for _ in cols..padded_dim {
+                data.push(0.0);
+            }
+        }
+
+        Self {
+            data,
+            offsets,
+            row_dim,
+            padded_dim,
+            num_rows: rows,
+        }
+    }
+
     /// Memory overhead from padding.
     pub fn padding_overhead(&self) -> f32 {
         let original = self.row_dim * self.num_rows * std::mem::size_of::<f32>();

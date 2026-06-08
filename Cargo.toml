@@ -824,3 +824,23 @@ required-features = ["outlier_guard"]
 [[example]]
 name = "llmexec_guard_demo"
 required-features = ["llmexec_guard"]
+
+[[test]]
+name = "static_cal_goat"
+required-features = ["static_cal_tables", "kvarn"]
+
+[[test]]
+name = "targeted_precision_goat"
+required-features = ["targeted_precision"]
+
+[[test]]
+name = "precision_aware_draft_goat"
+required-features = ["precision_aware_draft"]
+
+[[test]]
+name = "channel_simd_goat"
+required-features = ["channel_simd_align"]
+
+[[test]]
+name = "pipeline_pruner_goat"
+required-features = ["modality_pruned_load"]
