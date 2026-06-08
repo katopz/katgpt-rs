@@ -823,6 +823,19 @@ pub mod region_shard_map;
 #[cfg(feature = "bfcf_lfu_shard")]
 pub use region_shard_map::{RegionShardMap, RegionSharding};
 
+// ── BFCF × LFU × Sharding — Region Batch (Plan 218 Phase 3) ─────────────
+//
+// Batch processing for accept/reject/maybe regions:
+// - accept → gather token indices (deterministic, SIMD-friendly loop)
+// - reject → sum token counts (O(regions), zero allocation)
+// - maybe  → classify tokens via ScreeningPruner, split into sub-regions
+
+#[cfg(feature = "bfcf_lfu_shard")]
+pub mod region_batch;
+
+#[cfg(feature = "bfcf_lfu_shard")]
+pub use region_batch::{RegionBatcher, RegionBatching};
+
 // ── SubstrateGate — Inference-Time Capability Substrate Routing (Plan 216) ──
 //
 // Pre-computed per-capability MLP channel masks intersected with ReLU

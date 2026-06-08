@@ -181,13 +181,13 @@ pub trait RegionBatching: Send + Sync {
 - [x] Test: sequential fallback when region count < threshold
 
 ### Phase 3: Region-Level Batching
-- [ ] Add `RegionBatching` trait and impl to `src/pruners/region_batch.rs`
-- [ ] Implement `batch_accept()` — SIMD batch sampling from accept regions
-- [ ] Implement `batch_reject_count()` — O(1) sum of token_counts
-- [ ] Implement `batch_refine()` — batch preimage lookahead on maybe regions
-- [ ] Test: batch_accept produces valid token samples from accept regions
-- [ ] Test: batch_reject_count matches sum of individual token_counts
-- [ ] Test: batch_refine produces same result as sequential refinement
+- [x] Add `RegionBatching` trait and impl to `src/pruners/region_batch.rs`
+- [x] Implement `batch_accept()` — SIMD batch sampling from accept regions
+- [x] Implement `batch_reject_count()` — O(1) sum of token_counts
+- [x] Implement `batch_refine()` — batch preimage lookahead on maybe regions
+- [x] Test: batch_accept produces valid token samples from accept regions
+- [x] Test: batch_reject_count matches sum of individual token_counts
+- [x] Test: batch_refine produces same result as sequential refinement
 
 ### Phase 4: Latent Extensions (Creative Fusion)
 - [ ] Add `NeuronShardRegionKey` — BLAKE3 hash of NeuronShard + region constraints
