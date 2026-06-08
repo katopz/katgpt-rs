@@ -166,6 +166,156 @@ impl<R: SubstrateRouter> SubstrateExecutionContext<R> {
     }
 }
 
+// ── T11: CPU sparse index-packed matmul with dual mask ──────────
+
+/// CPU-only sparse matmul: intersects ReLU-active channels with the substrate mask,
+/// then accumulates `value * weight_row` for each surviving channel.
+///
+/// The weight matrix is row-major `[d_model][mlp_hidden]` — for channel `c`,
+/// the weight row spans `weights[c * d_model .. (c + 1) * d_model]`.
+///
+/// Returns the number of active channels used after mask intersection (for FLOPs accounting).
+///
+/// # Arguments
+/// * `active_indices` — indices of ReLU-active channels
+/// * `active_values` — corresponding activation values (same length as `active_indices`)
+/// * `weights` — weight matrix `[d_model * mlp_hidden]`, row-major
+/// * `d_model` — model dimension (row stride)
+/// * `mask` — substrate mask for intersection
+/// * `layer_idx` — which transformer layer
+/// * `output` — pre-allocated output buffer of length `d_model`
+///
+/// # Safety
+/// Caller must ensure `weights.len() >= d_model * mlp_hidden` and `output.len() >= d_model`.
+pub fn cpu_sparse_substrate_matmul(
+    active_indices: &[usize],
+    active_values: &[f32],
+    weights: &[f32],
+    d_model: usize,
+    mask: &SubstrateMask,
+    layer_idx: usize,
+    output: &mut [f32],
+) -> usize {
+    let count = active_indices.len().min(active_values.len());
+    let mut active_used = 0usize;
+
+    for i in 0..count {
+        let ch = active_indices[i];
+
+        // Dual sparsity: ReLU-active ∩ substrate-active
+        if !mask.get(layer_idx, ch) {
+            continue;
+        }
+
+        let val = active_values[i];
+        let row_start = ch * d_model;
+        let row_end = row_start + d_model;
+
+        // Bounds check — skip if weight row is out of range
+        if row_end > weights.len() {
+            continue;
+        }
+
+        // Accumulate: output += val * weights[ch, :]
+        let row = &weights[row_start..row_end];
+        for (j, &w) in row.iter().enumerate() {
+            output[j] += val * w;
+        }
+
+        active_used += 1;
+    }
+
+    active_used
+}
+
+// ── T12: GPU path placeholder ────────────────────────────────────
+
+/// Placeholder for batched GPU substrate matmul.
+///
+/// When multiple branches share the same substrate mask, a GPU batched
+/// matmul would be more efficient. This stub returns an error until
+/// an actual GPU backend is integrated.
+///
+/// # Arguments
+/// * `n_branches` — number of branches to batch
+/// * `_masks` — substrate masks per branch (unused until GPU impl)
+/// * `_layer_idx` — transformer layer index (unused until GPU impl)
+///
+/// # Errors
+/// Always returns an error — GPU substrate path is not yet implemented.
+#[allow(unused_variables)]
+pub fn gpu_batch_substrate_matmul(
+    n_branches: usize,
+    masks: &[&SubstrateMask],
+    layer_idx: usize,
+) -> Result<usize, &'static str> {
+    Err("GPU substrate path not yet implemented")
+}
+
+// ── T13: Auto-route heuristic ────────────────────────────────────
+
+/// Auto-route: decide whether to use dense path, GPU batch, or CPU sparse matmul.
+///
+/// Decision logic:
+/// 1. If `mask.active_ratio() > 0.4` → dense path (mask overhead exceeds savings) → return `None`
+/// 2. If `n_branches > 4 && gpu_available` → would use GPU batch, but GPU not yet
+///    implemented, so fall through to CPU sparse
+/// 3. Otherwise → CPU sparse path via `cpu_sparse_substrate_matmul`
+///
+/// Returns `Some(active_channels_used)` when the sparse path was taken, or `None`
+/// when the dense path is preferred (mask not applied).
+///
+/// # Arguments
+/// * `active_indices` — ReLU-active channel indices
+/// * `active_values` — corresponding activation values
+/// * `mask` — substrate mask
+/// * `weights` — weight matrix `[d_model * mlp_hidden]`, row-major
+/// * `d_model` — model dimension
+/// * `output` — pre-allocated output buffer (will be accumulated into)
+/// * `layer_idx` — transformer layer index
+/// * `gpu_available` — whether GPU is available
+/// * `n_branches` — number of branches for batch consideration
+pub fn auto_route_substrate(
+    active_indices: &[usize],
+    active_values: &[f32],
+    mask: &SubstrateMask,
+    weights: &[f32],
+    d_model: usize,
+    output: &mut [f32],
+    layer_idx: usize,
+    gpu_available: bool,
+    n_branches: usize,
+) -> Option<usize> {
+    // Gate 1: mask too dense → skip, use dense path
+    if mask.active_ratio() > 0.4 {
+        return None;
+    }
+
+    // Gate 2: large batch + GPU available → would batch on GPU
+    //         (GPU path not yet implemented, so fall through to CPU)
+    if n_branches > 4 && gpu_available {
+        // Future: gpu_batch_substrate_matmul(...)
+        // For now, fall through to CPU sparse path
+    }
+
+    // Gate 3: CPU sparse path
+    let active_used = cpu_sparse_substrate_matmul(
+        active_indices,
+        active_values,
+        weights,
+        d_model,
+        mask,
+        layer_idx,
+        output,
+    );
+
+    if active_used == 0 {
+        return None;
+    }
+
+    Some(active_used)
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -307,5 +457,181 @@ mod tests {
         // Layer 1: channel 10 is active
         let (idx1, _) = apply_substrate_mask(&[5, 10, 15], &[1.0, 2.0, 3.0], &mask, 1);
         assert_eq!(idx1, vec![10]);
+    }
+
+    // ── T11: cpu_sparse_substrate_matmul tests ─────────────────
+
+    #[test]
+    fn test_cpu_sparse_matmul_basic() {
+        // d_model=4, mlp_hidden=8 → weights is [8][4] row-major
+        // Channel 0 weights: [1.0, 0.0, 0.0, 0.0]
+        // Channel 3 weights: [0.0, 0.0, 0.0, 1.0]
+        let weights: Vec<f32> = (0..32)
+            .map(|i| {
+                let ch = i / 4;
+                let col = i % 4;
+                if ch == 0 && col == 0 {
+                    1.0
+                } else if ch == 3 && col == 3 {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+
+        // Mask allows channels 0 and 3
+        let mask = make_mask_with_channels(1, 8, &[(0, 0), (0, 3)]);
+
+        // All channels active (0..7), values are all 2.0
+        let indices: Vec<usize> = (0..8).collect();
+        let values: Vec<f32> = vec![2.0; 8];
+        let mut output = vec![0.0f32; 4];
+
+        let used =
+            cpu_sparse_substrate_matmul(&indices, &values, &weights, 4, &mask, 0, &mut output);
+
+        // Only channels 0 and 3 survive the mask
+        assert_eq!(used, 2);
+        // Channel 0: val=2.0 * [1,0,0,0] → output[0] += 2.0
+        // Channel 3: val=2.0 * [0,0,0,1] → output[3] += 2.0
+        assert_eq!(output, vec![2.0, 0.0, 0.0, 2.0]);
+    }
+
+    #[test]
+    fn test_cpu_sparse_matmul_no_intersection() {
+        let weights = vec![0.0f32; 16]; // d_model=2, mlp_hidden=8
+        let mask = make_mask_with_channels(1, 8, &[(0, 5)]); // only ch 5
+
+        let indices = vec![0usize, 1, 2]; // ch 0,1,2 active via ReLU
+        let values = vec![1.0f32, 2.0, 3.0];
+        let mut output = vec![0.0f32; 2];
+
+        let used =
+            cpu_sparse_substrate_matmul(&indices, &values, &weights, 2, &mask, 0, &mut output);
+
+        assert_eq!(used, 0); // No intersection
+        assert_eq!(output, vec![0.0, 0.0]); // Output untouched
+    }
+
+    #[test]
+    fn test_cpu_sparse_matmul_accumulates() {
+        // d_model=2, mlp_hidden=4
+        // Channel 1 weights: [2.0, 3.0]
+        let weights = vec![0.0, 0.0, 2.0, 3.0, 0.0, 0.0, 0.0, 0.0];
+        let mask = make_mask_with_channels(1, 4, &[(0, 1)]);
+
+        let indices = vec![1usize];
+        let values = vec![5.0f32];
+        let mut output = vec![1.0f32, 2.0]; // pre-existing output
+
+        let used =
+            cpu_sparse_substrate_matmul(&indices, &values, &weights, 2, &mask, 0, &mut output);
+
+        assert_eq!(used, 1);
+        // 1.0 + 5.0*2.0 = 11.0, 2.0 + 5.0*3.0 = 17.0
+        assert_eq!(output, vec![11.0, 17.0]);
+    }
+
+    // ── T12: gpu_batch_substrate_matmul test ────────────────────
+
+    #[test]
+    fn test_gpu_batch_stub_returns_error() {
+        let mask = make_mask_with_channels(1, 64, &[(0, 0)]);
+        let result = gpu_batch_substrate_matmul(8, &[&mask], 0);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "GPU substrate path not yet implemented"
+        );
+    }
+
+    // ── T13: auto_route_substrate tests ─────────────────────────
+
+    #[test]
+    fn test_auto_route_dense_mask_returns_none() {
+        // Create a mask with >40% active → dense path, returns None
+        let mut mask = SubstrateMask::new(1, 10, "dense".into(), "model".into());
+        for ch in 0..10 {
+            mask.set(0, ch); // 100% active
+        }
+        mask.set_recovery_score(0.8);
+
+        let weights = vec![0.0f32; 20]; // d_model=2, mlp_hidden=10
+        let mut output = vec![0.0f32; 2];
+
+        let result = auto_route_substrate(
+            &[0, 1],
+            &[1.0, 2.0],
+            &mask,
+            &weights,
+            2,
+            &mut output,
+            0,
+            false,
+            1,
+        );
+
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_auto_route_sparse_mask_takes_cpu_path() {
+        // Sparse mask: only 1/10 channels active
+        let mask = make_mask_with_channels(1, 10, &[(0, 0)]);
+
+        // d_model=2, mlp_hidden=10
+        // Channel 0 weights: [3.0, 4.0]
+        let mut weights = vec![0.0f32; 20];
+        weights[0] = 3.0;
+        weights[1] = 4.0;
+
+        let mut output = vec![0.0f32; 2];
+
+        let result =
+            auto_route_substrate(&[0], &[2.0], &mask, &weights, 2, &mut output, 0, false, 1);
+
+        assert_eq!(result, Some(1));
+        // 2.0 * [3.0, 4.0] = [6.0, 8.0]
+        assert_eq!(output, vec![6.0, 8.0]);
+    }
+
+    #[test]
+    fn test_auto_route_no_intersection_returns_none() {
+        // Sparse mask but no overlap with active indices
+        let mask = make_mask_with_channels(1, 10, &[(0, 9)]);
+        let weights = vec![0.0f32; 20];
+        let mut output = vec![0.0f32; 2];
+
+        let result = auto_route_substrate(
+            &[0, 1],
+            &[1.0, 2.0],
+            &mask,
+            &weights,
+            2,
+            &mut output,
+            0,
+            false,
+            1,
+        );
+
+        assert!(result.is_none());
+        assert_eq!(output, vec![0.0, 0.0]);
+    }
+
+    #[test]
+    fn test_auto_route_gpu_fallthrough_to_cpu() {
+        // n_branches > 4 && gpu_available → would try GPU, falls through to CPU
+        let mask = make_mask_with_channels(1, 10, &[(0, 2)]);
+        let mut weights = vec![0.0f32; 20];
+        weights[4] = 1.0; // Channel 2, col 0
+        weights[5] = 1.0; // Channel 2, col 1
+        let mut output = vec![0.0f32; 2];
+
+        let result =
+            auto_route_substrate(&[2], &[3.0], &mask, &weights, 2, &mut output, 0, true, 8);
+
+        assert_eq!(result, Some(1));
+        assert_eq!(output, vec![3.0, 3.0]);
     }
 }
