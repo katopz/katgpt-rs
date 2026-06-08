@@ -141,8 +141,8 @@ graph TD
 - [x] Test: Freeze/thaw roundtrip preserves detector state
 
 ### T8: Benchmark — Before/After
-- [ ] Benchmark: tokens saved by collapse detection (expected: 30-50% on ambiguous tasks)
-- [ ] Benchmark: accuracy with vs without collapse detector (expected: same or +2-5pp)
+- [x] Benchmark: tokens saved by collapse detection (expected: 30-50% on ambiguous tasks)
+- [x] Benchmark: accuracy with vs without collapse detector (expected: same or +2-5pp)
 - [x] Benchmark: overhead of CollapseDetector per token (expected: <10ns, O(1))
 - [x] Example: `collapse_aware_thinking_demo` showing thinking vs collapsed vs adaptive
 

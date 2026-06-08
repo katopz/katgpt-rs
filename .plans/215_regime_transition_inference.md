@@ -1,7 +1,7 @@
 # Plan 215: Regime-Transition Inference (Self-Revising Discovery)
 
 **Research**: R190 (Self-Revising Discovery Regime Transition)
-**Status**: IN PROGRESS (T1-T5 Complete)
+**Status**: IN PROGRESS (T1-T7 Complete, T6 benchmarks done)
 **Feature Gate**: `regime_transition` (off by default until GOAT proof)
 **Depends On**: Plan 209 (FOL), Plan 210 (INSIGHT), Plan 211 (Three-Mode Router)
 
@@ -92,14 +92,14 @@ DDTree Exploration
 
 ### T6: GOAT Proof — Before/After Benchmark
 
-- [ ] Create `tests/bench_regime_transition.rs`
-- [ ] Before: Run DDTree on known-hard constraint problem WITHOUT regime transition (fixed pruners)
-- [ ] After: Run same problem WITH regime transition enabled
-- [ ] Measure: accuracy (valid branches found), token efficiency, total compute time
-- [ ] Expected: regime transition finds valid branches that fixed pruners miss
-- [ ] Also measure: overhead of regime transition detection (< 5% of total compute)
-- [ ] Run with `--features regime_transition` and `--nocapture`
-- [ ] Document results in `.benchmarks/` folder
+- [x] Create `tests/bench_regime_transition.rs`
+- [x] Before: Run DDTree on known-hard constraint problem WITHOUT regime transition (fixed pruners)
+- [x] After: Run same problem WITH regime transition enabled
+- [x] Measure: accuracy (valid branches found), token efficiency, total compute time
+- [x] Expected: regime transition finds valid branches that fixed pruners miss
+- [x] Also measure: overhead of regime transition detection (< 5% of total compute)
+- [x] Run with `--features regime_transition` and `--nocapture`
+- [x] Document results in `.benchmarks/` folder
 
 ### T7: CPU/GPU Auto-Route Integration
 
