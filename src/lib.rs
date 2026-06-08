@@ -81,6 +81,8 @@ pub mod spechop;
 #[cfg(feature = "spectral_quant")]
 pub mod spectralquant;
 pub mod speculative;
+#[cfg(feature = "static_cal_tables")]
+pub mod static_cal;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
 pub mod tokenizer;

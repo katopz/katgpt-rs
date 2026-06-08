@@ -211,6 +211,7 @@ rosetta_pruner = ["papaya"]  # Rosetta Pruners — universal cross-domain meta-p
 domino_correction = []  # Domino Causal Correction — modelless decoupled pattern: PrefixCorrectionTable + domino_score + DominoPruner (Plan 197 GOAT 25/25 -22.8% build time, Research 177, default-ON)
 kurtosis_gate = []  # Kurtosis Gate — polarization-driven speculative decoding (Plan 203b, default ON, zero perf cost)
 domino_lora = []  # Domino LoRA causal correction adapter for speculative decoding (Plan 231)
+static_cal_tables = []  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1)
 rv_gated_routing = []  # RV-Gated Compute Routing — AcceptanceVarianceTracker + InferenceRouter integration (Plan 202 GOAT 89.7% P50 improvement, default-ON)
 rv_gated_thinking = ["rv_gated_routing"]  # RV-Gated Thinking — ThinkingController RV bias (Plan 202 GOAT, default-ON via rv_gated_routing)
 rv_bandit_pruning = []  # RV Bandit Pruning — FrequencyBandit top-ρ arm suppression (Plan 202 GOAT, default-ON via rv_gated_routing)
