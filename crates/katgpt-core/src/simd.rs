@@ -3329,9 +3329,9 @@ mod tests {
         let cases: &[&[f32]] = &[
             &[3.0],
             &[1.0, 2.0, 3.0, 2.0, 1.0],
-            &[5.0, 5.0, 5.0],            // tie → first index (0)
-            &[-1.0, -2.0, -0.5, -9.0],   // all negative
-            &[0.0, 1.0, 1.0, 0.5, 1.0],  // multiple maxima → first (index 1)
+            &[5.0, 5.0, 5.0],           // tie → first index (0)
+            &[-1.0, -2.0, -0.5, -9.0],  // all negative
+            &[0.0, 1.0, 1.0, 0.5, 1.0], // multiple maxima → first (index 1)
         ];
         for c in cases {
             assert_eq!(simd_argmax_f32(c), naive(c), "mismatch on {c:?}");
@@ -5030,5 +5030,60 @@ mod tests {
         assert_eq!(crate::simd::simd_sum_abs_f32(&[-42.0]), 42.0);
         assert_eq!(crate::simd::simd_sum_abs_f32(&[42.0]), 42.0);
         assert_eq!(crate::simd::simd_sum_abs_f32(&[0.0]), 0.0);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Ternary dot-product kernel — Sense Composition (Plan 221)
+// ---------------------------------------------------------------------------
+
+/// Ternary dot-product: state · ternary_dir → f32.
+/// Branchless conditional add/subtract using bitmask.
+#[inline]
+pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f32 {
+    let mut acc = 0.0f32;
+    let min_len = state.len().min(64);
+    for i in 0..min_len {
+        let mask = 1u64 << i;
+        let sign = if (dir.pos_bits & mask) != 0 {
+            1.0f32
+        } else if (dir.neg_bits & mask) != 0 {
+            -1.0f32
+        } else {
+            0.0f32
+        };
+        acc += sign * state[i] * dir.row_scale;
+    }
+    acc
+}
+
+#[cfg(test)]
+mod tests_sense {
+    use super::*;
+    use crate::types::TernaryDir;
+
+    #[test]
+    fn test_ternary_dot_matches_scalar() {
+        let state = [1.0f32, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0];
+        let dir = TernaryDir {
+            pos_bits: 0b0101, // indices 0, 2 are positive
+            neg_bits: 0b1000, // index 3 is negative
+            row_scale: 0.5,
+        };
+        let result = simd_ternary_dot_f32(&state, &dir);
+        // +1*1.0 + 0*2.0 + 1*3.0 + (-1)*4.0 = 0.0, scaled by 0.5 = 0.0
+        assert!((result - 0.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_ternary_dot_all_positive() {
+        let state = [1.0f32, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let dir = TernaryDir {
+            pos_bits: 0b11,
+            neg_bits: 0,
+            row_scale: 1.0,
+        };
+        let result = simd_ternary_dot_f32(&state, &dir);
+        assert!((result - 3.0).abs() < 1e-6);
     }
 }

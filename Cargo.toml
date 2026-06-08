@@ -779,3 +779,7 @@ required-features = ["bfcf_lfu_shard"]
 [[example]]
 name = "coexplain_demo"
 required-features = ["coexplain_riir"]
+
+[[example]]
+name = "sense_composition"
+required-features = ["sense_composition"]

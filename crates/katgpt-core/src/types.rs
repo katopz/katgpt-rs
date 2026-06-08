@@ -3572,3 +3572,151 @@ mod tests_types {
         assert!(config.validate().is_ok());
     }
 }
+
+// ---------------------------------------------------------------------------
+// Sense Composition — KG Latent Octree (Plan 221)
+// ---------------------------------------------------------------------------
+
+/// Kind of sense module for NPC brain composition.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum SenseKind {
+    CommonSense = 0,
+    FighterSense = 1,
+    GameTheorySense = 2,
+    #[default]
+    SpatialSense = 3,
+    SocialSense = 4,
+    SkillSense = 5,
+    Reserved = 7,
+}
+
+/// Ternary direction vector: +1/0/-1 encoded as two bitmasks + row scale.
+/// 20 bytes each.
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct TernaryDir {
+    /// Bitmask for positive (+1) entries.
+    pub pos_bits: u64,
+    /// Bitmask for negative (-1) entries.
+    pub neg_bits: u64,
+    /// Scale factor for this direction row.
+    pub row_scale: f32,
+}
+
+impl TernaryDir {
+    pub const SIZE: usize = 20;
+
+    pub fn zero() -> Self {
+        Self {
+            pos_bits: 0,
+            neg_bits: 0,
+            row_scale: 0.0,
+        }
+    }
+}
+
+/// Fixed-size sense module: KG latent octree + ternary direction vectors.
+/// ~232 bytes. BLAKE3 committed.
+#[derive(Clone, Debug)]
+#[repr(C)]
+pub struct SenseModule {
+    pub kind: SenseKind,
+    pub version: u8,
+    pub octree_depth: u8,
+    pub n_directions: u8,
+    pub _reserved: u8,
+    /// Octree occupancy bit-planes (up to depth 3 → 128 nodes in 2×u64).
+    pub octree_bits: [u64; 4],
+    /// Ternary direction vectors for projection.
+    pub directions: [TernaryDir; 8],
+    /// Module confidence [0, 1].
+    pub confidence: f32,
+    /// BLAKE3 commitment over all preceding fields.
+    pub commitment: [u8; 32],
+}
+
+impl SenseModule {
+    /// Project HLA state onto this module's ternary directions → sigmoid scalar.
+    pub fn project(&self, hla_state: &[f32; 8]) -> f32 {
+        let mut dot = 0.0f32;
+        for (i, dir) in self.directions[..self.n_directions as usize]
+            .iter()
+            .enumerate()
+        {
+            if i < hla_state.len() {
+                let val = hla_state[i];
+                // Ternary dot: +1 for pos_bits, -1 for neg_bits
+                let sign = if dir.pos_bits & (1 << i) != 0 {
+                    1.0f32
+                } else if dir.neg_bits & (1 << i) != 0 {
+                    -1.0f32
+                } else {
+                    0.0f32
+                };
+                dot += sign * val * dir.row_scale;
+            }
+        }
+        // sigmoid
+        1.0 / (1.0 + (-dot).exp())
+    }
+
+    /// Query octree occupancy at given level and index.
+    /// Returns None if indices out of bounds.
+    pub fn query_octree(&self, level: u8, index: u8) -> Option<bool> {
+        let nodes_at_level = 1usize << (level * 2); // quadtree-like
+        if index as usize >= nodes_at_level || level > self.octree_depth {
+            return None;
+        }
+        let flat_idx = (0..level).fold(0usize, |acc, _| acc * 4) + index as usize;
+        let word = flat_idx / 64;
+        let bit = flat_idx % 64;
+        if word >= self.octree_bits.len() {
+            return None;
+        }
+        Some(self.octree_bits[word] & (1 << bit) != 0)
+    }
+
+    /// Compute and store BLAKE3 commitment.
+    pub fn commit(&mut self) {
+        // Zero commitment before hashing
+        self.commitment = [0u8; 32];
+        let bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                self as *const Self as *const u8,
+                std::mem::size_of::<Self>() - 32, // exclude commitment field
+            )
+        };
+        self.commitment = *blake3::hash(bytes).as_bytes();
+    }
+
+    /// Verify BLAKE3 commitment.
+    pub fn verify(&self) -> bool {
+        let mut copy = self.clone();
+        copy.commitment = [0u8; 32];
+        let bytes: &[u8] = unsafe {
+            std::slice::from_raw_parts(
+                &copy as *const Self as *const u8,
+                std::mem::size_of::<Self>() - 32,
+            )
+        };
+        let expected = blake3::hash(bytes);
+        self.commitment == *expected.as_bytes()
+    }
+}
+
+impl Default for SenseModule {
+    fn default() -> Self {
+        Self {
+            kind: SenseKind::default(),
+            version: 1,
+            octree_depth: 3,
+            n_directions: 0,
+            _reserved: 0,
+            octree_bits: [0; 4],
+            directions: [TernaryDir::zero(); 8],
+            confidence: 0.0,
+            commitment: [0u8; 32],
+        }
+    }
+}

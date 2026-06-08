@@ -144,3 +144,6 @@ pub use traits::{GameConfig, MutantConfig, MutationKind, ProblemMutator};
 pub mod linoss;
 #[cfg(feature = "mux_pruner")]
 pub mod mux;
+
+#[cfg(feature = "sense_composition")]
+pub mod sense;

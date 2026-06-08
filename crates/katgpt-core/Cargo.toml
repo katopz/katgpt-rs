@@ -61,3 +61,4 @@ modal_spec = []  # ModalSpec drafter — LinOSS cell + Fourier basis speculative
 collapse_aware_thinking = []  # Collapse-Aware Adaptive Thinking — CollapseDetector trait (Plan 212)
 substrate_gate = []  # SubstrateGate passthrough — inference-time capability substrate routing (Plan 216)
 belief_drafter = []  # NextLat Belief-State Speculative Drafter — entropy threshold config (Plan 217)
+sense_composition = ["plasma_path", "domain_latent"]  # KG Latent Octree Sense Composition (Plan 221)
