@@ -79,4 +79,35 @@ mod tests {
         assert_eq!(top.len(), 2);
         assert_eq!(top[0].0, 0); // first summary has highest gate
     }
+
+    /// Sigmoid gates are INDEPENDENT (not softmax — they don't sum to 1.0).
+    /// If this were softmax, aligned vectors would suppress unaligned ones.
+    /// With sigmoid, each gate is independently in (0, 1).
+    #[test]
+    fn test_gates_are_sigmoid_not_softmax() {
+        let query = vec![1.0, 0.0];
+        let summaries: Vec<&[f32]> = vec![&[1.0, 0.0], &[1.0, 0.0], &[1.0, 0.0]];
+        let gates = compute_gates(&query, &summaries);
+
+        // All three summaries are identical and aligned → all gates should be equal and high.
+        // With softmax, they'd each be 1/3 ≈ 0.333. With sigmoid, they're all ~0.731.
+        assert!(
+            gates.iter().all(|&g| g > 0.5),
+            "sigmoid gates for aligned summaries should all be > 0.5, got {:?}",
+            gates
+        );
+
+        // Gates do NOT sum to 1.0 (definitively NOT softmax)
+        let sum: f32 = gates.iter().sum();
+        assert!(
+            sum > 1.5,
+            "sigmoid gates should sum to > 1.5 for 3 aligned summaries (not 1.0 like softmax), got {}",
+            sum
+        );
+
+        // Each gate independently in (0, 1)
+        for &g in &gates {
+            assert!(g > 0.0 && g < 1.0, "gate {} not in (0,1)", g);
+        }
+    }
 }

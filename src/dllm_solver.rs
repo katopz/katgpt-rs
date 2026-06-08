@@ -155,6 +155,65 @@ pub fn build_dd_tree_adaptive(
 }
 
 // ---------------------------------------------------------------------------
+// Plan 222 T15: Wire CriticalIntervalGate with TriggerGate
+// ---------------------------------------------------------------------------
+//
+// When a critical interval is detected during DDTree construction, the
+// CriticalIntervalGate can request a compute tier override from TriggerGate.
+// This bridges the entropy-based solver switching with the load-based tier
+// routing in InferenceRouter.
+//
+// Logic:
+//   critical_interval + load low  → allow GPU for q-sample refinement
+//   critical_interval + load high → stay on CPU with fast solver
+//   no critical interval          → no override (defer to default routing)
+//
+// Feature gate: requires both `critical_interval_gate` and `rv_gated_routing`.
+// ---------------------------------------------------------------------------
+
+/// Result of CriticalInterval + TriggerGate integration.
+#[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CriticalTierDecision {
+    /// No critical interval detected — defer to default routing.
+    Defer,
+    /// Critical interval + low load → promote to GPU for q-sample refinement.
+    PromoteGpu,
+    /// Critical interval + high load → stay on CPU with fast solver.
+    StayCpu,
+}
+
+/// Decide compute tier when CriticalIntervalGate detects a critical step.
+///
+/// Uses TriggerGate's current QPS/tier as a proxy for load:
+/// - If current tier is CpuOnly (low load) → promote to GPU for better quality.
+/// - If current tier is CpuGpu or higher (high load) → stay on CPU to avoid overload.
+///
+/// This mirrors the `rv_tier_boost()` pattern from Plan 202, but uses
+/// entropy as the signal instead of acceptance variance.
+///
+/// Returns `Defer` when entropy is below critical threshold (no override needed).
+#[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+pub fn critical_tier_decision(
+    entropy: f32,
+    config: &CriticalIntervalConfig,
+    current_tier: crate::trigger_gate::ComputeTier,
+    gpu_available: bool,
+) -> CriticalTierDecision {
+    if !is_critical_interval(entropy, config) {
+        return CriticalTierDecision::Defer;
+    }
+
+    // Critical interval detected — decide based on load
+    match current_tier {
+        crate::trigger_gate::ComputeTier::CpuOnly if gpu_available => {
+            CriticalTierDecision::PromoteGpu
+        }
+        _ => CriticalTierDecision::StayCpu,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Q-Sampling Solver (feature-gated: q_sample_solver)
 // ---------------------------------------------------------------------------
 
@@ -861,6 +920,243 @@ mod tests {
             per_call < std::time::Duration::from_micros(10),
             "MBR select too slow: {:?}",
             per_call
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Plan 222 T15: CriticalIntervalGate + TriggerGate wiring tests
+    // -----------------------------------------------------------------------
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_critical_tier_decision_defers_when_not_critical() {
+        use crate::trigger_gate::ComputeTier;
+
+        let config = CriticalIntervalConfig::new(100);
+        // Peaked distribution: low entropy → not critical
+        let mut peaked = vec![0.001f32; 100];
+        peaked[0] = 0.9;
+        let entropy = shannon_entropy(&peaked);
+
+        let decision = critical_tier_decision(entropy, &config, ComputeTier::CpuOnly, true);
+        assert_eq!(decision, CriticalTierDecision::Defer);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_critical_tier_decision_promotes_gpu_on_low_load() {
+        use crate::trigger_gate::ComputeTier;
+
+        let config = CriticalIntervalConfig::new(100);
+        // Uniform distribution: high entropy → critical
+        let uniform = vec![0.01f32; 100];
+        let entropy = shannon_entropy(&uniform);
+
+        let decision = critical_tier_decision(entropy, &config, ComputeTier::CpuOnly, true);
+        assert_eq!(decision, CriticalTierDecision::PromoteGpu);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_critical_tier_decision_stays_cpu_on_high_load() {
+        use crate::trigger_gate::ComputeTier;
+
+        let config = CriticalIntervalConfig::new(100);
+        let uniform = vec![0.01f32; 100];
+        let entropy = shannon_entropy(&uniform);
+
+        // High load: already on CpuGpu → stay on CPU
+        let decision = critical_tier_decision(entropy, &config, ComputeTier::CpuGpu, true);
+        assert_eq!(decision, CriticalTierDecision::StayCpu);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_critical_tier_decision_stays_cpu_when_no_gpu() {
+        use crate::trigger_gate::ComputeTier;
+
+        let config = CriticalIntervalConfig::new(100);
+        let uniform = vec![0.01f32; 100];
+        let entropy = shannon_entropy(&uniform);
+
+        // Critical but no GPU available → stay on CPU
+        let decision = critical_tier_decision(entropy, &config, ComputeTier::CpuOnly, false);
+        assert_eq!(decision, CriticalTierDecision::StayCpu);
+    }
+
+    // -----------------------------------------------------------------------
+    // Plan 222 T12: Benchmark — before/after CriticalIntervalGate
+    // Stub: verifies machinery correctness without real model inference.
+    // Real benchmarks require a live model; this validates the adaptive build
+    // path produces correct solver transitions and entropy measurements.
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "critical_interval_gate")]
+    #[test]
+    fn bench_t12_critical_interval_before_after() {
+        // Simulate 16-depth DDTree with mixed entropy marginals
+        let depths: Vec<Vec<f32>> = (0..16)
+            .map(|d| {
+                if d % 4 == 0 {
+                    // High entropy: uniform distribution
+                    vec![0.01f32; 100]
+                } else {
+                    // Low entropy: peaked distribution
+                    let mut m = vec![0.001f32; 100];
+                    m[d % 100] = 0.7;
+                    m[(d + 1) % 100] = 0.2;
+                    m
+                }
+            })
+            .collect();
+
+        // --- Without CriticalIntervalGate (baseline): always DpmSolver2M ---
+        let mut solver_baseline = SolverKind::DpmSolver2M;
+        let transitions_baseline = build_dd_tree_adaptive(&depths, f64::MAX, &mut solver_baseline);
+        // With h_critical = MAX, nothing is critical
+        assert!(transitions_baseline.iter().all(|t| !t.critical));
+        assert_eq!(solver_baseline, SolverKind::DpmSolver2M);
+
+        // --- With CriticalIntervalGate: adaptive switching ---
+        let mut solver_gated = SolverKind::DpmSolver2M;
+        let transitions_gated = build_dd_tree_adaptive(&depths, 0.0, &mut solver_gated);
+        // With h_critical = 0, everything is critical
+        assert!(transitions_gated.iter().all(|t| t.critical));
+
+        // --- With realistic threshold ---
+        let mut solver_real = SolverKind::DpmSolver2M;
+        let realistic_h = (100f64).ln() * 0.5; // ~2.3
+        let transitions_real = build_dd_tree_adaptive(&depths, realistic_h, &mut solver_real);
+
+        let critical_count = transitions_real.iter().filter(|t| t.critical).count();
+        let non_critical_count = transitions_real.iter().filter(|t| !t.critical).count();
+
+        // Mixed depths should produce both critical and non-critical transitions
+        assert!(critical_count > 0, "expected some critical intervals");
+        assert!(
+            non_critical_count > 0,
+            "expected some non-critical intervals"
+        );
+
+        // Verify entropy measurements are deterministic
+        for i in 0..transitions_real.len() {
+            let recomputed: f64 = depths[i]
+                .iter()
+                .map(|&p| {
+                    let p = p as f64;
+                    if p > 0.0 { -p * p.ln() } else { 0.0 }
+                })
+                .sum();
+            assert!((transitions_real[i].entropy - recomputed).abs() < 1e-6);
+        }
+
+        // Perf: 1000 iterations should complete quickly
+        let start = std::time::Instant::now();
+        for _ in 0..1000 {
+            let mut s = SolverKind::DpmSolver2M;
+            let _ = build_dd_tree_adaptive(&depths, realistic_h, &mut s);
+        }
+        let per_call = start.elapsed() / 1000;
+        assert!(
+            per_call < std::time::Duration::from_micros(200),
+            "Adaptive build too slow: {:?}",
+            per_call
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Plan 222 T13: Benchmark — MBR vs existing strategies
+    // Stub: verifies MBR machinery correctness without real model inference.
+    // Compares MBR select output against BestQ (argmax) and EqR strategies.
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "mbr_tree_select")]
+    #[test]
+    fn bench_t13_mbr_vs_bestq_vs_eqr() {
+        // Simulate 20 candidate paths with known score distribution
+        let n_candidates = 20;
+        let seq_len = 16;
+        let paths: Vec<Vec<f32>> = (0..n_candidates)
+            .map(|i| {
+                (0..seq_len)
+                    .map(|j| ((i * seq_len + j) as f32 * 0.01).sin().max(0.0))
+                    .collect()
+            })
+            .collect();
+        let scores: Vec<f32> = (0..n_candidates)
+            .map(|i| {
+                // Bimodal: first 10 are mediocre, last 10 are good
+                if i < 10 {
+                    0.3 + (i as f32 * 0.01)
+                } else {
+                    0.7 + ((i - 10) as f32 * 0.02)
+                }
+            })
+            .collect();
+
+        // --- BestQ strategy: argmax of scores ---
+        let bestq_idx = scores
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap()
+            .0;
+        assert_eq!(bestq_idx, n_candidates - 1); // last candidate has highest score
+
+        // --- EqR strategy: equal-random from top-K ---
+        // (in real code this would be random from top-K; here we verify determinism)
+        let eqr_k = 5;
+        let mut eqr_indexed: Vec<(usize, f32)> =
+            scores.iter().enumerate().map(|(i, &s)| (i, s)).collect();
+        eqr_indexed.select_nth_unstable_by(eqr_k - 1, |a, b| {
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+        });
+        let eqr_top_k: Vec<usize> = eqr_indexed[..eqr_k].iter().map(|&(i, _)| i).collect();
+        assert!(eqr_top_k.iter().all(|&i| i >= 10)); // all top-5 are from the "good" group
+
+        // --- MBR strategy: minimum risk selection ---
+        for k in [3, 5, 10] {
+            let mbr_idx = mbr_select(&paths, &scores, k);
+            assert!(mbr_idx < n_candidates);
+            // MBR selects from top-K, so it should be in the good group
+            let mut top_k_idx: Vec<usize> = (0..n_candidates).collect();
+            top_k_idx.sort_by(|&a, &b| scores[b].partial_cmp(&scores[a]).unwrap());
+            let top_k_set: std::collections::HashSet<usize> =
+                top_k_idx[..k].iter().copied().collect();
+            assert!(top_k_set.contains(&mbr_idx), "MBR should select from top-K");
+        }
+
+        // --- Perf: MBR vs BestQ ---
+        let n_iters = 10000;
+
+        let start_mbr = std::time::Instant::now();
+        for _ in 0..n_iters {
+            let _ = mbr_select(&paths, &scores, 5);
+        }
+        let mbr_time = start_mbr.elapsed() / n_iters;
+
+        let start_bestq = std::time::Instant::now();
+        for _ in 0..n_iters {
+            let _ = scores
+                .iter()
+                .enumerate()
+                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap());
+        }
+        let bestq_time = start_bestq.elapsed() / n_iters;
+
+        // MBR should be reasonably fast (O(K^2) for small K)
+        assert!(
+            mbr_time < std::time::Duration::from_micros(50),
+            "MBR too slow: {:?}",
+            mbr_time
+        );
+
+        // Log comparison (not a hard assertion — informational)
+        eprintln!(
+            "MBR: {:?}, BestQ: {:?} (MBR overhead: {:.1}x)",
+            mbr_time,
+            bestq_time,
+            mbr_time.as_nanos() as f64 / bestq_time.as_nanos().max(1) as f64
         );
     }
 }

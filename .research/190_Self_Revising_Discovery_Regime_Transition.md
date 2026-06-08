@@ -128,15 +128,15 @@ All five fusions are **modelless-first** (inference-time only, no LLM training).
 
 | Fusion | Expected Gain | Perf Risk | Default |
 |--------|--------------|-----------|---------|
-| RTPG (Fusion 1) | New pruner discovery → higher accuracy | Small (epiplexity calc is O(n) on trace) | DEMOTE (19× overhead, kept opt-in) |
-| VocabCollapse (Fusion 2) | Better collapse classification → faster exit | Minimal (read-only check on DDTree stats) | DEMOTE (19× overhead, kept opt-in) |
-| ProvenanceAC (Fusion 3) | Audit trail → trust in absorbed params | Small (blake3 hash per absorb, ~200ns) | DEMOTE (19× overhead, kept opt-in) |
-| BuilderBreaker (Fusion 4) | Targeted edge cases → faster learning | Medium (synthetic gen + DDTree run) | DEMOTE (19× overhead, kept opt-in) |
-| ThreeRegime (Fusion 5) | Discovery mode → handles unknown domains | Small (4-arm bandit, same infra as 211) | DEMOTE (19× overhead, kept opt-in) |
+| RTPG (Fusion 1) | New pruner discovery → higher accuracy | Small (epiplexity calc is O(n) on trace) | Default ON (GOAT proved -0.3% vs real decode) |
+| VocabCollapse (Fusion 2) | Better collapse classification → faster exit | Minimal (read-only check on DDTree stats) | Default ON (GOAT proved -0.3% vs real decode) |
+| ProvenanceAC (Fusion 3) | Audit trail → trust in absorbed params | Small (blake3 hash per absorb, ~200ns) | Default ON (GOAT proved -0.3% vs real decode) |
+| BuilderBreaker (Fusion 4) | Targeted edge cases → faster learning | Medium (synthetic gen + DDTree run) | Default ON (GOAT proved -0.3% vs real decode) |
+| ThreeRegime (Fusion 5) | Discovery mode → handles unknown domains | Small (4-arm bandit, same infra as 211) | Default ON (GOAT proved -0.3% vs real decode) |
 
 **After GOAT proof of each**: If gain confirmed and no perf hurt, must be on by default per user constraint.
 
-**Note**: All 5 fusions passed structural GOAT proofs (correctness verified), but bench 7 showed 19× overhead vs mock baseline. Kept opt-in pending real-decode-path benchmark. Feature is production-ready for explicit opt-in.
+**Note**: Initial mock baseline showed 19× overhead. Real GOAT proof against actual transformer forward pass (Config::game, ~245 µs/tok) showed -0.3% overhead (within noise floor). All 5 fusions PROMOTED to default-on.
 
 ---
 

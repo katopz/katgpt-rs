@@ -119,18 +119,18 @@ Segment boundaries align with KVarN tile_size (128) for zero-copy checkpoints.
 ### Phase 3: Memory-Soup DDTree Branch Merging
 
 #### Task 7: DDTree Branch State Averaging
-- [ ] At DDTree leaf evaluation, compute γ-weighted average of cached branch KV states
-- [ ] Apply averaged state as additional context for constraint pruning
-- [ ] Feature-gate behind `memory_soup_dtree` (opt-in, experimental)
+- [x] At DDTree leaf evaluation, compute γ-weighted average of cached branch KV states
+- [x] Apply averaged state as additional context for constraint pruning
+- [x] Feature-gate behind `memory_soup_dtree` (opt-in, experimental)
 
 ### Phase 4: TriggerGate Integration
 
 #### Task 8: Tier-Aware Checkpoint Policy
-- [ ] In `TriggerGate`, add `should_checkpoint(&self) -> CheckpointPolicy`:
+- [x] In `TriggerGate`, add `should_checkpoint(&self) -> CheckpointPolicy`:
   - `CpuOnly` → lazy checkpointing (only on segment boundary)
   - `CpuGpu` → normal checkpointing (every segment boundary)
   - `CpuGpuAne` → eager checkpointing (every segment boundary + pre-compute summaries)
-- [ ] `CheckpointPolicy` enum: `Lazy`, `Normal`, `Eager`
+- [x] `CheckpointPolicy` enum: `Lazy`, `Normal`, `Eager`
 
 ### Phase 5: Tests & Benchmarks
 
