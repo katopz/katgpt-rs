@@ -842,9 +842,9 @@ pub mod regime_transition;
 
 #[cfg(feature = "regime_transition")]
 pub use regime_transition::{
-    AdversarialBreaker, CollapseClassifier, CollapseType, DDTreeStats, FailurePattern, GateResult,
-    ProvenanceChain, ProvenanceStep, PrunerType, RegimeCollapseClassifier, RegimeTransitionGate,
-    TransportResult,
+    AdversarialBreaker, CollapseClassifier, CollapseType, DDTreeStats, FailurePattern, FailureRule,
+    GateResult, ProvenanceChain, ProvenanceStep, PrunerType, RegimeCollapseClassifier,
+    RegimeTransitionGate, RegimeTransitionScheduler, TransitionDeferred, TransportResult,
 };
 
 #[cfg(feature = "regime_transition")]

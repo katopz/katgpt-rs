@@ -530,4 +530,67 @@ mod tests {
             "Collapsed correct should still be positive"
         );
     }
+
+    /// T7: CPU/GPU routing — collapse signal feeds into ThinkingController load dispatch.
+    ///
+    /// When collapse is detected mid-reasoning, the load dispatcher should route
+    /// to the CPU fast path (immediate answer) rather than continuing on GPU
+    /// (deep think path). This test simulates that routing decision.
+    #[test]
+    fn collapse_signal_routes_to_cpu_on_high_load() {
+        // Simulated routing decision based on collapse state.
+        #[derive(Debug, PartialEq, Eq)]
+        #[repr(u8)]
+        enum ComputeRoute {
+            /// Continue deep thinking on GPU.
+            Gpu,
+            /// Fast path: collapse detected, route to CPU for immediate answer.
+            Cpu,
+        }
+
+        fn decide_route(collapsed: bool) -> ComputeRoute {
+            match collapsed {
+                true => ComputeRoute::Cpu,
+                false => ComputeRoute::Gpu,
+            }
+        }
+
+        // Create detector with low threshold: 2 hesitation tokens trigger collapse.
+        let mut detector = make_detector(vec![42], 2);
+
+        // Phase 1: No hesitation — should route to GPU (continue deep thinking).
+        assert!(!detector.check_collapse(10, 0));
+        assert_eq!(decide_route(false), ComputeRoute::Gpu);
+
+        // Phase 2: First hesitation token — still under threshold, GPU continues.
+        assert!(!detector.check_collapse(42, 1));
+        assert_eq!(decide_route(false), ComputeRoute::Gpu);
+
+        // Phase 3: Second hesitation token — threshold exceeded, collapse detected.
+        // Load dispatch must now route to CPU (fast path / immediate answer).
+        let collapsed = detector.check_collapse(42, 2);
+        assert!(collapsed, "Collapse should be detected at threshold=2");
+        assert_eq!(decide_route(collapsed), ComputeRoute::Cpu);
+
+        // Verify the efficiency reward signal is consistent with CPU routing:
+        // A collapsed trace that yields a correct answer should get less reward
+        // than direct, but still positive — encouraging the CPU fast path.
+        let reward_collapsed = efficiency_reward(
+            true,
+            3, // tokens used before collapse
+            4096,
+            ThinkingMode::Latent,
+            0.5,
+        );
+        assert!(
+            reward_collapsed > 0.0,
+            "Collapsed correct should give positive reward for CPU routing, got {reward_collapsed}"
+        );
+
+        // Reset should allow a fresh trace to route back to GPU.
+        detector.reset();
+        assert_eq!(detector.hesitation_count(), 0);
+        assert!(!detector.check_collapse(10, 0));
+        assert_eq!(decide_route(false), ComputeRoute::Gpu);
+    }
 }

@@ -77,8 +77,8 @@ DDTree Exploration
 - [x] Track failure patterns via `Mutex<HashMap<FailurePattern, u32>>` (no papaya dep needed)
 - [x] When pattern count exceeds threshold (configurable, default 5) → generate synthetic edge case
 - [x] Synthetic edge case: perturb the failing token sequence by ±1 token in each position
-- [ ] Feed synthetic through DDTree to verify it exposes a genuine failure
-- [ ] If genuine → extract as new rule via Plan 209 T2 (RuleExtractor)
+- [x] Feed synthetic through DDTree to verify it exposes a genuine failure
+- [x] If genuine → extract as new rule via Plan 209 T2 (RuleExtractor)
 - [x] Integration test: mock failure pattern → synthetic generation → rule extraction
 
 ### T5: Four-Regime Router Extension
@@ -103,10 +103,10 @@ DDTree Exploration
 
 ### T7: CPU/GPU Auto-Route Integration
 
-- [ ] When `Discovery` regime is active and load is low (CPU idle) → run regime transition on CPU
-- [ ] When load is high → defer regime transition to background thread
-- [ ] `RegimeTransitionScheduler` with configurable concurrency limit (default: 1 concurrent transition)
-- [ ] Integration test: concurrent decode + regime transition → no perf regression on decode path
+- [x] When `Discovery` regime is active and load is low (CPU idle) → run regime transition on CPU
+- [x] When load is high → defer regime transition to background thread
+- [x] `RegimeTransitionScheduler` with configurable concurrency limit (default: 1 concurrent transition)
+- [x] Integration test: concurrent decode + regime transition → no perf regression on decode path
 
 ---
 

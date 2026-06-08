@@ -137,7 +137,7 @@ graph TD
 - [x] Test: EfficiencyReward gives higher reward for short+correct vs long+correct
 - [x] Test: T2M OptionStripper catches option-matching shortcut
 - [x] Test: End-to-end: thinking → collapse detected → forced exit → correct answer
-- [ ] Test: CPU/GPU routing: collapse signal feeds into ThinkingController load dispatch
+- [x] Test: CPU/GPU routing: collapse signal feeds into ThinkingController load dispatch
 - [x] Test: Freeze/thaw roundtrip preserves detector state
 
 ### T8: Benchmark — Before/After

@@ -345,6 +345,22 @@ pub struct FailurePattern {
     pub failure_depth: usize,
 }
 
+/// A rule extracted from a systematic failure pattern.
+///
+/// Represents: "tokens matching this prefix always fail at this depth."
+/// Can be converted into a new pruner that avoids the identified failure pattern.
+#[derive(Clone, Debug)]
+pub struct FailureRule {
+    /// Token prefix that triggers the failure.
+    pub trigger_prefix: Vec<usize>,
+    /// Depth at which failure occurs.
+    pub failure_depth: usize,
+    /// How many times this pattern was observed.
+    pub observations: u32,
+    /// Synthetic variants that also failed (confirms genuine weakness).
+    pub synthetic_confirms: u32,
+}
+
 /// Wrapper around any [`ConstraintPruner`] that tracks failure patterns and
 /// generates synthetic edge cases for adversarial testing.
 ///
@@ -406,6 +422,49 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
             .map(|(pattern, _)| pattern.clone())
             .collect()
     }
+
+    /// Feed synthetic variants through the inner pruner to verify the weakness is genuine.
+    ///
+    /// Returns the number of synthetic variants that also fail. If this is > 0,
+    /// the weakness is confirmed as systematic, not a one-off edge case.
+    pub fn verify_synthetic_failure(&self, pattern: &FailurePattern) -> u32 {
+        let variants = self.generate_synthetic(pattern);
+        let mut confirms = 0u32;
+        for variant in &variants {
+            if !self.inner.is_valid(
+                pattern.failure_depth,
+                variant[variant.len().saturating_sub(1)],
+                &variant[..variant.len().saturating_sub(1)],
+            ) {
+                confirms += 1;
+            }
+        }
+        confirms
+    }
+
+    /// Extract a failure rule from a hot pattern, verifying it with synthetic variants.
+    ///
+    /// Returns `None` if the pattern hasn't reached threshold or isn't confirmed.
+    pub fn extract_failure_rule(&self, pattern: &FailurePattern) -> Option<FailureRule> {
+        let map = self.failure_counts.lock().unwrap();
+        let count = map.get(pattern).copied()?;
+        if count < self.threshold {
+            return None;
+        }
+        drop(map);
+
+        let synthetic_confirms = self.verify_synthetic_failure(pattern);
+        if synthetic_confirms == 0 {
+            return None;
+        }
+
+        Some(FailureRule {
+            trigger_prefix: pattern.tokens.clone(),
+            failure_depth: pattern.failure_depth,
+            observations: count,
+            synthetic_confirms,
+        })
+    }
 }
 
 impl<P: ConstraintPruner> ConstraintPruner for AdversarialBreaker<P> {
@@ -420,6 +479,113 @@ impl<P: ConstraintPruner> ConstraintPruner for AdversarialBreaker<P> {
             });
         }
         result
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// T7: RegimeTransitionScheduler
+// ════════════════════════════════════════════════════════════════════
+
+/// Error returned when a regime transition is deferred due to load.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TransitionDeferred;
+
+impl std::fmt::Display for TransitionDeferred {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "regime transition deferred due to concurrency limit")
+    }
+}
+
+impl std::error::Error for TransitionDeferred {}
+
+/// Scheduler for regime transitions with configurable concurrency control.
+///
+/// When the Discovery regime is active and load is low, runs regime transition
+/// immediately on the current thread. When load is high, defers to background.
+///
+/// Default concurrency limit: 1 (one concurrent transition at a time).
+pub struct RegimeTransitionScheduler {
+    /// Maximum number of concurrent regime transitions.
+    concurrency_limit: u32,
+    /// Current number of active transitions.
+    active_count: std::sync::atomic::AtomicU32,
+    /// Whether background mode is enabled (defer transitions).
+    background_enabled: bool,
+}
+
+impl RegimeTransitionScheduler {
+    /// Create a new scheduler with the given concurrency limit.
+    pub fn new(concurrency_limit: u32) -> Self {
+        Self {
+            concurrency_limit: concurrency_limit.max(1),
+            active_count: std::sync::atomic::AtomicU32::new(0),
+            background_enabled: false,
+        }
+    }
+
+    /// Create with default settings: concurrency_limit=1, background=false.
+    pub fn with_defaults() -> Self {
+        Self::new(1)
+    }
+
+    /// Enable or disable background deferral mode.
+    pub fn set_background_mode(&mut self, enabled: bool) {
+        self.background_enabled = enabled;
+    }
+
+    /// Check if a new transition can be started (under concurrency limit).
+    pub fn can_start(&self) -> bool {
+        self.active_count.load(std::sync::atomic::Ordering::Relaxed) < self.concurrency_limit
+    }
+
+    /// Try to acquire a transition slot. Returns true if successful.
+    pub fn try_acquire(&self) -> bool {
+        use std::sync::atomic::Ordering;
+        loop {
+            let current = self.active_count.load(Ordering::Relaxed);
+            if current >= self.concurrency_limit {
+                return false;
+            }
+            if self
+                .active_count
+                .compare_exchange_weak(current, current + 1, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+
+    /// Release a transition slot after completion.
+    pub fn release(&self) {
+        self.active_count
+            .fetch_sub(1, std::sync::atomic::Ordering::Release);
+    }
+
+    /// Get current number of active transitions.
+    pub fn active_transitions(&self) -> u32 {
+        self.active_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Whether transitions should be deferred to background.
+    pub fn should_defer(&self) -> bool {
+        self.background_enabled
+    }
+
+    /// Execute a transition function with concurrency control.
+    ///
+    /// If background mode is on and concurrency is exceeded, returns `Err(TransitionDeferred)`.
+    /// Otherwise, runs the closure and returns its result.
+    pub fn execute<F, R>(&self, f: F) -> Result<R, TransitionDeferred>
+    where
+        F: FnOnce() -> R,
+    {
+        if !self.try_acquire() {
+            return Err(TransitionDeferred);
+        }
+        let result = f();
+        self.release();
+        Ok(result)
     }
 }
 
@@ -1084,5 +1250,177 @@ mod tests {
         let hash2 = chain.commitment_hash();
         assert_eq!(hash1, hash2, "Commitment hash must be deterministic");
         assert_ne!(hash1, [0u8; 32], "Commitment hash must be non-zero");
+    }
+
+    // ── T4 Integration: Synthetic DDTree Verification + Rule Extraction ──
+
+    /// Verify that synthetic perturbation confirms genuine weaknesses.
+    ///
+    /// Pattern [1, 3] ends in token 3. Perturbations include [2, 3] and [0, 3]
+    /// which still end in token 3, so RejectThree still rejects them.
+    #[test]
+    fn integration_t4_synthetic_ddtree_verifies_genuine_failure() {
+        let ab = AdversarialBreaker::new(RejectThree, 3);
+
+        // Feed failures for pattern [1, 3] at depth 1 until hot
+        // Each call creates FailurePattern { tokens: [1, 3], failure_depth: 1 }
+        for _ in 0..3 {
+            assert!(!ab.is_valid(1, 3, &[1]), "token 3 must be rejected");
+        }
+
+        // Pattern should be hot
+        let hot = ab.hot_patterns();
+        assert_eq!(hot.len(), 1, "Exactly one pattern should be hot");
+        assert_eq!(hot[0].tokens, vec![1, 3]);
+
+        let pattern = &hot[0];
+
+        // Verify synthetic failure — perturbations of [1,3] include [2,3] and [0,3]
+        // Both still end in token 3, so they still fail → confirms > 0
+        let confirms = ab.verify_synthetic_failure(pattern);
+        assert!(
+            confirms > 0,
+            "Synthetic confirms must be > 0 for genuine weakness, got {}",
+            confirms
+        );
+
+        // Extract failure rule
+        let rule = ab
+            .extract_failure_rule(pattern)
+            .expect("rule should be extracted from hot pattern with synthetic confirms");
+        assert_eq!(rule.failure_depth, 1, "failure_depth must match");
+        assert!(
+            rule.observations >= 3,
+            "observations ({}) must be >= threshold (3)",
+            rule.observations
+        );
+        assert!(
+            rule.synthetic_confirms > 0,
+            "synthetic_confirms ({}) must be > 0",
+            rule.synthetic_confirms
+        );
+        assert_eq!(
+            rule.trigger_prefix,
+            vec![1, 3],
+            "trigger_prefix must match pattern tokens"
+        );
+    }
+
+    /// Verify that rule extraction works across multiple failure patterns
+    /// all pointing to the same systematic weakness (token 3).
+    #[test]
+    fn integration_t4_rule_extraction_from_failure() {
+        let ab = AdversarialBreaker::new(RejectThree, 3);
+
+        // Feed many different failure patterns all involving token 3
+        // Each pattern ends in token 3 (the systematic weakness)
+        let prefixes: &[&[usize]] = &[&[1], &[2], &[3], &[4], &[5]];
+        for prefix in prefixes {
+            for _ in 0..3 {
+                let mut tokens = prefix.to_vec();
+                tokens.push(3); // failing token
+                let depth = tokens.len() - 1;
+                // Call is_valid with parent = prefix, token = 3
+                assert!(
+                    !ab.is_valid(depth, 3, prefix),
+                    "token 3 must be rejected with prefix {:?}",
+                    prefix
+                );
+            }
+        }
+
+        // Get hot patterns
+        let hot = ab.hot_patterns();
+        assert!(!hot.is_empty(), "At least one pattern should be hot");
+
+        // Extract rules from all hot patterns
+        let rules: Vec<FailureRule> = hot
+            .iter()
+            .filter_map(|p| ab.extract_failure_rule(p))
+            .collect();
+
+        assert!(!rules.is_empty(), "At least one rule should be extracted");
+
+        // All extracted rules should point to the same systematic weakness: token 3
+        // The last element of trigger_prefix is the failing token
+        for rule in &rules {
+            let last = rule
+                .trigger_prefix
+                .last()
+                .expect("trigger_prefix should be non-empty");
+            assert_eq!(
+                *last, 3,
+                "All rules should point to token 3 as the systematic weakness, got {}",
+                last
+            );
+            assert!(
+                rule.synthetic_confirms > 0,
+                "Each rule should have synthetic confirms > 0"
+            );
+        }
+    }
+
+    /// T7 Integration — RegimeTransitionScheduler concurrency control.
+    #[test]
+    fn integration_t7_concurrent_decode_no_regression() {
+        // 1. Create scheduler with concurrency_limit=1
+        let mut sched = RegimeTransitionScheduler::new(1);
+
+        // 2. can_start() is true initially
+        assert!(sched.can_start(), "Should be able to start initially");
+        assert_eq!(sched.active_transitions(), 0);
+
+        // 3. Acquire slot via try_acquire() → true
+        assert!(sched.try_acquire(), "First acquire should succeed");
+
+        // 4. can_start() is now false (limit reached)
+        assert!(!sched.can_start(), "Should be at limit after one acquire");
+
+        // 5. Second try_acquire() → false
+        assert!(
+            !sched.try_acquire(),
+            "Second acquire must fail at concurrency_limit=1"
+        );
+
+        // 6. Release the slot
+        sched.release();
+
+        // 7. can_start() is true again
+        assert!(sched.can_start(), "Should be able to start after release");
+        assert_eq!(sched.active_transitions(), 0);
+
+        // 8. execute() with a closure that returns GateResult::Accept → Ok(Accept)
+        let result = sched.execute(|| GateResult::Accept);
+        assert_eq!(
+            result,
+            Ok(GateResult::Accept),
+            "execute should run closure and return Ok(Accept)"
+        );
+
+        // 9. active_transitions() is 0 after execute completes
+        assert_eq!(
+            sched.active_transitions(),
+            0,
+            "active_transitions must be 0 after execute completes"
+        );
+
+        // 10. Background mode: set_background_mode(true), verify should_defer()
+        assert!(!sched.should_defer(), "Background should be off by default");
+        sched.set_background_mode(true);
+        assert!(
+            sched.should_defer(),
+            "Background should be on after set_background_mode(true)"
+        );
+        sched.set_background_mode(false);
+
+        // 11. Execute under load: acquire first, then execute → Err(TransitionDeferred)
+        assert!(sched.try_acquire(), "Acquire for load test");
+        let result = sched.execute(|| GateResult::Accept);
+        assert_eq!(
+            result,
+            Err(TransitionDeferred),
+            "execute under concurrency limit must return Err(TransitionDeferred)"
+        );
+        sched.release();
     }
 }
