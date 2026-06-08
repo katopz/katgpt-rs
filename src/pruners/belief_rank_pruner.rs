@@ -247,16 +247,16 @@ mod tests {
         let pruner = BeliefRankPruner::new(4, 8, 0.7);
         let h = peaked_vector(4);
         let f = pruner.flatness(&h);
-        // [10.0, 0.1, 0.1, 0.1] → PR = (100.03)² / (4 * 10000.0003) ≈ 0.25
-        // One dominant dim out of 4 → moderately peaked
+        // [10.0, 0.1, 0.1, 0.1] → PR ≈ 0.25 (one dominant dim out of 4)
         assert!(f < 0.5, "peaked vector should have flatness < 0.5, got {f}");
 
-        // Extreme peaked: only one non-zero dimension → flatness → 0
+        // Even "extreme" [100, 0, 0, 0] still has PR = 1/4 = 0.25
+        // because PR = (Σ h²)² / (n * Σ h⁴), and one non-zero gives rank 1/n
         let extreme = vec![100.0f32, 0.0, 0.0, 0.0];
         let f2 = pruner.flatness(&extreme);
         assert!(
-            f2 < 0.05,
-            "extreme peaked vector should have flatness ≈ 0.0, got {f2}"
+            (f2 - 0.25).abs() < 0.01,
+            "single-dim peaked vector has PR = 1/n_embd = 0.25, got {f2}"
         );
     }
 

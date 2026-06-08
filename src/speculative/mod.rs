@@ -217,6 +217,10 @@ pub use dd_tree::build_dd_tree_speculative;
 // ── Belief Drafter Re-exports (Plan 217, feature: belief_drafter) ──
 #[cfg(feature = "belief_drafter")]
 pub use belief_drafter::{BeliefDraftCondition, BeliefDraftError, BeliefDraftToken, BeliefDrafter};
+#[cfg(feature = "belief_drafter")]
+pub use dd_tree::build_dd_tree_belief;
+#[cfg(feature = "belief_drafter")]
+pub use dd_tree::build_dd_tree_belief_collapse_aware;
 
 // ── Budget Adaptation Re-exports (Plan 167, feature: budget_adaptation) ──
 #[cfg(feature = "budget_adaptation")]

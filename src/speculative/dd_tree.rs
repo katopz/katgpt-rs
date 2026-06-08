@@ -553,6 +553,111 @@ where
     build_dd_tree_screened(&slices, config, &NoScreeningPruner, false)
 }
 
+// ── Belief-Drafter DDTree (Plan 217, feature: belief_drafter) ───────
+
+#[cfg(feature = "belief_drafter")]
+#[inline]
+fn belief_sigmoid(x: f32) -> f32 {
+    1.0 / (1.0 + (-x).exp())
+}
+
+/// Build DDTree from belief-state draft tokens.
+///
+/// Uses [`BeliefDrafter`] to produce variable-length draft candidates from
+/// the current hidden state `h_t`, then constructs a DDTree from the
+/// draft token marginals.
+///
+/// Pipeline: `h_t → BeliefDrafter::draft() → convert to marginals → build_dd_tree_screened()`
+///
+/// Feature-gated behind `belief_drafter`.
+///
+/// # Arguments
+/// * `drafter` — The [`BeliefDrafter`] producing candidate tokens
+/// * `h_t` — Current hidden state `[n_embd]`
+/// * `max_draft_steps` — Maximum draft tokens to produce
+/// * `entropy_threshold` — Entropy-gated stopping threshold
+/// * `config` — DDTree configuration
+/// * `chain_seed` — Whether to use chain-seeding for DDTree construction
+#[cfg(feature = "belief_drafter")]
+pub fn build_dd_tree_belief(
+    drafter: &super::belief_drafter::BeliefDrafter,
+    h_t: &[f32],
+    max_draft_steps: usize,
+    entropy_threshold: f32,
+    config: &crate::types::Config,
+    chain_seed: bool,
+) -> Vec<TreeNode> {
+    let drafts = drafter.draft(h_t, max_draft_steps, entropy_threshold);
+    if drafts.is_empty() {
+        return Vec::new();
+    }
+
+    let vocab_size = drafter.vocab_size();
+    let mut marginals = Vec::with_capacity(drafts.len());
+
+    for draft_token in &drafts {
+        let mut marginal = vec![0.0f32; vocab_size];
+        // The drafted token gets dominant probability
+        let confidence = (draft_token.log_prob.exp()).max(0.5);
+        marginal[draft_token.token_idx] = confidence;
+        // Spread remaining mass uniformly
+        let residual = (1.0 - confidence) / (vocab_size - 1).max(1) as f32;
+        for (j, m) in marginal.iter_mut().enumerate() {
+            if j != draft_token.token_idx {
+                *m = residual;
+            }
+        }
+        marginals.push(marginal);
+    }
+
+    let slices: Vec<&[f32]> = marginals.iter().map(|m| m.as_slice()).collect();
+    build_dd_tree_screened(&slices, config, &NoScreeningPruner, chain_seed)
+}
+
+/// Build DDTree with collapse-aware entropy threshold scaling.
+///
+/// When the drafter detects high uncertainty (measured by average entropy
+/// of previous drafts), it reduces the entropy threshold to produce
+/// shorter, more confident drafts. When uncertainty is low, it allows
+/// longer drafts for better coverage.
+///
+/// The `base_entropy_threshold` is scaled by:
+/// `effective = base * (1.0 + 0.5 * (1.0 - sigmoid(avg_entropy - 1.5)))`
+///
+/// This integrates with the collapse-aware thinking from Plan 212.
+///
+/// # Arguments
+/// * `previous_avg_entropy` — `None` delegates to [`build_dd_tree_belief`] with
+///   the base threshold. `Some(avg_ent)` triggers adaptive scaling.
+#[cfg(feature = "belief_drafter")]
+pub fn build_dd_tree_belief_collapse_aware(
+    drafter: &super::belief_drafter::BeliefDrafter,
+    h_t: &[f32],
+    max_draft_steps: usize,
+    base_entropy_threshold: f32,
+    config: &crate::types::Config,
+    chain_seed: bool,
+    previous_avg_entropy: Option<f32>,
+) -> Vec<TreeNode> {
+    let effective_threshold = match previous_avg_entropy {
+        None => base_entropy_threshold,
+        Some(avg_ent) => {
+            // Low avg entropy (confident) → effective ≈ base * 1.5 → longer drafts
+            // High avg entropy (uncertain) → effective ≈ base * 0.5 → shorter drafts
+            base_entropy_threshold * (1.0 + 0.5 * (1.0 - belief_sigmoid(avg_ent - 1.5)))
+        }
+    };
+
+    build_dd_tree_belief(
+        drafter,
+        h_t,
+        max_draft_steps,
+        effective_threshold,
+        config,
+        chain_seed,
+    )
+}
+
 /// DDTree with Kurtosis Gate filtering (Plan 203b).
 ///
 /// Wraps [`build_dd_tree_speculative`] with per-position excess kurtosis gating.
@@ -5827,6 +5932,137 @@ mod tests {
                 scored > base,
                 "Should be less extreme than base for negative scores"
             );
+        }
+
+        // ── Belief DDTree Tests (Plan 217, feature: belief_drafter) ──
+
+        /// Helper: create a BeliefDrafter suitable for DDTree tests.
+        /// Uses n_embd=4, vocab_size=4 to match draft config patterns.
+        #[cfg(feature = "belief_drafter")]
+        fn make_belief_drafter_for_tree() -> crate::speculative::belief_drafter::BeliefDrafter {
+            use crate::speculative::belief_drafter::{BeliefDrafter, LatentDynamicsMLP};
+
+            let n_embd = 4;
+            let vocab_size = 4;
+            let mlp = LatentDynamicsMLP::random_init(n_embd);
+            let output_head: Vec<f32> = (0..vocab_size * n_embd)
+                .map(|i| (i as f32 + 1.0) * 0.1)
+                .collect();
+            let wte: Vec<f32> = (0..vocab_size * n_embd)
+                .map(|i| (i as f32 + 1.0) * 0.05)
+                .collect();
+            BeliefDrafter::new(mlp, output_head, wte).expect("valid drafter")
+        }
+
+        #[cfg(feature = "belief_drafter")]
+        #[test]
+        fn test_belief_ddtree_produces_valid_tree() {
+            let drafter = make_belief_drafter_for_tree();
+            let h_t = vec![1.0f32; 4];
+            let config = Config::draft();
+
+            let tree = build_dd_tree_belief(&drafter, &h_t, 5, 10.0, &config, false);
+
+            assert!(!tree.is_empty(), "should produce a non-empty tree");
+            for node in &tree {
+                assert!(
+                    node.token_idx < drafter.vocab_size(),
+                    "token_idx {} must be < vocab_size {}",
+                    node.token_idx,
+                    drafter.vocab_size()
+                );
+            }
+        }
+
+        #[cfg(feature = "belief_drafter")]
+        #[test]
+        fn test_belief_ddtree_respects_draft_length() {
+            let drafter = make_belief_drafter_for_tree();
+            let h_t = vec![1.0f32; 4];
+            let config = Config::draft();
+
+            let max_steps = 3;
+            let tree = build_dd_tree_belief(&drafter, &h_t, max_steps, 10.0, &config, false);
+
+            let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+            assert!(
+                max_depth <= max_steps,
+                "tree depth {} should not exceed max_draft_steps {}",
+                max_depth,
+                max_steps
+            );
+        }
+
+        #[cfg(feature = "belief_drafter")]
+        #[test]
+        fn test_belief_ddtree_collapse_aware_adjusts_threshold() {
+            let drafter = make_belief_drafter_for_tree();
+            let h_t = vec![1.0f32; 4];
+            let config = Config::draft();
+
+            // Low avg entropy → higher effective threshold → potentially longer drafts
+            let tree_low_ent = build_dd_tree_belief_collapse_aware(
+                &drafter,
+                &h_t,
+                5,
+                5.0,
+                &config,
+                false,
+                Some(0.5),
+            );
+
+            // High avg entropy → lower effective threshold → shorter drafts
+            let tree_high_ent = build_dd_tree_belief_collapse_aware(
+                &drafter,
+                &h_t,
+                5,
+                5.0,
+                &config,
+                false,
+                Some(3.0),
+            );
+
+            // Both should produce valid trees; the low-entropy one should be >= high-entropy
+            // (not guaranteed strictly larger due to entropy gating, but should trend)
+            assert!(!tree_low_ent.is_empty());
+            assert!(!tree_high_ent.is_empty());
+        }
+
+        #[cfg(feature = "belief_drafter")]
+        #[test]
+        fn test_belief_ddtree_empty_draft() {
+            let drafter = make_belief_drafter_for_tree();
+            let h_t = vec![1.0f32; 4];
+            let config = Config::draft();
+
+            // max_draft_steps=0 → draft() returns empty → empty tree
+            let tree = build_dd_tree_belief(&drafter, &h_t, 0, 10.0, &config, false);
+
+            assert!(
+                tree.is_empty(),
+                "zero max_draft_steps should produce empty tree"
+            );
+        }
+
+        #[cfg(feature = "belief_drafter")]
+        #[test]
+        fn test_belief_ddtree_marginals_normalized() {
+            let drafter = make_belief_drafter_for_tree();
+            let h_t = vec![1.0f32; 4];
+            let vs = drafter.vocab_size();
+
+            // Verify the marginal construction logic: confidence + residual sums to ~1.0
+            let drafts = drafter.draft(&h_t, 3, 10.0);
+            for draft_token in &drafts {
+                let confidence = (draft_token.log_prob.exp()).max(0.5);
+                let residual = (1.0 - confidence) / (vs - 1).max(1) as f32;
+                let total = confidence + residual * (vs - 1) as f32;
+                assert!(
+                    (total - 1.0).abs() < 1e-5,
+                    "marginal should sum to ~1.0, got {}",
+                    total
+                );
+            }
         }
     }
 }

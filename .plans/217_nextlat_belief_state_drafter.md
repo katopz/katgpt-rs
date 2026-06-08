@@ -1,7 +1,7 @@
 # Plan 217: NextLat Belief-State Speculative Drafter
 
 **Research**: R192 (NextLat Belief-State Latent Dynamics)
-**Status**: Phase 0+1+2 COMPLETE (24 tests passing, 3 benchmarks passing). Phase 3+ pending.
+**Status**: Phase 0+1+2+3 COMPLETE (34 tests passing, 3 benchmarks passing). Phase 4+ pending.
 **Feature Gate**: `belief_drafter` (off by default until GOAT proof)
 **Depends on**: Plan 055 (MTP Drafter infrastructure), Plan 195 (ThoughtFold), Plan 212 (Collapse-Aware Adaptive Thinking)
 
@@ -109,9 +109,14 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
   - B3: 17 μs/step at n_embd=16 — well within budget
 
 ### Phase 3: Belief-State Pruner
-- [x] Implement effective-rank computation on hidden states (participation ratio on variance diagonal)
+- [x] Implement effective-rank computation on hidden states (participation ratio of diagonal covariance)
+  - `flatness(h)`: PR of single vector, O(n_embd), branch-free inner loop
+  - `effective_rank()`: PR of variance diagonal from sliding window, O(n * k)
 - [x] Add `BeliefRankPruner` implementing `ScreeningPruner` trait
+  - Sigmoid smooth gating: `relevance = sigmoid(-k * (rank - threshold))`
+  - Low rank → sigmoid > 0.5 → accept; high rank → sigmoid < 0.5 → reject
 - [x] Low rank → high confidence → accept draft; high rank → reject → deeper search
+  - 10 tests: flatness peaked/uniform/zero, effective rank single/peaked/diverse, relevance confident/uncertain/uninitialized, buffer size
 - [ ] Benchmark: pruning quality with/without belief-state signal
 
 ### Phase 4: Latent Transition Cache
