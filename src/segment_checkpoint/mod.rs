@@ -6,6 +6,8 @@
 //! Zero training required — pure modelless inference enhancement.
 
 pub mod gating;
+
+#[cfg(feature = "ssc_spec_draft")]
 pub mod ssc;
 
 // ---------------------------------------------------------------------------
