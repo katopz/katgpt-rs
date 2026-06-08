@@ -21,6 +21,15 @@ pub enum Regime {
     Typical,
     /// NLL > H + ε (higher information than expected).
     Uncertain,
+    /// Entropy exceeds critical threshold — solver should switch (Plan 222).
+    CriticalInterval,
+}
+
+/// Classify entropy as critical interval.
+/// Returns true if entropy exceeds threshold.
+#[inline]
+pub fn is_critical(entropy: f32, h_critical: f32) -> bool {
+    entropy >= h_critical
 }
 
 /// Classify a single sequence's regime based on its average NLL vs entropy rate.
@@ -98,6 +107,7 @@ pub fn regime_distribution(
             Regime::Conservative => n_conservative += 1,
             Regime::Typical => n_typical += 1,
             Regime::Uncertain => n_uncertain += 1,
+            Regime::CriticalInterval => n_uncertain += 1, // Critical intervals are high-entropy, treated as uncertain for counting
         }
     }
 
