@@ -810,7 +810,7 @@ pub use bfcf_types::BfcpPartition;
 pub mod substrate_types;
 
 #[cfg(feature = "substrate_gate")]
-pub use substrate_types::{SubstrateMask, SubstrateConfig, SubstrateRouter, NoSubstrateRouter};
+pub use substrate_types::{NoSubstrateRouter, SubstrateConfig, SubstrateMask, SubstrateRouter};
 
 #[cfg(feature = "substrate_gate")]
 pub mod substrate_execution;
@@ -832,6 +832,19 @@ pub mod substrate_loader;
 
 #[cfg(feature = "substrate_gate")]
 pub use substrate_loader::{load_substrate_mask, save_substrate_mask};
+
+// ── Belief-State Rank Pruner (Plan 217 Phase 3) ──────────────
+//
+// Uses hidden state effective rank (participation ratio) as screening signal.
+// Low rank → confident → accept drafts. High rank → uncertain → reject.
+//
+// Feature gate: `belief_drafter`
+
+#[cfg(feature = "belief_drafter")]
+pub mod belief_rank_pruner;
+
+#[cfg(feature = "belief_drafter")]
+pub use belief_rank_pruner::BeliefRankPruner;
 
 // ── CoExplain Bidirectional Alignment (Plan 214) ──────────────
 //

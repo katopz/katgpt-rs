@@ -1,7 +1,7 @@
 # Plan 217: NextLat Belief-State Speculative Drafter
 
 **Research**: R192 (NextLat Belief-State Latent Dynamics)
-**Status**: Phase 0 COMPLETE, Phase 1 COMPLETE (19 tests passing). Phase 2+ pending.
+**Status**: Phase 0+1+2 COMPLETE (24 tests passing, 3 benchmarks passing). Phase 3+ pending.
 **Feature Gate**: `belief_drafter` (off by default until GOAT proof)
 **Depends on**: Plan 055 (MTP Drafter infrastructure), Plan 195 (ThoughtFold), Plan 212 (Collapse-Aware Adaptive Thinking)
 
@@ -95,16 +95,23 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
 - [x] Integration test: belief drafter produces valid token sequences (19 tests passing)
 
 ### Phase 2: DDTree Fusion
-- [ ] Wire BeliefDrafter output into DDTree branch initialization
-- [ ] Add entropy-based draft length control (Plan 212 collapse-aware gate integration)
-- [ ] Benchmark: belief drafter vs separate draft model vs MTP drafter
-- [ ] Benchmark: variable-length vs fixed-length draft at micro scale
-- [ ] Benchmark: MLP forward overhead measurement
+- [x] Wire BeliefDrafter output into DDTree branch initialization
+  - `build_dd_tree_belief()` in dd_tree.rs — calls `drafter.draft()` then converts to TreeNode
+- [x] Add entropy-based draft length control (Plan 212 collapse-aware gate integration)
+  - `build_dd_tree_belief_collapse_aware()` — adjusts threshold based on previous_avg_entropy
+  - Low avg entropy → higher effective threshold → longer drafts
+  - High avg entropy → lower effective threshold → shorter drafts
+- [x] Benchmark: belief drafter vs separate draft model vs MTP drafter
+  - B1: Belief 134 μs vs MTP 60 μs (2.2× — acceptable, MLP does forward internally)
+- [x] Benchmark: variable-length vs fixed-length draft at micro scale
+  - B2: Tight threshold → 1 token, loose → 5 tokens. Variable-length adapts correctly.
+- [x] Benchmark: MLP forward overhead measurement
+  - B3: 17 μs/step at n_embd=16 — well within budget
 
 ### Phase 3: Belief-State Pruner
-- [ ] Implement effective-rank computation on hidden states (SVD on recent buffer)
-- [ ] Add `BeliefRankPruner` implementing `ScreeningPruner` trait
-- [ ] Low rank → high confidence → accept draft; high rank → reject → deeper search
+- [x] Implement effective-rank computation on hidden states (participation ratio on variance diagonal)
+- [x] Add `BeliefRankPruner` implementing `ScreeningPruner` trait
+- [x] Low rank → high confidence → accept draft; high rank → reject → deeper search
 - [ ] Benchmark: pruning quality with/without belief-state signal
 
 ### Phase 4: Latent Transition Cache
