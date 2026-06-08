@@ -6,11 +6,14 @@
 pub mod bandit;
 pub mod batch;
 pub mod brain;
+pub mod gm;
 pub mod hotswap;
 pub mod octree;
 pub mod serialize;
 
 pub use bandit::{SenseTrial, SenseTrialLog};
 pub use brain::{NpcBrain, SenseOverride};
+pub(crate) use gm::dispatch_gm_action;
+pub use gm::{NpcBrainSnapshot, SenseError};
 pub use hotswap::SenseHotSwap;
 pub use octree::{KgEmbedding, SenseOctreeBuilder};

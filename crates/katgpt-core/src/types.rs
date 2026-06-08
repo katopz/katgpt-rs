@@ -3720,3 +3720,43 @@ impl Default for SenseModule {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// DilationConfig — RAT+ Recurrence Bridge sparse attention (Plan 225)
+// ---------------------------------------------------------------------------
+
+/// Dilation configuration for RAT+ bridge sparse attention.
+/// Controls stride D for KV cache access during decode.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DilationConfig {
+    D1 = 1, // Dense (no dilation)
+    D2 = 2,
+    D4 = 4,
+    D8 = 8,
+    D16 = 16,
+    D32 = 32,
+    D64 = 64,
+}
+
+impl DilationConfig {
+    /// Returns the dilation stride as usize.
+    #[inline]
+    pub fn stride(&self) -> usize {
+        *self as usize
+    }
+
+    /// Select dilation from queries-per-second heuristic.
+    /// Low QPS → dense, High QPS → aggressive dilation.
+    pub fn from_qps(qps: f32) -> Self {
+        if qps < 1.0 {
+            Self::D1
+        } else if qps < 5.0 {
+            Self::D4
+        } else if qps < 20.0 {
+            Self::D16
+        } else {
+            Self::D64
+        }
+    }
+}

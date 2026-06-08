@@ -54,6 +54,8 @@ pub mod plot;
 #[cfg(feature = "proof_cert")]
 pub mod proof_cert;
 pub mod pruners;
+#[cfg(feature = "rat_plus_bridge")]
+pub mod rat_bridge;
 #[cfg(feature = "maxsim")]
 pub mod rerank;
 #[cfg(feature = "river_valley")]
