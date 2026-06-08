@@ -811,6 +811,18 @@ pub mod bfcp_region_cache;
 #[cfg(feature = "bfcf_lfu_shard")]
 pub use bfcp_region_cache::{BfcpRegionCache, FreqTier, RegionCaching, blake3_logit_hash};
 
+// ── BFCF × LFU × Sharding — Region Shard Map (Plan 218 Phase 2) ────────────
+//
+// Frequency-aware (RegionLabel × FreqTier) → shard index mapping.
+// Hot pinned to shard 0, Cold to last shard, Warm round-robin.
+// Sequential fallback when regions < 30.
+
+#[cfg(feature = "bfcf_lfu_shard")]
+pub mod region_shard_map;
+
+#[cfg(feature = "bfcf_lfu_shard")]
+pub use region_shard_map::{RegionShardMap, RegionSharding};
+
 // ── SubstrateGate — Inference-Time Capability Substrate Routing (Plan 216) ──
 //
 // Pre-computed per-capability MLP channel masks intersected with ReLU

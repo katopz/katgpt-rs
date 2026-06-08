@@ -171,14 +171,14 @@ pub trait RegionBatching: Send + Sync {
 - [x] Benchmark: cache hit rate on synthetic workload (target: ≥ 60% across 100 steps) — achieved 95%
 
 ### Phase 2: Frequency-Aware Region Sharding
-- [ ] Add `RegionShardMap`, `RegionSharding` trait to `src/pruners/region_shard_map.rs`
-- [ ] Implement shard assignment: Hot → dedicated shard, Warm → round-robin, Cold → lazy
-- [ ] Implement `rebalance()` — promote/demote shards when FreqTier transitions
-- [ ] Implement `min_regions_for_shard()` — only shard when regions > 30 (below: sequential)
-- [ ] Integrate `FreqTier` derivation from FreqBandit (reuse Plan 189 `FrequencyBandit`)
-- [ ] Test: shard assignment correctness for all (label, tier) combinations
-- [ ] Test: rebalance correctly migrates regions on tier transitions
-- [ ] Test: sequential fallback when region count < threshold
+- [x] Add `RegionShardMap`, `RegionSharding` trait to `src/pruners/region_shard_map.rs`
+- [x] Implement shard assignment: Hot → dedicated shard, Warm → round-robin, Cold → lazy
+- [x] Implement `rebalance()` — promote/demote shards when FreqTier transitions
+- [x] Implement `min_regions_for_shard()` — only shard when regions > 30 (below: sequential)
+- [ ] Integrate `FreqTier` derivation from FreqBandit (reuse Plan 189 `FrequencyBandit`) — deferred to Phase 5
+- [x] Test: shard assignment correctness for all (label, tier) combinations
+- [x] Test: rebalance correctly migrates regions on tier transitions
+- [x] Test: sequential fallback when region count < threshold
 
 ### Phase 3: Region-Level Batching
 - [ ] Add `RegionBatching` trait and impl to `src/pruners/region_batch.rs`
