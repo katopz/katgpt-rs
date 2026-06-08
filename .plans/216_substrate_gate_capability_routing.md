@@ -1,7 +1,7 @@
 # Plan 216: SubstrateGate — Inference-Time Capability Substrate Routing
 
 **Research**: R191 (Prism Capability Substrate Extraction)
-**Status**: IN PROGRESS
+**Status**: Phase 1-5 Complete (Phase 6-9 pending)
 **Feature Gate**: `substrate_gate` (off by default until GOAT proof)
 **Depends On**: Plan 022 (Sparse MLP), Plan 087 (CNA Steering)
 
@@ -40,70 +40,70 @@ ForwardContext (transformer.rs)
 
 ### Phase 1: Core Types & Infrastructure
 
-- [ ] T1: Define `SubstrateMask` type in `katgpt-core/src/types.rs`
+- [x] T1: Define `SubstrateMask` type in `src/pruners/substrate_types.rs`
   - Packed bitmask (`Vec<u64>`) over `[layers × d_ff]` MLP channels
   - Per-layer active counts
   - Recovery score field
   - BLAKE3 hash for provenance
   - `serde` Serialize/Deserialize for `.mask` file loading
 
-- [ ] T2: Define `SubstrateRouter` trait in `katgpt-core/src/traits.rs`
+- [x] T2: Define `SubstrateRouter` trait in `src/pruners/substrate_types.rs`
   - `select_mask(tokens, config) -> Option<&SubstrateMask>`
   - `register_mask(capability, mask)`
   - Default impl: `NoSubstrateRouter` (returns None, falls back to full MLP)
 
-- [ ] T3: Add `SubstrateMask` field to `Config` in `types.rs`
-  - `substrate_masks: Vec<SubstrateMask>` — loaded at model init
-  - `substrate_threshold: f32` — minimum recovery score to use mask
+- [x] T3: Define `SubstrateConfig` in `src/pruners/substrate_types.rs`
+  - `masks: Vec<SubstrateMask>` — loaded at model init
+  - `threshold: f32` — minimum recovery score to use mask
   - Validation: mask dimensions match model architecture
 
 ### Phase 2: Dual Sparsity Execution
 
-- [ ] T4: Implement mask intersection in `transformer.rs` `forward_base()`
-  - After ReLU, before w2 down-projection
-  - `active ∩ substrate` bitwise AND
-  - Update `active_indices` / `active_values` with intersection
+- [x] T4: Implement mask intersection in `src/pruners/substrate_execution.rs`
+  - `apply_substrate_mask()` — O(active_count) filter of ReLU-active channels
+  - `apply_substrate_mask_inplace()` — zero-allocation in-place compaction
+  - `active ∩ substrate` bitwise check per channel
   - Zero runtime cost when `substrate_gate` feature disabled (`#[cfg]`)
 
-- [ ] T5: Implement `SubstrateRouter` integration in `ForwardContext`
-  - `router: Box<dyn SubstrateRouter>` — set during context init
-  - Per-token mask selection based on token context
-  - Cache selected mask for sequence (don't re-classify every token)
+- [x] T5: Implement `SubstrateExecutionContext<R>` in `src/pruners/substrate_execution.rs`
+  - Generic over `SubstrateRouter`
+  - `select_for_sequence()` — caches mask per sequence
+  - `apply_to_layer()` — applies intersection with heuristic gating
 
 ### Phase 3: DDTree Integration
 
-- [ ] T6: Extend DDTree branch scoring with substrate recovery
+- [x] T6: Extend DDTree branch scoring with substrate recovery in `src/pruners/substrate_ddtree.rs`
   - Each branch can specify a capability name
   - Branch score = logprob × sigmoid(recovery) × constraint_validity
   - Sigmoid (not softmax) per project conventions
 
-- [ ] T7: Implement substrate-aware branch expansion
-  - When expanding DDTree, offer substrate-specific branches
-  - E.g., for Python→Rust: "stdlib" branch, "async" branch, "error_handling" branch
-  - Each branch uses its SubstrateMask for the forward pass
+- [x] T7: Implement substrate-aware branch expansion in `src/pruners/substrate_ddtree.rs`
+  - `SubstrateBranch` struct with capability name, mask, logprob, constraint_validity
+  - `expand_substrate_branches()` — scores and sorts branches
+  - `select_best_branch()` — picks first viable branch above min_recovery
 
 ### Phase 4: ScreeningPruner Extension
 
-- [ ] T8: Implement `SubstrateScreeningPruner`
-  - `relevance(token, context) -> f32`
-  - Uses mask's activation concentration as signal
-  - Sigmoid-gated output
-  - Integrates with existing `ScreeningPruner` trait
+- [x] T8: Implement `SubstrateScreeningPruner` in `src/pruners/substrate_pruner.rs`
+  - `relevance(token, context) -> f32` via `ScreeningPruner` trait
+  - Uses mask recovery score as base + hash-based token modulation
+  - Sigmoid-gated output [0, 1]
+  - `SubstratePrunerBuilder` for configurable construction
 
 ### Phase 5: Mask Loading & Export
 
-- [ ] T9: Implement `.mask` file loader
-  - Parse `SubstrateMaskFile` (bincode or JSON)
-  - Validate dimensions against loaded model
-  - Register masks with `SubstrateRouter`
-  - Error handling: missing file → fall back to full MLP (no crash)
+- [x] T9: Implement `.mask` file loader in `src/pruners/substrate_loader.rs`
+  - `load_substrate_mask(json)` — parses JSON, validates version/dimensions/hash
+  - `save_substrate_mask(mask)` — serializes to pretty JSON
+  - `validate_mask()` — architecture + hash validation
+  - Error handling: malformed file → returns None (no crash)
 
-- [ ] T10: Define `.mask` file format spec (shared with riir-ai)
-  - Version field for forward compatibility
-  - Per-layer packed bitmasks
+- [x] T10: Define `.mask` file format in `src/pruners/substrate_loader.rs`
+  - `SubstrateMaskFile` struct with version=1
+  - Per-layer packed bitmasks (Vec<Vec<u64>>)
   - Recovery score, capability name, model ID
-  - BLAKE3 adapter hash for provenance
-  - Documented in `.docs/` for cross-project consumption
+  - BLAKE3 hash for provenance
+  - JSON format for cross-project consumption
 
 ### Phase 6: CPU/GPU Auto-Route
 
@@ -174,10 +174,11 @@ ForwardContext (transformer.rs)
 
 ### Phase 9: Feature Gate & Default
 
-- [ ] T24: Add `substrate_gate` feature to `katgpt-core/src/lib.rs` and `Cargo.toml`
+- [x] T24: Add `substrate_gate` feature to `Cargo.toml` and `src/pruners/mod.rs`
   - Dependencies: `sparse_mlp`, `cna_steering`
   - All code behind `#[cfg(feature = "substrate_gate")]`
   - Off by default until GOAT proof
+  - Added to `full` feature list
 
 - [ ] T25: If all GOAT gates pass (T18-T23) → change to default-on
   - Add to default features in `Cargo.toml`
