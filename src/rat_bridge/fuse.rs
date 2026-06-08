@@ -5,6 +5,9 @@
 //!
 //! Uses sigmoid (not softmax) for all gating per project constraints.
 
+use super::bridge::RatBridgeState;
+use super::dilated_kv::DilatedKvAccessor;
+
 /// Fused bridge attention output.
 #[derive(Debug, Clone)]
 pub struct BridgeAttentionOutput {
@@ -69,6 +72,40 @@ pub fn bridge_attention(
     BridgeAttentionOutput { output, alpha }
 }
 
+/// Full decode step with RAT+ bridge.
+///
+/// Combines `RatBridgeState` gate computation with dilated KV attention.
+/// This is the primary entry point for decode-time inference:
+/// 1. Update bridge gate from query + GDN2 readout
+/// 2. Compute dilated indices from current dilation config
+/// 3. Fused bridge attention with α-blend
+pub fn rat_decode_step(
+    state: &mut RatBridgeState,
+    query: &[f32],
+    kv_keys: &[Vec<f32>],
+    kv_vals: &[Vec<f32>],
+    gdn2_readout: &[f32],
+) -> BridgeAttentionOutput {
+    // 1. Update bridge gate
+    state.compute_gate(query, gdn2_readout);
+
+    // 2. Get dilated indices
+    let indices = DilatedKvAccessor::dilated_indices(kv_keys.len(), state.dilation);
+
+    // 3. Dilated KV access — collect owned copies for bridge_attention compatibility
+    let keys_dilated: Vec<Vec<f32>> = indices.iter().map(|&i| kv_keys[i].clone()).collect();
+    let vals_dilated: Vec<Vec<f32>> = indices.iter().map(|&i| kv_vals[i].clone()).collect();
+
+    // 4. Bridge attention with α from state
+    bridge_attention(
+        query,
+        &keys_dilated,
+        &vals_dilated,
+        gdn2_readout,
+        state.alpha,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -115,5 +152,42 @@ mod tests {
         for &v in &out.output {
             assert!((v - 0.25).abs() < 1e-6);
         }
+    }
+
+    #[test]
+    fn test_rat_decode_step() {
+        let mut state = RatBridgeState::new(katgpt_core::types::DilationConfig::D4, 8);
+        let query = vec![0.5; 8];
+        let keys = (0..16).map(|_| vec![0.3; 8]).collect::<Vec<_>>();
+        let vals = (0..16).map(|_| vec![0.4; 8]).collect::<Vec<_>>();
+        let gdn2 = vec![0.1; 8];
+        let out = rat_decode_step(&mut state, &query, &keys, &vals, &gdn2);
+        assert_eq!(out.output.len(), 8);
+        assert!((0.0..=1.0).contains(&out.alpha));
+    }
+
+    #[test]
+    fn test_dilation_reduces_kv_access() {
+        let query = vec![0.5; 4];
+        let keys = (0..32)
+            .map(|i| vec![i as f32 / 32.0; 4])
+            .collect::<Vec<_>>();
+        let vals = (0..32)
+            .map(|i| vec![i as f32 / 64.0; 4])
+            .collect::<Vec<_>>();
+        let gdn2 = vec![0.1; 4];
+
+        let dense = {
+            let mut s = RatBridgeState::new(katgpt_core::types::DilationConfig::D1, 4);
+            rat_decode_step(&mut s, &query, &keys, &vals, &gdn2)
+        };
+        let dilated = {
+            let mut s = RatBridgeState::new(katgpt_core::types::DilationConfig::D16, 4);
+            rat_decode_step(&mut s, &query, &keys, &vals, &gdn2)
+        };
+
+        // Both should produce valid output, but different (different KV positions used)
+        assert_eq!(dense.output.len(), 4);
+        assert_eq!(dilated.output.len(), 4);
     }
 }

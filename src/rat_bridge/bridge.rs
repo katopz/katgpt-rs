@@ -41,6 +41,23 @@ impl RatBridgeState {
         self.alpha = 1.0 / (1.0 + (-dot).exp());
         self.alpha
     }
+
+    /// Reset dilation based on QPS load signal.
+    ///
+    /// Delegates to `DilationConfig::from_qps` which maps QPS thresholds
+    /// to dilation strides (low QPS → dense, high QPS → aggressive dilation).
+    pub fn set_dilation_from_qps(&mut self, qps: f32) {
+        self.dilation = DilationConfig::from_qps(qps);
+    }
+
+    /// Update projection from GDN2 readout (no new parameters — reuses GDN2 state).
+    ///
+    /// The bridge projection is the GDN2 readout vector itself, used for
+    /// bridge attention: `bridge_out = projection · query`.
+    pub fn update_projection(&mut self, gdn2_readout: &[f32]) {
+        self.projection.clear();
+        self.projection.extend_from_slice(gdn2_readout);
+    }
 }
 
 #[cfg(test)]
@@ -74,5 +91,24 @@ mod tests {
         let alpha = state.compute_gate(&query, &readout);
         // dot=0 → sigmoid(0) = 0.5
         assert!((alpha - 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_set_dilation_from_qps() {
+        let mut state = RatBridgeState::new(DilationConfig::D1, 8);
+        // Low QPS → dense
+        state.set_dilation_from_qps(0.5);
+        assert_eq!(state.dilation, DilationConfig::D1);
+        // High QPS → aggressive dilation
+        state.set_dilation_from_qps(50.0);
+        assert!(state.dilation.stride() > 1);
+    }
+
+    #[test]
+    fn test_update_projection() {
+        let mut state = RatBridgeState::new(DilationConfig::D4, 4);
+        let readout = vec![1.0, 2.0, 3.0, 4.0];
+        state.update_projection(&readout);
+        assert_eq!(state.projection, readout);
     }
 }

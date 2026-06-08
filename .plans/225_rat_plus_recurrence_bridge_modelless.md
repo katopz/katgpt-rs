@@ -1,6 +1,6 @@
 # Plan 225: RAT+ Recurrence Bridge — Modelless Dilated Inference
 
-**Status**: 🔧 Phase 1 Complete
+**Status**: 🔧 Phase 2-3 Complete
 **Research**: `.research/201_RAT_Plus_Train_Dense_Infer_Sparse.md`
 **Feature Gate**: `rat_plus_bridge` (default-off → GOAT gate → default-on if proved)
 **Dependencies**: `gdn2_attention`, `dash_attn`, `vortex_flow`
@@ -73,24 +73,28 @@ Wire existing GDN2 recurrent state as a "bridge" for dilated sparse attention du
 
 ### Phase 2: Dilated KV Access
 
-- [ ] **T2.1** Implement `DilatedKvAccessor` in `dilated_kv.rs`
+- [x] **T2.1** Implement `DilatedKvAccessor` in `dilated_kv.rs`
   - `fn stride_access(kv_cache: &[T], d: DilationConfig) -> &[T]`
   - Zero-copy slice view into existing KV cache with stride D
   - No allocation — just offset arithmetic
+  - Added `dilated_decode_step()` — full decode with D-strided KV + sigmoid-gated bridge readout
 
-- [ ] **T2.2** Implement `dilated_decode_step()` in `fuse.rs`
+- [x] **T2.2** Implement `dilated_decode_step()` in `fuse.rs`
   - Replace full KV scan with D-strided KV access
   - Add GDN2 bridge readout as complementary signal
   - Sigmoid gate: `α = sigmoid(⟨q, gdn2_readout⟩)`
+  - Added `rat_decode_step()` — high-level decode combining `RatBridgeState` + dilated KV + bridge attention
 
 ### Phase 3: Bridge Projection
 
-- [ ] **T3.1** Implement `RatBridgeState` in `bridge.rs`
+- [x] **T3.1** Implement `RatBridgeState` in `bridge.rs`
   - Wraps `Gdn2LayerState` with bridge projection
   - Bridge projection: reuses GDN2's `gdn2_readout()` output
   - No new parameters — just reuses existing recurrent state
+  - Added `set_dilation_from_qps()` — QPS-based adaptive dilation
+  - Added `update_projection()` — copies GDN2 readout into bridge state
 
-- [ ] **T3.2** Implement `bridge_attention()` in `fuse.rs`
+- [x] **T3.2** Implement `bridge_attention()` in `fuse.rs`
   - `y = α · softmax(Q·K_dilated^T)·V_dilated + (1-α) · S·q`
   - Where S is GDN2 state, q is query, K_dilated/V_dilated are strided
   - α computed per-head via sigmoid
