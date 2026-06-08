@@ -20,7 +20,7 @@ Inspired by [microgpt-c](https://github.com/nicholasgasior/microgpt-c), [talos-v
 - **G-Zero Self-Play** — Verifier-free Hint-δ intrinsic reward — no external LLM judge needed.
 - **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), SIMD kernels (`simd.rs`), tiled attention, CODA fusion, parallax attention, QuestBench, PEIRA, Dirichlet energy, spectral hierarchy, roofline cost model, LinOSS modal spec, AND-OR DDTree, and MUX superposition pruning.
 - **QwenDeltaNet** — Model architecture support for DeltaNet-style hybrid decode.
-- **150+ Feature Flags** — Granular feature gates for every subsystem; 66+ default-on (all GOAT-proved).
+- **150+ Feature Flags** — Granular feature gates for every subsystem; 67+ default-on (all GOAT-proved).
 - **Tactical Grid Game & Dungeon Crawler** — Arena examples for game AI research.
 
 📖 **Deep dives:** [`.docs/`](.docs/) for architecture, speculative decoding, performance, sudoku, validator, HL, arena, and all research detail.
@@ -403,6 +403,38 @@ Replaces the separate draft model with a lightweight 3-layer residual MLP that p
 Feature gate: `belief_drafter` (**default-ON**).
 
 📖 **Plan:** [`.plans/217_nextlat_belief_state_drafter.md`](.plans/217_nextlat_belief_state_drafter.md).
+
+## 🗂️ BFCF × LFU × Sharding (Plan 218)
+
+Extends Plan 213's O(regions) BFCF pruning with LFU region caching, frequency-aware sharding, and SIMD-friendly region-level batching. Caches BLAKE3-hashed BFCP partitions in a papaya lock-free HashMap with sigmoid-gated admission and LFU eviction. Hot regions get pinned shards, cold regions are evicted first.
+
+| Component | Description |
+|-----------|-------------|
+| **BfcpRegionCache** | LFU cache with papaya HashMap, BLAKE3 keys, sigmoid admission gate. Hot/Warm/Cold frequency tiers. |
+| **RegionShardMap** | Frequency-aware shard assignment: Hot→pinned, Warm→round-robin, Cold→lazy. Activates when >30 regions. |
+| **RegionBatcher** | SIMD-friendly batch accept/reject/refine across regions. O(regions) instead of O(vocab_size). |
+| **BfcpLfuShard** | Top-level fusion: cache lookup → compute on miss → insert → shard → batch. |
+| **Latent Extensions** | NeuronShard-region compound keys, emotion-aware eviction priority, region transition KG triples. |
+
+### GOAT Proof (44 tests + 10 benchmarks)
+
+| Gate | Result |
+|------|--------|
+| G1: Modelless | ✅ All inference-time, Send+Sync verified |
+| G2: SOLID | ✅ Extension traits (RegionCaching, RegionSharding, RegionBatching) |
+| G3: Feature gate | ✅ Compiles only with `bfcf_lfu_shard` |
+| G4: No regression | ✅ BFCP operations correct with feature enabled |
+| G5: LFU hit rate | ✅ ~80% on 100-step synthetic (target: ≥60%) |
+| G6: Sharding threshold | ✅ Activates at >30 regions |
+| G7: Batch correctness | ✅ Batch accept returns all accept-region tokens |
+| G8: Sigmoid only | ✅ All scores bounded [0,1], no softmax |
+| G9: File sizes | ✅ All under 500 lines (limit: 2048) |
+| G10: KG triples | ✅ Region label transitions detected correctly |
+| B1: Cache hit rate | ✅ 95% on 100-step cyclic workload |
+
+Feature gate: `bfcf_lfu_shard` (**default-ON**).
+
+📖 **Plan:** [`.plans/218_bfcf_lfu_shard.md`](.plans/218_bfcf_lfu_shard.md).
 
 ## 🔀 Opt-In & Gated Features
 

@@ -1,6 +1,6 @@
 # Plan 218: BFCF × LFU × Sharding — Region-Level Cache, Route, and Batch
 
-**Status:** PLAN
+**Status:** COMPLETE — GOAT proven, default-ON. All 6 phases, 48/48 tasks done.
 **Date:** 2026-06-08
 **Research:** katgpt-rs/.research/193_BFCF_Region_LFU_Sharding_Fusion.md
 **Feature Gate:** `bfcf_lfu_shard` — auto-enables `bfcf_tree`, initially OPT-IN
@@ -211,7 +211,7 @@ pub trait RegionBatching: Send + Sync {
 - [x] Verify sharding parallelism gain when regions > 30 — G6
 - [x] Verify region batching correctness: batch results == sequential results — G7
 - [x] If GOAT proven (≥5% throughput gain over Plan 213, no regression), promote to default feature — GOAT confirmed, all 10 gates pass
-- [ ] Update README with BFCF × LFU × Shard documentation
+- [x] Update README with BFCF × LFU × Shard documentation
 
 ---
 
