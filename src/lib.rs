@@ -14,6 +14,8 @@ pub mod distill;
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::needless_range_loop)]
 pub mod dllm;
+#[cfg(feature = "critical_interval_gate")]
+pub mod dllm_solver;
 #[cfg(feature = "ega_attn")]
 pub mod ega_attn;
 #[cfg(feature = "feedback")]
@@ -60,6 +62,8 @@ pub mod river_valley;
 pub mod rt_turbo;
 #[cfg(feature = "ruliology")]
 pub mod ruliology;
+#[cfg(feature = "segment_checkpoint")]
+pub mod segment_checkpoint;
 #[cfg(feature = "shard_kv")]
 pub mod shard_kv;
 pub mod simd;
@@ -97,6 +101,9 @@ static GLOBAL_ALLOC: alloc::TrackingAllocator = alloc::TrackingAllocator;
 
 #[cfg(feature = "mux_demux")]
 pub mod mux_demux;
+
+#[cfg(feature = "llmexec_guard")]
+pub mod llmexec_guard;
 
 #[cfg(feature = "validator")]
 pub mod validator;
