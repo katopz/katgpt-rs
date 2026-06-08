@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! BFCP Region Pruner — skip reject regions, sample accept regions (Plan 213).
 //!
 //! Partitions logit space into BFCP regions by evaluating ScreeningPruner
@@ -38,7 +37,7 @@ impl BFCPPruner {
     /// - otherwise → Maybe
     ///
     /// Tokens are grouped into up to 3 BorelRegion instances (one per label).
-    pub fn from_logits(pruner: &dyn ScreeningPruner, logits: &[f32], vocab_size: usize) -> Self {
+    pub fn from_logits(pruner: &dyn ScreeningPruner, _logits: &[f32], vocab_size: usize) -> Self {
         let mut accept_tokens = Vec::with_capacity(vocab_size / 2);
         let mut reject_tokens = Vec::with_capacity(vocab_size / 2);
         let mut maybe_tokens = Vec::with_capacity(vocab_size / 4);

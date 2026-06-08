@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_lfu_shard")]
 //! BFCP Region LFU Cache — frequency-aware partition caching with sigmoid admission.
 //!
 //! Caches BLAKE3-hashed BFCP partitions in a papaya lock-free HashMap. LFU eviction
@@ -43,10 +42,8 @@ pub fn blake3_logit_hash(logits: &[f32]) -> [u8; 32] {
     // SAFETY: reading byte representation of &[f32] — no alignment issues on
     // x86/ARM since f32 and u8 share address boundaries. Read-only.
     unsafe {
-        let bytes = std::slice::from_raw_parts(
-            logits.as_ptr() as *const u8,
-            logits.len() * std::mem::size_of::<f32>(),
-        );
+        let bytes =
+            std::slice::from_raw_parts(logits.as_ptr() as *const u8, std::mem::size_of_val(logits));
         hasher.update(bytes);
     }
     *hasher.finalize().as_bytes()
@@ -214,6 +211,10 @@ impl BfcpRegionCache {
     pub fn len(&self) -> usize {
         self.map.pin().len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 // ── RegionCaching trait ──────────────────────────────────────
@@ -262,12 +263,12 @@ impl NeuronShardRegionKey {
         unsafe {
             let shard_bytes = std::slice::from_raw_parts(
                 shard_weights.as_ptr() as *const u8,
-                shard_weights.len() * std::mem::size_of::<f32>(),
+                std::mem::size_of_val(shard_weights),
             );
             hasher.update(shard_bytes);
             let logit_bytes = std::slice::from_raw_parts(
                 logits.as_ptr() as *const u8,
-                logits.len() * std::mem::size_of::<f32>(),
+                std::mem::size_of_val(logits),
             );
             hasher.update(logit_bytes);
         }

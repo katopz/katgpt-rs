@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! Symbolic Percept Router — maps BFCP partition to routing decision (Plan 213 P4).
 //!
 //! Uses region count and label entropy (sigmoid, not softmax) for compute routing.

@@ -176,7 +176,7 @@ fn main() {
 
     for step in 0..50 {
         let match_quality = (step as f32 / 50.0).min(0.95);
-        let generated: Vec<usize> = vec![1, 2, 3, 4]
+        let generated: Vec<usize> = [1, 2, 3, 4]
             .iter()
             .map(|&t| {
                 if fastrand::f32() < match_quality {

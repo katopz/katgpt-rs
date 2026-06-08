@@ -1,4 +1,3 @@
-#![cfg(feature = "regime_transition")]
 //! Four-Regime Router — extends Plan 211 Three-Mode Router with Discovery and Consolidation regimes.
 //!
 //! UCB1 bandit over Regime × Heaviness (6 arms) with sigmoid-gated confidence bounding.

@@ -6,8 +6,6 @@
 //!
 //! Plan 217 Phase 4.
 
-#![cfg(feature = "belief_drafter")]
-
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A compact key for the cache: blake3 hash of (h_t || next_emb).
@@ -22,14 +20,12 @@ impl CacheKey {
         // issues on x86/ARM since f32 and u8 share address boundaries. We only
         // read, never write through these pointers.
         unsafe {
-            let h_bytes = std::slice::from_raw_parts(
-                h_t.as_ptr() as *const u8,
-                h_t.len() * std::mem::size_of::<f32>(),
-            );
+            let h_bytes =
+                std::slice::from_raw_parts(h_t.as_ptr() as *const u8, std::mem::size_of_val(h_t));
             hasher.update(h_bytes);
             let emb_bytes = std::slice::from_raw_parts(
                 next_emb.as_ptr() as *const u8,
-                next_emb.len() * std::mem::size_of::<f32>(),
+                std::mem::size_of_val(next_emb),
             );
             hasher.update(emb_bytes);
         }

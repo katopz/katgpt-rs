@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_lfu_shard")]
 //! Frequency-aware region sharding for BFCF partitions (Plan 218 Phase 2).
 //!
 //! Maps (RegionLabel × FreqTier) → shard index using papaya lock-free HashMap.

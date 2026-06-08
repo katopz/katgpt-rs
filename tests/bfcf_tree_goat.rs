@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! GOAT Verification tests for Plan 213: BFCF Tree.
 //!
 //! These tests verify correctness invariants that constitute GOAT proof:
@@ -19,6 +18,7 @@ use katgpt_rs::speculative::types::ScreeningPruner;
 // ── Synthetic pruners for testing ──────────────────────────────
 
 /// Pruner that classifies by token index ranges.
+#[allow(dead_code)]
 struct RangePruner {
     accept_up_to: usize,
     reject_above: usize,

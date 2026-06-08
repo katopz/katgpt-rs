@@ -143,9 +143,9 @@ pub struct EpisodePruner<P: ConstraintPruner, L: EpisodeLookup, S: ConstraintSyn
     /// Inner pruner (base structural validity).
     inner: P,
     /// Episode lookup backend.
-    lookup: L,
+    _lookup: L,
     /// Constraint synthesizer (diff → constraints).
-    synthesizer: S,
+    _synthesizer: S,
     /// Cached synthesized constraints, keyed by prompt hash.
     constraint_cache: Vec<(u64, Vec<SynthesizedConstraint>)>,
     /// Maximum cache entries before eviction (LRU-style, default 64).
@@ -160,8 +160,8 @@ impl<P: ConstraintPruner, L: EpisodeLookup, S: ConstraintSynthesizer> EpisodePru
     pub fn new(inner: P, lookup: L, synthesizer: S) -> Self {
         Self {
             inner,
-            lookup,
-            synthesizer,
+            _lookup: lookup,
+            _synthesizer: synthesizer,
             constraint_cache: Vec::new(),
             max_cache: 64,
             current_prompt_hash: 0,
@@ -187,6 +187,7 @@ impl<P: ConstraintPruner, L: EpisodeLookup, S: ConstraintSynthesizer> EpisodePru
     /// Returns synthesized constraints for the current prompt hash, using the
     /// cache if available or synthesizing from the episode DB reference.
     /// Where candidate and reference agree, no constraints are emitted.
+    #[allow(dead_code)]
     pub(crate) fn get_or_synthesize(&mut self, candidate: &[usize]) -> &[SynthesizedConstraint] {
         let hash = self.current_prompt_hash;
 
@@ -196,9 +197,9 @@ impl<P: ConstraintPruner, L: EpisodeLookup, S: ConstraintSynthesizer> EpisodePru
         }
 
         // Lookup episode and synthesize
-        let constraints = match self.lookup.lookup(hash) {
+        let constraints = match self._lookup.lookup(hash) {
             Some(episode) => self
-                .synthesizer
+                ._synthesizer
                 .synthesize(candidate, &episode.reference_tokens),
             None => Vec::new(),
         };
@@ -245,9 +246,8 @@ impl<P: ConstraintPruner, L: EpisodeLookup, S: ConstraintSynthesizer> Constraint
 {
     fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
         // Inner pruner is the base gate
-        match self.inner.is_valid(depth, token_idx, parent_tokens) {
-            false => return false,
-            true => {}
+        if !self.inner.is_valid(depth, token_idx, parent_tokens) {
+            return false;
         }
 
         // Check cached constraints (read-only borrow)

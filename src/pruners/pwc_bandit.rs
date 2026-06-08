@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! PWC Bandit Arms — piecewise-constant value function over BFCP regions (Plan 213 P3).
 //!
 //! Each bandit arm maintains a PWC value function: constant per region, varying across regions.

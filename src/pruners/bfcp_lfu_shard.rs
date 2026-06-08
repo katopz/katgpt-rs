@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_lfu_shard")]
 //! Top-level fusion: LFU cache + shard map + batcher (Plan 218 Phase 5).
 //!
 //! Pipeline: lookup → cache miss → compute → insert → shard → batch.

@@ -9,8 +9,6 @@
 //!
 //! Feature-gated behind `belief_drafter` — off by default until GOAT proof.
 
-#![cfg(feature = "belief_drafter")]
-
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
 
@@ -27,7 +25,7 @@ const VERSION: u32 = 1;
 /// Standard GELU approximation: `0.5 * x * (1.0 + tanh(sqrt(2/π) * (x + 0.044715 * x³)))`
 #[inline]
 fn gelu(x: f32) -> f32 {
-    const SQRT_2_OVER_PI: f32 = 0.797_884_560_802_865_4; // sqrt(2/pi)
+    const SQRT_2_OVER_PI: f32 = 0.797_884_6; // sqrt(2/pi)
     let inner = SQRT_2_OVER_PI * (x + 0.044_715 * x * x * x);
     0.5 * x * (1.0 + inner.tanh())
 }
@@ -156,16 +154,16 @@ impl LatentDynamicsMLP {
         let mut magic = [0u8; 4];
         rdr.read_exact(&mut magic)
             .map_err(|e| format!("read magic: {e}"))?;
-        match &magic {
-            MAGIC => {}
-            other => return Err(format!("bad magic: expected {:?}, got {:?}", MAGIC, other)),
+        if &magic != MAGIC {
+            return Err(format!("bad magic: expected {:?}, got {:?}", MAGIC, &magic));
         }
 
         // Version
         let version = read_u32(&mut rdr)?;
-        match version {
-            VERSION => {}
-            v => return Err(format!("unsupported version: {v} (expected {VERSION})")),
+        if version != VERSION {
+            return Err(format!(
+                "unsupported version: {version} (expected {VERSION})"
+            ));
         }
 
         // n_embd
@@ -238,8 +236,7 @@ impl LatentDynamicsMLP {
             state = state.wrapping_mul(1_106_351_524).wrapping_add(12_345);
             // Map to (-1, 1) uniformly
             let bits = state >> 1; // clear sign bit
-            let f = (bits as f32) / (u32::MAX as f32 * 0.5) - 1.0;
-            f
+            (bits as f32) / (u32::MAX as f32 * 0.5) - 1.0
         };
 
         // Xavier init: scale = sqrt(2 / fan_in)
@@ -434,15 +431,16 @@ impl BeliefDrafter {
 
     /// Project hidden state through output head to get logits.
     /// Returns logits `[vocab_size]`.
+    #[allow(dead_code)]
     fn logits_from_hidden(&self, h: &[f32]) -> Vec<f32> {
         let n = self.mlp.n_embd;
         let vs = self.vocab_size;
         let mut logits = vec![0.0f32; vs];
         // output_head: [vocab_size, n_embd] row-major
         // logits[i] = dot(output_head[i*n..(i+1)*n], h)
-        for i in 0..vs {
+        for (i, slot) in logits.iter_mut().enumerate().take(vs) {
             let row_off = i * n;
-            logits[i] = simd_dot_f32(&self.output_head[row_off..row_off + n], h, n);
+            *slot = simd_dot_f32(&self.output_head[row_off..row_off + n], h, n);
         }
         logits
     }
@@ -520,9 +518,9 @@ impl BeliefDrafter {
         let n = self.mlp.n_embd;
         let vs = self.vocab_size;
         debug_assert_eq!(logits.len(), vs);
-        for i in 0..vs {
+        for (i, slot) in logits.iter_mut().enumerate().take(vs) {
             let row_off = i * n;
-            logits[i] = simd_dot_f32(&self.output_head[row_off..row_off + n], h, n);
+            *slot = simd_dot_f32(&self.output_head[row_off..row_off + n], h, n);
         }
     }
 
@@ -617,12 +615,13 @@ fn read_f32_vec(rdr: &mut impl Read, expected_len: usize, label: &str) -> Result
         .chunks_exact(4)
         .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
         .collect();
-    match vec.len() == expected_len {
-        true => Ok(vec),
-        false => Err(format!(
+    if vec.len() == expected_len {
+        Ok(vec)
+    } else {
+        Err(format!(
             "{label}: expected {expected_len} elements, got {}",
             vec.len()
-        )),
+        ))
     }
 }
 
@@ -740,9 +739,14 @@ mod tests {
         drop(file);
 
         let result = LatentDynamicsMLP::load_from_bin(&path);
-        match result {
-            Err(msg) if msg.contains("bad magic") => {}
-            other => panic!("expected bad magic error, got: {other:?}"),
+        // Verify that loading with a bad magic byte sequence produces an error
+        if let Err(msg) = &result {
+            assert!(
+                msg.contains("bad magic"),
+                "expected bad magic error, got: {msg}"
+            );
+        } else {
+            panic!("expected bad magic error, got: {result:?}");
         }
     }
 
@@ -857,7 +861,7 @@ mod tests {
         // With zero threshold, should draft 1-2 tokens (stops after 2nd if entropy > 0)
         let drafts_limited = drafter.draft(&h_t, 5, 0.0);
         assert!(
-            drafts_limited.len() >= 1 && drafts_limited.len() <= 5,
+            !drafts_limited.is_empty() && drafts_limited.len() <= 5,
             "low threshold should produce 1-5 tokens, got {}",
             drafts_limited.len()
         );
@@ -948,7 +952,7 @@ mod tests {
 
     #[test]
     fn test_log_softmax_sums_to_one() {
-        let mut logits = vec![1.0f32, 2.0f32, 3.0f32];
+        let mut logits = [1.0f32, 2.0f32, 3.0f32];
         log_softmax_inplace(&mut logits);
         let sum_exp: f32 = logits.iter().map(|&lp| lp.exp()).sum();
         assert!(
@@ -970,7 +974,7 @@ mod tests {
 
     #[test]
     fn test_greedy_sample_argmax() {
-        let logits = vec![0.1f32, 0.5f32, 0.3f32];
+        let logits = [0.1f32, 0.5f32, 0.3f32];
         let (idx, _) = greedy_sample(&logits);
         assert_eq!(idx, 1, "should pick index 1 (0.5)");
     }

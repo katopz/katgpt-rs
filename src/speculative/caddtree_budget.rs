@@ -1,4 +1,3 @@
-#![cfg(feature = "caddtree_budget")]
 //! CaDDTree — Cost-Aware Adaptive DDTree Budget Selection (Plan 219).
 //!
 //! Replaces fixed `Config::tree_budget` with per-round adaptive budget that

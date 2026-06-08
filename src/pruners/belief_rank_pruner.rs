@@ -18,8 +18,6 @@
 //!
 //! Plan 217 Phase 3.
 
-#![cfg(feature = "belief_drafter")]
-
 use katgpt_core::ScreeningPruner;
 
 /// Pruner that uses hidden state effective rank (participation ratio) to gate draft acceptance.
@@ -78,9 +76,8 @@ impl BeliefRankPruner {
     ///
     /// Silently ignores vectors with wrong dimensionality.
     pub fn observe(&mut self, h: &[f32]) {
-        match h.len() == self.n_embd {
-            false => return,
-            true => {}
+        if h.len() != self.n_embd {
+            return;
         }
 
         self.hidden_buffer.push(h.to_vec());
@@ -137,9 +134,8 @@ impl BeliefRankPruner {
 
         let k = self.hidden_buffer.len();
 
-        match k {
-            1 => return self.flatness(&self.hidden_buffer[0]),
-            _ => {}
+        if k == 1 {
+            return self.flatness(&self.hidden_buffer[0]);
         }
 
         let n = self.n_embd;
@@ -198,10 +194,10 @@ impl BeliefRankPruner {
 }
 
 impl ScreeningPruner for BeliefRankPruner {
-    fn relevance(&self, _depth: usize, _token_idx: usize, _parent_tokens: &[usize]) -> f32 {
-        match self.initialized {
-            false => return 0.5, // Neutral relevance when no observations yet
-            true => {}
+    fn relevance(&self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> f32 {
+        // Neutral relevance when no observations yet
+        if !self.initialized {
+            return 0.5;
         }
 
         let rank = self.effective_rank();
@@ -354,7 +350,7 @@ mod tests {
     fn test_observe_maintains_buffer_size() {
         let mut pruner = BeliefRankPruner::new(4, 3, 0.7);
         for i in 0..10 {
-            pruner.observe(&vec![i as f32; 4]);
+            pruner.observe(&[i as f32; 4]);
         }
         assert_eq!(
             pruner.buffer_len(),

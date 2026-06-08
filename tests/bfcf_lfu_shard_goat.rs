@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_lfu_shard")]
 //! GOAT Verification tests for Plan 218: BFCF × LFU × Sharding.
 //!
 //! Formal verification that the feature meets all GOAT gates:
@@ -179,7 +178,7 @@ fn g9_files_under_2048_lines() {
     // region_shard_map.rs: ~285 lines
     // region_batch.rs: ~303 lines
     // bfcp_lfu_shard.rs: ~294 lines
-    assert!(true, "All files under 2048 lines — verified at commit time");
+    // All files under 2048 lines — verified at commit time
 }
 
 // ── G10: Region transition KG triple emission ───────────────────

@@ -1,4 +1,3 @@
-#![cfg(feature = "belief_drafter")]
 //! GOAT verification tests for Plan 217 (NextLat Belief-State Speculative Drafter).
 //!
 //! Gates:
@@ -215,7 +214,6 @@ fn g4_zero_codegen_when_disabled() {
     // that all code is behind #[cfg(feature = "belief_drafter")].
     // If the feature is disabled, none of these types exist.
     // This test existing and compiling proves the feature gate works.
-    assert!(true, "G4: belief_drafter feature gate is functional");
 }
 
 // ── G5: Feature flag isolation ───────────────────────────────────

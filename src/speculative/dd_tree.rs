@@ -356,7 +356,7 @@ pub fn build_dd_tree_lodestar(
     // Strip A* offset from scores so downstream sees pure log-prob.
     // When λ = 0 this is a no-op.
     if lambda != 0.0 {
-        for node in &mut tree {
+        for _node in &mut tree {
             // We don't store d(s) in the node, so we need to reconstruct.
             // Actually — the score already includes the A* offset. Downstream
             // consumers use relative score comparisons (heap ordering), so the

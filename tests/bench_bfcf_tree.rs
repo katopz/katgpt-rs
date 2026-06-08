@@ -11,9 +11,9 @@
 use std::time::Instant;
 
 use katgpt_rs::pruners::{
-    bfcf_types::{BFCP, BorelRegion, RegionLabel},
+    bfcf_types::RegionLabel,
     bfcp_pruner::BFCPPruner,
-    percept_router::{ComputePath, PerceptRouter, SigmoidPerceptRouter},
+    percept_router::{PerceptRouter, SigmoidPerceptRouter},
     pwc_bandit::RegionBandit,
 };
 use katgpt_rs::speculative::types::ScreeningPruner;
@@ -317,10 +317,8 @@ fn bench_bfcf_throughput_gain() {
     let start = Instant::now();
     for _ in 0..ITERS {
         for _step in 0..speculative_steps {
-            let mut _screened = 0usize;
             for token_idx in 0..VOCAB_SIZE {
                 let _rel = pruner.relevance(0, token_idx, &[]);
-                _screened += 1;
             }
         }
     }

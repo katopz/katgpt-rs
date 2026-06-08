@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_lfu_shard")]
 //! Region-level batching for BFCF partitions (Plan 218 Phase 3).
 //!
 //! Batch processes accept/reject/maybe regions from a BFCP partition:

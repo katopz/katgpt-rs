@@ -304,6 +304,16 @@ impl RoaringMembership {
                 .collect(),
         }
     }
+
+    /// Create from pre-built bitmaps.
+    pub fn from_bitmaps(bitmaps: Vec<CompactBitmap>) -> Self {
+        Self { bitmaps }
+    }
+
+    /// Access the underlying bitmaps.
+    pub fn bitmaps(&self) -> &[CompactBitmap] {
+        &self.bitmaps
+    }
 }
 
 impl Default for RoaringMembership {

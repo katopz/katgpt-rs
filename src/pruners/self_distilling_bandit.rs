@@ -192,6 +192,7 @@ impl DomainQTable {
     }
 
     /// Get global Q-values.
+    #[allow(dead_code)]
     fn global_q_values(&self) -> &[f32] {
         self.global.q_values()
     }
@@ -655,7 +656,6 @@ mod tests {
         );
 
         let mut early_reward = 0.0f32;
-        let late_reward;
 
         for i in 0..100 {
             // Gradually improve match quality
@@ -670,7 +670,7 @@ mod tests {
                 early_reward = sd.convergence_metrics().avg_reward;
             }
         }
-        late_reward = sd.convergence_metrics().avg_reward;
+        let late_reward = sd.convergence_metrics().avg_reward;
 
         assert!(
             late_reward > early_reward,

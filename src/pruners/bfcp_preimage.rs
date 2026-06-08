@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! BFCP Preimage Lookahead — backward reachability from accepted prefix (Plan 213 P2).
 //!
 //! Refines "maybe" regions by checking which tokens are backward-reachable from
@@ -210,7 +209,11 @@ mod tests {
 
     impl ScreeningPruner for EvenTokenPruner {
         fn relevance(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> f32 {
-            if token_idx % 2 == 0 { 1.0 } else { 0.0 }
+            if token_idx.is_multiple_of(2) {
+                1.0
+            } else {
+                0.0
+            }
         }
     }
 

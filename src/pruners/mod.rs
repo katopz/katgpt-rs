@@ -881,6 +881,14 @@ pub mod count_min_sketch;
 #[cfg(feature = "bfcf_lsh_cms")]
 pub use count_min_sketch::{CountMinSketch, SketchFrequency};
 
+// ── BFCF × LSH × CMS — Top-Level Fusion (Plan 220 Phase 4) ──
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub mod bfcp_lsh_cms;
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub use bfcp_lsh_cms::BfcpLshCms;
+
 // ── SubstrateGate — Inference-Time Capability Substrate Routing (Plan 216) ──
 //
 // Pre-computed per-capability MLP channel masks intersected with ReLU

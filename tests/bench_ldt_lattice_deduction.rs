@@ -116,7 +116,7 @@ fn bench_ldt_lattice_deduction_goat_proof() {
         }
     }
 
-    /// Check if the lattice_deduction feature is present
+    // Check if the lattice_deduction feature is present
     println!("═══════════════════════════════════════════════════════════");
     println!("  LDT Lattice Deduction — GOAT Proof (Plan 088)");
     println!("═══════════════════════════════════════════════════════════");

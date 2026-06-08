@@ -1,4 +1,3 @@
-#![cfg(feature = "bfcf_tree")]
 //! BFCF Tree core types — Borel Finite Connected Partition (Plan 213 Phase 1).
 //!
 //! Types for perceptual region folding: token space partitioned into convex BFCP regions

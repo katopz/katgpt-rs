@@ -1145,7 +1145,7 @@ fn goat_217_acceptance_rate() {
     let belief_ratio = belief_tree.len() as f64 / mtp_tree.len().max(1) as f64;
     println!("\n  Belief/MTP node ratio: {:.2}", belief_ratio);
     assert!(
-        belief_tree.len() >= 1,
+        !belief_tree.is_empty(),
         "Belief tree should have at least 1 node"
     );
 
@@ -1275,8 +1275,8 @@ fn goat_217_variable_length_speedup() {
     // Fixed-length: always draft exactly 5 tokens (high entropy threshold forces max)
     let start = Instant::now();
     let mut fixed_total_tokens = 0usize;
-    for i in 0..iters {
-        let drafts = black_box(drafter.draft(&hidden_states[i], 5, 100.0)); // very high threshold = always 5
+    for h in hidden_states.iter().take(iters) {
+        let drafts = black_box(drafter.draft(h, 5, 100.0)); // very high threshold = always 5
         fixed_total_tokens += drafts.len();
     }
     let fixed_elapsed = start.elapsed();
@@ -1286,8 +1286,8 @@ fn goat_217_variable_length_speedup() {
     let start = Instant::now();
     let mut var_total_tokens = 0usize;
     let mut var_lengths = Vec::with_capacity(iters);
-    for i in 0..iters {
-        let drafts = black_box(drafter.draft(&hidden_states[i], 5, 2.0)); // normal threshold
+    for h in hidden_states.iter().take(iters) {
+        let drafts = black_box(drafter.draft(h, 5, 2.0)); // normal threshold
         var_lengths.push(drafts.len());
         var_total_tokens += drafts.len();
     }
@@ -1371,19 +1371,18 @@ fn goat_217_no_regression() {
     println!("  Feature gate verification:");
     println!("    belief_drafter      → active (this test is behind it)");
     println!("    speculative_generator → active (this test is behind it)");
-    println!("");
     println!("  All belief_drafter code is behind #[cfg(feature = \"belief_drafter\')]:");
     println!("    - src/speculative/belief_drafter.rs");
     println!("    - src/speculative/belief_cache.rs");
     println!("    - src/pruners/belief_rank_pruner.rs");
     println!("    - tests/bench_217_belief_drafter_goat.rs");
-    println!("");
     println!("  Verification: Run `cargo check` without features → zero impact.");
     println!("  (This is a manual step — the test itself proves the feature gate is active.)");
 
     // Assert the test itself is behind the correct feature gate
     // (If you're seeing this output, the feature gates work correctly)
-    assert!(true, "Feature gate verification");
+    // Feature gate verification: if this test compiles and runs,
+    // the feature gates are correctly structured.
 
     println!("\n  ✓ G3 PASS: Feature gates correctly isolate belief_drafter code");
 

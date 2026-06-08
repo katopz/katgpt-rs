@@ -94,13 +94,13 @@ fn precompute_distances() -> [u32; N_STATES] {
         changed = false;
         for s in 0..N_STATES {
             for t in 0..VOCAB {
-                if let Some(ns) = delta(s, t) {
-                    if d[ns] != u32::MAX {
-                        let cand = d[ns] + 1;
-                        if cand < d[s] {
-                            d[s] = cand;
-                            changed = true;
-                        }
+                if let Some(ns) = delta(s, t)
+                    && d[ns] != u32::MAX
+                {
+                    let cand = d[ns] + 1;
+                    if cand < d[s] {
+                        d[s] = cand;
+                        changed = true;
                     }
                 }
             }
@@ -134,14 +134,18 @@ fn singular_span_len(mut state: usize) -> u32 {
 // Weights over the vocab. NOT a trained model — a fixed inference-time prior,
 // deliberately biased toward `[` to create the budget trap.
 const DRAFT_WEIGHT: [f32; VOCAB] = [
-    /*OPEN */ 5.0, /*CLOSE*/ 1.0, /*NUM */ 2.0, /*COMMA*/ 2.0, /*HDR */ 1.0,
+    /*OPEN */ 5.0, /*CLOSE*/ 1.0, /*NUM */ 2.0, /*COMMA*/ 2.0,
+    /*HDR */ 1.0,
 ];
 
 /// Tiny deterministic LCG so trials are reproducible without external crates.
 struct Lcg(u64);
 impl Lcg {
     fn next_f32(&mut self) -> f32 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 33) as f32) / ((1u64 << 31) as f32)
     }
 }
@@ -175,7 +179,10 @@ fn decode_naive(budget: usize, rng: &mut Lcg) -> Run {
     let mut steps = 0;
     while tokens < budget {
         if state == ACCEPT {
-            return Run { valid_complete: true, steps };
+            return Run {
+                valid_complete: true,
+                steps,
+            };
         }
         let legal: Vec<usize> = (0..VOCAB).filter(|&t| delta(state, t).is_some()).collect();
         if legal.is_empty() {
@@ -186,7 +193,10 @@ fn decode_naive(budget: usize, rng: &mut Lcg) -> Run {
         tokens += 1;
         steps += 1;
     }
-    Run { valid_complete: state == ACCEPT, steps }
+    Run {
+        valid_complete: state == ACCEPT,
+        steps,
+    }
 }
 
 /// THINKING: Lodestar. Same draft, but
@@ -199,7 +209,10 @@ fn decode_lodestar(budget: usize, dist: &[u32; N_STATES], rng: &mut Lcg) -> Run 
     let mut steps = 0;
     while tokens < budget {
         if state == ACCEPT {
-            return Run { valid_complete: true, steps };
+            return Run {
+                valid_complete: true,
+                steps,
+            };
         }
 
         // (B) Jump-ahead: collapse a forced singular span into one step if it fits.
@@ -207,8 +220,7 @@ fn decode_lodestar(budget: usize, dist: &[u32; N_STATES], rng: &mut Lcg) -> Run 
         if span >= 1 && (tokens + span as usize) <= budget {
             // Walk the forced span (deterministic) in a single decode step.
             for _ in 0..span {
-                let legal: Vec<usize> =
-                    (0..VOCAB).filter(|&t| delta(state, t).is_some()).collect();
+                let legal: Vec<usize> = (0..VOCAB).filter(|&t| delta(state, t).is_some()).collect();
                 state = delta(state, legal[0]).unwrap();
                 tokens += 1;
             }
@@ -220,7 +232,7 @@ fn decode_lodestar(budget: usize, dist: &[u32; N_STATES], rng: &mut Lcg) -> Run 
         let budget_remaining = (budget - tokens) as u32;
         let legal: Vec<usize> = (0..VOCAB)
             .filter(|&t| match delta(state, t) {
-                Some(ns) => dist[ns] != u32::MAX && 1 + dist[ns] <= budget_remaining,
+                Some(ns) => dist[ns] != u32::MAX && dist[ns] < budget_remaining,
                 None => false,
             })
             .collect();
@@ -234,7 +246,10 @@ fn decode_lodestar(budget: usize, dist: &[u32; N_STATES], rng: &mut Lcg) -> Run 
         tokens += 1;
         steps += 1;
     }
-    Run { valid_complete: state == ACCEPT, steps }
+    Run {
+        valid_complete: state == ACCEPT,
+        steps,
+    }
 }
 
 fn main() {
@@ -246,7 +261,11 @@ fn main() {
     println!("Shortest-accepting-distance d(s) — precomputed ONCE, reverse-BFS:");
     print!("  START(H0)={}  H1={}  H2={}", dist[0], dist[1], dist[2]);
     for d in 1..=MAX_DEPTH {
-        print!("  (d{d},Val)={}  (d{d},More)={}", dist[s_value(d)], dist[s_more(d)]);
+        print!(
+            "  (d{d},Val)={}  (d{d},More)={}",
+            dist[s_value(d)],
+            dist[s_more(d)]
+        );
     }
     println!("  ACCEPT={}", dist[ACCEPT]);
     println!(
@@ -256,8 +275,14 @@ fn main() {
 
     // ── Budget sweep (deterministic seed) ──────────────────────
     println!("Budget sweep (draft adversary biased toward '['):");
-    println!("  {:>6} | {:>14} {:>6} | {:>16} {:>6} {:>6}", "budget", "naive valid?", "steps", "lodestar valid?", "steps", "saved");
-    println!("  {:-<6}-+-{:-<14}-{:-<6}-+-{:-<16}-{:-<6}-{:-<6}", "", "", "", "", "", "");
+    println!(
+        "  {:>6} | {:>14} {:>6} | {:>16} {:>6} {:>6}",
+        "budget", "naive valid?", "steps", "lodestar valid?", "steps", "saved"
+    );
+    println!(
+        "  {:-<6}-+-{:-<14}-{:-<6}-+-{:-<16}-{:-<6}-{:-<6}",
+        "", "", "", "", "", ""
+    );
     let feasible = dist[START] as usize; // min tokens for ANY valid output
     for budget in [feasible, feasible + 2, feasible + 4, feasible + 8, 30] {
         let mut rng_a = Lcg(0x1234_5678);
@@ -315,7 +340,11 @@ fn main() {
         "  (A) budget guarantee : Lodestar {} valid-in-budget vs naive {} → {}",
         pct(lode_ok, trials),
         pct(naive_ok, trials),
-        if correctness_win { "PASS ✅" } else { "FAIL ❌" }
+        if correctness_win {
+            "PASS ✅"
+        } else {
+            "FAIL ❌"
+        }
     );
     println!(
         "  (B) jump-ahead speed : avg steps {:.2} vs {:.2} → {}",
@@ -325,7 +354,11 @@ fn main() {
     );
     println!(
         "  overall              : {}",
-        if correctness_win && speed_win { "GOAT PASS — gain, no model training" } else { "see above" }
+        if correctness_win && speed_win {
+            "GOAT PASS — gain, no model training"
+        } else {
+            "see above"
+        }
     );
 
     // Inline self-checks (cheap, run every invocation).
@@ -344,11 +377,16 @@ fn pct(ok: u32, n: usize) -> String {
 fn run_invariant_checks(dist: &[u32; N_STATES]) {
     // Admissibility + consistency: d(s) ≤ 1 + d(δ(s,t)) for every legal edge.
     for s in 0..N_STATES {
-        for t in 0..VOCAB {
-            if let Some(ns) = delta(s, t) {
-                if dist[ns] != u32::MAX && dist[s] != u32::MAX {
-                    assert!(dist[s] <= 1 + dist[ns], "consistency violated at state {s} token {}", TOK_NAME[t]);
-                }
+        for (t, _) in TOK_NAME.iter().enumerate() {
+            if let Some(ns) = delta(s, t)
+                && dist[ns] != u32::MAX
+                && dist[s] != u32::MAX
+            {
+                assert!(
+                    dist[s] <= 1 + dist[ns],
+                    "consistency violated at state {s} token {}",
+                    TOK_NAME[t]
+                );
             }
         }
     }
