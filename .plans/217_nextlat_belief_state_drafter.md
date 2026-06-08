@@ -1,7 +1,7 @@
 # Plan 217: NextLat Belief-State Speculative Drafter
 
 **Research**: R192 (NextLat Belief-State Latent Dynamics)
-**Status**: NOT STARTED
+**Status**: Phase 0 COMPLETE (feature gate wired, 7 tests passing). Phase 1+ pending.
 **Feature Gate**: `belief_drafter` (off by default until GOAT proof)
 **Depends on**: Plan 055 (MTP Drafter infrastructure), Plan 195 (ThoughtFold), Plan 212 (Collapse-Aware Adaptive Thinking)
 
@@ -77,12 +77,12 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
 ## Tasks
 
 ### Phase 0: Types & MLP Forward
-- [ ] Add `belief_drafter` feature gate to `crates/katgpt-core/src/lib.rs` and `src/lib.rs`
-- [ ] Add `LatentDynamicsMLP` struct to `src/speculative/belief_drafter.rs`
-- [ ] Implement `forward(&self, h_t: &[f32], next_emb: &[f32]) -> Vec<f32>` with SIMD matmul
-- [ ] Implement `load_from_bin(path: &Path) -> Result<LatentDynamicsMLP>` for riir-ai export
-- [ ] Implement `random_init(config: &Config) -> LatentDynamicsMLP` for untrained mode
-- [ ] Unit test: MLP forward shape correctness for all config presets
+- [x] Add `belief_drafter` feature gate to `crates/katgpt-core/src/lib.rs` and `src/lib.rs`
+- [x] Add `LatentDynamicsMLP` struct to `src/speculative/belief_drafter.rs`
+- [x] Implement `forward(&self, h_t: &[f32], next_emb: &[f32]) -> Vec<f32>` with SIMD matmul
+- [x] Implement `load_from_bin(path: &Path) -> Result<LatentDynamicsMLP>` for riir-ai export
+- [x] Implement `random_init(config: &Config) -> LatentDynamicsMLP` for untrained mode
+- [x] Unit test: MLP forward shape correctness for all config presets
 
 ### Phase 1: Belief Drafter Integration
 - [ ] Add `BeliefDrafter` struct wrapping MLP + output head reference
