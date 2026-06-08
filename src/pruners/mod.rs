@@ -848,8 +848,38 @@ pub use region_batch::{RegionBatcher, RegionBatching};
 #[cfg(feature = "bfcf_lfu_shard")]
 pub mod bfcp_lfu_shard;
 
+// ── BFCF × LSH × CMS × Roaring — Bitmap Membership (Plan 220 Phase 3) ─────
+//
+// Custom Roaring-like CompactBitmap replacing Vec<bool> for region membership.
+// Feature-gated behind `bfcf_lsh_cms` — opt-in until GOAT proved.
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub mod roaring_membership;
+
 #[cfg(feature = "bfcf_lfu_shard")]
 pub use bfcp_lfu_shard::{BfcpLfuShard, freq_aware_complexity};
+
+// ── LSH Approximate Cache — SimHash near-miss cache layer (Plan 220) ──
+//
+// Three-level hierarchy: L0 exact (BLAKE3) → L1 LSH (SimHash) → compute.
+// SimHash maps logit vectors to 64-bit fingerprints for approximate lookup.
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub mod lsh_cache;
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub use lsh_cache::{ApproximateCaching, BfcpLshCache, LshApproximateCache, SimHashFingerprint};
+
+// ── BFCF × LSH × CMS — Count-Min Sketch Frequency Estimation (Plan 220 Phase 2) ──
+//
+// O(1) frequency estimation via 4-row × 256-col CMS (2KB). One-sided overestimate
+// safe for LFU eviction. SketchFrequency trait bridges CMS → FreqTier classification.
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub mod count_min_sketch;
+
+#[cfg(feature = "bfcf_lsh_cms")]
+pub use count_min_sketch::{CountMinSketch, SketchFrequency};
 
 // ── SubstrateGate — Inference-Time Capability Substrate Routing (Plan 216) ──
 //
