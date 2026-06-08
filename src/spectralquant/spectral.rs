@@ -1405,3 +1405,74 @@ mod dual_gram_goat_tests {
         }
     }
 }
+
+/// Compute Kolmogorov-Smirnov D-statistic between a weight distribution
+/// and a Gaussian reference N(μ, σ). O(n log n) due to sort, zero additional allocation
+/// beyond the scratch buffer.
+///
+/// Returns D ∈ [0, 1] where:
+/// - D < 0.1: normal weight distribution
+/// - D > 0.25: likely outlier injection (per arxiv 2605.15152)
+pub fn ks_d_statistic(weights: &[f32], scratch: &mut [f32]) -> f32 {
+    let n = weights.len().min(scratch.len());
+    if n == 0 {
+        return 0.0;
+    }
+
+    // Copy to scratch for sorting
+    scratch[..n].copy_from_slice(&weights[..n]);
+    scratch[..n].sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+    // Compute mean and std from sorted data
+    let mean: f64 = scratch[..n].iter().map(|&x| x as f64).sum::<f64>() / n as f64;
+    let var: f64 = scratch[..n]
+        .iter()
+        .map(|&x| {
+            let d = x as f64 - mean;
+            d * d
+        })
+        .sum::<f64>()
+        / n as f64;
+    let std = var.sqrt().max(1e-10);
+
+    if std < 1e-10 {
+        return 0.0; // constant weights → no distribution to compare
+    }
+
+    // Compare empirical CDF to Gaussian CDF
+    let mut max_d = 0.0f32;
+    for (i, &x) in scratch[..n].iter().enumerate() {
+        let z = (x as f64 - mean) / std;
+        let gaussian_cdf = normal_cdf(z) as f32;
+        let empirical_cdf_upper = ((i + 1) as f32) / n as f32;
+        let empirical_cdf_lower = (i as f32) / n as f32;
+
+        let d_plus = (empirical_cdf_upper - gaussian_cdf).abs();
+        let d_minus = (gaussian_cdf - empirical_cdf_lower).abs();
+        max_d = max_d.max(d_plus).max(d_minus);
+    }
+
+    max_d
+}
+
+/// Standard normal CDF approximation (Abramowitz and Stegun).
+/// Accurate to ~1e-7.
+fn normal_cdf(z: f64) -> f64 {
+    // Protect against overflow
+    if z < -8.0 {
+        return 0.0;
+    }
+    if z > 8.0 {
+        return 1.0;
+    }
+
+    let t = 1.0 / (1.0 + 0.2316419 * z.abs());
+    let d = 0.3989422804014327; // 1/sqrt(2π)
+    let p = d
+        * (-z * z / 2.0).exp()
+        * t
+        * (0.319381530
+            + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+
+    if z > 0.0 { 1.0 - p } else { p }
+}

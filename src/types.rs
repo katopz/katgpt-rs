@@ -190,3 +190,55 @@ pub fn top_p_coreset_allocating(scores: &[f32], p: f32) -> (Vec<bool>, usize) {
     );
     (mask, count)
 }
+
+// ---------------------------------------------------------------------------
+// Outlier-Aware Quantization Guard (Plan 224)
+// ---------------------------------------------------------------------------
+
+/// Action to take when outlier injection is detected.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum OutlierAction {
+    /// Log warning, continue loading. Default for MIT engine.
+    #[default]
+    Warn = 0,
+    /// Reject the model (return error). Useful for SaaS deployment.
+    Reject = 1,
+    /// Silent — just record metrics, no warning. Useful for benchmarking.
+    Silent = 2,
+}
+
+/// Configuration for the outlier-aware quantization guard.
+/// Runs once at model load time to detect outlier injection attacks.
+#[derive(Clone, Debug)]
+pub struct OutlierGuardConfig {
+    /// KS D-statistic threshold above which a layer is flagged.
+    /// Default: 0.15 (conservative midpoint between normal <0.1 and attacked >0.25).
+    pub ks_threshold: f32,
+    /// What to do when an outlier is detected.
+    pub on_detection: OutlierAction,
+    /// Whether to also check StiffSoft eigenvalue distribution if available.
+    pub use_stiffsoft_crosscheck: bool,
+}
+
+impl Default for OutlierGuardConfig {
+    fn default() -> Self {
+        Self {
+            ks_threshold: 0.15,
+            on_detection: OutlierAction::Warn,
+            use_stiffsoft_crosscheck: false,
+        }
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for OutlierGuardConfig {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut state = s.serialize_struct("OutlierGuardConfig", 3)?;
+        state.serialize_field("ks_threshold", &self.ks_threshold)?;
+        state.serialize_field("on_detection", &(self.on_detection as u8))?;
+        state.serialize_field("use_stiffsoft_crosscheck", &self.use_stiffsoft_crosscheck)?;
+        state.end()
+    }
+}
