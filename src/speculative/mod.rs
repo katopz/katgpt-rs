@@ -1,6 +1,8 @@
 pub mod budget_compat;
 
 #[cfg(feature = "belief_drafter")]
+pub mod belief_cache;
+#[cfg(feature = "belief_drafter")]
 pub mod belief_drafter;
 pub mod dd_tree;
 pub mod dflash;
@@ -215,6 +217,8 @@ pub use spec_generator::{
 pub use dd_tree::build_dd_tree_speculative;
 
 // ── Belief Drafter Re-exports (Plan 217, feature: belief_drafter) ──
+#[cfg(feature = "belief_drafter")]
+pub use belief_cache::LatentTransitionCache;
 #[cfg(feature = "belief_drafter")]
 pub use belief_drafter::{BeliefDraftCondition, BeliefDraftError, BeliefDraftToken, BeliefDrafter};
 #[cfg(feature = "belief_drafter")]

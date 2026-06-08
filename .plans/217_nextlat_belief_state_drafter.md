@@ -1,7 +1,7 @@
 # Plan 217: NextLat Belief-State Speculative Drafter
 
 **Research**: R192 (NextLat Belief-State Latent Dynamics)
-**Status**: Phase 0+1+2+3 COMPLETE (34 tests passing, 3 benchmarks passing). Phase 4+ pending.
+**Status**: Phase 0+1+2+3+4(cache) COMPLETE (43 tests passing, 3 benchmarks passing). Phase 4(bench)+5 pending.
 **Feature Gate**: `belief_drafter` (off by default until GOAT proof)
 **Depends on**: Plan 055 (MTP Drafter infrastructure), Plan 195 (ThoughtFold), Plan 212 (Collapse-Aware Adaptive Thinking)
 
@@ -120,7 +120,7 @@ For Config::micro (embd=16): MLP has ~1.5K params. For Config::bpe (embd=32): ~6
 - [ ] Benchmark: pruning quality with/without belief-state signal
 
 ### Phase 4: Latent Transition Cache
-- [ ] Implement `(h_t, x_{t+1})` → `ĥ_{t+1}` LRU cache using papaya HashMap
+- [x] Implement `(h_t, x_{t+1})` → `ĥ_{t+1}` LRU cache using papaya HashMap
 - [ ] Measure cache hit rate on game domain sequences
 - [ ] Benchmark: cached vs uncached MLP forward
 
