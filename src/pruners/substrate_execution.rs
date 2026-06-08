@@ -110,6 +110,64 @@ pub fn flops_reduction_ratio(mask: &SubstrateMask, active_ratio: f32) -> f32 {
     1.0 - (with_mask / without_mask)
 }
 
+// ── Dual-sparsity sparse matmul: ReLU ∩ substrate mask → w2 down-projection ──
+
+/// Dual-sparsity sparse matmul for the w2 down-projection.
+///
+/// Packs ReLU-active neurons, intersects with the substrate mask in-place,
+/// then performs sparse matmul with the reduced active set.
+/// Same weight layout as `sparse_matmul`: weight[row * cols + col].
+///
+/// Returns the post-intersection alive count.
+pub fn sparse_matmul_substrate(
+    output: &mut [f32],
+    weight: &[f32],
+    input: &[f32],
+    rows: usize,
+    cols: usize,
+    active_indices: &mut [usize],
+    active_values: &mut [f32],
+    mask: &SubstrateMask,
+    layer_idx: usize,
+) -> usize {
+    // Phase 1: Pack ReLU-active neuron indices and values
+    let mut relu_alive = 0usize;
+    for c in 0..cols {
+        let val = input[c];
+        if val > 0.0 {
+            active_indices[relu_alive] = c;
+            active_values[relu_alive] = val;
+            relu_alive += 1;
+        }
+    }
+
+    // Phase 1.5: Substrate mask intersection — in-place compaction
+    let alive = apply_substrate_mask_inplace(
+        &mut active_indices[..relu_alive],
+        &mut active_values[..relu_alive],
+        mask,
+        layer_idx,
+    );
+
+    // Skip matmul entirely if intersection killed all neurons
+    if alive == 0 {
+        return 0;
+    }
+
+    // Phase 2: Sparse multiply with reduced active set
+    crate::simd::simd_sparse_matmul_rows(
+        output,
+        weight,
+        &active_indices[..alive],
+        &active_values[..alive],
+        rows,
+        cols,
+        alive,
+    );
+
+    alive
+}
+
 // ── SubstrateExecutionContext ──────────────────────────────────
 
 /// Execution context for substrate-aware forward pass.

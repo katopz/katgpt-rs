@@ -464,6 +464,9 @@ pub struct ForwardContext {
     pub(crate) active_indices: Vec<usize>, // [mlp_hidden] pre-allocated index buffer
     #[cfg(feature = "sparse_mlp")]
     pub(crate) active_values: Vec<f32>, // [mlp_hidden] pre-allocated value buffer
+    // SubstrateGate: per-sequence capability mask for dual sparsity (Plan 216)
+    #[cfg(feature = "substrate_gate")]
+    pub(crate) substrate_mask: Option<crate::pruners::SubstrateMask>,
     // Paged KV cache: pre-allocated flat buffers for attention computation
     paged_flat_key: Vec<f32>,   // [block_size * kv_dim]
     paged_flat_value: Vec<f32>, // [block_size * kv_dim]
@@ -560,6 +563,8 @@ impl ForwardContext {
             active_indices: vec![0; config.mlp_hidden],
             #[cfg(feature = "sparse_mlp")]
             active_values: vec![0.0; config.mlp_hidden],
+            #[cfg(feature = "substrate_gate")]
+            substrate_mask: None,
             paged_flat_key: vec![0.0; block_kv],
             paged_flat_value: vec![0.0; block_kv],
             raven_query_buf: vec![0.0; kvd.max(64)],
@@ -2265,8 +2270,44 @@ fn forward_base<'a>(
         if let Some(ref modulator) = ctx.cna_modulator {
             crate::pruners::cna_modulate(&mut ctx.hidden, layer_idx, modulator);
         }
-        // MLP w2: sparse when feature enabled and sparsity is high enough (Plan 022)
-        #[cfg(feature = "sparse_mlp")]
+        // MLP w2: substrate dual-sparsity path (Plan 216)
+        #[cfg(all(feature = "sparse_mlp", feature = "substrate_gate"))]
+        {
+            let alive = if let Some(ref substrate_mask) = ctx.substrate_mask {
+                crate::pruners::sparse_matmul_substrate(
+                    &mut ctx.x,
+                    &layer_weights.mlp_w2,
+                    &ctx.hidden,
+                    n,
+                    config.mlp_hidden,
+                    &mut ctx.active_indices,
+                    &mut ctx.active_values,
+                    substrate_mask,
+                    layer_idx,
+                )
+            } else {
+                types::sparse_matmul(
+                    &mut ctx.x,
+                    &layer_weights.mlp_w2,
+                    &ctx.hidden,
+                    n,
+                    config.mlp_hidden,
+                    &mut ctx.active_indices,
+                    &mut ctx.active_values,
+                )
+            };
+            if (alive as f32 / config.mlp_hidden as f32) > (1.0 - config.sparse_threshold) {
+                matmul(
+                    &mut ctx.x,
+                    &layer_weights.mlp_w2,
+                    &ctx.hidden,
+                    n,
+                    config.mlp_hidden,
+                );
+            }
+        }
+        // MLP w2: sparse-only path (no substrate)
+        #[cfg(all(feature = "sparse_mlp", not(feature = "substrate_gate")))]
         {
             let alive = types::sparse_matmul(
                 &mut ctx.x,
