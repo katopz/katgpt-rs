@@ -1,7 +1,7 @@
 # NFCoT FlowScore Drafter (Plan 229)
 
 **Research:** 204_NFCoT_Normalizing_Flow_Continuous_CoT
-**Status:** Planned
+**Status:** Implemented (T1-T7 done, T8 partial — 3 items deferred)
 **GOAT Gate:** `nf_flow_score` (parent: `nf_flow`, default: OFF)
 
 ## Overview
