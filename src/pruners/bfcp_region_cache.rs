@@ -7,6 +7,7 @@
 //!
 //! Plan 218 Phase 1.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::bfcf_types::BFCP;
@@ -24,7 +25,7 @@ pub enum FreqTier {
 // ── CachedRegion ──────────────────────────────────────────────
 
 struct CachedRegion {
-    partition: BFCP,
+    partition: Arc<BFCP>,
     hash: [u8; 32],
     freq: u32,
     tier: FreqTier,
@@ -91,17 +92,17 @@ impl BfcpRegionCache {
         }
     }
 
-    pub fn lookup(&self, hash: &[u8; 32]) -> Option<BFCP> {
+    pub fn lookup(&self, hash: &[u8; 32]) -> Option<Arc<BFCP>> {
         let guard = self.map.pin();
         match guard.get(hash) {
             Some(entry) => {
                 let new_freq = entry.freq.saturating_add(1);
                 let tier = classify_tier(new_freq, self.hot_threshold, self.warm_threshold);
-                let partition = entry.partition.clone();
+                let partition = Arc::clone(&entry.partition);
                 let _ = guard.insert(
                     *hash,
                     CachedRegion {
-                        partition: partition.clone(),
+                        partition: Arc::clone(&partition),
                         hash: *hash,
                         freq: new_freq,
                         tier,
@@ -117,7 +118,7 @@ impl BfcpRegionCache {
         }
     }
 
-    pub fn insert(&mut self, hash: [u8; 32], partition: BFCP) {
+    pub fn insert(&mut self, hash: [u8; 32], partition: Arc<BFCP>) {
         let guard = self.map.pin();
 
         // Existing entry → just bump freq.
@@ -184,7 +185,7 @@ impl BfcpRegionCache {
                 (
                     *k,
                     CachedRegion {
-                        partition: v.partition.clone(),
+                        partition: Arc::clone(&v.partition),
                         hash: v.hash,
                         freq: new_freq,
                         tier,
@@ -221,18 +222,18 @@ impl BfcpRegionCache {
 
 #[cfg(feature = "bfcf_lfu_shard")]
 pub trait RegionCaching: Send + Sync {
-    fn lookup(&self, hash: &[u8; 32]) -> Option<BFCP>;
-    fn insert(&mut self, hash: [u8; 32], partition: BFCP);
+    fn lookup(&self, hash: &[u8; 32]) -> Option<Arc<BFCP>>;
+    fn insert(&mut self, hash: [u8; 32], partition: Arc<BFCP>);
     fn freq_tier(&self, hash: &[u8; 32]) -> Option<FreqTier>;
     fn decay(&mut self, lambda: f32);
 }
 
 impl RegionCaching for BfcpRegionCache {
-    fn lookup(&self, hash: &[u8; 32]) -> Option<BFCP> {
+    fn lookup(&self, hash: &[u8; 32]) -> Option<Arc<BFCP>> {
         self.lookup(hash)
     }
 
-    fn insert(&mut self, hash: [u8; 32], partition: BFCP) {
+    fn insert(&mut self, hash: [u8; 32], partition: Arc<BFCP>) {
         self.insert(hash, partition);
     }
 
@@ -338,6 +339,7 @@ pub fn detect_region_transitions(
 mod tests {
     use super::*;
     use crate::pruners::bfcf_types::{BorelRegion, HalfSpace, RegionLabel};
+    use std::sync::Arc as TestArc;
 
     fn make_partition(n_regions: usize, base_tokens: usize) -> BFCP {
         let regions: Vec<BorelRegion> = (0..n_regions)
@@ -386,7 +388,7 @@ mod tests {
         let hash = make_hash(1);
         let partition = make_partition(3, 10);
 
-        cache.insert(hash, partition.clone());
+        cache.insert(hash, TestArc::new(partition.clone()));
         let result = cache.lookup(&hash);
         assert!(result.is_some());
         assert_eq!(result.unwrap().region_count(), partition.region_count());
@@ -413,16 +415,16 @@ mod tests {
         let p3 = make_partition(3, 30);
         let p4 = make_partition(4, 40);
 
-        cache.insert(h1, p1);
-        cache.insert(h2, p2);
-        cache.insert(h3, p3);
+        cache.insert(h1, TestArc::new(p1));
+        cache.insert(h2, TestArc::new(p2));
+        cache.insert(h3, TestArc::new(p3));
 
         // Bump h2 and h3 freq so h1 is lowest.
         let _ = cache.lookup(&h2);
         let _ = cache.lookup(&h3);
 
         // Insert h4 → should evict h1 (lowest freq).
-        cache.insert(h4, p4);
+        cache.insert(h4, TestArc::new(p4));
 
         assert_eq!(cache.len(), 3);
         assert!(
@@ -436,7 +438,7 @@ mod tests {
     fn test_freq_increment_on_hit() {
         let mut cache = BfcpRegionCache::new(16);
         let hash = make_hash(1);
-        cache.insert(hash, make_partition(2, 10));
+        cache.insert(hash, TestArc::new(make_partition(2, 10)));
 
         // Initial tier is Cold (freq=1, warm_threshold=10).
         assert_eq!(cache.freq_tier(&hash), Some(FreqTier::Cold));
@@ -462,7 +464,7 @@ mod tests {
     fn test_decay_reduces_frequency() {
         let mut cache = BfcpRegionCache::new(16);
         let hash = make_hash(1);
-        cache.insert(hash, make_partition(2, 10));
+        cache.insert(hash, TestArc::new(make_partition(2, 10)));
 
         // Bump to freq=10 (warm).
         for _ in 0..9 {
@@ -479,7 +481,7 @@ mod tests {
     fn test_hit_rate() {
         let mut cache = BfcpRegionCache::new(16);
         let hash = make_hash(1);
-        cache.insert(hash, make_partition(2, 10));
+        cache.insert(hash, TestArc::new(make_partition(2, 10)));
 
         // 3 hits + 1 miss = 0.75 hit rate.
         let _ = cache.lookup(&hash);
@@ -504,7 +506,7 @@ mod tests {
         let hash = make_hash(1);
         let partition = make_partition(2, 10);
 
-        cache.insert(hash, partition);
+        cache.insert(hash, TestArc::new(partition));
         // sigmoid(1/1000) ≈ 0.5005 > 0.5, so it should still be admitted.
         assert!(cache.lookup(&hash).is_some());
 
@@ -513,7 +515,7 @@ mod tests {
         // Let's test the negative case by using a negative threshold (sigmoid neg → < 0.5).
         let mut cache_strict = BfcpRegionCache::with_thresholds(16, 100, 10, -1.0);
         let hash2 = make_hash(2);
-        cache_strict.insert(hash2, make_partition(2, 10));
+        cache_strict.insert(hash2, TestArc::new(make_partition(2, 10)));
         // sigmoid(1 / -1.0) = sigmoid(-1.0) ≈ 0.269 < 0.5, rejected.
         assert!(cache_strict.lookup(&hash2).is_none());
     }

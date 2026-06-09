@@ -8,6 +8,8 @@
 //! With `freq_bandit` feature: `ShardTierBandit` adapts tier decisions via UCB1
 //! based on cache hit rewards, overriding static frequency thresholds.
 
+use std::sync::Arc;
+
 use super::bfcf_types::{BFCP, BorelRegion};
 use super::bfcp_region_cache::{BfcpRegionCache, FreqTier, blake3_logit_hash};
 use super::region_batch::{RegionBatcher, RegionBatching};
@@ -156,7 +158,11 @@ impl BfcpLfuShard {
     }
 
     /// Main pipeline: hash → lookup → compute on miss → insert → return partition.
-    pub fn process(&mut self, logits: &[f32], mut compute_fn: impl FnMut(&[f32]) -> BFCP) -> BFCP {
+    pub fn process(
+        &mut self,
+        logits: &[f32],
+        mut compute_fn: impl FnMut(&[f32]) -> BFCP,
+    ) -> Arc<BFCP> {
         let hash = blake3_logit_hash(logits);
 
         // Try cache hit first.
@@ -165,8 +171,8 @@ impl BfcpLfuShard {
         }
 
         // Cache miss — compute new partition.
-        let partition = compute_fn(logits);
-        self.cache.insert(hash, partition.clone());
+        let partition = Arc::new(compute_fn(logits));
+        self.cache.insert(hash, Arc::clone(&partition));
         partition
     }
 
@@ -180,7 +186,7 @@ impl BfcpLfuShard {
         &mut self,
         logits: &[f32],
         compute_fn: impl FnMut(&[f32]) -> BFCP,
-    ) -> (BFCP, Vec<(usize, FreqTier)>) {
+    ) -> (Arc<BFCP>, Vec<(usize, FreqTier)>) {
         let partition = self.process(logits, compute_fn);
         let hash = blake3_logit_hash(logits);
 

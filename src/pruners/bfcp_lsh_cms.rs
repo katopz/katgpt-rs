@@ -5,6 +5,8 @@
 //!
 //! Plan 220 Phase 4.
 
+use std::sync::Arc;
+
 use super::bfcf_types::{BFCP, RegionLabel};
 use super::bfcp_region_cache::{FreqTier, blake3_logit_hash};
 use super::count_min_sketch::{CountMinSketch, SketchFrequency};
@@ -68,7 +70,7 @@ impl BfcpLshCms {
     ///
     /// Returns `(partition, level, tier)` where level is 0/1/2 and tier is the
     /// CMS-estimated frequency tier for the hash.
-    pub fn process<F>(&mut self, logits: &[f32], compute_fn: F) -> (BFCP, u8, FreqTier)
+    pub fn process<F>(&mut self, logits: &[f32], compute_fn: F) -> (Arc<BFCP>, u8, FreqTier)
     where
         F: FnOnce(&[f32]) -> BFCP,
     {
@@ -149,7 +151,7 @@ impl BfcpLshCms {
     }
 
     /// Update membership bitmaps from a partition's regions.
-    fn update_membership(&mut self, partition: &BFCP) {
+    fn update_membership(&mut self, partition: &Arc<BFCP>) {
         // Build bitmaps for each region based on token ranges.
         // This is a simplified version — real implementation would use
         // actual token indices from ScreeningPruner results.
