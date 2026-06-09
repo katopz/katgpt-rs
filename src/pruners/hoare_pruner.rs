@@ -140,6 +140,37 @@ impl HoarePruner {
         self.state = SemanticState::initial();
         self.violations = 0;
     }
+
+    /// Map token_idx to bracket character for ConstraintPruner impl.
+    /// 0='(', 1=')', 2='[', 3=']', 4='{', 5='}'
+    fn token_idx_to_char(idx: usize) -> Option<char> {
+        match idx {
+            0 => Some('('),
+            1 => Some(')'),
+            2 => Some('['),
+            3 => Some(']'),
+            4 => Some('{'),
+            5 => Some('}'),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "hoare_pruner")]
+impl crate::speculative::types::ConstraintPruner for HoarePruner {
+    fn is_valid(&self, _depth: usize, _token_idx: usize, _parent_tokens: &[usize]) -> bool {
+        self.predicates.iter().all(|p| p.evaluate(&self.state))
+    }
+
+    fn propagate(&mut self, _depth: usize, token_idx: usize, _parent_token: &[usize]) -> bool {
+        if let Some(ch) = Self::token_idx_to_char(token_idx) {
+            let token = ch.to_string();
+            self.propagate(&token)
+        } else {
+            // Non-bracket token: just check predicates against current state
+            self.predicates.iter().all(|p| p.evaluate(&self.state))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -189,5 +220,61 @@ mod tests {
         let mut s2 = SemanticState::initial();
         s2.push_bracket(b'(');
         assert_ne!(s1.hash, s2.hash);
+    }
+
+    #[test]
+    fn test_multistep_propagation_violation() {
+        let pred = Predicate::BracketDepthLe(2);
+        let mut pruner = HoarePruner::new(vec![pred]);
+
+        // Path: "(", "(", "x", "(", "x", ")"
+        assert!(pruner.propagate("(")); // depth 1
+        assert!(pruner.propagate("(")); // depth 2
+        assert!(pruner.propagate("x")); // depth 2, non-bracket
+        assert!(!pruner.propagate("(")); // depth 3 > 2, VIOLATION
+        assert!(!pruner.propagate("x")); // still depth 3, still invalid
+        assert!(pruner.propagate(")")); // depth 2, valid again
+
+        assert_eq!(pruner.violations(), 2);
+        assert_eq!(pruner.state().bracket_depth, 2);
+    }
+
+    #[test]
+    fn test_propagate_overhead_benchmark() {
+        use std::time::Instant;
+
+        let pred = Predicate::BracketDepthLe(10);
+        let mut pruner = HoarePruner::new(vec![pred]);
+
+        let tokens = ["(", ")", "[", "]", "{", "}", "x", "y"];
+        let n = 10_000;
+
+        // Warmup
+        for _ in 0..100 {
+            for &t in &tokens {
+                let _ = pruner.propagate(t);
+            }
+            pruner.reset();
+        }
+
+        let start = Instant::now();
+        for _ in 0..n {
+            for &t in &tokens {
+                let _ = pruner.propagate(t);
+            }
+            pruner.reset();
+        }
+        let elapsed = start.elapsed();
+        let per_call_ns = elapsed.as_nanos() as f64 / (n as f64 * tokens.len() as f64);
+
+        // Debug builds have no optimizations — use generous threshold.
+        // Release builds should be well under 200ns.
+        let budget = if cfg!(debug_assertions) { 5000.0 } else { 200.0 };
+        assert!(
+            per_call_ns < budget,
+            "propagate overhead {per_call_ns:.1}ns exceeds {budget:.0}ns budget"
+        );
+
+        eprintln!("  propagate: {per_call_ns:.1}ns/call ({n} iterations, {} tokens each)", tokens.len());
     }
 }

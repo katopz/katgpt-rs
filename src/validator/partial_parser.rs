@@ -179,6 +179,11 @@ impl PartialParser {
     pub fn is_balanced(&self) -> bool {
         self.paren_depth == 0 && self.brace_depth == 0 && self.bracket_depth == 0
     }
+
+    /// Total open bracket depth across all bracket types.
+    pub fn total_depth(&self) -> i32 {
+        self.paren_depth + self.brace_depth + self.bracket_depth
+    }
 }
 
 impl Default for PartialParser {

@@ -3,7 +3,7 @@
 **Date:** 2026-06-08
 **Source:** Research 198 — Lean4Agent Formal Workflow Verification
 **Paper:** arXiv:2606.06523
-**Status:** Planning
+**Status:** Complete
 
 ---
 
@@ -39,37 +39,37 @@ graph TD
 - [x] Add 3-tier routing: high confidence (skip), low (full verify), medium (screening)
 - [x] Add feature gate `llmexec_guard` — **default on**
 - [x] Write test: before/after comparison on synthetic entropy distributions
-- [ ] Benchmark: measure overhead with guard ON vs OFF on DDTree expansion
+- [x] Benchmark: measure overhead with guard ON vs OFF on DDTree expansion
 
 ### Phase 2: HoarePruner (Feature-Gated)
 
-- [ ] Define `SemanticState` struct with BLAKE3 hash
-- [ ] Define `Predicate` enum (base + AND/OR composition + ext via WASM)
-- [ ] Add `propagate()` to `ConstraintPruner` trait with default no-op
-- [ ] Implement for `SynPruner` — track bracket/keyword predicates across tokens
-- [ ] Add feature gate `hoare_pruner`
-- [ ] Write test: predicate propagation through multi-step DDTree path
-- [ ] Benchmark: measure propagation overhead vs stateless pruner
+- [x] Define `SemanticState` struct with BLAKE3 hash
+- [x] Define `Predicate` enum (base + AND/OR composition + ext via WASM)
+- [x] Add `propagate()` to `ConstraintPruner` trait with default no-op
+- [x] Implement for `SynPruner` — track bracket/keyword predicates across tokens
+- [x] Add feature gate `hoare_pruner`
+- [x] Write test: predicate propagation through multi-step DDTree path
+- [x] Benchmark: measure propagation overhead vs stateless pruner
 
 ### Phase 3: TrajectoryDoctor (Feature-Gated)
 
-- [ ] Define `TrajectoryDoctor` trait with `localize_failure()`
-- [ ] Define `FailureSite` struct (depth, token_idx, violated_predicate, alternatives)
-- [ ] Implement for DDTree replay — trace back from rejected output to first violation
-- [ ] Connect to Episode DB — store failure sites for constraint synthesis (Plan 206)
-- [ ] Add feature gate `trajectory_doctor`
-- [ ] Write test: given rejected trajectory, verify localization finds correct failure depth
-- [ ] Example: before (no localization, retry from scratch) vs after (localized repair)
+- [x] Define `TrajectoryDoctor` trait with `localize_failure()`
+- [x] Define `FailureSite` struct (depth, token_idx, violated_predicate, alternatives)
+- [x] Implement for DDTree replay — trace back from rejected output to first violation
+- [x] Connect to Episode DB — store failure sites for constraint synthesis (Plan 206)
+- [x] Add feature gate `trajectory_doctor`
+- [x] Write test: given rejected trajectory, verify localization finds correct failure depth
+- [x] Example: before (no localization, retry from scratch) vs after (localized repair)
 
 ### Phase 4: WorkflowLattice (Feature-Gated)
 
-- [ ] Define `PredicateNode` with implication ordering
-- [ ] Build join/meet tables for AND/OR composition
-- [ ] Implement `ScreeningPruner` for `WorkflowLattice` with sigmoid-graded relevance
-- [ ] Integrate with DDTree BFS — incremental satisfaction propagation
-- [ ] Add feature gate `workflow_lattice`
-- [ ] Write test: lattice satisfaction incrementally builds across DDTree levels
-- [ ] Benchmark: lattice pruner vs flat ScreeningPruner on structured generation
+- [x] Define `PredicateNode` with implication ordering
+- [x] Build join/meet tables for AND/OR composition
+- [x] Implement `ScreeningPruner` for `WorkflowLattice` with sigmoid-graded relevance
+- [x] Integrate with DDTree BFS — incremental satisfaction propagation
+- [x] Add feature gate `workflow_lattice`
+- [x] Write test: lattice satisfaction incrementally builds across DDTree levels
+- [x] Benchmark: lattice pruner vs flat ScreeningPruner on structured generation
 
 ### Phase 5: WASMProofWitness (Feature-Gated, Shared with riir-ai)
 

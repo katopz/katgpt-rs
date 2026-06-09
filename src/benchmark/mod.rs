@@ -28,6 +28,8 @@ mod heuristic;
 #[cfg(feature = "hla_attention")]
 mod hla;
 mod infrastructure;
+#[cfg(feature = "llmexec_guard")]
+mod llmexec_guard;
 mod noise;
 mod routing;
 mod simd;

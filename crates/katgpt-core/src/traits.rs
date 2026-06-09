@@ -63,6 +63,12 @@ pub trait ConstraintPruner: Send + Sync {
             results[i] = self.is_valid(depth, candidates[i], parent_tokens);
         }
     }
+
+    /// Propagate semantic state with a new token. Returns true if all predicates hold.
+    /// Default: no-op (delegates to is_valid for backward compat).
+    fn propagate(&mut self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> bool {
+        true // no-op by default
+    }
 }
 
 /// No-op pruner: allows all tokens (original DDTree behavior).
@@ -82,6 +88,10 @@ impl ConstraintPruner for NoPruner {
     ) {
         let len = candidates.len().min(results.len());
         results[..len].fill(true);
+    }
+
+    fn propagate(&mut self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> bool {
+        true
     }
 }
 

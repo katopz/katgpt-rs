@@ -3,8 +3,8 @@ use super::types::PruneResult;
 use crate::speculative::types::ConstraintPruner;
 use crate::tokenizer::BpeTokenizer;
 use crate::tokenizer::BpeTokenizerImpl;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
 
 /// Two-tier syntax pruner for Validator.
 ///
@@ -68,6 +68,23 @@ impl ConstraintPruner for SynPruner {
         // Reuse the existing parser via Mutex to avoid per-call allocation.
         let mut parser = self.parser.lock().unwrap();
         parser.is_valid(&code)
+    }
+
+    #[cfg(feature = "hoare_pruner")]
+    fn propagate(&mut self, _depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
+        let mut all_tokens = self.scratch_tokens.lock().unwrap();
+        all_tokens.clear();
+        all_tokens.extend_from_slice(parent_tokens);
+        all_tokens.push(token_idx);
+
+        let code = BpeTokenizerImpl::decode(&self.tokenizer, &*all_tokens);
+
+        let mut parser = self.parser.lock().unwrap();
+        parser.reset();
+        let valid = parser.is_valid(&code);
+
+        const MAX_BRACKET_DEPTH: i32 = 32;
+        valid && parser.total_depth() <= MAX_BRACKET_DEPTH
     }
 }
 
