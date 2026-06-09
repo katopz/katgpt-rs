@@ -721,14 +721,15 @@ pub(crate) fn score_action(
 
 // ── LoRA Inference Helpers ─────────────────────────────────────
 
-/// Softmax over logits, producing probability distribution.
+/// Per-element sigmoid scoring (independent scores in [0,1]).
+///
+/// Replaces softmax per project rule: "Use sigmoid not softmax".
+/// Unlike softmax (which produces a probability distribution summing to 1),
+/// sigmoid gives independent scores — each action is scored on its own merit.
 #[cfg(feature = "bomber-wasm")]
 #[allow(dead_code)]
-fn softmax(logits: &[f32]) -> Vec<f32> {
-    let max_val = logits.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let exps: Vec<f32> = logits.iter().map(|&x| (x - max_val).exp()).collect();
-    let sum: f32 = exps.iter().sum();
-    exps.iter().map(|&x| x / sum).collect()
+fn sigmoid_scores(logits: &[f32]) -> Vec<f32> {
+    logits.iter().map(|&s| 1.0 / (1.0 + (-s).exp())).collect()
 }
 
 /// Count walkable adjacent cells (for board feature encoding).

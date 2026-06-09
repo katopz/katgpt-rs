@@ -32,7 +32,7 @@
 //! ```
 
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use super::absorb_compress::AbsorbCompress;
 #[cfg(feature = "idea_divergence")]
@@ -195,12 +195,14 @@ impl fmt::Display for BanditStrategy {
 /// Shared arm tracking state: Q-values, visit counts, scoring.
 ///
 /// Used by both [`BanditPruner`] and [`BanditSession`] to avoid duplication.
-/// All methods are O(1) except [`BanditStats::best_arm`] which is O(arms).
+/// All methods are O(1) including [`BanditStats::best_arm`] (cached).
 pub struct BanditStats {
     q_values: Vec<f32>,
     visits: Vec<u32>,
     total_pulls: u32,
     num_arms: usize,
+    /// Cached index of the arm with highest Q-value.
+    best_arm_idx: usize,
     /// Running M2 for Welford variance (per arm).
     reward_m2: Vec<f32>,
     /// Running mean reward for variance tracking (per arm).
@@ -215,6 +217,7 @@ impl BanditStats {
             visits: vec![0; num_arms],
             total_pulls: 0,
             num_arms,
+            best_arm_idx: num_arms.saturating_sub(1),
             reward_m2: vec![0.0; num_arms],
             reward_mean: vec![0.0; num_arms],
         }
@@ -232,6 +235,19 @@ impl BanditStats {
         self.total_pulls += 1;
         let n = self.visits[arm] as f32;
         self.q_values[arm] += (reward - self.q_values[arm]) / n;
+
+        // Invalidate best_arm cache if updated arm might now be best.
+        // Use > to prefer the first arm strictly better than current best.
+        // Use == with arm > best_arm_idx to match max_by's tie-breaking
+        // (prefer later index, matching the original scan behavior).
+        let updated_q = self.q_values[arm];
+        let best_q = self.q_values[self.best_arm_idx];
+        if updated_q > best_q || (updated_q == best_q && arm > self.best_arm_idx) {
+            self.best_arm_idx = arm;
+        } else if arm == self.best_arm_idx && updated_q < best_q {
+            // Previous best degraded — full rescan needed
+            self.best_arm_idx = self.scan_best_arm();
+        }
 
         // Welford's online algorithm for reward variance tracking
         let old_mean = self.reward_mean[arm];
@@ -270,8 +286,14 @@ impl BanditStats {
         sample_beta(alpha, beta, rng)
     }
 
-    /// Index of the arm with highest Q-value.
+    /// Index of the arm with highest Q-value (cached O(1)).
+    #[inline]
     pub fn best_arm(&self) -> usize {
+        self.best_arm_idx
+    }
+
+    /// Full scan to find best arm — used only for cache invalidation.
+    fn scan_best_arm(&self) -> usize {
         self.q_values
             .iter()
             .enumerate()
@@ -409,6 +431,10 @@ pub struct BanditPruner<P: ScreeningPruner> {
     /// Stores arm selections, rewards, and failure modes across sessions.
     #[cfg(feature = "skill_lifecycle")]
     memory: PrunerMemory,
+    /// Pre-allocated scratch buffers for soft-route relevance computation.
+    /// Avoids per-call Vec allocation in the hot path.
+    soft_route_scores: Mutex<Vec<f32>>,
+    soft_route_weights: Mutex<Vec<f32>>,
 }
 
 impl<P: ScreeningPruner> BanditPruner<P> {
@@ -434,6 +460,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             arm_score_vectors: vec![vec![]; num_arms],
             #[cfg(feature = "skill_lifecycle")]
             memory: PrunerMemory::new(256, "bandit"),
+            soft_route_scores: Mutex::new(Vec::with_capacity(num_arms)),
+            soft_route_weights: Mutex::new(Vec::with_capacity(num_arms)),
         }
     }
 
@@ -466,10 +494,12 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             arm_score_vectors: vec![vec![]; num_arms],
             #[cfg(feature = "skill_lifecycle")]
             memory: PrunerMemory::new(256, "bandit"),
+            soft_route_scores: Mutex::new(Vec::with_capacity(num_arms)),
+            soft_route_weights: Mutex::new(Vec::with_capacity(num_arms)),
         }
     }
 
-    // ── Partial Scoring (Plan 191 T1.4) ────────────────────────────
+    // ── Partial Scoring (Plan 187 T3) ──────────────────────────────
 
     /// Create a bandit pruner with a graduated reward scorer.
     ///
@@ -498,6 +528,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             arm_score_vectors: vec![vec![]; num_arms],
             #[cfg(feature = "skill_lifecycle")]
             memory: PrunerMemory::new(256, "bandit"),
+            soft_route_scores: Mutex::new(Vec::with_capacity(num_arms)),
+            soft_route_weights: Mutex::new(Vec::with_capacity(num_arms)),
         }
     }
 
@@ -530,9 +562,12 @@ impl<P: ScreeningPruner> BanditPruner<P> {
             arm_score_vectors: vec![vec![]; num_arms],
             #[cfg(feature = "skill_lifecycle")]
             memory: PrunerMemory::new(256, "bandit"),
+            soft_route_scores: Mutex::new(Vec::with_capacity(num_arms)),
+            soft_route_weights: Mutex::new(Vec::with_capacity(num_arms)),
         }
     }
 
+    // ── Divergence Update ─────────────────────────────────────────
     /// Update the divergence tracker after an arm update.
     ///
     /// Reads the current Q-value for the arm and updates the per-arm score vector.
@@ -634,11 +669,11 @@ impl<P: ScreeningPruner> BanditPruner<P> {
     fn arm_thompson(&self, arm: usize, rng: &mut Rng) -> f32 {
         match &self.shared_stats {
             Some(stats) => {
-                let n = stats.visits(arm);
+                let (q_raw, n) = stats.arm_snapshot(arm);
                 if n == 0 {
                     return rng.uniform();
                 }
-                let q = stats.q_value(arm).clamp(0.0, 1.0);
+                let q = q_raw.clamp(0.0, 1.0);
                 let alpha = q * n as f32 + 1.0;
                 let beta = (1.0 - q) * n as f32 + 1.0;
                 sample_beta(alpha, beta, rng)
@@ -824,13 +859,15 @@ impl<P: ScreeningPruner> BanditPruner<P> {
                 concentration_threshold,
             } => {
                 let q = self.arm_q(token_idx).clamp(0.0, 1.0).max(0.01);
-                // Compute concentration across all arms
+                // Compute concentration across all arms (in-place, no allocation)
                 let num_arms = self.stats.num_arms;
-                let scores: Vec<f32> = (0..num_arms)
-                    .map(|a| self.arm_q(a).clamp(0.0, 1.0).max(0.01))
-                    .collect();
-                let max_score = scores.iter().copied().fold(0.0f32, f32::max);
-                let sum: f32 = scores.iter().sum();
+                let mut max_score = 0.0f32;
+                let mut sum = 0.0f32;
+                for a in 0..num_arms {
+                    let s = self.arm_q(a).clamp(0.0, 1.0).max(0.01);
+                    max_score = max_score.max(s);
+                    sum += s;
+                }
                 let concentration = if sum > 0.0 && max_score > 0.0 {
                     max_score / sum
                 } else {
@@ -896,15 +933,16 @@ impl<P: ScreeningPruner> BanditPruner<P> {
         let num_arms = self.stats.num_arms;
         let tau = self.soft_route_tau;
 
-        // Compute bandit scores for all arms
-        let scores: Vec<f32> = (0..num_arms).map(|a| self.arm_bandit_score(a)).collect();
+        // Compute bandit scores into pre-allocated scratch buffer
+        let mut scores = self.soft_route_scores.lock().unwrap();
+        scores.clear();
+        scores.extend((0..num_arms).map(|a| self.arm_bandit_score(a)));
 
         // Numerical stability: subtract max before exp
         let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        let weights: Vec<f32> = scores
-            .iter()
-            .map(|&s| ((s - max_score) / tau).exp())
-            .collect();
+        let mut weights = self.soft_route_weights.lock().unwrap();
+        weights.clear();
+        weights.extend(scores.iter().map(|&s| ((s - max_score) / tau).exp()));
         let weight_sum: f32 = weights.iter().sum();
 
         if weight_sum <= 0.0 {
@@ -1506,6 +1544,7 @@ impl<E: BanditEnv> BanditSession<E> {
         let mut events = Vec::with_capacity(episodes + 1);
         let optimal_arm = self.env.optimal_arm();
         let optimal_reward = self.env.optimal_reward();
+        let config_owned = config.to_string();
 
         for episode in 0..episodes {
             let arm = self.select_arm(rng);
@@ -1546,7 +1585,7 @@ impl<E: BanditEnv> BanditSession<E> {
                 q_value: self.stats.q_value(arm),
                 cumulative_reward: self.cumulative_reward,
                 cumulative_regret: self.cumulative_regret,
-                config: config.to_string(),
+                config: config_owned.clone(),
                 note: String::new(),
                 base_correct: None,
                 reviewed_correct: None,
@@ -1710,6 +1749,17 @@ impl SharedBanditStats {
     pub fn total_pulls(&self) -> u32 {
         let inner = self.inner.lock().unwrap();
         inner.total_pulls
+    }
+
+    /// Snapshot of (q_value, visits) for an arm under a single lock acquisition.
+    ///
+    /// Prefer this over calling `q_value()` + `visits()` separately to avoid
+    /// acquiring the lock twice.
+    pub fn arm_snapshot(&self, arm: usize) -> (f32, u32) {
+        let inner = self.inner.lock().unwrap();
+        let q = inner.q_values.get(arm).copied().unwrap_or(0.0);
+        let v = inner.visits.get(arm).copied().unwrap_or(0);
+        (q, v)
     }
 
     /// Visit count for an arm.

@@ -20,6 +20,8 @@
 //! - **Behavioral change** — requires real model output measurement.
 //! - **Quality at scale** — synthetic activations, not real transformer output.
 
+use std::collections::HashSet;
+
 use katgpt_rs::pruners::{CnaCircuit, CnaModulator, CnaNeuron, cna_modulate};
 
 fn main() {
@@ -54,9 +56,12 @@ fn main() {
         },
     ];
 
+    let neuron_set = neurons.iter().map(|n| (n.layer, n.index)).collect();
     let circuit = CnaCircuit {
         neurons,
+        neuron_set,
         universal_excluded: vec![],
+        universal_excluded_set: HashSet::new(),
         n_positive: 10,
         n_negative: 10,
         total_mlp_activations: 6 * 128,

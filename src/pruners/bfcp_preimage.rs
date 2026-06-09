@@ -8,14 +8,6 @@
 use super::bfcf_types::{BFCP, BorelRegion, RegionLabel};
 use crate::speculative::types::ScreeningPruner;
 
-// ── sigmoid helper ──────────────────────────────────────────────
-
-/// Scalar sigmoid, never softmax.
-#[inline]
-fn sigmoid(x: f64) -> f64 {
-    1.0 / (1.0 + (-x).exp())
-}
-
 // ── compute_preimage ────────────────────────────────────────────
 
 /// Compute backward reachability from accepted prefix.
@@ -109,9 +101,8 @@ fn classify_maybe_region(
 
     for token_idx in 0..effective_vocab {
         let relevance = pruner.relevance(depth, token_idx, prefix);
-        // Sigmoid-based soft threshold: relevance > 0.5 → accept
-        let score = sigmoid(relevance as f64 - 0.5);
-        if score > 0.5 {
+        // Direct threshold: sigmoid(y) > 0.5 ⟺ y > 0, so sigmoid(x-0.5) > 0.5 ⟺ x > 0.5
+        if relevance > 0.5 {
             accept_count += 1;
         } else {
             reject_count += 1;
@@ -338,7 +329,7 @@ mod tests {
 
     #[test]
     fn test_refine_partition_stops_early_when_no_progress() {
-        // Pruner that returns 0.3 for everything → sigmoid maps to reject
+        // Pruner that returns 0.3 for everything → below 0.5 threshold → reject
         struct LowRelevancePruner;
         impl ScreeningPruner for LowRelevancePruner {
             fn relevance(&self, _: usize, _: usize, _: &[usize]) -> f32 {

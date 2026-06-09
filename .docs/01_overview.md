@@ -76,7 +76,16 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - RiM reasoning buffer slots: K×M reasoning blocks prepended to input, zero-cost slot reuse (rim_slots feature, Plan 172)
 - Wall attention: W_g gate projection per KV head dimension, sigmoid-gated attention bypass (wall_attention feature, Plan 173)
 - ManifoldPruner: ManifoldE point-to-manifold soft validity scoring + kernel-tricked relevance (behind `"manifold_pruner"` feature, Plan 234, GOAT G1 FAIL — demoted, opt-in only)
-- `traits.rs` module in katgpt-core: GameState, RolloutPolicy, StateHeuristic, ActionSpaceLog, ConstraintPruner, ScreeningPruner, SpeculativeGenerator traits
+- `traits.rs` module in katgpt-core: GameState, RolloutPolicy, StateHeuristic, ActionSpaceLog, ConstraintPruner, ScreeningPruner, SpeculativeGenerator, CollapseDetector, DominoPruner, CompletionHorizon, PartialScorer, ProblemMutator, BestBuddyAligner, DataGate, LeoHead, DualLeoMixer, AutocurriculumSampler, GenerativeConstraintPruner traits
+- Sense Composition: KG Latent Octree NPC sense modules with ternary bit-plane projection, GM override dispatch, lock-free hot-swap, and bandit-quality feedback (Plan 221)
+- SLoD Spectral Level-of-Detail Pruner: Poincaré ball hyperbolic geometry + heat diffusion on kNN Laplacians for multi-scale KG resolution control (Plan 235, default-ON, GOAT G1–G6)
+- Schema Centroid: Per-class embedding centroids for informed KG entity initialization with controlled perturbation (Plan 237, default-ON, GOAT 7/7)
+- BAKE Precision-Gated Bayesian Embedding: Per-dimension precision tracking for KG embeddings with O(8) arithmetic, zero-alloc (Plan 236, opt-in, GOAT 10/10 but marginal drift 4.7%)
+- Shard Embedding: Johnson-Lindenstrauss random orthogonal projection [f32;64]→[f32;8] for O(1) cosine similarity shard lookup (Plan 230)
+- NFCoT FlowScore Drafter: Inference-time normalizing flow density scoring for speculative candidates, zero training (Plan 229)
+- Union Bound Confidence: Additive branch confidence via Boole's inequality (Plan 231, default-ON, GOAT 6/6)
+- PathwayTracker: Intrinsic pathway stability detection (Plan 231, default-ON, GOAT 7/7)
+- FederationComposer: Explicit pruning with residual early termination (Plan 231, default-ON, GOAT 7/7)
 
 ## Module Structure
 
@@ -96,6 +105,18 @@ crates/
     roofline.rs     Roofline cost model — GPU operator runtime prediction via calibrated peak throughput (Plan 159, behind "roofline_cost" feature) ⊏
     parallax_attn.rs Parallax parameterized local linear attention — streaming covariance correction (Plan 135, behind "parallax_attn" feature) ⊔
     linoss.rs        LinOSS oscillatory state-space cell + ModalSpec drafter — Fourier modal speculative drafting (behind "modal_spec" feature)
+    sense/             KG Latent Octree Sense Composition — NPC sense modules with ternary bit-plane projection (Plan 221, behind "sense_composition" feature)
+      brain.rs          NpcBrain composition + GM override + HLA projection
+      octree.rs         SenseOctreeBuilder — KG→bit-plane octree builder
+      gm.rs             GM action dispatch API (pin_sense, disable_autonomous, inject_kg)
+      hotswap.rs        SenseHotSwap — lock-free AtomicPtr module replacement
+      bandit.rs         SenseTrialLog — bandit trial log + decay direction EMA
+      batch.rs          SenseBatch — parallel batch projection (rayon when N>64)
+      serialize.rs      SNSE binary format with BLAKE3 verification
+      bake.rs           BAKE precision-gated Bayesian embedding update (behind "bake_precision" feature)
+      schema_centroid.rs  SchemaCentroidCache — per-class centroid init (behind "schema_centroid" feature)
+    shard_embedding.rs  JL random orthogonal projection [f32;64]→[f32;8] — ShardEmbedding with cosine similarity (Plan 230)
+    slod.rs             SLoD Spectral Level-of-Detail Pruner — Poincaré ball + heat diffusion + tier routing (Plan 235, behind "slod" feature)
     and_or/          AND-OR tree module — AndOrNode<G,S> generic AND-OR tree for hierarchical goal decomposition (behind "and_or_dtree" feature)
       mod.rs        Module root, re-exports AndOrNode
       types.rs      AndOrNode enum (Or/And/Leaf), is_solved, push_child, set_best, set_solution
@@ -622,9 +643,34 @@ src/
 | `bfcf_lfu_shard` | `bfcf_tree`, `papaya` | BFCF × LFU × Sharding — region-level LFU cache with frequency-aware sharding, batch processing, NeuronShard compound keys, emotion-aware eviction, KG triple transitions (Plan 218, default-on, GOAT 44 tests + 10 benchmarks) |
 | `caddtree_budget` | `spec_cost_model` | CaDDTree — Cost-Aware Adaptive DDTree Budget Selection (Plan 219, 7 GOAT tests, opt-in) |
 | `manifold_pruner` | — | ManifoldPruner — ManifoldE point-to-manifold soft validity scoring + kernel-tricked relevance for ScreeningPruner (Plan 234, opt-in, GOAT G1 FAIL) |
-| `full` | all above (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`, `sigmoid_margin`, `moa_inference`, `dual_gram_pca`, `roofline_cost`, `leo_all_goals`, `dual_leo`, `stability_metrics`, `asymmetric_kv`, `kog_cpu_fusion`, `caddtree_budget`) | Enable all features |
+| `sense_composition` | `katgpt-core/sense_composition` | KG Latent Octree NPC sense modules — ternary bit-plane projection, GM override, hot-swap, bandit feedback (Plan 221, opt-in) |
+| `shard_embedding` | — | (always-on) JL random orthogonal projection [f32;64]→[f32;8] for O(1) cosine similarity shard lookup (Plan 230) |
+| `slod` | `katgpt-core/slod`, `spectral_hierarchy` | SLoD Spectral Level-of-Detail Pruner — Poincaré ball hyperbolic geometry + heat diffusion tier routing (Plan 235, default-on, GOAT G1–G6) |
+| `schema_centroid` | `katgpt-core/schema_centroid`, `dep:papaya` | Schema Centroid — per-class embedding centroids for informed KG entity init (Plan 237, default-on, GOAT 7/7) |
+| `bake_precision` | `katgpt-core/bake_precision`, `dep:papaya`, `sense_composition` | BAKE Precision-Gated Bayesian Embedding — per-dimension precision tracking, O(8) arithmetic (Plan 236, opt-in, GOAT 10/10 but marginal) |
+| `nf_flow_score` | — | NFCoT FlowScore — modelless normalizing flow density scoring for speculative candidates (Plan 229, opt-in) |
+| `nf_flow_gate` | `nf_flow_score` | NFCoT adaptive EMA acceptance criterion (Plan 229 T3, opt-in) |
+| `nf_flow_budget` | `nf_flow_score` | NFCoT sigmoid-weighted speculative depth allocation (Plan 229 T4, opt-in) |
+| `nf_flow` | `nf_flow_score`, `nf_flow_gate`, `nf_flow_budget` | NFCoT parent feature — enables score + gate + budget (Plan 229, opt-in) |
+| `union_bound_confidence` | — | Union Bound Confidence — additive branch confidence via Boole's inequality (Plan 231, default-on, GOAT 6/6) |
+| `pathway_tracker` | — | PathwayTracker — intrinsic pathway stability detection (Plan 231, default-on, GOAT 7/7) |
+| `federation_composer` | — | FederationComposer — explicit pruning with residual early termination (Plan 231, default-on, GOAT 7/7) |
+| `collapse_aware_thinking` | `selectivity_router`, `thinking_cot`, `bandit` | Collapse-aware adaptive thinking — runtime reasoning collapse detection + early exit (Plan 212, default-on) |
+| `substrate_gate` | `katgpt-core/substrate_gate` | SubstrateGate — inference-time routing via substrate conditions (Plan 216, opt-in) |
+| `llmexec_guard` | — | Entropy-driven verification budgeting (default-on) |
+| `outlier_guard` | — | Model-load-time outlier injection detection via KS D-statistic (default-on) |
+| `segment_checkpoint` | — | Segment-level checkpoint/rollback for speculative decoding (default-on) |
+| `trust_region_spec` | — | Trust-region speculative verification (default-on) |
+| `precision_aware_draft` | — | Precision-aware draft selection (default-on) |
+| `self_distilling_bandit` | — | Self-distilling bandit arms (default-on) |
+| `static_cal_tables` | — | Pre-computed calibration tables for quantization (default-on) |
+| `targeted_precision` | — | Targeted precision allocation for KV cache (default-on) |
+| `egcs` | — | Expert-gated channel selection (default-on) |
+| `nds_proxy` | — | NDS Proxy — normalized difference score proxy for routing (Plan 186, default-on) |
+| `rat_plus_bridge` | `katgpt-core/rat_plus_bridge` | RAT+ Recurrence Bridge via GDN2 state for modelless dilated inference (Plan 225, opt-in) |
+| `full` | all above (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`, `sigmoid_margin`, `moa_inference`, `dual_gram_pca`, `roofline_cost`, `leo_all_goals`, `dual_leo`, `stability_metrics`, `asymmetric_kv`, `kog_cpu_fusion`, `caddtree_budget`, `sense_composition`, `bake_precision`) | Enable all features |
 
-Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley`, `peira_distill`, `kog_cpu_fusion`, `gepa_reflective`, `phrase_boost`, `hydra_budget`, `flashar_consensus`, `budget_adaptation`, `belief_drafter`, `bfcf_lfu_shard` (47 default features — production best perf + accuracy, Plans 051, 077-079, 085-089, 097, 099, 101-112, 119, 131, 133, 136, 148, 152, 154-167, 217-218).
+Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bandit_top_p`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley`, `peira_distill`, `kog_cpu_fusion`, `gepa_reflective`, `phrase_boost`, `hydra_budget`, `flashar_consensus`, `budget_adaptation`, `ilc_distill`, `thinking_prune`, `rim_slots`, `thinking_cot`, `freq_bandit`, `spec_reconciliation`, `trust_region_spec`, `curvature_alloc`, `directional_credit`, `kv_share`, `nds_proxy`, `wealth_pruner`, `speculative_generator`, `kvarn`, `and_or_dtree`, `belief_drafter`, `bfcf_lfu_shard`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, `llmexec_guard`, `outlier_guard`, `segment_checkpoint`, `self_distilling_bandit`, `precision_aware_draft`, `static_cal_tables`, `targeted_precision`, `egcs`, `reward_mem`, `symbolic_distill`, `concept_grounding`, `reward_calibrator`, `decision_explain`, `collapse_aware_thinking`, `ilc_distill`, `kog_cpu_fusion` (~80+ default features — production best perf + accuracy, all GOAT-proved, Plans 051–237).
 
 ## Quick Start
 
@@ -708,3 +754,13 @@ if pruner.manifold_score(depth, token, prefix) > threshold {
 | 12 | `12_fft_arena.md` | FFT Tactics Arena (Plan 053) |
 | 13 | `13_mtp_threshold_guide.md` | MTP threshold guide (Plan 055) |
 | 14 | `14_go_arena.md` | Go Arena (Plan 065) |
+| 15 | `15_paper_feature_comparison.md` | Paper feature comparison |
+| 16 | `16_spechop_architecture.md` | SpecHop architecture |
+| 17 | `17_peira_distillation.md` | PEIRA distillation |
+| 18 | `18_sleep_consolidation.md` | Sleep consolidation |
+| 19 | `19_kv_compression.md` | KV compression alternatives |
+| 20 | `20_negative_results.md` | Negative results |
+| 21 | `21_opt_in_features.md` | Opt-in features |
+| 22 | `22_percepta.md` | Percepta full detail |
+| 23 | `23_hl_arena_detail.md` | HL & Arena detail |
+| 24 | `24_sense_composition.md` | **NPC Sense Composition** (Plans 221/230/235/236/237) |

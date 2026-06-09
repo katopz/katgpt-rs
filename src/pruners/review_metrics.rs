@@ -216,16 +216,51 @@ impl ReviewMetrics {
     }
 
     /// Compute a snapshot of all metrics for display/logging.
+    ///
+    /// Snapshots all 4 counters once, then derives ratios from the snapshot
+    /// to avoid cascading atomic loads (4 loads instead of ~16).
     pub fn summary(&self) -> ReviewSummary {
         let helpful = self.helpful.load(Ordering::Relaxed);
         let harmful = self.harmful.load(Ordering::Relaxed);
         let both_correct = self.both_correct.load(Ordering::Relaxed);
         let both_wrong = self.both_wrong.load(Ordering::Relaxed);
+
+        let helpful_f = helpful as f64;
+        let harmful_f = harmful as f64;
+        let both_correct_f = both_correct as f64;
+        let both_wrong_f = both_wrong as f64;
+
+        let denom_help = helpful_f + both_wrong_f;
+        let helpfulness = if denom_help == 0.0 {
+            0.0
+        } else {
+            helpful_f / denom_help * 100.0
+        };
+
+        let denom_harm = harmful_f + both_correct_f;
+        let harmfulness = if denom_harm == 0.0 {
+            0.0
+        } else {
+            harmful_f / denom_harm * 100.0
+        };
+
+        let benefit_ratio = if harmfulness == 0.0 {
+            if helpfulness > 0.0 {
+                f64::INFINITY
+            } else {
+                0.0
+            }
+        } else {
+            helpfulness / harmfulness
+        };
+
+        let total = helpful + harmful + both_correct + both_wrong;
+
         ReviewSummary {
-            helpfulness: self.helpfulness(),
-            harmfulness: self.harmfulness(),
-            benefit_ratio: self.benefit_ratio(),
-            total: self.total(),
+            helpfulness,
+            harmfulness,
+            benefit_ratio,
+            total,
             helpful,
             harmful,
             both_correct,

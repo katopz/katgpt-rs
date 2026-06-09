@@ -46,6 +46,8 @@ pub struct EosProxyScorer {
     loss_mean: Vec<f32>,
     /// Cached influence = persistence × alignment, normalized.
     influence: Vec<f32>,
+    /// Pre-allocated scratch buffer for softmax exp values in `update_alignment`.
+    softmax_scratch: Vec<f32>,
 }
 
 impl EosProxyScorer {
@@ -60,6 +62,7 @@ impl EosProxyScorer {
             ema_rate,
             loss_mean: vec![0.0; num_groups],
             influence: vec![0.0; num_groups],
+            softmax_scratch: Vec::new(),
         }
     }
 
@@ -124,16 +127,19 @@ impl CurvatureInfluenceScorer for EosProxyScorer {
         if group >= self.alignment.len() || scores.is_empty() {
             return;
         }
-        // Compute softmax entropy
+        // Compute softmax entropy using pre-allocated scratch buffer
         let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        let exps: Vec<f32> = scores.iter().map(|&s| (s - max_score).exp()).collect();
-        let sum: f32 = exps.iter().sum();
+        self.softmax_scratch.clear();
+        self.softmax_scratch
+            .extend(scores.iter().map(|&s| (s - max_score).exp()));
+        let sum: f32 = self.softmax_scratch.iter().sum();
         if sum <= 0.0 {
             self.alignment[group] = 0.0;
             self.recompute_influence();
             return;
         }
-        let entropy: f32 = exps
+        let entropy: f32 = self
+            .softmax_scratch
             .iter()
             .map(|&e| {
                 let p = e / sum;

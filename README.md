@@ -18,9 +18,9 @@ Inspired by [microgpt-c](https://github.com/nicholasgasior/microgpt-c), [talos-v
 - **BPE Tokenizer** — Train/encode/decode with Config::bpe() preset for code generation.
 - **Bomberman Arena** — 4-player HL proof: adaptive intelligence (+177) > greedy (+131) > static rules (-30) > random (-55).
 - **G-Zero Self-Play** — Verifier-free Hint-δ intrinsic reward — no external LLM judge needed.
-- **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), SIMD kernels (`simd.rs`), tiled attention, CODA fusion, parallax attention, QuestBench, PEIRA, Dirichlet energy, spectral hierarchy, roofline cost model, LinOSS modal spec, AND-OR DDTree, and MUX superposition pruning.
+- **katgpt-core** — Shared crate with decoupled types (`types.rs`), trait definitions (`traits.rs`), SIMD kernels (`simd.rs`), tiled attention, CODA fusion, parallax attention, QuestBench, PEIRA, Dirichlet energy, spectral hierarchy, roofline cost model, LinOSS modal spec, AND-OR DDTree, MUX superposition pruning, NPC sense composition (KG latent octree), SLoD spectral level-of-detail pruner, shard embedding (JL projection), schema centroid init, and BAKE precision-gated embeddings.
 - **QwenDeltaNet** — Model architecture support for DeltaNet-style hybrid decode.
-- **150+ Feature Flags** — Granular feature gates for every subsystem; 67+ default-on (all GOAT-proved).
+- **150+ Feature Flags** — Granular feature gates for every subsystem; 80+ default-on (all GOAT-proved).
 - **Tactical Grid Game & Dungeon Crawler** — Arena examples for game AI research.
 
 📖 **Deep dives:** [`.docs/`](.docs/) for architecture, speculative decoding, performance, sudoku, validator, HL, arena, and all research detail.
@@ -80,6 +80,8 @@ Additional core traits:
 - **`PartialScorer`** — Graduated episode reward breakdown.
 - **`ProblemMutator`** — Arena config evolution via mutation.
 - **`BestBuddyAligner`** — Mutual NN filter with batch alignment confidence.
+- **`CollapseDetector`** — Runtime reasoning collapse detection with hesitation monitoring.
+- **`DataGate`** — Task-level data admission control for self-play stability.
 
 ### Routing & Conditioning
 
@@ -94,7 +96,7 @@ Additional core traits:
 
 ## 🔄 E2E Inference Flow — Default GOAT Stack
 
-The default production stack has **~70 GOAT-proved features** enabled, but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
+The default production stack has **~80+ GOAT-proved features** enabled, but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
 
 ```mermaid
 flowchart TD
@@ -524,6 +526,57 @@ Sub-features:
 
 GOAT status: **⚠️ MARGINAL** — debug overhead 3.5%, release expected <1%. All off by default until proven.
 
+## 🧠 NPC Sense Composition (Plan 221)
+
+KG Latent Octree NPC sense modules — compresses game domain KG triples into fixed-type ternary bit-plane sense modules. NPCs compose modules at spawn time and query at ~45ns/tick via bitwise dot-product.
+
+| Component | Description |
+|-----------|-------------|
+| **NpcBrain** | Composes `Vec<SenseModule>` per NPC, projects 8-dim HLA state, respects GM overrides |
+| **SenseModule** | Ternary bit-plane + octree bits + confidence + BLAKE3 commitment |
+| **SenseHotSwap** | Lock-free `AtomicPtr` module replacement |
+| **SenseOctreeBuilder** | Converts `KgEmbedding` → bit-plane octree occupancy |
+| **SenseTrialLog** | Bandit feedback log with EMA confidence decay |
+| **SenseBatch** | Parallel batch projection (rayon when N>64) |
+| **SNSE Serialization** | Binary format with BLAKE3 verification |
+| **GM Override** | Pin senses, disable autonomous mode for scripted NPCs |
+
+Feature gate: `sense_composition` (opt-in, requires `plasma_path`, `domain_latent`).
+
+📖 **Full detail:** [`.docs/24_sense_composition.md`](.docs/24_sense_composition.md).
+
+## 📐 Shard Embedding (Plan 230)
+
+Johnson-Lindenstrauss random orthogonal projection for O(1) cosine similarity shard lookup. Compresses `style_weights: [f32; 64]` → `ShardEmbedding: [f32; 8]` via pre-computed orthogonal matrix. Zero training, zero data — modelless dimension reduction.
+
+- **JlProjectionMatrix** — 64×8 Gram-Schmidt orthogonal rows with BLAKE3 commitment
+- **ShardEmbedding** — `[f32; 8]` with `cosine_similarity()`, `dist_sq()`, BLAKE3 hash
+
+No feature gate — always compiled in `katgpt-core`.
+
+## 🌊 SLoD: Spectral Level-of-Detail Pruner (Plan 235)
+
+Modelless KG resolution control via spectral heat diffusion on hyperbolic kNN graph Laplacians. Auto-detects multi-scale structure and routes constraint checks to appropriate resolution tier at O(1). Default-ON, GOAT G1–G6 all pass.
+
+| Phase | What |
+|-------|-------|
+| 1. Geometry | Poincaré ball hyperbolic distance + Fréchet mean + log/exp maps |
+| 2. Graph | kNN Laplacian from KG embeddings |
+| 3. Spectral | Jacobi eigendecomposition → multi-signal boundary scan |
+| 4. Routing | `SlodPruner` (implements `ConstraintPruner`) → tier routing O(1) |
+
+Feature gate: `slod` (**default-ON**, depends on `spectral_hierarchy`).
+
+## 🎯 Schema Centroid (Plan 237)
+
+Per-class embedding centroids for informed KG entity initialization. Pre-computes `mean` + `std_dev` per class → initializes new entities near class centroid with controlled perturbation. GOAT 7/7, default-ON.
+
+- **SchemaCentroidCache** — papaya lock-free `HashMap<u64, CentroidStats>`
+- **schema_init_entity()** — average class centroids + `γ·σ_c ⊙ noise` perturbation
+- **Cross-feature bridge**: when `bake_precision` enabled → `schema_init_with_precision()` uses informed prior
+
+Feature gate: `schema_centroid` (**default-ON**, requires `dep:papaya`).
+
 ## 🔀 Opt-In & Gated Features
 
 Proven features behind feature flags — not in default set:
@@ -550,6 +603,9 @@ Proven features behind feature flags — not in default set:
 | **BAKE Precision** (`bake_precision`) | Per-dimension Bayesian precision tracking for KG embeddings (Plan 236) | GOAT 10/10, drift marginal (4.7%), oscillation at threshold (50%) |
 | **ManifoldPruner** (`manifold_pruner`) | ManifoldE point-to-manifold soft validity + kernel-tricked relevance for ScreeningPruner (Plan 234) | 🪦 GOAT G1 FAIL — no acceptance gain at same threshold, kernel ranking valid |
 | **NFCoT FlowScore** (`nf_flow`) | Modelless normalizing flow density scoring for speculative candidates — zero training, O(vocab) per position (Plan 229) | GOAT ⚠️ MARGINAL, all sub-features default OFF |
+| **Sense Composition** (`sense_composition`) | KG Latent Octree NPC sense modules — ternary bit-plane projection, GM override, hot-swap (Plan 221) | Opt-in — requires `plasma_path`, `domain_latent` |
+| **BAKE Precision** (`bake_precision`) | Per-dimension Bayesian precision tracking for KG embeddings (Plan 236) | GOAT 10/10 but drift marginal (4.7%) |
+| **RAT+ Bridge** (`rat_plus_bridge`) | Recurrence Bridge via GDN2 state for modelless dilated inference (Plan 225) | Opt-in |
 
 📖 **Full detail for ALL opt-in features:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md).
 
@@ -746,9 +802,9 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 
 ### Feature Flags
 
-📖 **Feature flags** (163 total in [`Cargo.toml`](Cargo.toml); the table below covers the user-facing subset): See [`.docs/`](.docs/) for per-feature detail.
+📖 **Feature flags** (240+ total in [`Cargo.toml`](Cargo.toml); the table below covers the user-facing subset): See [`.docs/`](.docs/) for per-feature detail.
 
-**Default features** (65+, all GOAT-proved): `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bandit_top_p`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley`, `peira_distill`, `kog_cpu_fusion`, `gepa_reflective`, `phrase_boost`, `hydra_budget`, `flashar_consensus`, `budget_adaptation`, `ilc_distill`, `thinking_prune`, `rim_slots`, `thinking_cot`, `freq_bandit`, `spec_reconciliation`, `trust_region_spec`, `curvature_alloc`, `directional_credit`, `kv_share`, `nds_proxy`, `wealth_pruner`, `speculative_generator`, `kvarn`, `and_or_dtree`.
+**Default features** (80+, all GOAT-proved): `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bandit_top_p`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley`, `peira_distill`, `kog_cpu_fusion`, `gepa_reflective`, `phrase_boost`, `hydra_budget`, `flashar_consensus`, `budget_adaptation`, `ilc_distill`, `thinking_prune`, `rim_slots`, `thinking_cot`, `freq_bandit`, `spec_reconciliation`, `trust_region_spec`, `curvature_alloc`, `directional_credit`, `kv_share`, `nds_proxy`, `wealth_pruner`, `speculative_generator`, `kvarn`, `and_or_dtree`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, `llmexec_guard`, `outlier_guard`, `segment_checkpoint`, `self_distilling_bandit`, `precision_aware_draft`, `static_cal_tables`, `targeted_precision`, `egcs`, `reward_mem`, `symbolic_distill`, `concept_grounding`, `reward_calibrator`, `decision_explain`, `collapse_aware_thinking`.
 
 <details>
 <summary>📋 Full Feature Flag Table</summary>
@@ -891,6 +947,31 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 | `ega_attn` | Energy-Gated Attention spectral salience gating (Plan 139, opt-in) |
 | `stiff_anomaly` | Stiff/soft subspace eigenvalue anomaly gate (Plan 138, opt-in) |
 | `and_or_dtree` | AND-OR DDTree blueprint subgoal decomposition (Plan 190, opt-in) |
+| `sense_composition` | KG Latent Octree NPC sense modules — ternary bit-plane projection, GM override, hot-swap (Plan 221, opt-in) |
+| `shard_embedding` | (always-on) JL random orthogonal projection [f32;64]→[f32;8] for O(1) cosine similarity (Plan 230) |
+| `slod` | SLoD Spectral Level-of-Detail Pruner — Poincaré ball hyperbolic geometry + heat diffusion tier routing (Plan 235, **default-on**) |
+| `schema_centroid` | Schema Centroid per-class embedding centroids for informed KG entity init (Plan 237, **default-on**) |
+| `bake_precision` | BAKE Precision-Gated Bayesian Embedding — per-dimension precision tracking, O(8) arithmetic (Plan 236, opt-in) |
+| `nf_flow_score` | NFCoT FlowScore — modelless normalizing flow density scoring (Plan 229, opt-in) |
+| `nf_flow_gate` | NFCoT adaptive EMA acceptance criterion (Plan 229 T3, opt-in) |
+| `nf_flow_budget` | NFCoT sigmoid-weighted speculative depth allocation (Plan 229 T4, opt-in) |
+| `nf_flow` | NFCoT parent — enables score + gate + budget (Plan 229, opt-in) |
+| `union_bound_confidence` | Union Bound Confidence via Boole's inequality (Plan 231, **default-on**) |
+| `pathway_tracker` | PathwayTracker intrinsic pathway stability detection (Plan 231, **default-on**) |
+| `federation_composer` | FederationComposer explicit pruning with residual early termination (Plan 231, **default-on**) |
+| `collapse_aware_thinking` | Collapse-aware adaptive thinking — runtime collapse detection + early exit (Plan 212, **default-on**) |
+| `substrate_gate` | SubstrateGate inference-time routing (Plan 216, opt-in) |
+| `llmexec_guard` | Entropy-driven verification budgeting (**default-on**) |
+| `outlier_guard` | Model-load-time outlier injection detection (**default-on**) |
+| `segment_checkpoint` | Segment-level checkpoint/rollback (**default-on**) |
+| `trust_region_spec` | Trust-region speculative verification (**default-on**) |
+| `precision_aware_draft` | Precision-aware draft selection (**default-on**) |
+| `self_distilling_bandit` | Self-distilling bandit arms (**default-on**) |
+| `static_cal_tables` | Pre-computed calibration tables (**default-on**) |
+| `targeted_precision` | Targeted precision allocation for KV cache (**default-on**) |
+| `egcs` | Expert-gated channel selection (**default-on**) |
+| `nds_proxy` | NDS Proxy — normalized difference score proxy (Plan 186, **default-on**) |
+| `rat_plus_bridge` | RAT+ Recurrence Bridge via GDN2 state (Plan 225, opt-in) |
 | `directional_credit` | Entropy-bifurcated direction-adaptive screening (Plan 184, **default-on**) |
 | `kv_share` | Q-K=V projection sharing — 50% KV cache reduction (Plan 185, **default-on**) |
 | `spec_reconciliation` | Speculative reconciliation engine — verify offline trajectories against plausibility manifolds (Plan 177, **default-on**) |
@@ -918,10 +999,11 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 
 ```
 crates/katgpt-core/   Shared types + SIMD kernels + traits
-  types.rs            Decoupled structs & impls (Config, Rng, LoraAdapter, DomainLatent, etc.)
+  types.rs            Decoupled structs & impls (Config, Rng, LoraAdapter, DomainLatent, SenseModule, ShardEmbedding, etc.)
   traits.rs           Core trait definitions (22+ traits: ConstraintPruner, ScreeningPruner,
                         SpeculativeGenerator, GameState, LeoHead, DualLeoMixer, DominoPruner,
-                        CompletionHorizon, PartialScorer, ProblemMutator, BestBuddyAligner, etc.)
+                        CompletionHorizon, PartialScorer, ProblemMutator, BestBuddyAligner,
+                        CollapseDetector, DataGate, etc.)
   simd.rs             SIMD kernel implementations (NEON/AVX2)
   attention.rs        Tiled online-softmax flash attention
   coda.rs             CODA fused SIMD kernels (RMSNorm + matmul + SwiGLU fusion)
@@ -932,6 +1014,18 @@ crates/katgpt-core/   Shared types + SIMD kernels + traits
   spectral_hierarchy.rs  Spectral hierarchy (eigenspace, Haar, Cauchy interlacing)
   roofline.rs         Roofline cost model (GEMM/GEMV/GRAM estimation)
   linoss.rs           LinOSS cell for modal speculative decoding
+  shard_embedding.rs  JL random orthogonal projection [f32;64]→[f32;8]
+  slod.rs             SLoD spectral level-of-detail pruner (Poincaré ball)
+  sense/              KG Latent Octree Sense Composition
+    brain.rs          NpcBrain + GM override + HLA projection
+    octree.rs         KG→bit-plane octree builder
+    gm.rs             GM action dispatch API
+    hotswap.rs        Lock-free AtomicPtr module replacement
+    bandit.rs         Bandit trial log + decay
+    batch.rs          Parallel batch projection (rayon when N>64)
+    serialize.rs      SNSE binary format with BLAKE3
+    bake.rs           BAKE precision-gated embedding update
+    schema_centroid.rs  Per-class centroid init
   and_or/             AND-OR DDTree blueprint decomposition
   mux/                MUX superposition pruning (span pruner, DDTree, BFS, bandit width, freeze/thaw, demux)
 src/
@@ -1024,6 +1118,7 @@ tests/               167 integration test & benchmark files (~87 bench suites)
 | [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) | **Opt-in features** (D2F, GFlowNet, SpecHop, Committee Boost, etc.) |
 | [`.docs/22_percepta.md`](.docs/22_percepta.md) | **Percepta full detail** (module structure, compiler stack, verified properties) |
 | [`.docs/23_hl_arena_detail.md`](.docs/23_hl_arena_detail.md) | **HL & Arena detail** (all games, G-Zero, Freeze/Thaw, Emotion Vector, etc.) |
+| [`.docs/24_sense_composition.md`](.docs/24_sense_composition.md) | **NPC Sense Composition** (Plans 221/230/235/236/237) |
 | [`.docs/191_open_ended_problem_evolution_arena.md`](.docs/191_open_ended_problem_evolution_arena.md) | **Open-ended problem evolution arena** (ProblemMutator, IdeaDivergence, PartialScorer) |
 | [`examples/README.md`](examples/README.md) | 111 examples grouped by category |
 

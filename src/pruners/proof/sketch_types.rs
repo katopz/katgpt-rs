@@ -17,6 +17,7 @@
 //!
 //! Requires `proof_sketch_evolution` feature (depends on `bandit`).
 
+use std::collections::VecDeque;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
@@ -412,7 +413,7 @@ pub struct SketchEntry {
     /// Unresolved subgoals.
     pub pending_goals: Vec<Goal>,
     /// Lessons learned from episodes (Ralph loop summaries).
-    pub lessons: Vec<String>,
+    pub lessons: VecDeque<String>,
     /// Elo rating from Plackett-Luce aggregation.
     pub elo_rating: f64,
     /// P-UCB visit count.
@@ -431,7 +432,7 @@ impl<'de> serde::Deserialize<'de> for SketchEntry {
             id: SketchId,
             proof_state: ProofState,
             pending_goals: Vec<Goal>,
-            lessons: Vec<String>,
+            lessons: VecDeque<String>,
             elo_rating: f64,
             visits: usize,
         }
@@ -472,7 +473,7 @@ impl SketchEntry {
             id: SketchId::new(),
             proof_state,
             pending_goals: pending_goals.into_iter().take(MAX_PENDING_GOALS).collect(),
-            lessons: Vec::new(),
+            lessons: VecDeque::new(),
             elo_rating: DEFAULT_ELO,
             visits: 0,
             created_at: Instant::now(),
@@ -492,9 +493,9 @@ impl SketchEntry {
     /// Keeps only the last `MAX_LESSONS` entries (FIFO eviction).
     pub fn add_lesson(&mut self, lesson: String) {
         if self.lessons.len() >= MAX_LESSONS {
-            self.lessons.remove(0);
+            self.lessons.pop_front();
         }
-        self.lessons.push(lesson);
+        self.lessons.push_back(lesson);
     }
 
     /// Record a visit (increment visit count).

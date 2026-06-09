@@ -105,7 +105,12 @@ impl RegionBatching for RegionBatcher {
         vocab_size: usize,
     ) -> Vec<BorelRegion> {
         let depth = prefix.len();
-        let mut sub_regions = Vec::new();
+        // At most 2 sub-regions per maybe region (accept + reject)
+        let maybe_count = regions
+            .iter()
+            .filter(|r| r.label == RegionLabel::Maybe)
+            .count();
+        let mut sub_regions = Vec::with_capacity(maybe_count * 2);
 
         for region in regions {
             if region.label != RegionLabel::Maybe {

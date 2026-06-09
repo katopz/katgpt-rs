@@ -117,6 +117,9 @@ static GLOBAL_ALLOC: alloc::TrackingAllocator = alloc::TrackingAllocator;
 #[cfg(feature = "mux_demux")]
 pub mod mux_demux;
 
+#[cfg(feature = "mux_latent_context")]
+pub mod mux_latent;
+
 #[cfg(feature = "llmexec_guard")]
 pub mod llmexec_guard;
 

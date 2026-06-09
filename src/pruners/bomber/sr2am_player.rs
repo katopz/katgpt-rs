@@ -187,29 +187,31 @@ fn compute_game_delta(
     }
 }
 
-/// Compute Shannon entropy on softmax-normalized scores (only valid actions).
+/// Compute Shannon entropy on sigmoid-normalized scores (only valid actions).
+///
+/// Uses per-element sigmoid instead of softmax per project rule.
+/// Sigmoid scores are then normalized by their sum to form a probability
+/// distribution for entropy computation.
 fn shannon_entropy(scores: &[f32; ACTION_COUNT]) -> f32 {
-    let max_val = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let exps: Vec<f32> = scores
+    let sigs: Vec<f32> = scores
         .iter()
         .map(|&s| {
             if s <= f32::NEG_INFINITY {
                 0.0
             } else {
-                (s - max_val).exp()
+                1.0 / (1.0 + (-s).exp())
             }
         })
         .collect();
-    let sum: f32 = exps.iter().sum();
+    let sum: f32 = sigs.iter().sum();
     if sum <= 0.0 {
         return 0.0;
     }
-    let entropy: f32 = exps
+    let entropy: f32 = sigs
         .iter()
-        .zip(scores.iter())
-        .filter(|(e, _)| **e > 0.0)
-        .map(|(e, _)| {
-            let p = *e / sum;
+        .filter(|&&s| s > 0.0)
+        .map(|&s| {
+            let p = s / sum;
             -p * p.ln()
         })
         .sum();
@@ -903,13 +905,17 @@ mod tests {
     }
 
     #[test]
-    fn test_sr2am_entropy_single_low() {
-        // Single dominant score → low entropy (one action clearly best)
-        let scores = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-        let entropy = shannon_entropy(&scores);
+    fn test_sr2am_entropy_single_dominant_lower_than_uniform() {
+        // With sigmoid normalization, a single dominant score produces lower
+        // entropy than uniform scores, but not near-zero (sigmoid doesn't
+        // flatten differences as aggressively as softmax).
+        let uniform = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
+        let dominant = [100.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let entropy_uniform = shannon_entropy(&uniform);
+        let entropy_dominant = shannon_entropy(&dominant);
         assert!(
-            entropy < 0.5,
-            "single dominant score should have low entropy, got {entropy}"
+            entropy_dominant < entropy_uniform,
+            "dominant score entropy ({entropy_dominant}) should be < uniform ({entropy_uniform})"
         );
     }
 

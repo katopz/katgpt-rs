@@ -84,12 +84,16 @@ impl PhraseTrie {
     /// Return the union of all child token IDs reachable from the active set.
     ///
     /// Used to determine which tokens should receive a boost at the current position.
+    ///
+    /// O(active_nodes × vocab_width) with O(vocab_size) bitset for dedup.
     pub fn get_boosted_tokens(&self, active: &[usize]) -> Vec<usize> {
+        let mut seen = vec![false; self.vocab_size];
         let mut result = Vec::new();
         for &node_idx in active {
             let node = &self.nodes[node_idx];
             for (tok, slot) in node.children.iter().enumerate() {
-                if slot.is_some() && !result.contains(&tok) {
+                if slot.is_some() && !seen[tok] {
+                    seen[tok] = true;
                     result.push(tok);
                 }
             }
@@ -102,17 +106,21 @@ impl PhraseTrie {
     /// - For each active node, follow the edge `token_id` if it exists.
     /// - If an edge doesn't exist at root, root stays active (always track from start).
     /// - Always include root so new phrases can begin at any position.
+    ///
+    /// O(active_nodes) with O(nodes) bitset for dedup.
     pub fn advance(&self, active: &[usize], token_id: usize) -> Vec<usize> {
+        let mut seen = vec![false; self.nodes.len()];
         let mut next = Vec::with_capacity(active.len() + 1);
         for &node_idx in active {
-            if let Some(child) = self.nodes[node_idx].children[token_id]
-                && !next.contains(&child)
-            {
-                next.push(child);
+            if let Some(child) = self.nodes[node_idx].children[token_id] {
+                if !seen[child] {
+                    seen[child] = true;
+                    next.push(child);
+                }
             }
         }
         // Root (index 0) is always active — new phrases can start at any position.
-        if !next.contains(&0) {
+        if !seen[0] {
             next.push(0);
         }
         next

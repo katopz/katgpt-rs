@@ -130,6 +130,21 @@ impl HoarePruner {
         all_hold
     }
 
+    /// Propagate state with a single char — avoids allocation vs `propagate(&str)`.
+    pub fn propagate_char(&mut self, ch: char) -> bool {
+        match ch {
+            '(' | '[' | '{' => self.state.push_bracket(ch as u8),
+            ')' | ']' | '}' => self.state.pop_bracket(ch as u8),
+            _ => {}
+        }
+
+        let all_hold = self.predicates.iter().all(|p| p.evaluate(&self.state));
+        if !all_hold {
+            self.violations += 1;
+        }
+        all_hold
+    }
+
     /// Number of violations detected so far.
     pub fn violations(&self) -> usize {
         self.violations
@@ -164,8 +179,7 @@ impl crate::speculative::types::ConstraintPruner for HoarePruner {
 
     fn propagate(&mut self, _depth: usize, token_idx: usize, _parent_token: &[usize]) -> bool {
         if let Some(ch) = Self::token_idx_to_char(token_idx) {
-            let token = ch.to_string();
-            self.propagate(&token)
+            self.propagate_char(ch)
         } else {
             // Non-bracket token: just check predicates against current state
             self.predicates.iter().all(|p| p.evaluate(&self.state))
@@ -269,12 +283,19 @@ mod tests {
 
         // Debug builds have no optimizations — use generous threshold.
         // Release builds should be well under 200ns.
-        let budget = if cfg!(debug_assertions) { 5000.0 } else { 200.0 };
+        let budget = if cfg!(debug_assertions) {
+            5000.0
+        } else {
+            200.0
+        };
         assert!(
             per_call_ns < budget,
             "propagate overhead {per_call_ns:.1}ns exceeds {budget:.0}ns budget"
         );
 
-        eprintln!("  propagate: {per_call_ns:.1}ns/call ({n} iterations, {} tokens each)", tokens.len());
+        eprintln!(
+            "  propagate: {per_call_ns:.1}ns/call ({n} iterations, {} tokens each)",
+            tokens.len()
+        );
     }
 }

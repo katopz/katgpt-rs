@@ -259,9 +259,20 @@ pub fn detect_universal_neurons(
             }
         }
 
-        // Sort by activation magnitude descending, take top-0.1%.
-        scored.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        for &(slot, _) in scored.iter().take(top_k) {
+        // Partial-sort for top-0.1% by activation magnitude descending.
+        // select_nth_unstable_by partitions around the k-th element in O(n),
+        // then we truncate to keep only the top-k.
+        if top_k < scored.len() {
+            scored.select_nth_unstable_by(top_k, |a, b| {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            scored.truncate(top_k);
+        } else {
+            scored.sort_unstable_by(|a, b| {
+                b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        for &(slot, _) in &scored {
             appearance_count[slot] += 1;
         }
     }

@@ -37,16 +37,17 @@ use super::concept_grounding::{ConceptGrounding, PrunerState, TemplateGrounding}
 /// Key: blake3 hash of serialized TraceNode.
 /// Value: computed sensitivity values per pruner.
 ///
-/// Uses `Arc<RwLock<HashMap>>` as a fallback when `papaya` is not available.
+/// Uses papaya lock-free `HashMap` for contention-free concurrent access.
+/// Wrapped in `Arc` so clones share state (insert from one visible to all).
 pub struct SensitivityCache {
-    cache: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<[u8; 32], Vec<f32>>>>,
+    cache: std::sync::Arc<papaya::HashMap<[u8; 32], Vec<f32>>>,
     version: std::sync::atomic::AtomicU64,
 }
 
 impl Clone for SensitivityCache {
     fn clone(&self) -> Self {
         Self {
-            cache: self.cache.clone(),
+            cache: std::sync::Arc::clone(&self.cache),
             version: std::sync::atomic::AtomicU64::new(self.version()),
         }
     }
@@ -65,27 +66,24 @@ impl SensitivityCache {
     /// Create an empty cache.
     pub fn new() -> Self {
         Self {
-            cache: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+            cache: std::sync::Arc::new(papaya::HashMap::new()),
             version: std::sync::atomic::AtomicU64::new(0),
         }
     }
 
     /// Look up cached sensitivity values for a trace.
     pub fn get(&self, trace_hash: &[u8; 32]) -> Option<Vec<f32>> {
-        let guard = self.cache.read().unwrap();
-        guard.get(trace_hash).cloned()
+        self.cache.pin().get(trace_hash).cloned()
     }
 
     /// Insert sensitivity values into the cache.
     pub fn insert(&self, trace_hash: [u8; 32], sensitivities: Vec<f32>) {
-        let mut guard = self.cache.write().unwrap();
-        guard.insert(trace_hash, sensitivities);
+        self.cache.pin().insert(trace_hash, sensitivities);
     }
 
     /// Invalidate all entries (bump version for HotSwapPruner reload).
     pub fn invalidate(&self) {
-        let mut guard = self.cache.write().unwrap();
-        guard.clear();
+        self.cache.pin().clear();
         self.version
             .fetch_add(1, std::sync::atomic::Ordering::Release);
     }
@@ -97,8 +95,7 @@ impl SensitivityCache {
 
     /// Number of cached entries.
     pub fn len(&self) -> usize {
-        let guard = self.cache.read().unwrap();
-        guard.len()
+        self.cache.pin().len()
     }
 
     /// Whether the cache is empty.
@@ -161,7 +158,7 @@ impl TraceNode {
 /// Attribution of a single pruner to a token choice.
 #[derive(Clone, Debug)]
 pub struct PrunerAttribution {
-    pub pruner_name: String,
+    pub pruner_name: Cow<'static, str>,
     pub score: f32,
     pub sensitivity: f32,
 }
@@ -243,7 +240,7 @@ impl DecisionExplanation {
 
                 if attr.sensitivity > max_sensitivity {
                     max_sensitivity = attr.sensitivity;
-                    primary_driver = &attr.pruner_name;
+                    primary_driver = attr.pruner_name.as_ref();
                 }
             }
 
@@ -300,6 +297,8 @@ pub trait DecisionExplainer: Send + Sync {
 }
 
 // ── PerturbationExplainer ───────────────────────────────────────────────
+
+use std::borrow::Cow;
 
 /// Perturbation-based sensitivity analysis explainer.
 ///
@@ -369,16 +368,17 @@ impl DecisionExplainer for PerturbationExplainer {
             let mut attributions = Vec::with_capacity(num_pruners);
 
             for pruner_idx in 0..chosen.pruner_scores.len().min(num_pruners) {
-                let raw_name = match self.pruner_names.get(pruner_idx) {
-                    Some(n) => n.clone(),
-                    None => format!("pruner_{}", pruner_idx),
+                let raw_name: Cow<'static, str> = match self.pruner_names.get(pruner_idx) {
+                    Some(n) => Cow::Owned(n.clone()),
+                    None => Cow::Owned(format!("pruner_{}", pruner_idx)),
                 };
                 let score = chosen.pruner_scores[pruner_idx];
                 let sensitivity = self.compute_single_sensitivity(node, pruner_idx, self.delta);
 
                 // Ground pruner name via concept grounding when available
                 #[cfg(feature = "concept_grounding")]
-                let pruner_name = self.ground_pruner_name(&raw_name, node.depth, chosen.token_idx);
+                let pruner_name =
+                    Cow::Owned(self.ground_pruner_name(&raw_name, node.depth, chosen.token_idx));
                 #[cfg(not(feature = "concept_grounding"))]
                 let pruner_name = raw_name;
 
@@ -392,7 +392,7 @@ impl DecisionExplainer for PerturbationExplainer {
             // Handle pruner_names that exceed actual scores — append zero-sensitivity entries
             for pruner_idx in chosen.pruner_scores.len()..num_pruners {
                 attributions.push(PrunerAttribution {
-                    pruner_name: self.pruner_names[pruner_idx].clone(),
+                    pruner_name: Cow::Owned(self.pruner_names[pruner_idx].clone()),
                     score: 0.0,
                     sensitivity: 0.0,
                 });
@@ -552,7 +552,7 @@ impl PerturbationExplainer {
             for attr in &choice.pruner_attributions {
                 if attr.sensitivity > max_sens {
                     max_sens = attr.sensitivity;
-                    primary = &attr.pruner_name;
+                    primary = attr.pruner_name.as_ref();
                 }
             }
         }

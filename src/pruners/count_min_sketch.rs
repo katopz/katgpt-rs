@@ -81,11 +81,15 @@ impl CountMinSketch {
     ///
     /// O(1024) constant time — no per-key iteration. Typical lambda ∈ [0.5, 1.0]
     /// for gradual aging.
+    ///
+    /// Uses Q16 fixed-point integer math to avoid f32 arithmetic on hot path.
+    /// `lambda_fixed = round(lambda * 65536)`, then `new_v = (v * lambda_fixed) >> 16`.
     pub fn decay(&mut self, lambda: f32) {
+        let lambda_fixed = (lambda * 65536.0) as u32;
         for row in 0..ROWS {
             for col in 0..COLS {
-                let v = self.counters[row][col] as f32 * lambda;
-                self.counters[row][col] = v as u16;
+                let v = self.counters[row][col] as u32;
+                self.counters[row][col] = ((v * lambda_fixed) >> 16) as u16;
             }
         }
     }

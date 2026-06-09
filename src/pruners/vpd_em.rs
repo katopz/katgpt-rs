@@ -67,12 +67,29 @@ fn softmax(q: &[f32]) -> Vec<f32> {
     if q.is_empty() {
         return Vec::new();
     }
-    let max_val = q.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let max_val = q.iter().copied().fold(f32::NEG_INFINITY, f32::max);
     let exps: Vec<f32> = q.iter().map(|&v| (v - max_val).exp()).collect();
     let sum: f32 = exps.iter().sum();
     let log_sum = sum.ln();
     // Return log-probabilities for KL computation
     exps.iter().map(|e| e.ln() - log_sum).collect()
+}
+
+/// In-place softmax that reuses a pre-allocated buffer.
+///
+/// Writes log-probabilities into `out`, avoiding allocation on repeated calls.
+fn softmax_inplace(q: &[f32], out: &mut Vec<f32>) {
+    out.clear();
+    if q.is_empty() {
+        return;
+    }
+    let max_val = q.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    out.extend(q.iter().map(|&v| (v - max_val).exp()));
+    let sum: f32 = out.iter().sum();
+    let log_sum = sum.ln();
+    for e in out.iter_mut() {
+        *e = e.ln() - log_sum;
+    }
 }
 
 /// KL divergence: `sum(p * (p - q))` where p and q are log-probabilities.
@@ -305,6 +322,10 @@ pub struct VpdEmCycle<P: ScreeningPruner> {
     reference_q: Vec<f32>,
     /// Collected samples for next E-step batch.
     e_step_buffer: Vec<BcoSample>,
+    /// Pre-allocated scratch buffer for student log-probabilities (avoids per-M-step allocation).
+    student_log_p: Vec<f32>,
+    /// Pre-allocated scratch buffer for teacher log-probabilities (avoids per-M-step allocation).
+    teacher_log_p: Vec<f32>,
     /// Phantom data for the ScreeningPruner type parameter.
     _phantom: PhantomData<P>,
 }
@@ -324,6 +345,8 @@ impl<P: ScreeningPruner> VpdEmCycle<P> {
             teacher_q: vec![0.0; n_actions],
             reference_q: vec![0.0; n_actions],
             e_step_buffer: Vec::new(),
+            student_log_p: Vec::with_capacity(n_actions),
+            teacher_log_p: Vec::with_capacity(n_actions),
             _phantom: PhantomData,
         }
     }
@@ -399,9 +422,9 @@ impl<P: ScreeningPruner> VpdEmCycle<P> {
         absorb: &mut SdarGatedAbsorbCompress<P>,
     ) -> bool {
         // Compute action-level KL divergence as gating signal
-        let student_log_p = softmax(&self.student_q);
-        let teacher_log_p = softmax(&self.teacher_q);
-        let kl = kl_divergence(&student_log_p, &teacher_log_p);
+        softmax_inplace(&self.student_q, &mut self.student_log_p);
+        softmax_inplace(&self.teacher_q, &mut self.teacher_log_p);
+        let kl = kl_divergence(&self.student_log_p, &self.teacher_log_p);
 
         // Gate the distillation signal using SDAR sigmoid
         let gate = sdar_gate(kl * self.config.kl_penalty, SDAR_BETA);

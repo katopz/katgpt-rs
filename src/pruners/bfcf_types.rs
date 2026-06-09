@@ -132,6 +132,10 @@ impl BorelRegion {
 #[derive(Clone, Debug)]
 pub struct BFCP {
     pub regions: Vec<BorelRegion>,
+    /// Cached label counts, updated in `from_regions`.
+    accept_count: usize,
+    reject_count: usize,
+    maybe_count: usize,
 }
 
 impl BFCP {
@@ -139,12 +143,32 @@ impl BFCP {
     pub fn empty() -> Self {
         Self {
             regions: Vec::new(),
+            accept_count: 0,
+            reject_count: 0,
+            maybe_count: 0,
         }
     }
 
     /// Create a partition from a vector of regions.
     pub fn from_regions(regions: Vec<BorelRegion>) -> Self {
-        Self { regions }
+        let accept_count = regions
+            .iter()
+            .filter(|r| r.label == RegionLabel::Accept)
+            .count();
+        let reject_count = regions
+            .iter()
+            .filter(|r| r.label == RegionLabel::Reject)
+            .count();
+        let maybe_count = regions
+            .iter()
+            .filter(|r| r.label == RegionLabel::Maybe)
+            .count();
+        Self {
+            regions,
+            accept_count,
+            reject_count,
+            maybe_count,
+        }
     }
 
     /// Number of regions in the partition.
@@ -183,28 +207,22 @@ impl BFCP {
             .filter(|r| r.label == RegionLabel::Maybe)
     }
 
-    /// Count of accept regions.
+    /// Count of accept regions (cached O(1)).
+    #[inline]
     pub fn accept_count(&self) -> usize {
-        self.regions
-            .iter()
-            .filter(|r| r.label == RegionLabel::Accept)
-            .count()
+        self.accept_count
     }
 
-    /// Count of reject regions.
+    /// Count of reject regions (cached O(1)).
+    #[inline]
     pub fn reject_count(&self) -> usize {
-        self.regions
-            .iter()
-            .filter(|r| r.label == RegionLabel::Reject)
-            .count()
+        self.reject_count
     }
 
-    /// Count of maybe regions.
+    /// Count of maybe regions (cached O(1)).
+    #[inline]
     pub fn maybe_count(&self) -> usize {
-        self.regions
-            .iter()
-            .filter(|r| r.label == RegionLabel::Maybe)
-            .count()
+        self.maybe_count
     }
 
     /// Tokens in accept regions.
@@ -229,37 +247,33 @@ impl BFCP {
 ///
 /// Each region maps to exactly one scalar value. Theorem 2 (NS-CSG):
 /// after Bellman backup, values remain piecewise-constant — no leakage.
+///
+/// Values are stored in a dense Vec indexed by region — O(1) lookup and update.
 #[derive(Clone, Debug)]
 pub struct PWCValueFunction {
-    /// (region_index, value) — constant per region.
-    pub region_values: Vec<(usize, f64)>,
+    /// Direct-indexed values: region_values[region_idx] = value.
+    pub region_values: Vec<f64>,
 }
 
 impl PWCValueFunction {
     /// Create a new PWC value function with `region_count` regions, all initialized to `initial`.
     pub fn new(region_count: usize, initial: f64) -> Self {
         Self {
-            region_values: (0..region_count).map(|i| (i, initial)).collect(),
+            region_values: vec![initial; region_count],
         }
     }
 
-    /// Get value for a specific region. Returns 0.0 if region not found.
+    /// Get value for a specific region. Returns 0.0 if index out of bounds.
+    #[inline]
     pub fn value(&self, region_idx: usize) -> f64 {
-        self.region_values
-            .iter()
-            .find(|(idx, _)| *idx == region_idx)
-            .map(|(_, v)| *v)
-            .unwrap_or(0.0)
+        self.region_values.get(region_idx).copied().unwrap_or(0.0)
     }
 
-    /// Update value for a specific region.
+    /// Update value for a specific region. No-op if index out of bounds.
+    #[inline]
     pub fn update(&mut self, region_idx: usize, new_value: f64) {
-        if let Some(entry) = self
-            .region_values
-            .iter_mut()
-            .find(|(idx, _)| *idx == region_idx)
-        {
-            entry.1 = new_value;
+        if let Some(v) = self.region_values.get_mut(region_idx) {
+            *v = new_value;
         }
     }
 
@@ -276,15 +290,9 @@ impl PWCValueFunction {
     /// Verify PWC closure: each region has exactly one value (no duplicates).
     /// After updates, values haven't leaked between regions — structural invariant.
     pub fn verify_pwc_closure(&self) -> bool {
-        // PWC closure: each region index appears exactly once
-        let len = self.region_values.len();
-        let unique_count: usize = {
-            let mut indices: Vec<usize> = self.region_values.iter().map(|(i, _)| *i).collect();
-            indices.sort();
-            indices.dedup();
-            indices.len()
-        };
-        unique_count == len
+        // PWC closure: dense Vec implies each index appears exactly once
+        // by construction — always true for the direct-index representation.
+        true
     }
 }
 

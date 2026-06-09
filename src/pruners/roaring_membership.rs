@@ -19,7 +19,7 @@ enum BitmapContainer {
     /// Sorted array of set-bit positions within [0, 65536).
     Array(Vec<u16>),
     /// 1024 × 64 = 65 536 bits.
-    Bits(Box<[u64; 1024]>),
+    Bits(Box<[u64; 1024]>, u64),
 }
 
 /// Threshold for switching between array and bit container (Roaring spec).
@@ -34,7 +34,7 @@ impl BitmapContainer {
     fn len(&self) -> u64 {
         match self {
             BitmapContainer::Array(a) => a.len() as u64,
-            BitmapContainer::Bits(b) => b.iter().map(|w| w.count_ones() as u64).sum(),
+            BitmapContainer::Bits(_, count) => *count,
         }
     }
 
@@ -42,7 +42,7 @@ impl BitmapContainer {
     fn contains(&self, lo: u16) -> bool {
         match self {
             BitmapContainer::Array(a) => a.binary_search(&lo).is_ok(),
-            BitmapContainer::Bits(b) => {
+            BitmapContainer::Bits(b, _) => {
                 let word = lo as usize / 64;
                 let bit = lo as usize % 64;
                 (b[word] >> bit) & 1 == 1
@@ -58,10 +58,15 @@ impl BitmapContainer {
                     self.maybe_promote();
                 }
             }
-            BitmapContainer::Bits(b) => {
+            BitmapContainer::Bits(b, count) => {
                 let word = lo as usize / 64;
                 let bit = lo as usize % 64;
-                b[word] |= 1u64 << bit;
+                let old = b[word];
+                let mask = 1u64 << bit;
+                if old & mask == 0 {
+                    *count += 1;
+                }
+                b[word] = old | mask;
             }
         }
     }
@@ -69,7 +74,7 @@ impl BitmapContainer {
     fn iter(&self) -> Box<dyn Iterator<Item = u16> + '_> {
         match self {
             BitmapContainer::Array(a) => Box::new(a.iter().copied()),
-            BitmapContainer::Bits(b) => Box::new(b.iter().enumerate().flat_map(|(i, &word)| {
+            BitmapContainer::Bits(b, _) => Box::new(b.iter().enumerate().flat_map(|(i, &word)| {
                 (0..64u32).filter_map(move |bit| {
                     if (word >> bit) & 1 == 1 {
                         Some(((i * 64) + bit as usize) as u16)
@@ -86,7 +91,7 @@ impl BitmapContainer {
             BitmapContainer::Array(a) => {
                 a.capacity() * std::mem::size_of::<u16>() + std::mem::size_of::<Vec<u16>>()
             }
-            BitmapContainer::Bits(b) => std::mem::size_of_val(b.as_ref()),
+            BitmapContainer::Bits(b, _) => std::mem::size_of_val(b.as_ref()),
         }
     }
 
@@ -99,7 +104,7 @@ impl BitmapContainer {
             for &lo in a.iter() {
                 bits[lo as usize / 64] |= 1u64 << (lo as usize % 64);
             }
-            *self = BitmapContainer::Bits(bits);
+            *self = BitmapContainer::Bits(bits, a.len() as u64);
         }
     }
 
@@ -117,7 +122,8 @@ impl BitmapContainer {
             for lo in set_indices {
                 bits[lo as usize / 64] |= 1u64 << (lo as usize % 64);
             }
-            BitmapContainer::Bits(bits)
+            let count = bits.iter().map(|w| w.count_ones() as u64).sum();
+            BitmapContainer::Bits(bits, count)
         } else {
             // Already sorted by construction.
             BitmapContainer::Array(set_indices)

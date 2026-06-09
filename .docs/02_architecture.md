@@ -1647,3 +1647,166 @@ pub struct BlockScores {
 ```
 
 `FlashPrefillConfig` provides named constructors: `default()`, `metal()`, `long_context()`, `short_context()`.
+
+---
+
+## Sense Composition (Plan 221)
+
+KG Latent Octree NPC sense modules — compresses game domain KG triples into fixed-type ternary bit-plane sense modules. NPCs compose modules at spawn time and query at ~45ns/tick via bitwise dot-product.
+
+### Key Types
+
+```rust
+/// Composable NPC sense module with ternary bit-plane projection
+pub struct SenseModule {
+    octree_bits: u64,        // Octree occupancy mask (8 octants)
+    pos_bits: TernaryDir,    // Positive direction bit-plane
+    neg_bits: TernaryDir,    // Negative direction bit-plane
+    row_scale: Vec<f32>,     // Per-dimension scale
+    confidence: f32,         // Module quality [0,1]
+    kind: SenseKind,         // Sense type classification
+    #[cfg(feature = "bake_precision")]
+    precision: Option<PrecisionEntry>, // BAKE precision tracking
+}
+
+/// NPC Brain — composes sense modules and projects HLA state
+pub struct NpcBrain {
+    modules: Vec<SenseModule>,
+    hla_cache: HlaCacheProxy,
+    gm_overrides: Vec<SenseOverride>,
+    autonomous: bool,
+}
+
+/// Sense kinds — classification of what a module senses
+pub enum SenseKind {
+    CommonSense, FighterSense, GameTheorySense,
+    SpatialSense, SocialSense, SkillSense, Reserved,
+}
+```
+
+### Architecture
+
+- **SenseModule::project()** — Ternary bitwise dot → sigmoid → 8-dim HLA projection at ~45ns/tick
+- **SenseOctreeBuilder** — Converts `KgEmbedding` → bit-plane octree occupancy + ternary direction vectors
+- **SenseHotSwap** — Lock-free `AtomicPtr` swap with `AtomicBool` module lock
+- **SenseTrialLog** — Bandit feedback for module quality, `decay_direction()` EMA adjusts confidence
+- **SenseBatch** — Parallel batch projection for multiple NPCs (rayon when N>64)
+- **SNSE Serialization** — Binary format with BLAKE3 verification for persistent sense state
+- **GM Override** — `SenseOverride` pins specific senses or disables autonomous mode for scripted NPCs
+
+Feature gate: `sense_composition` (opt-in, requires `plasma_path`, `domain_latent`).
+
+---
+
+## Shard Embedding (Plan 230)
+
+Johnson-Lindenstrauss random orthogonal projection for O(1) cosine similarity shard lookup.
+
+```rust
+/// 64→8 random orthogonal projection matrix
+pub struct JlProjectionMatrix {
+    matrix: [[f32; STYLE_DIM]; EMBED_DIM], // 64×8
+    hash: [u8; 32], // BLAKE3 commitment
+}
+
+/// Compressed shard embedding
+pub struct ShardEmbedding([f32; 8]);
+```
+
+- **Construction**: Gram-Schmidt orthogonal rows from RNG seed → BLAKE3 commitment
+- **Projection**: SIMD dot-product `style_weights[64] → embedding[8]`
+- **Lookup**: `cosine_similarity()` and `dist_sq()` on [f32; 8]
+- No feature gate — always compiled in `katgpt-core`
+
+---
+
+## SLoD Spectral Level-of-Detail Pruner (Plan 235)
+
+Modelless KG resolution control via spectral heat diffusion on hyperbolic kNN graph Laplacians. GOAT G1–G6 all pass.
+
+### Key Types
+
+```rust
+pub struct SlodConfig {
+    pub knn_k: usize,           // kNN neighbors (default: 8)
+    pub n_scales: usize,        // Number of scale tiers (default: 3)
+    pub participation_threshold: f32,
+    pub entropy_threshold: f32,
+}
+
+pub struct SlodOperator {
+    config: SlodConfig,
+    scale_boundaries: Vec<ScaleBoundary>,
+}
+
+pub struct SlodPruner { operator: SlodOperator }
+impl ConstraintPruner for SlodPruner { ... }
+```
+
+### Architecture
+
+1. **Poincaré ball geometry**: `poincare_distance()`, `log_map()`, `exp_map()`, `frechet_mean()`
+2. **kNN Laplacian**: Build graph from KG embeddings → Laplacian L = D - A
+3. **Jacobi eigendecomposition**: Extract eigenvalues/eigenvectors
+4. **Multi-signal boundary scan**: Participation ratio + diffusion entropy + spectral concentration → MAD peak picker
+5. **Tier routing**: `SlodPruner::is_valid()` routes to appropriate resolution tier O(1)
+
+Feature gate: `slod` (default-ON, depends on `spectral_hierarchy`).
+
+---
+
+## Schema Centroid (Plan 237)
+
+Per-class embedding centroids for informed KG entity initialization. GOAT 7/7.
+
+```rust
+pub struct CentroidStats {
+    pub mean: [f32; 8],
+    pub std_dev: [f32; 8],
+}
+
+pub struct SchemaCentroidCache {
+    centroids: papaya::HashMap<u64, CentroidStats>,
+}
+```
+
+- **Construction**: Per-class `mean` + `std_dev` computed once from KG snapshots
+- **Initialization**: `schema_init_entity()` → average class centroids + `γ·σ_c ⊙ noise` perturbation
+- **Fallback**: Random `[-0.5, 0.5]` init if class not found
+- **Cross-feature bridge**: When `bake_precision` enabled → `schema_init_with_precision()` uses informed prior
+
+Feature gate: `schema_centroid` (default-ON, requires `dep:papaya`).
+
+---
+
+## BAKE Precision-Gated Bayesian Embedding (Plan 236)
+
+Per-dimension precision tracking for KG embeddings. GOAT 10/10 but **demoted to opt-in** (drift 4.7% vs 30% target).
+
+```rust
+pub struct PrecisionEntry {
+    pub lambda: [f32; 8],  // Per-dimension precision
+    pub mu: [f32; 8],      // Per-dimension mean
+}
+
+pub struct BakePrecisionStore {
+    entries: papaya::HashMap<u64, PrecisionEntry>,
+}
+
+pub struct BakeSession { /* lifecycle: begin → observe × N → end */ }
+```
+
+- **Bayesian update**: `λ_new = λ_old + λ_obs`, `μ_new = (λ_old ⊙ μ_old + λ_obs ⊙ obs) / λ_new`
+- **Regularization**: `β · √(λ ⊙ (μ_current - μ_old)²)` penalty
+- **O(8) arithmetic**: Zero-alloc, SIMD-friendly
+- **Session lifecycle**: `begin()` → `observe()` × N → `end()` writes back to store
+
+Feature gate: `bake_precision` (opt-in, requires `dep:papaya`, `sense_composition`).
+
+---
+
+## RatPlus Recurrence Bridge (Plan 225)
+
+RAT+ recurrence bridge via GDN2 state for modelless dilated inference.
+
+Feature gate: `rat_plus_bridge` (opt-in).

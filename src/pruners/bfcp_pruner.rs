@@ -90,7 +90,7 @@ impl BFCPPruner {
         kept_tokens.extend_from_slice(&accept_tokens);
         kept_tokens.extend_from_slice(&maybe_tokens);
 
-        let partition = BFCP { regions };
+        let partition = BFCP::from_regions(regions);
 
         Self {
             partition,

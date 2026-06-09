@@ -24,8 +24,6 @@
 //! - Mode selection: <50ns, O(1) fixed 6 arms, no allocation
 //! - Grounding quality: SIMD-friendly chunked loop over vocabulary-sized arrays
 
-use std::collections::VecDeque;
-
 // ── Sigmoid helper ────────────────────────────────────────────
 
 /// Sigmoid function: `1 / (1 + exp(-x))`.
@@ -408,32 +406,38 @@ pub fn grounding_quality(pruned: &[f32], unpruned: &[f32]) -> f32 {
 /// Fixed-size rolling window for tracking recent verification outcomes.
 #[derive(Debug, Clone)]
 pub struct RollingWindow {
-    values: VecDeque<f32>,
-    capacity: usize,
+    /// Ring buffer storage.
+    buf: Vec<f32>,
+    /// Next write position (wraps around).
+    head: usize,
+    /// Number of elements currently in the buffer.
+    len: usize,
 }
 
 impl RollingWindow {
     pub fn new(capacity: usize) -> Self {
         Self {
-            values: VecDeque::with_capacity(capacity),
-            capacity,
+            buf: vec![0.0; capacity],
+            head: 0,
+            len: 0,
         }
     }
 
     /// Push a value, evicting oldest if at capacity.
     pub fn push(&mut self, value: f32) {
-        if self.values.len() == self.capacity {
-            self.values.pop_front();
+        self.buf[self.head] = value;
+        self.head = (self.head + 1) % self.buf.len();
+        if self.len < self.buf.len() {
+            self.len += 1;
         }
-        self.values.push_back(value);
     }
 
     /// Mean of values in window (0.0 if empty).
     pub fn mean(&self) -> f32 {
-        if self.values.is_empty() {
+        if self.len == 0 {
             return 0.0;
         }
-        self.values.iter().sum::<f32>() / self.values.len() as f32
+        self.buf[..self.len].iter().sum::<f32>() / self.len as f32
     }
 }
 

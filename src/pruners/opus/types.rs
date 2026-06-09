@@ -15,6 +15,8 @@
 //! - `Φ_selected` = accumulated sketch of previously selected arms
 //! - `λ` = redundancy weight (configurable)
 
+use std::collections::{HashSet, VecDeque};
+
 use crate::pruners::bandit::{BanditEnv, BanditPruner};
 use crate::speculative::types::ScreeningPruner;
 use crate::types::Rng;
@@ -129,9 +131,11 @@ pub struct OpusBanditPruner<P: ScreeningPruner> {
     /// Accumulated sketch of selected features: Φ_selected = Σ sketch(φ(z)).
     selected_sketch_sum: Vec<f32>,
     /// Ring buffer of selected arm indices for history tracking.
-    selected_arms: Vec<usize>,
-    /// Per-arm feature vectors (deterministic from arm index + seed).
-    arm_features: Vec<Vec<f32>>,
+    selected_arms: VecDeque<usize>,
+    /// Per-arm feature vectors flattened with stride (arm `i` → `arm_features[i * feature_dim..(i+1) * feature_dim]`).
+    arm_features: Vec<f32>,
+    /// Stride for arm_features (= feature_dim).
+    feature_stride: usize,
     /// RNG for Boltzmann sampling.
     rng: Rng,
 }
@@ -146,15 +150,14 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
         let feature_dim = config.feature_dim;
         let sketch_dim = config.sketch_dim;
 
-        // Generate deterministic feature vectors per arm
+        // Generate deterministic feature vectors per arm (flat layout)
         let mut feat_rng = Rng::new(0xDEAD_BEEF);
-        let arm_features: Vec<Vec<f32>> = (0..num_arms)
-            .map(|_| {
-                (0..feature_dim)
-                    .map(|_| feat_rng.uniform() * 2.0 - 1.0)
-                    .collect()
-            })
-            .collect();
+        let mut arm_features = Vec::with_capacity(num_arms * feature_dim);
+        for _ in 0..num_arms {
+            for _ in 0..feature_dim {
+                arm_features.push(feat_rng.uniform() * 2.0 - 1.0);
+            }
+        }
 
         let sketch = CountSketch::new(feature_dim, sketch_dim, 0xCAFE_BABE);
 
@@ -163,8 +166,9 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
             config,
             sketch,
             selected_sketch_sum: vec![0.0; sketch_dim],
-            selected_arms: Vec::new(),
+            selected_arms: VecDeque::new(),
             arm_features,
+            feature_stride: feature_dim,
             rng: Rng::new(42),
         }
     }
@@ -176,13 +180,12 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
         let sketch_dim = config.sketch_dim;
 
         let mut feat_rng = Rng::new(seed.wrapping_add(1));
-        let arm_features: Vec<Vec<f32>> = (0..num_arms)
-            .map(|_| {
-                (0..feature_dim)
-                    .map(|_| feat_rng.uniform() * 2.0 - 1.0)
-                    .collect()
-            })
-            .collect();
+        let mut arm_features = Vec::with_capacity(num_arms * feature_dim);
+        for _ in 0..num_arms {
+            for _ in 0..feature_dim {
+                arm_features.push(feat_rng.uniform() * 2.0 - 1.0);
+            }
+        }
 
         let sketch = CountSketch::new(feature_dim, sketch_dim, seed.wrapping_add(2));
 
@@ -191,10 +194,19 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
             config,
             sketch,
             selected_sketch_sum: vec![0.0; sketch_dim],
-            selected_arms: Vec::new(),
+            selected_arms: VecDeque::new(),
             arm_features,
+            feature_stride: feature_dim,
             rng: Rng::new(seed),
         }
+    }
+
+    /// Get the feature vector for arm `i` as a slice.
+    #[inline]
+    fn arm_features(&self, i: usize) -> &[f32] {
+        let start = i * self.feature_stride;
+        let end = start + self.feature_stride;
+        &self.arm_features[start..end]
     }
 
     /// Prepare for a new episode: cache Boltzmann scores, reset selection state.
@@ -217,33 +229,36 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
     /// Uses a ring buffer of size [`OpusConfig::buffer_size`]: oldest selections
     /// are evicted once the buffer is full.
     pub fn record_selection(&mut self, arm: usize) {
-        if arm >= self.arm_features.len() {
+        let num_arms = self.arm_features.len() / self.feature_stride;
+        if arm >= num_arms {
             return;
         }
 
         // Evict oldest if buffer is full
         if self.selected_arms.len() >= self.config.buffer_size {
-            if let Some(&old_arm) = self.selected_arms.first()
-                && old_arm < self.arm_features.len()
+            if let Some(&old_arm) = self.selected_arms.front()
+                && old_arm < num_arms
             {
-                let old_sketch = self.sketch.sketch(&self.arm_features[old_arm]);
+                let old_feat = self.arm_features(old_arm);
+                let old_sketch = self.sketch.sketch(old_feat);
                 for (i, &val) in old_sketch.iter().enumerate() {
                     if i < self.selected_sketch_sum.len() {
                         self.selected_sketch_sum[i] -= val;
                     }
                 }
             }
-            self.selected_arms.remove(0);
+            self.selected_arms.pop_front();
         }
 
         // Add arm's sketch to the accumulated sum
-        let arm_sketch = self.sketch.sketch(&self.arm_features[arm]);
+        let arm_feat = self.arm_features(arm);
+        let arm_sketch = self.sketch.sketch(arm_feat);
         for (i, &val) in arm_sketch.iter().enumerate() {
             if i < self.selected_sketch_sum.len() {
                 self.selected_sketch_sum[i] += val;
             }
         }
-        self.selected_arms.push(arm);
+        self.selected_arms.push_back(arm);
     }
 
     /// Update bandit stats with observed reward.
@@ -295,7 +310,8 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
     ///
     /// U_z = alignment(z) - λ · ⟨ϕ(z), Φ_selected⟩
     fn compute_utility(&self, arm: usize) -> f32 {
-        if arm >= self.arm_features.len() {
+        let num_arms = self.arm_features.len() / self.feature_stride;
+        if arm >= num_arms {
             return 0.0;
         }
 
@@ -304,7 +320,8 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
 
         // Redundancy: inner product between arm's sketch and accumulated selected sketches
         let redundancy = if !self.selected_arms.is_empty() {
-            let arm_sketch = self.sketch.sketch(&self.arm_features[arm]);
+            let arm_feat = self.arm_features(arm);
+            let arm_sketch = self.sketch.sketch(arm_feat);
             dot(&arm_sketch, &self.selected_sketch_sum)
         } else {
             0.0
@@ -354,9 +371,7 @@ impl<P: ScreeningPruner> OpusBanditPruner<P> {
 
     /// Unique arms selected in current episode.
     pub fn unique_selected(&self) -> usize {
-        let mut unique = self.selected_arms.clone();
-        unique.sort_unstable();
-        unique.dedup();
+        let unique: HashSet<usize> = self.selected_arms.iter().copied().collect();
         unique.len()
     }
 
@@ -400,12 +415,14 @@ impl<P: ScreeningPruner> ScreeningPruner for OpusBanditPruner<P> {
         }
 
         // Out of bounds arm
-        if token_idx >= self.arm_features.len() {
+        let num_arms = self.arm_features.len() / self.feature_stride;
+        if token_idx >= num_arms {
             return alignment;
         }
 
         // Redundancy penalty: ⟨ϕ(z), Φ_selected⟩
-        let arm_sketch = self.sketch.sketch(&self.arm_features[token_idx]);
+        let arm_feat = self.arm_features(token_idx);
+        let arm_sketch = self.sketch.sketch(arm_feat);
         let redundancy = dot(&arm_sketch, &self.selected_sketch_sum);
 
         // OPUS utility: alignment - λ · redundancy
@@ -626,7 +643,7 @@ mod tests {
 
         opus.record_selection(3); // Should evict arm 0
         assert_eq!(opus.selected_count(), 3);
-        assert_eq!(opus.selected_arms, vec![1, 2, 3]);
+        assert_eq!(opus.selected_arms, VecDeque::from([1, 2, 3]));
     }
 
     #[test]
