@@ -114,10 +114,10 @@ graph TD
 - [x] Emit metrics: `outlier_guard_layers_scanned`, `outlier_guard_layers_flagged`, `max_ks_d`
 
 ### T5: StiffSoft Cross-Check Integration (Optional)
-- [ ] Behind `stiff_anomaly` feature gate
-- [ ] When both KS and StiffSoft flag the same layer, log "HIGH CONFIDENCE outlier detection"
-- [ ] When only KS flags (no StiffSoft), log "MEDIUM CONFIDENCE — weight distribution anomaly"
-- [ ] When only StiffSoft flags (no KS), log "MEDIUM CONFIDENCE — eigenvalue anomaly"
+- [x] Behind `stiff_anomaly` feature gate
+- [x] When both KS and StiffSoft flag the same layer, log "HIGH CONFIDENCE outlier detection"
+- [x] When only KS flags (no StiffSoft), log "MEDIUM CONFIDENCE — weight distribution anomaly"
+- [x] When only StiffSoft flags (no KS), log "MEDIUM CONFIDENCE — eigenvalue anomaly"
 
 ### T6: GOAT Tests
 - [x] Test: `ks_d_statistic` returns <0.1 for Gaussian-distributed weights

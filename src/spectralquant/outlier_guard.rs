@@ -157,6 +157,78 @@ impl OutlierGuard {
     }
 }
 
+/// Confidence level from dual-signal outlier detection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ConfidenceLevel {
+    /// No anomaly detected.
+    Clean = 0,
+    /// Only one signal flagged (medium confidence).
+    Medium = 1,
+    /// Both KS and StiffSoft flagged (high confidence).
+    High = 2,
+}
+
+/// StiffSoft cross-check result.
+#[derive(Debug, Clone)]
+pub struct StiffSoftCrossCheck {
+    /// Whether the KS statistic flagged this layer.
+    pub ks_flagged: bool,
+    /// Whether the StiffSoft eigenvalue check flagged this layer.
+    pub eigenvalue_flagged: bool,
+    /// Combined confidence level.
+    pub confidence: ConfidenceLevel,
+}
+
+#[cfg(feature = "stiff_anomaly")]
+impl StiffSoftCrossCheck {
+    /// Perform cross-check between KS and StiffSoft signals.
+    pub fn check(ks_d: f32, ks_threshold: f32, eigenvalue_anomaly: Option<bool>) -> Self {
+        let ks_flagged = ks_d > ks_threshold;
+        let eigenvalue_flagged = eigenvalue_anomaly.unwrap_or(false);
+
+        let confidence = match (ks_flagged, eigenvalue_flagged) {
+            (true, true) => ConfidenceLevel::High,
+            (true, false) | (false, true) => ConfidenceLevel::Medium,
+            (false, false) => ConfidenceLevel::Clean,
+        };
+
+        Self {
+            ks_flagged,
+            eigenvalue_flagged,
+            confidence,
+        }
+    }
+
+    /// Log message for this cross-check result.
+    pub fn log_message(&self, layer_idx: usize, weight_name: &str) -> String {
+        match self.confidence {
+            ConfidenceLevel::High => {
+                format!(
+                    "HIGH CONFIDENCE outlier detection at layer {} ({}): KS D={:.4}, eigenvalue anomaly={}",
+                    layer_idx, weight_name, self.ks_flagged, self.eigenvalue_flagged
+                )
+            }
+            ConfidenceLevel::Medium => {
+                if self.ks_flagged {
+                    format!(
+                        "MEDIUM CONFIDENCE — weight distribution anomaly at layer {} ({}): KS flagged, eigenvalue clean",
+                        layer_idx, weight_name
+                    )
+                } else {
+                    format!(
+                        "MEDIUM CONFIDENCE — eigenvalue anomaly at layer {} ({}): KS clean, eigenvalue flagged",
+                        layer_idx, weight_name
+                    )
+                }
+            }
+            ConfidenceLevel::Clean => {
+                format!("Layer {} ({}) clean", layer_idx, weight_name)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -258,5 +330,55 @@ mod tests {
         guard.scan_layer(&weights2, 1, "test2");
         // If we got here without panic, scratch was reused
         assert_eq!(guard.report().layers.len(), 2);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "stiff_anomaly")]
+mod crosscheck_tests {
+    use super::*;
+
+    #[test]
+    fn test_both_flagged_high_confidence() {
+        let check = StiffSoftCrossCheck::check(0.3, 0.15, Some(true));
+        assert_eq!(check.confidence, ConfidenceLevel::High);
+    }
+
+    #[test]
+    fn test_only_ks_flagged_medium() {
+        let check = StiffSoftCrossCheck::check(0.3, 0.15, Some(false));
+        assert_eq!(check.confidence, ConfidenceLevel::Medium);
+    }
+
+    #[test]
+    fn test_only_eigenvalue_flagged_medium() {
+        let check = StiffSoftCrossCheck::check(0.05, 0.15, Some(true));
+        assert_eq!(check.confidence, ConfidenceLevel::Medium);
+    }
+
+    #[test]
+    fn test_clean() {
+        let check = StiffSoftCrossCheck::check(0.05, 0.15, Some(false));
+        assert_eq!(check.confidence, ConfidenceLevel::Clean);
+    }
+
+    #[test]
+    fn test_no_stiffsoft_available() {
+        let check = StiffSoftCrossCheck::check(0.3, 0.15, None);
+        assert!(check.ks_flagged);
+        assert!(!check.eigenvalue_flagged);
+        assert_eq!(check.confidence, ConfidenceLevel::Medium);
+    }
+
+    #[test]
+    fn test_log_messages() {
+        let high = StiffSoftCrossCheck::check(0.3, 0.15, Some(true));
+        assert!(
+            high.log_message(0, "ffn.up_proj")
+                .contains("HIGH CONFIDENCE")
+        );
+
+        let clean = StiffSoftCrossCheck::check(0.05, 0.15, Some(false));
+        assert!(clean.log_message(0, "ffn.up_proj").contains("clean"));
     }
 }

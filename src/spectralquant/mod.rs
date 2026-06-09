@@ -25,8 +25,10 @@ pub use forward::{
     par_dequantize_spectral_keys_flat, par_dequantize_spectral_values_flat,
 };
 pub use nonuniform_quant::{CompressedVector, NonUniformQuantizer};
+#[cfg(all(feature = "outlier_guard", feature = "stiff_anomaly"))]
+pub use outlier_guard::StiffSoftCrossCheck;
 #[cfg(feature = "outlier_guard")]
-pub use outlier_guard::{LayerReport, OutlierGuard, OutlierGuardReport};
+pub use outlier_guard::{ConfidenceLevel, LayerReport, OutlierGuard, OutlierGuardReport};
 #[cfg(feature = "dual_gram_pca")]
 pub use spectral::calibrate_eigenbasis_dual_gram;
 pub use spectral::{
