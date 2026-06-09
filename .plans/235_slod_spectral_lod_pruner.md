@@ -4,7 +4,7 @@
 **Status:** ✅ Complete (GOAT G1-G6 all pass, 21 tests)
 **Research:** 208 (SLoD Semantic Level of Detail)
 **Depends On:** Plan 156 ✅ (Spectral Hierarchy), Plan 218 ✅ (BFCF × LFU Sharding)
-**Feature Gate:** `slod` (opt-in, gated)
+**Feature Gate:** `slod` (default-ON, GOAT G1-G6 all pass)
 **Classification:** Modelless — inference-time only, no LLM training
 
 ---
@@ -160,7 +160,7 @@ fn boundary_scan(
 | G5 | BoundaryScan wall-clock (1K nodes) | ≤ 50ms | 25.6ms ✅ |
 | G6 | Fréchet mean convergence (T≤15) | ≤ 10⁻⁶ tolerance in ≤15 steps | Converges ✅ |
 
-**Promotion:** G1-G6 all pass → candidate for default-on.
+**Promotion:** G1-G6 all pass → **promoted to default-ON**.
 
 ---
 
