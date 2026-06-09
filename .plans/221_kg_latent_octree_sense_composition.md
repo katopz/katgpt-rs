@@ -151,7 +151,7 @@ Compress game domain knowledge into fixed-type ternary bit-plane sense modules (
   - Before/after: "without sense modules" vs "with sense modules" vs "GM override"
   - Print: sense activations, decision, confidence, GM override status
 
-- [ ] **T12: Example — sense bandit self-learning demo** (`examples/sense_bandit_demo.rs`)
+- [x] **T12: Example — sense bandit self-learning demo** (`examples/sense_bandit_demo.rs`)
   - Demonstrates: self-play loop → sense trials → AbsorbCompress → HotSwap
   - Shows GM lock: lock module → bandit can't swap → stays at GM-chosen version
   - Shows confidence evolution over N episodes

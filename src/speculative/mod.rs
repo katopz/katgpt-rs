@@ -401,6 +401,13 @@ pub use nf_flow::{
     sigmoid,
 };
 
+// ── NFCoT FlowScore SpeculativeGenerator Integration (Plan 229 T2) ──
+#[cfg(all(feature = "nf_flow_score", feature = "speculative_generator"))]
+pub mod nf_flow_generator;
+
+#[cfg(all(feature = "nf_flow_score", feature = "speculative_generator"))]
+pub use nf_flow_generator::{FlowScoredError, FlowScoredGenerator, ScoredToken};
+
 // ── NFCoT FlowGate — Adaptive Acceptance Criterion (Plan 229 T3, feature: nf_flow_gate) ──
 #[cfg(feature = "nf_flow_gate")]
 pub mod nf_flow_gate;

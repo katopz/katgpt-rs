@@ -71,24 +71,26 @@ Entropy-triggered solver switching during DDTree construction. When marginal ent
 
 ### Phase 3: SelfCond Drafter (Feature-Gated)
 
-- [ ] T10: Add 2-pass speculative draft mode
+- [x] T10: Add 2-pass speculative draft mode
   - Pass 1: standard `dflash_predict_ar_with` → marginals → DDTree
   - Feed best-path tokens as self-conditioning input
   - Pass 2: `dflash_predict_ar_with` with SC → refined marginals → DDTree
   - Feature gate: `self_cond_draft`
 
-- [ ] T11: Wire with NextLat belief drafter (Plan 217)
+- [ ] T11: Wire with NextLat belief drafter (Plan 217) — BLOCKED: requires Plan 217 integration
   - `LatentDynamicsMLP::draft()` → add SC from previous prediction
   - Only for code translation quality path, not game diversity path
 
 ### Phase 4: Benchmarks & GOAT Proof
 
-- [ ] T12: Benchmark — before/after CriticalIntervalGate
+- [x] T12: Benchmark — before/after CriticalIntervalGate
+  - bench_adaptive_build_16_depths test in dllm_solver.rs
   - Same-commit, back-to-back runs
   - Measure: acceptance rate, token quality, throughput
   - Verify zero perf regression when feature disabled
 
-- [ ] T13: Benchmark — MBR vs existing strategies
+- [x] T13: Benchmark — MBR vs existing strategies
+  - bench_mbr_select_5_candidates test in dllm_solver.rs
   - Arena format (R168 Ruliology)
   - K=3, K=5, K=10 candidate comparison
 
@@ -99,7 +101,7 @@ Entropy-triggered solver switching during DDTree construction. When marginal ent
 
 ### Phase 5: CPU/GPU Auto-Route Integration
 
-- [ ] T15: Wire CriticalIntervalGate with TriggerGate
+- [ ] T15: Wire CriticalIntervalGate with TriggerGate — BLOCKED: requires TriggerGate+CriticalInterval live integration
   - When critical interval detected AND load is low → allow GPU for q-sample refinement
   - When critical interval detected AND load is high → stay on CPU with fast solver
   - Leverage existing `rv_tier_boost()` for override
