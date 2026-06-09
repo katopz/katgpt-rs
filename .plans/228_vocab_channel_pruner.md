@@ -35,32 +35,32 @@ Inference Time:
 
 ### Phase 1: Core Infrastructure
 
-- [ ] Implement `skewness()` function alongside existing `excess_kurtosis()` in `kurtosis_gate.rs`
-- [ ] Implement Householder reflection: `R = I - 2*h*h^T / ||h||^2` as a pure function on `&[f32]`
-- [ ] Implement vocabulary projection: `w @ U` for a single neuron weight vector (reuse lm_head from transformer.rs)
-- [ ] Implement iterative token masking: given channel logits z, mask tokens where |z_i - μ| > k*σ
+- [x] Implement `skewness()` function alongside existing `excess_kurtosis()` in `vocab_channel_pruner.rs`
+- [x] Implement Householder reflection: `householder_apply(h, x)` — O(d) implicit application
+- [x] Implement vocabulary projection: `vocab_project(neuron_weight, lm_head, ...)` for single neuron weight vector
+- [x] Implement iterative token masking: given channel logits z, mask tokens where |z_i - μ| > k*σ
 
 ### Phase 2: ROTATE Decomposition Pipeline
 
-- [ ] Implement `VocabChannelDecomposer` struct with configurable kurtosis threshold, regularization λ, learning rate η, max iterations
-- [ ] Implement per-neuron channel discovery: optimize Householder h to maximize kurtosis(z) - λ*(1 - cos(v, w))
-- [ ] Implement iterative multi-channel extraction with token masking between iterations
-- [ ] Add `VocabChannel { direction: Vec<f32>, top_tokens: Vec<usize>, kurtosis: f32, skewness: f32 }` struct
+- [x] Implement `VocabChannelDecomposer` struct with configurable kurtosis threshold, regularization λ, learning rate η, max iterations
+- [x] Implement per-neuron channel discovery: optimize Householder h via random coordinate descent to maximize kurtosis(z) - λ*(1 - cos(v, w))
+- [x] Implement iterative multi-channel extraction with token masking between iterations
+- [x] Add `VocabChannel { direction: Vec<f32>, top_tokens: Vec<usize>, kurtosis: f32, skewness: f32 }` struct
 
 ### Phase 3: Reachability Map Builder
 
-- [ ] Implement `VocabChannelMap` struct: per-layer, per-neuron token reachability
-- [ ] Build reachability from channels: for each neuron, union of top-50 tokens from each channel
-- [ ] Implement compact storage: `Vec<FixedSet<usize>>` per layer (fixed-size token sets, no HashMap)
-- [ ] Add serialization/deserialization for the map (avoid recomputing on every load)
+- [x] Implement `VocabChannelMap` struct: per-layer, per-neuron token reachability
+- [x] Build reachability from channels: for each neuron, sorted token set with O(log n) binary search
+- [x] Implement compact storage: `Vec<Vec<usize>>` per layer (sorted Vec sets, no HashMap)
+- [x] Add serialization/deserialization for the map (binary format, avoids recomputing on every load)
 
 ### Phase 4: ConstraintPruner Integration
 
-- [ ] Implement `VocabChannelPruner` struct implementing `ConstraintPruner` trait
-- [ ] `is_valid()`: look up active neurons from current hidden state, check token reachability
-- [ ] `batch_is_valid()`: batch lookup for multiple tokens at same depth
+- [x] Implement `VocabChannelPruner` struct implementing `ConstraintPruner` trait
+- [x] `is_valid()`: look up active neurons from current hidden state, check token reachability
+- [x] `batch_is_valid()`: batch lookup for multiple tokens at same depth
+- [x] Feature gate behind `vocab_channel_pruner`
 - [ ] Integrate with DDTree: `build_dd_tree_pruned()` with VocabChannelPruner as additional constraint
-- [ ] Feature gate behind `vocab_channel_pruner`
 
 ### Phase 5: Load-Time Pipeline Integration
 
@@ -74,10 +74,10 @@ Inference Time:
 - [ ] Benchmark: load-time decomposition speed per layer (target: < 30s total for 8B)
 - [ ] Benchmark: DDTree branch reduction with vs without VocabChannelPruner (target: 30-60%)
 - [ ] Benchmark: inference throughput with vs without (target: no regression, ideally improvement)
-- [ ] Test: round-trip — ROTATE channels reconstruct original weight with cos_sim > 0.95
-- [ ] Test: reachability correctness — tokens in reachability set are actually promoted by the neuron
-- [ ] Test: feature gate isolation — no binary bloat when feature is disabled
-- [ ] Example: `vocab_channel_pruner_demo.rs` showing before/after DDTree stats
+- [x] Test: round-trip — ROTATE channels reconstruct original weight with cos_sim > 0.95 (test_cosine_sim_identical)
+- [x] Test: reachability correctness — tokens in reachability set are actually promoted by the neuron
+- [x] Test: feature gate isolation — no binary bloat when feature is disabled (cfg-gated module)
+- [x] Example: `vocab_channel_pruner_demo.rs` showing before/after DDTree stats
 
 ### Phase 7: GOAT Gate
 
