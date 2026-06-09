@@ -66,6 +66,7 @@ impl BFCPPruner {
                 constraints: Vec::new(),
                 label: RegionLabel::Accept,
                 token_count: accept_tokens.len(),
+                boundary_precision: 0.0,
             });
         }
         if !reject_tokens.is_empty() {
@@ -73,6 +74,7 @@ impl BFCPPruner {
                 constraints: Vec::new(),
                 label: RegionLabel::Reject,
                 token_count: reject_tokens.len(),
+                boundary_precision: 0.0,
             });
         }
         if !maybe_tokens.is_empty() {
@@ -80,6 +82,7 @@ impl BFCPPruner {
                 constraints: Vec::new(),
                 label: RegionLabel::Maybe,
                 token_count: maybe_tokens.len(),
+                boundary_precision: 0.0,
             });
         }
 

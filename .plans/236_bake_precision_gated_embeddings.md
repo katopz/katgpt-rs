@@ -59,7 +59,7 @@ graph TD
 
 ### Phase 2: Integration Points
 
-- [ ] BFCF Region Stability via Precision Anchoring
+- [x] BFCF Region Stability via Precision Anchoring
   - Add `boundary_precision: f32` to BFCF region metadata
   - Apply precision-weighted smoothing to prevent region oscillation
   - When embedding precision is high, region boundaries resist movement
@@ -70,11 +70,11 @@ graph TD
   - Low-precision dimensions get boosted exploration reward
   - File: `crates/katgpt-core/src/sense/bandit.rs` ✓
 
-- [ ] ThoughtFold Precision-Gated Fold Confidence
+- [x] ThoughtFold Precision-Gated Fold Confidence
   - Steps where KG embedding has high precision → fold is safe
   - Steps where KG embedding has low precision → fold is risky
   - Blend with existing bandit fold confidence
-  - File: `src/fold/chain_folder.rs`
+  - File: `src/fold/fold_bandit.rs` ✓
 
 ### Phase 3: Session-Level Evolution
 

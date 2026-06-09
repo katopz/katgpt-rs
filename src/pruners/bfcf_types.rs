@@ -62,6 +62,10 @@ pub struct BorelRegion {
     pub label: RegionLabel,
     /// Number of tokens within this region.
     pub token_count: usize,
+    /// Boundary precision anchoring strength — [0.0, 1.0].
+    /// 0.0 = no anchoring (default), 1.0 = highly anchored (resists boundary changes).
+    /// Zero cost when 0.0 — not feature-gated.
+    pub boundary_precision: f32,
 }
 
 impl BorelRegion {
@@ -71,7 +75,15 @@ impl BorelRegion {
             constraints,
             label,
             token_count,
+            boundary_precision: 0.0,
         }
+    }
+
+    /// Builder: set boundary precision anchoring strength.
+    /// Clamps to [0.0, 1.0].
+    pub fn with_precision(mut self, precision: f32) -> Self {
+        self.boundary_precision = precision.clamp(0.0, 1.0);
+        self
     }
 
     /// Check if a logit vector satisfies all constraints of this region.
@@ -107,11 +119,10 @@ impl BorelRegion {
             _ => RegionLabel::Maybe,
         };
 
-        Some(BorelRegion::new(
-            label,
-            combined,
-            self.token_count.min(other.token_count),
-        ))
+        Some(
+            BorelRegion::new(label, combined, self.token_count.min(other.token_count))
+                .with_precision(self.boundary_precision.min(other.boundary_precision)),
+        )
     }
 }
 
@@ -288,6 +299,48 @@ pub trait BfcpPartition: Send + Sync {
     fn refine(&self, region: &BorelRegion, prefix: &[usize]) -> Vec<BorelRegion>;
 }
 
+// ── Precision Smooth Label (Plan 236 Phase 2) ────────────────
+
+/// Apply precision-weighted smoothing to prevent region label oscillation.
+/// When `boundary_precision` is high, the region label resists change.
+/// Returns the effective label considering precision anchoring.
+#[cfg(feature = "bake_precision")]
+pub fn precision_smooth_label(
+    old_label: RegionLabel,
+    new_label: RegionLabel,
+    boundary_precision: f32,
+) -> RegionLabel {
+    // If labels agree, no smoothing needed
+    if old_label == new_label {
+        return new_label;
+    }
+    // If precision is high (>0.5), anchor to old label with probability proportional to precision
+    // Use deterministic threshold: if precision > 0.5, keep old label
+    // This prevents oscillation in high-precision regions
+    if boundary_precision > 0.5 {
+        old_label
+    } else {
+        new_label
+    }
+}
+
+#[cfg(feature = "bake_precision")]
+impl BFCP {
+    /// Apply precision-weighted smoothing to a new partition based on a previous partition.
+    /// Returns adjusted partition where high-precision regions resist label changes.
+    pub fn precision_smooth(&self, new_partition: &BFCP) -> BFCP {
+        let mut smoothed = new_partition.clone();
+        let min_regions = self.regions.len().min(smoothed.regions.len());
+        for i in 0..min_regions {
+            let old_label = self.regions[i].label;
+            let precision = self.regions[i].boundary_precision;
+            smoothed.regions[i].label =
+                precision_smooth_label(old_label, smoothed.regions[i].label, precision);
+        }
+        smoothed
+    }
+}
+
 // ── Tests ───────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -431,5 +484,84 @@ mod tests {
         vf.update(7, 0.1);
         vf.update(0, 1.0);
         assert!(vf.verify_pwc_closure());
+    }
+
+    #[test]
+    fn test_borel_region_default_precision() {
+        let region = BorelRegion::new(RegionLabel::Accept, vec![], 5);
+        assert_eq!(region.boundary_precision, 0.0);
+    }
+
+    #[test]
+    fn test_borel_region_with_precision_clamps() {
+        let region = BorelRegion::new(RegionLabel::Accept, vec![], 5).with_precision(1.5);
+        assert_eq!(region.boundary_precision, 1.0);
+
+        let region_neg = BorelRegion::new(RegionLabel::Accept, vec![], 5).with_precision(-0.5);
+        assert_eq!(region_neg.boundary_precision, 0.0);
+    }
+
+    #[test]
+    fn test_intersect_propagates_min_precision() {
+        let r1 = BorelRegion::new(RegionLabel::Accept, vec![], 10).with_precision(0.8);
+        let r2 = BorelRegion::new(RegionLabel::Accept, vec![], 8).with_precision(0.3);
+        let intersection = r1.intersect(&r2).unwrap();
+        assert_eq!(intersection.boundary_precision, 0.3); // min(0.8, 0.3)
+    }
+
+    #[test]
+    fn test_intersect_precision_zero_when_one_is_zero() {
+        let r1 = BorelRegion::new(RegionLabel::Accept, vec![], 10).with_precision(0.9);
+        let r2 = BorelRegion::new(RegionLabel::Accept, vec![], 8); // default 0.0
+        let intersection = r1.intersect(&r2).unwrap();
+        assert_eq!(intersection.boundary_precision, 0.0); // min(0.9, 0.0)
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_smooth_label_keeps_old_when_high_precision() {
+        let result = precision_smooth_label(RegionLabel::Accept, RegionLabel::Maybe, 0.8);
+        assert_eq!(result, RegionLabel::Accept);
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_smooth_label_accepts_new_when_low_precision() {
+        let result = precision_smooth_label(RegionLabel::Accept, RegionLabel::Maybe, 0.3);
+        assert_eq!(result, RegionLabel::Maybe);
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_smooth_label_passthrough_matching() {
+        let result = precision_smooth_label(RegionLabel::Accept, RegionLabel::Accept, 0.9);
+        assert_eq!(result, RegionLabel::Accept);
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_smooth_label_boundary_exactly_0_5() {
+        // Exactly 0.5 → NOT > 0.5, so new label wins
+        let result = precision_smooth_label(RegionLabel::Accept, RegionLabel::Reject, 0.5);
+        assert_eq!(result, RegionLabel::Reject);
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_bfcp_precision_smooth() {
+        let old = BFCP::from_regions(vec![
+            BorelRegion::new(RegionLabel::Accept, vec![], 10).with_precision(0.8),
+            BorelRegion::new(RegionLabel::Reject, vec![], 20).with_precision(0.2),
+        ]);
+        // New partition flips both labels
+        let new = BFCP::from_regions(vec![
+            BorelRegion::new(RegionLabel::Maybe, vec![], 10),
+            BorelRegion::new(RegionLabel::Accept, vec![], 20),
+        ]);
+        let smoothed = old.precision_smooth(&new);
+        // Region 0: precision 0.8 > 0.5 → anchored to Accept
+        assert_eq!(smoothed.regions[0].label, RegionLabel::Accept);
+        // Region 1: precision 0.2 <= 0.5 → accepts new label Accept
+        assert_eq!(smoothed.regions[1].label, RegionLabel::Accept);
     }
 }
