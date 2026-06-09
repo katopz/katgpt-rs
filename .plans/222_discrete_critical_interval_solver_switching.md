@@ -77,8 +77,11 @@ Entropy-triggered solver switching during DDTree construction. When marginal ent
   - Pass 2: `dflash_predict_ar_with` with SC → refined marginals → DDTree
   - Feature gate: `self_cond_draft`
 
-- [ ] T11: Wire with NextLat belief drafter (Plan 217) — BLOCKED: requires Plan 217 integration
-  - `LatentDynamicsMLP::draft()` → add SC from previous prediction
+- [x] T11: Wire with NextLat belief drafter (Plan 217) — UNBLOCKED: additive SC injection
+  - `LatentDynamicsMLP::forward_with_sc(h_t, next_emb, sc, sc_scale)` — additive blend into embedding channel
+  - `BeliefDrafter::draft_with_sc(h_t, max_steps, entropy_threshold, sc_scale, initial_sc)` — recursive SC feedback loop
+  - Feature-gated behind `self_cond_draft` — zero cost when disabled
+  - Same weights work with or without SC (no architecture change)
   - Only for code translation quality path, not game diversity path
 
 ### Phase 4: Benchmarks & GOAT Proof

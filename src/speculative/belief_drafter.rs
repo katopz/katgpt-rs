@@ -1,11 +1,15 @@
 //! NextLat Belief-State Speculative Drafter — lightweight MLP recursive hidden state prediction.
 //!
-//! Implements Plan 217: `LatentDynamicsMLP` (Phase 0) + `BeliefDrafter` with `draft()` (Phase 1).
+//! Implements Plan 217: `LatentDynamicsMLP` (Phase 0) + `BeliefDrafter` with `draft()` (Plan 1).
 //! The MLP predicts `h_{t+1}` from `(h_t, emb(x_{t+1}))` using a 3-layer residual architecture
 //! inspired by arXiv:2511.05963 (NextLat). `BeliefDrafter` wraps the MLP with an output head
 //! for recursive variable-length speculative drafting with entropy-gated stopping.
 //!
 //! Architecture: `h_{t+1} = h_t + FC3(GELU(FC2(GELU(FC1(LN(concat(h_t, next_emb)))))))`
+//!
+//! Self-conditioning (Plan 222 T11): additive SC injection into the embedding channel.
+//! `forward_with_sc(h_t, next_emb, sc, scale)` blends SC into next_emb before the MLP,
+//! keeping weight dimensions unchanged. Feature-gated behind `self_cond_draft`.
 //!
 //! Feature-gated behind `belief_drafter` — off by default until GOAT proof.
 
@@ -136,6 +140,43 @@ impl LatentDynamicsMLP {
         }
 
         result
+    }
+
+    /// Forward pass with self-conditioning: additive SC injection into embedding channel.
+    ///
+    /// Blends the SC signal (previous prediction) into `next_emb` before the standard
+    /// MLP forward pass. This keeps weight dimensions unchanged — same weights work
+    /// with or without SC.
+    ///
+    /// Formula: `next_emb' = next_emb + scale * sc`
+    /// Then: `h_{t+1} = forward(h_t, next_emb')`
+    ///
+    /// - `h_t`: current hidden state `[n_embd]`
+    /// - `next_emb`: embedding of next token `[n_embd]`
+    /// - `sc`: self-conditioning signal from previous prediction `[n_embd]`
+    /// - `sc_scale`: blending factor (typical: 0.1–0.5). 0.0 = no SC effect.
+    /// - Returns: predicted next hidden state `[n_embd]`
+    #[cfg(feature = "self_cond_draft")]
+    pub fn forward_with_sc(
+        &self,
+        h_t: &[f32],
+        next_emb: &[f32],
+        sc: &[f32],
+        sc_scale: f32,
+    ) -> Vec<f32> {
+        let n = self.n_embd;
+        assert_eq!(h_t.len(), n, "h_t must have length n_embd");
+        assert_eq!(next_emb.len(), n, "next_emb must have length n_embd");
+        assert_eq!(sc.len(), n, "sc must have length n_embd");
+
+        // Additive blend: next_emb' = next_emb + scale * sc
+        let mut blended_emb = vec![0.0f32; n];
+        for i in 0..n {
+            blended_emb[i] = next_emb[i] + sc_scale * sc[i];
+        }
+
+        // Standard forward with blended embedding
+        self.forward(h_t, &blended_emb)
     }
 
     /// Load MLP weights from a binary file.
@@ -508,6 +549,87 @@ impl BeliefDrafter {
             // 6. Get embedding for drafted token, advance hidden state
             let emb = self.token_embedding(token_idx);
             h_current = self.mlp.forward(&h_current, emb);
+        }
+
+        drafts
+    }
+
+    /// Draft variable-length token sequence with self-conditioning from previous prediction.
+    ///
+    /// After each recursive step, the predicted hidden state is used as the SC signal
+    /// for the *next* step. This creates a feedback loop where the drafter refines its
+    /// own predictions, similar to Chen et al. (2022) self-conditioning for diffusion.
+    ///
+    /// - `h_t`: initial hidden state `[n_embd]`
+    /// - `max_steps`: maximum draft steps
+    /// - `entropy_threshold`: stop when entropy exceeds this
+    /// - `sc_scale`: blending factor for SC injection (typical: 0.1–0.5). 0.0 = no SC.
+    /// - `initial_sc`: optional initial SC signal `[n_embd]`. None = zeros (no initial SC).
+    ///
+    /// Returns drafted tokens (at least 1, at most `max_steps`).
+    #[cfg(feature = "self_cond_draft")]
+    pub fn draft_with_sc(
+        &self,
+        h_t: &[f32],
+        max_steps: usize,
+        entropy_threshold: f32,
+        sc_scale: f32,
+        initial_sc: Option<&[f32]>,
+    ) -> Vec<BeliefDraftToken> {
+        let n = self.mlp.n_embd;
+        assert_eq!(h_t.len(), n, "h_t must have length n_embd");
+
+        let mut drafts = Vec::with_capacity(max_steps);
+        let mut h_current = h_t.to_vec();
+
+        // SC buffer starts with initial signal or zeros
+        let mut sc_current: Vec<f32> = match initial_sc {
+            Some(sc) => {
+                assert_eq!(sc.len(), n, "initial_sc must have length n_embd");
+                sc.to_vec()
+            }
+            None => vec![0.0f32; n],
+        };
+
+        // Pre-allocate scratch for log-softmax
+        let mut logits_buf = vec![0.0f32; self.vocab_size];
+
+        for _ in 0..max_steps {
+            // 1. Project hidden → logits
+            self.logits_from_hidden_into(&h_current, &mut logits_buf);
+
+            // 2. Convert to log-probs + compute entropy
+            log_softmax_inplace(&mut logits_buf);
+            let ent = entropy_from_log_probs(&logits_buf);
+
+            // 3. Greedy sample
+            let (token_idx, log_prob) = greedy_sample(&logits_buf);
+
+            // 4. Record draft
+            drafts.push(BeliefDraftToken {
+                token_idx,
+                log_prob,
+                entropy: ent,
+            });
+
+            // 5. Entropy-gated stop (after first token — always draft at least 1)
+            if drafts.len() > 1 && ent > entropy_threshold {
+                break;
+            }
+
+            // 6. Get embedding for drafted token
+            let emb = self.token_embedding(token_idx);
+
+            // 7. Store current hidden state as SC for next step
+            let prev_h = h_current.clone();
+
+            // 8. Advance with SC: h_{t+1} = mlp.forward_with_sc(h_t, emb, sc, scale)
+            h_current = self
+                .mlp
+                .forward_with_sc(&prev_h, emb, &sc_current, sc_scale);
+
+            // 9. Update SC signal for next iteration (previous hidden state)
+            sc_current = prev_h;
         }
 
         drafts
@@ -977,5 +1099,161 @@ mod tests {
         let logits = [0.1f32, 0.5f32, 0.3f32];
         let (idx, _) = greedy_sample(&logits);
         assert_eq!(idx, 1, "should pick index 1 (0.5)");
+    }
+
+    // ── Self-Conditioning Tests (Plan 222 T11, feature: self_cond_draft) ──────
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_forward_with_sc_zero_scale_is_noop() {
+        // sc_scale=0.0 must produce identical output to forward() without SC
+        let n_embd = 16;
+        let mlp = LatentDynamicsMLP::random_init(n_embd);
+        let h_t = vec![0.5f32; n_embd];
+        let next_emb = vec![0.3f32; n_embd];
+        let sc = vec![1.0f32; n_embd];
+
+        let expected = mlp.forward(&h_t, &next_emb);
+        let actual = mlp.forward_with_sc(&h_t, &next_emb, &sc, 0.0);
+
+        for (i, (a, e)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (a - e).abs() < 1e-6,
+                "SC noop mismatch at [{i}]: got {a}, expected {e}"
+            );
+        }
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_forward_with_sc_nonzero_differs() {
+        // sc_scale > 0 must produce different output from forward() without SC
+        let n_embd = 16;
+        let mlp = LatentDynamicsMLP::random_init(n_embd);
+        let h_t = vec![0.5f32; n_embd];
+        let next_emb = vec![0.3f32; n_embd];
+        let sc = vec![1.0f32; n_embd];
+
+        let baseline = mlp.forward(&h_t, &next_emb);
+        let sc_output = mlp.forward_with_sc(&h_t, &next_emb, &sc, 0.5);
+
+        let any_different = baseline
+            .iter()
+            .zip(sc_output.iter())
+            .any(|(&b, &s)| (b - s).abs() > 1e-6);
+        assert!(any_different, "SC with nonzero scale must change output");
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_forward_with_sc_preserves_shape() {
+        let n_embd = 32;
+        let mlp = LatentDynamicsMLP::random_init(n_embd);
+        let h_t = vec![0.5f32; n_embd];
+        let next_emb = vec![0.3f32; n_embd];
+        let sc = vec![0.7f32; n_embd];
+
+        let output = mlp.forward_with_sc(&h_t, &next_emb, &sc, 0.3);
+        assert_eq!(output.len(), n_embd, "output must have length n_embd");
+
+        for (i, &v) in output.iter().enumerate() {
+            assert!(v.is_finite(), "output[{i}] must be finite: {v}");
+        }
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_draft_with_sc_produces_valid_tokens() {
+        let drafter = make_test_drafter();
+        let h_t = vec![1.0f32; 4];
+        let drafts = drafter.draft_with_sc(&h_t, 5, 100.0, 0.3, None);
+
+        assert!(!drafts.is_empty(), "should produce at least 1 draft");
+        assert!(drafts.len() <= 5, "should not exceed max_steps");
+
+        for (i, token) in drafts.iter().enumerate() {
+            assert!(
+                token.token_idx < 3,
+                "token {} index {} must be < vocab_size=3",
+                i,
+                token.token_idx
+            );
+            assert!(
+                token.log_prob.is_finite(),
+                "token {} log_prob must be finite",
+                i
+            );
+            assert!(
+                token.entropy >= 0.0,
+                "token {} entropy must be non-negative",
+                i
+            );
+        }
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_draft_with_sc_always_at_least_one() {
+        let drafter = make_test_drafter();
+        let h_t = vec![0.5f32; 4];
+        // Very low entropy threshold — should still produce at least 1 token
+        let drafts = drafter.draft_with_sc(&h_t, 5, 0.0, 0.5, None);
+        assert!(!drafts.is_empty(), "must produce at least 1 draft token");
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_draft_with_sc_with_initial_signal() {
+        let drafter = make_test_drafter();
+        let h_t = vec![1.0f32; 4];
+        let initial_sc = vec![0.8f32; 4];
+
+        let drafts = drafter.draft_with_sc(&h_t, 5, 100.0, 0.3, Some(&initial_sc));
+
+        assert!(
+            !drafts.is_empty(),
+            "should produce at least 1 draft with initial SC"
+        );
+        for token in &drafts {
+            assert!(token.token_idx < 3, "token must be < vocab_size");
+        }
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_draft_with_sc_zero_scale_matches_draft() {
+        // sc_scale=0.0 should produce same tokens as draft() without SC
+        let drafter = make_test_drafter();
+        let h_t = vec![1.0f32; 4];
+
+        let baseline = drafter.draft(&h_t, 5, 100.0);
+        let sc_draft = drafter.draft_with_sc(&h_t, 5, 100.0, 0.0, None);
+
+        assert_eq!(baseline.len(), sc_draft.len(), "same number of draft steps");
+        for (i, (b, s)) in baseline.iter().zip(sc_draft.iter()).enumerate() {
+            assert_eq!(
+                b.token_idx, s.token_idx,
+                "step {i}: zero-scale SC must match baseline"
+            );
+        }
+    }
+
+    #[cfg(feature = "self_cond_draft")]
+    #[test]
+    fn test_draft_with_sc_entropy_gating() {
+        let drafter = make_test_drafter();
+        let h_t = vec![1.0f32; 4];
+
+        // High threshold → draft all steps
+        let drafts_full = drafter.draft_with_sc(&h_t, 5, 100.0, 0.3, None);
+        assert_eq!(
+            drafts_full.len(),
+            5,
+            "high threshold should draft all steps"
+        );
+
+        // Zero threshold → draft 1-2 tokens
+        let drafts_limited = drafter.draft_with_sc(&h_t, 5, 0.0, 0.3, None);
+        assert!(!drafts_limited.is_empty(), "must produce at least 1 token");
     }
 }
