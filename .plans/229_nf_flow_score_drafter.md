@@ -1,7 +1,7 @@
 # NFCoT FlowScore Drafter (Plan 229)
 
 **Research:** 204_NFCoT_Normalizing_Flow_Continuous_CoT
-**Status:** Implemented (T1-T7 done, T8 partial — 1 item deferred: README). GOAT: ⚠️ MARGINAL — debug overhead 3.5%, release expected <1%. Keep opt-in.
+**Status:** ✅ Complete (T1-T8 all done). GOAT: ⚠️ MARGINAL — debug overhead 3.5%, release expected <1%. Keep opt-in.
 **GOAT Gate:** `nf_flow_score` (parent: `nf_flow`, default: OFF)
 
 ## Overview
@@ -78,7 +78,7 @@ This is a diagonal affine normalizing flow constructed from existing inference-t
 - [x] Add `nf_flow` parent feature to Cargo.toml
 - [x] Add `nf_flow_score`, `nf_flow_gate`, `nf_flow_budget`, `nf_flow_mux`, `nf_flow_fold` sub-features
 - [x] All OFF by default until GOAT proof
-- [ ] Update README with NFCoT FlowScore section
+- [x] Update README with NFCoT FlowScore section
 
 ## Expected GOAT Criteria
 

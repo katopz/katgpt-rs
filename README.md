@@ -490,6 +490,40 @@ Feature gate: `bfcf_lfu_shard` (**default-ON**).
 
 📖 **Plan:** [`.plans/218_bfcf_lfu_shard.md`](.plans/218_bfcf_lfu_shard.md).
 
+## 📐 Shard Embedding Projection (Plan 230)
+
+Johnson-Lindenstrauss random orthogonal projection for O(1) cosine similarity shard lookup. Compresses `style_weights: [f32; 64]` → `ShardEmbedding: [f32; 8]` via pre-computed linear matmul. Zero training, zero data — modelless dimension reduction. Integrates with BFCF region cache as secondary key.
+
+Feature: `shard_embedding` (opt-in).
+
+## 🌊 NFCoT FlowScore Drafter (Plan 229)
+
+Inference-time normalizing flow density scoring for speculative decoding candidates. Constructs a lightweight diagonal affine flow from DDTree marginals — **zero training, zero additional model forward passes**.
+
+Flow score decomposes into two additive terms:
+
+| Component | Formula | Intuition |
+|-----------|---------|----------|
+| `base_logprob` | Σ log P(token_i \| context) | Standard log-likelihood from DDTree marginals |
+| `log_det` | Σ log sigmoid(H_i) | Entropy-based confidence weighting |
+| **flow_score** | base_logprob + log_det | Combined density |
+
+- **High entropy** (uncertain) → σ ≈ 1 → log_det ≈ 0 → score ≈ base
+- **Low entropy** (confident) → σ ≈ 0 → large negative log_det → score < base
+
+Sub-features:
+
+| Feature | What | Gate |
+|---------|------|------|
+| `nf_flow_score` | Core density scoring (T1) | GOAT ⚠️ MARGINAL — debug 3.5%, release <1% |
+| `nf_flow_gate` | Adaptive EMA acceptance criterion (T3) | GOAT gate, default OFF |
+| `nf_flow_budget` | Sigmoid-weighted speculative depth allocation (T4) | GOAT gate, default OFF |
+| `nf_flow_mux` | Flow scoring for MUX trajectories (T6) | Requires `mux_pruner` |
+| `nf_flow_fold` | Confidence-gated chain folding (T7) | Requires `chain_fold` |
+| `nf_flow` | Parent — enables score + gate + budget | Default OFF |
+
+GOAT status: **⚠️ MARGINAL** — debug overhead 3.5%, release expected <1%. All off by default until proven.
+
 ## 🔀 Opt-In & Gated Features
 
 Proven features behind feature flags — not in default set:
@@ -514,6 +548,7 @@ Proven features behind feature flags — not in default set:
 | **DFlare KV Routing** (`dflare_kv_routing`) | Pruner-confidence KV routing (Plan 174) | Structural ✅, improvement < GOAT threshold |
 | **DFlare Progressive Budget** (`dflare_progressive_budget`) | Position-weighted DDTree budget (Plan 174) | Structural ✅, improvement < GOAT threshold |
 | **CaDDTree** (`caddtree_budget`) | Adaptive DDTree budget selection — replaces fixed tree_budget with per-round throughput-optimal budget (CaDDTree + BASTION, Plan 219) | Opt-in, GOAT verified (7/7), in `full` feature set |
+| **NFCoT FlowScore** (`nf_flow`) | Modelless normalizing flow density scoring for speculative candidates — zero training, O(vocab) per position (Plan 229) | GOAT ⚠️ MARGINAL, all sub-features default OFF |
 
 📖 **Full detail for ALL opt-in features:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md).
 
