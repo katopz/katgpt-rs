@@ -63,5 +63,7 @@ collapse_aware_thinking = []  # Collapse-Aware Adaptive Thinking — CollapseDet
 substrate_gate = []  # SubstrateGate passthrough — inference-time capability substrate routing (Plan 216)
 belief_drafter = []  # NextLat Belief-State Speculative Drafter — entropy threshold config (Plan 217)
 sense_composition = ["plasma_path", "domain_latent"]  # KG Latent Octree Sense Composition (Plan 221)
+slod = ["spectral_hierarchy"]  # SLoD Spectral Level-of-Detail Pruner (Plan 235)
 rat_plus_bridge = []  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 schema_centroid = ["dep:papaya"]  # Schema-Centroid Informed KG Embedding Initialization (Plan 237)
+bake_precision = []  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236)

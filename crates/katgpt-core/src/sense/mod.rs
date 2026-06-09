@@ -3,6 +3,7 @@
 //! Compresses game domain knowledge into fixed-type ternary bit-plane sense modules.
 //! NPCs compose modules at spawn time and query at ~45ns/tick via bitwise dot-product.
 
+pub mod bake;
 pub mod bandit;
 pub mod batch;
 pub mod brain;
@@ -13,6 +14,10 @@ pub mod octree;
 pub mod schema_centroid;
 pub mod serialize;
 
+pub use bake::{
+    DEFAULT_OBS_PRECISION, UNINFORMATIVE_PRECISION, bake_regularize, bake_update, bake_update_mean,
+    bake_update_precision, exploration_priority, informed_prior_precision, precision_to_confidence,
+};
 pub use bandit::{SenseTrial, SenseTrialLog};
 pub use brain::{NpcBrain, SenseOverride};
 pub(crate) use gm::dispatch_gm_action;

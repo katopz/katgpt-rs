@@ -30,12 +30,27 @@ impl SenseTrialLog {
             .iter()
             .filter(|t| t.sense_kind == kind)
             .fold((0.0f32, 0usize), |(s, c), t| (s + t.reward, c + 1));
-        if count == 0 {
-            0.0
-        } else {
-            sum / count as f32
-        }
+        if count == 0 { 0.0 } else { sum / count as f32 }
     }
+}
+
+/// Compute exploration-weighted reward for sense trial.
+/// Dimensions with low precision get boosted exploration reward.
+#[cfg(feature = "bake_precision")]
+pub fn precision_weighted_reward(
+    base_reward: f32,
+    precision: &[f32; 8],
+    activated_dims: &[usize],
+) -> f32 {
+    if activated_dims.is_empty() {
+        return base_reward;
+    }
+    let avg_priority: f32 = activated_dims
+        .iter()
+        .map(|&d| crate::sense::bake::exploration_priority(precision, d))
+        .sum::<f32>()
+        / activated_dims.len() as f32;
+    base_reward * (1.0 + avg_priority)
 }
 
 /// EMA weight update for direction decay based on bandit feedback.

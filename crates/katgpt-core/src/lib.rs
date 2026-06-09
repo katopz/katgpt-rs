@@ -34,7 +34,7 @@ pub use traits::{
 pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
 
 // Re-export key types at crate root for convenience
-pub use shard_embedding::{JlProjectionMatrix, EMBED_DIM, STYLE_DIM as JL_STYLE_DIM};
+pub use shard_embedding::{EMBED_DIM, JlProjectionMatrix, STYLE_DIM as JL_STYLE_DIM};
 pub use types::{
     AttentionMode, AttentionProjection, CacheLayout, Config, ConvergenceSelector, DashAttnConfig,
     DilationConfig, HlaMode, HybridPattern, InferenceOverrides, InferenceResult, LoopMode,
@@ -149,3 +149,11 @@ pub mod mux;
 
 #[cfg(feature = "sense_composition")]
 pub mod sense;
+
+#[cfg(feature = "slod")]
+pub mod slod;
+#[cfg(feature = "slod")]
+pub use slod::{
+    ScaleBoundary, SlodConfig, SlodOperator, SlodPruner, exp_map, frechet_mean,
+    heat_kernel_weights, log_map, poincare_distance,
+};

@@ -1007,6 +1007,18 @@ pub mod workflow_lattice;
 #[cfg(feature = "dynamic_rank")]
 pub mod dynamic_rank;
 
+#[cfg(feature = "manifold_pruner")]
+pub mod kernel_scoring;
+
+#[cfg(feature = "manifold_pruner")]
+pub mod kernel_screening_pruner;
+
+#[cfg(feature = "manifold_pruner")]
+pub mod hyperplane_pruner;
+
+#[cfg(feature = "manifold_pruner")]
+pub mod manifold_pruner;
+
 #[cfg(feature = "federation_composer")]
 pub mod federation_composer;
 

@@ -186,7 +186,7 @@ pub fn cauchy_interlacing_check(eigenvalues: &[Vec<f32>]) -> bool {
 /// row is an eigenvector sorted by eigenvalue descending. This avoids per-eigenvector
 /// `Vec` allocations — a single contiguous buffer is better for cache locality and
 /// enables SIMD-accelerated dot products in [`eigenspace_alignment`].
-fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
+pub(crate) fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
     let k = k.min(n);
     if k == 0 {
         return Vec::new();

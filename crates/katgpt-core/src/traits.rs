@@ -69,6 +69,22 @@ pub trait ConstraintPruner: Send + Sync {
     fn propagate(&mut self, _depth: usize, _token_idx: usize, _parent_token: &[usize]) -> bool {
         true // no-op by default
     }
+
+    /// Soft validity score: how close is this token to the constraint boundary?
+    /// Returns 1.0 for valid, 0.0 for invalid by default.
+    /// Override for soft scoring (ManifoldE point-to-manifold, Plan 234).
+    fn manifold_score(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+        match self.is_valid(depth, token_idx, parent_tokens) {
+            true => 1.0,
+            false => 0.0,
+        }
+    }
+
+    /// Returns the constraint as a half-space (normal vector, threshold) if available.
+    /// Default: None (fall back to is_valid/manifold_score).
+    fn constraint_vector(&self, _depth: usize, _parent_tokens: &[usize]) -> Option<(&[f32], f32)> {
+        None
+    }
 }
 
 /// No-op pruner: allows all tokens (original DDTree behavior).
