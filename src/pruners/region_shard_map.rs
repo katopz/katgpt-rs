@@ -1,6 +1,6 @@
 //! Frequency-aware region sharding for BFCF partitions (Plan 218 Phase 2).
 //!
-//! Maps (RegionLabel × FreqTier) → shard index using papaya lock-free HashMap.
+//! Maps (RegionLabel × FreqTier) → shard index using a flat `[AtomicUsize; 9]` array.
 //! Hot tier pins to shard 0, Cold to last shard, Warm round-robins across middle.
 //! Below `min_regions_for_shard` (30), sequential processing is preferred.
 
@@ -11,12 +11,25 @@ use super::bfcp_region_cache::FreqTier;
 
 // ── RegionShardMap ─────────────────────────────────────────────
 
+/// Sentinel value for uninitialized shard entries.
+const UNASSIGNED: usize = usize::MAX;
+const SHARD_SLOTS: usize = 9;
+
+/// Flat index into the 9-entry shard array: `label * 3 + tier`.
+#[inline]
+fn shard_index(label: RegionLabel, tier: FreqTier) -> usize {
+    (label as usize) * 3 + (tier as usize)
+}
+
 /// Shard assignment: (RegionLabel × FreqTier) → preferred shard index.
+///
+/// Uses a flat `[AtomicUsize; 9]` instead of HashMap — O(1) array indexing
+/// with no hashing overhead for the fixed 3×3 grid.
 pub struct RegionShardMap {
     /// Number of available shards (worker threads).
     num_shards: usize,
-    /// Lock-free assignment map: (RegionLabel, FreqTier) → shard index.
-    assignment: papaya::HashMap<(RegionLabel, FreqTier), usize>,
+    /// Flat assignment array: index = label * 3 + tier → shard index.
+    assignment: [AtomicUsize; SHARD_SLOTS],
     /// Round-robin counter for warm-tier distribution.
     rr_counter: AtomicUsize,
 }
@@ -33,7 +46,7 @@ impl RegionShardMap {
         let num_shards = num_shards.max(1);
         let map = Self {
             num_shards,
-            assignment: papaya::HashMap::new(),
+            assignment: [const { AtomicUsize::new(UNASSIGNED) }; SHARD_SLOTS],
             rr_counter: AtomicUsize::new(0),
         };
         map.populate_default();
@@ -45,7 +58,7 @@ impl RegionShardMap {
         let num_shards = num_shards.max(1);
         let map = Self {
             num_shards,
-            assignment: papaya::HashMap::new(),
+            assignment: [const { AtomicUsize::new(UNASSIGNED) }; SHARD_SLOTS],
             rr_counter: AtomicUsize::new(0),
         };
         map.populate_round_robin();
@@ -53,12 +66,13 @@ impl RegionShardMap {
     }
 
     /// Assign shard for a region given its label and frequency tier.
-    /// Falls back to `label as usize % num_shards` if no entry exists.
+    /// Falls back to `label as usize % num_shards` if entry is uninitialized.
     pub fn assign_shard(&self, label: RegionLabel, tier: FreqTier) -> usize {
-        let guard = self.assignment.pin();
-        match guard.get(&(label, tier)) {
-            Some(&shard) => shard,
-            None => (label as usize) % self.num_shards,
+        let shard = self.assignment[shard_index(label, tier)].load(Ordering::Relaxed);
+        if shard == UNASSIGNED {
+            (label as usize) % self.num_shards
+        } else {
+            shard
         }
     }
 
@@ -67,7 +81,6 @@ impl RegionShardMap {
     /// - Cold → last shard
     /// - Warm → round-robin among middle shards
     pub fn rebalance(&mut self, transitions: &[(RegionLabel, FreqTier, FreqTier)]) {
-        let guard = self.assignment.pin();
         for &(label, _old_tier, new_tier) in transitions {
             let shard = match new_tier {
                 FreqTier::Hot => 0,
@@ -81,7 +94,7 @@ impl RegionShardMap {
                 }
                 FreqTier::Warm => self.next_warm_shard(),
             };
-            let _ = guard.insert((label, new_tier), shard);
+            self.assignment[shard_index(label, new_tier)].store(shard, Ordering::Relaxed);
         }
     }
 
@@ -103,7 +116,6 @@ impl RegionShardMap {
     // ── Internal helpers ────────────────────────────────────────
 
     fn populate_default(&self) {
-        let guard = self.assignment.pin();
         let labels = [RegionLabel::Accept, RegionLabel::Reject, RegionLabel::Maybe];
         let tiers = [FreqTier::Hot, FreqTier::Warm, FreqTier::Cold];
 
@@ -114,20 +126,19 @@ impl RegionShardMap {
                     FreqTier::Cold => self.num_shards.saturating_sub(1),
                     FreqTier::Warm => self.next_warm_shard(),
                 };
-                let _ = guard.insert((label, tier), shard);
+                self.assignment[shard_index(label, tier)].store(shard, Ordering::Relaxed);
             }
         }
     }
 
     fn populate_round_robin(&self) {
-        let guard = self.assignment.pin();
         let labels = [RegionLabel::Accept, RegionLabel::Reject, RegionLabel::Maybe];
         let tiers = [FreqTier::Hot, FreqTier::Warm, FreqTier::Cold];
 
         for &label in &labels {
             for &tier in &tiers {
                 let shard = self.next_warm_shard();
-                let _ = guard.insert((label, tier), shard);
+                self.assignment[shard_index(label, tier)].store(shard, Ordering::Relaxed);
             }
         }
     }
@@ -277,8 +288,22 @@ mod tests {
         let map = RegionShardMap::new(4);
         assert_eq!(map.min_regions_for_shard(), 30);
     }
+
+    #[test]
+    fn test_shard_index_formula() {
+        // Verify the flat index formula matches (label, tier) pairs.
+        assert_eq!(shard_index(RegionLabel::Accept, FreqTier::Hot), 0);
+        assert_eq!(shard_index(RegionLabel::Accept, FreqTier::Warm), 1);
+        assert_eq!(shard_index(RegionLabel::Accept, FreqTier::Cold), 2);
+        assert_eq!(shard_index(RegionLabel::Reject, FreqTier::Hot), 3);
+        assert_eq!(shard_index(RegionLabel::Reject, FreqTier::Warm), 4);
+        assert_eq!(shard_index(RegionLabel::Reject, FreqTier::Cold), 5);
+        assert_eq!(shard_index(RegionLabel::Maybe, FreqTier::Hot), 6);
+        assert_eq!(shard_index(RegionLabel::Maybe, FreqTier::Warm), 7);
+        assert_eq!(shard_index(RegionLabel::Maybe, FreqTier::Cold), 8);
+    }
 }
 
 // TL;DR: Frequency-aware region sharding for BFCF partitions. (RegionLabel × FreqTier) → shard
-// via papaya lock-free HashMap. Hot pinned to shard 0, Cold to last shard, Warm round-robin.
-// Sequential fallback when regions < 30. Plan 218 Phase 2.
+// via flat [AtomicUsize; 9] array indexed by label*3+tier. Hot pinned to shard 0, Cold to last
+// shard, Warm round-robin. Sequential fallback when regions < 30. Plan 218 Phase 2.
