@@ -1,7 +1,7 @@
 # NFCoT FlowScore Drafter (Plan 229)
 
 **Research:** 204_NFCoT_Normalizing_Flow_Continuous_CoT
-**Status:** Implemented (T1-T7 done, T8 partial — 1 item deferred: README)
+**Status:** Implemented (T1-T7 done, T8 partial — 1 item deferred: README). GOAT: ⚠️ MARGINAL — debug overhead 3.5%, release expected <1%. Keep opt-in.
 **GOAT Gate:** `nf_flow_score` (parent: `nf_flow`, default: OFF)
 
 ## Overview

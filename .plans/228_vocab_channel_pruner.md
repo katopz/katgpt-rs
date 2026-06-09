@@ -4,7 +4,7 @@
 **Research:** 203_ROTATE_Vocabulary_Channel_Inference.md
 **Feature Gate:** `vocab_channel_pruner`
 **Status:** Plan
-**GOAT Status:** GOAT — load-time weight decomposition → per-neuron token reachability → ConstraintPruner lookup
+**GOAT Status:** ⚠️ PENDING — branch reduction 0% on uniform marginals (need real model marginals). Infrastructure complete. Keep opt-in.
 
 ---
 
