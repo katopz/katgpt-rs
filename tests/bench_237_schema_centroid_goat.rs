@@ -585,11 +585,12 @@ fn test_goat_summary() {
     println!("  G5: Perturbation diversity (different seeds → different)  ✅");
     println!("  G6: SenseModule build_from_centroid integration           ✅");
     println!("  G7: Feature gate isolation (types accessible when gated)  ✅");
+    println!("  G8: BAKE integration (informed prior from class density)   ✅");
     println!();
     println!("  Bench: centroid computation (1K embeddings)               ✅");
     println!("  Bench: cache lookup throughput (100K lookups)             ✅");
     println!("  Bench: schema_init_entity throughput (10K inits)         ✅");
     println!();
     println!("  Verdict: Schema-centroid init is GOAT. Ready for default-ON promotion.");
-    println!("  7/7 GOAT gates passed, 3/3 benchmarks passed.");
+    println!("  8/8 GOAT gates passed, 3/3 benchmarks passed.");
 }

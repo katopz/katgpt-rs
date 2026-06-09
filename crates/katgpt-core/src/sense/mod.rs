@@ -24,6 +24,8 @@ pub(crate) use gm::dispatch_gm_action;
 pub use gm::{NpcBrainSnapshot, SenseError};
 pub use hotswap::SenseHotSwap;
 pub use octree::{KgEmbedding, SenseOctreeBuilder};
+#[cfg(all(feature = "schema_centroid", feature = "bake_precision"))]
+pub use schema_centroid::schema_init_with_precision;
 #[cfg(feature = "schema_centroid")]
 pub use schema_centroid::{
     CentroidStats, SchemaCentroidCache, compute_centroid, schema_init_entity,

@@ -175,6 +175,48 @@ pub fn schema_init_entity(
     result
 }
 
+/// Initialize a new entity's embedding AND precision from schema class centroids.
+///
+/// When both `schema_centroid` and `bake_precision` features are enabled:
+/// - `mean` = schema_init_entity(...) (centroid-based initialization)
+/// - `precision` = informed_prior_precision(class_count) (dense classes → higher precision)
+///
+/// This upgrades BAKE's "uninformative prior" to an "informed prior" —
+/// the entity starts closer to optimal, so BAKE converges faster.
+#[cfg(feature = "bake_precision")]
+pub fn schema_init_with_precision(
+    classes: &[u64],
+    cache: &SchemaCentroidCache,
+    gamma: f32,
+    rng: &mut fastrand::Rng,
+) -> ([f32; 8], [f32; 8]) {
+    use crate::sense::bake::informed_prior_precision;
+
+    // Get embedding from schema centroid
+    let embedding = schema_init_entity(classes, cache, gamma, rng);
+
+    // Compute informed prior precision from class density
+    // Use the average count across found classes
+    let mut total_count = 0usize;
+    let mut found_count = 0usize;
+    for &class_hash in classes {
+        if let Some(stats) = cache.get(class_hash) {
+            total_count += stats.count;
+            found_count += 1;
+        }
+    }
+
+    let precision = if found_count > 0 {
+        let avg_count = total_count / found_count;
+        informed_prior_precision(avg_count)
+    } else {
+        // Fallback: uninformative prior
+        [crate::sense::bake::UNINFORMATIVE_PRECISION; 8]
+    };
+
+    (embedding, precision)
+}
+
 /// Random initialization fallback — uniform in [-0.5, 0.5] per dimension.
 fn random_init(rng: &mut fastrand::Rng) -> [f32; 8] {
     let mut emb = [0.0f32; 8];
@@ -452,6 +494,97 @@ mod tests {
                     result[d]
                 );
             }
+        }
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_schema_init_with_precision_informed() {
+        let cache = SchemaCentroidCache::new();
+        let class_hash = 42u64;
+        // Create 10 embeddings for this class
+        let embs: Vec<KgEmbedding> = (0..10)
+            .map(|i| make_embedding([0.5 + i as f32 * 0.01; 8]))
+            .collect();
+        cache.compute_and_insert(class_hash, &embs);
+
+        let mut rng = fastrand::Rng::with_seed(42);
+        let (embedding, precision) =
+            schema_init_with_precision(&[class_hash], &cache, 0.3, &mut rng);
+
+        // Embedding should be near centroid
+        let stats = cache.get(class_hash).unwrap();
+        for d in 0..8 {
+            assert!(
+                (embedding[d] - stats.mean[d]).abs() < 1.0,
+                "embedding should be near centroid"
+            );
+        }
+
+        // Precision should be informed (dense class → higher precision)
+        let expected_p = 10.0f32 / (1.0 + 10.0); // count=10, p = 10/11 ≈ 0.909
+        for d in 0..8 {
+            assert!(
+                (precision[d] - expected_p).abs() < 1e-4,
+                "precision should be informed by class count at dim {d}: got {} expected {}",
+                precision[d],
+                expected_p
+            );
+        }
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_schema_init_with_precision_fallback() {
+        let cache = SchemaCentroidCache::new();
+        let mut rng = fastrand::Rng::with_seed(99);
+
+        // Unknown class → should use uninformative prior
+        let (embedding, precision) = schema_init_with_precision(&[404u64], &cache, 0.3, &mut rng);
+
+        // Embedding should be random fallback (not all zeros)
+        assert!(!embedding.iter().all(|&v| v == 0.0));
+
+        // Precision should be uninformative
+        for d in 0..8 {
+            assert!(
+                (precision[d] - 0.1).abs() < 1e-6,
+                "fallback precision should be uninformative (0.1)"
+            );
+        }
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_schema_init_with_precision_multi_class() {
+        let cache = SchemaCentroidCache::new();
+
+        // Class 1: 5 entities
+        let c1 = 100u64;
+        let embs1: Vec<KgEmbedding> = (0..5)
+            .map(|i| make_embedding([1.0 + i as f32 * 0.1; 8]))
+            .collect();
+        cache.compute_and_insert(c1, &embs1);
+
+        // Class 2: 20 entities
+        let c2 = 200u64;
+        let embs2: Vec<KgEmbedding> = (0..20)
+            .map(|i| make_embedding([3.0 + i as f32 * 0.05; 8]))
+            .collect();
+        cache.compute_and_insert(c2, &embs2);
+
+        let mut rng = fastrand::Rng::with_seed(42);
+        let (_embedding, precision) = schema_init_with_precision(&[c1, c2], &cache, 0.0, &mut rng);
+
+        // avg_count = (5 + 20) / 2 = 12, p = 12/13 ≈ 0.923
+        let expected_p = 12.0f32 / (1.0 + 12.0);
+        for d in 0..8 {
+            assert!(
+                (precision[d] - expected_p).abs() < 1e-3,
+                "multi-class precision at dim {d}: got {} expected {}",
+                precision[d],
+                expected_p
+            );
         }
     }
 }
