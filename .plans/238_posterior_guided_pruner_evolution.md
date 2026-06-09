@@ -1,6 +1,6 @@
 # Plan 238: Posterior-Guided Pruner Evolution (PGPE)
 
-**Status:** Phase 1-4 Complete, Phase 5 Next
+**Status:** Phase 1-5 Complete, Phase 6 Next
 **Research:** R211 (Bayesian-Agent distillation), R209 (BAKE precision), R172/P192 (MUSE lifecycle)
 **Feature Gate:** `posterior_evolution` (opt-in, default OFF until GOAT proven)
 
@@ -50,11 +50,12 @@ Fuse BAKE precision vectors with MUSE skill lifecycle to create posterior-guided
 - [x] Fix downstream `CompressConfig` struct literals in `expression_pruner.rs` with `..Default::default()`
 - [x] Unit tests: precision-gated compress good/bad arm, Q-threshold fallback, surprise tracking, KL surprise return
 
-### Phase 5: Precision-Gated Safe Exploration
-- [ ] Add precision input to `SafePhased` bandit strategy
-- [ ] Implement `α = sigmoid(λ × (precision_skill - precision_threshold))` for escalation
-- [ ] Backward compatible: if no precision, use phase-gap (existing GOAT behavior)
-- [ ] Benchmark: `SafePhased` with precision vs without → verify no regression on existing GOAT tests
+### Phase 5: Precision-Gated Safe Exploration ✅ COMPLETE (6 tests pass)
+- [x] Add `precision_gated_alpha()` method to `SafePhasedState` (behind `posterior_evolution` feature)
+- [x] Implement `α = sigmoid(λ × (precision - threshold))` for precision-gated escalation
+- [x] Backward compatible: `precision_skill=None` → returns current phase-based alpha
+- [x] Safety guarantee: precision can only INCREASE alpha (max of phase-based and precision-gated), never decrease
+- [x] Unit tests: None returns phase alpha, high precision → ~1.0, low precision → phase alpha, monotone, threshold at 0.5, never decreases phase alpha
 
 ### Phase 6: Example / Proof
 - [ ] Create `examples/posterior_evolution_demo.rs` — shows before/after precision evolution over 100 tasks

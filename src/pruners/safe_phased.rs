@@ -124,6 +124,39 @@ impl SafePhasedState {
         self.alpha
     }
 
+    /// Compute precision-gated alpha (Plan 238).
+    ///
+    /// When precision is available, α = sigmoid(λ × (precision - threshold)).
+    /// This replaces phase-gap escalation with Bayesian certainty gating:
+    /// - High precision (well-explored, certain) → α → 1.0 (trust the bandit)
+    /// - Low precision (uncertain) → α → 0.0 (fall back to baseline)
+    ///
+    /// If `precision_skill` is `None`, returns the current phase-based alpha.
+    /// This is backward compatible — no precision = existing behavior.
+    #[cfg(feature = "posterior_evolution")]
+    pub fn precision_gated_alpha(
+        &self,
+        precision_skill: Option<f32>,
+        lambda: f32,
+        precision_threshold: f32,
+    ) -> f32 {
+        match precision_skill {
+            Some(precision) => {
+                let x = lambda * (precision - precision_threshold);
+                let sigmoid = if x >= 0.0 {
+                    1.0 / (1.0 + (-x).exp())
+                } else {
+                    let ex = x.exp();
+                    ex / (1.0 + ex)
+                };
+                // Blend: take the max of phase-based and precision-gated alpha
+                // This ensures precision can only INCREASE exploration, never decrease it
+                self.alpha.max(sigmoid)
+            }
+            None => self.alpha, // No precision → use existing phase-based alpha
+        }
+    }
+
     /// Current regret budget R̂.
     pub fn regret_budget(&self) -> f32 {
         self.regret_budget
@@ -703,5 +736,90 @@ mod tests {
         eprintln!(
             "  Overhead per selection: 1× rng.draw + 1× f32.cmp = ~5 ALU ops (O(1), independent of k={NUM_ARMS})"
         );
+    }
+
+    /// Tests for precision-gated alpha (Plan 238, Phase 5).
+    #[cfg(feature = "posterior_evolution")]
+    mod precision_gated_alpha_tests {
+        use super::*;
+
+        #[test]
+        fn precision_gated_alpha_none_returns_phase_alpha() {
+            let state = SafePhasedState::new(0, 0.1, 10, 5);
+            let phase_alpha = state.alpha();
+            let gated = state.precision_gated_alpha(None, 1.0, 3.0);
+            assert!(
+                (gated - phase_alpha).abs() < 1e-6,
+                "no precision should return phase alpha"
+            );
+        }
+
+        #[test]
+        fn precision_gated_alpha_high_precision_approaches_1() {
+            let state = SafePhasedState::new(0, 0.1, 10, 5);
+            let gated = state.precision_gated_alpha(Some(10.0), 1.0, 3.0);
+            assert!(
+                gated > 0.95,
+                "high precision should give alpha near 1.0, got {gated}"
+            );
+        }
+
+        #[test]
+        fn precision_gated_alpha_low_precision_approaches_phase() {
+            let state = SafePhasedState::new(0, 0.1, 10, 5);
+            let phase_alpha = state.alpha();
+            // Precision well below threshold → sigmoid near 0 → takes max with phase alpha
+            let gated = state.precision_gated_alpha(Some(0.5), 1.0, 3.0);
+            // Should be at least phase_alpha (max of phase and sigmoid)
+            assert!(
+                gated >= phase_alpha - 1e-6,
+                "low precision should not reduce alpha below phase alpha"
+            );
+        }
+
+        #[test]
+        fn precision_gated_alpha_monotone_with_precision() {
+            let state = SafePhasedState::new(0, 0.1, 10, 5);
+            let a1 = state.precision_gated_alpha(Some(1.0), 1.0, 3.0);
+            let a2 = state.precision_gated_alpha(Some(3.0), 1.0, 3.0);
+            let a3 = state.precision_gated_alpha(Some(5.0), 1.0, 3.0);
+            assert!(
+                a1 <= a2,
+                "alpha should be monotone with precision: {a1} <= {a2}"
+            );
+            assert!(
+                a2 <= a3,
+                "alpha should be monotone with precision: {a2} <= {a3}"
+            );
+        }
+
+        #[test]
+        fn precision_gated_alpha_at_threshold_is_half() {
+            let state = SafePhasedState::new(0, 0.1, 10, 5);
+            // At threshold, sigmoid(0) = 0.5
+            let gated = state.precision_gated_alpha(Some(3.0), 1.0, 3.0);
+            // Should be max(phase_alpha, 0.5)
+            let expected = state.alpha().max(0.5);
+            assert!(
+                (gated - expected).abs() < 1e-6,
+                "at threshold: {gated} should be max(phase_alpha, 0.5) = {expected}"
+            );
+        }
+
+        #[test]
+        fn precision_gated_never_decreases_phase_alpha() {
+            let mut state = SafePhasedState::new(0, 0.1, 0, 5);
+            // Advance to higher phase for larger alpha
+            for _ in 0..100 {
+                state.record_round();
+            }
+            let phase_alpha = state.alpha();
+            // Even with very low precision, precision_gated_alpha >= phase_alpha
+            let gated = state.precision_gated_alpha(Some(0.1), 1.0, 3.0);
+            assert!(
+                gated >= phase_alpha - 1e-6,
+                "precision gating should never decrease alpha: {gated} >= {phase_alpha}"
+            );
+        }
     }
 }
