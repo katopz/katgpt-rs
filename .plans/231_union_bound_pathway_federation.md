@@ -20,7 +20,7 @@
 - [x] T8: Implement `FederationComposer<C,S>` in `src/pruners/federation_composer.rs`
 - [x] T9: GOAT test — prove federation composer early termination saves compute
 - [x] T10: Add all three features to `full` feature set
-- [ ] T11: Update README.md — Deep Manifold GOAT section
+- [x] T11: Update README.md — Deep Manifold GOAT section
 - [x] T12: Run full benchmark suite — no regressions
 - [x] T13: GOAT gate proof — all gates passing per feature
 

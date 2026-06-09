@@ -603,6 +603,34 @@ GOAT 6/6 proved. Default-on.
 
 📖 See [`.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md`](.research/051_Deep_Manifold_Fixed_Point_Boundary_Conditions.md).
 
+### Modelless Distillation Features (Plan 231)
+
+Three additional Deep Manifold features — all GOAT-proven, default-ON:
+
+| Feature | What | GOAT | Key Gain |
+|---------|------|------|----------|
+| **Union Bound Confidence** (`union_bound_confidence`) | Additive branch confidence via Boole's inequality (§2.4.2) | 6/6 | Linear degradation, 76ns overhead |
+| **PathwayTracker** (`pathway_tracker`) | Intrinsic pathway stability detection (§4.2) | 7/7 | 85% thinking budget savings, 100% convergence accuracy |
+| **FederationComposer** (`federation_composer`) | Explicit Model→Agent→Tool pruning with residual early termination (§7.5) | 7/7 | 70% early termination rate, 35% compute savings |
+
+📖 Plans: [`.plans/231_union_bound_pathway_federation.md`](.plans/231_union_bound_pathway_federation.md).
+📖 Benchmarks: [`.benchmarks/231_union_bound_goat.md`](.benchmarks/231_union_bound_goat.md), [`.benchmarks/231_pathway_tracker_goat.md`](.benchmarks/231_pathway_tracker_goat.md), [`.benchmarks/231_federation_composer_goat.md`](.benchmarks/231_federation_composer_goat.md).
+
+### BAKE Precision-Gated Embeddings (Plan 236) — Opt-In
+
+Per-dimension Bayesian precision tracking for KG embeddings. High-precision dimensions anchor (resist change), low-precision dimensions explore (absorb eagerly). O(8) arithmetic, zero-alloc, SIMD-friendly. Phase 1–2 complete (core + BFCF integration + GOAT 10/10), Phase 3 in progress.
+
+| Metric | Result |
+|--------|--------|
+| SIMD throughput | 168.7 ns/update (10K updates) |
+| Drift reduction | 4.7% vs naive EMA (marginal, target ≥30%) |
+| Oscillation reduction | 50.0% fewer region flips (at GOAT threshold) |
+| Precision monotonicity | Verified across 1000 updates |
+
+Feature: `bake_precision`. Opt-in — drift reduction is marginal, oscillation at threshold. Phase 3 (session-level evolution) pending.
+
+📖 Plan: [`.plans/236_bake_precision_gated_embeddings.md`](.plans/236_bake_precision_gated_embeddings.md).
+
 ## ⚡ Trigger Gate + Three-Way Compute (Plan 176)
 
 Automatic tier promotion from CPU → GPU → ANE based on real-time load signals. CPU is always available as fallback.

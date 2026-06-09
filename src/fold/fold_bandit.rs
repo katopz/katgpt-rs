@@ -132,6 +132,20 @@ impl FoldBandit {
     pub fn pulls(&self, arm: usize) -> u32 {
         self.pulls.get(arm).copied().unwrap_or(0)
     }
+
+    /// Scale fold budget by precision confidence from BAKE embeddings.
+    ///
+    /// High confidence (precise embeddings) → can fold more aggressively → lower budget.
+    /// Low confidence (uncertain embeddings) → keep more steps → higher budget.
+    ///
+    /// Bridge: `fold_budget = bandit.best_budget() * (1.0 - α * confidence)`
+    /// where α controls how much precision influences folding (default 0.3).
+    #[cfg(feature = "bake_precision")]
+    pub fn precision_gated_budget(&self, precision_confidence: f32, alpha: f32) -> f32 {
+        let base = self.best_budget();
+        let gated = base * (1.0 - alpha * precision_confidence);
+        gated.clamp(0.1, 1.0) // always keep at least 10%
+    }
 }
 
 impl Default for FoldBandit {
@@ -305,5 +319,51 @@ mod tests {
     fn test_default() {
         let bandit = FoldBandit::default();
         assert_eq!(bandit.total_pulls(), 0);
+    }
+
+    // ── Precision-Gated Budget Tests (Plan 236) ──────────────────────
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_gated_budget_zero_confidence_returns_base() {
+        let bandit = FoldBandit::new();
+        let base = bandit.best_budget();
+        let gated = bandit.precision_gated_budget(0.0, 0.3);
+        assert!((gated - base).abs() < f32::EPSILON,
+            "confidence=0 should return base budget, got {gated} vs {base}");
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_gated_budget_full_confidence_reduces_budget() {
+        let bandit = FoldBandit::new();
+        let base = bandit.best_budget();
+        let gated = bandit.precision_gated_budget(1.0, 0.3);
+        assert!(gated < base,
+            "confidence=1 should reduce budget, got {gated} >= {base}");
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_gated_budget_clamps_to_minimum() {
+        // Bias arm 4 (budget 1.0) so base is 1.0, then extreme alpha+confidence
+        let mut bandit = FoldBandit::new();
+        for _ in 0..50 {
+            bandit.record_reward(1.0, true, 0.9);
+        }
+        assert!((bandit.best_budget() - 1.0).abs() < f32::EPSILON);
+        let gated = bandit.precision_gated_budget(1.0, 10.0);
+        assert!((gated - 0.1).abs() < f32::EPSILON,
+            "should clamp to 0.1 minimum, got {gated}");
+    }
+
+    #[cfg(feature = "bake_precision")]
+    #[test]
+    fn test_precision_gated_budget_zero_alpha_returns_base() {
+        let bandit = FoldBandit::new();
+        let base = bandit.best_budget();
+        let gated = bandit.precision_gated_budget(0.8, 0.0);
+        assert!((gated - base).abs() < f32::EPSILON,
+            "alpha=0 should return base budget unchanged, got {gated} vs {base}");
     }
 }

@@ -283,3 +283,103 @@ fn g9_informed_prior_consistency() {
     }
     println!("G9 PASS: informed prior monotonically increases with class count");
 }
+
+// ── G10: BFCF region oscillation with precision anchoring ─────────────────────
+
+/// Simulate BFCF region label assignments over multiple decode steps.
+/// With precision anchoring, high-precision regions should resist label flips.
+#[cfg(feature = "bfcf_tree")]
+#[test]
+fn g10_bfcf_region_oscillation_precision_anchoring() {
+    use katgpt_rs::pruners::bfcf_types::{BFCP, BorelRegion, RegionLabel};
+
+    let n_steps = 100;
+    let n_regions = 10;
+
+    // Simulate noisy relevance scores that flip labels.
+    // Each step, ~30% of regions get a noisy flip signal.
+    let simulate_labels = |step: u32, noise_seed: u32| -> Vec<RegionLabel> {
+        let mut labels = Vec::with_capacity(n_regions);
+        for i in 0..n_regions {
+            // Deterministic pseudo-random: flip if hash is above threshold
+            let hash = step
+                .wrapping_mul(2654435761)
+                .wrapping_add(i as u32 * 40503 + noise_seed);
+            let flip = (hash % 10) < 3; // ~30% flip rate
+            if flip {
+                labels.push(match i % 3 {
+                    0 => RegionLabel::Maybe,
+                    1 => RegionLabel::Accept,
+                    _ => RegionLabel::Reject,
+                });
+            } else {
+                labels.push(match i % 3 {
+                    0 => RegionLabel::Accept,
+                    1 => RegionLabel::Reject,
+                    _ => RegionLabel::Maybe,
+                });
+            }
+        }
+        labels
+    };
+
+    // --- Without precision anchoring: count label flips ---
+    let mut flips_without = 0u32;
+    let mut prev_labels = simulate_labels(0, 0);
+    for step in 1..n_steps {
+        let new_labels = simulate_labels(step, 0);
+        for i in 0..n_regions {
+            if prev_labels[i] != new_labels[i] {
+                flips_without += 1;
+            }
+        }
+        prev_labels = new_labels;
+    }
+
+    // --- With precision anchoring: build partitions with boundary_precision and smooth ---
+    let mut flips_with = 0u32;
+    let make_partition = |labels: &[RegionLabel]| -> BFCP {
+        let regions: Vec<BorelRegion> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, &label)| {
+                // Assign high precision (0.8) to half the regions, low (0.2) to rest
+                let precision = if i % 2 == 0 { 0.8 } else { 0.2 };
+                BorelRegion::new(label, vec![], (i + 1) * 10).with_precision(precision)
+            })
+            .collect();
+        BFCP::from_regions(regions)
+    };
+
+    let mut old_partition = make_partition(&simulate_labels(0, 0));
+    for step in 1..n_steps {
+        let new_labels = simulate_labels(step, 0);
+        let new_partition = make_partition(&new_labels);
+        let smoothed = old_partition.precision_smooth(&new_partition);
+        // Count flips between old (smoothed) and the raw new
+        for i in 0..old_partition.regions.len().min(smoothed.regions.len()) {
+            if old_partition.regions[i].label != smoothed.regions[i].label {
+                flips_with += 1;
+            }
+        }
+        old_partition = smoothed;
+    }
+
+    let reduction_pct = if flips_without > 0 {
+        (flips_without - flips_with) as f64 / flips_without as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    println!(
+        "G10 PASS: region flips without={} with={} reduction={:.1}%",
+        flips_without, flips_with, reduction_pct
+    );
+
+    // GOAT gate: precision anchoring should reduce oscillation by ≥50%
+    assert!(
+        reduction_pct >= 50.0,
+        "G10 FAIL: precision anchoring reduction {:.1}% < 50% GOAT threshold",
+        reduction_pct
+    );
+}

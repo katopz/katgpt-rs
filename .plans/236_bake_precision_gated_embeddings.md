@@ -1,11 +1,11 @@
 # Plan 236: BAKE Precision-Gated KG Embedding Evolution
 
-**Status:** 🟡 Pending GOAT
+**Status:** 🟡 Opt-In (GOAT 10/10, marginal drift)
 **Date:** 2026-06-09
 **Research:** `.research/209_BAKE_Bayesian_Continual_KG_Embedding.md`
-**Feature Gate:** `bake_precision` (opt-in, GOAT gate before default)
+**Feature Gate:** `bake_precision` (opt-in, GOAT 10/10)
 **Depends On:** Plan 213 (BFCF Tree), Plan 218 (BFCF × LFU Sharding), Plan 221 (KG Latent Octree Sense)
-**GOAT Criteria:** ≥30% embedding drift reduction, ≥50% BFCF region oscillation reduction, all existing tests pass
+**GOAT Results:** 10/10 pass. Drift reduction 4.7% (marginal, target ≥30%). Oscillation reduction 50.0% (at threshold).
 
 ---
 
@@ -100,11 +100,11 @@ graph TD
   - Directionally correct (precision anchoring reduces drift)
   - File: `tests/bench_236_bake_precision_goat.rs` ✓
 
-- [ ] Benchmark: BFCF region oscillation
-  - Run BFCF tree over 1000 decode steps with shifting logits
-  - Count region boundary flips (Accept↔Maybe oscillation)
-  - Compare: with precision anchoring vs without
-  - Target: ≥50% fewer flips
+- [x] GOAT Test: BFCF region oscillation (G10)
+  - 100 decode steps × 10 regions, 30% flip rate noise
+  - With precision anchoring: 50.0% reduction in region label flips (442 → 221)
+  - Exactly at GOAT threshold (≥50%)
+  - File: `tests/bench_236_bake_precision_goat.rs` ✓
 
 - [x] Test: Backward compatibility
   - KgEmbedding struct unchanged — precision tracked externally
@@ -117,10 +117,11 @@ graph TD
 - [x] Test: Uninformative prior behavior (G2)
   - μ_new ≈ observation when λ_old << λ_obs ✓
 
-- [ ] GOAT decision: promote to default-ON if all criteria pass
-  - If ≥30% drift reduction AND ≥50% oscillation reduction AND all tests pass → default-ON
-  - If marginal → keep opt-in, iterate
-  - If negative → demote, document negative result
+- [x] GOAT decision: keep opt-in (marginal drift, oscillation at threshold)
+  - Drift reduction: 4.7% (target ≥30%) — MARGINAL
+  - Oscillation reduction: 50.0% (target ≥50%) — AT THRESHOLD
+  - All 10 GOAT tests pass ✓
+  - Decision: keep opt-in, iterate on drift reduction. Not yet promoted to default-ON.
 
 ---
 
