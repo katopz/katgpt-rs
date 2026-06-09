@@ -73,12 +73,12 @@ graph TD
 
 ### Phase 5: WASMProofWitness (Feature-Gated, Shared with riir-ai)
 
-- [ ] Extend WASM validator ABI — add `witness_hash` and `violated_rule` to return
-- [ ] Implement BLAKE3 witness hash computation in WASM validators
-- [ ] Add feature gate `wasm_proof_witness`
-- [ ] Write test: witness determinism — same input produces same hash
-- [ ] Update WASM batch API template to include witness fields
-- [ ] Document ABI change and migration path
+- [x] Extend WASM validator ABI — add `witness_hash` and `violated_rule` to return
+- [x] Implement BLAKE3 witness hash computation in WASM validators
+- [x] Add feature gate `wasm_proof_witness`
+- [x] Write test: witness determinism — same input produces same hash
+- [x] Update WASM batch API template to include witness fields
+- [x] Document ABI change and migration path
 
 ---
 
