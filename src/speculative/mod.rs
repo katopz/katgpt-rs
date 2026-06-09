@@ -415,6 +415,18 @@ pub mod nf_flow_gate;
 #[cfg(feature = "nf_flow_gate")]
 pub use nf_flow_gate::NfFlowGate;
 
+// ── VocabChannel Pruner — ROTATE-Derived ConstraintPruner (Plan 228, feature: vocab_channel_pruner) ──
+#[cfg(feature = "vocab_channel_pruner")]
+pub mod vocab_channel_pruner;
+
+#[cfg(feature = "vocab_channel_pruner")]
+pub use vocab_channel_pruner::excess_kurtosis as vocab_excess_kurtosis;
+#[cfg(feature = "vocab_channel_pruner")]
+pub use vocab_channel_pruner::{
+    VocabChannel, VocabChannelConfig, VocabChannelDecomposer, VocabChannelMap, VocabChannelPruner,
+    decompose_layer_channels, householder_apply, iterative_token_mask, skewness, vocab_project,
+};
+
 // ── Domino Causal Correction re-exports (Plan 197, feature: domino_correction) ──
 #[cfg(feature = "domino_correction")]
 pub use dd_tree::build_dd_tree_domino;
@@ -425,3 +437,17 @@ pub use domino::{
     PrefixCorrectionTable, PrefixCorrectionTableBuilder, compute_prefix_strength, domino_score,
     prefix_hash,
 };
+
+// ── NFCoT FlowMUX — Flow Scoring for MUX Trajectories (Plan 229 T6) ──
+#[cfg(all(feature = "nf_flow_score", feature = "mux_pruner"))]
+pub mod nf_flow_mux;
+
+#[cfg(all(feature = "nf_flow_score", feature = "mux_pruner"))]
+pub use nf_flow_mux::{MuxFlowScore, aggregate_mux_score, score_mux_trajectory};
+
+// ── NFCoT FlowFold — Confidence-Gated Chain Folding (Plan 229 T7) ──
+#[cfg(all(feature = "nf_flow_score", feature = "chain_fold"))]
+pub mod nf_flow_fold;
+
+#[cfg(all(feature = "nf_flow_score", feature = "chain_fold"))]
+pub use nf_flow_fold::{FoldDecision, evaluate_fold, evaluate_fold_batch};

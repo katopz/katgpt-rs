@@ -215,6 +215,9 @@ domino_lora = []  # Domino LoRA causal correction adapter for speculative decodi
 nf_flow_score = []  # NFCoT FlowScore Drafter — modelless normalizing flow density scoring (Plan 229 T1, GOAT gate, default OFF)
 nf_flow_budget = []  # NFCoT FlowBudget — sigmoid-weighted speculative depth allocation (Plan 229 T4, GOAT gate, default OFF)
 nf_flow_gate = []  # NFCoT FlowGate — adaptive acceptance criterion (Plan 229 T3, GOAT gate, default OFF)
+nf_flow = ["nf_flow_score", "nf_flow_gate", "nf_flow_budget"]  # NFCoT parent feature — all modelless flow components (Plan 229, default OFF until GOAT)
+nf_flow_mux = ["nf_flow_score", "mux_pruner"]  # NFCoT FlowMUX — flow scoring for MUX trajectories (Plan 229 T6, default OFF)
+nf_flow_fold = ["nf_flow_score", "chain_fold"]  # NFCoT FlowFold — confidence-gated chain folding (Plan 229 T7, default OFF)
 static_cal_tables = []  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1)
 targeted_precision = []  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2)
 modality_pruned_load = []  # Modality-Pruned Context Loading — query classifier + pipeline selection (Plan 227 Phase 3)
@@ -251,6 +254,7 @@ coexplain_riir = ["coexplain_pruner"]  # RIIR Feedback Loop — Curator marketpl
 bfcf_lfu_shard = ["bfcf_tree", "papaya"]  # BFCF × LFU × Sharding — region-level cache with frequency-aware eviction (Plan 218, GOAT 44 tests + 10 benchmarks, default-on)
 bfcf_lsh_cms = ["bfcf_lfu_shard"]  # BFCF × LSH × CMS — SimHash approximate cache + Count-Min Sketch (Plan 220, GOAT 10/10, default-ON)
 critical_interval_gate = []  # Default-on: entropy-triggered solver switch (Plan 222)
+vocab_channel_pruner = []  # ROTATE-Derived ConstraintPruner — load-time weight decomposition → per-neuron token reachability (Plan 228, GOAT candidate)
 q_sample_solver = ["critical_interval_gate"]  # Opt-in: q-sampling for critical steps
 mbr_tree_select = []  # Opt-in: MBR selection from DDTree
 self_cond_draft = []  # Opt-in: 2-pass self-conditioned speculative draft
@@ -856,3 +860,7 @@ required-features = ["nf_flow_score"]
 [[test]]
 name = "pipeline_pruner_goat"
 required-features = ["modality_pruned_load"]
+
+[[example]]
+name = "vocab_channel_pruner_demo"
+required-features = ["vocab_channel_pruner"]

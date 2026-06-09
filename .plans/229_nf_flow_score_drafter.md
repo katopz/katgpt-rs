@@ -61,23 +61,23 @@ This is a diagonal affine normalizing flow constructed from existing inference-t
 - [x] Validate: flow_score > max-prob selection on ≥ 3 existing test suites
 
 ### T6: FlowMUX Composition (cross-feature)
-- [ ] Implement flow scoring for MUX multiplexed trajectories
-- [ ] Score continuous MUX tokens using flow density in simplex space
-- [ ] Requires MUX feature (Research 158) to be available
-- [ ] Test: MUX + FlowScore composition improves over MUX alone
+- [x] Implement flow scoring for MUX multiplexed trajectories
+- [x] Score continuous MUX tokens using flow density in simplex space
+- [x] Requires MUX feature (Research 158) to be available
+- [x] Test: MUX + FlowScore composition improves over MUX alone
 
 ### T7: FlowFold Chain Composition (cross-feature)
-- [ ] Integrate flow score with ThoughtFold chain folding
-- [ ] Before fold: compute flow_score(original_chain)
-- [ ] After fold: compute flow_score(folded_chain)
-- [ ] Accept fold if flow_score(folded) ≥ α · flow_score(original)
-- [ ] Requires chain_fold feature (Plan 195) to be available
-- [ ] Test: confidence-gated folding reduces false folds
+- [x] Integrate flow score with ThoughtFold chain folding
+- [x] Before fold: compute flow_score(original_chain)
+- [x] After fold: compute flow_score(folded_chain)
+- [x] Accept fold if flow_score(folded) ≥ α · flow_score(original)
+- [x] Requires chain_fold feature (Plan 195) to be available
+- [x] Test: confidence-gated folding reduces false folds
 
 ### T8: Feature Gate Integration
-- [ ] Add `nf_flow` parent feature to Cargo.toml
-- [ ] Add `nf_flow_score`, `nf_flow_gate`, `nf_flow_budget`, `nf_flow_smooth`, `nf_flow_mux`, `nf_flow_fold` sub-features
-- [ ] All OFF by default until GOAT proof
+- [x] Add `nf_flow` parent feature to Cargo.toml
+- [x] Add `nf_flow_score`, `nf_flow_gate`, `nf_flow_budget`, `nf_flow_mux`, `nf_flow_fold` sub-features
+- [x] All OFF by default until GOAT proof
 - [ ] Update README with NFCoT FlowScore section
 
 ## Expected GOAT Criteria
