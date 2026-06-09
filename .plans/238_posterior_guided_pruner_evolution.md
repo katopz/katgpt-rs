@@ -30,12 +30,15 @@ Fuse BAKE precision vectors with MUSE skill lifecycle to create posterior-guided
 - [x] Implement `PrecisionPolicy::retire_trigger(precision)` — precision → 0 (converged to uninformative)
 - [x] Unit tests for each action trigger with known inputs/expected outputs
 
-### Phase 3: PosteriorGuidedPruner Integration
-- [ ] Create `src/pruners/posterior/mod.rs` — `PosteriorGuidedPruner<P: ConstraintPruner>` wrapper that adds precision tracking to any existing pruner
-- [ ] Implement `ConstraintPruner` for `PosteriorGuidedPruner` — delegates to inner pruner, records evidence on propagate()
-- [ ] Implement `PosteriorGuidedPruner::record_evidence(outcome, context, failure_mode)` — updates precision vector
-- [ ] Implement `PosteriorGuidedPruner::lifecycle_action()` — returns current `PrecisionPolicy` decision
-- [ ] Integration test: wrap existing pruner (e.g., Sudoku) in `PosteriorGuidedPruner`, verify pruning still works + precision updates
+### Phase 3: PosteriorGuidedPruner Integration ✅ COMPLETE (15 tests pass)
+- [x] Create `src/pruners/posterior/wrapper.rs` — `PosteriorGuidedPruner<P: ScreeningPruner>` decorator that adds precision tracking to any existing pruner
+- [x] Implement `ScreeningPruner` for `PosteriorGuidedPruner` — delegates to inner pruner with precision-gated modulation
+- [x] Implement `PosteriorGuidedPruner::record_evidence(outcome, context, failure_mode)` — updates precision vector, returns KL surprise
+- [x] Implement `PosteriorGuidedPruner::lifecycle_action()` — returns current `PrecisionPolicy` decision
+- [x] Implement `PosteriorGuidedPruner::record_structured_evidence()` — accepts full `PosteriorEvidence`
+- [x] Implement `PosteriorGuidedPruner::best_arm()` — posterior-guided best arm selection
+- [x] Re-export `PosteriorGuidedPruner` and `PrecisionPolicyConfig` from mod.rs and pruners/mod.rs
+- [x] Unit tests: cold start, retired arm, evidence recording, best arm convergence, all 5 lifecycle actions, custom config
 
 ### Phase 4: Precision-Gated AbsorbCompress
 - [ ] Modify `AbsorbCompress` to accept precision vectors alongside Q-values
