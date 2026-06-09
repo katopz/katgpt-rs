@@ -97,12 +97,7 @@ pub struct SlodOperator {
 
 // ── Poincaré Ball Geometry ────────────────────────────────────────
 
-/// Poincaré ball radius clamp to stay inside the ball.
-#[inline]
-fn clamp_norm(x: &[f32], max_norm: f32) -> f32 {
-    let norm_sq = simd_dot_f32(x, x, x.len());
-    norm_sq.sqrt().min(max_norm)
-}
+// clamp_norm removed — was unused
 
 /// Compute squared Euclidean distance.
 #[inline]
@@ -184,7 +179,7 @@ pub fn log_map(base: &[f32], point: &[f32], dim: usize) -> Vec<f32> {
 /// exp_x(v) = x ⊕ tanh(||v||/2) / ||v|| · v
 /// where the tangent vector v encodes the conformal factor from log_map.
 pub fn exp_map(base: &[f32], tangent: &[f32], dim: usize) -> Vec<f32> {
-    let norm_base_sq = simd_dot_f32(base, base, dim).min(1.0 - 1e-5);
+    let _norm_base_sq = simd_dot_f32(base, base, dim).min(1.0 - 1e-5);
     let tangent_norm = simd_dot_f32(tangent, tangent, dim).sqrt();
 
     if tangent_norm < 1e-10 {

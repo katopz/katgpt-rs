@@ -6,7 +6,7 @@
 
 use katgpt_core::{
     ConstraintPruner, NoPruner, ScaleBoundary, SlodConfig, SlodOperator, SlodPruner, exp_map,
-    frechet_mean, heat_kernel_weights, log_map, poincare_distance,
+    frechet_mean, log_map, poincare_distance,
 };
 use std::time::Instant;
 
@@ -143,7 +143,7 @@ fn t4_hsbm_hierarchy_produces_boundaries() {
         mad_beta: 1.0, // lower threshold for small graph
         ..Default::default()
     };
-    let (evals, evecs) = SlodOperator::build_laplacian(&embeddings, n, dim, &config);
+    let (evals, _evecs) = SlodOperator::build_laplacian(&embeddings, n, dim, &config);
 
     // Verify eigenvalues show structure (gap between intra/inter-cluster)
     assert!(
@@ -324,7 +324,7 @@ fn t6_empty_tiers_accepts_all() {
 #[test]
 fn g5_boundary_scan_1k_nodes_under_50ms() {
     let n = 1000;
-    let dim = 8;
+    let _dim = 8;
     let k_eigs = 20;
 
     // Synthetic eigenvalues: descending with some gaps
