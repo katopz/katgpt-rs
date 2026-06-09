@@ -291,7 +291,7 @@ The `DynamicPairRouter` should be implemented as an extension to `PolytopeLoraRo
 | 030 BanditPruner | ✅ Done | **Primary target** — BanditPruner Q-values are static ranking |
 | 079 BtRank | ✅ GOAT | BT ranking is pairwise (already dynamic in GATv2 terms) |
 | 197 DominoPruner | ✅ GOAT | DominoPruner is already dynamic — the correction pattern to reuse |
-| 243 Polytope Router | Phase 2 | **Primary target** for riir-ai — currently static routing |
+| 243 Polytope Router | ✅ Done | **Base router** for DynamicPairRouter — G1 proved it's static |
 | 203 FrameExpertCoreset | Done | Frame-level coreset — could also benefit from dynamic routing |
 | 221 KG Confidence Bridge | ✅ Done | **Prerequisite for DynamicPairRouter** — KG confidence now flows from KgEmbedding → SenseModule.confidence → project() scaling. Same HLA + different confidence → different sense ranking (GATv2 dynamic property proven in T5). |
 
@@ -307,7 +307,7 @@ The `DynamicPairRouter` should be implemented as an extension to `PolytopeLoraRo
 
 4. **LoRA routing gain depends on adapter diversity**: If all LoRA adapters learn similar behaviors, dynamic routing has nothing to discriminate. The gain requires meaningful adapter specialization, which depends on training quality.
 
-5. **KG confidence bridge is infrastructure, not payoff**: The confidence-weighted projection (`confidence * sigmoid(dot)`) is a static scaling — the same triple always has the same confidence. The GATv2 dynamic property emerges when DIFFERENT zones/contexts have different confidence vectors, flipping the argsort. This was proven in bench_221 T5. The real payoff requires DynamicPairRouter (Plan 206 Priority 2) to dynamically select based on (state, confidence_vector) pairs.
+5. **KG confidence bridge is infrastructure, not payoff**: The confidence-weighted projection (`confidence * sigmoid(dot)`) is a static scaling — the same triple always has the same confidence. The GATv2 dynamic property emerges when DIFFERENT zones/contexts have different confidence vectors, flipping the argsort. This was proven in bench_221 T5. **DynamicPairRouter (Plan 260 T1-T4+T7) now proves the dynamic property at the LoRA routing layer** — G1 confirms static base, G2 confirms dynamic extension.
 
 ---
 
@@ -347,3 +347,5 @@ The `DynamicPairRouter` should be implemented as an extension to `PolytopeLoraRo
 **Verdict: GOAT** — both are worth implementing behind feature gates. katgpt-rs diagnostic first (quick win / learning), riir-ai pair routing second (higher ceiling). Neither changes existing APIs.
 
 KG confidence bridge (Plan 221 T13) closes the extraction→inference gap — confidence now flows to projection output. Unblocks DynamicPairRouter.
+
+**DynamicPairRouter (Plan 260 G1-G2 ✅)**: `PolytopeLoraRouter` confirmed static (G1). `DynamicPolytopeLoraRouter` confirmed dynamic — 3 distinct argsort patterns for same state + different objectives (G2). Xavier-initialized weights also produce dynamic ranking (G2b: 3/4 states). Feature-gated `dynamic_pair_routing`, default-OFF. T5 (training integration), T6 (arena benchmark), T8 (CPU/GPU auto-route) pending.
