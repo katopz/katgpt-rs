@@ -20,7 +20,7 @@ use std::time::Instant;
 
 use katgpt_core::traits::{ConstraintPruner, NoPruner, ScreeningPruner};
 use katgpt_rs::pruners::hyperplane_pruner::HyperplanePruner;
-use katgpt_rs::pruners::kernel_scoring::{KernelKind, kernel_score};
+use katgpt_rs::pruners::kernel_scoring::{KernelKind, kernel_score, kernel_score_simd_gaussian};
 use katgpt_rs::pruners::kernel_screening_pruner::KernelScreeningPruner;
 use katgpt_rs::pruners::manifold_pruner::ManifoldPruner;
 
@@ -830,6 +830,100 @@ fn g8_dtree_manifold_captures_boundary_tokens() {
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4: Kernel SIMD Benchmark
+// ---------------------------------------------------------------------------
+
+#[test]
+fn g9_kernel_score_simd_vs_scalar_benchmark() {
+    let dim = 256;
+    let query: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.01).sin()).collect();
+    let candidate: Vec<f32> = (0..dim).map(|i| (i as f32 * 0.02).cos()).collect();
+
+    let sigma = 1.0;
+    let iters = 100_000;
+
+    // Warmup
+    for _ in 0..1000 {
+        let _ = kernel_score(&query, &candidate, KernelKind::Gaussian { sigma });
+        let _ = kernel_score_simd_gaussian(&query, &candidate, sigma);
+    }
+
+    // Scalar benchmark
+    let start = Instant::now();
+    let mut scalar_result = 0.0f32;
+    for _ in 0..iters {
+        scalar_result += kernel_score(&query, &candidate, KernelKind::Gaussian { sigma });
+    }
+    let scalar_time = start.elapsed();
+
+    // SIMD benchmark
+    let start = Instant::now();
+    let mut simd_result = 0.0f32;
+    for _ in 0..iters {
+        simd_result += kernel_score_simd_gaussian(&query, &candidate, sigma);
+    }
+    let simd_time = start.elapsed();
+
+    // Results match
+    let s = scalar_result / iters as f32;
+    let si = simd_result / iters as f32;
+    assert!((s - si).abs() < 1e-4, "scalar {s} != simd {si}");
+
+    println!("Kernel SIMD vs Scalar (256-dim, {} iters):", iters);
+    println!("  Scalar: {:?}", scalar_time);
+    println!("  SIMD:   {:?}", simd_time);
+    println!(
+        "  Ratio:  {:.2}x",
+        scalar_time.as_secs_f64() / simd_time.as_secs_f64()
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6: BFCP Region Radius Adaptation Benchmark
+// ---------------------------------------------------------------------------
+
+#[test]
+fn g10_bfcp_region_radius_adaptation() {
+    use katgpt_rs::pruners::bfcp_lfu_shard::region_radius;
+
+    let base = 1.0f32;
+    let scale = 10.0f32;
+
+    // Hot region (freq=100): wide manifold
+    let hot_r = region_radius(base, 100.0, scale);
+    // Cold region (freq=1): tight manifold
+    let cold_r = region_radius(base, 1.0, scale);
+    // Default (freq=0): half base
+    let default_r = region_radius(base, 0.0, scale);
+
+    assert!(hot_r > cold_r, "hot ({hot_r}) > cold ({cold_r})");
+    assert!(
+        (default_r - 0.5).abs() < 1e-6,
+        "default = 0.5, got {default_r}"
+    );
+
+    // Throughput: measure that radius computation is O(1)
+    let iters = 1_000_000;
+    let start = Instant::now();
+    for i in 0..iters {
+        black_box(region_radius(base, i as f32, scale));
+    }
+    let elapsed = start.elapsed();
+
+    println!(
+        "BFCP region_radius throughput ({} iters): {:?}",
+        iters, elapsed
+    );
+    println!(
+        "  Per-call: {:.1}ns",
+        elapsed.as_nanos() as f64 / iters as f64
+    );
+    println!("  Hot radius:   {:.4}", hot_r);
+    println!("  Cold radius:  {:.4}", cold_r);
+    println!("  Default radius: {:.4}", default_r);
+}
+
+// ---------------------------------------------------------------------------
 // TL;DR Summary
 // ---------------------------------------------------------------------------
 
@@ -847,6 +941,8 @@ fn tldr_goat_summary() {
     println!("  G6: Gaussian vs Linear recall           📊 advisory (see output)");
     println!("  G7: Throughput no regression            📊 measured");
     println!("  G8: DDTree boundary recovery             ✅ boundary capture");
+    println!("  G9: Kernel SIMD vs Scalar match           ✅ correctness + timing");
+    println!("  G10: BFCP region radius adaptation        ✅ hot > cold, O(1)");
     println!("  ─────────────────────────────────────────────────────");
     println!("  Promotion requires: G5 ≥ 3% acceptance gain, G8 boundary capture");
     println!("  Run with --nocapture to see advisory PASS/FAIL");

@@ -899,7 +899,7 @@ PFlash ratio measures compression complexity of the prompt. High ratio → compl
 
 ## Interaction Matrix
 
-All fifteen techniques compose without conflicts:
+All sixteen techniques compose without conflicts:
 
 | Technique | Affects Prefill | Affects Decode | Feature Flag |
 |-----------|:-:|:-:|-------------|
@@ -920,6 +920,7 @@ All fifteen techniques compose without conflicts:
 | Hydra Budget | ✅ layer importance | ✅ layer skipping | `hydra_budget` (default) |
 | FlashAR Consensus | — | ✅ thermal routing | `flashar_consensus` (default, requires `tri_mode`, `plasma_path`) |
 | Budget Adaptation | — | ✅ budget scaling | `budget_adaptation` (default) |
+| ManifoldPruner Soft Validity | — | ✅ soft sigmoid pruning | `manifold_pruner` (opt-in, Plan 234) |
 
 All are additive and backward-compatible. Standard `forward()` with no features works exactly as before.
 

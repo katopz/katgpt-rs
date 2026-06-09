@@ -95,7 +95,7 @@ ManifoldE embeds knowledge graph triples as points near a manifold (sphere/hyper
 - [x] Half-space intersection: for each pruner returning `Some((normal, threshold))`, compute `normal · token_embedding >= threshold`. Valid = intersection of all half-spaces.
 - [x] For pruners returning `None`, fall back to `is_valid()` boolean check
 - [x] `manifold_score()` implementation: `product of sigmoid(-distance_to_boundary / temperature)` for each constraint
-- [ ] SIMD batch: `batch_manifold_score()` processes all candidates in one pass
+- [x] SIMD batch: `batch_manifold_score()` processes all candidates in one pass
 - [x] Test: single pruner with constraint vector → HyperplanePruner matches its constraint
 - [x] Test: two pruners with non-parallel normals → intersection is stricter than either alone
 - [x] Test: two pruners with parallel normals → intersection = stricter of the two
@@ -108,10 +108,10 @@ ManifoldE embeds knowledge graph triples as points near a manifold (sphere/hyper
 - [x] `manifold_score()` returns `sigmoid(-distance / temperature)` where distance is derived from `is_valid()` boundary proximity
 - [x] For pruners with `constraint_vector()`: distance = `|normal · token - threshold|`
 - [x] For pruners without: distance = `0.0` if valid, `∞` if invalid → sigmoid → `{1.0, 0.0}` fallback
-- [ ] Wire into DDTree: use `manifold_score` instead of `is_valid` when feature enabled, expand children with score > 0.5
+- [x] Wire into DDTree: use `manifold_score` instead of `is_valid` when feature enabled, expand children with score > 0.5
 - [x] Test: ManifoldPruner with high temperature → nearly uniform scores (permissive)
 - [x] Test: ManifoldPruner with low temperature → near-binary scores (conservative)
-- [ ] Test: DDTree expansion with ManifoldPruner captures boundary tokens that binary pruner misses
+- [x] Test: DDTree expansion with ManifoldPruner captures boundary tokens that binary pruner misses
 
 ### Phase 4: Kernel-Tricked Relevance (P1)
 
@@ -123,34 +123,34 @@ ManifoldE embeds knowledge graph triples as points near a manifold (sphere/hyper
 - [x] Implement `KernelScreeningPruner<P>` that wraps any `ScreeningPruner` and applies kernel transformation
 - [x] Test: Gaussian kernel returns 1.0 for identical vectors, ~0.0 for distant
 - [x] Test: Polynomial kernel preserves sign of dot product
-- [ ] Benchmark: `kernel_score` SIMD vs scalar on 256-dim vectors
+- [x] Benchmark: `kernel_score` SIMD vs scalar on 256-dim vectors
 
 ### Phase 5: BFCP Region Radius Adaptation (P2)
 
-- [ ] Extend BFCP region scoring to use LFU frequency as manifold radius `D_r`
-- [ ] `region_radius(freq: f32) -> f32`: `D_r = base_radius * sigmoid(freq / freq_scale)`
-- [ ] Hot regions: high freq → large `D_r` → wide manifold → more candidates pass
-- [ ] Cold regions: low freq → small `D_r` → tight manifold → fewer candidates pass
-- [ ] Wire into existing `bfcf_lfu_shard` feature — no new feature gate
-- [ ] Test: hot region radius > cold region radius for same `base_radius`
-- [ ] Test: `sigmoid(0) = 0.5` → default radius at zero frequency
+- [x] Extend BFCP region scoring to use LFU frequency as manifold radius `D_r`
+- [x] `region_radius(freq: f32) -> f32`: `D_r = base_radius * sigmoid(freq / freq_scale)`
+- [x] Hot regions: high freq → large `D_r` → wide manifold → more candidates pass
+- [x] Cold regions: low freq → small `D_r` → tight manifold → fewer candidates pass
+- [x] Wire into existing `bfcf_lfu_shard` feature — no new feature gate
+- [x] Test: hot region radius > cold region radius for same `base_radius`
+- [x] Test: `sigmoid(0) = 0.5` → default radius at zero frequency
 
 ### Phase 6: GOAT Proof + Benchmark
 
 - [x] Create benchmark: `cargo test --features manifold_pruner --release -- --nocapture`
 - [x] Benchmark 1: HyperplanePruner vs boolean AND composition — measure valid candidate count and downstream DDTree acceptance rate
 - [x] Benchmark 2: KernelScreeningPruner (Gaussian) vs linear ScreeningPruner — measure ranking quality (Kendall τ)
-- [ ] Benchmark 3: BFCP region radius adaptation — measure throughput vs fixed threshold
+- [x] Benchmark 3: BFCP region radius adaptation — measure throughput vs fixed threshold
 - [x] GOAT gate: promote `manifold_pruner` to default if ≥3% improvement in DDTree acceptance rate without throughput regression
-- [ ] If GOAT fails: document negative result, keep as opt-in, demote in README
+- [x] If GOAT fails: document negative result, keep as opt-in, demote in README
 
 ### Phase 7: Documentation + Integration
 
-- [ ] Add `manifold_pruner` to feature flags table in `README.md`
-- [ ] Add to `.docs/01_overview.md` module structure
-- [ ] Add to `.docs/07_adaptation.md` as technique
-- [ ] Add to `.docs/15_paper_feature_comparison.md`
-- [ ] Add example: before/after DDTree expansion showing boundary token recovery
+- [x] Add `manifold_pruner` to feature flags table in `README.md`
+- [x] Add to `.docs/01_overview.md` module structure
+- [x] Add to `.docs/07_adaptation.md` as technique
+- [x] Add to `.docs/15_paper_feature_comparison.md`
+- [x] Add example: before/after DDTree expansion showing boundary token recovery
 
 ---
 

@@ -75,6 +75,7 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - LinOSS + ModalSpec drafter: oscillatory state-space cell + Fourier modal speculative drafting (modal_spec feature)
 - RiM reasoning buffer slots: K×M reasoning blocks prepended to input, zero-cost slot reuse (rim_slots feature, Plan 172)
 - Wall attention: W_g gate projection per KV head dimension, sigmoid-gated attention bypass (wall_attention feature, Plan 173)
+- ManifoldPruner: ManifoldE point-to-manifold soft validity scoring + kernel-tricked relevance (behind `"manifold_pruner"` feature, Plan 234, GOAT G1 FAIL — demoted, opt-in only)
 - `traits.rs` module in katgpt-core: GameState, RolloutPolicy, StateHeuristic, ActionSpaceLog, ConstraintPruner, ScreeningPruner, SpeculativeGenerator traits
 
 ## Module Structure
@@ -620,6 +621,7 @@ src/
 | `belief_drafter` | `katgpt-core/belief_drafter`, `papaya` | NextLat Belief-State Speculative Drafter — lightweight 3-layer residual MLP recursive hidden-state prediction for variable-length self-speculative decoding + LatentTransitionCache + BeliefRankPruner (Plan 217, default-on, GOAT 43 tests + 7 benchmarks) |
 | `bfcf_lfu_shard` | `bfcf_tree`, `papaya` | BFCF × LFU × Sharding — region-level LFU cache with frequency-aware sharding, batch processing, NeuronShard compound keys, emotion-aware eviction, KG triple transitions (Plan 218, default-on, GOAT 44 tests + 10 benchmarks) |
 | `caddtree_budget` | `spec_cost_model` | CaDDTree — Cost-Aware Adaptive DDTree Budget Selection (Plan 219, 7 GOAT tests, opt-in) |
+| `manifold_pruner` | — | ManifoldPruner — ManifoldE point-to-manifold soft validity scoring + kernel-tricked relevance for ScreeningPruner (Plan 234, opt-in, GOAT G1 FAIL) |
 | `full` | all above (excludes `stepcode`, `sp_kv`, `shard_kv`, `peira_distill`, `dirichlet_energy`, `data_probe`, `rmsd_distill`, `safe_bandit`, `stiff_anomaly`, `state_source`, `nexus_elo`, `skill_opt`, `proof_cert`, `mech_attribution`, `ega_attn`, `event_log`, `spec_cost_model`, `spechop`, `rt_turbo`, `tf_loop`, `plasma_path`, `parallel_probe`, `parallax_attn`, `sigmoid_margin`, `moa_inference`, `dual_gram_pca`, `roofline_cost`, `leo_all_goals`, `dual_leo`, `stability_metrics`, `asymmetric_kv`, `kog_cpu_fusion`, `caddtree_budget`) | Enable all features |
 
 Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `tes_loop`, `lattice_deduction`, `delta_routing`, `stability_metrics`, `mls_aggregate`, `gdn2_attention`, `dash_attn`, `dreamer`, `lt2_looped`, `dmax_spd`, `eqr_convergence`, `subterranean`, `sr2am_configurator`, `data_gate`, `plasma_path`, `parallel_probe`, `tf_loop`, `leo_all_goals`, `dual_leo`, `sigmoid_margin`, `moa_inference`, `sleep_consolidation`, `spectral_hierarchy`, `dual_gram_pca`, `roofline_cost`, `newton_schulz`, `river_valley`, `peira_distill`, `kog_cpu_fusion`, `gepa_reflective`, `phrase_boost`, `hydra_budget`, `flashar_consensus`, `budget_adaptation`, `belief_drafter`, `bfcf_lfu_shard` (47 default features — production best perf + accuracy, Plans 051, 077-079, 085-089, 097, 099, 101-112, 119, 131, 133, 136, 148, 152, 154-167, 217-218).
@@ -662,6 +664,22 @@ cargo run --example go_06_bench --features go --release       # Go benchmark sui
 | `game_go` | 85 | 32 | 4 | 1 | 128 | Go board 9×9 + action (~16K params) |
 | `qwen_deltanet` | 151936 | 2048 | 16 | 4 | 8192 | QwenDeltaNet hybrid DeltaNet/Attention (kv_heads=8, head_dim=128, Plan 182) |
 | `gemma2_2b` | 256000 | 2304 | 8 | 26 | 9216 | Gemma 2 2B architecture (kv_heads=4, head_dim=256) |
+
+### ManifoldPruner Code Example (Plan 234, opt-in)
+
+```rust
+// Before: Binary pruning (misses boundary tokens)
+if pruner.is_valid(depth, token, prefix) {
+    tree.expand(token);
+}
+
+// After: ManifoldPruner captures boundary tokens
+if pruner.manifold_score(depth, token, prefix) > threshold {
+    tree.expand(token); // threshold < 0.5 captures boundary tokens
+}
+```
+
+> **Note:** G1 FAIL — `sigmoid(x) > 0.5 ⟺ x > 0`, so at default 0.5 cutoff this is identical to binary pruning. The Gaussian kernel (G2 PASS) remains valuable for ranking.
 
 ## Key Design Principles
 

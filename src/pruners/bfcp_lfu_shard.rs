@@ -291,6 +291,19 @@ pub fn freq_aware_complexity(base_complexity: f32, dominant_tier: FreqTier) -> f
     sigmoid(base_complexity * freq_factor)
 }
 
+/// Frequency-adaptive manifold radius for BFCP regions.
+///
+/// `D_r = base_radius * sigmoid(freq / freq_scale)`
+/// - Hot (high freq) → large D_r → wide manifold → more candidates pass
+/// - Cold (low freq) → small D_r → tight manifold → fewer candidates pass
+/// - At zero frequency: `sigmoid(0) = 0.5` → default radius = `base_radius * 0.5`
+///
+/// Feature-gated behind `manifold_pruner` — extends existing BFCP.
+#[cfg(feature = "manifold_pruner")]
+pub fn region_radius(base_radius: f32, freq: f32, freq_scale: f32) -> f32 {
+    base_radius * sigmoid(freq / freq_scale)
+}
+
 #[inline]
 fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
@@ -578,6 +591,31 @@ mod tests {
             refined,
             FreqTier::Warm,
             "bandit should shift Cold toward Hot, clamped to Warm"
+        );
+    }
+
+    #[cfg(feature = "manifold_pruner")]
+    #[test]
+    fn test_region_radius_hot_wider_than_cold() {
+        let base = 1.0f32;
+        let scale = 10.0f32;
+        let hot = region_radius(base, 100.0, scale);
+        let cold = region_radius(base, 1.0, scale);
+        assert!(
+            hot > cold,
+            "hot radius ({hot}) should be > cold radius ({cold})"
+        );
+    }
+
+    #[cfg(feature = "manifold_pruner")]
+    #[test]
+    fn test_region_radius_zero_freq_is_half_base() {
+        let base = 2.0f32;
+        let r = region_radius(base, 0.0, 10.0);
+        // sigmoid(0) = 0.5
+        assert!(
+            (r - 1.0).abs() < 1e-6,
+            "zero freq should give base * 0.5 = 1.0, got {r}"
         );
     }
 
