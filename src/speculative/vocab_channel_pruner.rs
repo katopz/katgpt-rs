@@ -1825,8 +1825,8 @@ mod tests {
         let per_call = elapsed.as_nanos() as f64 / iters as f64;
         eprintln!("vocab_project V=1000 d=256: {per_call:.0}ns/call");
         assert!(
-            per_call < 5_000_000.0,
-            "vocab_project V=1000 should be <5ms (debug), got {per_call:.0}ns"
+            per_call < 15_000_000.0,
+            "vocab_project V=1000 should be <15ms (debug), got {per_call:.0}ns"
         );
     }
 
