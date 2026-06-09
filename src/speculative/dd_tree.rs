@@ -194,6 +194,48 @@ pub fn build_dd_tree_pruned(
     std::mem::take(&mut builder.tree)
 }
 
+// ── ManifoldPruner DDTree wiring (Plan 234 Phase 3, feature: manifold_pruner) ──
+
+/// Wrapper that delegates `is_valid` to `manifold_score > 0.5`.
+/// This allows the existing `build_dd_tree_pruned` to use soft scoring
+/// instead of binary pruning — capturing boundary tokens that binary pruning misses.
+#[cfg(feature = "manifold_pruner")]
+struct ManifoldValidWrapper<'a>(&'a dyn ConstraintPruner);
+
+#[cfg(feature = "manifold_pruner")]
+impl ConstraintPruner for ManifoldValidWrapper<'_> {
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
+        self.0.manifold_score(depth, token_idx, parent_tokens) > 0.5
+    }
+
+    fn manifold_score(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
+        self.0.manifold_score(depth, token_idx, parent_tokens)
+    }
+
+    fn constraint_vector(&self, depth: usize, parent_tokens: &[usize]) -> Option<(&[f32], f32)> {
+        self.0.constraint_vector(depth, parent_tokens)
+    }
+}
+
+/// DDTree built with manifold soft scoring instead of binary pruning.
+///
+/// Identical to [`build_dd_tree_pruned`] but replaces `is_valid()` calls with
+/// `manifold_score() > 0.5`. Tokens near the constraint boundary (score ~0.5)
+/// that binary pruning rejects may pass soft scoring, recovering otherwise-lost
+/// candidates.
+///
+/// Feature-gated behind `manifold_pruner`.
+#[cfg(feature = "manifold_pruner")]
+pub fn build_dd_tree_manifold(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    pruner: &dyn ConstraintPruner,
+    chain_seed: bool,
+) -> Vec<TreeNode> {
+    let wrapper = ManifoldValidWrapper(pruner);
+    build_dd_tree_pruned(marginals, config, &wrapper, chain_seed)
+}
+
 /// DDTree with Lodestar Completion-Distance Pruning (Plan 207, Research 183).
 ///
 /// Identical to [`build_dd_tree_pruned`] (best-first, no chain seed) **plus**:

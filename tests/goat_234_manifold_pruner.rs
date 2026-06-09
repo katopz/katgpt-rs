@@ -632,6 +632,204 @@ fn g7_throughput_no_regression() {
 }
 
 // ---------------------------------------------------------------------------
+// G8: DDTree Boundary Token Recovery — Manifold vs Binary
+// ---------------------------------------------------------------------------
+
+/// Pruner with a gap between `is_valid` threshold and `manifold_score` center.
+/// `is_valid` uses `dot >= threshold + gap` (strict).
+/// `manifold_score` uses sigmoid centered at `threshold` (so tokens with
+/// `dot ∈ [threshold, threshold + gap)` have score > 0.5 but fail `is_valid`).
+struct GapBoundaryPruner {
+    normal: Vec<f32>,
+    threshold: f32,
+    gap: f32,
+    token_embeddings: Vec<f32>,
+    dim: usize,
+}
+
+impl GapBoundaryPruner {
+    fn dot(&self, token_idx: usize) -> f32 {
+        let off = token_idx * self.dim;
+        let mut sum = 0.0f32;
+        for i in 0..self.dim {
+            sum += self.normal[i] * self.token_embeddings[off + i];
+        }
+        sum
+    }
+}
+
+impl ConstraintPruner for GapBoundaryPruner {
+    fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
+        // Strict: requires dot >= threshold + gap
+        self.dot(token_idx) >= self.threshold + self.gap
+    }
+
+    fn manifold_score(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> f32 {
+        let d = self.dot(token_idx);
+        // Sigmoid centered at threshold — score > 0.5 when dot > threshold
+        let distance = d - self.threshold;
+        1.0 / (1.0 + (-distance).exp())
+    }
+
+    fn constraint_vector(&self, _depth: usize, _parent_tokens: &[usize]) -> Option<(&[f32], f32)> {
+        Some((&self.normal, self.threshold))
+    }
+}
+
+#[test]
+fn g8_dtree_manifold_captures_boundary_tokens() {
+    println!("\n🧪 G8: DDTree Boundary Token Recovery — Manifold vs Binary");
+    println!("{}", "═".repeat(60));
+
+    use katgpt_rs::speculative::build_dd_tree_manifold;
+    use katgpt_rs::speculative::build_dd_tree_pruned;
+    use katgpt_rs::types::Config;
+
+    let mut config = Config::draft();
+    let vocab = config.vocab_size;
+    let depths = config.draft_lookahead;
+    config.tree_budget = 256;
+
+    let dim: usize = 8;
+    let threshold = 0.3f32;
+    let gap = 0.5f32; // is_valid requires dot >= 0.8, but manifold_score > 0.5 when dot > 0.3
+
+    // Build a unit normal
+    let normal: Vec<f32> = (0..dim).map(|i| hash_f32(0xABCD, i)).collect();
+    let norm_len = {
+        let mut s = 0.0f32;
+        for &v in &normal {
+            s += v * v;
+        }
+        s.sqrt()
+    };
+    let normal: Vec<f32> = normal.iter().map(|&v| v / norm_len).collect();
+
+    // Build embeddings: tokens 0..vocab
+    //   ~40% clearly valid: projection ≈ threshold + gap + 1.0 = 1.8
+    //   ~20% boundary:      projection ≈ threshold + 0.25 = 0.55 (manifold_score > 0.5, is_valid fails)
+    //   ~40% clearly invalid: projection ≈ threshold - 1.0 = -0.7
+    let mut token_embeddings = vec![0.0f32; vocab * dim];
+    for i in 0..vocab {
+        let proj = if i < (vocab * 4 / 10) {
+            // Clearly valid for both
+            threshold + gap + 1.0
+        } else if i < (vocab * 6 / 10) {
+            // Boundary: manifold_score > 0.5 but is_valid fails
+            threshold + 0.25
+        } else {
+            // Clearly invalid for both
+            threshold - 1.0
+        };
+        let off = i * dim;
+        for d in 0..dim {
+            token_embeddings[off + d] = proj * normal[d] + hash_f32(0xCAFE + i as u64, d) * 0.02;
+        }
+    }
+
+    let pruner = GapBoundaryPruner {
+        normal: normal.clone(),
+        threshold,
+        gap,
+        token_embeddings,
+        dim,
+    };
+
+    // Build marginals: peaked distribution so tree has real content
+    let marginals: Vec<Vec<f32>> = (0..depths)
+        .map(|_| {
+            let mut probs = vec![0.01f32; vocab];
+            // Give higher prob to boundary tokens to ensure they're considered
+            let peak = (vocab * 5 / 10) % vocab; // a boundary token
+            probs[peak] = 0.5;
+            // Also give prob to valid tokens
+            for t in 0..(vocab * 4 / 10).min(vocab) {
+                probs[t] = 0.1;
+            }
+            // Normalize
+            let sum: f32 = probs.iter().sum();
+            for p in probs.iter_mut() {
+                *p /= sum;
+            }
+            probs
+        })
+        .collect();
+    let mrefs: Vec<&[f32]> = marginals.iter().map(|m| m.as_slice()).collect();
+
+    // Build binary tree (uses is_valid)
+    let tree_binary = build_dd_tree_pruned(&mrefs, &config, &pruner, false);
+    // Build manifold tree (uses manifold_score > 0.5)
+    let tree_manifold = build_dd_tree_manifold(&mrefs, &config, &pruner, false);
+
+    let n_binary = tree_binary.len();
+    let n_manifold = tree_manifold.len();
+
+    // Count how many boundary tokens appear in each tree
+    let boundary_start = vocab * 4 / 10;
+    let boundary_end = vocab * 6 / 10;
+    let boundary_in_binary: usize = tree_binary
+        .iter()
+        .filter(|n| n.token_idx >= boundary_start && n.token_idx < boundary_end)
+        .count();
+    let boundary_in_manifold: usize = tree_manifold
+        .iter()
+        .filter(|n| n.token_idx >= boundary_start && n.token_idx < boundary_end)
+        .count();
+
+    println!(
+        "   Vocab: {} tokens ({}-dim), {} depths",
+        vocab, dim, depths
+    );
+    println!(
+        "   Threshold: {:.2}, Gap: {:.2} (is_valid ≥ {:.2})",
+        threshold,
+        gap,
+        threshold + gap
+    );
+    println!(
+        "   Boundary tokens: [{}..{}) (manifold_score > 0.5, is_valid = false)",
+        boundary_start, boundary_end
+    );
+    println!();
+    println!(
+        "   Binary tree:   {} nodes, {} boundary",
+        n_binary, boundary_in_binary
+    );
+    println!(
+        "   Manifold tree: {} nodes, {} boundary",
+        n_manifold, boundary_in_manifold
+    );
+    println!();
+
+    // The manifold tree should capture boundary tokens that binary rejects
+    let goat_pass = boundary_in_manifold > boundary_in_binary;
+    if goat_pass {
+        println!(
+            "   🟢 GOAT PASS — manifold tree has {} boundary nodes vs binary {}",
+            boundary_in_manifold, boundary_in_binary
+        );
+    } else {
+        println!(
+            "   🔴 GOAT FAIL — manifold tree boundary nodes ({}) ≤ binary ({})",
+            boundary_in_manifold, boundary_in_binary
+        );
+    }
+
+    assert!(
+        goat_pass,
+        "manifold tree should capture more boundary tokens than binary: {} vs {}",
+        boundary_in_manifold, boundary_in_binary
+    );
+    assert!(
+        n_manifold >= n_binary,
+        "manifold tree should have >= as many nodes as binary: {} vs {}",
+        n_manifold,
+        n_binary
+    );
+    println!("   ✅ PASS — boundary token recovery works");
+}
+
+// ---------------------------------------------------------------------------
 // TL;DR Summary
 // ---------------------------------------------------------------------------
 
@@ -648,8 +846,9 @@ fn tldr_goat_summary() {
     println!("  G5: DDTree acceptance gain              📊 advisory (see output)");
     println!("  G6: Gaussian vs Linear recall           📊 advisory (see output)");
     println!("  G7: Throughput no regression            📊 measured");
+    println!("  G8: DDTree boundary recovery             ✅ boundary capture");
     println!("  ─────────────────────────────────────────────────────");
-    println!("  Promotion requires: G5 ≥ 3% acceptance gain");
+    println!("  Promotion requires: G5 ≥ 3% acceptance gain, G8 boundary capture");
     println!("  Run with --nocapture to see advisory PASS/FAIL");
     println!("══════════════════════════════════════════════════════════");
     println!();

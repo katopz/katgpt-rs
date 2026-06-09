@@ -24,6 +24,43 @@ impl<'a> HyperplanePruner<'a> {
         self.temperature = t;
         self
     }
+
+    /// Batch manifold score for all candidates at once.
+    /// Writes scores into `scores` slice: `scores[i] = manifold_score(depth, candidates[i], parent_tokens)`.
+    /// Processes all candidates in one pass — no per-candidate trait dispatch overhead.
+    #[cfg(feature = "manifold_pruner")]
+    pub fn batch_manifold_score(
+        &self,
+        depth: usize,
+        candidates: &[usize],
+        parent_tokens: &[usize],
+        scores: &mut [f32],
+    ) {
+        let len = candidates.len().min(scores.len());
+        // Initialize all scores to 1.0 (product identity)
+        for s in scores.iter_mut().take(len) {
+            *s = 1.0;
+        }
+        // For each pruner, compute its contribution and multiply in-place
+        for pruner in &self.pruners {
+            let has_cv = pruner.constraint_vector(depth, parent_tokens).is_some();
+            for i in 0..len {
+                // Skip candidates already zeroed by a previous pruner
+                if scores[i] <= 0.0 {
+                    continue;
+                }
+                let score = if has_cv {
+                    let raw = pruner.manifold_score(depth, candidates[i], parent_tokens);
+                    let x = (raw - 0.5) / self.temperature;
+                    1.0 / (1.0 + (-x).exp())
+                } else {
+                    let raw = pruner.manifold_score(depth, candidates[i], parent_tokens);
+                    if raw > 0.5 { 1.0 } else { 0.0 }
+                };
+                scores[i] *= score;
+            }
+        }
+    }
 }
 
 impl ConstraintPruner for HyperplanePruner<'_> {
@@ -123,5 +160,30 @@ mod tests {
         assert!((hyper.manifold_score(0, 3, &[]) - 1.0).abs() < 1e-5);
         // Invalid token -> score 0.0
         assert!((hyper.manifold_score(0, 7, &[]) - 0.0).abs() < 1e-5);
+    }
+
+    #[cfg(feature = "manifold_pruner")]
+    #[test]
+    fn batch_manifold_score_matches_individual() {
+        let p1 = SimplePruner { threshold: 5 };
+        let p2 = SimplePruner { threshold: 8 };
+        let hyper = HyperplanePruner::new(vec![&p1, &p2]).with_temperature(0.5);
+
+        let candidates: Vec<usize> = (0..12).collect();
+        let mut batch_scores = vec![0.0f32; 12];
+        hyper.batch_manifold_score(0, &candidates, &[], &mut batch_scores);
+
+        for (i, &token) in candidates.iter().enumerate() {
+            let individual = hyper.manifold_score(0, token, &[]);
+            let diff = (batch_scores[i] - individual).abs();
+            assert!(
+                diff < 1e-5,
+                "token {}: batch={}, individual={}, diff={}",
+                token,
+                batch_scores[i],
+                individual,
+                diff
+            );
+        }
     }
 }

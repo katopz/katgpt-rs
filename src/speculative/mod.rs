@@ -62,6 +62,9 @@ pub use dd_tree::{
 #[cfg(feature = "lodestar")]
 pub use dd_tree::build_dd_tree_lodestar;
 
+#[cfg(feature = "manifold_pruner")]
+pub use dd_tree::build_dd_tree_manifold;
+
 #[cfg(feature = "thinking_prune")]
 pub use dd_tree::build_dd_tree_screened_with_schedule;
 
