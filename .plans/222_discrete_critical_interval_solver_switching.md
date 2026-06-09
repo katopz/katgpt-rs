@@ -104,10 +104,14 @@ Entropy-triggered solver switching during DDTree construction. When marginal ent
 
 ### Phase 5: CPU/GPU Auto-Route Integration
 
-- [ ] T15: Wire CriticalIntervalGate with TriggerGate — BLOCKED: requires TriggerGate+CriticalInterval live integration
-  - When critical interval detected AND load is low → allow GPU for q-sample refinement
-  - When critical interval detected AND load is high → stay on CPU with fast solver
-  - Leverage existing `rv_tier_boost()` for override
+- [x] T15: Wire CriticalIntervalGate with TriggerGate
+  - `observe_critical_entropy(entropy)` API on InferenceRouter — entropy-triggered tier override
+  - `critical_interval_config` + `last_critical_entropy` fields on InferenceRouter
+  - Wired into `forward()` tier chain after RV, before routing
+  - `PromoteGpu` when critical + CpuOnly + gpu_available; `StayCpu` when critical + high load
+  - Feature-gated behind `critical_interval_gate` + `rv_gated_routing` (both default-on)
+  - Uses `gate.gpu_available()` for GPU detection (consistent with rv_tier_boost pattern)
+  - 5 new tests in inference_router, all pass
 
 ---
 

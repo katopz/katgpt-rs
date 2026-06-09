@@ -22,6 +22,9 @@ use crate::pruners::acceptance_variance::AcceptanceVarianceTracker;
 #[cfg(feature = "rv_gated_routing")]
 use crate::trigger_gate::RvThresholds;
 
+#[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+use crate::dllm_solver::{CriticalIntervalConfig, CriticalTierDecision, critical_tier_decision};
+
 #[cfg(feature = "modality_pruned_load")]
 use crate::pipeline_pruner::QueryClassifier;
 
@@ -94,6 +97,12 @@ pub struct InferenceRouter {
     /// Query classifier for modality-pruned pipeline selection (Plan 227 Phase 3).
     #[cfg(feature = "modality_pruned_load")]
     query_classifier: QueryClassifier,
+    /// Critical interval config for entropy-triggered tier decisions (Plan 222 T15).
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    critical_interval_config: CriticalIntervalConfig,
+    /// Last observed critical interval entropy (Plan 222 T15).
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    last_critical_entropy: f32,
 }
 
 impl InferenceRouter {
@@ -138,6 +147,10 @@ impl InferenceRouter {
             lodestar_budget_remaining: -1,
             #[cfg(feature = "modality_pruned_load")]
             query_classifier: QueryClassifier::new(),
+            #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+            critical_interval_config: CriticalIntervalConfig::default(),
+            #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+            last_critical_entropy: 0.0,
         }
     }
 
@@ -257,12 +270,29 @@ impl InferenceRouter {
         #[cfg(not(feature = "rv_gated_routing"))]
         let tier_after_rv = tier_after_trust;
 
+        // Critical-interval tier adjustment (Plan 222 T15)
+        // Entropy-triggered override: promote to GPU for q-sample refinement
+        // when marginals are multimodal AND load is low.
+        #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+        let tier_after_critical = match self.observe_critical_entropy(self.last_critical_entropy) {
+            CriticalTierDecision::PromoteGpu if tier_after_rv == ComputeTier::CpuOnly => {
+                log::info!(
+                    "Router critical-interval override: {tier_after_rv}→CpuGpu (entropy={:.4})",
+                    self.last_critical_entropy
+                );
+                ComputeTier::CpuGpu
+            }
+            _ => tier_after_rv,
+        };
+        #[cfg(not(all(feature = "critical_interval_gate", feature = "rv_gated_routing")))]
+        let tier_after_critical = tier_after_rv;
+
         // Route to the appropriate backend.
         //
         // We populate ctx.logits via forward(), then return a borrow of ctx.logits
         // (not from self) to satisfy the lifetime constraint that the returned slice
         // borrows from `ctx`.
-        let backend_name = match tier_after_rv {
+        let backend_name = match tier_after_critical {
             ComputeTier::CpuOnly => {
                 crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
                 "CPU"
@@ -335,6 +365,52 @@ impl InferenceRouter {
     #[cfg(feature = "rv_gated_routing")]
     pub fn rv_thresholds(&self) -> &RvThresholds {
         &self.rv_thresholds
+    }
+
+    // ── Critical Interval Tier Routing (Plan 222 T15) ────────────
+
+    /// Observe entropy from DDTree build and decide whether to override tier.
+    ///
+    /// Call during each DDTree depth with the Shannon entropy of marginals.
+    /// Returns the tier decision:
+    /// - `Defer` — no override, use current routing
+    /// - `PromoteGpu` — critical interval + low load, promote to GPU
+    /// - `StayCpu` — critical interval + high load, stay on CPU with fast solver
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    pub fn observe_critical_entropy(&mut self, entropy: f32) -> CriticalTierDecision {
+        self.last_critical_entropy = entropy;
+        let current_tier = self.gate.current_tier();
+        let gpu_available = self.gate.gpu_available();
+        let decision = critical_tier_decision(
+            entropy,
+            &self.critical_interval_config,
+            current_tier,
+            gpu_available,
+        );
+        if !matches!(decision, CriticalTierDecision::Defer) {
+            log::info!(
+                "Router critical-interval tier: entropy={entropy:.4}, decision={decision:?}"
+            );
+        }
+        decision
+    }
+
+    /// Update CriticalInterval config at runtime.
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    pub fn set_critical_interval_config(&mut self, config: CriticalIntervalConfig) {
+        self.critical_interval_config = config;
+    }
+
+    /// Get current CriticalInterval config.
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    pub fn critical_interval_config(&self) -> &CriticalIntervalConfig {
+        &self.critical_interval_config
+    }
+
+    /// Get last observed critical interval entropy.
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    pub fn last_critical_entropy(&self) -> f32 {
+        self.last_critical_entropy
     }
 
     // ── Lodestar Distance/Budget Routing Hook (Plan 207) ────────────
@@ -896,5 +972,65 @@ mod tests {
         assert_eq!(router.lodestar_distance(), 0);
         assert_eq!(router.lodestar_budget_remaining(), -1);
         assert!(!router.lodestar_suggests_cpu());
+    }
+
+    // ------------------------------------------------------------------
+    // Plan 222 T15: CriticalIntervalGate + TriggerGate wiring
+    // ------------------------------------------------------------------
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_observe_critical_entropy_low_entropy_defers() {
+        let mut router = fast_router(false, false);
+        // Low entropy (peaked) → Defer
+        let decision = router.observe_critical_entropy(0.5);
+        assert_eq!(decision, CriticalTierDecision::Defer);
+        assert!((router.last_critical_entropy() - 0.5).abs() < 1e-6);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_observe_critical_entropy_high_entropy_stays_cpu_no_gpu() {
+        let mut router = fast_router(false, false);
+        // High entropy but no GPU → StayCpu
+        let high_entropy = (1000.0f32).ln() * 0.8; // well above H_critical
+        let decision = router.observe_critical_entropy(high_entropy);
+        assert_eq!(decision, CriticalTierDecision::StayCpu);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_observe_critical_entropy_high_entropy_promotes_with_gpu() {
+        let mut router = fast_router(true, false);
+        // High entropy + GPU available + low load (CpuOnly) → PromoteGpu
+        let high_entropy = (32000.0f32).ln() * 0.8;
+        let decision = router.observe_critical_entropy(high_entropy);
+        assert_eq!(decision, CriticalTierDecision::PromoteGpu);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_set_critical_interval_config_updates_threshold() {
+        let mut router = fast_router(false, false);
+        let custom = CriticalIntervalConfig::new(50); // tiny vocab → lower H_critical
+        router.set_critical_interval_config(custom);
+        // Verify config was updated
+        assert_eq!(router.critical_interval_config().vocab_size, 50);
+        // Even low entropy should now be critical with tiny vocab
+        let entropy = (50.0f32).ln() * 0.6; // above H_critical for vocab=50
+        let decision = router.observe_critical_entropy(entropy);
+        // With no GPU, critical → StayCpu
+        assert_eq!(decision, CriticalTierDecision::StayCpu);
+    }
+
+    #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
+    #[test]
+    fn test_critical_entropy_updates_last_observed() {
+        let mut router = fast_router(false, false);
+        assert_eq!(router.last_critical_entropy(), 0.0);
+        router.observe_critical_entropy(3.14);
+        assert!((router.last_critical_entropy() - 3.14).abs() < 1e-6);
+        router.observe_critical_entropy(2.71);
+        assert!((router.last_critical_entropy() - 2.71).abs() < 1e-6);
     }
 }
