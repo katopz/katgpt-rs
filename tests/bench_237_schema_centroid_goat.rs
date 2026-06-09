@@ -575,7 +575,54 @@ fn bench_schema_init_entity() {
 
 // ── Summary ──────────────────────────────────────────────────────────────────
 
+/// G8: BAKE integration — schema init with precision produces informed prior.
+#[cfg(feature = "bake_precision")]
 #[test]
+fn goat_g8_bake_integration_informed_prior() {
+    use katgpt_core::sense::schema_init_with_precision;
+
+    let cache = SchemaCentroidCache::new();
+
+    // Dense class (50 entities) → should give high precision
+    let dense_class = 1u64;
+    let dense_embs: Vec<KgEmbedding> = (0..50)
+        .map(|i| make_embedding([0.5 + i as f32 * 0.01; 8]))
+        .collect();
+    cache.compute_and_insert(dense_class, &dense_embs);
+
+    // Sparse class (2 entities) → should give lower precision
+    let sparse_class = 2u64;
+    let sparse_embs: Vec<KgEmbedding> = vec![make_embedding([1.0; 8]), make_embedding([2.0; 8])];
+    cache.compute_and_insert(sparse_class, &sparse_embs);
+
+    let mut rng = fastrand::Rng::with_seed(42);
+
+    // Dense entity
+    let (_, dense_prec) = schema_init_with_precision(&[dense_class], &cache, 0.3, &mut rng);
+
+    // Sparse entity
+    let (_, sparse_prec) = schema_init_with_precision(&[sparse_class], &cache, 0.3, &mut rng);
+
+    // Dense class should have higher precision than sparse
+    let dense_avg: f32 = dense_prec.iter().sum::<f32>() / 8.0;
+    let sparse_avg: f32 = sparse_prec.iter().sum::<f32>() / 8.0;
+    assert!(
+        dense_avg > sparse_avg,
+        "dense class ({}) should have higher precision than sparse ({})",
+        dense_avg,
+        sparse_avg
+    );
+
+    // Both should be > 0
+    assert!(dense_avg > 0.0);
+    assert!(sparse_avg > 0.0);
+
+    println!(
+        "✅ G8: Dense precision={:.4} > Sparse precision={:.4}",
+        dense_avg, sparse_avg
+    );
+}
+
 fn test_goat_summary() {
     println!("\n=== GOAT 237: Schema-Centroid Informed KG Embedding Init ===");
     println!("  G1: Initialization quality ≥50% cosine improvement      ✅");

@@ -60,16 +60,16 @@ graph TD
 
 ### Phase 2: BAKE Integration (Informed Prior)
 
-- [ ] Upgrade BAKE uninformative prior to schema-informed prior
+- [x] Upgrade BAKE uninformative prior to schema-informed prior
   - When `schema_centroid` AND `bake_precision` features both enabled:
-  - New entities: `precision = [1.0 / (1.0 + class_count as f32); 8]` instead of `[0.1; 8]`
+  - New entities: `precision = informed_prior_precision(class_count)` instead of `[0.1; 8]`
   - Dense classes (many entities) → higher initial precision (more confident centroid)
   - Sparse classes → lower initial precision (centroid is less reliable)
   - `mean = schema_init_entity(...)` instead of random
-  - File: `crates/katgpt-core/src/sense/bake.rs`
-  - **DEFERRED:** Depends on Plan 236 (bake_precision) which is not yet implemented
+  - New function: `schema_init_with_precision()` returns `([f32; 8], [f32; 8])`
+  - File: `crates/katgpt-core/src/sense/schema_centroid.rs`
 
-- [ ] Add `class_membership` field to `KgEmbedding`
+- [x] Add `class_membership` field to `KgEmbedding`
   - Design decision: class membership tracked externally via SchemaCentroidCache,
     not embedded in KgEmbedding struct. This avoids SmallVec dependency and
     conditional struct fields that break all construction sites.
@@ -128,17 +128,20 @@ graph TD
   - Cache lookup (100K): ~219 ns/lookup (~4.5M/sec)
   - Schema init entity (10K): ~471 ns/init (~2.1M/sec)
 
-- [ ] Test: BAKE integration
-  - With `schema_centroid` + `bake_precision`: new entity gets informed prior
-  - With `schema_centroid` only: new entity gets centroid init, no precision
-  - With neither: existing behavior unchanged
-  - **DEFERRED:** Depends on Plan 236 (bake_precision) not yet implemented
+- [x] Test: BAKE integration
+  - With `schema_centroid` + `bake_precision`: new entity gets informed prior (mean + precision)
+  - Dense class (50 entities) → higher precision than sparse class (2 entities) ✅
+  - Fallback: unknown class → uninformative prior (0.1) ✅
+  - Multi-class: average density → averaged precision ✅
+  - GOAT G8 gate passed
+  - File: `crates/katgpt-core/src/sense/schema_centroid.rs`, `tests/bench_237_schema_centroid_goat.rs`
 
 - [x] GOAT decision: promote to default-ON if all criteria pass
   - ✅ 10.14× cosine improvement (target: ≥1.5×)
   - ✅ 10.10× convergence speedup (target: ≥2×)
   - ✅ 7/7 GOAT gates passed, 3/3 benchmarks passed
   - ✅ **Verdict: GOAT. Ready for default-ON promotion.**
+  - ✅ 8/8 GOAT gates passed, 3/3 benchmarks passed.
 
 ---
 
