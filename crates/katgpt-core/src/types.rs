@@ -3574,6 +3574,61 @@ mod tests_types {
 }
 
 // ---------------------------------------------------------------------------
+// Shard Embedding — JL Random Orthogonal Projection (Plan 230)
+// ---------------------------------------------------------------------------
+
+/// Low-dimensional projection of NeuronShard style_weights for fast similarity search.
+/// Produced by Johnson-Lindenstrauss random orthogonal projection.
+/// 8 × f32 = 32 bytes — fits in cache line, suitable for SIMD cosine similarity.
+///
+/// Plan 230: Shard Embedding Projection — modelless linear weight-to-vector.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[repr(C)]
+pub struct ShardEmbedding(pub [f32; 8]);
+
+impl ShardEmbedding {
+    pub const ZERO: Self = Self([0.0; 8]);
+    pub const DIM: usize = 8;
+
+    /// Cosine similarity between two embeddings.
+    pub fn cosine_similarity(&self, other: &Self) -> f32 {
+        let dot: f32 = self.0.iter().zip(other.0.iter()).map(|(a, b)| a * b).sum();
+        let mag_a: f32 = self.0.iter().map(|x| x * x).sum::<f32>().sqrt();
+        let mag_b: f32 = other.0.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if mag_a < 1e-8 || mag_b < 1e-8 {
+            return 0.0;
+        }
+        dot / (mag_a * mag_b)
+    }
+
+    /// Euclidean distance squared between two embeddings.
+    pub fn dist_sq(&self, other: &Self) -> f32 {
+        self.0
+            .iter()
+            .zip(other.0.iter())
+            .map(|(a, b)| (a - b) * (a - b))
+            .sum()
+    }
+}
+
+impl Default for ShardEmbedding {
+    fn default() -> Self {
+        Self::ZERO
+    }
+}
+
+// Hash for use as HashMap key (bit-level, NOT semantic hash)
+impl std::hash::Hash for ShardEmbedding {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for &v in &self.0 {
+            v.to_bits().hash(state);
+        }
+    }
+}
+
+impl Eq for ShardEmbedding {}
+
+// ---------------------------------------------------------------------------
 // Sense Composition — KG Latent Octree (Plan 221)
 // ---------------------------------------------------------------------------
 

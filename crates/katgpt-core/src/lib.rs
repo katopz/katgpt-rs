@@ -13,6 +13,7 @@ pub mod attention;
 pub mod coda;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
+pub mod shard_embedding;
 pub mod simd;
 pub mod traits;
 pub mod types;
@@ -33,12 +34,13 @@ pub use traits::{
 pub use traits::{AllGoalsUpdate, LeoHead, sigmoid_bounded_q};
 
 // Re-export key types at crate root for convenience
+pub use shard_embedding::{JlProjectionMatrix, EMBED_DIM, STYLE_DIM as JL_STYLE_DIM};
 pub use types::{
     AttentionMode, AttentionProjection, CacheLayout, Config, ConvergenceSelector, DashAttnConfig,
     DilationConfig, HlaMode, HybridPattern, InferenceOverrides, InferenceResult, LoopMode,
     ModelArchitecture, ResidualGate, RetrievalHeadRole, Rng, RtTurboConfig, SdpaOutputGate,
-    WeightDtype, kv_dim, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel, matmul_relu,
-    rmsnorm, sample_token, sample_token_into, softmax, softmax_scaled,
+    ShardEmbedding, WeightDtype, kv_dim, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel,
+    matmul_relu, rmsnorm, sample_token, sample_token_into, softmax, softmax_scaled,
 };
 
 #[cfg(feature = "domain_latent")]
