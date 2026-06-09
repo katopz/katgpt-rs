@@ -45,18 +45,20 @@ impl JlProjectionMatrix {
             for j in 0..STYLE_DIM {
                 rows[i][j] = rng();
             }
-            // Subtract projections onto previous rows
+            // Subtract projections onto previous rows (SIMD-accelerated dot)
             for k in 0..i {
-                let dot: f32 = rows[i].iter().zip(rows[k].iter()).map(|(a, b)| a * b).sum();
+                let dot = crate::simd::simd_dot_f32(&rows[i], &rows[k], STYLE_DIM);
                 for j in 0..STYLE_DIM {
                     rows[i][j] -= dot * rows[k][j];
                 }
             }
-            // Normalize to unit length
-            let norm: f32 = rows[i].iter().map(|x| x * x).sum::<f32>().sqrt();
+            // Normalize to unit length (SIMD-accelerated sum-of-squares)
+            let norm_sq: f32 = crate::simd::simd_sum_sq(&rows[i], STYLE_DIM);
+            let norm = norm_sq.sqrt();
             if norm > 1e-8 {
+                let inv_norm = 1.0 / norm;
                 for j in 0..STYLE_DIM {
-                    rows[i][j] /= norm;
+                    rows[i][j] *= inv_norm;
                 }
             }
         }

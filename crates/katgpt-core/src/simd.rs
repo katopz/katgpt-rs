@@ -5038,21 +5038,19 @@ mod tests {
 // ---------------------------------------------------------------------------
 
 /// Ternary dot-product: state · ternary_dir → f32.
-/// Branchless conditional add/subtract using bitmask.
+/// Branchless sign extraction: pos_bit → +1, neg_bit → -1, neither → 0.
+/// Uses `(pos as i8 - neg as i8) as f32` to avoid any branches.
 #[inline]
 pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f32 {
     let mut acc = 0.0f32;
     let min_len = state.len().min(64);
+    let scale = dir.row_scale;
     for i in 0..min_len {
         let mask = 1u64 << i;
-        let sign = if (dir.pos_bits & mask) != 0 {
-            1.0f32
-        } else if (dir.neg_bits & mask) != 0 {
-            -1.0f32
-        } else {
-            0.0f32
-        };
-        acc += sign * state[i] * dir.row_scale;
+        let pos = ((dir.pos_bits & mask) != 0) as i8;
+        let neg = ((dir.neg_bits & mask) != 0) as i8;
+        let sign = (pos - neg) as f32;
+        acc += sign * unsafe { *state.get_unchecked(i) } * scale;
     }
     acc
 }

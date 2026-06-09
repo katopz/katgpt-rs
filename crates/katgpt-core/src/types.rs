@@ -2053,8 +2053,8 @@ pub fn rmsnorm(x: &mut [f32]) {
     // Pass 1: sum of squares (SIMD-accelerated)
     let sum_sq = crate::simd::simd_sum_sq(x, x.len());
 
-    // Pass 2: scale
-    let inv_rms = 1.0 / (sum_sq / x.len() as f32 + 1e-5).sqrt();
+    // Pass 2: scale — stay f32 throughout to avoid f64 round-trip
+    let inv_rms = 1.0 / (sum_sq / x.len() as f32 + 1e-5f32).sqrt();
     crate::simd::simd_scale_inplace(x, inv_rms);
 }
 
@@ -2078,9 +2078,10 @@ pub fn gegelu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // hidden[j] = gate[j] * sigmoid(1.702 * gate[j]) * up[j]
         // SIMD: buf = 1 + buf, then buf = 1/buf (sigmoid), then fused gate*sigmoid*up
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
-        // buf[j] = sigmoid; fused: hidden = gate * up, then scale-multiply by sigmoid
+        // Vectorized reciprocal: buf = sigmoid = 1/(1+exp(-1.702*gate))
+        crate::simd::simd_reciprocal_inplace(&mut buf);
+        // Fused: hidden = gate * up, then scale-multiply by sigmoid
         for j in 0..CHUNK {
-            buf[j] = 1.0 / buf[j];
             hidden[i + j] = gate[i + j] * up[i + j];
         }
         crate::simd::simd_scale_mul_inplace(&mut hidden[i..i + CHUNK], &buf, 1.0);
@@ -2187,11 +2188,12 @@ pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
         // buf[j] = exp(-gate[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = gate[j] / (1 + exp(-gate[j])) * up[j]
-        // SIMD: buf = 1 + exp(-gate), then fused reciprocal + gate*up
+        // SIMD: buf = 1 + exp(-gate), then vectorized reciprocal + gate*up
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
-        // hidden = gate * up, compute sigmoid via reciprocal in same loop
+        // Vectorized reciprocal: buf = sigmoid = 1/(1+exp(-gate))
+        crate::simd::simd_reciprocal_inplace(&mut buf);
+        // Fused: hidden = gate * up, then scale-multiply by sigmoid
         for j in 0..CHUNK {
-            buf[j] = 1.0 / buf[j];
             hidden[i + j] = gate[i + j] * up[i + j];
         }
         crate::simd::simd_scale_mul_inplace(&mut hidden[i..i + CHUNK], &buf, 1.0);
@@ -2221,6 +2223,7 @@ pub fn rmsnorm_with_gamma_eps(x: &mut [f32], gamma: &[f32], eps: f64) {
         return;
     }
     let sum_sq = crate::simd::simd_sum_sq(x, n);
+    // Cast eps to f32 once — the f64 param is kept for API compat
     let inv_rms = 1.0 / (sum_sq / n as f32 + eps as f32).sqrt();
     crate::simd::simd_scale_mul_inplace(x, gamma, inv_rms);
 }
@@ -2368,16 +2371,9 @@ pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
         }
     }
 
-    // Binary search: find the first index where cdf[i] > r
-    match cdf[..n].binary_search_by(|&c| {
-        if c > r {
-            std::cmp::Ordering::Greater
-        } else {
-            std::cmp::Ordering::Less
-        }
-    }) {
-        Ok(i) | Err(i) => i.min(n - 1),
-    }
+    // partition_point: first index where cdf[i] > r — monotonically increasing
+    let idx = cdf[..n].partition_point(|&c| c <= r);
+    idx.min(n - 1)
 }
 
 /// Zero-alloc variant of [`sample_token`] that reuses a pre-allocated CDF buffer.
@@ -2398,15 +2394,11 @@ pub fn sample_token_into(probs: &[f32], rng: &mut Rng, cdf: &mut Vec<f32>) -> us
             *cdf.get_unchecked_mut(i) = sum;
         }
     }
-    match cdf[..n].binary_search_by(|&c| {
-        if c > r {
-            std::cmp::Ordering::Greater
-        } else {
-            std::cmp::Ordering::Less
-        }
-    }) {
-        Ok(i) | Err(i) => i.min(n - 1),
-    }
+    // partition_point: first index where cdf[i] > r — monotonically increasing
+    // so this is equivalent to binary_search_by with Less/Greater but avoids
+    // closure overhead and is branch-predictor friendly.
+    let idx = cdf[..n].partition_point(|&c| c <= r);
+    idx.min(n - 1)
 }
 
 // ---------------------------------------------------------------------------
@@ -3696,27 +3688,29 @@ pub struct SenseModule {
 
 impl SenseModule {
     /// Project HLA state onto this module's ternary directions → sigmoid scalar.
+    ///
+    /// KG weight bridge: output is scaled by module confidence so that
+    /// high-confidence KG triples produce stronger sense activations and
+    /// low-confidence triples are attenuated. Confidence 1.0 = unchanged.
+    ///
+    /// Branchless sign extraction, fast sigmoid via `1.0 / (1.0 + exp(-x))`.
     pub fn project(&self, hla_state: &[f32; 8]) -> f32 {
         let mut dot = 0.0f32;
-        for (i, dir) in self.directions[..self.n_directions as usize]
-            .iter()
-            .enumerate()
-        {
-            if i < hla_state.len() {
-                let val = hla_state[i];
-                // Ternary dot: +1 for pos_bits, -1 for neg_bits
-                let sign = if dir.pos_bits & (1 << i) != 0 {
-                    1.0f32
-                } else if dir.neg_bits & (1 << i) != 0 {
-                    -1.0f32
-                } else {
-                    0.0f32
-                };
-                dot += sign * val * dir.row_scale;
+        let n = self.n_directions as usize;
+        for i in 0..n {
+            if i >= hla_state.len() {
+                break;
             }
+            let dir = &self.directions[i];
+            let mask = 1u64 << i;
+            let pos = ((dir.pos_bits & mask) != 0) as i8;
+            let neg = ((dir.neg_bits & mask) != 0) as i8;
+            let sign = (pos - neg) as f32;
+            dot += sign * hla_state[i] * dir.row_scale;
         }
-        // sigmoid
-        1.0 / (1.0 + (-dot).exp())
+        // sigmoid * confidence (KG weight bridge)
+        let exp_neg = (-dot).exp();
+        self.confidence * (1.0 / (1.0 + exp_neg))
     }
 
     /// Query octree occupancy at given level and index.
@@ -3749,17 +3743,21 @@ impl SenseModule {
     }
 
     /// Verify BLAKE3 commitment.
+    /// Avoids cloning the full struct by zeroing commitment in a stack copy
+    /// of the pre-commitment bytes.
     pub fn verify(&self) -> bool {
-        let mut copy = self.clone();
-        copy.commitment = [0u8; 32];
-        let bytes: &[u8] = unsafe {
+        // Hash only the data fields (excluding commitment)
+        let data_bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                &copy as *const Self as *const u8,
+                self as *const Self as *const u8,
                 std::mem::size_of::<Self>() - 32,
             )
         };
-        let expected = blake3::hash(bytes);
-        self.commitment == *expected.as_bytes()
+        let mut commitment_copy = [0u8; 32];
+        commitment_copy.copy_from_slice(&self.commitment);
+        // Compute expected hash (commitment was zeroed during commit())
+        let expected = blake3::hash(data_bytes);
+        commitment_copy == *expected.as_bytes()
     }
 }
 
