@@ -850,5 +850,9 @@ name = "async_qdq_goat"
 required-features = ["async_qdq_overlap"]
 
 [[test]]
+name = "nf_flow_goat"
+required-features = ["nf_flow_score"]
+
+[[test]]
 name = "pipeline_pruner_goat"
 required-features = ["modality_pruned_load"]

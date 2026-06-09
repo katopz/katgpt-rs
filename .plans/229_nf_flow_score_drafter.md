@@ -31,9 +31,9 @@ This is a diagonal affine normalizing flow constructed from existing inference-t
 - [x] Unit test: peaked marginals (low entropy) → σ ≈ 0 → large negative log_det → score < base
 
 ### T2: FlowScore Drafter Integration with SpeculativeGenerator
-- [ ] Extend `SpeculativeGenerator` trait with `fn generate_scored()` that returns candidates with flow scores
-- [ ] Implement for existing drafter: compute flow scores for all DDTree candidates
-- [ ] Select candidate with highest flow_score instead of highest base probability
+- [x] Extend `SpeculativeGenerator` trait with `fn generate_scored()` that returns candidates with flow scores
+- [x] Implement for existing drafter: compute flow scores for all DDTree candidates
+- [x] Select candidate with highest flow_score instead of highest base probability
 - [ ] Benchmark: flow_score selection vs max-prob selection on existing test suite
 
 ### T3: FlowGate Acceptance Criterion
@@ -52,13 +52,13 @@ This is a diagonal affine normalizing flow constructed from existing inference-t
 - [x] Test: budget allocation matches expected distribution
 
 ### T5: GOAT Proof — Before/After Benchmarks
-- [ ] Create `tests/nf_flow_bench.rs` with feature-gated benchmarks
-- [ ] Benchmark: flow_score computation overhead (< 1% of total inference)
-- [ ] Benchmark: speculative acceptance rate before/after FlowGate
-- [ ] Benchmark: first-attempt accuracy before/after FlowScore selection
-- [ ] Test: FlowScore drafter on Sudoku solver (existing test infrastructure)
-- [ ] Test: FlowScore drafter on Rust syntax validation (SynPruner)
-- [ ] Validate: flow_score > max-prob selection on ≥ 3 existing test suites
+- [x] Create `tests/nf_flow_goat.rs` with feature-gated benchmarks
+- [x] Benchmark: flow_score computation overhead (< 1% of total inference)
+- [x] Benchmark: speculative acceptance rate before/after FlowGate
+- [x] Benchmark: first-attempt accuracy before/after FlowScore selection
+- [x] Test: FlowScore drafter on Sudoku solver (existing test infrastructure)
+- [x] Test: FlowScore drafter on Rust syntax validation (SynPruner)
+- [x] Validate: flow_score > max-prob selection on ≥ 3 existing test suites
 
 ### T6: FlowMUX Composition (cross-feature)
 - [ ] Implement flow scoring for MUX multiplexed trajectories
