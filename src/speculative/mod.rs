@@ -384,6 +384,30 @@ pub mod precision_aware_generator;
 #[cfg(all(feature = "precision_aware_draft", feature = "speculative_generator"))]
 pub use precision_aware_generator::PrecisionAwareGenerator;
 
+// ── NFCoT FlowBudget — Speculative Depth Allocation (Plan 229 T4, feature: nf_flow_budget) ──
+#[cfg(feature = "nf_flow_budget")]
+pub mod nf_flow_budget;
+
+#[cfg(feature = "nf_flow_budget")]
+pub use nf_flow_budget::{FlowBudgetAllocator, allocate_budget};
+
+// ── NFCoT FlowScore — Modelless Normalizing Flow Density Scoring (Plan 229, feature: nf_flow_score) ──
+#[cfg(feature = "nf_flow_score")]
+pub mod nf_flow;
+
+#[cfg(feature = "nf_flow_score")]
+pub use nf_flow::{
+    NfFlowScore, categorical_entropy, flow_components, flow_score, flow_score_batch, select_best,
+    sigmoid,
+};
+
+// ── NFCoT FlowGate — Adaptive Acceptance Criterion (Plan 229 T3, feature: nf_flow_gate) ──
+#[cfg(feature = "nf_flow_gate")]
+pub mod nf_flow_gate;
+
+#[cfg(feature = "nf_flow_gate")]
+pub use nf_flow_gate::NfFlowGate;
+
 // ── Domino Causal Correction re-exports (Plan 197, feature: domino_correction) ──
 #[cfg(feature = "domino_correction")]
 pub use dd_tree::build_dd_tree_domino;
