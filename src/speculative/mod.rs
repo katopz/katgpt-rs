@@ -350,6 +350,9 @@ pub use correlation_budget::CorrelationBudgetAllocator;
 #[cfg(feature = "corr_budget")]
 pub use dd_tree::build_dd_tree_screened_corr;
 
+#[cfg(feature = "nf_flow_budget")]
+pub use dd_tree::build_dd_tree_screened_flow_budget;
+
 // ── CaDDTree — Cost-Aware Adaptive DDTree Budget Selection (Plan 219) ──
 #[cfg(feature = "caddtree_budget")]
 pub mod caddtree_budget;
@@ -423,8 +426,10 @@ pub mod vocab_channel_pruner;
 pub use vocab_channel_pruner::excess_kurtosis as vocab_excess_kurtosis;
 #[cfg(feature = "vocab_channel_pruner")]
 pub use vocab_channel_pruner::{
-    VocabChannel, VocabChannelConfig, VocabChannelDecomposer, VocabChannelMap, VocabChannelPruner,
-    decompose_layer_channels, householder_apply, iterative_token_mask, skewness, vocab_project,
+    ComposedPruner, DecompositionResult, VocabChannel, VocabChannelConfig, VocabChannelDecomposer,
+    VocabChannelMap, VocabChannelPruner, decompose_layer_channels, decompose_model_channels,
+    householder_apply, iterative_token_mask, load_cached_pruner, save_pruner_cache, skewness,
+    vocab_project,
 };
 
 // ── Domino Causal Correction re-exports (Plan 197, feature: domino_correction) ──

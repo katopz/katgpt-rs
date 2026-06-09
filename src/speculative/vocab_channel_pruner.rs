@@ -790,6 +790,265 @@ impl ConstraintPruner for VocabChannelPruner {
     }
 }
 
+// ── Phase 4: ComposedPruner (DDTree Integration) ────────────────────
+
+/// Compose multiple `ConstraintPruner`s — token is valid only if ALL pruners agree.
+///
+/// This enables stacking `VocabChannelPruner` with any existing pruner
+/// (e.g., `SudokuPruner`, `EpisodePruner`) without modifying either.
+///
+/// # Example
+///
+/// ```ignore
+/// let composed = ComposedPruner::new(vec![
+///     Box::new(vocab_pruner),
+///     Box::new(other_pruner),
+/// ]);
+/// build_dd_tree_pruned(&marginals, &config, &composed, false);
+/// ```
+pub struct ComposedPruner {
+    pruners: Vec<Box<dyn ConstraintPruner>>,
+}
+
+impl ComposedPruner {
+    /// Create a composed pruner from a list of pruners.
+    ///
+    /// An empty list acts as `NoPruner` (all tokens valid).
+    pub fn new(pruners: Vec<Box<dyn ConstraintPruner>>) -> Self {
+        Self { pruners }
+    }
+
+    /// Create a single-pruner composition (no overhead if only one).
+    pub fn single(pruner: Box<dyn ConstraintPruner>) -> Self {
+        Self {
+            pruners: vec![pruner],
+        }
+    }
+
+    /// Number of composed pruners.
+    pub fn len(&self) -> usize {
+        self.pruners.len()
+    }
+
+    /// True if no pruners are composed.
+    pub fn is_empty(&self) -> bool {
+        self.pruners.is_empty()
+    }
+}
+
+impl ConstraintPruner for ComposedPruner {
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
+        // ALL must agree — short-circuit on first rejection
+        self.pruners
+            .iter()
+            .all(|p| p.is_valid(depth, token_idx, parent_tokens))
+    }
+
+    fn batch_is_valid(
+        &self,
+        depth: usize,
+        candidates: &[usize],
+        parent_tokens: &[usize],
+        results: &mut [bool],
+    ) {
+        let len = candidates.len().min(results.len());
+        // Initialize: all valid
+        results[..len].fill(true);
+
+        // AND-reduce across all pruners
+        let mut buf = vec![false; len];
+        for pruner in &self.pruners {
+            pruner.batch_is_valid(depth, candidates, parent_tokens, &mut buf);
+            for i in 0..len {
+                results[i] = results[i] && buf[i];
+            }
+        }
+    }
+}
+
+// ── Phase 5: Load-Time Pipeline ─────────────────────────────────────
+
+/// Result of load-time ROTATE decomposition for a single model.
+pub struct DecompositionResult {
+    /// Per-layer decomposition timing.
+    pub layer_timings_ms: Vec<f64>,
+    /// Total decomposition time.
+    pub total_ms: f64,
+    /// BLAKE3 hash of the weight bytes used for decomposition.
+    pub weight_hash: [u8; 32],
+    /// The constructed pruner (ready for use).
+    pub pruner: VocabChannelPruner,
+}
+
+/// Decompose all layers of a model's MLP output weights into vocab channels.
+///
+/// Runs ROTATE decomposition on each layer's `mlp_w2` matrix against `lm_head`,
+/// builds a `VocabChannelMap`, and wraps it in a `VocabChannelPruner`.
+///
+/// Returns timing per layer, total time, and the BLAKE3 hash of all weight bytes.
+pub fn decompose_model_channels(
+    weights: &crate::transformer::TransformerWeights,
+    config: &crate::types::Config,
+    channel_config: &VocabChannelConfig,
+) -> DecompositionResult {
+    let mut hasher = blake3::Hasher::new();
+
+    // Hash lm_head once
+    hasher.update(bytemuck::cast_slice::<f32, u8>(&weights.lm_head));
+
+    let n_layer = weights.layers.len();
+    let mut layer_channels = Vec::with_capacity(n_layer);
+    let mut layer_timings_ms = Vec::with_capacity(n_layer);
+
+    let total_start = std::time::Instant::now();
+
+    for (layer_idx, layer) in weights.layers.iter().enumerate() {
+        // Hash this layer's mlp_w2
+        hasher.update(bytemuck::cast_slice::<f32, u8>(&layer.mlp_w2));
+
+        let layer_start = std::time::Instant::now();
+        let channels = decompose_layer_channels(
+            &layer.mlp_w2,
+            &weights.lm_head,
+            config.n_embd,
+            config.mlp_hidden,
+            config.vocab_size,
+            channel_config,
+        );
+        let layer_elapsed = layer_start.elapsed();
+        layer_timings_ms.push(layer_elapsed.as_secs_f64() * 1000.0);
+
+        log::info!(
+            "[vocab_channel] Layer {}/{}: {} neurons, {:.1}ms",
+            layer_idx,
+            n_layer,
+            channels.len(),
+            layer_elapsed.as_secs_f64() * 1000.0,
+        );
+
+        layer_channels.push(channels);
+    }
+
+    let total_elapsed = total_start.elapsed();
+    let weight_hash = *hasher.finalize().as_bytes();
+
+    let map = VocabChannelMap::from_channels(&layer_channels, config.vocab_size);
+    let pruner = VocabChannelPruner::new(map);
+
+    log::info!(
+        "[vocab_channel] Decomposition complete: {} layers, {:.1}ms total, hash={:.16}",
+        n_layer,
+        total_elapsed.as_secs_f64() * 1000.0,
+        weight_hash[..8]
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect::<String>()
+    );
+
+    DecompositionResult {
+        layer_timings_ms,
+        total_ms: total_elapsed.as_secs_f64() * 1000.0,
+        weight_hash,
+        pruner,
+    }
+}
+
+/// Cache file header for serialized `VocabChannelMap`.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CacheHeader {
+    /// BLAKE3 hash of the weight bytes used for decomposition.
+    weight_hash: [u8; 32],
+    /// Vocab size at decomposition time.
+    vocab_size: usize,
+    /// Layer count at decomposition time.
+    layer_count: usize,
+}
+
+/// Try to load a cached `VocabChannelMap` from disk.
+///
+/// Returns `Some(pruner)` if the cache exists, the weight hash matches,
+/// and the dimensions are compatible. Returns `None` otherwise.
+pub fn load_cached_pruner(
+    cache_path: &std::path::Path,
+    expected_hash: &[u8; 32],
+    expected_vocab_size: usize,
+    expected_layer_count: usize,
+) -> Option<VocabChannelPruner> {
+    let data = std::fs::read(cache_path).ok()?;
+    if data.len() < 4 + std::mem::size_of::<CacheHeader>() {
+        log::info!("[vocab_channel] Cache file too small, skipping");
+        return None;
+    }
+
+    // Header: 4 bytes JSON length (big-endian) + JSON + binary map
+    let json_len = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
+    if data.len() < 4 + json_len {
+        log::info!("[vocab_channel] Cache file truncated, skipping");
+        return None;
+    }
+
+    let header: CacheHeader = serde_json::from_slice(&data[4..4 + json_len]).ok()?;
+
+    if &header.weight_hash != expected_hash {
+        log::info!("[vocab_channel] Cache hash mismatch, skipping");
+        return None;
+    }
+    if header.vocab_size != expected_vocab_size || header.layer_count != expected_layer_count {
+        log::info!(
+            "[vocab_channel] Cache dimension mismatch (expected vocab={}, layers={}), skipping",
+            expected_vocab_size,
+            expected_layer_count,
+        );
+        return None;
+    }
+
+    let map_bytes = &data[4 + json_len..];
+    let map = VocabChannelMap::deserialize(map_bytes).ok()?;
+    log::info!(
+        "[vocab_channel] Loaded cached map: {} layers, {:.1}KB",
+        map.layer_count(),
+        map_bytes.len() as f64 / 1024.0,
+    );
+    Some(VocabChannelPruner::new(map))
+}
+
+/// Save a `VocabChannelMap` to disk with BLAKE3 hash verification header.
+///
+/// Format: `[4-byte JSON len][JSON header][binary map]`
+pub fn save_pruner_cache(
+    cache_path: &std::path::Path,
+    weight_hash: &[u8; 32],
+    pruner: &VocabChannelPruner,
+    vocab_size: usize,
+    layer_count: usize,
+) -> std::io::Result<()> {
+    if let Some(parent) = cache_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let header = CacheHeader {
+        weight_hash: *weight_hash,
+        vocab_size,
+        layer_count,
+    };
+    let header_json = serde_json::to_vec(&header)?;
+
+    let map_bytes = pruner.map().serialize();
+
+    let mut out = Vec::with_capacity(4 + header_json.len() + map_bytes.len());
+    out.extend_from_slice(&(header_json.len() as u32).to_be_bytes());
+    out.extend_from_slice(&header_json);
+    out.extend_from_slice(&map_bytes);
+
+    std::fs::write(cache_path, out)?;
+    log::info!(
+        "[vocab_channel] Saved cache: {:.1}KB to {}",
+        (4 + header_json.len() + map_bytes.len()) as f64 / 1024.0,
+        cache_path.display(),
+    );
+    Ok(())
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]

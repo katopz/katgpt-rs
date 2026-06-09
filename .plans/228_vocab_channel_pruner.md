@@ -60,20 +60,20 @@ Inference Time:
 - [x] `is_valid()`: look up active neurons from current hidden state, check token reachability
 - [x] `batch_is_valid()`: batch lookup for multiple tokens at same depth
 - [x] Feature gate behind `vocab_channel_pruner`
-- [ ] Integrate with DDTree: `build_dd_tree_pruned()` with VocabChannelPruner as additional constraint
+- [x] Integrate with DDTree: `build_dd_tree_pruned()` with VocabChannelPruner as additional constraint
 
 ### Phase 5: Load-Time Pipeline Integration
 
-- [ ] Add ROTATE decomposition to model loading path (after weights are loaded, before inference starts)
-- [ ] Add `--vocab-channels` CLI flag to enable/disable
-- [ ] Add timing metrics for load-time decomposition (should be < 30s for 8B model)
-- [ ] Add cache: save decomposed channels to disk, skip recomputation if weights unchanged (BLAKE3 hash of weight bytes)
+- [x] Add ROTATE decomposition to model loading path (after weights are loaded, before inference starts)
+- [x] Add `--vocab-channels` CLI flag to enable/disable
+- [x] Add timing metrics for load-time decomposition (should be < 30s for 8B model)
+- [x] Add cache: save decomposed channels to disk, skip recomputation if weights unchanged (BLAKE3 hash of weight bytes)
 
 ### Phase 6: Benchmarks & Tests
 
-- [ ] Benchmark: load-time decomposition speed per layer (target: < 30s total for 8B)
-- [ ] Benchmark: DDTree branch reduction with vs without VocabChannelPruner (target: 30-60%)
-- [ ] Benchmark: inference throughput with vs without (target: no regression, ideally improvement)
+- [x] Benchmark: load-time decomposition speed per layer (target: < 30s total for 8B)
+- [x] Benchmark: DDTree branch reduction with vs without VocabChannelPruner (target: 30-60%)
+- [x] Benchmark: inference throughput with vs without (target: no regression, ideally improvement)
 - [x] Test: round-trip — ROTATE channels reconstruct original weight with cos_sim > 0.95 (test_cosine_sim_identical)
 - [x] Test: reachability correctness — tokens in reachability set are actually promoted by the neuron
 - [x] Test: feature gate isolation — no binary bloat when feature is disabled (cfg-gated module)
