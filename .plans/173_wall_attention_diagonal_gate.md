@@ -72,8 +72,8 @@ The factorized form `q̃_i = exp(P_i) ⊙ q_i`, `k̃_j = exp(-P_j) ⊙ k_j` mean
 
 ## Task 5: Wall + GDN2 unified gate infrastructure
 
-- [ ] Extract shared `DiagonalGate` trait from GDN2's channel-wise decay and Wall's diagonal gate
-- [ ] Both use the same `Diag(g_t)` primitive — just applied differently:
+- [x] Extract shared `DiagonalGate` trait from GDN2's channel-wise decay and Wall's diagonal gate
+- [x] Both use the same `Diag(g_t)` primitive — just applied differently:
   - GDN2: gate applied to recurrent state decay
   - Wall: gate applied to softmax attention via factorized Q/K rescale
 

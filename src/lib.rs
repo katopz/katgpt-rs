@@ -12,6 +12,10 @@ pub mod channel_simd;
 pub mod dash_attn;
 #[cfg(feature = "data_probe")]
 pub mod data_probe;
+// Shared diagonal gate abstraction (GDN2 + Wall).
+// Available when either gdn2_attention or wall_attention is enabled.
+#[cfg(any(feature = "gdn2_attention", feature = "wall_attention"))]
+pub mod diagonal_gate;
 #[cfg(any(feature = "peira_distill", feature = "ilc_distill"))]
 pub mod distill;
 #[cfg(feature = "dllm")]

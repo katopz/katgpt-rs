@@ -823,7 +823,7 @@ mod tests {
             "oldest lesson must be evicted (FIFO)"
         );
         assert_eq!(
-            entry.lessons.last().unwrap(),
+            entry.lessons.iter().last().unwrap(),
             "overflow",
             "newest lesson must be at end"
         );
