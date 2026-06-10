@@ -779,11 +779,11 @@ At 30K CCU: `30K × 20Hz = 600K inferences/sec`. CPU handles forward, but also r
 |--------|--------|
 | `TriggerGate::evaluate()` | 0.008 µs/call |
 | `TriggerGate::record_inference()` | 0.002 µs/call |
-| `InferenceRouter::forward()` (CPU tier) | 0.85 µs/token (−24.6% vs baseline) |
+| `InferenceRouter::forward()` (CPU tier) | 0.85 µs/token (1.18M tok/s, −24.6% vs baseline) |
 | `forward_batch` (batch=8) | 0.83 µs/token (+3.3% overhead) |
 | Router under load (2000 iters) | 1.22M calls/sec |
-| GPU forward (8 Metal MSL kernels) | 1937 µs/token, cosine ≥ 0.999 vs CPU |
-| ANE forward (CoreML hybrid lm_head) | 137 µs/token, 0.02× vs CPU |
+| GPU forward (8 Metal MSL kernels) | 1937 µs/token (516 tok/s), cosine ≥ 0.999 vs CPU |
+| ANE forward (CoreML hybrid lm_head) | 137 µs/token (7.3K tok/s), 0.02× vs CPU |
 | GPU tier-up latency | 62 ms (compile + first forward) |
 | ANE compilation | 59 ms |
 
