@@ -823,6 +823,21 @@ pub struct WallPrefixState {
     head_dim: usize,
 }
 
+/// Per-channel gate statistics for retrieval head analysis (Plan 173 Task 7).
+///
+/// Identifies "always-on" (retrieval-critical) vs "dynamic" (recency)
+/// dimensions based on prefix sum statistics.
+/// - High variance = content-dependent (dynamic = retrieval-critical)
+/// - Low variance = stable (always-on = recency)
+#[cfg(feature = "wall_attention")]
+#[derive(Clone, Debug)]
+pub struct GateStatistics {
+    /// Per-channel mean of prefix sums.
+    pub mean: Vec<f32>,
+    /// Per-channel variance of prefix sums.
+    pub variance: Vec<f32>,
+}
+
 #[cfg(feature = "wall_attention")]
 impl WallPrefixState {
     pub fn new(config: &Config) -> Self {
@@ -956,6 +971,146 @@ impl WallPrefixState {
             gate_buf[d] = log_sig.clamp(-gate_max, 0.0);
         }
     }
+
+    // ── DashAttention integration (Plan 173 Task 6) ────────────
+
+    /// Compute minimum retention across all channels for a block.
+    ///
+    /// Given a block spanning positions `[block_start, block_end)`, returns
+    /// the minimum `exp(P[block_end] - P[block_start])` across all channels.
+    ///
+    /// If `min_retention < threshold`, all channels have decayed → block can
+    /// be skipped in sparse attention (DashAttention block routing).
+    ///
+    /// The prefix sums represent cumulative gate values. For a block spanning
+    /// positions [s, e), the retention at each channel is `exp(P[e,d] - P[s,d])`.
+    /// A retention close to 1.0 means the channel is well-retained; close to 0
+    /// means it has decayed.
+    ///
+    /// Returns `1.0` if prefix sums are not yet computed (no decay).
+    #[inline]
+    pub fn min_retention_at_block(
+        &self,
+        layer_idx: usize,
+        kv_head: usize,
+        block_start: usize,
+        block_end: usize,
+    ) -> f32 {
+        let hd = self.head_dim;
+        let offset = layer_idx * self.n_kv_head * hd + kv_head * hd;
+        let ps = &self.prefix_sums;
+
+        // If prefix sums are too short, return 1.0 (no skip)
+        if ps.len() < offset + hd {
+            return 1.0;
+        }
+
+        let current = block_end;
+        if current == 0 {
+            return 1.0;
+        }
+
+        // Chunk-4 min of exp(prefix * block_span / current)
+        let block_span = (block_end - block_start) as f32;
+        let inv_current = 1.0 / current as f32;
+        let mut min_ret: f32 = f32::MAX;
+
+        let mut d = 0;
+        while d + 4 <= hd {
+            for dd in 0..4 {
+                let gate_accumulated = ps[offset + d + dd];
+                let gate_in_block = gate_accumulated * block_span * inv_current;
+                let retention = gate_in_block.exp();
+                if retention < min_ret {
+                    min_ret = retention;
+                }
+            }
+            d += 4;
+        }
+        while d < hd {
+            let gate_accumulated = ps[offset + d];
+            let gate_in_block = gate_accumulated * block_span * inv_current;
+            let retention = gate_in_block.exp();
+            if retention < min_ret {
+                min_ret = retention;
+            }
+            d += 1;
+        }
+
+        min_ret
+    }
+
+    // ── RTPurbo integration (Plan 173 Task 7) ──────────────────
+
+    /// Compute gate statistics across all KV heads for a given layer.
+    ///
+    /// Returns per-channel mean and variance of the prefix sums.
+    /// High-variance channels are "dynamic" (content-dependent) and should
+    /// be weighted more heavily in RTPurbo's low-dim projection.
+    #[inline]
+    pub fn gate_statistics(&self, layer_idx: usize) -> GateStatistics {
+        let hd = self.head_dim;
+        let n_heads = self.n_kv_head;
+        let layer_off = layer_idx * n_heads * hd;
+
+        let mut mean = vec![0.0f32; hd];
+        let mut variance = vec![0.0f32; hd];
+
+        // Chunk-4 mean accumulation
+        for h in 0..n_heads {
+            let off = layer_off + h * hd;
+            let mut d = 0;
+            while d + 4 <= hd {
+                mean[d] += ps(off, d, &self.prefix_sums);
+                mean[d + 1] += ps(off, d + 1, &self.prefix_sums);
+                mean[d + 2] += ps(off, d + 2, &self.prefix_sums);
+                mean[d + 3] += ps(off, d + 3, &self.prefix_sums);
+                d += 4;
+            }
+            while d < hd {
+                mean[d] += ps(off, d, &self.prefix_sums);
+                d += 1;
+            }
+        }
+
+        // Normalize mean
+        let inv_n = 1.0 / n_heads as f32;
+        for m in &mut mean {
+            *m *= inv_n;
+        }
+
+        // Chunk-4 variance accumulation
+        for h in 0..n_heads {
+            let off = layer_off + h * hd;
+            let mut d = 0;
+            while d + 4 <= hd {
+                for dd in 0..4 {
+                    let diff = ps(off, d + dd, &self.prefix_sums) - mean[d + dd];
+                    variance[d + dd] += diff * diff;
+                }
+                d += 4;
+            }
+            while d < hd {
+                let diff = ps(off, d, &self.prefix_sums) - mean[d];
+                variance[d] += diff * diff;
+                d += 1;
+            }
+        }
+
+        // Normalize variance (population)
+        for v in &mut variance {
+            *v *= inv_n;
+        }
+
+        GateStatistics { mean, variance }
+    }
+}
+
+/// Helper for reading prefix_sums with offset + channel index.
+#[cfg(feature = "wall_attention")]
+#[inline(always)]
+fn ps(offset: usize, channel: usize, prefix_sums: &[f32]) -> f32 {
+    prefix_sums[offset + channel]
 }
 
 /// Causal decode: single token forward with optional LoRA adapter.

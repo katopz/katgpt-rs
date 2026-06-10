@@ -79,15 +79,15 @@ The factorized form `q̃_i = exp(P_i) ⊙ q_i`, `k̃_j = exp(-P_j) ⊙ k_j` mean
 
 ## Task 6: Wall + DashAttention integration
 
-- [ ] Use gate-derived "forgetfulness scores" for block-level routing decisions
-- [ ] When all channels of a key have decayed below threshold → skip block in sparse attention
-- [ ] Compute per-block min-retention from prefix sums at block boundaries
+- [x] Use gate-derived "forgetfulness scores" for block-level routing decisions
+- [x] When all channels of a key have decayed below threshold → skip block in sparse attention
+- [x] Compute per-block min-retention from prefix sums at block boundaries
 
 ## Task 7: Wall + RTPurbo gate-aware retrieval
 
-- [ ] Analyze gate variance per head/channel to identify "always-on" (retrieval-critical) vs "dynamic" (recency) dimensions
-- [ ] Weight RTPurbo's low-dim projection toward high-variance channels (dynamic = content-dependent)
-- [ ] Gate statistics as additional features for retrieval head scoring
+- [x] Analyze gate variance per head/channel to identify "always-on" (retrieval-critical) vs "dynamic" (recency) dimensions
+- [x] Weight RTPurbo's low-dim projection toward high-variance channels (dynamic = content-dependent)
+- [x] Gate statistics as additional features for retrieval head scoring
 
 ## Task 8: GOAT proof — Wall correctness
 

@@ -413,6 +413,87 @@ impl RetrievalProjection {
     }
 
     // -----------------------------------------------------------------------
+    // Wall gate-aware scoring (Plan 173 Task 7)
+    // -----------------------------------------------------------------------
+
+    /// Variance-weighted batch projection scoring.
+    ///
+    /// Same as `batch_project_scores` but weights the projection by gate variance
+    /// statistics from Wall Attention. High-variance channels ("dynamic" =
+    /// content-dependent) get more weight; low-variance ("always-on") get less.
+    ///
+    /// `gate_variance`: per-channel variance from `WallPrefixState::gate_statistics()`.
+    /// Length must equal `head_dim`. If empty or all zeros, falls back to uniform.
+    ///
+    /// The weighting is applied as a multiplicative scale on the key elements
+    /// before projection, not on the weights themselves (preserves learned structure).
+    pub fn batch_project_scores_weighted(
+        &self,
+        head_idx: usize,
+        q_pre: &[f32],
+        k_cache: &[f32],
+        n_keys: usize,
+        gate_variance: &[f32],
+    ) -> Vec<f32> {
+        let hd = self.head_dim;
+        let ld = self.low_dim;
+        let stride = self.head_stride();
+        let head_off = head_idx * stride;
+
+        // Project query once (same as standard)
+        let mut q_proj = [0.0f32; 64]; // stack alloc for low_dim ≤ 64
+        let q_slice = &mut q_proj[..ld];
+        let w_q_head = &self.w_q[head_off..head_off + hd * ld];
+        for i in 0..hd {
+            let qi = q_pre[i];
+            // Apply variance weighting: scale by sigmoid(variance) to boost dynamic dims
+            let var_scale = if gate_variance.len() > i && gate_variance[i] > 0.0 {
+                // sigmoid(log(1 + variance)) — simple, monotonic, bounded
+                let v = gate_variance[i];
+                1.0 / (1.0 + (-v.ln_1p()).exp())
+            } else {
+                1.0
+            };
+            let row = i * ld;
+            for j in 0..ld {
+                q_slice[j] += qi * var_scale * w_q_head[row + j];
+            }
+        }
+
+        // Score each key
+        let mut scores = vec![0.0f32; n_keys];
+        let w_k_head = &self.w_k[head_off..head_off + hd * ld];
+
+        let mut k_proj = [0.0f32; 64];
+        let k_slice = &mut k_proj[..ld];
+
+        for n in 0..n_keys {
+            k_slice.fill(0.0);
+            let k_off = n * hd;
+            for i in 0..hd {
+                let ki = k_cache[k_off + i];
+                let var_scale = if gate_variance.len() > i && gate_variance[i] > 0.0 {
+                    let v = gate_variance[i];
+                    1.0 / (1.0 + (-v.ln_1p()).exp())
+                } else {
+                    1.0
+                };
+                let row = i * ld;
+                for j in 0..ld {
+                    k_slice[j] += ki * var_scale * w_k_head[row + j];
+                }
+            }
+            let mut score = 0.0f32;
+            for j in 0..ld {
+                score += q_slice[j] * k_slice[j];
+            }
+            scores[n] = score;
+        }
+
+        scores
+    }
+
+    // -----------------------------------------------------------------------
     // Serialization
     // -----------------------------------------------------------------------
 

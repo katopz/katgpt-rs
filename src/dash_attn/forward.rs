@@ -206,6 +206,10 @@ pub fn forward_dash_attn_decode<'a>(
             let _routing =
                 score_blocks_entmax_into(q_head, &summary_refs, dash_config, &mut routing_scratch);
             // TODO: Use routing.active_indices to select sparse KV blocks
+            // Plan 173 Task 6: Wall gate-derived block skip is available via
+            // ctx.wall_prefix.min_retention_at_block() when wall_attention is active.
+            // When Wall + DashAttention are both enabled, blocks where all channels
+            // have decayed below threshold can be pre-filtered before entmax routing.
         }
 
         types::matmul(&mut ctx.attn_out, &layer_weights.attn_wo, &ctx.q, n, n);
