@@ -1,4 +1,4 @@
-#![cfg(all(feature = "mux_latent_context", feature = "domain_latent"))]
+#![cfg(feature = "mux_latent_context")]
 
 //! Integration tests for MUX-Latent full compress → decode → verify pipeline.
 //!
@@ -160,8 +160,8 @@ fn compress_then_prefill_plan() {
         );
     }
     // summary should report both latent and raw counts
-    assert!(meta.summary.latent_slots > 0);
-    assert!(meta.summary.effective_entries < tokens.len());
+    assert!(meta.summary.latent_slots > 0, "summary.latent_slots should be > 0");
+    assert!(meta.summary.effective_entries < tokens.len(), "summary.effective_entries ({}) should be < tokens.len() ({})", meta.summary.effective_entries, tokens.len());
 }
 
 // ── Test 3: Buffer budget enforcement ──────────────────────────────
