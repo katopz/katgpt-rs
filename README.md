@@ -300,6 +300,52 @@ Amdahl cost model for LeviathanVerifier speculative decoding. Feature gate: `spe
 | f_sparse consistency | ✅ < 10% variance |
 | Cost model error bound | ✅ < 15% |
 
+## 🔀 MUX-Latent: Zero-Training Context Compression via Superposition Fusion (Plan 238)
+
+Compresses long context 4×–16× at prefill time using MUX superposition — **zero training, zero parameters, deterministic**. The fusion of three independently-proven ideas:
+
+| Ingredient | Origin | Role in Fusion |
+|---|---|---|
+| **MUX Superposition** | Research 158 | Encoder: `Σ decay^j × onehot(token_j)` blends N tokens into 1 latent slot |
+| **Latent Context Injection** | LCLM (arXiv 2606.09659) | Architecture: inject latent slots at mid-layer, skip full KV |
+| **DomainLatent** | Plan 038 | Wire format: BLAKE3-committed `DLAT` binary, mid-layer K/V inject |
+
+```mermaid
+flowchart LR
+    subgraph Encode["ENCODER — zero training"]
+        T["[t1..t8] span"] --> MUX["MUX Superpose\nΣ decay^j × onehot(t_j)"]
+        MUX --> Z["z_i (1 latent slot)"]
+    end
+    subgraph Wire["WIRE — latent-to-latent"]
+        Z -->|"f32 vector, BLAKE3 committed"| STREAM["Stream / Patch\nno decompress needed"]
+    end
+    subgraph Decode["DECODER — domain_latent inject"]
+        STREAM --> INJ["Mid-layer K/V\n1 KV entry (not 8)"]
+        INJ --> GEN["Generate tokens"]
+        GEN -.->|"on demand"| EXPAND["EXPAND(i)\nO(1) lossless recovery"]
+    end
+```
+
+### GOAT Proof (Bench 238)
+
+| Metric | X4 | X8 | X16 |
+|---|---|---|---|
+| **TTFT Speedup** | 6.6× | 14.0× | **29.0×** |
+| **KV Memory Reduction** | 75% | 87.5% | **93.8%** |
+| **Logit Cosine Sim** (random weights) | 0.597 | 0.617 | 0.552 |
+
+### Streaming & Patch Implications
+
+Because MUX latent slots are **continuous `Vec<f32>` vectors with BLAKE3 checksums**, they enable:
+
+- **Latent-to-latent streaming**: Send `z_i` over the wire — receiver injects directly into KV via `DomainLatent`. No round-trip decompress/recompress.
+- **Freeze/Thaw patching**: Selectively update specific latent slots (e.g., new facts arrive) without recomputing the entire compressed context. Patch = overwrite `weights` in one `LatentSegment`, recompute BLAKE3.
+- **Federated context**: Multiple nodes share compressed context segments as latent slots, merge via weighted average in superposition space.
+- **KG octree leaf patching**: `segment_id` ↔ octree morton code 1:1. Patch one 32-byte leaf = patch one latent slot. No full recompute.
+
+Feature gate: `mux_latent_context` (**default-ON**, GOAT 5/5 PASS). Adaptive LOD: `lclm_adaptive_lod` (opt-in).
+Wire patch protocol: [`Plan 243`](.plans/243_mux_latent_octree_wire_patch.md) (`mux_latent_wire`, opt-in).
+
 ## 🧵 ThoughtFold: Inference-Time Chain Folding (Plan 195)
 
 Prunes redundant reasoning steps during Chain-of-Thought generation using attention-based importance scoring + binary search fold verification. No LLM training — pure inference-time optimization.
