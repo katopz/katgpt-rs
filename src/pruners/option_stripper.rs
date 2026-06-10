@@ -200,20 +200,20 @@ impl<S: ScreeningPruner> OptionStripper<S> {
 
         // Letter options: A-D followed by ) or .
         if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_alphabetic()) {
-            if let Some(_) = rest.strip_prefix(')') {
+            if rest.strip_prefix(')').is_some() {
                 return true;
             }
-            if let Some(_) = rest.strip_prefix('.') {
+            if rest.strip_prefix('.').is_some() {
                 return true;
             }
         }
 
         // Numbered options: 1-4 followed by ) or .
         if let Some(rest) = trimmed.strip_prefix(|c: char| c.is_ascii_digit()) {
-            if let Some(_) = rest.strip_prefix(')') {
+            if rest.strip_prefix(')').is_some() {
                 return true;
             }
-            if let Some(_) = rest.strip_prefix('.') {
+            if rest.strip_prefix('.').is_some() {
                 return true;
             }
         }
@@ -352,6 +352,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn test_collapse_detector_frozen_validate() {
         let mut frozen = CollapseDetectorFrozen::default();
         frozen.threshold = 0;

@@ -35,6 +35,7 @@ impl SenseHotSwap {
     }
 
     /// Atomically swap a module. Returns Err if module is locked.
+    #[allow(clippy::result_large_err)]
     pub fn swap(&self, kind: SenseKind, new_module: SenseModule) -> Result<(), SenseModule> {
         let idx = kind as usize;
         let Some((ptr, locked)) = self.slots.get(idx).and_then(|s| s.as_ref()) else {
@@ -102,6 +103,7 @@ mod tests {
     fn test_swap_returns_consistent() {
         let hotswap = SenseHotSwap::new(&[SenseKind::FighterSense]);
         let mut module = SenseModule::default();
+        #[allow(clippy::field_reassign_with_default)]
         module.kind = SenseKind::FighterSense;
         module.commit();
 

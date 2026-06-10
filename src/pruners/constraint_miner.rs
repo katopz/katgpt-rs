@@ -1,4 +1,3 @@
-#![cfg(feature = "auto_constraint_synthesis")]
 //! Auto Constraint Synthesis — mine accepted DDTree paths for recurring patterns (Plan 211 F2).
 //!
 //! Extracts frequent token sequences from accepted paths and converts them to
@@ -367,6 +366,7 @@ mod tests {
 
         let patterns = extract_frequent_sequences(&paths, 10);
         let mut miner = ConstraintMiner::default();
+        #[allow(clippy::field_reassign_with_default)]
         miner.min_acceptance = 0.90;
 
         let mut constraints = Vec::new();

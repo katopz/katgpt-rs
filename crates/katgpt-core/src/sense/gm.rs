@@ -30,6 +30,7 @@ pub struct NpcBrainSnapshot {
 
 /// Internal-only trait for GM sense override dispatch.
 /// NOT exposed as public API — callers go through `dispatch_gm_action`.
+#[allow(dead_code)]
 pub(crate) trait GmSenseApi {
     /// Pin a single sense to a fixed activation value.
     fn pin_sense(&mut self, npc_id: u32, kind: SenseKind, value: f32) -> Result<(), SenseError>;
@@ -71,6 +72,7 @@ pub(crate) trait GmSenseApi {
 // Binary payload helpers
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 fn read_u32(payload: &[u8], offset: usize) -> Option<(u32, usize)> {
     if offset + 4 > payload.len() {
         return None;
@@ -84,6 +86,7 @@ fn read_u32(payload: &[u8], offset: usize) -> Option<(u32, usize)> {
     Some((val, offset + 4))
 }
 
+#[allow(dead_code)]
 fn read_u64(payload: &[u8], offset: usize) -> Option<(u64, usize)> {
     if offset + 8 > payload.len() {
         return None;
@@ -101,6 +104,7 @@ fn read_u64(payload: &[u8], offset: usize) -> Option<(u64, usize)> {
     Some((val, offset + 8))
 }
 
+#[allow(dead_code)]
 fn read_f32(payload: &[u8], offset: usize) -> Option<(f32, usize)> {
     if offset + 4 > payload.len() {
         return None;
@@ -114,6 +118,7 @@ fn read_f32(payload: &[u8], offset: usize) -> Option<(f32, usize)> {
     Some((val, offset + 4))
 }
 
+#[allow(dead_code)]
 fn read_u8(payload: &[u8], offset: usize) -> Option<(u8, usize)> {
     if offset >= payload.len() {
         return None;
@@ -122,6 +127,7 @@ fn read_u8(payload: &[u8], offset: usize) -> Option<(u8, usize)> {
 }
 
 /// Convert raw u8 to SenseKind. Returns None for unknown discriminants.
+#[allow(dead_code)]
 fn kind_from_u8(raw: u8) -> Option<SenseKind> {
     match raw {
         0 => Some(SenseKind::CommonSense),
@@ -136,6 +142,7 @@ fn kind_from_u8(raw: u8) -> Option<SenseKind> {
 }
 
 /// Serialize snapshot into a binary response buffer.
+#[allow(dead_code)]
 fn serialize_snapshot(snap: &NpcBrainSnapshot) -> Vec<u8> {
     let count = snap.activations.len() as u8;
     let override_count = snap.overrides_active.len() as u8;
@@ -191,6 +198,7 @@ fn serialize_snapshot(snap: &NpcBrainSnapshot) -> Vec<u8> {
 /// - `0x25` lock_module:   npc_id(4) + kind(1)
 /// - `0x26` force_reload:  npc_id(4) + kind(1) + path_len(1) + path_bytes(path_len)
 /// - `0x27` dump_brain:    npc_id(4)
+#[allow(dead_code)]
 pub(crate) fn dispatch_gm_action(
     api: &mut dyn GmSenseApi,
     action_code: u8,

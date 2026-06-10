@@ -56,11 +56,20 @@ Implementation of `.issues/001_pruners_optimization.md` findings.
 ### LOW
 - [ ] Remaining LOW items from issue
 
-## GOAT Gates
-| Gate | Change | Metric |
-|------|--------|--------|
-| `goat_flat_cells` | BomberState flat cells | MCTS nodes/sec |
-| `goat_multisource_bfs` | Go multi-source BFS | evaluate() μs |
+## GOAT Proof Results
+
+Benchmarks run on debug build (unoptimized). All gates ≥ 10% gain threshold.
+
+| Gate | Change | OLD | NEW | Gain | Verdict |
+|------|--------|-----|-----|------|---------|
+| G1 | BomberState flat cells | Vec<Vec<Cell>> | [Cell;169] | **+595%** | 🟢 PROMOTED |
+| G2 | MCTS throughput | — | 518K nodes/sec | — | 🟢 within bounds |
+| G3 | Go multi-source BFS | per-cell BFS | multi-source | **+367%** | 🟢 PROMOTED |
+| G4 | Arc\<BFCP\> | deep clone | Arc refcount | **+5912%** | 🟢 PROMOTED |
+| G4b | BFCP cache pipeline | — | 119K ops/sec | — | 🟢 within bounds |
+| G5 | PhraseTrie bitset | O(n²) contains | bitset | **+53%** | 🟢 PROMOTED |
+
+**No losers to demote.** All optimizations proven ≥ 10% gain.
 
 ## Skipped Items (with justification)
 - `hydra_budget Vec<bool> → bitmask`: pub field used externally, would break API

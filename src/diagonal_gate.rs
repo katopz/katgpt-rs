@@ -180,9 +180,9 @@ impl WallDiagonalGate {
         // Step 5: out = ln(1 + exp(-logit)) → softplus(-logit), then negate
         // log_sigmoid(logit) = -ln(1 + exp(-logit)) = -softplus(-logit)
         simd_add_scalar_inplace(&mut out[..hd], 1.0);
-        for d in 0..hd {
-            let log_sig = -out[d].ln();
-            out[d] = log_sig.clamp(-self.gate_max, 0.0);
+        for v in out[..hd].iter_mut() {
+            let log_sig = -(*v).ln();
+            *v = log_sig.clamp(-self.gate_max, 0.0);
         }
     }
 }

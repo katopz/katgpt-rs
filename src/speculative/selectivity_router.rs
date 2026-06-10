@@ -125,13 +125,7 @@ impl SelectivityRouter {
     ///
     /// Returns `None` if position has never been observed.
     pub fn kurtosis_at(&self, position: usize) -> Option<f32> {
-        // Positions at the tail of the vec that were never observed
-        // still have the resize-default of 0.0 — treat as observed
-        // only if within bounds and non-zero or explicitly set.
-        match self.position_kurtosis.get(position) {
-            Some(&k) => Some(k),
-            None => None,
-        }
+        self.position_kurtosis.get(position).copied()
     }
 
     /// Reset all tracking state. Use when switching domains or sessions.
@@ -502,7 +496,7 @@ mod benches {
         let start = Instant::now();
         let data = std::hint::black_box(router.serialize());
         let elapsed = start.elapsed();
-        assert!(data.len() > 0, "serialized data should be non-empty");
+        assert!(!data.is_empty(), "serialized data should be non-empty");
         eprintln!("serialize 1K positions: {:?}", elapsed);
     }
 
@@ -515,7 +509,7 @@ mod benches {
         let start = Instant::now();
         let data = std::hint::black_box(router.serialize());
         let elapsed = start.elapsed();
-        assert!(data.len() > 0);
+        assert!(!data.is_empty());
         eprintln!("serialize 10K positions: {:?}", elapsed);
     }
 
@@ -528,7 +522,7 @@ mod benches {
         let start = Instant::now();
         let data = std::hint::black_box(router.serialize());
         let elapsed = start.elapsed();
-        assert!(data.len() > 0);
+        assert!(!data.is_empty());
         eprintln!("serialize 100K positions: {:?}", elapsed);
     }
 

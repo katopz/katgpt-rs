@@ -67,11 +67,11 @@ fn main() {
 
     for episode in 0..EPISODES {
         // Simple LCG PRNG
-        for arm in 0..NUM_ARMS {
+        for (arm, &rate) in SUCCESS_RATES.iter().enumerate() {
             rng_state = rng_state.wrapping_mul(6364136223846793005).wrapping_add(1);
             let rand_f32 = ((rng_state >> 33) as f32) / (1u64 << 31) as f32;
 
-            let success = rand_f32 < SUCCESS_RATES[arm];
+            let success = rand_f32 < rate;
             let outcome = if success {
                 EvidenceOutcome::Success
             } else {
@@ -80,7 +80,7 @@ fn main() {
 
             let failure_mode = if !success {
                 // Classify failure mode
-                if SUCCESS_RATES[arm] < 0.3 {
+                if rate < 0.3 {
                     Some(FailureMode::FalseAccept)
                 } else {
                     Some(FailureMode::WrongValue)
@@ -96,13 +96,13 @@ fn main() {
         // Print status at key milestones
         if episode == 9 || episode == 49 || episode == 99 {
             println!("\n  ── After {} episodes ──", episode + 1);
-            for arm in 0..NUM_ARMS {
+            for (arm, &rate) in SUCCESS_RATES.iter().enumerate() {
                 let pv = pgp.precision(arm).unwrap();
                 let action = pgp.lifecycle_action(arm);
                 let surprise = pgp.last_surprise(arm);
                 println!(
                     "  Arm {arm} (p={:.1}): obs={:3}, success_prob={:.3}, precision={:.1}, surprise={:.4}, action={action:?}",
-                    SUCCESS_RATES[arm],
+                    rate,
                     pv.observations(),
                     pv.success_probability(),
                     pv.avg_precision(),
@@ -117,13 +117,13 @@ fn main() {
     println!("── AFTER ({EPISODES} episodes) ──────────────────────────────────────────");
     println!();
     println!("  Relevance with precision modulation:");
-    for arm in 0..NUM_ARMS {
+    for (arm, &rate) in SUCCESS_RATES.iter().enumerate() {
         let rel = pgp.relevance(0, arm, &[]);
         let action = pgp.lifecycle_action(arm);
         let pv = pgp.precision(arm).unwrap();
         println!(
             "  Arm {arm} (p={:.1}): relevance={rel:.3}, success_prob={:.3}, precision={:.1}, action={action:?}",
-            SUCCESS_RATES[arm],
+            rate,
             pv.success_probability(),
             pv.avg_precision(),
         );

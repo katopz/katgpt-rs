@@ -409,12 +409,14 @@ impl SlodOperator {
 
             // C_k(σ): spectral concentration — effective rank
             let mut c_energy = 0.0f32;
-            for k in 0..k_eigs {
-                let decay = (-eigenvalues[k] * sigma).exp();
+            for &eig in eigenvalues.iter().take(k_eigs) {
+                let decay = (-eig * sigma).exp();
                 c_energy += decay * decay;
             }
-            let c_total: f32 = (0..k_eigs)
-                .map(|k| (-eigenvalues[k] * sigma).exp())
+            let c_total: f32 = eigenvalues
+                .iter()
+                .take(k_eigs)
+                .map(|&eig| (-eig * sigma).exp())
                 .sum::<f32>()
                 .max(1e-10);
             c_signal[si] = c_energy / (c_total * c_total);
@@ -431,7 +433,7 @@ impl SlodOperator {
             .collect();
 
         // MAD peak picker
-        mad_peak_picker(&composite, &sigmas, &eigenvalues, config)
+        mad_peak_picker(&composite, &sigmas, eigenvalues, config)
     }
 
     /// Construct SlodOperator from embeddings.
@@ -552,8 +554,9 @@ pub fn frechet_mean(
         }
 
         // Normalize by total weight
-        for d in 0..dim {
-            avg_tangent[d] /= weight_sum.max(1e-10);
+        let norm = weight_sum.max(1e-10);
+        for v in avg_tangent.iter_mut() {
+            *v /= norm;
         }
 
         // Check convergence

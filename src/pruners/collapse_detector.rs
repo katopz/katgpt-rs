@@ -182,6 +182,7 @@ impl S2FCollapseDetector {
     }
 
     /// Count hesitation tokens in the current ring buffer.
+    #[allow(clippy::needless_range_loop)]
     fn count_hesitation(&self) -> u32 {
         let mut count: u32 = 0;
         for i in 0..Self::RING_SIZE {

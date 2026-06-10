@@ -78,8 +78,8 @@ impl SenseOctreeBuilder {
     fn insert_embedding(&self, bits: &mut [u64; 4], embedding: &[f32; 8], _sign: bool) {
         // Simple spatial partition: use first 2 dims for quadtree-like indexing
         // Mark nodes as occupied based on embedding magnitude
-        for dim in 0..8.min(embedding.len()) {
-            if embedding[dim].abs() > 0.1 {
+        for (dim, &val) in embedding.iter().enumerate() {
+            if val.abs() > 0.1 {
                 let word = dim / 64;
                 let bit = dim % 64;
                 if word < bits.len() {
@@ -190,7 +190,7 @@ mod tests {
     #[cfg(feature = "schema_centroid")]
     #[test]
     fn test_build_from_centroid() {
-        use super::super::schema_centroid::{SchemaCentroidCache, schema_init_entity};
+        use super::super::schema_centroid::SchemaCentroidCache;
 
         let cache = SchemaCentroidCache::new();
         let class_hash = 42u64;

@@ -112,11 +112,11 @@ impl PhraseTrie {
         let mut seen = vec![false; self.nodes.len()];
         let mut next = Vec::with_capacity(active.len() + 1);
         for &node_idx in active {
-            if let Some(child) = self.nodes[node_idx].children[token_id] {
-                if !seen[child] {
-                    seen[child] = true;
-                    next.push(child);
-                }
+            if let Some(child) = self.nodes[node_idx].children[token_id]
+                && !seen[child]
+            {
+                seen[child] = true;
+                next.push(child);
             }
         }
         // Root (index 0) is always active — new phrases can start at any position.

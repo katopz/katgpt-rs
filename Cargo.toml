@@ -296,6 +296,14 @@ required-features = ["posterior_evolution"]
 name = "bench_231_union_bound_goat"
 required-features = ["union_bound_confidence"]
 
+[[test]]
+name = "bench_001_pruners_goat"
+required-features = ["bomber", "go"]
+
+[[test]]
+name = "bench_001_pruners_goat_proof"
+required-features = ["bomber", "go"]
+
 # ── SegmentCheckpoint (Plan 223b) ───────────────────────────────
 
 [[example]]
@@ -909,6 +917,10 @@ required-features = ["federation_composer"]
 [[test]]
 name = "bench_238_mux_latent_goat"
 required-features = ["mux_latent_context"]
+
+[[test]]
+name = "bench_238_mux_latent_model_goat"
+required-features = ["mux_latent_context", "domain_latent"]
 
 [[example]]
 name = "vocab_channel_pruner_demo"

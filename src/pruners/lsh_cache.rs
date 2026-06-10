@@ -40,8 +40,8 @@ impl SimHashFingerprint {
             }
         }
         let mut bits: u64 = 0;
-        for j in 0..64 {
-            if dots[j] >= 0.0 {
+        for (j, &dot) in dots.iter().enumerate() {
+            if dot >= 0.0 {
                 bits |= 1 << j;
             }
         }

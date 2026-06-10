@@ -4,6 +4,8 @@
 //! then initializes new entity embeddings near their class centroid
 //! with controlled perturbation — avoiding cold-start randomness.
 
+#![allow(clippy::needless_range_loop)]
+
 use super::octree::KgEmbedding;
 
 /// Pre-computed centroid statistics for a KG schema class.

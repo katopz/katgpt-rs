@@ -176,7 +176,7 @@ pub struct TemplateGrounding {
 impl TemplateGrounding {
     /// Template confidence: `sigmoid(1.0) ≈ 0.7310585`.
     /// Pre-computed because `f32::exp` is not `const fn`.
-    const TEMPLATE_CONFIDENCE: f32 = 0.7310585786300049;
+    const TEMPLATE_CONFIDENCE: f32 = 0.7310586;
 
     /// Create a new `TemplateGrounding` with the default template table.
     pub fn new() -> Self {
@@ -332,7 +332,7 @@ impl ConceptGrounding for TemplateGrounding {
         let confidence_summary = match (accepted_count, total_scorers) {
             (0, 0) => "no scorer data".to_string(),
             (a, t) if a == t && t > 0 => "all scorers agree".to_string(),
-            (a, t) if a == 0 => format!("unanimously rejected ({t} scorers)"),
+            (0, t) => format!("unanimously rejected ({t} scorers)"),
             (a, t) => format!("{a}/{t} scorers confident"),
         };
 

@@ -10,6 +10,7 @@
 //! ```
 
 #![cfg(feature = "schema_centroid")]
+#![allow(clippy::needless_range_loop)]
 
 use std::time::Instant;
 
@@ -623,6 +624,7 @@ fn goat_g8_bake_integration_informed_prior() {
     );
 }
 
+#[allow(dead_code)]
 fn test_goat_summary() {
     println!("\n=== GOAT 237: Schema-Centroid Informed KG Embedding Init ===");
     println!("  G1: Initialization quality ≥50% cosine improvement      ✅");

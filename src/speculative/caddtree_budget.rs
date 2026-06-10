@@ -63,8 +63,7 @@ impl AcceptanceSurrogate {
             return 0.0;
         }
         let mut confidence = 1.0_f32;
-        for d in 0..max_depth {
-            let marg = marginals[d];
+        for marg in marginals.iter().take(max_depth) {
             match marg.iter().copied().reduce(f32::max) {
                 Some(top1) => confidence *= top1,
                 None => return 0.0,
@@ -83,8 +82,7 @@ impl AcceptanceSurrogate {
         }
         let mut cum_confidence = 1.0_f32;
         let mut total = 0.0_f32;
-        for d in 0..marginals.len() {
-            let marg = marginals[d];
+        for marg in marginals.iter() {
             let top1 = match marg.iter().copied().reduce(f32::max) {
                 Some(p) => p,
                 None => break,
@@ -109,8 +107,7 @@ impl AcceptanceSurrogate {
         }
         let mut cum_confidence = 1.0_f32;
         let mut total = 0.0_f32;
-        for d in 0..marginals.len() {
-            let marg = marginals[d];
+        for marg in marginals.iter() {
             if marg.is_empty() {
                 break;
             }
