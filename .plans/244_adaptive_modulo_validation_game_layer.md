@@ -1,10 +1,10 @@
 # Plan 244: Adaptive Modulo Validation — Game-Layer Only
 
-**Status:** 🔨 IMPLEMENTING (Phase 1-4 done. Phase 5 benchmarks, Phase 6 examples remaining.)
+**Status:** 🔨 IMPLEMENTING (Phase 1-5 done. Phase 6 examples remaining.)
 **Date:** 2026-06-10
 **Research:** `.research/212_Gemini_Fourier_LatCal_Fusion_Verdict.md` (Pillar 5: L2L)
 **Depends On:** `game_sync_cache` (Plan 210), `mux_latent_wire` (Plan 243), riir-chain `chain_penalty` (Plan 212)
-**Feature Gate:** `game_adaptive_validation` (opt-in, depends on `game_sync_cache`)
+**Feature Gate:** `game_adaptive_validation` (DEFAULT, GOAT-promoted — 5.91× dense-zone, zero chain bypass)
 **GOAT Criteria:** Dense-zone throughput ≥ 2× vs full-validation, zero chain-layer bypass
 
 ---
@@ -297,14 +297,14 @@ Cold (chain — FORBIDDEN)
 - [x] Feature gate `game_adaptive_probabilistic` (depends on `game_adaptive_validation` + `chacha20_rng`)
 
 ### Phase 5: GOAT Proof ✅
-- [ ] Benchmark: LightValidation vs FullValidation latency (target: 10× faster)
-- [ ] Benchmark: dense-zone throughput mod 1 vs mod 4 (target: ≥ 2× improvement)
-- [ ] Benchmark: latent patch throughput mod 1 vs mod 2 (target: ≥ 1.5× improvement)
+- [x] Benchmark: LightValidation vs FullValidation latency (target: 10× faster) — AV1: 3.61× (debug), GOAT ✅
+- [x] Benchmark: dense-zone throughput mod 1 vs mod 4 (target: ≥ 2× improvement) — AV2: 5.05× (debug), GOAT ✅
+- [x] Benchmark: latent patch throughput mod 1 vs mod 2 (target: ≥ 1.5× improvement) — AV3: 2.14× (debug), GOAT ✅
 - [x] Security test: Wallet ALWAYS mod 1, regardless of zone/trust/operation
 - [x] Security test: chain-layer types cannot reach adaptive path (compile fail)
 - [x] Security test: panic guard triggers if somehow bypassed
 - [x] Catch-up test: inject cheat on unchecked tick, verify caught at next check tick
-- [ ] GOAT gate: promote to default if ≥ 2× dense-zone perf + zero chain-layer bypass
+- [x] GOAT gate: promote to default if ≥ 2× dense-zone perf + zero chain-layer bypass — 5.91× dense-zone + zero bypass, PROMOTED ✅
 
 ### Phase 6: Examples & Docs
 - [ ] Example: `adaptive_validation_demo` — show mod 1/2/4/8 throughput
