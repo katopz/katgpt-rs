@@ -46,7 +46,8 @@ impl SpectralThreatFeatures {
     /// confidence + phase near 0 produces urgency > 0.7.
     #[inline]
     pub fn dodge_urgency(&self) -> f32 {
-        let raw = self.combo_frequency * (1.0 - 2.0 * self.vulnerability_phase) * self.rhythm_confidence;
+        let raw =
+            self.combo_frequency * (1.0 - 2.0 * self.vulnerability_phase) * self.rhythm_confidence;
         sigmoid(raw * 5.0)
     }
 
@@ -56,7 +57,8 @@ impl SpectralThreatFeatures {
     /// Inverse of urgency — when to attack rather than dodge.
     #[inline]
     pub fn counter_window(&self) -> f32 {
-        let raw = self.combo_frequency * (2.0 * self.vulnerability_phase - 1.0) * self.rhythm_confidence;
+        let raw =
+            self.combo_frequency * (2.0 * self.vulnerability_phase - 1.0) * self.rhythm_confidence;
         sigmoid(raw * 5.0)
     }
 }
@@ -85,6 +87,8 @@ struct LabeledRhythm {
     y_buf: Vec<f32>,
     /// Pre-allocated scratch for in-place z output.
     z_buf: Vec<f32>,
+    /// Observed damage tick timestamps for auto-calibration.
+    damage_timestamps: Vec<u32>,
 }
 
 // ── CombatRhythmTracker ────────────────────────────────────────
@@ -168,6 +172,7 @@ impl CombatRhythmTracker {
             forcing: vec![0.0; h],
             y_buf: vec![0.0; h],
             z_buf: vec![0.0; h],
+            damage_timestamps: Vec::with_capacity(16),
         });
     }
 
@@ -208,6 +213,7 @@ impl CombatRhythmTracker {
         // Only count real damage events for confidence ramp
         if amount > 0.0 {
             rhythm.event_count += 1;
+            rhythm.damage_timestamps.push(_tick);
         }
     }
 
@@ -264,12 +270,81 @@ impl CombatRhythmTracker {
         }
     }
 
+    /// Auto-calibrate ω² from observed damage intervals.
+    ///
+    /// Snaps the nearest pre-tuned mode to the exact observed combo frequency,
+    /// and sets a second mode to the sub-harmonic (half frequency).
+    /// Requires at least 3 timestamps (2 intervals) to produce valid calibration.
+    pub fn auto_calibrate(&mut self, entity_id: u8) {
+        let rhythm = match self.cells.iter_mut().find(|c| c.entity_id == entity_id) {
+            Some(r) => r,
+            None => return,
+        };
+        let ts = &rhythm.damage_timestamps;
+        if ts.len() < 3 {
+            return;
+        }
+
+        // Compute intervals, filter zero-length (same-tick double hits)
+        let mut intervals: Vec<u32> = ts
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .filter(|&d| d > 0)
+            .collect();
+        if intervals.is_empty() {
+            return;
+        }
+
+        // Dominant interval = mode with ±5 tick tolerance
+        intervals.sort_unstable();
+        let mut best_val = intervals[0];
+        let mut best_count = 1u32;
+        let mut run_start = 0;
+        for i in 1..intervals.len() {
+            if intervals[i] - intervals[run_start] <= 10 {
+                // tolerance ±5 from cluster start
+                let count = (i - run_start + 1) as u32;
+                if count > best_count {
+                    best_count = count;
+                    best_val = intervals[run_start + (i - run_start) / 2];
+                }
+            } else {
+                run_start = i;
+            }
+        }
+        let dominant_interval = best_val;
+
+        // ω² = (2π / T)² where T = interval_ticks * dt
+        let period = dominant_interval as f32 * self.dt;
+        let omega = 2.0 * std::f32::consts::PI / period;
+        let observed_omega_sq = omega * omega;
+
+        // Snap nearest mode to observed ω²
+        let omega_sq = &mut rhythm.cell.omega_sq;
+        let mut nearest_idx = 0;
+        let mut nearest_dist = f32::MAX;
+        for (i, &v) in omega_sq.iter().enumerate() {
+            let dist = (v - observed_omega_sq).abs();
+            if dist < nearest_dist {
+                nearest_dist = dist;
+                nearest_idx = i;
+            }
+        }
+        omega_sq[nearest_idx] = observed_omega_sq;
+
+        // Sub-harmonic on second mode (avoid overwriting the snapped one)
+        let sub_harmonic = observed_omega_sq * 0.25;
+        let sub_idx = if nearest_idx == 0 { 1 } else { 0 };
+        omega_sq[sub_idx] = sub_harmonic;
+    }
+
     /// Reset state for a participant (new encounter).
     pub fn reset(&mut self, entity_id: u8) {
         if let Some(rhythm) = self.cells.iter_mut().find(|c| c.entity_id == entity_id) {
             let h = self.hidden_dim;
             rhythm.state = LinOSSState::zeros(h);
             rhythm.event_count = 0;
+            rhythm.damage_timestamps.clear();
         }
     }
 }
@@ -447,5 +522,53 @@ mod tests {
         // 9th should be ignored
         tracker.register(8);
         assert_eq!(tracker.cells.len(), 8);
+    }
+
+    #[test]
+    fn test_auto_calibrate_snaps_to_observed_frequency() {
+        let dt = 0.016f32;
+        let ticks_between = 50u32; // 50 * 16ms = 800ms combo
+        let mut tracker = CombatRhythmTracker::with_combat_frequencies(dt);
+        tracker.register(1);
+
+        // Feed 6 impulses at regular 50-tick intervals
+        for i in 0..6u32 {
+            tracker.ingest_damage(1, 30.0, i * ticks_between);
+        }
+
+        // Expected ω² = (2π / (50 * 0.016))² = (2π / 0.8)² ≈ 61.7
+        let expected_omega_sq = {
+            let period = ticks_between as f32 * dt;
+            let omega = 2.0 * std::f32::consts::PI / period;
+            omega * omega
+        };
+
+        tracker.auto_calibrate(1);
+
+        // Verify at least one mode matches the observed frequency
+        let cell = &tracker.cells[0];
+        let snapped = cell
+            .cell
+            .omega_sq
+            .iter()
+            .any(|&w| (w - expected_omega_sq).abs() < 0.1);
+        assert!(
+            snapped,
+            "Expected a mode near ω²={expected_omega_sq:.1}, got {:?}",
+            cell.cell.omega_sq
+        );
+
+        // Sub-harmonic should be ω²/4
+        let sub_harmonic = expected_omega_sq * 0.25;
+        let has_sub = cell
+            .cell
+            .omega_sq
+            .iter()
+            .any(|&w| (w - sub_harmonic).abs() < 0.1);
+        assert!(
+            has_sub,
+            "Expected sub-harmonic near ω²={sub_harmonic:.1}, got {:?}",
+            cell.cell.omega_sq
+        );
     }
 }
