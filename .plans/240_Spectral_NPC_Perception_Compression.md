@@ -1,6 +1,6 @@
 # Plan 240: Spectral NPC Perception Compression
 
-**Status:** GOAT-Gated (Needs Benchmark Proof)
+**Status:** GOAT-Gated — Experimental (CPU 25.2%, <40% threshold)
 **Feature Flag:** `sense_lod` (opt-in, requires `sense_composition` + `slod`)
 **Routing:** katgpt-rs → crates/katgpt-core/src/sense/
 
@@ -45,25 +45,25 @@ Reads `ScaleBoundary` from `SlodOperator` + NPC distance to player/centroid. Ass
 
 ## Tasks
 
-- [ ] Create `SenseLodLevel` enum with `module_mask() -> &[SenseKind]` in `crates/katgpt-core/src/sense/lod.rs`
-- [ ] Add `active_lod: SenseLodLevel` field to `NpcBrain` (default: `Full`)
-- [ ] Create `SenseLodRouter` struct — takes `&[ScaleBoundary]` + distance metric, produces `SenseLodLevel`
-- [ ] Modify `NpcBrain::project_all_into` to skip modules not in LOD mask, push `0.0` for skipped
-- [ ] Modify `batch_project_all` / `batch_project_all_par` to accept `SenseLodRouter` and assign LODs pre-batch
-- [ ] Add `#[cfg(feature = "sense_lod")]` gate on all new code; feature requires `sense_composition` + `slod` in `Cargo.toml`
-- [ ] Add unit tests: mask correctness, skip behavior, fallback when no boundaries
-- [ ] Create benchmark `crates/katgpt-core/benches/sense_lod.rs`: 200 NPCs, measure CPU reduction vs behavioral delta
+- [x] Create `SenseLodLevel` enum with `module_mask() -> &[SenseKind]` in `crates/katgpt-core/src/sense/lod.rs`
+- [x] Add `active_lod: SenseLodLevel` field to `NpcBrain` (default: `Full`)
+- [x] Create `SenseLodRouter` struct — takes `&[ScaleBoundary]` + distance metric, produces `SenseLodLevel`
+- [x] Modify `NpcBrain::project_all_into` to skip modules not in LOD mask, push `0.0` for skipped
+- [x] Modify `batch_project_all` / `batch_project_all_par` to accept `SenseLodRouter` and assign LODs pre-batch
+- [x] Add `#[cfg(feature = "sense_lod")]` gate on all new code; feature requires `sense_composition` + `slod` in `Cargo.toml`
+- [x] Add unit tests: mask correctness, skip behavior, fallback when no boundaries
+- [x] Create benchmark `crates/katgpt-core/benches/sense_lod.rs`: 200 NPCs, measure CPU reduction vs behavioral delta
 
 ## GOAT Gate
 
 | Metric | Threshold | Pass |
 |--------|-----------|------|
-| CPU reduction (200 NPC batch) | >40% vs baseline | ☐ |
-| Behavioral quality loss | <5% (max projection delta across modules) | ☐ |
-| Zero alloc in hot path | No new allocations in `project_all_into` | ☐ |
-| Graceful fallback | No boundaries → Full LOD (no behavior change) | ☐ |
+| CPU reduction (200 NPC batch) | >40% vs baseline | ☒ 25.2% |
+| Behavioral quality loss | <5% (max projection delta across modules) | ✅ 0.0% |
+| Zero alloc in hot path | No new allocations in `project_all_into` | ✅ |
+| Graceful fallback | No boundaries → Full LOD (no behavior change) | ✅ |
 
-**Promotion:** If GOAT passes, promote `sense_lod` to default ON. If <30% CPU reduction or >8% quality loss, demote to experimental.
+**Verdict:** GOAT FAIL on CPU reduction. Quality is perfect. CPU bottleneck is `project_kind`'s O(n) GM override scan, not the dot-product itself. Stays experimental — not promoted to default.
 
 ## Expected Result
 

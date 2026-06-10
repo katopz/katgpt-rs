@@ -2,6 +2,9 @@
 
 use crate::types::{SenseKind, SenseModule};
 
+#[cfg(feature = "sense_lod")]
+use crate::sense::lod::SenseLodLevel;
+
 /// Maximum number of per-sense overrides.
 const MAX_OVERRIDES: usize = 8;
 
@@ -25,6 +28,10 @@ pub struct NpcBrain {
     pub hla_state: [f32; 8],
     /// GM override mask.
     pub overrides: SenseOverride,
+    /// Active LOD level — determines which modules to project.
+    /// Default: Full (all modules). Only used with `sense_lod` feature.
+    #[cfg(feature = "sense_lod")]
+    pub active_lod: SenseLodLevel,
 }
 
 impl NpcBrain {
@@ -34,6 +41,8 @@ impl NpcBrain {
             modules,
             hla_state: [0.0; 8],
             overrides: SenseOverride::default(),
+            #[cfg(feature = "sense_lod")]
+            active_lod: SenseLodLevel::Full,
         }
     }
 
@@ -47,8 +56,24 @@ impl NpcBrain {
 
     /// Zero-alloc projection into pre-allocated buffer.
     /// Clears `result` and fills with projected values for each module.
+    /// With `sense_lod` feature: skips modules not in active LOD level, pushes 0.0 for skipped.
     pub fn project_all_into(&self, result: &mut Vec<f32>) {
         result.clear();
+        #[cfg(feature = "sense_lod")]
+        {
+            let mask = crate::sense::lod::SenseLodMask::from_level(self.active_lod);
+            for m in &self.modules {
+                if mask.is_active(m.kind) {
+                    let val = self
+                        .project_kind(m.kind)
+                        .unwrap_or_else(|| m.project(&self.hla_state));
+                    result.push(val);
+                } else {
+                    result.push(0.0);
+                }
+            }
+        }
+        #[cfg(not(feature = "sense_lod"))]
         for m in &self.modules {
             let val = self
                 .project_kind(m.kind)
@@ -186,5 +211,92 @@ mod tests {
 
         brain.enable_autonomous();
         assert!(!brain.overrides.autonomous_disabled);
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "sense_lod")]
+mod lod_tests {
+    use super::*;
+    use crate::sense::lod::SenseLodLevel;
+    use crate::sense::octree::{KgEmbedding, SenseOctreeBuilder};
+
+    fn make_brain_with_modules() -> NpcBrain {
+        let builder = SenseOctreeBuilder::new(3);
+        let kinds = [
+            SenseKind::CommonSense,
+            SenseKind::FighterSense,
+            SenseKind::GameTheorySense,
+            SenseKind::SpatialSense,
+            SenseKind::SocialSense,
+            SenseKind::SkillSense,
+        ];
+        let modules: Vec<SenseModule> = kinds
+            .iter()
+            .map(|&kind| {
+                let emb = KgEmbedding {
+                    entity_hash: kind as u64,
+                    relation_hash: kind as u64,
+                    embedding: [0.5; 8],
+                    sign: true,
+                    confidence: 1.0,
+                };
+                builder.build(kind, &[emb])
+            })
+            .collect();
+        let mut brain = NpcBrain::compose(modules);
+        brain.hla_state = [0.5; 8];
+        brain
+    }
+
+    #[test]
+    fn test_lod_full_all_modules() {
+        let brain = make_brain_with_modules();
+        let mut result = Vec::new();
+        brain.project_all_into(&mut result);
+        assert_eq!(result.len(), 6);
+        // All should be non-zero
+        assert!(result.iter().all(|v| *v > 0.0));
+    }
+
+    #[test]
+    fn test_lod_minimal_only_spatial() {
+        let mut brain = make_brain_with_modules();
+        brain.active_lod = SenseLodLevel::Minimal;
+        let mut result = Vec::new();
+        brain.project_all_into(&mut result);
+        assert_eq!(result.len(), 6);
+        // Only SpatialSense (index 3) should be non-zero
+        for (i, v) in result.iter().enumerate() {
+            if i == 3 {
+                assert!(*v > 0.0, "SpatialSense should be non-zero");
+            } else {
+                assert_eq!(*v, 0.0, "Module {} should be skipped (0.0)", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lod_compressed_three_modules() {
+        let mut brain = make_brain_with_modules();
+        brain.active_lod = SenseLodLevel::Compressed;
+        let mut result = Vec::new();
+        brain.project_all_into(&mut result);
+        assert_eq!(result.len(), 6);
+        // Common (0), Fighter (1), Spatial (3) should be non-zero
+        let active = [0, 1, 3];
+        for (i, v) in result.iter().enumerate() {
+            if active.contains(&i) {
+                assert!(*v > 0.0, "Module {} should be active", i);
+            } else {
+                assert_eq!(*v, 0.0, "Module {} should be skipped", i);
+            }
+        }
+    }
+
+    #[test]
+    fn test_lod_default_is_full() {
+        let brain = make_brain_with_modules();
+        assert_eq!(brain.active_lod, SenseLodLevel::Full);
     }
 }

@@ -9,10 +9,14 @@ pub mod batch;
 pub mod brain;
 pub mod gm;
 pub mod hotswap;
+#[cfg(feature = "sense_lod")]
+pub mod lod;
 pub mod octree;
 #[cfg(feature = "schema_centroid")]
 pub mod schema_centroid;
 pub mod serialize;
+#[cfg(feature = "spectral_threat")]
+pub mod spectral_threat;
 
 #[cfg(feature = "bake_precision")]
 pub use bake::{BakePrecisionStore, BakeSession, PrecisionEntry};
@@ -31,3 +35,5 @@ pub use schema_centroid::schema_init_with_precision;
 pub use schema_centroid::{
     CentroidStats, SchemaCentroidCache, compute_centroid, schema_init_entity,
 };
+#[cfg(feature = "spectral_threat")]
+pub use spectral_threat::{CombatRhythmTracker, SpectralThreatFeatures};

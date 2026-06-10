@@ -13,9 +13,11 @@ blake3 = "1"
 serde = { version = "1", features = ["derive"] }
 half = "2"
 papaya = { version = "0.2", optional = true }
+rustfft = { version = "6", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
 default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost"]
@@ -67,3 +69,16 @@ slod = ["spectral_hierarchy"]  # SLoD Spectral Level-of-Detail Pruner (Plan 235,
 rat_plus_bridge = []  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 schema_centroid = ["dep:papaya"]  # Schema-Centroid Informed KG Embedding Initialization (Plan 237)
 bake_precision = ["dep:papaya"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236)
+spectral_threat = ["sense_composition", "modal_spec"]  # LinOSS Modal Threat Prediction (Plan 241)
+sense_lod = ["sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240)
+flow_field_nav = ["leo_all_goals", "dep:rustfft"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT-gated)
+
+[[bench]]
+name = "flow_field_bench"
+harness = false
+required-features = ["flow_field_nav"]
+
+[[bench]]
+name = "sense_lod"
+harness = false
+required-features = ["sense_lod"]

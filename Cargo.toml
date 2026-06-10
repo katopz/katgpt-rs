@@ -44,6 +44,7 @@ data_probe = ["katgpt-core/dirichlet_energy"]  # Data Probe Diagnostics — cont
 dirichlet_energy = ["katgpt-core/dirichlet_energy"]  # Dirichlet Energy structural alignment diagnostic (Research 111, Plan 149)
 leo_all_goals = ["katgpt-core/leo_all_goals"]  # LEO all-goals Q-value framework — LeoHead + AllGoalsUpdate + sigmoid_bounded_q (Plan 155)
 dual_leo = ["leo_all_goals", "katgpt-core/dual_leo"]  # Dual LEO teacher-student — + DualLeoMixer + AutocurriculumSampler (Plan 155)
+flow_field_nav = ["katgpt-core/flow_field_nav"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT-gated)
 ega_attn = []  # Energy-Gated Attention spectral salience gating (Plan 139)
 sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
@@ -107,6 +108,7 @@ skill_lifecycle = ["bandit"]  # Inference-Time Skill Evolution — per-pruner me
 sense_composition = ["katgpt-core/sense_composition", "bandit"]  # KG Latent Octree Sense Composition (Plan 221)
 schema_centroid = ["katgpt-core/schema_centroid", "sense_composition"]  # Schema-Centroid Informed KG Embedding Initialization (Plan 237, GOAT 7/7, default-ON)
 slod = ["katgpt-core/slod", "spectral_hierarchy"]  # SLoD Spectral Level-of-Detail Pruner (Plan 235, GOAT G1-G6 all pass, default-ON)
+sense_lod = ["katgpt-core/sense_lod", "sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240, GOAT-gated)
 bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236, GOAT 10/10 but marginal drift 4.7% vs 30% target — opt-in loser)
 rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 sdpg_bandit = ["bandit"]  # SDPG bandit + KL anchoring (Plan 180, Research 160)
@@ -207,6 +209,7 @@ mux_bfs = ["mux_ddtree"]  # MUX BFS — superposition-guided parallel tree searc
 mux_freeze_thaw = ["mux_pruner"]  # MUX Freeze/Thaw — persistent superposition patterns (Research 158)
 mux_demux = []  # MuxDemux Verifier — deterministic superposition recovery (Research 158, MUX)
 mux_latent_context = []  # MUX-Latent Context Compression — inference-time context compression via vocabulary superposition (Research 211, Plan 238, GOAT G1 14-29× TTFT reduction, default-ON)
+mux_latent_wire = ["mux_latent_context", "domain_latent"]  # MUX-Latent Wire Patch — latent-to-latent patching without decompress/recompress (Plan 243, opt-in)
 lclm_adaptive_lod = ["mux_latent_context"]  # LCLM Adaptive LOD — spectral energy-based adaptive compression ratio (Research 211, Plan 238 Phase 4, opt-in)
 kvarn = []  # KVarN variance-normalized KV-cache quantization (Research 159)
 selectivity_router = []  # Self-Learning Selectivity Router — adaptive CoT via per-position EMA kurtosis (Plan 204, default-OFF until GOAT proof)
@@ -916,6 +919,14 @@ required-features = ["mux_latent_context"]
 [[test]]
 name = "bench_238_mux_latent_model_goat"
 required-features = ["mux_latent_context", "domain_latent"]
+
+[[test]]
+name = "bench_238_mux_latent_integration"
+required-features = ["mux_latent_context", "domain_latent"]
+
+[[test]]
+name = "bench_238_adaptive_lod_bench"
+required-features = ["mux_latent_context"]
 
 [[example]]
 name = "vocab_channel_pruner_demo"
