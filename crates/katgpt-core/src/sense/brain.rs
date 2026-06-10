@@ -126,7 +126,7 @@ impl NpcBrain {
 
     /// Full projection: iterate all modules, project each.
     #[inline]
-    fn project_full(&self, result: &mut Vec<f32>) {
+    fn project_full(&self, result: &mut [f32]) {
         for (i, m) in self.modules.iter().enumerate() {
             result[i] = match self.overrides.pinned_value(m.kind) {
                 Some(v) => v,
@@ -139,7 +139,7 @@ impl NpcBrain {
     /// Compressed projection: only Common, Fighter, Spatial via O(1) index lookup.
     #[cfg(feature = "sense_lod")]
     #[inline]
-    fn project_compressed(&self, result: &mut Vec<f32>) {
+    fn project_compressed(&self, result: &mut [f32]) {
         use SenseKind::*;
         for &kind in &[CommonSense, FighterSense, SpatialSense] {
             let kind_idx = kind as usize;
@@ -156,7 +156,7 @@ impl NpcBrain {
     /// Minimal projection: only Spatial via O(1) index lookup.
     #[cfg(feature = "sense_lod")]
     #[inline]
-    fn project_minimal(&self, result: &mut Vec<f32>) {
+    fn project_minimal(&self, result: &mut [f32]) {
         let spatial_idx = SenseKind::SpatialSense as usize;
         if let Some(mod_idx) = self.module_index[spatial_idx] {
             result[mod_idx] = match self.overrides.pinned_value(SenseKind::SpatialSense) {

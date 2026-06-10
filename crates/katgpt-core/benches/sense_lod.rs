@@ -165,7 +165,7 @@ fn main() {
     assert!(!mask.is_active(SenseKind::SkillSense));
 
     // Baseline (Full for all)
-    let mut brains_full = make_brains_with_6_modules(NPC_COUNT);
+    let brains_full = make_brains_with_6_modules(NPC_COUNT);
     // Full is already the default from compose()
     let mut results_full: Vec<Vec<f32>> = vec![vec![]; NPC_COUNT];
 
