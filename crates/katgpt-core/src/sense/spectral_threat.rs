@@ -42,12 +42,12 @@ impl SpectralThreatFeatures {
     /// High frequency + phase near 0.0 → urgency near 1.0 (dodge NOW).
     /// Low confidence → urgency near 0.5 (neutral, fall back to reactive).
     ///
-    /// Formula: `sigmoid(combo_frequency * (1.0 - 2.0 * vulnerability_phase) * rhythm_confidence)`
+    /// The gain factor (5.0) amplifies the raw signal so that moderate
+    /// confidence + phase near 0 produces urgency > 0.7.
     #[inline]
     pub fn dodge_urgency(&self) -> f32 {
-        let x =
-            self.combo_frequency * (1.0 - 2.0 * self.vulnerability_phase) * self.rhythm_confidence;
-        sigmoid(x)
+        let raw = self.combo_frequency * (1.0 - 2.0 * self.vulnerability_phase) * self.rhythm_confidence;
+        sigmoid(raw * 5.0)
     }
 
     /// Compute counter window from spectral features.
@@ -56,9 +56,8 @@ impl SpectralThreatFeatures {
     /// Inverse of urgency — when to attack rather than dodge.
     #[inline]
     pub fn counter_window(&self) -> f32 {
-        let x =
-            self.combo_frequency * (2.0 * self.vulnerability_phase - 1.0) * self.rhythm_confidence;
-        sigmoid(x)
+        let raw = self.combo_frequency * (2.0 * self.vulnerability_phase - 1.0) * self.rhythm_confidence;
+        sigmoid(raw * 5.0)
     }
 }
 

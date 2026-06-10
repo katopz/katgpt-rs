@@ -123,7 +123,7 @@ pub struct FlowFieldConfig {
 - [x] `flow_steering(field: &FlowField, pos: (f32, f32)) -> (f32, f32)` — bilinear interpolation for sub-cell positions
 - [x] Blend flow vector with separation/avoidance forces
 - [x] Fallback to individual LEO when NPC is off-grid or goal has < min_npcs
-- [ ] Integration test: 10 NPCs with shared goal reach target via flow field
+- [x] Integration test: 10 NPCs with shared goal reach target via flow field
 
 ### T6: Feature Gate
 - [x] Add `flow_field_nav` feature to `crates/katgpt-core/Cargo.toml` (requires `leo_all_goals`)

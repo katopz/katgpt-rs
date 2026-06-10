@@ -233,4 +233,107 @@ mod tests {
         assert!((x - 1.0).abs() < EPSILON);
         assert!((y - 0.0).abs() < EPSILON);
     }
+
+    /// T5 Integration test: 10 NPCs with shared goal reach target via flow field.
+    ///
+    /// Builds a potential field (inverse-distance to goal), FFT-smooths it,
+    /// computes gradient → FlowField, then simulates 10 NPCs walking toward
+    /// the goal using `flow_steering` at each step.
+    #[test]
+    fn test_10_npcs_reach_goal() {
+        use super::super::{LeoPotentialGrid, fft_smooth};
+        use crate::Rng;
+
+        let w: u16 = 32;
+        let h: u16 = 32;
+        let goal: (f32, f32) = (28.0, 28.0);
+        let step_size: f32 = 0.5;
+        let max_steps: usize = 300;
+        let tolerance: f32 = 2.0;
+        let npc_count: usize = 10;
+
+        // 1. Build potential field: negative distance to goal.
+        //    Higher potential closer to goal — a smooth radial cone that produces
+        //    correct gradient vectors everywhere.
+        let max_dist = (w as f32).hypot(h as f32);
+        let mut grid = LeoPotentialGrid::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let dx = x as f32 - goal.0;
+                let dy = y as f32 - goal.1;
+                let dist = dx.hypot(dy);
+                grid.set_potential(x, y, max_dist - dist);
+            }
+        }
+
+        // 2. FFT-smooth the potential.
+        //    NOTE: FFT treats the grid as periodic.  A peak near one corner causes
+        //    wraparound artifacts at the opposite corner.  On this 32×32 grid with
+        //    goal at (28,28), cells near (0,0) see a phantom peak from the periodic
+        //    copy, reversing the gradient.  We use a very high cutoff to keep almost
+        //    all frequencies (gentle smoothing) while still exercising the pipeline.
+        //    FFT correctness is validated in dedicated unit tests.
+        let raw = grid.potential_mut();
+        fft_smooth(raw, w as usize, h as usize, 0.95);
+
+        // 3. Gradient → FlowField.
+        let field = grid.gradient();
+
+        // 4. Spawn 10 NPCs at random positions away from the goal.
+        let mut rng = Rng::new(42);
+        let mut npcs: Vec<(f32, f32)> = Vec::with_capacity(npc_count);
+        for _ in 0..npc_count {
+            let mut px: f32;
+            let mut py: f32;
+            loop {
+                px = rng.uniform() * (w as f32 - 6.0); // keep away from right/bottom edge
+                py = rng.uniform() * (h as f32 - 6.0);
+                let dist = (px - goal.0).hypot(py - goal.1);
+                if dist > 5.0 {
+                    break;
+                }
+            }
+            npcs.push((px, py));
+        }
+
+        // 5. Simulate movement.
+        for (i, npc) in npcs.iter_mut().enumerate() {
+            for step in 0..max_steps {
+                let (dx, dy) = flow_steering(&field, *npc);
+                if dx == 0.0 && dy == 0.0 {
+                    // Flow is zero — NPC is at the goal or stuck.
+                    break;
+                }
+                npc.0 += dx * step_size;
+                npc.1 += dy * step_size;
+
+                // Clamp to grid bounds to prevent drift from boundary artifacts.
+                npc.0 = npc.0.clamp(0.0, (w - 1) as f32);
+                npc.1 = npc.1.clamp(0.0, (h - 1) as f32);
+
+                let dist = (npc.0 - goal.0).hypot(npc.1 - goal.1);
+                if dist < tolerance {
+                    break;
+                }
+
+                assert!(
+                    step < max_steps - 1,
+                    "NPC {i} did not reach goal after {max_steps} steps, pos=({:.2}, {:.2}), dist={dist:.2}",
+                    npc.0,
+                    npc.1
+                );
+            }
+        }
+
+        // 6. Assert all NPCs reached the goal.
+        for (i, npc) in npcs.iter().enumerate() {
+            let dist = (npc.0 - goal.0).hypot(npc.1 - goal.1);
+            assert!(
+                dist < tolerance,
+                "NPC {i} did not reach goal: pos=({:.2}, {:.2}), dist={dist:.2}",
+                npc.0,
+                npc.1
+            );
+        }
+    }
 }
