@@ -770,8 +770,8 @@ At 30K CCU: `30K × 20Hz = 600K inferences/sec`. CPU handles forward, but also r
 | `InferenceRouter` | Routes to highest available tier, batch mode | ✅ Complete |
 | `TriggerGateConfig` | Serde + TOML tunable thresholds | ✅ Complete |
 | `CpuBackend` | Wraps `transformer::forward` | ✅ Complete |
-| GPU Backend | Metal compute pipeline from `TransformerWeights` | 🔧 Blocked on metal crate |
-| ANE Backend | CoreML runtime compilation from `TransformerWeights` | 🔧 Blocked on coreml-native API |
+| GPU Backend | 8 Metal MSL kernels, full forward pass, cosine ≥ 0.999 vs CPU | ✅ Complete |
+| ANE Backend | CoreML runtime compilation + hybrid lm_head, full transformer spec | ✅ Complete (lm_head only, MIL spec future) |
 
 ### Benchmarked Performance (Bench 176, micro model, release)
 
@@ -783,7 +783,7 @@ At 30K CCU: `30K × 20Hz = 600K inferences/sec`. CPU handles forward, but also r
 | `forward_batch` (batch=8) | 0.83 µs/token (+3.3% overhead) |
 | Router under load (2000 iters) | 1.22M calls/sec, 0 tier transitions |
 
-> GPU and ANE tiers blocked on backend crates. CPU-only numbers are real. Run `cargo test --test bench_176_trigger_gate --release -- --nocapture` to reproduce.
+> CPU-only numbers shown. GPU/ANE tiers require `--features inference_router` on macOS. Run `cargo test --test bench_176_trigger_gate --release -- --nocapture` to reproduce.
 
 ### Feature Gates
 
