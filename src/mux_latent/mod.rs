@@ -13,12 +13,14 @@ mod context;
 mod encoder;
 mod expand;
 mod inject;
+mod prefill;
 mod spectral_lod;
 
 pub use buffer::{BufferStats, EvictionPolicy, LatentContextBuffer};
-pub use config::MuxLatentConfig;
+pub use config::{CompressionRatio, MuxLatentConfig};
 pub use context::{CompressedContext, LatentSegment};
 pub use encoder::MuxLatentEncoder;
-pub use expand::expand_segment;
+pub use expand::{expand_all, expand_segment};
 pub use inject::{CompressionSummary, LatentPrefillAdapter, MixedPrefillSequence, PrefillEntry};
+pub use prefill::{CompressedPrefillPlan, CompressionMetadata, forward_prefill_with_compression};
 pub use spectral_lod::SpectralLOD;

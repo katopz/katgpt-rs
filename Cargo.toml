@@ -207,6 +207,7 @@ mux_bfs = ["mux_ddtree"]  # MUX BFS — superposition-guided parallel tree searc
 mux_freeze_thaw = ["mux_pruner"]  # MUX Freeze/Thaw — persistent superposition patterns (Research 158)
 mux_demux = []  # MuxDemux Verifier — deterministic superposition recovery (Research 158, MUX)
 mux_latent_context = []  # MUX-Latent Context Compression — inference-time context compression via vocabulary superposition (Research 211, Plan 238, opt-in until GOAT proof)
+lclm_adaptive_lod = ["mux_latent_context"]  # LCLM Adaptive LOD — spectral energy-based adaptive compression ratio (Research 211, Plan 238 Phase 4, opt-in)
 kvarn = []  # KVarN variance-normalized KV-cache quantization (Research 159)
 selectivity_router = []  # Self-Learning Selectivity Router — adaptive CoT via per-position EMA kurtosis (Plan 204, default-OFF until GOAT proof)
 ruliology = ["bandit"]  # Ruliology Bandit — simple program strategies as bandit arms (Plan 188, Research 168)
@@ -273,7 +274,7 @@ hoare_pruner = ["llmexec_guard"]  # Opt-in: predicate propagation (Plan 223)
 trajectory_doctor = ["hoare_pruner"]  # Opt-in: failure localization (Plan 223)
 workflow_lattice = ["hoare_pruner"]  # Opt-in: sigmoid-graded relevance (Plan 223)
 wasm_proof_witness = []  # Opt-in: proof certificates (Plan 223)
-posterior_evolution = ["bandit"]  # Posterior-Guided Pruner Evolution — BAKE precision + MUSE lifecycle (Plan 238, Research 211, opt-in until GOAT proof)
+posterior_evolution = ["bandit"]  # Posterior-Guided Pruner Evolution — BAKE precision + MUSE lifecycle (Plan 239, Research 211, opt-in until GOAT proof)
 shard_embedding = []  # Shard Embedding Projection — JL random orthogonal projection for shard similarity (Plan 230, GOAT candidate)
 manifold_pruner = []  # ManifoldE point-to-manifold soft validity scoring (Research 207, Plan 234, GOAT G1 FAIL — demoted, keep opt-in)
 union_bound_confidence = []  # Union bound additive branch confidence (Research 205, Plan 231, GOAT 6/6, default-ON)
@@ -286,6 +287,10 @@ full = ["sudoku", "validator", "ppot", "domain_latent", "bandit", "delta_mem", "
 [[test]]
 name = "goat_234_manifold_pruner"
 required-features = ["manifold_pruner"]
+
+[[test]]
+name = "bench_239_posterior_evolution_goat"
+required-features = ["posterior_evolution"]
 
 [[test]]
 name = "bench_231_union_bound_goat"
@@ -900,6 +905,10 @@ required-features = ["bandit"]
 [[test]]
 name = "bench_231_federation_composer_goat"
 required-features = ["federation_composer"]
+
+[[test]]
+name = "bench_238_mux_latent_goat"
+required-features = ["mux_latent_context"]
 
 [[example]]
 name = "vocab_channel_pruner_demo"

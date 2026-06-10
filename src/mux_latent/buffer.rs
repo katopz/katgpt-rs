@@ -80,6 +80,7 @@ impl LatentContextBuffer {
     }
 
     /// Create a buffer with adaptive SLoD compression.
+    #[cfg(feature = "lclm_adaptive_lod")]
     pub fn new_adaptive(tokens: &[u32], config: MuxLatentConfig, slod: SpectralLOD) -> Self {
         let window_size = config.window_size;
         let span_size = config.compression_ratio.span_size();
@@ -474,6 +475,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "lclm_adaptive_lod")]
     fn test_buffer_adaptive_compression() {
         let config = MuxLatentConfig {
             window_size: 8,
