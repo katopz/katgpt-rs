@@ -773,14 +773,6 @@ At 30K CCU: `30K × 20Hz = 600K inferences/sec`. CPU handles forward, but also r
 | GPU Backend | Metal compute pipeline from `TransformerWeights` | 🔧 Blocked on metal crate |
 | ANE Backend | CoreML runtime compilation from `TransformerWeights` | 🔧 Blocked on coreml-native API |
 
-### Expected Performance
-
-| Tier | Throughput | CPU Free | CCU Capacity |
-|------|-----------|----------|-------------|
-| CPU_ONLY | 600K tok/s | 0% | ~1K CCU |
-| CPU+GPU | 5M tok/s | 80% | ~10K CCU |
-| CPU+GPU+ANE | 15M tok/s | 95% | **30K+ CCU** |
-
 ### Feature Gates
 
 ```toml
