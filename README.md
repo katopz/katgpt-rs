@@ -203,9 +203,12 @@ graph LR
 
 ### Attention (O(1) alternatives)
 
+> **Note:** These are **opt-in alternative forward paths** (`forward_gdn2()`, `forward_raven()`, `forward_looped()`). The default `forward()` → `forward_base()` uses standard O(N) softmax attention.
+
 | Component | What | Gate |
 |-----------|------|------|
 | **GDN2** | Gated DeltaNet-2 — O(1) decode, constant state per head | `gdn2_attention` |
+| **Raven RSM** | Fixed-slot Top-K routing memory, frozen unselected slots | always compiled, opt-in `forward_raven()` |
 | **HLA/AHLA** | Higher-order Linear Attention — O(1) prefix stats | `hla_attention` |
 | **LT2 Looped** | Weight-shared T-pass loop, hybrid SDPA+AHLA | `lt2_looped` |
 | **TF Loop** | Training-free ODE-motivated sub-stepping | `tf_loop` |
@@ -1123,6 +1126,7 @@ tests/               167 integration test & benchmark files (~87 bench suites)
 | [`.docs/22_percepta.md`](.docs/22_percepta.md) | **Percepta full detail** (module structure, compiler stack, verified properties) |
 | [`.docs/23_hl_arena_detail.md`](.docs/23_hl_arena_detail.md) | **HL & Arena detail** (all games, G-Zero, Freeze/Thaw, Emotion Vector, etc.) |
 | [`.docs/24_sense_composition.md`](.docs/24_sense_composition.md) | **NPC Sense Composition** (Plans 221/230/235/236/237) |
+| [`.docs/25_raven_rsm.md`](.docs/25_raven_rsm.md) | **Raven RSM** — Opt-in O(1) routing slot memory (demoted from default) |
 | [`.docs/191_open_ended_problem_evolution_arena.md`](.docs/191_open_ended_problem_evolution_arena.md) | **Open-ended problem evolution arena** (ProblemMutator, IdeaDivergence, PartialScorer) |
 | [`examples/README.md`](examples/README.md) | 111 examples grouped by category |
 
