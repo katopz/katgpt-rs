@@ -30,6 +30,20 @@ pub trait QuantizedKVCache {
     fn pos(&self) -> usize;
     /// Set the current write position.
     fn set_pos(&mut self, pos: usize);
+
+    /// Compact the KV cache into a smaller representation.
+    ///
+    /// Default implementation returns an error — only meaningful when the
+    /// `still_kv` feature is enabled and the concrete cache type supports
+    /// compaction.
+    #[cfg(feature = "still_kv")]
+    fn compact_into(
+        &mut self,
+        _budget: usize,
+        _strategy: crate::still_kv::CompactionStrategy,
+    ) -> Result<crate::still_kv::CompactKVCache, String> {
+        Err("compact_into not supported by this cache type".to_string())
+    }
 }
 
 // ---------------------------------------------------------------------------

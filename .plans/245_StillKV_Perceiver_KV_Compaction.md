@@ -53,7 +53,7 @@ IterativeChunkCompactor
 
 ### Phase 1: Core Infrastructure
 - [ ] T1: Create `src/still_kv/mod.rs` with feature gate `still_kv`
-- [ ] T2: Implement `PositionFreeCompactor` — RoPE un-rotate/re-rotate using existing RoPE infra
+- [x] T2: Implement `PositionFreeCompactor` — RoPE un-rotate/re-rotate using existing RoPE infra
 - [ ] T3: Implement `CompactKVCache` struct with `position_offset` field
 - [ ] T4: Extend `QuantizedKVCache` trait with `compact_into()` method (default impl returns error)
 - [ ] T5: Implement `CompactionStrategy` enum with strategy-specific query generation
@@ -66,16 +66,16 @@ IterativeChunkCompactor
 - [ ] T10: Implement `MuxSuperposition` — MUX-Latent encoder produces t superposed queries (behind `mux_latent` feature)
 
 ### Phase 3: StillPerceiver Cross-Attention
-- [ ] T11: Implement `StillPerceiver` with cross-attention from queries to KV cache
-- [ ] T12: Implement 2-block self-attention refinement (RMSNorm + residual)
-- [ ] T13: Implement output projection heads (identity init for near pass-through at t=T)
-- [ ] T14: Wire `StillPerceiver` into `compact_into()` pipeline
+- [x] T11: Implement `StillPerceiver` with cross-attention from queries to KV cache
+- [x] T12: Implement 2-block self-attention refinement (RMSNorm + residual)
+- [x] T13: Implement output projection heads (identity init for near pass-through at t=T)
+- [x] T14: Wire `StillPerceiver` into `compact_into()` pipeline
 
 ### Phase 4: Iterative Chunked Compaction
-- [ ] T15: Implement `IterativeChunkCompactor` with fixed compression ratio c
-- [ ] T16: Implement 1-chunk lookahead buffer (raw KV between compressed chunks)
-- [ ] T17: Implement position offset accounting for multi-chunk compaction
-- [ ] T18: Integrate with `SegmentCheckpoint` for growing memory pattern
+- [x] T15: Implement `IterativeChunkCompactor` with fixed compression ratio c
+- [x] T16: Implement 1-chunk lookahead buffer (raw KV between compressed chunks)
+- [x] T17: Implement position offset accounting for multi-chunk compaction
+- [x] T18: Integrate with `SegmentCheckpoint` for growing memory pattern
 
 ### Phase 5: Tests & Benchmarks
 - [ ] T19: Unit test — position-free compaction round-trip (un-rotate → compact → re-rotate ≈ original)
