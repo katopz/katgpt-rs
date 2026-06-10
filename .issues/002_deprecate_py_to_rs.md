@@ -38,7 +38,7 @@ Everything py2rs vanishes — code, docs, plans, config. No crumbs.
 - [x] Scrub py2rs refs from `.research/033_autogo_distillation_strategy.md`
 - [x] `cargo check --workspace`
 - [x] `cargo test --quiet --workspace`
-- [ ] Commit: `refactor: remove deprecated py2rs domain (archived at tag py_to_rs)`
+- [x] Commit: `refactor: remove deprecated py2rs domain (archived at tag py_to_rs)`
 
 ### Phase 4: Remove Code — riir-ai (back on develop)
 - [x] `git checkout develop`
@@ -65,7 +65,7 @@ Everything py2rs vanishes — code, docs, plans, config. No crumbs.
 - [x] Scrub py2rs / python_validator / rust_validator refs from `.docs/02_wasm_validator_sdk.md`
 - [x] `cargo check --workspace`
 - [x] `cargo test --quiet --workspace`
-- [ ] Commit: `refactor: remove deprecated py2rs domain (archived at tag py_to_rs)`
+- [x] Commit: `refactor: remove deprecated py2rs domain (archived at tag py_to_rs)`
 
 ## What stays (game validators only)
 - `riir-validator-sdk/examples/bracket_validator.rs` — generic, used by game validators internally
