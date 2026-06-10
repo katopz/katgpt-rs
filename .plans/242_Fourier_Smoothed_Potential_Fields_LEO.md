@@ -96,40 +96,40 @@ pub struct FlowFieldConfig {
 ## Tasks
 
 ### T1: Core Types + FlowField
-- [ ] Create `crates/katgpt-core/src/flow/mod.rs` with `FlowField`, `LeoPotentialGrid`, `FlowFieldConfig`
-- [ ] `FlowField::lookup(x, y) -> (f32, f32)` — O(1) indexed access with bounds check
-- [ ] `FlowField::is_blocked(x, y) -> bool` — obstacle query
-- [ ] Unit tests: lookup, bounds, blocked cells
+- [x] Create `crates/katgpt-core/src/flow/mod.rs` with `FlowField`, `LeoPotentialGrid`, `FlowFieldConfig`
+- [x] `FlowField::lookup(x, y) -> (f32, f32)` — O(1) indexed access with bounds check
+- [x] `FlowField::is_blocked(x, y) -> bool` — obstacle query
+- [x] Unit tests: lookup, bounds, blocked cells
 
 ### T2: LeoPotentialGrid Builder
-- [ ] `LeoPotentialGrid::from_q_values()` — map LEO Q-values onto 2D grid
-- [ ] `LeoPotentialGrid::mark_blocked()` — set obstacle cells from spatial data
-- [ ] `LeoPotentialGrid::gradient() -> FlowField` — finite differences + normalization
-- [ ] Unit tests: grid construction, gradient direction correctness
+- [x] `LeoPotentialGrid::from_q_values()` — map LEO Q-values onto 2D grid
+- [x] `LeoPotentialGrid::mark_blocked()` — set obstacle cells from spatial data
+- [x] `LeoPotentialGrid::gradient() -> FlowField` — finite differences + normalization
+- [x] Unit tests: grid construction, gradient direction correctness
 
 ### T3: FFT Smoothing
-- [ ] `fft_smooth(grid: &mut [f32], w: usize, h: usize, cutoff: f32)` — forward FFT, low-pass, inverse
-- [ ] Use `rustfft` crate (add to deps, feature-gated under `flow_field_nav`)
-- [ ] Obstacle inflation before FFT (morphological dilation)
-- [ ] Unit tests: smooth field has no local minima, gradient points toward goal
+- [x] `fft_smooth(grid: &mut [f32], w: usize, h: usize, cutoff: f32)` — forward FFT, low-pass, inverse
+- [x] Use `rustfft` crate (add to deps, feature-gated under `flow_field_nav`)
+- [x] Obstacle inflation before FFT (morphological dilation)
+- [x] Unit tests: smooth field has no local minima, gradient points toward goal
 
 ### T4: FlowFieldCache — Per-Goal Shared Cache
-- [ ] `FlowFieldCache` — maps `(goal_id) -> FlowField`, recomputes when dirty
-- [ ] Dirty tracking: count changed cells since last compute. Recompute when ≥ threshold.
-- [ ] Integration with `LeoHead`: extract Q-values on recompute
-- [ ] Unit tests: cache hit/miss, dirty threshold, recompute trigger
+- [x] `FlowFieldCache` — maps `(goal_id) -> FlowField`, recomputes when dirty
+- [x] Dirty tracking: count changed cells since last compute. Recompute when ≥ threshold.
+- [x] Integration with `LeoHead`: extract Q-values on recompute
+- [x] Unit tests: cache hit/miss, dirty threshold, recompute trigger
 
 ### T5: NPC Integration
-- [ ] `flow_steering(field: &FlowField, pos: (f32, f32)) -> (f32, f32)` — bilinear interpolation for sub-cell positions
-- [ ] Blend flow vector with separation/avoidance forces
-- [ ] Fallback to individual LEO when NPC is off-grid or goal has < min_npcs
+- [x] `flow_steering(field: &FlowField, pos: (f32, f32)) -> (f32, f32)` — bilinear interpolation for sub-cell positions
+- [x] Blend flow vector with separation/avoidance forces
+- [x] Fallback to individual LEO when NPC is off-grid or goal has < min_npcs
 - [ ] Integration test: 10 NPCs with shared goal reach target via flow field
 
 ### T6: Feature Gate
-- [ ] Add `flow_field_nav` feature to `crates/katgpt-core/Cargo.toml` (requires `leo_all_goals`)
-- [ ] Add `flow_field_nav` feature to workspace `Cargo.toml` (opt-in, NOT default)
-- [ ] Gate all `flow/` module behind `#[cfg(feature = "flow_field_nav")]`
-- [ ] Conditionally compile `rustfft` dependency
+- [x] Add `flow_field_nav` feature to `crates/katgpt-core/Cargo.toml` (requires `leo_all_goals`)
+- [x] Add `flow_field_nav` feature to workspace `Cargo.toml` (opt-in, NOT default)
+- [x] Gate all `flow/` module behind `#[cfg(feature = "flow_field_nav")]`
+- [x] Conditionally compile `rustfft` dependency
 
 ### T7: GOAT Benchmark
 - [x] Create `crates/katgpt-core/benches/flow_field_bench.rs`
