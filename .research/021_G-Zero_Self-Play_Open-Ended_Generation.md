@@ -209,7 +209,7 @@ Current `AbsorbCompress` promotes heuristics based on raw environment reward (di
 - Standard UCB1 exploration gives the `α_S` coverage Theorem 1 requires.
 - `blind_spot_arms(top_k)` returns arms with highest accumulated δ — targets for next query-hint generation.
 
-This is a much cheaper Proposer than full GRPO and likely sufficient for narrow-domain agents (Bomberman, py2rs). Plan 025 already proved model-based bandit gets +12.1% reward over modelless — δ should improve both.
+This is a much cheaper Proposer than full GRPO and likely sufficient for narrow-domain agents (Bomberman, Go). Plan 025 already proved model-based bandit gets +12.1% reward over modelless — δ should improve both.
 
 ##### 1d. TemplateProposer (Medium Value, Zero GPU Cost)
 
@@ -259,7 +259,7 @@ Our existing arenas have explicit verifiers (game outcome). But G-Zero's premise
 | G-Zero Concept | Why It Doesn't Apply (Yet) | Revisit When |
 |---|---|---|
 | **8B base model scale** | Our draft model is tiny (head_dim=4). Hint-δ may be noisier at small scale; needs the target model in the speculative-decoding pair, not the draft. | Larger models |
-| **AlpacaEval / AIME benchmarks** | Not our evaluation surface. We measure on py2rs / Bomberman / Monopoly. Need domain-appropriate analogues. | — |
+| **AlpacaEval / AIME benchmarks** | Not our evaluation surface. We measure on Bomberman / Monopoly / Go. Need domain-appropriate analogues. | — |
 | **GRPO Proposer** | Full GRPO is heavy. **Bandit pruner IS the Proposer at our scale** (Phase 1 modelless). Revisit GRPO only if bandit-Proposer plateaus (Phase 2 opt-in). | Bandit plateaus |
 | **General-purpose hint text** | We use *structured* hints (domain routing, KV primes, validator outputs). `TemplateProposer` uses rule-based hints first; neural hints are Phase 2. | — |
 | **Length-normalized DPO at full sequence scale** | We generate short outputs (single Bomber move, single Rust function). Length normalization matters less; standard DPO likely fine. | Longer outputs |

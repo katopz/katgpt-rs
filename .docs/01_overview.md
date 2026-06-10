@@ -677,7 +677,6 @@ Default features: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bandit_top_p
 ```bash
 cargo test --quiet --workspace --all-features   # Run all 740+ tests
 cargo run --release                             # Run benchmark suite (includes Leviathan verification)
-cargo run --example hello_py2rs                                # BPE + bidirectional prefill demo
 cargo run --example sudoku_01_9x9 --features sudoku           # Sudoku streaming solver
 cargo run --example sudoku_02_speculative --features sudoku   # DDTree pruning demo
 cargo run --example sudoku_03_tui --features sudoku           # TUI visualization

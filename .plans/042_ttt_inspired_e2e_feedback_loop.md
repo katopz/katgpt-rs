@@ -59,7 +59,7 @@ riir-burner trains LoRA from that JSONL, riir-ai deploys the adapter.
 - Reward signal format (`InferenceResult` with reward, domain, context, output)
 - Solution cache in anyrag (PUCT-inspired scoring, top-K retention)
 - JSONL export from cache → riir-burner-compatible format
-- Wire the loop for at least one language domain (e.g., `py2rs`)
+- Wire the loop for at least one language domain (e.g., `rust_code`)
 
 **Deferred:**
 - Per-request budget adaptation (needs cache first)
@@ -133,8 +133,8 @@ impl CachedSolution {
 JSONL compatible with riir-burner's existing `--corpus` input:
 
 ```jsonl
-{"instruction":"translate to rust: async def fetch(url):","output":"async fn fetch(url: &str) -> Result<String, reqwest::Error>","reward":0.95,"domain":"py2rs"}
-{"instruction":"translate to rust: def fibonacci(n):","output":"fn fibonacci(n: u64) -> u64","reward":0.88,"domain":"py2rs"}
+{"instruction":"implement a binary search","output":"fn binary_search<T: Ord>(arr: &[T], target: &T) -> Option<usize>","reward":0.95,"domain":"rust_code"}
+{"instruction":"write a hashmap from scratch","output":"struct SimpleMap<K, V> { buckets: Vec<Vec<(K, V)>> }","reward":0.88,"domain":"rust_code"}
 ```
 
 riir-burner already reads JSONL. The only addition: optional `reward` field for quality-weighted sampling.
@@ -206,7 +206,7 @@ riir-burner already reads JSONL. The only addition: optional `reward` field for 
 - [x] **Task 7: E2E validation** *(manual — requires running servers end-to-end)*
   - Run anyrag with `solution-cache` feature
   - Run katgpt-rs with `feedback_url` pointing to anyrag
-  - Execute 10+ inference requests in a domain (e.g., py2rs code translation)
+  - Execute 10+ inference requests in a domain (e.g., rust_code)
   - Verify cache entries appear in `/cache/stats`
   - Export JSONL via `/cache/export`
   - Run riir-burner with exported JSONL as corpus

@@ -557,11 +557,6 @@ name = "dungeon_01_tui"
 [[example]]
 name = "dungeon_02_multifloor"
 
-# ── Getting Started ────────────────────────────────────────────
-
-[[example]]
-name = "hello_py2rs"
-
 # ── Sudoku ─────────────────────────────────────────────────────
 
 [[example]]

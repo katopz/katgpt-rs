@@ -8,11 +8,11 @@
 
 ## Overview
 
-Two production techniques distilled from ZAYA, adapted for the Python→Rust translation pipeline:
+Two production techniques distilled from ZAYA:
 
-1. **Bidirectional Prefill**: During prefill, prompt tokens (Python code + anyRAG docs) attend to ALL other prompt tokens — no causal mask. Code is non-linear; a function body references a struct 3,000 tokens earlier. The model sees the whole file at once. Generation tokens still use causal attention. Zero overhead on the decode hot path — prefill runs once per request.
+1. **Bidirectional Prefill**: During prefill, prompt tokens attend to ALL other prompt tokens — no causal mask. Code is non-linear; a function body references a struct 3,000 tokens earlier. The model sees the whole file at once. Generation tokens still use causal attention. Zero overhead on the decode hot path — prefill runs once per request.
 
-2. **Modality LoRA Switching**: Load two LoRA adapters per domain — a `reader_lora` (active during prefill) and a `writer_lora` (active during decode). When the router selects "py2rs", both adapters load. The switch is a reference swap at the prefill→decode boundary. Zero data movement.
+2. **Modality LoRA Switching**: Load two LoRA adapters per domain — a `reader_lora` (active during prefill) and a `writer_lora` (active during decode). Both adapters load when configured. The switch is a reference swap at the prefill→decode boundary. Zero data movement.
 
 Both are zero-copy: all buffers pre-allocated at startup, no `Vec::new()` in the request path, reference passing throughout.
 
@@ -386,13 +386,7 @@ The existing `attention_head` already accepts `t_n: usize` (number of KV positio
 
 - [x] **Task 6: Add dual LoRA to `DomainConfig` and `ExpertBundle`** (`src/router/types.rs`)
   ```toml
-  # domains.toml
-  [[domain]]
-  name = "py2rs"
-  keywords = ["python", "rewrite", "fastapi", "flask", "translate"]
-  pruner = "syn_validator.wasm"
-  reader_lora = "python_reader.bin"   # active during prefill
-  writer_lora = "rust_writer.bin"     # active during decode
+  # domains.toml — add reader_lora / writer_lora to any domain
   ```
   ```rust
   // DomainConfig additions
@@ -526,16 +520,8 @@ The existing `attention_head` already accepts `t_n: usize` (number of KV positio
   - Report: overhead ratio, memory usage
 
 - [x] **Task 11: Update `domains.toml`** (`domains.toml`)
-  - Add `reader_lora` / `writer_lora` fields to `py2rs` domain
+  - Add `reader_lora` / `writer_lora` fields to domain entries
   - Document dual LoRA config in comments
-  ```toml
-  [[domain]]
-  name = "py2rs"
-  keywords = ["python", "rewrite", "fastapi", "flask", "translate"]
-  pruner = "syn_validator.wasm"
-  reader_lora = "python_reader.bin"
-  writer_lora = "rust_writer.bin"
-  ```
 
 - [x] **Task 12: Update README** (`README.md`)
   - Add "Bidirectional Prefill (Plan 025)" section under Architecture

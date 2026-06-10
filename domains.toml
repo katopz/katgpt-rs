@@ -37,19 +37,6 @@ early_exit_patience = 5
 early_exit_gap = 2.0
 
 [[domain]]
-name = "py2rs"
-keywords = ["python", "rewrite", "fastapi", "flask", "translate"]
-pruner = "syn_validator.wasm"
-reader_lora = "python_reader.bin"
-writer_lora = "rust_writer.bin"
-truncation = { mode = "tokens", limit = 8000 }
-reasoning_retention = { preserve = true, max_per_turn = 500 }
-
-# AutoTTS β parameterization — derives all inference knobs from single scalar
-[domain.inference]
-beta = 0.8
-
-[[domain]]
 name = "general"
 keywords = []
 native_pruner = "no_pruner"
