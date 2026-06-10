@@ -99,11 +99,9 @@ Simple endpoint wrapping existing BPE tokenizer. Returns token count for context
 
 ```toml
 [[domain]]
-name = "py2rs"
-keywords = ["python", "rewrite", "translate"]
+name = "rust_code"
+keywords = ["rust", "cargo", "compile"]
 pruner = "syn_validator.wasm"
-reader_lora = "python_reader.bin"
-writer_lora = "rust_writer.bin"
 truncation = { mode = "tokens", limit = 10000 }  # NEW
 ```
 

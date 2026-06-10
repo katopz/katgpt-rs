@@ -214,7 +214,7 @@ Next inference uses updated LoRA
    - `output_path: PathBuf` (where to write new lora.bin)
 3. `retrain()` calls existing `Trainer::train_from_jsonl()` — no new training code
 4. `signal_hotswap()` writes new lora.bin to output_path (HotSwapPruner watches via BLAKE3)
-5. Add CLI example: `feedback_consumer --endpoint http://localhost:8080 --domain py2rs --beta 0.5`
+5. Add CLI example: `feedback_consumer --endpoint http://localhost:8080 --domain rust_code --beta 0.5`
 6. Feature-gate behind `feedback-consumer` feature
 
 **Estimated changes:** ~120 lines consumer logic, ~30 lines config, ~40 lines CLI example, ~20 lines test
@@ -254,8 +254,8 @@ Run all fixes together to prove the full loop works:
 
 6. **TTT feedback loop (manual):**
    - Start anyrag with `solution-cache` feature
-   - Start `feedback_consumer` watching domain "py2rs"
-   - Run 50 inferences in py2rs domain
+   - Start `feedback_consumer` watching domain "rust_code"
+   - Run 50 inferences in rust_code domain
    - Assert: feedback_consumer triggers retraining
    - Assert: new lora.bin written to output path
    - Assert: BLAKE3 checksum differs from original

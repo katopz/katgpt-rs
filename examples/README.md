@@ -89,7 +89,7 @@ flag is missing.
 | `cna_02_steering` | CNA | `cna_steering` | Runtime activation modulation with discovered circuits |
 | `cna_03_go_circuit` | CNA | `cna_steering,go` | End-to-end circuit discovery from Go games |
 | `stepcode_01_shaped_bandit` | StepCode | `stepcode` | Intra-trajectory reward shaping (Plan 054) |
-| `hello_py2rs` | Getting Started | — | Python → Rust transpilation demo with modality LoRA (Plan 025) |
+
 | `and_or_demo` | AND-OR | `and_or_dtree` | `AndOrNode` tree construction & metrics walkthrough |
 | `and_or_sudoku` | AND-OR | `and_or_dtree` | Rows-as-AND-subgoals decomposition on a 4×4 Sudoku |
 | `ega_01_quality` | EGA | `ega_attn` | Energy-gated attention val-loss ablation (Plan 139) |
@@ -328,13 +328,7 @@ they enable. ⚠️ Plan 054 proved NO GAIN; infrastructure only, off by default
 cargo run --example stepcode_01_shaped_bandit --features stepcode
 ```
 
-## 16. Getting Started
-
-```bash
-cargo run --example hello_py2rs
-```
-
-## 17. AND-OR DDTree (Plan 190)
+## 16. AND-OR DDTree (Plan 190)
 
 Blueprint-driven subgoal decomposition with AND/OR nodes.
 

@@ -916,16 +916,6 @@ let logits = forward(&mut ctx, &weights, &mut cache, token, pos, &config);
 // which handles the reader→writer swap internally.
 ```
 
-Domain config in `domains.toml`:
-```toml
-[[domain]]
-name = "py2rs"
-keywords = ["python", "rewrite", "translate"]
-pruner = "syn_validator.wasm"
-reader_lora = "python_reader.bin"   # active during bidirectional prefill
-writer_lora = "rust_writer.bin"     # active during causal decode
-```
-
 ## CODA Fusion Kernels (`crates/katgpt-core/src/coda.rs`, Plan 103)
 
 CODA-inspired fused SIMD kernels that algebraically reparameterize matmul+residual+rmsnorm+activation into single-pass SIMD loops, eliminating intermediate buffer writes.

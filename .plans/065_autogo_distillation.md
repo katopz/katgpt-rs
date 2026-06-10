@@ -647,7 +647,7 @@ Same pattern as bomber (`bomber`, `bomber-agent`, `bomber-wasm`). New domain, sa
 
 These demos are running code with measured results — the pipeline works:
 
-1. **`bandit_with_real_model_demo.rs`** — Loads real `rust_validator.wasm`, real `py2rs_lora.bin` (trained by riir-burner), runs real LeviathanVerifier p/q rejection sampling. Full pipeline: Draft → DDTree + BanditPruner\<WasmPruner\> → LeviathanVerifier → bandit.update(). **Swap validator + vocab = Go.**
+1. **`bandit_with_real_model_demo.rs`** — Loads real `rust_validator.wasm`, real trained LoRA (trained by riir-burner), runs real LeviathanVerifier p/q rejection sampling. Full pipeline: Draft → DDTree + BanditPruner\<WasmPruner\> → LeviathanVerifier → bandit.update(). **Swap validator + vocab = Go.**
 
 2. **`bomber_tech_ab_demo.rs`** — 1000-round A/B: LoRA-only vs WASM-only vs LoRA+WASM vs Full HL (LoRA+WASM+Bandit+AbsorbCompress). Combined wins. **No component conflict.**
 

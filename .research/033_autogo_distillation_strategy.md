@@ -653,7 +653,7 @@ External reviews correctly identified that `riir-ai` has every component needed 
 
 The demos aren't aspirational — they're running code with measured results:
 
-1. **`bandit_with_real_model_demo.rs`** — Loads real `rust_validator.wasm`, real `py2rs_lora.bin` (trained by riir-burner on Gemma 4 E4B), runs real LeviathanVerifier p/q rejection sampling. Full pipeline: Draft → DDTree + BanditPruner\<WasmPruner\> → LeviathanVerifier → bandit.update(). **This is the exact architecture for Go — just swap the validator and vocab.**
+1. **`bandit_with_real_model_demo.rs`** — Loads real `rust_validator.wasm`, real trained LoRA (trained by riir-burner on Gemma 4 E4B), runs real LeviathanVerifier p/q rejection sampling. Full pipeline: Draft → DDTree + BanditPruner\<WasmPruner\> → LeviathanVerifier → bandit.update(). **This is the exact architecture for Go — just swap the validator and vocab.**
 
 2. **`bomber_tech_ab_demo.rs`** — 1000-round A/B test: LoRA-only vs WASM-only vs LoRA+WASM vs Full HL (LoRA+WASM+Bandit+AbsorbCompress). Combined wins. **This proves the integration works end-to-end — no component conflict.**
 
