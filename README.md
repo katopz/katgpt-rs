@@ -1,6 +1,6 @@
 # KatGPT-RS
 
-A neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, recurrent attention, and adaptive test-time scaling — built in Rust.
+A **GOAT-proved** neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, and **106 adaptive test-time scaling features** — built in Rust.
 
 Inspired by [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/microgpt/).
 
@@ -14,7 +14,6 @@ Inspired by [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/m
 - **ConstraintPruner** — Pluggable trait for neuro-symbolic intercept: deterministic rules engine prunes invalid branches before target verification.
 - **ScreeningPruner** — Upgraded binary pruning to graded relevance (`R ∈ [0.0, 1.0]`) with blended score formula.
 - **SpeculativeVerifier** — Swappable verification via trait: `SimulatedVerifier` (fast) or `LeviathanVerifier` (real p/q rejection sampling).
-- **O(1) Attention Alternatives** — GDN2 recurrent state, Raven RSM fixed-slot memory, LT2 looped inference (opt-in forward paths).
 - **Hybrid OCT+PQ KV Cache** — Default codec: OCTOPUS triplet encoding + PlanarQuant 2D Givens rotation. Best MSE + 64× fewer rotation FMAs (Bench 024, Plan 101).
 - **PFlash Block-Sparse Prefill** — Up to 21× sequence reduction with 100% NIAH needle retrieval.
 - **BPE Tokenizer** — Train/encode/decode with Config::bpe() preset for code generation.
@@ -1146,53 +1145,37 @@ tests/               167 integration test & benchmark files (~87 bench suites)
 
 ## 📖 Documentation Index
 
-| Document | Content |
-|----------|---------|
-| [`.docs/01_overview.md`](.docs/01_overview.md) | Architecture overview |
-| [`.docs/02_architecture.md`](.docs/02_architecture.md) | Full architecture detail |
-| [`.docs/03_speculative_decoding.md`](.docs/03_speculative_decoding.md) | Speculative decoding, D2F |
-| [`.docs/04_performance.md`](.docs/04_performance.md) | Benchmarks, throughput tables |
-| [`.docs/05_sudoku.md`](.docs/05_sudoku.md) | Sudoku solver detail |
-| [`.docs/06_validator.md`](.docs/06_validator.md) | Validator detail |
-| [`.docs/07_adaptation.md`](.docs/07_adaptation.md) | Adaptation strategies |
-| [`.docs/08_lucebox_techniques.md`](.docs/08_lucebox_techniques.md) | Raven, PFlash techniques |
-| [`.docs/09_heuristic-learning.md`](.docs/09_heuristic-learning.md) | HL infrastructure, FFT benchmarks |
-| [`.docs/10_bomber_arena.md`](.docs/10_bomber_arena.md) | Bomberman arena |
-| [`.docs/11_monopoly_fsm.md`](.docs/11_monopoly_fsm.md) | Monopoly FSM |
-| [`.docs/12_fft_arena.md`](.docs/12_fft_arena.md) | FFT Tactics Arena |
-| [`.docs/13_mtp_threshold_guide.md`](.docs/13_mtp_threshold_guide.md) | MTP threshold guide |
-| [`.docs/14_go_arena.md`](.docs/14_go_arena.md) | Go arena |
-| [`.docs/15_paper_feature_comparison.md`](.docs/15_paper_feature_comparison.md) | Paper feature comparison |
-| [`.docs/16_spechop_architecture.md`](.docs/16_spechop_architecture.md) | SpecHop architecture |
-| [`.docs/17_peira_distillation.md`](.docs/17_peira_distillation.md) | PEIRA distillation |
-| [`.docs/18_sleep_consolidation.md`](.docs/18_sleep_consolidation.md) | Sleep consolidation |
-| [`.docs/19_kv_compression.md`](.docs/19_kv_compression.md) | **KV compression alternatives** (TurboQuant, SpectralQuant, OCTOPUS, PlanarQuant, Asymmetric) |
-| [`.docs/20_negative_results.md`](.docs/20_negative_results.md) | **Negative results** (StepCode, δ-Mem, SDAR, RMSD, Replaced features) |
-| [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) | **Opt-in features** (D2F, GFlowNet, SpecHop, Committee Boost, etc.) |
-| [`.docs/22_percepta.md`](.docs/22_percepta.md) | **Percepta full detail** (module structure, compiler stack, verified properties) |
-| [`.docs/23_hl_arena_detail.md`](.docs/23_hl_arena_detail.md) | **HL & Arena detail** (all games, G-Zero, Freeze/Thaw, Emotion Vector, etc.) |
-| [`.docs/24_sense_composition.md`](.docs/24_sense_composition.md) | **NPC Sense Composition** (Plans 221/230/235/236/237) |
-| [`.docs/25_raven_rsm.md`](.docs/25_raven_rsm.md) | **Raven RSM** — Opt-in O(1) routing slot memory (demoted from default) |
-| [`.docs/191_open_ended_problem_evolution_arena.md`](.docs/191_open_ended_problem_evolution_arena.md) | **Open-ended problem evolution arena** (ProblemMutator, IdeaDivergence, PartialScorer) |
-| [`examples/README.md`](examples/README.md) | 111 examples grouped by category |
-
-## 📦 Related Crates
-
-- **[riir-ai](../riir-ai/)** — Frame-sampling real-time gamestate bridge ([Plan 070](../riir-ai/.docs/17_frame_sampling_gamestate.md))
+- [Architecture overview](.docs/01_overview.md)
+- [Full architecture detail](.docs/02_architecture.md)
+- [Speculative decoding, D2F](.docs/03_speculative_decoding.md)
+- [Benchmarks, throughput tables](.docs/04_performance.md)
+- [Sudoku solver detail](.docs/05_sudoku.md)
+- [Validator detail](.docs/06_validator.md)
+- [Adaptation strategies](.docs/07_adaptation.md)
+- [PFlash techniques](.docs/08_lucebox_techniques.md)
+- [HL infrastructure, FFT benchmarks](.docs/09_heuristic-learning.md)
+- [Bomberman arena](.docs/10_bomber_arena.md)
+- [Monopoly FSM](.docs/11_monopoly_fsm.md)
+- [FFT Tactics Arena](.docs/12_fft_arena.md)
+- [MTP threshold guide](.docs/13_mtp_threshold_guide.md)
+- [Go arena](.docs/14_go_arena.md)
+- [Paper feature comparison](.docs/15_paper_feature_comparison.md)
+- [SpecHop architecture](.docs/16_spechop_architecture.md)
+- [PEIRA distillation](.docs/17_peira_distillation.md)
+- [Sleep consolidation](.docs/18_sleep_consolidation.md)
+- [KV compression alternatives](.docs/19_kv_compression.md)
+- [Negative results](.docs/20_negative_results.md)
+- [Opt-in features](.docs/21_opt_in_features.md)
+- [Percepta full detail](.docs/22_percepta.md)
+- [HL & Arena detail](.docs/23_hl_arena_detail.md)
+- [NPC Sense Composition](.docs/24_sense_composition.md)
+- [Raven RSM — Opt-in O(1) routing slot memory](.docs/25_raven_rsm.md)
+- [Open-ended problem evolution arena](.docs/191_open_ended_problem_evolution_arena.md)
+- [111 examples grouped by category](examples/README.md)
 
 ## 📜 References
 
+- [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/microgpt/)
 - [microgpt-c](https://github.com/nicholasgasior/microgpt-c) — Original C implementation
 - [talos-vs-macbook](https://github.com/AlexCheema/talos-vs-macbook) — Reference model
-- [Fast Inference from Transformers via Speculative Decoding](https://arxiv.org/pdf/2211.17192) — Leviathan et al., 2022
-- [DFlash](https://arxiv.org/abs/2602.06036) + [DDTree](https://arxiv.org/abs/2604.12989) — Block diffusion draft trees
-- [Raven: Sparse Memory Routing](https://github.com/goombalab/raven) — Afzal et al., 2025
 - [Percepta](https://www.percepta.ai/blog/can-llms-be-computers) — 2D convex hull attention, WASM in transformer weights
-- [TurboQuant](https://arxiv.org/pdf/2504.19874) — Zandieh et al., 2025
-- [G-Zero](https://arxiv.org/pdf/2605.09959) — Verifier-free self-play via Hint-δ
-- [Deep Manifold Part 2](https://arxiv.org/pdf/2512.06563) — Fixed-point boundary conditions
-- [Luce-Org/lucebox-hub](https://github.com/Luce-Org/lucebox-hub/) — Per-chip LLM inference
-- [Learning Beyond Gradients](https://trinkle23897.github.io/learning-beyond-gradients/) — Heuristic Learning paradigm
-- [LEAP: AND-OR Graph Decomposition](https://arxiv.org/abs/2606.03303) — Blueprint-driven subgoal decomposition for DDTree
-- [To Think or Not To Think](https://arxiv.org/abs/2602.10625) — S2F reasoning collapse + adaptive thinking (ICML 2026)
-- [Thinkless: LLM Learns When to Think](https://arxiv.org/abs/2505.13379) — DeGRPO decoupled hybrid reasoning (NeurIPS 2025)
