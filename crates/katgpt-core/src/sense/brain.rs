@@ -8,15 +8,45 @@ use crate::sense::lod::SenseLodLevel;
 /// Maximum number of per-sense overrides.
 const MAX_OVERRIDES: usize = 8;
 
+/// Number of SenseKind variants with valid discriminants 0..6.
+const SENSE_KIND_COUNT: usize = 6;
+
 /// Per-NPC sense override configuration. GM always wins.
 #[derive(Clone, Debug, Default)]
 pub struct SenseOverride {
     /// Pinned sense activations: (kind, value). If present, overrides autonomous.
     pub pinned: Vec<(SenseKind, f32)>,
+    /// O(1) pin lookup indexed by SenseKind discriminant. Rebuilt on pin/unpin.
+    pin_lookup: [Option<f32>; SENSE_KIND_COUNT],
     /// If true, all autonomous computation is disabled; only pinned values returned.
     pub autonomous_disabled: bool,
     /// Script ID if in scripted mode.
     pub script_id: Option<u64>,
+}
+
+impl SenseOverride {
+    fn rebuild_pin_lookup(&mut self) {
+        self.pin_lookup = [None; SENSE_KIND_COUNT];
+        for &(kind, value) in &self.pinned {
+            let idx = kind as usize;
+            if idx < SENSE_KIND_COUNT {
+                self.pin_lookup[idx] = Some(value);
+            }
+        }
+    }
+
+    #[inline]
+    fn pinned_value(&self, kind: SenseKind) -> Option<f32> {
+        let idx = kind as usize;
+        if idx < SENSE_KIND_COUNT {
+            self.pin_lookup[idx]
+        } else {
+            self.pinned
+                .iter()
+                .find(|(k, _)| *k == kind)
+                .map(|(_, v)| *v)
+        }
+    }
 }
 
 /// NPC Brain — composes sense modules and projects HLA state.
@@ -24,6 +54,8 @@ pub struct SenseOverride {
 pub struct NpcBrain {
     /// Loaded sense modules.
     pub modules: Vec<SenseModule>,
+    /// O(1) module lookup indexed by SenseKind discriminant. Rebuilt on compose.
+    module_index: [Option<usize>; SENSE_KIND_COUNT],
     /// Current HLA state (8-dim).
     pub hla_state: [f32; 8],
     /// GM override mask.
@@ -32,18 +64,38 @@ pub struct NpcBrain {
     /// Default: Full (all modules). Only used with `sense_lod` feature.
     #[cfg(feature = "sense_lod")]
     pub active_lod: SenseLodLevel,
+    /// Cached LOD mask — rebuilt when active_lod changes.
+    #[cfg(feature = "sense_lod")]
+    lod_mask: crate::sense::lod::SenseLodMask,
 }
 
 impl NpcBrain {
     /// Create a new brain with given modules.
     pub fn compose(modules: Vec<SenseModule>) -> Self {
+        let mut module_index = [None; SENSE_KIND_COUNT];
+        for (i, m) in modules.iter().enumerate() {
+            let idx = m.kind as usize;
+            if idx < SENSE_KIND_COUNT {
+                module_index[idx] = Some(i);
+            }
+        }
         Self {
             modules,
+            module_index,
             hla_state: [0.0; 8],
             overrides: SenseOverride::default(),
             #[cfg(feature = "sense_lod")]
             active_lod: SenseLodLevel::Full,
+            #[cfg(feature = "sense_lod")]
+            lod_mask: crate::sense::lod::SenseLodMask::from_level(SenseLodLevel::Full),
         }
+    }
+
+    /// Set active LOD level and rebuild cached mask.
+    #[cfg(feature = "sense_lod")]
+    pub fn set_lod(&mut self, level: SenseLodLevel) {
+        self.active_lod = level;
+        self.lod_mask = crate::sense::lod::SenseLodMask::from_level(level);
     }
 
     /// Project HLA state onto all loaded modules. GM override wins.
@@ -56,52 +108,48 @@ impl NpcBrain {
 
     /// Zero-alloc projection into pre-allocated buffer.
     /// Clears `result` and fills with projected values for each module.
+    /// Uses O(1) pin lookup and cached LOD mask — no linear scans, no per-call allocation.
     /// With `sense_lod` feature: skips modules not in active LOD level, pushes 0.0 for skipped.
     pub fn project_all_into(&self, result: &mut Vec<f32>) {
         result.clear();
         #[cfg(feature = "sense_lod")]
-        {
-            let mask = crate::sense::lod::SenseLodMask::from_level(self.active_lod);
-            for m in &self.modules {
-                if mask.is_active(m.kind) {
-                    let val = self
-                        .project_kind(m.kind)
-                        .unwrap_or_else(|| m.project(&self.hla_state));
-                    result.push(val);
-                } else {
-                    result.push(0.0);
-                }
-            }
-        }
-        #[cfg(not(feature = "sense_lod"))]
+        let mask = self.lod_mask;
         for m in &self.modules {
-            let val = self
-                .project_kind(m.kind)
-                .unwrap_or_else(|| m.project(&self.hla_state));
+            #[cfg(feature = "sense_lod")]
+            if !mask.is_active(m.kind) {
+                result.push(0.0);
+                continue;
+            }
+            let val = match self.overrides.pinned_value(m.kind) {
+                Some(v) => v,
+                None if self.overrides.autonomous_disabled => 0.0,
+                None => m.project(&self.hla_state),
+            };
             result.push(val);
         }
     }
 
     /// Project a single sense kind, respecting GM override.
+    /// Uses O(1) lookups — no linear scans.
     pub fn project_kind(&self, kind: SenseKind) -> Option<f32> {
-        // Check scripted mode first
+        // Check pin first (O(1) lookup)
+        if let Some(v) = self.overrides.pinned_value(kind) {
+            return Some(v);
+        }
+        // Scripted mode with no pin → None
         if self.overrides.autonomous_disabled {
-            return self
-                .overrides
-                .pinned
+            return None;
+        }
+        // O(1) module lookup by index
+        let idx = kind as usize;
+        if idx < SENSE_KIND_COUNT {
+            self.module_index[idx].map(|i| self.modules[i].project(&self.hla_state))
+        } else {
+            self.modules
                 .iter()
-                .find(|(k, _)| *k == kind)
-                .map(|(_, v)| *v);
+                .find(|m| m.kind == kind)
+                .map(|m| m.project(&self.hla_state))
         }
-        // Check per-sense pin
-        if let Some((_, value)) = self.overrides.pinned.iter().find(|(k, _)| *k == kind) {
-            return Some(*value);
-        }
-        // Autonomous projection
-        self.modules
-            .iter()
-            .find(|m| m.kind == kind)
-            .map(|m| m.project(&self.hla_state))
     }
 
     /// Update HLA state with delta.
@@ -113,13 +161,14 @@ impl NpcBrain {
         }
     }
 
-    /// GM pins a sense activation.
+    /// GM pins a sense activation. Rebuilds O(1) lookup table.
     pub fn pin_sense(&mut self, kind: SenseKind, value: f32) {
         if let Some(entry) = self.overrides.pinned.iter_mut().find(|(k, _)| *k == kind) {
             entry.1 = value;
         } else if self.overrides.pinned.len() < MAX_OVERRIDES {
             self.overrides.pinned.push((kind, value));
         }
+        self.overrides.rebuild_pin_lookup();
     }
 
     /// Enter scripted mode — disable all autonomous behavior.
@@ -262,7 +311,7 @@ mod lod_tests {
     #[test]
     fn test_lod_minimal_only_spatial() {
         let mut brain = make_brain_with_modules();
-        brain.active_lod = SenseLodLevel::Minimal;
+        brain.set_lod(SenseLodLevel::Minimal);
         let mut result = Vec::new();
         brain.project_all_into(&mut result);
         assert_eq!(result.len(), 6);
@@ -279,7 +328,7 @@ mod lod_tests {
     #[test]
     fn test_lod_compressed_three_modules() {
         let mut brain = make_brain_with_modules();
-        brain.active_lod = SenseLodLevel::Compressed;
+        brain.set_lod(SenseLodLevel::Compressed);
         let mut result = Vec::new();
         brain.project_all_into(&mut result);
         assert_eq!(result.len(), 6);

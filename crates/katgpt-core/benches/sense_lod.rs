@@ -94,7 +94,7 @@ fn assign_lods(brains: &mut [NpcBrain], distances: &[f32]) {
     let r = router();
     let lods = r.assign_lods(distances);
     for (brain, lod) in brains.iter_mut().zip(lods) {
-        brain.active_lod = lod;
+        brain.set_lod(lod);
     }
 }
 
@@ -166,9 +166,7 @@ fn main() {
 
     // Baseline (Full for all)
     let mut brains_full = make_brains_with_6_modules(NPC_COUNT);
-    for brain in &mut brains_full {
-        brain.active_lod = SenseLodLevel::Full;
-    }
+    // Full is already the default from compose()
     let mut results_full: Vec<Vec<f32>> = vec![vec![]; NPC_COUNT];
 
     let start = std::time::Instant::now();

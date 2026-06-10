@@ -31,13 +31,13 @@ pub fn batch_project_all_par(brains: &[NpcBrain], results: &mut [Vec<f32>]) {
 }
 
 /// Assign LOD levels to brains based on distances via router.
-/// No-op when `sense_lod` feature is disabled.
+/// Uses `set_lod` to keep cached mask in sync.
 #[cfg(feature = "sense_lod")]
 pub fn assign_lods_to_brains(brains: &mut [NpcBrain], router: &SenseLodRouter, distances: &[f32]) {
     assert_eq!(brains.len(), distances.len());
     let lods = router.assign_lods(distances);
     for (brain, lod) in brains.iter_mut().zip(lods) {
-        brain.active_lod = lod;
+        brain.set_lod(lod);
     }
 }
 
@@ -46,7 +46,7 @@ pub fn assign_lods_to_brains(brains: &mut [NpcBrain], router: &SenseLodRouter, d
 pub fn reset_lods_to_full(brains: &mut [NpcBrain]) {
     use crate::sense::lod::SenseLodLevel;
     for brain in brains.iter_mut() {
-        brain.active_lod = SenseLodLevel::Full;
+        brain.set_lod(SenseLodLevel::Full);
     }
 }
 

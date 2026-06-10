@@ -1,6 +1,6 @@
 # Plan 240: Spectral NPC Perception Compression
 
-**Status:** GOAT-Gated — Experimental (CPU 25.2%, <40% threshold)
+**Status:** GOAT-Gated — Experimental (CPU 5.7%, <40% threshold)
 **Feature Flag:** `sense_lod` (opt-in, requires `sense_composition` + `slod`)
 **Routing:** katgpt-rs → crates/katgpt-core/src/sense/
 
@@ -58,12 +58,12 @@ Reads `ScaleBoundary` from `SlodOperator` + NPC distance to player/centroid. Ass
 
 | Metric | Threshold | Pass |
 |--------|-----------|------|
-| CPU reduction (200 NPC batch) | >40% vs baseline | ☒ 25.2% |
+| CPU reduction (200 NPC batch) | >40% vs baseline | ☒ 5.7% |
 | Behavioral quality loss | <5% (max projection delta across modules) | ✅ 0.0% |
 | Zero alloc in hot path | No new allocations in `project_all_into` | ✅ |
 | Graceful fallback | No boundaries → Full LOD (no behavior change) | ✅ |
 
-**Verdict:** GOAT FAIL on CPU reduction. Quality is perfect. CPU bottleneck is `project_kind`'s O(n) GM override scan, not the dot-product itself. Stays experimental — not promoted to default.
+**Verdict:** GOAT FAIL on CPU reduction. Quality is perfect. After applying optimization.md rules (O(1) lookup tables for pins + module index, cached LOD mask), the baseline became fast enough that skipping modules only saves 5.7%. The `SenseModule::project` dot-product is the real cost (~5ns/module) and can't be skipped without losing behavioral fidelity. Stays experimental — not promoted to default.
 
 ## Expected Result
 
