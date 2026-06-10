@@ -52,18 +52,18 @@ IterativeChunkCompactor
 ## Tasks
 
 ### Phase 1: Core Infrastructure
-- [ ] T1: Create `src/still_kv/mod.rs` with feature gate `still_kv`
+- [x] T1: Create `src/still_kv/mod.rs` with feature gate `still_kv`
 - [x] T2: Implement `PositionFreeCompactor` — RoPE un-rotate/re-rotate using existing RoPE infra
-- [ ] T3: Implement `CompactKVCache` struct with `position_offset` field
-- [ ] T4: Extend `QuantizedKVCache` trait with `compact_into()` method (default impl returns error)
-- [ ] T5: Implement `CompactionStrategy` enum with strategy-specific query generation
+- [x] T3: Implement `CompactKVCache` struct with `position_offset` field
+- [x] T4: Extend `QuantizedKVCache` trait with `compact_into()` method (default impl returns error)
+- [x] T5: Implement `CompactionStrategy` enum with strategy-specific query generation
 
 ### Phase 2: Heuristic Query Banks
-- [ ] T6: Implement `ClusterCentroids` — mini-batch k-means on [K;V] concat (max 10 iterations)
-- [ ] T7: Implement `AttentionWeighted` — use DashAttention scores to weight KV averaging
-- [ ] T8: Implement `SpectralProjection` — project to top-t eigenvectors from SpectralQuant eigenbasis
-- [ ] T9: Implement `BfcfRegionBlend` — BFCF region centroids as cross-attention queries
-- [ ] T10: Implement `MuxSuperposition` — MUX-Latent encoder produces t superposed queries (behind `mux_latent` feature)
+- [x] T6: Implement `ClusterCentroids` — mini-batch k-means on [K;V] concat (max 10 iterations)
+- [x] T7: Implement `AttentionWeighted` — use DashAttention scores to weight KV averaging
+- [x] T8: Implement `SpectralProjection` — project to top-t eigenvectors from SpectralQuant eigenbasis
+- [x] T9: Implement `BfcfRegionBlend` — BFCF region centroids as cross-attention queries
+- [x] T10: Implement `MuxSuperposition` — MUX-Latent encoder produces t superposed queries (behind `mux_latent` feature)
 
 ### Phase 3: StillPerceiver Cross-Attention
 - [x] T11: Implement `StillPerceiver` with cross-attention from queries to KV cache
@@ -78,9 +78,9 @@ IterativeChunkCompactor
 - [x] T18: Integrate with `SegmentCheckpoint` for growing memory pattern
 
 ### Phase 5: Tests & Benchmarks
-- [ ] T19: Unit test — position-free compaction round-trip (un-rotate → compact → re-rotate ≈ original)
-- [ ] T20: Unit test — compact_into produces correct budget size
-- [ ] T21: Unit test — iterative compaction produces linear growth at rate 1/c
+- [x] T19: Unit test — position-free compaction round-trip (un-rotate → compact → re-rotate ≈ original)
+- [x] T20: Unit test — compact_into produces correct budget size
+- [x] T21: Unit test — iterative compaction produces linear growth at rate 1/c
 - [ ] T22: Benchmark — StillKV vs MUX-Latent at 8x, 16x, 32x compression on synthetic KV data
 - [ ] T23: Benchmark — StillKV synthesis vs selection (H2O-style) quality comparison
 - [ ] T24: GOAT gate — measure compact-cache quality (MSE vs original) at each compression ratio
