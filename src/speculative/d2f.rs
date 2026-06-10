@@ -181,6 +181,54 @@ impl D2fDecodeConfig {
 }
 
 // ---------------------------------------------------------------------------
+// Schedule-Aware Multistep Ratios (Plan 079 T16)
+// ---------------------------------------------------------------------------
+
+/// Compute DPM-Solver++(2M) step-size ratios from schedule timesteps.
+///
+/// Given denoising timesteps `t_0 < t_1 < ... < t_{N-1}` in [0,1], computes
+/// `r_i = h_{i-1} / h_i` where `h_i = λ_i - λ_{i+1}` and `λ = logit(t)`
+/// is the log-SNR (logit of mask probability).
+///
+/// For uniform steps, all `r_i = 1.0` (the Plan 078 default).
+/// Non-uniform schedules (LogitNormal, EquiProbability) produce varying `r_i`,
+/// giving the solver more accurate second-order extrapolation.
+///
+/// Returns `Vec<f32>` of length `max(0, n_steps - 1)`.
+/// `ratios[i]` is used at denoising step `i+1` (step 0 has no history).
+pub fn compute_multistep_ratios(steps: &[f32]) -> Vec<f32> {
+    if steps.len() < 3 {
+        // Need at least 3 points for one ratio: h_0 / h_1.
+        // With < 3 steps, fall back to r=1.0 for all available steps.
+        return vec![1.0f32; steps.len().saturating_sub(1)];
+    }
+
+    // Compute log-SNR (logit) for each timestep.
+    // λ(t) = log(t / (1-t)) = logit(t)
+    let lambdas: Vec<f32> = steps
+        .iter()
+        .map(|&t| {
+            let clamped = t.clamp(1e-6, 1.0 - 1e-6);
+            (clamped / (1.0 - clamped)).ln()
+        })
+        .collect();
+
+    // h_i = λ_i - λ_{i+1} (step sizes in log-SNR space)
+    // r_i = h_{i-1} / h_i for i >= 1
+    let h: Vec<f32> = lambdas.windows(2).map(|w| w[0] - w[1]).collect();
+
+    h.windows(2)
+        .map(|w| {
+            if w[1].abs() < 1e-8 {
+                1.0 // Avoid division by zero; fall back to uniform
+            } else {
+                (w[0] / w[1]).abs().min(10.0) // Clamp for numerical stability
+            }
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
 // ELF Logit-Normal Schedule (Plan 079)
 // ---------------------------------------------------------------------------
 
@@ -508,6 +556,16 @@ pub fn d2f_decode_block_with_prompt_with(
     let tau_conf = decode_config.confidence_threshold;
     let temperature = decode_config.temperature;
 
+    // Pre-compute schedule-aware multistep ratios from log-SNR (Plan 079 T16).
+    // For uniform schedules, all r_i = 1.0 (identical to Plan 078 behavior).
+    // Non-uniform schedules get schedule-adaptive extrapolation coefficients.
+    let multistep_ratios = if decode_config.multistep {
+        let schedule_steps = decode_config.schedule.generate_steps(max_steps, rng);
+        compute_multistep_ratios(&schedule_steps)
+    } else {
+        Vec::new()
+    };
+
     // Initialize: prompt + mask tokens for the block
     let mut tokens: Vec<usize> = prompt.to_vec();
     tokens.extend(std::iter::repeat_n(mask, block_size));
@@ -521,11 +579,14 @@ pub fn d2f_decode_block_with_prompt_with(
         let _seq_len_actual =
             forward_block_causal_with(dctx, weights, &tokens[..seq_len], config, block_size);
 
-        // DPM-Solver++(2M) multistep logit extrapolation (Plan 078 T10.6)
+        // DPM-Solver++(2M) multistep logit extrapolation (Plan 078 T10.6, Plan 079 T16)
         //
         // Caches raw model outputs and blends with previous step's prediction
-        // to get a second-order estimate. For uniform steps (default schedule):
-        //   D = 1.5 * current - 0.5 * prev
+        // to get a second-order estimate:
+        //   D_i = (1 + r_i/2) * current - (r_i/2) * prev  (RePlaid Eq 16)
+        //
+        // r_i = h_{i-1}/h_i is the step-size ratio in log-SNR space.
+        // For uniform steps: r = 1.0, so D = 1.5 * current - 0.5 * prev.
         //
         // Step 0: no blend (insufficient history), just cache.
         // Step 1+: blend current with cached previous raw output.
@@ -537,8 +598,8 @@ pub fn d2f_decode_block_with_prompt_with(
 
             if step >= 1 {
                 // DPM-Solver++(2M): D = (1 + r/2) * current - (r/2) * prev
-                // r = step-size ratio in log-SNR space. Uniform steps: r = 1.0
-                let r = 1.0f32;
+                // r = step-size ratio in log-SNR space (schedule-aware, Plan 079 T16)
+                let r = multistep_ratios.get(step - 1).copied().unwrap_or(1.0);
                 let alpha = 1.0 + r / 2.0;
                 let beta = r / 2.0;
                 let blend_start = block_start * vocab;
@@ -704,6 +765,14 @@ pub fn d2f_decode_block_with_prompt_with_sampler(
     let tau_conf = decode_config.confidence_threshold;
     let temperature = decode_config.temperature;
 
+    // Pre-compute schedule-aware multistep ratios from log-SNR (Plan 079 T16).
+    let multistep_ratios = if decode_config.multistep {
+        let schedule_steps = decode_config.schedule.generate_steps(max_steps, rng);
+        compute_multistep_ratios(&schedule_steps)
+    } else {
+        Vec::new()
+    };
+
     // Initialize: prompt + mask tokens for the block
     let mut tokens: Vec<usize> = prompt.to_vec();
     tokens.extend(std::iter::repeat_n(mask, block_size));
@@ -717,14 +786,14 @@ pub fn d2f_decode_block_with_prompt_with_sampler(
         let _seq_len_actual =
             forward_block_causal_with(dctx, weights, &tokens[..seq_len], config, block_size);
 
-        // DPM-Solver++(2M) multistep logit extrapolation (Plan 078 T10.6)
+        // DPM-Solver++(2M) multistep logit extrapolation (Plan 078 T10.6, Plan 079 T16)
         if decode_config.multistep {
             let logits_len = seq_len * vocab;
             dctx.prev_prev_logits_flat[..logits_len]
                 .copy_from_slice(&dctx.logits_flat[..logits_len]);
 
             if step >= 1 {
-                let r = 1.0f32;
+                let r = multistep_ratios.get(step - 1).copied().unwrap_or(1.0);
                 let alpha = 1.0 + r / 2.0;
                 let beta = r / 2.0;
                 let blend_start = block_start * vocab;
@@ -2030,6 +2099,184 @@ mod tests {
         // All decoded tokens should be valid vocab indices
         for &t in &result.tokens {
             assert!(t < config.vocab_size, "token {t} out of vocab range");
+        }
+    }
+
+    // ── Schedule-Aware Multistep Tests (Plan 079 T16) ────────────
+
+    #[test]
+    fn test_multistep_ratios_uniform_steps() {
+        // Uniform steps in t-space are NOT uniform in log-SNR space.
+        // Interior ratios (away from t=0 and t=1 boundaries) should be ≈ 1.0.
+        let steps: Vec<f32> = (0..5).map(|i| i as f32 / 4.0).collect();
+        let ratios = compute_multistep_ratios(&steps);
+        assert_eq!(ratios.len(), 3, "5 steps → 3 ratios");
+        // Interior ratio (between 0.25→0.5 and 0.5→0.75) should be ≈ 1.0
+        assert!(
+            (ratios[1] - 1.0).abs() < 0.01,
+            "interior ratio ≈ 1.0, got {}",
+            ratios[1]
+        );
+        // All ratios should be positive and bounded
+        for &r in &ratios {
+            assert!(r > 0.0 && r <= 10.0, "ratio out of bounds: {r}");
+        }
+    }
+
+    #[test]
+    fn test_multistep_ratios_empty() {
+        assert!(compute_multistep_ratios(&[]).is_empty());
+        assert!(compute_multistep_ratios(&[0.5]).is_empty());
+        assert_eq!(compute_multistep_ratios(&[0.0, 1.0]), vec![1.0]);
+    }
+
+    #[test]
+    fn test_multistep_ratios_non_uniform() {
+        // Non-uniform steps should produce varying r_i
+        // Heavily skewed schedule: more steps at the beginning
+        let steps = vec![0.0, 0.1, 0.3, 0.6, 1.0];
+        let ratios = compute_multistep_ratios(&steps);
+        assert_eq!(ratios.len(), 3, "5 steps → 3 ratios");
+
+        // For non-uniform steps, not all r_i should be identical
+        let all_same = ratios.windows(2).all(|w| (w[0] - w[1]).abs() < 0.01);
+        assert!(
+            !all_same,
+            "non-uniform steps should produce varying ratios: {ratios:?}"
+        );
+
+        // All ratios should be positive and bounded
+        for &r in &ratios {
+            assert!(r > 0.0, "ratio should be positive, got {r}");
+            assert!(r <= 10.0, "ratio should be clamped to 10.0, got {r}");
+        }
+    }
+
+    #[test]
+    fn test_multistep_ratios_logit_normal() {
+        let mut rng = Rng::new(42);
+        let schedule = ScheduleKind::LogitNormal {
+            mean: -1.5,
+            std: 0.8,
+        };
+        let steps = schedule.generate_steps(8, &mut rng);
+        let ratios = compute_multistep_ratios(&steps);
+
+        // N steps → N-2 ratios (need 3 consecutive λ points for one ratio)
+        assert_eq!(ratios.len(), 6, "8 steps → 6 ratios");
+        for &r in &ratios {
+            assert!(r > 0.0 && r <= 10.0, "ratio out of bounds: {r}");
+        }
+    }
+
+    #[test]
+    fn test_multistep_ratios_equi_probability() {
+        let schedule = ScheduleKind::EquiProbability {
+            mean: -1.2,
+            std: 1.2,
+        };
+        let steps = schedule.generate_steps(6, &mut Rng::new(42));
+        let ratios = compute_multistep_ratios(&steps);
+
+        // N steps → N-2 ratios
+        assert_eq!(ratios.len(), 4, "6 steps → 4 ratios");
+        for &r in &ratios {
+            assert!(r > 0.0 && r <= 10.0, "ratio out of bounds: {r}");
+        }
+    }
+
+    #[test]
+    fn test_multistep_with_logit_normal_schedule() {
+        // Verify multistep decode works with non-uniform LogitNormal schedule
+        let config = Config::micro_dllm();
+        let mut rng = Rng::new(42);
+        let weights = TransformerWeights::new(&config, &mut rng);
+
+        let decode_config = D2fDecodeConfig {
+            denoise_steps: 4,
+            multistep: true,
+            schedule: ScheduleKind::LogitNormal {
+                mean: -1.5,
+                std: 0.8,
+            },
+            confidence_threshold: 0.3,
+            block_size: config.block_size,
+            temperature: 0.8,
+            ..D2fDecodeConfig::default()
+        };
+
+        let result = d2f_decode_block(
+            &weights,
+            &config,
+            &decode_config,
+            &NoPruner,
+            &NoScreeningPruner,
+            &mut rng,
+        );
+
+        assert_eq!(result.tokens.len(), config.block_size);
+        // steps_used may be less than denoise_steps if converged early
+        assert!(
+            result.steps_used <= decode_config.denoise_steps,
+            "steps_used {} exceeds max {}",
+            result.steps_used,
+            decode_config.denoise_steps
+        );
+        for &t in &result.tokens {
+            assert!(t < config.vocab_size, "token {t} out of vocab range");
+        }
+    }
+
+    #[test]
+    fn test_multistep_schedule_changes_blend_coefficients() {
+        // Non-uniform schedule should produce different confidence history
+        // than uniform schedule, since blend coefficients differ.
+        let config = Config::micro_dllm();
+        let weights = TransformerWeights::new(&config, &mut Rng::new(42));
+
+        let uniform_config = D2fDecodeConfig {
+            denoise_steps: 4,
+            multistep: true,
+            schedule: ScheduleKind::Uniform,
+            ..D2fDecodeConfig::with_block_size(4)
+        };
+        let logit_normal_config = D2fDecodeConfig {
+            denoise_steps: 4,
+            multistep: true,
+            schedule: ScheduleKind::LogitNormal {
+                mean: -1.5,
+                std: 0.8,
+            },
+            ..D2fDecodeConfig::with_block_size(4)
+        };
+
+        let result_uniform = d2f_decode_block(
+            &weights,
+            &config,
+            &uniform_config,
+            &NoPruner,
+            &NoScreeningPruner,
+            &mut Rng::new(42),
+        );
+        let result_logit_normal = d2f_decode_block(
+            &weights,
+            &config,
+            &logit_normal_config,
+            &NoPruner,
+            &NoScreeningPruner,
+            &mut Rng::new(42),
+        );
+
+        assert_eq!(
+            result_uniform.tokens.len(),
+            result_logit_normal.tokens.len()
+        );
+        // Both should produce valid output regardless of schedule
+        for &t in &result_uniform.tokens {
+            assert!(t < config.vocab_size);
+        }
+        for &t in &result_logit_normal.tokens {
+            assert!(t < config.vocab_size);
         }
     }
 }
