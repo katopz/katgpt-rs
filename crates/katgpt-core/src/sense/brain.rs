@@ -64,9 +64,6 @@ pub struct NpcBrain {
     /// Default: Full (all modules). Only used with `sense_lod` feature.
     #[cfg(feature = "sense_lod")]
     pub active_lod: SenseLodLevel,
-    /// Cached LOD mask — rebuilt when active_lod changes.
-    #[cfg(feature = "sense_lod")]
-    lod_mask: crate::sense::lod::SenseLodMask,
 }
 
 impl NpcBrain {
@@ -86,8 +83,6 @@ impl NpcBrain {
             overrides: SenseOverride::default(),
             #[cfg(feature = "sense_lod")]
             active_lod: SenseLodLevel::Full,
-            #[cfg(feature = "sense_lod")]
-            lod_mask: crate::sense::lod::SenseLodMask::from_level(SenseLodLevel::Full),
         }
     }
 
@@ -95,7 +90,6 @@ impl NpcBrain {
     #[cfg(feature = "sense_lod")]
     pub fn set_lod(&mut self, level: SenseLodLevel) {
         self.active_lod = level;
-        self.lod_mask = crate::sense::lod::SenseLodMask::from_level(level);
     }
 
     /// Project HLA state onto all loaded modules. GM override wins.
@@ -108,24 +102,68 @@ impl NpcBrain {
 
     /// Zero-alloc projection into pre-allocated buffer.
     /// Clears `result` and fills with projected values for each module.
-    /// Uses O(1) pin lookup and cached LOD mask — no linear scans, no per-call allocation.
-    /// With `sense_lod` feature: skips modules not in active LOD level, pushes 0.0 for skipped.
+    ///
+    /// LOD depth:
+    /// - Full: iterate all modules, project all (6 dot-products)
+    /// - Compressed: resize to zero, project only [Common, Fighter, Spatial] via O(1) index (3 dot-products)
+    /// - Minimal: resize to zero, project only Spatial via O(1) index (1 dot-product)
+    ///
+    /// No linear scans, no per-module branch for LOD < Full.
     pub fn project_all_into(&self, result: &mut Vec<f32>) {
+        let len = self.modules.len();
         result.clear();
+        result.resize(len, 0.0);
+
         #[cfg(feature = "sense_lod")]
-        let mask = self.lod_mask;
-        for m in &self.modules {
-            #[cfg(feature = "sense_lod")]
-            if !mask.is_active(m.kind) {
-                result.push(0.0);
-                continue;
-            }
-            let val = match self.overrides.pinned_value(m.kind) {
+        match self.active_lod {
+            SenseLodLevel::Full => self.project_full(result),
+            SenseLodLevel::Compressed => self.project_compressed(result),
+            SenseLodLevel::Minimal => self.project_minimal(result),
+        }
+        #[cfg(not(feature = "sense_lod"))]
+        self.project_full(result);
+    }
+
+    /// Full projection: iterate all modules, project each.
+    #[inline]
+    fn project_full(&self, result: &mut Vec<f32>) {
+        for (i, m) in self.modules.iter().enumerate() {
+            result[i] = match self.overrides.pinned_value(m.kind) {
                 Some(v) => v,
                 None if self.overrides.autonomous_disabled => 0.0,
                 None => m.project(&self.hla_state),
             };
-            result.push(val);
+        }
+    }
+
+    /// Compressed projection: only Common, Fighter, Spatial via O(1) index lookup.
+    #[cfg(feature = "sense_lod")]
+    #[inline]
+    fn project_compressed(&self, result: &mut Vec<f32>) {
+        use SenseKind::*;
+        for &kind in &[CommonSense, FighterSense, SpatialSense] {
+            let kind_idx = kind as usize;
+            if let Some(mod_idx) = self.module_index[kind_idx] {
+                result[mod_idx] = match self.overrides.pinned_value(kind) {
+                    Some(v) => v,
+                    None if self.overrides.autonomous_disabled => 0.0,
+                    None => self.modules[mod_idx].project(&self.hla_state),
+                };
+            }
+        }
+    }
+
+    /// Minimal projection: only Spatial via O(1) index lookup.
+    #[cfg(feature = "sense_lod")]
+    #[inline]
+    fn project_minimal(&self, result: &mut Vec<f32>) {
+        let spatial_idx = SenseKind::SpatialSense as usize;
+        if let Some(mod_idx) = self.module_index[spatial_idx] {
+            result[mod_idx] = match self.overrides.pinned_value(SenseKind::SpatialSense) {
+                Some(v) => v,
+                None if self.overrides.autonomous_disabled => 0.0,
+                None => self.modules[mod_idx].project(&self.hla_state),
+            };
         }
     }
 

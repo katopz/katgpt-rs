@@ -175,7 +175,7 @@ fn main() {
     }
     let _warmup_elapsed = start.elapsed();
 
-    const ITERS: usize = 10000;
+    const ITERS: usize = 5000;
     let start = std::time::Instant::now();
     for _ in 0..ITERS {
         baseline_full(&brains_full, &mut results_full);
