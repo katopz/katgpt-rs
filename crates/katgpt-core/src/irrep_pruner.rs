@@ -74,8 +74,8 @@ pub fn spectral_flatness(logits: &[f32], scratch: &mut Vec<Complex<f64>>) -> f32
     let mut sum: f64 = 0.0;
     let mut count: usize = 0;
 
-    for k in 1..=spectrum_end {
-        let mag_sq = scratch[k].re * scratch[k].re + scratch[k].im * scratch[k].im;
+    for bin in scratch.iter().take(spectrum_end + 1).skip(1) {
+        let mag_sq = bin.re * bin.re + bin.im * bin.im;
         if mag_sq <= 0.0 {
             continue; // skip zero bins (they'd kill geometric mean)
         }
@@ -307,10 +307,9 @@ impl ConstraintPruner for IrrepPruner {
     ) {
         // If no logits set, allow everything
         if self.logits.is_empty() {
-            let len = candidates.len().min(results.len());
-            for i in 0..len {
-                results[i] = true;
-            }
+            let len = candidates.len();
+            let cap = results.len();
+            results[..len.min(cap)].fill(true);
             return;
         }
 
@@ -318,15 +317,15 @@ impl ConstraintPruner for IrrepPruner {
             // Converged: all in-range valid
             true => {
                 let len = candidates.len().min(results.len());
-                for i in 0..len {
-                    results[i] = candidates[i] < self.logits.len();
+                for (i, r) in results.iter_mut().enumerate().take(len) {
+                    *r = candidates[i] < self.logits.len();
                 }
             }
             // Uncertain: check top-k membership
             false => {
                 let len = candidates.len().min(results.len());
-                for i in 0..len {
-                    results[i] = self.is_in_top_k(candidates[i]);
+                for (i, r) in results.iter_mut().enumerate().take(len) {
+                    *r = self.is_in_top_k(candidates[i]);
                 }
             }
         }
