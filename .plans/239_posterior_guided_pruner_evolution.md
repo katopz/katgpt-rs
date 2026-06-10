@@ -1,8 +1,8 @@
 # Plan 239: Posterior-Guided Pruner Evolution (PGPE)
 
-**Status:** ✅ COMPLETE — All 7 Phases Done, GOAT 8/8 PASS
+**Status:** ✅ COMPLETE — GOAT 8/8 PASS, promoted to default (decorator overhead 258ns only when PosteriorGuidedPruner used; existing pruners unaffected)
 **Research:** R211 (Bayesian-Agent distillation), R209 (BAKE precision), R172/P192 (MUSE lifecycle)
-**Feature Gate:** `posterior_evolution` (GOAT PROVED — promoted to default)
+**Feature Gate:** `posterior_evolution` (GOAT 8/8 — default-ON, zero regression without explicit decorator use)
 
 ---
 

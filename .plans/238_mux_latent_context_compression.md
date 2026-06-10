@@ -1,9 +1,9 @@
 # Plan 238: MUX-Latent Context Compression
 
-**Status:** 🟢 Phases 1-3 Complete, Phase 4 Complete, Phases 5-6 Complete (GOAT 7/7)
+**Status:** 🟡 Phases 1-6 Complete, GOAT structural 7/7 but NOT proven at scale (no model TTFT/quality benchmark)
 **Date:** 2026-06-10
 **Research:** `.research/211_LCLM_Latent_Context_Language_Model_Distillation.md`
-**Feature Gate:** `mux_latent_context` (opt-in initially, promote to default after GOAT proof)
+**Feature Gate:** `mux_latent_context` (opt-in — GOAT criteria requires TTFT > 2× at 16k with < 5% PPL loss, not yet proven)
 **Depends On:** Existing `mux_demux.rs` (MUX superposition), `domain_latent` (mid-layer injection), `MuxDdTree` (speculative decoding)
 **GOAT Criteria:** TTFT reduction > 2× at 16k context with < 5% quality loss (perplexity)
 
