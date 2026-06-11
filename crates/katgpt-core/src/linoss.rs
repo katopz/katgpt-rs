@@ -214,12 +214,25 @@ impl LinOSSCell {
         forcings: &[&[f32]],
         dt: f32,
     ) -> Vec<LinOSSState> {
+        let h = self.hidden_dim;
         let n = forcings.len();
         let mut results = Vec::with_capacity(n);
-        let mut state = initial.clone();
+        // Pre-allocate double buffers for ping-pong (avoids 2 allocs per step).
+        let mut y_buf = vec![0.0f32; h];
+        let mut z_buf = vec![0.0f32; h];
+        let mut y_cur = initial.y.clone();
+        let mut z_cur = initial.z.clone();
+
         for forcing in forcings.iter().take(n) {
-            state = self.imex_step(&state, forcing, dt);
-            results.push(state.clone());
+            self.imex_step_inplace(&y_cur, &z_cur, forcing, dt, &mut y_buf, &mut z_buf);
+            // Clone buf into results (unavoidable — LinOSSState owns its Vec).
+            results.push(LinOSSState {
+                y: y_buf.clone(),
+                z: z_buf.clone(),
+            });
+            // Swap buffers for next iteration.
+            std::mem::swap(&mut y_cur, &mut y_buf);
+            std::mem::swap(&mut z_cur, &mut z_buf);
         }
         results
     }

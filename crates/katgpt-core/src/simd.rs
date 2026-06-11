@@ -2804,18 +2804,24 @@ unsafe fn neon_sum_sq(x: &[f32], len: usize) -> f32 {
     unsafe {
         let mut acc0 = vdupq_n_f32(0.0);
         let mut acc1 = vdupq_n_f32(0.0);
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
         let mut i = 0;
-        let chunks2 = len / 8;
+        let chunks4 = len / 16;
 
-        for _ in 0..chunks2 {
+        for _ in 0..chunks4 {
             let v0 = vld1q_f32(x.as_ptr().add(i));
             acc0 = vfmaq_f32(acc0, v0, v0);
             let v1 = vld1q_f32(x.as_ptr().add(i + 4));
             acc1 = vfmaq_f32(acc1, v1, v1);
-            i += 8;
+            let v2 = vld1q_f32(x.as_ptr().add(i + 8));
+            acc2 = vfmaq_f32(acc2, v2, v2);
+            let v3 = vld1q_f32(x.as_ptr().add(i + 12));
+            acc3 = vfmaq_f32(acc3, v3, v3);
+            i += 16;
         }
 
-        let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
 
         let mut acc_rem = vdupq_n_f32(0.0);
         let remaining = (len - i) / 4;
@@ -2857,13 +2863,15 @@ unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
 
         let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
 
-        // Handle remaining 8-element chunk
+        // Accumulate remaining 8-element chunks, reduce once
+        let mut acc_rem = _mm256_setzero_ps();
         let remaining = (len - i) / 8;
         for _ in 0..remaining {
             let v = _mm256_loadu_ps(x.as_ptr().add(i));
-            sum += horizontal_sum_256(_mm256_fmadd_ps(v, v, _mm256_setzero_ps()));
+            acc_rem = _mm256_fmadd_ps(v, v, acc_rem);
             i += 8;
         }
+        sum += horizontal_sum_256(acc_rem);
 
         while i < len {
             let v = *x.get_unchecked(i);
@@ -3085,15 +3093,17 @@ unsafe fn avx2_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 
         let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
 
+        let mut acc_rem = _mm256_setzero_ps();
         let remaining = (len - i) / 8;
         for _ in 0..remaining {
             let d = _mm256_sub_ps(
                 _mm256_loadu_ps(a.as_ptr().add(i)),
                 _mm256_loadu_ps(b.as_ptr().add(i)),
             );
-            sum += horizontal_sum_256(_mm256_fmadd_ps(d, d, _mm256_setzero_ps()));
+            acc_rem = _mm256_fmadd_ps(d, d, acc_rem);
             i += 8;
         }
+        sum += horizontal_sum_256(acc_rem);
 
         while i < len {
             let diff = *a.get_unchecked(i) - *b.get_unchecked(i);

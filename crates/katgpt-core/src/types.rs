@@ -2116,9 +2116,8 @@ pub fn gegelu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 
     let mut i = 0;
     while i + CHUNK <= hidden.len() {
-        // buf[j] = -1.702 * gate[j] via copy + SIMD scale
-        buf[..CHUNK].copy_from_slice(&gate[i..i + CHUNK]);
-        crate::simd::simd_scale_inplace(&mut buf, -1.702);
+        // buf[j] = -1.702 * gate[j] via fused SIMD copy+scale (single pass)
+        crate::simd::simd_fused_decay_write(&mut buf, 0.0, &gate[i..i + CHUNK], -1.702);
         // buf[j] = exp(-1.702 * gate[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = gate[j] * sigmoid(1.702 * gate[j]) * up[j]
@@ -2156,9 +2155,8 @@ pub fn gegelu_tanh(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 
     let mut i = 0;
     while i + CHUNK <= hidden.len() {
-        // buf[j] = 0.044715 * g² via SIMD copy + scale + element-wise mul
-        buf[..CHUNK].copy_from_slice(&gate[i..i + CHUNK]);
-        crate::simd::simd_scale_inplace(&mut buf, 0.044715); // buf = 0.044715 * g
+        // buf[j] = 0.044715 * g via fused SIMD copy+scale (single pass)
+        crate::simd::simd_fused_decay_write(&mut buf, 0.0, &gate[i..i + CHUNK], 0.044715);
         crate::simd::simd_scale_mul_inplace(&mut buf, &gate[i..i + CHUNK], 1.0); // buf = 0.044715 * g²
         // Finish cubic via SIMD: buf = 1 + 0.044715*g², then buf = scale_2 * g * (1 + 0.044715*g²)
         crate::simd::simd_add_scalar_inplace(&mut buf, 1.0);
@@ -2198,9 +2196,8 @@ pub fn silu(x: &mut [f32]) {
 
     let mut i = 0;
     while i + CHUNK <= x.len() {
-        // buf[j] = -x[j] via copy + SIMD scale
-        buf[..CHUNK].copy_from_slice(&x[i..i + CHUNK]);
-        crate::simd::simd_scale_inplace(&mut buf, -1.0);
+        // buf[j] = -x[j] via fused SIMD copy+scale (single pass)
+        crate::simd::simd_fused_decay_write(&mut buf, 0.0, &x[i..i + CHUNK], -1.0);
         // buf[j] = exp(-x[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // x[j] = x[j] / (1 + exp(-x[j]))
@@ -2228,9 +2225,8 @@ pub fn swiglu(hidden: &mut [f32], gate: &[f32], up: &[f32]) {
 
     let mut i = 0;
     while i + CHUNK <= hidden.len() {
-        // buf[j] = -gate[j] via copy + SIMD scale
-        buf[..CHUNK].copy_from_slice(&gate[i..i + CHUNK]);
-        crate::simd::simd_scale_inplace(&mut buf, -1.0);
+        // buf[j] = -gate[j] via fused SIMD copy+scale (single pass)
+        crate::simd::simd_fused_decay_write(&mut buf, 0.0, &gate[i..i + CHUNK], -1.0);
         // buf[j] = exp(-gate[j]) via SIMD
         crate::simd::simd_exp_inplace(&mut buf);
         // hidden[j] = gate[j] / (1 + exp(-gate[j])) * up[j]

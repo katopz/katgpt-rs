@@ -250,13 +250,10 @@ impl SlodOperator {
             }
         }
 
-        // Degree vector
+        // Degree vector (SIMD row-sums)
         let mut degree = vec![0.0f32; n];
         for i in 0..n {
-            for j in 0..n {
-                degree[i] += w[i * n + j];
-            }
-            degree[i] = degree[i].max(1e-10);
+            degree[i] = crate::simd::simd_sum_f32(&w[i * n..(i + 1) * n]).max(1e-10);
         }
 
         // Normalized Laplacian: L = I - D^{-1/2} W D^{-1/2}
@@ -284,11 +281,7 @@ impl SlodOperator {
             let v = &eigvecs[eig_idx * n..(eig_idx + 1) * n];
             // Compute Lv
             let mut lv = vec![0.0f32; n];
-            for i in 0..n {
-                for j in 0..n {
-                    lv[i] += lap[i * n + j] * v[j];
-                }
-            }
+            crate::simd::simd_matvec(&mut lv, &lap, v, n, n);
             // λ = (v^T Lv) / (v^T v)
             let numerator = simd_dot_f32(v, &lv, n);
             let denominator = simd_dot_f32(v, v, n).max(1e-10);
@@ -689,18 +682,14 @@ fn zscore_into(signal: &[f32], out: &mut [f32]) {
     }
     // Use SIMD sum for mean
     let mean: f32 = crate::simd::simd_sum_f32(&signal[..n]) / n as f32;
-    // Compute variance
-    let mut variance = 0.0f32;
-    for i in 0..n {
-        let d = signal[i] - mean;
-        variance += d * d;
-    }
-    variance /= n as f32;
-    let std = variance.sqrt().max(1e-10);
-    let inv_std = 1.0 / std;
-    for i in 0..n {
-        out[i] = (signal[i] - mean) * inv_std;
-    }
+    // Center into output buffer: out[i] = signal[i] - mean
+    out[..n].copy_from_slice(&signal[..n]);
+    crate::simd::simd_add_scalar_inplace(&mut out[..n], -mean);
+    // Compute variance via SIMD sum-of-squares on centered data
+    let variance: f32 = crate::simd::simd_sum_sq(&out[..n], n) / n as f32;
+    let inv_std = 1.0 / variance.sqrt().max(1e-10);
+    // Scale in-place
+    crate::simd::simd_scale_inplace(&mut out[..n], inv_std);
 }
 
 /// MAD (Median Absolute Deviation) peak picker.

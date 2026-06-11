@@ -312,7 +312,10 @@ pub fn tiled_attention_parallax_forward(
     let rho_is_zero = if parallax_config.gate_scale == 0.0 {
         true // gate_scale=0 makes correction zero regardless of ρ
     } else {
-        scratch.rho[..d].iter().all(|&v| v == 0.0)
+        // SIMD single-pass: sum of |values| is 0 iff all are zero.
+        // Faster than scalar early-exit scan for typical non-zero ρ
+        // (which must scan all d elements anyway to confirm all-zero).
+        crate::simd::simd_sum_abs_f32(&scratch.rho[..d]) == 0.0
     };
     if rho_is_zero {
         tiled_attention_core(
