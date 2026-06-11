@@ -174,9 +174,9 @@ and identified cross-cutting themes.
 - [x] `cna.rs:320-325` — `is_universal_excluded()` → HashSet
 - [x] `cna.rs:233-249` — Full sort for top-k → `select_nth_unstable`
 - [x] `decision_explainer.rs:372-398` — String alloc per attribution → `&str` / `Cow`
-- [ ] `decision_explainer.rs:511-536` — Recomputed totals per sensitivity call
+- [x] `decision_explainer.rs:511-536` — Recomputed totals per sensitivity call (pre-compute threshold, early return)
 - [x] `lodestar.rs:262-296` — Bellman-Ford O(S²Σ) → BFS O(SΣ)
-- [ ] `curvature_alloc.rs:129` — Softmax scratch Vec alloc → pre-allocate
+- [x] `curvature_alloc.rs:129` — Softmax scratch Vec alloc → pre-allocate
 - [ ] `curvature_alloc.rs:83-95` — Lazy recompute for `recompute_influence`
 - [x] `count_min_sketch.rs:84-90` — f32 decay → integer math with shift
 - [x] `opus/types.rs:134` — Nested `Vec<Vec<f32>>` → flat with stride
@@ -189,14 +189,14 @@ and identified cross-cutting themes.
 - [x] `lsh_cache.rs:85-89` — `Vec::remove(0)` → VecDeque
 - [ ] `bfcp_region_cache.rs:146-157` — LFU eviction O(n) → min-heap or TinyLFU
 - [x] `go/g_zero_player.rs:285-321` — `compute_go_delta` board_tokens Vec → pre-compute or defer
-- [ ] `go/state.rs:246-256` — `legal_moves()` → accept pre-allocated buffer
-- [ ] `go/state.rs:405-432` — `flood_empty` HashSet for 2 values → bool pair
+- [x] `go/state.rs:246-256` — `legal_moves()` → accept pre-allocated buffer (_into variant exists, callers migrated)
+- [x] `go/state.rs:405-432` — `flood_empty` HashSet for 2 values → bool pair
 - [x] `monopoly/systems.rs:70-151` — `build_ctx` → reusable DecisionContext buffer
 - [ ] `monopoly/mod.rs:532-576` — `square_kind()` → const lookup table
 - [ ] `monopoly/group_squares` → return `&'static [u8]`
 - [ ] `dungeon_pathfinder.rs:225-231` — Pre-compute floor adjacency on construction
-- [ ] `region_batch.rs:108` — `Vec::new()` → `Vec::with_capacity`
-- [ ] `region_batch.rs:138,146` — `constraints.clone()` → `Arc<Vec<HalfSpace>>`
+- [x] `region_batch.rs:108` — `Vec::new()` → `Vec::with_capacity`
+- [x] `region_batch.rs:138,146` — `constraints.clone()` → `Arc<Vec<HalfSpace>>`
 
 ---
 

@@ -510,30 +510,25 @@ impl PerturbationExplainer {
 
         let chosen_total: f32 = chosen.pruner_scores.iter().sum();
 
-        // Perturb the closest alternative's pruner score by +delta.
-        // If the perturbed total >= chosen total → flip → sensitivity = 1.0.
-        // If no flip → sensitivity = 0.0 (spec: "If unchanged → sensitivity = 0.0").
-        //
-        // We check each alternative: perturb its pruner score at pruner_idx by +delta.
-        // If any perturbed candidate ties/beats chosen, sensitivity = 1.0.
-        let mut flipped = false;
+        // Pre-compute threshold: perturbed_total >= chosen_total ⟺ cand_total + delta >= chosen_total
+        // ⟺ cand_total >= chosen_total - delta.
+        // Short-circuit: if delta >= chosen_total, any candidate with the target pruner flips.
+        let threshold = chosen_total - delta;
+
         for (i, cand) in node.candidates.iter().enumerate() {
             if i == node.chosen {
                 continue;
             }
+            if cand.pruner_scores.get(pruner_idx).is_none() {
+                continue;
+            }
             let cand_total: f32 = cand.pruner_scores.iter().sum();
-            // Perturb pruner_idx score by +delta
-            let perturbed_total = match cand.pruner_scores.get(pruner_idx) {
-                Some(&s) => cand_total - s + (s + delta),
-                None => continue,
-            };
-            if perturbed_total >= chosen_total {
-                flipped = true;
-                break;
+            if cand_total >= threshold {
+                return 1.0;
             }
         }
 
-        if flipped { 1.0 } else { 0.0 }
+        0.0
     }
 
     /// Build a human-readable summary of the decision explanation.
