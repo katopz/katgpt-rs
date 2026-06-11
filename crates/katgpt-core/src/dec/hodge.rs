@@ -485,6 +485,120 @@ pub fn dec_relevance_score(cx: &CellComplex, features: &CochainField) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
+// Hodge Spectrum — Power Iteration (T17)
+// ---------------------------------------------------------------------------
+
+/// Compute approximate eigenvalues of Δₖ using power iteration with deflation.
+///
+/// Returns eigenvalues sorted descending. Uses `n_eigenvalues` rounds of
+/// power iteration on the Hodge Laplacian matvec to extract the top eigenvalues.
+/// For each round:
+/// 1. Start with random vector
+/// 2. Iterate: x = Δₖ(x), normalize
+/// 3. Rayleigh quotient gives eigenvalue estimate
+/// 4. Deflate: subtract projected component from previous eigenvectors
+///
+/// # Arguments
+/// * `cx` — The cell complex
+/// * `rank` — Rank of the cochain (determines which Δₖ to use)
+/// * `n_eigenvalues` — Number of eigenvalues to extract
+/// * `max_iter` — Maximum power-iteration steps per eigenvalue
+///
+/// # Returns
+/// Eigenvalues sorted descending (largest first). Length = `n_eigenvalues`.
+pub fn hodge_spectrum(
+    cx: &CellComplex,
+    rank: u8,
+    n_eigenvalues: usize,
+    max_iter: usize,
+) -> Vec<f32> {
+    let n = cx.n_cells(rank);
+    let n_ev = n_eigenvalues.min(n);
+    if n_ev == 0 {
+        return Vec::new();
+    }
+
+    let mut eigenvalues = Vec::with_capacity(n_ev);
+    let mut eigenvectors = Vec::with_capacity(n_ev);
+
+    for ev_idx in 0..n_ev {
+        // Initialize with pseudo-random vector using simple LCG seeded by index
+        let seed = (ev_idx + 7) as u32;
+        let mut x = vec![0.0f32; n];
+        for i in 0..n {
+            let val = simple_lcg(seed.wrapping_add(i as u32));
+            x[i] = (val as f32) / (u32::MAX as f32) - 0.5;
+        }
+
+        // Deflate: remove projection onto already-found eigenvectors
+        deflate(&mut x, &eigenvectors);
+        normalize_inplace(&mut x);
+
+        // Power iteration
+        for _ in 0..max_iter {
+            let mut cochain = CochainField::zeros(rank, n, 1);
+            cochain.data.copy_from_slice(&x);
+            let lap = hodge_laplacian(cx, &cochain);
+            x.copy_from_slice(&lap.data);
+
+            // Deflate again
+            deflate(&mut x, &eigenvectors);
+
+            let norm = l2_norm(&x);
+            if norm < 1e-12 {
+                break;
+            }
+            for v in x.iter_mut() {
+                *v /= norm;
+            }
+        }
+
+        // Rayleigh quotient: λ = xᵀΔx / (xᵀx)
+        let mut cochain = CochainField::zeros(rank, n, 1);
+        cochain.data.copy_from_slice(&x);
+        let lap = hodge_laplacian(cx, &cochain);
+        let rayleigh: f32 = x.iter().zip(lap.data.iter()).map(|(&a, &b)| a * b).sum();
+
+        eigenvalues.push(rayleigh.max(0.0));
+        eigenvectors.push(x);
+    }
+
+    eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    eigenvalues
+}
+
+/// Simple LCG pseudo-random number generator (no external deps).
+fn simple_lcg(state: u32) -> u32 {
+    // Numerical Recipes LCG parameters
+    state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223)
+}
+
+/// L2 norm of a vector.
+fn l2_norm(v: &[f32]) -> f32 {
+    v.iter().map(|&x| x * x).sum::<f32>().sqrt()
+}
+
+/// Normalize a vector to unit length in-place.
+fn normalize_inplace(v: &mut [f32]) {
+    let norm = l2_norm(v);
+    if norm > 1e-12 {
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+    }
+}
+
+/// Remove projections of `v` onto each vector in `basis` (Gram–Schmidt deflation).
+fn deflate(v: &mut [f32], basis: &[Vec<f32>]) {
+    for b in basis {
+        let dot: f32 = v.iter().zip(b.iter()).map(|(&a, &c)| a * c).sum();
+        for (vi, bi) in v.iter_mut().zip(b.iter()) {
+            *vi -= dot * bi;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests (T18, T27–T30)
 // ---------------------------------------------------------------------------
 
@@ -963,5 +1077,60 @@ mod tests {
         assert_eq!(cx.n_vertices(), 16);
         assert_eq!(cx.n_edges(), 24);
         assert_eq!(cx.n_faces(), 9);
+    }
+
+    // -----------------------------------------------------------------------
+    // T17: Hodge spectrum
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hodge_spectrum_rank0_small() {
+        let cx = CellComplex::grid_2d(4, 4);
+        let eigs = hodge_spectrum(&cx, 0, 3, 50);
+        assert_eq!(eigs.len(), 3);
+        // Eigenvalues should be sorted descending
+        for i in 1..eigs.len() {
+            assert!(
+                eigs[i] <= eigs[i - 1] + 1e-3,
+                "eigenvalues not sorted: {:?}",
+                eigs
+            );
+        }
+        // All eigenvalues of the Laplacian should be >= 0 (PSD)
+        for &e in &eigs {
+            assert!(e >= -1e-3, "negative eigenvalue: {}", e);
+        }
+    }
+
+    #[test]
+    fn hodge_spectrum_rank0_single_eigenvalue() {
+        let cx = CellComplex::grid_2d(3, 3);
+        let eigs = hodge_spectrum(&cx, 0, 1, 30);
+        assert_eq!(eigs.len(), 1);
+        // Top eigenvalue of 3x3 grid Laplacian should be positive
+        assert!(eigs[0] > 0.1, "top eigenvalue too small: {}", eigs[0]);
+    }
+
+    // -----------------------------------------------------------------------
+    // T19: Benchmark Hodge decomposition on 256×256
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn bench_hodge_decompose_256x256() {
+        let cx = CellComplex::grid_2d(256, 256);
+        let mut potential = CochainField::zeros(0, cx.n_vertices(), 1);
+        // Fill with sine-based function
+        for i in 0..cx.n_vertices() {
+            potential.data[i] = (i as f32 * 0.01).sin();
+        }
+        let start = std::time::Instant::now();
+        let _components = hodge_decompose(&cx, &potential);
+        let elapsed = start.elapsed();
+        println!("Hodge decomposition 256×256: {:?}", elapsed);
+        assert!(
+            elapsed.as_secs() < 120,
+            "Hodge decomposition too slow: {:?}",
+            elapsed
+        );
     }
 }

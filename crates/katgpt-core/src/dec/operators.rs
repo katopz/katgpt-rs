@@ -11,6 +11,24 @@
 use super::types::{CellComplex, CochainField, MAX_RANK};
 
 // ---------------------------------------------------------------------------
+// Hodge Star Mₖ (T10)
+// ---------------------------------------------------------------------------
+
+/// Compute the Hodge star Mₖ (mass/metric matrix) scaling factor.
+///
+/// For uniform grids, returns identity (each cell has equal volume/area).
+/// The actual Hodge star is a diagonal matrix; on uniform grids every
+/// diagonal entry is the same, so we return that single scalar.
+///
+/// TODO: Non-uniform grids need actual metric tensor — see Plan 251 T10.
+pub fn hodge_star(_cx: &CellComplex, rank: u8) -> f32 {
+    // Uniform grid: all cells have equal metric, so Mₖ = I (identity)
+    // Scale factor is 1.0 for all ranks on a uniform grid.
+    let _ = rank;
+    1.0f32
+}
+
+// ---------------------------------------------------------------------------
 // Exterior Derivative dₖ = Bₖ₊₁ᵀ
 // ---------------------------------------------------------------------------
 
@@ -46,21 +64,27 @@ pub fn exterior_derivative(cx: &CellComplex, input: &CochainField) -> CochainFie
     // For each entry (row, col, sign) in Bₖ₊₁:
     //   output[col] += sign * input[row]
     let entries = cx.boundary_entries(k);
+
+    // T11: SIMD hint — process inner dim loop with explicit chunking
+    // so LLVM can see the unrolled 4-wide pattern for auto-vectorization.
     for &(src_cell, dst_cell, sign) in entries {
         let src_start = src_cell * dim;
         let dst_start = dst_cell * dim;
-        match sign {
-            1 => {
-                for d in 0..dim {
-                    output.data[dst_start + d] += input.data[src_start + d];
-                }
-            }
-            -1 => {
-                for d in 0..dim {
-                    output.data[dst_start + d] -= input.data[src_start + d];
-                }
-            }
-            _ => {}
+        let sign_f = sign as f32;
+
+        // Chunked 4-wide to assist auto-vectorization
+        let chunks = dim / 4;
+        let remainder = dim % 4;
+        for c in 0..chunks {
+            let off = c * 4;
+            output.data[dst_start + off] += sign_f * input.data[src_start + off];
+            output.data[dst_start + off + 1] += sign_f * input.data[src_start + off + 1];
+            output.data[dst_start + off + 2] += sign_f * input.data[src_start + off + 2];
+            output.data[dst_start + off + 3] += sign_f * input.data[src_start + off + 3];
+        }
+        for d in 0..remainder {
+            let off = chunks * 4 + d;
+            output.data[dst_start + off] += sign_f * input.data[src_start + off];
         }
     }
 

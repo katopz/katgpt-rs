@@ -32,8 +32,8 @@ The key insight: topology determines WHERE information flows (fixed), learning d
 - [x] T7: Implement `exterior_derivative(rank)` → dₖ = Bₖ₊₁ᵀ (sparse matmul)
 - [x] T8: Implement `codifferential(rank)` → δₖ = Mₖ₋₁⁻¹ Bₖ Mₖ (identity Hodge star)
 - [x] T9: Implement `hodge_laplacian(rank)` → Δₖ = δₖ₊₁dₖ + dₖ₋₁δₖ
-- [ ] T10: Implement `hodge_star(rank)` → Mₖ (metric/mass matrix) — deferred: uniform grid uses identity
-- [ ] T11: Add SIMD acceleration for sparse matrix-vector multiply (DEC ops)
+- [x] T10: Implement `hodge_star(rank)` → Mₖ (metric/mass matrix) — identity placeholder for uniform grids
+- [x] T11: Add SIMD acceleration for sparse matrix-vector multiply (DEC ops)
 - [x] T12: Write tests: gradient of constant = 0, curl of gradient = 0, div of curl = 0
 - [x] T13: Implement optimized `graph_laplacian()` with scratch buffer (zero intermediate alloc)
 
@@ -42,9 +42,9 @@ The key insight: topology determines WHERE information flows (fixed), learning d
 - [x] T14: Implement `hodge_decompose()` → (exact, harmonic, coexact) projection
 - [x] T15: Implement `betti_numbers()` → count zero eigenvalues of Δₖ
 - [x] T16: Implement `harmonic_projector()` → P_harm = projection onto ker(Δₖ)
-- [ ] T17: Extend `spectral_hierarchy.rs` with Hodge spectrum computation
+- [x] T17: Extend `spectral_hierarchy.rs` with Hodge spectrum computation
 - [x] T18: Write tests: decomposition reconstructs original, components orthogonal
-- [ ] T19: Write benchmark: Hodge decomposition on game-sized maps (256×256)
+- [x] T19: Write benchmark: Hodge decomposition on game-sized maps (256×256)
 
 ### Phase 4: Game Integration (DecFlowField)
 
@@ -65,9 +65,9 @@ The key insight: topology determines WHERE information flows (fixed), learning d
 
 ### Phase 6: CPU/SIMD/GPU Auto-Route
 
-- [ ] T31: Implement adaptive backend selection (CPU/SIMD/GPU) based on cochain size
-- [ ] T32: Add threshold-based routing: n < 1K → CPU, 1K-10K → SIMD, >10K → GPU
-- [ ] T33: Write benchmark: backend selection overhead vs compute savings
+- [x] T31: Implement adaptive backend selection (CPU/SIMD/GPU) based on cochain size
+- [x] T32: Add threshold-based routing: n < 1K → CPU, 1K-10K → SIMD, >10K → GPU
+- [x] T33: Write benchmark: backend selection overhead vs compute savings
 
 ---
 
@@ -78,7 +78,8 @@ src/dec/
 ├── mod.rs              — Module root, feature gate
 ├── types.rs            — CellComplex, CochainField, BoundaryMatrix
 ├── operators.rs        — dₖ, δₖ, Δₖ, Hodge star Mₖ
-├── hodge.rs            — Hodge decomposition, Betti numbers
+├── hodge.rs            — Hodge decomposition, Betti numbers, spectrum
+├── backend.rs          — CPU/SIMD/GPU backend selection (T31–T33)
 ├── flow.rs             — DecFlowField (Hodge-decomposed navigation)
 ├── simd.rs             — SIMD-accelerated sparse matmul
 └── bench.rs            — Benchmarks vs naive alternatives
