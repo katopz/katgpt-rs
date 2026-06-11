@@ -287,7 +287,11 @@ impl SlodOperator {
                 let a_j = &embeddings[j * dim..(j + 1) * dim];
                 dists.push((j, poincare_distance(a_i, a_j, dim)));
             }
-            dists.sort_unstable_by(|a, b| {
+            // Partial sort: O(n) to partition top-k nearest, then sort just those
+            dists.select_nth_unstable_by(k, |a, b| {
+                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            dists[..k].sort_unstable_by(|a, b| {
                 a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
             });
 

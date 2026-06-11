@@ -3617,7 +3617,6 @@ mod tests_types {
 ///
 /// Plan 230: Shard Embedding Projection — modelless linear weight-to-vector.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[repr(C)]
 pub struct ShardEmbedding(pub [f32; 8]);
 
 impl ShardEmbedding {

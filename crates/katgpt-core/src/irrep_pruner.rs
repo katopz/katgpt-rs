@@ -120,8 +120,12 @@ pub struct IrrepPruner {
     /// Cached sorted indices (descending by logit value), updated by set_logits.
     /// Used for top-k gating when uncertain.
     sorted_indices: Vec<usize>,
-    /// O(1) bitmap for top-k membership checks.
-    top_k_bitmap: Vec<bool>,
+    /// Bitset for O(1) top-k membership checks.
+    /// Each u64 word holds 64 bits. 8× denser than Vec<bool> — fills are
+    /// 8× fewer cachelines touched, and 256K vocab fits in 4KB vs 256KB.
+    top_k_bits: Vec<u64>,
+    /// Tracked vocabulary size (number of bits in `top_k_bits`).
+    vocab_len: usize,
     /// How many tokens from sorted_indices are "valid" given current flatness.
     valid_count: usize,
     /// Number of top-k tokens to keep when distribution is uncertain.
@@ -186,12 +190,14 @@ impl IrrepPruner {
         top_k_when_uncertain: usize,
         max_vocab: usize,
     ) -> Self {
+        let bitset_words = (max_vocab + 63) / 64;
         Self {
             planner: FftPlanner::new(),
             scratch: Vec::with_capacity(max_vocab),
             logits: Vec::with_capacity(max_vocab),
             sorted_indices: Vec::with_capacity(max_vocab),
-            top_k_bitmap: Vec::with_capacity(max_vocab),
+            top_k_bits: Vec::with_capacity(bitset_words),
+            vocab_len: 0,
             valid_count: 0,
             top_k_when_uncertain,
             convergence_threshold,
@@ -262,25 +268,22 @@ impl IrrepPruner {
     }
 
     /// Check if a token_idx is in the top-k set (only meaningful when uncertain).
-    /// O(1) bitmap lookup.
-    ///
-    /// # Safety
-    /// Caller must ensure `token_idx < top_k_bitmap.len()` (guaranteed by is_valid's
-    /// out-of-range check and the fact that top_k_bitmap is always >= logits.len()).
+    /// O(1) bitset lookup — single word read + mask.
     #[inline]
     fn is_in_top_k(&self, token_idx: usize) -> bool {
         debug_assert!(
-            token_idx < self.top_k_bitmap.len(),
-            "is_in_top_k: token_idx {token_idx} >= bitmap len {}",
-            self.top_k_bitmap.len()
+            token_idx < self.vocab_len,
+            "is_in_top_k: token_idx {token_idx} >= vocab len {}",
+            self.vocab_len
         );
-        // SAFETY: is_valid already checks token_idx < logits.len(), and
-        // rebuild_sorted_indices ensures top_k_bitmap.len() == logits.len().
-        unsafe { *self.top_k_bitmap.get_unchecked(token_idx) }
+        let word = token_idx >> 6;
+        let bit = token_idx & 63;
+        // SAFETY: rebuild_sorted_indices ensures top_k_bits covers vocab_len.
+        unsafe { *self.top_k_bits.get_unchecked(word) & (1u64 << bit) != 0 }
     }
 
     /// Rebuild sorted indices by descending logit value using partial sort for top-k.
-    /// Builds O(1) bitmap for membership checks.
+    /// Builds O(1) bitset for membership checks.
     fn rebuild_sorted_indices(&mut self) {
         let n = self.logits.len();
         self.sorted_indices.clear();
@@ -303,17 +306,21 @@ impl IrrepPruner {
             });
         }
 
-        // Build bitmap from sorted top-k.
-        // Ensure bitmap covers full vocabulary
-        if self.top_k_bitmap.len() < n {
-            self.top_k_bitmap.resize(n, false);
+        // Build bitset from sorted top-k.
+        // Each u64 word holds 64 bits — 8× fewer cachelines than Vec<bool>.
+        self.vocab_len = n;
+        let n_words = (n + 63) / 64;
+        if self.top_k_bits.len() < n_words {
+            self.top_k_bits.resize(n_words, 0);
         }
-        // Bulk clear — single memset, faster than scattered indirect writes
-        self.top_k_bitmap[..n].fill(false);
+        // Bulk clear — single memset over ~n/64 words
+        self.top_k_bits[..n_words].fill(0);
         for &idx in &self.sorted_indices[..k] {
-            // SAFETY: idx < n by construction (sorted_indices contains 0..n)
+            let word = idx >> 6;
+            let bit = idx & 63;
+            // SAFETY: idx < n by construction, word < n_words
             unsafe {
-                *self.top_k_bitmap.get_unchecked_mut(idx) = true;
+                *self.top_k_bits.get_unchecked_mut(word) |= 1u64 << bit;
             }
         }
     }
@@ -362,13 +369,16 @@ impl ConstraintPruner for IrrepPruner {
                     *r = candidates[i] < self.logits.len();
                 }
             }
-            // Uncertain: check top-k membership via O(1) bitmap
+            // Uncertain: check top-k membership via O(1) bitset
             false => {
                 let len = candidates.len().min(results.len());
-                let bitmap_len = self.top_k_bitmap.len();
+                let n_words = self.top_k_bits.len();
                 for (i, r) in results.iter_mut().enumerate().take(len) {
                     let idx = candidates[i];
-                    *r = idx < bitmap_len && unsafe { *self.top_k_bitmap.get_unchecked(idx) };
+                    let word = idx >> 6;
+                    let bit = idx & 63;
+                    *r = word < n_words
+                        && unsafe { *self.top_k_bits.get_unchecked(word) & (1u64 << bit) != 0 };
                 }
             }
         }

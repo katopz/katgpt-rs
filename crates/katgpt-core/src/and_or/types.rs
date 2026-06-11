@@ -28,6 +28,7 @@ use std::fmt;
 /// - `And` nodes: `solved_bits` bit i tracks child i solved status (up to 64 children)
 /// - `Leaf` nodes: no children
 #[derive(Debug, Clone)]
+#[repr(u8)]
 pub enum AndOrNode<G, S> {
     /// OR node: any child can succeed. Represents alternative strategies.
     Or {
