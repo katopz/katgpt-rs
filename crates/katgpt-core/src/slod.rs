@@ -122,6 +122,7 @@ pub fn poincare_distance(a: &[f32], b: &[f32], dim: usize) -> f32 {
 /// Möbius addition in the Poincaré ball: a ⊕ b.
 ///
 /// a ⊕ b = ((1 + 2<a,b> + ||b||²)a + (1 - ||a||²)b) / (1 + 2<a,b> + ||a||²||b||²)
+#[allow(dead_code)]
 fn mobius_add(a: &[f32], b: &[f32], dim: usize) -> Vec<f32> {
     let mut result = vec![0.0f32; dim];
     mobius_add_into(&mut result, a, b, dim);
@@ -237,9 +238,7 @@ pub fn exp_map_into(
     let dir_norm_sq = simd_dot_f32(dir, dir, dim);
     if dir_norm_sq >= 1.0 - 1e-5 {
         let scale = (1.0 - 1e-5) / dir_norm_sq.sqrt();
-        for i in 0..dim {
-            dir[i] *= scale;
-        }
+        dir.iter_mut().for_each(|v| *v *= scale);
     }
 
     // Möbius addition: base ⊕ dir

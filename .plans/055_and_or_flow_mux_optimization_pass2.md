@@ -20,35 +20,34 @@ redundant computation, and SIMD-unfriendly patterns.
 ## Optimization Targets
 
 ### 1. flow/fft.rs — `inflate_obstacles` snapshot allocation
-- [ ] Replace `blocked.to_vec()` with pre-allocated snapshot buffer passed as parameter
-- [ ] In `fft_smooth_into`, col_buf already reused — verify no double-clear
+- [x] Replace `blocked.to_vec()` with pre-allocated snapshot buffer passed as parameter
+- [x] In `fft_smooth_into`, col_buf already reused — verified no double-clear
 
 ### 2. flow/mod.rs — `gradient()` unnecessary f32 math
-- [ ] Replace branch-free normalization with early-continue for zero gradient (avoids sqrt + div for flat cells)
-- [ ] Pre-compute `w as usize` and `h as usize` once (already done, verify)
+- [x] Replace branch-free normalization with early-continue for zero gradient (avoids sqrt + div for flat cells)
+- [x] Pre-compute `w as usize` and `h as usize` once (already done, verified)
 
 ### 3. flow/mod.rs — `from_q_values` heap allocation
-- [ ] `potential` Vec pre-sized via `with_capacity` — verify this is sufficient
-- [ ] The chunked loop is cosmetic — LLVM can auto-vectorize a flat loop equally well with `fold`
-- [ ] Consider `chunks_exact` + remainder for cleaner code
+- [x] `potential` Vec pre-sized via `with_capacity` — already sufficient
+- [x] The chunked loop is cosmetic — kept as-is (LLVM handles both patterns)
+- [x] Consider `chunks_exact` + remainder — not worth the refactor for same perf
 
 ### 4. mux/dd_tree.rs — `collect_leaf_paths` still allocates Vec<Vec<usize>>
-- [ ] `bfs.rs::step()` calls `collect_leaf_paths()` — should use `collect_leaf_paths_flat()` instead
-- [ ] `expand_bfs_frontier` already exists on dd_tree — `bfs.rs::step()` should delegate to it or use flat paths
-- [ ] `collect_leaf_paths()` allocates one Vec per leaf — replace internal use with flat version
+- [x] `bfs.rs::step()` now uses `collect_leaf_paths_flat()` — single contiguous Vec + offsets
+- [x] `expand_bfs_frontier` already uses per-leaf paths — no change needed (API is correct)
+- [x] `collect_leaf_paths()` kept for backward compat, hot path uses flat version
 
 ### 5. mux/dd_tree.rs — `expand_node` allocates per child
-- [ ] `child_tokens: Vec<u32>` and `child_weights: Vec<f32>` allocated per child
-- [ ] With fixed K, can use `[u32; MAX_K]` and `[f32; MAX_K]` stack arrays
-- [ ] `children.reserve(effective_width)` before push loop
+- [x] `children.reserve(effective_width)` added before push loop
+- [ ] Stack arrays for child tokens/weights — deferred (MuxNode stores Vec, changing would be API-breaking)
 
 ### 6. mux/dd_tree.rs — `init_root` allocates
 - [ ] `(0..peaks.len() as u32).collect()` — one Vec for tokens, one for weights
 - [ ] With bounded K, can use stack arrays
 
 ### 7. mux/demux.rs — `demux` allocates output Vec
-- [ ] `Vec::with_capacity(len)` — could accept pre-allocated buffer
-- [ ] Consider `demux_into` variant that writes to caller-provided slice
+- [x] Added `demux_into` variant that writes to caller-provided `&mut Vec<u32>` buffer
+- [x] `demux()` delegates to `demux_into` — backward compatible
 
 ### 8. mux/top_k.rs — `extract_top_k_peaks` allocates
 - [ ] `logits.to_vec()` — allocates copy for in-place partition
@@ -78,5 +77,5 @@ redundant computation, and SIMD-unfriendly patterns.
 - Require >10% improvement on at least one benchmark to promote to default
 
 ## Validation
-- [ ] `cargo test -p katgpt-core --features "flow_field_nav,mux_bfs,mux_demux,mux_bandit_width,mux_freeze_thaw,comp_width"`
-- [ ] `cargo bench --bench flow_field_bench --features flow_field_nav`
+- [x] `cargo test -p katgpt-core --features "flow_field_nav,mux_bfs,mux_demux,mux_bandit_width,mux_freeze_thaw,comp_width,mux_ddtree,mux_pruner"` — 232/232 pass
+- [ ] `cargo bench --bench flow_field_bench --features flow_field_nav` — deferred (manual benchmark)
