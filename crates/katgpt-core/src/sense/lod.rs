@@ -118,7 +118,12 @@ impl SenseLodMask {
     }
 
     pub fn is_active(&self, kind: SenseKind) -> bool {
-        self.mask.get(kind as usize).copied().unwrap_or(false)
+        let idx = kind as usize;
+        if idx < self.mask.len() {
+            self.mask[idx]
+        } else {
+            false
+        }
     }
 
     #[inline]

@@ -12,10 +12,13 @@ const MAX_OVERRIDES: usize = 8;
 const SENSE_KIND_COUNT: usize = 6;
 
 /// Per-NPC sense override configuration. GM always wins.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct SenseOverride {
     /// Pinned sense activations: (kind, value). If present, overrides autonomous.
-    pub pinned: Vec<(SenseKind, f32)>,
+    /// Fixed-size array avoids heap allocation — MAX_OVERRIDES slots.
+    pub pinned: [(SenseKind, f32); MAX_OVERRIDES],
+    /// Number of valid entries in `pinned`.
+    pinned_count: usize,
     /// O(1) pin lookup indexed by SenseKind discriminant. Rebuilt on pin/unpin.
     pin_lookup: [Option<f32>; SENSE_KIND_COUNT],
     /// If true, all autonomous computation is disabled; only pinned values returned.
@@ -24,10 +27,23 @@ pub struct SenseOverride {
     pub script_id: Option<u64>,
 }
 
+impl Default for SenseOverride {
+    fn default() -> Self {
+        Self {
+            pinned: [(SenseKind::CommonSense, 0.0); MAX_OVERRIDES],
+            pinned_count: 0,
+            pin_lookup: [None; SENSE_KIND_COUNT],
+            autonomous_disabled: false,
+            script_id: None,
+        }
+    }
+}
+
 impl SenseOverride {
     fn rebuild_pin_lookup(&mut self) {
         self.pin_lookup = [None; SENSE_KIND_COUNT];
-        for &(kind, value) in &self.pinned {
+        for i in 0..self.pinned_count {
+            let (kind, value) = self.pinned[i];
             let idx = kind as usize;
             if idx < SENSE_KIND_COUNT {
                 self.pin_lookup[idx] = Some(value);
@@ -41,11 +57,19 @@ impl SenseOverride {
         if idx < SENSE_KIND_COUNT {
             self.pin_lookup[idx]
         } else {
-            self.pinned
-                .iter()
-                .find(|(k, _)| *k == kind)
-                .map(|(_, v)| *v)
+            for i in 0..self.pinned_count {
+                if self.pinned[i].0 == kind {
+                    return Some(self.pinned[i].1);
+                }
+            }
+            None
         }
+    }
+
+    /// Returns true if no pins are active.
+    #[inline]
+    fn is_empty(&self) -> bool {
+        self.pinned_count == 0
     }
 }
 
@@ -143,7 +167,7 @@ impl NpcBrain {
     #[inline]
     fn project_full(&self, result: &mut [f32]) {
         // Fast path: no overrides active
-        if self.overrides.pinned.is_empty() && !self.overrides.autonomous_disabled {
+        if self.overrides.is_empty() && !self.overrides.autonomous_disabled {
             for (i, m) in self.modules.iter().enumerate() {
                 result[i] = m.project(&self.hla_state);
             }
@@ -241,25 +265,33 @@ impl NpcBrain {
         if idx < SENSE_KIND_COUNT {
             // Fast path: O(1) check via pin_lookup
             if self.overrides.pin_lookup[idx].is_some() {
-                // Already pinned — update Vec entry and lookup in-place
-                for entry in &mut self.overrides.pinned {
-                    if entry.0 == kind {
-                        entry.1 = value;
+                // Already pinned — update array entry and lookup in-place
+                for i in 0..self.overrides.pinned_count {
+                    if self.overrides.pinned[i].0 == kind {
+                        self.overrides.pinned[i].1 = value;
                         break;
                     }
                 }
                 self.overrides.pin_lookup[idx] = Some(value);
-            } else if self.overrides.pinned.len() < MAX_OVERRIDES {
-                // New pin — append to Vec and update single lookup slot
-                self.overrides.pinned.push((kind, value));
+            } else if self.overrides.pinned_count < MAX_OVERRIDES {
+                // New pin — append to array and update single lookup slot
+                self.overrides.pinned[self.overrides.pinned_count] = (kind, value);
+                self.overrides.pinned_count += 1;
                 self.overrides.pin_lookup[idx] = Some(value);
             }
         } else {
             // Unknown discriminant — fall back to linear scan
-            if let Some(entry) = self.overrides.pinned.iter_mut().find(|(k, _)| *k == kind) {
-                entry.1 = value;
-            } else if self.overrides.pinned.len() < MAX_OVERRIDES {
-                self.overrides.pinned.push((kind, value));
+            let mut found = false;
+            for i in 0..self.overrides.pinned_count {
+                if self.overrides.pinned[i].0 == kind {
+                    self.overrides.pinned[i].1 = value;
+                    found = true;
+                    break;
+                }
+            }
+            if !found && self.overrides.pinned_count < MAX_OVERRIDES {
+                self.overrides.pinned[self.overrides.pinned_count] = (kind, value);
+                self.overrides.pinned_count += 1;
             }
             self.overrides.rebuild_pin_lookup();
         }

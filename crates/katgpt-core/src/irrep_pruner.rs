@@ -304,22 +304,14 @@ impl IrrepPruner {
         }
 
         // Build bitmap from sorted top-k.
-        // Only clear entries that were set last time (tracked by prev_valid_count)
-        // to avoid re-zeroing the entire buffer.
-        let prev_valid_count = self.valid_count.min(self.top_k_bitmap.len());
-        for &idx in &self.sorted_indices[..prev_valid_count] {
-            // SAFETY: sorted_indices entries are < n by construction
-            unsafe {
-                if idx < self.top_k_bitmap.len() {
-                    *self.top_k_bitmap.get_unchecked_mut(idx) = false;
-                }
-            }
-        }
+        // Ensure bitmap covers full vocabulary
         if self.top_k_bitmap.len() < n {
             self.top_k_bitmap.resize(n, false);
         }
+        // Bulk clear — single memset, faster than scattered indirect writes
+        self.top_k_bitmap[..n].fill(false);
         for &idx in &self.sorted_indices[..k] {
-            // SAFETY: idx < n by construction
+            // SAFETY: idx < n by construction (sorted_indices contains 0..n)
             unsafe {
                 *self.top_k_bitmap.get_unchecked_mut(idx) = true;
             }

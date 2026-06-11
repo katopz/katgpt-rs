@@ -313,16 +313,20 @@ impl SlodOperator {
             degree[i] = crate::simd::simd_sum_f32(&w[i * n..(i + 1) * n]).max(1e-10);
         }
 
+        // Precompute inv_sqrt(degree) once — avoids repeated sqrt in inner loop
+        let mut inv_sqrt_d = vec![0.0f32; n];
+        for i in 0..n {
+            inv_sqrt_d[i] = 1.0 / degree[i].sqrt();
+        }
+
         // Normalized Laplacian: L = I - D^{-1/2} W D^{-1/2}
         let mut lap = vec![0.0f32; n * n];
         for i in 0..n {
-            for j in 0..n {
+            let isd_i = inv_sqrt_d[i];
+            for (j, isd_j) in inv_sqrt_d.iter().enumerate().take(n) {
                 let idx = i * n + j;
-                if i == j {
-                    lap[idx] = 1.0 - w[idx] / (degree[i] * degree[j]).sqrt();
-                } else {
-                    lap[idx] = -w[idx] / (degree[i] * degree[j]).sqrt();
-                }
+                let scaled = w[idx] * isd_i * isd_j;
+                lap[idx] = if i == j { 1.0 - scaled } else { -scaled };
             }
         }
 
@@ -397,12 +401,11 @@ impl SlodOperator {
         let log_min = sigma_min.ln();
         let log_max = sigma_max.ln();
 
-        let sigmas: Vec<f32> = (0..n_sigma)
-            .map(|i| {
-                let t = i as f32 / (n_sigma - 1) as f32;
-                (log_min + t * (log_max - log_min)).exp()
-            })
-            .collect();
+        let mut sigmas = [0.0f32; 100];
+        for (i, sigma_slot) in sigmas.iter_mut().enumerate() {
+            let t = i as f32 / (n_sigma - 1) as f32;
+            *sigma_slot = (log_min + t * (log_max - log_min)).exp();
+        }
 
         // Compute query spectral coefficients: φ_k^T e_focus
         let query_coeffs: Vec<f32> = (0..k_eigs)
@@ -413,9 +416,9 @@ impl SlodOperator {
             .collect();
 
         // Compute three signals at each σ
-        let mut v_signal = vec![0.0f32; n_sigma];
-        let mut d_signal = vec![0.0f32; n_sigma];
-        let mut c_signal = vec![0.0f32; n_sigma];
+        let mut v_signal = [0.0f32; 100];
+        let mut d_signal = [0.0f32; 100];
+        let mut c_signal = [0.0f32; 100];
         // Pre-allocate weights — reused across sigma iterations
         let mut weights = vec![0.0f32; n];
 
@@ -436,8 +439,8 @@ impl SlodOperator {
             }
 
             // V(σ): participation — effective number of active nodes
-            let w_sum: f32 = weights.iter().copied().sum::<f32>().max(1e-10);
-            let w_sq_sum: f32 = weights.iter().map(|w| w * w).sum();
+            let w_sum = crate::simd::simd_sum_f32(&weights[..n]).max(1e-10);
+            let w_sq_sum = crate::simd::simd_sum_sq(&weights[..n], n);
             v_signal[si] = (w_sum * w_sum / w_sq_sum.max(1e-10)) / n as f32;
 
             // D_w(σ): diffusion entropy
@@ -452,29 +455,25 @@ impl SlodOperator {
 
             // C_k(σ): spectral concentration — effective rank
             let mut c_energy = 0.0f32;
+            let mut c_total = 0.0f32;
             for &eig in eigenvalues.iter().take(k_eigs) {
                 let decay = (-eig * sigma).exp();
                 c_energy += decay * decay;
+                c_total += decay;
             }
-            let c_total: f32 = eigenvalues
-                .iter()
-                .take(k_eigs)
-                .map(|&eig| (-eig * sigma).exp())
-                .sum::<f32>()
-                .max(1e-10);
-            c_signal[si] = c_energy / (c_total * c_total);
+            c_signal[si] = c_energy / (c_total * c_total).max(1e-10);
         }
 
-        // Z-score normalize each signal (pre-allocated scratch buffers)
-        let mut z_v = vec![0.0f32; n_sigma];
-        let mut z_d = vec![0.0f32; n_sigma];
-        let mut z_c = vec![0.0f32; n_sigma];
+        // Z-score normalize each signal (stack-allocated scratch buffers)
+        let mut z_v = [0.0f32; 100];
+        let mut z_d = [0.0f32; 100];
+        let mut z_c = [0.0f32; 100];
         zscore_into(&v_signal, &mut z_v);
         zscore_into(&d_signal, &mut z_d);
         zscore_into(&c_signal, &mut z_c);
 
-        // Composite score (pre-allocated)
-        let mut composite = vec![0.0f32; n_sigma];
+        // Composite score (stack-allocated)
+        let mut composite = [0.0f32; 100];
         for i in 0..n_sigma {
             composite[i] =
                 config.alpha[0] * z_v[i] + config.alpha[1] * z_d[i] + config.alpha[2] * z_c[i];

@@ -130,7 +130,7 @@ impl HardwarePeaks {
 /// ```
 ///
 /// The bottleneck determines the `bound` classification.
-#[inline]
+#[inline(always)]
 pub fn roofline_estimate(
     _op: OpType,
     dtype: Dtype,
@@ -181,7 +181,7 @@ pub fn roofline_estimate(
 /// Convenience: estimate cost for a GEMV operation (m × k) vector.
 ///
 /// FLOPs = 2 * m * k, bytes = (m * k + m + k) * sizeof(dtype).
-#[inline]
+#[inline(always)]
 pub fn gemv_cost(m: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
     let elem_size: u64 = match dtype {
         Dtype::F32 => 4,
@@ -195,7 +195,7 @@ pub fn gemv_cost(m: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCo
 /// Convenience: estimate cost for a GEMM operation (m × k) × (k × n).
 ///
 /// FLOPs = 2 * m * n * k, bytes = (m*k + k*n + m*n) * sizeof(dtype).
-#[inline]
+#[inline(always)]
 pub fn gemm_cost(m: u64, n: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
     let elem_size: u64 = match dtype {
         Dtype::F32 => 4,
@@ -211,7 +211,7 @@ pub fn gemm_cost(m: u64, n: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> Ro
 /// X is (seq_len × d_h), G is (seq_len × seq_len).
 /// FLOPs = seq_len² * d_h (upper triangle + mirror ≈ seq_len² * d_h).
 /// Bytes = (seq_len * d_h + seq_len²) * sizeof(dtype).
-#[inline]
+#[inline(always)]
 pub fn gram_cost(seq_len: u64, d_h: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
     let elem_size: u64 = match dtype {
         Dtype::F32 => 4,

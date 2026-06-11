@@ -464,8 +464,6 @@ pub fn simd_matmul_residual_partial_rms(
     // Zero partial sums for fresh accumulation
     partial_sums[..n_blocks].fill(0.0);
 
-    let mut block_counter = 0usize;
-    let mut block_idx = 0usize;
     for i in 0..rows {
         let row_off = i * cols;
         let acc = simd_dot_f32(
@@ -478,14 +476,9 @@ pub fn simd_matmul_residual_partial_rms(
         let r = unsafe { *residual.get_unchecked(i) };
         let d = acc + b + r;
 
-        // Accumulate partial RMS (sum of squares, divided by n later in compute_rstd)
+        // Accumulate partial RMS — branch-free block index via integer division
         unsafe {
-            *partial_sums.get_unchecked_mut(block_idx) += d * d;
-        }
-        block_counter += 1;
-        if block_counter == bs {
-            block_counter = 0;
-            block_idx += 1;
+            *partial_sums.get_unchecked_mut(i / bs) += d * d;
         }
 
         // Gamma scaling (identity if gamma is None)

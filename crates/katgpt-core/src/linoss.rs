@@ -527,8 +527,8 @@ impl ModalSpecDrafter {
 
     /// Draft tokens: encode prompt → LinOSS oscillation → Fourier reconstruct → nearest vocab.
     ///
-    /// Allocating version — see `draft_into` for zero-alloc alternative.
-    /// Uses pre-allocated `zero_forcing` buffer from self.
+    /// Zero-alloc per timestep using double-buffered scratch (y_a/z_a, y_b/z_b).
+    /// Uses `imex_step_inplace` + `_into` variants to avoid Vec allocations in the hot loop.
     pub fn draft(&self, prompt_tokens: &[usize], n_draft: usize) -> Vec<usize> {
         if n_draft == 0 || self.embeddings.is_empty() {
             return vec![];
@@ -536,18 +536,40 @@ impl ModalSpecDrafter {
         let h = self.hidden_dim;
         let vocab_dim = self.basis.vocab_dim();
         let k = self.basis.k();
-        let mut state = LinOSSState::zeros(h);
+
+        // Double-buffered scratch — avoids 2 Vec allocations per imex_step
+        let mut y_a = vec![0.0f32; h];
+        let mut z_a = vec![0.0f32; h];
+        let mut y_b = vec![0.0f32; h];
+        let mut z_b = vec![0.0f32; h];
+        let mut forcing = vec![0.0f32; h];
+        let mut coeffs = vec![0.0f32; k];
+        let mut reconstructed = vec![0.0f32; vocab_dim];
+
+        // Prompt encoding
         for &tok in prompt_tokens {
             if tok < self.embeddings.len() {
-                let forcing = self.project_to_hidden(&self.embeddings[tok], vocab_dim);
-                state = self.cell.imex_step(&state, &forcing, self.dt);
+                self.project_to_hidden_into(&self.embeddings[tok], vocab_dim, &mut forcing);
+                let (y_new, z_new) = self
+                    .cell
+                    .imex_step_inplace(&y_a, &z_a, &forcing, self.dt, &mut y_b, &mut z_b);
+                y_a[..h].copy_from_slice(y_new);
+                z_a[..h].copy_from_slice(z_new);
             }
         }
+
+        // Draft loop — zero alloc per iteration
+        forcing.fill(0.0);
         let mut draft = Vec::with_capacity(n_draft);
         for _ in 0..n_draft {
-            state = self.cell.imex_step(&state, &self.zero_forcing, self.dt);
-            let coeffs = self.extract_coefficients(&state, k);
-            let reconstructed = self.basis.reconstruct(&coeffs);
+            let (y_new, z_new) = self
+                .cell
+                .imex_step_inplace(&y_a, &z_a, &forcing, self.dt, &mut y_b, &mut z_b);
+            y_a[..h].copy_from_slice(y_new);
+            z_a[..h].copy_from_slice(z_new);
+
+            self.extract_coefficients_into(&y_a, k, &mut coeffs);
+            self.basis.reconstruct_into(&coeffs, &mut reconstructed);
             draft.push(self.nearest_token(&reconstructed));
         }
         draft

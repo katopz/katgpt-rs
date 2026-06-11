@@ -2,6 +2,16 @@
 
 use crate::types::{SenseKind, SenseModule};
 
+/// Number of SenseKind variants tracked by the aggregate table.
+const AGGREGATE_KINDS: usize = 8;
+
+/// Per-kind aggregate for O(1) average_reward.
+#[derive(Clone, Debug, Default)]
+struct KindAggregate {
+    sum: f32,
+    count: u32,
+}
+
 /// A single sense trial for bandit feedback.
 #[derive(Clone, Debug)]
 pub struct SenseTrial {
@@ -13,28 +23,48 @@ pub struct SenseTrial {
 }
 
 /// Trial log for sense module self-learning.
+/// Maintains per-kind aggregates for O(1) average_reward queries.
 #[derive(Clone, Debug, Default)]
 pub struct SenseTrialLog {
     pub trials: Vec<SenseTrial>,
+    /// Per-kind running aggregates — O(1) average_reward by kind.
+    aggregates: [KindAggregate; AGGREGATE_KINDS],
 }
 
 impl SenseTrialLog {
     pub fn record(&mut self, trial: SenseTrial) {
+        // Update per-kind aggregate (O(1))
+        let idx = trial.sense_kind as usize;
+        if idx < AGGREGATE_KINDS {
+            self.aggregates[idx].sum += trial.reward;
+            self.aggregates[idx].count += 1;
+        }
         self.trials.push(trial);
     }
 
-    /// Compute average reward for a sense kind — branch-predicted single pass, zero allocation.
-    /// Early continue avoids touching `t.reward` for non-matching trials, saving memory bandwidth.
+    /// Compute average reward for a sense kind — O(1) via pre-computed aggregates.
+    #[inline]
     pub fn average_reward(&self, kind: SenseKind) -> f32 {
-        let mut sum = 0.0f32;
-        let mut count = 0usize;
-        for t in &self.trials {
-            if t.sense_kind == kind {
-                sum += t.reward;
-                count += 1;
+        let idx = kind as usize;
+        if idx < AGGREGATE_KINDS {
+            let agg = &self.aggregates[idx];
+            if agg.count == 0 {
+                0.0
+            } else {
+                agg.sum / agg.count as f32
             }
+        } else {
+            // Unknown kind — fall back to linear scan
+            let mut sum = 0.0f32;
+            let mut count = 0usize;
+            for t in &self.trials {
+                if t.sense_kind == kind {
+                    sum += t.reward;
+                    count += 1;
+                }
+            }
+            if count == 0 { 0.0 } else { sum / count as f32 }
         }
-        if count == 0 { 0.0 } else { sum / count as f32 }
     }
 }
 

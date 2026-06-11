@@ -3709,16 +3709,13 @@ impl TernaryDir {
 
     /// Zero padding bytes for deterministic hashing.
     /// TernaryDir is 20 logical bytes but 24 with alignment padding.
-    /// This zeroes the 4 trailing padding bytes.
+    /// This zeroes the 4 trailing padding bytes in one write.
+    #[inline(always)]
     pub fn zero_padding(&mut self) {
-        // Write zeros to the padding region (bytes 20..24)
+        // Write 4 zero bytes at once via u32 store instead of 4 individual byte writes
         unsafe {
             let ptr = self as *mut Self as *mut u8;
-            let padding_start = 20;
-            let padding_end = std::mem::size_of::<Self>();
-            for i in padding_start..padding_end {
-                *ptr.add(i) = 0;
-            }
+            (ptr.add(20) as *mut u32).write(0);
         }
     }
 }
@@ -3768,13 +3765,14 @@ impl SenseModule {
         let n = self.n_directions as usize;
         let mut dot = 0.0f32;
 
+        // Unrolled-friendly flat loop: extract ternary sign per-dim, FMA into dot.
+        // bool-as-u32 then cast to f32 is zero-extend (no int-to-float conversion).
         for i in 0..n {
             let dir = &self.directions[i];
-            // Branch-free: extract sign from bit position i via shift + AND.
-            // bool-as-f32 (zero-extend) is cheaper than u64-as-f32 (int-to-float conversion).
-            let sign = (((dir.pos_bits >> i) & 1 != 0) as u8 as f32)
-                - (((dir.neg_bits >> i) & 1 != 0) as u8 as f32);
-            dot += sign * hla_state[i] * dir.row_scale;
+            let pos = ((dir.pos_bits >> i) & 1) as u32 as f32;
+            let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
+            // sign ∈ {-1, 0, +1} — FMA: dot += sign * hla * scale
+            dot += (pos - neg) * hla_state[i] * dir.row_scale;
         }
 
         // Fast sigmoid * confidence
@@ -3816,21 +3814,30 @@ impl SenseModule {
     }
 
     /// Verify BLAKE3 commitment.
+    /// Uses a stack buffer to avoid cloning the entire 232-byte struct.
     /// Zeros TernaryDir padding bytes before comparing to match commit() behavior.
     pub fn verify(&self) -> bool {
-        // Clone to avoid mutating self, then zero padding + commitment.
-        // This matches commit()'s approach exactly: raw bytes after zeroing padding.
-        let mut copy = self.clone();
-        copy.commitment = [0u8; 32];
-        for dir in &mut copy.directions {
-            dir.zero_padding();
+        let size_before_commit = std::mem::size_of::<Self>() - 32;
+        let mut buf = [0u8; std::mem::size_of::<SenseModule>()];
+        // Copy raw bytes to stack buffer
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                self as *const Self as *const u8,
+                buf.as_mut_ptr(),
+                size_before_commit,
+            );
         }
-        let bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                &copy as *const Self as *const u8,
-                std::mem::size_of::<Self>() - 32,
-            )
-        };
+        // Zero commitment region in buffer
+        buf[size_before_commit..].fill(0);
+        // Zero TernaryDir padding in buffer — each TernaryDir is 24 bytes, padding at bytes 20..24
+        let dirs_offset = std::mem::offset_of!(SenseModule, directions);
+        let dir_size = std::mem::size_of::<TernaryDir>();
+        for i in 0..8 {
+            let dir_start = dirs_offset + i * dir_size;
+            // Zero 4 padding bytes at offset 20 within each TernaryDir
+            buf[dir_start + 20..dir_start + dir_size].fill(0);
+        }
+        let bytes = &buf[..size_before_commit];
         let expected = blake3::hash(bytes);
         self.commitment == *expected.as_bytes()
     }

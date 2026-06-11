@@ -748,11 +748,8 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     let mut label_buf = String::with_capacity(16);
 
     // Grid CSPs (Bomber-like): placing the "bomb" cell narrows explosion zone
-    // Pre-allocate constant structures once — all grid CSPs share the same
-    // valid_at_depth (all-true) and base narrowing structure (empty vecs).
     let grid_vocab = 16;
-    let grid_valid: Vec<bool> = vec![true; grid_vocab];
-    let mut adjacent_buf = vec![false; grid_vocab];
+    let mut adjacent_buf = [false; 16];
     for i in 0..count_per_domain {
         let vocab_size = grid_vocab;
         let key = i % vocab_size;
@@ -771,10 +768,10 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         // Build narrowing directly — only the key slot is non-empty, avoiding
         // cloning 16 empty Vecs from grid_base_narrowing.
         let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| Vec::new()).collect();
-        narrowing[key] = adjacent_buf.clone();
+        narrowing[key] = adjacent_buf.to_vec();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth: grid_valid.clone(),
+            valid_at_depth: vec![true; grid_vocab],
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
@@ -791,12 +788,10 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     }
 
     // Stone CSPs (Go-like): placing a "capture" stone eliminates liberties
-    // Pre-compute the wide bitmap once (identical for all stone CSPs)
     let stone_vocab = 12;
-    let stone_valid: Vec<bool> = vec![true; stone_vocab];
     let wide_next_bm: Vec<bool> = (0..stone_vocab).map(|c| c % 3 == 0).collect();
     // Pre-allocate reusable scratch for narrow bitmap
-    let mut narrow_bm_scratch = vec![false; stone_vocab];
+    let mut narrow_bm_scratch = [false; 12];
 
     for i in 0..count_per_domain {
         let vocab_size = stone_vocab; // smaller board for tighter constraints
@@ -810,7 +805,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         let mut narrowing: Vec<Vec<bool>> = Vec::with_capacity(vocab_size);
         for j in 0..vocab_size {
             if j == key {
-                narrowing.push(narrow_bm_scratch.clone());
+                narrowing.push(narrow_bm_scratch.to_vec());
             } else {
                 // Clone the shared wide bitmap instead of the base narrowing's empty vec
                 // (wide_next_bm is identical for all non-key slots)
@@ -819,7 +814,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         }
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth: stone_valid.clone(),
+            valid_at_depth: vec![true; stone_vocab],
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
@@ -838,8 +833,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
     // Logic CSPs (propositional): XOR constraints where revealing one variable
     // determines the other
     let logic_vocab = 8;
-    let logic_valid: Vec<bool> = vec![true; logic_vocab];
-    let mut logic_bm_scratch = vec![false; logic_vocab];
+    let mut logic_bm_scratch = [false; 8];
 
     for i in 0..count_per_domain {
         let vocab_size = logic_vocab;
@@ -851,10 +845,10 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         logic_bm_scratch[partner] = true;
         // Build narrowing directly — only the key slot is non-empty.
         let mut narrowing: Vec<Vec<bool>> = (0..vocab_size).map(|_| Vec::new()).collect();
-        narrowing[key] = logic_bm_scratch.clone();
+        narrowing[key] = logic_bm_scratch.to_vec();
         let pruner = NarrowingPruner {
             _vocab_size: vocab_size,
-            valid_at_depth: logic_valid.clone(),
+            valid_at_depth: vec![true; logic_vocab],
             narrowing,
         };
         // OPT: reuse label_buf instead of format!() per iteration
