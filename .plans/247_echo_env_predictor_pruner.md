@@ -77,10 +77,10 @@ graph LR
 - [x] `test_echo_latency_no_regression`: ≤5% overhead per token on hot path
 
 ### T7: Example — `examples/echo_env_predictor_demo.rs`
-- [ ] Bomber arena with echo_env_predictor ON vs OFF
-- [ ] Print prediction accuracy, consistency entropy, final scores
-- [ ] Show before/after thinking vs non-thinking with expected gains
-- [ ] Feature flag: `echo_env_predictor`
+- [x] Bomber arena with echo_env_predictor ON vs OFF
+- [x] Print prediction accuracy, consistency entropy, final scores
+- [x] Show before/after thinking vs non-thinking with expected gains
+- [x] Feature flag: `echo_env_predictor`
 
 ---
 
