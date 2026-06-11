@@ -118,7 +118,7 @@ fn main() {
 
     // Show children detail
     println!("\n  Root children:");
-    for (i, child) in tree.children().enumerate() {
+    for (i, child) in tree.children().iter().enumerate() {
         println!("    [{i}] {child}");
     }
 

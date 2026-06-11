@@ -25,7 +25,7 @@ use std::fmt;
 /// # Invariants
 ///
 /// - `Or` nodes: `best` is always `< children.len()` when `Some`
-/// - `And` nodes: `solved.len() == children.len()` always
+/// - `And` nodes: `solved_bits` bit i tracks child i solved status (up to 64 children)
 /// - `Leaf` nodes: no children
 #[derive(Debug, Clone)]
 pub enum AndOrNode<G, S> {
@@ -42,9 +42,9 @@ pub enum AndOrNode<G, S> {
         /// Partial solution assuming subgoals succeed.
         sketch: Option<S>,
         children: Vec<AndOrNode<G, S>>,
-        /// Per-child solved status. `solved.len() == children.len()` invariant.
-        solved: Vec<bool>,
-        /// Number of `true` entries in `solved`. Maintained incrementally.
+        /// Bitfield: bit i = child i is solved. Avoids heap allocation for ≤64 children.
+        solved_bits: u64,
+        /// Number of set bits in `solved_bits`. Maintained incrementally for O(1) `is_solved`.
         solved_count: usize,
     },
     /// Leaf: a solved or unsolved atomic goal.
@@ -71,7 +71,7 @@ impl<G, S> AndOrNode<G, S> {
             goal,
             sketch: None,
             children: Vec::new(),
-            solved: Vec::new(),
+            solved_bits: 0,
             solved_count: 0,
         }
     }
@@ -176,7 +176,7 @@ impl<G, S> AndOrNode<G, S> {
 
     /// Add a child to an OR or AND node. No-op for leaves.
     ///
-    /// For AND nodes, this also appends `false` to `solved`.
+    /// For AND nodes, the new child is unsolved by default (bit = 0 in `solved_bits`).
     pub fn push_child(&mut self, child: AndOrNode<G, S>) {
         match self {
             Self::Or { children, .. } => {
@@ -184,12 +184,12 @@ impl<G, S> AndOrNode<G, S> {
             }
             Self::And {
                 children,
-                solved,
+                solved_bits: _,
                 solved_count,
                 ..
             } => {
                 children.push(child);
-                solved.push(false);
+                // solved_bits bit for new child is 0 (unsolved) by default.
                 // solved_count unchanged — new child is unsolved.
                 let _ = solved_count;
             }
@@ -198,18 +198,19 @@ impl<G, S> AndOrNode<G, S> {
     }
 
     /// Mark child `idx` as solved in an AND node.
-    /// Returns `false` if not an AND node or `idx` out of bounds.
+    /// Returns `false` if not an AND node or `idx` out of bounds or ≥ 64.
     pub fn mark_child_solved(&mut self, idx: usize) -> bool {
         match self {
             Self::And {
-                children: _,
-                solved,
+                children,
+                solved_bits,
                 solved_count,
                 ..
             } => {
-                if idx < solved.len() {
-                    if !solved[idx] {
-                        solved[idx] = true;
+                if idx < children.len() && idx < 64 {
+                    let mask = 1u64 << idx;
+                    if *solved_bits & mask == 0 {
+                        *solved_bits |= mask;
                         *solved_count += 1;
                     }
                     true
@@ -371,16 +372,17 @@ impl<G: fmt::Debug, S: fmt::Debug> fmt::Display for AndOrNode<G, S> {
                 goal,
                 children,
                 solved_count,
-                solved,
+                solved_bits,
                 ..
             } => {
                 write!(
                     f,
-                    "AND(goal={:?}, children={}, solved={}/{})",
+                    "AND(goal={:?}, children={}, solved={}/{}, bits={:b})",
                     goal,
                     children.len(),
                     solved_count,
-                    solved.len()
+                    children.len(),
+                    solved_bits
                 )
             }
             Self::Leaf { goal, solution, .. } => {

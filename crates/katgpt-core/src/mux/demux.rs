@@ -50,21 +50,25 @@ impl MuxDemuxVerifier {
         }
         pairs[..len].sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
-        // Single allocation: collect directly into result Vec.
-        // O(k²) duplicate scan is fine for k ≤ 32 — trivially fits in L1 cache.
-        let mut out_tokens = Vec::with_capacity(len);
-        let mut is_unique = true;
+        // O(k log k) uniqueness check: sort a copy by token ID, scan adjacent.
+        // For k ≤ 32 this is faster than O(k²) scan due to branch predictability.
+        let mut sorted_tokens: [u32; MAX_DEMUX_K] = [0; MAX_DEMUX_K];
         for i in 0..len {
-            let token = pairs[i].0;
-            if is_unique {
-                for j in 0..i {
-                    if pairs[j].0 == token {
-                        is_unique = false;
-                        break;
-                    }
-                }
+            sorted_tokens[i] = pairs[i].0;
+        }
+        sorted_tokens[..len].sort_unstable();
+        let mut is_unique = true;
+        for i in 1..len {
+            if sorted_tokens[i] == sorted_tokens[i - 1] {
+                is_unique = false;
+                break;
             }
-            out_tokens.push(token);
+        }
+
+        // Single allocation: collect sorted-by-weight tokens into result Vec.
+        let mut out_tokens = Vec::with_capacity(len);
+        for i in 0..len {
+            out_tokens.push(pairs[i].0);
         }
 
         DemuxResult {
@@ -101,21 +105,24 @@ impl MuxDemuxVerifier {
         }
         pairs[..len].sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
-        // Extract sorted tokens into caller buffer + inline duplicate check.
-        // O(k²) scan is fine for k ≤ 32 — trivially fits in L1 cache.
-        out_tokens.clear();
-        let mut is_unique = true;
+        // O(k log k) uniqueness check: sort a copy by token ID, scan adjacent.
+        let mut sorted_tokens: [u32; MAX_DEMUX_K] = [0; MAX_DEMUX_K];
         for i in 0..len {
-            let token = pairs[i].0;
-            if is_unique {
-                for j in 0..i {
-                    if pairs[j].0 == token {
-                        is_unique = false;
-                        break;
-                    }
-                }
+            sorted_tokens[i] = pairs[i].0;
+        }
+        sorted_tokens[..len].sort_unstable();
+        let mut is_unique = true;
+        for i in 1..len {
+            if sorted_tokens[i] == sorted_tokens[i - 1] {
+                is_unique = false;
+                break;
             }
-            out_tokens.push(token);
+        }
+
+        // Extract sorted-by-weight tokens into caller buffer.
+        out_tokens.clear();
+        for i in 0..len {
+            out_tokens.push(pairs[i].0);
         }
 
         DemuxResult {

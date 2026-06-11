@@ -133,8 +133,14 @@ impl LeoPotentialGrid {
         let mut potential = Vec::with_capacity(cells);
         for cell_idx in 0..cells {
             let start = cell_idx * actions_per_cell;
-            let slice = &q_values[start..start + actions_per_cell];
-            let max_q = slice.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+            let mut max_q = f32::NEG_INFINITY;
+            for a in 0..actions_per_cell {
+                // Safety: start + a < cells * actions_per_cell == q_values.len()
+                let val = unsafe { *q_values.get_unchecked(start + a) };
+                if val > max_q {
+                    max_q = val;
+                }
+            }
             potential.push(max_q);
         }
 

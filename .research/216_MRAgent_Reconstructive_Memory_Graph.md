@@ -65,9 +65,9 @@ The fusion is NOT just "add MRAgent to octree" — it's fundamentally different:
 
 ```
                 ┌─────────────────────────────────────┐
-                │         OctreeCTC Memory Graph       │
+                │         OctreeCTC Memory Graph      │
                 │                                     │
-  Cue (HLA) ──▶│  Octree Node 0 (root)               │
+  Cue (HLA) ──▶ │  Octree Node 0 (root)               │
                 │    ├─ Tag: TernaryDir[0] ──▶ Content: KG Triples (episode)
                 │    ├─ Tag: TernaryDir[1] ──▶ Content: KG Triples (semantic)
                 │    └─ Tag: TernaryDir[2] ──▶ Octree Child Nodes
@@ -78,7 +78,7 @@ The fusion is NOT just "add MRAgent to octree" — it's fundamentally different:
                 │    HLA'(t) = updated HLA from H(t)  │
                 │                                     │
                 │  Traversal:                         │
-                │    select: entropy-gated bandit      │
+                │    select: entropy-gated bandit     │
                 │    expand: project(Z, HLA') → rank  │
                 │    prune: LOD-adaptive cutoff       │
                 │    update: HLA'' = bridge(H(t))     │

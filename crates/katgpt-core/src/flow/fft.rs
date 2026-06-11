@@ -94,14 +94,14 @@ pub fn fft_smooth_into(
     for fy in 0..h {
         let fy_centered = {
             let raw = fy as f32;
-            raw - h_f * (raw >= half_h) as u32 as f32
+            if raw >= half_h { raw - h_f } else { raw }
         };
         let fyc_sq = fy_centered * fy_centered;
         let row_off = fy * w;
         for fx in 0..w {
             let fx_centered = {
                 let raw = fx as f32;
-                raw - w_f * (raw >= half_w) as u32 as f32
+                if raw >= half_w { raw - w_f } else { raw }
             };
             let r_sq = fx_centered * fx_centered + fyc_sq;
             if r_sq > cutoff_r_sq {

@@ -55,7 +55,7 @@ fn main() {
     println!("  {root}");
 
     println!("\n  Children:");
-    for (i, child) in root.children().enumerate() {
+    for (i, child) in root.children().iter().enumerate() {
         println!("    [{i}] {child}");
     }
 

@@ -46,6 +46,7 @@ impl MuxBanditWidth {
     }
 
     /// Select the best width arm using upper confidence bound.
+    #[inline]
     pub fn select_width(&self, total_steps: u32) -> usize {
         let ln_n = if total_steps > 0 {
             (total_steps as f32).ln()
@@ -73,6 +74,7 @@ impl MuxBanditWidth {
     }
 
     /// Update the arm for `width` with the observed `reward`.
+    #[inline]
     pub fn update(&mut self, width: usize, reward: f32) {
         if width >= 1 && width <= self.arms.len() {
             // Arms are created as (1..=k), so arm index = width - 1.

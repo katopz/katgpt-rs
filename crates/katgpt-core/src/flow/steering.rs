@@ -44,15 +44,11 @@ pub fn flow_steering(field: &FlowField, pos: (f32, f32)) -> (f32, f32) {
     let (dx01, dy01) = field.lookup(x0, y1);
     let (dx11, dy11) = field.lookup(x1, y1);
 
-    // Bilinear interpolation.
-    let rx = dx00 * (1.0 - dx) * (1.0 - dy)
-        + dx10 * dx * (1.0 - dy)
-        + dx01 * (1.0 - dx) * dy
-        + dx11 * dx * dy;
-    let ry = dy00 * (1.0 - dx) * (1.0 - dy)
-        + dy10 * dx * (1.0 - dy)
-        + dy01 * (1.0 - dx) * dy
-        + dy11 * dx * dy;
+    // Bilinear interpolation (pre-compute complement weights to avoid redundant subtractions).
+    let omx = 1.0 - dx;
+    let omy = 1.0 - dy;
+    let rx = dx00 * omx * omy + dx10 * dx * omy + dx01 * omx * dy + dx11 * dx * dy;
+    let ry = dy00 * omx * omy + dy10 * dx * omy + dy01 * omx * dy + dy11 * dx * dy;
 
     normalize(rx, ry)
 }

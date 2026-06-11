@@ -189,15 +189,16 @@ impl MuxDdTree {
         let peaks = extract_top_k_into(logits, self.k, &mut buf);
         let effective_width = width.min(peaks.len()).max(1);
 
+        // Hoist shared weights allocation outside the loop — identical for every child.
+        let child_weights: Vec<f32> = peaks.iter().take(self.k).copied().collect();
         node.children.reserve(effective_width);
         for i in 0..effective_width {
             // Distribute peaks across children: each child gets a shifted view
             let offset = (i * self.k / effective_width).min(peaks.len());
             let child_tokens: Vec<u32> =
                 (offset as u32..(offset + peaks.len().min(self.k)) as u32).collect();
-            let child_weights: Vec<f32> = peaks.iter().take(self.k).copied().collect();
             node.children
-                .push(MuxNode::new(child_tokens, child_weights));
+                .push(MuxNode::new(child_tokens, child_weights.clone()));
         }
 
         // Track maximum depth
@@ -274,9 +275,11 @@ impl MuxDdTree {
     /// For trees with depth ≤ ~20 and branching factor ≤ K, the total allocation
     /// is ~leaf_count × depth elements — one contiguous Vec instead of one Vec per leaf.
     pub fn collect_leaf_paths_flat(&self) -> LeafPaths {
+        let estimated_leaves = self.leaf_count();
         let mut paths = LeafPaths {
-            buf: Vec::new(),
-            offsets: Vec::new(),
+            // Pre-allocate: each leaf path is at most `depth` elements.
+            buf: Vec::with_capacity(estimated_leaves * self.depth.max(1)),
+            offsets: Vec::with_capacity(estimated_leaves + 1),
         };
         // Stack-based BFS: each entry is (depth, path_indices_start_in_buf, node)
         // We store pending paths contiguously in buf.
