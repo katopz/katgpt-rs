@@ -28,13 +28,13 @@ Research 220 (arXiv:2503.13663 "A Convenient Category of Cubes") identified thre
 - [x] T7: Write test: DDTree with IntervalPruner produces fewer rejected tokens than without
 
 ### Phase 2: LatticeOpernad — Canonical AND/OR for Pruners (No DEC dependency)
-- [ ] T8: Create `src/lattice_operad/` module with feature gate `lattice_operad`
-- [ ] T9: Implement `PrunerExpr` enum: Atom(usize), And(Box<Self>, Box<Self>), Or(Box<Self>, Box<Self>)
-- [ ] T10: Implement canonicalize() using distributive lattice word problem (absorption, idempotency, distributivity)
-- [ ] T11: Implement eval() that evaluates PrunerExpr against a token using composed pruner results
-- [ ] T12: Implement compose() that takes two PrunerExprs and AND/OR them, then canonicalize
+- [x] T8: Create `src/lattice_operad/` module with feature gate `lattice_operad`
+- [x] T9: Implement `PrunerExpr` enum: Atom(usize), And(Box<Self>, Box<Self>), Or(Box<Self>, Box<Self>)
+- [x] T10: Implement canonicalize() using distributive lattice word problem (absorption, idempotency, distributivity)
+- [x] T11: Implement eval() that evaluates PrunerExpr against a token using composed pruner results
+- [x] T12: Implement compose() that takes two PrunerExprs and AND/OR them, then canonicalize
 - [ ] T13: Wire into DDTree: when `lattice_operand` feature is on, compose pruner results via PrunerExpr instead of ad-hoc AND
-- [ ] T14: Write test: (A AND B) OR (A AND C) canonicalizes to A AND (B OR C)
+- [x] T14: Write test: (A AND B) OR (A AND C) canonicalizes to A AND (B OR C)
 - [ ] T15: Write test: composition of 4+ pruners via PrunerExpr matches per-token AND but faster on batch
 
 ### Phase 3: CubicalNerve — CAT(0) from Game Zone Poset (Blocked on Plan 251 Phase 4)

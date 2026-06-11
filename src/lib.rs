@@ -54,6 +54,8 @@ pub mod iso_quant;
 #[cfg(feature = "kv_share")]
 pub mod kv_share;
 pub mod kvarn;
+#[cfg(feature = "lattice_operad")]
+pub mod lattice_operad;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
 #[cfg(feature = "newton_schulz")]

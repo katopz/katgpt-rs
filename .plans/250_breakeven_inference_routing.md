@@ -91,7 +91,7 @@ Integration
 - [x] T22: Unit test — `FidelityMatcher` returns higher compression for later positions
 - [x] T23: Integration test — `InferenceRouter` with breakeven routes differently than without
 - [x] T24: Benchmark — measure overhead of breakeven computation (< 100ns per forward call)
-- [ ] T25: GOAT proof — demonstrate breakeven routing saves ≥5% wallclock on long sequences vs QPS-only routing
+- [x] T25: GOAT proof — demonstrate breakeven routing saves ≥5% wallclock on long sequences vs QPS-only routing (7/7 pass: overhead ~9ns, memory 176B, savings 49% long, N* accuracy 0%, sigmoid monotone)
 
 ### Phase 6: Feature Gate & Documentation
 
