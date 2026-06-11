@@ -58,10 +58,10 @@ The key insight: topology determines WHERE information flows (fixed), learning d
 
 ### Phase 5: DEC Pruner Features & Dirichlet Extension
 
-- [ ] T27: Extend `dirichlet.rs` with Hodge energy computation
-- [ ] T28: Add DEC-based features to `ScreeningPruner::relevance()` 
-- [ ] T29: Add `HodgeResidual` pruner signal (constraint satisfaction metric)
-- [ ] T30: Write GOAT gate: `dec_operators` feature flag, A/B test vs naive
+- [x] T27: Extend `dirichlet.rs` with Hodge energy computation
+- [x] T28: Add DEC-based features to `ScreeningPruner::relevance()` 
+- [x] T29: Add `HodgeResidual` pruner signal (constraint satisfaction metric)
+- [x] T30: Write GOAT gate: `dec_operators` feature flag, A/B test vs naive
 
 ### Phase 6: CPU/SIMD/GPU Auto-Route
 

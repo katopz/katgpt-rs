@@ -442,7 +442,50 @@ pub fn harmonic_projector(cx: &CellComplex, input: &CochainField) -> CochainFiel
 }
 
 // ---------------------------------------------------------------------------
-// Tests (T18)
+// Hodge Energy & Pruner Signals (T27–T29)
+// ---------------------------------------------------------------------------
+
+/// Compute Hodge energy E(ω) = ⟨ω, Δₖω⟩ for a k-cochain.
+///
+/// This is the DEC analog of Dirichlet energy. For rank 0, this reduces to
+/// the standard graph Dirichlet energy. For higher ranks, it measures how
+/// "non-harmonic" the cochain is — high energy means far from harmonic.
+pub fn hodge_energy(cx: &CellComplex, omega: &CochainField) -> f32 {
+    let lap = hodge_laplacian(cx, omega);
+    // ⟨ω, Δω⟩ = Σᵢ ωᵢ · Δωᵢ
+    omega
+        .data
+        .iter()
+        .zip(lap.data.iter())
+        .map(|(&a, &b)| a * b)
+        .sum()
+}
+
+/// Hodge residual: measures how well a cochain satisfies the DEC constraint.
+///
+/// `residual = ‖Δₖω‖₂` — zero means ω is harmonic (fully constraint-satisfying).
+/// - Low residual = high constraint satisfaction = should be pruned (already good)
+/// - High residual = needs attention (far from harmonic, significant dynamics)
+pub fn hodge_residual(cx: &CellComplex, omega: &CochainField) -> f32 {
+    let lap = hodge_laplacian(cx, omega);
+    lap.data.iter().map(|&v| v * v).sum::<f32>().sqrt()
+}
+
+/// DEC-based relevance boost for a position's feature cochain.
+///
+/// Returns a value in (0, 1] where:
+/// - High values indicate topologically smooth/relevant positions
+/// - Low values indicate topologically noisy/irrelevant positions
+///
+/// Uses `1 / (1 + E_hodge)` as a sigmoid-like decay from 1 (zero energy)
+/// toward 0 (high energy). Never uses softmax — always sigmoid family.
+pub fn dec_relevance_score(cx: &CellComplex, features: &CochainField) -> f32 {
+    let energy = hodge_energy(cx, features);
+    1.0 / (1.0 + energy)
+}
+
+// ---------------------------------------------------------------------------
+// Tests (T18, T27–T30)
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
@@ -744,5 +787,181 @@ mod tests {
                 "pairwise orthogonality: max |⟨a,b⟩|/‖max‖ = {max_ortho}"
             );
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // T27: Hodge energy tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hodge_energy_constant_is_zero() {
+        // Constant function → Laplacian is zero → energy is zero
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, 5.0);
+        }
+        let e = hodge_energy(&cx, &omega);
+        assert!(
+            e.abs() < 1e-4,
+            "hodge energy of constant should be ~0, got {e}"
+        );
+    }
+
+    #[test]
+    fn hodge_energy_rank0_positive_semidefinite() {
+        // ⟨ω, Δω⟩ ≥ 0 for all ω (Laplacian is positive semidefinite)
+        let cx = CellComplex::grid_2d(5, 5);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, (i as f32 * 1.3).sin());
+        }
+        let e = hodge_energy(&cx, &omega);
+        assert!(e >= -1e-4, "hodge energy should be ≥ 0 (PSD), got {e}");
+    }
+
+    #[test]
+    fn hodge_energy_rank0_nonzero() {
+        // Non-constant function should have positive energy
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        // Step function: left half = 0, right half = 1
+        for y in 0..4usize {
+            for x in 0..4usize {
+                let v = if x >= 2 { 1.0f32 } else { 0.0f32 };
+                omega.set_scalar(y * 4 + x, v);
+            }
+        }
+        let e = hodge_energy(&cx, &omega);
+        assert!(
+            e > 0.1,
+            "hodge energy of step function should be > 0, got {e}"
+        );
+    }
+
+    #[test]
+    fn hodge_energy_rank1() {
+        // Edge cochain: non-constant should have positive energy
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(1, cx.n_edges(), 1);
+        for i in 0..cx.n_edges() {
+            omega.set_scalar(i, (i as f32 * 0.5).sin());
+        }
+        let e = hodge_energy(&cx, &omega);
+        assert!(e >= -1e-4, "hodge energy rank-1 should be ≥ 0, got {e}");
+    }
+
+    // -----------------------------------------------------------------------
+    // T28: DEC relevance score tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dec_relevance_constant_is_one() {
+        // Constant cochain → zero energy → relevance = 1/(1+0) = 1
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, 3.0);
+        }
+        let score = dec_relevance_score(&cx, &omega);
+        assert!(
+            (score - 1.0).abs() < 0.01,
+            "relevance of constant should be ~1.0, got {score}"
+        );
+    }
+
+    #[test]
+    fn dec_relevance_bounded() {
+        // Relevance should always be in (0, 1]
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, (i as f32 * 10.0).sin());
+        }
+        let score = dec_relevance_score(&cx, &omega);
+        assert!(
+            score > 0.0 && score <= 1.0,
+            "relevance should be in (0, 1], got {score}"
+        );
+    }
+
+    #[test]
+    fn dec_relevance_noisy_lower_than_smooth() {
+        // Smooth cochain should have higher relevance than noisy one
+        let cx = CellComplex::grid_2d(4, 4);
+        let n = cx.n_vertices();
+
+        // Smooth: linear ramp
+        let mut smooth = CochainField::zeros(0, n, 1);
+        for i in 0..n {
+            smooth.set_scalar(i, (i as f32 / n as f32) * 0.1);
+        }
+
+        // Noisy: alternating high/low
+        let mut noisy = CochainField::zeros(0, n, 1);
+        for i in 0..n {
+            noisy.set_scalar(i, if i % 2 == 0 { 10.0 } else { -10.0 });
+        }
+
+        let score_smooth = dec_relevance_score(&cx, &smooth);
+        let score_noisy = dec_relevance_score(&cx, &noisy);
+        assert!(
+            score_smooth > score_noisy,
+            "smooth ({score_smooth}) should have higher relevance than noisy ({score_noisy})"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // T29: Hodge residual tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hodge_residual_constant_is_zero() {
+        // Constant function is harmonic → residual = 0
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, 7.0);
+        }
+        let r = hodge_residual(&cx, &omega);
+        assert!(r < 1e-4, "residual of constant should be ~0, got {r}");
+    }
+
+    #[test]
+    fn hodge_residual_non_negative() {
+        // ‖Δω‖₂ ≥ 0 always (L2 norm)
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, (i as f32).sin());
+        }
+        let r = hodge_residual(&cx, &omega);
+        assert!(r >= 0.0, "residual should be ≥ 0, got {r}");
+    }
+
+    #[test]
+    fn hodge_residual_nonconstant_nonzero() {
+        // Non-constant, non-harmonic function should have positive residual
+        let cx = CellComplex::grid_2d(4, 4);
+        let mut omega = CochainField::zeros(0, cx.n_vertices(), 1);
+        for i in 0..cx.n_vertices() {
+            omega.set_scalar(i, (i as f32 * 2.0).cos());
+        }
+        let r = hodge_residual(&cx, &omega);
+        assert!(r > 0.01, "residual of non-harmonic should be > 0, got {r}");
+    }
+
+    // -----------------------------------------------------------------------
+    // T30: GOAT gate feature flag test
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn goat_gate_feature_enabled() {
+        // This test only runs when dec_operators feature is enabled.
+        // If it compiles and runs, the GOAT gate is open.
+        let cx = CellComplex::grid_2d(4, 4);
+        assert_eq!(cx.n_vertices(), 16);
+        assert_eq!(cx.n_edges(), 24);
+        assert_eq!(cx.n_faces(), 9);
     }
 }

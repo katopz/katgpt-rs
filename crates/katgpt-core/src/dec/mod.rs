@@ -39,6 +39,9 @@ pub mod operators;
 pub mod types;
 
 pub use flow::{DecFlowField, coexact_flow, exact_flow, harmonic_flow};
-pub use hodge::{HodgeComponents, betti_numbers, harmonic_projector, hodge_decompose};
+pub use hodge::{
+    HodgeComponents, betti_numbers, dec_relevance_score, harmonic_projector, hodge_decompose,
+    hodge_energy, hodge_residual,
+};
 pub use operators::{codifferential, exterior_derivative, graph_laplacian, hodge_laplacian};
 pub use types::{CellComplex, CochainField, MAX_RANK};
