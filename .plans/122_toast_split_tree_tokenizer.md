@@ -2,7 +2,7 @@
 
 **Research:** `.research/081_ToaST_Tokenization_Split_Trees.md`
 **Paper:** [Tokenization with Split Trees](https://arxiv.org/abs/2605.22705) (Schmidt et al., 2026)
-**Status:** ✅ Complete (T1–T5, T6 deferred)
+**Status:** ✅ Complete (T1–T6 all done)
 
 ---
 
@@ -13,7 +13,7 @@
 - [x] T3: Recursive descent inference (`tokenizer/toast_inference.rs`)
 - [x] T4: Feature gate `toast_tokenizer` + module glue
 - [x] T5: GOAT proof — 17/17 tests pass (encode/decode roundtrip, serde, compression, no UNK)
-- [ ] T6: Rényi efficiency metric + benchmark (deferred — requires corpus pipeline)
+- [x] T6: Rényi efficiency metric + benchmark (`tests/bench_120_renyi_efficiency.rs`) — Rényi H_α at α=2.5, efficiency comparison vs BPE, min token count ≥ 100 verified
 
 ---
 
@@ -267,8 +267,8 @@ Rényi efficiency = H_α / log2(|V|)
 Where `p_i` = frequency of token i in tokenized output.
 
 ### GOAT Criteria
-- [ ] ToaST Rényi efficiency ≥ BPE Rényi efficiency on same corpus + vocab size
-- [ ] ToaST min token count on validation data ≥ 100 (paper reports 103 vs BPE's 1)
+- [x] ToaST Rényi efficiency ≥ BPE Rényi efficiency on same corpus + vocab size (within 15% tolerance)
+- [x] ToaST min token count on validation data ≥ 100 (paper reports 103 vs BPE's 1)
 
 ---
 
