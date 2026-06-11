@@ -3770,8 +3770,10 @@ impl SenseModule {
 
         for i in 0..n {
             let dir = &self.directions[i];
-            // Branch-free: extract sign from bit position i via shift + AND
-            let sign = ((dir.pos_bits >> i) & 1) as f32 - ((dir.neg_bits >> i) & 1) as f32;
+            // Branch-free: extract sign from bit position i via shift + AND.
+            // bool-as-f32 (zero-extend) is cheaper than u64-as-f32 (int-to-float conversion).
+            let sign = (((dir.pos_bits >> i) & 1 != 0) as u8 as f32)
+                - (((dir.neg_bits >> i) & 1 != 0) as u8 as f32);
             dot += sign * hla_state[i] * dir.row_scale;
         }
 
@@ -3816,7 +3818,8 @@ impl SenseModule {
     /// Verify BLAKE3 commitment.
     /// Zeros TernaryDir padding bytes before comparing to match commit() behavior.
     pub fn verify(&self) -> bool {
-        // Clone to avoid mutating self, then zero padding + commitment
+        // Clone to avoid mutating self, then zero padding + commitment.
+        // This matches commit()'s approach exactly: raw bytes after zeroing padding.
         let mut copy = self.clone();
         copy.commitment = [0u8; 32];
         for dir in &mut copy.directions {

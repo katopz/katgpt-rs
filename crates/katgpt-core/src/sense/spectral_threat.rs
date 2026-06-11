@@ -266,10 +266,9 @@ impl CombatRhythmTracker {
         let mut dominant = 0usize;
         let mut max_amp = rhythm.state.y[0].abs();
         for i in 1..h {
-            let amp = rhythm.state.y[i];
-            let abs_amp = if amp < 0.0 { -amp } else { amp };
-            if abs_amp > max_amp {
-                max_amp = abs_amp;
+            let amp = rhythm.state.y[i].abs();
+            if amp > max_amp {
+                max_amp = amp;
                 dominant = i;
             }
         }

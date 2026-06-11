@@ -14,11 +14,17 @@ pub const DEFAULT_OBS_PRECISION: f32 = 1.0;
 /// λ_new = λ_old + λ_obs  (precision grows monotonically)
 #[inline]
 pub fn bake_update_precision(lambda_old: &[f32; 8], lambda_obs: f32) -> [f32; 8] {
-    let mut lambda_new = *lambda_old;
-    for val in lambda_new.iter_mut() {
-        *val += lambda_obs;
-    }
-    lambda_new
+    let obs = lambda_obs;
+    [
+        lambda_old[0] + obs,
+        lambda_old[1] + obs,
+        lambda_old[2] + obs,
+        lambda_old[3] + obs,
+        lambda_old[4] + obs,
+        lambda_old[5] + obs,
+        lambda_old[6] + obs,
+        lambda_old[7] + obs,
+    ]
 }
 
 /// BAKE eq 3: Precision-weighted mean update.
@@ -31,10 +37,10 @@ pub fn bake_update_mean(
     observation: &[f32; 8],
     lambda_obs: f32,
 ) -> [f32; 8] {
-    let lambda_new = bake_update_precision(lambda_old, lambda_obs);
     let mut mu_new = [0.0f32; 8];
     for d in 0..8 {
-        mu_new[d] = (lambda_old[d] * mu_old[d] + lambda_obs * observation[d]) / lambda_new[d];
+        let lambda_new_d = lambda_old[d] + lambda_obs;
+        mu_new[d] = (lambda_old[d] * mu_old[d] + lambda_obs * observation[d]) / lambda_new_d;
     }
     mu_new
 }
@@ -47,8 +53,12 @@ pub fn bake_update(
     observation: &[f32; 8],
     lambda_obs: f32,
 ) -> ([f32; 8], [f32; 8]) {
-    let lambda_new = bake_update_precision(lambda_old, lambda_obs);
-    let mu_new = bake_update_mean(mu_old, lambda_old, observation, lambda_obs);
+    let mut mu_new = [0.0f32; 8];
+    let mut lambda_new = [0.0f32; 8];
+    for d in 0..8 {
+        lambda_new[d] = lambda_old[d] + lambda_obs;
+        mu_new[d] = (lambda_old[d] * mu_old[d] + lambda_obs * observation[d]) / lambda_new[d];
+    }
     (mu_new, lambda_new)
 }
 
@@ -75,7 +85,15 @@ pub fn bake_regularize(
 /// Higher average precision → higher confidence.
 #[inline]
 pub fn precision_to_confidence(lambda: &[f32; 8]) -> f32 {
-    let mean_lambda: f32 = lambda.iter().sum::<f32>() / 8.0;
+    let mean_lambda = (lambda[0]
+        + lambda[1]
+        + lambda[2]
+        + lambda[3]
+        + lambda[4]
+        + lambda[5]
+        + lambda[6]
+        + lambda[7])
+        * 0.125;
     1.0 / (1.0 + (-(mean_lambda - 1.0)).exp()) // sigmoid
 }
 

@@ -32,29 +32,38 @@ pub fn compute_centroid(embeddings: &[KgEmbedding]) -> Option<CentroidStats> {
         return None;
     }
 
-    let mut mean = [0.0f32; 8];
-    let mut m2 = [0.0f32; 8];
+    let n = embeddings.len();
+    let inv_n = 1.0 / n as f32;
 
-    for (n, emb) in embeddings.iter().enumerate() {
-        let n1 = n as f32;
+    // Pass 1: sum (SIMD-friendly, no division in inner loop)
+    let mut mean = [0.0f32; 8];
+    for emb in embeddings {
         for d in 0..8 {
-            let delta = emb.embedding[d] - mean[d];
-            mean[d] += delta / (n1 + 1.0);
-            let delta2 = emb.embedding[d] - mean[d];
-            m2[d] += delta * delta2;
+            mean[d] += emb.embedding[d];
+        }
+    }
+    for d in 0..8 {
+        mean[d] *= inv_n;
+    }
+
+    // Pass 2: variance
+    let mut var = [0.0f32; 8];
+    for emb in embeddings {
+        for d in 0..8 {
+            let diff = emb.embedding[d] - mean[d];
+            var[d] += diff * diff;
         }
     }
 
-    let n = embeddings.len() as f32;
     let mut std_dev = [0.0f32; 8];
     for d in 0..8 {
-        std_dev[d] = (m2[d] / n).sqrt();
+        std_dev[d] = (var[d] * inv_n).sqrt();
     }
 
     Some(CentroidStats {
         mean,
         std_dev,
-        count: embeddings.len(),
+        count: n,
     })
 }
 
