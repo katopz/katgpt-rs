@@ -13,6 +13,11 @@ use super::{
     TradeResponse, square_kind,
 };
 
+/// Railroad square indices — constant lookup to avoid per-call array construction.
+const RAILROAD_SQUARES: [u8; 4] = [5, 15, 25, 35];
+/// Utility square indices — constant lookup to avoid per-call array construction.
+const UTILITY_SQUARES: [u8; 2] = [12, 28];
+
 // ── Decision Context ───────────────────────────────────────────
 
 /// Read-only snapshot of game state provided to AI for each decision.
@@ -277,8 +282,7 @@ pub fn property_strategic_value(ctx: &DecisionContext, square: u8) -> f32 {
         }
         SquareKind::Railroad => {
             // Count existing railroads owned by this player
-            let railroad_squares: [u8; 4] = [5, 15, 25, 35];
-            let owned_railroads = railroad_squares
+            let owned_railroads = RAILROAD_SQUARES
                 .iter()
                 .filter(|&&sq| ctx.square_owners[sq as usize] == Some(ctx.player_id))
                 .count();
@@ -300,8 +304,7 @@ pub fn property_strategic_value(ctx: &DecisionContext, square: u8) -> f32 {
                 }
         }
         SquareKind::Utility => {
-            let utility_squares: [u8; 2] = [12, 28];
-            let owned_utilities = utility_squares
+            let owned_utilities = UTILITY_SQUARES
                 .iter()
                 .filter(|&&sq| ctx.square_owners[sq as usize] == Some(ctx.player_id))
                 .count();

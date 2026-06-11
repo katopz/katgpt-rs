@@ -417,17 +417,18 @@ pub const fn group_size(group: PropertyGroup) -> u8 {
     }
 }
 
-/// Returns all square indices belonging to a property group.
-pub fn group_squares(group: PropertyGroup) -> Vec<u8> {
+/// Returns all square indices belonging to a property group as a static slice.
+/// Zero-allocation lookup — callers can iterate directly.
+pub fn group_squares(group: PropertyGroup) -> &'static [u8] {
     match group {
-        PropertyGroup::Brown => vec![1, 3],
-        PropertyGroup::LightBlue => vec![6, 8, 9],
-        PropertyGroup::Pink => vec![11, 13, 14],
-        PropertyGroup::Orange => vec![16, 18, 19],
-        PropertyGroup::Red => vec![21, 23, 24],
-        PropertyGroup::Yellow => vec![26, 27, 29],
-        PropertyGroup::Green => vec![31, 32, 34],
-        PropertyGroup::DarkBlue => vec![37, 39],
+        PropertyGroup::Brown => &[1, 3],
+        PropertyGroup::LightBlue => &[6, 8, 9],
+        PropertyGroup::Pink => &[11, 13, 14],
+        PropertyGroup::Orange => &[16, 18, 19],
+        PropertyGroup::Red => &[21, 23, 24],
+        PropertyGroup::Yellow => &[26, 27, 29],
+        PropertyGroup::Green => &[31, 32, 34],
+        PropertyGroup::DarkBlue => &[37, 39],
     }
 }
 
@@ -601,7 +602,7 @@ mod tests {
         ];
 
         for group in all_groups {
-            for sq_idx in group_squares(group) {
+            for &sq_idx in group_squares(group) {
                 // street_data should not panic for valid squares
                 let prop = street_data(sq_idx, group);
                 assert_eq!(prop.square, sq_idx);
@@ -666,7 +667,7 @@ mod tests {
         ];
 
         for (group, min_price) in all_groups {
-            for sq_idx in group_squares(group) {
+            for &sq_idx in group_squares(group) {
                 let prop = street_data(sq_idx, group);
                 let prop_name = prop.name;
                 let prop_price = prop.price;
@@ -692,7 +693,7 @@ mod tests {
         ];
 
         for group in all_groups {
-            for sq_idx in group_squares(group) {
+            for &sq_idx in group_squares(group) {
                 let prop = street_data(sq_idx, group);
                 // Each house level should increase rent
                 for h in 0..4 {
@@ -724,7 +725,7 @@ mod tests {
         ];
 
         for group in all_groups {
-            for sq_idx in group_squares(group) {
+            for &sq_idx in group_squares(group) {
                 let prop = street_data(sq_idx, group);
                 assert_eq!(
                     prop.mortgage_value,

@@ -8,7 +8,6 @@
 //! Flat array `Vec<GoCell>` with `row * size + col` indexing (matches C++ `GoBoard`).
 //! Pre-computed neighbor offsets avoid per-access bounds checking.
 
-use std::collections::HashSet;
 use std::fmt;
 
 use super::types::{GoAction, GoCell};
@@ -388,11 +387,12 @@ impl GoState {
                     counted[idx] = true;
                 }
                 GoCell::Empty => {
-                    let (territory, borders) = self.flood_empty(idx, &mut counted);
-                    if borders.len() == 1 {
-                        if borders.contains(&GoCell::Black) {
+                    let (territory, has_black, has_white) = self.flood_empty(idx, &mut counted);
+                    if has_black != has_white {
+                        // Exactly one color borders the territory
+                        if has_black {
                             black_score += territory.len() as f32;
-                        } else if borders.contains(&GoCell::White) {
+                        } else {
                             white_score += territory.len() as f32;
                         }
                     }
@@ -406,11 +406,12 @@ impl GoState {
 
     /// Flood-fill an empty region to determine territory ownership.
     ///
-    /// Returns `(territory_cells, border_colors)`.
-    /// `border_colors` is a subset of `{Black, White}` — empty only if board is entirely empty.
-    fn flood_empty(&self, start: usize, counted: &mut [bool]) -> (Vec<usize>, HashSet<GoCell>) {
+    /// Returns `(territory_cells, has_black_border, has_white_border)`.
+    /// Uses bool pair instead of `HashSet<GoCell>` — only 2 possible border colors.
+    fn flood_empty(&self, start: usize, counted: &mut [bool]) -> (Vec<usize>, bool, bool) {
         let mut territory = Vec::new();
-        let mut borders = HashSet::new();
+        let mut has_black = false;
+        let mut has_white = false;
         let mut stack = vec![start];
 
         while let Some(pos) = stack.pop() {
@@ -428,13 +429,12 @@ impl GoState {
                         }
                     }
                 }
-                color => {
-                    borders.insert(color);
-                }
+                GoCell::Black => has_black = true,
+                GoCell::White => has_white = true,
             }
         }
 
-        (territory, borders)
+        (territory, has_black, has_white)
     }
 
     /// Get the winner, if the game is over.
