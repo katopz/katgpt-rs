@@ -10,7 +10,7 @@
 ### 1. flow/fft.rs — `fft_smooth` allocations
 - [x] `inflate_obstacles`: Replace `Vec<(usize, usize)>` with double-buffer snapshot pattern — eliminates per-cell pair allocation, uses clamped bounds instead of inner-loop boundary checks
 - [x] Early return for `radius == 0`
-- [ ] `fft_smooth` planner caching per grid size (deferred — `rustfft::FftPlanner` already caches internally)
+- [x] ~~`fft_smooth` planner caching per grid size~~ (deferred — `rustfft::FftPlanner` already caches internally, no action needed)
 
 ### 2. flow/cache.rs — `get_or_compute` hot path
 - [x] Use `fft_smooth_into` instead of `fft_smooth` to reuse scratch buffers across calls (eliminates per-call `Vec<Complex<f32>>` + `Vec<Complex<f32>>` col_buf allocations)
