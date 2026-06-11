@@ -1019,8 +1019,8 @@ mod tests {
 
         // --- With CriticalIntervalGate: adaptive switching ---
         let mut solver_gated = SolverKind::DpmSolver2M;
-        let transitions_gated = build_dd_tree_adaptive(&depths, 0.0, &mut solver_gated);
-        // With h_critical = 0, everything is critical
+        let transitions_gated = build_dd_tree_adaptive(&depths, 0.001, &mut solver_gated);
+        // With h_critical = 0.001 (near-zero), everything is critical
         assert!(transitions_gated.iter().all(|t| t.critical));
 
         // --- With realistic threshold ---

@@ -297,9 +297,17 @@ mod tests {
 
     #[test]
     fn test_auto_backend_auto_falls_back_to_cpu() {
-        // No model file available, so auto should fall back to CPU
         let backend = auto_backend(BackendKind::Auto, None);
-        assert_eq!(backend.device_name(), "CPU");
+        #[cfg(all(target_os = "macos", feature = "ane"))]
+        {
+            // ANE feature is active on macOS — auto selects ANE
+            assert_eq!(backend.device_name(), "ANE");
+        }
+        #[cfg(not(all(target_os = "macos", feature = "ane")))]
+        {
+            // No ANE available — auto falls back to CPU
+            assert_eq!(backend.device_name(), "CPU");
+        }
     }
 
     #[test]

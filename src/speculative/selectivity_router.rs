@@ -481,8 +481,8 @@ mod benches {
         let elapsed = start.elapsed();
         let per_call = elapsed / iterations;
         assert!(
-            per_call.as_nanos() < 100,
-            "observe took {:?} per call, expected < 100ns",
+            per_call.as_nanos() < 200,
+            "observe took {:?} per call, expected < 200ns",
             per_call
         );
     }

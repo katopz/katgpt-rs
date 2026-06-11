@@ -23,7 +23,7 @@ impl CompressionRatio {
 ///
 /// Mirrors LCLM's architecture: windowed encoding, configurable compression,
 /// and decoder-side injection. All parameters are inference-time (no training).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MuxLatentConfig {
     /// Number of input tokens processed per encoder window.
     /// LCLM paper found W=1024 optimal. Smaller windows use less memory.
@@ -50,6 +50,19 @@ pub struct MuxLatentConfig {
     /// Layer index for domain_latent injection.
     /// Defaults to mid-layer (half of total layers).
     pub injection_layer: Option<usize>,
+}
+
+impl Default for MuxLatentConfig {
+    fn default() -> Self {
+        Self {
+            window_size: 0,
+            compression_ratio: CompressionRatio::default(),
+            mux_decay: 0.9,
+            max_latent_slots: 0,
+            preserve_instructions: false,
+            injection_layer: None,
+        }
+    }
 }
 
 impl MuxLatentConfig {
