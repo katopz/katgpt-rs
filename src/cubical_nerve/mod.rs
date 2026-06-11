@@ -14,5 +14,5 @@ mod poset;
 
 pub use cache::{NerveCache, NerveFlowField, NavigationHint};
 pub use cat0::{GeodesicPath, cat0_geodesic, is_cat0};
-pub use nerve::{CubicalComplex, CubicalCube, cubical_nerve};
+pub use nerve::{CubicalComplex, CubicalCube, cubical_nerve, cubical_nerve_with_threshold};
 pub use poset::{DistributiveMeetSemilattice, ZoneId, ZonePoset};

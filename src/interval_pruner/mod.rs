@@ -13,7 +13,13 @@
 //! - [`IntervalMask`] — boolean validity mask with interval-closure operations.
 //! - [`IntervalPruner`] — wraps any [`ConstraintPruner`] and enforces interval
 //!   closure on its batch output.
-//! - `simd` — SIMD stubs for future acceleration.
+//! - [`simd`] — SIMD-accelerated interval operations with adaptive routing.
+//!
+//! # Adaptive Backend (Plan 252 Phase 5)
+//!
+//! For vocab sizes ≥ [`INTERVAL_SIMD_THRESHOLD`] (256), SIMD-accelerated
+//! operations are used automatically. Below the threshold, scalar code is
+//! faster due to SIMD setup overhead. Configure via [`AdaptiveConfig`].
 
 #[cfg(feature = "interval_pruner")]
 mod interval;
@@ -22,3 +28,5 @@ mod simd;
 
 #[cfg(feature = "interval_pruner")]
 pub use interval::{IntervalMask, IntervalPruner};
+#[cfg(feature = "interval_pruner")]
+pub use simd::{AdaptiveConfig, RouteDecision, INTERVAL_SIMD_THRESHOLD, NERVE_SIMD_THRESHOLD};

@@ -145,6 +145,24 @@ impl IntervalMask {
     pub fn is_empty(&self) -> bool {
         self.mask.is_empty()
     }
+
+    /// Check that valid regions form contiguous intervals using adaptive routing.
+    ///
+    /// Selects between scalar and SIMD backends based on `config.interval_simd_threshold`.
+    /// For masks smaller than the threshold, scalar is faster (no SIMD setup overhead).
+    #[inline]
+    pub fn is_interval_closed_adaptive(&self, config: &crate::interval_pruner::AdaptiveConfig) -> bool {
+        config.is_interval_closed(&self.mask)
+    }
+
+    /// Merge nearby valid ranges using adaptive routing.
+    ///
+    /// Selects between scalar and SIMD backends based on `config.interval_simd_threshold`.
+    /// Returns a new mask with gaps filled.
+    pub fn close_intervals_adaptive(&self, gap_threshold: usize, config: &crate::interval_pruner::AdaptiveConfig) -> Self {
+        let result = config.close_intervals(&self.mask, gap_threshold);
+        Self { mask: result }
+    }
 }
 
 /// State machine for gap counting.
@@ -359,5 +377,64 @@ mod tests {
         let mask = IntervalMask::from_vec(vec![false, true, false]);
         assert!(mask.is_interval_closed());
         assert_eq!(mask.valid_intervals(), vec![(1, 2)]);
+    }
+
+    // -----------------------------------------------------------------------
+    // T29: Adaptive routing tests on IntervalMask
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_interval_mask_adaptive_is_interval_closed() {
+        use crate::interval_pruner::AdaptiveConfig;
+        let config = AdaptiveConfig::default();
+
+        // Small mask (below threshold) → scalar path.
+        let small = IntervalMask::from_vec(vec![true, false, true]);
+        assert!(!small.is_interval_closed_adaptive(&config));
+
+        // Contiguous small mask.
+        let small_closed = IntervalMask::from_vec(vec![true, true, false]);
+        assert!(small_closed.is_interval_closed_adaptive(&config));
+    }
+
+    #[test]
+    fn test_interval_mask_adaptive_close_intervals() {
+        use crate::interval_pruner::AdaptiveConfig;
+        let config = AdaptiveConfig::default();
+
+        let mask = IntervalMask::from_vec(vec![true, false, false, true]);
+        let closed = mask.close_intervals_adaptive(3, &config);
+        assert_eq!(closed.as_slice(), &[true, true, true, true]);
+    }
+
+    #[test]
+    fn test_interval_mask_adaptive_matches_non_adaptive() {
+        use crate::interval_pruner::AdaptiveConfig;
+        let config = AdaptiveConfig::default();
+
+        // Small mask.
+        let small = IntervalMask::from_vec(vec![true, false, true]);
+        assert_eq!(
+            small.is_interval_closed_adaptive(&config),
+            small.is_interval_closed()
+        );
+
+        // Large mask.
+        let mut large = vec![false; 512];
+        for i in 100..200 {
+            large[i] = true;
+        }
+        for i in 203..300 {
+            large[i] = true;
+        }
+        let mask = IntervalMask::from_vec(large);
+        assert_eq!(
+            mask.is_interval_closed_adaptive(&config),
+            mask.is_interval_closed()
+        );
+
+        let closed_adaptive = mask.close_intervals_adaptive(5, &config);
+        let closed_plain = mask.close_intervals(5);
+        assert_eq!(closed_adaptive.as_slice(), closed_plain.as_slice());
     }
 }

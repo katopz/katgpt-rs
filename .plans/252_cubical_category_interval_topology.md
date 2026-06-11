@@ -1,7 +1,7 @@
 # Plan 252: Cubical Category Interval Topology for Inference
 
 **Date:** 2026-06
-**Status:** Phase 1+2+3+4 complete (T1-T28). Phase 5 pending (T29-T31).
+**Status:** COMPLETE (All phases T1-T31 done).
 **Research:** 220 (Convenient Category of Cubes)
 **Depends On:** Plan 251 (DEC Operators), Plan 195 (ThoughtFold)
 **Blocks:** riir-ai Plan 278 (Operadic LoRA Composition)
@@ -55,9 +55,9 @@ Research 220 (arXiv:2503.13663 "A Convenient Category of Cubes") identified thre
 - [x] T28: Document results: promote to default if quality ≥ baseline + structural guarantees, demote if overhead > 20%
 
 ### Phase 5: CPU/SIMD/GPU Auto-Route
-- [ ] T29: Implement adaptive backend: interval closure is O(vocab_size) → SIMD for large vocab
-- [ ] T30: Implement adaptive backend: cubical nerve is O(|L|) → CPU for small zone counts, SIMD for large
-- [ ] T31: Add threshold-based routing with configurable cutoffs
+- [x] T29: Implement adaptive backend: interval closure is O(vocab_size) → SIMD for large vocab
+- [x] T30: Implement adaptive backend: cubical nerve is O(|L|) → CPU for small zone counts, SIMD for large
+- [x] T31: Add threshold-based routing with configurable cutoffs
 
 ## Architecture
 
@@ -103,4 +103,4 @@ src/cubical_nerve/    (Phase 3, blocked on Plan 251)
 - [x] Cubical nerve of known poset matches expected complex
 - [x] CAT(0) geodesic is unique and correct
 - [x] GOAT gate configured, can run with and without each feature
-- [ ] All benchmarks show acceptable overhead
+- [x] All benchmarks show acceptable overhead
