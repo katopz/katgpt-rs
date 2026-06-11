@@ -204,13 +204,13 @@ and identified cross-cutting themes.
 
 - [ ] `bandit.rs:199-208` — `BanditStats` field reordering
 - [x] `regime_transition.rs:87-103` — Two-pass std → Welford's one-pass — already uses Welford's algorithm (line 88)
-- [ ] `cna.rs:33-41` — `CnaNeuron` already well-packed
+- [x] `cna.rs:33-41` — `CnaNeuron` already well-packed — usize(8) + usize(8) + f32(4) + pad(4) = 24 bytes, no improvement possible
 - [ ] `lodestar.rs:58` — `Vec<bool>` → BitVec (only for large state spaces)
 - [ ] `sketch_types.rs:104,111` — Debug/Display hex formatting optimization
 - [ ] `gepa_reflective.rs:298` — Linear scan for empty slot → free list
 - [ ] `sdar_absorb.rs:381` — Diagnostic-only Vec alloc
-- [ ] `go/autoresearch.rs:130-139` — `config.label()` String → `&'static str`
-- [ ] `go/tournament.rs:491-503` — Three-pass count → single pass
+- [x] `go/autoresearch.rs:130-139` — `config.label()` String → `&'static str` — false positive, format depends on runtime config values, can't be &'static str
+- [x] `go/tournament.rs:491-503` — Three-pass count → single pass — already single pass (one loop counts wins/losses/draws/moves/score_delta)
 - [x] `monopoly/players.rs:280,303` — Const arrays for railroad/utility squares — already has const RAILROAD_SQUARES/UTILITY_SQUARES (line 15-21)
 - [x] `bomber/systems.rs:462-464` — `[Option<(i32,i32)>; 4]` for player positions — already uses `[None; 4]` fixed-size array
 
