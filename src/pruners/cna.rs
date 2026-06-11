@@ -185,13 +185,21 @@ pub fn cna_discover(
         }
     }
 
-    // Sort by |delta| descending, take top-k.
-    candidates.sort_unstable_by(|a, b| {
-        b.delta
-            .partial_cmp(&a.delta)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    candidates.truncate(k);
+    // Partial sort: O(n) select top-k by |delta| descending instead of O(n log n) full sort.
+    if k < candidates.len() {
+        candidates.select_nth_unstable_by(k, |a, b| {
+            b.delta
+                .partial_cmp(&a.delta)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        candidates.truncate(k);
+    } else {
+        candidates.sort_unstable_by(|a, b| {
+            b.delta
+                .partial_cmp(&a.delta)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
 
     // Build layer → neuron-indices lookup for O(k_layer) modulation.
     let mut layer_index: HashMap<usize, Vec<usize>> = HashMap::new();

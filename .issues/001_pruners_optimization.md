@@ -164,34 +164,34 @@ and identified cross-cutting themes.
 
 ## MEDIUM (Notable but bounded impact)
 
-- [ ] `bfcf_types.rs:247-264` — `PWCValueFunction::value/update` linear scan → direct-index Vec
+- [x] `bfcf_types.rs:247-264` — `PWCValueFunction::value/update` linear scan → direct-index Vec
 - [ ] `bfcf_types.rs:58-69` — `BorelRegion` field reordering (save 8 bytes/region)
 - [ ] `bfcf_types.rs:187-208` — Cache accept/reject/maybe counts on BFCP
-- [ ] `bandit.rs:274-281` — `best_arm()` cache in BanditStats
-- [ ] `bandit.rs:1658-1725` — `SharedBanditStats` batch reads under single lock
-- [ ] `bandit.rs:1549` — Hoist `config.to_string()` outside episode loop
-- [ ] `regime_transition.rs:338` — `FailurePattern` Vec key → blake3 hash
-- [ ] `cna.rs:320-325` — `is_universal_excluded()` → HashSet
-- [ ] `cna.rs:233-249` — Full sort for top-k → `select_nth_unstable`
-- [ ] `decision_explainer.rs:372-398` — String alloc per attribution → `&str` / `Cow`
+- [x] `bandit.rs:274-281` — `best_arm()` cache in BanditStats
+- [ ] `bandit.rs:1658-1725` — `SharedBanditStats` batch reads under single lock (arm_snapshot added, full batch API pending)
+- [x] `bandit.rs:1549` — Hoist `config.to_string()` outside episode loop
+- [x] `regime_transition.rs:338` — `FailurePattern` Vec key → blake3 hash
+- [x] `cna.rs:320-325` — `is_universal_excluded()` → HashSet
+- [x] `cna.rs:233-249` — Full sort for top-k → `select_nth_unstable`
+- [x] `decision_explainer.rs:372-398` — String alloc per attribution → `&str` / `Cow`
 - [ ] `decision_explainer.rs:511-536` — Recomputed totals per sensitivity call
-- [ ] `lodestar.rs:262-296` — Bellman-Ford O(S²Σ) → BFS O(SΣ)
+- [x] `lodestar.rs:262-296` — Bellman-Ford O(S²Σ) → BFS O(SΣ)
 - [ ] `curvature_alloc.rs:129` — Softmax scratch Vec alloc → pre-allocate
 - [ ] `curvature_alloc.rs:83-95` — Lazy recompute for `recompute_influence`
-- [ ] `count_min_sketch.rs:84-90` — f32 decay → integer math with shift
-- [ ] `opus/types.rs:134` — Nested `Vec<Vec<f32>>` → flat with stride
-- [ ] `opus/types.rs:357` — `unique_selected()` clone+sort+dedup → HashSet/bitmap
-- [ ] `hydra_budget.rs:22-34` — `Vec<bool>` → bitmask, `skipped: Vec<usize>` → `&[bool]`
-- [ ] `three_mode_bandit.rs:410-436` — `RollingWindow` VecDeque → fixed ring buffer
-- [ ] `plackett_luce.rs:230-276` — Pre-allocate Gibbs sampler buffers in struct
-- [ ] `sketch_types.rs:493-498` — `lessons.remove(0)` → VecDeque
-- [ ] `hoare_pruner.rs:167` — `ch.to_string()` → match on char directly
-- [ ] `lsh_cache.rs:85-89` — `Vec::remove(0)` → VecDeque
+- [x] `count_min_sketch.rs:84-90` — f32 decay → integer math with shift
+- [x] `opus/types.rs:134` — Nested `Vec<Vec<f32>>` → flat with stride
+- [x] `opus/types.rs:357` — `unique_selected()` clone+sort+dedup → HashSet/bitmap
+- [x] `hydra_budget.rs:22-34` — `Vec<bool>` → bitmask, `skipped: Vec<usize>` → `&[bool]`
+- [x] `three_mode_bandit.rs:410-436` — `RollingWindow` VecDeque → fixed ring buffer
+- [x] `plackett_luce.rs:230-276` — Pre-allocate Gibbs sampler buffers in struct
+- [x] `sketch_types.rs:493-498` — `lessons.remove(0)` → VecDeque
+- [x] `hoare_pruner.rs:167` — `ch.to_string()` → match on char directly
+- [x] `lsh_cache.rs:85-89` — `Vec::remove(0)` → VecDeque
 - [ ] `bfcp_region_cache.rs:146-157` — LFU eviction O(n) → min-heap or TinyLFU
-- [ ] `go/g_zero_player.rs:285-321` — `compute_go_delta` board_tokens Vec → pre-compute or defer
+- [x] `go/g_zero_player.rs:285-321` — `compute_go_delta` board_tokens Vec → pre-compute or defer
 - [ ] `go/state.rs:246-256` — `legal_moves()` → accept pre-allocated buffer
 - [ ] `go/state.rs:405-432` — `flood_empty` HashSet for 2 values → bool pair
-- [ ] `monopoly/systems.rs:70-151` — `build_ctx` → reusable DecisionContext buffer
+- [x] `monopoly/systems.rs:70-151` — `build_ctx` → reusable DecisionContext buffer
 - [ ] `monopoly/mod.rs:532-576` — `square_kind()` → const lookup table
 - [ ] `monopoly/group_squares` → return `&'static [u8]`
 - [ ] `dungeon_pathfinder.rs:225-231` — Pre-compute floor adjacency on construction
