@@ -32,12 +32,12 @@ pub fn batch_project_all_par(brains: &[NpcBrain], results: &mut [Vec<f32>]) {
 
 /// Assign LOD levels to brains based on distances via router.
 /// Uses `set_lod` to keep cached mask in sync.
+/// Zero-allocation: routes per-element inline instead of collecting into a Vec.
 #[cfg(feature = "sense_lod")]
 pub fn assign_lods_to_brains(brains: &mut [NpcBrain], router: &SenseLodRouter, distances: &[f32]) {
     assert_eq!(brains.len(), distances.len());
-    let lods = router.assign_lods(distances);
-    for (brain, lod) in brains.iter_mut().zip(lods) {
-        brain.set_lod(lod);
+    for (brain, &dist) in brains.iter_mut().zip(distances.iter()) {
+        brain.set_lod(router.route(dist));
     }
 }
 

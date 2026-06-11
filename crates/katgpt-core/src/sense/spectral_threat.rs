@@ -88,7 +88,9 @@ struct LabeledRhythm {
     /// Pre-allocated scratch for in-place z output.
     z_buf: [f32; HIDDEN_DIM],
     /// Observed damage tick timestamps for auto-calibration.
-    damage_timestamps: Vec<u32>,
+    damage_timestamps: [u32; MAX_TIMESTAMPS],
+    /// Number of valid entries in `damage_timestamps`.
+    damage_timestamp_count: usize,
 }
 
 // ── Constants ──────────────────────────────────────────────────
@@ -105,8 +107,10 @@ const MAX_TIMESTAMPS: usize = 16;
 /// Ingests damage events as impulses, extracts modal features on demand.
 /// Zero allocation on hot path — all buffers pre-allocated.
 pub struct CombatRhythmTracker {
-    /// Per-participant cells. Pre-allocated with capacity 8.
-    cells: Vec<LabeledRhythm>,
+    /// Per-participant cells. Fixed-size array (max 8).
+    cells: [Option<LabeledRhythm>; HIDDEN_DIM],
+    /// Number of valid entries in `cells`.
+    cell_count: usize,
     /// Hidden dimension for LinOSS cells.
     hidden_dim: usize,
     /// Timestep for imex_step (derived from tick rate, e.g. 16ms → 0.016).
@@ -124,7 +128,8 @@ impl CombatRhythmTracker {
     /// `dt` = derived from game tick rate (e.g., 16ms → 0.016).
     pub fn new(hidden_dim: usize, dt: f32) -> Self {
         Self {
-            cells: Vec::with_capacity(HIDDEN_DIM),
+            cells: [const { None }; HIDDEN_DIM],
+            cell_count: 0,
             hidden_dim,
             dt,
             max_damage: 50.0,
@@ -151,10 +156,14 @@ impl CombatRhythmTracker {
     /// Register a new participant for tracking. No-op if already registered.
     #[inline]
     pub fn register(&mut self, entity_id: u8) {
-        if self.cells.iter().any(|c| c.entity_id == entity_id) {
-            return;
+        for i in 0..self.cell_count {
+            if let Some(c) = &self.cells[i] {
+                if c.entity_id == entity_id {
+                    return;
+                }
+            }
         }
-        if self.cells.len() >= HIDDEN_DIM {
+        if self.cell_count >= HIDDEN_DIM {
             return; // max tracked participants
         }
 
@@ -166,7 +175,7 @@ impl CombatRhythmTracker {
         cell.beta.fill(Self::COMBAT_BETA);
 
         let h = self.hidden_dim;
-        self.cells.push(LabeledRhythm {
+        self.cells[self.cell_count] = Some(LabeledRhythm {
             entity_id,
             cell,
             state: LinOSSState::zeros(h),
@@ -174,8 +183,10 @@ impl CombatRhythmTracker {
             forcing: [0.0; HIDDEN_DIM],
             y_buf: [0.0; HIDDEN_DIM],
             z_buf: [0.0; HIDDEN_DIM],
-            damage_timestamps: Vec::with_capacity(16),
+            damage_timestamps: [0u32; MAX_TIMESTAMPS],
+            damage_timestamp_count: 0,
         });
+        self.cell_count += 1;
     }
 
     /// Ingest a damage event from `source_id`.
@@ -186,11 +197,22 @@ impl CombatRhythmTracker {
     /// do not increment event_count (only real impulses build confidence).
     #[inline(always)]
     pub fn ingest_damage(&mut self, source_id: u8, amount: f32, _tick: u32) {
-        let slot = match self.cells.iter().position(|c| c.entity_id == source_id) {
-            Some(i) => i,
-            None => return,
+        let slot = {
+            let mut found = None;
+            for i in 0..self.cell_count {
+                if let Some(c) = &self.cells[i] {
+                    if c.entity_id == source_id {
+                        found = Some(i);
+                        break;
+                    }
+                }
+            }
+            match found {
+                Some(i) => i,
+                None => return,
+            }
         };
-        let rhythm = &mut self.cells[slot];
+        let rhythm = self.cells[slot].as_mut().unwrap();
 
         // Convert damage to forcing vector: normalized impulse across all dims
         let normalized = amount / self.max_damage;
@@ -214,7 +236,10 @@ impl CombatRhythmTracker {
         // Only count real damage events for confidence ramp
         if amount > 0.0 {
             rhythm.event_count += 1;
-            rhythm.damage_timestamps.push(_tick);
+            if rhythm.damage_timestamp_count < MAX_TIMESTAMPS {
+                rhythm.damage_timestamps[rhythm.damage_timestamp_count] = _tick;
+                rhythm.damage_timestamp_count += 1;
+            }
         }
     }
 
@@ -225,23 +250,35 @@ impl CombatRhythmTracker {
     #[inline(always)]
     pub fn extract_features(&self, entity_id: u8) -> SpectralThreatFeatures {
         // Linear scan on max-8 entries (<64 bytes) — fits in cache line.
-        let rhythm = match self.cells.iter().find(|c| c.entity_id == entity_id) {
-            Some(r) => r,
-            None => return SpectralThreatFeatures::default(),
+        let rhythm = {
+            let mut found = None;
+            for i in 0..self.cell_count {
+                if let Some(c) = &self.cells[i] {
+                    if c.entity_id == entity_id {
+                        found = Some(i);
+                        break;
+                    }
+                }
+            }
+            match found {
+                Some(i) => self.cells[i].as_ref().unwrap(),
+                None => return SpectralThreatFeatures::default(),
+            }
         };
 
         if rhythm.event_count == 0 {
             return SpectralThreatFeatures::default();
         }
 
-        // Find dominant mode: argmax of |y[i]|
+        // Find dominant mode: argmax of |y[i]| (branch-free abs)
         let h = self.hidden_dim;
         let mut dominant = 0usize;
-        let mut max_amp = 0.0f32;
-        for i in 0..h {
-            let amp = rhythm.state.y[i].abs();
-            if amp > max_amp {
-                max_amp = amp;
+        let mut max_amp = rhythm.state.y[0].abs();
+        for i in 1..h {
+            let amp = rhythm.state.y[i];
+            let abs_amp = if amp < 0.0 { -amp } else { amp };
+            if abs_amp > max_amp {
+                max_amp = abs_amp;
                 dominant = i;
             }
         }
@@ -280,20 +317,33 @@ impl CombatRhythmTracker {
     /// Requires at least 3 timestamps (2 intervals) to produce valid calibration.
     #[inline]
     pub fn auto_calibrate(&mut self, entity_id: u8) {
-        let rhythm = match self.cells.iter_mut().find(|c| c.entity_id == entity_id) {
-            Some(r) => r,
-            None => return,
+        let rhythm = {
+            let mut found = None;
+            for i in 0..self.cell_count {
+                if let Some(c) = &self.cells[i] {
+                    if c.entity_id == entity_id {
+                        found = Some(i);
+                        break;
+                    }
+                }
+            }
+            match found {
+                Some(i) => i,
+                None => return,
+            }
         };
-        let ts = &rhythm.damage_timestamps;
-        if ts.len() < 3 {
+        let rhythm = self.cells[rhythm].as_mut().unwrap();
+        let ts_count = rhythm.damage_timestamp_count;
+        if ts_count < 3 {
             return;
         }
+        let ts = &rhythm.damage_timestamps[..ts_count];
 
         // Compute intervals into fixed-size stack array (max 16 timestamps → 15 intervals)
         let mut intervals = [0u32; MAX_TIMESTAMPS];
         let mut interval_count = 0usize;
-        for w in ts.windows(2) {
-            let d = w[1] - w[0];
+        for i in 0..ts_count - 1 {
+            let d = ts[i + 1] - ts[i];
             if d > 0 {
                 intervals[interval_count] = d;
                 interval_count += 1;
@@ -349,11 +399,17 @@ impl CombatRhythmTracker {
 
     /// Reset state for a participant (new encounter).
     pub fn reset(&mut self, entity_id: u8) {
-        if let Some(rhythm) = self.cells.iter_mut().find(|c| c.entity_id == entity_id) {
-            let h = self.hidden_dim;
-            rhythm.state = LinOSSState::zeros(h);
-            rhythm.event_count = 0;
-            rhythm.damage_timestamps.clear();
+        for i in 0..self.cell_count {
+            if let Some(c) = &self.cells[i] {
+                if c.entity_id == entity_id {
+                    let rhythm = self.cells[i].as_mut().unwrap();
+                    let h = self.hidden_dim;
+                    rhythm.state = LinOSSState::zeros(h);
+                    rhythm.event_count = 0;
+                    rhythm.damage_timestamp_count = 0;
+                    return;
+                }
+            }
         }
     }
 }

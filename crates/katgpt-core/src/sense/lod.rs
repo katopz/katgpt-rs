@@ -83,7 +83,11 @@ impl SenseLodRouter {
     ///
     /// `out` must have the same length as `distances`. Panics if lengths differ.
     pub fn assign_lods_into(&self, distances: &[f32], out: &mut [SenseLodLevel]) {
-        assert_eq!(distances.len(), out.len(), "assign_lods_into: length mismatch");
+        assert_eq!(
+            distances.len(),
+            out.len(),
+            "assign_lods_into: length mismatch"
+        );
         for (i, &d) in distances.iter().enumerate() {
             out[i] = self.route(d);
         }
@@ -94,17 +98,27 @@ impl SenseLodRouter {
 #[derive(Clone, Copy, Debug)]
 pub struct SenseLodMask {
     mask: [bool; 6],
+    active_count: u8,
 }
 
 impl SenseLodMask {
     /// Pre-computed masks — one per LOD level, built once.
     const MASKS: [Self; 3] = [
         // Full: all 6 active
-        Self { mask: [true, true, true, true, true, true] },
+        Self {
+            mask: [true, true, true, true, true, true],
+            active_count: 6,
+        },
         // Compressed: Common(0), Fighter(1), Spatial(3)
-        Self { mask: [true, true, false, true, false, false] },
+        Self {
+            mask: [true, true, false, true, false, false],
+            active_count: 3,
+        },
         // Minimal: Spatial(3) only
-        Self { mask: [false, false, false, true, false, false] },
+        Self {
+            mask: [false, false, false, true, false, false],
+            active_count: 1,
+        },
     ];
 
     #[inline]
@@ -120,8 +134,9 @@ impl SenseLodMask {
         false
     }
 
+    #[inline]
     pub fn active_count(&self) -> usize {
-        self.mask.iter().map(|&b| b as usize).sum()
+        self.active_count as usize
     }
 }
 

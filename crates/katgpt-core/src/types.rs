@@ -3755,47 +3755,24 @@ fn fast_sigmoid(x: f32) -> f32 {
 }
 
 impl SenseModule {
-    /// Broadcast mask lookup table — eliminates `1u64 << i` per iteration.
-    const MASKS: [u64; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
-
     /// Project HLA state onto this module's ternary directions → sigmoid scalar.
     ///
     /// KG weight bridge: output is scaled by module confidence so that
     /// high-confidence KG triples produce stronger sense activations and
     /// low-confidence triples are attenuated. Confidence 1.0 = unchanged.
     ///
-    /// Optimized: pre-computed mask table, chunk-4 unrolled dot product,
-    /// fast rational sigmoid (~4x faster than exp-based).
+    /// Optimized: branch-free bit extraction via shift+AND, flat loop
+    /// (LLVM auto-vectorizes better than chunked), fast rational sigmoid.
     #[inline(always)]
     pub fn project(&self, hla_state: &[f32; 8]) -> f32 {
         let n = self.n_directions as usize;
         let mut dot = 0.0f32;
 
-        // Process in chunks of 4 for auto-vectorization
-        let chunks = n / 4;
-        let remainder = n % 4;
-
-        for c in 0..chunks {
-            let base = c * 4;
-            for j in 0..4 {
-                let i = base + j;
-                let dir = &self.directions[i];
-                let mask = Self::MASKS[i];
-                let pos = ((dir.pos_bits & mask) != 0) as u32 as f32;
-                let neg = ((dir.neg_bits & mask) != 0) as u32 as f32;
-                dot += (pos - neg) * hla_state[i] * dir.row_scale;
-            }
-        }
-
-        // Handle remainder (0..3 iterations)
-        let base = chunks * 4;
-        for j in 0..remainder {
-            let i = base + j;
+        for i in 0..n {
             let dir = &self.directions[i];
-            let mask = Self::MASKS[i];
-            let pos = ((dir.pos_bits & mask) != 0) as u32 as f32;
-            let neg = ((dir.neg_bits & mask) != 0) as u32 as f32;
-            dot += (pos - neg) * hla_state[i] * dir.row_scale;
+            // Branch-free: extract sign from bit position i via shift + AND
+            let sign = ((dir.pos_bits >> i) & 1) as f32 - ((dir.neg_bits >> i) & 1) as f32;
+            dot += sign * hla_state[i] * dir.row_scale;
         }
 
         // Fast sigmoid * confidence
