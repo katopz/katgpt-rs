@@ -16,6 +16,8 @@ pub mod dash_attn;
 pub mod data_probe;
 // Shared diagonal gate abstraction (GDN2 + Wall).
 // Available when either gdn2_attention or wall_attention is enabled.
+#[cfg(feature = "cubical_nerve")]
+pub mod cubical_nerve;
 #[cfg(any(feature = "gdn2_attention", feature = "wall_attention"))]
 pub mod diagonal_gate;
 #[cfg(any(

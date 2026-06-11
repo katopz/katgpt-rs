@@ -1,7 +1,7 @@
 # Plan 252: Cubical Category Interval Topology for Inference
 
 **Date:** 2026-06
-**Status:** Phase 1+2+4 complete (T1-T15, T24-T28). Phase 3 unblocked (Plan 251 complete). Phase 5 pending.
+**Status:** Phase 1+2+3+4 complete (T1-T22, T24-T28). Phase 3 T23 (benchmark) pending. Phase 5 pending.
 **Research:** 220 (Convenient Category of Cubes)
 **Depends On:** Plan 251 (DEC Operators), Plan 195 (ThoughtFold)
 **Blocks:** riir-ai Plan 278 (Operadic LoRA Composition)
@@ -37,14 +37,14 @@ Research 220 (arXiv:2503.13663 "A Convenient Category of Cubes") identified thre
 - [x] T14: Write test: (A AND B) OR (A AND C) canonicalizes to A AND (B OR C)
 - [x] T15: Write test: composition of 4+ pruners via PrunerExpr matches per-token AND but faster on batch
 
-### Phase 3: CubicalNerve — CAT(0) from Game Zone Poset (Blocked on Plan 251 Phase 4)
-- [ ] T16: Implement `DistributiveMeetSemilattice` trait: partial order with distributive meet
-- [ ] T17: Implement `cubical_nerve()` construction: L → ⊞[L] cubical set from distributive meet-semilattice
-- [ ] T18: Implement `cat0_geodesic()` on ⊞[L]: compute unique shortest path on CAT(0) complex
-- [ ] T19: Bridge `cat0_geodesic()` → `DecFlowField::exact_channel()` for navigation
-- [ ] T20: Implement cache: compute ⊞[L] on map load, invalidate on topology change
-- [ ] T21: Write test: cubical nerve of simple 2-zone map produces correct CAT(0) complex
-- [ ] T22: Write test: geodesic on CAT(0) is unique and matches BFS shortest path for grid maps
+### Phase 3: CubicalNerve — CAT(0) from Game Zone Poset (Unblocked — Plan 251 Complete)
+- [x] T16: Implement `DistributiveMeetSemilattice` trait: partial order with distributive meet
+- [x] T17: Implement `cubical_nerve()` construction: L → ⊞[L] cubical set from distributive meet-semilattice
+- [x] T18: Implement `cat0_geodesic()` on ⊞[L]: compute unique shortest path on CAT(0) complex
+- [x] T19: Bridge `cat0_geodesic()` → `DecFlowField::exact_channel()` for navigation
+- [x] T20: Implement cache: compute ⊞[L] on map load, invalidate on topology change
+- [x] T21: Write test: cubical nerve of simple 2-zone map produces correct CAT(0) complex
+- [x] T22: Write test: geodesic on CAT(0) is unique and matches BFS shortest path for grid maps
 - [ ] T23: Write benchmark: cubical nerve construction time vs map size
 
 ### Phase 4: GOAT Gate & Arena Proof
@@ -98,9 +98,9 @@ src/cubical_nerve/    (Phase 3, blocked on Plan 251)
 - Demote if: overhead > 20% with no quality improvement
 
 ## Validation
-- [ ] Interval closure test passes (no Swiss-cheese valid regions after closure)
-- [ ] PrunerExpr canonicalization matches manual simplification
-- [ ] Cubical nerve of known poset matches expected complex
-- [ ] CAT(0) geodesic is unique and correct
-- [ ] GOAT gate configured, can run with and without each feature
+- [x] Interval closure test passes (no Swiss-cheese valid regions after closure)
+- [x] PrunerExpr canonicalization matches manual simplification
+- [x] Cubical nerve of known poset matches expected complex
+- [x] CAT(0) geodesic is unique and correct
+- [x] GOAT gate configured, can run with and without each feature
 - [ ] All benchmarks show acceptable overhead
