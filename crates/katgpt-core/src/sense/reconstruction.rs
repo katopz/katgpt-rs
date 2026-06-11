@@ -142,6 +142,122 @@ impl TripleEvidence {
     }
 }
 
+/// Pre-computed projection weights: `[6×8]` row-major matrix.
+///
+/// Materialized once from `NpcBrain` modules, then reused across all reconstruction
+/// steps. Avoids per-module ternary bit extraction in the hot loop, turning
+/// `expand()` from 6 individual `module.project()` calls into one `simd_matmul_rows`.
+///
+/// Layout: `matrix[module_idx * 8 + dim] = sign × row_scale`
+/// where `sign ∈ {-1, 0, +1}` is extracted from `directions[dim]` bit `dim`.
+#[derive(Clone, Debug)]
+pub struct ProjectionWeights {
+    /// `[6 × 8]` row-major: one row per module, one column per HLA dimension.
+    matrix: [f32; 48],
+    /// Per-module confidence (sigmoid output scale).
+    confidence: [f32; 6],
+}
+
+impl ProjectionWeights {
+    /// Pre-compute projection weights from brain modules.
+    ///
+    /// Extracts ternary signs and row scales into a contiguous `[f32; 48]` matrix
+    /// suitable for `simd_matmul_rows`. Zero-cost per reconstruction step — compute
+    /// once, use across all 3 steps.
+    #[inline]
+    pub fn from_brain(brain: &crate::sense::brain::NpcBrain) -> Self {
+        let mut matrix = [0.0f32; 48];
+        let mut confidence = [0.0f32; 6];
+
+        for module in &brain.modules {
+            let kind_idx = module.kind as usize;
+            if kind_idx >= 6 {
+                continue;
+            }
+            confidence[kind_idx] = module.confidence;
+
+            let n = module.n_directions as usize;
+            let row_off = kind_idx * 8;
+            for i in 0..n {
+                let dir = &module.directions[i];
+                let pos = ((dir.pos_bits >> i) & 1) as u32 as f32;
+                let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
+                matrix[row_off + i] = (pos - neg) * dir.row_scale;
+            }
+        }
+
+        Self { matrix, confidence }
+    }
+}
+
+/// Pre-computed projection weights for multi-entity batch reconstruction.
+///
+/// Same as `ProjectionWeights` but supports N entities sharing the same brain
+/// config. The weight matrix is shared; only HLA states differ per entity.
+///
+/// Layout: `matrix[module_idx * 8 + dim]` (same as single-entity).
+/// HLA states are stacked externally: `[N × 8]` row-major.
+#[derive(Clone, Debug)]
+pub struct BatchProjectionWeights {
+    /// Shared weight matrix `[6 × 8]` (same brain config for all entities).
+    weights: ProjectionWeights,
+    /// Number of entities this batch covers.
+    n_entities: usize,
+}
+
+impl BatchProjectionWeights {
+    /// Create batch weights for N entities sharing the same brain.
+    #[inline]
+    pub fn new(brain: &crate::sense::brain::NpcBrain, n_entities: usize) -> Self {
+        Self {
+            weights: ProjectionWeights::from_brain(brain),
+            n_entities,
+        }
+    }
+
+    /// Batch expand: project N HLA states against shared weights.
+    ///
+    /// `hla_batch`: `[N × 8]` row-major (entity 0's HLA, then entity 1's, etc.)
+    /// `activations_out`: `[N × 6]` row-major output
+    ///
+    /// For each entity, computes `[6×8] × [8] → [6]` raw dots, then sigmoid + confidence.
+    /// SIMD amortizes across all N × 6 = 6N dot products (each 8 elements).
+    ///
+    /// Wins when N ≥ 4: 24+ dot × 8 f32 = 192+ ops, NEON setup amortized.
+    #[cfg(feature = "sense_composition")]
+    pub fn expand_batch(
+        &self,
+        hla_batch: &[f32],  // [N × 8]
+        activations_out: &mut [f32], // [N × 6]
+    ) {
+        let n = self.n_entities;
+        debug_assert!(hla_batch.len() >= n * 8, "hla_batch too small");
+        debug_assert!(activations_out.len() >= n * 6, "activations_out too small");
+
+        for e in 0..n {
+            let hla_off = e * 8;
+            let act_off = e * 6;
+
+            // One matvec: [6×8] × [8] → [6] raw dots
+            let mut dots = [0.0f32; 6];
+            crate::simd::simd_matmul_rows(
+                &mut dots,
+                &self.weights.matrix,
+                &hla_batch[hla_off..hla_off + 8],
+                6,
+                8,
+            );
+
+            // Sigmoid + confidence
+            for m in 0..6 {
+                let x = dots[m].clamp(-12.0, 12.0);
+                let sigmoid = 0.5 + x / (2.0 + (4.0 + x * x).sqrt());
+                activations_out[act_off + m] = self.weights.confidence[m] * sigmoid;
+            }
+        }
+    }
+}
+
 /// Reconstruction state: tracks active traversal across the sense octree.
 ///
 /// This is the core of active reconstruction — the HLA state evolves based on
@@ -163,6 +279,10 @@ pub struct ReconstructionState {
     step: u8,
     /// Configuration.
     config: ReconstructionConfig,
+    /// Pre-computed projection weights (lazy init on first expand_matvec).
+    /// None until `expand_matvec()` is called with a brain.
+    #[cfg(feature = "sense_composition")]
+    cached_weights: Option<ProjectionWeights>,
 }
 
 impl ReconstructionState {

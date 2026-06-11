@@ -971,7 +971,7 @@ required-features = ["mux_latent_wire"]
 
 [[test]]
 name = "octree_ctc_recall_test"
-required-features = ["octree_ctc"]
+required-features = ["sense_composition"]
 
 [[example]]
 name = "octree_ctc_demo"
