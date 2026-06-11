@@ -82,23 +82,23 @@ impl RegimeCollapseClassifier {
         Self { tolerance }
     }
 
-    /// Compute the standard deviation of failure depths.
+    /// Compute the standard deviation of failure depths using Welford's one-pass algorithm.
     /// Returns 0.0 for empty or single-element sets.
     fn failure_depth_std(&self, stats: &DDTreeStats) -> f64 {
         match stats.failure_depths.len() {
             0 | 1 => 0.0,
-            n => {
-                let mean = stats.failure_depths.iter().map(|&d| d as f64).sum::<f64>() / n as f64;
-                let variance = stats
-                    .failure_depths
-                    .iter()
-                    .map(|&d| {
-                        let diff = d as f64 - mean;
-                        diff * diff
-                    })
-                    .sum::<f64>()
-                    / n as f64;
-                variance.sqrt()
+            _ => {
+                let mut mean = 0.0f64;
+                let mut m2 = 0.0f64;
+                for (i, &d) in stats.failure_depths.iter().enumerate() {
+                    let x = d as f64;
+                    let delta = x - mean;
+                    mean += delta / (i as f64 + 1.0);
+                    let delta2 = x - mean;
+                    m2 += delta * delta2;
+                }
+                let n = stats.failure_depths.len() as f64;
+                (m2 / n).sqrt()
             }
         }
     }
@@ -334,6 +334,23 @@ use std::sync::Mutex;
 
 use katgpt_core::traits::ConstraintPruner;
 
+/// Hash of a failure pattern token sequence, used as a compact HashMap key.
+/// Avoids storing/cloning the full `Vec<usize>` per pattern.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FailurePatternHash([u8; 32]);
+
+impl FailurePatternHash {
+    /// Compute blake3 hash from depth + token sequence.
+    pub fn from_parts(depth: usize, tokens: &[usize]) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(&(depth as u64).to_le_bytes());
+        for &t in tokens {
+            hasher.update(&(t as u64).to_le_bytes());
+        }
+        Self(hasher.finalize().into())
+    }
+}
+
 /// Token sequence that failed validation, recorded for adversarial analysis.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FailurePattern {
@@ -341,6 +358,13 @@ pub struct FailurePattern {
     pub tokens: Vec<usize>,
     /// Depth at which failure occurred.
     pub failure_depth: usize,
+}
+
+impl FailurePattern {
+    /// Compute blake3 hash for use as a compact HashMap key.
+    pub fn hash_key(&self) -> FailurePatternHash {
+        FailurePatternHash::from_parts(self.failure_depth, &self.tokens)
+    }
 }
 
 /// A rule extracted from a systematic failure pattern.
@@ -367,7 +391,9 @@ pub struct FailureRule {
 /// [`AdversarialBreaker::generate_synthetic`] perturbations.
 pub struct AdversarialBreaker<P: ConstraintPruner> {
     inner: P,
-    failure_counts: Mutex<HashMap<FailurePattern, u32>>,
+    failure_counts: Mutex<HashMap<FailurePatternHash, u32>>,
+    /// Stores patterns that reached threshold (needed for hot_patterns, extract_failure_rule).
+    hot_patterns: Mutex<HashMap<FailurePatternHash, FailurePattern>>,
     threshold: u32,
 }
 
@@ -377,6 +403,7 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
         Self {
             inner,
             failure_counts: Mutex::new(HashMap::new()),
+            hot_patterns: Mutex::new(HashMap::new()),
             threshold,
         }
     }
@@ -389,9 +416,14 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
     /// Record a failure and check if it exceeds the pattern threshold.
     /// Returns `true` if the pattern count *just* reached the threshold.
     pub fn record_failure(&self, pattern: FailurePattern) -> bool {
+        let key = pattern.hash_key();
         let mut map = self.failure_counts.lock().unwrap();
-        let count = map.entry(pattern).or_insert(0);
+        let count = map.entry(key).or_insert(0);
         *count += 1;
+        if *count == self.threshold {
+            // Store full pattern for later retrieval (hot_patterns, extract_failure_rule)
+            self.hot_patterns.lock().unwrap().insert(key, pattern);
+        }
         *count == self.threshold
     }
 
@@ -414,10 +446,12 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
 
     /// Return all failure patterns whose count has reached the threshold.
     pub fn hot_patterns(&self) -> Vec<FailurePattern> {
-        let map = self.failure_counts.lock().unwrap();
-        map.iter()
+        let counts = self.failure_counts.lock().unwrap();
+        let hot = self.hot_patterns.lock().unwrap();
+        counts
+            .iter()
             .filter(|&(_, &count)| count >= self.threshold)
-            .map(|(pattern, _)| pattern.clone())
+            .filter_map(|(key, _)| hot.get(key).cloned())
             .collect()
     }
 
@@ -444,8 +478,9 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
     ///
     /// Returns `None` if the pattern hasn't reached threshold or isn't confirmed.
     pub fn extract_failure_rule(&self, pattern: &FailurePattern) -> Option<FailureRule> {
+        let key = pattern.hash_key();
         let map = self.failure_counts.lock().unwrap();
-        let count = map.get(pattern).copied()?;
+        let count = map.get(&key).copied()?;
         if count < self.threshold {
             return None;
         }

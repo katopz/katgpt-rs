@@ -7,7 +7,9 @@
 //!
 //! Plan 218 Phase 1.
 
+use std::cmp::Ordering as CmpOrdering;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::bfcf_types::BFCP;
@@ -60,8 +62,42 @@ fn classify_tier(freq: u32, hot_threshold: u32, warm_threshold: u32) -> FreqTier
 
 // ── BfcpRegionCache ──────────────────────────────────────────
 
+/// Entry in the LFU min-heap: (freq, hash). `Ord` is reverse by freq so `BinaryHeap::pop`
+/// gives the minimum-frequency entry.
+#[derive(Clone, Debug)]
+struct LfuEntry {
+    freq: u32,
+    hash: [u8; 32],
+}
+
+impl PartialEq for LfuEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.freq == other.freq && self.hash == other.hash
+    }
+}
+impl Eq for LfuEntry {}
+
+impl PartialOrd for LfuEntry {
+    fn partial_cmp(&self, other: &Self) -> Option<CmpOrdering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LfuEntry {
+    /// Reverse order by freq (min-heap via max-heap with inverted comparison).
+    /// Tie-break by hash for determinism.
+    fn cmp(&self, other: &Self) -> CmpOrdering {
+        other
+            .freq
+            .cmp(&self.freq)
+            .then_with(|| self.hash.cmp(&other.hash))
+    }
+}
+
 pub struct BfcpRegionCache {
     map: papaya::HashMap<[u8; 32], CachedRegion>,
+    /// Min-heap tracking LFU entries for O(log n) eviction.
+    heap: Mutex<std::collections::BinaryHeap<LfuEntry>>,
     capacity: usize,
     admit_threshold: f32,
     hot_threshold: u32,
@@ -83,6 +119,7 @@ impl BfcpRegionCache {
     ) -> Self {
         Self {
             map: papaya::HashMap::new(),
+            heap: Mutex::new(std::collections::BinaryHeap::new()),
             capacity: capacity.max(1),
             admit_threshold,
             hot_threshold,
@@ -133,6 +170,11 @@ impl BfcpRegionCache {
                     tier: classify_tier(new_freq, self.hot_threshold, self.warm_threshold),
                 },
             );
+            // Push updated entry to heap (stale entries are lazily filtered on eviction)
+            self.heap.lock().unwrap().push(LfuEntry {
+                freq: new_freq,
+                hash,
+            });
             return;
         }
 
@@ -143,21 +185,26 @@ impl BfcpRegionCache {
             return;
         }
 
-        // Evict LFU entry if at capacity.
+        // Evict LFU entry if at capacity — O(log n) via min-heap.
         if guard.len() >= self.capacity {
-            let mut min_hash: Option<[u8; 32]> = None;
-            let mut min_freq = u32::MAX;
-            for (k, v) in guard.iter() {
-                if v.freq < min_freq {
-                    min_freq = v.freq;
-                    min_hash = Some(*k);
+            let mut heap = self.heap.lock().unwrap();
+            // Pop stale entries (removed or freq bumped) until we find a valid one
+            while let Some(entry) = heap.pop() {
+                // Verify entry still exists in map with matching freq
+                if let Some(current) = guard.get(&entry.hash) {
+                    if current.freq == entry.freq {
+                        let _ = guard.remove(&entry.hash);
+                        break;
+                    }
                 }
-            }
-            if let Some(evict) = min_hash {
-                let _ = guard.remove(&evict);
+                // Stale entry — continue popping
             }
         }
 
+        self.heap.lock().unwrap().push(LfuEntry {
+            freq: initial_freq,
+            hash,
+        });
         let _ = guard.insert(
             hash,
             CachedRegion {
@@ -193,6 +240,17 @@ impl BfcpRegionCache {
                 )
             })
             .collect();
+
+        // Rebuild heap with decayed frequencies
+        let mut heap = self.heap.lock().unwrap();
+        heap.clear();
+        for (k, v) in &entries {
+            heap.push(LfuEntry {
+                freq: v.freq,
+                hash: *k,
+            });
+        }
+        drop(heap);
 
         for (k, v) in entries {
             let _ = guard.insert(k, v);

@@ -157,10 +157,11 @@ pub mod sdar;
 #[cfg(feature = "sdar_gate")]
 pub mod sdar_gate;
 
+#[cfg(all(feature = "sdar_gate", debug_assertions))]
+pub use sdar::PromotionStats;
 #[cfg(feature = "sdar_gate")]
 pub use sdar::{
-    GateStats, PromotionStats, SdarAbsorbConfig, SdarBanditConfig, SdarBanditPruner,
-    SdarGatedAbsorbCompress,
+    GateStats, SdarAbsorbConfig, SdarBanditConfig, SdarBanditPruner, SdarGatedAbsorbCompress,
 };
 #[cfg(feature = "sdar_gate")]
 pub use sdar_gate::{
@@ -1000,9 +1001,10 @@ pub mod regime_transition;
 
 #[cfg(feature = "regime_transition")]
 pub use regime_transition::{
-    AdversarialBreaker, CollapseClassifier, CollapseType, DDTreeStats, FailurePattern, FailureRule,
-    GateResult, ProvenanceChain, ProvenanceStep, PrunerType, RegimeCollapseClassifier,
-    RegimeTransitionGate, RegimeTransitionScheduler, TransitionDeferred, TransportResult,
+    AdversarialBreaker, CollapseClassifier, CollapseType, DDTreeStats, FailurePattern,
+    FailurePatternHash, FailureRule, GateResult, ProvenanceChain, ProvenanceStep, PrunerType,
+    RegimeCollapseClassifier, RegimeTransitionGate, RegimeTransitionScheduler, TransitionDeferred,
+    TransportResult,
 };
 
 #[cfg(feature = "regime_transition")]

@@ -290,7 +290,47 @@ pub fn compute_go_delta(
     last_move: Option<(usize, usize)>,
 ) -> MoveDelta {
     let board_tokens: Vec<i8> = state.board.iter().map(|c| *c as i8).collect();
+    compute_go_delta_from_tokens(
+        state,
+        template,
+        template_move,
+        legal_moves,
+        last_move,
+        board_tokens,
+    )
+}
 
+/// Pre-allocated variant: reuses `buf` for board token encoding.
+/// Clears and refills `buf` with the current board state as i8 tokens.
+pub fn compute_go_delta_into(
+    state: &GoState,
+    template: GoTemplate,
+    template_move: (usize, usize),
+    legal_moves: &[(usize, usize)],
+    last_move: Option<(usize, usize)>,
+    buf: &mut Vec<i8>,
+) -> MoveDelta {
+    buf.clear();
+    buf.extend(state.board.iter().map(|c| *c as i8));
+    compute_go_delta_from_tokens(
+        state,
+        template,
+        template_move,
+        legal_moves,
+        last_move,
+        std::mem::take(buf),
+    )
+}
+
+/// Core logic shared by both variants.
+fn compute_go_delta_from_tokens(
+    state: &GoState,
+    template: GoTemplate,
+    template_move: (usize, usize),
+    legal_moves: &[(usize, usize)],
+    last_move: Option<(usize, usize)>,
+    board_tokens: Vec<i8>,
+) -> MoveDelta {
     let hinted_score = compute_move_score(state, template_move.0, template_move.1);
 
     // Baseline: best score among legal moves NOT matching this template.
@@ -777,6 +817,8 @@ pub fn run_gzero_selfplay(
     let mut proposer_b = GoTemplateProposer::new();
     let mut absorb_compress = GoDeltaGatedAbsorbCompress::new(config.delta_config.clone());
 
+    let mut legal_buf: Vec<(usize, usize)> =
+        Vec::with_capacity(config.board_size * config.board_size);
     let mut episodes: Vec<GoSelfPlayResult> = Vec::with_capacity(config.num_episodes);
     let mut black_wins = 0usize;
     let mut white_wins = 0usize;
@@ -801,6 +843,8 @@ pub fn run_gzero_selfplay(
         let mut state = GoState::with_komi(config.board_size, current_komi);
         let mut replay = GoReplay::new(config.board_size, current_komi);
         let mut move_deltas: Vec<MoveDelta> = Vec::new();
+        let mut board_tokens_buf: Vec<i8> =
+            Vec::with_capacity(config.board_size * config.board_size);
 
         // Per-episode per-template delta accumulators
         let mut episode_template_deltas: Vec<TemplateDeltaAccumulator> = (0..NUM_TEMPLATES)
@@ -816,7 +860,8 @@ pub fn run_gzero_selfplay(
         }
 
         while !state.is_terminal() && moves_played < max_moves {
-            let legal_moves = state.legal_moves();
+            state.legal_moves_into(&mut legal_buf);
+            let legal_moves = &legal_buf;
 
             // No legal moves → pass
             if legal_moves.is_empty() {
@@ -852,13 +897,14 @@ pub fn run_gzero_selfplay(
                 .copied()
                 .unwrap_or(legal_moves[0]);
 
-            // Compute δ for this move
-            let move_delta = compute_go_delta(
+            // Compute δ for this move (reusing pre-allocated board buffer)
+            let move_delta = compute_go_delta_into(
                 &state,
                 template,
                 best_move,
                 &legal_moves,
                 proposer.last_move,
+                &mut board_tokens_buf,
             );
 
             // Feed δ back to proposer

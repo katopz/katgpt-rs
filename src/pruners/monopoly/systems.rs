@@ -68,12 +68,23 @@ pub fn spawn_players(world: &mut World) -> [Entity; 4] {
 
 /// Build a [`DecisionContext`] snapshot from the current world state.
 fn build_ctx(world: &World, player_id: u8, turn_number: u32) -> DecisionContext {
+    let mut buf = Vec::new();
+    build_ctx_into(world, player_id, turn_number, &mut buf)
+}
+
+/// Build a [`DecisionContext`] snapshot, reusing `owned_buf` for the owned-properties Vec.
+fn build_ctx_into(
+    world: &World,
+    player_id: u8,
+    turn_number: u32,
+    owned_buf: &mut Vec<u8>,
+) -> DecisionContext {
     let player_entities = world.resource::<PlayerEntities>().entities;
     let entity = player_entities[player_id as usize];
     let player = world.get::<Player>(entity).expect("player exists");
     let squares = world.resource::<Board>().squares;
 
-    let mut owned_properties = Vec::new();
+    owned_buf.clear();
     let mut group_counts = [0u8; 8];
     let mut opponent_cash = [0u32; 4];
     let mut opponent_property_count = [0u8; 4];
@@ -99,7 +110,7 @@ fn build_ctx(world: &World, player_id: u8, turn_number: u32) -> DecisionContext 
             square_houses_arr[sq_idx] = owned.houses;
             square_mortgaged[sq_idx] = owned.is_mortgaged;
             if owned.owner == entity {
-                owned_properties.push(sq_idx as u8);
+                owned_buf.push(sq_idx as u8);
                 // Only count actual street properties in group_counts
                 // (railroads/utilities have Property with placeholder Brown group)
                 let is_street = world
@@ -132,7 +143,7 @@ fn build_ctx(world: &World, player_id: u8, turn_number: u32) -> DecisionContext 
         player_id,
         cash: player.cash,
         position: player.position,
-        owned_properties,
+        owned_properties: std::mem::take(owned_buf),
         group_counts,
         opponent_cash,
         opponent_property_count,
@@ -791,9 +802,12 @@ pub fn execute_turn(
         .map(|p| p.in_jail)
         .unwrap_or(false);
 
+    // Reusable buffer for owned properties across build_ctx calls
+    let mut owned_buf = Vec::new();
+
     if in_jail {
         let turn_number = world.resource::<TurnState>().turn_number;
-        let ctx = build_ctx(world, player_id, turn_number);
+        let ctx = build_ctx_into(world, player_id, turn_number, &mut owned_buf);
         let decision = ai.jail_decision(&ctx);
 
         match decision {
@@ -958,7 +972,7 @@ pub fn execute_turn(
         .unwrap_or(false);
     if !jailed {
         let turn_number = world.resource::<TurnState>().turn_number;
-        let ctx = build_ctx(world, player_id, turn_number);
+        let ctx = build_ctx_into(world, player_id, turn_number, &mut owned_buf);
         let builds = ai.build_houses(&ctx);
 
         for sq in builds {

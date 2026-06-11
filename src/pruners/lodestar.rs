@@ -39,6 +39,57 @@ const NO_EDGE: usize = usize::MAX;
 /// Marker for "no accepting state reachable from here".
 pub const UNREACHABLE: u32 = u32::MAX;
 
+// ── BitVec (compact bool storage) ──────────────────────────────────────
+
+/// Compact bit-vector backed by `Vec<u64>`.
+///
+/// 8× memory savings vs `Vec<bool>` (1 bit per element vs 1 byte).
+/// Zero external dependencies.
+#[derive(Clone, Debug)]
+struct BitVec {
+    words: Vec<u64>,
+    len: usize,
+}
+
+impl BitVec {
+    /// All-false bit-vector of length `len`.
+    fn new(len: usize) -> Self {
+        let words = (len + 63) / 64;
+        Self {
+            words: vec![0u64; words],
+            len,
+        }
+    }
+
+    /// Get bit at `idx`. Returns `false` if out of bounds.
+    #[inline]
+    fn get(&self, idx: usize) -> bool {
+        if idx >= self.len {
+            return false;
+        }
+        let word = idx / 64;
+        let bit = idx % 64;
+        (self.words[word] >> bit) & 1 == 1
+    }
+
+    /// Set bit at `idx` to `value`. Panics if out of bounds.
+    #[inline]
+    fn set(&mut self, idx: usize, value: bool) {
+        assert!(
+            idx < self.len,
+            "BitVec index {idx} out of bounds (len={})",
+            self.len
+        );
+        let word = idx / 64;
+        let bit = idx % 64;
+        if value {
+            self.words[word] |= 1u64 << bit;
+        } else {
+            self.words[word] &= !(1u64 << bit);
+        }
+    }
+}
+
 // ── LodestarAutomaton ──────────────────────────────────────────────────
 
 /// A deterministic finite automaton (DFA) that tracks generation state.
@@ -54,8 +105,8 @@ pub struct LodestarAutomaton {
     /// δ(s, t) = transitions[s * vocab_size + t] → next state.
     /// Flat row-major: state × vocab → next state (`usize::MAX` = no transition).
     transitions: Vec<usize>,
-    /// Set of accepting (complete) states.
-    accept_states: Vec<bool>,
+    /// Set of accepting (complete) states (bit-packed).
+    accept_states: BitVec,
     /// Precomputed shortest-accepting-distance d(s) per state.
     /// `u32::MAX` = unreachable (dead state).
     distances: Vec<u32>,
@@ -85,7 +136,7 @@ impl LodestarAutomaton {
         );
         LodestarAutomatonBuilder {
             transitions: vec![NO_EDGE; n_states * vocab_size],
-            accept_states: vec![false; n_states],
+            accept_states: BitVec::new(n_states),
             vocab_size,
             n_states,
             start_state,
@@ -107,10 +158,7 @@ impl LodestarAutomaton {
     /// Whether `state` is accepting (a complete, valid output ends here).
     #[inline]
     pub fn is_accept(&self, state: usize) -> bool {
-        match self.accept_states.get(state) {
-            Some(b) => *b,
-            None => false,
-        }
+        self.accept_states.get(state)
     }
 
     /// Precomputed shortest-accepting-distance `d(s)`.
@@ -179,7 +227,7 @@ impl LodestarAutomaton {
 /// finalize the automaton (precomputing distances and singular spans).
 pub struct LodestarAutomatonBuilder {
     transitions: Vec<usize>,
-    accept_states: Vec<bool>,
+    accept_states: BitVec,
     vocab_size: usize,
     n_states: usize,
     start_state: usize,
@@ -218,7 +266,7 @@ impl LodestarAutomatonBuilder {
             "accept state ({state}) out of range (n_states={})",
             self.n_states
         );
-        self.accept_states[state] = true;
+        self.accept_states.set(state, true);
         self
     }
 
@@ -253,42 +301,51 @@ impl LodestarAutomatonBuilder {
 
 // ── Precomputation ─────────────────────────────────────────────────────
 
-/// Reverse-BFS / Bellman relaxation from accept states.
+/// Reverse-BFS from accept states.
 ///
-/// d(accept) = 0, d(s) = 1 + min_t(d(δ(s,t))) for non-accept.
-/// `u32::MAX` for unreachable states.
-///
-/// O(|S|·|Σ|) per relaxation pass, ≤ |S| passes.
+/// d(accept) = 0. BFS outward from all accept states via reverse edges.
+/// O(|S|·|Σ|) total — each (state, token) edge examined exactly once during
+/// reverse-edge construction + BFS traversal.
 fn precompute_distances(
     transitions: &[usize],
-    accept_states: &[bool],
+    accept_states: &BitVec,
     n_states: usize,
     vocab_size: usize,
 ) -> Vec<u32> {
+    use std::collections::VecDeque;
+
     let mut dist = vec![UNREACHABLE; n_states];
+    let mut queue = VecDeque::with_capacity(n_states);
+
+    // Build reverse adjacency: for each state, which states can reach it?
+    // reverse_edges[dest] = list of (source, token) pairs that transition to dest.
+    // Total edges = S × Σ, built in O(S·Σ).
+    let mut reverse_edges: Vec<Vec<usize>> = vec![Vec::new(); n_states];
     for s in 0..n_states {
-        if accept_states[s] {
-            dist[s] = 0;
+        let base = s * vocab_size;
+        for t in 0..vocab_size {
+            let ns = transitions[base + t];
+            if ns != NO_EDGE {
+                reverse_edges[ns].push(s);
+            }
         }
     }
-    // Bellman-style relaxation to fixpoint.
-    let mut changed = true;
-    while changed {
-        changed = false;
-        for s in 0..n_states {
-            let base = s * vocab_size;
-            for t in 0..vocab_size {
-                let ns = transitions[base + t];
-                if ns != NO_EDGE {
-                    let d_ns = dist[ns];
-                    if d_ns != UNREACHABLE {
-                        let candidate = d_ns + 1;
-                        if candidate < dist[s] {
-                            dist[s] = candidate;
-                            changed = true;
-                        }
-                    }
-                }
+
+    // Seed with all accept states at distance 0
+    for s in 0..n_states {
+        if accept_states.get(s) {
+            dist[s] = 0;
+            queue.push_back(s);
+        }
+    }
+
+    // Multi-source BFS along reverse edges
+    while let Some(target) = queue.pop_front() {
+        let d_next = dist[target] + 1;
+        for &source in &reverse_edges[target] {
+            if dist[source] == UNREACHABLE {
+                dist[source] = d_next;
+                queue.push_back(source);
             }
         }
     }
@@ -302,7 +359,7 @@ fn precompute_distances(
 /// Follows the forced token until hitting a real branch or ACCEPT.
 fn precompute_singular_spans(
     transitions: &[usize],
-    accept_states: &[bool],
+    accept_states: &BitVec,
     n_states: usize,
     vocab_size: usize,
 ) -> Vec<u32> {
@@ -314,7 +371,7 @@ fn precompute_singular_spans(
 /// Compute the singular span from a single state.
 fn compute_singular_span(
     transitions: &[usize],
-    accept_states: &[bool],
+    accept_states: &BitVec,
     vocab_size: usize,
     mut state: usize,
 ) -> u32 {
@@ -340,7 +397,7 @@ fn compute_singular_span(
             1 => {
                 state = only_next;
                 len += 1;
-                if accept_states[state] {
+                if accept_states.get(state) {
                     return len; // Reached ACCEPT through forced chain.
                 }
             }

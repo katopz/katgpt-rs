@@ -225,6 +225,8 @@ struct FrontierEntry {
 pub struct ParetoConfigFrontier {
     entries: [FrontierEntry; MAX_CONFIGS],
     len: usize,
+    /// Free-list stack of unoccupied slot indices. Avoids O(MAX_CONFIGS) linear scan.
+    free_slots: Vec<usize>,
 }
 
 impl Default for ParetoConfigFrontier {
@@ -236,6 +238,10 @@ impl Default for ParetoConfigFrontier {
 impl ParetoConfigFrontier {
     /// Create an empty frontier.
     pub fn new() -> Self {
+        let mut free_slots = Vec::with_capacity(MAX_CONFIGS);
+        for i in (0..MAX_CONFIGS).rev() {
+            free_slots.push(i);
+        }
         Self {
             entries: [FrontierEntry {
                 config: ConfigVariant::default(),
@@ -244,6 +250,7 @@ impl ParetoConfigFrontier {
                 occupied: false,
             }; MAX_CONFIGS],
             len: 0,
+            free_slots,
         }
     }
 
@@ -291,11 +298,12 @@ impl ParetoConfigFrontier {
             if new_dominates {
                 self.entries[i].occupied = false;
                 self.len -= 1;
+                self.free_slots.push(i);
             }
         }
 
-        // Find an empty slot.
-        let slot = self.entries.iter().position(|e| !e.occupied);
+        // Find an empty slot via free-list (O(1)) instead of linear scan.
+        let slot = self.free_slots.pop();
         match slot {
             Some(i) => {
                 self.entries[i] = FrontierEntry {

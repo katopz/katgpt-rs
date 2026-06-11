@@ -102,15 +102,20 @@ impl Default for SketchId {
 
 impl fmt::Debug for SketchId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
-        write!(f, "SketchId({})", &hex[..16])
+        write!(f, "SketchId(")?;
+        for &b in &self.0[..8] {
+            write!(f, "{b:02x}")?;
+        }
+        write!(f, ")")
     }
 }
 
 impl fmt::Display for SketchId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let hex: String = self.0.iter().map(|b| format!("{b:02x}")).collect();
-        write!(f, "{}", &hex[..8])
+        for &b in &self.0[..4] {
+            write!(f, "{b:02x}")?;
+        }
+        Ok(())
     }
 }
 
@@ -184,18 +189,17 @@ impl ProofState {
 
 impl fmt::Debug for ProofState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let preview = match self.canonical.len() {
-            0 => "<empty>".to_string(),
-            n if n <= 32 => format!("{:02x?}", self.canonical),
+        match self.canonical.len() {
+            0 => write!(f, "ProofState(<empty>)"),
+            n if n <= 32 => write!(f, "ProofState({:02x?})", self.canonical),
             _ => {
-                let hex: String = self.canonical[..16]
-                    .iter()
-                    .map(|b| format!("{b:02x}"))
-                    .collect();
-                format!("{hex}... ({} bytes)", self.canonical.len())
+                write!(f, "ProofState(")?;
+                for &b in &self.canonical[..16] {
+                    write!(f, "{b:02x}")?;
+                }
+                write!(f, "... ({} bytes))", self.canonical.len())
             }
-        };
-        write!(f, "ProofState({preview})")
+        }
     }
 }
 

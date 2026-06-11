@@ -62,7 +62,8 @@ pub use replay_writer::{GameSampleCollector, GoActionType, GoReplayWriter, Jsonl
 // G-Zero Self-Play
 pub use g_zero_player::{
     GoDeltaGatedAbsorbCompress, GoDeltaGatedConfig, GoGZeroSelfPlayConfig, GoGZeroSelfPlayResults,
-    GoSelfPlayResult, GoTemplateProposer, MoveDelta, compute_go_delta, run_gzero_selfplay,
+    GoSelfPlayResult, GoTemplateProposer, MoveDelta, compute_go_delta, compute_go_delta_into,
+    run_gzero_selfplay,
 };
 
 // Tournament

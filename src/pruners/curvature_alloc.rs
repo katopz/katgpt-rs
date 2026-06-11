@@ -18,7 +18,8 @@
 /// get more DDTree budget.
 pub trait CurvatureInfluenceScorer: Send + Sync {
     /// Return the cached curvature-influence score for group `k`, normalized to [0, 1].
-    fn curvature_influence(&self, group: usize) -> f32;
+    /// Lazily recomputes if the cache is stale.
+    fn curvature_influence(&mut self, group: usize) -> f32;
 
     /// Number of depth groups tracked.
     fn num_groups(&self) -> usize;
@@ -48,6 +49,8 @@ pub struct EosProxyScorer {
     influence: Vec<f32>,
     /// Pre-allocated scratch buffer for softmax exp values in `update_alignment`.
     softmax_scratch: Vec<f32>,
+    /// Whether influence cache is stale (needs recomputation).
+    influence_dirty: bool,
 }
 
 impl EosProxyScorer {
@@ -63,6 +66,7 @@ impl EosProxyScorer {
             loss_mean: vec![0.0; num_groups],
             influence: vec![0.0; num_groups],
             softmax_scratch: Vec::new(),
+            influence_dirty: false,
         }
     }
 
@@ -82,8 +86,11 @@ impl EosProxyScorer {
         }
     }
 
-    /// Recompute influence = persistence × alignment, then normalize to [0, 1].
-    fn recompute_influence(&mut self) {
+    /// Ensure the influence cache is up-to-date, recomputing only when dirty.
+    fn ensure_influence(&mut self) {
+        if !self.influence_dirty {
+            return;
+        }
         let max_val = self
             .persistence
             .iter()
@@ -95,11 +102,13 @@ impl EosProxyScorer {
             let raw = self.persistence[i] * self.alignment[i];
             self.influence[i] = if max_val > 0.0 { raw / max_val } else { 0.0 };
         }
+        self.influence_dirty = false;
     }
 }
 
 impl CurvatureInfluenceScorer for EosProxyScorer {
-    fn curvature_influence(&self, group: usize) -> f32 {
+    fn curvature_influence(&mut self, group: usize) -> f32 {
+        self.ensure_influence();
         match self.influence.get(group) {
             Some(&v) => v,
             None => 0.0,
@@ -120,7 +129,7 @@ impl CurvatureInfluenceScorer for EosProxyScorer {
         self.loss_mean[group] = (1.0 - alpha) * self.loss_mean[group] + alpha * loss;
         // EMA update of persistence (residual magnitude)
         self.persistence[group] = (1.0 - alpha) * self.persistence[group] + alpha * residual;
-        self.recompute_influence();
+        self.influence_dirty = true;
     }
 
     fn update_alignment(&mut self, group: usize, scores: &[f32]) {
@@ -135,7 +144,7 @@ impl CurvatureInfluenceScorer for EosProxyScorer {
         let sum: f32 = self.softmax_scratch.iter().sum();
         if sum <= 0.0 {
             self.alignment[group] = 0.0;
-            self.recompute_influence();
+            self.influence_dirty = true;
             return;
         }
         let entropy: f32 = self
@@ -156,7 +165,7 @@ impl CurvatureInfluenceScorer for EosProxyScorer {
         };
         // Alignment = 1 − normalized_entropy (high when concentrated)
         self.alignment[group] = (1.0 - normalized_entropy).clamp(0.0, 1.0);
-        self.recompute_influence();
+        self.influence_dirty = true;
     }
 }
 
@@ -188,7 +197,7 @@ impl CurvatureWeightedBudget {
         &self,
         total_budget: usize,
         max_depth: usize,
-        scorer: &dyn CurvatureInfluenceScorer,
+        scorer: &mut dyn CurvatureInfluenceScorer,
     ) -> Vec<usize> {
         if max_depth == 0 || total_budget == 0 {
             return vec![];
@@ -259,7 +268,7 @@ impl Default for CurvatureWeightedBudget {
 #[inline]
 pub fn verification_depth(
     position: usize,
-    scorer: &dyn CurvatureInfluenceScorer,
+    scorer: &mut dyn CurvatureInfluenceScorer,
     max_depth: usize,
 ) -> usize {
     let influence = scorer.curvature_influence(position);
@@ -289,7 +298,7 @@ impl<S: CurvatureInfluenceScorer> NdsAwareScorer<S> {
 
 #[cfg(feature = "nds_proxy")]
 impl<S: CurvatureInfluenceScorer> CurvatureInfluenceScorer for NdsAwareScorer<S> {
-    fn curvature_influence(&self, group: usize) -> f32 {
+    fn curvature_influence(&mut self, group: usize) -> f32 {
         self.inner.curvature_influence(group)
         // NDS proxy is available via crate::pruners::nds_proxy::nds_proxy
         // but the scorer doesn't have access to marginals here.
@@ -317,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_eos_proxy_scorer_initializes_zero() {
-        let scorer = EosProxyScorer::new(5, 0.1);
+        let mut scorer = EosProxyScorer::new(5, 0.1);
         assert_eq!(scorer.num_groups(), 5);
         for k in 0..5 {
             assert!(
@@ -348,9 +357,9 @@ mod tests {
 
     #[test]
     fn test_budget_allocation_sums_to_total() {
-        let scorer = EosProxyScorer::new(5, 0.1);
+        let mut scorer = EosProxyScorer::new(5, 0.1);
         let budget = CurvatureWeightedBudget::new();
-        let alloc = budget.allocate(100, 5, &scorer);
+        let alloc = budget.allocate(100, 5, &mut scorer);
         let sum: usize = alloc.iter().sum();
         assert_eq!(sum, 100, "Allocation should sum to total budget");
     }
@@ -368,7 +377,7 @@ mod tests {
         scorer.update_alignment(1, &[0.25, 0.25, 0.25, 0.25]);
 
         let budget = CurvatureWeightedBudget::new();
-        let alloc = budget.allocate(100, 3, &scorer);
+        let alloc = budget.allocate(100, 3, &mut scorer);
 
         assert!(
             alloc[2] > alloc[0],
@@ -380,12 +389,12 @@ mod tests {
 
     #[test]
     fn test_floor_guarantee() {
-        let scorer = EosProxyScorer::new(5, 0.1);
+        let mut scorer = EosProxyScorer::new(5, 0.1);
         let budget = CurvatureWeightedBudget {
             floor_ratio: 0.2,
             max_boost: 0.5,
         };
-        let alloc = budget.allocate(100, 5, &scorer);
+        let alloc = budget.allocate(100, 5, &mut scorer);
 
         // Every position should get at least floor_ratio * (total/depth)
         let min_budget = 0.2 * 100.0 / 5.0;

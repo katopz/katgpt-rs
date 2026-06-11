@@ -54,14 +54,14 @@ Implementation of `.issues/001_pruners_optimization.md` findings.
 - [x] Go `flood_empty` HashSet<GoCell> → bool pair
 - [x] Monopoly `group_squares()` Vec<u8> → &'static [u8]
 - [x] Monopoly railroad/utility const arrays hoisted to module level
-- [ ] `regime_transition` FailurePattern Vec key → blake3 hash
-- [ ] `lodestar` Bellman-Ford O(S²Σ) → BFS O(SΣ)
-- [ ] `curvature_alloc` lazy recompute for `recompute_influence`
-- [ ] `bfcp_region_cache` LFU eviction O(n) → min-heap/TinyLFU
+- [x] `regime_transition` FailurePattern Vec key → blake3 hash (FailurePatternHash + blake3)
+- [x] `lodestar` Bellman-Ford O(S²Σ) → BFS O(SΣ) (reverse-BFS with VecDeque)
+- [x] `curvature_alloc` lazy recompute for `recompute_influence` (dirty flag pattern)
+- [x] `bfcp_region_cache` LFU eviction O(n) → min-heap/TinyLFU (BinaryHeap with lazy stale filtering)
 - [x] `go/g_zero_player` `compute_go_delta` board_tokens Vec
-- [ ] `go/state` `legal_moves()` accept pre-allocated buffer (caller `legal_moves_into` already exists)
-- [ ] `monopoly/systems` `build_ctx` → reusable DecisionContext buffer
-- [ ] `monopoly/mod` `square_kind()` → const lookup table (already `const fn` — no change needed)
+- [x] `go/state` `legal_moves()` accept pre-allocated buffer (caller `legal_moves_into` already exists)
+- [x] `monopoly/systems` `build_ctx` → reusable DecisionContext buffer (build_ctx_into with reused Vec)
+- [x] `monopoly/mod` `square_kind()` → const lookup table (already `const fn` — no change needed)
 - [x] `dungeon_pathfinder` pre-compute floor adjacency on construction
 - [x] `cna` `is_universal_excluded()` → HashSet (already uses HashSet)
 - [x] `decision_explainer` recompute totals per sensitivity (totals computed inline — minimal impact)
@@ -71,14 +71,14 @@ Implementation of `.issues/001_pruners_optimization.md` findings.
 - [x] `bandit.rs` BanditStats field reordering (checked: already well-packed after prior changes)
 - [x] `cna.rs` CnaNeuron already well-packed (issue confirms no change needed)
 - [x] `monopoly/players.rs` const arrays for railroad/utility squares → done (hoisted to module-level consts)
-- [ ] `regime_transition` two-pass std → Welford's one-pass
-- [ ] `lodestar` Vec<bool> → BitVec
-- [ ] `sketch_types` Debug/Display hex formatting optimization
-- [ ] `gepa_reflective` linear scan for empty slot → free list
+- [x] `regime_transition` two-pass std → Welford's one-pass
+- [x] `lodestar` Vec<bool> → BitVec
+- [x] `sketch_types` Debug/Display hex formatting optimization (write! directly, no String intermediate)
+- [x] `gepa_reflective` linear scan for empty slot → free list (Vec<usize> stack)
 - [ ] `sdar_absorb` diagnostic-only Vec alloc
 - [ ] `go/autoresearch` config.label() String → fmt (dynamic values, can't be &'static)
-- [ ] `go/tournament` three-pass count → single pass
-- [ ] `bomber/systems` `[Option<(i32,i32)>; 4]` for player positions
+- [x] `go/tournament` three-pass count → single pass (single loop with match)
+- [x] `bomber/systems` `[Option<(i32,i32)>; 4]` for player positions (fixed-size array replaces Vec)
 
 ## GOAT Proof Results
 

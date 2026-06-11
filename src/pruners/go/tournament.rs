@@ -488,23 +488,24 @@ pub fn run_tournament(
     player.reset();
 
     let total_duration = tournament_start.elapsed();
-    let our_wins = games
-        .iter()
-        .filter(|g| g.outcome == GameOutcome::Win)
-        .count();
-    let their_wins = games
-        .iter()
-        .filter(|g| g.outcome == GameOutcome::Loss)
-        .count();
-    let draws = games
-        .iter()
-        .filter(|g| g.outcome == GameOutcome::Draw)
-        .count();
-    let total_moves: usize = games.iter().map(|g| g.total_moves).sum();
+    let mut our_wins = 0usize;
+    let mut their_wins = 0usize;
+    let mut draws = 0usize;
+    let mut total_moves: usize = 0;
+    let mut score_delta_sum = 0.0f32;
+    for g in &games {
+        total_moves += g.total_moves;
+        score_delta_sum += g.score_delta;
+        match g.outcome {
+            GameOutcome::Win => our_wins += 1,
+            GameOutcome::Loss => their_wins += 1,
+            GameOutcome::Draw => draws += 1,
+        }
+    }
     let avg_score_delta = if games.is_empty() {
         0.0
     } else {
-        games.iter().map(|g| g.score_delta).sum::<f32>() / games.len() as f32
+        score_delta_sum / games.len() as f32
     };
     let games_per_sec = if total_duration.as_secs_f32() > 0.0 {
         games.len() as f32 / total_duration.as_secs_f32()

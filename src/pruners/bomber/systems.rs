@@ -458,13 +458,20 @@ fn apply_movement(world: &mut World, actions: [Option<BomberAction>; 4]) {
 /// After movement, check if any alive player is standing on a `Landmine` bomb.
 /// Triggered landmines explode with range 1 regardless of their `BombRange` component.
 fn trigger_landmines(world: &mut World) -> Vec<PendingExplosion> {
-    // Collect alive player positions
-    let player_positions: Vec<(i32, i32)> = {
+    // Collect alive player positions into fixed-size array (max 4 players)
+    let mut player_positions = [None; 4];
+    let mut player_count = 0usize;
+    {
         let mut q = world.query_filtered::<&GridPos, With<Alive>>();
-        q.iter(world).map(|p| (p.x, p.y)).collect()
-    };
+        for p in q.iter(world) {
+            if player_count < 4 {
+                player_positions[player_count] = Some((p.x, p.y));
+                player_count += 1;
+            }
+        }
+    }
 
-    if player_positions.is_empty() {
+    if player_count == 0 {
         return Vec::new();
     }
 
@@ -476,8 +483,12 @@ fn trigger_landmines(world: &mut World) -> Vec<PendingExplosion> {
             if bomb.bomb_type != BombType::Landmine {
                 continue;
             }
-            if player_positions.contains(&(pos.x, pos.y)) {
-                to_explode.push((entity, (pos.x, pos.y), fuse.owner));
+            let pos_tuple = (pos.x, pos.y);
+            for i in 0..player_count {
+                if player_positions[i] == Some(pos_tuple) {
+                    to_explode.push((entity, pos_tuple, fuse.owner));
+                    break;
+                }
             }
         }
     }
