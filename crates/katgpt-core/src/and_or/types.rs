@@ -101,6 +101,7 @@ impl<G, S> AndOrNode<G, S> {
     /// - `Or`: solved if any child is solved (or `best` points to a solved child)
     /// - `And`: solved if all children are solved
     /// - `Leaf`: solved if `solution.is_some()`
+    #[inline]
     pub fn is_solved(&self) -> bool {
         match self {
             Self::Or { children, best, .. } => match best {
@@ -273,6 +274,7 @@ impl<G, S> AndOrNode<G, S> {
     // ── Tree metrics ─────────────────────────────────────────────
 
     /// Total number of nodes in this subtree (including self).
+    #[inline]
     pub fn node_count(&self) -> usize {
         1 + match self {
             Self::Or { children, .. } | Self::And { children, .. } => {
@@ -283,6 +285,7 @@ impl<G, S> AndOrNode<G, S> {
     }
 
     /// Maximum depth of the tree (0 for leaves, 1 + max child depth otherwise).
+    #[inline]
     pub fn depth(&self) -> usize {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => children
@@ -326,6 +329,7 @@ impl<G, S> AndOrNode<G, S> {
     ///
     /// Equivalent to `(self.solved_count(), self.unsolved_count())` but only
     /// walks the tree once.
+    #[inline]
     pub fn leaf_stats(&self) -> (usize, usize) {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => {

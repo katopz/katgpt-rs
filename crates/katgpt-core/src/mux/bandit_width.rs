@@ -52,6 +52,7 @@ impl MuxBanditWidth {
         } else {
             1.0
         };
+        let two_ln_n = 2.0 * ln_n;
 
         let mut best_width = 1;
         let mut best_ucb = f32::NEG_INFINITY;
@@ -59,8 +60,9 @@ impl MuxBanditWidth {
             let ucb = if arm.pulls == 0 {
                 f32::INFINITY
             } else {
-                let avg = arm.total_reward / arm.pulls as f32;
-                avg + self.exploration * (2.0 * ln_n / arm.pulls as f32).sqrt()
+                let inv_pulls = 1.0 / arm.pulls as f32;
+                let avg = arm.total_reward * inv_pulls;
+                avg + self.exploration * (two_ln_n * inv_pulls).sqrt()
             };
             if ucb > best_ucb {
                 best_ucb = ucb;

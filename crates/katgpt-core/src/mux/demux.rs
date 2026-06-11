@@ -29,9 +29,48 @@ impl MuxDemuxVerifier {
 
     /// Demultiplex a superposition: given token IDs and weights,
     /// return them sorted by weight (descending) and verify uniqueness.
+    ///
+    /// Performs a single allocation (no intermediate buffer), unlike `demux_into`
+    /// which clones into the result for caller buffer reuse.
     pub fn demux(&self, tokens: &[u32], weights: &[f32]) -> DemuxResult {
-        let mut buf = Vec::with_capacity(tokens.len());
-        self.demux_into(tokens, weights, &mut buf)
+        assert_eq!(tokens.len(), weights.len());
+        let n = tokens.len();
+        if n == 0 {
+            return DemuxResult {
+                tokens: Vec::new(),
+                is_unique: true,
+            };
+        }
+
+        // Stack-allocated sort: copy to stack, sort descending by weight.
+        let mut pairs: [(u32, f32); MAX_DEMUX_K] = [(0, 0.0); MAX_DEMUX_K];
+        let len = n.min(MAX_DEMUX_K);
+        for i in 0..len {
+            pairs[i] = (tokens[i], weights[i]);
+        }
+        pairs[..len].sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
+
+        // Single allocation: collect directly into result Vec.
+        // O(k²) duplicate scan is fine for k ≤ 32 — trivially fits in L1 cache.
+        let mut out_tokens = Vec::with_capacity(len);
+        let mut is_unique = true;
+        for i in 0..len {
+            let token = pairs[i].0;
+            if is_unique {
+                for j in 0..i {
+                    if pairs[j].0 == token {
+                        is_unique = false;
+                        break;
+                    }
+                }
+            }
+            out_tokens.push(token);
+        }
+
+        DemuxResult {
+            tokens: out_tokens,
+            is_unique,
+        }
     }
 
     /// Zero-alloc demultiplexing into a caller-provided buffer.

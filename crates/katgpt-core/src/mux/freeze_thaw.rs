@@ -40,13 +40,23 @@ impl MuxPatternStore {
         Self::default()
     }
 
+    /// Create a store with pre-allocated capacity for `n` keys.
+    pub fn with_capacity(n: usize) -> Self {
+        Self {
+            patterns: HashMap::with_capacity(n),
+            total_patterns: 0,
+        }
+    }
+
     /// Freeze a pattern: store it under the given key.
+    #[inline]
     pub fn freeze(&mut self, key: u64, target: MuxTarget) {
         self.patterns.entry(key).or_default().push(target);
         self.total_patterns += 1;
     }
 
     /// Thaw patterns: retrieve all patterns for a given key.
+    #[inline]
     pub fn thaw(&self, key: u64) -> &[MuxTarget] {
         self.patterns.get(&key).map(|v| v.as_slice()).unwrap_or(&[])
     }
