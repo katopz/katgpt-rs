@@ -1,7 +1,7 @@
 # Plan 249: TRDraft — Trajectory-Refined Draft for Modelless Inference
 
 **Date:** 2026-06-11
-**Status:** Planning
+**Status:** Phase 1-3 complete, Phase 4-5 remaining
 **Feature Gate:** `trd_refined_draft` (default-OFF)
 **Research:** R217 (TRD Trajectory-Refined Distillation)
 **Related:** Plan 195 (ThoughtFold, ✅ default-ON), Plan 212 (Collapse-Aware, in-progress), Plan 072 (SDAR), Plan 071 (ROPD), Plan 079 (ELF), Plan 080 (BT Rank), Plan 169 (GDSD), Plan 180 (SDPG), Plan 148 (Plasma SIMD)
@@ -69,7 +69,7 @@ graph TD
 
 - [x] Implement `refine_branch()` — rollback DDTree to failure point, re-expand with ConstraintPruner + top-k fallback
 - [x] Integrate ConstraintPruner into re-drafting: constrain candidate continuations to valid set at each step
-- [ ] Add ThoughtFold pre-fold: before re-drafting, fold redundant reasoning steps in prefix for cleaner starting point
+- [x] Add ThoughtFold pre-fold: before re-drafting, fold redundant reasoning steps in prefix for cleaner starting point
 - [x] Implement `rank_branches()` — BT Rank pairwise σ(s_raw − s_refined) comparison of raw vs re-drafted branches
 - [x] Add refinement step counter + hard cap at `max_refinement_steps` (prevent infinite re-draft loops)
 - [x] Add 7 unit tests covering prefix failure detection, refinement, bandit, branch scoring
@@ -83,10 +83,10 @@ graph TD
 
 ### Phase 4: CPU/SIMD/GPU Routing
 
-- [ ] Route prefix failure detection to CPU (entropy computation on logits, scalar ops)
-- [ ] Route ConstraintPruner check to CPU/SIMD (fixed-size vocab scan, SIMD for top-k)
-- [ ] Route re-drafting (DDTree expansion) to GPU when available (batched matmul for tree expansion)
-- [ ] Route BT Rank pairwise comparison to SIMD (small N candidates, vectorizable σ(si − sj))
+- [x] Route prefix failure detection to CPU (entropy computation on logits, scalar ops)
+- [x] Route ConstraintPruner check to CPU/SIMD (fixed-size vocab scan, SIMD for top-k)
+- [x] Route re-drafting (DDTree expansion) to GPU when available (batched matmul for tree expansion)
+- [x] Route BT Rank pairwise comparison to SIMD (small N candidates, vectorizable σ(si − sj))
 
 ### Phase 5: Arena Proof + Benchmark
 

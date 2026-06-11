@@ -301,7 +301,9 @@ impl<'a, P: ConstraintPruner> TrajectoryRefinedDraft<'a, P> {
             };
         }
 
-        // Re-draft from failure point
+        // Re-draft from failure point (CPU path).
+        // GPU routing: when `gpu` feature is enabled, `redraft_gpu_batched` can
+        // dispatch batched matmul for DDTree expansion. Not yet integrated.
         let mut success = true;
         let mut budget_exceeded = false;
         for step in 0..max_steps {
@@ -347,7 +349,9 @@ impl<'a, P: ConstraintPruner> TrajectoryRefinedDraft<'a, P> {
             refined_tokens = raw_branch.to_vec();
             RefinementOutcome::BudgetExceeded
         } else if success {
-            // BT Rank: score refined vs raw using sigmoid comparison
+            // BT Rank: score refined vs raw using sigmoid comparison.
+            // SIMD-routed: branch_score uses simd_sum_f32 under plasma_path.
+            // For N>2 candidates, use bt_rank_winner() for pairwise ranking.
             let raw_score = branch_score(raw_branch, marginals);
             let refined_score = branch_score(&refined_tokens, marginals);
             let rank_score = sigmoid(self.config.rank_temperature * (refined_score - raw_score));
@@ -537,6 +541,12 @@ fn prefold_prefix(prefix: &[usize]) -> Vec<usize> {
 // ── Helper functions ─────────────────────────────────────────
 
 /// Shannon entropy of a probability distribution.
+///
+/// CPU-bound scalar ops: p*ln(p) loop over logits. SIMD not beneficial here
+/// because (a) vocab is typically < 100k, (b) the branch-free p > 0 filter
+/// is already near-optimal, and (c) ln(p) is not available as a SIMD kernel.
+/// Future: consider SIMD entropy for large marginals (>10k) via chunked
+/// p*ln(p) with a SIMD ln approximation.
 fn shannon_entropy(probs: &[f32]) -> f32 {
     let mut h = 0.0f32;
     for &p in probs {
@@ -547,22 +557,64 @@ fn shannon_entropy(probs: &[f32]) -> f32 {
     h
 }
 
-/// Find the first valid token from a marginal distribution using ConstraintPruner.
+/// SIMD-optimized top-k scan using `simd_argmax_f32`.
 ///
-/// Scans top-k candidates (sorted by probability) and returns the first
-/// that passes constraint validation. O(k) where k = min(10, vocab_size).
+/// Performs K passes of SIMD argmax (masking found maxima to -inf), yielding
+/// top-k candidates in O(K * vocab / SIMD_WIDTH) instead of O(K * vocab)
+/// scalar comparisons. Each argmax pass is SIMD-accelerated (NEON/AVX2).
+#[cfg(feature = "plasma_path")]
 fn find_valid_token<P: ConstraintPruner>(
     depth: usize,
     marginal: &[f32],
     parent_tokens: &[usize],
     pruner: &P,
 ) -> Option<usize> {
-    // Find top-10 candidates by probability
+    const K: usize = 10;
+
+    if marginal.is_empty() {
+        return None;
+    }
+
+    // Copy marginal for masking (simd_argmax_f32 needs &[f32])
+    let mut buf = marginal.to_vec();
+    let mut top_indices: [usize; K] = [0; K];
+    let mut top_probs: [f32; K] = [f32::NEG_INFINITY; K];
+
+    // K passes of SIMD argmax: find max, record it, mask to -inf
+    for slot in 0..K {
+        let (idx, val) = crate::simd::simd_argmax_f32(&buf);
+        top_indices[slot] = idx;
+        top_probs[slot] = val;
+        if idx < buf.len() {
+            buf[idx] = f32::NEG_INFINITY;
+        }
+    }
+
+    // Check validity in probability order (highest first)
+    for &idx in &top_indices {
+        if pruner.is_valid(depth, idx, parent_tokens) {
+            return Some(idx);
+        }
+    }
+
+    None
+}
+
+/// Scalar top-k scan — O(n * K) with per-element min comparison.
+///
+/// Fallback when `plasma_path` is not enabled. Maintains a fixed-size top-K
+/// buffer, replacing the minimum on each iteration.
+#[cfg(not(feature = "plasma_path"))]
+fn find_valid_token<P: ConstraintPruner>(
+    depth: usize,
+    marginal: &[f32],
+    parent_tokens: &[usize],
+    pruner: &P,
+) -> Option<usize> {
     let mut top_indices: [usize; 10] = [0; 10];
     let mut top_probs: [f32; 10] = [f32::NEG_INFINITY; 10];
 
     for (idx, &prob) in marginal.iter().enumerate() {
-        // Find minimum in top_probs
         let min_idx = top_probs
             .iter()
             .enumerate()
@@ -575,7 +627,6 @@ fn find_valid_token<P: ConstraintPruner>(
         }
     }
 
-    // Check validity in probability order
     for &idx in &top_indices {
         if pruner.is_valid(depth, idx, parent_tokens) {
             return Some(idx);
@@ -585,22 +636,152 @@ fn find_valid_token<P: ConstraintPruner>(
     None
 }
 
-/// Score a branch using product of marginal probabilities.
+/// SIMD-optimized branch scoring: gather probs → compute ln → SIMD sum.
+///
+/// Gathers all marginal probabilities for the branch tokens into a contiguous
+/// buffer, computes ln on each (sequential but cache-friendly), then reduces
+/// via `simd_sum_f32`. Benefits from SIMD reduction on branches > 4 tokens.
+#[cfg(feature = "plasma_path")]
+fn branch_score(branch: &[usize], marginals: &[&[f32]]) -> f32 {
+    let mut log_probs = Vec::with_capacity(branch.len());
+    for (depth, &token) in branch.iter().enumerate() {
+        if depth < marginals.len() {
+            let marginal = marginals[depth];
+            if token < marginal.len() {
+                log_probs.push(marginal[token].max(1e-10).ln());
+            }
+        }
+    }
+    crate::simd::simd_sum_f32(&log_probs)
+}
+
+/// Scalar branch scoring — product of marginal log-probabilities.
 ///
 /// Higher score = more probable branch = better.
+#[cfg(not(feature = "plasma_path"))]
 fn branch_score(branch: &[usize], marginals: &[&[f32]]) -> f32 {
     let mut score = 0.0f32;
     for (depth, &token) in branch.iter().enumerate() {
         if depth < marginals.len() {
             let marginal = marginals[depth];
             if token < marginal.len() {
-                // Log-probability (numerically stable sum instead of product)
                 let prob = marginal[token].max(1e-10);
                 score += prob.ln();
             }
         }
     }
     score
+}
+
+// ── BT Rank pairwise SIMD (plasma_path) ───────────────────────
+
+/// SIMD-vectorized BT Rank pairwise comparison for N candidate branches.
+///
+/// Scores all branches via `branch_score` (SIMD when available), then computes
+/// pairwise σ(τ * (si − sj)) win probabilities. Returns the index of the
+/// candidate with the highest aggregate win rate.
+///
+/// For N=2 (current use case), this degenerates to a single sigmoid comparison.
+/// For N>2, the batched scoring and pairwise summation benefit from SIMD.
+#[cfg(feature = "plasma_path")]
+#[allow(dead_code)]
+fn bt_rank_winner(candidates: &[&[usize]], marginals: &[&[f32]], temperature: f32) -> usize {
+    let n = candidates.len();
+    if n == 0 {
+        return 0;
+    }
+    if n == 1 {
+        return 0;
+    }
+
+    // Score all candidates (branch_score is SIMD-optimized under plasma_path)
+    let scores: Vec<f32> = candidates
+        .iter()
+        .map(|branch| branch_score(branch, marginals))
+        .collect();
+
+    // Pairwise win rates: for each candidate i, sum σ(τ * (si - sj)) over all j != i
+    let mut win_rates = vec![0.0f32; n];
+    for i in 0..n {
+        for j in 0..n {
+            if i != j {
+                win_rates[i] += sigmoid(temperature * (scores[i] - scores[j]));
+            }
+        }
+    }
+
+    // Argmax win rate
+    let mut best = 0usize;
+    let mut best_rate = win_rates[0];
+    for (i, &rate) in win_rates.iter().enumerate().skip(1) {
+        if rate > best_rate {
+            best_rate = rate;
+            best = i;
+        }
+    }
+    best
+}
+
+/// Scalar BT Rank pairwise comparison for N candidate branches.
+///
+/// Identical logic to `bt_rank_winner` but without SIMD-optimized branch_score.
+#[cfg(not(feature = "plasma_path"))]
+#[allow(dead_code)]
+fn bt_rank_winner(candidates: &[&[usize]], marginals: &[&[f32]], temperature: f32) -> usize {
+    let n = candidates.len();
+    if n == 0 {
+        return 0;
+    }
+    if n == 1 {
+        return 0;
+    }
+
+    let scores: Vec<f32> = candidates
+        .iter()
+        .map(|branch| branch_score(branch, marginals))
+        .collect();
+
+    let mut win_rates = vec![0.0f32; n];
+    for i in 0..n {
+        for j in 0..n {
+            if i != j {
+                win_rates[i] += sigmoid(temperature * (scores[i] - scores[j]));
+            }
+        }
+    }
+
+    let mut best = 0usize;
+    let mut best_rate = win_rates[0];
+    for (i, &rate) in win_rates.iter().enumerate().skip(1) {
+        if rate > best_rate {
+            best_rate = rate;
+            best = i;
+        }
+    }
+    best
+}
+
+// ── GPU routing stub ──────────────────────────────────────────
+
+/// GPU-batched DDTree expansion for re-drafting.
+///
+/// Placeholder for future GPU integration: when `gpu` feature is enabled,
+/// re-drafting can leverage batched matmul for DDTree expansion on GPU.
+/// Current implementation falls back to CPU re-drafting via `refine_branch`.
+///
+/// TODO(Plan 249): Integrate with riir-ai/riir-gpu CubeCL runtime for
+/// batched speculative draft expansion. Requires DDTree GPU node store.
+#[cfg(feature = "gpu")]
+#[allow(dead_code)]
+fn redraft_gpu_batched(
+    _prefix: &[usize],
+    _marginals: &[&[f32]],
+    _max_steps: usize,
+) -> Option<Vec<usize>> {
+    // GPU re-drafting not yet implemented — fall back to CPU path.
+    // When DDTree GPU integration lands, this will dispatch batched matmul
+    // for tree expansion, returning the GPU-refined branch.
+    None
 }
 
 #[cfg(test)]
