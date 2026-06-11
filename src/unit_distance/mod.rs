@@ -11,6 +11,7 @@
 //! | `MinkowskiLattice` | Modelless (T1) | High-dim lattice with sup-norm packing |
 //! | `ClassGroupPigeonhole` | Modelless (T2) | Norm-one element counting via ideal class |
 //! | `CmField` | Light model-based (T4) | CM field construction with prescribed splitting |
+//! | `TowerSearch` | Model-based (T5) | UCB1 bandit search for optimal tower parameters |
 //!
 //! # Reference
 //!
@@ -28,6 +29,8 @@ mod minkowski;
 #[cfg(feature = "unit_distance")]
 mod pigeonhole;
 #[cfg(feature = "unit_distance")]
+mod tower_search;
+#[cfg(feature = "unit_distance")]
 mod types;
 
 #[cfg(feature = "unit_distance")]
@@ -41,6 +44,10 @@ pub use minkowski::MinkowskiLattice;
 pub use pigeonhole::{
     ClassGroupPigeonhole, pigeonhole_q_sqrt5_i, pigeonhole_qi, sum_of_two_squares,
     verify_pigeonhole_bound,
+};
+#[cfg(feature = "unit_distance")]
+pub use tower_search::{
+    TowerArm, TowerBandit, TowerFamily, TowerSearch, TowerSearchConfig, TowerSearchResult,
 };
 #[cfg(feature = "unit_distance")]
 pub use types::{

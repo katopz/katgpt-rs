@@ -12,7 +12,7 @@
 - [x] **T2: ClassGroupPigeonhole** — CM field element counting via ideal class pigeonhole
 - [x] **T3: UnitDistanceGOAT** — Verify ν(n) ≥ n^(1+δ) for explicit small examples
 - [x] **T4: CmFieldConstruction** — Pro-2 tower with prescribed splitting (light model-based)
-- [ ] **T5: InfiniteTowerSearch** — G-Zero self-play for optimal tower parameters (model-based) — *deferred, requires G-Zero infrastructure*
+- [x] **T5: InfiniteTowerSearch** — G-Zero self-play for optimal tower parameters (model-based) ✅ UCB1 bandit over (family, primes, denom) configurations
 - [x] **T6: Feature Gate Audit** — `unit_distance` gate with zero default impact
 
 ---
@@ -198,12 +198,23 @@ This is **light model-based** because:
 
 Use G-Zero self-play to search for optimal tower parameters (T set, S set, prime p choice).
 
-### Why Deferred
+### Implementation
 
-- Requires working T1–T4 as building blocks
-- The search space (T sets, S sets, prime choices) is amenable to bandit optimization
-- Connects to existing `g_zero` infrastructure (Plan 049)
-- Low priority — explicit constructions suffice for GOAT proofs
+Implemented as `tower_search.rs` — a self-contained UCB1 bandit over tower parameter
+configurations. Each arm represents a `(family, num_split_primes, denominator)` triple.
+The reward signal is the computed δ exponent from `DeltaEstimate::from_field_params()`.
+
+**Key types:**
+- `TowerFamily` — enum: Qi, QSqrt5I, Pro2Tower, Cyclotomic
+- `TowerArm` — search arm with field parameters
+- `TowerBandit` — UCB1 bandit with warm-up, select/observe cycle
+- `TowerSearchConfig` — search configuration (rounds, prime counts, denominators)
+- `TowerSearchResult` — best arm, best δ, rankings, success flag
+- `TowerSearch` — static runner: generate_arms → UCB1 loop → result
+
+**GOAT proofs (10 tests):** G1 (positive δ), G2 (monotonicity), G3 (concentrates on best),
+G4 (cross-family), G5 (determinism), G6 (scaling), G7 (theoretical formula), G8 (full pipeline),
+G9 (exploration/exploitation), Summary.
 
 ### Connection to G-Zero
 
@@ -212,6 +223,10 @@ The tower parameter search is a **pure exploration** problem:
 - Action: modify one parameter
 - Reward: δ value achieved (larger is better)
 - This maps directly to our Phase 1 modelless search (T1–T5 in G-Zero)
+
+The implementation is self-contained (no import from `g_zero` module) but follows the
+same UCB1 pattern as `DeltaBanditPruner`. Future work could integrate with the full
+G-Zero infrastructure for more sophisticated search strategies.
 
 ---
 
@@ -240,10 +255,12 @@ src/unit_distance/
 ├── minkowski.rs        # T1: MinkowskiLattice<f64>
 ├── pigeonhole.rs       # T2: ClassGroupPigeonhole
 ├── cm_field.rs         # T4: CmFieldConstruction (light model-based)
+├── tower_search.rs     # T5: InfiniteTowerSearch (UCB1 bandit)
 └── types.rs            # Shared types: Complex, primes, field params
 
 tests/
-└── bench_unit_distance_goat.rs  # T3: GOAT proofs
+├── bench_unit_distance_goat.rs  # T3: GOAT proofs (8 tests)
+└── goat_090_tower_search.rs     # T5: GOAT proofs (10 tests)
 ```
 
 ---
