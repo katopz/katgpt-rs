@@ -662,6 +662,7 @@ impl crate::traits::ConstraintPruner for SlodPruner {
 /// Z-score normalize a signal. Returns zero-centered signal.
 ///
 /// Convenience wrapper that allocates — prefer [`zscore_into`] in hot paths.
+#[allow(dead_code)]
 fn zscore(signal: &[f32]) -> Vec<f32> {
     if signal.is_empty() {
         return Vec::new();

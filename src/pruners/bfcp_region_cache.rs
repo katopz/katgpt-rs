@@ -191,11 +191,11 @@ impl BfcpRegionCache {
             // Pop stale entries (removed or freq bumped) until we find a valid one
             while let Some(entry) = heap.pop() {
                 // Verify entry still exists in map with matching freq
-                if let Some(current) = guard.get(&entry.hash) {
-                    if current.freq == entry.freq {
-                        let _ = guard.remove(&entry.hash);
-                        break;
-                    }
+                if let Some(current) = guard.get(&entry.hash)
+                    && current.freq == entry.freq
+                {
+                    let _ = guard.remove(&entry.hash);
+                    break;
                 }
                 // Stale entry — continue popping
             }

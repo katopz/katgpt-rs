@@ -54,7 +54,7 @@ struct BitVec {
 impl BitVec {
     /// All-false bit-vector of length `len`.
     fn new(len: usize) -> Self {
-        let words = (len + 63) / 64;
+        let words = len.div_ceil(64);
         Self {
             words: vec![0u64; words],
             len,
@@ -332,6 +332,7 @@ fn precompute_distances(
     }
 
     // Seed with all accept states at distance 0
+    #[allow(clippy::needless_range_loop)]
     for s in 0..n_states {
         if accept_states.get(s) {
             dist[s] = 0;

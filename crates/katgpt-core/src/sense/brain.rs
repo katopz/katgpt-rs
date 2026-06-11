@@ -116,9 +116,8 @@ impl NpcBrain {
         #[cfg(feature = "sense_lod")]
         match self.active_lod {
             SenseLodLevel::Full => {
-                // Full writes every element — skip zero-fill.
-                result.reserve(len);
-                unsafe { result.set_len(len); }
+                // Full writes every element — zero-fill overwritten but avoids uninit.
+                result.resize(len, 0.0);
                 self.project_full(result);
             }
             SenseLodLevel::Compressed | SenseLodLevel::Minimal => {
@@ -133,9 +132,8 @@ impl NpcBrain {
         }
         #[cfg(not(feature = "sense_lod"))]
         {
-            // Full writes every element — skip zero-fill.
-            result.reserve(len);
-            unsafe { result.set_len(len); }
+            // Full writes every element — zero-fill overwritten but avoids uninit.
+            result.resize(len, 0.0);
             self.project_full(result);
         }
     }
@@ -209,8 +207,8 @@ impl NpcBrain {
     /// Update HLA state with delta (dynamic slice, bounds-checked).
     pub fn update_hla(&mut self, delta: &[f32]) {
         let len = delta.len().min(self.hla_state.len());
-        for i in 0..len {
-            self.hla_state[i] += delta[i];
+        for (s, d) in self.hla_state.iter_mut().zip(delta.iter()).take(len) {
+            *s += d;
         }
     }
 

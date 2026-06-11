@@ -229,6 +229,7 @@ impl ChainFolder {
     }
 
     /// Count the number of tokens in kept (non-folded) steps.
+    #[allow(dead_code)]
     fn kept_token_count(&self) -> usize {
         if self.boundaries.is_empty() {
             return 0;

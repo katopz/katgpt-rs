@@ -1364,7 +1364,7 @@ fn bench_seed(seed: u64) -> BenchResult {
     let mut ai_explorer = AiExplorer;
     let ai = solve_exploring(&game, &mut ai_explorer);
 
-    let mut hy_explorer = HybridExplorer;
+    let mut hy_explorer = HybridExplorer::new();
     let hy = solve_exploring(&game, &mut hy_explorer);
 
     BenchResult {
