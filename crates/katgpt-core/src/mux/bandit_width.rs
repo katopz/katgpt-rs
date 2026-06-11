@@ -20,14 +20,7 @@ impl Arm {
         }
     }
 
-    fn average_reward(&self) -> f32 {
-        if self.pulls == 0 {
-            f32::INFINITY // unexplored arms get priority
-        } else {
-            self.total_reward / self.pulls as f32
-        }
-    }
-
+    #[inline]
     fn update(&mut self, reward: f32) {
         self.total_reward += reward;
         self.pulls += 1;
@@ -60,21 +53,21 @@ impl MuxBanditWidth {
             1.0
         };
 
-        let best = self
-            .arms
-            .iter()
-            .map(|arm| {
-                let avg = arm.average_reward();
-                let ucb = if arm.pulls == 0 {
-                    f32::INFINITY
-                } else {
-                    avg + self.exploration * (2.0 * ln_n / arm.pulls as f32).sqrt()
-                };
-                (arm.width, ucb)
-            })
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        best.map(|(w, _)| w).unwrap_or(1)
+        let mut best_width = 1;
+        let mut best_ucb = f32::NEG_INFINITY;
+        for arm in &self.arms {
+            let ucb = if arm.pulls == 0 {
+                f32::INFINITY
+            } else {
+                let avg = arm.total_reward / arm.pulls as f32;
+                avg + self.exploration * (2.0 * ln_n / arm.pulls as f32).sqrt()
+            };
+            if ucb > best_ucb {
+                best_ucb = ucb;
+                best_width = arm.width;
+            }
+        }
+        best_width
     }
 
     /// Update the arm for `width` with the observed `reward`.

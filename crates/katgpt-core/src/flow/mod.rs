@@ -277,6 +277,18 @@ impl LeoPotentialGrid {
         &mut self.potential
     }
 
+    /// Read-only access to the raw potential slice.
+    #[inline]
+    pub fn potential_slice(&self) -> &[f32] {
+        &self.potential
+    }
+
+    /// Read-only access to the blocked bitfield.
+    #[inline]
+    pub fn blocked(&self) -> &[u64] {
+        &self.blocked
+    }
+
     /// Mutable access to the blocked bitfield.
     #[inline]
     pub fn blocked_mut(&mut self) -> &mut [u64] {

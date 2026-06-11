@@ -16,11 +16,9 @@ pub fn extract_top_k_peaks(logits: &[f32], k: usize) -> Vec<f32> {
     }
     let mut values = logits.to_vec();
     // O(n) partial sort: partition so first k are the largest (unordered), then sort those k
-    let _ = values.select_nth_unstable_by(k - 1, |a, b| {
-        b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    let _ = values.select_nth_unstable_by(k - 1, |a, b| b.total_cmp(a));
     values.truncate(k);
-    values.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    values.sort_unstable_by(|a, b| b.total_cmp(a));
     values
 }
 
@@ -48,12 +46,7 @@ pub fn extract_top_k_into<'a>(
             continue; // Skip if not in top-k
         }
         // Find insertion position (descending order)
-        let pos = match buf[..k].binary_search_by(|probe| {
-            probe
-                .partial_cmp(&val)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .reverse()
-        }) {
+        let pos = match buf[..k].binary_search_by(|probe| val.total_cmp(probe)) {
             Ok(idx) | Err(idx) => idx.min(k - 1),
         };
         // Shift elements down

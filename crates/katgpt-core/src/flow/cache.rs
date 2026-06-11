@@ -162,12 +162,18 @@ impl FlowFieldCache {
         self.blocked_buf[..blocked_words].fill(0);
 
         // Copy blocked state into bitfield for inflation.
+        // NOTE: Grid stores blocked as (w*h+63)/64 words (flat), while we use
+        // (w+63)/64*h words (row-aligned). Layouts differ when w is not a
+        // multiple of 64, so per-cell copy is required.
         for y in 0..grid_h {
+            let grid_row_off = (y as usize) * (grid_w as usize);
+            let buf_row_off = (y as usize) * words_per_row;
             for x in 0..grid_w {
-                if grid.is_blocked(x, y) {
-                    let word = (y as usize) * words_per_row + (x as usize) / 64;
-                    let bit = (x as usize) % 64;
-                    self.blocked_buf[word] |= 1u64 << bit;
+                let cell = grid_row_off + x as usize;
+                let word = cell / 64;
+                let bit = cell % 64;
+                if grid.blocked()[word] & (1u64 << bit) != 0 {
+                    self.blocked_buf[buf_row_off + x as usize / 64] |= 1u64 << (x as usize % 64);
                 }
             }
         }
@@ -183,25 +189,24 @@ impl FlowFieldCache {
             self.config.obstacle_radius,
         );
 
-        // Apply inflated obstacles back to the grid.
+        // Apply inflated obstacles back to the grid (same layout mismatch as above).
         for y in 0..grid_h {
+            let grid_row_off = (y as usize) * (grid_w as usize);
+            let buf_row_off = (y as usize) * words_per_row;
             for x in 0..grid_w {
-                let word = (y as usize) * words_per_row + (x as usize) / 64;
-                let bit = (x as usize) % 64;
-                if self.blocked_buf[word] & (1u64 << bit) != 0 {
-                    grid.mark_blocked(x, y);
+                if self.blocked_buf[buf_row_off + x as usize / 64] & (1u64 << (x as usize % 64))
+                    != 0
+                {
+                    let cell = grid_row_off + x as usize;
+                    grid.blocked_mut()[cell / 64] |= 1u64 << (cell % 64);
                 }
             }
         }
 
         // FFT smooth the potential field to remove local minima — reuse scratch buffers.
+        // Bulk copy: potential layout is identical (w*h flat, row-major).
         self.potential_buf.resize(total_cells, 0.0);
-        for y in 0..grid_h {
-            for x in 0..grid_w {
-                self.potential_buf[(y as usize) * (grid_w as usize) + (x as usize)] =
-                    grid.potential(x, y);
-            }
-        }
+        self.potential_buf[..total_cells].copy_from_slice(&grid.potential_slice()[..total_cells]);
 
         fft_smooth_into(
             &mut self.potential_buf,
@@ -212,13 +217,8 @@ impl FlowFieldCache {
             &mut self.fft_col_buf,
         );
 
-        // Write smoothed values back.
-        for y in 0..grid_h {
-            for x in 0..grid_w {
-                let idx = (y as usize) * (grid_w as usize) + (x as usize);
-                grid.set_potential(x, y, self.potential_buf[idx]);
-            }
-        }
+        // Write smoothed values back (bulk copy — same layout).
+        grid.potential_mut()[..total_cells].copy_from_slice(&self.potential_buf[..total_cells]);
 
         // Compute gradient → FlowField.
         let field = grid.gradient();

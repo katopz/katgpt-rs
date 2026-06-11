@@ -44,6 +44,8 @@ pub enum AndOrNode<G, S> {
         children: Vec<AndOrNode<G, S>>,
         /// Per-child solved status. `solved.len() == children.len()` invariant.
         solved: Vec<bool>,
+        /// Number of `true` entries in `solved`. Maintained incrementally.
+        solved_count: usize,
     },
     /// Leaf: a solved or unsolved atomic goal.
     Leaf { goal: G, solution: Option<S> },
@@ -70,6 +72,7 @@ impl<G, S> AndOrNode<G, S> {
             sketch: None,
             children: Vec::new(),
             solved: Vec::new(),
+            solved_count: 0,
         }
     }
 
@@ -105,12 +108,14 @@ impl<G, S> AndOrNode<G, S> {
                 None => children.iter().any(|c| c.is_solved()),
             },
             Self::And {
-                children, solved, ..
+                children,
+                solved_count,
+                ..
             } => {
                 if children.is_empty() {
                     return false;
                 }
-                solved.iter().all(|&s| s)
+                *solved_count == children.len()
             }
             Self::Leaf { solution, .. } => solution.is_some(),
         }
@@ -158,13 +163,11 @@ impl<G, S> AndOrNode<G, S> {
     }
 
     /// Iterate over direct children.
-    pub fn children(&self) -> impl Iterator<Item = &AndOrNode<G, S>> {
+    #[inline]
+    pub fn children(&self) -> &[AndOrNode<G, S>] {
         match self {
-            Self::Or { children, .. } | Self::And { children, .. } => {
-                // SAFETY: we're creating a valid iterator
-                children.iter()
-            }
-            Self::Leaf { .. } => [].iter(),
+            Self::Or { children, .. } | Self::And { children, .. } => children,
+            Self::Leaf { .. } => &[],
         }
     }
 
@@ -179,10 +182,15 @@ impl<G, S> AndOrNode<G, S> {
                 children.push(child);
             }
             Self::And {
-                children, solved, ..
+                children,
+                solved,
+                solved_count,
+                ..
             } => {
                 children.push(child);
                 solved.push(false);
+                // solved_count unchanged — new child is unsolved.
+                let _ = solved_count;
             }
             Self::Leaf { .. } => {}
         }
@@ -195,10 +203,14 @@ impl<G, S> AndOrNode<G, S> {
             Self::And {
                 children: _,
                 solved,
+                solved_count,
                 ..
             } => {
                 if idx < solved.len() {
-                    solved[idx] = true;
+                    if !solved[idx] {
+                        solved[idx] = true;
+                        *solved_count += 1;
+                    }
                     true
                 } else {
                     false
@@ -286,6 +298,7 @@ impl<G, S> AndOrNode<G, S> {
     ///
     /// If you also need `unsolved_count`, prefer [`leaf_stats`](Self::leaf_stats)
     /// which fuses both in a single traversal.
+    #[inline]
     pub fn solved_count(&self) -> usize {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => {
@@ -299,6 +312,7 @@ impl<G, S> AndOrNode<G, S> {
     ///
     /// If you also need `solved_count`, prefer [`leaf_stats`](Self::leaf_stats)
     /// which fuses both in a single traversal.
+    #[inline]
     pub fn unsolved_count(&self) -> usize {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => {
@@ -352,16 +366,16 @@ impl<G: fmt::Debug, S: fmt::Debug> fmt::Display for AndOrNode<G, S> {
             Self::And {
                 goal,
                 children,
+                solved_count,
                 solved,
                 ..
             } => {
-                let solved_n = solved.iter().filter(|&&b| b).count();
                 write!(
                     f,
                     "AND(goal={:?}, children={}, solved={}/{})",
                     goal,
                     children.len(),
-                    solved_n,
+                    solved_count,
                     solved.len()
                 )
             }
