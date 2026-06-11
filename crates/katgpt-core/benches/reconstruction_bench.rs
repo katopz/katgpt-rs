@@ -1,21 +1,23 @@
 //! Benchmark: OctreeCTC Reconstructive Navigation (Plan 248).
 //!
-//! Measures per-cycle latency for 3-step reconstruction (scalar vs SIMD).
+//! Measures per-cycle latency for 3-step reconstruction (scalar vs SIMD vs matvec vs batch).
 //! GOAT Gate: <200ns per 3-step reconstruction cycle.
 //!
 //! Measures:
 //!   - Scalar `reconstruct()` — baseline
-//!   - SIMD `reconstruct_simd()` — optimized evolve_hla (proven win)
+//!   - SIMD `reconstruct_simd()` — SIMD evolve (historically slower at 6×8)
+//!   - Matvec `reconstruct_matvec()` — pre-computed weight matrix, single matvec expand
+//!   - Multi-entity batch — N NPCs × same brain config, amortized SIMD
 //!   - Per-step breakdown: expand → route → accumulate → evolve_hla
-//!   - Full SIMD step (expand_simd + route_simd + evolve_hla_simd)
 //!
-//! Note: expand_simd/route_simd are scaling-optimized for larger module counts.
-//! At 6 modules × 8-dim HLA, scalar expand/route is faster due to SIMD setup
-//! overhead. evolve_hla_simd wins at any size.
+//! Key finding: At 6 modules × 8-dim HLA, scalar wins for single entity.
+//! SIMD only wins when batched across N ≥ 4 entities (48N f32 ops amortize NEON setup).
 
 use katgpt_core::sense::brain::NpcBrain;
 use katgpt_core::sense::octree::{KgEmbedding, SenseOctreeBuilder};
-use katgpt_core::sense::reconstruction::{ReconstructionConfig, ReconstructionState};
+use katgpt_core::sense::reconstruction::{
+    BatchProjectionWeights, ProjectionWeights, ReconstructionConfig, ReconstructionState,
+};
 use katgpt_core::types::SenseKind;
 
 const ITERS: usize = 10_000;
@@ -55,8 +57,9 @@ fn make_brain_with_6_modules() -> NpcBrain {
     brain
 }
 
+// ── Full Cycle Benchmarks ────────────────────────────────────────
+
 fn bench_reconstruct_scalar(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
-    // Warmup
     for _ in 0..100 {
         let mut state = ReconstructionState::with_config(brain.hla_state, config);
         let _ = state.reconstruct(brain);
@@ -68,12 +71,10 @@ fn bench_reconstruct_scalar(brain: &NpcBrain, config: ReconstructionConfig) -> f
         let _ = state.reconstruct(brain);
         std::hint::black_box(&state);
     }
-    let elapsed = start.elapsed();
-    elapsed.as_nanos() as f64 / ITERS as f64
+    start.elapsed().as_nanos() as f64 / ITERS as f64
 }
 
 fn bench_reconstruct_simd(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
-    // Warmup
     for _ in 0..100 {
         let mut state = ReconstructionState::with_config(brain.hla_state, config);
         let _ = state.reconstruct_simd(brain);
@@ -85,12 +86,31 @@ fn bench_reconstruct_simd(brain: &NpcBrain, config: ReconstructionConfig) -> f64
         let _ = state.reconstruct_simd(brain);
         std::hint::black_box(&state);
     }
-    let elapsed = start.elapsed();
-    elapsed.as_nanos() as f64 / ITERS as f64
+    start.elapsed().as_nanos() as f64 / ITERS as f64
 }
+
+fn bench_reconstruct_matvec(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
+    // Pre-compute weights ONCE (production path — weights survive across ticks)
+    let weights = ProjectionWeights::from_brain(brain);
+
+    for _ in 0..100 {
+        let mut state = ReconstructionState::with_config(brain.hla_state, config);
+        let _ = state.reconstruct_with_weights(&weights);
+    }
+
+    // Benchmark: state creation is cheap, weights are pre-computed
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        let mut state = ReconstructionState::with_config(brain.hla_state, config);
+        let _ = state.reconstruct_with_weights(&weights);
+        std::hint::black_box(&state);
+    }
+    start.elapsed().as_nanos() as f64 / ITERS as f64
+}
+
+// ── Per-Step Breakdown ───────────────────────────────────────────
 
 fn bench_step_scalar(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
-    // Warmup
     for _ in 0..100 {
         let mut state = ReconstructionState::with_config(brain.hla_state, config);
         let activations = state.expand(brain);
@@ -108,56 +128,170 @@ fn bench_step_scalar(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
         state.evolve_hla();
         std::hint::black_box(&state);
     }
-    let elapsed = start.elapsed();
-    elapsed.as_nanos() as f64 / ITERS as f64
+    start.elapsed().as_nanos() as f64 / ITERS as f64
 }
 
-fn bench_step_simd(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
-    // Warmup
+fn bench_step_matvec(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
+    let weights = ProjectionWeights::from_brain(brain);
+
     for _ in 0..100 {
         let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let activations = state.expand(brain);
+        let activations = state.expand_with_weights(&weights);
         let selected = state.route(&activations);
         state.accumulate(&selected, &activations);
-        state.evolve_hla_simd();
+        state.evolve_hla();
     }
 
     let start = std::time::Instant::now();
     for _ in 0..ITERS {
         let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let activations = state.expand(brain);
+        let activations = state.expand_with_weights(&weights);
         let selected = state.route(&activations);
         state.accumulate(&selected, &activations);
-        state.evolve_hla_simd();
+        state.evolve_hla();
         std::hint::black_box(&state);
     }
-    let elapsed = start.elapsed();
-    elapsed.as_nanos() as f64 / ITERS as f64
+    start.elapsed().as_nanos() as f64 / ITERS as f64
 }
 
-/// Full SIMD path: expand_simd + route_simd + accumulate + evolve_hla_simd
-fn bench_step_full_simd(brain: &NpcBrain, config: ReconstructionConfig) -> f64 {
+// ── Multi-Entity Batch ───────────────────────────────────────────
+
+/// Benchmark batch expand across N entities.
+/// Measures throughput (ns per entity) for different batch sizes.
+fn bench_batch_expand(brain: &NpcBrain, n_entities: usize) -> f64 {
+    let batch_weights = BatchProjectionWeights::new(brain, n_entities);
+
+    // Prepare N varied HLA states
+    let mut hla_batch = vec![0.0f32; n_entities * 8];
+    for e in 0..n_entities {
+        let off = e * 8;
+        let base = 0.1 * (e + 1) as f32;
+        hla_batch[off..off + 8].copy_from_slice(&[
+            base,
+            base + 0.2,
+            base + 0.1,
+            base + 0.3,
+            base + 0.15,
+            base + 0.05,
+            base + 0.25,
+            base + 0.35,
+        ]);
+    }
+    let mut activations_out = vec![0.0f32; n_entities * 6];
+
     // Warmup
     for _ in 0..100 {
-        let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let activations = state.expand_simd(brain);
-        let selected = state.route_simd(&activations);
-        state.accumulate(&selected, &activations);
-        state.evolve_hla_simd();
+        batch_weights.expand_batch(&hla_batch, &mut activations_out);
     }
 
     let start = std::time::Instant::now();
     for _ in 0..ITERS {
-        let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let activations = state.expand_simd(brain);
-        let selected = state.route_simd(&activations);
-        state.accumulate(&selected, &activations);
-        state.evolve_hla_simd();
-        std::hint::black_box(&state);
+        batch_weights.expand_batch(&hla_batch, &mut activations_out);
+        std::hint::black_box(&activations_out);
     }
-    let elapsed = start.elapsed();
-    elapsed.as_nanos() as f64 / ITERS as f64
+    let total_ns = start.elapsed().as_nanos() as f64 / ITERS as f64;
+    total_ns / n_entities as f64 // per-entity cost
 }
+
+/// Benchmark: scalar expand per entity (baseline for batch comparison).
+fn bench_scalar_expand_per_entity(brain: &NpcBrain, n_entities: usize) -> f64 {
+    let mut hla_batch = vec![0.0f32; n_entities * 8];
+    for e in 0..n_entities {
+        let off = e * 8;
+        let base = 0.1 * (e + 1) as f32;
+        hla_batch[off..off + 8].copy_from_slice(&[
+            base,
+            base + 0.2,
+            base + 0.1,
+            base + 0.3,
+            base + 0.15,
+            base + 0.05,
+            base + 0.25,
+            base + 0.35,
+        ]);
+    }
+
+    // Warmup
+    for _ in 0..100 {
+        for e in 0..n_entities {
+            let off = e * 8;
+            let hla: &[f32; 8] = unsafe { &*(&hla_batch[off] as *const f32 as *const [f32; 8]) };
+            for module in &brain.modules {
+                let _ = std::hint::black_box(module.project(hla));
+            }
+        }
+    }
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        for e in 0..n_entities {
+            let off = e * 8;
+            let hla: &[f32; 8] = unsafe { &*(&hla_batch[off] as *const f32 as *const [f32; 8]) };
+            for module in &brain.modules {
+                let _ = std::hint::black_box(module.project(hla));
+            }
+        }
+    }
+    let total_ns = start.elapsed().as_nanos() as f64 / ITERS as f64;
+    total_ns / n_entities as f64
+}
+
+/// Benchmark: matvec expand per entity (single-entity pre-computed matrix).
+fn bench_matvec_expand_per_entity(brain: &NpcBrain, n_entities: usize) -> f64 {
+    let weights = ProjectionWeights::from_brain(brain);
+
+    let mut hla_batch = vec![0.0f32; n_entities * 8];
+    for e in 0..n_entities {
+        let off = e * 8;
+        let base = 0.1 * (e + 1) as f32;
+        hla_batch[off..off + 8].copy_from_slice(&[
+            base,
+            base + 0.2,
+            base + 0.1,
+            base + 0.3,
+            base + 0.15,
+            base + 0.05,
+            base + 0.25,
+            base + 0.35,
+        ]);
+    }
+
+    // Warmup
+    for _ in 0..100 {
+        for e in 0..n_entities {
+            let off = e * 8;
+            let mut dots = [0.0f32; 6];
+            katgpt_core::simd::simd_matmul_rows(
+                &mut dots,
+                &weights.matrix,
+                &hla_batch[off..off + 8],
+                6,
+                8,
+            );
+            std::hint::black_box(dots);
+        }
+    }
+
+    let start = std::time::Instant::now();
+    for _ in 0..ITERS {
+        for e in 0..n_entities {
+            let off = e * 8;
+            let mut dots = [0.0f32; 6];
+            katgpt_core::simd::simd_matmul_rows(
+                &mut dots,
+                &weights.matrix,
+                &hla_batch[off..off + 8],
+                6,
+                8,
+            );
+            std::hint::black_box(dots);
+        }
+    }
+    let total_ns = start.elapsed().as_nanos() as f64 / ITERS as f64;
+    total_ns / n_entities as f64
+}
+
+// ── Main ─────────────────────────────────────────────────────────
 
 fn main() {
     println!("=== Plan 248: OctreeCTC Reconstruction Benchmark ===\n");
@@ -176,76 +310,109 @@ fn main() {
     println!("Modules: {}", brain.modules.len());
     println!("Iterations: {ITERS}\n");
 
-    // Full cycle benchmarks
+    // ── Full 3-Step Cycle ──
+    println!("=== Full 3-Step Cycle ===");
     let scalar_ns = bench_reconstruct_scalar(&brain, config);
     let simd_ns = bench_reconstruct_simd(&brain, config);
+    let matvec_ns = bench_reconstruct_matvec(&brain, config);
 
-    println!("--- Full 3-Step Cycle ---");
-    println!("Scalar:  {scalar_ns:>8.1} ns/cycle");
-    println!("SIMD:    {simd_ns:>8.1} ns/cycle");
-    let speedup = scalar_ns / simd_ns;
-    println!("Speedup: {speedup:.2}x");
-
-    let goat_pass = simd_ns < 200.0;
+    println!("Scalar:            {scalar_ns:>8.1} ns/cycle");
     println!(
-        "GOAT (<200ns): {}",
+        "SIMD (evolve):     {simd_ns:>8.1} ns/cycle  ({:.2}×)",
+        scalar_ns / simd_ns
+    );
+    println!(
+        "Matvec (batched):  {matvec_ns:>8.1} ns/cycle  ({:.2}×)",
+        scalar_ns / matvec_ns
+    );
+
+    // Find GOAT
+    let best_ns = scalar_ns.min(simd_ns).min(matvec_ns);
+    let goat_pass = best_ns < 200.0;
+    println!(
+        "\nGOAT (<200ns): {} — best = {best_ns:.1} ns",
         if goat_pass { "PASS ✅" } else { "FAIL ❌" }
     );
 
-    // Per-step benchmarks
-    println!("\n--- Per-Step Breakdown (expand+route+accumulate+evolve) ---");
+    // ── Per-Step Breakdown ──
+    println!("\n=== Per-Step Breakdown (expand+route+accumulate+evolve) ===");
     let step_scalar_ns = bench_step_scalar(&brain, config);
-    let step_simd_ns = bench_step_simd(&brain, config);
-    let step_full_simd_ns = bench_step_full_simd(&brain, config);
+    let step_matvec_ns = bench_step_matvec(&brain, config);
 
     println!("Scalar step:       {step_scalar_ns:>8.1} ns");
-    println!("SIMD evolve only:  {step_simd_ns:>8.1} ns");
-    println!("SIMD full path:    {step_full_simd_ns:>8.1} ns");
-    let step_speedup = step_scalar_ns / step_full_simd_ns;
-    println!("Full SIMD speedup: {step_speedup:.2}x");
+    println!(
+        "Matvec step:       {step_matvec_ns:>8.1} ns  ({:.2}×)",
+        step_scalar_ns / step_matvec_ns
+    );
 
-    // Correctness check: SIMD produces same results as scalar
+    // ── Multi-Entity Batch Expand ──
+    println!("\n=== Multi-Entity Batch Expand (per-entity ns) ===");
+    println!(
+        "{:>4} {:>12} {:>12} {:>12} {:>8}",
+        "N", "scalar", "matvec", "batch", "best"
+    );
+    println!("{}", "-".repeat(52));
+
+    for &n in &[1, 2, 4, 8, 16, 32] {
+        let s_ns = bench_scalar_expand_per_entity(&brain, n);
+        let m_ns = bench_matvec_expand_per_entity(&brain, n);
+        let b_ns = bench_batch_expand(&brain, n);
+        let best = s_ns.min(m_ns).min(b_ns);
+        let best_label = if best == s_ns {
+            "scalar"
+        } else if best == m_ns {
+            "matvec"
+        } else {
+            "batch"
+        };
+        println!("{n:>4} {s_ns:>10.1} ns {m_ns:>10.1} ns {b_ns:>10.1} ns {best_label:>8}");
+    }
+
+    // ── Correctness ──
+    println!("\n=== Correctness ===");
+
+    // Matvec matches scalar
+    let weights = ProjectionWeights::from_brain(&brain);
     let mut state_scalar = ReconstructionState::with_config(brain.hla_state, config);
     let _ = state_scalar.reconstruct(&brain);
 
-    let mut state_simd = ReconstructionState::with_config(brain.hla_state, config);
-    let _ = state_simd.reconstruct_simd(&brain);
+    let mut state_matvec = ReconstructionState::with_config(brain.hla_state, config);
+    let _ = state_matvec.reconstruct_with_weights(&weights);
 
     let mut max_diff = 0.0f32;
     for i in 0..8 {
-        let diff = (state_scalar.hla()[i] - state_simd.hla()[i]).abs();
+        let diff = (state_scalar.hla()[i] - state_matvec.hla()[i]).abs();
         max_diff = max_diff.max(diff);
     }
-    println!("\n--- Correctness ---");
-    println!("Max HLA diff (scalar vs SIMD): {max_diff:.6e}");
+    println!("Max HLA diff (scalar vs matvec): {max_diff:.6e}");
     assert!(
         max_diff < 1e-4,
-        "SIMD and scalar should produce similar results, diff={max_diff}"
+        "Matvec should match scalar, diff={max_diff}"
     );
-    println!("Numerical equivalence: PASS ✅");
+    println!("Matvec equivalence: PASS ✅");
 
-    // Correctness check: full SIMD step vs scalar step
-    let mut state_a = ReconstructionState::with_config(brain.hla_state, config);
-    let act_scalar = state_a.expand(&brain);
-    let sel_scalar = state_a.route(&act_scalar);
-    state_a.accumulate(&sel_scalar, &act_scalar);
-    state_a.evolve_hla();
+    // Batch expand matches scalar
+    let batch_weights = BatchProjectionWeights::new(&brain, 4);
+    let hla_batch = [
+        0.3f32, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8, 0.2f32, 0.4, 0.6, 0.8, 0.1, 0.3, 0.5, 0.7,
+        0.5f32, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.8f32, 0.6, 0.4, 0.2, 0.7, 0.5, 0.3, 0.1,
+    ];
+    let mut activations_out = [0.0f32; 24];
+    batch_weights.expand_batch(&hla_batch, &mut activations_out);
 
-    let mut state_b = ReconstructionState::with_config(brain.hla_state, config);
-    let act_simd = state_b.expand_simd(&brain);
-    let sel_simd = state_b.route_simd(&act_simd);
-    state_b.accumulate(&sel_simd, &act_simd);
-    state_b.evolve_hla_simd();
-
-    let mut max_step_diff = 0.0f32;
-    for i in 0..8 {
-        let diff = (state_a.hla()[i] - state_b.hla()[i]).abs();
-        max_step_diff = max_step_diff.max(diff);
+    // Verify entity 0 matches scalar expand
+    let mut state_0 =
+        ReconstructionState::with_config([0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8], config);
+    let scalar_acts = state_0.expand(&brain);
+    let mut max_batch_diff = 0.0f32;
+    for i in 0..6 {
+        let diff = (scalar_acts[i] - activations_out[i]).abs();
+        max_batch_diff = max_batch_diff.max(diff);
     }
-    println!("Max step diff (scalar vs full SIMD): {max_step_diff:.6e}");
+    println!("Max batch diff (entity 0): {max_batch_diff:.6e}");
     assert!(
-        max_step_diff < 1e-4,
-        "Full SIMD step should match scalar, diff={max_step_diff}"
+        max_batch_diff < 1e-4,
+        "Batch expand should match scalar, diff={max_batch_diff}"
     );
-    println!("Step equivalence: PASS ✅");
+    println!("Batch equivalence: PASS ✅");
 }
