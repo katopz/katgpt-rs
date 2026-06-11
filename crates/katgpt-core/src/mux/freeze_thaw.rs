@@ -31,6 +31,8 @@ impl MuxTarget {
 #[derive(Debug, Clone, Default)]
 pub struct MuxPatternStore {
     patterns: HashMap<u64, Vec<MuxTarget>>,
+    /// Cached total pattern count — incremented on freeze, avoids O(n) scan on read.
+    total_patterns: usize,
 }
 
 impl MuxPatternStore {
@@ -41,6 +43,7 @@ impl MuxPatternStore {
     /// Freeze a pattern: store it under the given key.
     pub fn freeze(&mut self, key: u64, target: MuxTarget) {
         self.patterns.entry(key).or_default().push(target);
+        self.total_patterns += 1;
     }
 
     /// Thaw patterns: retrieve all patterns for a given key.
@@ -54,8 +57,9 @@ impl MuxPatternStore {
     }
 
     /// Total number of patterns across all keys.
+    /// O(1) — maintained incrementally on freeze.
     pub fn pattern_count(&self) -> usize {
-        self.patterns.values().map(|v| v.len()).sum()
+        self.total_patterns
     }
 }
 

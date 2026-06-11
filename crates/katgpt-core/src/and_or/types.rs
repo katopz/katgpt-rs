@@ -283,34 +283,28 @@ impl<G, S> AndOrNode<G, S> {
     }
 
     /// Count of solved leaves in this subtree.
+    ///
+    /// If you also need `unsolved_count`, prefer [`leaf_stats`](Self::leaf_stats)
+    /// which fuses both in a single traversal.
     pub fn solved_count(&self) -> usize {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => {
                 children.iter().map(|c| c.solved_count()).sum()
             }
-            Self::Leaf { solution, .. } => {
-                if solution.is_some() {
-                    1
-                } else {
-                    0
-                }
-            }
+            Self::Leaf { solution, .. } => solution.is_some() as usize,
         }
     }
 
     /// Count of unsolved leaves in this subtree.
+    ///
+    /// If you also need `solved_count`, prefer [`leaf_stats`](Self::leaf_stats)
+    /// which fuses both in a single traversal.
     pub fn unsolved_count(&self) -> usize {
         match self {
             Self::Or { children, .. } | Self::And { children, .. } => {
                 children.iter().map(|c| c.unsolved_count()).sum()
             }
-            Self::Leaf { solution, .. } => {
-                if solution.is_none() {
-                    1
-                } else {
-                    0
-                }
-            }
+            Self::Leaf { solution, .. } => solution.is_none() as usize,
         }
     }
 

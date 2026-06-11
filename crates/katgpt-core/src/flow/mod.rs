@@ -130,8 +130,24 @@ impl LeoPotentialGrid {
         );
         let words = (cells + 63) / 64;
 
+        // Process chunks of 4 cells at a time to help LLVM auto-vectorize the max reduction.
         let mut potential = Vec::with_capacity(cells);
-        for cell_idx in 0..cells {
+        let chunks = cells / 4;
+        for chunk in 0..chunks {
+            let base = chunk * 4;
+            for i in 0..4 {
+                let cell_idx = base + i;
+                let start = cell_idx * actions_per_cell;
+                let end = start + actions_per_cell;
+                let max_q = q_values[start..end]
+                    .iter()
+                    .copied()
+                    .fold(f32::NEG_INFINITY, f32::max);
+                potential.push(max_q);
+            }
+        }
+        // Remaining cells (0..3)
+        for cell_idx in (chunks * 4)..cells {
             let start = cell_idx * actions_per_cell;
             let end = start + actions_per_cell;
             let max_q = q_values[start..end]

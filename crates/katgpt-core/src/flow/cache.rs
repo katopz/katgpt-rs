@@ -5,7 +5,9 @@
 
 use std::collections::HashMap;
 
-use super::{FlowField, FlowFieldConfig, LeoPotentialGrid, fft_smooth, inflate_obstacles};
+use rustfft::num_complex::Complex;
+
+use super::{FlowField, FlowFieldConfig, LeoPotentialGrid, fft_smooth_into, inflate_obstacles};
 use crate::traits::LeoHead;
 
 /// Per-goal cached flow field with dirty-tracking metadata.
@@ -28,6 +30,13 @@ pub struct FlowFieldCache {
     config: FlowFieldConfig,
     /// Minimum NPCs sharing a goal to warrant a flow field.
     min_npcs: u16,
+    /// Pre-allocated FFT scratch buffers — reused across calls to avoid per-compute allocation.
+    fft_buf: Vec<Complex<f32>>,
+    fft_col_buf: Vec<Complex<f32>>,
+    /// Pre-allocated potential buffer — reused across calls.
+    potential_buf: Vec<f32>,
+    /// Pre-allocated blocked bitfield buffer.
+    blocked_buf: Vec<u64>,
 }
 
 impl FlowFieldCache {
@@ -37,6 +46,10 @@ impl FlowFieldCache {
             fields: HashMap::new(),
             config,
             min_npcs: 1,
+            fft_buf: Vec::new(),
+            fft_col_buf: Vec::new(),
+            potential_buf: Vec::new(),
+            blocked_buf: Vec::new(),
         }
     }
 
@@ -136,9 +149,12 @@ impl FlowFieldCache {
         let mut grid = LeoPotentialGrid::from_q_values(grid_w, grid_h, goal_q, actions_per_cell);
 
         // Inflate obstacles before FFT to prevent flow into walls.
-        // inflate_obstacles expects row-major layout: words_per_row × grid_h words.
         let words_per_row = ((grid_w as usize) + 63) / 64;
-        let mut blocked_bits = vec![0u64; words_per_row * (grid_h as usize)];
+        let blocked_words = words_per_row * (grid_h as usize);
+
+        // Resize scratch buffers if grid dimensions changed.
+        self.blocked_buf.resize(blocked_words, 0u64);
+        self.blocked_buf[..blocked_words].fill(0);
 
         // Copy blocked state into bitfield for inflation.
         for y in 0..grid_h {
@@ -146,13 +162,13 @@ impl FlowFieldCache {
                 if grid.is_blocked(x, y) {
                     let word = (y as usize) * words_per_row + (x as usize) / 64;
                     let bit = (x as usize) % 64;
-                    blocked_bits[word] |= 1u64 << bit;
+                    self.blocked_buf[word] |= 1u64 << bit;
                 }
             }
         }
 
         inflate_obstacles(
-            &mut blocked_bits,
+            &mut self.blocked_buf,
             grid_w,
             grid_h,
             self.config.obstacle_radius,
@@ -163,35 +179,34 @@ impl FlowFieldCache {
             for x in 0..grid_w {
                 let word = (y as usize) * words_per_row + (x as usize) / 64;
                 let bit = (x as usize) % 64;
-                if blocked_bits[word] & (1u64 << bit) != 0 {
+                if self.blocked_buf[word] & (1u64 << bit) != 0 {
                     grid.mark_blocked(x, y);
                 }
             }
         }
 
-        // FFT smooth the potential field to remove local minima.
-        let mut potential = {
-            let mut pot = Vec::with_capacity(total_cells);
-            for y in 0..grid_h {
-                for x in 0..grid_w {
-                    pot.push(grid.potential(x, y));
-                }
+        // FFT smooth the potential field to remove local minima — reuse scratch buffers.
+        self.potential_buf.resize(total_cells, 0.0);
+        for y in 0..grid_h {
+            for x in 0..grid_w {
+                self.potential_buf[(y as usize) * (grid_w as usize) + (x as usize)] = grid.potential(x, y);
             }
-            pot
-        };
+        }
 
-        fft_smooth(
-            &mut potential,
+        fft_smooth_into(
+            &mut self.potential_buf,
             grid_w as usize,
             grid_h as usize,
             self.config.cutoff,
+            &mut self.fft_buf,
+            &mut self.fft_col_buf,
         );
 
         // Write smoothed values back.
         for y in 0..grid_h {
             for x in 0..grid_w {
                 let idx = (y as usize) * (grid_w as usize) + (x as usize);
-                grid.set_potential(x, y, potential[idx]);
+                grid.set_potential(x, y, self.potential_buf[idx]);
             }
         }
 

@@ -48,12 +48,12 @@ impl MuxDemuxVerifier {
         pairs[..len]
             .sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Extract sorted tokens + inline duplicate check (no HashSet).
+        // Extract sorted tokens + inline duplicate check.
+        // O(k²) scan is fine for k ≤ 32 — trivially fits in L1 cache.
         let mut sorted_tokens = Vec::with_capacity(len);
         let mut is_unique = true;
         for i in 0..len {
             let token = pairs[i].0;
-            // Check for duplicate against all previous — O(k^2) but k ≤ 32.
             if is_unique {
                 for j in 0..i {
                     if pairs[j].0 == token {

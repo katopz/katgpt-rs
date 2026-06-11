@@ -221,6 +221,8 @@ pub fn fft_smooth_into(
 /// Expands obstacle regions so the FFT-smoothed gradient never points
 /// into a wall. Operates on a bitfield stored as `u64` words
 /// (64 cells per word, row-major).
+///
+/// Uses double-buffer to avoid order-dependent dilation without allocation.
 pub fn inflate_obstacles(blocked: &mut [u64], w: u16, h: u16, radius: u8) {
     let wu = w as usize;
     let hu = h as usize;
@@ -229,41 +231,31 @@ pub fn inflate_obstacles(blocked: &mut [u64], w: u16, h: u16, radius: u8) {
     assert!(blocked.len() >= total_words, "blocked bitfield too small");
 
     let r = radius as i32;
+    if r == 0 {
+        return;
+    }
 
-    // Collect newly blocked positions first to avoid order-dependent dilation.
-    let mut new_blocked: Vec<(usize, usize)> = Vec::new();
+    // Snapshot original state to avoid order-dependent dilation.
+    let src = blocked.to_vec();
 
     for y in 0..hu {
         for x in 0..wu {
             let word_idx = y * words_per_row + x / 64;
             let bit = x % 64;
-            if blocked[word_idx] & (1u64 << bit) != 0 {
+            if src[word_idx] & (1u64 << bit) != 0 {
                 // Already blocked — expand neighbors
-                for dy in -r..=r {
-                    for dx in -r..=r {
-                        if dx == 0 && dy == 0 {
-                            continue;
-                        }
-                        let nx = x as i32 + dx;
-                        let ny = y as i32 + dy;
-                        if nx < 0 || ny < 0 || nx >= wu as i32 || ny >= hu as i32 {
-                            continue;
-                        }
-                        let nxu = nx as usize;
-                        let nyu = ny as usize;
-                        let nw_idx = nyu * words_per_row + nxu / 64;
-                        let nbit = nxu % 64;
-                        if blocked[nw_idx] & (1u64 << nbit) == 0 {
-                            new_blocked.push((nw_idx, nbit));
-                        }
+                let y_min = (y as i32 - r).max(0) as usize;
+                let y_max = (y as i32 + r).min(hu as i32 - 1) as usize;
+                let x_min = (x as i32 - r).max(0) as usize;
+                let x_max = (x as i32 + r).min(wu as i32 - 1) as usize;
+                for ny in y_min..=y_max {
+                    for nx in x_min..=x_max {
+                        let nw_idx = ny * words_per_row + nx / 64;
+                        blocked[nw_idx] |= 1u64 << (nx % 64);
                     }
                 }
             }
         }
-    }
-
-    for (word_idx, bit) in new_blocked {
-        blocked[word_idx] |= 1u64 << bit;
     }
 }
 

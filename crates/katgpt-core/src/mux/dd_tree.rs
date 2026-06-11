@@ -13,6 +13,40 @@ use crate::mux::top_k::{MAX_TOP_K, extract_top_k_into};
 /// Default superposition width (number of tokens per node).
 pub const DEFAULT_K: usize = 4;
 
+/// Flat storage for leaf paths — avoids one `Vec<usize>` per leaf.
+///
+/// `buf` stores all path indices contiguously; `offsets[i]..offsets[i+1]`
+/// is the i-th leaf's path.
+#[derive(Debug, Clone)]
+pub struct LeafPaths {
+    /// Flat buffer of path indices.
+    pub buf: Vec<usize>,
+    /// `offsets.len() == leaf_count + 1`. Path i is `buf[offsets[i]..offsets[i+1]]`.
+    pub offsets: Vec<usize>,
+}
+
+impl LeafPaths {
+    /// Number of leaf paths stored.
+    pub fn len(&self) -> usize {
+        self.offsets.len().saturating_sub(1)
+    }
+
+    /// Returns true if there are no leaf paths.
+    pub fn is_empty(&self) -> bool {
+        self.offsets.len() <= 1
+    }
+
+    /// Access the i-th leaf path.
+    pub fn path(&self, i: usize) -> &[usize] {
+        &self.buf[self.offsets[i]..self.offsets[i + 1]]
+    }
+
+    /// Iterate over all leaf paths.
+    pub fn iter(&self) -> impl Iterator<Item = &[usize]> {
+        (0..self.len()).map(move |i| self.path(i))
+    }
+}
+
 /// A node in the DD-tree that carries K tokens as a weighted span.
 #[derive(Debug, Clone)]
 pub struct MuxNode {
@@ -228,6 +262,44 @@ impl MuxDdTree {
                 peaks.len().min(self.k)
             }
         }
+    }
+
+    /// Collect paths to all leaf nodes (BFS order).
+    ///
+    /// Returns paths as a flat buffer + offsets to avoid per-path `Vec` allocation.
+    /// `offsets[i]..offsets[i+1]` in `path_buf` is one leaf path.
+    ///
+    /// Each queue entry stores the full path inline (copied into a stack buffer).
+    /// For trees with depth ≤ ~20 and branching factor ≤ K, the total allocation
+    /// is ~leaf_count × depth elements — one contiguous Vec instead of one Vec per leaf.
+    pub fn collect_leaf_paths_flat(&self) -> LeafPaths {
+        let mut paths = LeafPaths {
+            buf: Vec::new(),
+            offsets: Vec::new(),
+        };
+        // Stack-based BFS: each entry is (depth, path_indices_start_in_buf, node)
+        // We store pending paths contiguously in buf.
+        let mut stack: Vec<(*const MuxNode, usize, usize)> = vec![(&self.root as *const _, 0, 0)];
+        paths.offsets.push(0);
+
+        while let Some((node_ptr, path_start, path_len)) = stack.pop() {
+            // SAFETY: node_ptr comes from valid tree references that outlive this fn.
+            let node = unsafe { &*node_ptr };
+            if node.is_leaf() {
+                paths.buf.extend_from_within(path_start..path_start + path_len);
+                paths.offsets.push(paths.buf.len());
+            } else {
+                for (i, child) in node.children.iter().enumerate().rev() {
+                    let child_path_start = paths.buf.len();
+                    // Append parent path + this child index
+                    paths.buf.extend_from_within(path_start..path_start + path_len);
+                    paths.buf.push(i);
+                    stack.push((child as *const _, child_path_start, path_len + 1));
+                }
+            }
+        }
+
+        paths
     }
 
     /// Collect paths to all leaf nodes (BFS order).
