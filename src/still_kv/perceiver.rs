@@ -188,9 +188,90 @@ impl StillPerceiver {
         output
     }
 
-    // -----------------------------------------------------------------------
-    // T12: Self-attention refinement (RMSNorm + residual)
-    // -----------------------------------------------------------------------
+    /// Cross-attend latent queries into the KV cache, returning both output and attention weights.
+    ///
+    /// Same as `cross_attention` but also returns the attention weight matrix.
+    /// The weights are needed for β-D (VortexFlow) bias computation.
+    ///
+    /// # Returns
+    /// `(output, attention_weights)` where:
+    /// - `output` shape `[compact_length * latent_dim]` (same as `cross_attention`)
+    /// - `attention_weights` shape `[compact_length * seq_len]` (row-major)
+    pub fn cross_attention_with_weights(
+        &self,
+        latent_queries: &[f32],
+        kv_cache: &[f32],
+    ) -> (Vec<f32>, Vec<f32>) {
+        let cfg = &self.config;
+        let d = cfg.latent_dim;
+        let t = latent_queries.len() / d;
+        let big_t = kv_cache.len() / d;
+        let num_heads = cfg.cross_attn_heads;
+        let head_dim = cfg.cross_head_dim();
+        let scale = 1.0 / (head_dim as f32).sqrt();
+
+        assert_eq!(
+            cfg.kv_dim, d,
+            "kv_dim must equal latent_dim for direct cross-attention"
+        );
+        assert_eq!(latent_queries.len(), t * d, "latent_queries shape mismatch");
+        assert_eq!(kv_cache.len(), big_t * d, "kv_cache shape mismatch");
+
+        let mut output = vec![0.0f32; t * d];
+        // Aggregate attention weights across heads (average)
+        let mut agg_weights = vec![0.0f32; t * big_t];
+
+        for h in 0..num_heads {
+            let h_off = h * head_dim;
+
+            let mut scores = vec![0.0f32; t * big_t];
+
+            for qi in 0..t {
+                let q_row = qi * d + h_off;
+                let score_row = qi * big_t;
+                for ki in 0..big_t {
+                    let k_row = ki * d + h_off;
+                    let dot = dot_chunk4(
+                        &latent_queries[q_row..q_row + head_dim],
+                        &kv_cache[k_row..k_row + head_dim],
+                    );
+                    scores[score_row + ki] = dot * scale;
+                }
+            }
+
+            softmax_rows(&mut scores, t, big_t);
+
+            // Accumulate head-averaged attention weights
+            let head_weight = 1.0 / num_heads as f32;
+            for i in 0..t * big_t {
+                agg_weights[i] += scores[i] * head_weight;
+            }
+
+            for qi in 0..t {
+                let score_row = qi * big_t;
+                let out_base = qi * d + h_off;
+                for ki in 0..big_t {
+                    let w = scores[score_row + ki];
+                    if w < 1e-8 {
+                        continue;
+                    }
+                    let v_base = ki * d + h_off;
+                    accumulate_chunk4(
+                        &mut output[out_base..out_base + head_dim],
+                        &kv_cache[v_base..v_base + head_dim],
+                        w,
+                    );
+                }
+            }
+        }
+
+        // Residual connection
+        for i in 0..t * d {
+            output[i] += latent_queries[i];
+        }
+
+        (output, agg_weights)
+    }
 
     /// Self-attention among latent tokens to refine representations (multi-head).
     ///
@@ -318,6 +399,30 @@ impl StillPerceiver {
         let keys = self.project_keys(&latents);
         let values = self.project_values(&latents);
         (keys, values)
+    }
+
+    /// Run forward pass and return latents + cross-attention weights.
+    ///
+    /// The cross-attention weights are needed for β-D (VortexFlow) computation.
+    /// Returns `(latents, cross_attn_weights)` where:
+    /// - `latents` shape `[compact_length * latent_dim]`
+    /// - `cross_attn_weights` shape `[compact_length * seq_len]` (from last block)
+    pub fn forward_with_weights(
+        &self,
+        kv_cache: &[f32],
+        query_bank: &[f32],
+    ) -> (Vec<f32>, Vec<f32>) {
+        let mut latents = query_bank.to_vec();
+        let mut last_cross_weights = Vec::new();
+
+        for _ in 0..self.config.num_blocks {
+            let (new_latents, weights) = self.cross_attention_with_weights(&latents, kv_cache);
+            latents = new_latents;
+            last_cross_weights = weights;
+            latents = self.self_attention(&latents);
+        }
+
+        (latents, last_cross_weights)
     }
 }
 

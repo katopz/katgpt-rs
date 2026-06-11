@@ -3,16 +3,21 @@
 //! Processes KV cache in fixed-size chunks with a lookahead buffer,
 //! enabling streaming compaction for very long sequences.
 //!
-//! Pipeline per chunk:
+//! Pipeline per chunk (mirrors STILL architecture):
 //! 1. Un-rotate RoPE via `PositionFreeCompactor`
-//! 2. Generate queries via `QueryBank`
-//! 3. Cross-attend via `StillPerceiver::forward`
-//! 4. Project to compact keys/values via `forward_projected`
-//! 5. Re-rotate compacted keys with new positions
-//! 6. Convert values back to f16
+//! 2. Concat [K_free; V] → 2d-dim input per token per head
+//! 3. Generate queries via `QueryBank` (2d-dim)
+//! 4. Cross-attend via `StillPerceiver::forward` with internal RoPE
+//! 5. Split 2d output → compact keys (first d) + compact values (last d)
+//! 6. Compute heuristic β (beta) additive attention bias
+//! 7. Re-rotate compacted keys with new positions
+//! 8. Convert values to f16
 
 use half::f16;
 
+use super::beta_bias::{
+    BetaBias, BetaStrategy, compute_beta_mass_matching, compute_beta_vortex_flow,
+};
 use super::compact_cache::CompactionStrategy;
 use super::perceiver::{StillPerceiver, StillPerceiverConfig};
 use super::position_free::PositionFreeCompactor;
@@ -29,6 +34,9 @@ pub struct KVChunk {
     pub start_pos: usize,
     /// Number of tokens in this chunk.
     pub len: usize,
+    /// Additive attention bias per latent token — calibrates attention to synthetic entries.
+    /// Shape: `[compact_len]` (one scalar per latent). Empty for non-compacted chunks.
+    pub beta: BetaBias,
 }
 
 impl KVChunk {
@@ -39,6 +47,7 @@ impl KVChunk {
             values: Vec::new(),
             start_pos,
             len: 0,
+            beta: BetaBias::zeros(0, 0),
         }
     }
 
@@ -69,6 +78,8 @@ pub struct IterativeChunkCompactor {
     pub rope_theta: f32,
     /// Compression ratio: original tokens / compact tokens per chunk.
     pub compression_ratio: usize,
+    /// β (beta) strategy for additive attention bias computation.
+    pub beta_strategy: BetaStrategy,
 }
 
 impl IterativeChunkCompactor {
@@ -99,6 +110,7 @@ impl IterativeChunkCompactor {
             strategy,
             rope_theta,
             compression_ratio: compression_ratio.max(1),
+            beta_strategy: BetaStrategy::MassMatching,
         }
     }
 
@@ -147,6 +159,7 @@ impl IterativeChunkCompactor {
                 values: values[elem_start..elem_end].to_vec(),
                 start_pos: pos,
                 len: chunk_len,
+                beta: BetaBias::zeros(0, 0),
             });
 
             offset += chunk_len;
@@ -157,17 +170,20 @@ impl IterativeChunkCompactor {
     }
 
     // -----------------------------------------------------------------------
-    // T15: Per-chunk compaction using perceiver + query bank
+    // T15: Per-chunk compaction using perceiver + query bank + β bias
     // -----------------------------------------------------------------------
 
-    /// Compact a single chunk using the perceiver pipeline.
+    /// Compact a single chunk using the STILL-aligned perceiver pipeline.
     ///
     /// Pipeline:
-    /// 1. Un-rotate RoPE via PositionFreeCompactor
-    /// 2. Generate queries via QueryBank
-    /// 3. Cross-attend via StillPerceiver::forward_projected
-    /// 4. Re-rotate compacted keys with new positions
-    /// 5. Convert values back to f16
+    /// 1. Un-rotate RoPE from keys (position-free space)
+    /// 2. Concat [K_free; V] → 2d-dim input per token
+    /// 3. Generate 2d queries via QueryBank
+    /// 4. Cross-attend via StillPerceiver (2d latent dim)
+    /// 5. Split 2d output → compact keys (first d) + compact values (last d)
+    /// 6. Compute heuristic β bias
+    /// 7. Re-rotate compacted keys with new positions
+    /// 8. Convert values to f16
     ///
     /// # Arguments
     /// * `chunk` - Current chunk to compact
@@ -175,7 +191,7 @@ impl IterativeChunkCompactor {
     /// * `budget` - Target number of compact tokens
     ///
     /// # Returns
-    /// Compacted chunk.
+    /// Compacted chunk with β bias.
     pub fn compact_chunk(
         &self,
         chunk: &KVChunk,
@@ -187,53 +203,71 @@ impl IterativeChunkCompactor {
             return KVChunk::new(chunk.start_pos);
         }
 
-        // T16: If lookahead is present, concatenate chunk keys with lookahead keys
-        // for richer context during compaction.
-        let (combined_keys_f16, combined_start_pos) = match lookahead {
-            Some(la) if !la.is_empty() => {
-                let mut k = Vec::with_capacity(chunk.keys.len() + la.keys.len());
-                k.extend_from_slice(&chunk.keys);
-                k.extend_from_slice(&la.keys);
-                (k, chunk.start_pos)
-            }
-            _ => (chunk.keys.clone(), chunk.start_pos),
-        };
+        // T16: If lookahead is present, concatenate chunk keys/values with lookahead
+        let (combined_keys_f16, combined_values_f16, combined_start_pos, combined_len) =
+            match lookahead {
+                Some(la) if !la.is_empty() => {
+                    let mut k = Vec::with_capacity(chunk.keys.len() + la.keys.len());
+                    let mut v = Vec::with_capacity(chunk.values.len() + la.values.len());
+                    k.extend_from_slice(&chunk.keys);
+                    k.extend_from_slice(&la.keys);
+                    v.extend_from_slice(&chunk.values);
+                    v.extend_from_slice(&la.values);
+                    (k, v, chunk.start_pos, chunk.len + la.len)
+                }
+                _ => (
+                    chunk.keys.clone(),
+                    chunk.values.clone(),
+                    chunk.start_pos,
+                    chunk.len,
+                ),
+            };
 
         // Step 1: Un-rotate RoPE from keys (position-free space)
         let pos_free_compactor = PositionFreeCompactor::new(self.rope_theta, kv_dim);
         let unrotated_keys =
             pos_free_compactor.un_rotate_keys(&combined_keys_f16, combined_start_pos);
 
-        // Step 2: Generate queries via query bank
-        let query_bank = create_query_bank(self.strategy, kv_dim);
-        let queries = query_bank.generate_queries(&unrotated_keys, budget);
+        // Step 2: Convert values to f32 and concat [K_free; V] → 2d-dim input
+        let unrotated_values_f32: Vec<f32> =
+            combined_values_f16.iter().map(|v| v.to_f32()).collect();
+        let input_2d = concat_kv(&unrotated_keys, &unrotated_values_f32, kv_dim);
+        let input_dim_2d = kv_dim * 2; // 2d
+
+        // Step 3: Generate 2d queries via query bank
+        let query_bank = create_query_bank(self.strategy, input_dim_2d);
+        let queries = query_bank.generate_queries(&input_2d, budget);
 
         // If query bank returned nothing, fall back to truncated output
         if queries.is_empty() {
             return self.truncate_chunk(chunk, budget, kv_dim);
         }
 
-        // Step 3+4: Cross-attend and project to compact keys/values
-        let perceiver = self.build_perceiver(budget, kv_dim);
-        let (compact_keys_f32, compact_values_f32) =
-            perceiver.forward_projected(&unrotated_keys, &queries);
+        // Step 4: Cross-attend with 2d latent dim
+        let perceiver = self.build_perceiver(budget, input_dim_2d);
+        let (latents_2d, cross_attn_weights) = perceiver.forward_with_weights(&input_2d, &queries);
 
-        // Step 4: Re-rotate compacted keys with new positions
-        // The compacted tokens start at `new_start_pos` which the caller sets
-        // For now we use the chunk's start_pos; compact_stream() adjusts this.
+        // Step 5: Split 2d output → compact keys (first d) + compact values (last d)
+        let (compact_keys_f32, compact_values_f32) = split_kv_from_2d(&latents_2d, kv_dim);
+
+        // Step 6: Compute heuristic β bias
+        let beta = match self.beta_strategy {
+            BetaStrategy::MassMatching => compute_beta_mass_matching(combined_len, budget),
+            BetaStrategy::VortexFlowRouting => {
+                compute_beta_vortex_flow(&cross_attn_weights, combined_len, budget)
+            }
+        };
+
+        // Step 7: Re-rotate compacted keys with new positions
         let compact_keys_f16 =
             pos_free_compactor.re_rotate_keys(&compact_keys_f32, chunk.start_pos);
 
-        // Step 5: Convert compact values to f16 (values don't need RoPE rotation)
+        // Step 8: Convert compact values to f16 (values don't need RoPE rotation)
         let compact_values_f16: Vec<f16> = compact_values_f32
             .iter()
             .map(|&v| f16::from_f32(v))
             .collect();
 
-        // T16: When lookahead was used, we compacted combined data but only
-        // keep budget tokens from the original chunk portion.
-        // The perceiver already produced exactly `budget` tokens of output,
-        // so the output is already sized correctly.
         let actual_len = compact_keys_f16.len() / kv_dim;
 
         KVChunk {
@@ -241,6 +275,7 @@ impl IterativeChunkCompactor {
             values: compact_values_f16,
             start_pos: chunk.start_pos,
             len: actual_len,
+            beta,
         }
     }
 
@@ -325,13 +360,57 @@ impl IterativeChunkCompactor {
         let actual_budget = budget.min(chunk.len);
         let elem_end = actual_budget * kv_dim;
 
+        let beta = compute_beta_mass_matching(chunk.len, actual_budget);
+
         KVChunk {
             keys: chunk.keys[..elem_end].to_vec(),
             values: chunk.values[..elem_end].to_vec(),
             start_pos: chunk.start_pos,
             len: actual_budget,
+            beta,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// KV concat/split helpers for 2d latent dimension
+// ---------------------------------------------------------------------------
+
+/// Concatenate [K; V] per token → 2d-dim input.
+///
+/// Input: `keys` shape `[seq_len * d]`, `values` shape `[seq_len * d]`
+/// Output: shape `[seq_len * 2d]` where each token row is `[k_0..k_d, v_0..v_d]`
+fn concat_kv(keys: &[f32], values: &[f32], d: usize) -> Vec<f32> {
+    let seq_len = keys.len() / d;
+    let mut out = Vec::with_capacity(seq_len * d * 2);
+
+    for t in 0..seq_len {
+        let k_start = t * d;
+        let v_start = t * d;
+        out.extend_from_slice(&keys[k_start..k_start + d]);
+        out.extend_from_slice(&values[v_start..v_start + d]);
+    }
+
+    out
+}
+
+/// Split 2d latent output into compact keys (first d) and compact values (last d).
+///
+/// Mirrors STILL's `key_head = [I | 0]`, `value_head = [0 | I]` split.
+/// Input: `latents_2d` shape `[compact_len * 2d]`
+/// Output: `(compact_keys shape [compact_len * d], compact_values shape [compact_len * d])`
+fn split_kv_from_2d(latents_2d: &[f32], d: usize) -> (Vec<f32>, Vec<f32>) {
+    let seq_len = latents_2d.len() / (d * 2);
+    let mut keys = Vec::with_capacity(seq_len * d);
+    let mut values = Vec::with_capacity(seq_len * d);
+
+    for t in 0..seq_len {
+        let row_start = t * d * 2;
+        keys.extend_from_slice(&latents_2d[row_start..row_start + d]);
+        values.extend_from_slice(&latents_2d[row_start + d..row_start + d * 2]);
+    }
+
+    (keys, values)
 }
 
 #[cfg(test)]
@@ -365,6 +444,7 @@ mod tests {
             values: vec![f16::from_f32(val + 1.0); total],
             start_pos,
             len,
+            beta: BetaBias::zeros(0, 0),
         }
     }
 

@@ -1,22 +1,29 @@
 //! StillKV: Perceiver-based KV cache compaction — modelless (Plan 245).
 //!
-//! Compacts KV caches via learned cross-attention without model-specific knowledge.
-//! Key insight: position-free compaction — un-rotate RoPE, compact in latent space,
-//! re-rotate on retrieval.
+//! Compacts KV caches via cross-attention synthesis without model-specific training.
+//! Architecture mirrors STILL (Baseten, 2026): per-layer Perceiver compactor with
+//! 2d latent dimension ([K_free; V] concat), β additive attention bias,
+//! internal RoPE on cross-attention queries/keys, no final RMSNorm.
 //!
-//! Strategies:
+//! β strategies:
+//! - **β-A (MassMatching)**: log(T/t) uniform scalar baseline
+//! - **β-D (VortexFlow)**: attention-concentration-weighted per-latent bias
+//!
+//! Query bank strategies:
 //! - **ClusterCentroids**: k-means-style cluster representatives
 //! - **AttentionWeighted**: attention-score-weighted importance sampling
 //! - **SpectralProjection**: PCA/SVD low-rank projection
 //! - **BfcfRegionBlend**: BFCF region-weighted blending
 //! - **MuxSuperposition**: multiplexed superposition encoding
 
+pub mod beta_bias;
 pub mod compact_cache;
 pub mod iterative;
 pub mod perceiver;
 pub mod position_free;
 pub mod query_bank;
 
+pub use beta_bias::{BetaBias, BetaStrategy, compute_beta_mass_matching, compute_beta_vortex_flow};
 pub use compact_cache::{CompactKVCache, CompactionMeta, CompactionStrategy};
 pub use iterative::{IterativeChunkCompactor, KVChunk};
 pub use perceiver::{StillPerceiver, StillPerceiverConfig};

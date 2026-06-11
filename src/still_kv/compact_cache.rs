@@ -1,5 +1,6 @@
 //! Compact KV cache storage and compaction metadata.
 
+use crate::still_kv::beta_bias::BetaBias;
 use half::f16;
 use std::fmt;
 
@@ -45,6 +46,7 @@ pub struct CompactionMeta {
 ///
 /// Keys and values are stored as flat f16 buffers in `[seq_len, head_dim]` layout.
 /// `position_offset` tracks the original position range for RoPE re-application.
+/// `beta` holds the additive attention bias per latent for attention calibration.
 #[derive(Debug, Clone)]
 pub struct CompactKVCache {
     /// Compacted key cache — flat f16, shape `[compact_len * num_heads * head_dim]`.
@@ -59,6 +61,10 @@ pub struct CompactKVCache {
     pub position_offset: usize,
     /// Compaction metadata.
     pub meta: CompactionMeta,
+    /// Additive attention bias per latent — calibrates attention to synthetic entries.
+    /// Shape: `[compact_len]` (one scalar per latent token).
+    /// Without β, the frozen model has no mechanism to upweight/downweight compact slots.
+    pub beta: BetaBias,
 }
 
 impl CompactKVCache {
@@ -75,6 +81,7 @@ impl CompactKVCache {
                 compression_ratio: 1.0,
                 quality_score: 1.0,
             },
+            beta: BetaBias::zeros(0, 0),
         }
     }
 

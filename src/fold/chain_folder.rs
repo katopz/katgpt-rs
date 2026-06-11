@@ -206,6 +206,7 @@ impl ChainFolder {
             values: values.to_vec(),
             start_pos: 0,
             len: kept_tokens,
+            beta: crate::still_kv::BetaBias::zeros(0, 0),
         };
 
         let compacted = compactor.compact_chunk(&chunk, None, budget);

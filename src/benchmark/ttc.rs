@@ -22,7 +22,7 @@ use crate::types::Rng;
 /// Each result is tagged with `feature_dim: "TTC"` and
 /// `category: BenchCategory::TestTimeCompute`.
 pub fn bench_ttc() -> Vec<BenchResult> {
-    let mut results = Vec::new();
+    let mut results: Vec<BenchResult> = Vec::new();
     let warmup = 100;
     let iters = 5_000;
 
