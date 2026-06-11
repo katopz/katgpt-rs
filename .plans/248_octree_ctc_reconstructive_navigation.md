@@ -49,16 +49,34 @@ Implement multi-step active reconstruction over KG-Latent-Octree, replacing sing
 - [x] Add `NpcBrain::project_reconstruct()` that uses `ReconstructionState` internally
 - [x] Wire `SenseBandit` trial logging for reconstruction steps
 
-### Phase 4: SIMD Optimization — DONE (commits aeb41fa6, 8f476361)
+### Phase 4: SIMD Optimization — DONE (commits aeb41fa6, 8f476361, b39a434c)
 - [x] Batch `expand()` across multiple active nodes using SIMD — `expand_simd()` (scalar faster at current 6×8 size, available for scaling)
-- [x] Batch `evolve_hla()` dot-product using existing SIMD infrastructure — `evolve_hla_simd()` (1.86x speedup)
-- [x] Benchmark: ensure <200ns per reconstruction cycle (3 steps) — PASS: 115ns SIMD, 214ns scalar
+- [x] Batch `evolve_hla()` dot-product using existing SIMD infrastructure — `evolve_hla_simd()`
+- [x] Pre-computed `ProjectionWeights`: `[6×8]` weight matrix materialized once from ternary dirs
+- [x] `expand_with_weights()`: single `simd_matmul_rows` call replaces 6× `module.project()`
+- [x] `reconstruct_with_weights()`: production path with pre-computed weights
+- [x] `BatchProjectionWeights` + `expand_batch()`: multi-entity batch API
+- [x] Benchmark: ensure <200ns per reconstruction cycle (3 steps) — PASS
 
-**Benchmark results (NEON, Apple Silicon):**
-- Scalar: 213.6 ns/cycle
-- SIMD: 115.1 ns/cycle (1.86x speedup)
-- Numerical equivalence: max diff 5.96e-8
-- 12/12 reconstruction tests pass (8 original + 4 SIMD equivalence)
+**Benchmark results (NEON, Apple Silicon, latest):**
+
+| Path | Full 3-step cycle | Per-step expand |
+|------|-------------------|-----------------|
+| Scalar `reconstruct()` | **97.5 ns** ✅ | 8.7 ns |
+| SIMD `reconstruct_simd()` | 109.6 ns (0.89×) | 8.7 ns |
+| Matvec `reconstruct_with_weights()` | 116.3 ns (0.84×) | **2.1 ns** (3.6×) |
+
+**Key findings:**
+- Pre-computed matvec expand is 3.6× faster per step (2.1ns vs 8.7ns scalar)
+- Full-cycle scalar still wins due to tighter loop inlining by LLVM
+- Multi-entity matvec expand wins at every batch size (N=1 through N=32)
+- SIMD evolve_hla is net-negative at 8 elements (scalar auto-unroll is optimal)
+- Production path: cache `ProjectionWeights` per brain config, use `expand_with_weights()` per entity
+- All 16 reconstruction tests pass, max diff = 0 (bit-exact)
+
+**GOAT verdict:** Scalar `reconstruct()` is GOAT for single-entity (97.5ns < 200ns).
+Matvec `expand_with_weights()` is GOAT for expand (2.1ns vs 8.7ns).
+Use `reconstruct_with_weights()` when weights can be pre-computed and reused.
 
 ### Phase 5: GOAT Proof — DONE
 - [x] Create `examples/octree_ctc_demo.rs` showing before/after:
@@ -101,7 +119,7 @@ HLA state update is clamped: `hla[i] = clamp(hla[i] + lr * delta, -1.0, 1.0)`. S
 ```
 katgpt-core/src/
 ├── sense/
-│   ├── reconstruction.rs    ← NEW: ReconstructionState + loop
+│   ├── reconstruction.rs    ← MODIFIED: ProjectionWeights, BatchProjectionWeights, expand_with_weights, reconstruct_with_weights, reconstruct_matvec
 │   ├── brain.rs              ← MODIFIED: add project_reconstruct()
 │   ├── bandit.rs             ← REUSED: entropy-gated selection
 │   └── ...
@@ -109,6 +127,8 @@ katgpt-core/src/
 └── ...
 
 katgpt-rs/
+├── benches/
+│   └── reconstruction_bench.rs  ← MODIFIED: full cycle, per-step, multi-entity batch comparison
 ├── examples/
 │   └── octree_ctc_demo.rs    ← NEW: before/after demo
 ├── tests/
