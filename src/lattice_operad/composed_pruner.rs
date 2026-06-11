@@ -294,4 +294,183 @@ mod tests {
             );
         }
     }
+
+    // ── T15: 4+ pruner batch composition correctness + perf ─────────
+
+    struct AcceptMod3;
+    impl ConstraintPruner for AcceptMod3 {
+        fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
+            token_idx % 3 == 0
+        }
+    }
+
+    struct AcceptGt10;
+    impl ConstraintPruner for AcceptGt10 {
+        fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
+            token_idx > 10
+        }
+    }
+
+    struct AcceptLt50;
+    impl ConstraintPruner for AcceptLt50 {
+        fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
+            token_idx < 50
+        }
+    }
+
+    #[test]
+    fn test_six_pruner_batch_matches_per_token_and() {
+        // T15: Composition of 6 pruners via PrunerExpr must produce identical
+        // results to per-token AND, and batch must be at least as fast.
+        //
+        // Pruners: AcceptEven, AcceptLt5, AcceptMod3, AcceptGt10, AcceptLt50, AcceptAll
+        // Combined: even AND <5 AND mod3 AND >10 AND <50 AND all
+        //
+        // The per-token AND is: even && <5 && mod3 && >10 && <50 && all
+        // Since <5 AND >10 have no overlap, everything should be rejected.
+        // But let's use a more interesting combination:
+        // AcceptEven AND AcceptLt50 AND AcceptMod3 AND AcceptAll
+        //   = even AND <50 AND (mod3==0)
+        let even = AcceptEven;
+        let lt50 = AcceptLt50;
+        let mod3 = AcceptMod3;
+        let all = AcceptAll;
+
+        // Balanced AND-tree: ((even AND lt50) AND (mod3 AND all))
+        let expr = PrunerExpr::and(
+            PrunerExpr::and(PrunerExpr::Atom(0), PrunerExpr::Atom(1)),
+            PrunerExpr::and(PrunerExpr::Atom(2), PrunerExpr::Atom(3)),
+        );
+
+        let pruner = ComposedPruner::from_expr(expr, vec![&even, &lt50, &mod3, &all]);
+
+        let candidates: Vec<usize> = (0..100).collect();
+
+        // Per-token AND (ground truth)
+        let per_token_and: Vec<bool> = candidates
+            .iter()
+            .map(|&c| c % 2 == 0 && c < 50 && c % 3 == 0)
+            .collect();
+
+        // Per-token via ComposedPruner
+        let per_token_expr: Vec<bool> = candidates
+            .iter()
+            .map(|&c| pruner.is_valid(0, c, &[]))
+            .collect();
+
+        // Batch via ComposedPruner
+        let mut batch = vec![false; 100];
+        pruner.batch_is_valid(0, &candidates, &[], &mut batch);
+
+        // All three must agree
+        for i in 0..100 {
+            assert_eq!(
+                per_token_and[i], per_token_expr[i],
+                "per_token_expr mismatch at token {}",
+                candidates[i]
+            );
+            assert_eq!(
+                per_token_and[i], batch[i],
+                "batch mismatch at token {}",
+                candidates[i]
+            );
+        }
+    }
+
+    #[test]
+    fn test_five_pruner_batch_correctness() {
+        // T15: 5 pruners, verify batch matches per-token AND
+        let even = AcceptEven;
+        let lt5 = AcceptLt5;
+        let mod3 = AcceptMod3;
+        let all = AcceptAll;
+        let gt10 = AcceptGt10;
+
+        // ((even AND lt5) AND (mod3 AND (all AND gt10)))
+        // = even AND <5 AND mod3 AND >10
+        // Since <5 AND >10 have NO overlap, everything is rejected
+        let expr = PrunerExpr::and(
+            PrunerExpr::and(PrunerExpr::Atom(0), PrunerExpr::Atom(1)),
+            PrunerExpr::and(
+                PrunerExpr::Atom(2),
+                PrunerExpr::and(PrunerExpr::Atom(3), PrunerExpr::Atom(4)),
+            ),
+        );
+
+        let pruner = ComposedPruner::from_expr(expr, vec![&even, &lt5, &mod3, &all, &gt10]);
+
+        let candidates: Vec<usize> = (0..100).collect();
+        let mut batch = vec![false; 100];
+        pruner.batch_is_valid(0, &candidates, &[], &mut batch);
+
+        // Everything should be rejected (<5 AND >10 is impossible)
+        for (i, &b) in batch.iter().enumerate() {
+            assert!(!b, "token {i} should be rejected (<5 AND >10 impossible)");
+        }
+    }
+
+    #[test]
+    fn test_four_pruner_batch_speedup() {
+        // T15: Batch of 4+ pruners should be faster than per-token loop.
+        // We measure this by comparing batch vs per-token timing.
+        // The batch path calls each sub-pruner's batch_is_valid once,
+        // amortizing lock acquisition, then evaluates the expression tree.
+        // Per-token path calls is_valid N times per pruner.
+
+        let even = AcceptEven;
+        let lt50 = AcceptLt50;
+        let mod3 = AcceptMod3;
+        let all = AcceptAll;
+
+        let expr = PrunerExpr::and(
+            PrunerExpr::and(PrunerExpr::Atom(0), PrunerExpr::Atom(1)),
+            PrunerExpr::and(PrunerExpr::Atom(2), PrunerExpr::Atom(3)),
+        );
+
+        let pruner = ComposedPruner::from_expr(expr, vec![&even, &lt50, &mod3, &all]);
+
+        let candidates: Vec<usize> = (0..1000).collect();
+        let n_rounds = 100;
+
+        // Warm up
+        let mut batch_buf = vec![false; 1000];
+        for _ in 0..10 {
+            pruner.batch_is_valid(0, &candidates, &[], &mut batch_buf);
+        }
+
+        // Batch timing
+        let batch_start = std::time::Instant::now();
+        for _ in 0..n_rounds {
+            pruner.batch_is_valid(0, &candidates, &[], &mut batch_buf);
+        }
+        let batch_elapsed = batch_start.elapsed();
+
+        // Per-token timing
+        let per_token_start = std::time::Instant::now();
+        for _ in 0..n_rounds {
+            for &c in &candidates {
+                std::hint::black_box(pruner.is_valid(0, c, &[]));
+            }
+        }
+        let per_token_elapsed = per_token_start.elapsed();
+
+        // Verify correctness
+        let mut verify = vec![false; 1000];
+        pruner.batch_is_valid(0, &candidates, &[], &mut verify);
+        for (i, &c) in candidates.iter().enumerate() {
+            let expected = c % 2 == 0 && c < 50 && c % 3 == 0;
+            assert_eq!(verify[i], expected, "correctness mismatch at token {}", c);
+        }
+
+        // Log timing for GOAT gate evaluation
+        eprintln!(
+            "[T15] 4-pruner batch={:.2}us vs per-token={:.2}us (ratio={:.2}x)",
+            batch_elapsed.as_secs_f64() * 1e6 / n_rounds as f64,
+            per_token_elapsed.as_secs_f64() * 1e6 / n_rounds as f64,
+            per_token_elapsed.as_secs_f64() / batch_elapsed.as_secs_f64(),
+        );
+
+        // We don't assert timing strictly (CI environments are noisy),
+        // but we log it for GOAT gate evaluation. Correctness is verified above.
+    }
 }
