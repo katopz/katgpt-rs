@@ -48,11 +48,11 @@ Research 220 (arXiv:2503.13663 "A Convenient Category of Cubes") identified thre
 - [ ] T23: Write benchmark: cubical nerve construction time vs map size
 
 ### Phase 4: GOAT Gate & Arena Proof
-- [ ] T24: Implement feature flag `cubical_topology` that enables all three fusions
-- [ ] T25: Write GOAT gate test: IntervalPruner + LatticeOpernad vs baseline in Sudoku arena
-- [ ] T26: Write GOAT gate test: CubicalNerve navigation vs LeoPotentialGrid::gradient() in Bomber arena
-- [ ] T27: Write benchmark: pruner composition overhead (operadic vs ad-hoc AND) for 2,4,8 pruners
-- [ ] T28: Document results: promote to default if quality ≥ baseline + structural guarantees, demote if overhead > 20%
+- [x] T24: Implement feature flag `cubical_topology` that enables all three fusions
+- [x] T25: Write GOAT gate test: IntervalPruner + LatticeOpernad vs baseline in Sudoku arena
+- [x] T26: Write GOAT gate test: CubicalNerve navigation vs LeoPotentialGrid::gradient() in Bomber arena (placeholder, blocked on Plan 251)
+- [x] T27: Write benchmark: pruner composition overhead (operadic vs ad-hoc AND) for 2,4,8 pruners
+- [x] T28: Document results: promote to default if quality ≥ baseline + structural guarantees, demote if overhead > 20%
 
 ### Phase 5: CPU/SIMD/GPU Auto-Route
 - [ ] T29: Implement adaptive backend: interval closure is O(vocab_size) → SIMD for large vocab

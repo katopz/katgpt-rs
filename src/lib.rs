@@ -49,6 +49,8 @@ pub mod hla;
 pub mod hybrid_oct_pq;
 pub mod inference_backend;
 pub mod inference_router;
+#[cfg(feature = "interval_pruner")]
+pub mod interval_pruner;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
 #[cfg(feature = "kv_share")]
