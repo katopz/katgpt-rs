@@ -59,14 +59,14 @@ impl HalfSpace {
 pub struct BorelRegion {
     /// Half-space constraints defining the polytope (Arc for cheap cloning).
     pub constraints: Arc<[HalfSpace]>,
-    /// Symbolic label from screening.
-    pub label: RegionLabel,
     /// Number of tokens within this region.
     pub token_count: usize,
     /// Boundary precision anchoring strength — [0.0, 1.0].
     /// 0.0 = no anchoring (default), 1.0 = highly anchored (resists boundary changes).
     /// Zero cost when 0.0 — not feature-gated.
     pub boundary_precision: f32,
+    /// Symbolic label from screening.
+    pub label: RegionLabel,
 }
 
 impl BorelRegion {
@@ -74,9 +74,9 @@ impl BorelRegion {
     pub fn new(label: RegionLabel, constraints: Vec<HalfSpace>, token_count: usize) -> Self {
         Self {
             constraints: constraints.into(),
-            label,
             token_count,
             boundary_precision: 0.0,
+            label,
         }
     }
 
@@ -84,9 +84,9 @@ impl BorelRegion {
     pub fn from_arc(label: RegionLabel, constraints: Arc<[HalfSpace]>, token_count: usize) -> Self {
         Self {
             constraints,
-            label,
             token_count,
             boundary_precision: 0.0,
+            label,
         }
     }
 

@@ -165,10 +165,10 @@ and identified cross-cutting themes.
 ## MEDIUM (Notable but bounded impact)
 
 - [x] `bfcf_types.rs:247-264` — `PWCValueFunction::value/update` linear scan → direct-index Vec
-- [ ] `bfcf_types.rs:58-69` — `BorelRegion` field reordering (save 8 bytes/region)
-- [ ] `bfcf_types.rs:187-208` — Cache accept/reject/maybe counts on BFCP
+- [x] `bfcf_types.rs:58-69` — `BorelRegion` field reordering (save 8 bytes/region) — fields reordered: constraints, token_count, boundary_precision, label (32→24 bytes)
+- [x] `bfcf_types.rs:187-208` — Cache accept/reject/maybe counts on BFCP — already has accept_count/reject_count/maybe_count fields + O(1) accessors
 - [x] `bandit.rs:274-281` — `best_arm()` cache in BanditStats
-- [ ] `bandit.rs:1658-1725` — `SharedBanditStats` batch reads under single lock (arm_snapshot added, full batch API pending)
+- [x] `bandit.rs:1658-1725` — `SharedBanditStats` batch reads under single lock — added BanditSnapshot + snapshot() + batch_ucb1() (N lock acquisitions → 1)
 - [x] `bandit.rs:1549` — Hoist `config.to_string()` outside episode loop
 - [x] `regime_transition.rs:338` — `FailurePattern` Vec key → blake3 hash
 - [x] `cna.rs:320-325` — `is_universal_excluded()` → HashSet
@@ -187,14 +187,14 @@ and identified cross-cutting themes.
 - [x] `sketch_types.rs:493-498` — `lessons.remove(0)` → VecDeque
 - [x] `hoare_pruner.rs:167` — `ch.to_string()` → match on char directly
 - [x] `lsh_cache.rs:85-89` — `Vec::remove(0)` → VecDeque
-- [ ] `bfcp_region_cache.rs:146-157` — LFU eviction O(n) → min-heap or TinyLFU
+- [x] `bfcp_region_cache.rs:146-157` — LFU eviction O(n) → min-heap — already uses BinaryHeap<LfuEntry> with reversed Ord for O(log n) eviction
 - [x] `go/g_zero_player.rs:285-321` — `compute_go_delta` board_tokens Vec → pre-compute or defer
 - [x] `go/state.rs:246-256` — `legal_moves()` → accept pre-allocated buffer (_into variant exists, callers migrated)
 - [x] `go/state.rs:405-432` — `flood_empty` HashSet for 2 values → bool pair
 - [x] `monopoly/systems.rs:70-151` — `build_ctx` → reusable DecisionContext buffer
 - [x] `monopoly/mod.rs:532-576` — `square_kind()` → const lookup table (already const fn match, inlined by compiler)
-- [ ] `monopoly/group_squares` → return `&'static [u8]`
-- [ ] `dungeon_pathfinder.rs:225-231` — Pre-compute floor adjacency on construction
+- [x] `monopoly/group_squares` → return `&'static [u8]` — already returns `&'static [u8]` (board.rs:422)
+- [x] `dungeon_pathfinder.rs:225-231` — Pre-compute floor adjacency on construction — DungeonMap.floor_adj built at construction via build_floor_adj()
 - [x] `region_batch.rs:108` — `Vec::new()` → `Vec::with_capacity`
 - [x] `region_batch.rs:138,146` — `constraints.clone()` → `Arc<Vec<HalfSpace>>`
 
@@ -203,7 +203,7 @@ and identified cross-cutting themes.
 ## LOW (Infrequent or minor)
 
 - [ ] `bandit.rs:199-208` — `BanditStats` field reordering
-- [ ] `regime_transition.rs:87-103` — Two-pass std → Welford's one-pass
+- [x] `regime_transition.rs:87-103` — Two-pass std → Welford's one-pass — already uses Welford's algorithm (line 88)
 - [ ] `cna.rs:33-41` — `CnaNeuron` already well-packed
 - [ ] `lodestar.rs:58` — `Vec<bool>` → BitVec (only for large state spaces)
 - [ ] `sketch_types.rs:104,111` — Debug/Display hex formatting optimization
@@ -211,8 +211,8 @@ and identified cross-cutting themes.
 - [ ] `sdar_absorb.rs:381` — Diagnostic-only Vec alloc
 - [ ] `go/autoresearch.rs:130-139` — `config.label()` String → `&'static str`
 - [ ] `go/tournament.rs:491-503` — Three-pass count → single pass
-- [ ] `monopoly/players.rs:280,303` — Const arrays for railroad/utility squares
-- [ ] `bomber/systems.rs:462-464` — `[Option<(i32,i32)>; 4]` for player positions
+- [x] `monopoly/players.rs:280,303` — Const arrays for railroad/utility squares — already has const RAILROAD_SQUARES/UTILITY_SQUARES (line 15-21)
+- [x] `bomber/systems.rs:462-464` — `[Option<(i32,i32)>; 4]` for player positions — already uses `[None; 4]` fixed-size array
 
 ---
 
