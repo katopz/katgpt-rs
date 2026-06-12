@@ -754,19 +754,6 @@ impl crate::traits::ConstraintPruner for SlodPruner {
 
 // ── Helper Functions ──────────────────────────────────────────────
 
-/// Z-score normalize a signal. Returns zero-centered signal.
-///
-/// Convenience wrapper that allocates — prefer [`zscore_into`] in hot paths.
-#[allow(dead_code)]
-fn zscore(signal: &[f32]) -> Vec<f32> {
-    if signal.is_empty() {
-        return Vec::new();
-    }
-    let mut out = vec![0.0f32; signal.len()];
-    zscore_into(signal, &mut out);
-    out
-}
-
 /// Z-score normalize into a pre-allocated buffer (zero-allocation hot path).
 fn zscore_into(signal: &[f32], out: &mut [f32]) {
     if signal.is_empty() {
