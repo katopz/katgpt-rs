@@ -8,20 +8,20 @@ use std::collections::HashMap;
 /// A frozen superposition pattern: token IDs and their weights.
 #[derive(Debug, Clone)]
 pub struct MuxTarget {
+    /// Depth at which this pattern was recorded.
+    pub depth: usize,
     /// Token IDs in the superposition.
     pub tokens: Vec<u32>,
     /// Weights for each token.
     pub weights: Vec<f32>,
-    /// Depth at which this pattern was recorded.
-    pub depth: usize,
 }
 
 impl MuxTarget {
     pub fn new(tokens: Vec<u32>, weights: Vec<f32>, depth: usize) -> Self {
         Self {
+            depth,
             tokens,
             weights,
-            depth,
         }
     }
 }
@@ -30,9 +30,9 @@ impl MuxTarget {
 /// logit distribution shape.
 #[derive(Debug, Clone, Default)]
 pub struct MuxPatternStore {
-    patterns: HashMap<u64, Vec<MuxTarget>>,
     /// Cached total pattern count — incremented on freeze, avoids O(n) scan on read.
     total_patterns: usize,
+    patterns: HashMap<u64, Vec<MuxTarget>>,
 }
 
 impl MuxPatternStore {
@@ -43,8 +43,8 @@ impl MuxPatternStore {
     /// Create a store with pre-allocated capacity for `n` keys.
     pub fn with_capacity(n: usize) -> Self {
         Self {
-            patterns: HashMap::with_capacity(n),
             total_patterns: 0,
+            patterns: HashMap::with_capacity(n),
         }
     }
 

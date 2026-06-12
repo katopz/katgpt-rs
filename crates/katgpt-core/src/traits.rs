@@ -429,14 +429,14 @@ struct PlayerAgg {
 
 #[derive(Clone, Debug, Default)]
 pub struct ActionSpaceLog {
+    /// Running peak across all entries, tracked during record() for O(1) peak_action_space().
+    peak: usize,
     /// (tick, player_id, action_count) entries.
     /// Field order: usize (8B) → u32 (4B) → u8 (1B) = 16B vs 24B with (u32, u8, usize).
     entries: Vec<(usize, u32, u8)>,
     /// Per-player running aggregates for O(1) avg_action_space_for().
     /// Indexed by player_id (u8, so max 256 entries). Lazy-initialized on first record.
     player_aggs: Vec<PlayerAgg>,
-    /// Running peak across all entries, tracked during record() for O(1) peak_action_space().
-    peak: usize,
 }
 
 impl ActionSpaceLog {
@@ -678,10 +678,9 @@ pub trait AllGoalsUpdate {
             .zip(next_lambda_return.iter())
             .zip(done.iter())
             .map(|(((&r, &q_max), &g_next), &d)| {
-                if d {
-                    r
-                } else {
-                    r + gamma * (lambda * g_next + (1.0 - lambda) * q_max)
+                match d {
+                    true => r,
+                    false => r + gamma * (lambda * g_next + (1.0 - lambda) * q_max),
                 }
             })
             .collect()
@@ -990,6 +989,8 @@ pub trait GenerativeConstraintPruner<Output>: Send + Sync {
 #[cfg(feature = "partial_scoring")]
 #[derive(Clone, Debug, Default)]
 pub struct GameTrace {
+    /// Final reward from the game engine (binary: win=1.0, loss=0.0).
+    pub final_reward: f64,
     /// Ticks survived before termination.
     pub survival_ticks: u32,
     /// Opponents eliminated.
@@ -998,8 +999,6 @@ pub struct GameTrace {
     pub actions_taken: u32,
     /// Maximum possible ticks (episode budget).
     pub max_ticks: u32,
-    /// Final reward from the game engine (binary: win=1.0, loss=0.0).
-    pub final_reward: f64,
 }
 
 /// Graduated reward scorer for game episodes.
@@ -1098,12 +1097,7 @@ pub trait ProblemMutator: Send + Sync {
 /// Returns 0.0 if either slice has zero variance.
 #[inline]
 pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
-    assert_eq!(
-        a.len(),
-        b.len(),
-        "pearson_correlation: slices must have equal length"
-    );
-    if a.is_empty() {
+    if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
     let n = a.len() as f32;
@@ -1182,9 +1176,7 @@ pub fn best_buddies(corr_rows: &[&[f32]], k: usize) -> Vec<(usize, usize)> {
     buddies.sort_by(|a, b| {
         let corr_a = corr_rows[a.0][a.1];
         let corr_b = corr_rows[b.0][b.1];
-        corr_b
-            .partial_cmp(&corr_a)
-            .unwrap_or(std::cmp::Ordering::Equal)
+        corr_b.total_cmp(&corr_a)
     });
     buddies.truncate(k);
     buddies

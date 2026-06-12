@@ -140,12 +140,12 @@ fn compositional_width(peaks: &[f32], base: usize) -> usize {
 /// DD-tree wrapper that manages superposition expansion.
 #[derive(Debug, Clone)]
 pub struct MuxDdTree {
-    /// Root node.
-    pub root: MuxNode,
     /// Maximum superposition width per node.
     pub k: usize,
     /// Current depth of the tree.
     pub depth: usize,
+    /// Root node.
+    pub root: MuxNode,
     /// Pruner for validating superposition spans.
     pub pruner: MuxSpanPruner,
 }
@@ -154,9 +154,9 @@ impl MuxDdTree {
     pub fn new(k: usize) -> Self {
         let pruner = MuxSpanPruner::new(k, 0.5);
         Self {
-            root: MuxNode::new(Vec::new(), Vec::new()),
             k,
             depth: 0,
+            root: MuxNode::new(Vec::new(), Vec::new()),
             pruner,
         }
     }
@@ -202,16 +202,12 @@ impl MuxDdTree {
         let child_weights: Arc<[f32]> = peaks.iter().take(self.k).copied().collect();
         let child_len = peaks.len().min(self.k);
         node.children.reserve(effective_width);
-        // Pre-allocate child_tokens outside the loop — clear() + refill each iteration
-        // avoids per-iteration heap allocation for small k (≤16).
-        let mut child_tokens: Vec<u32> = Vec::with_capacity(child_len);
         for i in 0..effective_width {
             // Distribute peaks across children: each child gets a shifted view
             let offset = (i * self.k / effective_width).min(peaks.len());
-            child_tokens.clear();
-            child_tokens.extend(offset as u32..(offset + child_len) as u32);
+            let child_tokens: Vec<u32> = (offset as u32..(offset + child_len) as u32).collect();
             node.children
-                .push(MuxNode::new(child_tokens.clone(), child_weights.clone()));
+                .push(MuxNode::new(child_tokens, Arc::clone(&child_weights)));
         }
 
         // Track maximum depth

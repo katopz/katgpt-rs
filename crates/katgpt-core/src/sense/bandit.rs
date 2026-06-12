@@ -8,8 +8,8 @@ const AGGREGATE_KINDS: usize = 8;
 /// Per-kind aggregate for O(1) average_reward.
 #[derive(Clone, Copy, Debug, Default)]
 struct KindAggregate {
-    sum: f32,
     count: u32,
+    sum: f32,
 }
 
 /// A single sense trial for bandit feedback.
@@ -17,9 +17,9 @@ struct KindAggregate {
 pub struct SenseTrial {
     pub npc_id: u32,
     pub action_taken: u32,
+    pub sense_kind: SenseKind,
     pub activation: f32,
     pub reward: f32,
-    pub sense_kind: SenseKind,
 }
 
 /// Trial log for sense module self-learning.
@@ -41,7 +41,6 @@ impl SenseTrialLog {
     }
 
     pub fn record(&mut self, trial: SenseTrial) {
-        // Update per-kind aggregate (O(1))
         let idx = trial.sense_kind as usize;
         if idx < AGGREGATE_KINDS {
             self.aggregates[idx].sum += trial.reward;
@@ -62,7 +61,6 @@ impl SenseTrialLog {
                 agg.sum / agg.count as f32
             }
         } else {
-            // Unknown kind — fall back to linear scan
             let mut sum = 0.0f32;
             let mut count = 0usize;
             for t in &self.trials {

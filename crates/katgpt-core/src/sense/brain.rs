@@ -20,24 +20,24 @@ pub struct SenseOverride {
     /// Pinned sense activations: (kind, value). If present, overrides autonomous.
     /// Fixed-size array avoids heap allocation — MAX_OVERRIDES slots.
     pub pinned: [(SenseKind, f32); MAX_OVERRIDES],
-    /// Number of valid entries in `pinned`.
-    pinned_count: usize,
     /// O(1) pin lookup indexed by SenseKind discriminant. Rebuilt on pin/unpin.
     pin_lookup: [Option<f32>; SENSE_KIND_COUNT],
-    /// If true, all autonomous computation is disabled; only pinned values returned.
-    pub autonomous_disabled: bool,
     /// Script ID if in scripted mode.
     pub script_id: Option<u64>,
+    /// Number of valid entries in `pinned`.
+    pinned_count: usize,
+    /// If true, all autonomous computation is disabled; only pinned values returned.
+    pub autonomous_disabled: bool,
 }
 
 impl Default for SenseOverride {
     fn default() -> Self {
         Self {
             pinned: [(SenseKind::CommonSense, 0.0); MAX_OVERRIDES],
-            pinned_count: 0,
             pin_lookup: [None; SENSE_KIND_COUNT],
-            autonomous_disabled: false,
             script_id: None,
+            pinned_count: 0,
+            autonomous_disabled: false,
         }
     }
 }
@@ -83,10 +83,10 @@ pub struct NpcBrain {
     pub modules: Vec<SenseModule>,
     /// O(1) module lookup indexed by SenseKind discriminant. Rebuilt on compose.
     module_index: [Option<usize>; SENSE_KIND_COUNT],
-    /// Current HLA state (8-dim).
-    pub hla_state: [f32; 8],
     /// GM override mask.
     pub overrides: SenseOverride,
+    /// Current HLA state (8-dim).
+    pub hla_state: [f32; 8],
     /// Active LOD level — determines which modules to project.
     /// Default: Full (all modules). Only used with `sense_lod` feature.
     #[cfg(feature = "sense_lod")]
@@ -106,8 +106,8 @@ impl NpcBrain {
         Self {
             modules,
             module_index,
-            hla_state: [0.0; 8],
             overrides: SenseOverride::default(),
+            hla_state: [0.0; 8],
             #[cfg(feature = "sense_lod")]
             active_lod: SenseLodLevel::Full,
         }

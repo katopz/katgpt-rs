@@ -776,7 +776,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         };
         // OPT: reuse label_buf instead of format!() per iteration
         label_buf.clear();
-        core::fmt::write(&mut label_buf, format_args!("grid_{i}")).unwrap();
+        let _ = core::fmt::write(&mut label_buf, format_args!("grid_{i}"));
         csps.push(SyntheticCsp {
             pruner: Box::new(pruner),
             depth: 0,
@@ -819,7 +819,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         };
         // OPT: reuse label_buf instead of format!() per iteration
         label_buf.clear();
-        core::fmt::write(&mut label_buf, format_args!("stone_{i}")).unwrap();
+        let _ = core::fmt::write(&mut label_buf, format_args!("stone_{i}"));
         csps.push(SyntheticCsp {
             pruner: Box::new(pruner),
             depth: 0,
@@ -853,7 +853,7 @@ pub fn generate_synthetic_csps(count_per_domain: usize) -> Vec<SyntheticCsp> {
         };
         // OPT: reuse label_buf instead of format!() per iteration
         label_buf.clear();
-        core::fmt::write(&mut label_buf, format_args!("logic_{i}")).unwrap();
+        let _ = core::fmt::write(&mut label_buf, format_args!("logic_{i}"));
         csps.push(SyntheticCsp {
             pruner: Box::new(pruner),
             depth: 0,

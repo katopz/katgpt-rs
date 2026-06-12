@@ -111,19 +111,6 @@ pub fn spectral_flatness(
 ///
 /// Inspired by arXiv:2606.02993: converged neurons encode single irreps.
 pub struct IrrepPruner {
-    /// Cached FFT planner (avoids per-call allocation).
-    planner: FftPlanner<f64>,
-    /// Pre-allocated scratch buffer for FFT.
-    scratch: Vec<Complex<f64>>,
-    /// Cached logits for rank-based gating.
-    logits: Vec<f32>,
-    /// Cached sorted indices (descending by logit value), updated by set_logits.
-    /// Used for top-k gating when uncertain.
-    sorted_indices: Vec<usize>,
-    /// Bitset for O(1) top-k membership checks.
-    /// Each u64 word holds 64 bits. 8× denser than Vec<bool> — fills are
-    /// 8× fewer cachelines touched, and 256K vocab fits in 4KB vs 256KB.
-    top_k_bits: Vec<u64>,
     /// Tracked vocabulary size (number of bits in `top_k_bits`).
     vocab_len: usize,
     /// How many tokens from sorted_indices are "valid" given current flatness.
@@ -137,6 +124,19 @@ pub struct IrrepPruner {
     pub convergence_threshold: f32,
     /// Current spectral flatness (updated by set_logits).
     current_flatness: f32,
+    /// Cached FFT planner (avoids per-call allocation).
+    planner: FftPlanner<f64>,
+    /// Pre-allocated scratch buffer for FFT.
+    scratch: Vec<Complex<f64>>,
+    /// Cached logits for rank-based gating.
+    logits: Vec<f32>,
+    /// Cached sorted indices (descending by logit value), updated by set_logits.
+    /// Used for top-k gating when uncertain.
+    sorted_indices: Vec<usize>,
+    /// Bitset for O(1) top-k membership checks.
+    /// Each u64 word holds 64 bits. 8× denser than Vec<bool> — fills are
+    /// 8× fewer cachelines touched, and 256K vocab fits in 4KB vs 256KB.
+    top_k_bits: Vec<u64>,
 }
 
 /// Configuration for [`IrrepPruner`].
@@ -192,16 +192,16 @@ impl IrrepPruner {
     ) -> Self {
         let bitset_words = max_vocab.div_ceil(64);
         Self {
-            planner: FftPlanner::new(),
-            scratch: Vec::with_capacity(max_vocab),
-            logits: Vec::with_capacity(max_vocab),
-            sorted_indices: Vec::with_capacity(max_vocab),
-            top_k_bits: Vec::with_capacity(bitset_words),
             vocab_len: 0,
             valid_count: 0,
             top_k_when_uncertain,
             convergence_threshold,
             current_flatness: 0.0,
+            planner: FftPlanner::new(),
+            scratch: Vec::with_capacity(max_vocab),
+            logits: Vec::with_capacity(max_vocab),
+            sorted_indices: Vec::with_capacity(max_vocab),
+            top_k_bits: Vec::with_capacity(bitset_words),
         }
     }
 

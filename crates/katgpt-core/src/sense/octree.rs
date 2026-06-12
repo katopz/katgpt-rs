@@ -10,11 +10,8 @@ pub struct KgEmbedding {
     pub entity_hash: u64,
     pub relation_hash: u64,
     pub embedding: [f32; 8],
-    pub sign: bool,
-    /// KG triple confidence from extraction pipeline.
-    /// Flows into SenseModule via builder, used to weight projection.
-    /// Default 1.0 = no attenuation (backward compatible).
     pub confidence: f32,
+    pub sign: bool,
 }
 
 /// Builds octree bit-planes from KG embeddings.

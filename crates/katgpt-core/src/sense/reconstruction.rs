@@ -56,6 +56,7 @@ impl OctreeNodeId {
 
 /// Traversal action for octree reconstruction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum TraversalAction {
     /// Expand forward: cue → tag → content.
     Forward { tag_idx: u8 },
@@ -70,14 +71,14 @@ pub enum TraversalAction {
 pub struct ReconstructionConfig {
     /// Maximum reconstruction steps (default: 3, MRAgent shows diminishing returns after 3-4).
     pub max_steps: u8,
+    /// Enable LOD-adaptive pruning (default: true).
+    /// Reduces octree depth when activation spread is narrow.
+    pub lod_adaptive: bool,
     /// Learning rate for HLA state evolution (default: 0.1).
     pub hla_learning_rate: f32,
     /// Entropy threshold for early stopping (default: 0.05).
     /// Below this entropy, evidence is considered sufficient.
     pub entropy_threshold: f32,
-    /// Enable LOD-adaptive pruning (default: true).
-    /// Reduces octree depth when activation spread is narrow.
-    pub lod_adaptive: bool,
     /// Maximum activation delta per step (default: 0.3).
     /// Prevents HLA state from jumping too far in one step.
     pub max_hla_delta: f32,
@@ -87,9 +88,9 @@ impl Default for ReconstructionConfig {
     fn default() -> Self {
         Self {
             max_steps: 3,
+            lod_adaptive: true,
             hla_learning_rate: 0.1,
             entropy_threshold: 0.05,
-            lod_adaptive: true,
             max_hla_delta: 0.3,
         }
     }
@@ -138,12 +139,12 @@ impl ReconstructionConfig {
 /// Fixed-size for zero-allocation hot path.
 #[derive(Clone, Debug, Default)]
 pub struct TripleEvidence {
-    /// Number of triples recovered.
-    pub count: u8,
-    /// Sum of confidence scores for recovered triples.
-    pub confidence_sum: f32,
     /// Per-kind activation strengths (indexed by SenseKind discriminant).
     pub kind_activations: [f32; 6],
+    /// Sum of confidence scores for recovered triples.
+    pub confidence_sum: f32,
+    /// Number of triples recovered.
+    pub count: u8,
 }
 
 impl TripleEvidence {
@@ -302,24 +303,24 @@ impl BatchProjectionWeights {
 pub struct ReconstructionState {
     /// Evolving HLA state (cue). Updated by `evolve_hla()` after each step.
     hla: [f32; 8],
+    /// Accumulated evidence (H(t)).
+    evidence: TripleEvidence,
     /// Active octree nodes being explored (Z(t)).
     /// Used in Phase 2 for full octree traversal.
     #[allow(dead_code)]
     active_nodes: [Option<OctreeNodeId>; 8],
-    /// Number of active nodes.
-    /// Used in Phase 2 for full octree traversal.
-    #[allow(dead_code)]
-    n_active: u8,
-    /// Accumulated evidence (H(t)).
-    evidence: TripleEvidence,
-    /// Current reconstruction step.
-    step: u8,
     /// Configuration.
     config: ReconstructionConfig,
     /// Pre-computed projection weights (lazy init on first expand_matvec).
     /// None until `expand_matvec()` is called with a brain.
     #[cfg(feature = "sense_composition")]
     cached_weights: Option<ProjectionWeights>,
+    /// Current reconstruction step.
+    step: u8,
+    /// Number of active nodes.
+    /// Used in Phase 2 for full octree traversal.
+    #[allow(dead_code)]
+    n_active: u8,
 }
 
 impl ReconstructionState {
@@ -330,13 +331,13 @@ impl ReconstructionState {
         active_nodes[0] = Some(OctreeNodeId::ROOT);
         Self {
             hla,
-            active_nodes,
-            n_active: 1,
             evidence: TripleEvidence::default(),
-            step: 0,
+            active_nodes,
             config: ReconstructionConfig::default(),
             #[cfg(feature = "sense_composition")]
             cached_weights: None,
+            step: 0,
+            n_active: 1,
         }
     }
 
@@ -347,13 +348,13 @@ impl ReconstructionState {
         active_nodes[0] = Some(OctreeNodeId::ROOT);
         Self {
             hla,
-            active_nodes,
-            n_active: 1,
             evidence: TripleEvidence::default(),
-            step: 0,
+            active_nodes,
             config,
             #[cfg(feature = "sense_composition")]
             cached_weights: None,
+            step: 0,
+            n_active: 1,
         }
     }
 
@@ -856,12 +857,12 @@ pub struct ReconstructionResult {
     pub passive: [f32; 6],
     /// Active multi-step activations (reconstructed).
     pub active: [f32; 6],
-    /// Number of reconstruction steps taken.
-    pub steps: u8,
-    /// Final evidence state.
-    pub evidence: TripleEvidence,
     /// HLA state delta (active - passive HLA).
     pub hla_delta: [f32; 8],
+    /// Final evidence state.
+    pub evidence: TripleEvidence,
+    /// Number of reconstruction steps taken.
+    pub steps: u8,
 }
 
 /// Run side-by-side comparison: passive vs active reconstruction.

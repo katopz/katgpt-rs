@@ -443,10 +443,7 @@ impl ConfiguratorContext {
     ///
     /// `floor(desperation * 10.0)`, clamped to 0..9.
     pub fn with_desperation(mut self, desperation: f32) -> Self {
-        self.desperation_bin = (desperation * 10.0).floor() as usize;
-        if self.desperation_bin > 9 {
-            self.desperation_bin = 9;
-        }
+        self.desperation_bin = ((desperation * 10.0).floor() as usize).min(9);
         self
     }
 
@@ -456,8 +453,7 @@ impl ConfiguratorContext {
     /// S_T measures structural information content — higher values indicate
     /// more structure that a bounded observer can extract from the data.
     pub fn with_epiplexity(mut self, epiplexity: f32) -> Self {
-        let bin = (epiplexity * 10.0).floor() as u8;
-        self.epiplexity_bin = if bin > 9 { 9 } else { bin };
+        self.epiplexity_bin = ((epiplexity * 10.0).floor() as u8).min(9);
         self
     }
 
@@ -467,14 +463,8 @@ impl ConfiguratorContext {
     /// epiplexity (S_T structural information) in one call.
     /// `desperation_bin` defaults to 0.
     pub fn from_entropy_epiplexity(domain: usize, entropy: f32, epiplexity: f32) -> Self {
-        let entropy_bin = {
-            let bin = (entropy * 10.0).floor() as usize;
-            if bin > 9 { 9 } else { bin }
-        };
-        let epiplexity_bin = {
-            let bin = (epiplexity * 10.0).floor() as u8;
-            if bin > 9 { 9 } else { bin }
-        };
+        let entropy_bin = ((entropy * 10.0).floor() as usize).min(9);
+        let epiplexity_bin = ((epiplexity * 10.0).floor() as u8).min(9);
         Self {
             domain,
             entropy_bin,
@@ -487,8 +477,7 @@ impl ConfiguratorContext {
     ///
     /// `floor(epiplexity * 10.0)`, clamped to 0..9.
     pub fn epiplexity_bin(epiplexity: f32) -> u8 {
-        let bin = (epiplexity * 10.0).floor() as u8;
-        if bin > 9 { 9 } else { bin }
+        ((epiplexity * 10.0).floor() as u8).min(9)
     }
 }
 
@@ -575,7 +564,6 @@ impl WallConfig {
 /// Controls when mid-reasoning early exit triggers and how efficiency rewards
 /// are shaped. Feature-gated behind `collapse_aware_thinking`.
 #[derive(Clone, Debug)]
-#[repr(C)]
 pub struct ThinkingBudget {
     /// Maximum thinking tokens before forced termination.
     pub max_tokens: u32,
@@ -1894,17 +1882,8 @@ impl Config {
             self.draft_lookahead = self.draft_lookahead.min(v);
         }
         // Hydra Adaptive Layer Budget overrides (Research 148, Plan 165)
-        #[cfg(feature = "hydra_budget")]
-        {
-            if let Some(v) = overrides.hydra_skip_threshold {
-                // Applied via HydraBudgetConfig at call site, not directly on Config.
-                // The override is stored for downstream consumption.
-                let _ = v;
-            }
-            if let Some(v) = overrides.hydra_skip_erasure_draft {
-                let _ = v;
-            }
-        }
+        // Applied via HydraBudgetConfig at call site, not directly on Config.
+        // The overrides fields exist on InferenceOverrides for downstream consumption.
         self
     }
 }
@@ -3134,7 +3113,6 @@ pub trait DataGate {
 /// Sub-step integration strategy for the training-free loop.
 ///
 /// Controls how intermediate loop outputs are combined with the running state.
-#[repr(u8)]
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum SubStepStrategy {
     /// Damped Euler: x ← x + (1/K)·(y − x)
@@ -3537,7 +3515,7 @@ mod tests_types {
         original.save(&tmp).unwrap();
         let loaded = DomainLatent::load(&tmp).unwrap();
         assert_eq!(original.embedding, loaded.embedding);
-        let _ = std::fs::remove_file(&tmp);
+        drop(std::fs::remove_file(&tmp));
     }
 
     #[test]
@@ -3568,7 +3546,7 @@ mod tests_types {
         buf.extend_from_slice(hash.as_bytes());
         std::fs::write(&tmp, &buf).unwrap();
         assert!(DomainLatent::load(&tmp).is_err());
-        let _ = std::fs::remove_file(&tmp);
+        drop(std::fs::remove_file(&tmp));
     }
 
     #[test]
@@ -3582,7 +3560,7 @@ mod tests_types {
         buf.extend_from_slice(&[0u8; 32]); // wrong checksum
         std::fs::write(&tmp, &buf).unwrap();
         assert!(DomainLatent::load(&tmp).is_err());
-        let _ = std::fs::remove_file(&tmp);
+        drop(std::fs::remove_file(&tmp));
     }
 
     #[test]
@@ -3591,7 +3569,7 @@ mod tests_types {
         let tmp = std::env::temp_dir().join("katgpt_core_test_too_small.bin");
         std::fs::write(&tmp, b"DLAT").unwrap();
         assert!(DomainLatent::load(&tmp).is_err());
-        let _ = std::fs::remove_file(&tmp);
+        drop(std::fs::remove_file(&tmp));
     }
 
     #[test]
@@ -3888,14 +3866,11 @@ impl DilationConfig {
     /// Select dilation from queries-per-second heuristic.
     /// Low QPS → dense, High QPS → aggressive dilation.
     pub fn from_qps(qps: f32) -> Self {
-        if qps < 1.0 {
-            Self::D1
-        } else if qps < 5.0 {
-            Self::D4
-        } else if qps < 20.0 {
-            Self::D16
-        } else {
-            Self::D64
+        match qps {
+            ..1.0 => Self::D1,
+            1.0..5.0 => Self::D4,
+            5.0..20.0 => Self::D16,
+            _ => Self::D64,
         }
     }
 }

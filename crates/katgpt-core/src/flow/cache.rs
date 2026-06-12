@@ -14,11 +14,11 @@ use crate::traits::LeoHead;
 
 /// Per-goal cached flow field with dirty-tracking metadata.
 struct CachedField {
+    /// Tick at which this field was last (re)computed.
+    last_tick: u64,
     field: FlowField,
     /// Number of cells changed since last compute.
     dirty_count: u16,
-    /// Tick at which this field was last (re)computed.
-    last_tick: u64,
 }
 
 /// Per-goal shared flow field cache.
@@ -27,6 +27,8 @@ struct CachedField {
 /// Use [`FlowFieldCache::get_or_compute`] as the main entry point — it
 /// orchestrates the full pipeline: Q-value extraction → grid → FFT → gradient.
 pub struct FlowFieldCache {
+    /// Minimum NPCs sharing a goal to warrant a flow field.
+    min_npcs: u16,
     /// `goal_id → (FlowField, dirty_count, last_computed_tick)`.
     fields: HashMap<u64, CachedField>,
     config: FlowFieldConfig,
@@ -41,8 +43,6 @@ pub struct FlowFieldCache {
     blocked_buf: Vec<u64>,
     /// Pre-allocated snapshot buffer for obstacle inflation (avoids per-call allocation).
     snapshot_buf: Vec<u64>,
-    /// Minimum NPCs sharing a goal to warrant a flow field.
-    min_npcs: u16,
 }
 
 impl FlowFieldCache {

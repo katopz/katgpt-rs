@@ -73,10 +73,6 @@ fn sigmoid(x: f32) -> f32 {
 
 /// Per-participant LinOSS hidden state for combat rhythm tracking.
 struct LabeledRhythm {
-    /// LinOSS cell with pre-tuned ω² and β.
-    cell: LinOSSCell,
-    /// Hidden state (y, z) — oscillates with damage impulses.
-    state: LinOSSState,
     /// Pre-allocated forcing buffer — fixed-size to avoid heap alloc.
     forcing: [f32; HIDDEN_DIM],
     /// Pre-allocated scratch for in-place y output.
@@ -85,10 +81,14 @@ struct LabeledRhythm {
     z_buf: [f32; HIDDEN_DIM],
     /// Observed damage tick timestamps for auto-calibration.
     damage_timestamps: [u32; MAX_TIMESTAMPS],
-    /// Number of damage events ingested for this participant.
-    event_count: u32,
+    /// LinOSS cell with pre-tuned ω² and β.
+    cell: LinOSSCell,
+    /// Hidden state (y, z) — oscillates with damage impulses.
+    state: LinOSSState,
     /// Number of valid entries in `damage_timestamps`.
     damage_timestamp_count: usize,
+    /// Number of damage events ingested for this participant.
+    event_count: u32,
     /// Entity ID (source of damage / tracked participant).
     entity_id: u8,
 }
@@ -592,7 +592,7 @@ mod tests {
         tracker.auto_calibrate(1);
 
         // Verify at least one mode matches the observed frequency
-        let cell = &tracker.cells[0];
+        let cell = tracker.cells[0].as_ref().expect("slot 0 should be occupied");
         let snapped = cell
             .cell
             .omega_sq

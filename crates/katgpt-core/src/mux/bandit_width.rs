@@ -7,8 +7,8 @@
 #[derive(Debug, Clone)]
 struct Arm {
     width: usize,
-    total_reward: f32,
     pulls: u32,
+    total_reward: f32,
 }
 
 impl Arm {

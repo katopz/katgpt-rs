@@ -23,6 +23,9 @@ pub struct SlodConfig {
     /// k for kNN graph construction.
     /// Default: computed as `max(10, min(sqrt(N), 50))`.
     pub knn_k: usize,
+    /// Max Fréchet mean iterations.
+    /// Default: 15.
+    pub max_iterations: usize,
     /// Composite score weights: [participation, diffusion_entropy, spectral_concentration].
     /// Default: [1/3, 1/3, 1/3].
     pub alpha: [f32; 3],
@@ -32,9 +35,6 @@ pub struct SlodConfig {
     /// Spectral gap threshold for K* selection.
     /// Default: 2.0.
     pub gap_threshold: f32,
-    /// Max Fréchet mean iterations.
-    /// Default: 15.
-    pub max_iterations: usize,
     /// Fréchet mean step size (η).
     /// Default: 1.0.
     pub step_size: f32,
@@ -47,10 +47,10 @@ impl Default for SlodConfig {
     fn default() -> Self {
         Self {
             knn_k: 0, // sentinel: compute from N
+            max_iterations: 15,
             alpha: [1.0 / 3.0; 3],
             mad_beta: 2.0,
             gap_threshold: 2.0,
-            max_iterations: 15,
             step_size: 1.0,
             tolerance: 1e-6,
         }
@@ -72,10 +72,10 @@ impl SlodConfig {
 /// A detected scale boundary from the spectral analysis.
 #[derive(Debug, Clone)]
 pub struct ScaleBoundary {
-    /// Diffusion scale σ at which this boundary was detected.
-    pub sigma: f32,
     /// Effective rank K* (number of significant eigenmodes) at this scale.
     pub k_star: usize,
+    /// Diffusion scale σ at which this boundary was detected.
+    pub sigma: f32,
     /// Composite boundary score S(σ).
     pub score: f32,
 }
@@ -85,14 +85,14 @@ pub struct ScaleBoundary {
 /// Core spectral operator: eigenpairs + detected boundaries.
 #[derive(Debug, Clone)]
 pub struct SlodOperator {
+    /// Configuration used to build this operator.
+    pub config: SlodConfig,
     /// Eigenvalues λ_k (descending order).
     pub eigenvalues: Vec<f32>,
     /// Eigenvectors as flat buffer [K_eigs * N], row-major.
     pub eigenvectors: Vec<f32>,
     /// Detected scale boundaries.
     pub boundaries: Vec<ScaleBoundary>,
-    /// Configuration used to build this operator.
-    pub config: SlodConfig,
 }
 
 // ── Poincaré Ball Geometry ────────────────────────────────────────

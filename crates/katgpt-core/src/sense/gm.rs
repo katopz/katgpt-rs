@@ -21,9 +21,9 @@ pub enum SenseError {
 #[derive(Clone, Debug)]
 pub struct NpcBrainSnapshot {
     pub npc_id: u32,
+    pub autonomous_disabled: bool,
     pub activations: Vec<(SenseKind, f32)>,
     pub overrides_active: Vec<(SenseKind, f32)>,
-    pub autonomous_disabled: bool,
     pub locked_modules: Vec<SenseKind>,
     pub confidence: Vec<(SenseKind, f32)>,
 }

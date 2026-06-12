@@ -2337,15 +2337,19 @@ pub fn ternary_matvec_scalar(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
     for r in 0..w.rows {
         let mut sum = 0.0f32;
         let row_base = r * w.blocks64;
-        for c in 0..w.cols {
-            let block = c >> 6;
-            let bit = c & 63;
-            let mask = 1u64 << bit;
-            let idx = row_base + block;
-            let pos = (w.pos_bits[idx] & mask) != 0;
-            let neg = (w.neg_bits[idx] & mask) != 0;
-            let sign = pos as i32 - neg as i32;
-            sum += sign as f32 * x[c];
+        let mut col = 0usize;
+        for b in 0..w.blocks64 {
+            let pos_word = w.pos_bits[row_base + b];
+            let neg_word = w.neg_bits[row_base + b];
+            let remaining = (w.cols - col).min(64);
+            for bit in 0..remaining {
+                let mask = 1u64 << bit;
+                let pos = (pos_word & mask) != 0;
+                let neg = (neg_word & mask) != 0;
+                let sign = pos as i32 - neg as i32;
+                sum += sign as f32 * unsafe { *x.get_unchecked(col) };
+                col += 1;
+            }
         }
         y[r] = sum * w.row_scale[r];
     }
@@ -2385,42 +2389,24 @@ unsafe fn neon_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                     // Load 4 x values
                     let x_vals = vld1q_f32(x.as_ptr().add(col_off));
 
-                    // For each of the 4 lanes, test bit in bits4
-                    let lane_bits = [
-                        bits4 & 1,
-                        (bits4 >> 1) & 1,
-                        (bits4 >> 2) & 1,
-                        (bits4 >> 3) & 1,
+                    // Branchless lane masks: 0xFFFFFFFF if bit set, 0x00000000 if not.
+                    // 0u32.wrapping_sub(bit) yields all-ones when bit=1, all-zeros when bit=0.
+                    let pos_mask: [u32; 4] = [
+                        0u32.wrapping_sub((bits4 & 1) as u32),
+                        0u32.wrapping_sub(((bits4 >> 1) & 1) as u32),
+                        0u32.wrapping_sub(((bits4 >> 2) & 1) as u32),
+                        0u32.wrapping_sub(((bits4 >> 3) & 1) as u32),
                     ];
-                    let neg_lane_bits = [
-                        neg_bits4 & 1,
-                        (neg_bits4 >> 1) & 1,
-                        (neg_bits4 >> 2) & 1,
-                        (neg_bits4 >> 3) & 1,
-                    ];
-
-                    // Build selection masks from lane bits
-                    let pos_mask_u32: [u32; 4] = [
-                        if lane_bits[0] != 0 { !0u32 } else { 0 },
-                        if lane_bits[1] != 0 { !0u32 } else { 0 },
-                        if lane_bits[2] != 0 { !0u32 } else { 0 },
-                        if lane_bits[3] != 0 { !0u32 } else { 0 },
-                    ];
-                    let neg_mask_u32: [u32; 4] = [
-                        if neg_lane_bits[0] != 0 { !0u32 } else { 0 },
-                        if neg_lane_bits[1] != 0 { !0u32 } else { 0 },
-                        if neg_lane_bits[2] != 0 { !0u32 } else { 0 },
-                        if neg_lane_bits[3] != 0 { !0u32 } else { 0 },
+                    let neg_mask: [u32; 4] = [
+                        0u32.wrapping_sub((neg_bits4 & 1) as u32),
+                        0u32.wrapping_sub(((neg_bits4 >> 1) & 1) as u32),
+                        0u32.wrapping_sub(((neg_bits4 >> 2) & 1) as u32),
+                        0u32.wrapping_sub(((neg_bits4 >> 3) & 1) as u32),
                     ];
 
-                    let pos_sel = vreinterpretq_f32_u32(vld1q_u32(pos_mask_u32.as_ptr()));
-                    let neg_sel = vreinterpretq_f32_u32(vld1q_u32(neg_mask_u32.as_ptr()));
-
-                    // pos contribution: if bit set, add x[col], else 0
-                    let pos_val =
-                        vbslq_f32(vreinterpretq_u32_f32(pos_sel), x_vals, vdupq_n_f32(0.0));
-                    let neg_val =
-                        vbslq_f32(vreinterpretq_u32_f32(neg_sel), x_vals, vdupq_n_f32(0.0));
+                    // Select x lanes where pos/neg bits are set, zero elsewhere
+                    let pos_val = vbslq_f32(vld1q_u32(pos_mask.as_ptr()), x_vals, vdupq_n_f32(0.0));
+                    let neg_val = vbslq_f32(vld1q_u32(neg_mask.as_ptr()), x_vals, vdupq_n_f32(0.0));
 
                     acc = vaddq_f32(acc, vsubq_f32(pos_val, neg_val));
                 }
@@ -2440,11 +2426,7 @@ unsafe fn neon_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                 }
             }
 
-            // Horizontal sum
-            let mut lanes = [0.0f32; 4];
-            vst1q_f32(lanes.as_mut_ptr(), acc);
-            let sum = lanes[0] + lanes[1] + lanes[2] + lanes[3];
-            y[r] = sum * w.row_scale[r];
+            y[r] = vaddvq_f32(acc) * w.row_scale[r];
         }
     } // unsafe
 }
@@ -2478,30 +2460,29 @@ unsafe fn avx2_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                 for chunk in 0..chunks {
                     let col_off = base_col + chunk * 8;
 
-                    // Test 8 bits at once
                     let pos_byte = ((pos_word >> (chunk * 8)) & 0xFF) as u32;
                     let neg_byte = ((neg_word >> (chunk * 8)) & 0xFF) as u32;
 
-                    // Broadcast bits to per-lane masks
+                    // Branchless lane masks: 0u32.wrapping_sub(bit) → all-ones if bit=1, 0 if bit=0
                     let lane_masks_pos = [
-                        if pos_byte & 1 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 2 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 4 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 8 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 16 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 32 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 64 != 0 { !0u32 } else { 0 },
-                        if pos_byte & 128 != 0 { !0u32 } else { 0 },
+                        0u32.wrapping_sub(pos_byte & 1),
+                        0u32.wrapping_sub(pos_byte & 2),
+                        0u32.wrapping_sub(pos_byte & 4),
+                        0u32.wrapping_sub(pos_byte & 8),
+                        0u32.wrapping_sub(pos_byte & 16),
+                        0u32.wrapping_sub(pos_byte & 32),
+                        0u32.wrapping_sub(pos_byte & 64),
+                        0u32.wrapping_sub(pos_byte & 128),
                     ];
                     let lane_masks_neg = [
-                        if neg_byte & 1 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 2 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 4 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 8 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 16 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 32 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 64 != 0 { !0u32 } else { 0 },
-                        if neg_byte & 128 != 0 { !0u32 } else { 0 },
+                        0u32.wrapping_sub(neg_byte & 1),
+                        0u32.wrapping_sub(neg_byte & 2),
+                        0u32.wrapping_sub(neg_byte & 4),
+                        0u32.wrapping_sub(neg_byte & 8),
+                        0u32.wrapping_sub(neg_byte & 16),
+                        0u32.wrapping_sub(neg_byte & 32),
+                        0u32.wrapping_sub(neg_byte & 64),
+                        0u32.wrapping_sub(neg_byte & 128),
                     ];
 
                     let x_vals = _mm256_loadu_ps(x.as_ptr().add(col_off));
@@ -2639,21 +2620,19 @@ pub fn sigmoid_margin_loss(
     debug_assert_eq!(scores.len(), n_rows * n_cols);
     debug_assert_eq!(adjacency.len(), n_rows * n_cols);
 
+    let total_elements = n_rows * n_cols;
     let mut total = 0.0f32;
-    for i in 0..n_rows {
-        for j in 0..n_cols {
-            let idx = i * n_cols + j;
-            let score = scores[idx];
-            let adj = adjacency[idx];
-            // For positive pairs (adj=1): loss = softplus(-t·(score−b)), minimized when score → +∞
-            // For negative pairs (adj=0): loss = softplus(+t·(score−b)), minimized when score → −∞
-            // Branchless: 1.0 - 2.0 * (adj > 0.5) → -1.0 if positive, +1.0 if negative
-            let sign = 1.0 - 2.0 * (adj > 0.5) as u32 as f32;
-            let x = temperature * (score - bias) * sign;
-            total += softplus(x);
-        }
+    for idx in 0..total_elements {
+        let score = unsafe { *scores.get_unchecked(idx) };
+        let adj = unsafe { *adjacency.get_unchecked(idx) };
+        // For positive pairs (adj=1): loss = softplus(-t·(score−b)), minimized when score → +∞
+        // For negative pairs (adj=0): loss = softplus(+t·(score−b)), minimized when score → −∞
+        // Branchless: 1.0 - 2.0 * (adj > 0.5) → -1.0 if positive, +1.0 if negative
+        let sign = 1.0 - 2.0 * (adj > 0.5) as u32 as f32;
+        let x = temperature * (score - bias) * sign;
+        total += softplus(x);
     }
-    total / (n_rows * n_cols) as f32
+    total / total_elements as f32
 }
 
 /// Compute retrieval margin: 0.5 × (min_pos_score − max_neg_score).
@@ -5054,15 +5033,14 @@ mod tests {
 pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f32 {
     let mut acc = 0.0f32;
     let min_len = state.len().min(64);
-    let scale = dir.row_scale;
     for i in 0..min_len {
         let mask = 1u64 << i;
         let pos = ((dir.pos_bits & mask) != 0) as i8;
         let neg = ((dir.neg_bits & mask) != 0) as i8;
         let sign = (pos - neg) as f32;
-        acc += sign * unsafe { *state.get_unchecked(i) } * scale;
+        acc += sign * unsafe { *state.get_unchecked(i) };
     }
-    acc
+    acc * dir.row_scale
 }
 
 #[cfg(test)]

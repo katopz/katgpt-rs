@@ -12,7 +12,7 @@ use super::octree::KgEmbedding;
 ///
 /// Computed once per KG snapshot update, O(d·|E_c|) per class.
 /// Stored in `SchemaCentroidCache` keyed by blake3 class hash.
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct CentroidStats {
     /// Mean embedding of all entities in this class: v_c = (1/|E_c|) Σ e_i
     pub mean: [f32; 8],

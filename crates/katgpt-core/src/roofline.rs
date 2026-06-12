@@ -23,12 +23,12 @@ pub enum ComputeBound {
 /// Result of a roofline cost estimate.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct RooflineCost {
-    /// Predicted runtime in milliseconds.
-    pub runtime_ms: f64,
     /// Total floating-point operations.
     pub flops: u64,
     /// Total bytes moved (reads + writes).
     pub bytes_moved: u64,
+    /// Predicted runtime in milliseconds.
+    pub runtime_ms: f64,
     /// Which resource bottleneck dominates.
     pub bound: ComputeBound,
 }

@@ -15,15 +15,15 @@ const MIN_PEAKS: usize = 2;
 /// a valid superposition span at a given tree depth.
 #[derive(Debug, Clone)]
 pub struct MuxSpanPruner {
-    /// Geometric decay threshold: peak[i+1] / peak[i] >= decay_rate.
-    pub decay_rate: f32,
     /// Number of top-K peaks to inspect.
     pub k: usize,
+    /// Geometric decay threshold: peak[i+1] / peak[i] >= decay_rate.
+    pub decay_rate: f32,
 }
 
 impl MuxSpanPruner {
     pub fn new(k: usize, decay_rate: f32) -> Self {
-        Self { decay_rate, k }
+        Self { k, decay_rate }
     }
 
     /// Returns `true` if the logit distribution exhibits geometric decay
