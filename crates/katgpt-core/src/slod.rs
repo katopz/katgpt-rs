@@ -689,22 +689,32 @@ impl std::fmt::Debug for SlodPruner {
     }
 }
 
+impl SlodPruner {
+    /// Map depth to tier index. Returns None when no tiers exist or boundary
+    /// score indicates a weak boundary (accept-all shortcut).
+    #[inline]
+    fn tier_index(&self, depth: usize) -> Option<usize> {
+        let n_tiers = self.tier_pruners.len();
+        if n_tiers == 0 {
+            return None;
+        }
+        let tier_idx = depth.min(n_tiers - 1);
+        // Weak boundary → accept-all shortcut
+        if let Some(boundary) = self.operator.boundaries.get(tier_idx) {
+            if boundary.score < 0.1 {
+                return None;
+            }
+        }
+        Some(tier_idx)
+    }
+}
+
 impl crate::traits::ConstraintPruner for SlodPruner {
     fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool {
-        // Route to appropriate tier based on depth
-        let tier = match self.tier_pruners.len() {
-            0 => return true, // no tiers → accept all
-            n_tiers => {
-                // Map depth to tier via spectral boundaries
-                let tier_idx = depth.min(n_tiers - 1);
-                // Use boundary K* to modulate: deeper → more permissive
-                match self.operator.boundaries.get(tier_idx) {
-                    Some(boundary) if boundary.score < 0.1 => return true, // weak boundary → accept
-                    _ => tier_idx,
-                }
-            }
+        let tier = match self.tier_index(depth) {
+            Some(t) => t,
+            None => return true,
         };
-
         match self.tier_pruners.get(tier) {
             Some(pruner) => pruner.is_valid(depth, token_idx, parent_tokens),
             None => true,
@@ -718,50 +728,44 @@ impl crate::traits::ConstraintPruner for SlodPruner {
         parent_tokens: &[usize],
         results: &mut [bool],
     ) {
-        match self.tier_pruners.len() {
-            0 => {
+        let tier = match self.tier_index(depth) {
+            Some(t) => t,
+            None => {
                 let len = candidates.len().min(results.len());
                 results[..len].fill(true);
+                return;
             }
-            _ => {
-                // Delegate to the routed tier pruner's batch method
-                let tier = depth.min(self.tier_pruners.len() - 1);
-                match self.tier_pruners.get(tier) {
-                    Some(pruner) => {
-                        pruner.batch_is_valid(depth, candidates, parent_tokens, results)
-                    }
-                    None => {
-                        let len = candidates.len().min(results.len());
-                        results[..len].fill(true);
-                    }
-                }
+        };
+        match self.tier_pruners.get(tier) {
+            Some(pruner) => {
+                pruner.batch_is_valid(depth, candidates, parent_tokens, results)
+            }
+            None => {
+                let len = candidates.len().min(results.len());
+                results[..len].fill(true);
             }
         }
     }
 
     fn propagate(&mut self, depth: usize, token_idx: usize, parent_token: &[usize]) -> bool {
-        match self.tier_pruners.len() {
-            0 => true,
-            _ => {
-                let tier = depth.min(self.tier_pruners.len() - 1);
-                match self.tier_pruners.get_mut(tier) {
-                    Some(pruner) => pruner.propagate(depth, token_idx, parent_token),
-                    None => true,
-                }
-            }
+        let tier = match self.tier_index(depth) {
+            Some(t) => t,
+            None => return true,
+        };
+        match self.tier_pruners.get_mut(tier) {
+            Some(pruner) => pruner.propagate(depth, token_idx, parent_token),
+            None => true,
         }
     }
 
     fn manifold_score(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 {
-        match self.tier_pruners.len() {
-            0 => 1.0,
-            _ => {
-                let tier = depth.min(self.tier_pruners.len() - 1);
-                match self.tier_pruners.get(tier) {
-                    Some(pruner) => pruner.manifold_score(depth, token_idx, parent_tokens),
-                    None => 1.0,
-                }
-            }
+        let tier = match self.tier_index(depth) {
+            Some(t) => t,
+            None => return 1.0,
+        };
+        match self.tier_pruners.get(tier) {
+            Some(pruner) => pruner.manifold_score(depth, token_idx, parent_tokens),
+            None => 1.0,
         }
     }
 }
