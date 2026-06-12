@@ -75,6 +75,7 @@ flow_field_nav = ["leo_all_goals", "dep:rustfft"]  # Fourier-smoothed flow field
 spectral_pruner = ["dep:rustfft"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
                                    # Inspired by arXiv:2606.02993: prunes tokens when logit spectrum shows competing modes.
 octree_ctc = ["sense_composition"]  # OctreeCTC Reconstructive Memory Navigation (Plan 248, GOAT PASS, arXiv:2606.06036)
+merkle_octree = ["sense_composition"]  # Merkle octree hierarchical commitment for SenseModule (Plan 221-M)
 dec_operators = []  # Discrete Exterior Calculus — cell complexes, cochain fields, d/δ/Δ operators (Plan 251, Research 219, arXiv:2606.09806)
 
 [[bench]]
@@ -91,3 +92,8 @@ required-features = ["sense_lod"]
 name = "reconstruction_bench"
 harness = false
 required-features = ["sense_composition"]
+
+[[bench]]
+name = "merkle_octree_bench"
+harness = false
+required-features = ["merkle_octree"]

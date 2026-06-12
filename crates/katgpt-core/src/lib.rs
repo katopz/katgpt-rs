@@ -177,3 +177,21 @@ pub use flow::{
     FlowField, FlowFieldCache, FlowFieldConfig, LeoPotentialGrid, blend_steering, fft_smooth,
     fft_smooth_into, flow_steering, inflate_obstacles, should_use_flow_field,
 };
+
+// Merkle octree — hierarchical BLAKE3 commitment for KG latent octree nodes (Plan 221-M).
+#[cfg(feature = "merkle_octree")]
+pub mod merkle;
+#[cfg(feature = "merkle_octree")]
+pub use merkle::{
+    HASH_SIZE, MERKLE_OCTREE_DEPTH, MERKLE_OCTREE_INTERNAL, MERKLE_OCTREE_LEAVES,
+    MERKLE_OCTREE_NODES, MerkleOctree, MerkleProof,
+};
+
+// Curator verification layer for Merkle octree (Plan 253).
+#[cfg(feature = "merkle_octree")]
+pub mod curator;
+#[cfg(feature = "merkle_octree")]
+pub use curator::{
+    CuratorArm, CuratorBandit, CuratorVerdict, CuratorVerifier, FrozenTarget, MerkleEnvelope,
+    MerkleFrozenStore, verification_weight,
+};

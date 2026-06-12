@@ -148,6 +148,59 @@ impl SenseOctreeBuilder {
             row_scale,
         }
     }
+
+    /// Build a SenseModule with Merkle octree commitment.
+    ///
+    /// Replaces the flat BLAKE3 commitment with a hierarchical Merkle root.
+    /// Each KG embedding is hashed into a leaf, then the full depth-3 Merkle
+    /// tree is built bottom-up. The root hash replaces `commitment`.
+    ///
+    /// GOAT target: overhead < 2µs on top of existing `build()`.
+    #[cfg(feature = "merkle_octree")]
+    pub fn build_with_merkle(
+        &self,
+        kind: SenseKind,
+        embeddings: &[KgEmbedding],
+    ) -> (SenseModule, crate::merkle::MerkleOctree) {
+        let mut module = self.build(kind, embeddings);
+        let tree = Self::build_merkle_only(embeddings);
+
+        // Replace flat BLAKE3 commitment with Merkle root
+        module.commitment = *tree.root();
+
+        (module, tree)
+    }
+
+    /// Build only the Merkle octree from KG embeddings (no SenseModule).
+    ///
+    /// Each embedding is serialized to bytes and BLAKE3-hashed as a leaf.
+    /// Leaves beyond 64 are ignored. Unused leaves get zero hashes.
+    ///
+    /// Leaf data layout per embedding: entity_hash(8) || relation_hash(8) || embedding(32) || confidence(4) || sign(1) = 53 bytes.
+    #[cfg(feature = "merkle_octree")]
+    pub fn build_merkle_only(embeddings: &[KgEmbedding]) -> crate::merkle::MerkleOctree {
+        use crate::merkle::{HASH_SIZE, MERKLE_OCTREE_LEAVES};
+
+        let mut leaf_hashes = [[0u8; HASH_SIZE]; MERKLE_OCTREE_LEAVES];
+        let mut scratch = [0u8; 53]; // entity_hash(8) + relation_hash(8) + embedding(32) + confidence(4) + sign(1)
+
+        for (i, emb) in embeddings.iter().enumerate() {
+            if i >= MERKLE_OCTREE_LEAVES {
+                break;
+            }
+            scratch[0..8].copy_from_slice(&emb.entity_hash.to_le_bytes());
+            scratch[8..16].copy_from_slice(&emb.relation_hash.to_le_bytes());
+            // embedding: 8 x f32 = 32 bytes
+            for (j, val) in emb.embedding.iter().enumerate() {
+                scratch[16 + j * 4..20 + j * 4].copy_from_slice(&val.to_le_bytes());
+            }
+            scratch[48..52].copy_from_slice(&emb.confidence.to_le_bytes());
+            scratch[52] = emb.sign as u8;
+            leaf_hashes[i] = *blake3::hash(&scratch).as_bytes();
+        }
+
+        crate::merkle::MerkleOctree::build_from_leaves(&leaf_hashes)
+    }
 }
 
 #[cfg(test)]
@@ -242,5 +295,73 @@ mod tests {
         let module = builder.build(SenseKind::FighterSense, &embeddings);
         assert_eq!(module.n_directions, 8); // capped at 8
         assert!(module.verify());
+    }
+
+    #[cfg(feature = "merkle_octree")]
+    #[test]
+    fn test_build_with_merkle() {
+        use crate::merkle::MerkleProof;
+
+        let builder = SenseOctreeBuilder::new(3);
+        let embeddings: Vec<KgEmbedding> = (0..8)
+            .map(|i| KgEmbedding {
+                entity_hash: i as u64,
+                relation_hash: i as u64 * 3,
+                embedding: [(i as f32) * 0.1, -0.2, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0],
+                sign: i % 2 == 0,
+                confidence: 0.8 + i as f32 * 0.02,
+            })
+            .collect();
+
+        let (module, tree) = builder.build_with_merkle(SenseKind::SpatialSense, &embeddings);
+
+        // Module should have correct metadata
+        assert_eq!(module.n_directions, 8);
+        assert_eq!(module.kind, SenseKind::SpatialSense);
+
+        // Commitment should equal Merkle root
+        assert_eq!(module.commitment, *tree.root());
+
+        // Merkle proofs should verify for all embedded leaves
+        for i in 0..embeddings.len().min(64) {
+            let proof = MerkleProof::generate(&tree, i as u8)
+                .unwrap_or_else(|| panic!("proof generation failed for leaf {i}"));
+            assert!(
+                proof.verify(tree.root()),
+                "proof for leaf {i} should verify against Merkle root"
+            );
+        }
+    }
+
+    #[cfg(feature = "merkle_octree")]
+    #[test]
+    fn test_build_with_merkle_empty() {
+        let builder = SenseOctreeBuilder::new(3);
+        let (module, tree) = builder.build_with_merkle(SenseKind::SpatialSense, &[]);
+
+        assert_eq!(module.n_directions, 0);
+        assert_eq!(module.commitment, *tree.root());
+        // All leaves are zero, root should be hash-of-zeros
+        assert_ne!(tree.root(), &[0u8; 32]);
+    }
+
+    #[cfg(feature = "merkle_octree")]
+    #[test]
+    fn test_build_merkle_only_deterministic() {
+        let embeddings: Vec<KgEmbedding> = (0..5)
+            .map(|i| KgEmbedding {
+                entity_hash: i as u64,
+                relation_hash: 0,
+                embedding: [1.0, -0.5, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0],
+                sign: true,
+                confidence: 1.0,
+            })
+            .collect();
+
+        let tree_a = SenseOctreeBuilder::build_merkle_only(&embeddings);
+        let tree_b = SenseOctreeBuilder::build_merkle_only(&embeddings);
+
+        // Deterministic: same embeddings → same root
+        assert_eq!(tree_a.root(), tree_b.root());
     }
 }

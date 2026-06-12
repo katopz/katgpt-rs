@@ -128,10 +128,11 @@ impl MerkleOctree {
 
 /// Merkle inclusion proof for a leaf in the octree.
 ///
-/// For a depth-3 octree, a proof requires 3 levels of sibling hashes.
+/// For a depth-3 octree with layout root(0)→internal(1-8)→leaves(9-72),
+/// a proof requires 2 levels of sibling hashes (leaf→internal→root).
 /// Each level has 7 siblings (the other 7 children of the same parent).
 ///
-/// Total proof size: 3 x 7 x 32 = 672 bytes + 1 byte leaf index.
+/// Total proof size: 2 x 7 x 32 = 448 bytes + 1 byte leaf index + 32 bytes leaf hash.
 /// GOAT target: generate < 1µs, verify < 1µs.
 #[derive(Clone, Debug)]
 pub struct MerkleProof {
@@ -139,14 +140,17 @@ pub struct MerkleProof {
     pub leaf_index: u8,
     /// Leaf hash being proven.
     pub leaf_hash: [u8; HASH_SIZE],
-    /// Sibling hashes at each level (3 levels, 7 siblings each).
-    /// Level 0 = leaf's siblings, Level 1 = internal node's siblings, Level 2 = root's other children.
-    pub siblings: [[u8; HASH_SIZE]; Self::SIBLINGS_PER_LEVEL * MERKLE_OCTREE_DEPTH as usize],
+    /// Sibling hashes at each level (2 levels, 7 siblings each).
+    /// Level 0 = leaf's siblings (other leaves under same internal node),
+    /// Level 1 = internal node's siblings (other internal nodes under root).
+    pub siblings: [[u8; HASH_SIZE]; Self::SIBLING_LEVELS * Self::SIBLINGS_PER_LEVEL],
 }
 
 impl MerkleProof {
     /// Number of siblings per level (8 children - 1 self).
     const SIBLINGS_PER_LEVEL: usize = MERKLE_OCTREE_BRANCHING - 1;
+    /// Number of sibling levels (leaf→internal, internal→root).
+    const SIBLING_LEVELS: usize = MERKLE_OCTREE_DEPTH as usize - 1;
 
     /// Generate a Merkle proof for the given leaf index.
     ///
@@ -158,12 +162,11 @@ impl MerkleProof {
 
         let leaf_hash = tree.hashes[MERKLE_OCTREE_INTERNAL + 1 + leaf_index as usize];
 
-        // Collect siblings at each level (flat array: 3 levels x 7 siblings)
-        let mut siblings =
-            [[0u8; HASH_SIZE]; Self::SIBLINGS_PER_LEVEL * MERKLE_OCTREE_DEPTH as usize];
+        // Collect siblings at each level (flat array: 2 levels x 7 siblings)
+        let mut siblings = [[0u8; HASH_SIZE]; Self::SIBLING_LEVELS * Self::SIBLINGS_PER_LEVEL];
         let mut current_idx = MERKLE_OCTREE_INTERNAL + 1 + leaf_index as usize;
 
-        for level in 0..MERKLE_OCTREE_DEPTH as usize {
+        for level in 0..Self::SIBLING_LEVELS {
             let parent_idx = (current_idx - 1) / MERKLE_OCTREE_BRANCHING;
             let child_start = parent_idx * MERKLE_OCTREE_BRANCHING + 1;
 
@@ -193,7 +196,7 @@ impl MerkleProof {
         let mut current_hash = self.leaf_hash;
         let mut current_idx = MERKLE_OCTREE_INTERNAL + 1 + self.leaf_index as usize;
 
-        for level in 0..MERKLE_OCTREE_DEPTH as usize {
+        for level in 0..Self::SIBLING_LEVELS {
             let parent_idx = (current_idx - 1) / MERKLE_OCTREE_BRANCHING;
             let child_start = parent_idx * MERKLE_OCTREE_BRANCHING + 1;
 
@@ -385,16 +388,14 @@ mod tests {
 
     #[test]
     fn test_build_from_raw_leaves() {
-        let raw_data: Vec<&[u8]> = (0..64)
-            .map(|i| {
-                static mut BUFS: [[u8; 8]; 64] = [[0u8; 8]; 64];
-                // SAFETY: test-only, single-threaded
-                unsafe {
-                    BUFS[i][0..8].copy_from_slice(&(i as u64).to_le_bytes());
-                    &BUFS[i]
-                }
-            })
-            .collect();
+        static mut BUFS: [[u8; 8]; 64] = [[0u8; 8]; 64];
+        // SAFETY: test-only, single-threaded
+        unsafe {
+            for i in 0..64u64 {
+                BUFS[i as usize][0..8].copy_from_slice(&i.to_le_bytes());
+            }
+        }
+        let raw_data: Vec<&[u8]> = (0..64).map(|i| unsafe { BUFS[i].as_slice() }).collect();
 
         let tree = MerkleOctree::build_from_raw_leaves(&raw_data);
         // Root should be non-zero since leaves have non-trivial data
