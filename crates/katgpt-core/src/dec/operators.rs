@@ -62,6 +62,10 @@ pub fn exterior_derivative(cx: &CellComplex, input: &CochainField) -> CochainFie
     //   output[col] += sign * input[row]
     let entries = cx.boundary_entries(k);
 
+    // Hoist invariant chunk geometry out of the loop.
+    let chunks = dim / 4;
+    let remainder = dim % 4;
+
     // T11: SIMD hint — process inner dim loop with explicit chunking
     // so LLVM can see the unrolled 4-wide pattern for auto-vectorization.
     for &(src_cell, dst_cell, sign) in entries {
@@ -69,9 +73,6 @@ pub fn exterior_derivative(cx: &CellComplex, input: &CochainField) -> CochainFie
         let dst_start = dst_cell * dim;
         let sign_f = sign as f32;
 
-        // Chunked 4-wide to assist auto-vectorization
-        let chunks = dim / 4;
-        let remainder = dim % 4;
         for c in 0..chunks {
             let off = c * 4;
             output.data[dst_start + off] += sign_f * input.data[src_start + off];
@@ -124,21 +125,26 @@ pub fn codifferential(cx: &CellComplex, input: &CochainField) -> CochainField {
     //   output[row] += sign * input[col]
     // (Note: Bₖ maps (k)-cells to (k-1)-cells, so we iterate its entries directly)
     let entries = cx.boundary_entries(target_rank);
+
+    // Hoist invariant chunk geometry; branch-free sign via f32 multiply (matches exterior_derivative).
+    let chunks = dim / 4;
+    let remainder = dim % 4;
+
     for &(dst_cell, src_cell, sign) in entries {
         let src_start = src_cell * dim;
         let dst_start = dst_cell * dim;
-        match sign {
-            1 => {
-                for d in 0..dim {
-                    output.data[dst_start + d] += input.data[src_start + d];
-                }
-            }
-            -1 => {
-                for d in 0..dim {
-                    output.data[dst_start + d] -= input.data[src_start + d];
-                }
-            }
-            _ => {}
+        let sign_f = sign as f32;
+
+        for c in 0..chunks {
+            let off = c * 4;
+            output.data[dst_start + off] += sign_f * input.data[src_start + off];
+            output.data[dst_start + off + 1] += sign_f * input.data[src_start + off + 1];
+            output.data[dst_start + off + 2] += sign_f * input.data[src_start + off + 2];
+            output.data[dst_start + off + 3] += sign_f * input.data[src_start + off + 3];
+        }
+        for d in 0..remainder {
+            let off = chunks * 4 + d;
+            output.data[dst_start + off] += sign_f * input.data[src_start + off];
         }
     }
 
@@ -168,6 +174,14 @@ pub fn hodge_laplacian(cx: &CellComplex, input: &CochainField) -> CochainField {
     let k = input.rank;
     let n = input.n_cells();
     let dim = input.dim;
+
+    // Rank-0 fast path: Δ₀ = δ₁d₀ = graph Laplacian.
+    // Single-pass computation avoids 2 intermediate cochain allocations.
+    if k == 0 && cx.n_edges() > 0 {
+        let mut scratch = vec![0.0f32; cx.n_edges() * dim];
+        return graph_laplacian(cx, input, &mut scratch);
+    }
+
     let mut output = CochainField::zeros(k, n, dim);
 
     // Upper channel: Δ↑ₖ = δₖ₊₁ ∘ dₖ
@@ -175,8 +189,8 @@ pub fn hodge_laplacian(cx: &CellComplex, input: &CochainField) -> CochainField {
         let dk_input = exterior_derivative(cx, input);
         if dk_input.n_cells() > 0 {
             let delta_up = codifferential(cx, &dk_input);
-            for i in 0..output.data.len() {
-                output.data[i] += delta_up.data[i];
+            for (o, u) in output.data.iter_mut().zip(delta_up.data.iter()) {
+                *o += u;
             }
         }
     }
@@ -184,10 +198,10 @@ pub fn hodge_laplacian(cx: &CellComplex, input: &CochainField) -> CochainField {
     // Lower channel: Δ↓ₖ = dₖ₋₁ ∘ δₖ
     if k > 0 {
         let delta_k = codifferential(cx, input);
-        if delta_k.n_cells() > 0 && k > 0 {
+        if delta_k.n_cells() > 0 {
             let d_lower = exterior_derivative(cx, &delta_k);
-            for i in 0..output.data.len() {
-                output.data[i] += d_lower.data[i];
+            for (o, l) in output.data.iter_mut().zip(d_lower.data.iter()) {
+                *o += l;
             }
         }
     }
@@ -228,15 +242,16 @@ pub fn graph_laplacian(
     let mut output = CochainField::zeros(0, n_vertices, dim);
 
     // Entries come in pairs for each edge: (v_tail, e, -1), (v_head, e, +1).
+    // Hoist invariant chunk geometry out of the loop.
+    let chunks = dim / 4;
+    let remainder = dim % 4;
+
     for pair in entries.chunks_exact(2) {
         let (v_tail, _e, _sign_t) = pair[0];
         let (v_head, _e, _sign_h) = pair[1];
         let tail_start = v_tail * dim;
         let head_start = v_head * dim;
 
-        // Chunked 4-wide to assist auto-vectorization
-        let chunks = dim / 4;
-        let remainder = dim % 4;
         for c in 0..chunks {
             let off = c * 4;
             let diff0 = potential.data[tail_start + off] - potential.data[head_start + off];

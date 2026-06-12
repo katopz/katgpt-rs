@@ -34,14 +34,17 @@ pub struct NpcBrainInput {
 
 /// Per-module input for projection.
 /// Captures the ternary direction data needed for dot-product + sigmoid.
+///
+/// Field order: large u64-aligned array first, then f32, then u8 tail
+/// to minimize padding gaps.
 #[derive(Clone, Copy, Debug)]
 pub struct ModuleInput {
     /// Ternary direction vectors.
     pub directions: [crate::types::TernaryDir; 8],
-    /// Number of active directions (n_directions).
-    pub n_directions: u8,
     /// Module confidence [0, 1].
     pub confidence: f32,
+    /// Number of active directions (n_directions).
+    pub n_directions: u8,
 }
 
 impl Default for ModuleInput {
@@ -158,25 +161,31 @@ impl NpcBrainBackend for CpuTernaryBackend {
         }
 
         for (input, output) in inputs.iter().zip(outputs.iter_mut()) {
-            *output = NpcBrainOutput::default();
+            let projections = &mut output.projections;
+            // Zero all slots first — cheaper than Default::default() which
+            // goes through a memcpy of the whole struct.
+            *projections = [0.0; MAX_MODULES];
 
-            for i in 0..input.module_count {
+            let module_count = input.module_count;
+            let autonomous_disabled = input.autonomous_disabled;
+
+            for i in 0..module_count {
                 // Check GM override first
                 if let Some(v) = input.overrides[i] {
-                    output.projections[i] = v;
+                    projections[i] = v;
                     continue;
                 }
-                if input.autonomous_disabled {
-                    output.projections[i] = 0.0;
+                if autonomous_disabled {
+                    // Already zeroed above
                     continue;
                 }
 
-                // Exact ternary projection matching SenseModule::project()
-                output.projections[i] = project_ternary(
+                let module = &input.modules[i];
+                projections[i] = project_ternary(
                     &input.hla_state,
-                    &input.modules[i].directions,
-                    input.modules[i].n_directions as usize,
-                    input.modules[i].confidence,
+                    &module.directions,
+                    module.n_directions as usize,
+                    module.confidence,
                 );
             }
         }
@@ -196,6 +205,9 @@ impl NpcBrainBackend for CpuTernaryBackend {
 
 /// Ternary dot-product + sigmoid projection.
 /// Matches `SenseModule::project()` exactly.
+///
+/// Uses a direct indexed loop instead of `.enumerate().take(n)` to reduce
+/// iterator overhead and improve LLVM auto-vectorization.
 #[inline(always)]
 fn project_ternary(
     hla_state: &[f32; 8],
@@ -204,8 +216,9 @@ fn project_ternary(
     confidence: f32,
 ) -> f32 {
     let mut dot = 0.0f32;
-    for (i, hla_val) in hla_state.iter().enumerate().take(n_directions) {
+    for i in 0..n_directions {
         let dir = &directions[i];
+        let hla_val = hla_state[i];
         let pos = ((dir.pos_bits >> i) & 1) as u32 as f32;
         let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
         dot += (pos - neg) * hla_val * dir.row_scale;

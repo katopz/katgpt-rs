@@ -60,6 +60,10 @@ impl CellComplex {
 
         let mut cx = Self::new(n_vertices, n_edges, n_faces, 0);
 
+        // Pre-allocate boundary vectors to exact capacity — avoids re-allocations during push.
+        cx.boundaries[0].reserve_exact(2 * n_edges);
+        cx.boundaries[1].reserve_exact(4 * n_faces);
+
         // B₁: vertex→edge incidence
         // Horizontal edges: edge e = (y, x, H) connects vertex (y*w+x) → (y*w+x+1)
         for y in 0..h {
@@ -168,13 +172,13 @@ impl CellComplex {
 /// - Rank 2 (faces): fluxes, vorticity, area-normalized quantities
 /// - Rank 3 (volumes): densities, mass, occupancy
 pub struct CochainField {
+    /// Flat feature data: `[n_k × dim]`, row-major.
+    /// `data[cell_idx * dim + d]` is the d-th feature of cell `cell_idx`.
+    pub data: Vec<f32>,
     /// Feature dimension per cell.
     pub dim: usize,
     /// Rank k of this cochain (0=vertex, 1=edge, 2=face, 3=volume).
     pub rank: u8,
-    /// Flat feature data: `[n_k × dim]`, row-major.
-    /// `data[cell_idx * dim + d]` is the d-th feature of cell `cell_idx`.
-    pub data: Vec<f32>,
 }
 
 impl CochainField {
@@ -182,16 +186,16 @@ impl CochainField {
     #[inline]
     pub fn zeros(rank: u8, n_cells: usize, dim: usize) -> Self {
         Self {
+            data: vec![0.0f32; n_cells * dim],
             dim,
             rank,
-            data: vec![0.0f32; n_cells * dim],
         }
     }
 
     /// Create a cochain from existing data.
     #[inline]
     pub fn from_vec(rank: u8, dim: usize, data: Vec<f32>) -> Self {
-        Self { dim, rank, data }
+        Self { data, dim, rank }
     }
 
     /// Number of cells in this cochain.

@@ -79,11 +79,13 @@ impl DecFlowField {
         let n_edges = edge_field.n_cells();
         let mut combined = vec![0.0f32; n_edges];
 
-        // Weighted combination
-        for i in 0..n_edges {
-            combined[i] = alpha * decomp.exact.data[i]
-                + beta * decomp.coexact.data[i]
-                + gamma * decomp.harmonic.data[i];
+        // Weighted combination — zip avoids per-element bounds checks.
+        for ((c, e), (ce, h)) in combined
+            .iter_mut()
+            .zip(decomp.exact.data.iter())
+            .zip(decomp.coexact.data.iter().zip(decomp.harmonic.data.iter()))
+        {
+            *c = alpha * e + beta * ce + gamma * h;
         }
 
         // Infer grid dimensions from vertex/edge counts.
