@@ -1,6 +1,6 @@
 # Plan 253: Merkle-Octree Node-Tier Curator Consensus — Modelless Verification Layer
 
-> **Status:** 🏗️ In Progress (T6, T11, T13 remaining)
+> **Status:** 🏗️ In Progress (T6 remaining)
 > **Date:** 2026-06-12
 > **Research:** Research 221 — Merkle-Octree Curator Consensus
 > **Depends On:** `sense_composition` (Plan 221, existing), `bandit` (BanditPruner infrastructure)
@@ -40,7 +40,7 @@ Add a **modelless verification layer** to the existing KG Latent Octree Sense Co
 
 - [x] **T9: Unit tests** — MerkleOctree build (empty, single leaf, full 64 leaves), proof gen + verify (valid proof, tampered leaf, wrong root), curator verifier (consistent KG, inconsistent KG, spectral anomaly), bandit reputation (convergence after N verifications). — `katgpt-core/src/merkle.rs`, `katgpt-core/src/curator.rs`
 - [x] **T10: Benchmark** — Merkle build from 64 KG embeddings (< 5µs target), proof generation (< 1µs), proof verify (< 1µs), curator verify single module (< 2µs), bandit sample + update (< 100ns). — `katgpt-core/benches/merkle_octree_bench.rs`
-- [ ] **T11: GOAT proof** — inclusion proof verifies in < 1µs, full Merkle build from `SenseModule` data < 5µs, curator bandit converges within 100 episodes to > 75% accuracy. Create `.benchmarks/221_merkle_octree_goat.md` with results. — `.benchmarks/221_merkle_octree_goat.md`
+- [x] **T11: GOAT proof** — inclusion proof verifies in < 1µs, full Merkle build from `SenseModule` data < 5µs, curator bandit converges within 100 episodes to > 75% accuracy. Create `.benchmarks/221_merkle_octree_goat.md` with results. — `.benchmarks/221_merkle_octree_goat.md`
 
 ### Phase 5: Feature Gate & Integration
 
