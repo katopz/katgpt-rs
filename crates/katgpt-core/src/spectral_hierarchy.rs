@@ -524,8 +524,8 @@ mod tests {
         // Sort both descending.
         let mut full_sorted = full_eigs;
         let mut sub_sorted = sub_eigs;
-        full_sorted.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
-        sub_sorted.sort_unstable_by(|a, b| b.partial_cmp(a).unwrap());
+        full_sorted.sort_unstable_by(|a, b| b.total_cmp(a));
+        sub_sorted.sort_unstable_by(|a, b| b.total_cmp(a));
 
         let eigenvalues = vec![full_sorted, sub_sorted];
         assert!(

@@ -3274,17 +3274,11 @@ unsafe fn avx2_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: us
 /// `x` is row-major (seq_len × d_h), `gram_out` is row-major (seq_len × seq_len).
 #[inline]
 pub fn simd_gram_f32(x: &[f32], seq_len: usize, d_h: usize, gram_out: &mut [f32]) {
-    assert!(
-        x.len() == seq_len * d_h,
-        "x.len() = {} but seq_len * d_h = {}",
-        x.len(),
-        seq_len * d_h
-    );
-    assert!(
-        gram_out.len() == seq_len * seq_len,
-        "gram_out.len() = {} but seq_len^2 = {}",
+    debug_assert_eq!(x.len(), seq_len * d_h, "x length mismatch");
+    debug_assert_eq!(
         gram_out.len(),
-        seq_len * seq_len
+        seq_len * seq_len,
+        "gram_out length mismatch"
     );
 
     for i in 0..seq_len {
