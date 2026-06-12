@@ -579,7 +579,7 @@ impl ReconstructionState {
 
         let max_val = crate::simd::simd_max_f32(&padded);
 
-        let mean = total / 6.0;
+        let mean = total * (1.0 / 6.0);
         let mut selected = [false; 6];
         let mut any_selected = false;
         let mut max_idx = 0usize;
@@ -633,12 +633,12 @@ impl ReconstructionState {
         const KIND_MAP: [usize; 8] = [0, 1, 2, 3, 4, 5, 0, 1];
         let t_min = total_activation.min(1.0);
         let scale = lr * t_min / total_activation;
+        let half_total = 0.5 * total_activation;
 
         for (i, &kind_idx) in KIND_MAP.iter().enumerate() {
             let normalized = self.evidence.kind_activations[kind_idx];
-            let delta = scale * (normalized - 0.5 * total_activation);
+            let delta = scale * (normalized - half_total);
 
-            // Clamp delta and apply to HLA
             let clamped_delta = delta.clamp(-max_delta, max_delta);
             self.hla[i] = (self.hla[i] + clamped_delta).clamp(-1.0, 1.0);
         }
@@ -666,16 +666,14 @@ impl ReconstructionState {
             return;
         }
 
-        // Const LUT avoids modulo per iteration
-        const KIND_MAP: [usize; 8] = [0, 1, 2, 3, 4, 5, 0, 1];
         let t_min = total_activation.min(1.0);
         let scale = lr * t_min / total_activation;
 
-        // Compute delta buffer: delta[i] = kind_activations[KIND_MAP[i]]
+        // Gather: KIND_MAP = [0,1,2,3,4,5,0,1] → first 6 copied, last 2 wrap
         let mut delta = [0.0f32; 8];
-        for (i, &kind_idx) in KIND_MAP.iter().enumerate() {
-            delta[i] = self.evidence.kind_activations[kind_idx];
-        }
+        delta[..6].copy_from_slice(&self.evidence.kind_activations);
+        delta[6] = self.evidence.kind_activations[0];
+        delta[7] = self.evidence.kind_activations[1];
 
         // SIMD: delta = (delta - 0.5 * total) * scale  →  fused sub-scale
         let sub_val = 0.5 * total_activation;
@@ -782,10 +780,8 @@ impl ReconstructionState {
     /// inner matvec with an ANE dispatch. This is left as future work for
     /// the Metal backend in riir-engine.
     pub fn reconstruct_auto(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
-        match self.config.simd_beneficial() {
-            true => self.reconstruct_inner(brain, true),
-            false => self.reconstruct_inner(brain, false),
-        }
+        let use_simd = self.config.simd_beneficial();
+        self.reconstruct_inner(brain, use_simd)
     }
 
     /// Shared inner loop — dispatches to SIMD `evolve_hla_simd()` when available.

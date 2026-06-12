@@ -59,32 +59,35 @@ pub fn fft_smooth_into(
 
     let n = w * h;
 
-    // Reuse buf — resize and fill from grid.
-    buf.clear();
-    buf.extend(grid.iter().map(|&v| Complex::new(v, 0.0)));
+    // Reuse buf — resize then overwrite avoids Map iterator adapter.
+    buf.resize(n, Complex::new(0.0, 0.0));
+    for (b, &v) in buf.iter_mut().zip(grid.iter()) {
+        b.re = v;
+        b.im = 0.0;
+    }
 
     // --- 2D FFT: rows then columns ---
     let row_fwd = planner.plan_fft_forward(w);
     let col_fwd = planner.plan_fft_forward(h);
 
     // Transform rows (in-place, each row is contiguous)
-    for y in 0..h {
-        row_fwd.process(&mut buf[y * w..(y + 1) * w]);
+    for row in buf.chunks_exact_mut(w) {
+        row_fwd.process(row);
     }
 
     // Transform columns (strided — copy, transform, write back)
     col_buf.resize(h, Complex::new(0.0, 0.0));
     for x in 0..w {
-        // Gather column via stride arithmetic
+        // Gather column
         let mut idx = x;
-        for (y, item) in col_buf.iter_mut().enumerate().take(h) {
+        for item in col_buf.iter_mut() {
             *item = buf[idx];
             idx += w;
         }
         col_fwd.process(col_buf);
         // Scatter column back
         idx = x;
-        for (y, &item) in col_buf.iter().enumerate().take(h) {
+        for &item in col_buf.iter() {
             buf[idx] = item;
             idx += w;
         }
@@ -123,21 +126,21 @@ pub fn fft_smooth_into(
     // Inverse columns
     for x in 0..w {
         let mut idx = x;
-        for (y, item) in col_buf.iter_mut().enumerate().take(h) {
+        for item in col_buf.iter_mut() {
             *item = buf[idx];
             idx += w;
         }
         col_inv.process(col_buf);
         idx = x;
-        for (y, &item) in col_buf.iter().enumerate().take(h) {
+        for &item in col_buf.iter() {
             buf[idx] = item;
             idx += w;
         }
     }
 
     // Inverse rows
-    for y in 0..h {
-        row_inv.process(&mut buf[y * w..(y + 1) * w]);
+    for row in buf.chunks_exact_mut(w) {
+        row_inv.process(row);
     }
 
     // Write real parts back, normalised by n — zip avoids bounds checks
