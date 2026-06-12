@@ -161,11 +161,16 @@ impl TripleEvidence {
     /// Uses fast approximation: 1.0 - max_activation (0 = focused, 1 = uniform).
     #[inline]
     pub fn activation_entropy(&self) -> f32 {
-        let total: f32 = self.kind_activations.iter().copied().sum();
+        // Single pass: compute sum + max simultaneously
+        let mut total = 0.0f32;
+        let mut max_val = 0.0f32;
+        for &v in &self.kind_activations {
+            total += v;
+            max_val = max_val.max(v);
+        }
         if total < 1e-8 {
             return 1.0;
         }
-        let max_val = self.kind_activations.iter().copied().fold(0.0f32, f32::max);
         1.0 - max_val / total
     }
 
@@ -526,22 +531,27 @@ impl ReconstructionState {
             return [false; 6];
         }
 
-        let mean = total / 6.0;
+        // Precompute reciprocal to avoid per-element division
+        let mean = total * (1.0 / 6.0);
+
+        // Single pass: build selection mask + track max activation
         let mut selected = [false; 6];
+        let mut any_selected = false;
+        let mut max_idx = 0usize;
+        let mut max_val = activations[0];
 
         for i in 0..6 {
-            // Select modules above mean activation (entropy-gated threshold)
-            selected[i] = activations[i] > mean;
+            let above = activations[i] > mean;
+            selected[i] = above;
+            any_selected |= above;
+            if activations[i] > max_val {
+                max_val = activations[i];
+                max_idx = i;
+            }
         }
 
         // Ensure at least one module selected (pick max)
-        if !selected.iter().any(|&s| s) {
-            let max_idx = activations
-                .iter()
-                .enumerate()
-                .max_by(|(_, a), (_, b)| a.total_cmp(b))
-                .map(|(i, _)| i)
-                .unwrap_or(0);
+        if !any_selected {
             selected[max_idx] = true;
         }
 
@@ -616,23 +626,21 @@ impl ReconstructionState {
         let total_activation: f32 = self.evidence.kind_activations.iter().copied().sum();
 
         if total_activation < 1e-8 {
-            return; // No evidence — don't evolve
+            return;
         }
 
-        // Project accumulated activations back onto HLA dimensions.
-        // Each HLA dimension gets a delta proportional to its contribution
-        // to the total activation, scaled by learning rate.
+        // Const LUT avoids modulo per iteration
+        const KIND_MAP: [usize; 8] = [0, 1, 2, 3, 4, 5, 0, 1];
+        let t_min = total_activation.min(1.0);
+        let scale = lr * t_min / total_activation;
+
         for i in 0..8 {
-            // Cross-couple: use activation pattern to shift HLA
-            // Simple bridge: HLA[i] += lr * (activation[i % 6] / total - 0.5) * activation_sum
-            let kind_idx = i % 6;
-            let normalized = self.evidence.kind_activations[kind_idx] / total_activation;
-            let delta = lr * (normalized - 0.5) * total_activation.min(1.0);
+            let kind_idx = KIND_MAP[i];
+            let normalized = self.evidence.kind_activations[kind_idx];
+            let delta = scale * (normalized - 0.5 * total_activation);
 
-            // Clamp delta to prevent large jumps
+            // Clamp delta and apply to HLA
             let clamped_delta = delta.clamp(-max_delta, max_delta);
-
-            // Update HLA with clamped delta
             self.hla[i] = (self.hla[i] + clamped_delta).clamp(-1.0, 1.0);
         }
     }
@@ -775,10 +783,9 @@ impl ReconstructionState {
     /// inner matvec with an ANE dispatch. This is left as future work for
     /// the Metal backend in riir-engine.
     pub fn reconstruct_auto(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
-        if self.config.simd_beneficial() {
-            self.reconstruct_inner(brain, true)
-        } else {
-            self.reconstruct_inner(brain, false)
+        match self.config.simd_beneficial() {
+            true => self.reconstruct_inner(brain, true),
+            false => self.reconstruct_inner(brain, false),
         }
     }
 
@@ -888,10 +895,14 @@ pub fn compare_reconstruction(
     let active = state.reconstruct(brain);
 
     // Compute HLA delta
-    let mut hla_delta = [0.0f32; 8];
-    for i in 0..8 {
-        hla_delta[i] = state.hla[i] - hla[i];
-    }
+    let hla_delta = {
+        let mut d = [0.0f32; 8];
+        let evolved = state.hla();
+        for i in 0..8 {
+            d[i] = evolved[i] - hla[i];
+        }
+        d
+    };
 
     ReconstructionResult {
         passive,

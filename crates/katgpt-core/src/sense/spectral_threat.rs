@@ -84,12 +84,12 @@ struct LabeledRhythm {
     z_buf: [f32; HIDDEN_DIM],
     /// Observed damage tick timestamps for auto-calibration.
     damage_timestamps: [u32; MAX_TIMESTAMPS],
+    /// Entity ID (source of damage / tracked participant).
+    entity_id: u8,
     /// Number of damage events ingested for this participant.
     event_count: u32,
     /// Number of valid entries in `damage_timestamps`.
     damage_timestamp_count: usize,
-    /// Entity ID (source of damage / tracked participant).
-    entity_id: u8,
 }
 
 // ── Constants ──────────────────────────────────────────────────
@@ -344,15 +344,15 @@ impl CombatRhythmTracker {
         let mut best_count = 1u32;
         let mut run_start = 0;
         for i in 1..intervals.len() {
-            if intervals[i] - intervals[run_start] <= 10 {
-                // tolerance ±5 from cluster start
-                let count = (i - run_start + 1) as u32;
-                if count > best_count {
-                    best_count = count;
-                    best_val = intervals[run_start + (i - run_start) / 2];
+            match intervals[i] - intervals[run_start] <= 10 {
+                true => {
+                    let count = (i - run_start + 1) as u32;
+                    if count > best_count {
+                        best_count = count;
+                        best_val = intervals[run_start + (i - run_start) / 2];
+                    }
                 }
-            } else {
-                run_start = i;
+                false => run_start = i,
             }
         }
         let dominant_interval = best_val;
@@ -377,7 +377,10 @@ impl CombatRhythmTracker {
 
         // Sub-harmonic on second mode (avoid overwriting the snapped one)
         let sub_harmonic = observed_omega_sq * 0.25;
-        let sub_idx = if nearest_idx == 0 { 1 } else { 0 };
+        let sub_idx = match nearest_idx {
+            0 => 1,
+            _ => 0,
+        };
         omega_sq[sub_idx] = sub_harmonic;
     }
 

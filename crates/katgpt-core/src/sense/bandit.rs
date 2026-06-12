@@ -8,8 +8,8 @@ const AGGREGATE_KINDS: usize = 8;
 /// Per-kind aggregate for O(1) average_reward.
 #[derive(Clone, Copy, Debug, Default)]
 struct KindAggregate {
-    count: u32,
     sum: f32,
+    count: u32,
 }
 
 /// A single sense trial for bandit feedback.

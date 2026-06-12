@@ -162,18 +162,15 @@ pub fn schema_init_entity(
     }
 
     let n_found = found_count as f32;
+    let inv_n = 1.0 / n_found;
     let mut result = [0.0f32; 8];
 
     for i in 0..found_count {
         let (mean, std_dev) = found[i].expect("found[i] invariant: index < found_count");
         for d in 0..8 {
             let noise = rng.f32() * 2.0 - 1.0; // ∈ [-1, 1]
-            result[d] += mean[d] + gamma * std_dev[d] * noise;
+            result[d] += (mean[d] + gamma * std_dev[d] * noise) * inv_n;
         }
-    }
-
-    for d in 0..8 {
-        result[d] /= n_found;
     }
 
     result
@@ -218,6 +215,7 @@ pub fn schema_init_with_precision(
     }
 
     let n_found = found_count as f32;
+    let inv_n = 1.0 / n_found;
     let mut embedding = [0.0f32; 8];
     let mut total_count = 0usize;
 
@@ -226,12 +224,8 @@ pub fn schema_init_with_precision(
         total_count += stats.count;
         for d in 0..8 {
             let noise = rng.f32() * 2.0 - 1.0;
-            embedding[d] += stats.mean[d] + gamma * stats.std_dev[d] * noise;
+            embedding[d] += (stats.mean[d] + gamma * stats.std_dev[d] * noise) * inv_n;
         }
-    }
-
-    for d in 0..8 {
-        embedding[d] /= n_found;
     }
 
     let avg_count = total_count / found_count;
