@@ -163,7 +163,7 @@ Trains a 109M-parameter Llama2 transformer (Stories110M) **directly on Apple Neu
 | **4: Async Bandit** | katgpt-rs | DEMOTE | Already done |
 | **5: NEON fp16** | katgpt-rs | MARGINAL | Fold into ane_direct |
 
-**One plan created: Plan 254 (ANE-Latent NPC Brain Compute) for katgpt-rs.**
+**One plan created: Plan 255 (ANE-Latent NPC Brain Compute) for katgpt-rs.**
 **Two issues created: MIL Runtime + Concat-Tap for future.**
 
 ---

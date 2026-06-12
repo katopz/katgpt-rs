@@ -1,4 +1,4 @@
-# Plan 253: Spectral Budget Router — Layer-Adaptive NS Depth + Rank-p Truncation
+# Plan 254: Spectral Budget Router — Layer-Adaptive NS Depth + Rank-p Truncation
 
 **Date:** 2026-06-12
 **Status:** 🚧 IN PROGRESS
@@ -169,7 +169,7 @@ Three pre-defined arms:
 
 - [ ] ### T5: GOAT Proof Test
 
-**File:** `tests/bench_253_spectral_budget_goat.rs`
+**File:** `tests/bench_254_spectral_budget_goat.rs`
 
 ```rust
 // T1: Predictive config matches paper's exponents

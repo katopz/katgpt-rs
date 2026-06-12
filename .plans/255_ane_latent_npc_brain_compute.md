@@ -1,4 +1,4 @@
-# Plan 254: ANE-Latent NPC Brain Compute — Batch NPC Ops on Neural Engine
+# Plan 255: ANE-Latent NPC Brain Compute — Batch NPC Ops on Neural Engine
 
 **Source:** [Research 223 — maderix/ANE Distillation](../.research/223_maderix_ANE_Distillation_Verdict.md) + [Research 224 — coremltools Public API](../.research/224_coremltools_Public_API_ANE_Distillation_Verdict.md)
 **Related:** Plan 176 (GPU/ANE Offload), Plan 148 (PlasmaPath SIMD), Plan 240 (Sense Compression), Issue 004 (ANE CoreML Model Generation)

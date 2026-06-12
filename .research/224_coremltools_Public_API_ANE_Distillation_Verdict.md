@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-12
 **Source:** [apple/coremltools](https://github.com/apple/coremltools) — Apple's official CoreML conversion & optimization toolkit
-**Related:** Research 223 (maderix/ANE), Research 155 (ANE Backend), Research 157 (CoreML Programmatic), Issue 004 (ANE MIL Runtime), Plan 254 (ANE-Latent NPC Brain)
+**Related:** Research 223 (maderix/ANE), Research 155 (ANE Backend), Research 157 (CoreML Programmatic), Issue 004 (ANE MIL Runtime), Plan 255 (ANE-Latent NPC Brain)
 **Status:** GOAT Verdict — **Blocker Removed**
 
 ---
@@ -18,7 +18,7 @@ The previous maderix/ANE distillation (Research 223) identified MIL Runtime Comp
 | Item | Previous Status | New Status |
 |------|----------------|------------|
 | Issue 004 (ANE MIL Runtime) | Deferred — private API blocker | **UNBLOCKED** — use `mb.program` public API |
-| Plan 254 Part 2 | Use maderix MIL string building | **SIMPLIFIED** — use `mb.program` + coremltools |
+| Plan 255 Part 2 | Use maderix MIL string building | **SIMPLIFIED** — use `mb.program` + coremltools |
 | Conv2d(1×1) trick | Private MIL kernel generation | `mb.conv` with (1,1) kernel — public API |
 | INT8 quantization | Manual weight quantization | `coremltools.optimize.coreml` — public API |
 | ANE placement verification | Not available | `MLComputePlan` introspection — public API |
@@ -143,7 +143,7 @@ Multiple functions sharing weights in one `.mlpackage`:
 
 **Recommendation**: Update Issue 004 from "Deferred" to "Unblocked". The `mb.program` approach is the public-API equivalent of maderix's private MIL string building.
 
-### Plan 254 Part 2 — SIMPLIFIED
+### Plan 255 Part 2 — SIMPLIFIED
 
 | Previous | New |
 |----------|-----|
@@ -155,7 +155,7 @@ Multiple functions sharing weights in one `.mlpackage`:
 
 ### Key Constraint: Ternary Bit-Plane Projection
 
-The ternary-to-float conversion concern from Plan 254 Part 1 finding remains:
+The ternary-to-float conversion concern from Plan 255 Part 1 finding remains:
 - `SenseModule::project()` uses ternary bit-plane extraction (not float matmul)
 - coremltools doesn't have ternary bit ops in its standard op set
 - **Solution**: Convert ternary weights to float at model generation time in `generate_npc_brain_model.py`
@@ -175,19 +175,19 @@ The ternary-to-float conversion concern from Plan 254 Part 1 finding remains:
 | Question | Answer |
 |----------|--------|
 | Engine or fuel? | Engine |
-| On by default? | After Plan 254 completes |
+| On by default? | After Plan 255 completes |
 | Modelless? | ✅ State is NPC-specific, weights are engine |
 | Tests? | Easy — compare stateful vs stateless output |
 
-**VERDICT: GAIN — fold into Plan 254 Part 3 as stretch goal**
+**VERDICT: GAIN — fold into Plan 255 Part 3 as stretch goal**
 
 ### Fusion 7: Multifunction NPC Brain — GAIN (Future)
 
 **What**: Use iOS 18+ multifunction models to share weights between perception/emotion/zone functions.
 
-**Why**: Currently Plan 254 assumes 3 separate ANE dispatches. Multifunction models share weights → single dispatch, lower overhead.
+**Why**: Currently Plan 255 assumes 3 separate ANE dispatches. Multifunction models share weights → single dispatch, lower overhead.
 
-**VERDICT: GAIN — fold into Plan 254 Part 2 as stretch goal, requires iOS 18+ / macOS 15+**
+**VERDICT: GAIN — fold into Plan 255 Part 2 as stretch goal, requires iOS 18+ / macOS 15+**
 
 ### Fusion 8: Palettized Ternary Weights — GAIN (Future)
 
@@ -204,9 +204,9 @@ The ternary-to-float conversion concern from Plan 254 Part 1 finding remains:
 ### Immediate
 - [x] Create Research 224 — coremltools distillation verdict
 - [x] Update Issue 004 — remove "private API" blocker, update approach
-- [x] Update Plan 254 Part 2 — use `mb.program` instead of MIL string building
+- [x] Update Plan 255 Part 2 — use `mb.program` instead of MIL string building
 
-### Plan 254 Updates (Part 2 Revised)
+### Plan 255 Updates (Part 2 Revised)
 - [x] `scripts/generate_npc_brain_model.py` — use `mb.program` with `mb.matmul`/`mb.sigmoid`
 - [x] Ternary-to-float weight conversion in Python script
 - [x] INT8 quantization via `coremltools.optimize.coreml`
@@ -225,9 +225,9 @@ The ternary-to-float conversion concern from Plan 254 Part 1 finding remains:
 - Research 155 — ANE Compute Backend Verdict
 - Research 157 — CoreML Programmatic Model Building
 - Research 223 — maderix/ANE Distillation
-- Plan 254 — ANE-Latent NPC Brain Compute
+- Plan 255 — ANE-Latent NPC Brain Compute
 - Issue 004 — ANE MIL Runtime Compute Pipeline
 
 ---
 
-TL;DR: **coremltools public API removes the private API blocker from Issue 004.** Use `mb.program` for model building, `mb.linear` + `mb.sigmoid` for NPC brain ops, `coremltools.optimize.coreml` for INT8 quantization, and `MLComputePlan` for ANE placement verification. Three additional fusions identified (stateful accumulators, multifunction, palettized ternary) — all fold into Plan 254 as stretch goals.
+TL;DR: **coremltools public API removes the private API blocker from Issue 004.** Use `mb.program` for model building, `mb.linear` + `mb.sigmoid` for NPC brain ops, `coremltools.optimize.coreml` for INT8 quantization, and `MLComputePlan` for ANE placement verification. Three additional fusions identified (stateful accumulators, multifunction, palettized ternary) — all fold into Plan 255 as stretch goals.
