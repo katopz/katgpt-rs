@@ -77,14 +77,18 @@ quantized_model = quantizer.compile(model)
 
 ## Tasks
 
-- [ ] Create `scripts/generate_npc_brain_model.py` using `mb.program`
-- [ ] Implement ternary-to-float weight conversion (lossless: -1/0/+1 → f32)
-- [ ] Generate `npc_brain.mlpackage` with 3 fused ops
-- [ ] Apply INT8 per-tensor quantization via `coremltools.optimize.coreml`
-- [ ] Verify ANE placement via `MLComputePlan` (all ops on NE)
+- [x] Create `scripts/generate_npc_brain_model.py` using `mb.program`
+- [x] Implement ternary-to-float weight conversion (lossless: -1/0/+1 → f32)
+- [x] 3 fused ops: sense matmul + sigmoid, emotion dot + sigmoid, zone dot + sigmoid
+- [x] `TernaryDir` / `SenseModule` Python mirrors matching Rust `project()` semantics
+- [x] Weight binary export (`npc_brain_weights.bin`) for Rust-side verification
+- [x] INT8 per-tensor quantization via `coremltools.optimize.coreml.LinearQuantizer`
+- [x] ANE placement verification via `MLComputePlan`
+- [x] Graceful error handling for Python 3.13+ missing native extensions
+- [ ] **Blocked**: Generate `npc_brain.mlpackage` — requires Python 3.12 for BlobWriter
+- [ ] Verify ANE placement (all ops on NE) — requires .mlpackage
 - [ ] Verify FP16 I/O compatibility (ANE runs FP16 natively)
-- [ ] Generate `npc_brain_weights.bin` for Rust-side verification
-- [ ] Write test: generated model output matches `CpuTernaryBackend` output (cosine ≥ 0.99)
+- [ ] Write test: generated model output matches `CpuTernaryBackend` (cosine ≥ 0.99)
 
 ## Stretch Goals (from Research 224)
 

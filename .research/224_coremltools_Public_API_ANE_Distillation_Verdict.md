@@ -203,15 +203,15 @@ The ternary-to-float conversion concern from Plan 254 Part 1 finding remains:
 
 ### Immediate
 - [x] Create Research 224 — coremltools distillation verdict
-- [ ] Update Issue 004 — remove "private API" blocker, update approach
-- [ ] Update Plan 254 Part 2 — use `mb.program` instead of MIL string building
+- [x] Update Issue 004 — remove "private API" blocker, update approach
+- [x] Update Plan 254 Part 2 — use `mb.program` instead of MIL string building
 
 ### Plan 254 Updates (Part 2 Revised)
-- [ ] `scripts/generate_npc_brain_model.py` — use `mb.program` with `mb.linear`/`mb.sigmoid`
-- [ ] Ternary-to-float weight conversion in Python script
-- [ ] INT8 quantization via `coremltools.optimize.coreml`
-- [ ] ANE placement verification via `MLComputePlan`
-- [ ] Output `npc_brain.mlpackage` (public format, not private MIL)
+- [x] `scripts/generate_npc_brain_model.py` — use `mb.program` with `mb.matmul`/`mb.sigmoid`
+- [x] Ternary-to-float weight conversion in Python script
+- [x] INT8 quantization via `coremltools.optimize.coreml`
+- [x] ANE placement verification via `MLComputePlan`
+- [ ] Output `npc_brain.mlpackage` — blocked on Python 3.12 for BlobWriter serialization
 
 ---
 

@@ -103,17 +103,21 @@ else:
 
 **Updated per Research 224**: Use `coremltools` `mb.program` public API instead of maderix private MIL string building. This removes the private API blocker from Issue 004.
 
-- [ ] Create `scripts/generate_npc_brain_model.py` using `mb.program` with 3 fused ops:
+- [x] Create `scripts/generate_npc_brain_model.py` using `mb.program` with 3 fused ops:
   - Op 1: sense matmul `[B, 6, 8] × [B, 8, 1]` + sigmoid → `[B, 6]` (emotions)
   - Op 2: dot-product `[B, 8]·[B, 8]` + sigmoid → `[B, 1]` (emotion scalar)
   - Op 3: dot-product `[B, 8]·[B, 8]` + sigmoid → `[B, 1]` (zone weight)
-- [ ] Ternary-to-float weight conversion: lossless -1/0/+1 → f32 in Python script
-- [ ] Use `mb.linear` + `mb.sigmoid` (public API) instead of Conv2d(1×1) MIL kernel
-- [ ] Generate `npc_brain.mlpackage` (public format, `ct.convert(..., convert_to="mlprogram")`)
-- [ ] Apply INT8 per-tensor quantization via `coremltools.optimize.coreml.LinearQuantizer`
-- [ ] Verify ANE placement via `MLComputePlan` (all ops land on NE)
-- [ ] Generate `npc_brain_weights.bin` for Rust-side verification
-- [ ] Validate ANE residency (timing check < 1ms for batch=1)
+- [x] Ternary-to-float weight conversion: lossless -1/0/+1 → f32 in Python script
+- [x] Use `mb.matmul` + `mb.sigmoid` (public API) instead of Conv2d(1×1) MIL kernel
+- [x] `TernaryDir` / `SenseModule` Python mirrors with exact Rust `project()` semantics
+- [x] Reference projection function matching `SenseModule::project()` for verification
+- [x] Weight binary export for Rust-side verification (`npc_brain_weights.bin`)
+- [x] INT8 quantization via `coremltools.optimize.coreml.LinearQuantizer` (implemented, needs Python 3.12 for serialization)
+- [x] ANE placement verification via `MLComputePlan` (implemented, needs native extensions)
+- [x] Graceful error handling for Python 3.13+ missing native extensions
+- [ ] **Blocked**: Generate `npc_brain.mlpackage` — requires Python 3.12 for BlobWriter serialization
+- [ ] **Blocked**: Validate ANE residency (timing check < 1ms for batch=1) — requires .mlpackage
+- [ ] **Blocked**: Test model output matches `CpuTernaryBackend` (cosine ≥ 0.99) — requires .mlpackage
 
 **Stretch goals (from Research 224):**
 - [ ] Multifunction model: share weights between perception/emotion/zone (iOS 18+)
