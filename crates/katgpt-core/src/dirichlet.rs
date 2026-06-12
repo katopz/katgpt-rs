@@ -99,6 +99,6 @@ pub fn kv_cache_dirichlet_energy(
     adjacency: &[(usize, usize)],
 ) -> (f32, f32) {
     let energy = dirichlet_energy(keys, kv_dim, adjacency);
-    let n_edges = adjacency.len().max(1) as f32;
-    (energy, energy / n_edges)
+    let n_edges = adjacency.len().max(1) as f64;
+    (energy, (energy as f64 / n_edges) as f32)
 }

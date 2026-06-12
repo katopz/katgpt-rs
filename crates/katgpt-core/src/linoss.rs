@@ -121,33 +121,25 @@ impl LinOSSCell {
         let total = n * h;
         scratch.ensure_capacity(total);
 
-        // Zero-fill used portions
+        // Per-step transfer matrix: [[1, dt], [-ω²dt, 1]] with bias [0, dt*f]
+        // Fused zero-fill + init: only write each element once instead of zero + overwrite.
+        // a=1.0 and d=1.0 are constants; b=dt is constant; only c and bias_z vary per-step.
         for buf in [
-            &mut scratch.a,
-            &mut scratch.b,
-            &mut scratch.c,
-            &mut scratch.d,
             &mut scratch.bias_y,
-            &mut scratch.bias_z,
-            &mut scratch.pa,
-            &mut scratch.pb,
-            &mut scratch.pc,
-            &mut scratch.pd,
-            &mut scratch.pby,
             &mut scratch.pbz,
         ] {
             buf[..total].fill(0.0);
         }
+        scratch.a[..total].fill(1.0);
+        scratch.d[..total].fill(1.0);
+        scratch.b[..total].fill(dt);
+        // c and bias_z are overwritten per-step below, no need to pre-fill.
 
-        // Per-step transfer matrix: [[1, dt], [-ω²dt, 1]] with bias [0, dt*f]
         for (step, f) in forcings.iter().enumerate().take(n) {
             let base = step * h;
             for j in 0..h {
-                scratch.a[base + j] = 1.0;
-                scratch.b[base + j] = dt;
                 scratch.c[base + j] = -self.omega_sq[j] * dt;
-                scratch.d[base + j] = 1.0;
-                scratch.bias_z[base + j] = dt * f[j]; // bias_y stays 0
+                scratch.bias_z[base + j] = dt * f[j];
             }
         }
 
@@ -268,11 +260,13 @@ impl LinOSSCell {
     #[inline]
     pub fn energy(&self, state: &LinOSSState) -> f32 {
         let h = self.hidden_dim;
-        let mut e = 0.0f32;
+        // Use f64 accumulator for precision over many dimensions.
+        let mut e = 0.0f64;
         for i in 0..h {
-            e += state.y[i] * state.y[i] + self.omega_sq[i] * state.z[i] * state.z[i];
+            e += state.y[i] as f64 * state.y[i] as f64
+                + self.omega_sq[i] as f64 * state.z[i] as f64 * state.z[i] as f64;
         }
-        e
+        e as f32
     }
 }
 
@@ -412,7 +406,7 @@ impl VocabFourierBasis {
         }
 
         // Sort by magnitude descending, take top-K indices.
-        magnitudes.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        magnitudes.sort_by(|a, b| b.0.total_cmp(&a.0));
         magnitudes.truncate(k);
 
         // Phase 2: compute modes only for top-K (reuse cos_mode buffer).

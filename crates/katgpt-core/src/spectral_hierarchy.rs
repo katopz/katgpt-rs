@@ -279,7 +279,7 @@ pub(crate) fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
     // Extract eigenvalues and sort descending.
     // Build index array via iterator — avoids per-push bounds checks.
     let mut indexed: Vec<(usize, f64)> = (0..n).map(|i| (i, a[i * n + i])).collect();
-    indexed.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    indexed.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
     // Return top-k eigenvectors as a flat buffer [k * n], row-major.
     // Single allocation instead of k separate Vec<f32> allocations.

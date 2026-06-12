@@ -1998,10 +1998,14 @@ impl Rng {
         self.state
     }
 
-    /// Uniform [0, 1).
+    /// Uniform [0, 1) — 24 bits of entropy (full f32 mantissa precision).
     #[inline(always)]
     pub fn uniform(&mut self) -> f32 {
-        (self.next() >> 11) as f32 * (1.0 / 9007199254740992.0)
+        // Bit-manipulation trick: take upper 24 bits, OR into the 23-bit mantissa
+        // position with exponent set to 0x3f80 (1.0), then subtract 1.0.
+        // This gives exactly 24 bits of uniform random bits mapped to [0, 1).
+        let bits = ((self.next() >> 40) as u32 & 0x007f_ffff) | 0x3f80_0000;
+        f32::from_bits(bits) - 1.0
     }
 
     /// Standard normal via Box-Muller transform.
@@ -3603,22 +3607,39 @@ impl ShardEmbedding {
     pub const DIM: usize = 8;
 
     /// Cosine similarity between two embeddings.
-    /// Scalar for dim=8 — SIMD dispatch overhead exceeds the work at this size.
+    /// Unrolled for dim=8 — avoids loop overhead and helps register allocation.
     #[inline]
     pub fn cosine_similarity(&self, other: &Self) -> f32 {
-        let mut dot = 0.0f32;
-        let mut sq_a = 0.0f32;
-        let mut sq_b = 0.0f32;
-        for i in 0..8 {
-            dot += self.0[i] * other.0[i];
-            sq_a += self.0[i] * self.0[i];
-            sq_b += other.0[i] * other.0[i];
-        }
-        let denom = sq_a.sqrt() * sq_b.sqrt();
-        if denom < 1e-8 {
+        let dot = self.0[0] * other.0[0]
+            + self.0[1] * other.0[1]
+            + self.0[2] * other.0[2]
+            + self.0[3] * other.0[3]
+            + self.0[4] * other.0[4]
+            + self.0[5] * other.0[5]
+            + self.0[6] * other.0[6]
+            + self.0[7] * other.0[7];
+        let sq_a = self.0[0] * self.0[0]
+            + self.0[1] * self.0[1]
+            + self.0[2] * self.0[2]
+            + self.0[3] * self.0[3]
+            + self.0[4] * self.0[4]
+            + self.0[5] * self.0[5]
+            + self.0[6] * self.0[6]
+            + self.0[7] * self.0[7];
+        let sq_b = other.0[0] * other.0[0]
+            + other.0[1] * other.0[1]
+            + other.0[2] * other.0[2]
+            + other.0[3] * other.0[3]
+            + other.0[4] * other.0[4]
+            + other.0[5] * other.0[5]
+            + other.0[6] * other.0[6]
+            + other.0[7] * other.0[7];
+        let denom = sq_a * sq_b;
+        if denom < 1e-16 {
             return 0.0;
         }
-        dot / denom
+        let inv_norm = 1.0 / denom.sqrt();
+        dot * inv_norm
     }
 
     /// Euclidean distance squared between two embeddings.
@@ -3638,22 +3659,10 @@ impl Default for ShardEmbedding {
 // Hash for use as HashMap key (bit-level, NOT semantic hash)
 impl std::hash::Hash for ShardEmbedding {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        state.write_u64(
-            self.0[0].to_bits() as u64
-                | (self.0[1].to_bits() as u64) << 32,
-        );
-        state.write_u64(
-            self.0[2].to_bits() as u64
-                | (self.0[3].to_bits() as u64) << 32,
-        );
-        state.write_u64(
-            self.0[4].to_bits() as u64
-                | (self.0[5].to_bits() as u64) << 32,
-        );
-        state.write_u64(
-            self.0[6].to_bits() as u64
-                | (self.0[7].to_bits() as u64) << 32,
-        );
+        // Single write of all 32 bytes — fewer virtual calls than four write_u64.
+        state.write(unsafe {
+            std::slice::from_raw_parts(self.0.as_ptr() as *const u8, 32)
+        });
     }
 }
 
@@ -3681,7 +3690,8 @@ pub enum SenseKind {
 }
 
 /// Ternary direction vector: +1/0/-1 encoded as two bitmasks + row scale.
-/// 20 bytes each.
+/// 20 bytes each (u64, u64, f32).
+/// `#[repr(C)]` required — embedded in `SenseModule` which hashes raw bytes.
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct TernaryDir {

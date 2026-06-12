@@ -2681,18 +2681,18 @@ pub fn compute_retrieval_margin(
     let mut global_neg_max = f32::NEG_INFINITY;
 
     // Pre-allocate bitmap once, reuse per query
-    let mut pos_bitmap = vec![false; n_docs];
+    let mut pos_bitmap = vec![0u8; n_docs];
 
     for i in 0..n_queries {
         let q_row = &queries[i * dim..(i + 1) * dim];
 
         // Build positive set and compute min positive score in one pass
         let pos_start = i * k;
-        pos_bitmap.fill(false);
+        pos_bitmap.fill(0);
         let mut pos_min = f32::INFINITY;
         for &idx in &neighborhoods[pos_start..pos_start + k] {
             if idx < n_docs {
-                pos_bitmap[idx] = true;
+                pos_bitmap[idx] = 1;
                 let d_row = &documents[idx * dim..(idx + 1) * dim];
                 let dot = simd_dot_f32(q_row, d_row, dim);
                 pos_min = pos_min.min(dot);
@@ -2702,7 +2702,7 @@ pub fn compute_retrieval_margin(
         // max negative score (all docs not in pos_set)
         let mut neg_max = f32::NEG_INFINITY;
         for j in 0..n_docs {
-            if pos_bitmap[j] {
+            if pos_bitmap[j] != 0 {
                 continue;
             }
             let d_row = &documents[j * dim..(j + 1) * dim];

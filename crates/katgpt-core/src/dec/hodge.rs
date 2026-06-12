@@ -563,7 +563,7 @@ pub fn hodge_spectrum(
         eigenvectors.push(x);
     }
 
-    eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    eigenvalues.sort_by(|a, b| b.total_cmp(a));
     eigenvalues
 }
 

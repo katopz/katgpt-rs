@@ -292,12 +292,8 @@ impl SlodOperator {
             if k_eff == 0 {
                 continue;
             }
-            dists.select_nth_unstable_by(k_eff - 1, |a, b| {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-            });
-            dists[..k_eff].sort_unstable_by(|a, b| {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-            });
+            dists.select_nth_unstable_by(k_eff - 1, |a, b| a.1.total_cmp(&b.1));
+            dists[..k_eff].sort_unstable_by(|a, b| a.1.total_cmp(&b.1));
 
             // Take top-k nearest neighbors
             for &(j, d) in dists.iter().take(k_eff) {
@@ -357,7 +353,7 @@ impl SlodOperator {
             .enumerate()
             .map(|(i, &v)| (i, v))
             .collect();
-        indexed.sort_unstable_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        indexed.sort_unstable_by(|a, b| b.1.total_cmp(&a.1));
 
         let sorted_eigenvalues: Vec<f32> = indexed.iter().map(|&(_, v)| v).collect();
         let sorted_eigvecs = {
@@ -590,7 +586,7 @@ pub fn frechet_mean(
     let start_idx = weights
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a, b| a.1.total_cmp(b.1))
         .map(|(i, _)| i)
         .unwrap_or(0);
 
@@ -824,16 +820,12 @@ fn mad_peak_picker(
     // Compute median (O(n) via select_nth_unstable_by)
     let mut sorted = composite.to_vec();
     let mid = n / 2;
-    sorted.select_nth_unstable_by(mid, |a, b| {
-        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    sorted.select_nth_unstable_by(mid, |a, b| a.total_cmp(b));
     let median = sorted[mid];
 
     // Compute MAD (O(n) via select_nth_unstable_by)
     let mut deviations: Vec<f32> = composite.iter().map(|&x| (x - median).abs()).collect();
-    deviations.select_nth_unstable_by(mid, |a, b| {
-        a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    deviations.select_nth_unstable_by(mid, |a, b| a.total_cmp(b));
     let mad = deviations[mid].max(1e-10);
 
     // Find peaks where composite > median + β * MAD * 1.4826
