@@ -41,6 +41,16 @@ pub enum Dtype {
     F16,
 }
 
+impl Dtype {
+    #[inline(always)]
+    fn elem_size(self) -> u64 {
+        match self {
+            Self::F32 => 4,
+            Self::F16 => 2,
+        }
+    }
+}
+
 /// Operator type for roofline estimation.
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,10 +193,7 @@ pub fn roofline_estimate(
 /// FLOPs = 2 * m * k, bytes = (m * k + m + k) * sizeof(dtype).
 #[inline(always)]
 pub fn gemv_cost(m: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
-    let elem_size: u64 = match dtype {
-        Dtype::F32 => 4,
-        Dtype::F16 => 2,
-    };
+    let elem_size = dtype.elem_size();
     let flops = 2 * m * k;
     let bytes = (m * k + m + k) * elem_size;
     roofline_estimate(OpType::Gemv, dtype, flops, bytes, hw)
@@ -197,10 +204,7 @@ pub fn gemv_cost(m: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCo
 /// FLOPs = 2 * m * n * k, bytes = (m*k + k*n + m*n) * sizeof(dtype).
 #[inline(always)]
 pub fn gemm_cost(m: u64, n: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
-    let elem_size: u64 = match dtype {
-        Dtype::F32 => 4,
-        Dtype::F16 => 2,
-    };
+    let elem_size = dtype.elem_size();
     let flops = 2 * m * n * k;
     let bytes = (m * k + k * n + m * n) * elem_size;
     roofline_estimate(OpType::Gemm, dtype, flops, bytes, hw)
@@ -213,10 +217,7 @@ pub fn gemm_cost(m: u64, n: u64, k: u64, dtype: Dtype, hw: &HardwarePeaks) -> Ro
 /// Bytes = (seq_len * d_h + seq_len²) * sizeof(dtype).
 #[inline(always)]
 pub fn gram_cost(seq_len: u64, d_h: u64, dtype: Dtype, hw: &HardwarePeaks) -> RooflineCost {
-    let elem_size: u64 = match dtype {
-        Dtype::F32 => 4,
-        Dtype::F16 => 2,
-    };
+    let elem_size = dtype.elem_size();
     // Upper triangle: seq_len*(seq_len+1)/2 dot products, each of length d_h
     // But we count full for safety: seq_len * seq_len * d_h * 2 FLOPs
     let flops = seq_len * (seq_len + 1) / 2 * d_h * 2;
