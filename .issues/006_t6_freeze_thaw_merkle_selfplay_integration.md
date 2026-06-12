@@ -1,7 +1,7 @@
 # Issue 006: T6 — Freeze/Thaw Merkle Integration into Go Self-Play Flow
 
 > **Source:** Plan 253 (T6) — Merkle-Octree Curator Modelless Verification Layer
-> **Status:** 🔲 Open
+> **Status:** ✅ Done — implemented in `riir-ai/crates/riir-engine/src/kg.rs` behind `merkle_octree` feature. 7/7 tests pass.
 > **Scope:** Cross-crate wiring (`katgpt-core` → `riir-ai`)
 > **Priority:** Medium — blocks Plan 253 completion but not a blocker for other plans
 

@@ -1,6 +1,6 @@
 # Plan 253: Merkle-Octree Node-Tier Curator Consensus — Modelless Verification Layer
 
-> **Status:** 🏗️ In Progress (T6 remaining)
+> **Status:** ✅ Complete
 > **Date:** 2026-06-12
 > **Research:** Research 221 — Merkle-Octree Curator Consensus
 > **Depends On:** `sense_composition` (Plan 221, existing), `bandit` (BanditPruner infrastructure)
@@ -29,7 +29,7 @@ Add a **modelless verification layer** to the existing KG Latent Octree Sense Co
 
 - [x] **T4: Implement `CuratorVerifier`** — modelless checks: (1) KG consistency = dot-product similarity between KG embedding and claimed octree direction, (2) spectral flatness = variance of leaf hashes must exceed entropy floor, (3) latent conditioning = sigmoid(dot(query_vector, direction)) within [0,1]. No model weights. — `katgpt-core/src/curator.rs` — GOAT: verify single module < 2µs
 - [x] **T5: Implement `MerkleFrozenEnvelope`** — extends `MuxPatternStore` freeze pattern with BLAKE3 Merkle root for self-play data. `freeze_with_root(key, target, merkle_root)`, `thaw_and_verify(key) → Option<(&MuxTarget, bool)>`. — `katgpt-core/src/curator.rs` — GOAT: freeze/thaw overhead < 1µs
-- [ ] **T6: Freeze/thaw Merkle integration** — G-Zero `GoSelfPlayResult[]` → extract KG triples → freeze with Merkle root → thaw verifies against root. Wire into existing `run_gzero_selfplay` flow. — `katgpt-core/src/curator.rs`, `katgpt-core/examples/` — GOAT: full pipeline overhead < 3% of self-play loop
+- [x] **T6: Freeze/thaw Merkle integration** — G-Zero `GoSelfPlayResult[]` → extract KG triples → freeze with Merkle root → thaw verifies against root. Wire into existing `run_gzero_selfplay` flow. — `katgpt-core/src/curator.rs`, `katgpt-core/examples/` — GOAT: full pipeline overhead < 3% of self-play loop
 
 ### Phase 3: Curator Bandit
 
