@@ -1100,28 +1100,31 @@ pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
-    let n = a.len() as f32;
-    let sum_a: f32 = a.iter().copied().sum();
-    let sum_b: f32 = b.iter().copied().sum();
-    let mean_a = sum_a / n;
-    let mean_b = sum_b / n;
-
-    let mut cov = 0.0f32;
-    let mut var_a = 0.0f32;
-    let mut var_b = 0.0f32;
+    // Single-pass Welford-style: track sum_a, sum_b, cov, var_a, var_b
+    // Uses corrective term (n·Σxy − Σx·Σy) to match two-pass numerically.
+    let mut sum_a: f64 = 0.0;
+    let mut sum_b: f64 = 0.0;
+    let mut sum_ab: f64 = 0.0;
+    let mut sum_aa: f64 = 0.0;
+    let mut sum_bb: f64 = 0.0;
     for (&ai, &bi) in a.iter().zip(b.iter()) {
-        let da = ai - mean_a;
-        let db = bi - mean_b;
-        cov += da * db;
-        var_a += da * da;
-        var_b += db * db;
+        let x = ai as f64;
+        let y = bi as f64;
+        sum_a += x;
+        sum_b += y;
+        sum_ab += x * y;
+        sum_aa += x * x;
+        sum_bb += y * y;
     }
-
-    let denom = var_a.sqrt() * var_b.sqrt();
-    match denom < 1e-12 {
-        true => 0.0,
-        false => cov / denom,
+    let n = a.len() as f64;
+    let cov = n * sum_ab - sum_a * sum_b;
+    let var_a = n * sum_aa - sum_a * sum_a;
+    let var_b = n * sum_bb - sum_b * sum_b;
+    let denom = (var_a * var_b).sqrt();
+    if denom < 1e-12 {
+        return 0.0;
     }
+    (cov / denom) as f32
 }
 
 /// Best buddies: mutual nearest neighbors from correlation rows.

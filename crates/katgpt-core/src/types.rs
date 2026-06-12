@@ -3603,16 +3603,22 @@ impl ShardEmbedding {
     pub const DIM: usize = 8;
 
     /// Cosine similarity between two embeddings.
-    /// Uses SIMD-accelerated dot product and sum-of-squares.
+    /// Scalar for dim=8 — SIMD dispatch overhead exceeds the work at this size.
     #[inline]
     pub fn cosine_similarity(&self, other: &Self) -> f32 {
-        let dot = crate::simd::simd_dot_f32(&self.0, &other.0, 8);
-        let mag_a = crate::simd::simd_sum_sq(&self.0, 8).sqrt();
-        let mag_b = crate::simd::simd_sum_sq(&other.0, 8).sqrt();
-        if mag_a < 1e-8 || mag_b < 1e-8 {
+        let mut dot = 0.0f32;
+        let mut sq_a = 0.0f32;
+        let mut sq_b = 0.0f32;
+        for i in 0..8 {
+            dot += self.0[i] * other.0[i];
+            sq_a += self.0[i] * self.0[i];
+            sq_b += other.0[i] * other.0[i];
+        }
+        let denom = sq_a.sqrt() * sq_b.sqrt();
+        if denom < 1e-8 {
             return 0.0;
         }
-        dot / (mag_a * mag_b)
+        dot / denom
     }
 
     /// Euclidean distance squared between two embeddings.
@@ -3632,9 +3638,22 @@ impl Default for ShardEmbedding {
 // Hash for use as HashMap key (bit-level, NOT semantic hash)
 impl std::hash::Hash for ShardEmbedding {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for &v in &self.0 {
-            v.to_bits().hash(state);
-        }
+        state.write_u64(
+            self.0[0].to_bits() as u64
+                | (self.0[1].to_bits() as u64) << 32,
+        );
+        state.write_u64(
+            self.0[2].to_bits() as u64
+                | (self.0[3].to_bits() as u64) << 32,
+        );
+        state.write_u64(
+            self.0[4].to_bits() as u64
+                | (self.0[5].to_bits() as u64) << 32,
+        );
+        state.write_u64(
+            self.0[6].to_bits() as u64
+                | (self.0[7].to_bits() as u64) << 32,
+        );
     }
 }
 
