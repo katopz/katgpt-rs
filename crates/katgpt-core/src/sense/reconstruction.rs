@@ -634,8 +634,7 @@ impl ReconstructionState {
         let t_min = total_activation.min(1.0);
         let scale = lr * t_min / total_activation;
 
-        for i in 0..8 {
-            let kind_idx = KIND_MAP[i];
+        for (i, &kind_idx) in KIND_MAP.iter().enumerate() {
             let normalized = self.evidence.kind_activations[kind_idx];
             let delta = scale * (normalized - 0.5 * total_activation);
 

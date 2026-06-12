@@ -25,9 +25,7 @@ pub fn save_module(module: &SenseModule, mut w: impl Write) -> io::Result<()> {
             std::mem::size_of::<SenseModule>(),
         );
         w.write_all(bytes)?;
-        // Don't run SenseModule destructor — it has no Drop impl and fields are Copy-like.
-        // But formally we should forget the MaybeUninit copy to avoid double-drop.
-        std::mem::forget(copy.assume_init());
+        // SenseModule has no Drop impl — MaybeUninit drops as unit, no cleanup needed.
     }
     Ok(())
 }
