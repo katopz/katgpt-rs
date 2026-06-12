@@ -530,6 +530,9 @@ pub struct ForwardContext {
     // None = disabled (no profiles loaded). Some(plan) = modelless skip decisions.
     #[cfg(feature = "hydra_budget")]
     pub(crate) hydra_skip_plan: Option<crate::pruners::HydraSkipPlan>,
+    // Adaptive Depth Tier: caps layer count at inference time (Plan 284 T10).
+    // None = use all layers (backward compatible). Some(tier) = cap to tier.max_layers().
+    pub(crate) depth_tier: Option<types::DepthTier>,
     // Wall Attention: per-head prefix sum state for diagonal forget gates (Plan 173).
     // Pre-allocated, zero alloc in hot path. Updated incrementally each token.
     #[cfg(feature = "wall_attention")]
@@ -636,6 +639,7 @@ impl ForwardContext {
             mls_count: 0,
             #[cfg(feature = "hydra_budget")]
             hydra_skip_plan: None,
+            depth_tier: None,
             #[cfg(feature = "wall_attention")]
             wall_prefix: WallPrefixState::new(config),
             attn_scale: 1.0 / (config.head_dim as f32).sqrt(),
@@ -2251,8 +2255,14 @@ fn forward_base<'a>(
     let scale = ctx.attn_scale;
     let t_n = pos + 1;
 
+    // Adaptive Depth Tier: cap layer count at inference time (Plan 284 T10).
+    // Composes with Hydra: tier sets upper bound, Hydra skips within that bound.
+    let max_layer = ctx
+        .depth_tier
+        .map_or(config.n_layer, |t| t.max_layers(config.n_layer));
+
     // 2. Layer loop
-    for (layer_idx, layer_weights) in weights.layers.iter().enumerate() {
+    for (layer_idx, layer_weights) in weights.layers.iter().enumerate().take(max_layer) {
         let layer_cache = &mut cache.layers[layer_idx];
 
         // Hydra Adaptive Layer Budget: skip non-contributing layers (Research 148, Plan 165)
