@@ -2396,19 +2396,20 @@ unsafe fn neon_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                     // Load 4 x values
                     let x_vals = vld1q_f32(x.as_ptr().add(col_off));
 
-                    // Branchless lane masks: 0xFFFFFFFF if bit set, 0x00000000 if not.
-                    // 0u32.wrapping_sub(bit) yields all-ones when bit=1, all-zeros when bit=0.
+                    // Build selection masks — LLVM optimizes the if/else into
+                    // NEON compare+negate, which is faster than wrapping_sub
+                    // (scalar dep chain prevents auto-vectorization of the mask array).
                     let pos_mask: [u32; 4] = [
-                        0u32.wrapping_sub((bits4 & 1) as u32),
-                        0u32.wrapping_sub(((bits4 >> 1) & 1) as u32),
-                        0u32.wrapping_sub(((bits4 >> 2) & 1) as u32),
-                        0u32.wrapping_sub(((bits4 >> 3) & 1) as u32),
+                        if bits4 & 1 != 0 { !0u32 } else { 0 },
+                        if bits4 & 2 != 0 { !0u32 } else { 0 },
+                        if bits4 & 4 != 0 { !0u32 } else { 0 },
+                        if bits4 & 8 != 0 { !0u32 } else { 0 },
                     ];
                     let neg_mask: [u32; 4] = [
-                        0u32.wrapping_sub((neg_bits4 & 1) as u32),
-                        0u32.wrapping_sub(((neg_bits4 >> 1) & 1) as u32),
-                        0u32.wrapping_sub(((neg_bits4 >> 2) & 1) as u32),
-                        0u32.wrapping_sub(((neg_bits4 >> 3) & 1) as u32),
+                        if neg_bits4 & 1 != 0 { !0u32 } else { 0 },
+                        if neg_bits4 & 2 != 0 { !0u32 } else { 0 },
+                        if neg_bits4 & 4 != 0 { !0u32 } else { 0 },
+                        if neg_bits4 & 8 != 0 { !0u32 } else { 0 },
                     ];
 
                     // Select x lanes where pos/neg bits are set, zero elsewhere
@@ -2470,26 +2471,27 @@ unsafe fn avx2_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
                     let pos_byte = ((pos_word >> (chunk * 8)) & 0xFF) as u32;
                     let neg_byte = ((neg_word >> (chunk * 8)) & 0xFF) as u32;
 
-                    // Branchless lane masks: 0u32.wrapping_sub(bit) → all-ones if bit=1, 0 if bit=0
+                    // LLVM-optimizable mask construction — if/else compiles to
+                    // compare+negate which vectorizes; wrapping_sub creates scalar deps.
                     let lane_masks_pos = [
-                        0u32.wrapping_sub(pos_byte & 1),
-                        0u32.wrapping_sub(pos_byte & 2),
-                        0u32.wrapping_sub(pos_byte & 4),
-                        0u32.wrapping_sub(pos_byte & 8),
-                        0u32.wrapping_sub(pos_byte & 16),
-                        0u32.wrapping_sub(pos_byte & 32),
-                        0u32.wrapping_sub(pos_byte & 64),
-                        0u32.wrapping_sub(pos_byte & 128),
+                        if pos_byte & 1 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 2 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 4 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 8 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 16 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 32 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 64 != 0 { !0u32 } else { 0 },
+                        if pos_byte & 128 != 0 { !0u32 } else { 0 },
                     ];
                     let lane_masks_neg = [
-                        0u32.wrapping_sub(neg_byte & 1),
-                        0u32.wrapping_sub(neg_byte & 2),
-                        0u32.wrapping_sub(neg_byte & 4),
-                        0u32.wrapping_sub(neg_byte & 8),
-                        0u32.wrapping_sub(neg_byte & 16),
-                        0u32.wrapping_sub(neg_byte & 32),
-                        0u32.wrapping_sub(neg_byte & 64),
-                        0u32.wrapping_sub(neg_byte & 128),
+                        if neg_byte & 1 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 2 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 4 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 8 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 16 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 32 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 64 != 0 { !0u32 } else { 0 },
+                        if neg_byte & 128 != 0 { !0u32 } else { 0 },
                     ];
 
                     let x_vals = _mm256_loadu_ps(x.as_ptr().add(col_off));
