@@ -4,11 +4,12 @@
 Route — Time Series [sparse_mlp+domain_latent+ppot+bandit+g_zero+bt_rank+spectral_quant+hybrid_oct_pq+elf_sde+cna_steering+deep_manifold+tes_loop+lattice_deduction+delta_routing+gdn2_attention+dash_attn+dreamer+lt2_looped+plasma_path+tf_loop]
 </text>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="102" y1="357" x2="102" y2="38"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="269" y1="357" x2="269" y2="38"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="437" y1="357" x2="437" y2="38"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="604" y1="357" x2="604" y2="38"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="772" y1="357" x2="772" y2="38"/>
-<line opacity="0.1" stroke="#000000" stroke-width="1" x1="939" y1="357" x2="939" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="245" y1="357" x2="245" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="389" y1="357" x2="389" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="532" y1="357" x2="532" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="676" y1="357" x2="676" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="819" y1="357" x2="819" y2="38"/>
+<line opacity="0.1" stroke="#000000" stroke-width="1" x1="963" y1="357" x2="963" y2="38"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="1107" y1="357" x2="1107" y2="38"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="102" y1="357" x2="1107" y2="357"/>
 <line opacity="0.1" stroke="#000000" stroke-width="1" x1="102" y1="354" x2="1107" y2="354"/>
@@ -109,11 +110,12 @@ Run
 Throughput
 </text>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="102" y1="357" x2="102" y2="38"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="269" y1="357" x2="269" y2="38"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="437" y1="357" x2="437" y2="38"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="604" y1="357" x2="604" y2="38"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="772" y1="357" x2="772" y2="38"/>
-<line opacity="0.2" stroke="#000000" stroke-width="1" x1="939" y1="357" x2="939" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="245" y1="357" x2="245" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="389" y1="357" x2="389" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="532" y1="357" x2="532" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="676" y1="357" x2="676" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="819" y1="357" x2="819" y2="38"/>
+<line opacity="0.2" stroke="#000000" stroke-width="1" x1="963" y1="357" x2="963" y2="38"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="1107" y1="357" x2="1107" y2="38"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="102" y1="357" x2="1107" y2="357"/>
 <line opacity="0.2" stroke="#000000" stroke-width="1" x1="102" y1="322" x2="1107" y2="322"/>
@@ -166,28 +168,32 @@ Throughput
 11:48:55
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="102,358 102,363 "/>
-<text x="269" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<text x="245" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 12:07:11
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="269,358 269,363 "/>
-<text x="437" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="245,358 245,363 "/>
+<text x="389" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 15:50:47
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="437,358 437,363 "/>
-<text x="604" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="389,358 389,363 "/>
+<text x="532" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 20:28:27
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="604,358 604,363 "/>
-<text x="772" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="532,358 532,363 "/>
+<text x="676" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 20:33:51
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="772,358 772,363 "/>
-<text x="939" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="676,358 676,363 "/>
+<text x="819" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 20:39:02
 </text>
-<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="939,358 939,363 "/>
-<text x="1107" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="819,358 819,363 "/>
+<text x="963" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
 21:19:21
+</text>
+<polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="963,358 963,363 "/>
+<text x="1107" y="368" dy="0.76em" text-anchor="middle" font-family="sans-serif" font-size="7.258064516129032" opacity="1" fill="#000000">
+21:33:09
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="1107,358 1107,363 "/>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="1108,38 1108,357 "/>
@@ -227,14 +233,15 @@ Throughput
 160000000.0
 </text>
 <polyline fill="none" opacity="1" stroke="#000000" stroke-width="1" points="1108,70 1113,70 "/>
-<polyline fill="none" opacity="1" stroke="#0000FF" stroke-width="1" points="102,87 269,96 437,111 604,341 772,338 939,335 1107,80 "/>
+<polyline fill="none" opacity="1" stroke="#0000FF" stroke-width="1" points="102,87 245,96 389,111 532,341 676,338 819,335 963,80 1107,91 "/>
 <circle cx="102" cy="87" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="269" cy="96" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="437" cy="111" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="604" cy="341" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="772" cy="338" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="939" cy="335" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
-<circle cx="1107" cy="80" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="245" cy="96" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="389" cy="111" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="532" cy="341" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="676" cy="338" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="819" cy="335" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="963" cy="80" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
+<circle cx="1107" cy="91" r="3" opacity="1" fill="#0000FF" stroke="none" stroke-width="1"/>
 <text x="100" y="390" dy="0.76em" text-anchor="start" font-family="sans-serif" font-size="8.064516129032258" opacity="1" fill="#0000FF">
 ■ Delta routing (dim=4)
 </text>

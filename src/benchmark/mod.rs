@@ -391,14 +391,14 @@ fn active_features() -> String {
 }
 
 /// Cooldown pause between benchmark groups to reduce thermal throttling noise.
-fn cooldown(_secs: u64) {
-    // Cooldowns disabled for fast benchmark runs
+fn cooldown(secs: u64) {
+    std::thread::sleep(std::time::Duration::from_secs(secs));
 }
 
 /// Run all benchmarks and return results.
 ///
 /// Order: KV → SD → Attn → Game → Noise → Distill → TTC → Route → Diff → SIMD → E2E games.
-/// Inter-group cooldowns (3s) reduce thermal throttling noise on sustained runs.
+/// Inter-group cooldowns (10s) reduce thermal throttling noise on sustained runs.
 /// Every result is tagged with a `feature_dim` matching the Paper Feature Comparison Matrix.
 pub fn run_all(config: &Config) -> Vec<BenchResult> {
     let mut rng = Rng::new(42);
@@ -421,6 +421,9 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         draft_config.n_embd, draft_config.n_head, draft_config.mlp_hidden
     );
     println!("   Features: {}", active_features());
+
+    // Pre-bench cooldown to ensure cold start
+    cooldown(30);
 
     #[allow(unused_mut)]
     let mut results = Vec::new();
@@ -456,7 +459,7 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         r.category = BenchCategory::KvOptimization;
         results.push(r);
     }
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 2: Speculative Decoding (SD) ──
     let mut ar = speculative::bench_ar(&weights, config, warmup, iters);
@@ -484,7 +487,7 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
     spec_ar.feature_dim = "SD".into();
     spec_ar.category = BenchCategory::SpecDecoding;
     results.push(spec_ar);
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 3: Leviathan variants (SD) ──
     {
@@ -542,7 +545,7 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
             results.push(r);
         }
     }
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 4: Tree variants (SD) ──
     let (no_chain, chain) =
@@ -560,7 +563,7 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         r.category = BenchCategory::SpecDecoding;
         results.push(r);
     }
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 4.5: DFlash parallel proof (SD) ──
     {
@@ -597,7 +600,7 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         results.push(pflash_ms);
     }
 
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 6: Heuristic learning / TTC + Game (feature-gated) ──
     #[cfg(feature = "g_zero")]
@@ -632,12 +635,12 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
     // ── Phase 8: Noise / SDE scheduling ──
     let noise_results = noise::bench_elf_sde(config);
     results.extend(noise_results);
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 9: Distillation / Compression ──
     let distill_results = distillation::bench_distillation();
     results.extend(distill_results);
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 10: Test-Time Compute (TTC) ──
     #[cfg(feature = "bandit")]
@@ -645,25 +648,25 @@ pub fn run_all(config: &Config) -> Vec<BenchResult> {
         let ttc_results = ttc::bench_ttc();
         results.extend(ttc_results);
     }
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 11: Routing / MoE ──
     let routing_results = routing::bench_routing(config);
     results.extend(routing_results);
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 12: Diffusion / Denoising ──
     #[cfg(feature = "dllm")]
     {
         let diff_results = diffusion::bench_diffusion();
         results.extend(diff_results);
-        cooldown(3);
+        cooldown(10);
     }
 
     // ── Phase 13: SIMD / Perf ──
     let simd_results = simd::bench_simd_perf();
     results.extend(simd_results);
-    cooldown(3);
+    cooldown(10);
 
     // ── Phase 14: E2E Game timing (plasma/hot/warm/cold) ──
     let game_results = games::bench_e2e_game_timing(config);
