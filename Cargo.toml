@@ -1007,12 +1007,31 @@ required-features = ["octree_ctc"]
 name = "gpart_adapter_demo"
 required-features = ["gpart_adapter"]
 
+# Plan 256 GOAT-gate benchmarks use dotted `.goat.rs` filenames; map to underscored target names.
+[[test]]
+name = "bench_256_adaptive_k_goat"
+path = "tests/bench_256_adaptive_k.goat.rs"
+required-features = ["msa_adaptive_k"]
+
+[[test]]
+name = "bench_256_per_group_goat"
+path = "tests/bench_256_per_group.goat.rs"
+required-features = ["msa_per_group"]
+
 [[test]]
 name = "bench_257_gpart_adapter_goat"
 required-features = ["gpart_adapter"]
 
 [[example]]
 name = "ane_npc_goat"
+required-features = ["sense_composition"]
+
+[[example]]
+name = "ane_npc_power"
+required-features = ["sense_composition"]
+
+[[example]]
+name = "ane_npc_arena"
 required-features = ["sense_composition"]
 
 # ── DEC Dynamic Topology (Plan 261) ───────────────────────────
@@ -1024,3 +1043,8 @@ required-features = ["dec_terrain_ai"]
 [[example]]
 name = "dec_terrain_quality_bench"
 required-features = ["dec_terrain_ai"]
+
+[[test]]
+name = "bench_256_kv_outer_goat"
+path = "tests/bench_256_kv_outer.goat.rs"
+required-features = ["msa_kv_outer"]

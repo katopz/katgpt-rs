@@ -20,6 +20,11 @@ const NPC_COUNT: usize = 1000;
 const WARMUP_ITERS: usize = 10;
 const BENCH_ITERS: usize = 100;
 
+/// NPC counts swept in the multi-size comparison table.
+/// Kept distinct from `NPC_COUNT` (the GOAT verdict size) so the sweep
+/// can be adjusted independently.
+const SWEEP_COUNTS: [usize; 3] = [10, 100, 1000];
+
 // ── GOAT thresholds ──────────────────────────────────────────────
 
 #[cfg(all(feature = "ane_npc", target_os = "macos"))]
@@ -154,40 +159,106 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     dot / (na * nb)
 }
 
+// ── Bench helpers ───────────────────────────────────────────────
+
+/// Mean per-batch latency (µs) over `BENCH_ITERS` after `WARMUP_ITERS` warmup.
+/// Reuses one backend instance so allocator state stabilizes across runs.
+/// Returns the final outputs for downstream comparison.
+fn bench_cpu(
+    backend: &mut CpuTernaryBackend,
+    inputs: &[NpcBrainInput],
+) -> (f64, Vec<NpcBrainOutput>) {
+    let n = inputs.len();
+    let mut warmup = vec![NpcBrainOutput::default(); n];
+    for _ in 0..WARMUP_ITERS {
+        backend.batch_evaluate(inputs, &mut warmup).unwrap();
+    }
+
+    let mut outputs = vec![NpcBrainOutput::default(); n];
+    let start = std::time::Instant::now();
+    for _ in 0..BENCH_ITERS {
+        backend.batch_evaluate(inputs, &mut outputs).unwrap();
+    }
+    let per_batch_us = start.elapsed().as_micros() as f64 / BENCH_ITERS as f64;
+    (per_batch_us, outputs)
+}
+
+/// Same shape as `bench_cpu` but for any backend (ANE path).
+/// Errors from `batch_evaluate` are counted as failed iterations; if every
+/// iteration fails, the latency reflects the failure path (still useful to
+/// report so a broken ANE model doesn't silently look "fast").
+#[cfg(all(feature = "ane_npc", target_os = "macos"))]
+fn bench_backend<B: NpcBrainBackend>(
+    backend: &mut B,
+    inputs: &[NpcBrainInput],
+) -> (f64, Vec<NpcBrainOutput>) {
+    let n = inputs.len();
+    let mut warmup = vec![NpcBrainOutput::default(); n];
+    for _ in 0..WARMUP_ITERS {
+        let _ = backend.batch_evaluate(inputs, &mut warmup);
+    }
+
+    let mut outputs = vec![NpcBrainOutput::default(); n];
+    let start = std::time::Instant::now();
+    for _ in 0..BENCH_ITERS {
+        let _ = backend.batch_evaluate(inputs, &mut outputs);
+    }
+    let per_batch_us = start.elapsed().as_micros() as f64 / BENCH_ITERS as f64;
+    (per_batch_us, outputs)
+}
+
+/// (min, max, mean) cosine similarity across NPC outputs, skipping pairs
+/// where both sides are near-zero (trivially equal — would inflate the count
+/// without testing actual agreement).
+#[cfg(all(feature = "ane_npc", target_os = "macos"))]
+fn cosine_stats(cpu: &[NpcBrainOutput], ane: &[NpcBrainOutput]) -> (f32, f32, f32, usize) {
+    let mut min_cos = f32::MAX;
+    let mut max_cos = f32::MIN;
+    let mut sum_cos = 0.0f32;
+    let mut n_compared = 0usize;
+
+    for (cpu_out, ane_out) in cpu.iter().zip(ane.iter()) {
+        let cpu_proj = &cpu_out.projections;
+        let ane_proj = &ane_out.projections;
+
+        let cpu_norm: f32 = cpu_proj.iter().map(|x| x * x).sum::<f32>();
+        let ane_norm: f32 = ane_proj.iter().map(|x| x * x).sum::<f32>();
+        if cpu_norm < 1e-10 && ane_norm < 1e-10 {
+            continue;
+        }
+
+        let cos = cosine_similarity(cpu_proj, ane_proj);
+        min_cos = min_cos.min(cos);
+        max_cos = max_cos.max(cos);
+        sum_cos += cos;
+        n_compared += 1;
+    }
+
+    let mean = if n_compared > 0 {
+        sum_cos / n_compared as f32
+    } else {
+        1.0
+    };
+    (min_cos, max_cos, mean, n_compared)
+}
+
 // ── Main ─────────────────────────────────────────────────────────
 
 fn main() {
     println!("=== Plan 255 GOAT Proof — ANE vs CPU NPC Brain Compute ===\n");
-    println!("NPCs: {NPC_COUNT}");
+    println!("NPCs (GOAT): {NPC_COUNT}");
+    println!("Sweep sizes: {SWEEP_COUNTS:?}");
     println!("Warmup: {WARMUP_ITERS} iters, Bench: {BENCH_ITERS} iters\n");
 
-    // Generate diverse brains
     let brains = make_diverse_brains(NPC_COUNT);
     let inputs: Vec<NpcBrainInput> = brains.iter().map(NpcBrainInput::from_brain).collect();
 
-    // ── CPU Baseline ──────────────────────────────────────────────
+    // ── CPU Baseline (full 1000-NPC batch, reused for GOAT verdict) ──
     println!("── CPU Ternary Baseline ──");
 
     let mut cpu_backend = CpuTernaryBackend::new();
-
-    // Warmup
-    let mut cpu_outputs_warmup = vec![NpcBrainOutput::default(); NPC_COUNT];
-    for _ in 0..WARMUP_ITERS {
-        cpu_backend
-            .batch_evaluate(&inputs, &mut cpu_outputs_warmup)
-            .unwrap();
-    }
-
-    // Bench
-    let mut cpu_outputs = vec![NpcBrainOutput::default(); NPC_COUNT];
-    let cpu_start = std::time::Instant::now();
-    for _ in 0..BENCH_ITERS {
-        cpu_backend
-            .batch_evaluate(&inputs, &mut cpu_outputs)
-            .unwrap();
-    }
-    let cpu_total = cpu_start.elapsed();
-    let cpu_per_batch_us = cpu_total.as_micros() as f64 / BENCH_ITERS as f64;
+    #[allow(unused_variables)]
+    let (cpu_per_batch_us, cpu_outputs) = bench_cpu(&mut cpu_backend, &inputs);
 
     println!("  Batch latency (1000 NPCs): {:.1} µs", cpu_per_batch_us);
     println!(
@@ -195,14 +266,23 @@ fn main() {
         cpu_per_batch_us * 1000.0 / NPC_COUNT as f64
     );
 
+    // ── Multi-size sweep table ───────────────────────────────────
+    #[cfg(all(feature = "ane_npc", target_os = "macos"))]
+    run_multi_size_sweep();
+
+    #[cfg(not(all(feature = "ane_npc", target_os = "macos")))]
+    {
+        println!("\n── Multi-size Sweep Skipped ──");
+        println!("  Requires macOS + --features ane_npc");
+    }
+
     // ── ANE Path (if available) ──────────────────────────────────
     #[cfg(all(feature = "ane_npc", target_os = "macos"))]
     {
-        println!("\n── ANE CoreML Path ──");
+        println!("\n── ANE CoreML Path (GOAT size: {NPC_COUNT}) ──");
 
         use katgpt_rs::npc_ane_backend::AneNpcBrainBackend;
 
-        // Try to load the model
         let model_path = std::path::Path::new("npc_brain.mlpackage");
         let ane_backend = match AneNpcBrainBackend::new(model_path, NPC_COUNT) {
             Ok(b) => {
@@ -218,119 +298,75 @@ fn main() {
             }
         };
 
-        if let Some(mut ane_backend) = ane_backend {
-            // Warmup
-            let mut ane_outputs_warmup = vec![NpcBrainOutput::default(); NPC_COUNT];
-            for _ in 0..WARMUP_ITERS {
-                let _ = ane_backend.batch_evaluate(&inputs, &mut ane_outputs_warmup);
-            }
+        match ane_backend {
+            Some(mut ane_backend) => {
+                let (ane_per_batch_us, ane_outputs) =
+                    bench_backend(&mut ane_backend, &inputs);
 
-            // Bench
-            let mut ane_outputs = vec![NpcBrainOutput::default(); NPC_COUNT];
-            let ane_start = std::time::Instant::now();
-            for _ in 0..BENCH_ITERS {
-                let _ = ane_backend.batch_evaluate(&inputs, &mut ane_outputs);
-            }
-            let ane_total = ane_start.elapsed();
-            let ane_per_batch_us = ane_total.as_micros() as f64 / BENCH_ITERS as f64;
+                println!("  Batch latency ({NPC_COUNT} NPCs): {:.1} µs", ane_per_batch_us);
+                println!(
+                    "  Per-NPC: {:.1} ns",
+                    ane_per_batch_us * 1000.0 / NPC_COUNT as f64
+                );
 
-            println!("  Batch latency (1000 NPCs): {:.1} µs", ane_per_batch_us);
-            println!(
-                "  Per-NPC: {:.1} ns",
-                ane_per_batch_us * 1000.0 / NPC_COUNT as f64
-            );
+                println!("\n── Output Comparison ──");
+                let (min_cos, max_cos, mean_cos, n_compared) =
+                    cosine_stats(&cpu_outputs, &ane_outputs);
+                println!("  NPCs compared (non-zero): {n_compared}/{NPC_COUNT}");
+                println!("  Cosine similarity:");
+                println!("    min:  {min_cos:.6}");
+                println!("    max:  {max_cos:.6}");
+                println!("    mean: {mean_cos:.6}");
 
-            // ── Cosine similarity comparison ──────────────────────
-            println!("\n── Output Comparison ──");
+                let cpu_freed_pct = if cpu_per_batch_us > 0.0 {
+                    ((cpu_per_batch_us - ane_per_batch_us) / cpu_per_batch_us) * 100.0
+                } else {
+                    0.0
+                };
+                println!(
+                    "\n── CPU Time Freed ──\n  CPU: {:.1} µs, ANE: {:.1} µs → {:.1}% freed",
+                    cpu_per_batch_us, ane_per_batch_us, cpu_freed_pct
+                );
 
-            let mut min_cos = f32::MAX;
-            let mut max_cos = f32::MIN;
-            let mut sum_cos = 0.0f32;
-            let mut n_compared = 0usize;
+                println!("\n═══ GOAT Verdict ═══");
 
-            for (cpu_out, ane_out) in cpu_outputs.iter().zip(ane_outputs.iter()) {
-                let cpu_proj = &cpu_out.projections;
-                let ane_proj = &ane_out.projections;
+                let cosine_pass = mean_cos >= COSINE_THRESHOLD;
+                let latency_pass = ane_per_batch_us <= ANE_LATENCY_THRESHOLD_US as f64;
+                let freed_pass = cpu_freed_pct >= CPU_FREED_THRESHOLD_PCT as f64;
 
-                // Check if both have non-zero output (skip zero-zero comparisons)
-                let cpu_norm: f32 = cpu_proj.iter().map(|x| x * x).sum::<f32>();
-                let ane_norm: f32 = ane_proj.iter().map(|x| x * x).sum::<f32>();
-                if cpu_norm < 1e-10 && ane_norm < 1e-10 {
-                    continue; // Both zero — trivially equal
+                println!(
+                    "  [{}/{}] Cosine ≥ {:.2}: {} (mean = {:.6})",
+                    cosine_pass as u8,
+                    1,
+                    COSINE_THRESHOLD,
+                    if cosine_pass { "PASS ✅" } else { "FAIL ❌" },
+                    mean_cos
+                );
+                println!(
+                    "  [{}/{}] ANE latency < {}µs: {} ({:.1} µs)",
+                    latency_pass as u8,
+                    1,
+                    ANE_LATENCY_THRESHOLD_US,
+                    if latency_pass { "PASS ✅" } else { "FAIL ❌" },
+                    ane_per_batch_us
+                );
+                println!(
+                    "  [{}/{}] CPU freed ≥ {:.0}%: {} ({:.1}%)",
+                    freed_pass as u8,
+                    1,
+                    CPU_FREED_THRESHOLD_PCT,
+                    if freed_pass { "PASS ✅" } else { "FAIL ❌" },
+                    cpu_freed_pct
+                );
+
+                let all_pass = cosine_pass && latency_pass && freed_pass;
+                println!();
+                match all_pass {
+                    true => println!("🎉 GOAT PASS — promote ane_npc to default-on for macOS"),
+                    false => println!("❌ GOAT FAIL — keep ane_npc as opt-in"),
                 }
-
-                let cos = cosine_similarity(cpu_proj, ane_proj);
-                min_cos = min_cos.min(cos);
-                max_cos = max_cos.max(cos);
-                sum_cos += cos;
-                n_compared += 1;
             }
-
-            let mean_cos = if n_compared > 0 {
-                sum_cos / n_compared as f32
-            } else {
-                1.0
-            };
-
-            println!("  NPCs compared (non-zero): {n_compared}/{NPC_COUNT}");
-            println!("  Cosine similarity:");
-            println!("    min:  {min_cos:.6}");
-            println!("    max:  {max_cos:.6}");
-            println!("    mean: {mean_cos:.6}");
-
-            // ── CPU freed estimate ────────────────────────────────
-            let cpu_freed_pct = if cpu_per_batch_us > 0.0 {
-                ((cpu_per_batch_us - ane_per_batch_us) / cpu_per_batch_us) * 100.0
-            } else {
-                0.0
-            };
-            println!(
-                "\n── CPU Time Freed ──\n  CPU: {:.1} µs, ANE: {:.1} µs → {:.1}% freed",
-                cpu_per_batch_us, ane_per_batch_us, cpu_freed_pct
-            );
-
-            // ── GOAT Verdict ──────────────────────────────────────
-            println!("\n═══ GOAT Verdict ═══");
-
-            let cosine_pass = mean_cos >= COSINE_THRESHOLD;
-            let latency_pass = ane_per_batch_us <= ANE_LATENCY_THRESHOLD_US as f64;
-            let freed_pass = cpu_freed_pct >= CPU_FREED_THRESHOLD_PCT as f64;
-
-            println!(
-                "  [{}/{}] Cosine ≥ {:.2}: {} (mean = {:.6})",
-                cosine_pass as u8,
-                1,
-                COSINE_THRESHOLD,
-                if cosine_pass { "PASS ✅" } else { "FAIL ❌" },
-                mean_cos
-            );
-            println!(
-                "  [{}/{}] ANE latency < {}µs: {} ({:.1} µs)",
-                latency_pass as u8,
-                1,
-                ANE_LATENCY_THRESHOLD_US,
-                if latency_pass { "PASS ✅" } else { "FAIL ❌" },
-                ane_per_batch_us
-            );
-            println!(
-                "  [{}/{}] CPU freed ≥ {:.0}%: {} ({:.1}%)",
-                freed_pass as u8,
-                1,
-                CPU_FREED_THRESHOLD_PCT,
-                if freed_pass { "PASS ✅" } else { "FAIL ❌" },
-                cpu_freed_pct
-            );
-
-            let all_pass = cosine_pass && latency_pass && freed_pass;
-            println!();
-            if all_pass {
-                println!("🎉 GOAT PASS — promote ane_npc to default-on for macOS");
-            } else {
-                println!("❌ GOAT FAIL — keep ane_npc as opt-in");
-            }
-        } else {
-            // ANE model not available — CPU-only report
-            print_cpu_only_verdict(cpu_per_batch_us);
+            None => print_cpu_only_verdict(cpu_per_batch_us),
         }
     }
 
@@ -339,6 +375,64 @@ fn main() {
         println!("\n── ANE Not Available ──");
         println!("  Run with --features ane_npc on macOS for full comparison");
         print_cpu_only_verdict(cpu_per_batch_us);
+    }
+}
+
+/// Sweep CPU vs ANE over `SWEEP_COUNTS` and print a comparison table.
+///
+/// ANE models compiled for a fixed batch (1024 here) transparently pad
+/// smaller input batches, so this primarily measures fixed dispatch
+/// overhead vs the per-NPC work that scales. The CPU column should scale
+/// roughly linearly with NPC count; the ANE column should be near-flat.
+#[cfg(all(feature = "ane_npc", target_os = "macos"))]
+fn run_multi_size_sweep() {
+    use katgpt_rs::npc_ane_backend::AneNpcBrainBackend;
+
+    println!("\n── Multi-Size Sweep (CPU vs ANE) ──");
+
+    let model_path = std::path::Path::new("npc_brain.mlpackage");
+    let mut ane_backend = match AneNpcBrainBackend::new(model_path, NPC_COUNT) {
+        Ok(b) => {
+            println!("  ANE backend: {} (optimal batch {})",
+                b.backend_name(), b.optimal_batch_size());
+            b
+        }
+        Err(e) => {
+            println!("  ANE model load failed: {e}");
+            println!("  Skipping ANE column — CPU-only sweep:\n");
+            for &n in &SWEEP_COUNTS {
+                let brains = make_diverse_brains(n);
+                let inputs: Vec<NpcBrainInput> =
+                    brains.iter().map(NpcBrainInput::from_brain).collect();
+                let mut cpu = CpuTernaryBackend::new();
+                let (cpu_us, _) = bench_cpu(&mut cpu, &inputs);
+                println!(
+                    "  NPCs={n:>4} | CPU {cpu_us:>8.1} µs | CPU {:.1} ns/NPC | ANE n/a",
+                    cpu_us * 1000.0 / n as f64
+                );
+            }
+            return;
+        }
+    };
+
+    println!("  Format: NPCs | CPU µs | ANE µs | CPU ns/NPC | ANE ns/NPC | cosine\n");
+
+    for &n in &SWEEP_COUNTS {
+        let brains = make_diverse_brains(n);
+        let inputs: Vec<NpcBrainInput> =
+            brains.iter().map(NpcBrainInput::from_brain).collect();
+
+        let mut cpu = CpuTernaryBackend::new();
+        let (cpu_us, cpu_outputs) = bench_cpu(&mut cpu, &inputs);
+        let (ane_us, ane_outputs) = bench_backend(&mut ane_backend, &inputs);
+
+        let (_, _, mean_cos, _) = cosine_stats(&cpu_outputs, &ane_outputs);
+
+        println!(
+            "  NPCs={n:>4} | CPU {cpu_us:>8.1} µs | ANE {ane_us:>8.1} µs | CPU {:.1} ns/NPC | ANE {:.1} ns/NPC | cos {mean_cos:.4}",
+            cpu_us * 1000.0 / n as f64,
+            ane_us * 1000.0 / n as f64,
+        );
     }
 }
 

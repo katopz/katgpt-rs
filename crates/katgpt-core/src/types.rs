@@ -2424,7 +2424,15 @@ pub fn sparse_matmul(
 /// **Allocates a CDF buffer on every call.** For the hot decode loop, prefer
 /// [`sample_token_into`] which reuses a pre-allocated buffer.
 pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
-    let r = rng.uniform();
+    // Redraw on exactly 0.0: `rng.uniform()` can return 0.0 (notably the first draw
+    // for low-entropy seeds), which deterministically maps to the first nonzero-mass
+    // token via the left boundary of the inverse-CDF map. `partition_point(c <= r)`
+    // below already implements the strict comparison, so this guard only fixes the
+    // degenerate-zero draw without changing the comparison semantics.
+    let mut r = rng.uniform();
+    while r == 0.0 {
+        r = rng.uniform();
+    }
     let n = probs.len();
     if n == 0 {
         return 0;
@@ -2451,7 +2459,11 @@ pub fn sample_token(probs: &[f32], rng: &mut Rng) -> usize {
 /// Pass a `cdf` buffer (e.g. `ForwardContext::cdf`) to avoid a ~vocab_size allocation
 /// on every token decode. The buffer is cleared and refilled each call.
 pub fn sample_token_into(probs: &[f32], rng: &mut Rng, cdf: &mut Vec<f32>) -> usize {
-    let r = rng.uniform();
+    // See `sample_token`: redraw on exactly 0.0 to avoid the degenerate left-boundary draw.
+    let mut r = rng.uniform();
+    while r == 0.0 {
+        r = rng.uniform();
+    }
     let n = probs.len();
     if n == 0 {
         return 0;

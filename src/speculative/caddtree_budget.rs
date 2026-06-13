@@ -409,6 +409,106 @@ pub fn build_dd_tree_adaptive(marginals: &[&[f32]], config: &Config) -> (Vec<Tre
     (tree, selected_budget)
 }
 
+/// Build DDTree with adaptive budget + MUX-RCD residual (Plan 258 Task 4.2).
+///
+/// Composes [`build_dd_tree_adaptive`] with [`compute_mux_residual`] to produce
+/// a path-score-weighted residual embedding for the specified position. Tree
+/// nodes at `depth == position` serve as hypothesis path endpoints; their
+/// `score` field weights each path's contribution to the blended residual.
+///
+/// # Current Limitation (Degenerate Until Per-Path Marginals)
+///
+/// `build_dd_tree_adaptive` consumes a single shared set of depth-indexed
+/// marginals, so every path inherits the same distribution at `position`.
+/// Because path scores normalize to 1.0 inside `compute_mux_residual`, the
+/// output collapses to the standard residual `Σ_j p_j · E_j`. The wiring is
+/// correct and the API surface is complete; semantic gain arrives when a
+/// future caller supplies path-conditioned marginals (one distribution per
+/// tree leaf, produced by per-path forward passes).
+///
+/// # Arguments
+/// * `marginals` — depth-indexed marginal distributions, `[depth][vocab]`
+/// * `config` — model config (reads `vocab_size`, `n_embd`, `tree_budget`)
+/// * `wte` — flat embedding codebook, `[vocab_size * n_embd]`
+/// * `position` — depth index to compute the residual for
+/// * `residual_out` — caller-allocated output buffer, `[n_embd]`
+///
+/// # Returns
+/// `(tree_nodes, selected_budget)` — identical to [`build_dd_tree_adaptive`].
+#[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]
+pub fn build_dd_tree_adaptive_mux_residual(
+    marginals: &[&[f32]],
+    config: &Config,
+    wte: &[f32],
+    position: usize,
+    residual_out: &mut [f32],
+) -> (Vec<TreeNode>, usize) {
+    use crate::mux_demux::compute_mux_residual;
+
+    // 1. Build the adaptive tree (existing logic, unchanged).
+    let (tree, budget) = build_dd_tree_adaptive(marginals, config);
+
+    let n_embd = config.n_embd;
+    let vocab_size = config.vocab_size;
+    residual_out[..n_embd].fill(0.0f32);
+
+    // Guard: no marginals or position out of range → zero residual, tree intact.
+    if marginals.is_empty() || position >= marginals.len() {
+        return (tree, budget);
+    }
+
+    // 2. Flatten marginals once into compute_mux_residual's `[pos * vocab..]`
+    //    indexing convention. All paths currently share this buffer (degenerate
+    //    case — see limitation note above). Pre-allocated to avoid realloc.
+    let total_len: usize = marginals.iter().map(|m| m.len()).sum();
+    let mut flat_marginals: Vec<f32> = Vec::with_capacity(total_len);
+    for m in marginals {
+        flat_marginals.extend_from_slice(m);
+    }
+
+    // 3. Collect path scores from tree nodes at the target depth. Each such
+    //    node is a hypothesis endpoint for `position`; its score weights the
+    //    path's residual contribution. DDTree scores are cumulative log-probs
+    //    (always ≤ 0), so we shift by the max and exponentiate via the
+    //    log-sum-exp trick before handing them to `compute_mux_residual`, which
+    //    expects positive weights that normalize to a distribution.
+    let raw_scores: Vec<f32> = tree
+        .iter()
+        .filter(|n| n.depth == position)
+        .map(|n| n.score)
+        .collect();
+
+    if raw_scores.is_empty() {
+        return (tree, budget);
+    }
+
+    let max_score = raw_scores
+        .iter()
+        .copied()
+        .fold(f32::NEG_INFINITY, f32::max);
+    let path_scores: Vec<f32> = raw_scores
+        .iter()
+        .map(|&s| (s - max_score).exp())
+        .collect();
+
+    // 4. All paths share the flat marginals (wiring complete; per-path
+    //    marginals are future work). compute_mux_residual indexes at
+    //    `position * vocab_size` to pick the right slice.
+    let path_marginals: Vec<&[f32]> = path_scores.iter().map(|_| flat_marginals.as_slice()).collect();
+
+    compute_mux_residual(
+        &path_scores,
+        &path_marginals,
+        wte,
+        n_embd,
+        position,
+        vocab_size,
+        residual_out,
+    );
+
+    (tree, budget)
+}
+
 /// Build DDTree with adaptive budget + ScreeningPruner.
 ///
 /// Uses [`BudgetSelector`] to find optimal B*, then delegates to
@@ -749,5 +849,150 @@ mod tests {
             fixed_tree2.len(),
             "fixed-budget builder should be deterministic"
         );
+    }
+
+    // ── MUX-RCD Wiring (Plan 258 Task 4.2) ────────────────────────────
+    //
+    // The wiring is gated behind `mux_demux + rcd_residual`. Until per-path
+    // marginals arrive, the output is the standard residual because path
+    // scores normalize to 1.0. These tests verify: (1) the function runs
+    // end-to-end through build_dd_tree_adaptive + compute_mux_residual,
+    // (2) the residual matches a hand-computed `Σ_j p_j · E_j`, and
+    // (3) guards handle empty marginals and out-of-range positions.
+
+    /// Build a tiny Config with explicit vocab/n_embd for deterministic residuals.
+    fn mux_rcd_config(vocab: usize, n_embd: usize) -> Config {
+        Config {
+            vocab_size: vocab,
+            block_size: 8,
+            n_embd,
+            n_head: 1,
+            head_dim: n_embd,
+            mlp_hidden: n_embd * 2,
+            n_layer: 1,
+            n_kv_head: 1,
+            bos_token: 0,
+            temperature: 1.0,
+            ..Config::default()
+        }
+    }
+
+    /// Reference residual: `Σ_j p_j · E_j` over the codebook.
+    fn reference_residual(marginal: &[f32], wte: &[f32], n_embd: usize) -> Vec<f32> {
+        let vocab = marginal.len();
+        let mut out = vec![0.0f32; n_embd];
+        for j in 0..vocab {
+            let p = marginal[j];
+            if p == 0.0 {
+                continue;
+            }
+            let emb = &wte[j * n_embd..(j + 1) * n_embd];
+            for (k, &e) in emb.iter().enumerate() {
+                out[k] += p * e;
+            }
+        }
+        out
+    }
+
+    #[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]
+    #[test]
+    fn test_mux_rcd_matches_standard_residual() {
+        // 3-token vocab, 4-dim embeddings, 2 depths.
+        let vocab = 3;
+        let n_embd = 4;
+        let config = mux_rcd_config(vocab, n_embd);
+
+        // Two depths of marginals. Position 0 is what we'll compute residual for.
+        let m0: Vec<f32> = vec![0.5, 0.3, 0.2];
+        let m1: Vec<f32> = vec![0.4, 0.35, 0.25];
+        let marginals: Vec<&[f32]> = vec![m0.as_slice(), m1.as_slice()];
+
+        // Embedding codebook: token j → wte[j*n_embd .. (j+1)*n_embd].
+        let wte: Vec<f32> = vec![
+            1.0, 0.0, 0.0, 0.0, // token 0
+            0.0, 1.0, 0.0, 0.0, // token 1
+            0.0, 0.0, 1.0, 0.0, // token 2
+        ];
+
+        let mut residual = vec![0.0f32; n_embd];
+        let (tree, budget) =
+            build_dd_tree_adaptive_mux_residual(&marginals, &config, &wte, 0, &mut residual);
+
+        // Tree + budget pass through unchanged.
+        assert!(budget >= 1, "budget should be ≥ 1, got {budget}");
+        assert!(!tree.is_empty(), "tree should not be empty");
+
+        // Degenerate case: residual == standard Σ_j p_j · E_j (weights normalize to 1).
+        let expected = reference_residual(&m0, &wte, n_embd);
+        for k in 0..n_embd {
+            assert!(
+                (residual[k] - expected[k]).abs() < 1e-5,
+                "residual[{k}] = {} != expected {} (degenerate MUX should match standard RCD)",
+                residual[k],
+                expected[k]
+            );
+        }
+    }
+
+    #[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]
+    #[test]
+    fn test_mux_rcd_position_selects_correct_depth() {
+        // Residual for position 1 should use m1's distribution, not m0's.
+        let vocab = 2;
+        let n_embd = 2;
+        let config = mux_rcd_config(vocab, n_embd);
+
+        let m0: Vec<f32> = vec![1.0, 0.0]; // picks token 0 only
+        let m1: Vec<f32> = vec![0.0, 1.0]; // picks token 1 only
+        let marginals: Vec<&[f32]> = vec![m0.as_slice(), m1.as_slice()];
+
+        let wte: Vec<f32> = vec![
+            10.0, 20.0, // token 0
+            30.0, 40.0, // token 1
+        ];
+
+        let mut residual = vec![0.0f32; n_embd];
+        let _ = build_dd_tree_adaptive_mux_residual(&marginals, &config, &wte, 1, &mut residual);
+
+        // Position 1 → m1 = [0, 1] → picks token 1 → embedding [30, 40].
+        assert!((residual[0] - 30.0).abs() < 1e-5, "residual[0]={}", residual[0]);
+        assert!((residual[1] - 40.0).abs() < 1e-5, "residual[1]={}", residual[1]);
+    }
+
+    #[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]
+    #[test]
+    fn test_mux_rcd_out_of_range_position_zeros_residual() {
+        let vocab = 2;
+        let n_embd = 2;
+        let config = mux_rcd_config(vocab, n_embd);
+        let m0: Vec<f32> = vec![0.5, 0.5];
+        let marginals: Vec<&[f32]> = vec![m0.as_slice()];
+
+        let wte: Vec<f32> = vec![1.0, 1.0, 1.0, 1.0];
+        let mut residual = vec![0.0f32; n_embd];
+
+        // position=5 but only 1 depth → guard returns zero residual.
+        let (tree, _budget) =
+            build_dd_tree_adaptive_mux_residual(&marginals, &config, &wte, 5, &mut residual);
+
+        assert!(!tree.is_empty(), "tree still built even with bad position");
+        assert!(residual.iter().all(|&v| v == 0.0), "residual should be zeroed");
+    }
+
+    #[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]
+    #[test]
+    fn test_mux_rcd_empty_marginals_zeros_residual() {
+        let config = mux_rcd_config(2, 2);
+        let wte: Vec<f32> = vec![1.0; 4];
+        let mut residual = vec![0.0f32; 2];
+
+        // Empty marginals → guard returns before compute_mux_residual.
+        // BudgetSelector clamps to a minimum, so budget may be ≥ 1; only the
+        // tree and residual matter here.
+        let (tree, _budget) =
+            build_dd_tree_adaptive_mux_residual(&[], &config, &wte, 0, &mut residual);
+
+        assert!(tree.is_empty(), "empty marginals → empty tree");
+        assert!(residual.iter().all(|&v| v == 0.0), "residual should be zeroed");
     }
 }

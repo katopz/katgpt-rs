@@ -62,14 +62,16 @@ Distill MSA's key inference-time mechanisms into katgpt-rs's existing VortexFlow
   - [x] All match arms in `n_blocks()`, `from_config()`, `forward_cache()`, `forward_indexer()`, `cache_new()`
   - [x] Export in `mod.rs`
   - [x] 4 tests: different-blocks-per-group, total-leq-topk, each-group-gets-block, backward-compat-n_groups=1
-  - [ ] Benchmark vs shared selection on RULER
+  - [x] Benchmark vs shared selection on RULER
+    - `tests/bench_256_per_group.goat.rs` — GOAT FAIL: coverage 1.003× (need ≥1.5×), latency 0.983× (PASS)
 - [x] Implement KV-outer sparse prefill path for GPU
   - [x] Build reverse index: for each KV block, gather queries that selected it (`KvOuterIndex`)
   - [x] Hot-block sorting by query count for cache locality
   - [x] Two-phase forward: partial outputs + LSE combine (`KvOuterPrefill::prefill_sparse`)
   - [x] Gate behind `msa_kv_outer` sub-flag
   - [x] 5 tests: index build, hot blocks, single-block dense parity, needle-in-haystack, LSE numerical stability
-  - [ ] Benchmark: sparse prefill latency vs Q-outer at 32K, 128K, 512K context
+  - [x] Benchmark: sparse prefill latency vs Q-outer at 32K, 128K, 512K context
+    - `tests/bench_256_kv_outer.goat.rs` — GOAT FAIL at 128K+ (1.14×, need ≥1.5×); wins at 32K (2.02×); numerical equivalence 3.64e-6
 - [x] Implement adaptive k budget via sigmoid gate
   - Compute block score variance per query
   - k = k_min + (k_max - k_min) * sigmoid(w * variance + b)
@@ -79,7 +81,8 @@ Distill MSA's key inference-time mechanisms into katgpt-rs's existing VortexFlow
   - `compute_adaptive_k()` — 4-way unrolled variance + sigmoid gate
   - `AdaptiveKRouter<R: VortexFlow>` — wraps inner router, reads scratch scores for variance, truncates decision to adaptive k
   - 9 tests: high/low variance, bounds, edge cases, BlockTopK integration, bias extremes
-  - [ ] Benchmark: accuracy vs fixed k on varying context lengths
+  - [x] Benchmark: accuracy vs fixed k on varying context lengths
+    - `tests/bench_256_adaptive_k.goat.rs` — GOAT FAIL: recall 0.629 (need ≥0.90), compute savings 37.1% (PASS)
 
 ### Phase 3: GOAT Proof & Promotion
 
@@ -88,7 +91,35 @@ Distill MSA's key inference-time mechanisms into katgpt-rs's existing VortexFlow
   - Prefill latency at 32K, 128K, 512K
   - Decode latency at 32K, 128K
   - Block selection latency (micro-bench)
+  - **Deferred → Issue 014**: requires trained model weights + RULER dataset; not feasible in modelless inference mode. The 3 Phase 2 micro-benchmarks below serve as modelless GOAT proxies and their failures predict the arena would also fail.
 - [ ] If ≥5% RULER gain + ≥10% selection speedup → promote `msa_sparse` to default-ON
-- [ ] If <5% gain → document results, keep opt-in, create issue for optimization
-- [ ] Update README.md feature showcase with MSA results
-- [ ] Update VortexFlow documentation to include MSA scoring variants
+  - **SKIP**: all 3 Phase 2 micro-benchmarks FAILED their GOAT gates (see verdict below)
+- [x] If <5% gain → document results, keep opt-in, create issue for optimization
+  - **DONE**: results documented below; Issue 014 created for arena benchmark infrastructure
+- [x] Update README.md feature showcase with MSA results
+  - Added "MSA Sparse Attention Family" subsection under VortexFlow showcase with GOAT results table
+- [x] Update VortexFlow documentation to include MSA scoring variants
+  - Updated `src/dash_attn/vortex_flow.rs` module doc + `VortexFlowConfig` variant docs
+
+### GOAT Verdict: ❌ FAIL — `msa_sparse` stays opt-in
+
+All three Phase 2 micro-benchmarks (modelless RULER proxies) **FAILED** their GOAT gates:
+
+| Benchmark | Metric | Result | Threshold | Verdict |
+|-----------|--------|--------|-----------|---------|
+| Per-group | Coverage ratio | 1.003× | ≥ 1.5× | ❌ FAIL |
+| Per-group | Latency ratio | 0.983× | ≤ 2.0× | ✅ PASS |
+| KV-outer | Speedup @ 32K | 2.02× | ≥ 1.5× | ✅ PASS |
+| KV-outer | Speedup @ 128K | 1.14× | ≥ 1.5× | ❌ FAIL |
+| KV-outer | Speedup @ 512K | 0.83× | ≥ 1.5× | ❌ FAIL |
+| Adaptive-k | Compute savings | 37.1% | ≥ 25% | ✅ PASS |
+| Adaptive-k | Recall ratio | 0.629 | ≥ 0.90 | ❌ FAIL |
+
+**Root causes:**
+1. **Per-group coverage saturates**: with diverse needle queries, both shared and per-group routers already cover ~all reachable blocks; the union ratio hovers at ~1.0. Per-group's structural diversification (forcing each partition to contribute) isn't visible in cross-query union. Per-group DOES win on latency at top_k=32 (0.40–0.52× due to smaller argtopk per partition).
+2. **KV-outer block sharing drops with context**: reverse-index amortization only helps when many queries share blocks. With fixed n_queries=256 and top_k=32, avg queries/block = 256*32/n_blocks. As n_blocks grows (512K context = 8192 blocks), block sharing drops to ~1 query/block, and index-building overhead dominates. KV-outer wins at 32K (high sharing) but loses at 512K.
+3. **Adaptive-k recall is mathematically bounded**: recall normalized by fixed k is bounded by k_adaptive/k_fixed ≈ 20.14/32 = 0.63. The two GOAT criteria (≥25% savings → avg k ≤ 24, AND ≥90% recall → requires avg k ≥ 28.8) are in direct tension. A precision/weighted-recall metric would better reflect selection quality.
+
+**Numerical equivalence**: KV-outer output matches Q-outer baseline within 3.64e-6 max diff at 32K (math is correct).
+
+**Recommendation**: Keep `msa_sparse` (and sub-features `msa_per_group`, `msa_kv_outer`, `msa_adaptive_k`) as opt-in. The infrastructure is correct and numerically validated. Each technique has a narrow regime where it wins (per-group: high top_k latency; KV-outer: short context with high block sharing; adaptive-k: compute-constrained decode). Full RULER arena evaluation deferred to Issue 014 (needs model weights + dataset).

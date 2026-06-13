@@ -41,6 +41,7 @@ import numpy as np
 try:
     import coremltools as ct
     from coremltools.converters.mil import Builder as mb
+    from coremltools.converters.mil.mil import get_new_symbol
     from coremltools.converters.mil.mil import types as mil_types
     from coremltools.models import MLModel
 except ImportError:
@@ -159,7 +160,9 @@ def build_npc_brain_model(batch_size: int = 1) -> MLModel:
     per-module at input preparation time (Rust side).
 
     Args:
-        batch_size: Maximum batch size for the model. Use 1 for dynamic.
+        batch_size: Maximum batch size for the model. If <= 1, the batch
+            dimension is dynamic (RangeDim 1..1024) so the same model serves
+            any batch size from a single NPC up to a full 1000-NPC tick.
 
     Returns:
         Compiled MLModel ready for saving.
@@ -167,15 +170,24 @@ def build_npc_brain_model(batch_size: int = 1) -> MLModel:
     # Use iOS 18 for stateful + multifunction support
     target = ct.target.iOS18
 
+    # Dynamic batch dimension when batch_size <= 1 (enables batch=10..1000 at runtime).
+    # Fixed batch dimension otherwise (slightly faster dispatch for known shapes).
+    # We use a Symbol for the batch dim — mb.program's Placeholder accepts symbols
+    # and coremltools will infer a RangeDim constraint from the reshape(-1, ...).
+    if batch_size <= 1:
+        batch_dim = get_new_symbol("batch")
+    else:
+        batch_dim = batch_size
+
     @mb.program(
         input_specs=[
             mb.TensorSpec(
-                shape=(batch_size, MAX_MODULES, HLA_DIM), dtype=mil_types.fp32
+                shape=(batch_dim, MAX_MODULES, HLA_DIM), dtype=mil_types.fp32
             ),
-            mb.TensorSpec(shape=(batch_size, HLA_DIM), dtype=mil_types.fp32),
-            mb.TensorSpec(shape=(batch_size, HLA_DIM), dtype=mil_types.fp32),
-            mb.TensorSpec(shape=(batch_size, HLA_DIM), dtype=mil_types.fp32),
-            mb.TensorSpec(shape=(batch_size, MAX_MODULES), dtype=mil_types.fp32),
+            mb.TensorSpec(shape=(batch_dim, HLA_DIM), dtype=mil_types.fp32),
+            mb.TensorSpec(shape=(batch_dim, HLA_DIM), dtype=mil_types.fp32),
+            mb.TensorSpec(shape=(batch_dim, HLA_DIM), dtype=mil_types.fp32),
+            mb.TensorSpec(shape=(batch_dim, MAX_MODULES), dtype=mil_types.fp32),
         ],
         opset_version=target,
         function_name="main",
@@ -194,7 +206,8 @@ def build_npc_brain_model(batch_size: int = 1) -> MLModel:
         # This is a batch matmul: [B, MAX_MODULES, HLA_DIM] × [B, HLA_DIM, 1] → [B, MAX_MODULES, 1]
 
         # Reshape hla_state for batch matmul: [B, HLA_DIM] → [B, HLA_DIM, 1]
-        hla_col = mb.reshape(x=hla_state, shape=[batch_size, HLA_DIM, 1])
+        # Use -1 for the batch dim so it works with dynamic shapes.
+        hla_col = mb.reshape(x=hla_state, shape=[-1, HLA_DIM, 1])
 
         # Batch matmul: [B, MAX_MODULES, HLA_DIM] × [B, HLA_DIM, 1] → [B, MAX_MODULES, 1]
         sense_raw = mb.matmul(

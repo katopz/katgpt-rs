@@ -116,8 +116,13 @@ else:
 - [x] ANE placement verification via `MLComputePlan` (implemented, needs native extensions)
 - [x] Graceful error handling for Python 3.13+ missing native extensions
 - [x] Generate `npc_brain.mlpackage` — Python 3.12 available via uv, BlobWriter serialization works
-- [ ] Validate ANE residency (timing check < 1ms for batch=1) — .mlpackage now available
-- [ ] Test model output matches `CpuTernaryBackend` (cosine ≥ 0.99) — .mlpackage now available
+- [x] Validate ANE residency (timing check < 1ms for batch=1) — .mlpackage now available
+  - Fixed: added warmup predictions before timing (first run includes ANE pipeline compile)
+  - Fixed: residency now uses model's compiled batch size, not hardcoded batch=1
+- [x] Test model output matches `CpuTernaryBackend` (cosine ≥ 0.99) — .mlpackage now available
+  - Fixed: ANE encoding was full matvec, corrected to DIAGONAL matching `SenseModule::project`
+  - Fixed: output name discovery via `model.outputs()` (CoreML auto-names `mul_0` not `sense_proj`)
+  - Measured: cosine mean=0.999995 across 988/1000 non-zero NPCs
 
 **Stretch goals (from Research 224):**
 - [ ] Multifunction model: share weights between perception/emotion/zone (iOS 18+)
@@ -127,13 +132,21 @@ else:
 
 - [x] Create `AneNpcBrainBackend` struct with `coreml_native::Model`
 - [x] Load `npc_brain.mlmodelc` at construction
+  - Fixed: auto-compiles `.mlpackage` → `.mlmodelc` via `coreml::compile_model()`
+  - Fixed: discovers model's compiled batch size from input shape (overrides caller hint)
 - [x] Implement `batch_evaluate()`:
   - Encode all NPC inputs into `MLMultiArray` batch tensor
   - Call `model.predict()`
   - Decode output tensor → `Vec<NpcBrainOutput>`
+  - Fixed: pads batch to model's compiled batch size (fixed-shape ANE models)
+  - Fixed: diagonal encoding matching `SenseModule::project` (was full matvec)
+  - Fixed: output name discovery via `model.outputs()` (CoreML auto-names `mul_0`)
 - [x] Validate ANE residency at construction (fallback to SIMD if fails)
+  - Fixed: warmup predictions before timing (first run includes ANE pipeline compile)
 - [x] Write test: `AneNpcBrainBackend` matches `SimdNpcBrainBackend` output (cosine ≥ 0.99)
-- [ ] Write benchmark: `AneNpcBrainBackend` batch latency vs `SimdNpcBrainBackend` for 10, 100, 1000 NPCs
+- [x] Write benchmark: `AneNpcBrainBackend` batch latency vs `SimdNpcBrainBackend` for 10, 100, 1000 NPCs
+  - Implemented as multi-size sweep in `examples/ane_npc_goat.rs`
+  - Finding: ANE flat ~280µs (dispatch-bound), CPU linear 0.1→10.6µs (10→1000 NPCs)
 
 ### Part 4: Auto-Route Integration
 
@@ -156,12 +169,34 @@ TriggerGate routes general inference by QPS; NPC brain routes by NPC count.
 - [x] GOAT test: batch 1000 NPCs, ANE vs SIMD, output cosine ≥ 0.99
 - [x] GOAT benchmark: 1000 NPCs × 20Hz throughput, CPU vs ANE
   - Measure: total CPU time freed, ANE dispatch overhead, end-to-end latency
-- [ ] GOAT arena: bomber/go game with ANE NPC brain vs SIMD NPC brain
+- [x] GOAT arena: bomber/go game with ANE NPC brain vs SIMD NPC brain
   - Verify: same game outcome, different CPU utilization
-- [ ] GOAT power: measure CPU utilization with/without ANE NPC brain
+  - Implemented as `examples/ane_npc_arena.rs` (200-tick simulation through `NpcBrainRouter`)
+  - Result: PASS — outcome rel diff 0.0047%, cosine 0.999989
+- [x] GOAT power: measure CPU utilization with/without ANE NPC brain
   - Target: CPU utilization reduced by ≥30% at 1000 NPC load
+  - Implemented as `examples/ane_npc_power.rs` (getrusage FFI, zero new deps)
+  - Result: PASS on ratio (94.5% → 53.3% = 43.6% reduction), FAIL on absolute CPU time (13.85ms → 584ms)
 - [ ] If GOAT passes: promote `ane_npc` to default-on for macOS
-- [ ] If GOAT fails: keep as opt-in, document why
+- [x] If GOAT fails: keep as opt-in, document why
+
+### GOAT Verdict: ❌ FAIL — keep `ane_npc` as opt-in
+
+**What passes:**
+- Cosine similarity 0.999995 (output equivalence is perfect)
+- ANE latency 286µs < 1000µs threshold
+- Arena outcome equivalence (rel diff 0.0047%)
+- CPU utilization RATIO reduced 43.6% (94.5% → 53.3%)
+
+**What fails:**
+- CPU freed (wall-clock): ANE is 26x SLOWER than CPU SIMD (286µs vs 10.9µs for 1000 NPCs)
+- Absolute CPU time: ANE consumes 42x MORE CPU (584ms vs 13.85ms for 1000 iters)
+
+**Root cause:** The CPU ternary backend is extremely fast (~11ns/NPC via SIMD bit-plane projection). At 1000 NPCs, the entire CPU batch is 10.9µs — faster than a single ANE dispatch (~280µs). The ANE's fixed dispatch overhead dwarfs the actual compute. The "CPU freed" value proposition only holds when CPU is the bottleneck, but at these latencies the CPU is never the bottleneck.
+
+**When ANE WOULD win:** If NPC brain compute were heavier (e.g., full transformer attention per NPC, ~1ms/NPC), then batching 1000 NPCs on ANE (~300µs) would beat CPU serial (1000ms). The current ternary projection is too lightweight to benefit from ANE offload.
+
+**Recommendation:** Keep `ane_npc` as opt-in for future heavier NPC brain models. The infrastructure (backend trait, router, model generation, residency check) is complete and correct — it's the workload that doesn't justify ANE offload yet.
 
 ---
 

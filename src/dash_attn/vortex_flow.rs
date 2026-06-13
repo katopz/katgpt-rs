@@ -4,6 +4,28 @@
 //! 1. `forward_cache` — query-independent cache update when KV blocks are appended
 //! 2. `forward_indexer` — query-dependent block selection during decode
 //!
+//! # Available Routers
+//!
+//! | Router | Feature Gate | Scoring Strategy |
+//! |--------|-------------|------------------|
+//! | `BlockTopKRouter` | `vortex_flow` | mean-key centroid · query dot-product |
+//! | `EntmaxRouter` | `vortex_flow` | α-entmax sparsified scoring |
+//! | `ValueEnergyRouter` | `vortex_flow` | centroid · query gated by ‖value‖ |
+//! | `ChannelAwareRouter` | `vortex_flow` | SIMD-optimized critical-channel routing |
+//! | `MetaRouter` | `vortex_flow` | bandit-selected policy over multiple routers |
+//! | `MaxPoolBlockScorer` | `msa_sparse` | max(Q·K) per block instead of centroid (MSA Plan 256) |
+//! | `MaxStdDevBlockScorer` | `msa_sparse` | max(Q·K) × sigmoid(σ_k) — diversity-gated (MSA Plan 256) |
+//! | `PerGroupTopKRouter` | `msa_per_group` | independent top-k per GQA group (MSA Plan 256) |
+//! | `AdaptiveKRouter<R>` | `msa_adaptive_k` | variance-driven k budget via sigmoid gate (MSA Plan 256) |
+//! | `KvOuterPrefill` | `msa_kv_outer` | reverse-index sparse prefill (MSA Plan 256) |
+//!
+//! # MSA Plan 256 GOAT Status
+//!
+//! The `msa_sparse` family is **opt-in** (not default). All Phase 2 micro-benchmarks
+//! failed their GOAT gates — see `.plans/256_msa_blockwise_sparse_distillation.md`.
+//! Each technique has a narrow winning regime but does not beat the baseline
+//! broadly enough to promote to default.
+//!
 //! Feature gate: `vortex_flow` (Plan 196, Phase 1, default-OFF).
 
 use std::fmt::Debug;

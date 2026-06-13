@@ -87,9 +87,13 @@ denoise_loop step k:
   - Weighted sum across paths: Δ = Σ weight * p * E
   - Normalizes path scores to probabilities
 
-- [ ] **Task 4.2**: Wire MUX-RCD into `build_dd_tree_adaptive()`
-  - Requires DDTree score access — deferred to follow-up
-  - Gate behind `#[cfg(all(feature = "rcd_residual", feature = "mux_latent"))]`
+- [x] **Task 4.2**: Wire MUX-RCD into `build_dd_tree_adaptive()`
+  - Implemented as `build_dd_tree_adaptive_mux_residual()` in `src/speculative/caddtree_budget.rs`
+  - Composes `build_dd_tree_adaptive` + `compute_mux_residual`; extracts path scores from `TreeNode.score`
+  - **Feature gate correction:** plan referenced non-existent `mux_latent`; actual gate is `#[cfg(all(feature = "mux_demux", feature = "rcd_residual"))]` (matches `compute_mux_residual`'s gate)
+  - **Score semantics:** DDTree scores are cumulative log-probs (≤ 0); wiring applies log-sum-exp shift `(s - max).exp()` before normalization so `compute_mux_residual` receives positive weights
+  - **Degenerate-until-per-path-marginals:** with shared input marginals, path weights normalize to 1.0 so output collapses to standard `Σ_j p_j · E_j`; API surface complete for future per-path marginals
+  - 4 tests pass: matches-standard-residual, position-selects-correct-depth, out-of-range-zeros, empty-marginals-zeros
 
 ### Phase 5: Tests & Benchmarks (~100 lines)
 

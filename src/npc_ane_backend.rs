@@ -28,13 +28,12 @@ use coreml_native as coreml;
 #[cfg(test)]
 use katgpt_core::sense::backend::CpuTernaryBackend;
 use katgpt_core::sense::backend::{MAX_MODULES, NpcBrainBackend, NpcBrainInput, NpcBrainOutput};
+
+#[cfg(test)]
 use katgpt_core::types::TernaryDir;
 
 /// HLA state dimensionality (matches `NpcBrainInput::hla_state`).
 const HLA_DIM: usize = 8;
-
-/// Maximum sense directions per module (matches `TernaryDir` array size).
-const MAX_DIRECTIONS: usize = 8;
 
 /// ANE residency threshold — predictions slower than this indicate CPU fallback.
 const RESIDENCY_THRESHOLD_US: u64 = 1000;
@@ -58,6 +57,12 @@ pub struct AneNpcBrainBackend {
     model: coreml::Model,
     /// Maximum batch size (model may be compiled for a fixed shape).
     max_batch_size: usize,
+    /// Discovered name of the sense projection output (`[B, MAX_MODULES]`).
+    ///
+    /// CoreML `ct.convert()` auto-names outputs (`mul_0`, `sigmoid_1`, ...),
+    /// so we discover the name at construction by inspecting `model.outputs()`
+    /// rather than hardcoding it.
+    sense_output_name: String,
 }
 
 /// Error type for ANE NPC brain backend operations.
@@ -103,44 +108,125 @@ impl std::error::Error for AneNpcError {
 }
 
 impl AneNpcBrainBackend {
-    /// Create a new ANE NPC brain backend by loading a compiled CoreML model.
+    /// Create a new ANE NPC brain backend by loading a CoreML model.
     ///
-    /// The model file should be a `.mlmodelc` compiled bundle (or `.mlpackage`
-    /// which CoreML can load directly on macOS).
+    /// Accepts either:
+    /// - `.mlmodelc` — pre-compiled bundle, loaded directly (fast).
+    /// - `.mlpackage` / `.mlmodel` — source spec, compiled to `.mlmodelc` first
+    ///   via `MLModel::compileModel(at:)` (one-time ~1-5s, result in temp dir).
     ///
     /// After loading, runs a residency validation: a dummy prediction is timed
     /// and if latency exceeds 1ms, returns `AneNpcError::ResidencyFailed`.
     /// This catches cases where CoreML silently falls back to CPU.
     pub fn new(path: &std::path::Path, max_batch_size: usize) -> Result<Self, AneNpcError> {
-        let model = coreml::Model::load(path, coreml::ComputeUnits::All)
+        let compiled_path = Self::ensure_compiled(path)?;
+        let model = coreml::Model::load(&compiled_path, coreml::ComputeUnits::All)
             .map_err(|e| AneNpcError::ModelLoad(format!("load: {e}")))?;
+
+        // Discover the sense projection output name. CoreML's `ct.convert()`
+        // generates MIL-derived names (e.g. `mul_0`), not the Python variable
+        // names, so we inspect the model description and pick the first
+        // MultiArray output — that's the `[B, MAX_MODULES]` sense projection.
+        // (The other two outputs are `[B, 1]` scalars; we currently only
+        // consume the sense projection and apply overrides/autonomous-disabled
+        // on the Rust side.)
+        let sense_output_name = model
+            .outputs()
+            .iter()
+            .find(|d| matches!(d.feature_type(), coreml::FeatureType::MultiArray))
+            .map(|d| d.name().to_string())
+            .ok_or_else(|| {
+                AneNpcError::ModelLoad("no MultiArray output found in model".into())
+            })?;
+        log::info!("ANE NPC brain: sense output name = '{sense_output_name}'");
+
+        // Query the model's compiled batch size from the hla_state input shape.
+        // Fixed-shape ANE models reject any other batch size, so the compiled
+        // value wins over the caller's `max_batch_size` hint.
+        let model_batch = model
+            .inputs()
+            .iter()
+            .find(|d| d.name() == "hla_state")
+            .and_then(|d| d.shape())
+            .and_then(|s| s.first().copied())
+            .unwrap_or(max_batch_size);
+        if model_batch != max_batch_size {
+            log::info!(
+                "ANE NPC brain: model compiled batch={model_batch} overrides caller hint={max_batch_size}"
+            );
+        }
 
         let backend = Self {
             model,
-            max_batch_size,
+            max_batch_size: model_batch,
+            sense_output_name,
         };
 
-        // Validate ANE residency with a dummy batch=1 prediction
+        // Validate ANE residency at the model's compiled batch size
         backend.validate_residency()?;
 
         Ok(backend)
     }
 
-    /// Validate ANE residency by timing a single dummy prediction.
+    /// Return a `.mlmodelc` path for the given source.
     ///
-    /// Creates minimal dummy inputs (batch=1), runs predict, and checks
-    /// that latency is under the threshold. ANE predictions are typically
-    /// <100µs for this model; CPU fallback is >5ms.
-    fn validate_residency(&self) -> Result<(), AneNpcError> {
-        let batch = 1;
+    /// - `.mlmodelc` → returned as-is.
+    /// - `.mlpackage` / `.mlmodel` → compiled to a temp `.mlmodelc` via CoreML.
+    ///
+    /// The compiled model lands in CoreML's temp dir; the path is owned by the
+    /// system and remains valid for the process lifetime. Callers that want
+    /// persistence should ship `.mlmodelc` directly.
+    fn ensure_compiled(path: &std::path::Path) -> Result<std::path::PathBuf, AneNpcError> {
+        let is_compiled = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e == "mlmodelc")
+            .unwrap_or(false);
 
-        // Allocate dummy inputs
+        if is_compiled {
+            return Ok(path.to_path_buf());
+        }
+
+        log::info!(
+            "ANE NPC brain: compiling {} → .mlmodelc (one-time)",
+            path.display()
+        );
+        let compiled = coreml::compile_model(path)
+            .map_err(|e| AneNpcError::ModelLoad(format!("compile {}: {e}", path.display())))?;
+        log::info!("ANE NPC brain: compiled → {}", compiled.display());
+        Ok(compiled)
+    }
+
+    /// Validate ANE residency by timing dummy predictions after warmup.
+    ///
+    /// Creates dummy inputs sized to `max_batch_size` (the model's compiled
+    /// batch), runs a few warmup predictions to stabilize the ANE pipeline
+    /// (first run includes compile overhead), then times a final prediction.
+    /// ANE predictions are typically <100µs for this model; CPU fallback is >5ms.
+    fn validate_residency(&self) -> Result<(), AneNpcError> {
+        const RESIDENCY_WARMUP: usize = 3;
+        let batch = self.max_batch_size;
+
+        // Allocate dummy inputs at the model's compiled batch size
         let sense_weights = vec![0.0f32; batch * MAX_MODULES * HLA_DIM];
         let hla_state = vec![1.0f32; batch * HLA_DIM];
         let emotion_dir = vec![0.5f32; batch * HLA_DIM];
         let zone_dir = vec![0.5f32; batch * HLA_DIM];
         let confidence = vec![1.0f32; batch * MAX_MODULES];
 
+        // Warmup: first prediction triggers ANE pipeline compilation (~ms-scale).
+        for _ in 0..RESIDENCY_WARMUP {
+            let _ = self.predict_raw(
+                batch,
+                &sense_weights,
+                &hla_state,
+                &emotion_dir,
+                &zone_dir,
+                &confidence,
+            )?;
+        }
+
+        // Timed prediction — should now reflect steady-state ANE dispatch.
         let start = std::time::Instant::now();
         self.predict_raw(
             batch,
@@ -211,30 +297,14 @@ impl AneNpcBrainBackend {
     }
 }
 
-/// Encode a ternary direction into float weights for a single row.
-///
-/// For each dimension `i` in `0..HLA_DIM`:
-/// - `pos_bit[i] = 1` → `+1.0 * row_scale`
-/// - `neg_bit[i] = 1` → `-1.0 * row_scale`
-/// - neither → `0.0`
-///
-/// Only the first `n_directions` rows are active; remaining rows are zeroed.
-#[inline(always)]
-fn encode_ternary_dir(dir: &TernaryDir) -> [f32; HLA_DIM] {
-    let mut row = [0.0f32; HLA_DIM];
-    for i in 0..HLA_DIM {
-        let mask = 1u64 << i;
-        let pos = ((dir.pos_bits & mask) != 0) as u8 as f32;
-        let neg = ((dir.neg_bits & mask) != 0) as u8 as f32;
-        row[i] = (pos - neg) * dir.row_scale;
-    }
-    row
-}
-
 /// Encode all NPC brain inputs into CoreML batch tensors.
 ///
 /// Returns `(sense_weights, hla_state, emotion_dir, zone_dir, confidence)` tensors,
 /// all flattened in row-major order with shapes matching the CoreML model inputs.
+///
+/// `sense_weights[m][i]` encodes the DIAGONAL ternary projection (matches
+/// `SenseModule::project`): direction `i` contributes `sign_i * row_scale`
+/// at hla dim `i`, where `sign_i` is extracted from bit `i` of `directions[i]`.
 fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
     let batch = inputs.len();
 
@@ -257,32 +327,49 @@ fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
         for m in 0..input.module_count {
             let module = &input.modules[m];
 
-            // Encode ternary directions into float weight matrix
+            // Encode the DIAGONAL ternary projection that matches `SenseModule::project`:
+            //   dot = Σ_{i=0}^{n-1} sign_i(directions[i]) * hla_state[i] * row_scale[i]
+            // where sign_i extracts bit `i` of `directions[i]`'s pos/neg bitfield.
+            //
+            // This is NOT a full matvec — direction `i` only touches hla dim `i`.
+            // We encode it as `sense_weights[m][i] = sign_i * row_scale[i]` so that
+            // the model's `dot(sense_weights[m], hla_state)` reproduces the same sum.
+            // Dims ≥ n_directions are zero (no contribution).
             let module_base = (b * MAX_MODULES + m) * HLA_DIM;
-            for d in 0..MAX_DIRECTIONS {
-                if d < module.n_directions as usize {
-                    let row = encode_ternary_dir(&module.directions[d]);
-                    // Sum all direction rows into a single module row
-                    // (the model does dot(weights[m], hla_state))
-                    for i in 0..HLA_DIM {
-                        sense_weights[module_base + i] += row[i];
-                    }
-                }
+            let n = module.n_directions as usize;
+            for i in 0..HLA_DIM {
+                let w = if i < n {
+                    let dir = &module.directions[i];
+                    let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
+                    let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
+                    (pos - neg) * dir.row_scale
+                } else {
+                    0.0
+                };
+                sense_weights[module_base + i] = w;
             }
 
             // Confidence
             confidence[b * MAX_MODULES + m] = module.confidence;
 
-            // Emotion direction: use module 0's first direction
-            if m == 0 && module.n_directions > 0 {
-                let row = encode_ternary_dir(&module.directions[0]);
-                emotion_dir[hla_base..hla_base + HLA_DIM].copy_from_slice(&row);
+            // Emotion direction: use module 0's diagonal as emotion proxy
+            if m == 0 && n > 0 {
+                for i in 0..HLA_DIM {
+                    let dir = if i < n { &module.directions[i] } else { continue };
+                    let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
+                    let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
+                    emotion_dir[hla_base + i] = (pos - neg) * dir.row_scale;
+                }
             }
 
-            // Zone direction: use module 1's first direction (if exists)
-            if m == 1 && module.n_directions > 0 {
-                let row = encode_ternary_dir(&module.directions[0]);
-                zone_dir[hla_base..hla_base + HLA_DIM].copy_from_slice(&row);
+            // Zone direction: use module 1's diagonal as zone proxy
+            if m == 1 && n > 0 {
+                for i in 0..HLA_DIM {
+                    let dir = if i < n { &module.directions[i] } else { continue };
+                    let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
+                    let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
+                    zone_dir[hla_base + i] = (pos - neg) * dir.row_scale;
+                }
             }
         }
     }
@@ -307,20 +394,22 @@ struct EncodedBatch {
 
 /// Decode the CoreML prediction output into `NpcBrainOutput` values.
 ///
-/// Reads the `sense_proj` output tensor and fills `outputs`.
+/// Reads the sense projection output tensor (`sense_output_name`, which is
+/// discovered at construction since CoreML auto-names it) and fills `outputs`.
 /// GM overrides and autonomous_disabled are applied after decoding
 /// (matching `CpuTernaryBackend` semantics).
 fn decode_output(
     prediction: &coreml::Prediction,
+    sense_output_name: &str,
     inputs: &[NpcBrainInput],
     outputs: &mut [NpcBrainOutput],
 ) -> Result<(), AneNpcError> {
     let batch = inputs.len();
 
-    // Extract sense_proj output: [B, MAX_MODULES]
+    // Extract sense projection output: [B, MAX_MODULES]
     let (sense_data, _shape) = prediction
-        .get_f32("sense_proj")
-        .map_err(|e| AneNpcError::Prediction(format!("get sense_proj: {e}")))?;
+        .get_f32(sense_output_name)
+        .map_err(|e| AneNpcError::Prediction(format!("get {sense_output_name}: {e}")))?;
 
     for b in 0..batch {
         let projections = &mut outputs[b].projections;
@@ -377,13 +466,26 @@ impl NpcBrainBackend for AneNpcBrainBackend {
             ));
         }
 
-        // Encode inputs to CoreML tensors
-        let encoded = encode_batch(inputs);
+        // Fixed-shape ANE models require the exact compiled batch size.
+        // Pad with default (zero) inputs up to max_batch_size, run the full
+        // batch, then decode only the first `batch` outputs.
+        // This wastes some ANE cycles on padding but avoids dynamic-shape
+        // pitfalls (CoreML's RangeDim support is unreliable for ANE).
+        let padded = if batch < self.max_batch_size {
+            let mut v = inputs.to_vec();
+            v.resize(self.max_batch_size, NpcBrainInput::default());
+            v
+        } else {
+            inputs.to_vec()
+        };
 
-        // Run prediction
+        // Encode padded inputs to CoreML tensors
+        let encoded = encode_batch(&padded);
+
+        // Run prediction on the full padded batch
         let prediction = self
             .predict_raw(
-                batch,
+                self.max_batch_size,
                 &encoded.sense_weights,
                 &encoded.hla_state,
                 &encoded.emotion_dir,
@@ -392,8 +494,8 @@ impl NpcBrainBackend for AneNpcBrainBackend {
             )
             .map_err(|e| format!("ANE prediction failed: {e}"))?;
 
-        // Decode outputs (with override/autonomous handling)
-        decode_output(&prediction, inputs, outputs)
+        // Decode only the first `batch` outputs (padding rows are discarded)
+        decode_output(&prediction, &self.sense_output_name, inputs, outputs)
             .map_err(|e| format!("ANE output decode failed: {e}"))
     }
 
@@ -430,40 +532,6 @@ mod tests {
     }
 
     #[test]
-    fn test_encode_ternary_dir_all_positive() {
-        let dir = TernaryDir {
-            pos_bits: 0b11,
-            neg_bits: 0,
-            row_scale: 1.0,
-        };
-        let row = encode_ternary_dir(&dir);
-        assert_eq!(row[0], 1.0);
-        assert_eq!(row[1], 1.0);
-        assert_eq!(row[2], 0.0);
-    }
-
-    #[test]
-    fn test_encode_ternary_dir_mixed() {
-        let dir = TernaryDir {
-            pos_bits: 0b0101, // dims 0, 2 positive
-            neg_bits: 0b1000, // dim 3 negative
-            row_scale: 0.5,
-        };
-        let row = encode_ternary_dir(&dir);
-        assert_eq!(row[0], 0.5); // +1 * 0.5
-        assert_eq!(row[1], 0.0);
-        assert_eq!(row[2], 0.5); // +1 * 0.5
-        assert_eq!(row[3], -0.5); // -1 * 0.5
-    }
-
-    #[test]
-    fn test_encode_ternary_dir_zero() {
-        let dir = TernaryDir::zero();
-        let row = encode_ternary_dir(&dir);
-        assert_eq!(row, [0.0; HLA_DIM]);
-    }
-
-    #[test]
     fn test_encode_batch_empty() {
         let inputs: Vec<NpcBrainInput> = vec![NpcBrainInput::default()];
         let encoded = encode_batch(&inputs);
@@ -485,6 +553,41 @@ mod tests {
         assert_eq!(encoded.hla_state[1], 2.0);
         assert_eq!(encoded.hla_state[2], 3.0);
         assert_eq!(encoded.hla_state[3], 4.0);
+    }
+
+    /// Verify the diagonal sense_weights encoding matches `SenseModule::project`:
+    /// direction `i` contributes only at hla dim `i`, using bit `i` of `directions[i]`.
+    #[test]
+    fn test_encode_batch_diagonal_matches_cpu_projection() {
+        use katgpt_core::sense::backend::ModuleInput;
+
+        // Two directions: dir[0] sets bit 0 positive; dir[1] sets bit 1 negative.
+        let mut input = NpcBrainInput::default();
+        input.hla_state = [0.5, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        input.module_count = 1;
+        let mut dirs = [TernaryDir::zero(); 8];
+        dirs[0] = TernaryDir { pos_bits: 1 << 0, neg_bits: 0, row_scale: 2.0 };
+        dirs[1] = TernaryDir { pos_bits: 0, neg_bits: 1 << 1, row_scale: 4.0 };
+        input.modules[0] = ModuleInput { directions: dirs, n_directions: 2, confidence: 1.0 };
+
+        let encoded = encode_batch(&[input]);
+
+        // Module 0, dim 0: sign = +1 (bit 0 of dirs[0] = pos), scale 2.0 → +2.0
+        assert_eq!(encoded.sense_weights[0], 2.0);
+        // Module 0, dim 1: sign = -1 (bit 1 of dirs[1] = neg), scale 4.0 → -4.0
+        assert_eq!(encoded.sense_weights[1], -4.0);
+        // Dims ≥ n_directions are zero
+        assert_eq!(encoded.sense_weights[2], 0.0);
+        assert_eq!(encoded.sense_weights[7], 0.0);
+
+        // The model dot(sense_weights[0], hla_state) should equal the CPU's dot:
+        //   2.0*0.5 + (-4.0)*0.25 = 1.0 - 1.0 = 0.0 → sigmoid(0)=0.5
+        let dot: f32 = encoded.sense_weights[..HLA_DIM]
+            .iter()
+            .zip(encoded.hla_state[..HLA_DIM].iter())
+            .map(|(w, h)| w * h)
+            .sum();
+        assert!((dot - 0.0).abs() < 1e-6, "dot = {dot}");
     }
 
     #[test]

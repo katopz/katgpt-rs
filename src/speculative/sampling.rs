@@ -1,13 +1,24 @@
 use crate::types::Rng;
 
+// Uses strict `r < cdf` (not `<=`) so zero-probability leading bins are never selected.
+// Additionally, `rng.uniform()` is documented to return [0, 1) and can yield exactly
+// 0.0 (e.g. for low-entropy seeds the first draw is deterministically 0.0). A draw of
+// exactly 0.0 sits on the left boundary of the inverse-CDF map and deterministically
+// selects the first token with any nonzero mass, defeating per-seed variation. We
+// therefore redraw on `r == 0.0` to obtain a strictly-positive variate. This only
+// consumes extra RNG state for sampling calls — weight init (`normal()`) is untouched.
+///
 /// CDF-based sampling from a probability distribution.
 #[inline]
 pub fn sample_from_distribution(probs: &[f32], rng: &mut Rng) -> usize {
-    let r = rng.uniform();
+    let mut r = rng.uniform();
+    while r == 0.0 {
+        r = rng.uniform();
+    }
     let mut cdf = 0.0;
     for (i, &p) in probs.iter().enumerate() {
         cdf += p;
-        if r <= cdf {
+        if r < cdf {
             return i;
         }
     }

@@ -378,6 +378,9 @@ pub use caddtree_budget::{
     build_dd_tree_adaptive_screened,
 };
 
+#[cfg(all(feature = "caddtree_budget", feature = "mux_demux", feature = "rcd_residual"))]
+pub use caddtree_budget::build_dd_tree_adaptive_mux_residual;
+
 // ── Self-Learning Selectivity Router (Plan 204, feature: selectivity_router) ──
 #[cfg(feature = "selectivity_router")]
 pub mod selectivity_router;
