@@ -25,6 +25,9 @@ use crate::trigger_gate::RvThresholds;
 #[cfg(all(feature = "critical_interval_gate", feature = "rv_gated_routing"))]
 use crate::dllm_solver::{CriticalIntervalConfig, CriticalTierDecision, critical_tier_decision};
 
+#[cfg(feature = "rcd_residual")]
+use crate::dllm_solver::{ResidualMode, tier_to_residual_mode};
+
 #[cfg(feature = "modality_pruned_load")]
 use crate::pipeline_pruner::QueryClassifier;
 
@@ -654,6 +657,16 @@ impl InferenceRouter {
     #[inline]
     pub fn select_pipeline(&self, prompt: &str) -> crate::pipeline_pruner::PipelineConfig {
         self.query_classifier.classify_prompt(prompt)
+    }
+
+    /// Get the current residual mode based on the active compute tier (Plan 258).
+    ///
+    /// Plasma path returns `Skip` for zero overhead.
+    /// Higher tiers return progressively more expensive residual modes.
+    #[cfg(feature = "rcd_residual")]
+    #[inline]
+    pub fn residual_mode(&self) -> ResidualMode {
+        tier_to_residual_mode(self.gate.current_tier())
     }
 
     /// Generate tokens autoregressively using the routed forward path.

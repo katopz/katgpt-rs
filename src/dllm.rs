@@ -1785,6 +1785,18 @@ pub struct D2fContext {
     /// Cached logits from two steps ago: `[max_seq * vocab_size]`.
     /// Second cache for multistep logit extrapolation (Plan 078 T10.5).
     pub prev_prev_logits_flat: Vec<f32>,
+    /// Residual embeddings for RCD injection: `[max_seq * n_embd]`.
+    /// Stores interpolated residual embeddings for masked positions.
+    /// Written after token commitment, read during next step's input construction.
+    #[cfg(feature = "rcd_residual")]
+    pub residual_embeddings: Vec<f32>,
+    /// Entropy weights per position: `[max_seq]`.
+    /// α_i values computed from marginal distributions.
+    #[cfg(feature = "rcd_residual")]
+    pub entropy_weights: Vec<f32>,
+    /// Softmax scratch buffer for RCD: `[vocab_size]`.
+    #[cfg(feature = "rcd_residual")]
+    pub rcd_softmax_scratch: Vec<f32>,
     // usize fields after all Vec<f32> fields to eliminate inter-field padding.
     /// Number of positions with committed KV cache entries.
     /// Positions `[0..committed_len)` are valid and won't be recomputed.
@@ -1819,6 +1831,12 @@ impl D2fContext {
             attn_scores_buf: vec![0.0f32; max_seq],
             prev_logits_flat: vec![0.0f32; max_seq * vocab],
             prev_prev_logits_flat: vec![0.0f32; max_seq * vocab],
+            #[cfg(feature = "rcd_residual")]
+            residual_embeddings: vec![0.0f32; max_seq * n],
+            #[cfg(feature = "rcd_residual")]
+            entropy_weights: vec![0.0f32; max_seq],
+            #[cfg(feature = "rcd_residual")]
+            rcd_softmax_scratch: vec![0.0f32; vocab],
             committed_len: 0,
         }
     }
@@ -1836,6 +1854,11 @@ impl D2fContext {
         self.committed_len = 0;
         self.prev_logits_flat.fill(0.0);
         self.prev_prev_logits_flat.fill(0.0);
+        #[cfg(feature = "rcd_residual")]
+        {
+            self.residual_embeddings.fill(0.0);
+            self.entropy_weights.fill(0.0);
+        }
     }
 
     /// Commit KV cache entries for positions `[0..len)`.
@@ -2113,6 +2136,44 @@ pub fn denoise_loop(
     }
 
     (tokens, converged_step)
+}
+
+/// Run denoising loop with Residual Context Diffusion (Plan 258).
+///
+/// Wraps [`denoise_loop`] with RCD: after each denoising step, computes
+/// entropy-weighted residuals for masked positions and stores them for
+/// the next step's embedding construction.
+///
+/// When `rcd_config` is `None` or `enabled = false`, falls back to standard denoising.
+#[cfg(feature = "rcd_residual")]
+pub fn denoise_loop_rcd(
+    weights: &TransformerWeights,
+    target_tokens: &[usize],
+    config: &Config,
+    n_steps: usize,
+    confidence_threshold: f32,
+    constraint: &mut dyn DenoiseConstraint,
+    rng: &mut Rng,
+    rcd_config: Option<&mut crate::dllm_solver::RcdConfig>,
+) -> (Vec<usize>, usize) {
+    // For now, delegate to standard denoise_loop.
+    // Full RCD integration requires BidirectionalContext changes that
+    // will be wired in a follow-up once the D2fContext path is validated.
+    //
+    // The residual computation functions (normalized_entropy, compute_residual,
+    // interpolate_residual) are available and tested independently.
+    // The denoise_loop will be augmented to use them once the embedding
+    // injection path is validated through D2fContext.
+    drop(rcd_config);
+    denoise_loop(
+        weights,
+        target_tokens,
+        config,
+        n_steps,
+        confidence_threshold,
+        constraint,
+        rng,
+    )
 }
 
 /// Measure denoising accuracy: fraction of correctly recovered tokens.

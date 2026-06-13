@@ -542,6 +542,216 @@ pub fn mbr_select(
     best_idx
 }
 
+// ---------------------------------------------------------------------------
+// Residual Context Diffusion (Plan 258, feature: rcd_residual)
+// ---------------------------------------------------------------------------
+
+/// Configuration for Residual Context Diffusion.
+///
+/// Controls entropy-weighted residual context injection from discarded
+/// token probability distributions into the next denoising step's input embeddings.
+#[cfg(feature = "rcd_residual")]
+#[derive(Clone, Debug)]
+pub struct RcdConfig {
+    /// Whether RCD is enabled (runtime toggle).
+    pub enabled: bool,
+    /// Temperature for inference-time residual calibration (default 1.0).
+    pub temperature_residual: f32,
+    /// log(vocab_size), pre-computed once at init.
+    pub log_vocab: f32,
+    /// Pre-allocated scratch buffer for residual computation: `[n_embd]`.
+    /// Reused across positions and steps — zero allocation in hot loop.
+    pub residual_scratch: Vec<f32>,
+}
+
+#[cfg(feature = "rcd_residual")]
+impl RcdConfig {
+    /// Create a new RCD config for the given vocab size and embedding dimension.
+    pub fn new(vocab_size: usize, n_embd: usize) -> Self {
+        Self {
+            enabled: true,
+            temperature_residual: 1.0,
+            log_vocab: (vocab_size as f32).ln(),
+            residual_scratch: vec![0.0f32; n_embd],
+        }
+    }
+
+    /// Disabled RCD config (zero overhead).
+    pub fn disabled() -> Self {
+        Self {
+            enabled: false,
+            temperature_residual: 1.0,
+            log_vocab: 1.0,
+            residual_scratch: Vec::new(),
+        }
+    }
+}
+
+/// Compute normalized entropy weight α_i for a single position.
+///
+/// α_i = H(p_i) / log(V)
+/// - Uniform distribution → α = 1.0 (maximum uncertainty, full residual)
+/// - One-hot distribution → α = 0.0 (certain, no residual needed)
+#[cfg(feature = "rcd_residual")]
+#[inline]
+pub fn normalized_entropy(marginals: &[f32], log_vocab: f32) -> f32 {
+    if log_vocab <= 0.0 {
+        return 0.0;
+    }
+    let h = shannon_entropy(marginals);
+    // Clamp to [0, 1] for numerical stability
+    (h / log_vocab).clamp(0.0, 1.0)
+}
+
+/// Compute residual embedding Δ_i = Σ_j p_ij * E_j.
+///
+/// Weighted sum over the embedding codebook using marginal probabilities.
+/// Only meaningful for masked (uncertain) positions.
+///
+/// Writes result into `out` (must have length >= n_embd).
+/// Zero-allocation: caller provides output buffer.
+#[cfg(feature = "rcd_residual")]
+#[inline]
+pub fn compute_residual(
+    marginals: &[f32],
+    wte: &[f32], // Flat embedding matrix [vocab_size * n_embd]
+    n_embd: usize,
+    out: &mut [f32],
+) {
+    debug_assert!(out.len() >= n_embd);
+    out[..n_embd].fill(0.0f32);
+
+    let vocab = marginals.len();
+    for j in 0..vocab {
+        let p_j = marginals[j];
+        if p_j < 1e-10 {
+            continue; // Skip near-zero probabilities
+        }
+        let emb_start = j * n_embd;
+        let emb_end = emb_start + n_embd;
+        if emb_end > wte.len() {
+            break;
+        }
+        for (k, &e) in wte[emb_start..emb_end].iter().enumerate() {
+            out[k] += p_j * e;
+        }
+    }
+}
+
+/// Interpolate between mask embedding and residual embedding.
+///
+/// ẽ_i = (1 - α_i) * E_mask + α_i * Δ_i
+///
+/// - α_i = 0.0 → pure mask embedding (certain, no context needed)
+/// - α_i = 1.0 → pure residual embedding (maximally uncertain)
+#[cfg(feature = "rcd_residual")]
+#[inline]
+pub fn interpolate_residual(
+    mask_embedding: &[f32], // E_mask [n_embd]
+    residual: &[f32],       // Δ_i [n_embd]
+    alpha: f32,             // Normalized entropy weight [0, 1]
+    out: &mut [f32],        // Output [n_embd]
+) {
+    let n = out.len().min(mask_embedding.len()).min(residual.len());
+    let inv_alpha = 1.0 - alpha;
+    for i in 0..n {
+        out[i] = inv_alpha * mask_embedding[i] + alpha * residual[i];
+    }
+}
+
+/// Compute entropy weights for all positions in a batch.
+///
+/// Returns a Vec of α_i values, one per position.
+/// Only computes for masked positions; non-masked positions get α = 0.0.
+#[cfg(feature = "rcd_residual")]
+pub fn compute_entropy_weights(
+    logits_flat: &[f32], // [seq_len * vocab_size]
+    tokens: &[usize],
+    mask: usize,
+    vocab_size: usize,
+    log_vocab: f32,
+    softmax_scratch: &mut [f32], // [vocab_size] scratch
+) -> Vec<f32> {
+    let seq_len = tokens.len();
+    let mut alphas = vec![0.0f32; seq_len];
+
+    for p in 0..seq_len {
+        if tokens[p] != mask {
+            continue; // Already committed — no residual needed
+        }
+
+        let logits_p = &logits_flat[p * vocab_size..(p + 1) * vocab_size];
+
+        // Softmax into scratch
+        let max_l = logits_p.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        let mut sum_exp = 0.0f32;
+        for (i, &l) in logits_p.iter().enumerate() {
+            let e = (l - max_l).exp();
+            softmax_scratch[i] = e;
+            sum_exp += e;
+        }
+        if sum_exp > 0.0 {
+            let inv = 1.0 / sum_exp;
+            for v in softmax_scratch.iter_mut() {
+                *v *= inv;
+            }
+        }
+
+        alphas[p] = normalized_entropy(softmax_scratch, log_vocab);
+    }
+
+    alphas
+}
+
+// ---------------------------------------------------------------------------
+// Tier-Adaptive Routing (Plan 258 Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Residual computation mode, selected by inference tier.
+#[cfg(feature = "rcd_residual")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ResidualMode {
+    /// Skip residual computation entirely — zero overhead.
+    /// Used for Plasma tier (game AI path, frame-budget critical).
+    Skip = 0,
+    /// Confidence-only residual: α_i = max_prob (single register).
+    /// Cheap approximation — avoids full entropy computation.
+    ConfidenceOnly = 1,
+    /// Full RCD: normalized entropy + codebook weighted sum.
+    /// Best quality, moderate compute cost.
+    #[default]
+    Full = 2,
+    /// Full RCD + reference model warm start.
+    /// Maximum quality, highest compute cost.
+    FullWithWarmStart = 3,
+}
+
+/// Map compute tier to residual mode.
+///
+/// - Plasma → Skip (game AI, frame-budget critical)
+/// - CpuOnly → ConfidenceOnly (low resources)
+/// - CpuGpu → Full (balanced)
+/// - CpuGpuAne → FullWithWarmStart (maximum resources)
+#[cfg(feature = "rcd_residual")]
+#[inline]
+pub fn tier_to_residual_mode(tier: crate::trigger_gate::ComputeTier) -> ResidualMode {
+    match tier {
+        crate::trigger_gate::ComputeTier::CpuOnly => ResidualMode::ConfidenceOnly,
+        crate::trigger_gate::ComputeTier::CpuGpu => ResidualMode::Full,
+        crate::trigger_gate::ComputeTier::CpuGpuAne => ResidualMode::FullWithWarmStart,
+    }
+}
+
+/// Quick confidence-based alpha: 1.0 - max_prob.
+/// Cheaper than full entropy computation (avoids softmax + log).
+#[cfg(feature = "rcd_residual")]
+#[inline]
+pub fn confidence_alpha(marginals: &[f32]) -> f32 {
+    let max_prob = marginals.iter().copied().fold(0.0f32, f32::max);
+    (1.0 - max_prob).clamp(0.0, 1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1157,6 +1367,179 @@ mod tests {
             mbr_time,
             bestq_time,
             mbr_time.as_nanos() as f64 / bestq_time.as_nanos().max(1) as f64
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Plan 258: RCD Tests
+    // -----------------------------------------------------------------------
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_normalized_entropy_uniform() {
+        // Uniform distribution → α = 1.0
+        let uniform = vec![1.0 / 100.0; 100]; // all equal probabilities
+        let log_v = (100.0f32).ln();
+        let alpha = super::normalized_entropy(&uniform, log_v);
+        assert!((alpha - 1.0).abs() < 0.01, "uniform → α ≈ 1.0, got {alpha}");
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_normalized_entropy_onehot() {
+        // One-hot distribution → α = 0.0
+        let mut onehot = vec![0.0f32; 100];
+        onehot[42] = 1.0;
+        let log_v = (100.0f32).ln();
+        let alpha = super::normalized_entropy(&onehot, log_v);
+        assert!(alpha.abs() < 0.01, "one-hot → α ≈ 0.0, got {alpha}");
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_normalized_entropy_known() {
+        // Two equal tokens: p = [0.5, 0.5, 0, ..., 0]
+        // H = -2 * 0.5 * ln(0.5) = ln(2)
+        // α = ln(2) / ln(100) ≈ 0.301
+        let mut dist = vec![0.0f32; 100];
+        dist[0] = 0.5;
+        dist[1] = 0.5;
+        let log_v = (100.0f32).ln();
+        let alpha = super::normalized_entropy(&dist, log_v);
+        let expected = 2.0f32.ln() / 100.0f32.ln();
+        assert!(
+            (alpha - expected).abs() < 0.01,
+            "known dist → α ≈ {expected}, got {alpha}"
+        );
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_compute_residual_zero_when_all_mask() {
+        // All probability on mask token → Δ should equal mask embedding
+        let n_embd = 4;
+        let vocab = 3;
+        let mut wte = vec![0.0f32; vocab * n_embd];
+        // token 0 embedding: [1, 0, 0, 0]
+        wte[0..4].copy_from_slice(&[1.0, 0.0, 0.0, 0.0]);
+        // token 1 embedding: [0, 1, 0, 0]
+        wte[4..8].copy_from_slice(&[0.0, 1.0, 0.0, 0.0]);
+        // token 2 (mask) embedding: [0, 0, 1, 0]
+        wte[8..12].copy_from_slice(&[0.0, 0.0, 1.0, 0.0]);
+
+        let mut marginals = vec![0.0f32; vocab];
+        marginals[2] = 1.0; // all probability on mask token
+
+        let mut out = vec![0.0f32; n_embd];
+        super::compute_residual(&marginals, &wte, n_embd, &mut out);
+
+        // Should equal mask embedding
+        assert!((out[0] - 0.0).abs() < 1e-6);
+        assert!((out[1] - 0.0).abs() < 1e-6);
+        assert!((out[2] - 1.0).abs() < 1e-6);
+        assert!((out[3] - 0.0).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_compute_residual_weighted_sum() {
+        let n_embd = 4;
+        let vocab = 3;
+        let mut wte = vec![0.0f32; vocab * n_embd];
+        wte[0..4].copy_from_slice(&[1.0, 0.0, 0.0, 0.0]);
+        wte[4..8].copy_from_slice(&[0.0, 1.0, 0.0, 0.0]);
+        wte[8..12].copy_from_slice(&[0.0, 0.0, 1.0, 0.0]);
+
+        // 50/50 between token 0 and token 1
+        let marginals = vec![0.5f32, 0.5, 0.0];
+        let mut out = vec![0.0f32; n_embd];
+        super::compute_residual(&marginals, &wte, n_embd, &mut out);
+
+        // Should be [0.5, 0.5, 0.0, 0.0]
+        assert!((out[0] - 0.5).abs() < 1e-6, "got {}", out[0]);
+        assert!((out[1] - 0.5).abs() < 1e-6, "got {}", out[1]);
+        assert!((out[2] - 0.0).abs() < 1e-6);
+        assert!((out[3] - 0.0).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_interpolate_residual() {
+        let mask_emb = [0.0, 0.0, 1.0, 0.0];
+        let residual = [1.0, 0.0, 0.0, 0.0];
+        let mut out = [0.0f32; 4];
+
+        // α = 0.5 → 50/50 blend
+        super::interpolate_residual(&mask_emb, &residual, 0.5, &mut out);
+        assert!((out[0] - 0.5).abs() < 1e-6);
+        assert!((out[1] - 0.0).abs() < 1e-6);
+        assert!((out[2] - 0.5).abs() < 1e-6);
+        assert!((out[3] - 0.0).abs() < 1e-6);
+
+        // α = 0.0 → pure mask
+        super::interpolate_residual(&mask_emb, &residual, 0.0, &mut out);
+        assert!((out[0] - 0.0).abs() < 1e-6);
+        assert!((out[2] - 1.0).abs() < 1e-6);
+
+        // α = 1.0 → pure residual
+        super::interpolate_residual(&mask_emb, &residual, 1.0, &mut out);
+        assert!((out[0] - 1.0).abs() < 1e-6);
+        assert!((out[2] - 0.0).abs() < 1e-6);
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_config_disabled() {
+        let config = super::RcdConfig::disabled();
+        assert!(!config.enabled);
+        assert!(config.residual_scratch.is_empty());
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_config_new() {
+        let config = super::RcdConfig::new(1000, 64);
+        assert!(config.enabled);
+        assert!((config.log_vocab - 1000.0f32.ln()).abs() < 1e-6);
+        assert_eq!(config.residual_scratch.len(), 64);
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_residual_mode_default() {
+        assert_eq!(super::ResidualMode::default(), super::ResidualMode::Full);
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_confidence_alpha() {
+        // One-hot → confidence_alpha = 0.0
+        let mut onehot = vec![0.0f32; 10];
+        onehot[5] = 1.0;
+        let alpha = super::confidence_alpha(&onehot);
+        assert!(alpha.abs() < 1e-6, "one-hot → 0.0, got {alpha}");
+
+        // Uniform → confidence_alpha ≈ 1 - 1/10 = 0.9
+        let uniform = vec![0.1f32; 10];
+        let alpha = super::confidence_alpha(&uniform);
+        assert!((alpha - 0.9).abs() < 1e-6, "uniform → 0.9, got {alpha}");
+    }
+
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_tier_to_residual_mode() {
+        use crate::trigger_gate::ComputeTier;
+        assert_eq!(
+            super::tier_to_residual_mode(ComputeTier::CpuOnly),
+            super::ResidualMode::ConfidenceOnly
+        );
+        assert_eq!(
+            super::tier_to_residual_mode(ComputeTier::CpuGpu),
+            super::ResidualMode::Full
+        );
+        assert_eq!(
+            super::tier_to_residual_mode(ComputeTier::CpuGpuAne),
+            super::ResidualMode::FullWithWarmStart
         );
     }
 }

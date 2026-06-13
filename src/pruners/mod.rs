@@ -1042,3 +1042,11 @@ pub mod federation_composer;
 
 #[cfg(feature = "regime_transition")]
 pub use four_regime_router::{FourRegimeRouter, Heaviness, Regime, RegimeArm, RegimeFeatures};
+
+// ── Residual Context Diffusion (Plan 258) ──────────────────────
+
+#[cfg(feature = "rcd_residual")]
+pub mod resid_pruner;
+
+#[cfg(feature = "rcd_residual")]
+pub use resid_pruner::ResidPruner;
