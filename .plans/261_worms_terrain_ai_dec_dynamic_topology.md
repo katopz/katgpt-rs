@@ -1,7 +1,7 @@
 # Plan 261: Dynamic DEC Topology for Destructible Terrain
 
 **Date:** 2026-06
-**Status:** 🟡 PHASE 3 GOAT — remove_face O(n) scan (Issue 013), A* quality comparison pending
+**Status:** 🟡 PHASE 3 GOAT — remove_face O(n) scan (Issue 013), quality gate PASS (4/4), speed gate blocks default promotion
 **Research:** 119 — Arena × Latent Space (moved to `riir-ai/.research/119` — internal game product concept)
 **Depends On:** Plan 251 (DEC Operators), Plan 242 (Fourier Flow Fields)
 
@@ -43,8 +43,8 @@ DEC dynamic topology is a **generic modelless primitive** — it's useful for an
 ### Phase 3: GOAT Gate Validation
 - [x] Create `examples/dec_terrain_bench.rs` — benchmark DEC terrain update vs naive grid scan
 - [x] Measure: time to update navigation after N terrain destructions
-- [ ] Measure: quality of Hodge-decomposed routes vs A* on modified terrain
-- [ ] If DEC wins → promote `dec_terrain_ai` to default feature
+- [x] Measure: quality of Hodge-decomposed routes vs A* on modified terrain (`.benchmarks/261_dec_terrain_quality_goat.md`, `examples/dec_terrain_quality_bench.rs`)
+- [x] If DEC wins → promote `dec_terrain_ai` to default feature — **conditional**: quality 4/4 PASS (ratio 1.0000 vs A*) but speed gate blocked by Issue 013 (Hodge build ~15ms, break-even ~728 agents). Kept opt-in until Issue 013 resolves.
 - [x] If DEC loses → demote, document why, create issue for optimization (Issue 013: remove_face O(n) scan)
 
 ### Phase 4: Integration with Existing Flow Fields

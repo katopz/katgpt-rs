@@ -1014,3 +1014,13 @@ required-features = ["gpart_adapter"]
 [[example]]
 name = "ane_npc_goat"
 required-features = ["sense_composition"]
+
+# ── DEC Dynamic Topology (Plan 261) ───────────────────────────
+
+[[example]]
+name = "dec_terrain_bench"
+required-features = ["dec_terrain_ai"]
+
+[[example]]
+name = "dec_terrain_quality_bench"
+required-features = ["dec_terrain_ai"]

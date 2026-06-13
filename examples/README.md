@@ -120,6 +120,8 @@ flag is missing.
 | `thinking_cot_demo` | Misc | `thinking_cot` | Adaptive CoT thinking vs non-thinking quality (Plan 194) |
 | `mux_latent_compress` | MUX-Latent | `mux_latent_context` | Compress 4k tokens at X4/X8/X16, show KV savings, TTFT, adaptive LOD (Plan 238) |
 | `mux_latent_expand` | MUX-Latent | `mux_latent_context` | Compress then selectively expand segments, query-based retrieval (Plan 238) |
+| `dec_terrain_bench` | DEC Terrain | `dec_terrain_ai` | Dynamic topology update perf — `remove_face` + `recompute_if_dirty` (Plan 261) |
+| `dec_terrain_quality_bench` | DEC Terrain | `dec_terrain_ai` | Hodge-decomposed route quality vs A* on modified terrain (Plan 261 T46–47) |
 
 ---
 
