@@ -64,18 +64,23 @@ Distill MSA's key inference-time mechanisms into katgpt-rs's existing VortexFlow
   - [x] Export in `mod.rs`
   - [x] 4 tests: different-blocks-per-group, total-leq-topk, each-group-gets-block, backward-compat-n_groups=1
   - [ ] Benchmark vs shared selection on RULER
-- [ ] Implement KV-outer sparse prefill path for GPU
-  - Build reverse index: for each KV block, gather queries that selected it
-  - Pre-scheduled tile chunking for hot-block load balancing
-  - Two-phase forward: partial outputs + LSE combine
-  - Gate behind `msa_kv_outer` sub-flag
-  - Benchmark: sparse prefill latency vs Q-outer at 32K, 128K, 512K context
-- [ ] Implement adaptive k budget via sigmoid gate
+- [x] Implement KV-outer sparse prefill path for GPU
+  - [x] Build reverse index: for each KV block, gather queries that selected it (`KvOuterIndex`)
+  - [x] Hot-block sorting by query count for cache locality
+  - [x] Two-phase forward: partial outputs + LSE combine (`KvOuterPrefill::prefill_sparse`)
+  - [x] Gate behind `msa_kv_outer` sub-flag
+  - [x] 5 tests: index build, hot blocks, single-block dense parity, needle-in-haystack, LSE numerical stability
+  - [ ] Benchmark: sparse prefill latency vs Q-outer at 32K, 128K, 512K context
+- [x] Implement adaptive k budget via sigmoid gate
   - Compute block score variance per query
   - k = k_min + (k_max - k_min) * sigmoid(w * variance + b)
   - Threshold routing: k≤8 → SIMD only, k≤32 → CPU parallel, k>32 → GPU
   - Gate behind `msa_adaptive_k` sub-flag
-  - Benchmark: accuracy vs fixed k on varying context lengths
+  - `AdaptiveKConfig` with builder pattern (`with_params(w, b)`)
+  - `compute_adaptive_k()` — 4-way unrolled variance + sigmoid gate
+  - `AdaptiveKRouter<R: VortexFlow>` — wraps inner router, reads scratch scores for variance, truncates decision to adaptive k
+  - 9 tests: high/low variance, bounds, edge cases, BlockTopK integration, bias extremes
+  - [ ] Benchmark: accuracy vs fixed k on varying context lengths
 
 ### Phase 3: GOAT Proof & Promotion
 

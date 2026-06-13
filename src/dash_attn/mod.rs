@@ -38,12 +38,16 @@ pub use routing::{compute_routing_bias, score_blocks_entmax};
 pub use sat_analysis::{HeadSparsityInfo, head_sparsity_profile};
 
 // VortexFlow composable sparse routing (Plan 196, default-OFF)
+#[cfg(feature = "msa_adaptive_k")]
+pub mod adaptive_k;
 #[cfg(feature = "vortex_flow")]
 pub mod block_topk;
 #[cfg(feature = "vortex_flow")]
 pub mod channel_aware;
 #[cfg(feature = "vortex_flow")]
 pub mod entmax_router;
+#[cfg(feature = "msa_kv_outer")]
+pub mod kv_outer_prefill;
 #[cfg(feature = "vortex_flow")]
 pub mod meta_router;
 #[cfg(feature = "msa_sparse")]
@@ -53,6 +57,8 @@ pub mod value_energy;
 #[cfg(feature = "vortex_flow")]
 pub mod vortex_flow;
 
+#[cfg(feature = "msa_adaptive_k")]
+pub use adaptive_k::{AdaptiveKConfig, AdaptiveKRouter};
 #[cfg(feature = "msa_per_group")]
 pub use block_topk::PerGroupTopKRouter;
 #[cfg(feature = "vortex_flow")]
@@ -64,6 +70,8 @@ pub use channel_aware::{
 };
 #[cfg(feature = "vortex_flow")]
 pub use entmax_router::{EntmaxCache, EntmaxRouter};
+#[cfg(feature = "msa_kv_outer")]
+pub use kv_outer_prefill::{KvOuterIndex, KvOuterPrefill};
 #[cfg(feature = "vortex_flow")]
 pub use meta_router::{DynPolicy, DynRoutingCache, MetaRouter, compute_reward};
 #[cfg(feature = "msa_sparse")]
