@@ -108,3 +108,8 @@ required-features = ["merkle_octree"]
 name = "npc_brain_bench"
 harness = false
 required-features = ["sense_composition"]
+
+[[bench]]
+name = "latent_physics_bench"
+harness = false
+required-features = ["sector_projection", "action_bridge"]
