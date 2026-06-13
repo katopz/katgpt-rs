@@ -16,6 +16,8 @@ pub mod octree;
 pub mod reconstruction;
 #[cfg(feature = "schema_centroid")]
 pub mod schema_centroid;
+#[cfg(feature = "sector_projection")]
+pub mod sector;
 pub mod serialize;
 #[cfg(feature = "spectral_threat")]
 pub mod spectral_threat;
@@ -44,5 +46,7 @@ pub use schema_centroid::schema_init_with_precision;
 pub use schema_centroid::{
     CentroidStats, SchemaCentroidCache, compute_centroid, schema_init_entity,
 };
+#[cfg(feature = "sector_projection")]
+pub use sector::SectorProjection;
 #[cfg(feature = "spectral_threat")]
 pub use spectral_threat::{CombatRhythmTracker, SpectralThreatFeatures};

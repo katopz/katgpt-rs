@@ -20,6 +20,12 @@ pub mod simd;
 pub mod traits;
 pub mod types;
 
+// ActionBridge — generic latent→raw action bridge (Plan 262).
+#[cfg(feature = "action_bridge")]
+pub mod bridge;
+#[cfg(feature = "action_bridge")]
+pub use bridge::ActionBridge;
+
 // Re-export consolidated traits (Plan 107 Phase 0)
 pub use traits::{
     ActionSpaceLog, BestBuddyAligner, BinaryScreeningPruner, ConstraintPruner, DominoPruner,

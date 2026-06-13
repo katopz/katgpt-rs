@@ -1,7 +1,7 @@
 # Plan 262: Latent Physics Primitives — SectorProjection + ActionBridge
 
 **Date:** 2026-06
-**Status:** 🔵 ACTIVE
+**Status:** ✅ IMPLEMENTED (benchmarks deferred)
 **Blocks:** Plan 001 in riir-armageddon (armageddon consumes these primitives)
 **Context:** Armageddon's latent-space AI needs generic projection + bridge patterns that any game can use
 
@@ -21,8 +21,8 @@ These are NOT game-specific. Any game with NPC AI that thinks in latent space ne
 ## Tasks
 
 ### Phase 0: SectorProjection
-- [ ] Create `katgpt-rs-core/src/sense/sector.rs`
-- [ ] Define `SectorProjection` struct:
+- [x] Create `katgpt-rs-core/src/sense/sector.rs`
+- [x] Define `SectorProjection` struct:
   ```rust
   /// Multi-sector spatial projection for NPC perception.
   /// Divides space around NPC into N sectors, projects each into a latent score
@@ -34,17 +34,17 @@ These are NOT game-specific. Any game with NPC AI that thinks in latent space ne
       scores: [f32; N],
   }
   ```
-- [ ] Implement `project(&mut self, observation: &[f32; D]) -> &[f32; N]`
+- [x] Implement `project(&mut self, observation: &[f32; D]) -> &[f32; N]`
   - For each sector: `scores[i] = fast_sigmoid(dot(observation, sector_directions[i]))`
   - Uses existing `CpuTernaryBackend` dot-product path
   - Zero allocation, fixed-size
-- [ ] Implement `update_directions(&mut self, new_directions: [[i8; D]; N])` — hotswap without restart
-- [ ] Tests: project known observation → verify sigmoid output range [0, 1]
+- [x] Implement `update_directions(&mut self, new_directions: [[i8; D]; N])` — hotswap without restart
+- [x] Tests: project known observation → verify sigmoid output range [0, 1]
 - [ ] Bench: measure N=8 sector projection latency (target: < 100ns, since SenseModule is 45ns)
 
 ### Phase 1: ActionBridge
-- [ ] Create `katgpt-rs-core/src/bridge/mod.rs` (new module)
-- [ ] Define `ActionBridge` struct:
+- [x] Create `katgpt-rs-core/src/bridge/mod.rs` (new module)
+- [x] Define `ActionBridge` struct:
   ```rust
   /// Bridges latent Q-values to raw game actions via sigmoid-gated projection.
   /// Generic over action space size.
@@ -55,19 +55,19 @@ These are NOT game-specific. Any game with NPC AI that thinks in latent space ne
       threshold: f32,
   }
   ```
-- [ ] Implement `select_action(&self, q_values: &[f32; D]) -> (usize, f32)`
+- [x] Implement `select_action(&self, q_values: &[f32; D]) -> (usize, f32)`
   - For each action: `score[a] = sigmoid(dot(q_values, action_directions[a]))`
   - Returns (best_action_index, confidence_score)
   - Suppressed if confidence < threshold
-- [ ] Implement `select_top_k(&self, q_values: &[f32; D], k: usize) -> Vec<(usize, f32)>`
+- [x] Implement `select_top_k(&self, q_values: &[f32; D], k: usize, out: &mut [(usize, f32)]) -> usize`
   - Top-K actions sorted by confidence, for games with multi-action turns
-- [ ] Tests: known Q-values → verify action selection is deterministic
+- [x] Tests: known Q-values → verify action selection is deterministic
 - [ ] Bench: measure action selection latency for A=8 (target: < 200ns)
 
 ### Phase 2: Feature Gates
-- [ ] Gate `SectorProjection` behind `sector_projection` feature (default on)
-- [ ] Gate `ActionBridge` behind `action_bridge` feature (default on)
-- [ ] Add to `katgpt-rs-core/Cargo.toml` feature map
+- [x] Gate `SectorProjection` behind `sector_projection` feature (default on)
+- [x] Gate `ActionBridge` behind `action_bridge` feature (default on)
+- [x] Add to `katgpt-rs-core/Cargo.toml` feature map
 
 ---
 
