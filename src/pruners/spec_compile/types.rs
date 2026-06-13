@@ -263,7 +263,7 @@ impl fmt::Display for CompactBitmap {
 }
 
 /// Spec type classification — determines compilation strategy.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SpecType {
     /// Classification spec: output is one of N fixed labels.
