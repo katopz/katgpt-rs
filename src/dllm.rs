@@ -297,6 +297,16 @@ struct BidirectionalContext {
     // Output buffers (pre-allocated to max capacity, sliced per call)
     all_logits: Vec<f32>,
     all_attn_weights: Vec<f32>,
+    /// RCD residual embedding override for masked positions: `[block_size * n_embd]`.
+    /// When `rcd_active` is true and a position's token is the mask token,
+    /// this buffer's slice `[p*n..(p+1)*n]` is used instead of `wte[mask_token]`.
+    /// Written by `denoise_loop_rcd` after each commitment phase, read in the next forward pass.
+    #[cfg(feature = "rcd_residual")]
+    rcd_residual_embeddings: Vec<f32>,
+    /// Whether the residual embedding override is active for the current step.
+    /// Step 0 has no residuals yet (all-mask), so this is false on the first forward pass.
+    #[cfg(feature = "rcd_residual")]
+    rcd_active: bool,
 }
 
 impl BidirectionalContext {
@@ -323,6 +333,10 @@ impl BidirectionalContext {
             xr_all: vec![0.0f32; bs * n],
             all_logits: vec![0.0f32; bs * config.vocab_size],
             all_attn_weights: vec![0.0f32; bs * config.n_head * bs],
+            #[cfg(feature = "rcd_residual")]
+            rcd_residual_embeddings: vec![0.0f32; bs * n],
+            #[cfg(feature = "rcd_residual")]
+            rcd_active: false,
         }
     }
 }
@@ -371,9 +385,20 @@ fn forward_bidirectional_positions_into(
     bctx.xr_all[..seq_len * n].fill(0.0);
 
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
+        // RCD: when residual override is active and this position is still masked,
+        // use the interpolated residual embedding ẽ_i instead of wte[mask_token].
+        // This is a single branch per position — does not touch the inner matmul loops.
+        #[cfg(feature = "rcd_residual")]
+        let emb = if bctx.rcd_active && token == config.mask_token {
+            &bctx.rcd_residual_embeddings[p * n..(p + 1) * n]
+        } else {
+            &weights.wte[token * n..(token + 1) * n]
+        };
+        #[cfg(not(feature = "rcd_residual"))]
+        let emb = &weights.wte[token * n..(token + 1) * n];
         crate::simd::simd_add_into(
             &mut bctx.x,
-            &weights.wte[token * n..(token + 1) * n],
+            emb,
             &weights.wpe[p * n..(p + 1) * n],
         );
         rmsnorm(&mut bctx.x);
@@ -2140,11 +2165,17 @@ pub fn denoise_loop(
 
 /// Run denoising loop with Residual Context Diffusion (Plan 258).
 ///
-/// Wraps [`denoise_loop`] with RCD: after each denoising step, computes
-/// entropy-weighted residuals for masked positions and stores them for
-/// the next step's embedding construction.
+/// After each denoising step, computes entropy-weighted residuals for the
+/// positions that are *still masked* (discarded low-confidence distributions)
+/// and injects them into the next step's input embeddings via:
+///   `ẽ_i = (1 - α_i) * E_mask + α_i * Δ_i`
+/// where `α_i = H(p_i) / log(V)` and `Δ_i = Σ_j p_ij * E_j`.
 ///
-/// When `rcd_config` is `None` or `enabled = false`, falls back to standard denoising.
+/// This gives the model soft context about discarded tokens, accelerating
+/// convergence (paper reports 4-5× step reduction at equivalent accuracy).
+///
+/// When `rcd_config` is `None` or `enabled = false`, behaves identically to
+/// [`denoise_loop`] — the residual buffer is never activated.
 #[cfg(feature = "rcd_residual")]
 pub fn denoise_loop_rcd(
     weights: &TransformerWeights,
@@ -2156,24 +2187,146 @@ pub fn denoise_loop_rcd(
     rng: &mut Rng,
     rcd_config: Option<&mut crate::dllm_solver::RcdConfig>,
 ) -> (Vec<usize>, usize) {
-    // For now, delegate to standard denoise_loop.
-    // Full RCD integration requires BidirectionalContext changes that
-    // will be wired in a follow-up once the D2fContext path is validated.
-    //
-    // The residual computation functions (normalized_entropy, compute_residual,
-    // interpolate_residual) are available and tested independently.
-    // The denoise_loop will be augmented to use them once the embedding
-    // injection path is validated through D2fContext.
-    drop(rcd_config);
-    denoise_loop(
-        weights,
-        target_tokens,
-        config,
-        n_steps,
-        confidence_threshold,
-        constraint,
-        rng,
-    )
+    // If RCD is disabled at runtime, fall back to the standard loop with zero overhead.
+    let rcd_enabled = rcd_config.as_ref().map_or(false, |c| c.enabled);
+    if !rcd_enabled {
+        drop(rcd_config);
+        return denoise_loop(
+            weights,
+            target_tokens,
+            config,
+            n_steps,
+            confidence_threshold,
+            constraint,
+            rng,
+        );
+    }
+
+    use crate::dllm_solver::{compute_residual, interpolate_residual, normalized_entropy};
+
+    let seq_len = target_tokens.len().min(config.block_size);
+    let mask = config.mask_token;
+    let n = config.n_embd;
+    let vocab = config.vocab_size;
+    let log_vocab = rcd_config.as_ref().map_or(1.0, |c| c.log_vocab);
+
+    let mut bctx = BidirectionalContext::new(config);
+    let mut tokens = vec![mask; seq_len];
+    let mut converged_step = n_steps;
+    let mut remaining = seq_len;
+
+    // Reusable scratch buffers — allocated once, never reallocated in the loop.
+    let mut softmax_scratch = vec![0.0f32; vocab];
+    let mut residual_scratch = vec![0.0f32; n];
+    // E_mask: the embedding the masked positions would receive by default.
+    let mask_emb = weights.wte[mask * n..(mask + 1) * n].to_vec();
+
+    for step in 0..n_steps {
+        // The residual buffer is populated *after* step 0's forward pass, so the
+        // first forward is always standard (no residuals exist yet).
+        forward_bidirectional_positions_into(weights, &tokens, config, &mut bctx);
+
+        // Standard commitment phase — mirror of `denoise_loop`.
+        constraint.rebuild(&tokens, mask);
+        let mut any_changed = false;
+
+        for p in 0..seq_len {
+            if tokens[p] != mask {
+                continue;
+            }
+
+            let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
+            let max_l = crate::simd::simd_max_f32(logits_p);
+            let exp_buf = &mut bctx.all_attn_weights[..vocab];
+            exp_buf[..vocab].copy_from_slice(logits_p);
+            crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+            crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+            let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
+            let inv_sum = 1.0 / sum_exp;
+
+            // Find highest-confidence valid token.
+            let mut best_token = mask;
+            let mut best_prob = 0.0f32;
+            for t in 0..vocab {
+                if t == mask {
+                    continue;
+                }
+                if !constraint.is_valid(p, t, &tokens) {
+                    continue;
+                }
+                let prob = exp_buf[t] * inv_sum;
+                if prob > best_prob {
+                    best_prob = prob;
+                    best_token = t;
+                }
+            }
+
+            if best_prob >= confidence_threshold && best_token != mask {
+                tokens[p] = best_token;
+                any_changed = true;
+                remaining -= 1;
+            }
+        }
+
+        // RCD: for every position that is *still* masked after commitment,
+        // compute the entropy-weighted residual and stash it for the next step.
+        // The override is activated only when at least one residual was written,
+        // so the first step is guaranteed to use standard mask embeddings.
+        let mut wrote_residual = false;
+        for p in 0..seq_len {
+            if tokens[p] != mask {
+                continue;
+            }
+
+            // Softmax the logits for position p into scratch to get marginals p^k_i.
+            let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
+            let max_l = crate::simd::simd_max_f32(logits_p);
+            softmax_scratch[..vocab].copy_from_slice(logits_p);
+            crate::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab], -max_l);
+            crate::simd::simd_exp_inplace(&mut softmax_scratch[..vocab]);
+            let sum_exp = crate::simd::simd_sum_f32(&softmax_scratch[..vocab]);
+            if sum_exp > 0.0 {
+                let inv = 1.0 / sum_exp;
+                for v in softmax_scratch[..vocab].iter_mut() {
+                    *v *= inv;
+                }
+            }
+
+            // α_i = H(p_i) / log(V), Δ_i = Σ_j p_ij * E_j, ẽ_i = (1-α)E_mask + α·Δ_i.
+            let alpha = normalized_entropy(&softmax_scratch[..vocab], log_vocab);
+            compute_residual(
+                &softmax_scratch[..vocab],
+                &weights.wte,
+                n,
+                &mut residual_scratch,
+            );
+            interpolate_residual(
+                &mask_emb,
+                &residual_scratch,
+                alpha,
+                &mut bctx.rcd_residual_embeddings[p * n..(p + 1) * n],
+            );
+            wrote_residual = true;
+        }
+
+        // Activate the override for the *next* forward pass if we wrote anything.
+        // If all masked positions got committed, we're done — no residuals needed.
+        bctx.rcd_active = wrote_residual;
+
+        if !any_changed && remaining == 0 {
+            converged_step = step;
+            break;
+        }
+    }
+
+    // Disable the override before returning so the context is left in a clean state.
+    bctx.rcd_active = false;
+
+    if remaining == 0 && converged_step == n_steps {
+        converged_step = n_steps - 1;
+    }
+
+    (tokens, converged_step)
 }
 
 /// Measure denoising accuracy: fraction of correctly recovered tokens.
@@ -2717,6 +2870,161 @@ mod tests {
     #[test]
     fn test_loss_averaging_default_is_global() {
         assert_eq!(LossAveraging::default(), LossAveraging::Global);
+    }
+
+    // ── Plan 258 Task 5.4: RCD integration test ──
+
+    /// RCD must produce identical output to the baseline loop when disabled.
+    /// This is the runtime fallback guarantee: `enabled = false` ⇒ zero behavioral change.
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_disabled_matches_baseline() {
+        let config = Config::micro_dllm();
+        let mut rng = Rng::new(42);
+        let train_data = generate_pattern_dataset(&mut rng, 50, 4, 8);
+        let (weights, _) =
+            train_mini_dllm(&config, &train_data, &train_data, 200, 0.01, 0.25, 42);
+
+        let target = vec![3, 7, 3, 7];
+
+        let (base_tokens, base_steps) = denoise_loop(
+            &weights,
+            &target,
+            &config,
+            10,
+            0.3,
+            &mut NoConstraint,
+            &mut Rng::new(42),
+        );
+
+        let mut rcd_cfg = crate::dllm_solver::RcdConfig::disabled();
+        let (rcd_tokens, rcd_steps) = denoise_loop_rcd(
+            &weights,
+            &target,
+            &config,
+            10,
+            0.3,
+            &mut NoConstraint,
+            &mut Rng::new(42),
+            Some(&mut rcd_cfg),
+        );
+
+        assert_eq!(base_tokens, rcd_tokens, "disabled RCD must match baseline tokens");
+        assert_eq!(base_steps, rcd_steps, "disabled RCD must match baseline steps");
+    }
+
+    /// RCD enabled must still converge and produce a mask-free sequence.
+    /// This validates the residual injection path end-to-end (Task 1.5 + 5.4):
+    /// forward pass reads `rcd_residual_embeddings`, entropy/residual/interpolate fire,
+    /// and the loop terminates cleanly.
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_enabled_converges_and_injects() {
+        let config = Config::micro_dllm();
+        let mut rng = Rng::new(42);
+        let train_data = generate_pattern_dataset(&mut rng, 50, 4, 8);
+        let (weights, _) =
+            train_mini_dllm(&config, &train_data, &train_data, 200, 0.01, 0.25, 42);
+
+        let target = vec![3, 7, 3, 7];
+
+        let mut rcd_cfg =
+            crate::dllm_solver::RcdConfig::new(config.vocab_size, config.n_embd);
+        let (tokens, steps) = denoise_loop_rcd(
+            &weights,
+            &target,
+            &config,
+            10,
+            0.3,
+            &mut NoConstraint,
+            &mut Rng::new(42),
+            Some(&mut rcd_cfg),
+        );
+
+        assert!(
+            steps < 10,
+            "RCD should converge in ≤ 10 steps, got {steps}"
+        );
+        assert!(
+            tokens.iter().all(|&t| t != config.mask_token),
+            "RCD result still has mask tokens"
+        );
+    }
+
+    /// Differential test: RCD vs baseline on the same model/seeds.
+    /// We do NOT assert RCD is strictly fewer steps (that's the GOAT gate,
+    /// deferred to issue 012's benchmark harness). We assert RCD does not regress
+    /// accuracy or steps by more than a small tolerance — i.e. the injection
+    /// path is sound and doesn't corrupt the denoise dynamics.
+    #[cfg(feature = "rcd_residual")]
+    #[test]
+    fn test_rcd_vs_baseline_no_regression() {
+        let config = Config::micro_dllm();
+        let mut rng = Rng::new(42);
+        let train_data = generate_pattern_dataset(&mut rng, 50, 4, 8);
+        let (weights, _) =
+            train_mini_dllm(&config, &train_data, &train_data, 200, 0.01, 0.25, 42);
+
+        // Multiple targets — aggregate to avoid single-seed noise.
+        let targets: Vec<Vec<usize>> = (0..8)
+            .map(|_| {
+                let a = (rng.next() as usize) % 8;
+                let b = ((rng.next() as usize) % 7 + a + 1) % 8;
+                vec![a, b, a, b]
+            })
+            .collect();
+
+        let mut base_acc = 0.0f32;
+        let mut rcd_acc = 0.0f32;
+        let mut base_steps_total = 0usize;
+        let mut rcd_steps_total = 0usize;
+
+        for target in &targets {
+            let (base_tokens, base_steps) = denoise_loop(
+                &weights,
+                target,
+                &config,
+                10,
+                0.3,
+                &mut NoConstraint,
+                &mut Rng::new(42),
+            );
+            let mut rcd_cfg =
+                crate::dllm_solver::RcdConfig::new(config.vocab_size, config.n_embd);
+            let (rcd_tokens, rcd_steps) = denoise_loop_rcd(
+                &weights,
+                target,
+                &config,
+                10,
+                0.3,
+                &mut NoConstraint,
+                &mut Rng::new(42),
+                Some(&mut rcd_cfg),
+            );
+
+            base_acc += denoising_accuracy(&base_tokens, target);
+            rcd_acc += denoising_accuracy(&rcd_tokens, target);
+            base_steps_total += base_steps;
+            rcd_steps_total += rcd_steps;
+        }
+
+        let n = targets.len() as f32;
+        base_acc /= n;
+        rcd_acc /= n;
+
+        // Sanity: RCD must not catastrophically regress. We allow up to 25pp
+        // accuracy regression and 2× step increase on this micro-config, because
+        // the residual signal on an untrained-for-RCD model is informational but
+        // not calibrated (T_res tuning + reference model belong to riir-ai).
+        // The GOAT gate (issue 012) measures real gain on production weights.
+        assert!(
+            rcd_acc >= base_acc - 0.25,
+            "RCD accuracy regression too large: base={base_acc:.3} rcd={rcd_acc:.3}"
+        );
+        assert!(
+            rcd_steps_total <= base_steps_total * 2,
+            "RCD step count regression too large: base={base_steps_total} rcd={rcd_steps_total}"
+        );
     }
 }
 
