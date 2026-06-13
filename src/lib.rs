@@ -16,6 +16,8 @@ pub mod dash_attn;
 pub mod data_probe;
 #[cfg(all(target_os = "macos", feature = "ane_npc"))]
 pub mod npc_ane_backend;
+#[cfg(feature = "sense_composition")]
+pub mod npc_brain_router;
 // Shared diagonal gate abstraction (GDN2 + Wall).
 // Available when either gdn2_attention or wall_attention is enabled.
 #[cfg(feature = "cubical_nerve")]

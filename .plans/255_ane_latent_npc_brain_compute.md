@@ -137,13 +137,19 @@ else:
 
 ### Part 4: Auto-Route Integration
 
-- [ ] Extend `TriggerGate` (Plan 176) with NPC count awareness
-- [ ] Route: <100 NPCs → SIMD, ≥100 NPCs → ANE (if resident)
-- [ ] Log backend selection at startup
-- [ ] Feature flag: `ane_npc` (optional, default off until GOAT)
-- [ ] Write test: auto-route selects SIMD for <100 NPCs
-- [ ] Write test: auto-route selects ANE for ≥100 NPCs (when ANE available)
-- [ ] Write test: auto-route falls back to SIMD when ANE not resident
+- [x] Route: <100 NPCs → SIMD, ≥100 NPCs → ANE (if resident)
+- [x] Log backend selection at startup
+- [x] Feature flag: `ane_npc` (optional, default off until GOAT)
+- [x] Write test: auto-route selects SIMD for <100 NPCs
+- [x] Write test: auto-route selects ANE for ≥100 NPCs (when ANE available)
+- [x] Write test: auto-route falls back to SIMD when ANE not resident
+- [x] Write test: NpcBrainRouter::new(None) creates CPU backend
+- [x] Write test: NpcBrainRouter::new(Some(invalid_path)) falls back to CPU
+- [x] Write test: batch_evaluate works through router (CPU path)
+- [x] Write test: backend_name() and is_ane() return correct values
+
+Note: Separate `NpcBrainRouter` module instead of extending TriggerGate.
+TriggerGate routes general inference by QPS; NPC brain routes by NPC count.
 
 ### Part 5: GOAT Proof
 
