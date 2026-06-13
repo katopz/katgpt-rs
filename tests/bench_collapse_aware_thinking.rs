@@ -286,10 +286,11 @@ fn bench_efficiency_reward_shaping() {
     let start = Instant::now();
     for i in 0..n {
         let correct = i % 3 != 0;
-        let mode = match i % 3 {
+        let mode = match i % 4 {
             0 => ThinkingMode::Direct,
             1 => ThinkingMode::Latent,
-            _ => ThinkingMode::CpuResample,
+            2 => ThinkingMode::CpuResample,
+            _ => ThinkingMode::Dendritic,
         };
         efficiency_reward(correct, (i % 512) as u32, max_budget, mode, gamma);
     }

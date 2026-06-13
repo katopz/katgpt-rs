@@ -28,6 +28,10 @@ pub enum ThinkingMode {
     /// CPU-only thinking — PPoT resample high-entropy tokens on CPU.
     /// Zero GPU overhead beyond initial forward pass. Good when GPU is loaded.
     CpuResample,
+    /// NMDA-gated adaptive thinking — deterministic gate replaces bandit.
+    /// Uses entropy + coincidence to modulate thinking budget. Zero randomness.
+    /// Feature-gated behind `dendritic_gate`.
+    Dendritic,
 }
 
 /// How the thinking mode is selected per-query.
@@ -42,6 +46,8 @@ pub enum ThinkingSelector {
     Adaptive {
         /// Exploration rate for bandit (ε in ε-greedy). Default: 0.1.
         exploration_rate: f32,
+        /// Weight for dendritic arm in adaptive selection. Default: 0.25.
+        dendritic_weight: f32,
     },
 }
 
@@ -49,6 +55,7 @@ impl Default for ThinkingSelector {
     fn default() -> Self {
         Self::Adaptive {
             exploration_rate: 0.1,
+            dendritic_weight: 0.25,
         }
     }
 }
@@ -97,13 +104,13 @@ impl ThinkingConfig {
 
 // ── T2: ThinkingBandit ─────────────────────────────────────────────────
 
-/// Lightweight bandit with 3 arms: Direct, Latent, CpuResample.
+/// Lightweight bandit with 4 arms: Direct, Latent, CpuResample, Dendritic.
 /// Tracks reward = answer_quality * (1 - normalized_cost).
 /// Uses Thompson sampling (consistent with BanditPruner).
 struct ThinkingBandit {
     /// Per-arm success/failure counts for Beta posterior.
-    successes: [f32; 3],
-    failures: [f32; 3],
+    successes: [f32; 4],
+    failures: [f32; 4],
     /// Decay factor for recency weighting. Default: 0.99.
     decay: f32,
     /// Total pulls across all arms.
@@ -113,8 +120,8 @@ struct ThinkingBandit {
 impl ThinkingBandit {
     fn new() -> Self {
         Self {
-            successes: [1.0; 3], // Beta(1,1) = Uniform prior
-            failures: [1.0; 3],
+            successes: [1.0; 4], // Beta(1,1) = Uniform prior
+            failures: [1.0; 4],
             decay: 0.99,
             total_pulls: 0,
         }
@@ -125,12 +132,12 @@ impl ThinkingBandit {
         self.total_pulls += 1;
         // ε-greedy: with probability ε, pick a random arm
         if rng.next_f32() < exploration_rate {
-            return (rng.next_u32() as usize) % 3;
+            return (rng.next_u32() as usize) % 4;
         }
         // Thompson sampling: sample from Beta(α, β) for each arm, pick max
         let mut best_arm = 0;
         let mut best_score = 0.0f32;
-        for arm in 0..3 {
+        for arm in 0..4 {
             let alpha = self.successes[arm];
             let beta = self.failures[arm];
             // Sample from Beta(α, β) using the ratio of Gamma variates
@@ -159,7 +166,7 @@ impl ThinkingBandit {
 
     /// Decay old observations for recency weighting.
     fn decay_observations(&mut self) {
-        for arm in 0..3 {
+        for arm in 0..4 {
             self.successes[arm] *= self.decay;
             self.failures[arm] *= self.decay;
         }
@@ -263,17 +270,17 @@ pub struct ThinkingBanditFrozen {
     pub magic: [u8; 4],
     /// Version for migration.
     pub version: u32,
-    /// Per-arm success counts: [direct, latent, cpu_resample].
-    pub successes: [f32; 3],
-    /// Per-arm failure counts: [direct, latent, cpu_resample].
-    pub failures: [f32; 3],
+    /// Per-arm success counts: [direct, latent, cpu_resample, dendritic].
+    pub successes: [f32; 4],
+    /// Per-arm failure counts: [direct, latent, cpu_resample, dendritic].
+    pub failures: [f32; 4],
     /// Total episodes observed.
     pub total_pulls: u32,
 }
 
 impl ThinkingBanditFrozen {
     const MAGIC: [u8; 4] = *b"THKB";
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
 
     fn validate(&self) -> Result<(), String> {
         if self.magic != Self::MAGIC {
@@ -390,7 +397,10 @@ impl ThinkingController {
         match &self.config.mode {
             ThinkingSelector::AlwaysDirect => ThinkingMode::Direct,
             ThinkingSelector::AlwaysLatent => ThinkingMode::Latent,
-            ThinkingSelector::Adaptive { exploration_rate } => {
+            ThinkingSelector::Adaptive {
+                exploration_rate,
+                dendritic_weight: _,
+            } => {
                 let exploration_rate = *exploration_rate;
 
                 // 1. Check GPU load → decide CPU vs GPU route
@@ -438,6 +448,7 @@ impl ThinkingController {
                             }
                         }
                         2 => ThinkingMode::CpuResample,
+                        3 => ThinkingMode::Dendritic,
                         _ => ThinkingMode::Direct,
                     }
                 }
@@ -591,6 +602,7 @@ mod tests {
         let config = ThinkingConfig {
             mode: ThinkingSelector::Adaptive {
                 exploration_rate: 0.0,
+                dendritic_weight: 0.25,
             },
             confidence_threshold: 0.7,
             ..Default::default()
@@ -607,6 +619,7 @@ mod tests {
         let config = ThinkingConfig {
             mode: ThinkingSelector::Adaptive {
                 exploration_rate: 0.0,
+                dendritic_weight: 0.25,
             },
             confidence_threshold: 0.7,
             ..Default::default()
@@ -622,6 +635,7 @@ mod tests {
             mode == ThinkingMode::Direct
                 || mode == ThinkingMode::Latent
                 || mode == ThinkingMode::CpuResample
+                || mode == ThinkingMode::Dendritic
         );
     }
 
@@ -630,6 +644,7 @@ mod tests {
         let config = ThinkingConfig {
             mode: ThinkingSelector::Adaptive {
                 exploration_rate: 0.0,
+                dendritic_weight: 0.25,
             },
             confidence_threshold: 0.7,
             gpu_load_threshold: 0.8,
@@ -687,7 +702,7 @@ mod tests {
 
         let frozen = ctrl.freeze();
         assert_eq!(frozen.magic, *b"THKB");
-        assert_eq!(frozen.version, 1);
+        assert_eq!(frozen.version, 2);
         assert!(frozen.total_pulls > 0);
 
         // Thaw into new controller
@@ -727,12 +742,12 @@ mod tests {
 
     #[test]
     fn test_frozen_size() {
-        // 4 (magic) + 4 (version) + 12 (3 floats) + 12 (3 floats) + 4 (total_pulls) = 36
+        // 4 (magic) + 4 (version) + 16 (4 floats) + 16 (4 floats) + 4 (total_pulls) = 44
         // But repr(C) may add padding. Check it's small.
         let size = std::mem::size_of::<ThinkingBanditFrozen>();
         assert!(
-            size <= 56,
-            "ThinkingBanditFrozen is {size} bytes, expected <= 56"
+            size <= 64,
+            "ThinkingBanditFrozen is {size} bytes, expected <= 64"
         );
     }
 
@@ -740,9 +755,9 @@ mod tests {
     fn test_frozen_bad_magic() {
         let frozen = ThinkingBanditFrozen {
             magic: *b"XXXX",
-            version: 1,
-            successes: [1.0; 3],
-            failures: [1.0; 3],
+            version: 2,
+            successes: [1.0; 4],
+            failures: [1.0; 4],
             total_pulls: 0,
         };
         assert!(ThinkingBanditFrozen::validate(&frozen).is_err());

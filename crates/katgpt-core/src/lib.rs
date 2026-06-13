@@ -199,7 +199,7 @@ pub use curator::{
 
 // GPart isometric partition adapter — replaces LoRA's bilinear BA with single isometric Pθ_d (Plan 257).
 #[cfg(feature = "gpart_adapter")]
-pub use types::{GPART_MAGIC, GPART_VERSION, GpartAdapter, GpartPair};
+pub use types::{GPART_MAGIC, GPART_VERSION, GpartAdapter, GpartPair, GpartPrepared};
 
 #[cfg(feature = "dendritic_gate")]
 pub mod dendritic_gate;

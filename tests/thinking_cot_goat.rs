@@ -43,6 +43,7 @@ fn simulate_quality(mode: ThinkingMode, difficulty: f32) -> f32 {
         ThinkingMode::Direct => 0.9 - difficulty * 0.6, // 0.9 (easy) → 0.3 (hard)
         ThinkingMode::Latent => 0.85 - difficulty * 0.15, // 0.85 (easy) → 0.7 (hard)
         ThinkingMode::CpuResample => 0.88 - difficulty * 0.35, // 0.88 (easy) → 0.53 (hard)
+        ThinkingMode::Dendritic => 0.87 - difficulty * 0.2, // 0.87 (easy) → 0.67 (hard)
     }
 }
 
@@ -52,6 +53,7 @@ fn simulate_cost(mode: ThinkingMode) -> f32 {
         ThinkingMode::Direct => 0.1,
         ThinkingMode::Latent => 0.7,
         ThinkingMode::CpuResample => 0.2,
+        ThinkingMode::Dendritic => 0.35,
     }
 }
 
@@ -81,6 +83,7 @@ fn goat_direct_vs_adaptive_bandit_converges() {
     let config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.1,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     };
@@ -90,6 +93,7 @@ fn goat_direct_vs_adaptive_bandit_converges() {
     let mut direct_count = 0usize;
     let mut latent_count = 0usize;
     let mut cpu_count = 0usize;
+    let mut dendritic_count = 0usize;
 
     for i in 0..100 {
         let difficulty = if i < 50 { 0.2 } else { 0.8 };
@@ -105,6 +109,7 @@ fn goat_direct_vs_adaptive_bandit_converges() {
             ThinkingMode::Direct => direct_count += 1,
             ThinkingMode::Latent => latent_count += 1,
             ThinkingMode::CpuResample => cpu_count += 1,
+            ThinkingMode::Dendritic => dendritic_count += 1,
         }
     }
 
@@ -121,7 +126,7 @@ fn goat_direct_vs_adaptive_bandit_converges() {
         "CpuResample arm should be pulled at least once"
     );
 
-    let thinking_count = latent_count + cpu_count;
+    let thinking_count = latent_count + cpu_count + dendritic_count;
     assert!(
         thinking_count > 30,
         "Thinking modes should be selected at least 30 times (got {thinking_count})"
@@ -133,6 +138,7 @@ fn goat_cpu_route_when_gpu_loaded() {
     let config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.0,
+            dendritic_weight: 0.25,
         },
         gpu_load_threshold: 0.8,
         ..Default::default()
@@ -159,6 +165,7 @@ fn goat_freeze_thaw_roundtrip() {
     let config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.1,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     };
@@ -176,6 +183,7 @@ fn goat_freeze_thaw_roundtrip() {
     let mut ctrl2 = ThinkingController::new(ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.0,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     });
@@ -250,6 +258,7 @@ fn goat_adaptive_beats_fixed_cost_efficiency() {
     let adaptive_config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.1,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     };

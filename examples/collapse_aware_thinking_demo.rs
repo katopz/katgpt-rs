@@ -137,6 +137,7 @@ fn main() {
             ThinkingMode::Direct => "Direct",
             ThinkingMode::Latent => "Latent",
             ThinkingMode::CpuResample => "CpuResample",
+            ThinkingMode::Dendritic => "Dendritic",
         };
         println!(
             "  {:<20} {:<12} {:<12} {reward:.4}",

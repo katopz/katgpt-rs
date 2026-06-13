@@ -9,7 +9,6 @@
 
 #![cfg(feature = "dendritic_gate")]
 
-use katgpt_core::traits::ConstraintPruner;
 use katgpt_rs::speculative::{
     DendriticGate, NoPruner, build_dd_tree, build_dd_tree_dendritic, dendritic_sigmoid,
     extract_best_path,
@@ -274,9 +273,7 @@ fn main() {
     // ── Section 6: ThinkingController Arm ───────────────────────
     separator("Section 6: ThinkingMode::Dendritic — Bandit Arm 4");
 
-    use katgpt_rs::speculative::{
-        ThinkingConfig, ThinkingController, ThinkingMode, ThinkingSelector,
-    };
+    use katgpt_rs::speculative::{ThinkingConfig, ThinkingSelector};
 
     // Demonstrate that Dendritic is available as a thinking mode
     let adaptive_config = ThinkingConfig {

@@ -67,6 +67,13 @@ impl DendriticGate {
     pub fn compute_gate(&self, entropy: f32, coincidence: f32) -> f32 {
         dendritic_sigmoid(self.voltage_sensitivity * (entropy - self.threshold)) * coincidence
     }
+
+    /// Check if the gate is effectively closed (below early-exit threshold).
+    /// When gate < 0.1, proximal dendrite is sufficient — no need to expand further.
+    #[inline]
+    pub fn should_exit_early(&self, entropy: f32, coincidence: f32) -> bool {
+        self.compute_gate(entropy, coincidence) < 0.1
+    }
 }
 
 /// Sigmoid function for dendritic gate computation.

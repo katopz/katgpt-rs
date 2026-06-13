@@ -278,6 +278,8 @@ pub fn efficiency_reward(
         }
         // Other modes → no reward signal (not yet calibrated).
         (true, ThinkingMode::CpuResample) => 0.0,
+        // Dendritic correct → intermediate reward (deterministic gate, zero randomness).
+        (true, ThinkingMode::Dendritic) => 0.5,
     }
 }
 

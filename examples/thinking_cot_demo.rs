@@ -38,6 +38,7 @@ fn simulate_quality(mode: ThinkingMode, difficulty: f32) -> f32 {
         ThinkingMode::Direct => base * 0.6 + 0.1,
         ThinkingMode::Latent => base * 0.3 + 0.55,
         ThinkingMode::CpuResample => base * 0.4 + 0.4,
+        ThinkingMode::Dendritic => base * 0.35 + 0.5,
     }
 }
 
@@ -47,6 +48,7 @@ fn simulate_cost(mode: ThinkingMode) -> f32 {
         ThinkingMode::Direct => 0.1,
         ThinkingMode::Latent => 0.7,
         ThinkingMode::CpuResample => 0.2,
+        ThinkingMode::Dendritic => 0.35,
     }
 }
 
@@ -107,6 +109,7 @@ fn main() {
     let cpu_config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.0,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     };
@@ -135,6 +138,7 @@ fn main() {
     let adaptive_config = ThinkingConfig {
         mode: ThinkingSelector::Adaptive {
             exploration_rate: 0.1,
+            dendritic_weight: 0.25,
         },
         ..Default::default()
     };

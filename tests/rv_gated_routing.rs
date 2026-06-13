@@ -190,7 +190,10 @@ mod thinking_rv_tests {
         // Bandit decides, just verify it doesn't panic and returns a valid mode
         assert!(matches!(
             mode,
-            ThinkingMode::Direct | ThinkingMode::Latent | ThinkingMode::CpuResample
+            ThinkingMode::Direct
+                | ThinkingMode::Latent
+                | ThinkingMode::CpuResample
+                | ThinkingMode::Dendritic
         ));
     }
 
@@ -202,7 +205,10 @@ mod thinking_rv_tests {
         let mode = ctrl.select_mode_with_rv(0.5, -1.0, &mut rng);
         assert!(matches!(
             mode,
-            ThinkingMode::Direct | ThinkingMode::Latent | ThinkingMode::CpuResample
+            ThinkingMode::Direct
+                | ThinkingMode::Latent
+                | ThinkingMode::CpuResample
+                | ThinkingMode::Dendritic
         ));
     }
 

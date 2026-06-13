@@ -507,6 +507,11 @@ required-features = ["monopoly"]
 name = "monopoly_04_bench"
 required-features = ["monopoly"]
 
+# ── DendriticGate Adaptive Thinking (Plan 260) ────────────────
+[[example]]
+name = "dendritic_thinking_demo"
+required-features = ["dendritic_gate"]
+
 # ── GameState Forward Model (Plan 056) ────────────────────────
 
 [[example]]
