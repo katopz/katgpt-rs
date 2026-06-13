@@ -40,9 +40,10 @@ pub use shard_embedding::{EMBED_DIM, JlProjectionMatrix, STYLE_DIM as JL_STYLE_D
 pub use types::{
     AttentionMode, AttentionProjection, CacheLayout, Config, ConvergenceSelector, DashAttnConfig,
     DilationConfig, HlaMode, HybridPattern, InferenceOverrides, InferenceResult, LoopMode,
-    ModelArchitecture, ResidualGate, RetrievalHeadRole, Rng, RtTurboConfig, SdpaOutputGate,
-    ShardEmbedding, WeightDtype, kv_dim, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel,
-    matmul_relu, rmsnorm, sample_token, sample_token_into, softmax, softmax_scaled,
+    LoraAdapter, LoraPair, ModelArchitecture, ResidualGate, RetrievalHeadRole, Rng, RtTurboConfig,
+    SdpaOutputGate, ShardEmbedding, WeightDtype, kv_dim, lora_apply, matmul, matmul_f16,
+    matmul_f16_parallel, matmul_parallel, matmul_relu, rmsnorm, sample_token, sample_token_into,
+    softmax, softmax_scaled,
 };
 
 #[cfg(feature = "domain_latent")]
@@ -195,3 +196,14 @@ pub use curator::{
     CuratorArm, CuratorBandit, CuratorVerdict, CuratorVerifier, FrozenTarget, MerkleEnvelope,
     MerkleFrozenStore, verification_weight,
 };
+
+// GPart isometric partition adapter — replaces LoRA's bilinear BA with single isometric Pθ_d (Plan 257).
+#[cfg(feature = "gpart_adapter")]
+pub use types::{GPART_MAGIC, GPART_VERSION, GpartAdapter, GpartPair};
+
+#[cfg(feature = "dendritic_gate")]
+pub mod dendritic_gate;
+#[cfg(feature = "dendritic_gate")]
+pub use dendritic_gate::{DendriticGate, dendritic_sigmoid};
+#[cfg(feature = "dendritic_gate")]
+pub use simd::{coincidence_score, entropy_f32};

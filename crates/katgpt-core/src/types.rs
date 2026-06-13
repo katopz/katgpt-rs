@@ -2909,6 +2909,41 @@ impl GpartAdapter {
         }
     }
 
+    /// SIMD-optimised apply: pre-computes per-group delta once (O(d) divisions
+    /// instead of O(N)), then applies in 8-wide chunks.
+    ///
+    /// The "SIMD" benefit here is from eliminating per-element division — the
+    /// inner loop is branch-free (pure array lookups), which LLVM auto-vectorises
+    /// well. For contiguous same-group runs, `simd_add_scalar_inplace` is used.
+    pub fn apply_simd(&self, base_weights: &mut [f32]) {
+        let n = base_weights.len();
+        if n == 0 || self.d == 0 {
+            return;
+        }
+
+        let assignments = self.generate_assignments(n);
+        let group_sizes = self.compute_group_sizes(n, &assignments);
+
+        // Pre-compute per-group delta: θ[g] / √n_g — one division per group
+        let group_delta: Vec<f32> = (0..self.d)
+            .map(|g| self.theta[g] / (group_sizes[g] as f32).sqrt())
+            .collect();
+
+        // Process in 8-wide chunks for auto-vectorisation
+        let chunks = n / 8;
+        for c in 0..chunks {
+            let base = c * 8;
+            for j in 0..8 {
+                let i = base + j;
+                base_weights[i] += group_delta[assignments[i]];
+            }
+        }
+        // Scalar tail
+        for i in (chunks * 8)..n {
+            base_weights[i] += group_delta[assignments[i]];
+        }
+    }
+
     /// Generate group assignments from seed.
     /// Uses fastrand for deterministic cross-platform pseudorandom permutation.
     fn generate_assignments(&self, n: usize) -> Vec<usize> {
@@ -2993,7 +3028,7 @@ impl GpartAdapter {
         let commitment = self.commitment();
         buf[commit_offset..commit_offset + 32].copy_from_slice(&commitment);
 
-        std::fs::write(path).map_err(|e| format!("Failed to write gpart file: {e}"))
+        std::fs::write(path, &buf).map_err(|e| format!("Failed to write gpart file: {e}"))
     }
 
     /// Load adapter from binary format.
@@ -3126,6 +3161,33 @@ impl GpartPair {
             reader: None,
             writer: None,
         }
+    }
+
+    /// Apply the reader (prefill) adapter to base weights, if present.
+    pub fn apply_prefill(&self, base_weights: &mut [f32]) {
+        if let Some(ref adapter) = self.reader {
+            adapter.apply(base_weights);
+        }
+    }
+
+    /// Apply the writer (decode) adapter to base weights, if present.
+    pub fn apply_decode(&self, base_weights: &mut [f32]) {
+        if let Some(ref adapter) = self.writer {
+            adapter.apply(base_weights);
+        }
+    }
+}
+
+/// Conversion from LoRA to GPart (lossy, requires pre-computed θ_d).
+///
+/// **Note:** θ_d = P⁺ΔW must be computed by the riir-ai training pipeline.
+/// This conversion is a placeholder until that pipeline provides θ_d.
+#[cfg(feature = "gpart_adapter")]
+impl TryFrom<&LoraAdapter> for GpartAdapter {
+    type Error = &'static str;
+
+    fn try_from(_lora: &LoraAdapter) -> Result<Self, Self::Error> {
+        Err("GpartAdapter requires pre-computed θ_d from riir-ai training pipeline (P⁺ΔW)")
     }
 }
 

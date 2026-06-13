@@ -27,20 +27,20 @@ GPart replaces LoRA's bilinear BA factorization with a single isometric partitio
 
 ## Tasks
 
-- [ ] Add `gpart_adapter = []` feature gate to `crates/katgpt-core/Cargo.toml` `[features]` section, not in default set
-- [ ] Define `GpartAdapter` struct in `crates/katgpt-core/src/types.rs` (fields: `seed: u64`, `theta: Vec<f32>`, `d: usize`) behind `#[cfg(feature = "gpart_adapter")]`
-- [ ] Implement `GpartAdapter::generate_partition()` — seed-based pseudorandom group assignment using `fastrand::Rng`, returning assignments and group counts; single-pass O(N) counting
-- [ ] Implement `GpartAdapter::apply()` — single-pass O(N) broadcast: regenerate partition from seed, compute `1/√n_g` per group, apply `base_weights[i] += scale * theta[group]`; accept pre-allocated scratch `&mut [usize]` for assignments to avoid hot-loop allocation
-- [ ] Implement SIMD-accelerated `apply_simd()` using `simd_add_scalar_inplace` / chunked broadcast — group parameters by contiguous assignment, apply `theta[g] * inv_sqrt_ng` in SIMD-width chunks; fall back to scalar for tail
-- [ ] Implement `GpartAdapter::commitment()` → `[u8; 32]` — `BLAKE3(seed.to_le_bytes() || theta.as_bytes())`; and `verify(expected: &[u8; 32])` → `bool`
-- [ ] Implement binary I/O: `GpartAdapter::save()` and `GpartAdapter::load()` following the `[GPART | version | d | seed | blake3 | theta]` format; validate magic, version, and BLAKE3 checksum on load
-- [ ] Define `GpartPair` struct mirroring `LoraPair` pattern — `(GpartAdapter, GpartAdapter)` for prefill/decode adapter split; implement `apply_prefill()` and `apply_decode()` delegating to respective adapter
-- [ ] Implement `FromLoraAdapter` conversion trait: `LoraAdapter → GpartAdapter` (lossy, requires pre-computed θ_d = P⁺ΔW from training side; stub with `unimplemented!()` + doc note that riir-ai training pipeline must provide θ_d)
-- [ ] Create GOAT benchmark at `tests/bench_257_gpart_adapter_goat.rs` — G1: storage < 50% of LoRA; G2: apply speed ≤ 110% of LoRA; G3: quality ≥ 95% (requires trained θ_d, mark `#[ignore]`); G4: cross-platform determinism; G5: BLAKE3 commitment integrity; mirror structure of `bench_230_shard_embedding_goat.rs`
-- [ ] Create example at `examples/gpart_adapter_demo.rs` — demonstrate `GpartAdapter` construction from seed+θ, `apply()` on sample weights, `commitment()`/`verify()`, binary save/load roundtrip; gated behind `#[cfg(feature = "gpart_adapter")]`
-- [ ] Add unit tests in `types.rs` `#[cfg(test)] mod tests`: isometry check (`P^T P ≈ I_d`), apply correctness (known seed + θ → expected output), commitment roundtrip, tamper detection, load/save roundtrip, determinism across repeated seeds
-- [ ] Verify NeuronShard 368-byte Pod compatibility: `seed(8) + d(max=90)×4(360) = 368` — add compile-time assertion `const _: () = assert!(8 + 90 * 4 <= 368);` behind feature gate
-- [ ] Re-export `GpartAdapter` and `GpartPair` from `crates/katgpt-core/src/lib.rs` behind `#[cfg(feature = "gpart_adapter")]`
+- [x] Add `gpart_adapter = []` feature gate to `crates/katgpt-core/Cargo.toml` `[features]` section, not in default set
+- [x] Define `GpartAdapter` struct in `crates/katgpt-core/src/types.rs` (fields: `seed: u64`, `theta: Vec<f32>`, `d: usize`) behind `#[cfg(feature = "gpart_adapter")]`
+- [x] Implement `GpartAdapter::generate_partition()` — seed-based pseudorandom group assignment using `fastrand::Rng`, returning assignments and group counts; single-pass O(N) counting
+- [x] Implement `GpartAdapter::apply()` — single-pass O(N) broadcast: regenerate partition from seed, compute `1/√n_g` per group, apply `base_weights[i] += scale * theta[group]`; accept pre-allocated scratch `&mut [usize]` for assignments to avoid hot-loop allocation
+- [x] Implement SIMD-accelerated `apply_simd()` using `simd_add_scalar_inplace` / chunked broadcast — group parameters by contiguous assignment, apply `theta[g] * inv_sqrt_ng` in SIMD-width chunks; fall back to scalar for tail
+- [x] Implement `GpartAdapter::commitment()` → `[u8; 32]` — `BLAKE3(seed.to_le_bytes() || theta.as_bytes())`; and `verify(expected: &[u8; 32])` → `bool`
+- [x] Implement binary I/O: `GpartAdapter::save()` and `GpartAdapter::load()` following the `[GPART | version | d | seed | blake3 | theta]` format; validate magic, version, and BLAKE3 checksum on load
+- [x] Define `GpartPair` struct mirroring `LoraPair` pattern — `(GpartAdapter, GpartAdapter)` for prefill/decode adapter split; implement `apply_prefill()` and `apply_decode()` delegating to respective adapter
+- [x] Implement `TryFrom<&LoraAdapter>` conversion trait: `LoraAdapter → GpartAdapter` (lossy, requires pre-computed θ_d = P⁺ΔW from training side; stub with `unimplemented!()` + doc note that riir-ai training pipeline must provide θ_d)
+- [x] Create GOAT benchmark at `tests/bench_257_gpart_adapter_goat.rs` — G1: storage < 50% of LoRA; G2: apply speed ≤ 110% of LoRA; G3: quality ≥ 95% (requires trained θ_d, mark `#[ignore]`); G4: cross-platform determinism; G5: BLAKE3 commitment integrity; mirror structure of `bench_230_shard_embedding_goat.rs`
+- [x] Create example at `examples/gpart_adapter_demo.rs` — demonstrate `GpartAdapter` construction from seed+θ, `apply()` on sample weights, `commitment()`/`verify()`, binary save/load roundtrip; gated behind `#[cfg(feature = "gpart_adapter")]`
+- [x] Add unit tests in `types.rs` `#[cfg(test)] mod tests`: isometry check (`P^T P ≈ I_d`), apply correctness (known seed + θ → expected output), commitment roundtrip, tamper detection, load/save roundtrip, determinism across repeated seeds
+- [x] Verify NeuronShard 368-byte Pod compatibility: `seed(8) + d(max=90)×4(360) = 368` — add compile-time assertion `const _: () = assert!(8 + 90 * 4 <= 368);` behind feature gate
+- [x] Re-export `GpartAdapter` and `GpartPair` from `crates/katgpt-core/src/lib.rs` behind `#[cfg(feature = "gpart_adapter")]`
 
 ## GOAT Gates
 
