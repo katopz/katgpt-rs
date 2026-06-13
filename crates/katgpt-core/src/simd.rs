@@ -3301,6 +3301,97 @@ pub fn simd_gram_f32(x: &[f32], seq_len: usize, d_h: usize, gram_out: &mut [f32]
     }
 }
 
+// ── Entropy & Coincidence for DendriticGate (Plan 260) ──────────
+
+/// SIMD-accelerated entropy computation from log-probabilities.
+///
+/// Computes `entropy = -Σ p·log(p)` where `p = exp(logprobs[i])` normalized.
+/// Uses chunk-4 unrolled loop for auto-vectorization.
+///
+/// When `logprobs` is empty, returns 0.0.
+#[inline]
+pub fn entropy_f32(logprobs: &[f32]) -> f32 {
+    if logprobs.is_empty() {
+        return 0.0;
+    }
+
+    let len = logprobs.len();
+    let mut probs = Vec::with_capacity(len);
+    let mut sum = 0.0f32;
+
+    // Chunk-4 unrolled for auto-vectorization
+    let chunks = len / 4;
+    let remainder = len % 4;
+
+    for i in 0..chunks {
+        let base = i * 4;
+        let p0 = logprobs[base].exp();
+        let p1 = logprobs[base + 1].exp();
+        let p2 = logprobs[base + 2].exp();
+        let p3 = logprobs[base + 3].exp();
+        sum += p0 + p1 + p2 + p3;
+        probs.push(p0);
+        probs.push(p1);
+        probs.push(p2);
+        probs.push(p3);
+    }
+    for i in 0..remainder {
+        let p = logprobs[chunks * 4 + i].exp();
+        sum += p;
+        probs.push(p);
+    }
+
+    if sum <= f32::EPSILON {
+        return 0.0;
+    }
+
+    // H = log(sum) - Σ(p * logp) / sum  (identity: avoids double normalization)
+    let inv_sum = 1.0 / sum;
+    let mut dot_sum = 0.0f32;
+
+    for i in 0..len {
+        let p_norm = probs[i] * inv_sum;
+        if p_norm > 0.0 {
+            dot_sum += p_norm * logprobs[i];
+        }
+    }
+
+    let entropy = sum.ln() - dot_sum;
+    entropy.max(0.0)
+}
+
+/// Compute coincidence score: agreement between top-K candidates and parent path.
+///
+/// Counts how many of the top-K candidate tokens appear in the parent path
+/// within the coincidence window (last `window` tokens of parent_path).
+/// Returns `agreement_count / window_size` ∈ [0, 1].
+///
+/// When either slice is empty, returns 0.0.
+#[inline]
+pub fn coincidence_score(top_k: &[usize], parent_path: &[usize], window: usize) -> f32 {
+    if top_k.is_empty() || parent_path.is_empty() || window == 0 {
+        return 0.0;
+    }
+
+    let window_start = parent_path.len().saturating_sub(window);
+    let window_slice = &parent_path[window_start..];
+    let effective_window = window_slice.len() as f32;
+
+    if effective_window <= 0.0 {
+        return 0.0;
+    }
+
+    let mut agreement = 0usize;
+    // Small window → linear scan is fine (window typically ≤ 8)
+    for &token in top_k {
+        if window_slice.contains(&token) {
+            agreement += 1;
+        }
+    }
+
+    agreement as f32 / effective_window
+}
+
 // ── Tests ─────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -5018,6 +5109,76 @@ mod tests {
         assert_eq!(crate::simd::simd_sum_abs_f32(&[-42.0]), 42.0);
         assert_eq!(crate::simd::simd_sum_abs_f32(&[42.0]), 42.0);
         assert_eq!(crate::simd::simd_sum_abs_f32(&[0.0]), 0.0);
+    }
+
+    // ── Entropy & Coincidence Tests (Plan 260) ──────────────────
+
+    #[test]
+    fn test_entropy_uniform() {
+        // Uniform distribution over 4 tokens: H = ln(4) ≈ 1.386
+        let probs: Vec<f32> = vec![0.25, 0.25, 0.25, 0.25];
+        let logprobs: Vec<f32> = probs.iter().map(|&p| p.ln()).collect();
+        let h = entropy_f32(&logprobs);
+        let expected = 4.0f32.ln(); // ln(4)
+        assert!(
+            (h - expected).abs() < 0.01,
+            "uniform entropy should be ln(4)≈1.386, got {h}"
+        );
+    }
+
+    #[test]
+    fn test_entropy_peaked() {
+        // Peaked distribution: one token dominates
+        let probs: Vec<f32> = vec![0.99, 0.003, 0.004, 0.003];
+        let logprobs: Vec<f32> = probs.iter().map(|&p| p.ln()).collect();
+        let h = entropy_f32(&logprobs);
+        assert!(
+            h < 0.1,
+            "peaked distribution should have near-zero entropy, got {h}"
+        );
+    }
+
+    #[test]
+    fn test_entropy_empty() {
+        assert_eq!(entropy_f32(&[]), 0.0);
+    }
+
+    #[test]
+    fn test_coincidence_full_match() {
+        let top_k = vec![0, 1, 2, 3];
+        let parent = vec![0, 1, 2, 3];
+        let score = coincidence_score(&top_k, &parent, 4);
+        assert!(
+            (score - 1.0).abs() < 1e-6,
+            "full match should give 1.0, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_coincidence_no_match() {
+        let top_k = vec![10, 11, 12, 13];
+        let parent = vec![0, 1, 2, 3];
+        let score = coincidence_score(&top_k, &parent, 4);
+        assert!(score.abs() < 1e-6, "no match should give 0.0, got {score}");
+    }
+
+    #[test]
+    fn test_coincidence_partial_match() {
+        let top_k = vec![0, 5, 2, 9];
+        let parent = vec![0, 1, 2, 3];
+        // Window=4: parent slice = [0,1,2,3]; matches: 0,2 → 2/4 = 0.5
+        let score = coincidence_score(&top_k, &parent, 4);
+        assert!(
+            (score - 0.5).abs() < 1e-6,
+            "2 of 4 match should give 0.5, got {score}"
+        );
+    }
+
+    #[test]
+    fn test_coincidence_empty_slices() {
+        assert_eq!(coincidence_score(&[], &[1, 2], 4), 0.0);
+        assert_eq!(coincidence_score(&[1], &[], 4), 0.0);
+        assert_eq!(coincidence_score(&[1], &[2], 0), 0.0);
     }
 }
 

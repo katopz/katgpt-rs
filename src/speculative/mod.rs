@@ -4,7 +4,10 @@ pub mod budget_compat;
 pub mod belief_cache;
 #[cfg(feature = "belief_drafter")]
 pub mod belief_drafter;
+
 pub mod dd_tree;
+#[cfg(feature = "dendritic_gate")]
+pub mod dendritic_gate;
 pub mod dflash;
 #[cfg(feature = "domino_correction")]
 pub mod domino;
@@ -74,6 +77,11 @@ pub use dd_tree::build_dd_tree_screened_with_schedule;
 
 #[cfg(feature = "gdsd_distill")]
 pub use dd_tree::build_dd_tree_gdsd;
+
+#[cfg(feature = "dendritic_gate")]
+pub use dd_tree::build_dd_tree_dendritic;
+#[cfg(feature = "dendritic_gate")]
+pub use dendritic_gate::{DendriticGate, dendritic_sigmoid};
 
 #[cfg(feature = "and_or_dtree")]
 pub use dd_tree::build_dd_tree_and_or;

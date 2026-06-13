@@ -85,6 +85,43 @@ impl MuxBfs {
         }
     }
 
+    /// BFS step with dendritic-gated dynamic width.
+    ///
+    /// Each expansion's width is modulated by `gate.compute_gate()`:
+    /// `comp_width = (width as f32 * nmda_gate).max(1.0) as usize`
+    ///
+    /// Minimum width is 1 — always expand at least one candidate.
+    /// Feature-gated behind `dendritic_gate`.
+    #[cfg(feature = "dendritic_gate")]
+    pub fn step_dendritic(
+        &self,
+        tree: &mut MuxDdTree,
+        depth: usize,
+        logits_by_leaf: &[Vec<f32>],
+        gate: &crate::dendritic_gate::DendriticGate,
+        entropy_by_leaf: &[f32],
+        coincidence_by_leaf: &[f32],
+    ) {
+        let leaves = tree.collect_leaf_paths_flat();
+        assert_eq!(
+            leaves.len(),
+            logits_by_leaf.len(),
+            "logits count must match leaf count"
+        );
+
+        for i in 0..leaves.len() {
+            if tree.pruner.is_valid(&logits_by_leaf[i], depth) {
+                let base_width = self.detect_width(&logits_by_leaf[i]);
+                let nmda_gate = gate.compute_gate(
+                    *entropy_by_leaf.get(i).unwrap_or(&1.0),
+                    *coincidence_by_leaf.get(i).unwrap_or(&0.5),
+                );
+                let gated_width = ((base_width as f32) * nmda_gate).max(1.0) as usize;
+                tree.expand_node(leaves.path(i), &logits_by_leaf[i], gated_width);
+            }
+        }
+    }
+
     /// Zero-alloc variant of `step` that reuses a caller-provided `LeafPaths` buffer.
     ///
     /// The `leaves` buffer is cleared and refilled each call, retaining its heap

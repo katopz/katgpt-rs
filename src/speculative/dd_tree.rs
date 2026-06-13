@@ -3883,6 +3883,153 @@ pub fn entropy_truncate_horizon(entropy: f32, max_horizon: usize) -> usize {
     }
 }
 
+// ── DendriticGate Adaptive Tree (Plan 260, feature: dendritic_gate) ──
+
+/// Build DDTree with NMDA-gated adaptive expansion budget.
+///
+/// Uses `DendriticGate` to deterministically modulate per-expansion budget:
+/// `effective_budget = base_budget * nmda_gate`
+///
+/// Early exits when `nmda_gate < 0.1` (proximal dendrite sufficient).
+/// This replaces stochastic bandit budget allocation with zero-parameter,
+/// zero-training, physics-based adaptive compute.
+///
+/// Feature-gated behind `dendritic_gate`.
+///
+/// # Arguments
+/// * `marginals` — Per-depth token probability distributions (log-probs)
+/// * `config` — DDTree configuration
+/// * `pruner` — Constraint pruner
+/// * `chain_seed` — Whether to build greedy chain backbone first
+/// * `gate` — The `DendriticGate` instance with threshold/sensitivity params
+///
+/// # Returns
+///
+/// Tree nodes in expansion order. May have fewer nodes than `config.tree_budget`
+/// when gate triggers early exit.
+#[cfg(feature = "dendritic_gate")]
+pub fn build_dd_tree_dendritic(
+    marginals: &[&[f32]],
+    config: &crate::types::Config,
+    pruner: &dyn ConstraintPruner,
+    chain_seed: bool,
+    gate: &super::dendritic_gate::DendriticGate,
+) -> Vec<TreeNode> {
+    use katgpt_core::{coincidence_score, entropy_f32};
+
+    if marginals.is_empty() {
+        return Vec::new();
+    }
+
+    let seq_len = marginals.len();
+    let mut heap: BinaryHeap<TreeNode> = BinaryHeap::new();
+    let mut tree: Vec<TreeNode> = Vec::with_capacity(config.tree_budget);
+    let base_budget = config.tree_budget;
+    let mut parent_buf: Vec<usize> = vec![0usize; seq_len];
+
+    // Optional: seed greedy chain backbone first
+    if chain_seed {
+        let mut chain_path = 0u128;
+        let mut chain_score = 0.0f32;
+        for depth in 0..seq_len {
+            let parent_tokens = extract_parent_tokens_into(chain_path, depth, &mut parent_buf);
+            let mut best_prob = 0.0f32;
+            let mut best_idx = 0;
+            for (i, &prob) in marginals[depth].iter().enumerate() {
+                if prob > best_prob && pruner.is_valid(depth, i, parent_tokens) {
+                    best_prob = prob;
+                    best_idx = i;
+                }
+            }
+            if best_prob > 0.0 {
+                chain_score += best_prob.ln();
+                chain_path = (chain_path << 16) | (best_idx as u128);
+                tree.push(TreeNode {
+                    score: chain_score,
+                    depth,
+                    token_idx: best_idx,
+                    parent_path: chain_path,
+                });
+            } else {
+                break;
+            }
+        }
+    }
+
+    // Seed root children (depth 0)
+    if !chain_seed {
+        for (i, &prob) in marginals[0].iter().enumerate() {
+            if prob > 0.0 && pruner.is_valid(0, i, &[]) {
+                heap.push(TreeNode {
+                    score: prob.ln(),
+                    depth: 0,
+                    token_idx: i,
+                    parent_path: i as u128,
+                });
+            }
+        }
+    }
+
+    // Best-first expansion with dendritic-gated budget
+    let mut effective_budget = base_budget;
+
+    while tree.len() < effective_budget {
+        let Some(best) = heap.pop() else {
+            break;
+        };
+        tree.push(best);
+
+        if best.depth + 1 < seq_len {
+            let next_depth = best.depth + 1;
+            let parent_tokens =
+                extract_parent_tokens_into(best.parent_path, best.depth + 1, &mut parent_buf);
+
+            // Compute gate signal from entropy + coincidence at this depth
+            let entropy = entropy_f32(marginals[next_depth]);
+            let coinc = coincidence_score(
+                &top_k_indices(marginals[next_depth], gate.coincidence_window),
+                parent_tokens,
+                gate.coincidence_window,
+            );
+            let nmda_gate = gate.compute_gate(entropy, coinc);
+
+            // Early exit: proximal dendrite sufficient
+            if nmda_gate < 0.1 {
+                break;
+            }
+
+            // Modulate effective budget
+            effective_budget = ((base_budget as f32) * nmda_gate) as usize;
+            effective_budget = effective_budget.max(tree.len()).min(base_budget);
+
+            // Expand children
+            for (i, &prob) in marginals[next_depth].iter().enumerate() {
+                if prob > 0.0 && pruner.is_valid(next_depth, i, parent_tokens) {
+                    let score = best.score + prob.ln();
+                    heap.push(TreeNode {
+                        score,
+                        depth: next_depth,
+                        token_idx: i,
+                        parent_path: (best.parent_path << 16) | (i as u128),
+                    });
+                }
+            }
+        }
+    }
+
+    tree
+}
+
+/// Extract top-K indices from a probability slice (descending order).
+#[cfg(feature = "dendritic_gate")]
+#[inline]
+fn top_k_indices(probs: &[f32], k: usize) -> Vec<usize> {
+    let k = k.min(probs.len());
+    let mut indexed: Vec<(usize, f32)> = probs.iter().copied().enumerate().collect();
+    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    indexed.into_iter().take(k).map(|(i, _)| i).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
