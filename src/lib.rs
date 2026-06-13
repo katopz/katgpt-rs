@@ -14,6 +14,8 @@ pub mod channel_simd;
 pub mod dash_attn;
 #[cfg(feature = "data_probe")]
 pub mod data_probe;
+#[cfg(all(target_os = "macos", feature = "ane_npc"))]
+pub mod npc_ane_backend;
 // Shared diagonal gate abstraction (GDN2 + Wall).
 // Available when either gdn2_attention or wall_attention is enabled.
 #[cfg(feature = "cubical_nerve")]

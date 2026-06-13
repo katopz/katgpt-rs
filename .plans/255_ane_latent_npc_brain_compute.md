@@ -125,14 +125,14 @@ else:
 
 ### Part 3: ANE NpcBrainBackend Implementation
 
-- [ ] Create `AneNpcBrainBackend` struct with `coreml_native::Model`
-- [ ] Load `npc_brain.mlmodelc` at construction
-- [ ] Implement `batch_evaluate()`:
+- [x] Create `AneNpcBrainBackend` struct with `coreml_native::Model`
+- [x] Load `npc_brain.mlmodelc` at construction
+- [x] Implement `batch_evaluate()`:
   - Encode all NPC inputs into `MLMultiArray` batch tensor
   - Call `model.predict()`
   - Decode output tensor → `Vec<NpcBrainOutput>`
-- [ ] Validate ANE residency at construction (fallback to SIMD if fails)
-- [ ] Write test: `AneNpcBrainBackend` matches `SimdNpcBrainBackend` output (cosine ≥ 0.99)
+- [x] Validate ANE residency at construction (fallback to SIMD if fails)
+- [x] Write test: `AneNpcBrainBackend` matches `SimdNpcBrainBackend` output (cosine ≥ 0.99)
 - [ ] Write benchmark: `AneNpcBrainBackend` batch latency vs `SimdNpcBrainBackend` for 10, 100, 1000 NPCs
 
 ### Part 4: Auto-Route Integration
