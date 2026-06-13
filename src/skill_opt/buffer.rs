@@ -9,8 +9,8 @@ use super::gate::RejectedEdit;
 /// Supports JSONL serialization for persistence across sessions.
 pub struct RejectedEditBuffer {
     edits: Vec<RejectedEdit>,
-    head: usize,  // index of the oldest entry
-    len: usize,   // number of valid entries
+    head: usize, // index of the oldest entry
+    len: usize,  // number of valid entries
     max_size: usize,
 }
 
@@ -74,37 +74,36 @@ impl RejectedEditBuffer {
         self.len = 0;
     }
 
-    /// Serialize the buffer to JSONL (one JSON object per line).
-    ///
-    /// Pre-allocates the output string to avoid repeated resizes.
-    pub fn to_jsonl(&self) -> String {
-        // Estimate ~128 bytes per entry for JSON overhead.
-        let estimated = self.len * 128;
-        let mut out = String::with_capacity(estimated);
-        for (i, edit) in self.iter().enumerate() {
-            if i > 0 {
-                out.push('\n');
-            }
-            if let Ok(line) = serde_json::to_string(edit) {
-                out.push_str(&line);
-            }
+    /// Serialize the buffer to binary (length-prefixed postcard records).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.len * 64);
+        for edit in self.iter() {
+            let payload = postcard::to_allocvec(edit).unwrap_or_default();
+            let len = payload.len() as u32;
+            buf.extend_from_slice(&len.to_le_bytes());
+            buf.extend_from_slice(&payload);
         }
-        out
+        buf
     }
 
-    /// Deserialize a JSONL string back into a buffer.
-    ///
-    /// Returns an error if any line fails to parse.
-    pub fn from_jsonl(data: &str) -> Result<Self, String> {
+    /// Deserialize binary (length-prefixed postcard records) back into a buffer.
+    pub fn from_bytes(data: &[u8]) -> Result<Self, String> {
         let mut edits = Vec::new();
-        for line in data.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
+        let mut offset = 0usize;
+        while offset + 4 <= data.len() {
+            let len = u32::from_le_bytes(
+                data[offset..offset + 4]
+                    .try_into()
+                    .map_err(|e| e.to_string())?,
+            ) as usize;
+            offset += 4;
+            if offset + len > data.len() {
+                return Err("truncated record".into());
             }
-            let edit: RejectedEdit =
-                serde_json::from_str(trimmed).map_err(|e| format!("JSON parse error: {e}"))?;
+            let edit: RejectedEdit = postcard::from_bytes(&data[offset..offset + len])
+                .map_err(|e| format!("Parse error: {e}"))?;
             edits.push(edit);
+            offset += len;
         }
         let max_size = edits.len().max(1);
         let len = edits.len();

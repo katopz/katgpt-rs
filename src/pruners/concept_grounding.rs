@@ -39,7 +39,7 @@ fn sigmoid(x: f32) -> f32 {
 // ── Core types ────────────────────────────────────────────────
 
 /// Origin of a concept mapping — static template vs learned mapping.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
 pub enum GroundingSource {
     /// Static template match from `TemplateGrounding`.
@@ -49,7 +49,7 @@ pub enum GroundingSource {
 }
 
 /// A single variable-to-semantic concept mapping with confidence.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ConceptMapping {
     /// Variable name (e.g., "depth", "bandit_score").
     pub variable: String,
@@ -62,7 +62,7 @@ pub struct ConceptMapping {
 }
 
 /// Complete explanation for a pruner decision.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct PolicyExplanation {
     pub mappings: Vec<ConceptMapping>,
     pub chain_of_thought: Vec<String>,
@@ -70,55 +70,15 @@ pub struct PolicyExplanation {
 }
 
 impl PolicyExplanation {
-    /// Simple JSON serialization — no serde dependency.
-    /// Produces valid JSON suitable for TrialLog JSONL append.
-    pub fn to_json(&self) -> String {
-        let mappings_json: Vec<String> = self
-            .mappings
-            .iter()
-            .map(|m| {
-                format!(
-                    r#"{{"variable":"{}","semantic":"{}","confidence":{},"source":"{}"}}"#,
-                    json_escape(&m.variable),
-                    json_escape(&m.semantic),
-                    m.confidence,
-                    match m.source {
-                        GroundingSource::Template => "Template",
-                        GroundingSource::Learned => "Learned",
-                    }
-                )
-            })
-            .collect();
-
-        let chain_json: Vec<String> = self
-            .chain_of_thought
-            .iter()
-            .map(|s| format!("\"{}\"", json_escape(s)))
-            .collect();
-
-        format!(
-            r#"{{"mappings":[{}],"chain_of_thought":[{}],"summary":"{}"}}"#,
-            mappings_json.join(","),
-            chain_json.join(","),
-            json_escape(&self.summary),
-        )
+    /// Serialize to binary (postcard). No JSON.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        postcard::to_allocvec(self).unwrap_or_default()
     }
-}
 
-/// Escape a string for JSON embedding (handles quotes and backslashes).
-fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for ch in s.chars() {
-        match ch {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c => out.push(c),
-        }
+    /// Deserialize from binary (postcard).
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(data)
     }
-    out
 }
 
 // ── PrunerState snapshot ──────────────────────────────────────
@@ -497,10 +457,10 @@ mod tests {
         assert!(summary.contains("no scorer data"));
     }
 
-    // ── F2.8: to_json produces valid-ish JSON ──
+    // ── F2.8: Binary serialization roundtrip ──
 
     #[test]
-    fn test_to_json_output() {
+    fn test_to_bytes_roundtrip() {
         let explanation = PolicyExplanation {
             mappings: vec![ConceptMapping {
                 variable: "depth".to_string(),
@@ -512,25 +472,14 @@ mod tests {
             summary: "Decision summary".to_string(),
         };
 
-        let json = explanation.to_json();
+        let bytes = explanation.to_bytes();
+        let restored = PolicyExplanation::from_bytes(&bytes).expect("roundtrip");
 
-        // Should be valid JSON structure
-        assert!(json.starts_with('{'));
-        assert!(json.ends_with('}'));
-        assert!(json.contains("\"mappings\""));
-        assert!(json.contains("\"chain_of_thought\""));
-        assert!(json.contains("\"summary\""));
-        assert!(json.contains("\"depth\""));
-        assert!(json.contains("\"Template\""));
-    }
-
-    // ── F2.8: JSON escaping handles special characters ──
-
-    #[test]
-    fn test_json_escape() {
-        let input = r#"he said "hello\nworld""#;
-        let escaped = json_escape(input);
-        assert!(!escaped.contains('"') || escaped.contains("\\\""));
+        assert_eq!(restored.mappings.len(), 1);
+        assert_eq!(restored.mappings[0].variable, "depth");
+        assert_eq!(restored.mappings[0].source, GroundingSource::Template);
+        assert_eq!(restored.chain_of_thought.len(), 1);
+        assert_eq!(restored.summary, "Decision summary");
     }
 
     // ── Depth-based grounding maps correctly ──
@@ -650,14 +599,16 @@ mod tests {
             chain_of_thought: chain,
             summary,
         };
-        let json = explanation.to_json();
+        let bytes = explanation.to_bytes();
 
         // Verify end-to-end
         assert!(!explanation.mappings.is_empty());
         assert!(!explanation.chain_of_thought.is_empty());
         assert!(!explanation.summary.is_empty());
-        assert!(json.contains("function body or expression"));
-        assert!(json.contains("moderate confidence"));
+        assert!(!bytes.is_empty());
+        // Verify roundtrip
+        let restored = PolicyExplanation::from_bytes(&bytes).expect("roundtrip");
+        assert_eq!(restored.summary, explanation.summary);
     }
 
     // ── F2.9: Grounding Overhead Benchmark ──────────────────────────

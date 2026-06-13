@@ -77,7 +77,7 @@ pub fn generate_wasm_validator_certificates(
                 threshold: 1000.0,
             },
             ProofEvidence::Custom {
-                data: serde_json::json!({ "derived_from": ["P2.1", "P2.2"] }),
+                data: postcard::to_allocvec(&["P2.1", "P2.2"]).unwrap_or_default(),
             },
         );
         cert.prerequisites = vec!["P2.1".into(), "P2.2".into()];

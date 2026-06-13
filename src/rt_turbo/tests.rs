@@ -341,7 +341,7 @@ fn test_compute_all_scores_matches_individual() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_json_roundtrip_preserves_classification() {
+fn test_binary_roundtrip_preserves_classification() {
     let config = RtTurboConfig {
         retrieval_head_ratio: 0.25,
         ..RtTurboConfig::default()
@@ -349,8 +349,8 @@ fn test_json_roundtrip_preserves_classification() {
     let scores: Vec<f32> = vec![0.1, 0.8, 0.3, 0.9, 0.2, 0.7, 0.4, 0.6];
     let original = calibrate_from_scores(&scores, &config);
 
-    let json = original.to_json().expect("Serialize");
-    let loaded = HeadCalibration::from_json(&json).expect("Deserialize");
+    let bytes = original.to_bytes().expect("Serialize");
+    let loaded = HeadCalibration::from_bytes(&bytes).expect("Deserialize");
 
     // Verify structure
     assert_eq!(loaded.n_heads(), original.n_heads());
@@ -377,7 +377,7 @@ fn test_json_roundtrip_preserves_classification() {
 #[test]
 fn test_file_roundtrip_preserves_data() {
     let dir = tempfile::tempdir().expect("Create temp dir");
-    let path = dir.path().join("rt_turbo_calibration.json");
+    let path = dir.path().join("rt_turbo_calibration.bin");
 
     let config = RtTurboConfig {
         retrieval_head_ratio: 0.2,
@@ -424,8 +424,8 @@ fn test_config_snapshot_preserved_through_serialization() {
     let scores = vec![0.5f32; 6];
     let original = calibrate_from_scores(&scores, &config);
 
-    let json = original.to_json().expect("Serialize");
-    let loaded = HeadCalibration::from_json(&json).expect("Deserialize");
+    let bytes = original.to_bytes().expect("Serialize");
+    let loaded = HeadCalibration::from_bytes(&bytes).expect("Deserialize");
 
     assert_eq!(loaded.config_snapshot, original.config_snapshot);
 }
@@ -483,8 +483,8 @@ fn test_all_local_serialization_roundtrip() {
     let config = default_config();
     let original = HeadCalibration::all_local(8, &config);
 
-    let json = original.to_json().expect("Serialize");
-    let loaded = HeadCalibration::from_json(&json).expect("Deserialize");
+    let bytes = original.to_bytes().expect("Serialize");
+    let loaded = HeadCalibration::from_bytes(&bytes).expect("Deserialize");
 
     assert_eq!(loaded.n_retrieval(), 0);
     assert_eq!(loaded.n_local(), 8);

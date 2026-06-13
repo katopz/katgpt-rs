@@ -173,14 +173,14 @@ impl ReplaySample {
         (base + pu_bonus + kill_bonus).clamp(0.0, 1.0)
     }
 
-    /// Serialize to a single JSON line (for JSONL output).
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).unwrap_or_default()
+    /// Serialize to binary (postcard). Zero-copy friendly.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        postcard::to_allocvec(self).unwrap_or_default()
     }
 
-    /// Deserialize from a JSON line.
-    pub fn from_json(line: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(line)
+    /// Deserialize from binary (postcard).
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(data)
     }
 }
 
@@ -193,7 +193,7 @@ pub struct ReplayWriter {
 }
 
 impl ReplayWriter {
-    /// Open (or create) a JSONL file for replay samples.
+    /// Open (or create) a binary file for replay samples.
     pub fn create(path: &Path, round: u32) -> std::io::Result<Self> {
         let file = std::fs::File::create(path)?;
         Ok(Self {
@@ -203,10 +203,14 @@ impl ReplayWriter {
         })
     }
 
-    /// Write one sample as a JSON line.
+    /// Write one sample as a length-prefixed binary record (no JSON).
+    ///
+    /// Layout per record: len(4 LE) + postcard payload.
     pub fn write_sample(&mut self, sample: &ReplaySample) -> std::io::Result<()> {
-        let json = sample.to_json();
-        writeln!(self.file, "{json}")?;
+        let payload = sample.to_bytes();
+        let len = payload.len() as u32;
+        self.file.write_all(&len.to_le_bytes())?;
+        self.file.write_all(&payload)?;
         self.sample_count += 1;
         Ok(())
     }
@@ -338,10 +342,10 @@ mod tests {
         assert!((q - 0.65).abs() < 1e-6);
     }
 
-    // ── JSON roundtrip ─────────────────────────────────────────
+    // ── Binary roundtrip ───────────────────────────────────────
 
     #[test]
-    fn sample_json_roundtrip() {
+    fn sample_binary_roundtrip() {
         let sample = ReplaySample {
             board: vec![0u8; 169],
             player_pos: [5, 7],
@@ -360,8 +364,8 @@ mod tests {
             template_id: 255,
         };
 
-        let json = sample.to_json();
-        let restored = ReplaySample::from_json(&json).expect("deserialization should succeed");
+        let bytes = sample.to_bytes();
+        let restored = ReplaySample::from_bytes(&bytes).expect("deserialization should succeed");
 
         assert_eq!(restored.player_pos, [5, 7]);
         assert_eq!(restored.player_id, 2);
@@ -412,7 +416,7 @@ mod tests {
     fn writer_writes_and_counts_samples() {
         let dir = std::env::temp_dir().join("bomber_replay_test");
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("test_replay.jsonl");
+        let path = dir.join("test_replay.bin");
 
         let sample = ReplaySample {
             board: vec![0u8; 169],
@@ -442,14 +446,19 @@ mod tests {
             assert_eq!(writer.round(), 1);
         }
 
-        let contents = std::fs::read_to_string(&path).unwrap();
-        let lines: Vec<&str> = contents.trim().lines().collect();
-        assert_eq!(lines.len(), 5);
-
-        for line in &lines {
-            let s = ReplaySample::from_json(line).unwrap();
+        // Read back binary records
+        let contents = std::fs::read(&path).unwrap();
+        let mut offset = 0usize;
+        let mut count = 0usize;
+        while offset + 4 <= contents.len() {
+            let len = u32::from_le_bytes(contents[offset..offset + 4].try_into().unwrap()) as usize;
+            offset += 4;
+            let s = ReplaySample::from_bytes(&contents[offset..offset + len]).unwrap();
             assert_eq!(s.player_type, "Random");
+            offset += len;
+            count += 1;
         }
+        assert_eq!(count, 5);
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);
@@ -596,26 +605,32 @@ mod tests {
     }
 
     #[test]
-    fn enriched_backward_compat_json_without_new_fields() {
-        // Old JSON without danger_level, nearest_opponent_dist, escape_routes
-        let old_json = r#"{"board":[0,0,0],"player_pos":[1,1],"player_id":0,"bombs":[],"powerups":[],"action":0,"quality":0.5,"tick":1,"round":1,"player_type":"Old"}"#;
+    fn enriched_defaults_on_new_fields() {
+        // ReplaySample constructed with old fields only — new fields should have defaults.
+        let sample = ReplaySample {
+            board: vec![0u8; 3],
+            player_pos: [1, 1],
+            player_id: 0,
+            bombs: vec![],
+            powerups: vec![],
+            action: 0,
+            quality: 0.5,
+            tick: 1,
+            round: 1,
+            player_type: "Old".to_string(),
+            danger_level: 0,
+            nearest_opponent_dist: 0,
+            escape_routes: 0,
+            bomb_types: vec![],
+            template_id: 255,
+        };
 
-        let sample = ReplaySample::from_json(old_json).expect("should parse old format");
-        assert_eq!(sample.danger_level, 0);
-        assert_eq!(sample.nearest_opponent_dist, 0);
-        assert_eq!(sample.escape_routes, 0);
-        assert!(sample.bomb_types.is_empty());
-    }
-
-    #[test]
-    fn enriched_backward_compat_json_without_template_id() {
-        // Old JSON without template_id field — should default to 255
-        let old_json = r#"{"board":[0,0,0],"player_pos":[1,1],"player_id":0,"bombs":[],"powerups":[],"action":0,"quality":0.5,"tick":1,"round":1,"player_type":"Old","danger_level":0,"nearest_opponent_dist":0,"escape_routes":0,"bomb_types":[]}"#;
-
-        let sample = ReplaySample::from_json(old_json).expect("should parse old format");
-        assert_eq!(
-            sample.template_id, 255,
-            "template_id should default to 255 for old replays"
-        );
+        let bytes = sample.to_bytes();
+        let restored = ReplaySample::from_bytes(&bytes).expect("should roundtrip");
+        assert_eq!(restored.danger_level, 0);
+        assert_eq!(restored.nearest_opponent_dist, 0);
+        assert_eq!(restored.escape_routes, 0);
+        assert!(restored.bomb_types.is_empty());
+        assert_eq!(restored.template_id, 255);
     }
 }

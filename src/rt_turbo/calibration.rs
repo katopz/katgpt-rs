@@ -354,44 +354,36 @@ impl HeadCalibration {
         self.classifications.len()
     }
 
-    /// Serialize calibration to JSON string.
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string_pretty(self)
+    /// Serialize calibration to binary (postcard).
+    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+        postcard::to_allocvec(self)
     }
 
-    /// Serialize calibration to JSON bytes.
-    pub fn to_json_bytes(&self) -> Result<Vec<u8>, serde_json::Error> {
-        serde_json::to_vec_pretty(self)
+    /// Deserialize calibration from binary (postcard).
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(data)
     }
 
-    /// Deserialize calibration from JSON string.
-    pub fn from_json(json: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(json)
-    }
-
-    /// Deserialize calibration from JSON bytes.
-    pub fn from_json_bytes(bytes: &[u8]) -> Result<Self, serde_json::Error> {
-        serde_json::from_slice(bytes)
-    }
-
-    /// Save calibration to a file as JSON.
+    /// Save calibration to a file as binary (postcard).
     ///
     /// # Errors
     ///
     /// Returns IO errors if the file cannot be written.
     pub fn save(&self, path: &std::path::Path) -> Result<(), std::io::Error> {
-        let json = self.to_json_bytes()?;
-        std::fs::write(path, json)
+        let bytes = self
+            .to_bytes()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        std::fs::write(path, bytes)
     }
 
-    /// Load calibration from a JSON file.
+    /// Load calibration from a binary file (postcard).
     ///
     /// # Errors
     ///
-    /// Returns IO errors if the file cannot be read, or JSON errors if malformed.
+    /// Returns IO errors if the file cannot be read or data is malformed.
     pub fn load(path: &std::path::Path) -> Result<Self, std::io::Error> {
         let bytes = std::fs::read(path)?;
-        Self::from_json_bytes(&bytes)
+        Self::from_bytes(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
@@ -706,9 +698,9 @@ mod tests {
         let scores: Vec<f32> = vec![0.1, 0.8, 0.3, 0.9, 0.2, 0.7, 0.4, 0.6];
         let calibration = calibrate_from_scores(&scores, &config);
 
-        // JSON string roundtrip
-        let json = calibration.to_json().expect("Serialize to JSON");
-        let loaded = HeadCalibration::from_json(&json).expect("Deserialize from JSON");
+        // Binary roundtrip
+        let bytes = calibration.to_bytes().expect("Serialize to binary");
+        let loaded = HeadCalibration::from_bytes(&bytes).expect("Deserialize from binary");
 
         assert_eq!(loaded.n_retrieval(), calibration.n_retrieval());
         assert_eq!(loaded.n_local(), calibration.n_local());
@@ -730,7 +722,7 @@ mod tests {
     #[test]
     fn test_save_load_file_roundtrip() {
         let dir = tempfile::tempdir().expect("Create temp dir");
-        let path = dir.path().join("calibration.json");
+        let path = dir.path().join("calibration.bin");
 
         let config = RtTurboConfig {
             retrieval_head_ratio: 0.2,

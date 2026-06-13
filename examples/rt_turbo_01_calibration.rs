@@ -239,14 +239,14 @@ fn main() {
         config.retrieval_head_ratio * 100.0,
     );
 
-    // ── Step 5: JSON serialization ─────────────────────────────
+    // ── Step 5: Binary serialization ─────────────────────────────
     println!("\nStep 5: Serialization demo");
-    let json = calibration.to_json().expect("json serialization");
-    let json_bytes = json.len();
-    println!("  JSON size: {json_bytes} bytes");
+    let bytes = calibration.to_bytes().expect("binary serialization");
+    let n_bytes = bytes.len();
+    println!("  Binary size: {n_bytes} bytes");
     println!(
         "  Round-trip: {}",
-        if HeadCalibration::from_json(&json).is_ok() {
+        if HeadCalibration::from_bytes(&bytes).is_ok() {
             "✅ OK"
         } else {
             "❌ FAIL"

@@ -18,6 +18,13 @@ use serde::{Deserialize, Serialize};
 
 use super::certificate::{ProofCertificate, ProofEvidence, ProofProperty, ProofResult};
 
+/// Derived-from evidence for P5.3 production viability certificate.
+#[derive(Serialize, Deserialize)]
+struct P5Derived<'a> {
+    derived_from: [&'a str; 2],
+    witness_hash: String,
+}
+
 /// Encode bytes as lowercase hex string (avoids adding `hex` crate dependency).
 #[inline]
 fn to_hex(bytes: &[u8]) -> String {
@@ -114,14 +121,15 @@ impl WasmProofWitness {
             }
         };
 
-        let evidence = ProofEvidence::Custom {
-            data: serde_json::json!({
-                "witness_hash": to_hex(&self.witness_hash),
-                "input_hash": to_hex(&self.input_hash),
-                "violated_rule": self.violated_rule,
-                "validation_result": self.validation_result,
-            }),
-        };
+        // Evidence: binary-encoded witness data (no JSON).
+        let mut evidence_buf = Vec::with_capacity(96);
+        evidence_buf.extend_from_slice(&self.witness_hash);
+        evidence_buf.extend_from_slice(&self.input_hash);
+        evidence_buf.extend_from_slice(&[self.validation_result as u8]);
+        if let Some(ref rule) = self.violated_rule {
+            evidence_buf.extend_from_slice(rule.as_bytes());
+        }
+        let evidence = ProofEvidence::Custom { data: evidence_buf };
 
         ProofCertificate::new(id, property, result, evidence)
     }
@@ -224,10 +232,11 @@ pub fn generate_wasm_witness_certificates(
                 threshold: 1000.0,
             },
             ProofEvidence::Custom {
-                data: serde_json::json!({
-                    "derived_from": ["P5.1", "P5.2"],
-                    "witness_hash": to_hex(&witness.witness_hash),
-                }),
+                data: postcard::to_allocvec(&P5Derived {
+                    derived_from: ["P5.1", "P5.2"],
+                    witness_hash: to_hex(&witness.witness_hash),
+                })
+                .unwrap_or_default(),
             },
         );
         cert.prerequisites = vec!["P5.1".into(), "P5.2".into()];

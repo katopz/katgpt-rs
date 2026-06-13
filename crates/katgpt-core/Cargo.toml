@@ -11,6 +11,7 @@ rayon = "1.10"
 log = "0.4"
 blake3 = "1"
 serde = { version = "1", features = ["derive"] }
+postcard = { version = "1", features = ["alloc"] }
 half = "2"
 papaya = { version = "0.2", optional = true }
 rustfft = { version = "6", optional = true }

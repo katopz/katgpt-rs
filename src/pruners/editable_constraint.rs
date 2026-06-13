@@ -137,14 +137,14 @@ pub struct RuleEdit {
     pub action: String,
 }
 
-/// Parse a JSON array of rules into `RuleEdit` structs.
+/// Parse a binary (postcard) array of rules into `RuleEdit` structs.
 ///
 /// # Errors
 ///
-/// Returns an error message string if JSON is malformed or contains invalid actions.
-pub fn parse_rules(json: &str) -> Result<Vec<RuleEdit>, String> {
+/// Returns an error message string if data is malformed or contains invalid actions.
+pub fn parse_rules(data: &[u8]) -> Result<Vec<RuleEdit>, String> {
     let rules: Vec<RuleEdit> =
-        serde_json::from_str(json).map_err(|e| format!("JSON parse error: {e}"))?;
+        postcard::from_bytes(data).map_err(|e| format!("Parse error: {e}"))?;
 
     // Validate actions
     for rule in &rules {

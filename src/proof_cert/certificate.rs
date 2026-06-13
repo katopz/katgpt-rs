@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 /// A standalone proof certificate for a verified property.
+///
+/// Uses `postcard` (binary) for persistence — no JSON.
+/// `serde` derives are kept for `postcard` codec only.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofCertificate {
     pub id: String,
@@ -15,16 +18,34 @@ pub struct ProofCertificate {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProofProperty {
-    SpatialConsistency { game: String, board_size: usize },
-    DeterministicCorrectness { game: String, n_comparisons: usize },
-    RealtimeFeasibility { domain: String, target_latency_us: u64 },
-    Convergence { algorithm: String, metric: String },
-    Custom { name: String, description: String },
+    SpatialConsistency {
+        game: String,
+        board_size: usize,
+    },
+    DeterministicCorrectness {
+        game: String,
+        n_comparisons: usize,
+    },
+    RealtimeFeasibility {
+        domain: String,
+        target_latency_us: u64,
+    },
+    Convergence {
+        algorithm: String,
+        metric: String,
+    },
+    Custom {
+        name: String,
+        description: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProofResult {
-    Full { value: f64, threshold: f64 },
+    Full {
+        value: f64,
+        threshold: f64,
+    },
     Conditional {
         value: f64,
         threshold: f64,
@@ -35,7 +56,9 @@ pub enum ProofResult {
         unproved: Vec<String>,
         reason: String,
     },
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +80,9 @@ pub enum ProofEvidence {
         challenger: String,
         delta: f64,
     },
-    Custom { data: serde_json::Value },
+    /// Arbitrary binary evidence blob. Zero-copy friendly.
+    /// Use `postcard` to encode structured data when needed.
+    Custom { data: Vec<u8> },
 }
 
 impl ProofCertificate {

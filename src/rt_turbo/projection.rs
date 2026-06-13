@@ -494,41 +494,32 @@ impl RetrievalProjection {
     }
 
     // -----------------------------------------------------------------------
-    // Serialization
+    // Serialization (binary — postcard, no JSON)
     // -----------------------------------------------------------------------
 
-    /// Serialize to JSON string.
-    pub fn to_json(&self) -> serde_json::Result<String> {
-        serde_json::to_string(self)
+    /// Serialize to binary (postcard).
+    pub fn to_bytes(&self) -> Result<Vec<u8>, postcard::Error> {
+        postcard::to_allocvec(self)
     }
 
-    /// Serialize to JSON bytes.
-    pub fn to_json_bytes(&self) -> serde_json::Result<Vec<u8>> {
-        serde_json::to_vec(self)
+    /// Deserialize from binary (postcard).
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        postcard::from_bytes(data)
     }
 
-    /// Deserialize from JSON string.
-    pub fn from_json(json: &str) -> serde_json::Result<Self> {
-        serde_json::from_str(json)
-    }
-
-    /// Deserialize from JSON bytes.
-    pub fn from_json_bytes(bytes: &[u8]) -> serde_json::Result<Self> {
-        serde_json::from_slice(bytes)
-    }
-
-    /// Save projection weights to a JSON file.
+    /// Save projection weights to a binary file.
     pub fn save(&self, path: &std::path::Path) -> std::io::Result<()> {
-        let json = self
-            .to_json_bytes()
+        let bytes = self
+            .to_bytes()
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        std::fs::write(path, json)
+        std::fs::write(path, bytes)
     }
 
-    /// Load projection weights from a JSON file.
-    pub fn load(path: &std::path::Path) -> serde_json::Result<Self> {
-        let bytes = std::fs::read(path).map_err(serde_json::Error::io)?;
-        Self::from_json_bytes(&bytes)
+    /// Load projection weights from a binary file.
+    pub fn load(path: &std::path::Path) -> Result<Self, std::io::Error> {
+        let bytes = std::fs::read(path)?;
+        Self::from_bytes(&bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 
     /// Validate internal consistency of the projection weights.
@@ -830,10 +821,10 @@ mod tests {
     // --- Serialization Tests ---
 
     #[test]
-    fn test_json_roundtrip() {
+    fn test_binary_roundtrip() {
         let proj = RetrievalProjection::xavier(3, 64, 16);
-        let json = proj.to_json().unwrap();
-        let loaded = RetrievalProjection::from_json(&json).unwrap();
+        let bytes = proj.to_bytes().unwrap();
+        let loaded = RetrievalProjection::from_bytes(&bytes).unwrap();
 
         assert_eq!(loaded.n_retrieval_heads, 3);
         assert_eq!(loaded.head_dim, 64);
@@ -846,7 +837,7 @@ mod tests {
     fn test_file_roundtrip() {
         let dir = test_dir();
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("test_projection.json");
+        let path = dir.join("test_projection.bin");
 
         let proj = RetrievalProjection::identity(2, 32, 8);
         proj.save(&path).unwrap();

@@ -1,8 +1,8 @@
-//! SubstrateGate mask loader — `.mask` file format for capability substrates (Plan 216 T9-T10).
+//! SubstrateGate mask loader — `.mask` binary format for capability substrates (Plan 216 T9-T10).
 //!
-//! Loads and saves substrate masks in a portable format.
-//! Format: JSON with version field, per-layer packed bitmasks, recovery score,
-//! capability name, model ID, and BLAKE3 hash for provenance.
+//! Loads and saves substrate masks in binary (postcard).
+//! Format: magic bytes + version + postcard payload with per-layer packed bitmasks,
+//! recovery score, capability name, model ID, and BLAKE3 hash for provenance.
 
 use super::substrate_types::SubstrateMask;
 use serde::{Deserialize, Serialize};
@@ -57,12 +57,12 @@ mod hash_bytes {
 
 // ── Load / Save ────────────────────────────────────────────────
 
-/// Load a substrate mask from a JSON string.
+/// Load a substrate mask from binary (postcard).
 ///
 /// Validates dimensions and hash integrity.
 /// Returns `None` if the file is malformed or hash doesn't match.
-pub fn load_substrate_mask(json: &str) -> Option<SubstrateMask> {
-    let file: SubstrateMaskFile = match serde_json::from_str(json) {
+pub fn load_substrate_mask(data: &[u8]) -> Option<SubstrateMask> {
+    let file: SubstrateMaskFile = match postcard::from_bytes(data) {
         Ok(f) => f,
         Err(e) => {
             eprintln!("[substrate_loader] failed to parse mask file: {}", e);
@@ -139,10 +139,10 @@ pub fn load_substrate_mask(json: &str) -> Option<SubstrateMask> {
     Some(mask)
 }
 
-/// Save a substrate mask to a JSON string.
+/// Save a substrate mask to binary (postcard).
 ///
 /// Produces a portable file that can be loaded by katgpt-rs or riir-ai.
-pub fn save_substrate_mask(mask: &SubstrateMask) -> Option<String> {
+pub fn save_substrate_mask(mask: &SubstrateMask) -> Option<Vec<u8>> {
     let n_layers = mask.n_layers();
     let mlp_hidden = mask.mlp_hidden();
 
@@ -163,8 +163,8 @@ pub fn save_substrate_mask(mask: &SubstrateMask) -> Option<String> {
         hash: *mask.hash(),
     };
 
-    match serde_json::to_string_pretty(&file) {
-        Ok(json) => Some(json),
+    match postcard::to_allocvec(&file) {
+        Ok(bytes) => Some(bytes),
         Err(e) => {
             eprintln!("[substrate_loader] failed to serialize mask: {}", e);
             None
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_load_invalid_json() {
-        let result = load_substrate_mask("not valid json");
+        let result = load_substrate_mask(b"not valid binary");
         assert!(result.is_none());
     }
 
@@ -263,8 +263,8 @@ mod tests {
             model_id: "model".to_string(),
             hash: [0u8; 32],
         };
-        let json = serde_json::to_string(&file).unwrap();
-        let result = load_substrate_mask(&json);
+        let bytes = postcard::to_allocvec(&file).unwrap();
+        let result = load_substrate_mask(&bytes);
         assert!(result.is_none());
     }
 
@@ -280,8 +280,8 @@ mod tests {
             model_id: "model".to_string(),
             hash: [0u8; 32],
         };
-        let json = serde_json::to_string(&file).unwrap();
-        let result = load_substrate_mask(&json);
+        let bytes = postcard::to_allocvec(&file).unwrap();
+        let result = load_substrate_mask(&bytes);
         assert!(result.is_none());
     }
 
@@ -295,17 +295,17 @@ mod tests {
     }
 
     #[test]
-    fn test_save_produces_valid_json() {
+    fn test_save_produces_valid_binary() {
         let mask = make_test_mask();
-        let json = save_substrate_mask(&mask).expect("save should succeed");
+        let bytes = save_substrate_mask(&mask).expect("save should succeed");
 
-        // Should be parseable
-        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed["version"], 1);
-        assert_eq!(parsed["n_layers"], 2);
-        assert_eq!(parsed["mlp_hidden"], 128);
-        assert_eq!(parsed["capability_name"], "python_stdlib");
-        assert_eq!(parsed["model_id"], "test_model");
+        // Should be parseable via postcard
+        let parsed: SubstrateMaskFile = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(parsed.version, 1);
+        assert_eq!(parsed.n_layers, 2);
+        assert_eq!(parsed.mlp_hidden, 128);
+        assert_eq!(parsed.capability_name, "python_stdlib");
+        assert_eq!(parsed.model_id, "test_model");
     }
 
     #[test]

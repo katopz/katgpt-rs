@@ -238,19 +238,23 @@ fn load_teacher_q_from_replay(
     num_arms: usize,
 ) -> std::io::Result<Vec<f32>> {
     use std::fs::File;
-    use std::io::{BufRead, BufReader};
+    use std::io::Read;
 
     use crate::pruners::bomber::replay::ReplaySample;
 
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
+    let contents = std::fs::read(path)?;
+    let mut offset = 0usize;
 
     let mut quality_sums = vec![0.0f32; num_arms];
     let mut counts = vec![0u32; num_arms];
 
-    for line in reader.lines() {
-        let line = line?;
-        if let Ok(sample) = ReplaySample::from_json(&line) {
+    while offset + 4 <= contents.len() {
+        let len = u32::from_le_bytes(contents[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        if offset + len > contents.len() {
+            break;
+        }
+        if let Ok(sample) = ReplaySample::from_bytes(&contents[offset..offset + len]) {
             // Use template_id when available (0-7), fall back to action
             let idx = if sample.template_id < num_arms as u8 {
                 sample.template_id as usize
@@ -262,6 +266,7 @@ fn load_teacher_q_from_replay(
                 counts[idx] += 1;
             }
         }
+        offset += len;
     }
 
     Ok(quality_sums

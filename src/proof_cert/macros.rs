@@ -21,7 +21,7 @@ macro_rules! conditional_proof {
             implies: vec![$( $imp.into() ),*],
             explanation: String::new(),
             evidence: $crate::proof_cert::ProofEvidence::Custom {
-                data: serde_json::json!({}),
+                data: Vec::new(),
             },
             timestamp: std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

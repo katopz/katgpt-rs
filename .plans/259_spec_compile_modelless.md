@@ -73,7 +73,7 @@ full = [..., "spec_compile"]
 
 - [x] **T20**: Create `src/pruners/spec_compile/mod.rs` — module index, re-exports, `#[cfg(feature = "spec_pruner")]` and `#[cfg(feature = "spec_compile")]` gates
 - [x] **T21**: Add `spec_pruner` and `spec_compile` feature gates to `Cargo.toml`, add `pub mod spec_compile` to `src/pruners/mod.rs`
-- [ ] **T22**: Benchmarks & documentation — `.benchmarks/NNN_spec_compile_goat.md`, update README tech table
+- [x] **T22**: Benchmarks & documentation — `.benchmarks/259_spec_compile_goat.md`, update README tech table
 
 ---
 

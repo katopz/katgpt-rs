@@ -1,7 +1,7 @@
-//! Trial persistence for Heuristic Learning — JSONL episode history.
+//! Trial persistence for Heuristic Learning — binary episode history.
 //!
-//! Records every bandit episode to a JSONL file for offline analysis,
-//! absorb-compress decisions, and regression testing.
+//! Records every bandit episode as length-prefixed binary (postcard)
+//! for offline analysis, absorb-compress decisions, and regression testing.
 //!
 //! # Usage
 //!
@@ -15,7 +15,7 @@
 //! ```
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, BufWriter, Result, Write};
+use std::io::{BufWriter, Result, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -103,10 +103,11 @@ pub struct TrialSummary {
 
 // ── TrialLog ────────────────────────────────────────────────────
 
-/// Append-only JSONL trial log for persistent episode history.
+/// Append-only binary trial log for persistent episode history.
 ///
-/// Each call to [`append`] writes one serialized [`TrialRecord`] as a JSON line.
-/// Buffered for throughput — call [`flush`] to ensure durability.
+/// Each call to [`append`] writes one serialized [`TrialRecord`] as a
+/// length-prefixed binary record. Buffered for throughput — call [`flush`]
+/// to ensure durability.
 pub struct TrialLog {
     writer: BufWriter<File>,
     path: std::path::PathBuf,
@@ -116,7 +117,7 @@ pub struct TrialLog {
 }
 
 impl TrialLog {
-    /// Create or append to a JSONL trial log at `path`.
+    /// Create or append to a binary trial log at `path`.
     ///
     /// Creates the file if it doesn't exist. Appends if it does.
     pub fn new(path: &Path) -> Result<Self> {
@@ -138,14 +139,15 @@ impl TrialLog {
         self
     }
 
-    /// Append a single trial record as one JSON line.
+    /// Append a single trial record as a length-prefixed binary record.
     ///
     /// Buffered — may not hit disk until [`flush`](Self::flush).
     pub fn append(&mut self, record: &TrialRecord) -> Result<()> {
-        let line = serde_json::to_string(record)
+        let payload = postcard::to_allocvec(record)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        self.writer.write_all(line.as_bytes())?;
-        self.writer.write_all(b"\n")?;
+        let len = payload.len() as u32;
+        self.writer.write_all(&len.to_le_bytes())?;
+        self.writer.write_all(&payload)?;
         self.count += 1;
         Ok(())
     }
@@ -155,7 +157,7 @@ impl TrialLog {
         self.writer.flush()
     }
 
-    /// Path of the JSONL file.
+    /// Path of the binary log file.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -165,28 +167,40 @@ impl TrialLog {
         self.count
     }
 
-    /// Load all trial records from a JSONL file.
+    /// Load all trial records from a binary log file.
     ///
-    /// Malformed lines are skipped with a warning to stderr.
+    /// Malformed records are skipped with a warning to stderr.
     pub fn load(path: &Path) -> Result<Vec<TrialRecord>> {
-        let file = File::open(path)?;
-        let reader = BufReader::new(file);
+        let contents = std::fs::read(path)?;
         let mut records = Vec::new();
+        let mut offset = 0usize;
+        let mut record_num = 0usize;
 
-        for (line_num, line) in reader.lines().enumerate() {
-            let line = line?;
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
+        while offset + 4 <= contents.len() {
+            let len = u32::from_le_bytes(
+                contents[offset..offset + 4]
+                    .try_into()
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?,
+            ) as usize;
+            offset += 4;
+            if offset + len > contents.len() {
+                eprintln!(
+                    "trial_log: truncated record {} in {}",
+                    record_num,
+                    path.display()
+                );
+                break;
             }
-            match serde_json::from_str::<TrialRecord>(trimmed) {
+            match postcard::from_bytes::<TrialRecord>(&contents[offset..offset + len]) {
                 Ok(record) => records.push(record),
                 Err(e) => eprintln!(
-                    "trial_log: skipping malformed line {} in {}: {e}",
-                    line_num + 1,
+                    "trial_log: skipping malformed record {} in {}: {e}",
+                    record_num,
                     path.display()
                 ),
             }
+            offset += len;
+            record_num += 1;
         }
 
         Ok(records)
@@ -266,41 +280,49 @@ impl TrialLog {
 
     // ── Plan 210 Explanation Logging ─────────────────────────────────
 
-    /// Append a policy explanation as a JSONL line (Plan 210 F2.6).
+    /// Append a policy explanation as a binary record (Plan 210 F2.6).
     ///
-    /// Writes `{"type":"policy_explanation","hash":"<blake3>","data":{...}}`
-    /// where `data` is the JSON from [`PolicyExplanation::to_json`].
-    /// The blake3 hash covers the raw JSON for audit integrity.
+    /// Binary payload: blake3 hash of explanation data + postcard-encoded explanation.
     #[cfg(feature = "concept_grounding")]
     pub fn log_explanation(&mut self, explanation: &PolicyExplanation) -> Result<()> {
-        let data = explanation.to_json();
-        let hash = blake3::hash(data.as_bytes()).to_hex();
-        let line =
-            format!("{{\"type\":\"policy_explanation\",\"hash\":\"{hash}\",\"data\":{data}}}");
-        self.writer.write_all(line.as_bytes())?;
-        self.writer.write_all(b"\n")?;
+        let payload = postcard::to_allocvec(explanation)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let hash = blake3::hash(&payload);
+        // Record: hash(32) + payload
+        let mut record = Vec::with_capacity(32 + payload.len());
+        record.extend_from_slice(hash.as_bytes());
+        record.extend_from_slice(&payload);
+        let len = record.len() as u32;
+        self.writer.write_all(&len.to_le_bytes())?;
+        self.writer.write_all(&record)?;
         self.count += 1;
         Ok(())
     }
 
-    /// Append a decision explanation as a JSONL line (Plan 210 F3.8).
+    /// Append a decision explanation as a binary record (Plan 210 F3.8).
     ///
-    /// Writes `{"type":"decision_explanation","hash":"<blake3>","num_choices":N,"num_alternatives":M,"summary":"..."}`.
-    /// The blake3 hash covers the summary string for audit integrity.
+    /// Binary payload: blake3 hash of summary + postcard-encoded explanation fields.
     #[cfg(feature = "decision_explain")]
     pub fn log_decision(&mut self, explanation: &DecisionExplanation) -> Result<()> {
-        let hash = blake3::hash(explanation.summary.as_bytes()).to_hex();
-        let line = serde_json::json!({
-            "type": "decision_explanation",
-            "hash": hash.as_str(),
-            "num_choices": explanation.choices.len(),
-            "num_alternatives": explanation.alternatives.len(),
-            "summary": explanation.summary,
-        });
-        let line = serde_json::to_string(&line)
+        let hash = blake3::hash(explanation.summary.as_bytes());
+        #[derive(serde::Serialize, serde::Deserialize)]
+        struct DecisionRecord<'a> {
+            hash: [u8; 32],
+            num_choices: usize,
+            num_alternatives: usize,
+            summary: &'a str,
+        }
+        let record = DecisionRecord {
+            hash: *hash.as_bytes(),
+            num_choices: explanation.choices.len(),
+            num_alternatives: explanation.alternatives.len(),
+            summary: &explanation.summary,
+        };
+        let payload = postcard::to_allocvec(&record)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        self.writer.write_all(line.as_bytes())?;
-        self.writer.write_all(b"\n")?;
+        let len = payload.len() as u32;
+        self.writer.write_all(&len.to_le_bytes())?;
+        self.writer.write_all(&payload)?;
         self.count += 1;
         Ok(())
     }
@@ -479,9 +501,9 @@ mod tests {
             future_accuracy: 0.5,
         };
 
-        // Roundtrip through JSON
-        let json = serde_json::to_string(&trace).unwrap();
-        let deserialized: AnchorTrace = serde_json::from_str(&json).unwrap();
+        // Roundtrip through postcard binary
+        let bytes = postcard::to_allocvec(&trace).unwrap();
+        let deserialized: AnchorTrace = postcard::from_bytes(&bytes).unwrap();
         assert_eq!(trace, deserialized);
     }
 
@@ -543,27 +565,49 @@ mod tests {
     }
 
     #[test]
-    fn test_backward_compat_none_anchors() {
-        // A JSON record without "anchors" field should load with anchors=None
-        let json_line = r#"{"episode":0,"arm":1,"reward":0.5,"q_value":0.5,"cumulative_reward":0.0,"cumulative_regret":0.5,"config":"old","note":"","base_correct":null,"reviewed_correct":null}"#;
+    fn test_record_defaults() {
+        // Record with default optional fields
+        let record = TrialRecord {
+            episode: 0,
+            player_id: 0,
+            arm: 1,
+            reward: 0.5,
+            q_value: 0.5,
+            cumulative_reward: 0.0,
+            cumulative_regret: 0.5,
+            config: "old".into(),
+            note: String::new(),
+            base_correct: None,
+            reviewed_correct: None,
+            anchors: None,
+        };
 
-        let record: TrialRecord = serde_json::from_str(json_line).unwrap();
-        assert_eq!(record.episode, 0);
-        assert_eq!(record.arm, 1);
-        assert!(record.anchors.is_none());
+        let bytes = postcard::to_allocvec(&record).unwrap();
+        let restored: TrialRecord = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.episode, 0);
+        assert_eq!(restored.arm, 1);
+        assert!(restored.anchors.is_none());
     }
 
     #[test]
-    fn test_player_id_backward_compat() {
-        // Legacy JSON without player_id should parse with default 0
-        let json_line = r#"{"episode":5,"arm":2,"reward":0.8,"q_value":0.6,"cumulative_reward":4.0,"cumulative_regret":1.0,"config":"old","note":"","base_correct":null,"reviewed_correct":null}"#;
-        let record: TrialRecord = serde_json::from_str(json_line).unwrap();
-        assert_eq!(record.player_id, 0);
-
-        // New JSON with player_id should parse correctly
-        let json_with_id = r#"{"episode":5,"player_id":3,"arm":2,"reward":0.8,"q_value":0.6,"cumulative_reward":4.0,"cumulative_regret":1.0,"config":"new","note":"","base_correct":null,"reviewed_correct":null}"#;
-        let record_id: TrialRecord = serde_json::from_str(json_with_id).unwrap();
-        assert_eq!(record_id.player_id, 3);
+    fn test_player_id_roundtrip() {
+        let record = TrialRecord {
+            episode: 5,
+            player_id: 3,
+            arm: 2,
+            reward: 0.8,
+            q_value: 0.6,
+            cumulative_reward: 4.0,
+            cumulative_regret: 1.0,
+            config: "new".into(),
+            note: String::new(),
+            base_correct: None,
+            reviewed_correct: None,
+            anchors: None,
+        };
+        let bytes = postcard::to_allocvec(&record).unwrap();
+        let restored: TrialRecord = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(restored.player_id, 3);
     }
 
     // ── SharedTrialLog Tests (Issue 051 T4) ──────────────────────
