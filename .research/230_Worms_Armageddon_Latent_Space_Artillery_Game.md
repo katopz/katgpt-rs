@@ -73,8 +73,9 @@ No one has combined artillery physics AI with latent-space cognition. WAAI does 
 | **Archer** | Bow (100% long range) | Long | Fast | Dodge (80% projectile, 20% sword) | 3 throwable knives |
 | **White Mage** | Heal (AoE) | Mid | Medium | Barrier (absorb X damage) | Cure, Raise |
 | **Black Mage** | Fire/Ice/Thunder | Mid-Long | Slow | Magic Shield (50% all) | AoE damage spells |
-| **Ninja** | Shuriken (90% mid) | Mid | Very Fast | Evasion (70% all) | Smoke bomb, wall climb |
-| **Bomber** | Bombs (3s fuse) | Mid (throwable) | Medium | Armor (60% explosion) | Place bomb, throw bomb |
+| **Ninja** | Shuriken (90% mid) + Bombs (3s fuse, throwable) | Mid | Very Fast | Evasion (70% all) | Smoke bomb, wall climb, bomb throw/place |
+
+> Bombs are not a separate class — the Ninja handles them via the FFT Throw ability. Bomber is not a playable FFT job (bombs are monsters only).
 
 ### 2.3 Core Mechanics
 
