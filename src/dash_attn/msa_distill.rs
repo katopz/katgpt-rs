@@ -578,8 +578,13 @@ mod tests {
         let router = make_max_pool_router();
         let mut cache = router.cache_new(1, HEAD_DIM);
 
-        // Keys with norms: [1, 0, 0, 0] → ‖k‖=1, [3, 4, 0, 0] → ‖k‖=5
-        // mean_norm = (1+5)/2 = 3.0, std_dev = sqrt((1+25)/2 - 9) = sqrt(4) = 2.0
+        // BLOCK_SIZE=4, HEAD_DIM=4 → 4 keys
+        // Key 0: [1,0,0,0] → ‖k‖=1
+        // Key 1: [3,4,0,0] → ‖k‖=5
+        // Key 2: [1,0,0,0] → ‖k‖=1
+        // Key 3: [0,0,0,0] → ‖k‖=0
+        // mean_norm = (1+5+1+0)/4 = 1.75
+        // std_dev = sqrt((1+25+1+0)/4 - 1.75²) = sqrt(6.75 - 3.0625) = sqrt(3.6875)
         let keys = vec![
             1.0, 0.0, 0.0, 0.0, 3.0, 4.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         ];
@@ -587,8 +592,8 @@ mod tests {
         router.forward_cache(&mut cache, &keys, &vals, 0, HEAD_DIM);
 
         assert!(
-            (cache.key_norm_mean[0] - 2.0).abs() < 1e-4,
-            "expected mean norm ~2.0, got {}",
+            (cache.key_norm_mean[0] - 1.75).abs() < 1e-4,
+            "expected mean norm ~1.75, got {}",
             cache.key_norm_mean[0]
         );
         assert!(

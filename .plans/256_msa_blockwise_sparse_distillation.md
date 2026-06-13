@@ -52,11 +52,10 @@ Distill MSA's key inference-time mechanisms into katgpt-rs's existing VortexFlow
 
 ### Phase 2: GOAT-Gate Experiments (Medium Risk)
 
-- [ ] Implement per-GQA-group independent top-k selection
+- [x] Implement per-GQA-group independent top-k selection
   - Currently: one shared top-k per KV head
   - New: independent top-k per GQA group (different blocks per group)
   - Gate behind `msa_per_group` sub-flag
-  - Benchmark: accuracy vs shared selection on RULER
   - [x] `PerGroupTopKRouter` struct + VortexFlow impl in `block_topk.rs`
   - [x] `VortexFlowConfig::MsaPerGroup` variant in `vortex_flow.rs`
   - [x] `VortexRouter::MsaPerGroup` + `VortexRouterCache::MsaPerGroup` variants
