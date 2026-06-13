@@ -13,13 +13,41 @@
 //! - **Format repair**: "Fix malformed JSON" → structural token constraints
 //! - **Intent routing**: "Route to: search, create, delete" → label allowlist
 //!
-//! Feature gate: `spec_pruner`
+//! ## Feature Gates
+//!
+//! - `spec_pruner` — core SpecAsPruner: types, compiler, pruner, screening, proof
+//! - `spec_compile` — full suite (includes `spec_pruner`): marginals, DFA, chain, router
 
 pub mod compiler;
+pub mod proof;
 pub mod pruner;
+pub mod screening;
 pub mod types;
 
+#[cfg(feature = "spec_compile")]
+pub mod marginals;
+
+#[cfg(feature = "spec_compile")]
+pub mod dfa;
+
+#[cfg(feature = "spec_compile")]
+pub mod chain;
+
+#[cfg(feature = "spec_compile")]
+pub mod router;
+
 pub use compiler::SpecCompiler;
-pub use pruner::*;
-pub use types::CompilationResult;
+pub use proof::{SpecCommitment, SpecProof};
 pub use types::*;
+
+#[cfg(feature = "spec_compile")]
+pub use marginals::{SpecMarginals, TokenBias, spec_to_marginals};
+
+#[cfg(feature = "spec_compile")]
+pub use dfa::*;
+
+#[cfg(feature = "spec_compile")]
+pub use chain::*;
+
+#[cfg(feature = "spec_compile")]
+pub use router::*;

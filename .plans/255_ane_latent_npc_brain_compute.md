@@ -153,8 +153,8 @@ TriggerGate routes general inference by QPS; NPC brain routes by NPC count.
 
 ### Part 5: GOAT Proof
 
-- [ ] GOAT test: batch 1000 NPCs, ANE vs SIMD, output cosine ≥ 0.99
-- [ ] GOAT benchmark: 1000 NPCs × 20Hz throughput, CPU vs ANE
+- [x] GOAT test: batch 1000 NPCs, ANE vs SIMD, output cosine ≥ 0.99
+- [x] GOAT benchmark: 1000 NPCs × 20Hz throughput, CPU vs ANE
   - Measure: total CPU time freed, ANE dispatch overhead, end-to-end latency
 - [ ] GOAT arena: bomber/go game with ANE NPC brain vs SIMD NPC brain
   - Verify: same game outcome, different CPU utilization
