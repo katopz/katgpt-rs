@@ -29,15 +29,16 @@ impl SimHashFingerprint {
     pub fn from_logits(logits: &[f32], projection: &[[f32; 64]]) -> Self {
         // Row-major iteration: outer loop over logits, accumulate all 64 dots
         // in one pass for cache-friendly access to projection rows.
+        // Each per-row update is `dots[..64] += logit * row[..64]` — exactly
+        // the `simd_fused_scale_acc(dst, src, scale, len)` kernel, which dispatches
+        // to NEON vfmaq / AVX2 fmadd_ps for 4–8× the throughput of the scalar
+        // inner loop.
         let mut dots = [0.0f32; 64];
         for (i, logit) in logits.iter().enumerate() {
             if i >= projection.len() {
                 break;
             }
-            let row = &projection[i];
-            for j in 0..64 {
-                dots[j] += row[j] * logit;
-            }
+            crate::simd::simd_fused_scale_acc(&mut dots[..], &projection[i], *logit, 64);
         }
         let mut bits: u64 = 0;
         for (j, &dot) in dots.iter().enumerate() {
