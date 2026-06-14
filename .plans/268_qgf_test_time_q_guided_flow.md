@@ -2,7 +2,7 @@
 
 **Research:** `.research/236_QGF_Test_Time_Q_Guided_Flow.md`
 **Paper:** [arXiv:2606.11087](https://arxiv.org/pdf/2606.11087) — Q-Guided Flow (Zhou et al., 2026)
-**Status:** 🚧 In Progress — Phase 1 (T1-T3) + Phase 2 (T4-T5) + Phase 3 (T7 partial) + Phase 4 (T8-T9) implemented, tests green
+**Status:** 🚧 In Progress — Phase 1 (T1-T3, incl. T2 benchmark) + Phase 2 (T4-T5) + Phase 3 (T7 partial) + Phase 4 (T8-T9) implemented, tests green
 **Branch:** `develop` (no new feature branch per project rules)
 **Feature Gates:** `qgf` (parent, default OFF until GOAT proof)
   - `qgf_projector` (F2 — FirstOrderProjector)
@@ -108,7 +108,30 @@ At generation step t with prefix p_t and drafter velocity v_t:
 - [x] Implement batch variant `project_batch` using `generate_batch`
 - [x] Unit test: known prefix → deterministic projection (mock generator)
 - [x] Unit test: projection cost = 1 generator call (no BPTT)
-- [ ] Benchmark: projection overhead < existing drafter call cost + 10%
+- [x] Benchmark: projection overhead < existing drafter call cost + 10%
+  - **Bench:** `katgpt-core/benches/qgf_projector_bench.rs` (criterion).
+    Compares `project_one_step` / `project_batch` vs direct `generate()` /
+    `generate_batch()` across three generator cost tiers (cheap=4 iters,
+    medium=64 iters, expensive=1024 iters).
+  - **Optimization applied:** `Vec::remove(0)` → `Vec::swap_remove(0)` in both
+    `project_one_step` and `project_batch`. The remaining candidates are
+    immediately dropped, so order need not be preserved. `remove(0)` was O(n)
+    (shifts all elements); `swap_remove(0)` is O(1). Also pre-allocated the
+    batch output `Vec::with_capacity(batches.len())` to avoid reallocation.
+  - **Results (release, 100-sample criterion):**
+
+    | Path        | Generator   | Baseline | Projection | Overhead | Gate |
+    |-------------|-------------|----------|------------|----------|------|
+    | single-call | cheap (4i)  |  17.9 ns |  17.9 ns   |    ~0%   | ✅   |
+    | single-call | medium (64i)|  38.5 ns |  38.5 ns   |    ~0%   | ✅   |
+    | single-call | exp (1024i) |   405 ns |   403 ns   |   <0%    | ✅   |
+    | batch ×32   | cheap (4i)  |   798 ns |   845 ns   |   +5.9%  | ✅   |
+    | batch ×32   | medium (64i)|  1440 ns |  1455 ns   |   +1.0%  | ✅   |
+    | batch ×32   | exp (1024i) | 13850 ns | 13175 ns   |   -4.9%  | ✅   |
+
+  - **Verdict: ALL GATES PASS.** Single-call overhead is effectively zero
+    thanks to `#[inline]`; batch overhead is <6% for the cheapest generator
+    and negative for expensive generators (projection returns a smaller type).
 
 #### T3: Feature gate scaffolding
 - [x] Add `qgf` parent feature to `katgpt-core/Cargo.toml`

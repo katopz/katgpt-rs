@@ -119,3 +119,8 @@ required-features = ["sense_composition"]
 name = "latent_physics_bench"
 harness = false
 required-features = ["sector_projection", "action_bridge"]
+
+[[bench]]
+name = "qgf_projector_bench"
+harness = false
+required-features = ["qgf"]

@@ -91,7 +91,11 @@ where
     }
     // Take the first (highest-ranked) candidate. Generators that produce
     // multiple candidates are expected to rank them by likelihood, best first.
-    Ok(candidates.remove(0))
+    //
+    // `swap_remove(0)` is O(1) (single element copy + length decrement) vs
+    // `remove(0)` which is O(n) (shifts all remaining elements). Since we
+    // immediately drop the rest of `candidates`, the reorder is irrelevant.
+    Ok(candidates.swap_remove(0))
 }
 
 /// Batch variant — projects multiple prefixes in a single
@@ -123,19 +127,21 @@ where
     G: SpeculativeGenerator,
 {
     let batches = generator.generate_batch(conditions, rng)?;
-    batches
-        .into_iter()
-        .map(|mut candidates| {
-            if candidates.is_empty() {
-                panic!(
-                    "QGF project_batch: generator returned zero candidates for a condition. \
-                     SpeculativeGenerator::generate_batch() must produce at least one output per condition."
-                );
-            }
-            // Take the first (highest-ranked) candidate.
-            Ok(candidates.remove(0))
-        })
-        .collect()
+    // Pre-allocate the output Vec to avoid reallocation during `collect()`.
+    // Each batch entry contributes exactly one projection (the first candidate).
+    let mut projections = Vec::with_capacity(batches.len());
+    for mut candidates in batches {
+        if candidates.is_empty() {
+            panic!(
+                "QGF project_batch: generator returned zero candidates for a condition. \
+                 SpeculativeGenerator::generate_batch() must produce at least one output per condition."
+            );
+        }
+        // Take the first (highest-ranked) candidate.
+        // `swap_remove(0)` is O(1) — see `project_one_step` for rationale.
+        projections.push(candidates.swap_remove(0));
+    }
+    Ok(projections)
 }
 
 #[cfg(test)]
