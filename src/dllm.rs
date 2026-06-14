@@ -2123,9 +2123,15 @@ pub fn denoise_loop(
             let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
-            // Find highest-confidence valid token
+            // Find highest-confidence valid token.
+            //
+            // Hoist `inv_sum` out of the per-token comparison: since `inv_sum > 0`,
+            // comparing `exp_buf[t] * inv_sum > best_prob` is equivalent to
+            // `exp_buf[t] > best_prob * sum_exp`. We track `best_exp` (= best_prob * sum_exp)
+            // across the scan and divide once at the end. This removes one fmul
+            // from the vocab-sized inner loop.
             let mut best_token = mask;
-            let mut best_prob = 0.0f32;
+            let mut best_exp = 0.0f32; // exp_buf values are >= 0
             for t in 0..vocab {
                 if t == mask {
                     continue;
@@ -2133,12 +2139,13 @@ pub fn denoise_loop(
                 if !constraint.is_valid(p, t, &tokens) {
                     continue;
                 }
-                let prob = exp_buf[t] * inv_sum;
-                if prob > best_prob {
-                    best_prob = prob;
+                let e = exp_buf[t];
+                if e > best_exp {
+                    best_exp = e;
                     best_token = t;
                 }
             }
+            let best_prob = best_exp * inv_sum;
 
             if best_prob >= confidence_threshold && best_token != mask {
                 tokens[p] = best_token;
@@ -2217,7 +2224,8 @@ pub fn denoise_loop_rcd(
     let mut softmax_scratch = vec![0.0f32; vocab];
     let mut residual_scratch = vec![0.0f32; n];
     // E_mask: the embedding the masked positions would receive by default.
-    let mask_emb = weights.wte[mask * n..(mask + 1) * n].to_vec();
+    // Borrow directly from weights — no allocation (interpolate_residual takes &[f32]).
+    let mask_emb: &[f32] = &weights.wte[mask * n..(mask + 1) * n];
 
     for step in 0..n_steps {
         // The residual buffer is populated *after* step 0's forward pass, so the
@@ -2242,9 +2250,9 @@ pub fn denoise_loop_rcd(
             let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
-            // Find highest-confidence valid token.
+            // Find highest-confidence valid token (see denoise_loop for inv_sum hoist rationale).
             let mut best_token = mask;
-            let mut best_prob = 0.0f32;
+            let mut best_exp = 0.0f32;
             for t in 0..vocab {
                 if t == mask {
                     continue;
@@ -2252,12 +2260,13 @@ pub fn denoise_loop_rcd(
                 if !constraint.is_valid(p, t, &tokens) {
                     continue;
                 }
-                let prob = exp_buf[t] * inv_sum;
-                if prob > best_prob {
-                    best_prob = prob;
+                let e = exp_buf[t];
+                if e > best_exp {
+                    best_exp = e;
                     best_token = t;
                 }
             }
+            let best_prob = best_exp * inv_sum;
 
             if best_prob >= confidence_threshold && best_token != mask {
                 tokens[p] = best_token;
@@ -2285,9 +2294,7 @@ pub fn denoise_loop_rcd(
             let sum_exp = crate::simd::simd_sum_f32(&softmax_scratch[..vocab]);
             if sum_exp > 0.0 {
                 let inv = 1.0 / sum_exp;
-                for v in softmax_scratch[..vocab].iter_mut() {
-                    *v *= inv;
-                }
+                crate::simd::simd_scale_inplace(&mut softmax_scratch[..vocab], inv);
             }
 
             // α_i = H(p_i) / log(V), Δ_i = Σ_j p_ij * E_j, ẽ_i = (1-α)E_mask + α·Δ_i.

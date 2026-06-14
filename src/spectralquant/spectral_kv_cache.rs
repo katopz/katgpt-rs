@@ -838,14 +838,15 @@ impl SpectralQuantKVCache {
             return Vec::new();
         }
 
-        // Sequential fallback for small batches (rayon overhead > benefit)
+        // Sequential fallback for small batches (rayon overhead > benefit).
+        // Write directly into the flat output's per-token row — no intermediate buf
+        // (matches the parallel path below).
         if n <= threshold {
             let mut flat = vec![0.0f32; n * kv_dim];
             let mut scratch = DequantizeScratch::new(kv_dim);
-            let mut buf = vec![0.0f32; kv_dim];
             for t in 0..n {
-                self.dequantize_key_into_with_scratch(layer, t, &mut scratch, &mut buf);
-                flat[t * kv_dim..(t + 1) * kv_dim].copy_from_slice(&buf);
+                let row = &mut flat[t * kv_dim..(t + 1) * kv_dim];
+                self.dequantize_key_into_with_scratch(layer, t, &mut scratch, row);
             }
             return flat;
         }
@@ -883,10 +884,9 @@ impl SpectralQuantKVCache {
         if n <= threshold {
             let mut flat = vec![0.0f32; n * kv_dim];
             let mut scratch = DequantizeScratch::new(kv_dim);
-            let mut buf = vec![0.0f32; kv_dim];
             for t in 0..n {
-                self.dequantize_value_into_with_scratch(layer, t, &mut scratch, &mut buf);
-                flat[t * kv_dim..(t + 1) * kv_dim].copy_from_slice(&buf);
+                let row = &mut flat[t * kv_dim..(t + 1) * kv_dim];
+                self.dequantize_value_into_with_scratch(layer, t, &mut scratch, row);
             }
             return flat;
         }

@@ -835,18 +835,38 @@ fn hadamard_transform_inplace(x: &mut [f32]) {
 fn quantize_to_idx(value: f32, centroids: &[f32]) -> u8 {
     let n = centroids.len();
     debug_assert!(n <= 256, "codebook too large for u8 index");
-    // Unrolled scan for small codebooks (common: 2, 4, 8, 16, 256 entries).
-    // Avoids iterator overhead and partial_cmp per element.
-    let mut best_idx = 0u8;
-    let mut best_dist = (value - centroids[0]).abs();
-    for i in 1..n {
-        let dist = (value - centroids[i]).abs();
-        if dist < best_dist {
-            best_dist = dist;
-            best_idx = i as u8;
+    if n <= 1 {
+        return 0;
+    }
+    // Lloyd-Max codebook centroids are sorted ascending (see
+    // `LloydMaxQuantizer::fit` — initialized via sorted quantile placement).
+    // Binary search gives O(log n) instead of O(n) on the per-token-per-channel
+    // quantize hot path. Matches `spectral_kv_cache::quantize_to_idx`.
+    if value <= centroids[0] {
+        return 0;
+    }
+    if value >= centroids[n - 1] {
+        return (n - 1) as u8;
+    }
+    // Find the bracket [lo, lo+1].
+    let mut lo = 0usize;
+    let mut hi = n - 1;
+    while lo + 1 < hi {
+        let mid = lo + (hi - lo) / 2;
+        if centroids[mid] <= value {
+            lo = mid;
+        } else {
+            hi = mid;
         }
     }
-    best_idx
+    // Pick the closer of the two brackets.
+    let d_lo = value - centroids[lo];
+    let d_hi = centroids[hi] - value;
+    if d_lo <= d_hi {
+        lo as u8
+    } else {
+        hi as u8
+    }
 }
 
 fn dequantize_idx(idx: u8, centroids: &[f32]) -> f32 {
