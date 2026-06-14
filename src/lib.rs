@@ -71,6 +71,8 @@ pub mod kv_share;
 pub mod kvarn;
 #[cfg(feature = "lattice_operad")]
 pub mod lattice_operad;
+#[cfg(feature = "gauge_invariant")]
+pub mod gauge_invariant;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
 #[cfg(feature = "newton_schulz")]
@@ -105,6 +107,8 @@ pub mod segment_checkpoint;
 #[cfg(feature = "shard_kv")]
 pub mod shard_kv;
 pub mod simd;
+#[cfg(feature = "chiaroscuro")]
+pub mod chiaroscuro;
 #[cfg(feature = "sparse_task_vector")]
 pub mod sparse_task_vector;
 #[cfg(feature = "skill_opt")]

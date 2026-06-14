@@ -1722,6 +1722,7 @@ dependencies = [
  "ratatui",
  "rayon",
  "reqwest",
+ "rustfft",
  "serde",
  "serde_json",
  "syn",

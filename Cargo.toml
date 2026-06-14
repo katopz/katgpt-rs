@@ -198,6 +198,7 @@ game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Con
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
 newton_schulz = []  # Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114, GOAT 25/25 Bench 050) — default-ON
 spectral_budget = ["newton_schulz"]  # Spectral Budget Router — layer-adaptive NS depth + rank-p truncation (Plan 253, Research 222) — opt-in, GOAT gate
+gauge_invariant = ["newton_schulz"]  # Gauge-invariant adapter composition — LoRA-Muon distillation (Plan 270, Research 270) — opt-in, GOAT gate. Provides ns_inv_sqrt_psd + gauge_rebalance + gauge_invariant_compose primitives.
 river_valley = []  # River-valley diagnostic metrics — subspace ratios, effective rank, cosine similarity (Plan 152, Research 114, GOAT 25/25 Bench 050) — default-ON
 spectral_hierarchy = ["katgpt-core/spectral_hierarchy"]  # Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156 GOAT) — default-ON
 sigmoid_margin = ["katgpt-core/sigmoid_margin"]  # Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157)
@@ -811,6 +812,19 @@ required-features = ["vortex_flow"]
 [[example]]
 name = "vortex_03_meta_router"
 required-features = ["vortex_flow"]
+
+[[example]]
+name = "chiaroscuro_01_kv_strategy"
+required-features = ["chiaroscuro"]
+
+[[example]]
+name = "chiaroscuro_03_collapse_discovery"
+required-features = ["chiaroscuro"]
+
+[[test]]
+name = "bench_269_chiaroscuro"
+path = "tests/bench_269_chiaroscuro.goat.rs"
+required-features = ["chiaroscuro"]
 
 [[test]]
 name = "directional_credit_goat"
