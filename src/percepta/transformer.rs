@@ -327,7 +327,6 @@ impl VanillaTransformer {
         caches: &mut [HardAttentionHead],
         scratch: &mut ForwardScratch,
     ) -> usize {
-        let d = self.config.d_model;
         let n_layers = self.config.n_layers;
         let n_heads = self.config.n_heads;
         let qkv = &mut scratch.qkv;
@@ -352,16 +351,16 @@ impl VanillaTransformer {
             );
 
             // Residual connection
-            for i in 0..d {
-                residual[i] += sublayer_out[i];
+            for (r, s) in residual.iter_mut().zip(sublayer_out.iter()) {
+                *r += s;
             }
 
             // FFN sublayer
             self.apply_ffn(layer_idx, residual, ff, gated, sublayer_out);
 
             // Residual connection
-            for i in 0..d {
-                residual[i] += sublayer_out[i];
+            for (r, s) in residual.iter_mut().zip(sublayer_out.iter()) {
+                *r += s;
             }
         }
 
@@ -441,8 +440,8 @@ impl VanillaTransformer {
 
         // ReGLU: relu(gate) * value
         let (gate, value) = ff.split_at(d_ffn);
-        for i in 0..d_ffn {
-            gated[i] = relu(gate[i]) * value[i];
+        for ((out, g), v) in gated.iter_mut().zip(gate.iter()).zip(value.iter()) {
+            *out = relu(*g) * *v;
         }
 
         // FFN output: [d_model, d_ffn] @ [d_ffn] → [d_model]
@@ -527,15 +526,11 @@ fn matvec(w: &[Vec<f64>], x: &[f64], y: &mut [f64]) {
 
 /// Dot product of two f64 slices.
 ///
-/// Written as an index-based accumulation loop to help LLVM auto-vectorize.
+/// Uses `iter().zip()` so the loop bound is the shorter slice (defensive against
+/// mismatched lengths) and the body is branch-free, which lets LLVM auto-vectorize.
 #[inline]
 fn dot_product(a: &[f64], b: &[f64]) -> f64 {
-    let len = a.len().min(b.len());
-    let mut sum = 0.0f64;
-    for i in 0..len {
-        sum += a[i] * b[i];
-    }
-    sum
+    a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 // ── Token Encoding / Decoding ──────────────────────────────────

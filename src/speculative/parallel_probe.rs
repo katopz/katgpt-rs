@@ -21,7 +21,6 @@
 //!
 //! Reference: arXiv:2602.03845 — Parallel-Probe 2D Probing for Parallel Thinking.
 
-use std::collections::HashMap;
 use std::hash::Hash;
 
 use super::verifier::SpeculativeVerifier;
@@ -366,8 +365,12 @@ impl<A: Clone + Eq + Hash> ParallelProbeController<A> {
     ///
     /// Returns the answer held by the most branches, if it constitutes
     /// a majority (> prune_vote_ratio of active branches with answers).
+    ///
+    /// Uses a `Vec` linear scan rather than `HashMap` — typical branch counts
+    /// are small (4-8), so the hashing overhead dominates. Pre-allocated to
+    /// branch_count, so no allocation beyond the initial capacity.
     fn majority_vote(&self) -> Option<A> {
-        let mut counts: HashMap<A, usize> = HashMap::new();
+        let mut counts: Vec<(A, usize)> = Vec::with_capacity(self.branches.len());
         let mut total_with_answer = 0usize;
 
         for b in &self.branches {
@@ -375,7 +378,11 @@ impl<A: Clone + Eq + Hash> ParallelProbeController<A> {
                 continue;
             }
             if let Some(ref answer) = b.last_answer {
-                *counts.entry(answer.clone()).or_insert(0) += 1;
+                if let Some(slot) = counts.iter_mut().find(|(a, _)| a == answer) {
+                    slot.1 += 1;
+                } else {
+                    counts.push((answer.clone(), 1));
+                }
                 total_with_answer += 1;
             }
         }
@@ -445,13 +452,14 @@ impl<A: Clone + Eq + Hash> ParallelProbeController<A> {
             return Vec::new();
         };
 
-        let active_count = self.active_count();
+        let mut active_count = 0usize;
         let mut to_prune = Vec::new();
 
         for b in &mut self.branches {
             if b.is_pruned || b.is_finished {
                 continue;
             }
+            active_count += 1;
 
             let Some(ref answer) = b.last_answer else {
                 continue;

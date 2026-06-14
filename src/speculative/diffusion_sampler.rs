@@ -335,9 +335,13 @@ impl MlpSampler {
         }
     }
 
-    /// Forward pass: returns (hidden activations, output logit).
-    fn forward(&self, x: &[f32; N_FEATURES]) -> (Vec<f32>, f32) {
-        let h = &mut vec![0.0f32; self.hidden_dim];
+    /// Forward pass: fills `h_scratch` with hidden activations and returns output logit.
+    ///
+    /// `h_scratch` must have length `>= hidden_dim`. Avoids the per-call `Vec` allocation
+    /// and `clone()` that the previous `(Vec<f32>, f32)` return required.
+    fn forward_into(&self, x: &[f32; N_FEATURES], h_scratch: &mut [f32]) -> f32 {
+        debug_assert!(h_scratch.len() >= self.hidden_dim);
+        let h = &mut h_scratch[..self.hidden_dim];
         for (j, h_j) in h.iter_mut().enumerate() {
             let mut sum = self.b1[j];
             for (i, &xi) in x.iter().enumerate() {
@@ -350,14 +354,23 @@ impl MlpSampler {
         for (&w2j, &hj) in self.w2.iter().zip(h.iter()) {
             logit += w2j * hj;
         }
-
-        (h.clone(), logit)
+        logit
     }
 
     /// Predict P(correct | features) ∈ [0, 1].
+    ///
+    /// Uses a stack-allocated hidden buffer (hidden_dim ≤ 64 for all sampler variants)
+    /// to avoid heap allocation on the inference hot path.
     pub fn predict(&self, features: &SamplerFeatures) -> f32 {
         let x = features.to_array();
-        let (_, logit) = self.forward(&x);
+        let mut h_stack = [0.0f32; 64];
+        let h = if self.hidden_dim <= 64 {
+            &mut h_stack[..self.hidden_dim]
+        } else {
+            // Defensive: fall back to heap only for unusually large hidden_dim.
+            &mut vec![0.0f32; self.hidden_dim]
+        };
+        let logit = self.forward_into(&x, h);
         sigmoid(logit)
     }
 
@@ -376,9 +389,16 @@ impl MlpSampler {
             let mut epoch_loss = 0.0f32;
             let mut n_samples = 0usize;
 
+            // Reusable hidden buffer — allocated once per epoch instead of per-trajectory.
+            // Previous code allocated + cloned a Vec on every `forward()` call.
+            let mut h_buf = vec![0.0f32; self.hidden_dim];
+
             for traj in trajectories {
                 let x = traj.features.to_array();
-                let (hidden, logit) = self.forward(&x);
+                let logit = self.forward_into(&x, &mut h_buf);
+                // Backprop needs the hidden activations; alias the buffer for the
+                // gradient pass below. (h_buf is not mutated during backprop — only read.)
+                let hidden = &h_buf[..];
                 let pred = sigmoid(logit);
                 let y = if traj.correct { 1.0f32 } else { 0.0f32 };
 
@@ -593,8 +613,9 @@ impl DiffusionSampler {
             .map(|t| (self.predict(&t.features), t.correct))
             .collect();
 
-        // Sort by predicted probability descending
-        pairs.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // sort_unstable_by is faster than sort_by — doesn't preserve equal-element
+        // order (fine for AUC computation) and avoids O(n) worst-case merges.
+        pairs.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
         // Count positives and negatives
         let n_pos = pairs.iter().filter(|(_, c)| *c).count() as f64;
@@ -683,52 +704,26 @@ pub fn collect_trajectories(
             // Forward pass with block-causal attention
             let _ = forward_block_causal_with(&mut dctx, weights, &tokens, config, block_size);
 
-            for p in 0..seq_len {
-                if tokens[p] != mask {
-                    continue;
-                }
-
-                // Extract features from logits
-                let logits_start = p * vocab;
-                let logits_end = logits_start + vocab;
-                let logits_p = &dctx.logits_flat[logits_start..logits_end];
-
-                let features = SamplerFeatures::from_logits(
-                    logits_p, vocab, mask, step, max_steps, p, seq_len,
-                );
-
-                // Find top-1 prediction
-                let mut top1 = 0usize;
-                let mut top1_val = f32::NEG_INFINITY;
-                for (t, &logit) in logits_p.iter().enumerate() {
-                    if t == mask {
-                        continue;
-                    }
-                    if logit > top1_val {
-                        top1_val = logit;
-                        top1 = t;
-                    }
-                }
-
-                let correct = top1 == target[p];
-                all_trajectories.push(SamplerTrajectory { features, correct });
-
-                // Check cap
-                if max_trajectories > 0 && all_trajectories.len() >= max_trajectories {
-                    return all_trajectories;
-                }
-            }
-
-            // Sample tokens for next step (greedy for determinism)
+            // Single fused pass over masked positions: extract features, record
+            // trajectory, AND commit tokens via confidence remasking.
+            //
+            // Previously this was two separate loops over the same positions, each
+            // recomputing the O(vocab) argmax scan. Merging halves the argmax work.
+            //
+            // Cap handling: if `max_trajectories` is hit mid-step, we return
+            // immediately — the remaining token commits are skipped, matching the
+            // old two-loop behavior (loop 2 never ran after an early return).
             #[allow(clippy::needless_range_loop)]
             for p in 0..seq_len {
                 if tokens[p] != mask {
                     continue;
                 }
+
                 let logits_start = p * vocab;
                 let logits_end = logits_start + vocab;
                 let logits_p = &dctx.logits_flat[logits_start..logits_end];
 
+                // Find top-1 prediction (single argmax scan, reused below)
                 let mut top1 = 0usize;
                 let mut top1_val = f32::NEG_INFINITY;
                 for (t, &logit) in logits_p.iter().enumerate() {
@@ -741,13 +736,25 @@ pub fn collect_trajectories(
                     }
                 }
 
-                // Confidence remasking (same threshold as decode)
-                let max_logit = top1_val;
+                // ── Trajectory recording (was loop 1) ──
+                let features = SamplerFeatures::from_logits(
+                    logits_p, vocab, mask, step, max_steps, p, seq_len,
+                );
+                let correct = top1 == target[p];
+                all_trajectories.push(SamplerTrajectory { features, correct });
+
+                if max_trajectories > 0 && all_trajectories.len() >= max_trajectories {
+                    return all_trajectories;
+                }
+
+                // ── Confidence remasking / token commit (was loop 2) ──
+                // Reuses `top1` and `top1_val` from the single argmax above;
+                // the old code recomputed both in a second O(vocab) scan.
                 let sum_exp: f32 = (0..vocab)
                     .filter(|&t| t != mask)
-                    .map(|t| (logits_p[t] - max_logit).exp())
+                    .map(|t| (logits_p[t] - top1_val).exp())
                     .sum();
-                let top1_prob = (logits_p[top1] - max_logit).exp() / sum_exp;
+                let top1_prob = (logits_p[top1] - top1_val).exp() / sum_exp;
 
                 if top1_prob >= decode_config.confidence_threshold {
                     tokens[p] = top1;

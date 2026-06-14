@@ -273,8 +273,8 @@ pub fn block_select(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Vec<usize
         }
     }
 
-    selected.sort();
-    selected.dedup();
+    // Iteration is monotonically increasing in k_block, so `selected` is
+    // already sorted and unique — no sort/dedup needed.
     selected
 }
 
@@ -358,8 +358,7 @@ pub fn block_select_entmax(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Ve
         }
     }
 
-    selected.sort();
-    selected.dedup();
+    // Monotonic k_block iteration keeps `selected` sorted & unique.
     selected
 }
 
@@ -381,6 +380,10 @@ pub fn block_select_grid(
     let mut idx_out = vec![-1i32; m * n * h];
     let mut cnt_out = vec![0i32; m * h];
 
+    // Pre-allocate scratch buffer once; `clear()` reuses capacity across (q, head)
+    // iterations instead of allocating a new Vec per inner loop.
+    let mut selected_buf: Vec<i32> = Vec::with_capacity(n);
+
     for q in 0..m {
         let last_full = q >= m.saturating_sub(cfg.last_n_full);
 
@@ -394,7 +397,7 @@ pub fn block_select_grid(
             }
             let thresh = max_score * cfg.alpha;
 
-            let mut selected = Vec::with_capacity(n);
+            selected_buf.clear();
             for k in 0..=q.min(n - 1) {
                 let keep = k < cfg.attention_sink
                     || q.abs_diff(k) < cfg.window
@@ -402,17 +405,16 @@ pub fn block_select_grid(
                     || score[q * n * h + k * h + head] >= thresh;
 
                 if keep {
-                    selected.push(k as i32);
+                    selected_buf.push(k as i32);
                 }
             }
 
-            selected.sort();
-
+            // selected_buf is already sorted (monotonic k).
             let idx_row = &mut idx_out[q * n * h + head..];
-            for (i, &sel) in selected.iter().enumerate() {
+            for (i, &sel) in selected_buf.iter().enumerate() {
                 idx_row[i * h] = sel;
             }
-            cnt_out[q * h + head] = selected.len() as i32;
+            cnt_out[q * h + head] = selected_buf.len() as i32;
         }
     }
 

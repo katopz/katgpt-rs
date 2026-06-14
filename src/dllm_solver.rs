@@ -671,9 +671,14 @@ pub fn compute_residual(
         if emb_end > wte.len() {
             break;
         }
-        for (k, &e) in wte[emb_start..emb_end].iter().enumerate() {
-            out[k] += p_j * e;
-        }
+        // Fused scale-accumulate: out[k] += p_j * wte[emb_start+k].
+        // SIMD-accelerated (NEON/AVX2) — replaces the scalar enumerate loop.
+        katgpt_core::simd::simd_fused_scale_acc(
+            &mut out[..n_embd],
+            &wte[emb_start..emb_end],
+            p_j,
+            n_embd,
+        );
     }
 }
 
@@ -721,19 +726,15 @@ pub fn compute_entropy_weights(
 
         let logits_p = &logits_flat[p * vocab_size..(p + 1) * vocab_size];
 
-        // Softmax into scratch
-        let max_l = logits_p.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        let mut sum_exp = 0.0f32;
-        for (i, &l) in logits_p.iter().enumerate() {
-            let e = (l - max_l).exp();
-            softmax_scratch[i] = e;
-            sum_exp += e;
-        }
+        // Softmax into scratch using SIMD primitives (replaces 3 scalar passes
+        // over the vocab-sized slice with vectorized NEON/AVX2 kernels).
+        let max_l = katgpt_core::simd::simd_max_f32(logits_p);
+        // Copy logits into scratch, subtract max, exp, and sum in fused passes.
+        softmax_scratch[..vocab_size].copy_from_slice(logits_p);
+        katgpt_core::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab_size], -max_l);
+        let sum_exp = katgpt_core::simd::simd_exp_sum_inplace(&mut softmax_scratch[..vocab_size]);
         if sum_exp > 0.0 {
-            let inv = 1.0 / sum_exp;
-            for v in softmax_scratch.iter_mut() {
-                *v *= inv;
-            }
+            katgpt_core::simd::simd_scale_inplace(&mut softmax_scratch[..vocab_size], 1.0 / sum_exp);
         }
 
         alphas[p] = normalized_entropy(softmax_scratch, log_vocab);

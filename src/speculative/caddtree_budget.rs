@@ -124,6 +124,32 @@ impl AcceptanceSurrogate {
         }
         total
     }
+
+    /// Same as `expected_accepted_length_at_budget` but takes pre-computed
+    /// per-depth `top1` probabilities, avoiding the O(vocab) `reduce(f32::max)`
+    /// scan on every call.
+    ///
+    /// Use this when evaluating multiple budgets over the same marginals
+    /// (e.g. greedy budget search) — pre-compute `top1` once, reuse for all B.
+    pub fn expected_accepted_length_at_budget_top1(
+        &self,
+        top1s: &[f32],
+        budget: usize,
+    ) -> f32 {
+        if top1s.is_empty() || budget == 0 {
+            return 0.0;
+        }
+        let mut cum_confidence = 1.0_f32;
+        let mut total = 0.0_f32;
+        for &top1 in top1s.iter() {
+            // P(at least one good branch) = 1 - (1 - top1)^B, capped at 1.0.
+            let effective_prob = 1.0 - (1.0 - top1).powi(budget as i32).min(1.0);
+            cum_confidence *= effective_prob;
+            let gate = sigmoid(self.confidence_k * (cum_confidence - self.confidence_threshold));
+            total += gate;
+        }
+        total
+    }
 }
 
 impl Default for AcceptanceSurrogate {
@@ -355,15 +381,27 @@ impl BudgetSelector {
             return fallback_budget.min(max_budget).max(self.min_budget);
         }
 
+        // Pre-compute top1 per depth ONCE and reuse across budget trials.
+        // Previously each throughput(B) call re-scanned every marginal to find
+        // its max — O(depth * vocab) per budget, O(B * depth * vocab) total.
+        // Now O(depth * vocab) once + O(depth) per budget trial.
+        let mut top1s: Vec<f32> = Vec::with_capacity(marginals.len());
+        for marg in marginals.iter() {
+            match marg.iter().copied().reduce(f32::max) {
+                Some(top1) => top1s.push(top1),
+                None => break,
+            }
+        }
+
         let lo = self.min_budget;
         let hi = max_budget.max(lo);
 
         // Greedy unimodal ascent: find first B where T(B+1) ≤ T(B).
         let mut best_b = lo;
-        let mut best_t = self.throughput(marginals, lo);
+        let mut best_t = self.throughput_top1(&top1s, lo);
 
         for b in (lo + 1)..=hi {
-            let t = self.throughput(marginals, b);
+            let t = self.throughput_top1(&top1s, b);
             if t > best_t {
                 best_t = t;
                 best_b = b;
@@ -374,6 +412,17 @@ impl BudgetSelector {
         }
 
         best_b
+    }
+
+    /// Throughput using pre-computed `top1` per depth. Avoids re-scanning
+    /// marginals on every budget trial inside `select_budget`.
+    fn throughput_top1(&self, top1s: &[f32], budget: usize) -> f64 {
+        let cost = self.latency.estimate_cost(budget);
+        if cost <= 0.0 {
+            return 0.0;
+        }
+        let accept_len = self.surrogate.expected_accepted_length_at_budget_top1(top1s, budget);
+        accept_len as f64 / cost
     }
 
     /// Get a reference to the latency estimator for updates.
