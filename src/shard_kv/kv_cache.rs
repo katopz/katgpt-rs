@@ -30,7 +30,7 @@
 
 use super::rope::RopeFreqs;
 use super::types::{ShardCalibration, ShardConfig, ShardLayer};
-use crate::simd::simd_scale_inplace;
+use crate::simd::{simd_scale_inplace, simd_sum_sq};
 use crate::spectralquant::spectral::{BitAllocator, LloydMaxQuantizer, waterfill_bits};
 use crate::spectralquant::spectral_rotation::SpectralRotation;
 use crate::spectralquant::types::LloydMaxCodebook;
@@ -797,16 +797,7 @@ impl crate::types::QuantizedKVCache for ShardKVCache {
 // ── Internal helpers ──────────────────────────────────────────────────
 
 fn simd_norm(v: &[f32]) -> f32 {
-    let mut sum = 0.0f32;
-    // Process in chunks of 4 to help auto-vectorization (most KV dims are multiples of 4).
-    let chunks = v.chunks_exact(4);
-    for c in chunks {
-        sum += c[0] * c[0] + c[1] * c[1] + c[2] * c[2] + c[3] * c[3];
-    }
-    for &x in v.chunks_exact(4).remainder() {
-        sum += x * x;
-    }
-    sum.sqrt()
+    simd_sum_sq(v, v.len()).sqrt()
 }
 
 /// In-place Walsh-Hadamard transform.
@@ -937,13 +928,14 @@ fn kmeans_fit(
 }
 
 /// Pack variable-bit indices into bytes (LSB-first).
+/// `bits_per_dim.len()` must be `>= indices.len()` (callers always pass a full-length array).
 fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
     out.clear();
     let mut bit_buffer = 0u64;
     let mut bits_in_buffer = 0u32;
 
     for (i, &idx) in indices.iter().enumerate() {
-        let bits = bits_per_dim.get(i).copied().unwrap_or(1) as u32;
+        let bits = bits_per_dim[i] as u32;
         bit_buffer |= (idx as u64) << bits_in_buffer;
         bits_in_buffer += bits;
 
@@ -959,13 +951,14 @@ fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
 }
 
 /// Unpack variable-bit indices from bytes (LSB-first).
+/// `bits_per_dim.len()` must be `>= n_dims` (callers always pass a full-length array).
 fn unpack_variable_bits(packed: &[u8], bits_per_dim: &[u8], n_dims: usize, out: &mut [u8]) {
     let mut bit_buffer = 0u64;
     let mut bits_in_buffer = 0u32;
     let mut byte_idx = 0;
 
     for (i, o) in out.iter_mut().enumerate().take(n_dims) {
-        let bits = bits_per_dim.get(i).copied().unwrap_or(1) as u32;
+        let bits = bits_per_dim[i] as u32;
         while bits_in_buffer < bits && byte_idx < packed.len() {
             bit_buffer |= (packed[byte_idx] as u64) << bits_in_buffer;
             bits_in_buffer += 8;

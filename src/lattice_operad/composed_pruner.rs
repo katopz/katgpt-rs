@@ -88,17 +88,24 @@ impl ConstraintPruner for ComposedPruner<'_> {
         results: &mut [bool],
     ) {
         let n = candidates.len().min(results.len());
-        let mut atom_batch = vec![vec![false; n]; self.pruners.len()];
-
-        for (pi, pruner) in self.pruners.iter().enumerate() {
-            pruner.batch_is_valid(depth, &candidates[..n], parent_tokens, &mut atom_batch[pi]);
+        let n_p = self.pruners.len();
+        if n == 0 || n_p == 0 {
+            return;
         }
 
-        // For each candidate, collect atom results and evaluate expression
-        let mut atom_results = vec![false; self.pruners.len()];
+        // Flat batch buffer: P×N bools in one allocation instead of P Vecs.
+        // Layout: atom_batch[pi * n + i] = result of pruner `pi` for candidate `i`.
+        let mut atom_batch = vec![false; n_p * n];
+        for (pi, pruner) in self.pruners.iter().enumerate() {
+            let row = &mut atom_batch[pi * n..pi * n + n];
+            pruner.batch_is_valid(depth, &candidates[..n], parent_tokens, row);
+        }
+
+        // Reused atom-result row for one candidate at a time.
+        let mut atom_results = vec![false; n_p];
         for i in 0..n {
-            for pi in 0..self.pruners.len() {
-                atom_results[pi] = atom_batch[pi][i];
+            for pi in 0..n_p {
+                atom_results[pi] = atom_batch[pi * n + i];
             }
             results[i] = matches!(self.expr.eval(&atom_results), PrunerResult::Accept);
         }

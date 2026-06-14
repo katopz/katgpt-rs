@@ -1637,18 +1637,18 @@ pub fn extract_best_path_into(tree: &[TreeNode], path: &mut Vec<usize>) {
         return;
     }
 
-    // Build depth index: O(N) single pass
-    let mut by_depth: HashMap<usize, Vec<&TreeNode>> = HashMap::new();
+    // Build depth index: O(N) single pass. Use Vec-of-Vecs indexed by depth
+    // (no hashing) — depths are dense in [0, max_depth] for DDTree output.
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut by_depth: Vec<Vec<&TreeNode>> = (0..=max_depth).map(|_| Vec::new()).collect();
     for node in tree.iter() {
-        by_depth.entry(node.depth).or_default().push(node);
+        by_depth[node.depth].push(node);
     }
 
-    let max_depth = *by_depth.keys().max().unwrap_or(&0);
     for depth in 0..=max_depth {
-        let best = match by_depth.get(&depth) {
-            Some(nodes) => nodes.iter().max_by_key(|n| (n.score * 1e6) as i64),
-            None => break,
-        };
+        let best = by_depth[depth]
+            .iter()
+            .max_by_key(|n| (n.score * 1e6) as i64);
         match best {
             Some(node) => path.push(node.token_idx),
             None => break,
@@ -1664,19 +1664,19 @@ pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
         return Vec::new();
     }
 
-    // Build depth index: O(N) single pass
-    let mut by_depth: HashMap<usize, Vec<&TreeNode>> = HashMap::new();
+    // Build depth index: O(N) single pass. Use Vec-of-Vecs indexed by depth
+    // (no hashing) — depths are dense in [0, max_depth] for DDTree output.
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut by_depth: Vec<Vec<&TreeNode>> = (0..=max_depth).map(|_| Vec::new()).collect();
     for node in tree.iter() {
-        by_depth.entry(node.depth).or_default().push(node);
+        by_depth[node.depth].push(node);
     }
 
-    let max_depth = *by_depth.keys().max().unwrap_or(&0);
     let mut path = Vec::with_capacity(max_depth + 1);
     for depth in 0..=max_depth {
-        let best = match by_depth.get(&depth) {
-            Some(nodes) => nodes.iter().max_by_key(|n| (n.score * 1e6) as i64),
-            None => break,
-        };
+        let best = by_depth[depth]
+            .iter()
+            .max_by_key(|n| (n.score * 1e6) as i64);
         match best {
             Some(node) => path.push(node.token_idx),
             None => break,
@@ -1900,6 +1900,11 @@ pub fn merge_retrieved_branches(
             continue;
         }
 
+        let sim_ln = similarity.ln();
+
+        // Incrementally reconstruct parent_path: shift 16 bits + token per depth.
+        // Avoids per-depth O(depth) fold over seq[..=depth] (was O(D²) per sequence).
+        let mut parent_path: u128 = 0;
         for (depth, &token_idx) in seq.iter().enumerate() {
             if depth >= marginals.len() {
                 break;
@@ -1910,22 +1915,23 @@ pub fn merge_retrieved_branches(
 
             let base_prob = marginals[depth].get(token_idx).copied().unwrap_or(0.0);
             if base_prob <= 0.0 {
+                // Still advance parent_path so deeper tokens reconstruct the
+                // same path the original fold would have produced.
+                parent_path = if depth == 0 {
+                    token_idx as u128
+                } else {
+                    (parent_path << 16) | (token_idx as u128)
+                };
                 continue;
             }
 
-            let blended = (base_prob.ln() * inv_weight) + (similarity.ln() * rest_weight);
+            let blended = (base_prob.ln() * inv_weight) + (sim_ln * rest_weight);
 
-            // Reconstruct parent_path from sequence prefix up to current depth
-            let parent_path = seq[..=depth]
-                .iter()
-                .enumerate()
-                .fold(0u128, |acc, (d, &t)| {
-                    if d == 0 {
-                        t as u128
-                    } else {
-                        (acc << 16) | (t as u128)
-                    }
-                });
+            parent_path = if depth == 0 {
+                token_idx as u128
+            } else {
+                (parent_path << 16) | (token_idx as u128)
+            };
 
             tree.push(TreeNode {
                 score: blended,
@@ -3486,9 +3492,11 @@ impl TreeBuilder {
                     &mut self.parent_tokens_buf,
                 );
 
-                // RecFM: compute velocity from parent depth to this child depth
-                let parent_marginal = marginals[best.depth];
+                // RecFM: child velocity does not depend on token index `i` —
+                // it's a property of the (parent_depth, child_depth) marginal
+                // transition. Compute once, was per-token (O(V²) per expansion).
                 let child_marginal = marginals[next_depth];
+                let parent_marginal = marginals[best.depth];
                 let parent_velocity = branch_velocity_at(
                     best.depth,
                     parent_marginal,
@@ -3498,6 +3506,8 @@ impl TreeBuilder {
                         &[]
                     },
                 );
+                let child_velocity =
+                    branch_velocity_at(next_depth, child_marginal, parent_marginal);
 
                 for (i, &prob) in child_marginal.iter().enumerate() {
                     if prob <= 0.0 {
@@ -3509,8 +3519,6 @@ impl TreeBuilder {
                     }
 
                     // RecFM cross-scale consistency check for expansion branches
-                    let child_velocity =
-                        branch_velocity_at(next_depth, child_marginal, parent_marginal);
                     if !cross_scale_consistent(
                         parent_velocity,
                         child_velocity,

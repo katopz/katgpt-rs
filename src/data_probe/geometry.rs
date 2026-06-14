@@ -96,13 +96,15 @@ pub fn effective_rank(hidden_states: &[Vec<f32>]) -> f32 {
     if total < 1e-15 {
         return 0.0;
     }
-    let normalized: Vec<f64> = eigenvalues.iter().map(|&v| v / total).collect();
+    let inv_total = 1.0 / total;
 
-    // 6. Effective rank = exp(-Σ λ_i * log(λ_i)).
-    let entropy: f64 = normalized
+    // 6. Effective rank = exp(-Σ λ_i * log(λ_i)) — fused with normalization
+    // to avoid allocating an intermediate Vec.
+    let entropy: f64 = eigenvalues
         .iter()
-        .filter(|&&v| v > 1e-15)
-        .map(|&v| -v * v.ln())
+        .map(|&v| v * inv_total)
+        .filter(|&v| v > 1e-15)
+        .map(|v| -v * v.ln())
         .sum();
 
     entropy.exp() as f32

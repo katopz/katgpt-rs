@@ -187,7 +187,7 @@ pub fn build_hop_dd_tree(marginals: &[HopMarginal], config: &HopTreeConfig) -> V
         return Vec::new();
     }
 
-    let mut heap: BinaryHeap<HopTreeNode> = BinaryHeap::new();
+    let mut heap: BinaryHeap<HopTreeNode> = BinaryHeap::with_capacity(config.tree_budget);
     let mut tree: Vec<HopTreeNode> = Vec::with_capacity(config.tree_budget);
 
     // ── Chain seed: build greedy backbone first ────────────────
@@ -375,7 +375,7 @@ pub fn build_hop_dd_tree_with_schedule(
         })
         .collect();
 
-    let mut heap: BinaryHeap<HopTreeNode> = BinaryHeap::new();
+    let mut heap: BinaryHeap<HopTreeNode> = BinaryHeap::with_capacity(config.tree_budget);
     let mut tree: Vec<HopTreeNode> = Vec::with_capacity(config.tree_budget);
 
     // ── Chain seed with relaxed intermediate floors ──────────

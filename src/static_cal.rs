@@ -90,37 +90,33 @@ impl StaticCalTable {
     /// than per-element `update()` calls — lets BLAKE3's internal buffer absorb
     /// a large chunk in one go (fewer merge rounds).
     pub fn commit(&mut self) {
-        let mut hasher = blake3::Hasher::new();
-        // SAFETY: `[f32]` and `[u8]` have no padding on supported targets
-        // (f32 is 4 bytes, alignment 4; u8 alignment 1). We hash little-endian
-        // representation; on big-endian targets this would differ from
-        // `to_le_bytes()` per-element, but the project targets little-endian
-        // platforms (aarch64-apple, x86_64) and BLAKE3 commitment is only
-        // verified against commitments produced by the same build.
-        let bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                self.scales.as_ptr() as *const u8,
-                self.scales.len() * std::mem::size_of::<f32>(),
-            )
-        };
-        hasher.update(bytes);
-        self.commitment = hasher.finalize().into();
+        self.commitment = hash_scales(&self.scales);
     }
 
     /// Verify BLAKE3 commitment matches current scales.
     pub fn verify(&self) -> bool {
-        let mut hasher = blake3::Hasher::new();
-        // Same single-slice strategy as `commit()` for consistency.
-        let bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                self.scales.as_ptr() as *const u8,
-                self.scales.len() * std::mem::size_of::<f32>(),
-            )
-        };
-        hasher.update(bytes);
-        let expected: [u8; 32] = hasher.finalize().into();
-        self.commitment == expected
+        hash_scales(&self.scales) == self.commitment
     }
+}
+
+/// Hash `scales` with BLAKE3 as a contiguous byte slice.
+///
+/// SAFETY: `[f32]` and `[u8]` have no padding on supported targets
+/// (f32 is 4 bytes, alignment 4; u8 alignment 1). We hash little-endian
+/// representation; on big-endian targets this would differ from
+/// `to_le_bytes()` per-element, but the project targets little-endian
+/// platforms (aarch64-apple, x86_64) and BLAKE3 commitment is only
+/// verified against commitments produced by the same build.
+fn hash_scales(scales: &[f32]) -> [u8; 32] {
+    let mut hasher = blake3::Hasher::new();
+    let bytes: &[u8] = unsafe {
+        std::slice::from_raw_parts(
+            scales.as_ptr() as *const u8,
+            scales.len() * std::mem::size_of::<f32>(),
+        )
+    };
+    hasher.update(bytes);
+    hasher.finalize().into()
 }
 
 /// Per-head activation statistics collected during calibration pass.

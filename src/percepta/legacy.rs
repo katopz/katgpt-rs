@@ -329,7 +329,9 @@ impl Sudoku9x9 {
                 match self.grid[r][c] {
                     0 => s.push_str(". "),
                     d => {
-                        s.push_str(&format!("{d} "));
+                        // '1'..='9' correspond to ASCII 49..=57.
+                        s.push((b'0' + d) as char);
+                        s.push(' ');
                     }
                 }
             }
@@ -637,6 +639,12 @@ impl StreamingSolver {
         let mut prev_filled = 0usize;
         let mut shown_count = 0usize;
 
+        // Pre-size output buffer: each shown event is ~50 chars.
+        out.reserve(shown_indices.len() * 64);
+
+        // write!/writeln! into a String never returns Err.
+        use std::fmt::Write as _;
+
         for &idx in &shown_indices {
             let (row, col, digit, filled, _seq) = accepted_events[idx];
             shown_count += 1;
@@ -645,27 +653,25 @@ impl StreamingSolver {
             if filled < prev_filled && shown_count > 1 {
                 let drop = prev_filled - filled;
                 if drop >= 3 {
-                    out.push_str(&format!(
-                        "Undoing row {} col {}. Going back up.\n",
+                    let _ = writeln!(
+                        out,
+                        "Undoing row {} col {}. Going back up.",
                         row + 1,
                         col + 1,
-                    ));
+                    );
                 } else {
-                    out.push_str(&format!(
-                        "Trying another path at row {}, col {}.\n",
+                    let _ = writeln!(
+                        out,
+                        "Trying another path at row {}, col {}.",
                         row + 1,
                         col + 1,
-                    ));
+                    );
                 }
             }
 
-            out.push_str(&format!(
-                "Trying {digit} at row {}, col {}.\n",
-                row + 1,
-                col + 1,
-            ));
+            let _ = writeln!(out, "Trying {digit} at row {}, col {}.", row + 1, col + 1);
             let phrase = OK_PHRASES[shown_count % OK_PHRASES.len()];
-            out.push_str(&format!("{phrase} ({filled}/81 resolved)\n"));
+            let _ = writeln!(out, "{phrase} ({filled}/81 resolved)");
             prev_filled = filled;
         }
 
@@ -678,11 +684,12 @@ impl StreamingSolver {
             } = event
             {
                 let ratio = *total_trace as f64 / *hull_size as f64;
-                out.push_str(&format!(
+                let _ = writeln!(
+                    out,
                     "\n✅ Solved in {steps} steps!\n\
                      Hull compression: {hull_size} vertices \
-                     from {total_trace} trace entries ({ratio:.1}x)\n"
-                ));
+                     from {total_trace} trace entries ({ratio:.1}x)"
+                );
             }
         }
 

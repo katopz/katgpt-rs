@@ -527,7 +527,8 @@ fn compile_function(
     }
     let num_imports = func_import_idx;
 
-    let mut entries: Vec<DispatchEntry> = Vec::new();
+    // Pre-allocate: worst case each instruction emits a few dispatch entries.
+    let mut entries: Vec<DispatchEntry> = Vec::with_capacity(func.instructions.len() * 2);
     let mut label_stack: Vec<LabelFrame> = Vec::new();
 
     for instr in &func.instructions {
@@ -852,13 +853,17 @@ fn compute_input_base(module: &WasmModule) -> Result<i32, CompileError> {
 
 /// Adjust branch targets in a compiled function body by adding an offset.
 fn adjust_branches(body: &[DispatchEntry], offset: usize) -> Vec<DispatchEntry> {
+    let off = offset as i32;
     body.iter()
         .map(|(op, imm)| {
-            if op == "br" || op == "br_if" {
-                (op.clone(), imm + offset as i32)
+            // Branch-only opcodes get the offset added; everything else is unchanged.
+            let new_imm = if op == "br" || op == "br_if" {
+                *imm + off
             } else {
-                (op.clone(), *imm)
-            }
+                *imm
+            };
+            // Clone once per entry — `op` is the only heap-allocated part.
+            (op.clone(), new_imm)
         })
         .collect()
 }
@@ -914,11 +919,11 @@ fn build_program(module: &WasmModule) -> Result<(Vec<DispatchEntry>, i32), Compi
         prologue.push(("local.set".to_string(), k as i32));
     }
 
-    // Part 2: memory initialization (globals + data segments, skip zeros)
+    // Part 2: memory-initialization (globals + data segments, skip zeros)
     let mut initial_memory: BTreeMap<i32, u8> = BTreeMap::new();
 
-    // Find which globals are actually used
-    let mut used_globals: HashSet<usize> = HashSet::new();
+    // Find which globals are actually used (pre-size to global count)
+    let mut used_globals: HashSet<usize> = HashSet::with_capacity(module.globals.len());
     for fn_body in &module.functions {
         for ins in &fn_body.instructions {
             if ins.opcode == OP_GLOBAL_GET || ins.opcode == OP_GLOBAL_SET {
@@ -1021,50 +1026,60 @@ fn build_program(module: &WasmModule) -> Result<(Vec<DispatchEntry>, i32), Compi
 
 /// Convert dispatch table to token prefix string with `{` `}` delimiters.
 pub fn format_prefix(program: &[DispatchEntry]) -> String {
-    let mut lines = vec!["{".to_string()];
+    // Worst case: each entry is op_name + space + 8-char hex + 3 separators ≈ 32 bytes.
+    let mut out = String::with_capacity(program.len() * 32 + 4);
+    out.push('{');
+    out.push('\n');
     for (op, imm) in program {
         let bytes = int_to_bytes(*imm as i64);
-        let hex_bytes: Vec<String> = bytes.iter().map(|b| format!("{b:02x}")).collect();
-        lines.push(format!("{op} {}", hex_bytes.join(" ")));
+        // Inline write avoids allocating an intermediate Vec<String>.
+        use std::fmt::Write as _;
+        let _ = write!(out, "{op} {:02x} {:02x} {:02x} {:02x}\n", bytes[0], bytes[1], bytes[2], bytes[3]);
     }
-    lines.push("}".to_string());
-    lines.join("\n") + "\n"
+    out.push('}');
+    out.push('\n');
+    out
 }
 
 /// Format input bytes + commit token for appending after the program.
 pub fn format_input_section(input_str: &str) -> String {
     let data = input_str.as_bytes();
-    let mut tokens: Vec<String> = Vec::with_capacity(data.len() + 2);
+    // Worst case: 2 chars per byte + separators + commit token.
+    let mut out = String::with_capacity(data.len() * 3 + 24);
 
     for &b in data {
         if (0x20..0x7F).contains(&b) && b != b'{' && b != b'}' {
-            tokens.push(String::from(b as char));
+            out.push(b as char);
         } else {
-            tokens.push(format!("{b:02x}"));
+            use std::fmt::Write as _;
+            let _ = write!(out, "{b:02x}");
         }
+        out.push(' ');
     }
-    // Null terminator
-    tokens.push("00".to_string());
-    tokens.push("commit(+0,sts=0,bt=0)".to_string());
-    tokens.join(" ") + "\n"
+    // Null terminator + commit token.
+    out.push_str("00 commit(+0,sts=0,bt=0)\n");
+    out
 }
 
 /// Format the specialized model input (start + optional input tokens).
 pub fn format_spec_input(input_str: &str) -> String {
-    let mut tokens = vec!["start".to_string()];
+    let mut out = String::with_capacity(input_str.len() * 3 + 16);
+    out.push_str("start");
     if !input_str.is_empty() {
         let data = input_str.as_bytes();
         for &b in data {
+            out.push(' ');
             if (0x20..0x7F).contains(&b) && b != b'{' && b != b'}' {
-                tokens.push(String::from(b as char));
+                out.push(b as char);
             } else {
-                tokens.push(format!("{b:02x}"));
+                use std::fmt::Write as _;
+                let _ = write!(out, "{b:02x}");
             }
         }
-        tokens.push("00".to_string());
-        tokens.push("commit(+0,sts=0,bt=0)".to_string());
+        out.push_str(" 00 commit(+0,sts=0,bt=0)");
     }
-    tokens.join(" ") + "\n"
+    out.push('\n');
+    out
 }
 
 // ── Pipeline ──────────────────────────────────────────────────

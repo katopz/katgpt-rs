@@ -148,18 +148,31 @@ impl AlignedWeightMatrix {
 
             // Decode ternary bits into the destination row slice directly.
             // Branch-free inner: compute `val = sign * scale` where sign ∈ {-1, 0, +1}.
+            //
+            // We walk one 64-bit block at a time, draining the block bit-by-bit
+            // via `>>= 1`. This avoids the per-element `1u64 << (c & 63)` shift
+            // and the per-element `idx = row_base + (c >> 6)` recomputation —
+            // both of which LLVM rarely hoists cleanly across the bounds-checked
+            // load. Bit order is LSB-first, matching the original
+            // `bit = 1u64 << (c & 63)` indexing.
             let row_dst = &mut data[write_pos..write_pos + cols];
-            for c in 0..cols {
-                let block = c >> 6;
-                let bit = 1u64 << (c & 63);
-                let idx = row_base + block;
-                let pos = unsafe { *pos_bits.get_unchecked(idx) } & bit != 0;
-                let neg = unsafe { *neg_bits.get_unchecked(idx) } & bit != 0;
-                let sign = (pos as i32) - (neg as i32);
-                // sign ∈ {-1, 0, +1}; multiply by scale once.
-                unsafe {
-                    *row_dst.get_unchecked_mut(c) = (sign as f32) * scale;
-                };
+            let mut c = 0usize;
+            for block in 0..blocks64 {
+                let mut pos_w = unsafe { *pos_bits.get_unchecked(row_base + block) };
+                let mut neg_w = unsafe { *neg_bits.get_unchecked(row_base + block) };
+                let block_end = (c + 64).min(cols);
+                while c < block_end {
+                    let pos = pos_w & 1 != 0;
+                    let neg = neg_w & 1 != 0;
+                    pos_w >>= 1;
+                    neg_w >>= 1;
+                    let sign = (pos as i32) - (neg as i32);
+                    // sign ∈ {-1, 0, +1}; multiply by scale once.
+                    unsafe {
+                        *row_dst.get_unchecked_mut(c) = (sign as f32) * scale;
+                    }
+                    c += 1;
+                }
             }
 
             // Zero-pad the tail of this row in one shot.

@@ -133,7 +133,7 @@ pub struct KVarNKVCache {
     val_buffer: Vec<f32>,
     // ── Scratch buffers for zero-alloc hot path ──
     /// Scratch for tile operations: [tile_rows * tile_cols].
-    #[allow(dead_code)] // reserved for future SIMD tile ops
+    /// Reused by quantize_key_tile / quantize_val_tile to avoid per-tile allocation.
     scratch_tile: Vec<f32>,
     /// Scratch for batch-unpacked u32 values (reused across dequant calls).
     scratch_unpack: Vec<u32>,
@@ -579,83 +579,90 @@ impl KVarNKVCache {
     fn quantize_key_tile(&mut self, layer: usize, tile_idx: usize, count: usize) {
         let rows = self.kv_dim;
         let cols = count.min(self.tile_size);
-
-        // Copy buffer to scratch
         let tile_size = self.tile_size;
-        let mut tile_data = vec![0.0f32; rows * cols];
-        for ch in 0..rows {
-            for t in 0..cols {
-                tile_data[ch * cols + t] = self.key_buffer[ch * tile_size + t];
-            }
-        }
 
-        // Hadamard rotation per-tile on channel dimension:
-        //   Key tile [kv_dim, tile_size]: Hadamard each column (= each position's channels)
-        //   This is equivalent to per-position Hadamard on kv_dim, but batched at tile time.
-        if self.effective_hadamard && rows.is_power_of_two() {
-            hadamard::hadamard_cols(&mut tile_data, rows, cols);
-        }
+        // Reuse the pre-allocated scratch_tile buffer (kv_dim * tile_size floats).
+        // Drop the mutable borrow before writing back to storage fields.
+        let (var_scales, rtn_scales, rtn_zp, packed, bits) = {
+            let tile_data = &mut self.scratch_tile[..rows * cols];
 
-        // Step 1: Variance normalization
-        //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
-        #[cfg(feature = "static_cal_tables")]
-        let var_scales = if let Some(ref cal) = self.static_cal {
-            // Use static per-head scales instead of iterative Sinkhorn
-            let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
-            // Apply static scales to tile
+            // Strided copy: key_buffer is [kv_dim, tile_size] row-major; compact to [rows, cols].
             for ch in 0..rows {
-                let scale = s_row[ch];
-                for t in 0..cols {
-                    tile_data[ch * cols + t] /= scale;
+                let src = &self.key_buffer[ch * tile_size..ch * tile_size + cols];
+                let dst = &mut tile_data[ch * cols..ch * cols + cols];
+                dst.copy_from_slice(src);
+            }
+
+            // Hadamard rotation per-tile on channel dimension:
+            //   Key tile [kv_dim, tile_size]: Hadamard each column (= each position's channels)
+            //   This is equivalent to per-position Hadamard on kv_dim, but batched at tile time.
+            if self.effective_hadamard && rows.is_power_of_two() {
+                hadamard::hadamard_cols(tile_data, rows, cols);
+            }
+
+            // Step 1: Variance normalization
+            //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
+            #[cfg(feature = "static_cal_tables")]
+            let var_scales = if let Some(ref cal) = self.static_cal {
+                // Use static per-head scales instead of iterative Sinkhorn
+                let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
+                // Apply static scales to tile
+                for ch in 0..rows {
+                    let scale = s_row[ch];
+                    for t in 0..cols {
+                        tile_data[ch * cols + t] /= scale;
+                    }
                 }
-            }
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row,
-            }
-        } else if self.skip_varn {
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row: vec![1.0f32; rows],
-            }
-        } else {
-            let config = VarNormConfig {
-                tile_size: self.tile_size,
-                ..Default::default()
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row,
+                }
+            } else if self.skip_varn {
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row: vec![1.0f32; rows],
+                }
+            } else {
+                let config = VarNormConfig {
+                    tile_size: self.tile_size,
+                    ..Default::default()
+                };
+                variance_normalize(tile_data, rows, cols, &config)
             };
-            variance_normalize(&mut tile_data, rows, cols, &config)
-        };
 
-        #[cfg(not(feature = "static_cal_tables"))]
-        let var_scales = if self.skip_varn {
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row: vec![1.0f32; rows],
-            }
-        } else {
-            let config = VarNormConfig {
-                tile_size: self.tile_size,
-                ..Default::default()
+            #[cfg(not(feature = "static_cal_tables"))]
+            let var_scales = if self.skip_varn {
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row: vec![1.0f32; rows],
+                }
+            } else {
+                let config = VarNormConfig {
+                    tile_size: self.tile_size,
+                    ..Default::default()
+                };
+                variance_normalize(tile_data, rows, cols, &config)
             };
-            variance_normalize(&mut tile_data, rows, cols, &config)
-        };
 
-        // Step 2: RTN quantization
-        //   Targeted precision: use budget-allocated bits (Plan 227 Phase 2)
-        #[cfg(feature = "targeted_precision")]
-        let bits = if let Some(ref budget) = self.precision_budget {
-            budget.budget.ceil() as u8 // use ceiling to avoid precision loss
-        } else {
-            self.bits
-        };
+            // Step 2: RTN quantization
+            //   Targeted precision: use budget-allocated bits (Plan 227 Phase 2)
+            #[cfg(feature = "targeted_precision")]
+            let bits = if let Some(ref budget) = self.precision_budget {
+                budget.budget.ceil() as u8 // use ceiling to avoid precision loss
+            } else {
+                self.bits
+            };
 
-        #[cfg(not(feature = "targeted_precision"))]
-        let bits = self.bits;
+            #[cfg(not(feature = "targeted_precision"))]
+            let bits = self.bits;
 
-        let (rtn_scales, rtn_zp, packed) = if self.group_size > 0 {
-            rtn_quantize_rows_grouped(&tile_data, rows, cols, bits, self.group_size)
-        } else {
-            rtn_quantize_rows(&tile_data, rows, cols, bits)
+            let (rtn_scales, rtn_zp, packed) = if self.group_size > 0 {
+                rtn_quantize_rows_grouped(tile_data, rows, cols, bits, self.group_size)
+            } else {
+                rtn_quantize_rows(tile_data, rows, cols, bits)
+            };
+
+            (var_scales, rtn_scales, rtn_zp, packed, bits)
         };
 
         // Store
@@ -679,76 +686,82 @@ impl KVarNKVCache {
         let rows = count.min(self.tile_size);
         let cols = self.kv_dim;
 
-        // Copy buffer to scratch
-        let mut tile_data = vec![0.0f32; rows * cols];
-        let off = 0;
-        tile_data[off..off + rows * cols].copy_from_slice(&self.val_buffer[off..off + rows * cols]);
+        // Reuse the pre-allocated scratch_tile buffer (tile_size * kv_dim floats).
+        // Drop the mutable borrow before writing back to storage fields.
+        let (var_scales, rtn_scales, rtn_zp, packed, bits) = {
+            let tile_data = &mut self.scratch_tile[..rows * cols];
 
-        // Hadamard rotation per-tile (clustered across channels per token)
-        if self.effective_hadamard && cols.is_power_of_two() {
-            hadamard::hadamard_rows(&mut tile_data, cols);
-        }
+            // val_buffer is already [tile_size, kv_dim] row-major contiguous; copy directly.
+            tile_data.copy_from_slice(&self.val_buffer[..rows * cols]);
 
-        // Step 1: Variance normalization
-        //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
-        #[cfg(feature = "static_cal_tables")]
-        let var_scales = if let Some(ref cal) = self.static_cal {
-            // Use static per-head scales instead of iterative Sinkhorn
-            let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
-            // Apply static scales to tile
-            for ch in 0..rows {
-                let scale = s_row[ch];
-                for t in 0..cols {
-                    tile_data[ch * cols + t] /= scale;
+            // Hadamard rotation per-tile (clustered across channels per token)
+            if self.effective_hadamard && cols.is_power_of_two() {
+                hadamard::hadamard_rows(tile_data, cols);
+            }
+
+            // Step 1: Variance normalization
+            //   Static cal tables: O(1) lookup replaces Sinkhorn iterations (Plan 227 Phase 1)
+            #[cfg(feature = "static_cal_tables")]
+            let var_scales = if let Some(ref cal) = self.static_cal {
+                // Use static per-head scales instead of iterative Sinkhorn
+                let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
+                // Apply static scales to tile
+                for ch in 0..rows {
+                    let scale = s_row[ch];
+                    for t in 0..cols {
+                        tile_data[ch * cols + t] /= scale;
+                    }
                 }
-            }
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row,
-            }
-        } else if self.skip_varn {
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row: vec![1.0f32; rows],
-            }
-        } else {
-            let config = VarNormConfig {
-                tile_size: self.tile_size,
-                ..Default::default()
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row,
+                }
+            } else if self.skip_varn {
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row: vec![1.0f32; rows],
+                }
+            } else {
+                let config = VarNormConfig {
+                    tile_size: self.tile_size,
+                    ..Default::default()
+                };
+                variance_normalize(tile_data, rows, cols, &config)
             };
-            variance_normalize(&mut tile_data, rows, cols, &config)
-        };
 
-        #[cfg(not(feature = "static_cal_tables"))]
-        let var_scales = if self.skip_varn {
-            VarianceNormScales {
-                s_col: vec![1.0f32; cols],
-                s_row: vec![1.0f32; rows],
-            }
-        } else {
-            let config = VarNormConfig {
-                tile_size: self.tile_size,
-                ..Default::default()
+            #[cfg(not(feature = "static_cal_tables"))]
+            let var_scales = if self.skip_varn {
+                VarianceNormScales {
+                    s_col: vec![1.0f32; cols],
+                    s_row: vec![1.0f32; rows],
+                }
+            } else {
+                let config = VarNormConfig {
+                    tile_size: self.tile_size,
+                    ..Default::default()
+                };
+                variance_normalize(tile_data, rows, cols, &config)
             };
-            variance_normalize(&mut tile_data, rows, cols, &config)
-        };
 
-        // Step 2: RTN quantization
-        //   Targeted precision: use budget-allocated bits (Plan 227 Phase 2)
-        #[cfg(feature = "targeted_precision")]
-        let bits = if let Some(ref budget) = self.precision_budget {
-            budget.budget.ceil() as u8
-        } else {
-            self.bits
-        };
+            // Step 2: RTN quantization
+            //   Targeted precision: use budget-allocated bits (Plan 227 Phase 2)
+            #[cfg(feature = "targeted_precision")]
+            let bits = if let Some(ref budget) = self.precision_budget {
+                budget.budget.ceil() as u8
+            } else {
+                self.bits
+            };
 
-        #[cfg(not(feature = "targeted_precision"))]
-        let bits = self.bits;
+            #[cfg(not(feature = "targeted_precision"))]
+            let bits = self.bits;
 
-        let (rtn_scales, rtn_zp, packed) = if self.group_size > 0 {
-            rtn_quantize_rows_grouped(&tile_data, rows, cols, bits, self.group_size)
-        } else {
-            rtn_quantize_rows(&tile_data, rows, cols, bits)
+            let (rtn_scales, rtn_zp, packed) = if self.group_size > 0 {
+                rtn_quantize_rows_grouped(tile_data, rows, cols, bits, self.group_size)
+            } else {
+                rtn_quantize_rows(tile_data, rows, cols, bits)
+            };
+
+            (var_scales, rtn_scales, rtn_zp, packed, bits)
         };
 
         let bpr = packed_bytes_per_row(cols, bits);

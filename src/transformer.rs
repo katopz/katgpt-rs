@@ -2082,13 +2082,12 @@ fn depth_route(
     let sum_exp = crate::simd::simd_sum_f32(&logits_buf[..n_sources]);
     let inv_sum = 1.0 / sum_exp;
 
-    // 3. Weighted sum of sources, added to residual (additive routing)
-    //    For each source: scale into scratch buf then SIMD-accumulate into residual
+    // 3. Weighted sum of sources, added to residual (additive routing).
+    //    Fused into a single SIMD pass: residual[i] += src[i] * weight.
+    //    Eliminates the scaled_buf copy + separate scale + add passes.
     for (i, &src) in sources.iter().enumerate() {
         let weight = logits_buf[i] * inv_sum;
-        scaled_buf[..n_embd].copy_from_slice(&src[..n_embd]);
-        crate::simd::simd_scale_inplace(&mut scaled_buf[..n_embd], weight);
-        crate::simd::simd_add_inplace(&mut residual[..n_embd], &scaled_buf[..n_embd]);
+        crate::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
     }
 }
 
@@ -2156,14 +2155,13 @@ fn depth_route_with_indices(args: DepthRouteIndicesArgs<'_>) {
     let sum_exp = crate::simd::simd_sum_f32(&logits_buf[..n_sources]);
     let inv_sum = 1.0 / sum_exp;
 
-    // 3. Weighted sum of sources, added to residual (additive routing)
-    //    For each source: scale into scratch buf then SIMD-accumulate into residual
+    // 3. Weighted sum of sources, added to residual (additive routing).
+    //    Fused into a single SIMD pass: residual[i] += src[i] * weight.
+    //    Eliminates the scaled_buf copy + separate scale + add passes.
     for (i, &src_idx) in source_indices.iter().enumerate() {
         let src = &block_deltas[src_idx];
         let weight = logits_buf[i] * inv_sum;
-        scaled_buf[..n_embd].copy_from_slice(&src[..n_embd]);
-        crate::simd::simd_scale_inplace(&mut scaled_buf[..n_embd], weight);
-        crate::simd::simd_add_inplace(&mut residual[..n_embd], &scaled_buf[..n_embd]);
+        crate::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
     }
 }
 

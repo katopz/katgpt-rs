@@ -21,6 +21,7 @@
 /// Exponents from Magakyan et al. Figure 16, fitted on 77M-2.8B GPT-2 models.
 /// R² > 0.98 for all layer types.
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[repr(u8)]
 pub enum LayerType {
     AttentionQ,
     AttentionK,
@@ -239,21 +240,20 @@ impl SpectralBudgetConfig {
 ///
 /// Calibrated from the paper's data at M=2800:
 ///   For α=-0.25: σ_0.5(2800) ≈ 5e-3
-///   c = 5e-3 / 2800^(-0.25) ≈ 5e-3 / 0.0723 ≈ 0.069
+///   c = 5e-3 / 2800^(-0.25) ≈ 5e-3 / 0.13748 ≈ 0.03637
 ///
-/// So σ_0.5(M) ≈ 0.069 · M^(-|α|)
+/// So σ_0.5(M) ≈ 0.03637 · M^(-|α|)
 #[inline]
 fn predict_median_sv(alpha: f32, model_size_m: usize) -> f32 {
-    // Calibration coefficient from mid-layer data at 2.8B
-    const CALIB_SIGMA: f32 = 5e-3;
-    const CALIB_SIZE: f32 = 2800.0;
-    let calib_alpha = -0.25;
-
-    // c = CALIB_SIGMA / CALIB_SIZE^calib_alpha
-    let c = CALIB_SIGMA / CALIB_SIZE.powf(calib_alpha);
+    // Calibration coefficient from mid-layer data at 2.8B.
+    // c = CALIB_SIGMA / CALIB_SIZE^calib_alpha  — a pure constant, hoisted out
+    // of the per-layer loop so `powf` runs only once at compile time, not per layer.
+    // Pre-computed: 5e-3 / 2800f32.powf(-0.25) ≈ 0.03637136 (powf is not const fn,
+    // so the literal is evaluated once here instead of per call).
+    const CALIB_C: f32 = 0.03637136;
 
     // σ(M) = c · M^alpha
-    c * (model_size_m as f32).powf(alpha)
+    CALIB_C * (model_size_m as f32).powf(alpha)
 }
 
 // ── Spectral LOD ────────────────────────────────────────────────
@@ -262,6 +262,7 @@ fn predict_median_sv(alpha: f32, model_size_m: usize) -> f32 {
 ///
 /// Combines with SLoD (Semantic LOD) for compute routing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum SpectralLod {
     /// Simple terrain — mid-early/mid layers, α ≈ -0.25
     /// 5-step NS, minimal compute

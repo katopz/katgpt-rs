@@ -59,10 +59,20 @@ pub struct AneNpcBrainBackend {
     max_batch_size: usize,
     /// Discovered name of the sense projection output (`[B, MAX_MODULES]`).
     ///
-    /// CoreML `ct.convert()` auto-names outputs (`mul_0`, `sigmoid_1`, ...),
+    /// CoreML `ct.convert()` auto names outputs (`mul_0`, `sigmoid_1`, ...),
     /// so we discover the name at construction by inspecting `model.outputs()`
     /// rather than hardcoding it.
     sense_output_name: String,
+    /// Reusable padded-input buffer (sized to max_batch_size).
+    /// Eliminates per-call Vec allocation when batch < max_batch_size.
+    padded_inputs: Vec<NpcBrainInput>,
+    /// Reusable encoded tensor scratch buffers.
+    /// Avoids 5 heap allocations per batch_evaluate() call.
+    scratch_sense_weights: Vec<f32>,
+    scratch_hla_state: Vec<f32>,
+    scratch_emotion_dir: Vec<f32>,
+    scratch_zone_dir: Vec<f32>,
+    scratch_confidence: Vec<f32>,
 }
 
 /// Error type for ANE NPC brain backend operations.
@@ -160,6 +170,12 @@ impl AneNpcBrainBackend {
             model,
             max_batch_size: model_batch,
             sense_output_name,
+            padded_inputs: vec![NpcBrainInput::default(); model_batch],
+            scratch_sense_weights: vec![0.0f32; model_batch * MAX_MODULES * HLA_DIM],
+            scratch_hla_state: vec![0.0f32; model_batch * HLA_DIM],
+            scratch_emotion_dir: vec![0.0f32; model_batch * HLA_DIM],
+            scratch_zone_dir: vec![0.0f32; model_batch * HLA_DIM],
+            scratch_confidence: vec![0.0f32; model_batch * MAX_MODULES],
         };
 
         // Validate ANE residency at the model's compiled batch size
@@ -297,27 +313,37 @@ impl AneNpcBrainBackend {
     }
 }
 
-/// Encode all NPC brain inputs into CoreML batch tensors.
+/// Encode all NPC brain inputs into CoreML batch tensors, writing into
+/// caller-provided scratch buffers (zero per-call allocation).
 ///
-/// Returns `(sense_weights, hla_state, emotion_dir, zone_dir, confidence)` tensors,
-/// all flattened in row-major order with shapes matching the CoreML model inputs.
+/// Writes sense_weights `[B, MAX_MODULES, HLA_DIM]`, hla_state `[B, HLA_DIM]`,
+/// emotion_dir `[B, HLA_DIM]`, zone_dir `[B, HLA_DIM]`, and confidence
+/// `[B, MAX_MODULES]` in row-major order.
 ///
 /// `sense_weights[m][i]` encodes the DIAGONAL ternary projection (matches
 /// `SenseModule::project`): direction `i` contributes `sign_i * row_scale`
 /// at hla dim `i`, where `sign_i` is extracted from bit `i` of `directions[i]`.
-fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
+#[allow(clippy::too_many_arguments)]
+fn encode_batch_into(
+    inputs: &[NpcBrainInput],
+    sense_weights: &mut [f32],
+    hla_state: &mut [f32],
+    emotion_dir: &mut [f32],
+    zone_dir: &mut [f32],
+    confidence: &mut [f32],
+) {
     let batch = inputs.len();
 
-    // sense_weights: [B, MAX_MODULES, HLA_DIM]
-    let mut sense_weights = vec![0.0f32; batch * MAX_MODULES * HLA_DIM];
-    // hla_state: [B, HLA_DIM]
-    let mut hla_state = vec![0.0f32; batch * HLA_DIM];
-    // emotion_direction: [B, HLA_DIM] — use module 0's first direction as emotion proxy
-    let mut emotion_dir = vec![0.0f32; batch * HLA_DIM];
-    // zone_direction: [B, HLA_DIM] — use module 1's first direction as zone proxy
-    let mut zone_dir = vec![0.0f32; batch * HLA_DIM];
-    // confidence: [B, MAX_MODULES]
-    let mut confidence = vec![0.0f32; batch * MAX_MODULES];
+    // Zero all output buffers once so unused slots (padding rows, dims ≥ n_directions)
+    // don't carry stale data from the previous call.
+    let sw_len = batch * MAX_MODULES * HLA_DIM;
+    let hla_len = batch * HLA_DIM;
+    let conf_len = batch * MAX_MODULES;
+    sense_weights[..sw_len].fill(0.0);
+    hla_state[..hla_len].fill(0.0);
+    emotion_dir[..hla_len].fill(0.0);
+    zone_dir[..hla_len].fill(0.0);
+    confidence[..conf_len].fill(0.0);
 
     for (b, input) in inputs.iter().enumerate() {
         // HLA state
@@ -337,16 +363,11 @@ fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
             // Dims ≥ n_directions are zero (no contribution).
             let module_base = (b * MAX_MODULES + m) * HLA_DIM;
             let n = module.n_directions as usize;
-            for i in 0..HLA_DIM {
-                let w = if i < n {
-                    let dir = &module.directions[i];
-                    let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
-                    let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
-                    (pos - neg) * dir.row_scale
-                } else {
-                    0.0
-                };
-                sense_weights[module_base + i] = w;
+            for i in 0..n {
+                let dir = &module.directions[i];
+                let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
+                let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
+                sense_weights[module_base + i] = (pos - neg) * dir.row_scale;
             }
 
             // Confidence
@@ -354,8 +375,8 @@ fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
 
             // Emotion direction: use module 0's diagonal as emotion proxy
             if m == 0 && n > 0 {
-                for i in 0..HLA_DIM {
-                    let dir = if i < n { &module.directions[i] } else { continue };
+                for i in 0..n {
+                    let dir = &module.directions[i];
                     let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
                     let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
                     emotion_dir[hla_base + i] = (pos - neg) * dir.row_scale;
@@ -364,8 +385,8 @@ fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
 
             // Zone direction: use module 1's diagonal as zone proxy
             if m == 1 && n > 0 {
-                for i in 0..HLA_DIM {
-                    let dir = if i < n { &module.directions[i] } else { continue };
+                for i in 0..n {
+                    let dir = &module.directions[i];
                     let pos = ((dir.pos_bits >> i) & 1) as i8 as f32;
                     let neg = ((dir.neg_bits >> i) & 1) as i8 as f32;
                     zone_dir[hla_base + i] = (pos - neg) * dir.row_scale;
@@ -373,23 +394,6 @@ fn encode_batch(inputs: &[NpcBrainInput]) -> EncodedBatch {
             }
         }
     }
-
-    EncodedBatch {
-        sense_weights,
-        hla_state,
-        emotion_dir,
-        zone_dir,
-        confidence,
-    }
-}
-
-/// Encoded batch tensors for CoreML prediction.
-struct EncodedBatch {
-    sense_weights: Vec<f32>,
-    hla_state: Vec<f32>,
-    emotion_dir: Vec<f32>,
-    zone_dir: Vec<f32>,
-    confidence: Vec<f32>,
 }
 
 /// Decode the CoreML prediction output into `NpcBrainOutput` values.
@@ -471,26 +475,42 @@ impl NpcBrainBackend for AneNpcBrainBackend {
         // batch, then decode only the first `batch` outputs.
         // This wastes some ANE cycles on padding but avoids dynamic-shape
         // pitfalls (CoreML's RangeDim support is unreliable for ANE).
-        let padded = if batch < self.max_batch_size {
-            let mut v = inputs.to_vec();
-            v.resize(self.max_batch_size, NpcBrainInput::default());
-            v
+        //
+        // Reuse the cached `padded_inputs` buffer to avoid per-call Vec
+        // allocation. The buffer is sized to max_batch_size at construction.
+        // `NpcBrainInput` is `Clone` but not `Copy` (it owns arrays), so use
+        // `clone_from_slice` rather than `copy_from_slice`.
+        if batch < self.max_batch_size {
+            self.padded_inputs[..batch].clone_from_slice(inputs);
+            // Restore any padding slots that may have been overwritten by a
+            // prior, larger (but still sub-max) batch.
+            for slot in &mut self.padded_inputs[batch..self.max_batch_size] {
+                *slot = NpcBrainInput::default();
+            }
         } else {
-            inputs.to_vec()
-        };
+            // Full batch — write directly. (The slice is exactly max_batch_size.)
+            self.padded_inputs.clone_from_slice(inputs);
+        }
 
-        // Encode padded inputs to CoreML tensors
-        let encoded = encode_batch(&padded);
+        // Encode padded inputs into cached scratch tensors (zero alloc).
+        encode_batch_into(
+            &self.padded_inputs,
+            &mut self.scratch_sense_weights,
+            &mut self.scratch_hla_state,
+            &mut self.scratch_emotion_dir,
+            &mut self.scratch_zone_dir,
+            &mut self.scratch_confidence,
+        );
 
         // Run prediction on the full padded batch
         let prediction = self
             .predict_raw(
                 self.max_batch_size,
-                &encoded.sense_weights,
-                &encoded.hla_state,
-                &encoded.emotion_dir,
-                &encoded.zone_dir,
-                &encoded.confidence,
+                &self.scratch_sense_weights,
+                &self.scratch_hla_state,
+                &self.scratch_emotion_dir,
+                &self.scratch_zone_dir,
+                &self.scratch_confidence,
             )
             .map_err(|e| format!("ANE prediction failed: {e}"))?;
 
@@ -534,25 +554,52 @@ mod tests {
     #[test]
     fn test_encode_batch_empty() {
         let inputs: Vec<NpcBrainInput> = vec![NpcBrainInput::default()];
-        let encoded = encode_batch(&inputs);
+        let batch = inputs.len();
+        let mut sense_weights = vec![0.0f32; batch * MAX_MODULES * HLA_DIM];
+        let mut hla_state = vec![0.0f32; batch * HLA_DIM];
+        let mut emotion_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut zone_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut confidence = vec![0.0f32; batch * MAX_MODULES];
+        encode_batch_into(
+            &inputs,
+            &mut sense_weights,
+            &mut hla_state,
+            &mut emotion_dir,
+            &mut zone_dir,
+            &mut confidence,
+        );
 
         // Default input has module_count=0, all hla_state zero
-        assert_eq!(encoded.hla_state.len(), HLA_DIM);
-        assert!(encoded.sense_weights.iter().all(|&v| v == 0.0));
-        assert!(encoded.hla_state.iter().all(|&v| v == 0.0));
-        assert!(encoded.confidence.iter().all(|&v| v == 0.0));
+        assert_eq!(hla_state.len(), HLA_DIM);
+        assert!(sense_weights.iter().all(|&v| v == 0.0));
+        assert!(hla_state.iter().all(|&v| v == 0.0));
+        assert!(confidence.iter().all(|&v| v == 0.0));
     }
 
     #[test]
     fn test_encode_batch_with_hla_state() {
         let mut input = NpcBrainInput::default();
         input.hla_state = [1.0, 2.0, 3.0, 4.0, 0.0, 0.0, 0.0, 0.0];
-        let encoded = encode_batch(&[input]);
+        let inputs = [input];
+        let batch = inputs.len();
+        let mut sense_weights = vec![0.0f32; batch * MAX_MODULES * HLA_DIM];
+        let mut hla_state = vec![0.0f32; batch * HLA_DIM];
+        let mut emotion_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut zone_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut confidence = vec![0.0f32; batch * MAX_MODULES];
+        encode_batch_into(
+            &inputs,
+            &mut sense_weights,
+            &mut hla_state,
+            &mut emotion_dir,
+            &mut zone_dir,
+            &mut confidence,
+        );
 
-        assert_eq!(encoded.hla_state[0], 1.0);
-        assert_eq!(encoded.hla_state[1], 2.0);
-        assert_eq!(encoded.hla_state[2], 3.0);
-        assert_eq!(encoded.hla_state[3], 4.0);
+        assert_eq!(hla_state[0], 1.0);
+        assert_eq!(hla_state[1], 2.0);
+        assert_eq!(hla_state[2], 3.0);
+        assert_eq!(hla_state[3], 4.0);
     }
 
     /// Verify the diagonal sense_weights encoding matches `SenseModule::project`:
@@ -570,21 +617,35 @@ mod tests {
         dirs[1] = TernaryDir { pos_bits: 0, neg_bits: 1 << 1, row_scale: 4.0 };
         input.modules[0] = ModuleInput { directions: dirs, n_directions: 2, confidence: 1.0 };
 
-        let encoded = encode_batch(&[input]);
+        let inputs = [input];
+        let batch = inputs.len();
+        let mut sense_weights = vec![0.0f32; batch * MAX_MODULES * HLA_DIM];
+        let mut hla_state = vec![0.0f32; batch * HLA_DIM];
+        let mut emotion_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut zone_dir = vec![0.0f32; batch * HLA_DIM];
+        let mut confidence = vec![0.0f32; batch * MAX_MODULES];
+        encode_batch_into(
+            &inputs,
+            &mut sense_weights,
+            &mut hla_state,
+            &mut emotion_dir,
+            &mut zone_dir,
+            &mut confidence,
+        );
 
         // Module 0, dim 0: sign = +1 (bit 0 of dirs[0] = pos), scale 2.0 → +2.0
-        assert_eq!(encoded.sense_weights[0], 2.0);
+        assert_eq!(sense_weights[0], 2.0);
         // Module 0, dim 1: sign = -1 (bit 1 of dirs[1] = neg), scale 4.0 → -4.0
-        assert_eq!(encoded.sense_weights[1], -4.0);
+        assert_eq!(sense_weights[1], -4.0);
         // Dims ≥ n_directions are zero
-        assert_eq!(encoded.sense_weights[2], 0.0);
-        assert_eq!(encoded.sense_weights[7], 0.0);
+        assert_eq!(sense_weights[2], 0.0);
+        assert_eq!(sense_weights[7], 0.0);
 
         // The model dot(sense_weights[0], hla_state) should equal the CPU's dot:
         //   2.0*0.5 + (-4.0)*0.25 = 1.0 - 1.0 = 0.0 → sigmoid(0)=0.5
-        let dot: f32 = encoded.sense_weights[..HLA_DIM]
+        let dot: f32 = sense_weights[..HLA_DIM]
             .iter()
-            .zip(encoded.hla_state[..HLA_DIM].iter())
+            .zip(hla_state[..HLA_DIM].iter())
             .map(|(w, h)| w * h)
             .sum();
         assert!((dot - 0.0).abs() < 1e-6, "dot = {dot}");

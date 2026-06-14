@@ -70,9 +70,12 @@ pub struct HybridOctPqKVCache {
     /// KV dimension padded to even (for PQ rotation).
     kv_dim_padded: usize,
     /// Maximum sequence length.
+    #[allow(dead_code)] // capacity metadata; reset uses max_used_pos for efficiency
     max_seq_len: usize,
     /// Number of triplets: ⌈kv_dim/3⌉.
     n_triplets: usize,
+    /// Highest position ever written (for efficient reset).
+    max_used_pos: usize,
     // ── Small fields at end (packed, 3 bytes + 5 padding) ──
     /// Nominal bits per key coordinate.
     key_bits: u8,
@@ -133,6 +136,7 @@ impl HybridOctPqKVCache {
             kv_dim_padded,
             max_seq_len: cfg.max_seq_len,
             n_triplets: n_tri,
+            max_used_pos: 0,
             key_bits: cfg.key_bits,
             val_bits: cfg.val_bits,
             use_joint_rounding: cfg.use_joint_rounding,
@@ -144,6 +148,9 @@ impl HybridOctPqKVCache {
     /// Pipeline: normalize → PQ 2D rotate → decompose triplets → OCT encode → bit-pack
     pub fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         debug_assert_eq!(key.len(), self.kv_dim);
+        if pos > self.max_used_pos {
+            self.max_used_pos = pos;
+        }
         let norm = crate::simd::simd_sum_sq(key, key.len()).sqrt();
         self.key_norms[layer][pos] = norm;
 
@@ -190,6 +197,9 @@ impl HybridOctPqKVCache {
     /// Quantize and store a value vector at given layer and position.
     pub fn store_value(&mut self, layer: usize, pos: usize, value: &[f32]) {
         debug_assert_eq!(value.len(), self.kv_dim);
+        if pos > self.max_used_pos {
+            self.max_used_pos = pos;
+        }
         let norm = crate::simd::simd_sum_sq(value, value.len()).sqrt();
         self.val_norms[layer][pos] = norm;
 
@@ -360,8 +370,10 @@ impl HybridOctPqKVCache {
 
     /// Reset cache for new sequence.
     pub fn reset(&mut self) {
+        // Only clear positions that were actually used.
+        let limit = self.max_used_pos + 1;
         for layer in 0..self.n_layers {
-            for pos in 0..self.max_seq_len {
+            for pos in 0..limit {
                 self.key_packed[layer][pos].fill(0);
                 self.key_norms[layer][pos] = 0.0;
                 self.val_packed[layer][pos].fill(0);
@@ -369,6 +381,7 @@ impl HybridOctPqKVCache {
             }
         }
         self.pos = 0;
+        self.max_used_pos = 0;
     }
 
     /// Bytes stored per token (K + V, all layers).

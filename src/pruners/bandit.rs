@@ -351,11 +351,14 @@ impl BanditStats {
     ///
     /// Arms with fewer than 2 samples are excluded from the average.
     pub fn mean_reward_variance(&self) -> f32 {
-        let mut sum = 0.0;
+        let mut sum = 0.0f32;
         let mut count = 0u32;
+        // Inline reward_variance computation: we already know i < num_arms
+        // and visits[i] >= 2 here, so skip the per-arm bounds check.
         for i in 0..self.num_arms {
-            if self.visits[i] >= 2 {
-                sum += self.reward_variance(i);
+            let n = self.visits[i];
+            if n >= 2 {
+                sum += self.reward_m2[i] / (n - 1) as f32;
                 count += 1;
             }
         }
@@ -1361,14 +1364,22 @@ impl<E: BanditEnv> BanditSession<E> {
     }
 
     fn select_ucb1(&self) -> usize {
-        (0..self.env.num_arms())
-            .max_by(|&a, &b| {
-                self.stats
-                    .ucb1_score(a)
-                    .partial_cmp(&self.stats.ucb1_score(b))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .unwrap_or(0)
+        let n = self.env.num_arms();
+        if n == 0 {
+            return 0;
+        }
+        // Pre-compute UCB1 scores once: max_by's closure would otherwise call
+        // ucb1_score(max) repeatedly (each call recomputes total.ln()).
+        let mut best_idx = 0;
+        let mut best_score = self.stats.ucb1_score(0);
+        for i in 1..n {
+            let s = self.stats.ucb1_score(i);
+            if s > best_score {
+                best_score = s;
+                best_idx = i;
+            }
+        }
+        best_idx
     }
 
     fn select_epsilon_greedy(&self, epsilon: f32, rng: &mut Rng) -> usize {

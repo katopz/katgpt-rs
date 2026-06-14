@@ -138,6 +138,23 @@ where
     }
 
     let adj = build_adjacency(&complex.edges);
+    cat0_geodesic_with_adj(complex, &adj, from, to)
+}
+
+/// Internal: geodesic given a pre-built adjacency map.
+///
+/// Callers that issue many geodesic queries on the same complex should build
+/// the adjacency map once and reuse it via this entry point.
+fn cat0_geodesic_with_adj(
+    complex: &CubicalComplex,
+    adj: &HashMap<ZoneId, Vec<ZoneId>>,
+    from: ZoneId,
+    to: ZoneId,
+) -> GeodesicPath {
+    // Trivial case: same vertex.
+    if from == to {
+        return GeodesicPath::new(vec![from]);
+    }
 
     // BFS from `from` to `to`.
     let mut visited: HashMap<ZoneId, ZoneId> = HashMap::new();
@@ -224,11 +241,14 @@ where
     // is the same as the geodesic from j to i (reversed).
     // In a CAT(0) complex, the geodesic is unique, so both directions
     // must agree.
+    //
+    // Pre-compute adjacency once — it's reused across all O(N²) BFS calls.
+    let adj = build_adjacency(&complex.edges);
     let n = elements.len();
     for i in 0..n {
         for j in (i + 1)..n {
-            let path_forward = cat0_geodesic(complex, lattice, elements[i], elements[j]);
-            let path_backward = cat0_geodesic(complex, lattice, elements[j], elements[i]);
+            let path_forward = cat0_geodesic_with_adj(&complex, &adj, elements[i], elements[j]);
+            let path_backward = cat0_geodesic_with_adj(&complex, &adj, elements[j], elements[i]);
 
             // Both must find a path.
             if path_forward.is_empty() || path_backward.is_empty() {

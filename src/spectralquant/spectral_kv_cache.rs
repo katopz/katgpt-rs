@@ -43,7 +43,6 @@ pub struct SpectralQuantKVCache {
     scratch_semantic_indices: Vec<u8>,
     scratch_tail_indices: Vec<u8>,
     scratch_all_indices: Vec<u8>,
-    scratch_all_bits: Vec<u8>,
     // ── usize fields (8-byte aligned, no padding between them) ──
     /// Current write position.
     pos: usize,
@@ -59,7 +58,6 @@ pub struct SpectralQuantKVCache {
 /// Enables `&self` parallel dequantize without requiring `&mut self`.
 pub struct DequantizeScratch {
     // Vec fields first (8-byte aligned), then smaller types
-    all_bits: Vec<u8>,
     all_indices: Vec<u8>,
     rotated: Vec<f32>,
     unrotated: Vec<f32>,
@@ -69,7 +67,6 @@ impl DequantizeScratch {
     /// Create scratch buffers sized for `kv_dim` dimensions.
     pub fn new(kv_dim: usize) -> Self {
         Self {
-            all_bits: vec![0u8; kv_dim],
             all_indices: vec![0u8; kv_dim],
             rotated: vec![0.0f32; kv_dim],
             unrotated: vec![0.0f32; kv_dim],
@@ -173,6 +170,18 @@ impl SpectralQuantKVCache {
                         n_bits: b_low.max(1),
                     };
 
+                    // Precompute the full [kv_dim] bits-per-dim array once.
+                    // Per-token store/dequantize paths read this directly instead of
+                    // rebuilding it every call.
+                    let mut packed_bits = vec![0u8; kv_dim];
+                    if let Some(ref bits) = semantic_bits_per_dim {
+                        let copy_len = d_eff.min(bits.len());
+                        packed_bits[..copy_len].copy_from_slice(&bits[..copy_len]);
+                    } else {
+                        packed_bits[..d_eff].fill(b_high);
+                    }
+                    packed_bits[d_eff..kv_dim].fill(b_low.max(1));
+
                     SpectralQuantLayer {
                         calibration: key_cal.clone(),
                         qjl_signs,
@@ -183,6 +192,7 @@ impl SpectralQuantKVCache {
                         per_dim_semantic_codebooks: per_dim_codebooks,
                         semantic_codebook,
                         tail_codebook,
+                        packed_bits,
                     }
                 })
                 .collect();
@@ -317,7 +327,6 @@ impl SpectralQuantKVCache {
             scratch_semantic_indices: vec![0u8; kv_dim],
             scratch_tail_indices: vec![0u8; kv_dim],
             scratch_all_indices: vec![0u8; kv_dim],
-            scratch_all_bits: vec![0u8; kv_dim],
         }
     }
 
@@ -386,7 +395,6 @@ impl SpectralQuantKVCache {
         debug_assert_eq!(vec.len(), self.kv_dim);
         let layer_state = &self.layers[layer];
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
 
         // Compute norm
         let norm = simd_norm(vec);
@@ -438,27 +446,18 @@ impl SpectralQuantKVCache {
             self.scratch_tail_indices[i - d_eff] = quantize_to_idx(v, &tail_cb.centroids);
         }
 
-        // Build combined bits-per-dim array
-        let all_bits = &mut self.scratch_all_bits;
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
-
         // Build combined indices array
         let all_indices = &mut self.scratch_all_indices;
         all_indices[..d_eff].copy_from_slice(&self.scratch_semantic_indices[..d_eff]);
         let tail_len = self.kv_dim - d_eff;
         all_indices[d_eff..self.kv_dim].copy_from_slice(&self.scratch_tail_indices[..tail_len]);
 
-        // Pack variable bits into storage
+        // Pack variable bits into storage using precomputed packed_bits
         let packed = match target {
             StoreTarget::Key => &mut self.key_indices[layer][pos],
             StoreTarget::Value => &mut self.val_indices[layer][pos],
         };
-        pack_variable_bits(&all_indices[..self.kv_dim], &all_bits[..self.kv_dim], packed);
+        pack_variable_bits(&all_indices[..self.kv_dim], &layer_state.packed_bits, packed);
     }
 
     /// Dequantize a key at position into a new vector.
@@ -473,21 +472,11 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
-
-        // Build bits array
-        let mut all_bits = vec![0u8; self.kv_dim];
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
 
         let mut all_indices = vec![0u8; self.kv_dim];
         unpack_variable_bits(
             &self.key_indices[layer][pos],
-            &all_bits,
+            &layer_state.packed_bits,
             self.kv_dim,
             &mut all_indices,
         );
@@ -529,20 +518,11 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
-
-        let mut all_bits = vec![0u8; self.kv_dim];
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
 
         let mut all_indices = vec![0u8; self.kv_dim];
         unpack_variable_bits(
             &self.val_indices[layer][pos],
-            &all_bits,
+            &layer_state.packed_bits,
             self.kv_dim,
             &mut all_indices,
         );
@@ -586,22 +566,12 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
 
-        // Build bits array in scratch
-        let all_bits = &mut self.scratch_all_bits;
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
-
-        // Unpack variable bits into scratch
+        // Unpack variable bits into scratch using precomputed packed_bits
         let all_indices = &mut self.scratch_all_indices;
         unpack_variable_bits(
             &self.key_indices[layer][pos],
-            &all_bits[..self.kv_dim],
+            &layer_state.packed_bits,
             self.kv_dim,
             all_indices,
         );
@@ -651,20 +621,11 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
-
-        let all_bits = &mut self.scratch_all_bits;
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
 
         let all_indices = &mut self.scratch_all_indices;
         unpack_variable_bits(
             &self.val_indices[layer][pos],
-            &all_bits[..self.kv_dim],
+            &layer_state.packed_bits,
             self.kv_dim,
             all_indices,
         );
@@ -764,20 +725,11 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
-
-        let all_bits = &mut scratch.all_bits;
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
 
         let all_indices = &mut scratch.all_indices;
         unpack_variable_bits(
             &self.key_indices[layer][pos],
-            &all_bits[..self.kv_dim],
+            &layer_state.packed_bits,
             self.kv_dim,
             all_indices,
         );
@@ -832,20 +784,11 @@ impl SpectralQuantKVCache {
         }
 
         let d_eff = layer_state.d_eff;
-        let b_low = layer_state.b_low.max(1);
-
-        let all_bits = &mut scratch.all_bits;
-        if let Some(ref bits) = layer_state.semantic_bits_per_dim {
-            all_bits[..d_eff].copy_from_slice(&bits[..d_eff.min(bits.len())]);
-        } else {
-            all_bits[..d_eff].fill(layer_state.b_high);
-        }
-        all_bits[d_eff..self.kv_dim].fill(b_low);
 
         let all_indices = &mut scratch.all_indices;
         unpack_variable_bits(
             &self.val_indices[layer][pos],
-            &all_bits[..self.kv_dim],
+            &layer_state.packed_bits,
             self.kv_dim,
             all_indices,
         );

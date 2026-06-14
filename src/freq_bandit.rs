@@ -361,15 +361,22 @@ impl FrequencyBandit {
             }
         }
 
-        // All arms visited: pick highest UCB1 score
+        // All arms visited: pick highest UCB1 score.
+        // Hoist invariants out of the 3-arm loop: `ln(total)` and the
+        // exploration constant only depend on total pulls, not on the arm.
+        let ln_total = (self.total_pulls as f64).ln();
+        let c = self.exploration_c as f64;
+        let coef = c * (2.0 * ln_total).sqrt();
+
         let mut best_idx = 0;
         let mut best_score = f64::NEG_INFINITY;
 
         for i in 0..3 {
             let q = self.arm_q_values[i];
-            let n = self.arm_counts[i] as f64;
-            let total = self.total_pulls as f64;
-            let exploration = self.exploration_c as f64 * (2.0 * total.ln() / n).sqrt();
+            // exploration = c * sqrt(2 * ln(N) / n)
+            //             = (c * sqrt(2 * ln(N))) / sqrt(n)
+            // The numerator is loop-invariant; only `1/sqrt(n)` varies per arm.
+            let exploration = coef / (self.arm_counts[i] as f64).sqrt();
             let score = q + exploration;
 
             if score > best_score {

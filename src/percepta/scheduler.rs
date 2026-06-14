@@ -197,6 +197,9 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
     let mut ops = Vec::new();
     let mut inputs = Vec::new();
 
+    // Upper-bound hint: one entry per dimension for ops/inputs.
+    let dim_count = pg.all_dims.len();
+
     // Collect ops from dimensions
     for (&dim_id, dim) in &pg.all_dims {
         match &dim.kind {
@@ -220,8 +223,10 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
         ops.push(OpKey::LookUp(lookup_id));
     }
 
+    let n_ops = ops.len();
+
     // Produced dims
-    let mut produced = HashMap::new();
+    let mut produced: HashMap<OpKey, HashSet<DimId>> = HashMap::with_capacity(n_ops);
     for &op in &ops {
         let dims: HashSet<DimId> = match op {
             OpKey::LookUp(id) => pg.all_lookups[&id].dim_ids.iter().copied().collect(),
@@ -231,7 +236,7 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
     }
 
     // Dependency cache: raw dimension deps for each op
-    let mut deps_cache = HashMap::new();
+    let mut deps_cache: HashMap<OpKey, HashSet<DimId>> = HashMap::with_capacity(n_ops);
     for &op in &ops {
         let deps: HashSet<DimId> = match op {
             OpKey::ReGLU(dim_id) => {
@@ -273,7 +278,7 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
     }
 
     // dim_to_op: which operation produces each dim
-    let mut dim_to_op = HashMap::new();
+    let mut dim_to_op: HashMap<DimId, OpKey> = HashMap::with_capacity(dim_count);
     for &op in &ops {
         for &dim in &produced[&op] {
             dim_to_op.insert(dim, op);
@@ -281,9 +286,9 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
     }
 
     // op_deps, children, consumers
-    let mut op_deps = HashMap::new();
-    let mut children: HashMap<OpKey, HashSet<OpKey>> = HashMap::new();
-    let mut consumers: HashMap<DimId, HashSet<OpKey>> = HashMap::new();
+    let mut op_deps: HashMap<OpKey, HashSet<OpKey>> = HashMap::with_capacity(n_ops);
+    let mut children: HashMap<OpKey, HashSet<OpKey>> = HashMap::with_capacity(n_ops);
+    let mut consumers: HashMap<DimId, HashSet<OpKey>> = HashMap::with_capacity(dim_count);
 
     for &op in &ops {
         let mut deps = HashSet::new();
@@ -309,7 +314,7 @@ pub fn build_dep_graph(pg: &ProgramGraph) -> DepGraph {
         .copied()
         .collect();
 
-    let mut tight_to = HashMap::new();
+    let mut tight_to: HashMap<OpKey, HashSet<OpKey>> = HashMap::new();
     for &op in &ops {
         match op {
             OpKey::ReGLU(_) | OpKey::Persist(_) => {
@@ -376,17 +381,35 @@ pub fn min_layers(ops: &[OpKey], op_deps: &HashMap<OpKey, HashSet<OpKey>>) -> us
     if ops.is_empty() {
         return 0;
     }
-    let mut phase: HashMap<OpKey, i32> = HashMap::new();
+    let mut phase: HashMap<OpKey, i32> = HashMap::with_capacity(ops.len());
     let mut remaining: HashSet<OpKey> = ops.iter().copied().collect();
+    // Reusable scratch buffer for ready ops — avoids reallocating a Vec each pass.
+    let mut ready: Vec<OpKey> = Vec::with_capacity(ops.len());
 
     while !remaining.is_empty() {
+        // Collect all ops whose deps are already satisfied this pass.
+        ready.clear();
         let mut progress = false;
-        for op in remaining.clone() {
-            let deps = op_deps.get(&op).cloned().unwrap_or_default();
-            if !deps.iter().all(|p| phase.contains_key(p)) {
-                continue;
+        for &op in &remaining {
+            let deps = match op_deps.get(&op) {
+                Some(d) => d,
+                None => {
+                    // No deps — always ready.
+                    ready.push(op);
+                    continue;
+                }
+            };
+            if deps.iter().all(|p| phase.contains_key(p)) {
+                ready.push(op);
             }
-            let lo: i32 = deps.iter().map(|p| phase[p]).max().unwrap_or(-1) + 1;
+        }
+        // Assign phase to all ready ops.
+        for op in &ready {
+            let deps = op_deps.get(op);
+            let lo: i32 = match deps {
+                Some(d) => d.iter().map(|p| phase[p]).max().unwrap_or(-1) + 1,
+                None => 0,
+            };
             let lo = match op {
                 OpKey::LookUp(_) => lo + (-lo).rem_euclid(4),
                 OpKey::ReGLU(_) => lo + (2 - lo.rem_euclid(4) + 4).rem_euclid(4),
@@ -398,8 +421,8 @@ pub fn min_layers(ops: &[OpKey], op_deps: &HashMap<OpKey, HashSet<OpKey>>) -> us
                     }
                 }
             };
-            phase.insert(op, lo);
-            remaining.remove(&op);
+            phase.insert(*op, lo);
+            remaining.remove(op);
             progress = true;
         }
         assert!(progress, "Cycle in dependencies");
@@ -816,19 +839,19 @@ fn compute_alive_sets(
     dim_death: &HashMap<DimId, i32>,
     num_layers: usize,
 ) -> HashMap<i32, HashSet<DimId>> {
-    let mut alive_after = HashMap::new();
+    let mut alive_after = HashMap::with_capacity(num_layers * 2);
     for l in 0..num_layers {
         for sp in [1, 3] {
             let c = 4 * l as i32 + sp;
-            let alive: HashSet<DimId> = dims_vec
-                .iter()
-                .copied()
-                .filter(|&d| {
-                    let birth = dim_birth.get(&d).copied().unwrap_or(i32::MAX);
-                    let death = dim_death.get(&d).copied().unwrap_or(i32::MIN);
-                    birth <= c && death > c
-                })
-                .collect();
+            // Pre-size to dim count upper bound.
+            let mut alive: HashSet<DimId> = HashSet::with_capacity(dims_vec.len());
+            for &d in dims_vec {
+                let birth = dim_birth.get(&d).copied().unwrap_or(i32::MAX);
+                let death = dim_death.get(&d).copied().unwrap_or(i32::MIN);
+                if birth <= c && death > c {
+                    alive.insert(d);
+                }
+            }
             alive_after.insert(c, alive);
         }
     }
@@ -895,9 +918,13 @@ pub fn interval_coloring(
         }
     }
 
+    // Reused scratch buffer for slots freed at a given birth phase — avoids
+    // reallocating inside the hot loop.
+    let mut available: Vec<usize> = Vec::new();
+
     for (birth, death, d) in items {
         // Collect all slots freed by this birth phase
-        let mut available = Vec::new();
+        available.clear();
         while let Some(&Reverse((death_free, slot))) = free.peek() {
             if death_free <= birth {
                 free.pop();

@@ -54,6 +54,25 @@ pub struct RetrievalProjection {
     low_dim: usize,
 }
 
+/// Pre-compute per-dimension variance scale: `sigmoid(log(1 + v))`.
+///
+/// Depends only on the dimension index (via `gate_variance[i]`), not on the
+/// query or key vector. Hoisting this out of the per-key loop eliminates
+/// `n_keys × head_dim` redundant `ln_1p`+`exp` calls.
+///
+/// Returns a stack-allocated array of length `head_dim` (bounded by 256).
+#[inline]
+fn compute_var_scales(gate_variance: &[f32], head_dim: usize) -> [f32; 256] {
+    let mut out = [1.0f32; 256];
+    for i in 0..head_dim {
+        if i < gate_variance.len() && gate_variance[i] > 0.0 {
+            let v = gate_variance[i];
+            out[i] = 1.0 / (1.0 + (-v.ln_1p()).exp());
+        }
+    }
+    out
+}
+
 impl RetrievalProjection {
     /// Stride per head in the weight arrays: `head_dim * low_dim`.
     #[inline]
@@ -444,16 +463,13 @@ impl RetrievalProjection {
         let mut q_proj = [0.0f32; 64]; // stack alloc for low_dim ≤ 64
         let q_slice = &mut q_proj[..ld];
         let w_q_head = &self.w_q[head_off..head_off + hd * ld];
+        // Pre-compute per-dimension variance scale once — `sigmoid(log(1+v))` depends
+        // only on the dimension index `i`, not on the query/key vector. Previously this
+        // recomputed `ln_1p`+`exp` inside the per-key loop (n_keys × head_dim times).
+        let var_scales = compute_var_scales(gate_variance, hd);
         for i in 0..hd {
             let qi = q_pre[i];
-            // Apply variance weighting: scale by sigmoid(variance) to boost dynamic dims
-            let var_scale = if gate_variance.len() > i && gate_variance[i] > 0.0 {
-                // sigmoid(log(1 + variance)) — simple, monotonic, bounded
-                let v = gate_variance[i];
-                1.0 / (1.0 + (-v.ln_1p()).exp())
-            } else {
-                1.0
-            };
+            let var_scale = var_scales[i];
             let row = i * ld;
             for j in 0..ld {
                 q_slice[j] += qi * var_scale * w_q_head[row + j];
@@ -472,12 +488,7 @@ impl RetrievalProjection {
             let k_off = n * hd;
             for i in 0..hd {
                 let ki = k_cache[k_off + i];
-                let var_scale = if gate_variance.len() > i && gate_variance[i] > 0.0 {
-                    let v = gate_variance[i];
-                    1.0 / (1.0 + (-v.ln_1p()).exp())
-                } else {
-                    1.0
-                };
+                let var_scale = var_scales[i];
                 let row = i * ld;
                 for j in 0..ld {
                     k_slice[j] += ki * var_scale * w_k_head[row + j];

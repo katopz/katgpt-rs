@@ -80,6 +80,9 @@ pub struct SpectralQuantLayer {
     pub per_dim_semantic_codebooks: Option<Vec<LloydMaxCodebook>>,
     /// Per-dim semantic bits (v2 water-fill path, None for v1).
     pub semantic_bits_per_dim: Option<Vec<u8>>,
+    /// Precomputed full [kv_dim] bits-per-dim array (semantic + tail).
+    /// Built once at construction so per-token store/dequantize paths avoid rebuilding it.
+    pub packed_bits: Vec<u8>,
     /// Effective dimensionality (integer ceiling of d_eff).
     pub d_eff: usize,
     /// Semantic regime bits per coordinate.

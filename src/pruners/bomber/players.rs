@@ -379,25 +379,44 @@ pub(crate) fn has_escape_route(
     blast_range: u32,
     existing_bombs: &[KnownBomb],
 ) -> bool {
-    use std::collections::{HashSet, VecDeque};
+    use std::collections::VecDeque;
+    use super::{ARENA_H, ARENA_W};
 
     let max_steps = blast_range as i32 + 1;
-    let mut visited: HashSet<(i32, i32)> = HashSet::new();
+    // Fixed-size visited bitmap for the 13×13 arena — replaces HashSet allocation
+    // (this runs per is_safe_action(Bomb) per tick per player).
+    let mut visited = [false; ARENA_W * ARENA_H];
     let mut queue: VecDeque<((i32, i32), i32)> = VecDeque::new();
 
-    // Bomb entities block movement — collect all blocked positions
-    let blocked: HashSet<(i32, i32)> = {
-        let mut s: HashSet<(i32, i32)> = existing_bombs.iter().map(|(p, _, _)| *p).collect();
-        s.insert(new_bomb_pos);
-        s
+    // Inline bomb-entity blocking check: linear scan over existing bombs +
+    // the new bomb position. Avoids allocating a HashSet and a Vec<KnownBomb>.
+    let is_blocked = |x: i32, y: i32| {
+        if x == new_bomb_pos.0 && y == new_bomb_pos.1 {
+            return true;
+        }
+        existing_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
     };
 
-    // All bombs combined for comprehensive blast zone checking
+    // Stack-allocated combined bomb list for blast-zone checks.
+    // BOMB_FUSE_TICKS worth of capacity is plenty (existing + 1 new).
     let mut all_bombs: Vec<KnownBomb> = existing_bombs.to_vec();
     all_bombs.push((new_bomb_pos, blast_range, BOMB_FUSE_TICKS));
 
+    let mark = |visited: &mut [bool; ARENA_W * ARENA_H], x: i32, y: i32| {
+        if x >= 0 && (x as usize) < ARENA_W && y >= 0 && (y as usize) < ARENA_H {
+            visited[(y as usize) * ARENA_W + (x as usize)] = true;
+        }
+    };
+    let is_visited = |visited: &[bool; ARENA_W * ARENA_H], x: i32, y: i32| {
+        if x >= 0 && (x as usize) < ARENA_W && y >= 0 && (y as usize) < ARENA_H {
+            visited[(y as usize) * ARENA_W + (x as usize)]
+        } else {
+            true
+        }
+    };
+
     queue.push_back(((player_pos.x, player_pos.y), 0));
-    visited.insert((player_pos.x, player_pos.y));
+    mark(&mut visited, player_pos.x, player_pos.y);
 
     while let Some(((cx, cy), steps)) = queue.pop_front() {
         if steps > max_steps {
@@ -411,8 +430,13 @@ pub(crate) fn has_escape_route(
 
         // Expand neighbors (avoid bomb entities blocking movement)
         for (nx, ny) in [(cx, cy - 1), (cx, cy + 1), (cx - 1, cy), (cx + 1, cy)] {
-            if visited.insert((nx, ny)) && grid.is_walkable(nx, ny) && !blocked.contains(&(nx, ny))
-            {
+            if is_visited(&visited, nx, ny) {
+                continue;
+            }
+            // Mark first, then gate on walkable/blocked — matches original
+            // HashSet::insert semantics (unwalkable cells still get marked).
+            mark(&mut visited, nx, ny);
+            if grid.is_walkable(nx, ny) && !is_blocked(nx, ny) {
                 queue.push_back(((nx, ny), steps + 1));
             }
         }
@@ -551,26 +575,47 @@ pub(crate) fn escape_distance(
     pos: GridPos,
     grid: &ArenaGrid,
     bombs: &[KnownBomb],
-    blocked: &std::collections::HashSet<(i32, i32)>,
+    blocked: &[KnownBomb],
 ) -> Option<i32> {
-    use std::collections::{HashSet, VecDeque};
+    use std::collections::VecDeque;
+    use super::{ARENA_H, ARENA_W};
 
     if !in_blast_zone(pos, grid, bombs) {
         return Some(0);
     }
 
-    let mut visited: HashSet<(i32, i32)> = HashSet::new();
+    // Fixed-size visited bitmap for the 13×13 arena — avoids HashSet allocation
+    // and hashing overhead on every BFS call (this runs per action per tick).
+    let mut visited = [false; ARENA_W * ARENA_H];
     let mut queue: VecDeque<((i32, i32), i32)> = VecDeque::new();
 
+    let mark = |visited: &mut [bool; ARENA_W * ARENA_H], x: i32, y: i32| {
+        if x >= 0 && (x as usize) < ARENA_W && y >= 0 && (y as usize) < ARENA_H {
+            visited[(y as usize) * ARENA_W + (x as usize)] = true;
+        }
+    };
+    let is_visited = |visited: &[bool; ARENA_W * ARENA_H], x: i32, y: i32| {
+        if x >= 0 && (x as usize) < ARENA_W && y >= 0 && (y as usize) < ARENA_H {
+            visited[(y as usize) * ARENA_W + (x as usize)]
+        } else {
+            true // Out-of-bounds treated as visited (blocked)
+        }
+    };
+
     queue.push_back(((pos.x, pos.y), 0));
-    visited.insert((pos.x, pos.y));
+    mark(&mut visited, pos.x, pos.y);
 
     while let Some(((cx, cy), dist)) = queue.pop_front() {
         for (nx, ny) in [(cx, cy - 1), (cx, cy + 1), (cx - 1, cy), (cx + 1, cy)] {
-            if !visited.insert((nx, ny)) {
+            if is_visited(&visited, nx, ny) {
                 continue;
             }
-            if !grid.is_walkable(nx, ny) || blocked.contains(&(nx, ny)) {
+            // Linear scan over blocked bomb positions (N is tiny, typically < 8,
+            // so this beats hashing). Each bomb is (pos, range, fuse).
+            let is_blocked = blocked.iter().any(|&(bp, _, _)| bp.0 == nx && bp.1 == ny);
+            // Mark first, then gate — matches original HashSet::insert semantics.
+            mark(&mut visited, nx, ny);
+            if !grid.is_walkable(nx, ny) || is_blocked {
                 continue;
             }
             let next_dist = dist + 1;
@@ -604,27 +649,25 @@ pub(crate) fn score_action(
 ) -> f32 {
     use BomberAction::{Down, Left, Right, Up};
 
-    // Collect bomb positions that block movement
-    let bomb_positions: std::collections::HashSet<(i32, i32)> =
-        bombs.iter().map(|(p, _, _)| *p).collect();
+    // O(bombs) linear helper — replaces per-call HashSet<(i32,i32)> allocation.
+    // Bombs list is tiny (typically < 8), so linear scan beats hashing.
+    let is_blocked = |x: i32, y: i32| bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y);
 
     match action {
         Up | Down | Left | Right => {
             let target = move_target(action, pos);
 
             // Hard constraint: unwalkable or blocked by bomb entity
-            if !grid.is_walkable(target.x, target.y)
-                || bomb_positions.contains(&(target.x, target.y))
-            {
+            if !grid.is_walkable(target.x, target.y) || is_blocked(target.x, target.y) {
                 return f32::NEG_INFINITY;
             }
 
             // In blast zone — use escape distance for directional guidance
             if in_blast_zone(target, grid, bombs) {
                 let current_dist =
-                    escape_distance(pos, grid, bombs, &bomb_positions).unwrap_or(i32::MAX);
+                    escape_distance(pos, grid, bombs, bombs).unwrap_or(i32::MAX);
                 let target_dist =
-                    escape_distance(target, grid, bombs, &bomb_positions).unwrap_or(i32::MAX);
+                    escape_distance(target, grid, bombs, bombs).unwrap_or(i32::MAX);
                 return if target_dist < current_dist {
                     10.0 - target_dist as f32 * 0.5 // Moving toward safety
                 } else if target_dist > current_dist {
@@ -927,30 +970,26 @@ impl BomberPlayer for GreedyPlayer {
             }
         }
 
-        // Policy: score all actions, pick best
-        let best = ALL_ACTIONS
-            .iter()
-            .max_by(|a, b| {
-                score_action(
-                    a,
-                    grid,
-                    pos,
-                    &self.known_bombs,
-                    &self.known_powerups,
-                    self.last_dir,
-                )
-                .partial_cmp(&score_action(
-                    b,
-                    grid,
-                    pos,
-                    &self.known_bombs,
-                    &self.known_powerups,
-                    self.last_dir,
-                ))
-                .unwrap_or(std::cmp::Ordering::Equal)
-            })
-            .copied()
-            .unwrap_or(BomberAction::Wait);
+        // Policy: score all actions, pick best.
+        // Pre-compute once: the max_by closure would otherwise call score_action
+        // ~2×(N-1) times (each invocation recomputes the bomb_positions HashSet
+        // and runs escape_distance BFS).
+        let mut best = BomberAction::Wait;
+        let mut best_score = f32::NEG_INFINITY;
+        for &action in &ALL_ACTIONS {
+            let s = score_action(
+                &action,
+                grid,
+                pos,
+                &self.known_bombs,
+                &self.known_powerups,
+                self.last_dir,
+            );
+            if s > best_score {
+                best_score = s;
+                best = action;
+            }
+        }
 
         if matches!(
             best,
@@ -1025,8 +1064,10 @@ impl BomberPlayer for ValidatorPlayer {
         update_powerups(&mut self.known_powerups, events);
 
         let in_danger = in_blast_zone(pos, grid, &self.known_bombs);
-        let bomb_positions: std::collections::HashSet<(i32, i32)> =
-            self.known_bombs.iter().map(|(p, _, _)| *p).collect();
+        // O(bombs) linear helper — replaces per-call HashSet allocation.
+        let is_blocked = |x: i32, y: i32| {
+            self.known_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
+        };
 
         let mut best = BomberAction::Wait;
         let mut best_score = f32::NEG_INFINITY;
@@ -1043,16 +1084,14 @@ impl BomberPlayer for ValidatorPlayer {
                     continue;
                 }
                 let target = move_target(action, pos);
-                if !grid.is_walkable(target.x, target.y)
-                    || bomb_positions.contains(&(target.x, target.y))
-                {
+                if !grid.is_walkable(target.x, target.y) || is_blocked(target.x, target.y) {
                     continue;
                 }
-                let score = match escape_distance(target, grid, &self.known_bombs, &bomb_positions)
-                {
-                    Some(dist) => 10.0 - dist as f32 * 0.5,
-                    None => -5.0, // No escape route found — try anyway
-                };
+                let score =
+                    match escape_distance(target, grid, &self.known_bombs, &self.known_bombs) {
+                        Some(dist) => 10.0 - dist as f32 * 0.5,
+                        None => -5.0, // No escape route found — try anyway
+                    };
                 if score > best_score {
                     best_score = score;
                     best = *action;
@@ -1491,8 +1530,10 @@ impl BomberPlayer for HLPlayer {
         update_powerups(&mut self.known_powerups, events);
         update_opponents(&mut self.known_opponents, events, self._id);
 
-        let bomb_positions: std::collections::HashSet<(i32, i32)> =
-            self.known_bombs.iter().map(|(p, _, _)| *p).collect();
+        // O(bombs) linear helper — replaces per-call HashSet allocation.
+        let is_blocked = |x: i32, y: i32| {
+            self.known_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
+        };
 
         // Find nearest opponent and their predicted trajectory
         let nearest_info = self
@@ -1636,7 +1677,7 @@ impl BomberPlayer for HLPlayer {
                         | BomberAction::Right => {
                             let target = move_target(&action, pos);
                             grid.is_walkable(target.x, target.y)
-                                && !bomb_positions.contains(&(target.x, target.y))
+                                && !is_blocked(target.x, target.y)
                                 && !in_blast_zone(target, grid, &self.known_bombs)
                         }
                         _ => false, // Don't randomly explore Bomb/Wait
@@ -1732,8 +1773,12 @@ impl LoraPlayer {
     }
 
     /// Create LoraPlayer with LoRA loaded from file.
+    ///
+    /// Only loads the first adapter — multi-adapter L2+ files have layers 1+
+    /// silently dropped. For full multi-adapter evaluation, switch to a player
+    /// that applies each adapter to its target projection during forward pass.
     pub fn new_with_lora(id: u8, lora_path: &str) -> Self {
-        let lora = LoraAdapter::load(std::path::Path::new(lora_path)).ok();
+        let lora = LoraAdapter::load_first(std::path::Path::new(lora_path)).ok();
         let buf_size = lora.as_ref().map_or(0, |l| l.rank);
         Self {
             _id: id,
@@ -1758,8 +1803,10 @@ impl BomberPlayer for LoraPlayer {
         update_bombs(&mut self.known_bombs, events);
         update_powerups(&mut self.known_powerups, events);
 
-        let bomb_positions: std::collections::HashSet<(i32, i32)> =
-            self.known_bombs.iter().map(|(p, _, _)| *p).collect();
+        // O(bombs) linear helper — replaces per-call HashSet allocation.
+        let is_blocked = |x: i32, y: i32| {
+            self.known_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
+        };
 
         // Try LoRA scoring first
         let scores = self.lora.as_ref().and_then(|lora| {
@@ -1786,9 +1833,7 @@ impl BomberPlayer for LoraPlayer {
             // Basic wall collision filter
             if is_move {
                 let target = move_target(action, pos);
-                if !grid.is_walkable(target.x, target.y)
-                    || bomb_positions.contains(&(target.x, target.y))
-                {
+                if !grid.is_walkable(target.x, target.y) || is_blocked(target.x, target.y) {
                     continue;
                 }
             }
@@ -1908,8 +1953,11 @@ impl LoraWasmPlayer {
     }
 
     /// Create with LoRA only.
+    ///
+    /// Only loads the first adapter — multi-adapter L2+ files have layers 1+
+    /// silently dropped. See `LoraAdapter::load_first` for the limitation.
     pub fn new_with_lora(id: u8, lora_path: &str) -> Self {
-        let lora = LoraAdapter::load(std::path::Path::new(lora_path)).ok();
+        let lora = LoraAdapter::load_first(std::path::Path::new(lora_path)).ok();
         let buf_size = lora.as_ref().map_or(0, |l| l.rank);
         Self {
             _id: id,
@@ -1937,8 +1985,11 @@ impl LoraWasmPlayer {
     }
 
     /// Create with both artifacts (full LoRA + WASM stack).
+    ///
+    /// Only loads the first LoRA adapter — multi-adapter L2+ files have layers 1+
+    /// silently dropped. See `LoraAdapter::load_first` for the limitation.
     pub fn new_with_secrets(id: u8, lora_path: &str, wasm_path: &str) -> Self {
-        let lora = LoraAdapter::load(std::path::Path::new(lora_path)).ok();
+        let lora = LoraAdapter::load_first(std::path::Path::new(lora_path)).ok();
         let wasm = super::wasm_pruner::BomberWasmPruner::load_from_file(wasm_path).ok();
         let buf_size = lora.as_ref().map_or(0, |l| l.rank);
         Self {
@@ -1980,8 +2031,10 @@ impl BomberPlayer for LoraWasmPlayer {
         update_powerups(&mut self.known_powerups, events);
 
         let in_danger = in_blast_zone(pos, grid, &self.known_bombs);
-        let bomb_positions: std::collections::HashSet<(i32, i32)> =
-            self.known_bombs.iter().map(|(p, _, _)| *p).collect();
+        // O(bombs) linear helper — replaces per-call HashSet allocation.
+        let is_blocked = |x: i32, y: i32| {
+            self.known_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
+        };
 
         // Try LoRA scoring
         let lora_scores = self.lora.as_ref().and_then(|lora| {
@@ -2011,16 +2064,14 @@ impl BomberPlayer for LoraWasmPlayer {
                     continue;
                 }
                 let target = move_target(action, pos);
-                if !grid.is_walkable(target.x, target.y)
-                    || bomb_positions.contains(&(target.x, target.y))
-                {
+                if !grid.is_walkable(target.x, target.y) || is_blocked(target.x, target.y) {
                     continue;
                 }
-                let score = match escape_distance(target, grid, &self.known_bombs, &bomb_positions)
-                {
-                    Some(dist) => 10.0 - dist as f32 * 0.5,
-                    None => -5.0,
-                };
+                let score =
+                    match escape_distance(target, grid, &self.known_bombs, &self.known_bombs) {
+                        Some(dist) => 10.0 - dist as f32 * 0.5,
+                        None => -5.0,
+                    };
                 if score > best_score {
                     best_score = score;
                     best = *action;
@@ -2166,8 +2217,10 @@ impl BomberPlayer for NNPlayer {
         update_powerups(&mut self.known_powerups, events);
 
         let in_danger = in_blast_zone(pos, grid, &self.known_bombs);
-        let bomb_positions: std::collections::HashSet<(i32, i32)> =
-            self.known_bombs.iter().map(|(p, _, _)| *p).collect();
+        // O(bombs) linear helper — replaces per-call HashSet allocation.
+        let is_blocked = |x: i32, y: i32| {
+            self.known_bombs.iter().any(|(p, _, _)| p.0 == x && p.1 == y)
+        };
 
         let mut best = BomberAction::Wait;
         let mut best_score = f32::NEG_INFINITY;
@@ -2184,16 +2237,14 @@ impl BomberPlayer for NNPlayer {
                     continue;
                 }
                 let target = move_target(action, pos);
-                if !grid.is_walkable(target.x, target.y)
-                    || bomb_positions.contains(&(target.x, target.y))
-                {
+                if !grid.is_walkable(target.x, target.y) || is_blocked(target.x, target.y) {
                     continue;
                 }
-                let score = match escape_distance(target, grid, &self.known_bombs, &bomb_positions)
-                {
-                    Some(dist) => 10.0 - dist as f32 * 0.5,
-                    None => -5.0,
-                };
+                let score =
+                    match escape_distance(target, grid, &self.known_bombs, &self.known_bombs) {
+                        Some(dist) => 10.0 - dist as f32 * 0.5,
+                        None => -5.0,
+                    };
                 if score > best_score {
                     best_score = score;
                     best = *action;

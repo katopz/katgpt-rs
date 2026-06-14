@@ -41,17 +41,23 @@ impl BoundaryPenalty {
     /// Compute how close a logit value is to the nearest quantization boundary.
     /// Returns 0.0 if far from boundary, 1.0 if exactly on boundary.
     pub fn boundary_proximity(&self, logit: f32) -> f32 {
+        // Hoist the per-instance invariants out of the inner loop: callers like
+        // `compute_boundary_score` invoke this once per logit, so we save a
+        // division and multiplication per call.
+        let inv_scale = 1.0 / self.quant_scale;
         // Quantize to grid
-        let quantized = (logit / self.quant_scale).round() * self.quant_scale;
+        let quantized = (logit * inv_scale).round() * self.quant_scale;
         // Distance to nearest grid point
         let dist = (logit - quantized).abs();
         // How close to the midpoint between grid points (the boundary)
         let half_scale = self.quant_scale * 0.5;
         let boundary_dist = (dist - half_scale).abs();
 
-        // Sigmoid-based proximity: near boundary → high proximity
-        if boundary_dist < self.boundary_epsilon * self.quant_scale {
-            1.0 / (1.0 + (boundary_dist / self.quant_scale * 20.0 - 5.0).exp())
+        // Sigmoid-based proximity: near boundary → high proximity.
+        // `boundary_epsilon * quant_scale` is constant per call; precompute.
+        let near_threshold = self.boundary_epsilon * self.quant_scale;
+        if boundary_dist < near_threshold {
+            1.0 / (1.0 + (boundary_dist * inv_scale * 20.0 - 5.0).exp())
         } else {
             0.0
         }

@@ -20,11 +20,11 @@ pub enum SolverKind {
 /// Configuration for CriticalIntervalGate.
 #[derive(Clone, Debug)]
 pub struct CriticalIntervalConfig {
+    /// Vocab size for computing default threshold.
+    pub vocab_size: usize,
     /// Entropy threshold above which critical interval is detected.
     /// Default: log(vocab_size) * 0.5
     pub h_critical: f32,
-    /// Vocab size for computing default threshold.
-    pub vocab_size: usize,
     /// Whether to use q-sampling during critical steps.
     pub use_q_sample: bool,
 }
@@ -71,12 +71,14 @@ pub fn select_solver(entropy: f32, config: &CriticalIntervalConfig) -> SolverKin
 
 /// Compute Shannon entropy from marginal probabilities.
 /// H = -Σ p_i * log(p_i)
+///
+/// Branch-free: `p.max(1e-10).ln()` compiles to an `fmax` instruction,
+/// avoiding a data-dependent branch per element over the full vocabulary.
 pub fn shannon_entropy(marginals: &[f32]) -> f32 {
     let mut h = 0.0f32;
     for &p in marginals {
-        if p > 1e-10 {
-            h -= p * p.ln();
-        }
+        let lp = p.max(1e-10).ln();
+        h -= p * lp;
     }
     h
 }

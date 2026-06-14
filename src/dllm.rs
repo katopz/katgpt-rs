@@ -535,9 +535,7 @@ fn attention_forward_safe_into(
         let sum_exp = crate::simd::simd_sum_f32(&scores[..seq_len]);
         let inv_sum = 1.0 / sum_exp;
         crate::simd::simd_scale_inplace(&mut scores[..seq_len], inv_sum);
-        for t in 0..seq_len {
-            all_weights[h * seq_len + t] = scores[t];
-        }
+        all_weights[h * seq_len..h * seq_len + seq_len].copy_from_slice(&scores[..seq_len]);
 
         // Weighted value sum: accumulate per-position scaled value rows (SIMD-friendly)
         // Loop order: t outer → contiguous v_all row access, better cache locality.
