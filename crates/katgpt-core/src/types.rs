@@ -2598,6 +2598,10 @@ pub fn sample_token_into(probs: &[f32], rng: &mut Rng, cdf: &mut Vec<f32>) -> us
 /// where payload = `[n_adapters(4) | rank(4) | alpha(4) | adapter_data...]`
 /// and adapter_data = `[in_dim(4) | out_dim(4) | a_f32s | b_f32s]`
 ///
+/// Use [`LoraAdapter::load`] to read ALL adapters from a multi-adapter file
+/// (correct for L2+ models), or [`LoraAdapter::load_first`] when only the
+/// first adapter is needed (e.g., single-forward-pass heuristic players).
+///
 /// Zero-copy: loaded once per domain, reference-passed during inference.
 ///
 /// Fields ordered by descending alignment to minimize padding:
@@ -2618,10 +2622,14 @@ pub struct LoraAdapter {
 }
 
 impl LoraAdapter {
-    /// Load a single-adapter LoRA file from the Plan 008 binary format.
-    /// For multi-adapter files (multiple targets like Q, K, V), loads the first adapter.
-    /// Returns the adapter with its rank, alpha, and weight matrices.
-    pub fn load(path: &std::path::Path) -> Result<Self, String> {
+    /// Load ALL adapters from a Plan 008 binary LoRA file.
+    ///
+    /// Multi-adapter files (e.g., L2+ with 6 adapters/layer × n_layer) return every
+    /// adapter in declaration order. Single-adapter files return a 1-element Vec.
+    ///
+    /// Issue 299: previously this returned only the first adapter, silently
+    /// discarding layers 1+ and invalidating L2+ arena benchmarks.
+    pub fn load(path: &std::path::Path) -> Result<Vec<Self>, String> {
         const LORA_MAGIC: &[u8; 4] = b"LORA";
         const LORA_VERSION: u32 = 1;
 
@@ -2654,7 +2662,7 @@ impl LoraAdapter {
         }
 
         let mut offset = 0usize;
-        let n_adapters = read_u32_le(payload, &mut offset)?;
+        let n_adapters = read_u32_le(payload, &mut offset)? as usize;
         let rank = read_u32_le(payload, &mut offset)? as usize;
         let alpha = read_f32_le(payload, &mut offset)?;
 
@@ -2662,74 +2670,103 @@ impl LoraAdapter {
             return Err("No adapters in lora file".into());
         }
 
-        // Load first adapter
-        let in_dim = read_u32_le(payload, &mut offset)? as usize;
-        let out_dim = read_u32_le(payload, &mut offset)? as usize;
+        let mut adapters = Vec::with_capacity(n_adapters);
+        for i in 0..n_adapters {
+            let in_dim = read_u32_le(payload, &mut offset)? as usize;
+            let out_dim = read_u32_le(payload, &mut offset)? as usize;
 
-        let a_count = rank * in_dim;
-        let b_count = out_dim * rank;
-        let a_bytes = a_count * std::mem::size_of::<f32>();
-        let b_bytes = b_count * std::mem::size_of::<f32>();
+            let a_count = rank * in_dim;
+            let b_count = out_dim * rank;
+            let a_bytes = a_count * std::mem::size_of::<f32>();
+            let b_bytes = b_count * std::mem::size_of::<f32>();
 
-        if offset + a_bytes + b_bytes > payload.len() {
-            return Err("Truncated adapter data".into());
+            if offset + a_bytes + b_bytes > payload.len() {
+                return Err(format!("Truncated adapter {i} data"));
+            }
+
+            let a: Vec<f32> = {
+                #[cfg(target_endian = "little")]
+                {
+                    let mut v = Vec::with_capacity(a_count);
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            payload[offset..].as_ptr(),
+                            v.as_mut_ptr() as *mut u8,
+                            a_bytes,
+                        );
+                        v.set_len(a_count);
+                    }
+                    v
+                }
+                #[cfg(not(target_endian = "little"))]
+                {
+                    payload[offset..offset + a_bytes]
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                        .collect()
+                }
+            };
+            offset += a_bytes;
+
+            let b: Vec<f32> = {
+                #[cfg(target_endian = "little")]
+                {
+                    let mut v = Vec::with_capacity(b_count);
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            payload[offset..].as_ptr(),
+                            v.as_mut_ptr() as *mut u8,
+                            b_bytes,
+                        );
+                        v.set_len(b_count);
+                    }
+                    v
+                }
+                #[cfg(not(target_endian = "little"))]
+                {
+                    payload[offset..offset + b_bytes]
+                        .chunks_exact(4)
+                        .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                        .collect()
+                }
+            };
+            offset += b_bytes;
+
+            adapters.push(Self {
+                rank,
+                in_dim,
+                out_dim,
+                alpha,
+                a,
+                b,
+            });
         }
 
-        let a: Vec<f32> = {
-            #[cfg(target_endian = "little")]
-            {
-                let mut v = Vec::with_capacity(a_count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        payload[offset..].as_ptr(),
-                        v.as_mut_ptr() as *mut u8,
-                        a_bytes,
-                    );
-                    v.set_len(a_count);
-                }
-                v
-            }
-            #[cfg(not(target_endian = "little"))]
-            {
-                payload[offset..offset + a_bytes]
-                    .chunks_exact(4)
-                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-                    .collect()
-            }
-        };
-        offset += a_bytes;
+        if offset != payload.len() {
+            return Err(format!(
+                "LoRA payload trailing data: consumed {offset}, payload {}",
+                payload.len()
+            ));
+        }
 
-        let b: Vec<f32> = {
-            #[cfg(target_endian = "little")]
-            {
-                let mut v = Vec::with_capacity(b_count);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(
-                        payload[offset..].as_ptr(),
-                        v.as_mut_ptr() as *mut u8,
-                        b_bytes,
-                    );
-                    v.set_len(b_count);
-                }
-                v
-            }
-            #[cfg(not(target_endian = "little"))]
-            {
-                payload[offset..offset + b_bytes]
-                    .chunks_exact(4)
-                    .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-                    .collect()
-            }
-        };
+        Ok(adapters)
+    }
 
-        Ok(Self {
-            rank,
-            in_dim,
-            out_dim,
-            alpha,
-            a,
-            b,
-        })
+    /// Load only the first adapter from a Plan 008 binary LoRA file.
+    ///
+    /// Convenience for consumers that store a single `LoraAdapter` and only run
+    /// one forward pass (e.g., `LoraPlayer`, `FullHLPlayer`). Multi-adapter
+    /// files (L2+) have layers 1+ silently dropped — this is explicit about
+    /// that limitation so callers cannot accidentally regress on Issue 299.
+    ///
+    /// For correct multi-adapter evaluation, use [`load`](Self::load) and apply
+    /// each adapter to its target projection during the forward pass.
+    pub fn load_first(path: &std::path::Path) -> Result<Self, String> {
+        let adapters = Self::load(path)?;
+        adapters
+            .into_iter()
+            .next()
+            .ok_or_else(|| "LoRA file declared zero-length adapter list".into())
     }
 
     /// Load LoRA adapters from a compact binary format.
@@ -4479,6 +4516,151 @@ mod tests_types {
         assert!(!mask[0] && !mask[2], "groups 0 and 2 must be pruned");
         // Exactly 2 active.
         assert_eq!(mask.iter().filter(|&&b| b).count(), 2);
+    }
+
+    // ── Issue 299: multi-adapter LoRA loading ──────────────────────
+
+    /// Build a Plan 008 LoRA binary file with `n` adapters for testing.
+    /// Each adapter's A/B matrices are filled with a distinct sentinel pattern
+    /// so we can verify the loader returns the right data per adapter.
+    fn build_test_lora_file(path: &std::path::Path, n_adapters: usize, rank: usize) {
+        let in_dim = 4usize;
+        let out_dim = 4usize;
+        let alpha = 8.0f32;
+
+        // Payload: [n_adapters(4)][rank(4)][alpha(4)] + per-adapter [in_dim(4)][out_dim(4)][A][B]
+        let header = 4 + 4 + 4;
+        let per_adapter = 4 + 4 + (rank * in_dim + out_dim * rank) * std::mem::size_of::<f32>();
+        let mut payload = Vec::with_capacity(header + n_adapters * per_adapter);
+
+        payload.extend_from_slice(&(n_adapters as u32).to_le_bytes());
+        payload.extend_from_slice(&(rank as u32).to_le_bytes());
+        payload.extend_from_slice(&alpha.to_le_bytes());
+
+        for i in 0..n_adapters {
+            payload.extend_from_slice(&(in_dim as u32).to_le_bytes());
+            payload.extend_from_slice(&(out_dim as u32).to_le_bytes());
+            // A: [rank × in_dim], sentinel = (i + 1) * 0.1
+            let a_sentinel = (i as f32 + 1.0) * 0.1;
+            for _ in 0..(rank * in_dim) {
+                payload.extend_from_slice(&a_sentinel.to_le_bytes());
+            }
+            // B: [out_dim × rank], sentinel = (i + 1) * -0.2
+            let b_sentinel = (i as f32 + 1.0) * -0.2;
+            for _ in 0..(out_dim * rank) {
+                payload.extend_from_slice(&b_sentinel.to_le_bytes());
+            }
+        }
+
+        let checksum = blake3::hash(&payload);
+        let mut file_data = Vec::with_capacity(4 + 4 + 32 + payload.len());
+        file_data.extend_from_slice(b"LORA");
+        file_data.extend_from_slice(&1u32.to_le_bytes());
+        file_data.extend_from_slice(checksum.as_bytes());
+        file_data.extend_from_slice(&payload);
+        std::fs::write(path, &file_data).unwrap();
+    }
+
+    #[test]
+    fn test_lora_load_single_adapter_returns_one_element_vec() {
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_single.bin");
+        build_test_lora_file(&tmp, 1, 4);
+        let adapters = LoraAdapter::load(&tmp).expect("single-adapter load should succeed");
+        assert_eq!(adapters.len(), 1, "single-adapter file must yield 1-element Vec");
+        assert_eq!(adapters[0].rank, 4);
+        assert_eq!(adapters[0].in_dim, 4);
+        assert_eq!(adapters[0].out_dim, 4);
+        assert!((adapters[0].alpha - 8.0).abs() < 1e-6);
+        drop(std::fs::remove_file(&tmp));
+    }
+
+    /// Issue 299 regression: a 12-adapter file (L2 model, 6 adapters/layer × 2 layers)
+    /// must load ALL 12 adapters. Previously `load()` returned only the first.
+    #[test]
+    fn test_lora_load_multi_adapter_returns_all() {
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_multi.bin");
+        build_test_lora_file(&tmp, 12, 4);
+        let adapters = LoraAdapter::load(&tmp).expect("12-adapter load should succeed");
+        assert_eq!(
+            adapters.len(),
+            12,
+            "12-adapter file must yield 12-element Vec (Issue 299 regression)"
+        );
+
+        // Verify each adapter has its own sentinel data — proves layers 1..11 aren't dropped
+        for (i, a) in adapters.iter().enumerate() {
+            let expected_a = (i as f32 + 1.0) * 0.1;
+            let expected_b = (i as f32 + 1.0) * -0.2;
+            assert_eq!(a.rank, 4, "adapter {i} rank");
+            assert_eq!(a.in_dim, 4, "adapter {i} in_dim");
+            assert_eq!(a.out_dim, 4, "adapter {i} out_dim");
+            assert_eq!(a.a.len(), 4 * 4, "adapter {i} A matrix size");
+            assert_eq!(a.b.len(), 4 * 4, "adapter {i} B matrix size");
+            assert!(
+                a.a.iter().all(|&v| (v - expected_a).abs() < 1e-6),
+                "adapter {i} A data mismatch"
+            );
+            assert!(
+                a.b.iter().all(|&v| (v - expected_b).abs() < 1e-6),
+                "adapter {i} B data mismatch"
+            );
+        }
+        drop(std::fs::remove_file(&tmp));
+    }
+
+    #[test]
+    fn test_lora_load_first_returns_only_first_adapter() {
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_first.bin");
+        build_test_lora_file(&tmp, 6, 4);
+        let first = LoraAdapter::load_first(&tmp).expect("load_first should succeed");
+        assert_eq!(first.rank, 4);
+        // Adapter 0 sentinel is 1.0 * 0.1 = 0.1
+        assert!(first.a.iter().all(|&v| (v - 0.1).abs() < 1e-6));
+        assert!(first.b.iter().all(|&v| (v - (-0.2)).abs() < 1e-6));
+        drop(std::fs::remove_file(&tmp));
+    }
+
+    #[test]
+    fn test_lora_load_rejects_truncated_multi_adapter() {
+        // Truncate a 12-adapter file so only 6 adapters' bytes fit — loader must error
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_truncated.bin");
+        build_test_lora_file(&tmp, 12, 4);
+        let full = std::fs::read(&tmp).unwrap();
+        // Cut the payload in half (keep header + checksum + ~half the adapters)
+        let cut = full.len() / 2 + 20; // keep enough to pass header check
+        std::fs::write(&tmp, &full[..cut]).unwrap();
+        // Re-generate checksum won't match — but if it did, the truncation check fires.
+        // Either way, load must fail (not silently return wrong number of adapters).
+        let result = LoraAdapter::load(&tmp);
+        assert!(result.is_err(), "truncated multi-adapter file must error, not silently drop adapters");
+        drop(std::fs::remove_file(&tmp));
+    }
+
+    #[test]
+    fn test_lora_load_rejects_bad_magic() {
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_bad_magic.bin");
+        std::fs::write(&tmp, b"NOPE\0\0\0\0").unwrap();
+        assert!(LoraAdapter::load(&tmp).is_err());
+        drop(std::fs::remove_file(&tmp));
+    }
+
+    #[test]
+    fn test_lora_load_rejects_zero_adapters() {
+        let tmp = std::env::temp_dir().join("katgpt_core_test_lora_zero.bin");
+        // Build a valid-checksum file that declares 0 adapters
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&0u32.to_le_bytes()); // n_adapters = 0
+        payload.extend_from_slice(&4u32.to_le_bytes()); // rank
+        payload.extend_from_slice(&8.0f32.to_le_bytes()); // alpha
+        let checksum = blake3::hash(&payload);
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"LORA");
+        buf.extend_from_slice(&1u32.to_le_bytes());
+        buf.extend_from_slice(checksum.as_bytes());
+        buf.extend_from_slice(&payload);
+        std::fs::write(&tmp, &buf).unwrap();
+        assert!(LoraAdapter::load(&tmp).is_err(), "zero-adapter declaration must be rejected");
+        drop(std::fs::remove_file(&tmp));
     }
 }
 
