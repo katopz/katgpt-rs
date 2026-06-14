@@ -169,6 +169,7 @@ mech_attribution = ["cna_steering", "ropd_rubric", "bandit"]  # Mechanistic Data
 safe_bandit = ["bandit"]  # PrudentBanker Safe-Phased Bandit — delay-calibrated safe exploration (Plan 137)
 stiff_anomaly = []  # Stiff/Soft Subspace Anomaly Gate — generic eigenvalue decomposition anomaly detection (Plan 138)
 still_kv = []  # StillKV perceiver-based KV cache compaction — modelless (Plan 245)
+attn_match = []  # Attention Matching KV compaction — modelless (Plan 265, arxiv 2602.16284)
 cache_prune = []  # CachePrune SAT + rolling hash + sensitivity masking (Plan 140, Research 101)
 state_source = ["bandit"]  # State-Source Modelless Distillation — state-visitation tracking + P-UCB + retention (Plan 142, Research 103)
 nexus_elo = ["state_source", "proof_sketch_evolution"]  # Nexus Elo — Plackett-Luce + P-UCB + goal cache for DDTree/SR²AM (Plan 143, Research 104)
@@ -1055,3 +1056,7 @@ required-features = ["dec_terrain_ai"]
 name = "bench_256_kv_outer_goat"
 path = "tests/bench_256_kv_outer.goat.rs"
 required-features = ["msa_kv_outer"]
+
+[[example]]
+name = "attn_match_basic"
+required-features = ["attn_match"]
