@@ -983,6 +983,123 @@ pub trait GenerativeConstraintPruner<Output>: Send + Sync {
     }
 }
 
+// ── QGradientOracle (Plan 268 — QGF Test-Time Q-Guided Flow) ─────
+
+/// Critic gradient oracle for test-time guidance.
+///
+/// Provides `∇_a Q(s, a)` — the gradient of the critic (value function)
+/// with respect to the action — evaluated at a *projected* final output.
+/// This is the modelless primitive that powers QGF (Q-Guided Flow),
+/// distilling the test-time gradient-guidance principle from
+/// arXiv:2606.11087 (Zhou et al., 2026).
+///
+/// # QGF Design Decision: Drop the Jacobian (J ≈ I)
+///
+/// Per the QGF paper §5, the gradient is computed at a **first-order
+/// Euler approximation** of the clean output (`â_1 = a_t + (1-t)·v_θ`),
+/// and the Jacobian `∂â_1/∂a_t` is intentionally **dropped** (set to
+/// identity). This is *not* a lazy approximation:
+///
+/// - It gives **lower variance** than the full BPTT gradient (paper Fig 3)
+/// - It is **cheaper** (no backprop through the generator)
+/// - It produces **better** Q-optimization (paper Fig 4)
+///
+/// **Do NOT add chain-rule backprop through the generator** in downstream
+/// implementations — it re-introduces the high-variance BPTT path that QGF
+/// was designed to avoid. The existing FFT smoothing in `FlowFieldCache`
+/// is the equivalent variance-reduction mechanism for our discrete case.
+///
+/// # Usage
+///
+/// Implement this for any value-function-like type:
+/// - `LeoHead` (Q-values for all goals/actions)
+/// - `FlowFieldCache` (Q-values → FFT smoothed → gradient field)
+/// - `ActionBridge` (latent → raw action via ternary direction dot-product)
+/// - A BFN-rejection-sampling proxy (Freeze-tier fallback, no trained critic)
+///
+/// See `.research/268_QGF_Test_Time_Q_Guided_Flow.md` and
+/// `.plans/268_qgf_test_time_q_guided_flow.md`.
+#[cfg(feature = "qgf_oracle")]
+pub trait QGradientOracle {
+    /// State type (observation, context).
+    type State;
+
+    /// Action type (token, game action, latent vector).
+    type Action;
+
+    /// `∇_a Q(s, a)` evaluated at the *projected* final action.
+    ///
+    /// The caller must first produce the projection `â_1` via
+    /// `qgf::project_one_step()` — querying the gradient at the *current*
+    /// intermediate action is the OOD-biased path that QGF avoids.
+    ///
+    /// Returns a vector of per-action-dimension gradients. For discrete
+    /// action spaces, this is a per-action logit tilt.
+    fn q_gradient_at(&self, state: &Self::State, projected_action: &Self::Action) -> Vec<f32>;
+
+    /// Zero-alloc variant — writes the gradient into the caller-provided buffer.
+    ///
+    /// `out.len()` must equal the action-space dimensionality. Implementations
+    /// should panic (debug) or no-op (release) on length mismatch.
+    fn q_gradient_into(
+        &self,
+        state: &Self::State,
+        projected_action: &Self::Action,
+        out: &mut [f32],
+    );
+
+    /// Confidence in the gradient at this state, in `[0.0, 1.0]`.
+    ///
+    /// Used by `VarianceAdaptiveGuidance` (Plan 268 F4) to scale the guidance
+    /// weight `1/β` per-query via `sigmoid(k · (confidence − threshold))`.
+    ///
+    /// - Returns `1.0` for deterministic oracles (cached Q-values, ternary bridge)
+    /// - Returns lower values for noisy oracles (BFN rejection proxy, stale critic)
+    ///
+    /// Reuse Thicket (Plan 267) variance probe if available — confidence is
+    /// `1.0 − normalized_variance(Q(s, ·))`.
+    #[inline]
+    fn confidence(&self, _state: &Self::State) -> f32 {
+        1.0
+    }
+}
+
+/// No-op oracle that returns zero gradient — pure BC reference policy,
+/// no Q-guidance. Used in the Freeze tier (graceful degradation when no
+/// trained critic is available). Engine always boots.
+#[cfg(feature = "qgf_oracle")]
+#[derive(Clone, Debug, Default)]
+pub struct NoGuidanceOracle;
+
+#[cfg(feature = "qgf_oracle")]
+impl QGradientOracle for NoGuidanceOracle {
+    type State = ();
+    type Action = ();
+
+    #[inline]
+    fn q_gradient_at(&self, _state: &Self::State, _projected_action: &Self::Action) -> Vec<f32> {
+        Vec::new()
+    }
+
+    #[inline]
+    fn q_gradient_into(
+        &self,
+        _state: &Self::State,
+        _projected_action: &Self::Action,
+        out: &mut [f32],
+    ) {
+        for x in out.iter_mut() {
+            *x = 0.0;
+        }
+    }
+
+    /// Freeze tier: zero confidence → adaptive guidance weight collapses to 0.
+    #[inline]
+    fn confidence(&self, _state: &Self::State) -> f32 {
+        0.0
+    }
+}
+
 // ── Game Trace + Partial Scoring (Plan 191) ──────────────────────
 
 /// Minimal game trace for partial scoring.

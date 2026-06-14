@@ -34,6 +34,12 @@ pub use traits::{
 };
 pub use traits::{GenerativeConstraintPruner, SpeculativeGenerator};
 
+// Q-Guided Flow (Plan 268) — test-time Q-gradient guidance primitive.
+#[cfg(feature = "qgf_oracle")]
+pub use traits::{NoGuidanceOracle, QGradientOracle};
+#[cfg(feature = "qgf")]
+pub mod qgf;
+
 #[cfg(feature = "dual_leo")]
 pub use traits::{
     ActingMode, AlphaSchedule, AutocurriculumSampler, BcConfig, BcTarget, DualLeoMixer,

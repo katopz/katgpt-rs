@@ -84,6 +84,11 @@ dendritic_gate = []  # DendriticGate NMDA-inspired adaptive branching types (Pla
 sector_projection = []  # Multi-sector spatial projection (Plan 262)
 action_bridge = []  # Generic latent→raw action bridge (Plan 262)
 dec_terrain_ai = ["dec_operators"]  # Dynamic DEC topology + terrain cochains for destructible terrain (Plan 261, GOAT-gated)
+qgf = ["qgf_oracle", "qgf_projector"]  # Q-Guided Flow — test-time Q-gradient guidance parent (Plan 268, arXiv:2606.11087, GOAT-gated)
+qgf_oracle = []  # QGradientOracle trait — drop-Jacobian critic gradient (Plan 268 F3)
+qgf_projector = ["speculative_generator"]  # FirstOrderProjector — one-step Euler projection (Plan 268 F2)
+qgf_drafter = ["qgf_oracle", "qgf_projector"]  # QGuidedDrafter — Q-gradient velocity bias during generation (Plan 268 F1)
+qgf_adaptive = ["qgf_drafter"]  # VarianceAdaptiveGuidance — sigmoid-gated per-query 1/β (Plan 268 F4)
 
 [[bench]]
 name = "flow_field_bench"

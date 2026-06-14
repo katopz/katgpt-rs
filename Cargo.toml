@@ -28,6 +28,7 @@ reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }
 toml = "0.8"
 bytemuck = "1"
 half = "2"  # f16 compact KV cache storage (Plan 245 StillKV)
+rustfft = { version = "6", optional = true }  # CHIAR per-token DCT entropy (Plan 269)
 
 [target.'cfg(target_os = "macos")'.dependencies]
 coreml-native = { version = "0.2", optional = true }  # Apple Neural Engine inference backend (Plan 176)
@@ -120,6 +121,7 @@ slod = ["katgpt-core/slod", "spectral_hierarchy"]  # SLoD Spectral Level-of-Deta
 spectral_threat = ["katgpt-core/spectral_threat", "sense_composition"]  # LinOSS Modal Threat Prediction (Plan 241, GOAT PASS 46.9%)
 sense_lod = ["katgpt-core/sense_lod", "sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240, GOAT PASS 46.9%)
 spectral_pruner = ["katgpt-core/spectral_pruner"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
+chiaroscuro = ["dep:rustfft"]  # CHIAR Chiaroscuro Attention — per-token DCT spectral entropy operator routing + KV cache strategy (Plan 269, opt-in until GOAT)
 octree_ctc = ["katgpt-core/octree_ctc", "bandit"]  # OctreeCTC Reconstructive Memory Navigation (Plan 248, GOAT-gated)
 bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236, GOAT 10/10 but marginal drift 4.7% vs 30% target — opt-in loser)
 rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
@@ -154,6 +156,7 @@ trd_refined_draft = ["elf_sde", "bandit", "bt_rank"]  # Trajectory-Refined Draft
 monopoly = ["bevy_ecs", "bandit"]  # Monopoly Board Game Engine (Plan 034)
 go = ["bandit", "dep:reqwest"]  # AutoGo API bridge + Go GameState (Plan 065)
 randopt_weight = ["bandit"]  # RandOpt weight-space perturbation ensembling (Plan 121, Research 080)
+thicket_variance_probe = ["rv_gated_routing"]  # Thicket Variance Probe — decoding-space density routing signal (Plan 267, Research 267) — composes with RV for ablation
 toast_tokenizer = []  # ToaST split-tree tokenization (Plan 122, Research 081)
 convex_tok = ["dep:good_lp", "toast_tokenizer"]  # ConvexTok LP vocabulary optimizer (Plan 127, Research 087)
 datrie_vocab = ["toast_tokenizer"]  # Alias: enables toast_tokenizer (datrie is auto-routed) + benchmark examples (Research 137)
@@ -313,6 +316,12 @@ gpart_pruning = ["katgpt-core/gpart_pruning"]  # GPart top-k group pruning — m
 dendritic_gate = ["katgpt-core/dendritic_gate"]  # DendriticGate NMDA-inspired adaptive tree branching (Plan 260, GOAT-gated)
 dec_operators = ["katgpt-core/dec_operators"]  # DEC operators — cell complexes, cochain fields, d/δ/Δ operators (Plan 251)
 dec_terrain_ai = ["katgpt-core/dec_terrain_ai"]  # Dynamic DEC topology + terrain cochains for destructible terrain (Plan 261, GOAT-gated)
+qgf_oracle = ["katgpt-core/qgf_oracle"]  # QGradientOracle trait — drop-Jacobian critic gradient (Plan 268 F3, arXiv:2606.11087)
+qgf_projector = ["katgpt-core/qgf_projector", "speculative_generator"]  # FirstOrderProjector — one-step Euler projection (Plan 268 F2)
+qgf_drafter = ["katgpt-core/qgf_drafter", "qgf_oracle", "qgf_projector"]  # QGuidedDrafter — Q-gradient velocity bias during generation (Plan 268 F1)
+qgf_adaptive = ["katgpt-core/qgf_adaptive", "qgf_drafter"]  # VarianceAdaptiveGuidance — sigmoid-gated per-query 1/β (Plan 268 F4)
+qgf = ["qgf_drafter"]  # Q-Guided Flow parent — all modelless components (Plan 268, GOAT-gated, default OFF)
+dense_mesh = []  # DenseMesh latent node network — LMNet distillation (Research 234, Plan 266, GOAT-gated)
 manifold_pruner = []  # ManifoldE point-to-manifold soft validity scoring (Research 207, Plan 234, GOAT G1 FAIL — demoted, keep opt-in)
 union_bound_confidence = []  # Union bound additive branch confidence (Research 205, Plan 231, GOAT 6/6, default-ON)
 pathway_tracker = []  # Intrinsic pathway stability detection (Research 205, Plan 231, GOAT 7/7, default-ON)
@@ -704,6 +713,14 @@ required-features = ["stiff_anomaly"]
 [[example]]
 name = "randopt_01_basic"
 required-features = ["randopt_weight"]
+
+# ── Thicket Variance Probe (Plan 267) ─────────────────────────
+# Decoding-space density routing demo. Shows before/after:
+# - easy queries (dense thicket) → CPU only, no CoT expansion
+# - hard queries (needle) → TVP promotes, expands CoT budget
+[[example]]
+name = "thicket_variance_probe_01_basic"
+required-features = ["thicket_variance_probe"]
 
 # ── CachePrune (Plan 140) ──────────────────────────────────────
 
