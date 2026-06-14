@@ -5913,7 +5913,8 @@ pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f3
         let pos = ((dir.pos_bits & mask) != 0) as i8;
         let neg = ((dir.neg_bits & mask) != 0) as i8;
         let sign = (pos - neg) as f32;
-        acc += sign * unsafe { *state.get_unchecked(i) };
+        // FMA: acc = sign * state[i] + acc (single rounding).
+        acc = sign.mul_add(unsafe { *state.get_unchecked(i) }, acc);
     }
     acc * dir.row_scale
 }

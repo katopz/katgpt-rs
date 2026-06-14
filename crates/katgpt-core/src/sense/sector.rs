@@ -15,7 +15,8 @@
 fn dot_f32_i8<const D: usize>(observation: &[f32; D], direction: &[i8; D]) -> f32 {
     let mut acc = 0.0f32;
     for i in 0..D {
-        acc += observation[i] * direction[i] as f32;
+        // FMA: acc = obs[i] * dir[i] + acc (single rounding when target has FMA).
+        acc = (observation[i]).mul_add(direction[i] as f32, acc);
     }
     acc
 }

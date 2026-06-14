@@ -4833,8 +4833,10 @@ impl SenseModule {
         for (i, (hla_val, dir)) in hla_state.iter().zip(self.directions.iter()).enumerate().take(n) {
             let pos = ((dir.pos_bits >> i) & 1) as u32 as f32;
             let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
-            // sign ∈ {-1, 0, +1} — FMA: dot += sign * hla * scale
-            dot += (pos - neg) * hla_val * dir.row_scale;
+            // sign ∈ {-1, 0, +1} — single FMA: dot += (sign * hla_val) * scale.
+            // sign * hla_val is computed first, then FMA-fused with scale + dot.
+            let sign = pos - neg;
+            dot = (sign * hla_val).mul_add(dir.row_scale, dot);
         }
 
         // Sigmoid * confidence — uses shared crate::simd::fast_sigmoid (bounded (0,1))
