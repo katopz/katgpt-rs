@@ -127,6 +127,20 @@ pub struct S2FCollapseDetector {
     max_budget: u32,
     /// Efficiency γ for reward shaping (from `ThinkingBudget::efficiency_gamma`).
     gamma: f32,
+    // ── Plan 267 T12: TVP (Thicket Variance Probe) integration ───────
+    // High reasoning disagreement is the INVERSE of hesitation — it signals
+    // genuine uncertainty rather than degenerate repetition. When TVP EMA
+    // exceeds `tvp_expand_threshold`, the effective collapse threshold is
+    // raised by `tvp_expand_budget_delta` to give the model more thinking
+    // budget for substantive exploration.
+    #[cfg(feature = "thicket_variance_probe")]
+    tvp_reasoning_ema: f32,
+    /// Budget expansion (in hesitation tokens) applied when TVP EMA is high.
+    #[cfg(feature = "thicket_variance_probe")]
+    tvp_expand_budget_delta: u32,
+    /// TVP reasoning EMA above this triggers budget expansion. Range [0, 1].
+    #[cfg(feature = "thicket_variance_probe")]
+    tvp_expand_threshold: f32,
 }
 
 impl S2FCollapseDetector {
@@ -144,6 +158,12 @@ impl S2FCollapseDetector {
             last_trace_hesitation: 0,
             max_budget: budget.max_tokens,
             gamma: budget.efficiency_gamma,
+            #[cfg(feature = "thicket_variance_probe")]
+            tvp_reasoning_ema: 0.0,
+            #[cfg(feature = "thicket_variance_probe")]
+            tvp_expand_budget_delta: 0,
+            #[cfg(feature = "thicket_variance_probe")]
+            tvp_expand_threshold: 0.5,
         }
     }
 
@@ -156,6 +176,69 @@ impl S2FCollapseDetector {
         // Placeholder token IDs — override per-tokenizer in production.
         // These represent "wait", "hmm", "actually", "let me" equivalents.
         Self::new(vec![/* wait */ 0, /* hmm */ 0, /* actually */ 0], budget)
+    }
+
+    // ── Plan 267 T12: TVP (Thicket Variance Probe) integration ──────
+
+    /// Configure TVP-driven budget expansion (Plan 267 T12).
+    ///
+    /// When `observe_tvp_disagreement()` is called with a signal whose
+    /// EMA-smoothed `reasoning_disagreement` exceeds `expand_threshold`,
+    /// the effective collapse threshold is raised by `expand_delta` tokens.
+    /// This gives the model more thinking budget on genuinely uncertain
+    /// queries (the inverse signal of degenerate hesitation).
+    ///
+    /// Disabled by default (`expand_delta = 0`). Enable once the probe
+    /// runner (Plan 267 T4/T5) lands and produces real `TvpSignal`s.
+    #[cfg(feature = "thicket_variance_probe")]
+    pub fn with_tvp_expansion(mut self, expand_delta: u32, expand_threshold: f32) -> Self {
+        self.tvp_expand_budget_delta = expand_delta;
+        self.tvp_expand_threshold = expand_threshold.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Observe a TVP disagreement signal from the InferenceRouter (Plan 267 T12).
+    ///
+    /// Updates the EMA-smoothed reasoning disagreement. High disagreement
+    /// indicates genuine uncertainty (multiple probes disagree on the answer),
+    /// which is the INVERSE of hesitation — the detector should *expand*
+    /// the thinking budget rather than contract it.
+    ///
+    /// Low disagreement + high hesitation → contract as normal (degenerate trace).
+    /// High disagreement → expand threshold by `tvp_expand_budget_delta`.
+    ///
+    /// Zero-allocation: only scalar EMA update. No allocations.
+    #[cfg(feature = "thicket_variance_probe")]
+    pub fn observe_tvp_disagreement(
+        &mut self,
+        signal: &crate::pruners::thicket_variance_probe::TvpSignal,
+    ) {
+        let alpha = self.ema_alpha;
+        self.tvp_reasoning_ema =
+            (1.0 - alpha) * self.tvp_reasoning_ema + alpha * signal.reasoning_disagreement;
+    }
+
+    /// Current EMA-smoothed TVP reasoning disagreement (Plan 267 T12).
+    ///
+    /// Returns 0.0 when no TVP signals have been observed.
+    #[cfg(feature = "thicket_variance_probe")]
+    #[inline]
+    pub fn tvp_reasoning_ema(&self) -> f32 {
+        self.tvp_reasoning_ema
+    }
+
+    /// Compute the current effective threshold, accounting for TVP expansion.
+    ///
+    /// Returns `threshold + tvp_expand_budget_delta` when TVP EMA exceeds
+    /// the configured expansion threshold, else `threshold`.
+    #[cfg(feature = "thicket_variance_probe")]
+    #[inline]
+    fn effective_threshold(&self) -> u32 {
+        if self.tvp_expand_budget_delta > 0 && self.tvp_reasoning_ema > self.tvp_expand_threshold {
+            self.threshold.saturating_add(self.tvp_expand_budget_delta)
+        } else {
+            self.threshold
+        }
     }
 
     /// Freeze detector state to disk via `repr(C)` binary dump.
@@ -208,7 +291,15 @@ impl CollapseDetector for S2FCollapseDetector {
         let count = self.count_hesitation();
         self.last_trace_hesitation = self.last_trace_hesitation.max(count);
 
-        count >= self.threshold
+        // Effective threshold: expand when TVP indicates genuine uncertainty
+        // (Plan 267 T12). When `thicket_variance_probe` is off, this is just
+        // `self.threshold` — zero-cost gate.
+        #[cfg(feature = "thicket_variance_probe")]
+        let effective = self.effective_threshold();
+        #[cfg(not(feature = "thicket_variance_probe"))]
+        let effective: u32 = self.threshold;
+
+        count >= effective
     }
 
     /// Reset internal state between traces. Updates EMA threshold.
@@ -230,6 +321,13 @@ impl CollapseDetector for S2FCollapseDetector {
         self.ring_buffer = [0u32; Self::RING_SIZE];
         self.ring_write_idx = 0;
         self.last_trace_hesitation = 0;
+
+        // Plan 267 T12: clear TVP EMA between traces (per-query signal).
+        // Frozen config (expand_delta, expand_threshold) is preserved.
+        #[cfg(feature = "thicket_variance_probe")]
+        {
+            self.tvp_reasoning_ema = 0.0;
+        }
     }
 
     /// Number of hesitation tokens observed in the current trace.
@@ -595,5 +693,201 @@ mod tests {
         assert_eq!(detector.hesitation_count(), 0);
         assert!(!detector.check_collapse(10, 0));
         assert_eq!(decide_route(false), ComputeRoute::Gpu);
+    }
+
+    // ── Plan 267 T12: TVP Integration Tests ─────────────────────────
+    //
+    // These verify the inverse-signal composition: high TVP reasoning
+    // disagreement expands the effective collapse threshold, giving the
+    // model more thinking budget on genuinely uncertain queries.
+    //
+    // Gated on `thicket_variance_probe` because they reference `TvpSignal`.
+    #[cfg(feature = "thicket_variance_probe")]
+    mod tvp_integration {
+        use super::*;
+        use crate::pruners::thicket_variance_probe::TvpSignal;
+
+        fn make_detector_with_tvp(
+            threshold: u32,
+            expand_delta: u32,
+            expand_threshold: f32,
+        ) -> S2FCollapseDetector {
+            let budget = ThinkingBudget {
+                max_tokens: 4096,
+                collapse_threshold: threshold,
+                efficiency_gamma: 0.5,
+            };
+            S2FCollapseDetector::new(vec![42], &budget)
+                .with_tvp_expansion(expand_delta, expand_threshold)
+        }
+
+        fn high_disagreement_signal() -> TvpSignal {
+            TvpSignal {
+                reasoning_disagreement: 0.9,
+                format_disagreement: 0.05,
+                logit_kl: 1.5,
+                probe_count_used: 4,
+            }
+        }
+
+        fn low_disagreement_signal() -> TvpSignal {
+            TvpSignal {
+                reasoning_disagreement: 0.05,
+                format_disagreement: 0.0,
+                logit_kl: 0.01,
+                probe_count_used: 4,
+            }
+        }
+
+        /// Observe high TVP disagreement → effective threshold expands by `expand_delta`.
+        /// Model can emit more hesitation tokens before collapse triggers.
+        #[test]
+        fn high_disagreement_expands_effective_threshold() {
+            let mut detector = make_detector_with_tvp(3, 5, 0.5);
+            // Observe enough high-disagreement signals to push EMA above 0.5.
+            // EMA: starts at 0.0, α=0.1. After 8 observations of 0.9:
+            //   ema_n = 0.9 * (1 - 0.9^n)
+            //   n=8: 0.9 * (1 - 0.4305) ≈ 0.513 > 0.5 ✓
+            for _ in 0..8 {
+                detector.observe_tvp_disagreement(&high_disagreement_signal());
+            }
+            assert!(
+                detector.tvp_reasoning_ema() > 0.5,
+                "EMA should exceed 0.5 after sustained high disagreement, got {}",
+                detector.tvp_reasoning_ema()
+            );
+
+            // With expansion active, threshold=3 + delta=5 = 8 effective.
+            // Feed 7 hesitation tokens — should NOT collapse (7 < 8).
+            for i in 0..7 {
+                assert!(
+                    !detector.check_collapse(42, i),
+                    "Should not collapse at count={} with expanded threshold 8",
+                    i + 1
+                );
+            }
+
+            // Feed 1 more (total 8) — now collapse triggers (8 >= 8).
+            assert!(
+                detector.check_collapse(42, 7),
+                "Should collapse at count=8 with expanded threshold 8"
+            );
+        }
+
+        /// Low TVP disagreement → no threshold expansion. Standard behavior preserved.
+        #[test]
+        fn low_disagreement_keeps_threshold_unchanged() {
+            let mut detector = make_detector_with_tvp(3, 5, 0.5);
+            // Observe low disagreement — EMA stays low.
+            for _ in 0..8 {
+                detector.observe_tvp_disagreement(&low_disagreement_signal());
+            }
+            assert!(
+                detector.tvp_reasoning_ema() < 0.5,
+                "EMA should stay below 0.5 after low disagreement, got {}",
+                detector.tvp_reasoning_ema()
+            );
+
+            // Threshold unchanged: 3 hesitation tokens trigger collapse.
+            assert!(!detector.check_collapse(42, 0)); // count=1
+            assert!(!detector.check_collapse(42, 1)); // count=2
+            assert!(detector.check_collapse(42, 2)); // count=3 → collapse
+        }
+
+        /// EMA smoothing: a single spike should NOT fully expand — need sustained signal.
+        #[test]
+        fn ema_smooths_single_spike() {
+            let mut detector = make_detector_with_tvp(3, 5, 0.5);
+            // Single high-disagreement observation.
+            detector.observe_tvp_disagreement(&high_disagreement_signal());
+            // EMA = 0.1 * 0.9 = 0.09 — well below 0.5.
+            assert!((detector.tvp_reasoning_ema() - 0.09).abs() < 1e-6);
+
+            // No expansion yet — single spike is smoothed out.
+            assert!(!detector.check_collapse(42, 0)); // count=1
+            assert!(!detector.check_collapse(42, 1)); // count=2
+            assert!(detector.check_collapse(42, 2)); // count=3 → collapse (threshold=3)
+        }
+
+        /// TVP expansion disabled by default (expand_delta=0).
+        #[test]
+        fn tvp_expansion_disabled_by_default() {
+            let budget = ThinkingBudget {
+                max_tokens: 4096,
+                collapse_threshold: 3,
+                efficiency_gamma: 0.5,
+            };
+            let mut detector = S2FCollapseDetector::new(vec![42], &budget);
+            // No with_tvp_expansion called → delta=0, no expansion possible.
+            // Even with sustained high disagreement, threshold stays 3.
+            // EMA after 20 steps of 0.9 input: 0.9 * (1 - 0.9^20) ≈ 0.79.
+            for _ in 0..20 {
+                detector.observe_tvp_disagreement(&high_disagreement_signal());
+            }
+            assert!(
+                detector.tvp_reasoning_ema() > 0.7,
+                "EMA should be high after sustained disagreement, got {}",
+                detector.tvp_reasoning_ema()
+            );
+            // Still collapses at count=3 (delta=0 → no expansion).
+            assert!(!detector.check_collapse(42, 0));
+            assert!(!detector.check_collapse(42, 1));
+            assert!(detector.check_collapse(42, 2));
+        }
+
+        /// `reset()` clears TVP EMA (per-query signal) but preserves config.
+        #[test]
+        fn reset_clears_tvp_ema_but_preserves_config() {
+            let mut detector = make_detector_with_tvp(3, 5, 0.5);
+            // Sustain high disagreement.
+            for _ in 0..10 {
+                detector.observe_tvp_disagreement(&high_disagreement_signal());
+            }
+            let ema_before = detector.tvp_reasoning_ema();
+            assert!(ema_before > 0.5);
+
+            // Reset clears EMA but config (delta=5) is preserved.
+            detector.reset();
+            assert_eq!(
+                detector.tvp_reasoning_ema(),
+                0.0,
+                "reset should clear TVP EMA"
+            );
+
+            // After reset, a single low observation doesn't expand.
+            // Threshold is back to 3 (no expansion).
+            assert!(!detector.check_collapse(42, 0));
+            assert!(!detector.check_collapse(42, 1));
+            assert!(detector.check_collapse(42, 2));
+        }
+
+        /// Boundary: EMA exactly at threshold does NOT expand (strict `>` comparison).
+        #[test]
+        fn boundary_ema_at_threshold_does_not_expand() {
+            let mut detector = make_detector_with_tvp(3, 5, 0.5);
+            // Use the builder's clamped threshold (0.5). Drive EMA to exactly ~0.5.
+            // With α=0.1, EMA converges toward 0.5 asymptotically but never reaches
+            // it from below with constant 0.5 input. Use a 0.5001 input to nudge
+            // just above — but verify that exactly at 0.5 input, EMA stays < 0.5.
+            let boundary_signal = TvpSignal {
+                reasoning_disagreement: 0.5,
+                format_disagreement: 0.0,
+                logit_kl: 0.0,
+                probe_count_used: 4,
+            };
+            for _ in 0..50 {
+                detector.observe_tvp_disagreement(&boundary_signal);
+            }
+            // EMA converges toward 0.5 from below — stays strictly < 0.5.
+            assert!(
+                detector.tvp_reasoning_ema() < 0.5,
+                "EMA should stay < 0.5 (asymptotic from below), got {}",
+                detector.tvp_reasoning_ema()
+            );
+            // No expansion — collapses at count=3 as normal.
+            assert!(!detector.check_collapse(42, 0));
+            assert!(!detector.check_collapse(42, 1));
+            assert!(detector.check_collapse(42, 2));
+        }
     }
 }

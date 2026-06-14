@@ -136,11 +136,17 @@ TVP runs after critical-entropy gate, before breakeven amortization. Order ensur
 
 ### Phase 5: CollapseDetector Composition
 
-- [ ] **T12: Add `observe_tvp_disagreement()` to `S2FCollapseDetector`** _(not done in this PR — composes cleanly when T9-T11 land)_
+- [x] **T12: Add `observe_tvp_disagreement()` to `S2FCollapseDetector`** ✅ (Plan 267 T12 — landed 2026-06-14)
   - File: `src/pruners/collapse_detector.rs`
   - Inverse signal of hesitation: high disagreement → expand budget; high hesitation → contract
-  - Optional field `tvp_expand_budget_delta: u32` added to `ThinkingBudget` when feature on
+  - Optional field `tvp_expand_budget_delta: u32` added to `S2FCollapseDetector` when feature on
   - Composes with existing EMA self-learning
+  - Implementation: `observe_tvp_disagreement(&TvpSignal)` updates `tvp_reasoning_ema`;
+    `effective_threshold()` returns `threshold + delta` when EMA > `tvp_expand_threshold`.
+    Builder: `with_tvp_expansion(delta, threshold)`. `reset()` clears EMA per-query.
+    Zero-cost gate when `thicket_variance_probe` is off (cfg-gated fields + methods).
+  - 6 integration tests pass (high/low disagreement, EMA smoothing, disabled-by-default,
+    reset-clears-EMA, boundary-at-threshold). Existing 14 collapse_detector tests unaffected.
 
 ### Phase 6: Freeze/Thaw Persistence
 
