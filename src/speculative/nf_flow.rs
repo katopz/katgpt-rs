@@ -98,6 +98,123 @@ pub fn flow_score_batch(marginals: &[Vec<f32>], candidates: &[Vec<usize>]) -> Ve
         .collect()
 }
 
+// ── QGF-aware scoring (Plan 268 T6 — NFCoT × QGF fusion) ───────────
+//
+// The Q-gradient `∇_a Q(s, â_1)` from the QGuidedDrafter's oracle is a
+// per-action logit tilt. Applied in log-probability space, it contributes
+// an additive bonus `guidance_weight · gradient[selected[pos]]` at the
+// projection position. This is mathematically equivalent to tilting the
+// marginal *before* scoring with vanilla `flow_score`.
+//
+// When `guidance_weight == 0.0` or the gradient is empty, the QGF-aware
+// score is identical to `flow_score` — the QGF contribution is purely
+// additive on top of the NFCoT base score.
+//
+// See `.research/236_QGF_Test_Time_Q_Guided_Flow.md` §8 (QGF+NFCoT
+// synergy) and `.plans/268_qgf_test_time_q_guided_flow.md` T6.
+
+/// Compute QGF-augmented flow score, applying the gradient bonus at the
+/// *last* position of `selected` (the QGF projection point).
+///
+/// `score_qgf = flow_score(marginals, selected) + guidance_weight · gradient[selected[last]]`
+///
+/// Returns vanilla `flow_score` when `guidance_weight == 0.0`, gradient is
+/// empty, or `selected` is empty — i.e. QGF is fully optional.
+#[inline]
+pub fn score_with_qgf(
+    marginals: &[Vec<f32>],
+    selected: &[usize],
+    gradient: &[f32],
+    guidance_weight: f32,
+) -> f32 {
+    let base = flow_score(marginals, selected);
+    if guidance_weight == 0.0 || gradient.is_empty() || selected.is_empty() {
+        return base;
+    }
+    let pos = selected.len() - 1;
+    score_with_qgf_at_inner(base, selected, gradient, pos, guidance_weight)
+}
+
+/// Compute QGF-augmented flow score, applying the gradient bonus at a
+/// specific position.
+///
+/// Useful when the QGF projection is at a non-terminal position (e.g. a
+/// mid-trajectory re-guidance step).
+#[inline]
+pub fn score_with_qgf_at(
+    marginals: &[Vec<f32>],
+    selected: &[usize],
+    gradient: &[f32],
+    projection_pos: usize,
+    guidance_weight: f32,
+) -> f32 {
+    let base = flow_score(marginals, selected);
+    if guidance_weight == 0.0 || gradient.is_empty() {
+        return base;
+    }
+    score_with_qgf_at_inner(base, selected, gradient, projection_pos, guidance_weight)
+}
+
+/// Shared inner: add the QGF bonus to a pre-computed base score.
+#[inline]
+fn score_with_qgf_at_inner(
+    base: f32,
+    selected: &[usize],
+    gradient: &[f32],
+    pos: usize,
+    guidance_weight: f32,
+) -> f32 {
+    if pos >= selected.len() {
+        return base;
+    }
+    let action = selected[pos];
+    let g = gradient.get(action).copied().unwrap_or(0.0);
+    // FMA: base + guidance_weight * g
+    guidance_weight.mul_add(g, base)
+}
+
+/// Compute QGF-augmented flow scores for multiple candidates.
+///
+/// Shares one gradient across all candidates (the projection gradient is
+/// queried once at the top-1 candidate, then applied to every candidate's
+/// selected action at the projection position).
+pub fn score_with_qgf_batch(
+    marginals: &[Vec<f32>],
+    candidates: &[Vec<usize>],
+    gradient: &[f32],
+    guidance_weight: f32,
+) -> Vec<f32> {
+    candidates
+        .iter()
+        .map(|sel| score_with_qgf(marginals, sel, gradient, guidance_weight))
+        .collect()
+}
+
+/// Return the index of the candidate with the highest QGF-augmented flow score.
+pub fn select_best_qgf(
+    marginals: &[Vec<f32>],
+    candidates: &[Vec<usize>],
+    gradient: &[f32],
+    guidance_weight: f32,
+) -> usize {
+    match candidates.len() {
+        0 => 0,
+        1 => 0,
+        _ => {
+            let mut best_idx = 0usize;
+            let mut best_score = f32::NEG_INFINITY;
+            for (i, sel) in candidates.iter().enumerate() {
+                let s = score_with_qgf(marginals, sel, gradient, guidance_weight);
+                if s > best_score {
+                    best_score = s;
+                    best_idx = i;
+                }
+            }
+            best_idx
+        }
+    }
+}
+
 /// Return the index of the candidate with the highest flow score.
 pub fn select_best(marginals: &[Vec<f32>], candidates: &[Vec<usize>]) -> usize {
     match candidates.len() {
@@ -157,6 +274,49 @@ impl NfFlowScore {
     /// Return the index of the candidate with the highest flow score.
     pub fn select_best(&self, marginals: &[Vec<f32>], candidates: &[Vec<usize>]) -> usize {
         select_best(marginals, candidates)
+    }
+
+    /// Compute QGF-augmented flow score (Plan 268 T6).
+    ///
+    /// See [`score_with_qgf`] for the math. The QGF gradient is applied at
+    /// the *last* position of `selected` (the QGF projection point).
+    ///
+    /// When `guidance_weight == 0.0` or `gradient` is empty, this is
+    /// identical to [`Self::score`] — QGF is fully optional.
+    #[inline]
+    pub fn score_with_qgf(
+        &self,
+        marginals: &[Vec<f32>],
+        selected: &[usize],
+        gradient: &[f32],
+        guidance_weight: f32,
+    ) -> f32 {
+        score_with_qgf(marginals, selected, gradient, guidance_weight)
+    }
+
+    /// Compute QGF-augmented flow score at a specific projection position.
+    #[inline]
+    pub fn score_with_qgf_at(
+        &self,
+        marginals: &[Vec<f32>],
+        selected: &[usize],
+        gradient: &[f32],
+        projection_pos: usize,
+        guidance_weight: f32,
+    ) -> f32 {
+        score_with_qgf_at(marginals, selected, gradient, projection_pos, guidance_weight)
+    }
+
+    /// Return the index of the candidate with the highest QGF-augmented score.
+    #[inline]
+    pub fn select_best_qgf(
+        &self,
+        marginals: &[Vec<f32>],
+        candidates: &[Vec<usize>],
+        gradient: &[f32],
+        guidance_weight: f32,
+    ) -> usize {
+        select_best_qgf(marginals, candidates, gradient, guidance_weight)
     }
 }
 
@@ -423,6 +583,148 @@ mod tests {
         let candidates = vec![vec![0usize], vec![1usize]];
         let best = scorer.select_best(&marginals, &candidates);
         assert_eq!(best, 1, "should select candidate 1");
+    }
+
+    // ── QGF-aware scoring tests (Plan 268 T6) ─────────────────────
+
+    #[test]
+    fn test_score_with_qgf_zero_weight_equals_flow_score() {
+        // When guidance_weight == 0.0, score_with_qgf must equal flow_score.
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let selected = vec![0usize];
+        let gradient = vec![1.0, -1.0];
+        let expected = flow_score(&marginals, &selected);
+        let got = score_with_qgf(&marginals, &selected, &gradient, 0.0);
+        assert!((got - expected).abs() < 1e-6, "zero weight: got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_empty_gradient_equals_flow_score() {
+        // Empty gradient → no QGF bonus → equals vanilla flow_score.
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let selected = vec![0usize];
+        let expected = flow_score(&marginals, &selected);
+        let got = score_with_qgf(&marginals, &selected, &[], 1.0);
+        assert!((got - expected).abs() < 1e-6, "empty gradient: got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_adds_gradient_bonus() {
+        // With non-zero gradient, score_with_qgf = flow_score + w * gradient[selected[last]].
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let selected = vec![0usize];
+        let gradient = vec![2.0, -2.0];
+        let w = 0.5f32;
+        let base = flow_score(&marginals, &selected);
+        let expected = base + w * 2.0; // gradient[selected[0]] = gradient[0] = 2.0
+        let got = score_with_qgf(&marginals, &selected, &gradient, w);
+        assert!((got - expected).abs() < 1e-6, "got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_multi_position_last_position() {
+        // QGF bonus applies at the LAST position only.
+        let marginals = vec![vec![0.5f32, 0.5], vec![0.3f32, 0.7]];
+        let selected = vec![0usize, 1]; // last position selects action 1
+        let gradient = vec![10.0, -10.0]; // applies at the last position
+        let w = 0.1f32;
+        let base = flow_score(&marginals, &selected);
+        let expected = base + w * (-10.0); // gradient[selected[1]] = gradient[1] = -10.0
+        let got = score_with_qgf(&marginals, &selected, &gradient, w);
+        assert!((got - expected).abs() < 1e-6, "got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_at_specific_position() {
+        // Apply gradient at position 0 instead of the last.
+        let marginals = vec![vec![0.5f32, 0.5], vec![0.3f32, 0.7]];
+        let selected = vec![0usize, 1];
+        let gradient = vec![5.0, -5.0];
+        let w = 0.2f32;
+        let base = flow_score(&marginals, &selected);
+        // gradient[selected[0]] = gradient[0] = 5.0
+        let expected = base + w * 5.0;
+        let got = score_with_qgf_at(&marginals, &selected, &gradient, 0, w);
+        assert!((got - expected).abs() < 1e-6, "got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_empty_selected() {
+        // Empty selected → flow_score = 0, no bonus.
+        let marginals = vec![vec![0.5f32, 0.5]];
+        let got = score_with_qgf(&marginals, &[], &[1.0, 2.0], 1.0);
+        assert!(got.abs() < 1e-6, "empty selected: got {got}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_gradient_shorter_than_action() {
+        // Gradient is shorter than the vocab — missing entries are treated as 0.
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let selected = vec![5usize]; // out of gradient bounds
+        let gradient = vec![1.0]; // only 1 entry
+        let w = 1.0f32;
+        let base = flow_score(&marginals, &selected);
+        let expected = base; // gradient[5] = 0.0 (missing)
+        let got = score_with_qgf(&marginals, &selected, &gradient, w);
+        assert!((got - expected).abs() < 1e-6, "got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_select_best_qgf_flips_ranking() {
+        // Construct marginals where NFCoT alone prefers candidate A,
+        // but QGF gradient strongly endorses candidate B → combined picks B.
+        //
+        // marginals: [0.9, 0.1] → selecting action 0 has higher base log-prob.
+        // gradient: [-5.0, 5.0] → Q-critic strongly prefers action 1.
+        //
+        // NFCoT alone: candidate [0] > [1] (base log-prob difference).
+        // With strong QGF weight: candidate [1] > [0] (QGF bonus flips it).
+        let marginals = vec![vec![0.9f32, 0.1]];
+        let candidates = vec![vec![0usize], vec![1usize]];
+        let gradient = vec![-5.0, 5.0];
+
+        // NFCoT alone picks candidate 0.
+        let best_nf = select_best(&marginals, &candidates);
+        assert_eq!(best_nf, 0, "NFCoT alone should pick candidate 0");
+
+        // With strong QGF weight, pick candidate 1.
+        let best_qgf = select_best_qgf(&marginals, &candidates, &gradient, 10.0);
+        assert_eq!(best_qgf, 1, "QGF+NFCoT should flip to candidate 1");
+    }
+
+    #[test]
+    fn test_select_best_qgf_zero_weight_equals_select_best() {
+        let marginals = vec![vec![0.1f32, 0.9]];
+        let candidates = vec![vec![0usize], vec![1usize]];
+        let gradient = vec![1.0, -1.0];
+
+        let best_nf = select_best(&marginals, &candidates);
+        let best_qgf = select_best_qgf(&marginals, &candidates, &gradient, 0.0);
+        assert_eq!(best_nf, best_qgf, "zero-weight QGF should match NFCoT alone");
+    }
+
+    #[test]
+    fn test_nf_flow_score_score_with_qgf_instance() {
+        let scorer = NfFlowScore::new();
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let selected = vec![0usize];
+        let gradient = vec![1.0, -1.0];
+        let w = 0.5;
+        let got = scorer.score_with_qgf(&marginals, &selected, &gradient, w);
+        let expected = score_with_qgf(&marginals, &selected, &gradient, w);
+        assert!((got - expected).abs() < 1e-6, "instance: got {got}, expected {expected}");
+    }
+
+    #[test]
+    fn test_score_with_qgf_batch() {
+        let marginals = vec![vec![0.3f32, 0.7]];
+        let candidates = vec![vec![0usize], vec![1usize]];
+        let gradient = vec![1.0, -1.0];
+        let scores = score_with_qgf_batch(&marginals, &candidates, &gradient, 1.0);
+        assert_eq!(scores.len(), 2);
+        // candidate 0: base + 1*gradient[0] = base + 1
+        // candidate 1: base + 1*gradient[1] = base - 1
+        assert!(scores[0] > scores[1], "candidate 0 should score higher with positive gradient");
     }
 
     // ── Benchmarks ──────────────────────────────────────────────────

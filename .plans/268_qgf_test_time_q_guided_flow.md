@@ -2,7 +2,7 @@
 
 **Research:** `.research/236_QGF_Test_Time_Q_Guided_Flow.md`
 **Paper:** [arXiv:2606.11087](https://arxiv.org/pdf/2606.11087) — Q-Guided Flow (Zhou et al., 2026)
-**Status:** 🚧 In Progress — Phase 1 (T1-T3, incl. T2 benchmark) + Phase 2 (T4-T5) + Phase 3 (T7 partial) + Phase 4 (T8-T9) implemented, tests green
+**Status:** 🚧 In Progress — Phase 1 (T1-T3, incl. T2 benchmark) + Phase 2 (T4-T6) + Phase 3 (T7 partial) + Phase 4 (T8-T9) implemented, tests green
 **Branch:** `develop` (no new feature branch per project rules)
 **Feature Gates:** `qgf` (parent, default OFF until GOAT proof)
   - `qgf_projector` (F2 — FirstOrderProjector)
@@ -185,12 +185,62 @@ At generation step t with prefix p_t and drafter velocity v_t:
 - [x] Unit test: each oracle returns sensible gradient for a known state
   (25 tests across all oracle types).
 
-#### T6: NFCoT FlowScore fusion (unblock Plan 229)
-- [ ] Extend `NfFlowScore` (Plan 229) to optionally consume Q-gradient guidance
-- [ ] When `qgf_drafter` + `nf_flow_score` both enabled: QGF steers generation, NFCoT scores the result
-- [ ] Test: QGF + NFCoT > NFCoT alone on Sudoku test suite (the unblock)
-- [ ] Test: QGF + NFCoT > QGF alone (NFCoT adds ranking signal)
-- [ ] Document the synergy in `.research/268` §8 (already done)
+#### T6: NFCoT FlowScore fusion (unblock Plan 229) — ✅ COMPLETE
+- [x] Extend `NfFlowScore` (Plan 229) to optionally consume Q-gradient guidance
+  - **New API (in `src/speculative/nf_flow.rs`):**
+    - `score_with_qgf(marginals, selected, gradient, guidance_weight) -> f32`
+      — applies the QGF bonus at the *last* position (the projection point).
+    - `score_with_qgf_at(marginals, selected, gradient, projection_pos, weight) -> f32`
+      — applies the bonus at a caller-specified position.
+    - `score_with_qgf_batch(...)` — vectorized variant.
+    - `select_best_qgf(...)` — argmax over candidates using the combined score.
+    - Mirroring methods on `NfFlowScore` (`score_with_qgf`, `score_with_qgf_at`,
+      `select_best_qgf`).
+  - **Math:** `score_qgf = flow_score + guidance_weight · gradient[selected[pos]]`.
+    This is additive in log-probability space and is mathematically equivalent
+    to tilting the marginal *before* scoring with vanilla `flow_score`.
+  - **Optional by construction:** when `guidance_weight == 0.0` or `gradient`
+    is empty, the QGF-aware score is byte-identical to `flow_score`.
+- [x] When `qgf_drafter` + `nf_flow_score` both enabled: QGF steers generation, NFCoT scores the result
+  - **New module `src/speculative/nf_flow_qgf.rs`** (Plan 268 T6).
+  - **`NfQgfDrafter<G, O>`** composes `QGuidedDrafter<G, O>` (Plan 268 F1)
+    with `NfFlowScore` (Plan 229). Pipeline:
+    1. `drafter.generate_guided(condition, rng, step)` → candidates.
+    2. `drafter.oracle.q_gradient_at(condition, &candidates[0])` → gradient.
+    3. `scorer.score_with_qgf(marginals, selected, gradient, weight)` per candidate.
+    4. Sort by descending combined score.
+  - Builders: `from_parts(generator, oracle)`, `with_weight(w)`, `with_period(p)`.
+  - Implements `SpeculativeGenerator` (delegates to the inner QGF drafter).
+  - Feature gate: `#[cfg(all(feature = "nf_flow_score", feature = "qgf_drafter"))]`.
+- [x] Test: QGF + NFCoT > NFCoT alone on Sudoku test suite (the unblock)
+  - **Test:** `test_sudoku_like_qgf_nfcoot_synergy` — constructs a 2-position
+    Sudoku-like scenario (clue + empty cell) where the Q-critic gradient
+    strongly endorses the correct fill. Verifies the combined scorer's margin
+    between the correct and runner-up candidate *exceeds* NFCoT-alone's margin.
+  - **Test:** `test_qgf_flips_ranking_when_gradient_strong` — constructs a
+    single-position scenario where NFCoT alone prefers token 0 (high base
+    log-prob), but a strong Q-gradient endorses token 1. Verifies QGF+NFCoT
+    flips the ranking to token 1.
+- [x] Test: QGF + NFCoT > QGF alone (NFCoT adds ranking signal)
+  - **Test:** `test_nfcoot_breaks_ties_when_gradient_uniform` — when the
+    Q-gradient is uniform (all actions equally preferred), QGF alone cannot
+    discriminate, but NFCoT's flow-density base breaks the tie.
+- [x] Document the synergy in `.research/268` §8 (already done)
+  - Verified: `.research/236_QGF_Test_Time_Q_Guided_Flow.md` §8
+    ("Relationship to Existing Research") already documents the QGF+NFCoT
+    synergy: "NFCoT scores *post-hoc*; QGF *steers generation*. QGF is the
+    missing active counterpart to NFCoT's passive scoring."
+  - Cross-references Plan 229 (NFCoT FlowScore) as MARGINAL → unblocked by QGF.
+  - Note: the plan references `.research/268` but the actual research doc is
+    `.research/236` (plan number ≠ research number). The content is correct.
+- **Unit tests:** 11 new tests in `nf_flow.rs` + 9 new tests in `nf_flow_qgf.rs` = 20 total.
+- **Validation:**
+  - `cargo test --features nf_flow_score --lib speculative::nf_flow` → 39 pass, 0 fail
+  - `cargo test --features "nf_flow_score,qgf_drafter" --lib speculative::nf_flow_qgf` → 9 pass, 0 fail
+  - `cargo test --features nf_flow_score --test nf_flow_goat` → 7 pass, 0 fail
+  - `cargo test -p katgpt-core --features "qgf,qgf_drafter,qgf_adaptive" --lib` → 310 pass, 0 fail
+  - Clippy clean on all new/modified files (pre-existing `set_len` error in
+    `src/cumprodsum.rs:167` is unrelated)
 
 ---
 

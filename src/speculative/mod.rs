@@ -475,6 +475,21 @@ pub mod nf_flow_fold;
 #[cfg(all(feature = "nf_flow_score", feature = "chain_fold"))]
 pub use nf_flow_fold::{FoldDecision, evaluate_fold, evaluate_fold_batch};
 
+// ── NFCoT × QGF Fusion — Q-gradient-guided generation with flow-density scoring (Plan 268 T6) ──
+//
+// Composes QGuidedDrafter (Plan 268 F1) with NfFlowScore (Plan 229).
+// QGF steers generation via gradient tilt; NFCoT scores candidates by flow
+// density + QGF bonus. Feature-gated on both `nf_flow_score` + `qgf_drafter`,
+// default OFF until GOAT proof.
+#[cfg(all(feature = "nf_flow_score", feature = "qgf_drafter"))]
+pub mod nf_flow_qgf;
+
+#[cfg(all(feature = "nf_flow_score", feature = "qgf_drafter"))]
+pub use nf_flow::{score_with_qgf, score_with_qgf_at, score_with_qgf_batch, select_best_qgf};
+
+#[cfg(all(feature = "nf_flow_score", feature = "qgf_drafter"))]
+pub use nf_flow_qgf::NfQgfDrafter;
+
 // ── Deep Manifold Part 2 — Plan 231 (Research 205) ──
 #[cfg(feature = "union_bound_confidence")]
 pub mod branch_confidence;
