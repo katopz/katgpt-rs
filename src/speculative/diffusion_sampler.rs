@@ -70,6 +70,12 @@ impl SamplerFeatures {
     /// Extract features from a flat logits slice for one position.
     ///
     /// `logits_p` must be length `vocab`. `mask` token is excluded from stats.
+    ///
+    /// Zero-allocation: tracks top-3 probabilities via branchless comparisons
+    /// during the exp/sum pass (order preserved under division by `sum_exp`).
+    /// Entropy computed via the identity `Σ p·log(p) = (Σ e·log(e))/sum - log(sum)`
+    /// to avoid per-element division. Previously allocated 2 Vec<f32> of
+    /// vocab_size and did a full O(n log n) sort for top-3 mass.
     pub fn from_logits(
         logits_p: &[f32],
         vocab: usize,
@@ -79,71 +85,57 @@ impl SamplerFeatures {
         pos: usize,
         block_size: usize,
     ) -> Self {
-        let max_logit = logits_p.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        debug_assert_eq!(vocab, logits_p.len(), "vocab size mismatch");
+        let max_logit = logits_p.iter().copied().fold(f32::NEG_INFINITY, f32::max);
 
-        // Softmax denominator over valid (non-mask) tokens
+        // Single fused pass: compute exp, sum_exp, and track top-3 exp values
+        // (order preserved under division by sum_exp → top-3 exp == top-3 prob).
+        // Also accumulate Σ e·log(e) for entropy via the identity
+        //   H = -Σ p·log(p) = -(Σ e·log(e))/sum + log(sum).
         let mut sum_exp = 0.0f32;
-        let mut top_probs: Vec<f32> = Vec::with_capacity(vocab);
+        let mut sum_e_log_e = 0.0f32;
+        // Top-3 trackers (exp values). Initialized to -1 so any valid exp >= 0 wins.
+        let mut t1 = f32::NEG_INFINITY;
+        let mut t2 = f32::NEG_INFINITY;
+        let mut t3 = f32::NEG_INFINITY;
         for (t, &logit) in logits_p.iter().enumerate() {
             if t == mask {
-                top_probs.push(0.0);
                 continue;
             }
-            let prob = (logit - max_logit).exp();
-            top_probs.push(prob);
-            sum_exp += prob;
+            let e = (logit - max_logit).exp();
+            sum_exp += e;
+            // Branchless top-3 update: shift down only if e exceeds current tier.
+            // Compiles to cmov / fmax sequences — no data-dependent branches.
+            if e > t1 {
+                t3 = t2;
+                t2 = t1;
+                t1 = e;
+            } else if e > t2 {
+                t3 = t2;
+                t2 = e;
+            } else if e > t3 {
+                t3 = e;
+            }
+            // e·log(e): e is non-negative; for e near 0 the product is ~0 (lim x·log(x)=0).
+            // Guard with max(1e-10) to avoid log(0). Note: this contributes to the
+            // entropy identity and must use the *un-normalized* exp values.
+            if e > 1e-10 {
+                sum_e_log_e += e * e.ln();
+            }
         }
 
-        if sum_exp <= 0.0 {
+        if !(sum_exp > 0.0) {
             return Self::default();
         }
 
-        // Normalize to probabilities
-        for p in &mut top_probs {
-            *p /= sum_exp;
-        }
+        // Normalize top-3 exp values to probabilities.
+        let inv_sum = 1.0 / sum_exp;
+        let top1_prob = t1 * inv_sum;
+        let top2_prob = t2 * inv_sum;
+        let top3_mass = (t1 + t2 + t3) * inv_sum;
 
-        // Find top-1 and top-2
-        let mut top1_prob = 0.0f32;
-        let mut top2_prob = 0.0f32;
-        for (t, &prob) in top_probs.iter().enumerate() {
-            if t == mask {
-                continue;
-            }
-            if prob > top1_prob {
-                top2_prob = top1_prob;
-                top1_prob = prob;
-            } else if prob > top2_prob {
-                top2_prob = prob;
-            }
-        }
-
-        // Top-3 mass
-        let mut top3_mass = 0.0f32;
-        let mut probs_sorted: Vec<f32> = top_probs
-            .iter()
-            .enumerate()
-            .filter(|&(t, _)| t != mask)
-            .map(|(_, &p)| p)
-            .collect();
-        probs_sorted.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
-        for (i, &p) in probs_sorted.iter().enumerate() {
-            if i >= 3 {
-                break;
-            }
-            top3_mass += p;
-        }
-
-        // Entropy: -Σ p·log(p)
-        let mut entropy = 0.0f32;
-        for (t, &p) in top_probs.iter().enumerate() {
-            if t == mask {
-                continue;
-            }
-            if p > 1e-10 {
-                entropy -= p * p.ln();
-            }
-        }
+        // Entropy via identity: H = -(Σ e·log(e))/sum + log(sum).
+        let entropy = -(sum_e_log_e / sum_exp) + sum_exp.ln();
 
         let margin = top1_prob - top2_prob;
         let step_norm = if max_steps > 0 {

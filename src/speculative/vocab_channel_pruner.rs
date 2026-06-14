@@ -47,12 +47,18 @@ pub fn skewness(values: &[f32]) -> f32 {
         return 0.0;
     }
 
-    let mean: f32 = values.iter().sum::<f32>() / n;
+    let mean: f32 = values.iter().copied().sum::<f32>() / n;
 
-    let (m2, m3) = values.iter().fold((0.0f32, 0.0f32), |(m2, m3), &x| {
+    // Separate accumulators (not a tuple fold) so LLVM can vectorize m2 and m3
+    // independently. The cross-iteration data dependency in the tuple-fold form
+    // blocked auto-vectorization. FP semantics preserved: `d*d*d` left-to-right.
+    let mut m2 = 0.0f32;
+    let mut m3 = 0.0f32;
+    for &x in values {
         let d = x - mean;
-        (m2 + d * d, m3 + d * d * d)
-    });
+        m2 += d * d;
+        m3 += d * d * d;
+    }
 
     if m2 < 1e-10 {
         return 0.0;
@@ -78,12 +84,17 @@ pub fn excess_kurtosis(values: &[f32]) -> f32 {
         return 0.0;
     }
 
-    let mean: f32 = values.iter().sum::<f32>() / n;
+    let mean: f32 = values.iter().copied().sum::<f32>() / n;
 
-    let (m2, m4) = values.iter().fold((0.0f32, 0.0f32), |(m2, m4), &x| {
+    // Separate accumulators for independent SIMD vectorization (see skewness).
+    // FP semantics preserved: `d*d*d*d` left-to-right matches original fold.
+    let mut m2 = 0.0f32;
+    let mut m4 = 0.0f32;
+    for &x in values {
         let d = x - mean;
-        (m2 + d * d, m4 + d * d * d * d)
-    });
+        m2 += d * d;
+        m4 += d * d * d * d;
+    }
 
     if m2 < 1e-10 {
         return 0.0;
@@ -98,22 +109,29 @@ pub fn excess_kurtosis(values: &[f32]) -> f32 {
 ///
 /// O(d) time, O(d) allocation for the output.
 /// Returns a zero vector if `h` has zero norm (degenerate reflection).
+///
+/// Fused single-pass: `h_norm_sq` and `dot_hx` computed together to halve memory
+/// reads vs the previous two-pass iterator chain.
 #[inline]
 pub fn householder_apply(h: &[f32], x: &[f32]) -> Vec<f32> {
     debug_assert_eq!(h.len(), x.len());
 
-    let h_norm_sq: f32 = h.iter().map(|hi| hi * hi).sum();
+    let mut h_norm_sq = 0.0f32;
+    let mut dot_hx = 0.0f32;
+    for i in 0..h.len() {
+        h_norm_sq += h[i] * h[i];
+        dot_hx += h[i] * x[i];
+    }
     if h_norm_sq < 1e-12 {
         return x.to_vec();
     }
 
-    let dot_hx: f32 = h.iter().zip(x.iter()).map(|(hi, xi)| hi * xi).sum();
     let scale = 2.0 * dot_hx / h_norm_sq;
-
-    x.iter()
-        .zip(h.iter())
-        .map(|(&xi, &hi)| xi - scale * hi)
-        .collect()
+    let mut out = Vec::with_capacity(x.len());
+    for i in 0..x.len() {
+        out.push(x[i] - scale * h[i]);
+    }
+    out
 }
 
 /// Sigmoid function. Clamps input to avoid overflow in exp.
@@ -144,13 +162,17 @@ pub fn vocab_project(
     debug_assert!(lm_head.len() >= vocab_size * n_embd);
 
     let mut logits = vec![0.0f32; vocab_size];
+    // Direct indexed loop enables LLVM auto-vectorization (FMA on AVX2/NEON).
+    // Inner iterator chain (zip+map+sum) prevented vectorization. This is the
+    // inner loop of ROTATE decomposition: called 2× per coordinate per iteration
+    // × 20 iterations × 3 coords = 120 times per channel discovery.
     for t in 0..vocab_size {
-        let row = &lm_head[t * n_embd..(t + 1) * n_embd];
-        logits[t] = row
-            .iter()
-            .zip(neuron_weight.iter())
-            .map(|(&a, &b)| a * b)
-            .sum();
+        let base = t * n_embd;
+        let mut sum = 0.0f32;
+        for i in 0..n_embd {
+            sum += lm_head[base + i] * neuron_weight[i];
+        }
+        logits[t] = sum;
     }
     logits
 }
@@ -221,12 +243,12 @@ fn topk_indices(values: &[f32], k: usize) -> Vec<usize> {
 #[inline]
 fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
-    let (dot, na, nb): (f32, f32, f32) = a
-        .iter()
-        .zip(b.iter())
-        .fold((0.0, 0.0, 0.0), |(d, na, nb), (&ai, &bi)| {
-            (d + ai * bi, na + ai * ai, nb + bi * bi)
-        });
+    let n = a.len();
+    // Three SIMD dot-product reductions — LLVM cannot vectorize the fused
+    // tuple-fold (cross-iteration data dependency).
+    let dot = crate::simd::simd_dot_f32(a, b, n);
+    let na = crate::simd::simd_dot_f32(a, a, n);
+    let nb = crate::simd::simd_dot_f32(b, b, n);
     let denom = na.sqrt() * nb.sqrt();
     if denom < 1e-12 {
         return 0.0;
