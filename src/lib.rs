@@ -95,6 +95,12 @@ pub mod planar_quant;
 pub mod plot;
 #[cfg(feature = "precision_aware_draft")]
 pub mod precision_aware_draft;
+#[cfg(feature = "progressive_mcgs")]
+#[doc(alias = "mcts")]
+#[doc(alias = "mcgs")]
+#[doc(alias = "graph_search")]
+#[doc(alias = "monte_carlo")]
+pub mod progressive_mcgs;
 #[cfg(feature = "proof_cert")]
 pub mod proof_cert;
 pub mod pruners;

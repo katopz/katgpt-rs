@@ -165,6 +165,7 @@ convex_tok = ["dep:good_lp", "toast_tokenizer"]  # ConvexTok LP vocabulary optim
 datrie_vocab = ["toast_tokenizer"]  # Alias: enables toast_tokenizer (datrie is auto-routed) + benchmark examples (Research 137)
 event_log = []  # Event-sourced game traces with fork-and-diff (Plan 124, Research 081)
 vpd_em_distill = ["sdar_gate", "bandit"]  # VPD EM-style co-evolutionary distillation (Plan 120, Research 080)
+progressive_mcgs = []  # Progressive MCGS — graph search with reference edges + entropy-gated schedule (Plan 272, Research 239)
 proof_sketch_evolution = ["bandit"]  # Proof Sketch Evolution — Elo-rated population + global goal cache (Plan 128, Research 088)
 opus_selection = ["bandit"]  # OPUS Boltzmann + redundancy selection — CountSketch + softmax sampling (Plan 129, Research 089)
 epiplexity_scoring = []  # Epiplexity structural information scoring — loss-curve area above final (Plan 130, Research 090)
