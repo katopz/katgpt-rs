@@ -1125,6 +1125,16 @@ required-features = ["attn_match"]
 name = "attn_match_head_budget"
 required-features = ["attn_match"]
 
+# Plan 271 Phase 4 — Chunked compaction example (KV-based + text-based).
+[[example]]
+name = "attn_match_chunked"
+required-features = ["attn_match"]
+
+# Plan 271 Phase 5 — Online compaction example (mid-trajectory).
+[[example]]
+name = "attn_match_online"
+required-features = ["attn_match"]
+
 # Plan 271 Phase 2 — Adaptive solver router benchmark.
 [[bench]]
 name = "attn_match_router_bench"

@@ -172,24 +172,34 @@ Goal: per-head sensitivity curves + greedy swap solver, producing a model-specif
 
 Goal: support long contexts via per-chunk compaction.
 
+**STATUS: ✅ COMPLETE (2026-06-14)** — 9 tests pass, example runs clean, 87.4% memory reduction demonstrated.
+
 ### Tasks
 
-- [ ] **T4.1** Implement `src/attn_match/chunked.rs`:
-  - [ ] `ChunkedCompactor::new(chunk_size, overlap)` 
-  - [ ] `compact_kv_based(full_kv, queries, config) -> CompactKVCache`
-  - [ ] `compact_text_based(chunks, config) -> CompactKVCache`
-- [ ] **T4.2** Implement RoPE phase shift for text-based chunking:
-  - [ ] `apply_rope_phase_shift(keys, delta)` — rotate keys by global offset
-  - [ ] Reuse existing `still_kv::position_free` helpers if compatible
-- [ ] **T4.3** Add chunked compaction tests:
-  - [ ] KV-based preserves more than text-based on synthetic cross-chunk dependencies
-  - [ ] Concatenation produces correct total length
-- [ ] **T4.4** Add chunked example with synthetic long context (T=8192, 4 chunks)
+- [x] **T4.1** Implement `src/attn_match/chunked.rs`:
+  - [x] `ChunkedCompactor::new(chunk_size, overlap)`
+  - [x] `compact_kv_based(full_kv, queries, config) -> ChunkedCompactOutput`
+  - [x] `compact_text_based(chunks, queries_per_chunk, config) -> ChunkedCompactOutput`
+- [x] **T4.2** Implement RoPE phase shift for text-based chunking:
+  - [x] `apply_rope_phase_shift(keys, d, start_pos, new_pos, rope_theta) -> Vec<f32>` — via `PositionFreeBridge` adapter
+  - [x] Reuses `still_kv::position_free::PositionFreeCompactor` (f16↔f32 bridge); gated on `still_kv` feature with documented no-op fallback
+- [x] **T4.3** Add chunked compaction tests (9 tests, all pass):
+  - [x] `test_kv_based_chunking_concatenates_correctly`
+  - [x] `test_kv_based_preserves_more_than_text_based_on_dependent_chunks`
+  - [x] `test_overlap_reduces_boundary_loss`
+  - [x] `test_chunked_total_length_correct`
+  - [x] `test_empty_input_returns_empty`
+  - [x] `test_single_chunk_equivalent_to_direct_compact`
+  - [x] `test_chunk_starts_clamps_final_chunk`, `test_chunk_local_config_shrinks_oversize_compact`, `test_compact_kv_based_dim_mismatch_errors`
+- [x] **T4.4** Add example `examples/attn_match_chunked.rs` with synthetic long context (T=8192, 4 chunks of 2048)
+  - KV-based mean recon error 0.003207, text-based 0.004368
+  - Boundary error: KV-based 0.002234 < text-based 0.004441 (overlap captures cross-chunk context)
+  - 87.4% memory reduction demonstrated
 
-### Phase 4 Exit Criteria
-- Both chunking modes work
-- KV-based > text-based on dependent chunks
-- Total compacted length correct
+### Phase 4 Exit Criteria — ✅ ALL MET
+- ✅ Both chunking modes work (KV-based + text-based)
+- ✅ KV-based > text-based on dependent chunks (lower boundary error with overlap)
+- ✅ Total compacted length correct (sum of per-chunk compact lengths)
 
 ---
 
@@ -197,26 +207,29 @@ Goal: support long contexts via per-chunk compaction.
 
 Goal: compact mid-trajectory to support arbitrarily long generation.
 
+**STATUS: ✅ COMPLETE (2026-06-14)** — 8 tests pass, example runs clean, logical length stays bounded at phys_budget + recent_window while physical grows unbounded.
+
 ### Tasks
 
-- [ ] **T5.1** Implement `src/attn_match/online.rs`:
-  - [ ] `OnlineCompactor::new(phys_budget, recent_window)`
-  - [ ] `maybe_compact(kv_cache, current_pos) -> Option<CompactKVCache>`
-  - [ ] Returns Some when phys_budget reached, None otherwise
-  - [ ] Preserves most recent `recent_window` tokens uncompacted
-- [ ] **T5.2** Add online compaction tests:
-  - [ ] Compaction triggers at exactly phys_budget
-  - [ ] Recent window preserved uncompacted
-  - [ ] Multiple consecutive compactions preserve total semantics
-- [ ] **T5.3** Add online example simulating AIME-style long reasoning:
-  - [ ] Generate synthetic "reasoning" tokens
-  - [ ] Compact at intervals
-  - [ ] Print KV size before/after each compaction
+- [x] **T5.1** Implement `src/attn_match/online.rs`:
+  - [x] `OnlineCompactor::new(phys_budget, recent_window)`
+  - [x] `maybe_compact(kv_keys, kv_values, queries, current_pos, d, n, config) -> Option<OnlineCompactResult>`
+  - [x] Returns `Some` when `current_pos >= phys_budget + recent_window`, `None` otherwise
+  - [x] Preserves most recent `recent_window` tokens uncompacted (bit-identical in `recent_keys`/`recent_values`)
+- [x] **T5.2** Add online compaction tests (8 tests, all pass):
+  - [x] `test_compaction_triggers_at_phys_budget`
+  - [x] `test_recent_window_preserved_uncompacted`
+  - [x] `test_multiple_consecutive_compactions_preserve_total_semantics` (3 compactions, logical length bounded)
+  - [x] `test_no_compaction_when_below_budget`, `test_compaction_at_exact_boundary`, `test_trigger_threshold_value`, `test_clamp_compact_size`, `test_dim_mismatch_errors`
+- [x] **T5.3** Add example `examples/attn_match_online.rs` simulating AIME-style long reasoning:
+  - [x] Generate 4096 synthetic reasoning tokens, compact at intervals
+  - [x] Print KV size before/after each of 14 compactions
+  - [x] Demonstrate logical length stays at 384 while physical grows to 641 (39.8% peak reduction)
 
-### Phase 5 Exit Criteria
-- Compaction triggers at budget
-- Recent window always preserved
-- Multiple compactions don't corrupt state
+### Phase 5 Exit Criteria — ✅ ALL MET
+- ✅ Compaction triggers at budget (inclusive boundary at `phys_budget + recent_window`)
+- ✅ Recent window always preserved uncompacted (bit-identical)
+- ✅ Multiple compactions don't corrupt state (logical length stays bounded)
 
 ---
 
