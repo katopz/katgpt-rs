@@ -34,19 +34,15 @@ pub use position_free::PositionFreeCompactor;
 pub use query_bank::QueryBank;
 
 /// Compute cosine similarity between two flat f32 vectors.
+///
+/// Uses three SIMD dot-product reductions (NEON on aarch64, AVX2+FMA on x86_64)
+/// instead of a scalar fused 3-output loop that LLVM cannot auto-vectorize.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
-    let mut dot = 0.0f32;
-    let mut norm_a = 0.0f32;
-    let mut norm_b = 0.0f32;
-    for i in (0..a.len()).step_by(4) {
-        let end = (i + 4).min(a.len());
-        for j in i..end {
-            dot += a[j] * b[j];
-            norm_a += a[j] * a[j];
-            norm_b += b[j] * b[j];
-        }
-    }
+    let n = a.len();
+    let dot = crate::simd::simd_dot_f32(a, b, n);
+    let norm_a = crate::simd::simd_dot_f32(a, a, n);
+    let norm_b = crate::simd::simd_dot_f32(b, b, n);
     let denom = norm_a.sqrt() * norm_b.sqrt();
     if denom < 1e-12 { 0.0 } else { dot / denom }
 }

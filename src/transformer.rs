@@ -1878,8 +1878,14 @@ pub fn select_topk_indices_into_buf(
         return;
     }
 
-    indexed_buf.clear();
-    indexed_buf.extend(scores.iter().copied().enumerate());
+    // In-place indexed writes via resize + direct assignment: avoids `extend`'s
+    // potential reallocation jitter and push-per-element overhead. Index
+    // assignment is also more amenable to LLVM auto-vectorization. This runs
+    // every decode step when clustered vocab is active (clustered_lm_head hot path).
+    indexed_buf.resize(scores.len(), (0, 0.0));
+    for (i, &s) in scores.iter().enumerate() {
+        indexed_buf[i] = (i, s);
+    }
 
     indexed_buf.select_nth_unstable_by(k - 1, |a, b| {
         b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
@@ -3156,22 +3162,22 @@ pub fn load_mtp_projection(path: &std::path::Path) -> Result<MtpProjection, Stri
         ));
     }
 
-    // Extract weights and bias as f32 (little-endian)
+    // Extract weights and bias as f32 (little-endian).
+    // bytemuck::pod_collect_to_vec performs a single SIMD-friendly bulk copy
+    // (memcpy-like) instead of N iterator yields + N TryInto checks + N panicking
+    // unwraps. Size already validated by file_size == expected_size above, so
+    // the assert_eq! checks are demoted to debug_assert_eq! (no runtime cost
+    // in release).
     let weights_offset = header_size;
     let bias_offset = weights_offset + weights_bytes;
 
-    let weights: Vec<f32> = data[weights_offset..bias_offset]
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
-        .collect();
+    let weights: Vec<f32> =
+        bytemuck::pod_collect_to_vec(&data[weights_offset..bias_offset]);
+    let bias: Vec<f32> =
+        bytemuck::pod_collect_to_vec(&data[bias_offset..file_size - 4]);
 
-    let bias: Vec<f32> = data[bias_offset..file_size - 4]
-        .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes(chunk.try_into().unwrap()))
-        .collect();
-
-    assert_eq!(weights.len(), out_dim * in_dim, "weights count mismatch");
-    assert_eq!(bias.len(), out_dim, "bias count mismatch");
+    debug_assert_eq!(weights.len(), out_dim * in_dim, "weights count mismatch");
+    debug_assert_eq!(bias.len(), out_dim, "bias count mismatch");
 
     // Validate no NaN/Inf
     for (i, &w) in weights.iter().enumerate() {

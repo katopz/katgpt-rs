@@ -1394,11 +1394,23 @@ impl<E: BanditEnv> BanditSession<E> {
     }
 
     fn select_thompson(&self, rng: &mut Rng) -> usize {
-        (0..self.env.num_arms())
-            .map(|i| (i, self.stats.thompson_sample(i, rng)))
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-            .map(|(i, _)| i)
-            .unwrap_or(0)
+        let n = self.env.num_arms();
+        if n == 0 {
+            return 0;
+        }
+        // Manual indexed loop mirroring select_ucb1: avoids iterator state-machine
+        // overhead, tuple construction, and the partial_cmp().unwrap_or() branch
+        // per element. `>=` preserves max_by's "last maximum wins on ties" semantics.
+        let mut best_idx = 0;
+        let mut best_score = self.stats.thompson_sample(0, rng);
+        for i in 1..n {
+            let s = self.stats.thompson_sample(i, rng);
+            if s >= best_score {
+                best_score = s;
+                best_idx = i;
+            }
+        }
+        best_idx
     }
 
     /// Variance-minimized epsilon selection (RePlaid-inspired).

@@ -415,16 +415,26 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
 
     /// Record a failure and check if it exceeds the pattern threshold.
     /// Returns `true` if the pattern count *just* reached the threshold.
+    ///
+    /// Lock discipline: `failure_counts` is acquired and dropped *before*
+    /// `hot_patterns` is taken — never holds both at once. This removes lock-
+    /// held-while-waiting-on-another-lock serialization under concurrent
+    /// `is_valid` calls (which record failures from `ConstraintPruner::is_valid`)
+    /// and eliminates a latent deadlock risk if any future caller locks in
+    /// the opposite order.
     pub fn record_failure(&self, pattern: FailurePattern) -> bool {
         let key = pattern.hash_key();
-        let mut map = self.failure_counts.lock().unwrap();
-        let count = map.entry(key).or_insert(0);
-        *count += 1;
-        if *count == self.threshold {
-            // Store full pattern for later retrieval (hot_patterns, extract_failure_rule)
+        let reached_threshold = {
+            let mut map = self.failure_counts.lock().unwrap();
+            let count = map.entry(key).or_insert(0);
+            *count += 1;
+            *count == self.threshold
+        };
+        // failure_counts lock is now dropped — safe to acquire hot_patterns.
+        if reached_threshold {
             self.hot_patterns.lock().unwrap().insert(key, pattern);
         }
-        *count == self.threshold
+        reached_threshold
     }
 
     /// Generate synthetic edge cases from a failure pattern.
@@ -445,14 +455,22 @@ impl<P: ConstraintPruner> AdversarialBreaker<P> {
     }
 
     /// Return all failure patterns whose count has reached the threshold.
+    ///
+    /// Lock discipline: snapshot the qualifying keys from `failure_counts`
+    /// first (lock dropped), then look them up in `hot_patterns` — never
+    /// holds both locks at once.
     pub fn hot_patterns(&self) -> Vec<FailurePattern> {
-        let counts = self.failure_counts.lock().unwrap();
+        let hot_keys: Vec<FailurePatternHash> = {
+            let counts = self.failure_counts.lock().unwrap();
+            counts
+                .iter()
+                .filter(|&(_, &count)| count >= self.threshold)
+                .map(|(key, _)| *key)
+                .collect()
+        };
+        // failure_counts lock is now dropped — safe to acquire hot_patterns.
         let hot = self.hot_patterns.lock().unwrap();
-        counts
-            .iter()
-            .filter(|&(_, &count)| count >= self.threshold)
-            .filter_map(|(key, _)| hot.get(key).cloned())
-            .collect()
+        hot_keys.iter().filter_map(|key| hot.get(key).cloned()).collect()
     }
 
     /// Feed synthetic variants through the inner pruner to verify the weakness is genuine.

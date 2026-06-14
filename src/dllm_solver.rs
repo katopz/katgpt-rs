@@ -118,12 +118,16 @@ pub fn build_dd_tree_adaptive(
     };
 
     for (depth, marginals) in marginals_per_depth.iter().enumerate() {
-        // Compute Shannon entropy of marginals (zero-alloc: no extra Vec)
+        // Compute Shannon entropy of marginals (zero-alloc: no extra Vec).
+        // Branch-free `p.max(1e-10).ln()` (compiles to `fmax`) unblocks LLVM
+        // auto-vectorization over the vocab-sized inner loop — avoids the
+        // data-dependent `if p > 0.0` branch per element. Matches the pattern
+        // already used in `shannon_entropy` above.
         let entropy: f64 = marginals
             .iter()
             .map(|&p| {
-                let p = p as f64;
-                if p > 0.0 { -p * p.ln() } else { 0.0 }
+                let p = (p as f64).max(1e-10);
+                -p * p.ln()
             })
             .sum();
 
