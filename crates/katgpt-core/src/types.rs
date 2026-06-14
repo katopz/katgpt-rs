@@ -3033,11 +3033,16 @@ impl GpartAdapter {
         let assignments = self.generate_assignments(n);
         let group_sizes = self.compute_group_sizes(n, &assignments);
 
-        // Single-pass broadcast: w[i] += theta[g(i)] / sqrt(n_g)
-        for i in 0..n {
-            let g = assignments[i];
+        // Pre-compute per-group delta O(d): avoids recomputing sqrt+division for
+        // each of N elements. Same approach as `apply_simd()` / `GpartPrepared`.
+        let mut group_delta = vec![0.0f32; self.d];
+        for g in 0..self.d {
             let scale = 1.0 / (group_sizes[g] as f32).sqrt();
-            base_weights[i] += scale * self.theta[g];
+            group_delta[g] = scale * self.theta[g];
+        }
+        // Branch-free inner loop: pure array lookup, auto-vectorizable.
+        for i in 0..n {
+            base_weights[i] += group_delta[assignments[i]];
         }
     }
 
@@ -3056,10 +3061,16 @@ impl GpartAdapter {
         self.generate_assignments_into(n, assignments);
         self.compute_group_sizes_into(n, assignments, group_sizes);
 
-        for i in 0..n {
-            let g = assignments[i];
+        // Pre-compute per-group delta O(d): eliminates N recomputations of sqrt+division.
+        // `d` is small (≤ 90), so a single alloc of `d` f32s amortizes across N elements.
+        let mut group_delta = vec![0.0f32; self.d];
+        for g in 0..self.d {
             let scale = 1.0 / (group_sizes[g] as f32).sqrt();
-            base_weights[i] += scale * self.theta[g];
+            group_delta[g] = scale * self.theta[g];
+        }
+        // Branch-free inner loop: pure array lookup, auto-vectorizable.
+        for i in 0..n {
+            base_weights[i] += group_delta[assignments[i]];
         }
     }
 
@@ -4817,8 +4828,9 @@ impl SenseModule {
 
         // Unrolled-friendly flat loop: extract ternary sign per-dim, FMA into dot.
         // bool-as-u32 then cast to f32 is zero-extend (no int-to-float conversion).
-        for (i, hla_val) in hla_state.iter().enumerate().take(n) {
-            let dir = &self.directions[i];
+        // Zip iteration elides bounds checks on `self.directions[i]` (verified safe
+        // by `n_directions ≤ 8` but the runtime bound `n` defeats LLVM's elision).
+        for (i, (hla_val, dir)) in hla_state.iter().zip(self.directions.iter()).enumerate().take(n) {
             let pos = ((dir.pos_bits >> i) & 1) as u32 as f32;
             let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
             // sign ∈ {-1, 0, +1} — FMA: dot += sign * hla * scale

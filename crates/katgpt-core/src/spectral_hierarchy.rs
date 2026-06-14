@@ -238,19 +238,21 @@ pub(crate) fn top_k_eigenvectors(mat: &[f32], n: usize, k: usize) -> Vec<f32> {
                 let sin2 = sin_t * sin_t;
                 let sin_cos = sin_t * cos_t;
 
-                // Rotate matrix.
-                for r in 0..n {
-                    if r == p || r == q {
-                        continue;
+                // Rotate matrix. Split `[0..n)` into three contiguous ranges that
+                // exclude `p` and `q` — eliminates the per-iteration
+                // `if r == p || r == q { continue }` branch (which would otherwise
+                // mispredict twice per `r` sweep).
+                for &(r_lo, r_hi) in &[(0, p), (p + 1, q), (q + 1, n)] {
+                    for r in r_lo..r_hi {
+                        let arp = a[r * n + p];
+                        let arq = a[r * n + q];
+                        let new_rp = cos_t * arp + sin_t * arq;
+                        let new_rq = -sin_t * arp + cos_t * arq;
+                        a[r * n + p] = new_rp;
+                        a[p * n + r] = new_rp;
+                        a[r * n + q] = new_rq;
+                        a[q * n + r] = new_rq;
                     }
-                    let arp = a[r * n + p];
-                    let arq = a[r * n + q];
-                    let new_rp = cos_t * arp + sin_t * arq;
-                    let new_rq = -sin_t * arp + cos_t * arq;
-                    a[r * n + p] = new_rp;
-                    a[p * n + r] = new_rp;
-                    a[r * n + q] = new_rq;
-                    a[q * n + r] = new_rq;
                 }
 
                 let new_pp = cos2 * app + 2.0 * sin_cos * apq + sin2 * aqq;

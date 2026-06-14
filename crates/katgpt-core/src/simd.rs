@@ -1771,6 +1771,7 @@ unsafe fn neon_sum_f32(x: &[f32]) -> f32 {
             i += 16;
         }
 
+        // Horizontal reduce: acc0+acc1+acc2+acc3
         let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
 
         let mut acc_rem = vdupq_n_f32(0.0);
@@ -1813,7 +1814,7 @@ unsafe fn neon_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_max_f32(x: &[f32]) -> f32 {
-    use core::arch::aarch64::{vld1q_f32, vmaxq_f32};
+    use core::arch::aarch64::{vld1q_f32, vmaxq_f32, vmaxvq_f32};
     unsafe {
         let len = x.len();
         let chunks = len / 4;
@@ -1850,14 +1851,9 @@ unsafe fn neon_max_f32(x: &[f32]) -> f32 {
             i += 4;
         }
 
-        // Horizontal max of 4 lanes
-        let arr: [f32; 4] = core::mem::transmute(vmax);
-        let mut max = arr[0];
-        for &v in &arr[1..] {
-            if v > max {
-                max = v;
-            }
-        }
+        // Horizontal max of 4 lanes — single `vmaxvq_f32` instruction replaces
+        // the transmute + scalar loop. Mandatory on ARMv8+.
+        let mut max = vmaxvq_f32(vmax);
 
         // Handle tail
         while i < len {
@@ -1923,8 +1919,8 @@ unsafe fn neon_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 unsafe fn avx2_exp_inplace(x: &mut [f32]) {
     use core::arch::x86_64::{
         _mm256_add_epi32, _mm256_add_ps, _mm256_castsi256_ps, _mm256_cvtps_epi32, _mm256_loadu_ps,
-        _mm256_mul_ps, _mm256_round_ps, _mm256_set1_epi32, _mm256_set1_ps, _mm256_slli_epi32,
-        _mm256_storeu_ps, _mm256_sub_ps,
+        _mm256_max_epi32, _mm256_min_epi32, _mm256_mul_ps, _mm256_round_ps, _mm256_set1_epi32,
+        _mm256_set1_ps, _mm256_slli_epi32, _mm256_storeu_ps, _mm256_sub_ps,
     };
     unsafe {
         const ROUND_NEAREST: i32 = 0x00;
@@ -1992,7 +1988,14 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
             );
 
             // 2^n via AVX2 bit manipulation: shift = (n + 127) << 23
-            let vn_shifted_i = _mm256_add_epi32(vn_i, _mm256_set1_epi32(127));
+            // Clamp n to [-126, 127] before adding 127 — matches scalar `cephes_exp_scalar`
+            // and NEON `neon_exp_inplace`. Without this, x > ~88 produces n+127 > 255,
+            // overflowing the exponent bits and silently producing NaN/garbage.
+            let vn_clamped = _mm256_max_epi32(
+                _mm256_min_epi32(vn_i, _mm256_set1_epi32(127)),
+                _mm256_set1_epi32(-126),
+            );
+            let vn_shifted_i = _mm256_add_epi32(vn_clamped, _mm256_set1_epi32(127));
             let v_scale_bits = _mm256_slli_epi32::<23>(vn_shifted_i);
             let v_scale = _mm256_castsi256_ps(v_scale_bits);
 
@@ -2471,6 +2474,7 @@ unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
             i += 32;
         }
 
+        // Horizontal reduce: acc0+acc1+acc2+acc3
         let mut sum = horizontal_sum_256(_mm256_add_ps(
             _mm256_add_ps(acc0, acc1),
             _mm256_add_ps(acc2, acc3),
@@ -3273,29 +3277,31 @@ pub fn compute_retrieval_margin(
     let mut global_pos_min = f32::INFINITY;
     let mut global_neg_max = f32::NEG_INFINITY;
 
-    // Pre-allocate bitmap once, reuse per query
-    let mut pos_bitmap = vec![0u8; n_docs];
+    // Generation-counter bitmap: avoids per-query `fill(0)` memset.
+    // Instead of zeroing `n_docs` bytes per query (n_queries passes), we tag each
+    // slot with the current query index and compare — O(1) per query, no memset.
+    let mut pos_gen: Vec<u32> = vec![0; n_docs];
 
     for i in 0..n_queries {
         let q_row = &queries[i * dim..(i + 1) * dim];
+        let cur_gen = (i + 1) as u32;
 
-        // Build positive set and compute min positive score in one pass
+        // Build positive set and compute min positive score in one pass.
         let pos_start = i * k;
-        pos_bitmap.fill(0);
         let mut pos_min = f32::INFINITY;
         for &idx in &neighborhoods[pos_start..pos_start + k] {
             if idx < n_docs {
-                pos_bitmap[idx] = 1;
+                pos_gen[idx] = cur_gen;
                 let d_row = &documents[idx * dim..(idx + 1) * dim];
                 let dot = simd_dot_f32(q_row, d_row, dim);
                 pos_min = pos_min.min(dot);
             }
         }
 
-        // max negative score (all docs not in pos_set)
+        // max negative score (docs not in pos_set). Generation check replaces memset.
         let mut neg_max = f32::NEG_INFINITY;
         for j in 0..n_docs {
-            if pos_bitmap[j] != 0 {
+            if pos_gen[j] == cur_gen {
                 continue;
             }
             let d_row = &documents[j * dim..(j + 1) * dim];
@@ -3495,27 +3501,35 @@ fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
 unsafe fn neon_sum_abs_f32(x: &[f32]) -> f32 {
     use core::arch::aarch64::{vabsq_f32, vaddq_f32, vaddvq_f32, vdupq_n_f32, vld1q_f32};
     unsafe {
-        let mut i = 0;
-        let chunks = x.len() / 4;
+        // 4 independent accumulators (16 elements per outer iter) — matches
+        // `neon_sum_f32` / `neon_dot_f32` and keeps the FADD pipeline full.
         let mut acc0 = vdupq_n_f32(0.0);
-        // Use two accumulators for better pipeline utilization
         let mut acc1 = vdupq_n_f32(0.0);
-        let chunks2 = chunks / 2;
-        for _ in 0..chunks2 {
-            let v0 = vld1q_f32(x.as_ptr().add(i));
-            acc0 = vaddq_f32(acc0, vabsq_f32(v0));
-            let v1 = vld1q_f32(x.as_ptr().add(i + 4));
-            acc1 = vaddq_f32(acc1, vabsq_f32(v1));
-            i += 8;
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+        for _ in 0..chunks4 {
+            acc0 = vaddq_f32(acc0, vabsq_f32(vld1q_f32(x.as_ptr().add(i))));
+            acc1 = vaddq_f32(acc1, vabsq_f32(vld1q_f32(x.as_ptr().add(i + 4))));
+            acc2 = vaddq_f32(acc2, vabsq_f32(vld1q_f32(x.as_ptr().add(i + 8))));
+            acc3 = vaddq_f32(acc3, vabsq_f32(vld1q_f32(x.as_ptr().add(i + 12))));
+            i += 16;
         }
-        // Handle remaining 4-element chunk
-        if i + 4 <= x.len() {
-            let v = vld1q_f32(x.as_ptr().add(i));
-            acc0 = vaddq_f32(acc0, vabsq_f32(v));
+        // Horizontal reduce: acc0+acc1+acc2+acc3
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
+
+        // Remainder (4-element chunks).
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            acc_rem = vaddq_f32(acc_rem, vabsq_f32(vld1q_f32(x.as_ptr().add(i))));
             i += 4;
         }
-        let mut sum = vaddvq_f32(vaddq_f32(acc0, acc1));
-        while i < x.len() {
+        sum += vaddvq_f32(acc_rem);
+
+        while i < len {
             sum += (*x.get_unchecked(i)).abs();
             i += 1;
         }
@@ -3532,27 +3546,47 @@ unsafe fn avx2_sum_abs_f32(x: &[f32]) -> f32 {
     unsafe {
         // Mask to clear the sign bit: AND with this yields |x|
         let abs_mask = _mm256_set1_ps(f32::from_bits(0x7fff_ffff));
-        let mut i = 0;
-        let chunks = x.len() / 8;
+        // 4 independent accumulators (32 elements per outer iter) — matches
+        // `avx2_sum_f32` / `avx2_dot_f32` and keeps the FADD pipeline full.
         let mut acc0 = _mm256_setzero_ps();
         let mut acc1 = _mm256_setzero_ps();
-        let chunks2 = chunks / 2;
-        for _ in 0..chunks2 {
-            let v0 = _mm256_loadu_ps(x.as_ptr().add(i));
-            acc0 = _mm256_add_ps(acc0, _mm256_and_ps(v0, abs_mask));
-            let v1 = _mm256_loadu_ps(x.as_ptr().add(i + 8));
-            acc1 = _mm256_add_ps(acc1, _mm256_and_ps(v1, abs_mask));
-            i += 16;
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 32;
+        for _ in 0..chunks4 {
+            acc0 = _mm256_add_ps(acc0, _mm256_and_ps(_mm256_loadu_ps(x.as_ptr().add(i)), abs_mask));
+            acc1 = _mm256_add_ps(
+                acc1,
+                _mm256_and_ps(_mm256_loadu_ps(x.as_ptr().add(i + 8)), abs_mask),
+            );
+            acc2 = _mm256_add_ps(
+                acc2,
+                _mm256_and_ps(_mm256_loadu_ps(x.as_ptr().add(i + 16)), abs_mask),
+            );
+            acc3 = _mm256_add_ps(
+                acc3,
+                _mm256_and_ps(_mm256_loadu_ps(x.as_ptr().add(i + 24)), abs_mask),
+            );
+            i += 32;
         }
-        // Handle remaining 8-element chunk
-        let remaining = (x.len() - i) / 8;
+        // Horizontal reduce: acc0+acc1+acc2+acc3
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
+        // Remainder (8-element chunks).
+        let mut acc_rem = _mm256_setzero_ps();
+        let remaining = (len - i) / 8;
         for _ in 0..remaining {
             let v = _mm256_loadu_ps(x.as_ptr().add(i));
-            acc0 = _mm256_add_ps(acc0, _mm256_and_ps(v, abs_mask));
+            acc_rem = _mm256_add_ps(acc_rem, _mm256_and_ps(v, abs_mask));
             i += 8;
         }
-        let mut sum = horizontal_sum_256(_mm256_add_ps(acc0, acc1));
-        while i < x.len() {
+        sum += horizontal_sum_256(acc_rem);
+        while i < len {
             sum += (*x.get_unchecked(i)).abs();
             i += 1;
         }

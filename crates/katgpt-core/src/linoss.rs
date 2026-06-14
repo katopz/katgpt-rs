@@ -79,10 +79,22 @@ impl LinOSSCell {
         debug_assert!(y_out.len() >= h);
         debug_assert!(z_out.len() >= h);
         debug_assert!(forcing.is_empty() || forcing.len() == h);
-        for i in 0..h {
-            y_out[i] = y_in[i] + dt * z_in[i];
-            let f = if forcing.is_empty() { 0.0 } else { forcing[i] };
-            z_out[i] = z_in[i] + dt * (-self.omega_sq[i] * y_out[i] - self.beta[i] * z_in[i] + f);
+        // Hoist the `forcing.is_empty()` branch out of the hot loop into two
+        // specialized bodies. Inside each, use mul_add for FMA fusion.
+        if forcing.is_empty() {
+            for i in 0..h {
+                // y_out = y + dt·z ; z_out = z + dt·(−ω²·y_out − β·z)
+                y_out[i] = dt.mul_add(z_in[i], y_in[i]);
+                let wz = (-self.omega_sq[i]).mul_add(y_out[i], -self.beta[i] * z_in[i]);
+                z_out[i] = dt.mul_add(wz, z_in[i]);
+            }
+        } else {
+            for i in 0..h {
+                y_out[i] = dt.mul_add(z_in[i], y_in[i]);
+                // z_out = z + dt·(−ω²·y_out − β·z + f)
+                let wz = (-self.omega_sq[i]).mul_add(y_out[i], -self.beta[i] * z_in[i]) + forcing[i];
+                z_out[i] = dt.mul_add(wz, z_in[i]);
+            }
         }
         (&y_out[..h], &z_out[..h])
     }
@@ -458,12 +470,18 @@ impl VocabFourierBasis {
         }
         let vd = self.vocab_dim.min(result.len());
         result[..vd].fill(0.0);
+        // SIMD-fused scale-accumulate: `result[d] += c · modes[d]` for d in [0..vd).
+        // Replaces a scalar `result_d += c * modes[...]` loop with a single SIMD call
+        // per mode (NEON/AVX2 vectorized via `simd_fused_scale_acc`).
         for ki in 0..self.k {
             let c = coefficients.get(ki).copied().unwrap_or(0.0);
             let mode_start = ki * self.vocab_dim;
-            for (d, result_d) in result.iter_mut().enumerate().take(vd) {
-                *result_d += c * self.modes[mode_start + d];
-            }
+            crate::simd::simd_fused_scale_acc(
+                &mut result[..vd],
+                &self.modes[mode_start..mode_start + vd],
+                c,
+                vd,
+            );
         }
     }
 

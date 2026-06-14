@@ -171,6 +171,10 @@ pub struct ParallaxScratch {
     pub pv_buf: Vec<f32>,
     /// Correction output, length `head_dim`
     pub correction: Vec<f32>,
+    /// Cached dimensions from the last `ensure_capacity` call. Fast-path returns
+    /// immediately when both match, skipping 6 length comparisons + branches.
+    cached_seq_len: usize,
+    cached_head_dim: usize,
 }
 
 impl ParallaxScratch {
@@ -183,6 +187,8 @@ impl ParallaxScratch {
             sigma_kv: vec![0.0; head_dim * head_dim],
             pv_buf: vec![0.0; head_dim],
             correction: vec![0.0; head_dim],
+            cached_seq_len: seq_len,
+            cached_head_dim: head_dim,
         }
     }
 
@@ -198,6 +204,11 @@ impl ParallaxScratch {
 
     /// Resize buffers if dimensions changed (avoids reallocation when sizes match).
     pub fn ensure_capacity(&mut self, seq_len: usize, head_dim: usize) {
+        // Fast path: most calls reuse the same dimensions. Two comparisons
+        // replace six length reads + branches in the steady state.
+        if self.cached_seq_len == seq_len && self.cached_head_dim == head_dim {
+            return;
+        }
         let d = head_dim;
         let d2 = d * d;
         let mut changed = false;
@@ -230,6 +241,8 @@ impl ParallaxScratch {
         if changed {
             self.reset();
         }
+        self.cached_seq_len = seq_len;
+        self.cached_head_dim = head_dim;
     }
 }
 
@@ -425,13 +438,11 @@ fn tiled_attention_core(
     let d = head_dim;
     let n = seq_len;
 
-    // Use caller-provided scratch or allocate on demand
+    // Use caller-provided scratch or allocate on demand. No `fill(0.0)` needed —
+    // the score loop below writes every `scores[0..n]` element before any read.
     let mut local_scores;
     let scores: &mut [f32] = match scores {
-        Some(s) if s.len() >= n => {
-            s[..n].fill(0.0);
-            s
-        }
+        Some(s) if s.len() >= n => s,
         _ => {
             local_scores = vec![0.0f32; n];
             &mut local_scores

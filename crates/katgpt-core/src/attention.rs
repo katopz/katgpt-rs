@@ -196,15 +196,20 @@ fn tiled_attention_inner(
                 let m_new = m_old.max(rm);
                 max_tile[i] = m_new;
 
-                // Correction factor: exp2((m_old - m_new) * log2e_scale)
-                let correction = ((m_old - m_new) * log2e_scale).exp2();
+                // Fast path: when m_new == m_old (typical after the first K-tile,
+                // since softmax max saturates quickly), correction is 1.0 and the
+                // `simd_scale_inplace` + `norm_tile *=` work is a no-op. Skip it.
+                if m_new > m_old {
+                    // Correction factor: exp2((m_old - m_new) * log2e_scale)
+                    let correction = ((m_old - m_new) * log2e_scale).exp2();
 
-                // Apply correction to existing accumulators FIRST (SIMD-accelerated)
-                crate::simd::simd_scale_inplace(
-                    &mut o_tile[i * head_dim..i * head_dim + head_dim],
-                    correction,
-                );
-                norm_tile[i] *= correction;
+                    // Apply correction to existing accumulators FIRST (SIMD-accelerated)
+                    crate::simd::simd_scale_inplace(
+                        &mut o_tile[i * head_dim..i * head_dim + head_dim],
+                        correction,
+                    );
+                    norm_tile[i] *= correction;
+                }
 
                 // Compute P̃ in-place on s_tile row: exp((s - m_new) * scale)
                 // Mathematically equivalent to exp2((s - m_new) * log2e_scale)

@@ -206,11 +206,28 @@ fn scalar_outer_product_f64(
 #[inline]
 #[allow(dead_code)]
 fn scalar_dot_f64(a: &[f64], b: &[f64], len: usize) -> f64 {
-    let mut sum = 0.0f64;
-    for i in 0..len {
+    // 4 independent accumulators (4 elements per outer iter) — same pattern as
+    // the f32 SIMD kernels. Single-accumulator dot is FMA-latency-bound; 4 lanes
+    // keep the pipeline full and let LLVM emit 4-wide unrolled FMA on targets
+    // without hardware f64 SIMD (WASM, RISC-V, debug builds).
+    let mut acc = [0.0f64; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            acc[0] += *a.get_unchecked(i) * *b.get_unchecked(i);
+            acc[1] += *a.get_unchecked(i + 1) * *b.get_unchecked(i + 1);
+            acc[2] += *a.get_unchecked(i + 2) * *b.get_unchecked(i + 2);
+            acc[3] += *a.get_unchecked(i + 3) * *b.get_unchecked(i + 3);
+        }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f64>();
+    while i < len {
         unsafe {
             sum += *a.get_unchecked(i) * *b.get_unchecked(i);
         }
+        i += 1;
     }
     sum
 }
@@ -850,6 +867,7 @@ impl PeiraCovariance {
     /// **This method allocates 5 vectors on every call.** For hot paths,
     /// prefer [`predictor_with_scratch()`] or [`predict_and_loss()`] which
     /// reuse pre-allocated internal buffers and are zero-alloc.
+    #[deprecated(note = "allocates 5 vectors per call; use `predictor_with_scratch()` instead")]
     pub fn predictor(&self) -> (Vec<f64>, Vec<f64>) {
         let k = self.config.dim;
         let lambda = self.config.lambda;
@@ -865,6 +883,8 @@ impl PeiraCovariance {
         let mut q_star = vec![0.0f64; k * k];
         let mut l_scratch = vec![0.0f64; k * k];
         let mut l_inv_scratch = vec![0.0f64; k * k];
+        // Single `bt_scratch` reused for both `invert_spd_into` and `matmul_into`.
+        // Previously this was declared twice — the first allocation was leaked.
         let mut bt_scratch = vec![0.0f64; k * k];
         invert_spd_into(
             &mut q_star,
@@ -877,7 +897,6 @@ impl PeiraCovariance {
 
         // P* = Σ @ Q*
         let mut p_star = vec![0.0f64; k * k];
-        let mut bt_scratch = vec![0.0f64; k * k];
         matmul_into(&mut p_star, &mut bt_scratch, &self.sigma, &q_star, k);
 
         (p_star, q_star)

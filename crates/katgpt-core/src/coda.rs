@@ -60,11 +60,11 @@ impl GateActivation {
                 x * sigmoid
             }
             Self::GegeluTanh => {
-                // Precomputed: sqrt(2/π) ≈ 0.7978845608
-                const SQRT_2_OVER_PI: f32 = 0.797_884_6;
-                // x * (x * x) makes the dependency chain explicit for FMA pipelining
+                // sqrt(2/π) full f32 precision (was truncated to 7 digits).
+                const SQRT_2_OVER_PI: f32 = 0.797_884_560_802_865_4;
+                // Cubic via mul_add for FMA fusion: 0.044715 * x³ + x.
                 let x_sq = x * x;
-                let inner = SQRT_2_OVER_PI * (x + 0.044715 * x * x_sq);
+                let inner = SQRT_2_OVER_PI * 0.044_715_f32.mul_add(x * x_sq, x);
                 0.5 * x * (1.0 + inner.tanh())
             }
             Self::Gegelu => {
@@ -278,20 +278,14 @@ pub fn moa_swiglu(
         let y = gate_proj[i];
         let z = up_proj[i];
 
-        // Pre-compute all activated values into stack arrays,
-        // separating activation dispatch from accumulation for better pipelining.
-        let mut activated_gate = [0.0f32; MOA_DICT_SIZE];
-        let mut activated_up = [0.0f32; MOA_DICT_SIZE];
-        for j in 0..MOA_DICT_SIZE {
-            activated_gate[j] = activations[j].activate(y);
-            activated_up[j] = activations[j].activate(z);
-        }
-
+        // Single-pass FMA accumulation: `mul_add(weight, activation, acc)` lets
+        // LLVM emit fused-multiply-add for both halves. Eliminates the 14-element
+        // stack materialization that previously prevented FMA fusion.
         let mut mixed_gate = 0.0f32;
         let mut mixed_up = 0.0f32;
         for j in 0..MOA_DICT_SIZE {
-            mixed_gate += gate_weights[j] * activated_gate[j];
-            mixed_up += up_weights[j] * activated_up[j];
+            mixed_gate = gate_weights[j].mul_add(activations[j].activate(y), mixed_gate);
+            mixed_up = up_weights[j].mul_add(activations[j].activate(z), mixed_up);
         }
         hidden[i] = mixed_gate * mixed_up;
     }
@@ -748,7 +742,8 @@ pub fn simd_matmul_rmsnorm_rope(
 
     let half_rows = rows / 2;
     let pos_base = pos * head_dim;
-    let mut dim_idx = 0usize;
+    // Modular arithmetic replaces the per-iter `if dim_idx == head_dim { dim_idx = 0 }`
+    // branch — branch-free and friendlier to LLVM vectorization.
     for i in 0..half_rows {
         let even_row = 2 * i;
         let odd_row = 2 * i + 1;
@@ -768,12 +763,8 @@ pub fn simd_matmul_rmsnorm_rope(
             cols,
         ) * rstd;
 
-        // RoPE rotation: index into precomputed table
-        let rope_idx = pos_base + dim_idx;
-        dim_idx += 1;
-        if dim_idx == head_dim {
-            dim_idx = 0;
-        }
+        // RoPE rotation: index into precomputed table (modular, branch-free).
+        let rope_idx = pos_base + (i % head_dim);
         debug_assert!(rope_idx < cos_table.len(), "RoPE cos index out of bounds");
         debug_assert!(rope_idx < sin_table.len(), "RoPE sin index out of bounds");
         // Safety: tables are pre-sized to max_seq_len × head_dim; index verified above

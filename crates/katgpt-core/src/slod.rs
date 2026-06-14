@@ -119,6 +119,26 @@ pub fn poincare_distance(a: &[f32], b: &[f32], dim: usize) -> f32 {
     inner.acosh()
 }
 
+/// Poincaré distance with pre-computed ||a||² and ||b||².
+///
+/// Identical to [`poincare_distance`] but skips the two `simd_sum_sq` calls —
+/// useful when calling distance repeatedly over the same set of points (kNN graph
+/// construction, retrieval). The caller is responsible for passing `norm_a_sq`
+/// and `norm_b_sq` already clamped to `< 1 - 1e-5` for numerical stability.
+#[inline]
+pub fn poincare_distance_precomputed(
+    a: &[f32],
+    b: &[f32],
+    norm_a_sq: f32,
+    norm_b_sq: f32,
+    dim: usize,
+) -> f32 {
+    let diff_sq = crate::simd::simd_dist_sq(a, b, dim);
+    let denom = (1.0 - norm_a_sq) * (1.0 - norm_b_sq);
+    let inner = 1.0 + 2.0 * diff_sq / denom;
+    inner.acosh()
+}
+
 /// In-place Möbius addition — zero-allocation hot path.
 #[inline]
 fn mobius_add_into(result: &mut [f32], a: &[f32], b: &[f32], dim: usize) {
@@ -265,6 +285,16 @@ impl SlodOperator {
         let mut lap = vec![0.0f32; n * n];
         // Pre-allocate distance buffer — reused across iterations
         let mut dists: Vec<(usize, f32)> = Vec::with_capacity(n);
+        // Pre-compute ||x||² for every embedding once. `poincare_distance` recomputes
+        // both ||a||² and ||b||² on every call — for the n×n outer product here that's
+        // O(n²·dim) redundant work. Hoisting reduces to O(n·dim).
+        // Bit-identical to the prior scalar recomputation (same value, fewer times).
+        let norm_sq: Vec<f32> = (0..n)
+            .map(|i| {
+                crate::simd::simd_sum_sq(&embeddings[i * dim..(i + 1) * dim], dim)
+                    .min(1.0 - 1e-5)
+            })
+            .collect();
 
         for i in 0..n {
             let a_i = &embeddings[i * dim..(i + 1) * dim];
@@ -275,7 +305,7 @@ impl SlodOperator {
                     continue;
                 }
                 let a_j = &embeddings[j * dim..(j + 1) * dim];
-                dists.push((j, poincare_distance(a_i, a_j, dim)));
+                dists.push((j, poincare_distance_precomputed(a_i, a_j, norm_sq[i], norm_sq[j], dim)));
             }
             // Partial sort: O(n) to partition top-k nearest
             // Clamp k to dists.len() since we skipped self (dists has n-1 elements)

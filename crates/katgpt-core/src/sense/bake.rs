@@ -72,10 +72,14 @@ pub fn bake_regularize(
     mu_current: &[f32; 8],
     beta: f32,
 ) -> f32 {
+    // Algebraic identity: √(λ·diff²) = |diff| · √λ.
+    // Hoisting √λ out of the (λ·diff²)·sqrt dependency chain lets the FPU pipeline
+    // the sqrt in parallel with the diff subtract.
     let mut penalty = 0.0f32;
     for d in 0..8 {
+        let sqrt_lambda = lambda[d].sqrt();
         let diff = mu_current[d] - mu_old[d];
-        penalty += (lambda[d] * diff * diff).sqrt();
+        penalty += diff.abs() * sqrt_lambda;
     }
     penalty * beta
 }

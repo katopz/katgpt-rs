@@ -150,19 +150,23 @@ impl FlowFieldCache {
             return None;
         }
 
-        // Check for a valid cached entry via single lookup.
-        use std::collections::hash_map::Entry;
-        let needs_recompute = match self.fields.entry(goal_id) {
-            Entry::Occupied(e) => {
-                let cached = e.get();
-                cached.dirty_count > 0
-                    || cached.last_tick != tick
-                    || cached.topology_version != self.current_topology_version
+        // Check for a valid cached entry via single lookup. `entry()` would resolve
+        // the bucket and let us return `&e.get().field` directly, but the borrow
+        // checker forbids returning the entry handle from this scope, so we'd pay
+        // a second `[&goal_id]` hash on the cache-hit fast path. Instead, use `get`
+        // for the validation pass and a second `get` only on the cache-hit return —
+        // both probes are cheap (same hash, hot bucket), and this avoids `entry()`'s
+        // bookkeeping for the common case.
+        let cached_valid = match self.fields.get(&goal_id) {
+            Some(cached) => {
+                cached.dirty_count == 0
+                    && cached.last_tick == tick
+                    && cached.topology_version == self.current_topology_version
             }
-            Entry::Vacant(_) => true,
+            None => false,
         };
-        if !needs_recompute {
-            return Some(&self.fields[&goal_id].field);
+        if cached_valid {
+            return self.fields.get(&goal_id).map(|c| &c.field);
         }
 
         // Validate goal index.

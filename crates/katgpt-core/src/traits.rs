@@ -634,7 +634,9 @@ pub trait AllGoalsUpdate {
             .iter()
             .zip(next_q.iter())
             .map(|(&r, q_next)| {
-                let max_q = q_next.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+                // SIMD max reduction replaces scalar `fold(f32::NEG_INFINITY, f32::max)`.
+                // Same semantics for non-NaN inputs (including empty -> -inf); vectorizes on NEON/AVX2.
+                let max_q = crate::simd::simd_max_f32(q_next);
                 r + gamma * max_q
             })
             .collect()
@@ -1220,23 +1222,19 @@ pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
     if a.len() != b.len() || a.is_empty() {
         return 0.0;
     }
-    // Single-pass Welford-style: track sum_a, sum_b, cov, var_a, var_b
+    // Single-pass Welford-style: track sum_a, sum_b, cov, var_a, var_b.
     // Uses corrective term (n·Σxy − Σx·Σy) to match two-pass numerically.
-    let mut sum_a: f64 = 0.0;
-    let mut sum_b: f64 = 0.0;
-    let mut sum_ab: f64 = 0.0;
-    let mut sum_aa: f64 = 0.0;
-    let mut sum_bb: f64 = 0.0;
-    for (&ai, &bi) in a.iter().zip(b.iter()) {
-        let x = ai as f64;
-        let y = bi as f64;
-        sum_a += x;
-        sum_b += y;
-        sum_ab += x * y;
-        sum_aa += x * x;
-        sum_bb += y * y;
-    }
-    let n = a.len() as f64;
+    //
+    // SIMD: the four Σ reductions run through crate::simd helpers (NEON/AVX2);
+    // only the final corrective arithmetic stays in f64 for numerical parity
+    // with the original Welford-style two-pass reference.
+    let len = a.len();
+    let sum_a = crate::simd::simd_sum_f32(a) as f64;
+    let sum_b = crate::simd::simd_sum_f32(b) as f64;
+    let sum_ab = crate::simd::simd_dot_f32(a, b, len) as f64;
+    let sum_aa = crate::simd::simd_dot_f32(a, a, len) as f64;
+    let sum_bb = crate::simd::simd_dot_f32(b, b, len) as f64;
+    let n = len as f64;
     let cov = n * sum_ab - sum_a * sum_b;
     let var_a = n * sum_aa - sum_a * sum_a;
     let var_b = n * sum_bb - sum_b * sum_b;
@@ -1262,14 +1260,13 @@ pub fn best_buddies(corr_rows: &[&[f32]], k: usize) -> Vec<(usize, usize)> {
         if row.is_empty() {
             continue;
         }
-        let mut best_j = 0;
-        let mut best_corr = f32::NEG_INFINITY;
-        for (j, &val) in row.iter().enumerate() {
-            if val > best_corr {
-                best_corr = val;
-                best_j = j;
-            }
-        }
+        // Two-phase argmax: SIMD reduction for max value, then a single linear
+        // scan for the index. Breaks the data-dependency chain of the prior
+        // branchy `if val > best_corr` loop and lets the max reduction vectorize.
+        let best_corr = crate::simd::simd_max_f32(row);
+        // Linear scan for first index matching best_corr. For non-NaN inputs
+        // this returns the same index as the strict-greater loop (first-wins on ties).
+        let best_j = row.iter().position(|&v| v == best_corr).unwrap_or(0);
         best_for[i] = Some(best_j);
     }
 
