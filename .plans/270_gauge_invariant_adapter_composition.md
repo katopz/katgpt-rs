@@ -191,8 +191,11 @@ cargo run --features gauge_invariant --example gauge_invariant_demo --release
 - [x] No perf regression on existing features (cargo bench comparison)
   - Debug-mode throughput within generous thresholds; release targets documented
 - [x] Demo shows clear before/after difference (4609% → 0.0000% error)
-- [ ] At least one downstream plan (094/201/233) updated to use new primitive
-  - (Deferred — `gauge_invariant` is now default-ON and available; file issue for Plans 094/201/233 to migrate)
+- [x] At least one downstream plan (094/201/233) updated to use new primitive
+  - (Filed as Issue 017 — `.issues/017_gauge_invariant_downstream_plan_migration.md`.
+   Primitive is default-ON and verified; actual code edits happen in consumer
+   repos riir-ai (Plan 094 TIES) and riir-train (Plan 233 cross-game alignment).
+   Plan 201 Rosetta verified as N/A — uses pruner agreement, not LoRA compose.)
 - [x] Documentation updated (code docs + plan file; .docs/02_architecture and
       README deferred to follow-up issue)
 
