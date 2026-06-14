@@ -9,10 +9,10 @@
 Use GPart's isometric partition matrix as the weighting mechanism in the MUX-Latent demux pipeline. Replace learned linear weights with partition-based scaling for reduced parameter count.
 
 ## Acceptance Criteria
-- [ ] Plan 238 MUX-Latent must be complete first
-- [ ] Design isometric weight injection point in demux pipeline
-- [ ] Benchmark vs. standard MUX-Latent weights
-- [ ] GOAT gate behind `mux_isometric` feature flag
+- [-] Plan 238 MUX-Latent must be complete first (blocked on Plan 238)
+- [-] Design isometric weight injection point in demux pipeline (blocked on Plan 238)
+- [-] Benchmark vs. standard MUX-Latent weights (blocked on Plan 238)
+- [-] GOAT gate behind `mux_isometric` feature flag (blocked on Plan 238)
 
 ## Notes
 - Blocked until Plan 238 provides the MUX-Latent infrastructure

@@ -85,16 +85,16 @@ quantized_model = quantizer.compile(model)
 - [x] INT8 per-tensor quantization via `coremltools.optimize.coreml.LinearQuantizer`
 - [x] ANE placement verification via `MLComputePlan`
 - [x] Graceful error handling for Python 3.13+ missing native extensions
-- [ ] **Blocked**: Generate `npc_brain.mlpackage` — requires Python 3.12 for BlobWriter
-- [ ] Verify ANE placement (all ops on NE) — requires .mlpackage
-- [ ] Verify FP16 I/O compatibility (ANE runs FP16 natively)
-- [ ] Write test: generated model output matches `CpuTernaryBackend` (cosine ≥ 0.99)
+- [-] **Blocked**: Generate `npc_brain.mlpackage` — requires Python 3.12 for BlobWriter
+- [-] Verify ANE placement (all ops on NE) — requires .mlpackage (blocked by above)
+- [-] Verify FP16 I/O compatibility (ANE runs FP16 natively) (blocked by above)
+- [-] Write test: generated model output matches `CpuTernaryBackend` (cosine ≥ 0.99) (blocked by above)
 
 ## Stretch Goals (from Research 224)
 
-- [ ] Multifunction model: share weights between perception/emotion/zone (iOS 18+)
-- [ ] Stateful model: persistent NPC emotion accumulators via `read_state`/`coreml_update_state`
-- [ ] Palettized ternary weights: 1-bit `constexpr_lut_to_dense` compression
+- [-] Multifunction model: share weights between perception/emotion/zone (iOS 18+) — stretch
+- [-] Stateful model: persistent NPC emotion accumulators via `read_state`/`coreml_update_state` — stretch
+- [-] Palettized ternary weights: 1-bit `constexpr_lut_to_dense` compression — stretch
 
 ## Previous Approach (Superseded)
 

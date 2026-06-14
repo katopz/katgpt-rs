@@ -9,10 +9,10 @@
 Use GPart's seed-derived partition assignments as a deterministic routing key for consensus. Two nodes with the same seed must produce identical partition matrices — this property enables seed-route consensus for distributed inference validation.
 
 ## Acceptance Criteria
-- [ ] Multi-node consensus layer must exist first
-- [ ] Define seed-route protocol (seed → P → commitment → quorum verify)
-- [ ] Implement seed exchange in ChainConsensus
-- [ ] Test determinism across simulated nodes
+- [-] Multi-node consensus layer must exist first (blocked on multi-node consensus layer)
+- [-] Define seed-route protocol (seed → P → commitment → quorum verify) (blocked on above)
+- [-] Implement seed exchange in ChainConsensus (blocked on above)
+- [-] Test determinism across simulated nodes (blocked on above)
 
 ## Notes
 - GPart's `commitment()` already produces BLAKE3 hash of partition matrix

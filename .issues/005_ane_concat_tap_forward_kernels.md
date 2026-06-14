@@ -27,7 +27,7 @@ Modify ANE forward pass to use concat-tap pattern: output not just the result bu
 
 ## Tasks
 
-- [ ] Extend MIL/kernel generation to concat outputs
-- [ ] Modify forward pass to extract and cache intermediates
-- [ ] Benchmark: single dispatch vs multiple dispatch for 12-layer model
-- [ ] Verify intermediate accuracy (cosine ≥ 0.999 vs separate computation)
+- [-] Extend MIL/kernel generation to concat outputs (deferred — blocked on multi-layer model)
+- [-] Modify forward pass to extract and cache intermediates (deferred — blocked on multi-layer model)
+- [-] Benchmark: single dispatch vs multiple dispatch for 12-layer model (deferred — blocked on multi-layer model)
+- [-] Verify intermediate accuracy (cosine ≥ 0.999 vs separate computation) (deferred — blocked on multi-layer model)

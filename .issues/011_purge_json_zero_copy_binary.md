@@ -20,10 +20,10 @@
 - [x] `skill_opt/buffer.rs` — `to_bytes`/`from_bytes` (length-prefixed postcard)
 - [x] `examples/rt_turbo_01_calibration.rs` — updated for binary serialization
 - [x] `Cargo.toml` — added `postcard` dep to both katgpt-rs and katgpt-core
-- [ ] `pruners/go/replay.rs` — Go replay still uses JSON (deferred — training data format)
-- [ ] `pruners/go/replay_writer.rs` — Go JSONL writer (deferred — training data format)
-- [ ] riir-ai training pipeline — JSONL is the training data format, deferred
-- [ ] Remove `serde_json` from `Cargo.toml` when all callers migrated
+- [-] `pruners/go/replay.rs` — Go replay still uses JSON (deferred — training data format)
+- [-] `pruners/go/replay_writer.rs` — Go JSONL writer (deferred — training data format)
+- [-] riir-ai training pipeline — JSONL is the training data format, deferred
+- [-] Remove `serde_json` from `Cargo.toml` when all callers migrated (blocked on above)
 
 ## Problem
 Runtime JSON serialization (`serde_json::to_string`, `serde_json::json!`, `from_str`) has crept into hot paths and latent structures. JSON is:

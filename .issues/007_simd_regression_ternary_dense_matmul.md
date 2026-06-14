@@ -56,8 +56,8 @@ Controlled re-test shows dense matmul is **slightly faster** on HEAD.
 - [x] Identify root cause → `wrapping_sub` scalar dep chain
 - [x] Fix → revert to if/else mask construction
 - [x] Controlled verification → 203K ops/s matches baseline
-- [ ] Consider feature-gating `Mutex` fields in `BanditPruner` to reduce struct size
-      (Δ-Bandit remaining 2x gap: 65M vs 140M peak — separate issue)
+- [-] Consider feature-gating `Mutex` fields in `BanditPruner` to reduce struct size
+      (Δ-Bandit remaining 2x gap: 65M vs 140M peak — separate issue, not part of 007 scope)
 
 ## Notes
 
