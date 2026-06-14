@@ -2175,7 +2175,7 @@ mod tests_rng {
 // ---------------------------------------------------------------------------
 
 /// In-place softmax. Handles empty slices gracefully.
-/// Three-pass: find max → exp+sum → normalize.
+/// Three-pass: find max → shift+exp+sum (fused) → normalize.
 #[inline(always)]
 pub fn softmax(x: &mut [f32]) {
     if x.is_empty() {
@@ -2188,11 +2188,8 @@ pub fn softmax(x: &mut [f32]) {
     // Pass 2: subtract max (SIMD-accelerated)
     crate::simd::simd_add_scalar_inplace(x, -max_val);
 
-    // Pass 3: SIMD exp
-    crate::simd::simd_exp_inplace(x);
-
-    // Pass 4: sum + normalize (SIMD-accelerated sum)
-    let sum: f32 = crate::simd::simd_sum_f32(x);
+    // Pass 3: SIMD exp + sum (fused — saves one full buffer traversal vs separate exp+sum)
+    let sum: f32 = crate::simd::simd_exp_sum_inplace(x);
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }
@@ -2215,11 +2212,8 @@ pub fn softmax_scaled(x: &mut [f32], inv_temp: f32) {
     // Pass 2: shift and apply temperature in one fused SIMD pass
     crate::simd::simd_fused_sub_scale_inplace(x, max_val, inv_temp);
 
-    // Pass 3: SIMD exp
-    crate::simd::simd_exp_inplace(x);
-
-    // Pass 4: sum + normalize (SIMD-accelerated sum)
-    let sum: f32 = crate::simd::simd_sum_f32(x);
+    // Pass 3: SIMD exp + sum (fused — saves one full buffer traversal vs separate exp+sum)
+    let sum: f32 = crate::simd::simd_exp_sum_inplace(x);
     let inv_sum = 1.0 / sum;
     crate::simd::simd_scale_inplace(x, inv_sum);
 }

@@ -1184,6 +1184,35 @@ pub fn simd_exp_inplace(x: &mut [f32]) {
     }
 }
 
+/// Fused in-place exp + horizontal sum: `x[i] = exp(x[i])` and returns `Σ x[i]`.
+///
+/// Combines [`simd_exp_inplace`] + [`simd_sum_f32`] into one buffer traversal,
+/// saving one full read+write pass. Used by softmax/softmax_scaled to fuse the
+/// exp and denominator-computation passes — for vocab=256k this eliminates
+/// ~1MB of memory traffic per token decode.
+///
+/// NEON: 4× f32 per iter, 4 independent accumulators for ILP.
+/// AVX2: 8× f32 per iter, 4 independent accumulators for ILP.
+#[inline(always)]
+pub fn simd_exp_sum_inplace(x: &mut [f32]) -> f32 {
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_exp_sum_inplace(x) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_exp_sum_inplace(x) }
+        } else {
+            scalar_exp_sum_inplace(x)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_exp_sum_inplace(x)
+    }
+}
+
 /// SIMD-accelerated in-place reciprocal: `x[i] = 1.0 / x[i]`.
 ///
 /// Used by sigmoid computation in activation functions (SiLU, SwiGLU, GeGLU)
@@ -1214,6 +1243,18 @@ fn scalar_reciprocal_inplace(x: &mut [f32]) {
     for val in x.iter_mut() {
         *val = 1.0 / *val;
     }
+}
+
+#[inline(always)]
+#[allow(dead_code)]
+fn scalar_exp_sum_inplace(x: &mut [f32]) -> f32 {
+    let mut sum = 0.0f32;
+    for val in x.iter_mut() {
+        let e = cephes_exp_scalar(*val);
+        *val = e;
+        sum += e;
+    }
+    sum
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -1946,6 +1987,125 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
     }
 }
 
+/// Fused AVX2 exp + sum: `x[i] = exp(x[i])` and returns `Σ x[i]` in one pass.
+///
+/// 4 independent accumulators (32 elements per outer iteration) for ILP.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_exp_sum_inplace(x: &mut [f32]) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_add_epi32, _mm256_add_ps, _mm256_castsi256_ps, _mm256_cvtps_epi32, _mm256_loadu_ps,
+        _mm256_mul_ps, _mm256_round_ps, _mm256_set1_epi32, _mm256_set1_ps, _mm256_slli_epi32,
+        _mm256_storeu_ps, _mm256_sub_ps,
+    };
+    unsafe {
+        const ROUND_NEAREST: i32 = 0x00;
+
+        let v_inv_ln2 = _mm256_set1_ps(CEPHES_INV_LN2);
+        let v_ln2_hi = _mm256_set1_ps(CEPHES_LN2_HI);
+        let v_ln2_lo = _mm256_set1_ps(CEPHES_LN2_LO);
+        let v_one = _mm256_set1_ps(1.0);
+        let v_half = _mm256_set1_ps(0.5);
+        let v_third = _mm256_set1_ps(1.0 / 3.0);
+        let v_quarter = _mm256_set1_ps(0.25);
+        let v_fifth = _mm256_set1_ps(0.2);
+        let v_sixth = _mm256_set1_ps(1.0 / 6.0);
+
+        let mut acc0 = _mm256_setzero_ps();
+        let mut acc1 = _mm256_setzero_ps();
+        let mut acc2 = _mm256_setzero_ps();
+        let mut acc3 = _mm256_setzero_ps();
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 32;
+
+        macro_rules! step {
+            ($acc:expr, $off:expr) => {{
+                let vx = _mm256_loadu_ps(x.as_ptr().add(i + $off));
+                let vn_f = _mm256_round_ps(_mm256_mul_ps(vx, v_inv_ln2), ROUND_NEAREST);
+                let vn_i = _mm256_cvtps_epi32(vn_f);
+                let vg = _mm256_sub_ps(
+                    _mm256_sub_ps(vx, _mm256_mul_ps(vn_f, v_ln2_hi)),
+                    _mm256_mul_ps(vn_f, v_ln2_lo),
+                );
+                let q = _mm256_add_ps(
+                    v_one,
+                    _mm256_mul_ps(
+                        vg,
+                        _mm256_add_ps(
+                            v_one,
+                            _mm256_mul_ps(
+                                vg,
+                                _mm256_add_ps(
+                                    v_half,
+                                    _mm256_mul_ps(
+                                        vg,
+                                        _mm256_add_ps(
+                                            v_third,
+                                            _mm256_mul_ps(
+                                                vg,
+                                                _mm256_add_ps(
+                                                    v_quarter,
+                                                    _mm256_mul_ps(
+                                                        vg,
+                                                        _mm256_add_ps(
+                                                            v_fifth,
+                                                            _mm256_mul_ps(vg, v_sixth),
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                );
+                let vn_shifted_i = _mm256_add_epi32(vn_i, _mm256_set1_epi32(127));
+                let v_scale_bits = _mm256_slli_epi32::<23>(vn_shifted_i);
+                let v_scale = _mm256_castsi256_ps(v_scale_bits);
+                let r = _mm256_mul_ps(v_scale, q);
+                _mm256_storeu_ps(x.as_mut_ptr().add(i + $off), r);
+                $acc = _mm256_add_ps($acc, r);
+            }};
+        }
+
+        // Main loop: 32 elements per iteration (4 accumulators × 8 lanes)
+        for _ in 0..chunks4 {
+            step!(acc0, 0);
+            step!(acc1, 8);
+            step!(acc2, 16);
+            step!(acc3, 24);
+            i += 32;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
+        // Remaining 8-element chunks
+        let mut acc_rem = _mm256_setzero_ps();
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            step!(acc_rem, 0);
+            i += 8;
+        }
+        sum += horizontal_sum_256(acc_rem);
+
+        // Scalar tail (0-7 elements)
+        while i < len {
+            let e = cephes_exp_scalar(*x.get_unchecked(i));
+            *x.get_unchecked_mut(i) = e;
+            sum += e;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
 #[cfg(target_arch = "aarch64")]
 #[inline]
 unsafe fn neon_exp_inplace(x: &mut [f32]) {
@@ -2035,7 +2195,157 @@ unsafe fn neon_exp_inplace(x: &mut [f32]) {
     }
 }
 
-// ── AVX2 Backend (new primitives) ─────────────────────────────
+/// Fused NEON exp + sum: `x[i] = exp(x[i])` and returns `Σ x[i]` in one pass.
+///
+/// 4 independent accumulators for ILP — hides the FADD latency.
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
+    use core::arch::aarch64::{
+        vaddq_f32, vaddq_s32, vaddvq_f32, vcvtq_s32_f32, vdupq_n_f32, vdupq_n_s32, vld1q_f32,
+        vmaxq_s32, vminq_s32, vmulq_f32, vreinterpretq_f32_s32, vrndq_f32, vshlq_n_s32, vst1q_f32,
+        vsubq_f32,
+    };
+    unsafe {
+        let v_inv_ln2 = vdupq_n_f32(CEPHES_INV_LN2);
+        let v_ln2_hi = vdupq_n_f32(CEPHES_LN2_HI);
+        let v_ln2_lo = vdupq_n_f32(CEPHES_LN2_LO);
+        let v_one = vdupq_n_f32(1.0);
+        let v_half = vdupq_n_f32(0.5);
+        let v_third = vdupq_n_f32(1.0 / 3.0);
+        let v_quarter = vdupq_n_f32(0.25);
+        let v_fifth = vdupq_n_f32(0.2);
+        let v_sixth = vdupq_n_f32(1.0 / 6.0);
+        let v127 = vdupq_n_s32(127);
+        let vneg126 = vdupq_n_s32(-126);
+        let v_bias = vdupq_n_s32(127);
+
+        let mut acc0 = vdupq_n_f32(0.0);
+        let mut acc1 = vdupq_n_f32(0.0);
+        let mut acc2 = vdupq_n_f32(0.0);
+        let mut acc3 = vdupq_n_f32(0.0);
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        // Main loop: 16 elements per iteration (4 accumulators × 4 lanes)
+        for _ in 0..chunks4 {
+            macro_rules! step {
+                ($acc:expr, $off:expr) => {{
+                    let vx = vld1q_f32(x.as_ptr().add(i + $off));
+                    let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+                    let vn_i = vcvtq_s32_f32(vn_f);
+                    let vg = vsubq_f32(
+                        vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
+                        vmulq_f32(vn_f, v_ln2_lo),
+                    );
+                    let q = vaddq_f32(
+                        v_one,
+                        vmulq_f32(
+                            vg,
+                            vaddq_f32(
+                                v_one,
+                                vmulq_f32(
+                                    vg,
+                                    vaddq_f32(
+                                        v_half,
+                                        vmulq_f32(
+                                            vg,
+                                            vaddq_f32(
+                                                v_third,
+                                                vmulq_f32(
+                                                    vg,
+                                                    vaddq_f32(
+                                                        v_quarter,
+                                                        vmulq_f32(
+                                                            vg,
+                                                            vaddq_f32(v_fifth, vmulq_f32(vg, v_sixth)),
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    );
+                    let vn_clamped = vmaxq_s32(vminq_s32(vn_i, v127), vneg126);
+                    let v_shifted =
+                        vreinterpretq_f32_s32(vshlq_n_s32::<23>(vaddq_s32(vn_clamped, v_bias)));
+                    let r = vmulq_f32(v_shifted, q);
+                    vst1q_f32(x.as_mut_ptr().add(i + $off), r);
+                    $acc = vaddq_f32($acc, r);
+                }};
+            }
+            step!(acc0, 0);
+            step!(acc1, 4);
+            step!(acc2, 8);
+            step!(acc3, 12);
+            i += 16;
+        }
+
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc0, acc1), vaddq_f32(acc2, acc3)));
+
+        // Remaining 4-element chunks into single accumulator
+        let mut acc_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            let vx = vld1q_f32(x.as_ptr().add(i));
+            let vn_f = vrndq_f32(vmulq_f32(vx, v_inv_ln2));
+            let vn_i = vcvtq_s32_f32(vn_f);
+            let vg = vsubq_f32(
+                vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
+                vmulq_f32(vn_f, v_ln2_lo),
+            );
+            let q = vaddq_f32(
+                v_one,
+                vmulq_f32(
+                    vg,
+                    vaddq_f32(
+                        v_one,
+                        vmulq_f32(
+                            vg,
+                            vaddq_f32(
+                                v_half,
+                                vmulq_f32(
+                                    vg,
+                                    vaddq_f32(
+                                        v_third,
+                                        vmulq_f32(
+                                            vg,
+                                            vaddq_f32(
+                                                v_quarter,
+                                                vmulq_f32(vg, vaddq_f32(v_fifth, vmulq_f32(vg, v_sixth))),
+                                            ),
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+            );
+            let vn_clamped = vmaxq_s32(vminq_s32(vn_i, v127), vneg126);
+            let v_shifted = vreinterpretq_f32_s32(vshlq_n_s32::<23>(vaddq_s32(vn_clamped, v_bias)));
+            let r = vmulq_f32(v_shifted, q);
+            vst1q_f32(x.as_mut_ptr().add(i), r);
+            acc_rem = vaddq_f32(acc_rem, r);
+            i += 4;
+        }
+        sum += vaddvq_f32(acc_rem);
+
+        // Scalar tail (0-3 elements)
+        while i < len {
+            let e = cephes_exp_scalar(*x.get_unchecked(i));
+            *x.get_unchecked_mut(i) = e;
+            sum += e;
+            i += 1;
+        }
+
+        sum
+    }
+}
 
 #[cfg(target_arch = "x86_64")]
 #[inline]
@@ -3565,7 +3875,10 @@ pub fn simd_gram_f32(x: &[f32], seq_len: usize, d_h: usize, gram_out: &mut [f32]
 /// SIMD-accelerated entropy computation from log-probabilities.
 ///
 /// Computes `entropy = -Σ p·log(p)` where `p = exp(logprobs[i])` normalized.
-/// Uses chunk-4 unrolled loop for auto-vectorization.
+///
+/// Zero-allocation: two-pass over `logprobs` (pass 1 = Σexp, pass 2 = Σ(p/Σexp)·logp).
+/// Recomputing `exp()` is cheaper than allocating a `Vec` to cache it, and the
+/// chunk-4 unroll lets the auto-vectorizer emit NEON/AVX2 `exp` approximations.
 ///
 /// When `logprobs` is empty, returns 0.0.
 #[inline]
@@ -3575,43 +3888,54 @@ pub fn entropy_f32(logprobs: &[f32]) -> f32 {
     }
 
     let len = logprobs.len();
-    let mut probs = Vec::with_capacity(len);
-    let mut sum = 0.0f32;
-
-    // Chunk-4 unrolled for auto-vectorization
     let chunks = len / 4;
     let remainder = len % 4;
 
+    // Pass 1: sum = Σ exp(logprobs[i])  (chunk-4 unrolled for auto-vectorization)
+    let mut sum = 0.0f32;
     for i in 0..chunks {
         let base = i * 4;
-        let p0 = logprobs[base].exp();
-        let p1 = logprobs[base + 1].exp();
-        let p2 = logprobs[base + 2].exp();
-        let p3 = logprobs[base + 3].exp();
-        sum += p0 + p1 + p2 + p3;
-        probs.push(p0);
-        probs.push(p1);
-        probs.push(p2);
-        probs.push(p3);
+        sum += logprobs[base].exp();
+        sum += logprobs[base + 1].exp();
+        sum += logprobs[base + 2].exp();
+        sum += logprobs[base + 3].exp();
     }
     for i in 0..remainder {
-        let p = logprobs[chunks * 4 + i].exp();
-        sum += p;
-        probs.push(p);
+        sum += logprobs[chunks * 4 + i].exp();
     }
 
     if sum <= f32::EPSILON {
         return 0.0;
     }
 
-    // H = log(sum) - Σ(p * logp) / sum  (identity: avoids double normalization)
+    // Pass 2: dot_sum = Σ (p/sum) · logprobs[i]  (recompute exp, avoid allocation)
+    // H = log(sum) - dot_sum  (identity: H = log(Z) - Σ p_norm · logp)
     let inv_sum = 1.0 / sum;
     let mut dot_sum = 0.0f32;
-
-    for i in 0..len {
-        let p_norm = probs[i] * inv_sum;
+    for i in 0..chunks {
+        let base = i * 4;
+        let p0 = logprobs[base].exp() * inv_sum;
+        let p1 = logprobs[base + 1].exp() * inv_sum;
+        let p2 = logprobs[base + 2].exp() * inv_sum;
+        let p3 = logprobs[base + 3].exp() * inv_sum;
+        if p0 > 0.0 {
+            dot_sum += p0 * logprobs[base];
+        }
+        if p1 > 0.0 {
+            dot_sum += p1 * logprobs[base + 1];
+        }
+        if p2 > 0.0 {
+            dot_sum += p2 * logprobs[base + 2];
+        }
+        if p3 > 0.0 {
+            dot_sum += p3 * logprobs[base + 3];
+        }
+    }
+    for i in 0..remainder {
+        let idx = chunks * 4 + i;
+        let p_norm = logprobs[idx].exp() * inv_sum;
         if p_norm > 0.0 {
-            dot_sum += p_norm * logprobs[i];
+            dot_sum += p_norm * logprobs[idx];
         }
     }
 
@@ -5438,6 +5762,69 @@ mod tests {
         assert_eq!(coincidence_score(&[], &[1, 2], 4), 0.0);
         assert_eq!(coincidence_score(&[1], &[], 4), 0.0);
         assert_eq!(coincidence_score(&[1], &[2], 0), 0.0);
+    }
+
+    // ── simd_exp_sum_inplace tests ────────────────────────────
+
+    #[test]
+    fn exp_sum_matches_separate_exp_plus_sum() {
+        // The fused kernel must produce bit-identical exp values and a sum
+        // equal to `simd_sum_f32` over the exp'd buffer (within float tolerance
+        // — reassociation across accumulators can reorder adds).
+        let cases: &[&[f32]] = &[
+            &[0.0],
+            &[1.0],
+            &[0.0, 1.0, 2.0, 3.0],
+            &[-5.0, -1.0, 0.0, 1.0, 5.0, 10.0],
+            &(0..32).map(|i| (i as f32 - 16.0) * 0.1).collect::<Vec<_>>(),
+            // Lengths crossing SIMD chunk boundaries (16/32) + scalar tails
+            &(0..17).map(|i| (i as f32 - 8.0) * 0.1).collect::<Vec<_>>(),
+            &(0..33).map(|i| (i as f32 - 16.0) * 0.1).collect::<Vec<_>>(),
+            &(0..100).map(|i| (i as f32 - 50.0) * 0.05).collect::<Vec<_>>(),
+        ];
+        for case in cases {
+            let mut fused = case.to_vec();
+            let mut sep = case.to_vec();
+
+            let fused_sum = simd_exp_sum_inplace(&mut fused);
+            simd_exp_inplace(&mut sep);
+            let sep_sum = simd_sum_f32(&sep);
+
+            // exp values must match the non-fused path bit-for-bit (same polynomial)
+            for (i, (a, b)) in fused.iter().zip(sep.iter()).enumerate() {
+                assert!(
+                    (a - b).abs() < 1e-6,
+                    "exp mismatch at {i}: fused={a}, separate={b}, input={}",
+                    case[i]
+                );
+            }
+            // Sum tolerance accounts for floating-point reassociation across
+            // the 4 independent accumulators (different summation order).
+            let rel_err = (fused_sum - sep_sum).abs() / sep_sum.max(1e-30);
+            assert!(
+                rel_err < 1e-5,
+                "sum mismatch: fused={fused_sum}, separate={sep_sum}, rel_err={rel_err}"
+            );
+        }
+    }
+
+    #[test]
+    fn exp_sum_empty() {
+        let mut x: Vec<f32> = vec![];
+        assert_eq!(simd_exp_sum_inplace(&mut x), 0.0);
+    }
+
+    #[test]
+    fn exp_sum_known_value() {
+        // exp(0) + exp(1) + exp(2) = 1 + e + e² ≈ 1 + 2.71828 + 7.38906 ≈ 11.1073
+        let mut x = vec![0.0f32, 1.0, 2.0];
+        let sum = simd_exp_sum_inplace(&mut x);
+        let expected = 1.0 + std::f32::consts::E + std::f32::consts::E.powi(2);
+        assert!((sum - expected).abs() < 1e-4, "got {sum}, expected {expected}");
+        // Verify in-place exp also happened
+        assert!((x[0] - 1.0).abs() < 1e-6);
+        assert!((x[1] - std::f32::consts::E).abs() < 1e-4);
+        assert!((x[2] - std::f32::consts::E.powi(2)).abs() < 1e-4);
     }
 }
 
