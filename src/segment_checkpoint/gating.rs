@@ -37,11 +37,7 @@ pub fn sigmoid(x: f32) -> f32 {
 #[inline]
 pub fn dot_product(a: &[f32], b: &[f32]) -> f32 {
     let min_len = a.len().min(b.len());
-    let mut sum = 0.0f32;
-    for i in 0..min_len {
-        sum += a[i] * b[i];
-    }
-    sum
+    crate::simd::simd_dot_f32(&a[..min_len], &b[..min_len], min_len)
 }
 
 #[cfg(test)]

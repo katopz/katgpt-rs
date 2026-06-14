@@ -112,11 +112,16 @@ impl CollapseDetectorFrozen {
 pub struct S2FCollapseDetector {
     /// Token IDs that signal hesitation (e.g., "wait", "hmm", "actually").
     /// Configurable per-domain via builder pattern.
+    /// Sorted ascending on construction for O(log K) binary-search membership.
     hesitation_tokens: Vec<u32>,
     /// Fixed-size ring buffer of recent token IDs. Zero-allocation.
     ring_buffer: [u32; Self::RING_SIZE],
     /// Current write position in the ring buffer (wraps at RING_SIZE).
     ring_write_idx: usize,
+    /// Cached count of hesitation tokens currently in the ring buffer.
+    /// Updated incrementally on each `check_collapse` write to keep the
+    /// per-token hot path O(log K) instead of O(RING_SIZE * K).
+    current_count: u32,
     /// Collapse threshold τ — triggers when hesitation count ≥ threshold.
     threshold: u32,
     /// EMA smoothing factor α for self-learning. Default: 0.1.
@@ -149,10 +154,15 @@ impl S2FCollapseDetector {
 
     /// Create a new detector with the given hesitation tokens and budget.
     pub fn new(hesitation_tokens: Vec<u32>, budget: &ThinkingBudget) -> Self {
+        // Sort once for binary-search membership tests in the hot path.
+        let mut hesitation_tokens = hesitation_tokens;
+        hesitation_tokens.sort_unstable();
+        hesitation_tokens.dedup();
         Self {
             hesitation_tokens,
             ring_buffer: [0u32; Self::RING_SIZE],
             ring_write_idx: 0,
+            current_count: 0,
             threshold: budget.collapse_threshold,
             ema_alpha: 0.1,
             last_trace_hesitation: 0,
@@ -265,15 +275,33 @@ impl S2FCollapseDetector {
     }
 
     /// Count hesitation tokens in the current ring buffer.
-    #[allow(clippy::needless_range_loop)]
+    ///
+    /// Returns the cached `current_count` maintained incrementally by
+    /// `check_collapse` — O(1) on the hot path. The full O(RING_SIZE * log K)
+    /// scan is only used by `recompute_count` for testing / recovery.
+    #[inline]
     fn count_hesitation(&self) -> u32 {
-        let mut count: u32 = 0;
-        for i in 0..Self::RING_SIZE {
-            if self.hesitation_tokens.contains(&self.ring_buffer[i]) {
+        self.current_count
+    }
+
+    /// O(log K) binary-search membership test against the sorted hesitation set.
+    #[inline]
+    fn is_hesitation(&self, token_id: u32) -> bool {
+        self.hesitation_tokens.binary_search(&token_id).is_ok()
+    }
+
+    /// Recompute `current_count` from scratch by scanning the entire ring buffer.
+    /// Used by `from_frozen` to rebuild state and by tests that poke the buffer
+    /// directly.
+    #[allow(dead_code)]
+    fn recompute_count(&mut self) {
+        let mut count = 0u32;
+        for &tok in self.ring_buffer.iter() {
+            if self.is_hesitation(tok) {
                 count += 1;
             }
         }
-        count
+        self.current_count = count;
     }
 }
 
@@ -283,9 +311,19 @@ impl CollapseDetector for S2FCollapseDetector {
     /// Writes the token to the ring buffer, then counts hesitation matches.
     /// Returns `true` when hesitation count ≥ threshold τ.
     fn check_collapse(&mut self, token_id: u32, _position: usize) -> bool {
-        // Write token to ring buffer (zero-allocation, wraps around).
-        self.ring_buffer[self.ring_write_idx] = token_id;
-        self.ring_write_idx = (self.ring_write_idx + 1) % Self::RING_SIZE;
+        // Incremental count update: subtract the evicted token's contribution,
+        // write the new token, then add its contribution. Two binary searches
+        // (O(log K)) replace the previous O(RING_SIZE * K) linear scan.
+        let write_idx = self.ring_write_idx;
+        let evicted = self.ring_buffer[write_idx];
+        if self.is_hesitation(evicted) {
+            self.current_count = self.current_count.saturating_sub(1);
+        }
+        self.ring_buffer[write_idx] = token_id;
+        if self.is_hesitation(token_id) {
+            self.current_count += 1;
+        }
+        self.ring_write_idx = (write_idx + 1) % Self::RING_SIZE;
 
         // Count hesitation tokens and compare against threshold.
         let count = self.count_hesitation();
@@ -320,6 +358,7 @@ impl CollapseDetector for S2FCollapseDetector {
         // Clear ring buffer and tracking state.
         self.ring_buffer = [0u32; Self::RING_SIZE];
         self.ring_write_idx = 0;
+        self.current_count = 0;
         self.last_trace_hesitation = 0;
 
         // Plan 267 T12: clear TVP EMA between traces (per-query signal).
