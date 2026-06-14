@@ -81,16 +81,10 @@ impl DendriticGate {
 /// `σ(x) = 1 / (1 + exp(-x))`
 ///
 /// Uses sigmoid (not softmax) per project rules.
-/// Clamp to avoid overflow: for |x| > 20, returns 0.0 or 1.0.
+/// Delegates to shared crate::simd::fast_sigmoid (bounded (0,1), Cephes-exp).
 #[inline]
 pub fn dendritic_sigmoid(x: f32) -> f32 {
-    if x > 20.0 {
-        1.0
-    } else if x < -20.0 {
-        0.0
-    } else {
-        1.0 / (1.0 + (-x).exp())
-    }
+    crate::simd::fast_sigmoid(x)
 }
 
 #[cfg(test)]

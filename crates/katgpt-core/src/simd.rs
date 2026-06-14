@@ -1649,6 +1649,28 @@ fn cephes_exp_scalar(x: f32) -> f32 {
     scale * q
 }
 
+/// Bounded sigmoid: σ(x) = 1/(1 + e^{-x}), output in (0, 1).
+///
+/// Uses `f32::exp()` via the platform's libm (hardware-accelerated on aarch64).
+/// Early-exit for |x| > 40 where σ saturates to 0 or 1 in f32 precision.
+///
+/// **Correctness note**: the previous `0.5 + x/(2 + √(4+x²))` rational used in
+/// several modules overshoots (0,1) for |x| > 2.67 — error reaches 8.3% at x=3,
+/// 34.7% at x=12, and output exceeds 1.0 entirely. This implementation is exact
+/// (to libm precision) and never leaves (0, 1).
+#[inline(always)]
+pub fn fast_sigmoid(x: f32) -> f32 {
+    // sigmoid(40) = 1/(1 + e^{-40}) ≈ 1 - 4.2e-18, rounds to 1.0 in f32.
+    // sigmoid(-40) ≈ 4.2e-18, rounds to 0.0 in f32.
+    if x > 40.0 {
+        return 1.0;
+    }
+    if x < -40.0 {
+        return 0.0;
+    }
+    1.0 / (1.0 + (-x).exp())
+}
+
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_exp_inplace(x: &mut [f32]) {

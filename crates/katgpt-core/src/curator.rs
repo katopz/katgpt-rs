@@ -165,11 +165,11 @@ impl CuratorVerifier {
         dot * dir.row_scale
     }
 
-    /// Fast rational sigmoid — avoids `exp()`, max error ~0.003.
+    /// Sigmoid projection — delegates to shared crate::simd::fast_sigmoid
+    /// (bounded (0,1), libm-exp accuracy).
     #[inline(always)]
     fn sigmoid(x: f32) -> f32 {
-        let x = x.clamp(-12.0, 12.0);
-        0.5 + x / (2.0 + (4.0 + x * x).sqrt())
+        crate::simd::fast_sigmoid(x)
     }
 }
 

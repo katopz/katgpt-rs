@@ -4801,14 +4801,6 @@ pub struct SenseModule {
     pub commitment: [u8; 32],
 }
 
-/// Fast rational sigmoid approximation — avoids `exp()` (~15ns) for ~1ns cost.
-/// Max absolute error: ~0.003 vs `1/(1+exp(-x))`.
-#[inline(always)]
-fn fast_sigmoid(x: f32) -> f32 {
-    let x = x.clamp(-12.0, 12.0);
-    0.5 + x / (2.0 + (4.0 + x * x).sqrt())
-}
-
 impl SenseModule {
     /// Project HLA state onto this module's ternary directions → sigmoid scalar.
     ///
@@ -4817,7 +4809,7 @@ impl SenseModule {
     /// low-confidence triples are attenuated. Confidence 1.0 = unchanged.
     ///
     /// Optimized: branch-free bit extraction via shift+AND, flat loop
-    /// (LLVM auto-vectorizes better than chunked), fast rational sigmoid.
+    /// (LLVM auto-vectorizes better than chunked), bounded exp sigmoid.
     #[inline(always)]
     pub fn project(&self, hla_state: &[f32; 8]) -> f32 {
         let n = self.n_directions as usize;
@@ -4833,8 +4825,8 @@ impl SenseModule {
             dot += (pos - neg) * hla_val * dir.row_scale;
         }
 
-        // Fast sigmoid * confidence
-        self.confidence * fast_sigmoid(dot)
+        // Sigmoid * confidence — uses shared crate::simd::fast_sigmoid (bounded (0,1))
+        self.confidence * crate::simd::fast_sigmoid(dot)
     }
 
     /// Query octree occupancy at given level and index.

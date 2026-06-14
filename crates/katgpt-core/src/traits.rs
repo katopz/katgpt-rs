@@ -582,10 +582,12 @@ impl fmt::Display for ActionSpaceLog {
 /// highly off-policy updates (paper Section 5.1).
 ///
 /// Maps raw Q ∈ (-∞, +∞) → bounded Q ∈ (0, 1).
+///
+/// Delegates to shared crate::simd::fast_sigmoid (Cephes-exp accuracy, ~1 ULP).
 #[cfg(feature = "leo_all_goals")]
 #[inline]
 pub fn sigmoid_bounded_q(raw_q: f32) -> f32 {
-    1.0 / (1.0 + (-raw_q).exp())
+    crate::simd::fast_sigmoid(raw_q)
 }
 
 /// All-goals Q-value output head (LEO architecture).

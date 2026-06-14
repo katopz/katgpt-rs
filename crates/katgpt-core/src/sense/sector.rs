@@ -6,14 +6,7 @@
 //!
 //! Zero allocation, fixed-size. Uses `sigmoid(dot())` — never softmax.
 
-/// Fast sigmoid via `exp()`: `1 / (1 + e^{-x})`.
-///
-/// Output range is `(0, 1)`. Clamped input avoids overflow for extreme values.
-#[inline(always)]
-fn fast_sigmoid(x: f32) -> f32 {
-    let x = x.clamp(-50.0, 50.0);
-    1.0 / (1.0 + (-x).exp())
-}
+// Sigmoid delegates to shared crate::simd::fast_sigmoid (bounded (0,1), libm-exp).
 
 /// Dot product of an `f32` observation vector with an `i8` ternary direction vector.
 ///
@@ -68,7 +61,7 @@ impl<const N: usize, const D: usize> SectorProjection<N, D> {
     pub fn project(&mut self, observation: &[f32; D]) -> &[f32; N] {
         for i in 0..N {
             let dot = dot_f32_i8(observation, &self.sector_directions[i]);
-            self.scores[i] = fast_sigmoid(dot);
+            self.scores[i] = crate::simd::fast_sigmoid(dot);
         }
         &self.scores
     }
@@ -203,7 +196,7 @@ mod tests {
         let scores = proj.project(&obs);
 
         assert_eq!(scores.len(), 1);
-        let expected = fast_sigmoid(2.0);
+        let expected = crate::simd::fast_sigmoid(2.0);
         assert!(
             (scores[0] - expected).abs() < 1e-5,
             "expected {expected}, got {}",

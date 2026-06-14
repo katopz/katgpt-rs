@@ -47,7 +47,7 @@ impl SpectralThreatFeatures {
     pub fn dodge_urgency(&self) -> f32 {
         let raw =
             self.combo_frequency * (1.0 - 2.0 * self.vulnerability_phase) * self.rhythm_confidence;
-        sigmoid(raw * 5.0)
+        crate::simd::fast_sigmoid(raw * 5.0)
     }
 
     /// Compute counter window from spectral features.
@@ -58,18 +58,12 @@ impl SpectralThreatFeatures {
     pub fn counter_window(&self) -> f32 {
         let raw =
             self.combo_frequency * (2.0 * self.vulnerability_phase - 1.0) * self.rhythm_confidence;
-        sigmoid(raw * 5.0)
+        crate::simd::fast_sigmoid(raw * 5.0)
     }
 }
 
-/// Fast rational sigmoid approximation — avoids `exp()` (~15ns) for ~1ns cost.
-/// Max absolute error: ~0.003 vs `1/(1+exp(-x))`.
-/// Consistent with crate convention — NOT softmax.
-#[inline(always)]
-fn sigmoid(x: f32) -> f32 {
-    let x = x.clamp(-12.0, 12.0);
-    0.5 + x / (2.0 + (4.0 + x * x).sqrt())
-}
+// Sigmoid delegates to shared crate::simd::fast_sigmoid (bounded (0,1), libm-exp).
+// Consistent with crate convention — NOT softmax.
 
 // ── LabeledRhythm ──────────────────────────────────────────────
 
@@ -560,7 +554,7 @@ mod tests {
     #[test]
     fn test_combat_frequencies_cover_range() {
         let tracker = CombatRhythmTracker::with_combat_frequencies(0.016);
-        assert_eq!(tracker.hidden_dim, HIDDEN_DIM);
+        assert_eq!(tracker.hidden_dim as usize, HIDDEN_DIM);
     }
 
     #[test]

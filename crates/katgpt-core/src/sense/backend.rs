@@ -223,15 +223,7 @@ fn project_ternary(
         let neg = ((dir.neg_bits >> i) & 1) as u32 as f32;
         dot += (pos - neg) * hla_val * dir.row_scale;
     }
-    confidence * fast_sigmoid(dot)
-}
-
-/// Fast rational sigmoid approximation matching SenseModule::project().
-/// ~1ns vs ~15ns for exp()-based sigmoid. Max absolute error: ~0.003.
-#[inline(always)]
-fn fast_sigmoid(x: f32) -> f32 {
-    let x = x.clamp(-12.0, 12.0);
-    0.5 + x / (2.0 + (4.0 + x * x).sqrt())
+    confidence * crate::simd::fast_sigmoid(dot)
 }
 
 #[cfg(test)]

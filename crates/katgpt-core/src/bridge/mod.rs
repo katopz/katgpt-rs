@@ -6,14 +6,7 @@
 //!
 //! Zero allocation, fixed-size. Uses `sigmoid(dot())` — never softmax.
 
-/// Fast sigmoid via `exp()`: `1 / (1 + e^{-x})`.
-///
-/// Output range is `(0, 1)`. Clamped input avoids overflow for extreme values.
-#[inline(always)]
-fn fast_sigmoid(x: f32) -> f32 {
-    let x = x.clamp(-50.0, 50.0);
-    1.0 / (1.0 + (-x).exp())
-}
+// Sigmoid delegates to shared crate::simd::fast_sigmoid (bounded (0,1), libm-exp).
 
 /// Dot product of an `f32` Q-value vector with an `i8` ternary direction vector.
 ///
@@ -79,7 +72,7 @@ impl<const A: usize, const D: usize> ActionBridge<A, D> {
 
         for a in 0..A {
             let dot = dot_f32_i8(q_values, &self.action_directions[a]);
-            let score = fast_sigmoid(dot);
+            let score = crate::simd::fast_sigmoid(dot);
             if score > best_score {
                 best_score = score;
                 best_idx = a;
@@ -111,7 +104,7 @@ impl<const A: usize, const D: usize> ActionBridge<A, D> {
         let mut scores = [0.0f32; A];
         for (a, score) in scores.iter_mut().enumerate() {
             let dot = dot_f32_i8(q_values, &self.action_directions[a]);
-            *score = fast_sigmoid(dot);
+            *score = crate::simd::fast_sigmoid(dot);
         }
 
         // Track which action indices have already been selected.
