@@ -168,6 +168,11 @@ pub fn forward_dash_attn_decode<'a>(
     // Pre-allocate summary references outside the layer loop to avoid
     // per-layer Vec allocation (summaries don't change between layers).
     let mut summary_refs: Vec<&Vec<f32>> = Vec::with_capacity(summary_cache.n_chunks());
+    // Populate once — summaries are immutable across layers, so we only need
+    // to build the reference slice a single time before the loop.
+    for chunk in &summary_cache.summaries {
+        summary_refs.push(&chunk[0]);
+    }
     // Pre-allocate routing scratch outside the layer loop for reuse across layers
     let mut routing_scratch =
         super::routing::RoutingScratch::new(summary_cache.n_chunks(), config.head_dim);
@@ -198,11 +203,8 @@ pub fn forward_dash_attn_decode<'a>(
             let hd = config.head_dim;
             // Use first query head as representative for routing decision
             let q_head = &ctx.q[..hd];
-            // Reuse pre-allocated summary reference buffer
-            summary_refs.clear();
-            for chunk in &summary_cache.summaries {
-                summary_refs.push(&chunk[0]);
-            }
+            // summary_refs is populated once before the layer loop (summaries
+            // are immutable across layers) — no per-layer rebuild needed.
             let _routing =
                 score_blocks_entmax_into(q_head, &summary_refs, dash_config, &mut routing_scratch);
             // TODO: Use routing.active_indices to select sparse KV blocks

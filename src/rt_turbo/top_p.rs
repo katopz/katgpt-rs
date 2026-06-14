@@ -73,18 +73,30 @@ pub struct DynamicTopPResult {
 /// - Empty input -> empty output.
 /// - All identical scores -> uniform distribution.
 /// - Very large scores (1e6+) -> handled via max-subtraction.
+///
+/// # Implementation
+///
+/// Three passes: (1) SIMD max reduction, (2) exp + sum, (3) normalize.
+/// Passes 2 and 3 cannot be fused because the normalization scalar is only
+/// known after pass 2 completes.
 fn softmax_scores_into(scores: &[f32], out: &mut [f32]) {
     if scores.is_empty() {
         return;
     }
 
-    let max_val = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    // Pass 1: max reduction via SIMD helper (aarch64 NEON / x86_64 AVX2).
+    let max_val = crate::simd::simd_max_f32(scores);
+
+    // Pass 2: per-element `exp(s - max)` written into `out`, plus a scalar sum
+    // computed at the same time (avoids a second exp pass).
     let mut sum = 0.0f32;
     for (i, &s) in scores.iter().enumerate() {
         let e = (s - max_val).exp();
         out[i] = e;
         sum += e;
     }
+
+    // Pass 3: normalize. `1.0 / sum` once, then a single multiply per element.
     if sum > 0.0 {
         let inv = 1.0 / sum;
         for v in out.iter_mut() {
@@ -316,11 +328,8 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
     for (i, &(_, s)) in candidate_entries.iter().enumerate() {
         candidate_probs[i] = s;
     }
-    // In-place softmax: find max, rewrite as exp, normalize.
-    let max_val = candidate_probs
-        .iter()
-        .copied()
-        .fold(f32::NEG_INFINITY, f32::max);
+    // In-place softmax: find max via SIMD reduction, rewrite as exp, normalize.
+    let max_val = crate::simd::simd_max_f32(&candidate_probs);
     let mut sum = 0.0f32;
     for v in &mut candidate_probs {
         let e = (*v - max_val).exp();

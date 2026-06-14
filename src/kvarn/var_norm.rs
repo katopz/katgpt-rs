@@ -353,14 +353,23 @@ pub(crate) fn imbalance(col_s: &[f32], row_s: &[f32]) -> f32 {
 }
 
 /// max/min ratio, with epsilon guard to avoid division by zero.
+///
+/// Single-pass min/max fold (was two separate `fold` calls scanning `vals` twice).
 #[inline]
 fn ratio_max_min(vals: &[f32]) -> f32 {
     if vals.is_empty() {
         return 0.0;
     }
-    let lo = vals.iter().copied().fold(f32::MAX, f32::min).max(1e-8);
-    let hi = vals.iter().copied().fold(f32::MIN, f32::max).max(1e-8);
-    hi / lo
+    let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+    for &v in vals {
+        if v < lo {
+            lo = v;
+        }
+        if v > hi {
+            hi = v;
+        }
+    }
+    hi / lo.max(1e-8)
 }
 
 // ---------------------------------------------------------------------------

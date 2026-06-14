@@ -144,25 +144,28 @@ impl AlphaTarget {
         if self.cached_target.is_none() {
             let new_target = alpha_intersect(&self.current, &self.solutions);
 
-            // Check if any position has candidates from consistent solutions.
-            // If the target has non-trivial content, cache it as ŷ_prev.
+            // Single pass: determine whether the target has any non-empty set.
+            // The original called `.iter().any(|s| !s.is_empty())` and then
+            // `.iter().all(|s| s.is_empty())` — two full iterations. Since
+            // `any(!empty)` is the exact logical inverse of `all(empty)`, we
+            // only need a single short-circuiting scan.
             let has_content = new_target.iter().any(|s| !s.is_empty());
+
+            // If the target has non-trivial content, cache it as ŷ_prev.
             if has_content {
                 self.cached_prev = Some(new_target.clone());
             }
 
             // If the new target is entirely empty but we have a previous target,
             // use the previous target for stability.
-            let is_empty = new_target.iter().all(|s| s.is_empty());
-            if is_empty {
-                if let Some(ref prev) = self.cached_prev {
-                    self.cached_target = Some(prev.clone());
-                } else {
-                    self.cached_target = Some(new_target);
-                }
+            self.cached_target = Some(if has_content {
+                new_target
             } else {
-                self.cached_target = Some(new_target);
-            }
+                match &self.cached_prev {
+                    Some(prev) => prev.clone(),
+                    None => new_target,
+                }
+            });
         }
         self.cached_target.as_ref().unwrap()
     }
@@ -272,8 +275,21 @@ impl ConflictClause {
     /// Returns `true` if ALL commitments in this clause are present
     /// in the given set — meaning the search is about to repeat a
     /// known-bad path.
+    ///
+    /// Hot path: iterate the (typically small) slice and probe the
+    /// HashSet, rather than iterating the HashSet and probing the slice.
+    /// The slice is usually DDTree's current commitment chain (≤ a few
+    /// entries); the clause has at least 1 entry. Either ordering works
+    /// but iterating the smaller side keeps the inner `contains` O(1).
     pub fn is_violated_by(&self, commitments: &[(usize, usize)]) -> bool {
-        self.commitments.iter().all(|c| commitments.contains(c))
+        // Quick reject: if the slice has fewer entries than this clause,
+        // it cannot possibly contain all of them.
+        if commitments.len() < self.commitments.len() {
+            return false;
+        }
+        self.commitments
+            .iter()
+            .all(|c| commitments.contains(c))
     }
 
     /// Number of commitments in this clause.

@@ -9,6 +9,7 @@
 
 use std::path::Path;
 
+use crate::simd::simd_add_inplace;
 use crate::types::matmul;
 
 // ── Binary format constants ──────────────────────────────────
@@ -355,11 +356,11 @@ impl DominoLoraCorrection {
             concat_dim,
         );
 
-        // ReLU activation on down-projection (standard LoRA pattern)
+        // ReLU activation on down-projection (standard LoRA pattern).
+        // Branchless `max(0.0)` is auto-vectorizable; the previous `if *v < 0.0`
+        // form generated a branch per element.
         for v in self.down_buf.iter_mut() {
-            if *v < 0.0 {
-                *v = 0.0;
-            }
+            *v = v.max(0.0);
         }
 
         // Temporary delta logits buffer — compute into logits_out delta then add
@@ -378,9 +379,7 @@ impl DominoLoraCorrection {
         );
 
         // Add ΔL to base logits
-        for i in 0..self.vocab_size {
-            logits_out[i] += delta[i];
-        }
+        simd_add_inplace(&mut logits_out[..self.vocab_size], &delta[..self.vocab_size]);
     }
 
     /// Run a GRU forward step for causal state tracking.
@@ -410,14 +409,18 @@ impl DominoLoraCorrection {
 // ── Helpers ──────────────────────────────────────────────────
 
 /// Read `count` f32 values from `data` starting at `offset`, advancing offset.
+///
+/// Uses `bytemuck::pod_collect_to_vec` which handles unaligned source data
+/// correctly (the underlying file slice may not be 4-byte aligned). The
+/// chunks_exact+from_le_bytes path was per-element work that the compiler
+/// could only partially auto-vectorize. This path is cold (load-time only) but
+/// also used by the test harness, so a noticeable speed-up on large adapters
+/// is welcome. Relies on the host being little-endian (true for x86_64, aarch64).
 fn read_f32_slice(data: &[u8], offset: &mut usize, count: usize) -> Vec<f32> {
     let byte_count = count * 4;
     let slice = &data[*offset..*offset + byte_count];
     *offset += byte_count;
-    slice
-        .chunks_exact(4)
-        .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
-        .collect()
+    bytemuck::pod_collect_to_vec(slice)
 }
 
 /// Standard sigmoid function.

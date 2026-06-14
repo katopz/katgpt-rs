@@ -179,12 +179,19 @@ where
         //
         // Optimization: query the gradient once (at the projection) and reuse
         //    for all candidates. The gradient is per-action, not per-candidate.
+        //
+        // Optimization: reuse a single `selected` buffer across candidates
+        //    instead of cloning `parent_tokens` per candidate. The buffer is
+        //    `parent_tokens.len() + 1` long and is `clear()`-ed each iteration,
+        //    keeping allocation to one `with_capacity` per call.
+        let mut selected: Vec<usize> = Vec::with_capacity(condition.parent_tokens.len() + 1);
         let mut scored: Vec<ScoredToken> = if apply_guidance {
             let gradient = self.drafter.oracle.q_gradient_at(condition, &candidates[0]);
             candidates
                 .into_iter()
                 .map(|token| {
-                    let mut selected: Vec<usize> = condition.parent_tokens.clone();
+                    selected.clear();
+                    selected.extend_from_slice(&condition.parent_tokens);
                     selected.push(token.token_idx);
                     let fs = self
                         .scorer
@@ -200,7 +207,8 @@ where
             candidates
                 .into_iter()
                 .map(|token| {
-                    let mut selected: Vec<usize> = condition.parent_tokens.clone();
+                    selected.clear();
+                    selected.extend_from_slice(&condition.parent_tokens);
                     selected.push(token.token_idx);
                     let fs = self.scorer.score(marginals_history, &selected);
                     ScoredToken {

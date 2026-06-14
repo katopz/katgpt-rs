@@ -122,21 +122,29 @@ impl OscKVCache {
     }
 
     /// IMEX step — per-channel damped harmonic oscillator.
+    ///
+    /// Uses windowed slice views to eliminate per-iteration bounds checks.
     #[inline]
     fn store_into_layer(l: &mut OscKVLayer, pos: usize, data: &[f32], kv_dim: usize, dt: f32) {
         let base = pos * kv_dim;
+        let y_win = &mut l.y[base..base + kv_dim];
+        let z_win = &mut l.z[base..base + kv_dim];
+        let omega_sq = &l.omega_sq[..kv_dim];
+        let beta = &l.beta[..kv_dim];
+        let f = &data[..kv_dim];
+
         for i in 0..kv_dim {
-            let y_n = l.y[base + i];
-            let z_n = l.z[base + i];
-            let omega_sq = l.omega_sq[i];
-            let beta = l.beta[i];
-            let f = data[i];
+            let y_n = y_win[i];
+            let z_n = z_win[i];
+            let omega_sq_i = omega_sq[i];
+            let beta_i = beta[i];
+            let f_i = f[i];
 
             let y_new = y_n + dt * z_n;
-            let z_new = z_n + dt * (-omega_sq * y_new - beta * z_n + f);
+            let z_new = z_n + dt * (-omega_sq_i * y_new - beta_i * z_n + f_i);
 
-            l.y[base + i] = y_new;
-            l.z[base + i] = z_new;
+            y_win[i] = y_new;
+            z_win[i] = z_new;
         }
     }
 
@@ -159,8 +167,10 @@ impl OscKVCache {
     #[inline]
     fn dequantize_from_layer(l: &OscKVLayer, pos: usize, out: &mut [f32], kv_dim: usize) {
         let base = pos * kv_dim;
+        let y_win = &l.y[base..base + kv_dim];
+        let z_win = &l.z[base..base + kv_dim];
         for i in 0..kv_dim {
-            out[i] = l.y[base + i] + 0.1 * l.z[base + i];
+            out[i] = y_win[i] + 0.1 * z_win[i];
         }
     }
 

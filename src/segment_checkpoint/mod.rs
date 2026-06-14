@@ -100,9 +100,13 @@ impl SegmentStore {
     }
 
     /// Get a segment checkpoint by ID. Increments access count.
+    ///
+    /// Single hash lookup per map (was three: `contains_key` + `entry` + `get`).
     pub fn get(&mut self, segment_id: u32) -> Option<&SegmentCheckpoint> {
-        if self.segments.contains_key(&segment_id) {
-            *self.access_counts.entry(segment_id).or_insert(0) += 1;
+        if self.segments.get(&segment_id).is_some() {
+            if let Some(count) = self.access_counts.get_mut(&segment_id) {
+                *count += 1;
+            }
         }
         self.segments.get(&segment_id)
     }
@@ -163,12 +167,10 @@ impl CheckpointPolicy {
     /// - CPU+GPU (medium) → normal
     /// - CPU+GPU+ANE (low QPS) → eager
     pub fn from_tier(qps: f32) -> Self {
-        if qps > 20.0 {
-            Self::Lazy
-        } else if qps > 5.0 {
-            Self::Normal
-        } else {
-            Self::Eager
+        match qps {
+            q if q > 20.0 => Self::Lazy,
+            q if q > 5.0 => Self::Normal,
+            _ => Self::Eager,
         }
     }
 

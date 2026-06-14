@@ -84,8 +84,12 @@ impl ChainFolder {
         let mut best_keep = total_steps;
 
         // Rank steps by importance (ascending) to find the least important ones.
+        // `sort_unstable_by` is faster than `sort_by` and safe here because
+        // the (usize, f32) pairs have unique first elements; ties on `f32`
+        // importance scores do not need stable ordering for the downstream
+        // `take(fold_count)` + `verify_fold` logic.
         let mut indexed: Vec<(usize, f32)> = importance.iter().copied().enumerate().collect();
-        indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        indexed.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Binary search: how many of the least-important steps can we fold?
         let mut lo = 0_usize;
@@ -108,11 +112,22 @@ impl ChainFolder {
         let fold_count = total_steps - best_keep;
         let decisions = build_decisions(&context.boundaries, &indexed, fold_count);
 
-        let kept = decisions
-            .iter()
-            .filter(|d| **d != FoldDecision::Fold)
-            .count();
-        let folded = total_steps - kept;
+        // `best_keep` already counts the non-folded steps; reuse it instead of
+        // re-scanning the decisions Vec. `kept == best_keep` holds because
+        // `verify_fold` rejected any `mid` whose first-`mid` lowest-importance
+        // entries contained an anchor, and `build_decisions` only marks non-anchor
+        // entries as `Fold`. Therefore exactly `fold_count` entries become `Fold`
+        // and the kept count is `total_steps - fold_count == best_keep`.
+        //
+        // `debug_assert` keeps the invariant check in test builds while removing
+        // the O(n) scan from release hot path.
+        debug_assert_eq!(
+            decisions.iter().filter(|d| **d != FoldDecision::Fold).count(),
+            best_keep,
+            "build_decisions invariant: kept count must match best_keep"
+        );
+        let kept = best_keep;
+        let folded = fold_count;
 
         // Estimate token savings from boundaries.
         let tokens_saved = estimate_tokens_saved(&context.boundaries, &decisions);

@@ -55,6 +55,12 @@ pub fn encode_triplet_joint(triplet: &Triplet, codebook: &OctopusCodebook) -> Tr
     let j_eta = codebook.oct.quantize(eta) as i16;
     let n_dir = codebook.oct.centroids.len() as i16;
 
+    // Hoist hot-loop invariants: the centroid slice and the triplet direction
+    // components are loop-invariant across the 3×3 candidate search.
+    let centroids = codebook.oct.centroids.as_slice();
+    let (dir_x, dir_y, dir_z) = (triplet.dir[0], triplet.dir[1], triplet.dir[2]);
+    let norm = triplet.norm;
+
     // Search 3×3 neighborhood for best direction alignment
     let mut best_score = f32::NEG_INFINITY;
     let mut best_i_xi = j_xi;
@@ -71,13 +77,13 @@ pub fn encode_triplet_joint(triplet: &Triplet, codebook: &OctopusCodebook) -> Tr
                 continue;
             }
 
-            let xi_c = codebook.oct.centroids[cx as usize];
-            let eta_c = codebook.oct.centroids[cy as usize];
+            let xi_c = centroids[cx as usize];
+            let eta_c = centroids[cy as usize];
             let (nx, ny, nz) = oct_decode(xi_c, eta_c);
 
             // Score = t · n = ρ * (dir · n)
-            let dot = triplet.dir[0] * nx + triplet.dir[1] * ny + triplet.dir[2] * nz;
-            let score = triplet.norm * dot;
+            let dot = dir_x * nx + dir_y * ny + dir_z * nz;
+            let score = norm * dot;
 
             if score > best_score {
                 best_score = score;

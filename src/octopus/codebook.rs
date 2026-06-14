@@ -113,17 +113,42 @@ pub fn build_oct_codebook(dir_bits: u8) -> ScalarCodebook {
 /// Triplet-norm PDF on [0,1]: f(ρ) = C · ρ² · (1-ρ²)^((d-5)/2)
 ///
 /// Derived from ρ² ~ Beta(3/2, (d-3)/2) via change of variables.
+///
+/// Retained for direct testing; hot paths use [`norm_pdf_with`] with pre-computed
+/// constants to avoid recomputing `ln_gamma` per sample.
+#[cfg(test)]
+#[allow(dead_code)]
 fn norm_pdf(x: f32, dim: usize) -> f32 {
     if x <= 0.0 || x >= 1.0 {
         return 0.0;
     }
+    let (c, exponent) = norm_pdf_constants(dim);
+    c * (x * x) * (1.0 - x * x).powf(exponent)
+}
+
+/// Pre-computed norm-PDF constants for a given dimension.
+///
+/// Returns `(C, exponent)` where the PDF is `C · x² · (1-x²)^exponent`.
+/// `ln_gamma` (Lanczos, ~10-term series) is the dominant cost per `norm_pdf`
+/// call — precomputing once per codebook build avoids millions of redundant
+/// gamma evaluations across the Lloyd-Max inner loops.
+#[inline]
+fn norm_pdf_constants(dim: usize) -> (f32, f32) {
     let d = dim as f64;
     // C = 2 / B(3/2, (d-3)/2) = 2 · Γ(d/2) / (Γ(3/2) · Γ((d-3)/2))
     let log_c =
         std::f64::consts::LN_2 + ln_gamma(d / 2.0) - ln_gamma(1.5) - ln_gamma((d - 3.0) / 2.0);
     let c = log_c.exp() as f32;
-
     let exponent = ((dim - 5) as f32) / 2.0;
+    (c, exponent)
+}
+
+/// Evaluate norm PDF using pre-computed constants (hot-loop variant).
+#[inline]
+fn norm_pdf_with(x: f32, c: f32, exponent: f32) -> f32 {
+    if x <= 0.0 || x >= 1.0 {
+        return 0.0;
+    }
     c * (x * x) * (1.0 - x * x).powf(exponent)
 }
 
@@ -140,6 +165,9 @@ fn compute_centroids_norm(boundaries: &[f32], dim: usize) -> Vec<f32> {
     edges[1..=n - 1].copy_from_slice(boundaries);
     edges[n] = 1.0;
 
+    // Precompute PDF constants ONCE per call (was recomputed per sample).
+    let (c, exponent) = norm_pdf_constants(dim);
+
     for i in 0..n {
         let lo = edges[i];
         let hi = edges[i + 1];
@@ -148,7 +176,7 @@ fn compute_centroids_norm(boundaries: &[f32], dim: usize) -> Vec<f32> {
         let mut sum_xfx = 0.0f64;
         for j in 0..=n_samples {
             let x = lo + dx * j as f32;
-            let pdf = norm_pdf(x, dim);
+            let pdf = norm_pdf_with(x, c, exponent);
             let w = if j == 0 || j == n_samples { 0.5 } else { 1.0 };
             sum_fx += pdf as f64 * w;
             sum_xfx += x as f64 * pdf as f64 * w;
@@ -170,6 +198,9 @@ fn compute_mse_norm(boundaries: &[f32], centroids: &[f32], dim: usize) -> f32 {
     edges[1..=n - 1].copy_from_slice(boundaries);
     edges[n] = 1.0;
 
+    // Precompute PDF constants ONCE per call (was recomputed per sample).
+    let (c, exponent) = norm_pdf_constants(dim);
+
     let n_samples = 500;
     let mut total_mse = 0.0f64;
 
@@ -180,7 +211,7 @@ fn compute_mse_norm(boundaries: &[f32], centroids: &[f32], dim: usize) -> f32 {
         let mut interval_mse = 0.0f64;
         for j in 0..=n_samples {
             let x = lo + dx * j as f32;
-            let pdf = norm_pdf(x, dim);
+            let pdf = norm_pdf_with(x, c, exponent);
             let w = if j == 0 || j == n_samples { 0.5 } else { 1.0 };
             let diff = x as f64 - centroids[i] as f64;
             interval_mse += diff * diff * pdf as f64 * w;

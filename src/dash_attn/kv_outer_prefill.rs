@@ -9,6 +9,8 @@
 //!
 //! Feature gate: `msa_kv_outer` (Plan 256 Phase 2 GOAT gate).
 
+use crate::simd::{simd_dot_f32, simd_exp_sum_inplace, simd_fused_scale_acc, simd_max_f32};
+
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexRouter, VortexScratch};
 
 // ---------------------------------------------------------------------------
@@ -221,13 +223,13 @@ impl KvOuterPrefill {
                     &mut scores[..actual_bs],
                 );
 
-                // Local softmax: max, exp, sum
-                let max_score = find_max(&scores[..actual_bs]);
-                let mut sum_exp = 0.0f32;
+                // Local softmax: max, exp, sum — SIMD fused subtract+exp+sum
+                let max_score = simd_max_f32(&scores[..actual_bs]);
+                // Shift by max in-place, then fused exp + sum via SIMD.
                 for s in scores[..actual_bs].iter_mut() {
-                    *s = (*s - max_score).exp();
-                    sum_exp += *s;
+                    *s -= max_score;
                 }
+                let sum_exp = simd_exp_sum_inplace(&mut scores[..actual_bs]);
                 let inv_sum = 1.0 / sum_exp;
 
                 // Local LSE: log(sum exp(scores))
@@ -239,10 +241,11 @@ impl KvOuterPrefill {
                 for t in 0..actual_bs {
                     let w = scores[t] * inv_sum;
                     let v_start = t * hd;
-                    accumulate_scaled(
+                    simd_fused_scale_acc(
                         &mut local_out[..actual_hd],
                         &block_vals[v_start..v_start + actual_hd],
                         w,
+                        actual_hd,
                     );
                 }
 
@@ -285,7 +288,7 @@ impl KvOuterPrefill {
 
 /// Compute attention scores: `scores[t] = query · keys[t] * scale`.
 ///
-/// Uses 4-way unrolled dot products for auto-vectorization.
+/// Uses `simd_dot_f32` (NEON/AVX2) for the per-token dot product.
 #[inline]
 fn compute_scores(
     query: &[f32],
@@ -295,30 +298,9 @@ fn compute_scores(
     scale: f32,
     scores: &mut [f32],
 ) {
-    let chunks = head_dim / 4;
-    let rem = head_dim % 4;
-
     for t in 0..block_size {
         let k_start = t * head_dim;
-        let mut d0 = 0.0f32;
-        let mut d1 = 0.0f32;
-        let mut d2 = 0.0f32;
-        let mut d3 = 0.0f32;
-
-        for c in 0..chunks {
-            let base = k_start + c * 4;
-            d0 += query[c * 4] * block_keys[base];
-            d1 += query[c * 4 + 1] * block_keys[base + 1];
-            d2 += query[c * 4 + 2] * block_keys[base + 2];
-            d3 += query[c * 4 + 3] * block_keys[base + 3];
-        }
-
-        let mut dot = d0 + d1 + d2 + d3;
-        for d in 0..rem {
-            let qi = chunks * 4 + d;
-            dot += query[qi] * block_keys[k_start + qi];
-        }
-
+        let dot = simd_dot_f32(query, &block_keys[k_start..k_start + head_dim], head_dim);
         scores[t] = dot * scale;
     }
 }

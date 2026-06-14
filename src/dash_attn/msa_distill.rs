@@ -9,6 +9,7 @@
 
 use super::block_topk::{argtopk_with_scratch, sigmoid};
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexScratch};
+use crate::simd::{simd_dot_f32, simd_sum_sq};
 
 // ---------------------------------------------------------------------------
 // MSA cache — max-pool scores + key statistics per block
@@ -86,29 +87,13 @@ impl MsaBlockCache {
 #[inline]
 fn max_qk_score(query: &[f32], block_keys: &[f32], block_size: usize, head_dim: usize) -> f32 {
     let scale = 1.0 / (head_dim as f32).sqrt();
-    let mut max_score = f32::NEG_INFINITY;
 
+    // Compute all per-token dot products via SIMD, then take the max.
+    // Fused dot+scale in one pass; max reduces to a single value.
+    let mut max_score = f32::NEG_INFINITY;
     for t in 0..block_size {
         let k_start = t * head_dim;
-        // Chunked dot product for auto-vectorization (4-way unrolled)
-        let mut d0 = 0.0f32;
-        let mut d1 = 0.0f32;
-        let mut d2 = 0.0f32;
-        let mut d3 = 0.0f32;
-        let chunks = head_dim / 4;
-        for c in 0..chunks {
-            let base = k_start + c * 4;
-            d0 += query[c * 4] * block_keys[base];
-            d1 += query[c * 4 + 1] * block_keys[base + 1];
-            d2 += query[c * 4 + 2] * block_keys[base + 2];
-            d3 += query[c * 4 + 3] * block_keys[base + 3];
-        }
-        let mut dot = d0 + d1 + d2 + d3;
-        let rem = head_dim % 4;
-        for d in 0..rem {
-            let qi = chunks * 4 + d;
-            dot += query[qi] * block_keys[k_start + qi];
-        }
+        let dot = simd_dot_f32(query, &block_keys[k_start..k_start + head_dim], head_dim);
         let score = dot * scale;
         if score > max_score {
             max_score = score;
@@ -172,24 +157,7 @@ impl VortexFlow for MaxPoolBlockScorer {
         let mut norm_sq_sum = 0.0f32;
         for t in 0..block_size {
             let k_start = t * head_dim;
-            let mut n0 = 0.0f32;
-            let mut n1 = 0.0f32;
-            let mut n2 = 0.0f32;
-            let mut n3 = 0.0f32;
-            let chunks = head_dim / 4;
-            for c in 0..chunks {
-                let base = k_start + c * 4;
-                n0 += keys[base] * keys[base];
-                n1 += keys[base + 1] * keys[base + 1];
-                n2 += keys[base + 2] * keys[base + 2];
-                n3 += keys[base + 3] * keys[base + 3];
-            }
-            let mut norm_sq = n0 + n1 + n2 + n3;
-            let rem = head_dim % 4;
-            for d in 0..rem {
-                let idx = k_start + chunks * 4 + d;
-                norm_sq += keys[idx] * keys[idx];
-            }
+            let norm_sq = simd_sum_sq(&keys[k_start..k_start + head_dim], head_dim);
             let norm = norm_sq.sqrt();
             norm_sum += norm;
             norm_sq_sum += norm * norm;

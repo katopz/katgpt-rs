@@ -14,6 +14,7 @@
 
 /// Errors for profile serialization/deserialization.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ProfileError {
     /// Magic bytes do not match expected `b"SLR4"`.
     InvalidMagic,
@@ -39,6 +40,7 @@ impl std::error::Error for ProfileError {}
 
 /// Route recommendation based on position selectivity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ComputeRoute {
     /// High kurtosis → predictable → CPU speculative decode.
     CpuSpeculative,
@@ -165,23 +167,40 @@ impl SelectivityRouter {
             return Err(ProfileError::TruncatedData);
         }
 
-        let magic: [u8; 4] = data[0..4].try_into().unwrap();
+        // Length already validated above; the `try_into` calls below cannot
+        // fail because each slice is exactly 4 bytes. Use `?` with a defensive
+        // error mapping rather than `unwrap()` to keep the fallible surface
+        // explicit and panic-free.
+        let magic: [u8; 4] = data[0..4]
+            .try_into()
+            .map_err(|_| ProfileError::TruncatedData)?;
         if magic != MAGIC {
             return Err(ProfileError::InvalidMagic);
         }
 
-        let version = u32::from_le_bytes(data[4..8].try_into().unwrap());
+        let version = u32::from_le_bytes(
+            data[4..8]
+                .try_into()
+                .map_err(|_| ProfileError::TruncatedData)?,
+        );
         if version != VERSION {
             return Err(ProfileError::VersionMismatch);
         }
 
-        let len = u32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        let len = u32::from_le_bytes(
+            data[8..12]
+                .try_into()
+                .map_err(|_| ProfileError::TruncatedData)?,
+        ) as usize;
         let expected = HEADER_SIZE + len * 4;
         if data.len() < expected {
             return Err(ProfileError::TruncatedData);
         }
 
         let f32_bytes = &data[HEADER_SIZE..expected];
+        // bytemuck::cast_slice is infallible and zero-copy when the input is
+        // properly aligned; otherwise it returns the original input. We use
+        // `to_vec()` to materialize the owned Vec<f32>.
         let position_kurtosis = bytemuck::cast_slice::<u8, f32>(f32_bytes).to_vec();
 
         Ok(Self {

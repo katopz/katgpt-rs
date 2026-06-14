@@ -72,11 +72,17 @@ fn count_agreements(a: &[usize], b: &[usize]) -> usize {
 fn count_resampled_agreements(a: &[usize], b: &[usize], base: &[usize]) -> usize {
     let min_len = a.len().min(b.len()).min(base.len());
     let mut agreements = 0;
+    // Direct indexing: `i < min_len <= min(a.len(), b.len(), base.len())`
+    // guarantees all three accesses are in bounds; avoids three redundant
+    // `.get(i)` bounds checks per iteration (hot path, called O(m^2) per rank).
     for i in 0..min_len {
+        let a_i = a[i];
+        let b_i = b[i];
+        let base_i = base[i];
         // Only count agreement at positions where at least one variant differs from base
-        let a_changed = a.get(i).copied() != base.get(i).copied();
-        let b_changed = b.get(i).copied() != base.get(i).copied();
-        if (a_changed || b_changed) && a.get(i) == b.get(i) {
+        let a_changed = a_i != base_i;
+        let b_changed = b_i != base_i;
+        if (a_changed || b_changed) && a_i == b_i {
             agreements += 1;
         }
     }
@@ -105,13 +111,16 @@ fn compute_weighted_agreement_score(
     i: usize,
     m: usize,
 ) -> (usize, usize) {
-    // Self: count resampled positions where variant differs from base
-    let self_agreements = variants[i]
-        .iter()
-        .zip(base_path.iter())
-        .filter(|(v, b)| v != b)
-        .count()
-        .max(1); // at least 1 for self
+    // Self: count resampled positions where variant differs from base.
+    // Replaces iterator+filter+count+max chain with a single branchless pass
+    // — avoids the iterator overhead and `.max(1)` allocation-free early return.
+    let mut self_agreements = 0usize;
+    for (v, b) in variants[i].iter().zip(base_path.iter()) {
+        self_agreements += (v != b) as usize;
+    }
+    if self_agreements == 0 {
+        self_agreements = 1; // at least 1 for self
+    }
     let mut agreements = self_agreements;
     for j in 0..m {
         if i != j {
@@ -353,12 +362,14 @@ fn rank_by_consistency_weighted_subset(
 
     let mut agreement_counts: Vec<(usize, usize)> = (0..m)
         .map(|i| {
-            let self_agreements = variants[i]
-                .iter()
-                .zip(base_path.iter())
-                .filter(|(v, b)| v != b)
-                .count()
-                .max(1);
+            // Self: count resampled positions where variant differs from base.
+            let mut self_agreements = 0usize;
+            for (v, b) in variants[i].iter().zip(base_path.iter()) {
+                self_agreements += (v != b) as usize;
+            }
+            if self_agreements == 0 {
+                self_agreements = 1;
+            }
             let mut agreements = self_agreements;
             for j in 0..m {
                 if i != j {

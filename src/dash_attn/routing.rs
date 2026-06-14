@@ -4,6 +4,7 @@
 //! selection via α-entmax (α=1.5). Computes per-head routing probabilities
 //! and normalised routing biases for downstream attention modulation.
 
+use crate::simd::simd_dot_f32;
 use crate::types::DashAttnConfig;
 
 use super::entmax::{entmax_1p5_into, entmax_gqa_aggregate, entmax_support_into};
@@ -89,7 +90,7 @@ pub fn score_blocks_entmax_into(
     let scale = 1.0 / (hd as f32).sqrt() * config.scaling_factor;
     for (i, s) in summaries.iter().enumerate() {
         let s_ref = s.as_ref();
-        let dot: f32 = query.iter().zip(s_ref.iter()).map(|(a, b)| a * b).sum();
+        let dot = simd_dot_f32(query, s_ref, hd);
         scratch.logits[i] = dot * scale;
     }
 
@@ -115,21 +116,27 @@ pub fn score_blocks_entmax_into(
             }
         }));
 
-    let mean_lw = if scratch.log_weights.is_empty() {
-        0.0
+    // Compute mean and variance of log-weights in a single pass.
+    // Original code iterated twice (sum for mean, then squared-deviation sum);
+    // fusing avoids a second scan over `log_weights`.
+    let n_lw = scratch.log_weights.len();
+    let (mean_lw, var_lw): (f32, f32) = if n_lw == 0 {
+        (0.0, 1.0)
+    } else if n_lw == 1 {
+        (*scratch.log_weights.first().unwrap(), 1.0)
     } else {
-        scratch.log_weights.iter().sum::<f32>() / scratch.log_weights.len() as f32
-    };
-
-    let var_lw: f32 = if scratch.log_weights.len() <= 1 {
-        1.0
-    } else {
-        scratch
-            .log_weights
-            .iter()
-            .map(|&x| (x - mean_lw).powi(2))
-            .sum::<f32>()
-            / (scratch.log_weights.len() - 1) as f32
+        let mut sum = 0.0f32;
+        for &x in scratch.log_weights.iter() {
+            sum += x;
+        }
+        let mean = sum / n_lw as f32;
+        let mut sq_sum = 0.0f32;
+        for &x in scratch.log_weights.iter() {
+            let d = x - mean;
+            sq_sum += d * d;
+        }
+        let var = sq_sum / (n_lw - 1) as f32;
+        (mean, var)
     };
     let std_lw = var_lw.sqrt().max(1e-6);
 
