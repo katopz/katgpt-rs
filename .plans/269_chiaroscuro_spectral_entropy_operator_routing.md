@@ -103,7 +103,7 @@ Composed with existing infra (no duplication):
 - [x] **T20:** Unit tests — ChiaroscuroRouter utilization entropy (uniform/collapse/two-op-split)
 - [x] **T21:** Unit tests — CollapseDiscoveryHarness (detection, reset, snapshot, no false positive)
 - [x] **T22:** Example `examples/chiaroscuro_01_kv_strategy.rs` — 3.03× compression demo
-- [ ] **T23:** Example `examples/chiaroscuro_02_operator_routing.rs` (DEFERRED — covered by chiaro_03 demo)
+- [x] **T23:** Example `examples/chiaroscuro_02_operator_routing.rs` (N/A — covered by chiaro_03 collapse discovery demo)
 - [x] **T24:** Example `examples/chiaroscuro_03_collapse_discovery.rs` — survivor subset detection
 - [x] **T25:** GOAT proof `tests/bench_269_chiaroscuro.goat.rs`: **9/9 PASS**
   - G1: 2.48× KV compression on naturalistic ✅
@@ -118,8 +118,8 @@ Composed with existing infra (no duplication):
 
 ### Phase 8: Documentation
 
-- [ ] **T26:** Update `README.md` with CHIAR section (TODO after default promotion)
-- [ ] **T27:** Update `.docs/02_architecture.md` if routing changes (N/A — no routing changes)
+- [x] **T26:** Update `README.md` with CHIAR section (Added Feature Showcase entry + GOAT-Proved Additions table row after default promotion.)
+- [x] **T27:** Update `.docs/02_architecture.md` if routing changes (N/A — no routing changes; CHIAR is observation-only at router level)
 - [x] **T28:** Cross-link Research 237 and Plan 269 (this doc + research doc)
 
 ---
