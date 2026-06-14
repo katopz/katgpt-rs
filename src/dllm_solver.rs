@@ -326,21 +326,16 @@ fn sigmoid(x: f32) -> f32 {
 
 /// Find argmax index from a probability-like array.
 /// Returns the index with the highest value, or 0 if empty.
+///
+/// Delegates to `simd_argmax_f32` (NEON/AVX2) for the vocab-sized scan —
+/// called once per position in `SelfCondDraft::store_pass1`'s hot loop.
 #[cfg(any(feature = "q_sample_solver", feature = "self_cond_draft"))]
 #[inline]
 pub fn argmax(values: &[f32]) -> usize {
     if values.is_empty() {
         return 0;
     }
-    let mut best_idx = 0;
-    let mut best_val = values[0];
-    for (i, &v) in values.iter().enumerate().skip(1) {
-        if v > best_val {
-            best_val = v;
-            best_idx = i;
-        }
-    }
-    best_idx
+    katgpt_core::simd::simd_argmax_f32(values).0
 }
 
 // ---------------------------------------------------------------------------
@@ -789,10 +784,13 @@ pub fn tier_to_residual_mode(tier: crate::trigger_gate::ComputeTier) -> Residual
 
 /// Quick confidence-based alpha: 1.0 - max_prob.
 /// Cheaper than full entropy computation (avoids softmax + log).
+///
+/// Uses `simd_max_f32` for the vocab-sized max scan — single NEON/AVX2
+/// pass instead of a scalar `fold(f32::max)` reduction on the hot Plasma path.
 #[cfg(feature = "rcd_residual")]
 #[inline]
 pub fn confidence_alpha(marginals: &[f32]) -> f32 {
-    let max_prob = marginals.iter().copied().fold(0.0f32, f32::max);
+    let max_prob = katgpt_core::simd::simd_max_f32(marginals);
     (1.0 - max_prob).clamp(0.0, 1.0)
 }
 

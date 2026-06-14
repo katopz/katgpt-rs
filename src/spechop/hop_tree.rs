@@ -646,42 +646,55 @@ pub fn verify_hop_tree(
         ..Default::default()
     };
 
-    for (depth, (actual_action, actual_obs)) in actual.iter().enumerate() {
-        // Find speculative nodes at this depth with matching action
-        let candidates: Vec<&HopTreeNode> = tree
-            .iter()
-            .filter(|n| n.depth == depth && n.action == *actual_action)
-            .collect();
+    // Pre-bucket tree nodes by depth in a single pass → O(T) build.
+    // `actual` depths run 0..actual.len(); any tree node deeper than that
+    // can never match and is ignored. This replaces the previous O(D × T)
+    // full-tree rescan per depth (one `.filter` over the whole tree per hop).
+    //
+    // Buckets preserve expansion order, which is best-first by score, so the
+    // "try candidates in score order" semantics below are unchanged.
+    let n_depths = actual.len();
+    let mut buckets: Vec<Vec<usize>> = (0..n_depths).map(|_| Vec::new()).collect();
+    for (idx, node) in tree.iter().enumerate() {
+        if node.depth < n_depths {
+            buckets[node.depth].push(idx);
+        }
+    }
 
-        match candidates.as_slice() {
-            [] => {
-                // No speculative node for this action → direct commit
-                result.direct_commits += 1;
+    for (depth, (actual_action, actual_obs)) in actual.iter().enumerate() {
+        // Scan only this depth's bucket (already filtered by depth) and match
+        // by action — no full-tree rescan, no per-depth Vec allocation.
+        // Track `had_candidate` during the same pass so the direct-commit vs
+        // rollback classification needs no second scan of the bucket.
+        let mut matched = false;
+        let mut had_candidate = false;
+        for &node_idx in &buckets[depth] {
+            let node = &tree[node_idx];
+            if node.action != *actual_action {
+                continue;
+            }
+            had_candidate = true;
+            if verifier.verify(actual_obs, &node.observation) {
+                result.commits += 1;
                 result
                     .path
                     .push((actual_action.clone(), actual_obs.clone()));
+                matched = true;
+                break;
             }
-            nodes => {
-                // Try candidates in score order (best first)
-                let mut matched = false;
-                for node in nodes {
-                    if verifier.verify(actual_obs, &node.observation) {
-                        result.commits += 1;
-                        result
-                            .path
-                            .push((actual_action.clone(), actual_obs.clone()));
-                        matched = true;
-                        break;
-                    }
-                }
-                if !matched {
-                    // All candidates failed → rollback + commit real observation
-                    result.rollbacks += 1;
-                    result
-                        .path
-                        .push((actual_action.clone(), actual_obs.clone()));
-                }
+        }
+
+        if !matched {
+            // "no speculative node for this action" → direct commit;
+            // "candidates existed but all mismatched" → rollback.
+            if had_candidate {
+                result.rollbacks += 1;
+            } else {
+                result.direct_commits += 1;
             }
+            result
+                .path
+                .push((actual_action.clone(), actual_obs.clone()));
         }
     }
 

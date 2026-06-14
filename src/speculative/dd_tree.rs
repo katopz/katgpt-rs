@@ -1629,59 +1629,53 @@ fn cumulative_relevance(path: &[usize], screener: &dyn ScreeningPruner) -> f32 {
 
 /// Zero-alloc variant of `extract_best_path`.
 /// Writes best-scored token at each depth into `path` (cleared first).
-/// Depth-indexed optimization: groups nodes by depth in a single O(N) pass,
-/// replacing O(D×N) repeated `.iter().filter()` scans with O(1) depth lookups.
+///
+/// Two-pass O(N) with exactly two heap allocations (best_score + best_token),
+/// replacing the prior O(D) inner-Vec bucket allocation. Uses direct f32
+/// comparison instead of `(score * 1e6) as i64` to preserve full precision.
 pub fn extract_best_path_into(tree: &[TreeNode], path: &mut Vec<usize>) {
     path.clear();
     if tree.is_empty() {
         return;
     }
 
-    // Build depth index: O(N) single pass. Use Vec-of-Vecs indexed by depth
-    // (no hashing) — depths are dense in [0, max_depth] for DDTree output.
+    // Pass 1: discover max depth (sizes the per-depth tracker).
     let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
-    let mut by_depth: Vec<Vec<&TreeNode>> = (0..=max_depth).map(|_| Vec::new()).collect();
+
+    // Per-depth best tracker. `>=` below preserves the prior `max_by_key`
+    // last-wins-on-tie semantics (std returns the last max element).
+    let mut best_score: Vec<f32> = vec![f32::NEG_INFINITY; max_depth + 1];
+    let mut best_token: Vec<usize> = vec![usize::MAX; max_depth + 1];
+
+    // Pass 2: single sweep, update per-depth best in place.
     for node in tree.iter() {
-        by_depth[node.depth].push(node);
+        let d = node.depth;
+        // SAFETY: d <= max_depth by definition of max_depth.
+        if node.score >= best_score[d] {
+            best_score[d] = node.score;
+            best_token[d] = node.token_idx;
+        }
     }
 
+    // Emit one token per contiguous depth; stop at first missing depth.
     for depth in 0..=max_depth {
-        let best = by_depth[depth]
-            .iter()
-            .max_by_key(|n| (n.score * 1e6) as i64);
-        match best {
-            Some(node) => path.push(node.token_idx),
-            None => break,
+        match best_token[depth] {
+            usize::MAX => break,
+            tok => path.push(tok),
         }
     }
 }
 
 /// Extract best-scored token at each depth from a DDTree.
-/// Depth-indexed optimization: groups nodes by depth in a single O(N) pass,
-/// replacing O(D×N) repeated `.iter().filter()` scans with O(1) depth lookups.
+///
+/// Two-pass O(N) with exactly two heap allocations (best_score + best_token),
+/// replacing the prior O(D) inner-Vec bucket allocation. Uses direct f32
+/// comparison instead of `(score * 1e6) as i64` to preserve full precision.
+///
+/// See [`extract_best_path_into`] for the zero-alloc variant.
 pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
-    if tree.is_empty() {
-        return Vec::new();
-    }
-
-    // Build depth index: O(N) single pass. Use Vec-of-Vecs indexed by depth
-    // (no hashing) — depths are dense in [0, max_depth] for DDTree output.
-    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
-    let mut by_depth: Vec<Vec<&TreeNode>> = (0..=max_depth).map(|_| Vec::new()).collect();
-    for node in tree.iter() {
-        by_depth[node.depth].push(node);
-    }
-
-    let mut path = Vec::with_capacity(max_depth + 1);
-    for depth in 0..=max_depth {
-        let best = by_depth[depth]
-            .iter()
-            .max_by_key(|n| (n.score * 1e6) as i64);
-        match best {
-            Some(node) => path.push(node.token_idx),
-            None => break,
-        }
-    }
+    let mut path = Vec::new();
+    extract_best_path_into(tree, &mut path);
     path
 }
 
@@ -1689,18 +1683,22 @@ pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
 ///
 /// Each leaf node's `parent_path` encodes a full token sequence.
 /// Returns `(sequence, leaf_node)` pairs for all maximal-depth paths.
+///
+/// Zero per-node allocation: reuses one scratch buffer for token extraction.
 pub fn extract_candidate_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
     if tree.is_empty() {
         return Vec::new();
     }
 
     let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
 
     // Collect leaf nodes (nodes at max depth with no children in tree)
     tree.iter()
         .filter(|node| node.depth == max_depth)
         .map(|node| {
-            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            let seq =
+                extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf).to_vec();
             (seq, node)
         })
         .collect()
@@ -1710,14 +1708,20 @@ pub fn extract_candidate_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeN
 ///
 /// Useful when the solution might not require visiting all targets,
 /// or when partial sequences are valid solutions.
+///
+/// Zero per-node allocation: reuses one scratch buffer for token extraction.
 pub fn extract_all_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
     if tree.is_empty() {
         return Vec::new();
     }
 
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
+
     tree.iter()
         .map(|node| {
-            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            let seq =
+                extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf).to_vec();
             (seq, node)
         })
         .collect()
@@ -1775,6 +1779,9 @@ where
 ///
 /// Useful for small trees where rayon spawn cost outweighs parallelism benefit,
 /// or when deterministic ordering is required (first candidate wins).
+///
+/// Zero per-node allocation: reuses one scratch buffer across all candidates;
+/// allocates only when returning the winning sequence.
 pub fn find_valid_sequence<T, V>(tree: &[TreeNode], validator: V) -> Option<(Vec<usize>, T)>
 where
     V: Fn(&[usize]) -> Option<T>,
@@ -1783,10 +1790,14 @@ where
         return None;
     }
 
+    // Size scratch buffer once from the deepest node we may visit.
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
+
     for node in tree {
-        let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
-        if let Some(result) = validator(&seq) {
-            return Some((seq, result));
+        let seq = extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf);
+        if let Some(result) = validator(seq) {
+            return Some((seq.to_vec(), result));
         }
     }
 
@@ -1942,8 +1953,11 @@ pub fn merge_retrieved_branches(
         }
     }
 
-    // Re-sort by score descending
-    tree.sort_by(|a, b| {
+    // Re-sort by score descending. Unstable sort is safe here: TreeNode is
+    // Copy + Eq and downstream consumers only rely on score ordering, not on
+    // tie-stability. Unstable sort avoids the O(N) auxiliary allocation that
+    // stable sort incurs on large inputs.
+    tree.sort_unstable_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
@@ -4029,13 +4043,28 @@ pub fn build_dd_tree_dendritic(
 }
 
 /// Extract top-K indices from a probability slice (descending order).
+///
+/// Uses `select_nth_unstable_by` for O(N) average partitioning around the K-th
+/// element, then sorts only the K-sized prefix — replacing the prior O(N log N)
+/// full sort. Significant when `probs.len()` is large (full vocab) and K is small.
 #[cfg(feature = "dendritic_gate")]
 #[inline]
 fn top_k_indices(probs: &[f32], k: usize) -> Vec<usize> {
     let k = k.min(probs.len());
+    if k == 0 {
+        return Vec::new();
+    }
     let mut indexed: Vec<(usize, f32)> = probs.iter().copied().enumerate().collect();
-    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    indexed.into_iter().take(k).map(|(i, _)| i).collect()
+    // Partition so the top-k (by descending prob) live in `indexed[..k]`.
+    // `select_nth_unstable_by` reorders the slice in O(N) average time.
+    indexed.select_nth_unstable_by(k - 1, |a, b| {
+        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    // Sort only the small prefix for deterministic descending order.
+    indexed[..k].sort_by(|a, b| {
+        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+    });
+    indexed[..k].iter().map(|(i, _)| *i).collect()
 }
 
 #[cfg(test)]

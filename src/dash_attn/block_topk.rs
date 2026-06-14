@@ -178,7 +178,10 @@ impl VortexFlow for BlockTopKRouter {
 /// Find top-k indices from scores (partial sort, descending).
 /// Uses a simple selection-based approach — O(n*k) which is fine for small k.
 ///
-/// Reuses `pairs` scratch buffer across calls to avoid per-call allocation.
+/// `Vec::new()` here starts at zero capacity (no heap allocation); it only
+/// grows if the k>16 selection-sort fallback runs. The common k≤16 SIMD path
+/// never touches it. Prefer [`argtopk_with_scratch`] in callers that can
+/// reuse a buffer across calls to avoid the (rare) fallback allocation.
 pub fn argtopk(scores: &[f32], k: usize, indices: &mut Vec<usize>) {
     argtopk_with_scratch(scores, k, indices, &mut Vec::new());
 }
