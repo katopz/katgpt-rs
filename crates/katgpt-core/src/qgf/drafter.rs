@@ -184,8 +184,10 @@ where
             .q_gradient_into(condition, projected, gradient_buffer);
         // Tilt: additive shift over the shorter of the two buffers.
         let n = logits_buffer.len().min(gradient_buffer.len());
+        let w = self.guidance_weight;
         for i in 0..n {
-            logits_buffer[i] += self.guidance_weight * gradient_buffer[i];
+            // FMA: logits[i] = w * gradient[i] + logits[i] (single rounding).
+            logits_buffer[i] = w.mul_add(gradient_buffer[i], logits_buffer[i]);
         }
         true
     }
