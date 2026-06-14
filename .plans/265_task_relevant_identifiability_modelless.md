@@ -109,7 +109,7 @@ Paper's Algorithm 1 + Theorem 1 give a *theory-backed* stopping criterion for ad
 - [ ] T5.3 If all pass → promote `band_conditioner`, `specialist_projection`, `collider_consistency` to `default` feature set. **DEFERRED** — requires user sign-off. Features remain opt-in.
 - [ ] T5.4 If SPLAT-masked attention (G6) beats prior MSA implementation → demote `msa_blockwise_sparse` (Plan 256) to non-default per user rules ("demote loser"). **DEFERRED** — G6 passes on synthetic benchmark, but real-model comparison needed before demotion.
 - [ ] T5.5 Update README with showcase entry under "GOAT-Proved Additions" — three new items. **OUT OF SCOPE** — README not in write scope for this task.
-- [ ] T5.6 Mark Plan 264 Phase 2 unblocked (SPLAT is the consumer). **DONE** — `SpecialistMask::as_sparse_task_vector()` exposes the storage; `src/off_principal.rs` (Plan 264 subagent) can consume it.
+- [x] T5.6 Mark Plan 264 Phase 2 unblocked (SPLAT is the consumer). **DONE** — `SpecialistMask::as_sparse_task_vector()` (src/specialist_projection.rs:333-337) exposes the underlying `SparseTaskVector` storage. Plan 264 Phase 2 ultimately chose an SVD-based `OffPrincipalIndex` instead (T2.1-T2.8 all `[x]`), so SPLAT remains an *available-but-unconsumed* primitive in katgpt-rs — likely consumer is riir-ai model-based training (Plan 300) for TJS-LoRA mask composition.
 - [ ] T5.7 Cross-link Plan 300 (riir-ai model-based) — riir-ai consumes the engine primitives for TJS-LoRA training. **OUT OF SCOPE** — riir-ai repo.
 
 ### Phase 6 — Documentation
