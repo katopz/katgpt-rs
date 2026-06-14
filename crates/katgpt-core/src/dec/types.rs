@@ -274,6 +274,11 @@ impl CellComplex {
     /// - `target_idx`: cell index to remove
     /// - `last_idx`: last cell index at this rank (for swap-rebind)
     /// - `is_col`: `true` if the cell appears as `col` in entries, `false` if as `row`
+    ///
+    /// Single-pass compact-and-rebind: drops entries referencing `target_idx` and
+    /// rebinds `last_idx` → `target_idx` in one sweep. This halves cache misses vs
+    /// the previous two-pass `retain()` + linear scan, which matters because the
+    /// B₂ boundary of a 64×64 grid is ~384KB (larger than typical L2).
     fn swap_remove_from_boundary(
         &mut self,
         boundary_idx: usize,
@@ -282,30 +287,33 @@ impl CellComplex {
         is_col: bool,
     ) {
         let boundary = &mut self.boundaries[boundary_idx];
+        let needs_rebind = target_idx != last_idx;
+        let mut write = 0usize;
 
-        // Remove entries referencing the target cell
-        if is_col {
-            boundary.retain(|&(_, col, _)| col != target_idx);
-        } else {
-            boundary.retain(|&(row, _, _)| row != target_idx);
-        }
+        for read in 0..boundary.len() {
+            // Copy-by-value to avoid holding a borrow into `boundary` while we write.
+            let (row, col, sign) = boundary[read];
 
-        // Swap-rebind: move last cell's entries to the freed slot
-        if target_idx != last_idx {
-            if is_col {
-                for (_, col, _) in boundary.iter_mut() {
-                    if *col == last_idx {
-                        *col = target_idx;
-                    }
-                }
-            } else {
-                for (row, _, _) in boundary.iter_mut() {
-                    if *row == last_idx {
-                        *row = target_idx;
-                    }
-                }
+            // Drop entries referencing the removed cell.
+            let cell = if is_col { col } else { row };
+            if cell == target_idx {
+                continue;
             }
+
+            // Rebind last cell's entries to the freed slot (swap-remove semantics).
+            let (new_row, new_col) = if needs_rebind {
+                let nr = if !is_col && row == last_idx { target_idx } else { row };
+                let nc = if is_col && col == last_idx { target_idx } else { col };
+                (nr, nc)
+            } else {
+                (row, col)
+            };
+
+            boundary[write] = (new_row, new_col, sign);
+            write += 1;
         }
+
+        boundary.truncate(write);
     }
 }
 
