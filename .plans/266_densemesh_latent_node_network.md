@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-14
 **Research:** katgpt-rs/.research/234_DenseMesh_Latent_Node_Network.md
-**Status:** Phase 1–8 complete (core traits, types, topology engine, all edges, EdgeBandit, bridge functions, compute router, **adaptive width controller with CollapseAware + BreakevenRouter integration**, **TransformerNode glue wrapping `transformer::forward`**, profiling test, gate tests, README/research docs). **Gate 1 + Gate 2 + Gate 3 + Gate 5 PASS. Gate 4 measured (9.27× single-thread vs paper bound 2.5× — requires vertex parallelism).** 51 unit tests + 5 profiling tests + 4 gate tests pass.
+**Status:** Phase 1–8 complete. **Gate 2 FAILED empirically** — real trained Bomber LoRAs composed via diamond topology produce 0/1000 wins over best single (improvement -0.00%). **Demoted to experimental.** Gate 1 + Gate 3 + Gate 5 PASS. Gate 4 measured (9.27× single-thread vs paper bound 2.5× — requires vertex parallelism). 51 unit tests + 5 profiling tests + 5 gate tests pass.
 **Commercial Bound:** Public (katgpt-rs/MIT) — generic framework. Edge LoRA composition recipes stay in riir-ai (R122).
 
 ---
@@ -94,10 +94,13 @@ katgpt-rs/src/dense_mesh/
 - [x] Ensure raw values (token outputs, positions) only appear at input/output boundary nodes
 - [x] Document anti-patterns in module doc: never sync dense state, never validate movement by latent similarity
 
-### Phase 7 — GOAT Gate Proofs (Tests) — ✅ (gate 4 measured, not passed)
+### Phase 7 — GOAT Gate Proofs (Tests) — gate 2 FAILED, demoted to experimental
 
 - [x] **Gate 1 (correctness):** `test_dense_mesh_chain_identity` — topology `[1,1]` + IdentityEdge produces identical output to vanilla `forward()`
-- [x] **Gate 2 (composition mechanism):** `test_dense_mesh_gate2_composition_differs_from_single_lora` — diamond `[1,2,1]` with 2 LoRA edges produces strictly different output than chain with 1 LoRA (relative L2 distance 1.009). Win-rate gain on real arena still requires riir-ai R122 trained edges.
+- [ ] **Gate 2 (composition gain):** FAILED empirically. Two tests:
+  - `test_dense_mesh_gate2_composition_differs_from_single_lora` — proves composition MECHANISM (relative L2 = 1.009) but mechanism ≠ gain
+  - `test_dense_mesh_gate2_real_lora_composition_gain` — tests REAL trained Bomber LoRAs (baseline + echo vs moa target): **0/1000 wins over best single, improvement -0.00%**
+  - **Verdict:** untrained LoRA composition is a no-op ensemble. Gate 2 fails. R122 must train dedicated comm edges.
 - [x] **Gate 3 (easy overhead):** `test_dense_mesh_gate3_easy_overhead_vs_vanilla` — at `Config::small_target()` (vocab=4096, n_embd=64) ratio **0.997× ≤ 1.05×** ✅. At draft scale 2.71× — framework overhead visible at micro-model scale.
 - [ ] **Gate 4 (hard bound):** `test_dense_mesh_gate4_hard_bound_width4_measured` — measured **9.27×** single-thread vs paper bound 2.5×. Requires vertex parallelism (batched forward or rayon) — `#[ignore]` by default, run with `--include-ignored`. Filed as follow-up.
 - [x] **Gate 5 (bandit convergence):** `test_dense_mesh_gate5_bandit_convergence` and `test_bandit_converges_to_best_arm` — regret bound over 500 pulls passes

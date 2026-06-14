@@ -3,8 +3,8 @@
 **Date:** 2026-06-14
 **Research:** `.research/234_DenseMesh_Latent_Node_Network.md`
 **Plan:** `.plans/266_densemesh_latent_node_network.md`
-**Feature gate:** `dense_mesh` (opt-in, NOT default)
-**Verdict:** ✅ GAIN — Gate 1 + Gate 2 + Gate 3 + Gate 5 PASS. Gate 4 measured (above paper bound — requires vertex parallelism).
+**Feature gate:** `dense_mesh` (opt-in, **experimental** — demoted from GAIN)
+**Verdict:** ❌ NOT GOAT — Gate 2 FAILED empirically. Composition with untrained LoRAs produces no gain. Gates 1 + 3 + 5 PASS (framework is sound). Gate 4 measured (above paper bound — requires vertex parallelism).
 
 ---
 
@@ -13,12 +13,12 @@
 | Gate | Mandate (research/234) | Test | Result | Notes |
 |---|---|---|---|---|
 | 1. Correctness | `[1,1]`+IdentityEdge == vanilla `forward()` | `test_dense_mesh_chain_identity` | ✅ PASS | IdentityNode + IdentityEdge preserves input bit-exactly |
-| 2. Composition | diamond `[1,2,1]` + 2 LoRA edges ≥ 3 pp win | `test_dense_mesh_gate2_composition_differs_from_single_lora` | ✅ PASS (mechanism) | Relative L2 distance 1.0090 — diamond strictly composes 2 LoRAs. **Win-rate gain requires riir-ai R122 trained edges.** |
+| 2. Composition | diamond `[1,2,1]` + 2 LoRA edges ≥ 3 pp win | `test_dense_mesh_gate2_real_lora_composition_gain` | ❌ **FAIL** | **0/1000 wins** over best single with REAL trained Bomber LoRAs. Improvement -0.00%. Untrained composition is a no-op ensemble. |
 | 3. Easy overhead | ≤ 1.05× vanilla (chain + identity) | `test_dense_mesh_gate3_easy_overhead_vs_vanilla` | ✅ PASS (production scale) | `Config::small_target()` ratio 0.997× ≤ 1.05×. Draft scale 2.71× — framework overhead visible at micro-model scale |
 | 4. Hard bound | ≤ 2.5× vanilla at width 4 (paper bound) | `test_dense_mesh_gate4_hard_bound_width4_measured` | ⚠️ MEASURED | Single-thread ratio **9.27×** vs paper bound 2.5×. Requires vertex parallelism (batched forward or rayon) |
 | 5. Bandit convergence | regret < O(log T · √N) over 200 pulls | `test_dense_mesh_gate5_bandit_convergence`, `test_bandit_converges_to_best_arm` | ✅ PASS | Bandit converges to high-reward arm after 500 pulls |
 
-**Promote-to-default:** NOT MET — gate 2 proves composition MECHANISM, not win-rate GAIN. Keep `dense_mesh` opt-in.
+**Promote-to-default:** NOT MET — gate 2 empirically fails. `dense_mesh` stays opt-in and experimental.
 
 ---
 
@@ -176,13 +176,50 @@ T4: compute_router::pick_compute() dispatch latency: 0.00 ns/call (inlined) ✅
 
 ---
 
+## Gate 2 REAL — Composition gain with trained Bomber LoRAs (FAILED)
+
+```
+Gate 2 REAL: Composition gain with trained LoRAs
+  A = game_lora_baseline.bin (Bomber baseline)
+  B = game_lora_echo.bin (Bomber echo)
+  T = game_lora_v2_moa.bin (target — held out)
+  dim=32, rank=4, scale=2.0000
+
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Gate 2 REAL: L2 distance to target over 1000 samples                        │
+├────────────────────────────────────┬──────────────────────────────────────────────┤
+│ metric                    │ mean L2                                      │
+├────────────────────────────────────┼──────────────────────────────────────────────┤
+│ LoRA_A (baseline)         │                                     0.964656 │
+│ LoRA_B (echo)             │                                     0.964604 │
+│ Diamond (A+B)/2          │                                     0.964630 │
+├────────────────────────────────────┼──────────────────────────────────────────────┤
+│ best single               │                                     0.964604 │
+│ diamond improvement      │                                       -0.00% │
+└────────────────────────────────────┴──────────────────────────────────────────────┘
+
+  Diamond beats A alone: 955/1000 (95.5%)
+  Diamond beats B alone: 45/1000 (4.5%)
+  Diamond beats BOTH:    0/1000 (0.0%)
+
+Gate 2 REAL (composition gain): diamond loses to best single by 0.00% — ❌ FAIL
+```
+
+**Why this fails.** The diamond aggregation is `out = (LoRA_A(x) + LoRA_B(x)) / 2`. For this to beat the best single, A and B must be on **opposite sides** of the target T. With independently-trained Bomber LoRAs (same domain, similar loss landscape), their outputs are highly correlated — they're on the same side of T, so averaging just interpolates between them.
+
+The paper's +30.5% gain came from **trained communication edges** — modules specifically trained end-to-end to make inter-node composition beneficial. Our untrained LoRA-as-edge is mathematically incapable of producing composition gain; it's a linear average of correlated predictors.
+
+**Conclusion.** The modelless hypothesis (reuse game LoRAs as edges) is **empirically false**. DenseMesh requires riir-ai R122 trained communication edges to produce any quality gain.
+
+---
+
 ## TL;DR
 
-DenseMesh now has 4 of 5 GOAT gates proven against real `transformer::forward`:
+DenseMesh gate status after empirical validation:
 - ✅ Gate 1 (correctness)
-- ✅ Gate 2 (composition mechanism — relative L2 = 1.009)
+- ❌ Gate 2 (composition gain — **FAILED** with real trained LoRAs, 0/1000 wins)
 - ✅ Gate 3 (easy overhead — 0.997× at production scale)
 - ⚠️ Gate 4 (measured 9.27× — needs vertex parallelism)
 - ✅ Gate 5 (bandit convergence)
 
-**Verdict stays GAIN, not GOAT.** Cannot promote `dense_mesh` to default — gate 2 win-rate (≥ 3 pp on real arena) requires riir-ai R122 trained edges, and gate 4 needs vertex parallelism infrastructure.
+**Verdict: NOT GOAT, demoted to experimental.** The framework is architecturally sound (gates 1, 3, 5 pass) but produces **no composition gain** without trained communication edges. The modelless hypothesis was empirically falsified. `dense_mesh` stays opt-in and experimental. riir-ai R122 must pivot to training dedicated communication edges — not reuse game LoRAs.

@@ -1,7 +1,7 @@
 # Research: DenseMesh — Latent Node Network for Modelless Inference
 
 **Date:** 2026-06-14
-**Status:** Implemented (Phases 1–4, 6, 7-partial, 8-partial). GOAT Gate 1 (correctness) + Gate 5 (EdgeBandit convergence) pass. Gates 2/3/4 deferred pending LLM forward integration (Phase 5) and game LoRAs (riir-ai R122). Verdict: GAIN (GOAT-gated, not default).
+**Status:** Implemented (all 8 phases). **DEMOTED TO EXPERIMENTAL** — Gate 2 FAILED empirically (0/1000 wins with real trained Bomber LoRAs, improvement -0.00%). Gates 1 + 3 + 5 PASS. Gate 4 measured (9.27× single-thread vs 2.5× paper bound). Framework is sound plumbing, but composition gain requires riir-ai R122 trained communication edges.
 **Context:** katgpt-rs inference engine — modelless (inference-time only, no LLM training)
 **Source Paper:** "Language Model Networks: Supervision-Efficient Learning through Dense Communication" (arXiv:2505.12741, ICML 2026) — Wu, Wang, Yao (Tsinghua / BIMSA)
 **Commercial Bound:** Public (katgpt-rs/MIT). Generic trait + topology framework. The trained-edge LoRA recipes stay in riir-ai (R122).
@@ -210,20 +210,42 @@ For chain validators-as-nodes: each validator is a DenseMesh node. Inter-validat
 
 ## Verdict
 
-### ✅ GAIN — Feature Gate `dense_mesh` (opt-in, not default)
+### ❌ DEMOTED TO EXPERIMENTAL — gate 2 gain NOT achievable without trained edges
 
-**Why GAIN not GOAT (yet).** The paper proves the *trained-edge* variant is a strong win (+30.5%). Our modelless variant relies on **existing game LoRAs as edges** — these were trained for single-game competence, not inter-node communication. We expect partial gain (composition on multi-game, adaptive depth on hard queries) but cannot claim the paper's full headline number without trained edges. The trained-edge variant is riir-ai R122.
+**Empirical proof (2026-06-14).** Gate 2 REAL test (`test_dense_mesh_gate2_real_lora_composition_gain`) loaded 3 trained Bomber LoRAs from `riir-train/output/`:
+- A = `game_lora_baseline.bin`, B = `game_lora_echo.bin`, T = `game_lora_v2_moa.bin`
+- 1000 random inputs, measured L2 distance to target T
 
-**GOAT gate (must pass before promote-to-default):**
-1. `dense_mesh` forward produces **identical** output to vanilla pipeline when topology = `chain 1/1/1` and edge = identity (correctness baseline).
-2. On a multi-game arena (Go + Bomber + FFT), `diamond 1/2/1` with 2 game-LoRA edges beats single-LoRA routing by ≥ 3 pp win rate.
-3. Easy-query overhead ≤ 1.05× vs vanilla (collapse to chain, zero GPU dispatch).
-4. Hard-query latency ≤ 2.5× vanilla at width 4 (paper's own bound).
-5. EdgeBandit converges to optimal per-class topology within 200 queries (regret bound).
+Result: **diamond (A+B)/2 never beats best single** — 0/1000 wins, improvement -0.00%.
 
-**Promote-to-default condition.** If gates 1–3 pass and gate 2 shows ≥ 5 pp gain, promote `dense_mesh` to default for multi-game routing, keep `chain 1/1/1` as the easy-query fast path. Demote plain SubstrateGate if DenseMesh strictly dominates on the same arena.
+```
+LoRA_A (baseline): 0.964656
+LoRA_B (echo):     0.964604
+Diamond (A+B)/2:   0.964630  ← between A and B
+Diamond beats BOTH: 0/1000 (0.0%)
+```
 
-**Demote condition.** If gate 2 fails (LoRA-as-edge composition does not help), demote `dense_mesh` to experimental and pivot riir-ai R122 to train dedicated communication edges instead of reusing game LoRAs.
+This is the mathematical property of averaging independently-trained predictors: `|(A+B)/2 - T|` can only beat `min(|A-T|, |B-T|)` when A and B are on opposite sides of T. With correlated outputs (same domain, similar training), this never happens.
+
+**The modelless hypothesis was wrong.** Reusing game LoRAs as edges does not produce composition gain. The paper's +30.5% required **trained communication edges** — modules specifically trained end-to-end to make inter-node composition beneficial. Without that training, DenseMesh is a no-op ensemble.
+
+### DenseMesh framework status
+
+The **framework itself is sound** (proven by gates 1, 3, 5):
+- Gate 1 ✅ correctness (`[1,1]`+IdentityEdge == vanilla)
+- Gate 3 ✅ easy overhead (0.997× at production scale — framework cost is negligible)
+- Gate 5 ✅ bandit convergence
+- Gate 2 ❌ composition gain (untrained edges produce no improvement — this test)
+- Gate 4 ⚠️ hard bound (9.27× single-thread vs 2.5× bound — needs vertex parallelism)
+
+The value proposition collapses to: **if riir-ai R122 trains dedicated communication edges, this framework can route them.** Without trained edges, DenseMesh is plumbing without water.
+
+### Action
+
+- Keep `dense_mesh` feature as **opt-in, experimental** (not default, not promoted)
+- **Pivot riir-ai R122** from "reuse game LoRAs" to "train dedicated communication-edge LoRAs"
+- Gate 2 cannot be revisited until R122 produces trained comm edges
+- DenseMesh's `adaptive_width` controller (CollapseAware + BreakevenRouter) remains useful as a generic compute-gating primitive independent of edge composition
 
 ### Commercial Bound
 
@@ -324,4 +346,8 @@ Threshold: GPU dispatch kicks in only when `width ≥ 4` (per optimisation.md ~5
 
 ## TL;DR (final)
 
-LMNet's dense-vector node-network paradigm is a **GAIN** for katgpt-rs. We cannot train the edges (modelless), but we can fuse the **stripped hidden-state handoff**, **LoRA-as-edge composition**, and **adaptive-width topology** into a single generic `DenseMesh` framework that is genuinely orthogonal to all our existing multi-pass work. The framework is public (MIT); the edge-LoRA composition recipes are private (riir-ai R122). Gate behind `dense_mesh`, run the 5 GOAT gates, promote to default for multi-game routing only if gate 2 shows ≥ 5 pp gain.
+**Empirically DEMOTED to experimental.** The modelless hypothesis (reuse trained game LoRAs as DenseMesh edges) was tested with real Bomber LoRAs (`game_lora_baseline.bin` + `game_lora_echo.bin` vs `game_lora_v2_moa.bin` target). Diamond (A+B)/2 composition never beat the best single LoRA — 0/1000 samples, improvement -0.00%. The paper's +30.5% gain requires trained communication edges, not repurposed game LoRAs.
+
+The framework itself is sound: gates 1 (correctness), 3 (0.997× overhead), and 5 (bandit convergence) all pass. The value proposition collapses to **plumbing**: the topology engine, edge traits, and adaptive width controller are correct and reusable, but **without trained edges (riir-ai R122), DenseMesh produces no composition gain**.
+
+Keep `dense_mesh` opt-in and experimental. Pivot riir-ai R122 from "reuse game LoRAs" to "train dedicated communication-edge LoRAs". Revisit gate 2 only after R122 delivers trained edges. The `adaptive_width` controller remains independently useful as a generic compute-gating primitive.
