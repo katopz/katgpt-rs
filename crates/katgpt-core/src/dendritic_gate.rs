@@ -14,15 +14,16 @@
 /// where `nmda_gate = sigmoid(sensitivity * (entropy - threshold)) * coincidence`
 ///
 /// Stack-only, zero-allocation, deterministic.
+///
+/// Field order: usize (8B) → f32 (4B) → f32 (4B) — no padding, 16 bytes total.
 #[derive(Debug, Clone, Copy)]
-#[repr(C)]
 pub struct DendriticGate {
+    /// Top-K agreement span for coincidence scoring (default: 4).
+    pub coincidence_window: usize,
     /// Entropy threshold for gate activation (default: 1.5 nats).
     pub threshold: f32,
     /// Sigmoid steepness — controls gate sharpness (default: 2.0).
     pub voltage_sensitivity: f32,
-    /// Top-K agreement span for coincidence scoring (default: 4).
-    pub coincidence_window: usize,
 }
 
 impl Default for DendriticGate {
@@ -37,9 +38,9 @@ impl DendriticGate {
     #[inline]
     pub const fn new() -> Self {
         Self {
+            coincidence_window: 4,
             threshold: 1.5,
             voltage_sensitivity: 2.0,
-            coincidence_window: 4,
         }
     }
 
@@ -51,9 +52,9 @@ impl DendriticGate {
         coincidence_window: usize,
     ) -> Self {
         Self {
+            coincidence_window,
             threshold,
             voltage_sensitivity,
-            coincidence_window,
         }
     }
 

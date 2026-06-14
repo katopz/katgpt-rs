@@ -129,7 +129,9 @@ fn scalar_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
     let mut sum = 0.0f32;
     for i in 0..len {
         unsafe {
-            sum += *a.get_unchecked(i) * *b.get_unchecked(i);
+            // mul_add emits FMA when target has it; matches the SIMD path's
+            // `_mm256_fmadd_ps` / `vfmaq_f32` numerically (single rounding).
+            sum = (*a.get_unchecked(i)).mul_add(*b.get_unchecked(i), sum);
         }
     }
     sum
@@ -295,7 +297,9 @@ fn scalar_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n: 
         let row = &mut acc[i * n..i * n + n];
         for j in 0..n {
             unsafe {
-                *row.get_unchecked_mut(j) += ai * *b.get_unchecked(j);
+                // FMA: acc[j] = ai * b[j] + acc[j] (single rounding, matches SIMD path).
+                let bj = *b.get_unchecked(j);
+                *row.get_unchecked_mut(j) = ai.mul_add(bj, *row.get_unchecked(j));
             }
         }
     }
@@ -697,7 +701,8 @@ fn scalar_sparse_dot_f32(
     for i in 0..alive {
         unsafe {
             let c = *active_indices.get_unchecked(i);
-            sum += *weight.get_unchecked(row_off + c) * *active_values.get_unchecked(i);
+            // FMA: sum = weight[c] * val + sum (single rounding, matches SIMD path).
+            sum = (*weight.get_unchecked(row_off + c)).mul_add(*active_values.get_unchecked(i), sum);
         }
     }
     sum
@@ -1453,8 +1458,11 @@ fn scalar_add_scalar_inplace(x: &mut [f32], val: f32) {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
+    // Rewrite (v - sub) * scale as v * scale + (-sub * scale) to enable FMA.
+    // The additive term is loop-invariant — hoist outside the per-element work.
+    let bias = -(sub * scale);
     for v in x.iter_mut() {
-        *v = (*v - sub) * scale;
+        *v = v.mul_add(scale, bias);
     }
 }
 
@@ -1603,8 +1611,13 @@ unsafe fn neon_argmax_f32(x: &[f32]) -> (usize, f32) {
 fn scalar_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
     for i in 0..dst.len() {
         unsafe {
-            *dst.get_unchecked_mut(i) =
-                decay * *dst.get_unchecked(i) + write * *src.get_unchecked(i);
+            let d = *dst.get_unchecked(i);
+            let s = *src.get_unchecked(i);
+            // FMA: write * src + decay * dst (one FMA + one mul).
+            // Picked `decay * d` as the FMA product since `decay` is typically the
+            // recurrence weight (close to 1.0) — keeping it inside FMA preserves
+            // the most precision in the dominant term.
+            *dst.get_unchecked_mut(i) = decay.mul_add(d, write * s);
         }
     }
 }
@@ -1612,6 +1625,8 @@ fn scalar_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
+    // No FMA opportunity: x[i] = gamma[i] * x[i] * scale is a pure product of
+    // three factors. The two-multiply form is already optimal.
     for i in 0..x.len() {
         unsafe {
             *x.get_unchecked_mut(i) = *gamma.get_unchecked(i) * *x.get_unchecked(i) * scale;
@@ -3371,7 +3386,8 @@ fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
     for i in 0..len {
         unsafe {
             let v = *x.get_unchecked(i);
-            sum += v * v;
+            // FMA: sum = v * v + sum (single rounding, matches SIMD path).
+            sum = v.mul_add(v, sum);
         }
     }
     sum
@@ -3625,7 +3641,8 @@ fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
     for i in 0..len {
         unsafe {
             let diff = *a.get_unchecked(i) - *b.get_unchecked(i);
-            sum += diff * diff;
+            // FMA: sum = diff * diff + sum (single rounding, matches SIMD path).
+            sum = diff.mul_add(diff, sum);
         }
     }
     sum
@@ -3837,7 +3854,9 @@ pub fn simd_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize
 fn scalar_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize) {
     for i in 0..len {
         unsafe {
-            *dst.get_unchecked_mut(i) += scale * *src.get_unchecked(i);
+            // FMA: dst[i] = scale * src[i] + dst[i] (single rounding).
+            let s = *src.get_unchecked(i);
+            *dst.get_unchecked_mut(i) = scale.mul_add(s, *dst.get_unchecked(i));
         }
     }
 }
@@ -3932,9 +3951,15 @@ pub fn simd_gram_f32(x: &[f32], seq_len: usize, d_h: usize, gram_out: &mut [f32]
 ///
 /// Computes `entropy = -Σ p·log(p)` where `p = exp(logprobs[i])` normalized.
 ///
-/// Zero-allocation: two-pass over `logprobs` (pass 1 = Σexp, pass 2 = Σ(p/Σexp)·logp).
-/// Recomputing `exp()` is cheaper than allocating a `Vec` to cache it, and the
-/// chunk-4 unroll lets the auto-vectorizer emit NEON/AVX2 `exp` approximations.
+/// **Single-pass** over `logprobs`: accumulates both `Z = Σexp(logp)` and
+/// `Σ exp(logp)·logp` in the same loop, then applies the identity
+/// `H = log(Z) - Σ(e·logp)/Z`. This halves the number of `exp()` calls vs the
+/// old two-pass formulation (saves ~128K exp() calls on a 128K vocab) and removes
+/// the per-element branch that previously blocked auto-vectorization.
+///
+/// NaN-safe: when `logp = -∞`, `exp(logp) = 0` and `0 · (-∞) = NaN`; the
+/// `if e > 0.0` guard turns this into a branch-free `select`, contributing 0.
+/// This matches the old `if p_norm > 0.0` semantics exactly.
 ///
 /// When `logprobs` is empty, returns 0.0.
 #[inline]
@@ -3947,55 +3972,43 @@ pub fn entropy_f32(logprobs: &[f32]) -> f32 {
     let chunks = len / 4;
     let remainder = len % 4;
 
-    // Pass 1: sum = Σ exp(logprobs[i])  (chunk-4 unrolled for auto-vectorization)
-    let mut sum = 0.0f32;
+    // Single pass: accumulate Z = Σexp(logp) and S = Σ exp(logp)·logp together.
+    // The `if e > 0.0 { e * logp } else { 0.0 }` form compiles to a branch-free
+    // select (cmov), enabling LLVM to vectorize the whole loop body.
+    let mut sum_exp = 0.0f32;
+    let mut sum_exp_logp = 0.0f32;
     for i in 0..chunks {
         let base = i * 4;
-        sum += logprobs[base].exp();
-        sum += logprobs[base + 1].exp();
-        sum += logprobs[base + 2].exp();
-        sum += logprobs[base + 3].exp();
-    }
-    for i in 0..remainder {
-        sum += logprobs[chunks * 4 + i].exp();
-    }
-
-    if sum <= f32::EPSILON {
-        return 0.0;
-    }
-
-    // Pass 2: dot_sum = Σ (p/sum) · logprobs[i]  (recompute exp, avoid allocation)
-    // H = log(sum) - dot_sum  (identity: H = log(Z) - Σ p_norm · logp)
-    let inv_sum = 1.0 / sum;
-    let mut dot_sum = 0.0f32;
-    for i in 0..chunks {
-        let base = i * 4;
-        let p0 = logprobs[base].exp() * inv_sum;
-        let p1 = logprobs[base + 1].exp() * inv_sum;
-        let p2 = logprobs[base + 2].exp() * inv_sum;
-        let p3 = logprobs[base + 3].exp() * inv_sum;
-        if p0 > 0.0 {
-            dot_sum += p0 * logprobs[base];
-        }
-        if p1 > 0.0 {
-            dot_sum += p1 * logprobs[base + 1];
-        }
-        if p2 > 0.0 {
-            dot_sum += p2 * logprobs[base + 2];
-        }
-        if p3 > 0.0 {
-            dot_sum += p3 * logprobs[base + 3];
-        }
+        let l0 = logprobs[base];
+        let l1 = logprobs[base + 1];
+        let l2 = logprobs[base + 2];
+        let l3 = logprobs[base + 3];
+        let e0 = l0.exp();
+        let e1 = l1.exp();
+        let e2 = l2.exp();
+        let e3 = l3.exp();
+        sum_exp += e0 + e1 + e2 + e3;
+        // Branch-free guard: 0·(-∞) = NaN in IEEE 754; select 0 when e == 0
+        // (which happens iff logp = -∞). Equivalent to old `if p_norm > 0.0`.
+        sum_exp_logp += if e0 > 0.0 { e0 * l0 } else { 0.0 };
+        sum_exp_logp += if e1 > 0.0 { e1 * l1 } else { 0.0 };
+        sum_exp_logp += if e2 > 0.0 { e2 * l2 } else { 0.0 };
+        sum_exp_logp += if e3 > 0.0 { e3 * l3 } else { 0.0 };
     }
     for i in 0..remainder {
         let idx = chunks * 4 + i;
-        let p_norm = logprobs[idx].exp() * inv_sum;
-        if p_norm > 0.0 {
-            dot_sum += p_norm * logprobs[idx];
-        }
+        let l = logprobs[idx];
+        let e = l.exp();
+        sum_exp += e;
+        sum_exp_logp += if e > 0.0 { e * l } else { 0.0 };
     }
 
-    let entropy = sum.ln() - dot_sum;
+    if sum_exp <= f32::EPSILON {
+        return 0.0;
+    }
+
+    // H = log(Z) - S / Z   (identity: H = log(Z) - Σ p_norm · logp)
+    let entropy = sum_exp.ln() - sum_exp_logp / sum_exp;
     entropy.max(0.0)
 }
 
