@@ -1890,14 +1890,20 @@ pub fn select_topk_indices_into_buf(
         indexed_buf[i] = (i, s);
     }
 
-    indexed_buf.select_nth_unstable_by(k - 1, |a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    // total_cmp replaces partial_cmp().unwrap_or(Equal): eliminates the
+    // per-element NaN branch (compiled to a predicted branch on x86-64),
+    // giving LLVM a single instruction compare. Cluster scores are
+    // simd_dot products, which never produce NaN for finite weights.
+    indexed_buf.select_nth_unstable_by(k - 1, |a, b| b.1.total_cmp(&a.1));
+    indexed_buf[..k].sort_by(|a, b| b.1.total_cmp(&a.1));
 
-    indexed_buf[..k].sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
+    // Direct index writes replace clear+extend: writes are contiguous and
+    // skip Vec::push's length/capacity bookkeeping per element.
     output_buf.clear();
-    output_buf.extend(indexed_buf[..k].iter().map(|(i, _)| *i));
+    output_buf.resize(k, 0);
+    for (dst, (src, _)) in output_buf.iter_mut().zip(indexed_buf[..k].iter()) {
+        *dst = *src;
+    }
 }
 
 /// Two-stage clustered LM head for large vocabularies.
@@ -4331,13 +4337,16 @@ pub fn generate_batch(
 /// Convert token ids to readable characters (a-z, _ for BOS).
 pub fn tokens_to_string(tokens: &[usize]) -> String {
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz";
-    tokens
-        .iter()
-        .map(|&t| match t {
+    // Pre-allocate the exact capacity: one char per token, avoiding
+    // the repeated growth+realloc that String::collect performs.
+    let mut out = String::with_capacity(tokens.len());
+    for &t in tokens {
+        out.push(match t {
             0..=25 => CHARS[t] as char,
             _ => '_',
-        })
-        .collect()
+        });
+    }
+    out
 }
 
 /// Page size in tokens (tuneable, must be power of 2).
@@ -4672,9 +4681,10 @@ pub fn raven_compute_router_into(
 
     // Partial sort: find Top-K by descending score (O(n) average)
     if top_k < num_slots {
-        scored.select_nth_unstable_by(num_slots - top_k, |a, b| {
-            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // total_cmp: eliminates the per-element NaN branch from partial_cmp.
+        // Sigmoid outputs are always finite (bounded (0,1)), so total_cmp
+        // matches partial_cmp exactly without the predicted-branch stall.
+        scored.select_nth_unstable_by(num_slots - top_k, |a, b| a.1.total_cmp(&b.1));
     }
 
     // Fill r_t with zeros for final output
