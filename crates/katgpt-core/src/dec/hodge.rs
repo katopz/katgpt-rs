@@ -536,8 +536,15 @@ pub fn hodge_spectrum(
     let mut eigenvalues = Vec::with_capacity(n_ev);
     let mut eigenvectors = Vec::with_capacity(n_ev);
 
-    // Pre-allocate reusable cochain field for hodge_laplacian calls.
+    // Pre-allocate reusable cochain fields for hodge_laplacian_into — reused across
+    // all power-iteration steps (max_iter * n_ev calls previously allocated fresh).
     let mut cochain = CochainField::zeros(rank, n, 1);
+    let mut lap = CochainField::zeros(rank, n, 1);
+    let n_upper = if rank + 1 < MAX_RANK as u8 { cx.n_cells(rank + 1) } else { 0 };
+    let n_lower = if rank > 0 { cx.n_cells(rank - 1) } else { 0 };
+    let mut scratch_upper = CochainField::zeros(rank + 1, n_upper, 1);
+    let mut scratch_lower = CochainField::zeros(rank.saturating_sub(1), n_lower, 1);
+    let mut scratch_result = CochainField::zeros(rank, n, 1);
 
     for ev_idx in 0..n_ev {
         // Initialize with pseudo-random vector using simple LCG seeded by index
@@ -552,10 +559,17 @@ pub fn hodge_spectrum(
         deflate(&mut x, &eigenvectors);
         normalize_inplace(&mut x);
 
-        // Power iteration — reuses cochain allocation across iterations
+        // Power iteration — reuses pre-allocated scratch across iterations (zero alloc per iter).
         for _ in 0..max_iter {
             cochain.data.copy_from_slice(&x);
-            let lap = hodge_laplacian(cx, &cochain);
+            hodge_laplacian_into(
+                cx,
+                &cochain,
+                &mut lap,
+                &mut scratch_upper,
+                &mut scratch_lower,
+                &mut scratch_result,
+            );
             x.copy_from_slice(&lap.data);
 
             // Deflate again
@@ -572,7 +586,14 @@ pub fn hodge_spectrum(
 
         // Rayleigh quotient: λ = xᵀΔx / (xᵀx)
         cochain.data.copy_from_slice(&x);
-        let lap = hodge_laplacian(cx, &cochain);
+        hodge_laplacian_into(
+            cx,
+            &cochain,
+            &mut lap,
+            &mut scratch_upper,
+            &mut scratch_lower,
+            &mut scratch_result,
+        );
         // SIMD reduction: replaces scalar `iter().zip().map(|(a,b)| a*b).sum()`.
         // Spectrum-only path — does NOT affect the CG solver used by `arena_proof`.
         let rayleigh = crate::simd::simd_dot_f32(&x, &lap.data, x.len());
