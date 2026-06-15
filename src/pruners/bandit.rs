@@ -2634,8 +2634,12 @@ mod tests {
 
     #[test]
     fn test_soft_route_enabled_by_default() {
+        // soft_route defaults to false per f2ad6f94: defaulting to true forced
+        // every relevance() call through two Mutex locks + O(n) softmax,
+        // regressing Δ-Bandit 10× (140M→13M ops/s). Callers who want
+        // softmax-blended routing must opt in via set_soft_route(true, τ).
         let bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 5);
-        assert!(bp.soft_route, "soft_route should default to true");
+        assert!(!bp.soft_route, "soft_route should default to false (opt-in)");
         assert!(
             (bp.soft_route_tau - 1.0).abs() < f32::EPSILON,
             "tau should default to 1.0"
@@ -2653,6 +2657,9 @@ mod tests {
     #[test]
     fn test_soft_route_blend_dominates_single_arm() {
         let mut bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, 3);
+        // soft_route is opt-in (f2ad6f94); this test exercises soft-route
+        // blending, so explicitly enable it.
+        bp.set_soft_route(true, 1.0);
 
         // Arm 0: high Q
         for _ in 0..20 {
@@ -2878,9 +2885,10 @@ mod tests {
         // Baseline audit (NoScreeningPruner)
         let baseline = audit_baseline(&slices, &config);
 
-        // Soft-route bandit audit
-        let bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, vocab);
-        assert!(bp.soft_route, "soft_route should be on by default");
+        // Soft-route bandit audit. soft_route is opt-in (f2ad6f94).
+        let mut bp = BanditPruner::new(NoScreeningPruner, BanditStrategy::Ucb1, vocab);
+        bp.set_soft_route(true, 1.0);
+        assert!(bp.soft_route, "soft_route should be on after explicit opt-in");
         let candidate = audit_screening_pruner(&slices, &config, &bp, false);
 
         // GOAT: Soft-route bandit should not degrade vs baseline

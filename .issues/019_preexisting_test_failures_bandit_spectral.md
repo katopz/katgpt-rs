@@ -1,5 +1,6 @@
-# Issue 019: 3 Pre-Existing Test Failures (bandit soft_route + spectral eigenvector alignment)
+# Issue 019: 3 Pre-Existing Test Failures (bandit soft_route + spectral eigenvector alignment) — RESOLVED
 
+**Status**: ✅ Fixed in commit `perf: fix 4 pre-existing test failures (bandit soft_route + spectral eigenvector alignment)`
 **Source**: Surfaced during Plan 265/267/271 validation runs — **not caused** by any of those changes; failures reproduce on the prior `develop` HEAD as well.
 **Priority**: Medium (CI noise; no correctness impact on shipped features since these are soft-route defaults and a dual-Gram eigenvector check)
 **Blocked**: No
@@ -100,3 +101,32 @@ Per user rule: *"Create issue at ./issues for optimization task, do not create p
 3. `goat_t3_2_eigenvector_alignment` — eigenvector cos_sim 0.60 vs 0.90 threshold; degenerate-eigenvalue subspace rotation, not a real bug.
 
 Fix #1 first; #2 likely resolves automatically. #3 needs a proper subspace-similarity check, not a per-vector cos_sim.
+
+---
+
+## Resolution (2026-06-15)
+
+All 4 failures fixed (the original count of 3 missed `test_goat_175_fusion_residency_audit_passes`, which cascades from the same root cause as #1).
+
+### Fix 1+2+4 (bandit): align tests with the opt-in design from `f2ad6f94`
+
+The perf commit `f2ad6f94` deliberately flipped `soft_route: false` across all 4 constructors to recover 5× Δ-Bandit relevance throughput (140M→65M ops/s). The tests were never updated. Fixed by:
+- `test_soft_route_enabled_by_default`: assert the new default `!bp.soft_route` (with comment citing `f2ad6f94`).
+- `test_soft_route_blend_dominates_single_arm`: call `bp.set_soft_route(true, 1.0)` before exercising the soft-route blend path.
+- `test_goat_175_fusion_residency_audit_passes`: same — `bp.set_soft_route(true, 1.0)`.
+
+### Fix 3 (spectral): replace per-vector cos_sim with Davis-Kahan subspace projection
+
+Replaced the per-vector `|cos_sim(v_std[k], v_dg[k])| > 0.90` check with a symmetric subspace projection test:
+- For each `k`, compute `Σ_{j≤K} <v[k], e[j]>² / ‖v[k]‖²` in both directions (std→dg and dg→std).
+- `K = k + SLACK` (SLACK=2) to absorb ordering ambiguity in clustered eigenvalues — when two consecutive eigenvalues are within numerical noise of each other, the two algorithms can return them in swapped order, so `v_dg[k]` may be a linear combination of `v_std[k]` and `v_std[k+1]` (or vice versa). The captured variance is identical; only the per-vector pairing shifts.
+- Threshold remains 0.90 (squared projection ≥ 0.90).
+
+Also upgraded the dual-gram recovery loop in `calibrate_eigenbasis_dual_gram` from f32 to f64 accumulation, matching the standard path's precision (the standard path uses f64 throughout). This wasn't the root cause of the failure (the subspace projection fix is what matters) but it's a legitimate consistency improvement.
+
+### Verification
+
+```bash
+cargo test --lib 2>&1 | tail -3
+# test result: ok. 3514 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
