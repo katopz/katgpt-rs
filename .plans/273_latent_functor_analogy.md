@@ -1,10 +1,18 @@
 # Plan 273: Latent Functor — Analogy as Vector Arithmetic
 
 **Date:** 2026-06-15
-**Status:** ✅ COMPLETE (core primitive)
+**Status:** ⚠️ **SUPERSEDED — spec valid, target repo wrong per `003`.** See [riir-ai/.plans/303_latent_functor_runtime_npc_relational_learning.md](../../riir-ai/.plans/303_latent_functor_runtime_npc_relational_learning.md) for the corrected plan.
+
+> **Why superseded:** This plan targeted `katgpt-core/src/dirichlet.rs` (public, MIT). Per [`003_Commercial_Open_Source_Strategy_Verdict.md`](../.research/003_Commercial_Open_Source_Strategy_Verdict.md), latent-operation internals (projection directions + sigmoid gate tuning) are explicitly **riir-ai private** — "the efficiency multiplier, keep private." The functor arithmetic (`extract_functor`, `apply_functor`, `functor_parallelism`, `functor_gate`) IS a projection direction + sigmoid gate. It was (correctly) never shipped to katgpt-rs. Plan 303 (riir-ai) implements the spec in the correct repo.
+>
+> **What stays valid from this plan:** The API signatures, GOAT proofs G1-G5, and the modelless constraint analysis. These are reused in Plan 303.
+>
+> **What already shipped (unchanged):** The Dirichlet Energy diagnostic (`dirichlet_energy`, `functor_adjacency`, `consecutive_adjacency`, `kv_cache_dirichlet_energy`) from Plan 149 — this IS public-safe (pure measurement, not a latent operation) and stays in katgpt-rs.
+
 **Research:** 111 (Emergent Analogical Reasoning in Transformers, arXiv:2602.01992)
-**Related:** Plan 149 (Dirichlet Energy diagnostic — sibling primitive from same paper), Research 231 / Plan 264 (`sparse_task_vector` — *weight*-space deltas, distinct), Research 144 / Plan 162 (linear emotion direction vectors)
+**Related:** Plan 149 (Dirichlet Energy diagnostic — sibling primitive from same paper, SHIPPED), Research 231 / Plan 264 (`sparse_task_vector` — *weight*-space deltas, distinct), Research 144 / Plan 162 (linear emotion direction vectors)
 **Feature Gate:** `dirichlet_energy` (opt-in, katgpt-rs open) — reused, no new gate
+**Superseded by:** [riir-ai Plan 303](../../riir-ai/.plans/303_latent_functor_runtime_npc_relational_learning.md)
 
 ---
 

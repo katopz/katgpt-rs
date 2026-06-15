@@ -154,8 +154,8 @@ From `27_mmo_goat_pillars_decision_matrix.md`:
 
 Both open-engine primitives identified above are now built in `crates/katgpt-core/src/dirichlet.rs` (feature `dirichlet_energy`):
 
-1. **Dirichlet Energy diagnostic** — Plan 149 ✅ (`dirichlet_energy`, `kv_cache_dirichlet_energy`, adjacency helpers).
-2. **Functor direction probe** (`e_target ≈ e_source + f`) — Plan 273 ✅. Modelless latent-to-latent analogy: `extract_functor` (mean displacement + coherence), `apply_functor`, `functor_parallelism[_into]` (the §3 metric), `functor_gate` (sigmoid-gated trust). GOAT G1–G5 PASS, incl. ranking-preservation (constraint 7). Game-specific cross-domain functor transfer remains Super-GOAT in riir-ai — see **riir-ai Research 123** (Latent Functor Runtime Guide) for the private architectural guide covering NPC relational learning, coherence-driven re-estimation, and cross-game transfer.
+1. **Dirichlet Energy diagnostic** — Plan 149 ✅ SHIPPED (`dirichlet_energy`, `kv_cache_dirichlet_energy`, adjacency helpers). Public-safe: pure measurement, not a latent operation.
+2. **Functor direction probe** (`e_target ≈ e_source + f`) — Plan 273 ⚠️ **SUPERSEDED**. The spec (API signatures, GOAT G1–G5) is valid, but the target repo was wrong: per [`003_Commercial_Open_Source_Strategy_Verdict.md`](../.research/003_Commercial_Open_Source_Strategy_Verdict.md), latent-operation internals (projection directions + sigmoid gate tuning) are **riir-ai private**. The functor arithmetic (`extract_functor`, `apply_functor`, `functor_parallelism`, `functor_gate`) was (correctly) never shipped to katgpt-rs. It ships to riir-ai instead — see [riir-ai Plan 303](../../riir-ai/.plans/303_latent_functor_runtime_npc_relational_learning.md) for the corrected implementation plan. Game-specific cross-domain functor transfer remains Super-GOAT in riir-ai — see **riir-ai Research 123** (Latent Functor Runtime Guide) for the private architectural guide covering NPC relational learning, coherence-driven re-estimation, and cross-game transfer.
 
 ## Related Internal Research
 
