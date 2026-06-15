@@ -74,13 +74,18 @@ impl StandardCache {
             return [0.0, 0.0];
         }
 
+        // Hoist query components so the hot loop avoids the `&Vec2` indirection.
+        let qx = query.x;
+        let qy = query.y;
+
         // Online softmax: maintain running max and correction factor
         let mut max_score = f64::NEG_INFINITY;
         let mut sum_exp = 0.0f64;
         let mut out = [0.0f64; 2];
 
         for e in &self.entries {
-            let s = query.dot(&e.key);
+            // Inline dot product: qx*e.key.x + qy*e.key.y
+            let s = qx * e.key.x + qy * e.key.y;
             let new_max = max_score.max(s);
             // Rescale accumulated values when max changes
             let correction = (max_score - new_max).exp();
@@ -99,7 +104,8 @@ impl StandardCache {
             return [0.0, 0.0];
         }
 
-        [out[0] / sum_exp, out[1] / sum_exp]
+        let inv_sum = 1.0 / sum_exp;
+        [out[0] * inv_sum, out[1] * inv_sum]
     }
 
     /// Query with scaled softmax attention (temperature parameter).
@@ -114,6 +120,9 @@ impl StandardCache {
         }
 
         let inv_temp = 1.0 / temperature;
+        // Hoist query components so the hot loop avoids the `&Vec2` indirection.
+        let qx = query.x * inv_temp;
+        let qy = query.y * inv_temp;
 
         // Online softmax: maintain running max and correction factor
         let mut max_score = f64::NEG_INFINITY;
@@ -121,7 +130,9 @@ impl StandardCache {
         let mut out = [0.0f64; 2];
 
         for e in &self.entries {
-            let s = query.dot(&e.key) * inv_temp;
+            // Inline scaled dot product: (qx*kx + qy*ky) * inv_temp
+            // — inv_temp folded into qx/qy above to save a multiply per entry.
+            let s = qx * e.key.x + qy * e.key.y;
             let new_max = max_score.max(s);
             // Rescale accumulated values when max changes
             let correction = (max_score - new_max).exp();
@@ -140,19 +151,28 @@ impl StandardCache {
             return [0.0, 0.0];
         }
 
-        [out[0] / sum_exp, out[1] / sum_exp]
+        let inv_sum = 1.0 / sum_exp;
+        [out[0] * inv_sum, out[1] * inv_sum]
     }
 
     /// Query with hard attention (argmax).
     ///
     /// Returns the value with the highest dot product score, or `None` if empty.
     pub fn query_hard(&self, query: &Vec2) -> Option<[f64; 2]> {
-        let best = self.entries.iter().max_by(|a, b| {
-            let sa = query.dot(&a.key);
-            let sb = query.dot(&b.key);
-            sa.partial_cmp(&sb).unwrap_or(std::cmp::Ordering::Equal)
-        })?;
-        Some(best.val)
+        // Manual max-by to avoid recomputing `query.dot()` in the comparator
+        // and to avoid the `partial_cmp` overhead per pair.
+        let qx = query.x;
+        let qy = query.y;
+        let mut best_score = f64::NEG_INFINITY;
+        let mut best: Option<&Entry> = None;
+        for e in &self.entries {
+            let s = qx * e.key.x + qy * e.key.y;
+            if s > best_score {
+                best_score = s;
+                best = Some(e);
+            }
+        }
+        best.map(|e| e.val)
     }
 }
 

@@ -69,6 +69,15 @@ impl CHT {
         self.lines.len()
     }
 
+    /// Borrow the underlying envelope lines as a slice.
+    ///
+    /// Used by [`HullHalf`](super::hull::HullHalf) for branch-free
+    /// neighbour walks during tie-collection.
+    #[inline]
+    pub fn lines(&self) -> &[Line] {
+        &self.lines
+    }
+
     /// Remove all lines.
     pub fn clear(&mut self) {
         self.lines.clear();
@@ -112,9 +121,14 @@ impl CHT {
         };
 
         // Find insertion position by slope (lines sorted by ascending m).
-        let pos = self.lines.partition_point(|l| l.m < m);
+        let mut pos = self.lines.partition_point(|l| l.m < m);
 
         // ── Handle equal-slope lines ─────────────────────────────
+        // Track the index adjustment so we skip the O(log n) partition recompute.
+        // - Removing at `pos`:   lines[pos+1..] shift down to lines[pos..];
+        //   since lines[pos].m was > m, the partition point stays at `pos`.
+        // - Removing at `pos-1`: lines[pos..] shift down to lines[pos-1..];
+        //   the partition point becomes `pos-1`.
         if pos < self.lines.len() && self.lines[pos].m == m {
             if self.lines[pos].b == b {
                 // Same line: merge metadata into existing.
@@ -124,7 +138,7 @@ impl CHT {
                 // Existing intercept dominates for all x.
                 return;
             } else {
-                // New line dominates: remove existing.
+                // New line dominates: remove existing. Partition point unchanged.
                 self.lines.remove(pos);
             }
         } else if pos > 0 && self.lines[pos - 1].m == m {
@@ -135,11 +149,11 @@ impl CHT {
                 return;
             } else {
                 self.lines.remove(pos - 1);
+                // Partition point shifts down by one to track the removed slot.
+                pos -= 1;
             }
         }
 
-        // Recalculate insertion position after potential removals.
-        let pos = self.lines.partition_point(|l| l.m < m);
         self.lines.insert(pos, nl);
 
         // ── Remove dominated interior lines ──────────────────────

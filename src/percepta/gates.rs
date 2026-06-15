@@ -37,6 +37,7 @@
 /// assert_eq!(reglu(3.0, 0.0), 0.0);   // relu(0) = 0
 /// ```
 #[inline]
+#[must_use]
 pub fn reglu(a: f64, b: f64) -> f64 {
     a * b.max(0.0)
 }
@@ -67,8 +68,11 @@ pub fn reglu(a: f64, b: f64) -> f64 {
 /// assert_eq!(stepglu(5.0, -5.0), 0.0);
 /// ```
 #[inline]
+#[must_use]
 pub fn stepglu(a: f64, b: f64) -> f64 {
-    reglu(a, b + 1.0) - reglu(a, b)
+    // Factor out `a`: a * (relu(b+1) - relu(b)) saves one multiply vs
+    // two separate reglu calls (reglu(a, b+1) - reglu(a, b)).
+    a * ((b + 1.0).max(0.0) - b.max(0.0))
 }
 
 /// Gate primitive: `multiply(a, b) = a × b` (full signed multiplication).
@@ -93,8 +97,11 @@ pub fn stepglu(a: f64, b: f64) -> f64 {
 /// assert_eq!(multiply(3.0, 0.0), 0.0);     // zero
 /// ```
 #[inline]
+#[must_use]
 pub fn multiply(a: f64, b: f64) -> f64 {
-    reglu(a, b) - reglu(a, -b)
+    // Factor out `a`: a * (relu(b) - relu(-b)) saves one multiply vs
+    // two separate reglu calls (reglu(a, b) - reglu(a, -b)).
+    a * (b.max(0.0) - (-b).max(0.0))
 }
 
 // ── Persist Slot ────────────────────────────────────────────────

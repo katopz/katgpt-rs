@@ -28,9 +28,13 @@ pub struct AttentionResult {
 /// For the upper half, lines are stored directly. For the lower half,
 /// lines are negated so that `argmax` on the CHT yields the minimum
 /// of the original lines — enabling unified max-envelope logic.
+///
+/// `sign` is a cached `±1.0` matching `is_upper` so the per-vertex
+/// decode becomes a single multiply instead of a branch.
 pub struct HullHalf {
     cht: CHT,
     is_upper: bool,
+    sign: f64,
 }
 
 impl HullHalf {
@@ -39,6 +43,7 @@ impl HullHalf {
         Self {
             cht: CHT::new(),
             is_upper: upper,
+            sign: if upper { 1.0 } else { -1.0 },
         }
     }
 
@@ -47,6 +52,7 @@ impl HullHalf {
         Self {
             cht: CHT::with_capacity(capacity),
             is_upper: upper,
+            sign: if upper { 1.0 } else { -1.0 },
         }
     }
 
@@ -92,32 +98,39 @@ impl HullHalf {
         let best_idx = self.cht.argmax_idx(x)?;
         let best_line = self.cht.get_line(best_idx)?;
 
-        let kx_best = self.decode_m(best_line.m);
-        let ky_best = self.decode_b(best_line.b);
-        let best_score = qx * kx_best + qy * ky_best;
+        // Decode: original kx = stored_m * sign, ky = stored_b * sign.
+        // For tie-walking we work in *stored* space, where the comparison
+        // `qx*m + qy*b == best_raw` is equivalent to the decoded-space
+        // comparison `sign * (qx*m + qy*b) == sign * best_raw` (sign != 0).
+        // This drops two multiplies per neighbour step.
+        let sign = self.sign;
+        let best_raw = qx * best_line.m + qy * best_line.b;
+        let best_score = sign * best_raw;
 
-        // Collect metas from best + all tied neighbors
+        // Collect metas from best + all tied neighbours
         let mut combined = HullMeta::new();
         combined.merge(&best_line.meta);
-        self.walk_left(best_idx, qx, qy, best_score, &mut combined);
-        self.walk_right(best_idx, qx, qy, best_score, &mut combined);
+        self.walk_left(best_idx, qx, qy, best_raw, &mut combined);
+        self.walk_right(best_idx, qx, qy, best_raw, &mut combined);
 
         Some(AttentionResult {
             value: combined.resolve(tb),
             score: best_score,
-            best_kx: kx_best,
+            best_kx: sign * best_line.m,
         })
     }
 
     /// Handle the `qy == 0` special case: score = `qx * kx`.
     fn query_horizontal(&self, qx: f64, qy: f64, tb: TieBreak) -> Option<AttentionResult> {
-        let x = match qx >= 0.0 {
-            true => f64::INFINITY,
-            false => f64::NEG_INFINITY,
+        let x = if qx >= 0.0 {
+            f64::INFINITY
+        } else {
+            f64::NEG_INFINITY
         };
         let line = self.cht.argmax(x)?;
-        let kx_best = self.decode_m(line.m);
-        let ky_best = self.decode_b(line.b);
+        let sign = self.sign;
+        let kx_best = sign * line.m;
+        let ky_best = sign * line.b;
         Some(AttentionResult {
             value: line.meta.resolve(tb),
             score: qx * kx_best + qy * ky_best,
@@ -126,23 +139,24 @@ impl HullHalf {
     }
 
     /// Walk left from `best_idx`, merging metas of lines with equal score.
+    ///
+    /// `best_raw` is the score in *stored* (negated for lower hull) space;
+    /// comparing against it avoids two `sign` multiplies per step.
     fn walk_left(
         &self,
         best_idx: usize,
         qx: f64,
         qy: f64,
-        best_score: f64,
+        best_raw: f64,
         combined: &mut HullMeta,
     ) {
+        let lines = self.cht.lines();
         let mut i = best_idx;
         while i > 0 {
             i -= 1;
-            let prev = match self.cht.get_line(i) {
-                Some(l) => l,
-                None => break,
-            };
-            let s = qx * self.decode_m(prev.m) + qy * self.decode_b(prev.b);
-            if s == best_score {
+            let prev = &lines[i];
+            let s = qx * prev.m + qy * prev.b;
+            if s == best_raw {
                 combined.merge(&prev.meta);
             } else {
                 break;
@@ -151,45 +165,27 @@ impl HullHalf {
     }
 
     /// Walk right from `best_idx`, merging metas of lines with equal score.
+    ///
+    /// `best_raw` is the score in *stored* (negated for lower hull) space.
     fn walk_right(
         &self,
         best_idx: usize,
         qx: f64,
         qy: f64,
-        best_score: f64,
+        best_raw: f64,
         combined: &mut HullMeta,
     ) {
+        let lines = self.cht.lines();
         let mut i = best_idx + 1;
-        while i < self.cht.len() {
-            let next = match self.cht.get_line(i) {
-                Some(l) => l,
-                None => break,
-            };
-            let s = qx * self.decode_m(next.m) + qy * self.decode_b(next.b);
-            if s == best_score {
+        while i < lines.len() {
+            let next = &lines[i];
+            let s = qx * next.m + qy * next.b;
+            if s == best_raw {
                 combined.merge(&next.meta);
                 i += 1;
             } else {
                 break;
             }
-        }
-    }
-
-    /// Decode the stored slope back to the original `kx`.
-    #[inline]
-    fn decode_m(&self, stored: f64) -> f64 {
-        match self.is_upper {
-            true => stored,
-            false => -stored,
-        }
-    }
-
-    /// Decode the stored intercept back to the original `ky`.
-    #[inline]
-    fn decode_b(&self, stored: f64) -> f64 {
-        match self.is_upper {
-            true => stored,
-            false => -stored,
         }
     }
 }
@@ -267,21 +263,22 @@ impl HardAttentionHead {
 
         self.global.add(val, seq);
 
-        // Track leftmost key for qx < 0, qy == 0 queries
-        if kx < self.min_kx {
-            self.min_kx = kx;
-            self.left_meta = HullMeta::new();
-        }
-        if kx == self.min_kx {
+        // Track leftmost key for qx < 0, qy == 0 queries.
+        // When a new minimum appears, reset the accumulator before adding.
+        if kx <= self.min_kx {
+            if kx < self.min_kx {
+                self.min_kx = kx;
+                self.left_meta = HullMeta::new();
+            }
             self.left_meta.add(val, seq);
         }
 
-        // Track rightmost key for qx > 0, qy == 0 queries
-        if kx > self.max_kx {
-            self.max_kx = kx;
-            self.right_meta = HullMeta::new();
-        }
-        if kx == self.max_kx {
+        // Track rightmost key for qx > 0, qy == 0 queries.
+        if kx >= self.max_kx {
+            if kx > self.max_kx {
+                self.max_kx = kx;
+                self.right_meta = HullMeta::new();
+            }
             self.right_meta.add(val, seq);
         }
 
@@ -561,8 +558,8 @@ mod tests {
             .enumerate()
         {
             let val = [i as f64, 0.0];
-            head.insert([*kx, *ky], val, i as i64);
-            brute.insert([*kx, *ky], val, i as i64);
+            head.insert([*kx, *ky], val, i as i32);
+            brute.insert([*kx, *ky], val, i as i32);
         }
 
         // Query pointing DOWN: qy < 0 uses lower hull
@@ -599,8 +596,8 @@ mod tests {
         let mut brute = BruteAttentionHead::new();
         for (i, &(kx, ky)) in points.iter().enumerate() {
             let val = [i as f64, 0.0];
-            head.insert([kx, ky], val, i as i64);
-            brute.insert([kx, ky], val, i as i64);
+            head.insert([kx, ky], val, i as i32);
+            brute.insert([kx, ky], val, i as i32);
         }
         let result = head.query([0.0, -1.0], TieBreak::Latest);
         let brute_result = brute.query([0.0, -1.0], TieBreak::Latest);
@@ -628,8 +625,8 @@ mod tests {
             let x = i as f64;
             let y = -((x - 500.0) / 100.0).powi(2);
             let val = [i as f64, 0.0];
-            head.insert([x, y], val, i as i64);
-            brute.insert([x, y], val, i as i64);
+            head.insert([x, y], val, i as i32);
+            brute.insert([x, y], val, i as i32);
         }
         let queries = [
             [1.0, 0.0],
@@ -656,8 +653,8 @@ mod tests {
         let mut brute = BruteAttentionHead::new();
         for i in 0..1000u32 {
             let val = [i as f64, i as f64];
-            head.insert([i as f64, i as f64], val, i as i64);
-            brute.insert([i as f64, i as f64], val, i as i64);
+            head.insert([i as f64, i as f64], val, i as i32);
+            brute.insert([i as f64, i as f64], val, i as i32);
         }
         // Query (1, 1): maximizes x+y, should find last entry
         let h = head.query([1.0, 1.0], TieBreak::Latest).unwrap();
@@ -711,8 +708,8 @@ mod tests {
         ];
         for (i, &(kx, ky)) in points.iter().enumerate() {
             let val = [i as f64, 0.0];
-            head.insert([kx, ky], val, i as i64);
-            brute.insert([kx, ky], val, i as i64);
+            head.insert([kx, ky], val, i as i32);
+            brute.insert([kx, ky], val, i as i32);
         }
         // Note: [-1.0, 1.0] excluded — creates exact ties across non-adjacent
         // points (indices 1,3,5 all score 6), which CHT resolves per-vertex
@@ -757,8 +754,8 @@ mod tests {
             let kx = (next(&mut rng_seed) - 0.5) * 100.0;
             let ky = (next(&mut rng_seed) - 0.5) * 100.0;
             let val = [i as f64, 0.0];
-            head.insert([kx, ky], val, i as i64);
-            brute.insert([kx, ky], val, i as i64);
+            head.insert([kx, ky], val, i as i32);
+            brute.insert([kx, ky], val, i as i32);
         }
 
         for _ in 0..100 {
@@ -787,7 +784,7 @@ mod tests {
         for step in 1..=17 {
             let prev = head.query([1.0, 0.0], TieBreak::Latest).unwrap()[0];
             let next_val = prev + 1.0;
-            head.insert([step as f64, next_val], [next_val, 0.0], step as i64);
+            head.insert([step as f64, next_val], [next_val, 0.0], step as i32);
         }
         let result = head.query([1.0, 0.0], TieBreak::Latest).unwrap()[0];
         assert!((result - 59.0).abs() < 1e-10, "42 + 17 = 59, got {result}");
@@ -805,7 +802,7 @@ mod tests {
             head.insert(
                 [step as f64, state as f64 * 100.0 + bit as f64 * 10.0],
                 [next_state as f64, 0.0],
-                step as i64,
+                step as i32,
             );
             state = next_state;
         }
@@ -822,8 +819,8 @@ mod tests {
             let x = i as f64;
             let y = -((x - 5000.0) / 100.0).powi(2);
             let val = [i as f64, 0.0];
-            head.insert([x, y], val, i as i64);
-            brute.insert([x, y], val, i as i64);
+            head.insert([x, y], val, i as i32);
+            brute.insert([x, y], val, i as i32);
         }
         let query = [5.0, 10.0];
         let h = head.query(query, TieBreak::Latest).unwrap();
@@ -840,7 +837,7 @@ mod tests {
             let x = i as f64;
             let y = -((x - 10000.0) / 200.0).powi(2);
             let val = [i as f64, 0.0];
-            head.insert([x, y], val, i as i64);
+            head.insert([x, y], val, i as i32);
         }
         assert_eq!(head.size(), 20_000);
         // Sanity: query should return something

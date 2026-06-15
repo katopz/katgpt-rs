@@ -34,13 +34,16 @@ use super::types::{HARD_K, TieBreak};
 /// 2D key `[kx, ky]`
 #[inline]
 pub fn encode_key(k: f64, offset: f64, tie_break: TieBreak, inv_log_pos: f64) -> [f64; 2] {
-    let kx = 2.0 * k - 2.0 * offset;
+    // Hoist `d = k - offset` so both kx and ky reuse it:
+    //   kx = 2*(k - offset)
+    //   ky = -(k - offset)² + tie_term
+    // which saves one multiply and one subtract vs the expanded form.
+    let d = k - offset;
     let tie_term = match tie_break {
         TieBreak::Average => inv_log_pos,
         TieBreak::Latest => 0.0, // Latest uses sequence numbers in HullMeta
     };
-    let ky = -k * k + 2.0 * k * offset - offset * offset + tie_term;
-    [kx, ky]
+    [2.0 * d, (-(d * d)) + tie_term]
 }
 
 /// Encode a scalar query `q` into a 2D query for parabolic attention.
