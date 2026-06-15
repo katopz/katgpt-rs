@@ -486,6 +486,10 @@ pub fn milp_schedule(
     let protected: HashSet<DimId> = [pg.position, pg.inv_log_pos, pg.position_sq]
         .into_iter()
         .collect();
+    // Merged view: dims that are either outputs or protected. Computed once so
+    // the hot indicator/constraint loops below do one hash lookup instead of two.
+    let out_or_prot: HashSet<DimId> =
+        output_dims.union(&protected).copied().collect();
 
     info!(
         "MILP (HiGHS): {} ops, {} dims, {n} layers, {p} phases",
@@ -522,7 +526,7 @@ pub fn milp_schedule(
     // Death variables: one per non-output, non-protected dim with consumers
     let mut death = HashMap::new();
     for &d in &dims_vec {
-        if output_dims.contains(&d) || protected.contains(&d) {
+        if out_or_prot.contains(&d) {
             continue;
         }
         let has_cons = graph
@@ -545,7 +549,7 @@ pub fn milp_schedule(
     let mut ev: HashMap<(usize, i32), Variable> = HashMap::new();
 
     for (di, &d) in dims_vec.iter().enumerate() {
-        let is_out_or_prot = output_dims.contains(&d) || protected.contains(&d);
+        let is_out_or_prot = out_or_prot.contains(&d);
         let is_input = input_set.contains(&d);
         let has_death = death.contains_key(&d);
         let has_producer = graph
@@ -616,7 +620,7 @@ pub fn milp_schedule(
     // Birth indicator constraints: bb=1 iff phase_of(producer) ≤ c
     for (&(di, c), &bb_var) in &bb {
         let d = dims_vec[di];
-        let is_out_or_prot = output_dims.contains(&d) || protected.contains(&d);
+        let is_out_or_prot = out_or_prot.contains(&d);
 
         if !is_out_or_prot {
             if let Some(&prod) = graph.dim_to_op.get(&d)
@@ -664,7 +668,7 @@ pub fn milp_schedule(
         let mut ew_sum = LpAffine::default();
 
         for (di, &d) in dims_vec.iter().enumerate() {
-            let is_out_or_prot = output_dims.contains(&d) || protected.contains(&d);
+            let is_out_or_prot = out_or_prot.contains(&d);
             let is_input = input_set.contains(&d);
 
             if is_out_or_prot {

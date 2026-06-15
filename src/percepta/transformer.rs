@@ -258,6 +258,12 @@ impl VanillaTransformer {
         // Pre-allocated scratch buffers (reused across all positions and layers)
         let mut scratch = ForwardScratch::new(&self.config);
 
+        // Flatten tie-break flags into a single contiguous lookup table indexed by
+        // `layer_idx * n_heads + head`. Built once here so the per-head-per-layer
+        // hot loop does a single slice index instead of two nested Vec lookups
+        // (head_tiebreak[layer].get(head)) every call.
+        let tiebreak_flat = self.build_tiebreak_table();
+
         // Residual buffer (reused across positions)
         let mut residual = vec![0.0f64; d];
 
@@ -273,7 +279,13 @@ impl VanillaTransformer {
             add_position_encoding(&mut residual, pos);
 
             // Forward pass through all layers + prediction
-            let predicted = self.forward_step(&mut residual, pos, &mut caches, &mut scratch);
+            let predicted = self.forward_step(
+                &mut residual,
+                pos,
+                &mut caches,
+                &mut scratch,
+                &tiebreak_flat,
+            );
 
             // At the boundary, append predicted token
             if pos + 1 == token_ids.len() {
@@ -326,6 +338,7 @@ impl VanillaTransformer {
         pos: usize,
         caches: &mut [HardAttentionHead],
         scratch: &mut ForwardScratch,
+        tiebreak_flat: &[TieBreak],
     ) -> usize {
         let n_layers = self.config.n_layers;
         let n_heads = self.config.n_heads;
@@ -338,6 +351,7 @@ impl VanillaTransformer {
         for layer_idx in 0..n_layers {
             let seq = (pos * n_layers + layer_idx) as i32;
             let head_start = layer_idx * n_heads;
+            let tb_start = layer_idx * n_heads;
 
             // Attention sublayer
             self.apply_attention(
@@ -348,6 +362,7 @@ impl VanillaTransformer {
                 qkv,
                 head_out,
                 sublayer_out,
+                &tiebreak_flat[tb_start..tb_start + n_heads],
             );
 
             // Residual connection
@@ -383,6 +398,7 @@ impl VanillaTransformer {
         qkv: &mut [f64],
         head_out: &mut [f64],
         out: &mut [f64],
+        tiebreak_row: &[TieBreak],
     ) {
         let d = self.config.d_model;
         let n_heads = self.config.n_heads;
@@ -403,7 +419,7 @@ impl VanillaTransformer {
             let val = [v_slice[h * 2], v_slice[h * 2 + 1]];
             let query = [q_slice[h * 2], q_slice[h * 2 + 1]];
 
-            let tie_break = self.get_tie_break(layer_idx, h);
+            let tie_break = tiebreak_row[h];
 
             // Insert key-value pair into hull cache
             heads[h].insert(key, val, seq);
@@ -466,6 +482,35 @@ impl VanillaTransformer {
         }
 
         best_id
+    }
+
+    /// Build a flat tie-break lookup table indexed by `layer * n_heads + head`.
+    ///
+    /// Materializes the nested `head_tiebreak[layer][head]` flags into a single
+    /// contiguous `[TieBreak]` slice so the forward hot loop can index with O(1)
+    /// instead of two nested `Vec` lookups per head per layer.
+    fn build_tiebreak_table(&self) -> Vec<TieBreak> {
+        let total = self.config.n_layers * self.config.n_heads;
+        let mut table = Vec::with_capacity(total);
+        for layer_idx in 0..self.config.n_layers {
+            match self.weights.head_tiebreak.get(layer_idx) {
+                Some(row) => {
+                    for head in 0..self.config.n_heads {
+                        let tb = match row.get(head) {
+                            Some(true) => TieBreak::Latest,
+                            _ => TieBreak::Average,
+                        };
+                        table.push(tb);
+                    }
+                }
+                None => {
+                    for _ in 0..self.config.n_heads {
+                        table.push(TieBreak::Average);
+                    }
+                }
+            }
+        }
+        table
     }
 
     /// Get tie-break mode for a specific (layer, head) pair.

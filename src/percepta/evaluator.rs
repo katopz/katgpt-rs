@@ -31,7 +31,7 @@
 //!
 //! Reference: `.raw/transformer-vm/transformer_vm/evaluator.py` (404 lines)
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::percepta::graph::types::{
     DimId, DimensionKind, Expression, LookUp, LookupId, ProgramGraph,
@@ -207,8 +207,12 @@ impl GraphEvaluator {
             1.0 / std::f64::consts::LN_2 - 1.0 / (pos + 2.0).ln(),
         );
 
-        // Track already-processed lookups to avoid re-computing within one step
-        let mut processed_lookups: HashMap<LookupId, Vec<f64>> = HashMap::new();
+        // Track already-processed lookups to avoid re-computing within one step.
+        // Local (not a scratch field): self is borrowed mutably for attention ops
+        // in the loop below, so the cache cannot alias a self field. Pre-sized
+        // to the lookup count to avoid rehashing.
+        let mut processed_lookups: HashMap<LookupId, Vec<f64>> =
+            HashMap::with_capacity(self.graph.all_lookups.len());
 
         // Phase 1: Collect owned work items from the graph (ends immutable borrow).
         // This avoids holding an immutable borrow of self.graph while we need
@@ -271,12 +275,19 @@ impl GraphEvaluator {
             .collect();
 
         // Phase 2: Process work items (may mutate self for attention).
-        // Clone lookups needed for attention queries (ends immutable borrow of self.graph).
-        let lookup_data: HashMap<LookupId, LookUp> = self
-            .graph
-            .all_lookups
+        // Clone ONLY the lookups actually referenced by LookUp work items.
+        // Previously this cloned every lookup in the graph every step(); now it
+        // clones only the subset needed, cutting per-step allocation.
+        let needed_lookup_ids: HashSet<LookupId> = work_items
             .iter()
-            .map(|(&id, lu)| (id, lu.clone()))
+            .filter_map(|item| match item {
+                DimWorkItem::LookUp { lookup_id, .. } => Some(*lookup_id),
+                _ => None,
+            })
+            .collect();
+        let lookup_data: HashMap<LookupId, LookUp> = needed_lookup_ids
+            .iter()
+            .filter_map(|&id| self.graph.all_lookups.get(&id).map(|lu| (id, lu.clone())))
             .collect();
 
         for item in work_items {
@@ -387,7 +398,7 @@ impl GraphEvaluator {
             if score > best_score + 1e-9 {
                 // New best — reset accumulators
                 best_score = score;
-                total.iter_mut().for_each(|t| *t = 0.0);
+                total.fill(0.0);
                 count = 0;
                 latest_entry = None;
             }

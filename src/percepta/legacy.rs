@@ -501,11 +501,11 @@ impl StreamingSolver {
 
     /// Solve and collect streaming events.
     pub fn solve_streaming(&mut self) -> bool {
-        self.solve_recursive(0)
+        let filled = self.state.clue_count();
+        self.solve_recursive(0, filled)
     }
 
-    fn solve_recursive(&mut self, depth: usize) -> bool {
-        let filled = self.state.clue_count();
+    fn solve_recursive(&mut self, depth: usize, filled: usize) -> bool {
         self.cache
             .append(Vec2::new(self.step as f32, filled as f32), self.step);
 
@@ -539,7 +539,10 @@ impl StreamingSolver {
 
             if self.state.is_valid_move(row, col, digit) {
                 self.state.grid[row][col] = digit;
-                let new_filled = self.state.clue_count();
+                // Incremental: we just placed exactly one digit into an empty cell,
+                // so the new filled count is `filled + 1`. Avoids a full 81-cell
+                // scan on every accepted move in the backtracking recursion.
+                let new_filled = filled + 1;
                 self.events.push(SolveEvent::Accepted {
                     row,
                     col,
@@ -547,7 +550,7 @@ impl StreamingSolver {
                     filled: new_filled,
                 });
 
-                if self.solve_recursive(depth + 1) {
+                if self.solve_recursive(depth + 1, new_filled) {
                     return true;
                 }
 
