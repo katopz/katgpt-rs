@@ -1171,6 +1171,14 @@ harness = false
 name = "bench_272_progressive_mcgs_goat"
 required-features = ["progressive_mcgs"]
 
+# Plan 274 Phase 3 — CGSP GOAT gate benchmark.
+# Validates transfer-to-target, collapse recovery, feature-gate isolation,
+# per-cycle overhead, batched NPC throughput, allocation audit, and
+# latent/raw boundary on synthetic direction pools.
+[[test]]
+name = "bench_274_cgsp_goat"
+required-features = ["cgsp"]
+
 # ── Plan 265: Task-Relevant Identifiability (BCKVSS + SPLAT + CCCP) ────────
 
 [[example]]
