@@ -391,9 +391,7 @@ pub fn block_select_grid(
             let mut max_score: f32 = -f32::INFINITY;
             for k in 0..=q.min(n - 1) {
                 let v = score[q * n * h + k * h + head];
-                if v > max_score {
-                    max_score = v;
-                }
+                max_score = max_score.max(v);
             }
             let thresh = max_score * cfg.alpha;
 

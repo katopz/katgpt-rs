@@ -199,9 +199,7 @@ pub fn aggregate_utilities(utilities: &[f32], mode: UtilityAggregation) -> f32 {
         (UtilityAggregation::Max, _) => {
             let mut max = utilities[0];
             for &u in &utilities[1..] {
-                if u > max {
-                    max = u;
-                }
+                max = max.max(u);
             }
             max
         }

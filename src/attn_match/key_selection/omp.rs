@@ -59,9 +59,7 @@ pub fn select_omp_keys(
         let row = &phi[i * t_len..(i + 1) * t_len];
         let mut m = row[0];
         for &v in &row[1..] {
-            if v > m {
-                m = v;
-            }
+            m = m.max(v);
         }
         max_per_row[i] = m;
     }

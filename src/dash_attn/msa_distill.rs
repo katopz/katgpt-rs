@@ -95,9 +95,7 @@ fn max_qk_score(query: &[f32], block_keys: &[f32], block_size: usize, head_dim: 
         let k_start = t * head_dim;
         let dot = simd_dot_f32(query, &block_keys[k_start..k_start + head_dim], head_dim);
         let score = dot * scale;
-        if score > max_score {
-            max_score = score;
-        }
+        max_score = max_score.max(score);
     }
 
     max_score

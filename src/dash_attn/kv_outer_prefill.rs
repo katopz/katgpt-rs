@@ -310,9 +310,7 @@ fn compute_scores(
 fn find_max(slice: &[f32]) -> f32 {
     let mut max = f32::NEG_INFINITY;
     for &v in slice {
-        if v > max {
-            max = v;
-        }
+        max = max.max(v);
     }
     max
 }

@@ -79,9 +79,7 @@ pub fn row_max(matrix: &[f32], n: usize, t_len: usize, out: &mut [f32]) {
         let row = &matrix[i * t_len..(i + 1) * t_len];
         let mut m = row[0];
         for &v in &row[1..] {
-            if v > m {
-                m = v;
-            }
+            m = m.max(v);
         }
         out[i] = m;
     }

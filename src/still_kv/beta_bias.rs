@@ -139,9 +139,7 @@ pub fn compute_beta_vortex_flow(
         // Compute concentration = max attention weight for this latent
         let mut max_weight = 0.0f32;
         for &w in row {
-            if w > max_weight {
-                max_weight = w;
-            }
+            max_weight = max_weight.max(w);
         }
 
         // Sigmoid of deviation from uniform
