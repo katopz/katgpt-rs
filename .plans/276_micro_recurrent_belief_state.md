@@ -34,9 +34,22 @@ The GOAT-gate question becomes: **does attractor update (`σ(W_s·s + W_x·x + b
 - [x] **T0.1** Research note `katgpt-rs/.research/242_*.md` created.
 - [x] **T0.2** Private guide `riir-ai/.research/127_*.md` created (Super-GOAT mandatory output).
 - [x] **T0.3** This plan created.
-- [ ] **T0.4** Audit existing freeze/thaw snapshot infra: locate `LoRAWeightVersion`, `LoRAHotSwap`, BLAKE3 commit path. Confirm `MicroRecurrentKernelSnapshot` can reuse the same atomic-swap plumbing without forking it. (Output: a 1-paragraph note in this plan's §Notes identifying the exact trait/struct to extend.)
-- [ ] **T0.5** Audit existing `SenseModule::project` (the bridge) — confirm it already does dot-product + sigmoid (it does, per the grep). The new trait's `project_to_scalars()` should *delegate* to it, not duplicate it.
-- [ ] **T0.6** **NEW (post-verdict-revision):** Confirm `evolve_hla` + `evolve_hla_simd` call sites — anywhere else in the codebase that calls them directly needs to either (a) keep working unchanged via the trait impl, or (b) be updated to call through the trait. Grep for `evolve_hla` callers before the refactor.
+- [x] **T0.4** Audit existing freeze/thaw snapshot infra: locate `LoRAWeightVersion`, `LoRAHotSwap`, BLAKE3 commit path. Confirm `MicroRecurrentKernelSnapshot` can reuse the same atomic-swap plumbing without forking it. (Output: a 1-paragraph note in this plan's §Notes identifying the exact trait/struct to extend.)
+- [x] **T0.5** Audit existing `SenseModule::project` (the bridge) — confirm it already does dot-product + sigmoid (it does, per the grep). The new trait's `project_to_scalars()` should *delegate* to it, not duplicate it.
+- [x] **T0.6** **NEW (post-verdict-revision):** Confirm `evolve_hla` + `evolve_hla_simd` call sites — anywhere else in the codebase that calls them directly needs to either (a) keep working unchanged via the trait impl, or (b) be updated to call through the trait. Grep for `evolve_hla` callers before the refactor.
+
+### Phase 0 Audit Results (T0.4–T0.6)
+
+**T0.4 — Snapshot infra (katgpt-rs side, not riir-ai):** The plan text mentioned `LoRAWeightVersion`/`LoRAHotSwap`, but those live in **riir-ai** (`riir-ai/crates/riir-engine/src/episode_buffer.rs`), not katgpt-rs. katgpt-rs (public engine) uses a *different* atomic-swap idiom:
+- **`SenseHotSwap`** (`katgpt-rs/crates/katgpt-core/src/sense/hotswap.rs`): `AtomicPtr<Box<SenseModule>>` + `AtomicBool` lock flag, fixed-size array indexed by `SenseKind`. This is the lock-free hot-swap primitive in the public repo.
+- **`SenseModule::commit()` / `verify()`** (`types.rs` L4864–4907): BLAKE3 commitment over struct bytes with `TernaryDir` padding zeroed first for determinism. Same pattern reused by `JlProjectionMatrix::commit()/verify()` (`shard_embedding.rs`) and `GpartAdapter::commitment()/verify()` (`types.rs`).
+- **`MerkleOctree`** (`merkle.rs`): hierarchical BLAKE3 for KG latent octree nodes (Plan 221-M).
+
+**Decision (R3 resolved):** Write a parallel `KernelHotSwap` reusing the `SenseHotSwap` `AtomicPtr` primitive (NOT `arc_swap` crate — not a current katgpt-rs dep; NOT `LoRAWeightVersion` — that's riir-ai-private game IP). `MicroRecurrentKernelSnapshot` reuses the `SenseModule::commit()` BLAKE3-over-struct-bytes pattern directly. No forking needed; the BLAKE3 commitment + AtomicPtr swap primitives are already public-engine idioms.
+
+**T0.5 — Bridge confirmed:** `SenseModule::project(hla_state: &[f32; 8]) -> f32` (`types.rs` L4825) does exactly dot-product (ternary sign × hla_val × row_scale, FMA-fused) + `crate::simd::fast_sigmoid(dot)` scaled by `confidence`. This IS the dot-product + sigmoid bridge. The new trait's `project_to_scalars()` will **delegate** to this pattern (operating on the belief vector the same way `project` operates on `hla_state`), reusing `crate::simd::fast_sigmoid` and the dot-product helper. No duplication.
+
+**T0.6 — Call sites confirmed (safe to refactor):** `evolve_hla()` is called ONLY inside `ReconstructionState` methods: `reconstruct()` (L704), `reconstruct_matvec()` (L728), `reconstruct_with_weights()` (L753), and the shared `reconstruct_inner()` (L785, dispatches to scalar or SIMD). `evolve_hla_simd()` is called only in `reconstruct_inner()` behind `sense_composition` feature. **No external direct callers** — benchmarks (`reconstruction_bench.rs`) go through `ReconstructionState::reconstruct*`. The refactor is safe: move `evolve_hla` body into `LeakyIntegrator::step()` (Phase 2), make `ReconstructionState::evolve_hla()` a thin delegate. `reconstruct_inner` is the only dispatch site to update for the trait.
 
 ---
 
