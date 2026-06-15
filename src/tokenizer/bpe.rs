@@ -6,64 +6,81 @@ pub struct BpeTokenizerImpl;
 
 impl BpeTokenizerImpl {
     /// Encode a string into token IDs using BPE merge rules.
+    ///
+    /// Hot-path design: operates on `Vec<usize>` (token IDs) end-to-end. The
+    /// merge-rank lookup uses `merge_ranks_id: HashMap<(usize, usize), usize>`
+    /// — no `String` allocation per pair. The replacement ID is resolved via
+    /// `merge_target_id[rank]` — no `vocab_to_id` lookup per merge pass.
+    ///
+    /// Per AGENTS.md hot-loop rules: no allocation inside the merge loop.
+    /// The only allocation is the initial char→ID map and the two ping-pong
+    /// token buffers, both pre-sized.
     pub fn encode(tokenizer: &BpeTokenizer, text: &str) -> Vec<usize> {
         if text.is_empty() {
             return Vec::new();
         }
 
-        // Start with character-level tokens — avoid per-char String allocation
-        let mut tokens: Vec<String> = text.chars().map(|c| c.to_string()).collect();
-        let mut new_tokens = Vec::with_capacity(tokens.len());
+        // Map each char to its token ID up front. Unknown chars map to `unk`.
+        // This is the only String allocation in the entire encode path — one
+        // transient String per char, reused via a stack-local buffer.
+        let unk = tokenizer.unk_id();
+        let char_count = text.chars().count();
+        let mut tokens: Vec<usize> = Vec::with_capacity(char_count);
+        let mut buf = String::with_capacity(4);
+        for c in text.chars() {
+            buf.clear();
+            buf.push(c);
+            let id = tokenizer.vocab_to_id.get(&buf).copied().unwrap_or(unk);
+            tokens.push(id);
+        }
+        drop(buf);
 
-        // Iteratively merge the highest-priority (lowest-rank) pair
+        // Fast path: no merges configured (or tables not rebuilt).
+        if tokenizer.merge_ranks_id.is_empty() {
+            return tokens;
+        }
+
+        let mut new_tokens: Vec<usize> = Vec::with_capacity(tokens.len());
+
+        // Iteratively merge the highest-priority (lowest-rank) pair.
         loop {
-            let mut best_pair: Option<(usize, usize, usize)> = None; // (rank, left_idx, right_idx)
-
+            // Find the lowest-rank applicable merge across all adjacent pairs.
+            let mut best: Option<(usize, usize)> = None; // (rank, left_idx)
             for i in 0..tokens.len().saturating_sub(1) {
-                if let Some(&rank) = tokenizer
-                    .merge_ranks
-                    .get(&(tokens[i].clone(), tokens[i + 1].clone()))
-                {
-                    match best_pair {
-                        Some((best_rank, _, _)) if best_rank <= rank => {}
-                        _ => best_pair = Some((rank, i, i + 1)),
+                let pair = (tokens[i], tokens[i + 1]);
+                if let Some(&rank) = tokenizer.merge_ranks_id.get(&pair) {
+                    match best {
+                        Some((best_rank, _)) if best_rank <= rank => {}
+                        _ => best = Some((rank, i)),
                     }
                 }
             }
 
-            let Some((_rank, left_idx, _right_idx)) = best_pair else {
-                break;
-            };
+            let Some((best_rank, left_idx)) = best else { break };
 
-            let left = tokens[left_idx].clone();
-            let right = tokens[left_idx + 1].clone();
-            let merged_len = left.len() + right.len();
+            // Resolve the merged token ID via the rank-indexed table — no
+            // hashmap lookup, just a slice index.
+            let merged_id = tokenizer.merge_target_id[best_rank];
+            let left_id = tokens[left_idx];
+            let right_id = tokens[left_idx + 1];
 
-            // Merge all occurrences of this pair
+            // Apply the merge to all adjacent occurrences of (left, right).
+            // Indices are `usize` (Copy) — zero allocation in this loop.
             new_tokens.clear();
             let mut i = 0;
             while i < tokens.len() {
-                if i + 1 < tokens.len() && tokens[i] == left && tokens[i + 1] == right {
-                    // Merge in-place by concatenating left + right
-                    let mut merged = String::with_capacity(merged_len);
-                    merged.push_str(&left);
-                    merged.push_str(&right);
-                    new_tokens.push(merged);
+                if i + 1 < tokens.len() && tokens[i] == left_id && tokens[i + 1] == right_id {
+                    new_tokens.push(merged_id);
                     i += 2;
                 } else {
-                    new_tokens.push(tokens[i].clone());
+                    new_tokens.push(tokens[i]);
                     i += 1;
                 }
             }
             std::mem::swap(&mut tokens, &mut new_tokens);
         }
 
-        // Map tokens to IDs
-        let unk = tokenizer.unk_id();
         tokens
-            .into_iter()
-            .map(|t| *tokenizer.vocab_to_id.get(&t).unwrap_or(&unk))
-            .collect()
     }
 
     /// Decode token IDs back to string.
@@ -161,6 +178,8 @@ impl BpeTrainer {
             id_to_vocab,
             merges,
             merge_ranks: HashMap::new(),
+            merge_ranks_id: HashMap::new(),
+            merge_target_id: Vec::new(),
             bos_id: 1,
             eos_id: 2,
             pad_id: 0,

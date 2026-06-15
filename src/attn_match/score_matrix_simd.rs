@@ -73,11 +73,13 @@ pub fn compute_score_matrix_simd(
     if stabilize {
         for i in 0..n {
             let row = &mut out[i * t..(i + 1) * t];
+            // Branch-free horizontal max — emits CMOV/conditional-select on
+            // most targets rather than a predicted branch. Equivalent to the
+            // previous `if v > max` but without the mispredict cost on
+            // adversarial inputs.
             let mut max = row[0];
             for &v in &row[1..] {
-                if v > max {
-                    max = v;
-                }
+                max = max.max(v);
             }
             for v in row.iter_mut() {
                 *v -= max;

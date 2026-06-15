@@ -14,6 +14,17 @@ pub struct BpeTokenizer {
     /// Merge rule → rank (index in merges vec) for fast lookup.
     #[serde(skip)]
     pub merge_ranks: HashMap<(String, String), usize>,
+    /// ID-pair → merge rank (lower = higher priority). Hot-path lookup table
+    /// for `encode`, which operates on `Vec<usize>` end-to-end and avoids
+    /// per-pair `String` allocations. Kept in sync with `merge_ranks` by
+    /// `rebuild_ranks`.
+    #[serde(skip)]
+    pub merge_ranks_id: HashMap<(usize, usize), usize>,
+    /// `merge_target_id[rank]` = merged token ID for the rule at that rank.
+    /// Indexed by rank so `encode` can resolve the replacement with a single
+    /// indexed load instead of a `vocab_to_id` lookup per merge pass.
+    #[serde(skip)]
+    pub merge_target_id: Vec<usize>,
     /// Beginning-of-sequence token ID.
     pub bos_id: usize,
     /// End-of-sequence token ID.
@@ -37,13 +48,27 @@ impl BpeTokenizer {
     }
 
     /// Rebuild merge_ranks from merges vector.
+    ///
+    /// Also rebuilds the ID-keyed tables (`merge_ranks_id`, `merge_target_id`)
+    /// that `encode` uses to skip per-pair `String` allocation in the hot path.
     pub fn rebuild_ranks(&mut self) {
-        self.merge_ranks = self
-            .merges
-            .iter()
-            .enumerate()
-            .map(|(rank, rule)| ((rule.left.clone(), rule.right.clone()), rank))
-            .collect();
+        let n = self.merges.len();
+        self.merge_ranks = HashMap::with_capacity(n);
+        self.merge_ranks_id = HashMap::with_capacity(n);
+        self.merge_target_id = Vec::with_capacity(n);
+        let unk = self.unk_id();
+        for (rank, rule) in self.merges.iter().enumerate() {
+            self.merge_ranks
+                .insert((rule.left.clone(), rule.right.clone()), rank);
+            // Resolve left/right/merged to IDs. Unknown tokens map to `unk`,
+            // which simply makes the rule inert in the ID-keyed path (its key
+            // won't match real token pairs whose IDs differ from `unk`).
+            let l = self.vocab_to_id.get(&rule.left).copied().unwrap_or(unk);
+            let r = self.vocab_to_id.get(&rule.right).copied().unwrap_or(unk);
+            let m = self.vocab_to_id.get(&rule.merged).copied().unwrap_or(unk);
+            self.merge_ranks_id.insert((l, r), rank);
+            self.merge_target_id.push(m);
+        }
     }
 }
 
