@@ -201,6 +201,8 @@ impl SpeculativeVerifier for LeviathanVerifier<'_> {
     ) -> Vec<usize> {
         let vocab_size = draft_config.vocab_size;
         let target_temp = self.target_config.temperature;
+        // Cache reciprocal once — division is ~4-7 cycles, softmax is called multiple times per step.
+        let inv_target_temp = 1.0 / target_temp;
 
         // Phase 0 (MTP): Get target hidden state for conditioning + score initial token
         self.target_cache.reset();
@@ -214,7 +216,7 @@ impl SpeculativeVerifier for LeviathanVerifier<'_> {
                 self.target_config,
             );
             self.draft_sctx.probs_buf.copy_from_slice(logits);
-            softmax_scaled(&mut self.draft_sctx.probs_buf, 1.0 / target_temp);
+            softmax_scaled(&mut self.draft_sctx.probs_buf, inv_target_temp);
             // Save p_dist[0] from this early target forward (avoids re-scoring later)
             self.draft_sctx.p_distributions_flat[..vocab_size]
                 .copy_from_slice(&self.draft_sctx.probs_buf);
@@ -330,7 +332,7 @@ impl SpeculativeVerifier for LeviathanVerifier<'_> {
                 self.target_config,
             );
             self.draft_sctx.probs_buf.copy_from_slice(logits);
-            softmax_scaled(&mut self.draft_sctx.probs_buf, 1.0 / target_temp);
+            softmax_scaled(&mut self.draft_sctx.probs_buf, inv_target_temp);
             let start = (i + 1) * vocab_size;
             self.draft_sctx.p_distributions_flat[start..start + vocab_size]
                 .copy_from_slice(&self.draft_sctx.probs_buf);

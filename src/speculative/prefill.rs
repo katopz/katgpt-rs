@@ -190,20 +190,21 @@ pub fn compress_prompt(
         .map(|i| (i, importance_scores[i]))
         .collect();
 
-    // Sort by score descending, take top middle_budget
-    middle_indices.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    // Sort by score descending, take top middle_budget.
+    // `total_cmp` is branch-free and NaN-deterministic vs `partial_cmp().unwrap_or(Equal)`.
+    middle_indices.sort_by(|a, b| b.1.total_cmp(&a.1));
     middle_indices.truncate(middle_budget);
 
-    // Collect all selected indices
+    // Re-sort surviving indices by original position (in-place — avoids a second Vec alloc).
+    middle_indices.sort_by_key(|(i, _)| *i);
+
     let mut selected: Vec<usize> = Vec::with_capacity(budget);
 
     // Prefix
     selected.extend(0..prefix_len);
 
-    // Middle (sorted by original position)
-    let mut middle_selected: Vec<usize> = middle_indices.into_iter().map(|(i, _)| i).collect();
-    middle_selected.sort();
-    selected.extend(middle_selected);
+    // Middle (already position-sorted above)
+    selected.extend(middle_indices.into_iter().map(|(i, _)| i));
 
     // Suffix
     selected.extend(total.saturating_sub(suffix_len)..total);
@@ -339,8 +340,6 @@ pub fn block_select_entmax(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Ve
         return block_select(block_scores, cfg);
     }
 
-    let entmax_set: std::collections::HashSet<usize> = entmax_selected.into_iter().collect();
-
     let mut selected: Vec<usize> = Vec::with_capacity(num_blocks);
 
     for (k_block, _) in block_scores.iter().enumerate() {
@@ -348,10 +347,12 @@ pub fn block_select_entmax(block_scores: &[f32], cfg: &FlashPrefillConfig) -> Ve
             continue;
         }
 
-        // Sink + window rules are unconditional; entmax replaces the alpha threshold
+        // Sink + window rules are unconditional; entmax replaces the alpha threshold.
+        // Linear `Vec::contains` beats `HashSet` for typical block counts (< 64) —
+        // avoids hashing overhead and a heap allocation per call.
         let keep = k_block < cfg.attention_sink
             || q_block.abs_diff(k_block) < cfg.window
-            || entmax_set.contains(&k_block);
+            || entmax_selected.contains(&k_block);
 
         if keep {
             selected.push(k_block);
@@ -566,7 +567,8 @@ pub fn compress_prompt_blocks(
 
     let selected_blocks = block_select(&block_scores, cfg);
 
-    let mut selected_tokens: Vec<usize> = Vec::new();
+    // Upper bound on selected tokens: never more than the original prompt length.
+    let mut selected_tokens: Vec<usize> = Vec::with_capacity(total);
     let prefix_end = prefix_len.min(total);
     selected_tokens.extend(0..prefix_end);
 
