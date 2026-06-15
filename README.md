@@ -1,6 +1,6 @@
 # KatGPT-RS
 
-A **GOAT-proved** neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, and **114 adaptive test-time scaling features** — built in Rust. Pure algorithms, zero side effects, MIT licensed.
+A **GOAT-proved** neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, and **292 feature flags (124 default-on, all GOAT-proved)** — built in Rust. Pure algorithms, zero side effects, MIT licensed.
 
 Inspired by [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/microgpt/).
 
@@ -45,23 +45,29 @@ LLM drafts logits → ConstraintPruner filters invalid → DDTree builds valid-o
 ### Key Traits
 
 ```rust
-// From katgpt-core
+// From katgpt-core/src/traits.rs (signatures abbreviated)
 pub trait ConstraintPruner: Send + Sync {
-    fn is_valid(&self, token: usize) -> bool;
-    fn batch_is_valid(&self, tokens: &[usize], out: &mut [bool]);
+    fn is_valid(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> bool;
+    fn batch_is_valid(&self, depth: usize, tokens: &[usize], parent_tokens: &[usize], out: &mut [bool]);
+    fn propagate(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) { }
+    fn manifold_score(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32 { 0.0 }
+    fn constraint_vector(&self, depth: usize, parent_tokens: &[usize]) -> Vec<f32> { vec![] }
 }
 
-pub trait ScreeningPruner<P>: Send + Sync {
-    fn relevance(&self, token: usize, ctx: &P) -> f32;
+pub trait ScreeningPruner: Send + Sync {
+    fn relevance(&self, depth: usize, token_idx: usize, parent_tokens: &[usize]) -> f32;
 }
 
-pub trait SpeculativeGenerator: Send + Sync {
-    fn generate(&mut self, ...) -> Vec<usize>;
-    fn generate_batch(&mut self, ...) -> Vec<Vec<usize>>;
+pub trait SpeculativeGenerator {
+    type Condition;
+    type Output;
+    type Error;
+    fn generate(&mut self, condition: &Self::Condition, rng: &mut fastrand::Rng) -> Result<Vec<Self::Output>, Self::Error>;
+    fn generate_batch(&mut self, conditions: &[Self::Condition], rng: &mut fastrand::Rng) -> Result<Vec<Vec<Self::Output>>, Self::Error>;
 }
 ```
 
-Additional core traits: `GameState`, `RolloutPolicy`, `StateHeuristic`, `LeoHead`/`DualLeoMixer`, `AllGoalsUpdate`, `AutocurriculumSampler`, `DominoPruner`, `CompletionHorizon`, `GenerativeConstraintPruner`, `PartialScorer`, `ProblemMutator`, `BestBuddyAligner`, `CollapseDetector`, `DataGate`.
+Additional core traits in `katgpt-core/src/traits.rs`: `DominoPruner`, `CompletionHorizon`, `CollapseDetector`, `GameState`, `StateHeuristic`, `RolloutPolicy`, `LeoHead`, `AllGoalsUpdate`, `DualLeoMixer`, `AutocurriculumSampler`, `GenerativeConstraintPruner`, `QGradientOracle`, `PartialScorer`, `ProblemMutator`, `BestBuddyAligner`. Plus `DataGate` in `types.rs`. See [`crates/katgpt-core/src/traits.rs`](crates/katgpt-core/src/traits.rs) for full signatures.
 
 ### Routing & Conditioning
 
@@ -74,7 +80,7 @@ Additional core traits: `GameState`, `RolloutPolicy`, `StateHeuristic`, `LeoHead
 
 ## 🔄 E2E Inference Flow — Default GOAT Stack
 
-The default production stack has **~90+ GOAT-proved features** enabled, but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
+The default production stack has **124 GOAT-proved default-on features** (292 total flags), but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
 
 ```mermaid
 flowchart TD
@@ -239,7 +245,7 @@ graph LR
 | **Adaptive Modulo Validation** (`game_adaptive_validation`) | 244 | ✅ | 5.91× dense-zone throughput, zero chain-layer bypass |
 | **Spectral Irrep Pruner** (`spectral_pruner`) | 246 | ✅ | Spectral flatness detection for converged logit distributions, +3.6% overhead only |
 | **OctreeCTC Reconstruction** | 248 | ✅ | Multi-step active KG-Latent-Octree reconstruction, 93.2ns < 200ns GOAT |
-| **Spectral Budget Router** (`spectral_budget`) | 254 | 19/19 ✅ | Layer-adaptive NS depth + rank-p spectral truncation |
+| **Spectral Budget Router** (`spectral_budget`) | 254 | 19/19 ✅ | Layer-adaptive NS depth + rank-p spectral truncation (opt-in — GOAT-gated, not in default)
 | **Regime Transition** (`regime_transition`) | 215 | 8/8+4/4 ✅ | Self-revising discovery, -0.3% overhead vs real decode |
 | **SubstrateGate** (`substrate_gate`) | 216 | ✅ | Inference-time capability substrate routing via MLP masks |
 | **Critical Interval Gate** (`critical_interval_gate`) | 222 | ✅ | Entropy-triggered solver switch, zero cost (entropy already computed) |
@@ -597,9 +603,9 @@ Feature gate: `posterior_evolution` (**default-ON**). 📖 Plan: [`.plans/239_po
 
 ### 🔭 Spectral Budget Router (Plan 254)
 
-Layer-adaptive Newton-Schulz depth + rank-p spectral truncation for inference routing. Pre-computed NS config matches empirical quantile thresholds. **GOAT 19/19 PASS**, promoted to default-ON.
+Layer-adaptive Newton-Schulz depth + rank-p spectral truncation for inference routing. Pre-computed NS config matches empirical quantile thresholds. **GOAT 19/19 PASS**.
 
-Feature gate: `spectral_budget` (**default-ON**). 📖 Plan: [`.plans/254_spectral_budget_router.md`](.plans/254_spectral_budget_router.md).
+Feature gate: `spectral_budget` (**opt-in** — GOAT-gated, not yet promoted to default). 📖 Plan: [`.plans/254_spectral_budget_router.md`](.plans/254_spectral_budget_router.md).
 
 ### 🏛️ DEC Operators + Cubical Topology (Plans 251–252)
 
@@ -743,29 +749,47 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 cargo build --release                              # Build with optimizations
 cargo run --release                                # Run benchmark + generate plot
 cargo run --release --all-features                 # Run everything
-cargo test --quiet --workspace --all-features       # Run all tests (120+ files, 900+ cases)
+cargo test --quiet --workspace --all-features       # Run all tests (245 test files)
 cargo run --example sudoku_01_9x9 --features sudoku # Sudoku solver
 cargo clippy --all-targets --all-features --quiet   # Lint
 ```
 
 ### Feature Flags
 
-**150+ feature flags** with **114 default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, **`sense_lod`**, **`spectral_budget`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, and 80 more.
+**292 feature flags** with **124 default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, **`sense_lod`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, and 80 more.
 
-📖 **Full feature flag table (260+ flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
+📖 **Full feature flag table (292 flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
 
 ## 📁 Project Structure
 
 ```
-crates/katgpt-core/   Shared types + SIMD kernels + traits
-  types.rs            Decoupled structs (Config, Rng, LoraAdapter, DomainLatent, SenseModule, ShardEmbedding)
-  traits.rs           Core trait definitions (22+ traits)
+crates/katgpt-core/   Shared types + SIMD kernels + traits (consumed by katgpt-rs + riir-engine)
+  types.rs            Decoupled structs (Config, Rng, LoraAdapter, DomainLatent, ShardEmbedding, DataGate, ...)
+  traits.rs           Core trait definitions (18 traits + helper structs)
   simd.rs             SIMD kernel implementations (NEON/AVX2)
+  shard_embedding.rs  JL random orthogonal projection [f32;64]→[f32;8]
   attention.rs        Tiled online-softmax flash attention
   coda.rs             CODA fused SIMD kernels
+  parallax_attn.rs    Parallax parameterized local linear attention
+  peira.rs            PEIRA inter-view regressor alignment
+  dirichlet.rs        Dirichlet Energy structural alignment diagnostic
+  spectral_hierarchy.rs  Eigenspace alignment, Haar wavelets, Cauchy interlacing
+  roofline.rs         Roofline cost model for GPU operator runtime prediction
+  questbench.rs       QuestBench underspecification scoring
+  linoss.rs           LinOSS oscillatory state-space cell + ModalSpec drafter
+  irrep_pruner.rs     Spectral Irrep Pruner (spectral flatness decoding pruning)
+  merkle.rs           Merkle octree hierarchical BLAKE3 commitment
+  curator.rs          Curator verification layer for Merkle octree
+  dendritic_gate.rs   NMDA-inspired adaptive DDTree branching
+  slod.rs             SLoD Spectral Level-of-Detail Pruner (Poincaré ball)
   sense/              KG Latent Octree Sense Composition
   and_or/             AND-OR DDTree blueprint decomposition
   mux/                MUX superposition pruning (span pruner, DDTree, BFS, bandit, freeze/thaw, demux)
+  bridge/             Generic latent→raw action bridge
+  cgsp/               Curiosity-Guided Self-Play triad (Solver/Conjecturer/Guide)
+  dec/                Discrete Exterior Calculus operators
+  flow/               Fourier-smoothed flow fields for LEO crowd navigation
+  qgf/                Q-Guided Flow — test-time Q-gradient guidance
 src/
   transformer.rs      Weights, KVCache (flat/paged/raven), forward/generate
   speculative/        DDTree, DFlash, Verifier, Prefill, D2F, budget, flashar
@@ -776,9 +800,10 @@ src/
   gdn2/               Gated DeltaNet-2 recurrent attention
   dash_attn/          DashAttention adaptive sparse attention
   hybrid_oct_pq/      Default KV codec (OCT + PlanarQuant)
-  ...                 50+ additional modules
-examples/            120+ examples (see examples/README.md)
-tests/               180+ integration test & benchmark files (~90 bench suites)
+  ...                 45 additional submodules + 50 top-level modules
+examples/            178 examples (see examples/README.md)
+tests/               245 integration test & benchmark files
+benches/             Criterion benchmarks
 ```
 
 ## 📖 Documentation Index
@@ -808,8 +833,9 @@ tests/               180+ integration test & benchmark files (~90 bench suites)
 - [HL & Arena detail](.docs/23_hl_arena_detail.md)
 - [NPC Sense Composition](.docs/24_sense_composition.md)
 - [Raven RSM — Opt-in O(1) routing slot memory](.docs/25_raven_rsm.md)
+- [Progressive MCGS — graph search with reference edges](.docs/progressive_mcgs.md)
 - [Open-ended problem evolution arena](.docs/191_open_ended_problem_evolution_arena.md)
-- [111 examples grouped by category](examples/README.md)
+- [178 examples grouped by category](examples/README.md)
 - [DEC Operators & Cubical Topology](.plans/251_dec_operators_cell_complex.md)
 - [Spectral Budget Router](.plans/254_spectral_budget_router.md)
 - [Posterior-Guided Pruner Evolution](.plans/239_posterior_guided_pruner_evolution.md)

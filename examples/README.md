@@ -5,7 +5,7 @@ exact flag is listed per example and in the catalog below. Examples that gate
 themselves internally (`#![cfg(feature = ...)]`) print a hint and exit cleanly if the
 flag is missing.
 
-**106 examples** across 25 groups. Full feature definitions live in
+**178 examples** across 25 groups. Full feature definitions live in
 [`Cargo.toml`](../Cargo.toml) and the [README Feature Flags](../README.md#feature-flags) section.
 
 ## Catalog
@@ -427,7 +427,7 @@ cargo run --example mux_latent_expand --features mux_latent_context
 
 ## Feature Flags
 
-The flags below gate the example groups above. The full set (100+ flags, including
+The flags below gate the example groups above. The full set (292 flags, including
 production-default architecture features) lives in [`Cargo.toml`](../Cargo.toml) `[features]`
 and the [README Feature Flags](../README.md#feature-flags) section.
 
