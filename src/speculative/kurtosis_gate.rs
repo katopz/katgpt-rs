@@ -32,6 +32,34 @@ pub fn excess_kurtosis(values: &[f32]) -> f32 {
     (m4 * n) / (m2 * m2) - 3.0
 }
 
+/// Excess kurtosis given a pre-computed sum (avoids a re-scan for the mean).
+///
+/// Equivalent to `excess_kurtosis(values)` but reuses `sum = Σ values` so the
+/// mean is `sum / n` without a second full pass. Used by [`KurtosisGate`] on the
+/// unnormalized `exp(l - max)` values — valid because excess kurtosis is
+/// scale-invariant.
+#[inline]
+fn excess_kurtosis_from_sum(values: &[f32], sum: f32) -> f32 {
+    let n = values.len() as f32;
+    if n < 4.0 {
+        return 0.0;
+    }
+
+    let mean = sum / n;
+
+    let (m2, m4) = values.iter().fold((0.0f32, 0.0f32), |(m2, m4), &x| {
+        let d = x - mean;
+        (m2 + d * d, m4 + d * d * d * d)
+    });
+
+    if m2 < 1e-10 {
+        return 0.0;
+    }
+
+    // Population excess kurtosis: κ = n·m₄/m₂² − 3
+    (m4 * n) / (m2 * m2) - 3.0
+}
+
 /// Per-position kurtosis gate for speculative decoding.
 ///
 /// Uses the polarization effect from arXiv:2606.03990:
@@ -77,6 +105,13 @@ impl KurtosisGate {
     /// 3. Return `true` if kurtosis exceeds the threshold
     ///
     /// Returns `false` for empty or degenerate inputs.
+    ///
+    /// Optimization: excess kurtosis is scale-invariant
+    /// (`excess_kurtosis(c·p) == excess_kurtosis(p)` for any `c > 0`), so we
+    /// skip the explicit normalize pass and compute kurtosis directly on the
+    /// unnormalized `exp(l - max)` values. This drops the hot path from 5 full
+    /// vocab scans (max, exp+sum, normalize, mean, m2/m4) to 3 (max, exp+sum,
+    /// m2/m4 with mean = sum/n known from pass 2).
     pub fn should_speculate(&mut self, logits: &[f32]) -> bool {
         if let 0..=3 = logits.len() {
             return false;
@@ -84,8 +119,10 @@ impl KurtosisGate {
 
         self.scratch.clear();
 
-        // Numerically stable softmax
+        // Pass 1: max for numerical stability.
         let max_logit = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+
+        // Pass 2: exp + running sum (no normalize — kurtosis is scale-invariant).
         let mut sum: f32 = 0.0;
         for &l in logits {
             let p = (l - max_logit).exp();
@@ -97,13 +134,9 @@ impl KurtosisGate {
             return false;
         }
 
-        // Normalize in-place
-        let inv_sum = 1.0 / sum;
-        for p in &mut self.scratch {
-            *p *= inv_sum;
-        }
-
-        excess_kurtosis(&self.scratch) > self.threshold
+        // Pass 3: central moments on the unnormalized values. mean = sum/n is
+        // already known; no need to re-sum inside excess_kurtosis.
+        excess_kurtosis_from_sum(&self.scratch, sum) > self.threshold
     }
 
     /// Compute excess kurtosis directly from a probability distribution.

@@ -105,20 +105,18 @@ impl VortexFlow for EntmaxRouter {
             return;
         }
 
-        // Mean pooling of keys → summary (same as zero-init ChunkSummaryQuery)
+        // Mean pooling of keys → summary (same as zero-init ChunkSummaryQuery).
+        // Uses the crate SIMD add + scale kernels (matches ChannelAwareRouter's
+        // mean-pool) instead of a scalar nested loop.
         let summary = &mut cache.summaries[block_idx];
         summary.resize(head_dim, 0.0);
         summary.fill(0.0);
         for t in 0..block_size {
             let k_start = t * head_dim;
-            for d in 0..head_dim {
-                summary[d] += keys[k_start + d];
-            }
+            crate::simd::simd_add_inplace(summary, &keys[k_start..k_start + head_dim]);
         }
         let inv = 1.0 / block_size as f32;
-        for d in summary.iter_mut() {
-            *d *= inv;
-        }
+        crate::simd::simd_scale_inplace(summary, inv);
     }
 
     fn forward_indexer(

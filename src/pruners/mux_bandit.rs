@@ -69,36 +69,37 @@ impl MuxBanditWidth {
             }
         }
 
-        // UCB1 selection
+        // UCB1 selection — single pass computes each arm's score once and
+        // collects tied arms into a fixed-size stack buffer (5 arms max),
+        // avoiding both the second scan (which recomputed the sqrt) and the
+        // per-select Vec allocation.
         let ln_total = (total as f64).ln();
-        let mut best_idx = 0;
         let mut best_score = f64::NEG_INFINITY;
+        // Stack-allocated ties buffer — MuxBanditWidth always has exactly 5 arms.
+        let mut tied: [usize; MUX_WIDTH_ARMS.len()] = [0; MUX_WIDTH_ARMS.len()];
+        let mut tied_len: usize = 0;
 
         for i in 0..self.arms.len() {
             let q = self.rewards[i] / self.counts[i] as f64;
             let exploration = (2.0 * ln_total / self.counts[i] as f64).sqrt();
             let score = q + exploration;
-            if score > best_score {
+
+            if score > best_score + 1e-10 {
+                // Strictly better — reset ties to just this arm.
                 best_score = score;
-                best_idx = i;
+                tied[0] = i;
+                tied_len = 1;
+            } else if (score - best_score).abs() < 1e-10 {
+                // Tie — append.
+                tied[tied_len] = i;
+                tied_len += 1;
             }
         }
 
-        // Break ties randomly for diversity
-        let mut tied: Vec<usize> = Vec::new();
-        for i in 0..self.arms.len() {
-            let q = self.rewards[i] / self.counts[i] as f64;
-            let exploration = (2.0 * ln_total / self.counts[i] as f64).sqrt();
-            let score = q + exploration;
-            if (score - best_score).abs() < 1e-10 {
-                tied.push(i);
-            }
-        }
-
-        let idx = if tied.len() > 1 {
-            tied[rng.usize(..tied.len())]
+        let idx = if tied_len > 1 {
+            tied[rng.usize(..tied_len)]
         } else {
-            best_idx
+            tied[0]
         };
 
         self.arms[idx]

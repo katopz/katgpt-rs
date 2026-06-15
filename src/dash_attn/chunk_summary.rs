@@ -211,8 +211,11 @@ pub fn summarize_chunk_into(
     debug_assert!(scores_buf.len() >= chunk_size);
     // Cache the number of full hd-wide chunks; reused for the remainder tail.
     let n_full_chunks = chunk_keys.chunks_exact(hd).len();
+    // Use the crate SIMD dot kernel (8-wide FMA accumulator) instead of the
+    // iterator `.zip().map().sum()` form, which carries a single fadd
+    // dependency chain that blocks LLVM auto-vectorization.
     for (t, key_chunk) in chunk_keys.chunks_exact(hd).enumerate() {
-        let dot: f32 = q.iter().zip(key_chunk.iter()).map(|(a, b)| a * b).sum();
+        let dot = crate::simd::simd_dot_f32(q, key_chunk, hd);
         scores_buf[t] = dot * scale;
     }
     // Handle remainder if hd doesn't evenly divide

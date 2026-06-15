@@ -93,13 +93,72 @@ pub struct LatentDynamicsMLP {
     pub fc3_bias: Vec<f32>,    // [n_embd]
 }
 
+/// Reusable scratch buffers for [`LatentDynamicsMLP::forward_into`].
+///
+/// Sized once at construction and reused across every draft step — eliminates
+/// the 5 intermediate `vec!` allocations that the allocating `forward` would
+/// otherwise do per token. None of these buffers are read between calls; they
+/// are fully overwritten on each `forward_into`.
+pub struct MlpForwardScratch {
+    /// `[2 * n_embd]` — concat(h_t, next_emb).
+    concat: Vec<f32>,
+    /// `[2 * n_embd]` — LayerNorm output.
+    normed: Vec<f32>,
+    /// `[n_embd]` — FC1 output (post-GELU).
+    fc1_out: Vec<f32>,
+    /// `[n_embd]` — FC2 output (post-GELU).
+    fc2_out: Vec<f32>,
+    /// `[n_embd]` — FC3 output (pre-residual).
+    fc3_out: Vec<f32>,
+}
+
+impl MlpForwardScratch {
+    /// Allocate scratch sized for a model with embedding dim `n_embd`.
+    #[inline]
+    pub fn new(n_embd: usize) -> Self {
+        let concat_dim = 2 * n_embd;
+        Self {
+            concat: vec![0.0; concat_dim],
+            normed: vec![0.0; concat_dim],
+            fc1_out: vec![0.0; n_embd],
+            fc2_out: vec![0.0; n_embd],
+            fc3_out: vec![0.0; n_embd],
+        }
+    }
+}
+
 impl LatentDynamicsMLP {
     /// Run the MLP forward pass: `h_{t+1} = h_t + FC3(GELU(FC2(GELU(FC1(LN(concat))))))`.
     ///
     /// - `h_t`: current hidden state `[n_embd]`
     /// - `next_emb`: embedding of next token `[n_embd]`
     /// - Returns: predicted next hidden state `[n_embd]`
+    ///
+    /// Allocating convenience wrapper around [`Self::forward_into`]; hot-path
+    /// callers (e.g. [`BeliefDrafter::draft`]) should reuse an
+    /// [`MlpForwardScratch`] via `forward_into` to avoid the 6 per-step
+    /// allocations.
     pub fn forward(&self, h_t: &[f32], next_emb: &[f32]) -> Vec<f32> {
+        let n = self.n_embd;
+        let mut scratch = MlpForwardScratch::new(n);
+        let mut out = vec![0.0f32; n];
+        self.forward_into(h_t, next_emb, &mut scratch, &mut out);
+        out
+    }
+
+    /// Zero-allocation forward pass writing into caller-provided scratch + output.
+    ///
+    /// All intermediate buffers (`concat`, `normed`, `fc1_out`, `fc2_out`,
+    /// `fc3_out`) live in `scratch` and are reused across calls; the residual
+    /// result is written into `out` (`h_{t+1} = h_t + FC3(...)`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn forward_into(
+        &self,
+        h_t: &[f32],
+        next_emb: &[f32],
+        scratch: &mut MlpForwardScratch,
+        out: &mut [f32],
+    ) {
         let n = self.n_embd;
         assert_eq!(h_t.len(), n, "h_t must have length n_embd");
         assert_eq!(next_emb.len(), n, "next_emb must have length n_embd");
@@ -107,39 +166,37 @@ impl LatentDynamicsMLP {
         let concat_dim = 2 * n;
 
         // 1. Concatenate h_t and next_emb
-        let mut concat = vec![0.0f32; concat_dim];
+        let concat = &mut scratch.concat[..concat_dim];
         concat[..n].copy_from_slice(h_t);
         concat[n..].copy_from_slice(next_emb);
 
         // 2. LayerNorm
-        let mut normed = vec![0.0f32; concat_dim];
-        layer_norm(&concat, &self.norm_weight, &self.norm_bias, &mut normed);
+        let normed = &mut scratch.normed[..concat_dim];
+        layer_norm(concat, &self.norm_weight, &self.norm_bias, normed);
 
         // 3. FC1: [2*n_embd] → [n_embd] + GELU
-        let mut fc1_out = vec![0.0f32; n];
-        linear(&normed, &self.fc1_weight, &self.fc1_bias, n, &mut fc1_out);
-        for v in &mut fc1_out {
+        let fc1_out = &mut scratch.fc1_out[..n];
+        linear(normed, &self.fc1_weight, &self.fc1_bias, n, fc1_out);
+        for v in fc1_out.iter_mut() {
             *v = gelu(*v);
         }
 
         // 4. FC2: [n_embd] → [n_embd] + GELU
-        let mut fc2_out = vec![0.0f32; n];
-        linear(&fc1_out, &self.fc2_weight, &self.fc2_bias, n, &mut fc2_out);
-        for v in &mut fc2_out {
+        let fc2_out = &mut scratch.fc2_out[..n];
+        linear(fc1_out, &self.fc2_weight, &self.fc2_bias, n, fc2_out);
+        for v in fc2_out.iter_mut() {
             *v = gelu(*v);
         }
 
         // 5. FC3: [n_embd] → [n_embd] (no activation)
-        let mut fc3_out = vec![0.0f32; n];
-        linear(&fc2_out, &self.fc3_weight, &self.fc3_bias, n, &mut fc3_out);
+        let fc3_out = &mut scratch.fc3_out[..n];
+        linear(fc2_out, &self.fc3_weight, &self.fc3_bias, n, fc3_out);
 
         // 6. Residual: h_{t+1} = h_t + FC3(...)
-        let mut result = vec![0.0f32; n];
+        let out = &mut out[..n];
         for i in 0..n {
-            result[i] = h_t[i] + fc3_out[i];
+            out[i] = h_t[i] + fc3_out[i];
         }
-
-        result
     }
 
     /// Forward pass with self-conditioning: additive SC injection into embedding channel.
@@ -175,8 +232,12 @@ impl LatentDynamicsMLP {
             blended_emb[i] = next_emb[i] + sc_scale * sc[i];
         }
 
-        // Standard forward with blended embedding
-        self.forward(h_t, &blended_emb)
+        // Standard forward with blended embedding (reuses forward_into to
+        // avoid a second allocation for the residual output buffer).
+        let mut scratch = MlpForwardScratch::new(n);
+        let mut out = vec![0.0f32; n];
+        self.forward_into(h_t, &blended_emb, &mut scratch, &mut out);
+        out
     }
 
     /// Load MLP weights from a binary file.
@@ -522,14 +583,21 @@ impl BeliefDrafter {
         assert_eq!(h_t.len(), n, "h_t must have length n_embd");
 
         let mut drafts = Vec::with_capacity(max_steps);
-        let mut h_current = h_t.to_vec();
+        // Double-buffered hidden state: forward_into writes h_{t+1} into the
+        // inactive buffer while reading h_t from the active one, then we swap.
+        // This removes the per-step `h_current = mlp.forward(...)` allocation
+        // (the prior `h_t.to_vec()` + a fresh result Vec every step).
+        let mut h_a = h_t.to_vec();
+        let mut h_b = vec![0.0f32; n];
 
-        // Pre-allocate scratch for log-softmax
+        // Pre-allocate scratch for log-softmax and for the MLP forward pass
+        // (reused across all steps — see MlpForwardScratch).
         let mut logits_buf = vec![0.0f32; self.vocab_size];
+        let mut mlp_scratch = MlpForwardScratch::new(n);
 
         for _ in 0..max_steps {
             // 1. Project hidden → logits
-            self.logits_from_hidden_into(&h_current, &mut logits_buf);
+            self.logits_from_hidden_into(&h_a, &mut logits_buf);
 
             // 2. Convert to log-probs + compute entropy
             log_softmax_inplace(&mut logits_buf);
@@ -550,9 +618,11 @@ impl BeliefDrafter {
                 break;
             }
 
-            // 6. Get embedding for drafted token, advance hidden state
+            // 6. Get embedding for drafted token, advance hidden state.
+            //    forward_into reads h_a, writes h_b; swap for next iteration.
             let emb = self.token_embedding(token_idx);
-            h_current = self.mlp.forward(&h_current, emb);
+            self.mlp.forward_into(&h_a, emb, &mut mlp_scratch, &mut h_b);
+            std::mem::swap(&mut h_a, &mut h_b);
         }
 
         drafts
@@ -584,9 +654,11 @@ impl BeliefDrafter {
         assert_eq!(h_t.len(), n, "h_t must have length n_embd");
 
         let mut drafts = Vec::with_capacity(max_steps);
-        let mut h_current = h_t.to_vec();
+        // Double-buffered hidden state (h_a = current input, h_b = next output).
+        let mut h_a = h_t.to_vec();
+        let mut h_b = vec![0.0f32; n];
 
-        // SC buffer starts with initial signal or zeros
+        // SC buffer starts with initial signal or zeros.
         let mut sc_current: Vec<f32> = match initial_sc {
             Some(sc) => {
                 assert_eq!(sc.len(), n, "initial_sc must have length n_embd");
@@ -594,13 +666,19 @@ impl BeliefDrafter {
             }
             None => vec![0.0f32; n],
         };
+        // Previous hidden state used as the SC signal next iteration; reused
+        // across steps to avoid the prior per-step `h_current.clone()`.
+        let mut prev_h = vec![0.0f32; n];
+        // Blended embedding scratch (next_emb + scale * sc).
+        let mut blended_emb = vec![0.0f32; n];
 
-        // Pre-allocate scratch for log-softmax
+        // Pre-allocate scratch for log-softmax and the MLP forward pass.
         let mut logits_buf = vec![0.0f32; self.vocab_size];
+        let mut mlp_scratch = MlpForwardScratch::new(n);
 
         for _ in 0..max_steps {
             // 1. Project hidden → logits
-            self.logits_from_hidden_into(&h_current, &mut logits_buf);
+            self.logits_from_hidden_into(&h_a, &mut logits_buf);
 
             // 2. Convert to log-probs + compute entropy
             log_softmax_inplace(&mut logits_buf);
@@ -624,16 +702,23 @@ impl BeliefDrafter {
             // 6. Get embedding for drafted token
             let emb = self.token_embedding(token_idx);
 
-            // 7. Store current hidden state as SC for next step
-            let prev_h = h_current.clone();
+            // 7. Snapshot current hidden state into prev_h (reused buffer) —
+            //    becomes the SC signal next iteration.
+            prev_h.copy_from_slice(&h_a);
 
-            // 8. Advance with SC: h_{t+1} = mlp.forward_with_sc(h_t, emb, sc, scale)
-            h_current = self
-                .mlp
-                .forward_with_sc(&prev_h, emb, &sc_current, sc_scale);
+            // 8. Blend SC into embedding: next_emb' = next_emb + scale * sc.
+            for i in 0..n {
+                blended_emb[i] = emb[i] + sc_scale * sc_current[i];
+            }
 
-            // 9. Update SC signal for next iteration (previous hidden state)
-            sc_current = prev_h;
+            // 9. Advance: h_{t+1} = mlp.forward(h_t, blended_emb) via the
+            //    zero-alloc forward_into (reads h_a, writes h_b); then swap.
+            self.mlp
+                .forward_into(&h_a, &blended_emb, &mut mlp_scratch, &mut h_b);
+            std::mem::swap(&mut h_a, &mut h_b);
+
+            // 10. Update SC signal for next iteration (previous hidden state).
+            std::mem::swap(&mut sc_current, &mut prev_h);
         }
 
         drafts
