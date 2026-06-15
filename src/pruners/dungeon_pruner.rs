@@ -19,6 +19,9 @@
 //! - Inventory system (max 2 items)
 //! - Stair connections are bidirectional
 
+/// Sentinel value indicating no entity at a tile.
+const NO_ENTITY: i32 = -1;
+
 /// Maximum inventory capacity.
 const MAX_INVENTORY: u8 = 2;
 
@@ -44,6 +47,15 @@ pub struct DungeonMap {
     pub goal: (usize, usize, usize),           // (floor, r, c)
     pub monsters: Vec<(usize, usize, usize)>,  // (floor, r, c)
     pub treasures: Vec<(usize, usize, usize)>, // (floor, r, c)
+    // ── Precomputed hot-path lookups (built once in `new`) ──────────
+    /// Column count per floor. `floor_cols[f]` = width of floor `f`.
+    floor_cols: Vec<usize>,
+    /// Bitmask of all treasures: `(1 << treasures.len()) - 1`.
+    all_treasures_mask: u32,
+    /// Flat monster lookup per floor: `monster_at[f][r*cols+c]` → index or `NO_ENTITY`.
+    monster_at: Vec<Vec<i32>>,
+    /// Flat treasure lookup per floor: `treasure_at[f][r*cols+c]` → index or `NO_ENTITY`.
+    treasure_at: Vec<Vec<i32>>,
 }
 
 /// Build floor adjacency list from stair connections.
@@ -67,6 +79,82 @@ pub(crate) fn build_floor_adj(num_floors: usize, stairs: &[StairConnection]) -> 
 }
 
 impl DungeonMap {
+    /// Build precomputed lookup tables from raw components.
+    /// Called by both `new` and `from_parts`.
+    fn build_lookups(
+        floors: &[FloorGrid],
+        monsters: &[(usize, usize, usize)],
+        treasures: &[(usize, usize, usize)],
+    ) -> (Vec<usize>, u32, Vec<Vec<i32>>, Vec<Vec<i32>>) {
+        let floor_cols: Vec<usize> = floors
+            .iter()
+            .map(|grid| grid.first().map_or(0, |r| r.len()))
+            .collect();
+        let all_treasures_mask = if treasures.is_empty() {
+            0
+        } else {
+            ((1u64 << treasures.len()) - 1) as u32
+        };
+        let mut monster_at = vec![Vec::new(); floors.len()];
+        let mut treasure_at = vec![Vec::new(); floors.len()];
+        for (f_idx, grid) in floors.iter().enumerate() {
+            let cols = floor_cols[f_idx];
+            let area = grid.len() * cols;
+            monster_at[f_idx] = vec![NO_ENTITY; area];
+            treasure_at[f_idx] = vec![NO_ENTITY; area];
+        }
+        for (i, &(f, mr, mc)) in monsters.iter().enumerate() {
+            if f < monster_at.len() {
+                let cols = floor_cols[f];
+                let flat = mr * cols + mc;
+                if flat < monster_at[f].len() {
+                    monster_at[f][flat] = i as i32;
+                }
+            }
+        }
+        for (i, &(f, tr, tc)) in treasures.iter().enumerate() {
+            if f < treasure_at.len() {
+                let cols = floor_cols[f];
+                let flat = tr * cols + tc;
+                if flat < treasure_at[f].len() {
+                    treasure_at[f][flat] = i as i32;
+                }
+            }
+        }
+        (floor_cols, all_treasures_mask, monster_at, treasure_at)
+    }
+
+    /// Construct a `DungeonMap` from pre-parsed components.
+    ///
+    /// Used by tests and code that already has grid data (avoids re-parsing).
+    /// Computes floor adjacency and flat entity lookups.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn from_parts(
+        floors: Vec<FloorGrid>,
+        stairs: Vec<StairConnection>,
+        start: (usize, usize, usize),
+        goal: (usize, usize, usize),
+        monsters: Vec<(usize, usize, usize)>,
+        treasures: Vec<(usize, usize, usize)>,
+    ) -> Self {
+        let floor_adj = build_floor_adj(floors.len(), &stairs);
+        let (floor_cols, all_treasures_mask, monster_at, treasure_at) =
+            Self::build_lookups(&floors, &monsters, &treasures);
+        Self {
+            floors,
+            stairs,
+            floor_adj,
+            start,
+            goal,
+            monsters,
+            treasures,
+            floor_cols,
+            all_treasures_mask,
+            monster_at,
+            treasure_at,
+        }
+    }
+
     /// Parse multiple floor map strings into a dungeon.
     ///
     /// Map symbols:
@@ -123,7 +211,8 @@ impl DungeonMap {
             floors.push(grid);
         }
 
-        // Build floor adjacency from stairs
+        let (floor_cols, all_treasures_mask, monster_at, treasure_at) =
+            Self::build_lookups(&floors, &monsters, &treasures);
         let floor_adj = build_floor_adj(floors.len(), &stairs);
 
         Self {
@@ -134,6 +223,10 @@ impl DungeonMap {
             goal,
             monsters,
             treasures,
+            floor_cols,
+            all_treasures_mask,
+            monster_at,
+            treasure_at,
         }
     }
 
@@ -217,6 +310,28 @@ impl DungeonPruner {
         }
     }
 
+    /// O(1) flat lookup: monster index at `(floor, r, c)` or `NO_ENTITY`.
+    #[inline]
+    fn monster_at(&self, floor: usize, r: usize, c: usize) -> i32 {
+        let cols = *self.map.floor_cols.get(floor).unwrap_or(&0);
+        self.map.monster_at
+            .get(floor)
+            .and_then(|lut| lut.get(r * cols + c))
+            .copied()
+            .unwrap_or(NO_ENTITY)
+    }
+
+    /// O(1) flat lookup: treasure index at `(floor, r, c)` or `NO_ENTITY`.
+    #[inline]
+    fn treasure_at(&self, floor: usize, r: usize, c: usize) -> i32 {
+        let cols = *self.map.floor_cols.get(floor).unwrap_or(&0);
+        self.map.treasure_at
+            .get(floor)
+            .and_then(|lut| lut.get(r * cols + c))
+            .copied()
+            .unwrap_or(NO_ENTITY)
+    }
+
     /// Applies a single action to the state.
     ///
     /// Actions:
@@ -270,35 +385,27 @@ impl DungeonPruner {
             return None;
         }
 
-        // Goal validation (locked until all treasures collected)
-        if (next.floor, nr, nc) == self.map.goal {
-            let all_treasures = (1 << self.map.treasures.len()) - 1;
-            if next.collected_treasures != all_treasures {
-                return None;
-            }
+        // Goal validation (locked until all treasures collected) — precomputed mask
+        if (next.floor, nr, nc) == self.map.goal
+            && next.collected_treasures != self.map.all_treasures_mask
+        {
+            return None;
         }
 
-        // Check for a LIVE monster at the target tile
-        let live_monster_here = self
-            .map
-            .monsters
-            .iter()
-            .enumerate()
-            .any(|(i, &(f, mr, mc))| {
-                (f, mr, mc) == (next.floor, nr, nc) && (next.killed_monsters & (1 << i)) == 0
-            });
+        // Check for a LIVE monster at the target tile — O(1) flat lookup
+        let m_idx = self.monster_at(next.floor, nr, nc);
+        let live_monster_here = m_idx != NO_ENTITY
+            && (next.killed_monsters & (1 << m_idx)) == 0;
 
-        // Treasure collection (locked without item)
+        // Treasure collection (locked without item) — O(1) flat lookup
         if !live_monster_here {
-            for (i, &(f, tr, tc)) in self.map.treasures.iter().enumerate() {
-                if (f, tr, tc) == (next.floor, nr, nc) && (next.collected_treasures & (1 << i)) == 0
-                {
-                    if next.inventory > 0 {
-                        next.inventory -= 1;
-                        next.collected_treasures |= 1 << i;
-                    } else {
-                        return None; // Cannot walk onto locked treasure without item
-                    }
+            let t_idx = self.treasure_at(next.floor, nr, nc);
+            if t_idx != NO_ENTITY && (next.collected_treasures & (1 << t_idx)) == 0 {
+                if next.inventory > 0 {
+                    next.inventory -= 1;
+                    next.collected_treasures |= 1 << t_idx;
+                } else {
+                    return None; // Cannot walk onto locked treasure without item
                 }
             }
         }
@@ -310,15 +417,13 @@ impl DungeonPruner {
         // Accumulate movement cost (terrain-dependent)
         next.total_cost += self.terrain_cost(next.floor, nr, nc);
 
-        // Auto-pickup dropped items at new tile
-        for (i, &(f, mr, mc)) in self.map.monsters.iter().enumerate() {
-            if (f, mr, mc) == (next.floor, nr, nc)
-                && (next.dropped_items & (1 << i)) != 0
-                && next.inventory < MAX_INVENTORY
-            {
-                next.inventory += 1;
-                next.dropped_items &= !(1 << i);
-            }
+        // Auto-pickup dropped items at new tile — O(1) flat lookup
+        if m_idx != NO_ENTITY
+            && (next.dropped_items & (1 << m_idx)) != 0
+            && next.inventory < MAX_INVENTORY
+        {
+            next.inventory += 1;
+            next.dropped_items &= !(1 << m_idx);
         }
 
         Some(())
@@ -326,38 +431,32 @@ impl DungeonPruner {
 
     /// Apply attack action — must be standing on a live monster's tile.
     fn apply_attack(&self, next: &mut DungeonState) -> Option<()> {
-        let m_idx = self
-            .map
-            .monsters
-            .iter()
-            .position(|&(f, mr, mc)| (f, mr, mc) == (next.floor, next.r, next.c));
+        let m_idx = self.monster_at(next.floor, next.r, next.c);
 
-        match m_idx {
-            Some(idx) if (next.killed_monsters & (1 << idx)) == 0 => {
-                next.killed_monsters |= 1 << idx;
-                next.dropped_items |= 1 << idx;
-
-                // Auto-pickup if inventory allows
-                if next.inventory < MAX_INVENTORY {
-                    next.inventory += 1;
-                    next.dropped_items &= !(1 << idx);
-                }
-
-                // Check for treasure underneath the killed monster
-                for (i, &(f, tr, tc)) in self.map.treasures.iter().enumerate() {
-                    if (f, tr, tc) == (next.floor, next.r, next.c)
-                        && (next.collected_treasures & (1 << i)) == 0
-                        && next.inventory > 0
-                    {
-                        next.inventory -= 1;
-                        next.collected_treasures |= 1 << i;
-                    }
-                }
-
-                Some(())
-            }
-            _ => None, // No live monster here to attack
+        if m_idx == NO_ENTITY || (next.killed_monsters & (1 << m_idx)) != 0 {
+            return None; // No live monster here to attack
         }
+
+        next.killed_monsters |= 1 << m_idx;
+        next.dropped_items |= 1 << m_idx;
+
+        // Auto-pickup if inventory allows
+        if next.inventory < MAX_INVENTORY {
+            next.inventory += 1;
+            next.dropped_items &= !(1 << m_idx);
+        }
+
+        // Check for treasure underneath the killed monster — O(1) flat lookup
+        let t_idx = self.treasure_at(next.floor, next.r, next.c);
+        if t_idx != NO_ENTITY
+            && (next.collected_treasures & (1 << t_idx)) == 0
+            && next.inventory > 0
+        {
+            next.inventory -= 1;
+            next.collected_treasures |= 1 << t_idx;
+        }
+
+        Some(())
     }
 
     /// Apply use stairs action — must be standing on a stair connection.

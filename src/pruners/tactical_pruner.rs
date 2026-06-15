@@ -16,6 +16,9 @@ use crate::speculative::types::ConstraintPruner;
 /// Branch-free direction deltas: 0=Up(-1,0), 1=Down(1,0), 2=Left(0,-1), 3=Right(0,1).
 const DIR_DELTAS: [(isize, isize); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
 
+/// Sentinel value indicating no entity at a tile.
+const NO_ENTITY: i32 = -1;
+
 /// Represents the deterministic state of a grid-based tactical puzzle.
 ///
 /// Fields ordered by alignment (u64/u32 → u8) to minimize padding.
@@ -57,6 +60,15 @@ pub struct TacticalPruner {
     pub monsters: Vec<(usize, usize)>,
     pub treasures: Vec<(usize, usize)>,
     pub goal: (usize, usize),
+    // ── Precomputed hot-path lookups (built once in `new`) ─────────
+    /// Grid column count. Assumes rectangular rows (same as existing bounds checks).
+    cols: usize,
+    /// Bitmask of all treasures: `(1 << treasures.len()) - 1`. Precomputed for goal-lock check.
+    all_treasures_mask: u32,
+    /// Flat monster lookup: `monster_at[r * cols + c]` → monster index or `NO_ENTITY`.
+    monster_at: Vec<i32>,
+    /// Flat treasure lookup: `treasure_at[r * cols + c]` → treasure index or `NO_ENTITY`.
+    treasure_at: Vec<i32>,
 }
 
 impl TacticalPruner {
@@ -112,6 +124,29 @@ impl TacticalPruner {
             grid.push(row);
         }
 
+        // ── Precompute flat entity lookups (O(1) per tile in `apply_action`) ──
+        let cols = grid.first().map_or(0, |r| r.len());
+        let area = grid.len() * cols;
+        let all_treasures_mask = if treasures.is_empty() {
+            0
+        } else {
+            ((1u64 << treasures.len()) - 1) as u32
+        };
+        let mut monster_at = vec![NO_ENTITY; area];
+        let mut treasure_at = vec![NO_ENTITY; area];
+        for (i, &(mr, mc)) in monsters.iter().enumerate() {
+            let flat = mr * cols + mc;
+            if flat < area {
+                monster_at[flat] = i as i32;
+            }
+        }
+        for (i, &(tr, tc)) in treasures.iter().enumerate() {
+            let flat = tr * cols + tc;
+            if flat < area {
+                treasure_at[flat] = i as i32;
+            }
+        }
+
         Self {
             grid,
             start_r,
@@ -119,6 +154,10 @@ impl TacticalPruner {
             monsters,
             treasures,
             goal,
+            cols,
+            all_treasures_mask,
+            monster_at,
+            treasure_at,
         }
     }
 
@@ -163,17 +202,18 @@ impl TacticalPruner {
                 let nr = next.r as isize + dr;
                 let nc = next.c as isize + dc;
 
-                // 1. Grid bounds
+                // 1. Grid bounds (precomputed cols avoids grid[0].len() per call)
                 if nr < 0
                     || nc < 0
                     || nr >= self.grid.len() as isize
-                    || nc >= self.grid[0].len() as isize
+                    || nc >= self.cols as isize
                 {
                     return None;
                 }
 
                 let nr = nr as usize;
                 let nc = nc as usize;
+                let flat = nr * self.cols + nc;
 
                 // 2. Wall collisions
                 if self.grid[nr][nc] == '#' {
@@ -181,33 +221,29 @@ impl TacticalPruner {
                 }
 
                 // 3. Goal validation (exit locked until all treasures collected)
-                if (nr, nc) == self.goal {
-                    let all_treasures = (1 << self.treasures.len()) - 1;
-                    if next.collected_treasures != all_treasures {
-                        return None;
-                    }
+                if (nr, nc) == self.goal
+                    && next.collected_treasures != self.all_treasures_mask
+                {
+                    return None;
                 }
 
-                // Check for a LIVE monster at the target tile
-                let mut live_monster_here = false;
-                for (i, &m_pos) in self.monsters.iter().enumerate() {
-                    if m_pos == (nr, nc) && (next.killed_monsters & (1 << i)) == 0 {
-                        live_monster_here = true;
-                        break;
-                    }
-                }
+                // 4. Check for a LIVE monster at the target tile — O(1) flat lookup
+                let m_idx = self.monster_at[flat];
+                let live_monster_here = m_idx != NO_ENTITY
+                    && (next.killed_monsters & (1 << m_idx)) == 0;
 
-                // 4. Treasure collection (locked without item)
+                // 5. Treasure collection (locked without item) — O(1) flat lookup
                 if !live_monster_here {
-                    for (i, &t_pos) in self.treasures.iter().enumerate() {
-                        if t_pos == (nr, nc) && (next.collected_treasures & (1 << i)) == 0 {
-                            if next.inventory > 0 {
-                                next.inventory -= 1;
-                                next.collected_treasures |= 1 << i;
-                            } else {
-                                // Cannot walk onto locked treasure without item
-                                return None;
-                            }
+                    let t_idx = self.treasure_at[flat];
+                    if t_idx != NO_ENTITY
+                        && (next.collected_treasures & (1 << t_idx)) == 0
+                    {
+                        if next.inventory > 0 {
+                            next.inventory -= 1;
+                            next.collected_treasures |= 1 << t_idx;
+                        } else {
+                            // Cannot walk onto locked treasure without item
+                            return None;
                         }
                     }
                 }
@@ -216,48 +252,44 @@ impl TacticalPruner {
                 next.r = nr;
                 next.c = nc;
 
-                // 5. Accumulate movement cost (terrain-dependent)
+                // 6. Accumulate movement cost (terrain-dependent)
                 next.total_cost += self.terrain_cost(nr, nc);
 
-                // 6. Auto-pickup dropped items at new tile
-                for (i, &m_pos) in self.monsters.iter().enumerate() {
-                    if m_pos == (nr, nc)
-                        && (next.dropped_items & (1 << i)) != 0
-                        && next.inventory < 2
-                    {
-                        next.inventory += 1;
-                        next.dropped_items &= !(1 << i);
-                    }
+                // 7. Auto-pickup dropped items at new tile — O(1) flat lookup
+                if m_idx != NO_ENTITY
+                    && (next.dropped_items & (1 << m_idx)) != 0
+                    && next.inventory < 2
+                {
+                    next.inventory += 1;
+                    next.dropped_items &= !(1 << m_idx);
                 }
             }
             4 => {
-                // ATTACK ACTION — must be on a live monster's tile
-                let m_idx = self.monsters.iter().position(|&p| p == (next.r, next.c));
+                // ATTACK ACTION — must be on a live monster's tile — O(1) flat lookup
+                let flat = next.r * self.cols + next.c;
+                let m_idx = self.monster_at[flat];
 
-                if let Some(idx) = m_idx
-                    && (next.killed_monsters & (1 << idx)) == 0
-                {
-                    next.killed_monsters |= 1 << idx;
-                    next.dropped_items |= 1 << idx;
-
-                    // Auto-pickup if inventory allows
-                    if next.inventory < 2 {
-                        next.inventory += 1;
-                        next.dropped_items &= !(1 << idx);
-                    }
-
-                    // Check for treasure underneath the killed monster
-                    for (i, &t_pos) in self.treasures.iter().enumerate() {
-                        if t_pos == (next.r, next.c)
-                            && (next.collected_treasures & (1 << i)) == 0
-                            && next.inventory > 0
-                        {
-                            next.inventory -= 1;
-                            next.collected_treasures |= 1 << i;
-                        }
-                    }
-                } else {
+                if m_idx == NO_ENTITY || (next.killed_monsters & (1 << m_idx)) != 0 {
                     return None; // No live monster here to attack
+                }
+
+                next.killed_monsters |= 1 << m_idx;
+                next.dropped_items |= 1 << m_idx;
+
+                // Auto-pickup if inventory allows
+                if next.inventory < 2 {
+                    next.inventory += 1;
+                    next.dropped_items &= !(1 << m_idx);
+                }
+
+                // Check for treasure underneath the killed monster — O(1) flat lookup
+                let t_idx = self.treasure_at[flat];
+                if t_idx != NO_ENTITY
+                    && (next.collected_treasures & (1 << t_idx)) == 0
+                    && next.inventory > 0
+                {
+                    next.inventory -= 1;
+                    next.collected_treasures |= 1 << t_idx;
                 }
             }
             _ => return None,

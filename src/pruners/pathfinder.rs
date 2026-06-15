@@ -19,6 +19,12 @@ pub fn dir_delta(action: usize) -> (isize, isize) {
     DIRS[action.min(3)]
 }
 
+/// Flat index helper: `(r, c)` → `r * cols + c`.
+#[inline]
+fn flat_index(r: usize, c: usize, cols: usize) -> usize {
+    r * cols + c
+}
+
 /// Returns the action name for display.
 pub fn action_name(action: usize) -> &'static str {
     match action {
@@ -103,32 +109,44 @@ pub fn find_path(
 
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
+    if cols == 0 {
+        return None;
+    }
     let area = rows * cols;
+    let from_flat = flat_index(from.0, from.1, cols);
+    let to_flat = flat_index(to.0, to.1, cols);
+
+    // Skip HashSet hashing when blocked is empty (common case).
+    let has_blocked = !blocked.is_empty();
 
     let mut open = BinaryHeap::with_capacity(area);
-    let mut visited = HashSet::with_capacity(area);
-    let mut came_from = std::collections::HashMap::with_capacity(area);
+    // Flat visited array — O(1) direct index, far better cache locality than HashSet<(usize, usize)>.
+    let mut visited = vec![false; area];
+    // Flat came_from: (prev_flat_index, action). Only accessed for visited cells during reconstruction.
+    let mut came_from: Vec<(usize, u8)> = vec![(0, 0); area];
 
     open.push(Node {
         pos: from,
         g: 0,
         f: manhattan(from, to),
     });
-    visited.insert(from);
+    visited[from_flat] = true;
 
     while let Some(current) = open.pop() {
         if current.pos == to {
-            // Reconstruct path
+            // Reconstruct path from flat came_from chain.
             let mut path = Vec::new();
-            let mut pos = to;
-            while pos != from {
-                let (action, prev) = came_from[&pos];
-                path.push(action);
-                pos = prev;
+            let mut flat = to_flat;
+            while flat != from_flat {
+                let (prev_flat, action) = came_from[flat];
+                path.push(action as usize);
+                flat = prev_flat;
             }
             path.reverse();
             return Some(path);
         }
+
+        let cur_flat = flat_index(current.pos.0, current.pos.1, cols);
 
         for (action, &(dr, dc)) in DIRS.iter().enumerate().take(4) {
             let nr = current.pos.0 as isize + dr;
@@ -139,18 +157,24 @@ pub fn find_path(
             }
             let nr = nr as usize;
             let nc = nc as usize;
+            let next_flat = flat_index(nr, nc, cols);
 
-            let next = (nr, nc);
-
-            if !is_passable(grid, nr, nc) || blocked.contains(&next) || visited.contains(&next) {
+            if visited[next_flat] {
+                continue;
+            }
+            // Bounds-safe grid access: is_passable handles jagged rows.
+            if !is_passable(grid, nr, nc) {
+                continue;
+            }
+            if has_blocked && blocked.contains(&(nr, nc)) {
                 continue;
             }
 
-            visited.insert(next);
+            visited[next_flat] = true;
             let g = current.g + terrain_cost(grid, nr, nc);
-            let f = g + manhattan(next, to);
-            came_from.insert(next, (action, current.pos));
-            open.push(Node { pos: next, g, f });
+            let f = g + manhattan((nr, nc), to);
+            came_from[next_flat] = (cur_flat, action as u8);
+            open.push(Node { pos: (nr, nc), g, f });
         }
     }
 
@@ -175,16 +199,23 @@ pub fn find_distance(
 
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
+    if cols == 0 {
+        return None;
+    }
+    let area = rows * cols;
 
-    let mut open = BinaryHeap::with_capacity(rows * cols);
-    let mut visited = HashSet::with_capacity(rows * cols);
+    // Skip HashSet hashing when blocked is empty (common case).
+    let has_blocked = !blocked.is_empty();
+
+    let mut open = BinaryHeap::with_capacity(area);
+    let mut visited = vec![false; area];
 
     open.push(Node {
         pos: from,
         g: 0,
         f: manhattan(from, to),
     });
-    visited.insert(from);
+    visited[flat_index(from.0, from.1, cols)] = true;
 
     while let Some(current) = open.pop() {
         if current.pos == to {
@@ -200,39 +231,53 @@ pub fn find_distance(
             }
             let nr = nr as usize;
             let nc = nc as usize;
-            let next = (nr, nc);
+            let next_flat = flat_index(nr, nc, cols);
 
-            if !is_passable(grid, nr, nc) || blocked.contains(&next) || visited.contains(&next) {
+            if visited[next_flat] {
+                continue;
+            }
+            if !is_passable(grid, nr, nc) {
+                continue;
+            }
+            if has_blocked && blocked.contains(&(nr, nc)) {
                 continue;
             }
 
-            visited.insert(next);
+            visited[next_flat] = true;
             let g = current.g + terrain_cost(grid, nr, nc);
-            let f = g + manhattan(next, to);
-            open.push(Node { pos: next, g, f });
+            let f = g + manhattan((nr, nc), to);
+            open.push(Node { pos: (nr, nc), g, f });
         }
     }
 
     None
 }
 
-/// BFS flood fill — returns all positions reachable from `from`.
+/// BFS flood fill — returns a flat visited bitmap plus column count.
 ///
-/// Useful for cost evaluation: which targets are actually reachable.
-pub fn reachable_positions(
+/// Index by `r * cols + c` where `cols` is the returned column count.
+/// This is the cache-friendly core used by both `reachable_positions` and
+/// internal callers (e.g., map generation) that don't need a `HashSet`.
+#[inline]
+pub(crate) fn reachable_flat(
     grid: &[Vec<char>],
     from: (usize, usize),
     blocked: &HashSet<(usize, usize)>,
-) -> HashSet<(usize, usize)> {
+) -> (Vec<bool>, usize) {
     let rows = grid.len();
     let cols = grid.first().map_or(0, |r| r.len());
-
     let area = rows * cols;
-    let mut visited = HashSet::with_capacity(area);
+
+    let has_blocked = !blocked.is_empty();
+    let mut visited = if cols > 0 {
+        vec![false; area]
+    } else {
+        return (Vec::new(), 0);
+    };
     let mut queue = std::collections::VecDeque::with_capacity(area);
 
     queue.push_back(from);
-    visited.insert(from);
+    visited[flat_index(from.0, from.1, cols)] = true;
 
     while let Some(pos) = queue.pop_front() {
         for &(dr, dc) in DIRS.iter().take(4) {
@@ -244,18 +289,54 @@ pub fn reachable_positions(
             }
             let nr = nr as usize;
             let nc = nc as usize;
-            let next = (nr, nc);
+            let next_flat = flat_index(nr, nc, cols);
 
-            if !is_passable(grid, nr, nc) || blocked.contains(&next) || visited.contains(&next) {
+            if visited[next_flat] {
+                continue;
+            }
+            if !is_passable(grid, nr, nc) {
+                continue;
+            }
+            if has_blocked && blocked.contains(&(nr, nc)) {
                 continue;
             }
 
-            visited.insert(next);
-            queue.push_back(next);
+            visited[next_flat] = true;
+            queue.push_back((nr, nc));
         }
     }
 
-    visited
+    (visited, cols)
+}
+
+/// BFS flood fill — returns all positions reachable from `from`.
+///
+/// Useful for cost evaluation: which targets are actually reachable.
+pub fn reachable_positions(
+    grid: &[Vec<char>],
+    from: (usize, usize),
+    blocked: &HashSet<(usize, usize)>,
+) -> HashSet<(usize, usize)> {
+    let rows = grid.len();
+    let (visited, cols) = reachable_flat(grid, from, blocked);
+
+    // Collect reachable positions — sequential scan is cache-friendly.
+    let mut count = 0;
+    for &v in visited.iter() {
+        if v {
+            count += 1;
+        }
+    }
+    let mut result = HashSet::with_capacity(count);
+    for r in 0..rows {
+        let base = r * cols;
+        for c in 0..cols {
+            if visited[base + c] {
+                result.insert((r, c));
+            }
+        }
+    }
+    result
 }
 
 // ── Target System ──────────────────────────────────────────────

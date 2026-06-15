@@ -22,7 +22,7 @@
 //! let pruner = TacticalPruner::new(&map_str);
 //! ```
 
-use crate::pruners::pathfinder::{is_passable, reachable_positions};
+use crate::pruners::pathfinder::{is_passable, reachable_flat};
 use std::collections::HashSet;
 
 // ── Public Types ───────────────────────────────────────────────
@@ -164,18 +164,23 @@ impl MapGenerator {
 
         // 5. Find reachable positions from start
         let blocked = HashSet::new();
-        let reachable = reachable_positions(&grid, start, &blocked);
+        let (reachable, cols) = reachable_flat(&grid, start, &blocked);
 
-        if !reachable.contains(&goal) {
+        if !reachable[start.0 * cols + start.1] || !reachable[goal.0 * cols + goal.1] {
             self.seed = self.seed.wrapping_add(1);
             return None;
         }
 
         // 6. Place monsters and treasures on reachable floor tiles
-        let mut available: Vec<(usize, usize)> = reachable
-            .into_iter()
-            .filter(|&p| p != start && p != goal)
-            .collect();
+        let mut available: Vec<(usize, usize)> = Vec::with_capacity(grid.len() * cols);
+        for r in 0..grid.len() {
+            let base = r * cols;
+            for c in 0..grid[r].len() {
+                if reachable[base + c] && (r, c) != start && (r, c) != goal {
+                    available.push((r, c));
+                }
+            }
+        }
 
         // Sort for deterministic ordering (HashSet iteration is non-deterministic)
         available.sort_unstable();
@@ -287,9 +292,9 @@ impl MapGenerator {
         goal: (usize, usize),
     ) -> bool {
         let blocked = HashSet::new();
-        let reachable = reachable_positions(grid, start, &blocked);
+        let (reachable, cols) = reachable_flat(grid, start, &blocked);
 
-        if reachable.contains(&goal) {
+        if reachable[goal.0 * cols + goal.1] {
             return true;
         }
 
@@ -318,8 +323,8 @@ impl MapGenerator {
         }
 
         // Verify connectivity after carving
-        let reachable = reachable_positions(grid, start, &blocked);
-        reachable.contains(&goal)
+        let (reachable, cols) = reachable_flat(grid, start, &blocked);
+        reachable[goal.0 * cols + goal.1]
     }
 
     /// Adds sand (`~`) and water (`w`) terrain patches to the grid.
@@ -502,20 +507,20 @@ fn verify_all_reachable(
     goal: (usize, usize),
 ) -> bool {
     let blocked = HashSet::new();
-    let reachable = reachable_positions(grid, start, &blocked);
+    let (reachable, cols) = reachable_flat(grid, start, &blocked);
 
-    if !reachable.contains(&goal) {
+    if !reachable[goal.0 * cols + goal.1] {
         return false;
     }
 
-    for &pos in monsters {
-        if !reachable.contains(&pos) {
+    for &(r, c) in monsters {
+        if !reachable[r * cols + c] {
             return false;
         }
     }
 
-    for &pos in treasures {
-        if !reachable.contains(&pos) {
+    for &(r, c) in treasures {
+        if !reachable[r * cols + c] {
             return false;
         }
     }
@@ -671,8 +676,8 @@ mod tests {
         assert!(connected, "Should be able to carve a path");
 
         let blocked = HashSet::new();
-        let reachable = reachable_positions(&grid, start, &blocked);
-        assert!(reachable.contains(&goal));
+        let (reachable, cols) = reachable_flat(&grid, start, &blocked);
+        assert!(reachable[goal.0 * cols + goal.1]);
     }
 
     #[test]
@@ -748,16 +753,22 @@ mod tests {
 
         let map = generator.generate_single_floor().unwrap();
         let blocked = HashSet::new();
-        let reachable = reachable_positions(&map.grid, map.start, &blocked);
+        let (reachable, cols) = reachable_flat(&map.grid, map.start, &blocked);
 
-        assert!(reachable.contains(&map.goal), "Goal must be reachable");
-        for &m in &map.monsters {
-            assert!(reachable.contains(&m), "Monster at {m:?} must be reachable");
-        }
-        for &t in &map.treasures {
+        assert!(
+            reachable[map.goal.0 * cols + map.goal.1],
+            "Goal must be reachable"
+        );
+        for &(mr, mc) in &map.monsters {
             assert!(
-                reachable.contains(&t),
-                "Treasure at {t:?} must be reachable"
+                reachable[mr * cols + mc],
+                "Monster at ({mr}, {mc}) must be reachable"
+            );
+        }
+        for &(tr, tc) in &map.treasures {
+            assert!(
+                reachable[tr * cols + tc],
+                "Treasure at ({tr}, {tc}) must be reachable"
             );
         }
     }

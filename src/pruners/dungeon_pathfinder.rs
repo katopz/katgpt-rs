@@ -328,7 +328,7 @@ fn find_best_stair(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pruners::dungeon_pruner::{StairConnection, build_floor_adj};
+    use crate::pruners::dungeon_pruner::StairConnection;
 
     fn parse_grid(s: &str) -> Vec<Vec<char>> {
         s.lines()
@@ -348,15 +348,14 @@ mod tests {
             to: (1, 0, 0),
         }];
 
-        DungeonMap {
-            floors: vec![floor0, floor1],
-            floor_adj: build_floor_adj(2, &stairs),
+        DungeonMap::from_parts(
+            vec![floor0, floor1],
             stairs,
-            start: (0, 0, 0),
-            goal: (1, 2, 2),
-            monsters: vec![],
-            treasures: vec![],
-        }
+            (0, 0, 0),
+            (1, 2, 2),
+            vec![],
+            vec![],
+        )
     }
 
     fn make_three_floor_dungeon() -> DungeonMap {
@@ -374,15 +373,14 @@ mod tests {
             },
         ];
 
-        DungeonMap {
-            floors: vec![floor0, floor1, floor2],
-            floor_adj: build_floor_adj(3, &stairs),
+        DungeonMap::from_parts(
+            vec![floor0, floor1, floor2],
             stairs,
-            start: (0, 0, 0),
-            goal: (2, 2, 2),
-            monsters: vec![(1, 1, 1)],
-            treasures: vec![(1, 0, 2)],
-        }
+            (0, 0, 0),
+            (2, 2, 2),
+            vec![(1, 1, 1)],
+            vec![(1, 0, 2)],
+        )
     }
 
     #[test]
@@ -468,15 +466,14 @@ mod tests {
             from: (0, 0, 0),
             to: (1, 0, 0),
         }];
-        let dungeon = DungeonMap {
-            floors: vec![parse_grid("."), parse_grid("."), parse_grid(".")],
-            floor_adj: build_floor_adj(3, &stairs),
+        let dungeon = DungeonMap::from_parts(
+            vec![parse_grid("."), parse_grid("."), parse_grid(".")],
             stairs,
-            start: (0, 0, 0),
-            goal: (2, 0, 0),
-            monsters: vec![],
-            treasures: vec![],
-        };
+            (0, 0, 0),
+            (2, 0, 0),
+            vec![],
+            vec![],
+        );
 
         let sequence = bfs_floor_sequence(&dungeon, 0, 2);
         assert!(sequence.is_none(), "Floor 2 should be unreachable");
@@ -537,15 +534,14 @@ mod tests {
             },
         ];
 
-        let dungeon = DungeonMap {
-            floors: vec![floor0, floor1],
-            floor_adj: build_floor_adj(2, &stairs),
+        let dungeon = DungeonMap::from_parts(
+            vec![floor0, floor1],
             stairs,
-            start: (0, 0, 0),
-            goal: (1, 2, 2),
-            monsters: vec![],
-            treasures: vec![],
-        };
+            (0, 0, 0),
+            (1, 2, 2),
+            vec![],
+            vec![],
+        );
 
         // Block the closer stair at (2, 2)
         let mut blocked = MultiFloorBlocked::new();
