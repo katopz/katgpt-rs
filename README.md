@@ -704,7 +704,7 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 | **GameState** (`game_state`) | Generic MCTS, STRATEGA forward model | Arena-specific |
 | **SpecHop** (`spechop`) | Hop-level speculation for multi-step agents | Awaiting GOAT proof |
 | **Percepta** (full) | Transformer-VM with WASM interpreter in weights | Research-grade |
-| **Sense Composition** (`sense_composition`) | KG Latent Octree NPC sense modules — ternary bit-plane projection | Opt-in — requires `plasma_path`, `domain_latent` |
+| **Sense Composition** (`sense_composition`) | KG Latent Octree NPC sense modules — ternary bit-plane projection **+ per-NPC 8-dim recurrent belief state via `evolve_hla` (the HLA pillar — recurrent latent state + sigmoid-dot bridge to scalars; grep before proposing new recurrent-state primitives)** | Opt-in — requires `plasma_path`, `domain_latent` |
 | **BAKE Precision** (`bake_precision`) | Per-dimension Bayesian precision tracking for KG embeddings | GOAT 10/10, drift marginal (4.7%) |
 | **NFCoT FlowScore** (`nf_flow`) | Normalizing flow density scoring for speculative candidates | GOAT ⚠️ MARGINAL, all sub-features default OFF |
 | **FOL Constraints** (`fol_constraints`) | DDTree→FOL logical rule extraction | GOAT 6/6 |
