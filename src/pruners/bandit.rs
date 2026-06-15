@@ -249,9 +249,11 @@ impl BanditStats {
             self.best_arm_idx = self.scan_best_arm();
         }
 
-        // Welford's online algorithm for reward variance tracking
+        // Welford's online algorithm for reward variance tracking.
+        // `n` already holds visits[arm] as f32 from the Q-value update above;
+        // reuse it instead of re-indexing and re-casting.
         let old_mean = self.reward_mean[arm];
-        let new_mean = old_mean + (reward - old_mean) / self.visits[arm] as f32;
+        let new_mean = old_mean + (reward - old_mean) / n;
         self.reward_m2[arm] += (reward - old_mean) * (reward - new_mean);
         self.reward_mean[arm] = new_mean;
     }
@@ -913,6 +915,64 @@ impl<P: ScreeningPruner> BanditPruner<P> {
         score
     }
 
+    /// Compute bandit scores for all arms under CurvatureInfluence in a single O(N) pass.
+    ///
+    /// `arm_bandit_score`'s CI branch rescans all arms per call to derive the
+    /// global concentration statistic, making an N-arm soft-route relevance
+    /// call O(N²). This helper factors out the concentration pass and applies
+    /// the boost + floor guarantee in a second O(N) sweep, preserving the
+    /// exact per-arm semantics of `arm_bandit_score` (unvisited → 1.0,
+    /// dual_cutoff → 0.0, then CI boost + floor clamp).
+    #[inline]
+    fn fill_ci_scores(
+        &self,
+        scores: &mut Vec<f32>,
+        floor: f32,
+        concentration_threshold: f32,
+    ) {
+        let num_arms = self.stats.num_arms;
+        // Pass 1: concentration is computed over clamp(q, 0, 1).max(0.01) for
+        // all arms (matches arm_bandit_score's inner scan; unvisited arms have
+        // q=0 → contribute 0.01 here, but are overridden to 1.0 in pass 2).
+        let mut max_score = 0.0f32;
+        let mut sum = 0.0f32;
+        for a in 0..num_arms {
+            let s = self.arm_q(a).clamp(0.0, 1.0).max(0.01);
+            max_score = max_score.max(s);
+            sum += s;
+        }
+        let concentration = if sum > 0.0 && max_score > 0.0 {
+            max_score / sum
+        } else {
+            1.0 / num_arms as f32
+        };
+        let boost = if concentration > concentration_threshold {
+            concentration / concentration_threshold
+        } else {
+            1.0
+        };
+        // Pass 2: per-arm final score, honoring unvisited/dual_cutoff early
+        // returns exactly like arm_bandit_score.
+        scores.clear();
+        // Ensure capacity once to avoid reallocation during push.
+        if scores.capacity() < num_arms {
+            scores.reserve(num_arms - scores.capacity());
+        }
+        for a in 0..num_arms {
+            let s = if self.arm_visits(a) == 0 {
+                1.0
+            } else if self.dual_cutoff > 0.0 && self.arm_q(a) < self.dual_cutoff {
+                0.0
+            } else {
+                let q = self.arm_q(a).clamp(0.0, 1.0).max(0.01);
+                let boosted = q * boost;
+                let min_score = floor * max_score.max(q);
+                boosted.max(min_score).clamp(0.0, 1.0)
+            };
+            scores.push(s);
+        }
+    }
+
     /// Soft-route relevance: softmax-weighted blend of all arm bandit scores.
     ///
     /// Instead of returning just the score for the requested arm, this computes
@@ -936,10 +996,39 @@ impl<P: ScreeningPruner> BanditPruner<P> {
         let num_arms = self.stats.num_arms;
         let tau = self.soft_route_tau;
 
-        // Compute bandit scores into pre-allocated scratch buffer
+        // Compute bandit scores into pre-allocated scratch buffer.
+        //
+        // CurvatureInfluence fast path: the strategy's concentration stat is a
+        // global property of all arms, but `arm_bandit_score`'s CI branch
+        // recomputes it per call. Calling that N times would be O(N²);
+        // `fill_ci_scores` computes concentration once and applies it in a
+        // single O(N) pass. Only eligible when idea_divergence is off (that
+        // feature's per-arm scan does not factor into the concentration
+        // invariant and is handled by the generic fallback below).
         let mut scores = self.soft_route_scores.lock().unwrap();
         scores.clear();
-        scores.extend((0..num_arms).map(|a| self.arm_bandit_score(a)));
+        let use_ci_fast_path = {
+            #[cfg(feature = "idea_divergence")]
+            { false }
+            #[cfg(not(feature = "idea_divergence"))]
+            {
+                matches!(
+                    self.strategy,
+                    BanditStrategy::CurvatureInfluence { .. }
+                )
+            }
+        };
+        if use_ci_fast_path {
+            if let BanditStrategy::CurvatureInfluence {
+                floor,
+                concentration_threshold,
+            } = &self.strategy
+            {
+                self.fill_ci_scores(&mut scores, *floor, *concentration_threshold);
+            }
+        } else {
+            scores.extend((0..num_arms).map(|a| self.arm_bandit_score(a)));
+        }
 
         // Numerical stability: subtract max before exp
         let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
@@ -1368,12 +1457,29 @@ impl<E: BanditEnv> BanditSession<E> {
         if n == 0 {
             return 0;
         }
-        // Pre-compute UCB1 scores once: max_by's closure would otherwise call
-        // ucb1_score(max) repeatedly (each call recomputes total.ln()).
+        // Inline UCB1 scoring with ln(total) hoisted out of the per-arm loop.
+        // Each `stats.ucb1_score(i)` call recomputes `total.ln()`; for N arms
+        // that is N transcendental calls per arm-selection. We pull `ln_total`
+        // and the q/visits slices out once and keep the loop branch-free.
+        let total_pulls = self.stats.total_pulls();
+        if total_pulls == 0 {
+            return 0;
+        }
+        let ln_total = 2.0_f32 * (total_pulls as f32).ln();
+        let q_values = self.stats.q_values();
+        let visits = self.stats.visits();
         let mut best_idx = 0;
-        let mut best_score = self.stats.ucb1_score(0);
+        let mut best_score = if visits[0] == 0 {
+            f32::MAX
+        } else {
+            q_values[0] + (ln_total / visits[0] as f32).sqrt()
+        };
         for i in 1..n {
-            let s = self.stats.ucb1_score(i);
+            let s = if visits[i] == 0 {
+                f32::MAX
+            } else {
+                q_values[i] + (ln_total / visits[i] as f32).sqrt()
+            };
             if s > best_score {
                 best_score = s;
                 best_idx = i;

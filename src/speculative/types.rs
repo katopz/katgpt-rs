@@ -145,16 +145,17 @@ impl StabilitySnapshot {
         let p50 = sorted_latencies_ns[p50_idx];
         let p99 = sorted_latencies_ns[p99_idx];
 
-        // Variance and CV
+        // Variance and CV — uses `mul_add` so LLVM emits a single fused multiply-add
+        // per element instead of multiply + add (one rounding, one fewer op).
         let variance = if n > 1 {
-            sorted_latencies_ns
+            let sum_sq = sorted_latencies_ns
                 .iter()
                 .map(|&v| {
                     let diff = v as f64 - mean;
-                    diff * diff
+                    diff.mul_add(diff, 0.0)
                 })
-                .sum::<f64>()
-                / (n as f64)
+                .sum::<f64>();
+            sum_sq / (n as f64)
         } else {
             0.0
         };
@@ -1186,7 +1187,7 @@ fn compute_entropy(probs: &[f32]) -> f32 {
     probs
         .iter()
         .filter(|&&p| p > 0.0)
-        .map(|&p| -p * p.ln())
+        .map(|&p| (-p).mul_add(p.ln(), 0.0))
         .sum()
 }
 

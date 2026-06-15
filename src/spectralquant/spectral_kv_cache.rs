@@ -75,6 +75,11 @@ impl DequantizeScratch {
 }
 
 /// Discriminant for whether `store_vector` writes to key or value storage.
+///
+/// `#[repr(u8)]` gives a 1-byte discriminant with a predictable bit pattern,
+/// which lets the optimizer turn the `match` into a branch-friendly
+/// conditional-select / conditional-move instead of a jump table.
+#[repr(u8)]
 enum StoreTarget {
     Key,
     Value,
@@ -396,19 +401,26 @@ impl SpectralQuantKVCache {
         let layer_state = &self.layers[layer];
         let d_eff = layer_state.d_eff;
 
+        // Select the destination norm + packed-indices slots once so the rest of
+        // the body stays branch-free on `target` (one select instead of 3 matches).
+        let (norm_slot, packed_slot): (&mut f32, &mut Vec<u8>) = match target {
+            StoreTarget::Key => (
+                &mut self.key_norms[layer][pos],
+                &mut self.key_indices[layer][pos],
+            ),
+            StoreTarget::Value => (
+                &mut self.val_norms[layer][pos],
+                &mut self.val_indices[layer][pos],
+            ),
+        };
+
         // Compute norm
         let norm = simd_norm(vec);
         if norm < 1e-8 {
-            match target {
-                StoreTarget::Key => self.key_norms[layer][pos] = 0.0,
-                StoreTarget::Value => self.val_norms[layer][pos] = 0.0,
-            }
+            *norm_slot = 0.0;
             return;
         }
-        match target {
-            StoreTarget::Key => self.key_norms[layer][pos] = norm,
-            StoreTarget::Value => self.val_norms[layer][pos] = norm,
-        }
+        *norm_slot = norm;
 
         // Normalize into scratch buffer
         let inv_norm = 1.0 / norm;
@@ -442,22 +454,19 @@ impl SpectralQuantKVCache {
 
         // Quantize tail dims
         let tail_cb = &layer_state.tail_codebook;
-        for (i, &v) in self.scratch_rotated.iter().enumerate().skip(d_eff) {
-            self.scratch_tail_indices[i - d_eff] = quantize_to_idx(v, &tail_cb.centroids);
+        let tail_len = self.kv_dim - d_eff;
+        for i in 0..tail_len {
+            self.scratch_tail_indices[i] =
+                quantize_to_idx(self.scratch_rotated[i + d_eff], &tail_cb.centroids);
         }
 
         // Build combined indices array
         let all_indices = &mut self.scratch_all_indices;
         all_indices[..d_eff].copy_from_slice(&self.scratch_semantic_indices[..d_eff]);
-        let tail_len = self.kv_dim - d_eff;
         all_indices[d_eff..self.kv_dim].copy_from_slice(&self.scratch_tail_indices[..tail_len]);
 
         // Pack variable bits into storage using precomputed packed_bits
-        let packed = match target {
-            StoreTarget::Key => &mut self.key_indices[layer][pos],
-            StoreTarget::Value => &mut self.val_indices[layer][pos],
-        };
-        pack_variable_bits(&all_indices[..self.kv_dim], &layer_state.packed_bits, packed);
+        pack_variable_bits(&all_indices[..self.kv_dim], &layer_state.packed_bits, packed_slot);
     }
 
     /// Dequantize a key at position into a new vector.
@@ -658,16 +667,55 @@ impl SpectralQuantKVCache {
     }
 
     /// Reset cache for a new sequence.
+    ///
+    /// Parallelized across layers via rayon when `n_layers` is large enough
+    /// to amortize thread-pool scheduling cost (~5µs per task). For small
+    /// layer counts the inner `fill` work is plain memset and runs faster
+    /// sequentially. The per-position `Vec<u8>::fill(0)` reduces to a single
+    /// `memset` call in release builds.
     pub fn reset(&mut self) {
         self.pos = 0;
-        for layer in 0..self.n_layers {
-            for p in 0..self.max_seq_len {
-                self.key_indices[layer][p].fill(0);
-                self.key_norms[layer][p] = 0.0;
-                self.val_indices[layer][p].fill(0);
-                self.val_norms[layer][p] = 0.0;
+        let layers = self.n_layers;
+        let seq_len = self.max_seq_len;
+
+        // Treat the per-layer buckets as parallel slices so we can clear them
+        // in parallel without mutable aliasing across layers.
+        let (key_indices, val_indices, key_norms, val_norms) = (
+            self.key_indices.as_mut_slice(),
+            self.val_indices.as_mut_slice(),
+            self.key_norms.as_mut_slice(),
+            self.val_norms.as_mut_slice(),
+        );
+
+        // Sequential path beats rayon below this layer count — the inner work
+        // is memset-bound, so thread-pool overhead dominates parallel benefit.
+        const PARALLEL_LAYERS_MIN: usize = 4;
+
+        if layers < PARALLEL_LAYERS_MIN {
+            for li in 0..layers {
+                for p in 0..seq_len {
+                    key_indices[li][p].fill(0);
+                    val_indices[li][p].fill(0);
+                    key_norms[li][p] = 0.0;
+                    val_norms[li][p] = 0.0;
+                }
             }
+            return;
         }
+
+        key_indices
+            .par_iter_mut()
+            .zip(val_indices.par_iter_mut())
+            .zip(key_norms.par_iter_mut())
+            .zip(val_norms.par_iter_mut())
+            .for_each(|(((ki, vi), kn), vn)| {
+                for p in 0..seq_len {
+                    ki[p].fill(0);
+                    vi[p].fill(0);
+                    kn[p] = 0.0;
+                    vn[p] = 0.0;
+                }
+            });
     }
 
     /// Current write position.
@@ -991,22 +1039,30 @@ fn generate_random_rotation(dim: usize, seed: u64) -> Vec<f32> {
     }
     // Gram-Schmidt orthogonalization: for each column, subtract projections
     // onto all previous columns, then normalize to unit length.
+    //
+    // Inner loops use explicit indexed accumulation instead of `.map().sum()`
+    // chains — the iterator adapters block LLVM's auto-vectorizer on the
+    // dot-product / sum-of-squares, which dominate this routine at large dim.
     for col in 0..dim {
         for prev in 0..col {
-            let dot: f32 = (0..dim)
-                .map(|row| mat[row * dim + col] * mat[row * dim + prev])
-                .sum();
+            let mut dot = 0.0f32;
+            for row in 0..dim {
+                dot += mat[row * dim + col] * mat[row * dim + prev];
+            }
             for row in 0..dim {
                 mat[row * dim + col] -= dot * mat[row * dim + prev];
             }
         }
-        let norm: f32 = (0..dim)
-            .map(|row| mat[row * dim + col] * mat[row * dim + col])
-            .sum::<f32>()
-            .sqrt();
+        let mut norm_sq = 0.0f32;
+        for row in 0..dim {
+            let v = mat[row * dim + col];
+            norm_sq += v * v;
+        }
+        let norm = norm_sq.sqrt();
         if norm > 1e-8 {
+            let inv = 1.0 / norm;
             for row in 0..dim {
-                mat[row * dim + col] /= norm;
+                mat[row * dim + col] *= inv;
             }
         } else {
             // Degenerate column — set to basis vector
@@ -1062,6 +1118,10 @@ fn dequantize_idx(idx: u8, centroids: &[f32]) -> f32 {
 /// Pack variable-bit indices into bytes.
 ///
 /// Each index uses `bits_per_dim[i]` bits. Output is written LSB-first.
+///
+/// Writes directly into pre-allocated slots in `out` rather than `push`ing
+/// — callers `clear()` and `reserve()` upfront, so the per-byte capacity
+/// check inside `Vec::push` is pure overhead in this hot path.
 fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
     out.clear();
     // Callers always pass a full-length bits_per_dim (see store/dequantize sites),
@@ -1072,9 +1132,12 @@ fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
         .take(indices.len())
         .map(|&b| b as usize)
         .sum();
-    out.reserve(total_bits.div_ceil(8));
+    let total_bytes = total_bits.div_ceil(8);
+    out.resize(total_bytes, 0);
+
     let mut bit_buffer = 0u64;
     let mut bits_in_buffer = 0u32;
+    let mut write_pos = 0usize;
 
     for (i, &idx) in indices.iter().enumerate() {
         let bits = bits_per_dim[i] as u32;
@@ -1082,14 +1145,20 @@ fn pack_variable_bits(indices: &[u8], bits_per_dim: &[u8], out: &mut Vec<u8>) {
         bits_in_buffer += bits;
 
         while bits_in_buffer >= 8 {
-            out.push((bit_buffer & 0xFF) as u8);
+            // SAFETY: `total_bytes` was computed to hold exactly the bit-width
+            // of all `indices`, and we only emit one byte per 8 bits consumed.
+            out[write_pos] = (bit_buffer & 0xFF) as u8;
+            write_pos += 1;
             bit_buffer >>= 8;
             bits_in_buffer -= 8;
         }
     }
+    // Trailing partial byte (1..7 bits) — emit if any bits remain.
     if bits_in_buffer > 0 {
-        out.push((bit_buffer & 0xFF) as u8);
+        out[write_pos] = (bit_buffer & 0xFF) as u8;
+        write_pos += 1;
     }
+    debug_assert_eq!(write_pos, total_bytes, "packed byte count mismatch");
 }
 
 /// Unpack variable-bit indices from bytes.

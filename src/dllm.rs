@@ -378,12 +378,9 @@ fn forward_bidirectional_positions_into(
     let seq_len = tokens.len().min(config.block_size);
     let scale = 1.0 / (hd as f32).sqrt();
 
-    // Phase A: Compute K/V for all positions
-    bctx.k_cache[..seq_len * kvd].fill(0.0);
-    bctx.v_cache[..seq_len * kvd].fill(0.0);
-    bctx.x_norm2_all[..seq_len * n].fill(0.0);
-    bctx.xr_all[..seq_len * n].fill(0.0);
-
+    // Phase A: Compute K/V for all positions.
+    // (k_cache, v_cache, x_norm2_all, xr_all are fully overwritten for [0..seq_len)
+    // inside the loop, so no pre-zero is needed.)
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
         // RCD: when residual override is active and this position is still masked,
         // use the interpolated residual embedding ẽ_i instead of wte[mask_token].
@@ -407,8 +404,7 @@ fn forward_bidirectional_positions_into(
         bctx.x_norm2_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
 
         let layer = &weights.layers[0];
-        bctx.k.fill(0.0);
-        bctx.v.fill(0.0);
+        // matmul overwrites all `kvd` rows of bctx.k / bctx.v, so no pre-zero needed.
         matmul(&mut bctx.k, &layer.attn_wk, &bctx.x, kvd, n);
         matmul(&mut bctx.v, &layer.attn_wv, &bctx.x, kvd, n);
         bctx.k_cache[p * kvd..(p + 1) * kvd].copy_from_slice(&bctx.k);
@@ -420,15 +416,15 @@ fn forward_bidirectional_positions_into(
     let n_heads = config.n_head;
     let logits_len = seq_len * vocab;
     let attn_len = seq_len * n_heads * seq_len;
-    bctx.all_logits[..logits_len].fill(0.0);
-    bctx.all_attn_weights[..attn_len].fill(0.0);
+    // (all_logits[..logits_len] and all_attn_weights[..attn_len] are fully
+    // overwritten inside the loop, so no pre-zero is needed.)
     let layer = &weights.layers[0];
 
     for p in 0..seq_len {
         bctx.x
             .copy_from_slice(&bctx.x_norm2_all[p * n..(p + 1) * n]);
 
-        bctx.q.fill(0.0);
+        // matmul overwrites all `n` rows of bctx.q, so no pre-zero needed.
         matmul(&mut bctx.q, &layer.attn_wq, &bctx.x, n, n);
 
         attention_forward_safe_into(
@@ -453,7 +449,7 @@ fn forward_bidirectional_positions_into(
         // MLP
         bctx.xr2.copy_from_slice(&bctx.x_proj);
         rmsnorm(&mut bctx.x_proj);
-        bctx.hidden.fill(0.0);
+        // matmul_relu overwrites all `mlp_hidden` rows of bctx.hidden.
         matmul_relu(
             &mut bctx.hidden,
             &layer.mlp_w1,
@@ -461,7 +457,7 @@ fn forward_bidirectional_positions_into(
             config.mlp_hidden,
             n,
         );
-        bctx.x_mlp.fill(0.0);
+        // matmul overwrites all `n` rows of bctx.x_mlp.
         matmul(
             &mut bctx.x_mlp,
             &layer.mlp_w2,
@@ -471,7 +467,7 @@ fn forward_bidirectional_positions_into(
         );
         crate::simd::simd_add_inplace(&mut bctx.x_mlp, &bctx.xr2);
 
-        bctx.logits.fill(0.0);
+        // matmul overwrites all `vocab_size` rows of bctx.logits.
         matmul(
             &mut bctx.logits,
             &weights.lm_head,
@@ -869,7 +865,7 @@ fn forward_save<'a>(
     // Uses x_buf for xr2 temporary, x_proj_buf for rmsnorm I/O, x_mlp_buf for mlp output.
     for p in 0..seq_len {
         // x_proj = wo @ attn_out
-        ctx.x_proj_buf[..n].fill(0.0);
+        // matmul overwrites all `n` rows of ctx.x_proj_buf, so no pre-zero needed.
         matmul(
             &mut ctx.x_proj_buf,
             &layer.attn_wo,
@@ -895,7 +891,7 @@ fn forward_save<'a>(
             config.mlp_hidden,
             n,
         );
-        ctx.x_mlp_buf[..n].fill(0.0);
+        // matmul overwrites all `n` rows of ctx.x_mlp_buf, so no pre-zero needed.
         matmul(
             &mut ctx.x_mlp_buf,
             &layer.mlp_w2,
@@ -1199,12 +1195,11 @@ fn backward(
     // d_k/d_v to ALL positions in Phase 2 (every masked query attends to every
     // key). When none were masked, Phase 2 was a no-op and Phase 3 should be too.
     // The per-position d_k/d_v scans were O(seq_len*kvd) and always returned true
-    // when any_masked — replaced with a single O(seq_len) check.
+    // when any_masked — replaced with a single O(seq_len) check, hoisted outside
+    // the loop so the per-iteration branch is eliminated.
     let any_masked = is_masked.iter().any(|&m| m);
-    for p in 0..seq_len {
-        if !any_masked {
-            break;
-        }
+    if any_masked {
+        for p in 0..seq_len {
 
         // d_wq, d_wk, d_wv
         let an2 = &act.after_norm2[p * n..(p + 1) * n];
@@ -1258,6 +1253,7 @@ fn backward(
             );
         }
         bctx.d_after_norm2[p * n..(p + 1) * n].copy_from_slice(&bctx.d_an2[..n]);
+        }
     }
 
     // Compute d_after_norm1 and d_embeddings using saved d_after_attn_res

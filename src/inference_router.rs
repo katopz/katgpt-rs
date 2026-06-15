@@ -8,7 +8,7 @@
 //! GPU and ANE backends are optional (`Option<Box<dyn InferenceBackend>>`).
 //! When a backend is `None` the router falls back to CPU transparently.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use crate::inference_backend::InferenceBackend;
@@ -101,8 +101,9 @@ pub struct InferenceRouter {
     config: Config,
     /// Monotonically increasing inference counter (atomic for borrow-checker compatibility).
     total_inferences: AtomicU64,
-    /// Number of tier transitions since creation.
-    tier_transitions: AtomicU64,
+    /// Number of tier transitions since creation. Bounded by total_inferences,
+    /// so u32 (4B cap) is more than enough — saves 4 bytes vs AtomicU64.
+    tier_transitions: AtomicU32,
     last_backend: &'static str,
     /// Trust signal from speculative verification (0.0 = low trust, 1.0 = high trust).
     /// Updated externally via `update_trust()`. Influences tier transitions.
@@ -175,7 +176,7 @@ impl InferenceRouter {
             gate: TriggerGate::new(gate_config, gpu_available, ane_available),
             config: model_config,
             total_inferences: AtomicU64::new(0),
-            tier_transitions: AtomicU64::new(0),
+            tier_transitions: AtomicU32::new(0),
             last_backend: "CPU",
             trust_signal: 1.0,
             #[cfg(feature = "rv_gated_routing")]
@@ -379,14 +380,15 @@ impl InferenceRouter {
         // We populate ctx.logits via forward(), then return a borrow of ctx.logits
         // (not from self) to satisfy the lifetime constraint that the returned slice
         // borrows from `ctx`.
+        //
+        // CpuGpu and CpuGpuAne both route through dispatch_gpu_or_cpu: the ANE
+        // compile path is not yet implemented, so ANE falls back to GPU dispatch.
         let backend_name = match tier_final {
             ComputeTier::CpuOnly => {
                 crate::transformer::forward(ctx, weights, cache, token, pos, &self.config);
                 "CPU"
             }
-            ComputeTier::CpuGpu => self.dispatch_gpu_or_cpu(ctx, weights, cache, token, pos),
-            ComputeTier::CpuGpuAne => {
-                // ANE compile not yet implemented; route to GPU if available.
+            ComputeTier::CpuGpu | ComputeTier::CpuGpuAne => {
                 self.dispatch_gpu_or_cpu(ctx, weights, cache, token, pos)
             }
         };
@@ -634,7 +636,7 @@ impl InferenceRouter {
             total_inferences: self.total_inferences.load(Ordering::Relaxed),
             estimated_qps: self.gate.estimated_qps(),
             last_backend: self.last_backend,
-            tier_transitions: self.tier_transitions.load(Ordering::Relaxed),
+            tier_transitions: self.tier_transitions.load(Ordering::Relaxed) as u64,
             trust_signal: self.trust_signal,
             #[cfg(feature = "rv_gated_routing")]
             rv_signal: self.rv_signal(),

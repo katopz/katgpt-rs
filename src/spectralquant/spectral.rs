@@ -9,13 +9,13 @@
 /// Measures effective dimensionality of eigenvalue spectrum.
 /// Returns 1.0 for rank-1, returns n for uniform spectrum.
 pub fn participation_ratio(eigenvalues: &[f32]) -> f32 {
-    // Single-pass accumulation: halves bandwidth over the eigenvalue slice.
+    // Single-pass accumulation with FMA: halves bandwidth over the eigenvalue slice.
     let mut sum = 0.0f64;
     let mut sum_sq = 0.0f64;
     for &x in eigenvalues {
         let v = x as f64;
         sum += v;
-        sum_sq += v * v;
+        sum_sq = v.mul_add(v, sum_sq);
     }
     if sum_sq < 1e-12 {
         return 0.0;

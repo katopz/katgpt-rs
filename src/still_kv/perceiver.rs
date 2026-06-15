@@ -523,32 +523,26 @@ fn accumulate_chunk4(output: &mut [f32], values: &[f32], weight: f32) {
 /// Numerically stable softmax applied row-wise to `[rows, cols]`.
 ///
 /// For each row: subtract max, exp, divide by sum.
+/// Uses SIMD-accelerated primitives from `katgpt_core::simd` (NEON on aarch64,
+/// AVX2+FMA on x86_64) — replaces the 3 scalar loops with 3 vectorized passes.
 fn softmax_rows(data: &mut [f32], rows: usize, cols: usize) {
+    use katgpt_core::simd::{
+        simd_add_scalar_inplace, simd_exp_sum_inplace, simd_max_f32, simd_scale_inplace,
+    };
     for r in 0..rows {
         let row_start = r * cols;
         let row = &mut data[row_start..row_start + cols];
 
-        // Find max for numerical stability
-        let mut max_val = row[0];
-        for &v in &row[1..] {
-            if v > max_val {
-                max_val = v;
-            }
-        }
+        // Pass 1: find max for numerical stability (SIMD-accelerated).
+        let max_val = simd_max_f32(row);
 
-        // exp(x - max) and accumulate sum
-        let mut sum = 0.0f32;
-        for v in row.iter_mut() {
-            *v = (*v - max_val).exp();
-            sum += *v;
-        }
+        // Pass 2: subtract max (SIMD-accelerated).
+        simd_add_scalar_inplace(row, -max_val);
 
-        // Normalize
+        // Pass 3: SIMD exp + sum (fused) → SIMD normalize.
+        let sum: f32 = simd_exp_sum_inplace(row);
         if sum > 0.0 {
-            let inv_sum = 1.0 / sum;
-            for v in row.iter_mut() {
-                *v *= inv_sum;
-            }
+            simd_scale_inplace(row, 1.0 / sum);
         }
     }
 }

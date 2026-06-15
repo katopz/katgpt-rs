@@ -630,18 +630,15 @@ pub fn domino_correct_marginals(
         // Apply logit residual in-place
         let len = marginal.len().min(correction.len()).min(vocab_size);
         for v in 0..len {
-            marginal[v] += correction[v];
-            // Clamp to non-negative (logit residual can push below 0)
-            if marginal[v] < 0.0 {
-                marginal[v] = 0.0;
-            }
+            marginal[v] = (marginal[v] + correction[v]).max(0.0);
         }
 
-        // Re-normalize
+        // Re-normalize via reciprocal multiply (single division per vocab)
         let sum: f32 = marginal.iter().sum();
         if sum > f32::EPSILON {
+            let inv_sum = 1.0 / sum;
             for v in marginal.iter_mut() {
-                *v /= sum;
+                *v *= inv_sum;
             }
         }
     }
@@ -701,8 +698,9 @@ pub fn marginal_fusion_blend(
         let end = start + vocab_size;
         let sum: f32 = output[start..end].iter().sum();
         if sum > 0.0 {
+            let inv_sum = 1.0 / sum;
             for v in &mut output[start..end] {
-                *v /= sum;
+                *v *= inv_sum;
             }
         }
     }

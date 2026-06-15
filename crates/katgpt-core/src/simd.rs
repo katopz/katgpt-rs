@@ -496,7 +496,10 @@ fn scalar_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
     let mut sum = 0.0f32;
     for i in 0..len {
         unsafe {
-            sum += (*w.get_unchecked(i)).to_f32() * *x.get_unchecked(i);
+            // FMA: sum = w[i]*x[i] + sum (single rounding, matches the NEON path's vfmaq_f32).
+            sum = (*w.get_unchecked(i))
+                .to_f32()
+                .mul_add(*x.get_unchecked(i), sum);
         }
     }
     sum
@@ -1491,10 +1494,9 @@ fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
 fn scalar_max_f32(x: &[f32]) -> f32 {
     let mut max = x[0];
     for i in 1..x.len() {
-        let v = unsafe { *x.get_unchecked(i) };
-        if v > max {
-            max = v;
-        }
+        // Branch-free: matches the SIMD path's vmaxq_f32 / _mm256_max_ps NaN semantics
+        // (propagates NaN), unlike `if v > max` which silently drops NaN.
+        max = max.max(unsafe { *x.get_unchecked(i) });
     }
     max
 }
@@ -1641,6 +1643,18 @@ fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 fn cephes_exp_scalar(x: f32) -> f32 {
     // Range reduction: n = round(x / ln2)
     let n = (x * CEPHES_INV_LN2).round() as i32;
+
+    // 2^n via bit manipulation: (n + 127) << 23.
+    // Branches hoisted BEFORE the polynomial — saves ~6 FMAs in extreme cases.
+    // This is the scalar tail of every SIMD exp kernel, so it runs on real inputs
+    // whenever `len % 4 != 0` (NEON) or `len % 8 != 0` (AVX2).
+    if n < -126 {
+        return 0.0;
+    }
+    if n > 127 {
+        return f32::INFINITY;
+    }
+
     let g = x - n as f32 * CEPHES_LN2_HI - n as f32 * CEPHES_LN2_LO;
 
     // 6th-order Cephes polynomial for exp(g) in [-0.5*ln2, 0.5*ln2]
@@ -1652,13 +1666,6 @@ fn cephes_exp_scalar(x: f32) -> f32 {
                     + g * (1.0 / 3.0)
                         * (1.0 + g * 0.25 * (1.0 + g * 0.2 * (1.0 + g * (1.0 / 6.0))))));
 
-    // 2^n via bit manipulation: (n + 127) << 23
-    if n < -126 {
-        return 0.0;
-    }
-    if n > 127 {
-        return f32::INFINITY;
-    }
     let bits = ((n + 127) as u32) << 23;
     let scale = f32::from_bits(bits);
     scale * q

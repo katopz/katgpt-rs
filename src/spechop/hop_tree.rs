@@ -526,18 +526,22 @@ pub fn extract_best_hop_path(tree: &[HopTreeNode]) -> Vec<(String, String)> {
         return Vec::new();
     }
 
-    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
-
-    // Pick the highest-score node at max depth
-    let best = tree
-        .iter()
-        .filter(|n| n.depth == max_depth)
-        .max_by(|a, b| {
-            a.score
-                .partial_cmp(&b.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .expect("at least one node at max_depth");
+    // Single-pass: track max_depth and best (highest-score) node at that depth together.
+    // Replaces 3 tree traversals (max → filter → max_by) with one.
+    let best = tree.iter().reduce(|acc, n| {
+        use std::cmp::Ordering;
+        match n.depth.cmp(&acc.depth) {
+            Ordering::Greater => n,
+            Ordering::Less => acc,
+            Ordering::Equal => {
+                if n.score > acc.score {
+                    n
+                } else {
+                    acc
+                }
+            }
+        }
+    }).expect("non-empty tree has at least one node");
 
     reconstruct_path(tree, best)
 }
@@ -551,17 +555,22 @@ pub fn extract_deepest_hop_path(tree: &[HopTreeNode]) -> Vec<(String, String)> {
         return Vec::new();
     }
 
-    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
-
-    let best_at_max = tree
-        .iter()
-        .filter(|n| n.depth == max_depth)
-        .max_by(|a, b| {
-            a.score
-                .partial_cmp(&b.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .expect("at least one node at max_depth");
+    // Single-pass: track max_depth and best (highest-score) node at that depth together.
+    // Replaces 3 tree traversals (max → filter → max_by) with one.
+    let best_at_max = tree.iter().reduce(|acc, n| {
+        use std::cmp::Ordering;
+        match n.depth.cmp(&acc.depth) {
+            Ordering::Greater => n,
+            Ordering::Less => acc,
+            Ordering::Equal => {
+                if n.score > acc.score {
+                    n
+                } else {
+                    acc
+                }
+            }
+        }
+    }).expect("non-empty tree has at least one node");
 
     reconstruct_path(tree, best_at_max)
 }

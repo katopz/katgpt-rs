@@ -360,7 +360,8 @@ impl KVarNKVCache {
         let rtn_zp = &tile.rtn_zp;
         let s_row = &tile.var_scales.s_row;
 
-        // Specialized hot path per bit-width to avoid generic division/modulo
+        // Specialized hot path per bit-width to avoid generic division/modulo.
+        // Inner loops use `mul_add` so `(q*s + zp)` becomes a single fused FMA.
         match bits {
             4 => {
                 // 4-bit: 2 values per byte, pos_in_tile determines nibble
@@ -370,7 +371,7 @@ impl KVarNKVCache {
                 for ch in 0..kv_dim {
                     let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
                     let var_row = s_row[ch];
-                    out[ch] = (q * rtn_scales[ch] + rtn_zp[ch]) * var_col * var_row;
+                    out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
                 }
             }
             2 => {
@@ -386,19 +387,19 @@ impl KVarNKVCache {
                         for ch in 0..kv_dim {
                             let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
                             let idx = ch * groups_per_row + g.min(groups_per_row - 1);
-                            out[ch] = q * rtn_scales[idx] + rtn_zp[idx];
+                            out[ch] = q.mul_add(rtn_scales[idx], rtn_zp[idx]);
                         }
                     } else {
                         for ch in 0..kv_dim {
                             let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
-                            out[ch] = q * rtn_scales[ch] + rtn_zp[ch];
+                            out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]);
                         }
                     }
                 } else {
                     for ch in 0..kv_dim {
                         let q = ((quantized[ch * bpr + byte_off] >> shift) & mask) as f32;
                         let var_row = s_row[ch];
-                        out[ch] = (q * rtn_scales[ch] + rtn_zp[ch]) * var_col * var_row;
+                        out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
                     }
                 }
             }
@@ -407,7 +408,7 @@ impl KVarNKVCache {
                 for ch in 0..kv_dim {
                     let q = quantized[ch * bpr + pos_in_tile] as f32;
                     let var_row = s_row[ch];
-                    out[ch] = (q * rtn_scales[ch] + rtn_zp[ch]) * var_col * var_row;
+                    out[ch] = q.mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
                 }
             }
             _ => {
@@ -416,7 +417,8 @@ impl KVarNKVCache {
                     let row_off = ch * bpr;
                     let q = unpack_value(&quantized[row_off..row_off + bpr], pos_in_tile, bits);
                     let var_row = s_row[ch];
-                    out[ch] = (q as f32 * rtn_scales[ch] + rtn_zp[ch]) * var_col * var_row;
+                    out[ch] =
+                        (q as f32).mul_add(rtn_scales[ch], rtn_zp[ch]) * var_col * var_row;
                 }
             }
         }
@@ -455,7 +457,8 @@ impl KVarNKVCache {
         let rtn_zp = &tile.rtn_zp;
         let s_col = &tile.var_scales.s_col;
 
-        // Specialized hot path per bit-width — inline unpack directly into dequant
+        // Specialized hot path per bit-width — inline unpack directly into dequant.
+        // Inner loops use `mul_add` so `(q*s + zp)` becomes a single fused FMA.
         match bits {
             4 => {
                 // 2 values per byte, dequant inline.
@@ -467,15 +470,16 @@ impl KVarNKVCache {
                 for i in 0..full_pairs {
                     let b = packed_row[i];
                     let q0 = (b & 0x0F) as f32;
-                    out[2 * i] = (q0 * rtn_scale + rtn_zp_val) * s_col[2 * i] * var_row;
+                    out[2 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i] * var_row;
                     let q1 = (b >> 4) as f32;
-                    out[2 * i + 1] = (q1 * rtn_scale + rtn_zp_val) * s_col[2 * i + 1] * var_row;
+                    out[2 * i + 1] =
+                        q1.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * i + 1] * var_row;
                 }
                 if kv_dim & 1 == 1 {
                     let b = packed_row[full_pairs];
                     let q0 = (b & 0x0F) as f32;
                     out[2 * full_pairs] =
-                        (q0 * rtn_scale + rtn_zp_val) * s_col[2 * full_pairs] * var_row;
+                        q0.mul_add(rtn_scale, rtn_zp_val) * s_col[2 * full_pairs] * var_row;
                 }
             }
             2 => {
@@ -517,10 +521,13 @@ impl KVarNKVCache {
                         let full_quads = kv_dim / 4;
                         for i in 0..full_quads {
                             let b = packed_row[i];
-                            out[4 * i] = ((b & 0x03) as f32) * rtn_scale + rtn_zp_val;
-                            out[4 * i + 1] = (((b >> 2) & 0x03) as f32) * rtn_scale + rtn_zp_val;
-                            out[4 * i + 2] = (((b >> 4) & 0x03) as f32) * rtn_scale + rtn_zp_val;
-                            out[4 * i + 3] = (((b >> 6) & 0x03) as f32) * rtn_scale + rtn_zp_val;
+                            out[4 * i] = ((b & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
+                            out[4 * i + 1] =
+                                (((b >> 2) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
+                            out[4 * i + 2] =
+                                (((b >> 4) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
+                            out[4 * i + 3] =
+                                (((b >> 6) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
                         }
                         let tail_start = 4 * full_quads;
                         if tail_start < kv_dim {
@@ -531,7 +538,8 @@ impl KVarNKVCache {
                                 if idx >= kv_dim {
                                     break;
                                 }
-                                out[idx] = (((tail_byte >> sh) & 0x03) as f32) * rtn_scale + rtn_zp_val;
+                                out[idx] =
+                                    (((tail_byte >> sh) & 0x03) as f32).mul_add(rtn_scale, rtn_zp_val);
                             }
                         }
                     }
@@ -544,16 +552,16 @@ impl KVarNKVCache {
                     for i in 0..full_quads {
                         let b = packed_row[i];
                         let q0 = (b & 0x03) as f32;
-                        out[4 * i] = (q0 * rtn_scale + rtn_zp_val) * s_col[4 * i] * var_row;
+                        out[4 * i] = q0.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i] * var_row;
                         let q1 = ((b >> 2) & 0x03) as f32;
                         out[4 * i + 1] =
-                            (q1 * rtn_scale + rtn_zp_val) * s_col[4 * i + 1] * var_row;
+                            q1.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 1] * var_row;
                         let q2 = ((b >> 4) & 0x03) as f32;
                         out[4 * i + 2] =
-                            (q2 * rtn_scale + rtn_zp_val) * s_col[4 * i + 2] * var_row;
+                            q2.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 2] * var_row;
                         let q3 = ((b >> 6) & 0x03) as f32;
                         out[4 * i + 3] =
-                            (q3 * rtn_scale + rtn_zp_val) * s_col[4 * i + 3] * var_row;
+                            q3.mul_add(rtn_scale, rtn_zp_val) * s_col[4 * i + 3] * var_row;
                     }
                     // Tail: 0..=3 remaining elements packed in the next byte.
                     // Only access packed_row[full_quads] if a tail actually exists.
@@ -567,7 +575,7 @@ impl KVarNKVCache {
                                 break;
                             }
                             let q = ((tail_byte >> sh) & 0x03) as f32;
-                            out[idx] = (q * rtn_scale + rtn_zp_val) * s_col[idx] * var_row;
+                            out[idx] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[idx] * var_row;
                         }
                     }
                 }
@@ -577,7 +585,7 @@ impl KVarNKVCache {
                 let rtn_zp_val = rtn_zp[pos_in_tile];
                 for ch in 0..kv_dim {
                     let q = packed_row[ch] as f32;
-                    out[ch] = (q * rtn_scale + rtn_zp_val) * s_col[ch] * var_row;
+                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
                 }
             }
             _ => {
@@ -588,7 +596,7 @@ impl KVarNKVCache {
                 unpack_row(packed_row, bits, scratch);
                 for ch in 0..kv_dim {
                     let q = scratch[ch] as f32;
-                    out[ch] = (q * rtn_scale + rtn_zp_val) * s_col[ch] * var_row;
+                    out[ch] = q.mul_add(rtn_scale, rtn_zp_val) * s_col[ch] * var_row;
                 }
             }
         }
@@ -657,11 +665,13 @@ impl KVarNKVCache {
             let var_scales = if let Some(ref cal) = self.static_cal {
                 // Use static per-head scales instead of iterative Sinkhorn
                 let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
-                // Apply static scales to tile
+                // Apply static scales to tile (reciprocal-multiply: one division per row,
+                // not per element — vectorizer-friendly inner loop).
                 for ch in 0..rows {
-                    let scale = s_row[ch];
+                    let inv_scale = 1.0 / s_row[ch];
+                    let row_off = ch * cols;
                     for t in 0..cols {
-                        tile_data[ch * cols + t] /= scale;
+                        tile_data[row_off + t] *= inv_scale;
                     }
                 }
                 VarianceNormScales {
@@ -778,11 +788,13 @@ impl KVarNKVCache {
             let var_scales = if let Some(ref cal) = self.static_cal {
                 // Use static per-head scales instead of iterative Sinkhorn
                 let s_row: Vec<f32> = (0..rows).map(|ch| cal.get_scale(layer, ch)).collect();
-                // Apply static scales to tile
+                // Apply static scales to tile (reciprocal-multiply: one division per row,
+                // not per element — vectorizer-friendly inner loop).
                 for ch in 0..rows {
-                    let scale = s_row[ch];
+                    let inv_scale = 1.0 / s_row[ch];
+                    let row_off = ch * cols;
                     for t in 0..cols {
-                        tile_data[ch * cols + t] /= scale;
+                        tile_data[row_off + t] *= inv_scale;
                     }
                 }
                 VarianceNormScales {
@@ -954,9 +966,12 @@ fn rtn_quantize_rows(
         scales[r] = scale;
         zps[r] = lo;
 
-        // Quantize and pack
+        // Quantize and pack — use precomputed `inv_scale` and `neg_lo_over_scale`
+        // so the hot inner loop becomes a single `mul_add` + round, no division.
+        let inv_scale = 1.0 / scale;
+        let bias = -lo * inv_scale;
         for (c, &v) in row.iter().enumerate() {
-            let normalized = (v - lo) / scale;
+            let normalized = v.mul_add(inv_scale, bias);
             let q = (normalized.round() as u32).clamp(0, levels - 1);
             pack_value(&mut packed[r * bpr..], c, q, bits as usize);
         }
@@ -1013,10 +1028,12 @@ fn rtn_quantize_rows_grouped(
             scales[idx] = scale;
             zps[idx] = lo;
 
-            // Quantize and pack elements in this group
+            // Quantize and pack elements in this group — single mul_add per element.
+            let inv_scale = 1.0 / scale;
+            let bias = -lo * inv_scale;
             for c in g_start..g_end {
                 let v = tile[row_off + c];
-                let normalized = (v - lo) / scale;
+                let normalized = v.mul_add(inv_scale, bias);
                 let q = (normalized.round() as u32).clamp(0, levels - 1);
                 pack_value(&mut packed[r * bpr..], c, q, bits as usize);
             }

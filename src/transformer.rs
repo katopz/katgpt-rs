@@ -359,14 +359,15 @@ impl MultiLayerKVCache {
     pub fn snapshot(&self, pos: usize, config: &Config) -> KVSnapshot {
         let kd = types::kv_dim(config);
         let end = pos * kd;
-        let layers = self
-            .layers
-            .iter()
-            .map(|layer| KVLayerSnapshot {
+        // Pre-allocate outer Vec to avoid collect() reallocation jitter.
+        // Called per-speculation-step (step.rs L149/L354/L487/L649/L1083).
+        let mut layers = Vec::with_capacity(self.layers.len());
+        for layer in &self.layers {
+            layers.push(KVLayerSnapshot {
                 key: layer.key[..end].to_vec(),
                 value: layer.value[..end].to_vec(),
-            })
-            .collect();
+            });
+        }
         KVSnapshot { pos, layers }
     }
 
@@ -374,8 +375,9 @@ impl MultiLayerKVCache {
     /// Writes snapshot data back. No zeroing needed — each position is written before being read.
     pub fn restore(&mut self, snapshot: &KVSnapshot, config: &Config) {
         let kd = types::kv_dim(config);
+        // Hoist loop-invariant `end` out of the per-layer loop.
+        let end = snapshot.pos * kd;
         for (layer, snap_layer) in self.layers.iter_mut().zip(snapshot.layers.iter()) {
-            let end = snapshot.pos * kd;
             layer.key[..end].copy_from_slice(&snap_layer.key);
             layer.value[..end].copy_from_slice(&snap_layer.value);
         }
@@ -670,13 +672,14 @@ impl ForwardContext {
         n_embd: usize,
         _weights: &TransformerWeights,
     ) {
-        // Collect source indices (reuse pre-allocated buffer)
+        // Collect source indices (reuse pre-allocated buffer).
+        // `extend` with a bounded range is faster than push-per-element and
+        // removes the per-iteration branch (`prev_block < block_deltas.len()`).
+        // When block_idx is in-range, all 0..=block_idx are valid; when out-of-range,
+        // we cap at block_deltas.len() to avoid index-OOB in depth_route_with_indices.
+        let limit = (block_idx + 1).min(self.block_deltas.len());
         self.delta_source_indices.clear();
-        for prev_block in 0..=block_idx {
-            if prev_block < self.block_deltas.len() {
-                self.delta_source_indices.push(prev_block);
-            }
-        }
+        self.delta_source_indices.extend(0..limit);
 
         // Call depth_route directly using pre-gathered indices
         depth_route_with_indices(DepthRouteIndicesArgs {
@@ -4655,10 +4658,16 @@ pub fn raven_compute_router_into(
     r_t[..num_slots].copy_from_slice(&raw_logits[..num_slots]);
     crate::simd::simd_scale_inplace(&mut r_t[..num_slots], -1.0);
     crate::simd::simd_exp_inplace(&mut r_t[..num_slots]);
-    // Write directly into pre-sized scored buffer (avoids push reallocation)
+    // r_t now holds exp(-x). Compute sigmoid(x) = 1/(1+exp(-x)) via SIMD:
+    //   add_scalar(+1) → reciprocal → done. Replaces scalar 1/(1+e) per slot.
+    crate::simd::simd_add_scalar_inplace(&mut r_t[..num_slots], 1.0);
+    crate::simd::simd_reciprocal_inplace(&mut r_t[..num_slots]);
+    // Write (index, sigmoid) pairs directly into pre-sized scored buffer
+    // (avoids push reallocation). Index writes are sequential and trivially
+    // auto-vectorizable by LLVM.
     scored.resize(num_slots, (0, 0.0));
-    for (i, &e) in r_t[..num_slots].iter().enumerate() {
-        scored[i] = (i, 1.0 / (1.0 + e));
+    for (i, &sig) in r_t[..num_slots].iter().enumerate() {
+        scored[i] = (i, sig);
     }
 
     // Partial sort: find Top-K by descending score (O(n) average)
@@ -4872,8 +4881,15 @@ pub fn forward_raven<'a>(
         // Reuse pre-allocated query buffer for router logits (zero-alloc)
         // Buffer is pre-sized in ForwardContext::new() to max(kv_dim, 64, num_slots).
         let num_slots = cache.num_slots;
-        for (i, slot) in ctx.raven_query_buf[..num_slots].iter_mut().enumerate() {
-            *slot = ctx.k[i % kvd];
+        // Fast path: when num_slots <= kvd, just copy first num_slots K elements.
+        // Avoids per-iteration modulo (slow on most ISAs).
+        if num_slots <= kvd {
+            ctx.raven_query_buf[..num_slots]
+                .copy_from_slice(&ctx.k[..num_slots]);
+        } else {
+            for (i, slot) in ctx.raven_query_buf[..num_slots].iter_mut().enumerate() {
+                *slot = ctx.k[i % kvd];
+            }
         }
 
         // Raven: compute sparse routing vector (zero-alloc via pre-allocated buffers)
@@ -4926,12 +4942,9 @@ pub fn forward_raven<'a>(
                 &mut cache.readout_output,
             );
 
-            // Extract this head's attention output
-            for d in 0..hd {
-                unsafe {
-                    *ctx.attn_out.get_unchecked_mut(q_off + d) = slot_values[kv_group * hd + d];
-                }
-            }
+            // Extract this head's attention output (single memcpy vs hd unsafe writes).
+            ctx.attn_out[q_off..q_off + hd]
+                .copy_from_slice(&slot_values[kv_group * hd..kv_group * hd + hd]);
         }
 
         // Output projection + residual

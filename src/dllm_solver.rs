@@ -133,7 +133,8 @@ pub fn build_dd_tree_adaptive(
 
         let prev_solver = *solver_kind;
 
-        if entropy >= default_h_critical {
+        let is_critical = entropy >= default_h_critical;
+        if is_critical {
             // Critical interval — switch to q-sampling if available
             #[cfg(feature = "q_sample_solver")]
             {
@@ -153,7 +154,7 @@ pub fn build_dd_tree_adaptive(
             entropy,
             solver_before: prev_solver,
             solver_after: *solver_kind,
-            critical: entropy >= default_h_critical,
+            critical: is_critical,
         });
     }
 
@@ -274,7 +275,6 @@ pub fn q_sample_refine(
 
     // When alpha == alpha_prev == 1.0 and no noise → argmax commit (identity-like)
     let is_identity = (alpha - 1.0).abs() < 1e-8 && (alpha_prev - 1.0).abs() < 1e-8;
-    let noise_is_zero = noise[..len].iter().all(|&n| n.abs() < 1e-10);
 
     if is_identity {
         // Identity: return marginals through sigmoid for normalization
@@ -283,6 +283,10 @@ pub fn q_sample_refine(
         }
         return;
     }
+
+    // Defer the O(len) all-zero scan until after the `is_identity` short-circuit —
+    // avoids a wasted full pass when the identity fast-path applies.
+    let noise_is_zero = noise[..len].iter().all(|&n| n.abs() < 1e-10);
 
     if noise_is_zero {
         // Deterministic DDIM step: pure interpolation between marginals
@@ -432,17 +436,17 @@ impl SelfCondDraft {
             // Find best token for this position
             let best_idx = argmax(&self.sc_buffer[start..end]);
 
-            // Sigmoid boost: sharpen the distribution around the best token
+            // Sigmoid boost: sharpen the distribution around the best token.
+            // Branch-free: attenuate all tokens by `sigmoid(x - 1.0)` in one pass,
+            // then overwrite the best with `sigmoid(x + 1.0)` using the saved
+            // pre-attenuation value. Avoids the per-element `t == best_idx`
+            // branch on the vocab-sized inner loop.
             let slice = &mut self.sc_buffer[start..end];
-            for (t, val) in slice.iter_mut().enumerate() {
-                if t == best_idx {
-                    // Boost best token: sigmoid(x + sharpen_factor)
-                    *val = sigmoid(*val + 1.0);
-                } else {
-                    // Attenuate others: sigmoid(x - sharpen_factor)
-                    *val = sigmoid(*val - 1.0);
-                }
+            let best_val = slice[best_idx];
+            for val in slice.iter_mut() {
+                *val = sigmoid(*val - 1.0);
             }
+            slice[best_idx] = sigmoid(best_val + 1.0);
         }
 
         self.sc_ready = true;
@@ -562,19 +566,34 @@ pub fn mbr_select(
         return top_k_indices[0];
     }
 
-    // MBR: for each candidate, compute risk (sum of quality differences vs all others)
-    let mut best_idx = top_k_indices[0];
-    let mut min_risk = f32::MAX;
+    // MBR: for each candidate, risk = Σ_{j≠i} max(scores[i] - scores[j], 0).
+    // Only paths with lower scores contribute. Sort the top-k by score
+    // descending and use a suffix sum so each candidate's risk is O(1):
+    //   risk_p = (k-p-1) * s_p - suffix_sum[p+1]
+    // This converts the O(k²) pairwise scan into O(k log k).
+    let mut sorted: Vec<(usize, f32)> = top_k_indices
+        .iter()
+        .map(|&i| (i, scores[i]))
+        .collect();
+    sorted.sort_unstable_by(|a, b| {
+        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+    });
 
-    for &i in &top_k_indices {
-        let risk: f32 = top_k_indices
-            .iter()
-            .filter(|&&j| j != i)
-            .map(|&j| (scores[i] - scores[j]).max(0.0))
-            .sum();
+    // suffix_sum[p] = Σ_{j>=p} sorted[j].1; suffix_sum[k] = 0.
+    let mut suffix_sum = vec![0.0f32; k + 1];
+    for p in (0..k).rev() {
+        suffix_sum[p] = suffix_sum[p + 1] + sorted[p].1;
+    }
+
+    let mut best_idx = sorted[0].0;
+    let mut min_risk = f32::MAX;
+    for p in 0..k {
+        let s_p = sorted[p].1;
+        let count_below = (k - p - 1) as f32;
+        let risk = count_below * s_p - suffix_sum[p + 1];
         if risk < min_risk {
             min_risk = risk;
-            best_idx = i;
+            best_idx = sorted[p].0;
         }
     }
 
@@ -660,22 +679,21 @@ pub fn compute_residual(
     debug_assert!(out.len() >= n_embd);
     out[..n_embd].fill(0.0f32);
 
-    let vocab = marginals.len();
+    // Hoist the bounds check: the valid j range is bounded by both
+    // `marginals.len()` and `wte.len() / n_embd`. Computing it once avoids
+    // the per-iteration `emb_end > wte.len()` branch in the hot loop.
+    let vocab = marginals.len().min(wte.len() / n_embd);
     for j in 0..vocab {
         let p_j = marginals[j];
         if p_j < 1e-10 {
             continue; // Skip near-zero probabilities
         }
         let emb_start = j * n_embd;
-        let emb_end = emb_start + n_embd;
-        if emb_end > wte.len() {
-            break;
-        }
         // Fused scale-accumulate: out[k] += p_j * wte[emb_start+k].
         // SIMD-accelerated (NEON/AVX2) — replaces the scalar enumerate loop.
         katgpt_core::simd::simd_fused_scale_acc(
             &mut out[..n_embd],
-            &wte[emb_start..emb_end],
+            &wte[emb_start..emb_start + n_embd],
             p_j,
             n_embd,
         );

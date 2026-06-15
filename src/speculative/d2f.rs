@@ -38,7 +38,7 @@ use crate::speculative::diffusion_sampler::{DiffusionSampler, SamplerFeatures};
 /// ```text
 /// SemiActivated (confidence < τ_act) → FullyActivated (confidence ≥ τ_act)
 /// ```
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum D2fBlockState {
     /// Block is actively denoising. `step` tracks current denoising iteration.
     /// `confidence` is the fraction of non-mask tokens with probability ≥ τ_conf.
@@ -72,7 +72,7 @@ impl D2fBlockState {
 /// - More denoising steps → higher quality, slower
 /// - Higher confidence threshold → more selective remasking, may need more steps
 /// - Lower activation threshold → earlier successor block addition, more parallelism
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct D2fDecodeConfig {
     /// Number of denoising steps per block (T in D2F paper).
     /// Typical: 4-16. More steps = better quality but slower.
@@ -233,7 +233,7 @@ pub fn compute_multistep_ratios(steps: &[f32]) -> Vec<f32> {
 // ---------------------------------------------------------------------------
 
 /// D2F noise schedule type (ELF Appendix C.6).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ScheduleKind {
     /// Uniform spacing between steps (current default).
     #[default]
@@ -1020,13 +1020,14 @@ fn sample_temperatured(
 
     // Sample by cumulative distribution
     let r = (rng.next() as f64 / u64::MAX as f64) as f32;
+    let inv_scaled = 1.0 / scaled_sum; // multiply instead of divide per token
     let mut cumsum = 0.0f32;
     for t in 0..vocab {
         if t == mask || !pruner.is_valid(depth, t, parent_tokens) {
             continue;
         }
         let relevance = screener.relevance(depth, t, parent_tokens);
-        let prob = ((logits[t] - max_logit) * inv_temp).exp() * relevance / scaled_sum;
+        let prob = ((logits[t] - max_logit) * inv_temp).exp() * relevance * inv_scaled;
         cumsum += prob;
         if cumsum >= r {
             return (t, prob);
@@ -1052,12 +1053,13 @@ fn sample_greedy(
     rng: &mut Rng,
 ) -> (usize, f32) {
     let r = (rng.next() as f64 / u64::MAX as f64) as f32;
+    let inv_sum = if sum_exp > 0.0 { 1.0 / sum_exp } else { 0.0 }; // multiply per token instead of divide
     let mut cumsum = 0.0f32;
     for t in 0..vocab {
         if t == mask || !pruner.is_valid(depth, t, parent_tokens) {
             continue;
         }
-        let prob = (logits[t] - max_logit).exp() / sum_exp;
+        let prob = (logits[t] - max_logit).exp() * inv_sum;
         cumsum += prob;
         if cumsum >= r {
             return (t, prob);
@@ -1394,7 +1396,7 @@ impl<'a> D2fPipeline<'a> {
 /// binary mask/token transitions. This carries uncertainty forward,
 /// enabling iterative self-refinement.
 #[cfg(feature = "dmax_spd")]
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct SoftDecodeConfig {
     /// Enable hybrid embedding construction (default: true).
     pub use_hybrid_embeddings: bool,

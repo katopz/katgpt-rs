@@ -264,13 +264,15 @@ pub fn build_dd_tree_lodestar(
 ) -> Vec<TreeNode> {
     let lambda = lode_config.astar_lambda;
     let jump_ahead = lode_config.jump_ahead;
-    let mut heap: BinaryHeap<TreeNode> = BinaryHeap::new();
+    let mut heap: BinaryHeap<TreeNode> = BinaryHeap::with_capacity(config.tree_budget);
     let mut tree: Vec<TreeNode> = Vec::with_capacity(config.tree_budget);
     if marginals.is_empty() {
         return tree;
     }
     let seq_len = marginals.len();
     let mut parent_buf: Vec<usize> = vec![0usize; seq_len];
+    // Reusable scratch for jump-ahead span walk; avoids per-iteration allocation.
+    let mut span_parents_buf: Vec<usize> = Vec::with_capacity(seq_len);
 
     // Seed root children (depth 0, empty parent). After placing a token at depth
     // 0, remaining slots = seq_len - 1.
@@ -311,10 +313,12 @@ pub fn build_dd_tree_lodestar(
                     let end_depth = start_depth + span as usize;
                     if end_depth <= seq_len {
                         // Walk the span: collect forced tokens, accumulate log-prob.
+                        // Reuse span_parents_buf: clear + refill avoids per-pop allocation.
                         let mut span_score = best.score;
                         let mut span_path = best.parent_path;
                         let mut span_depth = start_depth;
-                        let mut span_parents = parent_tokens.to_vec();
+                        span_parents_buf.clear();
+                        span_parents_buf.extend_from_slice(parent_tokens);
                         let mut valid = true;
 
                         for _ in 0..span {
@@ -325,7 +329,7 @@ pub fn build_dd_tree_lodestar(
                             let forced = find_forced_token(
                                 marginals,
                                 span_depth,
-                                &span_parents,
+                                &span_parents_buf,
                                 horizon,
                                 seq_len - span_depth - 1,
                             );
@@ -334,7 +338,7 @@ pub fn build_dd_tree_lodestar(
                                     let d = horizon.min_completion_distance(
                                         span_depth,
                                         token,
-                                        &span_parents,
+                                        &span_parents_buf,
                                     );
                                     if d == u32::MAX || (d as usize) > seq_len - span_depth - 1 {
                                         valid = false;
@@ -342,7 +346,7 @@ pub fn build_dd_tree_lodestar(
                                     }
                                     span_score += prob.ln();
                                     span_path = (span_path << 16) | (token as u128);
-                                    span_parents.push(token);
+                                    span_parents_buf.push(token);
                                     span_depth += 1;
                                 }
                                 None => {
@@ -395,17 +399,9 @@ pub fn build_dd_tree_lodestar(
         }
     }
 
-    // Strip A* offset from scores so downstream sees pure log-prob.
-    // When λ = 0 this is a no-op.
-    if lambda != 0.0 {
-        for _node in &mut tree {
-            // We don't store d(s) in the node, so we need to reconstruct.
-            // Actually — the score already includes the A* offset. Downstream
-            // consumers use relative score comparisons (heap ordering), so the
-            // offset is harmless. Keep scores as-is for consistency with
-            // build_dd_tree_pruned's score convention.
-        }
-    }
+    // Note: A* offset is intentionally kept in scores. Downstream consumers
+    // use relative score comparisons (heap ordering), so the offset is
+    // harmless and matches build_dd_tree_pruned's score convention.
 
     tree
 }
@@ -1430,7 +1426,6 @@ impl ResidualTracker {
 ///
 /// When `enable` is `false`, all RecFM checks are no-ops (zero cost on hot path).
 #[cfg(feature = "recfm")]
-#[repr(C)]
 #[derive(Debug, Clone)]
 pub struct CrossScaleConfig {
     /// Enable RecFM cross-scale consistency filtering.
@@ -1469,18 +1464,10 @@ pub fn branch_velocity_at(depth: usize, marginal_curr: &[f32], marginal_prev: &[
     if depth == 0 || marginal_curr.is_empty() || marginal_prev.is_empty() {
         return 0.0;
     }
-    let top1_curr = marginal_curr
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(_, &p)| p)
-        .unwrap_or(0.0);
-    let top1_prev = marginal_prev
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map(|(_, &p)| p)
-        .unwrap_or(0.0);
+    // Only the max VALUE is needed (not the index). `fold` is branch-free and
+    // avoids the closure-call overhead of `.iter().enumerate().max_by(...)`.
+    let top1_curr = marginal_curr.iter().copied().fold(0.0f32, f32::max);
+    let top1_prev = marginal_prev.iter().copied().fold(0.0f32, f32::max);
     top1_curr - top1_prev
 }
 
@@ -3944,7 +3931,7 @@ pub fn build_dd_tree_dendritic(
     }
 
     let seq_len = marginals.len();
-    let mut heap: BinaryHeap<TreeNode> = BinaryHeap::new();
+    let mut heap: BinaryHeap<TreeNode> = BinaryHeap::with_capacity(config.tree_budget);
     let mut tree: Vec<TreeNode> = Vec::with_capacity(config.tree_budget);
     let base_budget = config.tree_budget;
     let mut parent_buf: Vec<usize> = vec![0usize; seq_len];
@@ -4044,9 +4031,13 @@ pub fn build_dd_tree_dendritic(
 
 /// Extract top-K indices from a probability slice (descending order).
 ///
-/// Uses `select_nth_unstable_by` for O(N) average partitioning around the K-th
-/// element, then sorts only the K-sized prefix — replacing the prior O(N log N)
-/// full sort. Significant when `probs.len()` is large (full vocab) and K is small.
+/// Uses a fixed-size running minimum tracker (smallest-of-top-K at slot 0).
+/// O(N·K·log K) time but only O(K) auxiliary storage — avoids the O(N) full
+/// allocation that `select_nth_unstable_by` on `Vec<(usize,f32)>` would
+/// require (which would allocate ~256KB for a 32k vocab). For small K
+/// (typical `coincidence_window`), this is both faster and dramatically
+/// lighter on the allocator, important since this is called per heap-pop
+/// inside `build_dd_tree_dendritic`.
 #[cfg(feature = "dendritic_gate")]
 #[inline]
 fn top_k_indices(probs: &[f32], k: usize) -> Vec<usize> {
@@ -4054,17 +4045,22 @@ fn top_k_indices(probs: &[f32], k: usize) -> Vec<usize> {
     if k == 0 {
         return Vec::new();
     }
-    let mut indexed: Vec<(usize, f32)> = probs.iter().copied().enumerate().collect();
-    // Partition so the top-k (by descending prob) live in `indexed[..k]`.
-    // `select_nth_unstable_by` reorders the slice in O(N) average time.
-    indexed.select_nth_unstable_by(k - 1, |a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
-    // Sort only the small prefix for deterministic descending order.
-    indexed[..k].sort_by(|a, b| {
-        b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
-    });
-    indexed[..k].iter().map(|(i, _)| *i).collect()
+    // Maintain top as ascending: smallest of top-K at top[0]. When we see a
+    // larger prob, evict top[0] and re-sort (K is tiny — typically ≤8).
+    let mut top: Vec<(f32, usize)> = Vec::with_capacity(k);
+    for (i, &p) in probs.iter().enumerate() {
+        if top.len() < k {
+            top.push((p, i));
+            top.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        } else if p > top[0].0 {
+            top[0] = (p, i);
+            top.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        }
+    }
+    // Final pass: reverse to descending (largest prob first), matching the
+    // original `select_nth_unstable_by` + sort contract.
+    top.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    top.into_iter().map(|(_, i)| i).collect()
 }
 
 #[cfg(test)]
