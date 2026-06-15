@@ -87,12 +87,19 @@ pub fn select_omp_keys(
     let mut residual = m_target.clone();
     let mut in_selected = vec![false; t_len];
 
+    // Hoisted scratch buffers — reused across greedy iterations to avoid
+    // per-iteration allocation. top_k_buf holds the (idx, corr) candidates
+    // for the current iteration; a_sub holds the phi[:, selected] sub-matrix
+    // rebuilt on each periodic NNLS refit.
+    let mut top_k_buf: Vec<(usize, f32)> = Vec::with_capacity(k);
+    let mut a_sub: Vec<f32> = Vec::with_capacity(n * t);
+
     let mut iter_count = 0usize;
     while selected.len() < t {
         // Correlation scores: c_j = residual^T Φ_:,j  (for j not in selected).
         let mut best_j = 0usize;
         let mut best_score = f32::NEG_INFINITY;
-        let mut top_k_buf: Vec<(usize, f32)> = Vec::with_capacity(k);
+        top_k_buf.clear();
         for j in 0..t_len {
             if in_selected[j] {
                 continue;
@@ -145,7 +152,8 @@ pub fn select_omp_keys(
         if iter_count % tau == 0 || selected.len() >= t {
             // Build A = phi[:, selected] ∈ R^{n × |selected|}.
             let cur_t = selected.len();
-            let mut a_sub = vec![0.0f32; n * cur_t];
+            a_sub.clear();
+            a_sub.resize(n * cur_t, 0.0);
             for (col, &sel_idx) in selected.iter().enumerate() {
                 for i in 0..n {
                     a_sub[i * cur_t + col] = phi[i * t_len + sel_idx];

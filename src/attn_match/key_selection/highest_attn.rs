@@ -94,13 +94,17 @@ pub fn select_highest_attn_keys(
         }
     }
 
-    // Partial sort: select top-t indices by score.
-    // For small t relative to T, a heap-based selection would be faster; we use
-    // a simple argsort for clarity. Production code should swap to partial_sort.
+    // Partial selection: O(T) partition to find the top-t boundary, then
+    // O(t log t) sort of just the survivors. For t << T this beats the prior
+    // full O(T log T) argsort. total_cmp replaces partial_cmp().unwrap_or()
+    // (no NaN branch — scores are finite dot products).
     let mut indexed: Vec<(usize, f32)> = per_key_score.iter().copied().enumerate().collect();
-    indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    if t > 0 && t < indexed.len() {
+        indexed.select_nth_unstable_by(t - 1, |a, b| b.1.total_cmp(&a.1));
+    }
+    indexed[..t].sort_by(|a, b| b.1.total_cmp(&a.1));
 
-    let indices: Vec<usize> = indexed.iter().take(t).map(|(i, _)| *i).collect();
+    let indices: Vec<usize> = indexed[..t].iter().map(|(i, _)| *i).collect();
     // No NNLS weights here — caller will fit β separately.
     let weights = vec![1.0f32; t];
 
