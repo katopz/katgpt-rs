@@ -2,27 +2,28 @@
 
 **Date:** 2026-06-15
 **Research:** [katgpt-rs/.research/242_Topological_State_Tracking_Recurrent_Belief.md](../.research/242_Topological_State_Tracking_Recurrent_Belief.md)
-**Private guide (Super-GOAT):** [riir-ai/.research/127_Implicit_Microcognition_Crowd_NPC_Guide.md](../../../riir-ai/.research/127_Implicit_Microcognition_Crowd_NPC_Guide.md)
+- **Private guide:** [`riir-ai/.research/127_*.md`](../../../riir-ai/.research/127_Implicit_Microcognition_Crowd_NPC_Guide.md) — **reframed as GOAT design context** (verdict revised from Super-GOAT after `evolve_hla` prior-art check)
 **Source paper:** [arXiv:2604.17121](https://arxiv.org/abs/2604.17121) — Mozer, Siddiqui, Liu (DeepMind, Jun 2026), "The Topological Trouble With Transformers"
-**Target:** `katgpt-rs/src/micro_belief/` (new module) + Cargo feature `micro_belief`
-**Status:** Active — Phase 0 (planning)
+**Target:** Extend `katgpt-rs/crates/katgpt-core/src/sense/` (refactor `evolve_hla` into a trait + add attractor family) + new `micro_belief/` submodule for the trait + snapshot + bridge + Cargo feature `micro_belief`
+**Status:** Active — Phase 0 (planning). **Verdict revised same day: Super-GOAT → GOAT** after prior-art check found `evolve_hla` already implements Family C.
 
 ---
 
 ## Goal
 
-Ship a generic, modelless, freeze/thaw-compatible **per-entity recurrent belief-state kernel** in katgpt-rs. The kernel implements one step of `s_t = f(s_{t-1}, x_t)` in a fixed-size latent vector, in three recurrence families drawn from Mozer et al.'s taxonomy (attractor loop, latent-thought loop, delta-rule SSM). This is the open primitive for the Super-GOAT fusion documented in `riir-ai/.research/127` — the generic math with no game semantics.
+**Revised (verdict downgrade):** the prior-art check found `ReconstructionState::evolve_hla()` already implements Family C (delta-rule SSM) — per-NPC recurrent latent state tracking is *shipped*. This plan is no longer "ship a new primitive"; it is **"extend `evolve_hla` into a trait, add an attractor-family variant (Family A) for beliefs-with-hysteresis, and optionally add kernel-as-versioned-snapshot for per-NPC divergence."**
 
-**GOAT gate (G1, must pass to promote to default-on):**
-- G1.1 Determinism (bit-identical `s_T` for fixed input sequence)
+The GOAT-gate question becomes: **does attractor update (`σ(W_s·s + W_x·x + b)`) reduce long-horizon flip-flops vs HLA's leaky integrator on a coherence benchmark?** If yes → promote attractor family as an opt-in variant (probably NOT default — HLA's leaky integrator is battle-tested). If no → demote to Gain, keep only the trait unification.
+
+**GOAT gate (G1 for the trait/snapshot mechanics; G2 for the attractor quality claim):**
+- G1.1 Determinism (bit-identical `s_T` for fixed input sequence) — applies to all families
 - G1.2 Boundedness (`‖s_t‖` stays bounded over 10k ticks; Family A doesn't diverge)
-- G1.3 Bridge ranking preservation (scalar projection preserves belief ranking)
-- G1.4 Latency (Family A ≤ 100ns/NPC/tick CPU SIMD; ≤ 50ns ANE batch)
-- G1.5 Freeze/thaw atomicity (readers never see torn kernel swap)
+- G1.3 Bridge ranking preservation (scalar projection preserves belief ranking) — already true for existing `SenseModule::project`, just re-verify
+- G1.4 Latency (Family A ≤ 100ns/NPC/tick CPU SIMD; ≤ 50ns ANE batch) — HLA's `evolve_hla_simd` is the baseline to match
+- G1.5 Freeze/thaw atomicity for `MicroRecurrentKernelSnapshot` (readers never see torn kernel swap)
+- **G2.1 (the actual GOAT gate for this plan):** attractor-family coherence ≥ HLA-leaky-integrator coherence on a long-horizon (1000-turn) dialogue/interaction benchmark, with strictly less flip-flopping. If G2.1 fails, attractor stays opt-in behind a sub-flag and the trait unification is the only shippable output.
 
-If G1 passes → promote `micro_belief` to default-on. If G1.2 (stability) fails for Family A, fall back to Family C (always-stable linear) as default and gate Family A behind a sub-flag.
-
-**Out of scope for this plan (stays in riir-ai/.plans/304):** NPC tick integration, sense-composition wiring, the 5 emotion channels, ANE batch dispatch, CGSP fusion, collapse detector. This plan ships *only* the generic kernel + snapshot + bridge math.
+**Out of scope (stays in riir-ai/.plans/304):** NPC tick integration changes, ANE batch dispatch for the attractor variant, CGSP fusion, collapse detector. This plan ships *only* the trait refactor + attractor family + snapshot + the G2.1 benchmark.
 
 ---
 
@@ -34,7 +35,8 @@ If G1 passes → promote `micro_belief` to default-on. If G1.2 (stability) fails
 - [x] **T0.2** Private guide `riir-ai/.research/127_*.md` created (Super-GOAT mandatory output).
 - [x] **T0.3** This plan created.
 - [ ] **T0.4** Audit existing freeze/thaw snapshot infra: locate `LoRAWeightVersion`, `LoRAHotSwap`, BLAKE3 commit path. Confirm `MicroRecurrentKernelSnapshot` can reuse the same atomic-swap plumbing without forking it. (Output: a 1-paragraph note in this plan's §Notes identifying the exact trait/struct to extend.)
-- [ ] **T0.5** Audit existing `latent_to_raw_scalar` / `sigmoid(dot())` bridge (per Plan 262 `curator_bridge.rs`). Confirm the bridge function signature matches what `MicroRecurrentBeliefState::project_to_scalars()` needs.
+- [ ] **T0.5** Audit existing `SenseModule::project` (the bridge) — confirm it already does dot-product + sigmoid (it does, per the grep). The new trait's `project_to_scalars()` should *delegate* to it, not duplicate it.
+- [ ] **T0.6** **NEW (post-verdict-revision):** Confirm `evolve_hla` + `evolve_hla_simd` call sites — anywhere else in the codebase that calls them directly needs to either (a) keep working unchanged via the trait impl, or (b) be updated to call through the trait. Grep for `evolve_hla` callers before the refactor.
 
 ---
 
@@ -42,19 +44,24 @@ If G1 passes → promote `micro_belief` to default-on. If G1.2 (stability) fails
 
 **Unblocks:** G1.1, G1.2, G1.3, G1.4 (partial), G1.5 (partial). This is the GOAT-gate phase.
 
-### Architecture
+### Architecture (revised — extend existing sense/, not greenfield)
 
 ```text
-katgpt-rs/src/micro_belief/
-├── mod.rs                  // Module root, re-exports
-├── types.rs                // MicroRecurrentBeliefState trait, Family enum, KernelConfig
-├── attractor.rs            // Family A: s_t = σ(W_s·s_{t-1} + W_x·x_t + b)
-├── delta_rule.rs           // Family C: s_t = diag(1-α)·s_{t-1} + β·x_t   [Phase 2]
-├── latent_thought.rs       // Family B: K iters of Family A                 [Phase 3]
-├── snapshot.rs             // MicroRecurrentKernelSnapshot (BLAKE3, versioned)
-├── bridge.rs               // project_to_scalars(): sigmoid(dot(s, d)) for k channels
-└── tests.rs                // G1.1–G1.5 GOAT tests + property tests
+katgpt-rs/crates/katgpt-core/src/
+├── sense/
+│   ├── reconstruction.rs       // EXISTING — evolve_hla() becomes an impl of the trait
+│   ├── brain.rs                // EXISTING — NpcBrain::hla_state is the state vector
+│   └── ...                     // EXISTING — SenseModule::project() is the bridge (unchanged)
+└── micro_belief/               // NEW submodule (small)
+    ├── mod.rs                  // Module root, re-exports
+    ├── types.rs                // BeliefKernel trait, RecurrenceFamily enum, KernelConfig
+    ├── attractor.rs            // Family A: s_t = σ(W_s·s_{t-1} + W_x·x_t + b)  [the GOAT candidate]
+    ├── leaky.rs                // Family C wrapper: delegates to existing evolve_hla logic (zero-behavior-change refactor)
+    ├── snapshot.rs             // MicroRecurrentKernelSnapshot (BLAKE3, versioned) — optional, for per-NPC divergence
+    └── tests.rs                // G1.1–G1.5 + G2.1 (the coherence benchmark)
 ```
+
+**Key refactor principle:** `ReconstructionState::evolve_hla()` logic moves into `leaky.rs` as `impl BeliefKernel for LeakyIntegrator`. The existing call site in the `expand → route → accumulate → evolve_hla` loop calls through the trait. **Zero behavior change for the default path** — this is critical to avoid regressing the shipped HLA benchmarks.
 
 ### Tasks
 
@@ -155,21 +162,16 @@ katgpt-rs/src/micro_belief/
 
 ---
 
-## Phase 2 — Family C (Delta-Rule SSM) — Always-Stable Fallback
+## Phase 2 — Family C wrapper (zero-behavior-change refactor of evolve_hla)
 
-**Why:** Family A (attractor) can diverge if `W_s` has unstable eigenvalues. Family C is linear with per-channel gates `α, β ∈ [0,1]` — always stable, always bounded. This is the safety net and the ANE-batch-friendly variant (pure elementwise + axpy).
+**Why (revised):** This is no longer "the fallback" — it's the **default that already ships**. The task is to wrap the existing `evolve_hla` logic in the trait without changing behavior, so the call site can dispatch to either LeakyIntegrator (today's default) or AttractorKernel (the GOAT candidate) transparently.
 
 ### Tasks
 
-- [ ] **T2.1** `delta_rule.rs`: `DeltaRuleKernel { alpha: [f32; D], beta: [f32; D] }`.
-  - `step()`: for each i, `state[i] = (1.0 - alpha[i]) * state[i] + beta[i] * input[i]`.
-  - Pure elementwise — trivially SIMD, trivially ANE-batchable.
-  - `α=0, β=1` = pure integrator (accumulates input — good for "memory of past encounters").
-  - `α=1, β=0` = no update (frozen state).
-  - `α=λ, β=0` = static decay (matches today's `sigmoid(-λΔt)` when composed with sigmoid bridge — backward-compatible fallback).
-- [ ] **T2.2** Extend `MicroRecurrentBeliefState` impl for `DeltaRuleKernel`.
-- [ ] **T2.3** Tests: G1.1, G1.2 (trivially passes — linear + bounded gates), G1.3, G1.4 (should be faster than Family A), G1.5.
-- [ ] **T2.4** Backward-compat test: `DeltaRuleKernel { alpha: [λ; D], beta: [0; D] }` composed with sigmoid bridge produces output within ε of today's `SpatialBelief::decay_confidence()` for the same Δt. (Validates the "upgrade target" claim in Plan 262.)
+- [ ] **T2.1** `leaky.rs`: `LeakyIntegrator { lr, max_delta }` — move the body of `evolve_hla` into `impl BeliefKernel for LeakyIntegrator`. The existing `ReconstructionState::evolve_hla()` becomes a thin delegate.
+- [ ] **T2.2** SIMD path: `evolve_hla_simd` logic moves into `LeakyIntegrator::step_simd()`; the existing method delegates.
+- [ ] **T2.3** **Zero-behavior-change test:** the existing HLA benchmarks (`reconstruction_bench.rs`) produce identical numbers before and after the refactor. This is the regression gate.
+- [ ] **T2.4** Backward-compat: `DeltaRuleKernel { alpha: [λ; D], beta: [0; D] }` (from the original Phase 2 plan) composed with sigmoid bridge matches `SpatialBelief::decay_confidence()` — only relevant if Plan 262's static-decay fallback needs a path; otherwise skip.
 
 ---
 
@@ -197,13 +199,14 @@ katgpt-rs/src/micro_belief/
 
 ---
 
-## Phase 5 — GOAT Promotion + Commit
+## Phase 5 — GOAT Gate G2.1 + Decision + Commit
 
 ### Tasks
 
-- [ ] **T5.1** If G1 gate passes → flip `micro_belief` to default-on (T1.16). Run full `cargo test` (all features) to confirm no regressions.
-- [ ] **T5.2** Update `.docs/01_overview.md` to mark `micro_belief` as default-on with GOAT proof reference (`.benchmarks/276_*.md`).
-- [ ] **T5.3** Commit with `feat:` prefix on `develop` branch (per AGENTS.md).
+- [ ] **T5.0** **NEW (the actual GOAT gate for this plan):** Build the G2.1 coherence benchmark — a synthetic long-horizon (1000-step) input sequence with injected ambiguity/flip-flop triggers (analog of the paper's "bank" polysemy). Run LeakyIntegrator (HLA default) vs AttractorKernel (Family A). Measure flip-flop rate + belief stability.
+- [ ] **T5.1** Run G2.1. **If attractor wins (less flip-flopping, ≥X% coherence gain)** → promote `micro_belief_attractor` as an opt-in variant (NOT default — HLA leaky is battle-tested). Document in `.docs/01_overview.md`.
+- [ ] **T5.2** **If attractor loses or ties** → demote to Gain. Keep the trait unification + LeakyIntegrator wrapper as the only shippable output. Attractor family stays behind `micro_belief_attractor` sub-flag for experimentation.
+- [ ] **T5.3** Commit with `feat:` (if attractor promoted) or `refactor:` (if only trait unification shipped) prefix on `develop`.
 - [ ] **T5.4** Mark all `- [ ]` tasks in this plan as `- [x]` when complete.
 
 ---
@@ -232,4 +235,4 @@ katgpt-rs/src/micro_belief/
 
 ## TL;DR
 
-Ship a generic `MicroRecurrentBeliefState` kernel in `katgpt-rs/src/micro_belief/` — three recurrence families (attractor loop, delta-rule SSM, latent-thought loop) drawn from Mozer et al. 2026's taxonomy of recurrent transformers. Each family implements `s_t = f(s_{t-1}, x_t)` in a fixed-size latent vector (default dim=32), with a freeze/thaw-snapshotable kernel and a sigmoid-dot bridge to bounded raw scalars. GOAT gate G1 (determinism, boundedness, ranking preservation, ≤100ns/tick, atomic swap) must pass before promoting to default-on. Family C (delta-rule) is the always-stable fallback; Family A (attractor) is the default if stable. This is the open primitive for the Super-GOAT fusion in `riir-ai/.research/127`.
+**Verdict revised Super-GOAT → GOAT** after a prior-art check found `ReconstructionState::evolve_hla()` already implements the core (per-NPC recurrent latent state + sigmoid bridge — it's literally Family C of the proposed primitive, already shipped and benchmarked). This plan is now **"extend `evolve_hla` into a `BeliefKernel` trait, add an attractor-family variant (Family A) for beliefs-with-hysteresis, and benchmark attractor vs leaky on a long-horizon coherence task (G2.1)."** The trait unification + LeakyIntegrator wrapper is a zero-behavior-change refactor; the attractor family is the GOAT candidate that must beat HLA's leaky integrator on flip-flop rate to justify its existence. If G2.1 fails, attractor stays an opt-in experiment and only the trait refactor ships. The bridge (`SenseModule::project`) and sync-boundary discipline are reused unchanged — HLA already got those right.

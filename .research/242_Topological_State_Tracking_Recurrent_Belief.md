@@ -1,8 +1,8 @@
 # Research 242: The Topological Trouble With Transformers — Recurrent Belief-State Primitive
 
 > **Source:** [The Topological Trouble With Transformers](https://arxiv.org/pdf/2604.17121) — Mozer, Siddiqui, Liu (Google DeepMind), arXiv:2604.17121v3, Jun 2026
-> **Date:** 2026-06-15
-> **Status:** Active — Super-GOAT (fusion)
+> **Date:** 2026-06-15 (verdict revised same day: Super-GOAT → GOAT after HLA prior-art check)
+> **Status:** Active — GOAT (fusion)
 > **Related Research:** 097 (Training-Free Looped Transformers), 192 (NextLat belief-state dynamics), 073 (LT2 looped), 070 (Gated DeltaNet-2), 135 (Parallax), 230 (SSD duality), 158 (MUX), 175 (ThoughtFold), 241 (SwiR explicit↔latent switch)
 > **Related Plans:** 108 (LT2 looped — done), 136 (Training-Free Loop Wrapper — done), 217 (NextLat drafter — done), 255 (ANE-Latent NPC Brain), 262 (Latent Physics Primitives), 275 (SwiR switch-thinking), 276 (this doc's plan)
 > **Cross-ref (riir-ai):** Research 127 (Implicit Microcognition Crowd-NPC Guide — Super-GOAT private guide), Plan 304 (downstream runtime integration, optional)
@@ -23,7 +23,7 @@ The diagnostic is the gift; the implementation is *ours*. Three inference-time t
 3. **A justification for inference-time looping** — the paper explicitly cites training-free looped transformers (Ng 2026 — our Research 097) as a legitimate response to the depth limit, not a hack.
 
 **Paper-alone verdict: GOAT** (a useful diagnostic map + taxonomy; no novel mechanism of its own, but a high-leverage frame).
-**Fusion verdict: Super-GOAT** — see §3. All 4 novelty-gate questions pass for the fusion of (this paper × two-brain model × plasma-tier NPC budget × NextLat belief dynamics). Mandatory outputs produced in this session: this open primitive + `riir-ai/.research/127_*.md` guide + `katgpt-rs/.plans/276_*.md`.
+**Fusion verdict: GOAT (revised down from an initial Super-GOAT claim).** A prior-art check on `evolve_hla` (see §2.4) showed HLA already implements per-NPC recurrent latent state tracking — exactly Family C of the proposed primitive. What remains novel is narrower: (a) attractor dynamics (Family A) as a quality variant over HLA's leaky integrator, (b) kernel-as-versioned-snapshot as a new per-NPC divergence axis, (c) taxonomy unification of `evolve_hla` into a trait. None is a new capability class. Outputs produced this session: this open primitive + `riir-ai/.research/127_*.md` (reframed as design context, not a moat doc) + `katgpt-rs/.plans/276_*.md` (reframed as an extension of `evolve_hla`, not a greenfield module).
 
 ---
 
@@ -99,7 +99,20 @@ The distilled inference-time primitive is a **small frozen kernel** implementing
 - Backprop through base weights — forbidden by modelless constraint.
 - The paper's multi-stage training scheme (§5.5) — training-only, → riir-train.
 
-### 2.3 Relationship to existing katgpt-rs primitives
+### 2.3 HLA prior art — the verdict-changing finding
+
+**`evolve_hla` already implements Family C.** `ReconstructionState::evolve_hla()` (`katgpt-rs/crates/katgpt-core/src/sense/reconstruction.rs:623`) is a gated additive recurrent update of the 8-dim HLA state, called every step in the `expand → route → accumulate → evolve_hla` loop:
+
+```rust
+self.hla[i] = (self.hla[i] + clamped_delta).clamp(-1.0, 1.0);
+// where clamped_delta = clamp(lr * (normalized - half_total) * scale, max_delta)
+```
+
+This is structurally `s_t = clamp(s_{t-1} + clamp(lr · f(x_t), max_delta), -1, 1)` — a leaky-integrator variant of Family C. `NpcBrain::update_hla_fixed()` (brain.rs:261) provides the raw additive path via `simd_add_inplace`. `SenseModule::project()` is the bridge (dot-product + sigmoid → scalar). All zero-alloc, SIMD, clamped, already benchmarked.
+
+**Conclusion:** HLA covers the *core* of the proposed primitive. The remaining delta is: (1) attractor dynamics (Family A) — qualitatively different update rule with fixed-point basins, not present in HLA's leaky integrator; (2) kernel-as-`MicroRecurrentKernelSnapshot` — HLA's evolve rule is hardcoded config + formula, not a per-NPC versioned artifact; (3) Family B (K-iteration latent-thought loop) — HLA does one evolve per step, no intra-tick settle. These are real extensions but not a new capability class.
+
+### 2.4 Relationship to existing katgpt-rs primitives
 
 | Existing primitive | Relationship to `MicroRecurrentBeliefState` |
 |---|---|
@@ -116,21 +129,21 @@ The distilled inference-time primitive is a **small frozen kernel** implementing
 
 **Paper-alone: GOAT.** A position/taxonomy paper — no novel mechanism of its own, but a high-leverage organizational frame that justifies and structures inference-time recurrence work we already have (Plans 108, 136, 217) and points to empty taxonomy cells worth filling.
 
-**Fusion: Super-GOAT.** All 4 novelty-gate questions pass for the *fusion* of this paper × the two-brain model × plasma-tier NPC budget × NextLat belief dynamics × freeze/thaw:
+**Fusion: GOAT (revised down from initial Super-GOAT claim).** A prior-art check on `evolve_hla` (§2.3) showed HLA already implements the core (per-NPC recurrent latent state + bridge). The novelty gate, honestly re-scored:
 
-| Gate | Question | Answer |
+| Gate | Question | Honest answer |
 |---|---|---|
-| **Q1 Novelty** | Any existing note cover "implicit recurrent belief state for crowd-scale NPC microcognition via tiny attractor loops"? | **No.** Closest cousins (097, 192, 126, 262) each cover a *different* axis. None fuses the topological diagnosis to per-NPC plasma-tier belief state. |
-| **Q2 New capability class** | New behavior, not just better numbers? | **Yes.** NPCs that maintain coherent multi-turn state (who they're negotiating with, what was last said, which faction member they last saw) across thousands of entities × long horizons, with **NO CoT token cost**. Today's `SpatialBelief::decay_confidence()` is a static placeholder; this is real state tracking. |
-| **Q3 Selling point** | "Our NPCs/systems do X that no competitor can"? | **Yes.** *"Our NPCs never forget who they're talking to — implicit recurrent belief state fits in L1 cache per NPC at 20Hz × thousands of NPCs, frozen-snapshot-compatible so emergent personalities persist."* |
-| **Q4 Force multiplier (≥2)** | Connects to ≥2 existing pillars? | **Yes — 6:** freeze/thaw (kernel is a snapshot), two-brain model (think-brain substrate), Plan 255 ANE-Latent NPC Brain (batched compute budget), Plan 262 Latent Physics (upgrades static decay → recurrent), Research 192 NextLat (belief residual MLP), Research 126 CGSP (curiosity drives kernel updates). |
+| **Q1 Novelty** | Any existing code cover this? | **FAILS.** `evolve_hla` is direct prior art for Family C (the core mechanism). Attractor family + kernel versioning are incremental deltas, not "no prior art". |
+| **Q2 New capability class** | New behavior, not just better numbers? | **FAILS.** HLA already does per-NPC recurrent latent state tracking. Attractor dynamics is a *variant* update rule (hysteresis vs leaky), not a new capability class. |
+| **Q3 Selling point** | "Our NPCs/systems do X that no competitor can"? | **WEAKENS.** "NPCs never forget who they're talking to" is already approximately true with HLA. The sharpened claim ("...with attractor-stable opinions + per-NPC kernel versioning") is incremental. |
+| **Q4 Force multiplier (≥2)** | Connects to ≥2 existing pillars? | Passes (6 systems), but Q4 alone ≠ Super-GOAT — needs Q1+Q2+Q3 too. |
 
-**Mandatory outputs (per `003` §Super-GOAT Capture Protocol):**
-1. **Open primitive** — this doc + `katgpt-rs/.plans/276_micro_recurrent_belief_state.md`.
-2. **Private guide** — `riir-ai/.research/127_Implicit_Microcognition_Crowd_NPC_Guide.md` (the selling-point doc, created in this session).
-3. **Plan(s)** — `katgpt-rs/.plans/276_*.md` (open); riir-ai/.plans/304 deferred until Phase 1 GOAT gate passes.
+**Downgrade rationale:** the Super-GOAT claim was made before checking `evolve_hla`. HLA's leaky integrator is already a Family-C recurrent belief-state kernel. The honest contribution of this research is: (a) the Mozer taxonomy as a diagnostic frame showing HLA occupies the "step axis, ratio=1, delta-rule" slot and there are unfilled slots (attractor with depth+step/ratio=1, latent-thought with ratio<1); (b) attractor dynamics (Family A) as a quality variant that may reduce long-horizon flip-flops; (c) kernel-as-snapshot as a new divergence axis. All three are GOAT-tier (provable gain if attractor benchmarks better than leaky on coherence), not Super-GOAT (new capability class).
 
-**Selling point (one sentence, repeated for emphasis):** Implicit recurrent belief state lets thousands of NPCs each maintain a coherent evolving subjective model of their world at plasma-tier latency, without paying the CoT-token tax that the paper identifies as the feedforward transformer's structural workaround.
+**Outputs (retained, reframed):**
+1. **Open primitive** — this doc + `katgpt-rs/.plans/276_*.md` (reframed as an *extension* of `evolve_hla`, not a greenfield module).
+2. **Design context** — `riir-ai/.research/127_*.md` (reframed from "Super-GOAT moat doc" to "GOAT design context for the attractor-family extension"). The mandatory-Super-GOAT-guide rule no longer applies; the doc is retained because the connection-map content is still useful design context.
+3. **Plan** — `katgpt-rs/.plans/276_*.md`.
 
 ---
 
@@ -148,7 +161,7 @@ The distilled inference-time primitive is a **small frozen kernel** implementing
 | Research 192 (NextLat) | Belief MLP drafts *tokens* | Belief kernel maintains *per-entity state* across ticks — no decoding |
 | Freeze/thaw | Versions LoRA-style adapter weights | Versions *recurrent kernels* — emergent NPC personality = emergent kernel snapshot |
 
-**Capability unlocked:** Crowd-scale NPC microcognition that is (a) structurally sound (real recurrence, not fake feedforward state), (b) plasma-tier cheap (≤1µs/NPC/tick), (c) personality-divergent (per-NPC kernel snapshots), (d) sync-safe (raw scalar bridge, latent vector stays local), (e) CoT-free (implicit activation dynamics, not explicit thought traces).
+**Capability increment (over existing HLA):** (a) attractor dynamics — stable beliefs with hysteresis that resist noise until evidence accumulates (HLA's leaky integrator has no basins); (b) per-NPC kernel versioning — two same-type NPCs can diverge via different kernel snapshots, not just different inputs (HLA's evolve rule is shared); (c) latent-thought intra-tick settle (Family B) for deliberation. All incremental over HLA's existing recurrent state tracking.
 
 **Closest cousins across both repos (for the fusion protocol):**
 - `katgpt-rs/.research/097_Training_Free_Looped_Transformers.md` — depth-axis recurrence (ratio>1) on a frozen checkpoint; the new primitive is depth+step (ratio≤1) on a tiny standalone kernel.
@@ -181,4 +194,4 @@ The distilled inference-time primitive is a **small frozen kernel** implementing
 
 ## TL;DR
 
-Mozer et al. prove (positionally) that feedforward transformers are topologically bounded for state tracking — every state update consumes a layer until depth is exhausted — and that CoT is a wasteful workaround. The distilled katgpt-rs primitive is `MicroRecurrentBeliefState`: a tiny frozen kernel implementing `s_t = f(s_{t-1}, x_t)` per entity per tick, in three recurrence families (attractor loop, latent-thought loop, delta-rule SSM) drawn from the paper's taxonomy. Latent-to-latent, freeze/thaw-compatible, ≤1µs/NPC/tick, bridges to raw scalars at the sync boundary. **Paper alone: GOAT (a diagnostic map + taxonomy). Fusion to crowd-scale NPC microcognition: Super-GOAT** — all 4 novelty gates pass; mandatory outputs produced in this session (this open primitive + `riir-ai/.research/127_*.md` guide + `katgpt-rs/.plans/276_*.md`).
+Mozer et al. prove (positionally) that feedforward transformers are topologically bounded for state tracking — every state update consumes a layer until depth is exhausted — and that CoT is a wasteful workaround. **Prior-art check revealed HLA already implements the core primitive:** `ReconstructionState::evolve_hla()` is a gated additive recurrent update of the 8-dim per-NPC latent state — exactly Family C (delta-rule SSM) of the proposed `MicroRecurrentBeliefState`. The honest delta is narrower: (a) attractor dynamics (Family A) as a quality variant over HLA's leaky integrator — may reduce long-horizon flip-flops, GOAT-gated on a coherence benchmark; (b) kernel-as-versioned-snapshot for a new per-NPC divergence axis; (c) taxonomy unification of `evolve_hla` into a trait. **Verdict: GOAT (paper alone) + GOAT (fusion, revised down from initial Super-GOAT claim after the `evolve_hla` prior-art check).** None of the remaining delta is a new capability class — HLA already does per-NPC recurrent latent state tracking.
