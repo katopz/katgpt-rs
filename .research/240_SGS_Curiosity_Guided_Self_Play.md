@@ -10,8 +10,8 @@
 
 > **Implementation status (2026-06-15):** Shipped at [`katgpt-rs/.plans/274_curiosity_guided_self_play.md`](../.plans/274_curiosity_guided_self_play.md) — Phases 1-4 complete. Code lives in [`katgpt-rs/crates/katgpt-core/src/cgsp/`](../crates/katgpt-core/src/cgsp/) (7 modules, 29 unit tests); the root crate re-exports it via [`katgpt-rs/src/cgsp.rs`](../src/cgsp.rs). Feature flag `cgsp` is **opt-in**. The GOAT gate ran with 9 tests at [`katgpt-rs/tests/bench_274_cgsp_goat.rs`](../tests/bench_274_cgsp_goat.rs); results in [`katgpt-rs/.benchmarks/274_cgsp_goat.md`](../.benchmarks/274_cgsp_goat.md):
 > - ✅ G2 (collapse recovery): 1 cycle vs 200+ baseline — CGSP's defining property.
-> - ✅ G3/G4/P2/G6: feature isolation, 844ns/cycle, 1.36ms for 1000 NPCs, latent/raw boundary respected.
-> - ⚠ P3: bounded 55.91 allocs/cycle (NOT zero — optimisation tracked in [`.issues/021_cgsp_cycle_allocation_reduction.md`](../.issues/021_cgsp_cycle_allocation_reduction.md)).
+> - ✅ G3/G4/P2/G6: feature isolation, 831ns/cycle (isolated `--test-threads=1`), 808µs for 1000 NPCs, latent/raw boundary respected.
+> - ⚠ P3: bounded 13.00 allocs/cycle (NOT zero — optimisation tracked in [`.issues/021_cgsp_cycle_allocation_reduction.md`](../.issues/021_cgsp_cycle_allocation_reduction.md)).
 > - ⚠ G1 (transfer-to-target) is INFORMATIONAL: the `(1 − solve_rate) · guide_score` reward is curiosity-correct but target-agnostic by design. CGSP is an exploration driver, not a target-seeker.
 >
 > **Promotion decision:** KEEP OPT-IN. The private selling-point guide for the runtime consumer is [`riir-ai/.research/126_NPC_Curiosity_Guided_Self_Play_Guide.md`](../../../riir-ai/.research/126_NPC_Curiosity_Guided_Self_Play_Guide.md); promote to default only after [`riir-ai/.plans/299_npc_curiosity_self_play_runtime.md`](../../../riir-ai/.plans/299_npc_curiosity_self_play_runtime.md) validates on real game domains. Runnable demos: [`examples/cgsp_minimal.rs`](../examples/cgsp_minimal.rs), [`examples/cgsp_collapse_recovery.rs`](../examples/cgsp_collapse_recovery.rs).

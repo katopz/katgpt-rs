@@ -810,9 +810,9 @@ where
 | G1 transfer-to-target | CGSP 0/64, baseline 0/64 | ⚠ INFORMATIONAL — CGSP is curiosity-driven, not target-seeking (root-cause: `(1 − solve_rate)` factor rewards intermediate-difficulty arms) |
 | G2 collapse recovery | 1 cycle with aware; 200+ without | ✅ PASS |
 | G3 feature isolation | `cargo check` clean both ways | ✅ PASS |
-| G4 per-cycle overhead | 844.5 ns/cycle (release, Apple Silicon arm64) | ✅ PASS |
-| P2 1000 NPCs/tick | 1363 µs/tick (1.36 µs/NPC, Rayon 8 chunks) | ✅ PASS |
-| P3 allocations | 55.91 allocs/cycle (bounded, not zero) | ✅ PASS (bounded) — optimization tracked in `.issues/021_cgsp_cycle_allocation_reduction.md` |
+| G4 per-cycle overhead | 831.3 ns/cycle (release, isolated `--test-threads=1`, Apple Silicon arm64) | ✅ PASS |
+| P2 1000 NPCs/tick | 808 µs/tick (0.81 µs/NPC, Rayon 8 chunks, isolated) | ✅ PASS |
+| P3 allocations | 13.00 allocs/cycle (bounded, not zero) | ✅ PASS (bounded) — optimization tracked in `.issues/021_cgsp_cycle_allocation_reduction.md` |
 | G6 latent/raw boundary | only f32+bool+u32 in CycleResult | ✅ PASS |
 
 **Promotion decision:** KEEP OPT-IN. CGSP is architecturally sound and plasma-tier fast, but its value proposition is collapse recovery + degenerate-batch gating — *not* target-seeking. Promote to default only after riir-ai Plan 299 validates on real game domains.

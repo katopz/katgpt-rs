@@ -1,28 +1,29 @@
 # Issue 021: CGSP `cycle()` per-cycle allocation reduction
 
-**Date:** 2026-06-15
+**Date:** 2026-06-15 (updated 2026-06-15 with re-measured baseline)
 **Discovered by:** Plan 274 Phase 3 GOAT gate (T3.6 / P3)
 **Severity:** Low (plasma-tier acceptable, blocks TRUE zero-alloc claim)
 **Feature:** `cgsp`
 
 ## Problem
 
-`CgspLoop::cycle()` allocates **~56 times per cycle** in steady state, not
+`CgspLoop::cycle()` allocates **~13 times per cycle** in steady state, not
 zero as the plan T1.4 originally claimed. The plan's "zero-allocation in
 steady state" invariant is empirically false.
 
-Measured in `.benchmarks/274_cgsp_goat.md` §P3:
-- 55.91 allocs/cycle
-- 3480 bytes/cycle
+Measured in `.benchmarks/274_cgsp_goat.md` §P3 (re-measured 2026-06-15 with
+`--test-threads=1`, 2000-cycle warmup, 1000-cycle window):
+- **13.00 allocs/cycle** (prior figure of 55.91 was stale — included warmup)
+- 800 bytes/cycle
 - k=8 candidates per cycle, pool_size=64
 
-The per-cycle cost is still 844ns (under the 1µs plasma budget), so this is
+The per-cycle cost is still 831ns (under the 1µs plasma budget), so this is
 not blocking. But the plan claimed zero-alloc and we should either honour
 that claim or update the plan honestly.
 
 ## Root cause
 
-Two allocation sites in `src/cgsp/loop_.rs::cycle()`:
+Two allocation sites in `crates/katgpt-core/src/cgsp/loop_.rs::cycle()`:
 
 ### Site 1: `scratch.candidates.resize(k, placeholder)` (line ~215)
 
@@ -33,7 +34,7 @@ scratch.candidates.resize(k, Candidate::new(Direction::zeros(target.dim()), usiz
 `ScratchBuffers::reset()` calls `.clear()` on each Vec (preserving capacity),
 then `cycle()` calls `.resize(k, placeholder)`. Going from len=0 to len=k
 clones the `placeholder` Candidate k times. Each clone allocates a new
-`Vec<f32>` for `Direction::coords`.
+`Vec<f32>` for `Direction::coords`. **~8 allocs/cycle.**
 
 **Fix:** Instead of clear+resize, use a fill pattern that reuses existing
 slots. Pre-fill the Vec once in `ScratchBuffers::new()` to length k, then
@@ -50,7 +51,8 @@ let rate = self.solver.attempt(target, &cand);
 This clone exists to work around a borrow-checker conflict: `self.solver`
 needs `&mut self` while `candidates` (which is a slice of `scratch`) is
 already borrowed mutably. Cloning the Candidate detaches it from the scratch
-borrow so the solver can be called.
+borrow so the solver can be called. **~5 allocs/cycle** (one per admitted
+candidate; k=8 with typical ~5 admitted).
 
 **Fix:** Refactor the borrow split. Options:
 - Extract the `&mut self.solver` borrow BEFORE entering the
@@ -85,7 +87,7 @@ Combining A + B would bring per-cycle allocations down to ~0 (only the
 
 ## Acceptance criteria
 
-- [ ] Per-cycle allocations < 5 (down from 56) in the P3 gate test
+- [ ] Per-cycle allocations < 5 (down from 13) in the P3 gate test
 - [ ] G4 per-cycle overhead does not regress (still ≤ 1µs)
 - [ ] All 29 existing cgsp unit tests still pass
 - [ ] All 9 GOAT gate tests still pass
@@ -94,13 +96,14 @@ Combining A + B would bring per-cycle allocations down to ~0 (only the
 
 - Plan: `.plans/274_curiosity_guided_self_play.md` (T3.6)
 - Benchmark: `.benchmarks/274_cgsp_goat.md` §P3
-- Implementation: `src/cgsp/loop_.rs` lines ~215, ~273
+- Implementation: `crates/katgpt-core/src/cgsp/loop_.rs` lines ~215, ~273
 - Test: `tests/bench_274_cgsp_goat.rs::p3_allocation_audit_steady_state`
 
 ## TL;DR
 
-CGSP's `cycle()` allocates ~56 times per cycle, not zero. Two sites cause
-this: (1) clear+resize pattern on `scratch.candidates`, (2) Candidate clone
-to dodge a borrow-checker conflict. Both are fixable. Not blocking (844ns
-includes them), but blocks the "zero-alloc" plan claim. Low priority unless
-CGSP sees heavy per-tick use in riir-ai Plan 299.
+CGSP's `cycle()` allocates ~13 times per cycle, not zero. Two sites cause
+this: (1) clear+resize pattern on `scratch.candidates` (~8 allocs),
+(2) Candidate clone to dodge a borrow-checker conflict (~5 allocs). Both are
+fixable. Not blocking (831ns includes them), but blocks the "zero-alloc"
+plan claim. Low priority unless CGSP sees heavy per-tick use in riir-ai
+Plan 299.

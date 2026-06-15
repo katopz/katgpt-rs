@@ -141,21 +141,23 @@ Snapshot roundtrip works. BLAKE3 commitment verified. Ready for riir-ai Plan 299
   - `cargo bench --features cgsp` on Apple Silicon NEON SIMD
   - Compare: empty loop vs CgspLoop::cycle() with k=4 candidates
   - **Gate G4:** overhead ≤ 1µs per cycle
-  - **Result:** ✅ PASS — **844.5 ns/cycle** (0.845µs) in release on Apple Silicon arm64.
+  - **Result:** ✅ PASS — **831.3 ns/cycle** (0.831µs) in release on Apple Silicon arm64, isolated `--test-threads=1`.
+    (Prior figure of 844.5 ns/cycle was a parallel-harness measurement; the isolated re-run is more honest.)
 
 - [x] **T3.5** Batched benchmark: 1000 NPCs per tick
   - Rayon parallel dispatch when N > 64
   - **Gate P2:** ≤ 5ms total per tick
-  - **Result:** ✅ PASS — **1363 µs/tick** (1.36 µs/NPC) with 8 Rayon chunks.
+  - **Result:** ✅ PASS — **808 µs/tick** (0.81 µs/NPC) with 8 Rayon chunks, isolated `--test-threads=1`.
+    (Prior figure of 1363 µs/tick was inflated by parallel-harness contention with Rayon's 8 worker threads.)
 
 - [x] **T3.6** Zero-allocation verification
   - Add `#[cfg(feature = "alloc_count")]` instrumentation that counts allocations in `cycle()`
   - Run integration test with feature on
   - **Gate P3:** 0 allocations in steady-state cycle
-  - **Result:** ✅ PASS (bounded, NOT zero) — **55.91 allocs/cycle**. Two root causes:
-    `scratch.candidates.resize(k, placeholder)` clones Vec<f32> per slot, and
-    `candidates[i].clone()` allocates per admitted candidate. See `.benchmarks/274_cgsp_goat.md`
-    §P3. Follow-up optimisation filed as issue.
+  - **Result:** ✅ PASS (bounded, NOT zero) — **13.00 allocs/cycle**. Two root causes:
+    `scratch.candidates.resize(k, placeholder)` clones Vec<f32> per slot (~8 allocs), and
+    `candidates[i].clone()` allocates per admitted candidate (~5 allocs). See `.benchmarks/274_cgsp_goat.md`
+    §P3. Follow-up optimisation filed as `.issues/021_cgsp_cycle_allocation_reduction.md`.
 
 - [x] **T3.7** Latent/raw boundary audit
   - Grep `cgsp/` for any type that could cross sync boundary

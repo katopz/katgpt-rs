@@ -35,15 +35,24 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo test --release --test bench_274_cgsp_goat \
-//!     --features cgsp -- --nocapture
+//! cargo test --release --test bench_274_cgsp_goat
+//!     --features cgsp -- --nocapture --test-threads=1
 //! ```
 //!
 //! For P3 (allocation audit), run in **debug** so `TrackingAllocator` is on:
 //! ```bash
-//! cargo test --test bench_274_cgsp_goat \
-//!     --features cgsp -- --nocapture
+//! cargo test --test bench_274_cgsp_goat
+//!     --features cgsp -- --nocapture --test-threads=1
 //! ```
+//!
+//! `--test-threads=1` is **required** for G4 and P2: both are tight
+//! microbenchmarks (≤ 1µs/cycle and ≤ 5ms/tick budgets). The default parallel
+//! test harness runs G4 concurrently with heavy G1/G1b/G2 workloads,
+//! starving it of cores and inflating per-cycle latency by ~30% (measured
+//! 833ns isolated → 1114ns parallel, which falsely fails the 1µs gate). This
+//! matches the convention already established by Plans 275 (swir) and 021
+//! (core hotpath). Same caveat applies to P2's Rayon `par_chunks_mut` — its
+//! 8 worker threads contend with the parallel test harness.
 
 #![cfg(feature = "cgsp")]
 #![cfg(test)]
@@ -567,7 +576,11 @@ fn g4_per_cycle_overhead() {
     if !cfg!(debug_assertions) {
         assert!(
             ns_per_cycle <= 1000.0,
-            "G4 FAIL: per-cycle overhead {ns_per_cycle:.1} ns > 1000 ns in release"
+            "G4 FAIL: per-cycle overhead {ns_per_cycle:.1} ns > 1000 ns in release. \
+             If this run used the default parallel test harness, re-run with \
+             `--test-threads=1` — G4 is a tight microbench and concurrent G1/G1b/G2 \
+             tests inflate per-cycle latency by ~30%. Isolated runs on this hardware \
+             typically measure ~830ns/cycle (well under budget)."
         );
         println!("✅ G4 PASS — {ns_per_cycle:.1} ns/cycle ≤ 1000 ns");
     } else {
@@ -646,7 +659,10 @@ fn p2_batched_1000_npcs_throughput() {
     if !cfg!(debug_assertions) {
         assert!(
             us_per_tick <= 5000.0,
-            "P2 FAIL: per-tick {us_per_tick:.1} µs > 5000 µs in release"
+            "P2 FAIL: per-tick {us_per_tick:.1} µs > 5000 µs in release. \
+             If this run used the default parallel test harness, re-run with \
+             `--test-threads=1` — P2 uses Rayon `par_chunks_mut` with 8 worker \
+             threads, which contend with the parallel test harness's own threads."
         );
         println!("✅ P2 PASS — {us_per_tick:.1} µs/tick ≤ 5000 µs");
     } else {
@@ -826,9 +842,10 @@ fn zzz_summary_print_goat_matrix() {
     println!("  G6  Latent/raw boundary   only f32+bool+u32 cross    (see gate test)");
     println!();
     println!("Reproduce:");
-    println!("  cargo test --release --test bench_274_cgsp_goat --features cgsp -- --nocapture");
-    println!("  cargo test --test bench_274_cgsp_goat --features cgsp -- --nocapture  # for P3");
+    println!("  cargo test --release --test bench_274_cgsp_goat --features cgsp -- --nocapture --test-threads=1");
+    println!("  cargo test --test bench_274_cgsp_goat --features cgsp -- --nocapture --test-threads=1  # P3");
     println!("  cargo check                                                         # G3 isolation");
     println!("  cargo check --features cgsp                                         # G3 sanity");
+    println!("  # --test-threads=1 is REQUIRED for G4/P2 (tight microbenchmarks)");
     println!("═══════════════════════════════════════════════════════════════════════════");
 }
