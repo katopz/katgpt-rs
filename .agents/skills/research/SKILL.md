@@ -31,21 +31,24 @@ Always reference files with project-relative paths (e.g. `katgpt-rs/.research/23
 
 ## Read first (grounding) — MANDATORY pre-flight
 
-**Hard rule:** before any distillation, verdict, or file creation, you MUST `list_directory` **all four** research/plan folders in this session. This skill is invoked from `katgpt-rs/`, which biases toward the public repo — but `riir-ai/` holds 60+ research notes and 90+ plans that are invisible to you until you list them. Skipping this is the #1 cause of duplicate notes and missed cross-repo fusion.
+**Hard rule:** before any distillation, verdict, or file creation, you MUST do **both** of these in this session:
 
-**Mandatory enumeration (all four, before any verdict):**
-- `katgpt-rs/.research/` — public modelless research notes
-- `katgpt-rs/.plans/` — public modelless plans
-- `riir-ai/.research/` — private runtime/game/chain research notes
-- `riir-ai/.plans/` — private runtime/game/chain plans
+1. **`read_file` all three READMEs** — these define repo purpose, current state, and the raw-vs-latent sync boundary the research must respect. Skipping this is the #1 cause of research notes that ignore the actual codebase architecture.
+2. **`list_directory` both `.research/` folders** — these hold the existing distillation corpus you must not duplicate.
 
-If you have not yet listed `riir-ai/.research/` AND `riir-ai/.plans/` in this session, STOP and do so now. Do not create any file until all four are enumerated.
+**Mandatory (before any verdict):**
+- `katgpt-rs/README.md` (`read_file`) — public engine purpose, architecture, current feature set.
+- `riir-ai/README.md` (`read_file`) — private runtime context (freeze/thaw, self-learn, chain, game systems).
+- `riir-armageddon/README.md` (`read_file`) — arena/game-product domain types, raw-vs-latent boundary, sync semantics, anti-cheat rules. The research MUST respect this boundary.
+- `katgpt-rs/.research/` (`list_directory`) — public modelless research corpus (do not duplicate).
+- `riir-ai/.research/` (`list_directory`) — private runtime/game/chain research corpus (do not duplicate).
 
-Then read for context:
-- `katgpt-rs/README.md` — public engine purpose, architecture, current state.
+If you have NOT `read_file` all three READMEs AND `list_directory` both `.research/` folders, STOP and do so now. Do not create any file until all five are done.
+
+Then read for additional context (as relevant to the topic):
 - `katgpt-rs/src/` + `katgpt-rs/crates/katgpt-core/src/` — existing modelless primitives (ConstraintPruners, bandits, DDTree, speculative decode).
-- `riir-ai/README.md` — game product context (freeze/thaw runtime, self-learn, chain).
 - `riir-ai/crates/` — runtime IP: `riir-engine`, `riir-games`, `riir-chain`, `riir-chaind`, `riir-ffi`, `riir-data`, `riir-examples`.
+- `katgpt-rs/.plans/` + `riir-ai/.plans/` — existing plans. **Do NOT list these in pre-flight.** Grep them during fusion search (§Workflow step 1), not as grounding — they describe what we *plan to build*, not what the repos *are*.
 
 ## Primary focus (distill HERE in katgpt-rs / riir-ai)
 
@@ -277,4 +280,4 @@ Reinforce these when designing game systems or chain state:
 
 ## TL;DR
 
-This skill packages the katgpt-rs research workflow: **MANDATORY pre-flight: `list_directory` all four folders (`katgpt-rs/{.research,.plans}`, `riir-ai/{.research,.plans}`) before any verdict** → read paper → classify (training? → riir-train, stop) → **distill + fuse** (find the transferable primitive, then grep BOTH repos for the 2–3 closest cousins to synthesize a novel combination) → **novelty gate** (Super-GOAT? → open primitive + private riir-ai guide; else GOAT/Gain → plan only) → implement behind feature flag → benchmark → promote GOAT or demote loser. Hard constraints: modelless-first, latent-to-latent with sigmoid (never softmax), freeze/thaw over fine-tuning, 3-repo commercial discipline, raw scalars at the sync boundary, **fusion-first mindset** (the best Super-GOATs come from fusing papers across BOTH repos, not direct-mapping one). **Super-GOAT = private moat; never skip the riir-ai guide. Never grep only katgpt-rs — riir-ai is half the corpus.**
+This skill packages the katgpt-rs research workflow: **MANDATORY pre-flight: `read_file` all three READMEs (`katgpt-rs/README.md`, `riir-ai/README.md`, `riir-armageddon/README.md`) AND `list_directory` both `.research/` folders (`katgpt-rs/.research/`, `riir-ai/.research/`) before any verdict** → read paper → classify (training? → riir-train, stop) → **distill + fuse** (find the transferable primitive, then grep BOTH repos — including `.plans/` — for the 2–3 closest cousins to synthesize a novel combination) → **novelty gate** (Super-GOAT? → open primitive + private riir-ai guide; else GOAT/Gain → plan only) → implement behind feature flag → benchmark → promote GOAT or demote loser. Hard constraints: modelless-first, latent-to-latent with sigmoid (never softmax), freeze/thaw over fine-tuning, 3-repo commercial discipline, raw scalars at the sync boundary, **fusion-first mindset** (the best Super-GOATs come from fusing papers across BOTH repos, not direct-mapping one). **Super-GOAT = private moat; never skip the riir-ai guide. Never grep only katgpt-rs — riir-ai is half the corpus.**
