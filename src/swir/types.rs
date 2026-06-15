@@ -21,7 +21,9 @@ pub enum ThinkMode {
 
 /// Control tokens injected by the controller at switch / convergence / termination
 /// instants. The caller resolves these to concrete token ids via
-/// [`ControlTokenIds`](crate::swir::ControlTokenIds) (Phase 2 wiring).
+/// [`ControlToken::resolve_via`] using a
+/// [`ControlTokenIds`](crate::thinking_cot::ControlTokenIds) populated from
+/// the host tokenizer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum ControlToken {
@@ -31,6 +33,26 @@ pub enum ControlToken {
     /// `</think>\n\nThe final answer is` — force the answer prefix. Used when
     /// the controller hits the overthinking guard (switch_count > c_max).
     ForceAnswerPrefix = 1,
+}
+
+impl ControlToken {
+    /// Resolve this control token to a concrete vocabulary id using the
+    /// host-supplied [`ControlTokenIds`](crate::thinking_cot::ControlTokenIds).
+    ///
+    /// Kept on `ControlToken` (not on `ControlTokenIds`) so the
+    /// `thinking_cot` crate-level wiring type can stay free of swir
+    /// dependencies — the dependency arrow is `swir → thinking_cot`, not the
+    /// reverse.
+    #[inline]
+    pub fn resolve_via(
+        self,
+        ids: &crate::thinking_cot::ControlTokenIds,
+    ) -> u32 {
+        match self {
+            ControlToken::CloseThink => ids.think_close,
+            ControlToken::ForceAnswerPrefix => ids.force_answer_prefix,
+        }
+    }
 }
 
 /// Result of one [`SwiRController::step`](crate::swir::SwiRController::step)

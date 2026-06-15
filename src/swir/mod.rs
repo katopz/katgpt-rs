@@ -80,51 +80,38 @@
 //! Paper reports +1.8–3.1pp accuracy and 1.36–6.8× token efficiency on MATH500
 //! (Qwen3-8B). The GOAT gate (Plan 275 Phase 3) must reproduce this on the
 //! host's actual model before promoting to default.
+//!
+//! # Phase 2 — `ThinkingStrategy` integration
+//!
+//! Hosts that already plug into `thinking_cot` (Plan 194) should prefer
+//! [`SwiRStrategyAdapter`] over driving [`SwiRController`] directly. The
+//! adapter implements the shared [`ThinkingStrategy`](crate::thinking_cot::ThinkingStrategy)
+//! trait, owns the softmax + soft-embedding scratch, and wires the controller's
+//! `StepAction` into a [`StepDirective`](crate::thinking_cot::StepDirective).
+//! See `tests/swir_strategy_integration.rs` for an end-to-end mock decode loop.
 
 mod controller;
 mod convex_hull_check;
 mod entropy;
 mod signal_mix;
 mod soft_embedding;
+mod strategy_adapter;
 mod types;
 
 pub use controller::SwiRController;
 pub use convex_hull_check::in_vocab_convex_hull;
-pub use entropy::shannon_entropy;
+pub use entropy::{entropy_from_logits, shannon_entropy};
 pub use signal_mix::{mix_thinking_signal, SignalMixKind};
 pub use soft_embedding::soft_embedding;
+pub use strategy_adapter::SwiRStrategyAdapter;
 pub use types::{ControlToken, StepAction, SwiRConfig, SwiRStats, ThinkMode};
 
-// Re-exported for the Phase 2 strategy adapter's `StepContext::control_token_ids`
-// field. Public so downstream code can construct it without depending on
-// `thinking_cot` internals.
-
-/// Concrete vocabulary ids for the control tokens the controller injects.
-///
-/// The host populates this from the tokenizer and feeds it to the Phase 2
-/// strategy adapter. Kept here (not in `types.rs`) because it's a *wiring* type
-/// — the core controller is tokenizer-agnostic.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct ControlTokenIds {
-    /// `<think>` — paper's reasoning-block open. (Currently informational; the
-    /// controller does not inject this.)
-    pub think_open: u32,
-    /// `</think>` — reasoning-block close. Maps to [`ControlToken::CloseThink`].
-    pub think_close: u32,
-    /// `</think>\n\nThe final answer is` — maps to
-    /// [`ControlToken::ForceAnswerPrefix`]. For tokenizers that don't encode
-    /// this as a single token, the host should use the id of `</think>` and
-    /// handle the `\n\nThe final answer is` portion in the post-processing.
-    pub force_answer_prefix: u32,
-}
-
-impl ControlTokenIds {
-    /// Resolve a controller-emitted [`ControlToken`] to a concrete vocab id.
-    #[inline]
-    pub fn resolve(&self, token: ControlToken) -> u32 {
-        match token {
-            ControlToken::CloseThink => self.think_close,
-            ControlToken::ForceAnswerPrefix => self.force_answer_prefix,
-        }
-    }
-}
+// `ControlTokenIds` (the host-side wiring struct that resolves `ControlToken`
+// values to concrete vocab ids) moved to `crate::thinking_cot::strategy` in
+// Plan 275 Phase 2 — it's shared with future strategies (CollapseAware,
+// ChainFold) and the dependency arrow is swir → thinking_cot, so it cannot
+// live here.
+//
+// The resolve helper is provided as a method on `ControlToken` in
+// [`types::ControlToken::resolve_via`] so callers can still write
+// `token.resolve_via(&ids)`.

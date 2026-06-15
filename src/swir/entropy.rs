@@ -68,6 +68,60 @@ pub fn shannon_entropy(probs: &[f32]) -> f32 {
     sum
 }
 
+/// Compute Shannon entropy (in nats) from a logits vector.
+///
+/// `H = -Σ p_i * ln(p_i)` where `p = softmax(logits)` with the standard
+/// max-shift for numerical stability.
+///
+/// Returns 0 for empty input.
+///
+/// This is a vendored twin of `attn_match::adaptive_cot::entropy_from_logits`.
+/// We duplicate rather than depend on `attn_match` because that feature is
+/// *opt-in* (per Plan 271 GOAT gate) and forcing every `thinking_cot` user
+/// to enable it would expand the dependency footprint for everyone. The
+/// kernel is small (~10 lines) and the duplication is intentional — keep
+/// them in sync if you touch the numerical-stability tricks.
+///
+/// Hot-path: max-shift and per-element `exp` are computed once, then reused
+/// for both the normalizer sum and the per-token `p * ln(p)` term.
+#[inline]
+pub fn entropy_from_logits(logits: &[f32]) -> f32 {
+    if logits.is_empty() {
+        return 0.0;
+    }
+    // Max-shift for numerical stability.
+    let mut max_logit = f32::NEG_INFINITY;
+    for &l in logits {
+        if l > max_logit {
+            max_logit = l;
+        }
+    }
+    if !max_logit.is_finite() {
+        // All -inf / NaN → degenerate, treat as zero entropy.
+        return 0.0;
+    }
+    // Single pass: shifted_exp[i] = exp(logits[i] - max_logit).
+    let mut shifted_exp: Vec<f32> = Vec::with_capacity(logits.len());
+    shifted_exp.extend(logits.iter().map(|&l| (l - max_logit).exp()));
+    let sum_exp: f32 = shifted_exp.iter().copied().sum();
+    if sum_exp <= 0.0 || !sum_exp.is_finite() {
+        return 0.0;
+    }
+    let inv_sum = 1.0 / sum_exp;
+    // H = -Σ p_i * ln(p_i), with p_i = shifted_exp[i] * inv_sum.
+    // ln(p) = ln(shifted_exp[i]) + ln(inv_sum) = ln(shifted_exp[i]) - ln(sum_exp)
+    // → fold the constant once.
+    let ln_inv_sum = inv_sum.ln(); // = -ln(sum_exp)
+    let mut h = 0.0f32;
+    for &e in &shifted_exp {
+        if e > 0.0 {
+            let p = e * inv_sum;
+            h -= p * (e.ln() + ln_inv_sum);
+        }
+    }
+    h
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

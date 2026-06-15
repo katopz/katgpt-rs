@@ -159,6 +159,12 @@ pub mod stiff_anomaly;
 pub mod still_kv;
 #[cfg(feature = "targeted_precision")]
 pub mod targeted_precision;
+// thinking_cot — adaptive CoT framework (Plan 194). The feature is a
+// meta-feature that pulls in the bandit/prune/probe machinery required by
+// speculative::thinking_controller; the module itself owns the shared
+// ThinkingStrategy trait (Plan 275 Phase 2).
+#[cfg(feature = "thinking_cot")]
+pub mod thinking_cot;
 pub mod tokenizer;
 pub mod transformer;
 pub mod trigger_gate;

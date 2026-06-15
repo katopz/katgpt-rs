@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/241_SwiReasoning_Explicit_Latent_Switch.md](../.research/241_SwiReasoning_Explicit_Latent_Switch.md)
 **Source paper:** [arxiv 2510.05069](https://arxiv.org/abs/2510.05069) — SwiReasoning (ICLR 2026, Shi et al., Georgia Tech / Microsoft)
 **Target:** `katgpt-rs/src/swir/` (new module) + Cargo feature `swir_switch_thinking`
-**Status:** Active — Phase 1 ✅ complete, Phase 2 pending
+**Status:** Active — Phase 1 ✅ complete, Phase 2 ✅ complete, Phase 3 pending
 **Depends On:** `thinking_cot` (Plan 194, for `ThinkingStrategy` integration point), `rim_slots` (Plan 172, for latent workspace reuse — optional, can use standalone buffer), `selectivity_router` (Plan 204, for explicit-only fallback on rigid-constraint tasks)
 **GOAT Criteria:** G1 (+1.5pp accuracy vs `thinking_cot`), G2 (1.3× token efficiency at fixed accuracy), G3 (<200ns per `step()` call, zero alloc), G4 (soft-embedding in vocab convex hull), G5 (no regression when disabled), G6 (auto-fallback on rigid-constraint tasks)
 
@@ -90,7 +90,7 @@ Goal: wire SwiR into the existing `thinking_cot` framework so it can actually dr
 
 ### Tasks
 
-- [ ] **T2.1** Audit `src/lib.rs` exports and `thinking_cot` module (Plan 194) for the existing `ThinkingStrategy` trait (or equivalent trait/type that switches between direct/CoT/early-exit modes). If no such trait exists yet, define a minimal one in `src/thinking_cot/strategy.rs`:
+- [x] **T2.1** Audit `src/lib.rs` exports and `thinking_cot` module (Plan 194) for the existing `ThinkingStrategy` trait (or equivalent trait/type that switches between direct/CoT/early-exit modes). If no such trait exists yet, define a minimal one in `src/thinking_cot/strategy.rs`:
   ```rust
   pub trait ThinkingStrategy {
       fn on_step(&mut self, ctx: &mut StepContext) -> StepDirective;
@@ -110,21 +110,27 @@ Goal: wire SwiR into the existing `thinking_cot` framework so it can actually dr
       Terminate,
   }
   ```
-- [ ] **T2.2** Implement `src/swir/strategy_adapter.rs` — `impl ThinkingStrategy for SwiRController`:
-  - [ ] Compute entropy from `ctx.logits` ( Shannon: `H = -Σ p log p`, with a SIMD-friendly chunked loop; clamp `log(0)` to 0 via masked select).
-  - [ ] Call `self.step(entropy, ctx.step_index)`.
-  - [ ] Translate `StepAction` to `StepDirective`. For `EmitSoftEmbedding`, call `soft_embedding()` writing into the strategy's pre-allocated scratch buffer, then apply signal mixing if `should_mix_signal()` returns Some.
-  - [ ] Hold scratch buffer as a field on the adapter (Vec<f32>::with_capacity(embedding_dim) once, reused).
-- [ ] **T2.3** Wire entropy computation: if `katgpt-rs` already has a SIMD entropy kernel (check `src/simd.rs`, `src/llmexec_guard.rs`, `src/breakeven/`), reuse. If not, add a minimal `pub fn shannon_entropy(probs: &[f32]) -> f32` to `src/swir/entropy.rs` with a chunked SIMD loop and a `fastmax` trick for `p log p` stability.
-- [ ] **T2.4** Add `SwiRController::default_for_model(embedding_dim)` constructor returning the paper's best-practice config with `alpha_0=0.6, beta_0=0.7, w_e_to_l=512, w_l_to_e=0, c_max=20, c_convergence_fraction=0.5, answer_budget_b=256`. Document in rustdoc that these are paper defaults (Qwen3-8B Tab. 6) and may need tuning per model.
-- [ ] **T2.5** Integration test: drive SwiR through a mock decode loop with synthetic logits (e.g., a Gaussian-mixture entropy schedule that triggers Latent→Explicit→Latent→Explicit). Verify:
-  - [ ] Soft-embedding outputs satisfy G4 convex-hull invariant at every latent step.
-  - [ ] Switch count matches expected schedule from the synthetic entropy.
-  - [ ] Convergence trigger fires when switch_count = ½c_max.
-  - [ ] Termination trigger fires when switch_count > c_max.
-- [ ] **T2.6** Feature gate composition: add `swir_switch_thinking = ["thinking_cot"]` dependency in Cargo.toml. Document that this enables latent mode via soft embedding (requires embedding matrix access on every decode step — verify `thinking_cot` exposes this).
+  **Finding:** `thinking_cot` was a meta-feature with no `pub mod thinking_cot;` in lib.rs and no trait. T2.1 introduces both: `src/thinking_cot/{mod,strategy}.rs` defining `ThinkingStrategy`, `StepContext`, `StepDirective`, and `ControlTokenIds` (the wiring struct lives here, not under swir, because the dependency arrow is swir → thinking_cot — swir depends on thinking_cot, not the reverse).
+- [x] **T2.2** Implement `src/swir/strategy_adapter.rs` — `impl ThinkingStrategy for SwiRController`:
+  - [x] Compute entropy from `ctx.logits` ( Shannon: `H = -Σ p log p`, with a SIMD-friendly chunked loop; clamp `log(0)` to 0 via masked select).
+  - [x] Call `self.step(entropy, ctx.step_index)`.
+  - [x] Translate `StepAction` to `StepDirective`. For `EmitSoftEmbedding`, call `soft_embedding()` writing into the strategy's pre-allocated scratch buffer, then apply signal mixing if `should_mix_signal()` returns Some.
+  - [x] Hold scratch buffer as a field on the adapter (Vec<f32>::with_capacity(embedding_dim) once, reused).
+  **Implementation:** `SwiRStrategyAdapter` owns (a) the `SwiRController`, (b) a `Vec<f32>` probs scratch (vocab-sized), (c) a `Vec<f32>` soft scratch (embedding_dim-sized). `on_step` computes entropy, advances the controller, then translates the `StepAction`. Signal-mix anchor embeddings are pulled from `ctx.embedding_matrix` at the resolved control-token id.
+- [x] **T2.3** Wire entropy computation: if `katgpt-rs` already has a SIMD entropy kernel (check `src/simd.rs`, `src/llmexec_guard.rs`, `src/breakeven/`), reuse. If not, add a minimal `pub fn shannon_entropy(probs: &[f32]) -> f32` to `src/swir/entropy.rs` with a chunked SIMD loop and a `fastmax` trick for `p log p` stability.
+  **Implementation:** Vendored `entropy_from_logits(logits: &[f32]) -> f32` in `src/swir/entropy.rs` (max-shift stable, mirrors the kernel in `attn_match::adaptive_cot::entropy_from_logits`). Reason for vendoring rather than depending on `attn_match`: that feature is opt-in (Plan 271 GOAT gate), and forcing every `thinking_cot` user to enable it would expand the dependency footprint for everyone. The kernel is ~10 lines and the duplication is documented in the rustdoc.
+- [x] **T2.4** Add `SwiRController::default_for_model(embedding_dim)` constructor returning the paper's best-practice config with `alpha_0=0.6, beta_0=0.7, w_e_to_l=512, w_l_to_e=0, c_max=20, c_convergence_fraction=0.5, answer_budget_b=256`. Document in rustdoc that these are paper defaults (Qwen3-8B Tab. 6) and may need tuning per model.
+  **Implementation:** Already done as bonus in Phase 1 (`SwiRConfig::default_for_model`). Phase 2 adds `SwiRStrategyAdapter::new(vocab, dim)` that wires it through.
+- [x] **T2.5** Integration test: drive SwiR through a mock decode loop with synthetic logits (e.g., a Gaussian-mixture entropy schedule that triggers Latent→Explicit→Latent→Explicit). Verify:
+  - [x] Soft-embedding outputs satisfy G4 convex-hull invariant at every latent step.
+  - [x] Switch count matches expected schedule from the synthetic entropy.
+  - [x] Convergence trigger fires when switch_count = ½c_max.
+  - [x] Termination trigger fires when switch_count > c_max.
+  **Implementation:** `tests/swir_strategy_integration.rs` (6 tests). `latent_explicit_latent_explicit_schedule_drives_switches` verifies the schedule. `convergence_fires_close_think_at_half_cmax` verifies the convergence guard. `termination_fires_force_answer_then_terminate` verifies the overthinking guard + budget countdown. `soft_embedding_satisfies_g4_throughout_long_run` runs 64 random distributions through the loop and asserts G4 on every soft step. Unit tests in `src/swir/strategy_adapter.rs` (7 tests) cover the same paths at module level.
+- [x] **T2.6** Feature gate composition: add `swir_switch_thinking = ["thinking_cot"]` dependency in Cargo.toml. Document that this enables latent mode via soft embedding (requires embedding matrix access on every decode step — verify `thinking_cot` exposes this).
+  **Implementation:** `swir_switch_thinking = ["thinking_cot"]` in Cargo.toml. `StepContext.embedding_matrix` is the host-side contract — the host is responsible for making the LM-head embedding matrix available. (The existing `thinking_cot` host code is not modified; only the trait is added. Future Phase 3 wiring into a real model will surface any missing access.)
 
-**Exit criteria for Phase 2:** `cargo test --features swir_switch_thinking` passes including integration tests with synthetic logits. SwiR can drive a decode loop end-to-end against a mock.
+**Exit criteria for Phase 2:** ✅ MET. `cargo test --features swir_switch_thinking` passes (33 unit + 6 integration + 1 doc test). `SwiRStrategyAdapter` drives a mock decode loop end-to-end against synthetic Gaussian-mixture-style logits, with G4 invariant verified at every soft-embedding step. Pre-existing unrelated failure (`speculative::budget_compat::tests::test_effective_tree_budget_entropy_adapts`) is a feature-gating issue in that test, not in this work.
 
 ---
 
