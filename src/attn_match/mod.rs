@@ -51,6 +51,8 @@ pub mod key_selection;
 pub mod online;
 pub mod router;
 pub mod score_matrix;
+pub mod score_matrix_gpu;
+pub mod score_matrix_rayon;
 pub mod score_matrix_simd;
 pub mod types;
 pub mod value_fitter;
@@ -60,7 +62,7 @@ pub mod adaptive_cot;
 
 pub use beta_fitter::{fit_beta_nnls, BetaFitConfig, BetaFitResult};
 pub use chunked::{ChunkedCompactor, ChunkedCompactOutput, ChunkMeta, TextChunk};
-pub use compact::{compact, CompactError, CompactOutput};
+pub use compact::{compact, compact_with_router, CompactError, CompactOutput, RouterTrace};
 pub use head_budget::{HeadBudgetSchedule, HeadBudgetSolver, HeadSensitivityCurve};
 pub use key_selection::{
     highest_attn::select_highest_attn_keys, omp::select_omp_keys, KeySelection, KeySelectorKind,
@@ -68,6 +70,7 @@ pub use key_selection::{
 pub use online::{OnlineCompactResult, OnlineCompactor};
 pub use router::{pick_backend, SolverBackend, SolverRouter, SolverRouterConfig};
 pub use score_matrix::{compute_score_matrix, compute_softmax_attention};
+pub use score_matrix_rayon::{compute_rms_attention_rayon, compute_score_matrix_rayon};
 pub use score_matrix_simd::compute_score_matrix_simd;
 pub use types::{
     AmConfig, AmResult, KeySelector, ReconstructionReport, ScoreMethod, SolverChoice,

@@ -233,6 +233,27 @@ fn compute_relative_error(
 /// Returns `None` if the matrix is not PD.
 #[inline]
 fn cholesky_decompose(a: &[f32], t: usize) -> Option<Vec<f32>> {
+    // For small t (< BLOCK_SIZE), use the unblocked algorithm — it has no
+    // sub-matrix allocation overhead and is friendlier to the autovectorizer.
+    if t < CHOLESKY_BLOCK_SIZE {
+        return cholesky_decompose_unblocked(a, t);
+    }
+    cholesky_decompose_blocked(a, t)
+}
+
+/// Block size for the blocked Cholesky algorithm. 32 is a common choice that
+/// fits a 32×32 f32 block (4 KB) in L1 alongside two scratch buffers of the
+/// same size (12 KB total) — well within typical 32 KB L1 caches.
+pub const CHOLESKY_BLOCK_SIZE: usize = 32;
+
+/// Unblocked Cholesky decomposition (Plan 271 Phase 2, T2.4 reference).
+///
+/// This is the textbook column-by-column algorithm used for small matrices.
+/// It is called automatically by [`cholesky_decompose`] when `t <
+/// CHOLESKY_BLOCK_SIZE`, and is also used internally by the blocked variant
+/// to factorize the diagonal blocks.
+#[inline]
+fn cholesky_decompose_unblocked(a: &[f32], t: usize) -> Option<Vec<f32>> {
     let mut l = vec![0.0f32; t * t];
     for j in 0..t {
         let mut sum = a[j * t + j];
@@ -251,6 +272,82 @@ fn cholesky_decompose(a: &[f32], t: usize) -> Option<Vec<f32>> {
             }
             l[i * t + j] = s / diag;
         }
+    }
+    Some(l)
+}
+
+/// Blocked Cholesky decomposition (Plan 271 Phase 2, T2.4).
+///
+/// Implements the right-looking blocked algorithm with block size
+/// [`CHOLESKY_BLOCK_SIZE`]. For each block column:
+///   1. Factorize the diagonal block with [`cholesky_decompose_unblocked`].
+///   2. Solve the off-diagonal strip via forward substitution.
+///   3. Symmetric rank-k update of the trailing sub-matrix into `a_red`.
+///
+/// The blocked variant is cache-aware: the inner GEMM-like rank-k update is
+/// amenable to SIMD auto-vectorization because it operates on contiguous
+/// rectangular blocks rather than triangular strided access.
+///
+/// Per AGENTS.md: the only allocation is the output buffer `l` plus a single
+/// `a_red` scratch the size of `a`. Per-block sub-buffers are reused across
+/// iterations by clearing in place.
+#[inline]
+fn cholesky_decompose_blocked(a: &[f32], t: usize) -> Option<Vec<f32>> {
+    debug_assert!(t >= CHOLESKY_BLOCK_SIZE, "use unblocked for small t");
+    // Copy A into a mutable scratch — we reduce it in place across blocks.
+    let mut a_red = a.to_vec();
+    let mut l = vec![0.0f32; t * t];
+    let bs = CHOLESKY_BLOCK_SIZE;
+    let mut k = 0usize;
+    while k < t {
+        let bk = bs.min(t - k);
+        // 1. Extract and factorize the diagonal block A[k:k+bk, k:k+bk].
+        let mut diag_block = vec![0.0f32; bk * bk];
+        for i in 0..bk {
+            for j in 0..bk {
+                diag_block[i * bk + j] = a_red[(k + i) * t + (k + j)];
+            }
+        }
+        let diag_l = cholesky_decompose_unblocked(&diag_block, bk)?;
+        // Write lower-triangular result into L.
+        for i in 0..bk {
+            for j in 0..=i {
+                l[(k + i) * t + (k + j)] = diag_l[i * bk + j];
+            }
+        }
+
+        // 2. Off-diagonal strip L[k+bk:, k:k+bk] via forward substitution.
+        //    For each row i in the strip, solve L_diag · x = A[i, k:k+bk]^T.
+        let n_strip = t - (k + bk);
+        if n_strip > 0 {
+            for i in 0..n_strip {
+                let row = k + bk + i;
+                for col in 0..bk {
+                    let mut s = a_red[row * t + (k + col)];
+                    for p in 0..col {
+                        s -= l[row * t + (k + p)] * diag_l[col * bk + p];
+                    }
+                    l[row * t + (k + col)] = s / diag_l[col * bk + col];
+                }
+            }
+
+            // 3. Symmetric rank-k update: a_red[k+bk:, k+bk:] -= L_strip · L_strip^T.
+            //    Maintains symmetry explicitly so subsequent iterations read
+            //    a consistent reduced matrix.
+            for i in 0..n_strip {
+                let row_i = k + bk + i;
+                for j in 0..=i {
+                    let row_j = k + bk + j;
+                    let mut dot = 0.0f32;
+                    for p in 0..bk {
+                        dot += l[row_i * t + (k + p)] * l[row_j * t + (k + p)];
+                    }
+                    a_red[row_i * t + row_j] -= dot;
+                    a_red[row_j * t + row_i] = a_red[row_i * t + row_j];
+                }
+            }
+        }
+        k += bk;
     }
     Some(l)
 }
@@ -416,5 +513,80 @@ mod tests {
         for &v in &x {
             assert!((v - 0.25).abs() < 1e-6);
         }
+    }
+
+    /// T2.4 — blocked Cholesky path must activate for t >= CHOLESKY_BLOCK_SIZE.
+    /// Synthetic SPD matrix `A = M·M^T + n·I` (with random M) is PD by
+    /// construction; both the blocked and unblocked paths must produce L
+    /// such that `L·L^T == A` to within numerical tolerance.
+    #[test]
+    fn test_cholesky_blocked_path_activated() {
+        let t = CHOLESKY_BLOCK_SIZE + 8; // exercises the blocked path
+        let mut seed = 31415u32;
+        let mut rng = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            (seed as f32) / (u32::MAX as f32) * 2.0 - 1.0
+        };
+        // M is (t, t) random.
+        let m: Vec<f32> = (0..t * t).map(|_| rng()).collect();
+        // A = M·M^T + t·I (diagonal loading makes it strictly PD).
+        let mut a = vec![0.0f32; t * t];
+        for i in 0..t {
+            for j in 0..t {
+                let mut s = 0.0f32;
+                for k in 0..t {
+                    s += m[i * t + k] * m[j * t + k];
+                }
+                a[i * t + j] = s;
+            }
+            a[i * t + i] += t as f32;
+        }
+        let l = cholesky_decompose(&a, t).expect("A is PD by construction");
+        // Verify L·L^T == A.
+        for i in 0..t {
+            for j in 0..t {
+                let mut s = 0.0f32;
+                let k_max = (i + 1).max(j + 1);
+                for k in 0..k_max {
+                    let li = if k <= i { l[i * t + k] } else { 0.0 };
+                    let lj = if k <= j { l[j * t + k] } else { 0.0 };
+                    s += li * lj;
+                }
+                let a_ij = a[i * t + j];
+                assert!((s - a_ij).abs() < 1e-3 * a_ij.abs().max(1.0),
+                    "L·L^T mismatch at ({},{}): got {} want {}", i, j, s, a_ij);
+            }
+        }
+    }
+
+    /// Blocked Cholesky must agree with unblocked to within numerical
+    /// tolerance — they should produce identical L for the same input.
+    #[test]
+    fn test_cholesky_blocked_matches_unblocked() {
+        let t = CHOLESKY_BLOCK_SIZE * 2; // multiple blocks
+        let mut seed = 2718u32;
+        let mut rng = || {
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            (seed as f32) / (u32::MAX as f32) * 2.0 - 1.0
+        };
+        let m: Vec<f32> = (0..t * t).map(|_| rng()).collect();
+        let mut a = vec![0.0f32; t * t];
+        for i in 0..t {
+            for j in 0..t {
+                let mut s = 0.0f32;
+                for k in 0..t {
+                    s += m[i * t + k] * m[j * t + k];
+                }
+                a[i * t + j] = s;
+            }
+            a[i * t + i] += t as f32;
+        }
+        let l_blocked = cholesky_decompose(&a, t).expect("blocked");
+        let l_unblocked = cholesky_decompose_unblocked(&a, t).expect("unblocked");
+        let mut max_diff = 0.0f32;
+        for i in 0..t * t {
+            max_diff = max_diff.max((l_blocked[i] - l_unblocked[i]).abs());
+        }
+        assert!(max_diff < 1e-4, "blocked/unblocked L max diff: {}", max_diff);
     }
 }

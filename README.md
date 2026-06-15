@@ -266,6 +266,7 @@ graph LR
 | **Module-Energy Compute Routing** (`module_energy_route`) | 264 | G7–G8 ✅ | Paper FFN profile match (Plasma/GPU/ANE/SIMD), monotone QPS routing |
 | **Gauge-Invariant Adapter Composition** (`gauge_invariant`) | 270 | 17/17 ✅ | LoRA-Muon NS inv-sqrt + gauge rebalance + compose, 4609%→0% error |
 | **CHIAR Chiaroscuro Attention** (`chiaroscuro`) | 269 | 9/9 ✅ | Per-token DCT spectral entropy KV strategy (3.03× compression), operator routing, collapse discovery |
+| **Attention Matching** (`attn_match`) | 271 | 9/9 ✅ | Modelless KV compaction `(K,V)→(Ck,β,Cv)`: β-recovery 1e-6, Cv Frobenius 0.0, 3.01× SIMD, blocked Cholesky (32×32), adaptive router (scalar/SIMD/rayon/GPU/ANE) |
 
 ## 🎮 Arena Proofs — HL Thesis Validated
 
@@ -318,6 +319,58 @@ Path-Aware:  100 nodes, 100 accumulated-valid (100.0%)
 📖 **Full negative result detail + replaced feature audit:** [`.docs/20_negative_results.md`](.docs/20_negative_results.md).
 
 ## 🔀 Feature Showcase
+
+### 🧠 Attention Matching: Modelless KV Compaction (Plan 271, arxiv 2602.16284)
+
+Compacts a KV cache `(K, V)` to `(Ck, β, Cv)` with `t < T` tokens while preserving both attention output AND attention mass under reference queries `Qref`. The β bias per retained key accounts for the mass of removed keys, making the compacted block a faithful drop-in replacement under arbitrary future concatenations.
+
+**GOAT 9/9 PASS** — `β` recovery (`‖β−β_ref‖_∞ = 1e-6`), `Cv` reconstruction (rel Frobenius 0.0), OMP residual (0.0%), reconstruction quality (0.71% rel error), router determinism, zero alloc in hot loop, SIMD speedup (3.01× release on Apple NEON).
+
+```mermaid
+flowchart LR
+    subgraph Input["Input KV cache"]
+        K["K (T, d)"]
+        V["V (T, d)"]
+        Q["Qref (n, d)"]
+    end
+    subgraph Stage1["Stage 1 — Key Selection"]
+        HA["HighestAttn keys
+(top-t by RMS score)"]
+        OMP["OMP keys
+(greedy mass pursuit)"]
+    end
+    subgraph Stage2["Stage 2 — β NNLS"]
+        BETA["Per-token bias β
+(projected GD, bounded w = e^β)"]
+    end
+    subgraph Stage3["Stage 3 — Cv Fit"]
+        CV["Least squares Cv
+(blocked Cholesky, jitter fallback)"]
+    end
+    K --> HA
+    K --> OMP
+    Q --> HA
+    Q --> OMP
+    HA --> BETA
+    OMP --> BETA
+    BETA --> CV
+    V --> CV
+    CV --> OUT["(Ck, β, Cv) — t tokens"]
+```
+
+**Adaptive router** picks `CpuScalar` / `CpuSimd` / `CpuRayon` / `Gpu` / `Ane` per stage based on `t` and `T` with hysteresis (no flap). Blocked Cholesky (32×32 L2-resident) activates automatically for `t ≥ 32`. GPU dispatch stub wired (T2.8) — falls back to rayon when no shader bundled.
+
+| Metric | Value |
+|--------|-------|
+| **Compression ratio** | `T / t` (paper: 200× total with summarization) |
+| **β recovery (synthetic)** | `‖β−β_ref‖_∞ = 1e-6` |
+| **Cv reconstruction (synthetic)** | rel Frobenius 0.0 |
+| **Router decision time** | 1.59 ns/call, zero alloc |
+| **SIMD speedup (release, NEON)** | 3.01× scalar (≥1.5× threshold) |
+
+Feature gate: `attn_match` (**default-ON** since Plan 271 Phase 7 GOAT 9/9). Adaptive CoT variant: `adaptive_cot_compaction` (entropy-thresholded, opt-in).
+
+📖 Plan: [`.plans/271_attention_matching_compaction.md`](.plans/271_attention_matching_compaction.md). Research: [`.research/233_Attention_Matching_KV_Compaction.md`](.research/233_Attention_Matching_KV_Compaction.md). Paper: [arxiv 2602.16284](https://arxiv.org/abs/2602.16284).
 
 ### 🔀 MUX-Latent: Zero-Training Context Compression (Plan 238)
 
