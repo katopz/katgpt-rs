@@ -1962,6 +1962,11 @@ pub struct TreeBuilder {
     chain_nodes: Vec<TreeNode>,
     chain_parent_tokens: Vec<usize>,
     parent_tokens_buf: Vec<usize>,
+    /// Cached `ln(marginals[d][i])` — computed once per build to avoid redundant
+    /// `f32::ln()` calls in the Phase C expansion inner loop (called per token
+    /// per heap-pop). Entries for `prob <= 0.0` are `0.0` (unused since those
+    /// tokens are skipped before the lookup).
+    log_marginals: Vec<Vec<f32>>,
 }
 
 impl TreeBuilder {
@@ -1973,6 +1978,31 @@ impl TreeBuilder {
             chain_nodes: Vec::with_capacity(config.draft_lookahead),
             chain_parent_tokens: Vec::with_capacity(config.draft_lookahead),
             parent_tokens_buf: vec![0usize; config.draft_lookahead + 1],
+            log_marginals: Vec::new(),
+        }
+    }
+
+    /// Pre-compute `ln(prob)` for every token in every marginal depth.
+    ///
+    /// Reuses inner `Vec` allocations across builds (clear + refill pattern).
+    /// The Phase C expansion loop calls `prob.ln()` once per token per heap-pop;
+    /// caching turns that O(budget × vocab) `ln` calls into O(depths × vocab).
+    #[inline]
+    fn cache_log_marginals(&mut self, marginals: &[&[f32]]) {
+        // Grow the outer Vec if needed; existing inner Vecs are reused below.
+        if self.log_marginals.len() < marginals.len() {
+            self.log_marginals.resize_with(marginals.len(), Vec::new);
+        } else {
+            self.log_marginals.truncate(marginals.len());
+        }
+        for (log_m, &m) in self.log_marginals.iter_mut().zip(marginals) {
+            log_m.clear();
+            log_m.reserve(m.len());
+            // Branch-free: `ln(0)` would be -inf, but those entries are never
+            // read (the expansion loop skips `prob <= 0.0` before indexing).
+            for &p in m {
+                log_m.push(if p > 0.0 { p.ln() } else { 0.0 });
+            }
         }
     }
 
@@ -1995,6 +2025,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             // ── Phase A: Build greedy chain backbone ──────────────
@@ -2218,11 +2250,12 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     // NEURO-SYMBOLIC INTERCEPT: prune before adding to heap
                     if prob > 0.0 && pruner.is_valid(next_depth, i, parent_tokens) {
                         self.heap.push(TreeNode {
-                            score: best.score + prob.ln(),
+                            score: best.score + log_m[i],
                             depth: next_depth,
                             token_idx: i,
                             parent_path: (best.parent_path << 16) | (i as u128),
@@ -2291,6 +2324,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             // ── Phase A: Build greedy chain backbone with screening ──
@@ -2539,6 +2574,7 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -2549,7 +2585,7 @@ impl TreeBuilder {
                     }
                     // SCREENING: ln(P_llm) + ln(R) blended score
                     self.heap.push(TreeNode {
-                        score: best.score + prob.ln() + relevance.ln(),
+                        score: best.score + log_m[i] + relevance.ln(),
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),
@@ -2603,6 +2639,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             // ── Phase A: Build greedy chain backbone with progressive budget ──
@@ -2881,6 +2919,7 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -2890,7 +2929,7 @@ impl TreeBuilder {
                         continue;
                     }
                     self.heap.push(TreeNode {
-                        score: best.score + prob.ln() + relevance.ln(),
+                        score: best.score + log_m[i] + relevance.ln(),
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),
@@ -2933,6 +2972,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             let mut cumulative_score: f32 = 0.0;
@@ -3149,6 +3190,7 @@ impl TreeBuilder {
                 next_depth,
                 &mut self.parent_tokens_buf,
             );
+            let log_m = &self.log_marginals[next_depth];
             for (i, &prob) in marginals[next_depth].iter().enumerate() {
                 if prob <= 0.0 {
                     continue;
@@ -3158,7 +3200,7 @@ impl TreeBuilder {
                     continue;
                 }
                 self.heap.push(TreeNode {
-                    score: score + prob.ln() + relevance.ln(),
+                    score: score + log_m[i] + relevance.ln(),
                     depth: next_depth,
                     token_idx: i,
                     parent_path: (best.parent_path << 16) | (i as u128),
@@ -3226,6 +3268,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         // Track velocity at each depth for cross-scale consistency checks
         let mut prev_velocity: f32 = 0.0;
@@ -3510,6 +3554,20 @@ impl TreeBuilder {
                 let child_velocity =
                     branch_velocity_at(next_depth, child_marginal, parent_marginal);
 
+                // Hoist cross_scale_consistent: its inputs (parent_velocity,
+                // child_velocity, recfm_config) are loop-invariant — the result
+                // is identical for every token `i`. If inconsistent, skip the
+                // entire inner loop (no children added at this depth).
+                if !cross_scale_consistent(
+                    parent_velocity,
+                    child_velocity,
+                    recfm_config.scale_alpha,
+                    recfm_config.consistency_threshold,
+                ) {
+                    continue;
+                }
+
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in child_marginal.iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -3519,18 +3577,8 @@ impl TreeBuilder {
                         continue;
                     }
 
-                    // RecFM cross-scale consistency check for expansion branches
-                    if !cross_scale_consistent(
-                        parent_velocity,
-                        child_velocity,
-                        recfm_config.scale_alpha,
-                        recfm_config.consistency_threshold,
-                    ) {
-                        continue; // Prune inconsistent branch
-                    }
-
                     self.heap.push(TreeNode {
-                        score: best.score + prob.ln() + relevance.ln(),
+                        score: best.score + log_m[i] + relevance.ln(),
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),
@@ -3588,6 +3636,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         // Helper: compute balanced score for a node
         // score = ln(P_llm) + backward_weight × ln(R) + lambda_flow × (1 - stop_prob[depth])
@@ -3842,6 +3892,10 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                // Hoist flow_bonus: depends only on next_depth, not token `i`.
+                let flow_bonus =
+                    lambda_flow * (1.0 - stop_probs.get(next_depth).copied().unwrap_or(0.5));
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -3851,8 +3905,9 @@ impl TreeBuilder {
                         continue;
                     }
                     // BALANCED: ln(P_llm) + backward_weight × ln(R) + flow_bonus
+                    let r_safe = relevance.max(1e-10); // Avoid ln(0)
                     self.heap.push(TreeNode {
-                        score: best.score + balanced_score(prob, relevance, next_depth),
+                        score: best.score + log_m[i] + backward_weight * r_safe.ln() + flow_bonus,
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),
