@@ -72,6 +72,13 @@ pub struct SwiRController {
     /// Aggregate stats for benchmarks / debug.
     latent_steps: u32,
     explicit_steps: u32,
+
+    /// Most recent per-step kurtosis scalar supplied by the host via
+    /// [`observe_kurtosis`](Self::observe_kurtosis). NaN until the first
+    /// observation. Drives the G6 auto-fallback (Plan 275 T3.8): when this
+    /// exceeds `config.kurtosis_escape_threshold`, the controller refuses to
+    /// enter Latent mode for that step.
+    last_kurtosis: f32,
 }
 
 impl SwiRController {
@@ -94,6 +101,7 @@ impl SwiRController {
             mix_pending: None,
             latent_steps: 0,
             explicit_steps: 0,
+            last_kurtosis: f32::NAN,
         }
     }
 
@@ -107,6 +115,32 @@ impl SwiRController {
     #[inline]
     pub fn switch_count(&self) -> u32 {
         self.switch_count
+    }
+
+    /// Supply a per-step kurtosis scalar for the G6 auto-fallback (Plan 275
+    /// T3.8). The host calls this **before** [`step`](Self::step) each decode
+    /// position; `step()` consults the stored value when deciding whether to
+    /// allow a Latent→Explicit→Latent re-entry. If the host never calls this,
+    /// `last_kurtosis` stays NaN and the escape hatch is inert (NaN compares
+    /// false to any threshold).
+    ///
+    /// Rigid-constraint tasks (paper's 3D-surface-shortest-path, formal math
+    /// with exact answers) produce heavy-tailed logit distributions → high
+    /// excess kurtosis. When `kurtosis > config.kurtosis_escape_threshold`,
+    /// the controller refuses to enter Latent mode for that step, bypassing
+    /// soft-embedding exploration entirely.
+    #[inline]
+    pub fn observe_kurtosis(&mut self, kurtosis: f32) {
+        self.last_kurtosis = kurtosis;
+    }
+
+    /// True iff the G6 escape hatch should fire this step (kurtosis above
+    /// threshold). Kept as a helper so the escape logic appears once in `step`.
+    #[inline]
+    fn kurtosis_escape_fires(&self) -> bool {
+        // NaN-safe: NaN > threshold is false, so an un-observed kurtosis never
+        // fires the escape hatch.
+        self.last_kurtosis > self.config.kurtosis_escape_threshold
     }
 
     /// Snapshot of aggregate stats.
@@ -166,6 +200,11 @@ impl SwiRController {
         // (entropy − reference_entropy), i.e. "is this step more or less
         // confident than the last switch point?". Asymmetric dwell windows
         // prevent chatter.
+        //
+        // G6 auto-fallback (Plan 275 T3.8): if the host-supplied kurtosis is
+        // above the escape threshold, refuse to enter or stay in Latent mode.
+        // This bypasses soft-embedding exploration on rigid-constraint tasks.
+        let kurtosis_escape = self.kurtosis_escape_fires();
         let mut switched_to = None;
         let entropy_below_ref = entropy < self.reference_entropy;
         let entropy_above_ref = entropy > self.reference_entropy;
@@ -178,9 +217,16 @@ impl SwiRController {
                     switched_to = Some(ThinkMode::Explicit);
                 }
             }
-            ThinkMode::Explicit if entropy_above_ref => {
+            ThinkMode::Latent if kurtosis_escape => {
+                // G6 escape: we're in Latent but the host signalled a rigid-
+                // constraint task. Force Explicit regardless of entropy trend.
+                self.switch_to(ThinkMode::Explicit, entropy, step_index);
+                switched_to = Some(ThinkMode::Explicit);
+            }
+            ThinkMode::Explicit if entropy_above_ref && !kurtosis_escape => {
                 // Explicit → Latent: entropy rose, model wants to explore → only
-                // allow after W_E→L dwell window to prevent chatter.
+                // allow after W_E→L dwell window to prevent chatter. Suppressed
+                // when the G6 escape hatch fires (rigid-constraint task).
                 if self.dwell_steps + 1 >= self.config.w_e_to_l {
                     self.switch_to(ThinkMode::Latent, entropy, step_index);
                     switched_to = Some(ThinkMode::Latent);
@@ -196,11 +242,19 @@ impl SwiRController {
 
         // (4) Switch-count guards (paper §3.4). Only count Latent→Explicit.
         // Convergence fires at ½·c_max; termination fires above c_max.
-        if self.mode == ThinkMode::Explicit {
+        //
+        // CRITICAL: only fire these guards on the step where the Latent→Explicit
+        // switch JUST happened (switched_to == Some(Explicit)). Firing every step
+        // while in Explicit mode causes a livelock: the enqueued CloseThink is
+        // drained at the start of the next step (step (1) above), which skips
+        // the mode-switch logic (step (3)), which means switch_count never
+        // advances, which re-enqueues CloseThink forever. The one-shot trigger
+        // on the switch event matches the paper's intent (§3.4 describes these
+        // as switch-count thresholds, not continuous conditions).
+        if switched_to == Some(ThinkMode::Explicit) {
             let conv_at = self.config.convergence_switch_count();
             if self.switch_count >= conv_at && self.switch_count <= self.config.c_max {
                 // Convergence window — enqueue CloseThink on the next step.
-                // Only enqueue once per convergence window to avoid spamming.
                 self.try_enqueue(ControlToken::CloseThink);
             } else if self.switch_count > self.config.c_max {
                 // Overthinking guard — force answer and start budget countdown.
@@ -310,6 +364,7 @@ mod tests {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: 100,
+            kurtosis_escape_threshold: f32::INFINITY,
         }
     }
 
@@ -498,5 +553,95 @@ mod tests {
         );
         c.step(5.0, 1); // stay Latent (entropy equal, no switch)
         assert!(c.should_mix_signal().is_none());
+    }
+
+    // ─── G6 auto-fallback (Plan 275 T3.8) ───────────────────────────────────
+
+    #[test]
+    fn test_g6_kurtosis_escape_forces_explicit_from_latent() {
+        // Default cfg_small has kurtosis_escape_threshold = ∞, so we override.
+        let mut c = SwiRController::new(SwiRConfig {
+            kurtosis_escape_threshold: 3.0,
+            ..cfg_small()
+        });
+        // Step 0: initial Latent, ref entropy = 5.
+        let a0 = c.step(5.0, 0);
+        assert_eq!(c.mode(), ThinkMode::Latent);
+        assert!(matches!(a0, StepAction::EmitSoftEmbedding));
+        // Observe a high kurtosis → escape hatch fires on the next step.
+        c.observe_kurtosis(5.0); // > 3.0 threshold
+        // Step 1: even though entropy is equal (no entropy-drop signal), the
+        // escape hatch forces Latent→Explicit.
+        let a1 = c.step(5.0, 1);
+        assert_eq!(c.mode(), ThinkMode::Explicit, "G6 escape must force Explicit");
+        assert!(matches!(a1, StepAction::EmitToken(_)));
+    }
+
+    #[test]
+    fn test_g6_kurtosis_escape_blocks_explicit_to_latent_reentry() {
+        // After the escape hatch forces Explicit, subsequent rising-entropy
+        // steps must NOT re-enter Latent while kurtosis stays high.
+        let mut c = SwiRController::new(SwiRConfig {
+            w_e_to_l: 1, // Easy to satisfy dwell so the only blocker is kurtosis.
+            kurtosis_escape_threshold: 2.0,
+            ..cfg_small()
+        });
+        c.step(5.0, 0); // Latent, ref=5
+        c.observe_kurtosis(10.0); // > 2.0 → escape
+        c.step(5.0, 1); // Latent→Explicit via escape
+        assert_eq!(c.mode(), ThinkMode::Explicit);
+        // Now entropy rises; without the escape hatch this would trigger
+        // Explicit→Latent after w_e_to_l=1 dwell. Keep kurtosis high.
+        c.observe_kurtosis(10.0);
+        let a = c.step(10.0, 2); // entropy > ref (5)
+        assert_eq!(c.mode(), ThinkMode::Explicit, "high kurtosis must block Latent re-entry");
+        assert!(matches!(a, StepAction::EmitToken(_)));
+    }
+
+    #[test]
+    fn test_g6_kurtosis_below_threshold_does_not_escape() {
+        // kurtosis below threshold → normal behaviour, escape hatch inert.
+        let mut c = SwiRController::new(SwiRConfig {
+            kurtosis_escape_threshold: 3.0,
+            ..cfg_small()
+        });
+        c.step(5.0, 0); // Latent, ref=5
+        c.observe_kurtosis(1.0); // < 3.0, no escape
+        c.step(5.0, 1); // No entropy drop, no escape → stay Latent
+        assert_eq!(c.mode(), ThinkMode::Latent);
+    }
+
+    #[test]
+    fn test_g6_nan_kurtosis_is_inert() {
+        // Host never calls observe_kurtosis → last_kurtosis stays NaN →
+        // escape hatch never fires (NaN > threshold is false). This preserves
+        // backward compatibility for hosts that don't wire a kurtosis signal.
+        let mut c = SwiRController::new(SwiRConfig {
+            kurtosis_escape_threshold: 3.0,
+            ..cfg_small()
+        });
+        c.step(5.0, 0); // Latent, ref=5
+        // No observe_kurtosis call — last_kurtosis is NaN.
+        c.step(5.0, 1); // Stay Latent (no entropy drop, NaN escape is inert).
+        assert_eq!(c.mode(), ThinkMode::Latent);
+    }
+
+    #[test]
+    fn test_g6_escape_releases_when_kurtosis_drops() {
+        // Once kurtosis drops below threshold, normal switching resumes.
+        let mut c = SwiRController::new(SwiRConfig {
+            w_e_to_l: 1,
+            kurtosis_escape_threshold: 2.0,
+            ..cfg_small()
+        });
+        c.step(5.0, 0); // Latent, ref=5
+        c.observe_kurtosis(10.0);
+        c.step(5.0, 1); // → Explicit (escape)
+        // Kurtosis drops below threshold.
+        c.observe_kurtosis(1.0);
+        // Now rising entropy should allow Explicit→Latent.
+        let a = c.step(10.0, 2); // entropy > ref (5), dwell >= w_e_to_l (1)
+        assert_eq!(c.mode(), ThinkMode::Latent, "escape released → Latent re-entry allowed");
+        assert!(matches!(a, StepAction::EmitSoftEmbedding));
     }
 }

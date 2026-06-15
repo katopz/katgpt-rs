@@ -94,6 +94,13 @@ pub enum StepAction {
 /// - `alpha_0` / `beta_0` — initial signal-mix ratios for Latent entry / Explicit
 ///   exit respectively (paper Eq. 4). Paper defaults 0.6 / 0.7.
 /// - `max_steps` — host-provided horizon for the α_t / β_t linear schedule.
+/// - `kurtosis_escape_threshold` — excess kurtosis above which Latent mode is
+///   bypassed (Plan 275 T3.8 G6 auto-fallback). The host supplies a per-step
+///   kurtosis scalar via [`SwiRController::observe_kurtosis`]; if it exceeds
+///   this threshold, the controller refuses to enter Latent mode (rigid-
+///   constraint tasks where soft embeddings would hallucinate). `f32::INFINITY`
+///   disables the escape hatch. Paper doesn't specify a value; 3.0 mirrors
+///   the `kurtosis_gate` Plan 203 default (excess kurtosis of a Gaussian is 0).
 #[derive(Debug, Clone, Copy)]
 pub struct SwiRConfig {
     /// Explicit→Latent dwell window (paper `W_E→L`). Default 512.
@@ -114,6 +121,9 @@ pub struct SwiRConfig {
     /// Horizon used by the α_t / β_t linear schedule. Must be set by the host
     /// (defaults to a conservative 1024 if the host doesn't override).
     pub max_steps: u32,
+    /// Excess kurtosis threshold for the G6 auto-fallback (Plan 275 T3.8).
+    /// `f32::INFINITY` disables the escape hatch.
+    pub kurtosis_escape_threshold: f32,
 }
 
 impl Default for SwiRConfig {
@@ -128,6 +138,9 @@ impl Default for SwiRConfig {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: 1024,
+            // Disabled by default — opt-in escape hatch per Plan 275 T3.8.
+            // Hosts that wire a kurtosis signal (Plan 203/204) lower this to ~3.0.
+            kurtosis_escape_threshold: f32::INFINITY,
         }
     }
 }

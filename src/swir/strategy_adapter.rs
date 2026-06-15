@@ -333,6 +333,7 @@ mod tests {
                 alpha_0: 0.6,
                 beta_0: 0.7,
                 max_steps: 16,
+                kurtosis_escape_threshold: f32::INFINITY,
             },
         );
         let ids = ControlTokenIds {
@@ -414,6 +415,7 @@ mod tests {
                 alpha_0: 0.6,
                 beta_0: 0.7,
                 max_steps: 32,
+                kurtosis_escape_threshold: f32::INFINITY,
             },
         );
         let ids = ControlTokenIds {

@@ -113,11 +113,16 @@ Don't direct-map the paper to our code. Find the transferable primitive: the geo
 - G-Zero self-play × Hint-δ bandit × absorb-compress → `katgpt-rs/.plans/049_*` (modelless self-play distillation, 1.16M cycles/sec)
 
 **Fusion protocol:**
-1. **MANDATORY — grep BOTH repos in this session. Do NOT stop after the first repo.** Run keyword / paper-title / author grep across all four folders:
-   - `katgpt-rs/.research/` + `katgpt-rs/.plans/`
-   - `riir-ai/.research/` + `riir-ai/.plans/`
+1. **MANDATORY — grep BOTH repos in this session, BOTH layers (notes AND code). Do NOT stop after the first repo or the first layer.** Run keyword / paper-title / author / primitive-name grep across:
+   - `katgpt-rs/.research/` + `katgpt-rs/.plans/` (intent — what we planned)
+   - `riir-ai/.research/` + `riir-ai/.plans/` (intent)
+   - `katgpt-rs/src/` + `katgpt-rs/crates/` (shipped primitives — what actually exists)
+   - `riir-ai/crates/` (shipped runtime)
+   - `riir-armageddon/crates/` (shipped game/arena domain types, raw-vs-latent boundary)
 
-   The closest cousin is frequently in the OTHER repo (e.g., a `katgpt-rs` modelless primitive fused with a `riir-ai` game runtime guide — see Gemini Fourier × LatCal). If you only grep `katgpt-rs`, you will miss it and produce a duplicate or weaker note.
+   (riir-train is deliberately excluded — training methods are out of scope for this workflow.)
+
+   Two layers, three repos. The closest cousin is frequently in the OTHER repo (e.g., a `katgpt-rs` modelless primitive fused with a `riir-ai` game runtime guide — see Gemini Fourier × LatCal) OR in the CODE not the notes. **Notes describe intent; code describes what shipped.** A mechanism can ship without a research note — e.g., HLA's `evolve_hla` (`katgpt-rs/crates/katgpt-core/src/sense/reconstruction.rs`) is a per-NPC recurrent belief-state kernel with no `.research/` note framing it as such; a notes-only grep misses it and produces a false Super-GOAT claim (this exact failure happened on Research 242 — verdict had to be revised Super-GOAT → GOAT). If you only grep `katgpt-rs/.research/`, you will miss both axes and produce a duplicate, weaker note, or an overclaimed verdict.
 2. After finding the transferable primitive of *this* paper, list the 2–3 closest existing notes/plans **across both repos** and ask: "what novel combination of this paper + note A + note B produces a capability none of them has alone?" Write that combination into the research note's §Distillation as a **Fusion** subsection, even if you don't plan it yet.
 3. Verdict by the commercial strategy doc (`003_*.md`): **Super-GOAT** > GOAT > Gain > Pass (see §Verdict tiers below). **A fusion that produces a new capability class is a strong Super-GOAT candidate — check the novelty gate (§1.5).**
 4. Create research `.md` at the right repo (see table above).
@@ -170,7 +175,7 @@ Don't direct-map the paper to our code. Find the transferable primitive: the geo
 
 Before planning, score novelty. Ask all four:
 
-1. **No prior art?** Grep `.research/` across all repos — does any existing note already cover this mechanism? If yes → not novel, it's a Gain at best.
+1. **No prior art?** Grep `.research/` + `.plans/` across all repos AND grep the shipped code (`katgpt-rs/src/`, `katgpt-rs/crates/`, `riir-ai/crates/`, `riir-armageddon/crates/`) for the primitive name and mechanism keywords. **Notes describe intent; code describes what shipped.** A mechanism can ship without a dedicated research note — HLA's `evolve_hla` is the canonical example (a per-NPC recurrent belief-state kernel in `katgpt-rs/crates/katgpt-core/src/sense/reconstruction.rs` with no notes-level prior-art framing; missing it caused the Research 242 Super-GOAT overclaim). If the code already covers the mechanism → not novel, Gain at best. **This two-layer check (notes + code) is mandatory — notes-only is the #1 cause of false Super-GOAT claims.**
 2. **New class of behavior?** Not better numbers, but something no incumbent can do (a new capability, not an optimization).
 3. **Product selling point?** Can you finish the sentence: "Our NPCs/systems do X that no competitor can"? If you can't → Gain.
 4. **Force multiplier?** Connects to ≥2 existing pillars/systems (check connection map in `.research/`). Solo novelty without integration = GOAT, not Super-GOAT.
@@ -280,4 +285,4 @@ Reinforce these when designing game systems or chain state:
 
 ## TL;DR
 
-This skill packages the katgpt-rs research workflow: **MANDATORY pre-flight: `read_file` all three READMEs (`katgpt-rs/README.md`, `riir-ai/README.md`, `riir-armageddon/README.md`) AND `list_directory` both `.research/` folders (`katgpt-rs/.research/`, `riir-ai/.research/`) before any verdict** → read paper → classify (training? → riir-train, stop) → **distill + fuse** (find the transferable primitive, then grep BOTH repos — including `.plans/` — for the 2–3 closest cousins to synthesize a novel combination) → **novelty gate** (Super-GOAT? → open primitive + private riir-ai guide; else GOAT/Gain → plan only) → implement behind feature flag → benchmark → promote GOAT or demote loser. Hard constraints: modelless-first, latent-to-latent with sigmoid (never softmax), freeze/thaw over fine-tuning, 3-repo commercial discipline, raw scalars at the sync boundary, **fusion-first mindset** (the best Super-GOATs come from fusing papers across BOTH repos, not direct-mapping one). **Super-GOAT = private moat; never skip the riir-ai guide. Never grep only katgpt-rs — riir-ai is half the corpus.**
+This skill packages the katgpt-rs research workflow: **MANDATORY pre-flight: `read_file` all three READMEs (`katgpt-rs/README.md`, `riir-ai/README.md`, `riir-armageddon/README.md`) AND `list_directory` both `.research/` folders (`katgpt-rs/.research/`, `riir-ai/.research/`) before any verdict** → read paper → classify (training? → riir-train, stop) → **distill + fuse** (find the transferable primitive, then grep BOTH layers — `.research/`+`.plans/` for intent AND `src/`+`crates/` (`katgpt-rs/src/`, `katgpt-rs/crates/`, `riir-ai/crates/`, `riir-armageddon/crates/`) for shipped code — across all repos, for the 2–3 closest cousins to synthesize a novel combination) → **novelty gate** (Super-GOAT? → open primitive + private riir-ai guide; else GOAT/Gain → plan only) → implement behind feature flag → benchmark → promote GOAT or demote loser. Hard constraints: modelless-first, latent-to-latent with sigmoid (never softmax), freeze/thaw over fine-tuning, 3-repo commercial discipline, raw scalars at the sync boundary, **fusion-first mindset** (the best Super-GOATs come from fusing papers across BOTH repos, not direct-mapping one). **Super-GOAT = private moat; never skip the riir-ai guide. Never grep only katgpt-rs — riir-ai is half the corpus. Never grep only notes — code is half the prior art (HLA's `evolve_hla` shipped without a research note and caused a false Super-GOAT on Research 242).**

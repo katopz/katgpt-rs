@@ -141,6 +141,7 @@ fn latent_explicit_latent_explicit_schedule_drives_switches() {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: schedule.len() as u32,
+            kurtosis_escape_threshold: f32::INFINITY,
         },
     );
     let ids = ControlTokenIds::default();
@@ -207,6 +208,7 @@ fn convergence_fires_close_think_at_half_cmax() {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: schedule.len() as u32,
+            kurtosis_escape_threshold: f32::INFINITY,
         },
     );
     let trace = drive_loop(adapter, &schedule, &emb, dim, ids, schedule.len() as u32);
@@ -268,6 +270,7 @@ fn termination_fires_force_answer_then_terminate() {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: schedule.len() as u32,
+            kurtosis_escape_threshold: f32::INFINITY,
         },
     );
     let trace = drive_loop(adapter, &schedule, &emb, dim, ids, schedule.len() as u32);
@@ -339,6 +342,7 @@ fn soft_embedding_satisfies_g4_throughout_long_run() {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: 64,
+            kurtosis_escape_threshold: f32::INFINITY,
         },
     );
     let ids = ControlTokenIds::default();
@@ -389,6 +393,7 @@ fn explicit_mode_emits_token_zero_placeholder() {
             alpha_0: 0.6,
             beta_0: 0.7,
             max_steps: 8,
+            kurtosis_escape_threshold: f32::INFINITY,
         },
     );
     let ids = ControlTokenIds::default();
