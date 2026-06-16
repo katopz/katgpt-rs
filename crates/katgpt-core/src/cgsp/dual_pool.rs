@@ -157,6 +157,21 @@ pub struct DualPoolConfig {
     pub min_exploration_prob: f32,
     /// RNG seed for pool + arm selection.
     pub seed: u64,
+    // ── Phase 4: E-pool growth (DecentMem Eq. 8 arm promotion) ──────────
+    /// Enable E-pool arm growth in `consolidate()`. When `false` (default),
+    /// consolidate uses priority-blend (Phase 1 behavior). When `true`,
+    /// rewarded X-pool arms are promoted into E-pool as new arms via
+    /// [`HintDeltaBandit::push_arm`] — requires E-pool backend to be a
+    /// growing bandit (`is_growing() == true`).
+    pub growth_enabled: bool,
+    /// Minimum accumulated X-pool per-arm reward for promotion to E-pool.
+    /// Only X-pool arms with `x_arm_rewards[arm] >= promotion_threshold`
+    /// are promoted during growth consolidation.
+    pub promotion_threshold: f32,
+    /// Maximum E-pool size. When growth would exceed this, the
+    /// lowest-priority E-pool arm is evicted (replaced by the new arm).
+    /// Prevents unbounded E-pool growth (Risk: memory + latency).
+    pub max_epool_size: usize,
 }
 
 impl Default for DualPoolConfig {
@@ -169,6 +184,9 @@ impl Default for DualPoolConfig {
             consolidate_blend: 0.5,
             min_exploration_prob: 1e-4,
             seed: 0x9E37_79B9_7F4A_7C15,
+            growth_enabled: false,       // Phase 4: off by default (Phase 1 compat).
+            promotion_threshold: 0.1,    // Minimum reward to promote X→E.
+            max_epool_size: 64,          // Cap per Risk table.
         }
     }
 }
@@ -214,6 +232,11 @@ pub struct DualPoolBandit<B: HintDeltaBandit> {
     x_count: u32,
     /// Cycles since last consolidate.
     cycles_since_consolidate: u32,
+    /// Per-arm reward accumulator for X-pool (Phase 4 growth). Tracks how
+    /// much reward each X-pool arm has earned since the last consolidate,
+    /// so `consolidate()` can promote high-reward arms into E-pool.
+    /// Sized to X-pool arm count; reset to zeros after each consolidate.
+    x_arm_rewards: Vec<f32>,
     /// Internal RNG state (splitmix64).
     rng_state: u64,
 }
@@ -230,13 +253,18 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
 
     /// Build with a custom [`DualPoolConfig`].
     pub fn with_config(e_pool: B, x_pool: B, config: DualPoolConfig) -> Self {
-        debug_assert_eq!(
-            e_pool.num_arms(),
-            x_pool.num_arms(),
-            "cgsp_dual_pool: Phase 1 requires same-size E/X pools ({} vs {})",
-            e_pool.num_arms(),
-            x_pool.num_arms(),
-        );
+        // Phase 1 requires same-size E/X pools. Phase 4 growth mode relaxes
+        // this (E-pool starts smaller and grows via consolidate).
+        if !config.growth_enabled {
+            debug_assert_eq!(
+                e_pool.num_arms(),
+                x_pool.num_arms(),
+                "cgsp_dual_pool: Phase 1 requires same-size E/X pools ({} vs {}) unless growth_enabled",
+                e_pool.num_arms(),
+                x_pool.num_arms(),
+            );
+        }
+        let x_n = x_pool.num_arms();
         let seed = config.seed;
         Self {
             e_pool,
@@ -250,6 +278,7 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
             x_reward_accum: 0.0,
             x_count: 0,
             cycles_since_consolidate: 0,
+            x_arm_rewards: vec![0.0; x_n],
             rng_state: seed.wrapping_add(0x9E37_79B9_7F4A_7C15),
         }
     }
@@ -356,6 +385,58 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
 
     // ── Internal RNG (splitmix64, matches PoolConjecturer) ────────────────
 
+    // ── Phase 4: consolidation strategies ────────────────────────────────
+
+    /// Phase 1 consolidation: priority-blend (same-size pools).
+    /// `e[i] = blend·e[i] + (1−blend)·x[i]`.
+    fn consolidate_blend(&mut self) {
+        let blend = self.config.consolidate_blend;
+        let n = self.e_pool.num_arms().min(self.x_pool.num_arms());
+        let e = self.e_pool.priorities_mut();
+        let x = self.x_pool.priorities();
+        for i in 0..n {
+            let blended = blend * e[i] + (1.0 - blend) * x[i.min(x.len())];
+            e[i] = blended;
+        }
+    }
+
+    /// Phase 4 consolidation: arm growth — promote rewarded X-pool arms into
+    /// E-pool as new arms (DecentMem Eq. 8). Only X-pool arms with accumulated
+    /// reward ≥ `promotion_threshold` are promoted. E-pool growth is capped at
+    /// `max_epool_size` (lowest-priority arm evicted on overflow).
+    fn consolidate_growing(&mut self) {
+        let threshold = self.config.promotion_threshold;
+        let max_size = self.config.max_epool_size;
+        let x_prios = self.x_pool.priorities().to_vec();
+        // Collect promoted arms first (avoid double-borrow on e_pool/x_arm_rewards).
+        let to_promote: Vec<(usize, Priority)> = self
+            .x_arm_rewards
+            .iter()
+            .zip(x_prios.iter())
+            .enumerate()
+            .filter(|&(_, (&reward, _))| reward >= threshold)
+            .map(|(arm, (_, &prio))| (arm, prio))
+            .collect();
+        for (_x_arm, prio) in to_promote {
+            // Evict lowest-priority arm if at capacity.
+            if self.e_pool.num_arms() >= max_size {
+                let e_prios = self.e_pool.priorities();
+                let evict_idx = e_prios
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal))
+                    .map(|(i, _)| i);
+                if let Some(idx) = evict_idx {
+                    // Replace evicted arm's priority in-place (keep size fixed).
+                    self.e_pool.priorities_mut()[idx] = prio;
+                    continue;
+                }
+            }
+            // E-pool below cap → push new arm.
+            self.e_pool.push_arm(prio);
+        }
+    }
+
     /// Advance the internal RNG by one step and return the next u64.
     fn next_u64(&mut self) -> u64 {
         self.rng_state = self.rng_state.wrapping_add(0x9E37_79B9_7F4A_7C15);
@@ -393,6 +474,10 @@ impl<B: HintDeltaBandit> HintDeltaBandit for DualPoolBandit<B> {
                 self.x_pool.absorb(arm, reward);
                 self.x_reward_accum += reward.max(0.0);
                 self.x_count += 1;
+                // Phase 4: track per-arm X-pool reward for growth consolidation.
+                if arm < self.x_arm_rewards.len() {
+                    self.x_arm_rewards[arm] += reward.max(0.0);
+                }
             }
         }
     }
@@ -469,22 +554,23 @@ impl<B: HintDeltaBandit> ReachableDualPoolRouter for DualPoolBandit<B> {
     fn consolidate(&mut self) {
         // DecentMem Eq. 8 — merge X-pool items into E-pool.
         //
-        // Phase 1 (same-size pools): priority-blend. Phase 4 will add arm
-        // growth (new directions from X-pool superset) and the
-        // FaithfulnessProbe consolidation gate.
-        let blend = self.config.consolidate_blend;
-        let n = self.e_pool.num_arms().min(self.x_pool.num_arms());
-        let e = self.e_pool.priorities_mut();
-        let x = self.x_pool.priorities();
-        for i in 0..n {
-            let blended = blend * e[i] + (1.0 - blend) * x[i.min(x.len())];
-            e[i] = blended;
+        // Phase 4 growth mode: rewarded X-pool arms are promoted into E-pool
+        // as new arms via `push_arm()`. Falls back to Phase 1 priority-blend
+        // when growth is disabled OR the E-pool backend isn't a growing bandit.
+        if self.config.growth_enabled && self.e_pool.is_growing() {
+            self.consolidate_growing();
+        } else {
+            self.consolidate_blend();
         }
-        // Reset X-pool to uniform (fresh exploration).
+        // Reset X-pool to uniform (fresh exploration) in both modes.
         let x_n = self.x_pool.num_arms();
         let x_unif = if x_n > 0 { 1.0 / x_n as f32 } else { 0.0 };
         for p in self.x_pool.priorities_mut() {
             *p = x_unif;
+        }
+        // Clear per-arm X-pool reward tracking for the next cycle batch.
+        for r in &mut self.x_arm_rewards {
+            *r = 0.0;
         }
     }
 
@@ -578,6 +664,14 @@ mod tests {
         }
         fn priorities_mut(&mut self) -> &mut [Priority] {
             &mut self.prios
+        }
+        // Phase 4: VecBandit is a growing bandit — push_arm extends the Vec.
+        fn push_arm(&mut self, priority: Priority) -> usize {
+            self.prios.push(priority);
+            self.prios.len() - 1
+        }
+        fn is_growing(&self) -> bool {
+            true
         }
     }
 
@@ -1590,6 +1684,127 @@ mod tests {
             sigmoid_reg,
             ratio_reg,
             dominance
+        );
+    }
+
+    // ── Phase 4 (G3) tests: E-pool growth + strategy discovery ────────────
+    //
+    // DecentMem Eq. 8: rewarded X-pool arms are promoted into E-pool as
+    // new arms. This is the core capability gap (Research 249 §2.1) —
+    // single-pool CGSP can never select a direction outside its static
+    // pool, while dual-pool discovers it via X-pool exploration +
+    // consolidation.
+
+    /// G3/T4.1: E-pool grows monotonically when X-pool arms earn reward.
+    ///
+    /// Setup: 1-arm E-pool (minimal, practically empty), 16-arm X-pool.
+    /// Run 100 cycles, rewarding X-pool arms each cycle. After each
+    /// consolidate, assert E-pool size is non-decreasing and ≥ 1 new arm.
+    #[test]
+    fn g3_epool_grows() {
+        let e = VecBandit::constant(1, 0.1);
+        let x = VecBandit::uniform(16);
+        let mut cfg = DualPoolConfig::default();
+        cfg.growth_enabled = true;
+        cfg.promotion_threshold = 0.05; // Easy to reach in 100 cycles.
+        cfg.max_epool_size = 64;
+        let mut dp = DualPoolBandit::with_config(e, x, cfg);
+
+        let initial_e_size = dp.e_pool().num_arms();
+        assert_eq!(initial_e_size, 1);
+
+        let mut prev_size = initial_e_size;
+        for cycle in 0..100 {
+            dp.begin_cycle();
+            // Force X-pool active and reward several arms.
+            dp.route_update(PoolId::Exploration, true);
+            // Simulate absorbing reward into X-pool arms 0, 5, 10.
+            // We need active_pool to be X for absorb to track x_arm_rewards.
+            // Use route_select to pick a pool + arm, then absorb reward.
+            // To deterministically reward specific arms, set active_pool.
+            dp.active_pool = PoolId::Exploration;
+            dp.absorb(0, 0.3);
+            dp.absorb(5, 0.2);
+            dp.absorb(10, 0.25);
+            dp.consolidate();
+
+            let cur_size = dp.e_pool().num_arms();
+            assert!(
+                cur_size >= prev_size,
+                "G3/T4.1 FAIL: E-pool shrank at cycle {} ({} → {})",
+                cycle,
+                prev_size,
+                cur_size
+            );
+            prev_size = cur_size;
+        }
+
+        // After 100 cycles with consistent rewards, E-pool should have grown.
+        assert!(
+            dp.e_pool().num_arms() > initial_e_size,
+            "G3/T4.1 FAIL: E-pool never grew: still {} arms after 100 cycles",
+            dp.e_pool().num_arms()
+        );
+    }
+
+    /// G3/T4.2: Growing E-pool discovers strategies beyond its initial pool.
+    ///
+    /// Setup: E-pool has 4 "known" arms (indices 0–3). X-pool has 16 arms
+    /// (indices 0–15). Arm 7 ("optimal direction") is NOT in the initial
+    /// E-pool — it only exists in the X-pool superset.
+    ///
+    /// We reward X-pool arm 7 heavily. After consolidation, arm 7's
+    /// direction should be promoted into E-pool as a new arm — the NPC
+    /// "discovers" a strategy beyond its initial template.
+    ///
+    /// Single-pool CGSP (static 4-arm pool) can NEVER select arm 7 —
+    /// it's not in the pool. This is the GOAT gain.
+    #[test]
+    fn g3_growing_pool_discovers_new_strategies() {
+        // E-pool: 4 known directions (indices 0-3, priority 0.25 each).
+        let e = VecBandit::uniform(4);
+        // X-pool: 16 directions (indices 0-15), uniform.
+        // Direction 7 is the optimal one — only in X-pool superset.
+        let x = VecBandit::uniform(16);
+        let mut cfg = DualPoolConfig::default();
+        cfg.growth_enabled = true;
+        cfg.promotion_threshold = 0.1;
+        cfg.max_epool_size = 64;
+        let mut dp = DualPoolBandit::with_config(e, x, cfg);
+
+        let initial_e_size = dp.e_pool().num_arms();
+        assert_eq!(initial_e_size, 4, "E-pool starts with 4 known directions");
+
+        // Run 50 cycles, heavily rewarding X-pool arm 7 each cycle.
+        for _ in 0..50 {
+            dp.begin_cycle();
+            dp.active_pool = PoolId::Exploration;
+            // Reward arm 7 (the optimal direction not in E-pool).
+            dp.absorb(7, 0.8);
+            dp.consolidate();
+        }
+
+        let final_e_size = dp.e_pool().num_arms();
+        assert!(
+            final_e_size > initial_e_size,
+            "G3/T4.2 FAIL: E-pool didn't grow ({} → {}) — optimal direction never promoted",
+            initial_e_size,
+            final_e_size
+        );
+
+        // The optimal direction (X-pool arm 7) should now be in E-pool.
+        // Since push_arm adds arms with the X-pool priority at consolidate time,
+        // and arm 7 was consistently rewarded, its priority should be elevated.
+        // Verify the E-pool has at least one arm with priority > initial uniform.
+        let e_prios = dp.e_pool().priorities();
+        let max_e_prio = e_prios.iter().cloned().fold(0.0f32, f32::max);
+        let uniform_4 = 1.0 / 4.0; // Initial E-pool was uniform(4)
+        assert!(
+            max_e_prio > uniform_4,
+            "G3/T4.2 FAIL: no E-pool arm has elevated priority (max={:.4}, uniform={:.4}) \
+             — promoted direction not consolidated",
+            max_e_prio,
+            uniform_4
         );
     }
 }

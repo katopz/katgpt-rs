@@ -127,6 +127,27 @@ pub trait HintDeltaBandit {
     fn num_arms(&self) -> usize {
         self.priorities().len()
     }
+
+    /// Push a new arm with the given priority. Returns the new arm index.
+    ///
+    /// Default implementation is a **no-op** (returns current arm count) —
+    /// only growing bandit backends override this. Non-growing bandits
+    /// (fixed-size) inherit the default and silently ignore the push.
+    ///
+    /// Used by `DualPoolBandit` Phase 4 consolidation (DecentMem Eq. 8):
+    /// rewarded X-pool arms are promoted into the E-pool as new arms.
+    fn push_arm(&mut self, _priority: Priority) -> usize {
+        self.num_arms()
+    }
+
+    /// Whether this bandit supports dynamic arm growth.
+    ///
+    /// Default: `false`. Growing backends (e.g. `Vec`-backed bandits) override
+    /// to `true`. `DualPoolBandit::consolidate()` checks this to decide whether
+    /// to do priority-blend (Phase 1) or arm growth (Phase 4).
+    fn is_growing(&self) -> bool {
+        false
+    }
 }
 
 // ── BatchQualityGate ──────────────────────────────────────────────────────
@@ -260,5 +281,10 @@ mod trait_tests {
         assert_eq!(b.num_arms(), 4);
         b.priorities_mut()[1] = 0.9;
         assert!((b.priority(1) - 0.9).abs() < 1e-6);
+        // Default push_arm is a no-op for non-growing bandits.
+        assert!(!b.is_growing());
+        let idx = b.push_arm(0.5);
+        assert_eq!(idx, 4, "no-op push_arm returns current count");
+        assert_eq!(b.num_arms(), 4, "non-growing bandit size unchanged");
     }
 }
