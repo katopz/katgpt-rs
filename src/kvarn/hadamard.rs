@@ -68,19 +68,36 @@ pub fn hadamard_rows(tile: &mut [f32], cols: usize) {
 /// since kv_dim is typically 64, 128, 256, etc.
 ///
 /// Equivalent to per-column Hadamard: mixes values across rows within each column.
+///
+/// Allocates a per-column scratch buffer. For hot paths, prefer
+/// [`hadamard_cols_into`] which reuses a caller-owned scratch buffer.
 pub fn hadamard_cols(tile: &mut [f32], rows: usize, cols: usize) {
     if rows == 0 || cols == 0 || !rows.is_power_of_two() {
         return;
     }
-    // Process one column at a time: collect, transform, write back
     let mut col_buf = vec![0.0f32; rows];
+    hadamard_cols_into(tile, rows, cols, &mut col_buf);
+}
+
+/// Zero-allocation variant of [`hadamard_cols`].
+///
+/// `col_buf` is caller-owned scratch with length `>= rows`; contents are overwritten.
+/// Reuse the same buffer across many tiles to eliminate per-tile allocation.
+#[inline]
+pub fn hadamard_cols_into(tile: &mut [f32], rows: usize, cols: usize, col_buf: &mut [f32]) {
+    if rows == 0 || cols == 0 || !rows.is_power_of_two() {
+        return;
+    }
+    debug_assert!(col_buf.len() >= rows, "col_buf must hold at least `rows` elements");
+    let buf = &mut col_buf[..rows];
+    // Process one column at a time: gather strided, transform, scatter strided.
     for j in 0..cols {
         for i in 0..rows {
-            col_buf[i] = tile[i * cols + j];
+            buf[i] = tile[i * cols + j];
         }
-        hadamard_transform_inplace(&mut col_buf);
+        hadamard_transform_inplace(buf);
         for i in 0..rows {
-            tile[i * cols + j] = col_buf[i];
+            tile[i * cols + j] = buf[i];
         }
     }
 }

@@ -253,12 +253,13 @@ impl QuantizedKVCache for OscKVCache {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers (test-only — production hot path uses SIMD kernels directly)
 
 /// Cosine similarity between two vectors.
 ///
 /// Uses three SIMD dot-product reductions (NEON on aarch64, AVX2+FMA on x86_64)
 /// instead of a scalar fused 3-output loop that LLVM cannot auto-vectorize.
+#[cfg(test)]
 fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     let n = a.len().min(b.len());
     let dot = crate::simd::simd_dot_f32(a, b, n);
@@ -272,6 +273,7 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Sigmoid activation (NOT softmax per project constraints).
+#[cfg(test)]
 #[inline]
 fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
