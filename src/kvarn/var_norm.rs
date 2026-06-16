@@ -250,11 +250,12 @@ fn apply_dual_scale_into(
     inv_col: &mut [f32],
 ) {
     // Precompute exp of log scales into caller-owned scratch.
+    // `1.0 / l.exp()` ≡ `(-l).exp()`: one exp call instead of exp + division.
     for (i, &l) in log_s_row.iter().enumerate() {
-        inv_row[i] = 1.0 / l.exp();
+        inv_row[i] = (-l).exp();
     }
     for (j, &l) in log_s_col.iter().enumerate() {
-        inv_col[j] = 1.0 / l.exp();
+        inv_col[j] = (-l).exp();
     }
 
     for i in 0..rows {
