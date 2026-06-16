@@ -2042,41 +2042,16 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
                 _mm256_mul_ps(vn_f, v_ln2_lo),
             );
 
-            // Cephes 6th-order polynomial
-            let q = _mm256_add_ps(
-                v_one,
-                _mm256_mul_ps(
-                    vg,
-                    _mm256_add_ps(
-                        v_one,
-                        _mm256_mul_ps(
-                            vg,
-                            _mm256_add_ps(
-                                v_half,
-                                _mm256_mul_ps(
-                                    vg,
-                                    _mm256_add_ps(
-                                        v_third,
-                                        _mm256_mul_ps(
-                                            vg,
-                                            _mm256_add_ps(
-                                                v_quarter,
-                                                _mm256_mul_ps(
-                                                    vg,
-                                                    _mm256_add_ps(
-                                                        v_fifth,
-                                                        _mm256_mul_ps(vg, v_sixth),
-                                                    ),
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            );
+            // Cephes 6th-order polynomial — CORRECT Horner-chain form matching
+            // `cephes_exp_scalar`: Q = 1 + g·(1 + g/2·(1 + g/3·(1 + g/4·(1 + g/5·(1 + g/6))))).
+            // (Issue 027: previous add-nested form g·(0.5 + g·(1/3 + ...)) gave 1/k
+            // coefficients instead of 1/k!, up to 5% error on exp(2).)
+            let p6 = _mm256_add_ps(v_one, _mm256_mul_ps(vg, v_sixth));
+            let p5 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_fifth), p6));
+            let p4 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_quarter), p5));
+            let p3 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_third), p4));
+            let p2 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_half), p3));
+            let q = _mm256_add_ps(v_one, _mm256_mul_ps(vg, p2));
 
             // 2^n via AVX2 bit manipulation: shift = (n + 127) << 23
             // Clamp n to [-126, 127] before adding 127 — matches scalar `cephes_exp_scalar`
@@ -2239,40 +2214,13 @@ unsafe fn avx2_exp_sum_inplace(x: &mut [f32]) -> f32 {
                     _mm256_sub_ps(vx, _mm256_mul_ps(vn_f, v_ln2_hi)),
                     _mm256_mul_ps(vn_f, v_ln2_lo),
                 );
-                let q = _mm256_add_ps(
-                    v_one,
-                    _mm256_mul_ps(
-                        vg,
-                        _mm256_add_ps(
-                            v_one,
-                            _mm256_mul_ps(
-                                vg,
-                                _mm256_add_ps(
-                                    v_half,
-                                    _mm256_mul_ps(
-                                        vg,
-                                        _mm256_add_ps(
-                                            v_third,
-                                            _mm256_mul_ps(
-                                                vg,
-                                                _mm256_add_ps(
-                                                    v_quarter,
-                                                    _mm256_mul_ps(
-                                                        vg,
-                                                        _mm256_add_ps(
-                                                            v_fifth,
-                                                            _mm256_mul_ps(vg, v_sixth),
-                                                        ),
-                                                    ),
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                );
+                // Cephes 6th-order polynomial — CORRECT Horner-chain form (Issue 027).
+                let p6 = _mm256_add_ps(v_one, _mm256_mul_ps(vg, v_sixth));
+                let p5 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_fifth), p6));
+                let p4 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_quarter), p5));
+                let p3 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_third), p4));
+                let p2 = _mm256_add_ps(v_one, _mm256_mul_ps(_mm256_mul_ps(vg, v_half), p3));
+                let q = _mm256_add_ps(v_one, _mm256_mul_ps(vg, p2));
                 let vn_shifted_i = _mm256_add_epi32(vn_i, _mm256_set1_epi32(127));
                 let v_scale_bits = _mm256_slli_epi32::<23>(vn_shifted_i);
                 let v_scale = _mm256_castsi256_ps(v_scale_bits);
@@ -2351,38 +2299,17 @@ unsafe fn neon_exp_inplace(x: &mut [f32]) {
                 vmulq_f32(vn_f, v_ln2_lo),
             );
 
-            // Cephes 6th-order polynomial
-            let q = vaddq_f32(
-                v_one,
-                vmulq_f32(
-                    vg,
-                    vaddq_f32(
-                        v_one,
-                        vmulq_f32(
-                            vg,
-                            vaddq_f32(
-                                v_half,
-                                vmulq_f32(
-                                    vg,
-                                    vaddq_f32(
-                                        v_third,
-                                        vmulq_f32(
-                                            vg,
-                                            vaddq_f32(
-                                                v_quarter,
-                                                vmulq_f32(
-                                                    vg,
-                                                    vaddq_f32(v_fifth, vmulq_f32(vg, v_sixth)),
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            );
+            // Cephes 6th-order polynomial — CORRECT Horner-chain form matching
+            // `cephes_exp_scalar`: Q = 1 + g·(1 + g/2·(1 + g/3·(1 + g/4·(1 + g/5·(1 + g/6))))).
+            // (Issue 027: the previous add-nested form g·(0.5 + g·(1/3 + ...)) produced
+            // coefficients 1/k instead of 1/k!, giving up to 5% error on exp(2). This
+            // form matches the scalar fallback bit-for-bit and is algebraically exact.)
+            let p6 = vaddq_f32(v_one, vmulq_f32(vg, v_sixth));        // 1 + g/6
+            let p5 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_fifth), p6));   // 1 + g/5·p6
+            let p4 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_quarter), p5)); // 1 + g/4·p5
+            let p3 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_third), p4));   // 1 + g/3·p4
+            let p2 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_half), p3));    // 1 + g/2·p3
+            let q = vaddq_f32(v_one, vmulq_f32(vg, p2));              // 1 + g·p2
 
             // 2^n via branchless NEON bit manipulation
             // Clamp n to [-126, 127] to avoid IEEE overflow/underflow
@@ -2562,37 +2489,13 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
                         vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
                         vmulq_f32(vn_f, v_ln2_lo),
                     );
-                    let q = vaddq_f32(
-                        v_one,
-                        vmulq_f32(
-                            vg,
-                            vaddq_f32(
-                                v_one,
-                                vmulq_f32(
-                                    vg,
-                                    vaddq_f32(
-                                        v_half,
-                                        vmulq_f32(
-                                            vg,
-                                            vaddq_f32(
-                                                v_third,
-                                                vmulq_f32(
-                                                    vg,
-                                                    vaddq_f32(
-                                                        v_quarter,
-                                                        vmulq_f32(
-                                                            vg,
-                                                            vaddq_f32(v_fifth, vmulq_f32(vg, v_sixth)),
-                                                        ),
-                                                    ),
-                                                ),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    );
+                    // Cephes 6th-order polynomial — CORRECT Horner-chain form (Issue 027).
+                    let p6 = vaddq_f32(v_one, vmulq_f32(vg, v_sixth));
+                    let p5 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_fifth), p6));
+                    let p4 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_quarter), p5));
+                    let p3 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_third), p4));
+                    let p2 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_half), p3));
+                    let q = vaddq_f32(v_one, vmulq_f32(vg, p2));
                     let vn_clamped = vmaxq_s32(vminq_s32(vn_i, v127), vneg126);
                     let v_shifted =
                         vreinterpretq_f32_s32(vshlq_n_s32::<23>(vaddq_s32(vn_clamped, v_bias)));
@@ -2621,34 +2524,13 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
                 vsubq_f32(vx, vmulq_f32(vn_f, v_ln2_hi)),
                 vmulq_f32(vn_f, v_ln2_lo),
             );
-            let q = vaddq_f32(
-                v_one,
-                vmulq_f32(
-                    vg,
-                    vaddq_f32(
-                        v_one,
-                        vmulq_f32(
-                            vg,
-                            vaddq_f32(
-                                v_half,
-                                vmulq_f32(
-                                    vg,
-                                    vaddq_f32(
-                                        v_third,
-                                        vmulq_f32(
-                                            vg,
-                                            vaddq_f32(
-                                                v_quarter,
-                                                vmulq_f32(vg, vaddq_f32(v_fifth, vmulq_f32(vg, v_sixth))),
-                                            ),
-                                        ),
-                                    ),
-                                ),
-                            ),
-                        ),
-                    ),
-                ),
-            );
+            // Cephes 6th-order polynomial — CORRECT Horner-chain form (Issue 027).
+            let p6 = vaddq_f32(v_one, vmulq_f32(vg, v_sixth));
+            let p5 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_fifth), p6));
+            let p4 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_quarter), p5));
+            let p3 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_third), p4));
+            let p2 = vaddq_f32(v_one, vmulq_f32(vmulq_f32(vg, v_half), p3));
+            let q = vaddq_f32(v_one, vmulq_f32(vg, p2));
             let vn_clamped = vmaxq_s32(vminq_s32(vn_i, v127), vneg126);
             let v_shifted = vreinterpretq_f32_s32(vshlq_n_s32::<23>(vaddq_s32(vn_clamped, v_bias)));
             let r = vmulq_f32(v_shifted, q);
@@ -6199,6 +6081,79 @@ mod tests {
         assert!((x[0] - 1.0).abs() < 1e-6);
         assert!((x[1] - std::f32::consts::E).abs() < 1e-4);
         assert!((x[2] - std::f32::consts::E.powi(2)).abs() < 1e-4);
+    }
+
+    #[test]
+    fn simd_exp_matches_f32_exp_truth_referenced() {
+        // Issue 027 regression guard: simd_exp_inplace must match `f32::exp()` to
+        // high precision. The previous polynomial used coefficients 1/k instead of
+        // 1/k!, giving up to 5% error on exp(2). This test compares against the
+        // platform libm `f32::exp()` (not against another SIMD path) so it cannot
+        // be defeated by self-referential comparisons.
+        //
+        // Range: [-15, 15] in 0.1 steps. Covers the polynomial bug range (x=0.5/1/2
+        // gave 2.6%/0.5%/5.1% error) and stays clear of the n-clamp boundary
+        // (|x| > ~88). The threshold below tolerates the f32 range-reduction
+        // precision floor (~2e-5 at |x|>6) while catching any polynomial regression.
+        let inputs: Vec<f32> = (-150..=150).map(|i| i as f32 * 0.1).collect();
+        let mut x = inputs.clone();
+        simd_exp_inplace(&mut x);
+        let mut worst_rel: f32 = 0.0;
+        let mut worst_at: f32 = 0.0;
+        for (i, &xi) in inputs.iter().enumerate() {
+            let expected = xi.exp();
+            let got = x[i];
+            // Allow for Cephes 6th-order truncation error (~1e-6 relative for the
+            // reduced argument). The old buggy poly produced ~5e-2 relative error
+            // at x=2 — this assertion would have caught it.
+            let denom = expected.abs().max(1e-30);
+            let rel_err = ((got - expected).abs() / denom) as f32;
+            if rel_err > worst_rel {
+                worst_rel = rel_err;
+                worst_at = xi;
+            }
+            // Threshold: 5e-4 relative. The Cephes 6th-order polynomial itself is
+            // accurate to ~1e-6, but the f32 range reduction `g = x - n·ln2_hi -
+            // n·ln2_lo` introduces ~2e-5 relative noise at |x|>6 due to
+            // catastrophic cancellation. 5e-4 is 25× above that floor and 100×
+            // below the polynomial-coefficient bug (5e-2 at x=2, Issue 027), so it
+            // catches any polynomial regression while tolerating range-reduction
+            // precision loss.
+            assert!(
+                rel_err < 5e-4,
+                "exp({xi}) = {got} vs true {expected}, rel_err = {rel_err:.3e} (worst so far: {worst_rel:.3e} at {worst_at})"
+            );
+        }
+        // Sanity log: worst observed relative error across the sweep.
+        // Post-fix this should be ~1e-7 (Cephes truncation floor).
+        eprintln!("simd_exp truth-referenced worst rel_err = {worst_rel:.3e} at x = {worst_at}");
+    }
+
+    #[test]
+    fn simd_exp_sum_matches_f32_exp_truth_referenced() {
+        // Issue 027 companion guard for the fused exp+sum path. Exercises the
+        // `step!` macro polynomial in both the main loop and the remaining-chunks
+        // loop (lengths chosen to hit both).
+        for &len in &[1usize, 3, 4, 8, 12, 16, 17, 31, 32, 33, 100] {
+            let inputs: Vec<f32> = (0..len).map(|i| (i as f32 - (len as f32) * 0.5) * 0.3).collect();
+            let mut x = inputs.clone();
+            let got_sum = simd_exp_sum_inplace(&mut x);
+            let mut expected_sum = 0.0f32;
+            for (i, &xi) in inputs.iter().enumerate() {
+                let expected = xi.exp();
+                expected_sum += expected;
+                let denom = expected.abs().max(1e-30);
+                let rel_err = ((x[i] - expected).abs() / denom) as f32;
+                assert!(
+                    rel_err < 5e-4,
+                    "len={len} exp({xi}) = {} vs true {expected}, rel_err={rel_err:.3e}",
+                    x[i]
+                );
+            }
+            // Sum tolerance: fused 4-accumulator reassociation adds ~1e-6 relative.
+            let sum_rel = ((got_sum - expected_sum).abs() / expected_sum.abs().max(1e-30)) as f32;
+            assert!(sum_rel < 5e-4, "len={len} sum mismatch: got {got_sum}, exp {expected_sum}, rel={sum_rel:.3e}");
+        }
     }
 
     // ── simd_sigmoid_tanh_clamp_inplace tests (Issue 024/025) ──────────────

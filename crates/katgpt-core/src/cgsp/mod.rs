@@ -33,6 +33,8 @@
 //! ```
 
 pub mod conjecturer;
+#[cfg(feature = "temporal_deriv")]
+pub mod derivative_curiosity;
 pub mod filters;
 pub mod guide;
 pub mod loop_;
@@ -45,6 +47,8 @@ pub mod types;
 pub mod dual_pool;
 
 // Convenience re-exports — flat namespace for callers.
+#[cfg(feature = "temporal_deriv")]
+pub use derivative_curiosity::DerivativeCuriosity;
 pub use conjecturer::PoolConjecturer;
 pub use filters::{BreakevenDifficultyFilter, ColinearityBatchGate};
 pub use guide::{structural_complexity, ComplexityWeights, HlaProjectionGuide};

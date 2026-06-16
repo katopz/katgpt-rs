@@ -482,7 +482,7 @@ impl CollapseSignal for EntropyCollapse {
 /// Clamp priorities to `[0, ∞)` and rescale so the max is `1.0` if it exceeds.
 ///
 /// Keeps the priority table numerically stable across many cycles.
-fn renormalize_priorities(p: &mut [Priority]) {
+pub fn renormalize_priorities(p: &mut [Priority]) {
     if p.is_empty() {
         return;
     }
