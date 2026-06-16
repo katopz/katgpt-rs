@@ -62,6 +62,7 @@
 //! ```
 
 use crate::simd::{simd_dot_f32, simd_scale_inplace};
+use crate::spectral_retract::power_iter_step;
 
 /// Pre-allocated scratch for gauge rebalancing.
 ///
@@ -124,43 +125,28 @@ fn power_iterate_sigma_max(
     }
 
     for _ in 0..n_steps {
-        // Compute M^T · (M · v) into v_new.
+        // Compute M^T · (M · v) into v_new via the shared `power_iter_step`
+        // helper (Plan 279 DRY refactor — Research 246 §6 Fusion Idea F).
         //
-        // Step 1: u = M · v  → length `outer`.
-        // We fuse this into a single loop over rows of M (each row is length `rank`),
-        // then immediately use u[i] to accumulate into v_new[k] = sum_i M[i,k] · u[i].
-        //
-        // To avoid an `outer` allocation, we accumulate v_new in two passes:
-        //   Pass 1: compute u[i] = dot(M_row_i, v) — we need to store u.
-        //   Pass 2: v_new[k] = sum_i M[i,k] · u[i].
-        //
-        // Since `outer` is unbounded, we recompute u[i] inline in pass 2
-        // (trading 2x compute for zero allocation). This is O(outer · rank²)
-        // for the full iteration but avoids heap allocation entirely.
-
-        // Zero v_new.
-        v_new.fill(0.0);
-
-        for i in 0..outer {
-            let row = &mat[i * rank..(i + 1) * rank];
-            let u_i = simd_dot_f32(row, v, rank);
-            // v_new[k] += M[i,k] · u_i for all k.
-            for k in 0..rank {
-                v_new[k] += row[k] * u_i;
+        // The matvec is the implicit PSD operator `M^T M` where M is
+        // `outer × rank`. To avoid an `outer`-length allocation for u = M·v,
+        // we recompute u[i] inline in the second pass (trading 2× compute
+        // for zero allocation — original behavior preserved byte-for-byte).
+        let step_norm = power_iter_step(v, v_new, |vin: &[f32], vout: &mut [f32]| {
+            vout.fill(0.0);
+            for i in 0..outer {
+                let row = &mat[i * rank..(i + 1) * rank];
+                let u_i = simd_dot_f32(row, vin, rank);
+                // vout[k] += M[i,k] · u_i for all k.
+                for k in 0..rank {
+                    vout[k] += row[k] * u_i;
+                }
             }
-        }
-
-        // Normalize v_new.
-        let norm: f32 = simd_dot_f32(v_new, v_new, rank).sqrt();
-        if norm < 1e-20 {
+        });
+        if step_norm < 1e-20 {
             // Degenerate — return 0.
             return 0.0;
         }
-        let inv = 1.0 / norm;
-        simd_scale_inplace(v_new, inv);
-
-        // Swap: copy v_new into v for next iteration.
-        v.copy_from_slice(v_new);
     }
 
     // Final σ_max² ≈ v^T · (M^T M) · v = ‖M · v‖².

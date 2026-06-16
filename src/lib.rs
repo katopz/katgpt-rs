@@ -79,6 +79,9 @@ pub mod kvarn;
 pub mod lattice_operad;
 #[cfg(feature = "gauge_invariant")]
 pub mod gauge_invariant;
+pub mod spectral_retract;
+#[cfg(feature = "manifold_power_iter_router")]
+pub mod manifold_power_iter_router;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
 #[cfg(feature = "newton_schulz")]
