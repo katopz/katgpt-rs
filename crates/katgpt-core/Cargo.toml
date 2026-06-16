@@ -33,6 +33,7 @@ parallax_attn = ["tiled_attention"]  # Parallax parameterized local linear atten
 sr2am_configurator = []  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076)
 data_gate = []  # Task-level data gating for self-play training stability (Plan 111, Research 075)
 cgsp = ["data_gate", "collapse_aware_thinking"]  # Curiosity-Guided Self-Play — modelless Solver/Conjecturer/Guide triad (Plan 274, Research 240). Self-contained: defines its own HintDeltaBandit/CollapseSignal/DifficultyFilter/BatchQualityGate traits. Moved from katgpt root to katgpt-core so riir-engine (Plan 299) can consume via katgpt-core/cgsp. Opt-in — keep off default until riir-ai Plan 299 Phase 3 GOAT gate validates on real game domains.
+cgsp_dual_pool = ["cgsp"]  # Dual-Pool Reachable Memory Router — DecentMem distillation (Plan 282, Research 249, arXiv:2605.22721). Sigmoid-routed E/X pools with proactive non-trapping (Thm. 1) + O(log T) regret (Thm. 2). Extends single-pool CGSP (degenerate α=1). Opt-in until G1–G5 GOAT gate passes.
 questbench = []  # QuestBench underspecification scoring for modelless architecture (Plan 110, Research 008)
 tf_loop = ["lt2_looped"]  # Training-free loop wrapper — ODE-refined sub-stepping (Plan 136)
 plasma_path = []  # Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110)

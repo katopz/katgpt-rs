@@ -39,6 +39,11 @@ pub mod loop_;
 pub mod traits;
 pub mod types;
 
+// Dual-pool reachable memory router (Plan 282, Research 249 — DecentMem).
+// Opt-in until G1–G5 GOAT gate passes.
+#[cfg(feature = "cgsp_dual_pool")]
+pub mod dual_pool;
+
 // Convenience re-exports — flat namespace for callers.
 pub use conjecturer::PoolConjecturer;
 pub use filters::{BreakevenDifficultyFilter, ColinearityBatchGate};
@@ -53,6 +58,10 @@ pub use types::{
     Direction, Priority, ScratchBuffers, SolveRate, Target, DEFAULT_HLA_DIM, DEFAULT_K,
     DEFAULT_POOL_SIZE,
 };
+
+// Dual-pool re-exports (Plan 282, Research 249).
+#[cfg(feature = "cgsp_dual_pool")]
+pub use dual_pool::{DualPoolBandit, DualPoolConfig, PoolId, ReachableDualPoolRouter};
 
 // ── Integration tests (T1.7) ──────────────────────────────────────────────
 

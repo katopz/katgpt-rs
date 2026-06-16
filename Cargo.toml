@@ -80,6 +80,7 @@ hydra_budget = ["katgpt-core/hydra_budget"]  # Hydra-Aware Adaptive Layer Budget
 deltanet_inference = ["katgpt-core/deltanet_inference"]  # DeltaNet GPU inference — hybrid DeltaNet/Attention decode (Plan 182, Research R036)
 data_gate = ["katgpt-core/data_gate", "bandit"]  # Task-level data gating for self-play training stability (Plan 111, Research 075)
 cgsp = ["katgpt-core/cgsp", "bandit", "collapse_aware_thinking", "data_gate", "breakeven_routing"]  # Curiosity-Guided Self-Play — modelless Solver/Conjecturer/Guide triad (Plan 274, Research 240). Implementation lives in katgpt-core/cgsp so riir-engine (Plan 299) can consume it; root re-exports at katgpt::cgsp for Plan 274 benchmarks. Opt-in until riir-ai Plan 299 Phase 3 GOAT gate validates on real game domains.
+cgsp_dual_pool = ["katgpt-core/cgsp_dual_pool", "cgsp"]  # Dual-Pool Reachable Memory Router — DecentMem distillation (Plan 282, Research 249, arXiv:2605.22721). Passthrough to katgpt-core. Opt-in until G1–G5 GOAT gate passes.
 subterranean = ["bandit"]  # Procedure graph compilation — compiling workflows into weights (Plan 110, Research 074)
 spec_pruner = []  # SpecAsPruner — compile NL specs into symbolic ConstraintPruner rules (Plan 259, Research 229)
 spec_compile = ["spec_pruner"]  # Full spec compilation suite — SpecAsPruner + SpecAsMarginals + SpecDFA + SpecProof + SpecChain

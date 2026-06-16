@@ -20,32 +20,31 @@ Ship a generic **dual-pool memory router** that splits a bandit's candidate pool
 
 ### Tasks
 
-- [ ] **T1.1** Define `PoolId` enum (`Exploitation = 0`, `Exploration = 1`) with `#[repr(u8)]` in `crates/katgpt-core/src/cgsp/dual_pool.rs`. Zero-cost tag.
-- [ ] **T1.2** Define `ReachableDualPoolRouter` trait (associated types `Item`, `Reward: Copy`; methods `route_select`, `route_update`, `consolidate`, `exploitation_probability`, `is_reachable`). Doc-comment cites DecentMem Theorems 1 + 2.
-- [ ] **T1.3** Implement `DualPoolBandit<B: HintDeltaBandit>` struct:
+- [x] **T1.1** Define `PoolId` enum (`Exploitation = 0`, `Exploration = 1`) with `#[repr(u8)]` in `crates/katgpt-core/src/cgsp/dual_pool.rs`. Zero-cost tag.
+- [x] **T1.2** Define `ReachableDualPoolRouter` trait (associated types `Item`, `Reward: Copy`; methods `route_select`, `route_update`, `consolidate`, `exploitation_probability`, `is_reachable`). Doc-comment cites DecentMem Theorems 1 + 2.
+- [x] **T1.3** Implement `DualPoolBandit<B: HintDeltaBandit>` struct:
   - Fields: `e_pool: B` (exploitation — wraps existing HintDeltaBandit), `x_pool: B` (exploration), `w_e: f32` (exploitation weight, init 1.0), `w_x: f32` (exploration weight, fixed 1.0 per paper Eq. 6/7), `alpha_update_gain: f32` (paper's `α = 0.5`), `decay: f32` (paper's `β = 0.5`).
-  - `exploitation_probability()` → `sigmoid(self.w_e - self.w_x)` (NOT ratio `w_e/(w_e+w_x)` — per AGENTS.md sigmoid rule; regret proof transfers per Research 249 §2.3).
-  - `route_select()` → sample pool by `exploitation_probability()`, select item from chosen pool's bandit.
-  - `route_update(pool, reward)` → DecentMem Eq. 6/7:
-    - E-pool used + reward success: `w_e += gain`
-    - E-pool used + reward fail: `w_e = max(1.0, decay * w_e)`
-    - X-pool used + reward success: `w_e = max(1.0, decay * w_e)` (suppress E dominance)
-    - X-pool used + reward fail: `w_e += gain`
-  - `consolidate()` → merge X-pool items into E-pool, reset X-pool (Eq. 8).
-  - `is_reachable()` → `exploitation_probability() < 1.0` (always true for sigmoid in finite precision — reachability by construction).
-- [ ] **T1.4** Unit tests:
-  - `t14_sigmoid_routing_in_unit_interval`: `exploitation_probability() ∈ (0, 1)` for all weight combos.
-  - `t14_x_pool_always_reachable`: after forcing `w_e` very high, `is_reachable()` still true (sigmoid asymptote).
-  - `t14_weight_update_e_pool_success`: E-pool + success → `w_e` increases.
-  - `t14_weight_update_e_pool_fail`: E-pool + fail → `w_e` decays toward 1.0.
-  - `t14_weight_update_x_pool_success`: X-pool + success → `w_e` decays (suppress E dominance).
-  - `t14_consolidate_merges_x_into_e`: after consolidate, E-pool size ≥ pre-consolidation, X-pool reset.
-- [ ] **T1.5** Wire into existing CGSP `CgspLoop`: add `DualPoolMode` config variant. When enabled, the loop's `HintDeltaBandit` is wrapped in `DualPoolBandit` — conjecturer samples from the router-selected pool instead of the single static pool. Single-pool mode (default) is unchanged.
-- [ ] **T1.6** Register module + feature flag:
-  - `pub mod dual_pool;` in `crates/katgpt-core/src/cgsp/mod.rs`
-  - `cgsp_dual_pool = ["cgsp"]` in `crates/katgpt-core/Cargo.toml`
-  - Forward `cgsp_dual_pool` as passthrough in root `katgpt-rs/Cargo.toml`
-- [ ] **T1.7** Validation: `cargo test -p katgpt-core --features cgsp_dual_pool --lib cgsp::dual_pool --release` → all T1.4 tests pass. `cargo check -p katgpt-core --lib --release` (default) → clean.
+  - `exploitation_probability()` → `sigmoid(self.w_e - self.w_x).clamp(ε, 1−ε)` (NOT ratio — per AGENTS.md sigmoid rule; regret proof transfers per Research 249 §2.3). **Note:** f32 sigmoid saturates at `x ≳ 18` (1+exp(−18) rounds to 1.0 in f32), so raw sigmoid gives α=1.0 exactly at extreme weights — breaking `is_reachable()`. Added `min_exploration_prob` clamp (default `1e-4`) as the numerical reachability guarantee. The paper's continuous-math theorem holds; the clamp makes it hold in f32.
+  - `route_select()` → sample pool by `exploitation_probability()`, select item from chosen pool's bandit (pure `sample_arm_from` fn avoids borrow conflict).
+  - `route_update(pool, reward)` → DecentMem Eq. 6/7 (4-case match, only `w_e` updates; `w_x` fixed at 1.0).
+  - `consolidate()` → Phase 1 priority-blend (same-size pools): `e[i] = blend·e[i] + (1−blend)·x[i]`, X-pool reset to uniform. True arm growth deferred to Phase 4.
+  - `is_reachable()` → `exploitation_probability() < 1.0` (always true via clamp — reachability by construction in f32).
+  - Implements `HintDeltaBandit` by delegating to the **active** pool (one pool per cycle, selected in `begin_cycle()`). Drops into `CgspLoop` as the `B` type parameter with zero loop changes.
+- [x] **T1.4** Unit tests (10 tests, all pass):
+  - `t14_sigmoid_routing_in_unit_interval`: α ∈ (0, 1) for default, extreme-high, and extreme-low w_e.
+  - `t14_x_pool_always_reachable`: extreme w_e → `is_reachable()` true + α < 1.0; moderate w_e → X-pool selected ~12% of trials.
+  - `t14_weight_update_e_pool_success`: E + success → w_e += gain.
+  - `t14_weight_update_e_pool_fail`: E + fail → w_e decays, floors at 1.0.
+  - `t14_weight_update_x_pool_success`: X + success → w_e decays.
+  - `t14_consolidate_merges_x_into_e`: E-pool blended, size unchanged, X-pool reset to uniform.
+  - Bonus: `route_select_returns_valid_arm_and_pool`, `hintdeltabandit_delegates_to_active_pool`, `begin_end_cycle_drives_routing`, `single_pool_degenerate_case_alpha_one`.
+- [x] **T1.5** CgspLoop integration (minimal — Phase 1 skeleton): `DualPoolBandit<B>` implements `HintDeltaBandit`, so it drops into `CgspLoop` as `B` with zero changes to `cycle()`. Caller wraps `begin_cycle()` / `end_cycle()` around the existing cycle call. No `DualPoolMode` config variant needed for Phase 1 — the router is self-contained. Full automated `cycle_dual_pool` method deferred to Phase 5 (CGSP Integration Benchmark).
+- [x] **T1.6** Register module + feature flag:
+  - `#[cfg(feature = "cgsp_dual_pool")] pub mod dual_pool;` in `crates/katgpt-core/src/cgsp/mod.rs` ✓
+  - Re-exports: `DualPoolBandit, DualPoolConfig, PoolId, ReachableDualPoolRouter` in `mod.rs` + `lib.rs` ✓
+  - `cgsp_dual_pool = ["cgsp"]` in `crates/katgpt-core/Cargo.toml` ✓
+  - `cgsp_dual_pool = ["katgpt-core/cgsp_dual_pool", "cgsp"]` passthrough in root `katgpt-rs/Cargo.toml` ✓
+- [x] **T1.7** Validation: `cargo test -p katgpt-core --features cgsp_dual_pool --lib cgsp::dual_pool --release` → **10 passed, 0 failed**. `cargo check -p katgpt-core --lib --release` (default) → **clean**. `cargo check --features cgsp_dual_pool --release` (root) → **clean**.
 
 **Phase 1 exit:** `ReachableDualPoolRouter` trait + `DualPoolBandit` impl compile and pass unit tests. Existing CGSP single-pool behavior unchanged.
 

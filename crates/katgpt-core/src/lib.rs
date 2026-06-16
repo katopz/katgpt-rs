@@ -38,6 +38,10 @@ pub use cgsp::{
     DEFAULT_HLA_DIM, DEFAULT_K, DEFAULT_POOL_SIZE, entropy_nats, sigmoid, structural_complexity,
 };
 
+// CGSP dual-pool extension — DecentMem distillation (Plan 282, Research 249).
+#[cfg(feature = "cgsp_dual_pool")]
+pub use cgsp::{DualPoolBandit, DualPoolConfig, PoolId, ReachableDualPoolRouter};
+
 // ActionBridge — generic latent→raw action bridge (Plan 262).
 #[cfg(feature = "action_bridge")]
 pub mod bridge;

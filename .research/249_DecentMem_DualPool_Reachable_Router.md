@@ -263,10 +263,12 @@ The dual-pool router is an **extension layer** on top of CGSP, not a replacement
 ## 6. Implementation Notes
 
 - **Sigmoid routing:** `α = sigmoid(w_E − w_X)` not `w_E / (w_E + w_X)`. Preserves regret proof (strict concavity holds).
+- **f32 saturation (discovered during Plan 282 Phase 1):** Raw f32 sigmoid saturates to exactly `1.0` for `x ≳ 18` (because `1.0 + exp(−18)` rounds to `1.0` in f32 — ULP at 1.0 is ~1.2e-7, and `exp(−18) ≈ 1.5e-8` is below it). This breaks `is_reachable()` at extreme weights. **Fix:** clamp `exploitation_probability()` to `[min_exploration_prob, 1 − min_exploration_prob]` (default `1e-4`). This is the numerical reachability guarantee — DecentMem Theorem 1 holds in continuous math; the clamp makes it hold in f32. Configurable via `DualPoolConfig::min_exploration_prob`.
 - **Consolidation gate:** wire `FaithfulnessProbe` (Plan 278) — only X-pool items with behavioral delta > threshold enter E-pool. Prevents Research 244's "dead condensed memory" failure.
 - **Latency budget:** dual-pool adds one sigmoid + one branch per cycle over single-pool CGSP. Sub-µs overhead. No allocation in hot path (reuse CGSP's pre-allocated pools).
 - **Latent boundary:** E-pool and X-pool are **latent** (per-NPC, never synced). Only the consolidated `f32` solve-rate crosses sync (same as CGSP). E-pool snapshots commit via existing `CuriosityPrioritySnapshot` BLAKE3 channel.
 - **Feature flag:** `cgsp_dual_pool` opt-in. GOAT gate: (G1) reachability — force one-hot E-pool, verify X-pool recovery without entropy detector; (G2) regret — synthetic bandit, verify O(log T); (G3) consolidation growth — E-pool size increases over cycles; (G4) faithfulness gate — dead items rejected; (G5) personality divergence — two NPCs diverge more with dual-pool than single-pool.
+- **Phase 1 status (shipped):** `DualPoolBandit<B: HintDeltaBandit>` implements both `HintDeltaBandit` (delegates to active pool) and `ReachableDualPoolRouter`. Same-size E/X pools (Phase 1 simplification); true arm growth deferred to Phase 4. Drops into `CgspLoop` as the `B` type parameter with zero loop changes — caller wraps `begin_cycle()` / `end_cycle()` around `cycle()`.
 
 ---
 
