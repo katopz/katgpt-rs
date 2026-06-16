@@ -85,7 +85,7 @@ pub use adaptive_cot::{AdaptiveCompactResult, AdaptiveTraceCompactor};
 #[cfg(feature = "lora_beta_predictor")]
 pub use lora_beta_predictor::{
     LoraBetaError, LoraBetaPredictor, PREDICTOR_MAGIC, PREDICTOR_VERSION,
-    BETA_MAX, BETA_MID, BETA_MIN, DEFAULT_ALPHA, DEFAULT_RANK,
+    BETA_MAX, BETA_MID, BETA_MIN, DEFAULT_ALPHA, DEFAULT_INIT_SEED, DEFAULT_RANK,
     LORA_INPUT_DIM as LORA_BETA_INPUT_DIM, LORA_OUTPUT_DIM as LORA_BETA_OUTPUT_DIM,
 };
 
