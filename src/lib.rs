@@ -53,9 +53,11 @@ pub mod dllm_solver;
 #[cfg(feature = "ega_attn")]
 pub mod ega_attn;
 // FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244).
-// Open half of the Cognitive Integrity Layer. Opt-in: `faithfulness_probe` (diagnostic, audit cadence) +
-// `triggered_injection` (hot-path gate, sigmoid-thresholded inject/skip).
-#[cfg(feature = "faithfulness_probe")]
+// Open half of the Cognitive Integrity Layer. Two features:
+// - `faithfulness_probe` (opt-in, diagnostic, audit cadence): full intervention suite + perturbation + attribution.
+// - `triggered_injection` (default-ON after GOAT G3): sigmoid-thresholded inject/skip hot-path gate only.
+// The module is compiled when EITHER feature is on; submodules are individually gated in `mod.rs`.
+#[cfg(any(feature = "faithfulness_probe", feature = "triggered_injection"))]
 pub mod faithfulness;
 #[cfg(feature = "feedback")]
 pub mod feedback;
