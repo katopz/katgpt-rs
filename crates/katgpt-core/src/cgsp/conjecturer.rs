@@ -14,6 +14,10 @@ use crate::cgsp::types::{Candidate, Direction, Priority, Target};
 /// Samples k candidates per cycle weighted by the current priority table.
 /// Implements priority-weighted roulette with a self-contained splitmix64
 /// RNG so behaviour is reproducible across runs given a seed.
+///
+/// `Debug` is derived so that wrappers (e.g. `DerivativeCuriosity` in the
+/// `temporal_deriv` fusion) can also derive `Debug` without a manual impl.
+#[derive(Debug)]
 pub struct PoolConjecturer {
     /// Frozen pool of direction vectors (immutable after construction).
     pool: Vec<Direction>,
@@ -120,7 +124,9 @@ impl CuriosityConjecturer for PoolConjecturer {
         if cdf_scratch.is_empty() || total <= 0.0 || self.pool.is_empty() {
             let dim = self.pool.first().map(|d| d.dim()).unwrap_or(0);
             for slot in out.iter_mut() {
-                slot.direction = Direction::zeros(dim);
+                // Resize in place to avoid per-slot allocation.
+                slot.direction.coords.resize(dim, 0.0);
+                slot.direction.coords.fill(0.0);
                 slot.pool_index = usize::MAX;
             }
             return;
@@ -134,14 +140,18 @@ impl CuriosityConjecturer for PoolConjecturer {
             let dir = &self.pool[idx];
             if mag > 0.0 {
                 // Perturb each coordinate by uniform noise in [-mag, +mag].
-                let mut coords = dir.coords.clone();
-                for c in coords.iter_mut() {
+                // Use clone_from to reuse the slot's existing Vec capacity
+                // rather than allocating a fresh Vec each call.
+                slot.direction.coords.clone_from(&dir.coords);
+                for c in slot.direction.coords.iter_mut() {
                     let n = (self.next_f32() - 0.5) * 2.0 * mag;
                     *c += n;
                 }
-                slot.direction = Direction { coords };
             } else {
-                slot.direction = dir.clone();
+                // Reuse the slot's existing Vec capacity. clone_from resizes
+                // in place and only reallocates if capacity is insufficient —
+                // in steady state (same dim across cycles) this is zero-alloc.
+                slot.direction.coords.clone_from(&dir.coords);
             }
             slot.pool_index = idx;
             // Suppress unused-warning for `dim` (kept for future shape checks).
