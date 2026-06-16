@@ -1076,3 +1076,17 @@ pub use thicket_variance_probe::{
     TvpProbeSource, TvpSignal, TvpSignalFrozen, TvpTierDecision, TvpThresholdAdapter,
     canonical_format_hash, tvp_tier_decision,
 };
+
+// ── Sigmoid-Graded Reject Confidence (Plan 310 T1) ────────────
+// HarnessBridge Table 7 distillation: tolerant > strict rejection.
+// Trait-level default methods live in katgpt-core; this is the opt-in
+// relax-and-retry caller helper.
+
+#[cfg(feature = "sigmoid_graded_reject")]
+pub mod soft_reject;
+
+#[cfg(feature = "sigmoid_graded_reject")]
+pub use soft_reject::{
+    NoRelaxation, RelaxationStrategy, SoftRejectConfig, SoftRejectVerdict,
+    batch_soft_reject_with_relax, soft_reject_decide, soft_reject_with_relax,
+};

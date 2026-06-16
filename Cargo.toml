@@ -1161,6 +1161,22 @@ name = "bench_279_manifold_power_iter_goat"
 path = "tests/bench_279_manifold_power_iter_goat.rs"
 required-features = ["manifold_power_iter_router", "gauge_invariant"]
 
+# Plan 279 T2.5 — Composition test: MPI router × vocab_coreset (Plan 181).
+# Validates orthogonality of (a) MPI score concentration and (b) top-p coreset
+# size adaptivity. Research note §2.5 Fusion B.
+[[test]]
+name = "composition_279_vocab_coreset"
+path = "tests/composition_279_vocab_coreset.rs"
+required-features = ["manifold_power_iter_router", "vocab_coreset"]
+
+# Plan 279 T2.6 — Composition test: MPI router × spectral_budget (Plan 253).
+# Validates orthogonality of (a) MPI router row conditioning and (b) per-layer
+# NS-depth routing. Research note §2.6 Fusion C.
+[[test]]
+name = "composition_279_spectral_budget"
+path = "tests/composition_279_spectral_budget.rs"
+required-features = ["manifold_power_iter_router", "spectral_budget"]
+
 # Plan 279 — N/D sweep benchmark (std::time::Instant, not criterion).
 [[bench]]
 name = "manifold_power_iter_router_bench"
