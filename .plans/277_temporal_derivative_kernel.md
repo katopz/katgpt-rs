@@ -78,18 +78,20 @@ Target: extend `crates/katgpt-core/src/sense/reconstruction.rs`. Adds a per-NPC 
 
 ### Tasks
 
-- [ ] **T2.1** Add `pub surprise: Option<TemporalDerivativeKernel<8>>` to `ReconstructionState` (behind `temporal_deriv` feature). `None` when feature disabled → zero cost.
-- [ ] **T2.2** In `reconstruct_inner`, after `evolve_hla` / `evolve_hla_simd`, call `surprise.observe(&self.hla)` if `Some`. Store result in a new `pub last_surprise: [f32; 8]` field (zero-init, only written when feature on).
-- [ ] **T2.3** Add accessor `pub fn surprise_vector(&self) -> Option<&[f32; 8]>` — returns `Some(&self.last_surprise)` if feature on, `None` otherwise. Clean downstream API.
-- [ ] **T2.4** Add `pub fn surprise_norm(&self) -> f32` — 0.0 when feature off, otherwise delegates to kernel.
-- [ ] **T2.5** Wire `ReconstructionConfig` with `temporal_deriv_alpha_fast: f32` (default 0.3) and `temporal_deriv_alpha_slow: f32` (default 0.03). Documented as the paper's ~10× ratio.
-- [ ] **T2.6** Synthetic emotional-event trace benchmark (`benches/reconstruction_bench.rs` extension):
+- [x] **T2.1** Add `pub surprise: Option<TemporalDerivativeKernel<8>>` to `ReconstructionState` (behind `temporal_deriv` feature). `None` when feature disabled → zero cost.
+- [x] **T2.2** In `reconstruct_inner`, after `evolve_hla` / `evolve_hla_simd`, call `surprise.observe(&self.hla)` if `Some`. Store result in a new `pub last_surprise: [f32; 8]` field (zero-init, only written when feature on).
+- [x] **T2.3** Add accessor `pub fn surprise_vector(&self) -> Option<&[f32; 8]>` — returns `Some(&self.last_surprise)` if feature on, `None` otherwise. Clean downstream API.
+- [x] **T2.4** Add `pub fn surprise_norm(&self) -> f32` — 0.0 when feature off, otherwise delegates to kernel.
+- [x] **T2.5** Wire `ReconstructionConfig` with `temporal_deriv_alpha_fast: f32` (default 0.3) and `temporal_deriv_alpha_slow: f32` (default 0.03). Documented as the paper's ~10× ratio.
+- [x] **T2.6** Synthetic emotional-event trace benchmark (`benches/reconstruction_bench.rs` extension):
   - Generate a 1000-tick trace with embedded events (combat onset at t=200, loot at t=500, encounter at t=800) — HLA gets a step change at those ticks.
   - **G2 gate:** does `surprise_norm()` peak within ±10 ticks of each embedded event? Target: ≥80% recall of events, ≤10% false positives (peaks outside event windows).
   - Compare against baseline: raw `hla.norm()` magnitude does *not* peak at events (it's monotonic). The derivative should.
-- [ ] **T2.7** `evolve_hla_simd` path must also feed the surprise kernel — ensure SIMD HLA variant produces identical surprise output to scalar variant (numerical equivalence test).
+  - **DONE (2026-06-16):** G2 gate PASSES — 3/3 events detected (recall=1.00), 0 false positives (FPR=0.00), orthogonality proven (raw norm peaks at tick 999, surprise peaks at tick 207, gap=792 ticks). Also covered by in-crate unit test `surprise_detects_emotional_events_g2_gate`.
+- [x] **T2.7** `evolve_hla_simd` path must also feed the surprise kernel — ensure SIMD HLA variant produces identical surprise output to scalar variant (numerical equivalence test).
+  - **DONE (2026-06-16):** Both scalar and SIMD paths call `observe_surprise_inner()` after the leaky step. Numerical equivalence verified by `evolve_hla_surprise_simd_matches_scalar` test (surprise vector diff < 1e-5, norm diff < 1e-5 over 10 varied ticks).
 
-**Phase 2 exit:** G2 gate passes on synthetic trace. Surprise vector lags HLA by design but peaks at events.
+**Phase 2 exit:** ✅ MET. G2 gate passes on synthetic trace (recall=1.00, FPR=0.00). Surprise vector peaks at events (ticks 207/507/807, +7 from injection); raw HLA norm peaks at the last tick (monotone non-decreasing by design). Orthogonality gap = 792 ticks. Both in-crate test and bench gate are green.
 
 ---
 
