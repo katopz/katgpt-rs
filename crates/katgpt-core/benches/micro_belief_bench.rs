@@ -23,16 +23,20 @@
 //!   per-task work exceeds thread-pool overhead"). The rayon variant is kept
 //!   intentionally to document this finding — it is NOT the speedup path at
 //!   this work size. Serial target: <15 µs total for 1000 NPCs.
+//! - **G3 (BoM)** — `sample_k_states(K=8)` must be ≤ 2× the cost of a single
+//!   `step()` call. The batched single-pass design computes the matvec once,
+//!   so the K overhead is only the K·dim element-wise noise additions +
+//!   sigmoids. Measured for K ∈ {1, 4, 8, 16} (Plan 281 T2.1).
 //!
 //! # Run
 //!
 //! ```bash
-//! cargo bench --bench micro_belief_bench --features micro_belief
+//! cargo bench --bench micro_belief_bench --features "micro_belief bom_sampling"
 //! ```
 //!
 //! # Feature gate
 //!
-//! Requires `micro_belief` (Plan 276 Phase 1).
+//! Requires `micro_belief` (Plan 276 Phase 1) + `bom_sampling` (Plan 281).
 
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use katgpt_core::micro_belief::LatentThoughtKernel;
@@ -195,6 +199,70 @@ fn bench_batch_1000_npcs(c: &mut Criterion) {
     group.finish();
 }
 
+// ─── BoM: sample_k_states latency (Plan 281 T2.1, G3 gate) ───────────────────
+//
+// Measures sample_k_states(K) for K ∈ {1, 4, 8, 16} on AttractorKernel and
+// K=8 on LeakyIntegrator. The G3 gate requires sample_k_states(K=8) ≤ 2× step().
+// The single-pass design computes the matvec once, so the K overhead is only
+// the K·dim element-wise noise additions + sigmoids.
+
+#[cfg(feature = "bom_sampling")]
+fn bench_bom_sample_k_states(c: &mut Criterion) {
+    use katgpt_core::{BoMSampler, NoiseQueryConfig};
+
+    let mut group = c.benchmark_group("micro_belief/bom_sample_k_states");
+    group.sample_size(500);
+
+    let kernel = AttractorKernel::from_seed(42, G1_4_DIM);
+    let s_prev = vec![0.0f32; G1_4_DIM];
+    let x = vec![0.5f32; G1_4_DIM];
+
+    for &k in &[1usize, 4, 8, 16] {
+        let cfg = NoiseQueryConfig::default().with_k(k).with_sigma(0.3);
+        // Fixed pre-allocated queries buffer, filled once with fastrand seed=42.
+        let mut rng = fastrand::Rng::with_seed(42);
+        let queries: Vec<f32> = (0..k * G1_4_DIM).map(|_| rng.f32() * 2.0 - 1.0).collect();
+        let mut out = vec![0.0f32; k * G1_4_DIM];
+
+        let label = format!("attractor_k{k}_dim{G1_4_DIM}");
+        group.bench_function(&label, |b| {
+            b.iter(|| {
+                kernel.sample_k_states(
+                    black_box(&s_prev),
+                    black_box(&x),
+                    black_box(&queries),
+                    black_box(&mut out),
+                    black_box(&cfg),
+                );
+            });
+        });
+    }
+
+    // LeakyIntegrator baseline at K=8.
+    {
+        let leaky = LeakyIntegrator::hla_default(G1_4_DIM);
+        let k = 8usize;
+        let cfg = NoiseQueryConfig::default().with_k(k).with_sigma(0.3);
+        let mut rng = fastrand::Rng::with_seed(42);
+        let queries: Vec<f32> = (0..k * G1_4_DIM).map(|_| rng.f32() * 2.0 - 1.0).collect();
+        let mut out = vec![0.0f32; k * G1_4_DIM];
+
+        group.bench_function("leaky_k8_dim32", |b| {
+            b.iter(|| {
+                leaky.sample_k_states(
+                    black_box(&s_prev),
+                    black_box(&x),
+                    black_box(&queries),
+                    black_box(&mut out),
+                    black_box(&cfg),
+                );
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_g1_4_attractor_step,
@@ -203,4 +271,17 @@ criterion_group!(
     bench_project_to_scalars,
     bench_batch_1000_npcs,
 );
+
+// `criterion_group!` does not accept `#[cfg]` on its arguments, so the BoM
+// bench lives in its own group and is merged via a feature-gated
+// `criterion_main!`. The bench's `required-features` already includes
+// `bom_sampling`, so both groups are always compiled here — the cfg split
+// is defensive for any future change to `required-features`.
+#[cfg(feature = "bom_sampling")]
+criterion_group!(bom_benches, bench_bom_sample_k_states);
+
+#[cfg(feature = "bom_sampling")]
+criterion_main!(benches, bom_benches);
+
+#[cfg(not(feature = "bom_sampling"))]
 criterion_main!(benches);

@@ -18,6 +18,7 @@
 //! - ✅ G1.6 (K=1 reduces to Family A) test in [`latent_thought`].
 //! - ✅ [`LatentThoughtKernel`] — Family B (Phase 3 T3.1).
 //! - ✅ G2.1 coherence benchmark — Phase 5 T5.0, see [`coherence_bench`].
+//! - ⏳ [`BoMSampler`] — K-hypothesis sampling (Plan 281, behind `bom_sampling`).
 //!
 //! # Latent vs raw boundary (AGENTS.md)
 //!
@@ -43,6 +44,8 @@
 //! - Source paper: [arXiv:2604.17121](https://arxiv.org/abs/2604.17121) — Mozer et al., DeepMind, Jun 2026.
 
 pub mod attractor;
+#[cfg(feature = "bom_sampling")]
+pub mod bom;
 pub mod bridge;
 pub mod coherence_bench;
 pub mod latent_thought;
@@ -62,6 +65,8 @@ mod tests;
 // `katgpt_core::micro_belief::attractor::AttractorKernel`.
 
 pub use attractor::AttractorKernel;
+#[cfg(feature = "bom_sampling")]
+pub use bom::{BoMSampler, NoiseQueryConfig, SeedStrategy, dot_product_scorer};
 pub use bridge::project_to_scalars;
 pub use latent_thought::LatentThoughtKernel;
 pub use leaky::LeakyIntegrator;

@@ -73,6 +73,11 @@ pub use micro_belief::{
     MicroRecurrentKernelSnapshot, RecurrenceFamily, SNAPSHOT_VERSION, project_to_scalars,
 };
 
+// BoMSampler — K-hypothesis single-pass belief sampling (Plan 281, Research 248).
+// Opt-in extension of MicroRecurrentBeliefState; gated on bom_sampling which implies micro_belief.
+#[cfg(feature = "bom_sampling")]
+pub use micro_belief::{BoMSampler, NoiseQueryConfig, SeedStrategy, dot_product_scorer};
+
 // FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244).
 // Moved from katgpt root to katgpt-core so riir-engine (Plan 308) can consume via katgpt-core.
 // Two features:

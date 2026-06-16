@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/248_DeltaTok_DeltaWorld_BoM_Single_Pass_Diverse_Sampling.md](../.research/248_DeltaTok_DeltaWorld_BoM_Single_Pass_Diverse_Sampling.md)
 **Source paper:** [arXiv:2604.04913](https://arxiv.org/abs/2604.04913) — Kerssies et al., "A Frame is Worth One Token: Efficient Generative World Modeling with Delta Tokens", Apr 2026
 **Target:** `katgpt-rs/crates/katgpt-core/src/micro_belief/` (extend `MicroRecurrentBeliefState` with an opt-in stochastic variant) + Cargo feature `bom_sampling`
-**Status:** Active — Phase 0 (planning). **Verdict: Gain** (not GOAT, not Super-GOAT — see Research 248 §3). Opt-in until G1–G3 pass; demote if G2 fails.
+**Status:** Phase 0–1 + G1/G3 landed (2026-06-16). `bom_sampling` opt-in feature ships `BoMSampler` trait + impls for `AttractorKernel` + `LeakyIntegrator`. **G1.1/G1.2/G1.3 PASS** (17 tests). **G3 borderline-FAIL** (K=8 attractor at 2.54×, target ≤2× — Issue 025, shared root cause with Issue 024; K=4 passes at 1.6×). **G2 (arena) deferred to riir-ai** (T2.3). **Verdict: Gain** (not GOAT, not Super-GOAT — see Research 248 §3). Stays opt-in until G2 passes.
 
 ---
 
@@ -24,9 +24,9 @@ The GOAT-gate question (G2): **does planning against K diverse belief hypotheses
 
 - [x] **T0.1** Research note `katgpt-rs/.research/248_*.md` created.
 - [x] **T0.2** This plan created.
-- [ ] **T0.3** Audit `MicroRecurrentBeliefState` trait (`micro_belief/types.rs`) — confirm `step()` signature can be extended with an optional `queries` parameter without breaking existing callers. The deterministic `step()` MUST remain the default path; BoM is opt-in.
-- [ ] **T0.4** Audit SIMD matvec infra (`crate::simd`) — confirm a K-row batched matvec (K noise queries × W_s/W_x) fits the existing SIMD helpers, or identify the minimal addition needed.
-- [ ] **T0.5** Audit `KernelHotSwap` (Plan 276 T0.4) — confirm the noise query distribution `N(0, σ²I)` can be versioned as part of `MicroRecurrentKernelSnapshot` (so σ is per-NPC-class, freeze/thaw-able). If not, add a `NoiseQueryConfig` to the snapshot.
+- [x] **T0.3** Audit `MicroRecurrentBeliefState` trait (`micro_belief/types.rs`) — **DONE.** `step(&self, state: &mut [f32], input: &[f32])` is the deterministic path. Plan 281 adds a *new* `BoMSampler` trait with a *new* method `sample_k_states` rather than extending `step()` — zero existing callers affected, `step()` stays deterministic-by-default. ✅
+- [x] **T0.4** Audit SIMD matvec infra (`crate::simd`) — **DONE.** `simd_dot_f32(a, b, len)` + `fast_sigmoid(x)` suffice. BoM's "K-row batched matvec" is really **1 matvec** (base activation `act[i] = W_s[i]·s + W_x[i]·x + b[i]`, D dot products reusing `simd_dot_f32`) **+ K × (D elementwise adds + D sigmoids)**. The elementwise K-loop auto-vectorizes. No new SIMD helper needed. ✅
+- [x] **T0.5** Audit `MicroRecurrentKernelSnapshot` (`micro_belief/snapshot.rs`) — **DONE.** Snapshot commits BLAKE3 over `(family_byte, dim_le, weights_blob)`. Adding a field would bump `SNAPSHOT_VERSION` (currently 1) and break Plan 276's G1.5 atomicity tests. **Decision:** give `NoiseQueryConfig` its OWN `commit()` method (separate BLAKE3 over `sigma_le || k_le || seed_strategy_byte`), treat it as a *companion artifact* to the kernel snapshot (caller embeds both commitments in the hot-swap audit event). `MicroRecurrentKernelSnapshot` is unchanged. ✅
 
 ---
 
@@ -85,12 +85,12 @@ pub struct NoiseQueryConfig {
 
 ### Tasks
 
-- [ ] **T1.1** Create `micro_belief/bom.rs` with `BoMSampler` trait + `NoiseQueryConfig` (behind `bom_sampling` feature).
-- [ ] **T1.2** Implement `BoMSampler` for `AttractorKernel`. Zero-alloc: caller passes `[K * D]` scratch, writes in-place.
-- [ ] **T1.3** Implement `BoMSampler` for `LeakyIntegrator` (the `evolve_hla` family).
-- [ ] **T1.4** `select_best()` with a generic scorer closure. Default scorer: max dot-product against a caller-provided direction vector (reuses `simd_dot_f32`).
-- [ ] **T1.5** Unit tests: (a) determinism for fixed queries (same `queries` → same `out` bit-identical); (b) K hypotheses are distinct when queries are distinct; (c) zero-sigma reproduces deterministic `step()` output (BoM degenerates to deterministic when σ=0).
-- [ ] **T1.6** `NoiseQueryConfig` BLAKE3 commitment + integration into `MicroRecurrentKernelSnapshot` (version the σ and K, freeze/thaw-able).
+- [x] **T1.1** Create `micro_belief/bom.rs` with `BoMSampler` trait + `NoiseQueryConfig` + `SeedStrategy` (behind `bom_sampling` feature).
+- [x] **T1.2** Implement `BoMSampler` for `AttractorKernel`. Zero-alloc: base activation computed once (chunked-4 loop mirroring `step()` for bit-identical σ=0 degeneracy), K elementwise perturbations write directly into `out`.
+- [x] **T1.3** Implement `BoMSampler` for `LeakyIntegrator` (the `evolve_hla` family). Shared normalization computed once, K elementwise delta perturbations; zero-total guard copies `s_prev` into every row.
+- [x] **T1.4** `select_best()` with a generic scorer closure, factored through `select_best_generic` helper (DRY). Default scorer factory `dot_product_scorer` reuses `simd_dot_f32`.
+- [x] **T1.5** Unit tests (17 total): (a) `bom_determinism_fixed_queries` G1.1 PASS; (b) `bom_distinct_hypotheses` G1.2 PASS (cosine sim < 0.99 at σ=0.1); (c) `bom_sigma_zero_matches_step_attractor` + `_leaky` + `_leaky_zero_total` G1.3 PASS. Plus boundedness, coherence 1000-tick, select_best (max/ties/leaky), commit roundtrip.
+- [x] **T1.6** `NoiseQueryConfig::commit()` BLAKE3 over `(sigma_le || k_le || seed_strategy_byte)` as a *companion artifact* to `MicroRecurrentKernelSnapshot` (see T0.5 decision — kernel snapshot unchanged, no SNAPSHOT_VERSION bump).
 
 ---
 
@@ -110,10 +110,10 @@ pub struct NoiseQueryConfig {
 
 ### Tasks
 
-- [ ] **T2.1** Add `sample_k_states` bench to `micro_belief_bench.rs`: K ∈ {1, 4, 8, 16}, measure ns/call, confirm G3 threshold.
-- [ ] **T2.2** Synthetic coherence test: run `sample_k_states` for 1000 ticks with random queries, confirm all K trajectories stay bounded (`‖s_t‖` ≤ clamp bound). Catches Family A divergence (Research 242 R1).
-- [ ] **T2.3** G2 arena harness: wire `BoMSampler` into a minimal planning loop (select_best by max-threat, then plan action against the selected belief). Run on bomber self-play. **If G2 fails by > −5pp → demote to experimental, document why, stop.**
-- [ ] **T2.4** If G2 passes: promote `bom_sampling` from opt-in to default-on for the trait method (NOT for the planner — the planner stays in riir-ai). Demote the loser (deterministic-only planning) if BoM strictly wins.
+- [x] **T2.1** Added `sample_k_states` bench to `micro_belief_bench.rs` (K ∈ {1, 4, 8, 16}). **G3 result:** K=1 0.89× PASS, K=4 1.60× PASS, **K=8 2.54× FAIL** (target ≤2×), K=16 4.52× FAIL. Root cause: K×D scalar `fast_sigmoid`/`exp()` calls — **Issue 025** (shared with Issue 024). K=4 is the practical plasma-tier ceiling until SIMD-sigmoid lands.
+- [x] **T2.2** Synthetic coherence tests: `bom_coherence_1000_ticks_bounded_attractor` + `_leaky` — 1000 ticks with random queries, all K trajectories stay bounded. PASS for both families.
+- [ ] **T2.3** G2 arena harness: **DEFERRED to riir-ai** per plan §Phase 3. The primitive is usable from a test harness at K=8 regardless of the 2.54× G3 ratio (G2 is a quality question, not a latency question). If G2 fails by > −5pp → demote to experimental, document why, stop.
+- [ ] **T2.4** If G2 passes: promote `bom_sampling` from opt-in to default-on for the trait method (NOT for the planner — the planner stays in riir-ai). Demote the loser (deterministic-only planning) if BoM strictly wins. **BLOCKED on T2.3 (G2 result) + Issue 025 (G3 fix).**
 
 ---
 
