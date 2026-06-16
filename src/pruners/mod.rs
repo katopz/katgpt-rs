@@ -30,6 +30,10 @@ pub mod freeze;
 
 pub mod emotion_vector;
 
+/// Self-advantage from latent recursion pre/post logits (Plan 283, Research 250).
+/// Modelless dead-compute detector distilled from arxiv:2511.16886.
+pub mod self_advantage;
+
 #[cfg(feature = "thinking_prune")]
 pub mod frozen_base_guard;
 

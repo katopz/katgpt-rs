@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/250_Latent_Recursion_Policy_Improvement_Advantage_Margin.md](../.research/250_Latent_Recursion_Policy_Improvement_Advantage_Margin.md)
 **Source paper:** [arxiv:2511.16886](https://arxiv.org/abs/2511.16886) — "Latent Reasoning in TRMs is Secretly a Policy Improvement Operator" (Asadulaev et al., ICML 2026)
 **Target:** `katgpt-rs/src/pruners/self_advantage.rs` (new module) + Cargo features `self_advantage_gate`, `product_policy_sharpen`
-**Status:** Active — Phase 0 (planning)
+**Status:** Active — Phase 1 + 2 + 3 COMPLETE (math + wrappers + examples). Phase 4 (GOAT gate benchmark) pending.
 
 ---
 
@@ -34,24 +34,24 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 
 ### Tasks
 
-- [ ] **T1.1** `fn self_advantage(pre_logits: &[f32], post_logits: &[f32], scratch: &mut [f32]) -> &[f32]`
+- [x] **T1.1** `fn self_advantage(pre_logits: &[f32], post_logits: &[f32], scratch: &mut [f32]) -> &[f32]`
   - Returns `A(a) = post_logsoftmax[a] − pre_logsoftmax[a]` per action.
   - Zero-allocation: writes into caller-provided `scratch` buffer (same length as logits).
   - SIMD-friendly: chunked loop over 4 or 8 elements for auto-vectorization.
   - Numerical stability: use log-softmax (not raw log of softmax) to avoid overflow — compute max-subtracted logits first.
 
-- [ ] **T1.2** `fn self_advantage_margin(pre_logits: &[f32], post_logits: &[f32], candidate: usize, scratch: &mut [f32]) -> f32`
+- [x] **T1.2** `fn self_advantage_margin(pre_logits: &[f32], post_logits: &[f32], candidate: usize, scratch: &mut [f32]) -> f32`
   - Returns the **Advantage Margin** for a specific candidate action: `A(candidate) − E_{a∼π_w}[A(a)]`.
   - The expectation is computed under the interpolated policy `π_w` with `w=1.0` (post-recursion policy) as the default weighting.
   - Positive margin = this candidate benefits from the recursion step. Negative = dead compute for this candidate.
 
-- [ ] **T1.3** Unit tests
+- [x] **T1.3** Unit tests
   - Identical pre/post logits → all advantages zero, margin zero (dead compute correctly detected).
   - Post-recursion sharpens toward candidate → positive margin for candidate.
   - Post-recursion shifts away from candidate → negative margin (correctly flagged as harmful step).
   - Numerical stability: extreme logits (±1e4) don't overflow.
 
-- [ ] **T1.4** Property test: `self_advantage` recovers SDPG's `centered_log_ratio` up to a state-dependent constant when pre=student and post=teacher. (Cross-validation with Plan 180's shipped implementation.)
+- [x] **T1.4** Property test: `self_advantage` recovers SDPG's `centered_log_ratio` up to a state-dependent constant when pre=student and post=teacher. (Cross-validation with Plan 180's shipped implementation.)
 
 ---
 
@@ -59,19 +59,21 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 
 ### Tasks
 
-- [ ] **T2.1** `pub struct AdvantageMarginGate<P> { inner: P, margin_threshold: f32, scratch: Vec<f32> }`
+- [x] **T2.1** `pub struct AdvantageMarginGate<P> { inner: P, margin_threshold: f32, scratch: Vec<f32> }`
   - Wraps any pruner/generator that produces logits.
   - After each recursion step, computes `self_advantage_margin()`.
   - If margin < `margin_threshold` (default 0.0) → signal "stop recursing" (dead compute detected).
   - Reuses the same `EarlyStopGate` integration point (depth-aware, passthrough at depth 0).
 
 - [ ] **T2.2** Integrate with `LoopMode::WeightShared` — when gate signals stop, break the loop early and use the last accepted state.
+  - **Deferred:** deep integration requires modifying transformer forward pass. Gate is usable standalone via `should_recurse()`.
 
 - [ ] **T2.3** Integrate with `SpeculativeGenerator` trait — add an optional `pre_recursion_logits` capture hook so the gate has access to both pre and post distributions.
+  - **Deferred:** trait modification requires broader design review. Gate works with any logits source via `should_recurse(pre, post, candidate)`.
 
-- [ ] **T2.4** Feature flag: `self_advantage_gate` (opt-in, off by default). Add to `Cargo.toml` `[features]`.
+- [x] **T2.4** Feature flag: `self_advantage_gate` (opt-in, off by default). Add to `Cargo.toml` `[features]`.
 
-- [ ] **T2.5** Example: `examples/pruner_03_self_advantage_gate.rs` — demonstrate dead-compute detection on a synthetic recursion loop. Show forward passes saved.
+- [x] **T2.5** Example: `examples/pruner_03_self_advantage_gate.rs` — demonstrate dead-compute detection on a synthetic recursion loop. Show forward passes saved.
 
 ---
 
@@ -79,17 +81,18 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 
 ### Tasks
 
-- [ ] **T3.1** `fn product_policy(pre_logits: &[f32], post_logits: &[f32], w: f32, out: &mut [f32])`
+- [x] **T3.1** `fn product_policy(pre_logits: &[f32], post_logits: &[f32], w: f32, out: &mut [f32])`
   - Returns log-space interpolation: `out[a] = (1−w) · pre_logsoftmax[a] + w · post_logsoftmax[a]`.
   - Caller softmaxes the result to get `π_w`.
   - `w=0.0` → pre-recursion (skip reasoning). `w=1.0` → post-recursion (full reasoning). `w>1.0` → extrapolation (trust reasoning beyond the model's own update).
   - Zero-allocation, writes to caller buffer.
 
-- [ ] **T3.2** `ProductPolicySharpen<P> { inner: P, w: f32 }` — wrapper that applies product-policy after each recursion step, producing a controllably-sharpened distribution.
+- [x] **T3.2** `ProductPolicySharpen<P> { inner: P, w: f32 }` — wrapper that applies product-policy after each recursion step, producing a controllably-sharpened distribution.
+  - Implemented as `ProductPolicySharpen { w: f32 }` (no inner generic needed — pure function wrapper).
 
-- [ ] **T3.3** Feature flag: `product_policy_sharpen` (opt-in). Add to `Cargo.toml`.
+- [x] **T3.3** Feature flag: `product_policy_sharpen` (opt-in). Add to `Cargo.toml`.
 
-- [ ] **T3.4** Example: `examples/pruner_04_product_policy.rs` — sweep `w ∈ {0.0, 0.5, 1.0, 1.5, 2.0}` on a recursion loop, show quality vs compute tradeoff curve.
+- [x] **T3.4** Example: `examples/pruner_04_product_policy.rs` — sweep `w ∈ {0.0, 0.5, 1.0, 1.5, 2.0}` on a recursion loop, show quality vs compute tradeoff curve.
 
 ---
 

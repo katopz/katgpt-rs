@@ -128,6 +128,8 @@ octree_ctc = ["katgpt-core/octree_ctc", "bandit"]  # OctreeCTC Reconstructive Me
 bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236, GOAT 10/10 but marginal drift 4.7% vs 30% target — opt-in loser)
 rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 sdpg_bandit = ["bandit"]  # SDPG bandit + KL anchoring (Plan 180, Research 160)
+self_advantage_gate = []  # Advantage-margin recursion gate — dead-compute detector (Plan 283, Research 250, arxiv:2511.16886)
+product_policy_sharpen = []  # Product-policy inference sharpening — controllable reasoning trust weight (Plan 283, Research 250)
 gdsd_distill = ["bandit"]  # GDSD Advantage-Guided Pruner — modelless self-distillation (Plan 169)
 bomber = ["bevy_ecs", "bandit"]  # Bomberman HL Arena (Plan 033)
 spechop = ["bandit"]  # SpecHop continuous multi-hop speculation pipeline (Plan 131, Research 091)
@@ -534,6 +536,16 @@ required-features = ["sia_feedback", "g_zero", "bomber"]
 [[example]]
 name = "bomber_18_sdpg_tournament"
 required-features = ["sdpg_bandit", "sdar_gate", "ropd_rubric", "g_zero", "bomber"]
+
+# ── Self-Advantage Recursion Gate (Plan 283, Research 250) ─────
+
+[[example]]
+name = "pruner_03_self_advantage_gate"
+required-features = ["self_advantage_gate"]
+
+[[example]]
+name = "pruner_04_product_policy"
+required-features = ["product_policy_sharpen"]
 
 [[example]]
 name = "bomber_21_sonlt_arena"
