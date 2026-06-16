@@ -553,6 +553,16 @@ mod tests {
         fn constant(n: usize, v: f32) -> Self {
             Self { prios: vec![v; n] }
         }
+        /// One-hot priority table: all mass on `hot` arm (others at tiny ε > 0
+        /// so `sample_arm_from` doesn't degenerate). Used by G1 reachability
+        /// tests to simulate a collapsed / trapped E-pool.
+        fn one_hot(n: usize, hot: usize) -> Self {
+            assert!(n > 0, "one_hot requires n > 0");
+            assert!(hot < n, "one_hot: hot arm {} out of range for n={}", hot, n);
+            let mut prios = vec![1e-6_f32; n];
+            prios[hot] = 1.0;
+            Self { prios }
+        }
     }
     impl HintDeltaBandit for VecBandit {
         fn absorb(&mut self, arm: usize, reward: f32) {
@@ -906,5 +916,256 @@ mod tests {
         );
         // But still strictly < 1 (reachability by construction).
         assert!(alpha < 1.0, "α must be < 1.0 (sigmoid never saturates)");
+    }
+
+    // ── Phase 2 (G1) tests: Reachability guarantee ──────────────────────
+    //
+    // DecentMem Theorem 1: the induced Markov chain is irreducible and
+    // aperiodic because the X-pool always has strictly nonzero selection
+    // probability (sigmoid + clamp). This makes the dual-pool router
+    // **proactively non-trapping** — no collapse detector needed.
+
+    /// T2.1 — Proactive non-trapping.
+    ///
+    /// Force the E-pool into a one-hot trap (arm 0 only). Without any
+    /// collapse detector, the dual-pool router still selects the X-pool
+    /// (teleportation operator) within a bounded number of cycles.
+    ///
+    /// Contrast: a single-pool bandit with the same one-hot priorities and
+    /// no detector stays permanently trapped at arm 0 — the baseline failure
+    /// mode dual-pool eliminates by construction.
+    #[test]
+    fn g1_proactive_non_trapping() {
+        // ── Dual-pool: proactive escape via sigmoid routing ───────────────
+        //
+        // E-pool is one-hot at arm 0 (simulating deep exploitation of a
+        // local optimum). X-pool is uniform (fresh exploration). With default
+        // weights (w_e = w_x = 1 → α = 0.5), the X-pool is selected ~50% of
+        // cycles. Even as w_e grows via E-pool successes, the clamp floor
+        // keeps X-pool probability ≥ min_exploration_prob.
+        let e = VecBandit::one_hot(8, 0);
+        let x = VecBandit::uniform(8);
+        let mut dp = DualPoolBandit::new(e, x);
+
+        let mut x_pool_selections = 0u32;
+        let mut non_zero_arms = 0u32;
+        let cycles = 100u32;
+        for _ in 0..cycles {
+            dp.begin_cycle();
+            let pool = dp.active_pool();
+            if pool == PoolId::Exploration {
+                x_pool_selections += 1;
+                // X-pool active → sample an arm (uniform → any arm possible).
+                let arm = sample_arm_from(dp.next_f32(), dp.x_pool().priorities());
+                if arm != 0 {
+                    non_zero_arms += 1;
+                }
+            } else {
+                // E-pool active → one-hot → arm 0 only.
+                let arm = sample_arm_from(dp.next_f32(), dp.e_pool().priorities());
+                assert_eq!(
+                    arm, 0,
+                    "one-hot E-pool must always select arm 0 (the trap)"
+                );
+            }
+        }
+
+        // Reachability guarantee: X-pool selected at least once (proactive).
+        assert!(
+            x_pool_selections > 0,
+            "G1 FAIL: dual-pool must select X-pool at least once in {cycles} cycles \
+             (proactive non-trapping). Got 0 selections. α = {}, w_e = {}",
+            dp.exploitation_probability(),
+            dp.w_e()
+        );
+        // Stronger: with α=0.5 default, X-pool should be selected ~50 times.
+        assert!(
+            x_pool_selections >= 10,
+            "G1 FAIL: expected ≥10 X-pool selections in {cycles} cycles with α≈0.5, got {x_pool_selections}"
+        );
+        // And at least some of those X-pool draws should escape arm 0.
+        assert!(
+            non_zero_arms > 0,
+            "G1 FAIL: dual-pool must select arm != 0 at least once via X-pool teleportation, got {non_zero_arms}"
+        );
+
+        // ── Single-pool baseline: permanent trap without detector ─────────
+        //
+        // Same one-hot priority table, no X-pool, no collapse detector.
+        // The priorities never change → arm 0 selected every cycle forever.
+        let single = VecBandit::one_hot(8, 0);
+        let mut trapped_count = 0u32;
+        for seed in 0u64..100 {
+            // Deterministic but varied u draws across [0, 1).
+            let u = (seed as f32 + 0.5) / 101.0;
+            let arm = sample_arm_from(u, single.priorities());
+            if arm == 0 {
+                trapped_count += 1;
+            }
+            // No absorb, no inject_exploration → priorities never change.
+        }
+        assert_eq!(
+            trapped_count, 100,
+            "Baseline FAIL: single-pool without detector must stay trapped at arm 0 \
+             for all 100 draws (got {trapped_count}). If this fails, the one-hot \
+             priority table isn't actually one-hot."
+        );
+        // Confirm the trap is due to priority table shape, not RNG luck.
+        let total: f32 = single.priorities().iter().copied().sum();
+        let mass_at_zero = single.priorities()[0] / total;
+        assert!(
+            mass_at_zero > 0.99,
+            "one-hot E-pool should have >99% mass at arm 0, got {mass_at_zero:.6}"
+        );
+    }
+
+    /// T2.1b — Reachability holds even at extreme exploitation weight.
+    ///
+    /// Drive w_e very high (α clamped to 1 − ε). Over a long enough horizon,
+    /// the X-pool is still selected (Theorem 1 in f32 — the clamp is the
+    /// numerical reachability guarantee).
+    #[test]
+    fn g1_reachable_at_extreme_exploitation() {
+        let e = VecBandit::one_hot(8, 0);
+        let x = VecBandit::uniform(8);
+        let mut dp = DualPoolBandit::new(e, x);
+        // Drive w_e to extreme → α clamped to 1 − min_exploration_prob.
+        for _ in 0..1000 {
+            dp.route_update(PoolId::Exploitation, true);
+        }
+        let alpha = dp.exploitation_probability();
+        assert!(
+            dp.is_reachable(),
+            "G1 FAIL: is_reachable() must be true even at extreme w_e = {} (α = {})",
+            dp.w_e(),
+            alpha
+        );
+
+        // With default min_exploration_prob = 1e-4, X-pool probability = 1e-4.
+        // Expected cycles to first X-pool selection ≈ 1/1e-4 = 10_000.
+        // Run 50_000 cycles → P(≥1 X-pool) ≈ 1 − exp(−5) ≈ 0.993.
+        let mut x_selected = 0u32;
+        for _ in 0..50_000 {
+            dp.begin_cycle();
+            if dp.active_pool() == PoolId::Exploration {
+                x_selected += 1;
+            }
+        }
+        assert!(
+            x_selected > 0,
+            "G1 FAIL: even at extreme w_e = {}, X-pool must be selected at least once \
+             in 50_000 cycles (α = {}, 1−α = {}). Got 0.",
+            dp.w_e(),
+            alpha,
+            1.0 - alpha
+        );
+    }
+
+    /// T2.3 — Markov chain irreducibility (DecentMem Theorem 1).
+    ///
+    /// The effective transition matrix is:
+    ///
+    ///   M[i][j] = α · T_E[j] + (1 − α) · T_X[j]
+    ///
+    /// where T_E is the E-pool's normalized priority distribution and T_X is
+    /// the X-pool's. Since the next arm depends only on j (not i), every row
+    /// of M is identical. The chain is irreducible iff all entries of M are
+    /// strictly positive, and aperiodic iff at least one diagonal entry is
+    /// positive (which follows from strict positivity of all entries).
+    ///
+    /// Theorem 1 holds because:
+    ///   - α < 1 (clamp floor) → (1 − α) > 0
+    ///   - T_X[j] > 0 for all j (X-pool uniform in Phase 1)
+    ///   - Therefore M[i][j] ≥ (1 − α) · T_X[j] > 0 for all i, j.
+    #[test]
+    fn g1_markov_chain_irreducibility() {
+        // Scenario: one-hot E-pool (arm 0 has all mass), uniform X-pool.
+        // This is the worst case for irreducibility — T_E[j] = 0 for j > 0,
+        // so positivity of M[i][j>0] relies entirely on the X-pool term.
+        let n_arms = 8usize;
+
+        // Test at three α regimes: balanced, exploitation-heavy, extreme.
+        let regimes: &[(&str, f32)] = &[
+            ("balanced (w_e=1.0)", 1.0),
+            ("exploit-heavy (w_e=5.0)", 5.0),
+            ("extreme (w_e=500.0)", 500.0),
+        ];
+
+        for &(label, w_e_target) in regimes {
+            let e = VecBandit::one_hot(n_arms, 0);
+            let x_pool = VecBandit::uniform(n_arms);
+            let mut dp = DualPoolBandit::new(e, x_pool);
+            // Set w_e to the target by boosting (each success adds 0.5).
+            let boosts = ((w_e_target - 1.0) / 0.5) as usize;
+            for _ in 0..boosts {
+                dp.route_update(PoolId::Exploitation, true);
+            }
+            let alpha = dp.exploitation_probability();
+
+            // Normalized priority distributions.
+            let t_e: Vec<f32> = {
+                let total: f32 = dp.e_pool().priorities().iter().copied().sum();
+                dp.e_pool()
+                    .priorities()
+                    .iter()
+                    .map(|&p| p / total)
+                    .collect()
+            };
+            let t_x: Vec<f32> = {
+                let total: f32 = dp.x_pool().priorities().iter().copied().sum();
+                dp.x_pool()
+                    .priorities()
+                    .iter()
+                    .map(|&p| p / total)
+                    .collect()
+            };
+
+            // Build M[i][j] = α · T_E[j] + (1−α) · T_X[j].
+            // Rows are identical (transition independent of current state).
+            let row: Vec<f32> = (0..n_arms)
+                .map(|j| alpha * t_e[j] + (1.0 - alpha) * t_x[j])
+                .collect();
+
+            // Theorem 1, part 1: all entries strictly positive.
+            for j in 0..n_arms {
+                assert!(
+                    row[j] > 0.0,
+                    "G1/T2.3 FAIL [{label}]: M[*][{j}] = {} must be > 0 \
+                     (α={alpha:.6}, T_E[{j}]={:.6}, T_X[{j}]={:.6}). \
+                     Markov chain is NOT irreducible — agent can be trapped.",
+                    row[j],
+                    t_e[j],
+                    t_x[j]
+                );
+            }
+
+            // Theorem 1, part 2: rows sum to 1 (valid stochastic matrix).
+            let row_sum: f32 = row.iter().sum();
+            assert!(
+                (row_sum - 1.0).abs() < 1e-5,
+                "G1/T2.3 FAIL [{label}]: row sum = {row_sum:.6}, expected 1.0"
+            );
+
+            // Irreducibility: since all entries > 0, every state reaches every
+            // other state in exactly 1 step → strongly connected → irreducible.
+            // (Formally: the support graph has all edges.)
+            //
+            // Aperiodicity: M[i][i] > 0 → self-loops exist → period = 1.
+            assert!(
+                row[0] > 0.0 && row[n_arms - 1] > 0.0,
+                "G1/T2.3 FAIL [{label}]: self-transitions must be positive for aperiodicity"
+            );
+
+            // Worst-case entry is min_j M[*][j].
+            let min_entry = row.iter().cloned().fold(f32::INFINITY, f32::min);
+            // For the extreme regime with one-hot E-pool, the j>0 entries are
+            // (1−α)·(1/n) ≈ min_exploration_prob / n. Document this.
+            let expected_floor = (1.0 - alpha) / n_arms as f32;
+            assert!(
+                min_entry >= expected_floor * 0.99,
+                "G1/T2.3 FAIL [{label}]: min entry {min_entry:.2e} < expected floor \
+                 {expected_floor:.2e} (X-pool teleportation too weak)"
+            );
+        }
     }
 }

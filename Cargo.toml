@@ -1193,6 +1193,14 @@ name = "faithfulness_probe_bench"
 required-features = ["faithfulness_probe"]
 harness = false
 
+# Plan 282 Phase 2 — Dual-pool reachability benchmark (G1).
+# Compares cycles-to-escape: dual-pool (proactive) vs single-pool + detector (reactive)
+# vs single-pool no detector (permanent trap baseline).
+[[bench]]
+name = "dual_pool_reachability_bench"
+required-features = ["cgsp_dual_pool"]
+harness = false
+
 # Plan 272 Phase 3 — Progressive MCGS GOAT gate benchmark.
 # Validates entropy decay, backprop isolation, stagnation improvement,
 # latency, and allocation audit on synthetic reward streams.
