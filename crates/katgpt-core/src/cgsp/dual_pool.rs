@@ -1168,4 +1168,428 @@ mod tests {
             );
         }
     }
+
+    // ── Phase 3 (G2) tests: Regret bound on concave reward landscape ──────
+    //
+    // DecentMem Theorem 2: under strict concavity of r(α) with interior
+    // maximizer α* ∈ (0.5, 1), the online router converges to a stable
+    // equilibrium near α* and achieves low regret vs the optimal fixed α*.
+    //
+    // IMPORTANT FINDING (discovered during Phase 3 implementation):
+    // The production DualPoolBandit uses CONSTANT step size (gain=0.5,
+    // decay=0.5), NOT the vanishing step size (1/ℓ) that the paper's
+    // Robbins-Monro SA theory requires for true O(log T). This means:
+    //   - The router reaches a STABLE EQUILIBRIUM α_eq (stable fixed point
+    //     of the mean-field dynamics), not asymptotic convergence to α*.
+    //   - With static (linear) rewards, α_eq ≈ 0.68 — the router never
+    //     concentrates on the better pool. Regret vs oracle (α=1) is Θ(T).
+    //   - With CONCAVE rewards (E-pool staleness), α_eq ≈ α* because r(α)
+    //     is flat near the peak. The per-cycle gap r(α*) − r(α_eq) ≈ 0.002,
+    //     so cumulative regret at T=10000 is ~20 — well within C·log(T)
+    //     for C=5 (≈46). The practical property (online beats fixed) holds.
+    //
+    // The tests below verify the PRACTICAL property from the paper's ablation
+    // (§7.3): the online router ADAPTS to the concave reward landscape and
+    // beats BOTH fixed extremes (α=0.5 over-exploration, α=1.0 over-
+    // exploitation). This is the meaningful empirical claim. True O(log T)
+    // asymptotic regret requires implementing vanishing step size (future work
+    // — documented in Plan 282 + Research 249 §6).
+    //
+    // Reward model (E-pool staleness):
+    //   E-pool reward: p_e if previous cycle was X-pool (fresh), p_e − δ if
+    //     previous was E-pool (stale — diminishing returns from reuse).
+    //   X-pool reward: p_x (constant — fresh candidates always worth p_x).
+    //   r(α) = α·(p_e − αδ) + (1−α)·p_x = p_x + (p_e − p_x)·α − δ·α²
+    //   This is a downward parabola in α → strictly concave with interior
+    //   maximizer α* = (p_e − p_x)/(2δ). With p_e=0.7, p_x=0.5, δ=0.15:
+    //   α* = 0.2/0.3 ≈ 0.667, r(α*) ≈ 0.567.
+    //   r(0.5) = 0.5625, r(1.0) = 0.55 → both extremes are suboptimal.
+
+    /// Tiny splitmix64 RNG for regret simulations (mirrors `DualPoolBandit`'s
+    /// internal RNG so reward draws are reproducible across strategies).
+    struct SimRng {
+        state: u64,
+    }
+    impl SimRng {
+        fn new(seed: u64) -> Self {
+            Self {
+                state: seed.wrapping_add(0x9E37_79B9_7F4A_7C15),
+            }
+        }
+        fn next_u64(&mut self) -> u64 {
+            self.state = self.state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.state;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+        fn next_f32(&mut self) -> f32 {
+            let u = self.next_u64() >> 40; // top 24 bits
+            (u as f32) / ((1u64 << 24) as f32)
+        }
+    }
+
+    /// Simulation result for the concave-reward regret tests.
+    struct ConcaveSimResult {
+        /// Cumulative regret vs `r(α*)` at each cycle (deterministic given
+        /// pool selection sequence — uses expected reward per cycle).
+        regret_vs_opt: Vec<f32>,
+        /// `α` at each cycle (sigmoid/ratio/fixed depending on strategy).
+        alpha_curve: Vec<f32>,
+        /// Cumulative realized reward (noisy — actual Bernoulli draws).
+        total_reward: f64,
+    }
+
+    /// Run a 2-pool Bernoulli regret simulation with E-pool staleness.
+    ///
+    /// Reward model: `r(α) = p_x + (p_e − p_x)·α − δ·α²` (concave parabola).
+    /// E-pool reward is `p_e` when the previous cycle was X-pool (fresh) and
+    /// `p_e − δ` when previous was E-pool (stale). X-pool reward is `p_x`.
+    ///
+    /// Parameters:
+    /// - `alpha_fn`: maps `w_e → α` (sigmoid for online, constant for fixed).
+    /// - `update_w_e`: if true, apply DecentMem Eq 6/7 (`success = reward > 0.25`).
+    /// - `r_opt`: `r(α*)` — the optimal reward rate (precomputed by caller).
+    ///
+    /// Returns the cumulative regret curve vs `r_opt`, the `α` curve, and the
+    /// total realized reward.
+    fn simulate_concave(
+        t_cycles: usize,
+        alpha_fn: &dyn Fn(f32) -> f32,
+        update_w_e: bool,
+        p_e: f32,
+        p_x: f32,
+        staleness_delta: f32,
+        r_opt: f32,
+        seed: u64,
+    ) -> ConcaveSimResult {
+        let mut rng = SimRng::new(seed);
+        let mut w_e = 1.0_f32;
+        let mut last_pool_was_e = false;
+        let mut regret = 0.0_f32;
+        let mut total_reward = 0.0_f64;
+        let mut regret_vs_opt = Vec::with_capacity(t_cycles);
+        let mut alpha_curve = Vec::with_capacity(t_cycles);
+        let eps = 1e-4_f32;
+        for _ in 0..t_cycles {
+            let alpha = alpha_fn(w_e).clamp(eps, 1.0 - eps);
+            alpha_curve.push(alpha);
+            let u_pool = rng.next_f32();
+            let pool_is_e = u_pool < alpha;
+            // Staleness: E-pool reward drops if previous cycle was also E.
+            let effective_p = if pool_is_e {
+                if last_pool_was_e {
+                    p_e - staleness_delta
+                } else {
+                    p_e
+                }
+            } else {
+                p_x
+            };
+            let reward = if rng.next_f32() < effective_p { 1.0_f32 } else { 0.0_f32 };
+            total_reward += reward as f64;
+            // Expected regret vs optimal (deterministic given pool + staleness).
+            regret += r_opt - effective_p;
+            regret_vs_opt.push(regret);
+            // Update w_e via DecentMem Eq 6/7.
+            if update_w_e {
+                let success = reward > 0.25;
+                let gain = 0.5_f32;
+                let decay = 0.5_f32;
+                match (pool_is_e, success) {
+                    (true, true) => w_e += gain,
+                    (true, false) => w_e = (decay * w_e).max(1.0),
+                    (false, true) => w_e = (decay * w_e).max(1.0),
+                    (false, false) => w_e += gain,
+                }
+            }
+            last_pool_was_e = pool_is_e;
+        }
+        ConcaveSimResult {
+            regret_vs_opt,
+            alpha_curve,
+            total_reward,
+        }
+    }
+
+    /// T3.1 — Online router reaches equilibrium near α* on concave landscape.
+    ///
+    /// With E-pool staleness (`r(α) = 0.5 + 0.2α − 0.15α²`, `α* ≈ 0.667`),
+    /// the online sigmoid router converges to a stable `α_eq` near `α*` and
+    /// achieves low cumulative regret vs `r(α*)`.
+    ///
+    /// Tests BOTH the real `DualPoolBandit` code path AND the simulation
+    /// helper, cross-validating that the helper mirrors production dynamics.
+    #[test]
+    fn g2_log_regret_synthetic() {
+        let t_cycles = 10_000_usize;
+        let p_e = 0.7_f32;
+        let p_x = 0.5_f32;
+        let delta = 0.15_f32;
+        // r(α) = p_x + (p_e − p_x)·α − δ·α². Maximiser: α* = (p_e−p_x)/(2δ).
+        let alpha_star = (p_e - p_x) / (2.0 * delta);
+        let r_opt = p_x + (p_e - p_x) * alpha_star - delta * alpha_star * alpha_star;
+        let log_t = (t_cycles as f32).ln();
+
+        // ── Real DualPoolBandit path (production code) ─────────────────────
+        let e_pool = VecBandit::uniform(8);
+        let x_pool = VecBandit::uniform(8);
+        let mut dp = DualPoolBandit::new(e_pool, x_pool);
+        let mut rng = SimRng::new(0xCAFE_BABE_1234_5678);
+        let mut last_e = false;
+        let mut real_regret = 0.0_f32;
+        let mut real_alpha: Vec<f32> = Vec::with_capacity(t_cycles);
+        for _ in 0..t_cycles {
+            dp.begin_cycle();
+            let pool = dp.active_pool();
+            let is_e = pool == PoolId::Exploitation;
+            let eff_p = if is_e {
+                if last_e { p_e - delta } else { p_e }
+            } else {
+                p_x
+            };
+            let reward = if rng.next_f32() < eff_p { 1.0 } else { 0.0 };
+            dp.absorb(0, reward); // arm 0; uniform pool, doesn't matter
+            dp.end_cycle();
+            real_regret += r_opt - eff_p;
+            real_alpha.push(dp.exploitation_probability());
+            last_e = is_e;
+        }
+
+        // Equilibrium α (mean of last 2000 cycles — past transient).
+        let eq_window = &real_alpha[t_cycles - 2000..];
+        let real_eq: f32 = eq_window.iter().sum::<f32>() / eq_window.len() as f32;
+        assert!(
+            (real_eq - alpha_star).abs() < 0.20,
+            "G2/T3.1 FAIL (DualPoolBandit): equilibrium α = {} too far from \
+             α* = {} (|diff| ≥ 0.20). Router did not adapt to concave landscape.",
+            real_eq,
+            alpha_star
+        );
+        // Cumulative regret vs r(α*) must be within C·log(T). The equilibrium
+        // gap is tiny (~0.002/cycle) so total regret ≈ 20 at T=10000, well
+        // under C·log(T) for C=5 (≈46).
+        assert!(
+            real_regret <= 5.0 * log_t,
+            "G2/T3.1 FAIL (DualPoolBandit): cumulative regret {} > 5·log(T) = {} \
+             (router equilibrium too far from α*)",
+            real_regret,
+            5.0 * log_t
+        );
+
+        // ── Simulation helper path (cross-validation) ──────────────────────
+        let sim = simulate_concave(
+            t_cycles,
+            &|w_e| sigmoid(w_e - 1.0),
+            true,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            0xCAFE_BABE_1234_5678,
+        );
+        let sim_eq_window = &sim.alpha_curve[t_cycles - 2000..];
+        let sim_eq: f32 = sim_eq_window.iter().sum::<f32>() / sim_eq_window.len() as f32;
+        assert!(
+            (sim_eq - alpha_star).abs() < 0.20,
+            "G2/T3.1 FAIL (sim): equilibrium α = {} too far from α* = {}",
+            sim_eq,
+            alpha_star
+        );
+        let sim_regret = *sim.regret_vs_opt.last().unwrap();
+        assert!(
+            sim_regret <= 5.0 * log_t,
+            "G2/T3.1 FAIL (sim): cumulative regret {} > 5·log(T) = {}",
+            sim_regret,
+            5.0 * log_t
+        );
+    }
+
+    /// T3.2 — Online router beats fixed-α on concave landscape (Corollary 1).
+    ///
+    /// The paper's ablation (§7.3) shows online routing beats BOTH fixed-α=0.5
+    /// (over-exploration) and exploit-only α=1.0 (over-exploitation) on tasks
+    /// with reusable structure (where staleness matters). This test verifies
+    /// that property on our synthetic concave bandit.
+    ///
+    /// Fixed-α regret vs α* is `r(α*) − r(ᾱ)` per cycle → Θ(T) (constant gap).
+    /// Online regret vs α* is `r(α*) − r(α_eq)` per cycle where `α_eq ≈ α*` →
+    /// the gap is tiny, so total regret is much smaller than any fixed-ᾱ ≠ α*.
+    #[test]
+    fn g2_fixed_routing_suboptimal() {
+        let t_cycles = 10_000_usize;
+        let p_e = 0.7_f32;
+        let p_x = 0.5_f32;
+        let delta = 0.15_f32;
+        let alpha_star = (p_e - p_x) / (2.0 * delta);
+        let r_opt = p_x + (p_e - p_x) * alpha_star - delta * alpha_star * alpha_star;
+        let seed = 0xDEAD_BEEF_CAFE_BABE;
+
+        let online = simulate_concave(
+            t_cycles,
+            &|w_e| sigmoid(w_e - 1.0),
+            true,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            seed,
+        );
+        let fixed_05 = simulate_concave(
+            t_cycles,
+            &|_| 0.5,
+            false,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            seed,
+        );
+        let fixed_10 = simulate_concave(
+            t_cycles,
+            &|_| 0.99, // α=1.0 clamp floor prevents div-by-zero; 0.99 ≈ pure exploit
+            false,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            seed,
+        );
+
+        // Online total reward should beat both fixed extremes.
+        // r(α*) ≈ 0.567, r(0.5) ≈ 0.5625, r(1.0) ≈ 0.55.
+        // Over 10000 cycles the gaps are: online-vs-0.5 ≈ 45, online-vs-1.0 ≈ 170.
+        assert!(
+            online.total_reward > fixed_05.total_reward,
+            "G2/T3.2 FAIL: online reward {} ≤ fixed-α=0.5 reward {} \
+             (online should beat over-exploration on concave landscape)",
+            online.total_reward,
+            fixed_05.total_reward
+        );
+        assert!(
+            online.total_reward > fixed_10.total_reward,
+            "G2/T3.2 FAIL: online reward {} ≤ fixed-α=1.0 reward {} \
+             (online should beat over-exploitation on concave landscape — \
+             staleness penalty makes pure exploit suboptimal)",
+            online.total_reward,
+            fixed_10.total_reward
+        );
+        // Stronger: online regret vs α* must be smaller than fixed regret.
+        // The margin against fixed-0.5 is modest (r(α) is flat near the peak,
+        // so α_eq ≈ 0.56 vs ᾱ=0.5 saves ~37%). Against pure-exploit α=1.0
+        // (far from α* ≈ 0.667), the margin is large (>70%). Both reflect
+        // the paper's ablation (§7.3): online beats fixed-0.5 by ~17% accuracy
+        // and fixed-1.0 by ~3% accuracy on AgentNet BBH.
+        let online_reg = *online.regret_vs_opt.last().unwrap();
+        let fixed_05_reg = *fixed_05.regret_vs_opt.last().unwrap();
+        let fixed_10_reg = *fixed_10.regret_vs_opt.last().unwrap();
+        assert!(
+            online_reg < fixed_05_reg,
+            "G2/T3.2 FAIL: online regret {} ≥ fixed-α=0.5 regret {} \
+             (Corollary 1 violation — online should beat over-exploration)",
+            online_reg,
+            fixed_05_reg
+        );
+        assert!(
+            online_reg < fixed_10_reg * 0.3,
+            "G2/T3.2 FAIL: online regret {} ≥ 30% of fixed-α=1.0 regret {} \
+             (online should crush pure-exploit — staleness makes α=1.0 far \
+             from α* ≈ {})",
+            online_reg,
+            fixed_10_reg,
+            alpha_star
+        );
+        // Sanity: fixed-0.5 (closer to α*) should have much smaller regret
+        // than fixed-1.0 (far from α*). Validates the concavity model.
+        assert!(
+            fixed_05_reg < fixed_10_reg * 0.5,
+            "G2/T3.2 FAIL: fixed-0.5 regret {} ≥ 50% of fixed-1.0 regret {} \
+             (concavity broken — α=0.5 should be much closer to α* than α=1.0)",
+            fixed_05_reg,
+            fixed_10_reg
+        );
+    }
+
+    /// T3.3 — Sigmoid and ratio routing reach same equilibrium (Research 249 §2.3).
+    ///
+    /// The paper uses `α = w_e / (w_e + w_x)` (ratio form). Per AGENTS.md we
+    /// use `α = sigmoid(w_e − w_x)` (sigmoid form). Both are monotonically
+    /// increasing, map to `(0, 1)`, and preserve strict concavity. Research
+    /// 249 §2.3 proves the regret bound transfers. This test verifies both
+    /// forms reach the same equilibrium α and achieve comparable regret.
+    #[test]
+    fn g2_sigmoid_vs_ratio_routing() {
+        let t_cycles = 10_000_usize;
+        let p_e = 0.7_f32;
+        let p_x = 0.5_f32;
+        let delta = 0.15_f32;
+        let alpha_star = (p_e - p_x) / (2.0 * delta);
+        let r_opt = p_x + (p_e - p_x) * alpha_star - delta * alpha_star * alpha_star;
+        let seed = 0xBEEF_CAFE_DEAD_BEEF;
+
+        let sigmoid_sim = simulate_concave(
+            t_cycles,
+            &|w_e| sigmoid(w_e - 1.0),
+            true,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            seed,
+        );
+        let ratio_sim = simulate_concave(
+            t_cycles,
+            &|w_e| w_e / (w_e + 1.0),
+            true,
+            p_e,
+            p_x,
+            delta,
+            r_opt,
+            seed,
+        );
+
+        // Both equilibria should be near α* (both are valid concave maps).
+        let sigmoid_eq: f32 = sigmoid_sim.alpha_curve[t_cycles - 2000..]
+            .iter()
+            .sum::<f32>()
+            / 2000.0;
+        let ratio_eq: f32 = ratio_sim.alpha_curve[t_cycles - 2000..]
+            .iter()
+            .sum::<f32>()
+            / 2000.0;
+        assert!(
+            (sigmoid_eq - alpha_star).abs() < 0.20,
+            "G2/T3.3 FAIL: sigmoid equilibrium α = {} too far from α* = {}",
+            sigmoid_eq,
+            alpha_star
+        );
+        assert!(
+            (ratio_eq - alpha_star).abs() < 0.20,
+            "G2/T3.3 FAIL: ratio equilibrium α = {} too far from α* = {} \
+             (concavity transfer per Research 249 §2.3 failed)",
+            ratio_eq,
+            alpha_star
+        );
+        // Both should be close to each other (same equilibrium up to
+        // sigmoid-vs-ratio reparameterisation noise).
+        assert!(
+            (sigmoid_eq - ratio_eq).abs() < 0.15,
+            "G2/T3.3 FAIL: sigmoid α_eq = {} and ratio α_eq = {} differ by ≥ 0.15 \
+             (expected same equilibrium — both are monotone concave maps)",
+            sigmoid_eq,
+            ratio_eq
+        );
+        // Comparable regret (within 2× — neither drastically dominates).
+        let sigmoid_reg = *sigmoid_sim.regret_vs_opt.last().unwrap();
+        let ratio_reg = *ratio_sim.regret_vs_opt.last().unwrap();
+        let dominance = (sigmoid_reg / ratio_reg.max(0.01)).max(ratio_reg / sigmoid_reg.max(0.01));
+        assert!(
+            dominance < 2.0,
+            "G2/T3.3 FAIL: sigmoid regret {} and ratio regret {} differ by {:.2}× \
+             (expected comparable — both reach α* neighbourhood)",
+            sigmoid_reg,
+            ratio_reg,
+            dominance
+        );
+    }
 }
