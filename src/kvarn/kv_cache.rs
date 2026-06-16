@@ -150,6 +150,16 @@ pub struct KVarNKVCache {
     varn_inv_row: Vec<f32>,
     /// VarN scratch: 1 / exp(log_s_col[j]) (length = max(kv_dim, tile_size)).
     varn_inv_col: Vec<f32>,
+    /// VarN scratch: running column log-scale (length = max(kv_dim, tile_size)).
+    varn_log_s_col: Vec<f32>,
+    /// VarN scratch: running row log-scale (length = max(kv_dim, tile_size)).
+    varn_log_s_row: Vec<f32>,
+    /// VarN scratch: best-seen column log-scale (length = max(kv_dim, tile_size)).
+    varn_log_s_col_best: Vec<f32>,
+    /// VarN scratch: best-seen row log-scale (length = max(kv_dim, tile_size)).
+    varn_log_s_row_best: Vec<f32>,
+    /// Hadamard column-transform scratch (length = kv_dim; reused by quantize_key_tile).
+    hadamard_col_buf: Vec<f32>,
     // ── Scalar config (usize: 8 bytes each) ──
     /// Current write position.
     pos: usize,
@@ -249,6 +259,11 @@ impl KVarNKVCache {
             varn_mean: vec![0.0f32; varn_max_dim],
             varn_inv_row: vec![0.0f32; varn_max_dim],
             varn_inv_col: vec![0.0f32; varn_max_dim],
+            varn_log_s_col: vec![0.0f32; varn_max_dim],
+            varn_log_s_row: vec![0.0f32; varn_max_dim],
+            varn_log_s_col_best: vec![0.0f32; varn_max_dim],
+            varn_log_s_row_best: vec![0.0f32; varn_max_dim],
+            hadamard_col_buf: vec![0.0f32; cfg.kv_dim],
             pos: 0,
             n_layers: cfg.n_layers,
             kv_dim: cfg.kv_dim,
@@ -675,7 +690,7 @@ impl KVarNKVCache {
             //   Key tile [kv_dim, tile_size]: Hadamard each column (= each position's channels)
             //   This is equivalent to per-position Hadamard on kv_dim, but batched at tile time.
             if self.effective_hadamard && rows.is_power_of_two() {
-                hadamard::hadamard_cols(tile_data, rows, cols);
+                hadamard::hadamard_cols_into(tile_data, rows, cols, &mut self.hadamard_col_buf);
             }
 
             // Step 1: Variance normalization
@@ -718,6 +733,10 @@ impl KVarNKVCache {
                     &mut self.varn_mean[..cols],
                     &mut self.varn_inv_row[..rows],
                     &mut self.varn_inv_col[..cols],
+                    &mut self.varn_log_s_col[..cols],
+                    &mut self.varn_log_s_row[..rows],
+                    &mut self.varn_log_s_col_best[..cols],
+                    &mut self.varn_log_s_row_best[..rows],
                 )
             };
 
@@ -743,6 +762,10 @@ impl KVarNKVCache {
                     &mut self.varn_mean[..cols],
                     &mut self.varn_inv_row[..rows],
                     &mut self.varn_inv_col[..cols],
+                    &mut self.varn_log_s_col[..cols],
+                    &mut self.varn_log_s_row[..rows],
+                    &mut self.varn_log_s_col_best[..cols],
+                    &mut self.varn_log_s_row_best[..rows],
                 )
             };
 
@@ -841,6 +864,10 @@ impl KVarNKVCache {
                     &mut self.varn_mean[..cols],
                     &mut self.varn_inv_row[..rows],
                     &mut self.varn_inv_col[..cols],
+                    &mut self.varn_log_s_col[..cols],
+                    &mut self.varn_log_s_row[..rows],
+                    &mut self.varn_log_s_col_best[..cols],
+                    &mut self.varn_log_s_row_best[..rows],
                 )
             };
 
@@ -866,6 +893,10 @@ impl KVarNKVCache {
                     &mut self.varn_mean[..cols],
                     &mut self.varn_inv_row[..rows],
                     &mut self.varn_inv_col[..cols],
+                    &mut self.varn_log_s_col[..cols],
+                    &mut self.varn_log_s_row[..rows],
+                    &mut self.varn_log_s_col_best[..cols],
+                    &mut self.varn_log_s_row_best[..rows],
                 )
             };
 
