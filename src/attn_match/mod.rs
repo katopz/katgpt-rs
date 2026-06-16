@@ -50,6 +50,8 @@ pub mod head_budget;
 pub mod key_selection;
 #[cfg(feature = "lora_beta_predictor")]
 pub mod lora_beta_predictor;
+#[cfg(feature = "lora_beta_predictor")]
+pub mod lora_beta_inference;
 pub mod online;
 pub mod router;
 pub mod score_matrix;
@@ -88,6 +90,9 @@ pub use lora_beta_predictor::{
     BETA_MAX, BETA_MID, BETA_MIN, DEFAULT_ALPHA, DEFAULT_INIT_SEED, DEFAULT_RANK,
     LORA_INPUT_DIM as LORA_BETA_INPUT_DIM, LORA_OUTPUT_DIM as LORA_BETA_OUTPUT_DIM,
 };
+
+#[cfg(feature = "lora_beta_predictor")]
+pub use lora_beta_inference::{compute_kv_stats_for_heads, compact_with_fixed_beta};
 
 #[cfg(test)]
 mod tests;
