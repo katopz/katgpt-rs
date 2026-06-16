@@ -296,9 +296,14 @@ pub fn product_policy_log(pre_logits: &[f32], post_logits: &[f32], w: f32, out: 
 #[derive(Debug, Clone)]
 pub struct AdvantageMarginGate {
     /// Margin threshold for accepting a recursion step.
-    /// Default: `0.0` — accept iff candidate has above-average improvement
-    /// under `π+`. Negative thresholds are more permissive (accept even
-    /// slightly harmful steps). Positive thresholds are stricter.
+    /// Default: `0.01` — small positive margin that rejects dead-compute steps
+    /// where the candidate's improvement merely ties the population average.
+    /// The mathematically centered value from Eq. 18 is `0.0`, but that never
+    /// fires for convergent recursion (every step trivially beats zero mean),
+    /// so the practical default is `0.01` (validated by the GOAT gate bench to
+    /// give a 5×+ forward-pass reduction at 100% argmax quality). Negative
+    /// thresholds are more permissive (accept even slightly harmful steps);
+    /// larger positive thresholds are stricter.
     pub margin_threshold: f32,
     /// Runtime toggle. Default: `true`. When `false`, `should_recurse()`
     /// always returns `true` (passthrough).
@@ -312,7 +317,10 @@ impl Default for AdvantageMarginGate {
     #[inline]
     fn default() -> Self {
         Self {
-            margin_threshold: 0.0,
+            // Practical default per Plan 283 Finding #1: 0.0 never fires for
+            // convergent recursion; 0.01 gives 5×+ reduction at 100% quality
+            // (validated by self_advantage_gate_bench GOAT gate).
+            margin_threshold: 0.01,
             enabled: true,
             scratch: Vec::new(),
         }
@@ -790,9 +798,26 @@ mod tests {
 
     #[cfg(feature = "self_advantage_gate")]
     #[test]
-    fn test_gate_default_is_passthrough_at_threshold_zero() {
-        // Default threshold 0.0: identical pre/post → margin 0 → 0 >= 0 → true.
+    fn test_gate_default_rejects_zero_margin_step() {
+        // Default threshold 0.01 (Plan 283 Finding #1): identical pre/post
+        // → margin 0 → 0 >= 0.01 is false → step rejected as dead compute.
+        // This is the entire point of the gate: a recursion step that didn't
+        // move the candidate's prediction above population average should
+        // not be re-run.
         let mut gate = AdvantageMarginGate::default();
+        let pre = [1.0, 2.0, 3.0];
+        let post = [1.0, 2.0, 3.0];
+        assert!(!gate.should_recurse(&pre, &post, 0), "zero-margin step must be rejected by default");
+        assert!(!gate.should_recurse(&pre, &post, 1), "zero-margin step must be rejected by default");
+    }
+
+    #[cfg(feature = "self_advantage_gate")]
+    #[test]
+    fn test_gate_threshold_zero_accepts_zero_margin() {
+        // Explicit threshold 0.0 (the centered default from Eq. 18): identical
+        // pre/post → margin 0 → 0 >= 0 → true. Kept as a sanity check that the
+        // math is unchanged — only the *default* changed.
+        let mut gate = AdvantageMarginGate::new(0.0);
         let pre = [1.0, 2.0, 3.0];
         let post = [1.0, 2.0, 3.0];
         assert!(gate.should_recurse(&pre, &post, 0));

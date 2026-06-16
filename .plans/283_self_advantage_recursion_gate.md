@@ -62,7 +62,7 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 - [x] **T2.1** `pub struct AdvantageMarginGate<P> { inner: P, margin_threshold: f32, scratch: Vec<f32> }`
   - Wraps any pruner/generator that produces logits.
   - After each recursion step, computes `self_advantage_margin()`.
-  - If margin < `margin_threshold` (default 0.0) → signal "stop recursing" (dead compute detected).
+  - If margin < `margin_threshold` (default **0.01** per Finding #1; was 0.0 per Eq. 18 math but never fires for convergent recursion) → signal "stop recursing" (dead compute detected).
   - Reuses the same `EarlyStopGate` integration point (depth-aware, passthrough at depth 0).
 
 - [ ] **T2.2** Integrate with `LoopMode::WeightShared` — when gate signals stop, break the loop early and use the last accepted state.
@@ -71,7 +71,7 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 - [ ] **T2.3** Integrate with `SpeculativeGenerator` trait — add an optional `pre_recursion_logits` capture hook so the gate has access to both pre and post distributions.
   - **Deferred:** trait modification requires broader design review. Gate works with any logits source via `should_recurse(pre, post, candidate)`.
 
-- [x] **T2.4** Feature flag: `self_advantage_gate` (opt-in, off by default). Add to `Cargo.toml` `[features]`.
+- [x] **T2.4** Feature flag: `self_advantage_gate` (**default-on** since Phase 4 GOAT 4/4 PASS, Bench 056). Add to `Cargo.toml` `[features]`.
 
 - [x] **T2.5** Example: `examples/pruner_03_self_advantage_gate.rs` — demonstrate dead-compute detection on a synthetic recursion loop. Show forward passes saved.
 
@@ -125,8 +125,16 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 
 - **No training.** All primitives are inference-time, modelless, latent-to-latent. The DIS training method (discrete corruption schedule) → riir-train.
 - **Reuse SDPG math.** `self_advantage` is structurally identical to `centered_log_ratio` with `student_q = pre_logits` and `teacher_q = post_logits`. The difference is the *source* of the two distributions (same model's two passes vs oracle-vs-student bandits), not the math.
-- **Sigmoid, not softmax, for gating decisions.** The advantage margin is compared to a threshold (0.0 default), not passed through softmax. Per AGENTS.md: use sigmoid for projections onto learned directions. The gate itself is a comparison, not a projection — but if we later use the margin to modulate a routing weight, use `sigmoid(α · margin)`, not softmax.
+- **Sigmoid, not softmax, for gating decisions.** The advantage margin is compared to a threshold (0.01 default per Finding #1), not passed through softmax. Per AGENTS.md: use sigmoid for projections onto learned directions. The gate itself is a comparison, not a projection — but if we later use the margin to modulate a routing weight, use `sigmoid(α · margin)`, not softmax.
 - **Raw vs latent boundary.** This is entirely latent-space (logits / log-probabilities). Nothing crosses the sync boundary. Safe for game AI use — the gate decision is local to each NPC's thought cycle, not synced.
+
+### Finding #1 (resolved 2026-06-17): Practical default threshold
+
+- **Symptom:** `AdvantageMarginGate::default()` with `threshold=0.0` (the Eq. 18 centered value) never fires — every recursion step trivially beats the zero-mean baseline on convergent distributions, giving 1.00× reduction (no gate).
+- **Root cause:** Eq. 18's centered default is mathematically correct but practically useless for convergent recursion loops, where post-recursion logits always drift slightly in the candidate's favor.
+- **Fix:** Changed `Default::default()` to use `threshold=0.01` — validated by `self_advantage_gate_bench` GOAT gate to give **5.27× forward-pass reduction at 100% argmax quality** (Bench 056).
+- **Backward compat:** `AdvantageMarginGate::new(0.0)` still works — the centered math is preserved, only the *default* changed. Test `test_gate_threshold_zero_accepts_zero_margin` locks in the centered behavior.
+- **Commit:** see git log for `feat(self_advantage_gate): Finding #1`.
 
 ---
 
