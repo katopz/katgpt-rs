@@ -21,7 +21,7 @@ serde_json = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "octree_ctc", "sector_projection", "action_bridge", "triggered_injection"]  # triggered_injection DEFAULT-ON (Plan 278 GOAT G3) — sigmoid-thresholded inject/skip gate
+default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "octree_ctc", "sector_projection", "action_bridge", "triggered_injection", "temporal_deriv"]  # triggered_injection DEFAULT-ON (Plan 278 GOAT G3) — sigmoid-thresholded inject/skip gate; temporal_deriv DEFAULT-ON (Plan 277 GOAT 4/4 fusions passed) — dual fast/slow EMA surprise signal
 sparse_mlp = []
 domain_latent = []
 maxsim = []
@@ -93,7 +93,8 @@ qgf_drafter = ["qgf"]  # QGuidedDrafter — Q-gradient velocity bias during gene
 qgf_adaptive = ["qgf_drafter"]  # VarianceAdaptiveGuidance — sigmoid-gated per-query 1/β (Plan 268 F4)
 micro_belief = []  # MicroRecurrentBeliefState — per-entity recurrent state trait + attractor/leaky kernels + BLAKE3 snapshot (Plan 276, Research 242). Opt-in until G1.1–G1.5 GOAT gate passes.
 bom_sampling = ["micro_belief"]  # BoMSampler — K-hypothesis single-pass belief sampling (Plan 281, Research 248). Opt-in until G1–G3 pass.
-temporal_deriv = []  # Temporal Derivative Kernel — dual fast/slow EMA surprise signal (Plan 277, Research 243, arXiv:2606.08720). Opt-in until ≥2 fusion gates pass.
+simd_sigmoid = []  # SIMD-vectorized sigmoid→tanh→clamp fused pass for AttractorKernel::step() + BoMSampler::sample_k_states (Issues 024/025, M1). Default-off until GOAT gate verdict; enables simd_sigmoid_tanh_clamp_inplace in both call sites together (preserves Plan 281 G1.3 σ=0 bit-identical degeneracy).
+temporal_deriv = []  # Temporal Derivative Kernel — dual fast/slow EMA surprise signal (Plan 277, Research 243, arXiv:2606.08720). DEFAULT-ON after GOAT 4/4 fusions passed (G2 HLA companion, G3 δ-Mem gate, G4 collapse detector, G5 derivative curiosity).
 faithfulness_probe = []  # FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244). Audit-cadence diagnostic — opt-in (diagnostic, audit cadence not every tick). Moved from katgpt root to katgpt-core so riir-engine (Plan 308) can consume via katgpt-core/faithfulness_probe.
 triggered_injection = []  # TriggeredInjectionGate — sigmoid-thresholded inject/skip hot-path gate (Plan 278, Research 244). DEFAULT-ON after GOAT G3 passed (50% skips w/ 0.63% quality parity in saturated regime). Moved from katgpt root to katgpt-core so riir-engine (Plan 308) can consume via katgpt-core/triggered_injection.
 

@@ -148,16 +148,18 @@ Target: extend `crates/katgpt-core/src/cgsp/` (Plan 274). Adds a derivative-driv
 
 ### Tasks
 
-- [ ] **T6.1** Aggregate G2–G5 results into `.benchmarks/277_temporal_deriv_goat.md`. Honest scorecard: which fusions passed, which failed, which were informational.
-- [ ] **T6.2** **Promotion rule (AGENTS.md):**
+- [x] **T6.1** Aggregate G2–G5 results into `.benchmarks/277_temporal_deriv_goat.md`. Honest scorecard: which fusions passed, which failed, which were informational.
+- [x] **T6.2** **Promotion rule (AGENTS.md):**
   - If ≥2 of {G2, G3, G4, G5} PASS → promote `temporal_deriv` to default-on. Demote any loser (e.g., if derivative-curiosity beats CGSP on cost AND matches on recovery, CGSP stays for target-seeking but derivative becomes default for exploration-only).
   - If exactly 1 PASS → keep `temporal_deriv` opt-in; document the one winning fusion as the canonical use case.
   - If 0 PASS → demote to Gain. Keep the primitive shipped (it's cheap and useful as a library) but mark all fusions as failed experiments.
+  - **DONE (2026-06-16):** 4/4 PASS → promoted `temporal_deriv` to DEFAULT-ON in both katgpt-core and root Cargo.toml. No demotions needed (all fusions are additive — no loser to demote). CGSP stays for target-seeking tasks (documented honest limitation in G5).
 - [ ] **T6.3** Update `README.md` with a new "Temporal Derivative Kernel" section under Feature Showcase (only if ≥1 fusion passes). Include the GOAT proof table.
 - [ ] **T6.4** Update `.docs/01_overview.md` feature flag table with final status (opt-in or default-on).
-- [ ] **T6.5** If all 4 fusions pass AND the "unified surprise bus" pattern (one kernel driving all four consumers) benchmarks cleanly (single-α works for all four, or a small α-schedule per consumer is clean): open a follow-up Super-GOAT escalation issue in `.issues/` referencing Research 243 §2.5. Do NOT claim Super-GOAT in this plan — that requires a separate note after validation.
+- [x] **T6.5** If all 4 fusions pass AND the "unified surprise bus" pattern (one kernel driving all four consumers) benchmarks cleanly (single-α works for all four, or a small α-schedule per consumer is clean): open a follow-up Super-GOAT escalation issue in `.issues/` referencing Research 243 §2.5. Do NOT claim Super-GOAT in this plan — that requires a separate note after validation.
+  - **DONE (2026-06-16):** All 4 consumers use the same paper-default α-pair (0.3, 0.03). Issue `.issues/026_temporal_deriv_super_goat_escalation.md` opened. Super-GOAT NOT claimed here — requires separate validation.
 
-**Phase 6 exit:** Honest verdict in benchmark doc. Feature flag set per promotion rule. Issue opened if Super-GOAT escalation is warranted.
+**Phase 6 exit:** ✅ MET (T6.1, T6.2, T6.5 done). Honest verdict in benchmark doc. Feature flag set to DEFAULT-ON. Super-GOAT escalation issue opened. T6.3/T6.4 (README/docs update) deferred to a follow-up doc commit.
 
 ---
 
