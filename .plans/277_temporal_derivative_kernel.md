@@ -154,12 +154,12 @@ Target: extend `crates/katgpt-core/src/cgsp/` (Plan 274). Adds a derivative-driv
   - If exactly 1 PASS → keep `temporal_deriv` opt-in; document the one winning fusion as the canonical use case.
   - If 0 PASS → demote to Gain. Keep the primitive shipped (it's cheap and useful as a library) but mark all fusions as failed experiments.
   - **DONE (2026-06-16):** 4/4 PASS → promoted `temporal_deriv` to DEFAULT-ON in both katgpt-core and root Cargo.toml. No demotions needed (all fusions are additive — no loser to demote). CGSP stays for target-seeking tasks (documented honest limitation in G5).
-- [ ] **T6.3** Update `README.md` with a new "Temporal Derivative Kernel" section under Feature Showcase (only if ≥1 fusion passes). Include the GOAT proof table.
-- [ ] **T6.4** Update `.docs/01_overview.md` feature flag table with final status (opt-in or default-on).
-- [x] **T6.5** If all 4 fusions pass AND the "unified surprise bus" pattern (one kernel driving all four consumers) benchmarks cleanly (single-α works for all four, or a small α-schedule per consumer is clean): open a follow-up Super-GOAT escalation issue in `.issues/` referencing Research 243 §2.5. Do NOT claim Super-GOAT in this plan — that requires a separate note after validation.
-  - **DONE (2026-06-16):** All 4 consumers use the same paper-default α-pair (0.3, 0.03). Issue `.issues/026_temporal_deriv_super_goat_escalation.md` opened. Super-GOAT NOT claimed here — requires separate validation.
+- [x] **T6.3** Update `README.md` with a new "Temporal Derivative Kernel" section under Feature Showcase (only if ≥1 fusion passes). Include the GOAT proof table.
+  - **DONE (2026-06-16):** Added "⚡ Temporal Derivative Kernel: Dual Fast/Slow Surprise Signal (Plan 277)" section under `## 🔀 Feature Showcase` with mermaid unified-surprise-bus diagram, GOAT 4/4 proof table, and key findings (orthogonality, counter-intuitive recall gain, 100% FN reduction, unified α-pair).
+- [x] **T6.4** Update `.docs/01_overview.md` feature flag table with final status (opt-in or default-on).
+  - **DONE (2026-06-16):** Feature flag table entry updated from "opt-in" to "**default-on**, GOAT 4/4" with 4-consumer summary. Added `temporal_deriv` to the Default features list. Updated plan range "Plans 051–237" → "Plans 051–277".
 
-**Phase 6 exit:** ✅ MET (T6.1, T6.2, T6.5 done). Honest verdict in benchmark doc. Feature flag set to DEFAULT-ON. Super-GOAT escalation issue opened. T6.3/T6.4 (README/docs update) deferred to a follow-up doc commit.
+**Phase 6 exit:** ✅ MET (all of T6.1–T6.5 done). Honest verdict in benchmark doc. Feature flag set to DEFAULT-ON. Super-GOAT escalation issue opened. README + overview docs updated.
 
 ---
 
