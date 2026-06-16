@@ -66,10 +66,10 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
   - Reuses the same `EarlyStopGate` integration point (depth-aware, passthrough at depth 0).
 
 - [ ] **T2.2** Integrate with `LoopMode::WeightShared` — when gate signals stop, break the loop early and use the last accepted state.
-  - **Deferred:** deep integration requires modifying transformer forward pass. Gate is usable standalone via `should_recurse()`.
+  - **Deferred (tracked in [Issue 028](../.issues/028_self_advantage_gate_integration_followups.md)):** deep integration touches the transformer hot inference path. Recommended approach: `Option<&mut AdvantageMarginGate>` parameter (None = no-op, byte-identical to baseline). Benchmark on Plan 276 `LatentThoughtKernel` K-iteration as test substrate.
 
 - [ ] **T2.3** Integrate with `SpeculativeGenerator` trait — add an optional `pre_recursion_logits` capture hook so the gate has access to both pre and post distributions.
-  - **Deferred:** trait modification requires broader design review. Gate works with any logits source via `should_recurse(pre, post, candidate)`.
+  - **Deferred (tracked in [Issue 028](../.issues/028_self_advantage_gate_integration_followups.md)):** trait modification requires broader design review. Recommended approach: define new opt-in `RecursionLogits` trait rather than modifying `SpeculativeGenerator` (avoids trait breakage on non-recursing generators). Gate works standalone via `should_recurse(pre, post, candidate)` today.
 
 - [x] **T2.4** Feature flag: `self_advantage_gate` (**default-on** since Phase 4 GOAT 4/4 PASS, Bench 056). Add to `Cargo.toml` `[features]`.
 
@@ -113,11 +113,11 @@ Ship three modelless primitives derived from the policy-improvement theoretical 
 
 ---
 
-## Phase 5 — Cross-Pollination (future, not blocking)
+## Phase 5 — Cross-Pollination (tracked in [Issue 028](../.issues/028_self_advantage_gate_integration_followups.md))
 
-- [ ] **T5.1** (future) Apply self-advantage gate to HLA `evolve_hla` — gate which belief updates are worth keeping. (Research 250 §Fusion)
-- [ ] **T5.2** (future) riir-ai guide: NPC thought-cycle dead-compute detection at MMORPG scale. Thousands of NPCs × 20Hz tick → skip non-improving thoughts. (Re-evaluate Super-GOAT potential here.)
-- [ ] **T5.3** (future) Freeze/thaw: snapshot the improvement direction vector `A(·)` per NPC personality as a versioned latent direction (BLAKE3-committed).
+- [ ] **T5.1** (GOAT-tier optimization, tracked in Issue 028) Apply self-advantage gate to HLA `evolve_hla` reconstruction loop — add as 4th early-stop criterion (complementary to existing `max_steps` + `entropy_threshold` + `adaptive_budget`). Design question: module activations `[f32; 6]` are sigmoid-bounded, not logits — needs targeted benchmark before promoting.
+- [x] **T5.2** (CLOSED 2026-06-17, Issue 028) riir-ai NPC thought-cycle guide: **re-evaluated, NOT Super-GOAT**. Novelty gate Q1=NO (prior art: `self_advantage` primitive ships; `evolve_hla` per-NPC substrate ships; HLA loop already has 3 early-stop criteria; related crowd-NPC priors in CuriosityPulse, LatentThoughtKernel, Plan 277 surprise kernel), Q2=Partial (optimization on existing capability, not new class). No `riir-ai/.research/` guide created — Super-GOAT-guide-mandatory rule not triggered. Re-trigger requires runtime evidence of qualitatively new behavior (crowd-coordinated thinking budgets, or catching argmax-drift-with-sharp-entropy that existing gates miss).
+- [ ] **T5.3** (speculative, blocked on T5.1) Freeze/thaw: snapshot the improvement direction vector `A(·)` per NPC personality as a versioned latent direction (BLAKE3-committed). Needs aggregation design — `A(·)` is per-step per-candidate, not a single direction vector.
 
 ---
 
