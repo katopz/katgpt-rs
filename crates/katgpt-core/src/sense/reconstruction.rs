@@ -11,6 +11,9 @@
 
 use crate::types::SenseModule;
 
+#[cfg(feature = "temporal_deriv")]
+use crate::temporal_deriv::TemporalDerivativeKernel;
+
 /// Morton-code identifier for an octree node.
 /// Encodes spatial position in the KG latent embedding space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -82,6 +85,20 @@ pub struct ReconstructionConfig {
     /// Maximum activation delta per step (default: 0.3).
     /// Prevents HLA state from jumping too far in one step.
     pub max_hla_delta: f32,
+    /// Fast EMA coefficient for the HLA surprise kernel (default: 0.3).
+    ///
+    /// Plan 277 Fusion F1: the dual `(fast − slow)` band-pass derivative
+    /// tracks *how fast* the HLA is changing (vs `evolve_hla` which tracks
+    /// *what is*). Paper's canonical ~10× ratio vs `temporal_deriv_alpha_slow`
+    /// (O'Reilly 2026, arXiv:2606.08720).
+    #[cfg(feature = "temporal_deriv")]
+    pub temporal_deriv_alpha_fast: f32,
+    /// Slow EMA coefficient for the HLA surprise kernel (default: 0.03).
+    ///
+    /// See `temporal_deriv_alpha_fast` — the ~10× ratio is the paper's
+    /// canonical separation of time constants.
+    #[cfg(feature = "temporal_deriv")]
+    pub temporal_deriv_alpha_slow: f32,
 }
 
 impl Default for ReconstructionConfig {
@@ -92,6 +109,10 @@ impl Default for ReconstructionConfig {
             hla_learning_rate: 0.1,
             entropy_threshold: 0.05,
             max_hla_delta: 0.3,
+            #[cfg(feature = "temporal_deriv")]
+            temporal_deriv_alpha_fast: 0.3,
+            #[cfg(feature = "temporal_deriv")]
+            temporal_deriv_alpha_slow: 0.03,
         }
     }
 }
@@ -357,24 +378,29 @@ pub struct ReconstructionState {
     n_active: u8,
     /// Current reconstruction step.
     step: u8,
+    /// Dual fast/slow EMA surprise kernel observing the HLA output channel
+    /// (Plan 277 Fusion F1, gated by `temporal_deriv`).
+    ///
+    /// `None` until first observation only if the feature is disabled at
+    /// compile time (then the field is absent entirely — zero cost). When the
+    /// feature is ON the kernel is always `Some` and is fed every `evolve_hla`
+    /// tick. Tracks *how fast* the HLA is changing; `evolve_hla` itself tracks
+    /// *what is*.
+    #[cfg(feature = "temporal_deriv")]
+    surprise: Option<TemporalDerivativeKernel<8>>,
+    /// Last `(fast − slow)` derivative written by `evolve_hla` (zero-init).
+    ///
+    /// Feature-gated for byte-identical layout when `temporal_deriv` is OFF.
+    /// Only written under `temporal_deriv`; read via [`surprise_vector`](Self::surprise_vector).
+    #[cfg(feature = "temporal_deriv")]
+    last_surprise: [f32; 8],
 }
 
 impl ReconstructionState {
     /// Initialize reconstruction with a starting HLA state.
     #[inline]
     pub fn new(hla: [f32; 8]) -> Self {
-        let mut active_nodes = [None; 8];
-        active_nodes[0] = Some(OctreeNodeId::ROOT);
-        Self {
-            hla,
-            evidence: TripleEvidence::default(),
-            config: ReconstructionConfig::default(),
-            #[cfg(feature = "sense_composition")]
-            cached_weights: None,
-            active_nodes,
-            n_active: 1,
-            step: 0,
-        }
+        Self::with_config(hla, ReconstructionConfig::default())
     }
 
     /// Initialize with custom config.
@@ -382,6 +408,15 @@ impl ReconstructionState {
     pub fn with_config(hla: [f32; 8], config: ReconstructionConfig) -> Self {
         let mut active_nodes = [None; 8];
         active_nodes[0] = Some(OctreeNodeId::ROOT);
+
+        // Build the surprise kernel from config alphas. Done outside the
+        // struct literal so `config` can move cleanly; alphas are Copy.
+        #[cfg(feature = "temporal_deriv")]
+        let surprise = Some(TemporalDerivativeKernel::new(
+            config.temporal_deriv_alpha_fast,
+            config.temporal_deriv_alpha_slow,
+        ));
+
         Self {
             hla,
             evidence: TripleEvidence::default(),
@@ -391,6 +426,10 @@ impl ReconstructionState {
             active_nodes,
             n_active: 1,
             step: 0,
+            #[cfg(feature = "temporal_deriv")]
+            surprise,
+            #[cfg(feature = "temporal_deriv")]
+            last_surprise: [0.0; 8],
         }
     }
 
@@ -398,6 +437,79 @@ impl ReconstructionState {
     #[inline]
     pub fn hla(&self) -> &[f32; 8] {
         &self.hla
+    }
+
+    /// Last `(fast − slow)` surprise derivative written by `evolve_hla`.
+    ///
+    /// Returns `None` when the `temporal_deriv` feature is off (no surprise
+    /// channel exists); returns `Some(&[f32; 8])` otherwise. The vector is
+    /// zero-initialized until the first `evolve_hla` tick.
+    ///
+    /// Plan 277 Fusion F1, T2.3.
+    #[inline]
+    pub fn surprise_vector(&self) -> Option<&[f32; 8]> {
+        #[cfg(feature = "temporal_deriv")]
+        {
+            Some(&self.last_surprise)
+        }
+        #[cfg(not(feature = "temporal_deriv"))]
+        {
+            None
+        }
+    }
+
+    /// L2 norm of the current `(fast − slow)` HLA surprise derivative.
+    ///
+    /// Returns `0.0` when the `temporal_deriv` feature is off; otherwise
+    /// delegates to [`TemporalDerivativeKernel::surprise_norm`]. Bounded
+    /// scalar suitable for syncing as a raw summary statistic (per
+    /// AGENTS.md latent→raw bridge rules).
+    ///
+    /// Plan 277 Fusion F1, T2.4.
+    #[inline]
+    pub fn surprise_norm(&self) -> f32 {
+        #[cfg(feature = "temporal_deriv")]
+        {
+            match self.surprise {
+                Some(ref s) => s.surprise_norm(),
+                None => 0.0,
+            }
+        }
+        #[cfg(not(feature = "temporal_deriv"))]
+        {
+            0.0
+        }
+    }
+
+    /// Inject a direct additive delta into the HLA state (per-dim clamped to
+    /// `[-1, 1]`). Does NOT touch evidence and does NOT observe into the
+    /// surprise kernel — call [`evolve_hla`](Self::evolve_hla) afterward to
+    /// feed the updated HLA into the surprise channel.
+    ///
+    /// Use cases: scripted narrative events (combat onset, loot drops,
+    /// encounters), benchmark event injection (Plan 277 G2 gate), and debug
+    /// introspection. The HLA field is otherwise private and only mutated
+    /// through `evolve_hla`.
+    #[inline]
+    pub fn inject_hla_delta(&mut self, delta: [f32; 8]) {
+        for i in 0..8 {
+            self.hla[i] = (self.hla[i] + delta[i]).clamp(-1.0, 1.0);
+        }
+    }
+
+    /// Feed the current HLA into the surprise kernel and cache the derivative
+    /// in `last_surprise`. Private — `evolve_hla` and `evolve_hla_simd` are
+    /// the only callers, which keeps a single observation point per tick.
+    ///
+    /// One predicted branch (`if let Some`); no allocation. The kernel is
+    /// always `Some` under `temporal_deriv`, but the `Option` keeps the field
+    /// initializable to `None` for future opt-out paths.
+    #[cfg(feature = "temporal_deriv")]
+    #[inline]
+    fn observe_surprise_inner(&mut self) {
+        if let Some(ref mut s) = self.surprise {
+            self.last_surprise = s.observe(&self.hla);
+        }
     }
 
     /// Current accumulated evidence.
@@ -671,6 +783,13 @@ impl ReconstructionState {
             self.config.hla_learning_rate,
             self.config.max_hla_delta,
         );
+
+        // Fusion F1 (Plan 277): feed the post-update HLA into the surprise
+        // kernel. Runs even when `leaky_step` no-op'd (total < 1e-8) — the
+        // kernel still needs to observe the (unchanged) signal so its EMAs
+        // converge and the derivative decays to zero on a stationary HLA.
+        #[cfg(feature = "temporal_deriv")]
+        self.observe_surprise_inner();
     }
 
     /// SIMD-optimized HLA evolution.
@@ -712,6 +831,12 @@ impl ReconstructionState {
             *d = d.clamp(-max_delta, max_delta);
             *h = (*h + *d).clamp(-1.0, 1.0);
         }
+
+        // Fusion F1 (Plan 277): SIMD path must feed the surprise kernel too —
+        // numerical equivalence with the scalar path is asserted in
+        // `evolve_hla_surprise_simd_matches_scalar`.
+        #[cfg(feature = "temporal_deriv")]
+        self.observe_surprise_inner();
     }
 
     /// Run full reconstruction loop (scalar path).
@@ -1048,6 +1173,250 @@ mod tests {
         assert!(
             max_diff < 1e-4,
             "SIMD and scalar evolve_hla should produce similar results, diff={max_diff}"
+        );
+    }
+
+    /// Plan 277 T2.7 — surprise channel numerical equivalence between scalar
+    /// `evolve_hla` and SIMD `evolve_hla_simd` paths.
+    ///
+    /// Both paths feed the same HLA into the `TemporalDerivativeKernel<8>` via
+    /// `observe_surprise_inner()`. Since the HLA itself is numerically
+    /// equivalent (asserted by `evolve_hla_simd_matches_scalar`) and the
+    /// surprise kernel is deterministic given its input, the surprise vectors
+    /// and norms MUST match to within f32 rounding tolerance.
+    ///
+    /// Guards against a regression where someone edits only one path's surprise
+    /// observe call (e.g. moves it before the leaky step, or removes it).
+    /// Requires both `sense_composition` (for the SIMD path) and
+    /// `temporal_deriv` (for the surprise channel).
+    #[cfg(all(feature = "sense_composition", feature = "temporal_deriv"))]
+    #[test]
+    fn evolve_hla_surprise_simd_matches_scalar() {
+        let config = ReconstructionConfig::default();
+        let hla = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
+        let selected = [true, false, true, false, true, false];
+        let activations = [0.5, 0.2, 0.8, 0.1, 0.3, 0.0];
+
+        // Run 10 ticks on each path so the surprise kernel builds up nonzero
+        // (fast − slow) state — a single tick would only test the initial
+        // transient, not the steady-state divergence robustness.
+        let mut state_scalar = ReconstructionState::with_config(hla, config);
+        let mut state_simd = ReconstructionState::with_config(hla, config);
+        for tick in 0..10u32 {
+            // Vary activations each tick to produce a non-trivial trajectory.
+            let scale = 0.5 + 0.1 * tick as f32;
+            let acts = [
+                activations[0] * scale,
+                activations[1] * scale,
+                activations[2] * scale,
+                activations[3] * scale,
+                activations[4] * scale,
+                activations[5] * scale,
+            ];
+            state_scalar.accumulate(&selected, &acts);
+            state_scalar.evolve_hla();
+            state_simd.accumulate(&selected, &acts);
+            state_simd.evolve_hla_simd();
+        }
+
+        // Compare the surprise vectors.
+        let sv_scalar = state_scalar
+            .surprise_vector()
+            .expect("temporal_deriv on → surprise_vector is Some");
+        let sv_simd = state_simd
+            .surprise_vector()
+            .expect("temporal_deriv on → surprise_vector is Some");
+        let mut max_vec_diff = 0.0f32;
+        for i in 0..8 {
+            let diff = (sv_scalar[i] - sv_simd[i]).abs();
+            max_vec_diff = max_vec_diff.max(diff);
+        }
+        assert!(
+            max_vec_diff < 1e-5,
+            "surprise vector scalar vs SIMD diverged: max_diff={max_vec_diff:e}"
+        );
+
+        // Compare the surprise norms.
+        let n_scalar = state_scalar.surprise_norm();
+        let n_simd = state_simd.surprise_norm();
+        let norm_diff = (n_scalar - n_simd).abs();
+        assert!(
+            norm_diff < 1e-5,
+            "surprise_norm scalar vs SIMD diverged: scalar={n_scalar:e}, simd={n_simd:e}, diff={norm_diff:e}"
+        );
+    }
+
+    /// Plan 277 Fusion F1 T2.6 — G2 gate: synthetic emotional-event trace.
+    ///
+    /// Embeds three step-change events into a 1000-tick HLA trace and verifies
+    /// the dual `(fast − slow)` surprise channel detects them while the raw
+    /// HLA L2 norm does not. This is the core G2 proof that the derivative is
+    /// an *orthogonal* signal to magnitude — it fires on change, not on level.
+    ///
+    /// Events (combat onset, loot drop, encounter) are injected as additive
+    /// deltas on one HLA dimension at t=200, 500, 800 via `inject_hla_delta`.
+    /// Between events the trace is held stationary so the EMAs converge and
+    /// the derivative decays back to ~0 — the canonical neocortical
+    /// prediction-error shape (O'Reilly 2026).
+    ///
+    /// Gates:
+    /// - Recall ≥ 80%: every event window (±10 ticks) contains a local
+    ///   `surprise_norm` peak. 3/3 events → 100% expected.
+    /// - False positives ≤ 10%: fewer than 10% of trace ticks outside event
+    ///   windows may be local peaks above the detection threshold.
+    /// - Raw vs derivative orthogonality: the raw HLA L2 norm is monotone
+    ///   non-decreasing across each event (it steps up and stays), so it CANNOT
+    ///   peak inside the event window — the derivative peaks where raw does not.
+    #[cfg(feature = "temporal_deriv")]
+    #[test]
+    fn surprise_detects_emotional_events_g2_gate() {
+        // --- Trace configuration -------------------------------------------------
+        const TRACE_LEN: usize = 1000;
+        const EVENTS: [usize; 3] = [200, 500, 800];
+        const WINDOW: usize = 10; // ±ticks around each event
+        // Detection threshold: a tick is a "peak" if surprise_norm exceeds this
+        // AND is a local maximum vs its immediate neighbors. Calibrated to sit
+        // well above the converged-stationary floor and well below the event
+        // spike magnitude given α_fast=0.3, α_slow=0.03.
+        const DETECT_THRESHOLD: f32 = 0.05;
+        const RECALL_MIN: f32 = 0.80; // ≥80% per the G2 spec
+        const FP_MAX_FRAC: f32 = 0.10; // ≤10% false positives
+
+        let config = ReconstructionConfig::default();
+        let mut state = ReconstructionState::with_config([0.0; 8], config);
+
+        // Per-tick recordings.
+        let mut surprise_trace = [0.0f32; TRACE_LEN];
+        let mut raw_norm_trace = [0.0f32; TRACE_LEN];
+
+        for t in 0..TRACE_LEN {
+            // Inject scripted event deltas exactly at the event tick.
+            // Combat onset: dim 0 jumps +0.6 (arousal).
+            // Loot drop:    dim 1 jumps +0.4 (valence).
+            // Encounter:    dim 2 jumps +0.5 (social attention).
+            let delta = match t {
+                200 => [0.6, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                500 => [0.0, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                800 => [0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0],
+                _ => [0.0; 8],
+            };
+            if delta != [0.0; 8] {
+                state.inject_hla_delta(delta);
+            }
+
+            // Drive a no-op evolve_hla tick: zero evidence → leaky_step does
+            // nothing to HLA, but the surprise kernel still observes the
+            // (possibly just-injected) current HLA. This is exactly the scalar
+            // path's documented behavior (observe runs even on a no-op step).
+            state.evolve_hla();
+
+            // Record surprise and raw HLA L2 norm.
+            surprise_trace[t] = state.surprise_norm();
+            let hla = state.hla();
+            let sq: f32 = hla.iter().map(|x| x * x).sum();
+            raw_norm_trace[t] = sq.max(0.0).sqrt();
+        }
+
+        // --- Detect local peaks in surprise_trace -------------------------------
+        // A peak at t requires surprise_trace[t] > threshold AND ≥ both
+        // neighbors (clamped at trace ends). We then count peaks that fall
+        // inside any event window vs outside.
+        let mut peaks_outside: usize = 0;
+        let mut surprise_peak_ticks: Vec<usize> = Vec::new();
+        for t in 0..TRACE_LEN {
+            if surprise_trace[t] <= DETECT_THRESHOLD {
+                continue;
+            }
+            let prev = if t == 0 { f32::MIN } else { surprise_trace[t - 1] };
+            let next = if t + 1 == TRACE_LEN {
+                f32::MIN
+            } else {
+                surprise_trace[t + 1]
+            };
+            if surprise_trace[t] >= prev && surprise_trace[t] >= next {
+                surprise_peak_ticks.push(t);
+                if !EVENTS.iter().any(|&e| t.abs_diff(e) <= WINDOW) {
+                    peaks_outside += 1;
+                }
+            }
+        }
+
+        // --- G2 gate: recall ----------------------------------------------------
+        // Count how many distinct event windows contain ≥1 peak.
+        let mut events_hit = 0usize;
+        for &e in &EVENTS {
+            let lo = e.saturating_sub(WINDOW);
+            let hi = (e + WINDOW).min(TRACE_LEN - 1);
+            if (lo..=hi).any(|t| surprise_peak_ticks.contains(&t)) {
+                events_hit += 1;
+            }
+        }
+        let recall = events_hit as f32 / EVENTS.len() as f32;
+        assert!(
+            recall >= RECALL_MIN,
+            "G2 recall {recall:.2} < {RECALL_MIN}: hit {events_hit}/{} events; peaks at {:?}",
+            EVENTS.len(),
+            surprise_peak_ticks
+        );
+
+        // --- G2 gate: false positives -------------------------------------------
+        // Out-of-window peaks must be < 10% of trace length.
+        let fp_frac = peaks_outside as f32 / TRACE_LEN as f32;
+        assert!(
+            fp_frac <= FP_MAX_FRAC,
+            "G2 false-positive fraction {fp_frac:.3} > {FP_MAX_FRAC}: {peaks_outside} out-of-window peaks at {:?}",
+            surprise_peak_ticks
+                .iter()
+                .copied()
+                .filter(|t| !EVENTS.iter().any(|e| t.abs_diff(*e) <= WINDOW))
+                .collect::<Vec<_>>()
+        );
+
+        // --- G2 proof: raw HLA norm does NOT peak at events ---------------------
+        // The raw norm is monotone non-decreasing by construction (each event
+        // only adds magnitude and nothing subtracts). Therefore the global raw
+        // peak is at the last tick, far from any event. We assert:
+        //   (a) raw norm at the last tick ≥ raw norm at every event tick, and
+        //   (b) the surprise global peak IS near an event (within WINDOW of
+        //       some event), proving the two signals peak at different places.
+        let raw_argmax = (0..TRACE_LEN)
+            .max_by(|&a, &b| {
+                raw_norm_trace[a]
+                    .partial_cmp(&raw_norm_trace[b])
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            })
+            .expect("non-empty trace");
+        let surprise_argmax = (0..TRACE_LEN)
+            .max_by(|&a, &b| {
+                surprise_trace[a]
+                    .partial_cmp(&surprise_trace[b])
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            })
+            .expect("non-empty trace");
+
+        // Raw norm peaks at (or near) the last tick — never at an event.
+        let raw_near_event = EVENTS
+            .iter()
+            .any(|&e| raw_argmax.abs_diff(e) <= WINDOW);
+        assert!(
+            !raw_near_event,
+            "G2: raw HLA norm must NOT peak near an event; raw_argmax={raw_argmax}, events={EVENTS:?}"
+        );
+
+        // Surprise norm peaks near an event.
+        let surprise_near_event = EVENTS
+            .iter()
+            .any(|&e| surprise_argmax.abs_diff(e) <= WINDOW);
+        assert!(
+            surprise_near_event,
+            "G2: surprise_norm must peak near an event; surprise_argmax={surprise_argmax}, events={EVENTS:?}"
+        );
+
+        // Orthogonality: the two argmaxes must be far apart (different places).
+        let argmax_gap = raw_argmax.abs_diff(surprise_argmax);
+        assert!(
+            argmax_gap > WINDOW as usize,
+            "G2: surprise peak and raw peak must be >{WINDOW} ticks apart; gap={argmax_gap} (raw={raw_argmax}, surprise={surprise_argmax})"
         );
     }
 
