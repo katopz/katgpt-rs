@@ -35,6 +35,8 @@ pub mod npc_brain_router;
 pub mod cubical_nerve;
 #[cfg(feature = "collider_consistency")]
 pub mod collider_pruner;
+#[cfg(feature = "cs_kv_probe")]
+pub mod cs_kv_probe;
 #[cfg(any(feature = "gdn2_attention", feature = "wall_attention"))]
 pub mod diagonal_gate;
 #[cfg(any(
