@@ -36,7 +36,13 @@
 //! through `&dyn BoMSampler`.
 
 use crate::micro_belief::types::MicroRecurrentBeliefState;
-use crate::simd::{fast_sigmoid, simd_dot_f32};
+use crate::simd::simd_dot_f32;
+
+#[cfg(not(feature = "simd_sigmoid"))]
+use crate::simd::fast_sigmoid;
+
+#[cfg(feature = "simd_sigmoid")]
+use crate::simd::simd_sigmoid_tanh_clamp_inplace;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NoiseQueryConfig
@@ -314,12 +320,31 @@ impl BoMSampler for AttractorKernel {
             i += 1;
         }
 
-        // ── Phase 2: K elementwise perturbations (auto-vectorises) ──
+        // ── Phase 2: K elementwise perturbations ──
         //
         // For each hypothesis k, add the noise query to the pre-sigmoid
-        // activation, apply 2·σ(·)−1, clamp. The inner i-loop is a pure
-        // elementwise chain (load, add, sigmoid, scale, clamp, store) that
-        // LLVM auto-vectorises over dim.
+        // activation, apply 2·σ(·)−1, clamp.
+        //
+        // Under `simd_sigmoid`: a single fused NEON/AVX2 pass per k replaces
+        // the inner dim-loop. The call signature
+        //   simd_sigmoid_tanh_clamp_inplace(out, act, queries, clamp)
+        // is bit-identical to step()'s call when queries is all-zero (q[i]=0.0,
+        // f32 addition is exact) — preserving Plan 281 G1.3.
+        //
+        // Under the default (scalar) path: per-element fast_sigmoid loop,
+        // bit-for-bit unchanged from the pre-simd_sigmoid implementation.
+        #[cfg(feature = "simd_sigmoid")]
+        for k_idx in 0..k {
+            let q_base = k_idx * dim;
+            let out_base = k_idx * dim;
+            simd_sigmoid_tanh_clamp_inplace(
+                &mut out[out_base..out_base + dim],
+                &act[..dim],
+                &queries[q_base..q_base + dim],
+                clamp,
+            );
+        }
+        #[cfg(not(feature = "simd_sigmoid"))]
         for k_idx in 0..k {
             let q_base = k_idx * dim;
             let out_base = k_idx * dim;

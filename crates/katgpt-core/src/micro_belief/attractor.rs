@@ -36,7 +36,19 @@
 
 use crate::micro_belief::bridge::project_to_scalars as bridge_project;
 use crate::micro_belief::types::{KernelConfig, MicroRecurrentBeliefState, RecurrenceFamily};
-use crate::simd::{fast_sigmoid, simd_dot_f32};
+use crate::simd::simd_dot_f32;
+
+#[cfg(not(feature = "simd_sigmoid"))]
+use crate::simd::fast_sigmoid;
+
+#[cfg(feature = "simd_sigmoid")]
+use crate::simd::simd_sigmoid_tanh_clamp_inplace;
+
+/// Static zero buffer for the `q` argument of `simd_sigmoid_tanh_clamp_inplace`
+/// when `step()` calls it (q is always zero in step — there is no noise query).
+/// 1024 f32 matches the max `dim` supported by the stack buffers.
+#[cfg(feature = "simd_sigmoid")]
+static ZERO_BUF: [f32; 1024] = [0.0; 1024];
 
 /// Family A attractor kernel: `s_t = 2·σ(W_s·s + W_x·x + b) − 1`.
 ///
@@ -165,6 +177,13 @@ impl MicroRecurrentBeliefState for AttractorKernel {
         // We must not mutate `state` in-place while reading it for the matvec,
         // because row i reads state[j] for all j (including j != i). The
         // dim=32 f32 vector (128 bytes) fits comfortably on the stack.
+        //
+        // `next` serves double duty: first as the pre-sigmoid activation
+        // buffer (dot_ws + dot_wx + b), then as the output of the
+        // sigmoid→tanh→clamp pass. The matvec addition order
+        // (dot_ws + dot_wx + b) is preserved bit-for-bit. The SIMD sigmoid
+        // helper reads a[i] and writes out[i] in the same 4-wide chunk, so
+        // in-place aliasing is safe (read completes before write per chunk).
         let mut next = [0.0f32; 1024]; // supports up to dim=1024
         debug_assert!(dim <= next.len(), "dim {dim} exceeds stack buffer");
 
@@ -194,16 +213,12 @@ impl MicroRecurrentBeliefState for AttractorKernel {
             let dot_wx_3 = simd_dot_f32(input, wx_r3, dim);
 
             // Pre-sigmoid activation = W_s·s + W_x·x + b.
-            let act_0 = dot_ws_0 + dot_wx_0 + self.b[i];
-            let act_1 = dot_ws_1 + dot_wx_1 + self.b[i + 1];
-            let act_2 = dot_ws_2 + dot_wx_2 + self.b[i + 2];
-            let act_3 = dot_ws_3 + dot_wx_3 + self.b[i + 3];
-
-            // State stored as 2·σ(·) − 1 ∈ (−1, 1) — see module-level docs.
-            next[i]     = (2.0 * fast_sigmoid(act_0) - 1.0).clamp(-clamp, clamp);
-            next[i + 1] = (2.0 * fast_sigmoid(act_1) - 1.0).clamp(-clamp, clamp);
-            next[i + 2] = (2.0 * fast_sigmoid(act_2) - 1.0).clamp(-clamp, clamp);
-            next[i + 3] = (2.0 * fast_sigmoid(act_3) - 1.0).clamp(-clamp, clamp);
+            // Addition order MUST stay (dot_ws + dot_wx) + b — do not rearrange
+            // (Plan 281 G1.3 bit-identical degeneracy with sample_k_states).
+            next[i]     = dot_ws_0 + dot_wx_0 + self.b[i];
+            next[i + 1] = dot_ws_1 + dot_wx_1 + self.b[i + 1];
+            next[i + 2] = dot_ws_2 + dot_wx_2 + self.b[i + 2];
+            next[i + 3] = dot_ws_3 + dot_wx_3 + self.b[i + 3];
             i += 4;
         }
         // Tail: remaining rows (dim mod 4).
@@ -212,9 +227,40 @@ impl MicroRecurrentBeliefState for AttractorKernel {
             let wx_row = &self.wx[i * dim..(i + 1) * dim];
             let dot_ws = simd_dot_f32(state, ws_row, dim);
             let dot_wx = simd_dot_f32(input, wx_row, dim);
-            let act = dot_ws + dot_wx + self.b[i];
-            next[i] = (2.0 * fast_sigmoid(act) - 1.0).clamp(-clamp, clamp);
+            next[i] = dot_ws + dot_wx + self.b[i];
             i += 1;
+        }
+
+        // Apply the state-writeback chain: (2·σ(·) − 1).clamp(−clamp, clamp).
+        //
+        // Under `simd_sigmoid`: a single fused NEON/AVX2 pass over `dim`
+        // elements replaces `dim` scalar fast_sigmoid calls. `next` is both
+        // the input (pre-sigmoid activation) and output — safe because the
+        // SIMD helper reads a[i] and writes out[i] within the same chunk
+        // (the vld1q completes before vst1q per 4-element group). q is zero
+        // in step() (no noise query) — ZERO_BUF makes the call signature
+        // identical to sample_k_states with zero queries, preserving G1.3.
+        //
+        // Under the default (scalar) path: per-element fast_sigmoid, bit-for-bit
+        // unchanged from the pre-simd_sigmoid implementation.
+        #[cfg(feature = "simd_sigmoid")]
+        {
+            // SAFETY: `next` aliases as both `a` (read) and `out` (write). The
+            // SIMD helper processes 4 (NEON) or 8 (AVX2) elements per chunk:
+            // it loads a[i..i+W] into a register, computes, then stores to
+            // out[i..i+W]. No chunk reads elements written by a later chunk,
+            // so the aliasing is data-race-free.
+            let len = dim;
+            let ptr = next.as_mut_ptr();
+            let a_slice: &[f32] = unsafe { core::slice::from_raw_parts(ptr, len) };
+            let out_slice: &mut [f32] = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
+            simd_sigmoid_tanh_clamp_inplace(out_slice, a_slice, &ZERO_BUF[..dim], clamp);
+        }
+        #[cfg(not(feature = "simd_sigmoid"))]
+        {
+            for j in 0..dim {
+                next[j] = (2.0 * fast_sigmoid(next[j]) - 1.0).clamp(-clamp, clamp);
+            }
         }
 
         // Write back in one pass — avoids read-after-write hazards on `state`

@@ -263,6 +263,62 @@ fn bench_bom_sample_k_states(c: &mut Criterion) {
     group.finish();
 }
 
+// ─── SIMD sigmoid GOAT gate (Issues 024/025 M1) ───────────────────────────────
+//
+// Benchmarks the simd_sigmoid feature path for AttractorKernel::step() and
+// sample_k_states. Only compiles when `--features simd_sigmoid` is passed.
+// Compare against the scalar baseline (run without `simd_sigmoid`) to verify
+// the G1.4 < 100ns/step and G3 ≤ 2× targets are met.
+
+#[cfg(feature = "simd_sigmoid")]
+fn bench_simd_sigmoid_attractor_step(c: &mut Criterion) {
+    let mut group = c.benchmark_group("micro_belief/simd_sigmoid_goat");
+    group.sample_size(500);
+
+    let kernel = AttractorKernel::from_seed(42, G1_4_DIM);
+    let mut state = vec![0.0f32; G1_4_DIM];
+    let input = vec![0.5f32; G1_4_DIM];
+
+    group.bench_function("attractor_step_dim32_simd", |b| {
+        b.iter(|| {
+            kernel.step(black_box(&mut state), black_box(&input));
+        });
+    });
+
+    group.finish();
+}
+
+#[cfg(all(feature = "simd_sigmoid", feature = "bom_sampling"))]
+fn bench_simd_sigmoid_bom_k8(c: &mut Criterion) {
+    use katgpt_core::{BoMSampler, NoiseQueryConfig};
+
+    let mut group = c.benchmark_group("micro_belief/simd_sigmoid_goat");
+    group.sample_size(500);
+
+    let kernel = AttractorKernel::from_seed(42, G1_4_DIM);
+    let s_prev = vec![0.0f32; G1_4_DIM];
+    let x = vec![0.5f32; G1_4_DIM];
+    let k = 8usize;
+    let cfg = NoiseQueryConfig::default().with_k(k).with_sigma(0.3);
+    let mut rng = fastrand::Rng::with_seed(42);
+    let queries: Vec<f32> = (0..k * G1_4_DIM).map(|_| rng.f32() * 2.0 - 1.0).collect();
+    let mut out = vec![0.0f32; k * G1_4_DIM];
+
+    group.bench_function("bom_k8_dim32_simd", |b| {
+        b.iter(|| {
+            kernel.sample_k_states(
+                black_box(&s_prev),
+                black_box(&x),
+                black_box(&queries),
+                black_box(&mut out),
+                black_box(&cfg),
+            );
+        });
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_g1_4_attractor_step,
@@ -272,16 +328,32 @@ criterion_group!(
     bench_batch_1000_npcs,
 );
 
-// `criterion_group!` does not accept `#[cfg]` on its arguments, so the BoM
-// bench lives in its own group and is merged via a feature-gated
-// `criterion_main!`. The bench's `required-features` already includes
-// `bom_sampling`, so both groups are always compiled here — the cfg split
-// is defensive for any future change to `required-features`.
+// `criterion_group!` does not accept `#[cfg]` on its arguments, so feature-
+// gated benches live in their own groups and are merged via feature-gated
+// `criterion_main!` invocations. The bench's `required-features` already
+// includes `bom_sampling`, so both groups are always compiled here — the cfg
+// split is defensive for any future change to `required-features`.
 #[cfg(feature = "bom_sampling")]
 criterion_group!(bom_benches, bench_bom_sample_k_states);
 
-#[cfg(feature = "bom_sampling")]
+// SIMD sigmoid GOAT gate group — only when `simd_sigmoid` is enabled.
+#[cfg(all(feature = "simd_sigmoid", feature = "bom_sampling"))]
+criterion_group!(
+    simd_sigmoid_benches,
+    bench_simd_sigmoid_attractor_step,
+    bench_simd_sigmoid_bom_k8
+);
+#[cfg(all(feature = "simd_sigmoid", not(feature = "bom_sampling")))]
+criterion_group!(simd_sigmoid_benches, bench_simd_sigmoid_attractor_step);
+
+#[cfg(all(feature = "bom_sampling", feature = "simd_sigmoid"))]
+criterion_main!(benches, bom_benches, simd_sigmoid_benches);
+
+#[cfg(all(feature = "bom_sampling", not(feature = "simd_sigmoid")))]
 criterion_main!(benches, bom_benches);
 
-#[cfg(not(feature = "bom_sampling"))]
+#[cfg(all(not(feature = "bom_sampling"), feature = "simd_sigmoid"))]
+criterion_main!(benches, simd_sigmoid_benches);
+
+#[cfg(not(any(feature = "bom_sampling", feature = "simd_sigmoid")))]
 criterion_main!(benches);

@@ -66,3 +66,34 @@ Note: `LeakyIntegrator::sample_k_states(K=8)` at 2.91× also exceeds 2×, but th
 ## TL;DR
 
 BoM `sample_k_states(K=8)` on AttractorKernel is 2.54× step() (683 ns), over the G3 ≤2× target. Root cause is the same as Issue 024: K×D scalar `fast_sigmoid`/`exp()` calls. Fixing Issue 024's SIMD-sigmoid bottleneck fixes this automatically. Does not block Phase 1 or G2; `bom_sampling` stays opt-in as planned.
+
+## Update (simd_sigmoid feature — 2026-06-16)
+
+**M1 implemented**: `simd_sigmoid_tanh_clamp_inplace` replaces the K×D scalar
+`fast_sigmoid` loop in `sample_k_states` Phase 2 with K fused NEON/AVX2 passes
+of `dim` sigmoids each. See Issue 024 update for implementation details and the
+discovered `neon_exp_inplace` polynomial bug (the new helper uses the correct
+Horner form).
+
+### Benchmark results (Apple Silicon arm64, release)
+
+| Variant | Scalar | SIMD | Ratio | G3 target | Verdict |
+|---|---|---|---|---|---|
+| `sample_k_states` K=1 | 240 ns | 206 ns | 0.98× step | ≤2× | PASS |
+| `sample_k_states` K=4 | 431 ns | 292 ns | 1.40× step | ≤2× | PASS |
+| `sample_k_states` K=8 | 660 ns | **390 ns** | **1.87× step** | ≤2× | **PASS** |
+| `sample_k_states` K=16 | 1217 ns | 560 ns | 2.68× step | ≤2× | FAIL (K=16 is above ceiling) |
+
+### Verdict: **PASS for G3 (K≤8)**
+
+K=8 drops from 2.54× to 1.87× step(), passing the G3 ≤2× target. K=4 drops
+to 1.40×. K=16 at 2.68× still exceeds 2× but K=16 is documented as the
+practical ceiling, not a target.
+
+### Recommendation
+
+**Promote `simd_sigmoid` to default-on for `bom_sampling`**. The G3 gate passes
+for K≤8, no correctness regression (G1.3 σ=0 degeneracy holds, 17 bom tests
+pass). Combined with Issue 024's recommendation: `simd_sigmoid` should be
+enabled whenever `bom_sampling` is enabled, either by making `bom_sampling`
+depend on `simd_sigmoid` or by documenting the recommended feature combination.
