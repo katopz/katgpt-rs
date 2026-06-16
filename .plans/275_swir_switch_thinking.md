@@ -80,7 +80,7 @@ Goal: compiling, tested, feature-gated module implementing the core SwiR state m
 - [x] **T1.11** Doc tests in `src/swir/mod.rs` showing a minimal end-to-end trace on a synthetic entropy stream (no real model) — exercises the controller through Explicit→Latent→Explicit cycle and verifies stats.
 - [x] **T1.12** Feature gate audit: `cargo build --no-default-features --features "swir_switch_thinking"` compiles; `cargo build` (with defaults) does NOT include swir code.
 
-**Exit criteria for Phase 1:** ✅ MET. All 12 task groups complete. `cargo test --features swir_switch_thinking swir::` passes 26/26 (10 controller + 4 entropy + 4 soft_embedding + 4 signal_mix + 4 convex_hull_check). Public API (`SwiRController`, `SwiRConfig`, `StepAction`, `soft_embedding`, `mix_thinking_signal`) frozen. Bonus: `SwiRConfig::default_for_model(embedding_dim)` constructor and `ControlTokenIds` wiring type added per T2.4 anticipation.
+**Exit criteria for Phase 1:** ✅ MET. All 12 task groups complete. `cargo test --features swir_switch_thinking swir::` passes **38/38** lib unit tests (10 controller base + 5 g6 kurtosis + 4 entropy + 4 soft_embedding + 4 signal_mix + 4 convex_hull_check + 7 strategy_adapter). Public API (`SwiRController`, `SwiRConfig`, `StepAction`, `soft_embedding`, `mix_thinking_signal`) frozen. Bonus: `SwiRConfig::default_for_model(embedding_dim)` constructor and `ControlTokenIds` wiring type added per T2.4 anticipation. *(The originally-quoted 26-test count grew as Phase 2/3 added the g6 kurtosis-escape and strategy_adapter tests.)*
 
 ---
 
@@ -131,6 +131,8 @@ Goal: wire SwiR into the existing `thinking_cot` framework so it can actually dr
   **Implementation:** `swir_switch_thinking = ["thinking_cot"]` in Cargo.toml. `StepContext.embedding_matrix` is the host-side contract — the host is responsible for making the LM-head embedding matrix available. (The existing `thinking_cot` host code is not modified; only the trait is added. Future Phase 3 wiring into a real model will surface any missing access.)
 
 **Exit criteria for Phase 2:** ✅ MET. `cargo test --features swir_switch_thinking` passes (33 unit + 6 integration + 1 doc test). `SwiRStrategyAdapter` drives a mock decode loop end-to-end against synthetic Gaussian-mixture-style logits, with G4 invariant verified at every soft-embedding step. Pre-existing unrelated failure (`speculative::budget_compat::tests::test_effective_tree_budget_entropy_adapts`) is a feature-gating issue in that test, not in this work.
+
+**VERIFICATION NOTE (2026-06-16):** the `bench_275_swir_goat` integration suite passes **10/10 serially** (`-- --test-threads=1`) but **9/10 under default parallel execution** — `g7_step_zero_allocation_debug` flakes because the global `katgpt_rs::alloc` tracking allocator is process-global, so allocations from concurrently-running tests bleed into the `count <= 0` assertion. The controller itself is zero-allocation (proven by the serial run and by `g7_adapter_on_step_allocations_debug`). This is a **test-harness isolation gap, not a production-code bug**. The reproduce command in `src/swir/BENCHMARKS.md` already pins `--test-threads=1`; a future cleanup could thread a per-test allocator counter. Documented honestly here rather than claiming a clean parallel pass.
 
 ---
 
