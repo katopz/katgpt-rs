@@ -99,14 +99,16 @@ Goal: the MPI conditioning fires **once per snapshot swap** (research note §2.2
 - [x] **T2.2** Implement `DefaultMpiRouterSnapshotHook` (default impl) — wraps `manifold_power_iter_router` + caches `gram_per_expert` keyed by `snapshot_version` (BLAKE3 of the expert weights, per research note §2.2). Skip recomputation if snapshot version unchanged.
 - [x] **T2.3** Implement Gram cache invalidation: `gram_cache_version: u64` field, invalidate on snapshot version bump. Cache entry stores `(M[i], blake3_tag)`. Zero-allocation on cache hit (return borrowed slices).
 - [x] **T2.4** Verify the reconditioning never mutates weights in-place during inference — only at the swap boundary. Add a doc-test asserting the hook is called from the swap path, not the per-token forward path (freeze/thaw constraint).
-- [ ] **T2.5** Composition test with `vocab_coreset` (Plan 181): MPI-conditioned `R'` → sigmoid scores → `vocab_coreset::vocab_coreset` for top-p coreset selection. Verify the two gains are orthogonal (research note §2.5 Fusion B): (a) better score quality from MPI, (b) adaptive coreset size from top-p.
-- [ ] **T2.6** Composition test with `spectral_budget` (Plan 254): MPI sets router *row directions*; `spectral_budget` sets NS *depth* per layer. Verify they compose cleanly on a layered MoE (orthogonal axes, research note §2.6 Fusion C).
+- [x] **T2.5** Composition test with `vocab_coreset` (Plan 181): MPI-conditioned `R'` → sigmoid scores → `vocab_coreset::vocab_coreset` for top-p coreset selection. Verify the two gains are orthogonal (research note §2.5 Fusion B): (a) better score quality from MPI, (b) adaptive coreset size from top-p.
+  - **Done (2026-06-17):** `tests/composition_279_vocab_coreset.rs` — 4 tests, all pass. Validates composition correctness (not MPI quality, which is locked in by the GOAT gate): G1 MPI changes score distribution (non-trivial composition), G2+G3 `vocab_coreset` contract respected for both R and R' (monotone in p, p=1.0→full set, scores in [0,1]), G4 byte-identical determinism, G5 sigmoid discipline (never softmax).
+- [x] **T2.6** Composition test with `spectral_budget` (Plan 253, Research 222 — note: plan originally said "254" but the actual feature is Plan 253 per `Cargo.toml`): MPI sets router *row directions*; `spectral_budget` sets NS *depth* per layer. Verify they compose cleanly on a layered MoE (orthogonal axes, research note §2.6 Fusion C).
+  - **Done (2026-06-17):** `tests/composition_279_spectral_budget.rs` — 4 tests, all pass. At M=2800 with layer types `[Q,K,V,O,MlpDown,MlpUp]`, NS depths = `[5,5,5,5,5,10]` (final MlpUp layer α=-0.96 → NS=10). Validates: G1 MPI λ gain at every layer independent of NS depth (e.g., 0.32→1.00), G2 non-interference (24 expert grams byte-identical before/after), G3 well-formed outputs + determinism, G4 non-decreasing NS depth distribution, G5 MPI row-norm contract (MaxVio ≈ 0) preserved at every layer regardless of NS depth.
 
 ### Phase 2 Exit Criteria
 - [x] Snapshot hook trait + default impl ship, deterministic given `(R, expert_grams, snapshot_version)`
 - [x] Gram cache shows ≥10× speedup on cache hit (same snapshot version) vs cold recompute — cache hit skips gram re-copy entirely
 - [x] No mutation path from the per-token forward loop — freeze/thaw invariant verified (doc-test in trait)
-- [ ] Composition tests with Plan 181 (`vocab_coreset`) and Plan 254 (`spectral_budget`) pass — deferred (T2.5/T2.6, optional cross-feature tests)
+- [x] Composition tests with Plan 181 (`vocab_coreset`) and Plan 253 (`spectral_budget`) pass — **done (T2.5/T2.6, 2026-06-17)**. 8 tests total across 2 files, all green.
 - [x] All Phase 1 tests still pass
 
 ---
