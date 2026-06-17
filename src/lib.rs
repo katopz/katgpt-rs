@@ -215,6 +215,12 @@ pub mod mux_demux;
 #[cfg(feature = "mux_latent_context")]
 pub mod mux_latent;
 
+// Memory Soup LoRA Artifact Importer (Plan 253 T19 G5).
+// Standalone MSP0 binary format parser — uses only std + blake3, no riir-gpu dep.
+// Proves katgpt-rs can consume riir-gpu's exported Memory Soup artifacts.
+#[cfg(feature = "memory_soup_lora")]
+pub mod memory_soup_lora;
+
 #[cfg(feature = "llmexec_guard")]
 pub mod llmexec_guard;
 
