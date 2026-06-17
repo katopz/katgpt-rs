@@ -301,3 +301,20 @@ pub use simd::{coincidence_score, entropy_f32};
 pub mod compression_drafter;
 #[cfg(feature = "compression_drafter")]
 pub use compression_drafter::{CompressionDrafter, Lz4FlexDrafter};
+
+// Functional Attention — closed-form Tikhonov spectral transport operator
+// (Plan 286, Research 257, arxiv 2605.31559, Xiao et al. ICML 2026). DUAL FORM
+// matching the reference implementation (`.raw/FUNCATTN/PDE-StandardBenchmark/model/
+// Functional_attention.py`): convex-combo regularization `(1-α)·K̃ᵀK̃ + α·I_d`,
+// column-normalized slice tokens, per-slice-token to_q/to_k/to_v linear
+// projections. Sigmoid-basis default per AGENTS.md (partition-of-unity holds
+// for any row-normalized non-negative kernel). Gain-tier open primitive:
+// paper itself defers NLP validation (§6); promote only after G1–G5 GOAT
+// gate passes.
+#[cfg(feature = "funcattn")]
+pub mod funcattn;
+#[cfg(feature = "funcattn")]
+pub use funcattn::{
+    FuncAttnBasis, FuncAttnConfig, FuncAttnError, FuncAttnScratch, compute_basis_into,
+    funcattn_forward, solve_convex_combo_dual,
+};

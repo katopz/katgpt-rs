@@ -101,6 +101,7 @@ triggered_injection = []  # TriggeredInjectionGate — sigmoid-thresholded injec
 self_advantage_gate = []  # Self-advantage recursion gate for HLA reconstruction (Plan 283 T5.1, Research 250, arxiv:2511.16886). Adds advantage-margin as the 4th early-stop criterion. The canonical AdvantageMarginGate primitive lives in the katgpt root crate (src/pruners/self_advantage.rs); this feature adds a minimal inline gate for the 6-element HLA activation vector (sigmoid-bounded, not logits — tuned separately).
 recursion_logits = []  # RecursionLogits opt-in trait — pre/post recursion logits exposure for AdvantageMarginGate wrapping (Plan 283 T2.3, arxiv:2511.16886). Opt-in; non-recursing generators do not implement it.
 compression_drafter = ["dep:lz4_flex"]  # CompressionDrafter — Hot-tier modelless LZ4 corpus-as-model drafter (Plan 285, Research 256, nathan.rs/gzip-lm). Opt-in until G1–G3 GOAT gate passes.
+funcattn = []  # Functional Attention — closed-form Tikhonov k×k spectral transport operator (Plan 286, Research 257, arxiv 2605.31559). Linear-in-n attention variant; sigmoid-basis default per AGENTS.md. Opt-in (Gain-tier): paper itself has not verified NLP gain; promote only after GOAT G1–G5 pass.
 
 [[bench]]
 name = "flow_field_bench"

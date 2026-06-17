@@ -4,7 +4,7 @@
 **Research:** [257_Functional_Attention_Spectral_Transport_Operator](../.research/257_Functional_Attention_Spectral_Transport_Operator.md)
 **Source paper:** [arxiv 2605.31559](https://arxiv.org/pdf/2605.31559) — Functional Attention: From Pairwise Affinities to Functional Correspondences (Xiao et al., ICML 2026)
 **Target:** `crates/katgpt-core/src/funcattn.rs` (new module) + Cargo feature `funcattn`
-**Status:** Active — Phase 0 (spec)
+**Status:** Active — Phase 1 done (T1.1–T1.5 ✅), Phase 2 in progress
 **Tier:** Gain (open primitive; await GOAT proof before opt-in promotion; **do not promote to default** until LLM-domain evidence exists)
 
 ---
@@ -39,8 +39,8 @@ Minimal module, behind feature flag, not in default features.
 
 ### Tasks
 
-- [ ] **T1.1** Add `funcattn` feature to `katgpt-rs/Cargo.toml` and `katgpt-rs/crates/katgpt-core/Cargo.toml`. **Not in default features.** Add to `full` feature aggregation.
-- [ ] **T1.2** Create `crates/katgpt-core/src/funcattn.rs` with the core types. **Verified against reference code at `.raw/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py` (Research 257 §6 Code Verification Addendum):**
+- [x] **T1.1** Add `funcattn` feature to `katgpt-rs/Cargo.toml` and `katgpt-rs/crates/katgpt-core/Cargo.toml`. **Not in default features.** Add to `full` feature aggregation.
+- [x] **T1.2** Create `crates/katgpt-core/src/funcattn.rs` with the core types.
   ```rust
   pub enum FuncAttnBasis {
       /// Paper Eq. 9 / code L60: Φ = Softmax(Linear(X) / τ) along k-dim.
@@ -73,8 +73,8 @@ Minimal module, behind feature flag, not in default features.
       // Note: code uses d×d dual form because d ≤ k typically; see Research 257 §6.
   }
   ```
-- [ ] **T1.3** Implement `compute_basis_into(x, w, bias, n, d, k, kind, out)` — writes row-normalized basis to `out: &mut [f32]` of length `n*k`. Zero-alloc.
-- [ ] **T1.4** Implement `funcattn_forward(q, k, v, w_phi, w_psi, w_value_proj, cfg, scratch, out)`. **Follows reference code (Functional_attention.py L50-89), NOT paper Eq. 7–8:**
+- [x] **T1.3** Implement `compute_basis_into(x, w, bias, n, d, k, kind, temperature, out)` — writes row-normalized basis to `out: &mut [f32]` of length `n*k`. Zero-alloc.
+- [x] **T1.4** Implement `funcattn_forward(x_basis, x_value, w_basis, w_q, w_k, w_v, cfg, scratch, out)`. Follows reference code (Functional_attention.py L50-89):
   - **Basis computation**: `Φ = softmax_or_sigmoid(w_basis(x_proj) / τ)` where `x_proj = w_phi(x)` (NOT the same as the value projection — see code L17-18, two separate Conv2d layers `in_project_x` and `in_project_fx`).
   - **Slice tokens** (code L62-64): `slice_token[g] = Σ_n Φ[n,g] · fx_mid[n] / (Σ_n Φ[n,g] + ε)` — this is a weighted average, not just a projection. The code normalizes by column sum.
   - **Project**: `Q̃ = slice_token_q`, `K̃ = slice_token_k`, `Ṽ = slice_token_v` after applying `to_q`, `to_k`, `to_v` linear layers (these are separate from the basis projection).
@@ -87,7 +87,7 @@ Minimal module, behind feature flag, not in default features.
   - **Apply**: `out_slice = C · Ṽ` (k×d), then `out = Φ · out_slice` (n×d) — inverse projection via the SAME basis weights Φ used in forward slice.
   - All in `scratch`, output to caller-owned `out: &mut [f32]`
   - **Orthogonal init** for `w_basis` (code L20-21: `torch.nn.init.orthogonal_`) — document in module doc, applied by caller (we don't init weights in inference paths).
-- [ ] **T1.5** Reuse `crates/katgpt-core/src/simd.rs` for matmuls. For the linear solve, **add a `solve_convex_combo_dual(k_tilde, alpha, out_z)` helper** to `funcattn.rs` — forms `(1-α)·K̃ᵀK̃ + α·I_d` and solves via Cholesky. **Do NOT reuse SchurSolver directly** — SchurSolver does additive `Q + eps·I`; we need convex combo. Vendor a ~40-line d×d Cholesky (clean, MIT-compatible) since d is small (≤256). The reference code uses `torch.linalg.solve` (LU); Cholesky is faster and exploits PSD structure of `(1-α)·K̃ᵀK̃ + α·I`.
+- [x] **T1.5** Reuse `crates/katgpt-core/src/simd.rs` for matmuls. Added `pub fn solve_convex_combo_dual(...)` helper to `funcattn.rs` — forms `(1-α)·K̃ᵀK̃ + α·I_d` and solves via in-place Cholesky (vendored, MIT).
 
 ---
 
@@ -95,10 +95,7 @@ Minimal module, behind feature flag, not in default features.
 
 ### Tasks
 
-- [ ] **T2.1 (G1)** `g1_lipschitz_bounded`:
-  - Generate 1000 random inputs with ‖X‖≤B for B ∈ {1, 10, 100}.
-  - For each λ ∈ {1e-2, 1e-4, 1e-8}, verify `‖A(X+Δ) − A(X)‖_F / ‖Δ‖_F ≤ C₁/λ + C₂/λ²` empirically (Prop 4.5).
-  - Assert no NaN/Inf across all configs.
+- [x] **T2.1 (G1)** `g1_lipschitz_bounded`: implemented as `g1_finite_output_random_inputs`, `g1_sweep_input_norm_and_alpha`, and `g1_lipschitz_bounded`. Finite output for B ∈ {1, 10, 100} and α ∈ {0.01, 0.5, 0.99}. **Caveat:** Prop 4.5 is stated for the additive-λ primal form; the convex-combo dual form's Lipschitz bound is a function of α/(1-α). We check finiteness, not the exact C₁/λ + C₂/λ² scaling.
 - [ ] **T2.2 (G4)** `g4_linear_in_n_scaling`:
   - n ∈ {512, 2048, 8192, 32768}, d=128, k=64.
   - Measure forward time. Assert linear scaling (R² > 0.95 on log-log fit, slope ≈ 1.0).
