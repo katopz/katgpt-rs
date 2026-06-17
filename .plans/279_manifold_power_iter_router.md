@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/246_Manifold_Power_Iteration_MoE_Router.md](../.research/246_Manifold_Power_Iteration_MoE_Router.md)
 **Source paper:** [arxiv 2606.12397](https://arxiv.org/abs/2606.12397) — Redesign MoE Routers with Manifold Power Iteration (RUC / Tencent, 10 Jun 2026)
 **Target:** `katgpt-rs/src/manifold_power_iter_router.rs` (new module) + Cargo feature `manifold_power_iter_router` + shared `power_iter_retract` helper in `katgpt-rs/src/spectral_retract.rs`
-**Status:** Active — Phase 0 (plan created, awaiting implementation)
+**Status:** Done — Phase 4 GOAT gate 9/9 green, promoted to DEFAULT-ON 2026-06-16 (verified 2026-06-17: 27/27 tests still green across 4 test files).
 
 ---
 
@@ -154,15 +154,15 @@ Goal: per AGENTS.md GOAT gate rule — if the new technique wins, promote to def
 ### Tasks
 
 - [x] **T4.1** Run full GOAT gate (`bench_279_manifold_power_iter_goat.rs`) on default features. Confirm 8/8 green. — **DONE: 9/9 tests pass (G1–G8 + summary). All gates green on release build.**
-- [x] **T4.2** If 8/8 green: promote `manifold_power_iter_router` to default features in `katgpt-rs/Cargo.toml`. Update `src/lib.rs` to remove the `#[cfg(feature = ...)]` gate (or keep the gate but add to default feature set). Update `README.md` Feature Showcase + GOAT Proofs section with the λ/MaxVio/zero-overhead numbers. — **PENDING: GOAT gate green, promotion approved. Cargo.toml `default` array update deferred due to concurrent working-tree activity on Cargo.toml (Research 252). Will add `"manifold_power_iter_router"` to default array + README Feature Showcase when working tree stabilizes.**
-- [ ] **T4.3** If 8/8 green: demote the loser (vanilla unconditioned router) — any internal caller that currently uses raw `R` for MoE gating should switch to `R'` via the snapshot hook. Document the migration in `src/manifold_power_iter_router.rs` module docs. — **N/A: no internal caller currently uses raw `R` for MoE gating (MPI router is a new module, no incumbent to demote).**
-- [ ] **T4.4** If ANY gate fails: keep `manifold_power_iter_router` behind its feature flag (opt-in). Document which gate(s) failed and why in this plan's Phase 4 section. Do NOT promote. The shared `power_iter_retract` helper (Phase 1 T1.4/T1.5) still ships — it's a DRY win independent of the MPI verdict. — **N/A: all gates passed.**
+- [x] **T4.2** If 8/8 green: promote `manifold_power_iter_router` to default features in `katgpt-rs/Cargo.toml`. Update `src/lib.rs` to remove the `#[cfg(feature = ...)]` gate (or keep the gate but add to default feature set). Update `README.md` Feature Showcase + GOAT Proofs section with the λ/MaxVio/zero-overhead numbers. — **DONE (verified 2026-06-17): `Cargo.toml` `default` array contains `"manifold_power_iter_router"` (line 45) with comment `DEFAULT-ON since Plan 279 Phase 4 GOAT 9/9 green`. `src/lib.rs` keeps the `#[cfg(feature = ...)]` gate (line 84) but the feature is now in the default set. `README.md` has the full Feature Showcase entry at L796-807 with the GOAT 9/9 green decision documented.**
+- [x] **T4.3** If 8/8 green: demote the loser (vanilla unconditioned router) — any internal caller that currently uses raw `R` for MoE gating should switch to `R'` via the snapshot hook. Document the migration in `src/manifold_power_iter_router.rs` module docs. — **N/A: no internal caller currently uses raw `R` for MoE gating (MPI router is a new module, no incumbent to demote).**
+- [x] **T4.4** If ANY gate fails: keep `manifold_power_iter_router` behind its feature flag (opt-in). Document which gate(s) failed and why in this plan's Phase 4 section. Do NOT promote. The shared `power_iter_retract` helper (Phase 1 T1.4/T1.5) still ships — it's a DRY win independent of the MPI verdict. — **N/A: all gates passed.**
 - [x] **T4.5** Update research note `katgpt-rs/.research/246_*.md` Status field: `Active → Done` (if promoted) or `Active → Shelved` (if demoted). Add a one-line postscript: "Plan 279 GOAT gate: N/8 green, promoted|shelved on YYYY-MM-DD."
 
 ### Phase 4 Exit Criteria
-- [ ] Promotion decision recorded in this plan + research note
-- [ ] `README.md` updated (if promoted)
-- [ ] Default feature set updated (if promoted) OR feature flag retained with failure rationale (if demoted)
+- [x] Promotion decision recorded in this plan + research note (research note `246_*.md` Status field: `Done — Plan 279 GOAT gate 9/9 green, promoted to DEFAULT-ON 2026-06-16`)
+- [x] `README.md` updated (if promoted) — Feature Showcase entry at L796-807 with G1–G8 details and promotion decision documented
+- [x] Default feature set updated (if promoted) — `"manifold_power_iter_router"` is in `Cargo.toml` `default` array (line 45); T4.3/T4.4 N/A (no incumbent loser to demote, all gates passed)
 
 ---
 
@@ -170,14 +170,16 @@ Goal: per AGENTS.md GOAT gate rule — if the new technique wins, promote to def
 
 | Gate | Metric | Target (paper) | Our threshold | Status |
 |------|--------|----------------|---------------|--------|
-| **G1** | Router–expert alignment λ (Eq. 11) | 0.27 → 0.66 (≈2.4×) | `λ(R') ≥ 0.5 · λ(R_optimal)` | ⏳ |
-| **G2** | Load-balance MaxVio | 1.13 → 0.96 (≈15%) | `MaxVio(R') ≤ 0.7 · MaxVio(R)` | ⏳ |
-| **G3** | Per-token overhead | 0 (paper §4.2) | gate timing `R` vs `R'` identical within noise | ⏳ |
-| **G4** | Swap cost at game scale | sub-ms (our distillation) | `N=8, D=256` total < 1ms | ⏳ |
-| **G5** | Determinism / sync-safety | deterministic (our distillation) | byte-identical `R'` across runs | ⏳ |
-| **G6** | DRY non-regression (Plan 270) | n/a (refactor invariant) | `gauge_rebalance` tests pass unchanged | ⏳ |
-| **G7** | Sigmoid constraint (AGENTS.md) | sigmoid, never softmax | static + runtime check | ⏳ |
-| **G8** | `iters=1` sufficiency | paper §1.4 | `iters=1` captures ≥90% of `iters=10` λ gain | ⏳ |
+| **G1** | Router–expert alignment λ (Eq. 11) | 0.27 → 0.66 (≈2.4×) | `λ(R') ≥ 0.5 · λ(R_optimal)` | ✅ |
+| **G2** | Load-balance MaxVio | 1.13 → 0.96 (≈15%) | `MaxVio(R') ≤ 0.7 · MaxVio(R)` | ✅ |
+| **G3** | Per-token overhead | 0 (paper §4.2) | gate timing `R` vs `R'` identical within noise | ✅ |
+| **G4** | Swap cost at game scale | sub-ms (our distillation) | `N=8, D=256` total < 1ms | ✅ (0.076ms release) |
+| **G5** | Determinism / sync-safety | deterministic (our distillation) | byte-identical `R'` across runs | ✅ |
+| **G6** | DRY non-regression (Plan 270) | n/a (refactor invariant) | `gauge_rebalance` tests pass unchanged | ✅ (16/16 still green) |
+| **G7** | Sigmoid constraint (AGENTS.md) | sigmoid, never softmax | static + runtime check | ✅ |
+| **G8** | `iters=1` sufficiency | paper §1.4 | `iters=1` captures ≥90% of `iters=10` λ gain | ✅ |
+
+**Final verdict: 9/9 green on release build** (`cargo test --test bench_279_manifold_power_iter_goat --release`). Re-verified 2026-06-17.
 
 **Promotion rule (AGENTS.md):** all 8 green → promote `manifold_power_iter_router` to default features, demote vanilla unconditioned router. Any red → keep opt-in, document failure, shared `power_iter_retract` helper still ships (DRY win independent of MPI verdict).
 
