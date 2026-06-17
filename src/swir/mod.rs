@@ -90,6 +90,7 @@
 //! `StepAction` into a [`StepDirective`](crate::thinking_cot::StepDirective).
 //! See `tests/swir_strategy_integration.rs` for an end-to-end mock decode loop.
 
+pub mod bench;
 mod controller;
 mod convex_hull_check;
 mod entropy;

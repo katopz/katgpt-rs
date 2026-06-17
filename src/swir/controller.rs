@@ -181,22 +181,30 @@ impl SwiRController {
             }
             return StepAction::InjectControlToken(token);
         }
-        // After ForceAnswerPrefix, count down tokens; once exhausted, terminate.
+        // (2) Answer-budget countdown (post-ForceAnswerPrefix). The paper's
+        // ForceAnswerPrefix means "stop reasoning, start answering" — we emit
+        // tokens without running the mode-switch logic below. Allowing further
+        // mode switches during the budget window would inflate switch_count
+        // past c_max on alternating entropy schedules, defeating the
+        // overthinking guard (paper §3.4). Stats still count as Explicit
+        // (we're emitting concrete answer tokens).
         if let Some(remaining) = self.answer_budget_remaining.as_mut() {
             if *remaining == 0 {
                 return StepAction::Terminate;
             }
             *remaining = remaining.saturating_sub(1);
+            self.explicit_steps = self.explicit_steps.saturating_add(1);
+            return StepAction::EmitToken(0);
         }
 
-        // (2) First-step init: lock reference_entropy to the first observation.
+        // (3) First-step init: lock reference_entropy to the first observation.
         // f32::NAN compares false to everything, so this is the natural sentinel.
         if self.reference_entropy.is_nan() {
             self.reference_entropy = entropy;
             self.dwell_steps = 0;
         }
 
-        // (3) Mode-switch logic (paper §3.3). Decision is based on the sign of
+        // (4) Mode-switch logic (paper §3.3). Decision is based on the sign of
         // (entropy − reference_entropy), i.e. "is this step more or less
         // confident than the last switch point?". Asymmetric dwell windows
         // prevent chatter.
@@ -240,7 +248,7 @@ impl SwiRController {
             self.dwell_steps = self.dwell_steps.saturating_add(1);
         }
 
-        // (4) Switch-count guards (paper §3.4). Only count Latent→Explicit.
+        // (5) Switch-count guards (paper §3.4). Only count Latent→Explicit.
         // Convergence fires at ½·c_max; termination fires above c_max.
         //
         // CRITICAL: only fire these guards on the step where the Latent→Explicit
@@ -271,7 +279,7 @@ impl SwiRController {
             ThinkMode::Explicit => self.explicit_steps = self.explicit_steps.saturating_add(1),
         }
 
-        // (5) Emit directive based on current mode. (Any injection enqueued
+        // (6) Emit directive based on current mode. (Any injection enqueued
         // above will be drained on the *next* call to step(), per step (1).)
         match self.mode {
             ThinkMode::Explicit => StepAction::EmitToken(0),
