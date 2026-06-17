@@ -33,11 +33,13 @@ Plan 287 scope-reduction #2 flagged that adding `policy: SinkAwarePolicy` to `Pa
 
 **Decision:** ship a new function `tiled_attention_parallax_forward_sink_aware`. `ParallaxConfig` stays untouched. Matches the existing standalone-gate pattern Plan 287 established and the SOLID/Decouple rule.
 
-### A2. FuncAttn wiring → DEFERRED
+### A2. FuncAttn wiring → NOT APPLICABLE (closed 2026-06-18)
 
-FuncAttn's basis projection `Φ` is `n×k` (k≪n typically), **not** an `n×n` attention map. Sink classification semantics on basis-modes differ fundamentally from token-position sinks (a "sink basis mode" is not a well-studied object). Wiring requires defining sink semantics in basis-mode space — a separate research question, not an API plumbing task.
+FuncAttn's basis projection `Φ` is `n×k` (k≪n typically), **not** an `n×n` attention map. Sink classification semantics on basis-modes differ fundamentally from token-position sinks (a "sink basis mode" is not a well-studied object).
 
-**Decision:** Plan 289 covers Parallax only. FuncAttn wiring → future plan if/when Φ-space sink semantics become interesting. Documented under §Non-goals.
+**Research verdict (Research 261, 2026-06-18):** Wiring is not just deferred — it is **not applicable**. FuncAttn's `out = Φ · C · Ṽ` structure has no token-position sinks because basis modes are partition-of-unity by design (every mode is a "broadcaster" by construction; degenerate modes are a training failure, not a runtime pathology). The NOP/Broadcast classifier collapses into a column-norm check, which is cheaper and belongs in a separate `funcattn_diagnostics` module if ever needed. See [Research 261](../.research/261_FuncAttn_Sink_Semantics_Verdict.md) for the full negative-result analysis.
+
+**Decision:** Plan 289 covers Parallax only. FuncAttn wiring is closed as not-applicable — not postponed. The `SinkAwarePolicy` API is Parallax-specific by design.
 
 ### A3. Attention matrix retention → OPTIONAL OUT-PARAM
 
@@ -91,7 +93,7 @@ When `SinkAwarePolicy::Uniform`, the wrapper **must not** pay for the temporary 
 - [x] **T4.1** Updated `crates/katgpt-core/src/parallax_attn.rs` module doc with §Sink-Aware Composition section cross-referencing Plan 287/288/289. *(2026-06-18)*
 - [x] **T4.2** Updated `katgpt-rs/README.md` Feature Showcase with forward-path composition row + scope-reduction update + Plan 289 ref. Updated `.benchmarks/059_sink_aware_goat.md` with Plan 289 G3-uniform-overhead row. *(2026-06-18)*
 - [x] **T4.3** Added follow-up note to `.plans/287_sink_aware_attention.md` §Follow-up: Plan 289 — DONE. *(2026-06-18)*
-- [x] **T4.4** Commit with `feat(289):` prefix on `develop`. Commit `ad1804d1`. *(2026-06-18)*
+- [x] **T4.4** Commit with `feat(289):` prefix on `develop`. Commit `1c08be8e`. *(2026-06-18)*
 
 ---
 
@@ -108,7 +110,7 @@ When `SinkAwarePolicy::Uniform`, the wrapper **must not** pay for the temporary 
 
 ## Non-goals (explicit)
 
-- **NOT** wiring into `FuncAttn`. Φ is `n×k`, not `n×n` attention. Sink semantics on basis-modes need separate research. Tracked as a potential follow-up if Φ-space sinks become interesting.
+- **NOT** wiring into `FuncAttn`. Φ is `n×k`, not `n×n` attention. Sink semantics on basis-modes were investigated and ruled out as not-applicable — see [Research 261](../.research/261_FuncAttn_Sink_Semantics_Verdict.md). The `SinkAwarePolicy` API is Parallax-specific by design, not by deferral.
 - **NOT** changing `ParallaxConfig` struct shape. No new fields, no feature-gated fields, no builder pattern. The sink-aware policy is a property of the *call*, not the *config* — it composes with any `ParallaxConfig`.
 - **NOT** deprecating the standalone `apply_dual_policy_gate_flat` / `_cached_flat` API. Diagnostic callers (Research 113 `effective_rank` cross-validation, `summarize_layer_sinks`) still use them directly on precomputed attention maps.
 - **NOT** adding SIMD cross-row restructuring to the parallax forward inner loop. Retained-attention path adds one `copy_from_slice` per row — already SIMD-accelerated by the stdlib memcpy.

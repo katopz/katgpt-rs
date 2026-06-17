@@ -30,6 +30,7 @@ This is **Gain-tier** because:
 **Out of scope (this plan):**
 - LLM-domain token-prediction GOAT gate (await Research 257 §5 Q2 — needs real LM weights, deferred until evidence exists)
 - riir-ai integration (that's Plan 318 — rank-k latent functor upgrade, primary value path)
+- Sink-aware attention wiring (closed as not-applicable — see [Research 261](../.research/261_FuncAttn_Sink_Semantics_Verdict.md); FuncAttn's `Φ · C · Ṽ` structure has no `n×n` attention matrix for the sink classifier to scan)
 
 ---
 

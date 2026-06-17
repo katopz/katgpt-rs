@@ -151,7 +151,9 @@ Wire the new classifier into the broader `data_probe` family so it composes with
 ## Scope reductions (2026-06-17)
 
 1. **Plan target path was wrong.** The plan said `crates/katgpt-core/src/data_probe/sink_classify.rs`, but the `data_probe` module already exists in the root crate at `src/data_probe/`. Corrected to `src/data_probe/sink_classify.rs` (root-crate re-export) + `crates/katgpt-core/src/data_probe.rs` (primitive types — needed so katgpt-core can reference them).
-2. **Direct wiring into `parallax_attn.rs` / `funcattn.rs` forward paths DEFERRED** per validation fallback. The policy enum + standalone `apply_dual_policy_gate` ship now; callers invoke after a forward pass. Keeps `ParallaxConfig` / `FuncAttnConfig` backwards-compatible. Rationale: adding `policy: SinkAwarePolicy` to `ParallaxConfig` would require feature-gating the field or breaking `Default::default()`; the standalone path is cleaner.
+2. **Direct wiring into `parallax_attn.rs` / `funcattn.rs` forward paths — split verdict.** The policy enum + standalone `apply_dual_policy_gate` shipped initially; callers invoke after a forward pass. Keeps `ParallaxConfig` / `FuncAttnConfig` backwards-compatible.
+   - **Parallax half: DONE** via [Plan 289](./289_sink_aware_forward_path_wiring.md) (single entry point `tiled_attention_parallax_forward_sink_aware`, separate from `ParallaxConfig`).
+   - **FuncAttn half: CLOSED as not-applicable** via [Research 261](../.research/261_FuncAttn_Sink_Semantics_Verdict.md). FuncAttn's `Φ · C · Ṽ` structure has no `n×n` attention matrix for the sink classifier to scan — basis modes are partition-of-unity by design, so the NOP/Broadcast discrimination collapses into a column-norm check.
 3. **Real-ViT effective_rank G2 DEFERRED.** Needs a frozen model. Synthetic G2 substitute verifies the dual-policy decision logic.
 4. **Stable-rank formula clarification.** Plan task wrote `(Σσ_k)²/Σσ_k²`; we implemented the standard stable rank `‖O‖_F²/‖O‖_op²` (matches the prescribed approximation, only needs top singular value, consistent with Roy-Vetterli `effective_rank` in `geometry.rs`). Documented in module doc.
 
@@ -169,7 +171,7 @@ This removes the technical blocker for the forward-path wiring (scope reduction 
 
 ## Follow-up: Plan 289 (parallax forward-path wiring) — DONE 2026-06-18
 
-[Plan 289](./289_sink_aware_forward_path_wiring.md) shipped `tiled_attention_parallax_forward_sink_aware` — a single entry point composing the parallax forward with the flat dual-policy gate. Resolves scope reduction #2 (parallax half — `funcattn` half remains deferred because Φ is n×k, not n×n attention).
+[Plan 289](./289_sink_aware_forward_path_wiring.md) shipped `tiled_attention_parallax_forward_sink_aware` — a single entry point composing the parallax forward with the flat dual-policy gate. Resolves scope reduction #2 (parallax half). The funcattn half was investigated and **closed as not-applicable** — see [Research 261](../.research/261_FuncAttn_Sink_Semantics_Verdict.md) for the negative-result analysis (FuncAttn's `Φ · C · Ṽ` structure has no token-position sinks).
 
 **Design:** separate entry point (not a `ParallaxConfig` field) — `ParallaxConfig::default()` stays feature-independent. `SinkAwarePolicy::Uniform` short-circuits to vanilla forward; `DualPolicy` runs the retained-attention forward into a caller-owned `o_temp`, then applies the flat gate. All scratch (n² attention matrix, n·d temp, classifier, optional cache) is bundled in one `SinkAwareParallaxScratch` struct.
 
