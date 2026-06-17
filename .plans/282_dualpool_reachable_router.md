@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/249_DecentMem_DualPool_Reachable_Router.md](../.research/249_DecentMem_DualPool_Reachable_Router.md)
 **Source paper:** [arXiv:2605.22721](https://arxiv.org/pdf/2605.22721) — Hao, Long, Zhao 2026, "Self-Evolving MAS via Decentralized Memory"
 **Target:** `crates/katgpt-core/src/cgsp/dual_pool.rs` (new module) + Cargo feature `cgsp_dual_pool`
-**Status:** Active — Phase 4 complete (G3 E-pool growth + G4 faithfulness gate); Phase 5 (G5 CGSP integration) deferred to riir-ai; Phase 6 (docs + GOAT decision) complete — feature stays opt-in (G1–G4 PASS, G5 deferred)
+**Status:** Active — Phase 4 complete (G3 E-pool growth + G4 faithfulness gate); Phase 5 (G5 CGSP integration) **MIGRATED + COMPLETE in [riir-ai Plan 312](../../riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md)** — G5.2 FLAT, G5.3 PASS (161 ns overhead), G5.4 PASS; Phase 6 (docs + GOAT decision) complete — feature stays opt-in (G1–G4 + G5.3/G5.4 PASS, G5.2 FLAT — reachability guarantee alone justifies the feature, not personality divergence).
 
 ---
 
@@ -143,29 +143,23 @@ Ship a generic **dual-pool memory router** that splits a bandit's candidate pool
 
 ---
 
-## Phase 5 — CGSP Integration Benchmark (G5)
+## Phase 5 — CGSP Integration Benchmark (G5) — MIGRATED to riir-ai Plan 312
 
-### Tasks
+**Migration rationale:** All four Phase 5 tasks require `NpcCgspRuntime`, `PriorityTableBandit`, `PersonalityLedger`, `SnapshotSink`, and the chain quorum commit infrastructure — all of which live in `riir-ai/crates/riir-engine/src/cgsp_runtime/`. Per the 3-repo commercial strategy (`katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md`), game-IP runtime code does NOT belong in the public MIT engine. The katgpt-rs plan therefore cannot host the implementation; riir-ai Plan 312 ([`riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md`](../../riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md)) owns the execution.
 
-- [ ] **T5.1** Integrate `DualPoolBandit` into `NpcCgspRuntime` (riir-ai, behind `cgsp_dual_pool` feature):
-  - Each NPC's `PriorityTableBandit` wraps in `DualPoolBandit`.
-  - E-pool = faction-template directions (frozen at spawn, as today).
-  - X-pool = dynamically conjectured directions (the `CuriosityConjecturer` trait already supports this — the shipped impl uses a fixed pool, but the trait can generate novel directions).
-  - Consolidation: rewarded X-pool directions → E-pool, with FaithfulnessProbe gate.
-- [ ] **T5.2** `g5_personality_divergence_widens` benchmark:
-  - Two same-faction NPCs, same RNG seed, 1000 cycles.
-  - Measure priority-table cosine similarity over time.
-  - Dual-pool: NPCs diverge MORE than single-pool (X-pool conjectures different novel directions per NPC → E-pools diverge).
-  - Target: dual-pool cosine similarity < single-pool cosine similarity at cycle 1000.
-- [ ] **T5.3** `g5_latency_budget` benchmark:
-  - Dual-pool adds: 1 sigmoid + 1 branch + consolidation scan per cycle.
-  - Assert: per-cycle overhead < 0.5µs over single-pool CGSP baseline (plasma tier).
-  - No allocation in hot path (reuse pre-allocated pools).
-- [ ] **T5.4** `g5_epool_persistence` test:
-  - After 1000 cycles, snapshot the grown E-pool via existing `CuriosityPrioritySnapshot` + BLAKE3 + chain quorum (Plan 299 T4.6 infrastructure).
-  - Reload snapshot. Assert: E-pool items are bit-identical (deterministic replay preserved).
+### Tasks (ownership transferred to riir-ai Plan 312)
 
-**Phase 5 exit:** G5 passes — dual-pool CGSP shows wider personality divergence, stays in plasma latency budget, snapshots persist correctly.
+- [x] **T5.0 (katgpt-rs)** Mark Phase 5 as migrated to riir-ai Plan 312. The open primitive (`DualPoolBandit`, `ReachableDualPoolRouter`, `consolidate_growing_gated`) is complete and feature-flagged as `cgsp_dual_pool` in katgpt-core; the runtime integration consumes it as `DualPoolBandit<PriorityTableBandit>` via the existing generic `NpcCgspRuntime<S, B: HintDeltaBandit>` type parameter with zero changes to the runtime signature.
+- [x] **T5.1 → riir-ai 312 T1** Integrate `DualPoolBandit` into `NpcCgspRuntime` (behind `cgsp_dual_pool` feature).
+  - **DONE (riir-ai, 2026-06-17):** `dual_pool_bridge.rs` ships with `wrap_priority_table`, `wrap_with_xpool`, `tick_dual_pool`, `consolidate_dual_pool_gated`, `snapshot_epool`. 6 unit tests pass. Plan 299's 299 tests still pass (the `PriorityTableBandit` gained backward-compatible `push_arm`/`is_growing` overrides).
+- [x] **T5.2 → riir-ai 312 T2** `g5_personality_divergence_widens` benchmark.
+  - **DONE (riir-ai, 2026-06-17):** Result = **FLAT**. Dual-pool cosine similarity (0.9693) is NOT lower than single-pool (0.9643) at cycle 1000. The X-pool's `PriorityTableBandit::uniform` conjecturer is too weak — just re-initializes to uniform, converges back to the same attractor. A richer X-pool conjecturer (KG bridge Plan 299 T4.3 or latent functor Plan 303) is needed for personality divergence widening. Documented as future work.
+- [x] **T5.3 → riir-ai 312 T3** `g5_latency_budget` benchmark.
+  - **DONE (riir-ai, 2026-06-17):** **PASS** — overhead = **+161.2 ns/cycle** (target: < 500 ns plasma budget). Steady-state, no allocation in the hot path.
+- [x] **T5.4 → riir-ai 312 T4** `g5_epool_persistence` test.
+  - **DONE (riir-ai, 2026-06-17):** **PASS** — E-pool grew 8→64 arms (hit cap), local roundtrip bit-identical, chain quorum roundtrip (Plan 299 T4.6 infrastructure) bit-identical. **Subtlety discovered:** `CuriosityPrioritySnapshot::blake3_hash` includes a time-based `snapshot_id`, so bit-identity is verified via priorities Vec comparison, not hash.
+
+**Phase 5 exit (now owned by riir-ai 312):** G5 verdict = G5.2 FLAT + G5.3 PASS + G5.4 PASS. `cgsp_dual_pool` stays opt-in per GOAT decision — the reachability guarantee (G1: 30× cheaper than reactive entropy detector, formal non-trapping) justifies the feature for trap-prone domains even without personality divergence widening. Promotion to CGSP default deferred until a richer X-pool conjecturer is integrated.
 
 ---
 
@@ -205,6 +199,7 @@ Ship a generic **dual-pool memory router** that splits a bandit's candidate pool
 ## Cross-References
 
 - **Research:** [249_DecentMem_DualPool_Reachable_Router.md](../.research/249_DecentMem_DualPool_Reachable_Router.md)
+- **Phase 5 (CGSP integration):** [riir-ai Plan 312](../../riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md) — `DualPoolBandit<PriorityTableBandit>` wrapped in `NpcCgspRuntime<S, B>` behind `cgsp_dual_pool` feature (G5 personality divergence + latency + persistence).
 - **Closest cousin (shipped):** [riir-ai Plan 299](../../riir-ai/.plans/299_npc_curiosity_self_play_runtime.md) — CGSP runtime (single-pool, this plan extends it to dual-pool)
 - **Faithfulness gate:** [Plan 278](278_faithfulness_probe_modelless.md) — `FaithfulnessProbe` primitive (consolidation gate in Phase 4)
 - **Collapse detector (reactive baseline):** [Plan 212](212_collapse_aware_adaptive_thinking.md) — `EntropyCollapse::inject_exploration` (dual-pool makes this proactive)
