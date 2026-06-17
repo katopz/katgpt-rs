@@ -1,27 +1,29 @@
-# Benchmark 285: CompressionDrafter Quest Grammar — GOAT **FAILED**
+# Benchmark 285: CompressionDrafter Quest Grammar — GOAT **FAILED** (2nd run)
 
 **Date:** 2026-06-17
 **Plan:** [285_compression_drafter_quest_grammar.md](../.plans/285_compression_drafter_quest_grammar.md)
-**Research:** [256_GzipLM_Compression_Drafter.md](../.research/256_GzipLM_Compression_Drafter.md) (revised GOAT → demoted)
+**Research:** [256_GzipLM_Compression_Drafter.md](../.research/256_GzipLM_Compression_Drafter.md)
 **Feature gates:** `compression_drafter` (katgpt-core), `quest_compression_draft` (riir-games)
-**Status:** ❌ **GOAT FAILED** — CompressionQuestDrafter stays opt-in; `TernaryDraftModel` remains default-on.
+**Status:** ❌ **GOAT FAILED (2nd run)** — both Phase 3 (candidate-scoring + lz4) and Phase 7 (beam search + MatchLengthScorer) fail. Stays opt-in.
 
 ---
 
 ## TL;DR
 
-**The CompressionDrafter loses to TernaryDraftModel on both quality and latency for the quest grammar use case.** The open primitive (`compression_drafter` in katgpt-core) is sound and stays as an opt-in module; the quest grammar wiring is preserved as opt-in but **does NOT promote to default-on**. Honest negative result — the corpus-as-format insight is correct, but candidate-set-scoring is the wrong algorithm (we need beam search, see §Why this failed).
+**Even with the real nathan.rs beam search algorithm and a custom fast match-length scorer, CompressionDrafter loses to TernaryDraftModel for quest grammar.** The fundamental issue: quest grammar's S-V-O templates are so short and so few (8 hardcoded strings) that any compression-based approach is both slower and less diverse than picking from the fixed list.
+
+The open primitive (`compression_drafter`, now including beam search + MatchLengthScorer) stays as opt-in code — both are correct, well-tested implementations useful for future consumers. But for this specific use case, **`TernaryDraftModel` wins fair and square**. Honest negative result.
 
 ---
 
-## GOAT Gate Results
+## GOAT Gate Results (Phase 7 re-bench)
 
-| Gate | Pass criterion | Actual | Verdict |
-|------|----------------|--------|---------|
-| **G1 Diversity** | compression ≥ 3× unique outputs vs ternary | **0.12× (1 unique vs 8)** | ❌ **FAIL** |
-| **G2 Latency** | compression ≤ 2× ternary p99 | **407× (50.875µs vs 125ns)** | ❌ **FAIL** |
-| **G3 Composition** | freeze/thaw roundtrip preserves generation | ✓ matches; tamper detected | ✅ **PASS** |
-| **G4 Zero-alloc** | scratch buffer doesn't grow over 1000 calls | ✓ stable | ✅ **PASS** |
+| Gate | Target | Phase 3 (lz4+cand) | Phase 7 (match+beam) | Verdict |
+|------|--------|---------------------|----------------------|---------|
+| **G1 Diversity** | ≥3× unique vs ternary | 0.12× (1 unique) | **1.50× (12 unique)** ↑ | ❌ **STILL FAIL** (improved 12×, still under 3×) |
+| **G2 Latency** | ≤2× ternary p99 | 407× | **1077×** ↑ (worse!) | ❌ **STILL FAIL** |
+| G3 Composition | freeze/thaw roundtrip | PASS | PASS | ✅ PASS |
+| G4 Zero-alloc | scratch stable | PASS | PASS | ✅ PASS |
 
 **Run command:**
 ```bash
@@ -31,84 +33,102 @@ cargo test --features quest_compression_draft --test bench_285_compression_draft
 
 ---
 
-## Why this failed (root cause analysis)
+## Why Phase 7 still failed
 
-### G1 root cause: corpus dominates, ctx is invisible
+### G1 root cause: 12 unique vs 8 isn't 3×
 
-The compression-drafter scores `compress(corpus + ctx + candidate) - compress(corpus + ctx)`. With a 2KB corpus and ctx of `"quest context N"` (~15 bytes), **ctx is 0.7% of the input**. The compressor's hash table is dominated by corpus patterns; ctx barely shifts the match search. Result: same winner across all 100 contexts (compression_unique = 1).
+Phase 7 improved G1 from 1 unique → 12 unique (12× better). Beam search works — it does produce more diverse outputs than fixed-candidate scoring. But the bar was 3× the ternary baseline of 8 = 24 unique outputs. We got 12.
 
-This is the **opposite failure** of nathan.rs's `tail=80` trick. nathan.rs uses a SHORT corpus (variable, primed by user) and a SHORTER ctx (80 bytes tail of recent output) — ctx and corpus are comparable in size. We have a LONG static corpus and a TINY dynamic ctx.
+Why only 12? The 100 contexts (`"quest 0"` to `"quest 99"`) share the `"quest "` prefix. Their numeric suffixes produce different beam trajectories only when the numeric byte shifts scoring. With a 2KB corpus dominated by S-V-O patterns, the numeric context bytes are largely irrelevant — the corpus determines the output, not the seed.
 
-### G2 root cause: lz4_flex on 2KB is ~50µs, ternary is ~125ns
+To get 24+ unique, we'd need either:
+- More varied seed contexts (different game state bytes, not numbered strings).
+- A per-NPC corpus (the riir-ai/.research/137 angle — different corpus → different output).
+- Temperature sampling (nathan.rs has this; we used pure argmax).
 
-LZ4 is fast for a general-purpose compressor (~500MB/s) but it's still 400× slower than a ternary matvec over 64-dim weights. The Hot-tier latency assumption in Plan 285 was wrong: lz4 is **Warm-tier** (ms), not Hot (sub-ms), and definitely not Plasma (µs). Ternary wins by 3 orders of magnitude.
+### G2 root cause: beam search amplifies scorer calls
 
-### G3 + G4 passed because they don't measure quality
+Phase 7's MatchLengthScorer IS fast — 217ns per `score()` call (computed: 313µs ÷ 1440 calls per generation). That's sub-µs, fitting Hot-tier for a single call. But beam search multiplies it:
 
-G3 (BLAKE3 roundtrip) and G4 (zero-alloc scratch) test the infrastructure, not the algorithm. Both work — the corpus-as-format serialization is sound. The problem is the *scoring algorithm*, not the storage format.
+```
+calls_per_generation = beam_width × horizon × alphabet_size
+                    = 4 × 12 × ~30 (quest-grammar alphabet)
+                    = 1440
+total_latency = 1440 × 217ns = 313µs
+```
+
+Ternary matvec + hash = 291ns total. So beam search is 1077× slower PER GENERATION, even though each individual scorer call is fast.
+
+This is fundamental: compression-based generation requires exploring multiple candidates per step. Template selection doesn't — it's one matvec + one hash. **There's no way to make beam search competitive with single-pass template selection on latency for this use case.**
 
 ---
 
-## What this means
+## What the two runs taught us
 
-### The honest downgrade
+| Insight | Phase 3 | Phase 7 |
+|---------|---------|---------|
+| Algorithm matters | Fixed-candidate scoring = 1 unique (corpus dominates) | Beam search = 12 unique (growing tail helps) ✓ |
+| Scorer speed matters | lz4 = 50µs/call (Warm-tier) | MatchLengthScorer = 217ns/call (Hot-tier per call) ✓ |
+| BUT beam search multiplies calls | N/A (single batch) | 1440 calls/generation × 217ns = 313µs (too slow for Hot) ✗ |
+| Diversity ceiling | Capped at candidate-set size | Capped by corpus structure — 12 unique is the natural ceiling for this corpus |
 
-The original verdict (R256 Super-GOAT → revised GOAT → now **demoted below GOAT**) was overclaimed at every step. The user's pushback to actually run the gate caught it. The correct verdict for the quest-grammar use case is **Pass (negative result)** — compression-as-scorer doesn't beat template selection here.
+**The honest conclusion:** compression-based generation is a Warm-tier technique. For Hot-tier quest grammar (sub-ms budget), template selection is structurally superior. The two approaches aren't competing on the same axis — they're for different tiers.
 
-### What stays
+---
 
-1. **`compression_drafter` module in katgpt-core stays** — it's a sound primitive (6/6 unit tests pass), useful for any consumer that wants corpus-as-scorer. Generic, no game IP. Default-off.
-2. **`CompressionQuestDrafter` and `CorpusSnapshot` stay opt-in** — they're correct code, just not the right tool for quest grammar. Future work might use them elsewhere.
-3. **`TernaryDraftModel` remains default-on** for quest grammar — it won this gate fair and square.
-4. **riir-ai/.research/137 (per-NPC plasma exploration)** stays as a research note. The G1 latency fit (sub-µs custom LZ77) is the only path that would beat ternary, and it's still unvalidated.
+## What ships (unchanged from Phase 3)
 
-### What we learned
-
-1. **The corpus-as-format insight is correct** — CorpusSnapshot's BLAKE3 roundtrip works perfectly. The format IS committable, tamper-evident, zero-parser. That part of the user's intuition was right.
-2. **The candidate-scoring algorithm is wrong for this use case.** Compression-as-scorer needs **beam search** (nathan.rs's actual algorithm — extend candidates byte-by-byte with horizon), not "score a fixed candidate set". The fixed candidate set collapses to the corpus-mode winner regardless of ctx.
-3. **lz4 is Warm-tier (ms), not Hot-tier (sub-ms).** The plasma tier (µs) would need a custom SIMD LZ77 over a tiny alphabet — still unvalidated.
-
-### What would need to change to make this work
-
-- **For diversity**: implement actual beam search (nathan.rs's algorithm). Don't score a fixed candidate set — extend byte-by-byte, beam_width=32, horizon=24. The output space becomes the corpus manifold, not the candidate enumeration.
-- **For latency**: a custom plasma-tier LZ77 (sub-µs SIMD over tiny alphabet) — the `riir-ai/.research/137` exploration. lz4 is too slow.
-
-Both are **non-trivial** and out of scope for this plan. They'd be a new plan if pursued.
+1. **`compression_drafter` module in katgpt-core** — now includes:
+   - `CompressionDrafter` trait + `Lz4FlexDrafter` (Phase 1)
+   - `MatchScorer` trait + `Lz4MatchScorer` + `MatchLengthScorer` (Phase 6)
+   - `beam_search()` function (Phase 5)
+   - `corpus_alphabet()` helper (Phase 5)
+   - 15/15 unit tests pass
+2. **`CompressionQuestDrafter` + `CorpusSnapshot`** in riir-games — both candidate-set and beam-search generation paths.
+3. **`TernaryDraftModel` remains default-on** for quest grammar — won twice.
+4. **riir-ai/.research/137** stays as exploration for the per-NPC plasma angle (would solve G1 via different corpora, not G2).
 
 ---
 
 ## Action items
 
-- [x] **T4.3 executed**: G1 failed, tried candidate-set-scoring, confirmed it doesn't produce useful signal for quest grammar.
-- [x] **Demotion**: `compression_drafter` stays opt-in in katgpt-core. `quest_compression_draft` stays opt-in in riir-games. Neither promotes to default.
-- [x] **README update**: NOT promoted — quest grammar README continues to describe TernaryDraftModel as the default drafter.
-- [x] **Negative result documented** (this file).
-- [ ] **Follow-up issue**: should we create `.issues/029_compression_beam_search.md` to track the beam-search variant? (User decision.)
+- [x] **Phase 5 executed**: beam search algorithm implemented, 4 unit tests pass.
+- [x] **Phase 6 executed**: MatchLengthScorer with inverted index, 4 unit tests pass. Per-call latency 217ns (Hot-tier).
+- [x] **Phase 7 executed**: re-bench with beam search + MatchLengthScorer. G1 improved 12× but still misses 3× bar. G2 worse due to beam search amplification.
+- [x] **Final demotion**: `compression_drafter` and `quest_compression_draft` stay opt-in. Neither promotes.
+- [x] **Honest negative result documented** (this file).
+- [ ] **Issue tracking**: `.issues/029_compression_beam_search_followups.md` to track the two paths that might still work:
+  - **Per-NPC corpus** (different corpora → different outputs, addresses G1).
+  - **Warm-tier positioning** (accept ms latency, position as Warm-tier quest generation for offline/NPC-sleep-cycle use, not Hot-tier runtime).
 
 ---
 
-## Files touched
+## Final verdict
 
-| File | Change |
-|------|--------|
-| `katgpt-rs/crates/katgpt-core/Cargo.toml` | Added `lz4_flex` optional dep + `compression_drafter` feature (stays opt-in) |
-| `katgpt-rs/crates/katgpt-core/src/compression_drafter.rs` | NEW: `CompressionDrafter` trait + `Lz4FlexDrafter` impl + 6 unit tests (all pass) |
-| `katgpt-rs/crates/katgpt-core/src/lib.rs` | Added `pub mod compression_drafter;` behind feature gate |
-| `katgpt-rs/Cargo.toml` | Added `compression_drafter` passthrough feature + example registration |
-| `katgpt-rs/src/lib.rs` | Added `pub use katgpt_core::compression_drafter;` re-export |
-| `katgpt-rs/examples/compression_drafter_01_basic.rs` | NEW: corpus-as-model demo |
-| `katgpt-rs/.research/256_GzipLM_Compression_Drafter.md` | Status revised: Super-GOAT → GOAT → (now) **demoted** with negative-result note |
-| `katgpt-rs/.plans/285_compression_drafter_quest_grammar.md` | NEW: plan with G1-G4 gate |
-| `katgpt-rs/.benchmarks/285_compression_drafter_goat.md` | NEW: this file (negative result) |
-| `riir-ai/.research/137_Compression_Drafter_Plasma_Personality_Guide.md` | Status revised: exploration, not committed Super-GOAT |
-| `riir-ai/crates/riir-games/Cargo.toml` | Added `quest_compression_draft` opt-in feature |
-| `riir-ai/crates/riir-games/src/quest_grammar/compression_draft.rs` | NEW: `CompressionQuestDrafter` + 6 unit tests (all pass) |
-| `riir-ai/crates/riir-games/src/quest_grammar/freeze_thaw.rs` | Added `CorpusSnapshot` + `Blake3Mismatch` / `Truncated` errors + 4 unit tests (all pass) |
-| `riir-ai/crates/riir-games/src/quest_grammar/mod.rs` | Registered `compression_draft` module behind feature gate |
-| `riir-ai/crates/riir-games/tests/bench_285_compression_drafter.rs` | NEW: GOAT bench (G1 FAIL, G2 FAIL, G3 PASS, G4 PASS) |
+**The user's instinct ("shall we zip and use this way?") was partially right:**
+- ✅ The corpus IS a valid wired format (CorpusSnapshot + BLAKE3 works perfectly).
+- ✅ Compression CAN generate diverse outputs (beam search gave 12 unique vs 8 templates).
+- ❌ But for the quest grammar Hot-tier use case, template selection is structurally faster and nearly as diverse.
+
+**The right home for compression-based generation in our stack is NOT quest grammar Hot-tier.** It's:
+1. **Warm-tier offline generation** — quest packs generated during NPC sleep cycles, where ms latency is fine and diversity matters more than speed.
+2. **Per-NPC personality** (riir-ai/.research/137) — if a custom plasma-tier SIMD LZ77 can fit µs budget, per-NPC corpora would produce genuine personality divergence. Still unvalidated.
+
+Both are follow-up work, not this plan.
+
+---
+
+## Files touched (Phase 5-7 additions)
+
+| File | Phase 5-7 Change |
+|------|------------------|
+| `katgpt-rs/crates/katgpt-core/src/compression_drafter.rs` | + `MatchScorer` trait, `Lz4MatchScorer`, `MatchLengthScorer` (inverted index), `beam_search()`, `corpus_alphabet()` + 9 new unit tests (15 total) |
+| `riir-ai/crates/riir-games/src/quest_grammar/compression_draft.rs` | + `generate_beam()` method using beam search |
+| `riir-ai/crates/riir-games/tests/bench_285_compression_drafter.rs` | G1+G2 switched to beam search; added phase history in doc comment |
+| `katgpt-rs/.plans/285_compression_drafter_quest_grammar.md` | + Phase 5/6/7 sections documenting the algorithm + scorer + re-bench |
 
 ---
 
 ## TL;DR
 
-Plan 285 GOAT **FAILED** on G1 (diversity 0.12× vs 3× target) and G2 (latency 407× vs 2× target). G3 (freeze/thaw composition) and G4 (zero-alloc) passed cleanly. **The open primitive and quest wiring stay as opt-in modules** — the code is correct and the CorpusSnapshot format works, but compression-as-scorer is the wrong algorithm for fixed-candidate-set quest generation. The right algorithm (nathan.rs's actual beam search) is a follow-up plan. TernaryDraftModel remains default-on. Honest negative result — the user's pushback to actually run the gate caught an overclaim that would have shipped as fake-GOAT.
+Phase 7 re-bench with beam search + MatchLengthScorer: **G1 improved 12× (1→12 unique outputs) but still misses 3× bar; G2 worse (407× → 1077×) because beam search amplifies scorer calls (1440/generation).** Per-call scorer latency IS fast (217ns, Hot-tier), but beam search × alphabet × horizon = too many calls. **Final verdict: quest grammar Hot-tier is structurally better served by `TernaryDraftModel` template selection.** Compression-based generation belongs in Warm-tier (offline quest pack generation) or per-NPC plasma (still unvalidated). Open primitive stays opt-in; honest negative result. Two follow-up paths documented for future issues.

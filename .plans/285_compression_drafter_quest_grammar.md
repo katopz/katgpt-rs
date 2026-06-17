@@ -71,12 +71,73 @@ Ship a **Hot-tier modelless CompressionDrafter** that scores quest-continuation 
 - [ ] **T4.3** If G1 fails (no diversity gain over template selection): the corpus isn't producing useful signal. Try the multi-byte candidate variant (horizon=4 from nathan.rs/gzip-lm). If still fails → demote `compression_drafter` to opt-in in katgpt-core, document negative result.
 - [ ] **T4.4** Commit with `feat:` prefix on success, `fix:` prefix if a follow-up fix was needed. Stay on `develop`. Tag the benchmark file in the commit message.
 
-## Out of Scope (deferred to follow-up issues)
+## Initial Result — G1+G2 FAILED (2026-06-17)
 
-- **Per-NPC plasma-tier LZ77** (G1 latency fit at µs budget) — that's the Super-GOAT exploration in `riir-ai/.research/137`. Out of scope for this GOAT plan.
-- **Fusion with PhraseBoost / IrreducibilityGate** — Phase 5+ once GOAT ships.
-- **HLA moment corpus composition** — Phase 6+ once corpus-as-format is proven.
-- **AbsorbCompress corpus eviction** — when corpus exceeds 30KB window, evict low-info bytes. Phase 7+.
+The first bench run (Phase 3) produced:
+- **G1 Diversity: FAIL 0.12×** — corpus dominates scoring, ctx is invisible. Same winner regardless of context.
+- **G2 Latency: FAIL 407×** — lz4_flex on 2KB is ~50µs/call; ternary matvec is 125ns. lz4 is Warm-tier, not Hot-tier.
+- G3 Composition: PASS. G4 Zero-alloc: PASS.
+
+Root cause analysis:
+1. **Wrong algorithm.** I implemented candidate-set-scoring. nathan.rs/gzip-lm actually uses **beam search** — extend byte-by-byte with horizon, the growing tail becomes the new scoring context. Fixed candidate sets collapse to the corpus-mode winner; growing tails produce diversity.
+2. **Wrong backend.** lz4_flex is a general-purpose compressor. We don't need compressed *length* — we need a **match-length proxy** (longest suffix of ctx+candidate appearing in corpus). That's a much simpler computation amenable to inverted-index acceleration.
+
+→ Add Phase 5 (beam search), Phase 6 (fast scorer), Phase 7 (re-bench).
+
+## Phase 5 — Beam Search Algorithm (the real nathan.rs algorithm)
+
+### Tasks
+
+- [ ] **T5.1** Add `beam_search()` function to `katgpt-rs/crates/katgpt-core/src/compression_drafter.rs`:
+  - Signature: `pub fn beam_search<S: MatchScorer>(scorer: &S, seed_ctx: &[u8], alphabet: &[u8], horizon: usize, beam_width: usize, tail_len: usize) -> Vec<u8>`
+  - Algorithm: nathan.rs/gzip-lm's actual beam search (see research §1.1). At each of `horizon` steps:
+    1. For each beam × each alphabet byte, score `tail(seed_ctx + beam) + [byte]`.
+    2. Keep top `beam_width` beams by cumulative score.
+    3. The growing beam IS the tail — it becomes scoring context for the next step. This is the diversity source nathan.rs exploits.
+  - Return the highest-scoring beam's bytes.
+  - Anti-repeat: cap visible ctx at `tail_len` bytes (nathan.rs's `tail=80` trick — without it the compressor matches its own older output and loops).
+- [ ] **T5.2** Define `pub trait MatchScorer { fn score(&self, ctx: &[u8], candidate: &[u8]) -> i32; }` — a narrower trait than `CompressionDrafter`. Any scorer (lz4, match-length, future SIMD) implements it. Beam search is scorer-agnostic.
+- [ ] **T5.3** Implement `Lz4MatchScorer` wrapping the existing `Lz4FlexDrafter` as a `MatchScorer`. Used for correctness validation of beam search (slow but correct).
+- [ ] **T5.4** Unit tests for beam search:
+  - `beam_search_produces_nonempty_output()`
+  - `beam_search_extends_corpus_patterns()` — corpus `"guard needs sword\n"`, seed_ctx `"guard"`, output starts with `"guard needs"` or similar.
+  - `beam_search_tail_prevents_loop()` — without tail_len cap, output repeats; with cap, diverse.
+  - `beam_search_horizon_controls_length()` — output length ≤ horizon.
+
+## Phase 6 — Fast Match-Length Scorer (latency fix)
+
+### Tasks
+
+- [ ] **T6.1** Add `MatchLengthScorer` to `compression_drafter.rs`:
+  - Inverted index: `byte_positions: Vec<Vec<u32>>` (256 buckets, positions in corpus).
+  - `pub fn new(corpus: &[u8]) -> Self` — builds inverted index once. O(corpus_len).
+  - `pub fn rebuild(&mut self, corpus: &[u8])` — for online-learning corpus updates.
+  - `fn suffix_match_len(&self, ctx: &[u8], candidate: &[u8]) -> usize` — longest suffix of `ctx + candidate` appearing in corpus. Uses inverted index to skip non-matching positions. O(matches × avg_match_len).
+  - Implements `MatchScorer`: `score(ctx, candidate) = suffix_match_len(ctx, candidate) as i32`.
+- [ ] **T6.2** Unit tests:
+  - `match_length_finds_short_patterns()`
+  - `match_length_finds_long_patterns()`
+  - `match_length_zero_for_unseen()`
+  - `inverted_index_accelerates_lookup()` — benchmark vs naive substring search.
+- [ ] **T6.3** Bench `MatchLengthScorer::score()` on 2KB corpus: target < 1µs p99. If it passes, G2 becomes achievable.
+
+## Phase 7 — Re-bench with Beam Search + Fast Scorer
+
+### Tasks
+
+- [ ] **T7.1** Update `riir-ai/crates/riir-games/src/quest_grammar/compression_draft.rs`:
+  - Add `pub fn generate_beam(&mut self, seed_ctx: &str, alphabet: &[u8], horizon: usize, beam_width: usize, tail_len: usize) -> String` — uses `beam_search` with `MatchLengthScorer`.
+  - Keep existing `generate()` (candidate-set) for backward compat.
+  - The alphabet for quest grammar: the ASCII bytes appearing in the registered corpus (use `corpus_alphabet()` helper).
+- [ ] **T7.2** Update `bench_285_compression_drafter.rs`:
+  - **G1 (beam)**: generate 100 quests via `generate_beam()` with varying seed contexts. Target ≥3× unique outputs vs ternary. **The growing tail is the diversity mechanism.**
+  - **G2 (beam + MatchLengthScorer)**: bench `generate_beam()` latency. Target ≤2× ternary p99.
+  - Keep G3 (freeze/thaw) and G4 (zero-alloc).
+- [ ] **T7.3** Run bench. Document PASS/FAIL per gate in `.benchmarks/285_compression_drafter_goat.md`.
+- [ ] **T7.4** Decision:
+  - All gates PASS → promote `quest_compression_draft` to default-on, demote `TernaryDraftModel`.
+  - G1 PASS, G2 FAIL → keep lz4 backend for correctness, ship `MatchLengthScorer` as the fast path. Opt-in until SIMD optimization.
+  - G1 FAIL → beam search doesn't help. Demote honestly, create issue for byte-level vs token-level beam search experiment.
 
 ---
 
