@@ -46,12 +46,9 @@
 pub mod beta_fitter;
 pub mod chunked;
 pub mod compact;
+pub mod compact_fixed_beta;
 pub mod head_budget;
 pub mod key_selection;
-#[cfg(feature = "lora_beta_predictor")]
-pub mod lora_beta_predictor;
-#[cfg(feature = "lora_beta_predictor")]
-pub mod lora_beta_inference;
 pub mod online;
 pub mod router;
 pub mod score_matrix;
@@ -84,15 +81,11 @@ pub use value_fitter::{fit_cv_least_squares, ValueFitConfig, ValueFitResult};
 #[cfg(feature = "adaptive_cot_compaction")]
 pub use adaptive_cot::{AdaptiveCompactResult, AdaptiveTraceCompactor};
 
-#[cfg(feature = "lora_beta_predictor")]
-pub use lora_beta_predictor::{
-    LoraBetaError, LoraBetaPredictor, PREDICTOR_MAGIC, PREDICTOR_VERSION,
-    BETA_MAX, BETA_MID, BETA_MIN, DEFAULT_ALPHA, DEFAULT_INIT_SEED, DEFAULT_RANK,
-    LORA_INPUT_DIM as LORA_BETA_INPUT_DIM, LORA_OUTPUT_DIM as LORA_BETA_OUTPUT_DIM,
-};
-
-#[cfg(feature = "lora_beta_predictor")]
-pub use lora_beta_inference::{compute_kv_stats_for_heads, compact_with_fixed_beta};
+// Simplified AM fast path (Issue 305): skip NNLS, use a fixed β (BETA_MID).
+// Always-available — no feature gate. Replaces the removed `lora_beta_predictor`
+// / `lora_beta_inference` modules, which proved mathematically moot under
+// softmax invariance.
+pub use compact_fixed_beta::{compact_with_fixed_beta, BETA_MAX, BETA_MID, BETA_MIN};
 
 #[cfg(test)]
 mod tests;
