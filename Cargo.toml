@@ -1454,6 +1454,15 @@ path = "benches/sink_aware_latency_bench.rs"
 required-features = ["sink_aware_attn"]
 harness = false
 
+# Plan 289 T3.5 — Sink-aware forward composition latency benchmark.
+# G3 gate for `tiled_attention_parallax_forward_sink_aware` wrapper overhead.
+# Verifies sa(Uniform) ≤ 5% slower than vanilla forward (zero-cost contract).
+[[bench]]
+name = "sink_aware_forward_bench"
+path = "benches/sink_aware_forward_bench.rs"
+required-features = ["parallax_attn", "sink_aware_attn"]
+harness = false
+
 # Plan 287 Phase 3 T3.4 — Synthetic G2 gate (Broadcast head preservation).
 # Real-ViT effective_rank gate is DEFERRED — needs a frozen model.
 [[test]]

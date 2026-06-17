@@ -30,7 +30,33 @@
 //! This reduces outer products from O(N²) to O(N), bringing CPU overhead
 //! from ~50× down to ~2× over base SDPA.
 //!
-//! Feature-gated behind `#[cfg(feature = "parallax_attn")]`.
+//! ## Sink-Aware Composition (Plan 289)
+//!
+//! When both `parallax_attn` and `sink_aware_attn` features are enabled, this
+//! module also exposes [`tiled_attention_parallax_forward_sink_aware`] — a
+//! single entry point composing the parallax forward with the dual-policy
+//! NOP/Broadcast classifier from [`crate::data_probe`] (Plan 287, Research 258).
+//!
+//! - [`SinkAwarePolicy::Uniform`] short-circuits to vanilla
+//!   [`tiled_attention_parallax_forward`] (zero-cost contract: ≤5% overhead,
+//!   measured within noise across n ∈ {64, 128, 256}).
+//! - [`SinkAwarePolicy::DualPolicy`] runs the retained-attention forward into
+//!   a caller-owned `o_temp`, then applies the flat dual-policy gate to produce
+//!   the final output. Caller owns scratch via [`SinkAwareParallaxScratch`] —
+//!   one struct bundles `attn_matrix`, `o_temp`, classifier scratch, and an
+//!   optional [`crate::data_probe::CachedSinkClassification`] for audit-cadence
+//!   amortization (Plan 287 Issue 001 mitigation).
+//!
+//! Design rationale (see `.plans/289_sink_aware_forward_path_wiring.md` §Scope
+//! decisions A1–A5): separate entry point (not a `ParallaxConfig` field) so
+//! `Default::default()` stays feature-independent; optional out-param on the
+//! forward for attention matrix retention (zero overhead when `None`);
+//! out-of-place gate with caller-provided temp buffer (no raw-pointer in-place
+//! variants needed in `data_probe`).
+//!
+//! Feature-gated behind `#[cfg(feature = "parallax_attn")]` for the vanilla
+//! forward and `#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]`
+//! for the sink-aware composition.
 
 use crate::simd;
 
@@ -270,6 +296,10 @@ impl ParallaxScratch {
 /// * `x`            — layer input `[head_dim]`
 /// * `parallax_config` — gate scale and init config
 /// * `scratch`      — pre-allocated scratch buffers (pass `None` for one-shot allocation)
+///
+/// See [`tiled_attention_parallax_forward_retaining`] for a variant that optionally
+/// writes the full `n×n` normalized attention matrix into a caller-owned buffer
+/// (used by [`tiled_attention_parallax_forward_sink_aware`] for sink classification).
 #[allow(clippy::too_many_arguments)]
 pub fn tiled_attention_parallax_forward(
     q: &[f32],
@@ -284,6 +314,43 @@ pub fn tiled_attention_parallax_forward(
     parallax_config: &ParallaxConfig,
     scratch: Option<&mut ParallaxScratch>,
 ) {
+    tiled_attention_parallax_forward_retaining(
+        q, k, v, output, seq_len, head_dim, scale, r, x, parallax_config, None, scratch,
+    );
+}
+
+/// Same as [`tiled_attention_parallax_forward`] but optionally retains the full
+/// `n×n` normalized attention matrix.
+///
+/// When `attn_matrix` is `Some(buf)`, `buf` must have length `seq_len * seq_len`
+/// and will be filled row-major with the post-normalization attention weights:
+/// `attn_matrix[i * seq_len + j] = p(i, j)`. This is required by sink-aware
+/// composition ([`tiled_attention_parallax_forward_sink_aware`]) because the
+/// classifier scans attention *columns* (per-position sink strength), while
+/// the parallax forward computes attention *row-by-row* and discards.
+///
+/// When `attn_matrix` is `None`, behavior is bit-identical to
+/// [`tiled_attention_parallax_forward`] — the per-row `copy_from_slice` is
+/// skipped (single hoisted branch outside the inner `j` loop).
+///
+/// # Arguments
+/// * `attn_matrix`  — `None` for vanilla behavior, or a caller-owned
+///   `&mut [f32]` of length `seq_len * seq_len` to retain the attention map.
+#[allow(clippy::too_many_arguments)]
+pub fn tiled_attention_parallax_forward_retaining(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    output: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    r: &[f32],
+    x: &[f32],
+    parallax_config: &ParallaxConfig,
+    mut attn_matrix: Option<&mut [f32]>,
+    scratch: Option<&mut ParallaxScratch>,
+) {
     let expected = seq_len * head_dim;
     debug_assert_eq!(q.len(), expected, "Q slice length mismatch");
     debug_assert_eq!(k.len(), expected, "K slice length mismatch");
@@ -295,6 +362,13 @@ pub fn tiled_attention_parallax_forward(
         "R must be head_dim × head_dim"
     );
     debug_assert_eq!(x.len(), head_dim, "x must have length head_dim");
+    if let Some(am) = attn_matrix.as_deref() {
+        debug_assert_eq!(
+            am.len(),
+            seq_len * seq_len,
+            "attn_matrix must be (seq_len, seq_len) row-major when Some"
+        );
+    }
 
     if seq_len == 0 {
         return;
@@ -341,6 +415,7 @@ pub fn tiled_attention_parallax_forward(
             scale,
             Some(&mut scratch.scores),
             parallax_config.activation,
+            attn_matrix.as_deref_mut(),
         );
         return;
     }
@@ -364,6 +439,12 @@ pub fn tiled_attention_parallax_forward(
         // Normalize attention weights (softmax or sigmoid)
         let row = &mut scratch.scores[..n];
         normalize_attention_weights(row, parallax_config.activation);
+
+        // Retain normalized attention row if caller asked for the full matrix.
+        // Branch is hoisted: either every row copies, or no row does.
+        if let Some(am) = attn_matrix.as_deref_mut() {
+            am[i * n..(i + 1) * n].copy_from_slice(&scratch.scores[..n]);
+        }
 
         // Accumulate output: o_i = Σ_j p_ij · v_j
         for j in 0..n {
@@ -416,6 +497,241 @@ pub fn tiled_attention_parallax_forward(
     }
 }
 
+// ── Sink-Aware composition (Plan 289) ─────────────────────────────
+// Requires both `parallax_attn` and `sink_aware_attn` features. Composes the
+// retained-attention forward with the flat-layout dual-policy gate so callers
+// get a single entry point that (a) is zero-cost when policy = Uniform, and
+// (b) handles all the buffer plumbing (attn matrix, temp output, classifier
+// scratch, optional cache) behind one owned scratch struct.
+//
+// Design rationale: see `.plans/289_sink_aware_forward_path_wiring.md`
+// §Scope decisions A1–A5. Summary: we add a *new entry point* rather than a
+// field on `ParallaxConfig` (preserves `Default::default()` + avoids
+// feature-gated fields); we use an *optional out-param* on the forward to
+// retain the n×n attention matrix (zero overhead when None); we forward into
+// a *caller-owned temp buffer* rather than adding `_inplace` gate variants
+// (keeps the gate API honest about its read/write split).
+
+/// Scratch buffers for [`tiled_attention_parallax_forward_sink_aware`].
+///
+/// Bundles everything the sink-aware composition needs beyond a vanilla
+/// [`ParallaxScratch`]:
+///
+/// * `attn_matrix` — `n×n` row-major buffer to retain the post-normalization
+///   attention map. Required by the classifier (it scans attention columns).
+/// * `o_temp` — `n×d` buffer that receives the parallax forward output before
+///   the gate consumes it. The flat gate API is out-of-place (`o: &[f32]`,
+///   `out: &mut [f32]`) — this buffer is the `o` side.
+/// * `classifier` — [`StableRankScratch`] for the power-iteration kernel.
+/// * `cached` — when `Some`, the wrapper uses [`apply_dual_policy_gate_cached_flat`]
+///   to amortize classifier cost across calls (Plan 287 Issue 001 mitigation).
+///   `None` runs the classifier every call.
+///
+/// Callers typically construct once via [`SinkAwareParallaxScratch::new`] and
+/// reuse across calls; [`SinkAwareParallaxScratch::ensure_capacity`] is a
+/// no-op when dimensions match (mirrors [`ParallaxScratch::ensure_capacity`]).
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
+pub struct SinkAwareParallaxScratch {
+    /// `n×n` row-major attention matrix. Written by the retained forward.
+    pub attn_matrix: Vec<f32>,
+    /// `n×d` temporary output. Written by the forward, read by the gate.
+    pub o_temp: Vec<f32>,
+    /// Classifier scratch (power iteration + col sums).
+    pub classifier: crate::data_probe::StableRankScratch,
+    /// Optional audit-cadence cache. When `None`, classifier runs every call.
+    pub cached: Option<crate::data_probe::CachedSinkClassification>,
+    cached_seq_len: usize,
+    cached_head_dim: usize,
+}
+
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
+impl SinkAwareParallaxScratch {
+    /// Allocate for the given dimensions. The `cached` field starts as `None`
+    /// (classifier runs every call); set it via [`Self::with_cache`] or by
+    /// direct field assignment to enable audit-cadence amortization.
+    pub fn new(seq_len: usize, head_dim: usize) -> Self {
+        Self {
+            attn_matrix: vec![0.0; seq_len * seq_len],
+            o_temp: vec![0.0; seq_len * head_dim],
+            classifier: crate::data_probe::StableRankScratch::new(head_dim),
+            cached: None,
+            cached_seq_len: seq_len,
+            cached_head_dim: head_dim,
+        }
+    }
+
+    /// Enable the audit-cadence cache with default config (cadence 16).
+    /// Convenience for callers who want the cached path without constructing
+    /// a [`crate::data_probe::CachedSinkClassification`] by hand.
+    pub fn with_cache(mut self) -> Self {
+        self.cached = Some(crate::data_probe::CachedSinkClassification::new());
+        self
+    }
+
+    /// Resize buffers if dimensions changed. No-op when both match the last
+    /// call — mirrors [`ParallaxScratch::ensure_capacity`]'s fast path.
+    pub fn ensure_capacity(&mut self, seq_len: usize, head_dim: usize) {
+        if self.cached_seq_len == seq_len && self.cached_head_dim == head_dim {
+            return;
+        }
+        if self.attn_matrix.len() != seq_len * seq_len {
+            self.attn_matrix.resize(seq_len * seq_len, 0.0);
+        }
+        if self.o_temp.len() != seq_len * head_dim {
+            self.o_temp.resize(seq_len * head_dim, 0.0);
+        }
+        self.classifier.ensure_capacity_dn(head_dim, seq_len);
+        self.cached_seq_len = seq_len;
+        self.cached_head_dim = head_dim;
+    }
+}
+
+/// Sink-aware composition of parallax forward + dual-policy gate (Plan 289).
+///
+/// Single entry point for callers who want per-head NOP/Broadcast gating
+/// applied to the parallax forward output, without manually plumbing the
+/// attention matrix, temporary output, classifier scratch, and optional
+/// audit cache.
+///
+/// # Behavior
+///
+/// * [`SinkAwarePolicy::Uniform`] — calls vanilla
+///   [`tiled_attention_parallax_forward`] directly into `output`. **Zero
+///   overhead** vs the vanilla path: no attention matrix is retained, no
+///   temporary buffer is touched, no classifier runs. Returns
+///   [`SinkKind::None`].
+/// * [`SinkAwarePolicy::DualPolicy(_)`] — runs the retained forward into
+///   `sink_scratch.o_temp` while writing the full `n×n` attention matrix into
+///   `sink_scratch.attn_matrix`, then applies the flat dual-policy gate
+///   (`o_temp → output`). When `sink_scratch.cached` is `Some`, uses the
+///   cached variant (amortizes classifier cost; Plan 287 Issue 001 mitigation).
+///
+/// # Arguments
+///
+/// * `q`, `k`, `v`, `output`, `seq_len`, `head_dim`, `scale`, `r`, `x`,
+///   `parallax_config`, `scratch` — see [`tiled_attention_parallax_forward`].
+/// * `policy`        — [`SinkAwarePolicy::Uniform`] for the zero-cost path;
+///   [`SinkAwarePolicy::DualPolicy`] to invoke the classifier + gate.
+/// * `gate_scale`    — pre-sigmoid logit for the NOP gate. `σ(gate_scale)` is
+///   the scale applied to NOP-classified output rows. Pass `0.0` for
+///   σ(0)=0.5 (half-suppression) or a large negative for near-zero.
+/// * `sink_scratch`  — owns `attn_matrix`, `o_temp`, classifier scratch, and
+///   optional cache. Construct once via [`SinkAwareParallaxScratch::new`] and
+///   reuse across calls.
+///
+/// # Returns
+///
+/// The dominant sink's [`SinkKind`] (`None` for Uniform path, or the
+/// classifier verdict for DualPolicy path).
+///
+/// # Feature gates
+///
+/// Requires both `parallax_attn` and `sink_aware_attn` features at the crate
+/// level. The vanilla forward is always available with just `parallax_attn`.
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
+#[allow(clippy::too_many_arguments)]
+pub fn tiled_attention_parallax_forward_sink_aware(
+    q: &[f32],
+    k: &[f32],
+    v: &[f32],
+    output: &mut [f32],
+    seq_len: usize,
+    head_dim: usize,
+    scale: f32,
+    r: &[f32],
+    x: &[f32],
+    parallax_config: &ParallaxConfig,
+    policy: &crate::data_probe::SinkAwarePolicy,
+    gate_scale: f32,
+    sink_scratch: &mut SinkAwareParallaxScratch,
+    scratch: Option<&mut ParallaxScratch>,
+) -> crate::data_probe::SinkKind {
+    use crate::data_probe::SinkAwarePolicy;
+
+    // Uniform short-circuit: zero-cost contract. Vanilla forward writes
+    // directly into `output`; we touch nothing in `sink_scratch`.
+    if matches!(policy, SinkAwarePolicy::Uniform) {
+        tiled_attention_parallax_forward(
+            q, k, v, output, seq_len, head_dim, scale, r, x, parallax_config, scratch,
+        );
+        return crate::data_probe::SinkKind::None;
+    }
+
+    // DualPolicy path: ensure scratch sized, forward into temp with attn
+    // matrix retained, then apply the flat gate (cached or uncached).
+    let n = seq_len;
+    let d = head_dim;
+    sink_scratch.ensure_capacity(n, d);
+
+    tiled_attention_parallax_forward_retaining(
+        q,
+        k,
+        v,
+        &mut sink_scratch.o_temp,
+        seq_len,
+        head_dim,
+        scale,
+        r,
+        x,
+        parallax_config,
+        Some(&mut sink_scratch.attn_matrix),
+        scratch,
+    );
+
+    // Source of truth for classifier thresholds is the `policy` argument.
+    // When the cache is enabled, sync its cfg from the policy so the cached
+    // variant (which reads `cached.cfg` internally) stays consistent. Cost is
+    // one 5-f32 struct copy per call — negligible vs the n×n classifier.
+    let policy_cfg = match policy {
+        SinkAwarePolicy::DualPolicy(c) => *c,
+        // Unreachable: Uniform short-circuited above.
+        SinkAwarePolicy::Uniform => unreachable!("Uniform handled by short-circuit"),
+    };
+
+    // Borrow classifier + cached disjointly from attn_matrix / o_temp. Split
+    // the mutable borrow on `sink_scratch` by destructuring field-by-field:
+    // Rust's borrow checker treats disjoint field borrows as independent.
+    let SinkAwareParallaxScratch {
+        attn_matrix,
+        o_temp,
+        classifier,
+        cached,
+        cached_seq_len: _,
+        cached_head_dim: _,
+    } = sink_scratch;
+
+    match cached {
+        Some(c) => {
+            c.cfg = policy_cfg;
+            crate::data_probe::apply_dual_policy_gate_cached_flat(
+                attn_matrix,
+                v,
+                o_temp,
+                n,
+                d,
+                gate_scale,
+                classifier,
+                c,
+                output,
+            )
+        }
+        None => {
+            let resolved = crate::data_probe::SinkAwarePolicy::DualPolicy(policy_cfg);
+            crate::data_probe::apply_dual_policy_gate_flat(
+                attn_matrix,
+                v,
+                o_temp,
+                n,
+                d,
+                &resolved,
+                gate_scale,
+                classifier,
+                output,
+            )
+        }
+    }
+}
+
 // ── Core attention (no feature-flag dependency) ───────────────────
 
 /// Core attention, used when Parallax correction is not needed.
@@ -434,6 +750,7 @@ fn tiled_attention_core(
     scale: f32,
     scores: Option<&mut [f32]>,
     activation: ParallaxActivation,
+    mut attn_matrix: Option<&mut [f32]>,
 ) {
     let d = head_dim;
     let n = seq_len;
@@ -463,6 +780,11 @@ fn tiled_attention_core(
         // Normalize attention weights (softmax or sigmoid)
         let row = &mut scores[..n];
         normalize_attention_weights(row, activation);
+
+        // Retain normalized attention row if caller asked for the full matrix.
+        if let Some(am) = attn_matrix.as_deref_mut() {
+            am[i * n..(i + 1) * n].copy_from_slice(&scores[..n]);
+        }
 
         // Accumulate output: o_i = Σ_j p_ij · v_j
         for (j, &p) in scores.iter().enumerate().take(n) {
@@ -577,6 +899,7 @@ mod tests {
             scale,
             None,
             ParallaxActivation::Softmax,
+            None,
         );
 
         for (i, (&a, &b)) in output_parallax.iter().zip(output_ref.iter()).enumerate() {
@@ -639,6 +962,7 @@ mod tests {
             scale,
             None,
             ParallaxActivation::Softmax,
+            None,
         );
 
         for (i, (&a, &b)) in output_parallax.iter().zip(output_ref.iter()).enumerate() {
@@ -752,6 +1076,7 @@ mod tests {
             scale,
             None,
             ParallaxActivation::Sigmoid,
+            None,
         );
 
         for (i, (&a, &b)) in output_parallax.iter().zip(output_ref.iter()).enumerate() {
@@ -934,5 +1259,355 @@ mod tests {
             any_differs,
             "sigmoid parallax correction should modify output vs base sigmoid"
         );
+    }
+
+    // ── Plan 289 tests ──────────────────────────────────────────────
+    // Covers: retained-attention forward correctness (always-on, parallax_attn
+    // only), and sink-aware composition parity (Uniform + DualPolicy) + G2.
+    // The latency G3 microbench lives in benches/ (T3.5).
+
+    /// Deterministic LCG for reproducible test inputs. Cheap, no deps.
+    /// `pub(super)` so the sibling `sink_aware_tests` module can reuse it.
+    pub(super) fn lcg_fill(seed: u64, buf: &mut [f32]) {
+        let mut s = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        for x in buf.iter_mut() {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            *x = (((s >> 33) as f32) / (u32::MAX as f32)) * 2.0 - 1.0;
+        }
+    }
+
+    /// Reference row-by-row attention matrix computation. Independent of the
+    /// forward's internal accumulation — recomputes scores + normalization.
+    fn reference_attn_matrix(
+        q: &[f32],
+        k: &[f32],
+        n: usize,
+        d: usize,
+        scale: f32,
+        activation: ParallaxActivation,
+        am: &mut [f32],
+    ) {
+        let mut row = vec![0.0f32; n];
+        for i in 0..n {
+            let q_off = i * d;
+            for j in 0..n {
+                let k_off = j * d;
+                row[j] = crate::simd::simd_dot_f32(&q[q_off..q_off + d], &k[k_off..k_off + d], d) * scale;
+            }
+            normalize_attention_weights(&mut row, activation);
+            am[i * n..(i + 1) * n].copy_from_slice(&row);
+        }
+    }
+
+    /// Helper: build (q, k, v) where attention concentrates strongly on position
+    /// `sink_pos` (mean column strength ≈ 0.94, well above τ_sink=0.5) but
+    /// `v[sink_pos]` is optionally zero (NOP) or normal content (Broadcast).
+    ///
+    /// Construction:
+    /// - q[i] = [i*0.5, 0, ...] for i in 0..n (varies across queries).
+    /// - k[sink] = [+10, 0, ...] → σ(q·k) saturates to ≈1 for i≥1.
+    /// - k[j≠sink] = [-10, 0, ...] → σ(q·k) ≈ 0 for i≥1.
+    /// - v[j] = ones (or zeros at sink for NOP case).
+    ///
+    /// Result: column `sink_pos` receives mean strength ≈ 0.94 across rows,
+    /// dominating all other columns. The AV update is rank-1 (output rows
+    /// proportional to v[sink]) when v[sink] is non-zero.
+    pub(super) fn build_sink_case(n: usize, d: usize, sink_pos: usize, sink_v_zero: bool) -> (Vec<f32>, Vec<f32>, Vec<f32>) {
+        let mut q = vec![0.0f32; n * d];
+        let mut k = vec![0.0f32; n * d];
+        let mut v = vec![0.0f32; n * d];
+        for i in 0..n {
+            q[i * d] = (i as f32) * 0.5;
+        }
+        // Sink column attracts strongly.
+        k[sink_pos * d] = 10.0;
+        // Other columns strongly repel.
+        for j in 0..n {
+            if j != sink_pos {
+                k[j * d] = -10.0;
+            }
+            for c in 0..d {
+                v[j * d + c] = if j == sink_pos && sink_v_zero { 0.0 } else { 1.0 };
+            }
+        }
+        (q, k, v)
+    }
+
+    /// T1.3 — retained attention matrix matches row-by-row reference (Sigmoid).
+    #[test]
+    fn plan289_retained_attn_matches_per_row_sigmoid() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let mut q = vec![0.0f32; n * d];
+        let mut k = vec![0.0f32; n * d];
+        let v = vec![0.0f32; n * d];
+        let mut output = vec![0.0f32; n * d];
+        let mut am_actual = vec![0.0f32; n * n];
+        let mut am_expected = vec![0.0f32; n * n];
+        lcg_fill(0xC0DE, &mut q);
+        lcg_fill(0xFEED, &mut k);
+
+        let cfg = ParallaxConfig { gate_scale: 0.0, zero_init: true, activation: ParallaxActivation::Sigmoid };
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+
+        tiled_attention_parallax_forward_retaining(
+            &q, &k, &v, &mut output, n, d, scale, &r, &x, &cfg, Some(&mut am_actual), None,
+        );
+        reference_attn_matrix(&q, &k, n, d, scale, ParallaxActivation::Sigmoid, &mut am_expected);
+
+        for i in 0..(n * n) {
+            assert_eq!(am_actual[i], am_expected[i], "am[{}] mismatch (Sigmoid)", i);
+        }
+    }
+
+    /// T1.3 — retained attention matrix matches row-by-row reference (Softmax).
+    #[test]
+    fn plan289_retained_attn_matches_per_row_softmax() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let mut q = vec![0.0f32; n * d];
+        let mut k = vec![0.0f32; n * d];
+        let v = vec![0.0f32; n * d];
+        let mut output = vec![0.0f32; n * d];
+        let mut am_actual = vec![0.0f32; n * n];
+        let mut am_expected = vec![0.0f32; n * n];
+        lcg_fill(0x1234, &mut q);
+        lcg_fill(0x5678, &mut k);
+
+        let cfg = ParallaxConfig { gate_scale: 0.0, zero_init: true, activation: ParallaxActivation::Softmax };
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+
+        tiled_attention_parallax_forward_retaining(
+            &q, &k, &v, &mut output, n, d, scale, &r, &x, &cfg, Some(&mut am_actual), None,
+        );
+        reference_attn_matrix(&q, &k, n, d, scale, ParallaxActivation::Softmax, &mut am_expected);
+
+        for i in 0..(n * n) {
+            assert_eq!(am_actual[i], am_expected[i], "am[{}] mismatch (Softmax)", i);
+        }
+    }
+}
+
+// ── Plan 289 sink-aware tests (require sink_aware_attn feature) ───
+
+#[cfg(all(test, feature = "parallax_attn", feature = "sink_aware_attn"))]
+mod sink_aware_tests {
+    use super::*;
+    use crate::data_probe::{
+        SinkAwarePolicy, SinkClassifierConfig, SinkKind, StableRankScratch,
+        apply_dual_policy_gate_flat,
+    };
+
+    fn parallax_zero_cfg(act: ParallaxActivation) -> ParallaxConfig {
+        ParallaxConfig { gate_scale: 0.0, zero_init: true, activation: act }
+    }
+
+    /// T3.1 — Uniform policy path produces bit-identical output to vanilla forward.
+    #[test]
+    fn plan289_uniform_bit_identical_to_vanilla() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let mut q = vec![0.0f32; n * d];
+        let mut k = vec![0.0f32; n * d];
+        let mut v = vec![0.0f32; n * d];
+        super::tests::lcg_fill(0xA1B2, &mut q);
+        super::tests::lcg_fill(0xC3D4, &mut k);
+        super::tests::lcg_fill(0xE5F6, &mut v);
+
+        let cfg = parallax_zero_cfg(ParallaxActivation::Sigmoid);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+
+        let mut out_vanilla = vec![0.0f32; n * d];
+        tiled_attention_parallax_forward(
+            &q, &k, &v, &mut out_vanilla, n, d, scale, &r, &x, &cfg, None,
+        );
+
+        let mut out_uniform = vec![0.0f32; n * d];
+        let mut sink_scratch = SinkAwareParallaxScratch::new(n, d);
+        let kind = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_uniform, n, d, scale, &r, &x, &cfg,
+            &SinkAwarePolicy::Uniform, -10.0, &mut sink_scratch, None,
+        );
+        assert!(matches!(kind, SinkKind::None), "Uniform must return SinkKind::None");
+
+        for i in 0..(n * d) {
+            assert_eq!(out_vanilla[i], out_uniform[i], "output[{}] differs (Uniform path)", i);
+        }
+    }
+
+    /// T3.2 — DualPolicy path bit-identical to manual composition.
+    #[test]
+    fn plan289_dualpolicy_matches_manual_composition() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let mut q = vec![0.0f32; n * d];
+        let mut k = vec![0.0f32; n * d];
+        let mut v = vec![0.0f32; n * d];
+        super::tests::lcg_fill(0x11, &mut q);
+        super::tests::lcg_fill(0x22, &mut k);
+        super::tests::lcg_fill(0x33, &mut v);
+
+        let cfg = parallax_zero_cfg(ParallaxActivation::Sigmoid);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let policy_cfg = SinkClassifierConfig::default();
+        let policy = SinkAwarePolicy::DualPolicy(policy_cfg);
+        let gate_scale = -2.0;
+
+        // Wrapper path
+        let mut out_wrapper = vec![0.0f32; n * d];
+        let mut sink_scratch = SinkAwareParallaxScratch::new(n, d);
+        let kind_wrapper = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_wrapper, n, d, scale, &r, &x, &cfg,
+            &policy, gate_scale, &mut sink_scratch, None,
+        );
+
+        // Manual composition
+        let mut out_manual = vec![0.0f32; n * d];
+        let mut o_temp = vec![0.0f32; n * d];
+        let mut am = vec![0.0f32; n * n];
+        let mut classifier = StableRankScratch::new(d);
+        tiled_attention_parallax_forward_retaining(
+            &q, &k, &v, &mut o_temp, n, d, scale, &r, &x, &cfg, Some(&mut am), None,
+        );
+        let kind_manual = apply_dual_policy_gate_flat(
+            &am, &v, &o_temp, n, d, &policy, gate_scale, &mut classifier, &mut out_manual,
+        );
+
+        assert_eq!(kind_wrapper, kind_manual, "SinkKind mismatch");
+        for i in 0..(n * d) {
+            assert_eq!(out_wrapper[i], out_manual[i], "output[{}] differs (DualPolicy path)", i);
+        }
+    }
+
+    /// T3.3 — synthetic NOP head: dominant sink has zero v, classifier must
+    /// return Nop, and output must be scaled by σ(gate_scale).
+    #[test]
+    fn plan289_synthetic_nop_head_gated() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = super::tests::build_sink_case(n, d, 0, true);
+
+        let cfg = parallax_zero_cfg(ParallaxActivation::Sigmoid);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let policy = SinkAwarePolicy::DualPolicy(SinkClassifierConfig::default());
+
+        // Ungated reference via Uniform.
+        let mut out_ungated = vec![0.0f32; n * d];
+        let mut sa_scratch_un = SinkAwareParallaxScratch::new(n, d);
+        tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_ungated, n, d, scale, &r, &x, &cfg,
+            &SinkAwarePolicy::Uniform, 0.0, &mut sa_scratch_un, None,
+        );
+
+        // DualPolicy with strong suppression.
+        let gate_scale = -10.0; // σ(-10) ≈ 4.5e-5
+        let mut out_gated = vec![0.0f32; n * d];
+        let mut sink_scratch = SinkAwareParallaxScratch::new(n, d);
+        let kind = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_gated, n, d, scale, &r, &x, &cfg,
+            &policy, gate_scale, &mut sink_scratch, None,
+        );
+        assert!(matches!(kind, SinkKind::Nop), "expected Nop, got {:?}", kind);
+
+        // NOP-gated output must equal σ(gate_scale) × ungated output.
+        let sigma = 1.0 / (1.0 + (-gate_scale).exp());
+        for i in 0..(n * d) {
+            let expected = out_ungated[i] * sigma;
+            let delta = (out_gated[i] - expected).abs();
+            assert!(delta < 1e-5, "gated[{}]={} != σ(gs)·ungated={} (delta {})",
+                i, out_gated[i], expected, delta);
+        }
+    }
+
+    /// T3.4 — synthetic Broadcast head: dominant sink carries content AND the
+    /// AV update is rank-1. Classifier must return Broadcast, and output must
+    /// be bit-identical to the Uniform (ungated) path.
+    #[test]
+    fn plan289_synthetic_broadcast_head_preserved() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = super::tests::build_sink_case(n, d, 0, false);
+
+        let cfg = parallax_zero_cfg(ParallaxActivation::Sigmoid);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+
+        let mut out_uniform = vec![0.0f32; n * d];
+        let mut sa_un = SinkAwareParallaxScratch::new(n, d);
+        tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_uniform, n, d, scale, &r, &x, &cfg,
+            &SinkAwarePolicy::Uniform, 0.0, &mut sa_un, None,
+        );
+
+        let policy = SinkAwarePolicy::DualPolicy(SinkClassifierConfig::default());
+        let gate_scale = -10.0;
+        let mut out_dp = vec![0.0f32; n * d];
+        let mut sa_dp = SinkAwareParallaxScratch::new(n, d);
+        let kind = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_dp, n, d, scale, &r, &x, &cfg,
+            &policy, gate_scale, &mut sa_dp, None,
+        );
+        assert!(matches!(kind, SinkKind::Broadcast), "expected Broadcast, got {:?}", kind);
+
+        for i in 0..(n * d) {
+            assert_eq!(out_uniform[i], out_dp[i], "Broadcast output[{}] must equal Uniform", i);
+        }
+    }
+
+    /// Cached path: wrapper uses cached variant when `cached = Some`. Two
+    /// consecutive DualPolicy calls → second reuses cached SinkKind.
+    #[test]
+    fn plan289_cached_path_audit_and_reuse() {
+        let n = 16;
+        let d = 8;
+        let scale = 1.0 / (d as f32).sqrt();
+        let (q, k, v) = super::tests::build_sink_case(n, d, 0, true);
+        let cfg = parallax_zero_cfg(ParallaxActivation::Sigmoid);
+        let r = vec![0.0f32; d * d];
+        let x = vec![0.0f32; d];
+        let policy = SinkAwarePolicy::DualPolicy(SinkClassifierConfig::default());
+
+        let mut sink_scratch = SinkAwareParallaxScratch::new(n, d).with_cache();
+        if let Some(c) = sink_scratch.cached.as_mut() {
+            c.audit_every_n = 4;
+        }
+
+        let gate_scale = -5.0;
+        let mut out_a = vec![0.0f32; n * d];
+        let kind_a = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_a, n, d, scale, &r, &x, &cfg,
+            &policy, gate_scale, &mut sink_scratch, None,
+        );
+        assert!(matches!(kind_a, SinkKind::Nop));
+        assert_eq!(
+            sink_scratch.cached.as_ref().unwrap().calls_since_audit, 1,
+            "first call must reset cadence counter"
+        );
+
+        let mut out_b = vec![0.0f32; n * d];
+        let kind_b = tiled_attention_parallax_forward_sink_aware(
+            &q, &k, &v, &mut out_b, n, d, scale, &r, &x, &cfg,
+            &policy, gate_scale, &mut sink_scratch, None,
+        );
+        assert!(matches!(kind_b, SinkKind::Nop));
+        assert_eq!(
+            sink_scratch.cached.as_ref().unwrap().calls_since_audit, 2,
+            "second call must increment without re-audit"
+        );
+
+        for i in 0..(n * d) {
+            assert_eq!(out_a[i], out_b[i], "cached NOP output[{}] must match audit output", i);
+        }
     }
 }

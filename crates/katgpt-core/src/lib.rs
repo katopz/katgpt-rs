@@ -160,7 +160,17 @@ pub use attention::{
 #[cfg(feature = "parallax_attn")]
 pub use parallax_attn::{
     ParallaxActivation, ParallaxConfig, ParallaxScratch, compute_rho, parallax_correction,
-    tiled_attention_parallax_forward,
+    tiled_attention_parallax_forward, tiled_attention_parallax_forward_retaining,
+};
+
+// Sink-aware composition (Plan 289). Requires both parallax_attn (for the
+// forward) and sink_aware_attn (for the classifier + flat gate). The
+// `tiled_attention_parallax_forward_sink_aware` entry point short-circuits to
+// vanilla parallax when policy = Uniform, so this is a zero-cost abstraction
+// for callers who construct the scratch but never enable DualPolicy.
+#[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
+pub use parallax_attn::{
+    SinkAwareParallaxScratch, tiled_attention_parallax_forward_sink_aware,
 };
 
 pub use simd::SimdLevel;

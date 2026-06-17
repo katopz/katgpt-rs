@@ -164,3 +164,15 @@ Wire the new classifier into the broader `data_probe` family so it composes with
 **Result:** flat variants are 1.8×–5.1× faster than Vec<Vec<f32>> due to cache locality. The cached-flat steady-state path is also faster than the Vec<Vec> Uniform baseline (single contiguous memcpy beats n per-row copies). G1 parity verified by 8 new unit tests.
 
 This removes the technical blocker for the forward-path wiring (scope reduction #2 above). The wiring itself is now a pure API-design task — Plan 289 scope.
+
+---
+
+## Follow-up: Plan 289 (parallax forward-path wiring) — DONE 2026-06-18
+
+[Plan 289](./289_sink_aware_forward_path_wiring.md) shipped `tiled_attention_parallax_forward_sink_aware` — a single entry point composing the parallax forward with the flat dual-policy gate. Resolves scope reduction #2 (parallax half — `funcattn` half remains deferred because Φ is n×k, not n×n attention).
+
+**Design:** separate entry point (not a `ParallaxConfig` field) — `ParallaxConfig::default()` stays feature-independent. `SinkAwarePolicy::Uniform` short-circuits to vanilla forward; `DualPolicy` runs the retained-attention forward into a caller-owned `o_temp`, then applies the flat gate. All scratch (n² attention matrix, n·d temp, classifier, optional cache) is bundled in one `SinkAwareParallaxScratch` struct.
+
+**Result (G3 zero-cost contract):** `forward_sink_aware(Uniform)` overhead vs vanilla forward is **-0.3% / 0.0% / +0.6%** at n ∈ {64, 128, 256} — within measurement noise. DualPolicy adds the expected classifier cost (2.1%–11.0%); cached brings it to ≤3%. 7 new unit tests cover parity, synthetic G2 (NOP gated / Broadcast preserved), and cached path semantics.
+
+The API-design blocker for forward-path integration is removed. **Real-ViT G2 remains the only gate blocker** for promoting `sink_aware_attn` to default features.

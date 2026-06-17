@@ -151,6 +151,29 @@ variant (production path).
 | 128  | 0.46       | 14.5–15.0     | 8.2–8.5      | **1.8×**    | 0.29–0.42      | -9% to -36% |
 | 512  | 2.00       | 144–148       | 46.5–49.8    | **3.1×**    | 1.17–1.21      | -40% |
 
+### Numbers after Plan 289 (forward-path composition)
+
+New benchmark: `benches/sink_aware_forward_bench.rs`. Measures the wrapper
+overhead of `tiled_attention_parallax_forward_sink_aware` vs vanilla
+`tiled_attention_parallax_forward`. `gate_scale = 0.0` to isolate wrapper cost
+from the parallax covariance math. `d_h = 64`, activation = Sigmoid.
+
+| n    | vanilla_us | sa(Uniform)_us | sa(Uniform) oh% | sa(Dual) oh% | sa(cached) oh% |
+|------|-----------:|---------------:|----------------:|-------------:|---------------:|
+| 64   | 50.4       | 50.3           | **-0.3%**       | 2.1%         | 0.6%           |
+| 128  | 190.5      | 190.6          | **0.0%**        | 5.0%         | 1.6%           |
+| 256  | 828.4      | 833.5          | **+0.6%**       | 11.0%        | 2.6%           |
+
+**G3 gate (zero-cost Uniform contract): PASS.** sa(Uniform) overhead is within
+measurement noise across all three sizes — the wrapper compiles down to a
+single `matches!` on the policy enum before delegating to vanilla forward.
+
+**sa(Dual) cost** matches Plan 287 G3 expectations: 2.1% at n=64 (classifier is
+small) climbing to 11% at n=256 (n×n attention retention + classifier scan
+starts to dominate). The cached variant brings the steady-state cost back to
+≤3% — confirming Plan 287 Issue 001's amortization strategy carries through to
+the forward-path composition.
+
 ### Why flat is so much faster
 
 The Vec<Vec<f32>> layout has hidden costs beyond the obvious pointer-chase:
