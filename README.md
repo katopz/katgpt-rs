@@ -571,7 +571,7 @@ Integrates into `thinking_cot` (Plan 194) as a `ThinkingStrategy`. Optional kurt
 | G2p efficiency proxy | SwiR < fixed-budget baseline | 33 steps vs 1024 = 31× fewer |
 | G9 hyperparameter ablation | W_E→L/C_max/α_0 respond correctly | monotonic ✓, α-independent ✓ |
 
-**G1/G2 (accuracy/efficiency on real model) deferred to riir-ai Plan 299** — katgpt-rs is modelless (no model loader). The algorithmic invariants above are necessary preconditions.
+**G1/G2 real-model validation (riir-ai Plan 313, 2026-06-18):** ran on Gemma 2 2B IT + MATH-500 (CPU M1 Pro). **G1 = 0%** (model capability blocked — ~9% expected, within binomial variance at n≤20); **G2 = 1.12× avg** (range 1.08–1.16×, below 1.3× gate target but consistently >1.0×). Verdict: keep opt-in. Definitive gate pass requires Qwen3-4B/8B (the paper's model). katgpt-rs is modelless (no model loader); the algorithmic invariants above are necessary preconditions.
 
 Feature gate: `swir_switch_thinking` (depends on `thinking_cot`, **opt-in** until G1/G2 pass on a real model). 📖 Plan: [`.plans/275_swir_switch_thinking.md`](.plans/275_swir_switch_thinking.md). Research: [`.research/241_SwiReasoning_Explicit_Latent_Switch.md`](.research/241_SwiReasoning_Explicit_Latent_Switch.md). Benchmark: [`.benchmarks/275_swir_switch_thinking_goat.md`](.benchmarks/275_swir_switch_thinking_goat.md).
 

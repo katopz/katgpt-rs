@@ -1,5 +1,7 @@
 # Plan 275 — SwiR Switch-Thinking GOAT Gate (Synthetic Data)
 
+> **UPDATE 2026-06-18:** The "deferred to riir-ai Plan 299" references throughout this document should read **riir-ai Plan 313** (Plan 299 is a different plan — NPC CGSP runtime). Plan 313 ran the real-model validation on **Gemma 2 2B IT + MATH-500** (CPU M1 Pro): **G1 = 0%** (model capability blocked), **G2 = 1.12× avg** (below 1.3× gate). Verdict: keep opt-in. Definitive G1/G2 gate pass requires Qwen3-4B/8B (the paper's model). See [`riir-ai/.benchmarks/313_swir_real_model_goat.md`](../../riir-ai/.benchmarks/313_swir_real_model_goat.md) for the real-model results. The synthetic-data results below remain valid as algorithmic-correctness proof.
+
 **Date:** 2026-06-15
 **Plan:** [`katgpt-rs/.plans/275_swir_switch_thinking.md`](../.plans/275_swir_switch_thinking.md)
 **Research:** [`katgpt-rs/.research/241_SwiReasoning_Explicit_Latent_Switch.md`](../.research/241_SwiReasoning_Explicit_Latent_Switch.md)
