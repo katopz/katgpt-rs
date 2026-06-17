@@ -5,7 +5,9 @@
 > **Date:** 2026-05, distilled 2025-07
 > **Related Research:** 28 (HLA), 061 (Delta Attention Residuals), 22 (Lighthouse Attention), 42 (SP-KV), 24 (δ-Mem), 48 (HRM-Text)
 > **Related Plans:** 104 (Gated DeltaNet-2 Recurrent Attention)
-> **Verdict: COMPLEMENTARY TO HLA — GDN2 solves a different problem than our HLA/AHLA: memory editing vs. memory compression. The channel-wise erase gate `b_t` (key-axis selective erasure) is the key innovation, accounting for ~90% of GDN2's gains over KDA. Best fit: riir-ai LoRA training pipeline where recurrent layers replace full attention for long-context. CPU SIMD recurrent decode is feasible for katgpt-rs. Feature-gate as `gdn2_attention` alongside `hla_attention`. Not a replacement for HLA — both address different linear attention axes.**
+> **Verdict: COMPLEMENTARY TO HLA — GDN2 solves a different problem than our HLA/AHLA: memory-editing vs. memory compression. The channel-wise erase gate `b_t` (key-axis selective erasure) is the key innovation, accounting for ~90% of GDN2's gains over KDA. Best fit: riir-ai LoRA training pipeline where recurrent layers replace full attention for long-context. CPU SIMD recurrent decode is feasible for katgpt-rs. Feature-gate as `gdn2_attention` alongside `hla_attention`. Not a replacement for HLA — both address different linear attention axes.**
+>
+> **Cross-reference (2026-06-17, Plan 287):** GDN2's decoupled erase/write duality (`b_t` for keys = erase = suppress; `w_t` for values = write = broadcast) is the **linear-attention analog** of Research 258's NOP/Broadcast duality for softmax attention. NOP sinks (suppress residual) ↔ erase gate; Broadcast sinks (rank-1 write of load-bearing global info) ↔ write gate. The sink-aware classifier (`sink_aware_attn`, Plan 287) ships the softmax-side equivalent: classify whether a softmax sink is erasing (NOP) or writing (Broadcast), then gate accordingly. The two mechanisms are duals across the softmax/linear attention boundary.
 
 ---
 

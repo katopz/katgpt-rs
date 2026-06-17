@@ -102,6 +102,7 @@ self_advantage_gate = []  # Self-advantage recursion gate for HLA reconstruction
 recursion_logits = []  # RecursionLogits opt-in trait — pre/post recursion logits exposure for AdvantageMarginGate wrapping (Plan 283 T2.3, arxiv:2511.16886). Opt-in; non-recursing generators do not implement it.
 compression_drafter = ["dep:lz4_flex"]  # CompressionDrafter — Hot-tier modelless LZ4 corpus-as-model drafter (Plan 285, Research 256, nathan.rs/gzip-lm). Opt-in until G1–G3 GOAT gate passes.
 funcattn = []  # Functional Attention — closed-form Tikhonov k×k spectral transport operator (Plan 286, Research 257, arxiv 2605.31559). Linear-in-n attention variant; sigmoid-basis default per AGENTS.md. Opt-in (Gain-tier): paper itself has not verified NLP gain; promote only after GOAT G1–G5 pass.
+sink_aware_attn = []  # Sink-Aware Attention — NOP/Broadcast classifier + dual-policy sigmoid gate (Plan 287, Research 258, arxiv 2606.08105, Fesser et al.). Per-head classifier (value-norm-ratio + stable-rank-of-update) decides whether a sink is Adaptive NOP (gate it) or Broadcast (preserve it). Opt-in until synthetic G2 + latency G3 pass; default stays Uniform.
 
 [[bench]]
 name = "flow_field_bench"

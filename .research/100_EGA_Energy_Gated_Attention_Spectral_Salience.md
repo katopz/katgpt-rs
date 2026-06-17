@@ -5,6 +5,8 @@
 **Date:** 2026-05-25
 **Verdict:** 🟡 **Conditional Adopt — model-based attention modification, useful for attention quality + KV eviction**
 
+**Cross-reference (2026-06-17, Plan 287):** EGA gates uniformly — every key position gets the same sigmoid-gate treatment based on its spectral energy. Research 258 (Fesser et al., arxiv 2606.08105) provides the per-head NOP/Broadcast categorization that could make EGA's gate **categorical** instead of uniform: NOP sinks could be gated (suppressed) while Broadcast sinks are preserved. This is the dual-policy attention shipped as `sink_aware_attn` — see `katgpt-rs/.plans/287_sink_aware_attention.md`. EGA + sink-aware = "gate only the no-op sinks, keep the broadcasters" — strictly more selective than EGA alone.
+
 ---
 
 ## TL;DR

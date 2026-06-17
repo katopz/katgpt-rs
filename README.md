@@ -378,6 +378,58 @@ Feature gate: `attn_match` (**default-ON** since Plan 271 Phase 7 GOAT 9/9). Ada
 
 📖 Plan: [`.plans/271_attention_matching_compaction.md`](.plans/271_attention_matching_compaction.md). Research: [`.research/233_Attention_Matching_KV_Compaction.md`](.research/233_Attention_Matching_KV_Compaction.md). Paper: [arxiv 2602.16284](https://arxiv.org/abs/2602.16284).
 
+### 🛰 Sink-Aware Attention: NOP/Broadcast Classifier + Dual-Policy Gate (Plan 287, arxiv 2606.08105)
+
+Per-head attention-sink classifier distinguishing **Adaptive NOP** sinks (`‖v_s‖ ≈ 0`, suppress residual — should gate) from **Broadcast** sinks (`‖v_s‖ ≈ content`, rank-1 update carrying load-bearing global info — should preserve). Builds on Fesser et al. *A Unifying View of Attention Sinks: Two Algorithms, Two Solutions*.
+
+Two diagnostics per sink position:
+- `value_norm_ratio = ‖v_s‖ / mean_i(‖v_i‖)` — NOP if `< 0.2`, Broadcast if `≈ 1`.
+- `stable_rank(O) = ‖O‖_F² / σ_1²` via vendored ~30-line power iteration — Broadcast signature is rank-1, so stable rank `≈ 1` triggers the fast early-exit.
+
+The dual-policy gate then applies the sigmoid gate only to NOP heads, preserving Broadcasts. Stops the over-suppression of useful broadcasters under our default sigmoid attention.
+
+```text
+         attn column   values V     update O = AV
+           │             │             │
+           ▼             ▼             ▼
+     ┌─────────────────────────────────────┐
+     │   classify_sink_at(pos, col, V, O) │
+     │                                     │
+     │  strength = mean(col)               │
+     │  ratio   = ‖v_pos‖ / mean(‖v_i‖)   │
+     │  srank  = power_iter(Oᵀ·O, 5)      │
+     │                                     │
+     │  strength ≤ τ_sink        → None   │
+     │  ratio    ≤ nop_max       → Nop    │
+     │  ratio ∈ [b_min, b_max] ∧  → Broadcast
+     │    srank ≤ b_srank_max             │
+     └────────────┬────────────────────────┘
+                  │ kind
+                  ▼
+     ┌────────────────────────────────────┐
+     │ apply_dual_policy_gate             │
+     │   Nop        → out = O · σ(g)       │
+     │   Broadcast  → out = O   (preserve) │
+     │   None       → out = O   (default)  │
+     └─────────────────────────────────────┘
+```
+
+| Metric | Value |
+|--------|-------|
+| **G1 classifier correctness** | 8/8 unit tests PASS (NOP, Broadcast, mixed, edges) |
+| **Stable-rank fast path (rank-1)** | 0.79 µs for n=32, d_h=64 |
+| **Stable-rank slow path (random)** | 1.67 µs for n=32, d_h=64 (target was <1µs — documented G2.4 miss) |
+| **Dual-policy latency overhead vs Uniform** | 1671% at n=128 (target was ≤5% — **G3 FAIL**, demoted to opt-in diagnostic) |
+| **Synthetic G2 (Broadcast preservation)** | DualPolicy preserves O unchanged for Broadcast heads (2/2 PASS) |
+
+**Scope reductions** (documented in [`.benchmarks/059_sink_aware_goat.md`](.benchmarks/059_sink_aware_goat.md)):
+- Plan T3.1–T3.3 direct wiring into `parallax_attn.rs` / `funcattn.rs` forward paths is **deferred**. The policy enum + standalone `apply_dual_policy_gate` ship now; callers invoke after a forward pass. Keeps `ParallaxConfig` / `FuncAttnConfig` backwards-compatible.
+- Real-ViT `effective_rank` G2 gate is **DEFERRED** — needs a frozen model. Synthetic G2 substitute in `tests/sink_aware_g2_synthetic.rs`.
+
+Feature gate: `sink_aware_attn` (**opt-in** — G3 latency overhead missed the 5% target; default stays `Uniform` pending optimization).
+
+📖 Plan: [`.plans/287_sink_aware_attention.md`](.plans/287_sink_aware_attention.md). Research: [`.research/258_Attention_Sink_Dual_Mechanism_NOP_Broadcast.md`](.research/258_Attention_Sink_Dual_Mechanism_NOP_Broadcast.md). Paper: [arxiv 2606.08105](https://arxiv.org/abs/2606.08105).
+
 ### 🔀 MUX-Latent: Zero-Training Context Compression (Plan 238)
 
 Compresses long context 4×–16× at prefill time using MUX superposition — **zero training, zero parameters, deterministic**.
