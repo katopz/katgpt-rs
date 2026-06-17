@@ -171,6 +171,16 @@ pub fn compute_kv_stats_for_heads(
             }
         }
 
+        // Query-key cross statistics (Issue 304 fix #1).
+        let qk_count = logits.len() as f32;
+        let qk_mean = logits.iter().copied().sum::<f32>() / qk_count;
+        let qk_var = logits.iter().map(|l| {
+            let dl = l - qk_mean;
+            dl * dl
+        }).sum::<f32>() / qk_count;
+        features[h * STATS_PER_HEAD + 2] = qk_mean;
+        features[h * STATS_PER_HEAD + 3] = qk_var;
+
         // Softmax over all (t, q) for this head.
         let max_logit = logits
             .iter()
@@ -190,7 +200,7 @@ pub fn compute_kv_stats_for_heads(
         logits.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
         for k in 0..TOP_K {
             let v = if k < logits.len() { logits[k] } else { 0.0 };
-            features[h * STATS_PER_HEAD + 2 + k] = v;
+            features[h * STATS_PER_HEAD + 4 + k] = v;
         }
     }
 
@@ -442,9 +452,14 @@ mod tests {
         for h in 0..N_HEADS {
             let mean = stats[h * STATS_PER_HEAD + 0];
             let var = stats[h * STATS_PER_HEAD + 1];
+            let qk_mean = stats[h * STATS_PER_HEAD + 2];
+            let qk_var = stats[h * STATS_PER_HEAD + 3];
             assert!(mean.is_finite(), "head {h} mean not finite: {mean}");
             assert!(var.is_finite(), "head {h} var not finite: {var}");
             assert!(var >= 0.0, "head {h} var negative: {var}");
+            assert!(qk_mean.is_finite(), "head {h} qk_mean not finite: {qk_mean}");
+            assert!(qk_var.is_finite(), "head {h} qk_var not finite: {qk_var}");
+            assert!(qk_var >= 0.0, "head {h} qk_var negative: {qk_var}");
         }
     }
 
@@ -460,7 +475,8 @@ mod tests {
 
         let stats = compute_kv_stats_for_heads(&key_refs, &query_refs, t_len, d, n).unwrap();
         for h in 0..N_HEADS {
-            let topk = &stats[h * STATS_PER_HEAD + 2..h * STATS_PER_HEAD + 2 + TOP_K];
+            // Top-K starts at offset 4 (after mean_k, var_k, mean_qk, var_qk).
+            let topk = &stats[h * STATS_PER_HEAD + 4..h * STATS_PER_HEAD + 4 + TOP_K];
             for k in 1..TOP_K {
                 assert!(topk[k] <= topk[k - 1] + 1e-6, "head {h} topk not sorted at {k}");
             }

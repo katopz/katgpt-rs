@@ -14,10 +14,10 @@
 //! β     = BETA_MIN + (BETA_MAX − BETA_MIN) · sigmoid(logit)
 //! ```
 //!
-//! - Input:  `LORA_INPUT_DIM = 80`  (pooled KV stats — matches T-D.1 `KvStats`)
+//! - Input:  `LORA_INPUT_DIM = 96`  (pooled KV stats — matches T-D.1 `KvStats`, with Issue 304 fix #1 query-key cross statistics)
 //! - Output: `LORA_OUTPUT_DIM = 8`  (per-head β — matches T-D.1 `β_ref`)
 //! - Rank:   `DEFAULT_RANK = 16`    (matches existing game LoRAs per T-D.2)
-//! - Params: `16×80 + 8×16 + 8 = 1416` trainable
+//! - Params: `16×96 + 8×16 + 8 = 1672` trainable (was 1416 before Issue 304 fix #1)
 //! - α:      `DEFAULT_ALPHA = 16`   (so `α/rank = 1.0`)
 //!
 //! # Why Sigmoid (not clamp / softmax)
@@ -82,9 +82,10 @@ pub const N_HEADS: usize = 8;
 /// MUST match `riir_data::beta_distill_corpus::TOP_K`.
 pub const TOP_K: usize = 8;
 
-/// Per-head feature dimension (`mean_k, var_k, top-K attn scores`).
+/// Per-head feature dimension. With Issue 304 fix #1, this is
+/// `mean_k, var_k, mean_qk, var_qk, top-K attn scores` (4 + TOP_K).
 /// MUST match `riir_data::beta_distill_corpus::STATS_PER_HEAD`.
-pub const STATS_PER_HEAD: usize = 2 + TOP_K;
+pub const STATS_PER_HEAD: usize = 4 + TOP_K;
 
 /// LoRA input dimension. MUST match
 /// `riir_data::beta_distill_corpus::LORA_INPUT_DIM`.
@@ -585,8 +586,8 @@ mod tests {
         // MUST match riir_data::beta_distill_corpus (T-D.1).
         assert_eq!(N_HEADS, 8);
         assert_eq!(TOP_K, 8);
-        assert_eq!(STATS_PER_HEAD, 10);
-        assert_eq!(LORA_INPUT_DIM, 80);
+        assert_eq!(STATS_PER_HEAD, 12);
+        assert_eq!(LORA_INPUT_DIM, 96);
         assert_eq!(LORA_OUTPUT_DIM, 8);
     }
 
@@ -688,9 +689,10 @@ mod tests {
     #[test]
     fn param_count_is_correct() {
         let p = LoraBetaPredictor::new();
-        // A[16×80] + B[8×16] + bias[8] = 1280 + 128 + 8 = 1416.
-        assert_eq!(p.param_count(), 1280 + 128 + 8);
-        assert_eq!(p.param_count(), 1416);
+        // A[16×96] + B[8×16] + bias[8] = 1536 + 128 + 8 = 1672.
+        // (Issue 304 fix #1 expanded LORA_INPUT_DIM from 80 to 96.)
+        assert_eq!(p.param_count(), 1536 + 128 + 8);
+        assert_eq!(p.param_count(), 1672);
     }
 
     // ── Forward pass ───────────────────────────────────────────────
