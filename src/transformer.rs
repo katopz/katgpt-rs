@@ -1295,6 +1295,31 @@ fn forward_verify<'a>(
 /// Zero-init ρ_τ means first iteration is h̃^(1) (no residual from "previous").
 ///
 /// Feature gate: `lt2_looped` (requires `hla_attention`).
+///
+/// # Plan 283 T2.2 — AdvantageMarginGate integration
+///
+/// When `weight_shared_advantage_gate` is enabled AND `recursion_gate` is
+/// `Some(gate)`, after each `tau` iteration the loop computes logits via the
+/// readout `lm_head` matmul and asks the gate whether the step improved the
+/// candidate's prediction. If the gate signals dead compute (`should_recurse`
+/// returns `false`), the outer loop breaks early, skipping the remaining
+/// `loop_count - tau - 1` iterations.
+///
+/// When `recursion_gate` is `None` (or the feature is off), behavior is
+/// byte-identical to the ungated baseline: the full `loop_count` iterations
+/// run and no extra work is performed.
+///
+/// # Overhead estimate (gated path only)
+///
+/// Per iteration the gate adds one `lm_head` matmul (`vocab_size × n_embd`
+/// FLOPs) plus one `should_recurse` check (`O(vocab)`, <1µs for vocab ≤ 128
+/// per Bench 056 G3). For a typical micro config (`vocab=27, n_embd=16,
+/// n_layer=1`) this is ~432 FLOPs versus ~512 FLOPs per layer pass — about
+/// 0.8× one layer's compute. At larger configs the ratio improves further
+/// (one `lm_head` matmul vs `n_layer` layer passes). The gate pays for itself
+/// if it saves ≥2 iterations (Bench 056 shows 2.68×–6.76× reduction at
+/// vocab ≤ 128). Allocations happen once on the first gated iteration, then
+/// are reused via `resize`/`clear` (no per-iteration heap traffic).
 #[cfg(feature = "lt2_looped")]
 #[allow(dead_code, clippy::too_many_arguments, clippy::needless_range_loop)]
 pub fn forward_looped<'a>(
@@ -1311,6 +1336,13 @@ pub fn forward_looped<'a>(
         &'a mut crate::gdn2::MultiLayerGdn2Cache,
     >,
     #[cfg(feature = "sleep_consolidation")] sleep_config: Option<&'a crate::sleep::SleepConfig>,
+    // Plan 283 T2.2: optional recursion gate. `None` = byte-identical to
+    // baseline (no gate, all `loop_count` iterations run). `Some(gate)` =
+    // after each `tau > 0` iteration, compute logits and ask the gate whether
+    // the step improved the candidate; break early on dead compute.
+    #[cfg(feature = "weight_shared_advantage_gate")] recursion_gate: Option<
+        &mut crate::pruners::self_advantage::AdvantageMarginGate,
+    >,
 ) -> &'a mut [f32] {
     cache.advance_pos(pos);
     use crate::types::{HybridPattern, LoopMode};
@@ -1337,6 +1369,19 @@ pub fn forward_looped<'a>(
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
     );
+
+    // Plan 283 T2.2 — recursion-gate scratch buffers.
+    // Declared at zero capacity so the no-gate path (`recursion_gate == None`)
+    // performs no allocation. The gated path resizes them exactly once (first
+    // gated iteration) and reuses them thereafter via `resize`/`clear`, which
+    // are no-ops once the capacity matches `vocab_size`. This honors the
+    // hot-loop rule (no allocation inside the outer loop body).
+    #[cfg(feature = "weight_shared_advantage_gate")]
+    let mut recursion_gate = recursion_gate;
+    #[cfg(feature = "weight_shared_advantage_gate")]
+    let mut _gate_scratch_logits: Vec<f32> = Vec::new();
+    #[cfg(feature = "weight_shared_advantage_gate")]
+    let mut _gate_prev_logits: Vec<f32> = Vec::new();
 
     // 2. Outer loop: T passes over all layers
     for tau in 0..loop_count {
@@ -1474,6 +1519,65 @@ pub fn forward_looped<'a>(
                     1.0,
                 );
                 crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.hidden[..n]);
+            }
+        }
+
+        // Plan 283 T2.2 — AdvantageMarginGate dead-compute check.
+        // Only active when `weight_shared_advantage_gate` is enabled AND the
+        // caller passed `Some(gate)`. When `None`, this block is compiled out
+        // of the feature-off build and is a runtime no-op in the feature-on
+        // build, so the no-gate path stays byte-identical to baseline.
+        //
+        // The check runs only for `tau > 0` (the first iteration has no
+        // pre-recursion logits to compare against). It computes the current
+        // iteration's logits via the same `lm_head` matmul used for the final
+        // readout, then asks the gate whether the candidate's prediction
+        // improved. If not, the remaining iterations are dead compute and we
+        // break early.
+        #[cfg(feature = "weight_shared_advantage_gate")]
+        {
+            if let Some(gate) = recursion_gate.as_deref_mut() {
+                // Compute this iteration's logits into a local scratch buffer
+                // (NOT ctx.logits — that must remain untouched so the final
+                // readout at the end of the function is byte-identical to the
+                // no-gate path). `resize` is a no-op after the first call.
+                _gate_scratch_logits.resize(config.vocab_size, 0.0);
+                standard_lm_head(
+                    &mut _gate_scratch_logits,
+                    &ctx.x,
+                    &weights.lm_head,
+                    config.vocab_size,
+                    n,
+                );
+                if tau > 0 && !_gate_prev_logits.is_empty() {
+                    // Candidate = argmax of the current (post-recursion)
+                    // logits — the model's current best prediction.
+                    let candidate = _gate_scratch_logits
+                        .iter()
+                        .enumerate()
+                        .max_by(|(_, a), (_, b)| {
+                            a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal)
+                        })
+                        .map(|(i, _)| i)
+                        .unwrap_or(0);
+                    if !gate.should_recurse(
+                        &_gate_prev_logits,
+                        &_gate_scratch_logits,
+                        candidate,
+                    ) {
+                        // Dead compute detected: this iteration did not
+                        // improve the candidate's prediction, so further
+                        // iterations are unlikely to either. Break the outer
+                        // loop and use the current hidden state.
+                        break;
+                    }
+                }
+                // Stash this iteration's logits as the next iteration's
+                // "pre" distribution. `clear` + `extend_from_slice` reuses
+                // the existing allocation (no per-iteration heap traffic
+                // after the first call).
+                _gate_prev_logits.clear();
+                _gate_prev_logits.extend_from_slice(&_gate_scratch_logits);
             }
         }
     }

@@ -129,6 +129,7 @@ bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Pre
 rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 sdpg_bandit = ["bandit"]  # SDPG bandit + KL anchoring (Plan 180, Research 160)
 self_advantage_gate = ["katgpt-core/self_advantage_gate"]  # Advantage-margin recursion gate — dead-compute detector (Plan 283, Research 250, arxiv:2511.16886). Root crate ships the canonical AdvantageMarginGate primitive (src/pruners/self_advantage.rs); katgpt-core ships the HLA reconstruction integration (4th early-stop criterion, Plan 283 T5.1).
+weight_shared_advantage_gate = ["self_advantage_gate"]  # Wire AdvantageMarginGate into forward_looped weight-shared loop — breaks early on dead-compute iterations (Plan 283 T2.2, arxiv:2511.16886). Auto-enables self_advantage_gate. Opt-in (not default-on) until benchmarked on a real looped-transformer workload; the no-gate path (gate=None) is byte-identical to baseline via #[cfg] + Option::is_some().
 recursion_logits = ["katgpt-core/recursion_logits"]  # RecursionLogits opt-in trait — pre/post recursion logits exposure for AdvantageMarginGate wrapping (Plan 283 T2.3). Opt-in (not default-on).
 product_policy_sharpen = []  # Product-policy inference sharpening — controllable reasoning trust weight (Plan 283, Research 250)
 gdsd_distill = ["bandit"]  # GDSD Advantage-Guided Pruner — modelless self-distillation (Plan 169)
@@ -558,6 +559,13 @@ name = "self_advantage_gate_bench"
 path = "benches/self_advantage_gate_bench.rs"
 required-features = ["self_advantage_gate"]
 harness = false
+
+# Plan 283 T2.2 — AdvantageMarginGate integration with forward_looped.
+# Byte-identical no-gate path GOAT gate + early-halt observability test.
+[[test]]
+name = "t2_2_weight_shared_gate"
+path = "tests/t2_2_weight_shared_gate.rs"
+required-features = ["weight_shared_advantage_gate"]
 
 [[example]]
 name = "bomber_21_sonlt_arena"
