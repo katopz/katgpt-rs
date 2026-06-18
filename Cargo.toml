@@ -1183,6 +1183,14 @@ name = "bench_256_kv_outer_goat"
 path = "tests/bench_256_kv_outer.goat.rs"
 required-features = ["msa_kv_outer"]
 
+# Plan 300 T1.12 — SPLAT MSA Rescue at 50% Density (synthetic GOAT gate).
+# Proves TJS-LoRA's task-supervised coordinate sparsity preserves attention
+# quality at 50% density, where Plan 256's heuristic routing failed.
+[[test]]
+name = "bench_300_tjs_msa_rescue_goat"
+path = "tests/bench_300_tjs_msa_rescue.goat.rs"
+required-features = ["specialist_projection"]
+
 # Plan 270 — Gauge-Invariant Adapter Composition GOAT proof (17 tests).
 # Requires both `gauge_invariant` (for the core primitives) and
 # `sparse_task_vector` (for the SparseTaskVector integration test t07).
