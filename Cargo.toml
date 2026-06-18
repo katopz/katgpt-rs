@@ -115,6 +115,8 @@ iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) 
 hybrid_oct_pq = ["planar_quant", "octopus"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
 bt_rank = []  # Bradley-Terry pairwise ranking for DDtree selection (OpenDeepThink distillation)
 rcd_residual = ["critical_interval_gate"]  # Residual Context Diffusion — entropy-weighted residual injection (Plan 258)
+closure_instrument = ["katgpt-core/closure_instrument", "rcd_residual"]  # Closure-Expansion Instrument — PTG + motif mining + PRI/CDG/TaR metrics (Plan 290, Research 264). Opt-in until G1–G4 GOAT gate passes.
+d2f_3sr_warm_start = ["rcd_residual", "lt2_looped", "dllm"]  # D2F 3-State Reuse warm-start refinement — composes 3SR × RCD (Plan 258) × LT2 (Plan 108) on the D2F+looped path (Plan 291, Research 265). Opt-in until G1 GOAT gate (≥15% fewer FP iterations) passes; NOT default — D2F is opt-in research.
 fft = ["bandit", "sr2am_configurator"]     # FFT Tactics Arena — ATB battle engine with status effects (Plan 053)
 stepcode = ["bandit"]  # ⚠️ Plan 054 — NO GAIN proven. Infrastructure only. Off by default, not in `full`.
 skill_lifecycle = ["bandit"]  # Inference-Time Skill Evolution — per-pruner memory + test-gated registration + progressive disclosure catalog (Plan 192, Research 172)
@@ -1262,6 +1264,17 @@ required-features = ["funcattn"]
 name = "funcattn_g3_sigmoid_vs_softmax"
 path = "tests/funcattn_g3_sigmoid_vs_softmax.rs"
 required-features = ["funcattn"]
+
+# Plan 286 T3.2 (G2) — FUNCATTN vs sigmoid Parallax vs softmax SDPA on
+# sinusoidal regression. Honest head-to-head architecture comparison at
+# matched parameter budget. Verdict is reported via eprintln and applied to
+# Plan 286 Phase 4 (T4.2 promote / T4.3 null-result) — the test asserts only
+# the sanity check that all 3 variants learned. Requires both `funcattn` and
+# `parallax_attn` features.
+[[test]]
+name = "funcattn_g2_funcattn_vs_parallax_vs_sdpa"
+path = "tests/funcattn_g2_funcattn_vs_parallax_vs_sdpa.rs"
+required-features = ["funcattn", "parallax_attn"]
 
 # Plan 266 — DenseMesh profiling test (Phase 7, T7.4). Measures forward
 # scaling, aggregation overhead, EdgeBandit decision, compute_router dispatch,
