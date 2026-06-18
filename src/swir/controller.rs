@@ -117,6 +117,22 @@ impl SwiRController {
         self.switch_count
     }
 
+    /// Current reference entropy (locked at the first step, updated on each
+    /// mode switch). Read-only diagnostic getter for hosts that want to plot
+    /// the entropy trend vs. the switching threshold.
+    #[inline]
+    pub fn reference_entropy(&self) -> f32 {
+        self.reference_entropy
+    }
+
+    /// Current dwell counter (steps since the last mode switch). Read-only
+    /// diagnostic getter — the host needs this to understand whether a
+    /// non-switch is due to the dwell window not being satisfied.
+    #[inline]
+    pub fn dwell_steps(&self) -> u32 {
+        self.dwell_steps
+    }
+
     /// Supply a per-step kurtosis scalar for the G6 auto-fallback (Plan 275
     /// T3.8). The host calls this **before** [`step`](Self::step) each decode
     /// position; `step()` consults the stored value when deciding whether to
