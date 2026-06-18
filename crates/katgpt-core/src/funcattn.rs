@@ -57,7 +57,19 @@
 //! Partition-of-unity (Prop 4.3) holds for *any* row-normalized non-negative
 //! kernel; sigmoid-then-row-normalize is valid. The `τ → 0` P0 limit becomes
 //! a `β = 1/τ → ∞` sigmoid-slope limit (analogous anneal). G3 verifies
-//! accuracy parity empirically.
+//! accuracy parity empirically — sigmoid **outperforms** softmax at matched
+//! hyperparameters on a synthetic PDE proxy (see `.benchmarks/058_*.md` G3).
+//!
+//! **Temperature requirement for sigmoid with small inputs:** sigmoid needs a
+//! sharper slope than softmax to produce non-uniform row distributions at
+//! small input scales. For `‖x‖ < 1` (pre-layernorm latents, PDE proxies), use
+//! `τ ≤ 0.1` (β = 1/τ ≥ 10). At the reference default `τ = 0.5`,
+//! `sigmoid(2·s)` for `s ∈ [-0.5, 0.5]` produces values in `[0.12, 0.88]`,
+//! which row-normalizes to near-uniform Φ with k=4 — the basis cannot
+//! differentiate between partitions and the model collapses to the column
+//! mean. For typical transformer activations (`‖x‖ ~ 1–10` after layernorm),
+//! `τ = 0.5` may suffice. See `.benchmarks/058_funcattn_goat.md` G3 Results
+//! "Temperature sensitivity" section for the full characterization.
 //!
 //! ## Orthogonal init
 //!

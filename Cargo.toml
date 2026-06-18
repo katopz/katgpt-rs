@@ -1255,6 +1255,14 @@ name = "funcattn_g5_zero_alloc"
 path = "tests/funcattn_g5_zero_alloc.rs"
 required-features = ["funcattn"]
 
+# Plan 286 T3.1 (G3) — sigmoid-basis vs softmax-basis FUNCATTN accuracy gate.
+# Trains both variants on a synthetic Burgers-like regression via central
+# finite-difference SGD; asserts sigmoid within 5% (10% hard threshold) of softmax.
+[[test]]
+name = "funcattn_g3_sigmoid_vs_softmax"
+path = "tests/funcattn_g3_sigmoid_vs_softmax.rs"
+required-features = ["funcattn"]
+
 # Plan 266 — DenseMesh profiling test (Phase 7, T7.4). Measures forward
 # scaling, aggregation overhead, EdgeBandit decision, compute_router dispatch,
 # and hot-path allocation count (debug-only via TrackingAllocator).

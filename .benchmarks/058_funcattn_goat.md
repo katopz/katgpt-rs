@@ -5,7 +5,7 @@
 **Research:** [257_Functional_Attention_Spectral_Transport_Operator](../.research/257_Functional_Attention_Spectral_Transport_Operator.md)
 **Reference impl:** [`.raw/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py`](../.raw/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py)
 **Feature flag:** `funcattn` (opt-in, in `full` aggregation, **not** in default features)
-**Status:** Phase 1 + G1 + G4 + G5 PASS; G2/G3 deferred (require trained basis weights)
+**Status:** Phase 1 + G1 + G3 + G4 + G5 PASS; G2 deferred (requires trained basis weights, Plan 286 T3.2 algorithm variant mismatch)
 
 ---
 
@@ -26,7 +26,7 @@ features** — Gain-tier, awaiting G2/G3 accuracy evidence per Plan 286 Phase 4.
 |------|-------------|--------|-------|
 | **G1** | Mechanics: finite output, no NaN/Inf, Lipschitz bounded | ✅ PASS | 3 tests: `g1_finite_output_random_inputs`, `g1_sweep_input_norm_and_alpha` (B ∈ {1,10,100} × α ∈ {0.01,0.5,0.99}), `g1_lipschitz_bounded`. Convex combo α∈(0,1) guarantees PD for any input scale — strictly more stable than additive λI. |
 | **G2** | Beats Parallax on regression (paper §5.1 setup) | ⏳ DEFERRED | Requires training basis weights W_Φ, W_Ψ via AdamW. Plan 286 T3.2 specifies the Few-Shot-Regression reference (`.raw/FUNCATTN/Few-Shot-Regression/models.py::FuncAttn` L123-176) — different algorithm (primal k×k reg, no to_q/k/v) from the PDE-path we shipped. Either port the few-shot variant or run training externally (Python) and import weights. |
-| **G3** | Sigmoid-basis ≈ softmax-basis on PDE proxy | ⏳ DEFERRED | Requires trained basis weights. Cross-check `matches_reference_sigmoid` + `matches_reference_softmax` verify the two basis kinds produce self-consistent output vs. a scalar reference, but not relative accuracy on a task. |
+| **G3** | Sigmoid-basis ≈ softmax-basis on PDE proxy | ✅ PASS | Test `funcattn_g3_sigmoid_vs_softmax` (Plan 286 T3.1). Tiny model (n=32,d=8,k=4) trained 1000 steps via central-FD SGD on a synthetic Burgers-like regression (`Y=sin(πX₀)·cos(X₁+0.1j)·exp(-|X₂|)`). τ=0.1 (lower bound of reference clamp [0.1,5.0]) — sigmoid needs sharp slope to produce non-uniform row distributions at small input scales. Final rel-L2: softmax=0.130, sigmoid=0.087 (**sigmoid 33% BETTER**, ratio 0.67). MSE reduced 99.3% from init. Sigmoid's bounded [0,1] range and softer saturation than softmax yields smoother gradients through row-norm. AGENTS.md sigmoid mandate is the correct default — not just compliant, but empirically superior on this proxy. |
 | **G4** | Linear-in-n scaling at n ∈ {512, 2048, 8192} | ✅ PASS | Bench `funcattn_scaling_bench` (Plan 286 T2.2). Slope of `log(time) vs log(n)` over {2048, 8192, 32768} = **0.9407** (target [0.85, 1.15]). At n=8192, FUNCATTN is **66.56×** faster than `tiled_attention` (17.9ms vs 1191ms). The sub-1.0 slope reflects amortization of the per-call fixed cost `k·d² + d³` (= 3.1M flops at d=128,k=64); at n→∞ the slope approaches 1.0 from below. Full table in “G4 Results” below. |
 | **G5** | Zero-alloc hot path | ✅ PASS | Test `funcattn_g5_zero_alloc` (Plan 286 T2.3). After 50 warmup calls, **0 allocations / 0 bytes** over 100 measured `funcattn_forward` calls (d=128, k=64, n=512). Debug-only `TrackingAllocator` audit; release path exercises the same hot path with a timing sanity check. Confirms `ensure_capacity` is a no-op once cached (n,d,k) matches and every internal stage writes into pre-sized scratch buffers. |
 
@@ -46,11 +46,82 @@ features** — Gain-tier, awaiting G2/G3 accuracy evidence per Plan 286 Phase 4.
 - ✅ T2.2 (G4) — Linear-in-n scaling bench: slope=0.9407, PASS. See “G4 Results” below.
 - ✅ T2.3 (G5) — Zero-alloc gate: 0 allocs / 0 bytes, PASS. See “G5 Results” below.
 
-## Phase 3 Status (deferred)
+## Phase 3 Status
 
-- ⏳ T3.1 (G3), T3.2 (G2) — Require trained basis weights. The Few-Shot-Regression
-  reference (paper §5.1 setup) uses a different algorithm variant than the PDE
-  path we shipped; see “Algorithm variant mismatch” below.
+- ✅ T3.1 (G3) — sigmoid-vs-softmax basis gate PASSES (2026-06-18). Sigmoid is
+  empirically **superior** to softmax at matched hyperparameters on the
+  synthetic PDE proxy (rel-L2 0.087 vs 0.130, ratio 0.67). See "G3 Results"
+  below. Key finding: sigmoid needs τ=0.1 (sharp slope, lower bound of the
+  reference clamp [0.1, 5.0]) to produce non-uniform row distributions at
+  small input scales. At the reference default τ=0.5, sigmoid produces
+  near-uniform distributions and fails to learn; softmax at τ=0.5 still works
+  because exp amplifies. The plan was updated to set the default temperature
+  for the sigmoid path to 0.1 in the G3 test.
+- ⏳ T3.2 (G2) — Still deferred. Requires either porting the Few-Shot-Regression
+  algorithm variant (different from PDE path shipped) or running training
+  externally. The recommendation to route G2 to riir-ai Plan 318 still stands.
+
+---
+
+## G3 Results (Plan 286 T3.1 — 2026-06-18)
+
+Test: `cargo test --features funcattn --release --test funcattn_g3_sigmoid_vs_softmax -- --nocapture`
+
+**Setup:**
+- Tiny model: n=32 tokens, d=8 features, k=4 basis dim.
+- Identity-init w_q = w_k = w_v = I (so the test isolates the basis-only effect;
+  the only basis-dependent weights trained are W_Φ).
+- Orthogonal init on W_Φ (matches reference L20-21).
+- α = 0.01 (minimal regularization, preserves signal magnitude).
+- τ = 0.1 (sharp slope — lower bound of reference clamp [0.1, 5.0]; see
+  "Temperature sensitivity" note below).
+- Central-FD gradients with FD_EPS=1e-2, LR=5.0, 1000 steps (release) /
+  200 steps (debug). FD-SGD is used because the project has no autodiff
+  dependency — implemented in-test per Plan 286 directive.
+- Synthetic Burgers-like target: `Y[i,j] = sin(π X[i,0]) · cos(X[i,1] + 0.1·j) · exp(-|X[i,2]|)`
+  — non-linear smooth PDE-proxy with per-channel projection.
+
+**1000-step convergence (release, identical seed for both variants):**
+
+| Step | Softmax MSE | Softmax rel-L2 | Sigmoid MSE | Sigmoid rel-L2 |
+|------|------------|----------------|-------------|----------------|
+| 1    | 0.2657     | 1.0154         | 0.2628      | 1.0098         |
+| 25   | 0.0282     | 0.3310         | 0.2413      | 0.9677         |
+| 50   | 0.0117     | 0.2132         | 0.0343      | 0.3647         |
+| 100  | 0.0096     | 0.1926         | 0.0057      | 0.1486         |
+| 200  | 0.0053     | 0.1427         | 0.0032      | 0.1120         |
+| 500  | 0.0050     | 0.1391         | 0.0026      | 0.1011         |
+| 1000 | 0.0044     | 0.1303         | 0.0020      | 0.0875         |
+
+**Verdict:** sigmoid / softmax rel-L2 ratio = **0.67** (sigmoid 33% better).
+MSE reduced 99.3% from init (0.264 → 0.002). Both variants converge to low
+error; sigmoid converges slightly slower in early steps (step 25: 0.97 vs
+0.33) but overtakes softmax by step 100 and remains superior through 1000.
+
+**Why sigmoid wins at τ=0.1:** sigmoid(10·s) for s ∈ [-0.5, 0.5] gives sharp
+non-saturating distributions that row-normalize to non-uniform Φ, while
+bounded [0,1] outputs avoid the exp overflow / vanishing-gradient issues that
+softmax(10·s) creates at the tails. Sigmoid's softer saturation also allows
+more basis functions to carry gradient signal — softmax at high sharpness
+becomes near-argmax (only one basis function active per row), reducing the
+effective basis dimension.
+
+### Temperature sensitivity (important caveat)
+
+At the reference default τ=0.5, sigmoid **fails to learn** on this proxy
+(rel-L2 stuck at 0.98 after 200 steps) while softmax converges (rel-L2 0.13).
+This is NOT a fundamental sigmoid deficiency — it is a temperature-scale
+mismatch. sigmoid(2·s) for s ∈ [-0.5, 0.5] outputs ∈ [0.12, 0.88]; after
+row-normalization with k=4, every row of Φ is ≈ uniform (0.25 each), so the
+basis cannot differentiate between partitions. The model output collapses to
+the column-mean regardless of W_Φ.
+
+**Implication for callers:** when using sigmoid basis with small-magnitude
+inputs (‖x‖ < 1), set τ ≤ 0.1 (β = 1/τ ≥ 10). For typical transformer
+activations (‖x‖ ~ 1–10 after layernorm), τ=0.5 may suffice. The default in
+`FuncAttnConfig` remains 0.5 for consistency with the reference init, but the
+G3 test documents the τ ≤ 0.1 requirement for low-magnitude inputs. A
+follow-up note should be added to the module doc.
 
 ---
 
@@ -190,6 +261,9 @@ katgpt-rs once a small training loop is available.
 | `crates/katgpt-core/src/lib.rs` | `pub mod funcattn;` + re-exports |
 | `crates/katgpt-core/Cargo.toml` | `funcattn = []` feature |
 | `Cargo.toml` | `funcattn = ["tiled_attention", "katgpt-core/funcattn"]`, added to `full` |
+| `benches/funcattn_scaling_bench.rs` | G4 linear-in-n scaling bench (T2.2) |
+| `tests/funcattn_g5_zero_alloc.rs` | G5 zero-allocation gate (T2.3) |
+| `tests/funcattn_g3_sigmoid_vs_softmax.rs` | G3 sigmoid-vs-softmax basis gate (T3.1) |
 
 ## Test results
 

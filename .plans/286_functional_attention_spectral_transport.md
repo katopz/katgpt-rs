@@ -4,7 +4,7 @@
 **Research:** [257_Functional_Attention_Spectral_Transport_Operator](../.research/257_Functional_Attention_Spectral_Transport_Operator.md)
 **Source paper:** [arxiv 2605.31559](https://arxiv.org/pdf/2605.31559) — Functional Attention: From Pairwise Affinities to Functional Correspondences (Xiao et al., ICML 2026)
 **Target:** `crates/katgpt-core/src/funcattn.rs` (new module) + Cargo feature `funcattn`
-**Status:** Active — Phase 1 done (T1.1–T1.5 ✅), Phase 2 done (T2.1–T2.3 ✅ G1+G4+G5 PASS), Phase 3 deferred (G2/G3 need training)
+**Status:** Active — Phase 1 done (T1.1–T1.5 ✅), Phase 2 done (T2.1–T2.3 ✅ G1+G4+G5 PASS), Phase 3 partial (T3.1 ✅ G3 PASS — sigmoid 33% BETTER than softmax; T3.2 deferred)
 **Tier:** Gain (open primitive; await GOAT proof before opt-in promotion; **do not promote to default** until LLM-domain evidence exists)
 
 ---
@@ -111,7 +111,7 @@ Minimal module, behind feature flag, not in default features.
 
 ### Tasks
 
-- [ ] **T3.1 (G3 — sigmoid vs softmax)** `g3_sigmoid_matches_softmax`:
+- [x] **T3.1 (G3 — sigmoid vs softmax)** `g3_sigmoid_matches_softmax`: **DONE 2026-06-18.** Test `tests/funcattn_g3_sigmoid_vs_softmax.rs`. Tiny model (n=32, d=8, k=4) trained 1000 steps via central-FD SGD on a synthetic Burgers-like regression. Sigmoid **outperforms** softmax at matched hyperparameters (rel-L2 0.087 vs 0.130, ratio 0.67). See `.benchmarks/058_funcattn_goat.md` G3 Results. Key finding: sigmoid needs τ=0.1 (sharp slope, lower bound of reference clamp [0.1,5.0]) to produce non-uniform row distributions at small input scales. At τ=0.5 (reference default), sigmoid fails to learn because sigmoid(2·s) on unit-scale inputs produces near-uniform Φ after row-norm. This is a temperature-scale mismatch, NOT a fundamental sigmoid deficiency — documented in the benchmark doc with implications for callers.
   - Synthetic PDE proxy: Burgers-equation-style dataset (paper §5.6 setup).
   - Train two FUNCATTN models (softmax basis vs sigmoid basis) for 1000 steps with identical seeds.
   - Assert sigmoid model's relative L2 error ≤ softmax model's + 5%.
@@ -154,6 +154,9 @@ If Phase 4 promotes, wire composability. Each opt-in.
 - `crates/katgpt-core/src/funcattn.rs` — new module
 - `crates/katgpt-core/src/lib.rs` — `#[cfg(feature = "funcattn")] pub mod funcattn;`
 - `Cargo.toml` — top-level `funcattn = ["katgpt-core/funcattn"]`
+- `benches/funcattn_scaling_bench.rs` — G4 linear-in-n scaling bench (T2.2)
+- `tests/funcattn_g5_zero_alloc.rs` — G5 zero-allocation gate (T2.3)
+- `tests/funcattn_g3_sigmoid_vs_softmax.rs` — G3 sigmoid-vs-softmax basis gate (T3.1)
 - `.docs/01_overview.md` — Feature Flags table entry (Phase 4 if promoted)
 
 ## Open Questions
