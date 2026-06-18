@@ -41,11 +41,11 @@ The minimal "every trace becomes a directed graph" primitive. Zero-allocation re
 
 ### Tasks
 
-- [ ] **T1.1** `mod.rs`: define `PrimitiveKind` (enum, `#[repr(u32)]`, stable enumeration for sync/replay), `OperatorKind` (`#[repr(u8)]`: `Sequence`, `Branch`, `Recurse`, `ParallelJoin`), `PtgNode { primitive: PrimitiveKind, tick: u32, blake3_in: [u8;32] }`, `PtgEdge { op: OperatorKind, from: u32, to: u32 }`, `PrimitiveTransitionGraph { nodes: Vec<PtgNode>, edges: Vec<PtgEdge>, root: u32 }`.
-- [ ] **T1.2** `trace.rs`: `PtgRecorder` — wraps any `ConstraintPruner` execution. Methods: `enter(primitive) -> NodeId`, `exit(node_id, op, child_id)`, `finish() -> PrimitiveTransitionGraph`. Use `smallvec::SmallVec<[PtgNode; 16]>` for typical short traces; spill to `Vec` only on overflow. **Zero allocations on the hot path when `closure_instrument` feature is disabled.**
-- [ ] **T1.3** `serde` impls for PTG (CBOR or postcard for cold-tier; commitment = `blake3::hash(serialized)`).
-- [ ] **T1.4** Property test: `PtgRecorder` output is deterministic given the same call sequence + RNG seed. Property test: serialization round-trip preserves structure.
-- [ ] **T1.5** Unit test: PTG of a 4-pruner operadic composition (use `lattice_operad/composed_pruner.rs` fixture) materializes to expected `(nodes, edges)`.
+- [x] **T1.1** `mod.rs`: define `PrimitiveKind` (enum, `#[repr(u32)]`, stable enumeration for sync/replay), `OperatorKind` (`#[repr(u8)]`: `Sequence`, `Branch`, `Recurse`, `ParallelJoin`), `PtgNode { primitive: PrimitiveKind, tick: u32, blake3_in: [u8;32] }`, `PtgEdge { op: OperatorKind, from: u32, to: u32 }`, `PrimitiveTransitionGraph { nodes: Vec<PtgNode>, edges: Vec<PtgEdge>, root: u32 }`.
+- [x] **T1.2** `trace.rs`: `PtgRecorder` — wraps any `ConstraintPruner` execution. Methods: `enter(primitive) -> NodeId`, `exit(node_id, op, child_id)`, `finish() -> PrimitiveTransitionGraph`. Use `smallvec::SmallVec<[PtgNode; 16]>` for typical short traces; spill to `Vec` only on overflow. **Zero allocations on the hot path when `closure_instrument` feature is disabled.**
+- [x] **T1.3** `serde` impls for PTG (CBOR or postcard for cold-tier; commitment = `blake3::hash(serialized)`).
+- [x] **T1.4** Property test: `PtgRecorder` output is deterministic given the same call sequence + RNG seed. Property test: serialization round-trip preserves structure.
+- [x] **T1.5** Unit test: PTG of a 4-pruner operadic composition (use `lattice_operad/composed_pruner.rs` fixture) materializes to expected `(nodes, edges)`.
 
 ### Acceptance
 
@@ -60,13 +60,13 @@ Discover recurring subgraphs across recent PTGs and admit high-PRI motifs as new
 
 ### Tasks
 
-- [ ] **T2.1** `motif.rs`: define `Motif { subgraph_hash: [u8;32], node_count: u8, edge_count: u8, occurrence_count: u32, task_family_ids: FixedU32Set<16> }`. `task_family_ids` = which distinct task families the motif appeared in (drives PRI).
-- [ ] **T2.2** `motif.rs`: `MotifMiner { recent_ptgs: RingBuffer<PrimitiveTransitionGraph, K=1024>, motif_index: papaya::HashMap<[u8;32], Motif> }`. Use bounded-depth gSpan-lite algorithm (max motif size = 4 nodes / 4 edges) — O(K · 4^4) worst case at K=1024 traces ≈ 256K ops, fits comfortably in warm tier (ms).
-- [ ] **T2.3** `motif.rs`: `MotifMiner::mine_batch() -> Vec<Motif>` — runs in rayon at sleep-cycle boundaries (like AutoDreamer Plan 107). Does NOT run on the decode hot path.
-- [ ] **T2.4** `admit.rs`: `MotifAdmitter::evaluate(motif: &Motif, gate: &RegimeTransitionGate) -> GateResult`. Wraps Plan 215's gate; admission cost scales with `motif.node_count` (more nodes = higher admission cost, mirroring MDL). Accept iff `DL_new < DL_old - AdmissionCost(motif)`.
-- [ ] **T2.5** `admit.rs`: when a motif is admitted, register it as a new `PrimitiveKind::Composite(motif_hash)` variant. Future PTGs that match the motif emit a single composite-primitive node instead of the underlying subgraph (compression).
-- [ ] **T2.6** Integration test: synthesize 100 PTGs containing the same 3-node motif (e.g., `Search → Verify → Branch`). Run `mine_batch()` → motif discovered. Run `MotifAdmitter::evaluate()` → admitted. Run a 101st PTG → emits as single composite node.
-- [ ] **T2.7** Demotion test: a candidate motif that appears only in 1 task family (low PRI) is rejected by the gate even if `occurrence_count` is high.
+- [x] **T2.1** `motif.rs`: define `Motif { subgraph_hash: [u8;32], node_count: u8, edge_count: u8, occurrence_count: u32, task_family_ids: FixedU32Set<16> }`. `task_family_ids` = which distinct task families the motif appeared in (drives PRI).
+- [x] **T2.2** `motif.rs`: `MotifMiner { recent_ptgs: RingBuffer<PrimitiveTransitionGraph, K=1024>, motif_index: papaya::HashMap<[u8;32], Motif> }`. Use bounded-depth gSpan-lite algorithm (max motif size = 4 nodes / 4 edges) — O(K · 4^4) worst case at K=1024 traces ≈ 256K ops, fits comfortably in warm tier (ms).
+- [x] **T2.3** `motif.rs`: `MotifMiner::mine_batch() -> Vec<Motif>` — runs in rayon at sleep-cycle boundaries (like AutoDreamer Plan 107). Does NOT run on the decode hot path.
+- [x] **T2.4** `admit.rs`: `MotifAdmitter::evaluate(motif: &Motif, gate: &RegimeTransitionGate) -> GateResult`. Wraps Plan 215's gate; admission cost scales with `motif.node_count` (more nodes = higher admission cost, mirroring MDL). Accept iff `DL_new < DL_old - AdmissionCost(motif)`.
+- [x] **T2.5** `admit.rs`: when a motif is admitted, register it as a new `PrimitiveKind::Composite(motif_hash)` variant. Future PTGs that match the motif emit a single composite-primitive node instead of the underlying subgraph (compression).
+- [x] **T2.6** Integration test: synthesize 100 PTGs containing the same 3-node motif (e.g., `Search → Verify → Branch`). Run `mine_batch()` → motif discovered. Run `MotifAdmitter::evaluate()` → admitted. Run a 101st PTG → emits as single composite node.
+- [x] **T2.7** Demotion test: a candidate motif that appears only in 1 task family (low PRI) is rejected by the gate even if `occurrence_count` is high.
 
 ### Acceptance
 
@@ -81,12 +81,12 @@ The paper's §6 evaluation metrics as runtime functions. PRI/CDG are pure-PTG-ag
 
 ### Tasks
 
-- [ ] **T3.1** `metrics.rs`: `PrimitiveReuseIndex::compute(corpus: &[PrimitiveTransitionGraph]) -> HashMap<PrimitiveKind, f32>`. PRI(p) = (count of distinct task families containing p) / (total task families). Stored per-primitive.
-- [ ] **T3.2** `metrics.rs`: `CompositionalDepthGeneralization::compute(train_depths: &[u32], test_depth: u32, success_rate: f32) -> CdgScore`. Returns rolling EMA of "success rate at depth > max training depth seen". Stored as scalar per-NPC.
-- [ ] **T3.3** `metrics.rs`: `TransferAsRecomposition::compute(baseline_ptgs: &[PTG], perturbed_ptgs: &[PTG], anchor_profile: &AnchorProfileRef) -> f32`. **Latent-only output.** Compares motif distributions before/after environment perturbation. Output ∈ [0, 1]; high = same motifs still solve perturbed instances (good TaR).
-- [ ] **T3.4** Bridge function `ptg_to_motif_embedding(ptg: &PTG, motif_directions: &MotifDirections) -> [f32; K]` (raw→latent). Zero-allocation dot-product projection + sigmoid (per AGENTS.md: never softmax). `MotifDirections` = pre-computed `[f32; K*N]` lookup table loaded once per NPC personality.
-- [ ] **T3.5** Bridge function `motif_embedding_to_tar_score(emb: &[f32; K]) -> f32` (latent→raw scalar). Clamp to [0, 1].
-- [ ] **T3.6** Unit tests: PRI computation correctness on synthetic corpus (3 task families, 5 primitives). TaR computation: 100% same motifs → TaR = 1.0; 0% overlap → TaR = 0.0.
+- [x] **T3.1** `metrics.rs`: `PrimitiveReuseIndex::compute(corpus: &[PrimitiveTransitionGraph]) -> HashMap<PrimitiveKind, f32>`. PRI(p) = (count of distinct task families containing p) / (total task families). Stored per-primitive.
+- [x] **T3.2** `metrics.rs`: `CompositionalDepthGeneralization::compute(train_depths: &[u32], test_depth: u32, success_rate: f32) -> CdgScore`. Returns rolling EMA of "success rate at depth > max training depth seen". Stored as scalar per-NPC.
+- [x] **T3.3** `metrics.rs`: `TransferAsRecomposition::compute(baseline_ptgs: &[PTG], perturbed_ptgs: &[PTG], anchor_profile: &AnchorProfileRef) -> f32`. **Latent-only output.** Compares motif distributions before/after environment perturbation. Output ∈ [0, 1]; high = same motifs still solve perturbed instances (good TaR).
+- [x] **T3.4** Bridge function `ptg_to_motif_embedding(ptg: &PTG, motif_directions: &MotifDirections) -> [f32; K]` (raw→latent). Zero-allocation dot-product projection + sigmoid (per AGENTS.md: never softmax). `MotifDirections` = pre-computed `[f32; K*N]` lookup table loaded once per NPC personality.
+- [x] **T3.5** Bridge function `motif_embedding_to_tar_score(emb: &[f32; K]) -> f32` (latent→raw scalar). Clamp to [0, 1].
+- [x] **T3.6** Unit tests: PRI computation correctness on synthetic corpus (3 task families, 5 primitives). TaR computation: 100% same motifs → TaR = 1.0; 0% overlap → TaR = 0.0.
 
 ### Acceptance
 
@@ -100,14 +100,14 @@ The paper's §6 evaluation metrics as runtime functions. PRI/CDG are pure-PTG-ag
 
 ### Tasks
 
-- [ ] **T4.1** Create `tests/bench_290_closure_instrument_goat.rs` with all G1–G5 assertions.
+- [x] **T4.1** Create `tests/bench_290_closure_instrument_goat.rs` with all G1–G5 assertions.
 - [ ] **T4.2** Wire `PtgRecorder` as an opt-in wrapper around `BanditPruner` / `AbsorbCompressLayer` (gated by `closure_instrument` feature).
 - [ ] **T4.3** Wire `MotifMiner::mine_batch()` into the existing sleep-cycle scheduler (Plan 107 AutoDreamer consolidation tick). Document the schedule.
 - [ ] **T4.4** Cross-repo validation: request riir-ai to expose `AnchorProfile::translate_priorities()` benchmark traces for TaR correlation (G3). If riir-ai cannot share traces (private IP), use synthetic transfer scenarios as a proxy and downgrade G3 to "correlates with synthetic transfer" with a TODO to upgrade.
-- [ ] **T4.5** Cold-tier commitment: PTG snapshot ≤ 1MB per 10K traces (G4). Use postcard encoding + BLAKE3 hash; reuse Plan 280 Merkle-octree commitment infrastructure.
-- [ ] **T4.6** Run full benchmark suite with `--features closure_instrument`. Document results in `katgpt-rs/.benchmarks/290_closure_instrument_goat.md`.
-- [ ] **T4.7** If G1–G4 PASS and G5 does not fire → promote `closure_instrument` to default-on, demote any loser.
-- [ ] **T4.8** If G5 fires (metrics don't correlate) → keep opt-in, document honest negative result in benchmark file.
+- [x] **T4.5** Cold-tier commitment: PTG snapshot ≤ 1MB per 10K traces (G4). Use postcard encoding + BLAKE3 hash; reuse Plan 280 Merkle-octree commitment infrastructure. (Honest result: 1.774 MB — see `.benchmarks/290_closure_instrument_goat.md`. Per-node 32-byte `blake3_in` is structural.)
+- [x] **T4.6** Run full benchmark suite with `--features closure_instrument`. Document results in `katgpt-rs/.benchmarks/290_closure_instrument_goat.md`.
+- [ ] **T4.7** If G1–G4 PASS and G5 does not fire → promote `closure_instrument` to default-on, demote any loser. (G1 PARTIAL 4507µs vs 100µs target; G4 PARTIAL 1.774MB vs 1MB — not promoted.)
+- [x] **T4.8** If G5 fires (metrics don't correlate) → keep opt-in, document honest negative result in benchmark file. (Opt-in retained. Honest partial result documented in `.benchmarks/290_closure_instrument_goat.md`.)
 
 ### Acceptance
 

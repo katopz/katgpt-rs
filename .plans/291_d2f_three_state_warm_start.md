@@ -25,8 +25,8 @@ Add the CoFRe **three-state reuse (3SR)** rule as an opt-in refinement to the LT
 
 ### Tasks
 
-- [ ] **T1.1** Add feature flag `d2f_3sr_warm_start` to `Cargo.toml`, depending on `rcd_residual`, `lt2_looped`, `dllm`. Gated module: `src/dllm_3sr.rs` (or extend `dllm.rs` behind `#[cfg(feature = "d2f_3sr_warm_start")]`).
-- [ ] **T1.2** Define `ThreeStateReuseConfig` struct:
+- [x] **T1.1** Add feature flag `d2f_3sr_warm_start` to `Cargo.toml`, depending on `rcd_residual`, `lt2_looped`, `dllm`. Gated module: `src/dllm_3sr.rs` (or extend `dllm.rs` behind `#[cfg(feature = "d2f_3sr_warm_start")]`).
+- [x] **T1.2** Define `ThreeStateReuseConfig` struct:
   ```rust
   pub struct ThreeStateReuseConfig {
       pub gamma_visible: f32,       // default 1.0
@@ -37,22 +37,22 @@ Add the CoFRe **three-state reuse (3SR)** rule as an opt-in refinement to the LT
   }
   ```
   Impl `Default` matching paper defaults. Zero-cost when `enabled=false`.
-- [ ] **T1.3** Implement transition-type classifier: given `z_prev` and `z_t` token slices + `mask_token`, classify each position into `{UnchangedVisible, StillMasked, NewlyRevealed}`. Reuse the existing "still masked" tracking already in `d2f.rs` (`masked: Vec<bool>`) — do not duplicate.
-- [ ] **T1.4** Implement per-position γ computation:
+- [x] **T1.3** Implement transition-type classifier: given `z_prev` and `z_t` token slices + `mask_token`, classify each position into `{UnchangedVisible, StillMasked, NewlyRevealed}`. Reuse the existing "still masked" tracking already in `d2f.rs` (`masked: Vec<bool>`) — do not duplicate.
+- [x] **T1.4** Implement per-position γ computation:
   - `UnchangedVisible` → `gamma_visible`
   - `StillMasked` → `gamma_masked_min + (gamma_masked_max − gamma_masked_min) * v_t` where `v_t = visible_fraction`
   - `NewlyRevealed` → `gamma_newly_revealed`
-- [ ] **T1.5** Implement the warm-start lerp `h⁰_t = γ_t ⊙ h⋆_{t+1} + (1−γ_t) ⊙ h_pre,t` operating on the LT2 loop carry buffer. Reuse the existing AHLA state carry buffer from `forward_looped` — extend it to be per-position-γ-weighted when the feature is on.
-- [ ] **T1.6** Wire `denoise_loop_rcd_3sr` entry point that combines RCD (Plan 258, input-embedding carry) with 3SR (solver-state carry). Both carry mechanisms are orthogonal and compose at different layers; neither subsumes the other.
+- [x] **T1.5** Implement the warm-start lerp `h⁰_t = γ_t ⊙ h⋆_{t+1} + (1−γ_t) ⊙ h_pre,t` operating on the LT2 loop carry buffer. Reuse the existing AHLA state carry buffer from `forward_looped` — extend it to be per-position-γ-weighted when the feature is on.
+- [x] **T1.6** Wire `denoise_loop_rcd_3sr` entry point that combines RCD (Plan 258, input-embedding carry) with 3SR (solver-state carry). Both carry mechanisms are orthogonal and compose at different layers; neither subsumes the other.
 
 ### Phase 1 GOAT gate (G1 — does it converge faster?)
 
-- [ ] **T1.7** Micro-benchmark: micro_dllm config, 8 denoising steps, measure **total FP solver iterations to reach a fixed token-agreement threshold** (vs ground-truth tokens) for three configs:
+- [x] **T1.7** Micro-benchmark: micro_dllm config, 8 denoising steps, measure **total FP solver iterations to reach a fixed token-agreement threshold** (vs ground-truth tokens) for three configs:
   - (a) RCD-only baseline (Plan 258 as shipped)
   - (b) RCD + uniform-γ warm-start (γ=1.0 everywhere — the "full reuse" ablation from paper Fig. 5)
   - (c) RCD + 3SR warm-start (this plan)
-- [ ] **T1.8** **G1 PASS condition:** (c) reaches the agreement threshold in ≥15% fewer total FP iterations than (a). (b) is the degenerate full-reuse control — paper shows it can be unstable at high budgets, so (b) underperforming (a) on some configs is expected and not a failure of (c).
-- [ ] **T1.9** Record results in `.benchmarks/NNN_d2f_3sr_warm_start_goat.md`. Honest null result if G1 fails — demote to Gain, do NOT promote.
+- [x] **T1.8** **G1 PASS condition:** (c) reaches the agreement threshold in ≥15% fewer total FP iterations than (a). (b) is the degenerate full-reuse control — paper shows it can be unstable at high budgets, so (b) underperforming (a) on some configs is expected and not a failure of (c). **Honest result: G1 FAILED at `Config::micro_dllm()` scale — all four configs converge in 2 steps, 0% reduction. See `.benchmarks/291_d2f_3sr_warm_start_goat.md` for root-cause analysis.**
+- [x] **T1.9** Record results in `.benchmarks/NNN_d2f_3sr_warm_start_goat.md`. Honest null result if G1 fails — demote to Gain, do NOT promote. **Demoted: stays opt-in Gain, NOT default-on. Phase 2/3 deferred until G1 can be re-attempted at realistic scale (see benchmark doc "what would need to change").**
 
 ## Phase 2 — Robustness Sweep (only if G1 passes)
 
