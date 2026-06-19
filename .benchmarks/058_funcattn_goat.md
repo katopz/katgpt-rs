@@ -5,7 +5,7 @@
 **Research:** [257_Functional_Attention_Spectral_Transport_Operator](../.research/257_Functional_Attention_Spectral_Transport_Operator.md)
 **Reference impl:** [`.raw/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py`](../.raw/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py)
 **Feature flag:** `funcattn` (opt-in, in `full` aggregation, **not** in default features)
-**Status:** Phase 1 + G1 + G2 + G3 + G4 + G5 PASS (5/5 gates green). All accuracy gates pass in the sample-efficiency regime; G2 documents the convergence-regime caveat (SDPA catches up at 500+ steps) and the sigmoid Parallax numerical instability under naive FD-SGD. **Not promoted to default** per T4.4 (LLM-domain evidence still required).
+**Status:** Phase 1 + G1 + G2 + G3 + G4 + G5 PASS (5/5 gates green). All accuracy gates pass in the sample-efficiency regime; G2 documents the convergence-regime caveat (SDPA catches up at 500+ steps) and the sigmoid Parallax numerical instability under naive FD-SGD. **G6 (T4.4 LLM-domain gate) FAIL** — FUNCATTN (0.969) < SDPA (1.000) on masked-token LM prediction at 600 FD-SGD steps. Per T4.4, **not promoted to default**; stays opt-in in `full`. This matches Research 257 §5 Q2's expected null result — the paper itself defers NLP.
 
 ---
 
@@ -29,6 +29,7 @@ features** — Gain-tier, awaiting G2/G3 accuracy evidence per Plan 286 Phase 4.
 | **G3** | Sigmoid-basis ≈ softmax-basis on PDE proxy | ✅ PASS | Test `funcattn_g3_sigmoid_vs_softmax` (Plan 286 T3.1). Tiny model (n=32,d=8,k=4) trained 1000 steps via central-FD SGD on a synthetic Burgers-like regression (`Y=sin(πX₀)·cos(X₁+0.1j)·exp(-|X₂|)`). τ=0.1 (lower bound of reference clamp [0.1,5.0]) — sigmoid needs sharp slope to produce non-uniform row distributions at small input scales. Final rel-L2: softmax=0.130, sigmoid=0.087 (**sigmoid 33% BETTER**, ratio 0.67). MSE reduced 99.3% from init. Sigmoid's bounded [0,1] range and softer saturation than softmax yields smoother gradients through row-norm. AGENTS.md sigmoid mandate is the correct default — not just compliant, but empirically superior on this proxy. |
 | **G4** | Linear-in-n scaling at n ∈ {512, 2048, 8192} | ✅ PASS | Bench `funcattn_scaling_bench` (Plan 286 T2.2). Slope of `log(time) vs log(n)` over {2048, 8192, 32768} = **0.9407** (target [0.85, 1.15]). At n=8192, FUNCATTN is **66.56×** faster than `tiled_attention` (17.9ms vs 1191ms). The sub-1.0 slope reflects amortization of the per-call fixed cost `k·d² + d³` (= 3.1M flops at d=128,k=64); at n→∞ the slope approaches 1.0 from below. Full table in “G4 Results” below. |
 | **G5** | Zero-alloc hot path | ✅ PASS | Test `funcattn_g5_zero_alloc` (Plan 286 T2.3). After 50 warmup calls, **0 allocations / 0 bytes** over 100 measured `funcattn_forward` calls (d=128, k=64, n=512). Debug-only `TrackingAllocator` audit; release path exercises the same hot path with a timing sanity check. Confirms `ensure_capacity` is a no-op once cached (n,d,k) matches and every internal stage writes into pre-sized scratch buffers. |
+| **G6** | LLM-domain token-prediction vs SDPA (T4.4 promotion gate) | ❌ FAIL | Test `funcattn_g6_token_prediction_lm_domain` (Plan 286 T4.4). Masked-token prediction on `[a,b,a,b,...]` sequences (V=8, D=8, N=8, K=8), 600 FD-SGD steps release. At convergence: FUNCATTN acc=0.969, SDPA acc=1.000 (Δ -0.031). SDPA catches up and surpasses FUNCATTN in the converged regime — exactly the G2 caveat (sample-efficiency advantage vanishes at 500+ steps). FUNCATTN plateaus at 0.969 (3/128 eval positions wrong — likely a basis-partition edge case). **`funcattn` stays opt-in, NOT promoted to default.** Matches Research 257 §5 Q2 expected null result. |
 
 ---
 
@@ -391,7 +392,120 @@ test funcattn::tests::forward_large_n_smoke ... ok
 test result: ok. 13 passed; 0 failed
 ```
 
-## Verdict (Phase 4 — pending)
+## G6 Results (Plan 286 T4.4 — 2026-06-19)
+
+Test: `cargo test --features funcattn --release --test funcattn_g6_token_prediction_lm_domain -- --nocapture`
+
+**Why this gate exists:** T4.4 explicitly blocks `funcattn` from default-on
+promotion until LLM-domain token-prediction evidence exists. G1–G5 all PASS
+but only address mechanics + PDE/regression accuracy. Research 257 §5 Q2
+flags NLP as the unverified domain: "Risk: we ship the open primitive, run
+GOAT gate, find no gain over Parallax/SDPA on real LM data, demote. This
+is the expected outcome for the katgpt-rs side." G6 is that gate.
+
+**Setup:**
+- Masked-token prediction on alternating-pattern sequences
+  `[a, b, a, b, a, b, a, b]` (V=8, D=8, N=8, K=8).
+- Genuine LM-domain task: discrete token sequences, cross-entropy loss on
+  the masked position, vocab-projection head. NOT a PDE-style regression
+  on continuous fields like G2/G3.
+- Two architectures at matched param budget:
+  - FUNCATTN (sigmoid basis, dual-form Tikhonov): 456 params
+    (W_emb[(V+1)·D] + W_pos[N·D] + W_basis[K·D] + 3·D² + W_head[V·D])
+  - SDPA (softmax `tiled_attention_forward`): 392 params
+    (W_emb[(V+1)·D] + W_pos[N·D] + 3·D² + W_head[V·D])
+  - FUNCATTN has ~16% more params (the W_basis term is FUNCATTN-specific).
+    This is a slight handicap against FUNCATTN — if it cannot beat SDPA
+    even with more capacity in the LM domain, the null result is robust.
+- Central-FD SGD, FD_EPS=1e-2, LR=0.05, α=0.5, τ=0.1.
+- 600 steps release / 40 steps debug — sized for the *converged* regime,
+  not sample-efficiency. This is the explicit purpose of T4.4 per the
+  benchmark 058 G2 caveat: "SDPA catches up to FUNCATTN at 500+ steps."
+- Same PRNG seed across variants; orthogonal init on the "primary" weight
+  (W_basis for FUNCATTN, W_Q for SDPA), small random init on embeddings
+  and head, identity on W_K/W_V.
+
+**600-step convergence (release, identical seed):**
+
+| Step | FUNCATTN mean_loss | FUNCATTN acc | SDPA mean_loss | SDPA acc |
+|------|--------------------|--------------|----------------|----------|
+| 1    | 2.0797             | 0.094        | 2.0786         | 0.094    |
+| 100  | 0.0004             | 0.945        | 0.0020         | 1.000    |
+| 200  | 0.0001             | 0.969        | 0.0005         | 1.000    |
+| 300  | 0.0001             | 0.969        | 0.0003         | 1.000    |
+| 400  | 0.0001             | 0.969        | 0.0002         | 1.000    |
+| 500  | 0.0000             | 0.969        | 0.0001         | 1.000    |
+| 600  | **0.0000**         | **0.969**    | **0.0001**     | **1.000**|
+
+**Verdict:**
+
+| Metric | FUNCATTN | SDPA | Δ (fa − sd) |
+|--------|----------|------|-------------|
+| Final mean loss | 0.0000 | 0.0001 | -0.0001 (fa slightly lower) |
+| Final accuracy  | 0.9688 | 1.0000 | **-0.0312 (fa LOSES)** |
+| Init loss reduction | 100.0% | 100.0% | tie |
+
+**→ G6 FAIL.** Both variants learned to near-zero loss (100% reduction),
+but SDPA reaches perfect accuracy (1.000) while FUNCATTN plateaus at
+0.969 — 3 of 128 eval samples remain wrong. The losses are essentially
+identical (both ~0.0001), so this is a hard-accuracy tiebreaker, not a
+loss-gap.
+
+### Why FUNCATTN loses here (and won G2)
+
+This result is the **exact mirror image of G2's sample-efficiency win**:
+
+1. **Sample-efficiency regime (G2, 150 steps):** FUNCATTN's closed-form
+   Tikhonov solve recovers the operator analytically — no gradient
+   signal needed to "learn" the attention pattern. SDPA must learn the
+   same pattern from softmax gradients, which is slower. FUNCATTN wins
+   10.9× at 150 steps.
+
+2. **Converged regime (G6, 600 steps):** Both variants have enough
+   gradient updates to fit the simple period-2 pattern perfectly. SDPA
+   fits it 100%; FUNCATTN fits it 96.9%. The closed-form solve's
+   sample-efficiency advantage vanishes, and FUNCATTN's structural
+   ceiling (the basis-partition Φ cannot represent every exact
+   token-token mapping that a learned softmax can) becomes visible.
+
+3. **The 3 misclassified positions** are likely a basis-partition edge
+case: with K=8 basis dimensions and V=8 vocab, certain (a, b) token
+pairs may produce near-degenerate Φ rows that the column-normalized
+slice tokens cannot disambiguate. SDPA's per-token softmax has no such
+structural limit — every position gets its own attention distribution.
+
+This matches Research 257 §1.5: *"Token sequences may or may not have
+[low intrinsic complexity relative to discretization]."* For a period-2
+pattern, the answer is: SDPA's per-position attention is strictly more
+expressive than FUNCATTN's k-basis partition, and once both are trained,
+SDPA wins.
+
+### What would need to change to make G6 pass
+
+1. **Larger K.** With K=V=8, the basis is exactly at the vocab size —
+   no spare capacity. K=16 or K=32 might let Φ represent finer-grained
+   token partitions. Untested; would increase the d²·k solve cost.
+2. **Larger seq_len N.** At N=8, the pattern is trivially learnable by
+   both. Longer sequences with more complex dependencies might favor
+   FUNCATTN's global structure. Untested.
+3. **Real LM weights.** The paper's headline results are on PDE solution
+   fields, not language. A real pretrained LM's basis matrices might
+   exploit FUNCATTN's structure better than random-init + FD-SGD can.
+   This is the riir-ai Plan 318 path (rank-k latent functor with trained
+   basis), out of scope for katgpt-rs.
+
+None of these are pursued here — T4.4 is a gate, not an optimization
+sweep. The honest null result stands.
+
+### Demotion / promotion decision
+
+**`funcattn`: stays opt-in, NOT default.** Per Plan 286 T4.4 + Research
+257 §5 Q2. The primitive is shipped and usable via `--features funcattn`
+or the `full` aggregation; it just is not in the default feature list.
+
+---
+
+## Verdict (Phase 4 — T4.4 closed as null result)
 
 **All 5 GOAT gates PASS** (G1+G2+G3+G4+G5). FUNCATTN beats SDPA by 10.9× and
 sigmoid Parallax by 18.4× on sinusoidal regression at the sample-efficiency
@@ -399,19 +513,25 @@ frontier (G2). Sigmoid basis outperforms softmax on PDE-proxy regression
 (G3). Linear-in-n scaling verified with slope 0.94 (G4). Zero-alloc hot path
 confirmed (G5). Mechanics + Lipschitz verified (G1).
 
-**Promotion status:**
+**G6 (T4.4 LLM-domain gate) FAIL** — at 600 FD-SGD steps on masked-token
+prediction, FUNCATTN plateaus at acc=0.969 while SDPA reaches acc=1.000.
+This is the converged-regime mirror of G2's sample-efficiency win: once both
+variants have enough gradient updates to fit the pattern, SDPA's per-token
+softmax is strictly more expressive than FUNCATTN's k-basis partition, and
+FUNCATTN's closed-form solve's sample-efficiency advantage vanishes.
+
+**Promotion status (final):**
 - ✅ **T4.2 satisfied** — eligible for opt-in promotion. `funcattn` is
-  already in the `full` feature aggregation.
-- ⚠️ **T4.4 still blocks default-on** — do NOT add `funcattn` to default
-  features until LLM-domain token-prediction evidence exists. Per Research
-  257 §5 Q2, this is a separate gate deferred to riir-ai Plan 318 (rank-k
-  latent functor) or a follow-up that imports trained basis weights into a
-  real LM attention layer.
-- ⚠️ **G2 sample-efficiency caveat** — the 10.9× advantage holds in the
-  150-step regime. At 500+ steps SDPA catches up to within ~2× as both
-  reach near-convergence. The paper's headline claim is fundamentally
-  about in-context learning with limited signal (the 150-step regime),
-  so this caveat does NOT invalidate the gate pass.
+  in the `full` feature aggregation.
+- ✅ **T4.4 CLOSED** — LLM-domain evidence gathered (G6). Result: FAIL.
+  **`funcattn` stays opt-in, NOT promoted to default.** This matches
+  Research 257 §5 Q2's expected null result ("the paper itself defers NLP").
+  The gate is closed, not deferred — there is no pending evidence that
+  would flip the verdict without changing the architecture (larger K,
+  longer sequences, or trained basis matrices — all out of scope here).
+- ⚠️ **G2 sample-efficiency caveat** — confirmed by G6. The 10.9× advantage
+  holds in the 150-step sample-efficiency regime; at 500+ steps SDPA
+  catches up and surpasses. Both gates are documented honestly.
 - ⚠️ **Sigmoid Parallax numerical instability** — separate finding. Sigmoid
   Parallax diverges under naive FD-SGD LR=1.0 at STEPS≥350. Production use
   requires weight decay / gradient clipping / LR annealing on W_R. Logged
@@ -420,4 +540,7 @@ confirmed (G5). Mechanics + Lipschitz verified (G1).
 The primitive is shipped and usable via `--features funcattn`. The convex-
 combo dual form gives strict numerical-stability improvements over the
 paper's additive primal form (PD-guaranteed for any α∈(0,1)), which is a
-useful contribution independent of the accuracy gate outcome.
+useful contribution independent of the accuracy gate outcome. The riir-ai
+side (Plan 318 — rank-k latent functor with trained basis on multi-axis
+NPC relations) is the primary value path and does NOT depend on this gate's
+outcome.
