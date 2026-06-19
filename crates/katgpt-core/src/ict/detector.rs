@@ -93,6 +93,30 @@ pub struct BranchingDetector {
     pub ema_decay: f32,
 }
 
+impl core::fmt::Debug for BranchingDetector {
+    /// Compact debug representation — shows the public config (k_trajectories,
+    /// action_dim, k_percent, eta, EMA state) but redacts the pre-allocated
+    /// scratch buffers (which are only interesting for allocation auditing,
+    /// not for debugging detection results). Scratch lengths are reported as
+    /// `(len)` so callers can still verify pre-allocation invariants.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("BranchingDetector")
+            .field("k_trajectories", &self.k_trajectories)
+            .field("action_dim", &self.action_dim)
+            .field("k_percent", &self.k_percent)
+            .field("eta", &self.eta)
+            .field("scratch_p_avg", &format_args!("({})", self.scratch_p_avg.len()))
+            .field("scratch_m", &format_args!("({})", self.scratch_m.len()))
+            .field("scratch_u", &format_args!("({})", self.scratch_u.len()))
+            .field("scratch_mask", &format_args!("({})", self.scratch_mask.len()))
+            .field("scratch_sorted", &format_args!("({})", self.scratch_sorted.len()))
+            .field("ema_beta", &self.ema_beta)
+            .field("ema_alpha", &self.ema_alpha)
+            .field("ema_decay", &self.ema_decay)
+            .finish()
+    }
+}
+
 impl BranchingDetector {
     /// Construct a detector with pre-allocated scratch.
     ///
