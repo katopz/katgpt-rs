@@ -319,7 +319,7 @@ Top co-occurring pairs:
 | 59 MoE+SD | Amdahl cost model for speculative decoding | `spec_cost_model` feature |
 | 60 MeMo | Reflection QA pipeline + TIES merging | `memo_reflections` feature |
 | 061 Delta Routing | Cross-layer residual delta routing | `delta_routing` feature |
-| 62 SHINE | Context→LoRA hypernetwork, alternating 2D attention | `shine_hypernet` / `shine_routing` features |
+| 62 SHINE | Context→LoRA hypernetwork, alternating 2D attention | `shine_hypernet` / `shine_routing` features (riir-ai runtime; training deferred → `riir-train/.plans/302_shine_context_to_lora_hypernetwork_DEFERRED.md`) |
 | 155 LEO | All-goals Q-value trait framework (SUPER GOAT, **default-on**) | `leo_all_goals` + `dual_leo` features |
 
 ### 2. Strong Conceptual Alignment (Pattern Adopted, Different Mechanism)
