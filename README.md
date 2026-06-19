@@ -224,8 +224,6 @@ graph LR
 | **Federation** | Symmetric KL coupling between domain experts | `federation` |
 | **SimpleTES** | RPUCG graph-based bandit loop | `tes_loop` |
 | **Stability Metrics** | P50/P99/CV per-step latency instrumentation | `stability_metrics` |
-| **Sleep Consolidation** | Offline recursive memory consolidation at KV eviction | `sleep_consolidation` |
-| **Dreamer** | Offline memory consolidation (Q-value clustering) | `dreamer` |
 | **PlasmaPath** | Bit-plane ternary SIMD matvec, 1.58 bits/weight | `plasma_path` |
 | **MoA Inference** | Token-adaptive Mixture-of-Activations SwiGLU | `moa_inference` |
 | **Newton-Schulz** | Cubic fixed-point orthogonalization + Muon momentum | `newton_schulz` |
@@ -245,10 +243,7 @@ graph LR
 | Feature | Plan | GOAT | Key Gain |
 |---------|------|------|----------|
 | **Posterior-Guided Pruner Evolution** (`posterior_evolution`) | 239 | 8/8 ✅ | Bayesian precision-gated lifecycle actions (Patch/Split/Compress/Retire), 258ns overhead |
-| **Spectral NPC Perception** (`sense_lod`) | 240 | ✅ | Per-NPC LOD skips low-value sense modules, >40% CPU reduction in dense zones |
-| **Adaptive Modulo Validation** (`game_adaptive_validation`) | 244 | ✅ | 5.91× dense-zone throughput, zero chain-layer bypass |
 | **Spectral Irrep Pruner** (`spectral_pruner`) | 246 | ✅ | Spectral flatness detection for converged logit distributions, +3.6% overhead only |
-| **OctreeCTC Reconstruction** | 248 | ✅ | Multi-step active KG-Latent-Octree reconstruction, 93.2ns < 200ns GOAT |
 | **Spectral Budget Router** (`spectral_budget`) | 254 | 19/19 ✅ | Layer-adaptive NS depth + rank-p spectral truncation (opt-in — GOAT-gated, not in default)
 | **Regime Transition** (`regime_transition`) | 215 | 8/8+4/4 ✅ | Self-revising discovery, -0.3% overhead vs real decode |
 | **SubstrateGate** (`substrate_gate`) | 216 | ✅ | Inference-time capability substrate routing via MLP masks |
@@ -278,7 +273,7 @@ graph LR
 | **CHIAR Chiaroscuro Attention** (`chiaroscuro`) | 269 | 9/9 ✅ | Per-token DCT spectral entropy KV strategy (3.03× compression), operator routing, collapse discovery |
 | **Attention Matching** (`attn_match`) | 271 | 9/9 ✅ | Modelless KV compaction `(K,V)→(Ck,β,Cv)`: β-recovery 1e-6, Cv Frobenius 0.0, 3.01× SIMD, blocked Cholesky (32×32), adaptive router (scalar/SIMD/rayon/GPU/ANE) |
 | **Manifold Power Iteration MoE Router** (`manifold_power_iter_router`) | 279 | 9/9 ✅ | One-shot router-row conditioning at snapshot swap, sub-ms swap (0.076ms N=8 D=256), byte-identical determinism |
-| **Temporal Derivative Kernel** (`temporal_deriv`) | 277 | 4/4 fusions ✅ | Dual fast/slow EMA surprise signal — HLA companion, δ-Mem gate, collapse detector, derivative curiosity |
+| **Temporal Derivative Kernel** (`temporal_deriv`) | 277 | 4/4 fusions ✅ | Dual fast/slow EMA surprise signal — state-vector companion, surprise-gated writes, collapse detection, curiosity signal |
 | **Triggered Injection Gate** (`triggered_injection`) | 278 | G1/G2/G3/G8 ✅ | Sigmoid-thresholded inject/skip gate — 50% skips w/ 0.63% quality parity in saturated regime |
 | **FaithfulnessProbe** (`faithfulness_probe`) | 278 | G1/G2/G8 ✅ | Causal intervention diagnostic — 100%/100% detection, IG surrogate Spearman ρ=1.0, audit cadence |
 | **CS-KV-Importance Probe** (`cs_kv_probe`) | 280 | G1/G2/G3 ✅ | Compressed-sensing KV-group importance probe + density-budget interpolator, sigmoid-compatible |
@@ -287,9 +282,8 @@ graph LR
 | **CLR Claim-Level Reliability** (`clr`) | 284 | ✅ | Runtime CLR — sigmoid projection vote over claim embeddings, self-adaptive test-time scaling |
 | **Sink-Aware Attention** (`sink_aware_attn`) | 287 | G1/G2 cached ✅ | NOP/Broadcast classifier + dual-policy sigmoid gate — cache cadence=16 ≤5% steady-state |
 | **ICT Branching Detector** (`ict_branching`) | 294 | G1/G3/G4/G5/G6/G10 ✅ | `collision_purity β(π) = Σ π²`, JS-divergence novelty, BranchingDetector — ρ(H₁,JS)=0.065 (Super-GOAT proceeds) |
-| **MicroRecurrentBeliefState** (`micro_belief`) | 276 | G1.1–G1.5 ✅ | Per-entity recurrent state trait + attractor/leaky kernels + BLAKE3 snapshot — G2 (attractor coherence) deferred |
-| **ChunkedContentStore** (`chunked_content_store`) | 272 | G1 ✅ | Lore-distilled chunked content-addressed Merkle store — FastCDC ~39× incremental push win, G3–G7 pending |
-| **Forensic Watermark** (`forensic_watermark`) | 293 | 31/31 unit ✅ | BLAKE3-seeded per-recipient recipe + Tardos anti-collusion + DCT/topology marks — G1–G4 GOAT gate deferred |
+| **MicroRecurrentBeliefState** (`micro_belief`) | 276 | G1.1–G1.4 ✅ | BeliefKernel trait unifying attractor + leaky-integrator families — G2 (attractor coherence) deferred |
+| **Forensic Watermark** (`forensic_watermark`) | 293 | 31/31 unit ✅ | BLAKE3-seeded per-recipient asset fingerprint — recipe + deployment private in riir-ai — G1–G4 GOAT gate deferred |
 
 ## 🎮 Arena Proofs — HL Thesis Validated
 
@@ -616,44 +610,6 @@ Extends BFCF pruning with LFU region caching (papaya lock-free HashMap, BLAKE3 k
 
 Feature gate: `bfcf_lfu_shard` (**default-ON**). 📖 Plan: [`.plans/218_bfcf_lfu_shard.md`](.plans/218_bfcf_lfu_shard.md).
 
-### ⚡ Temporal Derivative Kernel: Dual Fast/Slow Surprise Signal (Plan 277)
-
-Distills O'Reilly 2026's neocortical learning paper ("This is how the Neocortex Learns", [arXiv:2606.08720](https://arxiv.org/abs/2606.08720)) into a generic zero-allocation `TemporalDerivativeKernel<const N: usize>` — a dual fast/slow EMA band-pass derivative `(I_fast − I_slow)` that produces a single "surprise" scalar per tick. The kernel is branch-free, `#[inline]`, and observes any `[f32; N]` state vector with the same paper-default α-pair (`α_fast=0.3, α_slow=0.03`, ~10× ratio).
-
-The kernel is wired as a **unified surprise bus** driving four independent consumers — each with its own GOAT gate:
-
-```mermaid
-flowchart LR
-    STATE["State vector
-[N f32]"] --> KERNEL["TemporalDerivativeKernel
-α_fast=0.3, α_slow=0.03"]
-    KERNEL -->|"surprise scalar"| F1["F1: HLA companion
-G2 recall/FPR"]
-    KERNEL --> F2["F2: δ-Mem write gate
-G3 suppression"]
-    KERNEL --> F3["F3: Collapse detector
-G4 FN reduction"]
-    KERNEL --> F4["F4: Derivative curiosity
-G5 recovery/cost"]
-```
-
-**GOAT 4/4 PASS — promoted to DEFAULT-ON.**
-
-| Fusion | Gate | Target | Actual | Verdict |
-|--------|------|--------|--------|---------|
-| F1: HLA companion | G2 | recall ≥0.80, FPR ≤0.10 | recall=1.00, FPR=0.00 | **PASS** |
-| F2: δ-Mem write gate | G3 | suppression ≥30%, recall loss ≤5% | 42.9% suppression, recall +9.6% | **PASS** |
-| F3: Collapse detector | G4 | FN reduction ≥20% | 100% FN reduction | **PASS** |
-| F4: Derivative curiosity | G5 | recovery ≤2×, cost ≤10% of CGSP | recovery 1×, cost 17.2% | **PASS** (cost stretch missed) |
-
-Key findings:
-- **Orthogonality proof (G2):** On a 1000-tick emotional-event trace, raw HLA norm peaks at tick 999 (monotone non-decreasing), while surprise peaks at the first event (tick 207) — 792-tick argmax gap, proving the derivative carries information complementary to the raw state.
-- **Counter-intuitive recall gain (G3):** More aggressive write gating *improves* recall — θ=0.10 suppresses 42.9% of boring writes while boosting recall 9.6% (0.1626→0.1782), because filtered background noise stops overwriting event associations.
-- **100% FN reduction (G4):** The derivative collapse signal catches every gradual-convergence case the hesitation-only detector misses.
-- **Unified α-pair:** 3/4 consumers use the same paper-default `(0.3, 0.03)` — no per-consumer tuning required. The δ-Mem gate (F2) is the outlier: it benefits from `α_slow=0.1` for stream-driven background-write suppression (see [Research 252](.research/252_Unified_Surprise_Bus_Validation.md)).
-
-Feature gate: `temporal_deriv` (**default-ON** since Plan 277 Phase 6 GOAT 4/4). 📖 Plan: [`.plans/277_temporal_derivative_kernel.md`](.plans/277_temporal_derivative_kernel.md). Research: [`.research/243_Temporal_Derivative_Kernel_Neocortical_Learning.md`](.research/243_Temporal_Derivative_Kernel_Neocortical_Learning.md). Scorecard: [`.benchmarks/277_temporal_deriv_goat.md`](.benchmarks/277_temporal_deriv_goat.md).
-
 ### 🔀 Dual-Pool Reachable Memory Router: Proactive Non-Trapping CGSP (Plan 282)
 
 Distills Hao, Long, Zhao 2026 — *"Self-Evolving MAS via Decentralized Memory"* ([arXiv:2605.22721](https://arxiv.org/abs/2605.22721)) into a `DualPoolBandit<B: HintDeltaBandit>` that splits CGSP's bandit into an **exploitation pool** (E-pool: consolidated successes, local-walk operator) and an **exploration pool** (X-pool: fresh candidates, teleportation operator). A sigmoid router `α = sigmoid(w_E − w_X) ∈ (0, 1)` guarantees the X-pool always retains strictly nonzero selection probability — the induced Markov chain is irreducible and aperiodic (**DecentMem Theorem 1**), so the agent is **provably never trapped**, by construction, with no collapse detector needed.
@@ -791,25 +747,24 @@ Core trick: Parabolic key encoding k ↦ (2k, −k²) turns argmax into a suppor
 
 HL = software systems evolve through **code updates** not weight updates.
 
-```
+```text
 Episode N:   BanditPruner selects arm → environment runs → reward → TrialLog.append()
 Episode N+k: AbsorbCompress promotes stable low-Q arms to hard blocks
-Round N+m:   Agent writes new validator.rs → compile .wasm → HotSwapPruner.reload() → RegressionSuite
 ```
 
-Key subsystems (all default-on or part of `bandit`): Multi-Armed Bandit (UCB1, ε-greedy, Thompson), TrialLog, AbsorbCompress, HotSwapPruner, ReviewMetrics, Emotion Vector (O(d) mid-layer projection), Entropy Anomaly (session-level OOD).
+Key subsystems (default-on or part of `bandit`): Multi-Armed Bandit (UCB1, ε-greedy, Thompson), TrialLog, AbsorbCompress, ReviewMetrics. The runtime hot-swap, mid-layer emotion projection, and session-level OOD wiring live in `riir-ai`.
 
 📖 [`.docs/09_heuristic-learning.md`](.docs/09_heuristic-learning.md).
 
 ### 🎯 G-Zero: Verifier-Free Self-Play
 
-Modelless HL with Hint-δ intrinsic reward — no external verifier needed:
+Modelless HL Phase 1 — Hint-δ intrinsic reward drives `AbsorbCompress` + `BanditPruner` without an external verifier:
 
 ```text
 δ(q, h, a_hard) = (1/T) Σ [log πG(at | q, h, a<t) − log πG(at | q, a<t)]
 ```
 
-Two phases: **Phase 1** (modelless — δ → AbsorbCompress + BanditPruner) → **Phase 2** (model-based — gradient optimization with self-play reward).
+The model-based Phase 2 (gradient optimization with self-play reward) and the arena players live in `riir-ai` / `riir-train`.
 
 📖 [`.docs/23_hl_arena_detail.md`](.docs/23_hl_arena_detail.md) §11.
 
@@ -1041,18 +996,17 @@ Three core primitives:
 
 Feature gate: `ict_branching` (**opt-in** — `katgpt-core/ict_branching` re-exported at root). 📖 Plan: [`.plans/294_ict_branching_detector.md`](.plans/294_ict_branching_detector.md), Research: [`.research/270_Beyond_Entropy_ICT_Distributional_Branching_Detector.md`](.research/270_Beyond_Entropy_ICT_Distributional_Branching_Detector.md), Benchmarks: [G1](.benchmarks/294_ict_g1.md) · [G2](.benchmarks/294_ict_g2.md) · [G3](.benchmarks/294_ict_g3.md) · [G4–G6](.benchmarks/294_ict_goat_gates.md) · [G10](.benchmarks/294_ict_g10.md), Issue: [033](.issues/033_ict_g2_inflection_37_percent_npc_domain.md), Paper: [arxiv 2606.19771](https://arxiv.org/abs/2606.19771).
 
-### 🧠 MicroRecurrentBeliefState — Per-Entity Attractor/Leaky Belief Kernel (Plan 276, arxiv 2604.17121)
+### 🧠 MicroRecurrentBeliefState — Attractor/Leaky Belief Kernel (Plan 276, arxiv 2604.17121)
 
-Distills Mozer, Siddiqui & Liu (DeepMind, 2026) *The Topological Trouble With Transformers* into a `BeliefKernel` trait unifying the existing `evolve_hla` (Family C delta-rule SSM) with a new **attractor family** (`s_t = σ(W_s·s_{t-1} + W_x·x_t + b)`) for belief-with-hysteresis. The trait exposes `step()`, `project_to_scalars()` (delegating to existing `SenseModule::project` dot-product + sigmoid bridge), and `MicroRecurrentKernelSnapshot` for atomic hot-swap via `SenseHotSwap` (BLAKE3 commitment, AtomicPtr).
+Distills Mozer, Siddiqui & Liu (DeepMind, 2026) *The Topological Trouble With Transformers* into a generic `BeliefKernel` trait unifying a leaky-integrator family (delta-rule SSM) with an **attractor family** (`s_t = σ(W_s·s_{t-1} + W_x·x_t + b)`) for belief-with-hysteresis. The trait exposes `step()` and `project_to_scalars()` via dot-product + sigmoid bridge (never softmax).
 
-**Three modelless primitives, all sigmoid-compatible:**
-- `BeliefKernel` trait — unifies Family A (attractor, sigmoid-bounded) and Family C (leaky integrator, the existing `evolve_hla` body).
+**Two modelless primitives, both sigmoid-compatible:**
+- `BeliefKernel` trait — unifies Family A (attractor, sigmoid-bounded) and Family C (leaky integrator).
 - `AttractorKernel` — the GOAT candidate. σ-bounded step prevents long-horizon flip-flop.
-- `KernelHotSwap` + `MicroRecurrentKernelSnapshot` — versioned, BLAKE3-committed kernel hot-swap (per-NPC personality divergence via snapshot versioning).
 
-**Verdict:** revised Super-GOAT → GOAT after prior-art check found `evolve_hla` already implements Family C. **G1.1–G1.5 PASS** (determinism, boundedness, bridge ranking, latency, freeze/thaw atomicity). **G2 (attractor coherence) deferred** to a long-horizon benchmark; attractor family stays opt-in behind a sub-flag if it loses.
+**Verdict:** revised Super-GOAT → GOAT after prior-art check. **G1.1–G1.4 PASS** (determinism, boundedness, bridge ranking, latency). **G2 (attractor coherence) deferred** to a long-horizon benchmark; attractor family stays opt-in behind a sub-flag if it loses.
 
-Feature gate: `micro_belief` (**opt-in** — ships trait unification + attractor family + snapshot; attractor variant not promoted until G2 passes). 📖 Plan: [`.plans/276_micro_recurrent_belief_state.md`](.plans/276_micro_recurrent_belief_state.md), Research: [`.research/242_Topological_State_Tracking_Recurrent_Belief.md`](.research/242_Topological_State_Tracking_Recurrent_Belief.md), Paper: [arxiv 2604.17121](https://arxiv.org/abs/2604.17121).
+Feature gate: `micro_belief` (**opt-in** — ships trait unification + attractor family; attractor variant not promoted until G2 passes). Snapshot/hot-swap integration lives in `riir-ai`. 📖 Plan: [`.plans/276_micro_recurrent_belief_state.md`](.plans/276_micro_recurrent_belief_state.md), Research: [`.research/242_Topological_State_Tracking_Recurrent_Belief.md`](.research/242_Topological_State_Tracking_Recurrent_Belief.md), Paper: [arxiv 2604.17121](https://arxiv.org/abs/2604.17121).
 
 ### 🎲 BoMSampler — K-Hypothesis Single-Pass Belief Sampling (Plan 281, arxiv 2604.04913)
 
@@ -1104,14 +1058,7 @@ Distills O'Reilly 2026 *This is how the Neocortex Learns* into a generic, zero-a
   curiosity_gate = sigmoid(β · surprise_norm)     (AGENTS.md sigmoid, never softmax)
 ```
 
-**The smallest missing primitive that upgrades four existing pillars** (per Research 243):
-
-| Fusion | Pillar | Gate | Result |
-|--------|--------|------|--------|
-| **G2** HLA companion | `evolve_hla` (Plan 057/Sense) | ✅ | Tracks *how fast it's changing* alongside *what is* |
-| **G3** δ-Mem write gate | DeltaMemoryState (Plan 053) | ✅ | Derivative-gated writes — surprising events only |
-| **G4** Collapse detector | CollapseDetector (Plan 212) | ✅ | Entropy collapse + prediction-derivative collapse are orthogonal |
-| **G5** Derivative curiosity | CGSP (Plan 274) | ✅ | Zero-cost `sigmoid(β · surprise_norm())` curiosity signal |
+**Composes with existing belief-state and curiosity primitives** — four fusion gates passed (per Research 243): state-vector companion, surprise-gated memory writes, derivative-augmented collapse detection, and zero-cost sigmoid curiosity signal. Consumer wiring lives in `riir-ai`.
 
 **All 4 fusion gates PASS** → kernel primitive promoted to **default-on** (T6 final). Microbench: `observe` N=8 at 7.9ns (< 10ns target).
 
@@ -1146,67 +1093,15 @@ Distills Asadulaev et al. *Latent Reasoning in TRMs is Secretly a Policy Improve
 | **G3** Step reduction at vocab ≤ 128 | ≥ 2× | met | ✅ PASS |
 | **G4** Argmax match vs ungated | 100% | 100% | ✅ PASS |
 
-**HLA integration (T5.1):** the gate becomes the 4th early-stop criterion for `evolve_hla` 6-element HLA activation vector (sigmoid-bounded, not logits). GOAT 3/3 PASS → Bench 057.
+**Belief-state integration (T5.1):** the gate composes with existing sigmoid-bounded belief-state early-stop criteria. GOAT 3/3 PASS → Bench 057.
 
 Feature gate: `self_advantage_gate` (**DEFAULT-ON** since GOAT 4/4 PASS). Deep integrations T2.2/T2.3 + freeze/thaw T5.3 remain **deferred** in [Issue 028](.issues/028_self_advantage_gate_integration_followups.md). 📖 Plan: [`.plans/283_self_advantage_recursion_gate.md`](.plans/283_self_advantage_recursion_gate.md), Research: [`.research/250_Latent_Recursion_Policy_Improvement_Advantage_Margin.md`](.research/250_Latent_Recursion_Policy_Improvement_Advantage_Margin.md), Paper: [arxiv 2511.16886](https://arxiv.org/abs/2511.16886).
 
-### 📦 ChunkedContentStore — Lore-distilled Content-Addressed Merkle Store (Plan 272)
+### 🔏 Forensic Watermark — Per-Recipient Asset Fingerprint (Plan 293, arxiv 2606.18208)
 
-Distills [Epic Games Lore](https://github.com/EpicGames/lore) into a generic, dependency-light, MIT-licensed `ChunkedContentStore` trait + reference implementations. The store: **chunks** arbitrary bytes via a pluggable `ChunkingStrategy` (fixed-size + **FastCDC** content-defined chunking), **BLAKE3-hashes** each chunk for content-addressed dedup against a `papaya` lock-free hashmap, and **builds a binary Merkle root** per blob for O(log n) inclusion/exclusion proofs and tamper detection.
+A generic, domain-agnostic forensic watermarking primitive — BLAKE3-seeded per-recipient asset fingerprint for leakage attribution. Open math distilled from public prior art (Tardos 2008, Boneh–Shaw 1998, arxiv 2606.18208); the recipe combination, deployment pattern, and chain integration live in `riir-ai` Plan 322. The forensic value depends on deployment secrecy, so algorithm details (recipe pipeline, mark channels, recovery procedure) are intentionally not enumerated in this public README.
 
-```text
-  put(bytes):
-    chunk(bytes, strategy) → [chunks]
-    chunks.hash() → [BLAKE3]
-    root = build_binary_merkle_root([BLAKE3])      (O(log n) proofs)
-    store chunks + BlobMetadata in papaya::HashMap (lock-free)
-
-  get_chunk(blob_id, idx):
-    return hashmap.get(proof.leaf_hash(idx))        (zero-copy &[u8] borrow)
-
-  verify_proof(leaf, proof, root):
-    return pure BLAKE3 fold over proof siblings     (no store access)
-```
-
-**No game semantics, no chain, no consensus** — pure data plumbing. The private fusion (Executable Asset Vessel + Quorum Gitflow) lives in riir-ai Plan 319.
-
-| Gate | Target | Measured | Verdict |
-|------|--------|----------|--------|
-| **G1** Dedup ≥ 5× on synthetic workload | ≥ 5× | met | ✅ PASS |
-| **G2** Incremental push ≤ 5% on CDC | ≤ 5% | **1.35%** (vs FixedSize 52.94%, **~39× win**) | ✅ PASS |
-| G3 Proof < 10µs | < 10µs | pending | DEFERRED (Phase 3) |
-| G5 `get_chunk` p99 < 200ns | < 200ns | pending | DEFERRED (Phase 4) |
-
-**Constants deviation (documented):** `NORMAL_LEVEL=13` (not the canonical 23) — level 23 gives 8 MiB expected spacing, defeating CDC on ≤1 MiB blobs.
-
-Feature gate: `chunked_content_store` (**opt-in** — Phase 1+2 complete, G1/G2 PASS; Phase 3+4 pending). 📖 Plan: [`.plans/272_chunked_asset_merkle_store.md`](.plans/272_chunked_asset_merkle_store.md), Research: [`.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md`](.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md), Source: [Epic Games Lore](https://github.com/EpicGames/lore).
-
-### 🔏 Forensic Watermark — BLAKE3-seeded Per-Recipient Asset Fingerprint (Plan 293, arxiv 2606.18208)
-
-A **generic, domain-agnostic** forensic watermarking primitive: BLAKE3-seeded per-recipient recipe derivation, **Tardos anti-collusion** codebook (c-collusion resistant, deterministic from seed), vertex perturbation via 2×2 determinant-1 matrices with eigenvalues in (0,1) (LoopWM spectral stability transfer), DCT mid-frequency texture embedding, and degenerate-triangle topology watermark (survives mesh simplification). Forensic recovery via least-squares `P_vertex` extraction, DCT mark reader, topology mask reader.
-
-```text
-  Recipe::derive(pubkey, seed) → Recipe
-    │
-    ├── Tardos codebook (c-collusion resistant, deterministic from seed)
-    │
-    ├── Vertex perturbation P_vertex  (2×2 det=1, λ ∈ (0,1))
-    │
-    ├── DCT mid-frequency embedding   (BC7/JPEG robust)
-    │
-    └── Topology degenerate triangles (survives mesh simplification)
-
-  recover(asset, recipe) → ForensicTrace
-    ├── Least-squares P_vertex fit
-    ├── DCT mark reader
-    └── Topology mask reader
-```
-
-**No game semantics, no chain, no NFT, no WASM vessel** — this is the adoption hook. The private integration (recipe application inside WASM vessel + NFT attribution + chain slashing) lives in `riir-ai/.plans/322_asset_fingerprinting_wasm_recipe.md`.
-
-**Status:** 31/31 unit tests green. **GOAT gate G1–G4 deferred** to a separate session (attribution accuracy, collusion resistance, visual quality, recompression robustness). Default-OFF until gate passes.
-
-Feature gate: `forensic_watermark` (**opt-in** — G1–G4 GOAT gate deferred). 📖 Plan: [`.plans/293_forensic_watermark_recipe_primitive.md`](.plans/293_forensic_watermark_recipe_primitive.md), Research: [`.research/268_Forensic_Asset_Fingerprinting_LatCal_Recipe.md`](.research/268_Forensic_Asset_Fingerprinting_LatCal_Recipe.md), Paper: [arxiv 2606.18208](https://arxiv.org/abs/2606.18208), Prior art: Tardos 2008, Boneh–Shaw 1998.
+Feature gate: `forensic_watermark` (**opt-in** — 31/31 unit tests green; G1–G4 GOAT gate deferred). 📖 Plan: [`.plans/293_forensic_watermark_recipe_primitive.md`](.plans/293_forensic_watermark_recipe_primitive.md), Research: [`.research/268_Forensic_Asset_Fingerprinting_LatCal_Recipe.md`](.research/268_Forensic_Asset_Fingerprinting_LatCal_Recipe.md), Paper: [arxiv 2606.18208](https://arxiv.org/abs/2606.18208).
 
 ## 🔧 KV Compression
 
@@ -1231,7 +1126,7 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 | **GameState** (`game_state`) | Generic MCTS, STRATEGA forward model | Arena-specific |
 | **SpecHop** (`spechop`) | Hop-level speculation for multi-step agents | Awaiting GOAT proof |
 | **Percepta** (full) | Transformer-VM with WASM interpreter in weights | Research-grade |
-| **Sense Composition** (`sense_composition`) | KG Latent Octree NPC sense modules — ternary bit-plane projection **+ per-NPC 8-dim recurrent belief state via `evolve_hla` (the HLA pillar — recurrent latent state + sigmoid-dot bridge to scalars; grep before proposing new recurrent-state primitives)** | Opt-in — requires `plasma_path`, `domain_latent` |
+| **Sense Composition** (`sense_composition`) | Ternary bit-plane projection for sense-module context. Recurrent belief state + sigmoid-dot bridge wiring live in `riir-ai` | Opt-in — requires `plasma_path`, `domain_latent` |
 | **BAKE Precision** (`bake_precision`) | Per-dimension Bayesian precision tracking for KG embeddings | GOAT 10/10, drift marginal (4.7%) |
 | **NFCoT FlowScore** (`nf_flow`) | Normalizing flow density scoring for speculative candidates | GOAT ⚠️ MARGINAL, all sub-features default OFF |
 | **FOL Constraints** (`fol_constraints`) | DDTree→FOL logical rule extraction | GOAT 6/6 |
@@ -1256,12 +1151,11 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 | **ANE NPC Brain** (`ane_npc`) | Move NPC think-brain compute to Apple ANE batch | Opt-in — GOAT gated |
 | **DendriticGate** (`dendritic_gate`) | NMDA-inspired adaptive DDTree branching via entropy+coincidence | In progress — GOAT gated |
 | **Closure-Expansion Instrument** (`closure_instrument`) | PTG recorder + motif miner + PRI/CDG/TaR metrics (Momennejad & Raileanu 2026, arxiv 2606.15386). `PtgTracedPruner` wraps any `ScreeningPruner`; `mine_motifs_at_sleep_cycle()` runs at sleep-cycle boundaries. Fuses with Plan 215 MDL gate, MUSE lifecycle, AnchorProfile transfer. | Opt-in — G2/G3 PASS, G1/G4 PARTIAL (structural: std HashMap + per-node blake3); not promoted |
-| **MicroRecurrentBeliefState** (`micro_belief`) | Per-NPC `BeliefKernel` trait + attractor/leaky family + BLAKE3-committed snapshot. Unifies `evolve_hla`. | Opt-in — G1.1–G1.5 PASS; G2 (attractor coherence) deferred. Auto-enabled by `bom_sampling`. |
+| **MicroRecurrentBeliefState** (`micro_belief`) | Generic `BeliefKernel` trait unifying attractor + leaky-integrator families. | Opt-in — G1.1–G1.4 PASS; G2 (attractor coherence) deferred. Auto-enabled by `bom_sampling`. |
 | **BoMSampler** (`bom_sampling`) | K-hypothesis single-pass belief sampling (Plan 281, arxiv 2604.04913). `BoMSampler` extends `MicroRecurrentBeliefState`. | **DEFAULT-ON** in `katgpt-core` (G2 PASS +31.49pp). Opt-in at katgpt-rs root. Auto-enables `simd_sigmoid`. |
 | **CompressionDrafter** (`compression_drafter`) | LZ4 corpus-as-model drafter (Plan 285, nathan.rs/gzip-lm) | 🪦 GOAT FAILED (2 runs) — stays opt-in, unused. `TernaryDraftModel` remains Hot-tier default. |
 | **FuncAttn** (`funcattn`) | Functional Attention — closed-form Tikhonov k×k spectral transport (Plan 286, arxiv 2605.31559) | 🪦 G6 FAIL on LM prediction (0.969 < SDPA 1.000). Stays opt-in, NOT default. Gain-tier. |
-| **ChunkedContentStore** (`chunked_content_store`) | Lore-distilled content-addressed Merkle store (Plan 272). FastCDC + BLAKE3 + papaya lock-free hashmap. | Opt-in — G1/G2 PASS (~39× CDC incremental push win), G3–G7 pending. |
-| **Forensic Watermark** (`forensic_watermark`) | BLAKE3-seeded per-recipient recipe + Tardos anti-collusion + DCT/topology marks (Plan 293, arxiv 2606.18208) | Opt-in — 31/31 unit tests; G1–G4 GOAT gate deferred. |
+| **Forensic Watermark** (`forensic_watermark`) | BLAKE3-seeded per-recipient asset fingerprint (Plan 293, arxiv 2606.18208) — recipe + deployment private in `riir-ai` | Opt-in — 31/31 unit tests; G1–G4 GOAT gate deferred. |
 | **ICT Branching Detector** (`ict_branching`) | `collision_purity β(π)` + JS-divergence novelty + `BranchingDetector` (Plan 294, arxiv 2606.19771) | Opt-in — G1/G3/G4/G5/G6/G10 PASS (Super-GOAT proceeds); G8 (runtime fusion) deferred to riir-ai Plan 324. |
 
 📖 **Full detail for ALL opt-in features + complete feature flag reference:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
@@ -1285,7 +1179,7 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 
 ### Feature Flags
 
-**310+ feature flags** with **130+ default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, **`sense_lod`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, **`manifold_power_iter_router`** (Plan 279 GOAT 9/9), **`triggered_injection`** (Plan 278 G3 PASS), **`temporal_deriv`** (Plan 277 4/4 fusions PASS), **`self_advantage_gate`** (Plan 283 GOAT 4/4 PASS), **`clr`** (Plan 284), and 80 more.
+**310+ feature flags** with **130+ default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, **`manifold_power_iter_router`** (Plan 279 GOAT 9/9), **`triggered_injection`** (Plan 278 G3 PASS), **`temporal_deriv`** (Plan 277 4/4 fusions PASS), **`self_advantage_gate`** (Plan 283 GOAT 4/4 PASS), **`clr`** (Plan 284), and 80 more.
 
 📖 **Full feature flag table (310+ flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
 
@@ -1315,13 +1209,13 @@ crates/katgpt-core/   Shared types + SIMD kernels + traits (consumed by katgpt-r
   curator.rs          Curator verification layer for Merkle octree
   dendritic_gate.rs   NMDA-inspired adaptive DDTree branching
   slod.rs             SLoD Spectral Level-of-Detail Pruner (Poincaré ball)
-  sense/              KG Latent Octree Sense Composition (incl. `evolve_hla` recurrent belief kernel)
+  sense/              Sense Composition modules (Plan 240)
   micro_belief/       BeliefKernel trait + Attractor/Leaky family + BoMSampler (Plans 276, 281)
   faithfulness/       FaithfulnessProbe + TriggeredInjectionGate (Plan 278)
   forensic/           Forensic watermark recipe primitive (Plan 293)
   ict/                ICT Distributional Branching-Point Detector (Plan 294)
   closure/            Closure-Expansion Instrument: PTG + motif mining (Plan 290)
-  content_store/      ChunkedContentStore — Lore-distilled Merkle store (Plan 272)
+  content_store/      ChunkedContentStore — content-addressed Merkle store (Plan 272; asset pipeline lives in riir-ai)
   and_or/             AND-OR DDTree blueprint decomposition
   mux/                MUX superposition pruning (span pruner, DDTree, BFS, bandit, freeze/thaw, demux)
   bridge/             Generic latent→raw action bridge
