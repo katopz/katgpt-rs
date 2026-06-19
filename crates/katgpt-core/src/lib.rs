@@ -405,3 +405,21 @@ pub use forensic::{
     recipient_index, recover_codeword, recover_dct_marks, recover_p_vertex,
     recover_topology_marks, sigmoid,
 };
+
+// ICT Distributional Branching-Point Detector — open generic math (Plan 294,
+// Research 270, arxiv 2606.19771). Collision purity β(π) = Σ π² (proven
+// unconditionally monotone, ICT §A.2.5 — H₁ is wrong below π > e⁻¹ ≈ 0.37),
+// Rényi H₂, Jensen-Shannon divergence to group mean, BranchingDetector
+// (top-k% selector over K candidate trajectories + per-step β EMA), and the
+// Bebop H₁→H₂ acceptance-forecast upgrade. No game semantics, no chain;
+// runtime fusion (CLR gating, HLA updates, KG emission) is riir-ai Plan 324.
+// Opt-in until G3 (Spearman ρ(H₁, JS-uniqueness) < 0.5) AND G8 (riir-ai
+// Plan 324 runtime validation) pass.
+#[cfg(feature = "ict_branching")]
+pub mod ict;
+#[cfg(feature = "ict_branching")]
+pub use ict::{
+    AcceptanceForecastH2, BranchingDetector, BranchingReport, branching_point_mask,
+    branching_point_mask_into, collision_purity, collision_purity_into, is_critical_branching,
+    js_divergence, js_divergence_batch, renyi_h2, shannon_h1,
+};

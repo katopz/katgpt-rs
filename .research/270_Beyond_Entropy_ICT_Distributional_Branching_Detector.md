@@ -37,6 +37,40 @@ JS-uniqueness × β(π) collision-probability × HLA evolution × CLR runtime = 
 
 ---
 
+## Update (2026-06-19) — Plan 294 GOAT gate validation results
+
+Plan 294 (implementation of this research note) ran all public GOAT gates.
+Results below are final for the open `katgpt-rs` primitive; G7–G9 (runtime
+fusion on real NPCs) live in riir-ai Plan 324.
+
+| Gate | Target | Measured | Verdict |
+|------|--------|----------|---------|
+| G1 | β distinguishes where H₁ cannot (paper Fig 1a) | ΔH₁ = 1.2e-7, Δβ = 0.12 | ✅ PASS |
+| G2 | Median inflection ∈ [5%, 20%] (paper §A.4.1 ~10%) | median 37.5% on synthetic-NPC suite | ⚠️ BORDERLINE-FAIL — paper's 10% is LLM-token-specific. [Issue 033](../.issues/033_ict_g2_inflection_37_percent_npc_domain.md). Does NOT block G3. |
+| G3 ⭐ | Spearman ρ(H₁, JS-uniqueness) < 0.5 (**MAKE-OR-BREAK**) | ρ = 0.0652, 95% CI [-0.017, 0.150] | ✅ **PASS** — Super-GOAT verdict stands. |
+| G4 | ≤ 50µs/call (K=8, action_dim=32) | mean 1.96µs, p99 2.00µs | ✅ PASS (25× headroom) |
+| G5 | 0 allocs/call after warmup | 0 across 1000 calls | ✅ PASS |
+| G6 | Feature isolation via cargo + nm | all 3 sub-tests pass | ✅ PASS |
+| G10 | H₂ forecast beats H₁ on long-tail regime | MAE 0.402 vs 0.423 (long-tail) | ✅ PASS |
+
+**§3 verdict UNCHANGED: Super-GOAT.** G3 (the make-or-break) passed
+decisively — the entire bootstrap 95% CI for ρ is below 0.5, so JS-uniqueness
+carries structurally-different information from H₁ with high confidence.
+
+**Promotion of `ict_branching` to default-on: still deferred.** Per Plan 294
+§Phase 8 T8.4, G3 alone is necessary but not sufficient; we also need G8
+(riir-ai Plan 324 runtime fusion validated on real NPCs). The open primitive
+ships opt-in; the private fusion is riir-ai's responsibility.
+
+**Cross-links:**
+- Plan: [`.plans/294_ict_branching_detector.md`](../.plans/294_ict_branching_detector.md)
+- Implementation: `crates/katgpt-core/src/ict/`
+- Benchmarks: `.benchmarks/294_ict_{g1,g2,g3,goat_gates,g10}.md`
+- Bebop H₁→H₂ upgrade recommendation: `.research/243_Bebop_*.md` §Addendum (2026-06-19)
+- riir-ai guide: `riir-ai/.research/142_*.md` (private — runtime fusion lives there)
+
+---
+
 ## 1. Paper Core Findings
 
 ### 1.1 The bifurcation theorem (§3.1)

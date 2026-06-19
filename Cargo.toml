@@ -366,6 +366,7 @@ sigmoid_graded_reject = []  # Sigmoid-Graded Reject Confidence — tolerant soft
 union_bound_confidence = []  # Union bound additive branch confidence (Research 205, Plan 231, GOAT 6/6, default-ON)
 pathway_tracker = []  # Intrinsic pathway stability detection (Research 205, Plan 231, GOAT 7/7, default-ON)
 cs_kv_probe = []  # CS-KV-Importance Probe + Density-Budget Interpolator (Plan 280, Research 247) — opt-in until G2 duality gate passes
+ict_branching = ["katgpt-core/ict_branching"]  # ICT Distributional Branching-Point Detector — collision_purity β(π) + JS-divergence-to-group-mean + BranchingDetector (Plan 294, Research 270, arxiv 2606.19771, Super-GOAT). Opt-in until G3 + G8 (riir-ai Plan 324) pass.
 federation_composer = ["bandit"]  # Explicit Model→Agent→Tool pipeline with residual checking (Research 205, Plan 231, GOAT 7/7, default-ON)
 # dynamic_rank: defined above with papaya dep (Plan 232)
 # LeviathanVerifier is always compiled (no gate needed) — verifier.rs, benchmark.rs
@@ -1563,3 +1564,73 @@ name = "fpcg_probe_forecast_bench"
 path = "benches/fpcg_probe_forecast_bench.rs"
 required-features = ["future_probe"]
 harness = false
+
+# ── Plan 294: ICT Distributional Branching-Point Detector ───────────
+# Opt-in tests/benches behind `ict_branching`. Each entry follows the
+# bench_280_cs_kv_probe_goat / fpcg_goat_gate convention.
+
+# Phase 2 T2.1-T2.2 — G1 paper-proof: β distinguishes where H_1 cannot
+# (paper Fig 1a construction), + 3 bifurcation-regime tests.
+[[test]]
+name = "bench_294_ict_g1"
+path = "tests/bench_294_ict_g1.rs"
+required-features = ["ict_branching"]
+
+# Phase 3 T3.1-T3.2 — G2 inflection: synthetic NPC decision suite,
+# median inflection location ∈ [5%, 20%].
+[[test]]
+name = "bench_294_ict_g2"
+path = "tests/bench_294_ict_g2.rs"
+required-features = ["ict_branching"]
+
+# Phase 4 T4.1-T4.2 — G3 MAKE-OR-BREAK: Spearman ρ(H_1, JS-uniqueness) < 0.5.
+[[test]]
+name = "bench_294_ict_g3"
+path = "tests/bench_294_ict_g3.rs"
+required-features = ["ict_branching"]
+
+# Phase 5 T5.2 — G5 zero-alloc: TrackingAllocator verifies 0 allocs/call.
+[[test]]
+name = "bench_294_ict_g5"
+path = "tests/bench_294_ict_g5.rs"
+required-features = ["ict_branching"]
+
+# Phase 5 T5.3 — G6 feature isolation: cargo build succeeds with/without feature.
+[[test]]
+name = "bench_294_ict_g6"
+path = "tests/bench_294_ict_g6.rs"
+required-features = ["ict_branching"]
+
+# Phase 6 T6.2 — G10 Bebop H_1→H_2 upgrade: H_2 forecast beats H_1 on long-tail.
+[[test]]
+name = "bench_294_ict_g10"
+path = "tests/bench_294_ict_g10.rs"
+required-features = ["ict_branching"]
+
+# Phase 5 T5.1 — G4 hot-path cost: K=8, action_dim=32, ≤ 50µs/call.
+# std::time::Instant + harness=false (criterion is not a katgpt-rs dev-dep).
+[[bench]]
+name = "bench_294_ict_perf"
+path = "benches/bench_294_ict_perf.rs"
+required-features = ["ict_branching"]
+harness = false
+
+# Phase 8 T8.3 — Example: minimal collision_purity + js_divergence walkthrough.
+[[example]]
+name = "ict_minimal"
+required-features = ["ict_branching"]
+
+# Phase 8 T8.3 — Example: BranchingDetector on synthetic trajectories.
+[[example]]
+name = "ict_branching_detector"
+required-features = ["ict_branching"]
+
+# Phase 8 T8.3 — Example: paper Fig 1a reproduction.
+[[example]]
+name = "ict_paper_figure_1a"
+required-features = ["ict_branching"]
+
+# Phase 7 T7.2 — Example: Curiosity Pulse H_1→β drop-in reference.
+[[example]]
+name = "ict_curiosity_pulse_upgrade"
+required-features = ["ict_branching"]

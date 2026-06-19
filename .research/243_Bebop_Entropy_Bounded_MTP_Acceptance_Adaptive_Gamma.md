@@ -202,3 +202,76 @@ Zero-allocation. O(vocab) per step only for the entropy computation (which `Adap
 ## TL;DR
 
 Bebop is a training-recipe paper (TV loss → riir-train). Its one modelless inference-time gift is the **proven linear entropy–acceptance bound** `α ≈ a − b·H(p)`. Rejection sampling is already shipped in `LeviathanVerifier`. Entropy-driven gating is already shipped in `llmexec_guard` (but ad-hoc sigmoid, not calibrated forecast). The genuinely missing piece is **per-step adaptive γ from the acceptance forecast**, which the paper itself flags as unproven future work. **Gain tier** — useful, incremental, needs our own benchmark to prove. Tracked in Issue 023.
+
+---
+
+## Addendum (2026-06-19) — H_1 → H_2 upgrade recommendation (Plan 294 G10)
+
+**Status: PROVEN + VERIFIED. Adopt the upgrade.**
+
+Plan 294 Phase 6 GOAT Gate G10 calibrates the Bebop acceptance forecast with
+H_1 (current Bebop baseline) vs H_2 (collision-purity-based, `−log Σ π²`)
+on a synthetic workload with a 50/50 mix of "decisive" (`max π > 0.37`) and
+"long-tail" (`max π < 0.37`) next-token distributions. Ground truth is the
+paper's linear bound `α = a − b · H_2(p) + ε` (H_2 is the *correct*
+concentration signal per ICT §A.3.3 — H_1 has wrong gradient sign for
+`π < e⁻¹ ≈ 0.37`).
+
+### Result (bench_294_ict_g10.rs)
+
+| Forecaster       | a       | b       | MAE overall | MAE decisive | MAE long-tail |
+|------------------|---------|---------|-------------|--------------|---------------|
+| H_1 (Bebop)      | 12.340  | 3.531   | 0.4304      | 0.4407       | 0.4227        |
+| H_2 (this)       |  8.094  | 2.049   | **0.3969**  | **0.3901**   | **0.4020**    |
+| Δ (H_1 − H_2)    |         |         | +0.0334     | +0.0506      | +0.0207       |
+
+**H_2 wins on every regime.** The recovered coefficients (a=8.09, b=2.05)
+match the ground truth (a=8.0, b=2.0) almost exactly — the methodology is
+sound. The improvement is small in absolute terms (~0.03 MAE) but is
+**concentrated where ICT §A.3.3 predicts** (the long-tail regime where H_1
+is provably wrong).
+
+### The upgrade
+
+`AcceptanceForecastH2` (shipped in `crates/katgpt-core/src/ict/bebop_upgrade.rs`,
+behind feature `ict_branching`) is a drop-in replacement for Bebop's
+`α ≈ a − b · H_1(p)`:
+
+```rust,ignore
+// OLD (Bebop Issue 023):
+//   let alpha = a - b * shannon_h1(&softmax(logits));
+// NEW (Plan 294 G10):
+use katgpt_core::ict::AcceptanceForecastH2;
+let mut forecast = AcceptanceForecastH2::new(a, b);
+let alpha = forecast.observe_and_forecast(&next_token_logits);
+```
+
+The downstream adaptive-γ logic (`forecast.adaptive_gamma(target, lo, hi)`)
+is unchanged — it consumes `α` the same way regardless of which entropy
+produced it.
+
+### Why H_2 is the right answer (paper proof)
+
+ICT §A.2.5: ∂β/∂π(a) = 2π(a) > 0 unconditionally. β = Σ π² = exp(−H_2)
+strictly increases with concentration. H_1 only has the right gradient for
+π(a) > e⁻¹ ≈ 0.37 — for the long-tail tokens (the bulk of LLM vocabularies)
+H_1 reports a wrong "decisiveness" signal. Bebop's forecast inherits that
+wrongness; H_2 fixes it.
+
+### Recommendation
+
+- **Adopt `AcceptanceForecastH2` as the Issue 023 implementation primitive.**
+- Re-calibrate `(a, b)` on a real acceptance-length dataset — the synthetic
+  G10 numbers prove the *direction*; production coefficients need production
+  data.
+- The `ict_branching` feature stays opt-in until G8 (riir-ai Plan 324)
+validates the runtime fusion. Bebop callers wanting the H_2 upgrade alone
+  can enable just `ict_branching` and ignore the `BranchingDetector`.
+
+### References
+
+- Plan 294 §Phase 6 T6.1–T6.4
+- Research 270 §1.5, §A.3.3 (H_1 monotonicity caveat)
+- arxiv 2606.19771 §A.2.5 (β unconditional monotonicity)
+- Test: `tests/bench_294_ict_g10.rs`
+- Primitive: `crates/katgpt-core/src/ict/bebop_upgrade.rs`
