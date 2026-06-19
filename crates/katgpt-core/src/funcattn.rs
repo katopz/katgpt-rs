@@ -96,8 +96,11 @@ use crate::simd;
 ///
 /// Both produce rows `Φ[n,:]` with `Φ[n,j] ≥ 0` and `Σ_j Φ[n,j] = 1`
 /// (partition-of-unity), the only requirement for paper Prop 4.3.
+///
+/// `serde::{Serialize, Deserialize}` (added for Plan 286 T5.3 freeze/thaw —
+/// `FuncAttnWeightsSnapshot` embeds this enum and must round-trip via serde).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum FuncAttnBasis {
     /// Paper Eq. 9 / reference L60: `Φ = Softmax(Linear(X) / τ)` along k-axis.
     /// τ is the per-head temperature (reference clamps to [0.1, 5.0]).
@@ -497,6 +500,73 @@ pub fn solve_convex_combo_dual(
     }
 
     Ok(())
+}
+
+// ── SpectralQuant composition: eigenbasis pre-rotation (Plan 286 T5.1) ────
+
+/// Pre-rotate the FUNCATTN basis weights into a calibrated eigenbasis, in place.
+///
+/// Computes `W_Φ' = W_Φ · Vᵀ` where `V` is the eigenbasis (columns =
+/// eigenvectors, sorted by eigenvalue descending). Source: SpectralQuant's
+/// `CalibrationResult::eigenvectors` (Plan 077), or any PCA / orthogonal basis.
+///
+/// Plan 286 T5.1 hypothesis: a basis aligned with the data's principal
+/// eigen-directions is more expressive per parameter, because signal energy
+/// concentrates in the top eigen-directions. This is a **one-time
+/// calibration-time transform** — after it runs, the rotated `w_basis` is fed
+/// to [`funcattn_forward`] unchanged, so the forward path stays G5 zero-alloc.
+///
+/// # Arguments
+///
+/// * `w_basis`      — `(k, d)` row-major basis projection weights, mutated in place.
+/// * `eigenvectors` — `(d, d)` row-major eigenvector matrix; column `j` is the
+///                    eigenvector for eigenvalue `j` (SpectralQuant layout:
+///                    sorted by eigenvalue descending).
+/// * `k, d`         — dimensions. `d` must match the eigenbasis dim.
+///
+/// # Properties (verified in the test suite below)
+///
+/// - `V = I` is a no-op (`W · Iᵀ = W`).
+/// - Orthogonal `V` preserves every row's norm and preserves `W`'s row
+///   orthogonality — so an orthogonally-init'd basis stays orthogonal.
+/// - The forward pass remains finite + partition-of-unity after rotation.
+///
+/// # Panics
+///
+/// Debug-build panics on shape mismatch (`w_basis.len() != k*d`,
+/// `eigenvectors.len() != d*d`, `d == 0`). In release, the math is well-
+/// defined for `d ≥ 1` and a silent no-op for `k == 0`.
+#[inline]
+pub fn pre_rotate_basis_weights_into(
+    w_basis: &mut [f32],
+    eigenvectors: &[f32],
+    k: usize,
+    d: usize,
+) {
+    debug_assert_eq!(w_basis.len(), k * d, "w_basis must be (k, d)");
+    debug_assert_eq!(eigenvectors.len(), d * d, "eigenvectors must be (d, d)");
+    debug_assert!(d > 0, "d must be > 0");
+
+    if k == 0 || d == 0 {
+        return;
+    }
+
+    // For each basis row k, compute w_basis_new[k, j] = Σ_i V[j, i] · w_basis[k, i].
+    // One O(d) scratch allocation (calibration-time only — NOT on the decode
+    // hot path; `funcattn_forward` is the G5-verified zero-alloc path). The
+    // `d`-length row fits in L1 for typical head dims (d ≤ 256).
+    let mut row_scratch = vec![0.0f32; d];
+    for kk in 0..k {
+        let row_offset = kk * d;
+        // Snapshot the original row (we cannot mutate in-place — V is not
+        // lower-triangular and the new row depends on every original entry).
+        row_scratch[..d].copy_from_slice(&w_basis[row_offset..row_offset + d]);
+        for j in 0..d {
+            // V[j, i] = eigenvectors[j * d + i]; w_basis[k, i] = row_scratch[i].
+            let v_row = &eigenvectors[j * d..(j + 1) * d];
+            w_basis[row_offset + j] = simd::simd_dot_f32(v_row, &row_scratch[..d], d);
+        }
+    }
 }
 
 // ── Forward pass ──────────────────────────────────────────────────
@@ -1291,6 +1361,139 @@ mod tests {
         assert!(res.is_ok(), "convex combo should succeed with α > 0 even for zero K̃");
         for x in &out {
             assert!(x.is_finite(), "non-finite output for zero w_k");
+        }
+    }
+
+    // ── pre_rotate_basis_weights_into (Plan 286 T5.1) ─────────────
+
+    /// `d × d` identity matrix, row-major.
+    fn identity_matrix(d: usize) -> Vec<f32> {
+        let mut m = vec![0.0f32; d * d];
+        for i in 0..d {
+            m[i * d + i] = 1.0;
+        }
+        m
+    }
+
+    /// `d × d` row-orthonormal matrix via Gram-Schmidt on random rows.
+    fn random_orthonormal_rows(d: usize, seed: u64) -> Vec<f32> {
+        let mut m = vec![0.0f32; d * d];
+        fill_rand(&mut m, seed);
+        for i in 0..d {
+            for j in 0..i {
+                let dot = (0..d).map(|c| m[i * d + c] * m[j * d + c]).sum::<f32>();
+                for c in 0..d {
+                    m[i * d + c] -= dot * m[j * d + c];
+                }
+            }
+            let nrm = (0..d).map(|c| m[i * d + c] * m[i * d + c]).sum::<f32>().sqrt();
+            let nrm = if nrm < 1e-12 { 1.0 } else { nrm };
+            for c in 0..d {
+                m[i * d + c] /= nrm;
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn pre_rotate_identity_eigenvectors_is_noop() {
+        // V = I → W · Iᵀ = W (unchanged).
+        let k = 4;
+        let d = 8;
+        let mut w_basis = vec![0.0f32; k * d];
+        fill_rand(&mut w_basis, 4242);
+        let original = w_basis.clone();
+        let identity = identity_matrix(d);
+        pre_rotate_basis_weights_into(&mut w_basis, &identity, k, d);
+        let diff = frobenius(&w_basis, &original);
+        assert!(diff < 1e-5, "identity rotation should be no-op: diff = {}", diff);
+    }
+
+    #[test]
+    fn pre_rotate_preserves_row_norms() {
+        // V orthogonal → ‖V · w_row‖ = ‖w_row‖ for every row.
+        let k = 4;
+        let d = 8;
+        let mut w_basis = vec![0.0f32; k * d];
+        fill_rand(&mut w_basis, 4243);
+        let original_norms: Vec<f32> = (0..k)
+            .map(|r| (0..d).map(|c| w_basis[r * d + c] * w_basis[r * d + c]).sum::<f32>().sqrt())
+            .collect();
+        let v = random_orthonormal_rows(d, 17);
+        pre_rotate_basis_weights_into(&mut w_basis, &v, k, d);
+        for kk in 0..k {
+            let new_norm = (0..d)
+                .map(|c| w_basis[kk * d + c] * w_basis[kk * d + c])
+                .sum::<f32>()
+                .sqrt();
+            assert!(
+                (new_norm - original_norms[kk]).abs() < 1e-4,
+                "row {} norm changed: {} → {}",
+                kk,
+                original_norms[kk],
+                new_norm
+            );
+        }
+    }
+
+    #[test]
+    fn pre_rotate_preserves_orthogonality_of_w_basis() {
+        // If w_basis rows are orthonormal and V is orthogonal, then W · Vᵀ is
+        // still row-orthonormal (W · Wᵀ unchanged).
+        let k = 4;
+        let d = 8;
+        let w_basis = random_orthonormal_rows(d, 31); // d×d, take first k rows
+        let mut w_basis = w_basis.into_iter().take(k * d).collect::<Vec<_>>();
+        let v = random_orthonormal_rows(d, 32);
+        pre_rotate_basis_weights_into(&mut w_basis, &v, k, d);
+
+        // Check the k×k Gram matrix is still identity.
+        for a in 0..k {
+            for b in 0..k {
+                let dot = (0..d).map(|c| w_basis[a * d + c] * w_basis[b * d + c]).sum::<f32>();
+                let expected = if a == b { 1.0 } else { 0.0 };
+                assert!((dot - expected).abs() < 1e-3, "Gram[{},{}] = {} (want {})", a, b, dot, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn pre_rotate_forward_output_still_finite_and_partition_of_unity() {
+        // Sanity: after rotation, the forward pass still produces finite output
+        // and the basis rows still partition to 1 (verify the rotation doesn't
+        // break the partition-of-unity invariant that Prop 4.3 relies on).
+        let n = 32;
+        let d = 8;
+        let k = 4;
+        let mut w_basis = random_orthonormal_rows(d, 41).into_iter().take(k * d).collect::<Vec<_>>();
+        let w_q = random_orthonormal_rows(d, 42);
+        let w_k = random_orthonormal_rows(d, 43);
+        let w_v = random_orthonormal_rows(d, 44);
+        let v = random_orthonormal_rows(d, 45);
+        pre_rotate_basis_weights_into(&mut w_basis, &v, k, d);
+
+        // Verify partition-of-unity directly via compute_basis_into.
+        let mut x = vec![0.0f32; n * d];
+        fill_rand(&mut x, 99);
+        let mut phi = vec![0.0f32; n * k];
+        compute_basis_into(
+            &x, &w_basis, &[], n, d, k, FuncAttnBasis::Sigmoid, 0.1, &mut phi,
+        );
+        for i in 0..n {
+            let row_sum: f32 = phi[i * k..(i + 1) * k].iter().sum();
+            assert!((row_sum - 1.0).abs() < 1e-4, "row {} sum = {} (want 1.0)", i, row_sum);
+        }
+
+        // Forward still finite.
+        let cfg = FuncAttnConfig {
+            d, k, basis: FuncAttnBasis::Sigmoid, alpha: 0.5, temperature: 0.1, cholesky_jitter: 1e-6,
+        };
+        let mut scratch = FuncAttnScratch::new(n, d, k);
+        let mut out = vec![0.0f32; n * d];
+        funcattn_forward(&x, &x, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out)
+            .expect("forward after rotation");
+        for v in &out {
+            assert!(v.is_finite(), "non-finite output after eigen-rotation");
         }
     }
 }

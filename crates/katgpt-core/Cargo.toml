@@ -107,6 +107,7 @@ funcattn = []  # Functional Attention — closed-form Tikhonov k×k spectral tra
 chunked_content_store = ["dep:papaya"]  # ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 272, Research 262). Open primitive; consumed by riir-ai Plan 319. Default-off until GOAT gate G1–G7 pass.
 sink_aware_attn = []  # Sink-Aware Attention — NOP/Broadcast classifier + dual-policy sigmoid gate (Plan 287, Research 258, arxiv 2606.08105, Fesser et al.). Per-head classifier (value-norm-ratio + stable-rank-of-update) decides whether a sink is Adaptive NOP (gate it) or Broadcast (preserve it). Opt-in until synthetic G2 + latency G3 pass; default stays Uniform.
 closure_instrument = ["dep:papaya"]  # Closure-Expansion Instrument (CEI) — PTG recorder + motif miner + PRI/CDG/TaR metrics (Plan 290, Research 264, arxiv 2606.15386). Opt-in until G1–G4 GOAT gate passes; G5 demotes to opt-in diagnostic if metrics don't correlate with quality.
+forensic_watermark = []  # Forensic watermark recipe primitive — BLAKE3-seeded per-recipient perturbation recipes + Tardos anti-collusion codebook + DCT/topology marks (Plan 293, Research 268). Opt-in until G1–G4 GOAT gate passes; private integration (WASM vessel + NFT + slashing) is riir-ai Plan 322.
 
 [[bench]]
 name = "flow_field_bench"

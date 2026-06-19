@@ -148,6 +148,15 @@ pub mod shard_kv;
 pub mod simd;
 #[cfg(feature = "chiaroscuro")]
 pub mod chiaroscuro;
+// Functional Attention composition layer — Plan 286 Phase 5 (T5.1–T5.3). Each
+// submodule is independently feature-gated; the module root compiles when any
+// of the three composition features is on.
+#[cfg(any(
+    feature = "funcattn_spectral_pre_rotate",
+    feature = "funcattn_chiar_blend",
+    feature = "funcattn_freeze_thaw"
+))]
+pub mod funcattn_compose;
 #[cfg(feature = "specialist_projection")]
 pub mod specialist_projection;
 #[cfg(feature = "sparse_task_vector")]
