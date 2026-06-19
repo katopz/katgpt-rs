@@ -6,7 +6,7 @@
 **Industry prior art:** Tardos 2008, Boneh–Shaw 1998, AACS / Widevine / PlayReady forensic watermarking.
 **Target:** `katgpt-rs/crates/katgpt-core/src/forensic/` (new module)
 **Cargo feature:** `forensic_watermark` (opt-in, default OFF — promote to opt-in only after G1–G4 pass)
-**Status:** Active — Phase 0 (not started)
+**Status:** Active — Phases 1-6 ✓ (31/31 unit tests green), Phase 7 criterion harness ✓ (T7.1; T7.2–T7.5 G1–G4 GOAT gate DEFERRED to separate session), Phase 8 docs/example ✓ (T8.1, T8.3). Default-OFF until GOAT gate passes.
 
 ---
 
@@ -52,8 +52,8 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T1.1** Create module skeleton `crates/katgpt-core/src/forensic/mod.rs` with feature gate `#[cfg(feature = "forensic_watermark")]`. Add feature to `crates/katgpt-core/Cargo.toml`. Export from `crates/katgpt-core/src/lib.rs` behind feature gate.
-- [ ] **T1.2** Define `RecipeConfig` struct in `recipe.rs`:
+- [x] **T1.1** Create module skeleton `crates/katgpt-core/src/forensic/mod.rs` with feature gate `#[cfg(feature = "forensic_watermark")]`. Add feature to `crates/katgpt-core/Cargo.toml`. Export from `crates/katgpt-core/src/lib.rs` behind feature gate.
+- [x] **T1.2** Define `RecipeConfig` struct in `recipe.rs`:
   ```rust
   pub struct RecipeConfig {
       pub vertex_mark_count: usize,    // L_v, default 50
@@ -66,7 +66,7 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   }
   impl Default for RecipeConfig { /* codeword length L ≈ 1000 bits at c=10, n=1e5 */ }
   ```
-- [ ] **T1.3** Define `Recipe` struct in `recipe.rs`:
+- [x] **T1.3** Define `Recipe` struct in `recipe.rs`:
   ```rust
   pub struct Recipe {
       pub p_vertex: [[f32; 2]; 2],    // 2×2 det=1, eig ∈ (0,1)
@@ -77,12 +77,12 @@ katgpt-rs/crates/katgpt-core/src/forensic/
       pub recipient_id: [u8; 32],     // pubkey hash (for inverse-lookup)
   }
   ```
-- [ ] **T1.4** Implement `derive_recipe(config: &RecipeConfig, recipient_pubkey: &[u8; 32], master_seed: &[u8; 32]) -> Recipe`:
+- [x] **T1.4** Implement `derive_recipe(config: &RecipeConfig, recipient_pubkey: &[u8; 32], master_seed: &[u8; 32]) -> Recipe`:
   - `seed = BLAKE3::derive_key(master_seed, recipient_pubkey, "forensic_recipe_v1")`
   - `p_vertex = construct_perturbation_matrix(seed)` — see T1.5
   - `codeword = tardos::generate_codebook(seed, n=1e5, c=config.colluder_bound, epsilon=config.false_positive_epsilon)` — see Phase 2
   - `vertex_indices`, `dct_indices`, `topology_mask` derived from codeword bits
-- [ ] **T1.5** Implement `construct_perturbation_matrix(seed: &[u8; 32]) -> [[f32; 2]; 2]` with **LoopWM spectral stability constraint** (Research 268 §4):
+- [x] **T1.5** Implement `construct_perturbation_matrix(seed: &[u8; 32]) -> [[f32; 2]; 2]` with **LoopWM spectral stability constraint** (Research 268 §4):
   ```rust
   // A = diag(-exp(a)), a ∈ ℝ² learnable-from-seed
   // Ā = exp(Δ · A)  →  all eigenvalues in (0, 1)
@@ -97,7 +97,7 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   // Verify det ≈ 1, eig ∈ (0,1)
   ```
   Unit test: 1000 random seeds → all produce `det ∈ [0.9999, 1.0001]`, `eig ∈ (0, 1)`.
-- [ ] **T1.6** Unit tests:
+- [x] **T1.6** Unit tests:
   - Same `(master_seed, recipient_pubkey)` → same `Recipe` (determinism).
   - Different `recipient_pubkey` → different `Recipe.p_vertex` (per-recipient distinctness).
   - `Recipe.p_vertex` always satisfies det=1, eig∈(0,1) over 10⁴ random seeds.
@@ -108,17 +108,17 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T2.1** Create `tardos.rs`. Define `TardosCodebook { length: usize, n_recipients: usize, p_i: Vec<f32>, seed: [u8; 32] }`.
-- [ ] **T2.2** Implement `generate_codebook(seed: &[u8; 32], n_recipients: usize, c: usize, epsilon: f64) -> TardosCodebook` per Tardos 2008:
+- [x] **T2.1** Create `tardos.rs`. Define `TardosCodebook { length: usize, n_recipients: usize, p_i: Vec<f32>, seed: [u8; 32] }`.
+- [x] **T2.2** Implement `generate_codebook(seed: &[u8; 32], n_recipients: usize, c: usize, epsilon: f64) -> TardosCodebook` per Tardos 2008:
   - Codeword length `L = ceil(100 * c² * ln(n_recipients / epsilon))` (Tardos theorem).
   - Per-position accusation probability `p_i ∈ [p_min, p_max]` drawn from `f(p) ∝ 1/sqrt(p(1-p))`.
   - Per-recipient codeword bit `x_{j,i}` drawn Bernoulli(`p_i`).
   - Determinism: PRNG seeded from `seed` (use `ChaCha20` from existing deps, or `blake3::Hasher` as PRNG).
-- [ ] **T2.3** Implement `accusation_sum(codebook: &TardosCodebook, leaked_codeword: &[u8], recipient_idx: usize) -> f64`:
+- [x] **T2.3** Implement `accusation_sum(codebook: &TardosCodebook, leaked_codeword: &[u8], recipient_idx: usize) -> f64`:
   - Tardos accusation statistic `S_j = Σ_i (x_{j,i} - p_i) / sqrt(p_i (1 - p_i)) · y_i` where `y_i` is leaked bit.
   - Threshold `Z = c * sqrt(L / 2)` — recipient accused if `S_j > Z`.
-- [ ] **T2.4** Implement `extract_codeword_from_seed(seed: &[u8; 32], codebook: &TardosCodebook, recipient_pubkey: &[u8; 32]) -> Vec<u8>` — deterministic recipient-to-codeword mapping for inverse lookup.
-- [ ] **T2.5** Unit tests:
+- [x] **T2.4** Implement `extract_codeword_from_seed(seed: &[u8; 32], codebook: &TardosCodebook, recipient_pubkey: &[u8; 32]) -> Vec<u8>` — deterministic recipient-to-codeword mapping for inverse lookup.
+- [x] **T2.5** Unit tests:
   - **G2a synthetic:** c=10 colluders, each receives a codebook, they erasure-attack (any bit they disagree on → random). Run accusation_sum on each non-colluder → no false accusation at ε=1e-6.
   - **G2b synthetic:** c=10 colluders, the actual leaker (randomly chosen) is correctly identified with ≥ 95% accuracy over 1000 trials.
   - Length sanity: `L ≈ 1000` bits at c=10, n=1e5, ε=1e-6.
@@ -129,9 +129,9 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T3.1** Create `vertex.rs`. Define trait `VertexMarkable { fn vertex_count(&self) -> usize; fn get_vertex(&self, idx: usize) -> [f32; 3]; fn set_vertex(&mut self, idx: usize, v: [f32; 3]); }`.
-- [ ] **T3.2** Implement blanket impls for common slices: `&mut [[f32; 3]]`, `&mut Vec<[f32; 3]>`.
-- [ ] **T3.3** Implement `apply_vertex_marks<V: VertexMarkable>(mesh: &mut V, recipe: &Recipe, config: &RecipeConfig)`:
+- [x] **T3.1** Create `vertex.rs`. Define trait `VertexMarkable { fn vertex_count(&self) -> usize; fn get_vertex(&self, idx: usize) -> [f32; 3]; fn set_vertex(&mut self, idx: usize, v: [f32; 3]); }`.
+- [x] **T3.2** Implement blanket impls for common slices: `&mut [[f32; 3]]`, `&mut Vec<[f32; 3]>`.
+- [x] **T3.3** Implement `apply_vertex_marks<V: VertexMarkable>(mesh: &mut V, recipe: &Recipe, config: &RecipeConfig)`:
   ```rust
   for (k, &v_idx) in recipe.vertex_indices.iter().enumerate() {
       let v = mesh.get_vertex(v_idx as usize);
@@ -144,8 +144,8 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   }
   ```
   Verify: `‖v_marked - v‖_2 ≤ ε` for all marked vertices (spectral bound).
-- [ ] **T3.4** SIMD 4-wide batch path `apply_vertex_marks_simd` (Neon/AVX): process 4 vertices per iteration. Reuse SIMD pattern from `katgpt-core` existing SIMD utilities (look for `simd_matmul_hla.rs` patterns).
-- [ ] **T3.5** Unit tests:
+- [x] **T3.4** SIMD 4-wide batch path `apply_vertex_marks_simd` (Neon/AVX): process 4 vertices per iteration. Reuse SIMD pattern from `katgpt-core` existing SIMD utilities (look for `simd_matmul_hla.rs` patterns).
+- [x] **T3.5** Unit tests:
   - Vertex displacement `‖v_marked - v‖_2 ≤ ε` for 1000 random recipes on a synthetic 10K-vertex mesh.
   - SIMD path produces bit-identical results to scalar (within f32 epsilon).
   - Determinism: same recipe → same perturbed mesh.
@@ -156,10 +156,10 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T4.1** Create `texture.rs`. Define `Dct8x8Block { data: [f32; 64] }` (8×8 DCT block, AACS-style).
-- [ ] **T4.2** Hand-roll 8×8 forward + inverse DCT (Type II, orthonormal) — **no new deps**. ~80 lines, well-known formula. Verify against reference implementation on 100 random blocks (max abs error < 1e-5).
-- [ ] **T4.3** Define `TextureMarkable` trait: `fn block_count(&self) -> usize; fn get_block(&self, idx: usize) -> Dct8x8Block; fn set_block(&mut self, idx: usize, b: Dct8x8Block);`.
-- [ ] **T4.4** Implement `apply_dct_marks<T: TextureMarkable>(texture: &mut T, recipe: &Recipe, config: &RecipeConfig)`:
+- [x] **T4.1** Create `texture.rs`. Define `Dct8x8Block { data: [f32; 64] }` (8×8 DCT block, AACS-style).
+- [x] **T4.2** Hand-roll 8×8 forward + inverse DCT (Type II, orthonormal) — **no new deps**. ~80 lines, well-known formula. Verify against reference implementation on 100 random blocks (max abs error < 1e-5).
+- [x] **T4.3** Define `TextureMarkable` trait: `fn block_count(&self) -> usize; fn get_block(&self, idx: usize) -> Dct8x8Block; fn set_block(&mut self, idx: usize, b: Dct8x8Block);`.
+- [x] **T4.4** Implement `apply_dct_marks<T: TextureMarkable>(texture: &mut T, recipe: &Recipe, config: &RecipeConfig)`:
   ```rust
   for (k, &(block_idx, coef_idx)) in recipe.dct_indices.iter().enumerate() {
       let mut block = texture.get_block(block_idx as usize);
@@ -169,8 +169,8 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   }
   ```
   Mid-frequency range: `coef_idx ∈ [10, 32]` (avoid DC and high-freq noise).
-- [ ] **T4.5** Implement `recover_dct_marks<T: TextureMarkable>(texture_leaked: &T, reference: &T, recipe_seed: &[u8; 32]) -> Vec<u8>` — extract sign of `(leaked - reference)` at each known coef position.
-- [ ] **T4.6** Unit tests:
+- [x] **T4.5** Implement `recover_dct_marks<T: TextureMarkable>(texture_leaked: &T, reference: &T, recipe_seed: &[u8; 32]) -> Vec<u8>` — extract sign of `(leaked - reference)` at each known coef position.
+- [x] **T4.6** Unit tests:
   - Mark + recover round-trip: applied codeword matches recovered codeword 100% (no compression).
   - BC7 compression round-trip: mark → BC7 quantize → recover, accuracy ≥ 90%.
   - JPEG (q=85) round-trip: accuracy ≥ 85%.
@@ -181,13 +181,13 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T5.1** Create `topology.rs`. Define `TriangleMesh { positions: Vec<[f32; 3]>, indices: Vec<[u32; 3]> }` (generic — no game types).
-- [ ] **T5.2** Implement `apply_topology_marks(mesh: &mut TriangleMesh, recipe: &Recipe, config: &RecipeConfig)`:
+- [x] **T5.1** Create `topology.rs`. Define `TriangleMesh { positions: Vec<[f32; 3]>, indices: Vec<[u32; 3]> }` (generic — no game types).
+- [x] **T5.2** Implement `apply_topology_marks(mesh: &mut TriangleMesh, recipe: &Recipe, config: &RecipeConfig)`:
   - For each triangle `t_j` where `recipe.topology_mask[j] == 1`:
     - Insert a degenerate (zero-area) leaf triangle adjacent to `t_j` (shares one edge, third vertex at edge midpoint).
     - The new triangle is invisible at render (zero area) but persists in topology analysis.
-- [ ] **T5.3** Implement `recover_topology_marks(mesh_leaked: &TriangleMesh) -> Vec<u8>` — find zero-area triangles, map back to mask positions.
-- [ ] **T5.4** Unit tests:
+- [x] **T5.3** Implement `recover_topology_marks(mesh_leaked: &TriangleMesh) -> Vec<u8>` — find zero-area triangles, map back to mask positions.
+- [x] **T5.4** Unit tests:
   - Applied mask round-trips through mesh save/load (OBJ format).
   - Mesh simplification (Quadric Error Metric, ~10% reduction) preserves ≥ 70% of topology marks.
   - Render invisibility: degenerate triangles contribute zero pixels (verify via software rasterizer on 10⁶ sample rays).
@@ -198,8 +198,8 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T6.1** Create `recover.rs`. Define `LeakedContent { mesh: TriangleMesh, texture_blocks: Vec<Dct8x8Block> }` and `RecoveryResult { recipient_pubkey: [u8; 32], confidence: f32, evidence: RecoveryEvidence }`.
-- [ ] **T6.2** Implement `recover_p_vertex(mesh_leaked: &TriangleMesh, mesh_reference: &TriangleMesh, vertex_indices: &[u32]) -> [[f32; 2]; 2]` via least-squares fit:
+- [x] **T6.1** Create `recover.rs`. Define `LeakedContent { mesh: TriangleMesh, texture_blocks: Vec<Dct8x8Block> }` and `RecoveryResult { recipient_pubkey: [u8; 32], confidence: f32, evidence: RecoveryEvidence }`.
+- [x] **T6.2** Implement `recover_p_vertex(mesh_leaked: &TriangleMesh, mesh_reference: &TriangleMesh, vertex_indices: &[u32]) -> [[f32; 2]; 2]` via least-squares fit:
   ```rust
   // min ‖V_leak - (I + ε P) · V_ref‖_F
   // Linear in P: solve for p11, p22 independently (diagonal case)
@@ -207,10 +207,10 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   let p22 = lsq_fit(...y coords...) / epsilon;
   ```
   Use existing linear algebra (look for `schur.rs` ridge solve, or simple closed-form 1D LSQ).
-- [ ] **T6.3** Implement `recover_codeword(leaked: &LeakedContent, reference: &LeakedContent, codebook: &TardosCodebook, vertex_indices: &[u32], dct_indices: &[(u32, u8)]) -> Vec<u8>`:
+- [x] **T6.3** Implement `recover_codeword(leaked: &LeakedContent, reference: &LeakedContent, codebook: &TardosCodebook, vertex_indices: &[u32], dct_indices: &[(u32, u8)]) -> Vec<u8>`:
   - Concatenate: P_vertex bits (from T6.2 sign) + DCT marks (T4.5) + topology marks (T5.3).
   - Return as a single `Vec<u8>` of length L.
-- [ ] **T6.4** Implement `attribute(leaked: &LeakedContent, reference: &LeakedContent, registry: &dyn RecipientRegistry, config: &RecipeConfig) -> Option<RecoveryResult>`:
+- [x] **T6.4** Implement `attribute(leaked: &LeakedContent, reference: &LeakedContent, registry: &dyn RecipientRegistry, config: &RecipeConfig) -> Option<RecoveryResult>`:
   ```rust
   pub trait RecipientRegistry {
       fn lookup_by_codeword(&self, codeword: &[u8]) -> Option<[u8; 32]>;
@@ -219,7 +219,7 @@ katgpt-rs/crates/katgpt-core/src/forensic/
   ```
   - Recover codeword → lookup via registry → return pubkey + sigmoid-gated confidence.
   - Confidence: `σ(tardos::accusation_sum(...))` → match AGENTS.md sigmoid rule.
-- [ ] **T6.5** Unit tests:
+- [x] **T6.5** Unit tests:
   - End-to-end: derive recipe → apply to synthetic asset → leak (copy) → recover → attribute → correct recipient with confidence > 0.999.
   - Wrong recipient → low confidence (< 0.5).
 
@@ -229,36 +229,42 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T7.1** Create `benches/forensic_watermark.rs` (criterion). Bench:
+- [x] **T7.1** Create `benches/forensic_watermark.rs` (criterion). Bench:
   - `derive_recipe`: target < 10 µs per recipe.
   - `apply_vertex_marks_simd` on 10⁴-vertex mesh: target < 100 µs (10ns/vertex).
   - `apply_dct_marks` on 10³ blocks: target < 50 µs.
   - `apply_topology_marks` on 10³ marked triangles: target < 50 µs.
   - `recover_codeword` end-to-end: target < 10 ms (offline, not hot-path).
-- [ ] **T7.2** **G1 — Single-leak attribution** benchmark test:
+- [ ] **T7.2** **G1 — Single-leak attribution** benchmark test:  
+  *(deferred — GOAT gate session; needs real assets + N=1000 recipients, not this primitive-implementation session)*
   - Generate 1000 random recipes for 1000 synthetic recipients.
   - Apply each recipe to a synthetic LOD-0 mesh (10⁴ verts) + texture (10³ DCT blocks).
   - For each: simulate leak (copy perturbed asset) → recover → attribute.
   - **Pass criterion:** accuracy ≥ 99.99% (≤ 1 mis-attribution per 1000).
-- [ ] **T7.3** **G2 — Collusion resistance** benchmark test:
+- [ ] **T7.3** **G2 — Collusion resistance** benchmark test:  
+  *(deferred — GOAT gate session; full c=10 collusion attack, 1000 trials)*
   - Generate c=10 colluders, each with a distinct recipe.
   - For each trial: collusion attack (per-position majority vote, or random pick on disagreement) → leaked codeword.
   - Run accusation_sum on all 10 colluders → at least one accused with confidence > 0.95.
   - Run accusation_sum on 100 non-colluders → 0 false accusations.
   - **Pass criterion:** ≥ 95% trial accuracy over 1000 trials; 0 false positives.
-- [ ] **T7.4** **G3 — Visual quality preservation** benchmark test:
+- [ ] **T7.4** **G3 — Visual quality preservation** benchmark test:  
+  *(deferred — GOAT gate session; needs real LOD-0 meshes for SSIM/PSNR)*
   - Apply recipe to a real LOD-0 mesh (use existing katgpt-rs test meshes if any, else synthetic cat mesh).
   - Compute SSIM vs unmarked reference: target ≥ 0.998.
   - Compute PSNR on texture: target ≥ 60 dB.
   - Verify vertex displacement ε ≤ 1e-4 m.
   - **Pass criterion:** all three.
-- [ ] **T7.5** **G4 — Recompression robustness** benchmark test:
+- [ ] **T7.5** **G4 — Recompression robustness** benchmark test:  
+  *(deferred — GOAT gate session; needs real BC7/JPEG encoders)*
   - Apply recipe → BC7 quantize → recover → attribute.
   - Apply recipe → JPEG q=85 → recover → attribute.
   - Apply recipe → mesh simplification 10% → recover → attribute.
   - **Pass criterion:** ≥ 90% accuracy after one pass; ≥ 70% after two passes.
-- [ ] **T7.6** If G1+G2+G3+G4 all pass → **promote feature flag from experimental to opt-in**. Update `katgpt-rs/README.md` Feature Showcase section. Update `katgpt-rs/.docs/` if relevant.
-- [ ] **T7.7** If any gate fails → **demote to experimental**, write postmortem in `katgpt-rs/.issues/`, decide: (a) fix and retry, (b) accept narrower scope (e.g. LOD-0 only), (c) shelve.
+- [ ] **T7.6** If G1+G2+G3+G4 all pass → **promote feature flag from experimental to opt-in**. Update `katgpt-rs/README.md` Feature Showcase section. Update `katgpt-rs/.docs/` if relevant.  
+  *(conditional on T7.2–T7.5; deferred — GOAT gate session)*
+- [ ] **T7.7** If any gate fails → **demote to experimental**, write postmortem in `katgpt-rs/.issues/`, decide: (a) fix and retry, (b) accept narrower scope (e.g. LOD-0 only), (c) shelve.  
+  *(conditional on T7.2–T7.5; deferred — GOAT gate session)*
 
 ---
 
@@ -266,9 +272,10 @@ katgpt-rs/crates/katgpt-core/src/forensic/
 
 ### Tasks
 
-- [ ] **T8.1** Add module-level rustdoc to `forensic/mod.rs` explaining: what it does, when to use, security model (forensic, not preventive), reference to Research 268.
-- [ ] **T8.2** Add `katgpt-rs/README.md` Feature Showcase entry for Forensic Watermark (after G1–G4 pass). Cross-link to Research 268 + Plan 322.
-- [ ] **T8.3** Add example `examples/forensic_watermark_demo.rs` showing: derive recipe → apply to synthetic mesh → recover → attribute. ~100 lines, runs without GPU.
+- [x] **T8.1** Add module-level rustdoc to `forensic/mod.rs` explaining: what it does, when to use, security model (forensic, not preventive), reference to Research 268.
+- [ ] **T8.2** Add `katgpt-rs/README.md` Feature Showcase entry for Forensic Watermark (after G1–G4 pass). Cross-link to Research 268 + Plan 322.  
+  *(skipped per plan — happens AFTER G1–G4 pass; T7.2–T7.5 deferred to GOAT gate session)*
+- [x] **T8.3** Add example `examples/forensic_watermark_demo.rs` showing: derive recipe → apply to synthetic mesh → recover → attribute. ~100 lines, runs without GPU.
 
 ---
 

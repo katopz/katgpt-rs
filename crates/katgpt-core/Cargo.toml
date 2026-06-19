@@ -163,3 +163,8 @@ required-features = ["cgsp", "temporal_deriv"]
 name = "micro_belief_bench"
 harness = false
 required-features = ["micro_belief", "bom_sampling"]
+
+[[bench]]
+name = "forensic_watermark"
+harness = false
+required-features = ["forensic_watermark"]
