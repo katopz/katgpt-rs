@@ -5,7 +5,7 @@
 **Source paper:** [openreview 48NnVTsirb](https://openreview.net/forum?id=48NnVTsirb) — Kortukov et al., NeurIPS 2026 / Mech Interp Workshop at ICML 2026
 **Reference impl:** <https://github.com/kortukov/future_probes>
 **Target:** `katgpt-rs/src/pruners/future_probe.rs` (new module) + `katgpt-rs/src/pruners/feature_class.rs` (vocabulary tag) + Cargo features `future_probe`, `fpcg_selector`
-**Status:** Active — Phase 1 ✓ / Phase 2 ✓ / Phase 3 ✓ / Phase 4 <next>
+**Status:** Active — Phase 1 ✓ / Phase 2 ✓ / Phase 3 ✓ / Phase 4 partial (G5 ✓ / G6 partial / G7 ✓ measured in pure Rust; G1–G4 blocked on offline training — see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md)) / Phase 5 deferred
 
 ---
 
@@ -207,25 +207,31 @@ Benchmark vs the existing detection-side primitives. The headline is the **perpl
 ### Tasks
 
 - [ ] **T4.1** Set up a small test corpus (synthetic behaviors + resampling labels, or reuse a small open-source prompt set — Refusal-style binary behaviors are simplest). Generate ground-truth behavior labels via the paper's resampling recipe (S=10 base × M=10 completion per sentence).
+  - **BLOCKED on offline training, see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md).** Corpus prep is external data work, not engine code.
 - [ ] **T4.2** Train a `FutureBehaviorProbe` direction vector offline (Python script in `scripts/train_future_probe.py` or `riir-train/`). Logistic regression on (mid-layer activation, behavior-probability label). Save as safetensors with BLAKE3 manifest.
+  - **BLOCKED on offline training, see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md).** Per `AGENTS.md` constraint #1, offline training lives in `riir-train`, never in `katgpt-rs`.
 - [ ] **T4.3** Run FPCG selector on test corpus. Record: behavior-fraction shift (pp), perplexity delta, format-filter rate, mean tokens generated.
+  - **BLOCKED on T4.1 + T4.2 + a real-model `ActivationExtractor` wiring, see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md).** Feeds G1/G2/G3.
 - [ ] **T4.4** Run baselines on same corpus:
   - Unsteered (control)
   - `EmotionDirections` desperation-style modulation (current detection-side)
   - CNA modulation (Plan 087, sparse-neuron steering)
-- [ ] **T4.5** GOAT gate table:
+  - **BLOCKED on T4.1 + T4.2 + engine wiring, see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md).** Feeds G4.
+- [~] **T4.5** GOAT gate table (G1–G4 BLOCKED; G5/G6/G7 measured in pure Rust — see [`.benchmarks/292_fpcg_goat.md`](../.benchmarks/292_fpcg_goat.md)):
 
-  | Gate | Target | How measured |
-  |---|---|---|
-  | G1 Steering strength | FPCG achieves ≥ 30pp behavior shift on at least one behavior | behavior fraction Positive vs Negative |
-  | G2 Quality preservation | FPCG perplexity delta < 5% vs unsteered | mean PPL on test corpus |
-  | G3 Format integrity | FPCG format-filter rate < 10% | fraction of outputs failing regex/format check |
-  | G4 Pareto dominance | FPCG dominates EmotionDirections or CNA on at least one behavior class | plot PPL vs steering-Δpp |
-  | G5 Zero-alloc hot path | `Vec::capacity` stable across 1000 selector steps | instrumentation test |
-  | G6 Latency | `forecast()` < 200ns per call (matches EmotionDirections) | `cargo bench` |
-  | G7 BLAKE3 commitment | Probe reload from tampered bytes refuses to serve | unit test |
-- [ ] **T4.6** Write benchmark report `katgpt-rs/.benchmarks/292_fpcg_goat.md` with the table, plots (PPL vs Δpp), and a clear PASS/FAIL verdict per gate.
-- [ ] **T4.7** If any of G1–G4 fails: file an issue in `.issues/` documenting the failure mode, do not promote to default. Continue to Phase 5 with the demotion branch.
+  | Gate | Target | How measured | Status |
+  |---|---|---|---|
+  | G1 Steering strength | FPCG achieves ≥ 30pp behavior shift on at least one behavior | behavior fraction Positive vs Negative | **BLOCKED** — see `.issues/032_fpcg_phase4_training_blocker.md` |
+  | G2 Quality preservation | FPCG perplexity delta < 5% vs unsteered | mean PPL on test corpus | **BLOCKED** — see `.issues/032_fpcg_phase4_training_blocker.md` |
+  | G3 Format integrity | FPCG format-filter rate < 10% | fraction of outputs failing regex/format check | **BLOCKED** — see `.issues/032_fpcg_phase4_training_blocker.md` |
+  | G4 Pareto dominance | FPCG dominates EmotionDirections or CNA on at least one behavior class | plot PPL vs steering-Δpp | **BLOCKED** — see `.issues/032_fpcg_phase4_training_blocker.md` |
+  | G5 Zero-alloc hot path | `Vec::capacity` stable across 1000 selector steps | instrumentation test | **PASS ✓** — capacity = 10 stable across 1000 steps; `tests/fpcg_goat_gate.rs::g5_*` + `pruners::fpcg_selector::tests::hot_path_is_zero_alloc_across_many_steps` |
+  | G6 Latency | `forecast()` < 200ns per call (matches EmotionDirections) | `cargo bench` | **PASS ≤2048 / FAIL @4096 (absolute bar); PASS (relative) all sizes** — `forecast()` is 0.32–0.70× the cousin at every size (better-SIMD `simd_dot_f32`); d=64: 11.13ns … d=2048: 157.77ns PASS, d=4096: 309.54ns FAIL. `benches/fpcg_probe_forecast_bench.rs`. Real numbers in `.benchmarks/292_fpcg_goat.md`. |
+  | G7 BLAKE3 commitment | Probe reload from tampered bytes refuses to serve | unit test | **PASS ✓** — clean load serves + reproduces forecast; tampered direction byte → `ProbeLoadError::HashMismatch`. `tests/fpcg_goat_gate.rs::g7_*` + `pruners::future_probe::tests::load_rejects_tampered_bytes`. |
+- [x] **T4.6** Write benchmark report `katgpt-rs/.benchmarks/292_fpcg_goat.md` with the table, plots (PPL vs Δpp), and a clear PASS/FAIL verdict per gate.
+  - Done as a **scaffold report**: G5/G6/G7 carry real measured numbers; G1–G4 rows marked BLOCKED with the methodology documented for the unblock session; Pareto plot deferred until G4 can run. No fabricated numbers.
+- [x] **T4.7** If any of G1–G4 fails: file an issue in `.issues/` documenting the failure mode, do not promote to default. Continue to Phase 5 with the demotion branch.
+  - Filed as [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md). G1–G4 are not *failed* (no negative result) — they are *blocked* on offline training. No promote/demote decision is possible until they run (Phase 5 deferred, not demoted).
 
 ---
 
@@ -237,15 +243,19 @@ Benchmark vs the existing detection-side primitives. The headline is the **perpl
   - Update `katgpt-rs/README.md` Feature Showcase with a new entry for FPCG.
   - Update `katgpt-rs/.docs/01_overview.md` Feature Flags table.
   - Cross-link Research 267 and Plan 292 in `katgpt-rs/.docs/` indices.
+  - **DEFERRED — blocked on G1–G4, which are blocked on offline training (see [`.issues/032_fpcg_phase4_training_blocker.md`](../.issues/032_fpcg_phase4_training_blocker.md)). Not executed this session.**
 - [ ] **T5.2** If **G1 or G2 fails**:
   - Demote `future_probe` to opt-in permanently.
   - Keep Phase 1 (vocabulary tag) as the always-on shippable output.
   - Write a post-mortem in `.benchmarks/292_fpcg_goat.md` explaining why FPCG underperforms our existing detection-side primitives on this corpus. (Likely: our baseline is already read-only, so the perplexity-preservation advantage is muted.)
   - File follow-up issue for retry on a different behavior class (e.g., game-side NPC dialogue steering — but that's deferred to riir-ai).
+  - **DEFERRED — blocked on G1/G2 running. Not executed this session.**
 - [ ] **T5.3** If **G4 fails specifically** (FPCG works but doesn't dominate any baseline):
   - Keep both as opt-in.
   - Document FPCG as a *complementary* technique (paper's headline is complementarity, not dominance). Note in README: "use FPCG when activation steering breaks outputs, use Emotion Vector when raw strength matters."
+  - **DEFERRED — blocked on G4 running. Not executed this session.**
 - [ ] **T5.4** Commit. Use `feat:` prefix for shipping code, `docs:` for the research note + plan + benchmark report. Stay on `develop` branch (per `AGENTS.md`). Rebase non-interactive or merge fast-forward.
+  - **NOT executed this session** — per task instructions, commits are left to the parent agent that validates the integrated state (parallel commits on `develop` are unsafe).
 
 ---
 
