@@ -954,13 +954,13 @@ flowchart LR
 
 | Gate | Target | Measured | Verdict |
 |------|--------|----------|---------|
-| G1 | PRI < 100µs / 1K traces (hot-tier) | 4507µs | ⚠️ PARTIAL (std HashMap; warm-tier use case, fixable with ahash + bitmask) |
+| G1 | PRI < 100µs / 1K traces (hot-tier) | 22–26µs | ✅ PASS (bit matrix + ahash, Issue 035; was 4507µs) |
 | G2 | Motif mining < 5% of admission path | 2.07ms mine / 250ns admit | ✅ PASS |
 | G3 | TaR correlates with real transfer ≥0.5 | synthetic proxy 1.0/0.0 | ✅ PASS (proxy — real correlation needs riir-ai) |
-| G4 | 10K-trace snapshot < 1MB | 1.774MB | ⚠️ PARTIAL (32B per-node blake3 is structural, locked in Phase 0) |
+| G4 | 10K-trace snapshot < 1MB | 1.774MB | ⚠️ PARTIAL (32B per-node blake3 is structural, locked in Phase 0; sole remaining blocker) |
 | G5 | Demotion if no quality correlation | N/A | DEFERRED (needs riir-ai transfer traces) |
 
-**Decision: `closure_instrument` stays opt-in.** Per the plan's T4.7 promotion rule, G1–G4 must ALL pass. The G1/G4 failures are **structural** — they stem from the locked Phase 0 data model (`blake3_in: [u8; 32]` per node) and `std::collections::HashMap`, not from implementation bugs. All 17 unit tests + 6 integration tests pass; the wake→sleep→admit loop is proven end-to-end on real `AbsorbCompressLayer<NoScreeningPruner>`.
+**Decision: `closure_instrument` stays opt-in.** Per the plan's T4.7 promotion rule, G1–G4 must ALL pass. **G1 is now green** (Issue 035, 2026-06-19: replaced the nested `HashMap<PrimitiveKind, HashSet<u32>>` with a primitive×family bit matrix + ahash + rolling-tag dedup — 22–26µs / 1K traces, was 4507µs, ~180× speedup). **G4 is the sole remaining blocker** and is structural — it stems from the locked Phase 0 data model (`blake3_in: [u8; 32]` per node), not from an implementation bug. All 9 GOAT tests + 9 metrics unit tests + 6 integration tests pass; the wake→sleep→admit loop is proven end-to-end on real `AbsorbCompressLayer<NoScreeningPruner>`.
 
 Feature gate: `closure_instrument` (**opt-in**, requires `katgpt-core/closure_instrument`; auto-tracing of `AbsorbCompress` additionally needs `bandit`). 📖 Plan: [`.plans/290_closure_expansion_instrument.md`](.plans/290_closure_expansion_instrument.md), Research: [`.research/264_Compositional_Open_Ended_Intelligence_Framework.md`](.research/264_Compositional_Open_Ended_Intelligence_Framework.md), Benchmark: [`.benchmarks/290_closure_instrument_goat.md`](.benchmarks/290_closure_instrument_goat.md), Paper: [arxiv 2606.15386](https://arxiv.org/abs/2606.15386).
 

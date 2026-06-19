@@ -17,6 +17,10 @@ bytemuck = { version = "1", features = ["derive"] }
 papaya = { version = "0.2", optional = true }
 rustfft = { version = "6", optional = true }
 lz4_flex = { version = "0.13", optional = true }
+# ahash is used by `closure_instrument` (Plan 290 G1 hot-path optimization).
+# Already a transitive dep via hashbrown 0.14 / bevy_utils — listing it here only
+# promotes it to a direct dependency for the `closure_instrument` feature.
+ahash = { version = "0.8", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
@@ -106,7 +110,7 @@ compression_drafter = ["dep:lz4_flex"]  # CompressionDrafter — Hot-tier modell
 funcattn = []  # Functional Attention — closed-form Tikhonov k×k spectral transport operator (Plan 286, Research 257, arxiv 2605.31559). Linear-in-n attention variant; sigmoid-basis default per AGENTS.md. Opt-in (Gain-tier): paper itself has not verified NLP gain; promote only after GOAT G1–G5 pass.
 chunked_content_store = ["dep:papaya"]  # ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 272, Research 262). Open primitive; consumed by riir-ai Plan 319. Default-off until GOAT gate G1–G7 pass.
 sink_aware_attn = []  # Sink-Aware Attention — NOP/Broadcast classifier + dual-policy sigmoid gate (Plan 287, Research 258, arxiv 2606.08105, Fesser et al.). Per-head classifier (value-norm-ratio + stable-rank-of-update) decides whether a sink is Adaptive NOP (gate it) or Broadcast (preserve it). Opt-in until synthetic G2 + latency G3 pass; default stays Uniform.
-closure_instrument = ["dep:papaya"]  # Closure-Expansion Instrument (CEI) — PTG recorder + motif miner + PRI/CDG/TaR metrics (Plan 290, Research 264, arxiv 2606.15386). Opt-in until G1–G4 GOAT gate passes; G5 demotes to opt-in diagnostic if metrics don't correlate with quality.
+closure_instrument = ["dep:papaya", "dep:ahash"]  # Closure-Expansion Instrument (CEI) — PTG recorder + motif miner + PRI/CDG/TaR metrics (Plan 290, Research 264, arxiv 2606.15386). Opt-in until G1–G4 GOAT gate passes; G5 demotes to opt-in diagnostic if metrics don't correlate with quality. ahash powers the G1 hot-path bit-matrix PRI (Issue 035).
 forensic_watermark = []  # Forensic watermark recipe primitive — BLAKE3-seeded per-recipient perturbation recipes + Tardos anti-collusion codebook + DCT/topology marks (Plan 293, Research 268). Opt-in until G1–G4 GOAT gate passes; private integration (WASM vessel + NFT + slashing) is riir-ai Plan 322.
 ict_branching = []  # ICT Distributional Branching-Point Detector — collision_purity β(π), Rényi H₂, JS-divergence-to-group-mean, BranchingDetector (Plan 294, Research 270, arxiv 2606.19771). Opt-in until G3 + G8 (riir-ai Plan 324) pass.
 

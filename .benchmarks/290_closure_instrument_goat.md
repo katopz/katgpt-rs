@@ -1,6 +1,6 @@
 # Bench 290: Closure-Expansion Instrument (CEI) — GOAT Gate Results
 
-**Date:** 2026-06-18
+**Date:** 2026-06-18 (last revised 2026-06-19 — G1 fixed via Issue 035)
 **Plan:** [290_closure_expansion_instrument.md](../.plans/290_closure_expansion_instrument.md)
 **Research:** [264_Compositional_Open_Ended_Intelligence_Framework.md](../.research/264_Compositional_Open_Ended_Intelligence_Framework.md)
 **Source paper:** [arxiv 2606.15386](https://arxiv.org/abs/2606.15386) — Momennejad & Raileanu, "A Compositional Framework for Open-ended Intelligence", Jun 2026
@@ -12,7 +12,14 @@
 
 ## TL;DR
 
-**G1 PARTIAL, G2 PASS, G3 PASS (synthetic proxy), G4 PARTIAL.** Per Plan 290 T4.7 promotion rule (G1–G4 PASS required), `closure_instrument` is **NOT promoted to default-on**. It remains an opt-in diagnostic. The gates that fail do so for **structural** reasons documented below, not implementation bugs — the locked Phase 0 data model and the warm-tier use case are incompatible with the hot-tier / sub-MB canonical targets. All correctness tests pass (9/9).
+**G1 PASS (Issue 035, 2026-06-19), G2 PASS, G3 PASS (synthetic proxy), G4 PARTIAL.**
+G1 was the only non-structural blocker — it's now fixed by replacing the nested
+`HashMap<PrimitiveKind, HashSet<u32>>` with a primitive×family bit matrix
+(22–26µs / 1K traces, was 4507µs). G4 remains PARTIAL for the structural
+reason documented below (`blake3_in: [u8; 32]` per node, locked in Phase 0).
+Per Plan 290 T4.7 promotion rule (G1–G4 PASS required), `closure_instrument`
+is still **NOT promoted to default-on** — G4 blocks it. All correctness tests
+pass (9/9 GOAT + 9/9 metrics unit + 6/6 integration).
 
 ---
 
@@ -20,32 +27,59 @@
 
 | Gate | Spec target | Measured | Verdict | Notes |
 |------|-------------|----------|---------|-------|
-| G1 | PRI < 100µs / 1K-trace corpus (Hot-tier) | **4507µs** | ⚠️ PARTIAL | std HashMap dominates; warm-tier diagnostic, not hot-tier |
+| G1 | PRI < 100µs / 1K-trace corpus (Hot-tier) | **22–26µs** (release, 3 back-to-back runs) | ✅ PASS | bit matrix + ahash (Issue 035, 2026-06-19). Was 4507µs.
 | G2 | Motif mining < 5% of admission path | **1.69ms mine / 333ns admit (ratio 5077×)** | ✅ PASS | mine_batch < 5ms warm-tier bound met |
 | G3 | TaR correlates with real transfer (≥0.5) | synthetic proxy: same=1.0, none=0.0 | ✅ PASS (proxy) | real AnchorProfile correlation deferred (riir-ai private IP) |
-| G4 | PTG snapshot 10K traces < 1MB | **1.774 MB** | ⚠️ PARTIAL | locked data model has 32B blake3 per node |
+| G4 | PTG snapshot 10K traces < 1MB | **1.774 MB** | ⚠️ PARTIAL | locked data model has 32B blake3 per node — only remaining blocker |
 | G5 | Demotion rule (no quality correlation) | N/A — cannot fire from unit test | DEFERRED | needs riir-ai transfer traces |
 
-**Promotion decision:** Per T4.7, G1–G4 must ALL pass for promotion. G1 and G4 do not meet canonical targets → **`closure_instrument` stays opt-in**. Per T4.8 honest-negative-result rule, this is recorded here.
+**Promotion decision:** Per T4.7, G1–G4 must ALL pass for promotion. G1 is now
+green; **G4 is the sole remaining blocker** and is structural (locked Phase 0
+data model — see below). `closure_instrument` stays opt-in until G4 is
+addressed (e.g. `blake3_in: Option<[u8; 32]>` on inner nodes).
 
 ---
 
-## Why G1 Fails (and what would fix it)
+## Why G1 *was* failing — and how Issue 035 fixed it (2026-06-19)
 
 **Canonical target:** `< 100µs per 1K-trace corpus (Hot-tier)`.
 
-**Measured:** ~4.5ms per 1K traces × 8 nodes = ~4500ns per PTG.
+**Pre-fix measured:** ~4.5ms per 1K traces × 8 nodes = ~4500ns per PTG.
 
-**Root cause:** `compute_pri` uses `std::collections::HashMap<PrimitiveKind, HashSet<u32>>` for per-primitive family tracking. std's HashMap uses SipHash (slow but DoS-resistant); the per-PTG `seen_this_ptg: HashSet` allocates on every call. For 1K traces × 8 nodes = 8K hash inserts at ~500ns each = 4ms.
+**Pre-fix root cause:** `compute_pri` used
+`std::collections::HashMap<PrimitiveKind, HashSet<u32>>` for per-primitive
+family tracking. std's HashMap uses SipHash (slow but DoS-resistant); the
+per-PTG `seen_this_ptg: HashSet` allocated on every call. For 1K traces × 8
+nodes = 8K hash inserts at ~500ns each = 4ms.
 
-**Use case mismatch:** The canonical target was set assuming hot-tier (per-tick) execution. The actual use case is **warm-tier** — `MotifMiner::mine_batch()` runs at sleep-cycle boundaries (Plan 107 AutoDreamer consolidation tick, runs every ~100ms+). A 4ms cost on the warm tier is fine; on the hot tier it would be catastrophic.
+**Fix (Issue 035, `.contexts/optimization.md`):** Exploit the fact that the
+primitive id space is bounded to `[0, 512)` (`PrimitiveKind::to_u32` maps the
+whole enumeration there) and task-family counts are small in practice. Replace
+the nested HashMap with:
 
-**Fix paths (not done — feature stays opt-in):**
-1. Swap std HashMap for `ahash::AHashMap` (already in transitive deps). Expected ~3-5× speedup → ~1ms.
-2. Replace per-PTG HashSet allocation with a fixed `[u32; 256]` bitmask (primitive id space is bounded to 256). Expected ~10× speedup → ~400µs.
-3. SIMD-friendly counting sort over primitive ids. Expected → <100µs.
+1. **Primitive×family bit matrix.** One zero-init `Vec<u64>` of shape
+   `512 × ⌈F/64⌉` (F = distinct families; 4KB for the common F ≤ 64 case).
+   Per-node hot path becomes a single indexed `|=` write — no hash, no branch
+   on collision, no allocation. The bit matrix also subsumes the
+   per-primitive family set: "primitive p in family f?" is one bit lookup.
+2. **Rolling-tag per-PTG dedup.** The "same primitive twice in one PTG counts
+   once" rule needs per-PTG dedup. A stack `[u32; 512]` tag array + a wrapping
+   generation counter replaces the per-PTG `HashSet` allocation. Touched
+   entries are detected by `tag[i] == cur_gen`; the array is never cleared.
+3. **`ahash::AHashMap` for the small outer maps.** The unique-family pre-pass
+   and the final scores map use aHash instead of SipHash. aHash is already a
+   transitive dep via `hashbrown 0.14.5` (bevy_utils), so this adds zero new
+   top-level crates.
 
-**Recommendation:** Either (1)+(2) is cheap, or revise the plan's G1 target to "warm-tier < 5ms" — the use case justifies it.
+**Post-fix measured:** 22–26µs / 1K traces (release, 3 back-to-back runs on
+the same commit, 2026-06-19). **~180× speedup**, comfortably under the 100µs
+canonical target with a 4× safety margin.
+
+**Public API change:** `PriScores(pub HashMap<PrimitiveKind, f32>)` →
+`PriScores(pub AHashMap<PrimitiveKind, f32>)`. The only public consumers
+(`closure_mining::SleepCycleClosureReport`, the GOAT bench test) call only
+`.get()`, `.len()`, `.is_empty()` — all of which `AHashMap` provides.
+`motif_multiset`'s return type changed the same way for consistency.
 
 ---
 
@@ -148,11 +182,12 @@ observed by `MotifMiner`, mined at the sleep-cycle boundary, admitted by
 - **T4.5** — Cold-tier commitment via Plan 280 Merkle-octree is unchanged
   (the `commitment()` helper exists; full octree wiring still deferred).
 - **T4.7** — Promotion to default-on remains **BLOCKED** by the structural
-  G1 (4507µs vs 100µs) and G4 (1.774MB vs 1MB) failures documented above.
-  Wiring T4.2/T4.3 does not change those numbers — the wrapper adds zero
-  cost when the feature is off and the measurement layer's warm-tier
-  latency/size characteristics are unchanged. Per the plan's promotion
-  rule (G1–G4 must ALL pass), `closure_instrument` stays opt-in.
+  G4 (1.774MB vs 1MB) failure documented above. **G1 (latency) is no longer a
+  blocker** as of Issue 035 (2026-06-19): PRI runs in 22–26µs / 1K traces,
+  well under the 100µs canonical target. Wiring T4.2/T4.3 adds zero cost
+  when the feature is off and the measurement layer's warm-tier size
+  characteristics are unchanged. Per the plan's promotion rule (G1–G4 must
+  ALL pass), `closure_instrument` stays opt-in until G4 is addressed.
 
 ### Latency impact of the wiring (warm tier only)
 
@@ -173,7 +208,9 @@ integration test.
 
 **`closure_instrument`: stays opt-in.**
 
-- **Promotion blocked** by G1 (latency) and G4 (size) structural failures.
+- **Promotion blocked** by **G4 (size) only** as of Issue 035 (2026-06-19).
+  G1 (latency) was the other blocker and is now fixed (22–26µs / 1K traces,
+  was 4507µs).
 - **No demotion to "diagnostic only"** needed — the feature was always opt-in and is documented as such. The G5 demotion rule (correlate with real quality) cannot fire from this benchmark; it would only fire after T4.2/T4.3 wiring exposes the metrics to a real workload.
 - **Honest scope:** the *measurement layer* ships and is observable. The *integration layer* (wiring into BanditPruner / sleep-cycle) is the next plan.
 
@@ -188,4 +225,10 @@ integration test.
 
 ## TL;DR
 
-G1 and G4 fail their canonical targets for structural reasons (std HashMap + per-node blake3) that are fixable but not done in this plan. G2 and G3 pass. Per T4.7, the feature stays opt-in — not promoted to default-on. All 9 correctness tests green. Integration into the runtime (T4.2/T4.3) is the next work item.
+G1 **fixed and PASSING** as of Issue 035 (2026-06-19): 22–26µs / 1K traces
+(bit matrix + ahash, was 4507µs). G4 still fails its canonical target for the
+structural reason (per-node blake3) that is fixable but not done in this issue.
+G2 and G3 pass. Per T4.7, the feature stays opt-in until G4 is also resolved —
+not promoted to default-on. All 9 GOAT correctness tests + 9 metrics unit
+tests + 6 wire-integration tests green. Integration into the runtime
+(T4.2/T4.3) is already wired; the remaining work is the G4 data-model change.
