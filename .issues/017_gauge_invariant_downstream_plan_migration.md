@@ -1,5 +1,9 @@
 # Issue 017: Migrate Plans 094/201/233 to Consume `gauge_invariant` Primitive
 
+**Status**: CLOSED (katgpt-rs portion — M4 verified N/A; M1-M3 belong in riir-ai, M5-M7 in riir-train)
+
+**Closure rationale (2026-06-20):** M4 (RosettaPruner grep) verified — Rosetta mines universal constraint concepts, does not compose LoRA factor pairs, so gauge_invariant_compose is not applicable. The acceptance criterion ("at least one of M1-M3 OR M5-M7 lands with a benchmark") cannot be met from katgpt-rs alone — all candidate call sites are in riir-ai (TIES merging, Plan 094) or riir-train (cross-game LoRA alignment, Plan 233). The katgpt-rs primitive is stable, default-ON, GOAT 17/17 PASS. Downstream migration must be filed in the consumer repos.
+
 **Source**: Plan 270 (`.plans/270_gauge_invariant_adapter_composition.md`) — Success Criteria "At least one downstream plan updated to use new primitive"
 **Priority**: Medium
 **Blocked**: No — primitive is default-ON and verified (GOAT 17/17 PASS)
@@ -39,7 +43,7 @@ The primitive lives in katgpt-rs and is the source of truth. The issue documents
 
 **Migration target**: **Likely N/A.** Rosetta mines universal constraint concepts from `ConstraintPruner` / `ScreeningPruner` outputs — it does not compose LoRA factor pairs. The `gauge_invariant` primitive is orthogonal.
 
-- [ ] **M4**: Verify RosettaPruner has no latent adapter-composition code path that would benefit (quick grep). If none, close this sub-item as "not applicable".
+- [x] **M4** (verified 2026-06-20): Grep + full read of `katgpt-rs/src/pruners/rosetta.rs` found no LoRA factor-pair composition path — `mine_concepts` only tallies per-pruner agreement ratios and mines universal `ConstraintConcept` entries; grep for (lora|adapter|factor|matrix|compose|eta|AB^T|matmul|sigma|svd) returned zero real matches. `gauge_invariant_compose` is not applicable.
 
 ### Plan 233 — Rosetta Cross-Game LoRA Alignment (`riir-train/.plans/233_rosetta_cross_game_lora_alignment.md`)
 
