@@ -203,8 +203,15 @@ serde_for_motif!(Motif);
 /// ignored).
 ///
 /// Inputs are bounded by [`MAX_MOTIF_NODES`] / [`MAX_MOTIF_EDGES`] (= 4 each),
-/// so the sort scratch lives on the stack — zero heap allocation for the sort
-/// buffers (the previous version cloned into two heap `Vec`s per call).
+/// so the sort scratch *and* the postcard wire-form both live on the stack —
+/// zero heap allocation per call (the previous version cloned into two heap
+/// `Vec`s for sort scratch + two more via `postcard::to_allocvec`).
+///
+/// The postcard-compatible varint encoding is hand-rolled to match
+/// `postcard::to_allocvec(&n_buf[..n_len])` byte-for-byte. Verified by the
+/// `canonical_hash_matches_postcard` test below. Wire format:
+/// - `&[u32]` (seq):  `varint(len) || varint(u32) || varint(u32) || ...`
+/// - `&[u8]` (bytes): `varint(len) || raw bytes`  (serde `serialize_bytes`)
 #[inline]
 fn canonical_hash(node_kinds: &[u32], edge_kinds: &[u8]) -> [u8; 32] {
     debug_assert!(
@@ -230,10 +237,44 @@ fn canonical_hash(node_kinds: &[u32], edge_kinds: &[u8]) -> [u8; 32] {
     n_buf[..n_len].sort_unstable();
     e_buf[..e_len].sort_unstable();
 
+    // Postcard-compatible varint encoding into stack buffers — eliminates the
+    // two heap allocations from `postcard::to_allocvec`.
+    //
+    // `n_enc` bound: 1 byte length prefix + N varint-encoded u32s (≤ 5 bytes
+    // each via LEB128) = 1 + 4*5 = 21 bytes.
+    // `e_enc` bound: 1 byte length prefix + N raw bytes = 1 + 4 = 5 bytes
+    //   (postcard's `serialize_bytes` shortcut writes raw bytes, not varint-per-element).
+    let mut n_enc: [u8; 1 + MAX_MOTIF_NODES as usize * 5] = [0; 1 + 4 * 5];
+    let mut e_enc: [u8; 1 + MAX_MOTIF_EDGES as usize] = [0; 1 + 4];
+    let mut n_pos = write_varint_u32(&mut n_enc, n_len as u32);
+    for &v in &n_buf[..n_len] {
+        n_pos += write_varint_u32(&mut n_enc[n_pos..], v);
+    }
+    let mut e_pos = write_varint_u32(&mut e_enc, e_len as u32);
+    e_enc[e_pos..e_pos + e_len].copy_from_slice(&e_buf[..e_len]);
+    e_pos += e_len;
+
     let mut hasher = blake3::Hasher::new();
-    hasher.update(&postcard::to_allocvec(&n_buf[..n_len]).unwrap_or_default());
-    hasher.update(&postcard::to_allocvec(&e_buf[..e_len]).unwrap_or_default());
+    hasher.update(&n_enc[..n_pos]);
+    hasher.update(&e_enc[..e_pos]);
     hasher.finalize().into()
+}
+
+/// Encode `v` as a postcard-compatible LEB128 varint into `out`. Returns the
+/// number of bytes written. Mirrors `postcard::varint::varint_u32` byte for
+/// byte: LSB first, MSB of each byte is the continuation bit (1 = more bytes).
+#[inline]
+fn write_varint_u32(out: &mut [u8], mut v: u32) -> usize {
+    let mut i = 0;
+    loop {
+        out[i] = v as u8;
+        if v < 0x80 {
+            return i + 1;
+        }
+        out[i] |= 0x80;
+        v >>= 7;
+        i += 1;
+    }
 }
 
 /// `MotifMiner` — observes PTGs and runs `mine_batch()` at sleep-cycle
@@ -653,5 +694,50 @@ mod tests {
         // Latest is the last one pushed.
         let last_id = (RING_BUFFER_K + 4) as u32;
         assert_eq!(miner.recent_ptgs.last().unwrap().task_family_id, last_id);
+    }
+
+    /// The hand-rolled varint encoder in `canonical_hash` must produce
+    /// byte-for-byte identical BLAKE3 output to the previous
+    /// `postcard::to_allocvec`-based path. Covers edge cases: empty slices,
+    /// single elements, max-bound sizes, and large u32 values that span the
+    /// full 5-byte varint range.
+    #[test]
+    fn canonical_hash_matches_postcard() {
+        let cases: &[(Vec<u32>, Vec<u8>)] = &[
+            (vec![], vec![]),
+            (vec![1], vec![]),
+            (vec![], vec![5]),
+            (vec![1, 2], vec![5]),
+            (vec![3, 1, 2], vec![10, 20]),
+            (vec![100, 200, 300, 400], vec![100, 200, 255, 0]),
+            (vec![], vec![1, 2, 3, 4]),
+            // Large u32 values that need multi-byte varint encoding.
+            (vec![0x1234_5678], vec![0xff]),
+            (vec![u32::MAX], vec![0xff, 0x80, 0x40, 0x20]),
+            (vec![0x4000, 0x200000, 0x80, 0x40], vec![0]),
+        ];
+        for (n, e) in cases {
+            let hash_new = canonical_hash(n, e);
+            // Reference: pre-existing postcard-based path. Sort independently
+            // to mirror what the old `canonical_hash` did before hashing.
+            let mut n_sorted = n.clone();
+            let mut e_sorted = e.clone();
+            n_sorted.sort_unstable();
+            e_sorted.sort_unstable();
+            let mut hasher = blake3::Hasher::new();
+            hasher.update(
+                &postcard::to_allocvec(&n_sorted[..]).unwrap_or_default(),
+            );
+            hasher.update(
+                &postcard::to_allocvec(&e_sorted[..]).unwrap_or_default(),
+            );
+            let hash_ref: [u8; 32] = hasher.finalize().into();
+            assert_eq!(
+                hash_new, hash_ref,
+                "canonical_hash drift for n={n:?} e={e:?}\n\
+                 new: {hash_new:?}\n\
+                 ref: {hash_ref:?}",
+            );
+        }
     }
 }
