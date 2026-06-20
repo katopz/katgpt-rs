@@ -5,8 +5,10 @@
 > **Benchmark report:** [katgpt-rs/.benchmarks/292_fpcg_goat.md](../.benchmarks/292_fpcg_goat.md)
 > **Source paper:** [openreview 48NnVTsirb](https://openreview.net/forum?id=48NnVTsirb) — Kortukov et al., NeurIPS 2026
 > **Date:** 2026-06-19
-> **Status:** Open — **blocker** tracking the offline-training + corpus work needed to run FPCG GOAT gates G1–G4.
+> **Status:** CLOSED (cross-repo hand-off — G1–G4 require trained probe + labeled corpus that live in riir-train, not the public modelless katgpt-rs engine)
 > **Type:** Blocker / cross-repo hand-off (training lives in `riir-train`; corpus is external data)
+
+**Closure rationale (2026-06-20):** Per `AGENTS.md`: "Offline training (if needed for benchmark) lives in `riir-train` … never in `katgpt-rs`." G1–G4 require a trained `FutureBehaviorProbe` artifact + labeled test corpus + real-model `ActivationExtractor` wiring — all explicitly out of scope for the public modelless engine. G5/G6/G7 (the pure-Rust gates) already PASS in `.benchmarks/292_fpcg_goat.md`. The engine primitives (Phase 1–3) shipped behind opt-in `future_probe` / `fpcg_selector` feature flags. Reopen as a riir-train issue when the training pipeline is ready to produce the probe artifact.
 
 ---
 
