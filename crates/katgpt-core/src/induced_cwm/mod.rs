@@ -64,6 +64,7 @@
 
 pub mod belief;
 pub mod commitment;
+pub mod hot_swap;
 pub mod kernel;
 pub mod unit_test;
 
@@ -88,6 +89,7 @@ mod ismcts_tests;
 
 pub use belief::BeliefInferenceFn;
 pub use commitment::CwmCommitment;
+pub use hot_swap::InducedCwmSlot;
 pub use kernel::InducedCwmKernel;
 pub use unit_test::{TransitionTestFailure, TransitionUnitTest, make_transition_tests_from_trajectory, verify_transition};
 
