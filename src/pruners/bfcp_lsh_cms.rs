@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use super::bfcf_types::{BFCP, RegionLabel};
-use super::bfcp_region_cache::{FreqTier, blake3_logit_hash};
+use super::bfcp_region_cache::FreqTier;
 use super::count_min_sketch::{CountMinSketch, SketchFrequency};
 use super::lsh_cache::BfcpLshCache;
 use super::region_shard_map::RegionShardMap;
@@ -38,6 +38,11 @@ pub struct BfcpLshCms {
     hot_threshold: u32,
     /// Warm tier threshold (for CMS-based classification).
     warm_threshold: u32,
+    /// Last partition processed by `update_membership`. Compared by `Arc::as_ptr`
+    /// identity so repeated calls with the same cached partition short-circuit
+    /// the bitmap rebuild (Issue 001 H-23). L0/L1 hits return the *same* `Arc`,
+    /// so this skips the O(regions × tokens) rebuild on every cache hit.
+    last_membership_partition: Option<Arc<BFCP>>,
 }
 
 impl BfcpLshCms {
@@ -63,6 +68,7 @@ impl BfcpLshCms {
             membership: RoaringMembership::new(),
             hot_threshold: 100,
             warm_threshold: 10,
+            last_membership_partition: None,
         }
     }
 
@@ -74,10 +80,10 @@ impl BfcpLshCms {
     where
         F: FnOnce(&[f32]) -> BFCP,
     {
-        let hash = blake3_logit_hash(logits);
-
-        // Three-level cache lookup.
-        let (partition, level) = self.cache.process(logits, compute_fn);
+        // Three-level cache lookup + hash in one pass (Issue 001 H-28):
+        // BfcpLshCache::process_with_hash computes the BLAKE3 hash once and
+        // returns it so we can feed it to the CMS without a second hash pass.
+        let ((partition, level), hash) = self.cache.process_with_hash(logits, compute_fn);
 
         // CMS frequency update.
         self.sketch.update(&hash);
@@ -151,7 +157,20 @@ impl BfcpLshCms {
     }
 
     /// Update membership bitmaps from a partition's regions.
+    ///
+    /// Issue 001 H-23: short-circuit when `partition` is the same `Arc` we
+    /// already built bitmaps for (the common L0/L1 cache-hit path). Otherwise
+    /// rebuild from scratch — a true incremental diff is deferred until the
+    /// "simplified version" comment below is replaced with real token indexing.
     fn update_membership(&mut self, partition: &Arc<BFCP>) {
+        // Identity check: same Arc pointer → bitmaps already reflect this partition.
+        let new_ptr = Arc::as_ptr(partition);
+        if let Some(prev) = &self.last_membership_partition
+            && Arc::as_ptr(prev) == new_ptr
+        {
+            return;
+        }
+
         // Build bitmaps for each region based on token ranges.
         // This is a simplified version — real implementation would use
         // actual token indices from ScreeningPruner results.
@@ -170,6 +189,7 @@ impl BfcpLshCms {
             offset += region.token_count as u32;
         }
         self.membership = RoaringMembership::from_bitmaps(bitmaps);
+        self.last_membership_partition = Some(Arc::clone(partition));
     }
 }
 
@@ -179,6 +199,7 @@ impl BfcpLshCms {
 mod tests {
     use super::*;
     use crate::pruners::bfcf_types::BorelRegion;
+    use crate::pruners::bfcp_region_cache::blake3_logit_hash;
 
     /// Helper: create a BFCP with given token counts per label.
     fn make_partition(accept: usize, reject: usize, maybe: usize) -> BFCP {

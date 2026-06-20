@@ -163,17 +163,30 @@ impl BfcpLfuShard {
         logits: &[f32],
         mut compute_fn: impl FnMut(&[f32]) -> BFCP,
     ) -> Arc<BFCP> {
+        self.process_with_hash(logits, &mut compute_fn).0
+    }
+
+    /// Like [`process`](Self::process) but also returns the BLAKE3 hash of `logits`
+    /// so callers that need the hash for downstream cache operations (e.g. tier
+    /// lookup) can avoid recomputing it (Issue 001 H-28).
+    ///
+    /// Returns `(partition, hash)`. The hash is computed exactly once per call.
+    pub fn process_with_hash(
+        &mut self,
+        logits: &[f32],
+        compute_fn: &mut impl FnMut(&[f32]) -> BFCP,
+    ) -> (Arc<BFCP>, [u8; 32]) {
         let hash = blake3_logit_hash(logits);
 
         // Try cache hit first.
         if let Some(partition) = self.cache.lookup(&hash) {
-            return partition;
+            return (partition, hash);
         }
 
         // Cache miss — compute new partition.
         let partition = Arc::new(compute_fn(logits));
         self.cache.insert(hash, Arc::clone(&partition));
-        partition
+        (partition, hash)
     }
 
     /// Like `process` but also returns shard assignments for each region.
@@ -185,10 +198,11 @@ impl BfcpLfuShard {
     pub fn process_and_shard(
         &mut self,
         logits: &[f32],
-        compute_fn: impl FnMut(&[f32]) -> BFCP,
+        mut compute_fn: impl FnMut(&[f32]) -> BFCP,
     ) -> (Arc<BFCP>, Vec<(usize, FreqTier)>) {
-        let partition = self.process(logits, compute_fn);
-        let hash = blake3_logit_hash(logits);
+        // Reuse the hash computed inside process_with_hash instead of
+        // recomputing blake3_logit_hash a second time (Issue 001 H-28).
+        let (partition, hash) = self.process_with_hash(logits, &mut compute_fn);
 
         // Derive frequency tier from cache for each region.
         let static_tier = self.cache.freq_tier(&hash).unwrap_or(FreqTier::Cold);
