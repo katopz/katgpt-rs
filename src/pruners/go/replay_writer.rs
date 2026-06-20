@@ -25,7 +25,7 @@
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::state::GoState;
 use super::types::{GoAction, GoCell};
@@ -33,7 +33,7 @@ use super::types::{GoAction, GoCell};
 // ── JsonlGoSample ──────────────────────────────────────────────
 
 /// Action type for JSONL Go samples, matching riir-gpu's `GoActionType`.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum GoActionType {
     /// Place a stone at (row, col).
@@ -72,7 +72,11 @@ impl From<&GoAction> for GoActionType {
 /// Compatible with `riir-gpu::GoGameSample` token encoding:
 /// - vocab_size = 3 + board_size² + 1
 /// - block_size = board_size² + 1 (board cells + action)
-#[derive(Clone, Debug, Serialize)]
+///
+/// Binary (postcard) serialization is supported via [`JsonlGoSample::to_bytes`] /
+/// [`JsonlGoSample::from_bytes`] and is the preferred wire format for new code
+/// (Issue 011). The JSON shape remains for the existing riir-ai JSONL pipeline.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct JsonlGoSample {
     /// Board state: `board_size * board_size` cells (0=Empty, 1=Black, 2=White).
     pub board: Vec<u8>,
@@ -89,7 +93,14 @@ pub struct JsonlGoSample {
     /// Flat indices of legal moves at this position.
     pub legal_moves: Vec<usize>,
     /// BLAKE3 hash of (board || action_flat_index) for integrity.
-    #[serde(serialize_with = "serialize_blake3_hex")]
+    ///
+    /// Wire shape: hex string in JSONL (for riir-ai loader compatibility) and
+    /// the same hex string under postcard. `serialize_with` / `deserialize_with`
+    /// keep both formats round-trippable without changing the JSONL contract.
+    #[serde(
+        serialize_with = "serialize_blake3_hex",
+        deserialize_with = "deserialize_blake3_hex"
+    )]
     pub checksum: [u8; 32],
 }
 
@@ -97,6 +108,39 @@ pub struct JsonlGoSample {
 fn serialize_blake3_hex<S: serde::Serializer>(hash: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
     let hex: String = hash.iter().map(|b| format!("{b:02x}")).collect();
     s.serialize_str(&hex)
+}
+
+/// Deserialize BLAKE3 hash from the hex string written by [`serialize_blake3_hex`].
+///
+/// Used by both JSONL and postcard so the field round-trips identically across
+/// both formats (Issue 011).
+fn deserialize_blake3_hex<'de, D: serde::Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
+    use serde::de::Error;
+    let hex = String::deserialize(d)?;
+    if hex.len() != 64 {
+        return Err(D::Error::custom(format!(
+            "blake3 hex must be 64 chars, got {}",
+            hex.len()
+        )));
+    }
+    let mut out = [0u8; 32];
+    let bytes = hex.as_bytes();
+    for i in 0..32 {
+        let hi = hex_nibble(bytes[i * 2]).map_err(D::Error::custom)?;
+        let lo = hex_nibble(bytes[i * 2 + 1]).map_err(D::Error::custom)?;
+        out[i] = (hi << 4) | lo;
+    }
+    Ok(out)
+}
+
+/// Decode a single hex ASCII byte to its nibble value.
+fn hex_nibble(b: u8) -> Result<u8, &'static str> {
+    match b {
+        b'0'..=b'9' => Ok(b - b'0'),
+        b'a'..=b'f' => Ok(b - b'a' + 10),
+        b'A'..=b'F' => Ok(b - b'A' + 10),
+        _ => Err("invalid hex character in blake3 checksum"),
+    }
 }
 
 impl JsonlGoSample {
@@ -152,6 +196,103 @@ impl JsonlGoSample {
         let block_size = board_size * board_size + 1;
         (vocab_size, block_size)
     }
+
+    /// Serialize to binary (postcard). Zero-copy friendly.
+    ///
+    /// Matches the pattern from `src/pruners/bomber/replay.rs` (Issue 011).
+    /// Prefer this over `serde_json::to_string` for new writers.
+    ///
+    /// Routes through [`JsonlGoSampleBin`] because (a) postcard cannot serialize
+    /// the internally-tagged `GoActionType` (`#[serde(tag = "type")]`) used for
+    /// the JSONL shape, and (b) the binary shadow stores `checksum` as raw
+    /// `[u8; 32]` (32 bytes) instead of a hex string (64 bytes).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let bin = JsonlGoSampleBin::from(self);
+        postcard::to_allocvec(&bin).unwrap_or_default()
+    }
+
+    /// Deserialize from binary (postcard).
+    pub fn from_bytes(data: &[u8]) -> Result<Self, postcard::Error> {
+        let bin: JsonlGoSampleBin = postcard::from_bytes(data)?;
+        Ok(Self::from(bin))
+    }
+}
+
+// ── Binary (postcard) shadow types ─────────────────────────────
+//
+// `JsonlGoSample` uses `#[serde(tag = "type")]` on `GoActionType` and a
+// hex-string `serialize_with` / `deserialize_with` on `checksum` for the
+// human-readable JSONL consumed by the riir-ai training pipeline. Postcard
+// returns `WontImplement` for internally-tagged enums, so the binary path
+// routes through these externally-tagged (postcard-native) shadows. The
+// checksum is stored as raw bytes (compact, not hex).
+
+/// Postcard-native action variant (externally tagged — postcard's default).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+enum GoActionTypeBin {
+    Place { row: usize, col: usize },
+    Pass,
+}
+
+impl From<&GoActionType> for GoActionTypeBin {
+    fn from(a: &GoActionType) -> Self {
+        match a {
+            GoActionType::Place { row, col } => Self::Place { row: *row, col: *col },
+            GoActionType::Pass => Self::Pass,
+        }
+    }
+}
+
+impl From<GoActionTypeBin> for GoActionType {
+    fn from(a: GoActionTypeBin) -> Self {
+        match a {
+            GoActionTypeBin::Place { row, col } => Self::Place { row, col },
+            GoActionTypeBin::Pass => Self::Pass,
+        }
+    }
+}
+
+/// Postcard-native Go sample envelope. `checksum` is raw `[u8; 32]` (no hex).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+struct JsonlGoSampleBin {
+    board: Vec<u8>,
+    board_size: usize,
+    action: GoActionTypeBin,
+    player: u8,
+    quality: f32,
+    move_number: u32,
+    legal_moves: Vec<usize>,
+    checksum: [u8; 32],
+}
+
+impl From<&JsonlGoSample> for JsonlGoSampleBin {
+    fn from(s: &JsonlGoSample) -> Self {
+        Self {
+            board: s.board.clone(),
+            board_size: s.board_size,
+            action: GoActionTypeBin::from(&s.action),
+            player: s.player,
+            quality: s.quality,
+            move_number: s.move_number,
+            legal_moves: s.legal_moves.clone(),
+            checksum: s.checksum,
+        }
+    }
+}
+
+impl From<JsonlGoSampleBin> for JsonlGoSample {
+    fn from(s: JsonlGoSampleBin) -> Self {
+        Self {
+            board: s.board,
+            board_size: s.board_size,
+            action: GoActionType::from(s.action),
+            player: s.player,
+            quality: s.quality,
+            move_number: s.move_number,
+            legal_moves: s.legal_moves,
+            checksum: s.checksum,
+        }
+    }
 }
 
 // ── GoReplayWriter ─────────────────────────────────────────────
@@ -204,6 +345,14 @@ impl GoReplayWriter {
     /// Write one sample as a JSON line.
     ///
     /// Each call appends one JSON object followed by newline.
+    ///
+    /// Deprecated: prefer [`GoReplayWriter::write_sample_binary`] for zero-copy
+    /// binary records. The JSON path remains only because the riir-ai training
+    /// pipeline still consumes JSONL; it will be removed once that pipeline
+    /// migrates (Issue 011).
+    #[deprecated(
+        note = "use write_sample_binary; JSON removed when riir-ai training pipeline migrates"
+    )]
     pub fn write_sample(&mut self, sample: &JsonlGoSample) -> std::io::Result<()> {
         // Validate board dimensions match writer config
         debug_assert_eq!(
@@ -216,6 +365,26 @@ impl GoReplayWriter {
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         self.writer.write_all(json.as_bytes())?;
         self.writer.write_all(b"\n")?;
+        self.sample_count += 1;
+        Ok(())
+    }
+
+    /// Write one sample as a length-prefixed binary record (no JSON).
+    ///
+    /// Layout per record: `len(4 LE) + postcard payload`. Matches the pattern
+    /// from `src/pruners/bomber/replay.rs` (Issue 011).
+    pub fn write_sample_binary(&mut self, sample: &JsonlGoSample) -> std::io::Result<()> {
+        // Validate board dimensions match writer config
+        debug_assert_eq!(
+            sample.board_size, self.board_size,
+            "Sample board_size {} != writer board_size {}",
+            sample.board_size, self.board_size
+        );
+
+        let payload = sample.to_bytes();
+        let len = payload.len() as u32;
+        self.writer.write_all(&len.to_le_bytes())?;
+        self.writer.write_all(&payload)?;
         self.sample_count += 1;
         Ok(())
     }
@@ -280,16 +449,56 @@ impl GameSampleCollector {
     /// (i.e., only winning player's moves).
     ///
     /// Returns the number of samples written.
+    ///
+    /// Deprecated: prefer [`GameSampleCollector::finalize_and_write_binary`] for
+    /// zero-copy binary records. The JSONL path remains for the existing riir-ai
+    /// training pipeline (Issue 011).
+    #[deprecated(
+        note = "use finalize_and_write_binary; JSON removed when riir-ai training pipeline migrates"
+    )]
+    #[allow(deprecated)] // intentionally routes through the deprecated JSON writer
     pub fn finalize_and_write(
         mut self,
         winner: Option<GoCell>,
         writer: &mut GoReplayWriter,
         quality_threshold: f32,
     ) -> std::io::Result<usize> {
+        Self::finalize_inner(&mut self.samples, winner, quality_threshold, |w, s| {
+            w.write_sample(s)
+        }, writer)
+    }
+
+    /// Finalize all samples with winner quality and write as length-prefixed
+    /// binary records via [`GoReplayWriter::write_sample_binary`].
+    ///
+    /// Same quality semantics as [`Self::finalize_and_write`]. Preferred for new
+    /// code (Issue 011).
+    pub fn finalize_and_write_binary(
+        mut self,
+        winner: Option<GoCell>,
+        writer: &mut GoReplayWriter,
+        quality_threshold: f32,
+    ) -> std::io::Result<usize> {
+        Self::finalize_inner(&mut self.samples, winner, quality_threshold, |w, s| {
+            w.write_sample_binary(s)
+        }, writer)
+    }
+
+    /// Shared finalize loop — applies quality assignment + threshold filter,
+    /// then dispatches each sample to `emit`.
+    ///
+    /// Factored out so the JSON and binary paths can't drift in semantics.
+    fn finalize_inner(
+        samples: &mut Vec<(JsonlGoSample, u8)>,
+        winner: Option<GoCell>,
+        quality_threshold: f32,
+        mut emit: impl FnMut(&mut GoReplayWriter, &JsonlGoSample) -> std::io::Result<()>,
+        writer: &mut GoReplayWriter,
+    ) -> std::io::Result<usize> {
         let winner_id = winner.map(|c| c.player_id());
 
         let mut written = 0usize;
-        for (mut sample, player_id) in self.samples.drain(..) {
+        for (mut sample, player_id) in samples.drain(..) {
             // Assign quality: 1.0 if this player won, 0.0 if lost, 0.5 if draw
             sample.quality = match winner_id {
                 Some(wid) if wid == player_id => 1.0,
@@ -302,7 +511,7 @@ impl GameSampleCollector {
                 continue;
             }
 
-            writer.write_sample(&sample)?;
+            emit(writer, &sample)?;
             written += 1;
         }
 
@@ -323,6 +532,7 @@ impl GameSampleCollector {
 // ── Tests ──────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(deprecated)] // JSONL path is intentionally exercised until riir-ai migrates (Issue 011)
 mod tests {
     use super::*;
     use std::io::BufRead;
@@ -621,5 +831,175 @@ mod tests {
             s1.checksum, s3.checksum,
             "Different actions must produce different checksums"
         );
+    }
+
+    // ── Binary path (Issue 011) ──────────────────────────────────
+
+    #[test]
+    fn sample_binary_roundtrip_matches_original() {
+        let state = GoState::new(9);
+        let action = GoAction::Place(4, 4);
+        let original = JsonlGoSample::from_state(&state, &action, 1, 1.0);
+
+        let bytes = original.to_bytes();
+        assert!(!bytes.is_empty(), "to_bytes must produce output");
+
+        let restored = JsonlGoSample::from_bytes(&bytes)
+            .expect("postcard round-trip should succeed");
+
+        // Every field must round-trip exactly.
+        assert_eq!(restored.board, original.board);
+        assert_eq!(restored.board_size, original.board_size);
+        assert_eq!(restored.action, original.action);
+        assert_eq!(restored.player, original.player);
+        assert_eq!(restored.quality, original.quality);
+        assert_eq!(restored.move_number, original.move_number);
+        assert_eq!(restored.legal_moves, original.legal_moves);
+        assert_eq!(
+            restored.checksum, original.checksum,
+            "BLAKE3 checksum must round-trip through postcard hex-string codec"
+        );
+        assert_eq!(restored, original, "full struct equality after binary round-trip");
+    }
+
+    #[test]
+    fn writer_binary_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.bin");
+
+        let state = GoState::new(9);
+        let action = GoAction::Place(4, 4);
+        let sample = JsonlGoSample::from_state(&state, &action, 1, 1.0);
+
+        {
+            let mut writer = GoReplayWriter::create(&path, 9).unwrap();
+            writer.write_sample_binary(&sample).unwrap();
+            writer.write_sample_binary(&sample).unwrap();
+            writer.flush().unwrap();
+            assert_eq!(writer.sample_count(), 2);
+        }
+
+        // Read back length-prefixed binary records.
+        let contents = std::fs::read(&path).unwrap();
+        let mut offset = 0usize;
+        let mut count = 0usize;
+        while offset + 4 <= contents.len() {
+            let len = u32::from_le_bytes(
+                contents[offset..offset + 4].try_into().unwrap(),
+            ) as usize;
+            offset += 4;
+            let restored = JsonlGoSample::from_bytes(&contents[offset..offset + len])
+                .expect("each record must deserialize");
+            assert_eq!(restored, sample, "binary record must round-trip identically");
+            offset += len;
+            count += 1;
+        }
+        assert_eq!(count, 2, "should read exactly two records");
+    }
+
+    #[test]
+    fn collector_finalize_binary_winner_filter() {
+        let state = GoState::new(9);
+
+        let mut collector = GameSampleCollector::new(9);
+        // Move 1: Black plays (4,4)
+        collector.record_move(&state, &GoAction::Place(4, 4), 1);
+        // White's turn, plays (0,0)
+        let mut state2 = state.clone();
+        state2.play_move(4, 4);
+        collector.record_move(&state2, &GoAction::Place(0, 0), 2);
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("filtered.bin");
+        let mut writer = GoReplayWriter::create(&path, 9).unwrap();
+
+        // Black wins, threshold 0.5 → only Black's move written.
+        let written = collector
+            .finalize_and_write_binary(Some(GoCell::Black), &mut writer, 0.5)
+            .unwrap();
+        writer.flush().unwrap();
+        assert_eq!(written, 1);
+
+        // Read back the single binary record and verify quality=1.0, player=Black.
+        let contents = std::fs::read(&path).unwrap();
+        assert!(contents.len() >= 4, "file must contain at least one length prefix");
+        let len = u32::from_le_bytes(contents[0..4].try_into().unwrap()) as usize;
+        let restored = JsonlGoSample::from_bytes(&contents[4..4 + len]).unwrap();
+        assert!((restored.quality - 1.0).abs() < f32::EPSILON);
+        assert_eq!(restored.player, 1); // Black
+    }
+
+    /// Same shape as `self_play_jsonl_roundtrip` but writes binary records and
+    /// reads them back, validating that every sample round-trips through postcard.
+    #[test]
+    fn self_play_binary_roundtrip() {
+        let board_size = 9;
+        let num_games = 10;
+        let max_moves = board_size * board_size * 3;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("roundtrip.bin");
+
+        let mut rng = fastrand::Rng::with_seed(12345);
+        let mut writer = GoReplayWriter::create(&path, board_size).unwrap();
+
+        let mut total_samples = 0usize;
+        for _ in 0..num_games {
+            let mut state = GoState::new(board_size);
+            let mut collector = GameSampleCollector::new(board_size);
+            let mut moves_played = 0usize;
+
+            while !state.is_terminal() && moves_played < max_moves {
+                let legal_moves = state.legal_moves();
+                if legal_moves.is_empty() {
+                    collector.record_move(&state, &GoAction::Pass, moves_played as u32 + 1);
+                    state.play_pass();
+                    moves_played += 1;
+                    continue;
+                }
+                let (r, c) = legal_moves[rng.usize(..legal_moves.len())];
+                let action = GoAction::Place(r, c);
+                collector.record_move(&state, &action, moves_played as u32 + 1);
+                state.play_move(r, c);
+                moves_played += 1;
+            }
+
+            if !state.is_terminal() {
+                state.play_pass();
+                state.play_pass();
+            }
+
+            let winner = state.get_winner();
+            let written = collector
+                .finalize_and_write_binary(winner, &mut writer, 0.0)
+                .unwrap();
+            total_samples += written;
+        }
+        writer.flush().unwrap();
+
+        assert!(total_samples > 0, "should have written samples");
+
+        // Read every length-prefixed record back and validate shape.
+        let contents = std::fs::read(&path).unwrap();
+        let mut offset = 0usize;
+        let mut read = 0usize;
+        while offset + 4 <= contents.len() {
+            let len = u32::from_le_bytes(
+                contents[offset..offset + 4].try_into().unwrap(),
+            ) as usize;
+            offset += 4;
+            let s = JsonlGoSample::from_bytes(&contents[offset..offset + len])
+                .expect("each binary record must deserialize");
+            offset += len;
+            read += 1;
+
+            assert_eq!(s.board.len(), board_size * board_size);
+            assert!(
+                matches!(s.quality, 0.0 | 0.5 | 1.0),
+                "quality should be binary or draw: {}",
+                s.quality
+            );
+        }
+        assert_eq!(read, total_samples, "record count must match samples written");
     }
 }
