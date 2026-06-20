@@ -45,67 +45,10 @@ const HL_PER_MOVE_ALPHA: f32 = 1.0;
 const HL_DELTA_AMPLIFICATION: f32 = 10.0;
 
 // ── Board Helpers ──────────────────────────────────────────────
-
-/// Compute 4-connected neighbor flat indices for a board position.
-#[inline]
-fn board_neighbors(idx: usize, size: usize) -> Vec<usize> {
-    let row = idx / size;
-    let col = idx % size;
-    let mut result = Vec::with_capacity(4);
-    if row > 0 {
-        result.push(idx - size);
-    }
-    if row + 1 < size {
-        result.push(idx + size);
-    }
-    if col > 0 {
-        result.push(idx - 1);
-    }
-    if col + 1 < size {
-        result.push(idx + 1);
-    }
-    result
-}
-
-/// BFS flood fill to find a connected group and its liberties.
-///
-/// Returns `(group_indices, liberty_indices)`. Both empty if `board[start]` is not a stone.
-fn flood_group(board: &[GoCell], start: usize, size: usize) -> (Vec<usize>, Vec<usize>) {
-    let color = board[start];
-    if !color.is_stone() {
-        return (Vec::new(), Vec::new());
-    }
-
-    let total = size * size;
-    let mut group = Vec::new();
-    let mut liberties = Vec::new();
-    let mut visited = vec![false; total];
-    let mut stack = vec![start];
-
-    while let Some(pos) = stack.pop() {
-        if visited[pos] {
-            continue;
-        }
-        visited[pos] = true;
-
-        match board[pos] {
-            c if c == color => {
-                group.push(pos);
-                for n in board_neighbors(pos, size) {
-                    if !visited[n] {
-                        stack.push(n);
-                    }
-                }
-            }
-            GoCell::Empty => {
-                liberties.push(pos);
-            }
-            _ => {} // Opponent boundary
-        }
-    }
-
-    (group, liberties)
-}
+// Issue 001 H-20: `board_neighbors` and `flood_group` were copy-pasted across
+// players.rs, g_zero_player.rs, and autoresearch.rs. Now imported from
+// `go::utils` so all three call sites share one implementation.
+use super::utils::{board_neighbors, flood_group};
 
 /// Stones captured by `me` between two states (before → after).
 #[inline]

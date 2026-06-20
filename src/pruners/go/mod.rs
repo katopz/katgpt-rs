@@ -23,6 +23,7 @@ pub mod replay_writer;
 pub mod state;
 pub mod tournament;
 pub mod types;
+pub mod utils;
 
 #[cfg(feature = "event_log")]
 pub mod event_log_player;
