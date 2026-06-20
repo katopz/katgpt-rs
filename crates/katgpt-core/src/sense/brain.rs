@@ -386,6 +386,18 @@ mod tests {
     use crate::sense::octree::{KgEmbedding, SenseOctreeBuilder};
     use crate::types::SenseKind;
 
+    /// Layout regression guard: SenseOverride must stay at 136 bytes (no padding).
+    /// Field reorder must keep this pinned — bump only if MAX_OVERRIDES or
+    /// SENSE_KIND_COUNT changes, then re-audit the layout.
+    #[test]
+    fn sense_override_layout_is_compact() {
+        assert_eq!(
+            std::mem::size_of::<SenseOverride>(),
+            136,
+            "SenseOverride must stay at 136 bytes; padding regressed"
+        );
+    }
+
     fn make_fighter_module() -> SenseModule {
         let builder = SenseOctreeBuilder::new(3);
         let emb = KgEmbedding {
