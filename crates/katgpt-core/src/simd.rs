@@ -514,14 +514,35 @@ pub fn simd_dot_f16_f32(w_f16: &[half::f16], x_f32: &[f32], len: usize) -> f32 {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
-    let mut sum = 0.0f32;
-    for i in 0..len {
+    // 4 independent accumulators — mirrors `scalar_dot_f32` (4-wide unroll)
+    // and the NEON `neon_dot_f16_f32` path (also 4 accs). Single-accumulator
+    // dot is FMA-latency-bound; the f16→f32 widening is cheap (1 cycle) and
+    // not the bottleneck. mul_add preserves single-rounding FMA parity with
+    // the NEON path's vfmaq_f32 lane semantics.
+    let mut acc = [0.0f32; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
         unsafe {
-            // FMA: sum = w[i]*x[i] + sum (single rounding, matches the NEON path's vfmaq_f32).
-            sum = (*w.get_unchecked(i))
+            acc[0] = (*w.get_unchecked(i)).to_f32().mul_add(*x.get_unchecked(i), acc[0]);
+            acc[1] = (*w.get_unchecked(i + 1))
                 .to_f32()
-                .mul_add(*x.get_unchecked(i), sum);
+                .mul_add(*x.get_unchecked(i + 1), acc[1]);
+            acc[2] = (*w.get_unchecked(i + 2))
+                .to_f32()
+                .mul_add(*x.get_unchecked(i + 2), acc[2]);
+            acc[3] = (*w.get_unchecked(i + 3))
+                .to_f32()
+                .mul_add(*x.get_unchecked(i + 3), acc[3]);
         }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f32>();
+    while i < len {
+        unsafe {
+            sum = (*w.get_unchecked(i)).to_f32().mul_add(*x.get_unchecked(i), sum);
+        }
+        i += 1;
     }
     sum
 }
@@ -1493,9 +1514,28 @@ fn scalar_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_sum_f32(x: &[f32]) -> f32 {
-    let mut sum = 0.0f32;
-    for &v in x {
-        sum += v;
+    // 4 independent accumulators — addition is latency-bound on a single
+    // accumulator (~3 cycles/iter on most FPUs). Unrolling 4-wide keeps the
+    // adder pipeline full and helps LLVM auto-vectorize on targets without
+    // dedicated f32 SIMD.
+    let mut acc = [0.0f32; 4];
+    let chunks = x.len() / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            acc[0] += *x.get_unchecked(i);
+            acc[1] += *x.get_unchecked(i + 1);
+            acc[2] += *x.get_unchecked(i + 2);
+            acc[3] += *x.get_unchecked(i + 3);
+        }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f32>();
+    while i < x.len() {
+        unsafe {
+            sum += *x.get_unchecked(i);
+        }
+        i += 1;
     }
     sum
 }
@@ -3798,13 +3838,31 @@ pub fn simd_sum_sq(x: &[f32], len: usize) -> f32 {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
-    let mut sum = 0.0f32;
-    for i in 0..len {
+    // 4 independent accumulators — FMA latency bound on a single accumulator.
+    // mul_add preserves single-rounding parity with the SIMD path.
+    let mut acc = [0.0f32; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            let v0 = *x.get_unchecked(i);
+            let v1 = *x.get_unchecked(i + 1);
+            let v2 = *x.get_unchecked(i + 2);
+            let v3 = *x.get_unchecked(i + 3);
+            acc[0] = v0.mul_add(v0, acc[0]);
+            acc[1] = v1.mul_add(v1, acc[1]);
+            acc[2] = v2.mul_add(v2, acc[2]);
+            acc[3] = v3.mul_add(v3, acc[3]);
+        }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f32>();
+    while i < len {
         unsafe {
             let v = *x.get_unchecked(i);
-            // FMA: sum = v * v + sum (single rounding, matches SIMD path).
             sum = v.mul_add(v, sum);
         }
+        i += 1;
     }
     sum
 }
@@ -3925,7 +3983,27 @@ pub fn simd_sum_abs_f32(x: &[f32]) -> f32 {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
-    x.iter().map(|v| v.abs()).sum()
+    // 4 independent accumulators — addition latency bound on a single accumulator.
+    let mut acc = [0.0f32; 4];
+    let chunks = x.len() / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            acc[0] += (*x.get_unchecked(i)).abs();
+            acc[1] += (*x.get_unchecked(i + 1)).abs();
+            acc[2] += (*x.get_unchecked(i + 2)).abs();
+            acc[3] += (*x.get_unchecked(i + 3)).abs();
+        }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f32>();
+    while i < x.len() {
+        unsafe {
+            sum += (*x.get_unchecked(i)).abs();
+        }
+        i += 1;
+    }
+    sum
 }
 
 #[cfg(target_arch = "aarch64")]
@@ -4053,13 +4131,31 @@ pub fn simd_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 #[inline(always)]
 #[allow(dead_code)]
 fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
-    let mut sum = 0.0f32;
-    for i in 0..len {
+    // 4 independent accumulators — FMA latency bound on a single accumulator.
+    // mul_add preserves single-rounding parity with the SIMD path.
+    let mut acc = [0.0f32; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            let d0 = *a.get_unchecked(i) - *b.get_unchecked(i);
+            let d1 = *a.get_unchecked(i + 1) - *b.get_unchecked(i + 1);
+            let d2 = *a.get_unchecked(i + 2) - *b.get_unchecked(i + 2);
+            let d3 = *a.get_unchecked(i + 3) - *b.get_unchecked(i + 3);
+            acc[0] = d0.mul_add(d0, acc[0]);
+            acc[1] = d1.mul_add(d1, acc[1]);
+            acc[2] = d2.mul_add(d2, acc[2]);
+            acc[3] = d3.mul_add(d3, acc[3]);
+        }
+        i += 4;
+    }
+    let mut sum = acc.iter().sum::<f32>();
+    while i < len {
         unsafe {
             let diff = *a.get_unchecked(i) - *b.get_unchecked(i);
-            // FMA: sum = diff * diff + sum (single rounding, matches SIMD path).
             sum = diff.mul_add(diff, sum);
         }
+        i += 1;
     }
     sum
 }
