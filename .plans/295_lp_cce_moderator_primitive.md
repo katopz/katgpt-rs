@@ -1,0 +1,180 @@
+# Plan 295: LP-CCE Moderator Primitive — Generic LP + Primal-Dual Iterator + External Regret
+
+**Date:** 2026-06-20
+**Research:** [`katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md`](../.research/274_Optimal_CCE_Moderator_LP_No_Regret.md)
+**Source paper:** [arxiv 2606.20062](https://arxiv.org/pdf/2606.20062) — Campi, Cannerozzi, Tzouanas — Optimal CCEs in MFGs via LP + No-Regret Learning
+**Target:** `katgpt-rs/src/cce/` (new module) + Cargo feature `cce_moderator`
+**Status:** Active — Phase 1 (unblocking skeleton) pending
+
+---
+
+## Goal
+
+Ship three generic, game-agnostic primitives that implement the LP-CCE formulation and primal-dual learning algorithm from Campi et al. 2026:
+
+1. **`CceLp<N, A>`** — finite occupation-measure LP solver: given a finite state space `S` of size `N`, action space of size `A`, deviation class `D`, transition kernel `P`, payoff tensor `R`, and moderator objective tensor `R₀`, solve the LP for the optimal LP-CCE `ρ* ∈ P(S × A)`.
+2. **`ExternalRegret<D>`** — closed-form external-regret functional on a finite deviation class: `ER(ρ) = max_{κ ∈ D} (Γ[ρ] − Γ_dev[ρ](κ))`, plus uniqueness check (Assumption 6.2).
+3. **`CcePrimalDual`** — Bregman-regularized primal-dual iterator with `O(N⁻¹ᐟ²)` averaged-iterate convergence: primal `argmin_{ρ ∈ M} Γ₀(ρ) + λⁿ·ER(ρ) + ½·Dψ(ρ, ρⁿ)`, dual `λⁿ⁺¹ = max(0, λⁿ + (1/√N)·ER(ρⁿ⁺¹))`.
+
+**GOAT gate:** `cce_moderator` feature flag, default-off. Promote to consideration for default-on only after G1 (CCE ≥ Nash) and G2 (primal-dual convergence at `O(N⁻¹ᐟ²)`) PASS with benchmark evidence. Demote `PayoffTable<N>::nash_equilibrium` if CCE wins on a head-to-head Pareto-dominance benchmark.
+
+This is the **public open primitive** for Research 274's Super-GOAT verdict. The private selling-point guide is `riir-ai/.research/143_*`; the private runtime plan is `riir-ai/.plans/325_*`. **No game semantics in this plan** — pure generic math, MIT-licensed, anyone can adopt.
+
+---
+
+## Phase 1 — Unblocking Skeleton (CORE)
+
+### Tasks
+
+- [ ] **T1.1** Create `katgpt-rs/src/cce/mod.rs` with module declaration. Add `cce_moderator` feature to `Cargo.toml` `[features]` section, default-off. Verify `cargo build --features cce_moderator` succeeds with empty module.
+- [ ] **T1.2** Define core types in `katgpt-rs/src/cce/types.rs`:
+  - `pub struct StateSpace<const N: usize>` — marker for finite state space of size `N`
+  - `pub struct ActionSpace<const A: usize>` — marker for finite action space of size `A`
+  - `pub struct OccupationMeasure<const N: usize, const A: usize>` — `Vec<f32>` of size `N·A`, normalized to sum to 1 (invariant checked on construction)
+  - `pub trait DeviationClass` — `fn deviations(&self) -> &[Deviation]; fn apply(&self, κ: &Deviation, ρ: &OccupationMeasure) -> OccupationMeasure`
+  - `pub struct Deviation { id: u32, kernel: [[f32; A]; N] }` — a fixed alternative policy `κ : S → P(A)`
+  - `pub trait PayoffTensor<const N: usize, const A: usize>` — `fn gamma(&self, ρ: &OccupationMeasure) -> f32; fn gamma_dev(&self, ρ: &OccupationMeasure, κ: &Deviation) -> f32; fn gamma0(&self, ρ: &OccupationMeasure) -> f32`
+- [ ] **T1.3** Implement `ExternalRegret<D: DeviationClass>` in `katgpt-rs/src/cce/external_regret.rs`:
+  - `pub fn er(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor) -> f32` — returns `max_κ (Γ[ρ] − Γ_dev[ρ](κ))`
+  - `pub fn best_deviation(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor) -> Deviation` — returns argmax_κ
+  - `pub fn is_unique_maximizer(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor, ε: f32) -> bool` — Assumption 6.2 check: top-2 gap > ε
+  - `pub fn linear_derivative(&self, ρ: &OccupationMeasure, m_idx: usize, d: &D, p: &impl PayoffTensor) -> f32` — `δER/δρ = F[m](m) − F[m](κ*(ρ))` per Lemma 6.5
+- [ ] **T1.4** Add unit tests in `katgpt-rs/src/cce/external_regret.rs`:
+  - `test_er_zero_on_nash` — for `ρ = δ_(m⋆, m⋆)` (Dirac on Nash), `ER = 0`
+  - `test_er_positive_off_nash` — perturb `ρ`, `ER > 0`
+  - `test_unique_maximizer_strictly_convex` — for a strictly convex deviation problem, uniqueness holds
+  - `test_linear_derivative_matches_fd` — finite-difference check vs analytic
+
+**Phase 1 exit:** `cargo test --features cce_moderator` passes; `ExternalRegret` is correct on the 3 canonical examples (RPS, chicken, emission-abatement discrete).
+
+---
+
+## Phase 2 — LP-CCE Solver + Primal-Dual Iterator
+
+### Tasks
+
+- [ ] **T2.1** Implement `CceLp<N, A>` in `katgpt-rs/src/cce/lp.rs`:
+  - `pub fn solve(&self, p: &impl PayoffTensor, d: &D) -> Result<OccupationMeasure, CceLpError>` — solves the LP via Gaussian elimination on the active-set form (small N ≤ 16). Variables: `N·A` occupation-measure entries. Constraints: (i) sum = 1 (probability), (ii) consistency `marginal_A(ρ) = π_recommendation(ρ)`, (iii) regret inequalities `Γ[ρ] ≤ Γ_dev[ρ](κ)` for all `κ ∈ D`, (iv) non-negativity. Objective: minimize `Γ₀(ρ)`.
+  - `pub fn is_cce(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor, ε: f32) -> bool` — verification: `ER(ρ) ≤ ε`
+  - **No external LP solver dep.** Implement active-set simplex in-house (small N, no need for HiGHS/CLP). ~300 LOC.
+- [ ] **T2.2** Implement `CcePrimalDual` in `katgpt-rs/src/cce/primal_dual.rs`:
+  - `pub struct CcePrimalDual { lambda: f32, rho: OccupationMeasure, bregman_potential: BregmanPotential, n_iter: usize }`
+  - `pub fn step(&mut self, d: &D, p: &impl PayoffTensor) -> StepReport` — one primal-dual iteration per Algorithm 1
+  - `pub fn run(&mut self, d: &D, p: &impl PayoffTensor, n_steps: usize) -> ConvergenceReport` — averaged iterates + regret history
+  - Bregman potential: start with Euclidean `ψ(ρ) = ½·‖ρ‖²` (gives projection-style updates). Option for KL-divergence `ψ(ρ) = Σ ρ·log ρ` later (Plan 295 follow-up).
+  - Primal: closed-form argmin over the simplex (Euclidean potential → projected gradient; KL → entropic mirror descent).
+  - Dual: `λⁿ⁺¹ = max(0, λⁿ + (1/√N)·ER(ρⁿ⁺¹))` — per Algorithm 1.
+- [ ] **T2.3** Add Bregman divergence trait + Euclidean impl in `katgpt-rs/src/cce/bregman.rs`:
+  - `pub trait BregmanPotential { fn divergence(&self, ρ: &OccupationMeasure, σ: &OccupationMeasure) -> f32; fn gradient(&self, ρ: &OccupationMeasure) -> Vec<f32>; }`
+  - `pub struct Euclidean;` — `Dψ(ρ, σ) = ½·‖ρ − σ‖²`
+  - `pub struct Kl;` — `Dψ(ρ, σ) = Σ ρ·log(ρ/σ)` (Phase 3 follow-up)
+- [ ] **T2.4** **G2 — Primal-dual convergence test** in `katgpt-rs/tests/cce_convergence.rs`:
+  - Construct the emission-abatement discrete example (paper §8.2) with `N = 4` states, `A = 4` actions, `D = 4` deviations.
+  - Run `CcePrimalDual::run` for `N_steps = 10⁴`.
+  - Assert: `|Γ₀(ρ̄ᴺ) − Γ₀(ρ⋆_LP)| < 0.01` where `ρ⋆_LP` is `CceLp::solve`'s solution.
+  - Assert: `ER(ρ̄ᴺ) ≤ 0.01` (within Slater tolerance).
+  - Plot log-log convergence (gap vs N_steps); assert slope ≈ −0.5 ± 0.1.
+
+**Phase 2 exit:** `cargo test --features cce_moderator --test cce_convergence` passes; G2 PASS documented in `katgpt-rs/.benchmarks/029_cce_convergence.md`.
+
+---
+
+## Phase 3 — Pareto-Dominance Benchmark + Example
+
+### Tasks
+
+- [ ] **T3.1** **G1 — CCE ≥ Nash benchmark** in `katgpt-rs/tests/cce_vs_nash.rs`:
+  - Three canonical games: RPS (no Pareto gain, CCE = Nash), chicken (Pareto-dominant CCE exists), battle-of-sexes (Pareto-dominant CCE exists).
+  - For each: solve via `CceLp::solve` (with `Γ₀ = sum of player payoffs`); solve via `PayoffTable<N>::nash_equilibrium` (already shipped in `riir-games/src/payoff.rs`).
+  - Assert: `Γ₀(ρ_CCE) ≥ Γ₀(ρ_Nash)` (with `≥` because we maximize welfare, not minimize cost); for chicken and BoS, strict `>` by ≥ 5%.
+- [ ] **T3.2** **Example: `cce_demo.rs`** in `katgpt-rs/examples/cce_demo.rs`:
+  - Three-section demo: (1) CCE vs Nash on chicken; (2) primal-dual convergence on emission-abatement; (3) **designer steering** — same game, two different `Γ₀` (welfare-max vs min-cost) → two different optimal CCEs. This is the headline selling-point demo from the paper §8.2.
+- [ ] **T3.3** Document in `katgpt-rs/.docs/cce_moderator.md`:
+  - API reference for `CceLp`, `ExternalRegret`, `CcePrimalDual`
+  - Worked example (chicken game) with numbers
+  - Performance numbers from G1 + G2
+  - Cross-link to `riir-ai/.research/143_*` for the game-specific selling point
+
+**Phase 3 exit:** `cargo run --example cce_demo --features cce_moderator` runs and prints the three sections; G1 PASS documented.
+
+---
+
+## Phase 4 — GOAT Gate + Promotion Decision
+
+### Tasks
+
+- [ ] **T4.1** Aggregate G1 + G2 + G3 benchmark evidence into `katgpt-rs/.benchmarks/029_cce_moderator_goat.md`. Verdict: PASS / FAIL.
+- [ ] **T4.2** If G1 + G2 PASS: promote `cce_moderator` to consideration for default-on. Add a note in `katgpt-rs/README.md` Feature Showcase section (public-facing adoption hook).
+- [ ] **T4.3** If `PayoffTable<N>::nash_equilibrium` (in `riir-games/src/payoff.rs`) loses head-to-head on the G1 games: **demote it** by adding a doc comment pointing users to `CceLp` for general-sum games. Keep `nash_equilibrium` for zero-sum (where Nash = CCE).
+- [ ] **T4.4** Cross-link `katgpt-rs/README.md` Feature Showcase to mention `cce_moderator`. Cross-link `riir-ai/.research/143_*` and `riir-ai/.plans/325_*` as the private runtime follow-ups.
+
+**Phase 4 exit:** GOAT gate verdict recorded; promotion/demotion decision made; README updated.
+
+---
+
+## Validation Summary (G1–G3 in this plan; G4–G5 in Plan 325)
+
+| Gate | Target | Test file | Status |
+|------|--------|-----------|--------|
+| G1 — CCE Pareto-dominates Nash | `Γ₀(ρ_CCE) ≥ Γ₀(ρ_Nash) + 5%` on chicken + BoS | `tests/cce_vs_nash.rs` | Pending |
+| G2 — Primal-dual convergence at O(N⁻¹ᐟ²) | `|Γ₀(ρ̄ᴺ) − Γ₀(ρ⋆)| < 0.01`, `ER(ρ̄ᴺ) ≤ 0.01`, slope ≈ −0.5 | `tests/cce_convergence.rs` | Pending |
+| G3 — Designer steering demo | Two `Γ₀` → two structurally different `ρ̂` | `examples/cce_demo.rs` | Pending |
+| G4 — Crowd-scale latency (< 50µs per NPC update) | — | Plan 325 | Pending |
+| G5 — LatCal commitment bit-identical | — | Plan 325 | Pending |
+
+---
+
+## Out of Scope (→ riir-train, NOT here)
+
+- Neural-network parametrization of the recommendation policy `π_θ(a|x, ζ)` (paper §7.1). Adam gradient descent on `(φ, θ)` (paper §7.3, Algorithm 2). All training-flavored. → riir-train.
+- Smooth projection `ϕ_A(x) = c + r·tanh(x/r)` and SiLU activations — training-friendly smoothness, irrelevant for our discrete-table modelless path.
+- Fokker–Planck PDE solver — continuous-state machinery. We discretize.
+- Any GPU kernel for the LP solver — Phase 2 uses CPU active-set simplex for small N. GPU batched LP is a Phase 5+ follow-up if needed.
+
+## Out of Scope (→ riir-ai Plan 325, NOT here)
+
+- HLA-bucketed state space, zone-mood broadcast, CGSP deviation class wiring, LatCal commitment, designer `Γ₀` per game mode, latent functor fusion, ICT BranchingMask gating. All game-specific. → riir-ai Plan 325.
+
+---
+
+## File Layout
+
+```
+katgpt-rs/src/cce/
+├── mod.rs                  # Module declaration, feature gate
+├── types.rs                # StateSpace, ActionSpace, OccupationMeasure, Deviation, DeviationClass, PayoffTensor
+├── external_regret.rs      # ExternalRegret<D> + uniqueness check + linear derivative
+├── lp.rs                   # CceLp<N, A> active-set simplex LP solver
+├── primal_dual.rs          # CcePrimalDual Bregman primal-dual iterator
+└── bregman.rs              # BregmanPotential trait + Euclidean impl (+ Kl later)
+
+katgpt-rs/tests/
+├── cce_vs_nash.rs          # G1 benchmark
+└── cce_convergence.rs      # G2 benchmark
+
+katgpt-rs/examples/
+└── cce_demo.rs             # G3 demo (chicken, emission-abatement, designer steering)
+
+katgpt-rs/.benchmarks/
+├── 029_cce_convergence.md  # G2 results
+└── 029_cce_moderator_goat.md  # GOAT gate verdict
+
+katgpt-rs/.docs/
+└── cce_moderator.md        # API reference + worked example
+```
+
+Estimated total LOC: ~1500 (within AGENTS.md 3200-line file budget).
+
+---
+
+## References
+
+- Paper: [arxiv 2606.20062](https://arxiv.org/pdf/2606.20062)
+- Research: [`katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md`](../.research/274_Optimal_CCE_Moderator_LP_No_Regret.md)
+- Private guide: [`riir-ai/.research/143_Latent_CCE_Moderator_Crowd_Emergent_Coordination.md`](../../riir-ai/.research/143_Latent_CCE_Moderator_Crowd_Emergent_Coordination.md)
+- Private plan: [`riir-ai/.plans/325_latent_cce_moderator_runtime.md`](../../riir-ai/.plans/325_latent_cce_moderator_runtime.md)
+- Existing Nash solver (deviation class for 1v1 CCE): `riir-games/src/payoff.rs::PayoffTable<N>`
+- Existing OMD machinery (dual update inspiration): `katgpt-rs/src/pruners/prudent_banker.rs`
+- Existing mean-field α router (primal update inspiration): `katgpt-rs/crates/katgpt-core/src/cgsp/dual_pool.rs`
+
+**TL;DR:** Ship three generic public primitives — `CceLp<N,A>` (active-set LP solver on finite occupation measures), `ExternalRegret<D>` (closed-form external regret + uniqueness check + linear derivative), `CcePrimalDual` (Bregman primal-dual iterator with `O(N⁻¹ᐟ²)` averaged convergence). GOAT gate: G1 (CCE ≥ Nash by ≥ 5% on chicken + BoS), G2 (primal-dual convergence at slope ≈ −0.5), G3 (designer steering demo — same game, two `Γ₀`, two emergent outcomes). All modelless, MIT-licensed, no game semantics. The private selling-point binding (HLA × CGSP × LatCal × `Γ₀`) lands in riir-ai Plan 325.
