@@ -86,58 +86,113 @@ pub fn inject_sde_noise(
     sde_config: &SdeConfig,
     rng: &mut Rng,
 ) -> Vec<Vec<f32>> {
+    let mut out = Vec::with_capacity(marginals.len());
+    inject_sde_noise_into(marginals, sde_config, rng, &mut out);
+    out
+}
+
+/// **Zero-alloc variant** of [`inject_sde_noise`].
+///
+/// Writes perturbed marginals into the caller-owned `out` buffer (in-place
+/// rebuild — existing inner `Vec<f32>` slots are cleared and refilled, the
+/// outer Vec is grown or shrunk to match the input length). When the caller
+/// holds a long-lived `Vec<Vec<f32>>` across calls (e.g. inside the K-rollout
+/// loop in [`best_of_k_rollouts`]), this skips the per-call outer allocation
+/// AND reuses the inner `Vec<f32>` allocations across iterations.
+///
+/// Identical math to [`inject_sde_noise`] — the public function is now a thin
+/// wrapper that allocates a fresh `Vec<Vec<f32>>` and delegates here.
+pub fn inject_sde_noise_into(
+    marginals: &[&[f32]],
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+    out: &mut Vec<Vec<f32>>,
+) {
+    out.reserve(marginals.len());
+
     if !sde_config.is_enabled() {
-        return marginals.iter().map(|m| m.to_vec()).collect();
+        // SDE disabled: clone each marginal verbatim. Reuse inner allocations
+        // when the caller's buffer already has the right shape from a prior
+        // call (typical in the K-rollout loop).
+        for (i, marginal) in marginals.iter().enumerate() {
+            if i < out.len() {
+                out[i].clear();
+                out[i].extend_from_slice(marginal);
+            } else {
+                out.push(marginal.to_vec());
+            }
+        }
+        out.truncate(marginals.len());
+        return;
     }
 
-    marginals
-        .iter()
-        .map(|marginal| {
-            let mut perturbed = marginal.to_vec();
+    for (i, marginal) in marginals.iter().enumerate() {
+        if i >= out.len() {
+            out.push(Vec::new());
+        }
+        let slot = &mut out[i];
+        slot.clear();
+        slot.extend_from_slice(marginal);
+        let perturbed = slot;
 
-            // Find argmax if preserve_top1
-            let top1_idx = if sde_config.preserve_top1 {
-                perturbed
-                    .iter()
-                    .enumerate()
-                    .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-                    .map(|(i, _)| i)
-            } else {
-                None
-            };
-
-            // Convert to log-space, add noise, convert back
-            let mut sum = 0.0f32;
-            for (i, prob) in perturbed.iter_mut().enumerate() {
-                // Skip top-1 if preserving
-                if top1_idx == Some(i) {
-                    sum += *prob;
-                    continue;
-                }
-
-                // Skip below confidence floor
-                if *prob <= sde_config.confidence_floor {
-                    continue;
-                }
-
-                // Convert to log-space, add γ * N(0,1), convert back
-                let log_p = prob.ln();
-                let noisy_log_p = log_p + sde_config.gamma * rng.normal();
-                *prob = noisy_log_p.exp().max(0.0);
-                sum += *prob;
-            }
-
-            // Re-normalize
-            if sum > 0.0 {
-                let inv_sum = 1.0 / sum;
-                for prob in perturbed.iter_mut() {
-                    *prob *= inv_sum;
-                }
-            }
-
+        // Find argmax if preserve_top1
+        let top1_idx = if sde_config.preserve_top1 {
             perturbed
-        })
-        .collect()
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+        } else {
+            None
+        };
+
+        // Convert to log-space, add noise, convert back
+        let mut sum = 0.0f32;
+        for (j, prob) in perturbed.iter_mut().enumerate() {
+            // Skip top-1 if preserving
+            if top1_idx == Some(j) {
+                sum += *prob;
+                continue;
+            }
+
+            // Skip below confidence floor
+            if *prob <= sde_config.confidence_floor {
+                continue;
+            }
+
+            // Convert to log-space, add γ * N(0,1), convert back
+            let log_p = prob.ln();
+            let noisy_log_p = log_p + sde_config.gamma * rng.normal();
+            *prob = noisy_log_p.exp().max(0.0);
+            sum += *prob;
+        }
+
+        // Re-normalize
+        if sum > 0.0 {
+            let inv_sum = 1.0 / sum;
+            for prob in perturbed.iter_mut() {
+                *prob *= inv_sum;
+            }
+        }
+    }
+    out.truncate(marginals.len());
+}
+
+/// Rebuild a `Vec<&[f32]>` view over a `&[Vec<f32>]` owned store, reusing the
+/// caller's buffer (cleared first, then refilled). Used by tree-build helpers
+/// to convert the owned `noisy: Vec<Vec<f32>>` produced by
+/// [`inject_sde_noise_into`] into the `&[&[f32]]` shape that
+/// [`build_dd_tree_screened`] consumes, without allocating a fresh refs Vec
+/// each call.
+///
+/// The returned view borrows from `owned` for the duration of the caller's use.
+#[inline]
+pub fn build_slices_view<'a>(owned: &'a [Vec<f32>], view: &mut Vec<&'a [f32]>) {
+    view.clear();
+    view.reserve(owned.len());
+    for v in owned {
+        view.push(v.as_slice());
+    }
 }
 
 /// DDTree: Build verification tree from marginals using Best-First Search.
@@ -1248,8 +1303,10 @@ pub fn build_dd_tree_sde(
     sde_config: &SdeConfig,
     rng: &mut Rng,
 ) -> Vec<TreeNode> {
-    let noisy_marginals = inject_sde_noise(marginals, sde_config, rng);
-    let noisy_slices: Vec<&[f32]> = noisy_marginals.iter().map(|m| m.as_slice()).collect();
+    let mut noisy_marginals = Vec::with_capacity(marginals.len());
+    inject_sde_noise_into(marginals, sde_config, rng, &mut noisy_marginals);
+    let mut noisy_slices: Vec<&[f32]> = Vec::with_capacity(noisy_marginals.len());
+    build_slices_view(&noisy_marginals, &mut noisy_slices);
     build_dd_tree_screened(&noisy_slices, config, screener, chain_seed)
 }
 
@@ -1269,8 +1326,10 @@ pub fn build_dd_tree_balanced_sde(
     sde_config: &SdeConfig,
     rng: &mut Rng,
 ) -> Vec<TreeNode> {
-    let noisy_marginals = inject_sde_noise(marginals, sde_config, rng);
-    let noisy_slices: Vec<&[f32]> = noisy_marginals.iter().map(|m| m.as_slice()).collect();
+    let mut noisy_marginals = Vec::with_capacity(marginals.len());
+    inject_sde_noise_into(marginals, sde_config, rng, &mut noisy_marginals);
+    let mut noisy_slices: Vec<&[f32]> = Vec::with_capacity(noisy_marginals.len());
+    build_slices_view(&noisy_marginals, &mut noisy_slices);
     build_dd_tree_balanced(
         &noisy_slices,
         config,
@@ -1518,22 +1577,37 @@ pub fn best_of_k_rollouts(
     if width_config.k_rollouts <= 1 || !sde_config.is_enabled() {
         // Single rollout or SDE disabled — just build one tree
         let mut rng = Rng::new(base_seed);
-        let noisy = inject_sde_noise(marginals, sde_config, &mut rng);
+        let mut noisy = Vec::with_capacity(marginals.len());
+        inject_sde_noise_into(marginals, sde_config, &mut rng, &mut noisy);
+        // Build a fresh immutable view (no need to keep a mutable refs buffer here).
         let noisy_slices: Vec<&[f32]> = noisy.iter().map(|m| m.as_slice()).collect();
         let tree = build_dd_tree_screened(&noisy_slices, config, screener, false);
         return extract_best_path(&tree);
     }
 
-    // Run K independent rollouts with different noise seeds
+    // Run K independent rollouts with different noise seeds. Hoist the
+    // `noisy` buffer out of the loop — `inject_sde_noise_into` clears and
+    // refills it each iteration, skipping K-1 outer `Vec<Vec<f32>>`
+    // allocations and reusing the inner `Vec<f32>` slots across rollouts.
+    //
+    // `noisy_slices` must stay loop-local: it holds `&[f32]` references into
+    // `noisy`, so it cannot outlive a single iteration (the next iteration
+    // mutably borrows `noisy` again). Its allocation cost is negligible
+    // (length = #depths, typically ≤ 32) compared to the per-rollout tree
+    // build, but we still `reserve` once on the first iteration via the
+    // `with_capacity` on `noisy.len()`.
     let mut paths: Vec<Vec<usize>> = Vec::with_capacity(width_config.k_rollouts);
     let mut scores: Vec<f32> = Vec::with_capacity(width_config.k_rollouts);
     // EqR convergence: track marginal-change residual per rollout (Plan 119)
     #[cfg(feature = "eqr_convergence")]
     let mut final_residuals: Vec<f32> = Vec::with_capacity(width_config.k_rollouts);
+    let mut noisy: Vec<Vec<f32>> = Vec::with_capacity(marginals.len());
 
     for k in 0..width_config.k_rollouts {
         let mut rng = Rng::new(base_seed.wrapping_add(k as u64));
-        let noisy = inject_sde_noise(marginals, sde_config, &mut rng);
+        inject_sde_noise_into(marginals, sde_config, &mut rng, &mut noisy);
+        // Build the `&[&[f32]]` view fresh each iteration — references cannot
+        // escape the loop body because `noisy` is mutably re-borrowed next.
         let noisy_slices: Vec<&[f32]> = noisy.iter().map(|m| m.as_slice()).collect();
         let tree = build_dd_tree_screened(&noisy_slices, config, screener, false);
 
@@ -5343,6 +5417,106 @@ mod tests {
 
         for (a, b) in noisy1[0].iter().zip(noisy2[0].iter()) {
             assert!((a - b).abs() < 1e-6, "same seed should produce same noise");
+        }
+    }
+
+    #[test]
+    fn test_inject_sde_noise_into_matches_allocating_disabled() {
+        // When SDE is disabled, `inject_sde_noise_into` MUST produce a buffer
+        // byte-identical to `inject_sde_noise`. (Both should clone verbatim.)
+        let config = SdeConfig::default(); // gamma = 0.0
+        let marginals: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3], &[0.05, 0.15, 0.8]];
+
+        let mut rng_a = Rng::new(42);
+        let expected = inject_sde_noise(&marginals, &config, &mut rng_a);
+
+        let mut rng_b = Rng::new(42);
+        let mut buf = Vec::new();
+        inject_sde_noise_into(&marginals, &config, &mut rng_b, &mut buf);
+
+        assert_eq!(buf, expected, "_into must match allocating variant (disabled path)");
+    }
+
+    #[test]
+    fn test_inject_sde_noise_into_matches_allocating_enabled() {
+        // When SDE is enabled, `inject_sde_noise_into` MUST produce a buffer
+        // byte-identical to `inject_sde_noise` given the same RNG seed.
+        let config = SdeConfig {
+            gamma: 1.0,
+            ..Default::default()
+        };
+        let marginals: Vec<&[f32]> = vec![
+            &[0.1, 0.3, 0.6],
+            &[0.2, 0.5, 0.3],
+            &[0.05, 0.15, 0.8],
+            &[0.4, 0.4, 0.2],
+        ];
+
+        let mut rng_a = Rng::new(99);
+        let expected = inject_sde_noise(&marginals, &config, &mut rng_a);
+
+        let mut rng_b = Rng::new(99);
+        let mut buf = Vec::new();
+        inject_sde_noise_into(&marginals, &config, &mut rng_b, &mut buf);
+
+        assert_eq!(buf.len(), expected.len(), "length mismatch");
+        for (i, (got, want)) in buf.iter().zip(expected.iter()).enumerate() {
+            for (j, (&g, &w)) in got.iter().zip(want.iter()).enumerate() {
+                assert!(
+                    (g - w).abs() < 1e-6,
+                    "mismatch at marginal[{i}][{j}]: _into={g}, allocating={w}"
+                );
+            }
+            assert_eq!(got.len(), want.len(), "inner length mismatch at marginal {i}");
+        }
+    }
+
+    #[test]
+    fn test_inject_sde_noise_into_reuses_inner_allocations() {
+        // Calling `_into` twice with the same buffer MUST produce the same
+        // result as calling once, AND the inner `Vec<f32>` slots must be
+        // reused (no length drift, no stale data when marginals shrink).
+        let config = SdeConfig {
+            gamma: 0.5,
+            ..Default::default()
+        };
+
+        // First call: 3 marginals of length 3.
+        let m3: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3], &[0.05, 0.15, 0.8]];
+        let mut rng_a = Rng::new(7);
+        let mut buf = Vec::new();
+        inject_sde_noise_into(&m3, &config, &mut rng_a, &mut buf);
+        assert_eq!(buf.len(), 3);
+        assert_eq!(buf[0].len(), 3);
+        let first_pass = buf.iter().map(|v| v.to_vec()).collect::<Vec<_>>();
+
+        // Second call with same seed + same input MUST be byte-identical.
+        let mut rng_b = Rng::new(7);
+        inject_sde_noise_into(&m3, &config, &mut rng_b, &mut buf);
+        assert_eq!(buf, first_pass, "second call must match first (buffer reuse)");
+
+        // Third call with FEWER marginals MUST truncate the outer Vec.
+        let m2: Vec<&[f32]> = vec![&[0.1, 0.3, 0.6], &[0.2, 0.5, 0.3]];
+        let mut rng_c = Rng::new(7);
+        inject_sde_noise_into(&m2, &config, &mut rng_c, &mut buf);
+        assert_eq!(buf.len(), 2, "buffer must shrink when input shrinks");
+    }
+
+    #[test]
+    fn test_build_slices_view_matches_iter_collect() {
+        // `build_slices_view` MUST yield the same `Vec<&[f32]>` as the
+        // idiomatic `.iter().map(|m| m.as_slice()).collect()`.
+        let owned: Vec<Vec<f32>> = vec![vec![0.1, 0.2], vec![0.3], vec![0.4, 0.5, 0.6]];
+        let expected: Vec<&[f32]> = owned.iter().map(|m| m.as_slice()).collect();
+
+        let mut view = Vec::new();
+        build_slices_view(&owned, &mut view);
+
+        // Each slice must point at the same memory + length.
+        assert_eq!(view.len(), expected.len());
+        for (i, (got, want)) in view.iter().zip(expected.iter()).enumerate() {
+            assert_eq!(got.as_ptr(), want.as_ptr(), "slice {i} pointer must match");
+            assert_eq!(got.len(), want.len(), "slice {i} length must match");
         }
     }
 
