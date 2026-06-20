@@ -101,6 +101,8 @@ fn bench_per_group_vs_shared() {
     // Collect ratios (n_groups >= 2 only) for the aggregate GOAT verdict.
     let mut cov_ratios: Vec<f64> = Vec::new();
     let mut lat_ratios: Vec<f64> = Vec::new();
+    // O1 (Issue 015) — per-call partition spread, informational.
+    let mut spread_ratios: Vec<f64> = Vec::new();
 
     // Deferred diversity table rows.
     let mut div_rows: Vec<String> = Vec::new();
@@ -167,6 +169,35 @@ fn bench_per_group_vs_shared() {
                 let union_p: HashSet<usize> = dec_p.iter().flatten().copied().collect();
                 let cov_ratio = union_p.len() as f64 / union_s.len().max(1) as f64;
 
+                // O1 (Issue 015) — per-call partition spread.
+                //
+                // The cross-query union cov_ratio saturates near 1.0 because 128
+                // queries × 32 top-k touch essentially every reachable block.
+                // The per-call metric instead asks, per query: how different is the
+                // per-group selection from the shared selection on that same query?
+                //
+                // Note on "between groups within a single call": the PerGroupTopKRouter
+                // partitions blocks by `block_idx % n_groups` (disjoint ownership), so
+                // any two distinct groups' selections are trivially disjoint and
+                // pairwise-group Jaccard distance is always 1.0 — degenerate and
+                // uninformative. The meaningful per-call spread is therefore the
+                // Jaccard distance between the per-group router's per-call selection
+                // and the shared router's per-call selection: a high value means
+                // per-group deliberately picks blocks the shared top-k would NOT have
+                // picked on that same call (the design goal of diversification).
+                //
+                // distance = 1 - |A ∩ B| / |A ∪ B|; averaged over all queries.
+                let mut spread_sum = 0.0f64;
+                for q in 0..N_QUERIES {
+                    let a: HashSet<usize> = dec_p[q].iter().copied().collect();
+                    let b: HashSet<usize> = dec_s[q].iter().copied().collect();
+                    let inter = a.intersection(&b).count();
+                    let uni = a.len() + b.len() - inter;
+                    let dist = if uni == 0 { 0.0 } else { 1.0 - inter as f64 / uni as f64 };
+                    spread_sum += dist;
+                }
+                let per_call_spread = spread_sum / N_QUERIES as f64;
+
                 // Recall@top_k vs dense ground truth (dense[q] sorted desc → first top_k are the truth).
                 let mut rec_s = 0.0f64;
                 let mut rec_p = 0.0f64;
@@ -186,10 +217,18 @@ fn bench_per_group_vs_shared() {
                     up = union_p.len(),
                 ));
 
+                // O1 (Issue 015) — per-call partition spread, printed inline for --nocapture.
+                eprintln!(
+                    "    [O1] n_blocks={n_blocks} n_groups={n_groups} top_k={top_k} \
+                     per-call Jaccard spread (pergrp vs shared) = {spread:.4}",
+                    spread = per_call_spread,
+                );
+
                 // Verdict aggregation excludes n_groups=1 (identical to shared by construction).
                 if n_groups >= 2 {
                     cov_ratios.push(cov_ratio);
                     lat_ratios.push(lat_ratio);
+                    spread_ratios.push(per_call_spread);
                 }
             }
         }
@@ -209,6 +248,8 @@ fn bench_per_group_vs_shared() {
     // ── GOAT verdict (computed, not hardcoded) ─────────────────────
     let mean_cov = cov_ratios.iter().sum::<f64>() / cov_ratios.len().max(1) as f64;
     let mean_lat = lat_ratios.iter().sum::<f64>() / lat_ratios.len().max(1) as f64;
+    // O1 (Issue 015) — informational mean per-call spread. NOT a gate.
+    let mean_spread = spread_ratios.iter().sum::<f64>() / spread_ratios.len().max(1) as f64;
 
     println!("╔══════════════════════════════════════════════════════════════════╗");
     println!("║  GOAT Gate — Per-Group vs Shared (aggregated over n_groups≥2)    ║");
@@ -216,6 +257,8 @@ fn bench_per_group_vs_shared() {
     println!("║  mean coverage ratio (per-group / shared): {mean_cov:>20.3}       ║");
     println!("║  mean latency ratio (per-group / shared): {mean_lat:>20.3}       ║");
     println!("║  threshold:  coverage ≥ 1.500  AND  latency ≤ 2.000              ║");
+    println!("║  (O1) mean per-call Jaccard spread (pgrp vs shared): {ms:>9.4}   ║", ms = mean_spread);
+    println!("║       — informational only, design-goal evidence (not a gate)    ║");
     println!("╟──────────────────────────────────────────────────────────────────╢");
 
     let cov_pass = mean_cov >= 1.5;

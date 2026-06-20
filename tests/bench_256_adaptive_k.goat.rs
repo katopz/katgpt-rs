@@ -170,6 +170,81 @@ fn measure_router<R: VortexFlow<Cache = BlockTopKCache>>(
     m
 }
 
+// ── O3 (Issue 015): precision@adaptive_k + weighted recall ──────────────────
+//
+// The existing recall metric (above) divides hits by K_FIXED=32, so it is
+// mathematically capped at adapt_k/32 ≈ 20/32 = 0.625 because adaptive-k
+// picks fewer blocks than fixed-k. Two alternative metrics reframe the result:
+//
+//   precision@adaptive_k = |adapt ∩ dense_top{adapt_k}| / adapt_k
+//       → "of the blocks adaptive-k picked, how many were the true top-adapt_k?"
+//   weighted recall       = Σ scores(adapt ∩ dense_top32) / Σ scores(dense_top32)
+//       → "what fraction of dense-top-32 score mass did adaptive-k capture?"
+//
+// Both use existing data (dot scores, dense_topk_blocks, decision.blocks).
+#[derive(Default, Clone, Copy)]
+struct MetricsO3 {
+    precision_sum: f64,   // Σ precision@adaptive_k per query
+    weighted_sum: f64,    // Σ weighted_recall per query
+    n: usize,
+}
+
+impl MetricsO3 {
+    fn avg_precision(&self) -> f64 {
+        (self.n > 0).then(|| self.precision_sum / self.n as f64).unwrap_or(0.0)
+    }
+    fn avg_weighted(&self) -> f64 {
+        (self.n > 0).then(|| self.weighted_sum / self.n as f64).unwrap_or(0.0)
+    }
+}
+
+fn measure_router_o3<R: VortexFlow<Cache = BlockTopKCache>>(
+    router: &R,
+    cache: &BlockTopKCache,
+    qs: &QuerySet,
+    n_blocks: usize,
+) -> MetricsO3 {
+    let mut m = MetricsO3::default();
+    let mut scratch = VortexScratch::new(n_blocks);
+    for q in &qs.queries {
+        let scores = dot_query_centroids(q, cache, n_blocks);
+
+        // Dense top-32 (reference for weighted recall denominator).
+        let dense32 = dense_topk_blocks(&scores, K_FIXED);
+        let dense32_set: std::collections::HashSet<usize> = dense32.iter().copied().collect();
+        let dense32_score_sum: f64 = dense32.iter().map(|&b| scores[b] as f64).sum();
+
+        // Adaptive router decision.
+        let decision = router.forward_indexer(q, cache, n_blocks, K_FIXED, &mut scratch);
+        let adapt_k = decision.len();
+        let adapt_set: std::collections::HashSet<usize> =
+            decision.blocks.iter().copied().collect();
+
+        // precision@adaptive_k: of adapt_k picked, how many are in dense_top{adapt_k}?
+        if adapt_k > 0 {
+            let dense_adaptk = dense_topk_blocks(&scores, adapt_k);
+            let dense_adaptk_set: std::collections::HashSet<usize> =
+                dense_adaptk.iter().copied().collect();
+            let hit = adapt_set.intersection(&dense_adaptk_set).count();
+            m.precision_sum += hit as f64 / adapt_k as f64;
+        }
+
+        // weighted recall: score mass of (adapt ∩ dense32) over score mass of dense32.
+        if dense32_score_sum > 0.0 {
+            let inter_score: f64 = decision
+                .blocks
+                .iter()
+                .filter(|&&b| dense32_set.contains(&b))
+                .map(|&b| scores[b] as f64)
+                .sum();
+            m.weighted_sum += inter_score / dense32_score_sum;
+        }
+
+        m.n += 1;
+    }
+    m
+}
+
 /// Average ns/query for `router` over `iters` passes through all queries.
 fn time_router<R: VortexFlow<Cache = BlockTopKCache>>(
     router: &R,
@@ -206,6 +281,8 @@ fn bench_adaptive_k_vs_fixed_k() {
 
     let (mut adapt_k, mut adapt_recall, mut fixed_recall, mut count) = (0usize, 0.0f64, 0.0f64, 0usize);
     let mut by_label_k: std::collections::HashMap<&'static str, (usize, usize)> = std::collections::HashMap::new();
+    // O3 (Issue 015) — precision@adaptive_k + weighted recall accumulators.
+    let (mut o3_precision_sum, mut o3_weighted_sum, mut o3_n) = (0.0f64, 0.0f64, 0usize);
     println!();
     println!("╔════════════════════╦═══════════╦════════════════╦════════════════╦═══════════════════╦══════════════════╗");
     println!("║ Plan 256 Phase 2 — Adaptive-K vs Fixed-K Block Selection (GOAT gate)                             ║");
@@ -233,17 +310,32 @@ fn bench_adaptive_k_vs_fixed_k() {
             let fixed_ns = time_router(&fixed_router, &fixed_cache, &qs.queries, n_blocks, LATENCY_ITERS);
             let adapt_ns = time_router(&adapt_router, &adapt_cache, &qs.queries, n_blocks, LATENCY_ITERS);
 
+            // O3 (Issue 015) — additional metrics on existing data.
+            let m_o3 = measure_router_o3(&adapt_router, &adapt_cache, qs, n_blocks);
+
             println!(
                 "║ n_blocks={:<9}║ {:<9}║ {:>11.1}%   ║ {:>11.1}%   ║ {:>5.1} / {:<5.1}    ║ {:>5.0} / {:<5.0}    ║",
                 n_blocks, qs.label,
                 m_fixed.avg_recall() * 100.0, m_adapt.avg_recall() * 100.0,
                 m_fixed.avg_k(), m_adapt.avg_k(), adapt_ns, fixed_ns,
             );
+            // O3 metrics printed via eprintln so they surface under --nocapture
+            // without disturbing the existing table layout.
+            eprintln!(
+                "    [O3] n_blocks={nb} {label}: precision@adapt_k={p:.4}  weighted_recall={w:.4}  \
+                 (adapt_k≈{ak:.1}, fixed_k={fk})",
+                nb = n_blocks, label = qs.label,
+                p = m_o3.avg_precision(), w = m_o3.avg_weighted(),
+                ak = m_adapt.avg_k(), fk = K_FIXED,
+            );
 
             adapt_k += m_adapt.k_sum;
             adapt_recall += m_adapt.recall_sum;
             fixed_recall += m_fixed.recall_sum;
             count += m_adapt.n;
+            o3_precision_sum += m_o3.precision_sum;
+            o3_weighted_sum += m_o3.weighted_sum;
+            o3_n += m_o3.n;
             let e = by_label_k.entry(qs.label).or_insert((0, 0));
             e.0 += m_adapt.k_sum;
             e.1 += m_adapt.n;
@@ -275,6 +367,24 @@ fn bench_adaptive_k_vs_fixed_k() {
     println!("  Adaptive recall        : {:.4}", avg_recall_adapt);
     println!("  Fixed-k recall         : {:.4}", avg_recall_fixed);
     println!("  Recall ratio (ad/fixed): {:.4}  (criterion: ≥ 0.90)", recall_ratio);
+
+    // O3 (Issue 015) — precision@adaptive_k + weighted recall aggregates.
+    // These reframe the recall result: recall_ratio is capped at adapt_k/32 ≈ 0.625
+    // by construction (adaptive picks fewer blocks); precision@adaptive_k and
+    // weighted recall ask "did adaptive pick the RIGHT (highest-scoring) blocks?",
+    // which is the actual design question. Informational, not a gate.
+    let o3_avg_precision = (o3_n > 0).then(|| o3_precision_sum / o3_n as f64).unwrap_or(0.0);
+    let o3_avg_weighted = (o3_n > 0).then(|| o3_weighted_sum / o3_n as f64).unwrap_or(0.0);
+    println!();
+    println!("── O3 (Issue 015): precision@adaptive_k + weighted recall ({} samples) ──", o3_n);
+    println!("  precision@adaptive_k : {:.4}  (1.0 = adaptive picks exactly dense top-adapt_k)", o3_avg_precision);
+    println!("  weighted recall      : {:.4}  (1.0 = adaptive captures all dense-top-32 score mass)", o3_avg_weighted);
+    println!("  (reframes recall ratio {:.3}: adaptive picks fewer but higher-value blocks)", recall_ratio);
+    eprintln!(
+        "    [O3 aggregate] precision@adapt_k={p:.4}  weighted_recall={w:.4}  \
+         recall_ratio={rr:.4}  adapt_k≈{ak:.2}",
+        p = o3_avg_precision, w = o3_avg_weighted, rr = recall_ratio, ak = avg_k_adapt,
+    );
 
     let pass_savings = savings_ratio <= 0.75;
     let pass_recall = recall_ratio >= 0.90;

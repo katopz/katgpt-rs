@@ -16,11 +16,17 @@ use std::time::Instant;
 
 const HEAD_DIM: usize = 64;
 const BLOCK_SIZE: usize = 64; // tokens per KV block
-const N_QUERIES: usize = 256; // prefill batch of 256 query tokens
+const N_QUERIES: usize = 256; // prefill batch of 256 query tokens (GOAT-gate reference)
 const TOP_K: usize = 32; // blocks selected per query
 
 /// Context lengths to benchmark (in tokens).
 const CONTEXTS: &[usize] = &[32 * 1024, 128 * 1024, 512 * 1024];
+
+/// O2 (Issue 015) — N_QUERIES sweep for KV-outer reverse-index amortization.
+/// At 512K (8192 blocks) with top_k=32, avg_queries/block = (NQ*32)/8192:
+///   256 → 1.0, 512 → 2.0, 1024 → 4.0, 2048 → 8.0.
+/// Reverse-index benefit grows with avg_queries/block (more queries share each block).
+const N_QUERIES_SET: &[usize] = &[256, 512, 1024, 2048];
 
 // ── Deterministic PRNG (matches bench_256_simd_topk pattern) ──
 
@@ -281,12 +287,72 @@ fn bench_kv_outer_vs_q_outer() {
         }
     }
 
-    println!("╚═══════════════╩════════════════╩════════════════╩═════════╩═════════╝");
+    println!("╚═══════════════╩════════════════╩════════════════╩═════════╩═══════╝");
 
     // GOAT verdict
     let verdict = if goat_ok { "PASS ✅" } else { "FAIL ❌" };
     println!();
     println!("GOAT verdict (KV-outer ≥ 1.5x faster at 128K+): {verdict}");
+
+    // ── O2 (Issue 015): N_QUERIES sweep for reverse-index amortization regime ──
+    //
+    // The GOAT gate above runs the original N_QUERIES=256 sweep. Here we sweep
+    // N_QUERIES ∈ {256, 512, 1024, 2048} × all contexts to map where KV-outer's
+    // reverse index starts paying off (avg_queries/block rises, shared block
+    // loads amortize across more queries). This does NOT change the GOAT gate
+    // — it sharpens the regime boundary that the recommendation already names.
+    println!();
+    println!("── O2 (Issue 015): N_QUERIES sweep — KV-outer vs Q-outer speedup ──");
+    println!("    HEAD_DIM={HD}, BLOCK_SIZE={BS}, TOP_K={TK}", HD = HEAD_DIM, BS = BLOCK_SIZE, TK = TOP_K);
+    println!("    avg_queries/block = (N_QUERIES × TOP_K) / n_blocks (theoretical max amortization)");
+    println!();
+    println!("    {ctx:<8} {nq:<8} {aqb:<18} {qm:<14} {kvm:<14} {sp:<12}",
+        ctx = "ctx", nq = "NQ", aqb = "avg_q/block", qm = "Q-outer(ms)", kvm = "KV-outer(ms)", sp = "speedup");
+    println!("    {d:<8} {d:<8} {d:<18} {d:<14} {d:<14} {d:<12}", d = "--------");
+
+    for &nq in N_QUERIES_SET {
+        let queries_sweep = make_queries(nq);
+        for &ctx_tokens in CONTEXTS {
+            let n_blocks = ctx_tokens / BLOCK_SIZE;
+            let (keys, values) = make_keys_values(n_blocks);
+
+            // Q-outer baseline.
+            let router_q = VortexRouter::BlockTopK(BlockTopKRouter::new(true));
+            let t0 = Instant::now();
+            let _ = q_outer_baseline(&router_q, &keys, &values, &queries_sweep, nq, n_blocks, TOP_K);
+            let q_ms = t0.elapsed().as_secs_f64() * 1000.0;
+
+            // KV-outer.
+            let router_kv = VortexRouter::BlockTopK(BlockTopKRouter::new(true));
+            let prefill = KvOuterPrefill::new(router_kv, BLOCK_SIZE, HEAD_DIM);
+            let t1 = Instant::now();
+            let _ = prefill.prefill_sparse(&queries_sweep, &keys, &values, nq, n_blocks, TOP_K);
+            let kv_ms = t1.elapsed().as_secs_f64() * 1000.0;
+
+            let speedup = if kv_ms > 0.0 { q_ms / kv_ms } else { 0.0 };
+            let avg_q_per_block = (nq * TOP_K) as f64 / n_blocks as f64;
+
+            println!("    {ctx:<8} {nq:<8} {aqb:<18.3} {qm:<14.2} {kvm:<14.2} {sp:<12.3}x",
+                ctx = format_ctx(ctx_tokens),
+                nq = nq,
+                aqb = avg_q_per_block,
+                qm = q_ms,
+                kvm = kv_ms,
+                sp = speedup,
+            );
+            // eprintln so each row also surfaces cleanly under --nocapture.
+            eprintln!(
+                "    [O2] ctx={ctx} NQ={nq} avg_q/block={aqb:.3} q={qm:.2}ms kv={kvm:.2}ms speedup={sp:.3}x",
+                ctx = format_ctx(ctx_tokens),
+                nq = nq,
+                aqb = avg_q_per_block,
+                qm = q_ms,
+                kvm = kv_ms,
+                sp = speedup,
+            );
+        }
+    }
+    println!("    ────────────────────────────────────────────────────────────");
 
     // Only assert the benchmark ran (not the verdict).
     assert!(true, "benchmark completed");

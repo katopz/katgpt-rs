@@ -198,7 +198,7 @@ impl<R: VortexFlow> VortexFlow for AdaptiveKRouter<R> {
         // Step 1: Score all blocks up to k_max ceiling.
         // After this call, scratch.scores[..n_blocks] contains the raw block scores.
         let k_max = self.config.k_max.min(n_blocks);
-        let decision_full = self
+        let mut decision_full = self
             .inner
             .forward_indexer(query, cache, n_blocks, k_max, scratch);
 
