@@ -1492,6 +1492,13 @@ harness = false
 name = "clr_minimal"
 required-features = ["clr"]
 
+# Plan 295 Phase 2 — CCE primal-dual convergence test (G2).
+# Verifies O(N⁻¹ᐟ²) convergence on the emission-abatement discrete example.
+[[test]]
+name = "cce_convergence"
+path = "tests/cce_convergence.rs"
+required-features = ["cce_moderator"]
+
 [[example]]
 name = "clr_brevity_tiebreak"
 required-features = ["clr"]

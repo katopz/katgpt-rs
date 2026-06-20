@@ -296,6 +296,17 @@ pub trait PayoffTensor<const N: usize, const A: usize> {
     /// Moderator objective `Γ₀(ρ)` — the world-level cost the LP minimizes
     /// (e.g., expected emission, expected economic loss). Implementer-defined.
     fn gamma0(&self, rho: &OccupationMeasure<N, A>) -> f32;
+
+    /// Per-index coefficient of the moderator objective, assuming `Γ₀` is
+    /// linear: `Γ₀(ρ) = Σ_{s,a} ρ(s,a) · gamma0_coeff(s, a)`.
+    ///
+    /// Default: `gamma0_coeff = reward_follow` (i.e. `Γ₀ = Γ`, the moderator
+    /// objective equals the player's cost of following). Override when the
+    /// moderator has a separate objective (e.g., world-level welfare ≠ player
+    /// cost). Used by `CceLp::solve` (Phase 2) to build the LP objective row.
+    fn gamma0_coeff(&self, state: usize, action: usize) -> f32 {
+        self.reward_follow(state, action)
+    }
 }
 
 #[cfg(test)]

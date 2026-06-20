@@ -37,10 +37,16 @@
 //! CGSP conjecturer arm, signal = zone-mood latent scalar) lives in riir-ai
 //! Plan 325. See `AGENTS.md` "Latent vs Raw Space Rules" for the boundary.
 
+pub mod bregman;
 pub mod external_regret;
+pub mod lp;
+pub mod primal_dual;
 pub mod types;
 
+pub use bregman::{BregmanPotential, Euclidean, Kl};
 pub use external_regret::ExternalRegret;
+pub use lp::{CceLp, CceLpError};
+pub use primal_dual::{CcePrimalDual, ConvergenceReportRaw, StepReport};
 pub use types::{
     ActionSpace, Deviation, DeviationClass, OccupationMeasure, OccupationMeasureError,
     PayoffTensor, StateSpace,
