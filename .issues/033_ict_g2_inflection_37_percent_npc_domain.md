@@ -3,7 +3,9 @@
 **Date:** 2026-06-19
 **Plan:** 294 (ICT Distributional Branching-Point Detector) Phase 3 T3.3
 **Severity:** Medium — informative, NOT a blocker for G3
-**Status:** Documented; k_percent sweep recommended for NPC-scale consumers
+**Status:** CLOSED (documented — no code change needed; callers tune `k_percent` per-domain via existing API)
+
+**Closure rationale (2026-06-20):** No remaining work. The issue body explicitly states "No code change needed" — the `BranchingDetector::new` constructor already accepts `k_percent` as a parameter precisely so callers can tune per-domain. Default `k_percent = 0.10` (paper-recommended) stays for LLM workloads; NPC-scale callers pass `0.38` per this measurement. The math primitives (`collision_purity`, `js_divergence`, `BranchingDetector`) work correctly at any `k_percent`. Does NOT block G3 or shipping — Plan 294 T1/T2/T6/T7/T8 all ship regardless. Documented finding — closure is the resolution.
 
 ## Summary
 
