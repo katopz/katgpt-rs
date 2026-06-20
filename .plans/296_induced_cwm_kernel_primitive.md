@@ -5,7 +5,7 @@
 **Source paper:** [arxiv 2510.04542](https://arxiv.org/pdf/2510.04542) — Lehrach et al., Code World Models for General Game Playing (DeepMind, Oct 2025)
 **Target:** `katgpt-rs/crates/katgpt-core/src/induced_cwm/` (new module, open) + re-export through `katgpt-rs/src/lib.rs`
 **Cargo features:** `induced_cwm` (katgpt-core, **opt-in**); `induced_cwm_ismcts` (depends on `induced_cwm` + `game_state`)
-**Status:** Active — Phase 1 ✅ SHIPPED + Phase 2 ✅ SHIPPED (2026-06-21); Phase 3 (tournament) pending.
+**Status:** Active — Phase 1 ✅ SHIPPED + Phase 2 ✅ SHIPPED + Phase 3 ✅ SHIPPED (2026-06-21); Phase 4 (hot-swap hook) + Phase 5 (docs + GOAT proof) pending.
 
 ---
 
@@ -105,20 +105,26 @@ katgpt-rs/examples/
 
 ### Tasks
 
-- [ ] **T3.1** In `induced_cwm/tournament.rs`, add `pub struct ValueFnTournament<S: GameState, V: StateHeuristic<S>> { candidates: Vec<V>, games_per_match: usize, rng_seed: u64 }` with `pub fn run<K: InducedCwmKernel>(&self, kernel: &K, baseline: &dyn Fn(&S, u8) -> S::Action) -> TournamentWinner<V>`:
-  - Each candidate plays `games_per_match` games as player 0 vs `baseline`, then `games_per_match` as player 1, vs each other candidate (round-robin).
-  - Winner = highest win-rate-vs-baseline, tie-break by head-to-head.
-  - Returns `TournamentWinner { winner_idx, stats: Vec<PlayerStats> }`.
-- [ ] **T3.2** Add `PlayerStats { wins: u32, losses: u32, draws: u32, avg_reward: f32 }` with `Display` impl.
-- [ ] **T3.3** Reuse existing `mcts_search` for the policy (no heuristic = pure rollouts) so the tournament measures "heuristic-vs-no-heuristic" effect cleanly.
-- [ ] **T3.4** Unit test: 3 mock heuristics (one near-perfect, one mediocre, one random). Assert tournament picks the near-perfect one.
-- [ ] **T3.5** Example `induced_cwm_02_value_tournament.rs`: mock CWM + 3 mock heuristics → tournament prints ranking.
+- [x] **T3.1** `pub struct ValueFnTournament<S, V>` defined in `induced_cwm/tournament.rs` with `candidates: Vec<V>`, `games_per_match: usize`, `rng_seed: u64`, plus `ply_cap: u32` and `mcts_budget: usize`. `run(&self, initial_state: &S, baseline: &dyn Fn(&S, u8) -> S::Action) -> TournamentWinner<S, V>`. **DEViates from plan**: dropped `kernel: &K` parameter — redundant with `initial_state: &S` under the codebase's `GameState` convention (state IS the kernel — see Phase 1 T1.6 deviation). Matches Phase 2's `ismcts_search_with_inference<S, B>(...)` shape. Also added `mcts_budget` parameter so the search depth is configurable per tournament (held constant across candidates).
+- [x] **T3.2** `PlayerStats { wins, losses, draws, score }` with `Display` impl, plus `win_rate()`, `avg_reward()`, `games()` accessors. Chess-style scoring (win=1, draw=0.5, loss=0). Added `score: f32` instead of plan's `avg_reward: f32` because `avg_reward` is derived from `score / games()` — keeping the raw sum lets callers compute different aggregations later.
+- [x] **T3.3** Self-contained flat-UCB1 MCTS in `tournament.rs`. **DEViates from plan**: cannot reuse `mcts_search` because it lives in the ROOT crate (`katgpt-rs/src/pruners/game_state/mcts.rs`), and `katgpt-core` cannot depend on the root crate (circular dep — same constraint Phase 2 hit). The tournament measures *relative* heuristic strength, so absolute search quality is irrelevant as long as it's held constant across candidates — the mirrored MCTS satisfies this. Documented in `tournament.rs` module-level rustdoc.
+- [x] **T3.4** 10 unit tests in `tournament.rs` `#[cfg(test)] mod tests` (all pass): `PlayerStats` default/record/display, tournament picks Advance over Constant/Stall, head-to-head matrix consistency, tournament determinism given seed, empty-candidates panic, `seed_for_match` distinctness, `pick_ucb1` unvisited-first + max-UCB1. Mock is `RaceState` (race-to-N, GOAL=25) — GOAL > 2*MCTS_ROLLOUT_DEPTH_CAP forces the heuristic to be the only signal in MCTS leaf eval.
+- [x] **T3.5** `examples/induced_cwm_02_value_tournament.rs` — mock CWM + 3 mock heuristics (enum-wrapped for type-uniform `Vec<RaceHeuristic>`) + Stall baseline → tournament prints ranking + head-to-head matrix. Runs clean, Advance wins.
+
+### Phase 3 deviations summary
+
+1. **T3.1**: dropped `kernel: &K` parameter (state IS the kernel — Phase 1 T1.6 deviation pattern). Added `mcts_budget` parameter.
+2. **T3.2**: `score: f32` (cumulative) instead of `avg_reward: f32` (derived); `avg_reward()` is now an accessor.
+3. **T3.3**: self-contained MCTS in `tournament.rs` (mirrors Phase 2 ISMCTS self-containment rationale). Cannot reuse root-crate `mcts_search` due to circular dep.
 
 ### Files
 
 ```
-katgpt-rs/crates/katgpt-core/src/induced_cwm/tournament.rs
-katgpt-rs/examples/induced_cwm_02_value_tournament.rs
+katgpt-rs/crates/katgpt-core/src/induced_cwm/
+└── tournament.rs     # ValueFnTournament + PlayerStats + TournamentWinner + flat MCTS
+
+katgpt-rs/examples/
+└── induced_cwm_02_value_tournament.rs   # smoke example
 ```
 
 ---

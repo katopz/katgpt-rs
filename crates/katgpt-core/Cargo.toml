@@ -114,6 +114,7 @@ closure_instrument = ["dep:papaya", "dep:ahash"]  # Closure-Expansion Instrument
 ict_branching = []  # ICT Distributional Branching-Point Detector — collision_purity β(π), Rényi H₂, JS-divergence-to-group-mean, BranchingDetector (Plan 294, Research 270, arxiv 2606.19771). Opt-in until G3 + G8 (riir-ai Plan 324) pass.
 induced_cwm = []  # Induced Code World Model kernel primitive — `InducedCwmKernel: GameState` marker + `CwmCommitment` (BLAKE3) + `BeliefInferenceFn<S>` + `TransitionUnitTest` (Plan 296, Research 275, arxiv 2510.04542). Open half of the CWM Super-GOAT: LLM-induction pipeline is private (riir-ai Plan 326). Opt-in until G1–G4 GOAT gate passes.
 induced_cwm_ismcts = ["induced_cwm"]  # Information-Set MCTS over an induced CWM + belief fn (Plan 296 Phase 2). Self-contained search tree (does NOT reuse root-crate `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the root).
+induced_cwm_tournament = ["induced_cwm"]  # Value Function Tournament — round-robin arena-play selector over `StateHeuristic` candidates for a given induced CWM (Plan 296 Phase 3). Self-contained flat-UCB1 MCTS (does NOT reuse root-crate `mcts_search` — same circular-dep constraint as Phase 2).
 
 [[bench]]
 name = "flow_field_bench"

@@ -70,6 +70,9 @@ pub mod unit_test;
 #[cfg(feature = "induced_cwm_ismcts")]
 pub mod ismcts;
 
+#[cfg(feature = "induced_cwm_tournament")]
+pub mod tournament;
+
 #[cfg(test)]
 mod tests;
 
@@ -95,3 +98,11 @@ pub use unit_test::{TransitionTestFailure, TransitionUnitTest, make_transition_t
 // `katgpt_core::induced_cwm::ismcts::ismcts_search_with_inference`.
 #[cfg(feature = "induced_cwm_ismcts")]
 pub use ismcts::{InformationSet, NodeStats, ismcts_search_with_inference};
+
+// ── Phase 3 (Tournament) re-exports ────────────────────────────────────────
+//
+// Gated by `induced_cwm_tournament` so callers can write
+// `katgpt_core::induced_cwm::ValueFnTournament` instead of
+// `katgpt_core::induced_cwm::tournament::ValueFnTournament`.
+#[cfg(feature = "induced_cwm_tournament")]
+pub use tournament::{PlayerStats, TournamentWinner, ValueFnTournament};
