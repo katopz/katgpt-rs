@@ -478,7 +478,8 @@ impl VocabFourierBasis {
         }
 
         // Sort by magnitude descending, take top-K indices.
-        magnitudes.sort_by(|a, b| b.0.total_cmp(&a.0));
+        // Unstable is safe: only top-K is consumed; tie order within K is unspecified.
+        magnitudes.sort_unstable_by(|a, b| b.0.total_cmp(&a.0));
         magnitudes.truncate(k);
 
         // Phase 2: compute modes only for top-K (reuse cos_mode buffer).

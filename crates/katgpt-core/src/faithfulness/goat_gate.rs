@@ -275,7 +275,10 @@ fn spearman_rho(a: &[f32], b: &[f32]) -> f32 {
 fn ranks(values: &[f32]) -> Vec<f32> {
     let n = values.len();
     let mut indexed: Vec<(usize, f32)> = values.iter().enumerate().map(|(i, &v)| (i, v)).collect();
-    indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(core::cmp::Ordering::Equal));
+    // Unstable is safe: the tie-averaging loop below keys on equal *values*
+    // (which are still adjacent post-sort regardless of stability), not on
+    // preservation of original input order.
+    indexed.sort_unstable_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(core::cmp::Ordering::Equal));
     let mut out = vec![0.0_f32; n];
     let mut i = 0;
     while i < n {

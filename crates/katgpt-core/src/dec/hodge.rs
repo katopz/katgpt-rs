@@ -602,7 +602,7 @@ pub fn hodge_spectrum(
         eigenvectors.push(x);
     }
 
-    eigenvalues.sort_by(|a, b| b.total_cmp(a));
+    eigenvalues.sort_unstable_by(|a, b| b.total_cmp(a));
     eigenvalues
 }
 

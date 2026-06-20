@@ -1440,8 +1440,10 @@ pub fn best_buddies(corr_rows: &[&[f32]], k: usize) -> Vec<(usize, usize)> {
         }
     }
 
-    // Sort by correlation magnitude (descending), keep top-k
-    buddies.sort_by(|a, b| {
+    // Sort by correlation magnitude (descending), keep top-k.
+    // Unstable is safe: only top-K is consumed; tie order within K is unspecified
+    // (the doc contract is "top-K by magnitude", not a stable ordering).
+    buddies.sort_unstable_by(|a, b| {
         let corr_a = corr_rows[a.0][a.1];
         let corr_b = corr_rows[b.0][b.1];
         corr_b.total_cmp(&corr_a)
