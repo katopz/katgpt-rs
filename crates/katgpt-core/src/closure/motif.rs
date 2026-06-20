@@ -484,29 +484,62 @@ fn enumerate_chains(
     out: &mut HashMap<[u8; 32], Motif>,
 ) {
     // DFS stack: (current_node, visited_set_as_path, edge_ops_along_path).
-    // Visited is tracked by the path Vec itself.
-    let mut stack: Vec<(usize, Vec<usize>, Vec<u8>)> = Vec::with_capacity(8);
-    stack.push((start, vec![start], Vec::new()));
+    //
+    // Hot-path note: paths are bounded by `MAX_MOTIF_NODES` (=4) and ops by
+    // `MAX_MOTIF_EDGES` (=4), so we use fixed-size arrays + length counters
+    // instead of `Vec<usize>`/`Vec<u8>`. This eliminates 3 heap allocations
+    // per DFS step (the per-pop `kinds: Vec<u32>` plus the per-edge
+    // `path.clone()` + `ops.clone()` the previous `Vec`-backed version did).
+    // At K=1024 PTGs × N=10 nodes × ~4 edges each this is the difference
+    // between millions of tiny allocations and zero.
+    const MAX_NODES_PLUS_ROOT: usize = MAX_MOTIF_NODES as usize + 1;
+    const MAX_EDGES_PLUS_ONE: usize = MAX_MOTIF_EDGES as usize + 1;
 
-    while let Some((node, path, ops)) = stack.pop() {
-        if path.len() >= 2 && path.len() as u8 <= MAX_MOTIF_NODES {
-            // Hash this prefix as a motif.
-            let kinds: Vec<u32> = path.iter().map(|&i| node_kinds[i]).collect();
-            let hash = canonical_hash(&kinds, &ops);
+    #[derive(Clone, Copy)]
+    struct PathBuf {
+        nodes: [usize; MAX_NODES_PLUS_ROOT],
+        len: u8,
+        ops: [u8; MAX_EDGES_PLUS_ONE],
+        ops_len: u8,
+    }
+
+    let mut stack: Vec<(usize, PathBuf)> = Vec::with_capacity(8);
+    let init = PathBuf {
+        nodes: [start; MAX_NODES_PLUS_ROOT],
+        len: 1,
+        ops: [0; MAX_EDGES_PLUS_ONE],
+        ops_len: 0,
+    };
+    stack.push((start, init));
+
+    // Scratch buffer for the canonical-hash input — reused across DFS steps
+    // (avoids the per-pop `let kinds: Vec<u32> = ...collect()` allocation).
+    let mut kinds_buf = [0u32; MAX_NODES_PLUS_ROOT];
+
+    while let Some((node, path)) = stack.pop() {
+        let path_len = path.len as usize;
+        if path_len >= 2 && path.len <= MAX_MOTIF_NODES {
+            // Hash this prefix as a motif (fill scratch, no allocation).
+            for i in 0..path_len {
+                kinds_buf[i] = node_kinds[path.nodes[i]];
+            }
+            let kinds = &kinds_buf[..path_len];
+            let ops = &path.ops[..path.ops_len as usize];
+            let hash = canonical_hash(kinds, ops);
             let entry = out.entry(hash).or_insert_with(|| Motif {
                 subgraph_hash: hash,
-                node_count: path.len() as u8,
-                edge_count: ops.len() as u8,
+                node_count: path.len,
+                edge_count: path.ops_len,
                 occurrence_count: 0,
                 task_family_ids: FixedU32Set::<16>::new(),
             });
             entry.occurrence_count += 1;
             entry.task_family_ids.insert(task_family_id);
         }
-        if (path.len() as u8) >= MAX_MOTIF_NODES {
+        if path.len >= MAX_MOTIF_NODES {
             continue;
         }
-        if (ops.len() as u8) >= MAX_MOTIF_EDGES {
+        if path.ops_len >= MAX_MOTIF_EDGES {
             continue;
         }
         // Expand: try every outgoing edge from `node` whose target is not on path.
@@ -514,15 +547,25 @@ fn enumerate_chains(
             if from != node {
                 continue;
             }
-            if path.contains(&to) {
+            // Branch-free `path.contains(&to)` over the fixed-size prefix.
+            let mut on_path = false;
+            for i in 0..path_len {
+                if path.nodes[i] == to {
+                    on_path = true;
+                    break;
+                }
+            }
+            if on_path {
                 continue;
             }
-            let mut new_path = path.clone();
-            new_path.push(to);
-            let mut new_ops = ops.clone();
-            new_ops.push(op);
-            if (new_path.len() as u8) <= max_depth + 1 {
-                stack.push((to, new_path, new_ops));
+            // Copy-on-push: extend the fixed-size buffers in place.
+            let mut new_path = path;
+            new_path.nodes[path_len] = to;
+            new_path.len = path.len + 1;
+            new_path.ops[path.ops_len as usize] = op;
+            new_path.ops_len = path.ops_len + 1;
+            if new_path.len <= max_depth + 1 {
+                stack.push((to, new_path));
             }
         }
     }

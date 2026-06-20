@@ -1113,15 +1113,47 @@ pub fn classify_all_sinks_flat(
     }
     let inv_n = 1.0 / (n as f32);
 
-    // Materialize strengths so we can release the `col_sums` borrow before
-    // calling `classify_sink_at_flat(&mut scratch)` (borrow checker).
-    let strengths: Vec<f32> = col_sums[..n].iter().map(|s| s * inv_n).collect();
-
+    // First pass: collect (j, strength_j) pairs that clear the threshold into
+    // a tiny stack-backed buffer. Almost always only a handful of positions
+    // qualify (dominant sinks are rare), so this avoids the per-call
+    // `Vec<f32>::collect()` of length `n` the previous code did just to release
+    // the `col_sums` borrow before the `classify_sink_at_flat(&mut scratch)`
+    // call below.
+    //
+    // CAP=32 covers realistic attention sinks; if more positions clear the
+    // threshold we fall back to a heap allocation rather than silently dropping
+    // diagnostics.
+    const CANDIDATE_CAP: usize = 32;
+    let mut candidates_stack: [(usize, f32); CANDIDATE_CAP] = [(0, 0.0); CANDIDATE_CAP];
+    let mut candidates_heap: Vec<(usize, f32)> = Vec::new();
+    let mut n_candidates = 0usize;
+    let mut overflow = false;
     for j in 0..n {
-        let strength_j = strengths[j];
+        let strength_j = col_sums[j] * inv_n;
         if strength_j <= cfg.sink_strength_threshold {
             continue;
         }
+        if n_candidates < CANDIDATE_CAP {
+            candidates_stack[n_candidates] = (j, strength_j);
+            n_candidates += 1;
+        } else {
+            if !overflow {
+                // Spill the stack contents into the heap vec on first overflow,
+                // then continue appending.
+                candidates_heap.extend_from_slice(&candidates_stack);
+                overflow = true;
+            }
+            candidates_heap.push((j, strength_j));
+        }
+    }
+
+    // `col_sums` borrow ends here — safe to hand `scratch` to the classifier.
+    let process: &[(usize, f32)] = if overflow {
+        &candidates_heap
+    } else {
+        &candidates_stack[..n_candidates]
+    };
+    for &(j, strength_j) in process {
         let col = [strength_j];
         let diag = classify_sink_at_flat(j, &col, values, n, d, None, cfg, scratch);
         out.push(diag);

@@ -73,17 +73,33 @@ fn cg_solve(
     let mut x = CochainField::zeros(rank, n, dim);
 
     // For dim > 1, solve each feature channel independently.
+    //
+    // Scratch buffers (b, r, p, ap) are hoisted out of `cg_solve_scalar` and reused
+    // across all channels — eliminates 4·dim heap allocations per call on the
+    // multi-channel path (e.g. dim=4 ⇒ 16 allocs → 0). Grown only when n grows.
     match dim {
-        1 => cg_solve_scalar(cx, &rhs.data, rank, tol, max_iter, &mut x.data),
+        1 => {
+            let mut scratch = CgScratch::new(n);
+            cg_solve_scalar(cx, &rhs.data, rank, tol, max_iter, &mut x.data, &mut scratch);
+        }
         _ => {
             // Per-channel solve
             let mut rhs_ch = vec![0.0f32; n];
             let mut x_ch = vec![0.0f32; n];
+            let mut scratch = CgScratch::new(n);
             for d in 0..dim {
                 for i in 0..n {
                     rhs_ch[i] = rhs.data[i * dim + d];
                 }
-                cg_solve_scalar(cx, &rhs_ch, rank, tol, max_iter, &mut x_ch);
+                cg_solve_scalar(
+                    cx,
+                    &rhs_ch,
+                    rank,
+                    tol,
+                    max_iter,
+                    &mut x_ch,
+                    &mut scratch,
+                );
                 for i in 0..n {
                     x.data[i * dim + d] = x_ch[i];
                 }
@@ -94,10 +110,51 @@ fn cg_solve(
     x
 }
 
+/// Reusable scratch buffers for [`cg_solve_scalar`].
+///
+/// Holds the four length-`n` Vec allocations (b, r, p, ap) that the scalar CG
+/// solver would otherwise allocate on every call. Constructed once at the
+/// entry of [`cg_solve`] and grown only when `n` increases — the steady-state
+/// multi-channel path allocates zero Vecs after the first channel.
+struct CgScratch {
+    b: Vec<f32>,
+    r: Vec<f32>,
+    p: Vec<f32>,
+    ap: Vec<f32>,
+}
+
+impl CgScratch {
+    #[inline]
+    fn new(n: usize) -> Self {
+        Self {
+            b: vec![0.0; n],
+            r: vec![0.0; n],
+            p: vec![0.0; n],
+            ap: vec![0.0; n],
+        }
+    }
+
+    /// Grow each buffer to `n` if needed. No-op on the steady-state path where
+    /// the previous call used the same `n`.
+    #[inline]
+    fn ensure(&mut self, n: usize) {
+        if self.b.len() != n {
+            self.b.resize(n, 0.0);
+            self.r.resize(n, 0.0);
+            self.p.resize(n, 0.0);
+            self.ap.resize(n, 0.0);
+        }
+    }
+}
+
 /// Scalar CG solve: A·x = rhs for a single feature channel.
 ///
 /// Uses `hodge_laplacian` (or `graph_laplacian` for rank 0) as the matvec.
 /// For rank 0, removes the mean from both sides to handle the constant null space.
+///
+/// `scratch` provides the four length-`n` working buffers (b, r, p, ap) so the
+/// caller can reuse them across many channels instead of paying 4 allocations
+/// per call.
 fn cg_solve_scalar(
     cx: &CellComplex,
     rhs: &[f32],
@@ -105,9 +162,11 @@ fn cg_solve_scalar(
     tol: f32,
     max_iter: usize,
     x_out: &mut [f32],
+    scratch: &mut CgScratch,
 ) {
     let n = rhs.len();
     debug_assert_eq!(x_out.len(), n);
+    scratch.ensure(n);
 
     // For rank 0: project out constant null space
     let rhs_mean = match rank {
@@ -115,10 +174,12 @@ fn cg_solve_scalar(
         _ => 0.0,
     };
 
-    // Build corrected RHS (projected out null space)
-    let mut b = rhs.to_vec();
+    // Build corrected RHS into the reused `b` buffer (avoids `rhs.to_vec()` per call).
+    // `b[..n]` is fully overwritten below before any read.
+    let b = &mut scratch.b[..n];
+    b.copy_from_slice(rhs);
     if rank == 0 {
-        for v in &mut b {
+        for v in b.iter_mut() {
             *v -= rhs_mean;
         }
     }
@@ -155,13 +216,12 @@ fn cg_solve_scalar(
         out.copy_from_slice(&ax_field.data);
     };
 
-    // CG iterations: r = b, p = r, iterate
+    // CG iterations: r = b, p = r, iterate. All four working buffers come from
+    // the caller-supplied scratch — no per-call Vec allocations.
     x_out.fill(0.0f32);
-    let mut r = b;
-    let mut p = r.clone();
-    let mut ap = vec![0.0f32; n];
+    let (r, p, ap) = scratch_rpa(b, scratch);
 
-    let mut rs_old = dot(&r, &r);
+    let mut rs_old = dot(r, r);
 
     if rs_old < tol * tol {
         // RHS is essentially zero — solution is zero (in the projected space)
@@ -171,9 +231,9 @@ fn cg_solve_scalar(
     }
 
     for _ in 0..max_iter {
-        matvec(cx, &p, &mut v_field, &mut ap);
+        matvec(cx, p, &mut v_field, ap);
 
-        let p_ap = dot(&p, &ap);
+        let p_ap = dot(p, ap);
         if p_ap.abs() < 1e-20 {
             break; // Breakdown — p is in null space
         }
@@ -189,7 +249,7 @@ fn cg_solve_scalar(
             r[i] -= alpha * ap[i];
         }
 
-        let rs_new = dot(&r, &r);
+        let rs_new = dot(r, r);
         if rs_new < tol * tol {
             break;
         }
@@ -202,6 +262,27 @@ fn cg_solve_scalar(
 
         rs_old = rs_new;
     }
+}
+
+/// Split the `b`/`r`/`p`/`ap` scratch slots into the four (now-aliased) working
+/// buffers CG needs. Returns `(&mut r, &mut p, &mut ap)` after copying `b → r`
+/// and `r → p` (the CG initialization `r = b; p = r.clone()`).
+///
+/// This is a small helper that keeps the borrow-splitting local — the four
+/// `scratch.*` fields are disjoint, so we can hand out three `&mut` views at
+/// once without `RefCell`.
+#[inline]
+fn scratch_rpa<'a>(b: &'a [f32], scratch: &'a mut CgScratch) -> (&'a mut [f32], &'a mut [f32], &'a mut [f32]) {
+    let n = b.len();
+    let CgScratch { r, p, ap, b: _ } = scratch;
+    let r = &mut r[..n];
+    let p = &mut p[..n];
+    let ap = &mut ap[..n];
+    // r = b (CG initialization)
+    r.copy_from_slice(b);
+    // p = r
+    p.copy_from_slice(r);
+    (r, p, ap)
 }
 
 /// Dot product of two slices — SIMD-accelerated.
