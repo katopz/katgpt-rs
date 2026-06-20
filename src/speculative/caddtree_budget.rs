@@ -521,24 +521,31 @@ pub fn build_dd_tree_adaptive_mux_residual(
     //    (always ≤ 0), so we shift by the max and exponentiate via the
     //    log-sum-exp trick before handing them to `compute_mux_residual`, which
     //    expects positive weights that normalize to a distribution.
-    let raw_scores: Vec<f32> = tree
-        .iter()
-        .filter(|n| n.depth == position)
-        .map(|n| n.score)
-        .collect();
+    //
+    //    Single-alloc two-pass (was three Vec allocations before): pass 1 finds
+    //    max_score + path_count, pass 2 writes path_scores directly. Avoids
+    //    materializing the intermediate `raw_scores: Vec<f32>`.
+    let mut max_score = f32::NEG_INFINITY;
+    let mut path_count = 0usize;
+    for n in &tree {
+        if n.depth == position {
+            path_count += 1;
+            if n.score > max_score {
+                max_score = n.score;
+            }
+        }
+    }
 
-    if raw_scores.is_empty() {
+    if path_count == 0 {
         return (tree, budget);
     }
 
-    let max_score = raw_scores
-        .iter()
-        .copied()
-        .fold(f32::NEG_INFINITY, f32::max);
-    let path_scores: Vec<f32> = raw_scores
-        .iter()
-        .map(|&s| (s - max_score).exp())
-        .collect();
+    let mut path_scores: Vec<f32> = Vec::with_capacity(path_count);
+    for n in &tree {
+        if n.depth == position {
+            path_scores.push((n.score - max_score).exp());
+        }
+    }
 
     // 4. All paths share the flat marginals (wiring complete; per-path
     //    marginals are future work). compute_mux_residual indexes at

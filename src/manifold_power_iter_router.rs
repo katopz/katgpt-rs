@@ -190,8 +190,10 @@ pub fn compute_expert_gram_into(w_g: &[f32], d_model: usize, out: &mut [f32]) {
 ///
 /// Deterministic (G5): pure function of `(r, grams, c_prime, iters)` →
 /// byte-identical `R'` across runs — sync/quorum-safe. Zero-alloc in the
-/// retraction loop (caller-owned `scratch`); `r_prime` field clones once for
-/// convenience (ignore it for true zero-alloc).
+/// retraction loop (caller-owned `scratch`); the `r_prime` field in the
+/// returned [`MpiRouterResult`] clones once for diagnostic convenience. For
+/// the true zero-alloc path (no `r_prime` clone), use
+/// [`manifold_power_iter_router_inplace`].
 ///
 /// # Panics: debug assert only (shape mismatches).
 pub fn manifold_power_iter_router(
@@ -211,6 +213,46 @@ pub fn manifold_power_iter_router(
     );
 
     let target_norm = c_prime / (n_experts as f32).sqrt();
+    let (lambda, maxvio) =
+        manifold_power_iter_router_inplace(r, gram_per_expert, n_experts, d_model, target_norm, iters, scratch);
+
+    MpiRouterResult {
+        r_prime: r.to_vec(),
+        lambda_alignment: lambda,
+        maxvio,
+    }
+}
+
+/// **Zero-alloc variant** of [`manifold_power_iter_router`].
+///
+/// Performs the same in-place retraction and computes the same `(λ, MaxVio)`
+/// diagnostics, but skips the convenience `r_prime: Vec<f32>` clone in
+/// [`MpiRouterResult`] — `r` is the canonical conditioned router (mutated in
+/// place). The scratch buffer used during the diagnostics pass is taken from
+/// `scratch.mv_out` (resized internally if needed), so no per-call allocation
+/// is performed.
+///
+/// Use this from snapshot-swap hot paths that already own `r` and only need
+/// the scalar diagnostics. The public [`manifold_power_iter_router`] wraps
+/// this with a one-shot `r.to_vec()` for callers that want a snapshot.
+///
+/// `target_norm` is `c_prime / √N` (passed precomputed to avoid a redundant
+/// sqrt+div on every call).
+pub fn manifold_power_iter_router_inplace(
+    r: &mut [f32],
+    gram_per_expert: &[&[f32]],
+    n_experts: usize,
+    d_model: usize,
+    target_norm: f32,
+    iters: u8,
+    scratch: &mut PowerRetractScratch,
+) -> (f32, f32) {
+    debug_assert_eq!(r.len(), n_experts * d_model, "router shape mismatch");
+    debug_assert_eq!(
+        gram_per_expert.len(),
+        n_experts,
+        "gram_per_expert count mismatch"
+    );
 
     // Phase 1: retract each row (paper Eq. 4–5).
     for i in 0..n_experts {
@@ -220,14 +262,18 @@ pub fn manifold_power_iter_router(
         power_iter_retract(row, gram, d_model, target_norm, iters, scratch);
     }
 
-    // Phase 2: diagnostics.
-    let (lambda, maxvio) = compute_diagnostics(r, gram_per_expert, n_experts, d_model, target_norm);
-
-    MpiRouterResult {
-        r_prime: r.to_vec(),
-        lambda_alignment: lambda,
-        maxvio,
-    }
+    // Phase 2: diagnostics. Reuse the existing scratch buffer for the
+    // per-row `R'[i]·M[i]` matvec output (zero-alloc).
+    scratch.ensure_dim(d_model);
+    let (lambda, maxvio) = compute_diagnostics_with_scratch(
+        r,
+        gram_per_expert,
+        n_experts,
+        d_model,
+        target_norm,
+        &mut scratch.mv_out,
+    );
+    (lambda, maxvio)
 }
 
 /// Compute (lambda_alignment, maxvio) diagnostics for a router given grams.
@@ -241,9 +287,38 @@ pub fn compute_diagnostics(
     d_model: usize,
     target_norm: f32,
 ) -> (f32, f32) {
+    let mut rm_scratch = vec![0.0f32; d_model];
+    compute_diagnostics_with_scratch(
+        r,
+        gram_per_expert,
+        n_experts,
+        d_model,
+        target_norm,
+        &mut rm_scratch,
+    )
+}
+
+/// **Zero-alloc variant** of [`compute_diagnostics`].
+///
+/// Identical math, but the per-row `R'[i]·M[i]` matvec output is written into
+/// the caller-owned `rm_scratch` buffer (length `>= d_model`). Lets callers
+/// that already own a `d_model`-sized scratch (e.g. [`PowerRetractScratch::mv_out`])
+/// reuse it across consecutive diagnostics calls.
+pub fn compute_diagnostics_with_scratch(
+    r: &[f32],
+    gram_per_expert: &[&[f32]],
+    n_experts: usize,
+    d_model: usize,
+    target_norm: f32,
+    rm_scratch: &mut [f32],
+) -> (f32, f32) {
+    debug_assert_eq!(
+        rm_scratch.len(),
+        d_model,
+        "rm_scratch must be exactly d_model long"
+    );
     let mut lambda_sum = 0.0f32;
     let mut maxvio = 0.0f32;
-    let mut rm_scratch = vec![0.0f32; d_model]; // R'[i]·M[i], reused
     for i in 0..n_experts {
         let row = &r[i * d_model..(i + 1) * d_model];
         let gram = gram_per_expert[i];
@@ -307,8 +382,40 @@ pub fn gate_sigmoid_topk(
     k: usize,
     out_scores: &mut [f32],
 ) -> Vec<usize> {
+    let mut idx: Vec<usize> = vec![0usize; n_experts];
+    let kk = gate_sigmoid_topk_into(x, r_prime, n_experts, d_model, beta, k, out_scores, &mut idx);
+    idx.truncate(kk);
+    idx
+}
+
+/// **Zero-alloc variant** of [`gate_sigmoid_topk`].
+///
+/// Identical math and ordering, but writes the selected expert indices into
+/// the caller-owned `idx_buf` (length `>= n_experts`) and returns the truncation
+/// length `kk = min(k, n_experts)`. The returned slice `&mut idx_buf[..kk]` is
+/// valid until the buffer is next mutated.
+///
+/// Suitable for per-token NPC routing where the caller holds a pre-allocated
+/// `idx_buf` across frames (skips the per-call `Vec<usize>` allocation in
+/// [`gate_sigmoid_topk`]).
+///
+/// # Returns
+///
+/// Truncation length `kk`. On return, `idx_buf[0..kk]` holds the top-`kk`
+/// expert indices in descending sigmoid-score order.
+pub fn gate_sigmoid_topk_into(
+    x: &[f32],
+    r_prime: &[f32],
+    n_experts: usize,
+    d_model: usize,
+    beta: f32,
+    k: usize,
+    out_scores: &mut [f32],
+    idx_buf: &mut [usize],
+) -> usize {
     debug_assert_eq!(r_prime.len(), n_experts * d_model, "r_prime shape mismatch");
     debug_assert_eq!(out_scores.len(), n_experts, "out_scores length mismatch");
+    debug_assert_eq!(idx_buf.len(), n_experts, "idx_buf length mismatch");
 
     // Per-expert independent sigmoid.
     for i in 0..n_experts {
@@ -319,25 +426,28 @@ pub fn gate_sigmoid_topk(
         out_scores[i] = 1.0 / (1.0 + (-z).exp());
     }
 
+    // Initialize idx_buf to [0, 1, 2, ..., n_experts-1] in place.
+    for (i, slot) in idx_buf.iter_mut().enumerate() {
+        *slot = i;
+    }
+
     // Top-k by score. For small k (typical game-scale N ≤ 256) selection
     // sort is cache-friendly; for large N the caller should use a priority
     // queue. Keep this path branch-free for the hot N≤64 case.
-    let mut idx: Vec<usize> = (0..n_experts).collect();
     let kk = k.min(n_experts);
     for i in 0..kk {
         // Find max in [i..n].
         let mut best = i;
-        let mut best_score = out_scores[idx[i]];
+        let mut best_score = out_scores[idx_buf[i]];
         for j in (i + 1)..n_experts {
-            if out_scores[idx[j]] > best_score {
+            if out_scores[idx_buf[j]] > best_score {
                 best = j;
-                best_score = out_scores[idx[j]];
+                best_score = out_scores[idx_buf[j]];
             }
         }
-        idx.swap(i, best);
+        idx_buf.swap(i, best);
     }
-    idx.truncate(kk);
-    idx
+    kk
 }
 
 // ── Snapshot-swap hook (Phase 2) ─────────────────────────────────────────
@@ -790,5 +900,115 @@ mod tests {
         let _ = hook.recondition_at_swap(&mut r_b, &grams_ref, n, d, 1);
         // Same grams → same R' regardless of cache state.
         assert_eq!(r_a, r_b, "same grams must give same R' across version bumps");
+    }
+
+    #[test]
+    fn t10_gate_sigmoid_topk_into_matches_allocating() {
+        // The zero-alloc `gate_sigmoid_topk_into` MUST yield the same indices
+        // (in the same order) as the allocating `gate_sigmoid_topk`.
+        let d = 6usize;
+        let n = 5usize;
+        let r = seeded_matrix(31, n, d);
+        let x = seeded_vec(7, d);
+        let beta = 1.3f32;
+        let k = 3usize;
+
+        // Allocating path.
+        let mut scores_a = vec![0.0f32; n];
+        let topk_vec = gate_sigmoid_topk(&x, &r, n, d, beta, k, &mut scores_a);
+
+        // Zero-alloc path.
+        let mut scores_b = vec![0.0f32; n];
+        let mut idx_buf = vec![0usize; n];
+        let kk = gate_sigmoid_topk_into(&x, &r, n, d, beta, k, &mut scores_b, &mut idx_buf);
+
+        assert_eq!(kk, topk_vec.len(), "kk must equal length of allocating variant");
+        assert_eq!(&idx_buf[..kk], topk_vec.as_slice(), "indices must match");
+        assert_eq!(scores_a, scores_b, "score buffer contents must match");
+    }
+
+    #[test]
+    fn t11_gate_sigmoid_topk_into_handles_k_larger_than_n() {
+        // k > n_experts → kk clamps to n_experts; no out-of-bounds writes.
+        let d = 4usize;
+        let n = 3usize;
+        let r = seeded_matrix(11, n, d);
+        let x = seeded_vec(2, d);
+
+        let mut scores = vec![0.0f32; n];
+        let mut idx_buf = vec![0usize; n];
+        let kk = gate_sigmoid_topk_into(&x, &r, n, d, 1.0, n + 5, &mut scores, &mut idx_buf);
+
+        assert_eq!(kk, n, "kk must clamp to n_experts when k > n");
+        // All indices present exactly once.
+        let mut sorted = idx_buf[..kk].to_vec();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..n).collect::<Vec<usize>>());
+    }
+
+    #[test]
+    fn t12_compute_diagnostics_with_scratch_matches_allocating() {
+        // `compute_diagnostics_with_scratch` MUST yield identical (λ, MaxVio)
+        // to `compute_diagnostics`.
+        let d = 8usize;
+        let n = 3usize;
+        let r = seeded_matrix(51, n, d);
+        let grams: Vec<Vec<f32>> = (0..n)
+            .map(|i| gram_of(&seeded_matrix(200 + i as u64, d, d), d))
+            .collect();
+        let grams_ref: Vec<&[f32]> = grams.iter().map(|g| g.as_slice()).collect();
+        let target = 1.0f32 / (n as f32).sqrt();
+
+        let (lambda_a, maxvio_a) = compute_diagnostics(&r, &grams_ref, n, d, target);
+
+        let mut rm = vec![0.0f32; d];
+        let (lambda_b, maxvio_b) =
+            compute_diagnostics_with_scratch(&r, &grams_ref, n, d, target, &mut rm);
+
+        let bits = |f: f32| f.to_bits();
+        assert_eq!(bits(lambda_a), bits(lambda_b), "λ must be byte-identical");
+        assert_eq!(bits(maxvio_a), bits(maxvio_b), "MaxVio must be byte-identical");
+    }
+
+    #[test]
+    fn t13_router_inplace_matches_allocating() {
+        // `manifold_power_iter_router_inplace` MUST yield:
+        //  - identical mutated `r` (byte-for-byte)
+        //  - identical (λ, MaxVio) diagnostics
+        // as `manifold_power_iter_router`.
+        let d = 8usize;
+        let n = 3usize;
+        let c_prime = 1.0f32;
+        let target = c_prime / (n as f32).sqrt();
+
+        let r_seed = seeded_matrix(5, n, d);
+        let grams: Vec<Vec<f32>> = (0..n)
+            .map(|i| gram_of(&seeded_matrix(100 + i as u64, d, d), d))
+            .collect();
+        let grams_ref: Vec<&[f32]> = grams.iter().map(|g| g.as_slice()).collect();
+
+        // Allocating path.
+        let mut r_a = r_seed.clone();
+        let mut s_a = PowerRetractScratch::new(d);
+        let res_a = manifold_power_iter_router(&mut r_a, &grams_ref, n, d, c_prime, 1, &mut s_a);
+
+        // Zero-alloc path.
+        let mut r_b = r_seed.clone();
+        let mut s_b = PowerRetractScratch::new(d);
+        let (lambda_b, maxvio_b) =
+            manifold_power_iter_router_inplace(&mut r_b, &grams_ref, n, d, target, 1, &mut s_b);
+
+        assert_eq!(r_a, r_b, "R' mutated buffer must be byte-identical");
+        assert_eq!(res_a.r_prime, r_b, "r_prime field must equal mutated r_b");
+        assert_eq!(
+            res_a.lambda_alignment.to_bits(),
+            lambda_b.to_bits(),
+            "λ must match byte-for-byte"
+        );
+        assert_eq!(
+            res_a.maxvio.to_bits(),
+            maxvio_b.to_bits(),
+            "MaxVio must match byte-for-byte"
+        );
     }
 }
