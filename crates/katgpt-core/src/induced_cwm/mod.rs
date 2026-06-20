@@ -67,8 +67,14 @@ pub mod commitment;
 pub mod kernel;
 pub mod unit_test;
 
+#[cfg(feature = "induced_cwm_ismcts")]
+pub mod ismcts;
+
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, feature = "induced_cwm_ismcts"))]
+mod ismcts_tests;
 
 // ── Public API re-exports ─────────────────────────────────────────────────
 //
@@ -81,3 +87,11 @@ pub use belief::BeliefInferenceFn;
 pub use commitment::CwmCommitment;
 pub use kernel::InducedCwmKernel;
 pub use unit_test::{TransitionTestFailure, TransitionUnitTest, make_transition_tests_from_trajectory, verify_transition};
+
+// ── Phase 2 (ISMCTS) re-exports ────────────────────────────────────────────
+//
+// Gated by `induced_cwm_ismcts` so callers can write
+// `katgpt_core::induced_cwm::ismcts_search_with_inference` instead of
+// `katgpt_core::induced_cwm::ismcts::ismcts_search_with_inference`.
+#[cfg(feature = "induced_cwm_ismcts")]
+pub use ismcts::{InformationSet, NodeStats, ismcts_search_with_inference};

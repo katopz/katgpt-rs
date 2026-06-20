@@ -418,3 +418,11 @@ pub use induced_cwm::{
     BeliefInferenceFn, CwmCommitment, InducedCwmKernel, TransitionTestFailure, TransitionUnitTest,
     make_transition_tests_from_trajectory, verify_transition,
 };
+
+// Phase 2 (Plan 296 T2.1–T2.5): Information-Set MCTS over an induced CWM +
+// belief fn. Self-contained search tree (does NOT reuse root-crate
+// `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on
+// the root). Gated by `induced_cwm_ismcts` (which auto-enables
+// `induced_cwm`).
+#[cfg(feature = "induced_cwm_ismcts")]
+pub use induced_cwm::{InformationSet, NodeStats, ismcts_search_with_inference};
