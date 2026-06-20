@@ -4,7 +4,7 @@
 **Research:** [`katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md`](../.research/274_Optimal_CCE_Moderator_LP_No_Regret.md)
 **Source paper:** [arxiv 2606.20062](https://arxiv.org/pdf/2606.20062) — Campi, Cannerozzi, Tzouanas — Optimal CCEs in MFGs via LP + No-Regret Learning
 **Target:** `katgpt-rs/src/cce/` (new module) + Cargo feature `cce_moderator`
-**Status:** Active — Phase 1 (unblocking skeleton) pending
+**Status:** Phase 1 COMPLETE — Phase 2 (LP solver + primal-dual iterator) pending
 
 ---
 
@@ -26,26 +26,29 @@ This is the **public open primitive** for Research 274's Super-GOAT verdict. The
 
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/src/cce/mod.rs` with module declaration. Add `cce_moderator` feature to `Cargo.toml` `[features]` section, default-off. Verify `cargo build --features cce_moderator` succeeds with empty module.
-- [ ] **T1.2** Define core types in `katgpt-rs/src/cce/types.rs`:
+- [x] **T1.1** Create `katgpt-rs/src/cce/mod.rs` with module declaration. Add `cce_moderator` feature to `Cargo.toml` `[features]` section, default-off. Verify `cargo build --features cce_moderator` succeeds with empty module.
+- [x] **T1.2** Define core types in `katgpt-rs/src/cce/types.rs`:
   - `pub struct StateSpace<const N: usize>` — marker for finite state space of size `N`
   - `pub struct ActionSpace<const A: usize>` — marker for finite action space of size `A`
   - `pub struct OccupationMeasure<const N: usize, const A: usize>` — `Vec<f32>` of size `N·A`, normalized to sum to 1 (invariant checked on construction)
   - `pub trait DeviationClass` — `fn deviations(&self) -> &[Deviation]; fn apply(&self, κ: &Deviation, ρ: &OccupationMeasure) -> OccupationMeasure`
   - `pub struct Deviation { id: u32, kernel: [[f32; A]; N] }` — a fixed alternative policy `κ : S → P(A)`
   - `pub trait PayoffTensor<const N: usize, const A: usize>` — `fn gamma(&self, ρ: &OccupationMeasure) -> f32; fn gamma_dev(&self, ρ: &OccupationMeasure, κ: &Deviation) -> f32; fn gamma0(&self, ρ: &OccupationMeasure) -> f32`
-- [ ] **T1.3** Implement `ExternalRegret<D: DeviationClass>` in `katgpt-rs/src/cce/external_regret.rs`:
+- [x] **T1.3** Implement `ExternalRegret<D: DeviationClass>` in `katgpt-rs/src/cce/external_regret.rs`:
   - `pub fn er(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor) -> f32` — returns `max_κ (Γ[ρ] − Γ_dev[ρ](κ))`
   - `pub fn best_deviation(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor) -> Deviation` — returns argmax_κ
   - `pub fn is_unique_maximizer(&self, ρ: &OccupationMeasure, d: &D, p: &impl PayoffTensor, ε: f32) -> bool` — Assumption 6.2 check: top-2 gap > ε
   - `pub fn linear_derivative(&self, ρ: &OccupationMeasure, m_idx: usize, d: &D, p: &impl PayoffTensor) -> f32` — `δER/δρ = F[m](m) − F[m](κ*(ρ))` per Lemma 6.5
-- [ ] **T1.4** Add unit tests in `katgpt-rs/src/cce/external_regret.rs`:
+- [x] **T1.4** Add unit tests in `katgpt-rs/src/cce/external_regret.rs`:
   - `test_er_zero_on_nash` — for `ρ = δ_(m⋆, m⋆)` (Dirac on Nash), `ER = 0`
   - `test_er_positive_off_nash` — perturb `ρ`, `ER > 0`
   - `test_unique_maximizer_strictly_convex` — for a strictly convex deviation problem, uniqueness holds
   - `test_linear_derivative_matches_fd` — finite-difference check vs analytic
+  - `canonical_rps_nash_has_zero_er` — RPS mixed Nash is a marginal CCE (`ER = 0`)
+  - `canonical_chicken_nash_zero_and_cce_strict` — mixed Nash `ER = 0`, strict CCE `ER = -0.5`, welfare gain verified
+  - `canonical_emission_abatement_cce_satisfied` — paper §8.2 discrete emission game, marginal CCE `ER = 0`
 
-**Phase 1 exit:** `cargo test --features cce_moderator` passes; `ExternalRegret` is correct on the 3 canonical examples (RPS, chicken, emission-abatement discrete).
+**Phase 1 exit:** `cargo test --features cce_moderator --lib cce::` passes (20/20 tests); `ExternalRegret` is correct on the 3 canonical examples (RPS, chicken, emission-abatement discrete). ✅ SHIPPED
 
 ---
 
