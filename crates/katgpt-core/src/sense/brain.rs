@@ -15,17 +15,23 @@ const MAX_OVERRIDES: usize = 8;
 const SENSE_KIND_COUNT: usize = 6;
 
 /// Per-NPC sense override configuration. GM always wins.
+///
+/// # Layout
+///
+/// Fields ordered by alignment (u64 → f32 → u8) to eliminate padding — saves
+/// 8 bytes per NPC vs the naïve declaration order. With thousands of NPCs per
+/// shard this keeps the override struct at 136 bytes instead of 144.
 #[derive(Clone, Debug)]
 pub struct SenseOverride {
     /// Script ID if in scripted mode.
     pub script_id: Option<u64>,
-    /// Number of valid entries in `pinned`.
-    pinned_count: u8,
     /// Pinned sense activations: (kind, value). If present, overrides autonomous.
     /// Fixed-size array avoids heap allocation — MAX_OVERRIDES slots.
     pub pinned: [(SenseKind, f32); MAX_OVERRIDES],
     /// O(1) pin lookup indexed by SenseKind discriminant. Rebuilt on pin/unpin.
     pin_lookup: [Option<f32>; SENSE_KIND_COUNT],
+    /// Number of valid entries in `pinned`.
+    pinned_count: u8,
     /// If true, all autonomous computation is disabled; only pinned values returned.
     pub autonomous_disabled: bool,
 }
