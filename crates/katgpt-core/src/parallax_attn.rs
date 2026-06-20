@@ -21,6 +21,29 @@
 //! Advantages over softmax: no attention sinks, better numerical stability, no exp
 //! overflow risk. The column-sum factorization still applies identically.
 //!
+//! ## Training-time caller requirement: W_R gradient clipping (Issue 002)
+//!
+//! The Parallax correction `o_PLX = o_SA − gate_scale · Σ_KV · ρ` (where
+//! `ρ = W_R · x`) has a positive-feedback loop under naive SGD on W_R:
+//! as `|ρ|` grows, the correction grows, the gradient w.r.t. W_R grows
+//! (proportional to `Σ_KV · x`), W_R amplifies `ρ` further, etc. Once the
+//! loop runs away, attention-weight normalization overflows and the
+//! forward emits NaN.
+//!
+//! Re-investigation against the current forward path (Issue 002,
+//! 2026-06-19; see `tests/parallax_sigmoid_stability_grad_clip.rs`):
+//! - **Sigmoid activation is stable** for ≥500 FD-SGD steps at LR=1.0 from
+//!   zero W_R init at the canonical test setup (n=64, d=8).
+//! - **Softmax activation diverges to NaN around step 325–350** under the
+//!   same setup. This is the opposite of the original Issue 002 analysis,
+//!   which expected sigmoid to be the worse case (Research 140).
+//! - **Caller mitigation** for either activation when training W_R: apply
+//!   global L2 gradient clipping on the W_R gradient only
+//!   (`‖∇_W_R‖₂ ≤ 1.0` per step). This bounds the feedback loop's
+//!   per-step amplification without altering the W_Q/W_K/W_V trajectories.
+//!   For inference (frozen W_R), no mitigation is needed — the forward
+//!   path is finite for any finite `ρ`.
+//!
 //! ## Optimization: column-sum factorization
 //!
 //! The covariance factorizes via column sums of the attention weight matrix:

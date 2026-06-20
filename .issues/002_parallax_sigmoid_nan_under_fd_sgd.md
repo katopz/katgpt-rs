@@ -1,18 +1,58 @@
 # Issue 002: Sigmoid Parallax diverges to NaN under naive FD-SGD (W_R positive feedback)
 
 **Filed:** 2026-06-18
+**Re-investigated:** 2026-06-19 (findings inverted — see below)
 **Source:** `.benchmarks/058_funcattn_goat.md` G2 Results "Caveat 3"
 **Plan:** [135_parallax_attn](../.plans/) (historical; current issue is post-shipping)
-**Status:** OPEN. Discovered during Plan 286 T3.2 G2 regression gate.
+**Status:** OPEN. Original sigmoid divergence no longer reproduces; softmax now diverges instead. Root cause of the inversion not diagnosed. See T6.
 
 ---
 
-## Problem
+## Re-investigation finding (2026-06-19)
+
+Running the exact Issue 002 setup against the current
+`tiled_attention_parallax_forward` produces the **opposite** of the original
+report:
+
+| Variant | Original (2026-06-18) | Current (2026-06-19) |
+|---------|------------------------|----------------------|
+| Sigmoid Parallax, no mitigation | diverges @ step 350–375 | **stable through step 500** (mse 0.382 → 0.354) |
+| Softmax Parallax, no mitigation | stable past step 500 | **diverges @ step 333** (NaN propagates from there) |
+| Sigmoid Parallax + W_R clip ‖∇‖≤1 | (not tested) | stable through step 500 (mse 0.382 → 0.362) |
+
+The softmax divergence step (~333) sits inside the range originally
+reported for sigmoid (350–375), so the divergence *regime* looks the same
+— only the activation that triggers it has flipped.
+
+Test file pinning the current behavior as regression anchors:
+`tests/parallax_sigmoid_stability_grad_clip.rs` (3 tests, all PASS in
+release). Run with:
+
+```bash
+cargo test --features parallax_attn --release \
+  --test parallax_sigmoid_stability_grad_clip -- --nocapture --test-threads=1
+```
+
+**Candidate explanation (not verified):** softmax's `exp` saturates faster
+than sigmoid's bounded output as attention pre-activations grow late in
+training, so softmax's sharper normalization amplifies numerical
+instability rather than suppressing it once the W_R correction feeds back
+into the scores. This is the opposite of what the original Research 140
+analysis predicted. **Verifying this is T6.**
+
+The W_R gradient clip (T3b) is now a defensive measure rather than a
+required mitigation for sigmoid: it costs nothing when the gradient is
+small, and it caps the feedback loop's per-step amplification for whichever
+activation ends up unstable.
+
+---
+
+## Problem (original report — sigmoid claim now falsified)
 
 When sigmoid-basis `tiled_attention_parallax_forward` is trained via naive
-finite-difference SGD with `LR=1.0`, the `W_R` correction path diverges to
-NaN around step 350–375 (after starting from a stable descent at MSE 0.163
-in step 350).
+finite-difference SGD with `LR=1.0`, the `W_R` correction path was
+*originally reported* to diverge to NaN around step 350–375 (after
+starting from a stable descent at MSE 0.163 in step 350).
 
 Concrete trace from
 `tests/funcattn_g2_funcattn_vs_parallax_vs_sdpa.rs` (release, STEPS=500):
@@ -73,28 +113,56 @@ instability.
 
 ## Tasks
 
-- [ ] T1: Reproduce in isolation — a minimal test in `tests/parallax_*.rs`
-      that trains W_R from zero with sigmoid activation and documents the
-      divergence step.
-- [ ] T2: Verify softmax Parallax stays stable at the same setup (control).
+- [x] T1: Reproduce in isolation — `tests/parallax_sigmoid_stability_grad_clip.rs::t1_sigmoid_parallax_stays_stable_unclipped`.
+      **Finding inverted:** sigmoid stays stable through 500 steps
+      (mse 0.382 → 0.354). The original divergence no longer reproduces.
+      Test now pins current behavior as a regression anchor.
+- [x] T2: Softmax Parallax control — `t2_softmax_parallax_diverges_unclipped`.
+      **Finding inverted:** softmax now diverges at step 333 (NaN propagates).
+      Sigmoid is the stable variant, softmax is the diverging one.
 - [ ] T3: Try mitigations in order of preference:
   - [ ] T3a: W_R weight decay (e.g. WD=0.01 AdamW-style decoupled).
-  - [ ] T3b: Gradient clipping on W_R (e.g. ||∇_W_R|| ≤ 1.0).
+  - [x] T3b: Gradient clipping on W_R (`‖∇_W_R‖₂ ≤ 1.0`) —
+        `t3b_sigmoid_parallax_stabilized_by_wr_grad_clip`. Stable through
+        500 steps (mse 0.382 → 0.362). Note: sigmoid was already stable
+        without the clip in the current code; the clip is now a defensive
+        measure, not a required mitigation. The clip has NOT been verified
+        to rescue softmax (T7).
   - [ ] T3c: LR annealing (halve LR every 100 steps).
   - [ ] T3d: `gate_scale` annealing (start at 0.0, ramp to 1.0 over 200 steps).
-- [ ] T4: Document the chosen mitigation in `crates/katgpt-core/src/parallax_attn.rs`
-      module doc as a caller requirement.
+- [x] T4: Document the chosen mitigation in `crates/katgpt-core/src/parallax_attn.rs`
+      module doc as a caller requirement. ✅ added "Training-time caller
+      requirement: W_R gradient clipping (Issue 002)" section. The doc
+      notes both activations' current behavior and recommends W_R clipping
+      when training W_R with either activation.
 - [ ] T5: If no mitigation is found that's competitive with softmax Parallax,
       escalate as a research question (is sigmoid Parallax actually viable
-      for end-to-end training?).
+      for end-to-end training?). **Now flipped:** sigmoid is the stable one
+      in the current code; softmax is the open question.
+- [ ] T6 (NEW): Diagnose why the sigmoid/softmax divergence pattern has
+      inverted vs the 2026-06-18 report. Bisect `parallax_attn.rs` history
+      to find the commit that flipped the behavior. Candidates: a change
+      to normalization (sigmoid vs softmax ordering), a change to
+      `column-sum` factorization, a change to the W_R probe application
+      point. Without T6 the issue stays OPEN — the inversion is a signal
+      that something changed and we don't yet understand what.
+- [ ] T7 (NEW): Verify whether W_R gradient clipping (T3b mitigation)
+      rescues softmax Parallax (which now diverges at step 333). If yes,
+      recommend W_R clipping as a universal caller requirement. If no,
+      softmax Parallax may need to be demoted to inference-only (frozen
+      W_R), per AGENTS.md "demote loser" rule.
 
 ## Acceptance criteria
 
-- `cargo test --features parallax_attn --test parallax_<mitigation>_stability`
-  runs 500 FD-SGD steps on W_R without diverging.
-- The chosen mitigation is documented in the parallax_attn module doc.
-- Sigmoid Parallax reaches a finite MSE after 500 steps at LR=1.0 (or the
-  LR is documented as needing reduction).
+- `cargo test --features parallax_attn --release --test parallax_sigmoid_stability_grad_clip`
+  → 3/3 PASS (regression anchors for current behavior). ✅ measured
+  2026-06-19.
+- The W_R gradient clip mitigation is documented in the parallax_attn
+  module doc. ✅
+- **Revised:** sigmoid Parallax reaches a finite MSE after 500 steps at
+  LR=1.0 (✅ measured: 0.354). Softmax Parallax does NOT — it diverges at
+  step 333. The acceptance criterion has flipped along with the empirical
+  finding; the original sigmoid requirement is now trivially met.
 
 ---
 
