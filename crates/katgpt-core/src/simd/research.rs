@@ -202,7 +202,7 @@ pub fn simd_sum_sq(x: &[f32], len: usize) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
+pub(super) fn scalar_sum_sq(x: &[f32], len: usize) -> f32 {
     // 4 independent accumulators — FMA latency bound on a single accumulator.
     // mul_add preserves single-rounding parity with the SIMD path.
     let mut acc = [0.0f32; 4];
@@ -347,7 +347,7 @@ pub fn simd_sum_abs_f32(x: &[f32]) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
+pub(super) fn scalar_sum_abs_f32(x: &[f32]) -> f32 {
     // 4 independent accumulators — addition latency bound on a single accumulator.
     let mut acc = [0.0f32; 4];
     let chunks = x.len() / 4;
@@ -495,7 +495,7 @@ pub fn simd_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
+pub(super) fn scalar_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
     // 4 independent accumulators — FMA latency bound on a single accumulator.
     // mul_add preserves single-rounding parity with the SIMD path.
     let mut acc = [0.0f32; 4];
@@ -644,7 +644,7 @@ pub fn simd_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
+pub(super) fn scalar_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
     for i in 0..len {
         unsafe {
             *dst.get_unchecked_mut(i) += *a.get_unchecked(i) - *b.get_unchecked(i);
@@ -728,7 +728,7 @@ pub fn simd_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize) {
+pub(super) fn scalar_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize) {
     for i in 0..len {
         unsafe {
             // FMA: dst[i] = scale * src[i] + dst[i] (single rounding).

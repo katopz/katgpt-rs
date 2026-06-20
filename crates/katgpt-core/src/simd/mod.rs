@@ -58,6 +58,12 @@ mod tests_sense;
 // `pub(super)` in its backend submodule) into `simd::` scope so the test
 // modules can call them via bare names through `use super::*`. Only the
 // scalars actually referenced by `tests.rs` are imported.
+//
+// NOTE: this block exists because `simd.rs` was recently split into a
+// directory (`simd/`); the test file still references the scalar helpers
+// that used to be in the same module. This is a minimal fix to unblock test
+// compilation; a fuller refactor would move the scalar helpers into a
+// dedicated `simd/scalar_ref.rs` submodule.
 #[cfg(test)]
 use dot::{scalar_dot_f32, scalar_outer_product_acc};
 #[cfg(test)]

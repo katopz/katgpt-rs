@@ -38,7 +38,7 @@ pub fn simd_scale_inplace(x: &mut [f32], scale: f32) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_scale_inplace(x: &mut [f32], scale: f32) {
+pub(super) fn scalar_scale_inplace(x: &mut [f32], scale: f32) {
     for val in x.iter_mut() {
         *val *= scale;
     }
@@ -324,7 +324,7 @@ pub fn simd_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_add_inplace(dst: &mut [f32], src: &[f32]) {
+pub(super) fn scalar_add_inplace(dst: &mut [f32], src: &[f32]) {
     for i in 0..dst.len() {
         unsafe {
             *dst.get_unchecked_mut(i) += *src.get_unchecked(i);
@@ -334,7 +334,7 @@ fn scalar_add_inplace(dst: &mut [f32], src: &[f32]) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_add_scalar_inplace(x: &mut [f32], val: f32) {
+pub(super) fn scalar_add_scalar_inplace(x: &mut [f32], val: f32) {
     for v in x.iter_mut() {
         *v += val;
     }
@@ -342,7 +342,7 @@ fn scalar_add_scalar_inplace(x: &mut [f32], val: f32) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
+pub(super) fn scalar_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
     // Rewrite (v - sub) * scale as v * scale + (-sub * scale) to enable FMA.
     // The additive term is loop-invariant — hoist outside the per-element work.
     let bias = -(sub * scale);
@@ -353,7 +353,7 @@ fn scalar_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sum_f32(x: &[f32]) -> f32 {
+pub(super) fn scalar_sum_f32(x: &[f32]) -> f32 {
     // 4 independent accumulators — addition is latency-bound on a single
     // accumulator (~3 cycles/iter on most FPUs). Unrolling 4-wide keeps the
     // adder pipeline full and helps LLVM auto-vectorize on targets without
@@ -382,7 +382,7 @@ fn scalar_sum_f32(x: &[f32]) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
+pub(super) fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
     for i in 0..dst.len() {
         unsafe {
             *dst.get_unchecked_mut(i) = *a.get_unchecked(i) + *b.get_unchecked(i);
@@ -392,7 +392,7 @@ fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_max_f32(x: &[f32]) -> f32 {
+pub(super) fn scalar_max_f32(x: &[f32]) -> f32 {
     let mut max = x[0];
     for i in 1..x.len() {
         // Branch-free: matches the SIMD path's vmaxq_f32 / _mm256_max_ps NaN semantics
@@ -404,7 +404,7 @@ fn scalar_max_f32(x: &[f32]) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
+pub(super) fn scalar_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
     for i in 0..dst.len() {
         unsafe {
             let d = *dst.get_unchecked(i);
@@ -420,7 +420,7 @@ fn scalar_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
+pub(super) fn scalar_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
     // No FMA opportunity: x[i] = gamma[i] * x[i] * scale is a pure product of
     // three factors. The two-multiply form is already optimal.
     for i in 0..x.len() {

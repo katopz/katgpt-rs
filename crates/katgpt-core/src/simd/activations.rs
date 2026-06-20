@@ -94,7 +94,7 @@ pub fn simd_reciprocal_inplace(x: &mut [f32]) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_reciprocal_inplace(x: &mut [f32]) {
+pub(super) fn scalar_reciprocal_inplace(x: &mut [f32]) {
     for val in x.iter_mut() {
         *val = 1.0 / *val;
     }
@@ -102,7 +102,7 @@ fn scalar_reciprocal_inplace(x: &mut [f32]) {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_exp_sum_inplace(x: &mut [f32]) -> f32 {
+pub(super) fn scalar_exp_sum_inplace(x: &mut [f32]) -> f32 {
     let mut sum = 0.0f32;
     for val in x.iter_mut() {
         let e = cephes_exp_scalar(*val);
@@ -319,7 +319,7 @@ pub fn simd_sigmoid_inplace(x: &mut [f32]) {
 /// odd-length buffers.
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sigmoid_inplace(x: &mut [f32]) {
+pub(super) fn scalar_sigmoid_inplace(x: &mut [f32]) {
     for v in x.iter_mut() {
         *v = fast_sigmoid(*v);
     }
@@ -333,7 +333,7 @@ fn scalar_sigmoid_inplace(x: &mut [f32]) {
 /// odd-length buffers.
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: f32) {
+pub(super) fn scalar_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: f32) {
     for i in 0..out.len() {
         // a + q: f32 addition with +0.0 is exact, so q=0 preserves `a` bit-for-bit
         // (G1.3 degeneracy contract).
@@ -345,7 +345,7 @@ fn scalar_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: f32) 
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_exp_inplace(x: &mut [f32]) {
+pub(super) fn scalar_exp_inplace(x: &mut [f32]) {
     for val in x.iter_mut() {
         *val = cephes_exp_scalar(*val);
     }

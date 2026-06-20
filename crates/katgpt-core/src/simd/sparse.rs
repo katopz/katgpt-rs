@@ -52,7 +52,7 @@ pub fn simd_sparse_dot_f32(
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_sparse_dot_f32(
+pub(super) fn scalar_sparse_dot_f32(
     weight: &[f32],
     row_off: usize,
     active_indices: &[usize],

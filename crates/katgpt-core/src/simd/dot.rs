@@ -45,7 +45,7 @@ pub fn simd_fma_row(weight_row: &[f32], input: &[f32], len: usize) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+pub(super) fn scalar_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
     // 4 independent accumulators (4 elements per outer iter) — same pattern as
     // `scalar_dot_f64` in peira.rs. Single-accumulator dot is FMA-latency-bound
     // (~4 cycles/iter on most FPUs); 4 parallel accumulators keep the FMA
@@ -232,7 +232,7 @@ pub fn simd_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n: usize) {
+pub(super) fn scalar_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n: usize) {
     for i in 0..m {
         let ai = unsafe { *a.get_unchecked(i) };
         let row = &mut acc[i * n..i * n + n];
@@ -433,7 +433,7 @@ pub fn simd_dot_f16_f32(w_f16: &[half::f16], x_f32: &[f32], len: usize) -> f32 {
 
 #[inline(always)]
 #[allow(dead_code)]
-fn scalar_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
+pub(super) fn scalar_dot_f16_f32(w: &[half::f16], x: &[f32], len: usize) -> f32 {
     // 4 independent accumulators — mirrors `scalar_dot_f32` (4-wide unroll)
     // and the NEON `neon_dot_f16_f32` path (also 4 accs). Single-accumulator
     // dot is FMA-latency-bound; the f16→f32 widening is cheap (1 cycle) and
