@@ -43,7 +43,9 @@ pub fn cumprodsum_scalar(a: &[f32], x: &[f32], h_init: f32, out: &mut [f32]) {
     let mut h = h_init;
     for t in 0..out.len() {
         unsafe {
-            h = a.get_unchecked(t) * h + x.get_unchecked(t);
+            // FMA: single rounding, matches the NEON/AVX2 SIMD paths' numerics
+            // (vfmaq_f32 / fmadd emit the same a*h+x contraction).
+            h = a.get_unchecked(t).mul_add(h, *x.get_unchecked(t));
             *out.get_unchecked_mut(t) = h;
         }
     }

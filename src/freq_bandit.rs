@@ -158,9 +158,9 @@ pub fn token_stream_spectrum(tokens: &[usize], window_size: usize) -> FrequencyP
 
         for i in 0..n {
             let x = unsafe { *sig.get_unchecked(i) };
-            re += x * cos_a;
-            // im is computed with negative sign (matches original code).
-            im -= x * sin_a;
+            // FMA contractions for re/im accumulation (inner loop of O(n²) DFT).
+            re = x.mul_add(cos_a, re);
+            im = (-x).mul_add(sin_a, im);
 
             // Rotate to next angle: (cos_a, sin_a) ← (cos_a·cos_d − sin_a·sin_d,
             // sin_a·cos_d + cos_a·sin_d). Two FMAs each.
@@ -171,7 +171,8 @@ pub fn token_stream_spectrum(tokens: &[usize], window_size: usize) -> FrequencyP
         }
 
         unsafe {
-            *magnitudes.get_unchecked_mut(k) = (re * re + im * im) / (n as f32);
+            // FMA: re² + im² in a single rounding.
+            *magnitudes.get_unchecked_mut(k) = re.mul_add(re, im * im) / (n as f32);
         }
     }
 

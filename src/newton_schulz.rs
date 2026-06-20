@@ -186,9 +186,9 @@ pub fn muon_update(
     assert_eq!(momentum.len(), rows * cols, "momentum size mismatch");
     assert_eq!(out.len(), rows * cols, "out size mismatch");
 
-    // Momentum accumulation: m = β * m + g (SIMD fused scale-accumulate)
-    crate::simd::simd_scale_inplace(momentum, beta);
-    crate::simd::simd_add_inplace(momentum, grad);
+    // Momentum accumulation: m = β*m + g — single fused FMA pass
+    // (was 2 passes: scale_inplace + add_inplace).
+    crate::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
 
     // Orthogonalize the momentum
     newton_schulz5(momentum, rows, cols, out);
@@ -214,9 +214,9 @@ pub fn muon_update_into(
     assert_eq!(momentum.len(), rows * cols, "momentum size mismatch");
     assert_eq!(out.len(), rows * cols, "out size mismatch");
 
-    // Momentum accumulation: m = β * m + g (SIMD fused scale-accumulate)
-    crate::simd::simd_scale_inplace(momentum, beta);
-    crate::simd::simd_add_inplace(momentum, grad);
+    // Momentum accumulation: m = β*m + g — single fused FMA pass
+    // (was 2 passes: scale_inplace + add_inplace).
+    crate::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
 
     // Orthogonalize the momentum (zero-alloc)
     newton_schulz5_into(momentum, rows, cols, out, scratch);
@@ -649,9 +649,10 @@ fn newton_schulz_n_square_into_raw(
             }
         }
         matmul_ax(b_mat, x, m, n, bx, xt_buf);
-        // X = a*X + BX (fused SIMD scale-accumulate)
-        crate::simd::simd_scale_inplace(&mut x[..mn], A);
-        crate::simd::simd_add_inplace(&mut x[..mn], &bx[..mn]);
+        // X = A*X + BX — single fused FMA pass (was 2 passes).
+        // Runs n_iters times per NS call → halves memory traffic in the
+        // innermost Newton-Schulz iteration loop.
+        crate::simd::simd_fused_decay_write(&mut x[..mn], A, &bx[..mn], 1.0);
     }
 
     out.copy_from_slice(&x[..mn]);

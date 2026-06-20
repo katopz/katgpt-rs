@@ -62,7 +62,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::simd::simd_dot_f32;
+use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
 use crate::spectral_retract::{power_iter_retract, PowerRetractScratch};
 use blake3::Hasher;
 
@@ -332,6 +332,8 @@ pub fn compute_diagnostics_with_scratch(
         }
 
         // rm = R'[i] · M[i] (row-vector × matrix, matches Eq. 4 matvec).
+        // Rank-1 update form: rm += row[k] * gram[k,:]. Each inner j-loop is a
+        // contiguous scaled-accumulate → SIMD FMA kernel (was scalar before).
         rm_scratch.fill(0.0);
         for k in 0..d_model {
             let rk = row[k];
@@ -339,9 +341,7 @@ pub fn compute_diagnostics_with_scratch(
                 continue;
             }
             let grow = &gram[k * d_model..(k + 1) * d_model];
-            for j in 0..d_model {
-                rm_scratch[j] += rk * grow[j];
-            }
+            simd_fused_scale_acc(rm_scratch, grow, rk, d_model);
         }
         let rm_norm = simd_dot_f32(&rm_scratch, &rm_scratch, d_model).sqrt();
 

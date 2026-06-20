@@ -22,7 +22,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::simd::{simd_dot_f32, simd_scale_inplace};
+use crate::simd::{simd_dot_f32, simd_fused_decay_write, simd_scale_inplace};
 
 /// Caller-owned scratch for one power-iteration + retraction.
 ///
@@ -210,10 +210,9 @@ pub fn power_iter_retract(
 
         // Retract: v ← target_norm · mv_out / ‖mv_out‖
         let scale = target_norm / norm;
-        // v = scale * mv_out (copy + scale fused).
-        for i in 0..dim {
-            v[i] = scratch.mv_out[i] * scale;
-        }
+        // v = scale * mv_out. Fused scale-copy via decay_write with decay=0
+        // (single NEON/AVX2 pass; was a scalar loop). v and mv_out do not alias.
+        simd_fused_decay_write(&mut v[..dim], 0.0, &scratch.mv_out[..dim], scale);
     }
 }
 
