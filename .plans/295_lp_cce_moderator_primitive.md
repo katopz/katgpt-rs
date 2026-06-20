@@ -4,7 +4,7 @@
 **Research:** [`katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md`](../.research/274_Optimal_CCE_Moderator_LP_No_Regret.md)
 **Source paper:** [arxiv 2606.20062](https://arxiv.org/pdf/2606.20062) — Campi, Cannerozzi, Tzouanas — Optimal CCEs in MFGs via LP + No-Regret Learning
 **Target:** `katgpt-rs/src/cce/` (new module) + Cargo feature `cce_moderator`
-**Status:** Phase 3 COMPLETE (G1+G2+G3 PASS) — Phase 4 (GOAT gate aggregation + promotion decision) pending
+**Status:** ✅ ALL PHASES COMPLETE (Phase 1 + 2 + 3 + 4). G1+G2+G3 PASS. Default-off pending riir-ai Plan 325 runtime integration (G4+G5).
 
 ---
 
@@ -110,12 +110,32 @@ This is the **public open primitive** for Research 274's Super-GOAT verdict. The
 
 ### Tasks
 
-- [ ] **T4.1** Aggregate G1 + G2 + G3 benchmark evidence into `katgpt-rs/.benchmarks/029_cce_moderator_goat.md`. Verdict: PASS / FAIL.
-- [ ] **T4.2** If G1 + G2 PASS: promote `cce_moderator` to consideration for default-on. Add a note in `katgpt-rs/README.md` Feature Showcase section (public-facing adoption hook).
-- [ ] **T4.3** If `PayoffTable<N>::nash_equilibrium` (in `riir-games/src/payoff.rs`) loses head-to-head on the G1 games: **demote it** by adding a doc comment pointing users to `CceLp` for general-sum games. Keep `nash_equilibrium` for zero-sum (where Nash = CCE).
-- [ ] **T4.4** Cross-link `katgpt-rs/README.md` Feature Showcase to mention `cce_moderator`. Cross-link `riir-ai/.research/143_*` and `riir-ai/.plans/325_*` as the private runtime follow-ups.
+- [x] **T4.1** Aggregate G1 + G2 + G3 benchmark evidence into `katgpt-rs/.benchmarks/029_cce_moderator_goat.md`. Verdict: **PASS** (G1+G2+G3 all green; G4+G5 deferred to Plan 325).
+- [x] **T4.2** Promotion decision: **keep `cce_moderator` default-OFF.** Rationale: G1+G2+G3 PASS, but player-1-only CCE model + BFS-enumeration LP scaling limit + no Plan 325 runtime validation yet. Added `cce_moderator` entry to `katgpt-rs/README.md` GOAT-Proved Additions table with status note. Promotion criteria for default-on documented in the GOAT benchmark.
+- [~] **T4.3** `PayoffTable<N>::nash_equilibrium` (riir-games): **NOT demoted.** The G1 evidence comes from the player-1-only CCE model (which can exploit player 2); a fair head-to-head requires full-game CCE (Plan 325 scope). Also `PayoffTable<N>` is designed for zero-sum games (Nash = CCE), so demotion for general-sum doesn't apply. Doc-comment cross-link deferred to Plan 325 (requires editing riir-games, separate repo).
+- [x] **T4.4** Cross-links: `katgpt-rs/README.md` GOAT table mentions `cce_moderator` (T4.2). `katgpt-rs/.docs/cce_moderator.md` cross-links to `riir-ai/.research/143_*` and `riir-ai/.plans/325_*`. GOAT benchmark cross-links to all tests + example + research + plan.
 
-**Phase 4 exit:** GOAT gate verdict recorded; promotion/demotion decision made; README updated.
+**Phase 4 exit:** GOAT gate verdict recorded (PASS); promotion decision made (keep default-off); README updated. ✅ SHIPPED
+
+---
+
+## ✅ Plan 295 Complete
+
+All 4 phases shipped. Final deliverables:
+
+| Artifact | Path |
+|---|---|
+| Core module | `katgpt-rs/src/cce/{mod,types,external_regret,bregman,lp,primal_dual}.rs` |
+| G1 benchmark | `katgpt-rs/tests/cce_vs_nash.rs` (3 tests, PASS) |
+| G2 benchmark | `katgpt-rs/tests/cce_convergence.rs` (4 tests, PASS) |
+| G3 demo | `katgpt-rs/examples/cce_demo.rs` |
+| API docs | `katgpt-rs/.docs/cce_moderator.md` |
+| G2 evidence | `katgpt-rs/.benchmarks/029_cce_convergence.md` |
+| GOAT aggregation | `katgpt-rs/.benchmarks/029_cce_moderator_goat.md` |
+| README | `katgpt-rs/README.md` GOAT-Proved Additions table |
+
+**Test count:** 42 total (35 unit + 4 convergence + 3 vs-nash), all PASS.
+**LOC shipped:** ~3400 (src/cce/ ~2200, tests ~500, example ~360, docs ~350).
 
 ---
 
