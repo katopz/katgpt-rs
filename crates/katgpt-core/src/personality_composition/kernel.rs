@@ -128,12 +128,12 @@ impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
     /// # Panics (debug)
     ///
     /// In debug builds, panics if `out.len() != D` or `scratch.len() < D`.
-    pub fn compose_into(
+    pub fn compose_into<'a>(
         &self,
         layers: &[&dyn LayerDirectionSource; N],
         scratch: &mut [f32],
-        out: &mut [f32],
-    ) -> &mut [f32] {
+        out: &'a mut [f32],
+    ) -> &'a mut [f32] {
         debug_assert_eq!(out.len(), D, "out must be exactly D={D} elements");
         debug_assert!(
             scratch.len() >= D,
@@ -262,7 +262,7 @@ impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     // ─── Test layer impl ──────────────────────────────────────────────────
@@ -299,7 +299,7 @@ mod tests {
     }
 
     impl LayerDirectionSource for StaticLayer {
-        fn direction(&self, scratch: &mut [f32]) -> &[f32] {
+        fn direction<'a>(&self, scratch: &'a mut [f32]) -> &'a [f32] {
             scratch[..self.direction.len()].copy_from_slice(&self.direction);
             &scratch[..self.direction.len()]
         }

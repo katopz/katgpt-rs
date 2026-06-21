@@ -1,22 +1,18 @@
-//! Integration-test stub for `personality_composition`.
+//! Integration-test smoke check for the `personality_composition` public API
+//! (Plan 297 Phase 1-3).
 //!
-//! This file is owned by the subagent and serves as a **compilation
-//! smoke check** for the public API surface that Plan 297 Phase 1-3
-//! exposes. When the `personality_composition` feature is OFF, the body
-//! is gated out and only a trivial `compiles()` test runs — this proves
-//! the integration-test file itself is well-formed without depending on
-//! any crate-internal symbols.
-//!
-//! When the orchestrator flips the feature ON (Plan 297 T1.2), the real
-//! test body activates and exercises:
+//! Exercises the public surface that external consumers (riir-ai Plan 327)
+//! will use:
 //!
 //! - `PersonalityWeightedComposition::<N, D>::new`
 //! - `compose_into(&[&dyn LayerDirectionSource; N], &mut [f32], &mut [f32])`
 //! - `drift(&[&dyn LayerDirectionSource; N], f32)`
 //! - `PersonalitySnapshot::<N>::from_composition` + `verify_blake3`
 //!
-//! See `katgpt-rs/crates/katgpt-core/src/personality_composition/tests.rs`
-//! for the full unit-test suite (same assertions, inside the crate).
+//! The full unit-test suite lives in
+//! `katgpt-rs/crates/katgpt-core/src/personality_composition/tests.rs` —
+//! this file is just a compile check against the public API (proves no
+//! crate-internal symbols leaked into the surface).
 
 #![cfg(test)]
 
@@ -38,7 +34,7 @@ fn public_api_smoke() {
 
     struct Echo<const D: usize>([f32; D]);
     impl<const D: usize> LayerDirectionSource for Echo<D> {
-        fn direction(&self, scratch: &mut [f32]) -> &[f32] {
+        fn direction<'a>(&self, scratch: &'a mut [f32]) -> &'a [f32] {
             let n = D.min(scratch.len());
             scratch[..n].copy_from_slice(&self.0[..n]);
             &scratch[..n]
@@ -60,6 +56,7 @@ fn public_api_smoke() {
     assert!((out[0] - 0.5).abs() < 1e-6);
     assert!((out[1] - 0.5).abs() < 1e-6);
 
-    let snap = PersonalitySnapshot::<2>::from_composition(&kernel, ArchetypeLabel::new(1), 1);
+    let snap =
+        PersonalitySnapshot::<2>::from_composition(&kernel, ArchetypeLabel::from_str("smoke"), 1);
     assert!(snap.verify_blake3());
 }

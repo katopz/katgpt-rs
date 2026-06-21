@@ -27,12 +27,20 @@ pub mod types;
 // is opt-in via `faithfulness_probe`. It runs at audit cadence, not per-tick.
 #[cfg(feature = "faithfulness_probe")]
 pub mod attribution;
+#[cfg(all(test, feature = "faithfulness_probe"))]
+pub mod goat_gate;
 #[cfg(feature = "faithfulness_probe")]
 pub mod perturb;
 #[cfg(feature = "faithfulness_probe")]
 pub mod probe;
-#[cfg(all(test, feature = "faithfulness_probe"))]
-pub mod goat_gate;
+
+// SmearClassifier — ternary smear classification (Plan 298, Research 277).
+// Extends the binary FaithfulnessProbe with a vocabulary for how latent
+// mass is distributed (CoherentSingle / TokenSmear / SequenceSmear).
+// Opt-in: depends on `faithfulness_probe` for the integration surface, but
+// the classifier itself is standalone (zero deps on probe internals).
+#[cfg(feature = "smear_classifier")]
+pub mod smear;
 
 // Convenience re-exports. Heavy items are only re-exported when their
 // feature is on; `gate::*` and `types::*` are always available.
@@ -42,3 +50,9 @@ pub use gate::{EntropyThresholdGate, TriggeredInjectionGate, UncertaintySignal};
 #[cfg(feature = "faithfulness_probe")]
 pub use probe::{DefaultFaithfulnessProbe, FaithfulnessProbe};
 pub use types::{ConsumerContext, FaithfulnessProfile, Intervention, MemorySlice};
+
+// SmearClassifier re-exports — Plan 298 Phase 1. The classifier is opt-in
+// via `smear_classifier`; Phase 2 (TODO) will wire it into DefaultFaithfulnessProbe
+// as an optional diagnostic that emits a SmearReport alongside the binary verdict.
+#[cfg(feature = "smear_classifier")]
+pub use smear::{CosineSmearClassifier, SmearClass, SmearClassifier, SmearReport};

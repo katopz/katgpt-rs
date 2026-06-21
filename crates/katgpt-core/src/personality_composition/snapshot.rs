@@ -58,7 +58,15 @@ pub const SNAPSHOT_VERSION: u64 = 1;
 /// [`MicroRecurrentKernelSnapshot`] which uses a `Vec<u8>` blob, because
 /// attractor weights are variable-size `dim × dim`). Personality weights are
 /// fixed-size `N` so a fixed array is simpler and allocation-free.
-#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+///
+/// # Serialization
+///
+/// serde's derive does not support `[f32; N]` for arbitrary `N` (only up to
+/// 32 on stable). We intentionally skip `serde::Serialize`/`Deserialize`
+/// derives here and rely on BLAKE3 + raw bytes for integrity. Callers that
+/// need serde persistence should serialize via [`to_bytes`](Self::to_bytes)
+/// (which is layout-stable) and verify via [`verify_blake3`](Self::verify_blake3).
+#[derive(Clone, Debug)]
 pub struct PersonalitySnapshot<const N: usize> {
     /// Personality weights at snapshot time. Hashed into `blake3`.
     pub w: [f32; N],
@@ -78,8 +86,26 @@ pub struct PersonalitySnapshot<const N: usize> {
     pub version: u64,
 }
 
-impl<const N: usize, const D: usize> PersonalitySnapshot<N> {
+impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
+    /// Build a snapshot from the composition's current weights.
+    ///
+    /// Copies `w` out, records the archetype, and computes the BLAKE3
+    /// commitment. `version` is caller-managed — typically incremented by the
+    /// hot-swap layer on each swap.
+    ///
+    /// This is NOT on the hot path — snapshots are rare (per-entity
+    /// personality version events, not per-tick).
+    pub fn snapshot(&self, archetype: ArchetypeLabel, version: u64) -> PersonalitySnapshot<N> {
+        PersonalitySnapshot::from_parts_with_commit(self.w, archetype, version)
+    }
+}
+
+impl<const N: usize> PersonalitySnapshot<N> {
     /// Build a snapshot from a composition's current weights.
+    ///
+    /// This is a convenience constructor — prefer
+    /// [`PersonalityWeightedComposition::snapshot`] at call sites (it resolves
+    /// without needing to re-state `N`).
     ///
     /// Copies `w` out of the composition, records the archetype, and computes
     /// the BLAKE3 commitment. `version` is caller-managed — typically
@@ -87,13 +113,21 @@ impl<const N: usize, const D: usize> PersonalitySnapshot<N> {
     ///
     /// This is NOT on the hot path — snapshots are rare (per-entity
     /// personality version events, not per-tick).
-    pub fn from_composition(
+    pub fn from_composition<const D: usize>(
         composition: &PersonalityWeightedComposition<N, D>,
         archetype: ArchetypeLabel,
         version: u64,
     ) -> Self {
+        Self::from_parts_with_commit(composition.w, archetype, version)
+    }
+    /// Build a snapshot from raw parts, computing the BLAKE3 commitment fresh.
+    ///
+    /// Internal helper shared by [`from_composition`](Self::from_composition)
+    /// and
+    /// [`PersonalityWeightedComposition::snapshot`].
+    fn from_parts_with_commit(w: [f32; N], archetype: ArchetypeLabel, version: u64) -> Self {
         let mut snap = Self {
-            w: composition.w,
+            w,
             archetype,
             blake3: [0u8; 32],
             version,
@@ -101,9 +135,7 @@ impl<const N: usize, const D: usize> PersonalitySnapshot<N> {
         snap.commit();
         snap
     }
-}
 
-impl<const N: usize> PersonalitySnapshot<N> {
     /// Build a snapshot from raw parts WITHOUT computing the commitment.
     ///
     /// Useful for deserialisation paths where the commitment is already known
@@ -152,6 +184,53 @@ impl<const N: usize> PersonalitySnapshot<N> {
         }
         let recomputed = *hasher.finalize().as_bytes();
         recomputed == self.blake3
+    }
+
+    /// Serialize the snapshot to a flat byte buffer (LE f32 weights + archetype
+    /// + blake3 + version).
+    ///
+    /// Layout: `archetype (16) || w (N*4 LE) || blake3 (32) || version (8 LE)`.
+    /// Total: `56 + N*4` bytes.
+    ///
+    /// This is the persistence format for cold-tier storage. The BLAKE3 in
+    /// the buffer covers `(archetype, w)` only — `version` is metadata.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(16 + self.w.len() * 4 + 32 + 8);
+        buf.extend_from_slice(self.archetype.as_bytes());
+        for &wi in &self.w {
+            buf.extend_from_slice(&wi.to_le_bytes());
+        }
+        buf.extend_from_slice(&self.blake3);
+        buf.extend_from_slice(&self.version.to_le_bytes());
+        buf
+    }
+
+    /// Deserialize from a flat byte buffer produced by [`to_bytes`](Self::to_bytes).
+    ///
+    /// Returns `None` if the buffer is malformed (wrong length). Does NOT
+    /// re-verify the BLAKE3 — call [`verify_blake3`](Self::verify_blake3)
+    /// afterwards to check integrity.
+    pub fn from_bytes(buf: &[u8]) -> Option<Self> {
+        let expected_len = 16 + N * 4 + 32 + 8;
+        if buf.len() != expected_len {
+            return None;
+        }
+        let archetype_bytes: [u8; 16] = buf[0..16].try_into().ok()?;
+        let archetype = ArchetypeLabel::new(archetype_bytes);
+        let mut w = [0.0f32; N];
+        for i in 0..N {
+            let off = 16 + i * 4;
+            w[i] = f32::from_le_bytes(buf[off..off + 4].try_into().ok()?);
+        }
+        let blake3: [u8; 32] = buf[16 + N * 4..16 + N * 4 + 32].try_into().ok()?;
+        let version =
+            u64::from_le_bytes(buf[16 + N * 4 + 32..16 + N * 4 + 32 + 8].try_into().ok()?);
+        Some(Self {
+            w,
+            archetype,
+            blake3,
+            version,
+        })
     }
 }
 
@@ -246,15 +325,15 @@ mod tests {
     }
 
     #[test]
-    fn serde_roundtrip_preserves_all_fields() {
+    fn bytes_roundtrip_preserves_all_fields() {
         let k = PersonalityWeightedComposition::<3, 32>::new(
             PersonalityConfig::default(),
             [0.1, -0.2, 0.3],
         );
         let snap =
             PersonalitySnapshot::from_composition(&k, ArchetypeLabel::from_str("predator"), 7);
-        let json = serde_json::to_string(&snap).expect("serialize");
-        let back: PersonalitySnapshot<3> = serde_json::from_str(&json).expect("deserialize");
+        let bytes = snap.to_bytes();
+        let back = PersonalitySnapshot::<3>::from_bytes(&bytes).expect("deserialize");
         assert_eq!(back.w, snap.w);
         assert_eq!(back.archetype, snap.archetype);
         assert_eq!(back.blake3, snap.blake3);
@@ -263,6 +342,23 @@ mod tests {
             back.verify_blake3(),
             "deserialised snapshot must still verify"
         );
+    }
+
+    #[test]
+    fn from_bytes_rejects_wrong_length() {
+        let k = PersonalityWeightedComposition::<3, 32>::new(
+            PersonalityConfig::default(),
+            [0.1, -0.2, 0.3],
+        );
+        let snap = PersonalitySnapshot::from_composition(&k, ArchetypeLabel::empty(), 1);
+        let bytes = snap.to_bytes();
+        // Truncate by one byte — must fail.
+        let truncated = &bytes[..bytes.len() - 1];
+        assert!(PersonalitySnapshot::<3>::from_bytes(truncated).is_none());
+        // Expand by one byte — must fail.
+        let mut expanded = bytes.clone();
+        expanded.push(0);
+        assert!(PersonalitySnapshot::<3>::from_bytes(&expanded).is_none());
     }
 
     #[test]

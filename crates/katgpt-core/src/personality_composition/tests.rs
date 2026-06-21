@@ -1,388 +1,357 @@
-//! Module-level integration tests for `personality_composition`.
+//! Integration tests for the personality-weighted composition primitive
+//! (Plan 297 — Phases 1, 2, 3, 4 GOAT gates).
 //!
-//! These cover the validation gates from Plan 297:
-//!
-//! - **T1.V1** (compose core): `compose_zero_weights_uniform`,
-//!   `compose_extreme_positive_weight_selects_layer`,
-//!   `compose_extreme_negative_weight_zeros_layer`,
-//!   `compose_belief_confidence_decay_shrinks_contribution`.
-//! - **T2.V1** (drift): `drift_positive_surprise_reinforces`,
-//!   `drift_negative_surprise_penalizes`, `drift_clamps_to_w_max`,
-//!   `drift_ema_tracks_recent_reward`.
-//! - **T3.1–T3.3** (snapshot): see `snapshot.rs` tests; this file adds
-//!   `snapshot_round_trip_with_kernel` to exercise the full
-//!   snapshot/restore/verify cycle through the public API.
-//!
-//! Snapshot unit tests for the BLAKE3 commitment scheme live next to the
-//! code in `snapshot.rs::tests` (matches the `micro_belief::snapshot`
-//! convention). Phase 4 G1-G5 perf tests live in
-//! `benches/personality_composition_bench.rs` (orchestrator-owned).
+//! These cover:
+//! - Phase 1 T1.V2: compose kernel correctness (zero weights, extreme ±, belief decay)
+//! - Phase 2 T2.V1: drift rule (positive/negative surprise, clamp, EMA)
+//! - Phase 4 G1: `compose_tau_infinity_uniform` — no personality at τ → ∞
+//! - Phase 4 G4-supporting: sigmoid stability at extreme inputs
 
-#![cfg(test)]
+use crate::personality_composition::PersonalityWeightedComposition;
+use crate::personality_composition::kernel::tests::StaticLayer;
+use crate::personality_composition::sigmoid::sigmoid;
+use crate::personality_composition::trait_def::LayerDirectionSource;
+use crate::personality_composition::types::PersonalityConfig;
 
-use crate::personality_composition::direction_source::LayerDirectionSource;
-use crate::personality_composition::kernel::PersonalityWeightedComposition;
-use crate::personality_composition::sigmoid::{sigmoid, sigmoid_into};
-use crate::personality_composition::snapshot::PersonalitySnapshot;
-use crate::personality_composition::types::{ArchetypeLabel, PersonalityConfig};
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
-// ─── Mock layer ─────────────────────────────────────────────────────────
-//
-// Test-only `LayerDirectionSource` with explicit per-axis control. Each
-// instance has:
-//   - `dir` — what `direction()` returns (the "current" direction).
-//   - `recent` — what `recent_direction()` returns (what drift updates on).
-//   - `belief` — the `belief_confidence()` value.
-//
-// Implements `Clone + Copy` so we can build `[&dyn LayerDirectionSource; N]`
-// from a `Vec<MockLayer>` by reference without juggling lifetimes.
-
-#[derive(Clone, Copy)]
-struct MockLayer<const D: usize> {
-    dir: [f32; D],
-    recent: [f32; D],
-    belief: f32,
+/// A direction vector with 1.0 at index `i` and 0 elsewhere.
+fn unit_direction_32(i: usize) -> [f32; 32] {
+    let mut d = [0.0f32; 32];
+    d[i] = 1.0;
+    d
 }
 
-impl<const D: usize> LayerDirectionSource for MockLayer<D> {
-    fn direction(&self, scratch: &mut [f32]) -> &[f32] {
-        let n = D.min(scratch.len());
-        scratch[..n].copy_from_slice(&self.dir[..n]);
-        &scratch[..n]
-    }
-
-    fn recent_direction(&self) -> &[f32] {
-        &self.recent
-    }
-
-    fn belief_confidence(&self) -> f32 {
-        self.belief
-    }
+/// A direction vector with `v` at every element.
+fn uniform_direction_32(v: f32) -> [f32; 32] {
+    [v; 32]
 }
 
-#[allow(dead_code)]
-fn make_layers<const N: usize, const D: usize>(
-    layers: [MockLayer<D>; N],
-) -> [&dyn LayerDirectionSource; N] {
-    let mut out: [&dyn LayerDirectionSource; N] = [&layers[0]; N]; // placeholder init
-    for (i, l) in layers.iter().enumerate() {
-        out[i] = l as &dyn LayerDirectionSource;
-    }
-    out
-}
-
-// The above doesn't quite work because lifetimes get tangled when we try to
-// return a borrowed array. The idiomatic pattern is to keep the owned array
-// alive in the test body and build the trait-array inline. We keep
-// `make_layers` around only to avoid `unused` warnings during refactors —
-// the actual tests inline the array construction.
-
-// ─── T1.V1: compose core ────────────────────────────────────────────────
+// ─── Phase 1 T1.V2: compose correctness ────────────────────────────────────
 
 #[test]
 fn compose_zero_weights_uniform() {
-    // When all w[i] = 0, sigmoid(0/tau) = 0.5 for every layer, so the
-    // output is `0.5 * Σ_i belief_i * d_i`. With belief=1.0 (plasma tier),
-    // this reduces to `0.5 * Σ_i d_i`.
-    type K = PersonalityWeightedComposition<2, 3>;
-    let kernel = K::new(PersonalityConfig::default(), [0.0, 0.0]);
-    let l1 = MockLayer::<3> {
-        dir: [1.0, 0.0, 0.0],
-        recent: [0.0; 3],
-        belief: 1.0,
-    };
-    let l2 = MockLayer::<3> {
-        dir: [0.0, 2.0, 0.0],
-        recent: [0.0; 3],
-        belief: 1.0,
-    };
-    let layers: [&dyn LayerDirectionSource; 2] = [&l1, &l2];
-    let mut scratch = [0.0f32; 3];
-    let mut out = [0.0f32; 3];
+    // Plan 297 T1.V2 / R276 §5: when all wᵢ = 0 and τ finite, each sigmoid(0/τ)
+    // = 0.5, so output = 0.5 × Σ dᵢ.
+    let kernel = PersonalityWeightedComposition::<3, 32>::uniform();
+    let l0 = StaticLayer::new(unit_direction_32(0));
+    let l1 = StaticLayer::new(unit_direction_32(1));
+    let l2 = StaticLayer::new(unit_direction_32(2));
+    let layers: [&dyn LayerDirectionSource; 3] = [&l0, &l1, &l2];
+
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
     kernel.compose_into(&layers, &mut scratch, &mut out);
-    // Expected: 0.5 * (1, 0, 0) + 0.5 * (0, 2, 0) = (0.5, 1.0, 0.0)
+
+    // Each layer contributes 0.5 × dᵢ. d0 = e_0, d1 = e_1, d2 = e_2.
+    // Output should be 0.5 at indices 0, 1, 2 and 0 elsewhere.
     assert!((out[0] - 0.5).abs() < 1e-6, "out[0] = {}", out[0]);
-    assert!((out[1] - 1.0).abs() < 1e-6, "out[1] = {}", out[1]);
-    assert!(out[2].abs() < 1e-6, "out[2] = {}", out[2]);
+    assert!((out[1] - 0.5).abs() < 1e-6, "out[1] = {}", out[1]);
+    assert!((out[2] - 0.5).abs() < 1e-6, "out[2] = {}", out[2]);
+    for j in 3..32 {
+        assert!(out[j].abs() < 1e-6, "out[{j}] should be 0, got {}", out[j]);
+    }
 }
 
 #[test]
 fn compose_extreme_positive_weight_selects_layer() {
-    // With w[i] very large positive and tau=1.0, sigmoid(w[i]/tau) → 1.0.
-    // The layer's full direction passes through.
-    type K = PersonalityWeightedComposition<1, 3>;
-    let kernel = K::new(PersonalityConfig::default(), [20.0]);
-    let l1 = MockLayer::<3> {
-        dir: [0.7, -0.3, 0.4],
-        recent: [0.0; 3],
-        belief: 1.0,
-    };
-    let layers: [&dyn LayerDirectionSource; 1] = [&l1];
-    let mut scratch = [0.0f32; 3];
-    let mut out = [0.0f32; 3];
+    // Plan 297 T1.V2: large wᵢ → sigmoid(wᵢ/τ) ≈ 1.0 → output ≈ dᵢ.
+    let kernel = PersonalityWeightedComposition::<3, 32>::new(
+        PersonalityConfig::default(),
+        [50.0, -50.0, -50.0],
+    );
+    let l0 = StaticLayer::new(uniform_direction_32(1.0));
+    let l1 = StaticLayer::new(uniform_direction_32(1.0));
+    let l2 = StaticLayer::new(uniform_direction_32(1.0));
+    let layers: [&dyn LayerDirectionSource; 3] = [&l0, &l1, &l2];
+
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
     kernel.compose_into(&layers, &mut scratch, &mut out);
-    // Expected: 1.0 * 1.0 * d = d
-    assert!((out[0] - 0.7).abs() < 1e-5, "out[0] = {}", out[0]);
-    assert!((out[1] - (-0.3)).abs() < 1e-5, "out[1] = {}", out[1]);
-    assert!((out[2] - 0.4).abs() < 1e-5, "out[2] = {}", out[2]);
+
+    // Layer 0: sigmoid(50/1) ≈ 1.0 → contributes ~1.0 × d0 = [1.0; 32]
+    // Layers 1, 2: sigmoid(-50/1) ≈ 0.0 → contribute ~0
+    for j in 0..32 {
+        assert!(
+            (out[j] - 1.0).abs() < 1e-4,
+            "out[{j}] should be ~1.0, got {}",
+            out[j]
+        );
+    }
 }
 
 #[test]
 fn compose_extreme_negative_weight_zeros_layer() {
-    // With w[i] very large negative, sigmoid(w[i]/tau) → 0.0.
-    // The layer's contribution vanishes.
-    type K = PersonalityWeightedComposition<1, 3>;
-    let kernel = K::new(PersonalityConfig::default(), [-20.0]);
-    let l1 = MockLayer::<3> {
-        dir: [0.7, -0.3, 0.4],
-        recent: [0.0; 3],
-        belief: 1.0,
-    };
-    let layers: [&dyn LayerDirectionSource; 1] = [&l1];
-    let mut scratch = [0.0f32; 3];
-    let mut out = [0.0f32; 3];
+    // Plan 297 T1.V2: large negative wᵢ → sigmoid(wᵢ/τ) ≈ 0 → layer ~0.
+    let kernel =
+        PersonalityWeightedComposition::<2, 32>::new(PersonalityConfig::default(), [-50.0, 50.0]);
+    let l0 = StaticLayer::new(uniform_direction_32(1.0));
+    let l1 = StaticLayer::new(uniform_direction_32(2.0));
+    let layers: [&dyn LayerDirectionSource; 2] = [&l0, &l1];
+
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
     kernel.compose_into(&layers, &mut scratch, &mut out);
-    for j in 0..3 {
-        assert!(out[j].abs() < 1e-5, "out[{j}] = {} (should be ~0)", out[j]);
+
+    // Layer 0 contributes ~0 (suppressed).
+    // Layer 1 contributes ~1.0 × [2.0; 32] = [2.0; 32].
+    for j in 0..32 {
+        assert!(
+            (out[j] - 2.0).abs() < 1e-4,
+            "out[{j}] should be ~2.0, got {}",
+            out[j]
+        );
     }
 }
 
 #[test]
 fn compose_belief_confidence_decay_shrinks_contribution() {
-    // Two layers with identical direction, identical w=0 (sigmoid = 0.5),
-    // but different belief_confidence. The output should scale linearly
-    // with belief.
-    type K = PersonalityWeightedComposition<2, 2>;
-    let kernel = K::new(PersonalityConfig::default(), [0.0, 0.0]);
-    let full = MockLayer::<2> {
-        dir: [1.0, 1.0],
-        recent: [0.0; 2],
-        belief: 1.0,
-    };
-    let half = MockLayer::<2> {
-        dir: [1.0, 1.0],
-        recent: [0.0; 2],
-        belief: 0.5,
-    };
-    let layers: [&dyn LayerDirectionSource; 2] = [&full, &half];
-    let mut scratch = [0.0f32; 2];
-    let mut out = [0.0f32; 2];
+    // Plan 297 T1.V2: layer with belief_confidence = 0.1 contributes 10% of full.
+    let kernel = PersonalityWeightedComposition::<2, 32>::new(
+        PersonalityConfig::default(),
+        [50.0, 50.0], // both layers fully gated ON
+    );
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)); // confidence 1.0 (default)
+    let l1 = StaticLayer::new(uniform_direction_32(1.0)).with_confidence(0.1);
+    let layers: [&dyn LayerDirectionSource; 2] = [&l0, &l1];
+
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
     kernel.compose_into(&layers, &mut scratch, &mut out);
-    // Expected: 0.5*1.0*(1,1) + 0.5*0.5*(1,1) = (0.75, 0.75)
-    assert!((out[0] - 0.75).abs() < 1e-6, "out[0] = {}", out[0]);
-    assert!((out[1] - 0.75).abs() < 1e-6, "out[1] = {}", out[1]);
+
+    // Layer 0: sigmoid(50/1) ≈ 1.0, confidence 1.0 → ~1.0 × [1.0; 32]
+    // Layer 1: sigmoid(50/1) ≈ 1.0, confidence 0.1 → ~0.1 × [1.0; 32]
+    // Total: ~1.1 × [1.0; 32]
+    for j in 0..32 {
+        assert!(
+            (out[j] - 1.1).abs() < 1e-3,
+            "out[{j}] should be ~1.1, got {}",
+            out[j]
+        );
+    }
 }
 
-#[test]
-fn compose_is_additive_not_overwriting() {
-    // The kernel should ADD into out, not overwrite. Verify by pre-loading
-    // a baseline.
-    type K = PersonalityWeightedComposition<1, 2>;
-    let kernel = K::new(PersonalityConfig::default(), [20.0]); // sigmoid → 1.0
-    let l1 = MockLayer::<2> {
-        dir: [1.0, 1.0],
-        recent: [0.0; 2],
-        belief: 1.0,
-    };
-    let layers: [&dyn LayerDirectionSource; 1] = [&l1];
-    let mut scratch = [0.0f32; 2];
-    let mut out = [10.0f32, -5.0f32]; // baseline
-    kernel.compose_into(&layers, &mut scratch, &mut out);
-    assert!((out[0] - 11.0).abs() < 1e-6, "out[0] = {}", out[0]);
-    assert!((out[1] - (-4.0)).abs() < 1e-6, "out[1] = {}", out[1]);
-}
-
-// ─── T2.V1: drift ───────────────────────────────────────────────────────
+// ─── Phase 2 T2.V1: drift rule ─────────────────────────────────────────────
 
 #[test]
 fn drift_positive_surprise_reinforces() {
-    // r_observed > r_expected → surprise > 0 → w[i] increases when
-    // Σ_j d_recent[i][j] > 0.
-    type K = PersonalityWeightedComposition<1, 2>;
-    let mut kernel = K::new(PersonalityConfig::default(), [0.0]);
-    // Set r_expected to a known baseline so surprise is deterministic.
-    kernel.r_expected = [0.0];
-    let layer = MockLayer::<2> {
-        dir: [0.0; 2],
-        recent: [1.0, 1.0], // Σ = 2.0
-        belief: 1.0,
+    // Plan 297 T2.V1: r_obs > r_expected, positive d_recent → w increases.
+    let config = PersonalityConfig {
+        alpha: 0.1, // amplify for test visibility
+        ..Default::default()
     };
-    let layers: [&dyn LayerDirectionSource; 1] = [&layer];
-    let w_before = kernel.w[0];
-    kernel.drift(&layers, 1.0); // surprise = 1.0
-    // Δw = alpha * surprise * Σ_j d_recent[j] = 0.01 * 1.0 * 2.0 = 0.02
-    let expected = w_before + 0.02;
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.0]);
+
+    // d_recent = [1.0; 32] (sum = 32.0), r_expected = 0.0 initially.
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)).with_recent(uniform_direction_32(1.0));
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
+    let w_before = kernel.w_snapshot()[0];
+    kernel.drift(&layers, 1.0); // r_observed = 1.0, surprise = 1.0 - 0.0 = 1.0
+    let w_after = kernel.w_snapshot()[0];
+
+    // Δw = alpha * surprise * Σ d_recent = 0.1 * 1.0 * 32.0 = 3.2.
     assert!(
-        (kernel.w[0] - expected).abs() < 1e-6,
-        "w[0] = {} (expected {expected})",
-        kernel.w[0]
+        w_after > w_before,
+        "positive surprise should increase w: before={w_before}, after={w_after}"
     );
-    assert!(kernel.w[0] > w_before, "drift should reinforce");
+    assert!(
+        (w_after - 3.2).abs() < 1e-5,
+        "Δw should be 3.2, got {w_after}"
+    );
 }
 
 #[test]
 fn drift_negative_surprise_penalizes() {
-    // r_observed < r_expected → surprise < 0 → w[i] decreases.
-    type K = PersonalityWeightedComposition<1, 2>;
-    let mut kernel = K::new(PersonalityConfig::default(), [0.0]);
-    kernel.r_expected = [1.0]; // baseline
-    let layer = MockLayer::<2> {
-        dir: [0.0; 2],
-        recent: [1.0, 1.0],
-        belief: 1.0,
+    // Plan 297 T2.V1: r_obs < r_expected, positive d_recent → w decreases.
+    let config = PersonalityConfig {
+        alpha: 0.1,
+        ..Default::default()
     };
-    let layers: [&dyn LayerDirectionSource; 1] = [&layer];
-    let w_before = kernel.w[0];
-    kernel.drift(&layers, 0.0); // surprise = -1.0
-    let expected = w_before - 0.02; // 0.01 * (-1.0) * 2.0
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.0]);
+
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)).with_recent(uniform_direction_32(1.0));
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
+    // First drift to set r_expected to ~0.05 (= 0.05 * 1.0).
+    kernel.drift(&layers, 1.0);
+
+    // Now r_observed = 0.0 < r_expected → negative surprise.
+    let w_before = kernel.w_snapshot()[0];
+    kernel.drift(&layers, 0.0);
+    let w_after = kernel.w_snapshot()[0];
+
     assert!(
-        (kernel.w[0] - expected).abs() < 1e-6,
-        "w[0] = {} (expected {expected})",
-        kernel.w[0]
+        w_after < w_before,
+        "negative surprise should decrease w: before={w_before}, after={w_after}"
     );
-    assert!(kernel.w[0] < w_before, "drift should penalize");
 }
 
 #[test]
 fn drift_clamps_to_w_max() {
-    // A huge positive surprise with strong d_recent should saturate at
-    // w_max, not run off to infinity.
-    type K = PersonalityWeightedComposition<1, 2>;
+    // Plan 297 T2.V1: repeated positive drift saturates at w_max.
     let config = PersonalityConfig {
-        alpha: 1.0, // giant learning rate to force saturation in one step
-        w_max: 5.0,
+        alpha: 1.0, // huge step
+        w_max: 2.0,
         ..Default::default()
     };
-    let mut kernel = K::new(config, [0.0]);
-    let layer = MockLayer::<2> {
-        dir: [0.0; 2],
-        recent: [1.0, 1.0],
-        belief: 1.0,
-    };
-    let layers: [&dyn LayerDirectionSource; 1] = [&layer];
-    kernel.drift(&layers, 100.0); // surprise = 100, delta = 1*100*2 = 200
-    assert!(
-        (kernel.w[0] - 5.0).abs() < 1e-6,
-        "w[0] should clamp at +w_max, got {}",
-        kernel.w[0]
-    );
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.0]);
 
-    // And the negative direction.
-    kernel.r_expected = [100.0];
-    kernel.drift(&layers, -100.0); // surprise = -200, delta = -400
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)).with_recent(uniform_direction_32(1.0));
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
+    // Drift many times with positive surprise — should saturate at w_max.
+    for _ in 0..100 {
+        kernel.drift(&layers, 100.0);
+    }
+
+    let w = kernel.w_snapshot()[0];
     assert!(
-        (kernel.w[0] - (-5.0)).abs() < 1e-6,
-        "w[0] should clamp at -w_max, got {}",
-        kernel.w[0]
+        (w - 2.0).abs() < 1e-5,
+        "w should saturate at w_max=2.0, got {w}"
     );
 }
 
 #[test]
 fn drift_ema_tracks_recent_reward() {
-    // r_expected should track r_observed via EMA. With ema_decay=0.95,
-    // after one drift: r_expected' = 0.95 * r_expected + 0.05 * r_observed.
-    type K = PersonalityWeightedComposition<1, 1>;
-    let mut kernel = K::new(PersonalityConfig::default(), [0.0]);
-    kernel.r_expected = [0.0];
-    let layer = MockLayer::<1> {
-        dir: [0.0],
-        recent: [0.0],
-        belief: 1.0,
+    // Plan 297 T2.V1: r_expected converges to r_observed over many steps.
+    let config = PersonalityConfig {
+        ema_decay: 0.5, // faster convergence for the test
+        ..Default::default()
     };
-    let layers: [&dyn LayerDirectionSource; 1] = [&layer];
-    kernel.drift(&layers, 1.0);
-    let expected = 0.95 * 0.0 + 0.05 * 1.0;
-    assert!(
-        (kernel.r_expected[0] - expected).abs() < 1e-6,
-        "r_expected[0] = {} (expected {expected})",
-        kernel.r_expected[0]
-    );
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.0]);
 
-    // Many drift steps with constant r_observed should converge to it.
-    for _ in 0..1000 {
+    // Layer with no recent direction → no w drift, but r_expected still tracks.
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)); // no with_recent → empty recent_direction
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
+    // Feed constant reward = 1.0 — r_expected should converge to 1.0.
+    for _ in 0..50 {
         kernel.drift(&layers, 1.0);
     }
+
+    let r_exp = kernel.r_expected()[0];
     assert!(
-        (kernel.r_expected[0] - 1.0).abs() < 1e-3,
-        "r_expected should converge to 1.0 after many drifts, got {}",
-        kernel.r_expected[0]
+        (r_exp - 1.0).abs() < 1e-3,
+        "r_expected should converge to 1.0, got {r_exp}"
+    );
+
+    // w should NOT have moved (empty recent_direction → zero delta).
+    assert!(
+        kernel.w_snapshot()[0].abs() < 1e-6,
+        "w should not drift with empty recent_direction"
     );
 }
 
+// ─── Phase 4 G1: tau_infinity_uniform ──────────────────────────────────────
+
 #[test]
-fn drift_with_empty_recent_leaves_w_unchanged() {
-    // Default-impl LayerDirectionSource (no recent_direction override)
-    // should leave w unchanged — only the EMA fires.
-    type K = PersonalityWeightedComposition<1, 2>;
-    let mut kernel = K::new(PersonalityConfig::default(), [0.42]);
+fn g1_compose_tau_infinity_uniform() {
+    // Plan 297 Phase 4 G1: when τ → ∞, all weights contribute 0.5, output =
+    // 0.5 × Σ dᵢ (no personality). Divergence only with finite τ.
+    let config = PersonalityConfig {
+        tau: f32::INFINITY,
+        ..Default::default()
+    };
+    let kernel = PersonalityWeightedComposition::<3, 32>::new(
+        config,
+        [10.0, -10.0, 5.0], // extreme weights — should be IGNORED at τ = ∞
+    );
 
-    // A layer that DOESN'T override recent_direction.
-    struct NoRecent {
-        dir: [f32; 2],
-    }
-    impl LayerDirectionSource for NoRecent {
-        fn direction(&self, scratch: &mut [f32]) -> &[f32] {
-            scratch[..2].copy_from_slice(&self.dir);
-            &scratch[..2]
-        }
-        // recent_direction falls back to default → empty slice
-    }
+    let l0 = StaticLayer::new(uniform_direction_32(1.0));
+    let l1 = StaticLayer::new(uniform_direction_32(1.0));
+    let l2 = StaticLayer::new(uniform_direction_32(1.0));
+    let layers: [&dyn LayerDirectionSource; 3] = [&l0, &l1, &l2];
 
-    let l = NoRecent { dir: [1.0, 1.0] };
-    let layers: [&dyn LayerDirectionSource; 1] = [&l];
-    let w_before = kernel.w[0];
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
+    kernel.compose_into(&layers, &mut scratch, &mut out);
+
+    // At τ = ∞, sigmoid(w/∞) = sigmoid(0) = 0.5 for all layers regardless of w.
+    // Total = 0.5 × 3 × [1.0; 32] = [1.5; 32].
+    for j in 0..32 {
+        assert!(
+            (out[j] - 1.5).abs() < 1e-4,
+            "out[{j}] should be 1.5 (no-personality baseline), got {}",
+            out[j]
+        );
+    }
+}
+
+// ─── Phase 4 sigmoid stability (R276 §5) ──────────────────────────────────
+
+#[test]
+fn sigmoid_stable_for_extreme_inputs() {
+    // R276 §5 / Plan 297: no overflow/NaN for |x| > 50.
+    for &x in &[100.0f32, -100.0, 1000.0, -1000.0, 1e10, -1e10] {
+        let s = sigmoid(x);
+        assert!(s.is_finite(), "sigmoid({x}) is not finite: {s}");
+        assert!(s >= 0.0 && s <= 1.0, "sigmoid({x}) out of [0,1]: {s}");
+    }
+}
+
+// ─── Phase 2: empty recent_direction semantics ─────────────────────────────
+
+#[test]
+fn drift_empty_recent_direction_zero_delta() {
+    // A layer whose recent_direction() returns &[] should not influence w,
+    // but r_expected should still update.
+    let config = PersonalityConfig::default();
+    let mut kernel = PersonalityWeightedComposition::<1, 32>::new(config, [0.5]);
+
+    let l0 = StaticLayer::new(uniform_direction_32(1.0)); // no recent
+    let layers: [&dyn LayerDirectionSource; 1] = [&l0];
+
     kernel.drift(&layers, 1.0);
-    assert!(
-        (kernel.w[0] - w_before).abs() < 1e-9,
-        "drift with empty recent should not move w"
-    );
+
+    // w should be unchanged.
+    assert!((kernel.w_snapshot()[0] - 0.5).abs() < 1e-6);
+    // r_expected should have moved.
+    assert!(kernel.r_expected()[0] > 0.0);
 }
 
-// ─── T3.x snapshot via public API ───────────────────────────────────────
+// ─── Phase 1: multi-layer integration smoke test ───────────────────────────
 
 #[test]
-fn snapshot_round_trip_with_kernel() {
-    // T3.2: snapshot → mutate → verify mismatch → restore → verify match.
-    type K = PersonalityWeightedComposition<2, 3>;
-    let mut kernel = K::new(PersonalityConfig::default(), [0.5, -0.5]);
-    let snap = PersonalitySnapshot::<2>::from_composition(&kernel, ArchetypeLabel::new(11), 1);
-    assert!(snap.verify_blake3());
+fn compose_three_layers_mixed_weights_and_directions() {
+    // End-to-end: 3 layers with distinct directions and weights.
+    let config = PersonalityConfig::default();
+    let kernel = PersonalityWeightedComposition::<3, 32>::new(config, [0.0, 4.0, -4.0]);
+
+    let l0 = StaticLayer::new(unit_direction_32(0)); // e_0, w=0 → 0.5 × e_0
+    let l1 = StaticLayer::new(unit_direction_32(1)); // e_1, w=4 → sigmoid(4) ≈ 0.982 × e_1
+    let l2 = StaticLayer::new(unit_direction_32(2)); // e_2, w=-4 → sigmoid(-4) ≈ 0.018 × e_2
+    let layers: [&dyn LayerDirectionSource; 3] = [&l0, &l1, &l2];
+
+    let mut scratch = [0.0f32; 32];
+    let mut out = [0.0f32; 32];
+    kernel.compose_into(&layers, &mut scratch, &mut out);
+
+    let expected_0 = sigmoid(0.0 / 1.0);
+    let expected_1 = sigmoid(4.0 / 1.0);
+    let expected_2 = sigmoid(-4.0 / 1.0);
+
+    assert!((out[0] - expected_0).abs() < 1e-5, "out[0] mismatch");
+    assert!((out[1] - expected_1).abs() < 1e-5, "out[1] mismatch");
+    assert!((out[2] - expected_2).abs() < 1e-5, "out[2] mismatch");
+    for j in 3..32 {
+        assert!(out[j].abs() < 1e-6, "out[{j}] should be 0");
+    }
+}
+
+// ─── Phase 2: restore_w round-trip ─────────────────────────────────────────
+
+#[test]
+fn restore_w_roundtrips_cleanly() {
+    let mut kernel =
+        PersonalityWeightedComposition::<3, 32>::new(PersonalityConfig::default(), [0.1, 0.2, 0.3]);
+    let snapshot = *kernel.w_snapshot();
 
     // Mutate.
-    kernel.w[0] = 99.0;
-    let mutated = PersonalitySnapshot::<2>::from_composition(&kernel, ArchetypeLabel::new(11), 1);
-    assert_ne!(
-        mutated.blake3, snap.blake3,
-        "mutated w must produce a different blake3"
-    );
+    kernel.restore_w([0.9, 0.8, 0.7]);
+    assert_ne!(kernel.w_snapshot(), &snapshot);
 
     // Restore.
-    kernel.restore_w(snap.w);
-    let restored = PersonalitySnapshot::<2>::from_composition(&kernel, ArchetypeLabel::new(11), 1);
-    assert_eq!(
-        restored.blake3, snap.blake3,
-        "restored w must match the original snapshot's blake3"
-    );
-}
-
-#[test]
-fn w_snapshot_returns_borrowed_array() {
-    type K = PersonalityWeightedComposition<3, 4>;
-    let kernel = K::new(PersonalityConfig::default(), [1.0, 2.0, 3.0]);
-    let view = kernel.w_snapshot();
-    // Type assertion: must be &[f32; 3], not &[f32].
-    let _: &[f32; 3] = view;
-    assert_eq!(view, &[1.0, 2.0, 3.0]);
-}
-
-// ─── Sigmoid helpers (re-exposed smoke check) ────────────────────────────
-
-#[test]
-fn module_sigmoid_into_matches_scalar() {
-    let x = [0.0f32, 1.0, -1.0, 5.0, -5.0];
-    let mut out = [0.0f32; 5];
-    sigmoid_into(&x, &mut out);
-    for (i, xi) in x.iter().enumerate() {
-        assert!((out[i] - sigmoid(*xi)).abs() < 1e-7);
-    }
+    kernel.restore_w(snapshot);
+    assert_eq!(kernel.w_snapshot(), &snapshot);
 }

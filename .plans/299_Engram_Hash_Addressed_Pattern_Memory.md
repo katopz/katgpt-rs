@@ -6,7 +6,7 @@
 **Source paper:** [arXiv:2601.07372](https://arxiv.org/pdf/2601.07372) — Engram, Cheng et al. 2026 (DeepSeek-AI / Peking U.)
 **Target:** `katgpt-rs/crates/katgpt-core/src/engram/` (new module)
 **Cargo feature:** `engram` (opt-in, default OFF — promote to default-on after G1–G7 GOAT gate passes; per AGENTS.md GOAT gate rule)
-**Status:** Active — Phase 0 ✓ (research + guide complete), Phases 1–7 pending
+**Status:** Active — Phases 1-3 (core), 5 partial (commitment), 7 partial (forward) done; Phases 4 (tokenizer), 5 hotswap, 6 (cache), 7 GOAT gates, 8 docs pending
 
 ---
 
@@ -46,12 +46,12 @@ Plus tests in `crates/katgpt-core/src/engram/` (unit) and `tests/bench_299_engra
 
 ### Tasks
 
-- [ ] **T1.1** Create module skeleton `crates/katgpt-core/src/engram/mod.rs` with feature gate `#[cfg(feature = "engram")]`. Add `engram` feature to `crates/katgpt-core/Cargo.toml` (deps: `blake3` already there; `papaya` already there per AGENTS.md; no new deps). Export from `crates/katgpt-core/src/lib.rs` behind feature gate.
-- [ ] **T1.2** Define `EngramHash(pub u64)` — `#[repr(transparent)]`, `Copy + Eq + Hash`. Zero-cost newtype.
-- [ ] **T1.3** Define `HashHead { n: u8, k: u8, modulus: u64, seed: u64 }` — one prime-table hash configuration. Pre-computed at table build time, immutable.
-- [ ] **T1.4** Define `K_MAX = 16` const (paper uses 8 heads × 2 N-gram orders = 16). Fixed-size array `[EngramHash; K_MAX]` per retrieval — zero alloc.
-- [ ] **T1.5** Implement `multi_head_hash(suffix: &[CanonicalId], heads: &[HashHead; K_MAX]) -> [EngramHash; K_MAX]` in `hash.rs`. Multiplicative-XOR per head: `hash = (seed XOR suffix_fold) % modulus` where `suffix_fold = Σᵢ suffix[i] · MULTIPLIERS[i]`. SIMD-friendly (4 or 8 heads at once when suffix is fixed-size `[u64; 3]`).
-- [ ] **T1.6** Unit tests: empty suffix → all-zero hashes; same suffix → same hash (determinism); different suffix → different hash (no trivial collisions); K heads independent (changing one head's seed changes only its hash).
+- [x] **T1.1** Create module skeleton `crates/katgpt-core/src/engram/mod.rs` with feature gate `#[cfg(feature = "engram")]`. Add `engram` feature to `crates/katgpt-core/Cargo.toml` (deps: `blake3` already there; `papaya` already there per AGENTS.md; no new deps). Export from `crates/katgpt-core/src/lib.rs` behind feature gate.
+- [x] **T1.2** Define `EngramHash(pub u64)` — `#[repr(transparent)]`, `Copy + Eq + Hash`. Zero-cost newtype.
+- [x] **T1.3** Define `HashHead { n: u8, k: u8, modulus: u64, seed: u64 }` — one prime-table hash configuration. Pre-computed at table build time, immutable.
+- [x] **T1.4** Define `K_MAX = 16` const (paper uses 8 heads × 2 N-gram orders = 16). Fixed-size array `[EngramHash; K_MAX]` per retrieval — zero alloc.
+- [x] **T1.5** Implement `multi_head_hash(suffix: &[CanonicalId], heads: &[HashHead; K_MAX]) -> [EngramHash; K_MAX]` in `hash.rs`. Multiplicative-XOR per head: `hash = (seed XOR suffix_fold) % modulus` where `suffix_fold = Σᵢ suffix[i] · MULTIPLIERS[i]`. SIMD-friendly (4 or 8 heads at once when suffix is fixed-size `[u64; 3]`).
+- [x] **T1.6** Unit tests: empty suffix → all-zero hashes; same suffix → same hash (determinism); different suffix → different hash (no trivial collisions); K heads independent (changing one head's seed changes only its hash).
 - [ ] **T1.7** Property test: `proptest` over random `[CanonicalId; 3]` suffixes — verify determinism + uniform distribution modulo prime (chi-square test on 10K samples).
 
 ---
@@ -60,21 +60,21 @@ Plus tests in `crates/katgpt-core/src/engram/` (unit) and `tests/bench_299_engra
 
 ### Tasks
 
-- [ ] **T2.1** Define `EngramTable` trait in `mod.rs` (per R278 §2.1 — `lookup_into`, `commitment`, `num_slots`, `const D`).
-- [ ] **T2.2** Implement `InMemoryEngramTable` in `table.rs`:
+- [x] **T2.1** Define `EngramTable` trait in `mod.rs` (per R278 §2.1 — `lookup_into`, `commitment`, `num_slots`, `const D`).
+- [x] **T2.2** Implement `InMemoryEngramTable` in `table.rs`:
   - `slots: Box<[[f32; D]>` — flat `[N × D]` row-major, 64-byte aligned (per ContiguousWeights pattern, R102)
   - `heads: [HashHead; K_MAX]` — pre-computed at build
   - `commitment_cache: OnceCell<[u8; 32]>` — lazy BLAKE3
   - Lookup: `slots[hash as usize % N]` — direct index, O(1), cache-friendly
-- [ ] **T2.3** Implement `EngramTableBuilder`:
+- [x] **T2.3** Implement `EngramTableBuilder`:
   - `from_iter(items: impl Iterator<Item = ([f32; D], frequency: u64)>)` — populate table, write to slots indexed by hash mod N
   - Hash collision handling: last-write-wins (paper uses prime moduli + multi-head to dilute; collisions are a quality issue, not a correctness issue — the sigmoid gate filters noise)
   - `build_with_commitment()` — compute Merkle root of slot hashes (binary Merkle per R262), cache in `commitment_cache`
-- [ ] **T2.4** Implement `lookup_into(&self, hash_keys: &[EngramHash; K_MAX], out: &mut [f32]) -> usize`:
+- [x] **T2.4** Implement `lookup_into(&self, hash_keys: &[EngramHash; K_MAX], out: &mut [f32]) -> usize`:
   - For each `k`, copy `slots[hash_keys[k].0 as usize % N]` into `out[k*D..(k+1)*D]`
   - Return hit count (slots that contain non-zero data)
   - Zero-allocation: caller provides `out` of size `K_MAX × D`
-- [ ] **T2.5** Unit tests: empty table → all zeros out; single-slot populated → lookup hits; K-head retrieval fills all K slots; commitment deterministic (same content → same BLAKE3).
+- [x] **T2.5** Unit tests: empty table → all zeros out; single-slot populated → lookup hits; K-head retrieval fills all K slots; commitment deterministic (same content → same BLAKE3).
 - [ ] **T2.6** Performance: micro-bench `lookup_into` on 1M-slot table — target < 50 ns per K=16 retrieval (cache-resident, SIMD-friendly).
 
 ---
@@ -83,17 +83,17 @@ Plus tests in `crates/katgpt-core/src/engram/` (unit) and `tests/bench_299_engra
 
 ### Tasks
 
-- [ ] **T3.1** Define `SigmoidFusionConfig { tau: f32, rmsnorm_eps: f32 }` in `kernel.rs`. Defaults: `tau = √D` (matches paper), `rmsnorm_eps = 1e-6`.
-- [ ] **T3.2** Implement `rmsnorm_into(x: &[f32], eps: f32, out: &mut [f32])` — reuse existing `types::rmsnorm` pattern from `transformer.rs` if compatible; else inline.
-- [ ] **T3.3** Implement `sigmoid_fuse_into(q: &[f32], k: &[f32], v: &[f32], out: &mut [f32], config: &SigmoidFusionConfig)`:
+- [x] **T3.1** Define `SigmoidFusionConfig { tau: f32, rmsnorm_eps: f32 }` in `kernel.rs`. Defaults: `tau = √D` (matches paper), `rmsnorm_eps = 1e-6`.
+- [x] **T3.2** Implement `rmsnorm_into(x: &[f32], eps: f32, out: &mut [f32])` — reuse existing `types::rmsnorm` pattern from `transformer.rs` if compatible; else inline.
+- [x] **T3.3** Implement `sigmoid_fuse_into(q: &[f32], k: &[f32], v: &[f32], out: &mut [f32], config: &SigmoidFusionConfig)`:
   ```text
   q_norm = RMSNorm(q); k_norm = RMSNorm(k)
   gate = sigmoid(dot(q_norm, k_norm) / config.tau)
   for j in 0..D: out[j] = gate * v[j]
   ```
   SIMD-accelerated when `D % 8 == 0` (NEON/AVX2 dispatch via `simd::simd_dot_f32`).
-- [ ] **T3.4** **CRITICAL — never softmax.** Add a static assertion / doc comment that this kernel uses sigmoid per AGENTS.md. No `softmax` symbol in this module.
-- [ ] **T3.5** Unit tests:
+- [x] **T3.4** **CRITICAL — never softmax.** Add a static assertion / doc comment that this kernel uses sigmoid per AGENTS.md. No `softmax` symbol in this module.
+- [x] **T3.5** Unit tests:
   - `q == k` → gate ≈ 1.0 (after RMSNorm, dot ≈ D, sigmoid(D/√D) high)
   - `q == -k` → gate ≈ 0.0
   - `q ⊥ k` → gate ≈ 0.5
@@ -148,8 +148,8 @@ Plus tests in `crates/katgpt-core/src/engram/` (unit) and `tests/bench_299_engra
   - **Option A (simple):** `lock` blocks readers during swap. Swap is rare (table updates are infrequent), so this is OK if swap latency < 1ms.
   - **Option B (lock-free):** `crossbeam-epoch` for safe reclamation. Adds a dep.
   - **Default: Option A.** Promote to Option B only if G5 (reader atomicity under high swap rate) demands it.
-- [ ] **T5.5** Implement `EngramTableId(pub [u8; 32])` in `commitment.rs` — content-addressed identity. Methods: `from_table(table: &dyn EngramTable) -> Self`, `verify(table: &dyn EngramTable) -> bool`.
-- [ ] **T5.6** Implement `build_merkle_root(slots: &[[f32; D]]) -> [u8; 32]` — binary Merkle tree (R262 infrastructure). Leaves = `BLAKE3(slot_bytes)`; internal = `BLAKE3(left || right)`; root = table identity.
+- [x] **T5.5** Implement `EngramTableId(pub [u8; 32])` in `commitment.rs` — content-addressed identity. Methods: `from_table(table: &dyn EngramTable) -> Self`, `verify(table: &dyn EngramTable) -> bool`.
+- [x] **T5.6** Implement `build_merkle_root(slots: &[[f32; D]]) -> [u8; 32]` — binary Merkle tree (R262 infrastructure). Leaves = `BLAKE3(slot_bytes)`; internal = `BLAKE3(left || right)`; root = table identity.
 - [ ] **T5.7** Unit tests:
   - Same content → same `EngramTableId`
   - Different content → different `EngramTableId`
@@ -182,12 +182,12 @@ Plus tests in `crates/katgpt-core/src/engram/` (unit) and `tests/bench_299_engra
 
 ### Tasks
 
-- [ ] **T7.1** Implement `fuse_into_hidden_state(hidden_state: &mut [f32], query: &[f32], table: &dyn EngramTable, hash_keys: &[EngramHash; K_MAX], config: &EngramConfig)` in `forward.rs`:
+- [x] **T7.1** Implement `fuse_into_hidden_state(hidden_state: &mut [f32], query: &[f32], table: &dyn EngramTable, hash_keys: &[EngramHash; K_MAX], config: &EngramConfig)` in `forward.rs`:
   - Allocate K retrievals + K gates on caller-provided scratch buffers
   - Lookup K patterns
   - For each pattern: compute `k = W_K · e`, `v = W_V · e`, sigmoid-fuse into hidden_state
   - Sum the K contributions into hidden_state (residual add)
-- [ ] **T7.2** Define `EngramConfig { fusion: SigmoidFusionConfig, k_heads: usize, conv_kernel: Option<[f32; 4]>, multi_branch: Option<usize> }` — host-configurable.
+- [x] **T7.2** Define `EngramConfig { fusion: SigmoidFusionConfig, k_heads: usize, conv_kernel: Option<[f32; 4]>, multi_branch: Option<usize> }` — host-configurable.
 - [ ] **T7.3** **G1 gate** — `tests/bench_299_engram_goat.rs::g1_lookup_latency`:
   - 1M-slot table, D=128
   - Retrieve K=16 patterns in single call

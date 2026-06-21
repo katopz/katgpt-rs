@@ -49,6 +49,16 @@
 //! Gated behind the `personality_composition` Cargo feature (default-off until
 //! GOAT G4/G5 pass). See `katgpt-rs/.plans/297_personality_weighted_composition.md`.
 //!
+//! # Module layout
+//!
+//! - [`types`] — `PersonalityConfig`, `ArchetypeLabel`.
+//! - [`sigmoid`] — numerically stable branching sigmoid.
+//! - [`trait_def`] — `LayerDirectionSource` (file named to avoid the `trait`
+//!   keyword, which Rust reserves as a module path component).
+//! - [`kernel`] — `PersonalityWeightedComposition` (compose + drift + snapshot
+//!   accessors).
+//! - [`snapshot`] — `PersonalitySnapshot` with BLAKE3 commitment.
+//!
 //! # References
 //!
 //! - Plan: [`katgpt-rs/.plans/297_personality_weighted_composition.md`]
@@ -76,13 +86,13 @@ pub use types::{ArchetypeLabel, PersonalityConfig};
 // layer count; new N values require adding an alias here.
 
 /// Single-layer composition (degenerate: pure sigmoid gate on one direction).
-pub type SingleLayerComposition<D> = PersonalityWeightedComposition<1, D>;
+pub type SingleLayerComposition<const D: usize> = PersonalityWeightedComposition<1, D>;
 
 /// 4-layer composition.
-pub type QuadLayerComposition<D> = PersonalityWeightedComposition<4, D>;
+pub type QuadLayerComposition<const D: usize> = PersonalityWeightedComposition<4, D>;
 
 /// 7-layer composition.
-pub type HeptaLayerComposition<D> = PersonalityWeightedComposition<7, D>;
+pub type HeptaLayerComposition<const D: usize> = PersonalityWeightedComposition<7, D>;
 
 /// 9-layer composition (the production Entity Cognition Stack case).
 ///

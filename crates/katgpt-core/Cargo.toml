@@ -27,7 +27,7 @@ serde_json = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [features]
-default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "octree_ctc", "sector_projection", "action_bridge", "triggered_injection", "temporal_deriv", "bom_sampling"]  # triggered_injection DEFAULT-ON (Plan 278 GOAT G3) — sigmoid-thresholded inject/skip gate; temporal_deriv DEFAULT-ON (Plan 277 GOAT 4/4 fusions passed) — dual fast/slow EMA surprise signal; bom_sampling DEFAULT-ON (Plan 281 T2.4 full, 2026-06-17) — G2 PASS +31.49pp on 100 episodes proven in riir-ai Plan 314 (MultiThreatArena + MultiHypothesisBoMMinimaxPlanner vs deterministic). Auto-enables micro_belief + simd_sigmoid.
+default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "octree_ctc", "sector_projection", "action_bridge", "triggered_injection", "temporal_deriv", "bom_sampling", "personality_composition"]  # triggered_injection DEFAULT-ON (Plan 278 GOAT G3) — sigmoid-thresholded inject/skip gate; temporal_deriv DEFAULT-ON (Plan 277 GOAT 4/4 fusions passed) — dual fast/slow EMA surprise signal; bom_sampling DEFAULT-ON (Plan 281 T2.4 full, 2026-06-17) — G2 PASS +31.49pp on 100 episodes proven in riir-ai Plan 314 (MultiThreatArena + MultiHypothesisBoMMinimaxPlanner vs deterministic). Auto-enables micro_belief + simd_sigmoid.
 sparse_mlp = []
 domain_latent = []
 maxsim = []
@@ -115,6 +115,9 @@ ict_branching = []  # ICT Distributional Branching-Point Detector — collision_
 induced_cwm = []  # Induced Code World Model kernel primitive — `InducedCwmKernel: GameState` marker + `CwmCommitment` (BLAKE3) + `BeliefInferenceFn<S>` + `TransitionUnitTest` (Plan 296, Research 275, arxiv 2510.04542). Open half of the CWM Super-GOAT: LLM-induction pipeline is private (riir-ai Plan 326). Opt-in until G1–G4 GOAT gate passes.
 induced_cwm_ismcts = ["induced_cwm"]  # Information-Set MCTS over an induced CWM + belief fn (Plan 296 Phase 2). Self-contained search tree (does NOT reuse root-crate `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the root).
 induced_cwm_tournament = ["induced_cwm"]  # Value Function Tournament — round-robin arena-play selector over `StateHeuristic` candidates for a given induced CWM (Plan 296 Phase 3). Self-contained flat-UCB1 MCTS (does NOT reuse root-crate `mcts_search` — same circular-dep constraint as Phase 2).
+personality_composition = []  # PersonalityWeightedComposition — sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3 snapshot (Plan 297, Research 276). Open primitive for the Entity Cognition Stack Super-GOAT (riir-ai Plan 327 consumes this). Default-off until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
+smear_classifier = ["faithfulness_probe"]  # SmearClassifier — ternary (CoherentSingle/TokenSmear/SequenceSmear) latent-mass distribution classifier extending Plan 278's binary FaithfulnessProbe (Plan 298, Research 277, arXiv:2606.20560). Zero-alloc, SIMD-backed, #[repr(u8)] sync-friendly. Opt-in until G2 (useful discrimination) + G3 (<200ns latency) GOAT gate passes.
+engram = []  # Engram — hash-addressed, sigmoid-fused static pattern memory open primitive (Plan 299, Research 278, arXiv:2601.07372). N-gram-suffix → multi-head hash → O(1) table lookup → sigmoid gate → residual fuse. Open half of the Engram Super-GOAT (private half: riir-ai Guide 147; chain half: riir-chain R001 TODO). Default-off until G1–G7 GOAT gate passes.
 
 [[bench]]
 name = "flow_field_bench"
@@ -171,6 +174,11 @@ name = "micro_belief_bench"
 harness = false
 required-features = ["micro_belief", "bom_sampling"]
 
+[[bench]]
+name = "personality_composition_bench"
+harness = false
+required-features = ["personality_composition"]
+
 # Plan 272 — ChunkedContentStore basic example. Lives in katgpt-core (not the
 # root crate) because it imports katgpt_core::BlobId / ChunkedContentStore /
 # FixedSizeChunker / InMemoryChunkedStore, all of which are gated behind the
@@ -178,3 +186,11 @@ required-features = ["micro_belief", "bom_sampling"]
 [[example]]
 name = "chunked_store_basic"
 required-features = ["chunked_content_store"]
+
+[[example]]
+name = "personality_composition_01_basic"
+required-features = ["personality_composition"]
+
+[[example]]
+name = "personality_composition_02_taming"
+required-features = ["personality_composition"]

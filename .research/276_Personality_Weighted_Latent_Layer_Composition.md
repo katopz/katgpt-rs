@@ -2,7 +2,7 @@
 
 > **Source:** Internal design — open half of the riir-ai Super-GOAT (Research 146)
 > **Date:** 2026-06-21 (refined 2026-06-21)
-> **Status:** Active
+> **Status:** Active — implemented in Plan 297 (katgpt-rs), promoted to DEFAULT-ON after GOAT G4 (79.585ns) + G5 (zero alloc) passed. See `.plans/297_personality_weighted_composition.md` and `.benchmarks/297_personality_composition_goat.md`.
 > **Classification:** Public
 > **Related Research:** 242 (`MicroRecurrentBeliefState`), 111 (Analogical Reasoning)
 > **Cross-ref (riir-ai):** Research 146 (private Super-GOAT guide — game-specific 9-layer mapping, species archetype table, taming transition, validation gates)

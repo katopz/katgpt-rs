@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md](../.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md)
 **Source paper:** [arXiv:2606.20560](https://arxiv.org/abs/2606.20560) — Engels et al., "How Transparent is DiffusionGemma?", DeepMind, Jun 2026
 **Target:** `katgpt-rs/crates/katgpt-core/src/faithfulness/smear.rs` (new module) + Cargo feature `smear_classifier` (depends on `faithfulness_probe`)
-**Status:** Active — Phase 0 (planning)
+**Status:** Active — Phase 1 complete, Phases 2-4 pending
 
 ---
 
@@ -113,17 +113,17 @@ impl Default for CosineSmearClassifier {
 
 ### Tasks
 
-- [ ] **T1.1** Create `crates/katgpt-core/src/faithfulness/smear.rs` with `SmearClass`, `SmearReport`, `SmearClassifier` trait, `CosineSmearClassifier` impl. Behind `smear_classifier` feature (depends on `faithfulness_probe`).
-- [ ] **T1.2** Implement zero-alloc `classify`: caller passes `&mut [f32]` scratch of length `k + k*(k-1)/2`. Use `simd_dot_f32` for the inner products. No allocations in the hot path.
-- [ ] **T1.3** Use `#[repr(u8)]` on `SmearClass` per AGENTS.md rule (1-byte enum).
-- [ ] **T1.4** Unit tests:
+- [x] **T1.1** Create `crates/katgpt-core/src/faithfulness/smear.rs` with `SmearClass`, `SmearReport`, `SmearClassifier` trait, `CosineSmearClassifier` impl. Behind `smear_classifier` feature (depends on `faithfulness_probe`).
+- [x] **T1.2** Implement zero-alloc `classify`: caller passes `&mut [f32]` scratch of length `k + k*(k-1)/2`. Use `simd_dot_f32` for the inner products. No allocations in the hot path.
+- [x] **T1.3** Use `#[repr(u8)]` on `SmearClass` per AGENTS.md rule (1-byte enum).
+- [x] **T1.4** Unit tests:
   - `coherent_single_one_dominant_direction` — single non-zero hypothesis → `CoherentSingle`.
   - `token_smear_parallel_directions_across_sites` — 3 parallel hypotheses (cosine > 0.9) → `TokenSmear { span: 3 }`.
   - `sequence_smear_orthogonal_directions_one_site` — 2 orthogonal hypotheses → `SequenceSmear { n_hypotheses: 2, semantic_distance ≈ 1.0 }`.
   - `epsilon_filters_low_norm_hypotheses` — hypotheses below `epsilon` are dropped before classification.
   - `tau_same_boundary` — cosine distance exactly at `tau_same` → `TokenSmear` (≤).
   - `deterministic_for_fixed_input` — same input → bit-identical `SmearReport`.
-- [ ] **T1.5** Feature gate wiring: `smear_classifier = ["faithfulness_probe"]` in `crates/katgpt-core/Cargo.toml` + root `Cargo.toml`. Zero symbols when feature is off (verified via `nm`).
+- [x] **T1.5** Feature gate wiring: `smear_classifier = ["faithfulness_probe"]` in `crates/katgpt-core/Cargo.toml` + root `Cargo.toml`. Zero symbols when feature is off (verified via `nm`).
 
 ## Phase 2 — FaithfulnessProbe integration
 

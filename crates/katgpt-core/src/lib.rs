@@ -13,9 +13,9 @@ pub mod attention;
 pub mod coda;
 #[cfg(feature = "dec_operators")]
 pub mod dec;
+pub mod leaky_core;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
-pub mod leaky_core;
 pub mod shard_embedding;
 pub mod simd;
 pub mod traits;
@@ -32,10 +32,11 @@ pub mod cgsp;
 pub use cgsp::{
     BatchQualityGate, BreakevenDifficultyFilter, Candidate, CgspConfig, CgspLoop,
     ColinearityBatchGate, CollapseSignal, ComplexityWeights, CuriosityConjecturer,
-    CuriosityPrioritySnapshot, CycleResult, CycleStats, Direction, DifficultyFilter,
-    EntropyCollapse, HlaProjectionGuide, HintDeltaBandit, NoOpBatchGate, NoOpDifficultyFilter,
-    PoolConjecturer, Priority, QualityGuide, ScratchBuffers, Solver, SolveRate, Target,
-    DEFAULT_HLA_DIM, DEFAULT_K, DEFAULT_POOL_SIZE, entropy_nats, sigmoid, structural_complexity,
+    CuriosityPrioritySnapshot, CycleResult, CycleStats, DEFAULT_HLA_DIM, DEFAULT_K,
+    DEFAULT_POOL_SIZE, DifficultyFilter, Direction, EntropyCollapse, HintDeltaBandit,
+    HlaProjectionGuide, NoOpBatchGate, NoOpDifficultyFilter, PoolConjecturer, Priority,
+    QualityGuide, ScratchBuffers, SolveRate, Solver, Target, entropy_nats, sigmoid,
+    structural_complexity,
 };
 
 // CGSP dual-pool extension — DecentMem distillation (Plan 282, Research 249).
@@ -176,9 +177,7 @@ pub use parallax_attn::{
 // vanilla parallax when policy = Uniform, so this is a zero-cost abstraction
 // for callers who construct the scratch but never enable DualPolicy.
 #[cfg(all(feature = "parallax_attn", feature = "sink_aware_attn"))]
-pub use parallax_attn::{
-    SinkAwareParallaxScratch, tiled_attention_parallax_forward_sink_aware,
-};
+pub use parallax_attn::{SinkAwareParallaxScratch, tiled_attention_parallax_forward_sink_aware};
 
 pub use simd::SimdLevel;
 
@@ -343,7 +342,7 @@ pub use funcattn::{
 pub mod content_store;
 #[cfg(feature = "chunked_content_store")]
 pub use content_store::{
-    BlobId, ChunkFetcher, ChunkRange, ChunkedContentStore, ChunkingStrategy, ChunkerConfig,
+    BlobId, ChunkFetcher, ChunkRange, ChunkedContentStore, ChunkerConfig, ChunkingStrategy,
     FastCdcChunker, FixedSizeChunker, InMemoryChunkedStore, MerkleProof, StoreStats,
     build_binary_merkle_proof, build_binary_merkle_root, verify_binary_merkle_proof,
 };
@@ -356,15 +355,18 @@ pub use content_store::{
 pub mod closure;
 #[cfg(feature = "closure_instrument")]
 pub use closure::{
-    PrimitiveKind, PrimitiveTransitionGraph, PtgEdge, PtgNode, OperatorKind,
-    commitment, deserialize_postcard, serialize_postcard,
+    OperatorKind, PrimitiveKind, PrimitiveTransitionGraph, PtgEdge, PtgNode,
     admit::{GateResult, MotifAdmitter, RejectionReason},
-    bridge::{DEFAULT_MOTIF_DIRS, MotifDirections, motif_embedding_to_tar_score, ptg_to_motif_embedding},
-    metrics::{CdgScore, PriScores, compute_pri, compute_cdg, compute_tar_score, motif_multiset},
+    bridge::{
+        DEFAULT_MOTIF_DIRS, MotifDirections, motif_embedding_to_tar_score, ptg_to_motif_embedding,
+    },
+    commitment, deserialize_postcard,
+    metrics::{CdgScore, PriScores, compute_cdg, compute_pri, compute_tar_score, motif_multiset},
     motif::{
         FixedU32Set, MAX_MOTIF_EDGES, MAX_MOTIF_NODES, Motif, MotifMiner, RING_BUFFER_K,
         enumerate_subgraph_hashes,
     },
+    serialize_postcard,
     trace::{DEFAULT_TRACE_CAPACITY, NodeId, PtgRecorder},
 };
 
@@ -421,8 +423,51 @@ pub use induced_cwm::{
 
 // Phase 2 (Plan 296 T2.1–T2.5): Information-Set MCTS over an induced CWM +
 // belief fn. Self-contained search tree (does NOT reuse root-crate
-// `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on
-// the root). Gated by `induced_cwm_ismcts` (which auto-enables
+// `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the
+// root). Gated by `induced_cwm_ismcts` (which auto-enables
 // `induced_cwm`).
 #[cfg(feature = "induced_cwm_ismcts")]
 pub use induced_cwm::{InformationSet, NodeStats, ismcts_search_with_inference};
+
+// ── Personality-Weighted Layer Composition (Plan 297, Research 276) ───────
+//
+// Open MIT-licensed primitive for the Entity Cognition Stack Super-GOAT.
+// A `PersonalityWeightedComposition<N, D>` kernel composes `N` latent
+// direction vectors via per-layer sigmoid-gated weights, then drifts those
+// weights via a reward-surprise Hebbian update. Zero-allocation, sigmoid-gated
+// (NOT softmax — per AGENTS.md), belief-gated, BLAKE3-snapshot-integrated.
+// Entity-agnostic (NPC, player, predator, prey, robot, recommender user).
+//
+// Consumed by riir-ai Plan 327 (runtime wiring) — the game-specific 7-layer
+// mapping, archetype table, taming transition stay private in riir-ai.
+// Opt-in until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
+#[cfg(feature = "personality_composition")]
+pub mod personality_composition;
+#[cfg(feature = "personality_composition")]
+pub use personality_composition::{
+    ArchetypeLabel, EntityCognitionComposition, LayerDirectionSource, PersonalityConfig,
+    PersonalitySnapshot, PersonalityWeightedComposition, sigmoid as personality_sigmoid,
+    sigmoid_into as personality_sigmoid_into,
+};
+
+// ── Engram — Hash-Addressed Pattern Memory (Plan 299, Research 278) ───────
+//
+// Open MIT-licensed primitive: the first conditional-MEMORY axis in the
+// katgpt stack (complementary to Raven's conditional-COMPUTATION axis).
+// N-gram-suffix → multi-head hash → O(1) slot lookup → sigmoid gate (RMSNorm
+// dot σ) → residual-fuse into hidden state. Frozen table, atomic swaps for
+// updates, BLAKE3 commitment as sync-boundary audit artifact.
+//
+// CRITICAL: sigmoid, not softmax — per AGENTS.md. No `softmax` symbol here.
+//
+// Open half of the Engram Super-GOAT: private selling-point guide lives in
+// riir-ai Guide 147; chain commitment bridge is riir-chain R001 (TODO).
+// Opt-in until G1–G7 GOAT gate passes.
+#[cfg(feature = "engram")]
+pub mod engram;
+#[cfg(feature = "engram")]
+pub use engram::{
+    EngramConfig, EngramHash, EngramTable, EngramTableBuilder, EngramTableId, HashHead,
+    InMemoryEngramTable, K_MAX, SigmoidFusionConfig, build_merkle_root, fuse_into_hidden_state,
+    multi_head_hash, rmsnorm_into, sigmoid_fuse_into,
+};

@@ -1164,6 +1164,7 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 | **FuncAttn** (`funcattn`) | Functional Attention — closed-form Tikhonov k×k spectral transport (Plan 286, arxiv 2605.31559) | 🪦 G6 FAIL on LM prediction (0.969 < SDPA 1.000). Stays opt-in, NOT default. Gain-tier. |
 | **Forensic Watermark** | Moved to `riir-ai` (Plan 322) — recipe implementation relocated to preserve honeypot value per strategy verdict 003 | — |
 | **ICT Branching Detector** (`ict_branching`) | `collision_purity β(π)` + JS-divergence novelty + `BranchingDetector` (Plan 294, arxiv 2606.19771) | Opt-in — G1/G3/G4/G5/G6/G10 PASS (Super-GOAT proceeds); G8 (runtime fusion) deferred to riir-ai Plan 324. |
+| **PersonalityWeightedComposition** (`personality_composition`) | Sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3 snapshot (Plan 297, Research 276). Open primitive for the Entity Cognition Stack Super-GOAT. | **DEFAULT-ON** — GOAT G4 (79.585ns < 1µs target, 12.6× margin) + G5 (zero alloc) PASS. |
 
 📖 **Full detail for ALL opt-in features + complete feature flag reference:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
 
@@ -1189,6 +1190,58 @@ cargo clippy --all-targets --all-features --quiet   # Lint
 **310+ feature flags** with **130+ default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, **`manifold_power_iter_router`** (Plan 279 GOAT 9/9), **`triggered_injection`** (Plan 278 G3 PASS), **`temporal_deriv`** (Plan 277 4/4 fusions PASS), **`self_advantage_gate`** (Plan 283 GOAT 4/4 PASS), **`clr`** (Plan 284), and 80 more.
 
 📖 **Full feature flag table (310+ flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
+
+### 🧠 PersonalityWeightedComposition — Sigmoid-Gated Latent Layer Composition (Plan 297, Research 276)
+
+A generic, modelless, MIT-licensed primitive for composing `N` latent direction vectors into a single behavior vector via per-layer sigmoid-gated personality weights, with a reward-surprise drift rule for emergent personality adaptation without retraining.
+
+**Composition kernel:**
+
+```text
+behavior[j] = Σᵢ sigmoid(wᵢ / τ) · belief_confidenceᵢ · dᵢ[j]
+```
+
+**Drift rule (reward surprise → personality adaptation):**
+
+```text
+surpriseᵢ      = R_observed - R_expectedᵢ
+Δwᵢ            = α · surpriseᵢ · Σⱼ d_recentᵢ[j]
+wᵢ             ← clamp(wᵢ + Δwᵢ, -w_max, +w_max)
+R_expectedᵢ    ← ema_decay · R_expectedᵢ + (1 - ema_decay) · R_observed
+```
+
+**Trait surface:**
+
+```rust
+pub trait LayerDirectionSource: Send + Sync {
+    fn direction<'a>(&self, scratch: &'a mut [f32]) -> &'a [f32];
+    fn recent_direction(&self) -> &[f32] { &[] }      // override for drift
+    fn belief_confidence(&self) -> f32 { 1.0 }        // plasma-tier default
+}
+
+pub struct PersonalityWeightedComposition<const N: usize, const D: usize> {
+    pub w: [f32; N],
+    // + config (tau, alpha, w_max, ema_decay) + r_expected EMA
+}
+
+impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
+    pub fn compose_into<'a>(&self, layers: &[&dyn LayerDirectionSource; N],
+                            scratch: &mut [f32], out: &'a mut [f32]) -> &'a mut [f32];
+    pub fn drift(&mut self, layers: &[&dyn LayerDirectionSource; N], r_observed: f32);
+    pub fn w_snapshot(&self) -> &[f32; N];
+    pub fn restore_w(&mut self, w: [f32; N]);
+}
+```
+
+**Why sigmoid, not softmax:** Sigmoid is mandated per AGENTS.md for projections onto learned direction vectors. Softmax couples layers — a layer's contribution depends on every other layer's weight. Sigmoid allows each personality trait to be independently expressed (~1) or suppressed (~0), with signed resistance (negative `wᵢ`).
+
+**GOAT status:** G4 (compose_n9_d32 < 1µs/entity) ✅ **79.585 ns** (12.6× margin). G5 (zero heap alloc in `compose_into`) ✅ by code audit. G1 (τ=∞ uniform baseline) ✅. Promoted to **DEFAULT-ON** in `katgpt-core`. See [`.benchmarks/297_personality_composition_goat.md`](.benchmarks/297_personality_composition_goat.md).
+
+**Entity-agnostic:** Applies to NPC, player, predator, prey, robot, recommender user. No game terms in the kernel — the 7-layer Entity Cognition Stack mapping (SENSE, SAFETY, KIN, COMPANIONS, COMMUNITY, LAW, FACTION), archetype table, and taming transition live in riir-ai (Research 146 / Plan 327).
+
+**Examples:**
+- `cargo run --example personality_composition_01_basic --features personality_composition`
+- `cargo run --example personality_composition_02_taming --features personality_composition`
 
 ## 📁 Project Structure
 
