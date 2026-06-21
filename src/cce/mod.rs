@@ -36,18 +36,35 @@
 //! no game semantics. The latent-space reframing (state = HLA bucket, action =
 //! CGSP conjecturer arm, signal = zone-mood latent scalar) lives in riir-ai
 //! Plan 325. See `AGENTS.md` "Latent vs Raw Space Rules" for the boundary.
+//!
+//! ## Subjective-CCE heterogeneous extension (Plan 300)
+//!
+//! The [`HeterogeneousPayoff<N, A>`] trait generalizes [`PayoffTensor`] to
+//! per-NPC heterogeneous cost tables. Each player contributes its own cost
+//! tensor and deviation class; the wrapper builds one LP constraint row per
+//! `(player, κ)` pair. The regret bound `O(T⁻¹ᐟ²)` transfers as-is (sum of
+//! convex is convex). Closes the subjective-CCE wiring path from Issue 327;
+//! strict Bayes-CCE (no-common-prior) remains deferred (riir-ai Issue 328).
+//!
+//! ```text
+//! minimize   γ₀(ρ)                                       # moderator objective
+//! subject to γ_i(ρ) ≤ γ_dev_i(ρ, κ)   ∀i ∈ [1..P], ∀κ ∈ D_i  # per-NPC
+//!            Σ ρ = 1, ρ ≥ 0
+//! ```
 
 pub mod bregman;
 pub mod external_regret;
+pub mod heterogeneous;
 pub mod lp;
 pub mod primal_dual;
 pub mod types;
 
 pub use bregman::{BregmanPotential, Euclidean, Kl};
 pub use external_regret::ExternalRegret;
+pub use heterogeneous::PerPlayerGame;
 pub use lp::{CceLp, CceLpError};
 pub use primal_dual::{CcePrimalDual, ConvergenceReportRaw, StepReport};
 pub use types::{
-    ActionSpace, Deviation, DeviationClass, OccupationMeasure, OccupationMeasureError,
-    PayoffTensor, StateSpace,
+    ActionSpace, Deviation, DeviationClass, HeterogeneousPayoff, OccupationMeasure,
+    OccupationMeasureError, PayoffTensor, StateSpace,
 };

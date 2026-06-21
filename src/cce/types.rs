@@ -62,10 +62,7 @@ impl<const N: usize, const A: usize> OccupationMeasure<N, A> {
         }
         for (i, &v) in entries.iter().enumerate() {
             if v < -1e-6 {
-                return Err(OccupationMeasureError::NegativeEntry {
-                    index: i,
-                    value: v,
-                });
+                return Err(OccupationMeasureError::NegativeEntry { index: i, value: v });
             }
         }
         let sum: f32 = entries.iter().copied().sum();
@@ -125,11 +122,7 @@ impl<const N: usize, const A: usize> OccupationMeasure<N, A> {
     /// application where the invariant holds by construction.
     #[inline]
     pub(crate) fn from_entries_trusted(entries: Vec<f32>) -> Self {
-        debug_assert_eq!(
-            entries.len(),
-            N * A,
-            "from_entries_trusted: wrong length"
-        );
+        debug_assert_eq!(entries.len(), N * A, "from_entries_trusted: wrong length");
         Self { entries }
     }
 }
@@ -277,11 +270,7 @@ pub trait PayoffTensor<const N: usize, const A: usize> {
     /// where `μ(s) = Σ_a ρ(s, a)` is the state marginal.
     ///
     /// Default impl: linear in `μ` via `reward_deviate`.
-    fn gamma_dev(
-        &self,
-        rho: &OccupationMeasure<N, A>,
-        kappa: &Deviation<N, A>,
-    ) -> f32 {
+    fn gamma_dev(&self, rho: &OccupationMeasure<N, A>, kappa: &Deviation<N, A>) -> f32 {
         let mut g = 0.0;
         for s in 0..N {
             let mu_s = rho.marginal_state(s);
@@ -306,6 +295,107 @@ pub trait PayoffTensor<const N: usize, const A: usize> {
     /// cost). Used by `CceLp::solve` (Phase 2) to build the LP objective row.
     fn gamma0_coeff(&self, state: usize, action: usize) -> f32 {
         self.reward_follow(state, action)
+    }
+}
+
+/// Per-NPC heterogeneous payoff + deviation-class bundle (Plan 300).
+///
+/// Subjective-CCE generalization of [`PayoffTensor`]: each "player"
+/// contributes its own cost tensor and deviation class. The wrapper builds one
+/// LP constraint row per `(player, κ)` pair, each row using that player's
+/// cost tensor (NOT a shared tensor). Backs the heterogeneous subjective-CCE
+/// path of [`crate::cce::CceLp::solve_heterogeneous`].
+///
+/// ## Regret bound transfer (doc 62 §2)
+///
+/// `ER(ρ̄_T) ≤ O(T⁻¹ᐟ²)` transfers as-is from the homogeneous case. Each
+/// `γ_i(ρ)` is linear in `ρ`, so each per-player regret `ER_i(ρ) =
+/// max_{κ ∈ D_i} (γ_i(ρ) − γ_dev_i(ρ, κ))` is convex; the aggregate
+/// `ER(ρ) = (1/P) Σ_i ER_i(ρ)` is convex as the sum of convex functions.
+/// Primal-dual averaging is heterogeneity-agnostic. **No new theory, only API
+/// surface.**
+pub trait HeterogeneousPayoff<const N: usize, const A: usize> {
+    /// Number of players (each with its own payoff tensor + deviation class).
+    fn n_players(&self) -> usize;
+
+    /// Player `i`'s deviation class slice. Caller MUST ensure stable order
+    /// across calls (the LP indexes deviations by position).
+    fn deviations_for_player(&self, player: usize) -> &[Deviation<N, A>];
+
+    /// Player `i`'s cost of following at `(state, action)`.
+    fn reward_follow(&self, player: usize, state: usize, action: usize) -> f32;
+
+    /// Player `i`'s per-state expected cost of deviating to `κ`:
+    /// `Σ_{a'} κ(s)[a'] · cost_i(s, a')`.
+    ///
+    /// Default impl: dot product of `κ(s)` with player `i`'s `reward_follow`.
+    /// Override when an impl has a closed-form expression.
+    fn reward_deviate(&self, player: usize, state: usize, kappa: &Deviation<N, A>) -> f32 {
+        let mut g = 0.0;
+        for a in 0..A {
+            g += kappa.kernel[state][a] * self.reward_follow(player, state, a);
+        }
+        g
+    }
+
+    /// Player `i`'s cost of following the recommendation under `ρ`:
+    /// `γ_i(ρ) = Σ_{s,a} ρ(s, a) · cost_i(s, a)`.
+    ///
+    /// Default impl: linear in `ρ` via `reward_follow`.
+    fn gamma_player(&self, player: usize, rho: &OccupationMeasure<N, A>) -> f32 {
+        let mut g = 0.0;
+        for s in 0..N {
+            for a in 0..A {
+                g += rho.at(s, a) * self.reward_follow(player, s, a);
+            }
+        }
+        g
+    }
+
+    /// Player `i`'s cost of deviating to `κ` under `ρ`:
+    /// `γ_dev_i(ρ, κ) = Σ_s μ(s) · reward_deviate(i, s, κ)`
+    /// where `μ(s) = Σ_a ρ(s, a)` is the state marginal.
+    ///
+    /// Default impl: linear in `μ` via `reward_deviate`.
+    fn gamma_dev_player(
+        &self,
+        player: usize,
+        rho: &OccupationMeasure<N, A>,
+        kappa: &Deviation<N, A>,
+    ) -> f32 {
+        let mut g = 0.0;
+        for s in 0..N {
+            let mu_s = rho.marginal_state(s);
+            if mu_s == 0.0 {
+                continue;
+            }
+            g += mu_s * self.reward_deviate(player, s, kappa);
+        }
+        g
+    }
+
+    /// Moderator objective `Γ₀(ρ)`. Default: average player welfare
+    /// `(1/P) Σ_i γ_i(ρ)`. Override for designer-steerable moderators
+    /// (e.g., world-level emission, economic loss).
+    fn gamma0(&self, rho: &OccupationMeasure<N, A>) -> f32 {
+        let p = self.n_players().max(1) as f32;
+        let mut g = 0.0;
+        for i in 0..self.n_players() {
+            g += self.gamma_player(i, rho);
+        }
+        g / p
+    }
+
+    /// Per-index coefficient for the LP objective row (linear `Γ₀`).
+    /// Default: `(1/P) Σ_i reward_follow(i, s, a)`. Override together with
+    /// `gamma0` if the moderator objective differs from average welfare.
+    fn gamma0_coeff(&self, state: usize, action: usize) -> f32 {
+        let p = self.n_players().max(1) as f32;
+        let mut g = 0.0;
+        for i in 0..self.n_players() {
+            g += self.reward_follow(i, state, action);
+        }
+        g / p
     }
 }
 
@@ -337,11 +427,20 @@ mod tests {
     fn occupation_measure_new_rejects_bad_inputs() {
         // Wrong length.
         let err = OccupationMeasure::<2, 2>::new(vec![0.5, 0.5]).unwrap_err();
-        assert!(matches!(err, OccupationMeasureError::WrongLength { expected: 4, got: 2 }));
+        assert!(matches!(
+            err,
+            OccupationMeasureError::WrongLength {
+                expected: 4,
+                got: 2
+            }
+        ));
 
         // Negative entry.
         let err = OccupationMeasure::<2, 1>::new(vec![1.5, -0.5]).unwrap_err();
-        assert!(matches!(err, OccupationMeasureError::NegativeEntry { index: 1, .. }));
+        assert!(matches!(
+            err,
+            OccupationMeasureError::NegativeEntry { index: 1, .. }
+        ));
 
         // Not normalized (sum = 0.4).
         let err = OccupationMeasure::<2, 2>::new(vec![0.1, 0.1, 0.1, 0.1]).unwrap_err();
@@ -438,5 +537,50 @@ mod tests {
         // μ(0) = 0.1+0.2 = 0.3, μ(1) = 0.3+0.4 = 0.7.
         // Γ_dev(ρ, κ) = 0.3·2 + 0.7·4 = 0.6 + 2.8 = 3.4.
         assert!((p.gamma_dev(&rho, &kappa) - 3.4).abs() < 1e-6);
+    }
+
+    /// T1.3 (Plan 300): a trivial 2-player `HeterogeneousPayoff` impl with
+    /// `N=2, A=2`. Player 0's cost is `(s+1)*(a+1)`; player 1's cost is
+    /// `2*(s+1)*(a+1)`. Verify that `gamma0(uniform) = (1/2)(γ_0 + γ_1)`.
+    #[test]
+    fn heterogeneous_payoff_default_gamma0_averages_players() {
+        struct TwoPlayerHetero;
+        impl HeterogeneousPayoff<2, 2> for TwoPlayerHetero {
+            fn n_players(&self) -> usize {
+                2
+            }
+            fn deviations_for_player(&self, _player: usize) -> &[Deviation<2, 2>] {
+                &[]
+            }
+            fn reward_follow(&self, player: usize, s: usize, a: usize) -> f32 {
+                let base = ((s + 1) as f32) * ((a + 1) as f32);
+                if player == 0 { base } else { 2.0 * base }
+            }
+        }
+        let game = TwoPlayerHetero;
+        let rho = OccupationMeasure::<2, 2>::uniform(); // entries = 0.25
+
+        // γ_0(uniform) = Σ_{s,a} 0.25 · (s+1)*(a+1)
+        //              = 0.25·(1 + 2 + 2 + 4) = 0.25·9 = 2.25
+        let g0 = game.gamma_player(0, &rho);
+        assert!((g0 - 2.25).abs() < 1e-6, "γ_0 = {g0}");
+        // γ_1(uniform) = 2 · γ_0 = 4.5
+        let g1 = game.gamma_player(1, &rho);
+        assert!((g1 - 4.5).abs() < 1e-6, "γ_1 = {g1}");
+        // γ₀ default = (γ_0 + γ_1)/2 = (2.25 + 4.5)/2 = 3.375
+        let gamma0 = game.gamma0(&rho);
+        assert!((gamma0 - 3.375).abs() < 1e-6, "γ₀ = {gamma0}");
+
+        // gamma0_coeff(s,a) = (1/P) Σ_i reward_follow(i,s,a).
+        // For (0,0): (1·1 + 2·1)/2 = 1.5.
+        assert!((game.gamma0_coeff(0, 0) - 1.5).abs() < 1e-6);
+        // For (1,1): (1·4 + 2·4)/2 = 6.0.
+        assert!((game.gamma0_coeff(1, 1) - 6.0).abs() < 1e-6);
+
+        // reward_deviate default = Σ_a κ(s)[a]·reward_follow(player, s, a).
+        // Player 1, state 1, constant-deviation to a=1: 1·reward_follow(1,1,1) = 1·8 = 8.
+        let kappa = Deviation::<2, 2>::constant(0, 1);
+        let rd = game.reward_deviate(1, 1, &kappa);
+        assert!((rd - 8.0).abs() < 1e-6, "reward_deviate = {rd}");
     }
 }

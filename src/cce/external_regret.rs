@@ -17,7 +17,9 @@
 //! where `m = (s, a)` flat. Used by the primal-dual iterator (Phase 2) for the
 //! primal gradient step.
 
-use crate::cce::types::{Deviation, DeviationClass, OccupationMeasure, PayoffTensor};
+use crate::cce::types::{
+    Deviation, DeviationClass, HeterogeneousPayoff, OccupationMeasure, PayoffTensor,
+};
 
 /// Closed-form external-regret functional on a finite deviation class `D`.
 ///
@@ -37,12 +39,7 @@ impl ExternalRegret {
     /// `ER(ρ) = max_{κ ∈ D} (γ(ρ) − γ_dev(ρ, κ))`.
     ///
     /// Returns `f32::NEG_INFINITY` if `D` is empty.
-    pub fn er<
-        const N: usize,
-        const A: usize,
-        D: DeviationClass<N, A>,
-        P: PayoffTensor<N, A>,
-    >(
+    pub fn er<const N: usize, const A: usize, D: DeviationClass<N, A>, P: PayoffTensor<N, A>>(
         &self,
         rho: &OccupationMeasure<N, A>,
         d: &D,
@@ -117,10 +114,7 @@ impl ExternalRegret {
             return true;
         }
         let gamma = p.gamma(rho);
-        let mut values: Vec<f32> = devs
-            .iter()
-            .map(|k| gamma - p.gamma_dev(rho, k))
-            .collect();
+        let mut values: Vec<f32> = devs.iter().map(|k| gamma - p.gamma_dev(rho, k)).collect();
         // Sort descending so values[0] is the max.
         values.sort_by(|a, b| b.partial_cmp(a).unwrap_or(core::cmp::Ordering::Equal));
         (values[0] - values[1]) > eps
@@ -149,9 +143,44 @@ impl ExternalRegret {
             .expect("linear_derivative: deviation class must be non-empty");
         p.reward_follow(s, a) - p.reward_deviate(s, kappa_star)
     }
+
+    /// Heterogeneous external regret (Plan 300 T2.3).
+    ///
+    /// `ER_hetero(ρ) = (1/P) Σ_i max_{κ ∈ D_i} (γ_i(ρ) − γ_dev_i(ρ, κ))`.
+    ///
+    /// Convex by construction (sum of convex per-player regrets). The
+    /// `O(T⁻¹ᐟ²)` convergence bound transfers from the homogeneous case
+    /// (doc 62 §2). Returns `f32::NEG_INFINITY` only if `P = 0`; returns
+    /// `0.0` if every player has an empty deviation class (vacuous CCE).
+    pub fn er_heterogeneous<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        &self,
+        rho: &OccupationMeasure<N, A>,
+        game: &H,
+    ) -> f32 {
+        let p = game.n_players();
+        if p == 0 {
+            return f32::NEG_INFINITY;
+        }
+        let inv_p = 1.0 / p as f32;
+        let mut total = 0.0_f32;
+        for i in 0..p {
+            let gamma_i = game.gamma_player(i, rho);
+            let mut best_for_i = f32::NEG_INFINITY;
+            for kappa in game.deviations_for_player(i) {
+                let val = gamma_i - game.gamma_dev_player(i, rho, kappa);
+                if val > best_for_i {
+                    best_for_i = val;
+                }
+            }
+            // Empty deviation class → vacuous: this player contributes 0.
+            if best_for_i == f32::NEG_INFINITY {
+                best_for_i = 0.0;
+            }
+            total += best_for_i;
+        }
+        total * inv_p
+    }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -362,10 +391,15 @@ mod tests {
         let rho = OccupationMeasure::<3, 3>::uniform();
         let p = linear_cost();
         let val = ExternalRegret::new().er(&rho, &Empty, &p);
-        assert!(val.is_infinite() && val.is_sign_negative(), "empty D → -∞, got {val}");
-        assert!(ExternalRegret::new()
-            .best_deviation(&rho, &Empty, &p)
-            .is_none());
+        assert!(
+            val.is_infinite() && val.is_sign_negative(),
+            "empty D → -∞, got {val}"
+        );
+        assert!(
+            ExternalRegret::new()
+                .best_deviation(&rho, &Empty, &p)
+                .is_none()
+        );
     }
 
     #[test]
@@ -428,10 +462,7 @@ mod tests {
     #[test]
     fn marker_types_are_zst() {
         assert_eq!(core::mem::size_of::<StateSpace<4>>(), 0);
-        assert_eq!(
-            core::mem::size_of::<crate::cce::types::ActionSpace<4>>(),
-            0
-        );
+        assert_eq!(core::mem::size_of::<crate::cce::types::ActionSpace<4>>(), 0);
     }
 
     // ---------------------------------------------------------------------------
@@ -603,7 +634,10 @@ mod tests {
             er_cce < -1e-6,
             "chicken strict CCE should have ER < 0, got {er_cce}"
         );
-        assert!((er_cce - (-0.5)).abs() < 1e-6, "expected ER = -0.5, got {er_cce}");
+        assert!(
+            (er_cce - (-0.5)).abs() < 1e-6,
+            "expected ER = -0.5, got {er_cce}"
+        );
 
         // Welfare comparison (for future G1 benchmark): CCE welfare = 5.0
         // (both players' rewards sum to 5 in each of (S,T) and (T,S)).

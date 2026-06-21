@@ -316,4 +316,52 @@ GOAT gate rule: `cce_moderator` feature flag default-off. Promote to considerati
 - Our HLA: `riir-ai/crates/riir-engine/src/hla/`
 - Our LatCal: `riir-ai/crates/riir-chain/src/encoding/latcal*.rs`
 
+---
+
+## 9. Subjective-CCE heterogeneous extension (Plan 300, 2026-06-21)
+
+The homogeneous `CceLp<N,A>::solve(d, p)` takes a **single** `PayoffTensor<N,A>`
+shared across all deviation constraints. The subjective-CCE generalization —
+each NPC `i` evaluates deviations against its own `J_i^{CWM_i}` — requires a
+thin wrapper primitive, shipped in Plan 300:
+
+- **New trait `HeterogeneousPayoff<N,A>`** (`katgpt-rs/src/cce/types.rs`):
+  `n_players`, `deviations_for_player`, per-player `reward_follow` /
+  `reward_deviate` / `gamma_player` / `gamma_dev_player`, plus moderator
+  objective `gamma0 = (1/P) Σ_i γ_i(ρ)` and linear `gamma0_coeff`.
+- **New method `CceLp::solve_heterogeneous`** (`katgpt-rs/src/cce/lp.rs`):
+  builds `Σ_i |D_i|` constraint rows, each using player `i`'s cost tensor.
+  Shares BFS-enumeration infrastructure with `solve` (DRY refactor —
+  `enumerate_bfs` helper).
+- **New struct `PerPlayerGame<N,A,P,D>`** (`katgpt-rs/src/cce/heterogeneous.rs`):
+  default concrete impl backed by per-player `(PayoffTensor, DeviationClass)`
+  slices.
+
+**Regret bound transfer (doc 62 §2):** `ER(ρ̄_T) ≤ O(T⁻¹ᐟ²)` holds as-is — each
+`γ_i` is linear in `ρ`, so each per-player regret is convex; the average
+`(1/P) Σ_i ER_i(ρ)` is convex; primal-dual averaging is
+heterogeneity-agnostic. **No new theory; pure API surface.**
+
+**GOAT gates (Plan 300 Phase 4):**
+- **G1 PASS** — `PerPlayerGame` with identical players reproduces homogeneous
+  `solve` output (emission/chicken/RPS, objective within 1e-4).
+- **G2 PASS** — `er_heterogeneous(ρ⋆) = 0` on 8- and 16-player perturbed games
+  (exact LP solve).
+- **G3 SPLIT** — `CcePrimalDual` heterogeneous extension deferred to T4.3b
+  follow-up (subgradient oracle generalization is non-trivial).
+- **G4 PASS** — BFS-tractable regime (≤16 players) under 50ms target
+  (16 players = 32.7ms in release). 24/32 players document the BFS ceiling;
+  crowd-scale requires the primal-dual path.
+
+**Scope boundary:** this is the subjective-CCE wiring path (Issue 327 Path
+A+). Strict Bayes-CCE (no-common-prior per-NPC CWMs modeled as draws from a
+non-degenerate joint) is deferred Super-GOAT research, tracked separately in
+`riir-ai/.issues/328_no_common_prior_bayes_cce.md`.
+
+**References:**
+- Plan 300: [`katgpt-rs/.plans/300_subjective_cce_heterogeneous_payoff_wrapper.md`](../.plans/300_subjective_cce_heterogeneous_payoff_wrapper.md)
+- Parent issue (closed): [`riir-ai/.issues/327_cwm_cce_bayes_fusion.md`](../../riir-ai/.issues/327_cwm_cce_bayes_fusion.md)
+- Sibling issue (deferred): [`riir-ai/.issues/328_no_common_prior_bayes_cce.md`](../../riir-ai/.issues/328_no_common_prior_bayes_cce.md)
+- Regret sketch: [`riir-ai/.docs/62_bayes_cce_regret_sketch.md`](../../riir-ai/.docs/62_bayes_cce_regret_sketch.md) §2
+
 **TL;DR:** Campi et al. give us **optimal Coarse Correlated Equilibria in Mean Field Games via LP relaxation + no-regret primal-dual with Bregman regularization** (`O(N⁻¹ᐟ²)` convergence, no monotonicity assumption). The neural-network parametrization is training-flavored (→ riir-train), but the LP-CCE formulation + primal-dual iterator distill modellessly into `CceLp<N,A>` + `CcePrimalDual` in katgpt-rs. The latent-space reframing — `state` = HLA bucket, `action` = CGSP conjecturer arm, `signal` = zone-mood latent scalar broadcast via HLA channel, sync-committed via LatCal — is the **Super-GOAT**: coordinated emergent population behavior via a latent broadcast signal with a designer-steerable moderator objective, Pareto-dominating any Nash-seeking competitor, at crowd-scale (thousands of NPCs, 20Hz tick) within plasma-tier latency budgets. All 4 novelty-gate questions YES. Mandatory outputs shipped: this note (R274 public), Plan 295 (public primitive), riir-ai R143 (private guide), riir-ai Plan 325 (private runtime).

@@ -1536,6 +1536,30 @@ required-features = ["cce_moderator"]
 name = "cce_demo"
 required-features = ["cce_moderator"]
 
+# Plan 300 Phase 4 — Subjective-CCE heterogeneous-equivalence regression (G1).
+# Verifies PerPlayerGame with identical players reproduces CceLp::solve output.
+[[test]]
+name = "heterogeneous_g1"
+path = "tests/heterogeneous_g1.rs"
+required-features = ["cce_moderator"]
+
+# Plan 300 Phase 4 — Subjective-CCE regret-transfer gate (G2).
+# Verifies er_heterogeneous(ρ⋆) ≤ 1e-3 on synthetic 8- and 16-player games.
+[[test]]
+name = "heterogeneous_g2"
+path = "tests/heterogeneous_g2.rs"
+required-features = ["cce_moderator"]
+
+# Plan 300 Phase 4 — Subjective-CCE latency sweep (G4).
+# Reports wall-clock per solve for player counts {2,4,8,16,24,32}.
+# Note: BFS-tractable up to ~16 players; 24/32 document the BFS ceiling.
+# Crowd-scale requires the primal-dual path (T4.3 follow-up).
+[[bench]]
+name = "heterogeneous_cce"
+path = "benches/heterogeneous_cce.rs"
+required-features = ["cce_moderator"]
+harness = false
+
 [[example]]
 name = "clr_brevity_tiebreak"
 required-features = ["clr"]
