@@ -464,16 +464,15 @@ impl VocabFourierBasis {
             cos_mode.fill(0.0);
             for (i, emb) in embeddings.iter().enumerate() {
                 let cos_w = (omega * i as f32).cos();
-                for (d, cos_slot) in cos_mode.iter_mut().enumerate().take(vocab_dim) {
-                    *cos_slot += emb[d] * cos_w;
-                }
+                // SIMD AXPY — single-rounding FMA parity with the previous
+                // scalar 'cos_mode[d] += emb[d] * cos_w' loop. Hot path:
+                // n_candidates × n × vocab_dim scalar ops → SIMD.
+                crate::simd::simd_fused_scale_acc(&mut cos_mode[..vocab_dim], &emb[..vocab_dim], cos_w, vocab_dim);
             }
             let inv_n = 1.0 / n as f32;
-            let mut mag_sq = 0.0f32;
-            for val in cos_mode.iter_mut().take(vocab_dim) {
-                *val *= inv_n;
-                mag_sq += *val * *val;
-            }
+            // SIMD scale in place, then SIMD sum-of-squares.
+            crate::simd::simd_scale_inplace(&mut cos_mode[..vocab_dim], inv_n);
+            let mag_sq = crate::simd::simd_sum_sq(&cos_mode[..vocab_dim], vocab_dim);
             magnitudes.push((mag_sq.sqrt(), ci));
         }
 
