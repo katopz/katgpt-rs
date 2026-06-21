@@ -542,6 +542,9 @@ where
         let n_root = root_actions.len();
         let mut root_visits = vec![0u32; n_root];
         let mut root_total = vec![0f32; n_root];
+        // Running total of root visits — avoids the per-iter O(n_root) sum
+        // `root_visits.iter().copied().sum::<u32>()` inside the MCTS loop.
+        let mut total_root_visits: u32 = 0;
 
         // Scratch buffers reused across iterations (AGENTS.md hot-loop rules).
         let mut path: Vec<usize> = Vec::with_capacity(MCTS_ROLLOUT_DEPTH_CAP + 1);
@@ -574,7 +577,7 @@ where
                 // shallow, which is fine for the relative-strength
                 // measurement).
                 let parent_visits = if depth == 0 {
-                    root_visits.iter().copied().sum::<u32>()
+                    total_root_visits
                 } else {
                     // For deeper nodes, there is no per-node stat table —
                     // fall through to "always expand" semantics (one
@@ -611,6 +614,7 @@ where
             if let Some(&root_action_idx) = path.first() {
                 root_visits[root_action_idx] += 1;
                 root_total[root_action_idx] += leaf_reward;
+                total_root_visits += 1;
             }
         }
 
@@ -635,7 +639,10 @@ where
             }
         }
 
-        root_actions.into_iter().nth(best_idx).expect("best_idx < n_root")
+        // O(1) instead of O(best_idx) — the rest of root_actions is dropped
+        // anyway, so swap_remove is equivalent to nth(best_idx) but skips the
+        // iterator advance chain.
+        root_actions.swap_remove(best_idx)
     }
 
     /// Uniform-random rollout with a heuristic leaf evaluation at the depth

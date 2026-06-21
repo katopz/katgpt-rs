@@ -44,8 +44,18 @@ pub fn eigenspace_alignment(gram: &[f32], reference: &[f32], n: usize, k: usize)
         return 0.0;
     }
 
-    let gram_evecs = top_k_eigenvectors(gram, n, k);
-    let ref_evecs = top_k_eigenvectors(reference, n, k);
+    // Parallel dual eigensolve — the two `top_k_eigenvectors` calls are
+    // independent (each is O(n³) Jacobi), so `rayon::join` cuts wall time
+    // roughly in half on multi-core. Below rayon's ~5µs scheduling floor
+    // (small n) the join overhead would dominate, so fall back to serial.
+    let (gram_evecs, ref_evecs) = if n >= 64 {
+        rayon::join(
+            || top_k_eigenvectors(gram, n, k),
+            || top_k_eigenvectors(reference, n, k),
+        )
+    } else {
+        (top_k_eigenvectors(gram, n, k), top_k_eigenvectors(reference, n, k))
+    };
 
     let mut alignment_sum = 0.0f64;
     for i in 0..k {
