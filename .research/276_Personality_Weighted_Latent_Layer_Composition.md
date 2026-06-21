@@ -6,7 +6,7 @@
 > **Classification:** Public
 > **Related Research:** 242 (`MicroRecurrentBeliefState`), 111 (Analogical Reasoning)
 > **Cross-ref (riir-ai):** Research 146 (private Super-GOAT guide — game-specific 9-layer mapping, species archetype table, taming transition, validation gates)
-> **Companion Doc:** `riir-ai/.docs/60_npc_social_cognition_stack.md`
+> **Companion Doc:** `riir-ai/.docs/60_entity_cognition_stack.md`
 
 ---
 
