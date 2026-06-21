@@ -28,6 +28,11 @@
 use crate::micro_belief::attractor::AttractorKernel;
 use crate::micro_belief::bridge::project_to_scalars as bridge_project;
 use crate::micro_belief::types::{MicroRecurrentBeliefState, RecurrenceFamily};
+use crate::micro_belief::{assume_init_slice, uninit_stack};
+
+/// Stack-buffer capacity for the precomputed `W_x · x` scratch. Matches the
+/// `dim ≤ 1024` cap in `AttractorKernel::step`. Only `[..dim]` is used.
+const WX_X_BUF_LEN: usize = 1024;
 
 /// Family B — latent-thought loop: K iterations of the Family A attractor rule
 /// per tick.
@@ -74,10 +79,22 @@ impl MicroRecurrentBeliefState for LatentThoughtKernel {
     /// Advance one tick: apply `inner.step(state, input)` exactly `k_iters`
     /// times with the SAME `input` each iteration.
     ///
+    /// # K > 1 precompute optimization
+    ///
+    /// For `k_iters > 1`, the input `x` is invariant across iterations — only
+    /// `state` changes. We precompute `W_x · x` once via [`AttractorKernel::precompute_wx_dot`],
+    /// then call [`AttractorKernel::step_with_precomputed_wx`] K times. This
+    /// saves (K-1)×dim `simd_dot_f32` calls — at dim=32, K=3 that's ~64 saved
+    /// dots ≈ 90ns/tick.
+    ///
+    /// The precomputed path is bit-identical to calling `inner.step()` K times
+    /// (see `step_with_precomputed_wx_matches_step_bit_identical` in
+    /// `attractor.rs` — same `simd_dot_f32` reductions, same addition order).
+    ///
     /// # Zero allocation
     ///
-    /// No intermediate buffer is created here — `inner.step()` already uses a
-    /// stack-local `[f32; 1024]` scratch internally.
+    /// The `wx_x` scratch is a fixed `[f32; 1024]` stack buffer (4KB). K=1
+    /// skips the buffer entirely (delegates directly to `inner.step`).
     ///
     /// # `K = 0`
     ///
@@ -85,28 +102,30 @@ impl MicroRecurrentBeliefState for LatentThoughtKernel {
     /// docs for the rationale.
     #[inline]
     fn step(&self, state: &mut [f32], input: &[f32]) {
-        // Match-style dispatch on the iteration count so the compiler can
-        // unroll the common small-K cases (K=1 is the most frequent and reduces
-        // to a single `inner.step` call with zero loop overhead).
+        // Match-style dispatch: K=0 noop, K=1 direct (no precompute overhead),
+        // K>1 uses precomputed W_x·x across all iterations.
         match self.k_iters {
-            0 => {}, // no-op
+            0 => {} // no-op
             1 => self.inner.step(state, input),
             _ => {
+                // Precompute W_x · x ONCE (bit-identical to the dot_wx inside
+                // inner.step()). Reused across all K iterations.
+                // Uninit stack buffer (matches cumprodsum.rs pattern) — wx_x[..dim]
+                // is written by precompute_wx_dot before any read.
+                let mut wx_x_buf = uninit_stack::<WX_X_BUF_LEN>();
+                // SAFETY: wx_x[..dim] is fully written by precompute_wx_dot.
+                let wx_x: &mut [f32] = unsafe { assume_init_slice(&mut wx_x_buf, self.inner.dim) };
+                let dim = self.inner.dim;
+                self.inner.precompute_wx_dot(input, &mut wx_x[..dim]);
                 for _ in 0..self.k_iters {
-                    self.inner.step(state, input);
+                    self.inner.step_with_precomputed_wx(state, &wx_x[..dim]);
                 }
-            },
+            }
         }
     }
 
     #[inline(always)]
-    fn project_to_scalars(
-        &self,
-        state: &[f32],
-        directions: &[f32],
-        dim: usize,
-        out: &mut [f32],
-    ) {
+    fn project_to_scalars(&self, state: &[f32], directions: &[f32], dim: usize, out: &mut [f32]) {
         bridge_project(state, directions, dim, out);
     }
 
@@ -236,9 +255,7 @@ mod tests {
         let norm_sq_k3: f32 = s3.iter().map(|v| v * v).sum();
         // Informational only — print, do not hard-assert, in case the fixed
         // point happens to be near the origin for this seed.
-        eprintln!(
-            "settling check: ‖s_K1‖² = {norm_sq_k1:.6}, ‖s_K3‖² = {norm_sq_k3:.6}"
-        );
+        eprintln!("settling check: ‖s_K1‖² = {norm_sq_k1:.6}, ‖s_K3‖² = {norm_sq_k3:.6}");
     }
 
     /// Builder overrides K.

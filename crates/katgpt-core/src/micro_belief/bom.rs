@@ -36,6 +36,7 @@
 //! through `&dyn BoMSampler`.
 
 use crate::micro_belief::types::MicroRecurrentBeliefState;
+use crate::micro_belief::{assume_init_slice, uninit_stack};
 use crate::simd::simd_dot_f32;
 
 #[cfg(not(feature = "simd_sigmoid"))]
@@ -84,7 +85,11 @@ impl Default for NoiseQueryConfig {
         // G1.2 will likely require raising sigma from 0.02 for [-1,1] space;
         // 0.1 is the conservative starting point that keeps hypotheses
         // distinct without saturating the sigmoid.
-        Self { sigma: 0.1, k: 8, seed_strategy: SeedStrategy::PerNpc }
+        Self {
+            sigma: 0.1,
+            k: 8,
+            seed_strategy: SeedStrategy::PerNpc,
+        }
     }
 }
 
@@ -220,10 +225,7 @@ fn select_best_generic<S: Fn(&[f32]) -> f32>(
 ///
 /// Returns a closure suitable for [`BoMSampler::select_best`]. Reuses
 /// [`simd_dot_f32`]. Callers wanting minimax-over-threat supply their own `Fn`.
-pub fn dot_product_scorer<'a>(
-    direction: &'a [f32],
-    dim: usize,
-) -> impl Fn(&[f32]) -> f32 + 'a {
+pub fn dot_product_scorer<'a>(direction: &'a [f32], dim: usize) -> impl Fn(&[f32]) -> f32 + 'a {
     move |hyp| simd_dot_f32(hyp, &direction[..dim], dim)
 }
 
@@ -277,8 +279,11 @@ impl BoMSampler for AttractorKernel {
         // ── Phase 1: base activation (computed ONCE, bit-identical to step()) ──
         //
         // Stack buffer — supports dim ≤ 1024 (same cap as AttractorKernel::step).
-        let mut act = [0.0f32; 1024];
-        debug_assert!(dim <= act.len(), "dim {dim} exceeds stack buffer");
+        // Uninit (matches cumprodsum.rs pattern) — act[..dim] is written by
+        // the matvec below before the Phase 2 sigmoid reads it.
+        let mut act_buf = uninit_stack::<1024>();
+        // SAFETY: act[..dim] is fully written by the matvec below before any read.
+        let act: &mut [f32] = unsafe { assume_init_slice(&mut act_buf, dim) };
 
         // Chunked-4 outer loop — mirrors AttractorKernel::step exactly so the
         // dot-product reductions and FMA scheduling produce the same f32
@@ -356,12 +361,7 @@ impl BoMSampler for AttractorKernel {
     }
 
     #[inline]
-    fn select_best(
-        &self,
-        hypotheses: &[f32],
-        scorer: impl Fn(&[f32]) -> f32,
-        k: usize,
-    ) -> usize {
+    fn select_best(&self, hypotheses: &[f32], scorer: impl Fn(&[f32]) -> f32, k: usize) -> usize {
         select_best_generic(hypotheses, scorer, k, self.dim)
     }
 }
@@ -435,8 +435,10 @@ impl BoMSampler for LeakyIntegrator {
         // AttractorKernel::step's cap). The K elementwise perturbations then become
         // a single `add + clamp + clamp` per (k, j) — no per-k mul/sub.
         // Precomputing saves K×dim multiplications (256 at the G3 K=8/dim=32 budget).
-        let mut base_delta = [0.0f32; 1024];
-        debug_assert!(dim <= base_delta.len(), "dim {dim} exceeds stack buffer");
+        let mut base_delta_buf = uninit_stack::<1024>();
+        // SAFETY: base_delta[..dim] is fully written by the loop below before
+        // any read in the K-iteration phase.
+        let base_delta: &mut [f32] = unsafe { assume_init_slice(&mut base_delta_buf, dim) };
         for j in 0..dim {
             base_delta[j] = scale * (x[j] - half_total);
         }
@@ -455,12 +457,7 @@ impl BoMSampler for LeakyIntegrator {
     }
 
     #[inline]
-    fn select_best(
-        &self,
-        hypotheses: &[f32],
-        scorer: impl Fn(&[f32]) -> f32,
-        k: usize,
-    ) -> usize {
+    fn select_best(&self, hypotheses: &[f32], scorer: impl Fn(&[f32]) -> f32, k: usize) -> usize {
         select_best_generic(hypotheses, scorer, k, self.dim)
     }
 }
@@ -472,9 +469,7 @@ impl BoMSampler for LeakyIntegrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::micro_belief::{
-        AttractorKernel, LeakyIntegrator, MicroRecurrentBeliefState,
-    };
+    use crate::micro_belief::{AttractorKernel, LeakyIntegrator, MicroRecurrentBeliefState};
 
     // ── G1.1: determinism (fixed queries → bit-identical out) ──────────────
 
@@ -494,14 +489,19 @@ mod tests {
 
         // Fixed queries (seed=99).
         let mut rng = fastrand::Rng::with_seed(99);
-        let queries: Vec<f32> = (0..k * dim).map(|_| (rng.f32() * 2.0 - 1.0) * 0.3).collect();
+        let queries: Vec<f32> = (0..k * dim)
+            .map(|_| (rng.f32() * 2.0 - 1.0) * 0.3)
+            .collect();
 
         let mut out_a = vec![0.0f32; k * dim];
         let mut out_b = vec![0.0f32; k * dim];
         kernel.sample_k_states(&s_prev, &input, &queries, &mut out_a, &cfg);
         kernel.sample_k_states(&s_prev, &input, &queries, &mut out_b, &cfg);
 
-        assert_eq!(out_a, out_b, "G1.1: same queries must produce bit-identical out");
+        assert_eq!(
+            out_a, out_b,
+            "G1.1: same queries must produce bit-identical out"
+        );
     }
 
     // ── G1.2: distinct hypotheses (cosine sim < 0.99) ──────────────────────
@@ -522,7 +522,9 @@ mod tests {
         }
 
         let mut rng = fastrand::Rng::with_seed(42);
-        let queries: Vec<f32> = (0..k * dim).map(|_| (rng.f32() * 2.0 - 1.0) * 0.3).collect();
+        let queries: Vec<f32> = (0..k * dim)
+            .map(|_| (rng.f32() * 2.0 - 1.0) * 0.3)
+            .collect();
         let mut out = vec![0.0f32; k * dim];
         kernel.sample_k_states(&s_prev, &input, &queries, &mut out, &cfg);
 
@@ -571,7 +573,8 @@ mod tests {
         for k_idx in 0..k {
             let row = &out[k_idx * dim..(k_idx + 1) * dim];
             assert_eq!(
-                row, &stepped[..],
+                row,
+                &stepped[..],
                 "G1.3: row {k_idx} must match step() output with zero queries"
             );
         }
@@ -600,7 +603,8 @@ mod tests {
         for k_idx in 0..k {
             let row = &out[k_idx * dim..(k_idx + 1) * dim];
             assert_eq!(
-                row, &stepped[..],
+                row,
+                &stepped[..],
                 "G1.3 (leaky): row {k_idx} must match step() output with zero queries"
             );
         }
@@ -649,7 +653,10 @@ mod tests {
             }
             kernel.sample_k_states(&s_prev, &input, &queries, &mut out, &cfg);
             for &v in &out {
-                assert!(v > -1.0001 && v < 1.0001, "attractor state out of (-1,1): {v}");
+                assert!(
+                    v > -1.0001 && v < 1.0001,
+                    "attractor state out of (-1,1): {v}"
+                );
             }
             // Advance using row 0 as the next state.
             s_prev.copy_from_slice(&out[..dim]);
@@ -691,11 +698,7 @@ mod tests {
         //   row 0: dot = 0.1  → score 0.1
         //   row 1: dot = 0.9  → score 0.9  ← max
         //   row 2: dot = 0.5  → score 0.5
-        let hypotheses: Vec<f32> = vec![
-            0.1, 0.0, 0.0, 0.0,
-            0.9, 0.0, 0.0, 0.0,
-            0.5, 0.0, 0.0, 0.0,
-        ];
+        let hypotheses: Vec<f32> = vec![0.1, 0.0, 0.0, 0.0, 0.9, 0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0];
         let direction = vec![1.0f32, 0.0, 0.0, 0.0];
         let scorer = dot_product_scorer(&direction, dim);
         let best = kernel.select_best(&hypotheses, scorer, 3);
@@ -708,9 +711,9 @@ mod tests {
         let dim = 4;
         // Two rows with equal score (dot = 0.5), third is lower.
         let hypotheses: Vec<f32> = vec![
-            0.5, 0.0, 0.0, 0.0,  // score 0.5
-            0.0, 0.5, 0.0, 0.0,  // score 0.0
-            0.5, 0.0, 0.0, 0.0,  // score 0.5  (tie with row 0)
+            0.5, 0.0, 0.0, 0.0, // score 0.5
+            0.0, 0.5, 0.0, 0.0, // score 0.0
+            0.5, 0.0, 0.0, 0.0, // score 0.5  (tie with row 0)
         ];
         let direction = vec![1.0f32, 0.0, 0.0, 0.0];
         let scorer = dot_product_scorer(&direction, dim);
@@ -724,8 +727,7 @@ mod tests {
         let kernel = LeakyIntegrator::hla_default(4);
         let dim = 4;
         let hypotheses: Vec<f32> = vec![
-            0.0, 0.0, 0.0, 0.0,
-            1.0, 1.0, 1.0, 1.0,  // max norm
+            0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, // max norm
             0.5, 0.5, 0.5, 0.5,
         ];
         let direction = vec![1.0f32; dim];
@@ -745,25 +747,18 @@ mod tests {
         // Mutating sigma must break verification.
         let mut tampered = cfg;
         tampered.sigma = 0.5;
-        assert!(
-            !tampered.verify(&commit),
-            "tampered sigma must fail verify"
-        );
+        assert!(!tampered.verify(&commit), "tampered sigma must fail verify");
 
         // Mutating k must break verification.
         let mut tampered_k = cfg;
         tampered_k.k = 4;
-        assert!(
-            !tampered_k.verify(&commit),
-            "tampered k must fail verify"
-        );
+        assert!(!tampered_k.verify(&commit), "tampered k must fail verify");
     }
 
     #[test]
     fn noise_config_seed_strategy_affects_commit() {
         let base = NoiseQueryConfig::default();
-        let per_class = NoiseQueryConfig::default()
-            .with_seed_strategy(SeedStrategy::PerClass);
+        let per_class = NoiseQueryConfig::default().with_seed_strategy(SeedStrategy::PerClass);
         assert_ne!(
             base.commit(),
             per_class.commit(),
@@ -867,7 +862,9 @@ mod tests {
         let input = vec![0.5f32; dim];
 
         let mut rng = fastrand::Rng::with_seed(42);
-        let queries: Vec<f32> = (0..k * dim).map(|_| (rng.f32() * 2.0 - 1.0) * 0.3).collect();
+        let queries: Vec<f32> = (0..k * dim)
+            .map(|_| (rng.f32() * 2.0 - 1.0) * 0.3)
+            .collect();
         let mut out = vec![0.0f32; k * dim];
         kernel.sample_k_states(&s_prev, &input, &queries, &mut out, &cfg);
 
@@ -881,6 +878,9 @@ mod tests {
                 }
             }
         }
-        assert!(any_distinct, "leaky BoM must produce at least some distinct rows");
+        assert!(
+            any_distinct,
+            "leaky BoM must produce at least some distinct rows"
+        );
     }
 }

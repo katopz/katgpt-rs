@@ -59,6 +59,47 @@ pub mod types;
 #[cfg(test)]
 mod tests;
 
+// ─── Uninitialized stack buffer helper ─────────────────────────────────
+//
+// Matches the pattern in `katgpt-rs/src/cumprodsum.rs`: an array of
+// `MaybeUninit<f32>` initialized via the const block, reinterpreted as a
+// `&mut [f32]` slice via `from_raw_parts_mut`. Skips the O(N) zero-init that
+// `[0.0f32; N]` would impose — at N=1024 (4KB), that's ~40ns/call, which
+// dominates the per-step cost at dim=32 (Issue 024).
+//
+// SAFETY: the caller MUST write to every accessed element before reading it.
+// The `MaybeUninit<f32>` wrapper has no validity requirement, so creating
+// the array is safe; only the `from_raw_parts_mut` cast is unsafe (it
+// promises the memory is valid f32, which the caller upholds by writing first).
+
+/// Allocate a fixed-size uninitialized f32 stack buffer and return it as a
+/// `&mut [f32; N]` view.
+///
+/// # Safety
+///
+/// Caller MUST write to every element of the returned array before reading
+/// any element. Reading uninitialized memory is UB even for `f32`.
+#[inline]
+pub(crate) const fn uninit_stack<const N: usize>() -> [core::mem::MaybeUninit<f32>; N] {
+    [const { core::mem::MaybeUninit::uninit() }; N]
+}
+
+/// Reinterpret the first `len` elements of a `MaybeUninit<f32>` array as a
+/// `&mut [f32]` slice. The returned slice borrows from `buf`.
+///
+/// # Safety
+///
+/// Caller MUST ensure elements `0..len` are written before any read.
+#[inline]
+pub(crate) unsafe fn assume_init_slice<'a, const N: usize>(
+    buf: &'a mut [core::mem::MaybeUninit<f32>; N],
+    len: usize,
+) -> &'a mut [f32] {
+    // SAFETY: caller upholds that buf[0..len] is fully initialized before
+    // any read. MaybeUninit<f32> has the same layout as f32.
+    unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut f32, len) }
+}
+
 // ── Public API re-exports ─────────────────────────────────────────────────
 //
 // Mirrors the idiom used by other katgpt-core feature modules (e.g.
