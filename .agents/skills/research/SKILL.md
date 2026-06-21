@@ -1,18 +1,18 @@
 ---
 name: research
-description: Research workflow for distilling ML/AI papers into modelless inference primitives, freeze/thaw runtime patterns, and latent-space operations across the katgpt-rs / riir-ai / riir-train repo trio. Use when reading arxiv papers, deciding which repo a paper belongs in, creating .research/ notes or .plans/ files, implementing modelless inference primitives, or routing training-vs-inference insights. Enforces the 3-repo commercial strategy, modelless-first constraint, latent-to-latent preference, and freeze/thaw-over-fine-tuning rule.
+description: Research workflow for distilling ML/AI papers into modelless inference primitives, freeze/thaw runtime patterns, and latent-space operations across the katgpt-rs / riir-ai / riir-chain / riir-train repo quartet. Use when reading arxiv papers, deciding which repo a paper belongs in, creating .research/ notes or .plans/ files, implementing modelless inference primitives, or routing training-vs-inference insights. Enforces the 4-repo commercial strategy (public engine / private runtime / private chain / private training), modelless-first constraint, latent-to-latent preference, and freeze/thaw-over-fine-tuning rule.
 ---
 
 # Research Workflow — Modelless Inference, Freeze/Thaw, Latent-to-Latent
 
-Training-method research lives in `riir-train`. This repo (`katgpt-rs`) and `riir-ai` ship **freeze/thaw runtime + self-learn/adaptive NPCs + latent-space operations**. No LoRA training, no adapter fine-tuning, no optimizer research here. If a paper's value is its training loop → `riir-train/.research`. If its value is a latent-space insight, a routing trick, a freeze/thaw pattern, or a modelless inference primitive → distill here.
+Training-method research lives in `riir-train`. This repo (`katgpt-rs`), `riir-ai` (freeze/thaw runtime + self-learn/adaptive NPCs + game systems), and `riir-chain` (neuro-symbolic chain transport, LatCal, neuron_db, chain economics) ship **runtime + latent-space operations**. No LoRA training, no adapter fine-tuning, no optimizer research here. If a paper's value is its training loop → `riir-train/.research`. If its value is a latent-space insight, a routing trick, a freeze/thaw pattern, a chain-commitment bridge, or a modelless inference primitive → distill here.
 
 ## When to use this skill
 
 Activate when the user (or you) are doing any of:
 
 - Reading / fetching / summarizing an ML, AI, or systems paper (arxiv, PDF, blog).
-- Deciding which of the 3 repos a paper or idea belongs in.
+- Deciding which of the 4 repos a paper or idea belongs in (katgpt-rs / riir-ai / riir-chain / riir-train).
 - Creating a new `.research/NNN_*.md` note or `.plans/NNN_*.md` plan.
 - Implementing a modelless inference primitive (pruner, bandit, router, speculative decode, KV-cache op, sparse attention, quantization-aware inference).
 - Designing freeze/thaw snapshot cycles, adapter hot-swap, or runtime adapter routing.
@@ -24,33 +24,40 @@ Do NOT activate for: pure refactor tasks, bug fixes with no research angle, or o
 ## Repos (siblings under the same parent)
 
 - `katgpt-rs/` — public MIT engine. Generic modelless inference primitives. **No game IP, no chain IP.**
-- `riir-ai/` — private game product. Freeze/thaw runtime, self-learn, chain, game systems.
+- `riir-ai/` — private game product. Freeze/thaw runtime, self-learn, game systems. **Chain was spun off to `riir-chain/` (see `.plans/001_chain_spinoff.md` in that repo).**
+- `riir-chain/` — private neuro-symbolic chain transport. LatCal (Lattice Calculus), `neuron_db`, `riir-chaind` daemon, chain economics, Solana-parity features, asset lifecycle / forensic fingerprinting. **The sync-boundary bridge repo.**
 - `riir-train/` — private training vault. Adapter training, optimizers, loss functions. Out of scope for this workflow — just note "→ riir-train" and stop.
 
-Always reference files with project-relative paths (e.g. `katgpt-rs/.research/238_*.md`, `riir-ai/.plans/NNN_*.md`). The agent can `read_file` these directly.
+(`riir-armageddon/` is a fifth sibling — arena/game-product domain types only, not a distillation target. Read its README for the raw-vs-latent boundary; do not distill into it.)
+
+Always reference files with project-relative paths (e.g. `katgpt-rs/.research/238_*.md`, `riir-ai/.plans/NNN_*.md`, `riir-chain/.plans/NNN_*.md`). The agent can `read_file` these directly.
 
 ## Read first (grounding) — MANDATORY pre-flight
 
 **Hard rule:** before any distillation, verdict, or file creation, you MUST do **both** of these in this session:
 
-1. **`read_file` all three READMEs** — these define repo purpose, current state, and the raw-vs-latent sync boundary the research must respect. Skipping this is the #1 cause of research notes that ignore the actual codebase architecture.
-2. **`list_directory` both `.research/` folders** — these hold the existing distillation corpus you must not duplicate.
+1. **`read_file` all four READMEs** — these define repo purpose, current state, and the raw-vs-latent sync boundary the research must respect. Skipping this is the #1 cause of research notes that ignore the actual codebase architecture.
+2. **`list_directory` all three `.research/` folders** — these hold the existing distillation corpus you must not duplicate. (Create `riir-chain/.research/` if it does not yet exist and you are about to drop a chain-flavored note there.)
 
 **Mandatory (before any verdict):**
 - `katgpt-rs/README.md` (`read_file`) — public engine purpose, architecture, current feature set.
-- `riir-ai/README.md` (`read_file`) — private runtime context (freeze/thaw, self-learn, chain, game systems).
+- `riir-ai/README.md` (`read_file`) — private runtime context (freeze/thaw, self-learn, game systems). Chain is no longer here.
+- `riir-chain/README.md` (`read_file`) — private neuro-symbolic chain transport, LatCal, neuron_db, feature-flag umbrellas (`chain`, `chain_economics`, `chain_solana_parity`, `chain_catchup`, `chain_asset_*`, `shard_compactor`, `lora_posterior`). **Required reading for any LatCal / commitment / sync-bridge research.**
 - `riir-armageddon/README.md` (`read_file`) — arena/game-product domain types, raw-vs-latent boundary, sync semantics, anti-cheat rules. The research MUST respect this boundary.
 - `katgpt-rs/.research/` (`list_directory`) — public modelless research corpus (do not duplicate).
-- `riir-ai/.research/` (`list_directory`) — private runtime/game/chain research corpus (do not duplicate).
+- `riir-ai/.research/` (`list_directory`) — private runtime/game research corpus (do not duplicate). Historical chain notes (pre-spin-off) still live here — grep them too.
+- `riir-chain/.research/` (`list_directory` — create the folder on first use) — private chain research corpus. New chain-flavored notes land here, not in `riir-ai/.research/`.
 - `riir-ai/crates/riir-engine/src/` (`list_directory`) — **runtime module tree = codebase vocabulary at the highest level.** Module names (`latent_functor/`, `cgsp_runtime/`, `micro_belief/`, `adapters/`, ...) are how the codebase describes its own mechanisms. Skipping this caused the Research DiPOD miss: `latent_functor/reestimation.rs` ships the exact "drift-triggered self-healing swap" pattern under the name "coherence-driven re-estimation scheduler" — invisible to a paper-vocabulary grep.
 - `riir-ai/crates/riir-games/src/` (`list_directory`) — game systems module tree (same rationale).
+- `riir-chain/src/` (`list_directory`) — chain module tree: `encoding/` (LatCal), `neuron_db/`, `consensus/`, `economics/`, `asset_lifecycle/`, `forensic/`, `programs/`, `validator/`, `wallet/`, `batch/`, `catchup/`, `deploy/`, `shell/`.
 
-If you have NOT `read_file` all three READMEs AND `list_directory` both `.research/` folders AND both runtime crate src trees, STOP and do so now. Do not create any file until all seven are done.
+If you have NOT `read_file` all four READMEs AND `list_directory` all three `.research/` folders AND the three runtime/chain crate src trees, STOP and do so now. Do not create any file until all eleven are done.
 
 Then read for additional context (as relevant to the topic):
 - `katgpt-rs/src/` + `katgpt-rs/crates/katgpt-core/src/` — existing modelless primitives (ConstraintPruners, bandits, DDTree, speculative decode).
-- `riir-ai/crates/` — runtime IP: `riir-engine`, `riir-games`, `riir-chain`, `riir-chaind`, `riir-ffi`, `riir-data`, `riir-examples`.
-- `katgpt-rs/.plans/` + `riir-ai/.plans/` — existing plans. **Do NOT list these in pre-flight.** Grep them during fusion search (§Workflow step 1), not as grounding — they describe what we *plan to build*, not what the repos *are*.
+- `riir-ai/crates/` — runtime IP: `riir-engine`, `riir-games`, `riir-ffi`, `riir-data`, `riir-examples`. **(`riir-chain` and `riir-chaind` moved to the `riir-chain/` repo — do not look for them here.)**
+- `riir-chain/crates/` — chain daemon crate: `riir-chaind`. (LatCal, neuron_db, encoding, etc. live under `riir-chain/src/`.)
+- `katgpt-rs/.plans/` + `riir-ai/.plans/` + `riir-chain/.plans/` — existing plans. **Do NOT list these in pre-flight.** Grep them during fusion search (§Workflow step 1), not as grounding — they describe what we *plan to build*, not what the repos *are*.
 
 ## Primary focus (distill HERE in katgpt-rs / riir-ai)
 
