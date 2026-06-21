@@ -52,6 +52,8 @@ pub use enums::{
     DepthTier, HlaMode, HybridPattern, LoopMode, ModelArchitecture, ResidualGate,
     RetrievalHeadRole, RtTurboConfig, SdpaOutputGate, WeightDtype,
 };
+#[cfg(feature = "deltanet_inference")]
+pub use enums::DeltaNetLayerType;
 #[cfg(feature = "collapse_aware_thinking")]
 pub use enums::ThinkingBudget;
 #[cfg(feature = "wall_attention")]
