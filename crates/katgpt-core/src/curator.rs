@@ -132,11 +132,9 @@ impl CuratorVerifier {
         let mut m2 = 0.0f64;
         for i in 0..MERKLE_OCTREE_LEAVES {
             let leaf = &tree.hashes[MERKLE_OCTREE_INTERNAL + 1 + i];
-            // SAFETY: leaf is [u8; 32], reading first 8 bytes as u64
-            let val = unsafe {
-                let ptr = leaf.as_ptr() as *const u64;
-                std::ptr::read_unaligned(ptr)
-            };
+            // Read first 8 bytes as little-endian u64 — same codegen as
+            // `read_unaligned` on little-endian targets, but safe and portable.
+            let val = u64::from_le_bytes(leaf[..8].try_into().unwrap());
             let val = val as f64;
             // Welford online variance
             let delta = val - mean;
@@ -407,7 +405,8 @@ pub fn verification_weight(reputation: f32) -> f32 {
     let boosted_mask = (reputation > 0.8) as u32 as f32;
     // For 0.5..0.8: linear_val = reputation, for > 0.8: base = 1.0
     let linear_val = reputation * prob_mask * (1.0 - boosted_mask);
-    let boosted_val = (1.0 + (reputation - 0.8) * 5.0) * boosted_mask;
+    // FMA: reputation * 5.0 - 4.0 (== 1.0 + (reputation - 0.8) * 5.0).
+    let boosted_val = reputation.mul_add(5.0, -4.0) * boosted_mask;
     linear_val + boosted_val
 }
 

@@ -448,24 +448,24 @@ impl<B: HintDeltaBandit> DualPoolBandit<B> {
     {
         let threshold = self.config.promotion_threshold;
         let max_size = self.config.max_epool_size;
-        let x_prios = self.x_pool.priorities().to_vec();
-        // Collect promoted arms first (avoid double-borrow on e_pool/x_arm_rewards).
-        let to_promote: Vec<(usize, Priority)> = self
-            .x_arm_rewards
-            .iter()
-            .zip(x_prios.iter())
-            .enumerate()
-            .filter(|&(arm, (&reward, _))| reward >= threshold && gate(arm))
-            .map(|(arm, (_, &prio))| (arm, prio))
-            .collect();
-        for (_x_arm, prio) in to_promote {
+        // Iterate by index — `x_pool.priorities()` (a `&self.x_pool` borrow)
+        // and `&self.x_arm_rewards` are disjoint fields, so the borrow checker
+        // accepts both without the per-call `.to_vec()` allocation the original
+        // code did to release the collocated borrow.
+        let x_n = self.x_arm_rewards.len();
+        for arm in 0..x_n {
+            let reward = self.x_arm_rewards[arm];
+            if reward < threshold || !gate(arm) {
+                continue;
+            }
+            let prio = self.x_pool.priorities()[arm];
             // Evict lowest-priority arm if at capacity.
             if self.e_pool.num_arms() >= max_size {
                 let e_prios = self.e_pool.priorities();
                 let evict_idx = e_prios
                     .iter()
                     .enumerate()
-                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal))
+                    .min_by(|(_, a), (_, b)| a.total_cmp(b))
                     .map(|(i, _)| i);
                 if let Some(idx) = evict_idx {
                     // Replace evicted arm's priority in-place (keep size fixed).

@@ -377,11 +377,13 @@ pub fn simd_matmul_rmsnorm_moa_swiglu(
         ) * rstd;
 
         // MoA mixed activation: (Σ_k ρ_k σ_k(gate)) * (Σ_ℓ π_ℓ σ_ℓ(up))
+        // mul_add preserves single-rounding FMA semantics, matching the
+        // scalar `moa_swiglu` path and the SIMD NEON/AVX2 reductions.
         let mut mixed_gate = 0.0f32;
         let mut mixed_up = 0.0f32;
         for j in 0..MOA_DICT_SIZE {
-            mixed_gate += gate_weights[j] * activations[j].activate(gate_val);
-            mixed_up += up_weights[j] * activations[j].activate(up_val);
+            mixed_gate = gate_weights[j].mul_add(activations[j].activate(gate_val), mixed_gate);
+            mixed_up = up_weights[j].mul_add(activations[j].activate(up_val), mixed_up);
         }
 
         unsafe {
@@ -458,6 +460,16 @@ pub fn simd_matmul_residual_partial_rms(
     // Zero partial sums for fresh accumulation
     partial_sums[..n_blocks].fill(0.0);
 
+    // Hoist Option state out of the per-row hot loop so LLVM sees straight-line
+    // code with no per-iteration branch on the Option discriminant.
+    let b_ptr = bias.map_or(std::ptr::null(), |b| b.as_ptr());
+    let g_ptr = gamma.map_or(std::ptr::null(), |g| g.as_ptr());
+
+    // Wrap-counter for block index — avoids an integer division per row when
+    // `bs` is not a power of two (10-30 cycle `idiv` on most x86/ARM cores).
+    let mut block_idx: usize = 0;
+    let mut in_block: usize = 0;
+
     for i in 0..rows {
         let row_off = i * cols;
         let acc = simd_dot_f32(
@@ -466,17 +478,30 @@ pub fn simd_matmul_residual_partial_rms(
             cols,
         );
 
-        let b = bias.map_or(0.0, |b| unsafe { *b.get_unchecked(i) });
+        let b = if b_ptr.is_null() {
+            0.0
+        } else {
+            unsafe { *b_ptr.add(i) }
+        };
         let r = unsafe { *residual.get_unchecked(i) };
         let d = acc + b + r;
 
-        // Accumulate partial RMS — branch-free block index via integer division
+        // Accumulate partial RMS using the wrap counter instead of `i / bs`.
         unsafe {
-            *partial_sums.get_unchecked_mut(i / bs) += d * d;
+            *partial_sums.get_unchecked_mut(block_idx) += d * d;
+        }
+        in_block += 1;
+        if in_block == bs {
+            in_block = 0;
+            block_idx += 1;
         }
 
         // Gamma scaling (identity if gamma is None)
-        let g = gamma.map_or(1.0, |g| unsafe { *g.get_unchecked(i) });
+        let g = if g_ptr.is_null() {
+            1.0
+        } else {
+            unsafe { *g_ptr.add(i) }
+        };
         unsafe {
             *output_d.get_unchecked_mut(i) = d;
             *output_o.get_unchecked_mut(i) = d * g;
@@ -742,8 +767,11 @@ pub fn simd_matmul_rmsnorm_rope(
 
     let half_rows = rows / 2;
     let pos_base = pos * head_dim;
-    // Modular arithmetic replaces the per-iter `if dim_idx == head_dim { dim_idx = 0 }`
-    // branch — branch-free and friendlier to LLVM vectorization.
+    // Wrap-counter for the head_dim modular index. The previous `i % head_dim`
+    // form compiled to an integer division (~10-30 cycles per iter on most
+    // cores) when `head_dim` is not a power of two; the wrap-counter is a
+    // single compare + conditional reset per iter (predicted branch).
+    let mut dim_idx: usize = 0;
     for i in 0..half_rows {
         let even_row = 2 * i;
         let odd_row = 2 * i + 1;
@@ -763,8 +791,8 @@ pub fn simd_matmul_rmsnorm_rope(
             cols,
         ) * rstd;
 
-        // RoPE rotation: index into precomputed table (modular, branch-free).
-        let rope_idx = pos_base + (i % head_dim);
+        // RoPE rotation: index into precomputed table via wrap-counter.
+        let rope_idx = pos_base + dim_idx;
         debug_assert!(rope_idx < cos_table.len(), "RoPE cos index out of bounds");
         debug_assert!(rope_idx < sin_table.len(), "RoPE sin index out of bounds");
         // Safety: tables are pre-sized to max_seq_len × head_dim; index verified above
@@ -778,6 +806,12 @@ pub fn simd_matmul_rmsnorm_rope(
         unsafe {
             *output.get_unchecked_mut(even_row) = q_even * cos_val - q_odd * sin_val;
             *output.get_unchecked_mut(odd_row) = q_even * sin_val + q_odd * cos_val;
+        }
+
+        // Advance the head_dim wrap-counter (single predicted branch).
+        dim_idx += 1;
+        if dim_idx == head_dim {
+            dim_idx = 0;
         }
     }
 }

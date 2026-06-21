@@ -523,18 +523,42 @@ pub fn classify_all_sinks(
     }
     let inv_n = 1.0 / (n as f32);
 
-    // Materialize the per-position strengths into a small local Vec *once*,
-    // so we can release the `&mut scratch.col_sums` borrow before calling
-    // `classify_sink_at(&mut scratch)` (the borrow checker needs them to be
-    // disjoint). Cost: one length-n allocation up-front; cheaper than the
-    // original which allocated col_sums AND iterated it in a closure chain.
-    let strengths: Vec<f32> = col_sums[..n].iter().map(|s| s * inv_n).collect();
-
+    // Collect (j, strength_j) pairs that clear the threshold into a stack-backed
+    // buffer, mirroring `classify_all_sinks_flat`. Dominant sinks are rare
+    // (typically only a handful of positions qualify), so this avoids the
+    // per-call length-n `Vec<f32>::collect()` the previous code did just to
+    // release the `&mut scratch.col_sums` borrow before the
+    // `classify_sink_at(&mut scratch)` call below. CAP=32 covers realistic
+    // attention sinks; on overflow we spill to heap rather than dropping diag.
+    const CANDIDATE_CAP: usize = 32;
+    let mut candidates_stack: [(usize, f32); CANDIDATE_CAP] = [(0, 0.0); CANDIDATE_CAP];
+    let mut candidates_heap: Vec<(usize, f32)> = Vec::new();
+    let mut n_candidates = 0usize;
+    let mut overflow = false;
     for j in 0..n {
-        let strength_j = strengths[j];
+        let strength_j = col_sums[j] * inv_n;
         if strength_j <= cfg.sink_strength_threshold {
             continue;
         }
+        if n_candidates < CANDIDATE_CAP {
+            candidates_stack[n_candidates] = (j, strength_j);
+            n_candidates += 1;
+        } else {
+            if !overflow {
+                candidates_heap.extend_from_slice(&candidates_stack);
+                overflow = true;
+            }
+            candidates_heap.push((j, strength_j));
+        }
+    }
+
+    // `col_sums` borrow ends here — safe to hand `scratch` to the classifier.
+    let process: &[(usize, f32)] = if overflow {
+        &candidates_heap
+    } else {
+        &candidates_stack[..n_candidates]
+    };
+    for &(j, strength_j) in process {
         let col = [strength_j];
         let diag = classify_sink_at(j, &col, values, None, cfg, scratch);
         out.push(diag);
@@ -830,14 +854,16 @@ fn copy_rows(src: &[Vec<f32>], dst: &mut [Vec<f32>]) {
     }
 }
 
+/// Scale each row of `src` by `scale`, writing into `dst`.
+///
+/// Routes through [`simd::simd_fused_decay_write`] per row so the scaling is
+/// vectorized (NEON/AVX2). Equivalent to `dst[i] = 0.0 * dst[i] + scale * src[i]`.
 #[inline]
 fn scale_rows(src: &[Vec<f32>], scale: f32, dst: &mut [Vec<f32>]) {
     let n = src.len().min(dst.len());
     for i in 0..n {
         let m = src[i].len().min(dst[i].len());
-        for j in 0..m {
-            dst[i][j] = src[i][j] * scale;
-        }
+        crate::simd::simd_fused_decay_write(&mut dst[i][..m], 0.0, &src[i][..m], scale);
     }
 }
 
