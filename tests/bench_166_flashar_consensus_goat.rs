@@ -221,7 +221,7 @@ fn proof_g5_consensus_acceptance_ge_prefix_match() {
     let mut consensus_verifier = FlashARConsensusVerifier::new(
         &target_weights,
         &config,
-        d2f_config.clone(),
+        d2f_config,
         consensus_config,
         draft_width,
     );

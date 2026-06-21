@@ -28,17 +28,16 @@
 //!
 //! - ✅ Phase 1 (hashing) — [`hash`].
 //! - ✅ Phase 2 (frozen table + lookup) — [`table`].
-//! - ✅ Phase 3 (sigmoid fusion kernel, T3.1–T3.5) — [`kernel`].
-//! - ⏳ Phase 3 T3.6 (multi-branch variant) — TODO, deferred.
-//! - ⏳ Phase 3 T3.7 (depthwise causal conv) — TODO, deferred.
-//! - ⏳ Phase 4 (tokenizer compression) — TODO, deferred (needs
-//!   `unicode-normalization` dep).
-//! - ✅ Phase 5 partial (T5.5–T5.6 commitment) — [`commitment`].
-//! - ⏳ Phase 5 hotswap (T5.1–T5.4, T5.7–T5.8) — TODO, deferred.
-//! - ⏳ Phase 6 (Zipfian cache hierarchy) — TODO, deferred.
+//! - ✅ Phase 3 (sigmoid fusion kernel, T3.1–T3.7) — [`kernel`] + [`conv`].
+//! - ✅ Phase 4 (tokenizer compression) — [`tokenizer`].
+//! - ✅ Phase 5 (commitment + hotswap) — [`commitment`] + [`hotswap`].
+//! - ✅ Phase 6 (Zipfian cache hierarchy) — [`cache`].
 //! - ✅ Phase 7 partial (T7.1–T7.2 forward fuse) — [`forward`].
-//! - ⏳ Phase 7 GOAT gates (T7.3–T7.10) — orchestrator.
-//! - ⏳ Phase 8 (docs) — orchestrator.
+//! - ✅ Phase 7 GOAT gates (T7.3–T7.10) — `tests/bench_299_engram_goat.rs`.
+//!   G6 (effective depth) is deferred to riir-ai integration; feature stays
+//!   opt-in until G6 lands there.
+//! - ✅ Phase 8 (docs) — `.docs/27_engram_conditional_memory.md`,
+//!   `.benchmarks/299_engram_goat.md`, README entry.
 //!
 //! # CRITICAL — never softmax
 //!
@@ -60,23 +59,38 @@
 //! - Source paper: [arXiv:2601.07372](https://arxiv.org/pdf/2601.07372) —
 //!   Engram, Cheng et al. 2026.
 
-// TODO(Phase 4): SurjectiveMap / tokenizer compression — deferred pending
-// `unicode-normalization` dep decision by orchestrator.
-// TODO(Phase 5): EngramHotSwap — AtomicPtr<Box<dyn EngramTable>> +
-// with_table reader closure. Mirror sense/hotswap.rs pattern.
-// TODO(Phase 6): ZipfianCacheHierarchy — plasma/hot/warm/cold tiered cache.
+// All engram submodules are now landed (Phases 1–8). Phase 7 GOAT gate
+// results live in katgpt-rs/.benchmarks/299_engram_goat.md.
 
+mod cache;
 mod commitment;
+mod conv;
 mod forward;
 mod hash;
+mod hotswap;
 mod kernel;
 mod table;
+mod tokenizer;
 
+pub use cache::{
+    CacheResult, CacheTier, ColdFetcher, ZipfianCacheHierarchy, ZipfianStats, ZipfianStatsSnapshot,
+};
 pub use commitment::{EngramTableId, build_merkle_root};
+pub use conv::{IDENTITY_KERNEL, SPEC_KERNEL, ZERO_KERNEL, conv_causal_into};
 pub use forward::{EngramConfig, fuse_into_hidden_state};
 pub use hash::{HashHead, multi_head_hash};
-pub use kernel::{SigmoidFusionConfig, rmsnorm_into, sigmoid_fuse_into};
+pub use hotswap::EngramHotSwap;
+pub use kernel::{
+    SigmoidFusionConfig, rmsnorm_into, sigmoid_fuse_into, sigmoid_fuse_multi_branch_into,
+};
 pub use table::{EngramTableBuilder, InMemoryEngramTable};
+pub use tokenizer::{
+    SurjectiveMap, SurjectiveMapLoadError, TokenizerSpec, build_surjective_map, compress_token,
+    try_compress_token,
+};
+
+#[cfg(test)]
+mod tests;
 
 /// Maximum number of heads retrieved per query.
 ///

@@ -441,8 +441,8 @@ mod tests {
         // Strong signal along axis 0, small noise elsewhere — the principal
         // direction recovered by NS will be ≈ e_0.
         w_src[0] = 10.0;
-        for i in 1..d {
-            w_src[i] = 0.01 * (i as f32);
+        for (i, w) in w_src.iter_mut().enumerate().take(d).skip(1) {
+            *w = 0.01 * (i as f32);
         }
 
         let idx = OffPrincipalIndex::new(&w_src, (d, 1), 0.10);
@@ -456,8 +456,8 @@ mod tests {
         let mut before_sq = 0.0_f32;
         for j in 0..idx.k {
             let mut acc = 0.0_f32;
-            for row in 0..d {
-                acc += idx.u_k[row * idx.k + j] * q[row];
+            for (row, &q_row) in q.iter().enumerate().take(d) {
+                acc += idx.u_k[row * idx.k + j] * q_row;
             }
             before_sq += acc * acc;
         }
@@ -472,8 +472,8 @@ mod tests {
         let mut after_sq = 0.0_f32;
         for j in 0..idx.k {
             let mut acc = 0.0_f32;
-            for row in 0..d {
-                acc += idx.u_k[row * idx.k + j] * q_off[row];
+            for (row, &q_off_row) in q_off.iter().enumerate().take(d) {
+                acc += idx.u_k[row * idx.k + j] * q_off_row;
             }
             after_sq += acc * acc;
         }
@@ -653,7 +653,7 @@ mod tests {
         let q = vec![1.0_f32; d];
         let a = vec![-1.0_f32; d];
         let s = idx.score_bounded(&q, &a);
-        assert!(s >= 0.0 && s <= 1.0, "score_bounded = {s} not in [0, 1]");
+        assert!((0.0..=1.0).contains(&s), "score_bounded = {s} not in [0, 1]");
 
         // Positive score → > 0.5
         let q2 = vec![0.5_f32; d];

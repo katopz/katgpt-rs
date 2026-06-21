@@ -514,7 +514,7 @@ mod tests {
             );
         }
         // Confirm we exercised the path (not all-zero deltas).
-        assert!(stv.len() > 0, "test should produce non-empty sparse vector");
+        assert!(!stv.is_empty(), "test should produce non-empty sparse vector");
         eprintln!("g2_apply_roundtrip: {}/{} active, max_rel_err = {max_rel_err:.2e}", stv.len(), n);
     }
 

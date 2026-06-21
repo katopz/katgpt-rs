@@ -123,7 +123,7 @@ fn t1_speculative_acceptance_rate() {
         // TRDraft: detect failure + refine
         let failure = trd.detect_prefix_failure(
             2,
-            &marginal_slices[2],
+            marginal_slices[2],
             1,
             8,
             RejectionReason::ArgmaxMismatch,

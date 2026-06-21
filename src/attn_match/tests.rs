@@ -9,8 +9,6 @@
 //!
 //! They run against synthetic data with known structure.
 
-#![cfg(test)]
-
 use crate::attn_match::{
     beta_fitter::{fit_beta_nnls, BetaFitConfig},
     compact::compact,
@@ -84,9 +82,9 @@ fn goat_g1_beta_recovery_synthetic() {
 
     // GOAT G1: |β_recovered - β_true|_∞ < 0.1
     let mut max_err = 0.0f32;
-    for j in 0..t {
-        let beta_true = w_true[j].ln();
-        let err = (result.beta[j] - beta_true).abs();
+    for (&w, &b) in w_true.iter().zip(result.beta.iter()) {
+        let beta_true = w.ln();
+        let err = (b - beta_true).abs();
         if err > max_err {
             max_err = err;
         }
@@ -278,9 +276,11 @@ fn goat_determinism_full_pipeline() {
         crate::attn_match::types::KeySelector::Omp,
         crate::attn_match::types::KeySelector::OmpFast,
     ] {
-        let mut cfg = AmConfig::default();
-        cfg.compact_size = 8;
-        cfg.selector = *selector;
+        let cfg = AmConfig {
+            compact_size: 8,
+            selector: *selector,
+            ..AmConfig::default()
+        };
         let r1 = compact(&keys, &values, &queries, 32, 8, 4, &cfg).expect("compact r1");
         let r2 = compact(&keys, &values, &queries, 32, 8, 4, &cfg).expect("compact r2");
         assert_eq!(
@@ -308,9 +308,11 @@ fn e2e_compact_block_data_all_selectors() {
         crate::attn_match::types::KeySelector::Omp,
         crate::attn_match::types::KeySelector::OmpFast,
     ] {
-        let mut cfg = AmConfig::default();
-        cfg.compact_size = 16;
-        cfg.selector = *selector;
+        let cfg = AmConfig {
+            compact_size: 16,
+            selector: *selector,
+            ..AmConfig::default()
+        };
         let result = compact(&keys, &values, &queries, 64, 16, 8, &cfg).expect("compact ok");
         assert_eq!(result.compact_len, 16);
         assert_eq!(result.original_len, 64);

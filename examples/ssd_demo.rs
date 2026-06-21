@@ -154,8 +154,10 @@ fn bench_ssd_block() {
         // Benchmark naive (fewer iterations for large T)
         let naive_iters = if t <= 128 {
             ITERS
+        } else if t <= 512 {
+            50
         } else {
-            if t <= 512 { 50 } else { 5 }
+            5
         };
         let start = std::time::Instant::now();
         for _ in 0..naive_iters {

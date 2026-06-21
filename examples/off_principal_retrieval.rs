@@ -32,8 +32,8 @@ fn main() {
     // Source weight: dominant principal direction along axis 0.
     let mut w_src = vec![0.0_f32; D];
     w_src[0] = 10.0;
-    for i in 1..D {
-        w_src[i] = 0.01 * (i as f32);
+    for (i, w) in w_src.iter_mut().enumerate().take(D).skip(1) {
+        *w = 0.01 * (i as f32);
     }
     let idx = OffPrincipalIndex::new(&w_src, (D, 1), 0.10);
     println!(
@@ -138,6 +138,6 @@ fn hex_hash(hash: &[u8; 32]) -> String {
     for &b in &hash[..8] {
         s.push_str(&format!("{:02x}", b));
     }
-    s.push_str("…");
+    s.push('…');
     s
 }

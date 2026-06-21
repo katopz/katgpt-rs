@@ -218,9 +218,9 @@ impl<const N: usize> PersonalitySnapshot<N> {
         let archetype_bytes: [u8; 16] = buf[0..16].try_into().ok()?;
         let archetype = ArchetypeLabel::new(archetype_bytes);
         let mut w = [0.0f32; N];
-        for i in 0..N {
+        for (i, slot) in w.iter_mut().enumerate() {
             let off = 16 + i * 4;
-            w[i] = f32::from_le_bytes(buf[off..off + 4].try_into().ok()?);
+            *slot = f32::from_le_bytes(buf[off..off + 4].try_into().ok()?);
         }
         let blake3: [u8; 32] = buf[16 + N * 4..16 + N * 4 + 32].try_into().ok()?;
         let version =

@@ -312,7 +312,7 @@ fn g1_5_snapshot_atomicity() {
                 // SAFETY: ptr is always valid — the swapper never frees the
                 // old Box until after all readers finish (test invariant). The
                 // real KernelHotSwap will use epoch reclamation for prod safety.
-                let boxed_kernel: &Box<dyn MicroRecurrentBeliefState> = unsafe { &*ptr };
+                let boxed_kernel: &dyn MicroRecurrentBeliefState = unsafe { &**ptr };
                 boxed_kernel.step(&mut state, &input);
                 // Sanity: no reader should ever see a non-finite state.
                 for (i, &v) in state.iter().enumerate() {
@@ -365,7 +365,7 @@ fn g1_5_snapshot_atomicity() {
 
     // Sanity: we should have done meaningful work.
     assert_eq!(total_steps, NUM_READERS * STEPS_PER_READER);
-    assert!(alive_boxes.len() > 0, "swapper never ran");
+    assert!(!alive_boxes.is_empty(), "swapper never ran");
 }
 
 // ─── G2.1 placeholder (Phase 5 T5.0 — NOT implemented here) ───────────────

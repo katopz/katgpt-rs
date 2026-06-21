@@ -54,12 +54,10 @@ fn run_compaction(
     keys: &[f32],
     values: &[f32],
     queries: &[f32],
-    t_len: usize,
-    d: usize,
-    n: usize,
-    t: usize,
+    shape: (usize, usize, usize, usize),
     selector: KeySelector,
 ) {
+    let (t_len, d, n, t) = shape;
     let mut cfg = match selector {
         KeySelector::HighestAttnKeys => AmConfig::highest_attn(t),
         KeySelector::Omp => AmConfig::omp(t),
@@ -143,10 +141,7 @@ fn main() {
         &keys,
         &values,
         &queries,
-        t_len,
-        d,
-        n,
-        t,
+        (t_len, d, n, t),
         KeySelector::HighestAttnKeys,
     );
     print_separator();
@@ -155,10 +150,7 @@ fn main() {
         &keys,
         &values,
         &queries,
-        t_len,
-        d,
-        n,
-        t,
+        (t_len, d, n, t),
         KeySelector::Omp,
     );
     print_separator();
@@ -167,10 +159,7 @@ fn main() {
         &keys,
         &values,
         &queries,
-        t_len,
-        d,
-        n,
-        t,
+        (t_len, d, n, t),
         KeySelector::OmpFast,
     );
     print_separator();

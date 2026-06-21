@@ -252,8 +252,7 @@ mod tests {
         let d2f_config = D2fDecodeConfig::with_block_size(4);
 
         let r1 = {
-            let mut verifier =
-                D2fDrafterVerifier::new(&target_weights, &config, d2f_config.clone(), 4);
+            let mut verifier = D2fDrafterVerifier::new(&target_weights, &config, d2f_config, 4);
             verifier.speculate(
                 &draft_weights,
                 &config,

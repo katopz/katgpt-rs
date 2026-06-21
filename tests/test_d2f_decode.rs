@@ -203,7 +203,7 @@ fn test_d2f_decode_temperature_effects() {
     };
 
     // Low temperature: more deterministic
-    let mut cfg_low = decode_config_base.clone();
+    let mut cfg_low = decode_config_base;
     cfg_low.temperature = 0.1;
     let result_low = d2f_decode_block(
         &weights,
@@ -215,7 +215,7 @@ fn test_d2f_decode_temperature_effects() {
     );
 
     // High temperature: more diverse
-    let mut cfg_high = decode_config_base.clone();
+    let mut cfg_high = decode_config_base;
     cfg_high.temperature = 2.0;
     let result_high = d2f_decode_block(
         &weights,
@@ -735,7 +735,7 @@ fn benchmark_d2f_pipeline() {
 
     // Warmup
     for _ in 0..3 {
-        let pipeline = D2fPipeline::new(&config, decode_config.clone(), total_len);
+        let pipeline = D2fPipeline::new(&config, decode_config, total_len);
         let _ = pipeline.decode_all(&weights, &NoPruner, &NoScreeningPruner, &mut rng);
     }
 
@@ -743,7 +743,7 @@ fn benchmark_d2f_pipeline() {
     let n_iters = 20;
     let start = Instant::now();
     for _ in 0..n_iters {
-        let pipeline = D2fPipeline::new(&config, decode_config.clone(), total_len);
+        let pipeline = D2fPipeline::new(&config, decode_config, total_len);
         let _ = pipeline.decode_all(&weights, &NoPruner, &NoScreeningPruner, &mut rng);
     }
     let elapsed = start.elapsed();

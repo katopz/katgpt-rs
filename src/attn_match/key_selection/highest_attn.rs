@@ -155,7 +155,7 @@ mod tests {
         let n = 1;
         let mut keys = vec![0.0f32; t_len * d];
         // Make key 2 strongly aligned with query 0.
-        keys[2 * d + 0] = 10.0;
+        keys[2 * d] = 10.0;
         keys[2 * d + 1] = 10.0;
         let mut queries = vec![0.0f32; n * d];
         queries[0] = 10.0;

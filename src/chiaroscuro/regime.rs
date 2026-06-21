@@ -286,7 +286,7 @@ mod tests {
             g.observe_h(0.9);
         }
         let p = g.apply_probability();
-        assert!(p >= 0.0 && p <= 1.0, "probability must be in [0, 1], got {p}");
+        assert!((0.0..=1.0).contains(&p), "probability must be in [0, 1], got {p}");
     }
 
     #[test]

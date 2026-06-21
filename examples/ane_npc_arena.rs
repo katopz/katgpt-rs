@@ -277,7 +277,6 @@ fn main() {
         );
         println!();
         println!("ℹ️  GOAT Arena: CPU-only run complete. Rebuild with --features ane_npc for full comparison.");
-        return;
     }
 
     #[cfg(all(feature = "ane_npc", target_os = "macos"))]

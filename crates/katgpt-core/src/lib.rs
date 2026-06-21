@@ -467,7 +467,11 @@ pub use personality_composition::{
 pub mod engram;
 #[cfg(feature = "engram")]
 pub use engram::{
-    EngramConfig, EngramHash, EngramTable, EngramTableBuilder, EngramTableId, HashHead,
-    InMemoryEngramTable, K_MAX, SigmoidFusionConfig, build_merkle_root, fuse_into_hidden_state,
-    multi_head_hash, rmsnorm_into, sigmoid_fuse_into,
+    CacheResult, CacheTier, ColdFetcher, EngramConfig, EngramHash, EngramHotSwap, EngramTable,
+    EngramTableBuilder, EngramTableId, HashHead, IDENTITY_KERNEL, InMemoryEngramTable, K_MAX,
+    SigmoidFusionConfig, SurjectiveMap, SurjectiveMapLoadError, TokenId, TokenizerSpec,
+    ZipfianCacheHierarchy, ZipfianStats, ZipfianStatsSnapshot, build_merkle_root,
+    build_surjective_map, compress_token, conv_causal_into, fuse_into_hidden_state,
+    multi_head_hash, rmsnorm_into, sigmoid_fuse_into, sigmoid_fuse_multi_branch_into,
+    try_compress_token,
 };

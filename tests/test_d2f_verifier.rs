@@ -180,7 +180,7 @@ fn proof_4_acceptance_rate_untrained() {
     // Warmup (3 iterations)
     {
         let mut verifier =
-            D2fDrafterVerifier::new(&target_weights, &config, d2f_config.clone(), draft_width);
+            D2fDrafterVerifier::new(&target_weights, &config, d2f_config, draft_width);
         for i in 0..3 {
             let _ = verifier.speculate(
                 &draft_weights,
@@ -254,7 +254,7 @@ fn test_d2f_verifier_deterministic() {
     };
 
     let r1 = {
-        let mut verifier = D2fDrafterVerifier::new(&target_weights, &config, d2f_config.clone(), 4);
+        let mut verifier = D2fDrafterVerifier::new(&target_weights, &config, d2f_config, 4);
         verifier.speculate(
             &draft_weights,
             &config,

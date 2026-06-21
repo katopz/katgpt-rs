@@ -276,6 +276,7 @@ graph LR
 | **Temporal Derivative Kernel** (`temporal_deriv`) | 277 | 4/4 fusions ✅ | Dual fast/slow EMA surprise signal — state-vector companion, surprise-gated writes, collapse detection, curiosity signal |
 | **Triggered Injection Gate** (`triggered_injection`) | 278 | G1/G2/G3/G8 ✅ | Sigmoid-thresholded inject/skip gate — 50% skips w/ 0.63% quality parity in saturated regime |
 | **FaithfulnessProbe** (`faithfulness_probe`) | 278 | G1/G2/G8 ✅ | Causal intervention diagnostic — 100%/100% detection, IG surrogate Spearman ρ=1.0, audit cadence |
+| **SmearClassifier** (`smear_classifier`) | 298 | G1/G2/G3 ✅ | Ternary (CoherentSingle/TokenSmear/SequenceSmear) latent-mass vocabulary extending Plan 278 — SequenceSmear/TokenSmear unfaithfulness ratio 2.11×, k=8 d=32 at 107.6 ns |
 | **CS-KV-Importance Probe** (`cs_kv_probe`) | 280 | G1/G2/G3 ✅ | Compressed-sensing KV-group importance probe + density-budget interpolator, sigmoid-compatible |
 | **BoMSampler** (`bom_sampling`) | 281 | G1/G2/G3 ✅ | K-hypothesis single-pass belief sampling — K=8 at 1.87× step, **+31.49pp** arena win in riir-ai Plan 314 |
 | **Self-Advantage Gate** (`self_advantage_gate`) | 283 | 4/4 ✅ | Dead-compute detector via `log π+(a) − log π̂(a)` — paper 18× forward-pass reduction, vocab ≤ 128 |
@@ -905,6 +906,14 @@ All generic over `ConsumerContext` associated types (`Memory`, `Behavior`, `Delt
 Feature gates: `triggered_injection` (**default-ON**, GOAT G3 passed — saves compute, matches quality), `faithfulness_probe` (**opt-in**, diagnostic, audit cadence). 📖 Plan: [`.plans/278_faithfulness_probe_modelless.md`](.plans/278_faithfulness_probe_modelless.md), Research: [`.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md`](.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md), Benchmark: [`.benchmarks/278_faithfulness_probe_goat.md`](.benchmarks/278_faithfulness_probe_goat.md), Docs: [`.docs/faithfulness_probe.md`](.docs/faithfulness_probe.md).
 
 > **Unblocks:** riir-ai Plan 308 (Cognitive Integrity Layer runtime integration — HLA `evolve_hla`, NeuronShard, KG Octree, dMoE). The bidirectional fusion with Plan 054 path-hacking stays private in riir-ai.
+
+#### SmearClassifier extension (Plan 298)
+
+Distills Engels et al. 2026 (arXiv:2606.20560 §5.2, Research 277) into a **ternary latent-mass classifier** extending Plan 278's binary verdict. `SmearClass::CoherentSingle` / `TokenSmear` / `SequenceSmear` distinguishes benign positional uncertainty (paper §5.2.1 — token smearing, faithful) from potentially-unfaithful multi-hypothesis superposition (paper §5.2.2 — sequence smearing, warrants Cognitive Integrity Layer attention). `#[repr(u8)]` sync-friendly enum. Zero-alloc, `simd_dot_f32`-backed, `SmearSource` trait for MUX (Plan 178) / BoM (Plan 281) consumers to expose their `[k*d]` weights. Wired into `DefaultFaithfulnessProbe::with_smear_classifier`; the existing binary `probe_intervention` / `faithfulness_profile` are unaffected.
+
+**GOAT status:** G1 (6/6 correctness + determinism) ✅. G2 (useful discrimination — SequenceSmear/TokenSmear unfaithfulness ratio ≥2.0×) ✅ **2.11×** on 3000 synthetic trials (k=8, d=16). G3 (latency k=8, d=32 ≤200 ns) ✅ **107.6 ns** on Apple Silicon arm64. **Decision: stays opt-in** — correct, useful, fast, but default-on promotion requires real-workload evidence from riir-ai Plan 308 (T4.3 deferred).
+
+Feature gate: `smear_classifier` (**opt-in**, implies `faithfulness_probe`). 📖 Plan: [`.plans/298_smear_aware_faithfulness_probe.md`](.plans/298_smear_aware_faithfulness_probe.md), Research: [`.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md`](.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md), Benchmark: [`.benchmarks/298_smear_classifier_goat.md`](.benchmarks/298_smear_classifier_goat.md), Docs: [`.docs/faithfulness_probe.md`](.docs/faithfulness_probe.md).
 
 ### 🌀 Manifold Power Iteration MoE Router (Plan 279)
 

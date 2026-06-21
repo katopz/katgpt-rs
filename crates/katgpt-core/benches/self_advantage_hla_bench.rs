@@ -89,9 +89,9 @@ fn make_brain_with_6_modules(confidence_scale: f32) -> NpcBrain {
 fn argmax6(v: &[f32; 6]) -> usize {
     let mut idx = 0;
     let mut max = v[0];
-    for i in 1..6 {
-        if v[i] > max {
-            max = v[i];
+    for (i, &val) in v.iter().enumerate().skip(1) {
+        if val > max {
+            max = val;
             idx = i;
         }
     }

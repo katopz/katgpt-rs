@@ -136,6 +136,6 @@ fn hex_short(hash: &[u8; 32]) -> String {
     for b in &hash[..7] {
         s.push_str(&format!("{:02x}", b));
     }
-    s.push_str("…");
+    s.push('…');
     s
 }

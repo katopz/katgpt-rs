@@ -93,7 +93,9 @@ fn bench_us(warmup: usize, iters: usize, mut f: impl FnMut()) -> f64 {
 const N_G: usize = 8;
 const D_G: usize = 32; // smaller D for fast tests; G4 uses the real (8,256)
 
-fn build_synthetic_moe() -> (Vec<Vec<f32>>, Vec<Vec<f32>>, Vec<Vec<f32>>) {
+type ExpertMatrices = (Vec<Vec<f32>>, Vec<Vec<f32>>, Vec<Vec<f32>>);
+
+fn build_synthetic_moe() -> ExpertMatrices {
     // Returns (u_per_expert, w_g_per_expert, gram_per_expert).
     let mut us = Vec::with_capacity(N_G);
     let mut wgs = Vec::with_capacity(N_G);
@@ -448,8 +450,8 @@ fn g07_sigmoid_constraint() {
 
     // Perturb ONLY expert 0's row.
     let mut r_perturbed = r.clone();
-    for j in 0..d {
-        r_perturbed[j] *= 5.0; // large perturbation to expert 0 only
+    for v in r_perturbed.iter_mut().take(d) {
+        *v *= 5.0; // large perturbation to expert 0 only
     }
     gate_sigmoid_topk(&x, &r_perturbed, n, d, 1.0, n, &mut scores_b);
 

@@ -296,11 +296,10 @@ mod tests {
 
     #[test]
     fn beta_bounds_are_consistent() {
-        // BETA_MID is the arithmetic mean of BETA_MIN and BETA_MAX.
+        // BETA_MID is the arithmetic mean of BETA_MIN and BETA_MAX;
+        // ordering (MIN < MID < MAX) follows from the value checks below.
         let mid = (BETA_MIN + BETA_MAX) * 0.5;
         assert!((BETA_MID - mid).abs() < 1e-6);
-        assert!(BETA_MIN < BETA_MID);
-        assert!(BETA_MID < BETA_MAX);
         // Matches AmConfig::highest_attn bounds (w_lower=1e-3, w_upper=e^3).
         assert!((BETA_MIN - (1e-3f32).ln()).abs() < 1e-4);
         assert!((BETA_MAX - 3.0f32).abs() < 1e-6);

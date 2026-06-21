@@ -1678,7 +1678,7 @@ mod tests {
         // Orthogonality: the two argmaxes must be far apart (different places).
         let argmax_gap = raw_argmax.abs_diff(surprise_argmax);
         assert!(
-            argmax_gap > WINDOW as usize,
+            argmax_gap > WINDOW,
             "G2: surprise peak and raw peak must be >{WINDOW} ticks apart; gap={argmax_gap} (raw={raw_argmax}, surprise={surprise_argmax})"
         );
     }
@@ -1747,8 +1747,10 @@ mod tests {
     /// guard: if someone edits `TripleEvidence::KIND_MAP`, this catches it.
     #[test]
     fn kind_activations_padded_matches_kind_map() {
-        let mut ev = TripleEvidence::default();
-        ev.kind_activations = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6];
+        let ev = TripleEvidence {
+            kind_activations: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+            ..Default::default()
+        };
         let padded = ev.kind_activations_padded();
         assert_eq!(padded, [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.1, 0.2]);
         assert_eq!(TripleEvidence::KIND_MAP, [0, 1, 2, 3, 4, 5, 0, 1]);

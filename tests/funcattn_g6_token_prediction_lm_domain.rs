@@ -43,13 +43,15 @@
 //! logits   = W_head · O                                // (N, V)
 //! ```
 //!
-//! - FUNCATTN: W_emb ((V+1)·D — one extra row for the mask token) + W_pos
-//!             (N·D) + W_basis (k·D) + W_q (D·D) + W_k (D·D) + W_v (D·D)
-//!             + W_head (V·D)
-//!             = (V+1)·D + N·D + k·D + 3·D² + V·D  params
-//! - SDPA:     W_emb ((V+1)·D) + W_pos (N·D) + W_q (D·D) + W_k (D·D)
-//!             + W_v (D·D) + W_head (V·D)
-//!             = (V+1)·D + N·D + 3·D² + V·D       params
+//! ```text
+//! FUNCATTN: W_emb ((V+1)·D — one extra row for the mask token) + W_pos
+//!           (N·D) + W_basis (k·D) + W_q (D·D) + W_k (D·D) + W_v (D·D)
+//!           + W_head (V·D)
+//!           = (V+1)·D + N·D + k·D + 3·D² + V·D  params
+//! SDPA:     W_emb ((V+1)·D) + W_pos (N·D) + W_q (D·D) + W_k (D·D)
+//!           + W_v (D·D) + W_head (V·D)
+//!           = (V+1)·D + N·D + 3·D² + V·D       params
+//! ```
 //!
 //! At V=D=N=k=8: FUNCATTN = 72+64+64+192+64 = 456 params;
 //!               SDPA     = 72+64+192+64    = 392 params.

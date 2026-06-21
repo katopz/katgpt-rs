@@ -20,6 +20,7 @@ use katgpt_core::personality_composition::{
 /// Minimal `LayerDirectionSource` for the example: holds a fixed direction
 /// vector and an EMA-smoothed recent direction.
 struct ExampleLayer {
+    #[allow(dead_code)] // kept for host-integration clarity; not read by the layer trait
     name: &'static str,
     direction: [f32; 32],
     recent: [f32; 32],

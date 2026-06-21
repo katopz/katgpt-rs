@@ -850,11 +850,11 @@ mod tests {
         // Extreme freshness values should still clamp
         let budgets: Vec<usize> = [0.0f32, 0.1, 0.5, 0.9, 1.0]
             .iter()
-            .map(|&decay| ctrl.adaptive_budget_default(&vec![decay; 32]))
+            .map(|&decay| ctrl.adaptive_budget_default(&[decay; 32]))
             .collect();
 
         for &b in &budgets {
-            assert!(b >= 2 && b <= 6, "budget {b} out of [2, 6] range");
+            assert!((2..=6).contains(&b), "budget {b} out of [2, 6] range");
         }
     }
 

@@ -48,8 +48,8 @@ fn compose_zero_weights_uniform() {
     assert!((out[0] - 0.5).abs() < 1e-6, "out[0] = {}", out[0]);
     assert!((out[1] - 0.5).abs() < 1e-6, "out[1] = {}", out[1]);
     assert!((out[2] - 0.5).abs() < 1e-6, "out[2] = {}", out[2]);
-    for j in 3..32 {
-        assert!(out[j].abs() < 1e-6, "out[{j}] should be 0, got {}", out[j]);
+    for (j, &v) in out.iter().enumerate().skip(3) {
+        assert!(v.abs() < 1e-6, "out[{j}] should be 0, got {v}");
     }
 }
 
@@ -71,12 +71,8 @@ fn compose_extreme_positive_weight_selects_layer() {
 
     // Layer 0: sigmoid(50/1) ≈ 1.0 → contributes ~1.0 × d0 = [1.0; 32]
     // Layers 1, 2: sigmoid(-50/1) ≈ 0.0 → contribute ~0
-    for j in 0..32 {
-        assert!(
-            (out[j] - 1.0).abs() < 1e-4,
-            "out[{j}] should be ~1.0, got {}",
-            out[j]
-        );
+    for (j, &v) in out.iter().enumerate() {
+        assert!((v - 1.0).abs() < 1e-4, "out[{j}] should be ~1.0, got {v}");
     }
 }
 
@@ -95,12 +91,8 @@ fn compose_extreme_negative_weight_zeros_layer() {
 
     // Layer 0 contributes ~0 (suppressed).
     // Layer 1 contributes ~1.0 × [2.0; 32] = [2.0; 32].
-    for j in 0..32 {
-        assert!(
-            (out[j] - 2.0).abs() < 1e-4,
-            "out[{j}] should be ~2.0, got {}",
-            out[j]
-        );
+    for (j, &v) in out.iter().enumerate() {
+        assert!((v - 2.0).abs() < 1e-4, "out[{j}] should be ~2.0, got {v}");
     }
 }
 
@@ -122,12 +114,8 @@ fn compose_belief_confidence_decay_shrinks_contribution() {
     // Layer 0: sigmoid(50/1) ≈ 1.0, confidence 1.0 → ~1.0 × [1.0; 32]
     // Layer 1: sigmoid(50/1) ≈ 1.0, confidence 0.1 → ~0.1 × [1.0; 32]
     // Total: ~1.1 × [1.0; 32]
-    for j in 0..32 {
-        assert!(
-            (out[j] - 1.1).abs() < 1e-3,
-            "out[{j}] should be ~1.1, got {}",
-            out[j]
-        );
+    for (j, &v) in out.iter().enumerate() {
+        assert!((v - 1.1).abs() < 1e-3, "out[{j}] should be ~1.1, got {v}");
     }
 }
 
@@ -269,11 +257,10 @@ fn g1_compose_tau_infinity_uniform() {
 
     // At τ = ∞, sigmoid(w/∞) = sigmoid(0) = 0.5 for all layers regardless of w.
     // Total = 0.5 × 3 × [1.0; 32] = [1.5; 32].
-    for j in 0..32 {
+    for (j, &v) in out.iter().enumerate() {
         assert!(
-            (out[j] - 1.5).abs() < 1e-4,
-            "out[{j}] should be 1.5 (no-personality baseline), got {}",
-            out[j]
+            (v - 1.5).abs() < 1e-4,
+            "out[{j}] should be 1.5 (no-personality baseline), got {v}"
         );
     }
 }
@@ -286,7 +273,7 @@ fn sigmoid_stable_for_extreme_inputs() {
     for &x in &[100.0f32, -100.0, 1000.0, -1000.0, 1e10, -1e10] {
         let s = sigmoid(x);
         assert!(s.is_finite(), "sigmoid({x}) is not finite: {s}");
-        assert!(s >= 0.0 && s <= 1.0, "sigmoid({x}) out of [0,1]: {s}");
+        assert!((0.0..=1.0).contains(&s), "sigmoid({x}) out of [0,1]: {s}");
     }
 }
 
@@ -334,8 +321,8 @@ fn compose_three_layers_mixed_weights_and_directions() {
     assert!((out[0] - expected_0).abs() < 1e-5, "out[0] mismatch");
     assert!((out[1] - expected_1).abs() < 1e-5, "out[1] mismatch");
     assert!((out[2] - expected_2).abs() < 1e-5, "out[2] mismatch");
-    for j in 3..32 {
-        assert!(out[j].abs() < 1e-6, "out[{j}] should be 0");
+    for (j, &v) in out.iter().enumerate().skip(3) {
+        assert!(v.abs() < 1e-6, "out[{j}] should be 0");
     }
 }
 

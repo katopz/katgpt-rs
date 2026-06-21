@@ -342,8 +342,8 @@ mod tests {
             4.0 * 1.0 + 5.0 * 0.5 + 6.0 * (-0.5),
             7.0 * 1.0 + 8.0 * 0.5 + 9.0 * (-0.5),
         ];
-        for i in 0..dim {
-            assert!((scratch.mv_out[i] - expected[i]).abs() < 1e-6, "matvec mismatch at [{i}]");
+        for (i, expected_val) in expected.iter().enumerate().take(dim) {
+            assert!((scratch.mv_out[i] - expected_val).abs() < 1e-6, "matvec mismatch at [{i}]");
         }
     }
 

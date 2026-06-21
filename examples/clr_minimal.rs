@@ -112,21 +112,21 @@ fn main() {
 
     // Build trajectories. Outcome is a label string (we use u8 for compactness
     // and print it as "answer-{label}").
-    let mut trajectories: Vec<Trajectory<u8>> = Vec::with_capacity(6);
+    let trajectories: Vec<Trajectory<u8>> = vec![
+        // Cluster A — outcome 42, both clean. This should be the winner.
+        build_traj(42, 0, &directions, /*flawed_m*/ None, /*tokens*/ 100),
+        build_traj(42, 1, &directions, None, 80),
 
-    // Cluster A — outcome 42, both clean. This should be the winner.
-    trajectories.push(build_traj(42, 0, &directions, /*flawed_m*/ None, /*tokens*/ 100));
-    trajectories.push(build_traj(42, 1, &directions, None, 80));
+        // Cluster B — outcome 43, one trajectory flawed (claim #2 orthogonal to
+        // its direction). Lower Σ r_k than A because the flawed trajectory's r_k
+        // is dragged down by the `(mean)^5` gate.
+        build_traj(43, 2, &directions, None, 90),
+        build_traj(43, 3, &directions, Some(2), 70),
 
-    // Cluster B — outcome 43, one trajectory flawed (claim #2 orthogonal to
-    // its direction). Lower Σ r_k than A because the flawed trajectory's r_k
-    // is dragged down by the `(mean)^5` gate.
-    trajectories.push(build_traj(43, 2, &directions, None, 90));
-    trajectories.push(build_traj(43, 3, &directions, Some(2), 70));
-
-    // Cluster C — outcome 99, both clean but a different answer entirely.
-    trajectories.push(build_traj(99, 4, &directions, None, 50));
-    trajectories.push(build_traj(99, 5, &directions, None, 60));
+        // Cluster C — outcome 99, both clean but a different answer entirely.
+        build_traj(99, 4, &directions, None, 50),
+        build_traj(99, 5, &directions, None, 60),
+    ];
 
     // ── Run CLR vote ─────────────────────────────────────────────────────
     let config = ClrConfig {
@@ -252,9 +252,9 @@ fn build_traj(
             // Orthogonal embedding: rotate dir by swapping two components and
             // negating one. dot(emb, dir) ≈ 0 → sigmoid(0) = 0.5.
             let mut e = vec![0.0f32; DIM];
-            for d in 0..DIM {
+            for (d, e_d) in e.iter_mut().enumerate().take(DIM) {
                 let next = (d + 1) % DIM;
-                e[d] = dir[next];
+                *e_d = dir[next];
             }
             // Re-orthogonalize via Gram-Schmidt against dir.
             let dot_p = simd_dot_f32(&e, dir, DIM);

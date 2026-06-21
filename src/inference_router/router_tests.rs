@@ -965,7 +965,7 @@ fn chiar_hook_reports_stats_after_observing_keys() {
     let stats = router.chiar_stats().expect("stats after 100 keys");
     assert!(stats.tokens_observed >= 100, "tokens_observed = {}", stats.tokens_observed);
     let entropy = stats.utilization_entropy.expect("utilization_entropy");
-    assert!(entropy >= 0.0 && entropy <= 1.0, "entropy out of range: {entropy}");
+    assert!((0.0..=1.0).contains(&entropy), "entropy out of range: {entropy}");
 }
 
 #[cfg(feature = "chiaroscuro")]

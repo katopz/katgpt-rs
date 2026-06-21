@@ -51,8 +51,12 @@ pub use gate::{EntropyThresholdGate, TriggeredInjectionGate, UncertaintySignal};
 pub use probe::{DefaultFaithfulnessProbe, FaithfulnessProbe};
 pub use types::{ConsumerContext, FaithfulnessProfile, Intervention, MemorySlice};
 
-// SmearClassifier re-exports — Plan 298 Phase 1. The classifier is opt-in
-// via `smear_classifier`; Phase 2 (TODO) will wire it into DefaultFaithfulnessProbe
-// as an optional diagnostic that emits a SmearReport alongside the binary verdict.
+// SmearClassifier re-exports — Plan 298. The classifier itself is opt-in
+// via `smear_classifier`; Phase 2 wires it into DefaultFaithfulnessProbe as
+// an optional diagnostic that emits a SmearReport alongside the binary verdict.
+// `SmearSource`, `InterventionOutcome`, and `FaithfulnessProfileFull` are the
+// Phase 2 integration surface — only available when `smear_classifier` is on.
+#[cfg(feature = "smear_classifier")]
+pub use probe::{FaithfulnessProfileFull, InterventionOutcome, SmearSource};
 #[cfg(feature = "smear_classifier")]
 pub use smear::{CosineSmearClassifier, SmearClass, SmearClassifier, SmearReport};

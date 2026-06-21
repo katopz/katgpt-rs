@@ -40,6 +40,110 @@
 
 use crate::simd::{fast_sigmoid, simd_dot_f32, simd_sum_sq};
 
+/// Shared value `v` across `M` branches, each with its own query/key pair.
+///
+/// Computes per-branch gate and scales the **same** `v` by each gate.
+/// Default `M = 1` reduces to a single call to [`sigmoid_fuse_into`]. The
+/// paper uses `M = 4` (mHC backbone §2.4) — the shared value is the fused
+/// `(W_V · e)`; the keys are per-branch `(W_K^(m) · e)` projections.
+///
+/// # CRITICAL — sigmoid, not softmax, per AGENTS.md
+///
+/// Each branch computes its own independent scalar gate
+/// `σ(dot(q_norm, k_norm) / τ)`. There is **no `softmax` symbol** in this
+/// function — softmax would imply competition between branches (the
+/// Engram paper specifically avoids this — branches are additive, not
+/// mutually-exclusive).
+///
+/// # Zero-allocation
+///
+/// Uses the same fused-RMSNorm + dot trick as [`sigmoid_fuse_into`] — no
+/// intermediate `q_norm` / `k_norm` buffers are materialized. The caller
+/// provides the `out_per_branch` slices.
+///
+/// # Arguments
+///
+/// - `q_per_branch` — M query slices, each of length D.
+/// - `k_per_branch` — M key slices, each of length D.
+/// - `v` — single shared value slice of length D.
+/// - `out_per_branch` — M output slices, each of length D. Written as
+///   `out_per_branch[m][j] = gate_m * v[j]`.
+/// - `config` — fusion config (tau, rmsnorm_eps).
+///
+/// # Panics (debug only)
+///
+/// `debug_assert!` checks that all slices have equal length D and that
+/// `q_per_branch.len() == k_per_branch.len() == out_per_branch.len()`.
+///
+/// # Plan reference
+///
+/// Plan 299 Phase 3 T3.6. Default M=1 must reduce to a single call to
+/// [`sigmoid_fuse_into`] — verified by the `m1_matches_single_branch` unit
+/// test.
+#[inline]
+pub fn sigmoid_fuse_multi_branch_into(
+    q_per_branch: &[&[f32]],
+    k_per_branch: &[&[f32]],
+    v: &[f32],
+    out_per_branch: &mut [&mut [f32]],
+    config: &SigmoidFusionConfig,
+) {
+    let m = q_per_branch.len();
+    debug_assert_eq!(
+        k_per_branch.len(),
+        m,
+        "sigmoid_fuse_multi_branch_into: k_per_branch.len() must equal q_per_branch.len()"
+    );
+    debug_assert_eq!(
+        out_per_branch.len(),
+        m,
+        "sigmoid_fuse_multi_branch_into: out_per_branch.len() must equal q_per_branch.len()"
+    );
+    if m == 0 {
+        return;
+    }
+    let d = v.len();
+    debug_assert!(
+        q_per_branch.iter().all(|q| q.len() == d),
+        "sigmoid_fuse_multi_branch_into: all q slices must have length D = v.len()"
+    );
+    debug_assert!(
+        k_per_branch.iter().all(|k| k.len() == d),
+        "sigmoid_fuse_multi_branch_into: all k slices must have length D = v.len()"
+    );
+    debug_assert!(
+        out_per_branch.iter().all(|o| o.len() == d),
+        "sigmoid_fuse_multi_branch_into: all out slices must have length D = v.len()"
+    );
+    if d == 0 {
+        return;
+    }
+
+    // For each branch, compute the gate and scale v by it.
+    // The inner scale-loop is small-D-friendly and auto-vectorizes.
+    for branch in 0..m {
+        let q = q_per_branch[branch];
+        let k = k_per_branch[branch];
+        let out = &mut out_per_branch[branch];
+
+        // Fused RMSNorm + dot: dot(q_norm, k_norm) = dot(q, k) * inv_rms_q * inv_rms_k.
+        let sum_sq_q = simd_sum_sq(q, d);
+        let sum_sq_k = simd_sum_sq(k, d);
+        let inv_rms_q = 1.0 / ((sum_sq_q / d as f32) + config.rmsnorm_eps).sqrt();
+        let inv_rms_k = 1.0 / ((sum_sq_k / d as f32) + config.rmsnorm_eps).sqrt();
+        let raw_dot = simd_dot_f32(q, k, d);
+        let normalized_dot = raw_dot * inv_rms_q * inv_rms_k;
+
+        // CRITICAL: sigmoid, not softmax. Each branch computes its own
+        // independent scalar gate — no inter-branch competition.
+        let gate = fast_sigmoid(normalized_dot / config.tau);
+
+        for j in 0..d {
+            out[j] = gate * v[j];
+        }
+    }
+}
+
 /// Configuration for the sigmoid fusion kernel.
 ///
 /// Defaults (per Plan T3.1):
@@ -337,6 +441,116 @@ mod tests {
         rmsnorm_into(&x, 1e-6, &mut out);
         assert!((out[0] - 2.0).abs() < 1e-3, "got {}", out[0]);
         assert!(out[1..].iter().all(|&v| v.abs() < 1e-6));
+    }
+
+    #[test]
+    fn m1_multi_branch_matches_single_branch() {
+        // T3.6: M=1 must reduce bit-identically to a single call to
+        // sigmoid_fuse_into.
+        let d = 16;
+        let cfg = cfg_for_dim(d);
+        let q: Vec<f32> = (1..=d).map(|i| i as f32).collect();
+        let k: Vec<f32> = (0..d).map(|i| (i as f32) * 0.3 + 1.0).collect();
+        let v: Vec<f32> = (0..d).map(|i| (i as f32) * 0.1).collect();
+
+        // Single-branch reference.
+        let mut out_ref = vec![0.0f32; d];
+        sigmoid_fuse_into(&q, &k, &v, &mut out_ref, &cfg);
+
+        // Multi-branch with M=1.
+        let mut out_mb = vec![0.0f32; d];
+        let q_slices = [&q[..]];
+        let k_slices = [&k[..]];
+        let mut out_slices = [out_mb.as_mut_slice()];
+        sigmoid_fuse_multi_branch_into(&q_slices, &k_slices, &v, &mut out_slices, &cfg);
+
+        assert_eq!(out_mb, out_ref, "M=1 must match single-branch output");
+    }
+
+    #[test]
+    fn m4_q_equals_k_all_gates_near_one() {
+        // T3.6: M=4, q_i = k_i for all i → all gates near 1.0.
+        let d = 16;
+        let cfg = cfg_for_dim(d);
+        let q0: Vec<f32> = (1..=d).map(|i| i as f32).collect();
+        let q1: Vec<f32> = (0..d).map(|i| (i as f32) * 0.5 + 1.0).collect();
+        let q2: Vec<f32> = (0..d).map(|i| (i as f32) * 0.7 + 2.0).collect();
+        let q3: Vec<f32> = (0..d).map(|i| (i as f32) * 0.9 + 3.0).collect();
+        let v: Vec<f32> = vec![1.0f32; d];
+
+        let q_slices = [&q0[..], &q1[..], &q2[..], &q3[..]];
+        // k_i = q_i → dot(q_norm, k_norm) ≈ 1 → gate ≈ sigmoid(√d) ≈ 1.
+        let k_slices = [&q0[..], &q1[..], &q2[..], &q3[..]];
+        // Flat output buffer + per-branch views via split_at_mut (avoids
+        // multiple simultaneous &mut borrows of a Vec).
+        let mut out_buf = vec![0.0f32; 4 * d];
+        let (out0, rest) = out_buf.split_at_mut(d);
+        let (out1, rest) = rest.split_at_mut(d);
+        let (out2, out3) = rest.split_at_mut(d);
+        let mut out_slices = [out0, out1, out2, out3];
+        sigmoid_fuse_multi_branch_into(&q_slices, &k_slices, &v, &mut out_slices, &cfg);
+
+        for m in 0..4 {
+            // gate * v[j] = gate (since v[j]=1) → gate ≈ out_buf[m*d].
+            let gate = out_buf[m * d];
+            assert!(
+                (gate - 1.0).abs() < 0.05,
+                "branch {m}: gate ≈ 1, got {gate}"
+            );
+        }
+    }
+
+    #[test]
+    fn m4_orthogonal_q_k_all_gates_near_half() {
+        // T3.6: M=4, q_i ⊥ k_i for all i → all gates near 0.5.
+        let d = 16;
+        let cfg = cfg_for_dim(d);
+        // Build 4 orthogonal (q_i, k_i) pairs: q has first half non-zero,
+        // k has second half non-zero.
+        let mk_orth_pair = |seed: f32| -> (Vec<f32>, Vec<f32>) {
+            let mut q = vec![0.0f32; d];
+            let mut k = vec![0.0f32; d];
+            for i in 0..d / 2 {
+                q[i] = seed + i as f32;
+            }
+            for i in d / 2..d {
+                k[i] = seed + i as f32;
+            }
+            (q, k)
+        };
+        let (q0, k0) = mk_orth_pair(1.0);
+        let (q1, k1) = mk_orth_pair(2.0);
+        let (q2, k2) = mk_orth_pair(3.0);
+        let (q3, k3) = mk_orth_pair(4.0);
+        let v: Vec<f32> = vec![1.0f32; d];
+
+        let q_slices = [&q0[..], &q1[..], &q2[..], &q3[..]];
+        let k_slices = [&k0[..], &k1[..], &k2[..], &k3[..]];
+        let mut out_buf = vec![0.0f32; 4 * d];
+        let (out0, rest) = out_buf.split_at_mut(d);
+        let (out1, rest) = rest.split_at_mut(d);
+        let (out2, out3) = rest.split_at_mut(d);
+        let mut out_slices = [out0, out1, out2, out3];
+        sigmoid_fuse_multi_branch_into(&q_slices, &k_slices, &v, &mut out_slices, &cfg);
+
+        for m in 0..4 {
+            let gate = out_buf[m * d]; // v[0] = 1
+            assert!(
+                (gate - 0.5).abs() < 1e-3,
+                "branch {m}: gate ≈ 0.5, got {gate}"
+            );
+        }
+    }
+
+    #[test]
+    fn m0_multi_branch_is_noop() {
+        // Edge case: M=0 → no work.
+        let cfg = SigmoidFusionConfig::default();
+        let v: [f32; 0] = [];
+        let q_slices: &[&[f32]] = &[];
+        let k_slices: &[&[f32]] = &[];
+        let out_slices: &mut [&mut [f32]] = &mut [];
+        sigmoid_fuse_multi_branch_into(q_slices, k_slices, &v, out_slices, &cfg);
     }
 
     // Note: we intentionally do NOT import or reference simd_scale_inplace

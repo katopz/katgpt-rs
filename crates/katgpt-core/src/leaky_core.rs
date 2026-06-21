@@ -102,7 +102,7 @@ mod tests {
             let total: f32 = input.iter().copied().sum();
             leaky_step(&mut state, &input, total, 0.5, 1.0);
             for &v in &state {
-                assert!(v >= -1.0 && v <= 1.0, "state diverged: {v}");
+                assert!((-1.0..=1.0).contains(&v), "state diverged: {v}");
             }
         }
     }

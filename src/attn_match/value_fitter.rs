@@ -422,7 +422,7 @@ mod tests {
             2.0, 1.0,
         ];
         // True Cv: 2×3
-        let cv_true = vec![1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let cv_true = [1.0f32, 2.0, 3.0, 4.0, 5.0, 6.0];
         // Compute Y = X Cv
         let mut y = vec![0.0f32; n * d];
         for i in 0..n {

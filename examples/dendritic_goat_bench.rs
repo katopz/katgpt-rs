@@ -187,16 +187,16 @@ fn main() {
     // Easy query: expect ≥20% reduction
     let easy_pass = easy.reduction_pct >= 20.0;
     println!(
-        "  Easy: {} reduction (target ≥20%): {}",
-        format!("{:.1}%", easy.reduction_pct),
+        "  Easy: {:.1}% reduction (target ≥20%): {}",
+        easy.reduction_pct,
         if easy_pass { "PASS" } else { "FAIL" }
     );
 
     // Hard query: expect ≤5% reduction (don't prune when uncertain)
     let hard_pass = hard.reduction_pct <= 5.0;
     println!(
-        "  Hard: {} reduction (target ≤5%): {}",
-        format!("{:.1}%", hard.reduction_pct),
+        "  Hard: {:.1}% reduction (target ≤5%): {}",
+        hard.reduction_pct,
         if hard_pass { "PASS" } else { "FAIL" }
     );
 

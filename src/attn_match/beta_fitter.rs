@@ -440,8 +440,8 @@ mod tests {
         let a = vec![4.0f32, 2.0, 2.0, 3.0];
         let l = cholesky_decompose(&a, 2).expect("SPD matrix");
         // L L^T should equal A.
-        let reconstructed_l_lt = vec![
-            l[0] * l[0] + 0.0,
+        let reconstructed_l_lt = [
+            l[0] * l[0],
             l[2] * l[0],
             l[2] * l[0],
             l[2] * l[2] + l[3] * l[3],

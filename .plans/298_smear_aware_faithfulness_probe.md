@@ -129,9 +129,12 @@ impl Default for CosineSmearClassifier {
 
 ### Tasks
 
-- [ ] **T2.1** Extend `DefaultFaithfulnessProbe` (Plan 278) with an optional `smear: Option<Box<dyn SmearClassifier>>` field. When `Some`, the probe's audit cadence additionally classifies the latent mass at the intervention site and emits a `SmearReport` alongside the existing binary verdict.
-- [ ] **T2.2** The `SmearReport` flows into the existing faithfulness event stream — no new sync dependency, no new chain commit. The report is a diagnostic; the existing `TriggeredInjectionGate` (default-on, Plan 278) decides whether to act on it.
-- [ ] **T2.3** Document in `.docs/faithfulness_probe.md` that `SmearClass::SequenceSmear` with high `semantic_distance` is the "potentially unfaithful multi-hypothesis" signal that warrants Cognitive Integrity Layer attention (riir-ai `.research/129`).
+- [x] **T2.1** Extend `DefaultFaithfulnessProbe` (Plan 278) with an optional `smear: Option<Box<dyn SmearClassifier>>` field. When `Some`, the probe's audit cadence additionally classifies the latent mass at the intervention site and emits a `SmearReport` alongside the existing binary verdict.
+- [x] **T2.2** The `SmearReport` flows into the existing faithfulness event stream — no new sync dependency, no new chain commit. The report is a diagnostic; the existing `TriggeredInjectionGate` (default-on, Plan 278) decides whether to act on it.
+- [x] **T2.3** Document in `.docs/faithfulness_probe.md` that `SmearClass::SequenceSmear` with high `semantic_distance` is the "potentially unfaithful multi-hypothesis" signal that warrants Cognitive Integrity Layer attention (riir-ai `.research/129`).
+- [x] **T2.4** *(new)* API decision: chose `probe_intervention_full(...) -> InterventionOutcome<D>` + `faithfulness_profile_full(...) -> FaithfulnessProfileFull<D>` (cleaner than `(Delta, Option<SmearReport>)` tuple — the struct carries field names + doc for the `smear: None` fallback). Trait `FaithfulnessProbe` stays minimal and binary-only — the smear surface is inherent on `DefaultFaithfulnessProbe` (matches the spec's preferred option).
+- [x] **T2.5** *(new)* Added `SmearSource` trait for consumers that carry superposition (MUX/BoM). Documented that plain-autoregressive consumers should NOT implement it — the probe returns `smear: None` when the source is absent (correct: they are always `CoherentSingle` by construction).
+- [x] **T2.6** *(new)* Unblocked the workspace parse: Plan 299 left two missing-file stub registrations (`examples/engram_demo.rs`, `tests/bench_299_engram_goat.rs`). Created minimal placeholder files so `cargo` can parse the root manifest. Plan 299's agent will overwrite them with the real implementations.
 
 ## Phase 3 — GOAT Gate (G1/G2/G3)
 
@@ -147,20 +150,20 @@ The GOAT gate must prove the ternary classification is *useful*, not just correc
 
 ### Tasks
 
-- [ ] **T3.1** G1 unit tests — all pass (T1.4 covers this).
-- [ ] **T3.2** G2 synthetic harness: `tests/bench_298_smear_classifier_goat.rs`. Construct the three smear types via MUX-style superposition weights (deterministic). Inject into a Plan 278-style attribution probe. Measure per-class unfaithfulness rate. Target: `SequenceSmear` rate ≥ 2× `TokenSmear` rate.
-- [ ] **T3.3** G3 latency bench: `benches/smear_classifier_bench.rs`. Measure `classify` cost at `k∈{2,4,8}`, `d∈{8,16,32}`. Verify plasma-tier budget.
-- [ ] **T3.4** Honest assessment: if G2 fails (the ternary classification does NOT produce measurably better downstream decisions), demote to opt-in Gain and document why. Do NOT promote to default.
-- [ ] **T3.5** If G1+G2+G3 pass, write `.benchmarks/298_smear_classifier_goat.md` with before/after evidence and promote decision.
+- [x] **T3.1** G1 unit tests — all pass (T1.4 covers this).
+- [x] **T3.2** G2 synthetic harness: `tests/bench_298_smear_classifier_goat.rs`. Construct the three smear types via MUX-style superposition weights (deterministic). Inject into a Plan 278-style attribution probe. Measure per-class unfaithfulness rate. Target: `SequenceSmear` rate ≥ 2× `TokenSmear` rate.
+- [x] **T3.3** G3 latency bench: `benches/smear_classifier_bench.rs`. Measure `classify` cost at `k∈{2,4,8}`, `d∈{8,16,32}`. Verify plasma-tier budget.
+- [x] **T3.4** Honest assessment: G2 passes (ratio 2.11× ≥ 2.0×) and G3 passes (107.6 ns ≤ 200 ns target). The classifier stays opt-in — it's a diagnostic, and the synthetic workload is constructed to make the discrimination measurable. Promotion to default-on would require real-workload evidence (riir-ai Cognitive Integrity Layer integration, deferred to Plan 308/T4.3).
+- [x] **T3.5** Written `.benchmarks/298_smear_classifier_goat.md` with before/after evidence and promotion decision.
 
 ## Phase 4 — Documentation + cross-refs
 
 ### Tasks
 
-- [ ] **T4.1** Update `katgpt-rs/README.md` with a `SmearClassifier` entry under the Faithfulness section.
-- [ ] **T4.2** Update `.docs/faithfulness_probe.md` with the ternary classification vocabulary.
-- [ ] **T4.3** Update `riir-ai/.research/129_Cognitive_Integrity_Layer_Guide.md` to cite arXiv:2606.20560 as external validation of the top-k scalar bridge design + adopt "opaque serial depth" + "smearing" vocabulary. **This is a doc-only update — no new private guide** (Gain verdict, mandatory-guide rule not triggered).
-- [ ] **T4.4** Cross-link Research 277 ↔ Plan 298 ↔ Plan 278 (FaithfulnessProbe) ↔ Plan 178 (MUX) ↔ Plan 281 (BoM).
+- [x] **T4.1** Update `katgpt-rs/README.md` with a `SmearClassifier` entry under the Faithfulness section (new row in the GOAT-Proved Additions table + new subsection under the FaithfulnessProbe showcase). Coordinated with Plan 299 agent: only edited Faithfulness-related content, no Engram sections touched.
+- [x] **T4.2** Updated `.docs/faithfulness_probe.md` with the ternary classification vocabulary + wiring guide + paper citations (covered alongside T2.3).
+- [ ] **T4.3** **SKIPPED** — the riir-ai `.research/129` cross-repo update is out of scope for this single-repo coding task. Remains TODO for the orchestrator. The katgpt-rs docs already cross-link to `.research/129` and cite arXiv:2606.20560; the riir-ai guide itself needs the vocabulary adoption ("opaque serial depth" + "smearing") + paper citation as external validation of the top-k scalar bridge design.
+- [x] **T4.4** Cross-links added in `.docs/faithfulness_probe.md`: Research 277 ↔ Plan 298 ↔ Plan 278 ↔ Plan 178 (MUX) ↔ Plan 281 (BoM). Also cross-linked in `.benchmarks/298_smear_classifier_goat.md`.
 
 ## Optimization constraints (per AGENTS.md)
 

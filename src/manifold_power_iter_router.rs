@@ -812,8 +812,8 @@ mod tests {
 
         // Perturb row 0 only — scale by 2x.
         let mut r_perturbed = r.clone();
-        for j in 0..d {
-            r_perturbed[j] *= 2.0;
+        for v in r_perturbed.iter_mut().take(d) {
+            *v *= 2.0;
         }
         gate_sigmoid_topk(&x, &r_perturbed, n, d, 1.0, n, &mut scores_b);
 

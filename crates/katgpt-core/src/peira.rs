@@ -446,8 +446,8 @@ unsafe fn avx2_outer_product_ema_f64(
     first_step: bool,
 ) {
     use core::arch::x86_64::{
-        _mm256_add_pd, _mm256_broadcast_sd, _mm256_cvtps_pd, _mm256_loadu_pd, _mm256_mul_pd,
-        _mm256_set1_pd, _mm256_storeu_pd, _mm_loadu_ps,
+        _mm_loadu_ps, _mm256_add_pd, _mm256_broadcast_sd, _mm256_cvtps_pd, _mm256_loadu_pd,
+        _mm256_mul_pd, _mm256_set1_pd, _mm256_storeu_pd,
     };
 
     unsafe {
@@ -558,8 +558,8 @@ unsafe fn avx2_outer_product_f64(
     k: usize,
 ) {
     use core::arch::x86_64::{
-        _mm256_add_pd, _mm256_broadcast_sd, _mm256_cvtps_pd, _mm256_mul_pd, _mm256_set1_pd,
-        _mm256_storeu_pd, _mm_loadu_ps,
+        _mm_loadu_ps, _mm256_add_pd, _mm256_broadcast_sd, _mm256_cvtps_pd, _mm256_mul_pd,
+        _mm256_set1_pd, _mm256_storeu_pd,
     };
 
     unsafe {
@@ -1322,7 +1322,10 @@ mod tests {
         assert!((n[0] - 1.0).abs() < 0.1, "N[0,0] = {}", n[0]);
     }
 
+    // Tests the public deprecated `predictor()` API surface — keep the
+    // method exercised so regressions in the allocating path don't slip in.
     #[test]
+    #[allow(deprecated)]
     fn predictor_yields_valid_matrices() {
         let k = 4;
         let mut cov = PeiraCovariance::new(PeiraConfig::new(k).with_lambda(0.1));
@@ -1348,7 +1351,10 @@ mod tests {
         }
     }
 
+    // Uses the deprecated allocating `predictor()` for a one-shot test —
+    // aux_loss path is already covered zero-alloc elsewhere.
     #[test]
+    #[allow(deprecated)]
     fn aux_loss_is_finite() {
         let k = 4;
         let mut cov = PeiraCovariance::new(PeiraConfig::new(k));

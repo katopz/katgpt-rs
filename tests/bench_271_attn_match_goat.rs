@@ -122,8 +122,8 @@ fn g1_beta_recovery() {
     let result = fit_beta_nnls(&a, &m, n, t, &cfg);
 
     let mut max_err = 0.0f32;
-    for j in 0..t {
-        let beta_true = w_true[j].ln();
+    for (j, w) in w_true.iter().enumerate() {
+        let beta_true = w.ln();
         let err = (result.beta[j] - beta_true).abs();
         if err > max_err {
             max_err = err;
@@ -177,10 +177,10 @@ fn g2_cv_reconstruction() {
     // Relative Frobenius error.
     let mut diff_sq = 0.0f32;
     let mut true_sq = 0.0f32;
-    for k in 0..(t * d) {
-        let e = result.compact_values[k] - cv_true[k];
+    for (k, cv) in cv_true.iter().enumerate() {
+        let e = result.compact_values[k] - cv;
         diff_sq += e * e;
-        true_sq += cv_true[k] * cv_true[k];
+        true_sq += cv * cv;
     }
     let rel_frob = (diff_sq / true_sq).sqrt();
     println!(
@@ -542,9 +542,11 @@ fn z_full_pipeline_smoke_all_selectors() {
         KeySelector::Omp,
         KeySelector::OmpFast,
     ] {
-        let mut cfg = AmConfig::default();
-        cfg.compact_size = 16;
-        cfg.selector = *selector;
+        let cfg = AmConfig {
+            compact_size: 16,
+            selector: *selector,
+            ..Default::default()
+        };
         let result = compact(&keys, &values, &queries, 64, 16, 8, &cfg).expect("compact");
         assert_eq!(result.compact_len, 16);
         assert_eq!(result.original_len, 64);

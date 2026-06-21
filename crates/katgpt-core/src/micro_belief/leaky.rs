@@ -136,7 +136,7 @@ mod tests {
             let input: [f32; 8] = [0.0, 0.0, 0.0, 0.0, 0.0, rng.f32(), rng.f32(), rng.f32()];
             k.step(&mut state, &input);
             for &v in &state {
-                assert!(v >= -1.0 && v <= 1.0, "Family C diverged: {v}");
+                assert!((-1.0..=1.0).contains(&v), "Family C diverged: {v}");
             }
         }
     }

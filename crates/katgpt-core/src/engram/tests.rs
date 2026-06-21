@@ -88,7 +88,7 @@ fn pipeline_empty_table_all_zeros() {
     let mut out = vec![f32::NAN; K_MAX * 4];
     let hits = table.lookup_into(&keys, &mut out);
     assert_eq!(hits, 0);
-    assert!(out.iter().all(|v| v == 0.0), "empty table → all zeros");
+    assert!(out.iter().all(|&v| v == 0.0), "empty table → all zeros");
 }
 
 // ─── T3.5: sigmoid gate boundary semantics ────────────────────────────

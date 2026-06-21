@@ -236,6 +236,8 @@ ane_npc = ["ane", "katgpt-core/sense_composition"]  # ANE batch NPC brain comput
 thinking_cot = ["rim_slots", "thinking_prune", "parallel_probe", "ppot", "bt_rank", "bandit"]  # Adaptive CoT thinking — self-learning when to think (Plan 194)
 swir_switch_thinking = ["thinking_cot"]  # SwiR Switch-Thinking — Explicit↔Latent mode controller (Plan 275, Research 241). Depends on thinking_cot for the ThinkingStrategy trait + StepContext + StepDirective wiring types.
 faithfulness_probe = ["katgpt-core/faithfulness_probe"]  # FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244). Audit-cadence diagnostic — opt-in (diagnostic, audit cadence not every tick). Passthrough to katgpt-core (moved from root; riir-engine Plan 308 consumes via katgpt-core).
+engram = ["katgpt-core/engram"]  # Engram — hash-addressed, sigmoid-fused static pattern memory open primitive (Plan 299, Research 278, arXiv:2601.07372). N-gram-suffix → multi-head hash → O(1) table lookup → sigmoid gate → residual fuse. Open half of the Engram Super-GOAT. Opt-in until G1–G7 GOAT gate passes; G6 (effective-depth) deferred to riir-ai integration.
+smear_classifier = ["katgpt-core/smear_classifier"]  # SmearClassifier — ternary (CoherentSingle/TokenSmear/SequenceSmear) latent-mass distribution classifier extending Plan 278's binary FaithfulnessProbe (Plan 298, Research 277, arXiv:2606.20560). Zero-alloc, SIMD-backed, #[repr(u8)] sync-friendly. Opt-in until G2+G3 GOAT gate passes. Passthrough to katgpt-core.
 future_probe = []  # FutureBehaviorProbe — frozen direction vector for forecasting future behavior probability (Plan 292 Phase 2, Research 267, openreview 48NnVTsirb). BLAKE3-committed artifact, atomic hot-swap via RwLock<Arc<ProbeData>>. Opt-in until Phase 4 GOAT gate passes; Phase 1 vocabulary tag (FeatureClass) ships always-on regardless.
 fpcg_selector = ["future_probe"]  # FpcgSelector — Future Probe Controlled Generation sample-score-select loop at sentence granularity (Plan 292 Phase 3). Opt-in (implies future_probe) until Phase 4 GOAT gate passes.
 triggered_injection = ["katgpt-core/triggered_injection"]  # TriggeredInjectionGate — sigmoid-thresholded inject/skip hot-path gate (Plan 278, Research 244). DEFAULT-ON after GOAT G3 passed (50% skips w/ 0.63% quality parity in saturated regime). Passthrough to katgpt-core (moved from root; riir-engine Plan 308 consumes via katgpt-core).
@@ -1698,7 +1700,35 @@ name = "delta_mem_surprise_gate_bench"
 harness = false
 required-features = ["delta_mem"]
 
+# ── Plan 299 — Engram GOAT gates (G1/G2/G4) + example ───────────────
+# harness = false + fn main() (criterion is not a katgpt-rs dev-dep; see
+# benches/faithfulness_probe_bench.rs doc-comment for the convention).
+[[test]]
+name = "bench_299_engram_goat"
+path = "tests/bench_299_engram_goat.rs"
+required-features = ["engram"]
+harness = false
+
+[[example]]
+name = "engram_demo"
+required-features = ["engram"]
+
 # Plan 272 — Progressive MCGS basic example (feature-gated module).
 [[example]]
 name = "progressive_mcgs_basic"
 required-features = ["progressive_mcgs"]
+
+# ── Plan 298 — SmearClassifier GOAT gates (G2 useful discrimination, G3 latency).
+# harness=false + std::time::Instant + fn main() per the repo bench convention
+# (criterion is not a katgpt-rs dev-dep; see benches/faithfulness_probe_bench.rs
+# doc-comment for the convention).
+[[test]]
+name = "bench_298_smear_classifier_goat"
+path = "tests/bench_298_smear_classifier_goat.rs"
+required-features = ["smear_classifier"]
+
+[[bench]]
+name = "smear_classifier_bench"
+path = "benches/smear_classifier_bench.rs"
+required-features = ["smear_classifier"]
+harness = false

@@ -152,10 +152,10 @@ fn main() {
         }
 
         // Early-exit once tamed (and a few extra ticks to show stability).
-        if let Some(tt) = tame_tick {
-            if t >= tt + 10 {
-                break;
-            }
+        if let Some(tt) = tame_tick
+            && t >= tt + 10
+        {
+            break;
         }
     }
 

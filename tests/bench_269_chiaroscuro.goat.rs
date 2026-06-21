@@ -130,8 +130,8 @@ mod tests {
         let lo = cal.tau_lo_mut();
         let hi = cal.tau_hi_mut();
         // Should be within the input range.
-        assert!(lo >= 0.84 && lo <= 0.87, "G5 FAIL: τ_lo = {lo} not in [0.84, 0.87]");
-        assert!(hi >= 0.85 && hi <= 0.88, "G5 FAIL: τ_hi = {hi} not in [0.85, 0.88]");
+        assert!((0.84..=0.87).contains(&lo), "G5 FAIL: τ_lo = {lo} not in [0.84, 0.87]");
+        assert!((0.85..=0.88).contains(&hi), "G5 FAIL: τ_hi = {hi} not in [0.85, 0.88]");
         assert!(lo < hi, "G5 FAIL: τ_lo ({lo}) ≥ τ_hi ({hi})");
         eprintln!("G5 PASS: τ_lo = {lo:.4}, τ_hi = {hi:.4} (converged within 1024 tokens)");
     }
@@ -218,8 +218,8 @@ mod tests {
                 _ => {
                     // Mixed-frequency content
                     let mut x = vec![0.0_f32; 256];
-                    for j in 0..256 {
-                        x[j] = ((j as f32) * 0.3).sin() + 0.5 * ((j as f32) * 0.01).cos();
+                    for (j, v) in x.iter_mut().enumerate() {
+                        *v = ((j as f32) * 0.3).sin() + 0.5 * ((j as f32) * 0.01).cos();
                     }
                     x
                 }

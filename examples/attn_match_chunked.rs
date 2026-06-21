@@ -28,7 +28,7 @@ fn synth_block_kv(t_len: usize, d: usize, seed: u32) -> (Vec<f32>, Vec<f32>) {
     for i in 0..t_len {
         let b = i / block;
         for k in 0..d {
-            let sign = if b % 2 == 0 { 1.0 } else { -1.0 };
+            let sign = if b.is_multiple_of(2) { 1.0 } else { -1.0 };
             let x = ((i + b * 13 + k * 7 + seed as usize) as f32) * 0.03;
             keys[i * d + k] = sign * (0.4 + x.sin() * 0.3);
             values[i * d + k] = sign * (0.8 + x.cos() * 0.5);

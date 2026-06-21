@@ -1,11 +1,11 @@
 # FaithfulnessProbe — Causal Intervention Diagnostic for Injected Memory
 
-**Plan:** [278](../.plans/278_faithfulness_probe_modelless.md)
-**Research:** [244 — Self-Evolver Faithfulness / Cognitive Integrity Layer](../.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md)
+**Plan:** [278](../.plans/278_faithfulness_probe_modelless.md) | **Plan 298 (SmearClassifier extension):** [298](../.plans/298_smear_aware_faithfulness_probe.md)
+**Research:** [244 — Self-Evolver Faithfulness / Cognitive Integrity Layer](../.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md) | **Research 277 (SmearClassifier):** [277 — DiffusionGemma Transparency / Smearing / Faithfulness](../.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md)
 **Private guide (riir-ai):** [129 — Cognitive Integrity Layer Architectural Guide](../../riir-ai/.research/129_Cognitive_Integrity_Layer_Guide.md)
 **Runtime integration (riir-ai):** Plan 308 (private, unblocked by this primitive)
-**Source paper:** [Zhao et al. 2026 — Large Language Model Agents Are Not Always Faithful Self-Evolvers](https://arxiv.org/pdf/2601.22436) (ICML 2026)
-**Benchmark:** [278_faithfulness_probe_goat.md](../.benchmarks/278_faithfulness_probe_goat.md)
+**Source paper:** [Zhao et al. 2026 — Large Language Model Agents Are Not Always Faithful Self-Evolvers](https://arxiv.org/pdf/2601.22436) (ICML 2026) | **SmearClassifier paper:** [Engels et al. 2026 — How Transparent is DiffusionGemma?](https://arxiv.org/abs/2606.20560) §5.2 (arXiv:2606.20560)
+**Benchmark:** [278_faithfulness_probe_goat.md](../.benchmarks/278_faithfulness_probe_goat.md) | **298_smear_classifier_goat.md**](../.benchmarks/298_smear_classifier_goat.md)
 
 ---
 
@@ -130,6 +130,91 @@ impl UncertaintySignal for MyConsumer {
 
 ---
 
+## SmearClassifier — Ternary Latent-Mass Vocabulary (Plan 298)
+
+**Feature:** `smear_classifier` (opt-in, implies `faithfulness_probe`).
+**Paper:** Engels et al. 2026, [arXiv:2606.20560](https://arxiv.org/abs/2606.20560) §5.2.1 / §5.2.2.
+**Research:** [277 — DiffusionGemma Transparency / Smearing / Faithfulness](../.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md).
+
+The binary `FaithfulnessProbe` (Plan 278) answers "is this memory segment
+causally driving behavior?". It does NOT answer "HOW is the consumer's latent
+mass distributed?". The `SmearClassifier` (Plan 298) adds that vocabulary:
+
+extending the binary faithful/unfaithful signal with three classes:
+
+| Class | Paper § | Mass distribution | Verdict |
+|---|---|---|---|
+| `CoherentSingle` | — | One dominant hypothesis at one site. | Faithful single-hypothesis. |
+| `TokenSmear { span }` | §5.2.1 | One direction spread across `span` adjacent sites (cosine ≈ 1.0 between rows). | **Benign** positional uncertainty. Faithful. |
+| `SequenceSmear { n_hypotheses, semantic_distance }` | §5.2.2 | ≥2 semantically distinct directions at one site (cosine ≈ 0.0 between rows). | **Potentially unfaithful** multi-hypothesis superposition requiring disambiguation. |
+
+`#[repr(u8)]` enum — 1-byte sync-friendly output (AGENTS.md rule). Zero-allocation
+hot path: caller passes a scratch `&mut [f32]` of length `k + k*(k-1)/2`.
+`simd_dot_f32` for the pairwise cosines. **k=8, d=32 at 107.6 ns** on Apple
+Silicon arm64 (G3 GOAT gate — plasma-tier).
+
+### Wiring `SmearClassifier` into `DefaultFaithfulnessProbe`
+
+```rust
+use katgpt_core::faithfulness::{
+    CosineSmearClassifier, DefaultFaithfulnessProbe, SmearSource,
+};
+
+// 1. (Optional) Implement `SmearSource` on your consumer IF it carries
+//    a multi-hypothesis superposition (MUX Plan 178, BoM Plan 281).
+//    Do NOT implement this on plain-autoregressive consumers — they are
+//    always `CoherentSingle` by construction.
+impl SmearSource for MyMuxConsumer {
+    fn latent_mass_distribution(&self) -> (&[f32], usize, usize) {
+        (&self.k_hypotheses_flat, self.k, self.d)
+    }
+}
+
+// 2. Construct the probe with the classifier attached.
+let probe = DefaultFaithfulnessProbe::new(consumer, irrelevant_pool, filler)
+    .with_smear_classifier(Box::new(CosineSmearClassifier::default()));
+
+// 3. Run the smear-aware audit.
+let outcome = probe.faithfulness_profile_full(
+    &memory, &mut rng,
+    Some(&consumer as &dyn SmearSource),
+    &mut scratch,
+);
+// outcome.profile.is_faithfully_used(0.5)  — binary verdict (Plan 278)
+// outcome.smear                               — Option<SmearReport> (Plan 298)
+```
+
+The existing `probe_intervention` / `faithfulness_profile` methods are
+**unaffected** — they continue to return only the binary `Delta` /
+`FaithfulnessProfile`. The smear-aware surface is additive.
+
+### Diagnostic-only contract
+
+The `SmearReport` is a **diagnostic** — it does NOT:
+- Add a sync dependency (the `#[repr(u8)]` class byte CAN be synced but the
+  report itself is not committed to the chain).
+- Emit a chain commitment.
+- Change the `TriggeredInjectionGate` decision (Plan 278 default-on gate
+  remains the source of truth for inject/skip).
+
+Downstream consumers (riir-ai Cognitive Integrity Layer, `.research/129`)
+consume the report to react differently to benign positional uncertainty
+vs potentially-unfaithful multi-hypothesis computation.
+
+### When to escalate to Cognitive Integrity Layer attention
+
+A `SequenceSmear` report with high `semantic_distance` (default threshold:
+`tau_same = 0.1`, so `semantic_distance > 0.1` already classifies as
+SequenceSmear; values near `1.0` indicate near-orthogonal hypotheses) is the
+signal that warrants Cognitive Integrity Layer attention (riir-ai
+`.research/129`). The consumer is holding multiple semantically distinct
+hypotheses in superposition without having committed — this is the
+paper's "sequence smearing" failure mode (§5.2.2) where the model's output
+is ambiguous because it hasn't disambiguated between competing candidate
+sequences.
+
+---
+
 ## Canonical Example (generic — no game semantics)
 
 The katgpt-rs primitive ships **generic math only**. The canonical game wiring (HLA `evolve_hla`, NeuronShard, KG triples, emotion channels) is private → riir-ai Plan 308.
@@ -177,6 +262,7 @@ assert!(profile.is_faithfully_used(0.5)); // memory drives behavior
 |---|---|---|
 | `FaithfulnessProfile` per segment | Latent (behavioral deltas) | NO — per-entity diagnostic |
 | `AttributionProbe` norm | Latent (sensitivity scalar) | NO — per-entity, local |
+| `SmearReport` per audit (Plan 298) | Latent (mass distribution) | NO — per-entity diagnostic; the `#[repr(u8)]` class byte CAN be synced if downstream wants to, but the report itself is not committed |
 | Gate decision (inject/skip) | Latent (bool) | NO — local consumer state |
 | `dead_injection` event | Raw (event) | YES — audit trail (segment ID + deltas as f64) |
 
@@ -184,7 +270,9 @@ Probes NEVER substitute latent for raw in anti-cheat validation. The "raw signat
 
 ---
 
-## GOAT Gate Results (Phase 3)
+## GOAT Gate Results
+
+### Plan 278 (binary probe)
 
 | Gate | Metric | Threshold | Measured | Verdict |
 |---|---|---|---|---|
@@ -197,17 +285,33 @@ Probes NEVER substitute latent for raw in anti-cheat validation. The "raw signat
 
 **Decision:** `triggered_injection` promoted to **default-ON** (G3 passed — saves compute, matches quality). `faithfulness_probe` kept **opt-in** (diagnostic, audit cadence).
 
+### Plan 298 (SmearClassifier — ternary extension)
+
+| Gate | Metric | Threshold | Measured | Verdict |
+|---|---|---|---|---|
+| **G1** | Correctness + determinism | 6 unit tests pass | **6/6 PASS** | ✅ PASS |
+| **G2** | Useful discrimination (SequenceSmear / TokenSmear unfaithfulness ratio) | ≥2.0× | **2.11×** (1000 trials/class, k=8, d=16) | ✅ PASS |
+| **G3** | Latency (k=8, d=32) | ≤200 ns | **107.6 ns** (Apple Silicon arm64 SIMD) | ✅ PASS |
+
+**Decision:** `smear_classifier` stays **opt-in** — correct, useful, fast, but default-on promotion requires real-workload evidence from riir-ai Plan 308 integration (T4.3, deferred). See [298_smear_classifier_goat.md](../.benchmarks/298_smear_classifier_goat.md) for the full evidence.
+
 ---
 
 ## Cross-References
 
-- **Plan:** [278_faithfulness_probe_modelless.md](../.plans/278_faithfulness_probe_modelless.md)
-- **Research:** [244_Self_Evolver_Faithfulness_Cognitive_Integrity.md](../.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md)
+- **Plan 278 (FaithfulnessProbe):** [278_faithfulness_probe_modelless.md](../.plans/278_faithfulness_probe_modelless.md)
+- **Plan 298 (SmearClassifier):** [298_smear_aware_faithfulness_probe.md](../.plans/298_smear_aware_faithfulness_probe.md)
+- **Plan 178 (MUX superposition generator):** consumed by `SmearClassifier` — the K parallel token streams it produces are the classifier's primary input
+- **Plan 281 (BoMSampler):** consumed by `SmearClassifier` — the K belief states it samples are the classifier's secondary input
+- **Research 244:** [244_Self_Evolver_Faithfulness_Cognitive_Integrity.md](../.research/244_Self_Evolver_Faithfulness_Cognitive_Integrity.md)
+- **Research 277 (SmearClassifier):** [277_DiffusionGemma_Transparency_Smearing_Faithfulness.md](../.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md)
 - **Private guide (riir-ai):** [129_Cognitive_Integrity_Layer_Guide.md](../../riir-ai/.research/129_Cognitive_Integrity_Layer_Guide.md)
 - **Runtime integration (riir-ai Plan 308):** unblocked by this primitive
-- **Benchmark:** [278_faithfulness_probe_goat.md](../.benchmarks/278_faithfulness_probe_goat.md)
-- **Source paper:** [arxiv 2601.22436](https://arxiv.org/pdf/2601.22436)
+- **Benchmark 278:** [278_faithfulness_probe_goat.md](../.benchmarks/278_faithfulness_probe_goat.md)
+- **Benchmark 298:** [298_smear_classifier_goat.md](../.benchmarks/298_smear_classifier_goat.md)
+- **Source paper 278:** [arxiv 2601.22436](https://arxiv.org/pdf/2601.22436)
+- **Source paper 298:** [arxiv 2606.20560](https://arxiv.org/abs/2606.20560)
 
 ## TL;DR
 
-Generic, modelless, zero-alloc causal intervention diagnostic for injected memory. Three primitives: `FaithfulnessProbe` (detect dead injections), `AttributionProbe` (IG surrogate ranking), `TriggeredInjectionGate` (saturated-regime skip). All GOAT gates pass. `triggered_injection` default-on; `faithfulness_probe` opt-in. Unblocks riir-ai Plan 308.
+Generic, modelless, zero-alloc causal intervention diagnostic for injected memory. Three primitives: `FaithfulnessProbe` (detect dead injections), `AttributionProbe` (IG surrogate ranking), `TriggeredInjectionGate` (saturated-regime skip). All Plan 278 GOAT gates pass. `triggered_injection` default-on; `faithfulness_probe` opt-in. **Plan 298 adds `SmearClassifier`** — a ternary (CoherentSingle / TokenSmear / SequenceSmear) latent-mass vocabulary extending the binary probe, distilled from arXiv:2606.20560. All Plan 298 GOAT gates pass (G1 6/6, G2 ratio 2.11×, G3 107.6 ns). `smear_classifier` stays opt-in pending real-workload evidence. Unblocks riir-ai Plan 308.

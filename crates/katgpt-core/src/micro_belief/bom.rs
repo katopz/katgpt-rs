@@ -682,7 +682,7 @@ mod tests {
             }
             kernel.sample_k_states(&s_prev, &input, &queries, &mut out, &cfg);
             for &v in &out {
-                assert!(v >= -1.0 && v <= 1.0, "leaky state out of [-1,1]: {v}");
+                assert!((-1.0..=1.0).contains(&v), "leaky state out of [-1,1]: {v}");
             }
             s_prev.copy_from_slice(&out[..dim]);
         }
@@ -840,10 +840,7 @@ mod tests {
             }
             kernel.sample_k_states(&s_prev, &input, &queries, &mut out, &cfg);
             for &v in &out {
-                assert!(
-                    v >= -1.0 && v <= 1.0,
-                    "leaky diverged after 1000 ticks: {v}"
-                );
+                assert!((-1.0..=1.0).contains(&v), "leaky diverged after 1000 ticks: {v}");
             }
             s_prev.copy_from_slice(&out[..dim]);
         }

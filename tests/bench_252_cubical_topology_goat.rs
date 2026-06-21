@@ -35,7 +35,7 @@ mod tests {
     struct AcceptEven;
     impl ConstraintPruner for AcceptEven {
         fn is_valid(&self, _: usize, token_idx: usize, _: &[usize]) -> bool {
-            token_idx % 2 == 0
+            token_idx.is_multiple_of(2)
         }
     }
 
@@ -56,7 +56,7 @@ mod tests {
     struct AcceptMod3;
     impl ConstraintPruner for AcceptMod3 {
         fn is_valid(&self, _: usize, token_idx: usize, _: &[usize]) -> bool {
-            token_idx % 3 == 0
+            token_idx.is_multiple_of(3)
         }
     }
 

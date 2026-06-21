@@ -779,7 +779,7 @@ mod tests {
             let mut verifier = FlashARConsensusVerifier::new(
                 &target_weights,
                 &config,
-                d2f_config.clone(),
+                d2f_config,
                 consensus_config.clone(),
                 4,
             );

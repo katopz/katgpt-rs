@@ -72,7 +72,7 @@ impl FlatDirections {
     /// Construct from a pre-flat `Vec<f32>` of length `m * dim`.
     pub fn from_flat(dim: usize, vectors: Vec<f32>) -> Self {
         assert!(
-            vectors.len() % dim == 0,
+            vectors.len().is_multiple_of(dim),
             "FlatDirections::from_flat: len {} not a multiple of dim {dim}",
             vectors.len()
         );
@@ -221,8 +221,8 @@ fn build_g1_suite(seed: u64) -> (Vec<Trajectory<u8>>, FlatDirections) {
                     // Re-normalize perturb to `baseline` magnitude so the
                     // claim isn't trivially smaller than clean claims.
                     let pn = perturb.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-6);
-                    for d in 0..G1_DIM {
-                        perturb[d] = perturb[d] / pn * baseline;
+                    for v in perturb.iter_mut() {
+                        *v = *v / pn * baseline;
                     }
                     emb = perturb;
                     // Sanity (debug only): dot(emb, dir) ≈ 0 → verdict ≈ 0.5.

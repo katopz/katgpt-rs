@@ -336,31 +336,28 @@ mod tests {
             values.extend_from_slice(&extra_v);
             pos += 1;
 
-            match compactor
+            if let Some(r) = compactor
                 .maybe_compact(&keys, &values, &queries, pos, d, n, &cfg)
                 .expect("compact ok")
             {
-                Some(r) => {
-                    // Logical length must remain bounded by phys + window + 1
-                    // (compact_size may clamp up by 1 on tiny prefixes).
-                    assert!(
-                        r.total_logical_len <= phys + window + 1,
-                        "logical len {} exceeded bound {}",
-                        r.total_logical_len,
-                        phys + window
-                    );
-                    logical_len_history.push(r.total_logical_len);
-                    compact_lens.push(r.compact_prefix.compact_len);
+                // Logical length must remain bounded by phys + window + 1
+                // (compact_size may clamp up by 1 on tiny prefixes).
+                assert!(
+                    r.total_logical_len <= phys + window + 1,
+                    "logical len {} exceeded bound {}",
+                    r.total_logical_len,
+                    phys + window
+                );
+                logical_len_history.push(r.total_logical_len);
+                compact_lens.push(r.compact_prefix.compact_len);
 
-                    // Apply compaction: cache becomes [compact_prefix | recent].
-                    keys = r.compact_prefix.compact_keys.clone();
-                    keys.extend_from_slice(&r.recent_keys);
-                    values = r.compact_prefix.compact_values.clone();
-                    values.extend_from_slice(&r.recent_values);
-                    pos = r.total_logical_len;
-                }
-                None => {} // not yet at threshold, keep generating
-            }
+                // Apply compaction: cache becomes [compact_prefix | recent].
+                keys = r.compact_prefix.compact_keys.clone();
+                keys.extend_from_slice(&r.recent_keys);
+                values = r.compact_prefix.compact_values.clone();
+                values.extend_from_slice(&r.recent_values);
+                pos = r.total_logical_len;
+            } // else: not yet at threshold, keep generating
         }
 
         assert_eq!(

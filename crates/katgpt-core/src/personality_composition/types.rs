@@ -105,6 +105,7 @@ impl ArchetypeLabel {
     ///
     /// This gives a stable, deterministic mapping from archetype name to
     /// label — two entities with the same archetype name get the same label.
+    #[allow(clippy::should_implement_trait)] // infallible hash constructor, not FromStr (which requires Result)
     pub fn from_str(s: &str) -> Self {
         let hash = blake3::hash(s.as_bytes());
         Self(
@@ -155,8 +156,10 @@ mod tests {
 
     #[test]
     fn invalid_configs_rejected() {
-        let mut c = PersonalityConfig::default();
-        c.tau = 0.0;
+        let mut c = PersonalityConfig {
+            tau: 0.0,
+            ..Default::default()
+        };
         assert!(!c.is_valid());
         c.tau = -1.0;
         assert!(!c.is_valid());

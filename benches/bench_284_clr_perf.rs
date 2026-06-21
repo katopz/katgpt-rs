@@ -21,7 +21,7 @@
 //!
 //! This bench follows the established root-crate convention: `std::time::Instant`
 //! + `harness = false` + custom `main()`. The `[[bench]]` entry in `Cargo.toml`
-//! still declares `harness = false` as the plan required.
+//!   still declares `harness = false` as the plan required.
 //!
 //! Run with:
 //! ```bash

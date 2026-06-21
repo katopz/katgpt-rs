@@ -197,7 +197,7 @@ mod tests {
         for &d in &[2usize, 4, 8, 16, 32, 64, 128, 256] {
             let x: Vec<f32> = (0..d).map(|i| (i as f32).sin()).collect();
             let h = spectral_entropy_dct(&x);
-            assert!(h >= 0.0 && h <= 1.0, "d={d}: H={h} not in [0,1]");
+            assert!((0.0..=1.0).contains(&h), "d={d}: H={h} not in [0,1]");
         }
     }
 
@@ -216,8 +216,8 @@ mod tests {
         // Verify scratch can be reused across different input sizes.
         let mut scratch = Vec::new();
         let mut planner = FftPlanner::new();
-        let h1 = spectral_entropy_dct_into(&vec![1.0f32; 32], &mut scratch, &mut planner);
-        let h2 = spectral_entropy_dct_into(&vec![1.0f32; 128], &mut scratch, &mut planner);
+        let h1 = spectral_entropy_dct_into(&[1.0f32; 32], &mut scratch, &mut planner);
+        let h2 = spectral_entropy_dct_into(&[1.0f32; 128], &mut scratch, &mut planner);
         // Both constant → both low entropy.
         assert!(h1 < 0.1 && h2 < 0.1, "constant vectors: h1={h1}, h2={h2}");
     }
