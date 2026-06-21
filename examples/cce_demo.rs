@@ -247,10 +247,10 @@ fn section3_designer_steering() {
     for s in 0..4 {
         let s_1 = s / 2;
         let s_2 = s % 2;
-        for a in 0..2 {
+        for (a, &reward) in CHICKEN_REWARD[s_2].iter().enumerate() {
             let mass = rho_a.at(s, a);
             // Player 2 plays s_2, player 1 plays a.
-            player2_reward_a += mass * CHICKEN_REWARD[s_2][a];
+            player2_reward_a += mass * reward;
             let _ = s_1;
         }
     }
@@ -275,9 +275,9 @@ fn section3_designer_steering() {
     let mut player2_reward_b = 0.0_f32;
     for s in 0..4 {
         let s_2 = s % 2;
-        for a in 0..2 {
+        for (a, reward_a) in CHICKEN_REWARD.iter().enumerate() {
             let mass = rho_b.at(s, a);
-            player1_reward_b += mass * CHICKEN_REWARD[a][s_2];
+            player1_reward_b += mass * reward_a[s_2];
             player2_reward_b += mass * CHICKEN_REWARD[s_2][a];
         }
     }

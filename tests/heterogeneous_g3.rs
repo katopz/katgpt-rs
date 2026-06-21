@@ -204,7 +204,7 @@ fn g3c_convergence_rate_is_one_over_sqrt_n() {
         "G3c: fitted log-log slope = {slope:.4} (paper upper bound: -0.5; steeper is better)"
     );
     assert!(
-        slope <= -0.3 && slope >= -2.0,
+        (-2.0..=-0.3).contains(&slope),
         "G3c FAIL: slope = {slope:.4} should be in [-2.0, -0.3]"
     );
 }

@@ -44,9 +44,9 @@ use katgpt_rs::cce::{
 /// reach via projected gradient.
 const EMIT_COST: [[f32; 4]; 4] = [
     // a=0    a=1    a=2    a=3
-    [1.0, 2.0, 3.0, 4.0], // s=0 (low price): no abatement cheapest
-    [3.0, 2.5, 3.5, 4.5], // s=1: light abatement cheapest
-    [6.0, 4.0, 3.0, 5.0], // s=2: moderate abatement cheapest
+    [1.0, 2.0, 3.0, 4.0],  // s=0 (low price): no abatement cheapest
+    [3.0, 2.5, 3.5, 4.5],  // s=1: light abatement cheapest
+    [6.0, 4.0, 3.0, 5.0],  // s=2: moderate abatement cheapest
     [10.0, 7.0, 4.5, 4.0], // s=3 (critical): heavy abatement cheapest
 ];
 
@@ -173,7 +173,9 @@ fn g2c_convergence_rate_is_one_over_sqrt_n() {
         let denom = n_pts * sum_x2 - sum_x * sum_x;
         if denom.abs() > 1e-12 {
             let slope = (n_pts * sum_xy - sum_x * sum_y) / denom;
-            eprintln!("G2c: fitted log-log slope = {slope:.4} (paper upper bound: -0.5; steeper is better)");
+            eprintln!(
+                "G2c: fitted log-log slope = {slope:.4} (paper upper bound: -0.5; steeper is better)"
+            );
             // The paper's Theorem 6.1 proves gap(N) ≤ C·N⁻¹ᐟ² (an UPPER
             // bound). The empirical slope can be MORE negative (faster
             // convergence) for well-conditioned problems — this is good.
@@ -181,7 +183,7 @@ fn g2c_convergence_rate_is_one_over_sqrt_n() {
             // roughly N⁻¹ᐟ² within fit tolerance) and slope > -2.0 (sanity:
             // not a numerical artifact).
             assert!(
-                slope <= -0.3 && slope >= -2.0,
+                (-2.0..=-0.3).contains(&slope),
                 "G2c FAIL: slope = {slope:.4} should be in [-2.0, -0.3] (≤ -0.5 paper bound, steeper allowed)"
             );
         }

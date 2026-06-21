@@ -155,8 +155,8 @@ impl CcePrimalDual {
         // --- Averaged iterate: ρ̄ⁿ = ((n-1)/n) · ρ̄ⁿ⁻¹ + (1/n) · ρⁿ ---
         let w_old = (n - 1) as f32 / n as f32;
         let w_new = 1.0 / n as f32;
-        for i in 0..na {
-            self.rho_avg[i] = w_old * self.rho_avg[i] + w_new * rho_new[i];
+        for (rho_avg_i, &rho_new_i) in self.rho_avg.iter_mut().zip(rho_new.iter()) {
+            *rho_avg_i = w_old * *rho_avg_i + w_new * rho_new_i;
         }
 
         // Commit.
@@ -246,8 +246,8 @@ impl CcePrimalDual {
                 let m = s * A + a;
                 let g0 = game.gamma0_coeff(s, a);
                 let mut er_deriv = 0.0_f32;
-                for i in 0..n_players {
-                    if let Some(kappa) = best_kappas[i] {
+                for (i, kappa_opt) in best_kappas.iter().copied().enumerate() {
+                    if let Some(kappa) = kappa_opt {
                         er_deriv += game.reward_follow(i, s, a) - game.reward_deviate(i, s, kappa);
                     }
                     // Empty deviation class: player contributes 0.
@@ -277,8 +277,8 @@ impl CcePrimalDual {
         // --- Averaged iterate: ρ̄ⁿ = ((n-1)/n) · ρ̄ⁿ⁻¹ + (1/n) · ρⁿ ---
         let w_old = (n - 1) as f32 / n as f32;
         let w_new = 1.0 / n as f32;
-        for i in 0..na {
-            self.rho_avg[i] = w_old * self.rho_avg[i] + w_new * rho_new[i];
+        for (rho_avg_i, &rho_new_i) in self.rho_avg.iter_mut().zip(rho_new.iter()) {
+            *rho_avg_i = w_old * *rho_avg_i + w_new * rho_new_i;
         }
 
         // Commit.

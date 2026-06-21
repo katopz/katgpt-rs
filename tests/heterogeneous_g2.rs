@@ -52,15 +52,15 @@ impl DeviationClass<2, 2> for EmitDevs {
 fn perturbed_cost(base: [[f32; 2]; 2], seed: u64) -> Vec<f32> {
     let mut s = seed.wrapping_mul(0x9E3779B97F4A7C15) ^ 0x123456789ABCDEF0;
     let mut out = Vec::with_capacity(4);
-    for row in 0..2 {
-        for col in 0..2 {
+    for row in &base {
+        for &val in row {
             // LCG step → uniform-ish in [-0.01, 0.01].
             s = s
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             let u = ((s >> 33) as f32) / ((1u64 << 31) as f32) - 0.5; // [-0.5, 0.5)
             let noise = u * 0.02; // [-0.01, 0.01)
-            out.push((base[row][col] + noise).max(0.01)); // keep positive
+            out.push((val + noise).max(0.01)); // keep positive
         }
     }
     out

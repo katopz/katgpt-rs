@@ -79,8 +79,8 @@ impl CceLp {
         let mut rhs = vec![0.0_f64; n_cons];
 
         // Row 0: Σ ρ = 1.
-        for j in 0..na {
-            mat[0][j] = 1.0;
+        for val in &mut mat[0][..na] {
+            *val = 1.0;
         }
         rhs[0] = 1.0;
 
@@ -183,8 +183,8 @@ impl CceLp {
         let mut rhs = vec![0.0_f64; n_cons];
 
         // Row 0: Σ ρ = 1.
-        for j in 0..na {
-            mat[0][j] = 1.0;
+        for val in &mut mat[0][..na] {
+            *val = 1.0;
         }
         rhs[0] = 1.0;
 
@@ -352,11 +352,11 @@ fn solve_square_system(mat: &[Vec<f64>], rhs: &[f64], combo: &[usize]) -> Option
         // Find the row with max abs value in column `pivot`.
         let mut max_row = pivot;
         let mut max_val = aug[pivot][pivot].abs();
-        for row in (pivot + 1)..n {
-            let val = aug[row][pivot].abs();
+        for (row_off, aug_row) in aug[(pivot + 1)..n].iter().enumerate() {
+            let val = aug_row[pivot].abs();
             if val > max_val {
                 max_val = val;
-                max_row = row;
+                max_row = pivot + 1 + row_off;
             }
         }
         if max_val < 1e-12 {
@@ -373,8 +373,16 @@ fn solve_square_system(mat: &[Vec<f64>], rhs: &[f64], combo: &[usize]) -> Option
             if factor == 0.0 {
                 continue;
             }
-            for col in pivot..=n {
-                aug[row][col] -= factor * aug[pivot][col];
+            // Safe disjoint borrow: pivot < row, so split_at_mut(row) puts
+            // `pivot` in the left part and `row` at right[0].
+            let (left, right) = aug.split_at_mut(row);
+            let aug_pivot_row = &left[pivot];
+            let aug_row = &mut right[0];
+            for (aug_row_col, &aug_pivot_col) in aug_row[pivot..=n]
+                .iter_mut()
+                .zip(aug_pivot_row[pivot..=n].iter())
+            {
+                *aug_row_col -= factor * aug_pivot_col;
             }
         }
     }
@@ -397,7 +405,7 @@ fn solve_square_system(mat: &[Vec<f64>], rhs: &[f64], combo: &[usize]) -> Option
 
 /// Advance `combo` to the next combination of `combo.len()` items from `0..n`.
 /// Returns `false` when the last combination has been reached.
-fn next_combination(combo: &mut Vec<usize>, n: usize) -> bool {
+fn next_combination(combo: &mut [usize], n: usize) -> bool {
     let k = combo.len();
     if k == 0 {
         return false;
@@ -531,8 +539,8 @@ mod tests {
                 let mut g = 0.0;
                 for s in 0..4 {
                     let s_2 = s % 2;
-                    for a in 0..2 {
-                        let welfare_cost = -(R[a][s_2] + R[s_2][a]);
+                    for (a, r_a) in R.iter().enumerate() {
+                        let welfare_cost = -(r_a[s_2] + R[s_2][a]);
                         g += rho.at(s, a) * welfare_cost;
                     }
                 }

@@ -675,9 +675,9 @@ mod tests {
         // State encoding: (s_1,s_2): (S,T) = (0,1) → state 1; (T,S) = (1,0) → state 2.
         let mut e_cce = vec![0.0; 8];
         // state 1 = (s_1=0, s_2=1), recommend a_1=0 (S):
-        e_cce[1 * 2 + 0] = 0.5;
+        e_cce[2] = 0.5;
         // state 2 = (s_1=1, s_2=0), recommend a_1=1 (T):
-        e_cce[2 * 2 + 1] = 0.5;
+        e_cce[5] = 0.5;
         let rho_cce = OccupationMeasure::<4, 2>::new(e_cce).unwrap();
         // γ(ρ_CCE) = -(0.5·R[S][T] + 0.5·R[T][S]) = -(0.5·1 + 0.5·4) = -2.5.
         assert!((p.gamma(&rho_cce) - (-2.5)).abs() < 1e-6);

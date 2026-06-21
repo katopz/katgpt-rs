@@ -152,8 +152,8 @@ impl<const N: usize, const A: usize> Deviation<N, A> {
     /// `kernel[s][action] = 1` for every `s`.
     pub fn constant(id: u32, action: usize) -> Self {
         let mut kernel = [[0.0f32; A]; N];
-        for s in 0..N {
-            kernel[s][action] = 1.0;
+        for row in &mut kernel {
+            row[action] = 1.0;
         }
         Self { id, kernel }
     }
@@ -167,8 +167,8 @@ impl<const N: usize, const A: usize> Deviation<N, A> {
             "identity deviation requires N == A (got N={N}, A={A})"
         );
         let mut kernel = [[0.0f32; A]; N];
-        for s in 0..N {
-            kernel[s][s] = 1.0;
+        for (s, row) in kernel.iter_mut().enumerate() {
+            row[s] = 1.0;
         }
         Self { id, kernel }
     }
