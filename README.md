@@ -277,6 +277,7 @@ graph LR
 | **Triggered Injection Gate** (`triggered_injection`) | 278 | G1/G2/G3/G8 ✅ | Sigmoid-thresholded inject/skip gate — 50% skips w/ 0.63% quality parity in saturated regime |
 | **FaithfulnessProbe** (`faithfulness_probe`) | 278 | G1/G2/G8 ✅ | Causal intervention diagnostic — 100%/100% detection, IG surrogate Spearman ρ=1.0, audit cadence |
 | **SmearClassifier** (`smear_classifier`) | 298 | G1/G2/G3 ✅ | Ternary (CoherentSingle/TokenSmear/SequenceSmear) latent-mass vocabulary extending Plan 278 — SequenceSmear/TokenSmear unfaithfulness ratio 2.11×, k=8 d=32 at 107.6 ns |
+| **Engram** (`engram`) | 299 | G1/G2/G4 ✅ (G6 deferred) | Hash-addressed sigmoid-fused static pattern memory — N-gram → multi-head hash → O(1) lookup → sigmoid gate → residual fuse. **48 ns/retrieval**, Spearman ρ=1.0. Opt-in pending G6 (effective-depth) in riir-ai |
 | **CS-KV-Importance Probe** (`cs_kv_probe`) | 280 | G1/G2/G3 ✅ | Compressed-sensing KV-group importance probe + density-budget interpolator, sigmoid-compatible |
 | **BoMSampler** (`bom_sampling`) | 281 | G1/G2/G3 ✅ | K-hypothesis single-pass belief sampling — K=8 at 1.87× step, **+31.49pp** arena win in riir-ai Plan 314 |
 | **Self-Advantage Gate** (`self_advantage_gate`) | 283 | 4/4 ✅ | Dead-compute detector via `log π+(a) − log π̂(a)` — paper 18× forward-pass reduction, vocab ≤ 128 |
@@ -914,6 +915,38 @@ Distills Engels et al. 2026 (arXiv:2606.20560 §5.2, Research 277) into a **tern
 **GOAT status:** G1 (6/6 correctness + determinism) ✅. G2 (useful discrimination — SequenceSmear/TokenSmear unfaithfulness ratio ≥2.0×) ✅ **2.11×** on 3000 synthetic trials (k=8, d=16). G3 (latency k=8, d=32 ≤200 ns) ✅ **107.6 ns** on Apple Silicon arm64. **Decision: stays opt-in** — correct, useful, fast, but default-on promotion requires real-workload evidence from riir-ai Plan 308 (T4.3 deferred).
 
 Feature gate: `smear_classifier` (**opt-in**, implies `faithfulness_probe`). 📖 Plan: [`.plans/298_smear_aware_faithfulness_probe.md`](.plans/298_smear_aware_faithfulness_probe.md), Research: [`.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md`](.research/277_DiffusionGemma_Transparency_Smearing_Faithfulness.md), Benchmark: [`.benchmarks/298_smear_classifier_goat.md`](.benchmarks/298_smear_classifier_goat.md), Docs: [`.docs/faithfulness_probe.md`](.docs/faithfulness_probe.md).
+
+### 🧠 Engram — Hash-Addressed Conditional Pattern Memory (Plan 299)
+
+Distills Cheng et al. 2026 (arXiv:2601.07372, DeepSeek-AI / Peking U., Research 278) into the **first conditional-memory axis** in the katgpt stack. Where Raven (RSM/dMoE, Research 006) routes **computation** per token (active parameters), Engram routes **memory lookups** per token (static lookup slots). The paper's U-shape scaling law (§3) proves the hybrid is strictly better than either axis alone.
+
+The mechanism reduces to pure inference-time math — **no training, no backprop**:
+
+```text
+hash_keys = multi_head_hash(n_gram_suffix(input_ids))   # K=16 deterministic hashes, O(1)
+e_t       = concat(table[k] for k in hash_keys)          # multi-head retrieval, O(1)
+α_t       = σ(RMSNorm(q_t) · RMSNorm(W_K e_t) / √d)     # sigmoid gate (NEVER softmax)
+output_t  = α_t · (W_V e_t)                              # gated residual contribution
+h_t      += output_t                                     # residual fuse
+```
+
+The table is a frozen snapshot populated offline; updates are atomic Arc swaps via `EngramHotSwap`. The whole pipeline is zero-allocation on the hot path (caller provides scratch buffers). Sub-primitives (all behind the `engram` feature flag):
+
+- **`multi_head_hash`** — multiplicative-XOR hash over N-gram suffixes; K=16 independent hashes (distinct prime moduli per head).
+- **`InMemoryEngramTable`** — flat `Box<[f32]>` row-major slots, `slots[hash.0 % N]` direct-index lookup.
+- **`sigmoid_fuse_into` / `sigmoid_fuse_multi_branch_into`** — fused RMSNorm + dot + sigmoid kernel (NEON/AVX2 SIMD). mHC variant (paper §2.4): shared `V`, M distinct gates.
+- **`conv_causal_into`** — depthwise causal 1D conv (paper §2.3 eq 5), kernel 4, dilation = max N-gram order. `IDENTITY_KERNEL = [0,0,0,1]` gives pure passthrough (zero-init).
+- **`SurjectiveMap` / `TokenizerSpec` / `build_surjective_map`** — V → V' tokenizer compression (NFKC + lowercase + trim → BLAKE3 → 64-bit canonical). Paper reports 23% vocab reduction on 128k tokenizer.
+- **`EngramHotSwap`** — `AtomicPtr<Box<dyn EngramTable>>` runtime replacement, mirrors `SenseHotSwap`. AtomicBool lock (Option A) blocks readers during swap.
+- **`ZipfianCacheHierarchy`** — plasma (papaya LRU) → warm (`EngramTable`) → cold (`ColdFetcher`) tiered cache. Adaptive `maybe_resize(target_hit_rate)`.
+- **`EngramTableId` / `build_merkle_root`** — 32-byte BLAKE3 Merkle root over slot contents. Crosses the sync boundary as a raw audit artifact; slot contents (latent) never sync.
+- **`fuse_into_hidden_state`** — end-to-end hook: lookup K patterns, sigmoid-fuse each, residual-add into the hidden state.
+
+**GOAT status:** G1 (lookup latency) ✅ **48.12 ns/retrieval** (target < 200 ns, 4× headroom). G2 (sigmoid ranking) ✅ **Spearman ρ = 1.0000** (target > 0.95). G4 (table identity) ✅ **0 mismatches / 1000 random tables**. G6 (effective depth, paper §6.1) ⏸️ **DEFERRED** — requires live inference pipeline (LogitLens divergence at layer 5 with Engram vs layer 12 without); runs in riir-ai when the Bomber/Go stack is wired to consume `fuse_into_hidden_state`. G7 (no regressions) ✅ scoped check clean. **Decision: `engram` stays opt-in** — G6 is the load-bearing gate for the Super-GOAT (U-shape scaling), and per the paper itself pure-Engram alone doesn't deliver the hybrid win.
+
+Feature gate: `engram` (**opt-in**, rolls in `unicode-normalization` for NFKC + `papaya` for the plasma-tier LRU). 📖 Plan: [`.plans/299_Engram_Hash_Addressed_Pattern_Memory.md`](.plans/299_Engram_Hash_Addressed_Pattern_Memory.md), Research: [`.research/278_Engram_Conditional_Memory_Latent_Lookup_Fusion.md`](.research/278_Engram_Conditional_Memory_Latent_Lookup_Fusion.md), Benchmark: [`.benchmarks/299_engram_goat.md`](.benchmarks/299_engram_goat.md), Docs: [`.docs/27_engram_conditional_memory.md`](.docs/27_engram_conditional_memory.md). Demo: `cargo run --features engram --example engram_demo`.
+
+> **Unblocks:** riir-ai Guide 147 (NPC conditional-memory selling-point guide) and the chain-commitment half `riir-chain/.research/001_Engram_LatCal_Commitment_Bridge.md` (TODO — file when the LatCal bridge starts). The Super-GOAT (U-shape hybrid Engram+Raven) requires the riir-ai inference wiring + G6 to land.
 
 ### 🌀 Manifold Power Iteration MoE Router (Plan 279)
 

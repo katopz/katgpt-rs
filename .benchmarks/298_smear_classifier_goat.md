@@ -81,6 +81,8 @@ Measures `CosineSmearClassifier::classify` on full-rank `[k*d]` weights (all k r
 
 The `simd_dot_f32` inner products dominate the cost. For k=8, d=32: 8 self-dots (norms) + 28 pairwise dots = 36 dot products of dimension 32 = 1152 muladds, which at ~10 GFLOP/s (NEON) gives ~115 ns theoretical floor. The measured 107.6 ns is at the floor — the implementation is SIMD-bound, not allocation/call-overhead-bound. This is plasma-tier: the classifier is cheaper than one matvec row.
 
+**Debug-mode caveat:** `cargo bench` runs the release profile by default, so the G3 number above is authoritative. If the bench is invoked through `cargo test --features smear_classifier --bench smear_classifier_bench` (debug profile), the bench detects `cfg!(debug_assertions)` and scales the threshold 5× (200 → 1000 ns) with a clear banner — debug builds don't engage SIMD and the 200 ns plasma target is unreachable without it. The debug-scaled verdict is necessary-but-not-sufficient; the authoritative gate is the release number above.
+
 ---
 
 ## Phase 3 Exit: ✅ ALL GATES PASS
