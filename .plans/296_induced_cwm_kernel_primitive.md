@@ -133,7 +133,7 @@ katgpt-rs/examples/
 
 ### Tasks
 
-- [ ] **T4.1** In `induced_cwm/hot_swap.rs`, add:
+- [x] **T4.1** In `induced_cwm/hot_swap.rs`, added:
   ```rust
   /// Hot-swap slot for an induced CWM kernel, using the same atomic Arc
   /// pattern as LoRAWeightVersion. Readers never see a torn snapshot.
@@ -141,10 +141,23 @@ katgpt-rs/examples/
       inner: std::sync::Arc<std::sync::RwLock<Option<(K, CwmCommitment)>>>,
   }
   ```
-  Methods: `pub fn induce(&self, kernel: K) -> CwmCommitment`, `pub fn current(&self) -> Option<(K, CwmCommitment)>` (clone out), `pub fn current_blake3(&self) -> Option<[u8; 32]>`.
-- [ ] **T4.2** Document that this is the SAME pattern as `LoRAHotSwap` / `LoRAWeightVersion` (cite Plan 092). No new concurrency primitive — reuse existing.
-- [ ] **T4.3** Unit test: induce kernel A → read → induce kernel B → read returns B with new snapshot_id → BLAKE3 differs.
-- [ ] **T4.4** Roundtrip test: serialize `CwmCommitment` → deserialize → assert fields preserved. Use `serde` (already in deps).
+  **DEViates from plan**: the plan signature was `induce(&self, kernel: K) -> CwmCommitment`. The shipped signature is `induce(&self, kernel: K, version: u64, created_at_tick: u64) -> CwmCommitment` — caller supplies the version counter and induction-event tick so the slot does not need to maintain its own monotonic counter and so `created_at_tick` flows through from the induction pipeline (matches `CwmCommitment::from_kernel`'s existing signature). Also added accessors beyond the planned three: `current_commitment`, `current_version`, `is_empty`, `arc_strong_count`, plus `with_kernel` convenience constructor and a manual `Clone` (Arc-bump, no `K: Clone` bound on the slot itself — only on `current()`).
+- [x] **T4.2** Module-level rustdoc explicitly cites the precedent: `riir_engine::episode_buffer::LoRAWeightVersion` (riir-ai Plan 092) and `crate::micro_belief::snapshot::MicroRecurrentKernelSnapshot`. **DEViation**: chose `Arc<RwLock<>>` over `ArcSwap` because `arc-swap` is a `riir-engine` dep, NOT a `katgpt-core` dep — adding it for one struct is scope-creep. `RwLock` is in `std` (zero new deps); read critical section is one `clone()` (sub-µs uncontended); writers are minute-scale so writer contention is not a concern. Documented migration path to `ArcSwapOption` if profiling shows contention.
+- [x] **T4.3** `induce_swaps_kernel_and_bumps_version` test: induce kernel A (step_size=3, v=1) → read returns A → induce kernel B (step_size=5, v=2) → read returns B with new version → BLAKE3 differs between A and B. Plus `induce_same_kernel_keeps_blake3_stable` (G4 support: same canonical kernel induced twice → identical BLAKE3, different version).
+- [x] **T4.4** Two serde roundtrip tests: `commitment_serde_roundtrip_preserves_fields` (via `serde_json`) and `commitment_serde_roundtrip_via_postcard_preserves_fields` (postcard catches serde tag issues that the more lenient JSON representation might paper over). Both preserve `blake3` / `version` / `created_at_tick`.
+
+### Phase 4 deviations summary
+
+1. **T4.1 signature**: `induce` takes `version` + `created_at_tick` so the slot does not own the monotonic counter — the induction pipeline is the source of truth for both. Matches `CwmCommitment::from_kernel`'s existing parameter list.
+2. **T4.2 storage**: `Arc<RwLock<>>` not `ArcSwap`. `arc-swap` is a `riir-engine` dep but NOT a `katgpt-core` dep — adding it for one struct is scope-creep. Documented migration path.
+3. **T4.3/T4.4**: 8 tests total in `hot_swap.rs` (exceeds the 2 planned): slot lifecycle (3), swap semantics (2), serde roundtrip (2), `matches_kernel` cross-check (1), `Clone` fan-out (1), concurrent-read safety (1).
+
+### Files
+
+```
+katgpt-rs/crates/katgpt-core/src/induced_cwm/
+└── hot_swap.rs       # InducedCwmSlot + Clone + Default + 8 tests
+```
 
 ---
 
