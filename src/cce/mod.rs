@@ -51,6 +51,16 @@
 //! subject to γ_i(ρ) ≤ γ_dev_i(ρ, κ)   ∀i ∈ [1..P], ∀κ ∈ D_i  # per-NPC
 //!            Σ ρ = 1, ρ ≥ 0
 //! ```
+//!
+//! Two solver paths ship:
+//! - **Exact LP** via [`CceLp::solve_heterogeneous`] — BFS enumeration,
+//!   tractable up to ~16 players (G4: 43ms median).
+//! - **Primal-dual iterator** via [`CcePrimalDual::run_heterogeneous`] (Plan
+//!   300 T4.3b) — per-player subgradient oracle, `O(T⁻¹ᐟ²)` averaged-iterate
+//!   convergence, scales to 32+ players (G4: 8.9ms median at 32 players).
+//!   Crowd-scale production use should prefer this path.
+//!
+//! All 4 GOAT gates PASS — `cce_moderator` is **DEFAULT-ON**.
 
 pub mod bregman;
 pub mod external_regret;

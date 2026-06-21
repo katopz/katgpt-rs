@@ -29,7 +29,9 @@
 
 use crate::cce::bregman::Euclidean;
 use crate::cce::external_regret::ExternalRegret;
-use crate::cce::types::{DeviationClass, OccupationMeasure, PayoffTensor};
+use crate::cce::types::{
+    Deviation, DeviationClass, HeterogeneousPayoff, OccupationMeasure, PayoffTensor,
+};
 
 /// Per-step diagnostic reported by [`CcePrimalDual::step`].
 #[derive(Debug, Clone)]
@@ -93,10 +95,7 @@ impl CcePrimalDual {
 
     /// Override the initial primal iterate `ρ⁰`.
     pub fn with_initial_rho(mut self, rho: Vec<f32>) -> Self {
-        debug_assert!(
-            !rho.is_empty(),
-            "initial rho must be non-empty"
-        );
+        debug_assert!(!rho.is_empty(), "initial rho must be non-empty");
         self.rho = rho;
         self.rho_avg = self.rho.clone();
         self
@@ -110,12 +109,7 @@ impl CcePrimalDual {
 
     /// One primal-dual iteration. Updates `self.rho`, `self.rho_avg`,
     /// `self.lambda`, `self.n_iter` in place and returns a diagnostic report.
-    pub fn step<
-        const N: usize,
-        const A: usize,
-        D: DeviationClass<N, A>,
-        P: PayoffTensor<N, A>,
-    >(
+    pub fn step<const N: usize, const A: usize, D: DeviationClass<N, A>, P: PayoffTensor<N, A>>(
         &mut self,
         d: &D,
         p: &P,
@@ -181,12 +175,7 @@ impl CcePrimalDual {
 
     /// Run `n_steps` iterations and return the convergence report with
     /// averaged iterate + per-step history.
-    pub fn run<
-        const N: usize,
-        const A: usize,
-        D: DeviationClass<N, A>,
-        P: PayoffTensor<N, A>,
-    >(
+    pub fn run<const N: usize, const A: usize, D: DeviationClass<N, A>, P: PayoffTensor<N, A>>(
         mut self,
         d: &D,
         p: &P,
@@ -200,6 +189,132 @@ impl CcePrimalDual {
         let rho_avg = OccupationMeasure::<N, A>::from_entries_trusted(self.rho_avg.clone());
         let gamma0_avg = p.gamma0(&rho_avg);
         let er_avg = ExternalRegret::new().er(&rho_avg, d, p);
+
+        ConvergenceReportRaw {
+            rho_avg,
+            history,
+            gamma0_avg,
+            er_avg,
+        }
+    }
+
+    /// One primal-dual iteration on a heterogeneous player population
+    /// (Plan 300 T4.3b).
+    ///
+    /// Identical algorithm to [`step`](CcePrimalDual::step) but with the
+    /// per-player subgradient oracle. Caches the best deviation `κ_i*(ρ)` for
+    /// each player once per step (O(P · |D| · N · A) work), then aggregates
+    /// `grad[m] = gamma0_coeff(m) + λ · (1/P) Σ_i [cost_i(s,a) − reward_deviate(i, s, κ_i*)]`
+    /// for each (s, a) index. Heterogeneity-agnostic averaging follows the
+    /// homogeneous recipe unchanged (Theorem 6.1 applies to the convex
+    /// aggregate `ER_heterogeneous`; doc 62 §2).
+    pub fn step_heterogeneous<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        &mut self,
+        game: &H,
+    ) -> StepReport {
+        let na = N * A;
+        self.n_iter += 1;
+        let n = self.n_iter;
+
+        // Build the current ρ view.
+        let rho_view = OccupationMeasure::<N, A>::from_entries_trusted(self.rho.clone());
+
+        // --- Subgradient oracle: pick each player's best deviation at ρⁿ⁻¹ ---
+        // The best deviation κ_i*(ρ) maximizes (γ_i(ρ) − γ_dev_i(ρ, κ)) over
+        // κ ∈ D_i. Cache the pick so we don't recompute it per (s, a) index.
+        let n_players = game.n_players();
+        let mut best_kappas: Vec<Option<&Deviation<N, A>>> = Vec::with_capacity(n_players);
+        for i in 0..n_players {
+            let gamma_i = game.gamma_player(i, &rho_view);
+            let mut best_val = f32::NEG_INFINITY;
+            let mut best_kappa: Option<&Deviation<N, A>> = None;
+            for kappa in game.deviations_for_player(i) {
+                let val = gamma_i - game.gamma_dev_player(i, &rho_view, kappa);
+                if val > best_val {
+                    best_val = val;
+                    best_kappa = Some(kappa);
+                }
+            }
+            best_kappas.push(best_kappa);
+        }
+
+        // --- Primal: projected gradient step on γ₀(ρ) + λ · ER_hetero(ρ) ---
+        let inv_p = 1.0 / n_players.max(1) as f32;
+        let mut grad = vec![0.0_f32; na];
+        for s in 0..N {
+            for a in 0..A {
+                let m = s * A + a;
+                let g0 = game.gamma0_coeff(s, a);
+                let mut er_deriv = 0.0_f32;
+                for i in 0..n_players {
+                    if let Some(kappa) = best_kappas[i] {
+                        er_deriv += game.reward_follow(i, s, a) - game.reward_deviate(i, s, kappa);
+                    }
+                    // Empty deviation class: player contributes 0.
+                }
+                grad[m] = g0 + self.lambda * er_deriv * inv_p;
+            }
+        }
+
+        // Gradient step: ρ_temp = ρ - η · grad.
+        let eta = self.eta;
+        let rho_temp: Vec<f32> = self
+            .rho
+            .iter()
+            .zip(grad.iter())
+            .map(|(&r, &g)| r - eta * g)
+            .collect();
+
+        // Project onto the simplex.
+        let rho_new = project_onto_simplex(&rho_temp);
+
+        // --- Dual: λⁿ = max(0, λⁿ⁻¹ + (1/√n) · ER_hetero(ρⁿ)) ---
+        let rho_new_view = OccupationMeasure::<N, A>::from_entries_trusted(rho_new.clone());
+        let er_new = ExternalRegret::new().er_heterogeneous(&rho_new_view, game);
+        let dual_step = 1.0 / (n as f32).sqrt();
+        self.lambda = (self.lambda + dual_step * er_new).max(0.0);
+
+        // --- Averaged iterate: ρ̄ⁿ = ((n-1)/n) · ρ̄ⁿ⁻¹ + (1/n) · ρⁿ ---
+        let w_old = (n - 1) as f32 / n as f32;
+        let w_new = 1.0 / n as f32;
+        for i in 0..na {
+            self.rho_avg[i] = w_old * self.rho_avg[i] + w_new * rho_new[i];
+        }
+
+        // Commit.
+        let gamma0_new = game.gamma0(&rho_new_view);
+        self.rho = rho_new;
+
+        StepReport {
+            n,
+            rho: self.rho.clone(),
+            lambda: self.lambda,
+            er: er_new,
+            gamma0: gamma0_new,
+            eta,
+        }
+    }
+
+    /// Run `n_steps` heterogeneous iterations and return the convergence
+    /// report (Plan 300 T4.3b).
+    ///
+    /// `er_avg` carries `ER_heterogeneous(ρ̄ᴺ)` (the averaged-iterate regret).
+    /// Convergence bound: `|γ₀(ρ̄ᴺ) − γ₀(ρ⋆)| ≤ O(N⁻¹ᐟ²)` and
+    /// `ER_heterogeneous(ρ̄ᴺ) ≤ O(N⁻¹ᐟ²)` — transfers from the homogeneous
+    /// case by convexity of the aggregate.
+    pub fn run_heterogeneous<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        mut self,
+        game: &H,
+        n_steps: usize,
+    ) -> ConvergenceReportRaw<N, A> {
+        let mut history = Vec::with_capacity(n_steps);
+        for _ in 0..n_steps {
+            history.push(self.step_heterogeneous::<N, A, H>(game));
+        }
+
+        let rho_avg = OccupationMeasure::<N, A>::from_entries_trusted(self.rho_avg.clone());
+        let gamma0_avg = game.gamma0(&rho_avg);
+        let er_avg = ExternalRegret::new().er_heterogeneous(&rho_avg, game);
 
         ConvergenceReportRaw {
             rho_avg,
@@ -350,6 +465,71 @@ mod tests {
         assert!(
             report.er_avg <= 0.1,
             "ER(ρ̄) = {} should be ≤ 0.1",
+            report.er_avg
+        );
+    }
+
+    /// Plan 300 T4.3b smoke test: the heterogeneous primal-dual iterator
+    /// converges toward the same optimum as `CceLp::solve_heterogeneous` on
+    /// a 4-player perturbed emission-abatement game.
+    #[test]
+    fn primal_dual_heterogeneous_converges() {
+        use crate::cce::heterogeneous::PerPlayerGame;
+
+        struct Player {
+            c: [f32; 4],
+        }
+        impl PayoffTensor<2, 2> for Player {
+            fn reward_follow(&self, s: usize, a: usize) -> f32 {
+                self.c[s * 2 + a]
+            }
+            fn gamma0(&self, rho: &OccupationMeasure<2, 2>) -> f32 {
+                self.gamma(rho)
+            }
+        }
+        struct Devs {
+            v: Vec<Deviation<2, 2>>,
+        }
+        impl DeviationClass<2, 2> for Devs {
+            fn deviations(&self) -> &[Deviation<2, 2>] {
+                &self.v
+            }
+        }
+        let d = Devs {
+            v: vec![
+                Deviation::<2, 2>::constant(0, 0),
+                Deviation::<2, 2>::constant(1, 1),
+            ],
+        };
+        // 4 players, each a small perturbation around the same base table.
+        let players: Vec<Player> = (0..4)
+            .map(|i| Player {
+                c: [1.0 + i as f32 * 0.01, 3.0, 2.0, 5.0],
+            })
+            .collect();
+        let player_refs: Vec<(&Player, &Devs)> = players.iter().map(|p| (p, &d)).collect();
+        let game = PerPlayerGame::new(player_refs);
+
+        // Reference: exact LP solve.
+        let rho_lp = crate::cce::lp::CceLp::new()
+            .solve_heterogeneous(&game)
+            .expect("LP feasible");
+        let gamma0_lp = game.gamma0(&rho_lp);
+
+        // Run heterogeneous primal-dual for 10⁴ steps.
+        let runner = CcePrimalDual::new::<2, 2>().with_eta(0.05);
+        let report = runner.run_heterogeneous(&game, 10_000);
+
+        let gap = (report.gamma0_avg - gamma0_lp).abs();
+        assert!(
+            gap < 0.1,
+            "heterogeneous primal-dual gap {gap:.4} should be < 0.1 (γ₀(ρ̄) = {}, γ₀(ρ⋆_LP) = {})",
+            report.gamma0_avg,
+            gamma0_lp
+        );
+        assert!(
+            report.er_avg <= 0.1,
+            "heterogeneous ER(ρ̄) = {} should be ≤ 0.1",
             report.er_avg
         );
     }

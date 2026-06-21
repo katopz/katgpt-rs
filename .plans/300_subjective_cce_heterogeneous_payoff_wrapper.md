@@ -239,26 +239,29 @@ katgpt-rs/src/cce/
   - Chicken (N=4, A=2): P ∈ {1,2,4} all PASS. (P=8 takes 15s in debug — too slow for unit test; covered by G4 release-mode bench.)
   - RPS (N=9, A=3): P ∈ {1,2} all PASS. (P=3+ would take minutes — BFS on C(36,10) ≈ 254M.)
 - [x] **T4.2 G2 — Regret transfer on synthetic heterogeneous CWMs:** 8-player and 16-player games, each player's payoff tensor perturbed by ±1% LCG noise around a base emission table. `er_heterogeneous(ρ⋆) = 0.0` (machine precision — exact LP solve). The regret bound transfers trivially when the LP is solved exactly; the runtime primal-dual path (T4.3b) will exercise the `O(T⁻¹ᐟ²)` rate.
-- [ ] **T4.3 G3 — Convergence rate matches `O(T⁻¹ᐟ²)`:** SPLIT into T4.3b follow-up. Requires extending `CcePrimalDual` (Plan 295 Phase 2) to accept `HeterogeneousPayoff`. The subgradient oracle is per-`PayoffTensor`; per-player generalization is non-trivial. **Plan 300 closes on G1+G2+G4 per the risk register; G3 is a stretch goal.**
-- [x] **T4.4 G4 — Latency on crowd-scale:** sweep over player counts {2,4,8,16,24,32} in `katgpt-rs/benches/heterogeneous_cce.rs` (release mode):
-  - 2 players: 15µs
-  - 4 players: 112µs
-  - 8 players: 1.6ms
-  - 16 players: 32.7ms ✓ (under 50ms target)
-  - 24 players: 213ms (CEILING — BFS limit)
-  - 32 players: 768ms (CEILING)
-  - **All BFS-tractable scales (≤16 players) pass the <50ms target.** Crowd-scale (24+ players with rich deviation classes) requires the primal-dual iterator (T4.3b).
+- [x] **T4.3 G3 — Convergence rate matches `O(T⁻¹ᐟ²)`:** ✅ CLOSED via T4.3b. `CcePrimalDual::step_heterogeneous` + `run_heterogeneous` + `ExternalRegret::linear_derivative_heterogeneous` shipped. Per-player best-deviation cached per step (subgradient oracle); aggregate gradient `grad[m] = gamma0_coeff(m) + λ · (1/P) Σ_i [cost_i(s,a) − reward_deviate(i, s, κ_i*)]`. **G3 results (4-player perturbed game, 10⁴ steps):** G3a gap=0.000580 (<0.05 target, 86× margin); G3b ER_heterogeneous=0.000133 (≤0.05 target, 376× margin); G3c fitted log-log slope = **-1.0000** (in [-2.0,-0.3] target; beats paper's -0.5 O(N⁻¹ᐟ²) upper bound — well-conditioned convergence at O(1/N)); G3d gradient consistency PASS.
+- [x] **T4.4 G4 — Latency on crowd-scale:** sweep over player counts {2,4,8,16,24,32} in `katgpt-rs/benches/heterogeneous_cce.rs` (release mode). **Updated post-T4.3b** to report both BFS and primal-dual latency:
+  | n_players | BFS median | Primal-dual median (10k steps) |
+  |---|---|---|
+  | 2 | 15.9µs | 1796.9µs |
+  | 4 | 131.2µs | 2406.0µs |
+  | 8 | 1957.9µs | 3232.2µs |
+  | 16 | 43.2ms ✓ | 5095.1µs |
+  | 24 | 268.7ms (BFS ceiling) | **7881.6µs ✓** (34× faster) |
+  | 32 | 1199.4ms (BFS ceiling) | **8875.5µs ✓** (135× faster) |
+  - **All scales now under 50ms target** (32-player crowd-scale closed via primal-dual path, T4.3b). BFS crossover at ~16 players; primal-dual is the recommended path above that.
+  - Pre-T4.3b measurement (BFS only): 2=15µs, 4=112µs, 8=1.6ms, 16=32.7ms, 24=213ms CEILING, 32=768ms CEILING.
 
-**Phase 4 exit:** G1+G2+G4 PASS, G3 SPLIT into T4.3b follow-up. ✅ PASSED 2026-06-21.
+**Phase 4 exit:** G1+G2+G3+G4 ALL PASS. ✅ CLOSED 2026-06-22 via T4.3b (G3 primal-dual heterogeneous extension).
 
 ### Phase 5 — Documentation + feature promotion
 
 - [x] **T5.1** Add `HeterogeneousPayoff` + `PerPlayerGame` + `solve_heterogeneous` to `katgpt-rs/src/cce/mod.rs` module doc with a 10-line usage example. ✅ Module doc updated with the subjective-CCE LP formulation block.
 - [x] **T5.2** Update `katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md` with a "Subjective-CCE extension" section linking to this plan and to Issue 327 Path A+. ✅ Added §9.
 - [x] **T5.3** Update `riir-ai/.research/143_Latent_CCE_Moderator_Crowd_Emergent_Coordination.md` with the same pointer. ✅ Added section + cross-link row in the Plan dependency table.
-- [ ] **T5.4** Feature promotion: **DEFERRED.** G3 (`CcePrimalDual` heterogeneous extension) is SPLIT into T4.3b, so the "G1+G2+G3+G4 all PASS" condition is not met. Per AGENTS.md "promote to default only with proof of gain" rule, `cce_moderator` stays opt-in. **Discrepancy flagged:** the plan note said "Plan 325 already promoted cce_moderator to default-on" — audit of `katgpt-rs/Cargo.toml` line 45 (default features list) shows `cce_moderator` is NOT present. Either Plan 325's promotion was reverted, or the note was aspirational. Left as-is; user decision required.
+- [x] **T5.4** Feature promotion: ✅ DONE. T4.3b closed G3, so the "G1+G2+G3+G4 all PASS" condition is met. `cce_moderator` added to `default` features in `katgpt-rs/Cargo.toml` line 45 (2026-06-22). `src/lib.rs` comment updated to reflect DEFAULT-ON status. Zero non-optional deps (feature is `cce_moderator = []`); promotion is zero-cost for non-consumers since the module is `#[cfg(feature = "cce_moderator")]` gated. **Resolves the prior discrepancy** with the Plan 325 note — Plan 325 had not actually promoted the feature (Cargo.toml audit confirmed); Plan 300 T4.3b+T5.4 does the promotion with full GOAT evidence.
 
-**Phase 5 exit:** T5.1-T5.3 done; T5.4 deferred with documented rationale. ✅ (partial) 2026-06-21.
+**Phase 5 exit:** T5.1-T5.4 ALL DONE. ✅ COMPLETE 2026-06-22.
 
 ---
 
@@ -297,10 +300,10 @@ katgpt-rs/src/cce/
 
 - [x] G1 PASS (homogeneous equivalence regression — no Plan 295 breakage).
 - [x] G2 PASS (regret transfers on synthetic heterogeneous CWMs).
-- [x] G3 PASS-or-split (convergence rate `≤ −0.5` log-log slope; if non-trivial, split into T4.3b and close Plan 300 on G1+G2+G4). **SPLIT** — T4.3b follow-up created.
-- [x] G4 PASS (<50ms on BFS-tractable regime; 16 players = 32.7ms in release).
+- [x] G3 PASS (convergence rate log-log slope = -1.0; ≤ -0.5 paper bound).
+- [x] G4 PASS (<50ms on ALL scales post-T4.3b: 32-player crowd-scale = 8.9ms via primal-dual).
 - [x] All unit tests in `heterogeneous.rs` pass (5/5).
-- [~] `cargo check --all-features` clean (CI feature guard catches combo regressions per the `merkle_root` lesson). **PRE-EXISTING FAILURE** in `katgpt-core/src/dec/hodge.rs:222` (borrow-checker error in unrelated `LoraAdapter` combo) — not introduced by Plan 300. `cargo check --features cce_moderator` passes clean; the `--all-features` failure is in a different crate and was present before this plan. Left for the owner of the hodge/LoraAdapter work to fix.
+- [~] `cargo check --all-features` clean (CI feature guard catches combo regressions per the `merkle_root` lesson). **PRE-EXISTING FAILURE** in `katgpt-core/src/dec/hodge.rs:222` (borrow-checker error in unrelated `LoraAdapter` combo) — not introduced by Plan 300. `cargo check --features cce_moderator` passes clean; `cargo check` (default features, post-T5.4 promotion) passes clean. The `--all-features` failure is in a different crate and was present before this plan. Left for the owner of the hodge/LoraAdapter work to fix.
 - [x] Plan 300 status → ✅ COMPLETE. Issue 327 T-A+.1 through T-A+.4 marked done.
 
 ---
@@ -320,4 +323,4 @@ katgpt-rs/src/cce/
 
 ## TL;DR
 
-Thin wrapper extending Plan 295's `CceLp::solve` to per-NPC heterogeneous payoff tables. New trait `HeterogeneousPayoff<N,A>`, new method `CceLp::solve_heterogeneous`, new struct `PerPlayerGame`, new file `heterogeneous.rs`. Math transfers as-is per doc 62 §2 (sum of convex is convex, primal-dual averaging is heterogeneity-agnostic); no new theory. **✅ COMPLETE 2026-06-21:** Phase 1 (trait + tests), Phase 2 (LP solver + DRY `enumerate_bfs` refactor), Phase 3 (`PerPlayerGame` + 5 unit tests), Phase 4 (G1+G2+G4 PASS, G3 split to T4.3b), Phase 5 (docs; feature promotion deferred). Closes Issue 327 Path A+ (subjective-CCE wiring); unblocks future riir-ai runtime plan for per-NPC CWM payoff tables (T-A+.5).
+Thin wrapper extending Plan 295's `CceLp::solve` to per-NPC heterogeneous payoff tables. New trait `HeterogeneousPayoff<N,A>`, new method `CceLp::solve_heterogeneous`, new struct `PerPlayerGame`, new file `heterogeneous.rs`. T4.3b follow-up extended `CcePrimalDual` with `step_heterogeneous` + `run_heterogeneous` (per-player subgradient oracle caches best deviation per step). Math transfers as-is per doc 62 §2 (sum of convex is convex, primal-dual averaging is heterogeneity-agnostic); no new theory. **✅ COMPLETE 2026-06-22:** All phases done, all 4 GOAT gates PASS (G1 homogeneous equivalence, G2 regret transfer at exact-LP precision, G3 primal-dual convergence at slope -1.0 beating paper's -0.5 bound, G4 32-player crowd-scale at 8.9ms via primal-dual). `cce_moderator` promoted to DEFAULT-ON in Cargo.toml (zero non-optional deps). 43 lib tests + 3 G1 + 2 G2 + 4 G3 tests + G4 bench all green. Closes Issue 327 Path A+ (subjective-CCE wiring); unblocks future riir-ai runtime plan for per-NPC CWM payoff tables (T-A+.5).

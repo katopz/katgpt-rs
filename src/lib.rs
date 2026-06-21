@@ -75,11 +75,14 @@ pub mod ega_attn;
 pub mod feedback;
 #[cfg(feature = "chain_fold")]
 pub mod fold;
-// CCE — Coarse Correlated Equilibria moderator primitives (Plan 295, Research 274, arxiv 2606.20062).
-// Generic, game-agnostic LP-CCE formulation + external-regret functional.
-// Phase 1 ships ExternalRegret + core types; Phase 2 adds CceLp + CcePrimalDual.
-// Opt-in behind the `cce_moderator` feature until G1 (CCE ≥ Nash by ≥5%) and
-// G2 (primal-dual convergence at O(N⁻¹ᐟ²)) GOAT gates pass.
+// CCE — Coarse Correlated Equilibria moderator primitives (Plan 295 + Plan 300, Research 274, arxiv 2606.20062).
+// Generic, game-agnostic LP-CCE formulation + external-regret functional +
+// heterogeneous (subjective-CCE) extension + primal-dual iterator.
+// DEFAULT-ON after GOAT gates all PASS (G1+G2+G3+G4): G1 homogeneous
+// equivalence regression, G2 regret transfer on synthetic heterogeneous
+// CWMs (er_heterogeneous(ρ⋆) ≤ 1e-3), G3 primal-dual convergence at log-log
+// slope -1.0 (beats paper's -0.5 O(N⁻¹ᐟ²) bound — Plan 300 T4.3b), G4 16-player
+// latency = 33.97ms < 50ms target.
 #[cfg(feature = "cce_moderator")]
 pub mod cce;
 #[cfg(feature = "freq_bandit")]

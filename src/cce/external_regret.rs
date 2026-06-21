@@ -144,6 +144,62 @@ impl ExternalRegret {
         p.reward_follow(s, a) - p.reward_deviate(s, kappa_star)
     }
 
+    /// Linear derivative `∂ER_heterogeneous/∂ρ[m]` at flat index `m = (s, a)`
+    /// (Plan 300 T4.3b).
+    ///
+    /// Equals `(1/P) Σ_i [cost_i(s, a) − reward_deviate(i, s, κ_i*(ρ))]`
+    /// where `κ_i*(ρ)` is player `i`'s best deviation at `ρ`. This is the
+    /// subgradient of the convex aggregate `ER_heterogeneous(ρ)` — sum of
+    /// per-player subgradients, each of which is a single-valued selection
+    /// from `∂(γ_i − γ_dev_i(·, κ_i*))`.
+    ///
+    /// Players with empty deviation classes contribute 0 (vacuous CCE).
+    /// Requires `P ≥ 1`; returns 0 if `P == 0`.
+    ///
+    /// **Cost note:** recomputes the best deviation per player on every call.
+    /// When called inside a per-`(s, a)` loop (as in `CcePrimalDual`), this
+    /// is `O(N·A·P·|D_i|·N·A)` per iteration — wasteful. The primal-dual
+    /// iterator instead caches best deviations once per step and inlines the
+    /// per-index aggregation. This public method exists for testing and for
+    /// callers who evaluate only one (s, a) per step.
+    pub fn linear_derivative_heterogeneous<
+        const N: usize,
+        const A: usize,
+        H: HeterogeneousPayoff<N, A>,
+    >(
+        &self,
+        rho: &OccupationMeasure<N, A>,
+        m_flat: usize,
+        game: &H,
+    ) -> f32 {
+        let (s, a) = OccupationMeasure::<N, A>::unflat_index(m_flat);
+        let p = game.n_players();
+        if p == 0 {
+            return 0.0;
+        }
+        let inv_p = 1.0 / p as f32;
+        let mut g = 0.0_f32;
+        for i in 0..p {
+            // Find player i's best deviation κ_i*(ρ).
+            let gamma_i = game.gamma_player(i, rho);
+            let mut best_val = f32::NEG_INFINITY;
+            let mut best_kappa: Option<&Deviation<N, A>> = None;
+            for kappa in game.deviations_for_player(i) {
+                let val = gamma_i - game.gamma_dev_player(i, rho, kappa);
+                if val > best_val {
+                    best_val = val;
+                    best_kappa = Some(kappa);
+                }
+            }
+            // Subgradient component: cost_i(s, a) − reward_deviate(i, s, κ_i*).
+            if let Some(kappa) = best_kappa {
+                g += game.reward_follow(i, s, a) - game.reward_deviate(i, s, kappa);
+            }
+            // Empty deviation class: contributes 0 (vacuous).
+        }
+        g * inv_p
+    }
+
     /// Heterogeneous external regret (Plan 300 T2.3).
     ///
     /// `ER_hetero(ρ) = (1/P) Σ_i max_{κ ∈ D_i} (γ_i(ρ) − γ_dev_i(ρ, κ))`.
@@ -714,5 +770,55 @@ mod tests {
             val_bad > 0.5,
             "off-CCE ρ should have ER > 0 (always-Abate profitable), got {val_bad}"
         );
+    }
+
+    /// Plan 300 T4.3b: `linear_derivative_heterogeneous` matches the
+    /// homogeneous `linear_derivative` when the game is a single-player wrapper
+    /// around the same `(P, D)`. Sanity check that the per-player subgradient
+    /// aggregation reduces correctly to the homogeneous case at `P = 1`.
+    #[test]
+    fn linear_derivative_heterogeneous_matches_homogeneous_at_one_player() {
+        use crate::cce::heterogeneous::PerPlayerGame;
+
+        struct Emission;
+        impl PayoffTensor<2, 2> for Emission {
+            fn reward_follow(&self, s: usize, a: usize) -> f32 {
+                const C: [[f32; 2]; 2] = [[1.0, 3.0], [2.0, 5.0]];
+                C[s][a]
+            }
+            fn gamma0(&self, rho: &OccupationMeasure<2, 2>) -> f32 {
+                self.gamma(rho)
+            }
+        }
+        struct EmitDevs {
+            v: Vec<Deviation<2, 2>>,
+        }
+        impl DeviationClass<2, 2> for EmitDevs {
+            fn deviations(&self) -> &[Deviation<2, 2>] {
+                &self.v
+            }
+        }
+        let d = EmitDevs {
+            v: vec![
+                Deviation::<2, 2>::constant(0, 0),
+                Deviation::<2, 2>::constant(1, 1),
+            ],
+        };
+        let p = Emission;
+        let rho = OccupationMeasure::<2, 2>::new(vec![0.4, 0.1, 0.3, 0.2]).unwrap();
+
+        let game = PerPlayerGame::new(vec![(&p, &d)]);
+        let er = ExternalRegret::new();
+
+        // For each flat index m, the heterogeneous derivative (with P = 1,
+        // single player) must equal the homogeneous derivative.
+        for m in 0..(2 * 2) {
+            let homo = er.linear_derivative(&rho, m, &d, &p);
+            let hetero = er.linear_derivative_heterogeneous(&rho, m, &game);
+            assert!(
+                (homo - hetero).abs() < 1e-6,
+                "m = {m}: homo = {homo:.6}, hetero = {hetero:.6} (must match at P = 1)"
+            );
+        }
     }
 }

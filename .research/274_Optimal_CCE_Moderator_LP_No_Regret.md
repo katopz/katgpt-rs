@@ -318,7 +318,7 @@ GOAT gate rule: `cce_moderator` feature flag default-off. Promote to considerati
 
 ---
 
-## 9. Subjective-CCE heterogeneous extension (Plan 300, 2026-06-21)
+## 9. Subjective-CCE heterogeneous extension (Plan 300, 2026-06-21 → T4.3b 2026-06-22)
 
 The homogeneous `CceLp<N,A>::solve(d, p)` takes a **single** `PayoffTensor<N,A>`
 shared across all deviation constraints. The subjective-CCE generalization —
@@ -336,22 +336,38 @@ thin wrapper primitive, shipped in Plan 300:
 - **New struct `PerPlayerGame<N,A,P,D>`** (`katgpt-rs/src/cce/heterogeneous.rs`):
   default concrete impl backed by per-player `(PayoffTensor, DeviationClass)`
   slices.
+- **New methods `CcePrimalDual::step_heterogeneous` + `run_heterogeneous`**
+  (`katgpt-rs/src/cce/primal_dual.rs`, Plan 300 T4.3b): per-player subgradient
+  oracle caches best deviation `κ_i*(ρ)` once per step, then aggregates
+  `grad[m] = gamma0_coeff(m) + λ · (1/P) Σ_i [cost_i(s,a) − reward_deviate(i, s, κ_i*)]`.
+- **New method `ExternalRegret::linear_derivative_heterogeneous`**
+  (`katgpt-rs/src/cce/external_regret.rs`, Plan 300 T4.3b): public per-(s,a)
+  subgradient for testing / single-index callers.
 
 **Regret bound transfer (doc 62 §2):** `ER(ρ̄_T) ≤ O(T⁻¹ᐟ²)` holds as-is — each
 `γ_i` is linear in `ρ`, so each per-player regret is convex; the average
 `(1/P) Σ_i ER_i(ρ)` is convex; primal-dual averaging is
 heterogeneity-agnostic. **No new theory; pure API surface.**
 
-**GOAT gates (Plan 300 Phase 4):**
+**GOAT gates (Plan 300 Phase 4 + T4.3b):**
 - **G1 PASS** — `PerPlayerGame` with identical players reproduces homogeneous
   `solve` output (emission/chicken/RPS, objective within 1e-4).
 - **G2 PASS** — `er_heterogeneous(ρ⋆) = 0` on 8- and 16-player perturbed games
   (exact LP solve).
-- **G3 SPLIT** — `CcePrimalDual` heterogeneous extension deferred to T4.3b
-  follow-up (subgradient oracle generalization is non-trivial).
-- **G4 PASS** — BFS-tractable regime (≤16 players) under 50ms target
-  (16 players = 32.7ms in release). 24/32 players document the BFS ceiling;
-  crowd-scale requires the primal-dual path.
+- **G3 PASS** (T4.3b, 2026-06-22) — `CcePrimalDual::run_heterogeneous`
+  converges to LP optimum on a 4-player perturbed game: gap = 0.000580 after
+  10⁴ steps, `ER_heterogeneous(ρ̄ᴺ) = 0.000133`, fitted log-log slope = **-1.0**
+  (beats paper's -0.5 `O(N⁻¹ᐟ²)` upper bound — well-conditioned convergence at
+  `O(1/N)`).
+- **G4 PASS** — All scales under 50ms target post-T4.3b. BFS-tractable
+  regime (≤16 players): 16 players = 43.2ms via `solve_heterogeneous`.
+  Crowd-scale (24+ players) via `run_heterogeneous`: 24 players = 7.9ms,
+  32 players = 8.9ms (vs 268ms / 1199ms BFS-only ceiling — 34× / 135× faster).
+
+**Feature promotion (T5.4):** with all 4 GOAT gates PASS, `cce_moderator` is
+now in the `default` features list in `katgpt-rs/Cargo.toml`. Zero non-optional
+deps (`cce_moderator = []`); the module is `#[cfg(feature="cce_moderator")]`
+gated, so promotion is zero-cost for non-consumers.
 
 **Scope boundary:** this is the subjective-CCE wiring path (Issue 327 Path
 A+). Strict Bayes-CCE (no-common-prior per-NPC CWMs modeled as draws from a
