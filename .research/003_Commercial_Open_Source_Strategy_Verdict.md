@@ -1,6 +1,6 @@
-# Commercial Strategy — Engine & Platform Split
+# Commercial Strategy — Engine, Runtime, Chain, Training Split
 
-**Date:** 2026-06
+**Date:** 2026-06 (revised 2026-06-21 for `riir-chain` spin-off)
 **Status:** Active
 **Purpose:** Guide for AI agents to reason about what is public vs internal when creating research, plans, and docs.
 
@@ -8,19 +8,35 @@
 
 ---
 
+## Revision history
+
+- **2026-06 (initial):** 3-repo split (`katgpt-rs` / `riir-ai` / `riir-train`).
+- **2026-06-21:** `riir-chain` spun off from `riir-ai/crates/riir-chain` + `riir-ai/crates/riir-chaind` into its own standalone repo. Chain IP moves from `riir-ai` to `riir-chain`. The engine/runtime/training split rationale is unchanged; only the chain boundary is sharpened. See `riir-chain/.plans/001_chain_spinoff.md` and `riir-chain/.plans/002_chaind_spinoff.md`.
+
+---
+
 ## The Boundary
 
-Three repos. The split is absolute.
+Four repos. The split is absolute.
 
 | Repo | License | Role |
 |------|---------|------|
-| `katgpt-rs` | MIT (public) | Engine — generic inference framework. Adoption funnel. |
-| `riir-ai` | Private (internal) | **Game product** — freeze/thaw runtime, self-learn/adaptive NPCs, latent-space operations, neuro-symbolic chain, game systems. The ship-focus repo. |
+| `katgpt-rs` | MIT (public) | **Engine** — generic inference framework. Adoption funnel. No game IP, no chain IP. |
+| `riir-ai` | Private (internal) | **Game product** — freeze/thaw runtime, self-learn/adaptive NPCs, latent-space operations, game systems. The ship-focus repo for gameplay. |
+| `riir-chain` | Private (internal) | **Neuro-symbolic chain transport** — co-located AI+wallet state, LatCal (Lattice Calculus) encoding, split-key ledger, neuron_db, chain economics, DeFi programs, `riir-chaind` daemon, validator SDK bridges. |
 | `riir-train` | Private (internal) | **Training research** — adapter training methods, training data, trained weights. Know-how vault. |
 
 **Rule: anything `riir-*` is internal. No exceptions. No per-crate deliberation.**
 
-### Why three repos (not two) — and why LoRA training is NOT the focus
+(`riir-armageddon/` is a fifth repo for arena/game-product domain types only — it is not a distillation target. Read its README for the raw-vs-latent boundary; do not put research or chain code there.)
+
+### Why four repos (not three) — the chain spin-off
+
+Chain transport (`LatCal`, `neuron_db`, `chaind`, chain economics, asset lifecycle / forensic fingerprinting) grew large enough to warrant its own workspace with its own `Cargo.toml`, feature flags, and 60+ GOAT-gated umbrella features (`chain`, `chain_economics`, `chain_solana_parity`, `chain_catchup`, `chain_asset_*`, `shard_compactor`, `lora_posterior`). Keeping it under `riir-ai/crates/` conflated two distinct product surfaces (gameplay runtime vs ledger transport) and made CI feature-guard testing awkward.
+
+The split keeps the **sync boundary** sharper: chain IP is the only thing that crosses the `SyncBlock → ChainConsensus → Cold tier` commitment path. Gameplay runtime never touches that path directly — it bridges to chain via scalar commitments from the latent side. Separating the repos makes that boundary physical, not just conceptual.
+
+### Why we still need separate private repos (and why LoRA training is NOT the focus)
 
 We benchmarked 90+ adapter-training methods. **Most produced stability proofs (training converges, no NaN) rather than quality proofs (the adapter actually plays measurably better).** The few real, reproducible gains came from **runtime adapter selection (routing)** — not from the training method that produced the adapter.
 
@@ -29,7 +45,8 @@ We benchmarked 90+ adapter-training methods. **Most produced stability proofs (t
 So we pivoted:
 - **Training research** moved to `riir-train` (still a moat — implementations + configs took years). But it's no longer the headline.
 - **`riir-ai` ships**: freeze/thaw runtime (swap frozen adapters at runtime), latent-to-latent operations (compute NPC decisions in embedding space, never decode-then-re-encode), and self-learn/adaptive NPCs (runtime improvement, no offline training round-trip).
-- **`riir-ai` never names a training method.** It exposes a generic training interface (trait); `riir-train` implements it. Zero-cost abstraction.
+- **`riir-chain` ships**: neuro-symbolic chain transport — co-located AI+wallet state, latent-encoded balances, split-key transactions, LatCal commitment bridges, self-healing ledger, chain economics, DeFi programs.
+- **`riir-ai` and `riir-chain` never name a training method.** They expose generic training interfaces (traits); `riir-train` implements them. Zero-cost abstraction.
 
 ---
 
@@ -43,13 +60,13 @@ So we pivoted:
 - MIT attracts contributors and creates dependency without exposing know-how.
 - No legal friction for enterprise adoption.
 
-**"Ferrari, no gas":** `katgpt-rs` is the open Ferrari. Without the private platform, it runs but produces nothing competitive. The gas is inside `riir-ai`.
+**"Ferrari, no gas":** `katgpt-rs` is the open Ferrari. Without the private platform, it runs but produces nothing competitive. The gas is inside `riir-ai` (gameplay) and `riir-chain` (ledger).
 
 ---
 
 ## What riir-ai Can Do (Capabilities — Not How)
 
-`riir-ai` is the platform. Below is **what it can do**, not how it's built. The how stays internal.
+`riir-ai` is the game platform. Below is **what it can do**, not how it's built. The how stays internal.
 
 ### Freeze/Thaw Runtime (the product value)
 
@@ -83,7 +100,22 @@ NPC cognition operates **latent-to-latent** wherever possible — dot-products i
 
 This is what ships in the game. The capability that turns scripted NPCs into living ones — and it runs at runtime, not during offline training.
 
-### Neuro-Symbolic Chain
+### Arena Proofs (Outcomes, Not Methods)
+
+- Adaptive AI: large win-rate improvement vs baseline across multiple game types
+- Game-theory-optimal play achieved in turn-based tactics (99% win rate)
+- Frame-sampling: 939K decisions/sec
+- Dynamic routing: 100% win rate vs 0% static routing (runtime adapter selection)
+- Adaptive reasoning: +177% quality on hard queries at ≤50% cost
+- Browser NPC inference: sub-µs-per-call brain forward pass (WASM SIMD 5.47-7.27× over scalar)
+
+---
+
+## What riir-chain Can Do (Capabilities — Not How)
+
+`riir-chain` is the neuro-symbolic chain transport. Below is **what it can do**, not how it's built.
+
+### Co-Located AI + Wallet State
 
 - **AI state and wallet state co-located** in the same zero-copy data structure
 - **Latent-encoded balances** — not plaintext integers, tamper-resistant by inspection
@@ -94,23 +126,30 @@ This is what ships in the game. The capability that turns scripted NPCs into liv
 - **Full DeFi economy**: gas, rent, slashing
 - **9 GOAT proofs**: roundtrip fidelity, key security, pipeline throughput, tamper rejection
 
-### Arena Proofs (Outcomes, Not Methods)
+### LatCal — Lattice Calculus (the sync-boundary bridge)
 
-- Adaptive AI: large win-rate improvement vs baseline across multiple game types
-- Game-theory-optimal play achieved in turn-based tactics (99% win rate)
-- Frame-sampling: 939K decisions/sec
-- Dynamic routing: 100% win rate vs 0% static routing (runtime adapter selection)
-- Adaptive reasoning: +177% quality on hard queries at ≤50% cost
-- Browser NPC inference: sub-µs-per-call brain forward pass (WASM SIMD 5.47-7.27× over scalar)
+- **Deterministic commitment** — latent-side decisions become raw committed scalars at the chain boundary
+- **Fixed-point arithmetic bridges** — no float non-determinism across nodes
+- **Batch validation** — determinant-checked matrix arithmetic for high-throughput verification
+- **Raw ↔ latent bridge protocol** — what crosses the chain sync is always raw scalar (valence/arousal/desperation/calm/fear + signed deltas), never the full latent embedding vector
+- **DeFi programs** — gas/rent/stake primitives composed from the same fixed-point arithmetic
 
-### Trained Weight Assets (in riir-train)
+### `riir-chaind` Daemon
+
+- Validator node runtime
+- Snapshot sync, congestion control, upgradeable programs
+- Asset lifecycle / forensic fingerprinting for tamper-evident on-chain assets
+
+---
+
+## Trained Weight Assets (in riir-train)
 
 - Adapters trained across our game portfolio
 - Cross-game universal concept neurons
 - Per-zone weight snapshots
 - Episode DB (game strategy history, edge cases)
 
-**These live in `riir-train` (internal). riir-ai consumes them via the runtime freeze/thaw path — it never ships raw training data in-game; it ships the snapshotted, version-checked adapter the runtime hot-swaps.**
+**These live in `riir-train` (internal). `riir-ai` and `riir-chain` consume them via the runtime freeze/thaw path — neither ships raw training data; they ship the snapshotted, version-checked adapter the runtime hot-swaps.**
 
 ---
 
@@ -121,9 +160,20 @@ This is what ships in the game. The capability that turns scripted NPCs into liv
 | **Freeze/thaw runtime** | Lock-free adapter snapshots, integrity-verified hot-swap, per-NPC personality versioning, fused adapter inference | The runtime is small but every concurrency detail is tuned: memory ordering, zero-copy reads, atomic snapshot swap. A re-implementation will race, stall, or see torn updates. Months of profiling to get right. |
 | **Latent-to-latent operations** | Decision-level cognition in embedding space, sigmoid-gated projections, raw↔latent bridge with deterministic sync boundary | The bridge between raw (synced, replay-safe) and latent (efficient, composable) is the hard part. Getting the boundary right — what crosses as raw scalars vs what stays latent — requires domain tuning per game. |
 | **Self-learn / adaptive NPCs** | All-goals learning, open-ended policy gradient, collapse-aware recovery, self-play, curiosity-driven exploration — all runtime, no offline training round-trip | Turning scripted NPCs into living ones at runtime is the product. The collapse-detection and exploration signals are tuned against real game sessions. |
+
+## Why riir-chain Is Hard to Replicate
+
+| Pillar | Capability | Why Hard to Copy |
+|--------|-----------|-----------------|
 | **Chain design** | Co-located AI+wallet, latent-encoded balances, split-key, self-healing, five-tier memory | Novel neuro-symbolic economic design. No incumbent co-locates AI weights with wallet state in zero-copy fixed-size structures. |
-| **Training know-how (riir-train)** | 90+ adapter-training methods, consumer-GPU training, trained weight assets | Algorithms are published (arXiv). The implementations + configs took years of validation. Honest benchmarking showed most methods deliver stability, not quality gains — but the few that work + the trained weight assets are still GPU-hours of data. Secondary moat. |
+| **LatCal commitment bridge** | Deterministic fixed-point arithmetic that turns latent decisions into raw committed scalars | The arithmetic obfuscation + batch determinant validation took extensive validation. Round-trip fidelity and tamper rejection are tuned against real attack patterns. |
 | **Network effects** | Live chain with real economic activity | A forked chain has no players, validators, or economy. Can't be copied. |
+
+## Why riir-train Is Hard to Replicate
+
+| Pillar | Capability | Why Hard to Copy |
+|--------|-----------|-----------------|
+| **Training know-how** | 90+ adapter-training methods, consumer-GPU training, trained weight assets | Algorithms are published (arXiv). The implementations + configs took years of validation. Honest benchmarking showed most methods deliver stability, not quality gains — but the few that work + the trained weight assets are still GPU-hours of data. Secondary moat. |
 
 ---
 
@@ -137,32 +187,34 @@ Use these rules to decide what is safe for public `katgpt-rs/.research/` vs what
 |------------------|---------|---------|
 | Inference engine mechanics (DDTree, ConstraintPruner trait, bandit theory, speculative decode) | `katgpt-rs/.research/` (public) | Generic framework — adoption value, no moat risk |
 | An arXiv paper survey (what algorithm exists, why it's interesting) | `katgpt-rs/.research/` (public) | Literature review — tells WHAT exists, not HOW we use it |
-| A capability description ("riir-ai hot-swaps NPC personalities at runtime") | `katgpt-rs/.research/` (public, if needed for context) | Outcome — doesn't reveal the method |
-| **Training-method research, plans, benchmarks** | `riir-train` internal | Training know-how vault — separate repo so riir-ai ships clean |
+| A capability description ("riir-ai hot-swaps NPC personalities at runtime", "riir-chain commits latent decisions as raw scalars") | `katgpt-rs/.research/` (public, if needed for context) | Outcome — doesn't reveal the method |
+| **Training-method research, plans, benchmarks** | `riir-train` internal | Training know-how vault — separate repo so riir-ai/riir-chain ship clean |
 | **Trained weights, training data, training artifacts** | `riir-train` internal (never shipped) | Data assets — GPU-hours to produce |
 | Which specific training method produced a given adapter | `riir-train` internal | Naming the technique hands competitors the implementation direction |
 | Exact hyperparameters, configs, or fusion recipes | `riir-train` internal | That's the fuel — the HOW that achieves the result |
 | GPU kernel source for a specific training method | `riir-train` internal | Kernel implementations are the implementation detail |
-| **Freeze/thaw runtime internals** (concurrency protocol, hot-swap watcher, merge kernel) | `riir-ai` internal | Runtime IP — this is the ship-focus product |
+| **Freeze/thaw runtime internals** (concurrency protocol, hot-swap watcher, merge kernel) | `riir-ai` internal | Runtime IP — this is the ship-focus game product |
 | **Latent-operation internals** (projection directions, bridge function code, sigmoid gate tuning) | `riir-ai` internal | The efficiency multiplier — keep private |
 | **Self-learn / adaptive internals** (mixer parameters, collapse detector, exploration signal tuning) | `riir-ai` internal | The selling point — keep private |
-| Chain internals (encoding projections, key derivation, data layout, healing loop) | `riir-ai` internal | The implementation IS the IP |
+| **Chain internals** (LatCal encoding projections, key derivation, neuron_db layout, healing loop, chain economics parameters) | `riir-chain` internal | The implementation IS the IP — chain IP lives in `riir-chain`, not `riir-ai` |
+| **Chain / LatCal / commitment / sync-bridge research and plans** | `riir-chain/.research/` + `riir-chain/.plans/` internal | New chain-flavored notes land in `riir-chain`; historical chain notes (pre-spin-off) remain in `riir-ai/.research/` as-is |
 | Game domain configs (character classes, zone behavior, economy rules, quest grammar) | `riir-ai` internal | Game design IP |
-| Our benchmark numbers beyond what's already public | `riir-ai` (runtime/game/chain) or `riir-train` (training) | Match the repo to the proof's subject |
+| Our benchmark numbers beyond what's already public | `riir-ai` (runtime/game) / `riir-chain` (chain) / `riir-train` (training) | Match the repo to the proof's subject |
 
 ### Rule of Thumb
 
-**What = public. How = private. Training how = riir-train. Runtime how = riir-ai.**
+**What = public. How = private. Training how = riir-train. Runtime how = riir-ai. Chain how = riir-chain.**
 
 - "NPCs hot-swap personalities at runtime via versioned snapshots" → public (capability)
 - "The snapshot uses [specific concurrency primitive] with [specific memory ordering]" → `riir-ai` private (runtime how)
 - "We train adapters with [specific method] at [specific config]" → `riir-train` private (training how)
-- "Balances are encoded as latent vectors" → public (concept)
-- "The projection uses [specific learned values]" → `riir-train` private (implementation)
+- "Balances are encoded as latent vectors and committed via LatCal fixed-point bridges" → public (concept)
+- "The LatCal projection uses [specific learned values] / [specific matrix decomposition]" → `riir-chain` private (implementation)
+- "The projection uses [specific learned values]" (training side) → `riir-train` private (implementation)
 
 ### When Unsure
 
-Default to `riir-ai` internal. It is always safe to keep something private. It is never safe to un-leak something public.
+Default to the relevant private repo (`riir-ai` for gameplay, `riir-chain` for chain, `riir-train` for training). It is always safe to keep something private. It is never safe to un-leak something public.
 
 ---
 
@@ -174,10 +226,10 @@ A **Super-GOAT** is a novel mechanism that creates a capability competitors don'
 
 | Gate | Question | Fail → |
 |------|----------|--------|
-| **Novelty** | Grep `.research/` across all 3 repos. Does any existing note cover this mechanism? | → Gain |
+| **Novelty** | Grep `.research/` + `.plans/` across all 4 repos AND shipped code in `katgpt-rs/`, `riir-ai/crates/`, `riir-chain/src/`, `riir-chain/crates/`, `riir-armageddon/crates/`. Does any existing note or shipped module cover this mechanism? | → Gain |
 | **Capability class** | Is this a new *class* of behavior (not just better numbers on an existing capability)? | → GOAT |
-| **Selling point** | Can you finish: "Our NPCs/systems do ___ that no competitor can"? | → GOAT |
-| **Force multiplier** | Connects to ≥2 existing pillars/systems (freeze/thaw, latent ops, self-learn, chain, KG/HLA)? | → GOAT |
+| **Selling point** | Can you finish: "Our NPCs/systems/chain do ___ that no competitor can"? | → GOAT |
+| **Force multiplier** | Connects to ≥2 existing pillars/systems (freeze/thaw, latent ops, self-learn, chain, KG/HLA, LatCal)? | → GOAT |
 
 4/4 → Super-GOAT. Any miss → highest matching tier.
 
@@ -187,16 +239,21 @@ Super-GOAT MUST produce **both** outputs. Skipping either is a process failure.
 
 | Output | Location | Purpose |
 |--------|----------|--------|
-| **Open primitive** | `katgpt-rs/.research/` + `crates/katgpt-core/src/` | Adoption hook — generic math, no game semantics. The Ferrari part. |
-| **Private guide** | `riir-ai/.research/NNN_*.md` | The selling-point doc — how the game uses it, commercial value, connection map, validation protocol. The gas. |
+| **Open primitive** | `katgpt-rs/.research/` + `crates/katgpt-core/src/` | Adoption hook — generic math, no game semantics, no chain semantics. The Ferrari part. |
+| **Private guide** | `riir-ai/.research/NNN_*.md` (gameplay selling points) OR `riir-chain/.research/NNN_*.md` (chain / LatCal / sync-bridge selling points — create folder on first use) | The selling-point doc — commercial value, connection map, validation protocol. The gas. |
+
+**How to pick the guide repo:**
+- Game-runtime / HLA / functor / self-learn / NPC behavior selling point → `riir-ai/.research/`
+- Chain / LatCal / commitment / neuron_db / sync-bridge / DeFi economics selling point → `riir-chain/.research/`
+- Crosses the chain sync boundary (latent → raw commitment) → primary guide in `riir-chain/` (owns the boundary), cross-reference from `riir-ai/`
 
 The private guide MUST answer: what's the selling point, what connects to existing systems, what crosses the sync boundary (raw scalars only), what stays private, and how to validate the Super-GOAT claim.
 
 ### Why the guide matters
 
-The open primitive is reproducible from the paper — anyone reading arXiv can build it. The **guide** is where the private IP lives: the game-specific semantics, the integration with HLA/emotions/KG/freeze-thaw, the cross-game transfer protocol. Without the guide, the knowledge is lost — a future agent won't know why the open primitive matters or how to use it commercially.
+The open primitive is reproducible from the paper — anyone reading arXiv can build it. The **guide** is where the private IP lives: the game-specific or chain-specific semantics, the integration with HLA/emotions/KG/freeze-thaw/LatCal, the cross-system transfer protocol. Without the guide, the knowledge is lost — a future agent won't know why the open primitive matters or how to use it commercially.
 
-**Common failure:** agent reads paper → writes open primitive + plan → marks done → moves on. The private selling-point knowledge was never captured. Next agent sees generic math with no context. Fix: the novelty gate (SKILL.md §1.5) blocks this — Super-GOAT requires the riir-ai guide before the task is complete.
+**Common failure:** agent reads paper → writes open primitive + plan → marks done → moves on. The private selling-point knowledge was never captured. Next agent sees generic math with no context. Fix: the novelty gate (SKILL.md §1.5) blocks this — Super-GOAT requires the riir-ai or riir-chain guide before the task is complete.
 
 ---
 
@@ -205,3 +262,6 @@ The open primitive is reproducible from the paper — anyone reading arXiv can b
 | Doc | Connection |
 |-----|-----------|
 | 119 — Worms Armageddon Latent Space Game | Game product concept. Internal (`riir-ai/.research/119`). Moved out of public repo. |
+| `riir-chain/AGENTS.md` | Repo-local context for the chain spin-off (workspace layout, `merkle_root` lesson, drift resolution, `develop` branch policy). |
+| `riir-chain/.plans/001_chain_spinoff.md` | Chain crate migration record (riir-ai → riir-chain). |
+| `riir-chain/.plans/002_chaind_spinoff.md` | Chaind daemon migration record. |

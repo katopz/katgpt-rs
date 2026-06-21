@@ -106,7 +106,7 @@ If a paper is training-only → note "→ riir-train" in one line and stop. Do n
 
 ## Distillation targets (4-repo strategy)
 
-Per `katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md` (note: that doc predates the `riir-chain` spin-off — treat the table below as the current authoritative routing; updating `003_*.md` itself is tracked separately):
+Per `katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md` (revised 2026-06-21 to reflect the `riir-chain` spin-off):
 
 | Repo | Role | What lands here |
 |------|------|-----------------|
@@ -334,7 +334,7 @@ Reinforce these when designing game systems or chain state:
 
 - `katgpt-rs/.contexts/optimization.md` — perf rules (zero-alloc, SIMD, rayon, caching)
 - `katgpt-rs/.contexts/ibraheemdev-papaya-v0.2.3-examples.md` — papaya lock-free hashmap usage
-- `katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md` — 3-repo strategy source of truth (**pre-dates the `riir-chain` spin-off — still describes a 3-repo world; the SKILL.md table in §Distillation targets is the current authoritative 4-repo routing until that doc is updated**)
+- `katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md` — 4-repo strategy source of truth (revised 2026-06-21 for the `riir-chain` spin-off)
 - `katgpt-rs/.research/004_LoRA_Architecture_Verdict.md` — LoRA / validator terminology
 - `katgpt-rs/.research/005_Artifact_Definition.md` — artifact terminology
 - `katgpt-rs/.research/238_LoRA_Muon_Spectral_Low_Rank_Manifold.md` — canonical research-note example

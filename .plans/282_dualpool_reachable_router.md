@@ -145,7 +145,7 @@ Ship a generic **dual-pool memory router** that splits a bandit's candidate pool
 
 ## Phase 5 — CGSP Integration Benchmark (G5) — MIGRATED to riir-ai Plan 312
 
-**Migration rationale:** All four Phase 5 tasks require `NpcCgspRuntime`, `PriorityTableBandit`, `PersonalityLedger`, `SnapshotSink`, and the chain quorum commit infrastructure — all of which live in `riir-ai/crates/riir-engine/src/cgsp_runtime/`. Per the 3-repo commercial strategy (`katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md`), game-IP runtime code does NOT belong in the public MIT engine. The katgpt-rs plan therefore cannot host the implementation; riir-ai Plan 312 ([`riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md`](../../riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md)) owns the execution.
+**Migration rationale:** All four Phase 5 tasks require `NpcCgspRuntime`, `PriorityTableBandit`, `PersonalityLedger`, `SnapshotSink`, and the chain quorum commit infrastructure — all of which live in `riir-ai/crates/riir-engine/src/cgsp_runtime/`. Per the 4-repo commercial strategy (`katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md`), game-IP runtime code does NOT belong in the public MIT engine. The katgpt-rs plan therefore cannot host the implementation; riir-ai Plan 312 ([`riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md`](../../riir-ai/.plans/312_dual_pool_cgsp_runtime_integration.md)) owns the execution.
 
 ### Tasks (ownership transferred to riir-ai Plan 312)
 
