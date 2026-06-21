@@ -463,10 +463,13 @@ pub fn find_sufficient_set(
         &mut valid_buf[..check_limit],
     );
 
-    // Pre-allocate counts with capacity up to vocab_size (bounded by limit).
-    // Single pass: filter valid tokens AND compute extension counts, avoiding
-    // an intermediate Vec<usize> allocation.
-    let mut counts: Vec<(usize, usize)> = Vec::with_capacity(limit);
+    // Pre-allocate counts on the stack — limit ≤ 256 so 256 * 16B = 4 KB,
+    // well within typical stack budgets. Avoids the per-call Vec allocation
+    // that was previously here, and matches the pattern used by `valid_buf`,
+    // `batch_buf`, and `relevance_buf` elsewhere in this function.
+    const COUNTS_CAP: usize = 256;
+    let mut counts_stack: [(usize, usize); COUNTS_CAP] = [(0, 0); COUNTS_CAP];
+    let mut n_counts: usize = 0;
     for (tok, &valid) in valid_buf.iter().enumerate().take(check_limit) {
         if !valid {
             continue;
@@ -480,15 +483,16 @@ pub fn find_sufficient_set(
             &CANDIDATE_INDICES[..limit],
             &mut batch_buf[..limit],
         );
-        counts.push((tok, count));
+        counts_stack[n_counts] = (tok, count);
+        n_counts += 1;
     }
 
     // Sort by pre-computed counts (ascending = tighter constraints first)
-    counts.sort_by_key(|&(_, count)| count);
+    counts_stack[..n_counts].sort_by_key(|&(_, count)| count);
 
     let mut relevance_buf = [0.0f32; 256];
 
-    for &(tok, _) in counts.iter().take(max_search_depth) {
+    for &(tok, _) in counts_stack[..n_counts].iter().take(max_search_depth) {
         ext_buf[base_len] = tok; // Overwrite only the candidate slot (avoids clear + extend)
         score_relevance_into(pruner, depth + 1, &ext_buf, vocab_size, &mut relevance_buf);
         let score = underspecification_score(&relevance_buf[..limit]);
