@@ -1,0 +1,314 @@
+# Plan 300: Subjective-CCE Heterogeneous-Payoff Wrapper Primitive
+
+**Date:** 2026-06-21
+**Research:** Forked from [`riir-ai/.docs/62_bayes_cce_regret_sketch.md`](../../riir-ai/.docs/62_bayes_cce_regret_sketch.md) §2 (subjective-CCE framing, bound transfers at math level).
+**Source paper:** [arxiv 2606.20062](https://arxiv.org/pdf/2606.20062) — Campi, Cannerozzi, Tzoumas — Optimal CCEs in MFGs via LP + No-Regret Learning.
+**Parent issue:** [`riir-ai/.issues/327_cwm_cce_bayes_fusion.md`](../../riir-ai/.issues/327_cwm_cce_bayes_fusion.md) — closed 2026-06-21 (split decision, Branch 4: subjective-CCE demoted to wiring).
+**Target:** `katgpt-rs/src/cce/` (extend existing module from Plan 295) + extend `cce_moderator` feature.
+**Status:** 🟡 NOT STARTED. Estimated ~½ day code + tests.
+
+---
+
+## Goal
+
+Ship a thin wrapper that extends the Plan 295 `CceLp<N,A>` primitive to accept **per-NPC heterogeneous payoff tables**, where each NPC `i` has its own `PayoffTensor` and `DeviationClass`. The regret bound transfers as-is at the math level (doc 62 §2 — sum of convex is convex, primal-dual averaging is heterogeneity-agnostic); no new theory, just API surface + LP-construction logic.
+
+**Why:** Issue 327 P0.5 originally (and incorrectly) claimed "CceLp works unchanged on heterogeneous payoff tables". Audit on 2026-06-21 found this is false at the code level — `CceLp::solve(d: &D, p: &P)` takes a *single* `PayoffTensor<N,A>`; the LP constraint rows in `lp.rs:94-104` all reference the same `p`. This plan closes that gap. Result: subjective-CCE becomes shippable; Path A+ wiring closes.
+
+**GOAT gate:** `cce_moderator` feature remains default-off pending G1–G3 below. No demotion of `CceLp::solve` (homogeneous path) — both coexist.
+
+This is the **public open primitive** for the subjective-CCE wiring extension. The private runtime plan (riir-ai side, wiring per-NPC `NpcCwmRuntime<K>` payoff tables into this wrapper) is a *future* riir-ai plan, blocked on Plan 300 landing. **No game semantics in this plan** — pure generic math, MIT-licensed, anyone can adopt.
+
+---
+
+## The math (recap, doc 62 §2)
+
+Standard homogeneous CCE LP (Plan 295):
+```
+minimize   γ₀(ρ)
+subject to γ(ρ) ≤ γ_dev(ρ, κ)   ∀κ ∈ D
+           Σ ρ = 1, ρ ≥ 0
+```
+
+Heterogeneous subjective-CCE LP (this plan):
+```
+minimize   γ₀(ρ)                                    # moderator objective
+subject to γ_i(ρ) ≤ γ_dev_i(ρ, κ)   ∀i ∈ [1..P], ∀κ ∈ D_i    # per-NPC, per-deviation
+           Σ ρ = 1, ρ ≥ 0
+```
+
+where `P` is the player count, `γ_i(ρ) = Σ_{s,a} ρ(s,a) · P_i.reward_follow(s,a)` is player `i`'s expected cost of following the moderator's recommendation, and `γ_dev_i(ρ, κ) = Σ_s μ(s) · P_i.reward_deviate(s, κ)` is player `i`'s expected cost of deviating to `κ` under `ρ`'s state marginal.
+
+The convexity argument (doc 62 §2.1) is unchanged: each `γ_i` is linear in `ρ`, so each `ER_i(ρ) = max_{κ ∈ D_i} (γ_i(ρ) − γ_dev_i(ρ, κ))` is convex; `ER(ρ) = (1/P) Σ_i ER_i(ρ)` is convex as the sum of convex functions. The primal-dual averaging argument transfers.
+
+---
+
+## Design
+
+### New trait: `HeterogeneousPayoff`
+
+```rust
+/// Per-NPC heterogeneous payoff + deviation-class bundle.
+///
+/// Each "player" contributes its own `PayoffTensor` and `DeviationClass`.
+/// The wrapper builds one LP constraint row per `(player, κ)` pair, each
+/// row using that player's `P_i` (NOT a shared tensor).
+///
+/// Regret bound: `ER(ρ̄_T) ≤ O(T⁻¹ᐟ²)` transfers as-is from the
+/// homogeneous case (doc 62 §2). The heterogeneity enters only through
+/// per-player numerical values, not through the convexity structure.
+pub trait HeterogeneousPayoff<const N: usize, const A: usize> {
+    /// Number of players (each with its own payoff tensor + deviation class).
+    fn n_players(&self) -> usize;
+
+    /// Player `i`'s deviation class slice. Caller MUST ensure stable order
+    /// across calls (the LP indexes deviations by position).
+    fn deviations_for_player(&self, player: usize) -> &[Deviation<N, A>];
+
+    /// Player `i`'s cost of following at `(state, action)`.
+    fn reward_follow(&self, player: usize, state: usize, action: usize) -> f32;
+
+    /// Player `i`'s cost of deviating to `κ` at `state`. Default impl
+    /// mirrors `PayoffTensor::reward_deviate` using `reward_follow`.
+    fn reward_deviate(
+        &self,
+        player: usize,
+        state: usize,
+        kappa: &Deviation<N, A>,
+    ) -> f32 {
+        let mut g = 0.0;
+        for a in 0..A {
+            g += kappa.kernel[state][a] * self.reward_follow(player, state, a);
+        }
+        g
+    }
+
+    /// Moderator objective `γ₀(ρ)`. Default: average player welfare
+    /// `(1/P) Σ_i γ_i(ρ)`. Override for designer-steerable moderators.
+    fn gamma0(&self, rho: &OccupationMeasure<N, A>) -> f32 {
+        let p = self.n_players().max(1) as f32;
+        let mut g = 0.0;
+        for s in 0..N {
+            for a in 0..A {
+                for i in 0..self.n_players() {
+                    g += rho.at(s, a) * self.reward_follow(i, s, a);
+                }
+            }
+        }
+        g / p
+    }
+
+    /// Per-index coefficient for the LP objective row (linear `γ₀`).
+    /// Default: `(1/P) Σ_i reward_follow(i, s, a)`.
+    fn gamma0_coeff(&self, state: usize, action: usize) -> f32 {
+        let p = self.n_players().max(1) as f32;
+        let mut g = 0.0;
+        for i in 0..self.n_players() {
+            g += self.reward_follow(i, state, action);
+        }
+        g / p
+    }
+}
+```
+
+### New method on `CceLp`
+
+```rust
+impl CceLp {
+    /// Solve the subjective-CCE LP for a heterogeneous player population.
+    ///
+    /// Builds `Σ_i |D_i|` constraint rows. Each row `(i, κ)` uses
+    /// `P_i.reward_follow − P_i.reward_deviate(κ)`. Returns the optimal
+    /// occupation measure.
+    pub fn solve_heterogeneous<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        &self,
+        game: &H,
+    ) -> Result<OccupationMeasure<N, A>, CceLpError> {
+        // 1. Count total deviations: sum_i |D_i|
+        // 2. Build LP with na = N·A variables and 1 + total_devs constraints
+        // 3. Row 0: Σ ρ = 1
+        // 4. Rows 1..: for each (player, kappa) pair, build
+        //    g(s,a) = P_player.reward_follow(s,a) - P_player.reward_deviate(s,a, kappa)
+        // 5. Objective: gamma0_coeff per index
+        // 6. BFS enumerate (same algorithm as solve, just more rows)
+    }
+
+    /// Verify that `ρ` is a subjective-CCE: for every player `i` and every
+    /// `κ ∈ D_i`, `γ_i(ρ) ≤ γ_dev_i(ρ, κ) + ε`.
+    pub fn is_heterogeneous_cce<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        &self,
+        rho: &OccupationMeasure<N, A>,
+        game: &H,
+        epsilon: f32,
+    ) -> bool {
+        // Per-player, per-deviation regret check. Returns false on first
+        // violation.
+    }
+}
+```
+
+### Heterogeneous external-regret evaluator
+
+```rust
+impl ExternalRegret {
+    /// `ER_hetero(ρ) = (1/P) Σ_i max_{κ ∈ D_i} (γ_i(ρ) − γ_dev_i(ρ, κ))`.
+    pub fn er_heterogeneous<const N: usize, const A: usize, H: HeterogeneousPayoff<N, A>>(
+        &self,
+        rho: &OccupationMeasure<N, A>,
+        game: &H,
+    ) -> f32 {
+        // Per-player max-of-linear, averaged. Convex by construction.
+    }
+}
+```
+
+### Default struct impl: `PerPlayerGame`
+
+```rust
+/// Concrete `HeterogeneousPayoff` backed by per-player `(PayoffTensor,
+/// DeviationClass)` slices. The common case for runtimes that already
+/// hold per-NPC tables.
+pub struct PerPlayerGame<'a, const N: usize, const A: usize, P: PayoffTensor<N, A>, D: DeviationClass<N, A>> {
+    /// `(payoff_tensor, deviation_class)` per player.
+    pub players: Vec<(&'a P, &'a D)>,
+}
+
+impl<'a, const N: usize, const A: usize, P: PayoffTensor<N, A>, D: DeviationClass<N, A>>
+    HeterogeneousPayoff<N, A> for PerPlayerGame<'a, N, A, P, D>
+{
+    fn n_players(&self) -> usize { self.players.len() }
+    fn deviations_for_player(&self, player: usize) -> &[Deviation<N, A>] {
+        self.players[player].1.deviations()
+    }
+    fn reward_follow(&self, player: usize, state: usize, action: usize) -> f32 {
+        self.players[player].0.reward_follow(state, action)
+    }
+    // reward_deviate, gamma0, gamma0_coeff use defaults (delegate to P).
+}
+```
+
+---
+
+## File Layout
+
+```
+katgpt-rs/src/cce/
+├── mod.rs                # re-export new types
+├── types.rs              # add HeterogeneousPayoff trait
+├── lp.rs                 # add CceLp::solve_heterogeneous + is_heterogeneous_cce
+├── external_regret.rs    # add ExternalRegret::er_heterogeneous
+└── heterogeneous.rs      # NEW: PerPlayerGame + integration tests
+```
+
+---
+
+## Tasks
+
+### Phase 1 — Trait + types
+
+- [ ] **T1.1** Add `HeterogeneousPayoff<N, A>` trait to `katgpt-rs/src/cce/types.rs` with the five methods above (`n_players`, `deviations_for_player`, `reward_follow`, `reward_deviate`, `gamma0`, `gamma0_coeff`). Default impls for the last three.
+- [ ] **T1.2** Re-export from `katgpt-rs/src/cce/mod.rs`: `pub use types::HeterogeneousPayoff;`
+- [ ] **T1.3** Add unit test in `types.rs`: a 2-player trivial `HeterogeneousPayoff` impl with `N=2, A=2`, verify `gamma0` on uniform `ρ` matches hand-computed `(1/2)(γ_1 + γ_2)`.
+
+**Phase 1 exit:** `cargo test --features cce_moderator --lib cce::types::` passes.
+
+### Phase 2 — LP solver extension
+
+- [ ] **T2.1** Implement `CceLp::solve_heterogeneous::<N, A, H>(game: &H)` in `katgpt-rs/src/cce/lp.rs`. Refactor the existing `solve` to share BFS-enumeration infrastructure with the new method (extract `enumerate_bfs(mat, rhs, n_vars, na)` helper — DRY, keeps both paths consistent).
+- [ ] **T2.2** Implement `CceLp::is_heterogeneous_cce(rho, game, epsilon)` — per-player, per-deviation regret check. Early-exit on first violation.
+- [ ] **T2.3** Implement `ExternalRegret::er_heterogeneous(rho, game)` — average per-player external regret.
+
+**Phase 2 exit:** `cargo build --features cce_moderator` succeeds; no warnings.
+
+### Phase 3 — `PerPlayerGame` default impl + tests
+
+- [ ] **T3.1** Implement `PerPlayerGame<N, A, P, D>` in `katgpt-rs/src/cce/heterogeneous.rs`.
+- [ ] **T3.2** Unit tests in `heterogeneous.rs`:
+  - `homogeneous_equivalence` — `PerPlayerGame` with all players sharing the same `(P, D)` gives the same `ρ⋆` as `CceLp::solve(d, p)` on that single `(P, D)`. **Closes the "wrapper is a strict generalization" check.**
+  - `two_player_prisoners_dilemma` — classic 2-player PD where each player has its own payoff tensor. Verify `ρ⋆` concentrates on the cooperative joint action under a welfare-maximizing moderator objective.
+  - `heterogeneous_robustness` — two players with *slightly different* payoff tensors (perturbed by 1% noise). Verify `ρ⋆` is a small perturbation of the homogeneous `ρ⋆`. This is the subjective-CCE use case from Issue 327.
+  - `is_heterogeneous_cce_passes_on_solve_output` — `solve_heterogeneous` output passes `is_heterogeneous_cce(ε=1e-4)`.
+  - `is_heterogeneous_cce_rejects_pure_nash_when_pd` — pure Nash is NOT a heterogeneous CCE on PD (deviation profitable), so `is_heterogeneous_cce` returns false. Sanity check.
+
+**Phase 3 exit:** `cargo test --features cce_moderator --lib cce::heterogeneous::` passes.
+
+### Phase 4 — GOAT gates
+
+- [ ] **T4.1 G1 — Homogeneous equivalence (regression):** for the 3 canonical Plan 295 examples (RPS, chicken, emission-abatement), `PerPlayerGame` with all players sharing the same `(P, D)` produces the same `ρ⋆` as the homogeneous `CceLp::solve`. Tolerance: bit-identical (within f32 ε). Benchmark in `katgpt-rs/tests/heterogeneous_g1.rs`.
+- [ ] **T4.2 G2 — Regret transfer on synthetic heterogeneous CWMs:** generate 8-player game where each player's payoff tensor is perturbed Gaussian noise around a base tensor. Run `solve_heterogeneous`, verify `er_heterogeneous(ρ⋆) ≤ 1e-3`. The regret bound transfers as-is per doc 62 §2.2.
+- [ ] **T4.3 G3 — Convergence rate matches `O(T⁻¹ᐟ²)`:** extend `CcePrimalDual` (Plan 295 Phase 2) to accept `HeterogeneousPayoff`. Run 10⁴ iterations on the synthetic 8-player game. Fit log-log slope of `ER(ρ̄_T)` vs `T`. Must be ≤ −0.5 (matches or beats the paper's worst-case bound). Test in `katgpt-rs/tests/heterogeneous_g3.rs`.
+  - **Note:** if `CcePrimalDual` extension proves non-trivial (the primal-dual iterator's subgradient oracle is per-`PayoffTensor`, needs per-player generalization), split this into a follow-up task T4.3b and ship G1+G2 first. G3 is the "nice to have" that confirms the bound transfers in practice, not a blocker for closing Issue 327 Path A+.
+- [ ] **T4.4 G4 — Latency on crowd-scale:** `solve_heterogeneous` on a 32-player × 8-state × 4-action game (1024 variables, ~128 constraints). Target: <50ms (mirrors Plan 325 G4 crowd-scale target). Benchmark in `katgpt-rs/benches/heterogeneous_cce.rs`.
+
+**Phase 4 exit:** G1+G2+G4 PASS, G3 PASS-or-split-into-follow-up. Update this plan's status to ✅ COMPLETE.
+
+### Phase 5 — Documentation + feature promotion
+
+- [ ] **T5.1** Add `HeterogeneousPayoff` + `PerPlayerGame` + `solve_heterogeneous` to `katgpt-rs/src/cce/mod.rs` module doc with a 10-line usage example.
+- [ ] **T5.2** Update `katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md` with a "Subjective-CCE extension" section linking to this plan and to Issue 327 Path A+.
+- [ ] **T5.3** Update `riir-ai/.research/143_Latent_CCE_Moderator_Crowd_Emergent_Coordination.md` with the same pointer.
+- [ ] **T5.4** If G1+G2+G3+G4 all PASS: promote `cce_moderator` to default-on if not already (Plan 325 already did this for the homogeneous path; this is a no-op confirmation). If G3 split: leave as-is, document the follow-up.
+
+**Phase 5 exit:** all docs updated, plan closed.
+
+---
+
+## Performance considerations (per AGENTS.md optimization guidelines)
+
+- **No allocation in hot path.** `solve_heterogeneous` allocates the constraint matrix `mat` and RHS `rhs` once at entry; BFS enumeration is in-place. Mirror Plan 295's pattern.
+- **Reuse BFS-enumeration helper.** Extract `enumerate_bfs(mat, rhs, n_vars, na)` from `solve` and share with `solve_heterogeneous`. Avoids ~50 LOC duplication.
+- **`Vec::with_capacity` for player iteration.** When summing `Σ_i |D_i|`, pre-size the constraint matrix.
+- **Avoid `dyn` in the inner loop.** `H: HeterogeneousPayoff<N, A>` is monomorphized; the compiler inlines per-player calls.
+- **G4 latency target 50ms** is generous — Plan 295's homogeneous `solve` on `N=4, A=4, |D|=4` runs in <1ms. Heterogeneous scales with `Σ_i |D_i|`; for 32 players × 4 deviations each = 128 constraints, BFS on `C(1024+128, 129)` is too large — switch to the primal-dual path (T4.3) for crowd-scale, or document a "homogeneous for large P" fallback. **Flag for G4.**
+
+---
+
+## Risk register
+
+| Risk | Probability | Impact | Mitigation |
+|---|---|---|---|
+| BFS enumeration explodes for large `Σ_i |D_i|` | High | Medium | T4.4 G4 catches it; fallback to `CcePrimalDual` heterogeneous path (T4.3) for crowd-scale. Document the threshold. |
+| `HeterogeneousPayoff` trait design forces per-call `reward_follow(player, s, a)` indirection that defeats inlining | Low | Low | Generic `H` monomorphizes; benchmark on G4. If hot, add a `PerPlayerGameTables` struct that pre-flattens into a single `Vec<f32>` indexed by `player * N * A + s * A + a`. |
+| Default `gamma0` (average welfare) is wrong for some game modes | Medium | Low | `gamma0` is overridable; runtime (riir-ai side) supplies its own `ModeratorObjective`. |
+| `CcePrimalDual` extension for heterogeneous case (T4.3) is non-trivial | Medium | Medium | Split T4.3 into T4.3a (G1+G2+G4 ship without it) + T4.3b (follow-up). Don't block Plan 300 close on it. |
+
+---
+
+## Out of scope
+
+- **Strict Bayes-CCE / no-common-prior.** That's [`riir-ai/.issues/328_no_common_prior_bayes_cce.md`](../../riir-ai/.issues/328_no_common_prior_bayes_cce.md). This plan is strictly the subjective-CCE wiring.
+- **riir-ai runtime wiring.** Per-NPC `NpcCwmRuntime<K>` → `HeterogeneousPayoff` bridge is a future riir-ai plan, blocked on this plan landing. Tracked as T-A+.5 in Issue 327.
+- **Bayesian priors over payoff tables.** Not in this plan; that's the strict Bayes-CCE question (Issue 328).
+- **`CcePrimalDual` heterogeneous primal-dual iterator.** T4.3 is a stretch goal; the LP solver path (T2.1) is the primary deliverable. Primal-dual extension is a follow-up if G3 needs it.
+- **Multi-faction CCE with KNOWN per-faction payoff tables.** That's the homogeneous case (Plan 295) on the faction-aggregated table. Not this plan.
+
+---
+
+## Acceptance
+
+- [ ] G1 PASS (homogeneous equivalence regression — no Plan 295 breakage).
+- [ ] G2 PASS (regret transfers on synthetic heterogeneous CWMs).
+- [ ] G3 PASS-or-split (convergence rate `≤ −0.5` log-log slope; if non-trivial, split into T4.3b and close Plan 300 on G1+G2+G4).
+- [ ] G4 PASS (<50ms on 32-player crowd-scale).
+- [ ] All unit tests in `heterogeneous.rs` pass.
+- [ ] `cargo check --all-features` clean (CI feature guard catches combo regressions per the `merkle_root` lesson).
+- [ ] Plan 300 status → ✅ COMPLETE. Issue 327 T-A+.1 through T-A+.4 marked done.
+
+---
+
+## References
+
+- **Plan 295 (homogeneous CceLp primitive):** [`katgpt-rs/.plans/295_lp_cce_moderator_primitive.md`](295_lp_cce_moderator_primitive.md)
+- **Source paper:** [Campi, Cannerozzi, Tzoumas — arxiv 2606.20062](https://arxiv.org/pdf/2606.20062)
+- **P0.5 regret sketch (subjective-CCE §2):** [`riir-ai/.docs/62_bayes_cce_regret_sketch.md`](../../riir-ai/.docs/62_bayes_cce_regret_sketch.md)
+- **Parent issue (closed):** [`riir-ai/.issues/327_cwm_cce_bayes_fusion.md`](../../riir-ai/.issues/327_cwm_cce_bayes_fusion.md)
+- **Sibling issue (deferred):** [`riir-ai/.issues/328_no_common_prior_bayes_cce.md`](../../riir-ai/.issues/328_no_common_prior_bayes_cce.md)
+- **Public CCE research note:** [`katgpt-rs/.research/274_Optimal_CCE_Moderator_LP_No_Regret.md`](../.research/274_Optimal_CCE_Moderator_LP_No_Regret.md)
+- **Private CCE runtime (Plan 325):** [`riir-ai/.plans/325_latent_cce_moderator_runtime.md`](../../riir-ai/.plans/325_latent_cce_moderator_runtime.md)
+- **Private CWM runtime (Plan 326):** [`riir-ai/.plans/326_cwm_npc_runtime_integration.md`](../../riir-ai/.plans/326_cwm_npc_runtime_integration.md)
+
+---
+
+## TL;DR
+
+Thin wrapper extending Plan 295's `CceLp::solve` to per-NPC heterogeneous payoff tables. New trait `HeterogeneousPayoff<N,A>`, new method `CceLp::solve_heterogeneous`, new struct `PerPlayerGame`. Math transfers as-is per doc 62 §2 (sum of convex is convex, primal-dual averaging is heterogeneity-agnostic); no new theory, ~½ day code. Closes Issue 327 Path A+ (subjective-CCE wiring); unblocks future riir-ai runtime plan for per-NPC CWM payoff tables. GOAT gate: G1 homogeneous-equivalence regression + G2 regret transfer on synthetic heterogeneous CWMs + G4 crowd-scale latency. **Not started; estimated ½ day.**
