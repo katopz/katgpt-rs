@@ -399,9 +399,11 @@ pub fn tiled_attention_batched(
                         let scores = unsafe { &mut *scores.get() };
                         let o_tile = unsafe { &mut *o_tile.get() };
                         if scores.len() < scores_buf_size {
+                            // `resize` zero-fills the new tail; the existing
+                            // prefix is preserved but `tiled_attention_forward_impl`
+                            // will zero the working range itself (L279), so no
+                            // extra fill is needed here on the grow path either.
                             scores.resize(scores_buf_size, 0.0);
-                        } else {
-                            scores[..scores_buf_size].fill(0.0);
                         }
                         if o_tile.len() < o_tile_size {
                             o_tile.resize(o_tile_size, 0.0);
