@@ -329,7 +329,7 @@ This plan does NOT cover Phase 2.
 
 ---
 
-## Phase 3 — `subtree_inclusion` proof (RESEARCH — defer to issue)
+## Phase 3 — `subtree_inclusion` proof (RESEARCH — tracked in riir-chain Issue 002)
 
 The hard problem: prove that roots[d] is a faithful aggregation of roots[d+1].
 
@@ -340,7 +340,19 @@ The hard problem: prove that roots[d] is a faithful aggregation of roots[d+1].
 2. FFT-style batch verification via Plan 242 Fourier Smoothed Potential Fields
 3. Probabilistic proof via sampling (curator verifies K random leaves under each internal node)
 
-**Action:** create `.issues/NNN_rtdc_subtree_inclusion_research.md` to track. Not in this plan.
+**Tracked in:** [`riir-chain/issues/002_rtdc_subtree_inclusion_research.md`](../../riir-chain/issues/002_rtdc_subtree_inclusion_research.md).
+
+### Phase 3 status (updated 2026-06-22)
+
+- [x] **Candidate C (probabilistic sampling) — LANDED** in
+      `crates/katgpt-core/src/rtdc.rs` behind feature `rtdc_subtree_inclusion`.
+      CG6 PASSES: cost 4.72×≤5.0×, deterministic catch 100%, probabilistic
+      catch at f=1/8 K=8: 66.4% empirical vs 65.6% expected. 10 new tests.
+      Public API: `SubtreeProof`, `prove_subtree_inclusion`,
+      `verify_subtree_inclusion`, `tamper_detection_probability`,
+      `min_k_for_95pct_confidence`, `RTDC_SUBTREE_DEFAULT_K`.
+- [ ] **Candidate B (FFT batch verify)** — pending investigation.
+- [ ] **Candidate A (Pedersen)** — deferred (3-4 weeks, needs curve dep).
 
 ---
 

@@ -318,7 +318,8 @@ pub use curator::{
 // with O(log n) proof at the abstraction level it operates at.
 //
 // Phase 1 ships the open primitive (types + trait + depth-2 sound proofs).
-// Cross-depth soundness (`subtree_inclusion`) is Phase 2 — see
+// Cross-depth soundness (`subtree_inclusion`) is Phase 3 (Candidate C —
+// probabilistic sampling) behind `rtdc_subtree_inclusion` — see
 // `riir-chain/issues/002_rtdc_subtree_inclusion_research.md`.
 // LatCal-backed `DeterministicLeafEncode` impl lives in riir-chain (Plan 003).
 #[cfg(feature = "rtdc")]
@@ -326,8 +327,10 @@ pub mod rtdc;
 #[cfg(feature = "rtdc")]
 pub use rtdc::{
     DepthSelector, DepthTieredMerkleOctree, DepthTieredRoots, DeterministicLeafEncode, RtdcError,
-    RtdcProof, SubtreeProof,
+    RtdcProof,
 };
+#[cfg(feature = "rtdc_subtree_inclusion")]
+pub use rtdc::{RTDC_SUBTREE_DEFAULT_K, SubtreeProof, min_k_for_95pct_confidence};
 
 // GPart isometric partition adapter — replaces LoRA's bilinear BA with single isometric Pθ_d (Plan 257).
 #[cfg(feature = "gpart_adapter")]
