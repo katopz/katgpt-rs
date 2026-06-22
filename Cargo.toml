@@ -104,6 +104,10 @@ spec_cost_model = []  # Amdahl cost model for LeviathanVerifier (Research 59, Pl
 stability_metrics = []  # Per-step execution stability instrumentation — P50/P99/CV/stability_score, +0.6% overhead (Plan 102, default-on)
 coda_fusion = ["katgpt-core/coda_fusion"]  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation in single-pass (Plan 103)
 maxsim = ["katgpt-core/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
+salience_tri_gate = []  # Salience Tri-Gate Primitive — 3-way per-tick emit gate (Speak / Silent / Delegate) with silence as a first-class variant, two stacked sigmoids (never softmax), zero-allocation hot path (Plan 303, Research 281, arxiv 2606.14777, JoyAI-VL-Interaction). Open primitive; NPC wiring lives in riir-ai Plan 330. Opt-in until G1 (determinism + monotonicity) + G2 (two-sigmoid ablation parity) + <50ns decide() latency gates pass.
+complexity_prior_sampler = []  # Algorithmic-Probability Sampler — `sigmoid(-α·K̃(x) - β)`-weighted candidate sampling (Plan 305, Research 284, Dingle & Hutter 2026, Entropy 28(2):226). Pluggable K̃ proxies: RLE ratio, Shannon entropy, L1 norm. Sub-features `lz4_proxy` / `blake3_proxy` register stub types (Phase 2+ activates them). Safety guarantee: never worse than uniform; exponentially faster on low-K optima. Latent variant operates on `&[f32]` via byte-quantization. Opt-in until G1 (sampler safety) + G2 (exponential speedup) GOAT gates pass.
+lz4_proxy = ["complexity_prior_sampler"]  # Sub-feature for Lz4Complexity proxy (Plan 305 T1.5). Phase 1 ships a stub; activation requires `lz4_flex` dep — deferred to Phase 2+.
+blake3_proxy = ["complexity_prior_sampler"]  # Sub-feature for Blake3CanonicalLengthComplexity proxy (Plan 305 T1.5). Phase 1 ships a stub; reuses the existing `blake3` dep. Activation deferred to Phase 2+.
 spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
 turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
@@ -1066,6 +1070,10 @@ required-features = ["micro_belief"]
 [[example]]
 name = "compression_drafter_01_basic"
 required-features = ["compression_drafter"]
+
+[[example]]
+name = "algorithmic_probability_sampler_demo"
+required-features = ["complexity_prior_sampler"]
 
 [[example]]
 name = "spectral_threat_arena"

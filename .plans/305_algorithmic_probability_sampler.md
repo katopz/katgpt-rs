@@ -6,7 +6,7 @@
 **Source paper:** [Dingle & Hutter, *Entropy* 28(2):226, 2026](https://www.mdpi.com/1099-4300/28/2/226) — Simplicity and Complexity in Combinatorial Optimization
 **Target:** `katgpt-rs/src/screening/complexity_prior.rs` + `katgpt-rs/src/screening/coincidence_gate.rs`
 **Feature:** `complexity_prior_sampler` (off by default until GOAT gate passes)
-**Status:** Active — Phase 1 (skeleton)
+**Status:** Active — Phase 1 complete (skeleton + 22/22 tests + demo shipped), Phase 2 (G1+G2 GOAT gates) + Phase 3-5 deferred.
 
 ---
 
@@ -28,7 +28,7 @@ Implement two open primitives distilled from Dingle–Hutter 2026 (Research 284)
 
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/src/screening/complexity_prior.rs` with:
+- [x] **T1.1** Create `katgpt-rs/src/screening/complexity_prior.rs` with: — **DEVIATION:** `ruliology/irreducibility.rs`'s `rle_compress` is private (`fn`, not `pub fn`) and operates on `WinMatrix`, not raw bytes. Implemented self-contained `rle_compressed_len` (zero-alloc, counts runs) and `shannon_entropy_bits` inline.
   - `pub trait ComplexityProxy { fn k_tilde<T: AsRef<[u8]>>(&self, candidate: T) -> f32; }`
   - `pub struct RleComplexity;` — re-export `rle_compress` from `ruliology/irreducibility.rs`, compute `compressed_len / raw_len`
   - `pub struct EntropyComplexity;` — re-export Shannon entropy kernel from `ruliology/irreducibility.rs` (already SIMD-friendly)
@@ -36,7 +36,7 @@ Implement two open primitives distilled from Dingle–Hutter 2026 (Research 284)
   - `pub struct Lz4Complexity;` — lazily-initialized lz4 encoder (Warm tier; behind sub-feature `lz4_proxy` to keep the default zero-dep)
   - All proxies `#[inline]`, zero-allocation, `const fn new()` where possible
 
-- [ ] **T1.2** Implement `CompressionPriorSampler<K: ComplexityProxy>`:
+- [x] **T1.2** Implement `CompressionPriorSampler<K: ComplexityProxy>`:
   - Fields: `proxy: K`, `alpha: f32`, `beta: f32`
   - `pub fn log_prob<T: AsRef<[u8]>>(&self, candidate: T) -> f32` — returns `-α·K̃(x) - β` (log-sigmoid input; **never softmax**)
   - `pub fn sample_ix(&self, candidates: &[&[u8]], scratch: &mut [f32], rng: &mut impl Rng) -> usize` — fills `scratch` with log-probs, computes softmax-free categorical sample via cumulative-sum + binary search (sigmoid per candidate, then normalize for sampling only — never as the public API)
@@ -44,29 +44,29 @@ Implement two open primitives distilled from Dingle–Hutter 2026 (Research 284)
   - `pub const fn default() -> Self` — `alpha = 1.0, beta = 0.0`
   - All methods `#[inline]`, zero heap allocation in the hot path
 
-- [ ] **T1.3** Implement latent variant `LatentCompressionPriorSampler<K>`:
+- [x] **T1.3** Implement latent variant `LatentCompressionPriorSampler<K>`:
   - Operates on `&[f32]` via byte-quantization (`fn quantize_latent(v: &[f32], scratch: &mut [u8])` — min-max scale to `[0, 255]`)
   - Reuses the same `ComplexityProxy` trait (over `&[u8]`)
   - Same `log_prob` / `sample_ix` / `top_k` API
   - Quantization is zero-allocation: caller provides scratch buffer
 
-- [ ] **T1.4** Create `katgpt-rs/src/screening/coincidence_gate.rs` with:
+- [x] **T1.4** Create `katgpt-rs/src/screening/coincidence_gate.rs` with: — **DEVIATION:** `SmallVec<[usize; 8]>` return type replaced with `Vec<usize>` (smallvec not in deps). Simplified `probe_transfer<F>(..., objectives: &[F], ...)` signature (per implementation hand-off). Uses `fastrand::Rng` for the random sample (not on the per-tick hot path).
   - `pub struct CoincidenceGate { simple_set_size_estimate: f32 }` — threshold τ on `|X_O(1)|`; above τ → optimistic transfer probe, below τ → skip
   - `pub fn probe_transfer<F, I>(&self, x_star: &[u8], objectives: I, rank_threshold_r: usize) -> Vec<usize>` where `F: Fn(&[u8]) -> f32`, `I: IntoIterator<Item = F>` — returns indices of `f2_k` where `x*` ranks in top-r
   - `pub fn should_probe(&self, k_tilde_of_f2: f32) -> bool` — skip if `f2` is complex (high-K reward function)
   - Zero allocation in the hot path; returns `SmallVec<[usize; 8]>` or pre-allocated `&mut [usize]` slice
 
-- [ ] **T1.5** Feature-gate both modules behind `complexity_prior_sampler` in `katgpt-rs/Cargo.toml`:
+- [x] **T1.5** Feature-gate both modules behind `complexity_prior_sampler` in `katgpt-rs/Cargo.toml`:
   - Default: off (zero-dep baseline preserved)
-  - Sub-feature `lz4_proxy` adds `lz4` dep (for `Lz4Complexity`)
-  - Sub-feature `blake3_proxy` adds `blake3` dep (for `Blake3CanonicalLengthComplexity`, used by `riir-neuron-db`)
+  - Sub-feature `lz4_proxy` adds `lz4` dep (for `Lz4Complexity`) — **stub only in Phase 1; activation deferred to Phase 2+**
+  - Sub-feature `blake3_proxy` adds `blake3` dep (for `Blake3CanonicalLengthComplexity`, used by `riir-neuron-db`) — **stub only in Phase 1; activation deferred to Phase 2+**
 
-- [ ] **T1.6** Re-export from `katgpt-rs/src/screening/mod.rs` and `katgpt-rs/src/lib.rs`:
+- [x] **T1.6** Re-export from `katgpt-rs/src/screening/mod.rs` and `katgpt-rs/src/lib.rs`:
   - `pub use complexity_prior::{ComplexityProxy, CompressionPriorSampler, LatentCompressionPriorSampler, RleComplexity, EntropyComplexity, L1Complexity};`
   - `pub use coincidence_gate::CoincidenceGate;`
   - Gated by `#[cfg(feature = "complexity_prior_sampler")]`
 
-- [ ] **T1.7** Unit tests (in-module `#[cfg(test)] mod tests`):
+- [x] **T1.7** Unit tests (in-module `#[cfg(test)] mod tests`) — **22/22 PASS:**
   - `test_rle_complexity_all_same` — `[42u8; 100]` → K̃ near 0
   - `test_rle_complexity_random` — pseudo-random bytes → K̃ near 1
   - `test_entropy_complexity_uniform` — uniform byte distribution → max entropy
@@ -79,11 +79,7 @@ Implement two open primitives distilled from Dingle–Hutter 2026 (Research 284)
   - `test_coincidence_gate_probe_transfer` — given `x_star` and 3 objectives where `x_star` is top-1 in 2 of them, returns the 2 indices
   - `test_coincidence_gate_should_probe_skips_complex_f2` — high-K `f2` → skip
 
-- [ ] **T1.8** Add `examples/algorithmic_probability_sampler_demo.rs`:
-  - Build a 16-bit action space (65536 candidates)
-  - Define a simple objective `f1(x) = -popcount(x XOR 0xFFFF)` (optimum = `0xFFFF`, K = O(1))
-  - Show: uniform sampling needs ~32768 samples avg to find optimum; K-prior sampler (RLE) needs ~10
-  - Print speedup ratio
+- [x] **T1.8** Add `examples/algorithmic_probability_sampler_demo.rs`: — **NOTE:** Demo runs cleanly. Honest result: on the 2-byte u16 encoding, neither RLE nor inverted-L1 prior beats uniform within 1000 trials (the encoding is too short for the simplicity signal to dominate sampling noise). Phase 2's G2 benchmark uses a longer-encoding synthetic to demonstrate the exponential lift the theory predicts.
 
 ---
 

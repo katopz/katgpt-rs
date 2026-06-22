@@ -5,7 +5,7 @@
 **Source paper:** [arXiv:2409.02426](https://arxiv.org/abs/2409.02426) — Wang et al., *Breaking the Curse of Dimensionality*.
 **Private Super-GOAT guide:** `riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md`
 **Target:** `katgpt-rs/crates/katgpt-core/src/subspace_phase_gate.rs` (new module) + Cargo feature `subspace_phase_gate`
-**Status:** Active — Phase 1 in progress
+**Status:** Active — Phase 1 complete (skeleton shipped), Phase 2 (G1 GOAT proof) + Phases 3-5 deferred.
 
 ---
 
@@ -28,16 +28,16 @@ This is the **open** counterpart of the private Super-GOAT at `riir-neuron-db/.r
 
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/crates/katgpt-core/src/subspace_phase_gate.rs` with module doc referencing arXiv:2409.02426 and the open research note R279.
-- [ ] **T1.2** Implement `pub fn participation_ratio(spectrum: &[f32]) -> f32` — `(Σλ)² / Σ(λ²)`. Chunk-4 accumulation for SIMD auto-vectorisation. Zero-allocation. Guard against all-zero input (return 0.0).
-- [ ] **T1.3** Implement `pub fn numerical_rank(spectrum: &[f32], eta: f32) -> usize` — smallest `r` such that cumulative energy > η·total. Default η = 0.99 (paper eq. 52). Spectrum assumed sorted descending (caller's responsibility; document this).
-- [ ] **T1.4** Implement `pub fn phase_transition_gate(n_samples: usize, intrinsic_dim: usize) -> bool` — `n_samples >= intrinsic_dim`. Trivially simple; the value is the *name* and the *documentation* tying it to Theorem 4.
-- [ ] **T1.5** Implement `pub fn estimate_intrinsic_dim(spectrum: &[f32], method: IntrinsicDimMethod) -> usize` — dispatch between `ParticipationRatio` (round PR to nearest int) and `NumericalRank { eta }`.
-- [ ] **T1.6** Define `pub enum IntrinsicDimMethod { ParticipationRatio, NumericalRank { eta: f32 } }`.
-- [ ] **T1.7** Implement `pub struct JacobianSvdScratch { col: Vec<f32>, jac: Vec<f32>, u: Vec<f32>, s: Vec<f32>, vt: Vec<f32> }` with `with_capacity(n, m)` and `clear()` for reuse.
-- [ ] **T1.8** Implement `pub fn jacobian_svd_at<F>(f: F, x: &[f32], eps: f32, scratch: &mut JacobianSvdScratch) -> SvdResult where F: Fn(&[f32], &mut [f32])` — forward-difference Jacobian (column at a time), then thin SVD. Return top-r `(singular_value, right_singular_vector, left_singular_vector)` triples.
-- [ ] **T1.9** Define `pub struct SvdResult { singular_values: Vec<f32>, right_singular_vectors: Vec<Vec<f32>>, left_singular_vectors: Vec<Vec<f32>>, rank: usize }`.
-- [ ] **T1.10** Wire into `katgpt-rs/crates/katgpt-core/src/lib.rs`:
+- [x] **T1.1** Create `katgpt-rs/crates/katgpt-core/src/subspace_phase_gate.rs` with module doc referencing arXiv:2409.02426 and the open research note R279.
+- [x] **T1.2** Implement `pub fn participation_ratio(spectrum: &[f32]) -> f32` — `(Σλ)² / Σ(λ²)`. Chunk-4 accumulation for SIMD auto-vectorisation. Zero-allocation. Guard against all-zero input (return 0.0).
+- [x] **T1.3** Implement `pub fn numerical_rank(spectrum: &[f32], eta: f32) -> usize` — smallest `r` such that cumulative energy > η·total. Default η = 0.99 (paper eq. 52). Spectrum assumed sorted descending (caller's responsibility; document this).
+- [x] **T1.4** Implement `pub fn phase_transition_gate(n_samples: usize, intrinsic_dim: usize) -> bool` — `n_samples >= intrinsic_dim`. Trivially simple; the value is the *name* and the *documentation* tying it to Theorem 4.
+- [x] **T1.5** Implement `pub fn estimate_intrinsic_dim(spectrum: &[f32], method: IntrinsicDimMethod) -> usize` — dispatch between `ParticipationRatio` (round PR to nearest int) and `NumericalRank { eta }`.
+- [x] **T1.6** Define `pub enum IntrinsicDimMethod { ParticipationRatio, NumericalRank { eta: f32 } }`.
+- [x] **T1.7** Implement `pub struct JacobianSvdScratch { col: Vec<f32>, jac: Vec<f32>, u: Vec<f32>, s: Vec<f32>, vt: Vec<f32> }` with `with_capacity(n, m)` and `clear()` for reuse.
+- [x] **T1.8** Implement `pub fn jacobian_svd_at<F>(f: F, x: &[f32], eps: f32, scratch: &mut JacobianSvdScratch) -> SvdResult where F: Fn(&[f32], &mut [f32])` — forward-difference Jacobian (column at a time), then thin SVD. Return top-r `(singular_value, right_singular_vector, left_singular_vector)` triples.
+- [x] **T1.9** Define `pub struct SvdResult { singular_values: Vec<f32>, right_singular_vectors: Vec<Vec<f32>>, left_singular_vectors: Vec<Vec<f32>>, rank: usize }`.
+- [x] **T1.10** Wire into `katgpt-rs/crates/katgpt-core/src/lib.rs`:
    ```rust
    #[cfg(feature = "subspace_phase_gate")]
    pub mod subspace_phase_gate;
@@ -47,8 +47,8 @@ This is the **open** counterpart of the private Super-GOAT at `riir-neuron-db/.r
        jacobian_svd_at, numerical_rank, participation_ratio, phase_transition_gate,
    };
    ```
-- [ ] **T1.11** Add feature to `katgpt-rs/crates/katgpt-core/Cargo.toml`: `subspace_phase_gate = []` (no extra deps for now — pure numeric. Thin SVD on small matrices uses a portable scalar implementation; SIMD optimisation deferred to Phase 3).
-- [ ] **T1.12** Add feature to `katgpt-rs/Cargo.toml` (umbrella) propagating to katgpt-core.
+- [x] **T1.11** Add feature to `katgpt-rs/crates/katgpt-core/Cargo.toml`: `subspace_phase_gate = []` (no extra deps for now — pure numeric. Thin SVD on small matrices uses a portable scalar implementation; SIMD optimisation deferred to Phase 3).
+- [x] **T1.12** Add feature to `katgpt-rs/Cargo.toml` (umbrella) propagating to katgpt-core.
 
 **Exit:** `cargo check -p katgpt-core --features subspace_phase_gate` compiles. `cargo check -p katgpt-rs --features subspace_phase_gate` compiles.
 

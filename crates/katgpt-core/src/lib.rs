@@ -516,3 +516,22 @@ pub use engram::{
     multi_head_hash, rmsnorm_into, sigmoid_fuse_into, sigmoid_fuse_multi_branch_into,
     try_compress_token,
 };
+
+// Gain/Cost Loop Halting Primitive — open substrate-agnostic kernel for per-loop
+// halting decisions (Plan 304, Research 282, arXiv:2606.18023, LoopCoder-v2).
+//
+// halt when marginal refinement gain < marginal drift cost × τ; oscillation
+// early-halt via cos θ < 0; L_min floor protects representational capacity.
+// Composes with the shipped elastic-loop override (Issue 035) — Phase 2 will wire
+// this into `forward_looped()` (separate scope). Phase 1 ships the kernel only.
+//
+// Latent vs Raw: gain/cost signals are local latent (per-loop hidden-state
+// deltas); the halt count L is a deterministic raw scalar safe to sync/replay.
+//
+// Opt-in until G1–G5 GOAT gate (Research 149 §5) passes.
+#[cfg(feature = "gain_cost_halt")]
+pub mod gain_cost_halt;
+#[cfg(feature = "gain_cost_halt")]
+pub use gain_cost_halt::{
+    GainCostLoopHalter, HaltDecision, HaltReason, angular_change, hidden_erank, step_size,
+};

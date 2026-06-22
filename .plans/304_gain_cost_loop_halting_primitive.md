@@ -5,7 +5,7 @@
 **Private guide:** [riir-ai/.research/149_Per_NPC_Gain_Cost_Reasoning_Depth_Guide.md](../../../riir-ai/.research/149_Per_NPC_Gain_Cost_Reasoning_Depth_Guide.md)
 **Source paper:** [arxiv 2606.18023](https://arxiv.org/abs/2606.18023) — LoopCoder-v2 (Yang et al., 2026)
 **Target:** `crates/katgpt-core/src/gain_cost_halt.rs` (new module) + Cargo feature `gain_cost_halt`
-**Status:** Active — Phase 1 (skeleton)
+**Status:** Active — Phase 1 complete (kernel + 24/24 G1 mechanics tests shipped), Phase 2 (forward_looped wiring) + Phase 3 (docs) deferred.
 
 ---
 
@@ -23,9 +23,9 @@ The primitive composes with the shipped elastic loop override (`Config::effectiv
 
 ### Tasks
 
-- [ ] **T1.1** Create `crates/katgpt-core/src/gain_cost_halt.rs` behind `gain_cost_halt` feature. Re-export from `crates/katgpt-core/src/lib.rs`.
+- [x] **T1.1** Create `crates/katgpt-core/src/gain_cost_halt.rs` behind `gain_cost_halt` feature. Re-export from `crates/katgpt-core/src/lib.rs`.
 
-- [ ] **T1.2** Define the halter state struct (zero-alloc, hot-path-safe):
+- [x] **T1.2** Define the halter state struct (zero-alloc, hot-path-safe):
 
 ```rust
 /// Per-loop state for the gain/cost halting criterion (Research 282 / Plan 304).
@@ -58,7 +58,7 @@ pub struct GainCostLoopHalter {
 }
 ```
 
-- [ ] **T1.3** Implement `halt_decision(&mut self, loop_idx: usize, gain: f32, cost: f32, cos_theta: f32) -> HaltDecision`:
+- [x] **T1.3** Implement `halt_decision(&mut self, loop_idx: usize, gain: f32, cost: f32, cos_theta: f32) -> HaltDecision`:
 
 ```rust
 /// Result of a single gain/cost halt evaluation.
@@ -112,7 +112,7 @@ impl GainCostLoopHalter {
 }
 ```
 
-- [ ] **T1.4** Implement signal extractors (zero-alloc, accept `&mut scratch` buffers):
+- [x] **T1.4** Implement signal extractors (zero-alloc, accept `&mut scratch` buffers): — **DEVIATION:** `crate::data_probe::geometry::effective_rank` lives in the ROOT crate (`katgpt-rs/src/data_probe/`), not katgpt-core; katgpt-core cannot depend on the root (circular dep). `hidden_erank` ships a local self-contained Roy & Vetterli entropy-of-eigenvalue-spectrum implementation (column-mean centering → min(S,d)×min(S,d) Gram → in-place Jacobi eigenvalues → normalize → Shannon entropy → exp(entropy)).
 
 ```rust
 /// Compute effective rank from a hidden-state matrix (S × d), reusing the
@@ -159,7 +159,7 @@ pub fn angular_change(curr_step: &[f32], prev_step: &[f32]) -> f32 {
 }
 ```
 
-- [ ] **T1.5** G1 mechanics unit tests:
+- [x] **T1.5** G1 mechanics unit tests:
   - `halt_decision_gain_below_cost_halt`
   - `halt_decision_gain_above_cost_continue`
   - `halt_decision_refused_below_l_min`
@@ -168,9 +168,9 @@ pub fn angular_change(curr_step: &[f32], prev_step: &[f32]) -> f32 {
   - `step_size_zero_for_identical_states`
   - `angular_change_zero_for_zero_step`
   - `angular_change_negative_for_reversal`
-  - No NaN/Inf in any path; `HaltDecision` enum is `#[repr(u8)]`-compatible for cache-line friendliness.
+  - No NaN/Inf in any path; `HaltDecision` enum is `#[repr(u8)]`-compatible for cache-line friendliness. — **24/24 PASS** (added NaN-safety + tau-scaling + tall-matrix + rank-one + collapsed + scratch-contract + orthogonal + aligned tests beyond the plan's minimum list).
 
-- [ ] **T1.6** Add `gain_cost_halt` feature to `crates/katgpt-core/Cargo.toml`. Default = OFF (opt-in until G1–G5 pass).
+- [x] **T1.6** Add `gain_cost_halt` feature to `crates/katgpt-core/Cargo.toml`. Default = OFF (opt-in until G1–G5 pass).
 
 ---
 

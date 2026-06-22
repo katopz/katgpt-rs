@@ -262,3 +262,36 @@ pub mod closure_wire;
 
 #[cfg(feature = "closure_instrument")]
 pub mod closure_mining;
+
+// Salience Tri-Gate Primitive — open 3-way per-tick emit gate (Speak / Silent /
+// Delegate) distilled from JoyAI-VL-Interaction (Plan 303, Research 281,
+// arxiv 2606.14777). Two stacked sigmoids (never softmax); silence is a
+// first-class variant, not a threshold-suppression default; zero-allocation
+// hot path; deterministic for replay/sync. Game-side NPC wiring lives in
+// riir-ai Plan 330 — this crate stays math-only, MIT, no game IP.
+// Opt-in until G1 (determinism + monotonicity) + G2 (two-sigmoid ablation
+// parity) + <50ns decide() latency gates pass.
+#[cfg(feature = "salience_tri_gate")]
+pub mod salience;
+#[cfg(feature = "salience_tri_gate")]
+pub use salience::{
+    DelegateToken, FoldbackTarget, SalienceDecision, SalienceTriGate, SilenceToken,
+};
+
+// Algorithmic-Probability Sampler + Coincidence Gate — two open primitives
+// distilled from Dingle & Hutter 2026 (Plan 305, Research 284, Entropy
+// 28(2):226). `CompressionPriorSampler<K>` replaces uniform candidate sampling
+// in MCTS / bandits / DDTree / speculative drafters with a simplicity-biased
+// prior (sigmoid per candidate, never softmax as the public API). Pluggable
+// K̃: RLE ratio, Shannon entropy, L1 norm (LZ4 / BLAKE3 stubs gated behind
+// sub-features). `CoincidenceGate` probes a found optimum against other simple
+// objectives for theorem-backed cross-task transfer. riir-ai Plan 331 wires
+// this to HLA / functor / shard vectors (private).
+// Opt-in until G1 (sampler safety) + G2 (exponential speedup) gates pass.
+#[cfg(feature = "complexity_prior_sampler")]
+pub mod screening;
+#[cfg(feature = "complexity_prior_sampler")]
+pub use screening::{
+    CoincidenceGate, CompressionPriorSampler, ComplexityProxy, EntropyComplexity, L1Complexity,
+    LatentCompressionPriorSampler, RleComplexity, quantize_latent,
+};

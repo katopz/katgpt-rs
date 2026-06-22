@@ -6,7 +6,7 @@
 **Runtime plan:** [riir-ai/.plans/330_proactive_npc_salience_gate_runtime.md](../../riir-ai/.plans/330_proactive_npc_salience_gate_runtime.md)
 **Source paper:** [arxiv 2606.14777](https://arxiv.org/abs/2606.14777) — JoyAI-VL-Interaction (Yao et al., JD.com, Jun 2026)
 **Target:** `katgpt-rs/src/salience/` (new module) + Cargo feature `salience_tri_gate`
-**Status:** Active — Phase 1 (skeleton unblock)
+**Status:** Active — Phase 1 complete (skeleton + G1/G2 property tests shipped, 11/11 tests pass), Phase 2 benchmarks + Phase 3-5 deferred.
 
 ---
 
@@ -30,10 +30,10 @@ GOAT gate: G1 (determinism + monotonicity) and G2 (two-sigmoid ablation parity) 
 
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/src/salience/mod.rs` with module-level doc referencing Plan 303 + Research 281.
-- [ ] **T1.2** Add Cargo feature `salience_tri_gate` to `katgpt-rs/Cargo.toml` (opt-in, default off). Gate the entire module behind it.
-- [ ] **T1.3** Wire `pub mod salience;` into `katgpt-rs/src/lib.rs` behind the feature flag.
-- [ ] **T1.4** Define the core types in `katgpt-rs/src/salience/types.rs`:
+- [x] **T1.1** Create `katgpt-rs/src/salience/mod.rs` with module-level doc referencing Plan 303 + Research 281.
+- [x] **T1.2** Add Cargo feature `salience_tri_gate` to `katgpt-rs/Cargo.toml` (opt-in, default off). Gate the entire module behind it.
+- [x] **T1.3** Wire `pub mod salience;` into `katgpt-rs/src/lib.rs` behind the feature flag.
+- [x] **T1.4** Define the core types in `katgpt-rs/src/salience/types.rs`:
   ```rust
   /// First-class output of the salience gate. Silent is a decision, not a default.
   #[derive(Clone, Copy, Debug, PartialEq)]
@@ -74,7 +74,7 @@ GOAT gate: G1 (determinism + monotonicity) and G2 (two-sigmoid ablation parity) 
       ColdTier         = 3,  // result is a frozen shard (caller's persistence layer)
   }
   ```
-- [ ] **T1.5** Define the gate struct in `katgpt-rs/src/salience/gate.rs`:
+- [x] **T1.5** Define the gate struct in `katgpt-rs/src/salience/gate.rs`:
   ```rust
   /// 3-way salience gate. Maps activation `a` + scalars `z`, `c` to one of
   /// {Speak, Silent, Delegate}. Uses two stacked sigmoids — never softmax.
@@ -103,8 +103,8 @@ GOAT gate: G1 (determinism + monotonicity) and G2 (two-sigmoid ablation parity) 
       _marker: PhantomData<A>,
   }
   ```
-- [ ] **T1.6** Implement `SalienceTriGate::new(d_speak, d_delegate, w_z, w_c, beta_speak, beta_delegate, tau_speak, tau_delegate)` constructor. Validates that `D >= 1`, all direction vectors are finite, weights non-negative.
-- [ ] **T1.7** Implement `SalienceTriGate::decide(&self, a: &[f32; D], z: f32, c: f32, delegate_payload: A, tick: u64) -> SalienceDecision<A>`:
+- [x] **T1.6** Implement `SalienceTriGate::new(d_speak, d_delegate, w_z, w_c, beta_speak, beta_delegate, tau_speak, tau_delegate)` constructor. Validates that `D >= 1`, all direction vectors are finite, weights non-negative.
+- [x] **T1.7** Implement `SalienceTriGate::decide(&self, a: &[f32; D], z: f32, c: f32, delegate_payload: A, tick: u64) -> SalienceDecision<A>`:
   - Compute `salience = dot(a, d_speak) + w_z * z + w_c * c`.
   - Compute `score_speak = sigmoid(beta_speak * (salience - tau_speak))`.
   - Compute `delegate_dot = dot(a, d_delegate)`.
@@ -116,15 +116,15 @@ GOAT gate: G1 (determinism + monotonicity) and G2 (two-sigmoid ablation parity) 
     else:                                Speak
     ```
   - All branches return a `SalienceDecision<A>` — Silent is first-class.
-- [ ] **T1.8** Reuse `crate::simd::fast_sigmoid` for the sigmoid (already shipped, libm-exp-bounded). Add a doc note that we never use softmax.
-- [ ] **T1.9** Use `mul_add` for the dot-product accumulation (matches the `ActionBridge` pattern in `bridge/mod.rs`). Add an inline SIMD note.
-- [ ] **T1.10** Implement `SalienceTriGate::decide_batch(&self, activations: &[[f32; D]], z: &[f32], c: &[f32], payloads: &[A], tick: u64, out: &mut [SalienceDecision<A>])` — same logic, batched. Caller provides output buffer; no internal allocation.
+- [x] **T1.8** Reuse `crate::simd::fast_sigmoid` for the sigmoid (already shipped, libm-exp-bounded). Add a doc note that we never use softmax. — **DEVIATION:** `crate::simd::fast_sigmoid` does not exist in the root crate's simd module; implemented a private libm-bounded inline `sigmoid` in `gate.rs` with a TODO to hoist to `crate::simd::fast_sigmoid` when a SIMD dispatcher lands.
+- [x] **T1.9** Use `mul_add` for the dot-product accumulation (matches the `ActionBridge` pattern in `bridge/mod.rs`). Add an inline SIMD note.
+- [x] **T1.10** Implement `SalienceTriGate::decide_batch(&self, activations: &[[f32; D]], z: &[f32], c: &[f32], payloads: &[A], tick: u64, out: &mut [SalienceDecision<A>])` — same logic, batched. Caller provides output buffer; no internal allocation.
 
 ### Phase 1 acceptance
 
-- `cargo check --features salience_tri_gate` passes.
-- `cargo check --no-default-features` still passes (no leakage).
-- 3 unit tests: Silent path, Speak path, Delegate path — each constructs a gate with hand-tuned vectors, runs `decide()`, asserts the variant.
+- [x] `cargo check --features salience_tri_gate` passes.
+- [x] `cargo check --no-default-features` still passes (no leakage).
+- [x] 3 unit tests: Silent path, Speak path, Delegate path — each constructs a gate with hand-tuned vectors, runs `decide()`, asserts the variant. (Plus 8 more: G1 determinism, G1 monotonicity ×2, G2 ablation parity, batched smoke, plus 3 type-level tests in `types.rs`. 11/11 PASS.)
 
 ---
 
