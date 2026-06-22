@@ -346,13 +346,19 @@ The hard problem: prove that roots[d] is a faithful aggregation of roots[d+1].
 
 - [x] **Candidate C (probabilistic sampling) — LANDED** in
       `crates/katgpt-core/src/rtdc.rs` behind feature `rtdc_subtree_inclusion`.
-      CG6 PASSES: cost 4.72×≤5.0×, deterministic catch 100%, probabilistic
-      catch at f=1/8 K=8: 66.4% empirical vs 65.6% expected. 10 new tests.
+      CG6 PASSES: cost 4.72×≤5.5× (inline test), **4.60×** (formal Criterion
+      bench — `.benchmarks/303_rtdc_subtree_inclusion_goat.md`),
+      deterministic catch 100%, probabilistic catch at f=1/8 K=8: 66.4%
+      empirical vs 65.6% expected. 10 new tests.
       Public API: `SubtreeProof`, `prove_subtree_inclusion`,
       `verify_subtree_inclusion`, `tamper_detection_probability`,
       `min_k_for_95pct_confidence`, `RTDC_SUBTREE_DEFAULT_K`.
+      Criterion bench: `crates/katgpt-core/benches/rtdc_subtree_bench.rs`.
 - [ ] **Candidate B (FFT batch verify)** — pending investigation.
 - [ ] **Candidate A (Pedersen)** — deferred (3-4 weeks, needs curve dep).
+- [ ] **Chain wiring** — `chain_rtdc_subtree` feature + bridge glue in
+      `riir-chain/src/encoding/rtdc_bridge.rs`. Deferred until a consumer
+      needs it (riir-ai fog-of-war WASM verifier is the natural first consumer).
 
 ---
 

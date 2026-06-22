@@ -151,6 +151,13 @@ name = "merkle_octree_bench"
 harness = false
 required-features = ["merkle_octree"]
 
+# Plan 302 Phase 3 / Issue 002 — RTDC subtree_inclusion CG6 cost gate:
+# verify_subtree_inclusion cost vs depth-2 verify_at_depth baseline.
+[[bench]]
+name = "rtdc_subtree_bench"
+harness = false
+required-features = ["rtdc_subtree_inclusion"]
+
 [[bench]]
 name = "npc_brain_bench"
 harness = false
