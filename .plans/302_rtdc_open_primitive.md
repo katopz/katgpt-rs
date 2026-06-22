@@ -354,11 +354,33 @@ The hard problem: prove that roots[d] is a faithful aggregation of roots[d+1].
       `verify_subtree_inclusion`, `tamper_detection_probability`,
       `min_k_for_95pct_confidence`, `RTDC_SUBTREE_DEFAULT_K`.
       Criterion bench: `crates/katgpt-core/benches/rtdc_subtree_bench.rs`.
-- [ ] **Candidate B (FFT batch verify)** — pending investigation.
+- [x] **Candidate B (FFT batch verify)** — **CLOSED with negative result**
+      (2026-06-22). After investigating the literature and the RTDC leaf
+           data model, Candidate B is a **category error**:
+      1. RTDC leaves are 32-byte BLAKE3 hashes, not numerical samples.
+         `fft_smooth_into()` (Plan 242, `flow/fft.rs`) operates on
+         `Vec<f32>` LEO Q-values — a totally different data type.
+      2. FFT batch verification (in the cryptographic sense, e.g.
+         arXiv:2405.07941 OR-proofs, or FRI/STARK-based batch Merkle)
+         requires either (a) leaves expressed as field elements in a
+         finite field, or (b) a SNARK proving layer on top. RTDC commits
+         BLAKE3 hashes — neither applies.
+      3. Conflated two distinct mechanisms sharing the word "Fourier":
+         the Plan 242 navigation primitive (low-pass on potential fields)
+         vs cryptographic batch verification (random linear combination /
+         FRI over evaluation domains).
+      **Recommendation:** do not pursue. Candidate C (already landed) is
+      the production answer. If deterministic-per-frequency-cutoff
+      soundness ever becomes a hard requirement, the path is Candidate A
+      (Pedersen on tangent log-maps), not FFT.
 - [ ] **Candidate A (Pedersen)** — deferred (3-4 weeks, needs curve dep).
-- [ ] **Chain wiring** — `chain_rtdc_subtree` feature + bridge glue in
-      `riir-chain/src/encoding/rtdc_bridge.rs`. Deferred until a consumer
-      needs it (riir-ai fog-of-war WASM verifier is the natural first consumer).
+- [x] **Chain wiring** — **LANDED** in `riir-chain` commit `fac46d5`
+      (2026-06-22). `chain_rtdc_subtree` feature in `riir-chain/Cargo.toml`,
+      bridge glue in `riir-chain/src/encoding/rtdc_bridge.rs` exposes
+      `build_depth_tiered_for_payloads`, `prove_rtdc_subtree`,
+      `verify_rtdc_subtree`. 8 new bridge tests pass. See
+      [`riir-chain/.plans/003_rtdc_quorum_wiring.md`](../../riir-chain/.plans/003_rtdc_quorum_wiring.md)
+      Phase 3 status for details.
 
 ---
 
