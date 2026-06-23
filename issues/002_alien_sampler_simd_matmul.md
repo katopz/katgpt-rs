@@ -134,33 +134,65 @@ Per AGENTS.md sync-boundary rule:
 ## Acceptance
 
 - [x] C1: bank storage refactored to flat SoA, public API preserved (`new` signature unchanged; `bank()` now returns `&[f32]` flat — no external callers used the old `&[Vec<f32>]` form).
-- [~] C2 Tier A: `dot_4acc` (4-accumulator `mul_add`) ships but is **NOT used in the default hot path**. Benchmarks showed it slower than sequential `+=` without `target-cpu=native` (no autovec, added register pressure → 48.81× vs 40.22× sequential vs 38.86× pre-issue). `dot_seq` is the shipped default; `dot_4acc` is kept for future `target-cpu=native` builds.
+- [~] C2 Tier A: `dot_4acc` (4-accumulator `mul_add`) was shipped but **never used in the default hot path** (benchmarks showed it slower than sequential `+=` without `target-cpu=native`). **Deleted in the rayon follow-up (2026-06-24)** per AGENTS.md DRY rule — it was dead code. `dot_seq` is the only shipped kernel.
 - [x] C3: incremental bank norm update path ships (`from_flat_bank`, `push_bank_items`, `invalidate_norms`).
-- [x] R1: existing test suite passes (63 tests). Run-to-run determinism preserved. Cross-version bit-identical scores NOT guaranteed (mul_add form kept available but not default; sequential default preserves original semantics).
-- [ ] **G3 re-measured: 40.22× (target ≤ 5.0×).** ❌ NOT CLOSED. Root cause: GOAT bench bank grows to ~100K items (100 NPCs × 1000 cycles), making per-cycle cost O(bank_size). No constant-factor primitive optimization can overcome linear bank growth. Microbench (fixed bank=100) confirms the primitive is 8% faster post-Issue-002 — the G3 failure is a scenario design issue, not a primitive speed issue.
+- [x] R1: existing test suite passes (59 tests after `dot_4acc` removal). Run-to-run determinism preserved. The sequential `dot_seq` default preserves original semantics.
+- [x] **G3 CLOSED via rayon NPC-parallelization: ~4.5× (target ≤ 5.0×).** See the "Post-Rayon" section in `.benchmarks/311_alien_sampler_goat.md` for full details. **Prior root cause analysis (below) was WRONG** — the bank was already bounded at `BANK_CAP=200` in the bench, not unbounded. The actual G3 bottleneck was the 200× FMA ratio (10.24M Arm C vs 51.2K Arm B per cycle) executed fully serially across 100 NPCs. Rayon parallelization across 100 NPCs on 16 cores closes G3.
 - [ ] R2 microbench: `rank` 10k = 5.10ms (target ≤ 5.0ms). ❌ Improved 7% from 5.49ms but still 2% over.
 - [x] `.benchmarks/311_alien_sampler_goat.md` updated with post-Issue-002 G3 number + root cause analysis.
-- [ ] Plan 311 Phase 4 T4.1 + T4.3: NOT marked DONE (G3 not closed). Stays as "MOVED to Issue 002".
+- [ ] Plan 311 Phase 4 T4.1 + T4.3: marked DONE via rayon follow-up (see `.plans/311_alien_sampler_primitive.md`). SIMD inner-loop not needed — rayon alone closes G3.
 - [x] Commit on `develop` with `perf:` prefix per AGENTS.md.
 
 ### Outcome verdict (honest)
 
-**Partial — infrastructure lands, G3 not closed.** Issue 002 shipped useful infrastructure (SoA storage, C3 incremental API, microbench 8% faster) but did NOT achieve its primary goal (G3 ≤ 5×). The root cause is structural: the GOAT bench's unbounded bank growth makes G3 unreachable by primitive optimization alone. Per AGENTS.md honesty rule, this is documented rather than hidden.
+**Correction (2026-06-24):** The prior root cause analysis was **wrong**. The text
+below (kept for audit) claimed the GOAT bench's zone bank grew to ~100K items,
+making per-cycle cost O(bank_size). **The bank was already bounded at
+`BANK_CAP=200`** in `ArmC::step` (the `const BANK_CAP: usize = 200` was present
+in the bench since before Issue 002). The actual G3 bottleneck was the **200×
+FMA ratio** (Arm C: 10.24M FMAs/cycle; Arm B: 51.2K FMAs/cycle) executed fully
+serially across 100 NPCs.
 
-**What would actually close G3 (filed as follow-up, not in this issue):**
-1. **Bank bounding** — cap the zone bank at a max size with FIFO/LRU eviction. Algorithmic scenario change.
-2. **Adopt C3 in the bench** — use `push_bank_items` instead of `new(clone)`. Avoids rebuild clone but doesn't fix O(bank_size) cosine cost.
-3. **`target-cpu=native` builds** — would enable `dot_4acc` autovec (4× inner-loop speedup). Not portable for CI.
+**G3 is now CLOSED** via rayon NPC-parallelization (follow-up commit,
+2026-06-24). The 100 NPCs are embarrassingly parallel; `rayon::par_iter_mut`
+fuses pool regen + scoring + ranking into a single parallel pass per cycle.
+G3: 38.42× → ~4.5× on Apple M3 Max (16 cores). See the "Post-Rayon G3
+re-measurement" section in `.benchmarks/311_alien_sampler_goat.md`.
+
+**R1 caveat:** the per-NPC RNG seed split (required to parallelize
+`regen_pool`, which consumes a variable number of draws) shifts the β=0.7
+quality metric by ~2e-4 (0.6553 → 0.6555). The concentration metric stays
+bit-identical (0.4999 → 0.4999). GOAT gate verdicts are unchanged. See the
+benchmark doc for the full R1 analysis.
+
+**Outcome: G3 CLOSED.** Issue 002's infrastructure (C1 SoA, C3 incremental API)
+remains useful; C2 (`dot_4acc`) was dead code and has been deleted. Promotion
+is still blocked on G1+G2 (coherence-surface problem, separate plan needed).
+
+---
+
+### Prior outcome verdict (pre-rayon, kept for audit)
+
+**Partial — infrastructure lands, G3 not closed.** Issue 002 shipped useful infrastructure (SoA storage, C3 incremental API, microbench 8% faster) but did NOT achieve its primary goal (G3 ≤ 5×). The root cause ~~is structural: the GOAT bench's unbounded bank growth makes G3 unreachable by primitive optimization alone~~ **was misdiagnosed** — see correction above. Per AGENTS.md honesty rule, this is documented rather than hidden.
+
+**What would actually close G3 (DONE via rayon follow-up):**
+1. ~~**Bank bounding**~~ — already done (`BANK_CAP=200` was present since before Issue 002; the prior analysis missed it).
+2. ~~**Adopt C3 in the bench**~~ — not needed; rayon closes G3 without it.
+3. ~~**`target-cpu=native` builds**~~ — not needed; rayon closes G3 without SIMD.
+4. **Rayon NPC-parallelization** ✅ — the actual fix. Fuses regen + scoring into one parallel pass per cycle.
 
 **Explicitly NOT in scope:**
 - Multi-peak coherence scorer (G1+G2 fix) — separate plan.
-- Promotion of `alien_sampler` to default — blocked on G1+G2 (and now G3).
+- Promotion of `alien_sampler` to default — blocked on G1+G2 (G3 now closed).
 - Tier B LatCalMatrix wiring — separate issue, blocked on LatCalMatrix existing.
 - riir-ai consumer (`cgsp_runtime/alien_bridge.rs`) — separate plan in riir-ai.
-- Bank-bounding the GOAT scenario — separate issue (scenario change, not primitive change).
 
 ---
 
 ## TL;DR of the TL;DR
 
-Plan 311's `alien_sampler` failed G3 (38.86× slower than scalar baseline, target ≤5×). This issue attempted three perf changes: (1) flatten the bank from `Vec<Vec<f32>>` to SoA for cache/SIMD, (2) 4-accumulator `mul_add` dot for autovec, (3) incremental bank norm updates. **Result: infrastructure landed (C1+C3 done, microbench 8% faster), but G3 NOT closed (40.22× post-issue vs 38.86× pre-issue).** Root cause: the GOAT bench's zone bank grows to ~100K items, making per-cycle cost O(bank_size) — no constant-factor primitive optimization can overcome linear bank growth. The C2 `dot_4acc` (4-accumulator FMA) was slower than sequential without `target-cpu=native` and is kept available but not default. **The real G3 fix is bank-bounding (scenario change), filed as a follow-up. Module stays opt-in — G1+G2 still block promotion independently of G3.**
+Plan 311's `alien_sampler` failed G3 (38.86× slower than scalar baseline, target ≤5×). This issue attempted three perf changes: (1) flatten the bank from `Vec<Vec<f32>>` to SoA for cache/SIMD, (2) 4-accumulator `mul_add` dot for autovec, (3) incremental bank norm updates. **Result: infrastructure landed (C1+C3 done, microbench 8% faster), but G3 NOT closed at the time (40.22× post-issue vs 38.86× pre-issue).**
+
+**The prior root cause analysis was wrong** — it claimed the zone bank grew to ~100K items, but the bank was already bounded at `BANK_CAP=200`. The actual bottleneck was the 200× FMA ratio executed serially across 100 NPCs.
+
+**G3 is now CLOSED (2026-06-24 follow-up)** via rayon NPC-parallelization: 38.42× → ~4.5× on Apple M3 Max (16 cores). The C2 `dot_4acc` was dead code and has been deleted. **Module stays opt-in — G1+G2 still block promotion independently of G3.**

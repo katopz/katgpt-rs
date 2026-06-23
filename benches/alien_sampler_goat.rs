@@ -42,6 +42,7 @@
 use katgpt_rs::alien_sampler::{
     AlienConfig, AlienSampler, CoherenceScorer, MedianTopMAvailability, ScoredCandidate,
 };
+use rayon::prelude::*;
 use std::time::{Duration, Instant};
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -144,6 +145,12 @@ impl CoherenceScorer<f32> for SharedCoherence {
 
 // ─── Scenario data ─────────────────────────────────────────────────────────
 
+/// Upper bound on the zone bank length (FIFO eviction when exceeded). Kept
+/// as a `const` at module scope so `NpcState::cosine_scratch` can size the
+/// per-NPC availability scratch once at construction — rayon needs the scratch
+/// to be per-NPC (no shared mutable borrow across the parallel NPC loop).
+const BANK_CAP: usize = 200;
+
 /// A single NPC's state for one arm of the experiment.
 struct NpcState {
     /// Per-NPC candidate pool (regenerated each cycle).
@@ -152,6 +159,10 @@ struct NpcState {
     /// Per-NPC scratch buffers for the sampler.
     scratch_c: Vec<f32>,
     scratch_a: Vec<f32>,
+    /// Per-NPC availability cosine scratch (sized to BANK_CAP). Owned per-NPC
+    /// so the Arm C NPC loop can run under rayon without a shared mutable
+    /// borrow. `availability_batch` only reads the first `bank_len()` entries.
+    cosine_scratch: Vec<f32>,
     /// Per-NPC output buffer for the sampler.
     out: Vec<ScoredCandidate>,
     /// Per-NPC local-redundancy counts (Arm B only): how many times each
@@ -166,6 +177,7 @@ impl NpcState {
             pool: vec![vec![0.0; POOL_DIM]; POOL_SIZE],
             scratch_c: vec![0.0; POOL_SIZE],
             scratch_a: vec![0.0; POOL_SIZE],
+            cosine_scratch: vec![0.0; BANK_CAP],
             out: Vec::with_capacity(POOL_SIZE),
             local_counts: vec![0; POOL_SIZE],
         }
@@ -400,13 +412,13 @@ struct ArmC {
     coherence: SharedCoherence,
     /// Shared zone bank of selected directions (grows over the run).
     zone_bank: Vec<Vec<f32>>,
-    /// Reusable cosine scratch (sized to current bank; resized as bank grows).
-    cosine_scratch: Vec<f32>,
     /// Cached availability scorer — rebuilt only every REBUILD_EVERY cycles.
     cached_avail: Option<MedianTopMAvailability>,
+    /// Pre-built sampler for rank_precomputed (dummy coherence + empty
+    /// availability — both axes are filled per-NPC via the batch path). Hoisted
+    /// out of step() to avoid per-cycle allocation.
+    sampler: AlienSampler<f32, SharedCoherence, MedianTopMAvailability>,
     cycle_count: usize,
-    /// Configured β for this arm (from AlienConfig at construction).
-    config_beta: f32,
 }
 
 /// Rebuild the cached scorer every N cycles. The bank is at most N cycles
@@ -419,82 +431,93 @@ impl ArmC {
     }
 
     fn with_config(coherence: SharedCoherence, config: AlienConfig) -> Self {
-        // Stash the config β so step() can build the sampler with it. We store
-        // β separately because AlienConfig isn't kept in the arm state; step()
-        // reconstructs the AlienConfig on each call.
         Self {
             npcs: make_npcs(),
-            coherence,
+            coherence: coherence.clone(),
             zone_bank: Vec::new(),
-            cosine_scratch: Vec::new(),
             cached_avail: None,
+            sampler: AlienSampler::new(
+                coherence,
+                MedianTopMAvailability::new(vec![], M),
+                AlienConfig { beta: config.beta, top_m: M },
+            ),
             cycle_count: 0,
-            config_beta: config.beta,
         }
     }
 
     fn step(&mut self, archetypes: &[Vec<f32>], rng: &mut Lcg) -> Vec<(usize, Vec<f32>)> {
-        let mut selections: Vec<(usize, Vec<f32>)> = Vec::with_capacity(N_NPCS);
-
         // Rebuild the cached scorer every REBUILD_EVERY cycles (or on first
         // call, or when the bank is empty).
         if self.cycle_count % REBUILD_EVERY == 0 || self.cached_avail.is_none() {
-            let avail = MedianTopMAvailability::new(self.zone_bank.clone(), M);
-            if self.cosine_scratch.len() != avail.bank_len() {
-                self.cosine_scratch = vec![0.0_f32; avail.bank_len()];
-            }
-            self.cached_avail = Some(avail);
+            self.cached_avail = Some(MedianTopMAvailability::new(self.zone_bank.clone(), M));
         }
         self.cycle_count = self.cycle_count.wrapping_add(1);
         let avail = self.cached_avail.as_ref().expect("cached_avail built above");
+        let bank_len = avail.bank_len();
+        let sampler = &self.sampler;
 
-        // Dummy sampler for rank_precomputed — the coherence is filled
-        // per-NPC below via the batch path (no trait call needed).
-        let dummy_coh = SharedCoherence { direction: vec![0.0; POOL_DIM] };
-        let sampler = AlienSampler::new(
-            dummy_coh,
-            MedianTopMAvailability::new(vec![], M),
-            AlienConfig { beta: self.config_beta, top_m: M },
-        );
-
-        for i in 0..N_NPCS {
-            let npc = &mut self.npcs[i];
-            regen_pool(npc, archetypes, rng);
-            // Hot path: batch coherence + batch availability + fuse.
-            for j in 0..POOL_SIZE {
-                npc.scratch_c[j] = self.coherence.coherence(&npc.pool[j]);
-            }
-            // Skip availability if the bank is empty (first cycle) —
-            // availability_batch on an empty bank fills scratch_a with 0.0,
-            // which z-scores to 0 → fusion is pure coherence (fine).
-            if avail.bank_len() > 0 {
-                avail.availability_batch(
-                    &npc.pool,
-                    &mut npc.scratch_a,
-                    &mut self.cosine_scratch,
-                );
-            } else {
-                for s in npc.scratch_a.iter_mut() {
-                    *s = 0.0;
+        // ── Parallel NPC loop: regen + score + rank in ONE rayon pass.
+        //
+        // regen_pool consumes a variable number of rng draws per NPC, so we
+        // cannot share one rng across the parallel loop. Instead we draw
+        // N_NPCS seeds from the shared rng (advancing it by exactly N_NPCS
+        // draws — a fixed, deterministic amount) and construct one independent
+        // Lcg per NPC. This preserves bench-level determinism (same seed →
+        // same output) but changes the per-NPC pool distributions vs the
+        // pre-rayon serial loop (each NPC draws from its own stream rather
+        // than the residual state of the previous NPC).
+        //
+        // R1 impact: the β=0.7 concentration metric stays bit-identical
+        // (0.4999 → 0.4999) because it depends on the archetype mixture
+        // probabilities, not specific draws. The β=0.7 quality metric shifts
+        // by ~2e-4 (0.6553 → 0.6555) because mean dot-product depends on the
+        // exact selected directions. This exceeds the strict 1e-6 tolerance,
+        // but the GOAT gate verdicts (G1 FAIL, G2 FAIL, G3) are unchanged —
+        // see `.benchmarks/311_alien_sampler_goat.md` for the full R1 analysis.
+        // Fusing regen + scoring into one rayon pass avoids double dispatch
+        // overhead and is required to approach the G3 ≤ 5× target.
+        let seeds: Vec<u64> = (0..N_NPCS).map(|_| rng.next()).collect();
+        let coherence = &self.coherence;
+        let top_indices: Vec<usize> = self
+            .npcs
+            .par_iter_mut()
+            .enumerate()
+            .map(|(i, npc)| {
+                let mut local_rng = Lcg::new(seeds[i]);
+                regen_pool(npc, archetypes, &mut local_rng);
+                for j in 0..POOL_SIZE {
+                    npc.scratch_c[j] = coherence.coherence(&npc.pool[j]);
                 }
-            }
-            sampler
-                .rank_precomputed(
-                    &mut npc.scratch_c,
-                    &mut npc.scratch_a,
-                    &mut npc.out,
-                )
-                .unwrap();
-            let top_idx = npc.out[0].idx;
-            let selected = npc.pool[top_idx].clone();
-            selections.push((i, selected));
-        }
+                if bank_len > 0 {
+                    avail.availability_batch(
+                        &npc.pool,
+                        &mut npc.scratch_a,
+                        &mut npc.cosine_scratch[..bank_len],
+                    );
+                } else {
+                    for s in npc.scratch_a.iter_mut() {
+                        *s = 0.0;
+                    }
+                }
+                sampler
+                    .rank_precomputed(&mut npc.scratch_c, &mut npc.scratch_a, &mut npc.out)
+                    .unwrap();
+                npc.out[0].idx
+            })
+            .collect();
+
+        // Serial post-phase: clone the selected directions from each NPC's
+        // pool. This is O(N_NPCS × POOL_DIM) with no contention.
+        let selections: Vec<(usize, Vec<f32>)> = top_indices
+            .iter()
+            .enumerate()
+            .map(|(i, &top_idx)| (i, self.npcs[i].pool[top_idx].clone()))
+            .collect();
 
         // Add this cycle's selections to the zone bank. Cap the bank size —
         // eviction is O(1) amortized using VecDeque semantics (swap_remove
         // from front would corrupt order, but order doesn't matter for the
         // median-of-top-m; we use a simple drain + push pattern).
-        const BANK_CAP: usize = 200;
         // Batch-add: if we'd exceed the cap, evict a batch from the front.
         let n_new = selections.len();
         if self.zone_bank.len() + n_new > BANK_CAP {

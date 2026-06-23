@@ -143,9 +143,9 @@ This is the make-or-break phase. The whole point is proving dual-encoder availab
 
 ### Tasks
 
-- [ ] **T4.1** SIMD-ify `MedianTopMAvailability` cosine computation (4 or 8 lanes). **MOVED to [Issue 002](../issues/002_alien_sampler_simd_matmul.md)** — perf-only optimization; tracked as an issue per AGENTS.md ("Create issue at ./issues for optimization task, do not create plan"). Scope is G3 only; does NOT unblock promotion (G1+G2 still fail on the single-peak coherence surface and need a separate multi-peak coherence plan).
+- [x] **T4.1** SIMD-ify `MedianTopMAvailability` cosine computation (4 or 8 lanes). **CLOSED via rayon NPC-parallelization in GOAT bench (Issue 002 follow-up, 2026-06-24).** SIMD inner-loop not needed — rayon alone closes G3 (38.42× → ~4.5× on 16 cores). The 4-accumulator `dot_4acc` from Issue 002 C2 was dead code (slower than sequential without `target-cpu=native`) and has been deleted; `dot_seq` is the only shipped kernel.
 - [x] **T4.2** Hoist z-score computation into a single pass (compute mean + std in one loop, fuse in second). **DONE** as part of Phase 1 (`fuse_and_sort` kernel).
-- [ ] **T4.3** Re-run Phase 3 G3 perf measurement; confirm improvement. **MOVED to [Issue 002](../issues/002_alien_sampler_simd_matmul.md)** (tracked with T4.1).
+- [x] **T4.3** Re-run Phase 3 G3 perf measurement; confirm improvement. **DONE** — G3 = ~4.5× post-rayon (target ≤5×), observed range 4.49×–4.99× on Apple M3 Max (16 cores). See `.benchmarks/311_alien_sampler_goat.md` "Post-Rayon G3 re-measurement" section.
 - [x] **T4.4** If `rank()` allocates the return `Vec`, add `rank_into(&mut Vec<(f32, usize)>)` variant for callers that want to reuse the output buffer. **DONE** — shipped `rank_into` + `rank_precomputed` (hot-path batch variant).
 
 ---

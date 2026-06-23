@@ -38,21 +38,16 @@
 //! which lazily allocates / reuses an internal scratch buffer — convenient
 //! for cold paths and tests, but not the recommended hot-path entry point.
 //!
-//! # SIMD inner loop + R1 relaxation note (Issue 002 C2)
-//! The inner dot product ([`dot_4acc`]) uses four independent FMA accumulators
-//! (`f32::mul_add`) so LLVM can auto-vectorize to 4-lane SIMD (NEON `fmla`
-//! on aarch64, FMA3 on x86_64). This changes the FMA reduction order vs the
-//! pre-Issue-002 sequential `s += a*b` loop, so **strict bit-identical scores
-//! across versions are NOT guaranteed** (Issue 002 R1 relaxation). However:
-//! - **Determinism preserved**: same input → same output, bit-identical run-to-run.
-//! - **Ranking order preserved** on non-tied data (1-ULP diffs don't move
-//!   rankings outside exact ties, which are measure-zero on real embeddings).
-//! - **Mathematical correctness preserved** (cosines are valid).
+//! # Inner dot product + determinism
+//! The inner dot product is [`dot_seq`] (sequential `s += a*b`). Issue 002
+//! prototyped a 4-accumulator `mul_add` form (`dot_4acc`) for SIMD
+//! auto-vectorization, but benchmarks showed it slower than the sequential
+//! form without `target-cpu=native` (no autovec, added register pressure), so
+//! it was removed. The sequential form preserves strict run-to-run
+//! determinism (same input → same output, bit-identical). G3 closure for
+//! Plan 311 was instead achieved by parallelizing the NPC loop in the GOAT
+//! bench with rayon (see `.benchmarks/311_alien_sampler_goat.md`).
 //!
-//! The existing test suite enforces run-to-run determinism and tolerance-based
-//! assertions (`abs() < 1e-6`), both of which any deterministic implementation
-//! satisfies. Statistical GOAT gates (G1 concentration, G2 quality) average
-//! over 1000 cycles × 100 NPCs and are unaffected by 1-ULP numeric drift.
 //!
 //! # Edge cases
 //! - Empty bank → availability = 0.0 (no community signal; candidate is
@@ -554,10 +549,12 @@ impl AvailabilityScorer<f32> for MedianTopMAvailability {
 ///
 /// Benchmark-validated choice (rust-optimize skill: "measure after each
 /// change — some optimizations make things worse"). The 4-accumulator
-/// unrolled form was tried and is ~35% SLOWER on this target (M3 Max,
-/// generic target without `target-cpu=native`) — see Issue 002 bench notes.
+/// unrolled form (`dot_4acc`, Issue 002 C2) was tried and is ~35% SLOWER on
+/// this target (M3 Max, generic target without `target-cpu=native`) — it has
+/// since been removed; the sequential `zip` form is the only shipped kernel.
 /// The simple `zip` form lets LLVM extract ~2× from OoO overlap without the
-/// register-pressure cost of 4 accumulators.
+/// register-pressure cost of 4 accumulators. G3 closure for Plan 311 was
+/// instead achieved by rayon-parallelizing the NPC loop in the GOAT bench.
 ///
 /// `a.len()` must be `<= b.len()`; consumes `a.len()` elements.
 #[inline]
@@ -567,62 +564,6 @@ fn dot_seq(a: &[f32], b: &[f32]) -> f32 {
         s += x * y;
     }
     s
-}
-
-/// SIMD-friendly dot product using four independent FMA accumulators.
-///
-/// Computes `sum(a[i] * b[i])` with 4-way accumulator unrolling so LLVM can
-/// auto-vectorize to 4-lane SIMD (NEON `fmla` on aarch64, FMA3 on x86_64).
-/// `a.len()` must be `<= b.len()`; the function consumes `a.len()` elements.
-///
-/// # R1 relaxation (Issue 002 C2)
-/// Uses `f32::mul_add` (single-round fused multiply-add) and 4 independent
-/// accumulator chains, which produces a **different FMA reduction order**
-/// than a sequential `s += a*b` loop. Consequences:
-/// - Bit-identical cross-version output is NOT guaranteed (1-ULP drift).
-/// - Run-to-run determinism IS preserved (same code path every call).
-/// - Ranking order on non-tied data IS preserved (1-ULP diffs don't move
-///   rankings outside exact ties).
-/// - Mathematical correctness IS preserved (this is a valid dot product).
-///
-/// The existing test suite uses tolerance-based assertions and run-to-run
-/// determinism checks, both of which any deterministic implementation
-/// satisfies. The statistical GOAT gates (G1/G2) average over 1000 cycles ×
-/// 100 NPCs and are unaffected.
-///
-/// Reference: Issue 002 C2.
-#[inline]
-fn dot_4acc(a: &[f32], b: &[f32]) -> f32 {
-    let n = a.len();
-    if n == 0 {
-        return 0.0;
-    }
-    debug_assert!(
-        n <= b.len(),
-        "dot_4acc: b.len() ({}) must be >= a.len() ({n})",
-        b.len()
-    );
-    let n4 = n - (n % 4);
-    let mut s0 = 0.0_f32;
-    let mut s1 = 0.0_f32;
-    let mut s2 = 0.0_f32;
-    let mut s3 = 0.0_f32;
-    let mut i = 0;
-    while i < n4 {
-        // a[i].mul_add(b[i], s0) = a[i] * b[i] + s0  (single rounding).
-        s0 = a[i].mul_add(b[i], s0);
-        s1 = a[i + 1].mul_add(b[i + 1], s1);
-        s2 = a[i + 2].mul_add(b[i + 2], s2);
-        s3 = a[i + 3].mul_add(b[i + 3], s3);
-        i += 4;
-    }
-    let mut dot = (s0 + s1) + (s2 + s3);
-    // Tail (n % 4 != 0).
-    while i < n {
-        dot = a[i].mul_add(b[i], dot);
-        i += 1;
-    }
-    dot
 }
 
 /// Compute the median of the top-`m` values in `xs` (in place).
@@ -964,45 +905,6 @@ mod tests {
         let mut scratch = vec![0.0; 2];
         let direct_v = s.availability_embedded_with_scratch(&[1.0, 0.0], &mut scratch);
         assert!((trait_v - direct_v).abs() < 1e-6);
-    }
-
-    // ── dot_4acc unit tests ────────────────────────────────────────────────
-
-    #[test]
-    fn dot_4acc_matches_sequential() {
-        // 4-accumulator mul_add should match a sequential dot to within
-        // tolerance (R1 relaxation: not bit-identical, but close).
-        let a: Vec<f32> = (0..16).map(|i| (i as f32) * 0.1).collect();
-        let b: Vec<f32> = (0..16).map(|i| (i as f32) * 0.1 + 0.05).collect();
-        let simd = dot_4acc(&a, &b);
-        let mut seq = 0.0_f32;
-        for (x, y) in a.iter().zip(b.iter()) {
-            seq += x * y;
-        }
-        assert!((simd - seq).abs() < 1e-4, "simd={simd}, seq={seq}");
-    }
-
-    #[test]
-    fn dot_4acc_empty_returns_zero() {
-        assert_eq!(dot_4acc(&[], &[]), 0.0);
-    }
-
-    #[test]
-    fn dot_4acc_short_input_tail() {
-        // Length 5 → n4=4 + tail of 1.
-        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
-        let b = [1.0, 1.0, 1.0, 1.0, 1.0];
-        // Expected: 1+2+3+4+5 = 15.
-        assert!((dot_4acc(&a, &b) - 15.0).abs() < 1e-5);
-    }
-
-    #[test]
-    fn dot_4acc_deterministic_across_calls() {
-        let a: Vec<f32> = (0..32).map(|i| (i as f32) * 0.01 - 0.16).collect();
-        let b: Vec<f32> = (0..32).map(|i| (i as f32) * 0.02 - 0.31).collect();
-        let v1 = dot_4acc(&a, &b);
-        let v2 = dot_4acc(&a, &b);
-        assert_eq!(v1.to_bits(), v2.to_bits(), "dot_4acc must be deterministic");
     }
 
     // ── bank_row / bank_flat accessors ─────────────────────────────────────
