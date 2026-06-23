@@ -46,6 +46,7 @@ mod tests_types;
 // unchanged after the file → folder split. Feature gates mirror the
 // gates on the underlying items.
 pub use config::{Config, InferenceOverrides, kv_dim};
+#[cfg(feature = "domain_latent")]
 pub use domain::DomainLatent;
 pub use enums::{
     AttentionMode, AttentionProjection, CacheLayout, ConvergenceSelector, DashAttnConfig,
@@ -72,8 +73,10 @@ pub use lora::{LoraAdapter, LoraPair, lora_apply};
 pub use math::{
     gegelu, gegelu_tanh, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel, matmul_relu,
     rmsnorm, rmsnorm_with_gamma, rmsnorm_with_gamma_eps, sample_token, sample_token_into, silu,
-    softmax, softmax_scaled, sparse_matmul, swiglu,
+    softmax, softmax_scaled, swiglu,
 };
+#[cfg(feature = "sparse_mlp")]
+pub use math::sparse_matmul;
 pub use rng::Rng;
 pub use sense::{DilationConfig, SenseKind, SenseModule, ShardEmbedding, TernaryDir};
 #[cfg(feature = "plasma_path")]

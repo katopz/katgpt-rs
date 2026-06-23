@@ -145,7 +145,8 @@ For kernels we own (HLA, latent_functor, micro_belief, engram, Raven) — NOT fo
 - [x] **T7.1** Add `depth_invariance` feature to `crates/katgpt-core/Cargo.toml`. Default: OFF (opt-in until G1–G4 pass).
 - [x] **T7.2** Re-export `DepthInvarianceDiagnostic`, `DepthInvarianceKind`, `DepthInvarianceConfig`, `MagnitudeRegularization`, `apply_magnitude_regularization`, `Scratch` from `crates/katgpt-core/src/lib.rs`.
 - [x] **T7.3** Update `.docs/01_overview.md` Feature Flags table with `depth_invariance` row. Update `.docs/02_architecture.md` with a new "Depth-Invariance Diagnostic" section near the existing Sink-Aware section (cross-link to avoid confusion — different papers).
-- [ ] **T7.4** If G1–G4 all pass → promote `depth_invariance` to default-on in `crates/katgpt-core/Cargo.toml` and in the root `katgpt-rs/Cargo.toml` default feature list. If any fail → keep opt-in, document in `.benchmarks/`.
+- [x] **T7.4** If G1–G4 all pass → promote `depth_invariance` to default-on in `crates/katgpt-core/Cargo.toml` and in the root `katgpt-rs/Cargo.toml` default feature list. If any fail → keep opt-in, document in `.benchmarks/`.
+  **Status (parent, 2026-06-23):** **KEPT OPT-IN.** G1/G2/G3 PASS (G2 reproduces the paper finding on random-init — strongest possible signal). G4 latency targets (G4.1 ≤5% of forward, G4.3 ≤2% overhead) MISS — they are structurally unrealistic for the O(k·d)-vs-O(d²) workload shape (only `d=1024, k=4` clears G4.1). Per the plan's literal "If any fail → keep opt-in" clause, the feature stays opt-in. Full analysis + numbers at `.benchmarks/306_depth_invariance_g4.md`. The diagnostic is off-hot-path (audit cadence), so the missed latency gate carries no operational cost; revisit promotion after the SIMD-vectorized inner loop lands (would clear G4.2's 10M/sec) or after the gate is rewritten as an absolute-latency target.
 
 ---
 

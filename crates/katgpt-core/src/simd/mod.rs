@@ -78,10 +78,17 @@ pub use activations::{fast_sigmoid, simd_exp_inplace, simd_exp_sum_inplace, simd
 pub use argmax::simd_argmax_f32;
 pub use dot::{simd_dot_f16_f32, simd_dot_f32, simd_fma_row, simd_matmul_f16_f32_rows, simd_matmul_f16_f32_rows_parallel, simd_matmul_relu_rows, simd_matmul_rows, simd_matmul_rows_parallel, simd_matvec, simd_outer_product_acc, simd_outer_product_acc_scaled};
 pub use elementwise::{simd_add_inplace, simd_add_into, simd_add_scalar_inplace, simd_fused_decay_write, simd_fused_sub_scale_inplace, simd_max_f32, simd_scale_inplace, simd_scale_mul_inplace, simd_sum_f32};
+// Feature-gated re-exports — mirror the `#[cfg(feature = "...")]` gates on
+// the underlying items so `cargo check --no-default-features` stays green.
+#[cfg(feature = "maxsim")]
 pub use maxsim::{maxsim_score, maxsim_score_packed};
-pub use research::{coincidence_score, compute_retrieval_margin, dim_sufficiency_bound, entropy_f32, simd_dist_sq, simd_fused_scale_acc, simd_fused_sub_acc, simd_gram_f32, sigmoid_margin_loss, simd_sum_abs_f32, simd_sum_sq};
+#[cfg(feature = "sigmoid_margin")]
+pub use research::{compute_retrieval_margin, dim_sufficiency_bound, sigmoid_margin_loss};
+pub use research::{coincidence_score, entropy_f32, simd_dist_sq, simd_fused_scale_acc, simd_fused_sub_acc, simd_gram_f32, simd_sum_abs_f32, simd_sum_sq};
 pub use sparse::{simd_sparse_dot_f32, simd_sparse_matmul_rows};
-pub use ternary::{simd_ternary_dot_f32, simd_ternary_matmul_batch, simd_ternary_matvec, ternary_matvec_scalar};
+pub use ternary::simd_ternary_dot_f32;
+#[cfg(feature = "plasma_path")]
+pub use ternary::{simd_ternary_matmul_batch, simd_ternary_matvec, ternary_matvec_scalar};
 
 /// SIMD capability level detected at runtime.
 #[repr(u8)]

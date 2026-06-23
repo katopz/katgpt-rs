@@ -165,16 +165,22 @@ claim_rubric` (zero-dep baseline).
       a fictional probe, run the validator, print the grade. Single-file,
       runs with `cargo run --example claim_rubric_minimal --features
       claim_rubric --no-default-features`.
-- [ ] **T3.2** Cross-link from R287 §4 table: add a footer line
+- [x] **T3.2** Cross-link from R287 §4 table: add a footer line
       "Executable form: `katgpt_rs::claim_rubric` (Plan 307)" so future
       readers know the table has a code mirror.
-- [ ] **T3.3** Add `claim_rubric` to the `default` feature list only AFTER
+      **Status:** Done 2026-06-23. Footer added at end of
+      `.research/287_Probe_Steering_Claim_Evidence_Ladder_Fusion_With_267.md`,
+      pointing to `src/claim_rubric/` + `tests/claim_rubric_test.rs` as the
+      single source of truth for §4 score revisions.
+- [x] **T3.3** Add `claim_rubric` to the `default` feature list only AFTER
       Phase 2 passes (the meta-discipline should be on for every probe/
       steering primitive's CI). Until then, opt-in.
-      **Status:** Phase 2 passes (17/17 integration tests + 1/1 GOAT gate).
-      Promotion to default is deferred to the parent agent / next session —
-      it touches the `default = [...]` Cargo.toml line and should be a
-      deliberate decision, not an incidental side effect of Phase 1/2 work.
+      **Status:** ✅ **DONE 2026-06-23 (parent).** Phase 2 re-verified green
+      (17/17 round-trip + 1/1 GOAT gate, run by parent agent). `claim_rubric`
+      promoted to `default` in `katgpt-rs/Cargo.toml` (now 133 default
+      features). Promotion is the deliberate parent decision the plan called
+      for; both `cargo check --no-default-features --features claim_rubric`
+      and the default build compile clean.
 
 ---
 
@@ -185,9 +191,17 @@ claim_rubric` (zero-dep baseline).
 - [x] **T4.1** `tests/bench_307_claim_rubric_goat.rs` — runs the seven §4
       fixtures + the overclaim fixtures + the feature-class parity fixture.
       All must PASS. Gates promotion to default.
-- [ ] **T4.2** Audit: every probe/steering research note that invokes L1/
+- [x] **T4.2** Audit: every probe/steering research note that invokes L1/
       L2/L3 vocabulary must now link to a `Claim` fixture in its
       corresponding primitive's test file. (Documentation task, not code.)
+      **Status:** Done 2026-06-23. Audit doc at
+      `.docs/claim_rubric_audit.md`. Honest finding: the rubric vocabulary
+      is currently confined to R287 itself; the six cousin notes (R053,
+      R144, R211, R244, R267, R286) do NOT yet self-invoke L1/L2/L3 — they
+      pre-date the rubric. All seven §4 primitives have fixtures in the
+      shared `claim_rubric_test.rs`; the gap is *adoption* (cousin notes
+      should declare their level in-header), not fixture count. See the
+      audit's "Recommended follow-ups" for the four backfill actions.
 
 ---
 
