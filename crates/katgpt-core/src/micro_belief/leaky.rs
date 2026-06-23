@@ -71,6 +71,63 @@ impl LeakyIntegrator {
     pub fn hla_default(dim: usize) -> Self {
         Self::new(0.1, 0.2, dim)
     }
+
+    /// Recursively advance the kernel for `inputs.len()` ticks and classify the
+    /// resulting belief-vector chain with [`crate::classify_chain`].
+    ///
+    /// The chain `s_0, s_1, …, s_k` (where `s_0 = initial_state` and
+    /// `k = inputs.len()`) is captured into a flattened buffer and classified.
+    /// Each input `inputs[t]` drives one [`MicroRecurrentBeliefState::step`]
+    /// invocation producing `s_{t+1}`.
+    ///
+    /// **Zero per-step allocation** — double-buffered `s_a` / `s_b` plus a
+    /// single up-front `Vec::with_capacity` for the chain. The depth-invariance
+    /// `Scratch` is allocated inside this call; tight-loop callers should reuse
+    /// one via the raw [`crate::classify_chain`] primitive.
+    ///
+    /// # Plan 306 Phase 4 (G3 — T4.3 caveat)
+    ///
+    /// `LeakyIntegrator::step` clamps the state to `[-1, 1]` on every tick
+    /// (per-element `.clamp(-1.0, 1.0)` in [`crate::leaky_core::leaky_step`]).
+    /// It therefore **also classifies as `DepthInvariant`** by construction,
+    /// like the attractor. The T4.3 negative control builds an *unclamped*
+    /// leaky update inline in the test (no kernel-level support needed) so the
+    /// diagnostic can demonstrate its discriminating power on a real drift
+    /// kernel — see `tests/depth_invariance_micro_belief.rs::leaky_*_depth_specific`.
+    #[cfg(feature = "depth_invariance")]
+    pub fn audit_depth_invariance(
+        &self,
+        initial_state: &[f32],
+        inputs: &[&[f32]],
+        cfg: &crate::DepthInvarianceConfig,
+    ) -> crate::DepthInvarianceDiagnostic {
+        let dim = self.dim;
+        assert_eq!(initial_state.len(), dim, "initial_state must have length dim");
+        for (i, inp) in inputs.iter().enumerate() {
+            assert_eq!(inp.len(), dim, "inputs[{i}] must have length dim");
+        }
+
+        let k = inputs.len();
+        let k_plus_1 = k + 1;
+
+        let mut chain: Vec<f32> = Vec::with_capacity(k_plus_1 * dim);
+        chain.extend_from_slice(initial_state);
+
+        // Double-buffered state — see AttractorKernel::audit_depth_invariance
+        // for the aliasing rationale.
+        let mut s_a: Vec<f32> = initial_state.to_vec();
+        let mut s_b: Vec<f32> = initial_state.to_vec();
+
+        for inp in inputs {
+            s_b.copy_from_slice(&s_a);
+            MicroRecurrentBeliefState::step(self, &mut s_b, inp);
+            chain.extend_from_slice(&s_b);
+            std::mem::swap(&mut s_a, &mut s_b);
+        }
+
+        let mut scratch = crate::Scratch::with_capacity(k_plus_1, dim);
+        crate::classify_chain(&chain, dim, cfg, &mut scratch)
+    }
 }
 
 impl MicroRecurrentBeliefState for LeakyIntegrator {

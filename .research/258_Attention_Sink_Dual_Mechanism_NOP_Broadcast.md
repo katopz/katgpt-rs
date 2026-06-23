@@ -186,3 +186,24 @@ If G2 passes → promote `sink_aware_attn` to default in `parallax_attn` and `fu
 - Qiu, Z. et al. (2025). *Gated Attention for Large Language Models*. (NOP intervention)
 - Roy, V. & Vetterli, M. (2007). *The effective rank: a measure of effective dimensionality*. (Our existing `effective_rank` in `data_probe/geometry.rs`.)
 - Sandoval-Segura, P. et al. (2025). *Using attention sinks to identify and evaluate dormant heads in pretrained LLMs*. (NOP = "dormant head" — directly maps.)
+
+---
+
+## Cross-link disambiguation (Plan 306 T8.3)
+
+**Do not confuse this paper (arXiv:2606.08105, target-side sink classification)
+with arXiv:2605.09992 (Eldenk et al., *Attention Drift* — drafter-side
+magnitude accumulation in the recursive residual, Plan 306, Research 286).**
+Different paper, different mechanism. The two are frequently confused because
+both diagnose "attention drift" phenomenologically but operate on different
+sides of the speculative-decoding loop:
+
+| Aspect | This paper (Plan 287 / Research 258) | arXiv:2605.09992 (Plan 306 / Research 286) |
+|---|---|---|
+| Side | Target model (verifier) | Drafter (speculator) |
+| Mechanism | Sink classification (NOP vs Broadcast) | Recursive residual magnitude accumulation |
+| Diagnostic | `value_norm_ratio` + `stable_rank_of_update` per head | `magnitude_slope` on the hidden-state chain |
+| Fix | Dual-policy attention | Post-norm on the recursive residual (retrain for frozen MLPs) |
+
+See `.research/286_Attention_Drift_Depth_Invariance_Diagnostic.md` and
+`.plans/306_depth_invariance_diagnostic.md` for the drafter-side counterpart.

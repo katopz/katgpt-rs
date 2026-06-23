@@ -251,6 +251,65 @@ impl AttractorKernel {
         }
         out
     }
+
+    /// Recursively advance the kernel for `inputs.len()` ticks and classify the
+    /// resulting belief-vector chain with [`crate::classify_chain`].
+    ///
+    /// The chain `s_0, s_1, …, s_k` (where `s_0 = initial_state` and
+    /// `k = inputs.len()`) is captured into a flattened buffer and classified.
+    /// Each input `inputs[t]` drives one [`MicroRecurrentBeliefState::step`]
+    /// invocation producing `s_{t+1}`.
+    ///
+    /// **Zero per-step allocation** — double-buffered `s_a` / `s_b` plus a
+    /// single up-front `Vec::with_capacity` for the chain. The depth-invariance
+    /// `Scratch` is allocated inside this call; tight-loop callers should reuse
+    /// one via the raw [`crate::classify_chain`] primitive.
+    ///
+    /// # Plan 306 Phase 4 (G3 — negative control)
+    ///
+    /// The attractor update applies `(2·σ(·) − 1).clamp(±clamp)`, bounding
+    /// magnitude per construction. We therefore **expect** the diagnostic to
+    /// classify as [`DepthInvariant`] on this kernel — the negative control
+    /// confirming the classifier does not false-positive on healthy kernels.
+    /// The matching `leaky` audit (or an unclamped inline leaky in the test)
+    /// provides the positive control.
+    ///
+    /// [`DepthInvariant`]: crate::DepthInvarianceKind::DepthInvariant
+    #[cfg(feature = "depth_invariance")]
+    pub fn audit_depth_invariance(
+        &self,
+        initial_state: &[f32],
+        inputs: &[&[f32]],
+        cfg: &crate::DepthInvarianceConfig,
+    ) -> crate::DepthInvarianceDiagnostic {
+        let dim = self.dim;
+        assert_eq!(initial_state.len(), dim, "initial_state must have length dim");
+        for (i, inp) in inputs.iter().enumerate() {
+            assert_eq!(inp.len(), dim, "inputs[{i}] must have length dim");
+        }
+
+        let k = inputs.len();
+        let k_plus_1 = k + 1;
+
+        let mut chain: Vec<f32> = Vec::with_capacity(k_plus_1 * dim);
+        chain.extend_from_slice(initial_state);
+
+        // Double-buffered state — `step()` writes in place, so we copy s_a → s_b
+        // then step s_b, then swap. This is the only way to capture s_t and s_{t+1}
+        // in the same chain without aliasing step()'s read+write on `state`.
+        let mut s_a: Vec<f32> = initial_state.to_vec();
+        let mut s_b: Vec<f32> = initial_state.to_vec();
+
+        for inp in inputs {
+            s_b.copy_from_slice(&s_a);
+            MicroRecurrentBeliefState::step(self, &mut s_b, inp);
+            chain.extend_from_slice(&s_b);
+            std::mem::swap(&mut s_a, &mut s_b);
+        }
+
+        let mut scratch = crate::Scratch::with_capacity(k_plus_1, dim);
+        crate::classify_chain(&chain, dim, cfg, &mut scratch)
+    }
 }
 
 impl MicroRecurrentBeliefState for AttractorKernel {

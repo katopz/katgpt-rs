@@ -12,6 +12,25 @@
 //! keeping weight dimensions unchanged. Feature-gated behind `self_cond_draft`.
 //!
 //! Feature-gated behind `belief_drafter` — off by default until GOAT proof.
+//!
+//! # Attention-drift subject (Plan 306, Research 286, arXiv:2605.09992)
+//!
+//! This drafter is a **known subject** of the attention-drift failure mode diagnosed
+//! by Eldenk et al. — the architecture (input LayerNorm + unnormalized residual) is
+//! structurally identical to the pre-norm EAGLE-3 drafter that paper §3 shows classifies
+//! as `DepthSpecificRefinement` beyond the TTT horizon. Run [`BeliefDrafter::audit_depth_invariance`]
+//! (gated on `depth_invariance`) to classify a chain.
+//!
+//! **The fix (post-norm residual) is NOT applied here.** It requires MLP retraining —
+//! training-side work lives in `riir-train`. Inference-time [`katgpt_core::MagnitudeRegularization`]
+//! is **diagnostic-only** for this kernel: paper §4.4 Table 4 reports -56% acceptance
+//! when applied to a frozen pre-norm model. For kernels we own (HLA, functor,
+//! micro_belief, engram, Raven) `MagnitudeRegularization` is the modelless upstream fix;
+//! for this frozen-pretrained MLP it is not.
+//!
+//! Disambiguation: this is the **drafter-side magnitude-accumulation** mechanism, distinct
+//! from the **target-side sink classification** mechanism of Plan 287 / Research 258
+//! (arXiv:2606.08105). Different paper, different mechanism.
 
 use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -777,9 +796,108 @@ impl BeliefDrafter {
             wte,
         })
     }
+
+    /// Recursively advance the MLP for `max_depth` steps and classify the hidden
+    /// state chain with [`katgpt_core::classify_chain`].
+    ///
+    /// Drives the drafter with an external token sequence: at each step the
+    /// next token's embedding is fed as `next_emb` to
+    /// [`LatentDynamicsMLP::forward_into`], producing `h_{t+1} = h_t +
+    /// FC3(GELU(FC2(GELU(FC1(LN(concat(h_t, next_emb)))))))`. The chain
+    /// `h_0, h_1, …, h_k` (with `k = min(max_depth, token_seq.len())`) is
+    /// captured into a flattened buffer and classified.
+    ///
+    /// Reuses the drafter's own `MlpForwardScratch` + double-buffered `h_a` /
+    /// `h_b` pattern from [`Self::draft`] (zero per-step allocation; only one
+    /// `Vec::with_capacity` for the chain buffer up-front). The depth-invariance
+    /// `Scratch` is allocated inside this call — callers running many audits in
+    /// a tight loop should re-use one themselves via the raw
+    /// [`katgpt_core::classify_chain`] primitive.
+    ///
+    /// # Plan 306 Phase 3 (G2 — paper finding reproduction)
+    ///
+    /// Paper arXiv:2605.09992 §3 shows pre-norm EAGLE-3 drafters classify as
+    /// [`DepthSpecificRefinement`] beyond TTT. Our `LatentDynamicsMLP` has the
+    /// same structural shape; random-init results may differ from trained
+    /// (Xavier init bounds FC3 output) — informative either way. See Plan 306
+    /// §T3.2 doc for the random-init caveat.
+    ///
+    /// Returns [`DepthInvarianceDiagnostic::kind`] == [`Insufficient`] if
+    /// `max_depth + 1 < cfg.min_samples`.
+    ///
+    /// [`DepthSpecificRefinement`]: katgpt_core::DepthInvarianceKind::DepthSpecificRefinement
+    /// [`Insufficient`]: katgpt_core::DepthInvarianceKind::Insufficient
+    #[cfg(feature = "depth_invariance")]
+    pub fn audit_depth_invariance(
+        &self,
+        h_0: &[f32],
+        token_seq: &[usize],
+        max_depth: usize,
+        cfg: &katgpt_core::DepthInvarianceConfig,
+    ) -> katgpt_core::DepthInvarianceDiagnostic {
+        // No regularization on the plain audit — the audit is a measurement
+        // of the drafter as-shipped, not as-regularized.
+        let chain = self.capture_chain(h_0, token_seq, max_depth, katgpt_core::MagnitudeRegularization::None);
+        let k_plus_1 = chain.len() / self.mlp.n_embd;
+        let mut scratch = katgpt_core::Scratch::with_capacity(k_plus_1, self.mlp.n_embd);
+        katgpt_core::classify_chain(&chain, self.mlp.n_embd, cfg, &mut scratch)
+    }
+
+    /// Plan 306 Phase 3 G2c — capture the hidden-state chain with optional
+    /// inference-time [`katgpt_core::MagnitudeRegularization`] applied to
+    /// `h_{t+1}` after each forward step.
+    ///
+    /// Returns the flattened chain `[k+1][n_embd]` row-major. The caller is
+    /// responsible for `classify_chain` on the result. Exposed publicly so
+    /// tests can interleave custom regularization schedules without re-implementing
+    /// the double-buffered forward loop.
+    ///
+    /// # Diagnostic intent (Plan 306 §T3.4)
+    ///
+    /// For our frozen-pretrained drafter, applying `MagnitudeRegularization`
+    /// here is **diagnostic-only** — paper §4.4 Table 4 reports -56%
+    /// acceptance on pre-norm models when applied at inference time. The
+    /// shipped fix requires MLP retraining (→ riir-train). For kernels we own
+    /// (HLA, functor, micro_belief, engram, Raven) this same primitive is the
+    /// modelless upstream fix.
+    #[cfg(feature = "depth_invariance")]
+    pub fn capture_chain(
+        &self,
+        h_0: &[f32],
+        token_seq: &[usize],
+        max_depth: usize,
+        regularization: katgpt_core::MagnitudeRegularization,
+    ) -> Vec<f32> {
+        let n = self.mlp.n_embd;
+        assert_eq!(h_0.len(), n, "h_0 must have length n_embd");
+
+        let k = max_depth.min(token_seq.len());
+        let k_plus_1 = k + 1;
+
+        let mut chain: Vec<f32> = Vec::with_capacity(k_plus_1 * n);
+        chain.extend_from_slice(h_0);
+
+        let mut h_a: Vec<f32> = h_0.to_vec();
+        let mut h_b: Vec<f32> = vec![0.0f32; n];
+        let mut mlp_scratch = MlpForwardScratch::new(n);
+        // Scratch for the optional RmsNorm/ScalarPinch path. Length-d as per
+        // the apply_magnitude_regularization contract (currently unused by
+        // RmsNorm but required for API stability — see module doc).
+        let mut reg_scratch: Vec<f32> = vec![0.0f32; n];
+
+        for &tok in &token_seq[..k] {
+            let emb = self.token_embedding(tok);
+            self.mlp.forward_into(&h_a, emb, &mut mlp_scratch, &mut h_b);
+            katgpt_core::apply_magnitude_regularization(&mut h_b, regularization, &mut reg_scratch);
+            chain.extend_from_slice(&h_b[..n]);
+            std::mem::swap(&mut h_a, &mut h_b);
+        }
+
+        chain
+    }
 }
 
-// ── SpeculativeGenerator Integration ───────────────────────────
+// ── SpeculativeGenerator Integration ─────────────────────────────
 
 impl SpeculativeGenerator for BeliefDrafter {
     type Condition = BeliefDraftCondition;

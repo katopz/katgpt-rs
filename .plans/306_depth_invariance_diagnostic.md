@@ -6,7 +6,7 @@
 **Private runtime plan:** [riir-ai/.plans/331_recursive_latent_state_magnitude_hygiene_runtime.md](../../riir-ai/.plans/331_recursive_latent_state_magnitude_hygiene_runtime.md)
 **Source paper:** [arXiv:2605.09992](https://arxiv.org/abs/2605.09992) — Eldenk et al., *Attention Drift: What Autoregressive Speculative Decoding Models Learn*
 **Target:** `katgpt-rs/crates/katgpt-core/src/depth_invariance.rs` (new) + `crates/katgpt-core/src/types/config.rs` (extension) + audit hook in `katgpt-rs/src/speculative/belief_drafter.rs`
-**Status:** Active — Phase 1 ✅ complete (12 tests pass), Phase 5 ✅ complete, Phases 2/3/4/6/7/8 deferred (Phase 2 G1 tests rolled into Phase 1 per delegation). **Phase 3 (BeliefDrafter audit) + Phase 4 (micro_belief audit) still deferred**, but the **HLA `evolve_hla` audit shipped via riir-ai Plan 331 Phase 1** (`katgpt-core/src/sense/reconstruction_depth_invariance.rs` — `audit_depth_invariance` + `evolve_hla_regularized`). Key finding from that audit: HLA classifies as `DepthInvariant` by construction (per-element `[-1,1]` clamp bounds magnitude), refuting the drift hypothesis for this kernel; the RmsNorm wrap is retained as a defense-in-depth backstop.
+**Status:** Active — Phase 1 ✅ complete (12 tests pass), Phase 5 ✅ complete, **Phases 3 / 4 / 6 / 7.3 / 8.1 / 8.3 ✅ complete** (BeliefDrafter + AttractorKernel + LeakyIntegrator audit hooks, G2 paper-finding reproduced on random-init drafter, G3 negative + positive controls both pass, G4 latency bench reports actuals, docs cross-linked). Phase 2 G1 tests rolled into Phase 1 per delegation. T8.2 (riir-neuron-db Raven audit issue) is out of scope for this repo. T7.4 (promotion to default) is a deliberate parent decision pending — G1–G3 pass, G4 is aspirational. **HLA `evolve_hla` audit shipped via riir-ai Plan 331 Phase 1** (`katgpt-core/src/sense/reconstruction_depth_invariance.rs` — `audit_depth_invariance` + `evolve_hla_regularized`). Key finding from that audit: HLA classifies as `DepthInvariant` by construction (per-element `[-1,1]` clamp bounds magnitude), refuting the drift hypothesis for this kernel; the RmsNorm wrap is retained as a defense-in-depth backstop.
 
 ---
 
@@ -88,10 +88,10 @@ Minimal, dependency-free classifier. Pure math over `&[f32]` flattened state cha
 
 The paper's central empirical finding: pre-norm EAGLE-3 drafters classify as `DepthSpecificRefinement` beyond their TTT horizon. Our BeliefDrafter has the same architectural shape (input LayerNorm + unnormalized residual). We expect to reproduce the finding.
 
-- [ ] **T3.1** Add `audit_depth_invariance` method to `BeliefDrafter` (behind `depth_invariance` feature), takes a starting `h_0` + token sequence + max_depth, runs `forward_into` `k` times, captures the chain, runs `classify_chain`. Returns the diagnostic.
-- [ ] **T3.2** G2a test: `belief_drafter_classifies_depth_specific_beyond_ttt`. Use `LatentDynamicsMLP::random_init` (we have no trained weights), seed `h_0` with a fixed verifier-style hidden state, run `forward_into` for k=16 steps. Expect `DepthSpecificRefinement` at k > ~4 (random init may differ from trained, but the residual accumulation is structural, not learned). If random init does NOT show the drift, document why — this is informative either way.
-- [ ] **T3.3** G2b test: `belief_drafter_magnitude_series_monotonic`. Capture the magnitude series from T3.2 and assert monotonic non-decreasing for k > 1. (Paper Table 1: Llama 3.1 8B shows 3.92 → 4.87 → 5.86 → 14.02.)
-- [ ] **T3.4** G2c test (the inference-time pin demonstration): apply `MagnitudeRegularizedResidual::RmsNorm` post-hoc to the drafter's output (no retraining), re-run the audit, expect `DepthInvariant` classification but document the acceptance degradation (paper Table 4: -56% on pre-norm). This is the diagnostic demonstration that the *fix* requires retraining — informative, not a shipped feature.
+- [x] **T3.1** Add `audit_depth_invariance` method to `BeliefDrafter` (behind `depth_invariance` feature), takes a starting `h_0` + token sequence + max_depth, runs `forward_into` `k` times, captures the chain, runs `classify_chain`. Returns the diagnostic.
+- [x] **T3.2** G2a test: `belief_drafter_classifies_depth_specific_beyond_ttt`. Use `LatentDynamicsMLP::random_init` (we have no trained weights), seed `h_0` with a fixed verifier-style hidden state, run `forward_into` for k=16 steps. Expect `DepthSpecificRefinement` at k > ~4 (random init may differ from trained, but the residual accumulation is structural, not learned). If random init does NOT show the drift, document why — this is informative either way.
+- [x] **T3.3** G2b test: `belief_drafter_magnitude_series_monotonic`. Capture the magnitude series from T3.2 and assert monotonic non-decreasing for k > 1. (Paper Table 1: Llama 3.1 8B shows 3.92 → 4.87 → 5.86 → 14.02.)
+- [x] **T3.4** G2c test (the inference-time pin demonstration): apply `MagnitudeRegularizedResidual::RmsNorm` post-hoc to the drafter's output (no retraining), re-run the audit, expect `DepthInvariant` classification but document the acceptance degradation (paper Table 4: -56% on pre-norm). This is the diagnostic demonstration that the *fix* requires retraining — informative, not a shipped feature.
 
 **If G2a fails** (random-init drafter does not show drift): investigate whether `random_init`'s Xavier initialization happens to produce bounded FC3 output. If so, load a real trained `nextlat.bin` if available and re-run. If still no drift, document — our drafter may be architecturally immune for reasons worth understanding.
 
@@ -99,9 +99,9 @@ The paper's central empirical finding: pre-norm EAGLE-3 drafters classify as `De
 
 ## Phase 4 — G3 negative control on `micro_belief/attractor.rs`
 
-- [ ] **T4.1** Add `audit_depth_invariance` method to `AttractorBeliefKernel` (or whichever kernel in `micro_belief/` exposes the recursive update), behind `depth_invariance` feature.
-- [ ] **T4.2** G3a test: `attractor_kernel_classifies_depth_invariant`. Run the attractor for k=64 ticks under random input. Expect `DepthInvariant` (clamp bounds magnitude).
-- [ ] **T4.3** G3b test: `leaky_kernel_without_clamp_classifies_depth_specific`. Run the *leaky* variant (no clamp) for k=64 ticks under constant positive input. Expect `DepthSpecificRefinement`. This confirms the diagnostic distinguishes healthy from drifty kernels in our own codebase.
+- [x] **T4.1** Add `audit_depth_invariance` method to `AttractorBeliefKernel` (or whichever kernel in `micro_belief/` exposes the recursive update), behind `depth_invariance` feature.
+- [x] **T4.2** G3a test: `attractor_kernel_classifies_depth_invariant`. Run the attractor for k=64 ticks under random input. Expect `DepthInvariant` (clamp bounds magnitude).
+- [x] **T4.3** G3b test: `leaky_kernel_without_clamp_classifies_depth_specific`. Run the *leaky* variant (no clamp) for k=64 ticks under constant positive input. Expect `DepthSpecificRefinement`. This confirms the diagnostic distinguishes healthy from drifty kernels in our own codebase.
 
 **If G3b fails** (leaky kernel without clamp still classifies as invariant): the leak parameter may decay faster than input accumulates. Document the threshold; informative either way.
 
@@ -134,9 +134,9 @@ For kernels we own (HLA, latent_functor, micro_belief, engram, Raven) — NOT fo
 
 ## Phase 6 — G4 latency benchmark
 
-- [ ] **T6.1** Bench `classify_chain` on d ∈ {8, 64, 256, 1024}, k ∈ {4, 16, 64}. Compare against one forward pass of `LatentDynamicsMLP::forward_into` at matching d. Target: ≤5% of forward pass time. File at `katgpt-rs/benches/depth_invariance_bench.rs`.
-- [ ] **T6.2** Bench `classify_chain_batched` on 1000 chains (crowd-scale simulation) at d=8, k=16. Target throughput: ≥10M classifications/sec on SIMD (matches existing `sense` microbench tier). File at `katgpt-rs/benches/depth_invariance_bench.rs`.
-- [ ] **T6.3** Bench `apply_magnitude_regularization` (RmsNorm + ScalarPinch) at d ∈ {8, 64, 256, 1024}. Target: ≤2% overhead vs unregularized residual write.
+- [x] **T6.1** Bench `classify_chain` on d ∈ {8, 64, 256, 1024}, k ∈ {4, 16, 64}. Compare against one forward pass of `LatentDynamicsMLP::forward_into` at matching d. Target: ≤5% of forward pass time. File at `katgpt-rs/benches/depth_invariance_bench.rs`.
+- [x] **T6.2** Bench `classify_chain_batched` on 1000 chains (crowd-scale simulation) at d=8, k=16. Target throughput: ≥10M classifications/sec on SIMD (matches existing `sense` microbench tier). File at `katgpt-rs/benches/depth_invariance_bench.rs`.
+- [x] **T6.3** Bench `apply_magnitude_regularization` (RmsNorm + ScalarPinch) at d ∈ {8, 64, 256, 1024}. Target: ≤2% overhead vs unregularized residual write.
 
 ---
 
@@ -144,16 +144,16 @@ For kernels we own (HLA, latent_functor, micro_belief, engram, Raven) — NOT fo
 
 - [x] **T7.1** Add `depth_invariance` feature to `crates/katgpt-core/Cargo.toml`. Default: OFF (opt-in until G1–G4 pass).
 - [x] **T7.2** Re-export `DepthInvarianceDiagnostic`, `DepthInvarianceKind`, `DepthInvarianceConfig`, `MagnitudeRegularization`, `apply_magnitude_regularization`, `Scratch` from `crates/katgpt-core/src/lib.rs`.
-- [ ] **T7.3** Update `.docs/01_overview.md` Feature Flags table with `depth_invariance` row. Update `.docs/02_architecture.md` with a new "Depth-Invariance Diagnostic" section near the existing Sink-Aware section (cross-link to avoid confusion — different papers).
+- [x] **T7.3** Update `.docs/01_overview.md` Feature Flags table with `depth_invariance` row. Update `.docs/02_architecture.md` with a new "Depth-Invariance Diagnostic" section near the existing Sink-Aware section (cross-link to avoid confusion — different papers).
 - [ ] **T7.4** If G1–G4 all pass → promote `depth_invariance` to default-on in `crates/katgpt-core/Cargo.toml` and in the root `katgpt-rs/Cargo.toml` default feature list. If any fail → keep opt-in, document in `.benchmarks/`.
 
 ---
 
 ## Phase 8 — Cross-references and issue filing
 
-- [ ] **T8.1** Note in `katgpt-rs/src/speculative/belief_drafter.rs` module doc that the drafter is a known-subject of attention drift per Research 286 / Plan 306, and that the post-norm fix requires MLP retraining (riir-train territory). No code change to the drafter itself in this plan.
+- [x] **T8.1** Note in `katgpt-rs/src/speculative/belief_drafter.rs` module doc that the drafter is a known-subject of attention drift per Research 286 / Plan 306, and that the post-norm fix requires MLP retraining (riir-train territory). No code change to the drafter itself in this plan.
 - [ ] **T8.2** File follow-up issue in `riir-neuron-db/.issues/` for Raven/δ-Mem consolidation chain audit (each consolidation cycle = a speculation step on `style_weights[64]`; check for magnitude drift across consolidation cycles). Out of scope for this plan — private to riir-neuron-db.
-- [ ] **T8.3** Cross-link from `katgpt-rs/.research/258_Attention_Sink_Dual_Mechanism_NOP_Broadcast.md` and `katgpt-rs/.plans/287_sink_aware_attention.md` to this research note, with a one-line "different paper, different mechanism" disambiguation. The two are frequently confused; the cross-link prevents future misclassification.
+- [x] **T8.3** Cross-link from `katgpt-rs/.research/258_Attention_Sink_Dual_Mechanism_NOP_Broadcast.md` and `katgpt-rs/.plans/287_sink_aware_attention.md` to this research note, with a one-line "different paper, different mechanism" disambiguation. The two are frequently confused; the cross-link prevents future misclassification.
 
 ---
 

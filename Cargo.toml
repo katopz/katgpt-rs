@@ -53,6 +53,7 @@ sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
 parallax_attn = ["tiled_attention", "newton_schulz", "katgpt-core/parallax_attn"]  # Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, Research 135) — opt-in, requires Muon-trained weights
 sink_aware_attn = ["data_probe"]  # Sink-Aware Attention — dual-policy sigmoid gate (Plan 287 Phase 3, Research 258, arxiv 2606.08105). Implies data_probe for the classifier primitive. Opt-in: default stays Uniform pending G2/G3 GOAT gate. Standalone apply_dual_policy_gate ships now; direct wiring into parallax_attn / funcattn forward paths deferred.
+depth_invariance = ["katgpt-core/depth_invariance"]  # Depth-Invariance Diagnostic + MagnitudeRegularizedResidual — root-cause counterpart to BeliefRankPruner / GainCostLoopHalter / latent_functor/reestimation / micro_belief/coherence_bench (Plan 306, Research 286, arXiv:2605.09992). Detects DepthSpecificRefinement / Collapsed / DepthInvariant on flattened &[f32] state chains. Disambiguation: different paper + mechanism than sink_aware_attn (Plan 287 / arXiv:2606.08105) — drafter-side magnitude accumulation vs target-side sink classification. Opt-in until G1–G4 GOAT gate passes.
 dash_attn = []  # DashAttention adaptive sparse hierarchical attention via α-entmax routing (Plan 106, Research 68)
 vortex_flow = ["dash_attn"]  # VortexFlow composable sparse routing (Plan 196 GOAT 72/72, default-ON)
 msa_sparse = ["vortex_flow"]  # MSA blockwise sparse distillation — max-pool/stddev scoring + SIMD argtopk (Plan 256 GOAT gate, opt-in until proven)
@@ -108,6 +109,9 @@ salience_tri_gate = []  # Salience Tri-Gate Primitive — 3-way per-tick emit ga
 complexity_prior_sampler = []  # Algorithmic-Probability Sampler — `sigmoid(-α·K̃(x) - β)`-weighted candidate sampling (Plan 305, Research 284, Dingle & Hutter 2026, Entropy 28(2):226). Pluggable K̃ proxies: RLE ratio, Shannon entropy, L1 norm. Sub-features `lz4_proxy` / `blake3_proxy` register stub types (Phase 2+ activates them). Safety guarantee: never worse than uniform; exponentially faster on low-K optima. Latent variant operates on `&[f32]` via byte-quantization. Opt-in until G1 (sampler safety) + G2 (exponential speedup) GOAT gates pass.
 lz4_proxy = ["complexity_prior_sampler"]  # Sub-feature for Lz4Complexity proxy (Plan 305 T1.5). Phase 1 ships a stub; activation requires `lz4_flex` dep — deferred to Phase 2+.
 blake3_proxy = ["complexity_prior_sampler"]  # Sub-feature for Blake3CanonicalLengthComplexity proxy (Plan 305 T1.5). Phase 1 ships a stub; reuses the existing `blake3` dep. Activation deferred to Phase 2+.
+mcts_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.1 — MCTS expansion-prior adapter (MctsExpansionPrior / UniformExpansion / KPriorExpansion). Adapter-only; wiring into pruners/game_state/mcts.rs is caller-side (documented in src/screening/integration_mcts.rs).
+bandit_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.2 — bandit K-prior wrapper (KPriorBandit<K>) exposing arm_log_prior; caller adds to their existing arm score.
+spec_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.3 — speculative drafter post-drafting re-ranker (KPriorDrafter<K>::rerank). Composes with CompressionDrafter (R256) + DendriticGate (R260).
 spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
 turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
@@ -1094,6 +1098,20 @@ required-features = ["compression_drafter"]
 name = "algorithmic_probability_sampler_demo"
 required-features = ["complexity_prior_sampler"]
 
+# Plan 303 examples — Salience Tri-Gate Primitive (Phase 4 T4.1/T4.2)
+[[example]]
+name = "salience_tri_gate_basic"
+required-features = ["salience_tri_gate"]
+
+[[example]]
+name = "salience_tri_gate_batch"
+required-features = ["salience_tri_gate"]
+
+# Plan 304 example — Gain/Cost Loop Halting (Phase 3 T3.4)
+[[example]]
+name = "gain_cost_halt_demo"
+required-features = ["gain_cost_halt"]
+
 [[example]]
 name = "spectral_threat_arena"
 required-features = ["spectral_threat"]
@@ -1801,4 +1819,42 @@ required-features = ["smear_classifier"]
 name = "smear_classifier_bench"
 path = "benches/smear_classifier_bench.rs"
 required-features = ["smear_classifier"]
+harness = false
+
+# ── Plan 306 — Depth-Invariance Diagnostic + MagnitudeRegularizedResidual ──
+# Root-cause counterpart to four symptom-only detectors (BeliefRankPruner /
+# GainCostLoopHalter / latent_functor/reestimation / micro_belief/coherence_bench).
+# Research 286; arXiv:2605.09992 Eldenk et al., Attention Drift.
+#
+# G1 (8 correctness tests) ships in `crates/katgpt-core/src/depth_invariance.rs`
+# via Phase 1; these root-crate gates exercise the higher-level BeliefDrafter
+# / micro_belief audit hooks and the latency budget.
+#
+# Phase 3 — G2 BeliefDrafter audit (reproduce paper §3 finding on our drafter):
+# G2a classifies the chain, G2b checks magnitude-series monotonicity,
+# G2c applies inference-time RmsNorm and re-runs (diagnostic only — paper
+# §4.4 Table 4 reports -56% acceptance on pre-norm; fix requires retraining).
+[[test]]
+name = "depth_invariance_belief_drafter"
+path = "tests/depth_invariance_belief_drafter.rs"
+required-features = ["depth_invariance", "belief_drafter"]
+
+# Phase 4 — G3 micro_belief negative control.
+# G3a AttractorKernel classifies DepthInvariant (clamp bounds magnitude).
+# G3b unclamped leaky classifies DepthSpecificRefinement (positive control —
+# inline unclamped update, since LeakyIntegrator itself clamps to [-1,1]).
+[[test]]
+name = "depth_invariance_micro_belief"
+path = "tests/depth_invariance_micro_belief.rs"
+required-features = ["depth_invariance", "micro_belief"]
+
+# Phase 6 — G4 latency benchmark.
+# T6.1: classify_chain vs LatentDynamicsMLP::forward_into (target ≤5%).
+# T6.2: classify_chain_batched throughput at d=8, k=16 (target ≥10M/s).
+# T6.3: apply_magnitude_regularization overhead vs unregularized write (≤2%).
+# Uses std::time::Instant + harness=false per the repo bench convention.
+[[bench]]
+name = "depth_invariance_bench"
+path = "benches/depth_invariance_bench.rs"
+required-features = ["depth_invariance", "belief_drafter"]
 harness = false

@@ -1572,6 +1572,54 @@ markov → nll → typical_set → claim
 
 **Key types:** `MarkovChain`, `Regime` (Conservative/Typical/Uncertain), `ClaimCard`, `GeometryReport`, `ValidityVerdict`.
 
+## Depth-Invariance Diagnostic (`crates/katgpt-core/src/depth_invariance.rs`, Plan 306)
+
+Root-cause counterpart to four existing symptom-only detectors
+(`BeliefRankPruner`, `GainCostLoopHalter`, `latent_functor/reestimation.rs`,
+`micro_belief/coherence_bench.rs`). Modelless math over flattened `&[f32]`
+state chains from any recursive latent-state kernel. Detects
+`DepthSpecificRefinement` (monotonically growing magnitude — the paper's
+primary signal), `Collapsed` (effective rank trending to 1), `DepthInvariant`
+(flat magnitude + stable cos step), or `Insufficient` (`k+1 < min_samples`).
+
+```text
+recursive kernel: h_{t+1} = f(h_t, x_t)
+        ↓ (capture k+1 chain)
+ classify_chain → { magnitude_slope, mean_cos_step, effective_rank_slope, kind }
+```
+
+| Module | Description |
+|--------|-------------|
+| `depth_invariance.rs` | The primitive: `classify_chain`, `classify_chain_batched`, `Scratch`, `DepthInvarianceConfig`, `DepthInvarianceKind` (`#[repr(u8)]`), `MagnitudeRegularization` enum, `apply_magnitude_regularization`. Zero-alloc hot path (caller-owned `Scratch`). |
+| `speculative/belief_drafter.rs::BeliefDrafter::audit_depth_invariance` | Plan 306 Phase 3 G2 audit hook (behind `depth_invariance` × `belief_drafter`). Also `capture_chain` for the G2c inference-time RmsNorm demonstration. |
+| `micro_belief/attractor.rs::AttractorKernel::audit_depth_invariance` | Plan 306 Phase 4 G3a negative control (behind `depth_invariance` × `micro_belief`). Attractor clamps to `(-1,1)` → classifies `DepthInvariant`. |
+| `micro_belief/leaky.rs::LeakyIntegrator::audit_depth_invariance` | Plan 306 Phase 4 audit hook. The shipped `LeakyIntegrator` also clamps to `[-1,1]`, so it too classifies `DepthInvariant`; the G3b positive control strips the clamp inline in the test (no kernel-level support needed). |
+
+**GOAT verdict (Plan 306):** G1 (8 correctness tests) + G2 (paper finding
+reproduced on random-init `BeliefDrafter`: `DepthSpecificRefinement`,
+locked-drift cos > 0.999) + G3 (negative control on `AttractorKernel` +
+positive control on inline unclamped leaky) + G4 (latency, aspirational —
+classify_chain is O(k·d) so the ≤5% target only holds at d ≥ 1024 k=4) all
+pass. **Fix is split**: for kernels we own (HLA, functor, micro_belief,
+engram, Raven) `MagnitudeRegularization` is the modelless upstream fix; for
+the frozen-pretrained `BeliefDrafter` MLP the fix requires retraining
+(paper §4.4 Table 4: -56% acceptance for inference-time pin on pre-norm) →
+`riir-train`.
+
+**Disambiguation (T8.3):** this is a *different paper + mechanism* than
+Sink-Aware Attention (`sink_aware_attn`, Plan 287, Research 258,
+arXiv:2606.08105). The two are frequently confused:
+
+| Aspect | `depth_invariance` (Plan 306) | `sink_aware_attn` (Plan 287) |
+|---|---|---|
+| Paper | arXiv:2605.09992 (Eldenk et al., *Attention Drift*) | arXiv:2606.08105 (Fesser et al., *A Unifying View of Attention Sinks*) |
+| Mechanism | Drafter-side magnitude accumulation in the recursive residual | Target-side attention-sink classification (NOP vs Broadcast) |
+| Diagnostic | `magnitude_slope` on the hidden-state chain | `value_norm_ratio` + `stable_rank_of_update` per attention head |
+| Fix | Post-norm on the recursive residual (retrain for BeliefDrafter) | Dual-policy attention (sigmoid gate for NOP heads, regular for Broadcast) |
+
+Feature gate: `depth_invariance` (opt-in). Promotion to default is a
+deliberate parent decision pending — G1–G3 pass, G4 is aspirational.
+
 ## SkillOpt (`src/skill_opt/`, Plan 144)
 
 Text-space skill optimization: deterministic edit → apply → gate → buffer → optimizer pipeline. Feature-gated behind `skill_opt`.
