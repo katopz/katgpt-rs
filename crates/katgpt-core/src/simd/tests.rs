@@ -1760,6 +1760,68 @@
         assert_eq!(crate::simd::simd_sum_abs_f32(&[0.0]), 0.0);
     }
 
+    // ── simd_sum_sq_quartic tests (Plan 306 T7.4) ───────────────
+    //
+    // Fused Σx² + Σx⁴ used by depth_invariance::classify_chain for the
+    // magnitude + participation-ratio (flatness) pass. Truth reference is
+    // `scalar_sum_sq_quartic` (imported via #[cfg(test)] use in simd/mod.rs).
+
+    #[test]
+    fn simd_sum_sq_quartic_matches_scalar() {
+        // Pseudo-random f32 across several lengths: aligned (4, 8, 16),
+        // non-aligned tails, sub-SIMD-width remainder chunks. Deterministic
+        // xorshift64* so the test is reproducible.
+        let mut state: u64 = 0x9E3779B97F4A7C15;
+        let next_f32 = |s: &mut u64| -> f32 {
+            *s ^= *s << 13;
+            *s ^= *s >> 7;
+            *s ^= *s << 17;
+            (((*s & 0xFFFFFF) as f32) / ((0x1000000) as f32) - 0.5) * 4.0 // range ≈ [-2, 2]
+        };
+
+        for &len in &[1usize, 2, 3, 4, 5, 7, 8, 12, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 256, 257, 1023, 1024] {
+            let data: Vec<f32> = (0..len).map(|_| next_f32(&mut state)).collect();
+            let (sim_sq, sim_qu) = crate::simd::simd_sum_sq_quartic(&data);
+            let (ref_sq, ref_qu) = scalar_sum_sq_quartic(&data);
+
+            // Relative tolerance — large sums of x⁴ can drift on order of
+            // 1e-5 between SIMD and scalar even with single-rounding FMA,
+            // because the horizontal reduction order differs.
+            let tol_sq = (ref_sq.abs() * 1e-5).max(1e-6);
+            let tol_qu = (ref_qu.abs() * 1e-5).max(1e-6);
+            assert!(
+                (sim_sq - ref_sq).abs() <= tol_sq,
+                "len={len}: sum_sq simd={sim_sq} scalar={ref_sq} (tol {tol_sq})"
+            );
+            assert!((
+                sim_qu - ref_qu
+            ).abs() <= tol_qu, "len={len}: sum_quartic simd={sim_qu} scalar={ref_qu} (tol {tol_qu})");
+        }
+    }
+
+    #[test]
+    fn simd_sum_sq_quartic_zero_input() {
+        // Explicit zero slice at a few lengths including empty (which the
+        // dispatcher short-circuits) and a 64-wide aligned zero buffer.
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[]), (0.0, 0.0));
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[0.0]), (0.0, 0.0));
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[0.0; 4]), (0.0, 0.0));
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[0.0; 17]), (0.0, 0.0));
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[0.0; 64]), (0.0, 0.0));
+    }
+
+    #[test]
+    fn simd_sum_sq_quartic_short_input() {
+        // Sub-SIMD-width inputs exercise the scalar tail (no SIMD lanes fire).
+        // Exact values checked closed-form.
+        // len=1: x = 3.0 → x² = 9, x⁴ = 81
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[3.0]), (9.0, 81.0));
+        // len=2: 2.0, -1.0 → x² = (4, 1) → sum=5; x⁴ = (16, 1) → sum=17
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[2.0, -1.0]), (5.0, 17.0));
+        // len=3: 1.0, 2.0, -2.0 → x² = (1, 4, 4) → sum=9; x⁴ = (1, 16, 16) → sum=33
+        assert_eq!(crate::simd::simd_sum_sq_quartic(&[1.0, 2.0, -2.0]), (9.0, 33.0));
+    }
+
     // ── Entropy & Coincidence Tests (Plan 260) ──────────────────
 
     #[test]

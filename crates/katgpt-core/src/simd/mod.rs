@@ -69,6 +69,8 @@ use dot::{scalar_dot_f32, scalar_outer_product_acc};
 #[cfg(test)]
 use elementwise::{scalar_add_inplace, scalar_add_into, scalar_add_scalar_inplace, scalar_fused_decay_write, scalar_max_f32, scalar_scale_inplace, scalar_sum_f32};
 #[cfg(test)]
+use research::scalar_sum_sq_quartic;
+#[cfg(test)]
 use sparse::scalar_sparse_dot_f32;
 
 // Re-export the entire public surface so `crate::simd::*` paths are unchanged
@@ -84,7 +86,7 @@ pub use elementwise::{simd_add_inplace, simd_add_into, simd_add_scalar_inplace, 
 pub use maxsim::{maxsim_score, maxsim_score_packed};
 #[cfg(feature = "sigmoid_margin")]
 pub use research::{compute_retrieval_margin, dim_sufficiency_bound, sigmoid_margin_loss};
-pub use research::{coincidence_score, entropy_f32, simd_dist_sq, simd_fused_scale_acc, simd_fused_sub_acc, simd_gram_f32, simd_sum_abs_f32, simd_sum_sq};
+pub use research::{coincidence_score, entropy_f32, simd_dist_sq, simd_fused_scale_acc, simd_fused_sub_acc, simd_gram_f32, simd_sum_abs_f32, simd_sum_sq, simd_sum_sq_quartic};
 pub use sparse::{simd_sparse_dot_f32, simd_sparse_matmul_rows};
 pub use ternary::simd_ternary_dot_f32;
 #[cfg(feature = "plasma_path")]

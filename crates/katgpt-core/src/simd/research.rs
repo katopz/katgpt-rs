@@ -318,6 +318,227 @@ unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
     }
 }
 
+// ── SIMD Sum-x² + Sum-x⁴ fused (Plan 306 T7.4 revisit) ─────
+
+/// SIMD-accelerated fused sum of squares and sum of quartics:
+/// returns `(Σ x[i]², Σ x[i]⁴)` in a single sweep.
+///
+/// Used by `depth_invariance::classify_chain` to compute magnitude
+/// (`sqrt(Σx²)`) and participation-ratio flatness `((Σx²)² / (d·Σx⁴))`
+/// in one pass over each timestep's `h_t` slice, instead of the old
+/// scalar `mul_add` loop. Plan 306 Phase 6 T7.4 SIMD follow-up.
+///
+/// Empty slice returns `(0.0, 0.0)`.
+#[inline(always)]
+pub fn simd_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
+    if x.is_empty() {
+        return (0.0, 0.0);
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_sum_sq_quartic(x) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_sum_sq_quartic(x) }
+        } else {
+            scalar_sum_sq_quartic(x)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_sum_sq_quartic(x)
+    }
+}
+
+/// Scalar reference for [`simd_sum_sq_quartic`]. `pub(super)` so the
+/// `simd::tests` module can use it as the truth via `use super::*`.
+///
+/// 4 independent accumulators per quantity — FMA latency bound on a
+/// single accumulator. `mul_add` preserves single-rounding parity with
+/// the SIMD path.
+#[inline(always)]
+#[allow(dead_code)]
+pub(super) fn scalar_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
+    let len = x.len();
+    let mut sq = [0.0f32; 4];
+    let mut qu = [0.0f32; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            let v0 = *x.get_unchecked(i);
+            let v1 = *x.get_unchecked(i + 1);
+            let v2 = *x.get_unchecked(i + 2);
+            let v3 = *x.get_unchecked(i + 3);
+            let x2_0 = v0 * v0;
+            let x2_1 = v1 * v1;
+            let x2_2 = v2 * v2;
+            let x2_3 = v3 * v3;
+            // x² accumulation.
+            sq[0] += x2_0;
+            sq[1] += x2_1;
+            sq[2] += x2_2;
+            sq[3] += x2_3;
+            // x⁴ = x² · x² — fused mul-add for single rounding.
+            qu[0] = x2_0.mul_add(x2_0, qu[0]);
+            qu[1] = x2_1.mul_add(x2_1, qu[1]);
+            qu[2] = x2_2.mul_add(x2_2, qu[2]);
+            qu[3] = x2_3.mul_add(x2_3, qu[3]);
+        }
+        i += 4;
+    }
+    let mut sum_sq = sq.iter().sum::<f32>();
+    let mut sum_quartic = qu.iter().sum::<f32>();
+    while i < len {
+        unsafe {
+            let v = *x.get_unchecked(i);
+            let x2 = v * v;
+            sum_sq += x2;
+            sum_quartic = x2.mul_add(x2, sum_quartic);
+        }
+        i += 1;
+    }
+    (sum_sq, sum_quartic)
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
+    use core::arch::aarch64::{
+        vaddq_f32, vaddvq_f32, vdupq_n_f32, vfmaq_f32, vld1q_f32, vmulq_f32,
+    };
+
+    unsafe {
+        let mut sq0 = vdupq_n_f32(0.0);
+        let mut sq1 = vdupq_n_f32(0.0);
+        let mut sq2 = vdupq_n_f32(0.0);
+        let mut sq3 = vdupq_n_f32(0.0);
+        let mut qu0 = vdupq_n_f32(0.0);
+        let mut qu1 = vdupq_n_f32(0.0);
+        let mut qu2 = vdupq_n_f32(0.0);
+        let mut qu3 = vdupq_n_f32(0.0);
+
+        let len = x.len();
+        let mut i = 0;
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            let v0 = vld1q_f32(x.as_ptr().add(i));
+            let x2_0 = vmulq_f32(v0, v0);
+            sq0 = vaddq_f32(sq0, x2_0);
+            qu0 = vfmaq_f32(qu0, x2_0, x2_0);
+
+            let v1 = vld1q_f32(x.as_ptr().add(i + 4));
+            let x2_1 = vmulq_f32(v1, v1);
+            sq1 = vaddq_f32(sq1, x2_1);
+            qu1 = vfmaq_f32(qu1, x2_1, x2_1);
+
+            let v2 = vld1q_f32(x.as_ptr().add(i + 8));
+            let x2_2 = vmulq_f32(v2, v2);
+            sq2 = vaddq_f32(sq2, x2_2);
+            qu2 = vfmaq_f32(qu2, x2_2, x2_2);
+
+            let v3 = vld1q_f32(x.as_ptr().add(i + 12));
+            let x2_3 = vmulq_f32(v3, v3);
+            sq3 = vaddq_f32(sq3, x2_3);
+            qu3 = vfmaq_f32(qu3, x2_3, x2_3);
+
+            i += 16;
+        }
+
+        let mut sum_sq = vaddvq_f32(vaddq_f32(vaddq_f32(sq0, sq1), vaddq_f32(sq2, sq3)));
+        let mut sum_quartic = vaddvq_f32(vaddq_f32(vaddq_f32(qu0, qu1), vaddq_f32(qu2, qu3)));
+
+        // Remaining 4-element chunks.
+        let mut sq_rem = vdupq_n_f32(0.0);
+        let mut qu_rem = vdupq_n_f32(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            let v = vld1q_f32(x.as_ptr().add(i));
+            let x2 = vmulq_f32(v, v);
+            sq_rem = vaddq_f32(sq_rem, x2);
+            qu_rem = vfmaq_f32(qu_rem, x2, x2);
+            i += 4;
+        }
+        sum_sq += vaddvq_f32(sq_rem);
+        sum_quartic += vaddvq_f32(qu_rem);
+
+        // Scalar tail.
+        while i < len {
+            let v = *x.get_unchecked(i);
+            let x2 = v * v;
+            sum_sq += x2;
+            sum_quartic += x2 * x2;
+            i += 1;
+        }
+
+        (sum_sq, sum_quartic)
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[inline]
+unsafe fn avx2_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
+    use core::arch::x86_64::{
+        _mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_mul_ps, _mm256_setzero_ps,
+    };
+
+    unsafe {
+        let mut sq0 = _mm256_setzero_ps();
+        let mut sq1 = _mm256_setzero_ps();
+        let mut qu0 = _mm256_setzero_ps();
+        let mut qu1 = _mm256_setzero_ps();
+
+        let len = x.len();
+        let mut i = 0;
+        let chunks2 = len / 16;
+
+        for _ in 0..chunks2 {
+            let v0 = _mm256_loadu_ps(x.as_ptr().add(i));
+            let x2_0 = _mm256_mul_ps(v0, v0);
+            sq0 = _mm256_add_ps(sq0, x2_0);
+            qu0 = _mm256_fmadd_ps(x2_0, x2_0, qu0);
+
+            let v1 = _mm256_loadu_ps(x.as_ptr().add(i + 8));
+            let x2_1 = _mm256_mul_ps(v1, v1);
+            sq1 = _mm256_add_ps(sq1, x2_1);
+            qu1 = _mm256_fmadd_ps(x2_1, x2_1, qu1);
+
+            i += 16;
+        }
+
+        let mut sum_sq = super::horizontal::horizontal_sum_256(_mm256_add_ps(sq0, sq1));
+        let mut sum_quartic = super::horizontal::horizontal_sum_256(_mm256_add_ps(qu0, qu1));
+
+        // Remaining 8-element chunks.
+        let mut sq_rem = _mm256_setzero_ps();
+        let mut qu_rem = _mm256_setzero_ps();
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            let v = _mm256_loadu_ps(x.as_ptr().add(i));
+            let x2 = _mm256_mul_ps(v, v);
+            sq_rem = _mm256_add_ps(sq_rem, x2);
+            qu_rem = _mm256_fmadd_ps(x2, x2, qu_rem);
+            i += 8;
+        }
+        sum_sq += super::horizontal::horizontal_sum_256(sq_rem);
+        sum_quartic += super::horizontal::horizontal_sum_256(qu_rem);
+
+        // Scalar tail.
+        while i < len {
+            let v = *x.get_unchecked(i);
+            let x2 = v * v;
+            sum_sq += x2;
+            sum_quartic += x2 * x2;
+            i += 1;
+        }
+
+        (sum_sq, sum_quartic)
+    }
+}
+
 // ── SIMD Sum-|x| (Issue 120) ───────────────────────────────
 
 /// SIMD-accelerated sum of absolute values: `Σ |x[i]|`.

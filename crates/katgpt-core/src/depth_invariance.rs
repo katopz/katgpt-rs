@@ -226,9 +226,12 @@ fn least_squares_slope_vs_index(ys: &[f32]) -> f32 {
 /// rule, not the test", rank collapse is the sole Collapsed trigger.
 /// `magnitude_slope_collapse` is retained in [`DepthInvarianceConfig`] for API
 /// stability.
-// TODO(Phase 6): SIMD-vectorize the magnitude+flatness inner loop (chunk-4
-// mul_add) and the cosine dot-product is already simd_dot_f32. Correctness
-// first in Phase 1 — do not premature-optimize.
+///
+/// **SIMD inner loop (T7.4 revisit):** the per-timestep magnitude +
+/// participation-ratio pass is now fused into a single
+/// [`simd::simd_sum_sq_quartic`] sweep (NEON/AVX2/scalar dispatch). The cosine
+/// step continues to use [`simd::simd_dot_f32`]. Zero allocation, same math,
+/// same decision rule — pure perf change.
 pub fn classify_chain(
     states: &[f32],
     d: usize,
@@ -273,14 +276,9 @@ pub fn classify_chain(
     for t in 0..k_plus_1 {
         let h_t = &states[t * d..(t + 1) * d];
 
-        // Magnitude + flatness in one pass (simd_dot_f32 can't give Σh⁴).
-        let mut sum_sq: f32 = 0.0;
-        let mut sum_quartic: f32 = 0.0;
-        for &x in h_t {
-            let x2 = x * x;
-            sum_sq += x2;
-            sum_quartic = x2.mul_add(x2, sum_quartic); // x⁴ + acc
-        }
+        // Fused Σx² + Σx⁴ in one SIMD sweep (Plan 306 T7.4). Σx² feeds the
+        // magnitude; (Σx²)² / (d · Σx⁴) is the participation-ratio flatness.
+        let (sum_sq, sum_quartic) = simd::simd_sum_sq_quartic(h_t);
         let magnitude = sum_sq.sqrt();
         scratch.magnitude_series.push(magnitude);
 
