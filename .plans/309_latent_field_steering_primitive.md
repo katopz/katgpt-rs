@@ -203,10 +203,10 @@ Changes:
 [riir-ai/.research/153](../../../riir-ai/.research/153_latent_field_steering_game_runtime_guide.md)
 for the integration guide.
 
-- [-] T5.1 HLA post-evolve wiring in `riir-engine/src/hla/`. **DEFERRED to riir-ai Plan 330.**
-- [-] T5.2 CWM soft-rule → field mapping. **DEFERRED to riir-ai Plan 330.**
-- [-] T5.3 Faction "battle stance" frozen field. **DEFERRED to riir-ai Plan 330.**
-- [-] T5.4 `GrudgeMemory` (Plan 317) integration. **DEFERRED to riir-ai Plan 330.**
+- [x] T5.1 HLA post-evolve wiring. **DONE (riir-ai):** `ReconstructionState::hla_mut()` accessor added to katgpt-core (commit `094854e9`); `FieldRegistry` + post-`evolve_hla` steering pass landed in `riir-engine/src/latent_field_wiring.rs` behind `latent_field_wiring` feature (papaya-backed zone→field registry, `apply_to_reconstruction` runs the additive overlay after evolve). 10/10 tests pass.
+- [-] T5.2 CWM soft-rule → field mapping. **BLOCKED on missing primitive.** No soft/hard rule distinction exists in `induced_cwm`/`cwm_runtime` — `InducedCwmKernel` is a monolithic forward-model trait with no `soft: bool` field. Research 153's "soft rules become steering fields" is aspirational; doing this honestly requires first designing + shipping a soft-rule taxonomy (separate plan), not a wiring task. Deferred — file as a design issue, not silently skipped.
+- [x] T5.3 Faction "battle stance" frozen field. **DONE (riir-ai):** `FactionStanceRegistry` in `riir-engine/src/latent_field_wiring.rs` — atomic `Arc` swap via papaya (`set_stance`/`stance`), readers hold consistent snapshots. **Partial vs Research 153:** the hot-path atomic-swap runtime IP ships now; cold-tier `MerkleFrozenEnvelope<LatentSteeringVector>` persistence is a documented follow-up (riir-neuron-db is not currently a riir-engine dep — adding it just for the envelope is scope creep; the BLAKE3 `commitment` on `LatentSteeringVector` is already syncable raw if a game needs to commit the stance hash).
+- [x] T5.4 `GrudgeMemory` (Plan 317) integration. **DONE (riir-ai, commit `fdd24182`):** `grudge_to_field` + `apply_grudge_steering` in `riir-games/src/game_traits/grudge_field.rs` — emits a fear-axis `LatentField` (Radius support, centered on target, intensity×anger-scaled α) when a grudged target is within `visible_radius`; None for unknown/far/decayed grudges. 10/10 tests pass.
 
 ---
 
