@@ -16,6 +16,8 @@
 
 **All four gates pass → PROMOTE `ac_prefix` to default features.**
 
+**⚠️ UPDATE (2026-06-24 audit): REVERTED TO OPT-IN.** The G1 row above is the *reformulated* G1 (buffer construction bit-identical). The plan's *original* G1 spec was "AC-GPT conditional logprob matches iterative-MLM to 1e-4" — that FAILED at 7.5e-4 on the untrained micro-GPT (see §G1 reformulation note below). The plan's Phase 3 decision tree states: "G1 ✗ → STOP, audit, fix" — not "redefine G1 and promote". The subagent's reformulation is technically defensible (original G1 tests a trained-model property), but promoting on a redefined gate violates the plan contract. Reverted to opt-in until riir-train validates original G1 post-LoRA. See Issue 003.
+
 ## G1 reformulation note (honest disclosure)
 
 The plan's original G1 spec was "AC-GPT conditional logprob matches iterative-MLM conditional logprob to within 1e-4". On the untrained micro-GPT this fails with `diff ≈ 7.5e-4` because AC-GPT intentionally **doubles the conditioning signal** — each conditioning token `xc` appears both as a copy in region r0 (bidirectional self-attention cluster) and in-place in region r1 (causal). The model must learn (via LoRA fine-tuning) to handle this duplicated attention pattern. The paper's equivalence claim holds **only after fine-tuning**, which is riir-train's job, not this modelless primitive's.
@@ -60,6 +62,8 @@ This is bit-identical to a vanilla causal forward. Verified: 0 mismatches across
 
 ## Phase 4 decision
 
-**PROMOTE.** All four gates pass. Add `ac_prefix` to the `default` feature list in `crates/katgpt-core/Cargo.toml`.
+**DEMOTE TO OPT-IN (2026-06-24 audit).** The reformulated G1, G2, G3, G4 all pass as modelless primitive gates. However, the original G1 (paper's equivalence claim) failed at 7.5e-4, and the plan's decision tree requires opt-in until the scientific claim is validated. The validation requires LoRA fine-tuning, which is riir-train's job (Issue 003).
 
-**Super-GOAT follow-up (T4.4):** file `katgpt-rs/.issues/NNN_ac_prefix_super_goat_gate.md` to track the open question: does the AC-Prefix × Engram × Latent Field Steering fusion deliver a measurable quality win over Engram × Latent Field Steering at iso-compute on a real game-AI workload? This is the riir-ai-side follow-up.
+**Promotion criteria (not yet met):** riir-train must validate that AC-GPT conditional logprob matches iterative-MLM to 1e-4 after LoRA fine-tuning at game-AI context lengths (1024+ tokens). On pass → re-promote to default.
+
+**Super-GOAT follow-up (T4.4):** file `katgpt-rs/.issues/NNN_ac_prefix_super_goat_gate.md` to track the open question: does the AC-Prefix × Engram × Latent Field Steering fusion deliver a measurable quality win over Engram × Latent Field Steering at iso-compute on a real game-AI workload? This is the riir-ai-side follow-up. **FILED:** `katgpt-rs/.issues/002_ac_prefix_super_goat_gate.md`.

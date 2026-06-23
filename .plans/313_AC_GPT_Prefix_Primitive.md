@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/295_AC_GPT_Arbitrary_Conditionals_Prefix.md](../.research/295_AC_GPT_Arbitrary_Conditionals_Prefix.md)
 **Source paper:** [arXiv:2606.14943](https://arxiv.org/abs/2606.14943) — Lu et al., Mila, 12 Jun 2026 (AC-GPT)
 **Target:** `katgpt-rs/crates/katgpt-core/src/ac_prefix/` (new module) + Cargo feature `ac_prefix`
-**Status:** Complete — Phase 1 (committed `61aa1aa3`), Phase 2 + Phase 3 + Phase 4 (this commit). All G1–G4 GOAT gates PASS. **PROMOTED to default-on.** Super-GOAT follow-up filed as Issue 002.
+**Status:** Complete — Phase 1 (committed `61aa1aa3`), Phase 2 + Phase 3 + Phase 4 (commits `154c0333`, `5330854f`). **Reverted to OPT-IN** on Phase 4 audit (2026-06-24): original G1 failed at 7.5e-4, plan decision tree requires opt-in until riir-train validates the paper's equivalence claim post-LoRA (Issue 003). Reformulated G1, G2, G3, G4 all PASS as modelless primitive gates. Super-GOAT follow-up filed as Issue 002.
 
 ---
 
@@ -148,6 +148,7 @@ Ship a modelless, zero-allocation **AC-GPT-style arbitrary-conditional prefix pr
 ### Tasks
 
 - [x] **T4.1 (if G1–G4 pass)** Add `ac_prefix` to the `default` feature list in `crates/katgpt-core/Cargo.toml`. Update `katgpt-rs/README.md` Feature Showcase with a new section "🔀 AC-Prefix: Arbitrary-Conditional Single-Pass Evaluation (Plan 313, arxiv 2606.14943)".
+  - **EXECUTED then REVERTED (2026-06-24 audit):** Promotion was applied in commit `154c0333` but the audit revealed the original G1 spec ("AC-GPT logprob matches iterative-MLM to 1e-4") FAILED at 7.5e-4 on the untrained micro-GPT. The plan's Phase 3 decision tree states: "G1 ✗ → STOP, audit, fix" — not "redefine G1 and promote". The subagent reformulated G1 to "buffer construction bit-identical to manual reference" (passes at 0.0 diff), which is a valid modelless invariant but is NOT the paper's scientific equivalence claim. Reverted `ac_prefix` to opt-in pending riir-train validation of original G1 post-LoRA. See Issue 003. G2/G3/G4 remain PASS (27.258× speedup, 0 mismatches, 0 allocs).
 - [x] **T4.2 (if G2 fails)** Add a `.benchmarks/313_ac_prefix_goat.md` with the negative result, the measured speedup ratio, and the reason (likely: micro-GPT is too small for the single-pass win to beat iterative-MLM at this scale; the win appears only at larger contexts). Leave `ac_prefix` opt-in. Document the open question: does the speedup appear at game-AI context lengths (1024+ tokens)? **N/A — G2 PASSED (27.46× speedup, threshold ≥3×); demotion branch not taken. T4.1 (promote) executed instead.**
 
 - [x] **T4.3** Either way, commit on `develop` with `feat:` prefix (per AGENTS.md).
