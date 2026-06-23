@@ -171,10 +171,12 @@ pub fn compact_with_fixed_beta(
     };
 
     let selected_indices = selection.indices.clone();
-    let compact_keys: Vec<f32> = selected_indices
-        .iter()
-        .flat_map(|&idx| keys[idx * d..(idx + 1) * d].iter().copied())
-        .collect();
+    // Pre-allocate exactly and memcpy each row — avoids the log(t) Vec growth
+    // reallocations of `flat_map().collect()`.
+    let mut compact_keys = Vec::with_capacity(selected_indices.len() * d);
+    for &idx in &selected_indices {
+        compact_keys.extend_from_slice(&keys[idx * d..(idx + 1) * d]);
+    }
 
     // Stage 2: Use fixed β (skip NNLS).
     let beta = vec![fixed_beta; t];
@@ -195,16 +197,19 @@ pub fn compact_with_fixed_beta(
     compute_softmax_attention(&full_scores, n, t_len, &mut full_attn, &mut m_target);
 
     // Build Y ∈ R^{n×d}: Y_i = softmax(q_i K^T / √d) V.
+    // Loop order j-outer / k-inner so both `values` and `y_target` are read
+    // and written sequentially (row-major). The prior k-outer / j-inner form
+    // did strided `values[j*d + k]` reads — one cache miss per j for large d.
     let mut y_target = vec![0.0f32; n * d];
     for i in 0..n {
         let attn_row = &full_attn[i * t_len..(i + 1) * t_len];
         let y_row = &mut y_target[i * d..(i + 1) * d];
-        for k in 0..d {
-            let mut s = 0.0f32;
-            for j in 0..t_len {
-                s += attn_row[j] * values[j * d + k];
+        for j in 0..t_len {
+            let a = attn_row[j];
+            let v_row = &values[j * d..(j + 1) * d];
+            for k in 0..d {
+                y_row[k] += a * v_row[k];
             }
-            y_row[k] = s;
         }
     }
 
@@ -218,6 +223,12 @@ pub fn compact_with_fixed_beta(
 
     // Optional reconstruction report.
     let report = if config.report_reconstruction {
+        // O(t_len) bitmap for O(1) membership test. The prior
+        // `selected_indices.contains(&j)` was O(t) per key → O(T·t) total.
+        let mut selected_bitmap = vec![false; t_len];
+        for &idx in &selected_indices {
+            selected_bitmap[idx] = true;
+        }
         let mut sel_mass_sq = 0.0f32;
         let mut tot_mass_sq = 0.0f32;
         for j in 0..t_len {
@@ -228,7 +239,7 @@ pub fn compact_with_fixed_beta(
             }
             let rms = (sum_sq / (n as f32)).sqrt();
             tot_mass_sq += rms * rms;
-            if selected_indices.contains(&j) {
+            if selected_bitmap[j] {
                 sel_mass_sq += rms * rms;
             }
         }

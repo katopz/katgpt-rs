@@ -62,36 +62,43 @@ pub fn select_highest_attn_keys(
     compute_softmax_attention(scratch_scores, n, t_len, scratch_attn, &mut mass);
 
     // Aggregate per-key attention scores.
+    // Iterate queries in the outer loop so reads from `scratch_attn` are
+    // sequential (row-major) and writes to `per_key_score` are sequential.
+    // The previous j-outer/i-inner form did strided `scratch_attn[i*t_len + j]`
+    // reads — cache-hostile for large `t_len`. FLOPs are identical; only the
+    // memory access order changes.
     let mut per_key_score = vec![0.0f32; t_len];
+    let inv_n = 1.0f32 / (n as f32);
     match score_method {
         ScoreMethod::Mean => {
-            for j in 0..t_len {
-                let mut sum = 0.0f32;
-                for i in 0..n {
-                    sum += scratch_attn[i * t_len + j];
+            for i in 0..n {
+                let row = &scratch_attn[i * t_len..(i + 1) * t_len];
+                for j in 0..t_len {
+                    per_key_score[j] += row[j];
                 }
-                per_key_score[j] = sum / (n as f32);
+            }
+            for v in &mut per_key_score {
+                *v *= inv_n;
             }
         }
         ScoreMethod::Rms => {
-            for j in 0..t_len {
-                let mut sum_sq = 0.0f32;
-                for i in 0..n {
-                    let a = scratch_attn[i * t_len + j];
-                    sum_sq += a * a;
+            for i in 0..n {
+                let row = &scratch_attn[i * t_len..(i + 1) * t_len];
+                for j in 0..t_len {
+                    per_key_score[j] += row[j] * row[j];
                 }
-                per_key_score[j] = (sum_sq / (n as f32)).sqrt();
+            }
+            for v in &mut per_key_score {
+                *v = (*v * inv_n).sqrt();
             }
         }
         ScoreMethod::Max => {
-            for j in 0..t_len {
-                let mut m = f32::NEG_INFINITY;
-                for i in 0..n {
-                    let a = scratch_attn[i * t_len + j];
-                    // Branch-free max — emits CMOV/conditional-select.
-                    m = m.max(a);
+            per_key_score.fill(f32::NEG_INFINITY);
+            for i in 0..n {
+                let row = &scratch_attn[i * t_len..(i + 1) * t_len];
+                for j in 0..t_len {
+                    per_key_score[j] = per_key_score[j].max(row[j]);
                 }
-                per_key_score[j] = m;
             }
         }
     }

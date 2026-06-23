@@ -179,12 +179,14 @@ pub fn compact_with_router(
         ),
     };
 
-    // Extract Ck = K[selection.indices].
+    // Extract Ck = K[selection.indices]. Pre-allocate exactly and memcpy each
+    // row via `extend_from_slice` — the prior `flat_map().collect()` did not
+    // pre-size the Vec, causing log(t) reallocations as it grew.
     let selected_indices = selection.indices.clone();
-    let compact_keys: Vec<f32> = selected_indices
-        .iter()
-        .flat_map(|&idx| keys[idx * d..(idx + 1) * d].iter().copied())
-        .collect();
+    let mut compact_keys = Vec::with_capacity(selected_indices.len() * d);
+    for &idx in &selected_indices {
+        compact_keys.extend_from_slice(&keys[idx * d..(idx + 1) * d]);
+    }
 
     // Stage 2: Fit β via NNLS on the selected subset.
     // Build mass feature matrix A ∈ R^{n×t}: A_ij = exp(q_i (Ck)_j^T / √d).
@@ -196,15 +198,16 @@ pub fn compact_with_router(
     trace.mass_features_backend = Some(router.pick_backend(t.max(1), t_len, gpu_available));
     let mut a_mass = vec![0.0f32; n * t];
     let inv_sqrt_d = 1.0f32 / (d as f32).sqrt();
+    // Reuse the SIMD `dot_8wide` kernel (8-wide FMA on AVX2/NEON) instead of
+    // the prior scalar dot loop. For d=64 this is ~8× fewer add/mul ops in the
+    // inner loop after auto-vectorization.
+    use crate::attn_match::score_matrix_simd::dot_8wide;
     for i in 0..n {
         let q_row = &queries[i * d..(i + 1) * d];
         let a_row = &mut a_mass[i * t..(i + 1) * t];
         for j in 0..t {
             let ck_row = &compact_keys[j * d..(j + 1) * d];
-            let mut dot = 0.0f32;
-            for k in 0..d {
-                dot += q_row[k] * ck_row[k];
-            }
+            let dot = dot_8wide(q_row, ck_row, d);
             a_row[j] = (dot * inv_sqrt_d).max(-50.0).exp(); // clamp for stability
         }
     }
@@ -241,16 +244,20 @@ pub fn compact_with_router(
     compute_compact_attention(queries, &compact_keys, &beta, n, t, d, &mut x_attn);
 
     // Build Y ∈ R^{n×d}: Y_i = softmax(q_i K^T / √d) V = full_attn[i] · V.
+    // Loop order j-outer / k-inner so both `values` and `y_target` are read
+    // and written sequentially (row-major). The prior k-outer / j-inner form
+    // did strided `values[j*d + k]` reads — one cache miss per j for large d.
+    // This is the cache-friendly ijk matmul variant (Y = A × V).
     let mut y_target = vec![0.0f32; n * d];
     for i in 0..n {
         let attn_row = &full_attn[i * t_len..(i + 1) * t_len];
         let y_row = &mut y_target[i * d..(i + 1) * d];
-        for k in 0..d {
-            let mut s = 0.0f32;
-            for j in 0..t_len {
-                s += attn_row[j] * values[j * d + k];
+        for j in 0..t_len {
+            let a = attn_row[j];
+            let v_row = &values[j * d..(j + 1) * d];
+            for k in 0..d {
+                y_row[k] += a * v_row[k];
             }
-            y_row[k] = s;
         }
     }
 
@@ -264,6 +271,12 @@ pub fn compact_with_router(
 
     // Optional reconstruction report.
     let report = if config.report_reconstruction {
+        // O(t_len) bitmap for O(1) membership test. The prior
+        // `selected_indices.contains(&j)` was O(t) per key → O(T·t) total.
+        let mut selected_bitmap = vec![false; t_len];
+        for &idx in &selected_indices {
+            selected_bitmap[idx] = true;
+        }
         // Compute selected_mass_coverage: fraction of total RMS attention mass
         // captured by selected keys.
         let mut sel_mass_sq = 0.0f32;
@@ -276,7 +289,7 @@ pub fn compact_with_router(
             }
             let rms = (sum_sq / (n as f32)).sqrt();
             tot_mass_sq += rms * rms;
-            if selected_indices.contains(&j) {
+            if selected_bitmap[j] {
                 sel_mass_sq += rms * rms;
             }
         }

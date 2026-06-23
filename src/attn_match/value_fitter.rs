@@ -14,7 +14,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::attn_match::{STABILITY_EPS, score_matrix::row_max, score_matrix_simd::dot_8wide};
+use crate::attn_match::{STABILITY_EPS, score_matrix_simd::dot_8wide};
 
 /// Configuration for Cv fitting.
 #[derive(Debug, Clone, Copy)]
@@ -379,25 +379,32 @@ pub fn compute_compact_attention(
         }
     }
 
-    // Apply max-shift + exp + normalize per row.
-    let mut maxes = vec![f32::NEG_INFINITY; n];
-    row_max(x_out, n, t, &mut maxes);
+    // Apply max-shift + exp + normalize per row. Fused per-row (no scratch
+    // allocation): the row is hot in L1 between the max scan and the exp
+    // pass. Replaces `t` divisions per row with 1 reciprocal + `t` multiplies.
     for i in 0..n {
-        let m = maxes[i];
         let row = &mut x_out[i * t..(i + 1) * t];
+        // Pass 1: per-row max (scalar accumulator, no buffer).
+        let mut m = row[0];
+        for &v in &row[1..] {
+            m = m.max(v);
+        }
+        // Pass 2: shifted exp + accumulate sum_exp.
         let mut sum_exp = 0.0f32;
         for j in 0..t {
             let e = (row[j] - m).exp();
             row[j] = e;
             sum_exp += e;
         }
+        // Pass 3: normalize via reciprocal-multiply.
         let denom = if sum_exp < STABILITY_EPS {
             STABILITY_EPS
         } else {
             sum_exp
         };
-        for j in 0..t {
-            row[j] /= denom;
+        let inv_denom = 1.0 / denom;
+        for v in row.iter_mut() {
+            *v *= inv_denom;
         }
     }
 }

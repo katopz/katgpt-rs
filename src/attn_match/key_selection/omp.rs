@@ -116,19 +116,26 @@ pub fn select_omp_keys(
                 best_score = corr;
                 best_j = j;
             }
-            // Track top-k via simple insertion into top_k_buf.
+            // Track top-k via unsorted buffer with linear-min replacement.
+            // The prior code called `sort_by` on every replacement once the
+            // buffer was full — O(k log k) per candidate, O(T·k log k) total.
+            // For k=4 default that's ~T·8 comparisons; the linear scan below
+            // is O(k) per candidate with no branch-heavy sort. Correctness is
+            // preserved because `top_k_buf` is consumed without order
+            // dependency (dedup via `in_selected`).
             if top_k_buf.len() < k {
                 top_k_buf.push((j, corr));
-                if top_k_buf.len() == k {
-                    // Heapify or sort to find min for replacement.
-                    top_k_buf
-                        .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            } else {
+                // Find the slot with the minimum corr and replace if larger.
+                let mut min_idx = 0;
+                for m in 1..top_k_buf.len() {
+                    if top_k_buf[m].1 < top_k_buf[min_idx].1 {
+                        min_idx = m;
+                    }
                 }
-            } else if corr > top_k_buf[0].1 {
-                top_k_buf[0] = (j, corr);
-                // Re-sift min to front.
-                top_k_buf
-                    .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                if corr > top_k_buf[min_idx].1 {
+                    top_k_buf[min_idx] = (j, corr);
+                }
             }
         }
 

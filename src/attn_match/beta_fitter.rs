@@ -176,13 +176,16 @@ pub fn fit_beta_nnls(
                     }
                     aw[i] = s;
                 }
-                // grad = A^T (A w - m)
-                for j in 0..t {
-                    let mut s = 0.0f32;
-                    for i in 0..n {
-                        s += a[i * t + j] * (aw[i] - m[i]);
+                // grad = A^T (A w - m). Iterate i in the outer loop so reads
+                // from `a` are sequential (row-major). The prior j-outer form
+                // did strided `a[i*t + j]` reads — cache-hostile for large n.
+                grad.fill(0.0);
+                for i in 0..n {
+                    let row = &a[i * t..(i + 1) * t];
+                    let r_i = aw[i] - m[i];
+                    for j in 0..t {
+                        grad[j] += row[j] * r_i;
                     }
-                    grad[j] = s;
                 }
                 // Step: w ← w - η * grad; clamp to box.
                 for j in 0..t {

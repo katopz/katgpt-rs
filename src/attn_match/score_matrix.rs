@@ -36,36 +36,16 @@ pub fn compute_score_matrix(
 
     let inv_sqrt_d = 1.0f32 / (d as f32).sqrt();
 
-    // 8-wide chunked inner loop — auto-vectorizes on AVX2 (8x f32) / NEON (4x f32).
-    // Per AGENTS.md: chunked loops help LLVM auto-vectorize, branch-free inner.
+    // Reuse the shared `dot_8wide` kernel (8-wide chunked FMA, auto-vectorizes
+    // on AVX2/NEON) instead of a duplicated manual unroll. Keeps the scalar and
+    // SIMD paths in `score_matrix_simd` bit-identical by construction (DRY).
+    use crate::attn_match::score_matrix_simd::dot_8wide;
     for i in 0..n {
         let q_row = &queries[i * d..(i + 1) * d];
         let out_row = &mut out[i * t_len..(i + 1) * t_len];
         for j in 0..t_len {
             let k_row = &keys[j * d..(j + 1) * d];
-            // Chunked dot product in 8-element groups.
-            let mut dot = 0.0f32;
-            let mut k = 0usize;
-            let chunk = 8usize;
-            while k + chunk <= d {
-                let q_chunk = &q_row[k..k + chunk];
-                let k_chunk = &k_row[k..k + chunk];
-                // Manually unrolled — compiler will SIMD this.
-                dot += q_chunk[0] * k_chunk[0];
-                dot += q_chunk[1] * k_chunk[1];
-                dot += q_chunk[2] * k_chunk[2];
-                dot += q_chunk[3] * k_chunk[3];
-                dot += q_chunk[4] * k_chunk[4];
-                dot += q_chunk[5] * k_chunk[5];
-                dot += q_chunk[6] * k_chunk[6];
-                dot += q_chunk[7] * k_chunk[7];
-                k += chunk;
-            }
-            while k < d {
-                dot += q_row[k] * k_row[k];
-                k += 1;
-            }
-            out_row[j] = dot * inv_sqrt_d;
+            out_row[j] = dot_8wide(q_row, k_row, d) * inv_sqrt_d;
         }
     }
 }
@@ -109,28 +89,38 @@ pub fn compute_softmax_attention(
     assert_eq!(attn_out.len(), n * t_len);
     assert_eq!(mass_out.len(), n);
 
-    // Scratch buffer for row maxima — caller should reuse across calls but this
-    // is small (n elements) and not in the tightest inner loop.
-    let mut row_maxes = vec![f32::NEG_INFINITY; n];
-    row_max(scores, n, t_len, &mut row_maxes);
-
+    // Per-row fused softmax: max-shift + exp + normalize, with no scratch
+    // allocation. The row is hot in L1 between the max scan and the exp pass
+    // for typical `t_len`, so fusing beats the prior two-buffer approach
+    // (`row_maxes` Vec + separate `row_max` call). Replaces `t_len` divisions
+    // per row with 1 reciprocal + `t_len` multiplies.
     for i in 0..n {
-        let max_s = row_maxes[i];
         let row = &scores[i * t_len..(i + 1) * t_len];
         let out_row = &mut attn_out[i * t_len..(i + 1) * t_len];
+
+        // Pass 1: per-row max (scalar accumulator, no buffer).
+        let mut max_s = row[0];
+        for &v in &row[1..] {
+            max_s = max_s.max(v);
+        }
+
+        // Pass 2: shifted exp + accumulate sum_exp.
         let mut sum_exp = 0.0f32;
         for j in 0..t_len {
             let e = (row[j] - max_s).exp();
             out_row[j] = e;
             sum_exp += e;
         }
+
+        // Pass 3: normalize via reciprocal-multiply (1 division + N multiplies).
         let denom = if sum_exp < STABILITY_EPS {
             STABILITY_EPS
         } else {
             sum_exp
         };
-        for j in 0..t_len {
-            out_row[j] /= denom;
+        let inv_denom = 1.0 / denom;
+        for out in out_row.iter_mut() {
+            *out *= inv_denom;
         }
         mass_out[i] = sum_exp;
     }
