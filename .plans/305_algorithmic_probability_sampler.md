@@ -6,7 +6,7 @@
 **Source paper:** [Dingle & Hutter, *Entropy* 28(2):226, 2026](https://www.mdpi.com/1099-4300/28/2/226) — Simplicity and Complexity in Combinatorial Optimization
 **Target:** `katgpt-rs/src/screening/complexity_prior.rs` + `katgpt-rs/src/screening/coincidence_gate.rs`
 **Feature:** `complexity_prior_sampler` (off by default until GOAT gate passes)
-**Status:** Active — Phase 1 complete (skeleton + 22/22 tests + demo shipped), Phase 2 (G1+G2 GOAT gates) + Phase 3-5 deferred.
+**Status:** Active — Phase 1 complete (skeleton + 22/22 tests + demo shipped), Phase 3 complete (T3.1–T3.4 integration hooks shipped, adapter-only, 9/9 new tests pass), Phase 2 (G1+G2 GOAT gates) + Phase 4-5 deferred.
 
 ---
 
@@ -115,21 +115,37 @@ Implement two open primitives distilled from Dingle–Hutter 2026 (Research 284)
 
 ### Tasks
 
-- [ ] **T3.1** Add adapter trait impl for `katgpt-rs/src/mcts.rs`:
+- [x] **T3.1** Add adapter trait impl for MCTS — **DEVIATION:** actual path is `katgpt-rs/src/pruners/game_state/mcts.rs` (NOT `katgpt-rs/src/mcts.rs` as originally written). MCTS is generic over `S: GameState` with opaque `S::Action`; direct wiring would require threading `CompressionPriorSampler<K>` + an `Action → &[u8]` encoding hook through `mcts_search_impl` / `select_inline` / `expand_and_rollout`. Too invasive for the open-primitive landing. **Adapter-only seam shipped** at `katgpt-rs/src/screening/integration_mcts.rs`: `MctsExpansionPrior` trait with `UniformExpansion` (returns 0.0, byte-identical to pre-Plan-305) and `KPriorExpansion` (delegates to `sampler.log_prob`). Module doc documents the caller-side wiring pattern (encode unexpanded actions as `&[u8]`, call `sampler.sample_ix`). Gated by `mcts_k_prior`. 3/3 tests pass.
   - `MctsExpansionPrior` trait with default impl `UniformExpansion`
   - New impl `KPriorExpansion<K: ComplexityProxy>` gated by `mcts_k_prior` sub-feature
   - Zero-cost when feature is off (existing `UniformExpansion` unchanged)
 
-- [ ] **T3.2** Add integration for `katgpt-rs/src/bandit.rs`:
+- [x] **T3.2** Add integration for bandit — **DEVIATION:** `katgpt-rs/src/pruners/bandit.rs` has a `BanditStrategy` enum with 10+ variants, each with match arms in `arm_bandit_score` / `select_arm`. Adding a `KPrior` variant would require new arms in every match. **Adapter-only wrapper shipped** at `katgpt-rs/src/screening/integration_bandit.rs`: `KPriorBandit<K>` wraps a `CompressionPriorSampler<K>` and exposes `arm_log_prior(&[u8])` that the caller adds to their existing arm score. Does NOT implement a bandit policy — decoupled from the strategy enum. Gated by `bandit_k_prior`. 3/3 tests pass.
   - New bandit variant `KPriorBandit<K>` that biases arm selection by `sigmoid(-α·K̃(arm) - β)`
   - Gated by `bandit_k_prior` sub-feature
 
-- [ ] **T3.3** Add speculative drafter hook in `katgpt-rs/src/speculative/`:
+- [x] **T3.3** Add speculative drafter hook — **DEVIATION:** `katgpt-rs/src/speculative/` + `katgpt-rs/crates/katgpt-core/src/compression_drafter.rs` define many drafter flavours (NF-Flow, Domino, DFlash, Echo, Compression, Dendritic, ...) each with its own trait surface; a single wrapping trait would over-constrain the API. **Post-drafting re-ranker shipped** at `katgpt-rs/src/screening/integration_spec.rs`: `KPriorDrafter<K>::rerank(&[&[u8]], &mut [f32], &mut [f32])` adds `sampler.log_prob(draft_i)` to `scores[i]` in place; caller sorts after. Zero-allocation (caller-provided scratch). Composes cleanly with `CompressionDrafter` (R256) and `DendriticGate` (R260) since both produce `(token, score)` pairs. Gated by `spec_k_prior`. 3/3 tests pass.
   - `KPriorDrafter<K>` wraps an existing drafter, re-ranking drafts by K-prior
   - Composes cleanly with `CompressionDrafter` (R256) and `DendriticGate` (R260)
   - Gated by `spec_k_prior` sub-feature
 
-- [ ] **T3.4** Documentation: README section "🧠 Algorithmic-Probability Sampler: Safe Prior for Inference-Time Search (Plan 305, Research 284)" under Feature Showcase. Honest framing: "Levin-Search variant applied to modelless inference; never worse than uniform, exponentially better on simple optima; theorem-backed cross-task transfer via CoincidenceGate."
+- [x] **T3.4** Documentation: README section **added** under existing `## 🔀 Feature Showcase` as `### 🧠 Algorithmic-Probability Sampler: Safe Prior for Inference-Time Search (Plan 305, Research 284)` (inserted before `## 🔧 KV Compression`). Honest framing: "Levin-Search variant applied to modelless inference; never worse than uniform, exponentially better on simple optima; theorem-backed cross-task transfer via CoincidenceGate." Notes the adapter-only Phase 3 hooks behind `mcts_k_prior` / `bandit_k_prior` / `spec_k_prior`.
+
+### Phase 3 Validation
+
+Temporarily added the three sub-features to `Cargo.toml`, ran `cargo check --no-default-features --features complexity_prior_sampler,mcts_k_prior,bandit_k_prior,spec_k_prior --lib` (clean — only pre-existing warnings, none from new files) and `cargo test ... screening::` (**31/31 tests pass**, including 9 new tests across the three integration modules). Reverted the `Cargo.toml` change afterward (kept source files). Note: the `Cargo.toml` now also contains a concurrent `depth_invariance` / `gain_cost_halt` edit from another agent's Plan 306 — left untouched.
+
+### Phase 3 Cargo.toml Entries Needed (NOT committed — concurrent agent owns Cargo.toml)
+
+The following three lines must be added to `[features]` in `katgpt-rs/Cargo.toml` (each implies `complexity_prior_sampler` so the integration module's `use crate::screening::complexity_prior` resolves):
+
+```toml
+mcts_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.1 — MCTS expansion-prior adapter (MctsExpansionPrior / UniformExpansion / KPriorExpansion).
+bandit_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.2 — bandit K-prior wrapper (KPriorBandit).
+spec_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.3 — speculative drafter re-ranker (KPriorDrafter).
+```
+
+No new `[[example]]` entries needed (Phase 3 ships no new examples).
 
 ---
 
@@ -187,3 +203,5 @@ G3 + G4 + G5 pass → promote riir-ai HLA/functor/cgsp wiring to default.
 ## TL;DR
 
 Two open primitives from Dingle–Hutter 2026 (Research 284): `CompressionPriorSampler<K>` (universal algorithmic-probability sampler with pluggable `K̃` — RLE, entropy, L1, lz4) and `CoincidenceGate` (theorem-backed cross-task transfer). Feature `complexity_prior_sampler`, off by default. Phase 1: skeleton + tests + demo (8 tasks). Phase 2: GOAT gate G1 (sampler safety on 5 games) + G2 (exponential speedup on low-K synthetic). Pass → promote to default. Phase 3: MCTS / bandit / speculative integration hooks. Phase 4 (riir-ai): HLA / functor / cgsp / KG-triple wiring. Phase 5 (riir-chain + riir-neuron-db): LatCal commitment + NeuronShard K-prior signature storage. **The safest improvement in the stack: never hurts, sometimes exponentially helps, with a free cross-task transfer theorem on top.**
+
+**Phase 3 complete (T3.1–T3.4):** three adapter-only integration hooks shipped at `katgpt-rs/src/screening/integration_{mcts,bandit,spec}.rs`, gated by `mcts_k_prior` / `bandit_k_prior` / `spec_k_prior` (each implies `complexity_prior_sampler`). Adapter-only (not direct wiring) because the existing MCTS / bandit / speculative code is too tightly coupled / has too many flavours to retrofit a generic without an invasive refactor. Each module documents the caller-side wiring pattern. 9/9 new tests pass; existing code byte-identical when sub-features are off. Cargo.toml entries deferred to a concurrent agent (Plan 306 owns the file this commit window).

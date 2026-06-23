@@ -34,3 +34,28 @@ pub use complexity_prior::{
     ComplexityProxy, CompressionPriorSampler, EntropyComplexity, L1Complexity,
     LatentCompressionPriorSampler, RleComplexity, quantize_latent,
 };
+
+// ── Plan 305 Phase 3 integration hooks ─────────────────────────────────────
+//
+// Each sub-feature implies `complexity_prior_sampler` (declared in Cargo.toml),
+// so when any of these is on, the `crate::screening::complexity_prior` import
+// inside the integration module resolves.
+//
+// All three modules are zero-cost when their sub-feature is off: the
+// `#![cfg(...)]` at the top of each file drops the entire module, and the
+// `#[cfg(...)]` here drops the `pub mod` + `pub use` lines.
+
+#[cfg(feature = "mcts_k_prior")]
+pub mod integration_mcts;
+#[cfg(feature = "mcts_k_prior")]
+pub use integration_mcts::{KPriorExpansion, MctsExpansionPrior, UniformExpansion};
+
+#[cfg(feature = "bandit_k_prior")]
+pub mod integration_bandit;
+#[cfg(feature = "bandit_k_prior")]
+pub use integration_bandit::KPriorBandit;
+
+#[cfg(feature = "spec_k_prior")]
+pub mod integration_spec;
+#[cfg(feature = "spec_k_prior")]
+pub use integration_spec::KPriorDrafter;
