@@ -243,3 +243,11 @@ required-features = ["karc_forecaster"]
 name = "karc_forecast_bench"
 harness = false
 required-features = ["karc_forecaster"]
+
+# Plan 301 Phase 2 — G1 GOAT proof: subspace phase transition on synthetic
+# MoLRG (arXiv:2409.02426 Theorem 4). Generates K=3 orthogonal d=6 subspaces
+# in R^48, sweeps N ∈ {3,5,6,7,10,50,200}, runs PCA via jacobian_svd_at,
+# verifies N≥d recovery and phase_transition_gate match. Prints G1 PASS/FAIL.
+[[example]]
+name = "subspace_phase_gate_goat"
+required-features = ["subspace_phase_gate"]

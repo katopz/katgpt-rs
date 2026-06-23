@@ -5,7 +5,7 @@
 **Source paper:** [arXiv:2409.02426](https://arxiv.org/abs/2409.02426) — Wang et al., *Breaking the Curse of Dimensionality*.
 **Private Super-GOAT guide:** `riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md`
 **Target:** `katgpt-rs/crates/katgpt-core/src/subspace_phase_gate.rs` (new module) + Cargo feature `subspace_phase_gate`
-**Status:** Active — Phase 1 complete (skeleton shipped), Phase 2 (G1 GOAT proof) + Phases 3-5 deferred.
+**Status:** Active — Phase 1 complete (skeleton shipped), Phase 2 (G1 GOAT proof) complete with [Bench 301](../.benchmarks/301_subspace_phase_gate_g1.md) **G1 PASS**, Phases 3-5 deferred.
 
 ---
 
@@ -48,7 +48,7 @@ This is the **open** counterpart of the private Super-GOAT at `riir-neuron-db/.r
    };
    ```
 - [x] **T1.11** Add feature to `katgpt-rs/crates/katgpt-core/Cargo.toml`: `subspace_phase_gate = []` (no extra deps for now — pure numeric. Thin SVD on small matrices uses a portable scalar implementation; SIMD optimisation deferred to Phase 3).
-- [x] **T1.12** Add feature to `katgpt-rs/Cargo.toml` (umbrella) propagating to katgpt-core.
+- [x] **T1.12** Add feature to `katgpt-rs/Cargo.toml` (umbrella) propagating to katgpt-core. _(Initially marked done but the feature line was missing; fixed in the Phase 2 commit as `subspace_phase_gate = ["katgpt-core/subspace_phase_gate"]`.)_
 
 **Exit:** `cargo check -p katgpt-core --features subspace_phase_gate` compiles. `cargo check -p katgpt-rs --features subspace_phase_gate` compiles.
 
@@ -58,13 +58,13 @@ This is the **open** counterpart of the private Super-GOAT at `riir-neuron-db/.r
 
 ### Tasks
 
-- [ ] **T2.1** Create `katgpt-rs/crates/katgpt-core/examples/subspace_phase_gate_goat.rs` (behind feature gate).
-- [ ] **T2.2** Generate K=3 orthogonal subspaces in R^48, each d=6, with orthonormal bases drawn from QR of random Gaussian.
-- [ ] **T2.3** For each N ∈ {3, 5, 6, 7, 10, 50, 200}, sample N wake events per subspace, run PCA (via SVD), measure recovery error `‖Û Û^T − U* U*^T‖_F`.
-- [ ] **T2.4** Plot recovery error vs N (text-based or CSV for bench harness).
-- [ ] **T2.5** Verify phase transition: for N < d, error > 0.5; for N ≥ d, error < 0.1. Print PASS/FAIL.
-- [ ] **T2.6** Verify `phase_transition_gate(N, d)` returns `false` for N < d, `true` for N ≥ d — matches the empirical recovery.
-- [ ] **T2.7** Compare `participation_ratio()` vs `numerical_rank(0.99)` as intrinsic-dim estimators. Document which tracks the true d better on this synthetic.
+- [x] **T2.1** Create `katgpt-rs/crates/katgpt-core/examples/subspace_phase_gate_goat.rs` (behind feature gate).
+- [x] **T2.2** Generate K=3 orthogonal subspaces in R^48, each d=6, with orthonormal bases drawn from QR of random Gaussian.
+- [x] **T2.3** For each N ∈ {3, 5, 6, 7, 10, 50, 200}, sample N wake events per subspace, run PCA (via SVD), measure recovery error `‖Û Û^T − U* U*^T‖_F`.
+- [x] **T2.4** Plot recovery error vs N (text-based or CSV for bench harness).
+- [x] **T2.5** Verify phase transition: for N < d, error > 0.5; for N ≥ d, error < 0.1. Print PASS/FAIL.
+- [x] **T2.6** Verify `phase_transition_gate(N, d)` returns `false` for N < d, `true` for N ≥ d — matches the empirical recovery.
+- [x] **T2.7** Compare `participation_ratio()` vs `numerical_rank(0.99)` as intrinsic-dim estimators. Document which tracks the true d better on this synthetic.
 
 **Exit:** example runs, prints G1 PASS. Bench CSV saved to `katgpt-rs/.benchmarks/301_subspace_phase_gate_g1.md`.
 
