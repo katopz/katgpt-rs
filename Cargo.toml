@@ -1459,6 +1459,15 @@ name = "latent_steering_g5_zero_alloc"
 path = "tests/latent_steering_g5_zero_alloc.rs"
 required-features = ["latent_field_steering"]
 
+# Plan 309 T3.2 — Latent Field Steering SIMD vs scalar SAXPY benchmark.
+# Measures the explicit AVX2 path (added T3.1) against the scalar fallback
+# at d=8 and d=16. Gate: ≥ 2x at d=8, ≥ 1.5x at d=16. Also re-runs the G4
+# crowd-scale gate with the SIMD dispatcher in place.
+[[test]]
+name = "latent_steering_t3_simd_vs_scalar"
+path = "tests/latent_steering_t3_simd_vs_scalar.rs"
+required-features = ["latent_field_steering"]
+
 # Plan 286 T5.1 (G6) — FUNCATTN × SpectralQuant eigenbasis composition gate.
 # Pre-rotates w_basis onto a calibrated eigenbasis (calibrate_eigenbasis)
 # and compares vanilla vs eigen-aligned FUNCATTN on an anisotropic regression
