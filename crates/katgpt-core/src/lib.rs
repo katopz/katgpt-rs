@@ -370,6 +370,21 @@ pub use funcattn::{
     funcattn_forward, pre_rotate_basis_weights_into, solve_convex_combo_dual,
 };
 
+// Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310,
+// Research 291, arxiv 2605.31559). Generalizes FUNCATTN to d_src ≠ d_dst,
+// enabling train-on-small-deploy-on-large latent transfer without retraining.
+// Open primitive: frozen BLAKE3-committed bases + zero-alloc transport.
+// Opt-in until G1–G4 GOAT gate passes.
+#[cfg(feature = "cross_resolution_transport")]
+pub mod cross_resolution;
+#[cfg(feature = "cross_resolution_transport")]
+pub use cross_resolution::{
+    CrossResolutionBases, CrossResolutionError, CrossResScratch,
+    project_to_spectral_into, reconstruct_from_spectral_into,
+    transport_cross_domain_cross_resolution_into, transport_cross_resolution,
+    transport_cross_resolution_into,
+};
+
 // ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 272, Research 262).
 // Open primitive: chunks → BLAKE3 → dedup via papaya → binary Merkle root. No game/chain IP.
 // Consumed by riir-ai Plan 319 (Executable Asset Vessel + Quorum Gitflow).

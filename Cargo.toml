@@ -258,6 +258,7 @@ funcattn_spectral_pre_rotate = ["funcattn", "spectral_quant"]  # FUNCATTN × Spe
 funcattn_chiar_blend = ["funcattn", "chiaroscuro"]  # FUNCATTN × CHIAR — per-token spectral-entropy sigmoid blend of FUNCATTN (low-entropy) vs fallback op (Plan 286 T5.2). Opt-in; 2× attention cost, quality/latency knob. Plugs `FuncAttnChiaroscuroOp` into CHIAR's router for utilization/collapse tracking.
 funcattn_freeze_thaw = ["funcattn"]  # FUNCATTN × BLAKE3-committed snapshot hot-swap (Plan 286 T5.3). `FuncAttnWeightsSnapshot` + atomic `RwLock<Arc<>>` store. Freeze/thaw bridge to riir-ai Plan 318.
 funcattn_compose = ["funcattn_spectral_pre_rotate", "funcattn_chiar_blend", "funcattn_freeze_thaw"]  # Plan 286 Phase 5 parent — all three FUNCATTN compositions. Each is independently switchable; this convenience feature enables all.
+cross_resolution_transport = ["katgpt-core/cross_resolution_transport"]  # Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310, Research 291, arXiv:2605.31559). Generalizes FUNCATTN to `d_src ≠ d_dst`, enabling train-on-small-deploy-on-large latent transfer without retraining. Open primitive: frozen BLAKE3-committed bases + zero-alloc transport. Opt-in until G1–G4 GOAT gate passes.
 temporal_deriv = ["katgpt-core/temporal_deriv"]  # Temporal Derivative Kernel — dual fast/slow EMA surprise signal (Plan 277, Research 243, arXiv:2606.08720). Opt-in until ≥2 fusion gates pass.
 chain_fold = ["thinking_cot"]  # ThoughtFold chain folding — inference-time CoT step pruning (Plan 195 GOAT 16/16, validated by Plan 228 78% reduction)
 clr = []  # CLR Claim-Level Reliability runtime — sigmoid projection vote over claim embeddings (Plan 284, Research 255)
@@ -1386,6 +1387,39 @@ required-features = ["funcattn"]
 name = "funcattn_g2_funcattn_vs_parallax_vs_sdpa"
 path = "tests/funcattn_g2_funcattn_vs_parallax_vs_sdpa.rs"
 required-features = ["funcattn", "parallax_attn"]
+
+# Plan 310 T2.1 (G1) — Cross-Resolution Spectral Transport reconstruction gate.
+# Round-trip 64 → 16 → 64 on band-limited (80% energy in rank-k subspace)
+# personalities. Gate: mean cos ≥ 0.85, min cos ≥ 0.75. KILL if mean < 0.75.
+[[test]]
+name = "cross_res_g1_reconstruction"
+path = "tests/cross_res_g1_reconstruction.rs"
+required-features = ["cross_resolution_transport"]
+
+# Plan 310 T2.2 (G2) — Cross-Resolution Spectral Transport rank-preservation gate.
+# THE headline gate. Transport 16 → 256, score a fixed 5-action set, measure
+# ranking cos. Variant A: transported action weights (realistic, probes Super-
+# GOAT claim). Variant B: padded weights + identity bases (sanity).
+[[test]]
+name = "cross_res_g2_rank_preservation"
+path = "tests/cross_res_g2_rank_preservation.rs"
+required-features = ["cross_resolution_transport"]
+
+# Plan 310 T2.3 (G3) — Cross-Resolution k-sweep characterization.
+# Sweeps k ∈ {4, 8, 16, 32, 64} × band_frac ∈ {0.7, 0.85, 0.95} for 64 → 256.
+# No hard pass/fail — characterization only. Output informs Research 291 §5.3.
+[[test]]
+name = "cross_res_g3_k_sweep"
+path = "tests/cross_res_g3_k_sweep.rs"
+required-features = ["cross_resolution_transport"]
+
+# Plan 310 T2.4 (G4) — Cross-Resolution zero-allocation steady-state gate.
+# Debug: TrackingAllocator audit (0 allocs after warmup). Release: timing
+# sanity. Mirrors `funcattn_g5_zero_alloc.rs`.
+[[test]]
+name = "cross_res_g4_zero_alloc"
+path = "tests/cross_res_g4_zero_alloc.rs"
+required-features = ["cross_resolution_transport"]
 
 # Plan 286 T5.1 (G6) — FUNCATTN × SpectralQuant eigenbasis composition gate.
 # Pre-rotates w_basis onto a calibrated eigenbasis (calibrate_eigenbasis)
