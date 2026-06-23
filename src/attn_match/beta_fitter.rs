@@ -79,6 +79,11 @@ pub fn fit_beta_nnls(
     // Step 1: Closed-form clamped least squares (warm start).
     // Solve normal equations: (A^T A) w = A^T m, then clamp to [w_lower, w_upper].
     // This is a small (t×t) system; we compute A^T A and A^T m in one pass.
+    // Build A^T A (t × t, symmetric) and A^T m (t). Only the lower triangle
+    // (k <= j) of A^T A is accumulated — Cholesky only reads the lower
+    // triangle, so this halves the inner FMA count. We mirror to the upper
+    // once at the end for robustness (keeps the matrix consistent if a future
+    // blocked Cholesky reads full diagonal blocks).
     let mut ata = vec![0.0f32; t * t];
     let mut atm = vec![0.0f32; t];
     for i in 0..n {
@@ -86,9 +91,15 @@ pub fn fit_beta_nnls(
         let mi = m[i];
         for j in 0..t {
             atm[j] += row[j] * mi;
-            for k in 0..t {
+            for k in 0..=j {
                 ata[j * t + k] += row[j] * row[k];
             }
+        }
+    }
+    // Mirror lower triangle → upper.
+    for j in 1..t {
+        for k in 0..j {
+            ata[k * t + j] = ata[j * t + k];
         }
     }
 

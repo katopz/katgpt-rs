@@ -68,22 +68,33 @@ pub fn fit_cv_least_squares(
     assert_eq!(y.len(), n * d, "target output matrix size mismatch");
 
     // Build X^T X (t × t) and X^T Y (t × d).
+    // Only the lower triangle (k <= j) of X^T X is accumulated: the matrix is
+    // symmetric, and Cholesky only reads the lower triangle. The blocked
+    // Cholesky path extracts full diagonal blocks, so we mirror the lower
+    // triangle to the upper once after the accumulation (cheaper than t²
+    // redundant FMAs inside the n-loop for n ≥ 2). Halves the X^T X FMA count.
     let mut xtx = vec![0.0f32; t * t];
     let mut xty = vec![0.0f32; t * d];
     for i in 0..n {
         let x_row = &x[i * t..(i + 1) * t];
         let y_row = &y[i * d..(i + 1) * d];
-        // X^T X outer-product accumulation.
         for j in 0..t {
             let x_ij = x_row[j];
-            // X^T Y
+            // X^T Y: full column (all d dims needed downstream).
             for k in 0..d {
                 xty[j * d + k] += x_ij * y_row[k];
             }
-            // X^T X (symmetric)
-            for k in 0..t {
+            // X^T X: lower triangle only (k <= j).
+            for k in 0..=j {
                 xtx[j * t + k] += x_ij * x_row[k];
             }
+        }
+    }
+    // Mirror lower triangle → upper so the blocked Cholesky's full-block
+    // extraction reads correct symmetric values.
+    for j in 1..t {
+        for k in 0..j {
+            xtx[k * t + j] = xtx[j * t + k];
         }
     }
 
