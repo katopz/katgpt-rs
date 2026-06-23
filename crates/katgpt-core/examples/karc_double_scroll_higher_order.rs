@@ -102,6 +102,37 @@ fn nrmse(pred: &[f32], truth: &[f32], dim: usize) -> f32 {
     sum / dim as f32
 }
 
+/// Mean per-coordinate std of `truth` (used as the σ(u) reference for threshold).
+fn mean_sigma(truth: &[f32], dim: usize) -> f32 {
+    let n = truth.len() / dim;
+    let mut sum_std = 0.0f32;
+    for d in 0..dim {
+        let mut mean = 0.0f64;
+        for i in 0..n { mean += truth[i * dim + d] as f64; }
+        mean /= n as f64;
+        let mut var = 0.0f64;
+        for i in 0..n { let dx = truth[i * dim + d] as f64 - mean; var += dx * dx; }
+        var /= n as f64;
+        sum_std += var.sqrt() as f32;
+    }
+    sum_std / dim as f32
+}
+
+/// First sample index where ‖pred_i − truth_i‖₂ > ε·σ. Returns n if never.
+fn threshold_time(pred: &[f32], truth: &[f32], dim: usize, eps: f32, sigma: f32) -> usize {
+    let n = pred.len() / dim;
+    let bound = eps * sigma;
+    for i in 0..n {
+        let mut err_sq = 0.0f32;
+        for d in 0..dim {
+            let e = pred[i * dim + d] - truth[i * dim + d];
+            err_sq += e * e;
+        }
+        if err_sq.sqrt() > bound { return i; }
+    }
+    n
+}
+
 // ── Config ────────────────────────────────────────────────────────────────
 
 const D: usize = 3;
@@ -222,11 +253,23 @@ fn main() {
             wout_ho[d * d_h_ho + j] = wt_ho[j * D + d] as f32;
         }
     }
-    // Autonomous rollout with the higher-order Wout.
-    let nrmse_2 = autonomous_rollout_higher_order(
-        &wout_ho, &traj, &traj_raw, &scale, &offset, n_total, d_h_ho,
+    // Autonomous rollout with the higher-order Wout — 20 LT horizon for
+    // full G1 gate (NRMSE over 1 LT + threshold at ε=0.1).
+    let horizon_20lt = (20.0 * SAMPLES_PER_LT).ceil() as usize;
+    let (pred_ho, truth_ho) = autonomous_rollout_higher_order(
+        &wout_ho, &traj, &traj_raw, &scale, &offset, n_total, d_h_ho, horizon_20lt,
     );
+    let n_one_lt = (1.0 * SAMPLES_PER_LT).ceil() as usize;
+    let nrmse_2 = nrmse(&pred_ho[..n_one_lt * D], &truth_ho[..n_one_lt * D], D);
+    let sigma_ho = mean_sigma(&truth_ho, D);
+    let thr_sample_ho = threshold_time(&pred_ho, &truth_ho, D, 0.1, sigma_ho);
+    let thr_lt_ho = thr_sample_ho as f64 / SAMPLES_PER_LT;
     println!("  NRMSE(1 LT) = {:.6e}", nrmse_2);
+    println!("  threshold (ε=0.1): {} samples = {:.2} LT", thr_sample_ho, thr_lt_ho);
+    println!("  σ(u) mean per-coord: {:.4}", sigma_ho);
+    println!("  G1 NRMSE  ≤ 1.0e-3 : {}", if nrmse_2 <= 1.0e-3 { "PASS ✅" } else { "FAIL ❌" });
+    println!("  G1 thresh ≥ 8 LT   : {}", if thr_lt_ho >= 8.0 { "PASS ✅" } else { "FAIL ❌" });
+    println!("  paper reference: NRMSE 5.3e-4, threshold 16.7 LT");
 
     // ── Config 3: First-order low-rank r=8 ──
     println!("\n── Config 3: first-order low-rank r={} (ALS) ──", LR_RANK);
@@ -289,6 +332,7 @@ fn autonomous_rollout_nrmse(
 }
 
 /// Autonomous rollout with an external Wout matrix (higher-order full-rank).
+/// Returns `(pred, truth)` over `horizon` steps in RAW (un-normalized) space.
 fn autonomous_rollout_higher_order(
     wout: &[f32],
     traj: &[f32],
@@ -297,8 +341,8 @@ fn autonomous_rollout_higher_order(
     offset: &[f32],
     n_total: usize,
     d_h_ho: usize,
-) -> f32 {
-    let horizon = (1.0 * SAMPLES_PER_LT).ceil() as usize;
+    horizon: usize,
+) -> (Vec<f32>, Vec<f32>) {
     let seed_t = n_total - 1;
     let mut delay = [0.0f32; K * D];
     for lag in 0..K {
@@ -334,7 +378,7 @@ fn autonomous_rollout_higher_order(
         new_delay[D..].copy_from_slice(&cur_delay[..(K - 1) * D]);
         cur_delay = new_delay;
     }
-    nrmse(&pred, &truth, D)
+    (pred, truth)
 }
 
 /// Autonomous rollout with the low-rank A·B forecast.
