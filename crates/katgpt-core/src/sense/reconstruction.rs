@@ -473,6 +473,25 @@ impl ReconstructionState {
         &self.hla
     }
 
+    /// Mutable access to the HLA state (cue).
+    ///
+    /// Exposed for **post-evolve steering** (Plan 309 Phase 5 / Research 153):
+    /// after `evolve_hla()` has reconciled the HLA against accumulated evidence,
+    /// a game-runtime caller applies an additive latent-field overlay directly
+    /// onto this slice via `apply_latent_steering` / `apply_latent_steering_weighted`.
+    ///
+    /// This is a **latent-only, think-brain** mutation: it never enters `SyncBlock`,
+    /// never crosses the sync boundary, and never touches the frozen personality
+    /// shard — only the mutable per-tick belief state. Per AGENTS.md, only the 5
+    /// scalar emotion projections cross sync afterwards via the existing bridge.
+    ///
+    /// Game runtimes that do not use latent-field steering have no reason to
+    /// call this — the default read path is [`hla`](Self::hla).
+    #[inline]
+    pub fn hla_mut(&mut self) -> &mut [f32; 8] {
+        &mut self.hla
+    }
+
     /// Last `(fast − slow)` surprise derivative written by `evolve_hla`.
     ///
     /// Returns `None` when the `temporal_deriv` feature is off (no surprise
@@ -547,18 +566,13 @@ impl ReconstructionState {
         self.evidence.kind_activations = activations;
     }
 
-    /// Mutable reference to the 8-dim HLA latent state.
-    ///
-    /// Plan 331 Phase 1 wrap helper: lets [`crate::sense::reconstruction_depth_invariance`]
-    /// apply in-place magnitude regularization to the latent vector after the
-    /// raw `evolve_hla` update. `pub(crate)` to avoid exposing a generic
-    /// mutable accessor publicly (the public surface stays `hla() -> &[f32; 8]`
-    /// + `inject_hla_delta`).
-    #[cfg(feature = "depth_invariance")]
-    #[inline]
-    pub(crate) fn hla_mut(&mut self) -> &mut [f32; 8] {
-        &mut self.hla
-    }
+    // NOTE: The previous `pub(crate) fn hla_mut` (Plan 331 Phase 1, gated by
+    // `depth_invariance`) was removed — it duplicated the unconditional
+    // `pub fn hla_mut` added by Plan 309 Phase 5 for latent-field steering.
+    // `pub` is a superset of `pub(crate)`, so the unconditional method serves
+    // both callers (`reconstruction_depth_invariance::evolve_hla_regularized`
+    // and `apply_latent_steering`). Keeping both triggered E0592 whenever
+    // `depth_invariance` was enabled (its default state).
 
     /// Feed the current HLA into the surprise kernel and cache the derivative
     /// in `last_surprise`. Private — `evolve_hla` and `evolve_hla_simd` are
