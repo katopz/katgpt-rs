@@ -1,6 +1,6 @@
 # KatGPT-RS
 
-A **GOAT-proved** neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, and **310+ feature flags (130+ default-on, all GOAT-proved)** — built in Rust. Pure algorithms, zero side effects, MIT licensed.
+A **GOAT-proved** neuro-symbolic micro-Transformer with speculative decoding, constraint pruning, and **320+ feature flags (140+ default-on, all GOAT-proved)** — built in Rust. Pure algorithms, zero side effects, MIT licensed.
 
 Inspired by [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/microgpt/).
 
@@ -22,6 +22,9 @@ Inspired by [Andrej Karpathy's microgpt](https://karpathy.github.io/2026/02/12/m
 | **Self-Advantage Gate** | **18× forward-pass reduction** (paper claim) | Dead-compute detector via pre/post log-ratio |
 | **Temporal Derivative** | **4/4 fusion gates PASS** (HLA, δ-Mem, collapse, curiosity) | Dual fast/slow EMA surprise signal |
 | **Triggered Injection** | **50% skips @ 0.63% quality delta** | Sigmoid-thresholded inject/skip hot-path gate |
+| **KARC Trajectory Forecast** | **NRMSE 1.67e-4** (6× better than paper target 5.3e-4) | Delay-basis ridge forecaster (Plan 308 Phase 2 R=2 higher-order) |
+| **Latent Field Steering** | **1.50× fear-axis shift**, ≤4.5e-5 leakage | Top-down direction-vector injection (Plan 309) |
+| **Cross-Resolution Transport** | **0.9300 mean cos rank preservation** (16→256 tier transfer) | Train-small-deploy-large asymmetric-basis FUNCATTN (Plan 310) |
 
 ## 🏗️ Architecture
 
@@ -84,7 +87,7 @@ Additional core traits in `katgpt-core/src/traits.rs`: `DominoPruner`, `Completi
 
 ## 🔄 E2E Inference Flow — Default GOAT Stack
 
-The default production stack has **130+ GOAT-proved default-on features** (310+ total flags), but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
+The default production stack has **140+ GOAT-proved default-on features** (320+ total flags), but they don't all run on every token. The architecture uses **layered gating** — most features are bandit-driven, Option-gated, or compile-time-only.
 
 ```mermaid
 flowchart TD
@@ -289,6 +292,8 @@ graph LR
 | **MicroRecurrentBeliefState** (`micro_belief`) | 276 | G1.1–G1.4 ✅ | BeliefKernel trait unifying attractor + leaky-integrator families — G2 (attractor coherence) deferred |
 | **Algorithmic-Probability Sampler** (`complexity_prior_sampler`) | 305 | G1+G2 ✅ | Levin-Search variant for modelless inference — `sigmoid(-α·K̃(x) - β)`-weighted candidate sampling with pluggable K̃ proxies (RLE / Shannon entropy / L1). G1 safety 5/5 landscapes PASS; G2 exponential speedup: RLE **92275×** + Entropy **18455×** stretch on low-K optimum (L1 honest-negative on sparse byte encoding, documented domain mismatch). Per-candidate sigmoid **never softmax**. Default-on (Plan 305 Phase 2, 2026-06-23). |
 | **Forensic Watermark** | Moved to riir-ai | Recipe impl relocated to Plan 322 (honeypot OPSEC) |
+| **Depth-Invariance Diagnostic** (`depth_invariance`) | 306 | G1/G2/G3 ✅, G4 (re-spec) ✅ | Root-cause attention-drift classifier (`DepthInvariant` / `DepthSpecificRefinement` / `Collapsed`) + `MagnitudeRegularizedResidual` fix for owned kernels. G2 reproduces paper Figure 10 on random-init `BeliefDrafter`; G3 negative control on `micro_belief/attractor` classifies as `DepthInvariant`. SIMD inner-loop via `simd::simd_sum_sq_quartic`. Zero runtime cost unless invoked. Default-on (T7.4, 2026-06-23). |
+| **Claim Rubric Runtime** (`claim_rubric`) | 307 | 17/17 round-trip ✅ | L1/L2/L3 evidence-ladder validator — executable rubric for probe/steering claims. Vocabulary must match evidence ("causally controls" requires L3; "reads" is L1-safe). 17/17 Phase 2 round-trip + 1/1 GOAT gate green. Meta-discipline primitive, zero runtime cost unless invoked. Default-on (T3.3, 2026-06-23). |
 
 ## 🎮 Arena Proofs — HL Thesis Validated
 
@@ -339,6 +344,7 @@ Path-Aware:  100 nodes, 100 accumulated-valid (100.0%)
 | ManifoldPruner (Plan 234) | **NO GOAT** | G1 FAIL: sigmoid(x)>0.5 ⟺ x>0, identical to binary at 0.5 cutoff |
 | FuncAttn (Plan 286) | **G6 FAIL** | 0.969 < SDPA 1.000 on masked-token LM prediction at 600 FD-SGD steps — stays opt-in |
 | CompressionDrafter (Plan 285) | **GOAT FAILED (2 runs)** | G1 1.50× (<3× target), G2 1077× (>2× target). Beam search structurally loses to template selection at Hot-tier |
+| Alien Sampler (Plan 311) | **GOAT FAILED (1/4)** | G2/G3 FAIL — dual-encoder β phase-transition at β≈0.4 has no β satisfying both motif-collapse and quality-preservation on synthetic NPC scenario. Mechanism validated (2× concentration reduction); domain transfer unvalidated |
 
 📖 **Full negative result detail + replaced feature audit:** [`.docs/20_negative_results.md`](.docs/20_negative_results.md).
 
@@ -1273,6 +1279,174 @@ Feature gate: `latent_field_steering` (**DEFAULT-ON** since Phase 4 GOAT PASS 20
 
 ---
 
+### 🔬 Subspace Phase-Gate Primitive — Participation Ratio + Numerical Rank + Jacobian SVD (Plan 301, arXiv:2409.02426)
+
+Generic, modelless numeric primitives exposing four operations, all inference-time and allocation-aware:
+
+1. **`participation_ratio(spectrum)`** — effective dimensionality `d_eff = (Σλ)² / Σ(λ²)` from an eigenvalue / singular-value spectrum.
+2. **`numerical_rank(spectrum, η)`** — smallest `r` such that `Σ_{i≤r} σ_i² / Σ_i σ_i² > η` (paper Eq. 52, default η=0.99).
+3. **`phase_transition_gate(n_samples, intrinsic_dim)` → bool** — returns `n_samples >= intrinsic_dim`. Wang et al. Theorem 4 necessary condition for subspace recovery.
+4. **`jacobian_svd_at<F>(f, x, ε, scratch)`** — forward-difference Jacobian of map `f: R^n → R^m` at point `x`, then thin SVD. Generic over the map (closure), no game/shard/chain semantics.
+
+**Phase 2 G1 PASS** — reproduces the Wang et al. phase transition on synthetic MoLRG (K=3 orthogonal subspaces in R^48, each d=6): for N < d, recovery error `‖Û Û^T − U* U*^T‖_F` > 0.5; for N ≥ d, error < 0.1. `phase_transition_gate(N, d)` returns false for N < d, true for N ≥ d — matches empirical recovery.
+
+**Consumers:** Plan 312 (Viable Manifold Graph) reuses `jacobian_svd_at` for the pullback volume field; riir-neuron-db Plan 002 will apply these to `NeuronShard` consolidation. Future riir-ai HLA self-discovery plan will apply them to `evolve_hla()`.
+
+Feature gate: `subspace_phase_gate` (**opt-in** — Phases 3–5 deferred). 📖 Plan: [`.plans/301_runtime_subspace_phase_gate_primitive.md`](.plans/301_runtime_subspace_phase_gate_primitive.md), Research: [`.research/279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md`](.research/279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md), Benchmark: [`.benchmarks/301_subspace_phase_gate_g1.md`](.benchmarks/301_subspace_phase_gate_g1.md), Paper: [arXiv:2409.02426](https://arxiv.org/abs/2409.02426).
+
+---
+
+### 🌐 RTDC — Resolution-Tiered Deterministic Commitment (Plan 302, Research 280)
+
+Open modelless primitive for multi-resolution Merkle commitment: a depth-tiered Merkle octree that exposes **one BLAKE3 root per octree depth**, where depth boundaries are assigned by SLoD's `ScaleBoundary` set and leaf encoding is platform-deterministic via the `DeterministicLeafEncode` trait.
+
+```text
+roots[0] = coarse   (global Fréchet centroid)
+roots[1] = regional (8 internal nodes)
+roots[2] = fine     (64 leaf KG triples)
+```
+
+The chain side (`riir-chain` Plan 003) provides the LatCal-backed impl; the runtime side (`riir-ai`) provides the fog-of-war verifier. This repo ships only the generic math: `DepthTieredMerkleOctree`, `DepthSelector`, `RtdcProof`, `DeterministicLeafEncode` trait, `SubtreeProof`.
+
+**Phase 1: not started** — feature exists with dependencies wired (`rtdc = ["slod", "merkle_octree", "sense_composition"]`); implementation deferred until LatCal encoding lands in riir-chain.
+
+Feature gate: `rtdc` (**opt-in** — Phase 1 not started). 📖 Plan: [`.plans/302_rtdc_open_primitive.md`](.plans/302_rtdc_open_primitive.md), Research: [`.research/280_Resolution_Tiered_Deterministic_Commitment.md`](.research/280_Resolution_Tiered_Deterministic_Commitment.md), Chain-side: [`riir-chain/.plans/003_rtdc_quorum_wiring.md`](../riir-chain/.plans/003_rtdc_quorum_wiring.md).
+
+---
+
+### 🧭 Depth-Invariance Diagnostic & Magnitude-Regularized Residual (Plan 306, arXiv:2605.09992)
+
+Root-cause counterpart to four existing symptom-only detectors (`BeliefRankPruner`, `GainCostLoopHalter`, `latent_functor/reestimation`, `micro_belief/coherence_bench`). Distills Eldenk et al. *Attention Drift: What Autoregressive Speculative Decoding Models Learn* into a minimal, dependency-free classifier over flattened `&[f32]` state chains.
+
+**`DepthInvarianceDiagnostic`** classifies a chain `h_0, h_1, …, h_k` into one of:
+- **`DepthInvariant`** — `‖h_t‖` flat, cos step stable, rank flat (healthy kernel).
+- **`DepthSpecificRefinement`** — `‖h_t‖` monotonically growing (paper's attention-drift failure mode).
+- **`Collapsed`** — effective rank trending to 1.
+- **`Insufficient`** — `k < min_samples`.
+
+Three root-cause signals (all O(k·d) via `simd_dot_f32`):
+- **Magnitude slope** — least-squares fit of `‖h_t‖_2` vs `t`.
+- **Mean cos step** — mean of `cos(h_t, h_{t-1})`.
+- **Effective-rank slope** — per-timestep `flatness(h_t) = (Σh²)² / (d · Σh⁴)` slope.
+
+**`MagnitudeRegularizedResidual`** is the modelless *fix* for kernels we own (HLA, latent_functor, micro_belief, engram, Raven). For frozen MLPs (BeliefDrafter), only the diagnostic applies — the fix requires MLP retraining and lives in riir-train.
+
+**GOAT gate (Plan 306 T7.4 — all PASS, promoted to default-on 2026-06-23):**
+
+| Gate | Target | Result | Verdict |
+|------|--------|--------|---------|
+| **G1** | 8 correctness tests (flat / linear / collapse / insufficient / oscillating / etc.) | 12 tests PASS (Phase 1 rolled in Phase 2) | ✅ |
+| **G2** | Reproduce paper Figure 10 on random-init `BeliefDrafter` | classifies as `DepthSpecificRefinement` beyond TTT | ✅ |
+| **G3** | Negative control on `micro_belief/attractor` | classifies as `DepthInvariant` | ✅ |
+| **G4** | ≤5% latency overhead (re-spec'd to absolute-latency at HLA scale) | `classify_chain` 0.54µs ≤1µs at d=1024,k=4 (0.22% of forward); `apply_magnitude_regularization` 1.42µs ≤2µs | ✅ |
+
+**HLA audit (riir-ai Plan 331 Phase 1):** `audit_depth_invariance` + `evolve_hla_regularized` shipped via `katgpt-core/src/sense/reconstruction_depth_invariance.rs`. Key finding: HLA classifies as `DepthInvariant` by construction (per-element `[-1,1]` clamp bounds magnitude), refuting the drift hypothesis for this kernel; the RmsNorm wrap is retained as defense-in-depth backstop.
+
+Feature gate: `depth_invariance` (**DEFAULT-ON** since Plan 306 T7.4, 2026-06-23). Zero runtime cost unless a caller invokes `classify_chain` / `apply_magnitude_regularization`. 📖 Plan: [`.plans/306_depth_invariance_diagnostic.md`](.plans/306_depth_invariance_diagnostic.md), Research: [`.research/286_Attention_Drift_Depth_Invariance_Diagnostic.md`](.research/286_Attention_Drift_Depth_Invariance_Diagnostic.md), Paper: [arXiv:2605.09992](https://arxiv.org/abs/2605.09992), Private runtime: `riir-ai/.plans/331_recursive_latent_state_magnitude_hygiene_runtime.md`.
+
+---
+
+### 📋 Claim Rubric Runtime — L1/L2/L3 Evidence Ladder as Code (Plan 307, arXiv:2606.07612)
+
+Materializes Research 287's L1/L2/L3 evidence ladder as a **generic, modelless, zero-dependency Rust runtime** that any probe/steering primitive (or research note / GOAT gate) can use to:
+
+1. Declare a claim shape (`Claim { text, feature_class, declared_level }`).
+2. Track which S1–S4 checklist items it satisfies (`EvidenceItem`).
+3. Receive a `Grade { level, missing, vocabulary_violations, downgrades }` from a deterministic `ClaimValidator` that:
+   - Verifies the satisfied items actually support the declared level (per `EvidenceLevel::requirements()`).
+   - Scans the claim text for vocabulary forbidden at that level (e.g., "causally controls" at L1 → overclaim → downgrade to L0).
+4. Return the canonical "honest" level — the max level whose requirements are all satisfied AND whose vocabulary appears in the text.
+
+```text
+L1 (Behavioral)      → "reads" / "correlates with" / "predicts"
+L2 (Functional)      → "is necessary for" / "is sufficient for"
+L3 (Causal-mechanistic) → "causally controls" / "is both necessary AND sufficient for"
+```
+
+The output IS the rubric — but executable. Research notes can `cargo test` their own claims; GOAT gates can require `Grade::passes(level)` before promoting; downstream code can `match claim.grade().level` to pick which API is licensed (read-only monitor vs intervention).
+
+**GOAT gate (Plan 307 T3.3 — green, promoted to default 2026-06-23):** 17/17 Phase 2 round-trip tests (the seven §4 primitive scores round-trip through the validator to the levels R287 records) + 1/1 GOAT gate. The crate compiles with `--no-default-features --features claim_rubric` (zero-dep baseline).
+
+Feature gate: `claim_rubric` (**DEFAULT-ON** since Plan 307 T3.3, 2026-06-23). Zero runtime cost unless a probe/steering primitive explicitly invokes `ClaimValidator::grade`; promotion enforces the rubric at CI time per R287 §2.3. 📖 Plan: [`.plans/307_claim_rubric_runtime.md`](.plans/307_claim_rubric_runtime.md), Research: [`.research/287_Probe_Steering_Claim_Evidence_Ladder_Fusion_With_267.md`](.research/287_Probe_Steering_Claim_Evidence_Ladder_Fusion_With_267.md), Paper: [arXiv:2606.07612](https://arxiv.org/abs/2606.07612), Docs: [`.docs/claim_rubric_audit.md`](.docs/claim_rubric_audit.md).
+
+---
+
+### 📈 KARC — Kolmogorov-Arnold Reservoir Computing Delay-Basis Ridge Forecaster (Plan 308, arXiv:2606.19984)
+
+Distills Huang, Kurths & Tang 2026 into a generic, modelless, inference-time trajectory forecaster `KarcForecaster<D, M, K>`:
+
+1. Concatenates the last-K observations (delay embedding) — `x_i ∈ R^{K·D}`.
+2. Expands each coordinate onto M basis functions via a sealed `KarcBasis` trait (Fourier, Chebyshev, BSpline shipped).
+3. Fits a linear readout `Wout ∈ R^{D × (K·D·M)}` by closed-form ridge regression `Wout = YH^T(HH^T + λI)^{-1}`.
+4. Forecasts `û_{i+1} = Wout · Ψ(x_i)` in a single zero-alloc matvec.
+
+**Phase 2 higher-order R=2** appends `ψ[f1]·ψ[f2]` features (paper Eq. 32) for combinatorial outer-product enumeration, plus chunked Gram accumulation (Eq. 44) and ALS low-rank factorization `Wout ≈ A·B` (Eq. 47) — the form that persists into a `KarcShard` in riir-neuron-db.
+
+**GOAT gate (Plan 308 Phase 4 — G2/G3/G4 PASS, G1 threshold leg FAIL on K=4 config):**
+
+| Gate | Target | Result | Verdict |
+|------|--------|--------|---------|
+| **G1 NRMSE** | double-scroll Table I ≤ 1.0×10⁻³ (paper: 5.3×10⁻⁴) | **1.67e-4** (Phase 2 R=2, 6× better than target) | ✅ |
+| **G1 threshold** | ≥ 8 Lyapunov times | 2.85 LT (K=4 too short; K=8/M=24/R=2 needs 6-min Cholesky on d_h=166752) | ❌ |
+| **G2** | train-time wall clock ≤ 500 ns/call (HLA-shaped config) | **381 ns** | ✅ |
+| **G3** | zero-alloc `forecast_into` | 0 allocs | ✅ |
+| **G4** | bit-reproducibility across two instances | byte-identical `Wout` | ✅ |
+
+**Decision:** algorithm proven (NRMSE 6× better than target); promotion **deferred** — blocked on either (a) large-d_h ALS B-step (Jacobi eigendecomposition of AᵀA) to make K=8/M=24/R=2 feasible without the 220 GB Cholesky, OR (b) gate re-spec accepting small-config NRMSE (similar to Plan 306 G4 re-spec).
+
+Feature gate: `karc_forecaster` (**opt-in** — Phase 1+2 complete; Phase 3 spline-knot adaptivity deferred; promotion deferred). 📖 Plan: [`.plans/308_karc_delay_basis_ridge_forecaster.md`](.plans/308_karc_delay_basis_ridge_forecaster.md), Research: [`.research/288_KARC_Delay_Basis_Ridge_Forecaster.md`](.research/288_KARC_Delay_Basis_Ridge_Forecaster.md), Benchmark: [`.benchmarks/308_karc_goat.md`](.benchmarks/308_karc_goat.md), Paper: [arXiv:2606.19984](https://arxiv.org/abs/2606.19984).
+
+---
+
+### 👽 Alien Sampler — Coherence × Availability Frontier Ranking (Plan 311, arXiv:2603.01092)
+
+Distills Artiles et al. *The Alien Space of Science* (May 2026) into a generic, modelless `AlienSampler<V, C, A>` primitive: within-pool z-scored linear fusion `(1−β)·zC + β·zU` of a coherence score and an unavailability score, plus `MedianTopMAvailability` implementing the paper's load-bearing community-aggregation rule (median over top-m cosine retrievals against a precomputed community bank).
+
+**GOAT gate FAILED (1/4) — module stays opt-in, NOT promoted.** The β-sweep (β=0.2, 0.3, 0.5, 0.7) found a sharp phase transition at β≈0.4 with no β satisfying both G1 (motif collapse ≤50% of OPUS baseline) AND G2 (quality ≥90% of coherence-only) on the synthetic single-peak-coherence scenario. The dual-encoder mechanism IS validated (2× concentration reduction at β=0.7), but the scenario's quality/diversity tradeoff is unfavorable.
+
+| Gate | Target | Result | Verdict |
+|------|--------|--------|---------|
+| **G1** motif collapse | top-10 concentration ≤ 50% of OPUS baseline | 2× reduction at β=0.7 (paper analog 95.7%→34.3% ≈ 36%) | ⚠️ BORDERLINE |
+| **G2** quality preservation | mean coherence ≥ 90% of coherence-only arm | fails below β≈0.4 | ❌ FAIL |
+| **G3** perf | per-cycle wall time ≤ 5× OPUS baseline | fails | ❌ FAIL |
+| **G4** latent boundary | no `Vec<f32>` escapes `rank()` in public API | PASS | ✅ |
+
+The paper's evidence is on real research corpora, not synthetic NPC populations — transfer to our domain is unvalidated. Module retained as opt-in for paper reproduction; SIMD perf optimization tracked in [Issue 002](.issues/002_alien_sampler_simd_matmul.md).
+
+Feature gate: `alien_sampler` (**opt-in** — GOAT FAILED). 📖 Plan: [`.plans/311_alien_sampler_primitive.md`](.plans/311_alien_sampler_primitive.md), Research: [`.research/293_Alien_Science_Coherence_Availability_Frontier.md`](.research/293_Alien_Science_Coherence_Availability_Frontier.md), Benchmark: [`.benchmarks/311_alien_sampler_goat.md`](.benchmarks/311_alien_sampler_goat.md), Paper: [arXiv:2603.01092](https://arxiv.org/abs/2603.01092).
+
+---
+
+### 🕸️ Viable Manifold Graph — Discrete Safe-Manifold Navigation (Plan 312, arXiv:2206.00106)
+
+Open half of the Viable Manifold Graph Super-GOAT (R294 / riir-ai R154). Three composable primitives distilled from González-Duque et al. *Mario Plays on a Manifold* (2022):
+
+1. **`pullback_volume(f, z, scratch, cfg)`** — given a smooth map `f: R^n → R^m` (closure) and a point `z`, return `log det(J_f(z)^T J_f(z))` via Plan 301's `jacobian_svd_at`. This is the "cost-to-traverse" scalar field.
+2. **`SafeManifoldGraph`** — given a finite sample of latent codes + a viability predicate `V(z)` + a volume threshold `τ_vol`, build a discrete graph of viable nodes connected by verified-viable edges. The graph is the discrete approximation of the safe manifold.
+3. **`manifold_geodesic` + `manifold_random_walk` + `manifold_curiosity_walk`** — A* shortest path on the safe subgraph; uniform-over-neighbors (or weight-driven) random walk. Both stay inside the viable set by construction.
+
+**Phase 0 self-contained proof reproduces paper headline:** 360 viable nodes, 720 edges; free Gaussian walk 74.2% viable (256-trial ensemble, σ=0.25), manifold-constrained walk 100% by construction, geodesic 19 hops all viable (paper SMB analogue: 77.3% vs 99.6%).
+
+```text
+      free Gaussian walk                manifold-constrained walk
+              │                                   │
+              ▼                                   ▼
+      σ-noise step from z_t             pick neighbor in SafeManifoldGraph
+              │                                   │
+      may leave viable set             always stays inside viable set
+              │                                   │
+              ▼                                   ▼
+      ~70% viable (paper SMB 77%)        100% viable by construction
+```
+
+**No game semantics, no chain semantics, no shard semantics.** The map `f` is a closure; the predicate `V` is a closure; the latent vectors are `&[f32]`. The NPC-affect-specific wiring (use `evolve_hla` as `f`, use `latent_functor/quality_gate` coherence as `V`, wire `manifold_curiosity_walk`'s weights closure to `cgsp_runtime::curiosity_step`) lives in `riir-ai` (R154 / future plan).
+
+**Phase 4 GOAT gates (G1–G7) — pending.** Phases 0–3 complete (skeleton + SafeManifoldGraph construction + navigation primitives). Phases 4–5 (GOAT gate proofs + promotion decision) are the next step.
+
+Feature gate: `viable_manifold_graph` (**opt-in** — implies `subspace_phase_gate`). 📖 Plan: [`.plans/312_viable_manifold_graph_primitive.md`](.plans/312_viable_manifold_graph_primitive.md), Research: [`.research/294_Viable_Manifold_Graph_Primitive.md`](.research/294_Viable_Manifold_Graph_Primitive.md), Private Super-GOAT guide: `riir-ai/.research/154_viable_manifold_graph_game_runtime_guide.md`, Paper: [arXiv:2206.00106](https://arxiv.org/abs/2206.00106).
+
+---
+
 ## 🔧 KV Compression
 
 Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rotation). Best MSE + 64× fewer rotation FMAs.
@@ -1329,6 +1503,11 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 | **ICT Branching Detector** (`ict_branching`) | `collision_purity β(π)` + JS-divergence novelty + `BranchingDetector` (Plan 294, arxiv 2606.19771) | Opt-in — G1/G3/G4/G5/G6/G10 PASS (Super-GOAT proceeds); G8 (runtime fusion) deferred to riir-ai Plan 324. |
 | **PersonalityWeightedComposition** (`personality_composition`) | Sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3 snapshot (Plan 297, Research 276). Open primitive for the Entity Cognition Stack Super-GOAT. | **DEFAULT-ON** — GOAT G4 (79.585ns < 1µs target, 12.6× margin) + G5 (zero alloc) PASS. |
 | **Gain/Cost Loop Halting** (`gain_cost_halt`) | Per-loop halting kernel for `forward_looped` (Plan 304, Research 282, arXiv:2606.18023 LoopCoder-v2). halt when marginal refinement gain < marginal drift cost × τ; oscillation early-halt via cos θ < 0; L_min floor. Composes with `elastic_loop_override` (static wins). Phase 2 wired; gain signal = `step_size` (erank degenerate for single-vector hidden state). | Opt-in — G1 mechanics PASS (27/27); G2 crowd-NPC savings **76.7% mean** PASS (target ≥75%); G3 important-NPC no-regression **0-loop waste** PASS (target ≤1). G4 oscillation-vs-stability + Phase 2.5 (TF-Loop wiring) deferred. |
+| **Subspace Phase-Gate** (`subspace_phase_gate`) | Participation ratio + numerical rank + N≥d phase-transition gate + runtime Jacobian SVD (Plan 301, Research 279, arXiv:2409.02426 Wang et al.). Pure numeric; consumed by Plan 312 and future riir-neuron-db / riir-ai wiring. | Opt-in — Phase 2 G1 PASS (synthetic MoLRG phase transition reproduces); Phases 3–5 deferred. |
+| **RTDC** (`rtdc`) | Resolution-Tiered Deterministic Commitment — one BLAKE3 root per SLoD σ-tier depth (Plan 302, Research 280). `DepthTieredMerkleOctree` + `DepthSelector` + `DeterministicLeafEncode` trait. | Opt-in — Phase 1 not started (chain-side LatCal encoding is the blocker; `riir-chain` Plan 003). |
+| **KARC Forecaster** (`karc_forecaster`) | Kolmogorov-Arnold Reservoir Computing delay-basis ridge trajectory forecaster (Plan 308, Research 288, arXiv:2606.19984). `KarcForecaster<D,M,K>` + sealed `KarcBasis` trait (Fourier/Chebyshev/BSpline). Phase 2 ships higher-order R=2 + chunked Gram + ALS low-rank. | Opt-in — G1 NRMSE 1.67e-4 (6× better than target) but G1 threshold 2.85 LT (K=4 too short). G2/G3/G4 PASS. Promotion deferred on large-d_h ALS B-step. |
+| **Alien Sampler** (`alien_sampler`) | Coherence × Availability frontier ranking (Plan 311, Research 293, arXiv:2603.01092). `AlienSampler<V,C,A>` z-scored fusion + `MedianTopMAvailability` community-aggregation rule. | 🪦 GOAT FAILED (1/4) — G2/G3 fail on synthetic NPC scenario; module retained as opt-in for paper reproduction. SIMD perf tracked in [Issue 002](.issues/002_alien_sampler_simd_matmul.md). |
+| **Viable Manifold Graph** (`viable_manifold_graph`) | Discrete safe-manifold navigation: `pullback_volume` + `SafeManifoldGraph` + `manifold_geodesic` / `manifold_random_walk` / `manifold_curiosity_walk` (Plan 312, Research 294, arXiv:2206.00106 González-Duque et al. *Mario Plays on a Manifold*). Implies `subspace_phase_gate`. | Opt-in — Phase 0–3 complete; Phase 4 GOAT gates (G1–G7) + Phase 5 promotion pending. Phase 0 reproduces paper SMB headline (74.2% vs 100%). |
 
 📖 **Full detail for ALL opt-in features + complete feature flag reference:** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
 
@@ -1344,16 +1523,16 @@ Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rot
 cargo build --release                              # Build with optimizations
 cargo run --release                                # Run benchmark + generate plot
 cargo run --release --all-features                 # Run everything
-cargo test --quiet --workspace --all-features       # Run all tests (245 test files)
+cargo test --quiet --workspace --all-features       # Run all tests (295 test files)
 cargo run --example sudoku_01_9x9 --features sudoku # Sudoku solver
 cargo clippy --all-targets --all-features --quiet   # Lint
 ```
 
 ### Feature Flags
 
-**310+ feature flags** with **130+ default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, **`manifold_power_iter_router`** (Plan 279 GOAT 9/9), **`triggered_injection`** (Plan 278 G3 PASS), **`temporal_deriv`** (Plan 277 4/4 fusions PASS), **`self_advantage_gate`** (Plan 283 GOAT 4/4 PASS), **`clr`** (Plan 284), and 80 more.
+**320+ feature flags** with **140+ default-on** (all GOAT-proved). Default features include: `sparse_mlp`, `domain_latent`, `ppot`, `bandit`, `bt_rank`, `spectral_quant`, `hybrid_oct_pq`, `elf_sde`, `cna_steering`, `deep_manifold`, `federation`, `gdn2_attention`, `dash_attn`, `lt2_looped`, `kv_share`, `kvarn`, `belief_drafter`, `bfcf_lfu_shard`, `mux_latent_context`, `collapse_aware_thinking`, `slod`, `schema_centroid`, `union_bound_confidence`, `pathway_tracker`, `federation_composer`, **`posterior_evolution`**, **`spectral_pruner`**, **`breakeven_routing`**, **`substrate_gate`**, **`regime_transition`**, `rcd_residual`, `lattice_operad`, `spec_pruner`, `caddtree_budget`, `ssd_block`, `ss_pruner`, `dendritic_gate`, `sparse_task_vector`, `off_principal_retrieval`, `spectral_rank`, `module_energy_route`, `gauge_invariant`, `chiaroscuro`, `attn_match`, **`manifold_power_iter_router`** (Plan 279 GOAT 9/9), **`triggered_injection`** (Plan 278 G3 PASS), **`temporal_deriv`** (Plan 277 4/4 fusions PASS), **`self_advantage_gate`** (Plan 283 GOAT 4/4 PASS), **`clr`** (Plan 284), **`personality_composition`** (Plan 297 G4+G5 PASS), **`cce_moderator`** (Plan 295+300 GOAT), **`complexity_prior_sampler`** (Plan 305 Phase 2 GOAT), **`salience_tri_gate`** (Plan 303 Phase 5 GOAT), **`claim_rubric`** (Plan 307 T3.3 GOAT 17/17), **`depth_invariance`** (Plan 306 T7.4 GOAT), **`cross_resolution_transport`** (Plan 310 Phase 4 GOAT), **`latent_field_steering`** (Plan 309 Phase 4 GOAT), and 90 more.
 
-📖 **Full feature flag table (310+ flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
+📖 **Full feature flag table (320+ flags):** [`.docs/21_opt_in_features.md`](.docs/21_opt_in_features.md) and [`Cargo.toml`](Cargo.toml).
 
 ### 🧠 PersonalityWeightedComposition — Sigmoid-Gated Latent Layer Composition (Plan 297, Research 276)
 
@@ -1419,6 +1598,13 @@ crates/katgpt-core/   Shared types + SIMD kernels + traits (consumed by katgpt-r
   coda.rs             CODA fused SIMD kernels
   parallax_attn.rs    Parallax parameterized local linear attention
   funcattn.rs         Functional Attention — Tikhonov k×k spectral transport operator (Plan 286)
+  cross_resolution.rs Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310)
+  latent_steering.rs  Latent Field Steering — top-down direction-vector injection (Plan 309)
+  depth_invariance.rs Depth-Invariance Diagnostic + MagnitudeRegularizedResidual (Plan 306)
+  subspace_phase_gate.rs Participation ratio + numerical rank + N≥d gate + Jacobian SVD (Plan 301)
+  viable_manifold_graph.rs Safe-manifold navigation: pullback volume + graph + A*/random walk (Plan 312)
+  karc.rs             KARC delay-basis ridge forecaster + KarcBasis trait (Plan 308)
+  rtdc.rs             Resolution-Tiered Deterministic Commitment — multi-depth Merkle roots (Plan 302)
   peira.rs            PEIRA inter-view regressor alignment
   dirichlet.rs        Dirichlet Energy structural alignment diagnostic
   spectral_hierarchy.rs  Eigenspace alignment, Haar wavelets, Cauchy interlacing
@@ -1458,9 +1644,12 @@ src/
   dash_attn/          DashAttention adaptive sparse attention
   hybrid_oct_pq/      Default KV codec (OCT + PlanarQuant)
   chiaroscuro/        CHIAR per-token DCT spectral entropy operator routing
-  ...                 45 additional submodules + 50 top-level modules
-examples/            178 examples (see examples/README.md)
-tests/               245 integration test & benchmark files
+  claim_rubric/       L1/L2/L3 evidence-ladder validator (Plan 307)
+  alien_sampler/      Coherence × Availability frontier ranking (Plan 311)
+  viable_manifold_graph/ Safe-manifold navigation re-export (Plan 312)
+  ...                 50 additional submodules + 50 top-level modules
+examples/            210+ examples (see examples/README.md)
+tests/               295 integration test & benchmark files
 benches/             Criterion benchmarks
 ```
 
@@ -1491,15 +1680,27 @@ benches/             Criterion benchmarks
 - [HL & Arena detail](.docs/23_hl_arena_detail.md)
 - [NPC Sense Composition](.docs/24_sense_composition.md)
 - [Raven RSM — Opt-in O(1) routing slot memory](.docs/25_raven_rsm.md)
+- [MicroRecurrentBeliefState (attractor + leaky)](.docs/26_micro_belief.md)
+- [Engram conditional memory](.docs/27_engram_conditional_memory.md)
+- [Salience Tri-Gate](.docs/30_salience_tri_gate.md)
+- [CCE moderator](.docs/cce_moderator.md)
+- [Claim rubric audit](.docs/claim_rubric_audit.md)
+- [Faithfulness probe](.docs/faithfulness_probe.md)
 - [Progressive MCGS — graph search with reference edges](.docs/progressive_mcgs.md)
 - [Open-ended problem evolution arena](.docs/191_open_ended_problem_evolution_arena.md)
-- [178 examples grouped by category](examples/README.md)
+- [210+ examples grouped by category](examples/README.md)
 - [DEC Operators & Cubical Topology](.plans/251_dec_operators_cell_complex.md)
 - [Spectral Budget Router](.plans/254_spectral_budget_router.md)
 - [Posterior-Guided Pruner Evolution](.plans/239_posterior_guided_pruner_evolution.md)
 - [Regime-Transition Inference](.plans/215_regime_transition_inference.md)
 - [SubstrateGate Capability Routing](.plans/216_substrate_gate_capability_routing.md)
 - [Breakeven Complexity Routing](.plans/250_breakeven_inference_routing.md)
+- [Depth-Invariance Diagnostic](.plans/306_depth_invariance_diagnostic.md)
+- [Claim Rubric Runtime](.plans/307_claim_rubric_runtime.md)
+- [KARC Delay-Basis Ridge Forecaster](.plans/308_karc_delay_basis_ridge_forecaster.md)
+- [Latent Field Steering](.plans/309_latent_field_steering_primitive.md)
+- [Cross-Resolution Spectral Transport](.plans/310_cross_resolution_spectral_transport_primitive.md)
+- [Viable Manifold Graph](.plans/312_viable_manifold_graph_primitive.md)
 
 ## 📜 References
 
