@@ -549,6 +549,8 @@ fn proof_9_looped_logits_finite_t4() {
             #[cfg(feature = "weight_shared_advantage_gate")]
             None,
             None,
+            #[cfg(feature = "gain_cost_halt")]
+            None,
         );
 
         for (i, &l) in logits.iter().enumerate() {

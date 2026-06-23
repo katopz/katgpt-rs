@@ -679,6 +679,35 @@ The parameter is unconditional (no feature gate) — it is a caller input, not a
 
 **Feature gate**: `lt2_looped = ["hla_attention"]` (default-on). GOAT: 11/11 proofs pass.
 
+### Gain/Cost Loop Halting (`transformer.rs` + `katgpt-core::gain_cost_halt`, Plan 304)
+
+**Plan 304 / Research 282 / arXiv:2606.18023 (LoopCoder-v2).** An opt-in primitive that decides — per loop, per dispatch, at runtime — whether to continue iterating or halt, based on the **gain/cost scissors** criterion: *halt when marginal refinement gain < marginal drift cost × τ*. This is the dynamic counterpart to Issue 035's static `elastic_loop_override`: instead of the caller passing `Some(L)`, the halter decides L each loop from the hidden-state trajectory.
+
+**Kernel** (`katgpt-core::gain_cost_halt`): `GainCostLoopHalter` — a 12-byte state struct + `halt_decision(loop_idx, gain, cost, cos_theta) -> HaltDecision`. Returns one of:
+- `Continue` — gain ≥ cost × τ and no oscillation detected.
+- `Halt { reason }` — `GainBelowCost` (scissors crossover) or `Oscillation` (cos θ < 0 for `patience` consecutive loops).
+- `RefusedFloor` — `loop_idx < l_min`; refuse to halt to protect representational capacity (ELT §1.4: sub-floor loops collapse).
+
+**Forward-path wiring** (`forward_looped`, Plan 304 T2.1–T2.3): the function takes a final `#[cfg(feature = "gain_cost_halt")] halter: Option<&mut GainCostLoopHalter>` parameter. When `Some(halter)`, after each loop `tau > 0`:
+1. **gain** = `step_size(ctx.x, ctx.prev_h)` = `||h^(tau) - h^(tau-1)||₂`.
+2. **cost** = fixed tax (`cost_floor`), cached as `0.01 × first_loop_step_size` on `tau == 1` — mirrors LoopCoder-v2's flat Ω(r).
+3. **cos_theta** = `angular_change(curr_step, prev_step)` between successive update directions.
+4. Call `halter.halt_decision(tau + 1, gain, cost, cos_theta)`. On `Halt` → `break`.
+
+**Composition rules:**
+- **With `elastic_loop_override` (Issue 035, T2.2):** static override wins. If the caller passes `Some(L)`, the halter is IGNORED entirely (`halter_active = elastic_loop_override.is_none()`). The caller asked for a specific loop count — respect it.
+- **With `recursion_gate` (Plan 283 T2.2):** both can fire in the same loop. The recursion gate checks dead-compute via logit improvement; the halter checks via gain/cost scissors + oscillation. Either can `break` the loop independently. They compose because they measure different failure modes.
+
+**Open questions (resolved in Phase 2):**
+1. **Cost signal default** → fixed tax (`0.01 × first_step`), overridable. riir-ai can substitute coherence-decay/staleness by not using this code path.
+2. **Gain signal** → **DEVIATION:** the plan called for effective-rank delta, but the per-loop hidden state in `forward_looped` is a single vector (`ctx.x[..n]`, S=1), for which `hidden_erank` returns 0.0 (degenerate). Phase 2 uses `step_size` as the gain signal — monotone in refinement, cheaper than erank, and the kernel ships `step_size` for exactly this use.
+3. **Determinism** → gain/cost are pure functions of deterministic hidden state, so L is deterministic. Tested: `refused_floor_never_halts_when_l_min_above_loop_count` confirms the no-op path.
+4. **TF-Loop interaction** → Phase 2.5 (DEFERRED). Only wired into `forward_looped` (WeightShared path), not `forward_tf_looped`.
+
+**Latent vs Raw:** gain/cost signals are local latent (per-loop hidden-state deltas). The halt count L is a deterministic raw scalar, safe to sync/replay.
+
+**Feature gate:** `gain_cost_halt = ["katgpt-core/gain_cost_halt"]` (opt-in, OFF by default). The `halter = None` path is byte-identical to pre-Plan-304 via `#[cfg]` + `Option::is_none()`. GOAT gate G1–G5 (Research 149 §5) must pass before default promotion; G2 (≥75% crowd-NPC compute savings) and G3 (no important-NPC regression) are the headline gates — **deferred: requires synthetic loop suite harness**.
+
 ## MTP Projection (`transformer.rs`, Plan 055)
 
 Multi-Token Prediction projection weights for draft model acceleration:

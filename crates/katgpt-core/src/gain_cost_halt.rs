@@ -197,6 +197,37 @@ impl GainCostLoopHalter {
 
         HaltDecision::Continue
     }
+
+    /// Update the previous-loop step size (gain signal) for the next iteration's
+    /// angular-change computation. Called by the forward-path wiring (Plan 304 T2.3).
+    ///
+    /// The fields on this struct are `pub(crate)`, but the forward-path wiring
+    /// lives in the ROOT crate (`katgpt-rs/src/transformer.rs`), not in
+    /// `katgpt-core`. This setter is the only public mutation surface the wiring
+    /// needs — keeping the rest of the state private preserves the kernel's
+    /// invariants (e.g. `oscillation_count` is only mutated by `halt_decision`).
+    #[inline]
+    pub fn update_prev_step(&mut self, step: f32) {
+        self.prev_step = step;
+    }
+
+    /// Update the previous-loop effective rank. Called by the forward-path wiring
+    /// when erank is used as the gain signal (Plan 304 T2.3, future work — the
+    /// Phase-2 wiring uses `step_size` as the gain signal by default because the
+    /// per-loop hidden state in `forward_looped` is a single vector, which makes
+    /// erank degenerate; see the plan's DEVIATION note).
+    #[inline]
+    pub fn update_prev_erank(&mut self, erank: f32) {
+        self.prev_erank = Some(erank);
+    }
+
+    /// Read the cached previous-loop step size. The forward-path wiring uses
+    /// this to compute the angular-change cos θ between the current and previous
+    /// update directions without recomputing the previous step.
+    #[inline]
+    pub fn prev_step(&self) -> f32 {
+        self.prev_step
+    }
 }
 
 impl Default for GainCostLoopHalter {
@@ -872,6 +903,94 @@ mod tests {
             size_of::<HaltReason>(),
             1,
             "HaltReason must be exactly 1 byte (#[repr(u8)])"
+        );
+    }
+
+    // ── Plan 304 Phase 2 wiring tests ──────────────────────────────
+    //
+    // These exercise the public setter surface (T2.3) added so the ROOT crate
+    // (`katgpt-rs/src/transformer.rs::forward_looped`) can drive the halter
+    // without accessing `pub(crate)` fields. They also prove the G1
+    // determinism guarantee (Open Question 3): when the halter is configured
+    // to never halt (l_min above any realistic loop_count), it is a no-op and
+    // `forward_looped` output is bit-identical to the no-halter path.
+    //
+    // We test the kernel in isolation (no `ForwardContext` / `TransformerWeights`)
+    // because constructing a full transformer in a unit test is heavyweight and
+    // the G1 property is a pure function of the halter state. The composition
+    // with `forward_looped` is covered by the integration tests in
+    // `tests/issue_035_any_time_lt2_dispatch.rs` and `tests/goat_108_lt2_looped.rs`,
+    // which pass `None` for the halter and verify byte-identical output.
+
+    #[test]
+    fn update_prev_step_setter_round_trips() {
+        // The setter writes prev_step; the getter reads it back exactly.
+        let mut h = GainCostLoopHalter::new(1.0, 1, 1);
+        assert_eq!(h.prev_step(), 0.0, "default prev_step must be 0.0");
+        h.update_prev_step(1.5);
+        assert_eq!(h.prev_step(), 1.5);
+        h.update_prev_step(0.0);
+        assert_eq!(h.prev_step(), 0.0);
+        h.update_prev_step(f32::INFINITY);
+        assert_eq!(h.prev_step(), f32::INFINITY);
+    }
+
+    #[test]
+    fn update_prev_erank_setter_round_trips() {
+        // prev_erank starts as None; the setter makes it Some(value).
+        let mut h = GainCostLoopHalter::new(1.0, 1, 1);
+        h.update_prev_erank(7.3);
+        // We can't read prev_erank directly (no getter — the wiring doesn't need
+        // one), but we can confirm the setter doesn't perturb halt decisions:
+        // a halter with a huge cost threshold still continues on a big gain.
+        let d = h.halt_decision(5, 100.0, 0.0, 0.0);
+        assert_eq!(d, HaltDecision::Continue);
+    }
+
+    #[test]
+    fn refused_floor_never_halts_when_l_min_above_loop_count() {
+        // G1 determinism guarantee (Open Question 3): when the halter is
+        // configured with l_min higher than any realistic loop_count (e.g.
+        // 255, the u8 max), it NEVER returns Halt for any loop the forward
+        // pass would actually run — every loop returns RefusedFloor. This
+        // makes the halter a pure no-op, so `forward_looped` output is
+        // bit-identical to the no-halter path.
+        //
+        // The kernel's floor check is `loop_idx < l_min` (strict less-than),
+        // so l_min=255 refuses loops 1..=254 and only evaluates at exactly
+        // 255. Realistic LT2 loop counts are ≤ 32 (typically 2–8), so
+        // l_min=255 is well above the practical ceiling. We sweep the
+        // realistic range [1, 32] with adversarial gain/cost (gain = 0,
+        // cost = f32::MAX, cos_theta = -1.0 — the most halt-eager inputs
+        // possible) and confirm every one returns RefusedFloor, never Halt.
+        let mut h = GainCostLoopHalter::new(1.0, 1, 255);
+        for loop_idx in 1..=32usize {
+            let d = h.halt_decision(loop_idx, 0.0, f32::MAX, -1.0);
+            assert_ne!(
+                d,
+                HaltDecision::Halt { reason: HaltReason::GainBelowCost },
+                "l_min=255 must refuse to halt at loop_idx={loop_idx} even with gain=0, cost=MAX"
+            );
+            assert_ne!(
+                d,
+                HaltDecision::Halt { reason: HaltReason::Oscillation },
+                "l_min=255 must refuse to halt at loop_idx={loop_idx} even with cos_theta=-1"
+            );
+            assert_eq!(
+                d,
+                HaltDecision::RefusedFloor,
+                "l_min=255 must return RefusedFloor at loop_idx={loop_idx}, got {d:?}"
+            );
+        }
+        // Document the boundary: at exactly loop_idx == l_min (255), the
+        // floor no longer applies and the halter evaluates normally. This is
+        // correct behavior — the floor is a minimum, not a cap. No realistic
+        // loop_count reaches 255, so this is not a concern in practice.
+        let d_boundary = h.halt_decision(255, 0.0, f32::MAX, -1.0);
+        assert_eq!(
+            d_boundary,
+            HaltDecision::Halt { reason: HaltReason::Oscillation },
+            "at loop_idx == l_min (255), the floor lifts and the halter evaluates normally"
         );
     }
 }

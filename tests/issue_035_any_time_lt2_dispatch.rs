@@ -62,6 +62,8 @@ fn run_once(
         #[cfg(feature = "weight_shared_advantage_gate")]
         None,
         elastic_override,
+        #[cfg(feature = "gain_cost_halt")]
+        None,
     );
     logits.to_vec()
 }

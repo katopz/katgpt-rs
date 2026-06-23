@@ -1443,6 +1443,17 @@ pub fn forward_looped<'a>(
     // clamped to `[loop_min, 2×loop_max]` per `Config::effective_loop_count`.
     // No feature gate required (it's a parameter); zero cost when `None`.
     elastic_loop_override: Option<usize>,
+    // Plan 304 T2.1: optional gain/cost halter. `None` = byte-identical to
+    // pre-Plan-304 behavior (all `loop_count` iterations run). `Some(halter)`
+    // = after each iteration, evaluate gain/cost scissors and break early on
+    // `HaltDecision::Halt`. Composes with `elastic_loop_override` (Issue 035):
+    // if the caller passes `Some(L)` for the override, the halter is IGNORED
+    // (static override wins — see T2.2). Feature-gated to keep the no-halter
+    // build zero-cost: when `gain_cost_halt` is off, this parameter slot does
+    // not exist in the signature, so callers don't pass it either.
+    #[cfg(feature = "gain_cost_halt")] halter: Option<
+        &mut katgpt_core::gain_cost_halt::GainCostLoopHalter,
+    >,
 ) -> &'a mut [f32] {
     cache.advance_pos(pos);
     use crate::types::HybridPattern;
@@ -1481,6 +1492,37 @@ pub fn forward_looped<'a>(
     let mut _gate_scratch_logits: Vec<f32> = Vec::new();
     #[cfg(feature = "weight_shared_advantage_gate")]
     let mut _gate_prev_logits: Vec<f32> = Vec::new();
+
+    // Plan 304 T2.2 + T2.3 — gain/cost halter plumbing.
+    //
+    // `halter_active` is computed once outside the loop: the halter is ONLY
+    // consulted when the caller passed `Some(halter)` AND did NOT pass a static
+    // `elastic_loop_override` (T2.2 — static override wins). This bool is
+    // `false` in both feature-off builds (cfg-stripped) and feature-on builds
+    // where the caller asked for a fixed loop count — so the per-iteration
+    // halter branch is statically or branch-predicted-not-taken in all
+    // no-op paths. Zero cost when the halter is inactive.
+    //
+    // `prev_step_buf` holds the previous loop's update direction
+    // `h^(tau-1) - h^(tau-2)` so the next iteration can compute cos θ against
+    // it via `angular_change`. Allocated ONCE per `forward_looped` call (not
+    // per iteration) — honors the hot-loop rule. Matches the existing
+    // `_gate_scratch_logits` pattern: declared even in the no-halter path but
+    // never grown unless the halter fires.
+    #[cfg(feature = "gain_cost_halt")]
+    let mut halter = halter;
+    #[cfg(feature = "gain_cost_halt")]
+    let halter_active = elastic_loop_override.is_none();
+    #[cfg(feature = "gain_cost_halt")]
+    let mut prev_step_buf: Vec<f32> = Vec::with_capacity(n);
+    #[cfg(feature = "gain_cost_halt")]
+    let mut curr_step_buf: Vec<f32> = Vec::with_capacity(n);
+    // `cost_floor` is cached on the first halter evaluation (tau == 1) as
+    // `0.01 × first_step_size`, mirroring LoopCoder-v2's flat Ω(r) tax. See
+    // the plan's Open Question 1 resolution (Phase 2 ships the fixed-tax
+    // default; riir-ai can override with coherence-decay/staleness).
+    #[cfg(feature = "gain_cost_halt")]
+    let mut cost_floor: f32 = 0.0;
 
     // 2. Outer loop: T passes over all layers
     for tau in 0..loop_count {
@@ -1677,6 +1719,81 @@ pub fn forward_looped<'a>(
                 // after the first call).
                 _gate_prev_logits.clear();
                 _gate_prev_logits.extend_from_slice(&_gate_scratch_logits);
+            }
+        }
+
+        // Plan 304 T2.3 — gain/cost halt evaluation.
+        //
+        // Only active when ALL of: (a) `gain_cost_halt` feature is on,
+        // (b) the caller passed `Some(halter)`, (c) no static
+        // `elastic_loop_override` was set (`halter_active`, T2.2), and
+        // (d) `tau > 0` (the first iteration has no previous hidden state
+        // to compute a step against — and `prev_step_buf` is empty). When any
+        // condition fails this block is either cfg-stripped or a runtime
+        // no-op, so the no-halter path stays byte-identical to pre-Plan-304.
+        //
+        // **DEVIATION from Plan T2.3 (documented):** the plan called for
+        // effective-rank delta as the gain signal. But the per-loop hidden
+        // state in `forward_looped` is a SINGLE vector `ctx.x[..n]` (one row,
+        // S=1), for which `hidden_erank` returns 0.0 (degenerate — the kernel
+        // short-circuits on `s == 1`). We therefore use `step_size` as the
+        // gain signal: `||h^(tau) - h^(tau-1)||₂`. This is monotone in
+        // refinement, cheaper than erank, and the kernel ships `step_size`
+        // exactly for this use (see plan Open Question 2 resolution).
+        #[cfg(feature = "gain_cost_halt")]
+        if halter_active && tau > 0 {
+            if let Some(h) = halter.as_deref_mut() {
+                // gain = ||h^(tau) - h^(tau-1)||₂. `ctx.prev_h` was saved at
+                // the top of this iteration (before the layer pass), so it
+                // holds h^(tau-1); `ctx.x` now holds h^(tau) post-pass.
+                let gain = katgpt_core::gain_cost_halt::step_size(
+                    &ctx.x[..n],
+                    &ctx.prev_h[..n],
+                );
+
+                // cost = fixed tax (flat Ω(r), LoopCoder-v2 default).
+                // Cached on the first evaluation (tau == 1) as 0.01 × the
+                // first step size. Open Question 1 resolution: Phase 2 ships
+                // the flat-tax default; riir-ai can override with
+                // coherence-decay/staleness by not using this code path.
+                if tau == 1 {
+                    cost_floor = 0.01 * gain;
+                }
+                let cost = cost_floor;
+
+                // cos θ between the current and previous update directions.
+                // curr_step = h^(tau) - h^(tau-1); prev_step_buf holds
+                // h^(tau-1) - h^(tau-2) from the prior iteration. On tau == 1
+                // there is no tau-2 state, so cos θ is 0.0 (neutral,
+                // non-oscillatory — does not trip the detector).
+                curr_step_buf.clear();
+                for (cur, prev) in ctx.x[..n].iter().zip(ctx.prev_h[..n].iter()) {
+                    curr_step_buf.push(cur - prev);
+                }
+                let cos_theta = if prev_step_buf.is_empty() {
+                    0.0
+                } else {
+                    katgpt_core::gain_cost_halt::angular_change(
+                        &curr_step_buf,
+                        &prev_step_buf,
+                    )
+                };
+
+                // The halter expects a 1-based loop index (`tau` is 0-based).
+                let decision =
+                    h.halt_decision(tau + 1, gain, cost, cos_theta);
+                if let katgpt_core::gain_cost_halt::HaltDecision::Halt { .. } =
+                    decision
+                {
+                    break;
+                }
+
+                // Roll the current step into the previous-step slot for the
+                    // next iteration's cos θ. `std::mem::swap` avoids a copy;
+                    // the now-swapped-in `curr_step_buf` will be `clear()`'d
+                    // at the top of the next evaluation.
+                std::mem::swap(&mut curr_step_buf, &mut prev_step_buf);
+                h.update_prev_step(gain);
             }
         }
     }

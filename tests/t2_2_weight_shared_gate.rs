@@ -67,6 +67,8 @@ fn run_once(
         None,
         gate,
         None,
+        #[cfg(feature = "gain_cost_halt")]
+        None,
     );
     logits.to_vec()
 }
