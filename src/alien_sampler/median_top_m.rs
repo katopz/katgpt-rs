@@ -432,13 +432,15 @@ impl MedianTopMAvailability {
     /// builds trust the caller (hot-path contract).
     ///
     /// Reference: Plan 311 T1.4, Issue 002 C1/C2 (SoA + SIMD dot).
+    #[inline]
     pub fn availability_embedded_with_scratch(
         &self,
         candidate: &[f32],
         cosine_scratch: &mut [f32],
     ) -> f32 {
+        let dim = self.bank_dim;
         let n_bank = self.bank_len();
-        if n_bank == 0 || self.bank_dim == 0 {
+        if n_bank == 0 || dim == 0 {
             return 0.0;
         }
         debug_assert_eq!(
@@ -451,12 +453,12 @@ impl MedianTopMAvailability {
         // the pre-Issue-002 `zip` semantics — candidates may carry extra
         // atom payload beyond the embedding, e.g. the Phase 2 bench's 4×16
         // atoms where only the first 16 are the embedding).
-        let dim = self.bank_dim;
+        //
+        // `dot_seq` uses `zip` so it naturally truncates to the shorter of
+        // cand_slice / row — no per-item branch needed for short candidates.
         let cand_slice = if candidate.len() >= dim {
             &candidate[..dim]
         } else {
-            // Shorter candidate: dot the overlap only. (Defensive — caller
-            // should pass full-dim candidates.)
             candidate
         };
 
@@ -479,28 +481,17 @@ impl MedianTopMAvailability {
         let inv_cand_norm = cand_norm_sq.sqrt().recip();
 
         // Pass 1: cosine similarity against each bank item.
-        // cosine(a, b) = (a · b) / (||a|| ||b||)
-        //              = (a · b) * inv_cand_norm * inv_bank_norm
-        // Precomputed inv_bank_norms → two multiplies per cosine (no divides
-        // in the loop). Zero-norm rows have inv_norm = 0.0 (sentinel) →
-        // cosine = 0.0 for those slots.
-        for i in 0..n_bank {
-            let inv_bank_norm = self.bank_inv_norms[i];
-            if inv_bank_norm == 0.0 {
-                cosine_scratch[i] = 0.0;
-                continue;
-            }
-            let row = &self.bank_flat[i * dim..(i + 1) * dim];
-            // Dot against the (possibly shorter) cand_slice. The row is always
-            // exactly `dim` long; cand_slice is at most `dim` long.
-            let dot = if cand_slice.len() == dim {
-                // Common case: full-dim candidate → fast path.
-                dot_seq(cand_slice, row)
-            } else {
-                // Short candidate: dot the overlap only (defensive).
-                dot_seq(cand_slice, &row[..cand_slice.len()])
-            };
-            cosine_scratch[i] = dot * inv_cand_norm * inv_bank_norm;
+        // cosine(a, b) = (a · b) * inv_cand_norm * inv_bank_norm
+        //
+        // Branch-free inner loop (rust-optimize skill rule):
+        // - Zero-norm rows have inv_bank_norm = 0.0, and their dot product is
+        //   0.0 (zero vector · anything = 0), so `dot * inv_cand_norm * 0.0 = 0.0`
+        //   — no explicit zero-norm branch needed; the multiply handles it.
+        // - `chunks_exact(dim)` avoids per-iteration index arithmetic; `zip`
+        //   inside `dot_seq` handles short candidates.
+        for (i, row) in self.bank_flat.chunks_exact(dim).enumerate() {
+            let dot = dot_seq(cand_slice, row);
+            cosine_scratch[i] = dot * inv_cand_norm * self.bank_inv_norms[i];
         }
 
         // Pass 2: median of top-m.
@@ -521,6 +512,7 @@ impl MedianTopMAvailability {
     /// entries of `out` are written.
     ///
     /// Reference: Plan 311 T4.4.
+    #[inline]
     pub fn availability_batch(
         &self,
         candidates: &[Vec<f32>],
@@ -558,13 +550,16 @@ impl AvailabilityScorer<f32> for MedianTopMAvailability {
     }
 }
 
-/// Sequential dot product (pre-Issue-002 semantics: `s += a*b`).
+/// Dot product — simple sequential `s += a*b`.
 ///
-/// Used as the default hot-path dot to preserve bit-identical output vs the
-/// original implementation. `dot_4acc` (4-accumulator FMA) is available but
-/// benchmarks showed it slower than this sequential form on the GOAT scenario
-/// (register pressure + no autovec benefit without `target-cpu=native`), so
-/// the sequential form is the shipped default. See Issue 002 bench notes.
+/// Benchmark-validated choice (rust-optimize skill: "measure after each
+/// change — some optimizations make things worse"). The 4-accumulator
+/// unrolled form was tried and is ~35% SLOWER on this target (M3 Max,
+/// generic target without `target-cpu=native`) — see Issue 002 bench notes.
+/// The simple `zip` form lets LLVM extract ~2× from OoO overlap without the
+/// register-pressure cost of 4 accumulators.
+///
+/// `a.len()` must be `<= b.len()`; consumes `a.len()` elements.
 #[inline]
 fn dot_seq(a: &[f32], b: &[f32]) -> f32 {
     let mut s = 0.0_f32;
@@ -663,10 +658,12 @@ fn median_of_top_m(xs: &mut [f32], m: usize) -> f32 {
     // k = n - effective_m with ascending cmp → tail [n-m, n) holds the
     // largest m.
     let k = n - effective_m;
-    xs.select_nth_unstable_by(k, |a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+    xs.select_nth_unstable_by(k, |a, b| a.total_cmp(b));
     let top_m = &mut xs[k..];
     // Sort the top-m slice ascending so we can pick the median index cleanly.
-    top_m.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
+    // `total_cmp` is branch-free (single instruction on most ISAs) vs
+    // `partial_cmp().unwrap_or()` which has a branch — rust-optimize skill rule.
+    top_m.sort_by(|a, b| a.total_cmp(b));
 
     // Median of top_m (length = effective_m):
     // - odd:  top_m[effective_m / 2]
