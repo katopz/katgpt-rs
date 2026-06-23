@@ -202,3 +202,19 @@ Quality / behavior gates (the "is it actually better?" question) are riir-ai's r
 - **Prior art the paper builds on:** Arvanitidis et al. (Latent Space Oddity, ICLR 2018) — original pullback-metric idea for VAEs. Detlefsen et al. 2020 — categorical extension. Arvanitidis et al. 2019 — shortest paths on learned manifolds.
 - **Our substrate:** `katgpt-rs/.research/279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md` (Plan 301 ships `jacobian_svd_at`); `katgpt-rs/.research/290_latent_field_steering_open_primitive.md` (complement); `katgpt-rs/.research/276_Personality_Weighted_Latent_Layer_Composition.md` (sigmoid-blend kernel shape); `katgpt-rs/.plans/252_cubical_category_interval_topology.md` (raw-space geodesic cousin); `katgpt-rs/.plans/266_densemesh_latent_node_network.md` (composition-graph precedent, Gate 2 failed); `riir-ai/.research/153_latent_field_steering_game_runtime_guide.md` (template for the private guide).
 - **→ riir-train redirect:** VAE training, hierarchical categorical decoder, ELBO, Adam schedule, Baumgarten A* Mario viability agent. Not distilled here.
+
+---
+
+## Phase 5 result (2026-06-24)
+
+**PROMOTED to default-on.** All gates closed:
+
+- **G1–G7 correctness:** all PASS (10/10 unit tests).
+- **Perf bench — `manifold_random_walk/k=4` per-step:** 485.58 ns/step → **7.10 ns/step** post-CSR (68.4× speedup, 14× under the 100 ns/step target).
+- **Fix:** CSR (Compressed Sparse Row) adjacency added to `SafeManifoldGraph`; `for_each_neighbor` went from O(E) linear edge-list scan to O(degree) direct index. ~30 lines, no public-API change. Per-node neighbor order preserved byte-for-byte (`[< node ascending] ++ [> node ascending]`, matching the pre-CSR linear-scan emission order) so `manifold_random_walk` output is identical for any fixed RNG seed.
+- **`pullback_volume`:** 310 ns (PASS, 16× under 5 µs).
+- **`build_safe_manifold_graph`:** 384.60 µs (PASS, 26× under 10 ms; CSR build cost is +4.9%, negligible).
+
+Open follow-up (not a blocker): Phase 6 riir-ai wiring on real 8D HLA (R154 G8–G12) lives in a separate plan. If free Gaussian walks in `R^8` HLA already keep playability ~99% (HLA is well-behaved), this primitive is Gain not Super-GOAT — demote honestly at that point.
+
+📖 Full GOAT record: [`katgpt-rs/.benchmarks/312_viable_manifold_graph_goat.md`](../.benchmarks/312_viable_manifold_graph_goat.md).

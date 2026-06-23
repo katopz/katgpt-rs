@@ -131,7 +131,17 @@ pub struct SafeManifoldGraph {
     /// Flat `[n_nodes × dim]` row-major buffer of kept node coordinates.
     nodes: Vec<f32>,
     /// Bidirectional, deduplicated `(min_id, max_id)` edges, sorted ascending.
+    /// Source of truth for the public `edges()` accessor; not used by the
+    /// hot-path neighbor lookup (which goes through `csr_*` below).
     edges: Vec<(u32, u32)>,
+    /// CSR row pointers, length `n_nodes + 1`. Neighbors of node `i` live in
+    /// `csr_neighbors[csr_offsets[i]..csr_offsets[i+1]]`. O(degree) lookup.
+    csr_offsets: Vec<u32>,
+    /// CSR column indices, length `2 * n_edges` (each edge contributes one
+    /// entry per endpoint). Ordered per node as `[< node ascending] ++
+    /// [> node ascending]` to match the historical linear-scan emission
+    /// order byte-for-byte (preserves `manifold_random_walk` determinism).
+    csr_neighbors: Vec<u32>,
 }
 
 impl SafeManifoldGraph {
@@ -141,7 +151,68 @@ impl SafeManifoldGraph {
             dim,
             nodes: Vec::new(),
             edges: Vec::new(),
+            csr_offsets: vec![0],
+            csr_neighbors: Vec::new(),
         }
+    }
+
+    /// Rebuild the CSR adjacency cache from `edges`.
+    ///
+    /// Must be called whenever `edges` (or `nodes`, which changes `n_nodes`)
+    /// is mutated outside the public constructors — e.g. in tests that poke
+    /// the private fields directly. All production paths (`new`, [`build_safe_manifold_graph`])
+    /// invoke this at the end of construction.
+    ///
+    /// Per-node neighbor order is `[< node ascending] ++ [> node ascending]`,
+    /// matching the order the pre-CSR `for_each_neighbor` linear scan emitted
+    /// (edges are sorted by `(lo, hi)` lexicographically). This keeps
+    /// `manifold_random_walk` byte-identical for any fixed RNG seed.
+    ///
+    /// O(V + E): two passes over edges plus a per-node slice sort. The slice
+    /// sort is O(Σ deg·log(deg)) which is negligible (deg ≈ k_nearest).
+    fn rebuild_csr(&mut self) {
+        let n = self.n_nodes();
+        // Counting-sort first pass: degree of each node.
+        let mut degree = vec![0u32; n];
+        for &(lo, hi) in &self.edges {
+            let (lo, hi) = (lo as usize, hi as usize);
+            if lo < n && hi < n {
+                degree[lo] += 1;
+                degree[hi] += 1;
+            }
+        }
+        // Prefix sum → row pointers.
+        let mut offsets = Vec::with_capacity(n + 1);
+        offsets.push(0);
+        let mut acc: u32 = 0;
+        for &d in &degree {
+            acc += d;
+            offsets.push(acc);
+        }
+        // Second pass: scatter each edge's endpoints into the right slots.
+        let mut neighbors = vec![0u32; acc as usize];
+        let mut cursor = offsets.clone(); // cursor[i] = next write index for node i
+        for &(lo, hi) in &self.edges {
+            let (lo, hi) = (lo as usize, hi as usize);
+            if lo < n && hi < n {
+                let p = cursor[lo] as usize;
+                neighbors[p] = hi as u32;
+                cursor[lo] += 1;
+                let q = cursor[hi] as usize;
+                neighbors[q] = lo as u32;
+                cursor[hi] += 1;
+            }
+        }
+        // Per-node sort to match the pre-CSR emission order:
+        // lower-id neighbors first (ascending), then higher-id (ascending).
+        for node in 0..n {
+            let s = offsets[node] as usize;
+            let e = offsets[node + 1] as usize;
+            let node_u = node as u32;
+            neighbors[s..e].sort_unstable_by_key(|&nbr| (nbr > node_u, nbr));
+        }
+        self.csr_offsets = offsets;
+        self.csr_neighbors = neighbors;
     }
 
     /// Number of kept nodes.
@@ -172,7 +243,8 @@ impl SafeManifoldGraph {
         &self.nodes[start..end]
     }
 
-    /// Neighbors of node `idx`, in ascending id order.
+    /// Neighbors of node `idx`, in the canonical CSR order `[< idx ascending] ++
+    /// [> idx ascending]`.
     ///
     /// **Allocation note**: returns an owned `Vec<u32>` of length = node degree.
     /// This is a *cold* / query path; for hot navigation use
@@ -189,24 +261,24 @@ impl SafeManifoldGraph {
     }
 
     /// Zero-allocation neighbor iteration. Calls `f(id)` for each neighbor of
-    /// `idx`, in ascending id order. Used by hot navigation paths.
+    /// `idx`. O(degree) via the CSR adjacency cache — each step does two array
+    /// reads (`csr_offsets[idx]`, `csr_offsets[idx+1]`) plus `degree` reads
+    /// from `csr_neighbors`. Used by hot navigation paths.
+    ///
+    /// Neighbor order is deterministic and identical to the pre-CSR linear
+    /// scan: `[< idx ascending] ++ [> idx ascending]`. This keeps
+    /// `manifold_random_walk` byte-identical for any fixed RNG seed.
     ///
     /// # Panics
     ///
     /// Panics if `idx >= n_nodes()`.
     #[inline]
     pub fn for_each_neighbor<F: FnMut(u32)>(&self, idx: u32, mut f: F) {
-        let target = idx;
-        // Edges are sorted ascending by (min, max). Linear scan is fine for
-        // the graph sizes the paper uses (10²–10³ nodes, ~k·n edges). For
-        // larger graphs a CSR adjacency would be better — see Plan 312 risk
-        // register; deferred until a build ever exceeds ~10⁴ nodes.
-        for &(a, b) in self.edges.iter() {
-            if a == target {
-                f(b);
-            } else if b == target {
-                f(a);
-            }
+        let i = idx as usize;
+        let start = self.csr_offsets[i] as usize;
+        let end = self.csr_offsets[i + 1] as usize;
+        for &neighbor in &self.csr_neighbors[start..end] {
+            f(neighbor);
         }
     }
 
@@ -406,15 +478,20 @@ where
         }
     }
 
-    // ── Step 3: dedup + sort ────────────────────────────────────────────────
+    // ── Step 3: dedup + sort ────────────────────────────────────────────
     edges.sort_unstable();
     edges.dedup();
 
-    SafeManifoldGraph {
+    let mut g = SafeManifoldGraph {
         dim,
         nodes: kept_nodes,
         edges,
-    }
+        csr_offsets: Vec::new(),
+        csr_neighbors: Vec::new(),
+    };
+    // Build CSR adjacency so `for_each_neighbor` is O(degree), not O(E).
+    g.rebuild_csr();
+    g
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1041,6 +1118,7 @@ mod tests {
         let mut g = SafeManifoldGraph::new(2);
         g.nodes = vec![0.0, 0.0, 1.0, 0.0];
         g.edges = vec![];
+        g.rebuild_csr();
         // n_nodes should be 2 here.
         assert_eq!(g.n_nodes(), 2);
         let path = manifold_geodesic(&g, 0, 1);
@@ -1052,6 +1130,7 @@ mod tests {
         let mut g = SafeManifoldGraph::new(2);
         g.nodes = vec![0.0, 0.0, 1.0, 0.0];
         g.edges = vec![(0, 1)];
+        g.rebuild_csr();
         let path = manifold_geodesic(&g, 0, 1).expect("path exists");
         assert_eq!(path, vec![0, 1]);
     }

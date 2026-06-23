@@ -115,12 +115,12 @@ This is the "what does it look like?" demo. It validates the mechanism shape end
 - [x] **T4.7** **G6** — `test_manifold_random_walk_zero_alloc_across_1000_steps`: walk for 1000 steps, verify no `Vec` capacity growth in the scratch path. Per AGENTS.md hot-loop rule. **Verified 2026-06-23** — PASS (Vec capacity == m+1, no growth).
 - [x] **T4.8** **G7** — `test_primitive_never_touches_sync`: a static check (or a doc-test) that the primitive signature accepts only `&[f32]` + closures. The lint: the module must not import anything from `riir-chain`, `riir-neuron-db`, or any sync module. (Compile-pass test.) **Verified 2026-06-23** — PASS by inspection (module imports only `crate::subspace_phase_gate::{JacobianSvdScratch, jacobian_svd_at}` + `std::collections::BinaryHeap`).
 - [x] **T4.9** Add `benches/viable_manifold_graph_bench.rs`:
-  - `pullback_volume` latency on `R^4 → R^4` (target: < 5µs, since it's one SVD call). **Measured 2026-06-23: 304.74 ns — PASS (16.4× under target).**
-  - `manifold_random_walk` per-step latency (target: < 100ns/step for k=4 neighbors). **Measured 2026-06-23: 485.58 ns/step — FAIL (4.86× over target). Root cause: `for_each_neighbor` is O(E) linear scan, not O(degree). See `.benchmarks/312_viable_manifold_graph_goat.md` for full analysis + CSR fix recommendation.**
-  - `build_safe_manifold_graph` on 1000 samples (target: < 10ms, dominated by 1000 SVD calls). **Measured 2026-06-23: 367.93 µs — PASS (27.2× under target).**
+  - `pullback_volume` latency on `R^4 → R^4` (target: < 5µs, since it's one SVD call). **Measured 2026-06-23: 304.74 ns — PASS (16.4× under target). Re-measured 2026-06-24 post-CSR: 310.00 ns — still PASS.**
+  - `manifold_random_walk` per-step latency (target: < 100ns/step for k=4 neighbors). **Measured 2026-06-23: 485.58 ns/step — FAIL (4.86× over target). Root cause: `for_each_neighbor` is O(E) linear scan, not O(degree). FIXED 2026-06-24 via CSR adjacency: re-measured 7.10 ns/step — PASS (68.4× speedup, 14× under target). See §Post-CSR in [`.benchmarks/312_viable_manifold_graph_goat.md`](../.benchmarks/312_viable_manifold_graph_goat.md).**
+  - `build_safe_manifold_graph` on 1000 samples (target: < 10ms, dominated by 1000 SVD calls). **Measured 2026-06-23: 367.93 µs — PASS (27.2× under target). Re-measured 2026-06-24 post-CSR: 384.60 µs — still PASS (+4.9% CSR build cost, 26× margin).**
 - [x] **T4.10** Create `examples/viable_manifold_graph_01_basic.rs` — a small synthetic demo: build a safe graph on a 2D toy manifold (matching the paper's setup), run a geodesic and a random walk, print the playability comparison (manifold-constrained vs free Gaussian). **Already complete from Phase 0 (T0.1). Re-verified 2026-06-23: still runs, reproduces paper's 74.2% vs 100% playability gap.**
 
-**Exit gate status (2026-06-23):** G1–G7 unit tests all PASS. Bench G-bench 2 (random_walk per-step) FAILS its 100ns/step target due to O(E) `for_each_neighbor`. **Recommendation: DEMOTE — hold at opt-in until CSR adjacency lands.** Full numbers + root cause + promotion path in [`katgpt-rs/.benchmarks/312_viable_manifold_graph_goat.md`](../.benchmarks/312_viable_manifold_graph_goat.md). Phase 5 promotion tasks T5.1–T5.4 NOT executed (deferred to human decision).
+**Exit gate status (2026-06-24, post-CSR):** G1–G7 unit tests all PASS. **Bench G-bench 2 (random_walk per-step) now PASS: 7.10 ns/step (was 485.58 ns/step) — CSR adjacency closed the gate.** `pullback_volume` and `build_safe_manifold_graph` still PASS. **All gates closed → PROMOTED to default-on in Phase 5 (see below).** Full numbers + change + determinism analysis in [`katgpt-rs/.benchmarks/312_viable_manifold_graph_goat.md`](../.benchmarks/312_viable_manifold_graph_goat.md) §Post-CSR.
 
 **Exit:** all G1–G7 green; bench numbers documented in `katgpt-rs/.benchmarks/312_viable_manifold_graph_goat.md` (new file).
 
@@ -130,12 +130,12 @@ This is the "what does it look like?" demo. It validates the mechanism shape end
 
 ### Tasks
 
-- [ ] **T5.1** If G1–G7 all PASS: add `viable_manifold_graph` to `default = [...]` in `katgpt-rs/crates/katgpt-core/Cargo.toml` and root `katgpt-rs/Cargo.toml`.
-- [ ] **T5.2** Add showcase section to `katgpt-rs/README.md` under "Feature Showcase" with the GOAT table (G1–G7) + the paper citation + a note that game-side wiring lives in riir-ai.
-- [ ] **T5.3** Update `katgpt-rs/.docs/01_overview.md` Module Structure + Feature Flags tables.
-- [ ] **T5.4** Update `katgpt-rs/.research/294_*.md` with a "Phase 5 result" footer: PROMOTED / DEMOTED + measured numbers + demotion rationale if applicable.
+- [x] **T5.1** If G1–G7 all PASS: add `viable_manifold_graph` to `default = [...]` in `katgpt-rs/crates/katgpt-core/Cargo.toml` and root `katgpt-rs/Cargo.toml`. **DONE 2026-06-24** — promoted in both Cargo.toml files after CSR closed the perf gate (7.10 ns/step ≤ 100 ns/step).
+- [x] **T5.2** Add showcase section to `katgpt-rs/README.md` under "Feature Showcase" with the GOAT table (G1–G7) + the paper citation + a note that game-side wiring lives in riir-ai. **DONE 2026-06-24** — showcase section (§🕸️) + Feature Showcase table row updated to DEFAULT-ON with post-CSR numbers.
+- [x] **T5.3** Update `katgpt-rs/.docs/01_overview.md` Module Structure + Feature Flags tables. **DONE 2026-06-24 (no-op)** — `01_overview.md` does not reference `viable_manifold_graph` in either its Module Structure or Feature Flags table, so there is no stale row to update. Canonical feature reference is `Cargo.toml` + README Feature Showcase, both updated.
+- [x] **T5.4** Update `katgpt-rs/.research/294_*.md` with a "Phase 5 result" footer: PROMOTED / DEMOTED + measured numbers + demotion rationale if applicable. **DONE 2026-06-24** — footer appended: PROMOTED, 485.58→7.10 ns/step, CSR fix summary, determinism note, Phase 6 follow-up caveat.
 
-**Exit:** either promoted to default (G1–G7 PASS) or documented as opt-in with the failing gate(s) called out honestly.
+**Exit:** **PROMOTED to default-on.** All gates (G1–G7 correctness + perf bench) now PASS after the CSR adjacency fix. `viable_manifold_graph` is in `default = [...]` of both Cargo.toml files.
 
 ---
 

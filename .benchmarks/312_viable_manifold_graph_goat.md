@@ -37,7 +37,7 @@ Phase 0 example still runs: 360 viable nodes, 720 edges; free Gaussian 74.2% via
 | Bench | Median | Target | Status |
 |-------|--------|--------|--------|
 | `pullback_volume/R^4_to_R^4_identity` | **304.74 ns** | < 5 µs | ✅ **PASS** (16.4× under target) |
-| `manifold_random_walk/k=4_1000_steps` (per-step) | **485.58 ns/step** | < 100 ns/step | ❌ **FAIL** (4.86× over target) |
+| `manifold_random_walk/k=4_1000_steps` (per-step) | **485.58 ns/step** | < 100 ns/step | ❌ **FAIL (pre-CSR)** → ✅ **PASS (post-CSR, 7.10 ns/step)** — see §Post-CSR |
 | `build_safe_manifold_graph/1000_samples_d4` | **367.93 µs** | < 10 ms | ✅ **PASS** (27.2× under target) |
 
 Full criterion output:
@@ -83,6 +83,8 @@ The 100ns/step target was set under the assumption that "k=4 neighbors" implies 
 
 ## Recommendation: **DEMOTE (hold at opt-in)**
 
+**SUPERSEDED — see §Post-CSR below.** Kept for historical context.
+
 **Do not promote `viable_manifold_graph` to default-on** until the perf gate is met. Rationale:
 
 1. **G1, G2, G3, G3b, G4, G5, G6, G7 all PASS** — the primitive is *correct* and *allocation-safe*.
@@ -116,3 +118,55 @@ The 100ns/step target was set under the assumption that "k=4 neighbors" implies 
 - Plan 312 — open-primitive spec
 - Research 294 — math + prior-art table
 - Plan 301 — substrate (`jacobian_svd_at`, `JacobianSvdScratch`)
+
+---
+
+## Post-CSR (2026-06-24) — **PERF GATE CLOSED → PROMOTED**
+
+**Commit:** `perf(viable_manifold_graph): CSR adjacency closes random walk perf gate (Plan 312 T5)`
+
+### Change
+
+Added **CSR (Compressed Sparse Row) adjacency** to `SafeManifoldGraph` (two private fields: `csr_offsets: Vec<u32>` length `n_nodes+1`, `csr_neighbors: Vec<u32>` length `2·n_edges`). `for_each_neighbor` rewritten from O(E) linear edge-list scan to O(degree) direct index:
+
+```rust
+pub fn for_each_neighbor<F: FnMut(u32)>(&self, idx: u32, mut f: F) {
+    let start = self.csr_offsets[idx as usize] as usize;
+    let end   = self.csr_offsets[idx as usize + 1] as usize;
+    for &neighbor in &self.csr_neighbors[start..end] { f(neighbor); }
+}
+```
+
+- `edges: Vec<(u32,u32)>` **kept** as the source of truth for `edges()` / `n_edges()` — no public-API change.
+- Private `fn rebuild_csr(&mut self)` (O(V+E)) called at the end of every construction path: `SafeManifoldGraph::new`, `build_safe_manifold_graph`, and the two field-mutating tests `test_manifold_geodesic_trivial_*` (the `merkle_root` lesson — audit ALL constructors).
+- **Determinism preserved byte-for-byte:** per-node CSR neighbor order is `[< node ascending] ++ [> node ascending]`, exactly matching the pre-CSR linear-scan emission order (edges are sorted by `(lo, hi)`). `manifold_random_walk` output is identical for any fixed RNG seed. Verified by the sort key `(nbr > node, nbr)`.
+
+### Re-measured bench (same harness, MacBook Pro, release, criterion)
+
+| Bench | Pre-CSR | Post-CSR | Target | Status |
+|-------|---------|----------|--------|--------|
+| `pullback_volume/R^4_to_R^4_identity` | 304.74 ns | **310.00 ns** | < 5 µs | ✅ PASS (unchanged) |
+| `manifold_random_walk/k=4_1000_steps` (per-step) | 485.58 ns | **7.10 ns** | < 100 ns/step | ✅ **PASS** (68.4× speedup; 14× under target) |
+| `build_safe_manifold_graph/1000_samples_d4` | 367.93 µs | **384.60 µs** | < 10 ms | ✅ PASS (+4.9% CSR build cost, 26× margin) |
+
+```
+viable_manifold_graph/manifold_random_walk/k=4_1000_steps
+                        time:   [7.0983 µs 7.1034 µs 7.1084 µs]   (per 1000-step walk)
+                        thrpt:  [140.68 Melem/s 140.78 Melem/s 140.88 Melem/s]
+                 change:
+                        time:   [-98.596% -98.569% -98.546%] (p = 0.00 < 0.05)
+                        thrpt:  [+6777.0% +6886.4% +7020.9%]
+                        Performance has improved.
+```
+
+7.10 ns/step = two `csr_offsets` array reads + `degree` (typically ≤8) `csr_neighbors` reads + the RNG/draw overhead. Right in the expected 10–30 ns band.
+
+### Verification
+
+- **G1–G7 unit tests:** 10/10 PASS (`cargo test -p katgpt-core --features viable_manifold_graph --lib viable_manifold_graph`).
+- **Phase 0 example:** self-contained (defines its own `SafeManifoldGraph`, no module import) → unaffected by construction.
+- **Default-feature build:** `viable_manifold_graph` promoted to `default = [...]` in `crates/katgpt-core/Cargo.toml` and root `katgpt-rs/Cargo.toml`.
+
+### Verdict (updated)
+
+**PROMOTED to default-on.** All gates closed (G1–G7 correctness + perf). The §Recommendation DEMOTE above is superseded. Remaining open item is Phase 6 riir-ai wiring (separate plan, R154 G8–G12) — not a blocker for the open primitive.
