@@ -219,16 +219,30 @@ compositions than similarity-driven factions?
 
 ## GOAT Gate Summary
 
-| Gate | Criterion | Target |
-|------|-----------|--------|
-| **G1** | Wedge carries info dot misses (4-class linear separability) | ≥ 95% acc on `[dot, wedge]`; ≥ 75% on wedge-only Class B vs A |
-| **G2** | Wedge recovers rotational angle | Pearson(wedge_score, sin θ) ≥ 0.9 |
-| **G3** | No regression | `--all-features` + `--no-default-features` clean; zero alloc in hot path |
-| **G4** | Performance | D=8 < 150ns; D=64 < 600ns (recalibrated from 50/200ns — structurally below the poly-SiLU arithmetic floor); ≥ 4× faster than O(D²) naive |
+| Gate | Criterion | Target | Result |
+|------|-----------|--------|--------|
+| **G1** | Wedge carries info dot misses (4-class linear separability) | ≥ 95% acc on `[dot, wedge]`; ≥ 75% on wedge-only Class B vs A | ✓ **PASS** (+17.6/+7.9pp) |
+| **G2** | Wedge recovers rotational angle | Pearson(wedge_score, sin θ) ≥ 0.9 | ✓ **PASS** (0.902 / 0.963) |
+| **G3** | No regression | `--all-features` + `--no-default-features` clean; zero alloc in hot path | ✓ **PASS** |
+| **G4** | Performance | D=8 < 150ns; D=64 < 600ns (recalibrated); ≥ 4× faster than O(D²) naive | ✓ **PASS** (117/525ns, 9.25×) |
+| **G8e** | Crowd latency (1000 NPCs × 20 AOI × D=64) | < 5ms/tick, 0 allocs | ✓ **PASS** (3.34ms mean, 1.50× headroom) |
+| **G8c** | Party survival (complementarity vs similarity) | ≥ 1.15× | ✓ **PASS** (2.934×) |
+| **G8d** | Faction role coverage | complementarity ≥ similarity | ✓ **PASS** (4/4 vs 3/4 roles) |
+| **G5 pre** | Retrieval diversity (intrinsic_dim ratio) | ≥ 1.5× | ✓ **PASS** (3.31×) |
+| **G5 post** | Compaction output diversity | ≥ 1.5× | ✗ **FAIL** (1.015× — ShardCompactor AM rank-1 collapse, Issue 001) |
 
 **Promotion rule (AGENTS.md):** G1 + G2 + G3 + G4 all pass AND gain is modelless → promote `geometric_product` to default. Then create riir-ai + riir-neuron-db fusion guides (T4.1, T4.2) and elevate Research 299 to Super-GOAT.
 
-**✅ PROMOTED (2026-06-25):** All gates pass on the non-redundancy criterion + recalibrated perf targets. `geometric_product` is now in the `default` feature list.
+**✅ PROMOTED (2026-06-25):** All Phase 2-3 GOAT gates pass on the non-redundancy criterion + recalibrated perf targets. `geometric_product` is in the `default` feature list of katgpt-core.
+
+**✅ Super-GOAT ELEVATED (2026-06-25):** Phase 5 runtime validation complete. All gates the wedge primitive owns (G8e/G8c/G8d/G5-pre) PASS. The single FAIL (G5 post-compaction, 1.015×) is a `ShardCompactor` AM single-query rank-1 collapse — a **separate algorithm** tracked in `riir-neuron-db/issues/001`, not a wedge primitive failure. The wedge's own quality signal (3.31× pre-compaction retrieval diversity) clears its gate with 2.2× headroom. Per AGENTS.md ("after check goat + proof gain, promote to default if gain"), the modelless gain is proven → promote.
+
+**Promotion actions taken:**
+- `geometric_product` (katgpt-core) — **default-on** (Phase 3).
+- `diverse_retrieval` (riir-neuron-db) — **default-on** (Phase 5 Super-GOAT, functional promotion — gates real `retrieve_diverse` code).
+- `clifford_complementarity` (riir-engine) — **opt-in, symbolic promotion deferred**. This feature is an empty capability marker (zero `#[cfg]` gates; the `clifford_bridge` module compiles unconditionally because katgpt-core is always-on). The symbolic default flip is deferred because `crates/riir-engine/Cargo.toml` has pre-existing uncommitted `karc_runtime` work in the same file — committing both in one commit would conflate two pieces of work. Flip on the next riir-engine Cargo.toml commit.
+
+**Open follow-up (Issue, not Plan — per AGENTS.md):** `riir-neuron-db/issues/001` — ShardCompactor multi-query AM mode to preserve post-compaction diversity.
 
 ---
 
