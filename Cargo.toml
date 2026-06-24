@@ -645,6 +645,16 @@ path = "benches/vessel_extract_bench.rs"
 required-features = ["secure_vessel"]
 harness = false
 
+# Plan 315 T5.1 — Vessel minimal encode/decode/extract round-trip demo.
+[[example]]
+name = "vessel_minimal"
+required-features = ["secure_vessel"]
+
+# Plan 315 T5.2 — Vessel projector demo with a real WAT module + VesselCache.
+[[example]]
+name = "vessel_project"
+required-features = ["secure_vessel"]
+
 # Plan 311 Phase 2 T2.2 — Alien Sampler microbench. rank() 1k/10k candidates
 # + median_top_m() bank=100/10k. Targets: rank 1k <= 500us, 10k <= 5ms;
 # median_top_m bank=100 <= 5us, bank=10k <= 500us. std::time::Instant +

@@ -399,10 +399,11 @@ pub fn hidden_erank(hidden: &[f32], s: usize, d: usize, scratch_sv: &mut [f32]) 
     //
     // We do NOT scale by 1/S — the scale cancels when we normalize the
     // eigenvalues to sum = 1 before computing the entropy.
-    for slot in gram.iter_mut() {
-        *slot = 0.0;
-    }
-
+    // Zero-fill is only needed by the `s > d` branch, which accumulates with
+    // `+=` into the upper triangle then mirrors it to the lower. The `s <= d`
+    // branch assigns (not +=) to both `gram[i*m+j]` and its mirror `gram[j*m+i]`
+    // for every (i, j) pair in [0, m)², so every cell is overwritten — the
+    // zero-fill there is dead work.
     if s <= d {
         // m = s: build X Xᵀ (s×s). Outer product over the hidden dimension d.
         for i in 0..s {
@@ -421,6 +422,11 @@ pub fn hidden_erank(hidden: &[f32], s: usize, d: usize, scratch_sv: &mut [f32]) 
         }
     } else {
         // m = d: build Xᵀ X (d×d). Outer product over the sequence length s.
+        // Zero-fill first — the `+=` accumulation below only touches the
+        // upper triangle before the mirror pass.
+        for slot in gram.iter_mut() {
+            *slot = 0.0;
+        }
         for k in 0..s {
             let row = &hidden[k * d..(k + 1) * d];
             // Fold this centered row into the upper triangle of gram.

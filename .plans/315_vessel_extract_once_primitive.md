@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/297_vessel_extract_once_secure_wire_format.md](../.research/297_vessel_extract_once_secure_wire_format.md)
 **Cross-ref (riir-neuron-db):** [Research 006](../../riir-neuron-db/.research/006_neuron_vessel_tiered_secure_distribution_guide.md), [Plan 003](../../riir-neuron-db/.plans/003_neuron_vessel_sidecar.md)
 **Target:** `katgpt-rs/src/vessel/` (new module) + Cargo feature `secure_vessel`
-**Status:** Phase 1-4 complete (15 tests + GOAT bench done). Phase 6 (cache layer) complete — all hot-path gates PASS. Stays opt-in (dependency hygiene, not quality gate). Phase 5 (examples + docs) pending.
+**Status:** Phase 1-6 complete (all phases done). 21 tests green + 2 examples + docs. Stays opt-in (dependency hygiene, not quality gate).
 
 ---
 
@@ -76,9 +76,9 @@ The shard-level gates G6-G8 live in riir-neuron-db Plan 003. This plan owns G1-G
 
 ### Tasks
 
-- [ ] **T5.1** `katgpt-rs/examples/vessel_minimal.rs` — encode/decode/extract round-trip with a fake `[u8; 64]` Pod payload.
-- [ ] **T5.2** `katgpt-rs/examples/vessel_project.rs` — build a tiny WASM module with a `project` export (use `wat2wasm`), load as vessel, call projector.
-- [ ] **T5.3** `katgpt-rs/.docs/15_vessel.md` — overview doc with the tier table from Research 006 §4.
+- [x] **T5.1** `katgpt-rs/examples/vessel_minimal.rs` — encode/decode/extract round-trip with a fake `[u8; 64]` Pod payload. Demonstrates zero-copy borrow + Arc sharing.
+- [x] **T5.2** `katgpt-rs/examples/vessel_project.rs` — WAT module with `project` export, load as vessel, call projector, show `VesselCache` cache-miss→hit transition.
+- [x] **T5.3** `katgpt-rs/.docs/15_vessel.md` — overview doc with the tier table, wire layout, API surface, security model, GOAT results, and 5-repo routing.
 
 ---
 
