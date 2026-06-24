@@ -112,13 +112,14 @@ impl CompressionDrafter for Lz4FlexDrafter {
         // For batch amortization we'd need a custom LZ77 — see PlasmaLz77 sketch
         // in riir-ai/.research/137. For Hot tier this is acceptable.
         let baseline = self.compressed_len_baseline(ctx);
-        candidates
-            .iter()
-            .map(|c| {
-                let with_c = self.compressed_len_with(ctx, c);
-                baseline as i32 - with_c as i32
-            })
-            .collect()
+        // Pre-allocate once; collect() would also reserve but being explicit
+        // avoids the grow-and-shrink dance when len > 8 (the Vec grow threshold).
+        let mut out = Vec::with_capacity(candidates.len());
+        for c in candidates {
+            let with_c = self.compressed_len_with(ctx, c);
+            out.push(baseline as i32 - with_c as i32);
+        }
+        out
     }
 
     fn append(&mut self, bytes: &[u8]) {
@@ -171,8 +172,8 @@ impl MatchScorer for Lz4MatchScorer {
         let mut combined = Vec::with_capacity(ctx.len() + candidate.len());
         combined.extend_from_slice(ctx);
         combined.extend_from_slice(candidate);
-        let baseline_ctx = ctx.to_vec();
-        let baseline = compress_prepend_size(&baseline_ctx).len();
+        // compress_prepend_size takes &[u8]; pass ctx directly — no .to_vec().
+        let baseline = compress_prepend_size(ctx).len();
         let with_candidate = compress_prepend_size(&combined).len();
         baseline as i32 - with_candidate as i32
     }
@@ -228,6 +229,14 @@ impl MatchLengthScorer {
     /// Algorithm: probe the inverted index for the candidate's last byte, then
     /// extend each candidate match backwards comparing corpus bytes against
     /// the corresponding query bytes.
+    ///
+    /// # Hot path
+    ///
+    /// The backward-extension loop is the hottest part: for each candidate
+    /// match position we walk backwards one byte at a time. The closure-based
+    /// `query_back` of the original version has been inlined and its bound
+    /// checks hoisted, leaving a single ctx/candidate-slice branch per byte
+    /// (which the branch predictor learns in 1–2 iterations).
     pub fn suffix_match_len(&self, ctx: &[u8], candidate: &[u8]) -> usize {
         if candidate.is_empty() {
             return 0;
@@ -238,36 +247,40 @@ impl MatchLengthScorer {
             return 0;
         }
 
-        // Build the query view: we want to compare bytes going backwards from
-        // the end of (ctx + candidate). query[len-1] = candidate.last(), etc.
-        // We'll index query bytes by their offset from the end.
+        // Query = (ctx + candidate). Index bytes by offset from the end.
+        // query_len = total length; the last byte is the candidate's last byte.
         let query_len = ctx.len() + candidate.len();
-
-        // Helper: get the byte at offset `back` (1-indexed from the end) in (ctx + candidate).
-        // back=1 → last byte (candidate.last()). back=2 → second-to-last, etc.
-        let query_back = |back: usize| -> Option<u8> {
-            if back > query_len {
-                return None;
-            }
-            let idx = query_len - back;
-            if idx < ctx.len() {
-                Some(ctx[idx])
-            } else {
-                Some(candidate[idx - ctx.len()])
-            }
-        };
+        let ctx_len = ctx.len();
 
         let mut best: usize = 0;
         for &pos in positions {
+            // Hoist the bound: we extend backwards from back=1 while
+            //   back < query_len   (we already matched the last byte at back=0)
+            //   back <= pos        (don't run off the start of the corpus)
+            // The original `query_back(back+1)` always returned Some because the
+            // outer `back < query_len` guard implied `back+1 <= query_len`, so
+            // the `let Some(...) else { break }` was dead — removed.
+            let max_extend = (query_len - 1).min(pos as usize);
             let mut back = 1;
-            // Extend backwards while bytes match and we don't run off either end.
-            while back < query_len {
-                let Some(qb) = query_back(back + 1) else { break };
-                // Corpus position for the previous byte (going backwards).
-                if pos < back as u32 {
-                    break;
-                }
-                let corpus_byte = self.corpus[(pos - back as u32) as usize];
+            while back <= max_extend {
+                // idx of the byte we're matching: query_len - (back + 1)
+                // = query_len - back - 1 (monotonically decreasing).
+                let idx = query_len - back - 1;
+                // Branchless-friendly: idx < ctx_len → ctx, else candidate.
+                // idx decreases monotonically so this branch is extremely
+                // predictable (it flips at most once per extension).
+                let qb = if idx < ctx_len {
+                    // SAFETY: idx < ctx_len checked above.
+                    unsafe { *ctx.get_unchecked(idx) }
+                } else {
+                    // SAFETY: idx - ctx_len < candidate.len() because
+                    // idx = query_len - back - 1 < query_len - 1 = ctx_len + candidate.len() - 1.
+                    unsafe { *candidate.get_unchecked(idx - ctx_len) }
+                };
+                // SAFETY: back <= max_extend <= pos, so pos - back >= 0.
+                let corpus_byte = unsafe {
+                    *self.corpus.get_unchecked(pos as usize - back)
+                };
                 if corpus_byte == qb {
                     back += 1;
                 } else {
@@ -318,12 +331,20 @@ pub fn beam_search<S: MatchScorer>(
     // Scratch buffer for the visible context: tail(seed_ctx + beam).
     let mut ctx_buf = Vec::with_capacity(tail_len + 1);
 
-    for _ in 0..horizon {
-        // Expand: for each beam × each alphabet byte, produce a candidate.
-        let mut candidates: Vec<(Vec<u8>, i32)> =
-            Vec::with_capacity(beams.len() * alphabet.len());
+    // Candidate scratch: (parent_beam_idx, byte, score). We DON'T clone the
+    // parent beam here — we only materialize the beam_width survivors after
+    // sorting. This cuts beam clones from O(beams × alphabet) per step to
+    // O(beam_width), i.e. ~alphabet.len()× fewer allocations.
+    //
+    // Capacity: at most beam_width × alphabet.len() candidates per step
+    // (beams.len() never exceeds beam_width after the first truncation).
+    let max_candidates = beam_width * alphabet.len();
+    let mut candidates: Vec<(usize, u8, i32)> = Vec::with_capacity(max_candidates);
 
-        for (beam, beam_score) in &beams {
+    for _ in 0..horizon {
+        candidates.clear();
+
+        for (beam_idx, (beam, beam_score)) in beams.iter().enumerate() {
             // Build visible context: last `tail_len` bytes of (seed_ctx + beam).
             ctx_buf.clear();
             let total_len = seed_ctx.len() + beam.len();
@@ -335,19 +356,30 @@ pub fn beam_search<S: MatchScorer>(
                 ctx_buf.extend_from_slice(&beam[start - seed_ctx.len()..]);
             }
 
-            // Score each alphabet byte as a 1-byte candidate.
+            // Score each alphabet byte as a 1-byte candidate. Record without
+            // cloning the parent beam — we resolve the survivor list first.
             for &byte in alphabet {
                 let s = scorer.score(&ctx_buf, &[byte]);
-                let mut new_beam = beam.clone();
-                new_beam.push(byte);
-                candidates.push((new_beam, beam_score + s));
+                candidates.push((beam_idx, byte, beam_score + s));
             }
         }
 
-        // Select top beam_width by score (descending). Stable on ties (first wins).
-        candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        // Select top beam_width by score (descending). sort_unstable is faster
+        // than stable sort and tie order doesn't affect beam-search quality
+        // (same score = same quality).
+        candidates.sort_unstable_by(|a, b| b.2.cmp(&a.2));
         candidates.truncate(beam_width);
-        beams = candidates;
+
+        // Materialize ONLY the surviving beams: beam_width clones, not
+        // beams.len() × alphabet.len().
+        let mut new_beams: Vec<(Vec<u8>, i32)> = Vec::with_capacity(candidates.len());
+        for &(beam_idx, byte, score) in &candidates {
+            // Clone parent once, append the winning byte.
+            let mut new_beam = beams[beam_idx].0.clone();
+            new_beam.push(byte);
+            new_beams.push((new_beam, score));
+        }
+        beams = new_beams;
     }
 
     // Return the highest-scoring beam.

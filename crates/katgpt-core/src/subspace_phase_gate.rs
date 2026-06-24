@@ -166,6 +166,12 @@ pub struct JacobianSvdScratch {
     f_x: Vec<f32>,
     /// Output column buffer for `f(x + eps·e_i)` evaluations, length `m`.
     f_x_pert: Vec<f32>,
+    /// Output column buffer for `f(x + eps·e_i)` in the central-diff path,
+    /// length `m`. Replaces a per-column `.clone()` of `f_x_pert`.
+    f_x_plus: Vec<f32>,
+    /// Mutable copy of the input point `x`, length `n`. Replaces a per-call
+    /// `x.to_vec()` allocation.
+    x_pert: Vec<f32>,
     /// Flattened Jacobian, row-major `m × n`, length `m * n`.
     jac: Vec<f32>,
     /// Thin-SVD working storage for the Jacobi-rotation routine.
@@ -183,6 +189,8 @@ impl JacobianSvdScratch {
         Self {
             f_x: vec![0.0; m],
             f_x_pert: vec![0.0; m],
+            f_x_plus: vec![0.0; m],
+            x_pert: vec![0.0; n],
             jac: vec![0.0; m * n],
             svd_work: SvdScratch::with_capacity(n, m),
             svd_result: SvdResultScratch::with_capacity(m, n),
@@ -197,6 +205,11 @@ impl JacobianSvdScratch {
         for v in &mut self.f_x_pert {
             *v = 0.0;
         }
+        for v in &mut self.f_x_plus {
+            *v = 0.0;
+        }
+        // x_pert is overwritten fully before each use (copy_from_slice), so
+        // it doesn't need zeroing here.
         for v in &mut self.jac {
             *v = 0.0;
         }
@@ -386,28 +399,32 @@ where
     // For cache friendliness on small matrices, we transpose to row-major m×n
     // where row j, col i = jac[j*n + i].
     //
-    // We need a mutable copy of x to perturb. Reuse the f_x_pert slice as
-    // scratch? No — we need it for f output. Allocate one small buffer.
-    let mut x_pert: Vec<f32> = x.to_vec();
+    // Reuse the pre-allocated x_pert scratch instead of x.to_vec().
+    debug_assert!(scratch.x_pert.len() >= n, "x_pert scratch too short");
+    scratch.x_pert[..n].copy_from_slice(&x[..n]);
+    let x_pert = &mut scratch.x_pert;
     for i in 0..n {
         // Save the original coordinate.
         let x_i_orig = x_pert[i];
         if central {
             // f(x + step·e_i)
             x_pert[i] = x_i_orig + step;
-            f(&x_pert, &mut scratch.f_x_pert);
-            let f_plus: Vec<f32> = scratch.f_x_pert.clone();
+            f(x_pert, &mut scratch.f_x_pert);
+            // Swap f_x_pert → f_x_plus without cloning: std::mem::swap avoids
+            // the per-column Vec allocation the original `.clone()` did.
+            std::mem::swap(&mut scratch.f_x_plus, &mut scratch.f_x_pert);
             // f(x - step·e_i)
             x_pert[i] = x_i_orig - step;
-            f(&x_pert, &mut scratch.f_x_pert);
+            f(x_pert, &mut scratch.f_x_pert);
             // Central diff: (f_plus − f_minus) / (2·step)
             for j in 0..m {
-                scratch.jac[j * n + i] = (f_plus[j] - scratch.f_x_pert[j]) / (2.0 * step);
+                scratch.jac[j * n + i] =
+                    (scratch.f_x_plus[j] - scratch.f_x_pert[j]) / (2.0 * step);
             }
         } else {
             // Forward diff: (f(x + step·e_i) − f(x)) / step
             x_pert[i] = x_i_orig + step;
-            f(&x_pert, &mut scratch.f_x_pert);
+            f(x_pert, &mut scratch.f_x_pert);
             for j in 0..m {
                 scratch.jac[j * n + i] = (scratch.f_x_pert[j] - scratch.f_x[j]) / step;
             }

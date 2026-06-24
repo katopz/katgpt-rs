@@ -52,6 +52,12 @@ const RTDC_REGIONAL_TAG: &[u8] = b"rtdc_regional_v1";
 /// BLAKE3 domain-separation tag for the global root (`roots[0]`).
 const RTDC_GLOBAL_TAG: &[u8] = b"rtdc_global_v1";
 
+/// Maximum sibling count any `RtdcProof` can carry: depth-2 (full Merkle
+/// path) = 2 levels × (8 − 1) siblings = 14. Bounded by construction, so
+/// we store siblings inline as a fixed-size array + count instead of a
+/// `Vec` — eliminates a heap allocation per proof.
+const MAX_RTDC_SIBLINGS: usize = 2 * (MERKLE_OCTREE_BRANCHING - 1);
+
 // ─── Depth-tiered roots ────────────────────────────────────────────────
 
 /// One Merkle root per depth tier. Depth-3 octree ⇒ 3 roots.
@@ -252,11 +258,18 @@ impl DepthTieredMerkleOctree {
         let full = MerkleProof::generate(&self.inner, leaf_index)?;
         let n_siblings = siblings_for_depth(depth);
 
+        // Copy the first `n_siblings` entries into the fixed-size inline
+        // array. Avoids the heap allocation that `full.siblings[..n].to_vec()`
+        // did before. Unused trailing slots stay zero.
+        let mut siblings = [[0u8; HASH_SIZE]; MAX_RTDC_SIBLINGS];
+        siblings[..n_siblings].copy_from_slice(&full.siblings[..n_siblings]);
+
         Some(RtdcProof {
             leaf_index,
-            depth,
+            n_siblings: n_siblings as u8,
+            depth: depth as u8,
             leaf_hash: full.leaf_hash,
-            siblings: full.siblings[..n_siblings].to_vec(),
+            siblings,
             expected_root: self.roots.roots[depth],
         })
     }
@@ -272,19 +285,22 @@ impl DepthTieredMerkleOctree {
     /// `roots[d]`. It does NOT establish that `roots[d]` is a faithful
     /// aggregation of `roots[d+1]`. Cross-depth soundness is Phase 2.
     pub fn verify_at_depth(proof: &RtdcProof, roots: &DepthTieredRoots) -> bool {
-        if proof.depth > 2 {
+        let depth = proof.depth as usize;
+        if depth > 2 {
             return false;
         }
-        if proof.expected_root != roots.roots[proof.depth] {
-            return false;
-        }
-
-        let expected_n_siblings = siblings_for_depth(proof.depth);
-        if proof.siblings.len() != expected_n_siblings {
+        if proof.expected_root != roots.roots[depth] {
             return false;
         }
 
-        match proof.depth {
+        let expected_n_siblings = siblings_for_depth(depth);
+        if proof.n_siblings as usize != expected_n_siblings {
+            return false;
+        }
+        // Borrow the valid prefix once; all three arms use it.
+        let siblings = proof.siblings_slice();
+
+        match depth {
             // Phase 1: depth-0 carries only the leaf hash; the global root
             // is a single hash of roots[2]. We accept on faith that the
             // curator's roots[0] commits to this leaf — Phase 2's
@@ -296,7 +312,7 @@ impl DepthTieredMerkleOctree {
             // roots[1] requires Phase 2.
             1 => {
                 let position = (proof.leaf_index as usize) % MERKLE_OCTREE_BRANCHING;
-                let internal_hash = recompute_parent(&proof.leaf_hash, &proof.siblings, position);
+                let internal_hash = recompute_parent(&proof.leaf_hash, siblings, position);
                 internal_hash != [0u8; HASH_SIZE]
             }
             // Full Merkle proof — fully sound. Reuses MerkleProof::verify
@@ -304,15 +320,15 @@ impl DepthTieredMerkleOctree {
             2 => {
                 // siblings_for_depth(2) = 2 * (MERKLE_OCTREE_BRANCHING - 1) = 14.
                 // `MerkleProof::siblings` is a fixed `[[u8; 32]; 14]` array —
-                // we already validated `proof.siblings.len() == 14` above via
-                // `siblings_for_depth(proof.depth)`.
+                // we already validated `proof.n_siblings == 14` above via
+                // `siblings_for_depth(depth)`.
                 const FULL_SIBLING_COUNT: usize = 2 * (MERKLE_OCTREE_BRANCHING - 1);
-                let mut siblings = [[0u8; HASH_SIZE]; FULL_SIBLING_COUNT];
-                siblings.copy_from_slice(&proof.siblings);
+                let mut siblings_arr = [[0u8; HASH_SIZE]; FULL_SIBLING_COUNT];
+                siblings_arr.copy_from_slice(siblings);
                 let mp = MerkleProof {
                     leaf_index: proof.leaf_index,
                     leaf_hash: proof.leaf_hash,
-                    siblings,
+                    siblings: siblings_arr,
                 };
                 mp.verify(&roots.roots[2])
             }
@@ -543,16 +559,29 @@ fn next_sample_index(state: &mut u64, n: usize) -> usize {
 pub struct RtdcProof {
     /// Leaf index in `[0..64)`.
     pub leaf_index: u8,
+    /// Number of valid entries in `siblings` (0, 7, or 14 depending on depth).
+    /// Stored separately from the fixed-size `siblings` array so we can slice
+    /// `&siblings[..n_siblings]` without a heap-allocated `Vec`.
+    pub n_siblings: u8,
     /// Depth this proof was generated for (`0..=2`).
-    pub depth: usize,
+    pub depth: u8,
     /// BLAKE3 hash of the leaf being proven.
     pub leaf_hash: [u8; HASH_SIZE],
-    /// Sibling hashes along the truncated Merkle path. Length depends on
-    /// `depth` — see `siblings_for_depth`.
-    pub siblings: Vec<[u8; HASH_SIZE]>,
+    /// Sibling hashes along the truncated Merkle path. Only the first
+    /// `n_siblings` entries are valid; the rest are zero-padded.
+    /// Length depends on `depth` — see `siblings_for_depth`.
+    pub siblings: [[u8; HASH_SIZE]; MAX_RTDC_SIBLINGS],
     /// Precomputed `roots[depth]` from the issuing curator. The verifier
     /// checks this matches its locally-trusted `DepthTieredRoots.roots[depth]`.
     pub expected_root: [u8; HASH_SIZE],
+}
+
+impl RtdcProof {
+    /// View of the valid sibling slice (`&siblings[..n_siblings]`).
+    #[inline(always)]
+    pub fn siblings_slice(&self) -> &[[u8; HASH_SIZE]] {
+        &self.siblings[..self.n_siblings as usize]
+    }
 }
 
 /// Cross-depth sub-summation proof (Issue 002 — Phase 3).
@@ -855,7 +884,8 @@ mod tests {
                 .prove_at_depth(i as u8, 2)
                 .unwrap_or_else(|| panic!("prove_at_depth({i}, 2) returned None"));
             assert_eq!(proof.depth, 2);
-            assert_eq!(proof.siblings.len(), 14);
+            assert_eq!(proof.n_siblings, 14);
+            assert_eq!(proof.siblings_slice().len(), 14);
             assert!(
                 DepthTieredMerkleOctree::verify_at_depth(&proof, &roots),
                 "depth-2 proof for leaf {i} must verify"
@@ -903,7 +933,8 @@ mod tests {
         // also verify for a tampered roots[1] that still differs from roots[2].
         let proof = tree.prove_at_depth(13, 1).unwrap();
         assert_eq!(proof.depth, 1);
-        assert_eq!(proof.siblings.len(), 7);
+        assert_eq!(proof.n_siblings, 7);
+        assert_eq!(proof.siblings_slice().len(), 7);
         assert!(DepthTieredMerkleOctree::verify_at_depth(&proof, &roots));
     }
 
@@ -915,7 +946,8 @@ mod tests {
 
         let proof = tree.prove_at_depth(42, 0).unwrap();
         assert_eq!(proof.depth, 0);
-        assert!(proof.siblings.is_empty());
+        assert_eq!(proof.n_siblings, 0);
+        assert!(proof.siblings_slice().is_empty());
         // Phase 1: returns true when expected_root matches roots[0].
         assert!(DepthTieredMerkleOctree::verify_at_depth(&proof, &roots));
     }
