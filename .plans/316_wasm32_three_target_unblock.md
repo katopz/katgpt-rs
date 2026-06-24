@@ -127,7 +127,7 @@ the Vessel *projection* path (Model B) needed the getrandom + bytemuck fixes.
   kernel. All other SIMD ops (`simd_dot_f32`, `simd_matmul_rows`, `simd_sigmoid_*`,
   `simd_exp_*`, etc.) fall to scalar on wasm32 even with `+simd128`. Research 226's
   "AVX2 → NEON → WASM simd128 → scalar" tier is only realized for the ternary path.
-  Tracked as optimization issue `.issues/004_wasm_simd128_coverage_gap.md`.
+  Tracked as optimization issue `.issues/007_wasm_simd128_coverage_gap.md`.
 
 ## Files Changed
 
