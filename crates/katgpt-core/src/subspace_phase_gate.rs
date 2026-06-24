@@ -300,7 +300,18 @@ where
 
 // ─── One-sided Jacobi SVD (portable, no native-lapack dep) ─────────────────
 
-struct SvdScratch {
+/// Pre-allocated scratch for [`thin_svd`] / [`one_sided_jacobi_svd`]. Reuse
+/// across calls to avoid per-call allocation. Allocate once with
+/// [`SvdScratch::with_capacity`] for the largest `(m, n)` you will factor.
+//
+// Public since Plan 002 Phase 2: consumers with a *known* linear map (e.g.
+// `riir-neuron-db::NeuronShard::semantic_axes`, which SVDs a fixed weight
+// matrix) want to skip the forward-differencing in `jacobian_svd_at` and call
+// the SVD directly. Exposing the scratch + a thin-SVD entry point lets them do
+// so without re-deriving the Jacobian (which for a linear map is the matrix
+// itself and costs `n` extra `f` evaluations + a per-call `Vec` allocation
+// inside `jacobian_svd_at`).
+pub struct SvdScratch {
     /// Working copy of the input matrix, mutated in-place. Length m*n.
     a: Vec<f32>,
     /// Right-singular-vector accumulator V, n × n, row-major. Length n*n.
@@ -310,11 +321,12 @@ struct SvdScratch {
 }
 
 impl SvdScratch {
-    fn with_capacity(n: usize, m: usize) -> Self {
+    /// Allocate scratch sized for factoring an `m_rows × n_cols` matrix.
+    pub fn with_capacity(n_cols: usize, m_rows: usize) -> Self {
         Self {
-            a: vec![0.0; m * n],
-            v: vec![0.0; n * n],
-            col_norms_sq: vec![0.0; n],
+            a: vec![0.0; m_rows * n_cols],
+            v: vec![0.0; n_cols * n_cols],
+            col_norms_sq: vec![0.0; n_cols],
         }
     }
 
@@ -329,6 +341,32 @@ impl SvdScratch {
             *v = 0.0;
         }
     }
+}
+
+/// Thin SVD of a row-major `m_rows × n_cols` matrix `M = U Σ V^T` (requires
+/// `m_rows >= n_cols`) via one-sided Jacobi rotations.
+///
+/// This is the direct entry point for consumers that already hold the matrix
+/// (e.g. a known linear map's matrix). For estimating the SVD of an arbitrary
+/// (possibly non-linear) map's Jacobian, use [`jacobian_svd_at`] instead.
+///
+/// Returns the `n_cols` leading singular triples. Sign conventions are
+/// arbitrary (canonical SVD ambiguity); callers should not depend on signs.
+///
+/// Convergence: rotate until no off-diagonal element of `M^T M` exceeds
+/// `tol² · trace(M^T M)`. Standard textbook algorithm; ~O(n²) per sweep,
+/// ~log2(n) sweeps to converge for well-separated spectra.
+///
+/// Allocation: zero per-call (the result vectors are the only allocation;
+/// `work` is reused). This is the fast path that avoids the forward-differencing
+/// and per-call `x_pert` allocation of [`jacobian_svd_at`].
+pub fn thin_svd(
+    m_flat: &[f32], // row-major m × n
+    m_rows: usize,
+    n_cols: usize,
+    work: &mut SvdScratch,
+) -> SvdResult {
+    one_sided_jacobi_svd(m_flat, m_rows, n_cols, work)
 }
 
 /// One-sided Jacobi SVD: factor `M (m × n, m ≥ n) = U Σ V^T`.

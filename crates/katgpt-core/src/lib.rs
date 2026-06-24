@@ -302,8 +302,8 @@ pub use irrep_pruner::{
 };
 #[cfg(feature = "subspace_phase_gate")]
 pub use subspace_phase_gate::{
-    IntrinsicDimMethod, JacobianSvdScratch, SvdResult, estimate_intrinsic_dim, jacobian_svd_at,
-    numerical_rank, participation_ratio, phase_transition_gate,
+    IntrinsicDimMethod, JacobianSvdScratch, SvdResult, SvdScratch, estimate_intrinsic_dim,
+    jacobian_svd_at, numerical_rank, participation_ratio, phase_transition_gate, thin_svd,
 };
 
 #[cfg(feature = "viable_manifold_graph")]
