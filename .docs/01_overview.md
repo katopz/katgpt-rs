@@ -86,6 +86,7 @@ A from-scratch Rust implementation of a GPT-2 style transformer with speculative
 - Union Bound Confidence: Additive branch confidence via Boole's inequality (Plan 231, default-ON, GOAT 6/6)
 - PathwayTracker: Intrinsic pathway stability detection (Plan 231, default-ON, GOAT 7/7)
 - FederationComposer: Explicit pruning with residual early termination (Plan 231, default-ON, GOAT 7/7)
+- Closed-Unit Compaction Gate (CUCG): generic rubric-gated trajectory compaction primitive (SelfCompact, arxiv 2606.23525) — fires at structurally-safe moments instead of fixed token thresholds. evaluate() 8.91ns, 112.9M/s. Super-GOAT: trajectory compaction and shard freeze are the same primitive (G7). Default-on (Plan 320, 2026-06-25).
 
 ## Module Structure
 

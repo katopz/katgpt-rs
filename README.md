@@ -296,6 +296,7 @@ graph LR
 | **Forensic Watermark** | Moved to riir-ai | Recipe impl relocated to Plan 322 (honeypot OPSEC) |
 | **Depth-Invariance Diagnostic** (`depth_invariance`) | 306 | G1/G2/G3 ✅, G4 (re-spec) ✅ | Root-cause attention-drift classifier (`DepthInvariant` / `DepthSpecificRefinement` / `Collapsed`) + `MagnitudeRegularizedResidual` fix for owned kernels. G2 reproduces paper Figure 10 on random-init `BeliefDrafter`; G3 negative control on `micro_belief/attractor` classifies as `DepthInvariant`. SIMD inner-loop via `simd::simd_sum_sq_quartic`. Zero runtime cost unless invoked. Default-on (T7.4, 2026-06-23). |
 | **Claim Rubric Runtime** (`claim_rubric`) | 307 | 17/17 round-trip ✅ | L1/L2/L3 evidence-ladder validator — executable rubric for probe/steering claims. Vocabulary must match evidence ("causally controls" requires L3; "reads" is L1-safe). 17/17 Phase 2 round-trip + 1/1 GOAT gate green. Meta-discipline primitive, zero runtime cost unless invoked. Default-on (T3.3, 2026-06-23). |
+| **Closed-Unit Compaction Gate** (`closed_unit_compaction`) | 320 | 7/7 ✅ | Generic rubric-gated trajectory compaction primitive (SelfCompact, arxiv 2606.23525) — fires at structurally-safe moments (closed-unit ∧ summarizable ∧ progress ∧ ¬stuck). evaluate() **8.91 ns** (target <50ns), **112.9 M/s** (target >=50M). **Super-GOAT**: trajectory compaction and shard freeze are the same primitive (G7 proven structurally). Default-on (Phase 6, 2026-06-25). |
 
 ## 🎮 Arena Proofs — HL Thesis Validated
 
