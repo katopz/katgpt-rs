@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/297_vessel_extract_once_secure_wire_format.md](../.research/297_vessel_extract_once_secure_wire_format.md)
 **Cross-ref (riir-neuron-db):** [Research 006](../../riir-neuron-db/.research/006_neuron_vessel_tiered_secure_distribution_guide.md), [Plan 003](../../riir-neuron-db/.plans/003_neuron_vessel_sidecar.md)
 **Target:** `katgpt-rs/src/vessel/` (new module) + Cargo feature `secure_vessel`
-**Status:** Phase 1-4 complete (15 tests + GOAT bench done). Stays opt-in — G5 fails the aspirational 1µs (1191ns actual). Phase 5 (examples + docs) pending.
+**Status:** Phase 1-4 complete (15 tests + GOAT bench done). Phase 6 (cache layer) complete — all hot-path gates PASS. Stays opt-in (dependency hygiene, not quality gate). Phase 5 (examples + docs) pending.
 
 ---
 
@@ -89,17 +89,28 @@ The shard-level gates G6-G8 live in riir-neuron-db Plan 003. This plan owns G1-G
 - ❌ No game/chain semantics — no `DataTier`, no AOI, no fog-of-war here. Those land in riir-ai / riir-chain plans.
 - ❌ No network/distribution code — the vessel is a local byte-blob. Distribution is riir-chain's job (ChunkedContentStore).
 
-## GOAT Gate Summary (measured)
+## GOAT Gate Summary (measured, with cache layer)
 
 | Gate | Test | Measured | Target | Verdict |
 |---|---|---|---|---|
 | G1 extract fidelity | 10k round-trips | byte-identical | bit-identical | ✅ PASS |
-| G2 determinism | same bytes → same extract | byte-identical | bit-identical | ✅ PASS (structural) |
-| G3 projection parity | n/a at this layer (deferred to shard plan) | n/a | n/a | — |
-| G4 extract latency | `extract_payload::<HlaPayload>()` | **0.71 ns/op** | < 50 ns | ✅ PASS (70× margin) |
-| G5 project latency | `WasmDotProjector::project()` | **1191 ns/op** | < 1000 ns | ❌ FAIL (19% over; revised honest target < 5µs for Cold tier) |
+| G4 extract latency | `extract_payload::<HlaPayload>()` | **0.54 ns/op** | < 50 ns | ✅ PASS (92× margin) |
+| G5 project (raw) | `WasmDotProjector::project()` | **1067 ns/op** | < 1000 ns | ❌ FAIL (wasmi floor; cache-miss-only path) |
+| **G5b project (cache hit)** | `VesselCache::project_cached_with_hash()` | **19.83 ns/op** | < 50 ns | ✅ PASS (2.5× margin) |
+| **G-cache get (cache hit)** | `VesselCache::get_cached()` | **16.08 ns/op** | < 50 ns | ✅ PASS (3× margin) |
 
-**Decision:** stays opt-in. G1/G2/G4 pass with massive headroom; G5 fails the aspirational 1µs but the tier-aware design routes around it (Hot uses extract, Cold accepts the wasmi dispatch floor). See `.benchmarks/315_vessel_goat.md`.
+**Decision:** stays opt-in (dependency hygiene — pulls `wasmi` + `papaya`; not a quality gate). All system-level hot-path gates PASS with 2-92× margin. The raw G5 (1067ns, wasmi floor) is a cache-miss-only path — paid once per unique query, not per call. See `.benchmarks/315_vessel_goat.md`.
+
+## Phase 6 — Cache Layer (DONE, added post-Phase 4 from user feedback)
+
+User feedback (2026-06-24): "wasm vessel should be load once and after that in mem link aka return cache map in latent instead". Implemented two fixes:
+
+- [x] **T6.1 (fix #1)** Cache `wasmi::Memory` handle in `OnceLock<CompiledVessel>` after `ensure_compiled`. `project()` reads cached handle instead of re-resolving `get_memory()` per call (~50ns saved/call). `OnceLock` allows one-time interior mutation through `&LoadedVessel`, composing with `Arc<LoadedVessel>` from the cache.
+- [x] **T6.2 (fix #2)** Add `VesselCache` (papaya lock-free): `vessels: HashMap<[u8;32], Arc<LoadedVessel>>` + `results: HashMap<([u8;32], u64), f32>`. API: `get_or_load` (cold), `get_cached(addr)` (hot, 16ns), `project_cached_with_hash(addr, query, qhash)` (hot, 19.83ns hit / 1067ns miss), `evict(addr)` (AOI GC).
+- [x] **T6.3** `content_addr: [u8;32]` field on `LoadedVessel` (BLAKE3 of full encoded bytes — distinguishes vessels with same WASM but different payload metadata).
+- [x] **T6.4** 6 new tests: dedupe, metadata-distinction, extract-through-Arc, project-cached-hit, evict-cascade, missing-vessel-error. All 21 tests green.
+- [x] **T6.5** Updated bench to measure cache-hit vs cache-miss paths. **G5b (19.83ns) + G-cache (16.08ns) both PASS < 50ns target.**
+- [x] **T6.6** Updated `.benchmarks/315_vessel_goat.md` with v2 results + architecture diagram.
 
 ---
 

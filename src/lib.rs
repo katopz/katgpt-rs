@@ -348,6 +348,6 @@ pub mod vessel;
 #[cfg(feature = "secure_vessel")]
 pub use vessel::{
     decode_header, encode_vessel, ensure_compiled, extract_payload, extract_payload_slice,
-    load_vessel, verify_blake3, LoadedVessel, VESSEL_HEADER_LEN, VESSEL_MAGIC, VESSEL_VERSION,
-    VesselError, VesselHeader, VesselProjector, WasmDotProjector,
+    load_vessel, query_hash, verify_blake3, LoadedVessel, VESSEL_HEADER_LEN, VESSEL_MAGIC,
+    VESSEL_VERSION, VesselCache, VesselError, VesselHeader, VesselProjector, WasmDotProjector,
 };
