@@ -6,7 +6,7 @@
 **Private guide:** [riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md](../../riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md) (game-AI selling point)
 **Cross-ref:** [riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md](../../riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md) (`can_freeze` isomorphism)
 **Target:** `katgpt-rs/src/compaction/` (new module) + Cargo feature `closed_unit_compaction`
-**Status:** Active — Phase 1 + Phase 2 COMPLETE (2026-06-25). 49 unit tests PASS, G3/G5/G6 gates green. Phase 3 (latent SearchRubric, G1) next.
+**Status:** Active — Phase 1 + Phase 2 + Phase 3 COMPLETE (2026-06-25). 64 unit tests PASS, G1/G3/G5/G6 gates green. Phase 4 (MathRubric, CacheReuseProbe, G3) next.
 
 ---
 
@@ -88,20 +88,20 @@ Compiles with `cargo check --features closed_unit_compaction`. Unit tests pass. 
 
 ### Tasks
 
-- [ ] **T3.1** Implement `SearchRubric` in `src/compaction/rubrics/search.rs` with `ARITY = 4` (C1, C2, C3, N1). Predicates computed from a `TrajectoryFeatures` struct the caller supplies (coherence stability, intrinsic rank, divergence-since-last-summary, novelty rate) — **latent reframing per research note §2.4**, not LLM-judged.
-- [ ] **T3.2** Define `TrajectoryFeatures { coherence: f32, intrinsic_rank: usize, divergence_since_last: f32, novelty_rate: f32 }`. Each feature is a scalar from existing primitives (latent_functor quality_gate, subspace_phase_gate, DEC codifferential, cgsp curiosity).
-- [ ] **T3.3** Implement predicate sigmoids:
+- [x] **T3.1** Implement `SearchRubric` in `src/compaction/rubrics/search.rs` with `ARITY = 4` (C1, C2, C3, N1). Predicates computed from a `TrajectoryFeatures` struct the caller supplies (coherence stability, intrinsic rank, divergence-since-last-summary, novelty rate) — **latent reframing per research note §2.4**, not LLM-judged.
+- [x] **T3.2** Define `TrajectoryFeatures { coherence: f32, intrinsic_rank: f32, divergence_since_last: f32, novelty_rate: f32 }`. Each feature is a scalar from existing primitives (latent_functor quality_gate, subspace_phase_gate, DEC codifferential, cgsp curiosity).
+- [x] **T3.3** Implement predicate sigmoids:
   - C1: `σ(β_c1 · (coherence − τ_c1))` → Yes iff > 0.5.
   - C2: `σ(β_c2 · (rank_ceiling − intrinsic_rank))` → Yes iff > 0.5 (low rank = summarizable).
   - C3: `σ(β_c3 · (divergence_since_last − τ_c3))` → Yes iff > 0.5 (positive divergence = progress).
   - N1: `σ(β_n1 · (novelty_rate − τ_n1))` → Yes iff > 0.5 (high novelty rate = NOT stuck; the fire rule negates).
-- [ ] **T3.4** Configure `fire_rule = And(0b1111)` over (C1, C2, C3, ¬N1) — the paper's search rule.
-- [ ] **T3.5** Paper Figure 1 reproduction test: synthetic BrowseComp-like trajectory with marked safe-to-compact (post-verified-fact) and mid-derivation points. Assert: CUCG fires ≥ 80% recall at safe points; ≤ 20% FDR at mid-derivation. **This is G1.**
-- [ ] **T3.6** Document that the paper's LLM-judged verbatim quotes are replaced by latent-feature sigmoid projections; the audit record still records the trajectory span `[quote_start, quote_len]` that grounded each Yes (the span where the feature crossed threshold).
+- [x] **T3.4** Configure `fire_rule = And(0b1111)` over (C1, C2, C3, ¬N1) — the paper's search rule.
+- [x] **T3.5** Paper Figure 1 reproduction test: synthetic BrowseComp-like trajectory with marked safe-to-compact (post-verified-fact) and mid-derivation points. Assert: CUCG fires ≥ 80% recall at safe points; ≤ 20% FDR at mid-derivation. **This is G1.**
+- [x] **T3.6** Document that the paper's LLM-judged verbatim quotes are replaced by latent-feature sigmoid projections; the audit record still records the trajectory span `[quote_start, quote_len]` that grounded each Yes (the span where the feature crossed threshold).
 
 ### Acceptance
 
-G1 PASSES. Synthetic Figure-1 reproduction shows the 4-verified-facts-preserved outcome. `cargo test --features closed_unit_compaction --lib compaction::rubrics::search`.
+G1 PASSES (recall=1.000, FDR=0.000 on synthetic Figure-1 reproduction). `cargo test --features closed_unit_compaction --lib compaction::rubrics::search` — 15 tests pass.
 
 ---
 

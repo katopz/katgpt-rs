@@ -122,6 +122,7 @@ pub mod decision;
 pub mod fire_rule;
 pub mod gate;
 pub mod rubric;
+pub mod rubrics;
 
 pub use audit::{CompactionAuditRecord, DecisionKind, FireRuleEval, PredicateAudit};
 pub use backstop::Backstop;
