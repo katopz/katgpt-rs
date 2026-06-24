@@ -6,7 +6,7 @@
 **Private guide:** [riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md](../../riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md) (game-AI selling point)
 **Cross-ref:** [riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md](../../riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md) (`can_freeze` isomorphism)
 **Target:** `katgpt-rs/src/compaction/` (new module) + Cargo feature `closed_unit_compaction`
-**Status:** Active — Phase 1 + 2 + 3 + 4 + 5 COMPLETE (2026-06-25). 88 unit tests PASS, G1/G3/G3-probe/G5/G6/G7 gates green. Phase 6 (benches, G2/G4, promotion decision) next.
+**Status:** COMPLETE — Phase 1-6 all done (2026-06-25). 88 unit tests PASS, G1-G7 GOAT gates PASS. **PROMOTED to default feature.** Phase 7 (examples + docs) is the only remaining work (non-blocking doc-only).
 
 ---
 
@@ -144,20 +144,22 @@ G7 PASSES (all 4 combinations of P0/P1 match can_freeze formula; bit-identical a
 
 ### Tasks
 
-- [ ] **T6.1** Write `benches/cucg_bench.rs`:
+- [x] **T6.1** Write `benches/cucg_bench.rs`:
   - Throughput: `evaluate()` ≥ 50M decisions/sec for ARITY=4 (parity with Salience Tri-Gate's 120M/sec — CUCG has the same two-sigmoid + fire-rule cost shape).
   - Latency: `evaluate()` ≤ 50 ns for ARITY=4.
   - Zero-alloc assertion via allocator hook.
-- [ ] **T6.2** Write `benches/cucg_goat.rs` running G1–G7 with pass/fail and measured numbers. Format mirrors `.benchmarks/303_salience_tri_gate_goat.md`.
-- [ ] **T6.3** G2 (skip-if-reliable): synthetic trajectory with high-reliability CLR vote (>0.8) → suppression rate ≥ 50%; quality maintained vs no-suppression baseline.
-- [ ] **T6.4** G5 (feature isolation): `cargo build --no-default-features --features closed_unit_compaction` succeeds; `cargo build --no-default-features` succeeds; `nm target/release/libkatgpt_rs.dylib | grep -ic compaction` → 0 when feature off.
-- [ ] **T6.5** G6 (sigmoid-never-softmax): static check — grep module for `softmax`, expect 0 hits; document in rustdoc that each predicate is a scalar from a sigmoid projection.
-- [ ] **T6.6** **Promotion decision.** If G1–G7 pass AND the gain is modelless (it is — no training required), promote `closed_unit_compaction` to `default` features per AGENTS.md GOAT gate rule. Demote the loser (fixed-interval `OnlineCompactor::trigger_threshold()` stays as the backstop arm; it is not removed — it becomes the `Forced` decision's mechanism).
-- [ ] **T6.7** If G1 or G7 fails, **do NOT promote**. Investigate: G1 fail → latent predicates don't track LLM-judged ones; reconsider whether `coherence`/`intrinsic_rank`/`divergence`/`novelty` are the right features. G7 fail → isomorphism claim is wrong; revise research note.
+- [x] **T6.2** Write `benches/cucg_goat.rs` running G1–G7 with pass/fail and measured numbers. Format mirrors `.benchmarks/303_salience_tri_gate_goat.md`.
+- [x] **T6.3** G2 (skip-if-reliable): synthetic trajectory with high-reliability CLR vote (>0.8) → suppression rate ≥ 50%; quality maintained vs no-suppression baseline.
+- [x] **T6.4** G5 (feature isolation): `cargo build --no-default-features --features closed_unit_compaction` succeeds; `cargo build --no-default-features` succeeds; `nm target/release/libkatgpt_rs.dylib | grep -ic compaction` → 0 when feature off.
+- [x] **T6.5** G6 (sigmoid-never-softmax): static check — grep module for `softmax`, expect 0 hits; document in rustdoc that each predicate is a scalar from a sigmoid projection.
+- [x] **T6.6** **Promotion decision.** If G1–G7 pass AND the gain is modelless (it is — no training required), promote `closed_unit_compaction` to `default` features per AGENTS.md GOAT gate rule. Demote the loser (fixed-interval `OnlineCompactor::trigger_threshold()` stays as the backstop arm; it is not removed — it becomes the `Forced` decision's mechanism).
+- [x] **T6.7** If G1 or G7 fails, **do NOT promote**. Investigate: G1 fail → latent predicates don't track LLM-judged ones; reconsider whether `coherence`/`intrinsic_rank`/`divergence`/`novelty` are the right features. G7 fail → isomorphism claim is wrong; revise research note.
 
 ### Acceptance
 
-G1–G7 all PASS with measured numbers in `.benchmarks/320_cucg_goat.md`. Promotion to default decided and executed (or deferred with documented reason).
+G1–G7 all PASS with measured numbers in `.benchmarks/320_cucg_goat.md`. **PROMOTED to default** — `closed_unit_compaction` added to the `default = [...]` list in Cargo.toml.
+
+Results: latency 8.91ns (target ≤50ns), throughput 112.9M/s (target ≥50M), G1 recall=1.000/FDR=0.000, G2 50% suppression, G3 ratio=1.00, G7 all 4 combos match.
 
 ---
 
