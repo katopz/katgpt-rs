@@ -29,4 +29,6 @@ pub use ridge_solve::{
 // Plan 319 — Channel-wise Clifford Geometric Product (coherence + wedge).
 // Re-exported alongside the ridge kernels as a peer linear-algebra primitive.
 #[cfg(feature = "geometric_product")]
-pub use geometric_product::{cyclic_shift_into, geometric_product_into};
+pub use geometric_product::{
+    cyclic_shift_into, geometric_product_into, geometric_product_wedge_into,
+};
