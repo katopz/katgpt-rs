@@ -299,6 +299,14 @@ name = "stokes_calculus_bench"
 harness = false
 required-features = ["dec_operators"]
 
+# Plan 319 Phase 2 — Clifford Geometric Product GOAT gate. G1 4-class separability
+# (coherent/orthogonal/anti-correlated/rotated) + G2 rotational recovery
+# (Pearson(wedge, sin θ)) + G3-alloc + G4 perf vs O(D²) naive. Prints verdict.
+[[bench]]
+name = "bench_319_geometric_product_goat"
+harness = false
+required-features = ["geometric_product"]
+
 # Plan 301 Phase 2 — G1 GOAT proof: subspace phase transition on synthetic
 # MoLRG (arXiv:2409.02426 Theorem 4). Generates K=3 orthogonal d=6 subspaces
 # in R^48, sweeps N ∈ {3,5,6,7,10,50,200}, runs PCA via jacobian_svd_at,

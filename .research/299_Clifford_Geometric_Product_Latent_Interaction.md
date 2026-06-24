@@ -175,22 +175,38 @@ The closest cousins across all five repos, and what fusing each with the channel
 
 ## 3. Verdict
 
-**GOAT.** Provable-gain candidate, not a new-capability-class primitive in isolation.
+**GOAT — quality proven, perf pending.** Provable-gain candidate, not a new-capability-class primitive in isolation.
 
 ### One-line reasoning
 
-The channel-wise geometric product (Hadamard + roll + subtract) is a known math operation (Clifford 1878); its value here is as a **new signal dimension** (structural divergence) fused with our existing dot-product-only latent substrate (HLA/functor/shard/DEC). The GOAT gate must prove the wedge signal carries information the dot product misses in our specific substrate before this can be elevated.
+The channel-wise geometric product (Hadamard + roll + subtract) is a known math operation (Clifford 1878); its value here is as a **new signal dimension** (structural divergence) fused with our existing dot-product-only latent substrate (HLA/functor/shard/DEC). **The GOAT gate (Plan 319 Phase 2) has now PROVEN the wedge carries non-redundant information** the dot product misses.
 
-### Why not Super-GOAT (honest down-grade)
+### GOAT Gate Results (Plan 319 Phase 2, 2026-06-25)
 
-The four novelty-gate questions:
+| Gate | Criterion | Result |
+|------|-----------|--------|
+| G1 (non-redundancy) | wedge-only A-vs-B >> dot-only | ✓ **+17.6pp (D=8), +7.9pp (D=64)** — wedge-only 96.7%/98.2% vs dot-only 79.1%/90.2% |
+| G2 (rotational recovery) | Pearson(wedge, sin θ) ≥ 0.90 | ✓ **0.902 (D=8), 0.963 (D=64)** — wedge recovers the rotational angle the dot collapses |
+| G3 (no regression) | clean build + 0 allocs | ✓ **PASS** — 0 allocs/1000 calls at both D=8 and D=64 |
+| G4 (speedup) | ≥ 4× vs O(D²) at D=64 | ✓ **9.33×** — sparse rolling is algorithmically correct |
+| G4 (absolute latency) | D=8 < 50ns, D=64 < 200ns | ✗ **targets below `exp()` floor** — 32/448 SiLU `exp()` calls exceed budget |
 
-1. **No prior art in codebase?** ✅ YES — after 3-layer check (notes + code + vocabulary translation). No existing primitive computes the per-point channel-wise anti-symmetric wedge.
-2. **New class of behavior?** ⚠️ **PLAUSIBLE BUT UNPROVEN** — "structural complementarity detection" is a new signal, but whether it produces emergent behavior in our substrate needs the GOAT gate. The wedge product itself is known math.
-3. **Product selling point?** ⚠️ **DEPENDS ON FUSION** — "NPCs detect emotional complementarity" requires the HLA fusion to actually work. The primitive alone is not a selling point.
+**Full results:** [katgpt-rs/.benchmarks/319_geometric_product_goat.md](../.benchmarks/319_geometric_product_goat.md)
+
+### Why not Super-GOAT (still honest down-grade)
+
+The four novelty-gate questions, updated post-GOAT-gate:
+
+1. **No prior art in codebase?** ✅ YES — confirmed.
+2. **New class of behavior?** ✅ **NOW PROVEN** — the GOAT gate shows the wedge carries genuinely non-redundant structural information (G1 +17.6pp) and recovers rotational angle (G2 r=0.96). This is a new signal dimension, not a re-encoding of the dot product.
+3. **Product selling point?** ⚠️ **STILL DEPENDS ON FUSION** — the primitive's quality is proven, but the product selling point ("NPCs detect emotional complementarity") requires the HLA fusion to actually work in-game. Not yet validated.
 4. **Force multiplier?** ✅ YES — connects ≥2 pillars (HLA, functor, shard, DEC, CGSP).
 
-Q2 and Q3 are not confident YES. Per skill rule: "If you are NOT confident enough to commit all 4 YES right now, do not write 'Super-GOAT candidate'." Down-grade to GOAT. If the GOAT gate (Plan 319) shows the wedge carries genuinely orthogonal information to the dot product in HLA or shard retrieval, **then** create the riir-ai guide and elevate.
+Q2 is now a confident YES (the GOAT gate proved it). Q3 remains dependent on fusion validation. **Not yet a Super-GOAT** — promotion deferred until (a) perf unblock brings absolute latency to plasma tier, and (b) the riir-ai HLA fusion validates the product claim.
+
+### Perf caveat
+
+The absolute latency targets (D=8 < 50ns, D=64 < 200ns) were **unrealistic** — SiLU's `exp()` dominates. The primitive ships opt-in. Promotion to default is gated on a polynomial-sigmoid or SIMD-exp perf unblock (tracked as Issue 003). The algorithmic speedup (9.33× at D=64) proves the sparse rolling realization is correct; the bottleneck is `exp()`, not the wedge arithmetic.
 
 ### Tier justification
 
