@@ -201,10 +201,10 @@ The four novelty-gate questions, updated post-GOAT-gate:
 
 1. **No prior art in codebase?** ✅ YES — confirmed.
 2. **New class of behavior?** ✅ **NOW PROVEN** — the GOAT gate shows the wedge carries genuinely non-redundant structural information (G1 +17.6pp) and recovers rotational angle (G2 r=0.96). This is a new signal dimension, not a re-encoding of the dot product.
-3. **Product selling point?** ⚠️ **STILL DEPENDS ON FUSION** — the primitive's quality is proven, but the product selling point ("NPCs detect emotional complementarity") requires the HLA fusion to actually work in-game. Not yet validated.
+3. **Product selling point?** ⚠️ **FUSION SHIPPED, RUNTIME VALIDATION PENDING** — the fusion wiring is now shipped (Phase 4 complete): `riir-ai/cgsp_runtime/clifford_bridge.rs` (commit `0bb4b617`, 19 tests) and `riir-neuron-db/index.rs::retrieve_diverse` (commit `33e960e`, 7 tests). The product selling point ("NPCs detect emotional complementarity") now has a runnable implementation, but the in-game validation (G8c formation robustness, G8d faction diversity) has not yet been run. Super-GOAT elevation is gated on G8c/G8d passing.
 4. **Force multiplier?** ✅ YES — connects ≥2 pillars (HLA, functor, shard, DEC, CGSP).
 
-Q2 is now a confident YES (the GOAT gate proved it). Q3 remains dependent on fusion validation. **Not yet a Super-GOAT** — Super-GOAT elevation gated on Phase 4 fusion validation (the riir-ai HLA fusion validates the product claim). The perf unblock (Issue 003) is RESOLVED — `geometric_product` is now default-on.
+Q2 is now a confident YES (the GOAT gate proved it). Q3 has progressed from "depends on fusion" to "fusion shipped, runtime validation pending". **Not yet a Super-GOAT** — Super-GOAT elevation gated on G8c/G8d runtime fusion validation (formation robustness + faction diversity sims). The perf unblock (Issue 003) is RESOLVED — `geometric_product` is now default-on.
 
 ### Perf unblock (Issue 003 RESOLVED, 2026-06-25)
 
@@ -232,9 +232,11 @@ The original absolute latency targets (D=8 < 50ns, D=64 < 200ns) were **structur
 
 - **Open primitive** → `katgpt-rs/crates/katgpt-core/src/` (generic math, no game semantics). New module `geometric_product.rs` under a new `algebra/` subtree or directly in `math/`.
 - **Plan** → `katgpt-rs/.plans/319_geometric_product_latent_interaction.md` (open primitive + benchmark).
-- **riir-ai/riir-chain/riir-neuron-db application** → **UNBLOCKED** (Phase 3 promoted to default-on). Phase 4 fusion guides:
-  - `riir-ai/.research/155_clifford_wedge_npc_emotional_complementarity_guide.md` (HLA fusion selling point)
-  - `riir-neuron-db/.research/007_shard_structural_retrieval_guide.md` (shard retrieval selling point)
+- **riir-ai/riir-chain/riir-neuron-db application** → **SHIPPED** (Phase 4 complete, 2026-06-25). Fusion guides + wiring:
+  - `riir-ai/.research/156_clifford_wedge_npc_emotional_complementarity_guide.md` (HLA fusion selling point — file number corrected 155→156 due to collision)
+  - `riir-neuron-db/.research/008_shard_structural_retrieval_guide.md` (shard retrieval selling point — file number corrected 007→008 due to collision)
+  - `riir-ai/crates/riir-engine/src/cgsp_runtime/clifford_bridge.rs` (complementarity → Sociability CGSP target, `clifford_complementarity` feature, commit `0bb4b617`)
+  - `riir-neuron-db/src/index.rs::retrieve_diverse` (greedy max-wedge-span ensemble, `diverse_retrieval` feature, commit `33e960e`)
 
 ### What stays public vs private (if elevated to Super-GOAT later)
 
@@ -268,4 +270,4 @@ The paper is training-focused (vision backbone, AdamW). Before deferring anythin
 
 ## TL;DR
 
-CliffordNet's channel-wise geometric product `uv = u·v + u∧v` is a modelless latent-interaction primitive (Hadamard + cyclic shift + subtract, `O(D·|S|)`, zero-alloc) that adds a **structural-divergence signal dimension** missing from our dot-product-only latent substrate. It is **complementary** (not redundant) to DEC's spatial `exterior_derivative`, RotorQuant's orthogonal rotors, OFT's skew-symmetric Cayley, and Plan 318's batch cross-product. **Verdict: GOAT — PROMOTED to default-on.** The GOAT gate PROVED the wedge carries non-redundant information (G1 +17.6/+7.9pp, G2 r=0.90/0.96); the perf unblock (polynomial Padé [4/4] SiLU, Issue 003 RESOLVED) delivers 2.06× speedup at D=64. `geometric_product` is now in the `default` feature list. **Super-GOAT elevation** gated on Phase 4 fusion validation (riir-ai HLA complementarity + riir-neuron-db shard retrieval).
+CliffordNet's channel-wise geometric product `uv = u·v + u∧v` is a modelless latent-interaction primitive (Hadamard + cyclic shift + subtract, `O(D·|S|)`, zero-alloc) that adds a **structural-divergence signal dimension** missing from our dot-product-only latent substrate. It is **complementary** (not redundant) to DEC's spatial `exterior_derivative`, RotorQuant's orthogonal rotors, OFT's skew-symmetric Cayley, and Plan 318's batch cross-product. **Verdict: GOAT — PROMOTED to default-on. Phase 4 fusion COMPLETE.** The GOAT gate PROVED the wedge carries non-redundant information (G1 +17.6/+7.9pp, G2 r=0.90/0.96); the perf unblock (polynomial Padé [4/4] SiLU, Issue 003 RESOLVED) delivers 2.06× speedup at D=64. `geometric_product` is now in the `default` feature list. Phase 4 fusion shipped (riir-ai `clifford_bridge` + riir-neuron-db `retrieve_diverse`, both opt-in features). **Super-GOAT elevation** gated on G8c/G8d runtime validation (formation robustness + faction diversity sims) — fusion wiring exists, in-game validation pending.

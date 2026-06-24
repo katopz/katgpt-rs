@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/299_Clifford_Geometric_Product_Latent_Interaction.md](../.research/299_Clifford_Geometric_Product_Latent_Interaction.md)
 **Source paper:** [arXiv:2601.06793](https://arxiv.org/abs/2601.06793) — CliffordNet: All You Need is Geometric Algebra (Ji, Feb 2026)
 **Target:** `katgpt-rs/crates/katgpt-core/src/linalg/geometric_product.rs` (new module) + Cargo feature `geometric_product`
-**Status:** Active — Phase 1 ✅ complete, Phase 2 ✅ complete (quality GOAT), Phase 3 ✅ PROMOTED to default-on (Issue 003 RESOLVED), Phase 4 unblocked
+**Status:** Active — Phase 1 ✅ complete, Phase 2 ✅ complete (quality GOAT), Phase 3 ✅ PROMOTED to default-on (Issue 003 RESOLVED), Phase 4 ✅ COMPLETE (fusion guides + wiring shipped). Super-GOAT elevation gated on G8c/G8d runtime validation.
 
 ---
 
@@ -105,15 +105,17 @@ The core question from Research 299 §5 Q1: **does the wedge signal carry inform
 
 ---
 
-## Phase 4 — Fusion Hooks (UNBLOCKED — primitive promoted to default)
+## Phase 4 — Fusion Hooks (✅ COMPLETE)
 
-Phase 3 promoted `geometric_product` to default-on, so Phase 4 is now unblocked.
-These land in the PRIVATE repos and create the Super-GOAT guides.
+Phase 3 promoted `geometric_product` to default-on. Phase 4 lands the fusion
+wiring + Super-GOAT guides in the PRIVATE repos. **All four tasks complete
+(2026-06-25).** File numbers corrected from plan draft (155→156, 007→008) due
+to pre-existing collisions in the target `.research/` folders.
 
-- [ ] **T4.1** `riir-ai/.research/155_clifford_wedge_npc_emotional_complementarity_guide.md` — HLA fusion selling point (formation-quality scoring via `h_NPC1 ∧ h_NPC2`).
-- [ ] **T4.2** `riir-neuron-db/.research/007_shard_structural_retrieval_guide.md` — shard retrieval selling point (manifold-spanning ensemble selection via `∧`).
-- [ ] **T4.3** Wire `geometric_product_into` into the HLA evolve path (riir-engine `hla/`) as an opt-in complementarity signal alongside the existing dot-product projection. **Respect the raw-vs-latent boundary**: the wedge operates on HLA latents locally; only the resulting scalar (complementarity score) crosses the sync boundary.
-- [ ] **T4.4** Wire into NeuronShard retrieval (riir-neuron-db `index.rs`) as an opt-in `retrieve_diverse(k)` that maximizes total wedge span instead of dot-product similarity. Use `geometric_product_wedge_into` (Issue 003 Option C) for the cold-path retrieval — 201ns at D=64.
+- [x] **T4.1** `riir-ai/.research/156_clifford_wedge_npc_emotional_complementarity_guide.md` — HLA fusion selling point (formation-quality scoring via `h_NPC1 ∧ h_NPC2`). Number corrected from 155 (155 was taken by `Per_NPC_Sub_Goal_Compaction_Guide`).
+- [x] **T4.2** `riir-neuron-db/.research/008_shard_structural_retrieval_guide.md` — shard retrieval selling point (manifold-spanning ensemble selection via `∧`). Number corrected from 007 (007 was taken by `Can_Freeze_As_Cucg_Instance_Crossref`).
+- [x] **T4.3** Wired `geometric_product_wedge_into` into the CGSP runtime (riir-engine `cgsp_runtime/clifford_bridge.rs`) as an opt-in complementarity signal (`clifford_complementarity` feature). Emits a Sociability-axis `NpcCuriosityTarget` with the wedge-derived complementarity score as priority hint. Mirrors the `clr_bridge.rs` pattern. 19 tests pass. **Latent-only**: the 64-dim HLA direction vectors and wedge scalar never cross sync; only the existing 5 emotion scalars do. Commit `0bb4b617` on develop.
+- [x] **T4.4** Wired into NeuronShard retrieval (riir-neuron-db `index.rs`) as opt-in `retrieve_diverse(k)` behind the `diverse_retrieval` feature. Greedy max-wedge-span ensemble selection using `geometric_product_wedge_into` at D=8 (67ns/pair). 7 new tests (19 total pass). Commit `33e960e` on develop.
 
 ---
 
