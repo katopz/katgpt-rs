@@ -20,8 +20,8 @@ use super::certificate::{ProofCertificate, ProofEvidence, ProofProperty, ProofRe
 
 /// Derived-from evidence for P5.3 production viability certificate.
 #[derive(Serialize, Deserialize)]
-struct P5Derived<'a> {
-    derived_from: [&'a str; 2],
+struct P5Derived {
+    derived_from: [String; 2],
     witness_hash: String,
 }
 
@@ -233,7 +233,7 @@ pub fn generate_wasm_witness_certificates(
             },
             ProofEvidence::Custom {
                 data: postcard::to_allocvec(&P5Derived {
-                    derived_from: ["P5.1", "P5.2"],
+                    derived_from: ["P5.1".to_string(), "P5.2".to_string()],
                     witness_hash: to_hex(&witness.witness_hash),
                 })
                 .unwrap_or_default(),

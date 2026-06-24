@@ -212,7 +212,7 @@ pub struct FeedbackBandit {
     /// Inner SR²AM configurator bandit (always 4 arms).
     inner: ConfiguratorBandit,
     /// Per-context stats for feedback arms (arms 4-5).
-    feedback_stats: HashMap<(usize, usize, usize), FeedbackContextStats>,
+    feedback_stats: HashMap<(usize, u8, u8), FeedbackContextStats>,
     /// FeedbackBandit configuration.
     config: FeedbackBanditConfig,
     /// Trajectory summary for stall detection.

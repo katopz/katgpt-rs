@@ -94,7 +94,7 @@ impl RejectedEditBuffer {
             let len = u32::from_le_bytes(
                 data[offset..offset + 4]
                     .try_into()
-                    .map_err(|e| e.to_string())?,
+                    .map_err(|e: std::array::TryFromSliceError| e.to_string())?,
             ) as usize;
             offset += 4;
             if offset + len > data.len() {

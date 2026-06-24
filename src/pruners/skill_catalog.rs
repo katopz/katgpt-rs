@@ -184,13 +184,12 @@ impl SkillCatalog {
         }
         #[cfg(feature = "papaya")]
         {
-            let mut map = self.descriptors.pin();
-            if let Some(d) = map.get_mut(&arm_index) {
-                d.test_status = status;
-                true
-            } else {
-                false
-            }
+            let map = self.descriptors.pin();
+            map.update(arm_index, |d| {
+                let mut new_d = d.clone();
+                new_d.test_status = status;
+                new_d
+            }).is_some()
         }
     }
 

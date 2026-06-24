@@ -13,10 +13,10 @@ static FEEDBACK_SENDER: OnceLock<Sender<Vec<u8>>> = OnceLock::new();
 
 fn get_feedback_sender() -> &'static Sender<Vec<u8>> {
     FEEDBACK_SENDER.get_or_init(|| {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
         std::thread::spawn(move || {
             while let Ok(msg) = rx.recv() {
-                log::debug!("Feedback: {:.100}...", msg);
+                log::debug!("Feedback: {:.100}...", String::from_utf8_lossy(&msg));
             }
         });
         tx

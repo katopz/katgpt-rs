@@ -146,6 +146,7 @@ impl GraphEvaluator {
                 }
         }
 
+        let scratch_capacity = dim_order.len();
         Self {
             input_tokens,
             output_tokens,
@@ -154,7 +155,7 @@ impl GraphEvaluator {
             cumsum_accum,
             attention_entries: HashMap::new(),
             dim_order,
-            scratch_vals: HashMap::with_capacity(dim_order.len()),
+            scratch_vals: HashMap::with_capacity(scratch_capacity),
             scratch_attn_total: Vec::new(),
         }
     }
@@ -327,7 +328,13 @@ impl GraphEvaluator {
                             let lookup = lookup_data
                                 .get(&lookup_id)
                                 .expect("lookup_id exists in graph");
-                            let result = self.attention_insert_and_query(lookup, vals);
+                            let result = Self::attention_insert_and_query(
+                                &mut self.attention_entries,
+                                self.position,
+                                &mut self.scratch_attn_total,
+                                lookup,
+                                vals,
+                            );
                             processed_lookups.insert(lookup_id, result.clone());
                             result
                         }
@@ -356,7 +363,9 @@ impl GraphEvaluator {
     /// 5. Find max dot product: `max(qx·kx + qy·ky)` over all entries
     /// 6. Resolve ties using the lookup's tie-break mode
     fn attention_insert_and_query(
-        &mut self,
+        attention_entries: &mut HashMap<DimId, Vec<AttentionEntry>>,
+        position: usize,
+        scratch_attn_total: &mut Vec<f64>,
         lookup: &LookUp,
         vals: &HashMap<DimId, f64>,
     ) -> Vec<f64> {
@@ -372,9 +381,9 @@ impl GraphEvaluator {
             .collect();
 
         // Insert entry into cache
-        let entries = self.attention_entries.entry(lookup.id).or_default();
+        let entries = attention_entries.entry(lookup.id).or_default();
         entries.push(AttentionEntry {
-            seq: self.position,
+            seq: position,
             kx,
             ky,
             values: raw_vals,
@@ -387,7 +396,7 @@ impl GraphEvaluator {
         // Single-pass: find best score AND accumulate tie-break data
         let n_values = lookup.value_exprs.len();
         let mut best_score = f64::NEG_INFINITY;
-        let total = &mut self.scratch_attn_total;
+        let total = scratch_attn_total;
         total.clear();
         total.resize(n_values, 0.0);
         let mut count = 0usize;
