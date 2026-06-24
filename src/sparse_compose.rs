@@ -136,15 +136,14 @@ pub fn compose_union(a: &SparseTaskVector, b: &SparseTaskVector) -> SparseTaskVe
         }
     }
     // Drain the remaining tail of whichever side hasn't been exhausted.
-    while i < a.mask.len() {
-        mask.push(a.mask[i]);
-        deltas.push(a.deltas[i]);
-        i += 1;
+    // Bulk-extend with a single memcpy per side instead of per-element push.
+    if i < a.mask.len() {
+        mask.extend_from_slice(&a.mask[i..]);
+        deltas.extend_from_slice(&a.deltas[i..]);
     }
-    while j < b.mask.len() {
-        mask.push(b.mask[j]);
-        deltas.push(b.deltas[j]);
-        j += 1;
+    if j < b.mask.len() {
+        mask.extend_from_slice(&b.mask[j..]);
+        deltas.extend_from_slice(&b.deltas[j..]);
     }
 
     let eta = a.eta + b.eta;

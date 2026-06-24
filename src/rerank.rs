@@ -209,6 +209,9 @@ pub fn cosine_score_into(
         if q_norm < 1e-12 {
             continue;
         }
+        // Hoist the query-side reciprocal out of the document loop — one
+        // division per query instead of one per (query, document) pair.
+        let inv_q_norm = 1.0 / q_norm;
         for j in 0..ld {
             let d_row = &documents[j * dim..(j + 1) * dim];
             let d_norm = d_norms[j];
@@ -216,7 +219,8 @@ pub fn cosine_score_into(
                 continue;
             }
             let dot = simd_dot_f32(q_row, d_row, dim);
-            total += dot / (q_norm * d_norm);
+            let inv_d_norm = 1.0 / d_norm;
+            total += dot * (inv_q_norm * inv_d_norm);
             count += 1;
         }
     }

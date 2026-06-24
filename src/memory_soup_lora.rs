@@ -212,14 +212,15 @@ pub fn interpolate_query(
     let scale = 1.0 / (dim as f32).sqrt().max(1e-8);
 
     // Project query: projected[j] = sum_a gate_weight[j*n_embd + a] * query[a]
+    // SIMD-accelerated matvec — one dot product per output lane.
     let mut projected = vec![0.0f32; dim];
     for j in 0..dim {
         let row_off = j * artifact.n_embd;
-        let mut acc = 0.0f32;
-        for a in 0..artifact.n_embd {
-            acc += artifact.gate_weight[row_off + a] * query[a];
-        }
-        projected[j] = acc;
+        projected[j] = crate::simd::simd_dot_f32(
+            &artifact.gate_weight[row_off..row_off + artifact.n_embd],
+            query,
+            artifact.n_embd,
+        );
     }
 
     // Score each checkpoint and apply sigmoid gate.
@@ -227,22 +228,19 @@ pub fn interpolate_query(
         .checkpoints
         .iter()
         .map(|cp| {
-            let mut dot = 0.0f32;
-            for j in 0..dim {
-                dot += projected[j] * cp.repr[j];
-            }
+            let dot = crate::simd::simd_dot_f32(&projected, &cp.repr, dim);
             sigmoid_gate(dot * scale)
         })
         .collect();
 
-    // Interpolate deltas.
+    // Interpolate deltas via fused SAXPY: interpolated += w * cp.delta.
+    // simd_fused_decay_write(dst, decay=1.0, src, scale=w) computes
+    // dst = 1.0*dst + w*src in one NEON/AVX2 pass per chunk.
     let delta_len = artifact.checkpoints[0].delta.len();
     let mut interpolated = vec![0.0f32; delta_len];
     for (i, cp) in artifact.checkpoints.iter().enumerate() {
         let w = gammas[i];
-        for (j, &d) in cp.delta.iter().enumerate() {
-            interpolated[j] += w * d;
-        }
+        crate::simd::simd_fused_decay_write(&mut interpolated, 1.0, &cp.delta, w);
     }
 
     (interpolated, gammas)

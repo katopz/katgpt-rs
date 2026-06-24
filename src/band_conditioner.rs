@@ -280,7 +280,7 @@ fn partial_correlation(x: &[f32], y: &[f32], z_columns: &[&[f32]], n: usize) -> 
     // Heap-allocate because n can be 1000+ (CI tests on long sequences).
     // For the small k (≤ 4) used by band conditioning, this is one alloc
     // per call — acceptable since CI tests are not in the per-token hot path.
-    let total_cols = k + 1;
+    // `basis_cols` ends at `k + 1` (intercept + k z-columns); tracked via mutation below.
     let mut basis = vec![[0.0f32; 8]; n];
 
     // Intercept column.

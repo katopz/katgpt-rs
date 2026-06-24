@@ -285,10 +285,9 @@ impl SpecialistMask {
         for row in 0..self.n_rows() {
             let base = row * d_hidden;
             let row_end = base + d_hidden;
-            // Clear keep flags for this row.
-            for s in &mut scratch[..d_hidden] {
-                *s = 0.0;
-            }
+            // Clear keep flags for this row (bulk fill — one memset, faster
+            // than the per-element scalar loop for the common d_hidden ≥ 64 case).
+            scratch[..d_hidden].fill(0.0);
             // Advance idx past any coords belonging to earlier rows (already
             // consumed in prior iterations — mask is sorted ascending).
             while idx < mask.len() && (mask[idx] as usize) < base {

@@ -28,6 +28,20 @@ impl Default for BoundaryPenalty {
     }
 }
 
+/// Per-instance invariants derived from a [`BoundaryPenalty`].
+///
+/// Computed once per batch of logits (see [`BoundaryPenalty::compute_boundary_score`])
+/// instead of once per logit — removes 1 division + 2 multiplications per
+/// logit from the hot path. Field order: f32s only, no padding.
+#[derive(Clone, Copy)]
+struct BoundaryInvariants {
+    inv_scale: f32,
+    half_scale: f32,
+    near_threshold: f32,
+    inv_scale_20: f32,
+    quant_scale: f32,
+}
+
 impl BoundaryPenalty {
     pub fn new(quant_levels: u32, quant_scale: f32) -> Self {
         Self {
@@ -40,24 +54,40 @@ impl BoundaryPenalty {
 
     /// Compute how close a logit value is to the nearest quantization boundary.
     /// Returns 0.0 if far from boundary, 1.0 if exactly on boundary.
+    ///
+    /// This is the standalone entry point. Hot-path callers that score many
+    /// logits from the same config should use [`Self::compute_boundary_score`],
+    /// which lifts the per-instance invariants out of the per-logit loop.
     pub fn boundary_proximity(&self, logit: f32) -> f32 {
-        // Hoist the per-instance invariants out of the inner loop: callers like
-        // `compute_boundary_score` invoke this once per logit, so we save a
-        // division and multiplication per call.
-        let inv_scale = 1.0 / self.quant_scale;
-        // Quantize to grid
-        let quantized = (logit * inv_scale).round() * self.quant_scale;
-        // Distance to nearest grid point
-        let dist = (logit - quantized).abs();
-        // How close to the midpoint between grid points (the boundary)
-        let half_scale = self.quant_scale * 0.5;
-        let boundary_dist = (dist - half_scale).abs();
+        let inv = self.invariants();
+        Self::proximity_with(logit, &inv)
+    }
 
-        // Sigmoid-based proximity: near boundary → high proximity.
-        // `boundary_epsilon * quant_scale` is constant per call; precompute.
-        let near_threshold = self.boundary_epsilon * self.quant_scale;
-        if boundary_dist < near_threshold {
-            1.0 / (1.0 + (boundary_dist * inv_scale * 20.0 - 5.0).exp())
+    /// Pre-compute the per-instance invariants used by [`Self::proximity_with`].
+    /// Done once per `compute_boundary_score` call instead of once per logit.
+    #[inline]
+    fn invariants(&self) -> BoundaryInvariants {
+        let inv_scale = 1.0 / self.quant_scale;
+        BoundaryInvariants {
+            inv_scale,
+            half_scale: self.quant_scale * 0.5,
+            near_threshold: self.boundary_epsilon * self.quant_scale,
+            inv_scale_20: inv_scale * 20.0,
+            quant_scale: self.quant_scale,
+        }
+    }
+
+    /// Branch-free proximity core operating on pre-computed invariants.
+    #[inline]
+    fn proximity_with(logit: f32, inv: &BoundaryInvariants) -> f32 {
+        // Quantize to grid.
+        let quantized = (logit * inv.inv_scale).round() * inv.quant_scale;
+        // Distance to nearest grid point.
+        let dist = (logit - quantized).abs();
+        // How close to the midpoint between grid points (the boundary).
+        let boundary_dist = (dist - inv.half_scale).abs();
+        if boundary_dist < inv.near_threshold {
+            1.0 / (1.0 + (boundary_dist * inv.inv_scale_20 - 5.0).exp())
         } else {
             0.0
         }
@@ -65,12 +95,18 @@ impl BoundaryPenalty {
 
     /// Compute boundary score for a single token's logits.
     /// Higher score = more penalty (closer to boundaries).
+    ///
+    /// Computes the per-instance invariants **once** and threads them through
+    /// [`Self::proximity_with`] — avoids re-deriving `inv_scale`,
+    /// `half_scale`, `near_threshold`, and `inv_scale * 20.0` for every logit.
     pub fn compute_boundary_score(&self, token_logits: &[f32]) -> f32 {
-        let total_proximity: f32 = token_logits
-            .iter()
-            .map(|&l| self.boundary_proximity(l))
-            .sum();
-        total_proximity / token_logits.len().max(1) as f32
+        if token_logits.is_empty() {
+            return 0.0;
+        }
+        let inv = self.invariants();
+        let total_proximity: f32 =
+            token_logits.iter().map(|&l| Self::proximity_with(l, &inv)).sum();
+        total_proximity / token_logits.len() as f32
     }
 
     /// Apply boundary penalty to draft scores.
