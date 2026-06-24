@@ -244,6 +244,115 @@ impl<A: Clone, const D: usize> SalienceTriGate<A, D> {
         }
     }
 
+    /// Per-tick emit decision with an additive **delegate nudge** (Plan 332
+    /// Phase 6 — KARC anticipation bridge).
+    ///
+    /// Identical to [`Self::decide`] except for one term: the delegate score
+    /// receives an additive bonus `delegate_nudge` before the threshold check:
+    /// ```text
+    /// effective_score_delegate = score_delegate + delegate_nudge
+    /// if score_speak < floor_speak:                       Silent
+    /// elif effective_score_delegate > ceil_delegate:      Delegate(delegate_payload)
+    /// else:                                               Speak
+    /// ```
+    ///
+    /// # Semantics of `delegate_nudge`
+    ///
+    /// The nudge is a precomputed scalar in `[0.0, +∞)` (callers typically
+    /// pass a value in `[0, α]` where `α` is small, e.g. `0.2`). It makes the
+    /// `Delegate` branch **easier** to enter — a positive nudge lowers the
+    /// effective `ceil_delegate` threshold. A nudge of `0.0` makes this method
+    /// bit-identical to [`Self::decide`] (verified by `test_nudge_zero_is_decide`).
+    ///
+    /// Negative nudges are NOT rejected (the crate is game-agnostic — a caller
+    /// may legitimately want to *discourage* delegation in some context), but
+    /// the canonical use case (KARC anticipation: rising arousal → preemptively
+    /// delegate) uses `nudge >= 0`.
+    ///
+    /// # Why a separate method (not a new param on `decide`)
+    ///
+    /// `decide` is the default hot path with a measured 9.11 ns latency (Plan
+    /// 303 G2 bench). Adding a parameter would force every caller to pass
+    /// `0.0` explicitly and would expand the per-call ABI surface. Keeping
+    /// the nudge on a separate method preserves `decide`'s signature and
+    /// zero-cost default path — the caller opts in by name.
+    ///
+    /// # Determinism / Zero allocation
+    ///
+    /// Same guarantees as [`Self::decide`]: bit-identical across runs, no
+    /// `Vec`/`Box`/heap traffic.
+    ///
+    /// # Parameters
+    /// - `a`, `z`, `c`, `delegate_payload`, `tick`: same as [`Self::decide`].
+    /// - `delegate_nudge`: additive bonus to `score_delegate`. `0.0` = no
+    ///   effect. Typical range `[0, 0.5]`.
+    ///
+    /// Reference: Plan 332 Phase 6 T6.1/T6.2/T6.3.
+    #[must_use]
+    #[inline]
+    pub fn decide_with_delegate_nudge(
+        &self,
+        a: &[f32; D],
+        z: f32,
+        c: f32,
+        delegate_nudge: f32,
+        delegate_payload: A,
+        _tick: u64,
+    ) -> SalienceDecision<A> {
+        let d_speak = dot_fma(a, &self.d_speak);
+        let salience = self.w_z.mul_add(z, self.w_c.mul_add(c, d_speak));
+        let score_speak = sigmoid(self.beta_speak * (salience - self.tau_speak));
+
+        let delegate_dot = dot_fma(a, &self.d_delegate);
+        let score_delegate = sigmoid(self.beta_delegate * (delegate_dot - self.tau_delegate));
+        let effective_score_delegate = score_delegate + delegate_nudge;
+
+        if score_speak < self.floor_speak {
+            SalienceDecision::Silent
+        } else if effective_score_delegate > self.ceil_delegate {
+            SalienceDecision::Delegate(delegate_payload)
+        } else {
+            SalienceDecision::Speak
+        }
+    }
+
+    /// Batched form of [`Self::decide_with_delegate_nudge`].
+    ///
+    /// Same contract as [`Self::decide_batch`], with one extra per-row scalar:
+    /// `nudges[i]` is added to row `i`'s `score_delegate` before the threshold
+    /// check. Length must equal `activations.len()` (checked with
+    /// `debug_assert!`, elided in release).
+    ///
+    /// Reference: Plan 332 Phase 6 T6.1.
+    pub fn decide_batch_with_nudge(
+        &self,
+        activations: &[[f32; D]],
+        z: &[f32],
+        c: &[f32],
+        nudges: &[f32],
+        payloads: &[A],
+        tick: u64,
+        out: &mut [SalienceDecision<A>],
+    ) {
+        let n = activations.len();
+        debug_assert_eq!(z.len(), n, "decide_batch_with_nudge: z length mismatch");
+        debug_assert_eq!(c.len(), n, "decide_batch_with_nudge: c length mismatch");
+        debug_assert_eq!(nudges.len(), n, "decide_batch_with_nudge: nudges length mismatch");
+        debug_assert_eq!(payloads.len(), n, "decide_batch_with_nudge: payloads length mismatch");
+        debug_assert_eq!(out.len(), n, "decide_batch_with_nudge: out length mismatch");
+
+        for i in 0..n {
+            out[i] = self.decide_with_delegate_nudge(
+                &activations[i],
+                z[i],
+                c[i],
+                nudges[i],
+                payloads[i].clone(),
+                tick,
+            );
+        }
+    }
+
     /// Convenience constructor for a [`DelegateToken`](super::types::DelegateToken)
     /// (Plan 303 T3.1).
     ///
@@ -650,6 +759,121 @@ mod tests {
         // Row 3 demonstrates Silent precedence: even though a[1]=1 would
         // trigger Delegate on its own, the low salience forces Silent first.
         assert!(matches!(out[3], SalienceDecision::Silent));
+    }
+
+    // ── Phase 6 (Plan 332): delegate nudge tests ─────────────────────
+
+    #[test]
+    fn test_nudge_zero_is_decide() {
+        // A nudge of 0.0 must produce a bit-identical decision to `decide`.
+        // This is the load-bearing backwards-compat guarantee.
+        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
+            D_SPEAK, D_DELEGATE, 0.3, 0.2, 2.0, 2.0, 0.5, 0.5, 0.4, 0.5,
+        );
+        let mut rng = Lcg::new(0xDEAD_BEEF_CAFE_BABE);
+        for _ in 0..500 {
+            let mut a = [0f32; D];
+            for v in a.iter_mut() {
+                *v = rng.next_f32() * 2.0 - 1.0;
+            }
+            let z = rng.next_f32();
+            let c = rng.next_f32();
+            let baseline = gate.decide(&a, z, c, 42, 0);
+            let nudged = gate.decide_with_delegate_nudge(&a, z, c, 0.0, 42, 0);
+            assert_eq!(
+                baseline, nudged,
+                "nudge=0 differs from decide at a={a:?} z={z} c={c}: {baseline:?} vs {nudged:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_nudge_positive_can_flip_speak_to_delegate() {
+        // Construct a gate where the default decision is Speak (delegate_dot
+        // is just barely below the threshold), then verify a positive nudge
+        // can push it over to Delegate.
+        //
+        // delegate_dot = a[1] = 0.4 → score_delegate = sigmoid(2*(0.4-0.5))
+        //                           = sigmoid(-0.2) ≈ 0.450 < ceil=0.5 → Speak (without nudge)
+        // With nudge=0.1: effective = 0.450 + 0.1 = 0.550 > 0.5 → Delegate.
+        let gate: SalienceTriGate<&'static str, D> = SalienceTriGate::new(
+            D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5,
+        );
+        let a = [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+
+        // Sanity: without nudge it's Speak.
+        let d_plain = gate.decide(&a, 0.0, 0.0, "p", 0);
+        assert!(matches!(d_plain, SalienceDecision::Speak), "got {d_plain:?}");
+
+        // With nudge it flips to Delegate.
+        let d_nudged = gate.decide_with_delegate_nudge(&a, 0.0, 0.0, 0.1, "p", 0);
+        match d_nudged {
+            SalienceDecision::Delegate(s) => assert_eq!(s, "p"),
+            other => panic!("expected Delegate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_nudge_cannot_override_silent_precedence() {
+        // Silent has highest precedence (score_speak < floor_speak). Even an
+        // enormous nudge must not bypass this — the nudge only affects the
+        // delegate-vs-speak choice, not the silent floor.
+        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
+            D_SPEAK, D_DELEGATE, 0.0, 0.0, 2.0, 2.0, 0.5, 0.5, 0.9, 0.3,
+        );
+        let a = [0.1, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        // score_speak ≈ 0.31 < 0.9 → Silent regardless of delegate path.
+        let d = gate.decide_with_delegate_nudge(&a, 0.0, 0.0, 100.0, 7, 0);
+        assert!(matches!(d, SalienceDecision::Silent), "got {d:?}");
+    }
+
+    #[test]
+    fn test_nudge_monotone_in_delegate_probability() {
+        // Sweeping nudge from 0 → 1 with delegate_dot pinned just below
+        // threshold should produce at most one Speak→Delegate transition.
+        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
+            D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 10.0, 0.5, 0.5, 0.0, 0.5,
+        );
+        let a = [0.8, 0.45, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+        let mut last_delegate = false;
+        let mut transitions = 0u32;
+        for s in 0..=200 {
+            let nudge = s as f32 / 200.0;
+            let d = gate.decide_with_delegate_nudge(&a, 0.0, 0.0, nudge, 0, 0);
+            let is_delegate = matches!(d, SalienceDecision::Delegate(_));
+            if s > 0 && is_delegate != last_delegate {
+                transitions += 1;
+            }
+            assert!(!matches!(d, SalienceDecision::Silent));
+            last_delegate = is_delegate;
+        }
+        assert_eq!(transitions, 1, "expected one Speak→Delegate flip");
+    }
+
+    #[test]
+    fn test_decide_batch_with_nudge_smoke() {
+        // Two rows: row 0 has no nudge (stays Speak), row 1 has a nudge that
+        // flips it to Delegate.
+        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
+            D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5,
+        );
+        let activations: [[f32; D]; 2] = [
+            [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Speak (delegate_dot 0.4 → score ~0.45 < 0.5)
+            [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // → Delegate with nudge=0.1
+        ];
+        let z = [0.0; 2];
+        let c = [0.0; 2];
+        let nudges = [0.0, 0.1];
+        let payloads = [10u32, 11];
+        let mut out = [SalienceDecision::Silent, SalienceDecision::Silent];
+
+        gate.decide_batch_with_nudge(&activations, &z, &c, &nudges, &payloads, 0, &mut out);
+
+        assert!(matches!(out[0], SalienceDecision::Speak));
+        match &out[1] {
+            SalienceDecision::Delegate(p) => assert_eq!(*p, 11),
+            other => panic!("row 1: expected Delegate(11), got {other:?}"),
+        }
     }
 
     // Hook for the ablation test: expose the gate's d_speak to the reference
