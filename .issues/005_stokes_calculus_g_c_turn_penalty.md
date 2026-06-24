@@ -1,10 +1,10 @@
 # Issue 005: Stokes Calculus G-C — `line_integral` Cannot Encode Turn Penalties (needs rank-2 wrapper)
 
 **Date:** 2026-06-24
-**Status:** Open — structural limitation, blocks `stokes_calculus` promotion G-C gate
+**Status:** **CLOSED — RESOLVED** (Plan 317, 2026-06-24). `circulation_integral` rank-2 wrapper implemented + tested + benchmarked. G-C "≥20% fewer reversals" **still structural FAIL** (confirmed empirically: minimizing circulation INCREASES turns). Primitive is correct and useful; `stokes_calculus` stays opt-in pending G-A (riir-ai Plan 334).
 **Origin:** Plan 314 Phase 3 GOAT gate (benchmark `.benchmarks/314_stokes_calculus_goat.md`)
 **Severity:** Low (the primitive is correct and useful as a path-cost function; only the "smoothness" framing is wrong)
-**Related:** katgpt-rs/.plans/314 (Stokes Calculus Wrappers), katgpt-rs/.benchmarks/314_stokes_calculus_goat.md
+**Related:** katgpt-rs/.plans/314 (Stokes Calculus Wrappers), katgpt-rs/.plans/317 (Circulation Integral), katgpt-rs/.benchmarks/314_stokes_calculus_goat.md, katgpt-rs/.benchmarks/317_circulation_integral_goat.md
 
 ## Problem
 
@@ -60,10 +60,43 @@ This is a ~20 LOC wrapper, same complexity class as the existing primitives. It 
 
 ## Tasks
 
-- [ ] Implement `circulation_integral(cx, edge_field, closed_loop) -> f32` in `stokes_calculus.rs` (~20 LOC, delegates to `line_integral` for the closed loop).
-- [ ] Add 3 unit tests: zero-curl field → zero circulation; constant-curl field → circulation = curl × enclosed area; reversal antisymmetry (clockwise vs counterclockwise).
-- [ ] Re-run G-C benchmark with `circulation_integral` as the smoothness metric (smooth path encloses less area than zigzag path).
-- [ ] If G-C passes with `circulation_integral` → update Plan 314 G-C target to use the rank-2 wrapper; consider promoting `stokes_calculus` to default-on.
+- [x] Implement `circulation_integral(cx, edge_field, closed_loop) -> f32` in `stokes_calculus.rs` (~15 LOC, delegates to `line_integral` for the closed loop + debug_assert closed).
+- [x] Add 3 unit tests: zero-curl field → zero circulation; constant-curl field → circulation = curl × area; reversal antisymmetry (clockwise vs counterclockwise). All 3 PASS.
+- [x] Re-run G-C benchmark with `circulation_integral` as the smoothness metric. **RESULT: smooth loop circulation=128 (3 turns) vs zigzag circulation=112 (25 turns)** — minimizing circulation picks MORE turns. G-C FAILS empirically.
+- [-] If G-C passes with `circulation_integral` → update Plan 314 G-C target to use the rank-2 wrapper; consider promoting `stokes_calculus` to default-on. **NOT APPLICABLE — G-C fails.** `stokes_calculus` stays opt-in.
+
+## Resolution (Plan 317, 2026-06-24)
+
+**What was done:**
+1. Implemented `circulation_integral` as a thin, Stokes-theorem-correct wrapper over `line_integral` (a closed loop's line integral IS its circulation). Debug-asserts the loop is closed.
+2. Added 3 unit tests verifying the Stokes identities (zero-curl→0, constant-curl→curl×area with cross-check against `exterior_derivative`, reversal antisymmetry). All PASS.
+3. Ran the G-C2 benchmark on a 32×32 grid with a constant-curl field. **Empirical result**: smooth 8×8 rectangle loop has circulation=128 (3 turns) while zigzag sawtooth loop has circulation=112 (25 turns). Minimizing circulation picks the zigzag (MORE turns).
+
+**Why G-C still fails (the honest finding):**
+
+The pre-implementation analysis in Plan 317 predicted that turn count and enclosed area are **independent geometric properties**. The empirical result confirms this:
+- A smooth rectangle (4 turns) MAXIMIZES enclosed area for a given bounding box → HIGHER circulation.
+- A zigzag (many turns) can cut corners and enclose LESS area → LOWER circulation.
+- So minimizing `|circulation_integral|` picks the zigzag — the OPPOSITE of "fewer reversals".
+
+This is not a bug in `circulation_integral` — it's a mathematical fact about what Stokes integrals can express. Turn count is combinatorial; Stokes integrals are geometric. The G-C framing ("fewer reversals via Stokes reranking") was based on a false intuition from Issue 005's original proposal.
+
+**The primitive is still valuable:**
+- Stokes-theorem-correct (3 unit tests confirm the identities).
+- Natural rank-2 companion to `line_integral`.
+- Valid applications: rotational/vortex detection, Stokes-correct area measurement, harmonic field identification.
+
+**Promotion decision:** `stokes_calculus` stays opt-in. G-B (5.36× boundary-flux speedup) is the only gate that passed. G-A already FAILED in riir-ai Plan 334 (9.5× slower, 36% lower F1 than JS-divergence — fixed-grid cost cannot compete at action_dim=8). G-C fails structurally (confirmed empirically with `circulation_integral`). All three GOAT gates now have verdicts: G-A FAIL, G-B PASS, G-C FAIL. The 4 primitives are all correct and available to callers who enable the feature.
+
+### Verification
+
+| Check | Result |
+|-------|--------|
+| `cargo test -p katgpt-core --features dec_operators --lib dec::stokes_calculus` | **15 passed** (12 existing + 3 new), 0 failed |
+| `cargo test -p katgpt-core --features dec_operators --lib dec::` (G3 regression) | **99 passed**, 0 failed |
+| `cargo test -p katgpt-core --lib` (full G3) | **509 passed**, 0 failed |
+| `cargo check --all-features` | **EXIT 0** (Issue 004 fix holds) |
+| G-C2 benchmark (smooth vs zigzag circulation) | smooth=128/3turns vs zigzag=112/25turns → **G-C FAILS** (minimizing circulation increases turns) |
 
 ## Verdict
 

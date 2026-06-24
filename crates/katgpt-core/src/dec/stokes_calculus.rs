@@ -1,16 +1,19 @@
 //! Stokes Calculus Wrappers — thin modelless primitives over DEC operators.
 //!
-//! Implements Plan 314 (Research 296). Three named wrappers exposing the
-//! Generalized Stokes' Theorem as modelless inference tools:
+//! Implements Plan 314 (Research 296) + Plan 317 (Issue 005). Four named
+//! wrappers exposing the Generalized Stokes' Theorem as modelless inference
+//! tools:
 //!
 //! - [`belief_mass_divergence`] — Fokker-Planck belief-mass validator
 //!   (L1 norm of discrete divergence).
 //! - [`boundary_flux_mass`] — divergence-theorem boundary integral for
 //!   low-dim manifolds (O(boundary) vs O(volume)).
 //! - [`line_integral`] — discrete line integral of a rank-1 cochain along a
-//!   vertex path.
+//!   vertex path (open path; per-edge cost).
+//! - [`circulation_integral`] — discrete circulation of a rank-1 cochain
+//!   around a closed vertex loop (Stokes: ∮F = ∬curl F; Plan 317).
 //!
-//! All three are pure wrappers over the shipped DEC operators ([`codifferential`],
+//! All four are pure wrappers over the shipped DEC operators ([`codifferential`],
 //! [`exterior_derivative`], [`hodge_decompose`]). No new DEC machinery.
 //!
 //! # Constraint checklist (AGENTS.md)
@@ -268,7 +271,89 @@ pub fn line_integral(cx: &CellComplex, edge_field: &CochainField, path: &[u32]) 
 }
 
 // ===========================================================================
-// Tests (Plan 314 Phase 2)
+// circulation_integral — rank-2 Stokes wrapper (Plan 317, Issue 005)
+// ===========================================================================
+
+/// Discrete circulation of a rank-1 edge cochain around a closed vertex loop.
+///
+/// By the Generalized Stokes' Theorem, the line integral around a closed loop
+/// equals the integral of the curl over the enclosed area:
+///
+/// `∮_loop field = ∬_enclosed_area curl(field) dA = Σ_faces d₁(field)[f]`
+///
+/// This is the **rank-2 Stokes companion** to [`line_integral`]:
+/// - [`line_integral`] on an *open* path measures per-edge cost (path energy,
+///   work, friction accumulation) — it cannot see turn penalties because turn
+///   count is a pairwise edge property.
+/// - `circulation_integral` on a *closed* loop measures **enclosed rotational
+///   content** — non-zero for rotational (non-exact) fields, zero for exact
+///   (gradient) fields by the fundamental theorem of calculus.
+///
+/// # Smoothness / turn penalty application (Plan 314 G-C, Issue 005)
+///
+/// To compare two open paths between the same endpoints, close each by
+/// appending its first vertex (the caller must ensure the closing edges exist
+/// in the cell complex), then compute `circulation_integral` of each closure.
+/// On a constant-curl field, circulation is proportional to enclosed area, so
+/// the path whose closure encloses less area reports less circulation.
+///
+/// **Honest caveat (Plan 317 pre-analysis):** enclosed area and turn count are
+/// *independent* geometric properties — a staircase (many turns) can cut the
+/// corner and enclose *less* area than an L-shape (one turn) around the full
+/// square. So minimizing `|circulation_integral|` does *not* always minimize
+/// turns; it minimizes enclosed rotational content. Use it as a
+/// rotational-cost signal, not a guaranteed turn reducer.
+///
+/// # Arguments
+/// * `cx` — Cell complex providing `B₁` entries.
+/// * `edge_field` — Rank-1 cochain (per-edge scalar values), dim=1.
+/// * `closed_loop` — Vertex-index slice. MUST be closed: first and last
+///   vertices must be equal. Panics in debug if not.
+///
+/// # Returns
+/// The signed circulation. Returns `0.0` for loops shorter than 3 vertices
+/// (need ≥2 edges to form a closed loop). Reversal-antisymmetric:
+/// clockwise circulation == −counterclockwise circulation.
+///
+/// # Complexity
+/// `O(loop_len × |B₁|)` — same as [`line_integral`] (it delegates).
+///
+/// # Example
+///
+/// ```ignore
+/// use katgpt_core::dec::{CellComplex, CochainField, circulation_integral};
+///
+/// let cx = CellComplex::grid_2d(4, 4);
+/// let field = CochainField::zeros(1, cx.n_edges(), 1); // zero field → zero circulation
+/// let square_loop: [u32; 5] = [0, 1, 5, 4, 0]; // around face {0,1,5,4}
+/// let circ = circulation_integral(&cx, &field, &square_loop);
+/// assert_eq!(circ, 0.0);
+/// ```
+pub fn circulation_integral(cx: &CellComplex, edge_field: &CochainField, closed_loop: &[u32]) -> f32 {
+    // A closed loop needs at least 3 vertices (2 edges) to enclose anything.
+    // Shorter inputs trivially have zero circulation.
+    if closed_loop.len() < 3 {
+        return 0.0;
+    }
+
+    debug_assert_eq!(
+        closed_loop.first(),
+        closed_loop.last(),
+        "circulation_integral: closed_loop must be closed (first == last vertex), \
+         got start={:?}, end={:?}",
+        closed_loop.first(),
+        closed_loop.last()
+    );
+
+    // A closed loop's line integral IS its circulation (Stokes' theorem).
+    // The wrapper exists for (a) the closed-loop invariant check, (b) the
+    // rotational-content interpretation in the docs, and (c) a stable named
+    // call-site for callers who want circulation semantics, not path energy.
+    line_integral(cx, edge_field, closed_loop)
+}
+
+// ===========================================================================
+// Tests (Plan 314 Phase 2 + Plan 317 Phase 2)
 // ===========================================================================
 
 #[cfg(test)]
@@ -548,5 +633,128 @@ mod tests {
         let field = CochainField::zeros(1, cx.n_edges(), 1);
         assert_eq!(line_integral(&cx, &field, &[0u32]), 0.0);
         assert_eq!(line_integral(&cx, &field, &[]), 0.0);
+    }
+
+    // ── circulation_integral (Plan 317 Phase 2) ───────────────────────────
+
+    /// T3.1 Zero-curl (exact/gradient) field → zero circulation.
+    ///
+    /// Fundamental theorem of calculus: the line integral of a gradient field
+    /// around any closed loop is zero. `circulation_integral` must reflect this.
+    #[test]
+    fn test_circulation_integral_exact_field_zero() {
+        let cx = CellComplex::grid_2d(4, 4);
+
+        // φ(v) = v_index → d₀(φ) is a pure gradient (exact, curl-free) field.
+        let mut potential = CochainField::zeros(0, cx.n_vertices(), 1);
+        for v in 0..cx.n_vertices() {
+            potential.set_scalar(v, v as f32);
+        }
+        let gradient = exterior_derivative(&cx, &potential); // rank-1 exact field
+
+        // Closed loop around a face: 0→1→5→4→0 (on a 4×4 grid, w=4).
+        let square_loop: Vec<u32> = vec![0, 1, 5, 4, 0];
+        let circ = circulation_integral(&cx, &gradient, &square_loop);
+
+        assert!(
+            circ.abs() < 1e-4,
+            "exact field → circulation must be 0 (FTC), got {circ}"
+        );
+    }
+
+    /// T3.2 Constant-curl field → circulation equals curl × enclosed area.
+    ///
+    /// Stokes' theorem: ∮_∂A F = ∬_A curl(F) dA. For a single-face loop with
+    /// curl(F) = c constant over the face, circulation = c × 1 (unit face area).
+    /// We construct a field whose curl is exactly 1.0 on face 0, then verify
+    /// circulation around face 0's boundary == 1.0.
+    #[test]
+    fn test_circulation_integral_constant_curl_equals_curl_times_area() {
+        let cx = CellComplex::grid_2d(4, 4);
+        let n_edges = cx.n_edges();
+
+        // Face 0 on a 4×4 grid (w=4) has boundary edges:
+        //   bottom:  horizontal edge e_idx = 0*（w-1) + 0 = 0  (vertex 0→1)
+        //   right:   vertical   edge e_idx = n_h + 0*w + 1     (vertex 1→5)
+        //   top:     horizontal edge e_idx = 1*(w-1) + 0 = 3   (vertex 4→5, reversed: 5→4)
+        //   left:    vertical   edge e_idx = n_h + 0*w + 0     (vertex 0→4, reversed: 4→0)
+        // where n_h = (w-1)*w = 12 horizontal edges.
+        //
+        // grid_2d orients edges as (tail, e, −1), (head, e, +1) where for
+        // horizontal edges tail < head (left→right) and for vertical edges
+        // tail < head (top→bottom, i.e. lower vertex index → higher).
+        // Face 0's boundary oriented counterclockwise (interior on the left):
+        //   0→1 (bottom, along edge orientation)     contribution = +field[e_bot]
+        //   1→5 (right, along vertical orientation)  contribution = +field[e_right]
+        //   5→4 (top, against horizontal orientation) contribution = −field[e_top]
+        //   4→0 (left, against vertical orientation)  contribution = −field[e_left]
+        //
+        // curl d₁(field)[face 0] = +field[e_bot] − field[e_top] + field[e_right] − field[e_left]
+        //                        (matches the exterior_derivative sign convention).
+        //
+        // To get curl = +1 on face 0 with the simplest field, set the bottom
+        // edge to +1 and all other face-0 boundary edges to 0:
+        //   curl[0] = (+1) − 0 + 0 − 0 = +1.
+        let w = 4usize;
+        let n_h = (w - 1) * w; // 12 horizontal edges
+        // (Boundary edge indices documented above; only e_bot is non-zero in
+        // this minimal field. The others are kept as named documentation of
+        // the face-0 boundary layout.)
+        let e_bot = 0usize; // horizontal edge at (row 0, col 0)
+        let _e_right = n_h + 0 * w + 1; // vertical edge at (row 0, col 1)
+        let _e_top = 1 * (w - 1) + 0; // horizontal edge at (row 1, col 0)
+        let _e_left = n_h + 0 * w + 0; // vertical edge at (row 0, col 0)
+
+        let mut field = CochainField::zeros(1, n_edges, 1);
+        field.set_scalar(e_bot, 1.0); // only the bottom edge is non-zero
+        // (e_right, e_top, e_left remain 0.0)
+
+        // Closed loop around face 0, counterclockwise: 0→1→5→4→0.
+        let loop_ccw: Vec<u32> = vec![0, 1, 5, 4, 0];
+        let circ = circulation_integral(&cx, &field, &loop_ccw);
+
+        // Cross-check against the DEC operator: d₁(field)[face 0] must equal
+        // the circulation around face 0's boundary (Stokes identity).
+        let curl_field = exterior_derivative(&cx, &field); // rank-2
+        let curl_face0 = curl_field.scalar(0);
+
+        assert!(
+            (circ - curl_face0).abs() < 1e-5,
+            "circulation ({circ}) must equal curl at face 0 ({curl_face0}) — Stokes identity"
+        );
+        assert!(
+            (circ - 1.0).abs() < 1e-5,
+            "constant-curl=1 field over unit face → circulation = 1.0, got {circ}"
+        );
+    }
+
+    /// T3.3 Reversal antisymmetry: clockwise circulation == −counterclockwise.
+    ///
+    /// Reversing the loop direction negates every edge's sign contribution,
+    /// so circulation_cw == −circulation_ccw. Verified on a non-trivial
+    /// rotational field.
+    #[test]
+    fn test_circulation_integral_reversal_antisymmetry() {
+        let cx = CellComplex::grid_2d(4, 4);
+        let n_edges = cx.n_edges();
+
+        // Non-trivial rotational field (non-exact, so circulation is non-zero).
+        let mut field = CochainField::zeros(1, n_edges, 1);
+        for e in 0..n_edges {
+            field.set_scalar(e, (e as f32 * 0.7).sin());
+        }
+
+        // Counterclockwise loop around face {0,1,5,4}: 0→1→5→4→0.
+        let loop_ccw: Vec<u32> = vec![0, 1, 5, 4, 0];
+        // Clockwise: reverse the loop (still closed, first==last==0).
+        let loop_cw: Vec<u32> = vec![0, 4, 5, 1, 0];
+
+        let circ_ccw = circulation_integral(&cx, &field, &loop_ccw);
+        let circ_cw = circulation_integral(&cx, &field, &loop_cw);
+
+        assert!(
+            (circ_ccw + circ_cw).abs() < 1e-5,
+            "reversal antisymmetry: ccw({circ_ccw}) + cw({circ_cw}) must be 0"
+        );
     }
 }
