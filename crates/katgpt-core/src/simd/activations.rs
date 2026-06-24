@@ -33,7 +33,15 @@ pub fn simd_exp_inplace(x: &mut [f32]) {
             scalar_exp_inplace(x)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_exp_inplace(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_exp_inplace(x)
     }
@@ -62,7 +70,15 @@ pub fn simd_exp_sum_inplace(x: &mut [f32]) -> f32 {
             scalar_exp_sum_inplace(x)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_exp_sum_inplace(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_exp_sum_inplace(x)
     }
@@ -86,7 +102,15 @@ pub fn simd_reciprocal_inplace(x: &mut [f32]) {
             scalar_reciprocal_inplace(x)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_reciprocal_inplace(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_reciprocal_inplace(x)
     }
@@ -251,7 +275,17 @@ pub fn simd_sigmoid_tanh_clamp_inplace(out: &mut [f32], a: &[f32], q: &[f32], cl
         }
         return;
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe {
+            wasm32_sigmoid_tanh_clamp(&mut out[..len], &a[..len], &q[..len], clamp)
+        }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_sigmoid_tanh_clamp(&mut out[..len], &a[..len], &q[..len], clamp)
     }
@@ -303,7 +337,15 @@ pub fn simd_sigmoid_inplace(x: &mut [f32]) {
         }
         return;
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_sigmoid_inplace(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_sigmoid_inplace(x)
     }
@@ -1056,5 +1098,417 @@ unsafe fn neon_exp_sum_inplace(x: &mut [f32]) -> f32 {
         }
 
         sum
+    }
+}
+
+// ── WASM SIMD128 backends (Issue 007) ──────────────────────────
+//
+// 4-wide f32, same algorithmic structure as the NEON kernels (also 4-wide).
+// Gate: `#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]`.
+//
+// Mapping notes (NEON → WASM SIMD128):
+//   vld1q_f32       → v128_load (with .cast())
+//   vst1q_f32       → v128_store (with .cast())
+//   vrndq_f32       → f32x4_nearest          (round to nearest-even, ties to even)
+//   vcvtq_s32_f32   → i32x4_trunc_sat_f32x4  (saturating; identical for in-range n)
+//   vmulq/vaddq/vsubq_f32 → f32x4_mul/add/sub
+//   vdivq_f32       → f32x4_div
+//   vminq/vmaxq_f32 → f32x4_min/max
+//   vnegq_f32       → f32x4_neg
+//   vminq/vmaxq_s32 → i32x4_min/max_s
+//   vaddq_s32       → i32x4_add
+//   vshlq_n_s32::<23> → i32x4_shl(_, 23)
+//   vdupq_n_f32/s32 → f32x4_splat / i32x4_splat
+//   vreinterpretq_f32_s32 → no-op. WASM SIMD128 has a single `v128` register
+//     type; an i32x4 result is reinterpreted as f32 implicitly by passing it
+//     straight into an f32x4 op. (This is the intended design.)
+//
+// No FMA intrinsic in the WASM SIMD128 base proposal — the Cephes polynomial
+// uses separate `f32x4_mul` + `f32x4_add`. NEON's `cephes_exp_scalar` reference
+// also uses separate mul+add (no FMA), so the WASM path matches the scalar
+// reference modulo the rounding of the intermediate `n*ln2` products, which can
+// differ by ≤ 1 ULP on some inputs (acceptable, documented here per the
+// FMA-contraction rule for this issue).
+
+/// WASM SIMD128 reciprocal: `x[i] = 1.0 / x[i]`. Mirrors `neon_reciprocal_inplace`
+/// (4-wide `f32x4_div`). Uses plain division (~1 ULP), NOT a Newton-Raphson
+/// reciprocal estimate — matches the NEON/AVX2 kernels which use `vdivq_f32` /
+/// `_mm256_div_ps`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_reciprocal_inplace(x: &mut [f32]) {
+    use core::arch::wasm32::{f32x4_div, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let len = x.len();
+        let chunks = len / 4;
+        let ones = f32x4_splat(1.0);
+        for i in 0..chunks {
+            let v = v128_load(x.as_ptr().add(i * 4).cast());
+            let r = f32x4_div(ones, v);
+            v128_store(x.as_mut_ptr().add(i * 4).cast(), r);
+        }
+        for i in (chunks * 4)..len {
+            *x.get_unchecked_mut(i) = 1.0 / *x.get_unchecked(i);
+        }
+    }
+}
+
+/// WASM SIMD128 in-place exp via the 6th-order Cephes polynomial. Mirrors
+/// `neon_exp_inplace` (4-wide). See the backend mapping notes at the top of
+/// this section for the NEON→WASM intrinsic translation.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_exp_inplace(x: &mut [f32]) {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_mul, f32x4_nearest, f32x4_splat, f32x4_sub, i32x4_add, i32x4_max,
+        i32x4_min, i32x4_shl, i32x4_splat, i32x4_trunc_sat_f32x4, v128_load, v128_store,
+    };
+
+    unsafe {
+        let v_inv_ln2 = f32x4_splat(CEPHES_INV_LN2);
+        let v_ln2_hi = f32x4_splat(CEPHES_LN2_HI);
+        let v_ln2_lo = f32x4_splat(CEPHES_LN2_LO);
+        let v_one = f32x4_splat(1.0);
+        let v_half = f32x4_splat(0.5);
+        let v_third = f32x4_splat(1.0 / 3.0);
+        let v_quarter = f32x4_splat(0.25);
+        let v_fifth = f32x4_splat(0.2);
+        let v_sixth = f32x4_splat(1.0 / 6.0);
+        let v127 = i32x4_splat(127);
+        let vneg126 = i32x4_splat(-126);
+        let v_bias = i32x4_splat(127);
+
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            let vx = v128_load(x.as_ptr().add(i).cast());
+
+            // Range reduction: n = round(x * inv_ln2)
+            let vn_f = f32x4_nearest(f32x4_mul(vx, v_inv_ln2));
+            let vn_i = i32x4_trunc_sat_f32x4(vn_f);
+
+            // g = x - n * ln2_hi - n * ln2_lo
+            let vg = f32x4_sub(
+                f32x4_sub(vx, f32x4_mul(vn_f, v_ln2_hi)),
+                f32x4_mul(vn_f, v_ln2_lo),
+            );
+
+            // Cephes 6th-order polynomial — Horner-chain form matching
+            // `cephes_exp_scalar`: Q = 1 + g·(1 + g/2·(1 + g/3·(1 + g/4·(1 + g/5·(1 + g/6))))).
+            let p6 = f32x4_add(v_one, f32x4_mul(vg, v_sixth)); // 1 + g/6
+            let p5 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_fifth), p6)); // 1 + g/5·p6
+            let p4 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_quarter), p5)); // 1 + g/4·p5
+            let p3 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_third), p4)); // 1 + g/3·p4
+            let p2 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_half), p3)); // 1 + g/2·p3
+            let q = f32x4_add(v_one, f32x4_mul(vg, p2)); // 1 + g·p2
+
+            // 2^n via branchless bit manipulation: clamp n to [-126, 127], then
+            // (n + 127) << 23 reinterpreted as f32. The i32x4 result is passed
+            // straight into f32x4_mul — WASM reinterprets the bits implicitly.
+            let vn_clamped = i32x4_max(i32x4_min(vn_i, v127), vneg126);
+            let v_shifted = i32x4_shl(i32x4_add(vn_clamped, v_bias), 23);
+            let vresult = f32x4_mul(v_shifted, q);
+
+            v128_store(x.as_mut_ptr().add(i).cast(), vresult);
+            i += 4;
+        }
+
+        // Scalar tail
+        while i < x.len() {
+            *x.get_unchecked_mut(i) = cephes_exp_scalar(*x.get_unchecked(i));
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 fused exp + horizontal sum. Mirrors `neon_exp_sum_inplace`
+/// (4 accumulators × 4 lanes = 16 elements per outer iter for ILP). Horizontal
+/// reduce via 4× `f32x4_extract_lane` (WASM has no `vaddvq_f32` equivalent).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_exp_sum_inplace(x: &mut [f32]) -> f32 {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_nearest, f32x4_splat, f32x4_sub, i32x4_add,
+        i32x4_max, i32x4_min, i32x4_shl, i32x4_splat, i32x4_trunc_sat_f32x4, v128_load,
+        v128_store,
+    };
+
+    unsafe {
+        let v_inv_ln2 = f32x4_splat(CEPHES_INV_LN2);
+        let v_ln2_hi = f32x4_splat(CEPHES_LN2_HI);
+        let v_ln2_lo = f32x4_splat(CEPHES_LN2_LO);
+        let v_one = f32x4_splat(1.0);
+        let v_half = f32x4_splat(0.5);
+        let v_third = f32x4_splat(1.0 / 3.0);
+        let v_quarter = f32x4_splat(0.25);
+        let v_fifth = f32x4_splat(0.2);
+        let v_sixth = f32x4_splat(1.0 / 6.0);
+        let v127 = i32x4_splat(127);
+        let vneg126 = i32x4_splat(-126);
+        let v_bias = i32x4_splat(127);
+
+        let mut acc0 = f32x4_splat(0.0);
+        let mut acc1 = f32x4_splat(0.0);
+        let mut acc2 = f32x4_splat(0.0);
+        let mut acc3 = f32x4_splat(0.0);
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        // Main loop: 16 elements per iteration (4 accumulators × 4 lanes).
+        for _ in 0..chunks4 {
+            macro_rules! step {
+                ($acc:expr, $off:expr) => {{
+                    let vx = v128_load(x.as_ptr().add(i + $off).cast());
+                    let vn_f = f32x4_nearest(f32x4_mul(vx, v_inv_ln2));
+                    let vn_i = i32x4_trunc_sat_f32x4(vn_f);
+                    let vg = f32x4_sub(
+                        f32x4_sub(vx, f32x4_mul(vn_f, v_ln2_hi)),
+                        f32x4_mul(vn_f, v_ln2_lo),
+                    );
+                    // Cephes 6th-order polynomial — Horner-chain form (Issue 027).
+                    let p6 = f32x4_add(v_one, f32x4_mul(vg, v_sixth));
+                    let p5 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_fifth), p6));
+                    let p4 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_quarter), p5));
+                    let p3 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_third), p4));
+                    let p2 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_half), p3));
+                    let q = f32x4_add(v_one, f32x4_mul(vg, p2));
+                    let vn_clamped = i32x4_max(i32x4_min(vn_i, v127), vneg126);
+                    let v_shifted = i32x4_shl(i32x4_add(vn_clamped, v_bias), 23);
+                    let r = f32x4_mul(v_shifted, q);
+                    v128_store(x.as_mut_ptr().add(i + $off).cast(), r);
+                    $acc = f32x4_add($acc, r);
+                }};
+            }
+            step!(acc0, 0);
+            step!(acc1, 4);
+            step!(acc2, 8);
+            step!(acc3, 12);
+            i += 16;
+        }
+
+        // Horizontal reduce: acc0+acc1+acc2+acc3 → 4 lanes → scalar.
+        let s01 = f32x4_add(acc0, acc1);
+        let s23 = f32x4_add(acc2, acc3);
+        let s = f32x4_add(s01, s23);
+        let mut sum = f32x4_extract_lane::<0>(s)
+            + f32x4_extract_lane::<1>(s)
+            + f32x4_extract_lane::<2>(s)
+            + f32x4_extract_lane::<3>(s);
+
+        // Remaining 4-element chunks into a single accumulator.
+        let mut acc_rem = f32x4_splat(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            let vx = v128_load(x.as_ptr().add(i).cast());
+            let vn_f = f32x4_nearest(f32x4_mul(vx, v_inv_ln2));
+            let vn_i = i32x4_trunc_sat_f32x4(vn_f);
+            let vg = f32x4_sub(
+                f32x4_sub(vx, f32x4_mul(vn_f, v_ln2_hi)),
+                f32x4_mul(vn_f, v_ln2_lo),
+            );
+            // Cephes 6th-order polynomial — Horner-chain form (Issue 027).
+            let p6 = f32x4_add(v_one, f32x4_mul(vg, v_sixth));
+            let p5 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_fifth), p6));
+            let p4 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_quarter), p5));
+            let p3 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_third), p4));
+            let p2 = f32x4_add(v_one, f32x4_mul(f32x4_mul(vg, v_half), p3));
+            let q = f32x4_add(v_one, f32x4_mul(vg, p2));
+            let vn_clamped = i32x4_max(i32x4_min(vn_i, v127), vneg126);
+            let v_shifted = i32x4_shl(i32x4_add(vn_clamped, v_bias), 23);
+            let r = f32x4_mul(v_shifted, q);
+            v128_store(x.as_mut_ptr().add(i).cast(), r);
+            acc_rem = f32x4_add(acc_rem, r);
+            i += 4;
+        }
+        sum += f32x4_extract_lane::<0>(acc_rem)
+            + f32x4_extract_lane::<1>(acc_rem)
+            + f32x4_extract_lane::<2>(acc_rem)
+            + f32x4_extract_lane::<3>(acc_rem);
+
+        // Scalar tail (0-3 elements)
+        while i < len {
+            let e = cephes_exp_scalar(*x.get_unchecked(i));
+            *x.get_unchecked_mut(i) = e;
+            sum += e;
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+/// WASM SIMD128 in-place sigmoid: `x[i] = 1/(1 + e^{-x[i]})`. Mirrors
+/// `neon_sigmoid_inplace` (4-wide). exp(-x) via the same Cephes polynomial, then
+/// `f32x4_div` for the reciprocal. Scalar tail uses `fast_sigmoid` to stay
+/// bit-exact with the pre-SIMD code on odd-length buffers (tail = len % 4).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_sigmoid_inplace(x: &mut [f32]) {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_div, f32x4_mul, f32x4_nearest, f32x4_neg, f32x4_splat, f32x4_sub,
+        i32x4_add, i32x4_max, i32x4_min, i32x4_shl, i32x4_splat, i32x4_trunc_sat_f32x4,
+        v128_load, v128_store,
+    };
+
+    unsafe {
+        let v_inv_ln2 = f32x4_splat(CEPHES_INV_LN2);
+        let v_ln2_hi = f32x4_splat(CEPHES_LN2_HI);
+        let v_ln2_lo = f32x4_splat(CEPHES_LN2_LO);
+        let v_one = f32x4_splat(1.0);
+        let v_half = f32x4_splat(0.5);
+        let v_third = f32x4_splat(1.0 / 3.0);
+        let v_quarter = f32x4_splat(0.25);
+        let v_fifth = f32x4_splat(0.2);
+        let v_sixth = f32x4_splat(1.0 / 6.0);
+        let v127 = i32x4_splat(127);
+        let vneg126 = i32x4_splat(-126);
+        let v_bias = i32x4_splat(127);
+
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            // σ(x) = 1/(1 + exp(-x)). Compute exp(-x) via the Cephes polynomial.
+            let vx = f32x4_neg(v128_load(x.as_ptr().add(i).cast()));
+
+            let vn_f = f32x4_nearest(f32x4_mul(vx, v_inv_ln2));
+            let vn_i = i32x4_trunc_sat_f32x4(vn_f);
+
+            let vg = f32x4_sub(
+                f32x4_sub(vx, f32x4_mul(vn_f, v_ln2_hi)),
+                f32x4_mul(vn_f, v_ln2_lo),
+            );
+
+            // Cephes 6th-order polynomial — Horner form matching `cephes_exp_scalar`.
+            let gc_sixth = f32x4_mul(vg, v_sixth);
+            let p6 = f32x4_add(v_one, gc_sixth);
+            let gc_fifth = f32x4_mul(vg, v_fifth);
+            let p5 = f32x4_add(v_one, f32x4_mul(gc_fifth, p6));
+            let gc_quarter = f32x4_mul(vg, v_quarter);
+            let p4 = f32x4_add(v_one, f32x4_mul(gc_quarter, p5));
+            let gc_third = f32x4_mul(vg, v_third);
+            let p3 = f32x4_add(v_one, f32x4_mul(gc_third, p4));
+            let gc_half = f32x4_mul(vg, v_half);
+            let p2 = f32x4_add(v_one, f32x4_mul(gc_half, p3));
+            let qpoly = f32x4_add(v_one, f32x4_mul(vg, p2));
+
+            // 2^n via branchless bit manipulation. Clamp n to [-126, 127] — folds
+            // the |x| > 40 early-exit: large positive x → exp(-x) → 0 (σ → 1),
+            // large negative x → exp(-x) → inf (σ → 0). Both correct saturation.
+            let vn_clamped = i32x4_max(i32x4_min(vn_i, v127), vneg126);
+            let v_shifted = i32x4_shl(i32x4_add(vn_clamped, v_bias), 23);
+            let exp_neg_x = f32x4_mul(v_shifted, qpoly);
+
+            // σ = 1 / (1 + exp(-x)). f32x4_div gives ~1 ULP.
+            let denom = f32x4_add(v_one, exp_neg_x);
+            let sigma = f32x4_div(v_one, denom);
+
+            v128_store(x.as_mut_ptr().add(i).cast(), sigma);
+            i += 4;
+        }
+
+        // Scalar tail — bit-exact with the pre-SIMD code via fast_sigmoid.
+        while i < x.len() {
+            *x.get_unchecked_mut(i) = fast_sigmoid(*x.get_unchecked(i));
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 fused sigmoid → tanh-like clamp. Mirrors `neon_sigmoid_tanh_clamp`
+/// (4-wide). Computes `out[i] = (2·σ(a[i]+q[i]) − 1).clamp(-clamp, clamp)` via
+/// the same Cephes polynomial as `wasm32_exp_inplace`, then `f32x4_div` for the
+/// reciprocal and `f32x4_min`/`f32x4_max` for the clamp. Scalar tail uses
+/// `fast_sigmoid` to stay bit-exact on odd-length buffers (tail = len % 4).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: f32) {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_div, f32x4_max, f32x4_min, f32x4_mul, f32x4_nearest, f32x4_neg,
+        f32x4_splat, f32x4_sub, i32x4_add, i32x4_max, i32x4_min, i32x4_shl, i32x4_splat,
+        i32x4_trunc_sat_f32x4, v128_load, v128_store,
+    };
+
+    unsafe {
+        let v_inv_ln2 = f32x4_splat(CEPHES_INV_LN2);
+        let v_ln2_hi = f32x4_splat(CEPHES_LN2_HI);
+        let v_ln2_lo = f32x4_splat(CEPHES_LN2_LO);
+        let v_one = f32x4_splat(1.0);
+        let v_half = f32x4_splat(0.5);
+        let v_third = f32x4_splat(1.0 / 3.0);
+        let v_quarter = f32x4_splat(0.25);
+        let v_fifth = f32x4_splat(0.2);
+        let v_sixth = f32x4_splat(1.0 / 6.0);
+        let v_two = f32x4_splat(2.0);
+        let v_clamp = f32x4_splat(clamp);
+        let v_neg_clamp = f32x4_neg(v_clamp);
+        let v127 = i32x4_splat(127);
+        let vneg126 = i32x4_splat(-126);
+        let v_bias = i32x4_splat(127);
+
+        let mut i = 0;
+        let chunks = out.len() / 4;
+
+        for _ in 0..chunks {
+            // y = a[i] + q[i]  (the pre-sigmoid activation).
+            let va = v128_load(a.as_ptr().add(i).cast());
+            let vq = v128_load(q.as_ptr().add(i).cast());
+            let vy = f32x4_add(va, vq);
+
+            // σ(y) = 1/(1 + exp(-y)). Negate y, then the standard range-reduction
+            // + polynomial + 2^n path identical to `wasm32_exp_inplace`.
+            let vx = f32x4_neg(vy);
+
+            let vn_f = f32x4_nearest(f32x4_mul(vx, v_inv_ln2));
+            let vn_i = i32x4_trunc_sat_f32x4(vn_f);
+
+            let vg = f32x4_sub(
+                f32x4_sub(vx, f32x4_mul(vn_f, v_ln2_hi)),
+                f32x4_mul(vn_f, v_ln2_lo),
+            );
+
+            // Cephes 6th-order polynomial — Horner form matching `cephes_exp_scalar`.
+            let gc_sixth = f32x4_mul(vg, v_sixth);
+            let p6 = f32x4_add(v_one, gc_sixth);
+            let gc_fifth = f32x4_mul(vg, v_fifth);
+            let p5 = f32x4_add(v_one, f32x4_mul(gc_fifth, p6));
+            let gc_quarter = f32x4_mul(vg, v_quarter);
+            let p4 = f32x4_add(v_one, f32x4_mul(gc_quarter, p5));
+            let gc_third = f32x4_mul(vg, v_third);
+            let p3 = f32x4_add(v_one, f32x4_mul(gc_third, p4));
+            let gc_half = f32x4_mul(vg, v_half);
+            let p2 = f32x4_add(v_one, f32x4_mul(gc_half, p3));
+            let qpoly = f32x4_add(v_one, f32x4_mul(vg, p2));
+
+            // 2^n via branchless bit manipulation. Clamp n to [-126, 127] — also
+            // folds the |x| > 40 early-exit: exp(-y) for large positive y
+            // underflows to 0 (σ → 1), for large negative y overflows to inf
+            // (σ → 0). Both are the correct sigmoid saturation.
+            let vn_clamped = i32x4_max(i32x4_min(vn_i, v127), vneg126);
+            let v_shifted = i32x4_shl(i32x4_add(vn_clamped, v_bias), 23);
+            let exp_neg_y = f32x4_mul(v_shifted, qpoly);
+
+            // σ(y) = 1 / (1 + exp(-y)). f32x4_div gives ~1 ULP.
+            let denom = f32x4_add(v_one, exp_neg_y);
+            let sigma = f32x4_div(v_one, denom);
+
+            // 2·σ − 1, then clamp(-clamp, clamp) via min/max.
+            let tanh_like = f32x4_sub(f32x4_mul(v_two, sigma), v_one);
+            let clamped = f32x4_max(f32x4_min(tanh_like, v_clamp), v_neg_clamp);
+
+            v128_store(out.as_mut_ptr().add(i).cast(), clamped);
+            i += 4;
+        }
+
+        // Scalar tail — bit-exact with the pre-SIMD code via fast_sigmoid.
+        while i < out.len() {
+            let s = fast_sigmoid(*a.get_unchecked(i) + *q.get_unchecked(i));
+            let v = 2.0 * s - 1.0;
+            *out.get_unchecked_mut(i) = v.clamp(-clamp, clamp);
+            i += 1;
+        }
     }
 }

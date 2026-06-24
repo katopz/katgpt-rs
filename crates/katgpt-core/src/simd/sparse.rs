@@ -43,7 +43,23 @@ pub fn simd_sparse_dot_f32(
             scalar_sparse_dot_f32(weight, row_off, active_indices, active_values, alive)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe {
+            wasm32_simd128_sparse_dot_f32(
+                weight,
+                row_off,
+                active_indices,
+                active_values,
+                alive,
+            )
+        }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_sparse_dot_f32(weight, row_off, active_indices, active_values, alive)
     }
@@ -175,6 +191,84 @@ unsafe fn avx2_sparse_dot_f32(
 
         let mut sum = horizontal_sum_256(acc);
         // Remainder tail (0..7 elements)
+        while i < alive {
+            let c = *active_indices.get_unchecked(i);
+            sum += *weight.get_unchecked(row_off + c) * *active_values.get_unchecked(i);
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+/// WASM SIMD128 sparse dot — 4-wide f32, gather + mul-add.
+///
+/// Issue 007: ports the NEON structure to `core::arch::wasm32`. WASM SIMD128
+/// has no hardware gather intrinsic and no FMA intrinsic. The gather is
+/// emulated via 4 scalar `f32x4_replace_lane` lane-fills (one per lane, indexing
+/// into `weight` at the scattered positions); the FMA is emulated via
+/// `f32x4_mul` + `f32x4_add` (the engine/wasmtime JIT fuses them when
+/// profitable). Bit-identical accumulation order to the NEON kernel modulo FMA
+/// contraction: the scalar reference uses `mul_add` (single rounding), WASM uses
+/// separate mul+add (double rounding) — same divergence as
+/// `wasm32_simd128_dot_f32` in `dot.rs`.
+///
+/// Compile-time gated by `target_feature = "simd128"`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_sparse_dot_f32(
+    weight: &[f32],
+    row_off: usize,
+    active_indices: &[usize],
+    active_values: &[f32],
+    alive: usize,
+) -> f32 {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_replace_lane, f32x4_splat, v128_load,
+    };
+
+    unsafe {
+        // Single accumulator (mirrors the NEON kernel's structure).
+        let mut acc = f32x4_splat(0.0);
+        let mut i = 0;
+        let chunks = alive / 4;
+
+        for _ in 0..chunks {
+            // Gather 4 weight values from scattered indices into a v128.
+            // WASM SIMD128 has no gather intrinsic, so fill lane-by-lane.
+            let mut ww = f32x4_splat(0.0);
+            ww = f32x4_replace_lane::<0>(
+                ww,
+                *weight.get_unchecked(row_off + *active_indices.get_unchecked(i)),
+            );
+            ww = f32x4_replace_lane::<1>(
+                ww,
+                *weight.get_unchecked(row_off + *active_indices.get_unchecked(i + 1)),
+            );
+            ww = f32x4_replace_lane::<2>(
+                ww,
+                *weight.get_unchecked(row_off + *active_indices.get_unchecked(i + 2)),
+            );
+            ww = f32x4_replace_lane::<3>(
+                ww,
+                *weight.get_unchecked(row_off + *active_indices.get_unchecked(i + 3)),
+            );
+
+            // Load 4 contiguous active values.
+            let vv = v128_load(active_values.as_ptr().add(i).cast());
+
+            // acc += ww * vv (no FMA intrinsic — separate mul+add).
+            acc = f32x4_add(f32x4_mul(ww, vv), acc);
+            i += 4;
+        }
+
+        // Horizontal reduce: 4 lanes → scalar.
+        let mut sum = f32x4_extract_lane::<0>(acc)
+            + f32x4_extract_lane::<1>(acc)
+            + f32x4_extract_lane::<2>(acc)
+            + f32x4_extract_lane::<3>(acc);
+
+        // Remainder tail (0..3 elements).
         while i < alive {
             let c = *active_indices.get_unchecked(i);
             sum += *weight.get_unchecked(row_off + c) * *active_values.get_unchecked(i);

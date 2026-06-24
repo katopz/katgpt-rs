@@ -29,7 +29,15 @@ pub fn simd_scale_inplace(x: &mut [f32], scale: f32) {
             scalar_scale_inplace(x, scale)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_scale_inplace(x, scale) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_scale_inplace(x, scale)
     }
@@ -109,7 +117,15 @@ pub fn simd_add_scalar_inplace(x: &mut [f32], val: f32) {
             scalar_add_scalar_inplace(x, val)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_add_scalar_inplace(x, val) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_add_scalar_inplace(x, val)
     }
@@ -133,7 +149,15 @@ pub fn simd_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
             scalar_fused_sub_scale_inplace(x, sub, scale)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_fused_sub_scale_inplace(x, sub, scale) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_fused_sub_scale_inplace(x, sub, scale)
     }
@@ -160,7 +184,15 @@ pub fn simd_sum_f32(x: &[f32]) -> f32 {
             scalar_sum_f32(x)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_sum_f32(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_sum_f32(x)
     }
@@ -189,7 +221,15 @@ pub fn simd_add_inplace(dst: &mut [f32], src: &[f32]) {
             scalar_add_inplace(dst, src)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_add_inplace(dst, src) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_add_inplace(dst, src)
     }
@@ -223,7 +263,15 @@ pub fn simd_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
             scalar_add_into(dst, a, b)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_add_into(dst, a, b) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_add_into(dst, a, b)
     }
@@ -250,7 +298,15 @@ pub fn simd_max_f32(x: &[f32]) -> f32 {
             scalar_max_f32(x)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_max_f32(x) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_max_f32(x)
     }
@@ -279,7 +335,15 @@ pub fn simd_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f
             scalar_fused_decay_write(dst, decay, src, write)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_fused_decay_write(dst, decay, src, write) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_fused_decay_write(dst, decay, src, write)
     }
@@ -312,7 +376,15 @@ pub fn simd_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
             scalar_scale_mul_inplace(x, gamma, scale)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_scale_mul_inplace(x, gamma, scale) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_scale_mul_inplace(x, gamma, scale)
     }
@@ -908,6 +980,328 @@ unsafe fn avx2_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
             let result = _mm256_mul_ps(vg, _mm256_mul_ps(vx, vs));
             _mm256_storeu_ps(x.as_mut_ptr().add(i), result);
             i += 8;
+        }
+
+        while i < x.len() {
+            *x.get_unchecked_mut(i) = *gamma.get_unchecked(i) * *x.get_unchecked(i) * scale;
+            i += 1;
+        }
+    }
+}
+
+// ── WASM SIMD128 (4-wide f32) ─────────────────────────────────
+//
+// Issue 007: ports the NEON kernel structure to `core::arch::wasm32`.
+// WASM SIMD128 base proposal has NO FMA intrinsic — every fused op below
+// uses separate `f32x4_mul` + `f32x4_add` (wasmtime / engine JITs may fuse
+// mul→add). Bit-identical to the scalar reference modulo FMA contraction
+// (1 ULP acceptable vs the NEON `vfmaq_f32` path).
+//
+// Intrinsics mapping (NEON → WASM):
+//   vld1q_f32(p)            → v128_load(p.cast())
+//   vst1q_f32(p, v)         → v128_store(p.cast(), v)
+//   vdupq_n_f32(s)          → f32x4_splat(s)
+//   vaddq_f32/vmulq_f32     → f32x4_add / f32x4_mul
+//   vsubq_f32               → f32x4_sub
+//   vmaxq_f32               → f32x4_max
+//   vaddvq_f32(v)           → sum of f32x4_extract_lane::<0..3>(v)
+//   vmaxvq_f32(v)           → reduce f32x4_extract_lane::<0..3>(v) via f32::max
+//   vfmaq_f32(a, b, c)=a+b*c→ f32x4_add(f32x4_mul(b, c), a)
+
+/// WASM SIMD128 in-place scale. Mirrors `neon_scale_inplace` (4-wide).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_scale_inplace(x: &mut [f32], scale: f32) {
+    use core::arch::wasm32::{f32x4_mul, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let vs = f32x4_splat(scale);
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            let vx = v128_load(x.as_ptr().add(i).cast());
+            let result = f32x4_mul(vx, vs);
+            v128_store(x.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < x.len() {
+            *x.get_unchecked_mut(i) *= scale;
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 in-place broadcast add. Mirrors `neon_add_scalar_inplace`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_add_scalar_inplace(x: &mut [f32], val: f32) {
+    use core::arch::wasm32::{f32x4_add, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let vv = f32x4_splat(val);
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            let vx = v128_load(x.as_ptr().add(i).cast());
+            let result = f32x4_add(vx, vv);
+            v128_store(x.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < x.len() {
+            *x.get_unchecked_mut(i) += val;
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 fused subtract+scale. Mirrors `neon_fused_sub_scale_inplace`.
+/// `(x[i] - sub) * scale` — pure sub→mul chain, no FMA involved.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
+    use core::arch::wasm32::{f32x4_mul, f32x4_splat, f32x4_sub, v128_load, v128_store};
+
+    unsafe {
+        let sub_vec = f32x4_splat(sub);
+        let scale_vec = f32x4_splat(scale);
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            let v = v128_load(x.as_ptr().add(i).cast());
+            let result = f32x4_mul(f32x4_sub(v, sub_vec), scale_vec);
+            v128_store(x.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < x.len() {
+            *x.get_unchecked_mut(i) = (*x.get_unchecked(i) - sub) * scale;
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 horizontal sum. Mirrors `neon_sum_f32` (4 independent
+/// 4-lane accumulators = 16 elements per outer iter).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_sum_f32(x: &[f32]) -> f32 {
+    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_splat, v128_load};
+
+    unsafe {
+        // 4 independent accumulators to hide FADD pipeline latency.
+        // Same associativity-reorder already used by `wasm32_simd128_dot_f32`.
+        let mut acc0 = f32x4_splat(0.0);
+        let mut acc1 = f32x4_splat(0.0);
+        let mut acc2 = f32x4_splat(0.0);
+        let mut acc3 = f32x4_splat(0.0);
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            acc0 = f32x4_add(acc0, v128_load(x.as_ptr().add(i).cast()));
+            acc1 = f32x4_add(acc1, v128_load(x.as_ptr().add(i + 4).cast()));
+            acc2 = f32x4_add(acc2, v128_load(x.as_ptr().add(i + 8).cast()));
+            acc3 = f32x4_add(acc3, v128_load(x.as_ptr().add(i + 12).cast()));
+            i += 16;
+        }
+
+        // Horizontal reduce: acc0+acc1+acc2+acc3 → 4 lanes → scalar
+        // (replaces NEON `vaddvq_f32`).
+        let s = f32x4_add(f32x4_add(acc0, acc1), f32x4_add(acc2, acc3));
+        let mut sum = f32x4_extract_lane::<0>(s)
+            + f32x4_extract_lane::<1>(s)
+            + f32x4_extract_lane::<2>(s)
+            + f32x4_extract_lane::<3>(s);
+
+        let mut acc_rem = f32x4_splat(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            acc_rem = f32x4_add(acc_rem, v128_load(x.as_ptr().add(i).cast()));
+            i += 4;
+        }
+        sum += f32x4_extract_lane::<0>(acc_rem)
+            + f32x4_extract_lane::<1>(acc_rem)
+            + f32x4_extract_lane::<2>(acc_rem)
+            + f32x4_extract_lane::<3>(acc_rem);
+
+        while i < len {
+            sum += *x.get_unchecked(i);
+            i += 1;
+        }
+        sum
+    }
+}
+
+/// WASM SIMD128 in-place add. Mirrors `neon_add_inplace`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_add_inplace(dst: &mut [f32], src: &[f32]) {
+    use core::arch::wasm32::{f32x4_add, v128_load, v128_store};
+
+    unsafe {
+        let mut i = 0;
+        let chunks = dst.len() / 4;
+
+        for _ in 0..chunks {
+            let vd = v128_load(dst.as_ptr().add(i).cast());
+            let vs = v128_load(src.as_ptr().add(i).cast());
+            let result = f32x4_add(vd, vs);
+            v128_store(dst.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < dst.len() {
+            *dst.get_unchecked_mut(i) += *src.get_unchecked(i);
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 zip add. Mirrors `neon_add_into`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
+    use core::arch::wasm32::{f32x4_add, v128_load, v128_store};
+
+    unsafe {
+        let mut i = 0;
+        let chunks = dst.len() / 4;
+
+        for _ in 0..chunks {
+            let va = v128_load(a.as_ptr().add(i).cast());
+            let vb = v128_load(b.as_ptr().add(i).cast());
+            let result = f32x4_add(va, vb);
+            v128_store(dst.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < dst.len() {
+            *dst.get_unchecked_mut(i) = *a.get_unchecked(i) + *b.get_unchecked(i);
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 max reduction. Mirrors `neon_max_f32` (4 independent
+/// vector-max accumulators = 16 elements per outer iter). Lane reduce via
+/// `f32::max` replaces NEON `vmaxvq_f32` (no single horizontal-max instr).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_max_f32(x: &[f32]) -> f32 {
+    use core::arch::wasm32::{f32x4_extract_lane, f32x4_max, v128_load};
+
+    unsafe {
+        let len = x.len();
+        let chunks = len / 4;
+        if chunks == 0 {
+            let mut max = x[0];
+            for j in 1..len {
+                let v = *x.get_unchecked(j);
+                if v > max {
+                    max = v;
+                }
+            }
+            return max;
+        }
+
+        // 4 independent vector-max accumulators to hide the max-op latency.
+        // max is associative + commutative, so this is bit-identical to serial.
+        let mut vmax0 = v128_load(x.as_ptr().cast());
+        let mut vmax1 = vmax0;
+        let mut vmax2 = vmax0;
+        let mut vmax3 = vmax0;
+        let mut i = 0;
+        let chunks4 = len / 16;
+        for _ in 0..chunks4 {
+            vmax0 = f32x4_max(vmax0, v128_load(x.as_ptr().add(i).cast()));
+            vmax1 = f32x4_max(vmax1, v128_load(x.as_ptr().add(i + 4).cast()));
+            vmax2 = f32x4_max(vmax2, v128_load(x.as_ptr().add(i + 8).cast()));
+            vmax3 = f32x4_max(vmax3, v128_load(x.as_ptr().add(i + 12).cast()));
+            i += 16;
+        }
+        let mut vmax = f32x4_max(f32x4_max(vmax0, vmax1), f32x4_max(vmax2, vmax3));
+        // Remaining 4-element chunks
+        while i + 4 <= len {
+            vmax = f32x4_max(vmax, v128_load(x.as_ptr().add(i).cast()));
+            i += 4;
+        }
+
+        // Horizontal max of 4 lanes (NEON uses `vmaxvq_f32`; replicate via
+        // lane extraction + `f32::max`, matching the scalar reference's
+        // `max.max(v)` reduce semantics).
+        let mut max = f32x4_extract_lane::<0>(vmax)
+            .max(f32x4_extract_lane::<1>(vmax))
+            .max(f32x4_extract_lane::<2>(vmax))
+            .max(f32x4_extract_lane::<3>(vmax));
+
+        // Handle tail
+        while i < len {
+            let v = *x.get_unchecked(i);
+            if v > max {
+                max = v;
+            }
+            i += 1;
+        }
+        max
+    }
+}
+
+/// WASM SIMD128 fused decay-write: `dst = dst*decay + src*write`.
+/// Mirrors `neon_fused_decay_write`. NEON uses one `vfmaq_f32`; WASM has no
+/// FMA intrinsic so this is `f32x4_mul` + `f32x4_add` (1 ULP acceptable vs
+/// the FMA path — the engine JIT may fuse mul→add when profitable).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
+    use core::arch::wasm32::{f32x4_add, f32x4_mul, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let vd_decay = f32x4_splat(decay);
+        let vd_write = f32x4_splat(write);
+        let mut i = 0;
+        let chunks = dst.len() / 4;
+
+        for _ in 0..chunks {
+            let vdst = v128_load(dst.as_ptr().add(i).cast());
+            let vsrc = v128_load(src.as_ptr().add(i).cast());
+            // dst*decay + src*write (NEON: single FMA; WASM: mul→add).
+            let result = f32x4_add(f32x4_mul(vdst, vd_decay), f32x4_mul(vsrc, vd_write));
+            v128_store(dst.as_mut_ptr().add(i).cast(), result);
+            i += 4;
+        }
+
+        while i < dst.len() {
+            *dst.get_unchecked_mut(i) =
+                decay * *dst.get_unchecked(i) + write * *src.get_unchecked(i);
+            i += 1;
+        }
+    }
+}
+
+/// WASM SIMD128 fused scale+multiply: `x = gamma * x * scale`.
+/// Mirrors `neon_scale_mul_inplace` — pure 2-multiply chain, no FMA involved.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
+    use core::arch::wasm32::{f32x4_mul, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let vs = f32x4_splat(scale);
+        let mut i = 0;
+        let chunks = x.len() / 4;
+
+        for _ in 0..chunks {
+            let vx = v128_load(x.as_ptr().add(i).cast());
+            let vg = v128_load(gamma.as_ptr().add(i).cast());
+            let result = f32x4_mul(vg, f32x4_mul(vx, vs));
+            v128_store(x.as_mut_ptr().add(i).cast(), result);
+            i += 4;
         }
 
         while i < x.len() {

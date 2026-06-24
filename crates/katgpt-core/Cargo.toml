@@ -27,7 +27,14 @@ unicode-normalization = { version = "0.1", optional = true }
 
 [dev-dependencies]
 serde_json = "1"
+# criterion pulls rayon, which has no wasm32 backend. Benches run on native
+# only; gate accordingly so wasm32 example builds (Issue 007 GOAT harness)
+# don't unify it in.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
+# proptest pulls rusty-fork → wait-timeout, which has no wasm32 backend.
+# Property tests (Plan 299 T1.7) run on native only; gate accordingly so
+# wasm32 example/bench builds (Issue 007 GOAT harness) don't unify it in.
 proptest = "1"  # Plan 299 T1.7 — multi_head_hash property tests (determinism + uniform distribution)
 
 [features]
@@ -223,6 +230,12 @@ required-features = ["personality_composition"]
 [[example]]
 name = "personality_composition_02_taming"
 required-features = ["personality_composition"]
+
+# Issue 007 — WASM SIMD128 GOAT harness (G1 bit-exactness + G2 perf smoke).
+# Runs on native (validates NEON/AVX2) AND wasm32-wasip2 +simd128 (validates
+# the Issue 007 port). No required-features — only uses always-on simd::* APIs.
+[[example]]
+name = "simd_wasm32_goat"
 
 # Plan 308 — KARC double-scroll GOAT gate (G1: NRMSE ≤ 1e-3, threshold ≥ 8 LT).
 # Integrates the paper §A.1 double-scroll ODE (R1=1.2, R2=3.44, R4=0.193,

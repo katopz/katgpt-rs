@@ -29,7 +29,15 @@ pub fn simd_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
             scalar_dot_f32(a, b, len)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_dot_f32(a, b, len) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_dot_f32(a, b, len)
     }
@@ -203,7 +211,95 @@ unsafe fn avx2_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
     }
 }
 
-// ── Outer Product Accumulation ────────────────────────────────
+/// WASM SIMD128 dot product — 4-wide f32, 4 independent accumulators.
+///
+/// Issue 007: ports the NEON structure to `core::arch::wasm32`. WASM
+/// SIMD128 base proposal has no FMA intrinsic, so this uses separate
+/// `f32x4_mul` + `f32x4_add` (the engine / wasmtime JIT fuses them when
+/// profitable). Bit-identical accumulation order to the NEON kernel modulo
+/// FMA contraction (NEON uses `vfmaq_f32`, WASM uses mul→add).
+///
+/// Compile-time gated by `target_feature = "simd128"`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_splat, v128_load};
+
+    unsafe {
+        // 4 independent accumulators (4 lanes each = 16 elements per outer
+        // iter) to hide the mul→add latency chain. Mirrors the NEON kernel's
+        // unroll factor.
+        let mut acc0 = f32x4_splat(0.0);
+        let mut acc1 = f32x4_splat(0.0);
+        let mut acc2 = f32x4_splat(0.0);
+        let mut acc3 = f32x4_splat(0.0);
+        let mut i = 0usize;
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            acc0 = f32x4_add(
+                f32x4_mul(v128_load(a.as_ptr().add(i).cast()), v128_load(b.as_ptr().add(i).cast())),
+                acc0,
+            );
+            acc1 = f32x4_add(
+                f32x4_mul(
+                    v128_load(a.as_ptr().add(i + 4).cast()),
+                    v128_load(b.as_ptr().add(i + 4).cast()),
+                ),
+                acc1,
+            );
+            acc2 = f32x4_add(
+                f32x4_mul(
+                    v128_load(a.as_ptr().add(i + 8).cast()),
+                    v128_load(b.as_ptr().add(i + 8).cast()),
+                ),
+                acc2,
+            );
+            acc3 = f32x4_add(
+                f32x4_mul(
+                    v128_load(a.as_ptr().add(i + 12).cast()),
+                    v128_load(b.as_ptr().add(i + 12).cast()),
+                ),
+                acc3,
+            );
+            i += 16;
+        }
+
+        // Horizontal reduce: acc0+acc1+acc2+acc3 → 4 lanes → scalar.
+        let s01 = f32x4_add(acc0, acc1);
+        let s23 = f32x4_add(acc2, acc3);
+        let s = f32x4_add(s01, s23);
+        let mut sum = f32x4_extract_lane::<0>(s)
+            + f32x4_extract_lane::<1>(s)
+            + f32x4_extract_lane::<2>(s)
+            + f32x4_extract_lane::<3>(s);
+
+        // Tail: process remaining 4-element chunks with a single accumulator.
+        let mut acc = f32x4_splat(0.0);
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            acc = f32x4_add(
+                f32x4_mul(v128_load(a.as_ptr().add(i).cast()), v128_load(b.as_ptr().add(i).cast())),
+                acc,
+            );
+            i += 4;
+        }
+        sum += f32x4_extract_lane::<0>(acc)
+            + f32x4_extract_lane::<1>(acc)
+            + f32x4_extract_lane::<2>(acc)
+            + f32x4_extract_lane::<3>(acc);
+
+        // Scalar tail for the last 0..3 elements.
+        while i < len {
+            sum += *a.get_unchecked(i) * *b.get_unchecked(i);
+            i += 1;
+        }
+
+        sum
+    }
+}
+
+// ── Outer Product Accumulation ────────────────────────
 
 /// SIMD-accelerated outer product accumulation: `acc[i*n + j] += a[i] * b[j]`.
 ///

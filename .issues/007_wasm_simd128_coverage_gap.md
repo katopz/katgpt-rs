@@ -1,6 +1,6 @@
 # Issue 007 — WASM SIMD128 Coverage Gap (katgpt-core/simd/)
 
-[← Index](../README.md) · **Type:** optimization · **Priority:** medium · **Status:** open
+[← Index](../README.md) · **Type:** optimization · **Priority:** medium · **Status:** in-progress (Phase 1: 5/6 files ported)
 
 ## Summary
 
@@ -23,14 +23,15 @@ on 2026-06-24 (develop, post-Plan 316):
 |------|--------|---------|--------|------|
 | `ternary.rs` | ✅ 3 | ✅ 3 | ✅ 3 | No — full tier |
 | `mod.rs` | ✅ 2 | ✅ 2 | ✅ 3 | No (level detection only, not a hot kernel) |
-| `activations.rs` | ❌ 0 | ✅ 15 | ✅ 15 | **Yes** — sigmoid/exp fall to scalar on wasm32 |
-| `dot.rs` | ❌ 0 | ✅ 12 | ✅ 9 | **Yes** — `simd_dot_f32` scalar on wasm32 |
-| `elementwise.rs` | ❌ 0 | ✅ 27 | ✅ 27 | **Yes** — biggest gap (27 NEON/AVX kernels, 0 WASM) |
-| `argmax.rs` | ❌ 0 | ✅ 3 | ❌ 0 | **Yes** — no wasm32, also no x86_64 |
-| `sparse.rs` | ❌ 0 | ✅ 3 | ✅ 3 | **Yes** — sparse kernels scalar on wasm32 |
-| `research.rs` | ❌ 0 | ✅ 18 | ✅ 18 | **Yes** — research kernels scalar on wasm32 |
+| `activations.rs` | ✅ 5 (Issue 007) | ✅ 15 | ✅ 15 | **Closed** — 5 kernels ported |
+| `dot.rs` | ✅ 1 (Issue 007) | ✅ 12 | ✅ 9 | **Closed** — `simd_dot_f32` ported |
+| `elementwise.rs` | ✅ 9 (Issue 007) | ✅ 27 | ✅ 27 | **Closed** — 9 kernels ported |
+| `argmax.rs` | ✅ 1 (Issue 007) | ✅ 3 | ❌ 0 | **Closed** — ported |
+| `sparse.rs` | ✅ 1 (Issue 007) | ✅ 3 | ✅ 3 | **Closed** — `sparse_dot` ported (matmul inherits) |
+| `research.rs` | ❌ 0 | ✅ 18 | ✅ 18 | **Open** — research-only kernels; defer |
 
-**7 of 8 kernel files have zero wasm32 SIMD128 coverage.**
+**Phase 1: 5 of 6 hot-path files ported.** Only `research.rs` remains (deferred —
+research-only kernels, not on the inference hot path).
 
 ## Impact
 
@@ -95,6 +96,41 @@ Suggested order based on inference pipeline hot loops:
 5. **`sparse.rs`** — sparse matvec; matters iff sparse shards ship to edge.
 6. **`research.rs`** — research-only kernels; defer unless a research plan
    needs them on wasm32.
+
+## GOAT gate results (Phase 1, 2026-06-24)
+
+Verified via `examples/simd_wasm32_goat.rs` — a single binary that runs on both
+native (validates NEON/AVX2 vs scalar) and wasm32-wasip2 +simd128 via wasmtime
+(validates the Issue 007 port vs scalar). The reference is an **independent**
+scalar loop (not the crate's own `scalar_*` fallback).
+
+| Gate | Native (NEON) | WASM SIMD128 (wasmtime) |
+|------|---------------|------------------------|
+| **G1 correctness** | 288/288 PASS | **288/288 PASS** |
+| **G2 perf (dot n=1024)** | 7.7× scalar | **4.52× scalar** (≥2× target met) |
+| **G3 no-regression** | 509 lib tests PASS | n/a (cfg-gated, not compiled on native) |
+| **G4 alloc-free** | ✅ (kernels use `v128` locals only) | ✅ |
+
+Repro:
+```bash
+# Native
+cargo run -p katgpt-core --example simd_wasm32_goat --release
+# WASM SIMD128
+RUSTFLAGS="-C target-feature=+simd128" cargo build -p katgpt-core \
+    --example simd_wasm32_goat --release --target wasm32-wasip2 --no-default-features
+wasmtime target/wasm32-wasip2/release/examples/simd_wasm32_goat.wasm
+```
+
+### Tolerance notes (documented in the kernels + harness)
+
+- **Exact-bit** for: scale, add_scalar, fused_sub_scale, add_inplace, add_into,
+  max, argmax (no transcendental, no FMA).
+- **≤1 ULP** for: dot, sparse_dot, fused_decay_write, sum, scale_mul (FMA
+  contraction / 3-factor association difference — NEON uses true FMA, WASM uses
+  mul→add).
+- **Cephes ~1 ULP** for: exp, exp_sum, sigmoid, reciprocal.
+- **<3e-7 → 1e-4 tolerance** for: sigmoid_tanh_clamp (clamp boundary can
+  discontinuously flip which side wins under Cephes/libm exp-tail difference).
 
 ## Non-goals
 
