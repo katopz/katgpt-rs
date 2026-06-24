@@ -333,3 +333,21 @@ pub use alien_sampler::{
     AlienConfig, AlienSampler, AlienSamplerError, AvailabilityScorer, CoherenceScorer,
     MedianTopMAvailability, ScoredCandidate,
 };
+
+// Vessel — Extract-Once Secure Wire Format Primitive (Plan 315, Research 297).
+// Generic open primitive: WASM-with-BLAKE3-header wire format + tier-aware
+// loader trait. Hot/Plasma path: `extract_payload::<T: Pod>()` (one-time
+// validate, then zero-copy SIMD borrow). Cold/Freeze path: `VesselProjector`
+// (capability-restricted WASM call, fuel-gated, fail-safe). Re-uses existing
+// `wasmi` + `blake3` + `bytemuck` deps — no new deps. Honest scope: API
+// encapsulation + chain-committed integrity, NOT cryptographic confidentiality.
+// The private Super-GOAT guide + NeuronShard wrapper live in riir-neuron-db
+// (Research 006 / Plan 003). Opt-in until G1-G5 GOAT gate passes.
+#[cfg(feature = "secure_vessel")]
+pub mod vessel;
+#[cfg(feature = "secure_vessel")]
+pub use vessel::{
+    decode_header, encode_vessel, ensure_compiled, extract_payload, extract_payload_slice,
+    load_vessel, verify_blake3, LoadedVessel, VESSEL_HEADER_LEN, VESSEL_MAGIC, VESSEL_VERSION,
+    VesselError, VesselHeader, VesselProjector, WasmDotProjector,
+};

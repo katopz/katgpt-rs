@@ -67,6 +67,7 @@ dmax_spd = ["dllm"]  # DMax Soft Parallel Decode — hybrid embedding D2F enhanc
 tri_mode = ["dllm"]  # Tri-Mode inference — AR + Diffusion + Self-Speculation (Plan 089, Research 55)
 sudoku = []
 validator = ["syn", "proc-macro2"]
+secure_vessel = ["wasmi", "papaya"]  # Vessel — Extract-Once Secure Wire Format Primitive (Plan 315, Research 297). WASM + BLAKE3 header + tier-aware loader. Hot path: extract_payload::<T: Pod>() (zero-copy after one-time verify). Cold path: VesselProjector (fuel-gated WASM call). `blake3` is always-on (non-optional dep) so not listed. Opt-in until G1-G5 GOAT gate passes.
 sparse_mlp = ["katgpt-core/sparse_mlp"]  # TwELL-inspired sparse MLP matmul (Plan 022)
 ppot = []  # PPoT logit-parameterized CPU resampling (Plan 026 + 027)
 domain_latent = ["katgpt-core/domain_latent"]  # Free Transformer mid-layer domain conditioning (Plan 038)
@@ -632,6 +633,16 @@ harness = false
 name = "salience_tri_gate_bench"
 path = "benches/salience_tri_gate_bench.rs"
 required-features = ["salience_tri_gate"]
+harness = false
+
+# Plan 315 Phase 4 — Vessel GOAT gate bench. G1 extract fidelity (10k
+# round-trips) + G4 extract latency (target < 50 ns/op) + G5 project latency
+# (target < 1000 ns/op). std::time::Instant + harness=false (matches
+# salience_tri_gate_bench convention).
+[[bench]]
+name = "vessel_extract_bench"
+path = "benches/vessel_extract_bench.rs"
+required-features = ["secure_vessel"]
 harness = false
 
 # Plan 311 Phase 2 T2.2 — Alien Sampler microbench. rank() 1k/10k candidates
