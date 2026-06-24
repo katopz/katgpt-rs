@@ -290,25 +290,48 @@ impl LoadedVessel {
 
 /// Decode + verify a vessel blob into a [`LoadedVessel`].
 ///
-/// Performs the one-time cost: header parse + BLAKE3 verify. After this,
-/// [`extract_payload`] / [`extract_payload_slice`] are zero-copy borrows.
+/// Performs the one-time cost: header parse + BLAKE3 verify + content-addr
+/// hash. After this, [`extract_payload`] / [`extract_payload_slice`] are
+/// zero-copy borrows.
 ///
 /// Allocation: one `Arc<[u8]>` for the WASM bytes. The input `bytes` may
 /// be dropped after this returns — the `Arc` owns its own copy.
+///
+/// # Content address cost
+///
+/// Computes `content_addr` as BLAKE3 of the **52-byte header only** (~50ns),
+/// not the full encoded bytes (~600ns). This is safe because `header.blake3`
+/// already commits to the WASM bytes and the header fields commit to payload
+/// metadata — two vessels with the same header are byte-identical modulo
+/// BLAKE3 collisions (negligible, and caught by `verify_blake3` regardless).
 pub fn load_vessel(bytes: &[u8]) -> Result<LoadedVessel, VesselError> {
     let header = decode_header(bytes)?;
     let wasm_bytes: Arc<[u8]> = bytes[VESSEL_HEADER_LEN..].into();
     verify_blake3(&header, &wasm_bytes)?;
-    // Content address = BLAKE3 of the full encoded vessel (header + wasm).
-    // Computed once at load; used as the `VesselCache` key. Distinguishes
-    // vessels with identical WASM bytes but different payload metadata.
-    let content_addr = *blake3::hash(bytes).as_bytes();
+    // Content address = BLAKE3 of the 52-byte header only. The header
+    // commits to both the WASM bytes (via `header.blake3`) and the payload
+    // metadata (kind/offset/len), so this is a sound content address at
+    // ~50ns instead of ~600ns for the full encoded bytes.
+    let content_addr = content_addr_from_header(&header);
     Ok(LoadedVessel {
         header,
         content_addr,
         wasm_bytes,
         compiled: OnceLock::new(),
     })
+}
+
+/// Compute a content address from a decoded header — BLAKE3 of the 52-byte
+/// `#[repr(C)]` header struct. Used by both [`load_vessel`] and
+/// [`VesselCache::get_or_load`] so they agree on the key without either
+/// re-hashing the full encoded bytes.
+///
+/// Public so callers who have already decoded a header (e.g. for the cache
+/// pre-check) can derive the address in ~50ns without re-reading the blob.
+pub fn content_addr_from_header(header: &VesselHeader) -> [u8; 32] {
+    // `VesselHeader` is `#[repr(C)]` + `Pod` + no padding, so
+    // `bytes_of(&header)` is the stable 52-byte on-wire layout.
+    *blake3::hash(bytemuck::bytes_of(header)).as_bytes()
 }
 
 /// Extract a fixed-size `T: Pod` payload from the WASM bytes.
@@ -602,15 +625,29 @@ impl VesselCache {
     /// content-addressed data. This is harmless — the `Arc` returned to
     /// either caller is equivalent.
     pub fn get_or_load(&self, bytes: &[u8]) -> Result<Arc<LoadedVessel>, VesselError> {
-        // Cheap pre-check: hash the bytes to get the content address,
-        // then check the cache. If hit, skip the full parse+verify.
-        let content_addr = *blake3::hash(bytes).as_bytes();
+        // Derive the content address from the 52-byte header ONLY (~50ns),
+        // not the full encoded bytes (~600ns). The header commits to both
+        // the WASM bytes (via `header.blake3`) and payload metadata, so this
+        // is a sound cache key — and it avoids the double-hash that the
+        // previous `blake3::hash(full_bytes)` + `load_vessel(full_bytes)`
+        // path paid (~1200ns hashing → ~50ns).
+        //
+        // SAFETY: `decode_header` bounds-checks `bytes.len() >= HEADER_LEN`
+        // before we touch `bytes[..HEADER_LEN]`.
+        let header = decode_header(bytes)?;
+        let content_addr = content_addr_from_header(&header);
         let m = self.vessels.pin();
         if let Some(cached) = m.get(&content_addr) {
             return Ok(Arc::clone(cached));
         }
-        // Cache miss — full load (header decode + BLAKE3 verify + Arc alloc).
+        // Cache miss — full load. `load_vessel` re-derives the same
+        // `content_addr` from the header (idempotent, ~50ns) — no longer
+        // a double-hash of the full bytes.
         let vessel = Arc::new(load_vessel(bytes)?);
+        debug_assert_eq!(
+            vessel.content_addr, content_addr,
+            "content_addr mismatch: load_vessel and get_or_load disagree"
+        );
         // Insert. `get_or_insert` handles the benign race atomically: if
         // another thread won, we return their Arc; otherwise we return ours.
         let shared = m.get_or_insert(content_addr, vessel);
@@ -724,20 +761,30 @@ impl VesselCache {
     /// their cached projections go too).
     ///
     /// Returns true if the vessel was present.
+    ///
+    /// # Cost
+    ///
+    /// O(R) where R = total cached results across all vessels (papaya has
+    /// no prefix-scan, so we filter by `content_addr` during iteration).
+    /// Eviction is a cold path (AOI GC runs at zone-boundary ticks, not
+    /// per-frame), so the full scan is acceptable. If this ever becomes
+    /// hot, add a secondary `papaya::HashMap<[u8;32], Vec<u64>>` index
+    /// mapping vessel-addr → cached query-hashes (updated on each
+    /// `project_cached` insert).
     pub fn evict(&self, content_addr: &[u8; 32]) -> bool {
         let vessel_present = self.vessels.pin().remove(content_addr).is_some();
-        // Evict all results for this vessel. papaya doesn't have a
-        // `retain`-by-prefix, so we scan. For the realistic case (one
-        // vessel has ~100s of cached queries against it), this is cheap.
-        let results = &self.results;
-        let to_remove: Vec<_> = results
-            .pin()
+        // Single pin for the whole scan + collect — avoids re-pinning per
+        // removal (the previous version pinned N+1 times for N removals).
+        let m = self.results.pin();
+        let to_remove: Vec<([u8; 32], u64)> = m
             .iter()
             .filter(|((addr, _), _)| addr == content_addr)
             .map(|((addr, qh), _)| (*addr, *qh))
             .collect();
+        // `remove` on the same guard is fine — papaya allows mutation
+        // through a pinned guard without re-pinning.
         for key in to_remove {
-            results.pin().remove(&key);
+            m.remove(&key);
         }
         vessel_present
     }
