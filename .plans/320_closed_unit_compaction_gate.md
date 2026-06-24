@@ -6,7 +6,7 @@
 **Private guide:** [riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md](../../riir-ai/.research/155_Per_NPC_Sub_Goal_Compaction_Guide.md) (game-AI selling point)
 **Cross-ref:** [riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md](../../riir-neuron-db/.research/007_Can_Freeze_As_Cucg_Instance_Crossref.md) (`can_freeze` isomorphism)
 **Target:** `katgpt-rs/src/compaction/` (new module) + Cargo feature `closed_unit_compaction`
-**Status:** Active — Phase 0 (planning). Phases land after guide acceptance.
+**Status:** Active — Phase 1 + Phase 2 COMPLETE (2026-06-25). 49 unit tests PASS, G3/G5/G6 gates green. Phase 3 (latent SearchRubric, G1) next.
 
 ---
 
@@ -26,8 +26,8 @@ Ship a generic, modelless, **rubric-gated trajectory compaction** primitive (`Cl
 
 ### Tasks
 
-- [ ] **T1.1** Create module `src/compaction/mod.rs` with feature gate `#[cfg(feature = "closed_unit_compaction")]`. Re-export public API.
-- [ ] **T1.2** Define `Rubric` trait in `src/compaction/rubric.rs`:
+- [x] **T1.1** Create module `src/compaction/mod.rs` with feature gate `#[cfg(feature = "closed_unit_compaction")]`. Re-export public API.
+- [x] **T1.2** Define `Rubric` trait in `src/compaction/rubric.rs`:
   ```rust
   pub trait Rubric {
       const ARITY: usize;
@@ -39,12 +39,12 @@ Ship a generic, modelless, **rubric-gated trajectory compaction** primitive (`Cl
   }
   ```
   With `RubricVerdict { predicates: [PredicateResult; ARITY] }` and `PredicateResult::{Yes { quote_start, quote_len }, No { reason }}`. Fixed-size arrays; no heap alloc in the verdict.
-- [ ] **T1.3** Define `FireRule` enum in `src/compaction/fire_rule.rs`: `And(u8)`, `Or(u8)`, `Not(u8)`, `Box(Box, Box)`. Implement `fn evaluate(&self, verdict: &RubricVerdict) -> bool` (recursive, no alloc).
-- [ ] **T1.4** Define `Backstop` enum in `src/compaction/backstop.rs`: `None`, `TokenPct(f32)`, `Never`. Implement `fn should_force(&self, prompt_len: usize, ctx_window: usize) -> bool`.
-- [ ] **T1.5** Define `CompactionAuditRecord` in `src/compaction/audit.rs`: `#[derive(Clone, Copy, Debug, PartialEq)]`, fixed-size, `#[repr(C)]` for sync-boundary crossing. Fields per research note §2.3.
-- [ ] **T1.6** Define `CompactionDecision` enum: `Compress { audit }`, `Continue { audit }`, `Forced { audit }`.
-- [ ] **T1.7** Unit tests: `FireRule::And(0b1111)` returns true iff all 4 predicates Yes; `Or(0b0001)` returns true iff predicate 0 Yes; `Not(0)` returns true iff predicate 0 No; `Box(Or, And)` composes.
-- [ ] **T1.8** Unit tests: `Backstop::TokenPct(0.30)` forces at 30% of ctx_window, doesn't force below.
+- [x] **T1.3** Define `FireRule` enum in `src/compaction/fire_rule.rs`: `And(u8)`, `Or(u8)`, `Not(u8)`, `Box(Box, Box)`. Implement `fn evaluate(&self, verdict: &RubricVerdict) -> bool` (recursive, no alloc).
+- [x] **T1.4** Define `Backstop` enum in `src/compaction/backstop.rs`: `None`, `TokenPct(f32)`, `Never`. Implement `fn should_force(&self, prompt_len: usize, ctx_window: usize) -> bool`.
+- [x] **T1.5** Define `CompactionAuditRecord` in `src/compaction/audit.rs`: `#[derive(Clone, Copy, Debug, PartialEq)]`, fixed-size, `#[repr(C)]` for sync-boundary crossing. Fields per research note §2.3.
+- [x] **T1.6** Define `CompactionDecision` enum: `Compress { audit }`, `Continue { audit }`, `Forced { audit }`.
+- [x] **T1.7** Unit tests: `FireRule::And(0b1111)` returns true iff all 4 predicates Yes; `Or(0b0001)` returns true iff predicate 0 Yes; `Not(0)` returns true iff predicate 0 No; `Box(Or, And)` composes.
+- [x] **T1.8** Unit tests: `Backstop::TokenPct(0.30)` forces at 30% of ctx_window, doesn't force below.
 
 ### Acceptance
 
@@ -56,7 +56,7 @@ Compiles with `cargo check --features closed_unit_compaction`. Unit tests pass. 
 
 ### Tasks
 
-- [ ] **T2.1** Define `ClosedUnitCompactionGate<R: Rubric>` in `src/compaction/gate.rs`:
+- [x] **T2.1** Define `ClosedUnitCompactionGate<R: Rubric>` in `src/compaction/gate.rs`:
   ```rust
   pub struct ClosedUnitCompactionGate<R: Rubric> {
       rubric: R,
@@ -66,17 +66,17 @@ Compiles with `cargo check --features closed_unit_compaction`. Unit tests pass. 
       probe_interval_tokens: usize,
   }
   ```
-- [ ] **T2.2** Implement `pub fn evaluate(&self, trajectory_prefix: &[u8], prompt_len: usize, ctx_window: usize, clr_vote: Option<f32>, scratch: &mut RubricScratch) -> CompactionDecision`. Decision order:
+- [x] **T2.2** Implement `pub fn evaluate(&self, trajectory_prefix: &[u8], prompt_len: usize, ctx_window: usize, clr_vote: Option<f32>, scratch: &mut RubricScratch) -> CompactionDecision`. Decision order:
   1. `backstop.should_force(prompt_len, ctx_window)` → `Forced { audit }` if true.
   2. Else `rubric.evaluate(...)` → `verdict`.
   3. `fire_rule.evaluate(&verdict)` → if true, check `skip_if_reliable`: if `Some(τ)` and `clr_vote > τ` → `Continue { audit }` (suppressed); else `Compress { audit }`.
   4. Else `Continue { audit }`.
-- [ ] **T2.3** Build `CompactionAuditRecord` with bit-identical fields from the verdict + fire-rule evaluation + backstop/skip flags. `#[repr(C)]` for sync crossing.
-- [ ] **T2.4** Implement `pub fn probe_interval_tokens(&self) -> usize` for the caller's probe loop.
-- [ ] **T2.5** Zero-alloc assertion: `evaluate()` performs no heap allocation when `R::ARITY ≤ 8` (uses `RubricScratch` for any temporary buffers). Document the contract in rustdoc.
-- [ ] **T2.6** Unit tests: paper's search rule (`And(0b1111)` over C1/C2/C3/N1-inverted) → Compress iff all four pass; paper's math rule (`Or(0b0001, And(0b0110))` over Q1/Q2/Q3) → Compress iff Q1 or (Q2 and Q3).
-- [ ] **T2.7** Unit tests: `skip_if_reliable = Some(0.8)`, `clr_vote = 0.9` → Compress suppressed to Continue even if rubric fires; `clr_vote = 0.7` → Compress proceeds.
-- [ ] **T2.8** Unit tests: backstop overrides rubric — rubric says Continue but prompt > 30% ctx_window → Forced.
+- [x] **T2.3** Build `CompactionAuditRecord` with bit-identical fields from the verdict + fire-rule evaluation + backstop/skip flags. `#[repr(C)]` for sync crossing.
+- [x] **T2.4** Implement `pub fn probe_interval_tokens(&self) -> usize` for the caller's probe loop.
+- [x] **T2.5** Zero-alloc assertion: `evaluate()` performs no heap allocation when `R::ARITY ≤ 8` (uses `RubricScratch` for any temporary buffers). Document the contract in rustdoc.
+- [x] **T2.6** Unit tests: paper's search rule (`And(0b1111)` over C1/C2/C3/N1-inverted) → Compress iff all four pass; paper's math rule (`Or(0b0001, And(0b0110))` over Q1/Q2/Q3) → Compress iff Q1 or (Q2 and Q3).
+- [x] **T2.7** Unit tests: `skip_if_reliable = Some(0.8)`, `clr_vote = 0.9` → Compress suppressed to Continue even if rubric fires; `clr_vote = 0.7` → Compress proceeds.
+- [x] **T2.8** Unit tests: backstop overrides rubric — rubric says Continue but prompt > 30% ctx_window → Forced.
 
 ### Acceptance
 

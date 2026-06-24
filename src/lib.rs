@@ -45,6 +45,17 @@ pub use claim_rubric::{
     VocabularyViolation,
 };
 pub mod cumprodsum;
+// CUCG — Closed-Unit Compaction Gate (Plan 320, Research 300, arxiv 2606.23525).
+// Generic rubric-gated trajectory compaction primitive. Opt-in until G1-G7
+// GOAT gate passes. Re-exports the public surface for ergonomic use.
+#[cfg(feature = "closed_unit_compaction")]
+pub mod compaction;
+#[cfg(feature = "closed_unit_compaction")]
+pub use compaction::{
+    Backstop, ClosedUnitCompactionGate, ClosedUnitCompactionGateBuilder, CombineOp,
+    CompactionAuditRecord, CompactionDecision, DecisionKind, FireRule, FireRuleEval, PredicateAudit,
+    PredicateReason, PredicateResult, Rubric, RubricScratch, RubricVerdict,
+};
 #[cfg(feature = "ssd_block")]
 pub mod ssd_block;
 #[cfg(feature = "dash_attn")]
