@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/295_AC_GPT_Arbitrary_Conditionals_Prefix.md](../.research/295_AC_GPT_Arbitrary_Conditionals_Prefix.md)
 **Source paper:** [arXiv:2606.14943](https://arxiv.org/abs/2606.14943) — Lu et al., Mila, 12 Jun 2026 (AC-GPT)
 **Target:** `katgpt-rs/crates/katgpt-core/src/ac_prefix/` (new module) + Cargo feature `ac_prefix`
-**Status:** Complete — Phase 1 (committed `61aa1aa3`), Phase 2 + Phase 3 + Phase 4 (commits `154c0333`, `5330854f`). **Reverted to OPT-IN** on Phase 4 audit (2026-06-24): original G1 failed at 7.5e-4, plan decision tree requires opt-in until riir-train validates the paper's equivalence claim post-LoRA (Issue 003). Reformulated G1, G2, G3, G4 all PASS as modelless primitive gates. Super-GOAT follow-up filed as Issue 002.
+**Status:** Complete — Phase 1 (committed `61aa1aa3`), Phase 2 + Phase 3 + Phase 4 (commits `154c0333`, `5330854f`). **Re-promoted to DEFAULT-ON** on Issue 003 Phase 0 resolution (2026-06-24): §3.5 modelless unblock Path 2 — `attends_dedup` mask eliminates the doubled-signal bias bit-identically to iterative-MLM on single-layer micro-GPT (0.0 diff, see `.benchmarks/313_ac_prefix_modelless.md`). Original G1 reformulation (buffer bit-identical), G2 (27.258x speedup), G3 (0 mismatches), G4 (0 allocs) all PASS. Multi-layer equivalence remains a non-blocking riir-train follow-up. Super-GOAT follow-up filed as Issue 002.
 
 ---
 

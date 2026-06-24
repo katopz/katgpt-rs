@@ -141,6 +141,91 @@ impl<'a> AcPrefix<'a> {
         j_in_r0 | (both_in_r1 & causal_in_r1)
     }
 
+    /// Check whether original position `p` (an index into `base_tokens`) is a
+    /// conditioning position. O(log |xc|) via binary search on the sorted
+    /// `conditioning_positions` slice. Zero allocation.
+    #[inline]
+    pub fn is_xc_position(&self, p: usize) -> bool {
+        self.conditioning_positions.binary_search(&p).is_ok()
+    }
+
+    /// **Deduplicated three-region rule** (§3.5 modelless unblock candidate,
+    /// Issue 003 Phase 0 Path 2).
+    ///
+    /// Same as [`Self::attends`] **except** eval tokens in r1 do NOT attend to
+    /// in-place conditioning tokens in r1 — they get all conditioning through
+    /// the r0 copies only.
+    ///
+    /// # Why this exists — the doubled-signal bias
+    ///
+    /// The original [`Self::attends`] rule lets an eval token at original
+    /// position `k` attend to an in-place `xc` token at original position `p <= k`
+    /// **twice**: once via its r0 copy, once via its r1 in-place slot. On an
+    /// untrained model both appearances contribute real signal, biasing the
+    /// conditional likelihood. The paper resolves this via LoRA fine-tuning
+    /// (→ riir-train). The modelless alternative (this method) eliminates the
+    /// doubling by construction: eval tokens source ALL conditioning from r0
+    /// copies, never from in-place r1 `xc`.
+    ///
+    /// # Correctness argument (single-layer)
+    ///
+    /// For a single attention layer, the K/V at any position depend only on the
+    /// token embedding (not on other positions' attention). The r0 copy of `xc`
+    /// at original position `p` has the **same** token, **same** RoPE rotation,
+    /// **same** K/V as the in-place r1 `xc` at position `p`. Therefore:
+    ///
+    /// - Deduplicated AC-GPT attended set for eval at position `k`:
+    ///   { all xc via r0 copies } ∪ { eval at positions <= k via r1 }
+    /// - Iterative-MLM attended set for eval at position `k`:
+    ///   { all xc in-place } ∪ { all positions <= k }
+    ///   = { all xc } ∪ { eval at positions <= k }   (xc at <= k counted once)
+    ///
+    /// Both sets contain the same (token, original_position) pairs → same K/V
+    /// → same attention scores → same softmax → same logprobs. The deduplicated
+    /// mask makes single-pass AC-GPT **bit-identical** to iterative-MLM on a
+    /// single-layer model, modellessly (no gradient descent).
+    ///
+    /// # Multi-layer caveat
+    ///
+    /// On multi-layer models the r0 copies' representations evolve through
+    /// layers attending only to other r0 copies (r0→r1 is false), whereas in
+    /// iterative-MLM the in-place xc attend bidirectionally to eval tokens too.
+    /// The representations diverge from layer 2 onward. The G1 gate
+    /// (Issue 003) uses a single-layer micro-GPT where this divergence does
+    /// not arise; multi-layer equivalence remains a riir-train question.
+    ///
+    /// # Cost
+    ///
+    /// One `binary_search` (O(log |xc|)) when both `i` and `j` are in r1 and
+    /// `i >= j`. This is more expensive than [`Self::attends`] (which is O(1))
+    /// but still zero-allocation. Use [`Self::attends`] on the hottest paths;
+    /// use this method when the modelless bias correction is required.
+    #[inline]
+    pub fn attends_dedup(&self, i: usize, j: usize) -> bool {
+        // Same as attends, but in the (i ∈ r1, j ∈ r1) case additionally
+        // require that j is NOT an in-place xc position.
+        let xc = self.conditioning_positions.len();
+        let j_in_r0 = j < xc;
+        if j_in_r0 {
+            return true;
+        }
+        // j ∈ r1.
+        let i_in_r1 = i >= xc;
+        if !i_in_r1 {
+            return false; // i ∈ r0, j ∈ r1 → false (copies don't attend back)
+        }
+        // Both in r1. Standard causal, EXCEPT eval doesn't attend to in-place xc.
+        if i < j {
+            return false; // causal: i must be >= j
+        }
+        // i >= j, both in r1. Check if j is an in-place xc position.
+        let j_original = j - xc;
+        if self.is_xc_position(j_original) {
+            return false; // deduplicated: eval doesn't attend to in-place xc
+        }
+        true
+    }
+
     /// Write the augmented token sequence into `out`. Slot layout:
     ///   - `[0, xc_len)`         → copies: `base_tokens[conditioning_positions[k]]`
     ///   - `[xc_len, augmented)` → originals: `base_tokens` verbatim
@@ -218,6 +303,39 @@ impl<'a> AcPrefix<'a> {
         self.original_positions_into(&mut augmented_positions);
         self.loss_mask_into(&mut loss_mask);
         let mask = AcPrefixMask::materialize_from(self);
+        let logprobs = forward(&augmented_tokens, &augmented_positions, &mask, &loss_mask);
+        debug_assert_eq!(
+            logprobs.len(),
+            n,
+            "forward must return one logprob per augmented slot"
+        );
+        let mut acc = 0.0f32;
+        for (lp, m) in logprobs.iter().zip(loss_mask.iter()) {
+            acc += *lp * *m;
+        }
+        acc
+    }
+
+    /// **Deduplicated single-pass conditional log-likelihood** — the §3.5
+    /// modelless bias-correction variant (Issue 003 Phase 0 Path 2).
+    ///
+    /// Identical to [`Self::conditional_logprob`] except the materialized mask
+    /// uses [`AcPrefixMask::materialize_dedup_from`] (eval tokens do not attend
+    /// to in-place `xc` tokens in r1). See [`Self::attends_dedup`] for the
+    /// correctness argument: on a single-layer model this makes AC-GPT
+    /// bit-identical to iterative-MLM conditional logprob, modellessly.
+    pub fn conditional_logprob_dedup<F>(&self, mut forward: F) -> f32
+    where
+        F: FnMut(&[u32], &[usize], &AcPrefixMask, &[f32]) -> Vec<f32>,
+    {
+        let n = self.augmented_len();
+        let mut augmented_tokens = vec![0u32; n];
+        let mut augmented_positions = vec![0usize; n];
+        let mut loss_mask = vec![0.0f32; n];
+        self.augmented_tokens_into(&mut augmented_tokens);
+        self.original_positions_into(&mut augmented_positions);
+        self.loss_mask_into(&mut loss_mask);
+        let mask = AcPrefixMask::materialize_dedup_from(self);
         let logprobs = forward(&augmented_tokens, &augmented_positions, &mask, &loss_mask);
         debug_assert_eq!(
             logprobs.len(),
@@ -336,6 +454,23 @@ impl AcPrefixMask {
     /// materialized mask. Hot-path callers should prefer
     /// [`AcPrefix::attends`] directly.
     pub fn materialize_from(prefix: &AcPrefix<'_>) -> Self {
+        Self::materialize_with(prefix, |p, i, j| p.attends(i, j))
+    }
+
+    /// Bit-pack the [`AcPrefix::attends_dedup`] rule — the §3.5 modelless
+    /// bias-correction variant (Issue 003 Phase 0 Path 2). See
+    /// [`AcPrefix::attends_dedup`] for the doubled-signal-bias argument.
+    ///
+    /// Same allocation profile as [`Self::materialize_from`] (one `Box<[u64]>`
+    /// per augmented sequence).
+    pub fn materialize_dedup_from(prefix: &AcPrefix<'_>) -> Self {
+        Self::materialize_with(prefix, |p, i, j| p.attends_dedup(i, j))
+    }
+
+    fn materialize_with<F: Fn(&AcPrefix<'_>, usize, usize) -> bool>(
+        prefix: &AcPrefix<'_>,
+        rule: F,
+    ) -> Self {
         let n = prefix.augmented_len();
         let total_bits = n.checked_mul(n).expect("augmented_len squared overflows");
         let words = total_bits.div_ceil(64);
@@ -344,7 +479,7 @@ impl AcPrefixMask {
         for i in 0..n {
             let row_base = i * n;
             for j in 0..n {
-                if prefix.attends(i, j) {
+                if rule(prefix, i, j) {
                     let bit = row_base + j;
                     // SAFETY: bit < n*n <= words*64, so bit/64 is in bounds.
                     bits[bit / 64] |= 1u64 << (bit % 64);
@@ -452,6 +587,87 @@ mod tests {
         assert!(!p.attends(2, 3)); // 2 < 3
         assert!(!p.attends(2, 5)); // 2 < 5
         assert!(!p.attends(4, 5)); // 4 < 5
+    }
+
+    #[test]
+    fn attends_dedup_eliminates_inplace_xc_attention() {
+        // base_len=4, xc_positions=[1,3]. augmented_len=6.
+        //   r0 = [0,2) — copies at original positions {1,3}
+        //   r1 = [2,6) — original sequence; r1 slots map to original positions:
+        //     aug 2 → orig 0 (eval), aug 3 → orig 1 (in-place xc),
+        //     aug 4 → orig 2 (eval), aug 5 → orig 3 (in-place xc)
+        let base = [10u32, 20, 30, 40];
+        let p = small_prefix(&base);
+
+        // ── Same as `attends` for r0-source columns ──
+        // (i ∈ r0, j ∈ r0) → true; (i ∈ r1, j ∈ r0) → true; (i ∈ r0, j ∈ r1) → false.
+        assert!(p.attends_dedup(0, 0)); // both r0
+        assert!(p.attends_dedup(0, 1)); // both r0
+        assert!(p.attends_dedup(1, 0)); // both r0
+        assert!(p.attends_dedup(2, 0)); // r1 → r0 copy
+        assert!(p.attends_dedup(5, 1)); // r1 → r0 copy
+        assert!(!p.attends_dedup(0, 2)); // r0 → r1
+        assert!(!p.attends_dedup(1, 5)); // r0 → r1
+
+        // ── DIFFERENCE from `attends`: eval must NOT attend to in-place xc in r1 ──
+        // aug 3 (orig 1) is an in-place xc → eval tokens in r1 must not attend to it.
+        assert!(!p.attends_dedup(4, 3)); // eval at aug 4 → in-place xc at aug 3
+        assert!(!p.attends_dedup(5, 3)); // eval at aug 5 → in-place xc at aug 3
+        // aug 5 (orig 3) is an in-place xc → eval tokens must not attend to it.
+
+        // Self-attention: aug 5 IS in-place xc. attends_dedup returns false for
+        // (i ∈ r1, j ∈ r1, j is in-place xc). But aug 5 attending to aug 5 is
+        // an in-place xc attending to ITSELF — this is the (i==j, both in-place xc)
+        // corner case. Per the deduplicated rule, this is also false because the
+        // row query is "eval doesn't attend to in-place xc". An in-place xc
+        // row is NOT an eval token; it's a conditioning token. Its row in the
+        // attention matrix is only consumed by the loss mask (which masks it
+        // out). So the self-attention of in-place xc doesn't affect the eval
+        // logprobs. The rule consistently returns false here.
+        assert!(!p.attends_dedup(5, 5)); // in-place xc self-attn → false (irrelevant for eval)
+        // aug 3 (orig 1, in-place xc) self-attention.
+        assert!(!p.attends_dedup(3, 3));
+
+        // ── eval → eval in r1 still causal ──
+        // aug 2 (orig 0, eval) and aug 4 (orig 2, eval):
+        assert!(p.attends_dedup(2, 2));  // self
+        assert!(p.attends_dedup(4, 2));  // eval at orig 2 → eval at orig 0
+        assert!(!p.attends_dedup(2, 4)); // causal: 2 < 4
+    }
+
+    #[test]
+    fn attends_dedup_empty_prefix_is_standard_causal() {
+        // With no conditioning, dedup must degenerate to standard causal
+        // (same as the original `attends` — there are no in-place xc to skip).
+        let base = [10u32, 20, 30, 40];
+        let p = AcPrefix::empty(&base);
+        for i in 0..4 {
+            for j in 0..4 {
+                assert_eq!(
+                    p.attends_dedup(i, j),
+                    i >= j,
+                    "empty-prefix dedup must match standard causal at ({i}, {j})"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn materialize_dedup_matches_attends_dedup_for_all_pairs() {
+        let base: Vec<u32> = (0..12).collect();
+        let xc = vec![0usize, 3, 7, 10];
+        let p = AcPrefix::new(&base, &xc);
+        let mask = AcPrefixMask::materialize_dedup_from(&p);
+        let n = p.augmented_len();
+        for i in 0..n {
+            for j in 0..n {
+                assert_eq!(
+                    mask.get(i, j, n),
+                    p.attends_dedup(i, j),
+                    "dedup mask bit ({i}, {j}) mismatch"
+                );
+            }
+        }
     }
 
     #[test]
