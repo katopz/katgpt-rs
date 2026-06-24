@@ -152,8 +152,8 @@ mod tests {
             &prefix_lines(&compiled.prefix),
             50000,
         );
-        let universal_output = match universal_tokens {
-            Ok(tokens) => extract_output(&tokens),
+        let (universal_output, universal_had_tokens) = match &universal_tokens {
+            Ok(tokens) => (extract_output(tokens), !tokens.is_empty()),
             Err(e) => {
                 eprintln!("universal evaluation failed: {e}");
                 return;
@@ -168,8 +168,8 @@ mod tests {
             &prefix_lines(&compiled.prefix),
             50000,
         );
-        let specialized_output = match specialized_tokens {
-            Ok(tokens) => extract_output(&tokens),
+        let (specialized_output, specialized_had_tokens) = match &specialized_tokens {
+            Ok(tokens) => (extract_output(tokens), !tokens.is_empty()),
             Err(e) => {
                 eprintln!("specialized evaluation failed: {e}");
                 return;
@@ -181,11 +181,11 @@ mod tests {
 
         // Both should produce output containing 'A'
         assert!(
-            universal_output.contains('A') || universal_tokens.unwrap().len() > 0,
+            universal_output.contains('A') || universal_had_tokens,
             "Universal model should produce output"
         );
         assert!(
-            specialized_output.contains('A') || specialized_tokens.unwrap().len() > 0,
+            specialized_output.contains('A') || specialized_had_tokens,
             "Specialized model should produce output"
         );
 
@@ -202,8 +202,8 @@ mod tests {
         // Build specialized graph
         let (specialized_graph, _, _) = build_specialized_graph(&program);
 
-        let universal_dims = universal_graph.num_dimensions();
-        let specialized_dims = specialized_graph.num_dimensions();
+        let universal_dims = universal_graph.all_dims.len();
+        let specialized_dims = specialized_graph.all_dims.len();
 
         println!("Universal dimensions:  {universal_dims}");
         println!("Specialized dimensions: {specialized_dims}");
@@ -382,8 +382,8 @@ mod tests {
         println!("  Plan 064 Summary: Futamura + Evaluator Verification");
         println!("═══════════════════════════════════════════════════════════");
 
-        println!("  Universal dims:  {}", universal_graph.num_dimensions());
-        println!("  Specialized dims: {}", specialized_graph.num_dimensions());
+        println!("  Universal dims:  {}", universal_graph.all_dims.len());
+        println!("  Specialized dims: {}", specialized_graph.all_dims.len());
 
         if let Ok(build) = specialize_result {
             println!(
@@ -398,11 +398,11 @@ mod tests {
 
         // Core assertions
         assert!(
-            universal_graph.num_dimensions() > 0,
+            universal_graph.all_dims.len() > 0,
             "Universal graph should have dimensions"
         );
         assert!(
-            specialized_graph.num_dimensions() > 0,
+            specialized_graph.all_dims.len() > 0,
             "Specialized graph should have dimensions"
         );
     }

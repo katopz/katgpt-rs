@@ -1,7 +1,7 @@
-# Issue 004: `percepta_compile` Feature Breaks `--all-features` — Missing Vendored `runtime.h`
+# Issue 004: `percepta_compile` Feature Breaks `--all-features` — Missing Vendored `runtime.h` — **RESOLVED**
 
 **Date:** 2026-06-24
-**Status:** Open — blocks `cargo check --all-features`
+**Status:** **CLOSED — RESOLVED.** `cargo check --all-features` now passes (EXIT 0). runtime.h vendored at tracked location `src/percepta/runtime.h`; latent masked test bugs fixed across 4 files.
 **Origin:** Surfaced during `--all-features` audit of pre-existing compile errors
 **Severity:** Medium (default builds unaffected; only fires when `percepta_compile` feature is on)
 
@@ -53,29 +53,96 @@ upstream Percepta source.
 4. Tests: `test_runtime_h_is_valid` asserts content contains `putchar`,
    `compute`, `#ifndef`.
 
-## Resolution Options (user to decide)
+## Resolution (2026-06-24)
 
-1. **Restore the vendored file** — copy `runtime.h` from the upstream Percepta
-   `transformer-vm` repo into `.raw/transformer-vm/transformer_vm/compilation/`.
-   This is the correct fix.
-2. **Remove the `include_str!`** and gate the `compile` module behind a
-   runtime-configurable path (e.g., env var pointing to an external copy).
-   More work, less self-contained.
-3. **Accept the breakage** — document that `percepta_compile` requires manual
-   setup, exclude it from `--all-features` CI if a guard script is added later.
+**Chosen option: hybrid of (1) and (2).** The upstream `runtime.h` was restored
+from `Percepta-Core/transformer-vm@main` (4894 bytes, Apache-2.0) but placed at
+a **tracked** location `src/percepta/runtime.h` instead of the gitignored
+`.raw/transformer-vm/...` path. The `include_str!` was updated to the idiomatic
+`include_str!("runtime.h")` (relative to `compile.rs`).
 
-## Why This Was Not Fixed In-Session
+### Why not just restore `.raw/transformer-vm/...`?
 
-The file is a vendored external dependency with specific C runtime declarations
-(`putchar`, `compute`, `#ifndef` guards). Recreating it from scratch would
-require knowledge of the Percepta `transformer-vm` ABI contract. Filing as an
-issue rather than guessing.
+`.raw/` is gitignored (`.gitignore:2`). Restoring the file there would only fix
+**local** builds — every fresh clone / CI run would still break. Moving the
+header to `src/percepta/` (next to `compile.rs`) makes it version-controlled
+and follows Rust convention for embedded assets. The `.raw/` dir stays
+"reference-only upstream trees"; a header that's actively compiled in belongs
+next to the code that uses it.
 
-## Related
+### Vendored `runtime.h` contents (matches upstream exactly + SPDX header)
 
-- 7 other pre-existing `--all-features` compile errors were fixed in this session
-  (commit pending): `feedback.rs` Display, `wasm_proof_witness.rs` lifetime,
-  `evaluator.rs` borrow-after-move + double-borrow, `buffer.rs` type annotation,
-  `feedback_bandit.rs` HashMap key type, `skill_catalog.rs` papaya `get_mut`.
-- After those fixes, this missing-file error is the **sole remaining**
-  `--all-features` blocker.
+Provides the C runtime that user programs compiled with `-nostdlib` link against:
+
+- `putchar(int ch)` — imports `env.output_byte` (the ONE import the WASM lowerer
+  recognizes → emits `("output", 0)` dispatch entry).
+- `print_str(const char *s)` — loop calling putchar.
+- `parse_int` / `print_int` — non-negative int I/O via repeated addition
+  (no MUL, no arrays, so clang keeps everything in WASM registers).
+- `sscanf(str, fmt, ...)` — minimal `%d` only.
+- `printf(fmt, ...)` — `%d` / `%s` / `%c` / `%%`.
+- All helpers `always_inline` / `noinline` to avoid stack frames.
+
+This satisfies every e2e test's contract: hello.c uses `print_str`, collatz.c
+uses `sscanf`+`printf`, the simple test uses `putchar`.
+
+### Latent masked test bugs also fixed
+
+Restoring `runtime.h` unblocked compilation of the entire `percepta_compile`
+module for the **first time** — which surfaced ~30 pre-existing latent test bugs
+that had never compiled (the `include_str!` failure masked them). Fixed:
+
+| File | Bug | Fix |
+|------|-----|-----|
+| `src/percepta/cumsum.rs` | `cs.insert(.., i as i64)` but `insert` takes `seq: i32` (×2) | `i as i32` |
+| `src/percepta/compile.rs` | `op == "output"` where `op: &&str` (×11, masked) | `*op == "output"` |
+| `src/percepta/runner.rs` | same `&&str == &str` pattern (×2) | `*op == ...` |
+| `tests/integration.rs` | `head.insert(.., i as i64)` but takes `seq: i32` (×1) | `i as i32` |
+| `tests/test_percepta_rust_wasm.rs` | same `&&str == &str` pattern (×12) | `*op == ...` |
+| `tests/bench_064_futamura_evaluator.rs` | `ProgramGraph::num_dimensions()` never existed (×6); move-after-match on `Runner::evaluate` result (×2) | `all_dims.len()` + match-by-reference |
+
+## Verification
+
+```bash
+# Issue 004 headline — was: 1 hard error; now: EXIT 0
+cargo check --all-features
+
+# Default build unaffected (G3 no-regression)
+cargo check                                # EXIT 0
+cargo test -p katgpt-core --lib            # 509 passed, 0 failed
+
+# percepta_compile now compiles AND its tests run (clang+wasm32 present):
+cargo check --features percepta_compile    # EXIT 0
+cargo test --features percepta_compile --lib -- percepta::
+    # 339 passed, 0 failed, 13 ignored — incl. all 4 C→WASM e2e tests:
+    #   test_e2e_compile_hello_c / collatz_c / c_to_wasm_only / no_input_program
+cargo test --features percepta_compile --test test_percepta_rust_wasm
+    # 18 passed, 0 failed, 6 ignored (Rust→WASM→prefix pipeline)
+```
+
+## Known pre-existing failure (NOT introduced by this fix)
+
+`bench_064_futamura_evaluator::tests::proof_futamura_specialized_has_fewer_dimensions`
+fails: specialized graph has **300** dims vs universal **216**. The assertion
+`specialized_dims <= universal_dims` is a flawed premise — Futamura specialization
+trades generic instruction-fetch attention for per-instruction dimensions, so
+`all_dims.len()` *grows* for a baked-in program while attention complexity
+shrinks. This test never compiled before (the `num_dimensions()` method it called
+never existed), so the failure is a pre-existing latent logic bug. The correct
+metric for "specialization reduces work" is lookup/attention-head count, not raw
+dimension count — but changing the assertion would be guessing the author's
+intent, so it is left as-is and documented here.
+
+## TL;DR
+
+**RESOLVED.** `percepta_compile`'s `include_str!` pointed at a gitignored
+`.raw/` path that was never populated, breaking `cargo check --all-features`.
+Restored the upstream Percepta `runtime.h` (Apache-2.0) to a tracked location
+`src/percepta/runtime.h` and updated the `include_str!` to `"runtime.h"`.
+Unblocking the module's first-ever compile surfaced ~30 latent masked test bugs
+(`&&str == &str`, `i64` vs `i32`, a never-existent `num_dimensions()`, and a
+move-after-match) — all fixed across 6 files. `cargo check --all-features` now
+EXIT 0; 339 percepta lib tests + 18 Rust→WASM integration tests pass including
+all 4 C→WASM e2e tests; katgpt-core G3 regression clean (509 passed). One
+pre-existing logic assertion in `bench_064` (flawed Futamura dim-count premise)
+remains and is documented.

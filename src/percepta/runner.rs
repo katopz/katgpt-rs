@@ -625,8 +625,8 @@ mod tests {
         let compiled = result.unwrap();
         assert!(compiled.prefix.starts_with("{\n"));
         assert!(compiled.prefix.ends_with("}\n"));
-        assert!(compiled.program.iter().any(|(op, _)| op == "output"));
-        assert!(compiled.program.iter().any(|(op, _)| op == "halt"));
+        assert!(compiled.program.iter().any(|(op, _)| *op == "output"));
+        assert!(compiled.program.iter().any(|(op, _)| *op == "halt"));
     }
 
     #[test]

@@ -51,8 +51,12 @@ const GLOBAL_BASE: i64 = 8;
 const PLACEHOLDER: i32 = 0xDEAD;
 
 /// Embedded runtime.h for WASM compilation.
-pub const RUNTIME_H: &str =
-    include_str!("../../.raw/transformer-vm/transformer_vm/compilation/runtime.h");
+///
+/// Vendored from Percepta transformer-vm (Apache-2.0 © Percepta) and tracked at
+/// `src/percepta/runtime.h`. Provides `putchar` (→ `env.output_byte` import),
+/// `print_str`, `print_int`, `parse_int`, and minimal `printf`/`sscanf` (`%d`,
+/// `%s`, `%c`, `%%`) so user C compiled with `-nostdlib` can emit output.
+pub const RUNTIME_H: &str = include_str!("runtime.h");
 
 // ── Error Type ─────────────────────────────────────────────────
 
@@ -1475,10 +1479,10 @@ mod tests {
         assert_eq!(result.input_base, 65536);
 
         // Should contain output instruction
-        assert!(result.program.iter().any(|(op, _)| op == "output"));
+        assert!(result.program.iter().any(|(op, _)| *op == "output"));
 
         // Should contain halt instruction
-        assert!(result.program.iter().any(|(op, _)| op == "halt"));
+        assert!(result.program.iter().any(|(op, _)| *op == "halt"));
 
         // Count non-empty lines in prefix
         let lines: Vec<&str> = result
@@ -1576,12 +1580,12 @@ mod tests {
         .unwrap();
 
         // GLOBAL_GET expands to: i32.const (addr) + i32.load 0
-        assert!(result.iter().any(|(op, _)| op == "i32.load"));
+        assert!(result.iter().any(|(op, _)| *op == "i32.load"));
         // Should contain the global address: GLOBAL_BASE + 4*0 = 8
         assert!(
             result
                 .iter()
-                .any(|(op, imm)| op == "i32.const" && *imm == GLOBAL_BASE as i32)
+                .any(|(op, imm)| *op == "i32.const" && *imm == GLOBAL_BASE as i32)
         );
     }
 
@@ -1668,7 +1672,7 @@ mod tests {
             .program
             .iter()
             .enumerate()
-            .filter(|(_, (op, _))| op == "br")
+            .filter(|(_, (op, _))| *op == "br")
             .collect();
 
         assert!(!br_entries.is_empty(), "should have br instructions");
@@ -1758,8 +1762,7 @@ void compute(const char *input) {
 
         // Must contain output instruction (print_str → putchar → output_byte)
         assert!(
-            compiled.program.iter().any(|(op, _)| op == "output"),
-            "program should contain output instruction"
+            compiled.program.iter().any(|(op, _)| *op == "output")
         );
 
         // Must end with halt
@@ -1767,7 +1770,7 @@ void compute(const char *input) {
             compiled
                 .program
                 .last()
-                .map_or(false, |(op, _)| op == "halt"),
+                .map_or(false, |(op, _)| *op == "halt"),
             "program should end with halt"
         );
 
@@ -1827,13 +1830,13 @@ void compute(const char *input) {
             compiled
                 .program
                 .iter()
-                .any(|(op, _)| op == "br" || op == "br_if"),
+                .any(|(op, _)| *op == "br" || *op == "br_if"),
             "collatz should have branch instructions (loop)"
         );
 
         // Should have output instructions
         assert!(
-            compiled.program.iter().any(|(op, _)| op == "output"),
+            compiled.program.iter().any(|(op, _)| *op == "output"),
             "collatz should have output instructions (printf → putchar)"
         );
 
@@ -1890,8 +1893,8 @@ void compute(const char *input) {
         );
 
         let compiled = result.unwrap();
-        assert!(compiled.program.iter().any(|(op, _)| op == "output"));
-        assert!(compiled.program.iter().any(|(op, _)| op == "halt"));
+        assert!(compiled.program.iter().any(|(op, _)| *op == "output"));
+        assert!(compiled.program.iter().any(|(op, _)| *op == "halt"));
 
         // Cleanup
         let _ = fs::remove_dir_all(&temp_dir);

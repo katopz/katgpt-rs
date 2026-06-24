@@ -116,7 +116,7 @@ mod tests {
 
         for i in 1..=5 {
             let val = i as f64;
-            cs.insert(val, i as f64, i as i64);
+            cs.insert(val, i as f64, i as i32);
             expected += val;
             let got = cs.query();
             assert!(
@@ -137,7 +137,7 @@ mod tests {
         let mut expected = 0.0_f64;
 
         for (i, &val) in fibs.iter().enumerate() {
-            cs.insert(val, i as f64, i as i64);
+            cs.insert(val, i as f64, i as i32);
             expected += val;
             let got = cs.query();
             assert!(

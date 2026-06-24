@@ -1764,7 +1764,7 @@ fn test_cht_streaming_solver_query_correctness() {
     // Insert monotonic trace: (step, filled) → value = step
     for i in 0..20usize {
         let filled = i + 5;
-        head.insert([i as f64, filled as f64], [i as f64, 0.0], i as i64);
+        head.insert([i as f64, filled as f64], [i as f64, 0.0], i as i32);
     }
 
     // Query: rightmost kx (qx=1, qy=0) → should return last step

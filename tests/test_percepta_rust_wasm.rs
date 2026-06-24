@@ -387,7 +387,7 @@ fn test_f6_compile_hello_program() {
 
     // Must contain output instruction (output_byte calls → output)
     assert!(
-        compiled.program.iter().any(|(op, _)| op == "output"),
+        compiled.program.iter().any(|(op, _)| *op == "output"),
         "program should contain output instruction, got: {:?}",
         compiled.program.iter().take(10).collect::<Vec<_>>()
     );
@@ -397,7 +397,7 @@ fn test_f6_compile_hello_program() {
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| op == "halt"),
+            .map_or(false, |(op, _)| *op == "halt"),
         "program should end with halt, last: {:?}",
         compiled.program.last()
     );
@@ -427,7 +427,7 @@ fn test_f6_compile_simple_ok_program() {
     let output_count = compiled
         .program
         .iter()
-        .filter(|(op, _)| op == "output")
+        .filter(|(op, _)| *op == "output")
         .count();
     assert!(
         output_count >= 3,
@@ -460,7 +460,7 @@ fn test_f6_compile_addition_program() {
 
     // Should have output instructions
     assert!(
-        compiled.program.iter().any(|(op, _)| op == "output"),
+        compiled.program.iter().any(|(op, _)| *op == "output"),
         "addition should have output instructions"
     );
 
@@ -499,7 +499,7 @@ fn test_f6_compile_fibonacci_program() {
     let has_branches = compiled
         .program
         .iter()
-        .any(|(op, _)| op == "br" || op == "br_if");
+        .any(|(op, _)| *op == "br" || *op == "br_if");
     assert!(
         has_branches,
         "fibonacci should have branch instructions (loop)"
@@ -565,12 +565,12 @@ fn test_f6_runner_compile_rust_template() {
     );
 
     let compiled = result.unwrap();
-    assert!(compiled.program.iter().any(|(op, _)| op == "output"));
+    assert!(compiled.program.iter().any(|(op, _)| *op == "output"));
     assert!(
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| op == "halt")
+            .map_or(false, |(op, _)| *op == "halt")
     );
 }
 
@@ -671,12 +671,12 @@ fn test_h5_hello_compile_through_runner() {
     let compiled = result.unwrap();
 
     // Verify the dispatch table is well-formed
-    assert!(compiled.program.iter().any(|(op, _)| op == "output"));
+    assert!(compiled.program.iter().any(|(op, _)| *op == "output"));
     assert!(
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| op == "halt")
+            .map_or(false, |(op, _)| *op == "halt")
     );
 
     // Verify prefix format
@@ -761,7 +761,7 @@ fn test_h6_countdown_full_compile() {
         compiled
             .program
             .iter()
-            .any(|(op, _)| op == "br" || op == "br_if"),
+            .any(|(op, _)| *op == "br" || *op == "br_if"),
         "countdown should have branches"
     );
 
