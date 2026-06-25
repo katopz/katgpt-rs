@@ -1,7 +1,7 @@
 //! ARG Protocol Primitives — open generic types distilled from the ARG Standard
 //! (Iris Technologies, 2026; https://protocol.airistech.ai/arg-core.html).
 //!
-//! Plan 327 Phases 1-2, Research 309 — open half of the ARG × Latent Substrate
+//! Plan 327 Phases 1-3, Research 309 — open half of the ARG × Latent Substrate
 //! Super-GOAT fusion. Five generic protocol primitives (no game / chain /
 //! shard semantics):
 //!
@@ -17,10 +17,13 @@
 //! - [`scorer`] — `OfflineCandidateScorer`, `Evidence`, `InfoOutcomeStatus`,
 //!   `GainComponents`, `ScoredCandidate`. Step C scoring with the G5
 //!   silence-bias penalty (`silence ≠ confirmed success`).
+//! - [`registry`] — `InfoRegistry`, `InfoKey`, `InfoUnit`, `MatchResult`,
+//!   `CompareFn`. Step 9 + Step C two-phase dedup (primary key index +
+//!   secondary payload-hash collision index) with grey-zone review.
 //!
-//! Phase 3 will ship the fifth primitive (`InfoRegistry` with two-phase dedup).
-//! Private runtime composition with HLA / Entity Cognition Stack / VMG /
-//! Sub-Goal Compaction lives in `riir-ai/.plans/337_arg_runtime_wiring.md`.
+//! All five primitives shipped. Private runtime composition with HLA / Entity
+//! Cognition Stack / VMG / Sub-Goal Compaction lives in
+//! `riir-ai/.plans/337_arg_runtime_wiring.md`.
 //!
 //! All primitives are pure types + validators. No LLM in the hot path. The
 //! protocol permits LLM escalation (ARG OW-3.2 bounded proposer) — this crate
@@ -30,6 +33,7 @@
 pub mod candidate;
 pub mod lifecycle;
 pub mod policy;
+pub mod registry;
 pub mod scorer;
 pub mod taxonomy;
 
@@ -37,6 +41,10 @@ pub use candidate::{CandidateIntent, CandidateKind, EvidenceId, TypedOfflineCand
 pub use lifecycle::{LifecycleState, RedirectTable};
 pub use policy::{
     PolicyConstraints, PolicyDecision, PolicyEnvelope, PolicyState, ResponseMode, ShouldProceed,
+};
+pub use registry::{
+    AccessScope, CompareFn, CompareResult, InfoKey, InfoRegistry, InfoType, InfoUnit,
+    LabelSignature, MatchResult, MatchScratch, PayloadHash, PayloadHashCompare, Provenance,
 };
 pub use scorer::{
     DEFAULT_AUTO_COMMIT_THRESHOLD, Evidence, GainComponents, InfoOutcomeStatus,

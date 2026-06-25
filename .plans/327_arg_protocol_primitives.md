@@ -6,7 +6,7 @@
 **Private wiring plan:** [riir-ai/.plans/337_arg_runtime_wiring.md](../../riir-ai/.plans/337_arg_runtime_wiring.md)
 **Source protocol:** [ARG Standard](https://protocol.airistech.ai/arg-core.html) — Iris Technologies, 2026
 **Target:** `katgpt-rs/crates/katgpt-core/src/arg/` (new module) + Cargo feature `arg_protocol`
-**Status:** Active — Phase 3 (InfoRegistry) next. Phases 1-2 shipped.
+**Status:** Active — Phase 4 (GOAT gate + promotion) next. Phases 1-3 shipped.
 
 ---
 
@@ -90,7 +90,7 @@ The three smallest, most foundational primitives. Ships first so the open adopti
 
 ## Phase 3 — Info Registry
 
-- [ ] **T3.1** Write `arg/registry.rs` — `InfoRegistry`, `InfoUnit`, `InfoKey`, `InfoType`, `AccessScope`, `CompareResult`. ≤250 lines.
+- [x] **T3.1** Write `arg/registry.rs` — `InfoRegistry`, `InfoUnit`, `InfoKey`, `InfoType`, `AccessScope`, `CompareResult`. ≤250 lines.
   - `InfoType = u8` (controlled category)
   - `AccessScope = u64` (tenant/workspace id)
   - `LabelSignature = [u8; 32]` (BLAKE3 of `L_final_ids`)
@@ -102,7 +102,7 @@ The three smallest, most foundational primitives. Ships first so the open adopti
     - Phase 2: bounded recall on Top-K via lexical/vector (slot reserved, not implemented — gateway trait)
     - Phase 3: grey-zone `CompareResult ∈ {Same, Different, Unsure}` via pluggable `CompareFn` trait
   - `MatchResult ∈ {StrongMatch(InfoUnit), GreyZone(Vec<InfoUnit>), NoMatch}`
-- [ ] **T3.2** Property tests:
+- [x] **T3.2** Property tests:
   - Two units with same `InfoKey` → `StrongMatch`
   - Two units with different `InfoKey` but same payload hash → `GreyZone`
   - Two units with different `InfoKey` and different payload → `NoMatch`
