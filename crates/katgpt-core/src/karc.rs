@@ -213,7 +213,10 @@ impl<const M: usize> BSplineBasis<M> {
 
     /// Construct on domain `[0,1]`.
     pub fn new() -> Self {
-        assert!(M >= Self::DEGREE + 1, "BSplineBasis requires M >= degree+1 = 4");
+        assert!(
+            M >= Self::DEGREE + 1,
+            "BSplineBasis requires M >= degree+1 = 4"
+        );
         let d = Self::DEGREE;
         let knot_len = Self::knot_len();
         let mut knots = vec![0.0f32; knot_len];
@@ -488,11 +491,7 @@ pub fn feature_expand_higher_order<B: KarcBasis<M>, const M: usize, const R: usi
                     idx += 1;
                 }
             }
-            debug_assert_eq!(
-                idx,
-                d_h_1 * (d_h_1 + 1) / 2,
-                "pair buffer size mismatch"
-            );
+            debug_assert_eq!(idx, d_h_1 * (d_h_1 + 1) / 2, "pair buffer size mismatch");
         }
         _ => panic!(
             "feature_expand_higher_order: R={} not implemented (only R ∈ {{1,2}})",
@@ -829,7 +828,12 @@ pub fn low_rank_fit(
     scratch: &mut LowRankFitScratch,
 ) -> usize {
     assert!(r > 0, "low_rank_fit: r must be > 0");
-    assert!(r <= d_h, "low_rank_fit: r must be <= d_h (got r={}, d_h={})", r, d_h);
+    assert!(
+        r <= d_h,
+        "low_rank_fit: r must be <= d_h (got r={}, d_h={})",
+        r,
+        d_h
+    );
     assert!(lambda > 0.0, "low_rank_fit: lambda must be > 0");
     assert!(a_out.len() >= d_out * r, "a_out too small");
     assert!(b_out.len() >= r * d_h, "b_out too small");
@@ -1055,8 +1059,7 @@ pub fn low_rank_fit(
             let diff = scratch.wout_new[idx] - scratch.wout_old[idx];
             diff_sq += diff * diff;
         }
-        scratch.wout_old[..d_out * d_h]
-            .copy_from_slice(&scratch.wout_new[..d_out * d_h]);
+        scratch.wout_old[..d_out * d_h].copy_from_slice(&scratch.wout_new[..d_out * d_h]);
 
         if diff_sq.sqrt() < tol {
             iters_done = iter + 1;
@@ -1064,6 +1067,152 @@ pub fn low_rank_fit(
         }
     }
     iters_done
+}
+
+/// Single B-step ridge solve with a **frozen** `A` — solves
+/// `min_B ‖Y − A_frozen·B·Xᵀ‖²_F + λ‖B‖²_F` in closed form (Plan 308
+/// extension for Plan 332 Phase 7 cross-game transfer).
+///
+/// This is the frozen-A half of [`low_rank_fit`]: instead of alternating A
+/// and B steps, `A` is held fixed at `a_frozen` (e.g. the "personality
+/// factor" transferred from Game A) and only `B` is solved for, from Game
+/// B's Gram/Cov. Mathematically it is exactly one B-step of the ALS loop in
+/// [`low_rank_fit`] (lines 940–1019 of that function), extracted as a
+/// standalone primitive so callers can seed a Game-B forecaster with Game
+/// A's personality structure.
+///
+/// # The cross-game transfer hypothesis
+///
+/// If the KARC low-rank factorization `Wout = A·B` is interpreted as
+/// "`A` = which HLA-axis combinations this NPC cares about (personality),
+/// `B` = how observed features map onto those combinations (game-specific
+/// readout)", then freezing `A` from Game A and re-fitting `B` from Game B
+/// tests whether personality transfers across games. See the Plan 332
+/// Phase 7 benchmark and `.benchmarks/152_karc_cross_game_transfer.md` for
+/// the empirical verdict.
+///
+/// # Inputs
+///
+/// - `gram` — un-regularized feature Gram `XᵀX` (`d_h × d_h`, f64).
+/// - `cov` — cross-covariance `XᵀY` (`d_h × d_out`, f64).
+/// - `a_frozen` — frozen `A` factor (`d_out × r`, f64, row-major). Must be
+///   the transferred personality matrix from Game A.
+/// - `lambda` — ridge regularization `λ > 0`.
+///
+/// # Outputs
+///
+/// - `b_out` — solved `B` (`r × d_h`, f64, row-major). `A_frozen·B_out`
+///   minimizes the frozen-A ridge objective over the supplied Gram/Cov.
+///
+/// Uses the caller-supplied `scratch` (the same `LowRankFitScratch` used by
+/// [`low_rank_fit`], re-purposed). The dominant allocation is the
+/// `(r·d_h)×(r·d_h)` Kronecker system — same cost as one ALS B-step.
+///
+/// # Panics
+///
+/// Panics if `r == 0`, `r > d_h`, `λ ≤ 0`, `a_frozen.len() != d_out*r`, or
+/// `b_out.len() < r*d_h`.
+pub fn low_rank_fit_b_with_frozen_a(
+    gram: &[f64],
+    cov: &[f64],
+    d_h: usize,
+    d_out: usize,
+    r: usize,
+    lambda: f64,
+    a_frozen: &[f64],
+    b_out: &mut [f64],
+    scratch: &mut LowRankFitScratch,
+) {
+    assert!(r > 0, "low_rank_fit_b_with_frozen_a: r must be > 0");
+    assert!(
+        r <= d_h,
+        "low_rank_fit_b_with_frozen_a: r must be <= d_h (got r={}, d_h={})",
+        r,
+        d_h
+    );
+    assert!(
+        lambda > 0.0,
+        "low_rank_fit_b_with_frozen_a: lambda must be > 0"
+    );
+    assert_eq!(
+        a_frozen.len(),
+        d_out * r,
+        "low_rank_fit_b_with_frozen_a: a_frozen.len() = {} but expected d_out*r = {}*{} = {}",
+        a_frozen.len(),
+        d_out,
+        r,
+        d_out * r,
+    );
+    assert_eq!(
+        b_out.len(),
+        r * d_h,
+        "low_rank_fit_b_with_frozen_a: b_out.len() = {} but expected r*d_h = {}*{} = {}",
+        b_out.len(),
+        r,
+        d_h,
+        r * d_h,
+    );
+
+    // ── Single B-step with A = a_frozen (extracted from low_rank_fit) ──
+    // The B-step normal equation (AᵀA)·B·G + λB = Aᵀ·Covᵀ vectorizes as
+    // (G ⊗ AᵀA + λI_{r·d_h}) · vec(B) = vec(Aᵀ·Covᵀ).
+    let rd_h = r * d_h;
+
+    // 0. Compute Cov·A (d_h × r).
+    for i in 0..d_h {
+        for k in 0..r {
+            let mut s = 0.0f64;
+            for d in 0..d_out {
+                s += cov[i * d_out + d] * a_frozen[d * r + k];
+            }
+            scratch.cov_a[i * r + k] = s;
+        }
+    }
+    // 1. Build AᵀA (r × r) from the frozen A.
+    for i in 0..r {
+        for j in 0..r {
+            let mut s = 0.0f64;
+            for d in 0..d_out {
+                s += a_frozen[d * r + i] * a_frozen[d * r + j];
+            }
+            scratch.ata[i * r + j] = s;
+        }
+    }
+    // 2. Build the Kronecker system M = G ⊗ (AᵀA) + λI (rd_h × rd_h).
+    //    Same dominant allocation as one ALS B-step (see low_rank_fit comment).
+    let mut m = vec![0.0f64; rd_h * rd_h];
+    for i1 in 0..r {
+        for i2 in 0..r {
+            let ata_i1i2 = scratch.ata[i1 * r + i2];
+            for j1 in 0..d_h {
+                for j2 in 0..d_h {
+                    let row = i1 * d_h + j1;
+                    let col = i2 * d_h + j2;
+                    m[row * rd_h + col] = gram[j1 * d_h + j2] * ata_i1i2;
+                    if row == col {
+                        m[row * rd_h + col] += lambda;
+                    }
+                }
+            }
+        }
+    }
+    // 3. Build RHS = vec(Aᵀ·Covᵀ) (r × d_h, row-major → vec of length rd_h).
+    let mut rhs = vec![0.0f64; rd_h];
+    for i in 0..r {
+        for j in 0..d_h {
+            rhs[i * d_h + j] = scratch.cov_a[j * r + i];
+        }
+    }
+    // 4. Cholesky-solve M · vec(B) = rhs → vec(B) into b_out.
+    let mut chol_m = vec![0.0f64; rd_h * rd_h];
+    let mut z_m = vec![0.0f64; rd_h];
+    let mut x_m = vec![0.0f64; rd_h];
+    cholesky_f64(&mut chol_m, &m, rd_h);
+    chol_solve_f64(&mut x_m, &mut z_m, &chol_m, &rhs, rd_h, 1);
+    // 5. Unpack vec(B) → B (r × d_h, row-major).
+    b_out[..rd_h].copy_from_slice(&x_m[..rd_h]);
+    // NOTE: no scale rebalancing here — A is frozen, so rebalancing would
+    // change A (forbidden). The caller accepts A_frozen's scale as-is.
 }
 
 // ── Phase 2: Low-rank forecast matvec (paper Eq. 47 inference) ────────────
@@ -1161,9 +1310,7 @@ pub struct KarcForecaster<B: KarcBasis<M>, const D: usize, const M: usize, const
     forecast_low_rank_mid: Vec<f32>,
 }
 
-impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize>
-    KarcForecaster<B, D, M, K>
-{
+impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize> KarcForecaster<B, D, M, K> {
     /// Feature dimension `d_h = K·D·M`.
     pub const D_H: usize = K * D * M;
 
@@ -1231,9 +1378,13 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize>
         let d_h = Self::D_H;
         let expected = D * d_h;
         assert_eq!(
-            wout.len(), expected,
+            wout.len(),
+            expected,
             "KarcForecaster::restore_wout: wout.len() = {} but expected D*d_h = {}*{} = {}",
-            wout.len(), D, d_h, expected,
+            wout.len(),
+            D,
+            d_h,
+            expected,
         );
         self.wout = wout;
         self.fitted = true;
@@ -1452,7 +1603,15 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize>
             let x = &self.features_buf[..n * d_h];
             let w_t = &mut self.wout[..w_t_len];
             ridge_solve_woodbury_f32(
-                w_t, &mut sample_chol_f32, &mut sample_z_f32, &sample_gram_f32, y, x, n, d_h, D,
+                w_t,
+                &mut sample_chol_f32,
+                &mut sample_z_f32,
+                &sample_gram_f32,
+                y,
+                x,
+                n,
+                d_h,
+                D,
             );
         }
         // Transpose Wᵀ (d_h × D) → Wout (D × d_h).
@@ -1612,8 +1771,17 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize>
         let mut b64 = vec![0.0f64; r * d_h];
         let mut lr_scratch = LowRankFitScratch::with_capacity(d_h, D, r);
         let iters = low_rank_fit(
-            &s.gram, &s.cov, d_h, D, r, lambda64, max_iters, tol as f64,
-            &mut a64, &mut b64, &mut lr_scratch,
+            &s.gram,
+            &s.cov,
+            d_h,
+            D,
+            r,
+            lambda64,
+            max_iters,
+            tol as f64,
+            &mut a64,
+            &mut b64,
+            &mut lr_scratch,
         );
 
         // Cast to f32 storage.
@@ -1627,6 +1795,132 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize>
         self.forecast_low_rank_mid.clear();
         self.forecast_low_rank_mid.resize(r, 0.0);
         Ok(iters)
+    }
+
+    /// Cross-game transfer fit: solve `B` with `A` **frozen** at
+    /// `a_frozen`, leaving the "personality factor" `A` untouched while
+    /// re-fitting the "game-specific readout" `B` from the currently-
+    /// accumulated trajectory buffer (Plan 308 extension for Plan 332 Phase 7).
+    ///
+    /// This is the forecaster-level wrapper around
+    /// [`low_rank_fit_b_with_frozen_a`]. It builds the feature Gram `XᵀX` and
+    /// cross-covariance `XᵀY` from the accumulated trajectory buffer, then
+    /// solves the frozen-A ridge objective in closed form.
+    ///
+    /// # The cross-game transfer semantics
+    ///
+    /// - `a_frozen` is `D × r` (row-major), transferred from a Game-A fit
+    ///   (e.g. extracted from a [`KarcShard`](riir_neuron_db::KarcShard) via
+    ///   the Plan 332 Phase 4 freeze bridge, then SVD/ALS-decomposed).
+    /// - After this call, [`Self::is_low_rank_fitted`] is `true`,
+    ///   [`Self::a_low_rank`] holds `a_frozen` (cast to f32), and
+    ///   [`Self::b_low_rank`] holds the freshly-fit Game-B `B`.
+    /// - [`Self::forecast_low_rank_into`] works immediately: `û = A_frozen · B_B · Ψ(x)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `a_frozen.len() != D * r` (shape mismatch). Returns
+    /// [`FitError::NoSamples`] if the trajectory buffer is empty. Returns
+    /// [`FitError::NonPositiveLambda`] if `lambda <= 0`.
+    ///
+    /// # Modelless note
+    ///
+    /// This is a closed-form ridge solve — no gradient descent, no backprop.
+    /// The transfer is deterministic given `(a_frozen, trajectory, lambda)`.
+    pub fn fit_low_rank_with_frozen_a(
+        &mut self,
+        a_frozen: &[f32],
+        r: usize,
+        lambda: f32,
+    ) -> Result<(), FitError> {
+        if self.n_samples == 0 {
+            return Err(FitError::NoSamples);
+        }
+        if lambda <= 0.0 {
+            return Err(FitError::NonPositiveLambda);
+        }
+        assert_eq!(
+            a_frozen.len(),
+            D * r,
+            "fit_low_rank_with_frozen_a: a_frozen.len() = {} but expected D*r = {}*{} = {}",
+            a_frozen.len(),
+            D,
+            r,
+            D * r,
+        );
+        let d_h = Self::D_H;
+        let n = self.n_samples;
+        let lambda64 = lambda as f64;
+
+        // Build un-regularized Gram (XᵀX) and Cov (XᵀY) in f64 — identical
+        // to the accumulation in fit_low_rank.
+        let s = &mut self.scratch;
+        s.clear();
+        s.gram.clear();
+        s.gram.resize(d_h * d_h, 0.0);
+        for row_idx in 0..n {
+            let row = &self.features_buf[row_idx * d_h..(row_idx + 1) * d_h];
+            for i in 0..d_h {
+                let ri = row[i] as f64;
+                let mut j = i;
+                while j + 4 <= d_h {
+                    s.gram[i * d_h + j] += ri * row[j] as f64;
+                    s.gram[i * d_h + j + 1] += ri * row[j + 1] as f64;
+                    s.gram[i * d_h + j + 2] += ri * row[j + 2] as f64;
+                    s.gram[i * d_h + j + 3] += ri * row[j + 3] as f64;
+                    j += 4;
+                }
+                while j < d_h {
+                    s.gram[i * d_h + j] += ri * row[j] as f64;
+                    j += 1;
+                }
+            }
+        }
+        // Symmetrise.
+        for i in 0..d_h {
+            for j in 0..i {
+                s.gram[i * d_h + j] = s.gram[j * d_h + i];
+            }
+        }
+        s.cov.clear();
+        s.cov.resize(d_h * D, 0.0);
+        for row_idx in 0..n {
+            let row = &self.features_buf[row_idx * d_h..(row_idx + 1) * d_h];
+            let target = &self.targets_buf[row_idx * D..(row_idx + 1) * D];
+            for i in 0..d_h {
+                let ri = row[i] as f64;
+                for d in 0..D {
+                    s.cov[i * D + d] += ri * target[d] as f64;
+                }
+            }
+        }
+
+        // Cast a_frozen to f64 for the solve.
+        let a64: Vec<f64> = a_frozen.iter().map(|&v| v as f64).collect();
+        let mut b64 = vec![0.0f64; r * d_h];
+        let mut lr_scratch = LowRankFitScratch::with_capacity(d_h, D, r);
+        low_rank_fit_b_with_frozen_a(
+            &s.gram,
+            &s.cov,
+            d_h,
+            D,
+            r,
+            lambda64,
+            &a64,
+            &mut b64,
+            &mut lr_scratch,
+        );
+
+        // Cast to f32 storage. A is frozen (copied verbatim), B is freshly fit.
+        self.a_low_rank.clear();
+        self.a_low_rank.extend(a_frozen.iter().copied());
+        self.b_low_rank.clear();
+        self.b_low_rank.extend(b64.iter().map(|&v| v as f32));
+        self.low_rank_r = r;
+        self.low_rank_fitted = true;
+        self.forecast_low_rank_mid.clear();
+        self.forecast_low_rank_mid.resize(r, 0.0);
+        Ok(())
     }
 
     /// Phase 2 (T2.4): forecast `û = A · (B · Ψ(delay_state))` using the
@@ -1767,7 +2061,12 @@ mod tests {
         for x in (0..=100).map(|i| i as f32 / 100.0) {
             basis.eval_into(x, &mut out);
             let sum: f32 = out.iter().sum();
-            assert!(approx_eq(sum, 1.0, 1e-3), "B-spline sum at x={} = {}", x, sum);
+            assert!(
+                approx_eq(sum, 1.0, 1e-3),
+                "B-spline sum at x={} = {}",
+                x,
+                sum
+            );
         }
     }
 
@@ -1852,8 +2151,12 @@ mod tests {
         feature_expand::<ChebyshevBasis<4>, 4>(&delay, &basis, &mut out_first);
         feature_expand_higher_order::<ChebyshevBasis<4>, 4, 1>(&delay, &basis, &mut out_higher);
         for i in 0..12 {
-            assert_eq!(out_first[i].to_bits(), out_higher[i].to_bits(),
-                "R=1 mismatch at idx {}", i);
+            assert_eq!(
+                out_first[i].to_bits(),
+                out_higher[i].to_bits(),
+                "R=1 mismatch at idx {}",
+                i
+            );
         }
     }
 
@@ -1879,9 +2182,15 @@ mod tests {
         for f1 in 0..4 {
             for f2 in f1..4 {
                 let expected = psi[f1] * psi[f2];
-                assert!(approx_eq(out[idx], expected, 1e-5),
+                assert!(
+                    approx_eq(out[idx], expected, 1e-5),
                     "pair ({},{}) at idx {}: got {}, expected {}",
-                    f1, f2, idx, out[idx], expected);
+                    f1,
+                    f2,
+                    idx,
+                    out[idx],
+                    expected
+                );
                 idx += 1;
             }
         }
@@ -1894,12 +2203,7 @@ mod tests {
         // a hand-computed XᵀX + λI.
         let d_h = 3;
         let n = 4;
-        let features: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            0.5, 1.0, 1.5,
-            2.0, 0.0, 1.0,
-            1.0, 1.0, 1.0,
-        ];
+        let features: Vec<f32> = vec![1.0, 2.0, 3.0, 0.5, 1.0, 1.5, 2.0, 0.0, 1.0, 1.0, 1.0, 1.0];
         let lambda = 0.1f64;
         // Direct XᵀX.
         let mut direct_gram = vec![0.0f64; d_h * d_h];
@@ -1919,9 +2223,13 @@ mod tests {
         let iter = (0..n).map(|r| &features[r * d_h..(r + 1) * d_h] as &[f32]);
         chunked_gram_into(iter, &mut chunked, lambda, d_h);
         for i in 0..d_h * d_h {
-            assert!((direct_gram[i] - chunked[i]).abs() < 1e-10,
+            assert!(
+                (direct_gram[i] - chunked[i]).abs() < 1e-10,
                 "gram mismatch at {}: direct={}, chunked={}",
-                i, direct_gram[i], chunked[i]);
+                i,
+                direct_gram[i],
+                chunked[i]
+            );
         }
     }
 
@@ -1957,9 +2265,13 @@ mod tests {
         let mut mid = [0.0f32; 2];
         forecast_low_rank_apply(&a, &b, &psi, &mut mid, &mut out_lr, d_h, r, d_out);
         for d in 0..d_out {
-            assert!(approx_eq(out_direct[d], out_lr[d], 1e-4),
+            assert!(
+                approx_eq(out_direct[d], out_lr[d], 1e-4),
                 "matvec mismatch at d={}: direct={}, low_rank={}",
-                d, out_direct[d], out_lr[d]);
+                d,
+                out_direct[d],
+                out_lr[d]
+            );
         }
     }
 
@@ -1981,8 +2293,10 @@ mod tests {
             let prev_x1 = (1.4 * prev_t).cos() + 0.3 * (2.1 * prev_t).sin();
             let delay = [x0, x1, prev_x0, prev_x1];
             let next_t = (i + 1) as f32 * 0.07;
-            let target = [(0.9 * next_t).sin(),
-                          (1.4 * next_t).cos() + 0.3 * (2.1 * next_t).sin()];
+            let target = [
+                (0.9 * next_t).sin(),
+                (1.4 * next_t).cos() + 0.3 * (2.1 * next_t).sin(),
+            ];
             f.accumulate_pair(&delay, &target);
         }
         let lambda = 1e-4f32;
@@ -2003,22 +2317,33 @@ mod tests {
         }
         // Max absolute weight difference.
         let max_w = f.wout.iter().map(|x| x.abs()).fold(0.0f32, f32::max);
-        let max_diff = f.wout.iter().zip(ab.iter())
+        let max_diff = f
+            .wout
+            .iter()
+            .zip(ab.iter())
             .map(|(a, b)| (a - b).abs())
             .fold(0.0f32, f32::max);
         let rel = max_diff / max_w.max(1e-6);
         // With r=D=2, the factorization can represent Wout, but the ALS gauge
         // freedom + float precision leaves some residual. We check <15% relative.
-        assert!(rel < 0.15,
+        assert!(
+            rel < 0.15,
             "low-rank A·B diverges from Wout: max_diff={}, max_w={}, rel={:.4}",
-            max_diff, max_w, rel);
+            max_diff,
+            max_w,
+            rel
+        );
         // Also verify forecasts match within a looser tolerance (Chebyshev
         // expansion amplifies weight differences).
         let mut max_rel_err = 0.0f32;
         for probe_t in 0..20 {
             let t = (probe_t as f32 + 0.5) * 0.3;
-            let delay = [(0.7 * t).sin(), (1.1 * t).cos(),
-                         (0.7 * (t - 0.07)).sin(), (1.1 * (t - 0.07)).cos()];
+            let delay = [
+                (0.7 * t).sin(),
+                (1.1 * t).cos(),
+                (0.7 * (t - 0.07)).sin(),
+                (1.1 * (t - 0.07)).cos(),
+            ];
             let mut out_full = [0.0f32; 2];
             let mut out_lr = [0.0f32; 2];
             let delay_copy = delay;
@@ -2032,9 +2357,11 @@ mod tests {
                 }
             }
         }
-        assert!(max_rel_err < 0.15,
+        assert!(
+            max_rel_err < 0.15,
             "low-rank forecast diverges from full-rank: max_rel_err={:.4}",
-            max_rel_err);
+            max_rel_err
+        );
     }
 
     #[test]
@@ -2063,18 +2390,175 @@ mod tests {
         let mut b2 = vec![0.0f64; r * d_h];
         let mut scr1 = LowRankFitScratch::with_capacity(d_h, d_out, r);
         let mut scr2 = LowRankFitScratch::with_capacity(d_h, d_out, r);
-        let n1 = low_rank_fit(&gram, &cov, d_h, d_out, r, lambda, 30, 1e-10,
-                              &mut a1, &mut b1, &mut scr1);
-        let n2 = low_rank_fit(&gram, &cov, d_h, d_out, r, lambda, 30, 1e-10,
-                              &mut a2, &mut b2, &mut scr2);
+        let n1 = low_rank_fit(
+            &gram, &cov, d_h, d_out, r, lambda, 30, 1e-10, &mut a1, &mut b1, &mut scr1,
+        );
+        let n2 = low_rank_fit(
+            &gram, &cov, d_h, d_out, r, lambda, 30, 1e-10, &mut a2, &mut b2, &mut scr2,
+        );
         assert_eq!(n1, n2, "iteration count must match");
         for i in 0..d_out * r {
-            assert_eq!(a1[i].to_bits(), a2[i].to_bits(),
-                "A bit mismatch at {}", i);
+            assert_eq!(a1[i].to_bits(), a2[i].to_bits(), "A bit mismatch at {}", i);
         }
         for i in 0..r * d_h {
-            assert_eq!(b1[i].to_bits(), b2[i].to_bits(),
-                "B bit mismatch at {}", i);
+            assert_eq!(b1[i].to_bits(), b2[i].to_bits(), "B bit mismatch at {}", i);
         }
+    }
+
+    #[test]
+    fn frozen_a_fit_b_step_is_valid_ridge_solution() {
+        // Verify the frozen-A B-step produces a valid ridge solution: the
+        // returned B minimizes ‖Y - A·B·Xᵀ‖² + λ‖B‖² for the frozen A.
+        //
+        // We check this by verifying the gradient is approximately zero at
+        // the solution: d/dB [‖Y - A·B·Xᵀ‖² + λ‖B‖²] = -2·Aᵀ·(Y·X - A·B·Xᵀ·X) + 2λB
+        // should be ≈0. Equivalently: Aᵀ·Covᵀ = (AᵀA)·B·G + λB (the normal eq).
+        let d_h = 6usize;
+        let d_out = 2usize;
+        let r = 2usize;
+        let mut gram = vec![0.0f64; d_h * d_h];
+        for i in 0..d_h {
+            for j in 0..d_h {
+                gram[i * d_h + j] = if i == j { 2.0 + (i as f64) * 0.1 } else { 0.3 };
+            }
+        }
+        let mut cov = vec![0.0f64; d_h * d_out];
+        for i in 0..d_h {
+            for d in 0..d_out {
+                cov[i * d_out + d] = (i as f64 + 0.1) * ((d as f64) + 0.5);
+            }
+        }
+        let lambda = 1e-3f64;
+        // Arbitrary frozen A (not from ALS — just a valid D×r matrix).
+        let a_frozen: Vec<f64> = (0..d_out * r).map(|i| (i as f64 + 1.0) * 0.1).collect();
+        let mut b_out = vec![0.0f64; r * d_h];
+        let mut scr = LowRankFitScratch::with_capacity(d_h, d_out, r);
+        low_rank_fit_b_with_frozen_a(
+            &gram,
+            &cov,
+            d_h,
+            d_out,
+            r,
+            lambda,
+            &a_frozen,
+            &mut b_out,
+            &mut scr,
+        );
+        // Verify the normal equation: (AᵀA)·B·G + λB == Aᵀ·Covᵀ.
+        // Compute AᵀA (r×r).
+        let mut ata = vec![0.0f64; r * r];
+        for i in 0..r {
+            for j in 0..r {
+                let mut s = 0.0;
+                for d in 0..d_out {
+                    s += a_frozen[d * r + i] * a_frozen[d * r + j];
+                }
+                ata[i * r + j] = s;
+            }
+        }
+        // Compute LHS = (AᵀA)·B·G + λB (r × d_h).
+        let mut lhs = vec![0.0f64; r * d_h];
+        for i in 0..r {
+            for j in 0..d_h {
+                let mut s = 0.0;
+                for k in 0..r {
+                    for l in 0..d_h {
+                        s += ata[i * r + k] * b_out[k * d_h + l] * gram[l * d_h + j];
+                    }
+                }
+                lhs[i * d_h + j] = s + lambda * b_out[i * d_h + j];
+            }
+        }
+        // Compute RHS = Aᵀ·Covᵀ (r × d_h). (Covᵀ = Cov transposed: d_h × D → D × d_h)
+        // Cov is d_h × d_out, so Covᵀ is d_out × d_h. Aᵀ is r × d_out.
+        // Aᵀ·Covᵀ = r × d_h. (Aᵀ·Covᵀ)[i,j] = Σ_d A[d,i]·Cov[j,d].
+        let mut rhs = vec![0.0f64; r * d_h];
+        for i in 0..r {
+            for j in 0..d_h {
+                let mut s = 0.0;
+                for d in 0..d_out {
+                    s += a_frozen[d * r + i] * cov[j * d_out + d];
+                }
+                rhs[i * d_h + j] = s;
+            }
+        }
+        // LHS should equal RHS (the normal equation is satisfied).
+        let max_resid = lhs
+            .iter()
+            .zip(rhs.iter())
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f64, f64::max);
+        assert!(
+            max_resid < 1e-9,
+            "frozen-A B does not satisfy normal equation: max residual = {:e}",
+            max_resid
+        );
+    }
+
+    #[test]
+    fn frozen_a_fit_forecaster_method_works() {
+        // End-to-end: accumulate trajectory, ALS-fit A, then re-fit B via
+        // fit_low_rank_with_frozen_a. The forecast should be close to the
+        // ALS forecast (same A, B solved from same data).
+        let mut f = KarcForecaster::<ChebyshevBasis<4>, 2, 4, 2>::with_capacity(
+            ChebyshevBasis::<4>::new(),
+            256,
+        );
+        // Synthetic trajectory identical to low_rank_fit_r_equals_d.
+        for i in 0..200i32 {
+            let t = i as f32 * 0.07f32;
+            let x0 = (0.9f32 * t).sin();
+            let x1 = (1.4f32 * t).cos() + 0.3f32 * (2.1f32 * t).sin();
+            let prev_t = (i.saturating_sub(1)) as f32 * 0.07f32;
+            let prev_x0 = (0.9f32 * prev_t).sin();
+            let prev_x1 = (1.4f32 * prev_t).cos() + 0.3f32 * (2.1f32 * prev_t).sin();
+            let delay = [x0, x1, prev_x0, prev_x1];
+            let next_t = (i + 1) as f32 * 0.07f32;
+            let target = [
+                (0.9f32 * next_t).sin(),
+                (1.4f32 * next_t).cos() + 0.3f32 * (2.1f32 * next_t).sin(),
+            ];
+            f.accumulate_pair(&delay, &target);
+        }
+        // ALS reference fit (r = D = 2) — used only to extract a
+        // plausible A for the frozen-A test.
+        let lambda = 1e-4f32;
+        f.fit_low_rank(2, lambda, 50, 1e-10).unwrap();
+        let a_ref: Vec<f32> = f.a_low_rank.clone();
+        // Re-fit B with A frozen at the ALS A.
+        f.fit_low_rank_with_frozen_a(&a_ref, 2, lambda).unwrap();
+        // The frozen-A fit must produce a usable low-rank forecaster.
+        assert!(f.is_low_rank_fitted());
+        assert_eq!(f.low_rank_r(), 2);
+        // A must be preserved verbatim (frozen means frozen).
+        for i in 0..a_ref.len() {
+            assert_eq!(
+                a_ref[i].to_bits(),
+                f.a_low_rank[i].to_bits(),
+                "frozen A modified at idx {}",
+                i
+            );
+        }
+        // B must be non-trivial (not all zeros — the fit found a solution).
+        let b_norm: f32 = f.b_low_rank.iter().map(|v| v * v).sum::<f32>().sqrt();
+        assert!(b_norm > 1e-6, "frozen-A B is all zeros: b_norm={:e}", b_norm);
+        // Forecast must produce finite values at several probe points.
+        let mut max_abs = 0.0f32;
+        for probe_t in 0..10i32 {
+            let t = (probe_t as f32 + 0.5) * 0.3f32;
+            let delay = [
+                (0.7f32 * t).sin(),
+                (1.1f32 * t).cos(),
+                (0.7f32 * (t - 0.07f32)).sin(),
+                (1.1f32 * (t - 0.07f32)).cos(),
+            ];
+            let mut out = [0.0f32; 2];
+            assert!(f.forecast_low_rank_into(&delay, &mut out));
+            for d in 0..2 {
+                assert!(out[d].is_finite(), "non-finite forecast at probe {}", probe_t);
+                max_abs = max_abs.max(out[d].abs());
+            }
+        }
+        assert!(max_abs > 0.0, "all forecasts are zero");
     }
 }
