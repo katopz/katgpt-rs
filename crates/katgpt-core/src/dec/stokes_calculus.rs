@@ -931,9 +931,9 @@ mod tests {
         // this minimal field. The others are kept as named documentation of
         // the face-0 boundary layout.)
         let e_bot = 0usize; // horizontal edge at (row 0, col 0)
-        let _e_right = n_h + 0 * w + 1; // vertical edge at (row 0, col 1)
-        let _e_top = 1 * (w - 1) + 0; // horizontal edge at (row 1, col 0)
-        let _e_left = n_h + 0 * w + 0; // vertical edge at (row 0, col 0)
+        let _e_right = n_h + 1; // vertical edge at (row 0, col 1): n_h + 0*w + 1
+        let _e_top = w - 1; // horizontal edge at (row 1, col 0): 1*(w-1) + 0
+        let _e_left = n_h; // vertical edge at (row 0, col 0): n_h + 0*w + 0
 
         let mut field = CochainField::zeros(1, n_edges, 1);
         field.set_scalar(e_bot, 1.0); // only the bottom edge is non-zero

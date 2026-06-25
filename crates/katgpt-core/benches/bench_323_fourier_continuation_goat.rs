@@ -118,6 +118,7 @@ fn spectral_derivative(x: &[f32]) -> Vec<f32> {
     // i·ω_k = i·(2π/M)·freq_k → Complex{0, ω_k}.
     let two_pi_over_m = 2.0 * std::f32::consts::PI / mf;
     let half = m / 2;
+    #[allow(clippy::needless_range_loop)] // k drives the branched freq formula, not just indexing
     for k in 0..m {
         let freq = if k <= half { k as f32 } else { (k as f32) - mf };
         let omega = two_pi_over_m * freq;

@@ -727,14 +727,14 @@ mod tests {
         let s = 6;
         let d = 3;
         let mut hidden = vec![0.0f32; s * d];
-        // rows 0,1,2 = +e_0, +e_1, +e_2
-        hidden[0 * d + 0] = 1.0;
-        hidden[1 * d + 1] = 1.0;
-        hidden[2 * d + 2] = 1.0;
+        // rows 0,1,2 = +e_0, +e_1, +e_2  (index = row * d + col)
+        hidden[0] = 1.0; // (0,0)
+        hidden[d + 1] = 1.0; // (1,1)
+        hidden[2 * d + 2] = 1.0; // (2,2)
         // rows 3,4,5 = -e_0, -e_1, -e_2
-        hidden[3 * d + 0] = -1.0;
-        hidden[4 * d + 1] = -1.0;
-        hidden[5 * d + 2] = -1.0;
+        hidden[3 * d] = -1.0; // (3,0)
+        hidden[4 * d + 1] = -1.0; // (4,1)
+        hidden[5 * d + 2] = -1.0; // (5,2)
 
         let mut scratch = scratch_for(s, d);
         let r = hidden_erank(&hidden, s, d, &mut scratch);

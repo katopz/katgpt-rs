@@ -321,7 +321,7 @@ fn bench_line_integral(c: &mut Criterion) {
     // 15 East steps + 15 North steps = 30 edges, 1 turn.
     let mut smooth_path: Vec<u32> = Vec::with_capacity(31);
     for x in 0..=15 {
-        smooth_path.push((0 * w + x) as u32); // along row 0
+        smooth_path.push(x as u32); // along row 0: 0*w + x
     }
     for y in 1..=15 {
         smooth_path.push((y * w + 15) as u32); // along column 15

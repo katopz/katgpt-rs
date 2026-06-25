@@ -358,7 +358,7 @@ pub fn spectral_differentiate_into(
     //
     // For performance we special-case m ∈ {0, 1, 2} and fall back to the
     // general complex-powers recurrence for higher orders.
-    let is_even_n = n % 2 == 0;
+    let is_even_n = n.is_multiple_of(2);
     let nyquist_idx = n / 2;
     let two_pi_over_nh = 2.0f32 * core::f32::consts::PI / (n as f32 * cfg.spacing);
 
