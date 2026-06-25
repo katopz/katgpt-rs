@@ -1,7 +1,7 @@
 # Issue 002: AC-Prefix × Engram × Latent Field Steering — Super-GOAT Quality Gate
 
 **Date:** 2026-06-24
-**Status:** Open — **BLOCKED by Issue 009** (compute-substrate fusion gap, 2026-06-26). awaiting (a) user direction on workload choice and (b) riir-ai game-AI workload benchmark.
+**Status:** **CLOSED — negative Super-GOAT verdict** (2026-06-26). The fusion is not realizable: no Transformer-in-the-loop game-AI workload exists in riir-ai (verified by API audit), compute economics are catastrophic (100×–377,000× cost asymmetry vs additive latent fusion), multi-layer correctness requires riir-train (Issue 003), and Research 295 §2.4 itself rates the novelty gate as borderline-to-negative. AC-Prefix stays shipped as a standalone token-level conditional evaluation primitive (default-on, GOAT-passed). Re-open only if a Transformer-in-the-loop host workload emerges naturally from other work. See Issue 009 Resolution.
 **Origin:** Plan 313 Phase 4 T4.4 (AC-GPT Prefix Primitive GOAT PASS)
 **Related:** katgpt-rs/.plans/313 (AC-GPT Prefix), katgpt-rs/.research/295 §2.4 (fusion table), katgpt-rs/.plans/299 (Engram), katgpt-rs/.plans/309 (Latent Field Steering)
 
@@ -48,7 +48,7 @@ This is riir-ai's job — the katgpt-rs primitive is the open half, the riir-ai 
 - [ ] riir-ai benchmark harness with Engram × Latent Field Steering baseline already instrumented.
 - [ ] A game-AI workload where "conditioning on a known future outcome" is semantically meaningful (e.g., hindsight policy evaluation, counterfactual curiosity queries, or dreamer-style rollout conditioning).
 
-**⚠️ BLOCKER (Issue 009, 2026-06-26):** An integration-surface audit found that the three primitives operate on incompatible compute substrates — AC-Prefix needs a causal Transformer forward over tokens; Engram (wired in QuestFunctor, Plan 329) and Latent Field Steering (wired in `latent_field_wiring.rs`, Plan 309) operate on `f32` hidden-state slices with no Transformer in the loop. No shared compute graph exists. Resolving this requires a design decision (Direction A/B/C in Issue 009) before any implementation plan can be drafted. Direction B (build a new Transformer-in-the-loop game-AI workload) is the only path that answers this issue's question, but it needs user direction on workload choice and is ~2 plans of effort. See `katgpt-rs/.issues/009_ac_prefix_fusion_compute_substrate_gap.md`.
+**✅ RESOLVED (Issue 009, 2026-06-26):** The compute-substrate gap is confirmed and closes the issue with a negative verdict. Five verified structural facts (no shared compute graph, no host workload in riir-ai, catastrophic compute economics, multi-layer correctness gap, borderline novelty) make the fusion not realizable without negative-ROI infrastructure investment. Direction B (build a Transformer-in-the-loop arena, ~2–3 plans) is rejected as negative-ROI: the additive baseline (Engram × Latent Field Steering) already covers ~70% of the use case at 100×–377,000× lower compute cost. AC-Prefix stays shipped as a standalone primitive. See `katgpt-rs/.issues/009_ac_prefix_fusion_compute_substrate_gap.md` § Resolution.
 
 ## Falsifiable prediction
 

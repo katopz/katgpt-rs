@@ -1,7 +1,7 @@
 # Issue 009: AC-Prefix × Engram × Latent Field Steering — Compute-Substrate Fusion Gap
 
 **Date:** 2026-06-26
-**Status:** Open — design decision required before any implementation plan can be written
+**Status:** **CLOSED — negative Super-GOAT verdict** (2026-06-26). The design decision is resolved by evidence, not by user choice: the fusion is not realizable without negative-ROI infrastructure investment. AC-Prefix stays shipped (default-on, GOAT-passed, modelless-G1-corrected per Issue 003); the fusion is deferred *sine die*. See Resolution below.
 **Origin:** Issue 002 (AC-Prefix Super-GOAT gate) — surfaced during integration-surface audit
 **Severity:** Blocking for Issue 002 (cannot write an honest implementation plan without resolving this)
 **Related:** `katgpt-rs/.issues/002_ac_prefix_super_goat_gate.md`, `katgpt-rs/.research/295` §2.4 (fusion table), `katgpt-rs/.plans/313` (AC-Prefix), `katgpt-rs/.plans/299` (Engram), `katgpt-rs/.plans/309` (Latent Field Steering), `riir-ai/.plans/314` (BoM G2 arena precedent), `riir-ai/.plans/329` (QuestFunctor — the real Engram integration)
@@ -99,6 +99,52 @@ I did **not** write an implementation plan. Writing a 7-phase plan that assumes 
   - AC-Prefix: 0 implementors of `ForwardForAcPrefix` outside katgpt-core tests.
   - Engram: `riir-games/quest_grammar/quest_functor.rs` (QuestFunctor, FUNCATTN closed-form solve, d=8, latent-to-latent).
   - Latent Field Steering: `riir-engine/src/latent_field_wiring.rs` (FieldRegistry + FactionStanceRegistry, additive overlay on HLA slice).
+
+## Resolution (2026-06-26) — VERDICT: CLOSE WITH NEGATIVE SUPER-GOAT RESULT
+
+The prior session filed this issue as "design decision required" and offered three directions (A/B/C) for the user to choose. A deeper audit (this session) resolves the decision **by evidence, not by preference**: all three directions are either rejected (A), negative-ROI (B), or a different question (C). The fusion is not realizable.
+
+### Five verified structural facts
+
+1. **No shared compute graph** (the original finding, re-confirmed). AC-Prefix needs a local causal Transformer forward over `&[u32]` tokens via `ForwardForAcPrefix`. Engram (`fuse_into_hidden_state`, FUNCATTN closed-form solve) and Latent Field Steering (`apply_latent_steering`, SAXPY) operate on `f32` hidden-state slices with no Transformer. The substrates are incompatible by construction.
+
+2. **No Transformer-in-the-loop host workload exists in riir-ai** (verified by grep + API audit). Every LLM/forward path in riir-ai was checked:
+   - `CwmSynthesisLlm` trait: `fn synthesize(&self, prompt: &SynthesisPrompt) -> Result<String, LlmError>` — a **remote REST call to Gemini 2.5 Pro** (or `MockCwmLlm` canned responses). No local Transformer, no attention mask access, no per-position logprobs. AC-Prefix cannot plug in.
+   - QuestFunctor (Plan 329): FUNCATTN closed-form Tikhonov solve, `f32 → f32`, d=8. Not a Transformer.
+   - `DominoGRU::forward`: recurrent GRU. Not a causal Transformer.
+   - `AneInferenceBackend::forward`: generic ANE hardware dispatch. Not a token-sequence causal Transformer.
+   - `ChannelPredictionHead::forward`: a prediction head, not a full Transformer.
+   - `DominoAdapter`: adapter forward. Not a causal Transformer.
+   - **Zero implementors** of `ForwardForAcPrefix` outside katgpt-core tests/examples (re-confirmed by grep).
+   - Plan 314's BoM G2 arena (the Super-GOAT precedent) uses **no Transformer** — it's `BoMSampler` (latent micro-belief kernel) + `MultiThreatArena` (16-dim obs) + minimax-over-K planner.
+
+3. **Compute economics are catastrophic**. At iso-compute, AC-Prefix is 100× (micro-GPT: ~44K FLOPs) to 377,000× (production 4-layer model: ~151M FLOPs) more expensive than additive latent fusion (Engram+Steering ≈ 400 FLOPs at HLA d=8, K_MAX=16). AC-Prefix's GOAT speedup (27× over iterative MLM unmasking) **does not apply** — the baseline (Engram+Steering) is already single-pass additive, not iterative MLM. There is no speedup to claim.
+
+4. **Multi-layer correctness gap** (Issue 003, non-blocking for G1 but blocking for Super-GOAT). AC-Prefix G1 equivalence (`|dedup − iterative| = 0.0`) only holds for **single-layer** models. Multi-layer representations diverge (r0 copies evolve through layers attending only to other r0 copies). A real game-AI workload needs a multi-layer model (single-layer lacks capacity for meaningful reasoning). Closing the multi-layer gap requires riir-train (LoRA fine-tuning). So even if a host workload existed, the Super-GOAT quality measurement would be on an unproven-correct multi-layer forward.
+
+5. **Research 295 §2.4 rates the novelty gate as borderline-to-negative**. Q2 (new capability class): "Latent Field Steering × Engram already gets you ~70% there additively. Borderline." Q3 (selling point): "Engram × Latent Steering already gives a weaker version of this sentence." The research note itself downgraded from Super-GOAT to GOAT for this reason. The Super-GOAT re-opening (Issue 002) was contingent on a quality win that the substrate analysis now shows is not achievable.
+
+### Why Direction B (build a Transformer-in-the-loop arena) is negative-ROI
+
+Direction B would require: (a) designing a game-AI workload where "conditioning on a known future outcome" is semantically meaningful (hindsight-eval / counterfactual-curiosity / dreamer-rollout), (b) building a Plan-314-scale arena with a causal Transformer in the hot path, (c) implementing `ForwardForAcPrefix` over that Transformer, (d) getting riir-train to close the multi-layer correctness gap, then (e) running the iso-compute quality comparison. This is **2–3 plans minimum** for a result that facts 1–5 strongly indicate will be **negative** (the additive baseline already covers ~70% at 100×–377,000× lower compute cost). The ROI is deeply negative.
+
+### Constructive framing — what AC-Prefix IS good for
+
+This verdict is **not** a verdict against the AC-Prefix primitive. The primitive is:
+- Shipped, default-on, GOAT-passed (G1 modelless-corrected, G2 27× speedup, G3 no-regression, G4 alloc-free).
+- The **only** primitive in katgpt-core that provides token-level arbitrary-conditional evaluation in a single forward pass.
+- Valuable for **standalone** conditional evaluation queries (e.g., offline analysis: "what's the conditional likelihood of this token sequence given this conditioning set?").
+
+The negative verdict is specifically about the **fusion** with latent-domain primitives (Engram × Latent Field Steering). The fusion requires a host workload that spans both the token domain and the latent domain in a single forward pass. No such workload exists, and building one just for this fusion is not justified.
+
+### Re-open condition
+
+Re-open Issue 002 only if **all three** prerequisites emerge naturally from other work (do NOT build them just for this fusion):
+1. A Transformer-in-the-loop game-AI workload lands in riir-ai for an independent reason (e.g., NPC dialogue, quest text generation, replay narration).
+2. That workload's Transformer is local (not a remote API), with attention-mask access.
+3. riir-train closes the multi-layer correctness gap (Issue 003 follow-up).
+
+Until then, AC-Prefix is a shipped tool awaiting its host workload. Don't build the host just for AC-Prefix; add AC-Prefix when a host emerges naturally.
 
 ## TL;DR
 
