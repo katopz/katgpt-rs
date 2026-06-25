@@ -1,0 +1,11 @@
+name = "KatgptProof"
+version = "0.1.0"
+keywords = ["formal-verification", "action-bridge", "sigmoid", "katgpt"]
+defaultTargets = ["KatgptProof"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+
+[[lean_lib]]
+name = "KatgptProof"
