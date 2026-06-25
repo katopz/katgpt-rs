@@ -14,10 +14,11 @@
 //!   Jaccard token-overlap fallback. Zero-alloc hot path.
 //! - [`verifier`] — `VerifierGate`: reward + curiosity + branch-centroid
 //!   quarantine write gate. Composes with CLR `should_write_memory(r_k, S_LP)`.
-//! - (Phase 2) `projection` — `NonInterferenceProjection`: orthogonal latent
-//!   subspaces per branch.
-//! - (Phase 2) `compiler` — `BudgetCompiler`: priority-cascade context
-//!   compiler under fixed budget.
+//! - [`projection`] — `NonInterferenceProjection`: orthogonal latent subspaces
+//!   per branch (D-dim direction vectors; interference = |dot(dir_i, dir_j)|).
+//! - [`compiler`] — `BudgetCompiler`: priority-cascade context compiler under
+//!   fixed byte budget (scope_ctx → procedural → episodic → cross-positive →
+//!   failures → working_memory → query).
 //!
 //! # Latent vs raw boundary (AGENTS.md)
 //!
@@ -56,6 +57,8 @@
 //!   Plan 303 (Salience)
 
 pub mod bank;
+pub mod compiler;
+pub mod projection;
 pub mod router;
 pub mod types;
 pub mod verifier;
@@ -69,6 +72,14 @@ pub mod verifier;
 // `katgpt_core::branching::bank::BranchBank`.
 
 pub use bank::{BranchBank, DEFAULT_MAX_BRANCHES};
+pub use compiler::{
+    BudgetCompiler, CompiledContext, CompiledItem, DEFAULT_BUDGET_BYTES, PriorityTier,
+    RetrievedMaterials,
+};
+pub use projection::{
+    max_orthogonal_branches, AssignError, AssignResult, NonInterferenceProjection,
+    DEFAULT_ASSIGN_MAX_INTERFERENCE, DEFAULT_ORTHOGONAL_EPSILON, DEFAULT_PROJECTION_DIM,
+};
 pub use router::{
     BranchRouter, RouteMode, RouteResult, DEFAULT_TAU_JACCARD, DEFAULT_TAU_SNAP, DEFAULT_TAU_SPAWN,
 };

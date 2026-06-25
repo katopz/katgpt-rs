@@ -752,7 +752,8 @@ pub use arg::{
 // BranchBank (bounded persistent CognitiveBranch bank with spawn/merge/prune
 // lifecycle), BranchRouter (dot-product snap + Jaccard fallback), VerifierGate
 // (reward + curiosity + centroid-quarantine write gate, composes with CLR),
-// NonInterferenceProjection (Phase 2), BudgetCompiler (Phase 2). Fuses
+// NonInterferenceProjection (orthogonal latent subspace per branch),
+// BudgetCompiler (priority-cascade context compiler under fixed budget). Fuses
 // BAKE × CLR × MCGS × Engram × ARG × closure-instrument × Salience into a new
 // capability class: per-NPC continual adaptation without catastrophic
 // forgetting. Composes with arg_protocol LifecycleState when both features on.
@@ -761,8 +762,11 @@ pub use arg::{
 pub mod branching;
 #[cfg(feature = "non_interference_branches")]
 pub use branching::{
-    BranchBank, BranchId, BranchLifecycle, BranchRouter, BranchStats, CognitiveBranch,
-    DEFAULT_MAX_BRANCHES, DEFAULT_QUARANTINE_CENTROID_THRESH, DEFAULT_TAU_CURIOSITY,
-    DEFAULT_TAU_JACCARD, DEFAULT_TAU_SNAP, DEFAULT_TAU_SPAWN, DEFAULT_TAU_WRITE, EpisodicEntry,
-    FailureEntry, ProceduralRule, RouteMode, RouteResult, VerifierGate, WriteDecision,
+    AssignError, AssignResult, BranchBank, BranchId, BranchLifecycle, BranchRouter, BranchStats,
+    BudgetCompiler, CognitiveBranch, CompiledContext, CompiledItem, DEFAULT_ASSIGN_MAX_INTERFERENCE,
+    DEFAULT_BUDGET_BYTES, DEFAULT_MAX_BRANCHES, DEFAULT_ORTHOGONAL_EPSILON, DEFAULT_PROJECTION_DIM,
+    DEFAULT_QUARANTINE_CENTROID_THRESH, DEFAULT_TAU_CURIOSITY, DEFAULT_TAU_JACCARD,
+    DEFAULT_TAU_SNAP, DEFAULT_TAU_SPAWN, DEFAULT_TAU_WRITE, EpisodicEntry, FailureEntry,
+    NonInterferenceProjection, PriorityTier, ProceduralRule, RetrievedMaterials, RouteMode,
+    RouteResult, VerifierGate, WriteDecision, max_orthogonal_branches,
 };
