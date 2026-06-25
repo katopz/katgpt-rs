@@ -58,6 +58,8 @@
 
 pub mod bank;
 pub mod compiler;
+#[cfg(test)]
+mod composition;
 pub mod projection;
 pub mod router;
 pub mod types;

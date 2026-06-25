@@ -71,12 +71,17 @@ GOAT gate: G1 correctness (orthogonality preserves non-interference), G2 perf (r
 
 ### Tasks
 
-- [ ] **T4.1** Composition test: `BranchBank` + `arg_protocol` — verify `CognitiveBranch.lifecycle` round-trips through ARG `LifecycleState` when both features are on. Branch spawn = ARG `Active`; merge = source → `Deprecated` + RedirectTable; prune = `Removed`.
-- [ ] **T4.2** Composition test: `VerifierGate` + `clr` — verify `should_write` composes with CLR `should_write_memory(r_k, S_LP)` (CLR is upstream; VerifierGate adds branch-centroid check downstream).
-- [ ] **T4.3** Composition test: `BranchRouter` + `engram` — verify router can snap to branches whose `spawn_anchor` is derived from Engram hash-address embeddings.
-- [ ] **T4.4** Composition test: `NonInterferenceProjection` + `closure` (Plan 290) — verify closure motifs can populate `ProceduralRule.direction` from PTG node signatures.
+- [x] **T4.1** Composition test: `BranchBank` + `arg_protocol` — verify `CognitiveBranch.lifecycle` round-trips through ARG `LifecycleState` when both features are on. Branch spawn = ARG `Active`; merge = source → `Removed` (data moved to target — see note); prune = `Removed`. ARG `RedirectTable` composition demonstrated as caller-side continuity pattern. ✅ 2026-06-26
+- [x] **T4.2** Composition test: `VerifierGate` + `clr` — verify `should_write_composed` short-circuits on CLR reject; CLR accept + centroid check composes as upstream→downstream gates. CLR (`should_write_memory(r_k, S_LP)`) does NOT live in katgpt-core (it's a riir-ai runtime concern); the composition contract is the `clr_allows: bool` parameter, simulated locally as a two-sided reward+curiosity closure. ✅ 2026-06-26
+- [x] **T4.3** Composition test: `BranchRouter` + `engram` — verify router snaps to branches whose `spawn_anchor` is derived from Engram `multi_head_hash` outputs (K_MAX hashes → f32 anchor). Same-suffix snaps; different-suffix spawns; Engram determinism implies router determinism. ✅ 2026-06-26
+- [x] **T4.4** Composition test: `NonInterferenceProjection` + `closure` (Plan 290) — verify `ptg_to_motif_embedding` outputs populate `ProceduralRule.direction` and serve as projection directions. Two PTGs' embeddings measure interference honestly via the projection. Full closure→branching pipeline (PTG → embedding → projection direction + ProceduralRule → branch store → consistency check). ✅ 2026-06-26
 
-**Phase 4 exit:** all composition tests green; the five primitives compose cleanly with the four existing systems they're designed to fuse with.
+**Phase 4 exit:** all composition tests green (20 tests: T4.1 ×7, T4.2 ×5, T4.3 ×3, T4.4 ×4); the five primitives compose cleanly with the four existing systems they're designed to fuse with. ✅ 2026-06-26
+
+**Notes on plan-vs-code divergences (documented honestly):**
+1. **T4.1 merge semantics**: plan narrative said "merge = source → `Deprecated` + RedirectTable". The *implemented* `BranchBank::merge` moves the source's episodic/procedural/failure stores into the target (via `append`) then calls `prune(source)` → `Removed`. `Deprecated` would leave an empty husk (the data already moved); `Removed` is semantically correct for a data-moving merge. The ARG `RedirectTable` continuity is a *caller-side* pattern (register `source_label → target_label` after merge) — demonstrated in `arg_redirect_table_composes_post_merge`.
+2. **T4.2 CLR location**: CLR's `should_write_memory(r_k, S_LP)` is NOT in katgpt-core (it's a riir-ai runtime concern, Plan 284/316). The composition contract is the `clr_allows: bool` parameter on `VerifierGate::should_write_composed`; T4.2 simulates CLR locally as a two-sided reward+curiosity closure to verify the upstream→downstream gate composition.
+3. **T4.4 motif embedding orthogonality**: closure motif embeddings (sigmoid-bounded, always-positive) are NOT naturally orthogonal — sigmoid(0)=0.5 creates a high baseline. `two_ptgs_measure_interference_honestly` verifies the projection reports interference *honestly* (matching a manual dot-product computation), not that the embeddings are orthogonal.
 
 ---
 
