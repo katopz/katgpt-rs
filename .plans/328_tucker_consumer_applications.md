@@ -157,10 +157,10 @@ The `flagged` field on `ShopEntry`/`ItemStat` gets populated from the Tucker res
   *(PASS — Consumer 1 shipped prior session with all 4 GOAT gates.)*
 - [x] **T3.2** If Consumer 2 (game) G1–G4 pass → second validated consumer. Same update.
   *(PASS — Consumer 2 shipped this session with all 4 GOAT gates, with honest caveats documented in the G2 notes.)*
-- [ ] **T3.3** Once ≥1 consumer is validated, evaluate whether the `riir-neuron-db` `compact_tucker` integration (Plan 326 Phase 2) should be deprecated — the primitive is consumed directly from `katgpt-core` by these consumers; the riir-neuron-db wrapper adds no value for them.
-  *(OPEN — both consumers import `katgpt_core::linalg::tucker` directly. The riir-neuron-db wrapper is not used by either. Deprecation evaluation deferred to a separate audit.)*
-- [ ] **T3.4** Benchmark record: `.benchmarks/328_tucker_consumer_applications.md` with both consumers' G1–G4 results.
-  *(TODO — create the benchmark record with both consumers' results.)*
+- [x] **T3.3** Once ≥1 consumer is validated, evaluate whether the `riir-neuron-db` `compact_tucker` integration (Plan 326 Phase 2) should be deprecated — the primitive is consumed directly from `katgpt-core` by these consumers; the riir-neuron-db wrapper adds no value for them.
+  *(VERDICT — DO NOT deprecate; Plan 328 is orthogonal to the wrapper. Both Plan 328 consumers import `katgpt_core::linalg::tucker` directly and bypass `riir-neuron-db::ShardCompactor::compact_tucker` entirely. Plan 328 validates the **primitive** (already default-on in katgpt-core, never in question) but does NOT resolve the open question about the **wrapper**. The wrapper has its own adoption criteria ("Cold-tier replay/audit" or "Cross-zone batch transfer" — neither of which Plan 328's analytics consumers touch) and its own 30-day soak window in `riir-neuron-db/issues/002` (re-evaluate 2026-07-25). Plan 328 should NOT prematurely close Issue 002 — that would be dishonest, since the wrapper remains unvalidated by any production path. The correct outcome: the wrapper stays under Issue 002's soak window unchanged; Plan 328 just confirms the primitive has external consumers, which was never the question Issue 002 was asking.)*
+- [x] **T3.4** Benchmark record: `.benchmarks/328_tucker_consumer_applications.md` with both consumers' G1–G4 results.
+  *(DONE — `.benchmarks/328_tucker_consumer_applications.md` created with both consumers' G1–G4 results, the falsified-per-cell-residual debug-harness table, the cross-consumer comparison, the modelless-gain section, and the wrapper-orthogonality note pointing to Issue 002.)*
 
 ---
 
