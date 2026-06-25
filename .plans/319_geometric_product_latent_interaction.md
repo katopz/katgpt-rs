@@ -229,7 +229,8 @@ compositions than similarity-driven factions?
 | **G8c** | Party survival (complementarity vs similarity) | ≥ 1.15× | ✓ **PASS** (2.934×) |
 | **G8d** | Faction role coverage | complementarity ≥ similarity | ✓ **PASS** (4/4 vs 3/4 roles) |
 | **G5 pre** | Retrieval diversity (intrinsic_dim ratio) | ≥ 1.5× | ✓ **PASS** (3.31×) |
-| **G5 post** | Compaction output diversity | ≥ 1.5× | ✗ **FAIL** (1.015× — ShardCompactor AM rank-1 collapse, Issue 001) |
+| **G5 post** | Compaction output diversity | ≥ 1.5× | ✓ **PASS** (1.5011× — Issue 001 multi-query spread-query mode, resolved 2026-06-25) |
+| ~~G5 post (single-query)~~ | ~~Compaction output diversity~~ | ~~≥ 1.5×~~ | ✗ diagnostic only (1.0152× — original rank-1 collapse, now opt-in `n_am_queries=1` default) |
 
 **Promotion rule (AGENTS.md):** G1 + G2 + G3 + G4 all pass AND gain is modelless → promote `geometric_product` to default. Then create riir-ai + riir-neuron-db fusion guides (T4.1, T4.2) and elevate Research 299 to Super-GOAT.
 
@@ -242,7 +243,7 @@ compositions than similarity-driven factions?
 - `diverse_retrieval` (riir-neuron-db) — **default-on** (Phase 5 Super-GOAT, functional promotion — gates real `retrieve_diverse` code).
 - `clifford_complementarity` (riir-engine) — **opt-in, symbolic promotion deferred**. This feature is an empty capability marker (zero `#[cfg]` gates; the `clifford_bridge` module compiles unconditionally because katgpt-core is always-on). The symbolic default flip is deferred because `crates/riir-engine/Cargo.toml` has pre-existing uncommitted `karc_runtime` work in the same file — committing both in one commit would conflate two pieces of work. Flip on the next riir-engine Cargo.toml commit.
 
-**Open follow-up (Issue, not Plan — per AGENTS.md):** `riir-neuron-db/issues/001` — ShardCompactor multi-query AM mode to preserve post-compaction diversity.
+**Open follow-up (Issue, not Plan — per AGENTS.md):** ~~`riir-neuron-db/issues/001`~~ — **✅ RESOLVED** (2026-06-25). ShardCompactor multi-query spread-query AM mode implemented; G5 post-compaction gate now PASSES at 1.5011×. Default remains `n_am_queries=1` (no behavior change); diversity-preserving mode is opt-in via `with_n_am_queries(k)`.
 
 ---
 
