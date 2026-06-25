@@ -20,10 +20,16 @@
 //!
 //! - `continuation` — Fourier continuation for non-periodic latent fields
 //!   (Plan 323, feature `fourier_continuation`).
+//! - `differentiation` — standalone FFT-based spectral differentiation for
+//!   periodic uniform 1D grids (Plan 325, feature `spectral_differentiation`).
+//!   The specialized 1D-periodic case where DEC `exterior_derivative` is
+//!   overkill.
 //!
-//! Future narrow gaps (standalone FFT-based spectral differentiation, Tucker
-//! factorization for `NeuronShard` compaction) would land under this same
-//! umbrella as separate features.
+//! Future narrow gaps (Tucker factorization for `NeuronShard` compaction)
+//! would land under this same umbrella as a separate feature.
 
 #[cfg(feature = "fourier_continuation")]
 pub mod continuation;
+
+#[cfg(feature = "spectral_differentiation")]
+pub mod differentiation;

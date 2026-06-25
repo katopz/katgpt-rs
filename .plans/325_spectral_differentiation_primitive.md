@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/307_FNO_Practical_Perspective_Spectral_Primitives_Survey.md](../.research/307_FNO_Practical_Perspective_Spectral_Primitives_Survey.md) (§3 candidate plan #2)
 **Source paper:** [arXiv:2511.05963](https://arxiv.org/abs/2511.05963) — *Fourier Neural Operators Explained: A Practical Perspective* (Duruisseaux/Kossaffi/Anandkumar, Caltech+NVIDIA) §2.1 spectral differentiation.
 **Target:** `katgpt-rs/crates/katgpt-core/src/spectral/differentiation.rs` (new module) + Cargo feature `spectral_differentiation`.
-**Status:** Active — Phase 1 in progress.
+**Status:** Done — all 4 GOAT gates PASS, promoted to DEFAULT-ON (Phase 3, 2026-06-25).
 
 ---
 
@@ -99,10 +99,11 @@ X = FFT(x)                                // N complex coefficients
 
 ## Validation Summary
 
-(to be filled in after Phase 2)
+**All 4 GOAT gates PASS → promoted to DEFAULT-ON.** Final results (post-G4 cached-Arc fix):
 
-- G1: <fill>
-- G2: <fill>
-- G3: <fill>
-- G4: <fill>
-- Promotion: <fill>
+- **G1** (analytical correctness): order-1 max abs err **5.44e-7** (<1e-4); order-2 max abs err **1.27e-6** (<1e-3); spectral-vs-FD quality ratio **290.2×** (≥100×). PASS.
+- **G2** (perf): N=64 **0.19µs**, N=256 **0.83µs**, N=1024 **3.82µs** (all ≤50µs target). PASS.
+- **G3** (no-regression): order=0 identity, max abs err **2.38e-7** < 1e-5. PASS.
+- **G4** (alloc-free hot path): **0 allocations** over 100 steady-state calls (after caching `Arc<dyn Fft<f32>>` plans in scratch + using `process_with_scratch` instead of rustfft's per-call-Vec `process()`). PASS.
+- **Promotion**: `spectral_differentiation` added to `default` feature list. Pure modelless gain (closed-form FFT + `(iω)^m`, no learned weights).
+- **Full GOAT doc**: [`.benchmarks/325_spectral_differentiation_goat.md`](../.benchmarks/325_spectral_differentiation_goat.md)

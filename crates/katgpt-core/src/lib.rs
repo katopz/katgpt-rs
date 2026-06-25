@@ -325,6 +325,32 @@ pub use flow::{
     fft_smooth_into, flow_steering, inflate_obstacles, should_use_flow_field,
 };
 
+// Spectral primitives — Fourier-basis algebra on discrete samples.
+// Distilled from the FNO practical-perspective survey (Research 307).
+// Each operator ships behind its own feature flag and is independently GOAT-gated.
+// - `continuation` (feature `fourier_continuation`, Plan 323): Fourier
+//   continuation for non-periodic latent fields — closed-form polynomial
+//   periodic extension so the FFT does not produce Gibbs ringing at the
+//   boundaries. The one modelless FNO primitive the codebase genuinely
+//   lacked (Research 307 §3 candidate plan #1). Opt-in until G1–G4 pass.
+// - `differentiation` (feature `spectral_differentiation`, Plan 325):
+//   standalone FFT-based spectral differentiation on periodic uniform 1D
+//   grids — multiply FFT coefficients by `(iω)^m`, IFFT back. The
+//   specialized 1D-periodic case where DEC `exterior_derivative` is
+//   overkill. Opt-in until G1–G4 pass.
+#[cfg(any(feature = "fourier_continuation", feature = "spectral_differentiation"))]
+pub mod spectral;
+#[cfg(feature = "fourier_continuation")]
+pub use spectral::continuation::{
+    FcConfig, FcScratch, FourierContinuationError, MAX_POLY_ORDER, fourier_continue,
+    fourier_continue_into,
+};
+#[cfg(feature = "spectral_differentiation")]
+pub use spectral::differentiation::{
+    MAX_ORDER, SpecDiffConfig, SpecDiffError, SpecDiffScratch, spectral_differentiate,
+    spectral_differentiate_into,
+};
+
 // Merkle octree — hierarchical BLAKE3 commitment for KG latent octree nodes (Plan 221-M).
 #[cfg(feature = "merkle_octree")]
 pub mod merkle;
@@ -411,10 +437,9 @@ pub use funcattn::{
 pub mod cross_resolution;
 #[cfg(feature = "cross_resolution_transport")]
 pub use cross_resolution::{
-    CrossResolutionBases, CrossResolutionError, CrossResScratch,
-    project_to_spectral_into, reconstruct_from_spectral_into,
-    transport_cross_domain_cross_resolution_into, transport_cross_resolution,
-    transport_cross_resolution_into,
+    CrossResScratch, CrossResolutionBases, CrossResolutionError, project_to_spectral_into,
+    reconstruct_from_spectral_into, transport_cross_domain_cross_resolution_into,
+    transport_cross_resolution, transport_cross_resolution_into,
 };
 
 // Latent Field Steering — top-down direction-vector injection into mutable
@@ -427,10 +452,9 @@ pub use cross_resolution::{
 pub mod latent_steering;
 #[cfg(feature = "latent_field_steering")]
 pub use latent_steering::{
-    FieldSupport, LatentField, LatentSteeringError, LatentSteeringVector,
-    HLA_AROUSAL, HLA_CALM, HLA_DESPERATION, HLA_DIM, HLA_FEAR, HLA_VALENCE,
-    apply_field_to_crowd, apply_latent_steering, apply_latent_steering_weighted,
-    kernel_weight,
+    FieldSupport, HLA_AROUSAL, HLA_CALM, HLA_DESPERATION, HLA_DIM, HLA_FEAR, HLA_VALENCE,
+    LatentField, LatentSteeringError, LatentSteeringVector, apply_field_to_crowd,
+    apply_latent_steering, apply_latent_steering_weighted, kernel_weight,
 };
 
 // ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 272, Research 262).
@@ -673,7 +697,6 @@ pub mod karc;
 #[cfg(feature = "karc_forecaster")]
 pub use karc::{
     BSplineBasis, ChebyshevBasis, DelayRing, FitError, FourierBasis, KarcBasis, KarcForecaster,
-    KarcScratch, LowRankFitScratch, chunked_gram_into, feature_expand,
-    feature_expand_higher_order, forecast_low_rank_apply, higher_order_feature_count,
-    low_rank_fit,
+    KarcScratch, LowRankFitScratch, chunked_gram_into, feature_expand, feature_expand_higher_order,
+    forecast_low_rank_apply, higher_order_feature_count, low_rank_fit,
 };
