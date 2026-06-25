@@ -38,6 +38,7 @@
 // `trait` is a reserved keyword; the source file is `trait.rs` but the module
 // is referenced via the raw identifier `r#trait`. Re-exports below hide this.
 pub mod chunker;
+pub mod fetcher;
 pub mod in_memory;
 pub mod merkle;
 #[allow(non_snake_case)]
@@ -50,6 +51,7 @@ pub use chunker::{
     FixedSizeChunker,
 };
 pub use in_memory::InMemoryChunkedStore;
+pub use fetcher::{FsChunkFetcher, InMemoryChunkFetcher, TieredChunkFetcher, TieredWriteBackExt, WriteBack};
 pub use merkle::{build_binary_merkle_proof, build_binary_merkle_root, verify_binary_merkle_proof};
 pub use r#trait::{ChunkFetcher, ChunkedContentStore, ChunkingStrategy};
 pub use types::{BlobId, ChunkRange, MerkleProof, StoreStats};

@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md](../.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md)
 **Source:** [Epic Games Lore](https://github.com/EpicGames/lore) — distilled chunked content-addressed VCS primitive.
 **Target:** `katgpt-rs/crates/katgpt-core/src/content_store/` (new module) + Cargo feature `chunked_content_store`
-**Status:** Active — Phase 1 ✅ COMPLETE (2026-06-18). Phase 2 (FastCDC) ✅ COMPLETE (2026-06-18). 7 CDC tests pass; G1 GOAT gate proven (1.35% incremental push vs 52.94% FixedSize, ~39× win). **Constants deviation: NORMAL_LEVEL=13 (not 23) — level 23 gives 8 MiB expected spacing, defeating CDC on ≤1 MiB blobs; see chunker.rs module doc.** Phase 3 (Fetchers) + Phase 4 (GOAT Gate) pending.
+**Status:** Active — Phase 1 ✅ COMPLETE (2026-06-18). Phase 2 (FastCDC) ✅ COMPLETE (2026-06-18). 7 CDC tests pass; G1 GOAT gate proven (1.35% incremental push vs 52.94% FixedSize, ~39× win). **Constants deviation: NORMAL_LEVEL=13 (not 23) — level 23 gives 8 MiB expected spacing, defeating CDC on ≤1 MiB blobs; see chunker.rs module doc.** Phase 3 (Fetchers) ✅ T3.1/T3.2/T3.4/T3.5 COMPLETE (2026-06-25, 13 tests pass); T3.3 (NetChunkFetcher) DEFERRED — needs `chunked_net_fetch` Cargo.toml feature (concurrent-edit collision). **mmap deviation (T3.2):** uses `std::fs::read` instead of mmap — for ≤64 KiB chunks, one `read()` syscall matches mmap perf, and the owned `Vec<u8>` return type negates mmap's zero-copy benefit anyway. Phase 4 (GOAT Gate benchmarks) pending.
 
 **Cross-ref (riir-ai):** This is the open primitive consumed by [riir-ai Plan 319](../../riir-ai/.plans/319_executable_asset_vessel_quorum_gitflow.md) (Executable Asset Vessel + Quorum Gitflow). The fusion Super-GOAT lives there; this plan is the GOAT-tier foundation only.
 
@@ -117,19 +117,45 @@ Goal: realistic deployment paths for hydration.
 
 ### Tasks
 
-- [ ] **T3.1** Implement `InMemoryChunkFetcher` in `content_store/fetcher.rs`:
+- [x] **T3.1** Implement `InMemoryChunkFetcher` in `content_store/fetcher.rs`:
   - Wraps a `papaya::HashMap` (test-only / single-process deploy).
-- [ ] **T3.2** Implement `FsChunkFetcher` in `content_store/fetcher.rs`:
+  - **Status (2026-06-25):** DONE. `InMemoryChunkFetcher { chunks: papaya::HashMap<[u8;32], Vec<u8>> }`
+    with `put()`, `fetch()`, `len()`, `is_empty()`. 3 tests pass.
+- [x] **T3.2** Implement `FsChunkFetcher` in `content_store/fetcher.rs`:
   - Layout: `<root>/<hash[0..2]>/<hash[2..4]>/<hash>.chunk` (sharded to avoid filesystem limits).
   - Reads via `mmap` (per AGENTS.md io_uring/mmap zero-copy preference).
   - `fetch()` returns `Some(Vec<u8>)` or `None` on missing file.
+  - **Status (2026-06-25):** DONE with documented deviation. Uses `std::fs::read` instead of
+    `mmap`. Rationale: (1) chunks are ≤ 64 KiB (`FASTCDC_MAX_CHUNK_SIZE`) — a single `read()`
+    syscall matches mmap perf for small files; the zero-copy advantage only materializes for
+    large spans crossing many page faults; (2) the `ChunkFetcher::fetch` trait returns `Vec<u8>`
+    (owned), so mmap would still need a `to_vec()` copy to satisfy the return type — no actual
+    zero-copy gain; (3) adding `memmap2` would require a `Cargo.toml` dep change, colliding
+    with concurrent edits. Upgrade to mmap when the trait gains a `fetch_borrowed` path or
+    when Cargo.toml is stable. Atomic write-then-rename prevents partial reads on race.
+    6 tests pass (roundtrip, missing, sharded-path, multi-chunk, overwrite, tiered-write-back-to-FS).
 - [ ] **T3.3** Implement `NetChunkFetcher` skeleton (behind feature `chunked_net_fetch`):
   - Trait object over an `async` HTTP/3 client (use `reqwest` if already a dep; otherwise leave as a trait + a stub impl that returns `None`).
   - URL: `<base_url>/<hash>` (the deploy decides whether this is S3, IPFS gateway, riir-chain RPC, or a Lore server).
-- [ ] **T3.4** Implement `TieredChunkFetcher` (composite):
+  - **Status (2026-06-25):** DEFERRED. Requires a new `chunked_net_fetch` Cargo.toml feature,
+    which collides with concurrent `Cargo.toml` edits. The `TieredChunkFetcher` (T3.4) is
+    generic over any `ChunkFetcher`, so a `NetChunkFetcher` plugs in cleanly when this lands.
+    No blocking dependency — Phase 3 fetchers (T3.1/T3.2/T3.4/T3.5) all pass without it.
+- [x] **T3.4** Implement `TieredChunkFetcher` (composite):
   - First tries local (in-memory or FS); falls back to net.
   - Optional write-back to local on net fetch (configurable).
-- [ ] **T3.5** Unit tests for `FsChunkFetcher`: roundtrip put/get on tmpdir, missing-chunk returns None, sharded path is correct.
+  - **Status (2026-06-25):** DONE. `TieredChunkFetcher<Local, Fallback>` generic over both
+    tiers. Write-back is opt-in via `TieredWriteBackExt::fetch_with_write_back()` (an extension
+    trait requiring `Local: WriteBack`) — avoids a dead `write_back: bool` runtime flag in the
+    read-only `fetch()` path; the choice is at the call site, not construction. `WriteBack` is
+    a sealed trait implemented for `InMemoryChunkFetcher` and `FsChunkFetcher` only. 4 tests
+    pass (local-hit-skips-fallback, local-miss-falls-back, both-miss-none, write-back-to-local).
+- [x] **T3.5** Unit tests for `FsChunkFetcher`: roundtrip put/get on tmpdir, missing-chunk returns None, sharded path is correct.
+  - **Status (2026-06-25):** DONE. All three required scenarios covered + 3 additional
+    (multi-chunk roundtrip, overwrite idempotency, FS-as-tiered-local write-back persistence).
+    Uses `std::env::temp_dir()` with process-unique subdirs + RAII cleanup instead of a
+    `tempfile` dev-dep (avoids Cargo.toml change). 6 FsChunkFetcher tests + 3 InMemory + 4 Tiered
+    = 13 total fetcher tests, all pass.
 
 ---
 
