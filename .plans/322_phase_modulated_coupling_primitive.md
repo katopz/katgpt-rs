@@ -5,7 +5,7 @@
 **Private guide:** [riir-ai/.research/159_phase_rotation_subspace_gate_guide.md](../../../riir-ai/.research/159_phase_rotation_subspace_gate_guide.md)
 **Source paper:** [arxiv 2605.12700](https://arxiv.org/abs/2605.12700) — UFO: Domain-Unification-Free Operator Framework (Qiao, Karniadakis, Muniruzzaman, May 2026)
 **Target:** `katgpt-rs/crates/katgpt-core/src/phase_rotation.rs` (new module) + Cargo feature `phase_rotation_coupling`
-**Status:** Active — Phase 1 COMPLETE (2026-06-25). All 19 unit tests PASS (covers all plan-mandated scenarios + aliasing + monotone interpolation + scalar/per-channel equivalence + shape errors + Pythagorean identity G1 canary). `phase_safe_cos_sin` design pivot from the planned independent Padé cos/sin to libm-sin + Pythagorean-sqrt recovery: the independent Padé drifts in the `cos²+sin²=1` identity by ~5e-3 (50× the G1 budget); the sqrt-recovery forces it bit-by-bit. Phase 2 GOAT bench pending.
+**Status:** ✅ Phase 1 + Phase 2 COMPLETE (2026-06-25). **PROMOTED to DEFAULT-ON** — all 5 GOAT gates PASS with comfortable headroom (G1 drift 5.96e-8 <1e-4 [1677× headroom], G2 0 reversals/100 steps, G3 D=8 scalar+mix 18.9ns<50ns + D=8 mix-only 5.0ns<20ns + D=64 per-channel+mix 355.7ns<1500ns, G4 0 allocs/100 calls, G6 sigmoid(0)=0.5→cos=sin=1/√2). Pure modelless (closed-form cos/sin/sigmoid/dot, no training). Design pivot: independent-Padé cos/sin was replaced with `phase_safe_cos_sin` (libm sin + Pythagorean sqrt recovery) because independent Padé drifts in cos²+sin²=1 by ~5e-3 (50× G1 budget). Phase 3 SIMD/LUT optimization is unnecessary (355.7ns ≪ 1500ns budget); would only matter if a future hot-path caller needed <600ns. Phase 4 fusion guides remain deferred to riir-ai (HLA runtime) / riir-chain (LatCal committed phase) / katgpt-rs (DEC Hodge mixer) — those repos' responsibility.
 
 ---
 
@@ -66,22 +66,25 @@ Ship the **phase-modulated coupling primitive** distilled from UFO (arxiv 2605.1
 
 ### Tasks
 
-- [ ] **T2.1** Create `katgpt-rs/crates/katgpt-core/benches/bench_322_phase_rotation_goat.rs`:
+- [x] **T2.1** Create `katgpt-rs/crates/katgpt-core/benches/bench_322_phase_rotation_goat.rs`:
   - **G1 (norm preservation):** sweep α ∈ [0, π/2] in 1000 steps; for each, compute `|cos²α + sin²α - 1|` in f32. Report max. **Gate: < 1e-4.** Use libm cos/sin for the reference; also measure polynomial-Padé variant for the fast path.
   - **G2 (smooth interpolation):** for a fixed (a, b) pair with `a = [1,0,0,0]`, `b = [0,1,0,0]`, sweep α ∈ [0, π/2] in 100 steps; verify output moves monotonically from a to b in cosine-similarity space (cos sim to a decreases monotonically, cos sim to b increases monotonically). **Gate: monotone, no reversals.**
   - **G3 (latency):** batched-median timing (1024 calls per measurement, 256 batches, sink-hash anti-hoist — matches Plan 303 / 320 convention).
-    - D=8 scalar phase: target < 50 ns/call.
-    - D=64 per-channel phase (libm cos/sin): target < 1500 ns/call.
-    - D=64 per-channel phase (polynomial-Padé): target < 600 ns/call.
-  - **G4 (zero-alloc):** drop-tracking allocator; verify 0 allocations in steady-state (after scratch init).
-  - **G6 (sigmoid never softmax):** static check — `compute_phase_from_projection` uses `sigmoid`, never `softmax`. Code review assertion.
+    - D=8 scalar phase: target < 50 ns/call. **PASS: 18.9 ns.**
+    - D=64 per-channel phase (libm cos/sin): target < 1500 ns/call. **PASS: 355.7 ns.**
+    - D=64 per-channel phase (polynomial-Padé): target < 600 ns/call. **N/A — Phase 3 SIMD/LUT optimization unnecessary; 355.7ns ≪ 1500ns libm-path budget.**
+  - **G4 (zero-alloc):** drop-tracking allocator; verify 0 allocations in steady-state (after scratch init). **PASS: 0 allocs / 100 calls.**
+  - **G6 (sigmoid never softmax):** static check — `compute_phase_from_projection` uses `sigmoid`, never `softmax`. **PASS: cos α = sin α = 0.7071 ≈ 1/√2 at dot=0 (sigmoid(0)=0.5 → α=π/4); softmax would give 1.0.**
 
-- [ ] **T2.2** Run bench: `cargo bench -p katgpt-core --features phase_rotation_coupling --bench bench_322_phase_rotation_goat -- --nocapture`. Record results in `katgpt-rs/.benchmarks/322_phase_rotation_goat.md`.
+- [x] **T2.2** Run bench: recorded in `katgpt-rs/.benchmarks/322_phase_rotation_goat.md`. Direct binary launch bypassing the `cargo bench` dyld/trustd stall.
 
-- [ ] **T2.3** **Promote decision:**
-  - If G1 < 1e-4 AND G2 monotone AND G3 meets latency AND G4 zero-alloc → **promote `phase_rotation_coupling` to `default` feature** in `katgpt-rs/crates/katgpt-core/Cargo.toml`. Update README feature showcase.
-  - If G1 fails (norm drift) → **demote to Gain**, document why in the benchmark file, do NOT promote. The whole stability thesis depends on G1.
-  - If G3 fails (too slow) → try polynomial-Padé-only path; if still too slow, keep opt-in, file issue.
+- [x] **T2.3** **Promote decision: PROMOTED to DEFAULT-ON.**
+  - G1 < 1e-4 (5.96e-8 ✅) AND G2 monotone (0 reversals ✅) AND G3 meets latency (18.9ns/5.0ns/355.7ns all under budget ✅) AND G4 zero-alloc (0 ✅) AND G6 sigmoid (✅) AND gain is modelless (closed-form, no training ✅) → `phase_rotation_coupling` added to `default` feature list in `katgpt-rs/crates/katgpt-core/Cargo.toml`.
+  - The kill-switch condition (G1 norm drift) never triggered — the Pythagorean-sqrt recovery construction forces the identity bit-by-bit.
+
+### Phase 2 design pivot (recorded for posterity)
+
+The plan's T1.1 originally specified "uses polynomial-Padé cos/sin (reuse Plan 319 Issue 003 approximation, max error 4.9e-3)". The first implementation with hand-fit minimax Padé coefficients FAILED the G1 gate: independent Padé cos/sin drifts in the `cos²α+sin²α=1` identity by `~5e-3` (50× the G1 `<1e-4` budget), because cos and sin errors compound when squared rather than cancel. Fix: replace with `phase_safe_cos_sin` (libm sin + Pythagorean `sqrt(1-sin²)` recovery). This forces the identity to hold bit-by-bit (drift dropped to 5.96e-8, 80× improvement) at the cost of one `sqrt` per channel (~3 ns). Net latency still 4.2× under the D=64 budget. The `use_pade` API toggle was dropped — there is one path now. See `.benchmarks/322_phase_rotation_goat.md` § "Design pivot" for the full honesty note.
 
 ---
 
