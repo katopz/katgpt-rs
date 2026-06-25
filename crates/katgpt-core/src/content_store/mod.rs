@@ -55,6 +55,8 @@ pub use chunker::{
 };
 pub use in_memory::InMemoryChunkedStore;
 pub use fetcher::{FsChunkFetcher, InMemoryChunkFetcher, TieredChunkFetcher, TieredWriteBackExt, WriteBack};
+#[cfg(feature = "chunked_net_fetch")]
+pub use fetcher::NetChunkFetcher;
 pub use merkle::{build_binary_merkle_proof, build_binary_merkle_root, verify_binary_merkle_proof};
 pub use r#trait::{ChunkFetcher, ChunkedContentStore, ChunkingStrategy};
 pub use types::{BlobId, ChunkRange, MerkleProof, StoreStats};

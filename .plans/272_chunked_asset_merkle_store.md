@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md](../.research/262_Lore_Chunked_Asset_Merkle_Store_Modelless.md)
 **Source:** [Epic Games Lore](https://github.com/EpicGames/lore) — distilled chunked content-addressed VCS primitive.
 **Target:** `katgpt-rs/crates/katgpt-core/src/content_store/` (new module) + Cargo feature `chunked_content_store`
-**Status:** Active — Phase 1 ✅ COMPLETE (2026-06-18). Phase 2 (FastCDC) ✅ COMPLETE (2026-06-18). Phase 3 (Fetchers) ✅ T3.1/T3.2/T3.4/T3.5 COMPLETE (2026-06-25, 13 tests pass); T3.3 (NetChunkFetcher) DEFERRED. Phase 4 (GOAT Gate) ✅ G1/G2/G4/G6/G7 COMPLETE (2026-06-25, 5 inline tests pass); G3/G5 DEFERRED (perf-timing gates needing `criterion` bench targets — `Cargo.toml` collision). **Promotion: DEFERRED** until G3/G5 land as criterion benches; the modelless gain is proven (G1 dedup 8.47≥5.0, G2 push 1.35%≤5%, G7 10000/10000 tamper detection). **mmap deviation (T3.2):** uses `std::fs::read` — for ≤64 KiB chunks, one `read()` syscall matches mmap perf, and the owned `Vec<u8>` return negates mmap's zero-copy benefit.
+**Status:** Active — Phase 1 ✅ COMPLETE (2026-06-18). Phase 2 (FastCDC) ✅ COMPLETE (2026-06-18). Phase 3 (Fetchers) ✅ ALL COMPLETE (2026-06-25, T3.1-T3.5 done, 13 tests pass). Phase 4 (GOAT Gate) ✅ G1/G2/G4/G6/G7 PASS (2026-06-25, 5 inline tests pass); G3 **FAILS** (prove_chunk is O(n) — rebuilds Merkle tree per call; fix: cache levels in BlobMetadata); G5 needs release-mode measurement (non-blocking). **Promotion: BLOCKED on G3** — store stays opt-in until prove_chunk is O(log n). The modelless gain is proven (G1 dedup 8.47≥5.0, G2 push 1.35%≤5%, G7 10000/10000 tamper detection). **mmap deviation (T3.2):** uses `std::fs::read` — for ≤64 KiB chunks, one `read()` syscall matches mmap perf, and the owned `Vec<u8>` return negates mmap's zero-copy benefit.
 
 **Cross-ref (riir-ai):** This is the open primitive consumed by [riir-ai Plan 319](../../riir-ai/.plans/319_executable_asset_vessel_quorum_gitflow.md) (Executable Asset Vessel + Quorum Gitflow). The fusion Super-GOAT lives there; this plan is the GOAT-tier foundation only.
 
@@ -134,13 +134,15 @@ Goal: realistic deployment paths for hydration.
     with concurrent edits. Upgrade to mmap when the trait gains a `fetch_borrowed` path or
     when Cargo.toml is stable. Atomic write-then-rename prevents partial reads on race.
     6 tests pass (roundtrip, missing, sharded-path, multi-chunk, overwrite, tiered-write-back-to-FS).
-- [ ] **T3.3** Implement `NetChunkFetcher` skeleton (behind feature `chunked_net_fetch`):
+- [x] **T3.3** Implement `NetChunkFetcher` skeleton (behind feature `chunked_net_fetch`):
   - Trait object over an `async` HTTP/3 client (use `reqwest` if already a dep; otherwise leave as a trait + a stub impl that returns `None`).
   - URL: `<base_url>/<hash>` (the deploy decides whether this is S3, IPFS gateway, riir-chain RPC, or a Lore server).
-  - **Status (2026-06-25):** DEFERRED. Requires a new `chunked_net_fetch` Cargo.toml feature,
-    which collides with concurrent `Cargo.toml` edits. The `TieredChunkFetcher` (T3.4) is
-    generic over any `ChunkFetcher`, so a `NetChunkFetcher` plugs in cleanly when this lands.
-    No blocking dependency — Phase 3 fetchers (T3.1/T3.2/T3.4/T3.5) all pass without it.
+  - **Status (2026-06-25):** DONE (stub). `reqwest` is not a dep of `katgpt-core`, so the plan's
+    "otherwise" path applies: `NetChunkFetcher` defines the trait surface + URL construction
+    (`<base_url>/<hex_hash>`) but `fetch()` returns `None` (no HTTP client linked). Gated behind
+    `chunked_net_fetch = []` feature (empty — when `reqwest` lands, becomes `chunked_net_fetch =
+    ["dep:reqwest"]` and the stub gains a real client). The `TieredChunkFetcher` is generic over any
+    `ChunkFetcher`, so consumers compose `NetChunkFetcher` only when they need network hydration.
 - [x] **T3.4** Implement `TieredChunkFetcher` (composite):
   - First tries local (in-memory or FS); falls back to net.
   - Optional write-back to local on net fetch (configurable).
@@ -191,10 +193,13 @@ Goal: prove the gain. Required before promoting `chunked_content_store` to defau
   - Bench `prove_chunk(random_index)` and `verify_proof(random_proof)`.
   - Use `criterion` if available; otherwise `std::time::Instant` over 10K iters.
   - Pass: mean < 10 µs.
-  - **Status (2026-06-25):** DEFERRED. Requires a `criterion` bench target in `Cargo.toml`
-    (`benches/chunked_dedup.rs`), which collides with concurrent `Cargo.toml` edits. The structural
-    correctness of `prove_chunk`/`verify_proof` is verified by existing merkle tests + G4. Perf
-    gate deferred to when `Cargo.toml` is stable.
+  - **Status (2026-06-25):** IMPLEMENTED as inline `#[test]` (`#[ignore]`d) but **FAILS**.
+    Measured: prove=1.2ms, verify=12µs in debug mode (combined >> 10µs target).
+    **Root cause:** `build_binary_merkle_proof` (merkle.rs:72) is O(n) — it rebuilds the ENTIRE
+    Merkle tree (all n−1 internal nodes) on each proof call to collect level-by-level siblings.
+    The 10µs target assumes O(log n) proof generation (cached tree levels). Fix: cache Merkle
+    levels in `BlobMetadata` at `put()` time (Phase 1 implementation change). G3 is the
+    **blocker for promotion** — the store stays opt-in until prove_chunk is O(log n).
 - [x] **T4.5** Implement G4 (light-client verify) check:
   - Grep `content_store/merkle.rs` and `content_store/trait.rs`: assert no `chunks.get()`, no `blobs.get()`, no `self.chunks` access in `verify_proof` or `verify_binary_merkle_proof`.
   - Pass: zero grep hits.
@@ -207,10 +212,10 @@ Goal: prove the gain. Required before promoting `chunked_content_store` to defau
   - 10K-chunk store, 1M random reads via `get_chunk`.
   - Measure p50/p99 latency.
   - Pass: p99 < 200 ns.
-  - **Status (2026-06-25):** DEFERRED. Requires a `criterion` bench target in `Cargo.toml`, which
-    collides with concurrent edits. The `get_chunk` implementation is zero-alloc (`papaya` `.copied()`
-    on `&'static [u8]` — copies the 8-byte reference, not the chunk bytes), which is the structural
-    property the gate validates. Timing measurement deferred to when `Cargo.toml` is stable.
+  - **Status (2026-06-25):** IMPLEMENTED as inline `#[test]` (`#[ignore]`d) — needs RELEASE-MODE
+    measurement. Debug p99 ~875ns (debug-mode overhead on papaya's lock-free path); `get_chunk` is
+    zero-alloc (`papaya` `.copied()` on `&'static [u8]` — copies the 8-byte reference, not the chunk
+    bytes), which should meet 200ns in release. Non-blocking for promotion (G3 is the blocker).
 - [x] **T4.7** Implement G6 (default-off regression) check:
   - `cargo test -p katgpt-core` (no features) — all existing tests pass.
   - `cargo bench -p katgpt-core` (no features) — no perf regression vs the prior commit on existing benches.

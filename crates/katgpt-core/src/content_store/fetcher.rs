@@ -308,6 +308,62 @@ where
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// T3.3 — NetChunkFetcher (behind feature `chunked_net_fetch`)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Network chunk fetcher — fetches chunks from a remote backend (S3, IPFS
+/// gateway, riir-chain RPC, a Lore server).
+///
+/// **Stub implementation (Plan 272 T3.3 "otherwise" path):** `reqwest` is not
+/// a dependency of `katgpt-core`. This stub defines the trait surface and URL
+/// construction, but `fetch()` always returns `None`. When `reqwest` is added
+/// (behind the same feature), the stub gains a real HTTP client.
+///
+/// The URL pattern is `<base_url>/<hex_hash>` — the deploy decides the scheme
+/// and backend. This keeps the fetcher generic over the storage technology.
+#[cfg(feature = "chunked_net_fetch")]
+pub struct NetChunkFetcher {
+    /// Base URL prefix (e.g. `https://cdn.example.com/chunks`).
+    base_url: String,
+}
+
+#[cfg(feature = "chunked_net_fetch")]
+impl NetChunkFetcher {
+    /// Construct with a base URL. The chunk hash is appended as a hex path
+    /// segment: `<base_url>/<hex_hash>`.
+    #[must_use]
+    pub fn new(base_url: impl Into<String>) -> Self {
+        Self {
+            base_url: base_url.into(),
+        }
+    }
+
+    /// Compute the URL for a chunk hash: `<base_url>/<hex_hash>`.
+    ///
+    /// Exposed for testing and for callers that want to pre-warm a CDN cache.
+    #[must_use]
+    pub fn chunk_url(&self, chunk_hash: &[u8; 32]) -> String {
+        format!("{}/{}", self.base_url, hex_encode(chunk_hash))
+    }
+}
+
+#[cfg(feature = "chunked_net_fetch")]
+impl ChunkFetcher for NetChunkFetcher {
+    fn fetch(&self, _chunk_hash: &[u8; 32]) -> Option<Vec<u8>> {
+        // Stub: no HTTP client linked. Returns None — the `TieredChunkFetcher`
+        // caller treats this as a miss and falls through to the next tier
+        // (or reports the chunk as unavailable).
+        //
+        // When `reqwest` is added behind `chunked_net_fetch = ["dep:reqwest"]`,
+        // this becomes a blocking or async HTTP GET. The `ChunkFetcher` trait
+        // is sync (`fn fetch(&self, ...) -> Option<Vec<u8>>`), so the async
+        // case needs a runtime block_on or a separate async trait — deferred
+        // to the real implementation.
+        None
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 

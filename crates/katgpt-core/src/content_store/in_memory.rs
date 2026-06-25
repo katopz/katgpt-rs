@@ -114,6 +114,19 @@ impl InMemoryChunkedStore {
             }
         }
     }
+
+    /// Test-only: insert a raw chunk by its pre-computed hash, bypassing the
+    /// chunker. Used by GOAT gate G5 (hot-path read benchmark) to populate the
+    /// store with N distinct chunks without constructing N separate blobs.
+    #[cfg(test)]
+    pub(crate) fn insert_chunk_for_test(&self, hash: [u8; 32], chunk: &[u8]) {
+        let is_new = self.insert_chunk_if_absent(hash, chunk);
+        if is_new {
+            self.n_chunks_stored.fetch_add(1, Ordering::Relaxed);
+            self.total_bytes_stored
+                .fetch_add(chunk.len() as u64, Ordering::Relaxed);
+        }
+    }
 }
 
 impl Default for InMemoryChunkedStore {
