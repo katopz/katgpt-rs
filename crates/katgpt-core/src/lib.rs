@@ -104,11 +104,10 @@ pub use micro_belief::{
 #[cfg(any(feature = "faithfulness_probe", feature = "triggered_injection"))]
 pub mod faithfulness;
 
-// ReviewMetrics — inference-time path-consistency / reward-hacking counter (Plan 054, Research 244).
-// Moved from katgpt root to katgpt-core so riir-engine (Plan 308 Phase 3) can consume via
-// katgpt-core/review_metrics. Whole `pruners` module is feature-gated, matching the
-// faithfulness/cgsp precedent.
-#[cfg(feature = "review_metrics")]
+// Pruners module (Plan 054 review_metrics + Plan 320 indicator_probe_bank, etc.).
+// Parent module is always compiled; individual submodules gate their own features.
+// (Previously the whole `pruners` module was gated behind `review_metrics`; that
+// coupling was broken in Plan 320 so indicator_probe_bank can gate independently.)
 pub mod pruners;
 
 // Temporal Derivative Kernel — dual fast/slow EMA surprise signal (Plan 277, Research 243).

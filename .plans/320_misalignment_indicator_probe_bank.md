@@ -5,7 +5,7 @@
 **Private selling-point guide:** [riir-ai/.research/157_bidirectional_cognitive_monitoring_guide.md](../../riir-ai/.research/157_bidirectional_cognitive_monitoring_guide.md)
 **Source paper:** [Zhou et al. 2026 — Probing the Misaligned Thinking Process of Language Models](https://arxiv.org/pdf/2606.24251) — ICML 2026 Mech Interp Workshop
 **Target:** `katgpt-rs/crates/katgpt-core/src/pruners/indicator_probe_bank.rs` (new module) + Cargo feature `indicator_probe_bank`, `indicator_similarity`, `indicator_cascade`
-**Status:** Active — Phase 1 unblocked (no upstream blockers)
+**Status:** In progress — Phase 1 implementation (2026-06-25)
 
 ---
 
@@ -25,9 +25,9 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
 
 ### Tasks
 
-- [ ] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/pruners/indicator_probe_bank.rs`. Add to `pruners/mod.rs` behind `#[cfg(feature = "indicator_probe_bank")]`.
+- [x] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/pruners/indicator_probe_bank.rs`. Add to `pruners/mod.rs` behind `#[cfg(feature = "indicator_probe_bank")]`.
 
-- [ ] **T1.2** Define the indicator label enum (generic — no game semantics). Numeric discriminant, `#[repr(u8)]`, stable for sync:
+- [x] **T1.2** Define the indicator label enum (generic — no game semantics). Numeric discriminant, `#[repr(u8)]`, stable for sync:
 
   ```rust
   /// Generic indicator label. Domain-specific instantiations (e.g., NPC
@@ -44,7 +44,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
 
   The crate ships one canonical example impl: `pub enum DemoIndicatorLabel { A, B, C }` for tests + docs. Real instantiations live in consumer crates.
 
-- [ ] **T1.3** Define `IndicatorProbeBank<L: IndicatorLabel, const D: usize>`:
+- [x] **T1.3** Define `IndicatorProbeBank<L: IndicatorLabel, const D: usize>`:
 
   ```rust
   /// Structured bank of N pre-computed direction vectors, each tagged with
@@ -75,7 +75,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
   }
   ```
 
-- [ ] **T1.4** Implement `IndicatorProbeBank::project` (the single-direction read):
+- [x] **T1.4** Implement `IndicatorProbeBank::project` (the single-direction read):
 
   ```rust
   impl<L: IndicatorLabel, const D: usize> IndicatorProbeBank<L, D> {
@@ -93,7 +93,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
   }
   ```
 
-- [ ] **T1.5** Implement `IndicatorProbeBank::project_all_into` (the batched read — the hot-path shape):
+- [x] **T1.5** Implement `IndicatorProbeBank::project_all_into` (the batched read — the hot-path shape):
 
   ```rust
       /// Project `state` onto every direction, write sigmoid scores into
@@ -111,7 +111,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
       }
   ```
 
-- [ ] **T1.6** Implement `IndicatorProbeBank::or_fused_fire` (the OR-fusion):
+- [x] **T1.6** Implement `IndicatorProbeBank::or_fused_fire` (the OR-fusion):
 
   ```rust
       /// After `project_all_into(state, &mut scores)`, return the firing
@@ -140,7 +140,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
       }
   ```
 
-- [ ] **T1.7** Implement `IndicatorProbeBank::from_frozen_bytes` (the freeze/thaw loader):
+- [x] **T1.7** Implement `IndicatorProbeBank::from_frozen_bytes` (the freeze/thaw loader):
 
   ```rust
       /// Load a bank from its frozen wire format. Verifies the embedded
@@ -157,7 +157,7 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
       }
   ```
 
-- [ ] **T1.8** Unit tests in `tests/indicator_probe_bank_basic.rs`:
+- [x] **T1.8** Unit tests in `tests/indicator_probe_bank_basic.rs`:
   - `test_project_returns_sigmoid_in_unit_interval` — project on a zero vector returns 0.5; project on direction itself returns sigmoid(‖d‖² − threshold).
   - `test_or_fused_fire_none_below_tau` — all scores below tau → None.
   - `test_or_fused_fire_argmax_above_tau` — three labels with one above tau → that label.
@@ -167,9 +167,13 @@ The bank operates on any `[f32; D]` state — it carries zero game semantics. Th
   - `test_from_frozen_bytes_rejects_tampered_hash` — flip one byte in directions → `BankLoadError::HashMismatch`.
   - `test_indicator_label_u8_round_trip` — every `L::from_u8(L::as_u8(&l)) == l` for all variants in `DemoIndicatorLabel`.
 
-- [ ] **T1.9** Define the wire format `IndicatorBankWire` as a `#[repr(C)]` Pod with header (magic, version, N, D, blake3) + directions + thresholds. Follow the `merkle_freeze` pattern from `riir-neuron-db/src/freeze.rs` for BLAKE3 commitment.
+- [x] **T1.9** Define the wire format `IndicatorBankWire` as a `#[repr(C)]` Pod with header (magic, version, N, D, blake3) + directions + thresholds. Follow the `merkle_freeze` pattern from `riir-neuron-db/src/freeze.rs` for BLAKE3 commitment.
 
-- [ ] **T1.10** Wire Cargo feature `indicator_probe_bank` in `katgpt-rs/Cargo.toml`; ensure default-off; ensure zero overhead when off (grep `cfg(feature)` coverage on every new code path).
+  *Implementation note:* the wire format ships as `to_frozen_bytes`/`from_frozen_bytes` on the bank (header `[magic(4)|version(8)|n(2)|d(2)|blake3(32)]` = 48 bytes + body), plus a zero-copy `IndicatorBankWireHeader::parse` view. BLAKE3 commits over `directions ++ thresholds` (the body), matching the `riir-neuron-db/src/freeze.rs` one-shot `*blake3::hash(&buf).as_bytes()` pattern. The `IndicatorLabel` trait and `DemoIndicatorLabel` ship in-module so tests/docs are self-contained; consumer crates (riir-ai) supply the 18-indicator NPC taxonomy.
+
+- [x] **T1.10** Wire Cargo feature `indicator_probe_bank` in `katgpt-rs/Cargo.toml`; ensure default-off; ensure zero overhead when off (grep `cfg(feature)` coverage on every new code path).
+
+  *Note:* this required decoupling the `pruners` parent module from `review_metrics` (it was previously gated behind `review_metrics`); now `pruners` is always compiled and each submodule gates independently. Zero regression: `cargo check` (default, no `indicator_probe_bank`) is clean.
 
 **Phase 1 exit:** `IndicatorProbeBank` projects + OR-fuses + loads from frozen bytes. No cascade, no similarity matrix. Unit tests green. Feature gate `indicator_probe_bank` works.
 
