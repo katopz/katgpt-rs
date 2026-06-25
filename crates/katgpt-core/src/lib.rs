@@ -707,20 +707,24 @@ pub use karc::{
 };
 
 // ARG Protocol Primitives — open half of the ARG × Latent Substrate Super-GOAT
-// fusion (Plan 327 Phase 1, Research 309, Guide 160 private). Five generic
+// fusion (Plan 327 Phases 1-2, Research 309, Guide 160 private). Five generic
 // protocol primitives distilled from the ARG Standard
 // (https://protocol.airistech.ai/arg-core.html, Iris Technologies 2026):
 // `PolicyEnvelope` (Step 1 hard gate), `TaxonomyValidator` (Step 3 deterministic
 // label-set validator), `LifecycleState` + `RedirectTable` (Step E ontology
-// lifecycle continuity). Phase 2/3 will add `TypedOfflineCandidate` + scorer and
-// `InfoRegistry` with two-phase dedup. Private runtime composition with HLA /
-// Entity Cognition Stack / VMG / Sub-Goal Compaction lives in riir-ai Plan 337.
-// No game/chain/shard semantics. Opt-in until G1–G5 GOAT gate passes.
+// lifecycle continuity), `TypedOfflineCandidate` + `CandidateIntent` (Step C
+// typed offline candidate), `OfflineCandidateScorer` (Step C scoring with the
+// G5 silence-bias penalty). Phase 3 will add `InfoRegistry` with two-phase
+// dedup. Private runtime composition with HLA / Entity Cognition Stack / VMG /
+// Sub-Goal Compaction lives in riir-ai Plan 337. No game/chain/shard semantics.
+// Opt-in until G1–G5 GOAT gate passes.
 #[cfg(feature = "arg_protocol")]
 pub mod arg;
 #[cfg(feature = "arg_protocol")]
 pub use arg::{
-    LabelId, LabelSet, LifecycleState, PolicyConstraints, PolicyDecision, PolicyEnvelope,
-    PolicyState, RedirectTable, ResponseMode, ShouldProceed, TaxonomyKind, TaxonomyNode,
-    TaxonomyValidator, ValidationError, ValidationResult, ValidationScratch,
+    CandidateIntent, CandidateKind, DEFAULT_AUTO_COMMIT_THRESHOLD, Evidence, EvidenceId,
+    GainComponents, InfoOutcomeStatus, LabelId, LabelSet, LifecycleState, OfflineCandidateScorer,
+    PolicyConstraints, PolicyDecision, PolicyEnvelope, PolicyState, RedirectTable, ResponseMode,
+    ScoredCandidate, ShouldProceed, TaxonomyKind, TaxonomyNode, TaxonomyValidator,
+    TypedOfflineCandidate, ValidationError, ValidationResult, ValidationScratch,
 };

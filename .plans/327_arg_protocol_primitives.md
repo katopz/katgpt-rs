@@ -6,7 +6,7 @@
 **Private wiring plan:** [riir-ai/.plans/337_arg_runtime_wiring.md](../../riir-ai/.plans/337_arg_runtime_wiring.md)
 **Source protocol:** [ARG Standard](https://protocol.airistech.ai/arg-core.html) — Iris Technologies, 2026
 **Target:** `katgpt-rs/crates/katgpt-core/src/arg/` (new module) + Cargo feature `arg_protocol`
-**Status:** Active — Phase 1 (unblocking skeleton)
+**Status:** Active — Phase 3 (InfoRegistry) next. Phases 1-2 shipped.
 
 ---
 
@@ -31,16 +31,16 @@ The three smallest, most foundational primitives. Ships first so the open adopti
 
 ### Tasks
 
-- [ ] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/arg/` with `mod.rs` declaring submodules.
-- [ ] **T1.2** Add Cargo feature `arg_protocol = []` to `katgpt-rs/crates/katgpt-core/Cargo.toml`. Default-off.
-- [ ] **T1.3** Wire `#[cfg(feature = "arg_protocol")] pub mod arg;` in `katgpt-rs/crates/katgpt-core/src/lib.rs`.
-- [ ] **T1.4** Write `arg/policy.rs` — `PolicyEnvelope`, `PolicyState`, `ResponseMode`, `PolicyConstraints`. ≤100 lines.
+- [x] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/arg/` with `mod.rs` declaring submodules.
+- [x] **T1.2** Add Cargo feature `arg_protocol = []` to `katgpt-rs/crates/katgpt-core/Cargo.toml`. Default-off.
+- [x] **T1.3** Wire `#[cfg(feature = "arg_protocol")] pub mod arg;` in `katgpt-rs/crates/katgpt-core/src/lib.rs`.
+- [x] **T1.4** Write `arg/policy.rs` — `PolicyEnvelope`, `PolicyState`, `ResponseMode`, `PolicyConstraints`. ≤100 lines.
   - `PolicyState ∈ {Allow, AllowWithRefocus, Restrict, Block}` `#[repr(u8)]` enum
   - `ResponseMode ∈ {Normal, Prudent, Refocus, Refusal}` `#[repr(u8)]` enum
   - `PolicyConstraints { allowed_labels: &[LabelId], forbidden_labels: &[LabelId], max_hops: u8, max_depth: u8, max_complexity: u16 }`
   - `PolicyEnvelope { state: PolicyState, constraints: PolicyConstraints, response_mode: ResponseMode }`
   - `PolicyEnvelope::evaluate(&self, ctx: &EvalCtx) -> PolicyDecision` — zero-alloc, returns decision + whether to short-circuit
-- [ ] **T1.5** Write `arg/taxonomy.rs` — `TaxonomyNode`, `TaxonomyKind`, `LabelId`, `LabelSet`, `TaxonomyValidator`. ≤200 lines.
+- [x] **T1.5** Write `arg/taxonomy.rs` — `TaxonomyNode`, `TaxonomyKind`, `LabelId`, `LabelSet`, `TaxonomyValidator`. ≤200 lines.
   - `LabelId` = `u32` (stable identity, never recycled)
   - `TaxonomyKind ∈ {Cluster, Label, Leaf}` `#[repr(u8)]` enum
   - `TaxonomyNode { id: LabelId, kind: TaxonomyKind, parent_id: Option<LabelId>, incompatible_with: &[LabelId] }`
@@ -48,39 +48,39 @@ The three smallest, most foundational primitives. Ships first so the open adopti
   - `TaxonomyValidator` — owns `&[TaxonomyNode]` (sorted by id for binary-search lookup)
   - `TaxonomyValidator::validate_label_set(&self, candidates: &LabelSet, scratch: &mut ValidationScratch) -> ValidationResult` — enforces existence, cluster↔label compatibility, parent/child coherence, explicit incompatibilities. Zero-alloc when scratch is preallocated.
   - `TaxonomyValidator::expand_ascending(&self, leaf_set: &LabelSet, scratch: &mut ValidationScratch) -> LabelSet` — child→parent→root expansion only (no descending).
-- [ ] **T1.6** Write `arg/lifecycle.rs` — `LifecycleState`, `RedirectTable`. ≤100 lines.
+- [x] **T1.6** Write `arg/lifecycle.rs` — `LifecycleState`, `RedirectTable`. ≤100 lines.
   - `LifecycleState ∈ {Active, Shadow, Deprecated, Removed}` `#[repr(u8)]` enum
   - `RedirectTable` — papaya lock-free `HashMap<LabelId, LabelId>` (deprecated → replacement); `redirect(&self, id: LabelId) -> LabelId` follows chains; `redirect_chain(&self, id) -> Vec<LabelId>` for audit
   - `RedirectTable::insert_redirect(old, new)` — chain compression on insert (avoid redirect chains longer than 3)
-- [ ] **T1.7** Write `arg/lib.rs`-style facade re-exports in `arg/mod.rs`.
+- [x] **T1.7** Write `arg/lib.rs`-style facade re-exports in `arg/mod.rs`.
 
 ### Phase 1 GOAT gate
 
-- [ ] **T1.G1** Property tests for `TaxonomyValidator`:
+- [x] **T1.G1** Property tests for `TaxonomyValidator`:
   - rejects non-existent label
   - rejects cluster↔label incompatibility
   - enforces parent/child coherence (a child without parent fails)
   - ascending expansion preserves `child ⊆ expanded_parent`
   - ascending expansion never descends
-- [ ] **T1.G2** Criterion bench: `PolicyEnvelope::evaluate` median ≤ 50ns; `TaxonomyValidator::validate_label_set` median ≤ 200ns (taxonomy of 256 nodes, candidate set of 8).
-- [ ] **T1.G3** `cargo check --all-features` passes; `cargo check` (default) unchanged.
-- [ ] **T1.G4** `PolicyEnvelope::evaluate` and `TaxonomyValidator::validate_label_set` zero-alloc verified via `cargo test --features arg_protocol` (assert no `Vec::new()` / `Box::new()` / `String` in hot path; use scratch buffers).
-- [ ] **T1.G5** N/A in Phase 1 (silence-bias scorer ships in Phase 2).
+- [ ] **T1.G2** Criterion bench: `PolicyEnvelope::evaluate` median ≤ 50ns; `TaxonomyValidator::validate_label_set` median ≤ 200ns (taxonomy of 256 nodes, candidate set of 8). — *Deferred to Phase 4 (covers all primitives in one bench).*
+- [x] **T1.G3** `cargo check --all-features` passes; `cargo check` (default) unchanged.
+- [x] **T1.G4** `PolicyEnvelope::evaluate` and `TaxonomyValidator::validate_label_set` zero-alloc verified via `cargo test --features arg_protocol` (assert no `Vec::new()` / `Box::new()` / `String` in hot path; use scratch buffers).
+- [x] **T1.G5** N/A in Phase 1 (silence-bias scorer ships in Phase 2).
 
 ---
 
 ## Phase 2 — Typed Offline Candidates + Silence-Bias Scorer
 
-- [ ] **T2.1** Write `arg/candidate.rs` — `TypedOfflineCandidate`, `CandidateIntent`. ≤150 lines.
+- [x] **T2.1** Write `arg/candidate.rs` — `TypedOfflineCandidate`, `CandidateIntent`. ≤150 lines.
   - `CandidateKind ∈ {Split, Merge, Edge, Taxonomy, NewNode, RegistryDedup}` `#[repr(u8)]` enum
   - `CandidateIntent { kind, target_label: LabelId, before: LabelSet, after: LabelSet, evidence_refs: &[EvidenceId] }`
   - `TypedOfflineCandidate { intent: CandidateIntent, score: Option<f32> }`
-- [ ] **T2.2** Write `arg/scorer.rs` — `OfflineCandidateScorer`, `InfoOutcomeStatus`, `Evidence`. ≤200 lines.
+- [x] **T2.2** Write `arg/scorer.rs` — `OfflineCandidateScorer`, `InfoOutcomeStatus`, `Evidence`. ≤200 lines.
   - `InfoOutcomeStatus ∈ {InfoConfirmedSuccess, InfoUncertainSuccess, InfoLowConfidence}` `#[repr(u8)]` enum
   - `Evidence { outcome: InfoOutcomeStatus, weight: f32 }`
   - `OfflineCandidateScorer::score(&self, candidate: &TypedOfflineCandidate, evidence: &[Evidence]) -> f32` — computes `Gain_info_confirmed`, `Gain_info_uncertain`, `Gain_info_lowconf` separately, applies `Penalty_silent(C)` if `uncertain + lowconf > threshold`.
   - `OfflineCandidateScorer::can_auto_commit(scored: &ScoredCandidate, threshold: f32) -> bool` — refuses auto-commit when low-confidence-dominated.
-- [ ] **T2.3** Property tests for G5 silence-bias:
+- [x] **T2.3** Property tests for G5 silence-bias:
   - Same nominal gain, all-confirmed evidence → score X
   - Same nominal gain, all-low-confidence evidence → score Y < X (strict)
   - Same nominal gain, 50/50 confirmed/lowconf → score Z, X > Z > Y
