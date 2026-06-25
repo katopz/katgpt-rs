@@ -54,16 +54,16 @@ GOAT gate: G1 correctness (orthogonality preserves non-interference), G2 perf (r
 
 ### Tasks
 
-- [ ] **T3.1** `tests/bench_329_non_interference_branches_goat.rs` — GOAT gate:
-  - **G1 (correctness):** spawn N=8 branches with orthogonal directions in D=8 space; verify `interference(b_i, b_j) < 1e-6` for all i≠j. Write to branch i; verify branch j's episodic/procedural stores unchanged (non-interference by construction).
-  - **G2 (perf):** `router.route()` on 64-branch bank < 1µs (release). Measure with criterion or `std::time::Instant` over 10K iterations.
-  - **G3 (no-regression):** `cargo check --all-features` and `cargo check --no-default-features` both clean.
-  - **G4 (alloc-free):** `router.route()` and `verifier.should_write()` allocate 0 bytes on the hot path (inspect with `#[global_allocator]` counter or assert no `Vec::new()` / `Box::new()` in the path).
-  - **G5 (modelless):** no `riir_train` / `riir_gpu` dependency. Pure closed-form arithmetic + dot products.
-- [ ] **T3.2** If G1–G5 all PASS → promote `non_interference_branches` to `default` in `crates/katgpt-core/Cargo.toml` and `katgpt-rs/Cargo.toml`.
-- [ ] **T3.3** Record benchmark in `katgpt-rs/.benchmarks/329_non_interference_branches_goat.md`.
+- [x] **T3.1** `benches/bench_329_non_interference_branches_goat.rs` — GOAT gate. ✅ 2026-06-26
+  - **G1 (correctness):** G1a — spawn N=8 branches with orthogonal directions in D=8 space; verify `interference(b_i, b_j) < 1e-6` for all 8×7=56 ordered pairs (max observed = 0.00e0). G1b — write to branch 0; verify branch 1..7's episodic/procedural/failure stores byte-for-byte unchanged (non-interference by construction). G1c — 9th direction in D=8 (normalized all-ones) correctly rejected: interferes by 0.3536 ≥ 1/sqrt(8)=0.3536 > threshold 0.1.
+  - **G2 (perf):** `router.route()` on 64-branch bank = 301.5ns < 1µs target (3.3× margin) over 10,000 iters (release, `std::time::Instant`, `black_box`).
+  - **G3 (no-regression):** `cargo check --all-features`, `cargo check --no-default-features`, `cargo check -p katgpt-core` (default), `cargo check` (root) — all clean.
+  - **G4 (alloc-free):** `router.route()` and `verifier.should_write()` allocate 0 bytes over 100 steady-state calls (CountingAllocator). G4b companion gate verifies the 0-alloc result is non-degenerate (correct WriteDecision variants for known inputs).
+  - **G5 (modelless):** `non_interference_branches = []` deps in Cargo.toml — no `riir_train`/`riir_gpu`. Pure dot-product + budget arithmetic.
+- [x] **T3.2** Promoted `non_interference_branches` to `default` in `crates/katgpt-core/Cargo.toml` + added passthrough `non_interference_branches = ["katgpt-core/non_interference_branches"]` to root `katgpt-rs/Cargo.toml` default list. ✅ 2026-06-26
+- [x] **T3.3** Recorded benchmark in `katgpt-rs/.benchmarks/329_non_interference_branches_goat.md`. ✅ 2026-06-26
 
-**Phase 3 exit:** all gates PASS; feature promoted to default-on (if modelless gain proven) OR kept opt-in with documented reason.
+**Phase 3 exit:** all gates PASS; feature promoted to default-on with pure modelless gain (structural geometric orthogonality, not learned). ✅ 2026-06-26
 
 ---
 
