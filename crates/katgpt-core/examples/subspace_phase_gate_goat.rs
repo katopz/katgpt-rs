@@ -23,8 +23,7 @@
 //! the transition to N = d+1, contradicting Theorem 4.
 
 use katgpt_core::{
-    jacobian_svd_at, numerical_rank, participation_ratio, phase_transition_gate,
-    JacobianSvdScratch,
+    JacobianSvdScratch, jacobian_svd_at, numerical_rank, participation_ratio, phase_transition_gate,
 };
 
 // ── Setup (Plan 301 §Phase 2) ─────────────────────────────────────────────
@@ -128,8 +127,7 @@ fn generate_subspaces(rng: &mut Rng) -> Vec<Vec<f32>> {
             let mut basis = vec![0.0_f32; AMBIENT_DIM * INTRINSIC_DIM];
             for r in 0..AMBIENT_DIM {
                 for j in 0..INTRINSIC_DIM {
-                    basis[r * INTRINSIC_DIM + j] =
-                        g[r * total_cols + k * INTRINSIC_DIM + j];
+                    basis[r * INTRINSIC_DIM + j] = g[r * total_cols + k * INTRINSIC_DIM + j];
                 }
             }
             basis
@@ -144,8 +142,8 @@ fn sample_events(basis: &[f32], n: usize, rng: &mut Rng) -> Vec<f32> {
     let mut out = vec![0.0_f32; n * AMBIENT_DIM];
     for i in 0..n {
         let mut z = [0.0_f32; INTRINSIC_DIM];
-        for j in 0..INTRINSIC_DIM {
-            z[j] = rng.next_gaussian();
+        for z_j in z.iter_mut() {
+            *z_j = rng.next_gaussian();
         }
         for r in 0..AMBIENT_DIM {
             let mut acc = 0.0_f32;
@@ -165,11 +163,11 @@ fn recovery_error(u_hat: &[Vec<f32>], u_star: &[f32]) -> f32 {
     let d_hat = u_hat.len();
     let d_star = INTRINSIC_DIM;
     let mut cross_sq = 0.0_f32;
-    for i in 0..d_hat {
+    for u_hat_i in u_hat.iter() {
         for j in 0..d_star {
             let mut dot = 0.0_f32;
             for r in 0..AMBIENT_DIM {
-                dot += u_hat[i][r] * u_star[r * d_star + j];
+                dot += u_hat_i[r] * u_star[r * d_star + j];
             }
             cross_sq += dot * dot;
         }
@@ -247,8 +245,7 @@ fn main() {
     let subspaces = generate_subspaces(&mut rng);
 
     // Sanity: each basis is orthonormal, and the K bases are mutually orthogonal.
-    for k in 0..NUM_SUBSPACES {
-        let basis = &subspaces[k];
+    for (k, basis) in subspaces.iter().enumerate() {
         for i in 0..INTRINSIC_DIM {
             for j in 0..INTRINSIC_DIM {
                 let mut dot = 0.0_f32;
@@ -285,8 +282,8 @@ fn main() {
         let mut errors = Vec::with_capacity(NUM_SUBSPACES);
         let mut prs = Vec::with_capacity(NUM_SUBSPACES);
         let mut nrs = Vec::with_capacity(NUM_SUBSPACES);
-        for k in 0..NUM_SUBSPACES {
-            let r = run_single(&subspaces[k], n, &mut rng);
+        for subspace in subspaces.iter() {
+            let r = run_single(subspace, n, &mut rng);
             errors.push(r.error);
             prs.push(r.pr_estimate);
             nrs.push(r.nr_estimate as f32);
@@ -334,10 +331,7 @@ fn main() {
             mark, r.n, r.mean_err, side
         );
     }
-    println!(
-        "  T2.5 verdict: {}",
-        if t25_pass { "PASS" } else { "FAIL" }
-    );
+    println!("  T2.5 verdict: {}", if t25_pass { "PASS" } else { "FAIL" });
     println!();
 
     // T2.6 — phase_transition_gate matches empirical recovery.
@@ -356,14 +350,14 @@ fn main() {
             mark, r.n, gate, empirical, r.mean_err
         );
     }
-    println!(
-        "  T2.6 verdict: {}",
-        if t26_pass { "PASS" } else { "FAIL" }
-    );
+    println!("  T2.6 verdict: {}", if t26_pass { "PASS" } else { "FAIL" });
     println!();
 
     // T2.7 — participation_ratio vs numerical_rank as intrinsic-dim estimators.
-    println!("── T2.7: Intrinsic-dim estimation (true d={}) ──", INTRINSIC_DIM);
+    println!(
+        "── T2.7: Intrinsic-dim estimation (true d={}) ──",
+        INTRINSIC_DIM
+    );
     println!(
         "  {:>4}  {:>10}  {:>10}  {:>8}",
         "N", "PR_round", "NR99", "winner"
@@ -390,15 +384,14 @@ fn main() {
         );
     }
     println!();
-    println!("  Summary: PR wins {} row(s), NR wins {} row(s).", pr_wins, nr_wins);
+    println!(
+        "  Summary: PR wins {} row(s), NR wins {} row(s).",
+        pr_wins, nr_wins
+    );
     println!("  On this synthetic MoLRG, NR tracks the true d better than PR");
-    println!(
-        "  (sharp spectral elbow). For N<d, both correctly report N — the"
-    );
+    println!("  (sharp spectral elbow). For N<d, both correctly report N — the");
     println!("  true d is information-theoretically unrecoverable. NR is the");
-    println!(
-        "  better production pick (discrete, threshold-tunable, immune to"
-    );
+    println!("  better production pick (discrete, threshold-tunable, immune to");
     println!("  continuous-valued drift); PR is the better diagnostic (shows");
     println!("  the effective dimensionality even when no clear elbow exists).");
     println!();

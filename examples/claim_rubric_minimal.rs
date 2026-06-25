@@ -11,10 +11,8 @@
 
 #![cfg(feature = "claim_rubric")]
 
-use katgpt_rs::claim_rubric::{
-    Claim, ClaimValidator, EvidenceItemId, EvidenceItemId::*, EvidenceLevel,
-};
 use katgpt_rs::claim_rubric::FeatureClass;
+use katgpt_rs::claim_rubric::{Claim, ClaimValidator, EvidenceItemId, EvidenceLevel};
 
 fn main() {
     println!("═══════════════════════════════════════════════════════════════");
@@ -110,7 +108,11 @@ fn main() {
 
     assert_eq!(grade.honest_level, EvidenceLevel::L1);
     assert!(grade.downgraded);
-    assert_eq!(advice.len(), 6, "all six L2 items should be listed as missing");
+    assert_eq!(
+        advice.len(),
+        6,
+        "all six L2 items should be listed as missing"
+    );
 
     // ── GOAT-gate primitive: ClaimValidator::passes ──────────────────────
     println!("GOAT-gate primitive (ClaimValidator::passes):");
@@ -134,5 +136,7 @@ fn main() {
     println!();
     println!("See also:");
     println!("  .plans/307_claim_rubric_runtime.md   — full design");
-    println!("  .research/287_Probe_Steering_Claim_Evidence_Ladder_Fusion_With_267.md  — rubric source");
+    println!(
+        "  .research/287_Probe_Steering_Claim_Evidence_Ladder_Fusion_With_267.md  — rubric source"
+    );
 }

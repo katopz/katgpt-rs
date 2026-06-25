@@ -20,11 +20,12 @@ fn main() {
     println!("═══ CUCG GOAT Gate Report (Plan 320, Research 300) ═══");
     println!();
 
-    #[allow(clippy::vec_init_then_push)]
-    let mut results = Vec::new();
-
     // G1: rubric beats fixed-interval (search rubric recall/FDR)
-    results.push(("G1", "rubric recall ≥0.80, FDR ≤0.20", g1_search_rubric()));
+    let mut results = vec![(
+        "G1",
+        "rubric recall ≥0.80, FDR ≤0.20",
+        g1_search_rubric(),
+    )];
 
     // G2: skip-if-reliable ≥50% suppression
     results.push((

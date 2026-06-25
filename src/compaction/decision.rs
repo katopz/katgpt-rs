@@ -79,18 +79,24 @@ mod tests {
 
     #[test]
     fn audit_accessor_works_for_all_variants() {
-        let mut a: CompactionAuditRecord<2> = CompactionAuditRecord::default();
-        a.decision = DecisionKind::Compress.to_byte();
+        let a: CompactionAuditRecord<2> = CompactionAuditRecord {
+            decision: DecisionKind::Compress.to_byte(),
+            ..Default::default()
+        };
         let d = CompactionDecision::<2>::Compress { audit: a };
         assert_eq!(d.audit().decision, DecisionKind::Compress.to_byte());
 
-        let mut b: CompactionAuditRecord<2> = CompactionAuditRecord::default();
-        b.decision = DecisionKind::Continue.to_byte();
+        let b: CompactionAuditRecord<2> = CompactionAuditRecord {
+            decision: DecisionKind::Continue.to_byte(),
+            ..Default::default()
+        };
         let d = CompactionDecision::<2>::Continue { audit: b };
         assert_eq!(d.audit().decision, DecisionKind::Continue.to_byte());
 
-        let mut c: CompactionAuditRecord<2> = CompactionAuditRecord::default();
-        c.decision = DecisionKind::Forced.to_byte();
+        let c: CompactionAuditRecord<2> = CompactionAuditRecord {
+            decision: DecisionKind::Forced.to_byte(),
+            ..Default::default()
+        };
         let d = CompactionDecision::<2>::Forced { audit: c };
         assert_eq!(d.audit().decision, DecisionKind::Forced.to_byte());
     }

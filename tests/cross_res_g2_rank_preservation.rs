@@ -19,10 +19,10 @@
 //!
 //! - Source ranking: `r_src = W_16^T · src_state`
 //! - Destination ranking: `r_dst = W_256^T · dst_state`
-//!                      `= (Ψ_dst · Φ_src^T · W_16)^T · (Ψ_dst · Φ_src^T · src_state)`
-//!                      `= W_16^T · Φ_src · Ψ_dst^T · Ψ_dst · Φ_src^T · src_state`
-//!                      `= W_16^T · Φ_src · Φ_src^T · src_state` (Ψ_dst^T Ψ_dst = I)
-//!                      `= W_16^T · (band-limited projection of src_state)`
+//!   `= (Ψ_dst · Φ_src^T · W_16)^T · (Ψ_dst · Φ_src^T · src_state)`
+//!   `= W_16^T · Φ_src · Ψ_dst^T · Ψ_dst · Φ_src^T · src_state`
+//!   `= W_16^T · Φ_src · Φ_src^T · src_state` (Ψ_dst^T Ψ_dst = I)
+//!   `= W_16^T · (band-limited projection of src_state)`
 //!
 //! If `src_state` is fully in Φ_src's column space, r_dst = r_src exactly. If
 //! not, r_dst ranks the **band-limited projection** of src_state, which tests
@@ -60,7 +60,7 @@
 #![cfg(feature = "cross_resolution_transport")]
 
 use katgpt_core::cross_resolution::{
-    CrossResolutionBases, CrossResScratch, transport_cross_resolution_into,
+    CrossResScratch, CrossResolutionBases, transport_cross_resolution_into,
 };
 use katgpt_core::simd;
 
@@ -96,18 +96,23 @@ impl Rng {
 
 fn random_orthonormal(dim: usize, k: usize, rng: &mut Rng) -> Vec<f32> {
     assert!(k <= dim);
-    let mut cols: Vec<Vec<f32>> = (0..k).map(|_| (0..dim).map(|_| rng.next_f32()).collect()).collect();
+    let mut cols: Vec<Vec<f32>> = (0..k)
+        .map(|_| (0..dim).map(|_| rng.next_f32()).collect())
+        .collect();
     for i in 0..k {
         for j in 0..i {
             let dot: f32 = cols[i].iter().zip(cols[j].iter()).map(|(a, b)| a * b).sum();
-            for r in 0..dim {
-                cols[i][r] -= dot * cols[j][r];
+            // split_at_mut: cols[j] (j < i) lives in the left half, cols[i]
+            // is right[0] — two disjoint borrows in one expression.
+            let (left, right) = cols.split_at_mut(i);
+            for (ci_r, cj_r) in right[0].iter_mut().zip(left[j].iter()) {
+                *ci_r -= dot * cj_r;
             }
         }
         let norm: f32 = cols[i].iter().map(|x| x * x).sum::<f32>().sqrt();
         let inv = if norm > 1e-12 { 1.0 / norm } else { 1.0 };
-        for r in 0..dim {
-            cols[i][r] *= inv;
+        for v in cols[i].iter_mut() {
+            *v *= inv;
         }
     }
     let mut m = vec![0.0f32; dim * k];
@@ -219,17 +224,16 @@ fn transport_action_weights(
         }
         // Transport: dst = Ψ_dst · Φ_src^T · src_col.
         let mut spectral = vec![0.0f32; k];
-        for jj in 0..k {
-            let mut acc = 0.0f32;
-            for r in 0..d_src {
-                acc += bases.phi_src[r * k + jj] * src_col[r];
+        for (jj, spectral_jj) in spectral.iter_mut().enumerate() {
+            let mut acc = 0.0_f32;
+            for (cj_r, phi_row) in src_col.iter().zip(bases.phi_src.chunks(k)) {
+                acc += phi_row[jj] * cj_r;
             }
-            spectral[jj] = acc;
+            *spectral_jj = acc;
         }
         let mut dst_col = vec![0.0f32; d_dst];
-        for r in 0..d_dst {
-            let row = &bases.psi_dst[r * k..(r + 1) * k];
-            dst_col[r] = simd::simd_dot_f32(row, &spectral, k);
+        for (dst_r, psi_row) in dst_col.iter_mut().zip(bases.psi_dst.chunks(k)) {
+            *dst_r = simd::simd_dot_f32(psi_row, &spectral, k);
         }
         // Write back as column j of w_dst.
         for i in 0..d_dst {
@@ -295,8 +299,10 @@ fn g2_variant_a_rank_preservation_transported_weights() {
     let min = cosines.first().copied().unwrap_or(0.0);
     let median = cosines[cosines.len() / 2];
 
-    println!("\nG2-A RANK PRESERVATION (transported weights, n={}, d_src={}, d_dst={}, k={}, band_frac={}):",
-        N_SAMPLES, D_SRC, D_DST, K, VARIANT_A_BAND_FRAC);
+    println!(
+        "\nG2-A RANK PRESERVATION (transported weights, n={}, d_src={}, d_dst={}, k={}, band_frac={}):",
+        N_SAMPLES, D_SRC, D_DST, K, VARIANT_A_BAND_FRAC
+    );
     println!("  min cos:    {min:.4}");
     println!("  median cos: {median:.4}");
     println!("  mean cos:   {mean:.4}");
@@ -317,7 +323,9 @@ fn g2_variant_a_rank_preservation_transported_weights() {
     if mean >= 0.85 {
         println!("\nG2-A PASS: mean cos = {mean:.4} (≥ 0.85). Super-GOAT headline claim holds.");
     } else {
-        println!("\nG2-A BORDERLINE: mean cos = {mean:.4} ∈ [0.75, 0.85). Demote-to-Gain unless re-tuned.");
+        println!(
+            "\nG2-A BORDERLINE: mean cos = {mean:.4} ∈ [0.75, 0.85). Demote-to-Gain unless re-tuned."
+        );
     }
 }
 
@@ -365,7 +373,9 @@ fn g2_variant_b_negative_control_padded_weights_identity_bases() {
     }
 
     let mean: f32 = cosines.iter().sum::<f32>() / cosines.len() as f32;
-    println!("\nG2-B NEGATIVE CONTROL (padded weights, identity bases, n={N_SAMPLES}): mean cos = {mean:.4}");
+    println!(
+        "\nG2-B NEGATIVE CONTROL (padded weights, identity bases, n={N_SAMPLES}): mean cos = {mean:.4}"
+    );
     println!("  Expected: < 0.85 — naive padding drops w_src[8..16, :] because only");
     println!("  k=8 src components survive identity transport. Motivates Variant A.");
     // Negative-control gate: naive padding must FAIL the 0.85 gate, otherwise
