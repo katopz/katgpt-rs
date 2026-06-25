@@ -161,6 +161,7 @@ interest_cochain = []
 # dependency on riir-ai types like `ValidatedZoneView` / `HlaState`).
 lattice_utility = ["dec_operators"]
 bisimulation_operator_inference = []  # Bisimulation Operator Inference — generic modelless primitive that quotients an observed transition graph into bisimulation-equivalent state classes and infers an abstract PDDL-like operator schema (Plan 324, Research 308, arXiv:2602.19260 "The Price Is Not Right" Duggan et al. Feb 2026; underlying NSM method arXiv:2508.21501 Lorang et al.). Closes Research 264 §2.2 gap #1 (PTG data structure) + #2 (motif-mining loop). Lighter-weight PDDL-side counterpart to Induced CWM (Plan 296). Opt-in by design — downstream pipelines opt in; the primitive is not a default-on capability. Paige-Tarjan O((S+E) log S) partition refinement, canonical BLAKE3 commitment, BFS planner.
+arg_protocol = ["dep:papaya"]  # ARG Protocol Primitives — PolicyEnvelope + TaxonomyValidator + LifecycleState+RedirectTable (Plan 327 Phase 1, Research 309 — open half of the ARG × Latent Substrate Super-GOAT fusion). Five generic protocol primitives distilled from the ARG Standard (protocol.airistech.ai/arg-core.html). No game/chain/shard semantics. Opt-in until G1–G5 GOAT gate passes; private runtime composition lives in riir-ai Plan 337 / Guide 160.
 
 # Plan 335 Phase 6 — GOAT gate leaf bench. G2 lattice-side latency on a 16×16
 # grid (480 edges) + G4 zero-alloc code-review note. Leaf-clean: raw slices
