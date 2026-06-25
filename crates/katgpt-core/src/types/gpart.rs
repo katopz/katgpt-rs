@@ -497,5 +497,8 @@ impl TryFrom<&crate::LoraAdapter> for GpartAdapter {
 }
 
 // NeuronShard Pod compatibility: seed(8) + d(max=90)×4(360) = 368 bytes max.
+// Exact-fit invariant — clippy::eq_op fires because 8+90*4 const-folds to 368,
+// but the assertion is a deliberate compile-time budget guard, not a mistake.
 #[cfg(feature = "gpart_adapter")]
+#[allow(clippy::eq_op)]
 const _: () = assert!(8 + 90 * 4 <= 368);

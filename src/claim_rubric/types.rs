@@ -238,7 +238,7 @@ impl Claim {
     #[inline]
     #[must_use]
     pub fn grade(&self) -> Grade {
-        ClaimValidator::default().grade(self)
+        ClaimValidator.grade(self)
     }
 }
 

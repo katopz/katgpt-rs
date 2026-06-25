@@ -535,7 +535,6 @@ impl GameSampleCollector {
 #[allow(deprecated)] // JSONL path is intentionally exercised until riir-ai migrates (Issue 011)
 mod tests {
     use super::*;
-    use std::io::BufRead;
 
     #[test]
     fn go_action_type_flat_index() {
@@ -705,7 +704,6 @@ mod tests {
         let mut writer = GoReplayWriter::create(&path, board_size).unwrap();
 
         let mut total_samples = 0usize;
-        let mut total_moves = 0usize;
 
         for _ in 0..num_games {
             let mut state = GoState::new(board_size);
@@ -736,8 +734,6 @@ mod tests {
                 state.play_pass();
             }
 
-            total_moves += moves_played;
-
             let winner = state.get_winner();
             let written = collector
                 .finalize_and_write(winner, &mut writer, 0.0)
@@ -760,7 +756,7 @@ mod tests {
         );
 
         // Verify each line is valid and dimensions are correct
-        let (expected_vocab, expected_block) = JsonlGoSample::token_dims(board_size);
+        let (expected_vocab, _expected_block) = JsonlGoSample::token_dims(board_size);
 
         for line in &lines {
             let parsed: serde_json::Value = serde_json::from_str(line).unwrap();

@@ -7,8 +7,6 @@
 //!
 //! Reference: Plan 311 (T1.7).
 
-#![cfg(test)]
-
 use super::median_top_m::MedianTopMAvailability;
 use super::sampler::AlienSampler;
 use super::traits::{AvailabilityScorer, CoherenceScorer};
@@ -42,9 +40,9 @@ fn rank_empty_returns_empty() {
     let coh = DotCoherence { direction: vec![1.0, 0.0] };
     let avail = MedianTopMAvailability::new(vec![], 10);
     let sampler = AlienSampler::new(coh, avail, AlienConfig::paper_default());
-    let mut sc = &mut [][..];
-    let mut sa = &mut [][..];
-    let out = sampler.rank(&[], &mut sc, &mut sa).unwrap();
+    let sc: &mut [f32] = &mut [];
+    let sa: &mut [f32] = &mut [];
+    let out = sampler.rank(&[], sc, sa).unwrap();
     assert!(out.is_empty());
 }
 
@@ -266,7 +264,7 @@ fn beta_monotone_in_coherence_when_avail_const() {
     impl AvailabilityScorer<f32> for ConstAvail {
         fn availability(&self, _atoms: &[f32]) -> f32 { 0.5 }
     }
-    let coh = DotCoherence { direction: vec![1.0, 0.0] };
+    let _coh = DotCoherence { direction: vec![1.0, 0.0] };
     let candidates = vec![
         vec![0.1, 0.9],
         vec![0.9, 0.1],

@@ -28,8 +28,6 @@
 //! for sorting `scores` after the call (sorting would require an index
 //! permutation, which is an allocation we avoid).
 
-#![cfg(feature = "spec_k_prior")]
-
 use crate::screening::complexity_prior::{ComplexityProxy, CompressionPriorSampler};
 
 /// Drafter hook that re-ranks candidate drafts by K-prior.

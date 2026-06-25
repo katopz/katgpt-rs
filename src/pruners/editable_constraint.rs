@@ -252,12 +252,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_rules_valid_json() {
-        let json = r#"[
-            {"attribute": "bracket_depth", "threshold": 0.5, "action": "reject"},
-            {"attribute": "token_entropy", "threshold": 0.8, "action": "accept"}
-        ]"#;
-        let rules = parse_rules(json).unwrap();
+    fn test_parse_rules_valid_postcard() {
+        // `parse_rules` expects postcard (binary) bytes, not JSON.
+        let input = vec![
+            RuleEdit { attribute: "bracket_depth".into(), threshold: 0.5, action: "reject".into() },
+            RuleEdit { attribute: "token_entropy".into(), threshold: 0.8, action: "accept".into() },
+        ];
+        let bytes = postcard::to_allocvec(&input).unwrap();
+        let rules = parse_rules(&bytes).unwrap();
         assert_eq!(rules.len(), 2);
         assert_eq!(rules[0].attribute, "bracket_depth");
         assert!((rules[0].threshold - 0.5).abs() < 1e-6);
@@ -267,32 +269,39 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_rules_invalid_json() {
-        let json = r#"not valid json"#;
-        let result = parse_rules(json);
+    fn test_parse_rules_invalid_bytes() {
+        // Garbage bytes are not valid postcard.
+        let bytes: &[u8] = &[0xff, 0xff, 0xff];
+        let result = parse_rules(bytes);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("JSON parse error"));
+        assert!(result.unwrap_err().contains("Parse error"));
     }
 
     #[test]
     fn test_parse_rules_invalid_action() {
-        let json = r#"[{"attribute": "depth", "threshold": 0.5, "action": "explode"}]"#;
-        let result = parse_rules(json);
+        let input = vec![
+            RuleEdit { attribute: "depth".into(), threshold: 0.5, action: "explode".into() },
+        ];
+        let bytes = postcard::to_allocvec(&input).unwrap();
+        let result = parse_rules(&bytes);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid action"));
     }
 
     #[test]
     fn test_parse_rules_empty_array() {
-        let json = r#"[]"#;
-        let rules = parse_rules(json).unwrap();
+        let bytes = postcard::to_allocvec::<Vec<RuleEdit>>(&vec![]).unwrap();
+        let rules = parse_rules(&bytes).unwrap();
         assert!(rules.is_empty());
     }
 
     #[test]
     fn test_parse_rules_maybe_action() {
-        let json = r#"[{"attribute": "x", "threshold": 0.3, "action": "maybe"}]"#;
-        let rules = parse_rules(json).unwrap();
+        let input = vec![
+            RuleEdit { attribute: "x".into(), threshold: 0.3, action: "maybe".into() },
+        ];
+        let bytes = postcard::to_allocvec(&input).unwrap();
+        let rules = parse_rules(&bytes).unwrap();
         assert_eq!(rules[0].action, "maybe");
     }
 }

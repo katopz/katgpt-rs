@@ -107,8 +107,6 @@
 //! - Cousin (per-tick decision primitive):
 //!   `katgpt-rs/.research/281_Per_Tick_Salience_Tri_Gate_Speak_Silent_Delegate.md`
 
-#![cfg(feature = "alien_sampler")]
-
 pub mod median_top_m;
 pub mod sampler;
 pub mod traits;

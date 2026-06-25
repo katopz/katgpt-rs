@@ -141,7 +141,11 @@ pub fn bridge_attention_into<K: AsRef<[f32]>, V: AsRef<[f32]>>(
         // (Avoids the memset that `vec![0.0; n_kv]` would perform.)
         // For correctness in non-`debug_assert` builds we still initialize
         // unconditionally below; the `set_len` is just to skip the memset.
-        unsafe { weights.set_len(n_kv) };
+        // Allow: intentional uninit-then-fill to skip the memset.
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            weights.set_len(n_kv)
+        };
         for (i, k) in kv_keys_dilated.iter().enumerate() {
             let w = sigmoid(crate::simd::simd_dot_f32(k.as_ref(), query, dim));
             weights[i] = w;

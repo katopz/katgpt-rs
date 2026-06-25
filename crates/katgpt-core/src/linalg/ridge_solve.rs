@@ -442,6 +442,7 @@ pub fn ridge_solve_direct_f32(
 /// Scratch: `l_scratch` (`N*N`), `z_scratch` (`N*n_out`),
 /// `xt_z_scratch` accumulator is folded into `w_t` directly.
 #[inline]
+#[allow(clippy::too_many_arguments)] // Woodbury dual-form ridge solve API: (w_t, 2× scratch, gram, y, x, n, d_h, n_out) is intrinsic
 pub fn ridge_solve_woodbury_f32(
     w_t: &mut [f32],
     l_scratch: &mut [f32],

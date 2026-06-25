@@ -671,7 +671,7 @@ mod tests {
     use super::*;
 
     fn empty_grid() -> ArenaGrid {
-        ArenaGrid::new(ARENA_W, ARENA_H)
+        ArenaGrid::generate(42)
     }
 
     #[test]
@@ -719,7 +719,7 @@ mod tests {
         let mut player = RmsdPlayer::new(0);
         let grid = empty_grid();
         let pos = GridPos { x: 1, y: 1 };
-        let mut rng = Rng::new(42);
+        let mut rng = Rng::with_seed(42);
         let events = vec![GameEvent::PlayerMoved {
             player: 1,
             from: (5, 5),
@@ -738,11 +738,11 @@ mod tests {
         let mut player = RmsdPlayer::new(0);
         let grid = empty_grid();
         let pos = GridPos { x: 1, y: 1 };
-        let mut rng = Rng::new(42);
+        let mut rng = Rng::with_seed(42);
         let events = vec![];
 
         // Play a round
-        let action = player.select_action(&grid, pos, &events, &mut rng);
+        let _action = player.select_action(&grid, pos, &events, &mut rng);
         assert!(player.round_actions.len() == 1);
 
         // Set up teacher_q with non-zero values so RMSD filter selects the action
@@ -760,7 +760,7 @@ mod tests {
         let mut player = RmsdPlayer::new(0);
         let grid = empty_grid();
         let pos = GridPos { x: 1, y: 1 };
-        let mut rng = Rng::new(42);
+        let mut rng = Rng::with_seed(42);
 
         let events = vec![GameEvent::BombPlaced {
             player: 1,
@@ -796,7 +796,7 @@ mod tests {
         let mut player = RmsdPlayer::new(0);
         let grid = empty_grid();
         let pos = GridPos { x: 1, y: 1 };
-        let mut rng = Rng::new(42);
+        let mut rng = Rng::with_seed(42);
 
         // Simulate multiple rounds with plateau
         for _ in 0..5 {

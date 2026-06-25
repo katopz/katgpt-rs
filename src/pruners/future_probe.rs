@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn forecast_zero_direction_is_sigmoid_of_bias() {
         let probe = FutureBehaviorProbe::new(vec![0.0; 4], -2.0, 5, "refusal");
-        let activation = vec![1e6, -1e6, 3.14, 42.0]; // arbitrary — irrelevant
+        let activation = vec![1e6, -1e6, 1.5, 42.0]; // arbitrary — irrelevant
         let f = probe.forecast(&activation);
         let expected = 1.0 / (1.0 + 2.0_f32.exp()); // σ(-2)
         assert!(

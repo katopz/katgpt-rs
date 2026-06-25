@@ -55,11 +55,14 @@ fn main() {
             // NoPruner accepts both.
             nopruner_expansions += 2;
 
-            // CCCP: reject dead-task branches.
-            if constraint.is_valid_with_hidden(depth, &parent_hidden, &correct_h) {
+            // CCCP: reject dead-task branches (low collider-preservation score).
+            // `is_valid_with_hidden` was the planned API; the shipped primitive
+            // exposes `collider_preservation_score` (sigmoid in [0,1]). We treat
+            // score > 0.5 as "valid" for this demo.
+            if constraint.collider_preservation_score(depth, &parent_hidden, &correct_h) > 0.5 {
                 cccp_expansions += 1;
             }
-            if constraint.is_valid_with_hidden(depth, &parent_hidden, &dead_h) {
+            if constraint.collider_preservation_score(depth, &parent_hidden, &dead_h) > 0.5 {
                 cccp_expansions += 1;
             }
         }
@@ -72,19 +75,22 @@ fn main() {
 
         // No-task fast path: measure overhead.
         let noop = ColliderConstraint::default();
-        let parent: [usize; 0] = [];
         let iters = 100_000_usize;
         let start = std::time::Instant::now();
         let mut sink = 0_u64;
         for i in 0..iters {
-            let v = noop.is_valid(i % 64, i % 128, &parent);
+            // `is_noop()` is the no-collider fast path (the analog of the
+            // planned `is_valid` trivial-accept).
+            let v = noop.is_noop();
             sink = sink.wrapping_add(v as u64);
         }
         let elapsed = start.elapsed();
         let per_call_ns = elapsed.as_nanos() as f64 / iters as f64;
         let target_ns = if cfg!(debug_assertions) { 50.0 } else { 5.0 };
         assert_ne!(sink, u64::MAX);
-        println!("\nNo-task fast path: {per_call_ns:.2} ns per is_valid call (target < {target_ns:.0} ns)");
+        println!(
+            "\nNo-task fast path: {per_call_ns:.2} ns per is_noop call (target < {target_ns:.0} ns)"
+        );
 
         println!("\nDone.");
     }

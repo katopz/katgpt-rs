@@ -496,7 +496,7 @@ mod tests {
         // First: give base arms low rewards to create stall condition,
         // then feedback arms become eligible.
         let mut seen = [false; FB_NUM_ARMS];
-        for i in 0..300 {
+        for _ in 0..300 {
             let decision = bandit.select(ctx);
             let idx = match decision {
                 PlanningDecision::PlanNew => 0,

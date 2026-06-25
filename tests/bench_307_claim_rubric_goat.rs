@@ -73,7 +73,7 @@ const L3_MINUS_PARITY: &[EvidenceItemId] = &[
 
 #[test]
 fn goat_gate_all_pass() {
-    let validator = ClaimValidator::default();
+    let validator = ClaimValidator;
 
     // ── R287 §4 row 1: EmotionDirections::project → L1 ──────────────────
     let g = validator.grade(

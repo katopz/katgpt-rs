@@ -12,9 +12,9 @@
 //!   random walk on a k=4-nearest-neighbor graph. Reported throughput is
 //!   `Elements(1000)` so criterion prints the per-walk time; divide by 1000
 //!   for per-step. Target: < 100 ns/step.
-//! - **`build_safe_manifold_graph/1000_samples_d4`** — full graph build (filter
-//!   + kNN connect + dedup) on 1000 4D samples with a paper-style viability
-//!   predicate. Target: < 10 ms (dominated by 1000 SVD calls).
+//! - **`build_safe_manifold_graph/1000_samples_d4`** — full graph build
+//!   (filter + kNN connect + dedup) on 1000 4D samples with a paper-style
+//!   viability predicate. Target: < 10 ms (dominated by 1000 SVD calls).
 //!
 //! # Run
 //!
@@ -182,8 +182,8 @@ fn bench_build_safe_manifold_graph(c: &mut Criterion) {
     // 30% on a discrete 1000-sample uniform draw).
     let viable = |z: &[f32]| {
         let mut d2 = 0.0_f32;
-        for j in 0..DIM {
-            d2 += z[j] * z[j];
+        for zj in z.iter().take(DIM) {
+            d2 += zj * zj;
         }
         d2.sqrt() < 3.5
     };

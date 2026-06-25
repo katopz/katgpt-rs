@@ -11,8 +11,8 @@
 
 use katgpt_rs::pruners::{
     CuratorIngestion, DivergenceError, PrunerAccuracy, PrunerDivergence, PrunerSnapshot,
-    RuleBandit, TranslationRule, WorkloadRoute, classify_workload, compute_threshold_adjustment,
-    extract_translation_rules, parse_rules,
+    RuleBandit, RuleEdit, TranslationRule, WorkloadRoute, classify_workload,
+    compute_threshold_adjustment, extract_translation_rules, parse_rules,
 };
 
 // ── G1: Divergence metric correctness ───────────────────────────────
@@ -213,7 +213,13 @@ fn goat_feature_isolation() {
     let _bandit = RuleBandit::new();
     let _route = classify_workload("bandit_update");
 
-    // JSON parsing works
-    let parsed = parse_rules(r#"[{"attribute":"x","threshold":0.5,"action":"reject"}]"#);
+    // `parse_rules` expects postcard (binary) bytes, not JSON.
+    let rule = vec![RuleEdit {
+        attribute: "x".into(),
+        threshold: 0.5,
+        action: "reject".into(),
+    }];
+    let bytes = postcard::to_allocvec(&rule).unwrap();
+    let parsed = parse_rules(&bytes);
     assert!(parsed.is_ok());
 }

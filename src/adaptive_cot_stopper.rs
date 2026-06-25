@@ -178,6 +178,15 @@ impl AdaptiveCoTStopper {
         self.unresolved_pairs.len()
     }
 
+    /// Read-only access to the unresolved segment pairs.
+    ///
+    /// Exposed so external callers (examples, integration tests) can sample a
+    /// subset of pairs to resolve without rebuilding the full pair set.
+    #[inline]
+    pub fn unresolved_pairs(&self) -> &HashSet<(usize, usize)> {
+        &self.unresolved_pairs
+    }
+
     /// Fraction of pairs resolved, in `[0, 1]`. Returns 0.0 if `initial_count == 0`.
     #[inline]
     pub fn progress(&self) -> f32 {

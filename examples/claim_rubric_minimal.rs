@@ -37,7 +37,7 @@ fn main() {
         EvidenceItemId::LinearProbeCalibration,
     ]);
 
-    let validator = ClaimValidator::default();
+    let validator = ClaimValidator;
     let grade = validator.grade(&honest_l1);
     println!("Claim 1 (honest L1):");
     println!("  text           : {}", honest_l1.text);

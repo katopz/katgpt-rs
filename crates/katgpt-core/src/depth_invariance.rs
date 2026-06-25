@@ -165,9 +165,8 @@ impl Scratch {
 #[inline]
 fn least_squares_slope_vs_index(ys: &[f32]) -> f32 {
     let n = ys.len();
-    match n < 2 {
-        true => return 0.0,
-        false => {}
+    if n < 2 {
+        return 0.0;
     }
     let nf = n as f32;
     let x_mean = (nf - 1.0) * 0.5;
@@ -239,30 +238,24 @@ pub fn classify_chain(
     scratch: &mut Scratch,
 ) -> DepthInvarianceDiagnostic {
     // ── Dimension validation ──
-    match d == 0 || states.len() % d != 0 {
-        true => {
-            return DepthInvarianceDiagnostic {
-                magnitude_slope: 0.0,
-                mean_cos_step: 0.0,
-                effective_rank_slope: 0.0,
-                kind: DepthInvarianceKind::Insufficient,
-            };
-        }
-        false => {}
+    if d == 0 || !states.len().is_multiple_of(d) {
+        return DepthInvarianceDiagnostic {
+            magnitude_slope: 0.0,
+            mean_cos_step: 0.0,
+            effective_rank_slope: 0.0,
+            kind: DepthInvarianceKind::Insufficient,
+        };
     }
     let k_plus_1 = states.len() / d;
 
     // ── Min-samples gate ──
-    match k_plus_1 < cfg.min_samples {
-        true => {
-            return DepthInvarianceDiagnostic {
-                magnitude_slope: 0.0,
-                mean_cos_step: 0.0,
-                effective_rank_slope: 0.0,
-                kind: DepthInvarianceKind::Insufficient,
-            };
-        }
-        false => {}
+    if k_plus_1 < cfg.min_samples {
+        return DepthInvarianceDiagnostic {
+            magnitude_slope: 0.0,
+            mean_cos_step: 0.0,
+            effective_rank_slope: 0.0,
+            kind: DepthInvarianceKind::Insufficient,
+        };
     }
 
     // ── Clear scratch for this chain ──
@@ -295,14 +288,11 @@ pub fn classify_chain(
         if t > 0 {
             let h_prev = &states[(t - 1) * d..t * d];
             let mag_prev = scratch.magnitude_series[t - 1];
-            match mag_prev > 0.0 && magnitude > 0.0 {
-                true => {
-                    let dot = simd::simd_dot_f32(h_t, h_prev, d);
-                    cos_sum += dot / (mag_prev * magnitude);
-                    cos_count += 1;
-                }
-                false => {} // degenerate pair — skip
-            }
+            if mag_prev > 0.0 && magnitude > 0.0 {
+                let dot = simd::simd_dot_f32(h_t, h_prev, d);
+                cos_sum += dot / (mag_prev * magnitude);
+                cos_count += 1;
+            } // else: degenerate pair — skip
         }
     }
 
@@ -407,15 +397,12 @@ pub fn apply_magnitude_regularization(
                 sum_sq += x * x;
             }
             let current_rms = (sum_sq / d_f).sqrt();
-            match current_rms > max_rms && current_rms > 0.0 {
-                true => {
-                    let scale = max_rms / current_rms;
-                    for x in h_raw.iter_mut() {
-                        *x *= scale;
-                    }
+            if current_rms > max_rms && current_rms > 0.0 {
+                let scale = max_rms / current_rms;
+                for x in h_raw.iter_mut() {
+                    *x *= scale;
                 }
-                false => {} // already bounded — no-op
-            }
+            } // else: already bounded — no-op
         }
     }
 }

@@ -67,6 +67,7 @@ impl Rng {
     }
 }
 
+#[allow(clippy::needless_range_loop)] // orthonormalization math, explicit indexing clearer
 fn random_orthonormal(dim: usize, k: usize, rng: &mut Rng) -> Vec<f32> {
     assert!(k <= dim);
     let mut cols: Vec<Vec<f32>> = (0..k).map(|_| (0..dim).map(|_| rng.next_f32()).collect()).collect();
@@ -92,6 +93,7 @@ fn random_orthonormal(dim: usize, k: usize, rng: &mut Rng) -> Vec<f32> {
     m
 }
 
+#[allow(clippy::needless_range_loop)] // orthonormalization math, explicit indexing clearer
 fn bandlimited_sample(
     dim: usize,
     k: usize,
@@ -155,6 +157,7 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 }
 
 #[test]
+#[allow(clippy::needless_range_loop)] // orthonormalization math, explicit indexing clearer
 fn g3_k_sweep_characterization() {
     // Fixed personality basis (rank INTRINSIC_K) — the "true" subspace the
     // personalities live in. Independent of the transport rank k below.

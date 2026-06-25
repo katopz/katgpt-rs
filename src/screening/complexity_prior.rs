@@ -52,7 +52,7 @@ pub(crate) fn rle_compressed_len(data: &[u8]) -> usize {
             run += 1;
         }
         // Each 255-byte chunk of the run becomes its own (value, count) pair.
-        runs += (run + 254) / 255;
+        runs += run.div_ceil(255);
     }
     runs * 2
 }
@@ -290,6 +290,7 @@ impl<K: ComplexityProxy + Default> CompressionPriorSampler<K> {
     /// We expose this as an inherent `default()` rather than a `Default` trait
     /// impl because the `Default` bound leaks onto `K`, and we want callers to
     /// be explicit when their `K` does not impl `Default` (use [`Self::new`]).
+    #[allow(clippy::should_implement_trait)] // intentional inherent API; see doc
     #[inline]
     #[must_use]
     pub fn default() -> Self {
@@ -501,6 +502,7 @@ pub struct LatentCompressionPriorSampler<K: ComplexityProxy> {
 }
 
 impl<K: ComplexityProxy + Default> LatentCompressionPriorSampler<K> {
+    #[allow(clippy::should_implement_trait)] // intentional inherent API; mirrors CompressionPriorSampler::default
     #[inline]
     #[must_use]
     pub fn default() -> Self {
@@ -632,6 +634,7 @@ mod tests {
         fn next_u8(&mut self) -> u8 {
             (self.next_u64() & 0xFF) as u8
         }
+        #[allow(dead_code)] // deterministic RNG helper; retained for future tests
         fn next_f32(&mut self) -> f32 {
             (self.next_u64() as f32) / (u32::MAX as f32)
         }
@@ -758,7 +761,7 @@ mod tests {
         let normalised: Vec<f32> = probs.iter().map(|&p| p / total).collect();
 
         let n_draws = 20_000usize;
-        let mut counts = vec![0u32; 16];
+        let mut counts = [0u32; 16];
         let mut rng = Rng::with_seed(42);
         let mut scratch = vec![0.0f32; 16];
         for _ in 0..n_draws {
@@ -843,7 +846,8 @@ mod tests {
 
     #[test]
     fn test_quantize_latent_min_max_equal() {
-        let v = [3.14f32; 5];
+        // Arbitrary non-π value (avoids clippy::approximate_constants).
+        let v = [2.5f32; 5];
         let mut scratch = [0u8; 5];
         quantize_latent(&v, &mut scratch);
         for &b in &scratch {

@@ -141,7 +141,7 @@ fn run_decode_bench(seq_len: usize, rng: &mut SeedRng) -> DecodeBenchResult {
     let projection = RetrievalProjection::xavier(n_retrieval, head_dim, low_dim);
 
     // Build cache
-    let cache = RtTurboCache::new(calibration.clone(), projection, config, 0);
+    let mut cache = RtTurboCache::new(calibration.clone(), projection, config, 0);
 
     // Generate synthetic data
     let kv_cache = make_kv_cache(seq_len, n_heads, head_dim);

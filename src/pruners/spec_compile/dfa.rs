@@ -367,7 +367,7 @@ impl FormatDfaBuilder {
         let local_chars = {
             let mut bm = alphanumeric.clone();
             // Allow dots, underscores, hyphens, plus in local part.
-            for &c in &[b'.', b'_', b'-', b'+'] {
+            for &c in b".-_+" {
                 bm.insert(c as usize);
             }
             bm
@@ -379,6 +379,8 @@ impl FormatDfaBuilder {
         };
         let tld_chars = Self::chars_class((b'a'..=b'z').chain(b'A'..=b'Z'));
 
+        // Allow: incremental push is clearer than a single vec![] for this many transitions.
+        #[allow(clippy::vec_init_then_push)]
         let mut transitions = Vec::with_capacity(8);
         // start → local_part (first char must be alphanumeric)
         transitions.push(DfaTransition {
@@ -579,6 +581,8 @@ impl FormatDfaBuilder {
         let digits = Self::chars_class(b'0'..=b'9');
         let dash = Self::single_char(b'-');
 
+        // Allow: incremental push is clearer than a single vec![] for this many transitions.
+        #[allow(clippy::vec_init_then_push)]
         let mut transitions = Vec::with_capacity(8);
 
         // start → year digit
@@ -675,7 +679,7 @@ impl FormatDfaBuilder {
         };
         let path_chars = {
             let mut bm = alphanumeric.clone();
-            for &c in &[b'/', b'-', b'_', b'.', b'~', b'?', b'=', b'&', b'%'] {
+            for &c in b"/-_.~?=&%" {
                 bm.insert(c as usize);
             }
             bm

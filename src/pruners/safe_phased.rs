@@ -683,7 +683,6 @@ mod tests {
         let visits: [u32; NUM_ARMS] = [200, 180, 190, 210, 195];
         let total_pulls: u32 = visits.iter().sum();
 
-        let mut ucb1_count = 0u64;
         let mut safe_active_count = 0u64;
         let mut safe_baseline_count = 0u64;
 
@@ -703,8 +702,6 @@ mod tests {
                 .map(|(i, _)| i)
                 .unwrap_or(0);
             assert!(best_arm < NUM_ARMS);
-            ucb1_count += best_arm as u64;
-
             // SafePhased selection (same UCB1 + mixture)
             let arm = state.select_with_safe_mixture(best_arm, &mut rng);
             assert!(arm < NUM_ARMS);

@@ -206,7 +206,7 @@ mod tests {
             L1,
         )
         .with_evidence(L1_ITEMS);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         assert_eq!(g.honest_level, L1);
         assert!(!g.downgraded);
         assert!(g.vocabulary_violations.is_empty());
@@ -224,7 +224,7 @@ mod tests {
             L3,
         )
         .with_evidence(L1_ITEMS);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         assert_eq!(g.honest_level, L1, "evidence is the binding constraint");
         assert!(g.downgraded);
         assert_eq!(g.vocabulary_violations.len(), 1);
@@ -239,7 +239,7 @@ mod tests {
             L1,
         )
         .with_evidence(L1_ITEMS);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         // L2 verb raises vocab_floor to L2; evidence is L1 → honest = L1.
         assert_eq!(g.honest_level, L1);
         assert!(g.vocabulary_violations.iter().any(|v| v.verb == "induces"));
@@ -267,7 +267,7 @@ mod tests {
             L2,
         )
         .with_evidence(satisfied);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         assert_eq!(g.honest_level, L2);
         assert!(!g.downgraded);
         assert!(g.vocabulary_violations.is_empty());
@@ -304,7 +304,7 @@ mod tests {
             L3,
         )
         .with_evidence(satisfied);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         // Without PredictControlParity, evidence_level caps at L2 (since L3
         // requires PredictControlParity, and L2 doesn't).
         assert_eq!(g.honest_level, L2);
@@ -317,8 +317,8 @@ mod tests {
         // Claim declared L2 but missing all L2 items.
         let claim = Claim::new("the probe reads behavior", FeatureClass::Detection, L2)
             .with_evidence(L1_ITEMS);
-        let g = ClaimValidator::default().grade(&claim);
-        let advice = ClaimValidator::default().promote_advice(&g);
+        let g = ClaimValidator.grade(&claim);
+        let advice = ClaimValidator.promote_advice(&g);
         // Should mention all 6 L2 items.
         assert_eq!(advice.len(), 6);
         assert!(advice[0].contains("to upgrade to L2"));
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn empty_satisfied_grades_l0() {
         let claim = Claim::new("the probe reads behavior", FeatureClass::Detection, L1);
-        let g = ClaimValidator::default().grade(&claim);
+        let g = ClaimValidator.grade(&claim);
         assert_eq!(g.honest_level, L0);
         assert!(g.downgraded);
     }

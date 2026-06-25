@@ -67,6 +67,7 @@ impl Rng {
 }
 
 /// Modified Gram-Schmidt over random columns → column-orthonormal `dim × k`.
+#[allow(clippy::needless_range_loop)] // orthonormalization math, explicit indexing clearer
 fn random_orthonormal(dim: usize, k: usize, rng: &mut Rng) -> Vec<f32> {
     assert!(k <= dim);
     let mut cols: Vec<Vec<f32>> = (0..k).map(|_| (0..dim).map(|_| rng.next_f32()).collect()).collect();
@@ -99,6 +100,7 @@ fn random_orthonormal(dim: usize, k: usize, rng: &mut Rng) -> Vec<f32> {
 /// where `a` is k-dim random, `noise_perp` is the orthogonal complement of a
 /// full random vector against `basis`. By construction `||v||² = band_frac +
 /// (1-band_frac) = 1` exactly (after normalization).
+#[allow(clippy::needless_range_loop)] // orthonormalization math, explicit indexing clearer
 fn bandlimited_sample(
     dim: usize,
     k: usize,

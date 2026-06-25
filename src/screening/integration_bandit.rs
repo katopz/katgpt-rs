@@ -32,8 +32,6 @@
 //! `arm_log_prior` (deterministic, no RNG), leaving the categorical draw
 //! to the caller's policy.
 
-#![cfg(feature = "bandit_k_prior")]
-
 use crate::screening::complexity_prior::{ComplexityProxy, CompressionPriorSampler};
 
 /// Bandit prior that biases arm selection toward low-K arms.

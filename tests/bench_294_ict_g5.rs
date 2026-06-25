@@ -98,13 +98,13 @@ fn g5_zero_alloc_hot_path() {
     println!("Tolerance: {TOLERANCE} allocs/call.");
 
     let per_call = count as f64 / MEASURE_ITERS as f64;
-    let verdict = if count <= TOLERANCE { "PASS" } else { "FAIL" };
+    let verdict = if count == TOLERANCE { "PASS" } else { "FAIL" };
     println!(
         "G5 {verdict}: {per_call:.3} allocs/call (mean), {count} total across {MEASURE_ITERS} calls."
     );
 
     assert!(
-        count <= TOLERANCE,
+        count == TOLERANCE,
         "G5 FAIL: expected ≤ {TOLERANCE} allocs across {MEASURE_ITERS} calls, got {count} \
          ({per_call:.3}/call). Hot path is not zero-alloc — see BranchingDetector::observe_and_detect_into."
     );

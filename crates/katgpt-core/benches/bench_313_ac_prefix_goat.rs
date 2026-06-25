@@ -187,12 +187,12 @@ fn forward_masked(
                 }
             }
             let mut sum_exp = 0.0f32;
-            for j in 0..seq {
-                if scores[j].is_finite() {
-                    scores[j] = (scores[j] - max_score).exp();
-                    sum_exp += scores[j];
+            for s in scores.iter_mut().take(seq) {
+                if s.is_finite() {
+                    *s = (*s - max_score).exp();
+                    sum_exp += *s;
                 } else {
-                    scores[j] = 0.0;
+                    *s = 0.0;
                 }
             }
             let inv = if sum_exp > 0.0 { 1.0 / sum_exp } else { 0.0 };

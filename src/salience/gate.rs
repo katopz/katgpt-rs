@@ -80,6 +80,7 @@ impl<A: Clone, const D: usize> SalienceTriGate<A, D> {
     /// `beta > 0`, `floor_speak ∈ [0,1]`, `ceil_delegate ∈ [0,1]`).
     ///
     /// Reference: Plan 303 T1.6.
+    #[allow(clippy::too_many_arguments)] // numerical kernel; params are the gate's 10 knobs
     #[must_use]
     pub fn new(
         d_speak: [f32; D],
@@ -324,6 +325,7 @@ impl<A: Clone, const D: usize> SalienceTriGate<A, D> {
     /// `debug_assert!`, elided in release).
     ///
     /// Reference: Plan 332 Phase 6 T6.1.
+    #[allow(clippy::too_many_arguments)] // batch kernel; mirrors per-row decide_with_delegate_nudge params
     pub fn decide_batch_with_nudge(
         &self,
         activations: &[[f32; D]],
@@ -337,8 +339,16 @@ impl<A: Clone, const D: usize> SalienceTriGate<A, D> {
         let n = activations.len();
         debug_assert_eq!(z.len(), n, "decide_batch_with_nudge: z length mismatch");
         debug_assert_eq!(c.len(), n, "decide_batch_with_nudge: c length mismatch");
-        debug_assert_eq!(nudges.len(), n, "decide_batch_with_nudge: nudges length mismatch");
-        debug_assert_eq!(payloads.len(), n, "decide_batch_with_nudge: payloads length mismatch");
+        debug_assert_eq!(
+            nudges.len(),
+            n,
+            "decide_batch_with_nudge: nudges length mismatch"
+        );
+        debug_assert_eq!(
+            payloads.len(),
+            n,
+            "decide_batch_with_nudge: payloads length mismatch"
+        );
         debug_assert_eq!(out.len(), n, "decide_batch_with_nudge: out length mismatch");
 
         for i in 0..n {
@@ -669,7 +679,7 @@ mod tests {
 
         // Reference decision: speak/silent only.
         let reference = |a: &[f32; D], z: f32, c: f32| -> SalienceDecision<u32> {
-            let salience = dot_fma(a, &gate.d_speak_reference()) + 0.5 * z + 0.3 * c;
+            let salience = dot_fma(a, gate.d_speak_reference()) + 0.5 * z + 0.3 * c;
             let score_speak = sigmoid(2.5 * (salience - 0.2));
             if score_speak < 0.4 {
                 SalienceDecision::Silent
@@ -678,7 +688,7 @@ mod tests {
             }
         };
 
-        let mut rng = Lcg::new(0xC0FFEE_BABE_1234);
+        let mut rng = Lcg::new(0x00C0_FFEE_BABE_1234);
         for _ in 0..100 {
             let mut a = [0f32; D];
             for v in a.iter_mut() {
@@ -767,9 +777,8 @@ mod tests {
     fn test_nudge_zero_is_decide() {
         // A nudge of 0.0 must produce a bit-identical decision to `decide`.
         // This is the load-bearing backwards-compat guarantee.
-        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
-            D_SPEAK, D_DELEGATE, 0.3, 0.2, 2.0, 2.0, 0.5, 0.5, 0.4, 0.5,
-        );
+        let gate: SalienceTriGate<u32, D> =
+            SalienceTriGate::new(D_SPEAK, D_DELEGATE, 0.3, 0.2, 2.0, 2.0, 0.5, 0.5, 0.4, 0.5);
         let mut rng = Lcg::new(0xDEAD_BEEF_CAFE_BABE);
         for _ in 0..500 {
             let mut a = [0f32; D];
@@ -796,14 +805,16 @@ mod tests {
         // delegate_dot = a[1] = 0.4 → score_delegate = sigmoid(2*(0.4-0.5))
         //                           = sigmoid(-0.2) ≈ 0.450 < ceil=0.5 → Speak (without nudge)
         // With nudge=0.1: effective = 0.450 + 0.1 = 0.550 > 0.5 → Delegate.
-        let gate: SalienceTriGate<&'static str, D> = SalienceTriGate::new(
-            D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5,
-        );
+        let gate: SalienceTriGate<&'static str, D> =
+            SalienceTriGate::new(D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5);
         let a = [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
 
         // Sanity: without nudge it's Speak.
         let d_plain = gate.decide(&a, 0.0, 0.0, "p", 0);
-        assert!(matches!(d_plain, SalienceDecision::Speak), "got {d_plain:?}");
+        assert!(
+            matches!(d_plain, SalienceDecision::Speak),
+            "got {d_plain:?}"
+        );
 
         // With nudge it flips to Delegate.
         let d_nudged = gate.decide_with_delegate_nudge(&a, 0.0, 0.0, 0.1, "p", 0);
@@ -818,9 +829,8 @@ mod tests {
         // Silent has highest precedence (score_speak < floor_speak). Even an
         // enormous nudge must not bypass this — the nudge only affects the
         // delegate-vs-speak choice, not the silent floor.
-        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
-            D_SPEAK, D_DELEGATE, 0.0, 0.0, 2.0, 2.0, 0.5, 0.5, 0.9, 0.3,
-        );
+        let gate: SalienceTriGate<u32, D> =
+            SalienceTriGate::new(D_SPEAK, D_DELEGATE, 0.0, 0.0, 2.0, 2.0, 0.5, 0.5, 0.9, 0.3);
         let a = [0.1, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0];
         // score_speak ≈ 0.31 < 0.9 → Silent regardless of delegate path.
         let d = gate.decide_with_delegate_nudge(&a, 0.0, 0.0, 100.0, 7, 0);
@@ -854,9 +864,8 @@ mod tests {
     fn test_decide_batch_with_nudge_smoke() {
         // Two rows: row 0 has no nudge (stays Speak), row 1 has a nudge that
         // flips it to Delegate.
-        let gate: SalienceTriGate<u32, D> = SalienceTriGate::new(
-            D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5,
-        );
+        let gate: SalienceTriGate<u32, D> =
+            SalienceTriGate::new(D_SPEAK, D_DELEGATE, 0.0, 0.0, 10.0, 2.0, 0.5, 0.5, 0.0, 0.5);
         let activations: [[f32; D]; 2] = [
             [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // Speak (delegate_dot 0.4 → score ~0.45 < 0.5)
             [0.8, 0.4, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], // → Delegate with nudge=0.1

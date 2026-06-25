@@ -37,8 +37,6 @@
 // `bytemuck::Pod` is required by the extract path; `wasmi` is required by
 // the projector path. Both are gated by the `secure_vessel` feature so the
 // primitive compiles out cleanly when unused.
-#![cfg(feature = "secure_vessel")]
-
 use bytemuck::Pod;
 use std::sync::{Arc, OnceLock};
 
@@ -378,7 +376,7 @@ pub fn extract_payload_slice<T: Pod>(
         // Defensive — ZSTs make no sense as vessel payloads.
         return Err(VesselError::PayloadLenMismatch);
     }
-    if vessel.header.payload_len as usize % elem_size != 0 {
+    if !(vessel.header.payload_len as usize).is_multiple_of(elem_size) {
         return Err(VesselError::PayloadLenMismatch);
     }
     let start = vessel.header.payload_offset as usize;
@@ -1145,7 +1143,7 @@ mod tests {
     #[test]
     fn cache_extract_works_through_arc_handle() {
         let cache = VesselCache::new();
-        let payload = FakePayload { a: 3.14, b: -1.5, c: [1, 2, 3, 4, 5, 6, 7, 8] };
+        let payload = FakePayload { a: 2.5, b: -1.5, c: [1, 2, 3, 4, 5, 6, 7, 8] };
         let wasm = fake_wasm_with_payload(&payload);
         let encoded = encode_vessel(
             &wasm,

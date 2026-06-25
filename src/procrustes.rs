@@ -416,8 +416,7 @@ pub fn orthogonal_procrustes(
         // Outer product M += a_row ⊗ b_row (M is d×d row-major).
         // M[c', c] += a_row[c] * b_row[c']
         // Inner loop over c (column of M) is contiguous; SIMD-fused.
-        for cprime in 0..d {
-            let b_icprime = b_row[cprime];
+        for (cprime, &b_icprime) in b_row.iter().enumerate() {
             let m_row = &mut scratch.m[cprime * d..(cprime + 1) * d];
             // m_row[c] += a_row[c] * b_icprime  for each c (SIMD fused scale-acc).
             simd_fused_scale_acc(m_row, a_row, b_icprime, d);
@@ -426,12 +425,11 @@ pub fn orthogonal_procrustes(
 
     // Apply centering as a rank-1 correction: M -= n * mean_a ⊗ mean_b.
     if config.center {
-        for cprime in 0..d {
-            let mean_b_cprime = scratch.mean_b[cprime];
+        for (cprime, &mean_b_cprime) in scratch.mean_b[..d].iter().enumerate() {
             let m_row = &mut scratch.m[cprime * d..(cprime + 1) * d];
             // m_row[c] -= n * mean_a[c] * mean_b_cprime
-            for c in 0..d {
-                m_row[c] -= (n as f32) * scratch.mean_a[c] * mean_b_cprime;
+            for (m_val, &mean_a_c) in m_row.iter_mut().zip(&scratch.mean_a[..d]) {
+                *m_val -= (n as f32) * mean_a_c * mean_b_cprime;
             }
         }
     }
@@ -462,7 +460,13 @@ pub fn orthogonal_procrustes(
     // converges to machine precision in ≤ 6 iterations.
     //
     // We use 7 iterations as a safe default (handles σ_0 as low as 0.1).
-    polar_iteration(&scratch.m[..dd], d, out_rotation, &mut scratch.xtx, &mut scratch.x_new);
+    polar_iteration(
+        &scratch.m[..dd],
+        d,
+        out_rotation,
+        &mut scratch.xtx,
+        &mut scratch.x_new,
+    );
 
     // ── 7. (Optional) Special-orthogonal correction ─────────────────
     let mut flipped = false;
@@ -917,8 +921,14 @@ mod tests {
         // With centering ON, Procrustes should recover R = I with residual ~ 0.
         // Use 2D-scattered points (not collinear) so M is well-conditioned.
         let anchors: [[f32; 2]; 8] = [
-            [1.0, 2.0], [-1.5, 0.5], [3.0, -1.0], [-2.0, -2.0],
-            [0.5, 3.5], [-3.0, 1.0], [2.5, 2.5], [-0.5, -3.0],
+            [1.0, 2.0],
+            [-1.5, 0.5],
+            [3.0, -1.0],
+            [-2.0, -2.0],
+            [0.5, 3.5],
+            [-3.0, 1.0],
+            [2.5, 2.5],
+            [-0.5, -3.0],
         ];
         let mut a = Vec::new();
         let mut b = Vec::new();
@@ -932,14 +942,24 @@ mod tests {
         }
         let mut r = [0.0_f32; 4];
         let mut scratch = ProcrustesScratch::new(8, 2);
-        let mut cfg = ProcrustesConfig::default();
-        cfg.center = true;
+        let cfg = ProcrustesConfig {
+            center: true,
+            ..Default::default()
+        };
         let report = orthogonal_procrustes(&a, &b, 8, 2, &mut r, &mut scratch, &cfg)
             .expect("centered Procrustes should succeed");
         // Expected: R = I (no rotation).
         let identity = [1.0, 0.0, 0.0, 1.0];
-        assert!(matrices_approx_eq(&r, &identity, 1e-2), "R mismatch: got {:?}", r);
-        assert!(report.residual < 1e-2, "residual should be small, got {}", report.residual);
+        assert!(
+            matrices_approx_eq(&r, &identity, 1e-2),
+            "R mismatch: got {:?}",
+            r
+        );
+        assert!(
+            report.residual < 1e-2,
+            "residual should be small, got {}",
+            report.residual
+        );
     }
 
     #[test]
@@ -947,8 +967,14 @@ mod tests {
         // A and B differ by translation only.
         // Without centering, the translation leaks in and residual is non-trivial.
         let anchors: [[f32; 2]; 8] = [
-            [1.0, 2.0], [-1.5, 0.5], [3.0, -1.0], [-2.0, -2.0],
-            [0.5, 3.5], [-3.0, 1.0], [2.5, 2.5], [-0.5, -3.0],
+            [1.0, 2.0],
+            [-1.5, 0.5],
+            [3.0, -1.0],
+            [-2.0, -2.0],
+            [0.5, 3.5],
+            [-3.0, 1.0],
+            [2.5, 2.5],
+            [-0.5, -3.0],
         ];
         let mut a = Vec::new();
         let mut b = Vec::new();
@@ -960,9 +986,11 @@ mod tests {
         }
         let mut r = [0.0_f32; 4];
         let mut scratch = ProcrustesScratch::new(8, 2);
-        let mut cfg = ProcrustesConfig::default();
-        cfg.center = false;
-        cfg.compute_residual = true;
+        let cfg = ProcrustesConfig {
+            center: false,
+            compute_residual: true,
+            ..Default::default()
+        };
         let report = orthogonal_procrustes(&a, &b, 8, 2, &mut r, &mut scratch, &cfg)
             .expect("non-centered Procrustes should still run");
         // Residual should be significantly non-zero (translation leaks in).
@@ -974,6 +1002,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::erasing_op, clippy::identity_op)]
     fn result_is_orthogonal() {
         // For any valid input, R^T R ≈ I.
         let a = pseudo_random_anchors(64, 4, 42);
@@ -1075,7 +1104,11 @@ mod tests {
         assert_eq!(determinant_d(&[1.0, 2.0, 3.0, 4.0], 2), -2.0); // 1*4 - 2*3.
         // 3×3 identity → det = 1.
         let d3 = determinant_d(&[1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0], 3);
-        assert!(approx_eq(d3, 1.0, 1e-6), "3×3 identity det should be 1, got {}", d3);
+        assert!(
+            approx_eq(d3, 1.0, 1e-6),
+            "3×3 identity det should be 1, got {}",
+            d3
+        );
     }
 
     #[test]
@@ -1086,9 +1119,11 @@ mod tests {
         // B = reflect A across x-axis: (x, y) → (x, -y). This is a reflection
         // (det = -1).
         let b = [1.0, 0.0, 0.0, -1.0, -1.0, 0.0, 0.0, 1.0_f32];
-        let mut cfg = ProcrustesConfig::default();
-        cfg.special_orthogonal = true;
-        cfg.compute_det = true;
+        let cfg = ProcrustesConfig {
+            special_orthogonal: true,
+            compute_det: true,
+            ..Default::default()
+        };
         let mut r = [0.0_f32; 4];
         let mut scratch = ProcrustesScratch::new(4, 2);
         let report = orthogonal_procrustes(&a, &b, 4, 2, &mut r, &mut scratch, &cfg)

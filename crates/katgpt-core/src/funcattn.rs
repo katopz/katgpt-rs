@@ -99,7 +99,9 @@ use crate::simd;
 ///
 /// `serde::{Serialize, Deserialize}` (added for Plan 286 T5.3 freeze/thaw —
 /// `FuncAttnWeightsSnapshot` embeds this enum and must round-trip via serde).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[repr(u8)]
 pub enum FuncAttnBasis {
     /// Paper Eq. 9 / reference L60: `Φ = Softmax(Linear(X) / τ)` along k-axis.
@@ -152,7 +154,7 @@ impl Default for FuncAttnConfig {
             d: 128,
             k: 64,
             basis: FuncAttnBasis::default(),
-            alpha: 0.5, // sigmoid(0), matches reference `alpha_init=0`
+            alpha: 0.5,       // sigmoid(0), matches reference `alpha_init=0`
             temperature: 0.5, // matches reference init
             cholesky_jitter: 1e-6,
         }
@@ -269,16 +271,17 @@ pub enum FuncAttnError {
 /// # Arguments
 /// * `x`    — input matrix `(n, d)` row-major, length `n * d`.
 /// * `w`    — basis projection weights `(k, d)` row-major (transpose of the
-///            paper's natural `d × k` layout). Element `w[j * d + i]` is the
-///            weight from input dim `i` to basis dim `j`. This layout makes
-///            each basis row contiguous for SIMD dot products. **Must be
-///            initialized orthogonally** (reference L20-21).
+///   paper's natural `d × k` layout). Element `w[j * d + i]` is the
+///   weight from input dim `i` to basis dim `j`. This layout makes
+///   each basis row contiguous for SIMD dot products. **Must be
+///   initialized orthogonally** (reference L20-21).
 /// * `bias` — per-basis-dim additive bias, length `k`. Pass `&[]` for no bias.
 /// * `n, d, k` — dimensions.
 /// * `kind` — activation + normalization scheme.
 /// * `temperature` — τ in `scores / τ` (reference clamps to [0.1, 5.0]).
 /// * `out`  — output buffer `(n, k)`, length `n * k`.
 #[inline]
+#[allow(clippy::too_many_arguments)] // numerical kernel — argument count is intrinsic to the (n,d,k,kind,τ) API surface
 pub fn compute_basis_into(
     x: &[f32],
     w: &[f32],
@@ -295,7 +298,7 @@ pub fn compute_basis_into(
     debug_assert!(bias.is_empty() || bias.len() == k, "bias must be length k");
     debug_assert_eq!(out.len(), n * k, "out must be (n, k)");
     debug_assert!(
-        temperature >= 0.1 && temperature <= 5.0,
+        (0.1..=5.0).contains(&temperature),
         "temperature must be in [0.1, 5.0]: got {}",
         temperature
     );
@@ -395,13 +398,7 @@ fn cholesky_inplace(a: &mut [f32], dim: usize) -> bool {
 ///
 /// `l` is `(dim, dim)` lower-triangular; `b`, `x`, `y_buf` are length `dim`.
 #[inline]
-fn cholesky_solve_into(
-    l: &[f32],
-    b: &[f32],
-    dim: usize,
-    y_buf: &mut [f32],
-    x: &mut [f32],
-) {
+fn cholesky_solve_into(l: &[f32], b: &[f32], dim: usize, y_buf: &mut [f32], x: &mut [f32]) {
     debug_assert_eq!(l.len(), dim * dim);
     debug_assert_eq!(b.len(), dim);
     debug_assert_eq!(y_buf.len(), dim);
@@ -444,11 +441,12 @@ fn cholesky_solve_into(
 /// * `y_buf`   — scratch length `d` for triangular solve.
 /// * `z_op_t`  — output `Zᵀ`, `(k, d)` row-major. Row `j` solves `reg · z = K̃[j,:]ᵀ`.
 /// * `jitter`  — fallback diagonal bump if the (theoretically-impossible) PD
-///               check fails. Defense against extreme numerical drift.
+///   check fails. Defense against extreme numerical drift.
 ///
 /// Returns `Err(NotPositiveDefinite)` only if K̃ᵀK̃ + αI + jitter is still
 /// not PD — should never happen for `α > 0` with finite K̃.
 #[inline]
+#[allow(clippy::too_many_arguments)] // numerical kernel — Tikhonov dual-form solve API surface
 pub fn solve_convex_combo_dual(
     k_slice: &[f32],
     alpha: f32,
@@ -463,7 +461,11 @@ pub fn solve_convex_combo_dual(
     debug_assert_eq!(reg.len(), d * d);
     debug_assert_eq!(y_buf.len(), d);
     debug_assert_eq!(z_op_t.len(), k * d);
-    debug_assert!(alpha > 0.0 && alpha < 1.0, "alpha must be in (0, 1): got {}", alpha);
+    debug_assert!(
+        alpha > 0.0 && alpha < 1.0,
+        "alpha must be in (0, 1): got {}",
+        alpha
+    );
 
     let one_minus_alpha = 1.0 - alpha;
 
@@ -519,8 +521,8 @@ pub fn solve_convex_combo_dual(
 ///
 /// * `w_basis`      — `(k, d)` row-major basis projection weights, mutated in place.
 /// * `eigenvectors` — `(d, d)` row-major eigenvector matrix; column `j` is the
-///                    eigenvector for eigenvalue `j` (SpectralQuant layout:
-///                    sorted by eigenvalue descending).
+///   eigenvector for eigenvalue `j` (SpectralQuant layout:
+///   sorted by eigenvalue descending).
 /// * `k, d`         — dimensions. `d` must match the eigenbasis dim.
 ///
 /// # Properties (verified in the test suite below)
@@ -580,14 +582,14 @@ pub fn pre_rotate_basis_weights_into(
 /// # Arguments
 ///
 /// * `x_basis`  — input for the basis projection, `(n, d)` row-major.
-///                Corresponds to `x_mid = in_project_x(x)` in the reference.
+///   Corresponds to `x_mid = in_project_x(x)` in the reference.
 /// * `x_value`  — input for the slice-token value stream, `(n, d)` row-major.
-///                Corresponds to `fx_mid = in_project_fx(x)` in the reference.
-///                Pass the same slice as `x_basis` for shared projection.
+///   Corresponds to `fx_mid = in_project_fx(x)` in the reference.
+///   Pass the same slice as `x_basis` for shared projection.
 /// * `w_basis`  — basis projection weights `(k, d)` row-major. **Must be
-///                orthogonally initialized** by the caller (reference L20-21).
+///   orthogonally initialized** by the caller (reference L20-21).
 /// * `w_q`, `w_k`, `w_v` — `to_q`, `to_k`, `to_v` linear projection weights,
-///                each `(d, d)` row-major. Applied to slice_token (reference L67-69).
+///   each `(d, d)` row-major. Applied to slice_token (reference L67-69).
 /// * `cfg`      — configuration.
 /// * `scratch`  — pre-allocated scratch buffers.
 /// * `out`      — output `(n, d)`, length `n * d`. Pre-allocated by caller.
@@ -603,6 +605,7 @@ pub fn pre_rotate_basis_weights_into(
 /// normal operation. The `cholesky_jitter` fallback is a defense against
 /// extreme floating-point drift.
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)] // Stages 6/7/8: indices participate in stride arithmetic (j*d, l*d, g*d) for row-major matrix ops
 pub fn funcattn_forward(
     x_basis: &[f32],
     x_value: &[f32],
@@ -620,7 +623,7 @@ pub fn funcattn_forward(
 
     let expected = n * d;
     debug_assert!(
-        x_basis.len() % d == 0,
+        x_basis.len().is_multiple_of(d),
         "x_basis.len() ({}) must be divisible by d ({})",
         x_basis.len(),
         d
@@ -1007,12 +1010,31 @@ mod tests {
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
         funcattn_forward(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
         )
         .expect("forward should succeed");
 
         let ref_out = funcattn_reference(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, n, d, k, basis, alpha, temperature,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            n,
+            d,
+            k,
+            basis,
+            alpha,
+            temperature,
         );
         (out, ref_out)
     }
@@ -1022,24 +1044,42 @@ mod tests {
     #[test]
     fn matches_reference_sigmoid() {
         let (out, ref_out) = run_forward(16, 8, 4, 0.5, 0.5, FuncAttnBasis::Sigmoid, 42);
-        let err = frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
-        assert!(err < 1e-3, "sigmoid forward disagrees with reference: relative error = {}", err);
+        let err =
+            frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
+        assert!(
+            err < 1e-3,
+            "sigmoid forward disagrees with reference: relative error = {}",
+            err
+        );
     }
 
     #[test]
     fn matches_reference_softmax() {
         let (out, ref_out) = run_forward(16, 8, 4, 0.5, 0.5, FuncAttnBasis::Softmax, 142);
-        let err = frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
-        assert!(err < 1e-3, "softmax forward disagrees with reference: relative error = {}", err);
+        let err =
+            frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
+        assert!(
+            err < 1e-3,
+            "softmax forward disagrees with reference: relative error = {}",
+            err
+        );
     }
 
     #[test]
     fn matches_reference_extreme_alpha() {
         // α near 0 (almost pure K̃ᵀK̃) and α near 1 (almost pure I) — both must work.
         for &alpha in &[0.01f32, 0.99] {
-            let (out, ref_out) =
-                run_forward(12, 6, 4, alpha, 0.5, FuncAttnBasis::Sigmoid, 999 + alpha.to_bits() as u64);
-            let err = frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
+            let (out, ref_out) = run_forward(
+                12,
+                6,
+                4,
+                alpha,
+                0.5,
+                FuncAttnBasis::Sigmoid,
+                999 + alpha.to_bits() as u64,
+            );
+            let err = frobenius(&out, &ref_out)
+                / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
             assert!(
                 err < 1e-3,
                 "α={}: forward disagrees with reference: relative error = {}",
@@ -1052,9 +1092,17 @@ mod tests {
     #[test]
     fn matches_reference_temperature_sweep() {
         for &temp in &[0.1f32, 0.5, 1.0, 5.0] {
-            let (out, ref_out) =
-                run_forward(12, 6, 4, 0.5, temp, FuncAttnBasis::Sigmoid, 7000 + (temp * 100.0) as u64);
-            let err = frobenius(&out, &ref_out) / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
+            let (out, ref_out) = run_forward(
+                12,
+                6,
+                4,
+                0.5,
+                temp,
+                FuncAttnBasis::Sigmoid,
+                7000 + (temp * 100.0) as u64,
+            );
+            let err = frobenius(&out, &ref_out)
+                / frobenius(&ref_out, &vec![0.0; ref_out.len()]).max(1e-30);
             assert!(
                 err < 1e-3,
                 "τ={}: forward disagrees with reference: relative error = {}",
@@ -1095,7 +1143,15 @@ mod tests {
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
         funcattn_forward(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
         )
         .expect("forward");
         for x in &out {
@@ -1144,7 +1200,15 @@ mod tests {
                 let mut scratch = FuncAttnScratch::new(n, d, k);
                 let mut out = vec![0.0f32; n * d];
                 funcattn_forward(
-                    &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+                    &x_basis,
+                    &x_value,
+                    &w_basis,
+                    &w_q,
+                    &w_k,
+                    &w_v,
+                    &cfg,
+                    &mut scratch,
+                    &mut out,
                 )
                 .expect("convex combo should be PD for any α ∈ (0, 1)");
                 for x in &out {
@@ -1191,7 +1255,15 @@ mod tests {
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
         funcattn_forward(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
         )
         .expect("forward");
 
@@ -1208,7 +1280,15 @@ mod tests {
         }
         let mut out_pert = vec![0.0f32; n * d];
         funcattn_forward(
-            &x_pert, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out_pert,
+            &x_pert,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out_pert,
         )
         .expect("perturbed forward");
 
@@ -1262,7 +1342,11 @@ mod tests {
         let mut a = vec![4.0f32, 2.0, 2.0, 3.0];
         assert!(cholesky_inplace(&mut a, 2));
         assert!((a[0] - 2.0).abs() < 1e-5, "L[0,0] = {}", a[0]);
-        assert!(a[1].abs() < 1e-20, "L[0,1] upper tri must be zero, got {}", a[1]);
+        assert!(
+            a[1].abs() < 1e-20,
+            "L[0,1] upper tri must be zero, got {}",
+            a[1]
+        );
         assert!((a[2] - 1.0).abs() < 1e-5, "L[1,0] = {}", a[2]);
         assert!((a[3] - 2.0f32.sqrt()).abs() < 1e-5, "L[1,1] = {}", a[3]);
     }
@@ -1319,7 +1403,15 @@ mod tests {
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
         funcattn_forward(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
         )
         .expect("forward at n=2048");
         for x in &out {
@@ -1354,9 +1446,20 @@ mod tests {
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
         let res = funcattn_forward(
-            &x_basis, &x_value, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out,
+            &x_basis,
+            &x_value,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
         );
-        assert!(res.is_ok(), "convex combo should succeed with α > 0 even for zero K̃");
+        assert!(
+            res.is_ok(),
+            "convex combo should succeed with α > 0 even for zero K̃"
+        );
         for x in &out {
             assert!(x.is_finite(), "non-finite output for zero w_k");
         }
@@ -1384,7 +1487,10 @@ mod tests {
                     m[i * d + c] -= dot * m[j * d + c];
                 }
             }
-            let nrm = (0..d).map(|c| m[i * d + c] * m[i * d + c]).sum::<f32>().sqrt();
+            let nrm = (0..d)
+                .map(|c| m[i * d + c] * m[i * d + c])
+                .sum::<f32>()
+                .sqrt();
             let nrm = if nrm < 1e-12 { 1.0 } else { nrm };
             for c in 0..d {
                 m[i * d + c] /= nrm;
@@ -1404,7 +1510,11 @@ mod tests {
         let identity = identity_matrix(d);
         pre_rotate_basis_weights_into(&mut w_basis, &identity, k, d);
         let diff = frobenius(&w_basis, &original);
-        assert!(diff < 1e-5, "identity rotation should be no-op: diff = {}", diff);
+        assert!(
+            diff < 1e-5,
+            "identity rotation should be no-op: diff = {}",
+            diff
+        );
     }
 
     #[test]
@@ -1415,7 +1525,12 @@ mod tests {
         let mut w_basis = vec![0.0f32; k * d];
         fill_rand(&mut w_basis, 4243);
         let original_norms: Vec<f32> = (0..k)
-            .map(|r| (0..d).map(|c| w_basis[r * d + c] * w_basis[r * d + c]).sum::<f32>().sqrt())
+            .map(|r| {
+                (0..d)
+                    .map(|c| w_basis[r * d + c] * w_basis[r * d + c])
+                    .sum::<f32>()
+                    .sqrt()
+            })
             .collect();
         let v = random_orthonormal_rows(d, 17);
         pre_rotate_basis_weights_into(&mut w_basis, &v, k, d);
@@ -1448,9 +1563,18 @@ mod tests {
         // Check the k×k Gram matrix is still identity.
         for a in 0..k {
             for b in 0..k {
-                let dot = (0..d).map(|c| w_basis[a * d + c] * w_basis[b * d + c]).sum::<f32>();
+                let dot = (0..d)
+                    .map(|c| w_basis[a * d + c] * w_basis[b * d + c])
+                    .sum::<f32>();
                 let expected = if a == b { 1.0 } else { 0.0 };
-                assert!((dot - expected).abs() < 1e-3, "Gram[{},{}] = {} (want {})", a, b, dot, expected);
+                assert!(
+                    (dot - expected).abs() < 1e-3,
+                    "Gram[{},{}] = {} (want {})",
+                    a,
+                    b,
+                    dot,
+                    expected
+                );
             }
         }
     }
@@ -1463,7 +1587,10 @@ mod tests {
         let n = 32;
         let d = 8;
         let k = 4;
-        let mut w_basis = random_orthonormal_rows(d, 41).into_iter().take(k * d).collect::<Vec<_>>();
+        let mut w_basis = random_orthonormal_rows(d, 41)
+            .into_iter()
+            .take(k * d)
+            .collect::<Vec<_>>();
         let w_q = random_orthonormal_rows(d, 42);
         let w_k = random_orthonormal_rows(d, 43);
         let w_v = random_orthonormal_rows(d, 44);
@@ -1475,21 +1602,49 @@ mod tests {
         fill_rand(&mut x, 99);
         let mut phi = vec![0.0f32; n * k];
         compute_basis_into(
-            &x, &w_basis, &[], n, d, k, FuncAttnBasis::Sigmoid, 0.1, &mut phi,
+            &x,
+            &w_basis,
+            &[],
+            n,
+            d,
+            k,
+            FuncAttnBasis::Sigmoid,
+            0.1,
+            &mut phi,
         );
         for i in 0..n {
             let row_sum: f32 = phi[i * k..(i + 1) * k].iter().sum();
-            assert!((row_sum - 1.0).abs() < 1e-4, "row {} sum = {} (want 1.0)", i, row_sum);
+            assert!(
+                (row_sum - 1.0).abs() < 1e-4,
+                "row {} sum = {} (want 1.0)",
+                i,
+                row_sum
+            );
         }
 
         // Forward still finite.
         let cfg = FuncAttnConfig {
-            d, k, basis: FuncAttnBasis::Sigmoid, alpha: 0.5, temperature: 0.1, cholesky_jitter: 1e-6,
+            d,
+            k,
+            basis: FuncAttnBasis::Sigmoid,
+            alpha: 0.5,
+            temperature: 0.1,
+            cholesky_jitter: 1e-6,
         };
         let mut scratch = FuncAttnScratch::new(n, d, k);
         let mut out = vec![0.0f32; n * d];
-        funcattn_forward(&x, &x, &w_basis, &w_q, &w_k, &w_v, &cfg, &mut scratch, &mut out)
-            .expect("forward after rotation");
+        funcattn_forward(
+            &x,
+            &x,
+            &w_basis,
+            &w_q,
+            &w_k,
+            &w_v,
+            &cfg,
+            &mut scratch,
+            &mut out,
+        )
+        .expect("forward after rotation");
         for v in &out {
             assert!(v.is_finite(), "non-finite output after eigen-rotation");
         }

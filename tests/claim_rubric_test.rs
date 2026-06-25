@@ -74,7 +74,7 @@ fn l1_claim_with_l1_evidence_passes_cleanly() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1);
     assert!(!g.downgraded, "L1 evidence backs an L1 claim");
     assert!(
@@ -101,7 +101,7 @@ fn overclaim_l1_with_l3_verb_downgrades() {
         L3,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(
         g.honest_level,
         L1,
@@ -159,7 +159,7 @@ fn prediction_class_requires_predict_control_parity_for_l3() {
         L3,
     )
     .with_evidence(satisfied);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert!(
         g.honest_level < L3,
         "missing PredictControlParity caps the claim below L3"
@@ -188,7 +188,7 @@ fn r287_s4_emotion_directions_project_is_l1() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1, "R287 §4 row 1: EmotionDirections is L1");
     assert!(!g.downgraded);
 }
@@ -206,7 +206,7 @@ fn r287_s4_cna_contrastive_is_l1() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1, "R287 §4 row 2: CNA is L1+ → honest L1");
     assert!(!g.downgraded);
 }
@@ -245,7 +245,7 @@ fn r287_s4_faithfulness_probe_behavior_delta_is_l1() {
         L2, // declared L2 candidate
     )
     .with_evidence(satisfied);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(
         g.honest_level,
         L1,
@@ -268,7 +268,7 @@ fn r287_s4_future_behavior_probe_is_l1() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1, "R287 §4 row 4: FPCG is L1 (planned)");
     assert!(!g.downgraded);
 }
@@ -292,7 +292,7 @@ fn r287_s4_posterior_guided_pruner_is_l2() {
         L2,
     )
     .with_evidence(L2_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(
         g.honest_level,
         L2,
@@ -312,7 +312,7 @@ fn r287_s4_hla_evolve_is_l1() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1, "R287 §4 row 6: HLA evolve_hla is L1");
     assert!(!g.downgraded);
 }
@@ -328,7 +328,7 @@ fn r287_s4_spectral_probes_is_l1() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1, "R287 §4 row 7: spectral probes are L1");
     assert!(!g.downgraded);
 }
@@ -348,7 +348,7 @@ fn vocabulary_overclaim_l3_verb_on_l1_evidence_downgrades() {
         L3,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1);
     assert!(g.downgraded);
     assert!(!g.vocabulary_violations.is_empty());
@@ -367,7 +367,7 @@ fn l1_safe_verb_reads_at_l1_passes_cleanly() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1);
     assert!(g.vocabulary_violations.is_empty());
 }
@@ -382,7 +382,7 @@ fn l2_verb_induces_at_l1_is_violation() {
         L1,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L1);
     assert!(g
         .vocabulary_violations
@@ -398,7 +398,7 @@ fn l2_verb_induces_at_l2_with_l2_evidence_passes() {
         L2,
     )
     .with_evidence(L2_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert_eq!(g.honest_level, L2);
     assert!(
         g.vocabulary_violations.is_empty(),
@@ -442,7 +442,7 @@ fn prediction_class_without_parity_does_not_auto_promote_to_l3() {
         L3,
     )
     .with_evidence(satisfied);
-    let g = ClaimValidator::default().grade(&claim);
+    let g = ClaimValidator.grade(&claim);
     assert!(g.honest_level < L3);
     assert!(g.missing_for_declared.contains(&PredictControlParity));
 }
@@ -459,8 +459,8 @@ fn promote_advice_lists_missing_items_for_upgrade() {
         L2,
     )
     .with_evidence(L1_ITEMS);
-    let g = ClaimValidator::default().grade(&claim);
-    let advice = ClaimValidator::default().promote_advice(&g);
+    let g = ClaimValidator.grade(&claim);
+    let advice = ClaimValidator.promote_advice(&g);
     // L2 requires 6 additional items beyond L1; all 6 should be listed.
     assert_eq!(advice.len(), 6);
     assert!(advice.iter().all(|s| s.contains("to upgrade to L2")));

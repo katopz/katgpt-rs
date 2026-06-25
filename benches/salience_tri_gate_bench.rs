@@ -240,7 +240,7 @@ fn g2_ablation_parity_smoke<const D: usize>() -> bool {
         f32::INFINITY, // delegate sigmoid never crosses ceiling
     );
 
-    let mut rng = Lcg::new(0xC0FFEE_BABE);
+    let mut rng = Lcg::new(0xC0_FFEE_BABE);
     let n = 10_000;
     for _ in 0..n {
         let mut a = [0.0_f32; D];
@@ -418,7 +418,7 @@ fn run_throughput_for_dim(d: usize, n: usize) -> (f64, bool) {
 
 fn run_throughput_const<const D: usize>(n: usize) -> (f64, bool) {
     let gate: SalienceTriGate<u32, D> = make_gate();
-    let mut rng = Lcg::new(0xBADC_0DE);
+    let mut rng = Lcg::new(0xBAD_C0DE);
     let mut activations = vec![[0.0_f32; D]; n];
     let mut z = vec![0.0_f32; n];
     let mut c = vec![0.0_f32; n];

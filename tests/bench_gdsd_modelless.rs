@@ -345,9 +345,11 @@ fn goat_169_t5_bandit_integration() {
 #[test]
 fn goat_169_t6_advantage_functions() {
     use katgpt_rs::pruners::{
-        GdsdConfig, GdsdPruner, clamped_advantage, identity_advantage, sigmoid_advantage,
-        tanh_advantage,
+        GdsdConfig, GdsdPruner, clamped_advantage, identity_advantage, tanh_advantage,
     };
+    // `sigmoid_advantage` is ambiguous at `pruners::` (sdpg exports a different
+    // signature); use the gdsd scalar advantage fn directly.
+    use katgpt_rs::pruners::gdsd::sigmoid_advantage;
     use katgpt_rs::speculative::types::{NoScreeningPruner, ScreeningPruner};
     use katgpt_rs::speculative::{build_dd_tree_screened, extract_best_path};
     use katgpt_rs::types::Config;

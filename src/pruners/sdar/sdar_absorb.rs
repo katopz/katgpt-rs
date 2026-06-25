@@ -535,8 +535,6 @@ mod tests {
 
     #[test]
     fn test_high_benefit_ratio_promotes() {
-        let mut layer = make_layer_with_stats(3);
-
         // High benefit ratio (3.0) → gate ≈ 0.999+ → very likely promoted
         let mut promotions = 0;
         for _ in 0..100 {
@@ -589,8 +587,6 @@ mod tests {
 
     #[test]
     fn test_negative_benefit_ratio_blocks() {
-        let mut layer = make_layer_with_stats(3);
-
         // Negative benefit ratio (0.0) → gate ≈ 0.007 → almost never promoted
         let mut promotions = 0;
         for _ in 0..100 {
@@ -651,8 +647,6 @@ mod tests {
     #[test]
     fn test_floor_blocks_low_benefit_ratio() {
         let config = SdarAbsorbConfig::new(SDAR_BETA).with_floor(2.0);
-        let mut layer = make_layer_with_stats(3);
-
         // Override config
         let inner = AbsorbCompressLayer::new(NoScreeningPruner, 3, CompressConfig::default());
         let mut layer = SdarGatedAbsorbCompress::new(inner, 3, config);

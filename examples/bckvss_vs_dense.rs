@@ -9,7 +9,7 @@ fn main() {
     {
         use katgpt_rs::bckvss::{
             matthews_corr, perplexity_proxy, BandConditionerSelector,
-            BandConditionerSelectorConfig, QueryEmb, SyntheticScm,
+            BandConditionerSelectorConfig, QueryEmb, SegmentSelector, SyntheticScm,
         };
 
         println!("=== Plan 265 Phase 1: BCKVSS vs. Dense KV Cache ===\n");

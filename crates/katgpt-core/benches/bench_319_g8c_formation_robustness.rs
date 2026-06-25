@@ -214,11 +214,11 @@ fn generate_pool(seed: u32) -> Vec<Npc> {
                 hla[d] = axes[role][d] + noise_sigma * g;
             }
         } else {
-            for d in 0..DIM {
+            for h in hla.iter_mut().take(DIM) {
                 let u1 = rng.uniform().max(1e-10);
                 let u2 = rng.uniform();
                 let g = (-2.0f32 * u1.ln()).sqrt() * (2.0f32 * std::f32::consts::PI * u2).cos();
-                hla[d] = g;
+                *h = g;
             }
         }
         normalize_in_place(&mut hla);
@@ -437,7 +437,7 @@ fn main() {
     let start = Instant::now();
     let mut comp_survivals = Vec::with_capacity(N_TRIALS);
     let mut sim_survivals = Vec::with_capacity(N_TRIALS);
-    let mut trial_rng = Rng::new(0xC0B_A7_0); // "combat" mnemonic (valid hex)
+    let mut trial_rng = Rng::new(0x00C0_BA70); // "combat" mnemonic (valid hex)
     for _ in 0..N_TRIALS {
         comp_survivals.push(simulate_combat(&comp_party, &pool, &mut trial_rng));
         sim_survivals.push(simulate_combat(&sim_party, &pool, &mut trial_rng));

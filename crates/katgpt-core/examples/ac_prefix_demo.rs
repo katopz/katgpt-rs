@@ -32,14 +32,14 @@ use katgpt_core::{Config, matmul, matmul_relu, rmsnorm, softmax};
 /// Self-contained micro-GPT for the demo. Dimensions track `Config::micro()`:
 /// `n_embd=16, n_head=4, head_dim=4, vocab=27, mlp_hidden=64, n_layer=1`.
 struct MicroGpt {
-    wte: Vec<f32>,        // [vocab, n_embd]
-    lm_head: Vec<f32>,    // [vocab, n_embd]
-    w_q: Vec<f32>,        // [n_embd, n_embd]
-    w_k: Vec<f32>,        // [n_embd, n_embd]
-    w_v: Vec<f32>,        // [n_embd, n_embd]
-    w_o: Vec<f32>,        // [n_embd, n_embd]
-    w_fc: Vec<f32>,       // [mlp_hidden, n_embd]
-    w_proj: Vec<f32>,     // [n_embd, mlp_hidden]
+    wte: Vec<f32>,     // [vocab, n_embd]
+    lm_head: Vec<f32>, // [vocab, n_embd]
+    w_q: Vec<f32>,     // [n_embd, n_embd]
+    w_k: Vec<f32>,     // [n_embd, n_embd]
+    w_v: Vec<f32>,     // [n_embd, n_embd]
+    w_o: Vec<f32>,     // [n_embd, n_embd]
+    w_fc: Vec<f32>,    // [mlp_hidden, n_embd]
+    w_proj: Vec<f32>,  // [n_embd, mlp_hidden]
     n_embd: usize,
     n_head: usize,
     head_dim: usize,
@@ -90,7 +90,9 @@ impl SimpleRng {
 }
 
 fn rand_vec(n: usize, rng: &mut SimpleRng, scale: f32) -> Vec<f32> {
-    (0..n).map(|_| (rng.uniform() * 2.0 - 1.0) * scale).collect()
+    (0..n)
+        .map(|_| (rng.uniform() * 2.0 - 1.0) * scale)
+        .collect()
 }
 
 /// Per-position logprobs for the *actual* token at each augmented slot, using
@@ -152,9 +154,27 @@ fn forward_masked_ac_logits(
     let mut v_all = vec![0.0f32; seq * n_embd];
     for i in 0..seq {
         let h_in = &hidden[i * n_embd..(i + 1) * n_embd];
-        matmul(&mut q_all[i * n_embd..(i + 1) * n_embd], &model.w_q, h_in, n_embd, n_embd);
-        matmul(&mut k_all[i * n_embd..(i + 1) * n_embd], &model.w_k, h_in, n_embd, n_embd);
-        matmul(&mut v_all[i * n_embd..(i + 1) * n_embd], &model.w_v, h_in, n_embd, n_embd);
+        matmul(
+            &mut q_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_q,
+            h_in,
+            n_embd,
+            n_embd,
+        );
+        matmul(
+            &mut k_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_k,
+            h_in,
+            n_embd,
+            n_embd,
+        );
+        matmul(
+            &mut v_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_v,
+            h_in,
+            n_embd,
+            n_embd,
+        );
     }
 
     let mut attn_out = vec![0.0f32; seq * n_embd];
@@ -162,9 +182,8 @@ fn forward_masked_ac_logits(
     // RoPE-lite: per-(i,j) phase term using original positions. This is the
     // load-bearing use of augmented_positions — without it the demo would not
     // exercise the position-aware copy mechanism.
-    let pos_phase = |pi: usize, pj: usize| -> f32 {
-        ((pi.max(pj) - pi.min(pj)) as f32 * 0.1).cos()
-    };
+    let pos_phase =
+        |pi: usize, pj: usize| -> f32 { ((pi.max(pj) - pi.min(pj)) as f32 * 0.1).cos() };
     for i in 0..seq {
         for h in 0..n_head {
             let off = h * head_dim;
@@ -188,14 +207,14 @@ fn forward_masked_ac_logits(
                 }
             }
             let mut sum_exp = 0.0f32;
-            for j in 0..seq {
+            (0..seq).for_each(|j| {
                 if scores[j].is_finite() {
                     scores[j] = (scores[j] - max_score).exp();
                     sum_exp += scores[j];
                 } else {
                     scores[j] = 0.0;
                 }
-            }
+            });
             let inv = if sum_exp > 0.0 { 1.0 / sum_exp } else { 0.0 };
             for d in 0..head_dim {
                 let mut acc = 0.0f32;
@@ -212,7 +231,13 @@ fn forward_masked_ac_logits(
     // Output projection + residual.
     for i in 0..seq {
         let mut o = vec![0.0f32; n_embd];
-        matmul(&mut o, &model.w_o, &attn_out[i * n_embd..(i + 1) * n_embd], n_embd, n_embd);
+        matmul(
+            &mut o,
+            &model.w_o,
+            &attn_out[i * n_embd..(i + 1) * n_embd],
+            n_embd,
+            n_embd,
+        );
         for d in 0..n_embd {
             hidden[i * n_embd + d] += o[d];
         }
@@ -281,9 +306,27 @@ fn forward_naive_causal(model: &MicroGpt, base_tokens: &[u32], xc_positions: &[u
     let mut v_all = vec![0.0f32; seq * n_embd];
     for i in 0..seq {
         let h_in = &hidden[i * n_embd..(i + 1) * n_embd];
-        matmul(&mut q_all[i * n_embd..(i + 1) * n_embd], &model.w_q, h_in, n_embd, n_embd);
-        matmul(&mut k_all[i * n_embd..(i + 1) * n_embd], &model.w_k, h_in, n_embd, n_embd);
-        matmul(&mut v_all[i * n_embd..(i + 1) * n_embd], &model.w_v, h_in, n_embd, n_embd);
+        matmul(
+            &mut q_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_q,
+            h_in,
+            n_embd,
+            n_embd,
+        );
+        matmul(
+            &mut k_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_k,
+            h_in,
+            n_embd,
+            n_embd,
+        );
+        matmul(
+            &mut v_all[i * n_embd..(i + 1) * n_embd],
+            &model.w_v,
+            h_in,
+            n_embd,
+            n_embd,
+        );
     }
     let mut attn_out = vec![0.0f32; seq * n_embd];
     let scale = 1.0 / (head_dim as f32).sqrt();
@@ -304,10 +347,10 @@ fn forward_naive_causal(model: &MicroGpt, base_tokens: &[u32], xc_positions: &[u
                 }
             }
             let mut sum_exp = 0.0f32;
-            for j in 0..=i {
+            (0..=i).for_each(|j| {
                 scores[j] = (scores[j] - max_score).exp();
                 sum_exp += scores[j];
-            }
+            });
             let inv = 1.0 / sum_exp;
             for d in 0..head_dim {
                 let mut acc = 0.0f32;
@@ -320,7 +363,13 @@ fn forward_naive_causal(model: &MicroGpt, base_tokens: &[u32], xc_positions: &[u
     }
     for i in 0..seq {
         let mut o = vec![0.0f32; n_embd];
-        matmul(&mut o, &model.w_o, &attn_out[i * n_embd..(i + 1) * n_embd], n_embd, n_embd);
+        matmul(
+            &mut o,
+            &model.w_o,
+            &attn_out[i * n_embd..(i + 1) * n_embd],
+            n_embd,
+            n_embd,
+        );
         for d in 0..n_embd {
             hidden[i * n_embd + d] += o[d];
         }
@@ -373,13 +422,11 @@ fn main() {
     let model = MicroGpt::new(&cfg, 0xC0FFEE);
 
     // 16-token base sequence, 8 conditioning positions (every other).
-    let base_tokens: Vec<u32> = (0..16).map(|i| (i * 7 + 3) as u32 % cfg.vocab_size as u32).collect();
+    let base_tokens: Vec<u32> = (0..16)
+        .map(|i| (i * 7 + 3) as u32 % cfg.vocab_size as u32)
+        .collect();
     let xc_positions: Vec<usize> = (0..16).filter(|i| i % 2 == 0).collect();
-    println!(
-        "Base tokens ({}):  {:?}",
-        base_tokens.len(),
-        base_tokens
-    );
+    println!("Base tokens ({}):  {:?}", base_tokens.len(), base_tokens);
     println!(
         "Conditioning positions ({} of {}): {:?}",
         xc_positions.len(),
@@ -436,11 +483,7 @@ fn main() {
         },
         &mut rng,
     );
-    println!(
-        "   Sampled {} eval tokens: {:?}",
-        sampled.len(),
-        sampled
-    );
+    println!("   Sampled {} eval tokens: {:?}", sampled.len(), sampled);
 
     println!();
     println!("Demo complete — primitive is leak-free and end-to-end functional.");

@@ -700,8 +700,9 @@ mod replaid_tests {
         }
         let beta_after_chaos = lb.beta();
 
-        // β should have changed from stable state
-        assert!((beta_stable - beta_after_chaos).abs() > 0.001 || true); // may not change much with small lr
+        // β may not change much with small lr, so no strict assertion here —
+        // the smoke test above (observe_and_adapt not panicking) is the real check.
+        let _ = (beta_stable, beta_after_chaos);
     }
 
     #[test]

@@ -57,7 +57,7 @@ mod integration_tests {
     #[test]
     fn test_position_free_compaction_roundtrip() {
         let head_dim = 16;
-        let num_heads = 2;
+        let _num_heads = 2;
         let seq_len = 32;
         let rope_theta = 10000.0;
 
@@ -331,6 +331,7 @@ mod integration_tests {
     }
 
     /// Run compaction with a specific β strategy.
+    #[allow(clippy::too_many_arguments)]
     fn run_compaction_with_beta(
         keys_f16: &[f16],
         values_f16: &[f16],
@@ -481,6 +482,8 @@ mod integration_tests {
 
         let mut sel_keys = Vec::with_capacity(budget * kv_dim);
         let mut sel_values = Vec::with_capacity(budget * kv_dim);
+        // Allow: norms[i].0 indexing interleaves with inner d-loop; keep explicit.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..budget.min(norms.len()) {
             let t = norms[i].0;
             let base = t * kv_dim;
@@ -873,9 +876,7 @@ mod integration_tests {
 
         // Case 2: Single latent dominates — should be degenerate
         let mut dominant_weights = vec![0.0f32; compact_len * original_len];
-        for j in 0..original_len {
-            dominant_weights[j] = 1.0 / original_len as f32;
-        }
+        dominant_weights[..original_len].fill(1.0 / original_len as f32);
         let dist_dominant =
             AttentionDistribution::from_cross_attn(&dominant_weights, original_len, compact_len);
         assert!(

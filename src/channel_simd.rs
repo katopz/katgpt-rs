@@ -137,7 +137,11 @@ impl AlignedWeightMatrix {
         let mut data = Vec::with_capacity(total_len);
         // SAFETY: we will fully initialize `total_len` f32s below before any read.
         // Each row writes exactly `cols` ternary values then `padding` zeros.
-        unsafe { data.set_len(total_len) };
+        // Allow: intentional uninit-then-fill to skip the memset.
+        #[allow(clippy::uninit_vec)]
+        unsafe {
+            data.set_len(total_len)
+        };
         let mut offsets = Vec::with_capacity(rows);
 
         let mut write_pos = 0usize;

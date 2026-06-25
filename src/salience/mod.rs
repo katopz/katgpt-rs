@@ -58,8 +58,6 @@
 //! - Private guide: `riir-ai/.research/148_Per_Tick_Emit_Salience_NPC_Guide.md`
 //! - Runtime plan: `riir-ai/.plans/330_proactive_npc_salience_gate_runtime.md`
 
-#![cfg(feature = "salience_tri_gate")]
-
 pub mod gate;
 pub mod pending;
 pub mod types;

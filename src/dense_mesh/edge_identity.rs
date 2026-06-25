@@ -49,7 +49,7 @@ mod tests {
         }
         let mut scratch = MeshScratch::new(2, 4);
         let edge = IdentityEdge::new();
-        let out = edge.route_into(&from, &mut scratch);
+        edge.route_into(&from, &mut scratch);
         // Output matches input.
         for (i, v) in scratch.edge_output.rows().iter().enumerate() {
             assert_eq!(*v, i as f32);

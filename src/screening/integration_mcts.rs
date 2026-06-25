@@ -34,8 +34,6 @@
 //! On games whose optimum is low-K (simple tactics), the sampler reaches it
 //! exponentially faster (Levin-search variant).
 
-#![cfg(feature = "mcts_k_prior")]
-
 use crate::screening::complexity_prior::{ComplexityProxy, CompressionPriorSampler};
 
 /// Expansion prior applied to MCTS child candidates.

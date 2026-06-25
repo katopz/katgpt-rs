@@ -169,19 +169,21 @@ fn bench_iso_quant(
     }
 
     let mut result = BackendResult::default();
+    // Scratch buffer reused across reconstructions (avoids per-call alloc).
+    let mut recon_scratch = vec![0.0_f32; dim];
     for (pos, orig) in keys.iter().enumerate() {
-        let recon = cache.dequantize_key(0, pos);
+        cache.dequantize_key_into(0, pos, &mut recon_scratch);
         result.add(
-            per_coord_mse(orig, &recon) as f64,
-            cosine_similarity(orig, &recon) as f64,
+            per_coord_mse(orig, &recon_scratch) as f64,
+            cosine_similarity(orig, &recon_scratch) as f64,
             0.0,
         );
     }
 
     for q in queries {
         for (pos, orig) in keys.iter().enumerate() {
-            let recon = cache.dequantize_key(0, pos);
-            result.ip_err.push(ip_error(orig, &recon, q) as f64);
+            cache.dequantize_key_into(0, pos, &mut recon_scratch);
+            result.ip_err.push(ip_error(orig, &recon_scratch, q) as f64);
         }
     }
 
@@ -1645,9 +1647,12 @@ fn goat_maxsim_late_interaction() {
                 for (pos, key) in keys.iter().enumerate() {
                     cache.store_key(0, pos, key);
                 }
-                let dequant_flat: Vec<f32> = (0..n_keys)
-                    .flat_map(|pos| cache.dequantize_key(0, pos))
-                    .collect();
+                let mut scratch = vec![0.0_f32; dim];
+                let mut dequant_flat: Vec<f32> = Vec::with_capacity(n_keys * dim);
+                for pos in 0..n_keys {
+                    cache.dequantize_key_into(0, pos, &mut scratch);
+                    dequant_flat.extend_from_slice(&scratch);
+                }
                 let ms = maxsim_score(&queries_flat, &dequant_flat, n_queries, n_keys, dim);
                 let rel_err = ((ms - truth) / truth).abs() as f64;
                 iqf_res.rel_errors.push(rel_err);
@@ -1676,9 +1681,12 @@ fn goat_maxsim_late_interaction() {
                 for (pos, key) in keys.iter().enumerate() {
                     cache.store_key(0, pos, key);
                 }
-                let dequant_flat: Vec<f32> = (0..n_keys)
-                    .flat_map(|pos| cache.dequantize_key(0, pos))
-                    .collect();
+                let mut scratch = vec![0.0_f32; dim];
+                let mut dequant_flat: Vec<f32> = Vec::with_capacity(n_keys * dim);
+                for pos in 0..n_keys {
+                    cache.dequantize_key_into(0, pos, &mut scratch);
+                    dequant_flat.extend_from_slice(&scratch);
+                }
                 let ms = maxsim_score(&queries_flat, &dequant_flat, n_queries, n_keys, dim);
                 let rel_err = ((ms - truth) / truth).abs() as f64;
                 iqr_res.rel_errors.push(rel_err);

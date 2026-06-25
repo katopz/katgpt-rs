@@ -127,8 +127,10 @@ fn main() {
         // The residual pass is O(n d²) extra work; for the latency gate we
         // disable it (production shard-join calls don't need a residual
         // every time — only on diagnostics / first-call sanity).
-        let mut cfg = ProcrustesConfig::default();
-        cfg.compute_residual = false;
+        let mut cfg = ProcrustesConfig {
+            compute_residual: false,
+            ..Default::default()
+        };
         let us = bench_us(5, 20, || {
             let _ = orthogonal_procrustes(&a, &b, n, d, &mut r, &mut scratch, &cfg)
                 .expect("procrustes");

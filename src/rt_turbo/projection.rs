@@ -713,6 +713,9 @@ mod tests {
     }
 
     #[test]
+    // Allow: head 0 uses stride indexing `0 * stride + ...` which reads as a
+    // zero offset but documents the per-head layout consistently with heads 1/2.
+    #[allow(clippy::erasing_op, clippy::identity_op)]
     fn test_multi_head_isolation() {
         // Different heads should produce different projections
         let mut proj = RetrievalProjection::zeros(3, 32, 8);

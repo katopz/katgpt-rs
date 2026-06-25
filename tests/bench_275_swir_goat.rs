@@ -434,7 +434,7 @@ fn g7_step_zero_allocation_debug() {
              (budget: {G7_STEP_ALLOC_SLACK} allocs)"
         );
         assert!(
-            count <= G7_STEP_ALLOC_SLACK,
+            count == G7_STEP_ALLOC_SLACK,
             "G7 FAIL: step() allocated {count} times ({bytes} bytes). \
              The controller is supposed to be allocation-free after construction."
         );

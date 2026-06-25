@@ -234,13 +234,17 @@ impl<'a> AcPrefix<'a> {
     pub fn augmented_tokens_into(&self, out: &mut [u32]) {
         let xc = self.conditioning_positions.len();
         let base_len = self.base_tokens.len();
-        debug_assert_eq!(out.len(), xc + base_len, "out.len() must equal augmented_len");
-        for k in 0..xc {
-            out[k] = self.base_tokens[self.conditioning_positions[k]];
+        debug_assert_eq!(
+            out.len(),
+            xc + base_len,
+            "out.len() must equal augmented_len"
+        );
+        // Region 0: copies from conditioning positions.
+        for (k, out_slot) in out[..xc].iter_mut().enumerate() {
+            *out_slot = self.base_tokens[self.conditioning_positions[k]];
         }
-        for k in 0..base_len {
-            out[xc + k] = self.base_tokens[k];
-        }
+        // Region 1: originals verbatim — straight slice copy.
+        out[xc..xc + base_len].copy_from_slice(&self.base_tokens[..base_len]);
     }
 
     /// Write the loss mask into `out`:
@@ -266,9 +270,7 @@ impl<'a> AcPrefix<'a> {
             "out.len() must equal augmented_len"
         );
         // Region 0: copies are never in the loss.
-        for slot in 0..xc {
-            out[slot] = 0.0;
-        }
+        out[..xc].fill(0.0);
         // Region 1: original sequence positions.
         let xc_positions = self.conditioning_positions;
         for k in 0..base_len {
@@ -288,6 +290,7 @@ impl<'a> AcPrefix<'a> {
     ///   - `augmented_positions: &[usize]` — original position per slot (for RoPE)
     ///   - `mask: &AcPrefixMask` — the materialized three-region attention mask
     ///   - `loss_mask: &[f32]` — 1.0 at eval positions, 0.0 elsewhere
+    ///
     /// and returns per-position logprobs `Vec<f32>` (length = augmented_len).
     ///
     /// Returns the sum of logprobs at loss_mask=1.0 positions.
@@ -630,8 +633,8 @@ mod tests {
 
         // ── eval → eval in r1 still causal ──
         // aug 2 (orig 0, eval) and aug 4 (orig 2, eval):
-        assert!(p.attends_dedup(2, 2));  // self
-        assert!(p.attends_dedup(4, 2));  // eval at orig 2 → eval at orig 0
+        assert!(p.attends_dedup(2, 2)); // self
+        assert!(p.attends_dedup(4, 2)); // eval at orig 2 → eval at orig 0
         assert!(!p.attends_dedup(2, 4)); // causal: 2 < 4
     }
 
@@ -801,7 +804,9 @@ mod tests {
         let mut rng = fastrand::Rng::with_seed(0);
         let sampled = p.conditional_sample(
             |_tokens, _pos, _mask, _lm, _eval_slot| {
-                (0..27).map(|i| if i == 5 { 1000.0 } else { -1000.0 }).collect()
+                (0..27)
+                    .map(|i| if i == 5 { 1000.0 } else { -1000.0 })
+                    .collect()
             },
             &mut rng,
         );

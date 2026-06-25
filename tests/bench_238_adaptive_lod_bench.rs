@@ -250,6 +250,7 @@ fn bench_adaptive_compression_ratio_distribution() {
         preserve_instructions: false,
         ..Default::default()
     };
+    let window_size = config.window_size;
 
     let buf = LatentContextBuffer::new_adaptive(&tokens, config, slod.clone());
     let ctx = buf.context();
@@ -262,7 +263,6 @@ fn bench_adaptive_compression_ratio_distribution() {
     println!("╠═════════════════╪══════════╪══════╪══════╪══════╪═════════════╣");
 
     // Analyze per content type
-    let window_size = config.window_size;
     for &(start_offset, label) in &labels {
         let end_offset = if label == "repetitive" {
             total * 50 / 100

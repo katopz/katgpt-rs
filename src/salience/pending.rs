@@ -138,7 +138,7 @@ impl<A: Clone, const CAP: usize> PendingDelegateQueue<A, CAP> {
             return None;
         }
         // Oldest live slot = (head + CAP - len) mod CAP.
-        let oldest = ((self.head as usize + CAP - self.len as usize) % CAP) as usize;
+        let oldest = (self.head as usize + CAP - self.len as usize) % CAP;
         self.len -= 1;
         self.slots[oldest].take()
     }

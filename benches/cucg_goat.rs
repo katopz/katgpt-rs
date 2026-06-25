@@ -20,6 +20,7 @@ fn main() {
     println!("═══ CUCG GOAT Gate Report (Plan 320, Research 300) ═══");
     println!();
 
+    #[allow(clippy::vec_init_then_push)]
     let mut results = Vec::new();
 
     // G1: rubric beats fixed-interval (search rubric recall/FDR)

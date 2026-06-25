@@ -116,7 +116,14 @@ impl CrossResolutionBases {
             return Err(CrossResolutionError::RankDeficient);
         }
         let commitment = compute_commitment(&phi_src, &psi_dst, d_src, d_dst, k);
-        Ok(Self { phi_src, psi_dst, d_src, d_dst, k, commitment })
+        Ok(Self {
+            phi_src,
+            psi_dst,
+            d_src,
+            d_dst,
+            k,
+            commitment,
+        })
     }
 
     /// Re-check that the stored commitment matches the current basis contents.
@@ -231,6 +238,7 @@ impl CrossResScratch {
 /// Zero-alloc — caller provides the `spectral` buffer (typically
 /// `scratch.spectral`).
 #[inline]
+#[allow(clippy::needless_range_loop)] // spectral transport kernel: indices participate in stride arithmetic (r*k+j)
 pub fn project_to_spectral_into(
     src_state: &[f32],
     bases: &CrossResolutionBases,
@@ -264,6 +272,7 @@ pub fn project_to_spectral_into(
 /// contiguous dot product over a row of `Ψ_dst`, so this path is the
 /// SIMD-friendly one (`simd::simd_dot_f32` over contiguous slices).
 #[inline]
+#[allow(clippy::needless_range_loop)] // spectral transport kernel: row index r participates in stride r*k for row-major Ψ_dst
 pub fn reconstruct_from_spectral_into(
     spectral: &[f32],
     bases: &CrossResolutionBases,
@@ -299,10 +308,7 @@ pub fn transport_cross_resolution_into(
 
 /// Allocating convenience wrapper. Prefer [`transport_cross_resolution_into`]
 /// on hot paths.
-pub fn transport_cross_resolution(
-    src_state: &[f32],
-    bases: &CrossResolutionBases,
-) -> Vec<f32> {
+pub fn transport_cross_resolution(src_state: &[f32], bases: &CrossResolutionBases) -> Vec<f32> {
     let mut dst = vec![0.0; bases.d_dst];
     let mut scratch = CrossResScratch::new(bases.k);
     transport_cross_resolution_into(src_state, bases, &mut scratch, &mut dst);
@@ -393,16 +399,17 @@ mod tests {
         // Modified Gram-Schmidt over columns.
         for i in 0..k {
             for j in 0..i {
-                let dot: f32 =
-                    cols[i].iter().zip(cols[j].iter()).map(|(a, b)| a * b).sum();
-                for r in 0..dim {
-                    cols[i][r] -= dot * cols[j][r];
+                let dot: f32 = cols[i].iter().zip(cols[j].iter()).map(|(a, b)| a * b).sum();
+                // j < i: split_at_mut(i) gives [0..i) in `left`, cols[i] in right[0].
+                let (left, right) = cols.split_at_mut(i);
+                for (ci, cj) in right[0].iter_mut().zip(left[j].iter()) {
+                    *ci -= dot * *cj;
                 }
             }
             let norm: f32 = cols[i].iter().map(|x| x * x).sum::<f32>().sqrt();
             let inv = if norm > 1e-12 { 1.0 / norm } else { 1.0 };
-            for r in 0..dim {
-                cols[i][r] *= inv;
+            for v in cols[i].iter_mut() {
+                *v *= inv;
             }
         }
         // Pack columns into row-major `dim × k`.
@@ -430,8 +437,8 @@ mod tests {
 
         // Source state: band-limited to first k components.
         let mut src = vec![0.0f32; d_src];
-        for i in 0..k {
-            src[i] = (i as f32) * 0.5 - 1.5;
+        for (i, s) in src.iter_mut().enumerate().take(k) {
+            *s = (i as f32) * 0.5 - 1.5;
         }
         let mut dst = vec![0.0f32; d_dst];
         let mut scratch = CrossResScratch::new(k);
@@ -445,8 +452,8 @@ mod tests {
                 src[i]
             );
         }
-        for i in k..d_dst {
-            assert!(dst[i].abs() < 1e-6, "dst[{i}] = {} expected 0", dst[i]);
+        for (i, d) in dst.iter().enumerate().take(d_dst).skip(k) {
+            assert!(d.abs() < 1e-6, "dst[{i}] = {} expected 0", d);
         }
     }
 
@@ -480,12 +487,12 @@ mod tests {
         // for a k-dim `a`, which by orthonormality projects back to `a` exactly.
         let a: Vec<f32> = (0..k).map(|i| (i as f32) * 0.3 - 1.0).collect();
         let mut src = vec![0.0f32; d_src];
-        for r in 0..d_src {
+        for (r, s) in src.iter_mut().enumerate().take(d_src) {
             let mut acc = 0.0f32;
-            for j in 0..k {
-                acc += bases.phi_src[r * k + j] * a[j];
+            for (j, aj) in a.iter().enumerate().take(k) {
+                acc += bases.phi_src[r * k + j] * aj;
             }
-            src[r] = acc;
+            *s = acc;
         }
 
         // Forward: 64 → 256.
@@ -524,7 +531,7 @@ mod tests {
             d_src,
             k,
         )
-            .expect("reverse bases should construct");
+        .expect("reverse bases should construct");
 
         // Full-spectrum random src.
         let mut rng = make_rng(0xCAFE_BABE);
@@ -596,7 +603,11 @@ mod tests {
         let mut dst_fused = vec![0.0f32; d_dst];
         let mut scratch = CrossResScratch::new(k);
         transport_cross_domain_cross_resolution_into(
-            &src, &bases, &c_op, &mut scratch, &mut dst_fused,
+            &src,
+            &bases,
+            &c_op,
+            &mut scratch,
+            &mut dst_fused,
         );
 
         // Manual reference.

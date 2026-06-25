@@ -40,8 +40,8 @@
 //! inside the math (callers may wrap SIMD themselves), no floating-point
 //! reordering. This is required for anti-cheat: the phase-transition gate
 //! decision must be bit-identical across quorum nodes.
-
-#![cfg(feature = "subspace_phase_gate")]
+// (Module gating is handled by `#[cfg(feature = "subspace_phase_gate")]` on the
+// `mod` declaration in `lib.rs`; this file must NOT duplicate it.)
 
 // ─── Intrinsic-dimension estimation ─────────────────────────────────────────
 
@@ -418,8 +418,7 @@ where
             f(x_pert, &mut scratch.f_x_pert);
             // Central diff: (f_plus − f_minus) / (2·step)
             for j in 0..m {
-                scratch.jac[j * n + i] =
-                    (scratch.f_x_plus[j] - scratch.f_x_pert[j]) / (2.0 * step);
+                scratch.jac[j * n + i] = (scratch.f_x_plus[j] - scratch.f_x_pert[j]) / (2.0 * step);
             }
         } else {
             // Forward diff: (f(x + step·e_i) − f(x)) / step
@@ -436,7 +435,13 @@ where
     // Thin SVD of the m × n Jacobian via one-sided Jacobi rotations.
     // Writes into scratch.svd_result (SOA, reused across calls), then converts
     // to the owned SvdResult return type.
-    one_sided_jacobi_svd_into(&scratch.jac, m, n, &mut scratch.svd_result, &mut scratch.svd_work);
+    one_sided_jacobi_svd_into(
+        &scratch.jac,
+        m,
+        n,
+        &mut scratch.svd_result,
+        &mut scratch.svd_work,
+    );
     let len = scratch.svd_result.len;
     let singular_values = scratch.svd_result.singular_values[..len].to_vec();
     let right_singular_vectors: Vec<Vec<f32>> = (0..len)
@@ -576,6 +581,7 @@ pub fn thin_svd_into(
 /// Convergence: rotate until no off-diagonal element of `M^T M` exceeds
 /// `tol² · trace(M^T M)`. Standard textbook algorithm; ~O(n²) per sweep,
 /// ~log2(n) sweeps to converge for well-separated spectra.
+#[allow(clippy::needless_range_loop)] // hot numerical SVD kernels: indices participate in stride arithmetic (out_j*n, r*n+i, etc.)
 fn one_sided_jacobi_svd_into(
     m_flat: &[f32], // row-major m × n
     m_rows: usize,
@@ -590,10 +596,18 @@ fn one_sided_jacobi_svd_into(
     // matrix a caller will factor); we use the `m*n` / `n*n` prefix. This
     // lets a single `SvdScratch` be reused across matrices of different sizes
     // without reallocation.
-    debug_assert!(work.a.len() >= m * n,
-        "work.a len {} < m*n={}", work.a.len(), m * n);
-    debug_assert!(work.v.len() >= n * n,
-        "work.v len {} < n*n={}", work.v.len(), n * n);
+    debug_assert!(
+        work.a.len() >= m * n,
+        "work.a len {} < m*n={}",
+        work.a.len(),
+        m * n
+    );
+    debug_assert!(
+        work.v.len() >= n * n,
+        "work.v len {} < n*n={}",
+        work.v.len(),
+        n * n
+    );
 
     // Reset result for this matrix size (grows buffers if needed, zero-fill).
     result.clear_for(m, n);
@@ -857,7 +871,7 @@ mod tests {
         );
         // Top-3 singular values should be close to {10, 5, 2} (order-tolerant sign).
         let top3: Vec<f32> = result.singular_values.iter().take(3).cloned().collect();
-        let mut expected = vec![10.0, 5.0, 2.0];
+        let mut expected = [10.0f32, 5.0, 2.0];
         expected.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
         let mut got = top3.clone();
         got.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
@@ -935,15 +949,23 @@ mod tests {
         thin_svd_into(&m_flat, m_rows, n_cols, &mut result, &mut work2);
 
         // Same number of singular triples.
-        assert_eq!(result.len(), owned.singular_values.len(),
-            "SOA len {} != owned len {}", result.len(), owned.singular_values.len());
+        assert_eq!(
+            result.len(),
+            owned.singular_values.len(),
+            "SOA len {} != owned len {}",
+            result.len(),
+            owned.singular_values.len()
+        );
         // Same rank.
         assert_eq!(result.rank, owned.rank);
         // Same singular values (both sorted descending).
         for j in 0..result.len() {
-            assert!((result.singular_value(j) - owned.singular_values[j]).abs() < 1e-4,
+            assert!(
+                (result.singular_value(j) - owned.singular_values[j]).abs() < 1e-4,
                 "sv[{j}] mismatch: SOA={} owned={}",
-                result.singular_value(j), owned.singular_values[j]);
+                result.singular_value(j),
+                owned.singular_values[j]
+            );
         }
     }
 
@@ -971,12 +993,19 @@ mod tests {
             ident[i * n8 + i] = 1.0;
         }
         thin_svd_into(&ident, n8, n8, &mut result, &mut work);
-        assert_eq!(result.len(), n8, "8×8 identity should give 8 singular triples");
+        assert_eq!(
+            result.len(),
+            n8,
+            "8×8 identity should give 8 singular triples"
+        );
         assert_eq!(result.rank, n8, "identity should be full rank");
         // All singular values of identity are 1.
         for j in 0..n8 {
-            assert!((result.singular_value(j) - 1.0).abs() < 1e-4,
-                "identity sv[{j}] should be 1.0, got {}", result.singular_value(j));
+            assert!(
+                (result.singular_value(j) - 1.0).abs() < 1e-4,
+                "identity sv[{j}] should be 1.0, got {}",
+                result.singular_value(j)
+            );
         }
     }
 
@@ -991,8 +1020,10 @@ mod tests {
         for j in 0..result.len() {
             let v = result.right_singular_vector(j);
             let norm_sq: f32 = v.iter().map(|x| x * x).sum::<f32>();
-            assert!((norm_sq - 1.0).abs() < 1e-3,
-                "right sv vector {j} not unit-norm: |v|²={norm_sq}");
+            assert!(
+                (norm_sq - 1.0).abs() < 1e-3,
+                "right sv vector {j} not unit-norm: |v|²={norm_sq}"
+            );
         }
     }
 
@@ -1013,8 +1044,10 @@ mod tests {
         assert_eq!(result.singular_values().len(), 4);
         // Descending order.
         for j in 1..result.len() {
-            assert!(result.singular_value(j) <= result.singular_value(j - 1) + 1e-5,
-                "singular values must be descending");
+            assert!(
+                result.singular_value(j) <= result.singular_value(j - 1) + 1e-5,
+                "singular values must be descending"
+            );
         }
         // Accessors return slices of the right length.
         assert_eq!(result.right_singular_vector(0).len(), n_cols);

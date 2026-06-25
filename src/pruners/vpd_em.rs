@@ -510,10 +510,10 @@ mod tests {
 
     #[test]
     fn test_log_sigmoid_zero() {
-        // log σ(0) = log(0.5) ≈ -0.6931
+        // log σ(0) = log(0.5) = -LN_2
         let val = log_sigmoid(0.0);
         assert!(
-            (val - (-0.6931f32)).abs() < 0.01,
+            (val - (-core::f32::consts::LN_2)).abs() < 0.01,
             "log_sigmoid(0) ≈ -0.693, got {val}"
         );
     }

@@ -72,7 +72,7 @@ impl ConstraintPruner for SynPruner {
         all_tokens.extend_from_slice(parent_tokens);
         all_tokens.push(token_idx);
 
-        let code = BpeTokenizerImpl::decode(&self.tokenizer, &*all_tokens);
+        let code = BpeTokenizerImpl::decode(&self.tokenizer, &all_tokens);
 
         // Only do Tier 0 (bracket balance) in the hot path.
         // Tier 1 (syn) is too expensive for every DDTree node.
@@ -91,7 +91,7 @@ impl ConstraintPruner for SynPruner {
         all_tokens.extend_from_slice(parent_tokens);
         all_tokens.push(token_idx);
 
-        let code = BpeTokenizerImpl::decode(&self.tokenizer, &*all_tokens);
+        let code = BpeTokenizerImpl::decode(&self.tokenizer, &all_tokens);
 
         let mut parser = self.parser.lock().expect("parser mutex poisoned");
         parser.reset();
@@ -109,7 +109,7 @@ mod tests {
     #[test]
     fn test_syn_pruner_accepts_valid_rust() {
         let tokenizer = Arc::new(crate::tokenizer::BpeTrainer::train("fn let mut x", 64));
-        let mut pruner = SynPruner::new(tokenizer);
+        let pruner = SynPruner::new(tokenizer);
 
         let result = pruner.validate("let x = 42;");
         assert!(result.is_valid, "expected valid for 'let x = 42;'");
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn test_syn_pruner_rejects_invalid_rust() {
         let tokenizer = Arc::new(crate::tokenizer::BpeTrainer::train("fn let mut x", 64));
-        let mut pruner = SynPruner::new(tokenizer);
+        let pruner = SynPruner::new(tokenizer);
 
         let result = pruner.validate("let = ;");
         assert!(!result.is_valid, "expected invalid for 'let = ;'");
@@ -141,7 +141,7 @@ mod tests {
     #[test]
     fn test_syn_pruner_bracket_tier_rejects() {
         let tokenizer = Arc::new(crate::tokenizer::BpeTrainer::train("fn let { }", 64));
-        let mut pruner = SynPruner::new(tokenizer);
+        let pruner = SynPruner::new(tokenizer);
 
         // Unmatched closing brace — Tier 0 should reject before syn sees it
         let result = pruner.validate("fn main() { } }");

@@ -152,11 +152,11 @@ fn generate_pool(seed: u32) -> Vec<Npc> {
                 hla[d] = axes[role][d] + noise_sigma * g;
             }
         } else {
-            for d in 0..DIM {
+            for h in hla.iter_mut().take(DIM) {
                 let u1 = rng.uniform().max(1e-10);
                 let u2 = rng.uniform();
                 let g = (-2.0f32 * u1.ln()).sqrt() * (2.0f32 * std::f32::consts::PI * u2).cos();
-                hla[d] = g;
+                *h = g;
             }
         }
         normalize_in_place(&mut hla);
@@ -192,13 +192,13 @@ fn faction_role_coverage(members: &[&Npc], tau: f32) -> usize {
 fn faction_mean_roles(members: &[&Npc]) -> [f32; N_ROLES] {
     let mut mean = [0.0f32; N_ROLES];
     for m in members {
-        for r in 0..N_ROLES {
-            mean[r] += m.roles[r];
+        for (mean_r, &mr) in mean.iter_mut().zip(m.roles.iter()) {
+            *mean_r += mr;
         }
     }
     let inv_n = 1.0 / members.len() as f32;
-    for r in 0..N_ROLES {
-        mean[r] *= inv_n;
+    for mean_r in mean.iter_mut() {
+        *mean_r *= inv_n;
     }
     mean
 }
@@ -213,10 +213,10 @@ fn faction_role_variance(members: &[&Npc]) -> f32 {
     }
     let mean = faction_mean_roles(members);
     let mut total_var = 0.0f32;
-    for r in 0..N_ROLES {
+    for (r, &mean_r) in mean.iter().enumerate() {
         let mut sum_sq_diff = 0.0f32;
         for m in members {
-            let diff = m.roles[r] - mean[r];
+            let diff = m.roles[r] - mean_r;
             sum_sq_diff += diff * diff;
         }
         total_var += sum_sq_diff / members.len() as f32;
@@ -343,7 +343,7 @@ fn main() {
     );
     println!();
 
-    let pool = generate_pool(0x68DF_ACE);
+    let pool = generate_pool(0x068D_FACE);
     let mut scratch_w = vec![0.0f32; DIM];
     let mut scratch_su = vec![0.0f32; DIM];
     let mut scratch_sv = vec![0.0f32; DIM];

@@ -28,7 +28,7 @@ fn main() {
         let relevant_fraction = 0.6_f32;
         let n_relevant = ((n_pairs as f32) * relevant_fraction).round() as usize;
         let pairs_to_resolve: Vec<(usize, usize)> = stopper
-            .unresolved_pairs
+            .unresolved_pairs()
             .iter()
             .copied()
             .take(n_relevant)

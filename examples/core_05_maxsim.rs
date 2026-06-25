@@ -403,7 +403,7 @@ fn section5_turboquant_proof() {
     }
 
     // Score with TurboQuant MaxSim (lazy dequantize streaming pattern)
-    let tq_score = maxsim_score_turboquant(&queries, &cache, 0, 0..n_positions, dim);
+    let tq_score = maxsim_score_turboquant(&queries, &mut cache, 0, 0..n_positions, dim);
 
     // Score with uncompressed MaxSim for comparison
     let flat_keys: Vec<f32> = original_keys.iter().flatten().copied().collect();
@@ -629,7 +629,7 @@ fn section7_tq_vs_sq_benchmark() {
     let flat_keys: Vec<f32> = keys.iter().flatten().copied().collect();
     let gt_ms = maxsim_score(&queries, &flat_keys, lq, n_positions, kv_dim);
 
-    let tq_ms = maxsim_score_turboquant(&queries, &tq_cache, 0, 0..n_positions, kv_dim);
+    let tq_ms = maxsim_score_turboquant(&queries, &mut tq_cache, 0, 0..n_positions, kv_dim);
     let sq_ms = maxsim_score_spectralquant(&queries, &mut sq_cache, 0, 0..n_positions, kv_dim);
 
     let pct_err = |s: f32| -> f32 {
@@ -684,7 +684,7 @@ fn section7_tq_vs_sq_benchmark() {
     for _ in 0..200 {
         std::hint::black_box(maxsim_score_turboquant(
             &queries,
-            &tq_cache,
+            &mut tq_cache,
             0,
             0..n_positions,
             kv_dim,
@@ -694,7 +694,7 @@ fn section7_tq_vs_sq_benchmark() {
     for _ in 0..iters {
         std::hint::black_box(maxsim_score_turboquant(
             &queries,
-            &tq_cache,
+            &mut tq_cache,
             0,
             0..n_positions,
             kv_dim,

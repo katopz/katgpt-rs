@@ -214,6 +214,8 @@ pub fn interpolate_query(
     // Project query: projected[j] = sum_a gate_weight[j*n_embd + a] * query[a]
     // SIMD-accelerated matvec — one dot product per output lane.
     let mut projected = vec![0.0f32; dim];
+    // Allow: hot SIMD matvec — explicit row indexing keeps the dot-product lane clear.
+    #[allow(clippy::needless_range_loop)]
     for j in 0..dim {
         let row_off = j * artifact.n_embd;
         projected[j] = crate::simd::simd_dot_f32(
@@ -261,15 +263,16 @@ mod tests {
         n_targets: usize,
         n_layers: usize,
     ) -> Vec<u8> {
-        let gate_params = gate_dim * n_embd;
+        let _gate_params = gate_dim * n_embd;
         let params_per_cp = params_per_checkpoint(n_layers, n_targets, lora_rank, n_embd);
 
         // Build payload.
-        let mut payload: Vec<f32> = Vec::new();
-        payload.push(k as f32);
-        payload.push(gate_dim as f32);
-        payload.push(n_embd as f32);
-        payload.push(lora_rank as f32);
+        let mut payload: Vec<f32> = vec![
+            k as f32,
+            gate_dim as f32,
+            n_embd as f32,
+            lora_rank as f32,
+        ];
         payload.push(n_targets as f32);
         payload.push(n_layers as f32);
 
@@ -330,7 +333,7 @@ mod tests {
         assert_eq!(artifact.checkpoints[1].repr[1], 1.0);
 
         // Verify delta lengths.
-        let expected_delta_len = 1 * 2 * 2 * 4 * 8; // n_layers * n_targets * 2 * rank * n_embd
+        let expected_delta_len = 2 * 2 * 4 * 8; // n_layers * n_targets * 2 * rank * n_embd
         assert_eq!(artifact.checkpoints[0].delta.len(), expected_delta_len);
     }
 

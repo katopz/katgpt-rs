@@ -626,7 +626,7 @@ mod tests {
         }
 
         let echo_rate = echo_accepted as f64 / echo_total.max(1) as f64;
-        let baseline_rate = baseline_accepted as f64 / baseline_total.max(1) as f64;
+        let _baseline_rate = baseline_accepted as f64 / baseline_total.max(1) as f64;
 
         // GOAT G1: echo should produce trees and acceptance should be reasonable.
         // The predictor scores modulate relevance (0.5-0.7 range vs NoScreeningPruner's 1.0),

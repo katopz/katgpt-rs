@@ -504,7 +504,7 @@ mod tests {
         // S'[1,0] = 0.8 * 0 - 0.2 * pred[1] * 1 + 0.2 * 1 * 1
         //   where pred[1] = S[1,:] · k = 0 (initial state is zero)
         //   = 0 + 0 + 0.2 = 0.2
-        assert!((state.state[1 * 4 + 0] - 0.2).abs() < 1e-5);
+        assert!((state.state[4] - 0.2).abs() < 1e-5);
     }
 
     #[test]
@@ -659,7 +659,7 @@ mod tests {
         let mut state = DeltaMemoryState::new(DeltaMemoryConfig::default());
         state.enable_surprise_gate();
 
-        let mut basis = |i: usize| {
+        let basis = |i: usize| {
             let mut k = vec![0.0f32; 8];
             k[i] = 1.0;
             k
@@ -763,9 +763,7 @@ mod tests {
         // one-hot directions in the last 4 dims (well-separated from bg and
         // from each other — near-orthogonal for clean recall probing).
         let mut centroid_bg = [0.0f32; RANK];
-        for i in 0..4 {
-            centroid_bg[i] = 1.0;
-        }
+        centroid_bg[..4].fill(1.0);
         l2_normalize(&mut centroid_bg);
 
         let novel_centroids: [[f32; RANK]; 4] = {
@@ -805,7 +803,7 @@ mod tests {
             // Novel block — distinct centroid per pair (cycles through 4).
             let nc = novel_centroids[pair % 4];
             let mut nv_val = [0.0f32; RANK];
-            nv_val[(pair % RANK)] = 1.0; // distinct value per novel centroid
+            nv_val[pair % RANK] = 1.0; // distinct value per novel centroid
             l2_normalize(&mut nv_val);
             for _ in 0..NOVEL_BLOCK {
                 stream.push(Sample {
@@ -828,7 +826,7 @@ mod tests {
             for pair in 0..N_PAIRS {
                 let nc = novel_centroids[pair % 4];
                 let mut nv_val = [0.0f32; RANK];
-                nv_val[(pair % RANK)] = 1.0;
+                nv_val[pair % RANK] = 1.0;
                 l2_normalize(&mut nv_val);
                 let readout = state.read(&nc);
                 let mut dot = 0.0f32;

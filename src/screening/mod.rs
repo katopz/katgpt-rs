@@ -24,8 +24,6 @@
 //! Safety guarantee: never worse than uniform; exponentially faster when the
 //! optimum is low-K (Levin-search variant).
 
-#![cfg(feature = "complexity_prior_sampler")]
-
 pub mod coincidence_gate;
 pub mod complexity_prior;
 
