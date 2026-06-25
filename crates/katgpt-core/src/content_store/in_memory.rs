@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use papaya::HashMap;
 
 use super::chunker::FixedSizeChunker;
-use super::merkle::{build_binary_merkle_proof, build_binary_merkle_root, verify_binary_merkle_proof};
+use super::merkle::{build_merkle_levels, build_proof_from_levels, verify_binary_merkle_proof};
 use super::r#trait::{ChunkedContentStore, ChunkingStrategy};
 use super::types::{BlobId, MerkleProof, StoreStats};
 
@@ -28,12 +28,19 @@ use super::types::{BlobId, MerkleProof, StoreStats};
 ///
 /// `chunk_hashes` is `Box<[[u8; 32]]>` (fixed-size, heap-allocated once) so
 /// proof generation is a simple index lookup with no further allocation.
+///
+/// `merkle_levels` caches all levels of the binary Merkle tree (level 0 =
+/// padded leaves, last level = root) so that `prove_chunk` is O(log n) — sibling
+/// lookups from the cache instead of O(n) tree rebuild per proof.
 #[repr(C)]
 struct BlobMetadata {
     /// Number of chunks in this blob (== `chunk_hashes.len()`).
     n_chunks: u32,
     /// Ordered chunk hashes, leaf level of the Merkle tree.
     chunk_hashes: Box<[[u8; 32]]>,
+    /// Cached Merkle tree levels for O(log n) proof generation (Plan 272 G3 fix).
+    /// levels[0] = padded leaves, levels.last() = root. Memory: ~2× chunk_hashes.
+    merkle_levels: Vec<Vec<[u8; 32]>>,
     /// Sum of chunk byte lengths (== logical blob size).
     total_bytes: u64,
 }
@@ -155,8 +162,13 @@ impl ChunkedContentStore for InMemoryChunkedStore {
             chunk_hashes.push(hash);
         }
 
-        // 3. Compute the Merkle root = BlobId.
-        let root = build_binary_merkle_root(&chunk_hashes);
+        // 3. Compute the Merkle root = BlobId. Cache all levels for O(log n)
+        //    proof generation (Plan 272 G3 fix — avoids O(n) tree rebuild per proof).
+        let merkle_levels = build_merkle_levels(&chunk_hashes);
+        let root = merkle_levels
+            .last()
+            .and_then(|lvl| lvl.first().copied())
+            .unwrap_or_else(|| blake3::hash(b"").into());
         let blob_id = BlobId(root);
 
         // 4. Insert blob metadata (idempotent — same root → same metadata).
@@ -165,6 +177,7 @@ impl ChunkedContentStore for InMemoryChunkedStore {
         let metadata = BlobMetadata {
             n_chunks: u32::try_from(chunk_hashes.len()).unwrap_or(u32::MAX),
             chunk_hashes: chunk_hashes.into_boxed_slice(),
+            merkle_levels,
             total_bytes,
         };
         let is_new_blob = {
@@ -213,7 +226,10 @@ impl ChunkedContentStore for InMemoryChunkedStore {
         if leaf_index >= metadata.chunk_hashes.len() {
             return None;
         }
-        let siblings = build_binary_merkle_proof(&metadata.chunk_hashes, leaf_index);
+        // O(log n) sibling lookup from cached levels — ZERO BLAKE3 calls.
+        // (Previous implementation called build_binary_merkle_proof which is
+        //  O(n) — rebuilds the entire tree per proof. G3 fix.)
+        let siblings = build_proof_from_levels(&metadata.merkle_levels, leaf_index);
         Some(MerkleProof {
             leaf_index,
             siblings,

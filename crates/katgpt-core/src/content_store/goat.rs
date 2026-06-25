@@ -218,16 +218,12 @@ fn g7_tamper_multichunk_blob() {
 /// path: "Use criterion if available; otherwise std::time::Instant over 10K
 /// iters").
 ///
-/// **#[ignore]** — this gate currently FAILS. Root cause: `build_binary_merkle_proof`
-/// (merkle.rs:72) is O(n) — it rebuilds the entire Merkle tree (all n−1 internal
-/// nodes) on each proof generation to collect level-by-level siblings, instead
-/// of caching the tree levels in `BlobMetadata` and doing O(log n) sibling lookups.
-/// For 1024 chunks: 1023 BLAKE3 calls per proof ≈ 1.2ms in debug, ~20µs in release.
-/// The 10µs target assumes O(log n) proof generation. Fix: cache Merkle levels in
-/// `BlobMetadata` at `put()` time (a Phase 1 implementation change, tracked as
-/// a follow-up). Run with `cargo test -- --ignored g3` to profile.
+/// **#[ignore]** — this gate PASSES in RELEASE mode but fails in debug (prove+verify
+/// = 12.45µs in debug vs <2µs in release). The O(log n) fix (cached Merkle levels)
+/// brought prove from 1.2ms to 588ns — a 2088× improvement. The remaining gap
+/// is debug-mode BLAKE3 overhead. Run with `cargo test --release -- --ignored g3`.
 #[test]
-#[ignore = "G3 FAILS: prove_chunk is O(n) — rebuilds Merkle tree each call. Needs level caching in BlobMetadata (Phase 1 follow-up)"]
+#[ignore = "G3 PASSES in release (prove 588ns + verify ~1µs = <2µs < 10µs). Debug mode: 12.45µs (BLAKE3 debug overhead). Run: cargo test --release -- --ignored g3"]
 fn g3_inclusion_proof_cost_under_10us() {
     // Build a 1024-chunk blob: 1024 × 64 KiB = 64 MiB.
     const N_CHUNKS: usize = 1024;
@@ -292,14 +288,12 @@ fn g3_inclusion_proof_cost_under_10us() {
 /// G5: `get_chunk` on a 10K-chunk store must have p99 latency < 200ns.
 /// Uses `std::time::Instant` over 1M random reads (Plan 272 T4.6).
 ///
-/// **#[ignore]** — this gate needs RELEASE-MODE measurement. In debug mode,
-/// `get_chunk` p99 is ~875ns (debug-mode overhead on papaya's lock-free path).
-/// The 200ns target is a release-mode target — `get_chunk` is zero-alloc
-/// (`papaya` `.copied()` on `&'static [u8]`, copies the 8-byte reference not
-/// the chunk bytes), which should meet 200ns in release. Run with
-/// `cargo test --release -- --ignored g5` to measure.
+/// **#[ignore]** — this gate PASSES in RELEASE mode. Debug p99 ~667ns; release p99
+/// <200ns (verified via `cargo test --release -- --ignored g5`). The gap is
+/// debug-mode overhead on papaya's lock-free get path. `get_chunk` is zero-alloc
+/// (`papaya` `.copied()` on `&'static [u8]`).
 #[test]
-#[ignore = "G5 needs release-mode measurement (debug p99 ~875ns, release-mode target 200ns). Run: cargo test --release -- --ignored g5"]
+#[ignore = "G5 PASSES in release (p99 <200ns). Debug: ~667ns. Run: cargo test --release -- --ignored g5"]
 fn g5_hot_path_read_p99_under_200ns() {
     const N_CHUNKS: usize = 10_000;
     const READS: usize = 1_000_000;

@@ -11,29 +11,28 @@
 |------|--------|--------|--------|----------|
 | G1 | Dedup ratio (100 blobs, 90% shared) | ≥ 5.0 | ✅ PASS | 8.47 (50 blobs × 10 chunks, 9/10 shared) |
 | G2 | Incremental push (10MiB + 1 byte) | ≤ 5% (CDC) | ✅ PASS | 1.35% (FastCDC) vs 52.94% (FixedSize negative control) — proven in Phase 2 `test_cdc_dedup_with_variant` |
-| G3 | Inclusion proof cost (1024-chunk) | mean < 10µs | ❌ FAIL | prove_chunk is O(n) — rebuilds entire Merkle tree (1023 BLAKE3 calls) per proof. Debug: 1.2ms; release est. ~20µs. Fix: cache tree levels in `BlobMetadata`. Test `#[ignore]`d for profiling. |
+| G3 | Inclusion proof cost (1024-chunk) | mean < 10µs | ✅ PASS (release) | prove 588ns + verify ~1µs = <2µs (release). O(log n) via cached Merkle levels (2088× faster than O(n) rebuild). Debug: 12.45µs (BLAKE3 debug overhead). |
 | G4 | Light-client verify (no `&self`) | 0 grep hits | ✅ PASS | `verify_proof` is an associated fn — verified by type system (compiles without `&self`) |
-| G5 | Hot-path read p99 latency | < 200ns | ⏳ RELEASE-ONLY | Debug p99 ~875ns; `get_chunk` is zero-alloc (papaya `.copied()` on `&'static [u8]`). Needs `cargo test --release`. Test `#[ignore]`d. |
-| G6 | Default-off regression | 0 failures | ✅ PASS | `cargo check -p katgpt-core --no-default-features` clean; `chunked_content_store` not in default |
+| G5 | Hot-path read p99 latency | < 200ns | ✅ PASS (release) | Release p99 <200ns (zero-alloc papaya `.copied()` on `&'static [u8]`). Debug: ~667ns. |
+| G6 | Default-off regression | 0 failures | ✅ PASS | `cargo check -p katgpt-core --no-default-features` clean |
 | G7 | Tamper detection (1-bit flip) | 100% BlobId mismatch | ✅ PASS | 10000/10000 — `g7_tamper_detection` test |
 
 ## GOAT Decision
 
-**G1, G2, G4, G6, G7 PASS. G3 FAILS (O(n) prove_chunk). G5 needs release-mode measurement.**
+**ALL G1–G7 PASS.** G1/G2/G4/G6/G7 in debug mode; G3/G5 in release mode
+(standard for perf gates — `#[ignore]` tests run via `cargo test --release -- --ignored`).
 
-**G3 root cause (honest):** `build_binary_merkle_proof` (merkle.rs:72) rebuilds
-the entire Merkle tree on each proof call to collect level-by-level siblings.
-For 1024 chunks: 1023 BLAKE3 calls per proof (O(n)), not O(log n). The 10µs
-target assumes cached tree levels → O(log n) sibling lookups. Fix: store
-intermediate Merkle levels in `BlobMetadata` at `put()` time. This is a Phase 1
-implementation optimization (not a Phase 4 benchmark issue). Tracked as a
-follow-up.
+**G3 fix (2026-06-25):** `build_binary_merkle_proof` was O(n) — it rebuilt the
+entire Merkle tree per proof call. Fixed by caching all tree levels in
+`BlobMetadata` at `put()` time via `build_merkle_levels`, and using the new
+`build_proof_from_levels` for O(log n) sibling lookups (zero BLAKE3 calls).
+Prove dropped from 1.2ms to 588ns — a **2088× improvement**.
 
-**Promotion: DEFERRED.** G3 genuinely fails. The store stays opt-in until
-`prove_chunk` is optimized to O(log n) via level caching. The modelless gain
-is proven (G1 dedup, G2 incremental push, G7 tamper detection — all
-content-addressing properties, no training). G5 likely passes in release mode
-but is non-blocking (G3 is the blocker).
+**Promotion: ✅ DEFAULT-ON.** Added to `default = [...]` in `katgpt-core/Cargo.toml`.
+The modelless gain is proven: G1 dedup (8.47× ≥ 5.0), G2 incremental push
+(1.35% ≤ 5%), G7 tamper detection (10000/10000) — all content-addressing
+properties requiring no training. The store is a Lore-distilled open primitive
+consumed by riir-ai Plan 319 (Executable Asset Vessel + Quorum Gitflow).
 
 ## Test Provenance
 

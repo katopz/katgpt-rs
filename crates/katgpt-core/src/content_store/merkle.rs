@@ -58,6 +58,80 @@ pub fn build_binary_merkle_root(hashes: &[[u8; 32]]) -> [u8; 32] {
     level[0]
 }
 
+/// Build all levels of a binary Merkle tree over `hashes`.
+///
+/// Returns `Vec<Vec<[u8; 32]>>` where `levels[0]` is the (padded) leaf level
+/// and `levels.last()` is the root. Used to cache the tree in `BlobMetadata`
+/// so that `prove_chunk` is O(log n) — sibling lookups from cached levels
+/// instead of O(n) tree rebuild per proof.
+///
+/// Total entries: `2 * n_padded - 1` across all levels. For 1024 chunks:
+/// ~2047 hashes × 32 bytes = ~64 KiB of cached tree per blob.
+///
+/// The root (`levels.last()[0]`) equals `build_binary_merkle_root(hashes)`.
+pub fn build_merkle_levels(hashes: &[[u8; 32]]) -> Vec<Vec<[u8; 32]>> {
+    if hashes.is_empty() {
+        return vec![vec![blake3::hash(b"").into()]];
+    }
+    if hashes.len() == 1 {
+        return vec![hashes.to_vec()];
+    }
+    let n_padded = hashes.len().next_power_of_two();
+    let mut levels: Vec<Vec<[u8; 32]>> = Vec::with_capacity(n_padded.trailing_zeros() as usize + 1);
+
+    // Level 0: padded leaves.
+    let mut current: Vec<[u8; 32]> = Vec::with_capacity(n_padded);
+    current.extend_from_slice(hashes);
+    if current.len() < n_padded {
+        current.resize(n_padded, [0u8; 32]);
+    }
+    levels.push(std::mem::take(&mut current));
+
+    // Build up level-by-level until 1 node remains.
+    let mut n = n_padded;
+    while n > 1 {
+        let half = n / 2;
+        let mut next = Vec::with_capacity(half);
+        let prev = levels.last().expect("levels non-empty");
+        for i in 0..half {
+            next.push(parent_hash(&prev[2 * i], &prev[2 * i + 1]));
+        }
+        levels.push(next);
+        n = half;
+    }
+    levels
+}
+
+/// Build a Merkle inclusion proof from **cached tree levels** — O(log n)
+/// sibling lookups, ZERO BLAKE3 calls.
+///
+/// `levels[0]` = padded leaf level, `levels[k]` = level k. For `leaf_index`,
+/// walks up the tree collecting the sibling at each level.
+///
+/// This is the O(log n) companion to `build_binary_merkle_proof` (which is
+/// O(n) — it rebuilds the tree). `InMemoryChunkedStore` caches levels in
+/// `BlobMetadata` at `put()` time and calls this function for O(log n) proofs.
+pub fn build_proof_from_levels(levels: &[Vec<[u8; 32]>], leaf_index: usize) -> Vec<[u8; 32]> {
+    if levels.is_empty() {
+        return Vec::new();
+    }
+    let tree_depth = levels.len() - 1; // levels[0] = leaves, last = root
+    let mut siblings: Vec<[u8; 32]> = Vec::with_capacity(tree_depth);
+    let mut idx = leaf_index;
+    for level in 0..tree_depth {
+        let sib = idx ^ 1;
+        // levels[level] has the nodes at this level; sibling is at sib.
+        if let Some(&hash) = levels[level].get(sib) {
+            siblings.push(hash);
+        } else {
+            // Should not happen if levels are correctly built (padded to pow2).
+            siblings.push([0u8; 32]);
+        }
+        idx /= 2;
+    }
+    siblings
+}
+
 /// Build a Merkle inclusion proof for `leaf_index` against `hashes`.
 ///
 /// Returns the sibling hashes from leaf level up to root-child level
