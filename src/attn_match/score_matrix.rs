@@ -151,6 +151,7 @@ pub fn compute_softmax_attention(
 /// `mass_out.len() != n`, `y_out.len() != n*d`, or if `attn_out_opt` is
 /// `Some` with a slice whose length `!= n*t_len`.
 #[inline]
+#[allow(clippy::too_many_arguments)] // hot-path kernel: raw-slice args avoid struct indirection
 pub fn compute_softmax_attention_and_output(
     scores: &[f32], // (n, t_len) row-major, already scaled by inv_sqrt_d
     values: &[f32], // (t_len, d) row-major
