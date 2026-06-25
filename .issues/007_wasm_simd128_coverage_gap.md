@@ -1,6 +1,6 @@
 # Issue 007 — WASM SIMD128 Coverage Gap (katgpt-core/simd/)
 
-[← Index](../README.md) · **Type:** optimization · **Priority:** medium · **Status:** in-progress (Phase 1: 5/6 files ported)
+[← Index](../README.md) · **Type:** optimization · **Priority:** medium · **Status:** Phase 1 COMPLETE (commit `cbd4a8d6`, 2026-06-24; GOAT PASS — 288/288 correctness, 4.52× scalar on WASM SIMD128). All 5 hot-path files ported. Only `research.rs` remains — **deferred** (research-only kernels, not on the inference hot path).
 
 ## Summary
 
@@ -153,11 +153,11 @@ wasmtime target/wasm32-wasip2/release/examples/simd_wasm32_goat.wasm
 
 ## TL;DR
 
-7 of 8 SIMD kernel files in `katgpt-core/src/simd/` have zero `wasm32`
-coverage — only `ternary.rs` ships a real SIMD128 kernel. Every other op
-(dot, sigmoid, elementwise, argmax, sparse, research) falls to scalar on
-browser / CF Worker even with `+simd128`. This caps inference throughput
-on the edge targets that Plan 316 just unblocked. File per-kernel
-GOAT-gated ports using `core::simd` with the `target_feature = "simd128"`
-gate, prioritized by hot-path frequency: dot → activations → elementwise
-→ argmax → sparse → research.
+**Phase 1 COMPLETE** (commit `cbd4a8d6`, 2026-06-24). All 5 hot-path
+SIMD files in `katgpt-core/src/simd/` now ship real `wasm32` SIMD128
+kernels: `dot`, `activations`, `elementwise`, `argmax`, `sparse`
+(on top of the pre-existing `ternary` spine). GOAT gate PASSED — 288/288
+correctness, 4.52× scalar on the dot n=1024 kernel via wasmtime.
+Only `research.rs` remains at zero `wasm32` coverage, **deferred** by
+design (research-only kernels, not on the inference hot path). Re-open
+if a research plan needs those kernels on browser / CF Worker.
