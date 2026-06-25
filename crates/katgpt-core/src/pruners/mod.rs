@@ -7,3 +7,9 @@ pub mod review_metrics;
 
 #[cfg(feature = "indicator_probe_bank")]
 pub mod indicator_probe_bank;
+
+#[cfg(feature = "indicator_similarity")]
+pub mod indicator_similarity;
+
+#[cfg(feature = "indicator_cascade")]
+pub mod indicator_cascade;
