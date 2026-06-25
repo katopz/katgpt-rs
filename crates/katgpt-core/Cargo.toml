@@ -152,6 +152,7 @@ depth_invariance = []  # Depth-Invariance Diagnostic + MagnitudeRegularizedResid
 karc_forecaster = []  # KARC — Kolmogorov-Arnold Reservoir Computing delay-basis-ridge forecaster (Plan 308, Research 288, arXiv:2606.19984 Huang/Kurths/Tang). Modelless, inference-time trajectory forecaster: delay-embedding × sealed KarcBasis (Fourier/Chebyshev/BSpline) × closed-form ridge readout. Reuses the PEIRA ridge pattern via the new `linalg::ridge_solve` (f32) without touching PEIRA's f64 path. GOAT-gated G1 (double-scroll NRMSE ≤ 1e-3, ≥ 8 LT), G2 (≤ 500 ns/call forecast), G3 (zero-alloc forecast), G4 (bit-reproducible Wout). Opt-in — Phase 1 only; no root-feature alias yet.
 cross_resolution_transport = ["funcattn"]  # Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310, Research 291, arXiv:2605.31559). Generalizes FUNCATTN to `d_src ≠ d_dst`, enabling train-on-small-deploy-on-large latent transfer. Implies `funcattn` for solver/C-operator reuse. DEFAULT-ON (Plan 310 Phase 4, 2026-06-23): G1 mean cos 0.8944≥0.85, G2-A rank preservation mean cos 0.9300≥0.85 (Super-GOAT headline claim holds), G3 elbow at k=intrinsic_k=8, G4 0 allocs/1000 transports. Promoted per AGENTS.md rule 'GOAT pass → promote to default'.
 latent_field_steering = []  # Latent Field Steering — top-down direction-vector injection into mutable latent state (Plan 309, Research 290, CAA + functional emotions). Zero-alloc SIMD SAXPY + sigmoid-falloff localized support (radius/zone). DEFAULT-ON (Plan 309 Phase 4, 2026-06-23): G1-G5 all PASS — G1 fear-axis 1.50×≥1.30, G2 mean cos 0.9958≥0.95 min cos 0.9667≥0.90, G3 leakage 4.5e-5<0.01, G4 19.2µs<1ms, G5 0 allocs. Caveat: 8% argmax flip at α=0.3 — keep α≤0.3 for hot-path.
+phase_rotation_coupling = []  # Phase-Modulated Subspace Rotation Gate — norm-preserving latent coupling `cos α ⊙ a + sin α ⊙ b` with phase from a sigmoid projection onto a frozen direction vector (Plan 322, Research 305, arxiv 2605.12700 UFO). The genuinely-new operation class: every other latent op in the crate is additive / convex-combo / dot-projection / wedge-detection / linear-transport / spatial-sum — none has the `sin²α+cos²α=1` Pythagorean norm-preservation invariant. §3.5 modelless Path 2 unblock: trained γ_θ replaced with `α = sigmoid(⟨state, direction⟩ · λ) · π/2` (closed-form). Opt-in until G1–G4 GOAT gate passes (G1 norm-preservation <1e-4 is the kill switch; G2 monotone interpolation; G3 latency <50ns D=8 scalar / <600ns D=64 per-channel; G4 zero-alloc).
 # Plan 335 Phase 1 — InterestCohain (fame/notability cochain). Default-off
 # until Phase 6 GOAT gate passes; will be promoted to default in Phase 7.
 # The type ships unconditionally (no cfg gate) so downstream (riir-neuron-db
@@ -461,3 +462,13 @@ required-features = ["bisimulation_operator_inference"]
 [[example]]
 name = "bisimulation_demo"
 required-features = ["bisimulation_operator_inference"]
+
+# Plan 320 Phase 4 — Indicator Probe Bank GOAT gate: G1 per-indicator AU-ROC
+# (≥0.85), G2 OR-fusion transcript-TPR/FPR, G3 cascade FPR reduction (≥5× at
+# ≤10pp TPR cost), G4 hot-path latency (<200ns) + alloc-free, G5 similarity
+# block recovery (ARI ≥0.9), G7 wire-format integrity (tamper-evident).
+# G6 (feature-off zero-overhead) is verified via `cargo check --no-default-features`.
+[[bench]]
+name = "bench_320_indicator_probe_bank_goat"
+harness = false
+required-features = ["indicator_probe_bank", "indicator_similarity", "indicator_cascade"]

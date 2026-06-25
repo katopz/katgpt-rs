@@ -168,7 +168,7 @@ orthonormal-basis stabilization if a benchmark shows it's needed.
 - [x] T7 — Run the GOAT gate; recorded in `.benchmarks/322_fourier_continuation_goat.md`. **All 4 gates PASS.**
 - [x] T8 — G1+G2+G3+G4 all PASS → promoted `fourier_continuation` to `default` in both `Cargo.toml`s.
 - N/A T9 — No gate failed; no issue opened.
-- [ ] T10 — Commit on `develop` with `feat:` prefix.
+- [x] T10 — Commit on `develop` with `feat:` prefix. *(Committed as `e95853a3 feat: Fourier Continuation primitive (Plan 323, DEFAULT-ON)` on 2026-06-25.)*
 
 ## GOAT gate promotion rule
 

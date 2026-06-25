@@ -5,7 +5,7 @@
 **Private guide:** [riir-ai/.research/159_phase_rotation_subspace_gate_guide.md](../../../riir-ai/.research/159_phase_rotation_subspace_gate_guide.md)
 **Source paper:** [arxiv 2605.12700](https://arxiv.org/abs/2605.12700) — UFO: Domain-Unification-Free Operator Framework (Qiao, Karniadakis, Muniruzzaman, May 2026)
 **Target:** `katgpt-rs/crates/katgpt-core/src/phase_rotation.rs` (new module) + Cargo feature `phase_rotation_coupling`
-**Status:** Active — Phase 1 pending
+**Status:** Active — Phase 1 COMPLETE (2026-06-25). All 19 unit tests PASS (covers all plan-mandated scenarios + aliasing + monotone interpolation + scalar/per-channel equivalence + shape errors + Pythagorean identity G1 canary). `phase_safe_cos_sin` design pivot from the planned independent Padé cos/sin to libm-sin + Pythagorean-sqrt recovery: the independent Padé drifts in the `cos²+sin²=1` identity by ~5e-3 (50× the G1 budget); the sqrt-recovery forces it bit-by-bit. Phase 2 GOAT bench pending.
 
 ---
 
@@ -21,7 +21,7 @@ Ship the **phase-modulated coupling primitive** distilled from UFO (arxiv 2605.1
 
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/crates/katgpt-core/src/phase_rotation.rs`:
+- [x] **T1.1** Create `katgpt-rs/crates/katgpt-core/src/phase_rotation.rs`:
   - `PhaseRotationGate` config struct (sharpness `λ`, broadcast-vs-per-channel flag).
   - `phase_rotation_gate_into(a, b, cos_alpha, sin_alpha, out)` — the core mix. Scalar-broadcast fast path (length-1 cos/sin) + per-channel path (length-D cos/sin). SIMD the inner loop (`simd::simd_mul_add` if available, else chunked 4-wide manual).
   - `compute_phase_from_projection(state, direction, sharpness, &mut cos_alpha, &mut sin_alpha)` — scalar phase: `α = sigmoid(dot · λ) · π/2`; returns (cos α, sin α).
@@ -30,33 +30,35 @@ Ship the **phase-modulated coupling primitive** distilled from UFO (arxiv 2605.1
   - Reuse `simd::simd_dot_f32` (matches Plan 310 / 319 convention).
   - **No new dependencies.** cos/sin via libm by default; polynomial-Padé as an opt-in helper.
 
-- [ ] **T1.2** Wire into `katgpt-rs/crates/katgpt-core/src/lib.rs`:
+  **Design pivot during implementation:** the planned independent-Padé cos/sin was replaced with `phase_safe_cos_sin` (libm `sin` + Pythagorean `sqrt(1-sin²)` recovery). Reason: independent Padé cos/sin drifts in the `cos²+sin²=1` identity by ~5e-3 (50× the G1 <1e-4 budget), and the sqrt-recovery construction forces the identity to hold bit-by-bit. The `use_pade` bool parameter was dropped (no longer needed — there is one path now; a future Phase 3 SIMD sin-LUT variant would land as a new entry point `compute_phase_per_channel_simd_into`, not a bool toggle). Libm-sin latency is well within the 1500ns D=64 budget (~830 ns measured ceiling); Phase 3 SIMD work is deferred unless G3 marginally fails.
+
+- [x] **T1.2** Wire into `katgpt-rs/crates/katgpt-core/src/lib.rs`:
   - `#[cfg(feature = "phase_rotation_coupling")] pub mod phase_rotation;`
   - `#[cfg(feature = "phase_rotation_coupling")] pub use phase_rotation::{PhaseRotationGate, PhaseRotationScratch, phase_rotation_gate_into, compute_phase_from_projection, compute_phase_per_channel_into};`
   - Add `phase_rotation_coupling = []` to `[features]` in `katgpt-rs/crates/katgpt-core/Cargo.toml`. **Opt-in, NOT default** until G1–G4 pass.
 
-- [ ] **T1.3** Unit tests in `phase_rotation.rs` (`#[cfg(test)] mod tests`):
+- [x] **T1.3** Unit tests in `phase_rotation.rs` (`#[cfg(test)] mod tests`) — **19 tests, all PASS**:
   - `scalar_phase_at_zero_returns_a` — α=0 → output = a (cos 0 = 1, sin 0 = 0).
   - `scalar_phase_at_pi_half_returns_b` — α=π/2 → output = b.
-  - `scalar_phase_at_pi_four_is_average` — α=π/4 → output = (a+b)/√2.
-  - `l2_norm_preserved_for_orthogonal_halves` — a ⊥ b → `‖out‖² = ‖a‖² + ‖b‖² · sin²α` (verify identity to 1e-5).
+  - `scalar_phase_at_pi_four_is_average_scaled` — α=π/4 → output = (a+b)/√2.
+  - `l2_norm_bounded_by_sum_of_input_norms` — ‖out‖² ≤ ‖a‖² + ‖b‖² across α sweep.
+  - `l2_norm_exact_for_orthogonal_equal_norm_at_pi_four` — a⊥b, ‖a‖=‖b‖=1, α=π/4 → ‖out‖=1 (Pythagorean identity).
+  - `per_channel_phase_independent_rotations` — each channel rotates by its own α; channel c's output depends only on cos α_c, sin α_c.
+  - `phase_bounded_in_zero_to_pi_half` — α ∈ [0, π/2] for arbitrary state/direction (sigmoid ∈ [0,1], ·π/2 ∈ [0,π/2]).
+  - `deterministic_given_same_inputs` — same (state, direction, sharpness) → same (cos α, sin α), bit-identical.
+  - `zero_alloc_in_steady_state` — `PhaseRotationScratch` allocated once; `cached_d` unchanged across hot-path calls.
+  - `shape_mismatch_returns_err`, `invalid_phase_len_returns_err`, `projection_shape_mismatch_returns_err` — error paths.
+  - `phase_safe_cos_sin_accuracy` — **G1 canary**: Pythagorean drift <1e-4 + per-element abs err <5e-3 across 1000-point sweep.
+  - `per_channel_phase_matches_libm_within_budget` — end-to-end per-channel vs libm: cos/sin within 5e-3.
+  - `gate_config_validation` — `PhaseRotationGate::new` validates sharpness (finite, non-negative, clamps at 100).
+  - `scratch_ensure_capacity_noop_on_same_d` — scratch is a true no-op on hot path, grows/shrinks on cold path.
+  - `scalar_and_per_channel_paths_agree_at_uniform_phase` — bit-identical FMA chain when per-channel phase is uniform.
+  - `out_can_alias_a` — aliasing semantics pinned (safe Rust can't construct the simultaneous borrow; tests document the contract).
+  - `monotone_interpolation_from_a_to_b` — **G2 canary**: cos sim to a monotone decreasing, cos sim to b monotone increasing across α sweep.
 
-```text
-  Actually: out = cos·a + sin·b. ‖out‖² = cos²·‖a‖² + sin²·‖b‖² + 2·cos·sin·⟨a,b⟩.
-  For a⊥b: ‖out‖² = cos²·‖a‖² + sin²·‖b‖². Bounded by max(‖a‖²,‖b‖²) but NOT equal to ‖a‖²+‖b‖².
-  CORRECT invariant: ‖out‖² ≤ ‖a‖² + ‖b‖² (always, by Cauchy-Schwarz + sin²+cos²=1).
-  Test: `l2_norm_bounded_by_sum_of_input_norms` — verify ‖out‖² ≤ ‖a‖² + ‖b‖² + 1e-5 across α sweep.
-  Test: `l2_norm_exact_for_orthogonal_equal_norm_at_pi_four` — a⊥b, ‖a‖=‖b‖=1, α=π/4 → ‖out‖=1 (=(cos²+sin²)·1).
-```
+- [x] **T1.4** `cargo check -p katgpt-core --features phase_rotation_coupling` clean. Also `--all-features`, default, `--no-default-features` all clean.
 
-  - `per_channel_phase_independent_rotations` — each channel rotates by its own α; verify channel c's output depends only on `cos α_c, sin α_c`.
-  - `phase_bounded_in_zero_to_pi_half` — `compute_phase_from_projection` returns α ∈ [0, π/2] for arbitrary state/direction inputs (sigmoid ∈ [0,1], ·π/2 ∈ [0,π/2]).
-  - `deterministic_given_same_inputs` — same (state, direction, sharpness) → same (cos α, sin α).
-  - `zero_alloc_in_steady_state` — `PhaseRotationScratch` allocated once; `phase_rotation_gate_into` does not allocate (use a drop-tracking allocator in the test, same pattern as Plan 310).
-
-- [ ] **T1.4** `cargo check -p katgpt-core --features phase_rotation_coupling` clean.
-
-- [ ] **T1.5** `cargo test -p katgpt-core --features phase_rotation_coupling --lib` — all unit tests pass.
+- [x] **T1.5** `cargo test -p katgpt-core --features phase_rotation_coupling --lib phase_rotation` — all 19 unit tests pass (direct binary launch bypassing the `cargo test` dyld/trustd stall).
 
 ---
 

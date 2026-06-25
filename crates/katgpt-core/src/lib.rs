@@ -456,6 +456,23 @@ pub use latent_steering::{
     apply_latent_steering, apply_latent_steering_weighted, kernel_weight,
 };
 
+// Phase-Modulated Subspace Rotation Gate — norm-preserving latent coupling
+// `cos α ⊙ a + sin α ⊙ b` with phase from a sigmoid projection onto a frozen
+// direction vector (Plan 322, Research 305, arxiv 2605.12700 UFO). The
+// genuinely-new operation class: every other latent op in the crate is
+// additive / convex-combo / dot-projection / wedge-detection / linear-transport
+// / spatial-sum — none has the `sin²α+cos²α=1` Pythagorean norm-preservation
+// invariant. §3.5 modelless Path 2 unblock: the trained `γ_θ` is replaced with
+// `α = sigmoid(⟨state, direction⟩ · λ) · π/2` (closed-form). Opt-in until the
+// G1–G4 GOAT gate passes (G1 norm-preservation <1e-4 is the kill switch).
+#[cfg(feature = "phase_rotation_coupling")]
+pub mod phase_rotation;
+#[cfg(feature = "phase_rotation_coupling")]
+pub use phase_rotation::{
+    PhaseRotationError, PhaseRotationGate, PhaseRotationScratch, compute_phase_from_projection,
+    compute_phase_per_channel_into, phase_rotation_gate_into,
+};
+
 // ChunkedContentStore — Lore-distilled chunked content-addressed Merkle store (Plan 272, Research 262).
 // Open primitive: chunks → BLAKE3 → dedup via papaya → binary Merkle root. No game/chain IP.
 // Consumed by riir-ai Plan 319 (Executable Asset Vessel + Quorum Gitflow).
