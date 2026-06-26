@@ -79,9 +79,9 @@ promotion to `default`.
 
 ### Tasks
 
-- [ ] **T0.1** Add Cargo feature `analytic_lattice = []` to `katgpt-rs/crates/katgpt-core/Cargo.toml`. NOT default-on. (Name changed from `analytic_lattice_encoder` — the encoder is dropped per revision note; this flag now covers only the math primitives + traits that stay in katgpt-core.)
-- [ ] **T0.2** Create `analytic_lattice/mod.rs` with module doc + sub-module declarations. **Note:** the originally-planned `encoder.rs` submodule is DROPPED (redundant with `fourier/encoder.rs`). New submodule set: `asoc.rs`, `chain.rs`, `batch_chain.rs`, `decoder.rs`, `audit.rs`.
-- [ ] **T0.3** Define the typed-slot lattice vector and transport operator:
+- [x] **T0.1** Add Cargo feature `analytic_lattice = []` to `katgpt-rs/crates/katgpt-core/Cargo.toml`. NOT default-on. (Name changed from `analytic_lattice_encoder` — the encoder is dropped per revision note; this flag now covers only the math primitives + traits that stay in katgpt-core.)
+- [x] **T0.2** Create `analytic_lattice/mod.rs` with module doc + sub-module declarations. **Note:** the originally-planned `encoder.rs` submodule is DROPPED (redundant with `fourier/encoder.rs`). New submodule set: `asoc.rs`, `chain.rs`, `batch_chain.rs`, `decoder.rs`, `audit.rs`.
+- [x] **T0.3** Define the typed-slot lattice vector and transport operator:
 
 ```rust
 /// Typed per-slot lattice vector — 8 lanes matching Plan 335 eggshell.
@@ -98,7 +98,7 @@ pub struct TransportOperator {
 }
 ```
 
-- [ ] **T0.4** Wire into `katgpt-core/src/lib.rs` behind the feature flag.
+- [x] **T0.4** Wire into `katgpt-core/src/lib.rs` behind the feature flag.
 
 ---
 
@@ -124,7 +124,7 @@ pub struct TransportOperator {
 
 ### Tasks
 
-- [ ] **T1a.1** Define the plasma-tier draft trait (generic, no game IP, no
+- [x] **T1a.1** Define the plasma-tier draft trait (generic, no game IP, no
       `GpuFuture` import):
 
 ```rust
@@ -141,7 +141,7 @@ pub trait PlasmaDraft {
 }
 ```
 
-- [ ] **T1a.2** Define the hot-tier rederive trait (generic — note the
+- [x] **T1a.2** Define the hot-tier rederive trait (generic — note the
       associated `type Fut`, no `GpuFuture` bound at the trait level):
 
 ```rust
@@ -158,7 +158,7 @@ pub trait RederiveOp {
 }
 ```
 
-- [ ] **T1a.3** Define `ComposerCtx` (the shared per-tick context, generic):
+- [x] **T1a.3** Define `ComposerCtx` (the shared per-tick context, generic):
 
 ```rust
 /// Per-tick composer context — shared read-only state used by both the
@@ -178,7 +178,7 @@ pub struct ComposerCtx {
 }
 ```
 
-- [ ] **T1a.4** Document the `ComposerCtx` shape contract (see T1a.3 doc
+- [x] **T1a.4** Document the `ComposerCtx` shape contract (see T1a.3 doc
       comment): ctx carries ONLY `(tick, zone_hash, ...)` for cache keying
       and routing. Each `RederiveOp` impl owns its entity-state source
       (e.g. `BossRederiveOp` holds `Arc<BossSnapshots>` internally and only
@@ -433,7 +433,7 @@ If `PlasmaDraft` were also async, the non-blocking contract would collapse
 
 ### Tasks
 
-- [ ] **T2.1** Implement the chain composer (consumed by Phase 1 ASOC):
+- [x] **T2.1** Implement the chain composer (consumed by Phase 1 ASOC):
 
 ```rust
 /// Compose a chain of k×k transport operators: out = C[n-1] × ... × C[1] × C[0].
@@ -453,8 +453,8 @@ pub fn compose_chain_into(
 ) -> Result<(), ChainError> { /* ... */ }
 ```
 
-- [ ] **T2.2** G3 test: associativity `(A×B)×C ≈ A×(B×C)` within Frobenius ≤ 1e-5.
-- [ ] **T2.3** G5 test: `TrackingAllocator` audit shows 0 allocs after warmup.
+- [x] **T2.2** G3 test: associativity `(A×B)×C ≈ A×(B×C)` within Frobenius ≤ 1e-5.
+- [x] **T2.3** G5 test: `TrackingAllocator` audit shows 0 allocs after warmup.
 
 ---
 
@@ -472,7 +472,7 @@ pub fn compose_chain_into(
 
 ### Tasks
 
-- [ ] **T2.5.1** Implement the batched composer:
+- [x] **T2.5.1** Implement the batched composer:
 
 ```rust
 /// Zone-batched chain compose. Factors the shared prefix `ops[..prefix_len]`
@@ -505,18 +505,21 @@ pub fn batch_compose_chain_into(
 ) { /* ... */ }
 ```
 
-- [ ] **T2.5.2** G2 test (ranking preservation vs naive): for 100 random
+- [x] **T2.5.2** G2 test (ranking preservation vs naive): for 100 random
       `(prefix, suffix_i)` sets, the batched output matches the per-player
       `compose_chain` output within Frobenius ≤ 1e-6.
-
 - [ ] **T2.5.3** G4 benchmark: `batch_compose_chain` at N=64 players, k=8 must
       be ≥ 4× faster than 64× `compose_chain` (theoretical 8×; allow
       overhead). Write to `.benchmarks/330_batch_compose_chain.md`.
-
+      **NOTE (katgpt-core half):** the G4 latency benchmark is deferred to
+      riir-engine (Phase 1b) — it measures the ASOC cascade end-to-end. The
+      katgpt-core half ships the correctness gate (G2) only.
 - [ ] **T2.5.4** Integration with ASOC: when the `ComposerCtx` carries a zone
       with N>1 players, `ComposerTick` switches from per-player
       `compose_chain` to per-zone `batch_compose_chain` and emits N actions
       per tick instead of 1. Document the API extension on `ComposerTick`.
+      **NOTE (katgpt-core half):** deferred to Phase 1b — `ComposerTick`
+      ships in riir-engine.
 
 ---
 
@@ -526,7 +529,7 @@ pub fn batch_compose_chain_into(
 
 ### Tasks
 
-- [ ] **T3.1** Implement the decoder as a zero-alloc SIMD dot-product + sigmoid
+- [x] **T3.1** Implement the decoder as a zero-alloc SIMD dot-product + sigmoid
       (consumed by Phase 1 ASOC after the chain compose):
 
 ```rust
@@ -546,13 +549,12 @@ pub fn direction_vector_decode<const N: usize>(
 }
 ```
 
-- [ ] **T3.2** Add `direction_vector_decode_into` variant for batch decode
+- [x] **T3.2** Add `direction_vector_decode_into` variant for batch decode
       (multiple directions, single state) — used when ASOC decodes one
       composite operator against multiple action-type direction vectors.
 
-- [ ] **T3.3** G2 test: 100 random states × fixed direction, verify ranking
+- [x] **T3.3** G2 test: 100 random states × fixed direction, verify ranking
       matches brute-force reference within cos ≥ 0.95.
-
 - [ ] **T3.4** Audit: riir-games `scalar_projection.rs` SHOULD be refactored
       to call this (out of scope here — note as cleanup follow-up in
       `.issues/`).
@@ -565,12 +567,12 @@ pub fn direction_vector_decode<const N: usize>(
 
 ### Tasks
 
-- [ ] **T4.1** Implement `spectral_audit(operator, fourier_modes) -> AuditReport` per arxiv 2606.02427:
+- [x] **T4.1** Implement `spectral_audit(operator, fourier_modes) -> AuditReport` per arxiv 2606.02427:
   - Compute tangent operator (numerical Jacobian at identity).
   - Project onto Fourier modes (DCT-II for real symmetric, 8 modes default).
   - Return per-mode gain + spurious-coupling matrix.
-- [ ] **T4.2** G6 test: known-good composite operator returns max spurious coupling ≤ 5%; known-bad (random operator) returns > 5%.
-- [ ] **T4.3** Document: this is the GOAT-gate verifier for chain composition — fails loudly if the chain produces nonsense. Especially important for ASOC because the stale-draft fallback path skips the verifier by design (the bot accepted a possibly-wrong action to stay non-blocking); the spectral audit runs against the *completed* join path's composite operator in the warm-tier reflection cycle (`ReestimationScheduler`), not in the ASOC hot path.
+- [x] **T4.2** G6 test: known-good composite operator returns max spurious coupling ≤ 5%; known-bad (random operator) returns > 5%.
+- [x] **T4.3** Document: this is the GOAT-gate verifier for chain composition — fails loudly if the chain produces nonsense. Especially important for ASOC because the stale-draft fallback path skips the verifier by design (the bot accepted a possibly-wrong action to stay non-blocking); the spectral audit runs against the *completed* join path's composite operator in the warm-tier reflection cycle (`ReestimationScheduler`), not in the ASOC hot path.
 
 ---
 
@@ -578,12 +580,15 @@ pub fn direction_vector_decode<const N: usize>(
 
 ### Tasks
 
-- [ ] **T5.1** Split test locations per the Phase 1a/1b layering:
-  - **katgpt-core** (`katgpt-rs/crates/katgpt-core/tests/analytic_lattice_goat.rs`): G1 determinism (compose_chain), G2 ranking (decoder + batch_compose_chain vs naive), G3 associativity, G5 zero-alloc, G6 spectral audit. Pure math, no `GpuFuture`.
-  - **riir-engine** (`riir-ai/crates/riir-engine/tests/analytic_lattice_runtime_goat.rs`): G1 ASOC `ComposerTick` Ready path, G1b non-blocking contract (returns stale draft on `Poll::Pending`), G4 latency (plasma-draft path < 100ns, hot-join path < 1µs, batched N=64 ≥ 4× vs naive).
-- [ ] **T5.2** Write benchmark to `katgpt-rs/.benchmarks/330_analytic_lattice_goat.md` (math primitives) + `riir-ai/.benchmarks/330_analytic_lattice_runtime_goat.md` (ASOC cascade).
+- [x] **T5.1** Split test locations per the Phase 1a/1b layering:
+  - **katgpt-core** (`katgpt-rs/crates/katgpt-core/tests/analytic_lattice_goat.rs`): G1 determinism (compose_chain), G2 ranking (decoder + batch_compose_chain vs naive), G3 associativity, G5 zero-alloc, G6 spectral audit. Pure math, no `GpuFuture`. **DONE (katgpt-core half).**
+  - **riir-engine** (`riir-ai/crates/riir-engine/tests/analytic_lattice_runtime_goat.rs`): G1 ASOC `ComposerTick` Ready path, G1b non-blocking contract (returns stale draft on `Poll::Pending`), G4 latency (plasma-draft path < 100ns, hot-join path < 1µs, batched N=64 ≥ 4× vs naive). **DEFERRED to Phase 1b.**
+- [x] **T5.2** Write benchmark to `katgpt-rs/.benchmarks/330_analytic_lattice_goat.md` (math primitives) + `riir-ai/.benchmarks/330_analytic_lattice_runtime_goat.md` (ASOC cascade).
+  **katgpt-core half DONE.** riir-engine half deferred to Phase 1b.
 - [ ] **T5.3** If all gates pass: promote `analytic_lattice` to `default` in katgpt-core Cargo.toml. Separately promote `analytic_lattice_runtime` to default in riir-engine ONLY if `riir-gpu-async` is itself default-on (it is not today — keep opt-in).
+  **NOT DONE (katgpt-core half):** feature stays opt-in pending user review of the GOAT results. See `.benchmarks/330_analytic_lattice_goat.md`. The math gates (G1, G2, G3, G5, G6) all pass, but the headline primitive (`ComposerTick: GpuFuture`) hasn't shipped yet (Phase 1b) — the katgpt-core half is only useful when composed with the runtime half. Decision left to user.
 - [ ] **T5.4** If any gate fails: keep opt-in, document the failure in `.issues/`, decide modelless unblock path per workflow §3.5 (check freeze/thaw, raw/lora, latent correction before any riir-train deferral).
+  **N/A (katgpt-core half):** all gates passed.
 
 ---
 

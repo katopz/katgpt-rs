@@ -419,6 +419,23 @@ name = "bench_331_babel_codec_goat"
 required-features = ["babel_codec"]
 harness = false
 
+# Plan 330 — Analytic Lattice GOAT gate (katgpt-core half). Pure-math gates:
+# G1 determinism (compose_chain bit-identical), G2 ranking (decoder cos >= 0.95 +
+# batch vs naive Frobenius <= 1e-6), G3 associativity (Frobenius <= 1e-5),
+# G5 zero-alloc (TrackingAllocator), G6 spectral audit (good <= 5%, bad > 5%).
+# The runtime gates (G4 latency, G1b/G1c/G1d non-blocking contract) are DEFERRED
+# to riir-engine (Phase 1b — they need GpuFuture).
+[[test]]
+name = "analytic_lattice_goat"
+required-features = ["analytic_lattice"]
+
+# Plan 330 — Analytic Lattice G5 zero-alloc gate. Separate test binary
+# (matches the karc_alloc_check pattern) so the CountingAllocator doesn't
+# pick up allocations from the math GOAT tests running in parallel.
+[[test]]
+name = "analytic_lattice_alloc_check"
+required-features = ["analytic_lattice"]
+
 # Plan 321 Phase 2 — CommittedFieldBlend G4 zero-alloc GOAT gate. CountingAllocator
 # audit of apply_blended (1000 iters) + commit (100 re-commits). Gated on
 # committed_field_blend so default features compile cleanly.
