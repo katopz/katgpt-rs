@@ -19,7 +19,9 @@
 //! wasmtime target/wasm32-wasip2/release/examples/simd_wasm32_goat.wasm
 //! ```
 //!
-//! GOAT gate (per `.issues/007_wasm_simd128_coverage_gap.md`):
+//! GOAT gate (Issue 007 — resolved & removed from `.issues/`; this harness IS the
+//! G1 correctness + G2 perf evidence: 288/288 bit-exact vs independent scalar ref,
+//! 4.52× scalar on the dot n=1024 kernel via wasmtime):
 //! - **G1 correctness**: SIMD output bit-identical (or within documented FMA
 //!   tolerance) to scalar reference on representative inputs.
 //! - **G2 perf**: SIMD ≥ 1.0× scalar on this microbench (the strict ≥2× target
