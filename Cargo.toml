@@ -1729,6 +1729,17 @@ required-features = ["module_energy_route"]
 name = "sigmoid_graded_reject"
 required-features = ["sigmoid_graded_reject"]
 
+# Plan 310 T3.2 — Sigmoid-Graded Reject Confidence GOAT perf micro-bench.
+# G1 backward-compat (default impl reproduces is_valid); G2 latency (default
+# sub-ns, graded sigmoid <5ns); G3 batch ≥200M/s; G4 soft-reject pipeline
+# overhead <8ns; G5 determinism. std::time::Instant + harness=false (matches
+# salience_tri_gate_bench / procrustes_bench convention; criterion not a dep).
+[[bench]]
+name = "bench_310_sigmoid_graded_reject_goat"
+path = "benches/bench_310_sigmoid_graded_reject_goat.rs"
+required-features = ["sigmoid_graded_reject"]
+harness = false
+
 # Plan 307 Phase 4 — Claim Rubric GOAT gate (correctness round-trip on R287 §4).
 [[test]]
 name = "bench_307_claim_rubric_goat"
