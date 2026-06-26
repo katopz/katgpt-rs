@@ -1751,6 +1751,17 @@ path = "benches/bench_310_t31_false_reject_rate_goat.rs"
 required-features = ["sigmoid_graded_reject"]
 harness = false
 
+# Plan 310 T3.3 — Active-State Trace decision-quality GOAT bench (T2 quality gate).
+# G1 regret (trace < baseline); G2 accuracy (trace >= baseline); G3 size overhead
+# < 10% (T3.4 integrated); G4 backward-compat (empty trace == baseline); G5 determinism.
+# Controlled corpus with known ground-truth best-lever labels; FeedbackBandit does
+# NOT read TrialLog (pure in-memory UCB1), so the two-TrialLog problem is not a
+# blocker for T3.3 (see bench header). No feature flag required — self-contained.
+[[bench]]
+name = "bench_310_t33_active_state_trace_goat"
+path = "benches/bench_310_t33_active_state_trace_goat.rs"
+harness = false
+
 # Plan 307 Phase 4 — Claim Rubric GOAT gate (correctness round-trip on R287 §4).
 [[test]]
 name = "bench_307_claim_rubric_goat"
