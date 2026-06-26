@@ -1034,7 +1034,8 @@ impl<P: ScreeningPruner> BanditPruner<P> {
         let max_score = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         let mut weights = self.soft_route_weights.lock().unwrap();
         weights.clear();
-        weights.extend(scores.iter().map(|&s| ((s - max_score) / tau).exp()));
+        let inv_tau = 1.0 / tau;
+        weights.extend(scores.iter().map(|&s| ((s - max_score) * inv_tau).exp()));
         let weight_sum: f32 = weights.iter().sum();
 
         if weight_sum <= 0.0 {

@@ -297,7 +297,10 @@ pub fn build_hop_dd_tree(marginals: &[HopMarginal], config: &HopTreeConfig) -> V
 
         let next_depth = node.depth + 1;
         let node_idx = tree.len();
-        tree.push(node.clone());
+        // Only `node.score` is read after the push, so capture it and move the
+        // node into the tree instead of deep-cloning its two String fields.
+        let node_score = node.score;
+        tree.push(node);
 
         // Expand to next depth if available
         if next_depth >= marginals.len() {
@@ -313,7 +316,7 @@ pub fn build_hop_dd_tree(marginals: &[HopMarginal], config: &HopTreeConfig) -> V
                 break;
             }
 
-            let child_score = node.score + candidate.log_confidence();
+            let child_score = node_score + candidate.log_confidence();
             heap.push(HopTreeNode {
                 score: child_score,
                 depth: next_depth,
@@ -484,7 +487,10 @@ pub fn build_hop_dd_tree_with_schedule(
 
         let next_depth = node.depth + 1;
         let node_idx = tree.len();
-        tree.push(node.clone());
+        // Only `node.score` is read after the push, so capture it and move the
+        // node into the tree instead of deep-cloning its two String fields.
+        let node_score = node.score;
+        tree.push(node);
 
         if next_depth >= marginals.len() {
             continue;
@@ -500,7 +506,7 @@ pub fn build_hop_dd_tree_with_schedule(
                 break;
             }
 
-            let child_score = node.score + candidate.log_confidence();
+            let child_score = node_score + candidate.log_confidence();
             heap.push(HopTreeNode {
                 score: child_score,
                 depth: next_depth,

@@ -176,6 +176,9 @@ pub fn fit_cv_least_squares(
 fn solve_cholesky_multi_rhs(l: &[f32], rhs: &[f32], t: usize, d: usize) -> Vec<f32> {
     let mut cv = vec![0.0f32; t * d];
     let mut z = vec![0.0f32; t];
+    // The Cholesky diagonal is invariant across the d RHS columns — precompute
+    // its reciprocals once (t recips) instead of dividing 2·d·t times.
+    let inv_diag: Vec<f32> = (0..t).map(|j| 1.0 / l[j * t + j]).collect();
     for col in 0..d {
         // Forward: L z = rhs[:, col]
         for j in 0..t {
@@ -183,7 +186,7 @@ fn solve_cholesky_multi_rhs(l: &[f32], rhs: &[f32], t: usize, d: usize) -> Vec<f
             for k in 0..j {
                 s -= l[j * t + k] * z[k];
             }
-            z[j] = s / l[j * t + j];
+            z[j] = s * inv_diag[j];
         }
         // Back: L^T cv[:, col] = z
         for j in (0..t).rev() {
@@ -191,7 +194,7 @@ fn solve_cholesky_multi_rhs(l: &[f32], rhs: &[f32], t: usize, d: usize) -> Vec<f
             for k in (j + 1)..t {
                 s -= l[k * t + j] * cv[k * d + col];
             }
-            cv[j * d + col] = s / l[j * t + j];
+            cv[j * d + col] = s * inv_diag[j];
         }
     }
     cv

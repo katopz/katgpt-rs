@@ -467,7 +467,8 @@ fn forward_bidirectional_positions_into(
             &mut bctx.scores_buf,
         );
 
-        bctx.x_proj.fill(0.0);
+        // `matmul` overwrites all n rows of x_proj (output[r] = dot(...)), so no
+        // pre-zero is needed — matches the sibling q/k/v/hidden/x_mlp buffers.
         matmul(&mut bctx.x_proj, &layer.attn_wo, &bctx.attn_out_buf, n, n);
         crate::simd::simd_add_inplace(&mut bctx.x_proj, &bctx.xr_all[p * n..(p + 1) * n]);
 
