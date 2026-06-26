@@ -1,6 +1,6 @@
 # Benchmark 326 — Tucker / HOSVD GOAT Gate
 
-[← Index](../README.md) · **Plan:** `.plans/326_tucker_hosvd_factorization_primitive.md` · **Feature:** `tucker_factorization` (DEFAULT-ON) · **Date:** 2026-06-25
+[← Index](../README.md) · **Plan:** `.plans/326_tucker_hosvd_factorization.md` · **Feature:** `tucker_factorization` (DEFAULT-ON) · **Date:** 2026-06-25
 
 ## Primitive
 
@@ -82,8 +82,8 @@ dimensional error — `NeuronShard::style_weights` is 64 elements, not 512. The
 note conflated the TFNO paper's generic `(K,I,O)` weight-tensor shape with our
 64-element shard vector. The actual natural 3-tensor reshape of a 64-element
 flat buffer is `(4,4,4)` (4³ = 64). This primitive is generic over `(I₀,…,I_{N-1})`;
-the `(4,4,4)` shard case is the riir-neuron-db integration target (out of scope
-for this primitive plan — tracked as a separate integration plan).
+the `(4,4,4)` shard case is the riir-neuron-db integration target, shipped as
+Phase 2 of Plan 326 (`ShardCompactor::compact_tucker`, opt-in — see T2.P).
 
 ## Promotion
 
@@ -95,7 +95,7 @@ module compiles but does nothing unless a caller invokes `tucker_decompose_into`
 ## Cross-references
 
 - Research 307: `.research/307_FNO_Practical_Perspective_Spectral_Primitives_Survey.md` §3
-- Plan 326: `.plans/326_tucker_hosvd_factorization_primitive.md`
+- Plan 326: `.plans/326_tucker_hosvd_factorization.md`
 - `subspace_phase_gate::thin_svd_into` — the 2D SVD this generalizes
 - Plan 323 (Fourier Continuation) + Plan 325 (Spectral Differentiation) — the
   other two FNO gaps from Research 307 §3, both DEFAULT-ON
