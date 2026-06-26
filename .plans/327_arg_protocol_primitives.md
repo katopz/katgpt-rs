@@ -62,7 +62,7 @@ The three smallest, most foundational primitives. Ships first so the open adopti
   - enforces parent/child coherence (a child without parent fails)
   - ascending expansion preserves `child ⊆ expanded_parent`
   - ascending expansion never descends
-- [ ] **T1.G2** Criterion bench: `PolicyEnvelope::evaluate` median ≤ 50ns; `TaxonomyValidator::validate_label_set` median ≤ 200ns (taxonomy of 256 nodes, candidate set of 8). — *Deferred to Phase 4 (covers all primitives in one bench).*
+- [-] **T1.G2** Criterion bench: `PolicyEnvelope::evaluate` median ≤ 50ns; `TaxonomyValidator::validate_label_set` median ≤ 200ns (taxonomy of 256 nodes, candidate set of 8). — *Deferred to Phase 4 (covers all primitives in one bench).*
 - [x] **T1.G3** `cargo check --all-features` passes; `cargo check` (default) unchanged.
 - [x] **T1.G4** `PolicyEnvelope::evaluate` and `TaxonomyValidator::validate_label_set` zero-alloc verified via `cargo test --features arg_protocol` (assert no `Vec::new()` / `Box::new()` / `String` in hot path; use scratch buffers).
 - [x] **T1.G5** N/A in Phase 1 (silence-bias scorer ships in Phase 2).
