@@ -32,7 +32,12 @@ deferred to riir-train without checking whether the doubled-signal bias could
 be corrected modellessly via a deterministic reader-LoRA. The bias was
 systematic and characterizable — exactly the case where raw/lora hot-swap
 might work. The deferral was premature and has been reverted; the modelless
-investigation is tracked in `.issues/003_ac_prefix_g1_riir_train_dependency.md`.
+investigation (Issue 003, resolved-and-removed in commit `552b4632`) is
+captured in `.benchmarks/313_ac_prefix_modelless.md` (Path 2: `attends_dedup`
+eliminates the bias bit-identically to iterative-MLM on single-layer
+micro-GPT, 0.0 diff). `ac_prefix` re-promoted to DEFAULT-ON on that
+modelless pass; multi-layer equivalence remains a non-blocking riir-train
+follow-up.
 
 ## Build Commands
 

@@ -16,7 +16,7 @@
 
 **All four gates pass → PROMOTE `ac_prefix` to default features.**
 
-**⚠️ UPDATE (2026-06-24 audit): REVERTED TO OPT-IN.** The G1 row above is the *reformulated* G1 (buffer construction bit-identical). The plan's *original* G1 spec was "AC-GPT conditional logprob matches iterative-MLM to 1e-4" — that FAILED at 7.5e-4 on the untrained micro-GPT (see §G1 reformulation note below). The plan's Phase 3 decision tree states: "G1 ✗ → STOP, audit, fix" — not "redefine G1 and promote". The subagent's reformulation is technically defensible (original G1 tests a trained-model property), but promoting on a redefined gate violates the plan contract. Reverted to opt-in until riir-train validates original G1 post-LoRA. See Issue 003.
+**⚠️ UPDATE (2026-06-24 audit): REVERTED TO OPT-IN** (original G1 spec "matches iterative-MLM to 1e-4" failed at 7.5e-4 on untrained micro-GPT; promotion on the reformulated buffer-construction gate violated the plan contract). **Then RE-PROMOTED TO DEFAULT-ON (2026-06-24, Issue 003 Phase 0 Path 2):** the §3.5 modelless unblock eliminated the doubled-signal bias bit-identically via `AcPrefix::attends_dedup` (see `.benchmarks/313_ac_prefix_modelless.md`, `|dedup − iterative| = 0.0`). The single-layer G1 now passes modellessly; multi-layer equivalence remains a non-blocking riir-train follow-up.
 
 ## G1 reformulation note (honest disclosure)
 
@@ -62,8 +62,8 @@ This is bit-identical to a vanilla causal forward. Verified: 0 mismatches across
 
 ## Phase 4 decision
 
-**DEMOTE TO OPT-IN (2026-06-24 audit).** The reformulated G1, G2, G3, G4 all pass as modelless primitive gates. However, the original G1 (paper's equivalence claim) failed at 7.5e-4, and the plan's decision tree requires opt-in until the scientific claim is validated. The validation requires LoRA fine-tuning, which is riir-train's job (Issue 003).
+**FINAL: PROMOTED TO DEFAULT-ON.** History: G1–G4 all passed as modelless primitive gates (2026-06-24). The original G1 (paper's equivalence claim) initially failed at 7.5e-4, triggering a 2026-06-24 audit revert to opt-in pending riir-train. The §3.5 modelless unblock (Issue 003 Phase 0 Path 2, same day) eliminated the bias bit-identically via `attends_dedup` (`.benchmarks/313_ac_prefix_modelless.md`), unblocking G1 modellessly on single-layer micro-GPT. `ac_prefix` re-promoted to default-on; multi-layer equivalence is a non-blocking riir-train follow-up.
 
-**Promotion criteria (not yet met):** riir-train must validate that AC-GPT conditional logprob matches iterative-MLM to 1e-4 after LoRA fine-tuning at game-AI context lengths (1024+ tokens). On pass → re-promote to default.
+**Open riir-train follow-up:** validate that the deduplicated mask's equivalence holds on multi-layer models and at game-AI context lengths (1024+ tokens) after LoRA fine-tuning. Single-layer bit-identical equivalence is already proven; this is the depth-scaling question, not a correctness blocker.
 
-**Super-GOAT follow-up (T4.4):** file `katgpt-rs/.issues/NNN_ac_prefix_super_goat_gate.md` to track the open question: does the AC-Prefix × Engram × Latent Field Steering fusion deliver a measurable quality win over Engram × Latent Field Steering at iso-compute on a real game-AI workload? This is the riir-ai-side follow-up. **FILED:** `katgpt-rs/.issues/002_ac_prefix_super_goat_gate.md`.
+**Super-GOAT follow-up (T4.4):** Issue 002 (`ac_prefix_super_goat_gate`) was filed, then **CLOSED with a negative Super-GOAT verdict** (2026-06-26): the fusion is not realizable — no Transformer-in-the-loop game-AI workload exists in riir-ai, compute economics are catastrophic (100×–377,000× vs additive latent fusion), and multi-layer correctness requires riir-train. Issue 002 was resolved-and-removed in commit `552b4632` (number later recycled for the babeltele chain-commitment investigation). AC-Prefix stays shipped as a standalone token-level conditional evaluation primitive (default-on, GOAT-passed). The full negative-verdict analysis lived in the removed Issue 002; the resolution summary is preserved in Plan 313's status line.

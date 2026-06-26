@@ -67,7 +67,7 @@ On multi-layer models, the r0 copies' representations evolve through layers atte
 
 ## Cross-references
 
-- **Issue:** `katgpt-rs/.issues/003_ac_prefix_g1_riir_train_dependency.md` (CLOSED — modelless-validable).
+- **Issue 003** (`ac_prefix_g1_riir_train_dependency`) — CLOSED modelless-validable, then resolved-and-removed in commit `552b4632` (2026-06-26) along with Issues 002-009. This benchmark is the surviving evidence.
 - **Plan:** `katgpt-rs/.plans/313_AC_GPT_Prefix_Primitive.md` (Phase 4 promotion now justified).
 - **GOAT gate bench:** `katgpt-rs/.benchmarks/313_ac_prefix_goat.md` (G1 reformulation, G2–G4).
 - **Research:** `katgpt-rs/.research/295_AC_GPT_Arbitrary_Conditionals_Prefix.md`.
