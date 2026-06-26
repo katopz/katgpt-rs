@@ -179,4 +179,6 @@ The Phase 0 probe (Issue 001) showed a HAND-CRAFTED signal-aligned basis beats r
 
 **Phase 5 (true Apollonian harmonics) DEFERRED** — the achievable gain over the best fixed basis is narrow, localized to small k, and already substantially captured. Apollonian's extra geometric richness is unlikely to justify the implementation cost.
 
+**Concrete visualization caller: Plan 339 Phase 13 (L7 Spectral Attention Layer).** The Quest Manifold Bevy isometric demo will add an L7 overlay where the bot attends to the 32×32 heightmap terrain via FUNCATTN, with a toggleable basis (random / DCT-log / Haar-packet). The user SEES the +0.34 cos gain as a heatmap sharpening when switching from random to DCT-log. This is the first concrete caller of the constructors — the heightmap is a broadband spatial field (low-freq terrain shape + high-freq detail), exactly the regime where DCT-log shines. T13.1 (Cargo wiring: `katgpt-core` dep added to `riir-viz/quest_manifold_demo` feature) DONE; T13.2–T13.8 pending Plan 339 core phases. See [`riir-ai/.plans/339_quest_manifold_bevy_isometric_demo.md`](../../riir-ai/.plans/339_quest_manifold_bevy_isometric_demo.md) Phase 13.
+
 Full results: [`.benchmarks/332_structured_basis_goat_and_k_sweep.md`](../.benchmarks/332_structured_basis_goat_and_k_sweep.md)
