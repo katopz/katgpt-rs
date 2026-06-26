@@ -90,7 +90,13 @@ Per Plan 332 T4.3, the strict-gate failure means **document the negative result 
 
 DCT-log picks smooth log-spaced sinusoids at integer frequencies 1, 2, 3, ..., 32 cycles across d=64. The probe signal's along-`j` frequencies are `0.1 · f_s · (s+1)` = [0.3, 2.0, 5.1, 9.6] cycles — NOT integers, and clustered at the low end. DCT-log's basis vectors at integer frequencies don't sparsely represent non-integer-frequency signals; the high-frequency DCT rows (12, 19, 32) pick up only noise.
 
-**Verification (added after cross-checking against the FUNCATTN paper):** on a DCT-ALIGNED signal (integer frequencies 1, 2, 3, 5, 8 cycles matching the DCT grid), DCT-log beats random by **+0.3449 cos** (vs −0.1427 on the probe signal). The constructor is correct; the probe-signal failure is a frequency-mismatch artifact.
+**Constructor verification against canonical references (2026-06-26):**
+
+- **DCT-II formula** — matches Wikipedia's `X_k = Σ x_n · cos[π/N · (n+1/2) · k]` exactly. My `cos(π · f · (j+0.5) / d)` with `f=k, d=N` is identical.
+- **Haar matrix** — matches Wikipedia's `H_{2N} = [H_N ⊗ [1,1]; I_N ⊗ [1,-1]]` construction. For d=8, my row ordering (DC, then coarse-to-fine wavelets) produces exactly the canonical un-normalized `H_8` shown in the Wikipedia article, then I apply the standard `1/sqrt(support)` orthonormal normalization.
+- **FUNCATTN reference** (`xjffff/FUNCATTN/PDE-StandardBenchmark/model/Functional_attention.py`) — confirms `w_basis` is `(k, d)` with `torch.nn.init.orthogonal_` row init (my "random-orthogonal" baseline matches), and the basis is LEARNED via SGD (not fixed). The forward path `softmax(Linear(X) / τ)` matches my `compute_basis_into`.
+
+**Verification on DCT-aligned signal:** on a signal with integer frequencies 1, 2, 3, 5, 8 cycles matching the DCT grid, DCT-log beats random by **+0.3449 cos** (vs −0.1427 on the probe signal). The constructor is correct; the probe-signal failure is a frequency-mismatch artifact.
 
 **Cross-reference: FUNCATTN paper Table 7** (arXiv:2605.31559 §5.7): fixed Fourier basis + FuncAttn achieves 0.51 on Airfoil vs 0.43 for learned. Fixed spectral bases are competitive (~19% worse) on real PDE data with broad spectral content — they do NOT actively hurt. Our probe-signal DCT-log result is therefore an artifact of the synthetic signal's narrow, non-integer frequency content, not a property of DCT bases.
 
