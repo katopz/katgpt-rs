@@ -5,8 +5,23 @@
 > - `arxiv:2606.05345` PJ-RoPE (Zhang 2026) — lattice-as-difference-module algebra
 > - `arxiv:2110.13475` Gyrocalculus on SPD matrices (López et al., NeurIPS 2021) — closed-form curved-space distance per slot
 > - `arxiv:2606.02427` Spectral Audit of Operator Networks (Gao/Yang/Karniadakis 2026) — Fourier-mode tangent audit (GOAT-gate verifier)
-> **Date:** 2026-06-26
+> **Date:** 2026-06-26 (revised 2026-06-26 — see revision note)
 > **Status:** Active (Super-GOAT — see §3)
+>
+> **Revision note (2026-06-26):** The original draft claimed three novel
+> primitives (`AnalyticLatticeEncoder` trait, `direction_vector_decode`,
+> `compose_chain`). Mid-implementation audit found that the **encoder half is
+> redundant** — `riir-ai/crates/riir-engine/src/fourier/encoder.rs` already
+> ships `FourierEncoder::encode_position_into` / `encode_offset_into`, a
+> closed-form analytic encoder. This revision narrows the novelty claim to the
+> three primitives that are **genuinely missing**: (1) `compose_chain`
+> (cross-entity operator product), (2) `batch_compose_chain` (zone-batched
+> amortization), and (3) **ASOC (Adaptive Speculative Operator Cascade)** —
+> the headline contribution, built on the already-shipped `GpuFuture` /
+> `Join` / `block_on` substrate in `riir-gpu-async`. The Super-GOAT verdict
+> (4/4) is preserved because the novelty class is unchanged; only the
+> *encoder* attribution is corrected.
+>
 > **Related Research:** 290 (Latent Field Steering), 294 (Viable Manifold Graph), 298 (Inverting Bellman Closed-Form), 257 (FuncAttn spectral transport), 303 (Transolver/FuncAttn predecessor), 306 (Galerkin/FuncAttn grandparent), 296 (Stokes/DEC vocabulary)
 > **Related Plans:** 335 (Zone Eggshell — substrate, SHIPPED), 312 (Viable Manifold Graph), 286 (Functional Attention), 309 (Latent Field Steering), 330 (this primitive's plan), riir-ai P339 (Bevy isometric demo)
 > **Cross-ref (riir-ai):** Research 162 (game runtime Super-GOAT guide), Plan 339 (Bevy demo)
@@ -16,11 +31,32 @@
 
 ## TL;DR
 
-**Distilled primitive:** a modelless `AnalyticLatticeEncoder` that compiles a domain entity (quest, zone, player stat block, boss danger profile) into a fixed lattice vector `[x, y, z, f, g, h, ...]` via **closed-form algebra** (no VAE, no LLM, no gradient descent), plus a paired **direction-vector decoder** that projects a latent state onto an action-score direction, plus a **chain composer** that multiplies functional-attention transport operators `C_boss × C_quest × C_player` into one composite operator.
+**Distilled primitive (revised):** the modelless **ASOC cascade** — an autoplay
+bot's per-tick action selector that, on every tick, (a) **always** emits a
+cheap plasma-tier draft synchronously (so the bot never stalls), (b) joins 3
+hot-tier rederive `GpuFuture`s (`C_boss`, `C_quest`, `C_player`) via
+`GpuFuture::Join`, and (c) on `Poll::Pending` (GPU congestion) **returns the
+stale plasma draft instead of propagating Pending** — the bot's action loop
+never blocks on GPU.
 
-The math substrate ships (Plan 335 `lattice_edge_utility_into`, Plan 286 `funcattn_forward`, Plan 273 `extract_functor`/`apply_functor`). What's missing is the **encoder/decoder API** that compiles domain entities into the substrate, and the **chain composer** that fuses operators across entities (vs token-level composition shipped in `funcattn_compose/`).
+ASOC is built on two genuinely-novel closed-form primitives:
+1. **`compose_chain`** — cross-entity operator product
+   `C_boss × C_quest × C_player` (vs `funcattn_compose` which is token-level).
+2. **`batch_compose_chain`** — zone-batched amortization: factor the shared
+   prefix `C_qb = C_boss × C_quest` once, then apply `C_player_i × C_qb` for
+   N players in the same zone (O(N+k³) vs O(N·k³)).
 
-**Distilled for katgpt-rs (modelless, inference-time):** three open primitives — `AnalyticLatticeEncoder` trait, `direction_vector_decode` SIMD projection, `compose_chain` operator product — all closed-form, zero-alloc, behind one feature flag.
+**Redundant (intentionally dropped):** the `AnalyticLatticeEncoder` trait
+originally proposed here is redundant with `FourierEncoder::encode_*_into`
+which already ships closed-form `entity → [f32; N]` encoding. We do NOT
+re-ship a parallel encoder API. The decoder primitive `direction_vector_decode`
+remains novel as a *generalization* of `riir-games::scalar_projection` out of
+HLA-specific 5-scalar semantics into a generic single-direction primitive.
+
+The math substrate ships (Plan 335 `lattice_edge_utility_into`, Plan 286
+`funcattn_forward`, Plan 273 `extract_functor`/`apply_functor`, plus
+`riir-gpu-async` for the `GpuFuture` substrate). What's missing is the
+**chain composer** + **ASOC orchestration** + **spectral audit verifier**.
 
 ---
 
@@ -38,11 +74,23 @@ The math substrate ships (Plan 335 `lattice_edge_utility_into`, Plan 286 `funcat
 | `find_path_into`, `find_distance_into` (A*) | `riir-ai/crates/riir-engine/src/pathfinder.rs` | Tactical single-path movement (different layer than eggshell — coexist by design per Plan 335 G2) |
 
 **The gap (Q1 — no prior art?):**
-- ❌ No `AnalyticLatticeEncoder` trait — no closed-form `encode(&Quest) -> [f32; 6]` API exists
-- ❌ No direction-vector action decoder — `lattice_edge_utility_into` is edge-utility, not entity-action projection
-- ❌ No `compose_chain(&[TransportOp])` — `funcattn_compose/` chains at token/weight level, not across boss/quest/player entities
+- ✅ Closed-form `entity → [f32; N]` encoding — **already ships** as
+  `FourierEncoder::encode_position_into` / `encode_offset_into` in
+  `riir-ai/crates/riir-engine/src/fourier/encoder.rs`. NOT a novel contribution.
+- ❌ No `compose_chain(&[TransportOp])` — `funcattn_compose/` chains at
+  token/weight level, not across boss/quest/player entities. **NOVEL.**
+- ❌ No `batch_compose_chain` — no zone-batched operator prefix factoring. **NOVEL.**
+- ❌ No ASOC cascade — `GpuFuture`/`Join`/`block_on` substrate exists in
+  `riir-gpu-async`, but no `ComposerTick: GpuFuture` that returns a stale
+  plasma draft on `Poll::Pending` to keep the bot loop non-blocking. **NOVEL (headline).**
+- ❌ No direction-vector action decoder — `lattice_edge_utility_into` is
+  edge-utility, not entity-action projection. `scalar_projection.rs` is
+  HLA-specific. **NOVEL (generalization, not parity).**
+- ❌ No spectral audit verifier — no Fourier-mode tangent operator check. **NOVEL (G6 gate).**
 
-These three are the novel contribution. Q1 = **YES (genuinely missing)**.
+Q1 = **YES (genuinely missing)** — but the novel set is compose_chain +
+batch_compose_chain + ASOC + decoder-generalization + spectral-audit, NOT
+the encoder (which ships in `fourier/`).
 
 ---
 
@@ -52,11 +100,13 @@ These three are the novel contribution. Q1 = **YES (genuinely missing)**.
 
 | Paper term | Codebase-equivalent | Verified shipped? |
 |---|---|---|
-| "analytic encoder" / "closed-form embedding" | `AnalyticLatticeEncoder` (NEW) | No — gap |
-| "operator composition" / "functional correspondence" | `compose_chain` (NEW); `funcattn_compose` (token-level only) | Partial |
+| "analytic encoder" / "closed-form embedding" | `FourierEncoder::encode_position_into` / `encode_offset_into` (`riir-engine/src/fourier/encoder.rs`) | **YES — ships** (NOT novel; original R311 draft was wrong here) |
+| "operator composition" / "functional correspondence" | `compose_chain` (NEW); `funcattn_compose` (token-level only) | Partial — `compose_chain` is the novel cross-entity gap |
+| "zone-batched prefix factoring" | `batch_compose_chain` (NEW) | No — gap (amortizes N players in one zone) |
+| "adaptive speculative cascade" / "stale-draft fallback" | ASOC `ComposerTick: GpuFuture` (NEW) | No — gap (uses shipped `GpuFuture`/`Join`/`block_on` as substrate) |
 | "lattice coordinate" / "difference module" | LatCal eggshell lanes `[x,y,z,safety\|...]` | Yes (Plan 335) |
 | "gyrovector addition" / "curved-space distance" | LatCal fixed-point bridge in `riir-chain/src/encoding/latcal_fixed.rs` | Yes (commitment side) |
-| "direction vector projection" | `project_to_scalars` (decoder-only, HLA→5 scalars) | Partial — needs generalization |
+| "direction vector projection" | `project_to_scalars` (decoder-only, HLA→5 scalars) | Partial — needs generalization to non-HLA directions |
 | "spectral audit" / "tangent operator" | (NEW GOAT-gate verifier primitive) | No — gap |
 
 ### 2.2 Closest cousins (3)
@@ -67,14 +117,22 @@ These three are the novel contribution. Q1 = **YES (genuinely missing)**.
 
 ### 2.3 Fusion — what novel combination does this enable?
 
-**Synthesis (NEW capability class):** "Compile a quest description, zone geometry, player stat block, and boss danger profile into a shared typed-lattice coordinate space, then compose `C_boss × C_quest × C_player` as a single transport operator that yields the optimal action score for an autoplay bot — all in µs, no LLM forward pass, no VAE."
+**Synthesis (NEW capability class, revised):** "An autoplay bot that, every
+tick, drafts a synchronous plasma-tier action in nanoseconds, then speculatively
+joins three hot-tier transport-operator rederive futures (`C_boss`, `C_quest`,
+`C_player`), and on GPU congestion returns the stale plasma draft instead of
+blocking — composing `C_boss × C_quest × C_player` cross-entity (not token-
+level) when the join completes. The bot loop never stalls; the GPU pipeline
+amortizes across N players in one zone via prefix factoring."
 
 | Fusion | Source A | Source B | Novel combination? |
 |---|---|---|---|
-| **Analytic encoder × eggshell lanes** | PJ-RoPE difference-module algebra | Plan 335 SIMD lanes | **NEW** — closed-form `encode(entity) -> [f32; 8]` typed per slot |
-| **Decoder × direction vectors** | scalar_projection.rs (decoder-only) | gyrocalculus per-axis distance | **NEW** — generalized `decode(state, direction) -> action_score` |
-| **Chain compose × funcattn** | funcattn_compose (token-level) | cross-entity composition | **NEW** — `compose_chain(&[C_boss, C_quest, C_player]) -> C_total` |
-| **Spectral audit verifier** | arxiv 2606.02427 tangent-Fourier | GOAT-gate discipline | **NEW** — verifier that the chain composition has the intended mode profile |
+| **ASOC stale-draft fallback × `GpuFuture::Join`** | plasma-tier `QuestDraftModel` (ships) | `riir-gpu-async` `Join` + `block_on` (ships) | **NEW (headline)** — `ComposerTick: GpuFuture` returns stale plasma draft on `Poll::Pending` |
+| **Cross-entity chain compose × funcattn** | funcattn_compose (token-level only) | cross-entity `C_boss × C_quest × C_player` | **NEW** — `compose_chain(&[TransportOp]) -> TransportOp` |
+| **Zone-batched prefix factoring** | `compose_chain` (above) | `papaya` lock-free `ShardIndex` (zone→shard) | **NEW** — `batch_compose_chain`: factor `C_qb` once, apply N× `C_player_i × C_qb` |
+| **Decoder × direction vectors** | scalar_projection.rs (decoder-only, HLA-only) | gyrocalculus per-axis distance | **NEW (generalization)** — `direction_vector_decode(state, direction) -> action_score` for non-HLA directions |
+| **Spectral audit verifier** | arxiv 2606.02427 tangent-Fourier | GOAT-gate discipline | **NEW** — Fourier-mode tangent operator check, the G6 verifier |
+| ~~Analytic encoder × eggshell lanes~~ | ~~PJ-RoPE~~ | ~~Plan 335 SIMD lanes~~ | **NOT novel** — `fourier/encoder.rs` already ships closed-form encoding. Dropped. |
 
 ---
 
@@ -82,12 +140,12 @@ These three are the novel contribution. Q1 = **YES (genuinely missing)**.
 
 | Q | Answer | Evidence |
 |---|---|---|
-| Q1 — No prior art? | **YES** | grep across all 5 repos, both layers (notes + code), both vocabularies (paper + codebase). Three primitives genuinely missing. |
-| Q2 — New class of behavior? | **YES** | "Compile-and-compose" pipeline for autoplay quest reasoning — no incumbent ships this. |
-| Q3 — Product selling point? | **YES** | "Our autoplay bot reasons over MMORPG quests at sub-µs latency without any text embedding — pure deterministic algebra over typed lattice geometry." |
-| Q4 — Force multiplier? | **YES** | Multiplies ≥7 shipped pillars: Plan 335 eggshell, latent_functor arithmetic, funcattn, latent_field_steering, viable_manifold_graph, Quest Grammar, HLA, riir-viz. |
+| Q1 — No prior art? | **YES** | grep across all 5 repos, both layers (notes + code), both vocabularies (paper + codebase). Five primitives genuinely missing: `compose_chain`, `batch_compose_chain`, ASOC `ComposerTick`, generic `direction_vector_decode`, spectral audit. The original encoder-trait gap was a false positive (already ships in `fourier/encoder.rs`). |
+| Q2 — New class of behavior? | **YES** | "Speculative GPU-cascade action selection with stale-draft fallback" — no incumbent ships non-blocking GPU-joined operator composition for autoplay bots. The closest shipped analog (`funcattn_compose`) is token-level, not cross-entity, and never returns a stale draft. |
+| Q3 — Product selling point? | **YES** | "Our autoplay bot never blocks on GPU — every tick emits a plasma-tier action in nanoseconds, and speculatively joins three transport-operator rederive futures, falling back to the stale plasma draft on congestion." |
+| Q4 — Force multiplier? | **YES** | Multiplies ≥8 shipped pillars: `riir-gpu-async` `GpuFuture` (the new substrate), `fourier/encoder.rs`, Plan 335 eggshell, latent_functor arithmetic, funcattn, latent_field_steering, viable_manifold_graph, riir-games plasma `QuestDraftModel`, riir-viz. |
 
-**Selling point (one sentence):** *The bot never reads a word — it computes a quest as deterministic algebra over a typed lattice and composes functional-attention operators across boss/quest/player to choose its action in sub-µs.*
+**Selling point (one sentence, revised):** *The bot's action loop never blocks — every tick emits a plasma-tier draft in nanoseconds, then speculatively composes `C_boss × C_quest × C_player` cross-entity via `GpuFuture::Join`, falling back to the stale draft on GPU congestion.*
 
 **Mandatory outputs (per workflow §1.5):**
 1. ✅ Open primitive → `katgpt-rs/.plans/330_analytic_lattice_encoder_decoder_primitive.md` (this note's plan)
@@ -129,10 +187,13 @@ These three are the novel contribution. Q1 = **YES (genuinely missing)**.
 
 | Component | Repo | Why |
 |---|---|---|
-| `AnalyticLatticeEncoder` trait + 3 reference impls | katgpt-rs (open) | Generic math, no game IP |
-| `direction_vector_decode` SIMD | katgpt-rs (open) | Generic math |
-| `compose_chain` operator product | katgpt-rs (open) | Generic math |
-| Spectral audit verifier | katgpt-rs (open) | Generic math |
+| `compose_chain` operator product | katgpt-rs (open) | Generic k×k matmul, no game IP |
+| `batch_compose_chain` zone-prefix factoring | katgpt-rs (open) | Generic prefix-amortization, no game IP |
+| ASOC `ComposerTick: GpuFuture` cascade | katgpt-rs (open) | Generic orchestration over `GpuFuture`; plasma-draft trait is generic |
+| `direction_vector_decode` SIMD (generic) | katgpt-rs (open) | Generic dot-product + sigmoid |
+| Spectral audit verifier | katgpt-rs (open) | Generic Fourier-mode tangent check |
+| ~~`AnalyticLatticeEncoder` trait~~ | ~~katgpt-rs~~ | **DROPPED — redundant with `fourier/encoder.rs`.** Reuse, do not re-ship. |
+| Plasma-tier draft model (concrete game) | riir-ai (private) | Game design IP — ships as `riir-games::quest_draft::QuestDraftModel` |
 | Quest/Zone/Boss/Player encoding schemas | riir-ai (private) | Game design IP |
 | Game-specific direction vectors (per archetype) | riir-ai (private) | Game balance |
 | Bevy isometric demo | riir-ai (private) | Showcase, not engine |
@@ -151,4 +212,11 @@ These three are the novel contribution. Q1 = **YES (genuinely missing)**.
 
 ## TL;DR
 
-Super-GOAT verdict: 4/4 novelty gate passes. Three open primitives (`AnalyticLatticeEncoder`, `direction_vector_decode`, `compose_chain`) close the gap between the shipped eggshell substrate (Plan 335) and the user's vision of a modelless autoplay bot that reasons over quests as deterministic algebra. Private guide in riir-ai/.research/162; demo plan in riir-ai/.plans/339. GOAT gate G1–G6 must pass before promotion to default.
+Super-GOAT verdict: 4/4 novelty gate passes **(revised)**. The encoder half of
+the original draft was a false-positive gap (already ships in `fourier/encoder.rs`);
+the genuinely-novel contribution is the **ASOC cascade** (headline) plus
+`compose_chain`, `batch_compose_chain`, generic `direction_vector_decode`, and
+the spectral audit G6 verifier — all built on the already-shipped `GpuFuture` /
+`Join` / `block_on` substrate in `riir-gpu-async`. Private guide in
+riir-ai/.research/162; demo plan in riir-ai/.plans/339. GOAT gate G1–G6 must
+pass before promotion to default.
