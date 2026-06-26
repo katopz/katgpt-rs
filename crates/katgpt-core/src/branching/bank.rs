@@ -411,6 +411,25 @@ impl<E: Clone> core::fmt::Debug for BranchBank<E> {
     }
 }
 
+// Manual `Clone` (not derived) because the struct has an `E: Clone` bound on
+// the type parameter, which `#[derive(Clone)]` would express as
+// `where E: Clone` (correct here) but the manual form is more explicit and
+// matches the existing manual `Debug` impl style. Required by downstream
+// consumers (riir-ai Plan 338 `NpcCognitiveBranches::clone`) that need to
+// deep-copy an entire NPC's cognitive state for A/B comparison or
+// forked-counterfactual evaluation.
+impl<E: Clone> Clone for BranchBank<E> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            branches: self.branches.clone(),
+            free_slots: self.free_slots.clone(),
+            max_branches: self.max_branches,
+            n_active: self.n_active,
+        }
+    }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 /// Dot product of two f32 slices. Zero-alloc, auto-vectorizable inner loop.

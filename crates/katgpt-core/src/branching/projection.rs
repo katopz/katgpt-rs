@@ -155,6 +155,7 @@ impl AssignResult {
 /// `new(capacity)` pre-allocates `capacity` rows once. `assign_direction`
 /// writes in place (no allocation). The hot path (`project`, `interference`)
 /// is a pure dot-product over stack arrays — zero allocation, auto-vectorizable.
+#[derive(Clone, Debug)]
 pub struct NonInterferenceProjection<const D: usize = DEFAULT_PROJECTION_DIM> {
     /// Row-major projection matrix. Row `i` is the unit-norm direction for
     /// `BranchId(i)`. Zero-vector = unassigned slot.
