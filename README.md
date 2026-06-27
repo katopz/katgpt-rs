@@ -1860,31 +1860,29 @@ Every push to `develop` or `main` triggers `.github/workflows/release-plz.yml`:
 - **`main` push** → publishes unpublished `katgpt-core` versions to crates.io,
   pushes the `katgpt-core-vX.Y.Z` tag, and creates the GitHub Release.
 
-The normal cadence is:
-1. Commit `feat:`/`fix:` on `develop`.
-2. When ready to ship: **merge the release PR** into `develop`.
-3. **Merge `develop` → `main`** (fast-forward or PR).
-4. The `main` push fires the publish job. Done.
+### Ship it (`scripts/release.sh`)
 
-### Manual release (`scripts/release.sh`)
-
-To trigger the same workflow manually (via `workflow_dispatch`):
+One command does everything — no manual PR review, no manual merge:
 
 ```sh
-# Create / update the release PR (must be on develop)
 ./scripts/release.sh
-./scripts/release.sh release-pr
-
-# Publish unpublished katgpt-core versions (must be on main)
-./scripts/release.sh release
 ```
 
-The script is a thin wrapper around `gh workflow run release-plz.yml` — all
-publishing runs in CI, so your local machine never needs `cargo-registry`
-credentials. Prerequisites (one-time): `brew install gh && gh auth login`.
+From `develop`, this:
+1. Finds the open release-plz PR (auto-created by CI on your last develop push)
+2. Merges it into `develop` (merge commit)
+3. Promotes `develop` → `main` (fast-forward)
+4. CI auto-publishes `katgpt-core` to crates.io on the `main` push
 
-You can also trigger manually from the **Actions tab → Release-plz → Run
-workflow**.
+If there's no open release PR (nothing version-worthy since the last release),
+the script exits cleanly.
+
+Prerequisites (one-time): `brew install gh && gh auth login`.
+
+Fallback — manually trigger just the CI publish job (from `main`):
+```sh
+./scripts/release.sh --publish
+```
 
 ### One-time setup
 
