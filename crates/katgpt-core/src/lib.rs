@@ -810,3 +810,28 @@ pub use branching::{
     NonInterferenceProjection, PriorityTier, ProceduralRule, RetrievedMaterials, RouteMode,
     RouteResult, VerifierGate, WriteDecision, max_orthogonal_branches,
 };
+
+// Sleep-Time Query Anticipator — open primitive for offline query anticipation
+// (Plan 334, Research 318, arXiv:2504.13171 Lin et al. Letta/Berkeley).
+// Implements the open math half: SleepTimeAnticipator orchestrates per-direction
+// sleep-time compute → emits reusable AnticipatedQuerySet (the c' artifact,
+// BLAKE3-committed) → wake-time consume() does cheap dot-product + sigmoid-
+// gated lookup, falling through to fresh compute on low-predictability queries.
+// PredictabilityScorer trait + DotPredictabilityScorer default
+// (p = sigmoid(α·dot(c,dir)+β)); AmortizationCostModel operationalizes the
+// paper's §5.3 cost model. Game-specific direction-vector catalogs, NPC tiering,
+// HLA wiring, and chain commitment live in riir-ai Plan 341 (private).
+// Phase 1 ships traits + types + IdentityFunctorOp (synthetic-test default);
+// Phase 2 ships synthetic gates G1/G2/G5/G6/G7. G2/G3/G4 quality gates require
+// a real predictability-labeled corpus → deferred to riir-ai Plan 341.
+// Opt-in until G1–G5 GOAT gate passes; promotion to default-on requires
+// Plan 341 G1–G5 to clear on a real game corpus.
+#[cfg(feature = "sleep_time_anticipation")]
+pub mod sleep_time;
+#[cfg(feature = "sleep_time_anticipation")]
+pub use sleep_time::{
+    AmortizationCostModel, AnticipatedQueryDir, AnticipatedQuerySet, AnticipatedSlot,
+    DEFAULT_LATENCY_PREMIUM, DotPredictabilityScorer, IdentityFunctorOp, SLEEP_TIME_DEFAULT_K,
+    PredictabilityScorer, SleepTimeAnticipator, SleepTimeComputeOp, SleepTimeScratch, commit_direction,
+    consume, consume_gate,
+};

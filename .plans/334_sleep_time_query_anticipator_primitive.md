@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md](../.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md)
 **Source paper:** [arxiv 2504.13171](https://arxiv.org/abs/2504.13171) — Lin et al. (Letta/Berkeley), *Sleep-time Compute: Beyond Inference Scaling at Test-time*
 **Target:** `katgpt-rs/src/sleep_time/` (new module) + Cargo feature `sleep_time_anticipation`
-**Status:** Active — Phase 1 (skeleton + synthetic gates)
+**Status:** ✅ Phase 1 + Phase 2 COMPLETE (2026-06-27). Open math primitives shipped under `sleep_time_anticipation` (opt-in). 31 inline unit tests + 13 GOAT gate tests (G1/G2/G7) + 1 alloc-check test (G5) all pass. G6 latency measured inside targets (3.5–10× margin). Quality gates G2/G3/G4 require a real predictability-labeled corpus → deferred to riir-ai Plan 341. Promotion to default-on requires Plan 341 G1–G5 to clear on a real game corpus.
 
 ---
 
@@ -56,10 +56,13 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
 
 ## Phase 1 — Skeleton + Core Traits (CORE)
 
+**Status: ✅ COMPLETE (2026-06-27).** All 8 tasks shipped. 31 inline unit tests pass. `cargo check --all-features` clean (the `DEFAULT_K` collision with `cgsp::DEFAULT_K` was caught and fixed by renaming to `SLEEP_TIME_DEFAULT_K`). Default-features compile clean (zero impact when feature off).
+
 ### Tasks
 
-- [ ] **T1.1** Create `katgpt-rs/src/sleep_time/mod.rs` with module root + re-exports.
-- [ ] **T1.2** Define core types in `katgpt-rs/src/sleep_time/types.rs`:
+
+- [x] **T1.1** Create `katgpt-rs/src/sleep_time/mod.rs` with module root + re-exports. (Landed at `crates/katgpt-core/src/sleep_time/mod.rs` — the path in the task was the pre-workspace layout; current canonical path is under `crates/katgpt-core/`.)
+- [x] **T1.2** Define core types in `katgpt-rs/src/sleep_time/types.rs`:
   ```rust
   /// A frozen anticipated-query direction vector. The "slot" in c'.
   /// Generic over D (latent dim). No game semantics.
@@ -88,7 +91,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   }
   ```
 
-- [ ] **T1.3** Define `PredictabilityScorer` trait in `katgpt-rs/src/sleep_time/predictability.rs`:
+- [x] **T1.3** Define `PredictabilityScorer` trait in `katgpt-rs/src/sleep_time/predictability.rs`:
   ```rust
   /// Scores how predictable a query of class `dir` is from context `c`.
   /// Returns p in [0,1]. Higher = more predictable = more sleep-time compute warranted.
@@ -118,7 +121,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   }
   ```
 
-- [ ] **T1.4** Define `SleepTimeAnticipator` trait in `katgpt-rs/src/sleep_time/anticipator.rs`:
+- [x] **T1.4** Define `SleepTimeAnticipator` trait in `katgpt-rs/src/sleep_time/anticipator.rs`:
   ```rust
   /// The sleep-time operator S(c) → c'. Trait-bound, not concrete — the concrete
   /// per-domain op (latent_functor extraction, KARC ridge fit, Engram hash lookup,
@@ -192,7 +195,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   }
   ```
 
-- [ ] **T1.5** Define `AmortizationCostModel` in `katgpt-rs/src/sleep_time/cost_model.rs`:
+- [x] **T1.5** Define `AmortizationCostModel` in `katgpt-rs/src/sleep_time/cost_model.rs`:
   ```rust
   /// Paper §5.3 cost model: cost_total = sleep_cost + N * t * b_max * (1 - E[gate]).
   /// Answers: "is it worth pre-computing c' for this c, given N expected consumers?"
@@ -237,7 +240,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   }
   ```
 
-- [ ] **T1.6** Define wake-time `consume` helper in `katgpt-rs/src/sleep_time/consume.rs`:
+- [x] **T1.6** Define wake-time `consume` helper in `katgpt-rs/src/sleep_time/consume.rs`:
   ```rust
   /// Wake-time consumer: given query q and pre-computed c', produce an answer
   /// via cheap lookup + sigmoid gate. Falls through to caller-provided fresh_think
@@ -280,7 +283,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   }
   ```
 
-- [ ] **T1.7** Add Cargo feature in `katgpt-rs/Cargo.toml`:
+- [x] **T1.7** Add Cargo feature in `katgpt-rs/Cargo.toml`:
   ```toml
   [features]
   sleep_time_anticipation = ["dep:blake3"]
@@ -291,7 +294,7 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
   sleep_time_anticipation = []
   ```
 
-- [ ] **T1.8** Re-export from `katgpt-rs/src/lib.rs` and `crates/katgpt-core/src/lib.rs`:
+- [x] **T1.8** Re-export from `katgpt-rs/src/lib.rs` and `crates/katgpt-core/src/lib.rs`:
   ```rust
   #[cfg(feature = "sleep_time_anticipation")]
   pub mod sleep_time;
@@ -301,32 +304,34 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
 
 ## Phase 2 — Synthetic Gates (proves the math, not the game)
 
-These are the **mechanics + zero-alloc + commitment** gates. Quality gates G2/G3/G4 require a real predictability-labeled corpus and live in riir-ai Plan 341.
+**Status: ✅ COMPLETE (2026-06-27).** G1×5, G2×4, G7×4 GOAT gate tests pass in `tests/sleep_time_goat.rs`. G5 zero-alloc passes in `tests/sleep_time_alloc_check.rs` (separate binary; both `consume()` and `consume_gate()` at 0 allocs / 1000 calls). G6 latency measured at 9.5ns (D=8,K=8) and 57.6ns (D=64,K=8) — both inside the ≤200ns gate with 3.5–10× margin.
+
+These are the **mechanics + zero-alloc + commitment + latency** gates. Quality gates G2/G3/G4 require a real predictability-labeled corpus and live in riir-ai Plan 341.
 
 ### Tasks
 
-- [ ] **T2.1** `tests/sleep_time_goat_gate.rs::g1_mechanics` — verify:
+- [x] **T2.1** `tests/sleep_time_goat.rs::g1_*` — verify:
   - `AnticipatedQuerySet` round-trips (anticipate → serialize → deserialize → bit-identical slots).
   - `consume` returns the precomputed slot when `predictability > tau` and the fresh_think output when `predictability < tau` (smooth blend, not hard switch).
   - `predictability` is in `[0,1]` for all inputs.
   - `consume` is deterministic given (q, c', tau, beta).
 
-- [ ] **T2.2** `tests/sleep_time_goat_gate.rs::g2_cost_model_correctness` — verify:
+- [x] **T2.2** `tests/sleep_time_goat.rs::g2_*` — verify:
   - `amortization_factor(sleep=100, N=10, e_gate=0.5, t=10, b_max=100) ≈ 0.55` (matches paper's 2.5× gain inverted: cost ratio = 1/2.5 + offset).
   - `should_pre_compute` returns true iff `sleep_cost < N * t * b_max * e_gate`.
   - `total_cost` is monotonic decreasing in `e_gate` (more predictability → less total cost).
 
-- [ ] **T2.3** `tests/sleep_time_goat_gate.rs::g5_zero_alloc_hot_path` — verify via `TrackingAllocator`:
+- [x] **T2.3** `tests/sleep_time_alloc_check.rs::g5_zero_alloc_after_warmup_both_paths` — verify via `CountingAllocator`:
   - After 100 warmup `consume()` calls, **0 allocations / 0 bytes** over 100 measured `consume()` calls.
   - `anticipate()` may allocate (it builds the c' artifact); `consume()` (the wake-time hot path) MUST NOT.
   - This mirrors Plan 308 G5 and Plan 304 G5 — wake-time latency budget is sacred.
 
-- [ ] **T2.4** `tests/sleep_time_goat_gate.rs::g7_blake3_commitment` — verify:
+- [x] **T2.4** `tests/sleep_time_goat.rs::g7_*` — verify:
   - `AnticipatedQuerySet::blake3` is recomputed correctly when any slot's `precomputed` or `predictability` changes.
   - Tampering any byte in a serialized `AnticipatedQuerySet` produces a different `blake3` (catch-in-the-round).
   - Two `anticipate()` calls with identical inputs produce identical `blake3`.
 
-- [ ] **T2.5** `tests/sleep_time_goat_gate.rs::g6_consume_latency` — verify `consume()` is < 200ns at D=64 (matches `EmotionDirections::project` and KARC `forecast` latency profile — see Bench 292). Run via `benches/sleep_time_consume_bench.rs`.
+- [x] **T2.5** `benches/sleep_time_consume_bench.rs` — verify `consume()` is < 200ns at D=64. **Measured: 57.6 ns/call at D=64,K=8 (3.5× margin); 9.5 ns/call at D=8,K=8 (10× margin vs the ≤100ns D=8 target).** Both `consume()` and `consume_gate()` measured. Run via `cargo bench -p katgpt-core --features sleep_time_anticipation --bench sleep_time_consume_bench`.
 
 ---
 

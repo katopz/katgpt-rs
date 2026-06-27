@@ -175,6 +175,7 @@ bisimulation_operator_inference = []  # Bisimulation Operator Inference — gene
 arg_protocol = ["dep:papaya"]  # ARG Protocol Primitives — PolicyEnvelope + TaxonomyValidator + LifecycleState+RedirectTable + TypedOfflineCandidate+OfflineCandidateScorer + InfoRegistry (Plan 327 Phases 1-4, Research 309 — open half of the ARG × Latent Substrate Super-GOAT fusion). Five generic protocol primitives distilled from the ARG Standard (protocol.airistech.ai/arg-core.html). No game/chain/shard semantics. DEFAULT-ON (Plan 327 Phase 4, 2026-06-25): G1-G5 all PASS, pure modelless gain. Private runtime composition lives in riir-ai Plan 337 / Guide 160.
 babel_codec = []  # BabelCodec — Readability-relaxed semantic codec (Plan 331, Research 312, arXiv:2606.19857 BabelTele). Open primitive: generic `BabelCodec` trait + `FixedRuleTextCodec` (deterministic BT-P8 fixed symbolic mapping rules for KG-triple / entity-attribute / config / quest-grammar surfaces) + `SigmoidLatentCodec<D>` (generic-trait facade over existing `DensityBudget` infrastructure, latent-level analog) + BLAKE3 commitment. The modelless subset of BabelTele (the paper's headline 3.6× is LLM-prompted, NOT deterministic; we ship the fixed-rule subset). Opt-in until G1–G5 GOAT gate passes — the same G2 (≥ 2× on real corpus) gate that killed CompressionDrafter twice (Plan 285/287). Sigmoid, not softmax (per AGENTS.md).
 analytic_lattice = []  # Analytic Lattice — k×k transport operator chain composer + ASOC trait shapes + direction-vector SIMD decoder + spectral audit (Plan 330, Research 311, fusion of Functional Attention × PJ-RoPE × Gyrocalculus). katgpt-core half: pure math primitives (compose_chain, batch_compose_chain, direction_vector_decode, spectral_audit) + generic trait shapes (PlasmaDraft, RederiveOp, ComposerCtx) — NO GpuFuture import (leaf-clean). The ComposerTick: GpuFuture impl + Join3 combinator ship in riir-engine under the `analytic_lattice_runtime` feature (Phase 1b — separate task). Opt-in until G1–G6 GOAT gate passes. Flag name renamed from `analytic_lattice_encoder` per the revision note — the original `AnalyticLatticeEncoder` trait is DROPPED (redundant with riir-engine/src/fourier/encoder.rs).
+sleep_time_anticipation = []  # Sleep-Time Query Anticipator — open primitive for offline query anticipation (Plan 334, Research 318, arXiv:2504.13171 Lin et al. Letta/Berkeley). SleepTimeAnticipator orchestrates per-direction sleep-time compute → emits reusable AnticipatedQuerySet (c' artifact, BLAKE3-committed) → wake-time consume() does cheap dot-product + sigmoid-gated lookup, falling through to fresh compute on low-predictability queries. PredictabilityScorer trait + DotPredictabilityScorer default (p = sigmoid(α·dot(c,dir)+β)); AmortizationCostModel operationalizes the paper's §5.3 cost model (sleep_cost + N·t·b_max·(1−E[gate])). Phase 1 ships traits + types + IdentityFunctorOp (synthetic-test default, z_i = c + dir_i). Game-specific direction-vector catalogs, NPC tiering, HLA wiring, chain commitment live in riir-ai Plan 341 (private). Opt-in until G1–G5 GOAT gate passes; promotion to default-on requires Plan 341 G1–G5 to clear on a real game corpus. Sigmoid, not softmax (per AGENTS.md).
 
 # Plan 335 Phase 6 — GOAT gate leaf bench. G2 lattice-side latency on a 16×16
 # grid (480 edges) + G4 zero-alloc code-review note. Leaf-clean: raw slices
@@ -439,6 +440,33 @@ required-features = ["analytic_lattice"]
 [[test]]
 name = "analytic_lattice_alloc_check"
 required-features = ["analytic_lattice"]
+
+# Plan 334 — Sleep-Time Query Anticipator GOAT gate (G1 mechanics, G2 cost
+# model, G7 BLAKE3 commitment). Synthetic math gates only — proves the
+# mechanics, not the game quality. Quality gates G2/G3/G4 (predictability
+# correlation, cross-player amortization economics, wake-time latency under
+# load) require a real predictability-labeled corpus and live in riir-ai
+# Plan 341.
+[[test]]
+name = "sleep_time_goat"
+required-features = ["sleep_time_anticipation"]
+
+# Plan 334 — Sleep-Time G5 zero-alloc gate. Separate test binary (matches
+# the karc_alloc_check / analytic_lattice_alloc_check pattern) so the
+# CountingAllocator doesn't pick up allocations from the G1/G2/G7 GOAT tests
+# running in parallel.
+[[test]]
+name = "sleep_time_alloc_check"
+required-features = ["sleep_time_anticipation"]
+
+# Plan 334 Phase 2 T2.5 — Sleep-Time consume() hot-path latency GOAT gate.
+# Target: consume() ≤ 200ns/call at D=64 (style_weights scale), ≤ 100ns/call
+# at D=8 (HLA scale). Matches EmotionDirections::project and KARC forecast
+# latency profiles.
+[[bench]]
+name = "sleep_time_consume_bench"
+harness = false
+required-features = ["sleep_time_anticipation"]
 
 # Plan 321 Phase 2 — CommittedFieldBlend G4 zero-alloc GOAT gate. CountingAllocator
 # audit of apply_blended (1000 iters) + commit (100 re-commits). Gated on
