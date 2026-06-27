@@ -557,3 +557,16 @@ required-features = ["indicator_probe_bank", "indicator_similarity", "indicator_
 name = "bench_329_non_interference_branches_goat"
 harness = false
 required-features = ["non_interference_branches"]
+
+# Plan 335 Phase 2 — Paired Loss Gap Diagnostic GOAT gate. G2 perf
+# (from_log_probs + filtered_mean at L=8192 ≤ 1µs) + G2-alloc (zero-alloc
+# query hot path) + G4 gain (TopKNoCopy amplifies |gap| ≥ 1.5× vs AllTokens
+# on the characterized-bias fixture modeling the paper §6 / Plan 313
+# differential signature). G1 (35 unit tests) + G3 (feature-flag matrix)
+# verified in Phase 1. Synthetic-but-principled G4 fixture: models the
+# characterized bias directly (random-init micro-GPTs don't exhibit the
+# paper's pattern — that's a trained-model property, riir-train follow-up).
+[[bench]]
+name = "bench_335_paired_loss_goat"
+harness = false
+required-features = ["paired_loss_diagnostic"]

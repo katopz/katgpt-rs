@@ -85,4 +85,4 @@ mod tests;
 mod types;
 
 pub use tagger::{CopyNGramTagger, TokenTagger};
-pub use types::{ClassSizeBound, FilterKind, PairedLossGap, TokenClass};
+pub use types::{ClassSizeBound, FilterKind, FilterScratch, PairedLossGap, TokenClass};

@@ -55,25 +55,51 @@ pub struct PairedLossGap {
 /// Function). The paper tracks copy orthogonally; our merged enum gives the
 /// same filtered-aggregate result for the synthetic G1 fixture (Phase 2 may
 /// revisit if a richer tagger needs orthogonal copy tracking).
+///
+/// # Layout (Phase 2 perf)
+///
+/// `#[repr(u8)]` + `CopyN(u8)` makes this enum exactly **2 bytes**
+/// (1-byte discriminant + 1-byte payload). This matters for the G2 perf
+/// gate: a `Vec<TokenClass>` of length 8192 is 16 KiB (fits in L1) instead
+/// of 128 KiB (L2 territory with the default 16-byte layout). The n-gram
+/// length is capped at 255 — more than enough (paper uses N=5; in practice
+/// n ≤ 8). `n ≥ 256` saturates to 255 (the copy status matters more than the
+/// exact n for the filtered aggregates).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum TokenClass {
     /// Open-class content word (state-conditioned readout — paper Pattern i).
-    Content,
+    Content = 0,
     /// Closed-class function word.
-    Function,
+    Function = 1,
     /// Neither content nor function (e.g., punctuation, whitespace).
-    Other,
+    Other = 2,
     /// Opening delimiter — initiates a new region/scope (state update).
     /// Paper Pattern ii: openers are hybrid-favored.
-    BracketOpen,
+    BracketOpen = 3,
     /// Closing delimiter — satisfies an established structural obligation
     /// (state closure determined by visible opener). Paper Pattern ii:
     /// closers are transformer-favored.
-    BracketClose,
+    BracketClose = 4,
     /// Position completing a repeated n-gram of length `n` in the visible
     /// prefix. Paper Pattern iii: hybrid advantage vanishes here (visible-
     /// prefix retrieval suffices). `n ≥ 2` (a 1-gram "repeat" is trivial).
-    CopyN(usize),
+    /// `n` is capped at 255 (`u8`); larger n saturates (see Layout note).
+    CopyN(u8) = 5,
+}
+
+impl TokenClass {
+    /// `true` if this class is an "open-class" candidate for the `TopKNoCopy`
+    /// filter — i.e., Content or Function. These are the state-conditioned
+    /// readout positions where the paper's Patterns i/ii show the largest
+    /// Transformer–Hybrid separation.
+    ///
+    /// Used by [`super::gap::PairedLossGap::filtered_mean`] to build a
+    /// branchless mask for the single-pass fast path.
+    #[inline(always)]
+    pub fn is_open_class(self) -> bool {
+        matches!(self, TokenClass::Content | TokenClass::Function)
+    }
 }
 
 /// The Proposition 1 class-size bound (paper §5).
@@ -169,4 +195,49 @@ pub enum FilterKind {
         /// The exact n-gram length to isolate (paper uses N=5).
         n: usize,
     },
+}
+
+/// Reusable scratch buffer for the zero-alloc SIMD hot path (Plan 335
+/// Phase 2 T2.2).
+///
+/// [`PairedLossGap::filtered_mean`] and [`PairedLossGap::filtered_mean_with_scratch`]
+/// both compute a masked sum over `deltas`. The SIMD backend
+/// (`simd_masked_sum_count_f32`) operates on a `&[u8]` mask, which is built
+/// from the `&[TokenClass]` array. Building the mask allocates if done
+/// naively; this scratch buffer reuses the allocation across calls.
+///
+/// # Usage
+///
+/// ```ignore
+/// let mut scratch = FilterScratch::default();
+/// let mean = gap.filtered_mean_with_scratch(&classes, filter, &mut scratch);
+/// // Subsequent calls reuse the same mask buffer — zero net allocs.
+/// let mean2 = gap.filtered_mean_with_scratch(&classes, other_filter, &mut scratch);
+/// ```
+///
+/// The scratch buffer grows to fit the largest `classes` array seen; it does
+/// not shrink. For a fixed-L eval loop, it allocates once on the first call
+/// and is free thereafter.
+#[derive(Clone, Debug, Default)]
+pub struct FilterScratch {
+    /// Reusable mask buffer (1 byte per token). Grown as needed via
+    /// `resize`; never shrunk. Reused across `filtered_mean_with_scratch`
+    /// calls to achieve zero-alloc hot path.
+    pub(crate) mask_buf: Vec<u8>,
+}
+
+impl FilterScratch {
+    /// Construct an empty scratch buffer (no pre-allocation).
+    #[inline]
+    pub const fn new() -> Self {
+        Self { mask_buf: Vec::new() }
+    }
+
+    /// Construct with a pre-allocated capacity. Avoids the first-call grow.
+    #[inline]
+    pub fn with_capacity(l: usize) -> Self {
+        Self {
+            mask_buf: Vec::with_capacity(l),
+        }
+    }
 }

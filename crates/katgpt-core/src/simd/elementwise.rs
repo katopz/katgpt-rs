@@ -206,6 +206,61 @@ pub fn simd_sum_f32(x: &[f32]) -> f32 {
     }
 }
 
+/// SIMD-accelerated masked sum + count: returns `(sum(x[i] where mask[i] != 0),
+/// count of mask[i] != 0)`.
+///
+/// Used by the paired-loss-gap diagnostic's `TopKNoCopy` filter (Plan 335
+/// Phase 2) and any consumer that needs a stratified sum over a boolean mask.
+/// The mask is `&[u8]` (1 byte per element) for cross-platform SIMD
+/// compatibility (NEON `vcgtq_u8`, AVX2 `_mm256_cmpgt_epi8`).
+///
+/// # Why this exists (vs `simd_sum_f32`)
+///
+/// LLVM does NOT auto-vectorize horizontal f32 accumulation on most targets
+/// (f32 addition is non-associative; reordering changes the result). The
+/// plain `for i in 0..len { sum += x[i] * mask[i] }` form compiles to scalar
+/// `fadd` (~2.5 cycles/element on ARM64). This dispatcher uses explicit NEON
+/// `vfmaq_f32` / AVX2 `_mm256_fmadd_ps` to hit ~4–8 elements/cycle.
+///
+/// NEON: 4× f32 per masked-FMA. AVX2: 8× f32 per masked-FMA.
+#[inline(always)]
+pub fn simd_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
+    debug_assert_eq!(
+        x.len(),
+        mask.len(),
+        "simd_masked_sum_count_f32: x.len() ({}) must equal mask.len() ({})",
+        x.len(),
+        mask.len()
+    );
+    if x.is_empty() {
+        return (0.0, 0);
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_masked_sum_count_f32(x, mask) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_masked_sum_count_f32(x, mask) }
+        } else {
+            scalar_masked_sum_count_f32(x, mask)
+        }
+    }
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_masked_sum_count_f32(x, mask) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
+    {
+        scalar_masked_sum_count_f32(x, mask)
+    }
+}
+
 /// SIMD-accelerated in-place add: `dst[i] += src[i]` for all `i`.
 ///
 /// Used for residual connections in transformer forward pass (attn + MLP).
@@ -458,6 +513,24 @@ pub(super) fn scalar_sum_f32(x: &[f32]) -> f32 {
     sum
 }
 
+/// Scalar fallback for `simd_masked_sum_count_f32`. Branchless: `(mask[i] !=
+/// 0) as u32` produces a 0/1 multiplier; `d * (m as f32)` and `count += m`
+/// avoid the branch that would defeat pipelining.
+#[inline(always)]
+#[allow(dead_code)]
+pub(super) fn scalar_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
+    let mut sum = 0.0f32;
+    let mut count = 0u32;
+    for i in 0..x.len() {
+        unsafe {
+            let m = u32::from(*mask.get_unchecked(i) != 0);
+            sum += *x.get_unchecked(i) * (m as f32);
+            count += m;
+        }
+    }
+    (sum, count)
+}
+
 #[inline(always)]
 #[allow(dead_code)]
 pub(super) fn scalar_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
@@ -616,6 +689,107 @@ unsafe fn neon_sum_f32(x: &[f32]) -> f32 {
             i += 1;
         }
         sum
+    }
+}
+
+/// NEON masked sum + count for `simd_masked_sum_count_f32`. Loads 4 f32
+/// values per iteration, multiplies by a 0.0/1.0 mask (built from the u8
+/// mask bytes), and accumulates with 4 independent accumulators (same
+/// latency-hiding trick as `neon_sum_f32`). The mask conversion (u8→f32)
+/// uses a stack `[f32; 4]` load — the scalar conversions are cheap relative
+/// to the vectorized FMA, and the approach avoids needing a u8→u32 widening
+/// chain.
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
+    use core::arch::aarch64::{
+        vaddq_f32, vaddvq_f32, vdupq_n_f32, vld1q_f32, vmulq_f32,
+    };
+    unsafe {
+        let zero = vdupq_n_f32(0.0);
+        let mut acc_sum0 = zero;
+        let mut acc_sum1 = zero;
+        let mut acc_sum2 = zero;
+        let mut acc_sum3 = zero;
+        let mut count: u32 = 0;
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            // 4-lane mask as f32 (0.0 or 1.0).
+            let m0 = mask_f32_4(mask, i);
+            let m1 = mask_f32_4(mask, i + 4);
+            let m2 = mask_f32_4(mask, i + 8);
+            let m3 = mask_f32_4(mask, i + 12);
+            let x0 = vld1q_f32(x.as_ptr().add(i));
+            let x1 = vld1q_f32(x.as_ptr().add(i + 4));
+            let x2 = vld1q_f32(x.as_ptr().add(i + 8));
+            let x3 = vld1q_f32(x.as_ptr().add(i + 12));
+            // sum += x * mask (elementwise mul then add).
+            acc_sum0 = vaddq_f32(acc_sum0, vmulq_f32(x0, m0));
+            acc_sum1 = vaddq_f32(acc_sum1, vmulq_f32(x1, m1));
+            acc_sum2 = vaddq_f32(acc_sum2, vmulq_f32(x2, m2));
+            acc_sum3 = vaddq_f32(acc_sum3, vmulq_f32(x3, m3));
+            count += mask_count_4(mask, i)
+                + mask_count_4(mask, i + 4)
+                + mask_count_4(mask, i + 8)
+                + mask_count_4(mask, i + 12);
+            i += 16;
+        }
+
+        let mut sum = vaddvq_f32(vaddq_f32(vaddq_f32(acc_sum0, acc_sum1), vaddq_f32(acc_sum2, acc_sum3)));
+
+        // Remaining full 4-lanes.
+        let remaining = (len - i) / 4;
+        let mut acc_rem = zero;
+        for _ in 0..remaining {
+            let m = mask_f32_4(mask, i);
+            let xv = vld1q_f32(x.as_ptr().add(i));
+            acc_rem = vaddq_f32(acc_rem, vmulq_f32(xv, m));
+            count += mask_count_4(mask, i);
+            i += 4;
+        }
+        sum += vaddvq_f32(acc_rem);
+
+        // Tail.
+        while i < len {
+            let m = u32::from(*mask.get_unchecked(i) != 0);
+            sum += *x.get_unchecked(i) * (m as f32);
+            count += m;
+            i += 1;
+        }
+        (sum, count)
+    }
+}
+
+/// Helper: load 4 u8 mask values (at offsets `i..i+4`) as a NEON f32x4 of
+/// 0.0/1.0. Uses a stack `[f32; 4]` intermediate — the scalar conversions
+/// are cheap (1 cycle each) and the load is vectorized.
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+unsafe fn mask_f32_4(mask: &[u8], i: usize) -> core::arch::aarch64::float32x4_t {
+    use core::arch::aarch64::vld1q_f32;
+    unsafe {
+        let m = [
+            ((*mask.get_unchecked(i) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 1) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 2) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 3) != 0) as u8) as f32,
+        ];
+        vld1q_f32(m.as_ptr())
+    }
+}
+
+/// Helper: count non-zero mask values in `mask[i..i+4]`.
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+unsafe fn mask_count_4(mask: &[u8], i: usize) -> u32 {
+    unsafe {
+        u32::from(*mask.get_unchecked(i) != 0)
+            + u32::from(*mask.get_unchecked(i + 1) != 0)
+            + u32::from(*mask.get_unchecked(i + 2) != 0)
+            + u32::from(*mask.get_unchecked(i + 3) != 0)
     }
 }
 
@@ -867,6 +1041,97 @@ unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
             i += 1;
         }
         sum
+    }
+}
+
+/// AVX2 masked sum + count for `simd_masked_sum_count_f32`. Loads 8 f32
+/// values + 8 u8 mask values per iteration, widens u8→u32→f32 via
+/// `_mm256_cvtepu8_epi32` + `_mm256_cvtepi32_ps`, multiplies, and accumulates.
+/// 4 independent accumulators hide the FADD/FMA latency (same as `avx2_sum_f32`).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+#[inline]
+unsafe fn avx2_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
+    use core::arch::x86_64::{
+        _mm256_add_ps, _mm256_cvtepi32_ps, _mm256_cvtepu8_epi32, _mm256_loadu_ps,
+        _mm256_mul_ps, _mm256_setzero_ps, _mm_loadu_si128,
+    };
+    unsafe {
+        let zero = _mm256_setzero_ps();
+        let mut acc0 = zero;
+        let mut acc1 = zero;
+        let mut acc2 = zero;
+        let mut acc3 = zero;
+        let mut count: u32 = 0;
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 32;
+
+        for _ in 0..chunks4 {
+            // Load 8 u8 mask values, widen to 8×u32, convert to 8×f32.
+            let m_raw0 = _mm_loadu_si128(mask.as_ptr().add(i) as *const _);
+            let m0 = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(m_raw0));
+            let m_raw1 = _mm_loadu_si128(mask.as_ptr().add(i + 8) as *const _);
+            let m1 = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(m_raw1));
+            let m_raw2 = _mm_loadu_si128(mask.as_ptr().add(i + 16) as *const _);
+            let m2 = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(m_raw2));
+            let m_raw3 = _mm_loadu_si128(mask.as_ptr().add(i + 24) as *const _);
+            let m3 = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(m_raw3));
+            let x0 = _mm256_loadu_ps(x.as_ptr().add(i));
+            let x1 = _mm256_loadu_ps(x.as_ptr().add(i + 8));
+            let x2 = _mm256_loadu_ps(x.as_ptr().add(i + 16));
+            let x3 = _mm256_loadu_ps(x.as_ptr().add(i + 24));
+            acc0 = _mm256_add_ps(acc0, _mm256_mul_ps(x0, m0));
+            acc1 = _mm256_add_ps(acc1, _mm256_mul_ps(x1, m1));
+            acc2 = _mm256_add_ps(acc2, _mm256_mul_ps(x2, m2));
+            acc3 = _mm256_add_ps(acc3, _mm256_mul_ps(x3, m3));
+            count += mask_count_8(mask, i)
+                + mask_count_8(mask, i + 8)
+                + mask_count_8(mask, i + 16)
+                + mask_count_8(mask, i + 24);
+            i += 32;
+        }
+
+        let mut sum = horizontal_sum_256(_mm256_add_ps(
+            _mm256_add_ps(acc0, acc1),
+            _mm256_add_ps(acc2, acc3),
+        ));
+
+        let remaining = (len - i) / 8;
+        let mut acc = zero;
+        for _ in 0..remaining {
+            let m_raw = _mm_loadu_si128(mask.as_ptr().add(i) as *const _);
+            let m = _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(m_raw));
+            let xv = _mm256_loadu_ps(x.as_ptr().add(i));
+            acc = _mm256_add_ps(acc, _mm256_mul_ps(xv, m));
+            count += mask_count_8(mask, i);
+            i += 8;
+        }
+        sum += horizontal_sum_256(acc);
+
+        while i < len {
+            let m = u32::from(*mask.get_unchecked(i) != 0);
+            sum += *x.get_unchecked(i) * (m as f32);
+            count += m;
+            i += 1;
+        }
+        (sum, count)
+    }
+}
+
+/// Helper: count non-zero mask values in `mask[i..i+8]`. (x86_64 backend.)
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+unsafe fn mask_count_8(mask: &[u8], i: usize) -> u32 {
+    unsafe {
+        u32::from(*mask.get_unchecked(i) != 0)
+            + u32::from(*mask.get_unchecked(i + 1) != 0)
+            + u32::from(*mask.get_unchecked(i + 2) != 0)
+            + u32::from(*mask.get_unchecked(i + 3) != 0)
+            + u32::from(*mask.get_unchecked(i + 4) != 0)
+            + u32::from(*mask.get_unchecked(i + 5) != 0)
+            + u32::from(*mask.get_unchecked(i + 6) != 0)
+            + u32::from(*mask.get_unchecked(i + 7) != 0)
     }
 }
 
@@ -1150,6 +1415,99 @@ unsafe fn wasm32_simd128_sum_f32(x: &[f32]) -> f32 {
             i += 1;
         }
         sum
+    }
+}
+
+/// WASM SIMD128 masked sum + count. Mirrors `neon_masked_sum_count_f32`.
+/// Uses `f32x4(mask_byte != 0)` per lane for the mask conversion.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u32) {
+    use core::arch::wasm32::{f32x4, f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_splat, v128_load};
+    unsafe {
+        let zero = f32x4_splat(0.0);
+        let mut acc0 = zero;
+        let mut acc1 = zero;
+        let mut acc2 = zero;
+        let mut acc3 = zero;
+        let mut count: u32 = 0;
+        let mut i = 0;
+        let len = x.len();
+        let chunks4 = len / 16;
+
+        for _ in 0..chunks4 {
+            let m0 = mask_f32x4_wasm(mask, i);
+            let m1 = mask_f32x4_wasm(mask, i + 4);
+            let m2 = mask_f32x4_wasm(mask, i + 8);
+            let m3 = mask_f32x4_wasm(mask, i + 12);
+            let x0 = v128_load(x.as_ptr().add(i).cast());
+            let x1 = v128_load(x.as_ptr().add(i + 4).cast());
+            let x2 = v128_load(x.as_ptr().add(i + 8).cast());
+            let x3 = v128_load(x.as_ptr().add(i + 12).cast());
+            acc0 = f32x4_add(acc0, f32x4_mul(x0, m0));
+            acc1 = f32x4_add(acc1, f32x4_mul(x1, m1));
+            acc2 = f32x4_add(acc2, f32x4_mul(x2, m2));
+            acc3 = f32x4_add(acc3, f32x4_mul(x3, m3));
+            count += mask_count_4_wasm(mask, i)
+                + mask_count_4_wasm(mask, i + 4)
+                + mask_count_4_wasm(mask, i + 8)
+                + mask_count_4_wasm(mask, i + 12);
+            i += 16;
+        }
+
+        let s = f32x4_add(f32x4_add(acc0, acc1), f32x4_add(acc2, acc3));
+        let mut sum = f32x4_extract_lane::<0>(s)
+            + f32x4_extract_lane::<1>(s)
+            + f32x4_extract_lane::<2>(s)
+            + f32x4_extract_lane::<3>(s);
+
+        let remaining = (len - i) / 4;
+        let mut acc_rem = zero;
+        for _ in 0..remaining {
+            let m = mask_f32x4_wasm(mask, i);
+            let xv = v128_load(x.as_ptr().add(i).cast());
+            acc_rem = f32x4_add(acc_rem, f32x4_mul(xv, m));
+            count += mask_count_4_wasm(mask, i);
+            i += 4;
+        }
+        sum += f32x4_extract_lane::<0>(acc_rem)
+            + f32x4_extract_lane::<1>(acc_rem)
+            + f32x4_extract_lane::<2>(acc_rem)
+            + f32x4_extract_lane::<3>(acc_rem);
+
+        while i < len {
+            let m = u32::from(*mask.get_unchecked(i) != 0);
+            sum += *x.get_unchecked(i) * (m as f32);
+            count += m;
+            i += 1;
+        }
+        (sum, count)
+    }
+}
+
+/// Helper: build a wasm32 f32x4 mask (0.0/1.0 per lane) from `mask[i..i+4]`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline(always)]
+unsafe fn mask_f32x4_wasm(mask: &[u8], i: usize) -> core::arch::wasm32::v128 {
+    unsafe {
+        f32x4(
+            ((*mask.get_unchecked(i) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 1) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 2) != 0) as u8) as f32,
+            ((*mask.get_unchecked(i + 3) != 0) as u8) as f32,
+        )
+    }
+}
+
+/// Helper: count non-zero mask values in `mask[i..i+4]` (wasm32 backend).
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline(always)]
+unsafe fn mask_count_4_wasm(mask: &[u8], i: usize) -> u32 {
+    unsafe {
+        u32::from(*mask.get_unchecked(i) != 0)
+            + u32::from(*mask.get_unchecked(i + 1) != 0)
+            + u32::from(*mask.get_unchecked(i + 2) != 0)
+            + u32::from(*mask.get_unchecked(i + 3) != 0)
     }
 }
 

@@ -88,7 +88,10 @@ impl TokenTagger for CopyNGramTagger {
             // j < cur_start ensures no self-match; prefix[j..j+n] is valid
             // because j+n <= cur_start <= position < prefix.len().
             if &prefix[j..j + n] == cur {
-                return TokenClass::CopyN(n);
+                // n is usize but TokenClass::CopyN stores u8 (Phase 2 perf:
+                // 2-byte enum layout). n > 255 is absurd for n-gram detection
+                // (paper uses N=5); saturate.
+                return TokenClass::CopyN(n.min(255) as u8);
             }
         }
         TokenClass::Other

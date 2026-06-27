@@ -79,7 +79,7 @@ use sparse::scalar_sparse_dot_f32;
 pub use activations::{fast_sigmoid, simd_exp_inplace, simd_exp_sum_inplace, simd_reciprocal_inplace, simd_sigmoid_inplace, simd_sigmoid_tanh_clamp_inplace};
 pub use argmax::simd_argmax_f32;
 pub use dot::{simd_dot_f16_f32, simd_dot_f32, simd_fma_row, simd_matmul_f16_f32_rows, simd_matmul_f16_f32_rows_parallel, simd_matmul_relu_rows, simd_matmul_rows, simd_matmul_rows_parallel, simd_matvec, simd_outer_product_acc, simd_outer_product_acc_scaled};
-pub use elementwise::{simd_add_inplace, simd_add_into, simd_add_scalar_inplace, simd_fused_decay_write, simd_fused_sub_scale_inplace, simd_max_f32, simd_scale_inplace, simd_scale_mul_inplace, simd_sum_f32};
+pub use elementwise::{simd_add_inplace, simd_add_into, simd_add_scalar_inplace, simd_fused_decay_write, simd_fused_sub_scale_inplace, simd_masked_sum_count_f32, simd_max_f32, simd_scale_inplace, simd_scale_mul_inplace, simd_sum_f32};
 // Feature-gated re-exports — mirror the `#[cfg(feature = "...")]` gates on
 // the underlying items so `cargo check --no-default-features` stays green.
 #[cfg(feature = "maxsim")]
