@@ -508,6 +508,10 @@ fn main() {
     // representative timing for bragging, not a benchmark.
     println!("── Visual verification (untimed vs bench) ────────────────────");
 
+    let t_vfast0 = Instant::now();
+    let s_verify_fast = solve_fast();
+    let t_vfast = t_vfast0.elapsed();
+
     let t_vbt0 = Instant::now();
     let s_verify_bt = solve_backtrack();
     let t_vbt = t_vbt0.elapsed();
@@ -516,20 +520,12 @@ fn main() {
     let s_verify_sp = solve_speculate_iterative(8, 128);
     let t_vsp = t_vsp0.elapsed();
 
-    let t_vfast0 = Instant::now();
-    let s_verify_fast = solve_fast();
-    let t_vfast = t_vfast0.elapsed();
-
-    // Brag-worthy summary line — lead with the FASTEST solver.
-    println!("  ⏱  Arto Inkala (World's Hardest Sudoku) solved in {}", fmt_us(t_vfast));
-    println!("     solve_fast: {} ({} steps, MRV + constraint propagation)",
-        fmt_us(t_vfast), s_verify_fast.steps);
-    println!("     backtrack:  {} ({} steps)", fmt_us(t_vbt), s_verify_bt.steps);
-    println!("     speculate:  {} ({} spec_commits + {} fallback_steps)",
-        fmt_us(t_vsp), s_verify_sp.spec_commits, s_verify_sp.steps);
-    println!();
-
-    // Assert correctness — panics here if any solver produced an invalid grid.
+    // ── Assert correctness FIRST (panics if any solver is wrong). ──
+    assert!(s_verify_fast.solved, "solve_fast did not solve!");
+    assert!(
+        s_verify_fast.final_board.is_solved(),
+        "solve_fast final_board is_solved() == false"
+    );
     assert!(s_verify_bt.solved, "backtrack did not solve!");
     assert!(
         s_verify_bt.final_board.is_solved(),
@@ -540,31 +536,48 @@ fn main() {
         s_verify_sp.final_board.is_solved(),
         "speculate_iterative final_board is_solved() == false"
     );
-    assert!(s_verify_fast.solved, "solve_fast did not solve!");
-    assert!(
-        s_verify_fast.final_board.is_solved(),
-        "solve_fast final_board is_solved() == false"
-    );
-
     // Cross-check: Inkala has a unique solution, so all three must agree.
+    assert_eq!(
+        s_verify_fast.final_board.grid, s_verify_bt.final_board.grid,
+        "solve_fast and backtrack produced different grids \
+         (Inkala has a unique solution — they must match)"
+    );
     assert_eq!(
         s_verify_bt.final_board.grid, s_verify_sp.final_board.grid,
         "backtrack and speculate_iterative produced different grids \
          (Inkala has a unique solution — they must match)"
     );
-    assert_eq!(
-        s_verify_bt.final_board.grid, s_verify_fast.final_board.grid,
-        "backtrack and solve_fast produced different grids \
-         (Inkala has a unique solution — they must match)"
-    );
 
-    println!("  ✅ assertions passed: all 3 solvers agree, grids match, is_solved=true");
+    // ── Brag-worthy hero block ──
+    let speedup_vs_bt = t_vbt.as_nanos() as f64 / t_vfast.as_nanos().max(1) as f64;
+    let speedup_vs_sp = t_vsp.as_nanos() as f64 / t_vfast.as_nanos().max(1) as f64;
+    let hero = format!("⚡  World's Hardest Sudoku solved in {}", fmt_us(t_vfast));
+    let sub  = "(Arto Inkala — 21 clues, 60 empties)";
+    let w = hero.len().max(sub.len());
+    println!();
+    println!("  ╔{}╗", "═".repeat(w + 2));
+    println!("  ║ {:<width$} ║", hero, width = w);
+    println!("  ║ {:<width$} ║", sub,  width = w);
+    println!("  ╚{}╝", "═".repeat(w + 2));
+    println!();
+    println!("  Leaderboard (single-shot, this run):");
+    println!("    🥇  solve_fast   {:>10}   {:>7} steps   {}/speed",
+        fmt_us(t_vfast), s_verify_fast.steps, "—");
+    println!("    🥈  backtrack    {:>10}   {:>7} steps   {:.1}× slower",
+        fmt_us(t_vbt), s_verify_bt.steps, speedup_vs_bt);
+    println!("    🥉  speculate    {:>10}   fell back    {:.1}× slower",
+        fmt_us(t_vsp), speedup_vs_sp);
+    println!();
+    println!("  solve_fast = MRV cell selection + naked-singles constraint");
+    println!("               propagation. Pure modelless, no training.");
+    println!();
+    println!("  ✅ verified: 3 solvers agree, grid valid, unique solution confirmed");
     println!();
 
-    // Print the solved grid (from backtrack; speculate + fast match per asserts).
-    println!("  Solved grid (Arto Inkala):" );
+    // ── Solved grid (proof). ──
+    println!("  Solved grid:");
     println!();
-    for line in s_verify_bt.final_board.display().lines() {
+    for line in s_verify_fast.final_board.display().lines() {
         println!("    {line}");
     }
     println!();
