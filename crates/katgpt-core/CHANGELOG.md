@@ -1,0 +1,455 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.2.0](https://github.com/katopz/katgpt-rs/releases/tag/katgpt-core-v0.2.0) - 2026-06-27
+
+### Added
+
+- add release-plz CI for katgpt-core (release-only, skip root crate)
+- *(funcattn)* Plan 332 Phase 4 follow-up — promote funcattn_structured_basis to DEFAULT-ON in katgpt-core via per-basis GOAT gate
+- analytic_lattice — compose_chain + batch prefix + direction_vector_decode + spectral audit + ASOC trait shapes (Plan 330 katgpt-core)
+- *(funcattn)* Plan 332 — structured basis constructors (DCT-log, Haar-packet)
+- babel_codec — BT-P8 deterministic text codec + sigmoid latent codec + BLAKE3 commitment (Plan 331)
+- *(332)* structured basis selection for FUNCATTN — T5.1 invariance falsified
+- *(branching)* add Clone+Debug to NonInterferenceProjection and Clone to BranchBank
+- Plan 329 Phase 4 — composition tests (T4.1-T4.4, 20 tests green)
+- Plan 329 Phase 3 — GOAT gate PASS + promote non_interference_branches to default-on
+- Plan 329 Phase 2 — NonInterferenceProjection + BudgetCompiler (RIZZ distillation)
+- Plan 329 Phase 1 — non-interference memory branches skeleton (RIZZ distillation)
+- promote closure_instrument to default-on (Plan 290 T4.7 + G4 fix)
+- *(promote)* Plan 322 — promote phase_rotation_coupling to default (katgpt-core)
+- *(indicator_probe_bank)* Plan 320 Phase 4+5 — GOAT gate + promotion to DEFAULT-ON
+- *(core)* Plan 322 Phase 1 — phase-modulated subspace rotation gate primitive
+- *(content-store)* Plan 272 PROMOTED TO DEFAULT-ON — all G1-G7 GOAT gates PASS
+- *(indicator_probe_bank)* Plan 320 Phase 2+3 — similarity matrix + cascade
+- *(content-store)* Plan 272 T3.3 NetChunkFetcher stub + G3/G5 profiling
+- *(indicator_probe_bank)* Plan 320 Phase 1 — IndicatorProbeBank<L, D> open primitive
+- *(content-store)* Plan 272 Phase 4 GOAT gates — G1/G2/G4/G6/G7 PASS
+- *(promote)* Plan 327 — promote arg_protocol to default (katgpt-core)
+- *(content-store)* Plan 272 Phase 3 T3.1/T3.2/T3.4/T3.5 — chunk fetchers
+- *(arg)* Plan 327 Phase 3 — InfoRegistry two-phase dedup with grey-zone review
+- *(arg)* Plan 327 Phase 2 — TypedOfflineCandidate + OfflineCandidateScorer with G5 silence-bias
+- *(promote)* Plan 326 — promote tucker_factorization to default (katgpt-core)
+- *(katgpt-core)* add TuckerResultScratch::from_owned for Cold-tier reload (Plan 326 Phase 2)
+- *(arg)* Plan 327 Phase 1 — ARG protocol primitives (PolicyEnvelope, TaxonomyValidator, LifecycleState+RedirectTable)
+- *(katgpt-core)* add Tucker/HOSVD N-mode tensor factorization (Plan 326)
+- *(promote)* Plan 335 — promote interest_cochain to default (katgpt-core)
+- *(core)* standalone FFT-based spectral differentiation primitive (Plan 325, DEFAULT-ON, Research 307 §3 #2)
+- *(core)* bisimulation operator inference primitive (Plan 324, Research 308, arXiv:2602.19260)
+- Fourier Continuation primitive (Plan 323, DEFAULT-ON)
+- *(core)* CommittedFieldBlend — sampling-invariant per-entity MoE (Plan 321, G1-G5 PASS)
+- *(katgpt-core)* Plan 335 Phase 5 — SIMD lattice edge utility op (leaf-clean raw-slice API)
+- *(katgpt-core)* Plan 335 Phase 1 — InterestCohain primitive (fame/notability cochain)
+- *(plan-308)* add frozen-A low-rank B-step for Plan 332 Phase 7 cross-game transfer
+- Plan 319 Phase 5 — G8c formation PASS (2.93×) + G8d coverage PASS (4/4 vs 3/4)
+- Plan 319 Phase 5 — G8e AOI latency gate PASS (3.34ms < 5ms, 0 allocs/tick)
+- *(geometric_product)* perf unblock + promote to default-on (Issue 003 RESOLVED, Plan 319 Phase 3)
+- *(katgpt-core)* add channel-wise Clifford geometric product primitive (Plan 319 Phase 1)
+- *(dec)* add coboundary index for O(boundary) boundary_flux (Plan 318, Issue 006)
+- *(plan-308)* add KarcForecaster::restore_wout for freeze/thaw bridge
+- *(dec)* add circulation_integral rank-2 Stokes wrapper (Plan 317, Issue 005)
+- *(subspace_phase_gate)* thin_svd_into SOA scratch-stored result (zero-alloc hot path)
+- *(subspace_phase_gate)* expose thin_svd + SvdScratch as public API
+- *(dec)* Stokes calculus wrappers + Phase 3 GOAT gate (Plan 314)
+- *(katgpt-core)* Plan 313 Phase 2+3 AC-GPT conditional API + GOAT gate (PROMOTED)
+- *(katgpt-core)* Plan 313 Phase 1 AC-GPT prefix skeleton (opt-in)
+- *(katgpt-core)* Plan 312 Phase 4 GOAT gate proofs + bench for viable_manifold_graph
+- viable manifold graph primitive phases 1-3 (Plan 312)
+- plan 301 phase 2 G1 GOAT — subspace phase transition reproduces (PASS)
+- latent field steering primitive + GOAT gate (Plan 309, G1-G5 all PASS)
+- promote cross_resolution_transport to default-on (Plan 310 Phase 4)
+- cross-resolution spectral transport primitive + GOAT gate (Plan 310, G1-G4 all PASS)
+- *(306)* promote depth_invariance to default — G4 re-spec to absolute-latency at HLA scale
+- *(308)* KARC Phase 2 — higher-order features (Eq. 32) + chunked Gram (Eq. 44) + ALS low-rank fit (Eq. 47)
+- *(306/307)* parent decisions + katgpt-core baseline fix
+- KARC delay-basis-ridge forecaster (Plan 308 Phase 1, arXiv:2606.19984)
+- *(306)* depth-invariance diagnostic Phase 3/4/6/7.3/8 — BeliefDrafter + micro_belief audit hooks + G4 bench
+- Plan 304 Phase 2 — wire GainCostLoopHalter into forward_looped + docs
+- plan 331 phase 1 — HLA evolve_hla audit + RmsNorm regularized wrap
+- plan 306 phase 1+5 — depth-invariance diagnostic + magnitude-regularized residual wrapper
+- ship Plan 303/304/305 Phase 1 primitives (salience tri-gate, gain/cost halter, alg-prob sampler)
+- *(rtdc)* Plan 302 Phase 3 Candidate C — probabilistic subtree_inclusion proof (CG6 PASS)
+- RTDC open primitive — DepthTieredMerkleOctree + DeterministicLeafEncode (Plan 302 Phase 1)
+- *(engram)* finish Plan 299 T1.7 proptest + T2.6 micro-bench
+- *(personality_composition)* Plan 297 Phases 4-5, GOAT G4/G5 PASS, promote to default-on
+- *(personality_composition)* Plan 297 Phases 1-3, sigmoid-gated layer composition kernel
+- expose deltanet layer type
+- *(induced_cwm)* Plan 296 Phase 4 — Commitment Roundtrip + Hot-Swap Hook (T4.1-T4.4)
+- *(induced_cwm)* Plan 296 Phase 3 — Value Function Tournament (T3.1-T3.5)
+- *(induced_cwm)* Plan 296 Phase 2 — ISMCTS over induced CWM (T2.1-T2.5)
+- *(induced_cwm)* Plan 296 Phase 1 — kernel primitive skeleton (T1.1-T1.9)
+- *(035)* Any-Time LT2 Dispatch — per-request elastic loop_count
+- *(plan294)* add Debug impl for BranchingDetector
+- *(ict)* Plan 294 — ICT distributional branching-point detector (Super-GOAT G3 PASS)
+- *(forensic)* Plan 293 Phases 1-6 — forensic watermark recipe primitive
+- *(funcattn)* Plan 286 Phase 5 — T5.1/T5.2/T5.3 composition modules
+- FPCG Phases 1-3 — FeatureClass vocabulary + FutureBehaviorProbe + FpcgSelector (Plan 292, Research 267)
+- closure-instrument phase 1-3 — PTG + motifs + PRI/CDG/TaR (Plan 290)
+- *(funcattn)* G3 sigmoid-vs-softmax basis gate (Plan 286 T3.1)
+- katgpt-core FastCDC chunker (Plan 272 Phase 2)
+- katgpt-core chunked content store (Plan 272 Phase 1)
+- *(289)* sink-aware forward-path composition for parallax_attn
+- *(fft)* FFT SON-LT replay gen + LoRA player + arena (Plan 296 T7.3)
+- *(288)* sink-aware attention flat &[f32] layout variants
+- plan 287 — sink-aware attention classifier + dual-policy gate
+- *(286)* ship FUNCATTN dual-form open primitive + G1 mechanics gate
+- *(compression_drafter)* beam search + MatchLengthScorer (Plan 285 Phase 5-7, GOAT FAILED 2nd run)
+- *(compression_drafter)* add corpus-as-model primitive (Plan 285, GOAT FAILED)
+- *(281)* promote bom_sampling to default-on — G2 PASS +31.49pp (riir-ai Plan 314)
+- *(recursion_logits)* Plan 283 T2.3 — opt-in RecursionLogits trait + test consumer
+- *(281)* bom_sampling auto-enables simd_sigmoid — G3 PASS K=8 (1.87x step)
+- *(self_advantage_gate)* Plan 283 T5.1.3/T5.1.4 — GOAT 3/3 PASS, promote default NaN→0.01
+- *(self_advantage_gate)* Plan 283 T5.1.1/T5.1.2/T5.1.5 — HLA reconstruction 4th early-stop criterion
+- sigmoid-graded reject confidence — Plan 310 T1 (HarnessBridge Table 7)
+- Plan 277 Issue 026 — unified surprise bus Super-GOAT sweep
+- *(cgsp_dual_pool)* Plan 282 Phase 4 — FaithfulnessProbe gate (G4 PASS)
+- *(cgsp_dual_pool)* Plan 282 Phase 4 — E-pool arm growth (G3 PASS)
+- *(sense)* Plan 277 T2.6 — G2 gate bench for HLA surprise emotional-event trace
+- BoMSampler — K-hypothesis single-pass belief sampling (Plan 281)
+- *(cgsp)* Plan 277 Phase 5 F4 - DerivativeCuriosity + G5 GOAT gate
+- *(sense)* Plan 277 Phase 2 Fusion F1 — HLA surprise companion
+- *(cgsp_dual_pool)* Plan 282 Phase 3 — G2 regret bound on concave landscape
+- *(cgsp_dual_pool)* Plan 282 Phase 2 — G1 reachability guarantee proof
+- implement Plan 282 Phase 1 — ReachableDualPoolRouter + DualPoolBandit (DecentMem distillation)
+- *(micro_belief)* Plan 276 T1.14 — criterion [[bench]] for G1.4 + batch throughput
+- *(micro_belief,temporal_deriv,faithfulness)* Phase 1 skeletons for Plans 276/277/278
+- *(cgsp)* ship Plan 274 Phase 4 — examples + docs + complete cgsp-core move
+- implement Plans 264-271 modelless inference primitives
+- *(qgf)* add Q-Guided Flow test-time gradient-guidance primitive (Plan 268)
+- *(gpart_pruning)* top-k group masking at apply time (Issue 008 MVP)
+- *(katgpt-core)* WASM SIMD128 ternary matvec — Plan 290 T9
+- wire MUX-RCD into DDTree + MSA Plan 256 benchmarks (GOAT FAIL, opt-in)
+- dynamic DEC topology + terrain cochains for destructible terrain (Plan 261)
+- *(core)* add SectorProjection + ActionBridge latent physics primitives (Plan 262)
+- *(dendritic_gate)* ThinkingMode::Dendritic arm 4 + 4-arm bandit + re-export from katgpt-core (Plan 260 Phase 2+5)
+- Plan 255 Part 5 — GOAT proof example + NPC brain benchmark
+- *(dendritic_gate)* implement Plan 260 Phase 1+3+4+5+6 — DDTree build variant, MuxBfs integration, tests
+- implement GPart isometric partition adapter (Plan 257)
+- *(dash_attn)* per-GQA-group independent top-k selection + msa_per_group GOAT gate (Plan 256 Phase 2)
+- MSA blockwise sparse attention distillation (Plan 256, Research 225)
+- spectral budget router + newton_schulz_n + allocation optimizations + issue reindex
+- *(katgpt-core)* merkle octree curator modelless verification layer (Plan 253)
+- ANE-Latent NPC brain compute backend (Plan 254 Part 1)
+- *(dec)* Hodge spectrum, backend auto-route, SIMD hints — Plan 251 Phase 6 + remaining
+- IntervalPruner module — interval-preserving token pruning (Plan 252 Phase 1, T1-T7)
+- *(dec)* Hodge energy, residual, relevance score — Plan 251 Phase 5
+- *(dec)* DecFlowField — Hodge-decomposed NPC navigation — Plan 251 Phase 4
+- *(dec)* Hodge decomposition, Betti numbers, harmonic projector — Plan 251 Phase 3
+- DEC operators on cell complexes — Plan 251 Phase 1-2
+- *(sense)* batch reconstruction with pre-computed projection weights (Plan 248 Phase 4)
+- Plan 248 OctreeCTC GOAT proof tests and demo
+- SIMD optimizations for OctreeCTC reconstruction loop
+- *(still_kv)* heuristic beta optimization + sense brain reconstruction (issue 003, plan 248)
+- *(sense)* add OctreeCTC reconstructive memory navigation (Plan 248)
+- *(epiplexity)* SR²AM context extension with bandit arm selection (Plan 130 T4)
+- *(spectral_pruner)* GOAT PASS Plan 246 — promote to default, add config + benchmarks
+- StillKV Perceiver KV cache compaction scaffold (Plan 245, Research 213)
+- *(spectral_threat)* auto_calibrate + GOAT benchmarks + plan status updates
+- *(plan-242)* add T5 integration test — 10 NPCs reach goal via flow field
+- deep LOD — skip loop for Compressed/Minimal (Plan 240 GOAT PASS)
+- GOAT benchmark for Fourier-Smoothed Flow Fields (Plan 242 T7)
+- sense_lod — spectral NPC perception compression (Plan 240)
+- promote slod to default-ON (GOAT G1-G6 all pass), demote bake_precision as marginal loser
+- add BakePrecisionStore and BakeSession for Plan 236 Phase 3
+- Plan 231 GOAT proof — union_bound_confidence 6/6, pathway_tracker 7/7, federation_composer 7/7, all promoted to default-ON
+- promote 6 GOAT-proven features to default-ON
+- plan 237 complete — schema_centroid GOAT 7/7, promoted to default-ON
+- plan 237 phase 1 — SchemaCentroidCache + schema_init_entity
+- *(sense)* KG confidence weight bridge — KgEmbedding.confidence → SenseModule.project() scaling
+- Shard Embedding Projection — JL random orthogonal 64→8 (Plan 230)
+- *(katgpt-core)* add GM Sense API dispatch (Plan 221 T10) + RAT+ bridge Phase 1 (Plan 225)
+- Plan 221 — KG Latent Octree Sense Composition (T1-T11)
+- Plan 217 Phase 1 — BeliefDrafter struct, draft(), SpeculativeGenerator, DecodeStage::BeliefDraft (19 tests passing)
+- Plan 216 T11-T17, T24 — CPU/GPU auto-route, GOAT tests (11 passing, 23/25 tasks done)
+- implement Plan 212 Collapse-Aware Adaptive Thinking — S2F mid-reasoning early exit (T1-T3, T5-T8)
+- lodestar completion-distance pruning — budget mask + jump-ahead + A* (Plan 207 T2-T8)
+- GOAT proof for comp_width — 3/3 PASS (Plan 205)
+- compositional DDTree partner-entropy width (Plan 205)
+- domino causal correction — modelless decoupled pattern (Plan 197, Research 177)
+- Best Buddies Drafting — mutual NN filter for speculative decoding (Plan 199)
+- implement Plan 189 Phase 3 — ModalSpec drafter with LinOSS cell
+- *(pruners)* integrate IdeaDivergence into BanditPruner arm selection (Plan 191 T3.2)
+- SpeculativeGenerator trait unification — Phase 1 (Plan 193)
+- AND-OR DDTree decomposition — Plan 190 T1-T5
+- implement Plans 183-186 modelless bandit inference optimizations
+- *(mux)* complete Plan 178 — multiplexed latent reasoning via vocabulary superposition
+- *(config)* add deltanet linear attention head dimensions for hybrid models
+- *(pruners)* add Hydra adaptive layer budget (Plan 165)
+- *(sr2am+emotion)* wire desperation_bin into SR²AM context (Plan 162 T11/T12)
+- *(parallax)* promote sigmoid to ParallaxActivation default (Plan 161 T5)
+- *(parallax)* sigmoid attention mode — kernel-agnostic local linear correction (Plan 140)
+- *(parallax_attn)* add ParallaxScratch for zero-alloc reuse, re-export in lib
+- FlashLib dual-Gram routing + roofline cost model (Plan 159)
+- *(moa)* implement token-adaptive activation mixing (Plan 158)
+- *(simd)* add f64 SIMD kernels for PEIRA outer products and Newton-Schulz matmul
+- sigmoid margin loss + retrieval margin diagnostic (Plan 157, GOAT 7/7)
+- *(katgpt-core)* add spectral hierarchy diagnostic module (Plan 156)
+- *(katgpt-core)* add LEO all-goals trait framework (Plan 155)
+- add LEO all-goals trait framework (Plan 155) as default-on
+- add LEO all-goals Q-value trait framework (Plan 155)
+- *(peira)* implement PEIRA modelless distillation (Plan 153)
+- *(core)* add dirichlet_energy feature gate to katgpt-core (Plan 149)
+- *(plans 141-152)* implement Plans 149,151,152 + mark all 12 plans COMPLETE
+- *(core)* ternary SIMD matvec (plasma path) and weights cleanup
+- *(plasma_path)* ternary SIMD matvec — GOAT 5/5, promoted to default
+- implement plans 133-136 — parallel probe, MGR stability, HL regularization docs, TF loop
+- training-free loop, parallel probe, GOAT stability bench
+- *(types)* add Llama model architecture + SiLU/SwiGLU activations
+- Plans 133-139 — parallel probe extraction, MGR stability docs, HL regularization, TF loop, stiff anomaly gate, EGA attention
+- Plan 110 QuestBench T3-T5 + Plan 111 Mech Attribution T1-T8
+- *(spechop)* hop-level DDTree + SR²AM configurator integration (Plan 131, T25-T32)
+- *(rt_turbo)* add Phase 1 offline head calibration (Plan 126 T1-T6)
+
+### Fixed
+
+- scrub private repo names from public READMEs (commercial strategy leak)
+- *(funcattn)* Plan 332 — correct DCT-log verdict, it's not a bug
+- resolve clippy deny-level errors and lints in katgpt-core
+- clear clippy diagnostics across benches/tests/examples
+- gate feature-only super imports in simd/maxsim and simd/ternary
+- resolve all diagnostics (E0382 moved-value + dead-code warnings)
+- ThreatCohain typo in dec/mod.rs re-export (broke --all-features)
+- unblock wasm32 target for katgpt-core + secure_vessel + bomber-wasm (Plan 316)
+- *(cgsp)* import EntropyCollapse in derivative_curiosity test module
+- *(ac_prefix)* §3.5 modelless unblock — eliminate doubled-signal bias bit-identically (Issue 003 Phase 0 Path 2)
+- *(ac_prefix)* revert premature promotion to default-on (Plan 313 G1 audit)
+- *(core)* remove duplicate hla_mut under depth_invariance (E0592 unblock)
+- *(katgpt-core)* unblock cargo check --all-features — hodge borrow + LoraAdapter import + MerkleProof collision
+- clear all clippy warnings + gate engram integration test
+- resolve remaining katgpt-core clippy warnings (allow on numerical files, fix mechanical issues)
+- clear deny-by-default clippy lints (approx_constant, erasing_op, uninit_vec)
+- clear all cargo check --all-targets diagnostics
+- *(simd)* unblock test compilation after simd.rs → simd/ split
+- *(parallax)* Issue 002 T1/T2/T3b/T4 — stability regression anchors + W_R grad clip
+- *(core)* move ReviewMetrics to katgpt-core (Issue 308)
+- *(core)* centralize sigmoid, fix unbounded rational approximation
+- *(types)* LoraAdapter::load returns all adapters (Issue 299)
+- *(296)* SplitMix64 seed expansion in Rng::new — eliminate degenerate 0.0 first draw
+- *(simd)* revert wrapping_sub mask construction in neon/avx2 ternary matvec
+- resolve clippy needless_range_loop and forget_non_drop warnings
+- SenseModule BLAKE3 commitment uses offset_of instead of size_of - 32
+- resolve clippy warnings — field_reassign_with_default, needless_range_loop, total_cmp, and mask bounds
+- clamp kNN k to dists.len() in slod::build_laplacian
+- resolve clippy warnings and fix forward_batch test errors
+- clippy needless_range_loop warnings in irrep_pruner.rs
+- resolve all clippy and compiler warnings
+- FlowFieldCache bitfield layout + DummyHead action_count (Plan 242 T4-T6)
+- apply optimization.md rules to sense hot path (Plan 240)
+- resolve all clippy warnings
+- resolve remaining clippy warnings
+- resolve all compiler errors and clippy warnings
+- plan 235 slod — fix exp_map formula, test tolerances, remove dead code
+- resolve all clippy warnings and errors across katgpt-rs
+- resolve clippy needless_range_loop and single_match in traits.rs
+- resolve clippy warnings in katgpt-rs
+- *(peira)* resolve clippy warnings and micro-optimize
+- replace multiplication by -1 with negation (clippy::neg_multiply)
+- resolve all clippy warnings in dllm.rs and coda.rs
+- resolve all clippy warnings across both crates
+- *(core)* clippy/lint cleanups and derive improvements
+- *(clippy)* resolve assign_op_pattern and too_many_arguments warnings
+- *(clippy)* resolve erasing_op, identity_op, and needless_range_loop in simd.rs
+- resolve all compiler/clippy warnings
+
+### Other
+
+- add katgpt-core README + crates.io metadata (readme, keywords, categories)
+- bump version to 0.2.0
+- *(research)* 315 action items T1-T3 — universality-class canary + grounding docs
+- *(funcattn)* Plan 332 broadband PDE-like validation for DCT-log
+- rm resolved issues 002-009 + fix dangling refs in README/simd_wasm32_goat
+- *(plan326)* record G1/G3 PASS (unit tests), G2/G4 PENDING (bench blocked by system exec failure)
+- *(core)* CommittedFieldBlend Phase 4 — examples + docs (Plan 321 T4.1-T4.4)
+- clippy + rustfmt cleanup across benches/tests/examples/src
+- geometric product GOAT gate results — quality PASS, perf deferred (Plan 319 Phase 2-3)
+- *(simd)* port 17 wasm32 SIMD128 kernels + GOAT harness (Issue 007 Phase 1)
+- *(compression_drafter)* sort_unstable for corpus_alphabet (bytes are unique)
+- *(linoss)* SIMD AXPY + scale in Phase 2 mode computation (match Phase 1)
+- *(katgpt-core)* eliminate heap allocs in compression_drafter beam search, RTDC proofs, and Jacobian SVD
+- *(katgpt-core)* motif adjacency-list + linoss ping-pong double-buffer
+- *(katgpt-core)* hot-path alloc/SIMD wins across cgsp, induced_cwm, gain_cost_halt, mux, parallax, sense
+- *(vessel)* Plan 315 Phase 5 — examples + overview doc
+- *(katgpt-core)* hot-path alloc/clone elimination + loop fusion
+- *(viable_manifold_graph)* CSR adjacency closes random walk perf gate (Plan 312 T5)
+- AVX2 SIMD for apply_latent_steering (plan 309 T3.1/T3.2)
+- *(308)* Phase 4 G1 threshold analysis — K drives threshold, not d_h
+- *(306)* SIMD-vectorize classify_chain magnitude+flatness loop
+- *(rtdc)* Plan 302 Phase 3 CG6 formal bench harness + GOAT report
+- research 279 + plan 301 + subspace_phase_gate primitive (arXiv:2409.02426)
+- *(micro_belief)* cut LatentThoughtKernel K=3 latency 37% (723ns → 454ns)
+- *(core)* SIMD AXPY + scale + sum_sq for VocabFourierBasis mode computation
+- *(core)* SIMD AXPY for tilt_logits / tilt_logits_adaptive
+- *(core)* drop redundant scores buffer zero-fill in batched attention
+- *(core)* find_sufficient_set stack-allocate counts buffer
+- *(core)* parallelize dual eigensolve, MCTS running visit counter + O(1) action pick
+- *(core)* SIMD column-sum reductions in data_probe, drop redundant cast
+- *(core)* fuse surprise_norm SIMD pass, drop hypot for sqrt(x²+y²)
+- *(core)* fix O(n log n) Merkle proofs, add scaled outer-product kernel, total_cmp, drop 2KB chunker field
+- *(core)* eliminate allocations, FMA loss, integer division, and improve SIMD coverage
+- *(types)* split 5148-line types.rs into types/ module folder
+- *(simd)* split 6715-line simd.rs into simd/ module folder
+- 4-accumulator unroll for scalar dot/sum/dist kernels in simd.rs
+- 4-accumulator unroll for scalar_dot_f32 to break FMA latency chain
+- hoist hot-path allocations in hodge CG, data_probe sink classifier, motif chain DFS
+- *(katgpt-core)* SIMD-ify best_buddies argmax + update_goals_seen dot/norm (dual_leo default-on)
+- *(katgpt-core)* add simd_sigmoid_inplace, document 6-element scalar-sigmoid GOAT finding
+- *(katgpt-core)* skip empty words + iterate set bits in inflate_obstacles
+- *(katgpt-core)* extract top-K once per leaf in MuxBfs (3× fewer passes)
+- *(katgpt-core)* sort_unstable_by for remaining top-K / value-keyed sorts
+- *(katgpt-core)* swap MotifMiner::recent_ptgs Vec→VecDeque for O(1) eviction
+- *(katgpt-core)* hand-roll postcard varint in canonical_hash, kill remaining 2 allocs
+- *(katgpt-core)* sort_unstable in branching_point_mask (sister to detector fix)
+- *(katgpt-core)* stack-alloc canonical_hash scratch + unstable sort in ict detector
+- *(katgpt-core)* default reconstruct_inner to expand_matvec + fix buggy rational sigmoid
+- *(katgpt-core)* pin SenseOverride size at 136 bytes
+- *(katgpt-core)* reorder SenseOverride fields to eliminate padding
+- *(katgpt-core)* SIMD-vectorize direction dots + kill bom_arena hot-path allocations
+- relocate forensic watermark recipe from katgpt-rs to riir-chain
+- *(closure)* Plan 290 G1 — PRI bit-matrix + ahash (4507µs → 22-26µs, Issue 035)
+- *(issues)* remove 19 done issues + fix 018/020/021
+- sink-aware attention G3 latency work (Issue 001)
+- *(277)* Plan 277 T5.3 — derivative_curiosity_bench.rs (G5 GOAT gate, 4 benches)
+- *(cgsp_dual_pool)* Plan 282 Phase 6 — docs + example + GOAT gate decision (stays opt-in)
+- *(simd_sigmoid)* vectorize AttractorKernel sigmoid chain — fixes Issues 024/025
+- *(goat)* Plan 277 Phase 6 — GOAT scorecard + promote temporal_deriv to DEFAULT-ON
+- *(faithfulness)* relocate faithfulness module to katgpt-core so riir-engine Plan 308 can consume (fix Plan 278 placement, mirror cgsp precedent)
+- *(micro_belief)* Plan 276 Phase 2/3/5 — evolve_hla delegate + LatentThought + G2.1 gate
+- *(dec)* zero-alloc hodge_spectrum power iteration via _into variant
+- *(dec)* zero-alloc CG matvec via _into operator variants
+- *(core)* hardware f32→f64 widening in peira SIMD + zero-alloc linoss scan
+- FMA/reciprocal-multiply/SIMD-softmax across hot paths
+- *(qgf)* add projector overhead benchmark + swap_remove optimization (Plan 268 T2)
+- *(katgpt-core)* FMA in QGuidedDrafter::tilt_logits
+- *(katgpt-core)* entropy_f32 NaN-safe regression test
+- *(katgpt-core)* FMA in ternary dot products
+- *(katgpt-core)* single-pass entropy + FMA scalar fallbacks + DendriticGate layout
+- dec/hodge + dec/flow SIMD + SAXPY fusion
+- katgpt-core SIMD + allocation + branch optimizations
+- renumber research 267-270 to 235-238, plan 265 attn_match to 271
+- *(core)* fuse softmax exp+sum pass, zero-alloc entropy
+- *(dec)* single-pass compact-and-rebind for remove_face
+- *(298)* SWAR + sign-FMLA + 4acc ternary matvec — 2.1x NEON speedup
+- latent physics primitives benchmark (Plan 262)
+- purge JSON from hot paths — zero-copy binary (postcard) everywhere
+- *(gpart)* add GpartPrepared zero-alloc fast path, fix G2 GOAT gate (Plan 257)
+- tighten field types in sense structs for cache density
+- replace assert! with debug_assert! and partial_cmp.unwrap with total_cmp
+- optimize katgpt-core allocations, layout, and numerics
+- SIMD-accelerate SLoD/Dirichlet hot paths in katgpt-core
+- remove dead allocating zscore wrapper from slod
+- reuse token buffer in mux dd_tree expand_node, pre-allocate in init_root
+- reduce papaya epoch pin/unpin in schema_init_entity, O(k) bitmap uniqueness in demux
+- optimize katgpt-core — sigmoid, field layout, O(1) avg, dead code, sort alloc
+- DEC operators branch-free + rank-0 fast path, sense backend field reorder + loop optimizations
+- mux bfs detect_width eliminates allocations, dd_tree reserve sizing, and_or push_child reserve
+- optimize fft_smooth_into column loops and reconstruction hot paths
+- direct array indexing in curator check_spectral loop
+- optimize katgpt-core allocations, layout, arithmetic, and error handling
+- f32 FFT in irrep_pruner, flat buffers in linoss, remove repr(C) from merkle
+- flow::is_blocked if→match pattern
+- optimize katgpt-core — branch elimination, field reorder, assert→debug_assert, reciprocal mul
+- optimize sense module hot paths
+- extract Dtype::elem_size() helper in roofline cost module
+- optimize katgpt-core hot paths
+- extract SlodPruner tier_index helper to deduplicate routing logic
+- scalar ShardEmbedding cosine/Hash, single-pass pearson, f64 accumulation
+- optimize katgpt-core — layout, SIMD, allocations, error handling
+- *(katgpt-core)* optimize layout, SIMD kernels, and error handling across 22 files
+- reuse FftPlanner across flow field FFT smoothing calls
+- eliminate redundant allocations and double traversals in mux/dd_tree, mux/bandit_width, dec/operators
+- single-pass Welford variance + single-pin schema centroid lookup
+- eliminate double lookups, redundant fills, and single-pin papaya in katgpt-core
+- eliminate Vec clone in demux_into — truly zero-alloc
+- eliminate unwrap, optimize struct layout, reduce allocations in katgpt-core
+- match→if in irrep_pruner, remove unused var, simplify fold, fix derive/repr order
+- optimize katgpt-core — bitset, partial sort, repr cleanup
+- refine Plan 248 — promote octree_ctc to default, fix stale arXiv ref, update benchmarks
+- optimize and_or, flow, mux modules
+- optimize sense module hot paths
+- optimize and_or, flow, mux hot paths
+- *(sense)* optimize hot-path math and project sign extraction
+- optimize and_or, mux modules — inline hints, reduce allocs, division→mul
+- zero-alloc hot paths, SIMD fusion, branch elimination across core kernels
+- optimize sense module hot paths
+- optimize and_or, flow, mux modules
+- Plan 055 — mark completed optimization tasks
+- flow/mux/slod zero-allocation hot paths (Plan 055 pass 2)
+- optimize sense crate — eliminate allocations, branch-free dot product, O(1) active_count
+- cleanup — remove completed plans, safety fixes, idiom improvements
+- SIMD pipeline hiding, fused kernels, zero-alloc patterns
+- optimize and_or/flow/mux modules (Plan 054)
+- optimize sense module hot path and supporting code
+- optimize sense module hot-path performance
+- optimize katgpt-core hot paths
+- optimize and_or/flow/mux modules (Plan 247)
+- *(plan-242)* mark T8 dynamic obstacle response complete, all tasks done
+- 001 GOAT proof benchmarks - all gates promoted (no losers)
+- mark Plan 236 BAKE precision tasks complete — GOAT 9/9
+- optimize katgpt-core hot paths — branchless ternary, SIMD reciprocal fusion, zero-clone verify
+- zero-alloc hot paths + O(1) lookups in katgpt-core
+- mark Plans 222 & 223 complete — all phases implemented with tests/benches
+- single-pass SIMD argmax primitive (~5× over two-pass idiom)
+- SIMD-ify Wall Attention hot-path + pre-allocate all weight Vecs
+- Plan 172 + 173: RiM buffer slots + Wall attention (GOAT 13/13)
+- *(simd)* 4-accumulator NEON/AVX2 sum & max reductions (3.7-4.1x)
+- *(katgpt-core)* SIMD inlining, branch-free sparse, field reorder, deltanet feature
+- plan 163/178: add SIA FeedbackBandit — harness + weight co-evolution
+- *(katgpt-core)* hot-path optimizations across all modules
+- add #[inline] to hot-path functions and #[inline(always)] to SIMD kernels
+- apply optimization.md guidelines across katgpt-core and src
+- optimization sweep — repr(u8), SIMD, branchless, field reorder, hoist invariants
+- Add SIMD reciprocal, flatten eigenvector buffer
+- *(dirichlet)* functor_adjacency takes &[] instead of Vec
+- *(spectral_hierarchy)* pre-allocate f64 conversion, early-return for k=0
+- *(traits)* O(1) peak_action_space via running peak in record()
+- *(questbench)* batch validity check, byte-cast bool sum for autovec
+- *(parallax_attn)* SIMD-accelerate softmax and conditional scratch reset
+- *(peira)* pre-allocate f32->f64 scratch to eliminate per-call Vec
+- *(questbench)* pre-allocate CSP generator constants outside loops
+- Add parallax_attn feature: streaming covariance correction + AHLA extension (Plan 135)
+- Eliminate per-call heap allocations on hot paths with pre-allocated buffers
+- Replace scalar softmax and activation loops with SIMD batch operations
+- *(136)* latent-prediction sample complexity — theoretical validation only
+- zero-alloc hot paths, struct reorders, SIMD bulk copy, scratch reuse
+- zero-alloc reuse, struct field reorder, SIMD bulk copy
+- SIMD-ify questbench underspecification score and SdpaOutputGate
+- promote sleep_consolidation, spectral_hierarchy, dual_gram_pca, roofline_cost to default-ON
+- refine optimization pass — stack arrays, zero-alloc context reuse, multiply-by-inverse
+- apply optimization.md guidelines across katgpt-core and src/
+- *(types,spectral)* reorder struct fields by descending alignment
+- *(peira)* hoist first_step branch out of SIMD inner loops
+- apply hot-path optimizations per optimization.md guidelines
+- optimize hot paths per optimization guidelines
+- eliminate redundant attn_out zero-fill, fuse softmax passes, and remove tiled attention per-head allocation
+- *(simd)* use vdupq_n_f32 for NEON accumulator init
+- *(spectral)* simplify f32→f64 conversion, CSE trig in Jacobi rotation
+- *(attention)* fuse sub-scale-exp into SIMD passes, fused decay-write normalize
+- *(questbench)* eliminate intermediate Vec alloc, sparse narrowing bitmaps
+- *(coda)* use simd_sum_f32 for compute_rstd, document sigmoid gating
+- *(types)* add #[repr(u8)] to hot-path enums (PlanningDecision, GateDecision)
+- eliminate hot-path allocations and add SIMD abs-sum (Issues 109, 110, 112, 115, 120)
+- hot-loop alloc elimination, struct padding, enum sizing, SIMD reuse
+- *(gegelu_tanh)* replace scalar inner loops with SIMD primitives (issue #107)
+- *(katgpt-core)* fix 4 optimization issues (104-107)
+- apply katgpt-perf issues 001-012
+- fix double mutable borrow in page allocation
+- parallel LM head matmul + hot-path allocation elimination
+- eliminate hot-path allocations, SIMD scalar replacement, inline/enum annotations
+- fix issues 082-089 — SIMD scalar loops, redundant rmsnorm, fused sub+scale
+- SIMD-ize hot paths per Issue 089 review (#4,#5,#6,#7,#9)
+- SIMD acceleration + allocation fixes (issues 082-088)
+- use PI constant and suppress unused field warning
+- fix hot-path performance audit issues ([#81](https://github.com/katopz/katgpt-rs/pull/81))
+- *(simd)* add simd_fused_scale_acc for attention value accumulation
+- SIMD multi-accumulator dot, fused kernels, Cholesky inversion, cache-friendly attention (#069-#080)
+- *(plan155)* add proper LEO paper citation (Matthews et al., ICML 2026, arXiv:2605.23551)
+- *(core,src)* zero-alloc scratch buffers across attention, routing, transformer, and DLLM hot paths
+- *(core,src)* eliminate hot-path allocations and SIMD inefficiencies (PERF-001)
+- *(questbench)* replace domain-specific pruners with NarrowingPruner abstraction
+- rename microgpt to katgpt across entire codebase
