@@ -506,7 +506,6 @@ fn main() {
     // the user can visually confirm the solved grid and the bench asserts the
     // solution is actually correct. The `Instant` here is a single-shot
     // representative timing for bragging, not a benchmark.
-    println!("── Visual verification (untimed vs bench) ────────────────────");
 
     let t_vfast0 = Instant::now();
     let s_verify_fast = solve_fast();
@@ -548,41 +547,34 @@ fn main() {
          (Inkala has a unique solution — they must match)"
     );
 
-    // ── Brag-worthy hero block ──
+    // ── Brag block (flush-left, clean for screenshots). ──
     let speedup_vs_bt = t_vbt.as_nanos() as f64 / t_vfast.as_nanos().max(1) as f64;
     let speedup_vs_sp = t_vsp.as_nanos() as f64 / t_vfast.as_nanos().max(1) as f64;
     let hero = format!("⚡  World's Hardest Sudoku solved in {}", fmt_us(t_vfast));
     let sub  = "(Arto Inkala — 21 clues, 60 empties)";
     let w = hero.len().max(sub.len());
     println!();
-    println!("  ╔{}╗", "═".repeat(w + 2));
-    println!("  ║ {:<width$} ║", hero, width = w);
-    println!("  ║ {:<width$} ║", sub,  width = w);
-    println!("  ╚{}╝", "═".repeat(w + 2));
+    println!("╔{}╗", "═".repeat(w + 2));
+    println!("║ {:<width$} ║", hero, width = w);
+    println!("║ {:<width$} ║", sub,  width = w);
+    println!("╚{}╝", "═".repeat(w + 2));
     println!();
-    println!("  Leaderboard (single-shot, this run):");
-    println!("    🥇  solve_fast   {:>10}   {:>7} steps   {}/speed",
+    println!("Leaderboard (single-shot, this run):");
+    println!("  🥇  solve_fast   {:>10}   {:>7} steps   {}/speed",
         fmt_us(t_vfast), s_verify_fast.steps, "—");
-    println!("    🥈  backtrack    {:>10}   {:>7} steps   {:.1}× slower",
+    println!("  🥈  backtrack    {:>10}   {:>7} steps   {:.1}× slower",
         fmt_us(t_vbt), s_verify_bt.steps, speedup_vs_bt);
-    println!("    🥉  speculate    {:>10}   fell back    {:.1}× slower",
+    println!("  🥉  speculate    {:>10}   fell back    {:.1}× slower",
         fmt_us(t_vsp), speedup_vs_sp);
     println!();
-    println!("  solve_fast = MRV cell selection + naked-singles constraint");
-    println!("               propagation. Pure modelless, no training.");
+    println!("solve_fast = MRV cell selection + naked-singles constraint");
+    println!("             propagation. Pure modelless, no training.");
     println!();
-    println!("  ✅ verified: 3 solvers agree, grid valid, unique solution confirmed");
-    println!();
-
-    // ── Solved grid (proof). ──
-    println!("  Solved grid:");
-    println!("  ─────────────────────────────────────────────");
     for line in s_verify_fast.final_board.display().lines() {
-        println!("  {line}");
+        println!("    {line}");
     }
-    println!("  ─────────────────────────────────────────────");
     println!();
-    println!("── end visual verification ──────────────────────────────────");
+    println!("✅ verified: 3 solvers agree, grid valid, unique solution confirmed");
     println!();
 
     // Sink to prevent elision.
