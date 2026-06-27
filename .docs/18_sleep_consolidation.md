@@ -157,3 +157,25 @@ cargo check --features full
 - **Plan 105 (GDN2):** Gated DeltaNet-2 recurrent attention — O(1) decode
 - **Plan 107 (AutoDreamer):** Modelless consolidation complement
 - **Plan 092 (Freeze/Thaw):** Context→weights pipeline
+
+---
+
+## 9. Relationship to Sleep-Time Query Anticipation (Plan 334)
+
+Plan 154 (this doc) and Plan 334 are **complementary sleep-time approaches**, both offline, both modelless, both serving the same goal — move compute off the wake-time critical path — but they differ in *where the consolidated state lives*:
+
+| Aspect | Plan 154 (Sleep Consolidation) | Plan 334 (Sleep-Time Query Anticipator) |
+|--------|--------------------------------|------------------------------------------|
+| **Paper** | [arXiv:2605.26099](https://arxiv.org/abs/2605.26099) (LLM Sleep, Lee et al.) | [arXiv:2504.13171](https://arxiv.org/abs/2504.13171) (Sleep-time Compute, Lin et al.) |
+| **Approach** | **State internalization** — bake context into recurrent fast-weight state via N-pass consolidation at the KV-eviction boundary. | **Artifact emission** — pre-compute anticipated-query answers into a reusable BLAKE3-committed `AnticipatedQuerySet` (the c' artifact). |
+| **Where the answer lives** | Implicit in the recurrent state S (must be unrolled at wake-time to decode). | Explicit in c'.slots[i].precomputed (direct latent-vector lookup at wake-time). |
+| **Wake-time cost** | Single recurrent step (O(1) decode, but needs the recurrent kernel). | Dot-product + sigmoid gate + linear blend (zero-alloc, ~57ns at D=64). |
+| **Query-aware?** | No — consolidation is unconditional on what will be asked. | Yes — predictability scoring decides *which* queries are worth pre-computing. |
+| **Economics** | Implicit (the cost is the consolidation passes; the benefit is preserved wake-time latency). | Explicit via `AmortizationCostModel` — `should_pre_compute(sleep_cost, N, E[gate])` answers whether pre-computing pays off for this context given N consumers. |
+| **Failure mode** | Catastrophic forgetting if the recurrent state can't hold everything. | Cache miss on unpredictable queries → fall through to `fresh_think` (graceful). |
+
+**Composability:** the two are not mutually exclusive. A consumer could use Plan 154 to consolidate long-range context into recurrent state (so wake-time decode stays O(1)), *and* use Plan 334 to pre-compute anticipated-query answers for the most predictable queries (so wake-time serve avoids even the recurrent step for those). The c' artifact from Plan 334 sits alongside the recurrent state from Plan 154 — one is the compressed history, the other is the anticipated future.
+
+**The curiosity inversion bridges them:** Plan 334's `PredictabilityScorer` trait lets a consumer swap in a curiosity-inversion scorer where `p = sigmoid(α·(curiosity_ref − curiosity(c)))`. Curiosity here is the forecast residual of a KARC-style forecaster (Plan 308) — when the context is on-manifold (low curiosity, well-forecast), Plan 334 pre-computes aggressively; when it's off-manifold (high curiosity, novel), Plan 334 defers to wake-time fresh compute. Plan 154 has no such query-aware gate — it consolidates unconditionally.
+
+📖 Plan 334: [`.plans/334_sleep_time_query_anticipator_primitive.md`](../.plans/334_sleep_time_query_anticipator_primitive.md). Architecture entry: [`.docs/02_architecture.md`](02_architecture.md) § Sleep-Time Query Anticipator. Examples: [`sleep_time_01_basic.rs`](../crates/katgpt-core/examples/sleep_time_01_basic.rs) + [`sleep_time_02_curiosity_inversion.rs`](../crates/katgpt-core/examples/sleep_time_02_curiosity_inversion.rs).

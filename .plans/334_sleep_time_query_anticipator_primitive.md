@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md](../.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md)
 **Source paper:** [arxiv 2504.13171](https://arxiv.org/abs/2504.13171) — Lin et al. (Letta/Berkeley), *Sleep-time Compute: Beyond Inference Scaling at Test-time*
 **Target:** `katgpt-rs/src/sleep_time/` (new module) + Cargo feature `sleep_time_anticipation`
-**Status:** ✅ Phase 1 + Phase 2 COMPLETE (2026-06-27). Open math primitives shipped under `sleep_time_anticipation` (opt-in). 31 inline unit tests + 13 GOAT gate tests (G1/G2/G7) + 1 alloc-check test (G5) all pass. G6 latency measured inside targets (3.5–10× margin). Quality gates G2/G3/G4 require a real predictability-labeled corpus → deferred to riir-ai Plan 341. Promotion to default-on requires Plan 341 G1–G5 to clear on a real game corpus.
+**Status:** ✅ COMPLETE / CLOSED (2026-06-27). All four phases shipped. Open math primitives live under `sleep_time_anticipation` (opt-in). Phase 1: traits + types + IdentityFunctorOp. Phase 2: 31 inline unit tests + 13 GOAT gate tests (G1/G2/G7) + 1 alloc-check test (G5) all pass; G6 latency measured inside targets (3.5–10× margin). Phase 3: two runnable examples (`sleep_time_01_basic.rs`, `sleep_time_02_curiosity_inversion.rs`) — both build and run clean. Phase 4: README Feature Showcase entry + architecture doc entry + Plan 154 cross-reference. Quality gates G2/G3/G4 require a real predictability-labeled corpus → deferred to riir-ai Plan 341. Promotion to default-on requires Plan 341 G1–G5 to clear on a real game corpus.
 
 ---
 
@@ -337,14 +337,16 @@ These are the **mechanics + zero-alloc + commitment + latency** gates. Quality g
 
 ## Phase 3 — Example (adoption hook)
 
+**Status: ✅ COMPLETE (2026-06-27).** Both examples build and run clean via `cargo run -p katgpt-core --example <name> --features katgpt-core/sleep_time_anticipation --release`. T3.2 uses a generalized curiosity-inversion scorer (`p = sigmoid(α·(curiosity_ref − curiosity))`) rather than the special-case `p = 1 − sigmoid(curiosity)` form, so the high/low-predictability contrast and the `should_pre_compute` verdict flip are both cleanly visible. The scorer is implemented in the example (not in the shipped API) to demonstrate the `PredictabilityScorer` trait-swap mechanism without expanding the primitive's surface.
+
 ### Tasks
 
-- [ ] **T3.1** `examples/sleep_time_01_basic.rs` — minimal example showing:
+- [x] **T3.1** `examples/sleep_time_01_basic.rs` — minimal example showing:
   - Construct 4 anticipated-query directions (hardcoded).
   - Run `anticipate()` on a context.
   - Run `consume()` on a query, show the gated blend.
   - Print the cost model: amortization factor at N=1 vs N=10.
-- [ ] **T3.2** `examples/sleep_time_02_curiosity_inversion.rs` — show the predictability = 1 − curiosity mapping:
+- [x] **T3.2** `examples/sleep_time_02_curiosity_inversion.rs` — show the predictability = 1 − curiosity mapping:
   - Use a fake KARC-like forecaster (closed-form ridge over synthetic trajectory).
   - Show that high-curiosity contexts (large forecast residual) get LOW predictability → `should_pre_compute` returns false.
   - Show that low-curiosity contexts get HIGH predictability → `should_pre_compute` returns true.
@@ -353,11 +355,13 @@ These are the **mechanics + zero-alloc + commitment + latency** gates. Quality g
 
 ## Phase 4 — Documentation
 
+**Status: ✅ COMPLETE (2026-06-27).**
+
 ### Tasks
 
-- [ ] **T4.1** Add `sleep_time/` section to `katgpt-rs/README.md` under "Feature Showcase" — brief, public-facing. Reference Research 317 and Plan 334.
-- [ ] **T4.2** Add entry to `katgpt-rs/.docs/02_architecture.md` describing the module.
-- [ ] **T4.3** Cross-reference from `katgpt-rs/.docs/18_sleep_consolidation.md` (the existing Plan 154 doc) — note that Plan 334 is the **artifact-emission** complement to Plan 154's **state-internalization** approach.
+- [x] **T4.1** Add `sleep_time/` section to `katgpt-rs/README.md` under "Feature Showcase" — brief, public-facing. Reference Research 318 and Plan 334.
+- [x] **T4.2** Add entry to `katgpt-rs/.docs/02_architecture.md` describing the module.
+- [x] **T4.3** Cross-reference from `katgpt-rs/.docs/18_sleep_consolidation.md` (the existing Plan 154 doc) — note that Plan 334 is the **artifact-emission** complement to Plan 154's **state-internalization** approach.
 
 ---
 

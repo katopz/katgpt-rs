@@ -586,3 +586,24 @@ required-features = ["paired_loss_diagnostic"]
 [[example]]
 name = "paired_loss_02_class_size_bound"
 required-features = ["paired_loss_diagnostic"]
+
+# Plan 334 Phase 3 T3.1 — minimal sleep-time anticipator walkthrough: build
+# K=4 hardcoded anticipated-query directions, run anticipate() to emit the c'
+# artifact (BLAKE3-committed), run consume() to show the sigmoid-gated blend
+# (precomputed slot vs fresh_think), and print the amortization cost model
+# (amortization_factor at N=1 vs N=10, the paper's headline ~2.5× gain regime).
+[[example]]
+name = "sleep_time_01_basic"
+required-features = ["sleep_time_anticipation"]
+
+# Plan 334 Phase 3 T3.2 — the curiosity↔predictability inversion (the
+# load-bearing theoretical contribution). A synthetic KARC-like ridge
+# forecaster models context as evolving on a low-dim manifold; the
+# curiosity residual = ||x − forecast(x)||. Low-curiosity contexts (on the
+# manifold) → high predictability → should_pre_compute = true. High-curiosity
+# contexts (off the manifold) → low predictability → should_pre_compute = false.
+# Demonstrates the PredictabilityScorer trait-swap mechanism with a custom
+# CuriosityInversionScorer implementation.
+[[example]]
+name = "sleep_time_02_curiosity_inversion"
+required-features = ["sleep_time_anticipation"]
