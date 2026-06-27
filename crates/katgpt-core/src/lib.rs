@@ -835,3 +835,20 @@ pub use sleep_time::{
     PredictabilityScorer, SleepTimeAnticipator, SleepTimeComputeOp, SleepTimeScratch, commit_direction,
     consume, consume_gate,
 };
+
+// PairedLossGap — generic modelless paired token-level loss gap diagnostic
+// (Plan 335, Research 319, arXiv:2606.20936 Li & Merrill AI2). Pure
+// measurement tool: given two log-prob traces over the same prefixes, compute
+// per-token Δ_i = ℓ_A − ℓ_B, stratify by token class, report filtered
+// aggregates (ALL / TOP-K∩NO-COPY / COPY-N-ONLY) that amplify small
+// architecture gaps aggregate loss hides. ClassSizeBound exposes Proposition 1
+// (DKL ≤ log|V_τ|) — the volume-of-support bound justifying raw-vs-latent
+// sync. Generic math, no game/chain/shard semantics — legitimately public.
+// NOT an inference mechanism (measurement tool only) → not Super-GOAT.
+// Opt-in until G1–G4 GOAT gate passes.
+#[cfg(feature = "paired_loss_diagnostic")]
+pub mod paired_loss;
+#[cfg(feature = "paired_loss_diagnostic")]
+pub use paired_loss::{
+    ClassSizeBound, CopyNGramTagger, FilterKind, PairedLossGap, TokenClass, TokenTagger,
+};

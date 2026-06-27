@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/319_Paired_Token_Loss_Gap_Discourse_State_Diagnostic.md](../.research/319_Paired_Token_Loss_Gap_Discourse_State_Diagnostic.md)
 **Source paper:** [arxiv 2606.20936](https://arxiv.org/abs/2606.20936) — Li & Merrill, "Comparing Transformers and Hybrid Models at the Token Level", AI2, Jun 2026
 **Target:** `katgpt-rs/crates/katgpt-core/src/paired_loss/` (new module) + Cargo feature `paired_loss_diagnostic`
-**Status:** Active — Phase 1 (skeleton)
+**Status:** Active — Phase 1 COMPLETE (G1 GREEN)
 
 ---
 
@@ -28,22 +28,22 @@ Companion theoretical tool: **Proposition 1** (`DKL(p⋆_τ ‖ p_ϕ,τ) ≤ log
 
 ### Tasks
 
-- [ ] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/paired_loss/mod.rs` behind feature `paired_loss_diagnostic = []`. Wire into `katgpt-core/src/lib.rs` under `#[cfg(feature = "paired_loss_diagnostic")] pub mod paired_loss;`.
-- [ ] **T1.2** Define core types in `paired_loss/types.rs`:
+- [x] **T1.1** Create module `katgpt-rs/crates/katgpt-core/src/paired_loss/mod.rs` behind feature `paired_loss_diagnostic = []`. Wire into `katgpt-core/src/lib.rs` under `#[cfg(feature = "paired_loss_diagnostic")] pub mod paired_loss;`.
+- [x] **T1.2** Define core types in `paired_loss/types.rs`:
   - `pub struct PairedLossGap { deltas: Vec<f32> }` — the per-token `Δ_i = ℓ_A − ℓ_B` trace.
   - `pub enum TokenClass { Content, Function, Other, BracketOpen, BracketClose, CopyN(usize) }` — the tag-stratification enum (Content/Function/Other is the paper's three-way aggregate; BracketOpen/Close captures the state-update vs state-closure asymmetry; CopyN captures n-gram reuse).
   - `pub struct ClassSizeBound { log_v_tau: f32 }` — Proposition 1 bound (`log|V_τ|` for a class).
   - `pub enum FilterKind { AllTokens, TopKNoCopy { k: usize, max_ngram: usize }, CopyNOnly { n: usize } }` — the three filtered-eval modes from §6.
-- [ ] **T1.3** Implement `PairedLossGap::from_log_probs(log_probs_a: &[f32], log_probs_b: &[f32]) -> Self` — the O(L) subtract. Zero-alloc: take slices, build the delta vec once with `Vec::with_capacity`.
-- [ ] **T1.4** Implement `PairedLossGap::mean_gap(&self) -> f32` — the aggregate `Δ̄ = mean(Δ_i)` (the `ALL_TOKENS` filter).
-- [ ] **T1.5** Implement `PairedLossGap::mean_gap_for_class(&self, classes: &[TokenClass], target: TokenClass) -> f32` — tag-stratified raw mean (paper's §3 Analysis I).
-- [ ] **T1.6** Implement `PairedLossGap::filtered_mean(&self, classes: &[TokenClass], filter: FilterKind) -> f32` — the filtered aggregates (§6). For `TopKNoCopy`: select the top-K most-`Δ_i`-favored Content/Function classes, exclude CopyN positions for n ≤ max_ngram, mean over the mask. For `CopyNOnly`: mean over CopyN(n) positions only.
-- [ ] **T1.7** Implement `ClassSizeBound::for_vocab_size(v_tau: usize) -> Self` — `log_v_tau = (v_tau as f32).ln()`. Pure math, O(1).
-- [ ] **T1.8** Implement `ClassSizeBound::reducible_loss_ceiling(&self) -> f32` — returns `log_v_tau` (the Proposition 1 upper bound on `DKL(p⋆_τ ‖ p_ϕ,τ)`).
-- [ ] **T1.9** Add a `TokenTagger` trait: `pub trait TokenTagger { fn classify(&self, token_id: u32, position: usize, prefix: &[u32]) -> TokenClass; }` — pluggable tagger (POS, source-level, or game-state-derived). Ship one trivial impl: `CopyNGramTagger { n: usize }` that marks positions completing a repeated n-gram in the prefix (the paper's COPY_k feature). This is the minimum viable tagger; richer taggers (POS, bracket) are consumer-side.
-- [ ] **T1.10** Write `paired_loss/tests.rs` with the G1 synthetic fixture: two known log-prob traces → exact `Δ_i` per token, exact `mean_gap`, exact `filtered_mean` for each `FilterKind`.
+- [x] **T1.3** Implement `PairedLossGap::from_log_probs(log_probs_a: &[f32], log_probs_b: &[f32]) -> Self` — the O(L) subtract. Zero-alloc: take slices, build the delta vec once with `Vec::with_capacity`.
+- [x] **T1.4** Implement `PairedLossGap::mean_gap(&self) -> f32` — the aggregate `Δ̄ = mean(Δ_i)` (the `ALL_TOKENS` filter). SIMD horizontal sum via `simd_sum_f32`.
+- [x] **T1.5** Implement `PairedLossGap::mean_gap_for_class(&self, classes: &[TokenClass], target: TokenClass) -> f32` — tag-stratified raw mean (paper's §3 Analysis I).
+- [x] **T1.6** Implement `PairedLossGap::filtered_mean(&self, classes: &[TokenClass], filter: FilterKind) -> f32` — the filtered aggregates (§6). For `TopKNoCopy`: select the top-K most-`Δ_i`-favored Content/Function classes, exclude CopyN positions for n ≤ max_ngram, mean over the mask. For `CopyNOnly`: mean over CopyN(n) positions only.
+- [x] **T1.7** Implement `ClassSizeBound::for_vocab_size(v_tau: usize) -> Self` — `log_v_tau = (v_tau as f32).ln()`. Pure math, O(1).
+- [x] **T1.8** Implement `ClassSizeBound::reducible_loss_ceiling(&self) -> f32` — returns `log_v_tau` (the Proposition 1 upper bound on `DKL(p⋆_τ ‖ p_ϕ,τ)`).
+- [x] **T1.9** Add a `TokenTagger` trait: `pub trait TokenTagger { fn classify(&self, token_id: u32, position: usize, prefix: &[u32]) -> TokenClass; }` — pluggable tagger (POS, source-level, or game-state-derived). Ship one trivial impl: `CopyNGramTagger { n: usize }` that marks positions completing a repeated n-gram in the prefix (the paper's COPY_k feature). This is the minimum viable tagger; richer taggers (POS, bracket) are consumer-side.
+- [x] **T1.10** Write `paired_loss/tests.rs` with the G1 synthetic fixture: two known log-prob traces → exact `Δ_i` per token, exact `mean_gap`, exact `filtered_mean` for each `FilterKind`.
 
-**Phase 1 exit:** `cargo test -p katgpt-core --features paired_loss_diagnostic --lib` passes G1. `cargo check --features paired_loss_diagnostic` compiles.
+**Phase 1 exit:** `cargo test -p katgpt-core --features paired_loss_diagnostic --lib` passes G1 (35/35 tests). `cargo check --features paired_loss_diagnostic` compiles. G3 no-regression verified (default / no-default / all-features all clean on katgpt-core + root crate feature forwarding wired).
 
 ---
 
