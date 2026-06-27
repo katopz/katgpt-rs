@@ -5,6 +5,9 @@ edition = "2024"
 license = "MIT"
 description = "Shared types and SIMD kernels for katgpt-rs and riir-engine"
 repository = "https://github.com/katopz/katgpt-rs"
+readme = "README.md"
+keywords = ["inference", "simd", "modelless", "attention", "manifold"]
+categories = ["algorithms", "science", "data-structures"]
 
 [dependencies]
 fastrand = "2"
