@@ -576,10 +576,11 @@ fn main() {
 
     // ── Solved grid (proof). ──
     println!("  Solved grid:");
-    println!();
+    println!("  ─────────────────────────────────────────────");
     for line in s_verify_fast.final_board.display().lines() {
-        println!("    {line}");
+        println!("  {line}");
     }
+    println!("  ─────────────────────────────────────────────");
     println!();
     println!("── end visual verification ──────────────────────────────────");
     println!();
