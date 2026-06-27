@@ -3,9 +3,10 @@
 //! This crate contains the common core shared between the two projects:
 //! - **types**: Config, Rng, math utilities, LoRA, DomainLatent
 //! - **simd**: NEON/AVX2 accelerated linear algebra kernels
+//! - **hla**: Higher-order Linear Attention substrate (cache types + kernels)
 //! - **traits**: Shared traits for game AI and speculative decoding
 //!
-//! No feature flags on types — both projects get the full superset.
+//! No feature flags on types/simd/hla — both projects get the full substrate.
 
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
@@ -13,6 +14,7 @@ pub mod attention;
 pub mod coda;
 #[cfg(feature = "dec_operators")]
 pub mod dec;
+pub mod hla;
 pub mod leaky_core;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;

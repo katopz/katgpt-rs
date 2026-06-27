@@ -17,6 +17,13 @@
 //! Violating this order introduces look-ahead bias (using future information).
 //!
 //! Reference: Zhang et al. (2026), "Higher-order Linear Attention," §3.
+//!
+//! # Origin
+//!
+//! Moved from `katgpt-rs/src/hla/kernel.rs` (Plan 008 Phase 1 Step 4, 2026-06-28).
+//! Pure substrate — depends only on `crate::simd` and `crate::hla::types`, both
+//! in katgpt-core. The cognitive role-aware variants (`*_role_aware`) live in
+//! `riir-engine/src/hla/kernel.rs` behind the `hla_role_aware` feature.
 
 use crate::hla::types::{AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState};
 use crate::simd;

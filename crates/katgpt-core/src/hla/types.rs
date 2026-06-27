@@ -14,6 +14,14 @@
 //! - AHLA: PKV/mK shared per KV group, E/n per Q head
 //!
 //! KV group for Q head `h`: `kv_group = h * n_kv_head / n_head`
+//!
+//! # Origin
+//!
+//! Moved from `katgpt-rs/src/hla/types.rs` (Plan 008 Phase 1 Step 4, 2026-06-28).
+//! This is the pure substrate half of HLA — the cognitive extensions (role-aware
+//! kernels, `ThirdOrderMoment`, `HlaUpdateMode`) live in `riir-engine/src/hla/`
+//! behind the `hla_role_aware` feature (Category C per Issue 007 §"Cross-repo
+//! consumer cleanup").
 
 use crate::types::Config;
 

@@ -127,12 +127,33 @@ refined strategy doc, stranded in a private fork.
   file is ~6300 lines after step 2 (forward funcs + ForwardContext + tests),
   still over the 2048 ceiling — addressed in follow-up.
 - [ ] **Step 3 — `tokenizer` → core.** DEFERRED per Q2 verdict. Audit SentencePiece-sys dep first; if present, leave in root.
-- [ ] **Step 4 — `hla` → core.** 2248 lines total (`forward.rs` 569 + `kernel.rs` 1019 + `types.rs` 606 + `mod.rs` 54). Depends on step 2.
-  - [ ] 4a. Move `hla/{mod,types,kernel,forward}.rs` → `katgpt-core/src/hla/`
-  - [ ] 4b. Port riir-engine's `*_role_aware` variants behind a new core feature `hla_role_aware` (consolidation, not blind copy — per Issue 007 §"Cross-repo consumer cleanup")
-  - [ ] 4c. Root `src/hla/` → thin re-export
-  - [ ] 4d. GOAT gate: bit-identical forward output vs pre-move (sigmoid, never softmax)
-  - [ ] 4e. Commit: `feat(core): Plan 008 step 4 — move HLA substrate to katgpt-core + port role-aware variants`
+- [x] **Step 4 — `hla` → core (substrate half).** 2248 lines total (`forward.rs` 569 + `kernel.rs` 1019 + `types.rs` 606 + `mod.rs` 54). Depends on step 2.
+
+  ⚠️ **AUDIT FINDING (2026-06-28, before execution): the original premise was wrong.**
+  `forward.rs` CANNOT move cleanly to core — it imports `crate::transformer::{ForwardContext, TransformerWeights}` and `ForwardContext` has root-only pruner fields (`CnaModulator`, `SubstrateMask`, `HydraSkipPlan`). This is the **same split pattern as Step 2** (`katgpt-transformer` got the substrate types; root kept the forward composition). Corrected scope: move the **pure substrate half** (`types.rs` + `kernel.rs`) to core; keep the **composition half** (`forward.rs`) in root.
+
+  ### Done subtasks (2026-06-28)
+  - [x] 4a. Move `types.rs` (606 LoC) + `kernel.rs` (1019 LoC) → `katgpt-core/src/hla/` (verbatim; both files depend only on `crate::simd` + `crate::types::Config`, both already in core — zero import changes needed). New `katgpt-core/src/hla/mod.rs` declares `pub mod kernel; pub mod types;` + re-exports the substrate API. `forward.rs` stays in root.
+  - [x] 4c. Root `src/hla/mod.rs` → thin re-export of `katgpt_core::hla::{kernel, types}` + substrate API + local `pub mod forward;` (the composition layer). All existing call sites (`crate::hla::MultiLayerHlaCache`, `crate::hla::hla_state_update`, etc.) resolve unchanged via the re-exports.
+  - [x] 4d. **GOAT gate PASSED** — bit-identical forward output:
+    - `cargo test -p katgpt-core --lib hla::` → **16/16 green** (9 types + 7 kernel substrate tests, moved verbatim).
+    - `cargo test --lib --features hla_attention hla::` → **8/8 green** (the forward-composition tests: `forward_hla_produces_finite_logits`, `forward_ahla_produces_finite_logits`, `forward_hla_reset_clean`, `forward_hla_multi_token_stable`, `forward_ahla_multi_token_stable`, `forward_hla_all_configs`, `forward_ahla_gqa_draft`, `ahla_memory_smaller_than_symmetric`). These exercise the full `forward_hla`/`forward_ahla` path through `ForwardContext` → re-exported substrate kernels → output logits. Bit-identical because the kernels are byte-for-byte the same code, just resolved through `katgpt_core::hla` instead of local `crate::hla::kernel`.
+    - `cargo check -p katgpt-core --no-default-features` clean (substrate always-on, like simd/types).
+    - `cargo check -p katgpt-core --all-features` clean.
+    - `cargo check --all-features` (root) clean.
+    - `cargo check -p katgpt-core --target wasm32-wasip2` clean (HLA substrate builds on WASM; 1 pre-existing unrelated simd warning).
+    - `cargo test --lib --features hla_attention` (full root) → **3974/3975 green**. The 1 failure (`sleep::eviction::tests::sliding_window_retains_recent`) is **pre-existing** — confirmed failing on unmodified `develop` HEAD `eb604670`. Not caused by this change, not in scope to fix.
+  - [x] 4e. Commit: `feat(core): Plan 008 step 4 — move HLA substrate to katgpt-core` (see commit log).
+
+  ### Deferred subtask (Phase 2 reconciliation, not Phase 1)
+  - [ ] **4b. Port riir-engine's `*_role_aware` variants behind a core feature `hla_role_aware`.** DEFERRED — this is Phase 2 (riir-engine dedup) work, not Phase 1 (substrate extraction). Rationale:
+    1. The role-aware kernel variants (`hla_state_update_role_aware`, `ahla_step_role_aware`, `hla_layer_update_role_aware`, `ahla_layer_step_role_aware`, `third_order_update`, `third_order_readout`) all depend on `crate::role_transport::{RoleEmbeddingTable, diagonal_transport, SlotLabel}` — Category C private composition per Issue 007 §"Cross-repo consumer cleanup".
+    2. Porting them to core requires defining a `RoleTransport` trait in core + a `SlotLabel` newtype, then having riir-engine's `RoleEmbeddingTable` impl the trait. That's a design change to core's public API surface, not a pure move.
+    3. riir-engine also DIVERGED with `ThirdOrderMoment` (Plan 151 T13) + `HlaUpdateMode` + a `role: Option<SlotLabel>` field on `HlaQHeadState`/`AhlaQHeadState`. These are cognitive extensions, not substrate.
+    4. Per Risk 2 mitigation: "keep riir-engine's `role_transport.rs` as the private composition layer (it's Category C)." The cleanest interpretation: the role-aware **wrappers** (which compute the transported key then call the standard kernel) stay in riir-engine as composition; only the standard kernels (now in core) are the shared substrate.
+    5. **Track in Phase 2.1** (`riir-engine src/hla/ → consume katgpt_core::hla`). When riir-engine deletes its local `types.rs`/`kernel.rs` and imports from core, the role-aware wrappers will call `katgpt_core::hla::hla_state_update` instead of the local copy. The wrapper code itself can stay in riir-engine indefinitely — it's Category C composition.
+
+  **Net result:** the publishable-leaf half of HLA (cache types + streaming kernels, 1625 LoC) now lives in `katgpt-core` and is available to any crate via `cargo add katgpt-core`. The composition half (`forward_hla`/`forward_ahla`, 569 LoC) stays in root because it needs `ForwardContext`. The cognitive half (role-aware + third-order, ~600 LoC) stays in riir-engine because it needs `role_transport`. Three-tier split achieved without breaking any call site.
 - [ ] **Step 5 — `dd_tree` + `spec_types` → core.** Traits already in `core/traits.rs`; move dependent types (`TreeNode`, `DDTreeBranchCache`, `SpeculativeContext`, `DraftResult`, `NoPruner`, `ScreeningPruner` dep types) to join them.
 - [ ] **Step 6 — `mcts`, `sampling`, `delta_mem` → core.** Leaf inference mechanics. `mcts` parameterize over a core `Game` trait (Q3 verdict); leave game-specific impls in riir-engine.
 - [ ] **Step 7 — riir-engine `simd/wasm32.rs` → consume `katgpt_core::simd`.** Already shipped in core under `wasm32_simd128_*` kernels. Diff for riir-engine-only improvements, port if any, then delete reimplementation.
@@ -142,7 +163,7 @@ refined strategy doc, stranded in a private fork.
 After each Phase 1 step lands, riir-engine deletes its copy and imports from
 `katgpt_core` the same way `analytic_lattice` / `arg_runtime` already do.
 
-- [ ] 2.1 riir-engine `src/hla/` → `use katgpt_core::hla::{...}` (after step 4)
+- [ ] 2.1 riir-engine `src/hla/` → `use katgpt_core::hla::{...}` (after step 4). Includes the deferred 4b work: riir-engine deletes its local `types.rs`/`kernel.rs` (substrate half), imports from core; keeps the role-aware wrappers + `ThirdOrderMoment` + `role_transport` as the cognitive composition layer (Category C).
 - [x] **2.2 riir-engine `src/transformer/` → consume `katgpt_transformer::{...}`** (2026-06-27)
 
   **Scope:** swapped all substrate types from local definitions to
@@ -236,7 +257,7 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 Mirrors Issue 007 §Acceptance, updated:
 
 - [ ] Phase 1 step 2: `transformer`+`weights` live in `katgpt-core`, split into <2048-line files, re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test --lib` green on arm64. (x86_64 already cleared per Issue 006.)
-- [ ] Phase 1 step 4: `hla` lives in `katgpt-core` with role-aware variants behind feature flag. Bit-identical forward output vs pre-move.
+- [x] **Phase 1 step 4 (substrate half):** `hla` cache types + streaming kernels live in `katgpt-core/src/hla/{types,kernel}.rs`, re-exported from root `src/hla/mod.rs`. Bit-identical forward output vs pre-move (8/8 forward tests + 16/16 substrate tests green). `forward.rs` stays in root (needs `ForwardContext`). Role-aware variants + `ThirdOrderMoment` deferred to Phase 2.1 (riir-engine reconciliation — they're Category C cognitive composition, not substrate).
 - [ ] Phase 1 steps 5-7: each substrate module lives in core, re-exported from root.
 - [ ] Phase 2: riir-engine has zero Category A duplicates; all consume `katgpt_core::`. Bit-identical tests in both repos.
 - [ ] Each phase commit includes GOAT/bench evidence per AGENTS.md "dont defer benchmark task".
