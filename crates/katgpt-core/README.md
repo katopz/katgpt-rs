@@ -4,12 +4,10 @@
 [![Documentation](https://docs.rs/katgpt-core/badge.svg)](https://docs.rs/katgpt-core)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Shared types, SIMD kernels, and modelless inference primitives for the
-**KatGPT** / **riir-engine** stack. This is the leaf library consumed by
-[`katgpt-rs`](https://github.com/katopz/katgpt-rs),
-[`riir-neuron-db`](https://github.com/katopz/riir-neuron-db),
-[`riir-chain`](https://github.com/katopz/riir-chain), and
-[`riir-ai`](https://github.com/katopz/riir-ai).
+Modelless inference primitives: shared types, SIMD kernels, attention
+variants, spectral/manifold operators, belief kernels, and latent-space ops.
+The core library of the [`katgpt-rs`](https://github.com/katopz/katgpt-rs)
+inference framework.
 
 > **Modelless-first.** Every primitive here is inference-only: no training,
 > no backprop, no gradient descent. Runtime weight mutations are limited to

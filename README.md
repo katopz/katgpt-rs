@@ -1903,15 +1903,15 @@ workflow**.
 
 ### Downstream consumers
 
-`katgpt-core` is consumed by `riir-neuron-db`, `riir-chain`, and `riir-ai`.
-After a release, bump the version pin in those repos' `Cargo.toml`:
+`katgpt-core` is consumed by downstream projects. After a release, bump the
+version pin in each consumer's `Cargo.toml`:
 
 ```toml
 katgpt-core = "0.2"   # was: { path = "../katgpt-rs/crates/katgpt-core" }
 ```
 
-For local dev across repos, keep a `[patch.crates-io]` override pointing at
-your checkout so un-published local changes still work:
+For local dev, keep a `[patch.crates-io]` override pointing at your checkout
+so un-published local changes still work:
 
 ```toml
 [patch.crates-io]
