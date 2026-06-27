@@ -263,7 +263,36 @@ refined strategy doc, stranded in a private fork.
   | **Composition** | `katgpt-rs/src/pruners/delta_mem/{mod,pruner,multi_pruner}.rs` | `MemorySteeredPruner<P>`, `MultiDomainMemoryPruner<P>` + re-export shim | ~600 | Wrap root-only `ScreeningPruner` instances |
 
   **Net result:** 2378 LoC of substrate (mcts algorithm + sampling primitives + delta_mem state machine) now lives in `katgpt-core` and is available to any crate via `cargo add katgpt-core`. The composition half (`BanditRolloutPolicy`, `MemorySteeredPruner<P>`, `MultiDomainMemoryPruner<P>`, ~930 LoC) stays in root because it needs root-only types. Three-tier split achieved without breaking any call site — all existing import paths (`crate::pruners::game_state::mcts_search`, `crate::speculative::sampling::sample_from_distribution`, `crate::pruners::delta_mem::DeltaMemoryConfig`, `crate::pruners::delta_mem::state::DEFAULT_THETA_SURPRISE`, etc.) resolve unchanged via the re-export shims.
-- [ ] **Step 7 — riir-engine `simd/wasm32.rs` → consume `katgpt_core::simd`.** Already shipped in core under `wasm32_simd128_*` kernels. Diff for riir-engine-only improvements, port if any, then delete reimplementation.
+- [x] **Step 7 — riir-engine `simd/wasm32.rs` → consume `katgpt_core::simd`.** Already shipped in core under `wasm32_simd128_*` kernels. Diff for riir-engine-only improvements, port if any, then delete reimplementation.
+
+  **Scope audit (2026-06-28):** riir-engine `simd/mod.rs` already does `pub use katgpt_core::simd::*;` on non-WASM targets. Only the WASM SIMD128 path (`src/simd/wasm32.rs`, 630 LoC) is local. Of its 11 functions:
+  - **8 have bit-identical equivalents already in katgpt-core** (which has WASM SIMD128 paths for each): `simd_dot_f32`, `simd_sum_f32`, `simd_scale_inplace`, `simd_add_scalar_inplace`, `simd_exp_inplace`, `simd_matvec`, `simd_outer_product_acc` (WASM path missing — port), `simd_sum_sq` (WASM path missing — port).
+  - **2 are thin ergonomic wrappers** (no algorithmic content): `dot_f32_simd(a,b)` = `simd_dot_f32(a,b,a.len().min(b.len()))`; `matmul_f32_simd(a,x,rows,cols,out)` = `simd_matvec(out,a,x,rows,cols)`. Drop them; update the 2 WASM-only call sites.
+  - **1 is unique substrate** (`project_ternary_simd`): single-vector ternary dot-product. Its SWAR algorithm was already ported to core's `wasm32_ternary_matvec` + `bitselect_nibble8_wasm` (matvec form, TernaryWeights struct), but the dot-product form (raw bit-plane slices → f32) doesn't exist in core. Port it as a new public function under `plasma_path`.
+
+  Subtasks:
+  - [x] 7a. Port WASM SIMD128 path to `simd_sum_sq` in `research.rs` (mirror NEON 4-accumulator pattern, port riir-engine's algorithm).
+  - [x] 7b. Port WASM SIMD128 path to `simd_outer_product_acc` in `dot.rs` (mirror NEON FMA pattern, port riir-engine's algorithm).
+  - [x] 7c. Add `project_ternary_simd` (single-vector ternary dot-product variant) to `ternary.rs` under `plasma_path`. Port verbatim from riir-engine; the SWAR algorithm already lives in core as `bitselect_nibble8_wasm` but in matvec form. Added scalar fallback + WASM SIMD128 SWAR kernel + dispatcher + 7 tests (ported from riir-engine).
+  - [x] 7d. Update `simd/mod.rs` re-exports to include `project_ternary_simd` under `plasma_path`.
+  - [x] 7e. Delete `riir-engine/src/simd/wasm32.rs`; replace `simd/mod.rs` with `pub use katgpt_core::simd::*;` for all targets.
+  - [x] 7f. Update `riir-engine/examples/wasm_simd_bench.rs` to use core API (`simd_dot_f32` 3-arg form, `simd_matvec`, `project_ternary_simd` from core). (Dropped `matmul_f32_simd` wrapper — replaced both call sites with `simd_matvec` which takes args in `(acc, mat, vec, rows, cols)` order.)
+  - [x] 7g. GOAT gate — PASSED (bit-identical, no call-site regressions):
+    - `cargo check -p katgpt-core` (default) clean.
+    - `cargo check -p katgpt-core --no-default-features` clean.
+    - `cargo check -p katgpt-core --all-features` clean.
+    - `cargo check -p katgpt-core --target wasm32-wasip2` clean (1 pre-existing `SimdLevel` unused-import warning, unchanged from Step 6).
+    - `cargo test -p katgpt-core --lib simd::` → **124/124 green** (up from 117; +7 new `project_ternary_simd` tests ported from riir-engine).
+    - `cargo check` (katgpt-rs root default) clean.
+    - `cargo test --lib` (katgpt-rs root default) → **3936/3937 green** (1 pre-existing `sliding_window_retains_recent` failure, identical to Step 6 baseline — no regression).
+    - `cargo test --lib simd::` (katgpt-rs root) → **4/4 green** (attn_match tests).
+    - `cargo check -p riir-engine` (default) clean (3 pre-existing pathfinder warnings).
+    - `cargo check -p riir-engine --target wasm32-wasip2 --no-default-features --features hla` clean (3 pre-existing pathfinder warnings). The `+simd128` flag is set by riir-ai's `.cargo/config.toml`.
+    - `cargo test -p riir-engine --lib` → **2428/2429 green** (1 pre-existing `cgsp_runtime::dual_pool_bridge::g5_epool_persistence` failure, documented in Step 6 — unrelated to simd).
+    - `cargo build -p riir-engine --example wasm_simd_bench --no-default-features --features hla` (native) clean — example updated to use `simd_matvec` instead of dropped `matmul_f32_simd` wrapper.
+    - WASM example build blocked by pre-existing `freetype-sys` C++ cross-compile failure (missing `string.h` for wasip2 sysroot) — unrelated to this change; the example's Rust code compiles clean (validated via lib check).
+
+  **Bonus fix (pre-existing bug unblocked by Step 7):** `katgpt-core/src/simd/elementwise.rs:1493` `mask_f32x4_wasm` used `f32x4(...)` without importing it (relied on a function-scoped `use` in a sibling function). Latent bug — only surfaces when building for `wasm32 +simd128`, which riir-ai's `.cargo/config.toml` enables unconditionally (`rustflags = ["-C", "target-feature=+simd128"]`). Fixed by adding `use core::arch::wasm32::f32x4;` inside `mask_f32x4_wasm`. This unblocks the entire WASM SIMD128 build path for riir-engine.
 
 ### Phase 2 — riir-engine dedup (the DRY payoff)
 

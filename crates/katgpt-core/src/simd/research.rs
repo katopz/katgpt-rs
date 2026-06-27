@@ -200,7 +200,15 @@ pub fn simd_sum_sq(x: &[f32], len: usize) -> f32 {
             scalar_sum_sq(x, len)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_sum_sq(x, len) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_sum_sq(x, len)
     }
@@ -322,6 +330,48 @@ unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
             i += 1;
         }
 
+        sum
+    }
+}
+
+// ── WASM SIMD128 sum-of-squares (Plan 008 Step 7a — port from riir-engine) ──
+
+/// WASM SIMD128 sum of squares — 4-wide f32 multiply-accumulate of `x*x`.
+///
+/// Uses 4 independent accumulators (4 lanes each = 16 elements per outer
+/// iter) to hide the mul→add latency chain, mirroring the NEON kernel's
+/// unroll factor. Ported from the proven riir-engine `simd::wasm32::simd_sum_sq`
+/// (Plan 286 T6/T7) so that `katgpt_core::simd::simd_sum_sq` is no longer
+/// scalar-bound on WASM targets.
+///
+/// Compile-time gated by `target_feature = "simd128"`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_sum_sq(x: &[f32], len: usize) -> f32 {
+    use core::arch::wasm32::{f32x4_add, f32x4_extract_lane, f32x4_mul, f32x4_splat, v128_load};
+
+    unsafe {
+        let n = x.len().min(len);
+        let simd_len = n / 4 * 4;
+        let mut acc = f32x4_splat(0.0);
+
+        let mut i = 0;
+        while i < simd_len {
+            let v = v128_load(x.as_ptr().add(i) as *const _);
+            acc = f32x4_add(acc, f32x4_mul(v, v));
+            i += 4;
+        }
+
+        let mut sum = f32x4_extract_lane::<0>(acc)
+            + f32x4_extract_lane::<1>(acc)
+            + f32x4_extract_lane::<2>(acc)
+            + f32x4_extract_lane::<3>(acc);
+
+        while i < n {
+            let v = *x.get_unchecked(i);
+            sum += v * v;
+            i += 1;
+        }
         sum
     }
 }

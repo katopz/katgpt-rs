@@ -1489,6 +1489,7 @@ unsafe fn wasm32_simd128_masked_sum_count_f32(x: &[f32], mask: &[u8]) -> (f32, u
 #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
 #[inline(always)]
 unsafe fn mask_f32x4_wasm(mask: &[u8], i: usize) -> core::arch::wasm32::v128 {
+    use core::arch::wasm32::f32x4;
     unsafe {
         f32x4(
             ((*mask.get_unchecked(i) != 0) as u8) as f32,

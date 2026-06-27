@@ -327,7 +327,15 @@ pub fn simd_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n
             scalar_outer_product_acc(acc, a, b, m, n)
         }
     }
-    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        unsafe { wasm32_simd128_outer_product_acc(acc, a, b, m, n) }
+    }
+    #[cfg(not(any(
+        target_arch = "aarch64",
+        target_arch = "x86_64",
+        all(target_arch = "wasm32", target_feature = "simd128")
+    )))]
     {
         scalar_outer_product_acc(acc, a, b, m, n)
     }
@@ -407,6 +415,50 @@ unsafe fn avx2_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize
             while j < n {
                 *row.get_unchecked_mut(j) += ai * *b.get_unchecked(j);
                 j += 1;
+            }
+        }
+    }
+}
+
+// ── WASM SIMD128 outer-product accumulation (Plan 008 Step 7b — port from riir-engine) ──
+
+/// WASM SIMD128 outer-product accumulate: `acc[i,j] += a[i] * b[j]`.
+///
+/// Inner loop (j-dim) is vectorized as 4-wide FMA. The outer loop is scalar
+/// (single broadcast of `a[i]` per row). Ported verbatim from the proven
+/// riir-engine `simd::wasm32::simd_outer_product_acc` (Plan 286 T6/T7) so
+/// that `katgpt_core::simd::simd_outer_product_acc` is no longer scalar-bound
+/// on WASM targets.
+///
+/// Compile-time gated by `target_feature = "simd128"`.
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+#[inline]
+unsafe fn wasm32_simd128_outer_product_acc(
+    acc: &mut [f32],
+    a: &[f32],
+    b: &[f32],
+    m: usize,
+    n: usize,
+) {
+    use core::arch::wasm32::{f32x4_add, f32x4_mul, f32x4_splat, v128_load, v128_store};
+
+    unsafe {
+        let simd_n = n / 4 * 4;
+        for i in 0..m {
+            let ai = *a.get_unchecked(i);
+            let vai = f32x4_splat(ai);
+            let row = &mut acc[i * n..i * n + n];
+
+            let mut j = 0;
+            while j < simd_n {
+                let vacc = v128_load(row.as_ptr().add(j) as *const _);
+                let vb = v128_load(b.as_ptr().add(j) as *const _);
+                let r = f32x4_add(vacc, f32x4_mul(vai, vb));
+                v128_store(row.as_mut_ptr().add(j) as *mut _, r);
+                j += 4;
+            }
+            for jj in simd_n..n {
+                *row.get_unchecked_mut(jj) += ai * *b.get_unchecked(jj);
             }
         }
     }

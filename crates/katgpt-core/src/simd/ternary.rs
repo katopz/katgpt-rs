@@ -573,3 +573,232 @@ pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f3
     }
     acc * dir.row_scale
 }
+
+// ---------------------------------------------------------------------------
+// Single-vector ternary bit-plane projection (Plan 008 Step 7c — port from riir-engine)
+// ---------------------------------------------------------------------------
+//
+// Projects an input vector against a single ternary {-1, 0, +1} row stored as
+// two bit-planes (positive_bits, negative_bits). Returns the dot product
+// `Σ_i sign(pos_bit_i, neg_bit_i) * input[i]`. This is the single-row analog
+// of `simd_ternary_matvec` (which loops over rows of a `TernaryWeights`
+// matrix); callers that only need one row avoid constructing the matrix.
+//
+// Ported verbatim from the proven riir-engine `simd::wasm32::project_ternary_simd`
+// (Plan 286 T6/T7) so riir-engine can delete its local copy and consume
+// `katgpt_core::simd::project_ternary_simd` directly (Plan 008 Step 7e).
+
+/// Scalar reference: single-vector ternary bit-plane projection.
+///
+/// Computes `Σ_i sign(pos_bit_i, neg_bit_i) * input[i]` where sign is
+/// `+1` if positive bit set, `-1` if negative bit set, `0` otherwise.
+///
+/// # Safety
+/// Caller must ensure `input.len() >= n_elements` and bit-plane slices have
+/// enough bytes to cover `n_elements` bits (`ceil(n_elements / 8)` bytes).
+#[cfg(feature = "plasma_path")]
+#[inline]
+pub unsafe fn project_ternary_simd_scalar(
+    input: &[f32],
+    positive_bits: &[u8],
+    negative_bits: &[u8],
+    n_elements: usize,
+) -> f32 {
+    debug_assert!(input.len() >= n_elements);
+    let mut sum = 0.0f32;
+    for i in 0..n_elements {
+        // SAFETY: caller guarantees input.len() >= n_elements > i, and
+        // bit-plane slices cover ceil(n_elements/8) > i/8 bytes.
+        unsafe {
+            let byte_off = i / 8;
+            let bit_off = i % 8;
+            let is_pos = (*positive_bits.get_unchecked(byte_off) >> bit_off) & 1;
+            let is_neg = (*negative_bits.get_unchecked(byte_off) >> bit_off) & 1;
+            let sign: f32 = match (is_pos, is_neg) {
+                (1, 0) => 1.0,
+                (0, 1) => -1.0,
+                _ => 0.0,
+            };
+            sum += sign * *input.get_unchecked(i);
+        }
+    }
+    sum
+}
+
+/// Single-vector ternary bit-plane projection using WASM SIMD128 SWAR.
+///
+/// Projects an input vector against ternary {-1, 0, +1} weights stored as
+/// bit-planes. Two bit-planes encode the sign: positive_bits and negative_bits.
+/// Each bit position maps to one weight: (1,0)=+1, (0,1)=-1, (0,0)=0.
+///
+/// # Algorithm (SWAR bit-decoding)
+///
+/// Vectorizes the bit-decoding itself (vs scalar per-bit match):
+/// 1. Broadcast the bit-plane byte to all 4 lanes of an `i32x4` via `i32x4_splat`.
+/// 2. AND with a bit-position mask `[1, 2, 4, 8]` (or `[16, 32, 64, 128]` for the
+///    high nibble) to isolate each of the 4 bits into its own lane.
+/// 3. `i32x4_ne(_, 0)` produces a per-lane all-ones (-1) / all-zeros (0) mask.
+/// 4. `v128_bitselect(input, zeros, mask)` picks the input value where the bit is
+///    set, zero elsewhere.
+/// 5. `acc += pos_val - neg_val` accumulates the signed contribution.
+///
+/// Processing 8 elements per iteration (both nibbles of one byte) doubles
+/// throughput vs 4-element chunks and amortizes the byte broadcast.
+///
+/// # Safety
+/// Caller must ensure `input.len() >= n_elements` and bit-plane slices have
+/// enough bytes to cover `n_elements` bits (`ceil(n_elements / 8)` bytes).
+#[cfg(all(
+    feature = "plasma_path",
+    target_arch = "wasm32",
+    target_feature = "simd128"
+))]
+#[inline]
+pub unsafe fn project_ternary_simd_wasm32(
+    input: &[f32],
+    positive_bits: &[u8],
+    negative_bits: &[u8],
+    n_elements: usize,
+) -> f32 {
+    use core::arch::wasm32::{
+        f32x4_add, f32x4_extract_lane, f32x4_splat, f32x4_sub, i32x4, i32x4_ne, i32x4_splat,
+        v128, v128_and, v128_bitselect, v128_load,
+    };
+
+    debug_assert!(input.len() >= n_elements);
+
+    // SWAR bit-position masks: AND-ing a splatted byte with these isolates each
+    // of the 4 bits in a nibble into its own i32 lane.
+    let mask_lo: v128 = i32x4(1, 2, 4, 8); // bits 0-3
+    let mask_hi: v128 = i32x4(16, 32, 64, 128); // bits 4-7
+    let zero_i: v128 = i32x4_splat(0);
+    let zeros_f: v128 = f32x4_splat(0.0);
+
+    let mut acc = f32x4_splat(0.0);
+
+    // Process 8 elements per iteration: one byte each of pos/neg bit-planes,
+    // both nibbles. This is byte-aligned by construction (i is a multiple of 8).
+    let chunks8 = n_elements / 8 * 8;
+    let mut i = 0;
+    while i < chunks8 {
+        // SAFETY: caller guarantees input.len() >= n_elements > i+8, and
+        // positive/negative_bits cover ceil(n_elements/8) > i/8 bytes.
+        unsafe {
+            let byte_off = i / 8;
+            let pos_byte = *positive_bits.get_unchecked(byte_off) as i32;
+            let neg_byte = *negative_bits.get_unchecked(byte_off) as i32;
+
+            let pos_splat = i32x4_splat(pos_byte);
+            let neg_splat = i32x4_splat(neg_byte);
+
+            // Low nibble (bits 0-3) → 4 per-lane masks
+            let pos_lo_m = i32x4_ne(v128_and(pos_splat, mask_lo), zero_i);
+            let neg_lo_m = i32x4_ne(v128_and(neg_splat, mask_lo), zero_i);
+
+            // High nibble (bits 4-7) → 4 per-lane masks
+            let pos_hi_m = i32x4_ne(v128_and(pos_splat, mask_hi), zero_i);
+            let neg_hi_m = i32x4_ne(v128_and(neg_splat, mask_hi), zero_i);
+
+            // Load 8 input f32 values as two v128s
+            let in_lo = v128_load(input.as_ptr().add(i) as *const v128);
+            let in_hi = v128_load(input.as_ptr().add(i + 4) as *const v128);
+
+            // Masked select: keep input value where bit is set, zero elsewhere.
+            let pos_lo_val = v128_bitselect(in_lo, zeros_f, pos_lo_m);
+            let neg_lo_val = v128_bitselect(in_lo, zeros_f, neg_lo_m);
+            let pos_hi_val = v128_bitselect(in_hi, zeros_f, pos_hi_m);
+            let neg_hi_val = v128_bitselect(in_hi, zeros_f, neg_hi_m);
+
+            // acc += pos_val - neg_val  (sign ∈ {-1, 0, +1} × input)
+            acc = f32x4_add(acc, f32x4_sub(pos_lo_val, neg_lo_val));
+            acc = f32x4_add(acc, f32x4_sub(pos_hi_val, neg_hi_val));
+        }
+
+        i += 8;
+    }
+
+    // Handle a remaining 4-element chunk (n_elements % 8 >= 4).
+    // i is a multiple of 8, so bit_off is always 0 here → use mask_lo directly.
+    if i + 4 <= n_elements {
+        // SAFETY: see above — bounds verified by caller precondition.
+        unsafe {
+            let byte_off = i / 8;
+            let pos_byte = *positive_bits.get_unchecked(byte_off) as i32;
+            let neg_byte = *negative_bits.get_unchecked(byte_off) as i32;
+
+            let pos_splat = i32x4_splat(pos_byte);
+            let neg_splat = i32x4_splat(neg_byte);
+
+            let pos_m = i32x4_ne(v128_and(pos_splat, mask_lo), zero_i);
+            let neg_m = i32x4_ne(v128_and(neg_splat, mask_lo), zero_i);
+
+            let in_v = v128_load(input.as_ptr().add(i) as *const v128);
+            let pos_val = v128_bitselect(in_v, zeros_f, pos_m);
+            let neg_val = v128_bitselect(in_v, zeros_f, neg_m);
+            acc = f32x4_add(acc, f32x4_sub(pos_val, neg_val));
+        }
+
+        i += 4;
+    }
+
+    // Horizontal reduce of the 4-lane f32x4 accumulator.
+    let mut sum = f32x4_extract_lane::<0>(acc)
+        + f32x4_extract_lane::<1>(acc)
+        + f32x4_extract_lane::<2>(acc)
+        + f32x4_extract_lane::<3>(acc);
+
+    // Scalar tail (0-3 remaining elements).
+    while i < n_elements {
+        // SAFETY: caller precondition — bits/input cover this index.
+        unsafe {
+            let byte_off = i / 8;
+            let bit_off = i % 8;
+            let is_pos = (*positive_bits.get_unchecked(byte_off) >> bit_off) & 1;
+            let is_neg = (*negative_bits.get_unchecked(byte_off) >> bit_off) & 1;
+            let sign: f32 = match (is_pos, is_neg) {
+                (1, 0) => 1.0,
+                (0, 1) => -1.0,
+                _ => 0.0,
+            };
+            sum += sign * *input.get_unchecked(i);
+        }
+        i += 1;
+    }
+
+    sum
+}
+
+/// Single-vector ternary bit-plane projection: `input · ternary_row → f32`.
+///
+/// Dispatches to the WASM SIMD128 SWAR kernel on `wasm32 +simd128`, else the
+/// scalar reference. (NEON/AVX2 paths are not yet implemented; the scalar
+/// path is the bit-exact reference and the WASM path was proven equivalent
+/// in Plan 286 T6.) This is the single-row analog of [`simd_ternary_matvec`]
+/// — callers that only need one row avoid constructing a `TernaryWeights`.
+///
+/// # Safety
+/// Caller must ensure `input.len() >= n_elements` and that `positive_bits` /
+/// `negative_bits` each have at least `ceil(n_elements / 8)` bytes.
+#[cfg(feature = "plasma_path")]
+#[inline]
+pub unsafe fn project_ternary_simd(
+    input: &[f32],
+    positive_bits: &[u8],
+    negative_bits: &[u8],
+    n_elements: usize,
+) -> f32 {
+    #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+    {
+        // SAFETY: forwarded to caller precondition (see function doc).
+        unsafe {
+            project_ternary_simd_wasm32(input, positive_bits, negative_bits, n_elements)
+        }
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "simd128")))]
+    {
+        // SAFETY: forwarded to caller precondition (see function doc).
+        unsafe {
+            project_ternary_simd_scalar(input, positive_bits, negative_bits, n_elements)
+        }
+    }
+}

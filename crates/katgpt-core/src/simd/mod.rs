@@ -90,7 +90,20 @@ pub use research::{coincidence_score, entropy_f32, simd_dist_sq, simd_fused_scal
 pub use sparse::{simd_sparse_dot_f32, simd_sparse_matmul_rows};
 pub use ternary::simd_ternary_dot_f32;
 #[cfg(feature = "plasma_path")]
-pub use ternary::{simd_ternary_matmul_batch, simd_ternary_matvec, ternary_matvec_scalar};
+pub use ternary::{
+    project_ternary_simd, project_ternary_simd_scalar, simd_ternary_matmul_batch,
+    simd_ternary_matvec, ternary_matvec_scalar,
+};
+// WASM SIMD128 SWAR kernel — only available on `wasm32 +simd128`. Exported so
+// callers can invoke the specialized path directly (e.g. benches that want to
+// measure the SIMD speedup vs the scalar reference). On other targets this
+// symbol does not exist and the re-export is omitted.
+#[cfg(all(
+    feature = "plasma_path",
+    target_arch = "wasm32",
+    target_feature = "simd128"
+))]
+pub use ternary::project_ternary_simd_wasm32;
 
 /// SIMD capability level detected at runtime.
 #[repr(u8)]
