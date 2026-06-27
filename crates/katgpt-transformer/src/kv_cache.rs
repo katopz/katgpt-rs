@@ -20,8 +20,27 @@ impl KVCache {
     }
 
     pub fn reset(&mut self) {
-        // No-op: each position is written before being read, so stale data
-        // from previous sequences is never observed. Avoids O(block_size × kv_dim) zeroing.
+        // Eager zeroing — safe default for a shared substrate crate. The no-op
+        // optimization (relying on write-before-read invariant) is a consumer-
+        // specific perf decision; consumers that provably maintain the invariant
+        // can override locally. The conservative behavior avoids stale-KV leaks
+        // for consumers that reset between sequences without re-writing every
+        // position (e.g. dflash speculative rollback paths).
+        self.key.fill(0.0);
+        self.value.fill(0.0);
+    }
+
+    /// Invalidate only a single position in the KV cache — O(kv_dim) instead of
+    /// O(block_size × kv_dim). Used by dflash when only one position is dirty per
+    /// step (Issue 053). Also used by consumers that need to clear a rejected
+    /// speculative token's KV before the next draft iteration.
+    #[inline]
+    pub fn invalidate_position(&mut self, pos: usize, kv_dim: usize) {
+        let off = pos * kv_dim;
+        if off + kv_dim <= self.key.len() {
+            self.key[off..off + kv_dim].fill(0.0);
+            self.value[off..off + kv_dim].fill(0.0);
+        }
     }
 }
 
@@ -47,6 +66,16 @@ impl MultiLayerKVCache {
             layer.reset();
         }
         self.fill_pos = 0;
+    }
+
+    /// Invalidate only a single position across all layers — O(n_layer × kv_dim).
+    /// Much cheaper than full reset O(n_layer × block_size × kv_dim) when only 1
+    /// position is dirty. Used by dflash speculative decoding (Issue 053).
+    #[inline]
+    pub fn invalidate_position(&mut self, pos: usize, kv_dim: usize) {
+        for layer in &mut self.layers {
+            layer.invalidate_position(pos, kv_dim);
+        }
     }
 
     /// Update fill_pos tracker. Call after writing to the cache at a position.
@@ -77,7 +106,9 @@ impl MultiLayerKVCache {
     }
 
     /// Restore KV cache from a snapshot.
-    /// Writes snapshot data back. No zeroing needed — each position is written before being read.
+    /// Writes snapshot data back and zeros out positions [snapshot.pos..block_size)
+    /// to prevent stale data leaking into the next sequence. The tail zeroing is
+    /// the conservative default for a shared substrate crate.
     pub fn restore(&mut self, snapshot: &KVSnapshot, config: &Config) {
         let kd = types::kv_dim(config);
         // Hoist loop-invariant `end` out of the per-layer loop.
@@ -85,6 +116,10 @@ impl MultiLayerKVCache {
         for (layer, snap_layer) in self.layers.iter_mut().zip(snapshot.layers.iter()) {
             layer.key[..end].copy_from_slice(&snap_layer.key);
             layer.value[..end].copy_from_slice(&snap_layer.value);
+            // Zero out positions [snapshot.pos..block_size) to prevent stale data
+            // from a previous sequence leaking into the restored state.
+            layer.key[end..].fill(0.0);
+            layer.value[end..].fill(0.0);
         }
     }
 }
@@ -156,6 +191,10 @@ pub const PAGE_SIZE: usize = 16;
 ///
 /// Page layout per page: `[K_data | V_data]` where each segment is `PAGE_SIZE * kv_dim` floats.
 /// This enables sharing prefix pages between branches without cloning data.
+///
+/// Fields are `pub` because katgpt-rs root tests inspect them directly
+/// (`layer_page_tables`, `free_pages`). Consumers should prefer the method API.
+/// Field order groups heap pointers first, then `usize` scalars, to minimize padding.
 pub struct PagedKVCache {
     /// Pool of pages. Each page: `[PAGE_SIZE * kv_dim * 2]` floats (K then V).
     pub pages: Vec<Vec<f32>>,
@@ -163,71 +202,71 @@ pub struct PagedKVCache {
     pub layer_page_tables: Vec<Vec<Vec<usize>>>,
     /// Free list of page indices for reuse.
     pub free_pages: Vec<usize>,
+    /// Reference count per page index. Page is free when ref_count == 0.
+    /// Maintained on fork (increment shared pages) and rollback (decrement removed pages).
+    /// Enables O(1) exclusive-page detection instead of O(N×P×L) HashSet scan (Issue 053).
+    pub page_ref_counts: Vec<usize>,
     /// Dimension of each KV entry (`n_kv_head * head_dim`).
     pub kv_dim: usize,
+    /// Cached `PAGE_SIZE * kv_dim` — avoids recomputing on every write/read.
+    pub kv_page_size: usize,
     /// Total pages ever allocated (monotonically increasing).
     pub total_pages: usize,
-    /// Reusable scratch: per-layer page deficits (cleared + refilled each call).
-    pub deficits: Vec<usize>,
-    /// Reusable scratch: per-layer new page indices (cleared + refilled each call).
-    pub new_pages: Vec<Vec<usize>>,
-    /// Reusable scratch: flat buffer for all newly allocated pages in `ensure_pages()`.
-    pub all_new_buf: Vec<usize>,
-    /// Per-page reference counts for O(1) rollback (replaces HashSet scan).
-    pub page_ref_counts: Vec<u32>,
-    /// Reusable scratch: drained page indices awaiting recycle in `rollback()`.
-    pub rollback_removed: Vec<usize>,
 }
 
 impl PagedKVCache {
     /// Create a new paged KV cache.
     /// `max_sequences`: initial number of sequence slots (can grow via fork).
+    ///
+    /// All initial pages start in the free list (ref_count == 0) so they can be
+    /// reused immediately by `alloc_page` without growing the pool. This is the
+    /// memory-efficient initialization ported from riir-engine.
     pub fn new(config: &Config, max_sequences: usize) -> Self {
         let kvd = types::kv_dim(config);
         let initial_pages_per_layer = config.block_size / PAGE_SIZE + 1;
+        let initial_total = initial_pages_per_layer * config.n_layer;
 
         Self {
-            pages: (0..initial_pages_per_layer * config.n_layer)
+            pages: (0..initial_total)
                 .map(|_| vec![0.0; PAGE_SIZE * kvd * 2])
                 .collect(),
             layer_page_tables: (0..config.n_layer)
-                .map(|_| {
-                    (0..max_sequences)
-                        .map(|_| Vec::with_capacity(initial_pages_per_layer))
-                        .collect()
-                })
+                .map(|_| (0..max_sequences).map(|_| Vec::new()).collect())
                 .collect(),
-            free_pages: Vec::with_capacity(initial_pages_per_layer * config.n_layer),
+            // All initial pages start as free; preallocate to avoid first-grow realloc.
+            free_pages: (0..initial_total).collect(),
+            page_ref_counts: vec![0; initial_total],
             kv_dim: kvd,
-            total_pages: initial_pages_per_layer * config.n_layer,
-            deficits: Vec::with_capacity(config.n_layer),
-            new_pages: vec![Vec::new(); config.n_layer],
-            all_new_buf: Vec::with_capacity(initial_pages_per_layer * config.n_layer),
-            page_ref_counts: vec![config.n_layer as u32; initial_pages_per_layer * config.n_layer],
-            rollback_removed: Vec::with_capacity(initial_pages_per_layer),
+            kv_page_size: PAGE_SIZE * kvd,
+            total_pages: initial_total,
         }
     }
 
     /// Allocate a new page. Reuse from free list or grow the pool.
-    pub fn alloc_page(&mut self) -> usize {
-        match self.free_pages.pop() {
+    fn alloc_page(&mut self) -> usize {
+        let idx = match self.free_pages.pop() {
             Some(idx) => {
                 self.pages[idx].fill(0.0);
-                self.page_ref_counts[idx] = 1;
                 idx
             }
             None => {
                 self.pages.push(vec![0.0; PAGE_SIZE * self.kv_dim * 2]);
-                self.page_ref_counts.push(1);
                 let idx = self.total_pages;
                 self.total_pages += 1;
+                self.page_ref_counts.push(0);
                 idx
             }
-        }
+        };
+        self.page_ref_counts[idx] += 1;
+        idx
     }
 
     /// Ensure sequence `seq_idx` has enough pages to cover position `pos` for all layers.
+    ///
+    /// Uses stack-allocated `ArrayVec` for scratch (bounded to 128 layers) — zero
+    /// heap allocation in the hot path. Ported from riir-engine.
     pub fn ensure_pages(&mut self, seq_idx: usize, pos: usize) {
+        use arrayvec::ArrayVec;
         let pages_needed = pos / PAGE_SIZE + 1;
 
         // Grow sequence slots if needed (no page allocation, just empty vecs)
@@ -237,36 +276,23 @@ impl PagedKVCache {
             }
         }
 
-        // Collect how many new pages each layer needs (reuse scratch buffer)
-        self.deficits.clear();
+        // Collect deficits into a stack-allocated array.
+        // Most models have <= 128 layers; ArrayVec avoids per-call heap allocation.
+        let mut deficits = ArrayVec::<usize, 128>::new();
         for lt in &self.layer_page_tables {
-            self.deficits
-                .push(pages_needed.saturating_sub(lt[seq_idx].len()));
+            deficits.push(pages_needed.saturating_sub(lt[seq_idx].len()));
         }
 
-        // Allocate all pages upfront (reuse scratch buffer via take+put-back
-        // to avoid borrow conflict with alloc_page)
-        let total_deficit: usize = self.deficits.iter().sum();
-        let mut buf = std::mem::take(&mut self.all_new_buf);
-        buf.clear();
-        buf.reserve(total_deficit);
-        for _ in 0..total_deficit {
-            buf.push(self.alloc_page());
+        // Allocate all pages upfront
+        let mut new_pages = ArrayVec::<Vec<usize>, 128>::new();
+        for &deficit in &deficits {
+            let pages: Vec<usize> = (0..deficit).map(|_| self.alloc_page()).collect();
+            new_pages.push(pages);
         }
-
-        // Partition into per-layer lists and assign
-        self.new_pages.resize_with(self.deficits.len(), Vec::new);
-        let mut offset = 0;
-        for (i, &deficit) in self.deficits.iter().enumerate() {
-            self.new_pages[i].clear();
-            self.new_pages[i].extend_from_slice(&buf[offset..offset + deficit]);
-            offset += deficit;
-        }
-        self.all_new_buf = buf;
 
         // Assign new pages to each layer's page table
-        for (layer_tables, pages) in self.layer_page_tables.iter_mut().zip(self.new_pages.iter()) {
-            layer_tables[seq_idx].extend(pages.iter().copied());
+        for (layer_tables, pages) in self.layer_page_tables.iter_mut().zip(new_pages) {
+            layer_tables[seq_idx].extend(pages);
         }
     }
 
@@ -278,9 +304,8 @@ impl PagedKVCache {
         let page_list_idx = pos / PAGE_SIZE;
         let pidx = self.layer_page_tables[layer_idx][seq_idx][page_list_idx];
         let page = &mut self.pages[pidx];
-        let kv_page_size = PAGE_SIZE * self.kv_dim;
         let k_off = page_local * self.kv_dim;
-        let v_off = kv_page_size + page_local * self.kv_dim;
+        let v_off = self.kv_page_size + page_local * self.kv_dim;
         page[k_off..k_off + self.kv_dim].copy_from_slice(k);
         page[v_off..v_off + self.kv_dim].copy_from_slice(v);
     }
@@ -299,9 +324,8 @@ impl PagedKVCache {
         let page_list_idx = pos / PAGE_SIZE;
         let pidx = self.layer_page_tables[layer_idx][seq_idx][page_list_idx];
         let page = &self.pages[pidx];
-        let kv_page_size = PAGE_SIZE * self.kv_dim;
         let k_off = page_local * self.kv_dim;
-        let v_off = kv_page_size + page_local * self.kv_dim;
+        let v_off = self.kv_page_size + page_local * self.kv_dim;
         k.copy_from_slice(&page[k_off..k_off + self.kv_dim]);
         v.copy_from_slice(&page[v_off..v_off + self.kv_dim]);
     }
@@ -316,7 +340,7 @@ impl PagedKVCache {
         for layer_tables in &mut self.layer_page_tables {
             let source = &layer_tables[seq_idx];
             let shared_pages = source[..fork_page.min(source.len())].to_vec();
-            // Increment ref counts for shared pages
+            // Increment ref counts for shared pages (Issue 053)
             for &pidx in &shared_pages {
                 self.page_ref_counts[pidx] += 1;
             }
@@ -337,16 +361,16 @@ impl PagedKVCache {
     pub fn rollback(&mut self, seq_idx: usize, rollback_to_pos: usize) {
         let keep_count = rollback_to_pos / PAGE_SIZE;
 
-        // Truncate page tables and decrement ref counts for dropped pages.
-        // Pages with ref count == 0 go to the free list.
+        // Issue 053: use ref counts for O(1) exclusive-page detection instead of
+        // building a HashSet by scanning all sequences across all layers (O(N×P×L)).
+        // Decrement ref count for each removed page; if count reaches 0, it's exclusive.
         for layer_tables in &mut self.layer_page_tables {
             if seq_idx >= layer_tables.len() {
                 continue;
             }
             let table = &mut layer_tables[seq_idx];
-            self.rollback_removed.clear();
-            self.rollback_removed.extend(table.drain(keep_count..));
-            for pidx in self.rollback_removed.drain(..) {
+            let removed: Vec<usize> = table.drain(keep_count..).collect();
+            for pidx in removed {
                 self.page_ref_counts[pidx] -= 1;
                 if self.page_ref_counts[pidx] == 0 {
                     self.free_pages.push(pidx);
@@ -362,7 +386,7 @@ impl PagedKVCache {
                 self.free_pages.append(table);
             }
         }
-        // Reset all ref counts to 0
+        // Zero all ref counts since all page tables are cleared
         self.page_ref_counts.fill(0);
     }
 }

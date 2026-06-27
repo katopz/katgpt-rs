@@ -1774,6 +1774,7 @@ dependencies = [
 name = "katgpt-transformer"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "blake3",
  "bytemuck",
  "katgpt-core",

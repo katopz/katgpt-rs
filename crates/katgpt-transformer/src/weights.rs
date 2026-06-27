@@ -16,10 +16,16 @@ pub struct LayerWeights {
     pub attn_wo: Vec<f32>, // [n_embd, n_embd]
     pub mlp_w1: Vec<f32>,  // [mlp_hidden, n_embd]
     pub mlp_w2: Vec<f32>,  // [n_embd, mlp_hidden]
-    // Kog CPU fusion (Plan 160): RMSNorm gamma vectors
+    // Kog CPU fusion (Plan 160): RMSNorm gamma vectors — only present when the
+    // consumer enables `kog_cpu_fusion`. Consumers that don't use Kog fusion
+    // (e.g. riir-engine) get the compact 6-field struct and avoid ~2×n
+    // floats/layer of dead weight.
+    #[cfg(feature = "kog_cpu_fusion")]
     pub attn_norm_gamma: Vec<f32>, // [n_embd] pre-attention RMSNorm gamma (identity=1.0)
+    #[cfg(feature = "kog_cpu_fusion")]
     pub mlp_norm_gamma: Vec<f32>,  // [n_embd] pre-MLP RMSNorm gamma (identity=1.0)
     // Kog CPU fusion (Plan 160): fused QKV weight storage
+    #[cfg(feature = "kog_cpu_fusion")]
     pub attn_qkv_fused: Option<Vec<f32>>, // [(n_embd + 2*kv_dim), n_embd] interleaved
     // Wall Attention gate projection weights (Plan 173)
     #[cfg(feature = "wall_attention")]
@@ -124,8 +130,11 @@ impl TransformerWeights {
                     v.extend((0..len).map(|_| rng.normal() * layer_scale));
                     v
                 },
+                #[cfg(feature = "kog_cpu_fusion")]
                 attn_norm_gamma: vec![1.0f32; n],
+                #[cfg(feature = "kog_cpu_fusion")]
                 mlp_norm_gamma: vec![1.0f32; n],
+                #[cfg(feature = "kog_cpu_fusion")]
                 attn_qkv_fused: None,
                 #[cfg(feature = "wall_attention")]
                 attn_wg: vec![0.0; kvd], // Initialized to zeros; gate not active unless wall_config is Some
@@ -192,6 +201,7 @@ impl TransformerWeights {
     ///
     /// **MLP gamma**: Folded into `mlp_w1` because the residual (`xr2`) is saved
     /// BEFORE the norm, so gamma only affects the projection path.
+    #[cfg(feature = "kog_cpu_fusion")]
     pub fn fold_gamma(&mut self, config: &Config) {
         let n = config.n_embd;
 
@@ -220,6 +230,7 @@ impl TransformerWeights {
     /// The fused weight is stored in `attn_qkv_fused` (Some when populated).
     /// Original weights are preserved — fused is an additional allocation.
     /// Cache locality win: single contiguous memory region instead of 3 scattered buffers.
+    #[cfg(feature = "kog_cpu_fusion")]
     pub fn interleave_qkv(&mut self, config: &Config) {
         let n = config.n_embd;
         let kvd = types::kv_dim(config);

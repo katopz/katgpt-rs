@@ -143,7 +143,68 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 `katgpt_core` the same way `analytic_lattice` / `arg_runtime` already do.
 
 - [ ] 2.1 riir-engine `src/hla/` → `use katgpt_core::hla::{...}` (after step 4)
-- [ ] 2.2 riir-engine `src/transformer/` → `use katgpt_core::transformer::{...}` (after step 2)
+- [x] **2.2 riir-engine `src/transformer/` → consume `katgpt_transformer::{...}`** (2026-06-27)
+
+  **Scope:** swapped all substrate types from local definitions to
+  `katgpt-transformer` re-exports: `LayerWeights`, `TransformerWeights`,
+  `KVCache`, `MultiLayerKVCache`, `KVSnapshot`, `KVLayerSnapshot`,
+  `PagedKVCache`, `PAGE_SIZE`, `preload_kv_cache`, `MtpProjection`,
+  `load_mtp_projection`, `project_target_activation`, `RavenKVCache`.
+  Local definitions deleted from `transformer/mod.rs`, `transformer/raven.rs`,
+  and `transformer/mtp.rs` (MTP projection substrate section removed; clustered
+  LM head helpers stay local — they call `matmul`).
+
+  **Kept local (correctly):** `ForwardContext` (engine-specific pruner fields),
+  `PrefillContext` (**drifted** — riir-engine has `normed_x`, katgpt-transformer
+  has `queries`+`residuals`; reconciliation deferred), all forward functions,
+  `load_embed_*`, clustered LM head helpers, all raven forward functions.
+
+  **Reconciliation toward safe defaults (Option A per user direction):** the
+  initial swap revealed behavioral drift between riir-engine's local copies and
+  katgpt-transformer's versions. Per user instruction "go for A, and do the same
+  for other part too," katgpt-transformer was made conservative + riir-engine's
+  better impls were ported:
+  - `KVCache::reset()` — reverted no-op optimization to eager zeroing (safe
+    default for shared substrate; avoids stale-KV leaks for consumers that
+    reset between sequences).
+  - `MultiLayerKVCache::restore()` — added `[pos..block_size)` tail zeroing
+    (conservative; matches riir-engine's original behavior).
+  - `PagedKVCache` — ported riir-engine's ArrayVec-based `ensure_pages`/
+    `rollback` (stack-allocated scratch, zero heap alloc, bounded to 128 layers)
+    + pre-populated free list (memory-efficient page reuse) + `kv_page_size`
+    cached field (avoids recomputation). katgpt-transformer's pre-allocated
+    `Vec` scratch approach (`deficits`/`new_pages`/`all_new_buf`/
+    `rollback_removed` fields) removed in favor of ArrayVec.
+  - `LayerWeights` — gated `attn_norm_gamma`/`mlp_norm_gamma`/
+    `attn_qkv_fused` behind new `kog_cpu_fusion` feature. riir-engine uses
+    `default-features = false` on its katgpt-transformer dep → gets the compact
+    6-field struct (no ~2×n floats/layer dead weight). katgpt-rs root enables
+    `kog_cpu_fusion` (default-on); `ane`/`gpu_inference` features imply it
+    (their backends read the gamma fields unconditionally).
+  - `fold_gamma`/`interleave_qkv` methods — gated behind `kog_cpu_fusion`.
+
+  **Kept (additive, used by katgpt-rs root):** `MultiLayerKVCache.fill_pos`/
+  `advance_pos` (sleep consolidation, eviction, tf_loop, all forward funcs),
+  `RavenKVCache.readout_scores`/`readout_output` (root's `forward_raven`),
+  `invalidate_position` (dflash Issue 053 — ported from riir-engine).
+
+  **Validation:**
+  - `cargo check` clean on both repos (katgpt-rs root + riir-engine).
+  - katgpt-transformer: `--no-default-features`, default, `--all-features` all clean.
+  - riir-engine `transformer::` tests: **80/80 green** (includes snapshot/restore,
+    paged forward, prefill, preload_kv_cache, transformer_still compaction).
+  - riir-engine `dflash::` tests: **24/24 green** (validates `invalidate_position`
+    + `reset()` zeroing behavior in the speculative decoding path).
+  - riir-engine full lib: **2382/2383 green** (1 unrelated pre-existing failure
+    in `cgsp_runtime::dual_pool_bridge::g5_epool_persistence` — katgpt-core
+    CGSP types, not transformer).
+  - katgpt-rs root `transformer::` tests: **80/80 green** (validates the
+    behavioral changes are compatible with root too).
+
+  **Follow-up (tracked, not blocking):**
+  - Reconcile `PrefillContext` drift (riir-engine `normed_x` vs katgpt-transformer
+    `queries`+`residuals`). Requires porting the newer pre-activation caching
+    scheme to riir-engine's `forward_prefill` or vice versa.
 - [ ] 2.3 riir-engine `src/types.rs` → `use katgpt_core::types::{...}` (already partially done via `spec_types.rs:11`)
 - [ ] 2.4 riir-engine `src/tokenizer.rs` → consume core (after step 3, if it moves)
 - [ ] 2.5 riir-engine `src/dd_tree.rs` + `spec_types.rs` → consume core (after step 5)
