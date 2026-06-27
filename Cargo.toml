@@ -6,6 +6,7 @@ resolver = "3"
 name = "katgpt-rs"
 version = "0.2.0"
 edition = "2024"
+publish = false  # dev/examples aggregator — never published. Only katgpt-core ships to crates.io.
 
 [dependencies]
 katgpt-core = { path = "crates/katgpt-core" }
@@ -899,6 +900,10 @@ required-features = ["sudoku"]
 
 [[example]]
 name = "sudoku_03_tui"
+required-features = ["sudoku"]
+
+[[example]]
+name = "sudoku_05_fast_solver"
 required-features = ["sudoku"]
 
 # ── Go (AutoGo API Bridge) ────────────────────────────────────

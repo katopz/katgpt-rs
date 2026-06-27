@@ -1827,6 +1827,97 @@ Unlike `PersonalityWeightedComposition`, which *drifts* continuously under a rew
 - `cargo run --example committed_blend_01_three_archetypes --features committed_field_blend` — K=3 archetypes × 100 entities, fog-of-war sampling invariance.
 - `cargo run --example committed_blend_02_recommit_on_event --features committed_field_blend` — re-commit lifecycle (v=1 → v=2 personality swap + tamper detection).
 
+## 🚢 Releasing & Deploying
+
+Only **`katgpt-core`** ships to crates.io. The root `katgpt-rs` crate is a
+dev/examples aggregator (`publish = false`) — its version number is never
+bumped, tagged, or consumed by anyone.
+
+### Dev workflow
+
+All work happens on **`develop`** (no feature branches). Use [conventional
+commits](https://www.conventionalcommits.org/) so release-plz can compute the
+next version:
+
+| Prefix | Effect on `katgpt-core` version |
+|---|---|
+| `feat:` | minor bump (`0.2.0` → `0.2.1`) |
+| `fix:` | patch bump (`0.2.0` → `0.2.1`) |
+| `feat!:` / `BREAKING CHANGE:` | major bump (`0.2.0` → `1.0.0`) |
+| `docs:`, `chore:`, `refactor:`, `test:` | no bump |
+
+release-plz also runs `cargo-semver-checks`, so a silent API break (removed
+public fn, changed signature) forces a major bump regardless of the commit
+message.
+
+### Auto release (CI)
+
+Every push to `develop` or `main` triggers `.github/workflows/release-plz.yml`:
+
+- **`develop` push** → opens/updates a "Prepare release" PR with the bumped
+  `katgpt-core` version + generated `CHANGELOG.md`. The PR auto-updates as you
+  keep committing.
+- **`main` push** → publishes unpublished `katgpt-core` versions to crates.io,
+  pushes the `katgpt-core-vX.Y.Z` tag, and creates the GitHub Release.
+
+The normal cadence is:
+1. Commit `feat:`/`fix:` on `develop`.
+2. When ready to ship: **merge the release PR** into `develop`.
+3. **Merge `develop` → `main`** (fast-forward or PR).
+4. The `main` push fires the publish job. Done.
+
+### Manual release (`scripts/release.sh`)
+
+To trigger the same workflow manually (via `workflow_dispatch`):
+
+```sh
+# Create / update the release PR (must be on develop)
+./scripts/release.sh
+./scripts/release.sh release-pr
+
+# Publish unpublished katgpt-core versions (must be on main)
+./scripts/release.sh release
+```
+
+The script is a thin wrapper around `gh workflow run release-plz.yml` — all
+publishing runs in CI, so your local machine never needs `cargo-registry`
+credentials. Prerequisites (one-time): `brew install gh && gh auth login`.
+
+You can also trigger manually from the **Actions tab → Release-plz → Run
+workflow**.
+
+### One-time setup
+
+1. **GitHub repo settings → Actions → General → Workflow permissions**: set
+   to *Read and write*, and check *"Allow GitHub Actions to create and approve
+   pull requests"*.
+2. **Add the `CARGO_REGISTRY_TOKEN` secret** (Settings → Secrets and variables
+   → Actions). Generate a crates.io token with `publish-new` + `publish-update`
+   scopes.
+3. **First publish is manual** (crates.io limitation — CI can't publish a
+   brand-new crate name the first time):
+   ```sh
+   cargo publish -p katgpt-core
+   ```
+   After this, release-plz takes over for all subsequent versions.
+
+### Downstream consumers
+
+`katgpt-core` is consumed by `riir-neuron-db`, `riir-chain`, and `riir-ai`.
+After a release, bump the version pin in those repos' `Cargo.toml`:
+
+```toml
+katgpt-core = "0.2"   # was: { path = "../katgpt-rs/crates/katgpt-core" }
+```
+
+For local dev across repos, keep a `[patch.crates-io]` override pointing at
+your checkout so un-published local changes still work:
+
+```toml
+[patch.crates-io]
+katgpt-core = { path = "../katgpt-rs/crates/katgpt-core" }
+```
+
 ## 📁 Project Structure
 
 ```

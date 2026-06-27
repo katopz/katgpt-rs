@@ -1,0 +1,89 @@
+name: Release-plz
+
+# Two trigger modes:
+#   1. push to main/develop → automatic (normal git-flow cadence)
+#   2. workflow_dispatch      → manual via `./scripts/release.sh` or the Actions tab
+on:
+  push:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "release-plz command to run"
+        required: true
+        default: "release-pr"
+        type: choice
+        options:
+          - release-pr
+          - release
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────
+  # Publish + tag + GitHub Release. Fires on:
+  #   - push to main (normal release cadence)
+  #   - manual `release` dispatch
+  # ──────────────────────────────────────────────────────────────────────
+  release-plz-release:
+    name: Release-plz release (publish)
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.command == 'release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push tags, create GitHub releases
+      pull-requests: read   # detect the release PR and its commits
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0          # release-plz needs full git history
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/[email protected]
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Maintain the "Prepare release vX.Y.Z" PR on develop. Fires on:
+  #   - push to develop (accumulate changes as you work)
+  #   - push to main (clean up the PR after a real release)
+  #   - manual `release-pr` dispatch
+  # ──────────────────────────────────────────────────────────────────────
+  release-plz-pr:
+    name: Release-plz PR
+    if: >-
+      (github.event_name == 'push' &&
+       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.command == 'release-pr')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push to the release-pr branch
+      pull-requests: write   # create / update the release PR
+    concurrency:
+      # Only one release-pr job per branch at a time — prevents PR conflicts.
+      # cancel-in-progress: false → never skip an pending update.
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Run release-plz
+        uses: release-plz/[email protected]
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only needed if you use a private registry; safe to leave for crates.io.
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -1,0 +1,11 @@
+# release-plz configuration for katgpt-rs
+#
+# Only `katgpt-core` is released (published to crates.io). The root `katgpt-rs`
+# crate is a dev/examples/aggregator playground — it is never published, so its
+# version number carries no meaning for any downstream consumer.
+#
+# See README.md §"Releasing & Deploying" for the full dev→deploy workflow.
+
+[[package]]
+name = "katgpt-rs"
+release = false  # never version-bump, never tag, never changelog, never publish
