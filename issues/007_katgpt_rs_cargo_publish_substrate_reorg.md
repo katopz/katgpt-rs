@@ -23,6 +23,58 @@ This is the single change that makes the engine cargo-consumable AND eliminates 
 
 ---
 
+## Smell Audit (full inventory — HLA was the tip)
+
+**Root cause found:** `riir-ai/crates/riir-engine/src/lib.rs:3` documents it itself — *"Extracted from katgpt-rs (MIT, frozen at v0.1.0)"*. riir-engine is a **fork** of katgpt-rs@v0.1.0. Both sides then evolved independently for hundreds of commits. Everything present at v0.1.0 got duplicated; nothing keeps the copies in sync. HLA is just the first one I confirmed.
+
+### Category A — Substrate duplicated in riir-engine (the smells to fix)
+
+These modules live in `riir-engine/src/` as **own copies** (use `crate::`, not `katgpt_core::`). Each is inference mechanics — the WHAT, public per the 003 strategy — stuck in the private fork:
+
+| Module (riir-engine path) | Uses | Smell type | Strategy-doc status |
+|---|---|---|---|
+| `src/hla/` | `crate::hla::kernel`, `crate::transformer`, `crate::types` | Full pillar duplicated, diverged (`*_role_aware` variants) | inference mechanics — PUBLIC |
+| `src/transformer/` (gemma2, llama) | `crate::types::{self, *}` | Forward pass duplicated | inference mechanics — PUBLIC |
+| `src/types.rs` | — | Foundation (Config/Rng/InferenceResult) duplicated | inference mechanics — PUBLIC |
+| `src/tokenizer.rs` | `crate::types` | SentencePiece loader duplicated | inference mechanics — PUBLIC |
+| `src/dd_tree.rs` | `crate::spec_types::{ConstraintPruner, TreeNode, ...}` | DDTree duplicated | **named PUBLIC engine in 003** ("DDTree, ConstraintPruner trait") |
+| `src/spec_types.rs` | — | `TreeNode`/`DDTreeBranchCache`/`SpeculativeContext` duplicated; **traits already moved to `katgpt-core/src/traits.rs`** but the dependent types were left behind — half-finished extraction | PUBLIC |
+| `src/mcts.rs` | `crate::game_state` | MCTS mechanics duplicated | inference mechanics — PUBLIC |
+| `src/sampling.rs` | `crate::types::Rng` | CDF sampling duplicated | inference mechanics — PUBLIC |
+| `src/delta_mem/` | `crate::spec_types` | DeltaMemory duplicated | inference mechanics — PUBLIC |
+| `src/turboquant.rs` | `crate::types` | **Stub by design** — its own header says *"real impl lives in katgpt-rs, port when needed"*. Deferred dedup, acknowledged. | inference mechanics — PUBLIC |
+| `src/simd/wasm32.rs` | reimplements `simd_dot_f32`/`simd_sum_f32`/`simd_exp_inplace` etc. | WASM SIMD128 path **reimplemented** despite `katgpt-core/src/simd/` already shipping the same kernels (`wasm32_simd128_dot_f32` etc.) | inference mechanics — PUBLIC |
+
+### Category B — Correct composition (the pattern to replicate everywhere)
+
+These already do it right — `use katgpt_core::` / `use katgpt_rs::` to compose public primitives, keeping only the private wiring. This is the target end state for all of Category A:
+
+| Module | Imports from | Why it's correct |
+|---|---|---|
+| `analytic_lattice/asoc.rs` | `katgpt_core::analytic_lattice::{ComposerCtx, ...}` | Composes the public primitive |
+| `arg_runtime/*` (6 files) | `katgpt_core::arg::{LabelId, TaxonomyNode, ...}` | `_runtime` suffix = private composition layer |
+| `bom_arena/*` | `katgpt_core::{ArenaAction, BeliefPlanner, ...}` | Public primitives, private game wiring |
+| `cce_runtime/*` | `katgpt_rs::cce`, `katgpt_core::cgsp` | Public primitives, private per-NPC wiring |
+| `cgsp_runtime/*` | `katgpt_core::cgsp::{Direction, sigmoid}` | Public primitive, private anti-cheat/bridge |
+
+The `_runtime` suffix is already the **de-facto boundary marker** in this codebase: bare-name module = public primitive (should live in core); `*_runtime` module = private composition (correctly in riir-engine). The fix is to make every Category A module follow the Category B pattern.
+
+### Category C — Correctly private (must NOT move — 003 strategy compliance)
+
+These are game product IP per 003 §"What riir-ai Can Do". The audit confirms they correctly stay in riir-engine: `adapters/`, `arena/`, `bom_arena/` (game wiring), `cce_runtime/`, `cgsp_runtime/`, `cognitive_branches_runtime/`, `committed_blend/`, `cwm_runtime/`, `entity_cognition/`, `ict_runtime/`, `neuron_vessel_runtime/`, `policy_cache/`, `swir_validation/`, `zone/`, `kg*`, `game_state.rs`, `latent_field_wiring.rs`, `role_transport.rs`. Moving any of these to the public crate would violate the "How = private" rule.
+
+### Tier inconsistency smell (separate from duplication)
+
+`cgsp` lives in `katgpt-core` but `cce` lives in `katgpt-rs` root. Consumers reach them inconsistently: `use katgpt_core::cgsp` vs `use katgpt_rs::cce`. Same conceptual layer (game-theoretic runtime primitives), two different tiers. `cce` should move down to core to match `cgsp`, or both move up — pick one tier for the "public game-theory primitive" layer.
+
+### Net assessment
+
+- **10 substrate modules duplicated** in riir-engine (Category A), all PUBLIC inference mechanics per the 003 strategy. This is a strategy-doc violation in the OTHER direction: public WHAT is stranded in a private fork, forcing the fork to maintain its own divergent copies.
+- The `*_runtime` convention already marks the boundary correctly. The codebase knows the pattern; it just hasn't been applied to the v0.1.0 fork residue.
+- The single biggest DRY win is the substrate chain `types → transformer/weights → hla → dd_tree/spec_types`: move it to core, delete the riir-engine copies, and every downstream repo gets one canonical source.
+
+---
+
 ## Evidence: HLA is duplicated, not just scattered
 
 ### Where HLA lives today
@@ -75,34 +127,30 @@ crates/katgpt-core/src/
 
 ### Tier 1 — `katgpt-rs` (root, the engine — becomes publishable)
 
-Organize the remaining ~100 flat modules into subdirs by role, so the public surface is legible and the stable-vs-experimental split is visible:
+Organize the remaining ~100 flat modules into subdirs by role. **Mirror the existing `_runtime` convention** as the organizing principle — bare-name = public primitive (re-export from core), `*_runtime`-style suffix = composition layer:
 
 ```
 src/
 ├── lib.rs
-├── primitives/         # GOAT-gated research primitives, each feature-flagged
-│   ├── clr/            # (was src/clr/)
-│   ├── compaction/     # (was src/compaction/)
-│   ├── cgsp.rs         # (was src/cgsp.rs)
-│   ├── claim_rubric/   # etc.
-│   └── ...
-├── inference/          # higher-level inference wiring built ON core
-│   ├── attn_match/     # was src/attn_match/
-│   ├── speculative/    # was src/speculative/
-│   ├── pruners/        # was src/pruners/
-│   └── ...
-├── games/              # game engines + NPC brains (clearly app-level)
-│   ├── percepta/       # was src/percepta/
-│   ├── bomber/         # (wherever bomber lives)
-│   ├── go/  sudoku/  monopoly/
-│   └── npc_brain_router.rs
-├── backends/           # platform backends (optional, platform-gated)
-│   ├── gpu.rs  ane.rs  inference_router.rs
-│   └── ...
-└── bench/              # benchmark harnesses (was src/benchmark/)
+├── primitives/         # GOAT-gated research primitives (the WHAT), each feature-flagged.
+│                       # Candidates to also push DOWN to core over time: cce, clr, compaction
+│                       # (matches cgsp already being in core). Until then, live here as public.
+│   ├── cce/            # tier-inconsistency candidate (see Smell Audit) — push to core to match cgsp
+│   ├── clr/  compaction/  cgsp.rs  claim_rubric/  ...
+│   └── (GOAT-passed default-on primitives form the stable publishable surface)
+├── inference/          # higher-level inference wiring built ON core substrate
+│   ├── attn_match/  speculative/  pruners/  still_kv/  turboquant/
+│   └── (these are engine-tier, not substrate — depend on core's transformer/hla)
+├── games/              # game engines + NPC brains — clearly app-level, opt-in features
+│   ├── percepta/  bomber/  go/  sudoku/  monopoly/  npc_brain_router.rs
+│   └── (NOT in katgpt-core — game IP stays public-engine per 003, but separate tier)
+├── backends/           # platform backends (optional, target-gated) — gpu/ane/inference_router
+└── bench/              # benchmark harnesses
 ```
 
-This is a **pure move + `pub use` re-export** refactor — no logic changes. `lib.rs` keeps re-exporting at the top level so existing `use katgpt::clr_vote` call sites don't break. The subdir structure is for human/CI legibility and for scoping the publishable surface.
+**Critical:** after the substrate (Category A) moves to core, root `src/hla/`, `src/transformer.rs`, `src/types.rs`, `src/weights.rs`, `src/dd_tree.rs`, `src/spec_types.rs`, `src/mcts.rs`, `src/sampling.rs`, `src/tokenizer/`, `src/delta_mem/` all become thin `pub use katgpt_core::{...};` re-exports. No call site in katgpt-rs or its examples breaks. riir-engine deletes its copies and imports from core the same way `analytic_lattice` already does.
+
+This is a **pure move + re-export** refactor — no logic changes. `lib.rs` keeps re-exporting at the top level so existing `use katgpt::clr_vote` call sites don't break.
 
 ### Feature-flag stability tiers (enables cargo publish)
 
@@ -144,30 +192,42 @@ Once the substrate is in `katgpt-core`:
 
 Each phase is independently shippable and reversible:
 
-- [ ] **Phase 1 — Substrate extraction to core.** Move `types` → core (it's the root of the pillar chain, fewest deps). Then `transformer`/`weights`. Then `hla`. Each move: copy file, update `use` paths in katgpt-rs root (re-export from core), run full test suite. Core version bump: `0.3.0` (new public modules = breaking for core consumers until they `use katgpt_core::hla`).
-- [ ] **Phase 2 — Cross-repo dedup.** In riir-ai, replace duplicated `hla`/`transformer`/`types` with `katgpt-core` imports. Delete the copies. Verify `forward_hla` bit-identical on the existing tests in both repos.
-- [ ] **Phase 3 — Root crate reorg.** Move root `src/*` modules into `primitives/`/`inference/`/`games/`/`backends/` subdirs. Add top-level `pub use` re-exports so no call site breaks. Pure refactor, no logic.
-- [ ] **Phase 4 — Dep audit for publish.** Make `plotters` optional. Verify `cargo check --no-default-features` is clean on the root.
-- [ ] **Phase 5 — Publish katgpt-rs.** Add to `release-plz.toml`, first publish `0.1.0`. Document the feature-flag stability tiers in root README.
+- [ ] **Phase 1 — Substrate extraction to core.** Move the full Category A chain, in dependency order (each move is its own commit, full test suite green before next):
+  1. `types` (foundation — move first, surfaces any hidden deps)
+  2. `transformer` + `weights` (depends on types)
+  3. `tokenizer` (depends on types — audit deps first, see Risk 4)
+  4. `hla` (depends on transformer/types — port `*_role_aware` variants behind a core feature flag)
+  5. `dd_tree` + `spec_types` types (traits already in `core/traits.rs`; move the dependent `TreeNode`/`DDTreeBranchCache`/`SpeculativeContext` to join them)
+  6. `mcts`, `sampling`, `delta_mem` (leaf inference mechanics)
+  7. Delete `riir-engine/src/simd/wasm32.rs`, consume `katgpt_core::simd` wasm32 path instead
+  Each step: copy to core, `pub use katgpt_core::*` re-export at root, run tests. Core version bump: `0.3.0`.
+- [ ] **Phase 2 — Cross-repo dedup.** In riir-ai/riir-engine, delete every Category A copy, import from `katgpt_core` the same way `analytic_lattice`/`arg_runtime` already do. Verify `forward_hla`/`dd_tree` bit-identical on existing tests in both repos. This is the single biggest DRY win.
+- [ ] **Phase 2b — Tier consistency.** Move `cce` down to `katgpt-core` to match `cgsp` (both are public game-theory primitives). Update `cce_runtime` imports from `katgpt_rs::cce` → `katgpt_core::cce`.
+- [ ] **Phase 3 — Root crate reorg.** Move root `src/*` into `primitives/`/`inference/`/`games/`/`backends/` subdirs per the `_runtime` convention. Top-level `pub use` re-exports preserve all call sites. Pure refactor.
+- [ ] **Phase 4 — Dep audit for publish.** Make `plotters` optional. Verify `cargo check --no-default-features` clean on root.
+- [ ] **Phase 5 — Publish katgpt-rs.** Add to `release-plz.toml` as second package (`git_tag_name = "katgpt-rs-v{{version}}"`), first publish `0.1.0`. Document feature-flag stability tiers in README.
 
-Phases 1–2 are the high-value, low-risk core (kills the duplication, unblocks clean consumption). Phases 3–5 are the cargo-publish polish. **Phase 1+2 alone deliver most of the value** — any repo can then `cargo add katgpt-core` and get the full inference substrate including HLA.
+Phases 1–2 are the high-value, low-risk core (kills the duplication, unblocks clean consumption). Phases 3–5 are the cargo-publish polish. **Phase 1+2 alone deliver most of the value** — any repo can then `cargo add katgpt-core` and get the full inference substrate including HLA, DDTree, transformer.
 
 ---
 
 ## Risks
 
 1. **Moving `transformer`/`types` to core may surface hidden deps** (e.g., `Config` referencing something in root). **Mitigation:** move `types` first (it's the dependency root), find out, deal with it incrementally. Don't move the whole chain in one commit.
-2. **riir-engine's HLA diverged** (`*_role_aware` variants). **Mitigation:** role-aware is likely a superset — port it into core's `hla` behind a feature flag, keep riir-engine's role transport wiring. Phase 2 reconciliation.
+2. **riir-engine's HLA diverged** (`*_role_aware` variants, `role_transport` wiring). **Mitigation:** role-aware is likely a superset — port the HLA kernel variants into core's `hla` behind a feature flag; keep riir-engine's `role_transport.rs` as the private composition layer (it's Category C). Phase 2 reconciliation.
 3. **Version churn.** Core goes to `0.3.0` (new modules), root starts `0.1.0`. **Mitigation:** both are `0.x`, expected to churn. Document in READMEs.
-4. **`tokenizer` may have deps that disqualify it from core.** **Mitigation:** audit before moving; leave in root if it pulls anything heavy.
+4. **`tokenizer` may have deps that disqualify it from core** (SentencePiece C++ via `sentencepiece-sys`). **Mitigation:** audit first; if it pulls a C++ build dep, leave `tokenizer` in root and only move the trait/types. The riir-engine `tokenizer.rs` is already `#[cfg(not(target_arch = "wasm32"))]`-gated — core must preserve that.
+5. **`dd_tree`/`spec_types` reconciliation** — riir-engine's copy may have diverged from whatever katgpt-rs root has (root `spec_types.rs` doesn't even exist per the audit). **Mitigation:** treat core as the new canonical source; port any riir-engine-only improvements during Phase 2; the traits are already in core so the hard part (the trait boundary) is done.
+6. **Game-state coupling** — `mcts.rs` imports `crate::game_state::GameState`, which is Category C (game IP). **Mitigation:** `mcts` the algorithm (tree policy, UCB1, backprop) is public mechanics; `GameState` the trait stays wherever it is. Move the generic MCTS, parameterize over a `Game` trait from core if needed, leave game-specific impls in riir-engine.
 
 ---
 
 ## Acceptance
 
-- [ ] Phase 1: `hla`/`transformer`/`types`/`weights` live in `katgpt-core`, re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test -p katgpt-rs --lib` green.
-- [ ] Phase 2: riir-ai has no duplicated `hla`/`transformer`/`types`; consumes them from `katgpt-core`. riir-engine HLA tests bit-identical.
-- [ ] Phase 3: root `src/` organized into subdirs; no call-site breakage (all `use katgpt::*` still resolve via re-exports).
+- [ ] Phase 1: all Category A modules live in `katgpt-core`, re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test -p katgpt-rs --lib` green on arm64 + x86_64.
+- [ ] Phase 2: riir-engine has zero Category A duplicates; all consume `katgpt_core::`. `forward_hla`/`dd_tree`/`mcts` tests bit-identical to pre-move.
+- [ ] Phase 2b: `cce` in core, `cce_runtime` imports updated.
+- [ ] Phase 3: root `src/` organized into subdirs; no call-site breakage (all `use katgpt::*` resolve via re-exports).
 - [ ] Phase 4: `cargo check --no-default-features` clean on root; `plotters` optional.
 - [ ] Phase 5: `katgpt-rs@0.1.0` live on crates.io; `cargo add katgpt-rs` works.
 - [ ] This issue updated with GOAT/bench evidence at each phase (per AGENTS.md "dont defer benchmark task").
@@ -176,6 +236,7 @@ Phases 1–2 are the high-value, low-risk core (kills the duplication, unblocks 
 
 ## Open questions (need your call)
 
-1. **Scope of Phase 1:** just `hla` (the called-out pillar), or the full substrate chain (`types`→`transformer`→`weights`→`hla`)? The chain is the right answer if we want to actually fix the duplication, since HLA depends on the others. Confirm: move the whole chain?
-2. **`tokenizer`:** move to core or leave in root? Depends on its deps — needs a 5-min audit.
-3. **Go order:** Phase 1+2 first (kills duplication, highest value), defer 3–5? Or push all the way to publish in one push?
+1. **Phase 1 scope:** the full 7-step Category A chain above, or a subset (e.g. just the `types`→`transformer`→`hla` core that unblocks the HLA case study first)? Recommend the full chain — anything left behind stays duplicated.
+2. **`tokenizer`:** move to core (SentencePiece dep risk) or leave in root? Needs the Risk 4 audit.
+3. **`mcts`/`dd_tree` generic-vs-game split:** how aggressively to parameterize over core `Game`/`Node` traits vs. leave game-coupled copies in riir-engine?
+4. **Go order:** Phase 1+2 first (kills duplication, highest value), defer 3–5? Or push all the way to publish in one go?
