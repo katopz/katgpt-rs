@@ -5,8 +5,10 @@
 //! - **simd**: NEON/AVX2 accelerated linear algebra kernels
 //! - **hla**: Higher-order Linear Attention substrate (cache types + kernels)
 //! - **traits**: Shared traits for game AI and speculative decoding
+//! - **speculative**: Speculative-decoding substrate types (TreeNode, DraftResult,
+//!   configs, LDT conflict detector, TES credit assignment)
 //!
-//! No feature flags on types/simd/hla — both projects get the full substrate.
+//! No feature flags on types/simd/hla/speculative — both projects get the full substrate.
 
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
@@ -20,6 +22,7 @@ pub mod leaky_core;
 pub mod parallax_attn;
 pub mod shard_embedding;
 pub mod simd;
+pub mod speculative;
 pub mod traits;
 pub mod types;
 
