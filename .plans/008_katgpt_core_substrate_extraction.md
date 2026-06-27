@@ -119,7 +119,7 @@ refined strategy doc, stranded in a private fork.
     (3990/3991 green; the 1 failure is an unrelated flake in
     `pruners::three_mode_bandit::tests::bench_grounding_quality_32k` which passes
     in isolation).
-  - [ ] 2h. Commit: `feat(core): Plan 008 step 2 — extract katgpt-transformer substrate crate`
+  - [x] 2h. Commit: `feat: Plan 008 step 2 — extract katgpt-transformer substrate crate` (1debf905 on develop, 2026-06-27)
 
   **FOLLOW-UP (separate commit, not step 2):** split root `src/transformer.rs`
   forward functions into per-family submodules mirroring riir-engine's
