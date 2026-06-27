@@ -12,6 +12,8 @@
 //!   feature-gated config types (DFlare fusion/kv-routing/progressive-budget,
 //!   `LdtPruneConfig`, `SpecCostSnapshot`, `RoutingOverlapSnapshot`,
 //!   `StabilitySnapshot`).
+//! - [`sampling`]: CDF-based sampling primitives (`sample_from_distribution`,
+//!   `sample_residual_distribution`, `sample_residual_distribution_into`).
 //!
 //! ## What does NOT live here (stays in consumer crates)
 //! - The companion traits (`ConstraintPruner`, `ScreeningPruner`, `DominoPruner`,
@@ -35,8 +37,16 @@
 //! [`SpeculativeContext`]: katgpt_rs::speculative::SpeculativeContext
 //! [`DDTreeBranchCache`]: katgpt_rs::speculative::DDTreeBranchCache
 
+pub mod sampling;
 pub mod types;
 
 // Re-export the substrate API at `katgpt_core::speculative::*` for ergonomic
 // imports (`use katgpt_core::speculative::{TreeNode, DraftResult};`).
 pub use types::*;
+
+// Sampling primitives are always-on (depend only on `crate::types::Rng` +
+// `crate::simd::simd_scale_inplace`). Re-exported here for one-stop access.
+pub use sampling::{
+    sample_from_distribution, sample_residual_distribution,
+    sample_residual_distribution_into,
+};

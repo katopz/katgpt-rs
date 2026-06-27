@@ -4,11 +4,16 @@
 //! - **types**: Config, Rng, math utilities, LoRA, DomainLatent
 //! - **simd**: NEON/AVX2 accelerated linear algebra kernels
 //! - **hla**: Higher-order Linear Attention substrate (cache types + kernels)
+//! - **mcts**: Generic Monte Carlo Tree Search over any `GameState`
+//! - **delta_mem**: δ-mem associative memory substrate (state, hasher, multi-domain)
 //! - **traits**: Shared traits for game AI and speculative decoding
-//! - **speculative**: Speculative-decoding substrate types (TreeNode, DraftResult,
-//!   configs, LDT conflict detector, TES credit assignment)
+//! - **speculative**: Speculative-decoding substrate types + sampling primitives
+//!   (TreeNode, DraftResult, configs, LDT conflict detector, TES credit
+//!   assignment, CDF/residual samplers)
 //!
-//! No feature flags on types/simd/hla/speculative — both projects get the full substrate.
+//! No feature flags on types/simd/hla/mcts/delta_mem/speculative — both projects
+//! get the full substrate. Composition layers (root-only types like
+//! `BanditRolloutPolicy`, `MemorySteeredPruner<P>`) stay in the consuming crate.
 
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
@@ -16,8 +21,15 @@ pub mod attention;
 pub mod coda;
 #[cfg(feature = "dec_operators")]
 pub mod dec;
+pub mod delta_mem;
 pub mod hla;
 pub mod leaky_core;
+/// Generic Monte Carlo Tree Search over any [`crate::traits::GameState`].
+///
+/// Always-on substrate. Composition that needs root-only types
+/// (`BanditRolloutPolicy` depends on `crate::pruners::bandit::BanditStats`)
+/// stays in the consuming crate.
+pub mod mcts;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
 pub mod shard_embedding;

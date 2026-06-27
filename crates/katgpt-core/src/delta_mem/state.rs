@@ -14,7 +14,7 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "temporal_deriv")]
-use katgpt_core::temporal_deriv::TemporalDerivativeKernel;
+use crate::temporal_deriv::TemporalDerivativeKernel;
 
 /// Default surprise threshold θ_surprise for the temporal-derivative write gate
 /// (Plan 277 Phase 3). Writes are suppressed when `surprise_norm() < θ`.
@@ -54,7 +54,7 @@ impl Default for DeltaMemoryConfig {
 /// Total size: rank² floats (256 bytes at rank=8).
 pub struct DeltaMemoryState {
     /// Associative memory matrix [rank × rank], row-major.
-    state: Vec<f32>,
+    pub(crate) state: Vec<f32>,
     /// Config.
     config: DeltaMemoryConfig,
     /// Per-dimension write gate β [rank].
