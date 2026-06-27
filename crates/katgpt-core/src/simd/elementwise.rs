@@ -7,6 +7,13 @@
 //!
 //! AVX2 paths share horizontal reducers from `super::horizontal`.
 
+// x86_64 dispatch helpers from the parent `simd` module. Gated so other
+// architectures don't see an unused-import warning.
+#[cfg(target_arch = "x86_64")]
+use super::horizontal::{horizontal_max_256, horizontal_sum_256};
+#[cfg(target_arch = "x86_64")]
+use super::is_avx2_fma_available;
+
 // ── Scale Inplace ─────────────────────────────────────────────
 
 /// SIMD-accelerated in-place scale: `x[i] *= scale` for all `i`.
@@ -76,6 +83,7 @@ unsafe fn neon_scale_inplace(x: &mut [f32], scale: f32) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_scale_inplace(x: &mut [f32], scale: f32) {
     use core::arch::x86_64::{_mm256_loadu_ps, _mm256_mul_ps, _mm256_set1_ps, _mm256_storeu_ps};
@@ -736,6 +744,7 @@ unsafe fn neon_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_add_inplace(dst: &mut [f32], src: &[f32]) {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_storeu_ps};
@@ -757,6 +766,7 @@ unsafe fn avx2_add_inplace(dst: &mut [f32], src: &[f32]) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_add_scalar_inplace(x: &mut [f32], val: f32) {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_set1_ps, _mm256_storeu_ps};
@@ -778,7 +788,7 @@ unsafe fn avx2_add_scalar_inplace(x: &mut [f32], val: f32) {
 }
 
 #[cfg(target_arch = "x86_64")]
-#[target_feature(enable = "avx2", enable = "fma")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
     use core::arch::x86_64::{
@@ -815,6 +825,7 @@ unsafe fn avx2_fused_sub_scale_inplace(x: &mut [f32], sub: f32, scale: f32) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_setzero_ps};
@@ -860,6 +871,7 @@ unsafe fn avx2_sum_f32(x: &[f32]) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_storeu_ps};
@@ -881,6 +893,7 @@ unsafe fn avx2_add_into(dst: &mut [f32], a: &[f32], b: &[f32]) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_max_f32(x: &[f32]) -> f32 {
     use core::arch::x86_64::{_mm256_loadu_ps, _mm256_max_ps};
@@ -936,6 +949,7 @@ unsafe fn avx2_max_f32(x: &[f32]) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write: f32) {
     use core::arch::x86_64::{
@@ -965,6 +979,7 @@ unsafe fn avx2_fused_decay_write(dst: &mut [f32], decay: f32, src: &[f32], write
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_scale_mul_inplace(x: &mut [f32], gamma: &[f32], scale: f32) {
     use core::arch::x86_64::{_mm256_loadu_ps, _mm256_mul_ps, _mm256_set1_ps, _mm256_storeu_ps};

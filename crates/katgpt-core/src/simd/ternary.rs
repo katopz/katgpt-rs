@@ -8,6 +8,12 @@
 #[cfg(feature = "plasma_path")]
 use super::{SimdLevel, simd_level};
 
+// `horizontal_sum_256` is only used by the AVX2 ternary kernel, which itself
+// requires both `plasma_path` and `x86_64`. Gate the import identically so
+// other targets don't see an unused-import warning.
+#[cfg(all(feature = "plasma_path", target_arch = "x86_64"))]
+use super::horizontal::horizontal_sum_256;
+
 #[cfg(feature = "plasma_path")]
 use crate::types::TernaryWeights;
 
@@ -195,6 +201,7 @@ unsafe fn fmla_nibble8(
 }
 
 #[cfg(all(feature = "plasma_path", target_arch = "x86_64"))]
+#[target_feature(enable = "avx2,fma")]
 unsafe fn avx2_ternary_matvec(w: &TernaryWeights, x: &[f32], y: &mut [f32]) {
     // Safety: caller guarantees x.len()==w.cols and y.len()==w.rows
     unsafe {

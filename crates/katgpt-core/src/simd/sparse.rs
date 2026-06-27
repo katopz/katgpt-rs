@@ -1,6 +1,13 @@
 //! Sparse dot product and sparse matmul — gather-based kernels for the
 //! "active-tokens-only" matmul path (typically <32 of D dim alive).
 
+// x86_64 dispatch helpers from the parent `simd` module. Gated so other
+// architectures don't see an unused-import warning.
+#[cfg(target_arch = "x86_64")]
+use super::horizontal::horizontal_sum_256;
+#[cfg(target_arch = "x86_64")]
+use super::is_avx2_fma_available;
+
 // ── Sparse Dot Product (Scattered Gather) ────────────────────
 
 /// SIMD sparse dot: `Σ weight[row_off + active_indices[i]] * active_values[i]` for `i in 0..alive`.
@@ -147,6 +154,7 @@ unsafe fn neon_sparse_dot_f32(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sparse_dot_f32(
     weight: &[f32],

@@ -5,6 +5,13 @@
 //!
 //! AVX2 paths share horizontal reducers from `super::horizontal`.
 
+// x86_64 dispatch helpers from the parent `simd` module. Gated so other
+// architectures don't see an unused-import warning.
+#[cfg(target_arch = "x86_64")]
+use super::horizontal::horizontal_sum_256;
+#[cfg(target_arch = "x86_64")]
+use super::is_avx2_fma_available;
+
 // Cephes polynomial constants — range reduction for exp().
 // Used by both the scalar tail and the AVX2/NEON polynomial kernels.
 
@@ -156,6 +163,7 @@ unsafe fn neon_reciprocal_inplace(x: &mut [f32]) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_reciprocal_inplace(x: &mut [f32]) {
     use std::arch::x86_64::*;
@@ -392,6 +400,7 @@ pub(super) fn scalar_exp_inplace(x: &mut [f32]) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_exp_inplace(x: &mut [f32]) {
     use core::arch::x86_64::{
@@ -473,6 +482,7 @@ unsafe fn avx2_exp_inplace(x: &mut [f32]) {
 /// Scalar tail uses `fast_sigmoid` to stay bit-exact with the pre-SIMD code
 /// on odd-length buffers (AVX2 tail = len % 8).
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: f32) {
     use core::arch::x86_64::{
@@ -568,6 +578,7 @@ unsafe fn avx2_sigmoid_tanh_clamp(out: &mut [f32], a: &[f32], q: &[f32], clamp: 
 /// Scalar tail uses `fast_sigmoid` to stay bit-exact with the pre-SIMD code
 /// on odd-length buffers (AVX2 tail = len % 8).
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sigmoid_inplace(x: &mut [f32]) {
     use core::arch::x86_64::{
@@ -644,12 +655,13 @@ unsafe fn avx2_sigmoid_inplace(x: &mut [f32]) {
 ///
 /// 4 independent accumulators (32 elements per outer iteration) for ILP.
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_exp_sum_inplace(x: &mut [f32]) -> f32 {
     use core::arch::x86_64::{
         _mm256_add_epi32, _mm256_add_ps, _mm256_castsi256_ps, _mm256_cvtps_epi32, _mm256_loadu_ps,
-        _mm256_mul_ps, _mm256_round_ps, _mm256_set1_epi32, _mm256_set1_ps, _mm256_slli_epi32,
-        _mm256_storeu_ps, _mm256_sub_ps,
+        _mm256_mul_ps, _mm256_round_ps, _mm256_set1_epi32, _mm256_set1_ps, _mm256_setzero_ps,
+        _mm256_slli_epi32, _mm256_storeu_ps, _mm256_sub_ps,
     };
     unsafe {
         const ROUND_NEAREST: i32 = 0x00;

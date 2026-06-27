@@ -12,6 +12,13 @@
 /// For x < -20: returns exp(x) ≈ 0 (avoids log(1+0) precision loss).
 use super::*;
 
+// `horizontal_sum_256` lives in `super::horizontal`, so `use super::*` doesn't
+// reach it. Some call sites in this file use the fully-qualified path
+// (`super::horizontal::horizontal_sum_256`); this import lets the others use
+// the bare name to match the other simd submodules.
+#[cfg(target_arch = "x86_64")]
+use super::horizontal::horizontal_sum_256;
+
 #[cfg(feature = "sigmoid_margin")]
 #[inline]
 fn softplus(x: f32) -> f32 {
@@ -278,6 +285,7 @@ unsafe fn neon_sum_sq(x: &[f32], len: usize) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sum_sq(x: &[f32], len: usize) -> f32 {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps};
@@ -479,6 +487,7 @@ unsafe fn neon_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sum_sq_quartic(x: &[f32]) -> (f32, f32) {
     use core::arch::x86_64::{
@@ -633,6 +642,7 @@ unsafe fn neon_sum_abs_f32(x: &[f32]) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_sum_abs_f32(x: &[f32]) -> f32 {
     use core::arch::x86_64::{
@@ -791,6 +801,7 @@ unsafe fn neon_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
     use core::arch::x86_64::{
@@ -901,6 +912,7 @@ unsafe fn neon_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) 
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_fused_sub_acc(dst: &mut [f32], a: &[f32], b: &[f32], len: usize) {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_loadu_ps, _mm256_storeu_ps, _mm256_sub_ps};
@@ -987,6 +999,7 @@ unsafe fn neon_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: us
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_fused_scale_acc(dst: &mut [f32], src: &[f32], scale: f32, len: usize) {
     use core::arch::x86_64::{_mm256_fmadd_ps, _mm256_loadu_ps, _mm256_set1_ps, _mm256_storeu_ps};

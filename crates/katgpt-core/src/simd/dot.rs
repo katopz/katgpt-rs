@@ -9,6 +9,13 @@
 //! Backends share `is_avx2_fma_available` (from `super`) and AVX2 horizontal
 //! reducers (from `super::horizontal`).
 
+// x86_64 dispatch helpers from the parent `simd` module. Gated so other
+// architectures don't see an unused-import warning.
+#[cfg(target_arch = "x86_64")]
+use super::horizontal::horizontal_sum_256;
+#[cfg(target_arch = "x86_64")]
+use super::is_avx2_fma_available;
+
 // ── Dot Product ───────────────────────────────────────────────
 
 /// SIMD-accelerated dot product: `Σ a[i] * b[i]` for `len` elements.
@@ -148,6 +155,7 @@ unsafe fn neon_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_dot_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
     use core::arch::x86_64::{_mm256_add_ps, _mm256_fmadd_ps, _mm256_loadu_ps, _mm256_setzero_ps};
@@ -372,6 +380,7 @@ unsafe fn neon_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_outer_product_acc(acc: &mut [f32], a: &[f32], b: &[f32], m: usize, n: usize) {
     use core::arch::x86_64::{
@@ -504,6 +513,7 @@ unsafe fn neon_outer_product_acc_scaled(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_outer_product_acc_scaled(
     acc: &mut [f32],
