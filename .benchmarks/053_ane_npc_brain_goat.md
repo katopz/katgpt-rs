@@ -1,5 +1,16 @@
 # Benchmark 053: ANE-Latent NPC Brain Compute — GOAT Proof (Plan 255)
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> `ane_npc_*` example files referenced below (`examples/ane_npc_arena.rs`,
+> `ane_npc_goat.rs`, `ane_npc_power.rs`) and the `npc_ane_backend` /
+> `npc_brain_router` modules moved from this repo (katgpt-rs) to
+> `riir-ai/crates/riir-engine/`. The `ane_npc` feature flag now lives in
+> `riir-engine/Cargo.toml`. The historical results below were captured before
+> the move; the negative GOAT verdict still holds and is preserved as the
+> canonical reason `ane_npc` stays opt-in everywhere. The benchmark numbers
+> remain valid evidence — re-running today would require
+> `cargo run -p riir-engine --example ane_npc_goat --features ane_npc`.
+
 > **Date:** 2026-06-13
 > **Feature Gate:** `ane_npc` (opt-in, macOS only)
 > **Depends on:** Plan 255 (ANE-Latent NPC Brain Compute), Plan 221 (Sense Composition), Issue 004 (ANE CoreML Model Generation)

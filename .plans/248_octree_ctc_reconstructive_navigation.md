@@ -1,5 +1,15 @@
 # Plan 248: OctreeCTC — Reconstructive Memory Navigation
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> example + test referenced below (`examples/octree_ctc_demo.rs`,
+> `tests/octree_ctc_recall_test.rs`) moved from this repo (katgpt-rs) to
+> `riir-ai/crates/riir-engine/`. They construct `NpcBrain` which is now
+> private NPC runtime IP. The reconstruction substrate they consume
+> (`katgpt_core::sense::reconstruction`) stays public. The bench referenced
+> below (`crates/katgpt-core/benches/reconstruction_bench.rs`) ALSO moved to
+> `riir-engine/benches/reconstruction_bench.rs`. Historical task records
+> below reflect the original locations.
+
 **Date:** 2026-06-11
 **Research:** `.research/216_MRAgent_Reconstructive_Memory_Graph.md`
 **Status:** ✅ COMPLETE — all 6 phases done, promoted to default

@@ -264,7 +264,11 @@ wall_attention = ["katgpt-core/wall_attention", "katgpt-transformer/wall_attenti
 ane = ["dep:coreml-native", "dep:coreml-proto", "dep:prost", "kog_cpu_fusion"]  # Apple Neural Engine inference backend (Plan 176). Implies kog_cpu_fusion: ane_backend reads attn_norm_gamma / mlp_norm_gamma unconditionally.
 gpu_inference = ["dep:metal", "kog_cpu_fusion"]  # GPU inference backend via Metal compute pipelines (Plan 176). Implies kog_cpu_fusion: gpu_backend reads attn_norm_gamma / mlp_norm_gamma unconditionally.
 inference_router = ["gpu_inference", "ane"]  # Full inference routing: TriggerGate + InferenceRouter + GPU + ANE (Plan 176)
-ane_npc = ["ane", "katgpt-core/sense_composition"]  # ANE batch NPC brain compute — CoreML dispatch for NPC sense projection (Plan 255)
+# (Removed 2026-06-28: `ane_npc = ["ane", "katgpt-core/sense_composition"]` — dead feature.
+#  Issue 007 Phase C moved npc_ane_backend + npc_brain_router to riir-engine (NPC runtime IP).
+#  The ane_npc feature now lives in riir-ai/crates/riir-engine/Cargo.toml.
+#  The general-purpose `ane` feature above stays — it gates src/ane_backend.rs, which is
+#  Plan 176 inference routing substrate, not NPC-specific.)
 thinking_cot = ["rim_slots", "thinking_prune", "parallel_probe", "ppot", "bt_rank", "bandit"]  # Adaptive CoT thinking — self-learning when to think (Plan 194)
 swir_switch_thinking = ["thinking_cot"]  # SwiR Switch-Thinking — Explicit↔Latent mode controller (Plan 275, Research 241). Depends on thinking_cot for the ThinkingStrategy trait + StepContext + StepDirective wiring types. DEFAULT-ON (Plan 313 T6.2, 2026-06-27): G2 token-efficiency 1.32×/1.37×/1.43× at n=3/5/10 (gate ≥1.3×, all pass) on Gemma 2 2B + MATH-500 with tuned config (w_e_to_l=32, c_max=64). G1 accuracy blocked by model capability (Gemma 2 2B too small, not a SwiR design flaw). G3-G6 all pass (3.1ns/step, convex-hull 1000/1000, no-regression, kurtosis escape). Token efficiency is the primary value prop.
 faithfulness_probe = ["katgpt-core/faithfulness_probe"]  # FaithfulnessProbe — causal intervention diagnostic for injected memory (Plan 278, Research 244). Audit-cadence diagnostic — opt-in (diagnostic, audit cadence not every tick). Passthrough to katgpt-core (moved from root; riir-engine Plan 308 consumes via katgpt-core).

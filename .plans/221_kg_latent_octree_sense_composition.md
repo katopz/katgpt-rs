@@ -1,5 +1,15 @@
 # Plan 221: KG Latent Octree — Modelless Inference-Time Sense Composition
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> example files referenced below (`examples/sense_composition.rs`,
+> `examples/sense_bandit_demo.rs`, `tests/bench_221_kg_confidence_weight_goat.rs`)
+> moved from this repo (katgpt-rs) to `riir-ai/crates/riir-engine/`. They
+> construct `NpcBrain` (and sense::hotswap, sense::bandit) which are now
+> private NPC runtime IP per `.research/003_Commercial_Open_Source_Strategy`.
+> The substrate they consume (`katgpt_core::sense::octree`,
+> `katgpt_core::sense::reconstruction`, `katgpt_core::types::SenseKind`) stays
+> public. Historical task records below reflect the original locations.
+
 > **Status:** ✅ Complete
 > **Research:** `.research/196_KG_Latent_Octree_WASM_Composition.md`
 > **Feature Gate:** `sense_composition` (single gate, all tasks)

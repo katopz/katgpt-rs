@@ -1,5 +1,12 @@
 # Plan 276: MicroRecurrentBeliefState — Implicit Per-Entity State Tracking Kernel
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> `reconstruction_bench.rs` reference below (in Phase 0 audit + Phase 2
+> regression-gate task) moved from `crates/katgpt-core/benches/` to
+> `riir-ai/crates/riir-engine/benches/`. The bench constructs `NpcBrain`
+> (private NPC runtime IP per `.research/003`). The regression gate still
+> holds — re-run with `-p riir-engine --bench reconstruction_bench`.
+
 **Date:** 2026-06-15
 **Research:** [katgpt-rs/.research/242_Topological_State_Tracking_Recurrent_Belief.md](../.research/242_Topological_State_Tracking_Recurrent_Belief.md)
 - **Private guide:** [`riir-ai/.research/127_*.md`](../../../riir-ai/.research/127_Implicit_Microcognition_Crowd_NPC_Guide.md) — **reframed as GOAT design context** (verdict revised from Super-GOAT after `evolve_hla` prior-art check)

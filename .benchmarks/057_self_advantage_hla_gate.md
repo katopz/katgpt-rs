@@ -1,5 +1,14 @@
 # Bench 057: Self-Advantage Gate on HLA Reconstruction (Plan 283 T5.1.3/T5.1.4)
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The bench
+> `crates/katgpt-core/benches/self_advantage_hla_bench.rs` moved to
+> `riir-ai/crates/riir-engine/benches/self_advantage_hla_bench.rs` (NPC
+> runtime IP — the bench constructs `NpcBrain` which is private runtime code).
+> The reproduction command below should now be:
+> `cargo bench -p riir-engine --bench self_advantage_hla_bench
+>   --features self_advantage_gate_bench`
+> The historical numbers below remain valid.
+
 **Date:** 2026-06-17
 **Plan:** [283_self_advantage_recursion_gate.md](../.plans/283_self_advantage_recursion_gate.md) — Phase 5, T5.1
 **Issue:** [028_self_advantage_gate_integration_followups.md](../.issues/028_self_advantage_gate_integration_followups.md)

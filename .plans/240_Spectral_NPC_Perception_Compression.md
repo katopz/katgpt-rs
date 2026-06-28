@@ -1,5 +1,13 @@
 # Plan 240: Spectral NPC Perception Compression
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The bench
+> referenced below (`crates/katgpt-core/benches/sense_lod.rs`) moved to
+> `riir-ai/crates/riir-engine/benches/sense_lod.rs` (NPC runtime IP — the
+> bench constructs `NpcBrain` which is private runtime code). The `sense_lod`
+> feature still exists in `katgpt-core/Cargo.toml` (gates the generic LOD
+> substrate); only the bench relocated. Historical task records below reflect
+> the original location.
+
 **Status:** GOAT PASS — Promote to default ON
 **Feature Flag:** `sense_lod` (opt-in, requires `sense_composition` + `slod`)
 **Routing:** katgpt-rs → crates/katgpt-core/src/sense/

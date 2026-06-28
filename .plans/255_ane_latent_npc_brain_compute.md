@@ -1,5 +1,14 @@
 # Plan 255: ANE-Latent NPC Brain Compute — Batch NPC Ops on Neural Engine
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> `ane_npc_*` example files referenced below (`examples/ane_npc_arena.rs`,
+> `ane_npc_goat.rs`, `ane_npc_power.rs`) and the `npc_ane_backend` /
+> `npc_brain_router` modules moved from this repo (katgpt-rs) to
+> `riir-ai/crates/riir-engine/`. The `ane_npc` feature flag now lives in
+> `riir-engine/Cargo.toml` (still opt-in — GOAT FAILED per `.benchmarks/053`,
+> and ANE training itself is deferred per `riir-train/.issues/266` until 50M+
+> params). Historical task records below reflect the original locations.
+
 **Source:** [Research 223 — maderix/ANE Distillation](../.research/223_maderix_ANE_Distillation_Verdict.md) + [Research 224 — coremltools Public API](../.research/224_coremltools_Public_API_ANE_Distillation_Verdict.md)
 **Related:** Plan 176 (GPU/ANE Offload), Plan 148 (PlasmaPath SIMD), Plan 240 (Sense Compression), Issue 004 (ANE CoreML Model Generation)
 **Status:** Pending GOAT

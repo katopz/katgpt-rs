@@ -1,5 +1,13 @@
 # Plan 277 GOAT Scorecard — Temporal Derivative Kernel
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> `crates/katgpt-core/benches/reconstruction_bench.rs` references below moved
+> to `riir-ai/crates/riir-engine/benches/reconstruction_bench.rs` (NPC runtime
+> IP — the bench constructs `NpcBrain` which is private runtime code). The
+> reproduction commands should now use `-p riir-engine` with
+> `--features reconstruction_bench`. The historical numbers below remain
+> valid.
+
 **Date:** 2026-06-16
 **Plan:** [277_temporal_derivative_kernel.md](../.plans/277_temporal_derivative_kernel.md)
 **Research:** [243_Temporal_Derivative_Kernel_Neocortical_Learning.md](../.research/243_Temporal_Derivative_Kernel_Neocortical_Learning.md)

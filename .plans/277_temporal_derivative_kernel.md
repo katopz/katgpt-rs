@@ -1,5 +1,12 @@
 # Plan 277: Temporal Derivative Kernel — Dual Fast/Slow Surprise Signal
 
+> **📍 Migration note (2026-06-28, Issue 007 Phase C follow-up):** The
+> `reconstruction_bench.rs` references below (Phase 2 T2.6 synthetic emotional-
+> event trace benchmark) moved from `crates/katgpt-core/benches/` to
+> `riir-ai/crates/riir-engine/benches/`. The bench constructs `NpcBrain`
+> (private NPC runtime IP per `.research/003`). Re-run with
+> `-p riir-engine --bench reconstruction_bench --features reconstruction_bench`.
+
 **Date:** 2026-06-16
 **Research:** [katgpt-rs/.research/243_Temporal_Derivative_Kernel_Neocortical_Learning.md](../.research/243_Temporal_Derivative_Kernel_Neocortical_Learning.md)
 **Source paper:** [arXiv:2606.08720](https://arxiv.org/abs/2606.08720) — O'Reilly, "This is how the Neocortex Learns" (Jun 2026)
