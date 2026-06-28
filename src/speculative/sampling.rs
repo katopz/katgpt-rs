@@ -10,6 +10,7 @@
 //! [`crate::simd::simd_scale_inplace`] — both already in core — so the
 //! substrate code is byte-identical to the pre-move version.
 
+#[allow(deprecated)]
 pub use katgpt_core::speculative::sampling::{
     sample_from_distribution, sample_residual_distribution,
     sample_residual_distribution_into,

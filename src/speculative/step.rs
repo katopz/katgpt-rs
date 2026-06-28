@@ -13,7 +13,7 @@ use crate::types::{Config, Rng};
 use crate::speculative::dd_tree::{build_dd_tree, extract_best_path};
 use crate::speculative::dflash::dflash_predict;
 use crate::speculative::dflash::dflash_predict_conditioned;
-use crate::speculative::sampling::{sample_from_distribution, sample_residual_distribution};
+use crate::speculative::sampling::sample_from_distribution;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, forward};
 use crate::types::softmax_scaled;
 
@@ -159,6 +159,10 @@ pub fn speculative_step_rollback(
     let _t_verify_start = Instant::now();
 
     // 5. Try each candidate path with rollback on rejection
+    // Lifted scratch buffer: reused across paths + tokens, never re-allocates
+    // after the first path sized it to vocab_size. Replaces the deprecated
+    // `sample_residual_distribution` allocating wrapper.
+    let mut residual_buf: Vec<f32> = Vec::new();
     for path in &paths {
         target_cache.restore(&snapshot, target_config);
 
@@ -199,7 +203,10 @@ pub fn speculative_step_rollback(
                     softmax_scaled(&mut p_dist, 1.0 / target_config.temperature);
                 }
             } else {
-                let replacement = sample_residual_distribution(&p_dist, q_dist, rng);
+                residual_buf.clear();
+                residual_buf.resize(p_dist.len(), 0.0);
+                let replacement =
+                    sample_residual_distribution_into(&p_dist, q_dist, &mut residual_buf, rng);
                 accepted.push(replacement);
                 all_accepted = false;
                 break;
@@ -654,6 +661,8 @@ pub fn speculative_step_rollback_paged(
     let snapshot = target_cache.snapshot(pos, target_config);
 
     // 6. Verify candidate paths against target model with draft branch rollback
+    // Lifted scratch buffer (see speculative_step_rollback for rationale).
+    let mut residual_buf: Vec<f32> = Vec::new();
     for (path_idx, path) in paths.iter().enumerate() {
         target_cache.restore(&snapshot, target_config);
 
@@ -694,7 +703,10 @@ pub fn speculative_step_rollback_paged(
                     softmax_scaled(&mut p_dist, 1.0 / target_config.temperature);
                 }
             } else {
-                let replacement = sample_residual_distribution(&p_dist, q_dist, rng);
+                residual_buf.clear();
+                residual_buf.resize(p_dist.len(), 0.0);
+                let replacement =
+                    sample_residual_distribution_into(&p_dist, q_dist, &mut residual_buf, rng);
                 accepted.push(replacement);
                 all_accepted = false;
                 break;
