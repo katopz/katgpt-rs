@@ -15,7 +15,7 @@ use super::{SimdLevel, simd_level};
 use super::horizontal::horizontal_sum_256;
 
 #[cfg(feature = "plasma_path")]
-use crate::types::TernaryWeights;
+use crate::TernaryWeights;
 
 /// Scalar reference ternary matvec: y[r] = row_scale[r] * Σ(col → sign(pos_bit, neg_bit) * x[col])
 #[cfg(feature = "plasma_path")]
@@ -560,7 +560,7 @@ pub fn simd_ternary_matmul_batch(w: &TernaryWeights, x: &[f32], batch: usize, y:
 /// Branchless sign extraction: pos_bit → +1, neg_bit → -1, neither → 0.
 /// Uses `(pos as i8 - neg as i8) as f32` to avoid any branches.
 #[inline]
-pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::types::TernaryDir) -> f32 {
+pub fn simd_ternary_dot_f32(state: &[f32], dir: &crate::TernaryDir) -> f32 {
     let mut acc = 0.0f32;
     let min_len = state.len().min(64);
     for i in 0..min_len {

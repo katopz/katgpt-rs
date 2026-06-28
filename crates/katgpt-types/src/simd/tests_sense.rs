@@ -1,5 +1,5 @@
     use super::*;
-    use crate::types::TernaryDir;
+    use crate::TernaryDir;
 
     #[test]
     fn test_ternary_dot_matches_scalar() {

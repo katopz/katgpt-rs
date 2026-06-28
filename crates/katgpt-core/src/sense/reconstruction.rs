@@ -1290,33 +1290,6 @@ fn log_softmax_into6(x: &[f32], out: &mut [f32]) {
     out[5] = x[5] - max_val - log_lse;
 }
 
-impl SenseModule {
-    /// Project with reconstruction awareness — same as `project()` but exposed
-    /// for reconstruction loop to call explicitly.
-    #[inline]
-    pub fn project_reconstruction(&self, hla_state: &[f32; 8]) -> f32 {
-        self.project(hla_state)
-    }
-
-    /// Get octree children that are occupied at the given level.
-    /// Returns bitmask of occupied children (bit i = child i is occupied).
-    #[inline]
-    pub fn occupied_children(&self, parent_depth: u8) -> u8 {
-        let level = parent_depth as usize;
-        if level >= 4 {
-            return 0;
-        }
-        // Extract 8 bits from octree_bits for children at this depth
-        let bit_offset = level * 8;
-        let word = bit_offset / 64;
-        let shift = bit_offset % 64;
-        if word >= 4 {
-            return 0;
-        }
-        ((self.octree_bits[word] >> shift) & 0xFF) as u8
-    }
-}
-
 /// Reconstruction result with before/after comparison for GOAT proof.
 #[derive(Clone, Debug)]
 pub struct ReconstructionResult {

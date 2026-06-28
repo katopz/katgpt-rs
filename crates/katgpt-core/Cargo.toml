@@ -34,6 +34,12 @@ ahash = { version = "0.8", optional = true }
 # `dec_operators` feature and re-exported as `katgpt_core::dec` for backwards
 # compatibility.
 katgpt-dec = { path = "../katgpt-dec", optional = true }
+# katgpt-types houses the shared types + SIMD substrate spun out of
+# katgpt-core::{types, simd} (Issue 007 Phase E Tier 1 #2). Always-on — the
+# types/simd modules are foundational substrate that every other katgpt-core
+# module consumes. Re-exported as `katgpt_core::types` and `katgpt_core::simd`
+# for backwards compatibility.
+katgpt-types = { path = "../katgpt-types" }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }
@@ -59,35 +65,35 @@ statrs = "0.17"
 
 [features]
 default = ["sparse_mlp", "plasma_path", "leo_all_goals", "dual_leo", "sigmoid_margin", "spectral_hierarchy", "dual_gram_pca", "roofline_cost", "octree_ctc", "sector_projection", "action_bridge", "triggered_injection", "temporal_deriv", "bom_sampling", "personality_composition", "depth_invariance", "cross_resolution_transport", "latent_field_steering", "viable_manifold_graph", "ac_prefix", "geometric_product", "fourier_continuation", "spectral_differentiation", "interest_cochain", "tucker_factorization", "arg_protocol", "indicator_probe_bank", "indicator_similarity", "phase_rotation_coupling", "closure_instrument", "non_interference_branches", "funcattn_structured_basis", "best_belief"]  # non_interference_branches DEFAULT-ON (Plan 329 Phase 3, 2026-06-26): G1 8 orthogonal directions in D=8 (pairwise interference 0.00e0<1e-6; write to b_i does not contaminate b_j stores; 9th direction interferes 0.3536>=1/sqrt(8)=0.3536), G2 route 301.5ns<1us (64-branch bank, 3.3x margin), G3 all clean, G4 0 allocs/100 calls, G5 [] deps. 101/101 tests.  # closure_instrument DEFAULT-ON (Plan 290 T4.7 + G4 fix, 2026-06-26): G1 67us<100us (bit matrix, Issue 035), G2 638us<5ms, G3 synthetic-proxy monotone, G4 0.296MB<1MB (Option<[u8;32]> fix). 55/55 tests green. API break: PtgNode.blake3_in [u8;32] -> Option<[u8;32]>.  # phase_rotation_coupling DEFAULT-ON (Plan 322 Phase 2, 2026-06-25): G1 per-channel Pythagorean drift 5.96e-8<1e-4 + norm bound violation 0<1e-4 + scalar libm drift 1.19e-7, G2 0 reversals across 100-step sweep (monotone interpolation), G3 D=8 scalar+mix 18.9ns<50ns + D=8 mix-only 5.0ns<20ns + D=64 per-channel+mix 355.7ns<1500ns, G4 0 allocs/100 calls, G6 sigmoid(0)=0.5->cos=sin=1/sqrt2 confirmed (softmax would give 1.0). Pure modelless: closed-form cos/sin/sigmoid/dot, no training. Design pivot: independent Pade cos/sin drifts in cos^2+sin^2=1 by ~5e-3 (50x G1 budget) -> replaced with phase_safe_cos_sin (libm sin + Pythagorean sqrt(1-sin^2) recovery).  # indicator_probe_bank + indicator_similarity DEFAULT-ON (Plan 320 Phase 5, 2026-06-25): G1 per-indicator AU-ROC 1.000 (all 8 ≥ 0.85), G2 OR-fusion transcript-TPR 1.000 at turn-FPR 0.041 (≤0.05), G3 cascade 100× FPR reduction at 0pp TPR cost, G4 53.9ns/call (<200ns) + 0 allocs/100 calls, G5 cluster ARI 1.000 (≥0.9), G6 feature-off clean, G7 wire tamper-evident. Pure modelless read-side primitives (sigmoid-gated dot-projection onto BLAKE3-committed frozen directions + pairwise cosine structure). indicator_cascade stays OPT-IN (consumer-crate verifier territory).  # arg_protocol DEFAULT-ON (Plan 327 Phase 4, 2026-06-25): G1 61 tests, G2a PolicyEnvelope ~0.4ns<50ns, G2b TaxonomyValidator ~170ns<200ns (264-node taxonomy), G3 all-features/default/no-default clean, G4 0 allocs/100 calls (fixed via scratch.accepted + clone-instead-of-mem::take), G5 silence-bias strict inequalities. Pure modelless protocol primitives (PolicyEnvelope, TaxonomyValidator, LifecycleState+RedirectTable, TypedOfflineCandidate+OfflineCandidateScorer, InfoRegistry) distilled from the ARG Standard.  # tucker_factorization DEFAULT-ON (Plan 326 Phase 3): G1 4.1e-8<1e-4, G2 71us<500us, G3 1.0e-6<1e-4, G4 0 allocs. Pure modelless HOSVD.  # spectral_differentiation DEFAULT-ON (Plan 325 Phase 3, 2026-06-25): G1 order1 err 5.4e-7<1e-4 + order2 err 1.3e-6<1e-3 + spectral-vs-FD 290x>=100x, G2 N=1024 3.82us<50us (13x under), G3 order=0 identity err 2.4e-7<1e-5, G4 0 allocs/100 calls (fixed via cached Arc<Fft> plans + process_with_scratch instead of rustfft's per-call-Vec process()). Pure modelless closed-form FFT.  # fourier_continuation DEFAULT-ON (Plan 323 Phase 3, 2026-06-25): G1 wrap discontinuity <50% of naive + interior join C1-smooth, G2 8.9us<50us, G3 passthrough bit-identical, G4 0 allocs. The one modelless FNO primitive the codebase genuinely lacked.  # geometric_product DEFAULT-ON (Plan 319 Phase 3 + Issue 003 RESOLVED, 2026-06-25): polynomial Padé [4/4] SiLU eliminates the exp() floor (2.06× D=64 speedup); G1 non-redundancy +17.6/+7.9pp, G2 r=0.90/0.96, G3 0 allocs, G4 D=8 118ns<150ns / D=64 525ns<600ns (recalibrated from structurally-impossible 50/200ns). Wedge-only variant for cold-path callers.  # viable_manifold_graph DEFAULT-ON (Plan 312 Phase 5, 2026-06-24): G1-G7 correctness all PASS + perf bench PASS post-CSR (manifold_random_walk 485.58→7.10 ns/step, 14× under 100ns target). CSR adjacency makes for_each_neighbor O(degree); random-walk output byte-identical (neighbor order preserved).  # ac_prefix DEFAULT-ON (Plan 313 Phase 4 + Issue 003 Phase 0 RESOLVED, 2026-06-24): original G1 (matches iterative-MLM logprob to 1e-4) was failing at 7.5e-4 due to doubled-signal bias. §3.5 modelless unblock (Path 2: deterministic mask correction `attends_dedup`) eliminates the bias — dedup mask is bit-identical to iterative-MLM (0.0 diff) on single-layer micro-GPT. G2 27.258x speedup, G3 0 mismatches, G4 0 allocs. Multi-layer equivalence remains a non-blocking riir-train follow-up. See .benchmarks/313_ac_prefix_modelless.md.  # latent_field_steering DEFAULT-ON (Plan 309 Phase 4, 2026-06-23): G1-G5 all PASS - G1 fear-axis 1.50x>=1.30, G2 mean cos 0.9958>=0.95 min cos 0.9667>=0.90, G3 leakage 4.5e-5<0.01, G4 19.2us<1ms, G5 0 allocs. Caveat: 8% argmax flip at alpha=0.3 - keep alpha<=0.3 for hot-path. | cross_resolution_transport DEFAULT-ON (Plan 310 Phase 4, 2026-06-23): G1 mean cos 0.8944>=0.85, G2-A rank preservation mean cos 0.9300>=0.85 (Super-GOAT headline holds), G3 elbow k=8, G4 0 allocs. Implies funcattn as transitive default.  # depth_invariance DEFAULT-ON (Plan 306 T7.4): G1/G2/G3 PASS, G4 re-spec to absolute-latency at HLA scale (all PASS). Zero runtime cost unless invoked. | triggered_injection DEFAULT-ON (Plan 278 GOAT G3) — sigmoid-thresholded inject/skip gate; temporal_deriv DEFAULT-ON (Plan 277 GOAT 4/4 fusions passed) — dual fast/slow EMA surprise signal; bom_sampling DEFAULT-ON (Plan 281 T2.4 full, 2026-06-17) — G2 PASS +31.49pp on 100 episodes proven in riir-ai Plan 314 (MultiThreatArena + MultiHypothesisBoMMinimaxPlanner vs deterministic). Auto-enables micro_belief + simd_sigmoid.
-sparse_mlp = []
-domain_latent = []
-maxsim = []
+sparse_mlp = ["katgpt-types/sparse_mlp"]
+domain_latent = ["katgpt-types/domain_latent"]
+maxsim = ["katgpt-types/maxsim"]
 dllm = []  # Discrete diffusion language model support (Plan 068)
 coda_fusion = []  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation (Plan 103)
 lt2_looped = []  # LT2 looped inference types — LoopMode, HybridPattern, SdpaOutputGate, ResidualGate (Plan 108)
 tiled_attention = []  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
 parallax_attn = ["tiled_attention"]  # Parallax parameterized local linear attention — R projection + covariance branch (Plan 135, Research 135) — opt-in
-sr2am_configurator = []  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076)
-data_gate = []  # Task-level data gating for self-play training stability (Plan 111, Research 075)
+sr2am_configurator = ["katgpt-types/sr2am_configurator"]  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076)
+data_gate = ["katgpt-types/data_gate"]  # Task-level data gating for self-play training stability (Plan 111, Research 075)
 cgsp = ["data_gate", "collapse_aware_thinking"]  # Curiosity-Guided Self-Play — modelless Solver/Conjecturer/Guide triad (Plan 274, Research 240). Self-contained: defines its own HintDeltaBandit/CollapseSignal/DifficultyFilter/BatchQualityGate traits. Moved from katgpt root to katgpt-core so riir-engine (Plan 299) can consume via katgpt-core/cgsp. Opt-in — keep off default until riir-ai Plan 299 Phase 3 GOAT gate validates on real game domains.
 cgsp_dual_pool = ["cgsp"]  # Dual-Pool Reachable Memory Router — DecentMem distillation (Plan 282, Research 249, arXiv:2605.22721). Sigmoid-routed E/X pools with proactive non-trapping (Thm. 1) + O(log T) regret (Thm. 2). Extends single-pool CGSP (degenerate α=1). Opt-in until G1–G5 GOAT gate passes.
 questbench = []  # QuestBench underspecification scoring for modelless architecture (Plan 110, Research 008)
 tf_loop = ["lt2_looped"]  # Training-free loop wrapper — ODE-refined sub-stepping (Plan 136)
-plasma_path = []  # Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110)
+plasma_path = ["katgpt-types/plasma_path"]  # Bit-plane ternary SIMD matvec — multiplication-free CPU inference (Plan 148, Research 110)
 peira_distill = []  # PEIRA inter-view regressor alignment (Plan 153)
 dirichlet_energy = []  # Dirichlet Energy structural alignment diagnostic (Research 111, Plan 149)
 leo_all_goals = []  # LEO all-goals Q-value framework — LeoHead + AllGoalsUpdate + sigmoid_bounded_q (Plan 155)
 dual_leo = ["leo_all_goals"]  # Dual LEO teacher-student — + DualLeoMixer + AutocurriculumSampler (Plan 155)
 spectral_hierarchy = []  # Spectral hierarchy diagnostic — eigenspace alignment, Haar wavelets, Cauchy interlacing (Plan 156)
-sigmoid_margin = ["maxsim"]  # Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157)
+sigmoid_margin = ["maxsim", "katgpt-types/sigmoid_margin"]  # Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157)
 dual_gram_pca = []  # Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159)
 roofline_cost = []  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159)
 moa_inference = []  # MoA Mixture of Activations — token-adaptive activation mixing (Research 126, Plan 158)
-sia_feedback = ["sr2am_configurator"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
-hydra_budget = []  # Hydra-Aware Adaptive Layer Budget types (Research 148, Plan 165)
-deltanet_inference = []  # DeltaNet GPU inference — hybrid DeltaNet/Attention decode (Plan 182, Research R036)
-rim_slots = []  # RiM Reasoning Buffer Slots — fixed latent workspace for DDTree (Plan 172, Research 192)
-wall_attention = []  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention)
+sia_feedback = ["sr2am_configurator", "katgpt-types/sia_feedback"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
+hydra_budget = ["katgpt-types/hydra_budget"]  # Hydra-Aware Adaptive Layer Budget types (Research 148, Plan 165)
+deltanet_inference = ["katgpt-types/deltanet_inference"]  # DeltaNet GPU inference — hybrid DeltaNet/Attention decode (Plan 182, Research R036)
+rim_slots = ["katgpt-types/rim_slots"]  # RiM Reasoning Buffer Slots — fixed latent workspace for DDTree (Plan 172, Research 192)
+wall_attention = ["katgpt-types/wall_attention"]  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention)
 mux_pruner = []  # MuxSpanPruner — vocabulary simplex pruning (Research 158, MUX)
 mux_ddtree = ["mux_pruner"]  # MuxDdTree — superposition branch DDTree nodes (Research 158, MUX)
 mux_bandit_width = []  # MuxBanditWidth — adaptive superposition width (Research 158, MUX)
@@ -101,16 +107,16 @@ partial_scoring = []  # PartialScorer graduated reward for game episodes (Plan 1
 problem_mutator = []  # ProblemMutator game config evolution (Plan 191, Research 171)
 idea_divergence = ["partial_scoring"]  # IdeaDivergence strategic novelty filter (Plan 191, Research 171)
 modal_spec = []  # ModalSpec drafter — LinOSS cell + Fourier basis speculative decoding (Plan 189 Phase 3, experimental)
-collapse_aware_thinking = []  # Collapse-Aware Adaptive Thinking — CollapseDetector trait (Plan 212)
+collapse_aware_thinking = ["katgpt-types/collapse_aware_thinking"]  # Collapse-Aware Adaptive Thinking — CollapseDetector trait (Plan 212)
 substrate_gate = []  # SubstrateGate passthrough — inference-time capability substrate routing (Plan 216)
-belief_drafter = []  # NextLat Belief-State Speculative Drafter — entropy threshold config (Plan 217)
+belief_drafter = ["katgpt-types/belief_drafter"]  # NextLat Belief-State Speculative Drafter — entropy threshold config (Plan 217)
 best_belief = []  # ε-quantile Beta lower bound for conservative selection (Plan 336, Research 320, RQGM arXiv:2606.26294 Prop. 4). Complements sample_beta (Thompson exploration) with a conservative-exploitation counterpart. DEFAULT-ON (Phase 2 G2-unblock, 2026-06-28): LUT hot path 3.38ns<<100ns (32x32x5 table bit-identical to closed-form), G1 3.099e-5<1e-4, G4 0 allocs.
 sense_composition = ["plasma_path", "domain_latent"]  # KG Latent Octree Sense Composition (Plan 221)
 slod = ["spectral_hierarchy"]  # SLoD Spectral Level-of-Detail Pruner (Plan 235, GOAT G1-G6 all pass, default-ON)
 rat_plus_bridge = []  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 schema_centroid = ["dep:papaya"]  # Schema-Centroid Informed KG Embedding Initialization (Plan 237)
 bake_precision = ["dep:papaya"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236)
-spectral_threat = ["sense_composition", "modal_spec"]  # LinOSS Modal Threat Prediction (Plan 241)
+spectral_threat = ["sense_composition", "modal_spec", "katgpt-types/spectral_threat"]  # LinOSS Modal Threat Prediction (Plan 241)
 sense_lod = ["sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240)
 flow_field_nav = ["leo_all_goals", "dep:rustfft"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT-gated)
 spectral_pruner = ["dep:rustfft"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
@@ -143,8 +149,8 @@ dflare_progressive_budget = []  # Plan 174 — gates PositionWeightedBudget (roo
 non_interference_branches = []  # Non-Interference Memory Branches — RIZZ distillation (Plan 329, Research 310, arXiv:2606.20638 Goel et al. Oxford Jun 2026). Five generic open primitives: BranchBank (bounded persistent CognitiveBranch bank with spawn/merge/prune lifecycle), BranchRouter (dot-product snap + Jaccard fallback routing), VerifierGate (reward+curiosity+centroid quarantine write gate), NonInterferenceProjection (orthogonal latent subspace per branch), BudgetCompiler (priority-cascade context compiler). Super-GOAT fusion of BAKE × CLR × MCGS × Engram × ARG × closure-instrument × Salience. Composes with arg_protocol LifecycleState when both features are on. DEFAULT-ON (Phase 3, 2026-06-26): G1 8 orthogonal directions in D=8 pairwise interference 0.00e0<1e-6 + write-to-b_i-does-not-contaminate-b_j + 9th-direction-interferes-0.3536>=1/sqrt(8), G2 route 301.5ns<1us (64-branch bank), G3 all-features/default/no-default clean, G4 0 allocs/100 calls, G5 [] deps (pure dot-product + budget arithmetic). 101/101 unit tests green.
 dec_operators = ["dep:katgpt-dec"]  # Discrete Exterior Calculus — cell complexes, cochain fields, d/δ/Δ operators (Plan 251, Research 219, arXiv:2606.09806). Now spins in the `katgpt-dec` crate and re-exports it as `katgpt_core::dec` (Issue 007 Phase E Tier 1).
 geometric_product = []  # Channel-wise Clifford Geometric Product — per-point coherence (dot) + structure (wedge) latent interaction (Plan 319, Research 299, arXiv:2601.06793). Hadamard + cyclic shift + subtract, O(D·|S|), zero-alloc. DEFAULT-ON (2026-06-25, Issue 003 RESOLVED): polynomial Padé [4/4] SiLU approximation eliminates the exp() floor (2.06× speedup at D=64); G1 non-redundancy +17.6/+7.9pp, G2 rotational recovery r=0.90/0.96, G3 0 allocs, G4 D=8 118ns/D=64 525ns (recalibrated from structurally-impossible 50ns/200ns). Wedge-only variant (geometric_product_wedge_into) for cold-path callers. Targets recalibrated to polynomial-silu arithmetic floor.
-gpart_adapter = []  # GPart isometric partition adapter loading (Research 227, Plan 257)
-gpart_pruning = ["gpart_adapter"]  # GPart top-k group pruning — zero out low-magnitude groups at apply time (Issue 008)
+gpart_adapter = ["katgpt-types/gpart_adapter"]  # GPart isometric partition adapter loading (Research 227, Plan 257)
+gpart_pruning = ["gpart_adapter", "katgpt-types/gpart_pruning"]  # GPart top-k group pruning — zero out low-magnitude groups at apply time (Issue 008)
 dendritic_gate = []  # DendriticGate NMDA-inspired adaptive branching types (Plan 260)
 sector_projection = []  # Multi-sector spatial projection (Plan 262)
 action_bridge = []  # Generic latent→raw action bridge (Plan 262)

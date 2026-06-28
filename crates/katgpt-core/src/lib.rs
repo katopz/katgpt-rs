@@ -43,10 +43,18 @@ pub mod mcts;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
 pub mod shard_embedding;
-pub mod simd;
+// SIMD-accelerated linear algebra kernels (NEON / AVX2 / WASM-SIMD128 /
+// scalar fallback). Spun out to the `katgpt-types` crate (Issue 007 Phase E
+// Tier 1 #2) and re-exported here as `katgpt_core::simd` for backwards
+// compatibility. All `crate::simd::*` paths resolve unchanged.
+pub use katgpt_types::simd;
 pub mod speculative;
 pub mod traits;
-pub mod types;
+// Shared configuration, RNG, math utilities, LoRA, domain embeddings, and
+// inference types. Spun out to the `katgpt-types` crate (Issue 007 Phase E
+// Tier 1 #2) and re-exported here as `katgpt_core::types` for backwards
+// compatibility. All `crate::types::*` paths resolve unchanged.
+pub use katgpt_types as types;
 
 // CGSP — Curiosity-Guided Self-Play modelless triad (Plan 274, Research 240).
 // Self-contained: Direction/Target/Candidate, CgspLoop, PoolConjecturer,

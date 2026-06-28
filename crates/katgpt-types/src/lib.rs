@@ -1,9 +1,22 @@
-//! Shared configuration, RNG, math utilities, and inference types for the
-//! katgpt-rs / riir-engine superset.
+//! katgpt-types — Shared configuration, RNG, math utilities, SIMD kernels,
+//! and inference types for the katgpt-rs / riir-engine superset.
 //!
-//! Originally a single 5,148-line `types.rs` (2.5× the 2048-line ceiling),
-//! split into topic-specific submodules. The full public surface is
-//! re-exported here so `crate::types::*` paths remain unchanged.
+//! Pure substrate leaf crate. No katgpt-* dependencies — only `fastrand`,
+//! `blake3`, `serde`, `half`. This is the foundational layer (types + SIMD
+//! kernels) that every other katgpt-* crate (and riir-engine) builds on.
+//! The `types` and `simd` modules are co-located because `types::math`
+//! calls `simd` kernels (softmax / rmsnorm / matmul) and `simd::ternary`
+//! uses `types::TernaryWeights` — they form a tight bidirectional leaf that
+//! cannot be split further without breaking the cycle.
+//!
+//! Originally a single 5,148-line `types.rs` inside katgpt-core (2.5× the
+//! 2048-line ceiling), split into topic-specific submodules. The full public
+//! surface is re-exported here so consumers can use `katgpt_types::*` paths
+//! directly.
+//!
+//! Spun out of `katgpt-core::types` (Issue 007 Phase E Tier 1 #2) as a
+//! standalone publishable crate mirroring the `katgpt-dec` / `katgpt-transformer`
+//! template.
 //!
 //! # Module layout
 //!
@@ -13,7 +26,7 @@
 //!   and `kv_dim`
 //! - [`rng`] — XorShift64 PRNG
 //! - [`math`] — SIMD-accelerated softmax / rmsnorm / matmul / sample_token
-//!   (legacy home; candidates for relocation to `simd::`)
+//!   (legacy home; candidates for relocation to `katgpt-simd::`)
 //! - [`lora`] — CPU-side LoRA adapter
 //! - [`gpart`] — GPart Isometric Partition adapter (Research 227)
 //! - [`domain`] — DomainLatent embedding (Plan 038)
@@ -36,15 +49,19 @@ mod looping;
 mod lora;
 pub mod math;
 mod rng;
+/// SIMD-accelerated linear algebra kernels (NEON / AVX2 / WASM-SIMD128 /
+/// scalar fallback). Co-located with `types` because `types::math` calls
+/// these kernels and `simd::ternary` uses `types::TernaryWeights`.
+pub mod simd;
 mod sense;
 mod ternary;
 
 #[cfg(test)]
 mod tests_types;
 
-// Re-export the entire public surface so `crate::types::*` paths are
-// unchanged after the file → folder split. Feature gates mirror the
-// gates on the underlying items.
+// Re-export the entire public surface so `katgpt_types::*` paths are
+// available at the crate root. Feature gates mirror the gates on the
+// underlying items.
 pub use config::{Config, InferenceOverrides, kv_dim};
 #[cfg(feature = "domain_latent")]
 pub use domain::DomainLatent;
@@ -84,4 +101,4 @@ pub use ternary::TernaryWeights;
 
 // Internal helpers (read_u32_le / read_f32_le / read_u16_le) live in
 // `domain.rs` and are crate-private — not re-exported here. If other modules
-// need them, import via `crate::types::domain::read_u32_le`.
+// need them, import via `crate::domain::read_u32_le`.
