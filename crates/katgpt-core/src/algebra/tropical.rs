@@ -101,17 +101,19 @@ pub fn tropical_matvec_into(
 
     #[cfg(target_arch = "aarch64")]
     {
-        for i in 0..n_rows {
+        for (i, out_slot) in out.iter_mut().enumerate().take(n_rows) {
+            // stride math: row_off = i * n_cols
             let row_off = i * n_cols;
-            unsafe { out[i] = neon_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols) };
+            unsafe { *out_slot = neon_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols) };
         }
     }
 
     #[cfg(not(target_arch = "aarch64"))]
     {
-        for i in 0..n_rows {
+        for (i, out_slot) in out.iter_mut().enumerate().take(n_rows) {
+            // stride math: row_off = i * n_cols
             let row_off = i * n_cols;
-            out[i] = scalar_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols);
+            *out_slot = scalar_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols);
         }
     }
 }

@@ -251,8 +251,8 @@ impl<const N: usize, const D: usize> CommittedFieldBlend<N, D> {
         );
 
         // Sigmoid projection: pi_k = clamp(dot(summary, dir_k), -pi_max, pi_max).
-        for k in 0..N {
-            let dot = simd_dot_f32(summary, &direction_vectors[k], D);
+        for (k, dir_k) in direction_vectors.iter().enumerate() {
+            let dot = simd_dot_f32(summary, dir_k, D);
             self.pi[k] = dot.clamp(-self.pi_max, self.pi_max);
         }
 
@@ -311,9 +311,9 @@ impl<const N: usize, const D: usize> CommittedFieldBlend<N, D> {
             *x = 0.0;
         }
 
-        for k in 0..N {
+        for (k, field_k) in fields.iter().enumerate() {
             // f_k(z) — writes into dz_scratch, returns a reborrow.
-            let dz_k = fields[k].evolve(z, dz_scratch);
+            let dz_k = field_k.evolve(z, dz_scratch);
             debug_assert_eq!(
                 dz_k.len(),
                 D,
@@ -387,9 +387,9 @@ impl<const N: usize, const D: usize> CommittedFieldBlend<N, D> {
     /// If any field reports `L_k = ∞` (the default), this returns `∞`.
     pub fn lipschitz_bound(&self, fields: &[&dyn ArchetypeFieldSource<D>; N]) -> f32 {
         let mut bound = 0.0f32;
-        for k in 0..N {
+        for (k, field_k) in fields.iter().enumerate() {
             let gate = sigmoid(self.pi[k] / self.tau);
-            let l_k = fields[k].lipschitz_bound();
+            let l_k = field_k.lipschitz_bound();
             bound = bound.max(gate * l_k);
         }
         bound

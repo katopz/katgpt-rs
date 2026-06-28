@@ -354,6 +354,9 @@ where
         }
 
         // ── Phase B: round-robin head-to-head ─────────────────────────
+        // dual-row write: head_to_head[i][j] and head_to_head[j][i] both written,
+        // needs two &mut into the same Vec → borrow checker forbids iterator form.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             for j in (i + 1)..n {
                 let mut i_wins = 0u32;

@@ -737,8 +737,8 @@ pub fn make_haar_packet_basis(k: usize, d: usize) -> Vec<f32> {
     // Row 0: scaling function (DC component) = [1/sqrt(d); d]. This is the
     // "1 coarse" node from the plan — the lowest-frequency component.
     let dc_scale = (d as f32).sqrt();
-    for j in 0..d {
-        w[j] = 1.0 / dc_scale;
+    for w_slot in w.iter_mut().take(d) {
+        *w_slot = 1.0 / dc_scale;
     }
 
     // Rows 1..k: Haar wavelets at multiple scales, coarse-to-fine then by

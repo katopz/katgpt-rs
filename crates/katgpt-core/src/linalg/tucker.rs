@@ -310,8 +310,7 @@ impl TuckerScratch {
         //   max_m_rows = max_n max(I_n, prod_others)
         let mut max_n_cols = 1usize;
         let mut max_m_rows = 1usize;
-        for n in 0..nmodes {
-            let i_n = shape[n];
+        for &i_n in shape.iter().take(nmodes) {
             let m = total / i_n;
             let (nc, mr) = if i_n >= m { (m, i_n) } else { (i_n, m) };
             max_n_cols = max_n_cols.max(nc);
@@ -367,8 +366,8 @@ impl TuckerResultScratch {
     pub fn with_capacity(cfg: &TuckerConfig) -> Self {
         let mut factor_offsets = [0usize; MAX_MODES];
         let mut acc = 0usize;
-        for n in 0..cfg.n_modes() {
-            factor_offsets[n] = acc;
+        for (n, offset) in factor_offsets.iter_mut().enumerate().take(cfg.n_modes()) {
+            *offset = acc;
             acc += cfg.shape[n] * cfg.ranks[n];
         }
         Self {
@@ -586,7 +585,7 @@ fn unfold_into(x: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
 
     let m = total / i_n;
     let mut multi = [0usize; MAX_MODES];
-    for flat in 0..total {
+    for (flat, &xv) in x.iter().enumerate().take(total) {
         // Decode flat (row-major) → multi-index.
         let mut rem = flat;
         for k in 0..n {
@@ -601,7 +600,7 @@ fn unfold_into(x: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
                 col += multi[k] * col_strides[k];
             }
         }
-        out[row * m + col] = x[flat];
+        out[row * m + col] = xv;
     }
 }
 
@@ -621,7 +620,7 @@ fn fold_into(mat: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
 
     let m = total / i_n;
     let mut multi = [0usize; MAX_MODES];
-    for flat in 0..total {
+    for (flat, out_slot) in out.iter_mut().enumerate().take(total) {
         let mut rem = flat;
         for k in 0..n {
             multi[k] = rem / rm_strides[k];
@@ -634,7 +633,7 @@ fn fold_into(mat: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
                 col += multi[k] * col_strides[k];
             }
         }
-        out[flat] = mat[row * m + col];
+        *out_slot = mat[row * m + col];
     }
 }
 
@@ -845,11 +844,11 @@ pub fn tucker_reconstruct_into(
             expected: nmodes,
         });
     }
-    for n in 0..nmodes {
-        if out_shape[n] != result.factor_rows[n] {
+    for (n, &out_s) in out_shape.iter().enumerate().take(nmodes) {
+        if out_s != result.factor_rows[n] {
             return Err(TuckerError::ShapeFactorMismatch {
                 mode: n,
-                got: out_shape[n],
+                got: out_s,
                 expected: result.factor_rows[n],
             });
         }
@@ -896,8 +895,8 @@ pub fn tucker_reconstruct_into(
             let a_col =
                 &result.factors[factor_offsets[n] + j * i_n..factor_offsets[n] + (j + 1) * i_n];
             let b_row = &scratch.unfold_buf[j * m..(j + 1) * m];
-            for i in 0..i_n {
-                let a_ij = a_col[i];
+            for (i, &a_ij) in a_col.iter().enumerate().take(i_n) {
+                // stride math: y_row index = i * m..(i + 1) * m
                 let y_row = &mut scratch.y_buf[i * m..(i + 1) * m];
                 for k in 0..m {
                     y_row[k] += a_ij * b_row[k];

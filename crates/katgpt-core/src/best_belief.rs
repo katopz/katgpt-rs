@@ -115,9 +115,9 @@ static LUT: std::sync::OnceLock<LutTable> = std::sync::OnceLock::new();
 fn build_lut() -> LutTable {
     let mut table = [[[0.0_f32; LUT_F]; LUT_S]; 5];
     for (e, &eps) in LUT_EPS.iter().enumerate() {
-        for s in 0..LUT_S {
-            for f in 0..LUT_F {
-                table[e][s][f] = best_belief_score_cf(s as u32, f as u32, eps);
+        for (s, table_s) in table[e].iter_mut().enumerate().take(LUT_S) {
+            for (f, table_sf) in table_s.iter_mut().enumerate().take(LUT_F) {
+                *table_sf = best_belief_score_cf(s as u32, f as u32, eps);
             }
         }
     }
@@ -372,8 +372,8 @@ fn ln_gamma(x: f64) -> f64 {
     }
     let z = x - 1.0;
     let mut a = C[0];
-    for i in 1..9 {
-        a += C[i] / (z + i as f64);
+    for (i, &c_i) in C.iter().enumerate().skip(1) {
+        a += c_i / (z + i as f64);
     }
     let t = z + G + 0.5;
     0.5 * (2.0 * std::f64::consts::PI).ln() + (z + 0.5) * t.ln() - t + a.ln()
