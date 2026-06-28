@@ -146,8 +146,8 @@ fn main() {
     let mut rng = DemoRng::new(42);
     let episodes = 50;
 
-    let mut mode_counts = [0usize; 3];
-    let mut mode_rewards = [0.0f32; 3];
+    let mut mode_counts = [0usize; 4];
+    let mut mode_rewards = [0.0f32; 4];
     let mut total_quality = 0.0f32;
     let mut total_cost = 0.0f32;
 
@@ -176,8 +176,8 @@ fn main() {
 
     println!("  Episodes: {episodes}");
     println!("  Bandit learned:");
-    let mode_names = ["Direct", "Latent", "CpuResample"];
-    for arm in 0..3 {
+    let mode_names = ["Direct", "Latent", "CpuResample", "Dendritic"];
+    for arm in 0..4 {
         if mode_counts[arm] > 0 {
             let avg_r = mode_rewards[arm] / mode_counts[arm] as f32;
             let pct = mode_counts[arm] as f32 / episodes as f32 * 100.0;

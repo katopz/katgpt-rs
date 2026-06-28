@@ -63,7 +63,7 @@ fn main() {
     );
 
     let mut per_layer_channels: Vec<Vec<Vec<usize>>> = Vec::new();
-    let decomposer = VocabChannelDecomposer::new(config.clone());
+    let _decomposer = VocabChannelDecomposer::new(config.clone());
 
     for layer in 0..n_layers {
         // Create synthetic mlp_w2: neurons respond to specific embedding dimensions

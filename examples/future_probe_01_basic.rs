@@ -26,7 +26,6 @@
 //!   (Phase 4 GOAT gate runs that).
 //! - **FPCG selector** — that's the next example (`fpcg_01_basic.rs`).
 
-use katgpt_core::FeatureClass;
 use katgpt_rs::pruners::future_probe::{FutureBehaviorProbe, ProbeLoadError};
 use katgpt_core::traits::ScreeningPruner;
 

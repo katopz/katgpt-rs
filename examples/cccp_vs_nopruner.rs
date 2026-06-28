@@ -78,7 +78,7 @@ fn main() {
         let iters = 100_000_usize;
         let start = std::time::Instant::now();
         let mut sink = 0_u64;
-        for i in 0..iters {
+        for _ in 0..iters {
             // `is_noop()` is the no-collider fast path (the analog of the
             // planned `is_valid` trivial-accept).
             let v = noop.is_noop();

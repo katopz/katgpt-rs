@@ -34,16 +34,21 @@ const MAX_TREE_SIZE: usize = 10_000;
 
 /// Maximum number of unexpanded actions per node (ArrayVec capacity).
 /// Must accommodate the highest branching factor across all game domains.
-/// Bomber=6, Grid=5, Raid=~9. 16 provides comfortable headroom.
+/// Bomber=6, Grid=5, Raid=~9, Go 9×9=82 (81 points + pass),
+/// Go 13×13=170, Go 19×19=362. 362 covers standard Go board sizes.
 ///
 /// Ported from riir-engine (Plan 008 Phase 2.6, 2026-06-28): switching
 /// `children`/`unexpanded` from `Vec<usize>` to `ArrayVec<usize, MAX_UNEXPANDED>`
 /// eliminates per-node heap allocation — a genuine hot-path win because the
 /// tree allocates one node per MCTS iteration. Bit-identical values; only the
-/// backing storage changes. Callers whose `available_actions()` can exceed 16
-/// will hit the `assert!` in `new_root`/`new_child` — bump this const if a new
-/// game domain needs more headroom.
-const MAX_UNEXPANDED: usize = 16;
+/// backing storage changes. Callers whose `available_actions()` can exceed
+/// this const will hit the `assert!` in `new_root`/`new_child` — bump it if a
+/// new game domain needs more headroom.
+///
+/// 2026-06-28: raised from 16 → 362 after `go_01_mcts` / `go_02_tournament`
+/// panicked on a 9×9 board (82 actions). 362 covers 19×19 Go (standard
+/// tournament size) with no margin needed since pass is the only +1.
+const MAX_UNEXPANDED: usize = 362;
 
 // ── Tree Node ──────────────────────────────────────────────────
 

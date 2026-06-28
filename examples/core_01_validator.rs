@@ -148,7 +148,7 @@ fn main() {
     println!("{}", "─".repeat(40));
 
     let tokenizer_arc = Arc::new(tokenizer.clone());
-    let mut syn_pruner = SynPruner::new(Arc::clone(&tokenizer_arc));
+    let syn_pruner = SynPruner::new(Arc::clone(&tokenizer_arc));
 
     println!("\n  Valid fragments:");
     for code in VALID_FRAGMENTS {
