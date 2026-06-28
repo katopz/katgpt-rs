@@ -205,6 +205,11 @@ pub fn soft_reject_with_relax<P: ConstraintPruner, R: RelaxationStrategy>(
 ///
 /// Reuses the caller-supplied `conf_scratch` for the confidence values and
 /// `byte_scratch` for the relaxation step. No `Vec` growth.
+//
+// hot-path leaf: scratch buffers are passed in to keep this zero-alloc; the
+// argument count is the price of avoiding a config-struct allocation on every
+// call.
+#[allow(clippy::too_many_arguments)]
 pub fn batch_soft_reject_with_relax<P: ConstraintPruner, R: RelaxationStrategy>(
     pruner: &P,
     relaxer: &mut R,

@@ -10,17 +10,19 @@
 //!
 //! 1. **Reference-edge graph search** — a directed graph `G = (V, E)` where
 //!    `E = E_T ∪ E_ref`:
-//!    - **Primary edges** `E_T` carry parent→child generative relationships
-//!      and participate in selection + backprop (credit assignment).
-//!    - **Reference edges** `E_ref` carry cross-branch / non-adjacent
-//!      information flow and are **excluded from backprop**. They participate
-//!      only in proposal construction (read at expansion time).
+//!      - **Primary edges** `E_T` carry parent→child generative relationships
+//!        and participate in selection + backprop (credit assignment).
+//!      - **Reference edges** `E_ref` carry cross-branch / non-adjacent
+//!        information flow and are **excluded from backprop**. They participate
+//!        only in proposal construction (read at expansion time).
+//!
 //!    When `E_ref = ∅`, the search reduces to standard MCTS.
 //!
 //! 2. **Entropy-gated scheduler** — a probabilistic soft switch between UCT
 //!    exploration and Elite-Guided exploitation via a decaying weight `w(t)`:
-//!    - `P(UCT)   = w(t)`
-//!    - `P(Elite) = 1 - w(t)`
+//!      - `P(UCT)   = w(t)`
+//!      - `P(Elite) = 1 - w(t)`
+//!
 //!    The schedule is designed so the empirical branch-selection entropy
 //!    `H(π_t)` decreases monotonically over search progress, concentrating
 //!    compute on promising branches. Paper empirically shows 4.8 → 2.8 active

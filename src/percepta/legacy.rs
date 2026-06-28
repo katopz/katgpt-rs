@@ -380,6 +380,8 @@ impl Sudoku9x9 {
         // Candidate bitmask per cell: bit (d-1) set ⇒ digit d is a candidate.
         // 0b111111111 = all 9 digits valid.
         let mut cands = [[0u16; 9]; 9];
+        // multi-array coordinated init: cands[r][c] derived from self.grid[r][c]
+        #[allow(clippy::needless_range_loop)]
         for r in 0..9 {
             for c in 0..9 {
                 cands[r][c] = if self.grid[r][c] == 0 {
@@ -446,6 +448,9 @@ impl Sudoku9x9 {
 
         // ── Find the MRV cell: empty cell with fewest candidates. ──
         let mut best: Option<(usize, usize, u16)> = None; // (r, c, mask)
+        // multi-array scan: self.grid[r][c] and cands[r][c] read in lockstep,
+        // and (r,c) is captured into `best` for the branching phase below.
+        #[allow(clippy::needless_range_loop)]
         for r in 0..9 {
             for c in 0..9 {
                 if self.grid[r][c] != 0 {
@@ -503,11 +508,11 @@ impl Sudoku9x9 {
     #[inline]
     fn eliminate(cands: &mut [[u16; 9]; 9], row: usize, col: usize, d: u8) {
         let bit = 1u16 << (d - 1);
-        for c in 0..9 {
-            cands[row][c] &= !bit;
+        for cell in &mut cands[row] {
+            *cell &= !bit;
         }
-        for r in 0..9 {
-            cands[r][col] &= !bit;
+        for row_cells in cands.iter_mut() {
+            row_cells[col] &= !bit;
         }
         let box_r = (row / 3) * 3;
         let box_c = (col / 3) * 3;

@@ -95,9 +95,8 @@ impl MuxSpanPruner {
         }
 
         // Check geometric decay ordering
-        for i in 1..peaks.len() {
+        for (i, &(_, actual)) in peaks.iter().enumerate().skip(1) {
             let expected = top_val * self.decay.powi(i as i32);
-            let actual = peaks[i].1;
             // Allow 50% tolerance on the decay ratio
             let tolerance = expected.abs() * 0.5;
             if (actual - expected).abs() > tolerance {

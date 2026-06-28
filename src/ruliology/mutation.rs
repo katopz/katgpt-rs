@@ -83,9 +83,9 @@ impl FsmTemplateProposer {
 
         for s in 0..n {
             // Mutate transitions
-            for input in 0..2 {
+            for slot in transitions[s].iter_mut() {
                 if rng.f32() < self.mutation_rate {
-                    transitions[s][input] = (rng.u8(0..self.n_states)).min(MAX_STATES as u8 - 1);
+                    *slot = (rng.u8(0..self.n_states)).min(MAX_STATES as u8 - 1);
                 }
             }
             // Mutate outputs
@@ -201,6 +201,10 @@ pub fn co_evolve(
 ///
 /// Returns a [`CoEvolutionResult`] with acceptance/rejection counts.
 #[cfg(feature = "ruliology")]
+// hot-path leaf: each argument maps directly to a co-evolution hyperparameter;
+// grouping them into a config struct would just add a layer of indirection
+// without changing the call surface.
+#[allow(clippy::too_many_arguments)]
 pub fn delta_gated_co_evolve(
     seed: FsmStrategy,
     opponents: &[FsmStrategy],

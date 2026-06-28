@@ -109,6 +109,13 @@ pub struct SimulationGate {
     config: SimulationGateConfig,
 }
 
+impl Default for SimulationGate {
+    /// Default gate with default thresholds.
+    fn default() -> Self {
+        Self::new(SimulationGateConfig::default())
+    }
+}
+
 impl SimulationGate {
     /// Create a new simulation gate with the given config.
     pub fn new(config: SimulationGateConfig) -> Self {
@@ -117,11 +124,6 @@ impl SimulationGate {
             irreducibility,
             config,
         }
-    }
-
-    /// Default gate with default thresholds.
-    pub fn default() -> Self {
-        Self::new(SimulationGateConfig::default())
     }
 
     /// Analyze a win matrix and recommend a simulation strategy.

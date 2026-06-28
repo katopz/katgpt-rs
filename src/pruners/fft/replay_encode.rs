@@ -92,7 +92,7 @@ fn encode_hp_bucket(unit: &Unit) -> u8 {
         return 0;
     }
     let pct = unit.hp.max(0) as f32 / unit.stats.max_hp as f32;
-    ((pct * 8.0).floor() as usize).min(7).max(0) as u8
+    ((pct * 8.0).floor() as usize).clamp(0, 7) as u8
 }
 
 /// Encode MP bucket: 0..3 via `(mp / max_mp * 4).clamp(0, 3)`.
@@ -102,7 +102,7 @@ fn encode_mp_bucket(unit: &Unit) -> u8 {
         return 0;
     }
     let pct = unit.mp.max(0) as f32 / unit.stats.max_mp as f32;
-    ((pct * 4.0).floor() as usize).min(3).max(0) as u8
+    ((pct * 4.0).floor() as usize).clamp(0, 3) as u8
 }
 
 /// Encode a position axis value (0..GRID_W or GRID_H). Clamps to vocab range.

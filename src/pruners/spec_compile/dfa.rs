@@ -380,14 +380,11 @@ impl FormatDfaBuilder {
         let tld_chars = Self::chars_class((b'a'..=b'z').chain(b'A'..=b'Z'));
 
         // Allow: incremental push is clearer than a single vec![] for this many transitions.
-        #[allow(clippy::vec_init_then_push)]
-        let mut transitions = Vec::with_capacity(8);
-        // start → local_part (first char must be alphanumeric)
-        transitions.push(DfaTransition {
+        let mut transitions = vec![DfaTransition {
             from_state: S_START,
             char_class: alphanumeric.clone(),
             to_state: S_LOCAL,
-        });
+        }];
         // local_part loops (local chars)
         transitions.push(DfaTransition {
             from_state: S_LOCAL,
@@ -582,15 +579,11 @@ impl FormatDfaBuilder {
         let dash = Self::single_char(b'-');
 
         // Allow: incremental push is clearer than a single vec![] for this many transitions.
-        #[allow(clippy::vec_init_then_push)]
-        let mut transitions = Vec::with_capacity(8);
-
-        // start → year digit
-        transitions.push(DfaTransition {
+        let mut transitions = vec![DfaTransition {
             from_state: S_START,
             char_class: digits.clone(),
             to_state: S_YEAR,
-        });
+        }];
         // year loops (4 digits)
         transitions.push(DfaTransition {
             from_state: S_YEAR,

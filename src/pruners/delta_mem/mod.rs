@@ -1,8 +1,8 @@
 //! δ-mem modelless distillation: associative bandit memory.
 //!
-//! Substrate extraction (Plan 008 Step 6, 2026-06-28): the pure data +
+//! Substrate extraction (Plan 008 Step 6, 2026-06-28): the pure data plus
 //! algorithm half — `DeltaMemoryState`, `FeatureHasher`, `MultiDomainMemory`
-//! + their configs/snapshots — moved to [`katgpt_core::delta_mem`]. The
+//! and their configs/snapshots — moved to [`katgpt_core::delta_mem`]. The
 //! composition half (pruners that wrap a `ScreeningPruner` and add
 //! memory-steered corrections) stays here because the inner pruner type
 //! is a root-only trait object in many call sites.

@@ -483,6 +483,8 @@ impl RetrievalProjection {
         let mut k_proj = [0.0f32; 64];
         let k_slice = &mut k_proj[..ld];
 
+        // stride math: k_off = n * hd indexes into k_cache; scores[n] written.
+        #[allow(clippy::needless_range_loop)]
         for n in 0..n_keys {
             k_slice.fill(0.0);
             let k_off = n * hd;

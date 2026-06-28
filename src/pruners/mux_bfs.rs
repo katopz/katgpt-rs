@@ -70,9 +70,8 @@ impl MuxBfs {
         // Find the number of peaks that follow geometric decay.
         // Truncate at the first peak that deviates from the expected decay pattern.
         let mut valid_count = peaks.len();
-        for i in 1..peaks.len() {
+        for (i, &(_, actual)) in peaks.iter().enumerate().skip(1) {
             let expected = top_val * self.decay.powi(i as i32);
-            let actual = peaks[i].1;
             let tolerance = expected.abs() * 0.5;
             if (actual - expected).abs() > tolerance {
                 // This peak (and all after) don't follow geometric decay

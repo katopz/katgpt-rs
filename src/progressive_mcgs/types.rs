@@ -206,7 +206,6 @@ impl ProgressiveMcgsConfig {
     /// Validate config values; returns `Err` with a human-readable message if invalid.
     ///
     /// Call this once at construction; cheap relative to search loop.
-    #[must_use]
     pub fn validate(&self) -> Result<(), &'static str> {
         if self.max_refs_per_node == 0 {
             return Err("max_refs_per_node must be ≥ 1");

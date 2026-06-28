@@ -185,20 +185,20 @@ impl SpecMarginals {
         let len = logits.len().min(self.vocab_size);
         if self.biases.is_empty() {
             // Fast path: no explicit biases, just apply default.
-            for i in 0..len {
-                logits[i] += self.default_bias;
+            for logit in logits.iter_mut().take(len) {
+                *logit += self.default_bias;
             }
             return;
         }
 
         // Two-pointer merge: biases are sorted, logits are index-ordered.
         let mut bias_idx = 0;
-        for i in 0..len {
+        for (i, logit) in logits.iter_mut().enumerate().take(len) {
             if bias_idx < self.biases.len() && self.biases[bias_idx].token_idx == i {
-                logits[i] += self.biases[bias_idx].bias;
+                *logit += self.biases[bias_idx].bias;
                 bias_idx += 1;
             } else {
-                logits[i] += self.default_bias;
+                *logit += self.default_bias;
             }
         }
     }
@@ -272,12 +272,12 @@ fn dedup_sum(sorted: Vec<(usize, f32)>) -> Vec<(usize, f32)> {
     }
     let mut out = Vec::with_capacity(sorted.len());
     let mut cur = sorted[0];
-    for i in 1..sorted.len() {
-        if sorted[i].0 == cur.0 {
-            cur.1 += sorted[i].1;
+    for &(idx, bias) in sorted.iter().skip(1) {
+        if idx == cur.0 {
+            cur.1 += bias;
         } else {
             out.push(cur);
-            cur = sorted[i];
+            cur = (idx, bias);
         }
     }
     out.push(cur);

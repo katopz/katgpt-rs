@@ -162,9 +162,9 @@ impl EntropyGatedScheduler {
         debug_assert!(k <= cum.len(), "elite_topk exceeds stack buffer");
         let k_eff = k.min(cum.len());
         let mut total = 0.0f32;
-        for i in 0..k_eff {
+        for (i, slot) in cum.iter_mut().enumerate().take(k_eff) {
             total += 1.0 / (i as f32 + 1.0);
-            cum[i] = total;
+            *slot = total;
         }
         let u = rng.next_f32() * total;
         // Linear scan to find slot. For K=3, faster than binary search.

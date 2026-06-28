@@ -484,8 +484,8 @@ fn trigger_landmines(world: &mut World) -> Vec<PendingExplosion> {
                 continue;
             }
             let pos_tuple = (pos.x, pos.y);
-            for i in 0..player_count {
-                if player_positions[i] == Some(pos_tuple) {
+            for pp in player_positions.iter().take(player_count) {
+                if *pp == Some(pos_tuple) {
                     to_explode.push((entity, pos_tuple, fuse.owner));
                     break;
                 }

@@ -43,17 +43,19 @@ pub struct IrreducibilityGate {
     pub threshold: f32,
 }
 
+impl Default for IrreducibilityGate {
+    /// Default gate with 0.7 threshold.
+    #[inline]
+    fn default() -> Self {
+        Self::new(0.7)
+    }
+}
+
 impl IrreducibilityGate {
     /// Create a new gate with the given compression ratio threshold.
     #[inline]
     pub fn new(threshold: f32) -> Self {
         Self { threshold }
-    }
-
-    /// Default gate with 0.7 threshold.
-    #[inline]
-    pub fn default() -> Self {
-        Self::new(0.7)
     }
 
     /// Analyze a win matrix for irreducibility.

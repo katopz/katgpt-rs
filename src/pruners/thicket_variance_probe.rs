@@ -387,8 +387,8 @@ fn max_token_share(probes: &[ProbeOutput]) -> f32 {
     for i in 0..probes.len() {
         let ti = probes[i].token_id;
         let mut count: u32 = 0;
-        for j in 0..probes.len() {
-            if probes[j].token_id == ti {
+        for p in probes {
+            if p.token_id == ti {
                 count += 1;
             }
         }
@@ -406,8 +406,8 @@ fn max_format_share(probes: &[ProbeOutput]) -> f32 {
     for i in 0..probes.len() {
         let fi = probes[i].format_hash;
         let mut count: u32 = 0;
-        for j in 0..probes.len() {
-            if probes[j].format_hash == fi {
+        for p in probes {
+            if p.format_hash == fi {
                 count += 1;
             }
         }
@@ -428,13 +428,13 @@ fn mean_pairwise_kl(probes: &[ProbeOutput]) -> f32 {
     // C(8,2)=28 pairs × 2 softmax_normalizes = 56 saved allocs per aggregate.
     let mut pa = [0.0f32; TVP_TOP_LOGIT_CAP];
     let mut pb = [0.0f32; TVP_TOP_LOGIT_CAP];
-    for i in 0..probes.len() {
-        let li = probes[i].logits();
+    for (i, pi) in probes.iter().enumerate() {
+        let li = pi.logits();
         if li.is_empty() {
             continue;
         }
-        for j in (i + 1)..probes.len() {
-            let lj = probes[j].logits();
+        for pj in probes.iter().skip(i + 1) {
+            let lj = pj.logits();
             if lj.is_empty() {
                 continue;
             }

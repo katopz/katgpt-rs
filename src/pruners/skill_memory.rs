@@ -245,9 +245,9 @@ impl PrunerMemory {
         if entry_count > 0 {
             let cap = self.capacity as usize;
             let start = (head + cap - entry_count as usize) & (cap - 1);
-            for i in 0..entry_count as usize {
+            for (i, entry) in entries.iter_mut().enumerate().take(entry_count as usize) {
                 let src_idx = (start + i) & (cap - 1);
-                entries[i] = unsafe { *self.entries.as_ptr().add(src_idx) };
+                *entry = unsafe { *self.entries.as_ptr().add(src_idx) };
             }
         }
 

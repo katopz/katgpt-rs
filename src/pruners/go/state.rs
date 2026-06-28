@@ -668,6 +668,8 @@ impl GoHeuristic {
         // Multi-source BFS from all our stones → distance to nearest friendly for every cell
         let mut our_dist = vec![usize::MAX; area];
         let mut queue = std::collections::VecDeque::new();
+        // multi-array: state.board[idx] and our_dist[idx], and idx is enqueued.
+        #[allow(clippy::needless_range_loop)]
         for idx in 0..area {
             if state.board[idx] == color {
                 our_dist[idx] = 0;
@@ -687,6 +689,8 @@ impl GoHeuristic {
         // Multi-source BFS from all opponent stones (reusing the same queue)
         let mut opp_dist = vec![usize::MAX; area];
         debug_assert!(queue.is_empty());
+        // multi-array: state.board[idx] and opp_dist[idx], and idx is enqueued.
+        #[allow(clippy::needless_range_loop)]
         for idx in 0..area {
             if state.board[idx] == opponent {
                 opp_dist[idx] = 0;
