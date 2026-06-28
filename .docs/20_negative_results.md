@@ -141,7 +141,7 @@ At β=0.7, concentration drops from 0.9978 → 0.4999 — a **2× reduction** in
 
 G3 was originally 38.42× (FAIL) but closed to 4.56× via rayon NPC-parallelization (commit `60e4e50d`). The primitive ships with correct parallel-friendly architecture (per-NPC cosine scratch, deterministic RNG split).
 
-**Feature gate:** `alien_sampler` — **off by default**, opt-in for paper reproduction and future research on flatter coherence surfaces. SIMD inner-loop optimization tracked in [Issue 002](../issues/002_alien_sampler_simd_matmul.md) (G3 already closed via rayon; SIMD would be incremental).
+**Feature gate:** `alien_sampler` — **off by default**, opt-in for paper reproduction and future research on flatter coherence surfaces. SIMD inner-loop optimization tracked in [Issue 002](../.issues/002_alien_sampler_simd_matmul.md) (G3 already closed via rayon; SIMD would be incremental).
 
 📖 Plan: [`.plans/311_alien_sampler_primitive.md`](../.plans/311_alien_sampler_primitive.md), Benchmark: [`.benchmarks/311_alien_sampler_goat.md`](../.benchmarks/311_alien_sampler_goat.md), Research: [`.research/293_Alien_Science_Coherence_Availability_Frontier.md`](../.research/293_Alien_Science_Coherence_Availability_Frontier.md)
 

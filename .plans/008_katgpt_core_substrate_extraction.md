@@ -1,6 +1,6 @@
 # Plan 008: katgpt-core Substrate Extraction (Phase 1+2 of Issue 007)
 
-> **Origin:** [Issue 007](../issues/007_katgpt_rs_cargo_publish_substrate_reorg.md)
+> **Origin:** [Issue 007](../.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md)
 > **Status:** Active — Phase 1 step 1 ✅ done (pre-existing); steps 2-7 queued
 > **Branch:** `develop`
 > **Created:** 2026-06-27
@@ -307,7 +307,7 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 
   **DEFERRED — Blocker #1 (role field contamination):** riir-engine's `HlaQHeadState`/`AhlaQHeadState` carry `role: Option<SlotLabel>` + `third_order: ThirdOrderMoment` fields (gated `hla_role_aware`). These contaminate the entire type chain (`HlaLayerState.heads` → `MultiLayerHlaCache.layers`). Core's types don't have these fields, so re-exporting would lose role-aware functionality. **Resolution path:** refactor role info into a side-channel (e.g., `HashMap<HeadId, RoleInfo>`) or pass `role` as a kernel parameter. Medium effort — touches all role-aware kernels + forward.rs.
 
-  **DEFERRED — Blocker #2 (`ahla_step` math divergence — needs investigation):** riir-engine's `ahla_step` computes `tmp_r = PKV · q` (via `simd_matvec`), while katgpt-core computes `tmp_r = qᵀ · PKV` (manual loop, matches docstring). Since PKV = Σ k·vᵀ is non-symmetric, `PKV · q ≠ qᵀ · PKV`. riir-engine's docstring claims `qᵀ · PKV` but code computes the transpose — **a long-standing semantic mismatch**. Tests don't catch it (use sparse inputs where the two are identical). Per modelless-first mandate, did NOT change behavior. **Tracked as Issue 009** (`issues/009_ahla_step_math_divergence.md`). Needs decision: is riir-engine's `PKV · q` an intentional variant or a bug? If bug, fixing it changes trained behavior → riir-train follow-up.
+  **DEFERRED — Blocker #2 (`ahla_step` math divergence — needs investigation):** riir-engine's `ahla_step` computes `tmp_r = PKV · q` (via `simd_matvec`), while katgpt-core computes `tmp_r = qᵀ · PKV` (manual loop, matches docstring). Since PKV = Σ k·vᵀ is non-symmetric, `PKV · q ≠ qᵀ · PKV`. riir-engine's docstring claims `qᵀ · PKV` but code computes the transpose — **a long-standing semantic mismatch**. Tests don't catch it (use sparse inputs where the two are identical). Per modelless-first mandate, did NOT change behavior. **Tracked as Issue 009** (`.issues/009_ahla_step_math_divergence.md`). Needs decision: is riir-engine's `PKV · q` an intentional variant or a bug? If bug, fixing it changes trained behavior → riir-train follow-up.
 
   **GOAT gate:** 16/16 core hla tests, 8/8 root hla tests, 22/22 riir-engine hla tests (default), 28/28 hla_role_aware, full lib 2378/2379 (1 pre-existing `g5_epool_persistence`).
 - [x] **2.2 riir-engine `src/transformer/` → consume `katgpt_transformer::{...}`** (2026-06-27)
