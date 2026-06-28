@@ -201,7 +201,7 @@ fn cg_solve_scalar(
     let mut ax_field = CochainField::zeros(rank, n, 1);
     // Scratch for hodge_laplacian_into (rank ≥ 1). Sized for the intermediate ranks;
     // unused for rank 0 (graph_laplacian_into needs no scratch beyond ax_field).
-    let n_upper = if rank + 1 < MAX_RANK as u8 {
+    let n_upper = if rank + 1 < MAX_RANK {
         cx.n_cells(rank + 1)
     } else {
         0
@@ -463,9 +463,7 @@ fn boundary_matrix_rank(cx: &CellComplex, which: usize) -> usize {
         // Swap rows if needed
         if found_row != pivot_row {
             for c in 0..n_cols {
-                let tmp = mat[pivot_row * n_cols + c];
-                mat[pivot_row * n_cols + c] = mat[found_row * n_cols + c];
-                mat[found_row * n_cols + c] = tmp;
+                mat.swap(pivot_row * n_cols + c, found_row * n_cols + c);
             }
         }
 
@@ -615,7 +613,7 @@ pub fn hodge_spectrum(
     // all power-iteration steps (max_iter * n_ev calls previously allocated fresh).
     let mut cochain = CochainField::zeros(rank, n, 1);
     let mut lap = CochainField::zeros(rank, n, 1);
-    let n_upper = if rank + 1 < MAX_RANK as u8 {
+    let n_upper = if rank + 1 < MAX_RANK {
         cx.n_cells(rank + 1)
     } else {
         0

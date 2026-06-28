@@ -72,7 +72,7 @@ impl LabelSet {
     /// Returns `true` if the set contains `label`.
     #[inline]
     pub fn contains(&self, label: LabelId) -> bool {
-        self.as_slice().iter().any(|&l| l == label)
+        self.as_slice().contains(&label)
     }
 
     /// View as a borrowed slice.
@@ -261,7 +261,7 @@ impl<'a> TaxonomyValidator<'a> {
                 None => continue, // already rejected above
             };
             for &b in accepted.iter().skip(i + 1) {
-                if node_a.incompatible_with.iter().any(|&x| x == b) {
+                if node_a.incompatible_with.contains(&b) {
                     scratch
                         .rejections
                         .push(ValidationError::Incompatible(a, b));
@@ -279,8 +279,8 @@ impl<'a> TaxonomyValidator<'a> {
                 Some(n) => n,
                 None => continue,
             };
-            if let Some(parent_id) = node.parent_id {
-                if !valid.contains(parent_id) {
+            if let Some(parent_id) = node.parent_id
+                && !valid.contains(parent_id) {
                     scratch
                         .rejections
                         .push(ValidationError::MissingParent(parent_id));
@@ -288,7 +288,6 @@ impl<'a> TaxonomyValidator<'a> {
                     // ascending expansion is a separate step (expand_ascending)).
                     valid = remove_from_set(valid, c);
                 }
-            }
         }
 
         // The result owns its rejections Vec; the scratch keeps its capacity for

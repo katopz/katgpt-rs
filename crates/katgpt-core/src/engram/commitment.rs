@@ -136,7 +136,7 @@ pub fn build_merkle_root(slots: &[f32], d: usize) -> [u8; 32] {
     // BLAKE3(leaf || [0u8; 32]).
     let zero: [u8; 32] = [0u8; 32];
     while layer.len() > 1 {
-        let mut next: Vec<[u8; 32]> = Vec::with_capacity((layer.len() + 1) / 2);
+        let mut next: Vec<[u8; 32]> = Vec::with_capacity(layer.len().div_ceil(2));
         let mut i = 0;
         while i < layer.len() {
             let left = layer[i];

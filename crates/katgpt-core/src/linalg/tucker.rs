@@ -378,7 +378,7 @@ impl TuckerResultScratch {
             factor_rows: cfg.shape,
             factor_cols: cfg.ranks,
             core_shape: cfg.ranks,
-            n_modes: cfg.n_modes as u8,
+            n_modes: cfg.n_modes,
         }
     }
 

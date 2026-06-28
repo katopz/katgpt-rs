@@ -200,8 +200,8 @@ impl ZipfianCacheHierarchy {
         // drop the guard immediately.
         {
             let guard = self.plasma.pin();
-            if let Some((slot, _gen_val)) = guard.get(&hash) {
-                if slot.len() == d {
+            if let Some((slot, _gen_val)) = guard.get(&hash)
+                && slot.len() == d {
                     out.copy_from_slice(slot);
                     self.stats.hits_plasma.fetch_add(1, Ordering::Relaxed);
                     return CacheResult {
@@ -211,7 +211,6 @@ impl ZipfianCacheHierarchy {
                 }
                 // Size mismatch — fall through to warm/cold. (Shouldn't
                 // happen in practice; documented for robustness.)
-            }
         }
 
         // ── Warm tier ──────────────────────────────────────────────────
@@ -234,8 +233,8 @@ impl ZipfianCacheHierarchy {
         }
 
         // ── Cold tier ──────────────────────────────────────────────────
-        if let Some(cold) = &self.cold_fetcher {
-            if cold.fetch(hash, out) {
+        if let Some(cold) = &self.cold_fetcher
+            && cold.fetch(hash, out) {
                 self.stats.hits_cold.fetch_add(1, Ordering::Relaxed);
                 self.promote_to_plasma(hash, out);
                 return CacheResult {
@@ -243,7 +242,6 @@ impl ZipfianCacheHierarchy {
                     hit: true,
                 };
             }
-        }
 
         // ── Full miss ──────────────────────────────────────────────────
         for x in out.iter_mut() {

@@ -203,7 +203,7 @@ pub fn partition_refine(graph: &TransitionGraph) -> BisimulationQuotient {
         let mut prev_full: Option<&Vec<(u8, u32)>> = None;
         for (sig, original_idx) in &indexed_sigs {
             // Distinct-signature check via full vec comparison.
-            let is_new = prev_full.map_or(true, |p| p.as_slice() != sig.as_slice());
+            let is_new = prev_full.is_none_or(|p| p.as_slice() != sig.as_slice());
             if is_new {
                 next_class += 1;
             }

@@ -668,11 +668,10 @@ pub fn make_dct_log_basis(k: usize, d: usize) -> Vec<f32> {
         let f_raw = (2.0f32).powf(frac * log_d_half).round() as i64;
         let mut f = f_raw.clamp(1, max_f as i64);
         // Ensure strictly-greater than the previous frequency.
-        if let Some(&prev) = freqs.last() {
-            if f <= prev {
+        if let Some(&prev) = freqs.last()
+            && f <= prev {
                 f = prev + 1;
             }
-        }
         // If we ran past max_f, clamp (last few frequencies may saturate at
         // max_f — for k > d/2 this is unavoidable).
         if f > max_f as i64 {

@@ -401,7 +401,7 @@ impl<const D: usize> NonInterferenceProjection<D> {
     /// to assign directions beyond the initial capacity.
     #[inline]
     pub fn grow(&mut self, n: usize) {
-        self.directions.extend(core::iter::repeat([0.0f32; D]).take(n));
+        self.directions.extend(std::iter::repeat_n([0.0f32; D], n));
     }
 
     /// Iterator over `(BranchId, &[f32; D])` for every assigned (non-zero) row.

@@ -114,7 +114,7 @@ pub struct FourierBasis<const M: usize> {
 impl<const M: usize> FourierBasis<M> {
     /// Construct with period `P`. Asserts `M` is even and `P > 0`.
     pub const fn new(period: f32) -> Self {
-        assert!(M % 2 == 0, "FourierBasis requires even M (m = 2Q)");
+        assert!(M.is_multiple_of(2), "FourierBasis requires even M (m = 2Q)");
         assert!(period > 0.0, "FourierBasis period must be positive");
         Self { period }
     }
@@ -214,7 +214,7 @@ impl<const M: usize> BSplineBasis<M> {
     /// Construct on domain `[0,1]`.
     pub fn new() -> Self {
         assert!(
-            M >= Self::DEGREE + 1,
+            M > Self::DEGREE,
             "BSplineBasis requires M >= degree+1 = 4"
         );
         let d = Self::DEGREE;

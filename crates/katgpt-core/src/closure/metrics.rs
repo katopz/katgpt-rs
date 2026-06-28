@@ -115,7 +115,7 @@ pub fn compute_pri(corpus: &[PrimitiveTransitionGraph]) -> PriScores {
     // One contiguous `Vec<u64>` so a primitive's row is a contiguous slice —
     // cache-friendly popcount at the end. `words_per_row` is 1 for ≤ 64
     // families (the common case), giving a 4KB matrix (512 × 8B).
-    let words_per_row = (n_families + u64::BITS as usize - 1) / u64::BITS as usize;
+    let words_per_row = n_families.div_ceil(u64::BITS as usize);
     let mut bits: Vec<u64> = vec![0u64; PRIM_SPACE * words_per_row];
 
     // ── Phase 3: per-PTG dedup via rolling generation tag ─────────────────

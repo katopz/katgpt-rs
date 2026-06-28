@@ -181,11 +181,10 @@ impl BranchRouter {
         }
 
         // Secondary: Jaccard fallback (only if query has tokens).
-        if !query_tokens.is_empty() {
-            if let Some(id) = self.snap_jaccard(query_tokens, bank) {
+        if !query_tokens.is_empty()
+            && let Some(id) = self.snap_jaccard(query_tokens, bank) {
                 return RouteResult::reuse(id);
             }
-        }
 
         // No snap. Spawn if capacity remains, else frozen.
         if bank.can_spawn() {

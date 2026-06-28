@@ -178,10 +178,7 @@ impl ChunkFetcher for FsChunkFetcher {
         // Log-and-treat-as-miss is the honest fallback (a corrupted shard dir
         // is a deployment problem, not a fetcher-logic problem). The caller's
         // `TieredChunkFetcher` will try the next tier.
-        match self.read(chunk_hash) {
-            Ok(opt) => opt,
-            Err(_) => None,
-        }
+        self.read(chunk_hash).unwrap_or_default()
     }
 }
 

@@ -303,8 +303,8 @@ pub fn select_best_belief(
 
     // Incumbent tie preference: if the incumbent is in range and its score
     // ties the winner, return the incumbent to avoid churn.
-    if let Some(inc) = incumbent_idx {
-        if inc < candidates.len() && inc != best_idx {
+    if let Some(inc) = incumbent_idx
+        && inc < candidates.len() && inc != best_idx {
             let inc_score = best_belief_score(candidates[inc].0, candidates[inc].1, epsilon);
             // Tie = within ULP-level tolerance. f32 equality is fine here
             // because the same deterministic computation produces the same
@@ -313,7 +313,6 @@ pub fn select_best_belief(
                 return inc;
             }
         }
-    }
 
     best_idx
 }
@@ -356,14 +355,14 @@ fn lbeta(a: f32, b: f32) -> f32 {
 fn ln_gamma(x: f64) -> f64 {
     const G: f64 = 7.0;
     const C: [f64; 9] = [
-        0.99999999999980993,
+        0.999_999_999_999_809_9,
         676.5203681218851,
         -1259.1392167224028,
-        771.32342877765313,
-        -176.61502916214059,
+        771.323_428_777_653_1,
+        -176.615_029_162_140_6,
         12.507343278686905,
         -0.13857109526572012,
-        9.9843695780195716e-6,
+        9.984_369_578_019_572e-6,
         1.5056327351493116e-7,
     ];
     if x < 0.5 {

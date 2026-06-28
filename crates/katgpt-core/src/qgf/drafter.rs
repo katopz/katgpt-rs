@@ -113,7 +113,7 @@ where
     /// - `step % guidance_period == 0` (period matches).
     #[inline]
     pub fn should_apply_guidance(&self, step: usize) -> bool {
-        self.guidance_weight > 0.0 && step % self.guidance_period == 0
+        self.guidance_weight > 0.0 && step.is_multiple_of(self.guidance_period)
     }
 
     /// Convenience: project a condition to its likely final output via a
@@ -221,7 +221,7 @@ where
     ) -> bool {
         // Period gate applies even in adaptive mode — no point querying the
         // oracle if we're not tilting this step.
-        if step % self.guidance_period != 0 {
+        if !step.is_multiple_of(self.guidance_period) {
             return false;
         }
         let confidence = self.oracle.confidence(condition);

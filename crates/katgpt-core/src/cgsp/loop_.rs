@@ -375,7 +375,7 @@ where
     pub fn snapshot(&self) -> CuriosityPrioritySnapshot {
         let pool_dirs = self.conjecturer.pool_directions();
         let priorities: Vec<f32> = self.bandit.priorities().to_vec();
-        let mut directions: Vec<Direction> = pool_dirs.iter().cloned().collect();
+        let mut directions: Vec<Direction> = pool_dirs.to_vec();
         // Dual-pool growth: bandit arms may exceed the conjecturer's frozen
         // basis. Pad with zero vectors so directions.len() == priorities.len()
         // (required by the paired snapshot format). Zero = "no associated

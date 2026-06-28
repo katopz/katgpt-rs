@@ -105,7 +105,6 @@ pub fn tropical_matvec_into(
             let row_off = i * n_cols;
             unsafe { out[i] = neon_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols) };
         }
-        return;
     }
 
     #[cfg(not(target_arch = "aarch64"))]

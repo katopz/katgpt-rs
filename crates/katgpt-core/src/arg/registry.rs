@@ -345,11 +345,10 @@ impl InfoRegistry {
             // Collect the canonical units for each colliding key.
             let by_key = self.by_key.pin();
             for &k in keys.iter() {
-                if k != unit.key {
-                    if let Some(u) = by_key.get(&k) {
+                if k != unit.key
+                    && let Some(u) = by_key.get(&k) {
                         scratch.grey.push(*u);
                     }
-                }
             }
             if !scratch.grey.is_empty() {
                 return MatchResult::GreyZone(scratch.grey.clone());

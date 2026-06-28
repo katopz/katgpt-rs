@@ -263,12 +263,12 @@ fn is_prime(n: u64) -> bool {
     if n < 4 {
         return true; // 2, 3
     }
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         return false;
     }
     let mut i: u64 = 3;
     while i.saturating_mul(i) <= n {
-        if n % i == 0 {
+        if n.is_multiple_of(i) {
             return false;
         }
         i += 2;

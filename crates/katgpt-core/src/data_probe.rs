@@ -586,20 +586,17 @@ pub fn classify_all_sinks(
 /// paths is deferred — staged integration once the synthetic G2 + latency
 /// G3 gates pass on a real model.
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum SinkAwarePolicy {
     /// Default behavior: uniform sigmoid attention, no classifier overhead.
     /// Equivalent to current `parallax_attn` / `funcattn` behavior.
+    #[default]
     Uniform,
     /// Per-head dual policy: classify dominant sink, gate if NOP, preserve
     /// if Broadcast. Carries the classifier thresholds.
     DualPolicy(SinkClassifierConfig),
 }
 
-impl Default for SinkAwarePolicy {
-    fn default() -> Self {
-        Self::Uniform
-    }
-}
 
 /// Apply the dual-policy sigmoid gate to an attention output `O = A · V`.
 ///

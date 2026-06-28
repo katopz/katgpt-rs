@@ -90,14 +90,14 @@ impl<'a> PolicyConstraints<'a> {
     pub fn is_forbidden(&self, label: LabelId) -> bool {
         // Linear scan is correct here: forbidden lists are typically small (≤32).
         // For larger lists, the caller should pre-build a sorted slice + binary search.
-        self.forbidden_labels.iter().any(|&l| l == label)
+        self.forbidden_labels.contains(&label)
     }
 
     /// Returns `true` if `label` is allowed under the allowlist.
     /// Empty allowlist = permissive (no allowlist enforcement).
     #[inline]
     pub fn is_allowed(&self, label: LabelId) -> bool {
-        self.allowed_labels.is_empty() || self.allowed_labels.iter().any(|&l| l == label)
+        self.allowed_labels.is_empty() || self.allowed_labels.contains(&label)
     }
 }
 
