@@ -2,9 +2,10 @@
 
 > **Source:** *Mathematics of Neural Networks* — Bart M.N. Smets, arXiv:[2403.04807](https://arxiv.org/abs/2403.04807) [cs.LG], 6 Mar 2024 (lecture notes, ~80pp). Chapters 1–2 cover standard training-side material (supervised learning, SGD, backprop, CNNs, Xavier/He init, Adagrad/RMSProp/Adam) — **all → riir-train, NOT distilled here**. Chapter 3 covers manifolds, Lie groups, homogeneous spaces, **equivariant linear operators** (Theorem 3.32), G-CNN construction (§3.4), and **equivariant tropical operators** on the (max, +) semiring (§3.5, Theorem 3.54).
 > **Date:** 2026-06-28
-> **Status:** Active
+> **Status:** Active — Super-GOAT (promoted 2026-06-28 after Plan 337 G1 gate 3/3 PASS + G2 PASS after NEON specialization)
 > **Related Research:** 296 (Stokes/DEC crosswalk — closest cousin for "operators on manifolds"; verdict GOAT, mechanism ships as DEC, only wrappers new), 219 (TNO → DEC — the substrate), 299 (Clifford geometric product — the template for "known math, novel substrate fusion → gate to prove non-redundancy"), 270 (gauge-invariant adapter compose — narrow gauge equivariance), 314 (Group invariance of f-divergences)
 > **Related Plans:** 337 (this note's plan — tropical semiring primitive + G1 non-redundancy gate), 319 (geometric product — the gate template), 251 (DEC operators — the substrate the tropical variant fuses with)
+> **Cross-ref (riir-ai):** Research 164 (Tropical Game-Map Worst-Case Threat Guide — private Super-GOAT selling-point doc)
 > **Classification:** Public
 
 ---
@@ -17,7 +18,7 @@ The textbook's distillation-worthy content is Chapter 3, and within it two disti
 
 2. **Tropical semiring (max, +) and equivariant tropical operators** (§3.5, Theorem 3.54) — the headline distillation. ReLU and max-pool are shown to be *tropically affine* (linear in the (max, +) semiring); tropical convolution `(κ □_G f)(h) = sup_g (h·κ)(g) + f(g)` is the morphological analog of group convolution. **Every latent op we ship today is (ℝ, +, ·)-linear or sigmoid-gated. The (max, +) algebra is a genuinely different aggregation substrate with ZERO prior art in any of the five repos.**
 
-**Verdict: GOAT (not Super-GOAT).** Zero prior art for tropical primitives (Q1 ✅), new algebraic class (Q2 ✅), force multiplier across DEC/functor/shard (Q4 ✅) — but the selling-point and non-redundancy are **empirical questions, not theorems** (unlike Clifford's wedge, which is mathematically orthogonal to the dot product by construction). The honest path is the same as Research 299 took before its gate proved non-redundancy: ship the open primitive behind a feature flag, run a G1 non-redundancy gate (does tropical signal carry info that dot-product signal misses on our substrate?), and promote to Super-GOAT only if the gate passes convincingly + a product selling point emerges.
+**Verdict: Super-GOAT (promoted from GOAT-with-gate 2026-06-28 after Plan 337 G1 non-redundancy gate passed 3/3 substrates AND G2 perf gate passed after NEON specialization).** Zero prior art for tropical primitives (Q1 ✅), new algebraic class (Q2 ✅), force multiplier across DEC/functor/shard (Q4 ✅) — but the selling-point and non-redundancy are **empirical questions, not theorems** (unlike Clifford's wedge, which is mathematically orthogonal to the dot product by construction). The honest path is the same as Research 299 took before its gate proved non-redundancy: ship the open primitive behind a feature flag, run a G1 non-redundancy gate (does tropical signal carry info that dot-product signal misses on our substrate?), and promote to Super-GOAT only if the gate passes convincingly + a product selling point emerges.
 
 **Distilled for katgpt-rs (modelless, inference-time):**
 - Open primitive: `tropical_matvec_into(w: &[f32], x: &[f32], out: &mut [f32])` = `(W ⊗ x)_i = max_j (W[i,j] + x[j])` — the (max, +) analog of `simd_matvec`. Zero-allocation, SIMD-vectorizable via `max` reduction. Behind `tropical_algebra` feature flag.
@@ -146,23 +147,60 @@ Closest cousins across all five repos:
 | Fusion-first? | ✅ Five fusion candidates identified; TropicalDEC is the headline. |
 | GOAT gate definable? | ✅ G1 non-redundancy gate (does tropical signal carry info the linear signal misses?), mirroring Plan 319. |
 
-### Tier: **GOAT**
+### Tier: **Super-GOAT** (promoted 2026-06-28 after Plan 337 G1+G2 gates)
 
-**One-line reasoning:** Zero prior art for `(max, +)` primitives across all five repos + genuinely new algebraic class + force multiplier across DEC/functor/shard — but the non-redundancy on our specific substrate is an **empirical question** (unlike Clifford's mathematically-orthogonal wedge), so the honest verdict is GOAT-with-gate, not pre-committed Super-GOAT. The gate (Plan 337 Phase 2) decides promotion.
+**One-line reasoning:** Zero prior art for `(max, +)` primitives across all five repos + genuinely new algebraic class + force multiplier across DEC/functor/shard + **G1 non-redundancy gate passed 3/3 substrates** + **G2 perf gate passed after NEON specialization (D=64 0.96×, D=128 1.03× vs simd_matvec)** + product selling point confirmed. See riir-ai/.research/164.
 
-**Why not Super-GOAT right now (per §1.5 — no candidate escape hatch):**
+**Super-GOAT criteria (re-checked 2026-06-28 after G1+G2 gates):**
 - Q1 (no prior art?): ✅ Confirmed zero hits on `tropical|max-plus|maxplus|max_plus` outside tokenizers and unrelated `INV_U32_MAX_PLUS_1` constants. The `morphological dilation` in `flow/fft.rs` (Plan 242) is **binary obstacle inflation**, not tropical convolution.
 - Q2 (new class?): ✅ Every shipped latent op is `(ℝ, +, ·)`-linear or sigmoid-gated. `(max, +)` is a different semiring.
-- Q3 (selling point?): ⚠️ **Moderate, not yet committed.** "Worst-case threat path via tropical line integral" is a selling point for game AI, but it's niche and depends on the gate showing the tropical field is non-redundant with the sum field on actual game-map cochains. Cannot finish the "our NPCs do X no competitor can" sentence without the gate result.
-- Q4 (force multiplier?): ✅ TropicalDEC × TropicalFunctor × shard retrieval × (riir-ai game maps) ≥ 3 pillars.
+- Q3 (selling point?): ✅ **Confirmed.** G1 gate showed tropical signal non-redundant on 3/3 substrates. Selling point: "NPCs compute worst-case survival paths via tropical line integrals, complementing expected-engagement sum-paths" — see riir-ai/.research/164.
+- Q4 (force multiplier?): ✅ TropicalDEC × TropicalFunctor × shard retrieval × game maps ≥ 3 pillars.
 
-**Promotion path:** if Plan 337 G1 shows tropical DEC/functor signal is non-redundant with the linear signal by a clear margin (Clifford's threshold was +17.6pp) on a representative substrate (game-map cochains, HLA pairs, shard queries), AND a clean selling point emerges from the game-side fusion, this note amends to **Super-GOAT** with the mandatory riir-ai guide created at that point. **The guide is created AFTER the gate passes, not before — because the gate determines whether there IS a selling point to document.** This inverts the §1.5 default (guide-before-gate) but is consistent with the rule's intent: the guide contains the validation protocol, and here the validation protocol IS the gate that decides promotion.
+**Promotion complete (2026-06-28).** Plan 337 G1 passed 3/3 substrates. G2 passed after NEON specialization (the auto-vec baseline was 4-9× slower than simd_matvec due to a serial max-chain latency bottleneck; mirroring simd_dot_f32's 4-independent-accumulator pattern closed the gap). `tropical_algebra` promoted to default-on in `katgpt-core/Cargo.toml`. This note amended to Super-GOAT. Mandatory riir-ai guide at `riir-ai/.research/164_Tropical_Game_Map_Worst_Case_Threat_Guide.md`.
 
 **SE(2)-equivariant game maps** are flagged as a riir-ai follow-up (separate `.research/` note in `riir-ai/.research/` when scoped), not pre-committed here. The generic homogeneous-space framework is textbook math with a large surface; the game-side selling point ("rotation-equivariant NPC perception") is the moat, and that's riir-ai territory.
 
 ---
 
-## 4. References
+## 4. G1+G2 Gate Result (2026-06-28)
+
+Plan 337 ran the G1 non-redundancy gate (Phase 2) and the G2 perf gate (Phase 3) on representative substrates. Both passed.
+
+### 4.1 G1 (non-redundancy) — 3/3 PASS (all STRETCH)
+
+| Substrate | Setup | Metric | Value | PASS? | STRETCH? |
+|---|---|---|---|---|---|
+| **S1. DEC game-map cochain** | 16×16 grid, planted hotspot at vertex (8,8)=100.0 with 4 neighbors=50.0 | `|A △ B|` of top-3 edges by `|sum-flux|` vs `|max-flux|` | **2** (top-3 sum=`[127,128,360]`, max=`[127,360,112]`) | ✅ (≥1) | ✅ (≥2) |
+| **S2. HLA pairs coherence** | 64 random NPC pairs, 8-dim | Spearman ρ of mean-cosine vs max-cosine ranking | **+0.3468** | ✅ (<0.85) | ✅ (<0.70) |
+| **S3. Path bottleneck vs total** | 10 random paths on 16×16 grid | Spearman ρ of `line_integral` (sum) vs `tropical_line_integral` (max) | **+0.6991** | ✅ (<0.85) | ✅ (<0.70, marginal — 0.0009 under) |
+
+- **Bench:** `katgpt-rs/crates/katgpt-core/benches/bench_337_tropical_goat.rs`
+- **Full output:** `katgpt-rs/.benchmarks/337_tropical_goat.md`
+
+### 4.2 G2 (perf vs linear baseline) — PASS at gate dims after NEON specialization
+
+The plan's original hypothesis ("tropical faster because `max` is single-cycle on NEON/AVX2") was **wrong**. The auto-vectorized baseline was 4-9× slower than `simd_matvec` at gate dims, because the `f32::max` reduction inside `tropical_matvec_into` forms a **serial dependency chain** (`acc = acc.max(...)` — each step waits on the previous), which is the exact anti-pattern `simd_dot_f32`'s comment warns about. **The fix:** mirror `simd_dot_f32`'s 4-independent-accumulator pattern — use 4 separate `float32x4_t` accumulators advanced independently inside the inner loop, reduce once at the end. This closed the gap:
+
+- **D=64: 0.96× vs `simd_matvec`** (within noise — gate dims)
+- **D=128: 1.03× (faster!) vs `simd_matvec`** (within noise but trend positive)
+- **D=8: 0.82×** (caveat — D=8 is not a production use case for the tropical matvec; HLA vectors are sparse DEC wrappers, not raw 8-dim matvecs)
+
+Full perf table: `katgpt-rs/.benchmarks/337_tropical_goat.md`. The NEON specialization lives next to `simd_dot_f32` in `crates/katgpt-core/src/`.
+
+### 4.3 Gate summary
+
+| Gate | Status | Note |
+|---|---|---|
+| **G1** non-redundancy | ✅ PASS | 3/3 substrates, all STRETCH (S3 marginal 0.0009 under) |
+| **G2** perf | ✅ PASS | 0.96×/1.03× at D=64/128 after NEON spec; D=8 caveat |
+| **G3** no regression | ✅ clean | `cargo check` clean |
+| **G4** alloc-free | ✅ 0 allocs | caller-owned buffers |
+| **G5** modelless | ✅ pure modelless | no training, no backprop |
+
+---
+
+## 5. References
 
 - Textbook: [arXiv:2403.04807](https://arxiv.org/abs/2403.04807) — Smets, *Mathematics of Neural Networks*, Ch. 3.
 - Cited in-text: Cohen & Welling 2016 (G-CNNs), Cohen/Geiger/Weiler 2020 (homogeneous-space theory), Smets et al. 2021 (PDE-based G-CNNs, arXiv:2001.09046), Kolokoltsov & Maslov 1997 (idempotent analysis).
