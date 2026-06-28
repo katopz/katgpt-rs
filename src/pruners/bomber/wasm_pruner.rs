@@ -854,6 +854,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // whole point: sanity-check compile-time fuel consts
     fn fuel_constants_reasonable() {
         assert_eq!(FUEL_PER_CALL, 50_000);
         assert!(FUEL_BATCH_MULTIPLIER >= 2);

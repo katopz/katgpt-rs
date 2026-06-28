@@ -728,12 +728,14 @@ mod tests {
     #[ignore = "MILP solver too slow for unit tests; run with --ignored flag"]
     fn test_runner_build_result_has_correct_dimensions() {
         let result = Runner::build(None);
-        if result.is_err() {
-            // MILP solver may not be available in all test environments
-            eprintln!("Skipping build test: {:?}", result.unwrap_err());
-            return;
-        }
-        let build = result.unwrap();
+        let build = match result {
+            Ok(b) => b,
+            Err(e) => {
+                // MILP solver may not be available in all test environments
+                eprintln!("Skipping build test: {e:?}");
+                return;
+            }
+        };
 
         // Config should match weights
         assert_eq!(build.config.d_model, build.weights.d_model);
@@ -750,11 +752,13 @@ mod tests {
     #[ignore = "MILP solver too slow for unit tests; run with --ignored flag"]
     fn test_runner_build_result_has_token_maps() {
         let result = Runner::build(None);
-        if result.is_err() {
-            eprintln!("Skipping: {:?}", result.unwrap_err());
-            return;
-        }
-        let build = result.unwrap();
+        let build = match result {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("Skipping: {e:?}");
+                return;
+            }
+        };
 
         // Should have both input and output tokens
         assert!(!build.input_tokens.is_empty());

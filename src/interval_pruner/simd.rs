@@ -520,9 +520,7 @@ mod tests {
     fn test_simd_is_interval_closed_large_contiguous() {
         // Above threshold — SIMD path.
         let mut mask = vec![false; 512];
-        for i in 100..400 {
-            mask[i] = true;
-        }
+        mask[100..400].fill(true);
         assert!(simd_is_interval_closed(&mask));
     }
 
@@ -537,17 +535,14 @@ mod tests {
     fn test_simd_close_intervals_large() {
         let mut mask = vec![false; 512];
         // Two valid regions with a small gap.
-        for i in 100..200 {
-            mask[i] = true;
-        }
-        for i in 203..300 {
-            mask[i] = true;
-        }
+        mask[100..200].fill(true);
+        mask[203..300].fill(true);
         // Gap is 3 tokens (200, 201, 202).
         let closed = simd_close_intervals(&mask, 5);
         // Gap should be filled.
-        for i in 100..300 {
-            assert!(closed[i], "token {} should be valid after closure", i);
+        for (i, closed_i) in closed[100..300].iter().enumerate() {
+            let i = i + 100;
+            assert!(*closed_i, "token {} should be valid after closure", i);
         }
     }
 
@@ -578,12 +573,8 @@ mod tests {
     #[test]
     fn test_adaptive_close_intervals_matches_scalar() {
         let mut mask = vec![false; 512];
-        for i in 100..200 {
-            mask[i] = true;
-        }
-        for i in 203..300 {
-            mask[i] = true;
-        }
+        mask[100..200].fill(true);
+        mask[203..300].fill(true);
 
         let config = AdaptiveConfig::default();
         let simd_result = config.close_intervals(&mask, 5);
@@ -720,12 +711,8 @@ mod tests {
     #[test]
     fn test_adaptive_find_intervals_matches_scalar() {
         let mut mask = vec![false; 512];
-        for i in 50..100 {
-            mask[i] = true;
-        }
-        for i in 150..200 {
-            mask[i] = true;
-        }
+        mask[50..100].fill(true);
+        mask[150..200].fill(true);
 
         let config = AdaptiveConfig::default();
         let adaptive_result = config.find_intervals(&mask);
@@ -775,12 +762,8 @@ mod tests {
             let mut mask = vec![false; n];
             // Two regions with gap of 3.
             let region_size = n / 4;
-            for i in (region_size)..(region_size * 2) {
-                mask[i] = true;
-            }
-            for i in (region_size * 2 + 3)..(region_size * 3) {
-                mask[i] = true;
-            }
+            mask[region_size..(region_size * 2)].fill(true);
+            mask[(region_size * 2 + 3)..(region_size * 3)].fill(true);
 
             let start = std::time::Instant::now();
             for _ in 0..100 {

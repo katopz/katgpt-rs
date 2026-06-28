@@ -506,10 +506,10 @@ mod tests {
             let cand_task = (i + 1) % bench.n_tasks;
             let mut cand_h = vec![0.0_f32; h.len()];
             let sub = h.len() / bench.n_tasks;
-            for j in cand_task * sub..(cand_task + 1) * sub {
-                if j < h.len() {
-                    cand_h[j] = 1.0;
-                }
+            let start = cand_task * sub;
+            let end = ((cand_task + 1) * sub).min(h.len());
+            if start < end {
+                cand_h[start..end].fill(1.0);
             }
             // Check if the constraint rejects this dead candidate.
             let depth = bench.boundaries[i] - 1; // 0-indexed
@@ -563,15 +563,15 @@ mod tests {
             let sub = h.len() / bench.n_tasks;
             let mut correct_h = vec![0.0_f32; h.len()];
             let mut dead_h = vec![0.0_f32; h.len()];
-            for j in correct_task * sub..(correct_task + 1) * sub {
-                if j < h.len() {
-                    correct_h[j] = 1.0;
-                }
+            let cstart = correct_task * sub;
+            let cend = ((correct_task + 1) * sub).min(h.len());
+            if cstart < cend {
+                correct_h[cstart..cend].fill(1.0);
             }
-            for j in dead_task * sub..(dead_task + 1) * sub {
-                if j < h.len() {
-                    dead_h[j] = 1.0;
-                }
+            let dstart = dead_task * sub;
+            let dend = ((dead_task + 1) * sub).min(h.len());
+            if dstart < dend {
+                dead_h[dstart..dend].fill(1.0);
             }
             let depth = bench.boundaries[i] - 1;
             // Bandit-only: accepts both.

@@ -627,9 +627,9 @@ mod tests {
             .expect("expression should have one term")
     }
 
-    /// Build a minimal graph for basic evaluator tests.
-    /// Returns (input_tokens, output_tokens, graph, position_dim, one_dim, inv_log_pos_dim, position_sq_dim).
-    fn build_test_graph_full() -> (
+    /// Bundle returned by [`build_test_graph_full`]. Factored into a type alias
+    /// to keep clippy's `type_complexity` gate happy.
+    type TestGraphBundle = (
         HashMap<String, Expression>,
         HashMap<String, Expression>,
         ProgramGraph,
@@ -637,7 +637,11 @@ mod tests {
         DimId,
         DimId,
         DimId,
-    ) {
+    );
+
+    /// Build a minimal graph for basic evaluator tests.
+    /// Returns (input_tokens, output_tokens, graph, position_dim, one_dim, inv_log_pos_dim, position_sq_dim).
+    fn build_test_graph_full() -> TestGraphBundle {
         let mut builder = GraphBuilder::new();
 
         // Create a simple graph: cumsum of a generic dimension
@@ -818,7 +822,7 @@ mod tests {
 
         let fake_ref = vec!["wrong_token".to_string()];
         let result = evaluator.compare_with_reference(&[], &fake_ref, 100);
-        assert_eq!(result.unwrap(), false);
+        assert!(!result.unwrap());
     }
 
     #[test]

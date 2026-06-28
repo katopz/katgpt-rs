@@ -865,6 +865,8 @@ mod tests {
             // Manual baseline: same as gated but we compute manually
             for h_off in [0] {
                 let mut max_s = f32::NEG_INFINITY;
+                // Stride math: t indexes scores_baseline AND computes k_off = t * kv_dim.
+                #[allow(clippy::needless_range_loop)]
                 for t in 0..t_n {
                     let k_off = t * kv_dim + h_off;
                     let dot: f32 = q[h_off..h_off + hd]
@@ -939,12 +941,8 @@ mod tests {
 
         // All value_cache entries are 1.0, so attn_out[d] should be 1.0
         // (weighted average of 1.0s across non-pruned positions)
-        for d in 0..hd {
-            assert!(
-                (attn_out[d] - 1.0).abs() < 1e-4,
-                "Expected ~1.0 at d={d}, got {v}",
-                v = attn_out[d],
-            );
+        for (d, &v) in attn_out.iter().enumerate().take(hd) {
+            assert!((v - 1.0).abs() < 1e-4, "Expected ~1.0 at d={d}, got {v}");
         }
 
         // Verify pruned position has zero attention weight

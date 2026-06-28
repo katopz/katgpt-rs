@@ -662,8 +662,10 @@ fn set_tvp_config_adjusts_thresholds() {
     let mut router = fast_router(true, false);
 
     // Raise promote_at to 0.95 → 0.9 disagreement no longer promotes.
-    let mut cfg = TvpConfig::default();
-    cfg.promote_at = 0.95;
+    let cfg = TvpConfig {
+        promote_at: 0.95,
+        ..TvpConfig::default()
+    };
     router.set_tvp_config(cfg);
     assert_eq!(router.tvp_config().promote_at, 0.95);
 

@@ -286,12 +286,12 @@ mod tests {
             adv[0]
         );
         // Other arms: teacher and student agree → advantage ≈ 0
-        for i in 1..3 {
+        for (i, &adv_i) in adv.iter().enumerate().skip(1).take(2) {
             assert!(
-                adv[i].abs() < 1e-6,
+                adv_i.abs() < 1e-6,
                 "arm {} should have ~0 advantage, got {}",
                 i,
-                adv[i]
+                adv_i
             );
         }
     }

@@ -77,7 +77,7 @@ mod tests {
         let values: Vec<Vec<f32>> = (0..n).map(|_| vec![1.5; d]).collect();
         // Update O is rank-1: every row is the same vector v_s.
         let v_s = values[0].clone();
-        let update_O: Vec<Vec<f32>> = (0..n).map(|_| v_s.clone()).collect();
+        let update_o: Vec<Vec<f32>> = (0..n).map(|_| v_s.clone()).collect();
         // Attention column: all queries pay 1.0 to pos 0.
         let attn_column = column_all_on(0, n);
         let cfg = SinkClassifierConfig::default();
@@ -86,7 +86,7 @@ mod tests {
             0,
             &attn_column,
             &values,
-            Some(&update_O),
+            Some(&update_o),
             &cfg,
             &mut scratch,
         );

@@ -345,12 +345,11 @@ mod tests {
 
         let full = predict(&weights, &h, d_model, hidden, n_kv_heads, &mut buf);
 
-        for k in 0..n_kv_heads {
+        for (k, &full_k) in full.iter().enumerate() {
             let single = predict_single_head(&weights, &h, k, d_model, hidden, &mut buf2);
             assert!(
-                (full[k] - single).abs() < 1e-5,
+                (full_k - single).abs() < 1e-5,
                 "Head {k}: full={full_k}, single={single}",
-                full_k = full[k],
             );
         }
     }

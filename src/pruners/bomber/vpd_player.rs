@@ -197,6 +197,7 @@ fn compute_vpd_reward(alive: bool, danger: f32, powerups_collected: u32) -> f32 
 
 /// Compute danger level: fraction of adjacent cells (including current) in blast zone.
 #[cfg(test)]
+#[allow(dead_code)] // test helper; retained for future danger-aware reward tests
 fn danger_level(pos: GridPos, grid: &ArenaGrid, bombs: &[KnownBomb]) -> f32 {
     let directions: [(i32, i32); 5] = [(0, 0), (0, -1), (0, 1), (-1, 0), (1, 0)];
     let total = directions.len() as f32;

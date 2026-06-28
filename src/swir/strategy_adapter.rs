@@ -300,11 +300,11 @@ mod tests {
                 assert_eq!(v.len(), dim, "soft embedding width must equal dim");
                 // Uniform probs → centroid of the 4 rows = (1.5/4, 1.5/4, 1.5/4).
                 let expected = 1.5 / 4.0;
-                for d in 0..dim {
+                for (d, &v_d) in v.iter().enumerate() {
                     assert!(
-                        (v[d] - expected).abs() < 1e-5,
+                        (v_d - expected).abs() < 1e-5,
                         "dim {d}: got {}, expected {}",
-                        v[d],
+                        v_d,
                         expected
                     );
                 }

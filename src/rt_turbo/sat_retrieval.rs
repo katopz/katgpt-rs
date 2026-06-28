@@ -140,10 +140,9 @@ mod tests {
         }
 
         let mut total = 0.0;
-        for t in post_needle_start..post_needle_end.min(seq_len) {
-            for j in needle_start..needle_end.min(attention[t].len()) {
-                total += attention[t][j];
-            }
+        for row in &attention[post_needle_start..post_needle_end.min(seq_len)] {
+            let end = needle_end.min(row.len());
+            total += row[needle_start..end].iter().sum::<f32>();
         }
         total / (post_len * pre_len) as f32
     }
@@ -168,17 +167,17 @@ mod tests {
             match h {
                 // Head 0: strong retrieval — high attention to needle
                 0 => {
-                    for t in 15..20 {
-                        for j in 2..5 {
-                            matrix[t][j] = 0.8;
+                    for row in &mut matrix[15..20] {
+                        for cell in &mut row[2..5] {
+                            *cell = 0.8;
                         }
                     }
                 }
                 // Head 1: moderate retrieval
                 1 => {
-                    for t in 15..20 {
-                        for j in 2..5 {
-                            matrix[t][j] = 0.4;
+                    for row in &mut matrix[15..20] {
+                        for cell in &mut row[2..5] {
+                            *cell = 0.4;
                         }
                     }
                 }
@@ -188,9 +187,9 @@ mod tests {
                 }
                 // Head 3: moderate retrieval (between heads 1 and 2)
                 3 => {
-                    for t in 15..20 {
-                        for j in 2..5 {
-                            matrix[t][j] = 0.2;
+                    for row in &mut matrix[15..20] {
+                        for cell in &mut row[2..5] {
+                            *cell = 0.2;
                         }
                     }
                 }

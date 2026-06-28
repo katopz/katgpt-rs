@@ -526,8 +526,12 @@ mod tests {
         config: &RtTurboConfig,
     ) -> HeadCalibration {
         let mut scores = vec![0.0f32; n_heads];
-        for i in 0..n_retrieval.min(n_heads) {
-            scores[i] = 1.0 - i as f32 * 0.01;
+        for (i, s) in scores
+            .iter_mut()
+            .enumerate()
+            .take(n_retrieval.min(n_heads))
+        {
+            *s = 1.0 - i as f32 * 0.01;
         }
         calibrate_from_scores(&scores, config)
     }

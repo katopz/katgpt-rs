@@ -134,11 +134,11 @@ mod tests {
         let mut out = vec![0.0f32; 3];
         soft_embedding(&probs, &emb, 3, &mut out);
         // Centroid of one-hots = (1/3, 1/3, 1/3).
-        for d in 0..3 {
+        for (d, &out_d) in out.iter().enumerate() {
             assert!(
-                (out[d] - 1.0 / 3.0).abs() < 1e-6,
+                (out_d - 1.0 / 3.0).abs() < 1e-6,
                 "dim {d}: got {}, expected 1/3",
-                out[d]
+                out_d
             );
         }
     }

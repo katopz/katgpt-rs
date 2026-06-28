@@ -746,32 +746,32 @@ mod tests {
     #[test]
     #[should_panic(expected = "m must be >= 1")]
     fn new_rejects_zero_m() {
-        MedianTopMAvailability::new(vec![vec![1.0]], 0);
+        let _ = MedianTopMAvailability::new(vec![vec![1.0]], 0);
     }
 
     #[test]
     #[should_panic(expected = "all items must share the embedding dimension")]
     fn new_rejects_mixed_dim_bank() {
-        MedianTopMAvailability::new(vec![vec![1.0, 2.0], vec![1.0]], 1);
+        let _ = MedianTopMAvailability::new(vec![vec![1.0, 2.0], vec![1.0]], 1);
     }
 
     #[test]
     #[should_panic(expected = "is not finite")]
     fn new_rejects_nan_in_bank() {
-        MedianTopMAvailability::new(vec![vec![f32::NAN]], 1);
+        let _ = MedianTopMAvailability::new(vec![vec![f32::NAN]], 1);
     }
 
     #[test]
     #[should_panic(expected = "must be a multiple of dim")]
     fn from_flat_bank_rejects_misaligned() {
         // 7 floats, dim=3 → not a multiple.
-        MedianTopMAvailability::from_flat_bank(vec![1.0; 7], 3, 2);
+        let _ = MedianTopMAvailability::from_flat_bank(vec![1.0; 7], 3, 2);
     }
 
     #[test]
     #[should_panic(expected = "dim=0 but bank_flat is non-empty")]
     fn from_flat_bank_rejects_zero_dim_nonempty() {
-        MedianTopMAvailability::from_flat_bank(vec![1.0], 0, 2);
+        let _ = MedianTopMAvailability::from_flat_bank(vec![1.0], 0, 2);
     }
 
     // ── Edge cases ──────────────────────────────────────────────────────────
@@ -856,7 +856,7 @@ mod tests {
         let mut s = MedianTopMAvailability::new(bank, 10);
         let got = s.availability_embedded(&candidate);
         // Top-10 cosines = the 10 largest values in `cosines`.
-        cosines.sort_by(|a, b| a.partial_cmp(&b).unwrap());
+        cosines.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let top10 = &cosines[40..]; // 10 largest
         // Median of 10 (even) = average of top10[4] and top10[5].
         let expected = (top10[4] + top10[5]) * 0.5;

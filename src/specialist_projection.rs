@@ -678,9 +678,7 @@ mod tests {
         let mask = SpecialistMask::from_support(&support, (1, d_hidden));
         // Hidden state with energy ONLY in kept coords (coords 0-3).
         let mut hidden_aligned = vec![0.0; d_hidden];
-        for i in 0..4 {
-            hidden_aligned[i] = 1.0;
-        }
+        hidden_aligned[..4].fill(1.0);
         let score = specialist_score(&mask, &hidden_aligned);
         assert!(score > 0.0 && score < 1.0, "score {score} not in (0,1)");
         // All energy in kept coords → ratio → 1.0 → high score.
@@ -688,9 +686,7 @@ mod tests {
 
         // No energy in kept coords → low score.
         let mut hidden_misaligned = vec![0.0; d_hidden];
-        for i in 4..8 {
-            hidden_misaligned[i] = 1.0;
-        }
+        hidden_misaligned[4..8].fill(1.0);
         let score2 = specialist_score(&mask, &hidden_misaligned);
         assert!(score2 < 0.1, "no-alignment score {score2:.3} should be < 0.1");
     }

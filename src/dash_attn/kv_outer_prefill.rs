@@ -571,6 +571,8 @@ mod tests {
         let inv_sum = 1.0 / sum_exp;
 
         let mut dense_out = vec![0.0f32; HD];
+        // Stride math: t indexes dense_scores AND computes v_start = t * HD.
+        #[allow(clippy::needless_range_loop)]
         for t in 0..n_tokens {
             let w = dense_scores[t] * inv_sum;
             let v_start = t * HD;
@@ -578,6 +580,8 @@ mod tests {
         }
 
         // Compare sparse output to dense reference
+        // Multi-array + format: d indexes result.output AND dense_out.
+        #[allow(clippy::needless_range_loop)]
         for d in 0..HD {
             let diff = (result.output[d] - dense_out[d]).abs();
             assert!(

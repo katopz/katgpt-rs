@@ -1193,9 +1193,11 @@ mod tests {
     #[test]
     fn test_threshold_invariant_preserved() {
         // promote_at must stay > demote_at + 0.1 after any update.
-        let mut config = TvpConfig::default();
-        config.promote_at = 0.15;
-        config.demote_at = 0.1;
+        let config = TvpConfig {
+            promote_at: 0.15,
+            demote_at: 0.1,
+            ..TvpConfig::default()
+        };
         let mut adapter = TvpThresholdAdapter::new(&config.sanitized());
         // Force a demote update that would invert.
         for _ in 0..100 {

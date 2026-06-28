@@ -1363,7 +1363,7 @@ mod tests {
     fn test_expression_from_terms_removes_zeros() {
         let expr = Expression::from_terms(HashMap::from([(1, 2.0), (2, 0.0), (3, -1.0)]));
         assert_eq!(expr.len(), 2);
-        assert!(expr.terms.get(&2).is_none());
+        assert!(!expr.terms.contains_key(&2));
     }
 
     #[test]
@@ -1438,7 +1438,7 @@ mod tests {
     fn test_expression_set_removes_zero() {
         let mut expr = Expression::from_terms(HashMap::from([(1, 2.0), (2, 3.0)]));
         expr.set(1, 0.0);
-        assert!(expr.terms.get(&1).is_none());
+        assert!(!expr.terms.contains_key(&1));
         assert_eq!(expr.get(2), 3.0);
     }
 

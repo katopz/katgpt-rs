@@ -660,6 +660,7 @@ mod tests {
     // ── Constants ───────────────────────────────────────────────
 
     #[test]
+    #[allow(clippy::assertions_on_constants)] // whole point: sanity-check compile-time consts
     fn test_constants_sensible() {
         assert!((SDAR_BETA - 5.0).abs() < EPS, "Default β = 5.0");
         assert!(SDAR_BETA_MIN > 0.0, "β min > 0");

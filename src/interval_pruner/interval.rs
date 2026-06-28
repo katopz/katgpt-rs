@@ -434,12 +434,8 @@ mod tests {
 
         // Large mask.
         let mut large = vec![false; 512];
-        for i in 100..200 {
-            large[i] = true;
-        }
-        for i in 203..300 {
-            large[i] = true;
-        }
+        large[100..200].fill(true);
+        large[203..300].fill(true);
         let mask = IntervalMask::from_vec(large);
         assert_eq!(
             mask.is_interval_closed_adaptive(&config),

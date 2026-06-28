@@ -1063,15 +1063,15 @@ mod tests {
         let n = pre.len();
         let clr = centered_log_ratio(&pre, &post, 1.0);
 
-        for c in 0..n {
+        for (c, &clr_c) in clr.iter().enumerate() {
             let mut scratch = make_scratch(n);
             let m = self_advantage_margin(&pre, &post, c, &mut scratch);
             assert!(
-                (m + clr[c]).abs() < 1e-4,
+                (m + clr_c).abs() < 1e-4,
                 "margin({}) + clr({}) = {} should be ≈ 0",
                 c,
                 c,
-                m + clr[c]
+                m + clr_c
             );
         }
     }
@@ -1087,9 +1087,9 @@ mod tests {
         let post = [3.0, 1.0, 2.0];
         let clr = centered_log_ratio(&pre, &post, 1.0);
         let mut scratch = make_scratch(pre.len());
-        for c in 0..pre.len() {
+        for (c, &clr_c) in clr.iter().enumerate() {
             let m = self_advantage_margin(&pre, &post, c, &mut scratch);
-            assert!((m + clr[c]).abs() < 1e-4, "τ=1.0 identity broken at {}", c);
+            assert!((m + clr_c).abs() < 1e-4, "τ=1.0 identity broken at {}", c);
         }
     }
 

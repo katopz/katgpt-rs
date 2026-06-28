@@ -222,8 +222,8 @@ mod tests {
             .map(|_| {
                 let label = rng.bool();
                 let mut kv = vec![0.0_f32; d];
-                for i in 0..d {
-                    kv[i] = rng.f32() * 2.0 - 1.0;
+                for x in &mut kv {
+                    *x = rng.f32() * 2.0 - 1.0;
                 }
                 // Encode label into signal-head channels (one channel per head).
                 for (k, &h) in signal_heads.iter().enumerate() {
