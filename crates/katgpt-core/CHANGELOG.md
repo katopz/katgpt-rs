@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/katopz/katgpt-rs/compare/katgpt-core-v0.2.0...katgpt-core-v0.3.0) - 2026-06-28
+
+### Added
+
+- *(katgpt-sleep)* [**breaking**] promote sleep_time substrate to its own public crate (Issue 007 Phase E Tier 2 #6)
+- *(katgpt-personality)* [**breaking**] promote personality_composition substrate to its own public crate (Issue 007 Phase E Tier 2 #5)
+- *(katgpt-hla)* [**breaking**] promote HLA substrate to its own public crate (Issue 007 Phase E Tier 2 #4)
+- *(katgpt-micro-belief)* [**breaking**] promote micro-belief kernel to its own public crate (Issue 007 Phase E Tier 1 #3)
+- *(katgpt-types)* [**breaking**] promote types+simd substrate to its own public crate (Issue 007 Phase E Tier 1 #2)
+- *(katgpt-dec)* [**breaking**] promote DEC substrate to its own public crate (Issue 007 Phase E Tier 1 #1)
+- *(katgpt-core)* best_belief G2-unblock via 32x32x5 LUT, promote to default (Plan 336 Phase 2)
+- *(katgpt-core)* best_belief ε-quantile Beta selector (Plan 336 Phase 1+2)
+- *(lora)* add LoraAdapter::save — CPU-side export for arena-loadable adapters
+- *(core)* Plan 008 phase 2 — port substrate improvements from riir-engine
+- *(core)* Plan 008 step 7 — port WASM SIMD128 substrate to katgpt-core, fix mask_f32x4_wasm
+- *(core)* Plan 008 step 6 — move mcts/sampling/delta_mem substrate to katgpt-core
+- *(core)* Plan 008 step 5 — move speculative substrate types to katgpt-core
+- *(core)* Plan 008 step 4 — move HLA substrate to katgpt-core
+- Plan 335 Phase 3 — Proposition 1 annotation + consumer examples
+- Plan 335 Phase 2 — paired loss GOAT gate GREEN (G1-G4 all PASS)
+- *(sleep_time)* Issue 004 — ConsumeMatchMode for forecast-based answer retrieval
+- Plan 335 Phase 1 — paired token-level loss gap diagnostic (G1 GREEN)
+- *(sleep_time)* Plan 334 Phase 1+2 — Sleep-Time Query Anticipator open primitive (arXiv:2504.13171)
+
+### Fixed
+
+- *(curator)* correct verification_weight amplification constant (-4.0 → -3.0)
+- *(leak)* [**breaking**] move sense runtime IP + 3 NpcBrain benches to riir-engine (Issue 007 Phase C)
+- *(leak)* remove trained weights + migrate NPC runtime IP benches to riir-ai (Issue 007 Phase A+B)
+- *(cgsp)* pad snapshot directions for dual-pool E-pool growth
+- x86_64 SIMD backends missing #[target_feature] (Issue 006)
+
+### Other
+
+- close Plan 334 — Phase 3 examples + Phase 4 docs (sleep_time anticipator)
+
 ## [0.2.0](https://github.com/katopz/katgpt-rs/releases/tag/katgpt-core-v0.2.0) - 2026-06-27
 
 ### Added
