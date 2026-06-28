@@ -78,7 +78,11 @@ Commitment scheme: `BLAKE3(version_LE || pi[0..N]_LE || field_commitments[0..N])
 
 Per AGENTS.md feature-flag discipline: **the GOAT gate (G1–G5) passes with modelless gain.** The primitive is eligible for promotion to `default`.
 
-**However**, promotion is **DEFERRED** pending Phase 4 (examples + docs) and the runtime-integration validation in `riir-ai/.plans/336`. The feature stays opt-in (`committed_field_blend = ["personality_composition"]`) until the examples demonstrate the sampling-invariance property end-to-end and the README/docs are updated. This is consistent with the plan's Phase 4 gate.
+**Both deferral conditions are now satisfied** (as of 2026-06-26):
+- ✅ **Plan 321 Phase 4** (examples + docs) — SHIPPED commit `76ac861c`.
+- ✅ **riir-ai Plan 336 runtime-integration validation** — SHIPPED 2026-06-26 (all 7 phases done; G6a–G6e crowd-scale gates + G7a frozen-restoration bit-identical; `committed_personality_runtime` promoted to default-on in `riir-engine/Cargo.toml`).
+
+The **promotion proposal is open** at [Issue 005](../.issues/005_committed_field_blend_default_on_promotion.md) — a one-token Cargo.toml flip + root passthrough + doc updates, with acceptance gates A1–A4. The feature stays opt-in (`committed_field_blend = ["personality_composition"]`) until Issue 005 lands; the proposal is OPEN per Plan 336 T7.2's "do NOT unilaterally execute" constraint (it's a different repo's decision).
 
 ---
 
