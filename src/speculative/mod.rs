@@ -383,6 +383,20 @@ pub use caddtree_budget::{
 #[cfg(all(feature = "caddtree_budget", feature = "mux_demux", feature = "rcd_residual"))]
 pub use caddtree_budget::build_dd_tree_adaptive_mux_residual;
 
+// ── Hardware-Aware Prefix Scheduler — Multi-Request Budget Allocator (Plan 339) ──
+//
+// DSpark §3.2.2 global verification-budget allocator: given R spec-decode
+// requests with per-position survival probabilities a_{r,j} and a profiled
+// SPS(B) engine cost curve, produces per-request prefix lengths ℓ*_r that
+// maximize Θ = τ · SPS(B) via global sort + greedy admission + non-anticipating
+// early-stop (DSpark Appendix A correctness theorem — lossless distribution
+// preservation). Opt-in until a real multi-request batch caller exercises it.
+#[cfg(feature = "hardware_aware_scheduler")]
+pub mod prefix_scheduler;
+
+#[cfg(feature = "hardware_aware_scheduler")]
+pub use prefix_scheduler::{HardwareAwarePrefixScheduler, SpsCurve};
+
 // ── Self-Learning Selectivity Router (Plan 204, feature: selectivity_router) ──
 #[cfg(feature = "selectivity_router")]
 pub mod selectivity_router;

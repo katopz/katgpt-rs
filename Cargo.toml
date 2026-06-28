@@ -322,6 +322,7 @@ nf_flow_gate = []  # NFCoT FlowGate — adaptive acceptance criterion (Plan 229 
 nf_flow = ["nf_flow_score", "nf_flow_gate", "nf_flow_budget"]  # NFCoT parent feature — all modelless flow components (Plan 229, default OFF until GOAT)
 nf_flow_mux = ["nf_flow_score", "mux_pruner"]  # NFCoT FlowMUX — flow scoring for MUX trajectories (Plan 229 T6, default OFF)
 nf_flow_fold = ["nf_flow_score", "chain_fold"]  # NFCoT FlowFold — confidence-gated chain folding (Plan 229 T7, default OFF)
+hardware_aware_scheduler = []  # Hardware-Aware Prefix Scheduler — multi-request verification budget allocator (Plan 339, Issue 003, DSpark §3.2.2). Opt-in until a real multi-request batch caller exercises the synthetic GOAT gate.
 static_cal_tables = []  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1, GOAT 100% latency, default-ON)
 targeted_precision = []  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2, GOAT 21.3% ppl, default-ON)
 modality_pruned_load = []  # Modality-Pruned Context Loading — query classifier + pipeline selection (Plan 227 Phase 3, GOAT 97.6% latency simple queries, default-ON)

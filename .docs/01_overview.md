@@ -644,6 +644,7 @@ src/
 | `belief_drafter` | `katgpt-core/belief_drafter`, `papaya` | NextLat Belief-State Speculative Drafter — lightweight 3-layer residual MLP recursive hidden-state prediction for variable-length self-speculative decoding + LatentTransitionCache + BeliefRankPruner (Plan 217, default-on, GOAT 43 tests + 7 benchmarks) |
 | `bfcf_lfu_shard` | `bfcf_tree`, `papaya` | BFCF × LFU × Sharding — region-level LFU cache with frequency-aware sharding, batch processing, NeuronShard compound keys, emotion-aware eviction, KG triple transitions (Plan 218, default-on, GOAT 44 tests + 10 benchmarks) |
 | `caddtree_budget` | `spec_cost_model` | CaDDTree — Cost-Aware Adaptive DDTree Budget Selection (Plan 219, 7 GOAT tests, opt-in) |
+| `hardware_aware_scheduler` | — | Hardware-Aware Prefix Scheduler — multi-request verification budget allocator (Plan 339, Issue 003, DSpark §3.2.2). Global sort + greedy admission + non-anticipating early-stop (Appendix A correctness theorem). Opt-in until a real multi-request batch caller exercises the synthetic GOAT gate. |
 | `manifold_pruner` | — | ManifoldPruner — ManifoldE point-to-manifold soft validity scoring + kernel-tricked relevance for ScreeningPruner (Plan 234, opt-in, GOAT G1 FAIL) |
 | `sense_composition` | `katgpt-core/sense_composition` | KG Latent Octree NPC sense modules — ternary bit-plane projection, GM override, hot-swap, bandit feedback (Plan 221, opt-in) |
 | `shard_embedding` | — | (always-on) JL random orthogonal projection [f32;64]→[f32;8] for O(1) cosine similarity shard lookup (Plan 230) |
