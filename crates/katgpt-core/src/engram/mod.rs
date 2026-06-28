@@ -22,7 +22,7 @@
 //!
 //! Every step is **zero-allocation** in the hot path: callers provide scratch
 //! + out buffers, lookups index a flat `Box<[f32]>` row-major array directly
-//! by `hash mod N`.
+//!   by `hash mod N`.
 //!
 //! # Phase status (this file)
 //!

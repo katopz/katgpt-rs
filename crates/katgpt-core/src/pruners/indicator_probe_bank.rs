@@ -219,10 +219,10 @@ impl<L: IndicatorLabel, const D: usize> IndicatorProbeBank<L, D> {
             L::COUNT,
             "out_scores must have length L::COUNT"
         );
-        for i in 0..L::COUNT {
+        for (i, out_slot) in out_scores.iter_mut().enumerate().take(L::COUNT) {
             let dir = &self.directions[i * D..(i + 1) * D];
             let raw = simd_dot_f32(dir, state, D);
-            out_scores[i] = fast_sigmoid(raw - self.thresholds[i]);
+            *out_slot = fast_sigmoid(raw - self.thresholds[i]);
         }
     }
 

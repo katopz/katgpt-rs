@@ -229,9 +229,9 @@ fn default_heads(n_slots: usize) -> [HashHead; K_MAX] {
     }; K_MAX];
     // Use a base modulus ≥ max(n_slots, 2) to avoid mod-by-1 degeneracy.
     let base = (n_slots.max(2)) as u64;
-    for k in 0..K_MAX {
+    for (k, head) in heads.iter_mut().enumerate() {
         let prime = next_prime(base + k as u64); // distinct prime per head
-        heads[k] = HashHead {
+        *head = HashHead {
             n: 0,
             k: k as u8,
             modulus: prime,

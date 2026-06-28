@@ -123,6 +123,8 @@ impl EngramConfig {
 /// - `scratch_norm.len() >= D`
 /// - `scratch_out.len() >= D`
 /// - `config.k_heads <= K_MAX`
+// zero-alloc hot path; 5 inputs + 3 scratch buffers
+#[allow(clippy::too_many_arguments)]
 pub fn fuse_into_hidden_state(
     hidden_state: &mut [f32],
     query: &[f32],

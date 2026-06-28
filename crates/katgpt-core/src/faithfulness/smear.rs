@@ -175,8 +175,8 @@ impl SmearClassifier for CosineSmearClassifier {
 
         // Step 2: count survivors. Single pass, deterministic.
         let mut survivor_count: u8 = 0;
-        for i in 0..k {
-            if scratch[i] >= self.epsilon {
+        for &norm in scratch.iter().take(k) {
+            if norm >= self.epsilon {
                 survivor_count += 1;
             }
         }

@@ -598,11 +598,11 @@ impl PositionWeightedBudget {
         if current_total < total_budget {
             let mut remaining = total_budget - current_total;
             // Distribute remainder to earliest depths (highest weight)
-            for i in 0..max_depth {
+            for a in allocation.iter_mut().take(max_depth) {
                 if remaining == 0 {
                     break;
                 }
-                allocation[i] += 1;
+                *a += 1;
                 remaining -= 1;
             }
         } else if current_total > total_budget {

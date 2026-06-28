@@ -81,7 +81,6 @@ impl EngramHotSwap {
     /// On success, the old table is dropped (after the new pointer is
     /// published and the lock released — readers see either old or new,
     /// never a mix).
-    #[must_use]
     pub fn swap(&self, new_table: Box<dyn EngramTable>) -> Result<(), Box<dyn EngramTable>> {
         // Acquire the writer lock. `compare_exchange` returns Err if another
         // writer beat us to it — surface that to the caller.
@@ -215,10 +214,10 @@ impl EngramHotSwap {
         // torn reads in practice; if it fails, we upgrade to epoch.
         //
         // `ptr` points to a `Box<dyn EngramTable>` (double-boxed on insert).
-        // Dereference to get `&Box<dyn EngramTable>`, then `as_ref()` for
-        // the `&dyn EngramTable` the caller wants.
-        let table: &Box<dyn EngramTable> = unsafe { &*ptr };
-        f(table.as_ref())
+        // Dereference twice (through the double-box) to get `&dyn EngramTable`
+        // directly for the caller.
+        let table: &dyn EngramTable = unsafe { &**ptr };
+        f(table)
     }
 
     /// Fast identity check: low 8 bytes of the current table's BLAKE3 root.
