@@ -248,13 +248,13 @@ fn regen_pool(npc: &mut NpcState, archetypes: &[Vec<f32>], rng: &mut Lcg) {
             usize::MAX
         };
         if source_idx == usize::MAX {
-            for k in 0..POOL_DIM {
-                pool[k] = rng.next_range(1.0);
+            for p in pool.iter_mut().take(POOL_DIM) {
+                *p = rng.next_range(1.0);
             }
         } else {
             let archetype = &archetypes[source_idx];
-            for k in 0..POOL_DIM {
-                pool[k] = archetype[k] + rng.next_range(0.2); // ±20% noise
+            for (p, a) in pool.iter_mut().zip(archetype.iter()).take(POOL_DIM) {
+                *p = *a + rng.next_range(0.2); // ±20% noise
             }
         }
         // Normalize.
@@ -577,8 +577,8 @@ where
                 // are unit-norm → dot ∈ [-1, 1]. Map to [0, 1] via (dot+1)/2
                 // for a normalized quality score.
                 let mut dot = 0.0_f32;
-                for k in 0..dir.len() {
-                    dot += dir[k] * shared_coherence.direction[k];
+                for (d, s) in dir.iter().zip(shared_coherence.direction.iter()) {
+                    dot += d * s;
                 }
                 let quality = (dot + 1.0) * 0.5;
                 cohs.push(quality);

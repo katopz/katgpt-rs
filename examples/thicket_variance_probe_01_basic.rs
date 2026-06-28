@@ -29,7 +29,12 @@ use katgpt_rs::pruners::thicket_variance_probe::{
 };
 
 /// Synthetic tier enum — stands in for the real `ComputeTier`.
+///
+/// The `Cpu` prefix is intentional — each variant names a substrate stack
+/// ("CPU only", "CPU+GPU", "CPU+GPU+ANE"), mirroring the real `ComputeTier`
+/// taxonomy this demo substitutes for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)] // Cpu prefix is the documented substrate taxonomy
 enum Tier {
     CpuOnly,
     CpuGpu,

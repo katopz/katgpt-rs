@@ -45,6 +45,8 @@ fn l2_dist(a: &[f32], b: &[f32]) -> f32 {
 /// Returns output [dim] — a single query's aggregated value vector.
 fn matmul_attn_values(attn: &[f32], values: &[f32], seq_len: usize, dim: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; dim];
+    // `j` indexes `attn` AND strides `values` at `j * dim` — kept as a range loop.
+    #[allow(clippy::needless_range_loop)]
     for j in 0..seq_len {
         let w = attn[j];
         let v_off = j * dim;

@@ -40,16 +40,14 @@ fn main() {
             let sub = h.len() / bench.n_tasks;
             let mut correct_h = vec![0.0_f32; h.len()];
             let mut dead_h = vec![0.0_f32; h.len()];
-            for j in correct_task * sub..(correct_task + 1) * sub {
-                if j < h.len() {
-                    correct_h[j] = 1.0;
-                }
-            }
-            for j in dead_task * sub..(dead_task + 1) * sub {
-                if j < h.len() {
-                    dead_h[j] = 1.0;
-                }
-            }
+            // Fill the correct-task and dead-task sub-blocks (bounds-clamped
+            // in case `sub` doesn't divide `h.len()` evenly).
+            let correct_end = ((correct_task + 1) * sub).min(h.len());
+            let correct_start = (correct_task * sub).min(correct_end);
+            correct_h[correct_start..correct_end].fill(1.0);
+            let dead_end = ((dead_task + 1) * sub).min(h.len());
+            let dead_start = (dead_task * sub).min(dead_end);
+            dead_h[dead_start..dead_end].fill(1.0);
             let depth = bench.boundaries[i] - 1;
 
             // NoPruner accepts both.

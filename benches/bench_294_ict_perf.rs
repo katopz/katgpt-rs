@@ -57,9 +57,9 @@ fn main() {
         let dom_mass = 0.5 + 0.2 * ((seed & 0xFFFF) as f32 / 65535.0);
         p[dom] = dom_mass;
         let rest = (1.0 - dom_mass) / (ACTION_DIM - 1) as f32;
-        for j in 0..ACTION_DIM {
+        for (j, p_j) in p.iter_mut().enumerate() {
             if j != dom {
-                p[j] = rest;
+                *p_j = rest;
             }
         }
         trajectories.push(p);

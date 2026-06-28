@@ -63,7 +63,7 @@ impl Lcg {
 /// Build a `[k*d]` weight slice with full-rank structure — the worst-case
 /// runtime (all rows significant, all k*(k-1)/2 pairs evaluated).
 fn build_full_rank_weights(k: usize, d: usize) -> Vec<f32> {
-    let mut rng = Lcg::new(0xBEEF_298u64);
+    let mut rng = Lcg::new(0x0BEE_F298_u64);
     let mut w = vec![0.0_f32; k * d];
     for row in 0..k {
         let mut nrm = 0.0_f32;

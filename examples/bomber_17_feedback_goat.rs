@@ -368,16 +368,16 @@ fn main() {
             // Survival proxy: non-winner = death in bomber
             match game.winner {
                 Some(w) => {
-                    for i in 0..4 {
+                    for (i, d) in matchup_deaths.iter_mut().enumerate() {
                         if i != w {
-                            matchup_deaths[i] += 1;
+                            *d += 1;
                         }
                     }
                 }
                 None => {
                     // Draw: all dead
-                    for i in 0..4 {
-                        matchup_deaths[i] += 1;
+                    for d in &mut matchup_deaths {
+                        *d += 1;
                     }
                 }
             }
@@ -401,7 +401,7 @@ fn main() {
         );
 
         // Print FeedbackBandit decision stats and accumulate
-        if matchup.players.iter().position(|p| *p == FB_LABEL).is_some() {
+        if matchup.players.contains(&FB_LABEL) {
             for player in &players {
                 if let Some(sr2am) = player.as_any().downcast_ref::<Sr2amPlayer>() {
                     let (plan_new, plan_extend, plan_skip, plan_spechop) = sr2am.decision_stats();

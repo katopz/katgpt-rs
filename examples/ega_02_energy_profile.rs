@@ -118,8 +118,7 @@ fn main() {
             println!("  │ pos│ gate value                                │");
             println!("  ├────┼──────────────────────────────────────────┤");
 
-            for pos in 0..SEQ_LEN {
-                let g = gates[pos];
+            for (pos, &g) in gates.iter().enumerate() {
                 println!("  │ {:>2} │{} {:.4}│", pos, bar(g, bar_width), g);
             }
             println!("  └────┴──────────────────────────────────────────┘");
@@ -240,6 +239,9 @@ fn main() {
         println!("  pos │ type   │ head_0  │ head_1  │ head_2  │ head_3");
         println!("  ────┼────────┼─────────┼─────────┼─────────┼─────────");
 
+        // Outer `pos` is needed as an integer for `CONTENT_POSITIONS.contains(&pos)`
+        // and the print format; inner loop iterates the rows directly.
+        #[allow(clippy::needless_range_loop)]
         for pos in 0..SEQ_LEN {
             let kind = if CONTENT_POSITIONS.contains(&pos) {
                 "cont"
@@ -247,8 +249,8 @@ fn main() {
                 "fill"
             };
             print!("  {:>2}  │ {}  ", pos, kind);
-            for h in 0..4 {
-                print!("│ {:>7.4} ", energy_profiles[h][pos]);
+            for row in &energy_profiles {
+                print!("│ {:>7.4} ", row[pos]);
             }
             println!();
         }

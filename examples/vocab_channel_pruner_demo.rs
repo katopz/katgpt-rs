@@ -42,11 +42,13 @@ fn main() {
     }
 
     // ── 2. Per-Layer Decomposition ──────────────────────────────
-    let mut config = VocabChannelConfig::default();
-    config.max_channels = 3;
-    config.top_k_tokens = 10;
-    config.kurtosis_threshold = 0.5;
-    config.max_iterations = 10;
+    let config = VocabChannelConfig {
+        max_channels: 3,
+        top_k_tokens: 10,
+        kurtosis_threshold: 0.5,
+        max_iterations: 10,
+        ..Default::default()
+    };
 
     println!("\n🔧 VocabChannelConfig:");
     println!(

@@ -446,6 +446,7 @@ struct G4Result {
     /// Did PathwayTracker's `is_converged(0.8)` return true at the end?
     /// Expect true — it sees constant branch selections and declares
     /// "converged" despite the underlying activation oscillating.
+    #[allow(dead_code)] // documented contract; value is printed directly in run_g4
     pathway_converged: Option<bool>,
     /// Pass criterion: halter halts at loop 2 via Oscillation AND
     /// PathwayTracker reports stability ≥ 0.8 (converged). The contrast

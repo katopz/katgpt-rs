@@ -160,10 +160,12 @@ fn demo_epool_growth() {
 
     let e = GrowingVecBandit::uniform(4);
     let x = GrowingVecBandit::uniform(16);
-    let mut cfg = DualPoolConfig::default();
-    cfg.growth_enabled = true;
-    cfg.promotion_threshold = 0.1;
-    cfg.max_epool_size = 64;
+    let cfg = DualPoolConfig {
+        growth_enabled: true,
+        promotion_threshold: 0.1,
+        max_epool_size: 64,
+        ..Default::default()
+    };
     let mut dp = DualPoolBandit::with_config(e, x, cfg);
 
     let initial_e_size = dp.e_pool().num_arms();
@@ -233,11 +235,12 @@ fn demo_faithfulness_gate() {
     let gate = |arm: usize| live_arms.contains(&arm);
 
     let make_cfg = || {
-        let mut cfg = DualPoolConfig::default();
-        cfg.growth_enabled = true;
-        cfg.promotion_threshold = 0.05;
-        cfg.max_epool_size = 64;
-        cfg
+        DualPoolConfig {
+            growth_enabled: true,
+            promotion_threshold: 0.05,
+            max_epool_size: 64,
+            ..Default::default()
+        }
     };
 
     // ── Gate ON ──────────────────────────────────────────────────────────

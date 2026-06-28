@@ -53,7 +53,7 @@ use katgpt_rs::pruners::delta_mem::state::DEFAULT_THETA_SURPRISE;
 const RANK: usize = 8;
 const N_TOTAL: usize = 1_000;
 const FRAC_EVENTS: f32 = 0.20; // 20% events, 80% background
-const SEED: u64 = 0xC0FFEE_BABE_1234;
+const SEED: u64 = 0x00C0_FFEE_BABE_1234;
 
 /// Deterministic LCG (no extra crate dependency; fastrand is available but
 /// this keeps the bench self-contained and reproducible).
