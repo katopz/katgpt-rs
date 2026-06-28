@@ -54,16 +54,24 @@ impl PairedLossGap {
         );
         let len = log_probs_a.len();
         let mut deltas = Vec::with_capacity(len);
-        // Sound: `with_capacity(len)` reserved exactly `len` slots; we write
-        // exactly `len` elements before any observable read. The direct-index
-        // form (vs `push`) lets LLVM lower this to packed f32 subtracts without
-        // a per-iteration capacity check.
+        // SAFETY: `spare_capacity_mut()` exposes exactly `len` uninitialized
+        // slots; we `.write()` each one once before any observable read, then
+        // `set_len(len)` only after the full write pass. This preserves the
+        // perf intent (no per-iteration capacity check, packed f32 subtracts)
+        // without the unsound `set_len`-before-write pattern clippy flags as
+        // `uninit_vec`.
+        {
+            let spare = deltas.spare_capacity_mut();
+            for (slot, (&a, &b)) in spare
+                .iter_mut()
+                .zip(log_probs_a.iter().zip(log_probs_b.iter()))
+            {
+                slot.write(a - b);
+            }
+        }
+        // SAFETY: all `len` slots were initialized above.
         unsafe {
             deltas.set_len(len);
-            for i in 0..len {
-                *deltas.get_unchecked_mut(i) =
-                    *log_probs_a.get_unchecked(i) - *log_probs_b.get_unchecked(i);
-            }
         }
         Self { deltas }
     }
