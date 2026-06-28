@@ -53,6 +53,10 @@ pub use katgpt_types::leaky_core;
 pub mod mcts;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
+// Algebraic-structure primitives. Currently home to the tropical (max, +)
+// semiring (Plan 337, Research 321). Opt-in via `tropical_algebra`.
+#[cfg(feature = "tropical_algebra")]
+pub mod algebra;
 pub mod shard_embedding;
 // SIMD-accelerated linear algebra kernels (NEON / AVX2 / WASM-SIMD128 /
 // scalar fallback). Spun out to the `katgpt-types` crate (Issue 007 Phase E

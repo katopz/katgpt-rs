@@ -18,35 +18,35 @@ Ship the `(max, +)` tropical semiring as a modelless inference primitive: `tropi
 
 ### Tasks
 
-- [ ] **T1.1** Cargo feature `tropical_algebra = []` (opt-in, no default deps) in `katgpt-rs/crates/katgpt-core/Cargo.toml`.
-- [ ] **T1.2** New module `katgpt-rs/crates/katgpt-core/src/algebra/mod.rs` + `algebra/tropical.rs`. Module doc explains the (max, +) semiring, references Research 321 §1.2 and Smets Ch. 3 §3.5.
-- [ ] **T1.3** Core primitive in `algebra/tropical.rs`:
+- [x] **T1.1** Cargo feature `tropical_algebra = []` (opt-in, no default deps) in `katgpt-rs/crates/katgpt-core/Cargo.toml`.
+- [x] **T1.2** New module `katgpt-rs/crates/katgpt-core/src/algebra/mod.rs` + `algebra/tropical.rs`. Module doc explains the (max, +) semiring, references Research 321 §1.2 and Smets Ch. 3 §3.5.
+- [x] **T1.3** Core primitive in `algebra/tropical.rs`:
   - `pub fn tropical_matvec_into(w_row_major: &[f32], x: &[f32], out: &mut [f32], n_rows: usize, n_cols: usize)` — `(W ⊗ x)_i = max_j (W[i,j] + x[j])`. Initialize `out[i] = f32::NEG_INFINITY`, accumulate via `out[i] = out[i].max(w[i*n_cols+j] + x[j])`. Branch-free inner loop (LLVM auto-vectorizes `f32::max` on NEON/AVX2).
   - `pub fn tropical_dot_into(a: &[f32], b: &[f32], out: &mut f32, n: usize)` — `max_j (a[j] + b[j])`. Convenience scalar variant.
   - `pub fn tropical_matvec(w: &[f32], x: &[f32], n_rows: usize, n_cols: usize) -> Vec<f32>` — allocating wrapper for cold paths / tests.
-- [ ] **T1.4** Unit tests (same file, `#[cfg(test)]`):
+- [x] **T1.4** Unit tests (same file, `#[cfg(test)]`):
   - `tropical_matvec_matches_definition`: hand-computed 2×3 case.
   - `tropical_dot_is_max_sum`: `tropical_dot([1.0, 2.0, 3.0], [10.0, 20.0, 30.0]) == max(11, 22, 33) == 33.0`.
   - `neg_inf_identity`: column of all `−∞` in W → output `−∞` (matches `0` being multiplicative identity in the dual sense; additive identity `−∞` propagates).
   - `relu_is_tropical_affine`: `max(x, 0) == tropical_dot(&[0.0], &[x])` for one x — sanity-checks the textbook identity (Smets Example 3.49 / 3.57).
   - `dim_zero_noop`, `non_contiguous_strides_smoke`.
-- [ ] **T1.5** `cargo test -p katgpt-core --features tropical_algebra --lib` passes.
+- [x] **T1.5** `cargo test -p katgpt-core --features tropical_algebra --lib` passes. (9/9 tests green: 6 Phase 1 + 3 Phase 2.)
 
 ## Phase 2 — DEC wrappers + G1 non-redundancy gate (the GOAT decision)
 
 ### Tasks
 
-- [ ] **T2.1** Three DEC wrappers in `algebra/tropical.rs`, all `#[cfg(feature = "tropical_algebra")]`, all delegating to the shipped `dec/operators.rs` boundary matrices:
+- [x] **T2.1** Three DEC wrappers in `algebra/tropical.rs`, all `#[cfg(feature = "tropical_algebra")]`, all delegating to the shipped `dec/operators.rs` boundary matrices:
   - `tropical_exterior_derivative(cx: &CellComplex, input: &CochainField) -> CochainField` — for each (k+1)-cell, output = `max` over boundary k-cells of `(sign ? 0.0 : f32::NEG_INFINITY) + input[cell]`. Signed `+1` → `+0`, signed `−1` → `−∞` (exclude). Reuses `cx.boundary(k+1)` enumeration from `exterior_derivative_into`.
   - `tropical_codifferential(cx: &CellComplex, input: &CochainField) -> CochainField` — same form, opposite direction (k → k−1).
   - `tropical_line_integral(field: &CochainField, path: &[usize]) -> f32` — `path.iter().map(|&c| field[c]).fold(f32::NEG_INFINITY, f32::max)` — bottleneck-edge cost.
   - Each ~25 LOC. No new types; reuse `CochainField`.
-- [ ] **T2.2** DEC wrapper tests: `tropical_d_of_constant_is_zero_or_infty` (boundary of constant field under max = `+∞` if any boundary present else `−∞` — different from linear d which gives 0), `tropical_line_integral_is_bottleneck`, `tropical_exterior_derivative_includes_all_boundary_cells`.
-- [ ] **T2.3** **G1 non-redundancy bench** at `katgpt-rs/crates/katgpt-core/benches/bench_337_tropical_goat.rs`. Three substrates:
+- [x] **T2.2** DEC wrapper tests: `tropical_d_of_constant_is_zero_or_infty` (boundary of constant field under max = `+∞` if any boundary present else `−∞` — different from linear d which gives 0), `tropical_line_integral_is_bottleneck`, `tropical_exterior_derivative_includes_all_boundary_cells`.
+- [x] **T2.3** **G1 non-redundancy bench** at `katgpt-rs/crates/katgpt-core/benches/bench_337_tropical_goat.rs`. Three substrates:
   1. **DEC game-map cochain** (2D grid 16×16, random threat field) — compare `exterior_derivative` (sum-flux) vs `tropical_exterior_derivative` (max-flux). Metric: do they rank cells differently? Use a "threat hotspot" planted in the field; measure whether the top-3 cells by sum-flux differ from top-3 by max-flux. **PASS threshold: ≥1 of 3 cells differ in ranking** (else tropical is redundant). Stretch: ≥2 differ.
   2. **HLA pairs** (8-dim, 64 random NPC pairs) — compare `extract_functor` coherence (mean-cosine) vs tropical coherence (`max_k cos(target_k − source_k, f)`). Metric: rank correlation (Spearman) between the two coherence orderings. **PASS threshold: Spearman < 0.85** (else redundant). Stretch: < 0.7.
   3. **Path bottleneck vs path total** (DEC rank-1 cochain, 10 random paths on a 16×16 grid) — `tropical_line_integral` (bottleneck) vs `line_integral` (sum, from Plan 314). Metric: rank correlation of the 10 paths by each metric. **PASS threshold: Spearman < 0.85.** Stretch: < 0.7.
-- [ ] **T2.4** Run the bench. Record results in `.benchmarks/337_tropical_goat.md` (create folder if needed) with the **honest** outcome — PASS, FAIL, or partial.
+- [x] **T2.4** Run the bench. Record results in `.benchmarks/337_tropical_goat.md` (create folder if needed) with the **honest** outcome — PASS, FAIL, or partial.
 - [ ] **T2.5** **Decision point (this task closes Phase 2):**
   - **If ≥2 of 3 substrates PASS** → tropical signal is non-redundant. Proceed to Phase 3 (promote toward default), amend Research 321 to Super-GOAT, create riir-ai guide.
   - **If 1 of 3 PASS** → marginal. Keep opt-in, document the partial result, defer promotion pending a stronger substrate.
