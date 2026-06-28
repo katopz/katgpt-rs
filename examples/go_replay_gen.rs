@@ -215,7 +215,12 @@ struct GameResult {
     samples_written: usize,
 }
 
-/// Play a single self-play game and write samples.
+/// Play a single self-play game and write per-move samples.
+///
+/// Uses the deprecated JSON `finalize_and_write` until the riir-ai training
+/// pipeline migrates to `finalize_and_write_binary` (see method deprecation
+/// note). Tracked as part of the riir-ai migration, not a katgpt-rs fix.
+#[allow(deprecated)]
 fn play_game(
     config: &Config,
     rng: &mut Rng,

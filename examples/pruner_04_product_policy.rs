@@ -71,8 +71,8 @@ fn main() {
         let max_p = probs[top];
         let h = entropy(&probs);
         let label = match w {
-            w if w == 0.0 => "  (skip reasoning)",
-            w if w == 1.0 => "  (full reasoning)",
+            0.0 => "  (skip reasoning)",
+            1.0 => "  (full reasoning)",
             w if w > 1.0 => "  (extrapolation)",
             _ => "",
         };

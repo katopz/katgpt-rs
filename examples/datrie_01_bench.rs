@@ -238,7 +238,7 @@ fn bench_encode_throughput() {
                 // Longest prefix match (brute force — how HashMap is typically used)
                 let mut best_len = 1;
                 for end in (pos + 1..=input.len()).rev().take(20) {
-                    if vocab.get(&input[pos..end]).is_some() {
+                    if vocab.contains_key(&input[pos..end]) {
                         best_len = end - pos;
                         break;
                     }

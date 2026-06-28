@@ -35,11 +35,11 @@ fn l2_dist(a: &[f32], b: &[f32]) -> f32 {
 /// Matrix-vector product Y = A · V where:
 /// - `attn` is [seq_len] attention weights (one row of the attention matrix)
 /// - `values` is [seq_len × dim] row-major value matrix
+///
 /// Returns [dim] output vector.
 fn matmul_attn_values(attn: &[f32], values: &[f32], seq_len: usize, dim: usize) -> Vec<f32> {
     let mut out = vec![0.0; dim];
-    for j in 0..seq_len {
-        let w = attn[j];
+    for (j, &w) in attn.iter().enumerate().take(seq_len) {
         let row_off = j * dim;
         for d in 0..dim {
             out[d] += w * values[row_off + d];

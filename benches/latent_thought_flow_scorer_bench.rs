@@ -239,8 +239,8 @@ fn make_queries(seed: u64, _projection: &[f32]) -> Vec<(Vec<f32>, usize, Vec<f32
         // zero — no noise dims to confuse the projection.
         let mut input = vec![0.0f32; DIM];
         input[correct] = 1.5; // very strong signal
-        for k in 0..VOCAB {
-            input[k] += (rng.next_f32() - 0.5) * 0.05; // tiny noise on signal subspace
+        for slot in input.iter_mut().take(VOCAB) {
+            *slot += (rng.next_f32() - 0.5) * 0.05; // tiny noise on signal subspace
         }
 
         out.push((state, correct, input));
@@ -292,6 +292,7 @@ struct TrajectoryScore {
 }
 
 /// Score a single trajectory under all four scoring variants.
+#[allow(clippy::too_many_arguments)] // bench-only scorer: all 8 inputs are used by every call site
 fn score_trajectory(
     pre_logits: &[f32],
     post_logits: &[f32],
@@ -305,9 +306,9 @@ fn score_trajectory(
     // Argmax of post_logits = voted action.
     let mut voted_action = 0;
     let mut best_logit = f32::NEG_INFINITY;
-    for v in 0..VOCAB {
-        if post_logits[v] > best_logit {
-            best_logit = post_logits[v];
+    for (v, &l) in post_logits.iter().enumerate().take(VOCAB) {
+        if l > best_logit {
+            best_logit = l;
             voted_action = v;
         }
     }
@@ -396,9 +397,9 @@ fn pick_action(scorer: Scorer, scores: &[TrajectoryScore]) -> usize {
             }
             let mut best = 0;
             let mut best_count = tally[0];
-            for v in 1..VOCAB {
-                if tally[v] > best_count {
-                    best_count = tally[v];
+            for (v, &count) in tally.iter().enumerate().take(VOCAB).skip(1) {
+                if count > best_count {
+                    best_count = count;
                     best = v;
                 }
             }
@@ -419,9 +420,9 @@ fn pick_action(scorer: Scorer, scores: &[TrajectoryScore]) -> usize {
             }
             let mut best = 0;
             let mut best_weight = tally[0];
-            for v in 1..VOCAB {
-                if tally[v] > best_weight {
-                    best_weight = tally[v];
+            for (v, &weight) in tally.iter().enumerate().take(VOCAB).skip(1) {
+                if weight > best_weight {
+                    best_weight = weight;
                     best = v;
                 }
             }
@@ -517,8 +518,8 @@ fn run_g1(
                 post_probs[v] = (post_logits[v] - max_l).exp();
                 z += post_probs[v];
             }
-            for v in 0..VOCAB {
-                post_probs[v] /= z.max(1e-12);
+            for slot in post_probs.iter_mut().take(VOCAB) {
+                *slot /= z.max(1e-12);
             }
 
             scored.push(score_trajectory(
@@ -674,6 +675,7 @@ fn run_g2(
 }
 
 /// Single-scorer accuracy helper for G2.
+#[allow(clippy::too_many_arguments)] // bench harness: pre-allocated scratch buffers threaded through to avoid per-iter alloc
 fn run_g1_accuracy_only(
     kernel: &LatentThoughtKernel,
     projection: &[f32],
@@ -702,8 +704,8 @@ fn run_g1_accuracy_only(
                 post_probs[v] = (post_logits[v] - max_l).exp();
                 z += post_probs[v];
             }
-            for v in 0..VOCAB {
-                post_probs[v] /= z.max(1e-12);
+            for slot in post_probs.iter_mut().take(VOCAB) {
+                *slot /= z.max(1e-12);
             }
 
             scored.push(score_trajectory(
@@ -772,8 +774,8 @@ fn run_g3(kernel: &LatentThoughtKernel, projection: &[f32]) {
             post_probs[v] = (post_logits[v] - max_l).exp();
             z += post_probs[v];
         }
-        for v in 0..VOCAB {
-            post_probs[v] /= z.max(1e-12);
+        for slot in post_probs.iter_mut().take(VOCAB) {
+            *slot /= z.max(1e-12);
         }
 
         let score = score_trajectory(
@@ -828,9 +830,9 @@ fn print_per_k_accuracy(
             project_to_logits(&post, projection, &mut post_logits);
             let mut amax = 0;
             let mut best = f32::NEG_INFINITY;
-            for v in 0..VOCAB {
-                if post_logits[v] > best {
-                    best = post_logits[v];
+            for (v, &l) in post_logits.iter().enumerate().take(VOCAB) {
+                if l > best {
+                    best = l;
                     amax = v;
                 }
             }

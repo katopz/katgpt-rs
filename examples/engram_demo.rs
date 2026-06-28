@@ -49,10 +49,10 @@ fn make_demo_heads() -> [HashHead; K_MAX] {
         modulus: 1,
         seed: 0,
     }; K_MAX];
-    for k in 0..K_MAX {
+    for (k, head) in heads.iter_mut().enumerate().take(K_MAX) {
         // Distinct prime per head, all ≥ 256 (the table size).
         let prime = next_prime(256 + (k as u64) * 17);
-        heads[k] = HashHead {
+        *head = HashHead {
             n: 8,
             k: k as u8,
             modulus: prime,
@@ -173,11 +173,11 @@ fn main() {
     ];
     let keys = multi_head_hash(&suffix, &heads);
     println!("  multi_head_hash → {} slot keys (first 4 shown):", K_MAX);
-    for k in 0..4 {
+    for (k, key) in keys.iter().enumerate().take(4) {
         println!(
             "    head {k:2}: hash = {} → slot {}",
-            keys[k].0,
-            keys[k].0 % n_slots as u64
+            key.0,
+            key.0 % n_slots as u64
         );
     }
     println!();

@@ -25,6 +25,9 @@ const N_LAYERS: usize = 4;
 const POSITIVE_THRESHOLD: f32 = 0.15;
 const NEGATIVE_THRESHOLD: f32 = -0.15;
 
+/// Per-layer activation vector: (neuron_index, weights).
+type LayerActivations = Vec<(usize, Vec<f32>)>;
+
 // ── Board Encoding ─────────────────────────────────────────────
 
 /// Encode board state into per-layer activation vectors.
@@ -37,7 +40,7 @@ const NEGATIVE_THRESHOLD: f32 = -0.15;
 ///
 /// Values: +1.0 for friendly stone, -1.0 for opponent, 0.0 for empty,
 /// scaled by positional weight.
-fn encode_board(state: &GoState, player_id: u8) -> Vec<(usize, Vec<f32>)> {
+fn encode_board(state: &GoState, player_id: u8) -> LayerActivations {
     let color = GoCell::from_player_id(player_id);
     let size = state.size;
     let total = size * size;
@@ -45,13 +48,13 @@ fn encode_board(state: &GoState, player_id: u8) -> Vec<(usize, Vec<f32>)> {
 
     let mut layers = vec![vec![0.0f32; total]; N_LAYERS];
 
-    for idx in 0..total {
+    for (idx, board_cell) in state.board.iter().enumerate().take(total) {
         let row = idx / size;
         let col = idx % size;
 
-        let val = match state.board[idx] {
-            c if c == color => 1.0,
-            c if c == color.opponent() => -1.0,
+        let val = match board_cell {
+            c if *c == color => 1.0,
+            c if *c == color.opponent() => -1.0,
             _ => 0.0,
         };
 
@@ -139,10 +142,10 @@ fn play_random_game(rng: &mut fastrand::Rng) -> Vec<(GoState, u8, GoAction)> {
 /// High score → positive class. Low score → negative class.
 fn collect_contrastive_pairs(
     episodes: &[(GoState, u8, GoAction)],
-) -> (Vec<(usize, Vec<f32>)>, Vec<(usize, Vec<f32>)>) {
+) -> (LayerActivations, LayerActivations) {
     let heuristic = GoHeuristic;
-    let mut positive: Vec<(usize, Vec<f32>)> = Vec::new();
-    let mut negative: Vec<(usize, Vec<f32>)> = Vec::new();
+    let mut positive: LayerActivations = Vec::new();
+    let mut negative: LayerActivations = Vec::new();
 
     for (state, player_id, action) in episodes {
         // Build successor state
@@ -204,8 +207,8 @@ fn main() {
     println!("  Threshold: positive > {POSITIVE_THRESHOLD}, negative < {NEGATIVE_THRESHOLD}");
     println!();
 
-    let mut all_positive: Vec<(usize, Vec<f32>)> = Vec::new();
-    let mut all_negative: Vec<(usize, Vec<f32>)> = Vec::new();
+    let mut all_positive: LayerActivations = Vec::new();
+    let mut all_negative: LayerActivations = Vec::new();
 
     for game_idx in 0..NUM_GAMES {
         let episode = play_random_game(&mut rng);
@@ -317,8 +320,8 @@ fn main() {
 
     // Create a synthetic hidden activation vector
     let mut sample = vec![0.5f32; mlp_hidden];
-    for i in 0..mlp_hidden.min(20) {
-        sample[i] = 0.1 + i as f32 * 0.05;
+    for (i, slot) in sample.iter_mut().enumerate().take(mlp_hidden.min(20)) {
+        *slot = 0.1 + i as f32 * 0.05;
     }
 
     let baseline_sum: f32 = sample.iter().sum();

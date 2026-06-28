@@ -347,12 +347,12 @@ fn section_delta_evolution(num_episodes: usize, board_size: usize) {
         }
 
         let mut deltas = [0.0f32; 4];
-        for tmpl_idx in 0..4 {
+        for (tmpl_idx, delta_slot) in deltas.iter_mut().enumerate().take(4) {
             if let Some(history) = results.template_delta_history.get(tmpl_idx) {
                 // Find the last entry at or before this episode
                 let relevant: Vec<_> = history.iter().filter(|(ep, _)| *ep <= episode).collect();
                 if let Some((_, delta)) = relevant.last() {
-                    deltas[tmpl_idx] = *delta;
+                    *delta_slot = *delta;
                 }
             }
         }

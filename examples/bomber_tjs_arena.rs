@@ -177,6 +177,7 @@ fn parse_args() -> CliArgs {
 // ── Stats ──────────────────────────────────────────────────────
 
 #[derive(Clone, Default)]
+#[allow(dead_code)] // demo stats: full surface retained for future scoreboards
 struct PlayerStats {
     survival_count: u32,
     kill_count: u32,
@@ -188,6 +189,7 @@ struct PlayerStats {
     elo: f64,
 }
 
+#[allow(dead_code)] // demo stats: full surface retained for future scoreboards
 impl PlayerStats {
     fn new() -> Self {
         Self {

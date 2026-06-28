@@ -172,7 +172,7 @@ fn main() {
     // ── G5: project latency ─────────────────────────────────────────────
     println!("G5: project latency target < 1000 ns/op (1 µs)");
     let project_encoded = make_project_vessel();
-    let mut project_vessel = load_vessel(&project_encoded).expect("load");
+    let project_vessel = load_vessel(&project_encoded).expect("load");
     let mut config = wasmi::Config::default();
     config.consume_fuel(true);
     let engine = wasmi::Engine::new(&config);

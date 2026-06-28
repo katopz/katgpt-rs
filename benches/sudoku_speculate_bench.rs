@@ -4,14 +4,13 @@
 //! can be solved three ways:
 //!
 //! 1. **backtrack**        — canonical `Sudoku9x9::solve()` (the ground-truth
-//!                           complete solver; docs baseline = 49,559 steps).
+//!    complete solver; docs baseline = 49,559 steps).
 //! 2. **speculate_iterative** — iterative DDTree + greedy path commit, with
-//!                           backtracking fallback when speculation paints
-//!                           into a corner. This is the realistic "speculative
-//!                           decoding" pattern: draft → prune → commit → verify.
+//!    backtracking fallback when speculation paints into a corner. This is the
+//!    realistic "speculative decoding" pattern: draft → prune → commit → verify.
 //! 3. **speculate_oneshot** — single `build_dd_tree_pruned` with full-depth
-//!                           lookahead. "Pure speculate" extreme: can the tree
-//!                           find a complete valid solution in one build?
+//!    lookahead. "Pure speculate" extreme: can the tree find a complete valid
+//!    solution in one build?
 //!
 //! Convention: `std::time::Instant` + `harness = false` (matches
 //! `cucg_bench.rs`, `alien_sampler_bench.rs`, `procrustes_bench.rs` —
@@ -60,8 +59,8 @@ fn uniform_marginals(_board: &Sudoku9x9, lookahead: usize) -> Vec<Vec<f32>> {
     (0..lookahead)
         .map(|_| {
             let mut p = vec![0.0f32; SUDOKU_VOCAB];
-            for d in 1..=9 {
-                p[d] = 1.0 / 9.0;
+            for slot in p.iter_mut().take(10).skip(1) {
+                *slot = 1.0 / 9.0;
             }
             p
         })
