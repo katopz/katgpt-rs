@@ -535,20 +535,6 @@ impl TuckerResult {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-/// Write `shape`'s row-major (C-order) strides into `out[..shape.len()]`.
-/// The last mode has stride 1; stride[k] = stride[k+1] * shape[k+1].
-#[inline]
-fn row_major_strides_into(shape: &[usize], out: &mut [usize]) {
-    let n = shape.len();
-    if n == 0 {
-        return;
-    }
-    out[n - 1] = 1;
-    for k in (0..n - 1).rev() {
-        out[k] = out[k + 1] * shape[k + 1];
-    }
-}
-
 /// Per-mode column strides for the mode-n unfolding (Kolda's convention).
 /// Modes other than `mode` are ordered increasingly (excluding `mode`); the
 /// earliest non-`mode` mode has stride 1, the next has stride `shape[that_mode]`, etc.
@@ -566,74 +552,122 @@ fn col_strides_for_unfold_into(shape: &[usize], mode: usize, out: &mut [usize]) 
     }
 }
 
+/// Incremental mixed-radix odometer used by [`unfold_into`] / [`fold_into`].
+///
+/// Tracks `row = multi[mode]` and `col = Σ_{k≠mode} multi[k] * col_strides[k]`
+/// as the multi-index advances in row-major (most-significant first) order.
+/// Each step is O(1) amortized: the expected carry-chain length per increment
+/// is `1 + 1/shape[n-1] + 1/(shape[n-1]·shape[n-2]) + …` ≈ 1 + ε.
+///
+/// This replaces the prior per-element `n`-division multi-index decode
+/// (O(n) integer div/mod per element — ~25 cycles each on most x86 cores)
+/// with a branch-predicted carry loop, eliminating ~`n × total × 25` cycles
+/// of division work per unfold/fold call.
+#[inline]
+fn unfold_deltas(
+    shape: &[usize],
+    mode: usize,
+    col_strides: &[usize; MAX_MODES],
+) -> ([usize; MAX_MODES], [usize; MAX_MODES]) {
+    let n = shape.len();
+    let mut row_delta = [0usize; MAX_MODES];
+    let mut col_delta = [0usize; MAX_MODES];
+    for k in 0..n {
+        if k == mode {
+            // `row` tracks multi[mode]; one step in mode-n bumps row by 1
+            // (the output addresses it as `row * m`, so the effective jump is m).
+            row_delta[k] = 1;
+        } else {
+            col_delta[k] = col_strides[k];
+        }
+    }
+    (row_delta, col_delta)
+}
+
+/// Advance the odometer one step in row-major order, maintaining `row` and
+/// `col` incrementally. Carries from the least-significant mode upward.
+#[inline]
+fn advance_multi(
+    multi: &mut [usize; MAX_MODES],
+    shape: &[usize],
+    row: &mut usize,
+    col: &mut usize,
+    row_delta: &[usize; MAX_MODES],
+    col_delta: &[usize; MAX_MODES],
+) {
+    let mut k = shape.len();
+    loop {
+        k -= 1;
+        multi[k] += 1;
+        *row += row_delta[k];
+        *col += col_delta[k];
+        if multi[k] < shape[k] {
+            return;
+        }
+        // Overflow: reset this digit and subtract its full contribution.
+        multi[k] = 0;
+        *row -= shape[k] * row_delta[k];
+        *col -= shape[k] * col_delta[k];
+        if k == 0 {
+            return;
+        }
+    }
+}
+
 /// Unfold `x` (row-major tensor of `shape`) along `mode` into `out` as a
 /// row-major `(I_n, M)` matrix, where `I_n = shape[mode]` and `M = len / I_n`.
 ///
 /// `out.len()` must be `≥ x.len()`. `x.len()` must equal `prod(shape)`.
 fn unfold_into(x: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
-    let n = shape.len();
-    debug_assert!(n <= MAX_MODES, "MAX_MODES = {MAX_MODES}, got {n}");
+    debug_assert!(shape.len() <= MAX_MODES, "MAX_MODES = {MAX_MODES}, got {}", shape.len());
     let i_n = shape[mode];
     let total = x.len();
     debug_assert_eq!(total, shape.iter().product::<usize>());
     debug_assert!(out.len() >= total);
+    if total == 0 {
+        return;
+    }
 
-    let mut rm_strides = [0usize; MAX_MODES];
-    row_major_strides_into(shape, &mut rm_strides);
     let mut col_strides = [0usize; MAX_MODES];
     col_strides_for_unfold_into(shape, mode, &mut col_strides);
+    let (row_delta, col_delta) = unfold_deltas(shape, mode, &col_strides);
 
     let m = total / i_n;
     let mut multi = [0usize; MAX_MODES];
-    for (flat, &xv) in x.iter().enumerate().take(total) {
-        // Decode flat (row-major) → multi-index.
-        let mut rem = flat;
-        for k in 0..n {
-            multi[k] = rem / rm_strides[k];
-            rem %= rm_strides[k];
-        }
-        let row = multi[mode];
-        // Column index = Σ_{k≠mode} multi[k] * col_strides[k].
-        let mut col = 0usize;
-        for k in 0..n {
-            if k != mode {
-                col += multi[k] * col_strides[k];
-            }
-        }
-        out[row * m + col] = xv;
+    let mut row = 0usize;
+    let mut col = 0usize;
+
+    out[0] = x[0];
+    for flat in 1..total {
+        advance_multi(&mut multi, shape, &mut row, &mut col, &row_delta, &col_delta);
+        out[row * m + col] = x[flat];
     }
 }
 
 /// Inverse of [`unfold_into`]: fold `mat` (row-major `(shape[mode], M)`) back
 /// into `out` (row-major tensor of `shape`). `out.len()` must equal `prod(shape)`.
 fn fold_into(mat: &[f32], shape: &[usize], mode: usize, out: &mut [f32]) {
-    let n = shape.len();
     let i_n = shape[mode];
     let total = out.len();
     debug_assert_eq!(total, shape.iter().product::<usize>());
     debug_assert_eq!(mat.len(), total);
+    if total == 0 {
+        return;
+    }
 
-    let mut rm_strides = [0usize; MAX_MODES];
-    row_major_strides_into(shape, &mut rm_strides);
     let mut col_strides = [0usize; MAX_MODES];
     col_strides_for_unfold_into(shape, mode, &mut col_strides);
+    let (row_delta, col_delta) = unfold_deltas(shape, mode, &col_strides);
 
     let m = total / i_n;
     let mut multi = [0usize; MAX_MODES];
-    for (flat, out_slot) in out.iter_mut().enumerate().take(total) {
-        let mut rem = flat;
-        for k in 0..n {
-            multi[k] = rem / rm_strides[k];
-            rem %= rm_strides[k];
-        }
-        let row = multi[mode];
-        let mut col = 0usize;
-        for k in 0..n {
-            if k != mode {
-                col += multi[k] * col_strides[k];
-            }
-        }
-        *out_slot = mat[row * m + col];
+    let mut row = 0usize;
+    let mut col = 0usize;
+
+    out[0] = mat[0];
+    for flat in 1..total {
+        advance_multi(&mut multi, shape, &mut row, &mut col, &row_delta, &col_delta);
+        out[flat] = mat[row * m + col];
     }
 }
 
