@@ -5,7 +5,11 @@
 #   1. If no release PR is open, triggers release-plz to create one (and waits)
 #   2. Merges the release PR into develop (merge commit, never squash)
 #   3. Promotes develop → main (fast-forward)
-#   4. CI auto-publishes katgpt-core to crates.io on the main push
+#   4. Explicitly triggers the publish job on main (push alone does NOT fire it)
+#   5. Waits for publish (cargo publish to crates.io + tag + GitHub release)
+#
+# The release-plz workflow itself ONLY fires on workflow_dispatch — pushes to
+# develop/main do nothing. This script is the sole entry point for releases.
 #
 # Usage:
 #   ./scripts/release.sh             # ship it (from develop)
@@ -89,6 +93,14 @@ git checkout main
 git pull origin main
 git merge --no-ff develop -m "release: promote develop to main"
 git push origin main
+
+# ── Step 5: trigger publish on main (push alone no longer auto-fires) ─
+echo "→ triggering release-plz release on main..."
+gh workflow run release-plz.yml --ref main -f command=release
+sleep 3
+RUN_ID="$(gh run list --workflow=release-plz.yml --branch=main \
+  --event=workflow_dispatch --limit=1 --json databaseId --jq '.[0].databaseId')"
+[[ -n "$RUN_ID" ]] && gh run watch "$RUN_ID" --exit-status
 
 # Switch back to develop for continued work
 git checkout develop
