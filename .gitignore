@@ -3,3 +3,8 @@
 checkpoints/
 output/
 .logs
+
+# Trained model artifacts — must never ship in public MIT repo.
+# Trained weights belong in riir-train (source) / riir-ai/assets (runtime).
+*.mlpackage/
+*.mlmodel

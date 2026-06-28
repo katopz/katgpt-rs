@@ -7,7 +7,10 @@
 //!
 //! Training format (matches `riir_gpu::game`):
 //! - Input sequence: 169 board cell tokens (values 0-3) + 1 action token (4-9).
-//! - The action token at position 169 is what we predict.
+//! - Training layout: `input = tokens[0..169]`, `target = tokens[1..170]`, so
+//!   the model at position 168 (last board cell) predicts the action token.
+//!   The action-prediction logits live at position 168, NOT position 169
+//!   (see Issue 306 root-cause fix in `predict_action`).
 //! - Board token map: Floor=0, FixedWall=1, DestructibleWall=2, PowerUpHidden=3.
 //! - Action token map: GameAction value (0-5) + BOARD_VOCAB(=4) → logits[4..10].
 //!
@@ -228,10 +231,22 @@ impl SonltPlayer {
 
     /// Run the LoRA-augmented forward pass over the board and predict an action.
     ///
-    /// Feeds all 169 board tokens through the Transformer (building KV cache),
-    /// then runs one more step to produce logits at the action-prediction slot.
-    /// Reads `logits[BOARD_VOCAB..BOARD_VOCAB+ACTION_VOCAB]` and returns the
-    /// argmax mapped back to a `BomberAction`.
+    /// Feeds all 169 board tokens through the Transformer (building KV cache).
+    /// The logits produced at the **last board position** (position 168) are
+    /// the action predictions — during training, `target[168] = action_token`
+    /// (the shifted-target layout: `input = tokens[0..169]`, `target =
+    /// tokens[1..170]`). Reads `logits[BOARD_VOCAB..BOARD_VOCAB+ACTION_VOCAB]`
+    /// and returns the argmax mapped back to a `BomberAction`.
+    ///
+    /// # Issue 306 root-cause fix (2026-06-28)
+    ///
+    /// Previously this function did an EXTRA forward at position 169 (with
+    /// BOS token 0) and read those logits. That was a train/inference
+    /// mismatch: training only runs positions 0..=168 (seq_len=169), so
+    /// position 169 was never trained — its logits were essentially random,
+    /// which is why ANY trained LoRA made the player worse (0% survival).
+    /// The fix reads logits from position 168 (the last board cell), which
+    /// IS the action-prediction slot the model was trained on.
     ///
     /// Returns `None` if LoRA is not active.
     fn predict_action(&mut self, grid: &ArenaGrid) -> Option<BomberAction> {
@@ -244,7 +259,10 @@ impl SonltPlayer {
         self.key_cache.fill(0.0);
         self.value_cache.fill(0.0);
 
-        // Forward all 169 board tokens (positions 0..169).
+        // Forward all 169 board tokens (positions 0..=168). After the loop,
+        // `self.logits` holds the position-168 logits, which predict the
+        // action token (target[168] in the shifted-target training layout).
+        // No extra forward at position 169 — see Issue 306 root-cause note above.
         for (pos, &token) in tokens.iter().enumerate() {
             forward_game_with_lora(
                 &self.config,
@@ -272,35 +290,6 @@ impl SonltPlayer {
                 &mut self.value_cache,
             );
         }
-
-        // Final forward at position 169 to produce action logits.
-        // Use the BOS/Floor token (0) as the input — we only care about the
-        // logits produced at this position, which encode the predicted action.
-        forward_game_with_lora(
-            &self.config,
-            &self.weights,
-            self.lora_q.as_ref()?,
-            self.lora_k.as_ref()?,
-            self.lora_v.as_ref()?,
-            self.lora_o.as_ref()?,
-            self.lora_mlp1.as_ref()?,
-            self.lora_mlp2.as_ref()?,
-            0,
-            BOARD_CELLS,
-            &mut self.lora_buf,
-            &mut self.x,
-            &mut self.xr,
-            &mut self.xr2,
-            &mut self.q,
-            &mut self.k,
-            &mut self.v,
-            &mut self.attn_out,
-            &mut self.scores,
-            &mut self.hidden,
-            &mut self.logits,
-            &mut self.key_cache,
-            &mut self.value_cache,
-        );
 
         // Argmax over action logits [4..10). No softmax (project rule).
         let action_logits = &self.logits[BOARD_VOCAB..BOARD_VOCAB + ACTION_VOCAB];

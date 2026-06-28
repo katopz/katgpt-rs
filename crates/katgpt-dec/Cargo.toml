@@ -1,0 +1,35 @@
+[package]
+name = "katgpt-dec"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Discrete Exterior Calculus substrate — exterior derivative, codifferential, Hodge Laplacian/decomposition, Stokes calculus, lattice utility. Pure math, no app semantics."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["dec", "stokes", "hodge", "exterior-calculus", "cochains"]
+categories = ["mathematics", "science"]
+
+[dependencies]
+# Zero dependencies. katgpt-dec is a pure-math substrate that ships its own
+# minimal SIMD kernels (simd.rs) so it can be re-exported by katgpt-core as
+# `katgpt_core::dec` without creating a cyclic package dependency. The two
+# kernels (simd_dot_f32, simd_sigmoid_inplace) are bit-compatible scalar
+# fallbacks matching katgpt-core's implementations.
+
+[features]
+# katgpt-dec compiles all DEC code unconditionally — the crate's entire purpose
+# is DEC. The features below are pass-through tracking flags so katgpt-core can
+# preserve its historical feature surface (`dec_operators` enables this crate;
+# `dec_terrain_ai` / `lattice_utility` / `interest_cochain` are promotion-tracking
+# flags that imply `dec_operators` in katgpt-core). They gate nothing inside
+# katgpt-dec itself — mirroring the pre-promotion behavior where the whole
+# `dec` module compiled whenever `dec_operators` was on.
+default = []
+
+# Tracking flag: dynamic DEC topology + terrain cochains (Plan 261).
+dec_terrain_ai = []
+
+# Tracking flag: SIMD lattice-edge utility op (Plan 335 Phase 5/6/7 GOAT gate).
+lattice_utility = []
+
+# Tracking flag: InterestCohain type for fame/notability (Plan 335 Phase 1).
+interest_cochain = []

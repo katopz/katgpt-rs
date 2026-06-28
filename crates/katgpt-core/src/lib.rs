@@ -3,23 +3,73 @@
 //! This crate contains the common core shared between the two projects:
 //! - **types**: Config, Rng, math utilities, LoRA, DomainLatent
 //! - **simd**: NEON/AVX2 accelerated linear algebra kernels
+//! - **hla**: Higher-order Linear Attention substrate (cache types + kernels)
+//! - **mcts**: Generic Monte Carlo Tree Search over any `GameState`
+//! - **delta_mem**: δ-mem associative memory substrate (state, hasher, multi-domain)
 //! - **traits**: Shared traits for game AI and speculative decoding
+//! - **speculative**: Speculative-decoding substrate types + sampling primitives
+//!   (TreeNode, DraftResult, configs, LDT conflict detector, TES credit
+//!   assignment, CDF/residual samplers)
 //!
-//! No feature flags on types — both projects get the full superset.
+//! No feature flags on types/simd/hla/mcts/delta_mem/speculative — both projects
+//! get the full substrate. Composition layers (root-only types like
+//! `BanditRolloutPolicy`, `MemorySteeredPruner<P>`) stay in the consuming crate.
 
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
+
+// best_belief — ε-quantile Beta lower bound for conservative selection
+// (Plan 336, Research 320, RQGM arXiv:2606.26294 Prop. 4). Complements
+// `sample_beta` (Thompson sampling for EXPLORATION) with a conservative
+// EXPLOITATION / SELECTION counterpart. Opt-in until the G1+G2+G4 GOAT gate
+// passes.
+#[cfg(feature = "best_belief")]
+pub mod best_belief;
+#[cfg(feature = "best_belief")]
+pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief};
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 #[cfg(feature = "dec_operators")]
-pub mod dec;
-pub mod leaky_core;
+pub use katgpt_dec as dec;
+pub mod delta_mem;
+// Higher-order Linear Attention (HLA) substrate — cache types + streaming
+// kernels. Spun out to the `katgpt-hla` crate (Issue 007 Phase E Tier 2 #4)
+// and re-exported here as `katgpt_core::hla` for backwards compatibility.
+// All `crate::hla::*` and `katgpt_core::hla::*` paths resolve unchanged. The
+// composition layer (`forward_hla` / `forward_ahla`, depends on ForwardContext)
+// stays in katgpt-core; the cognitive role-aware variants stay in riir-engine.
+pub use katgpt_hla as hla;
+// Shared leaky-integrator primitive. Spun out to the `katgpt-types` leaf
+// (Issue 007 Phase E Tier 1 #3) so both katgpt-core (`sense::reconstruction`)
+// and `katgpt-micro-belief` (`LeakyIntegrator::step`) can consume it without
+// a cycle. Re-exported here as `katgpt_core::leaky_core` for backwards
+// compatibility.
+pub use katgpt_types::leaky_core;
+/// Generic Monte Carlo Tree Search over any [`crate::traits::GameState`].
+///
+/// Always-on substrate. Composition that needs root-only types
+/// (`BanditRolloutPolicy` depends on `crate::pruners::bandit::BanditStats`)
+/// stays in the consuming crate.
+pub mod mcts;
 #[cfg(feature = "parallax_attn")]
 pub mod parallax_attn;
+// Algebraic-structure primitives. Currently home to the tropical (max, +)
+// semiring (Plan 337, Research 321). Opt-in via `tropical_algebra`.
+#[cfg(feature = "tropical_algebra")]
+pub mod algebra;
 pub mod shard_embedding;
-pub mod simd;
+// SIMD-accelerated linear algebra kernels (NEON / AVX2 / WASM-SIMD128 /
+// scalar fallback). Spun out to the `katgpt-types` crate (Issue 007 Phase E
+// Tier 1 #2) and re-exported here as `katgpt_core::simd` for backwards
+// compatibility. All `crate::simd::*` paths resolve unchanged.
+pub use katgpt_types::simd;
+pub mod speculative;
 pub mod traits;
-pub mod types;
+// Shared configuration, RNG, math utilities, LoRA, domain embeddings, and
+// inference types. Spun out to the `katgpt-types` crate (Issue 007 Phase E
+// Tier 1 #2) and re-exported here as `katgpt_core::types` for backwards
+// compatibility. All `crate::types::*` paths resolve unchanged.
+pub use katgpt_types as types;
 
 // CGSP — Curiosity-Guided Self-Play modelless triad (Plan 274, Research 240).
 // Self-contained: Direction/Target/Candidate, CgspLoop, PoolConjecturer,
@@ -71,9 +121,10 @@ pub mod qgf;
 
 // MicroRecurrentBeliefState — per-entity recurrent state kernel (Plan 276, Research 242).
 // Trait + Family A (attractor) + Family C (leaky) + BLAKE3 snapshot + sigmoid bridge.
-// Opt-in until G1.1–G1.5 GOAT gate passes.
+// Spun out to the `katgpt-micro-belief` crate (Issue 007 Phase E Tier 1 #3) and
+// re-exported here as `katgpt_core::micro_belief` for backwards compatibility.
 #[cfg(feature = "micro_belief")]
-pub mod micro_belief;
+pub use katgpt_micro_belief as micro_belief;
 #[cfg(feature = "micro_belief")]
 pub use micro_belief::{
     AttractorKernel, KernelConfig, LeakyIntegrator, MicroRecurrentBeliefState,
@@ -632,7 +683,7 @@ pub use bisimulation::{
     plan as bisimulation_plan,
 };
 
-// ── Personality-Weighted Layer Composition (Plan 297, Research 276) ───────
+// ── Personality-Weighted Layer Composition (Plan 297, Research 276) ──────
 //
 // Open MIT-licensed primitive for the Entity Cognition Stack Super-GOAT.
 // A `PersonalityWeightedComposition<N, D>` kernel composes `N` latent
@@ -644,8 +695,15 @@ pub use bisimulation::{
 // Consumed by riir-ai Plan 327 (runtime wiring) — the game-specific 7-layer
 // mapping, archetype table, taming transition stay private in riir-ai.
 // Opt-in until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
+//
+// Substrate lives in the katgpt-personality crate (Issue 007 Phase E Tier 2
+// #5, 2026-06-28). Re-exported here as `katgpt_core::personality_composition`
+// for backwards compatibility — all `crate::personality_composition::*` paths
+// resolve unchanged. The `personality_composition` Cargo feature turns on the
+// `dep:katgpt-personality` dependency; the substrate compiles unconditionally
+// inside the crate itself.
 #[cfg(feature = "personality_composition")]
-pub mod personality_composition;
+pub use katgpt_personality as personality_composition;
 #[cfg(feature = "personality_composition")]
 pub use personality_composition::{
     ArchetypeLabel, EntityCognitionComposition, LayerDirectionSource, PersonalityConfig,
@@ -727,9 +785,9 @@ pub use gain_cost_halt::{
 // Plan 306 Phase 1+5; Research 286; arXiv:2605.09992 Eldenk et al.
 // Opt-in until G1 (8 correctness tests) passes.
 #[cfg(feature = "depth_invariance")]
-pub mod depth_invariance;
+pub use katgpt_types::depth_invariance;
 #[cfg(feature = "depth_invariance")]
-pub use depth_invariance::{
+pub use katgpt_types::depth_invariance::{
     DepthInvarianceConfig, DepthInvarianceDiagnostic, DepthInvarianceKind, MagnitudeRegularization,
     Scratch, apply_magnitude_regularization, classify_chain, classify_chain_batched,
 };
@@ -809,4 +867,53 @@ pub use branching::{
     DEFAULT_TAU_SNAP, DEFAULT_TAU_SPAWN, DEFAULT_TAU_WRITE, EpisodicEntry, FailureEntry,
     NonInterferenceProjection, PriorityTier, ProceduralRule, RetrievedMaterials, RouteMode,
     RouteResult, VerifierGate, WriteDecision, max_orthogonal_branches,
+};
+
+// Sleep-Time Query Anticipator — open primitive for offline query anticipation
+// (Plan 334, Research 318, arXiv:2504.13171 Lin et al. Letta/Berkeley).
+// Implements the open math half: SleepTimeAnticipator orchestrates per-direction
+// sleep-time compute → emits reusable AnticipatedQuerySet (the c' artifact,
+// BLAKE3-committed) → wake-time consume() does cheap dot-product + sigmoid-
+// gated lookup, falling through to fresh compute on low-predictability queries.
+// PredictabilityScorer trait + DotPredictabilityScorer default
+// (p = sigmoid(α·dot(c,dir)+β)); AmortizationCostModel operationalizes the
+// paper's §5.3 cost model. Game-specific direction-vector catalogs, NPC tiering,
+// HLA wiring, and chain commitment live in riir-ai Plan 341 (private).
+// Phase 1 ships traits + types + IdentityFunctorOp (synthetic-test default);
+// Phase 2 ships synthetic gates G1/G2/G5/G6/G7. G2/G3/G4 quality gates require
+// a real predictability-labeled corpus → deferred to riir-ai Plan 341.
+// Opt-in until G1–G5 GOAT gate passes; promotion to default-on requires
+// Plan 341 G1–G5 to clear on a real game corpus.
+//
+// Substrate lives in the katgpt-sleep crate (Issue 007 Phase E Tier 2 #6,
+// 2026-06-28). Re-exported here as `katgpt_core::sleep_time` for backwards
+// compatibility — all `crate::sleep_time::*` paths resolve unchanged. The
+// `sleep_time_anticipation` Cargo feature turns on the `dep:katgpt-sleep`
+// dependency; the substrate compiles unconditionally inside the crate itself.
+#[cfg(feature = "sleep_time_anticipation")]
+pub use katgpt_sleep as sleep_time;
+#[cfg(feature = "sleep_time_anticipation")]
+pub use sleep_time::{
+    AmortizationCostModel, AnticipatedQueryDir, AnticipatedQuerySet, AnticipatedSlot,
+    DEFAULT_LATENCY_PREMIUM, DotPredictabilityScorer, IdentityFunctorOp, SLEEP_TIME_DEFAULT_K,
+    PredictabilityScorer, SleepTimeAnticipator, SleepTimeComputeOp, SleepTimeScratch, commit_direction,
+    consume, consume_gate, consume_with_match_mode, consume_gate_with_match_mode, ConsumeMatchMode,
+};
+
+// PairedLossGap — generic modelless paired token-level loss gap diagnostic
+// (Plan 335, Research 319, arXiv:2606.20936 Li & Merrill AI2). Pure
+// measurement tool: given two log-prob traces over the same prefixes, compute
+// per-token Δ_i = ℓ_A − ℓ_B, stratify by token class, report filtered
+// aggregates (ALL / TOP-K∩NO-COPY / COPY-N-ONLY) that amplify small
+// architecture gaps aggregate loss hides. ClassSizeBound exposes Proposition 1
+// (DKL ≤ log|V_τ|) — the volume-of-support bound justifying raw-vs-latent
+// sync. Generic math, no game/chain/shard semantics — legitimately public.
+// NOT an inference mechanism (measurement tool only) → not Super-GOAT.
+// Opt-in until G1–G4 GOAT gate passes.
+#[cfg(feature = "paired_loss_diagnostic")]
+pub mod paired_loss;
+#[cfg(feature = "paired_loss_diagnostic")]
+pub use paired_loss::{
+    ClassGapReport, ClassGapRow, ClassSizeBound, CopyNGramTagger, FilterKind, FilterScratch,
+    PairedLossGap, TokenClass, TokenTagger,
 };

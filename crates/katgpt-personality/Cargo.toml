@@ -1,0 +1,28 @@
+[package]
+name = "katgpt-personality"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Personality-Weighted Latent Layer Composition — sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3-committed snapshot. Entity-agnostic, modelless, sigmoid (never softmax)."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["personality", "latent", "composition", "moe", "modelless"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# katgpt-personality is a pure substrate leaf — the only katgpt-* dependency is
+# the shared types/SIMD leaf (Issue 007 Phase E Tier 2 #5). The kernel uses
+# `simd_fused_scale_acc` from katgpt-types for the NEON/AVX2/FMA fused
+# scale-accumulate inner loop; the snapshot uses `blake3` directly for the
+# commitment hash. No katgpt-core dependency — the whole crate compiles
+# standalone.
+katgpt-types = { path = "../katgpt-types" }
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+
+[features]
+# katgpt-personality compiles its entire substrate (types, sigmoid, trait_def,
+# kernel, snapshot) unconditionally. No features — the substrate is the
+# crate's whole purpose. The `personality_composition` Cargo feature in
+# katgpt-core forwards to `dep:katgpt-personality` (turns the re-export on);
+# it does not gate anything inside this crate.
+default = []

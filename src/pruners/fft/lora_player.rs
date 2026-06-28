@@ -204,9 +204,19 @@ impl FftLoRAPlayer {
     /// Run the LoRA-augmented forward pass over the battle state and predict
     /// the next action type.
     ///
-    /// Feeds all 57 state tokens through the Transformer (building KV cache),
-    /// then runs one more step to produce logits at the action-prediction slot.
-    /// Reads `logits[ACTION_OFFSET..ACTION_OFFSET+9]` and returns the argmax.
+    /// # Issue 306 root-cause fix (2026-06-28, mirrors Bomber `SonltPlayer`)
+    ///
+    /// Previously this function fed all 57 state tokens (positions 0..=56),
+    /// then did an EXTRA forward at position 57 (with BOS token 0) and read
+    /// those logits. That was a train/inference mismatch: training only runs
+    /// positions 0..=56 (seq_len = FFT_GAME_SEQ_LEN - 1 = 57, shifted-target
+    /// layout: input=tokens[0..57], target=tokens[1..58]). Position 57 was
+    /// never trained — its logits were essentially random, which is why any
+    /// trained LoRA underperformed (T7.3 smoke: 16% Party win rate).
+    ///
+    /// The fix reads logits from position 56 (the last state cell), which IS
+    /// the action-prediction slot the model was trained on (target[56] =
+    /// action token at sequence position 57).
     ///
     /// Returns `None` if LoRA is not active.
     fn predict_action_type(&mut self, state: &BattleState) -> Option<ActionType> {
@@ -221,7 +231,10 @@ impl FftLoRAPlayer {
         self.key_cache.fill(0.0);
         self.value_cache.fill(0.0);
 
-        // Forward all 57 state tokens (positions 0..57).
+        // Forward all 57 state tokens (positions 0..=56). After the loop,
+        // `self.logits` holds the position-56 logits, which predict the
+        // action token (target[56] in the shifted-target training layout).
+        // No extra forward at position 57 — see Issue 306 root-cause note above.
         for (pos, &token) in self.state_tokens.iter().enumerate() {
             forward_fft_with_lora(
                 &self.config,
@@ -249,33 +262,6 @@ impl FftLoRAPlayer {
                 &mut self.value_cache,
             );
         }
-
-        // Final forward at position 57 (action slot) — input token 0 (BOS-like).
-        forward_fft_with_lora(
-            &self.config,
-            &self.weights,
-            self.lora_q.as_ref()?,
-            self.lora_k.as_ref()?,
-            self.lora_v.as_ref()?,
-            self.lora_o.as_ref()?,
-            self.lora_mlp1.as_ref()?,
-            self.lora_mlp2.as_ref()?,
-            0,
-            FFT_STATE_LEN,
-            &mut self.lora_buf,
-            &mut self.x,
-            &mut self.xr,
-            &mut self.xr2,
-            &mut self.q,
-            &mut self.k,
-            &mut self.v,
-            &mut self.attn_out,
-            &mut self.scores,
-            &mut self.hidden,
-            &mut self.logits,
-            &mut self.key_cache,
-            &mut self.value_cache,
-        );
 
         // Argmax over action logits [10..19). No softmax (project rule).
         let best_idx = self.logits[ACTION_OFFSET..ACTION_OFFSET + ACTION_COUNT]

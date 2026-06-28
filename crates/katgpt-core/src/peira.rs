@@ -435,6 +435,7 @@ unsafe fn neon_dot_f64(a: &[f64], b: &[f64], len: usize) -> f64 {
 // ── AVX2 (x86_64) f64 SIMD ──────────────────────────────────────
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_outer_product_ema_f64(
     dst_sigma: &mut [f64],
@@ -549,6 +550,7 @@ unsafe fn avx2_outer_product_ema_f64(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_outer_product_f64(
     dst_sigma: &mut [f64],
@@ -603,11 +605,12 @@ unsafe fn avx2_outer_product_f64(
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 unsafe fn avx2_dot_f64(a: &[f64], b: &[f64], len: usize) -> f64 {
     use core::arch::x86_64::{
-        _mm256_add_pd, _mm256_castpd256_pd128, _mm256_extractf128_pd, _mm256_loadu_pd,
-        _mm256_mul_pd,
+        _mm256_add_pd, _mm256_loadu_pd,
+        _mm256_mul_pd, _mm256_setzero_pd,
     };
 
     unsafe {
@@ -651,24 +654,24 @@ unsafe fn avx2_dot_f64(a: &[f64], b: &[f64], len: usize) -> f64 {
 }
 
 #[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
 #[inline]
 fn horizontal_sum_256d(v: core::arch::x86_64::__m256d) -> f64 {
     use core::arch::x86_64::{
-        _mm_add_pd, _mm_add_sd, _mm_castpd_ps, _mm_cvtss_f32, _mm_unpackhi_pd,
+        _mm_add_pd, _mm_add_sd, _mm_unpackhi_pd,
         _mm256_castpd256_pd128, _mm256_extractf128_pd,
     };
-    unsafe {
-        let hi = _mm256_extractf128_pd(v, 1);
-        let lo = _mm256_castpd256_pd128(v);
-        let sum128 = _mm_add_pd(lo, hi);
-        // sum128 has [s0, s1], shuffle to get [s1, s1]
-        let shuf = _mm_unpackhi_pd(sum128, sum128);
-        let result = _mm_add_sd(sum128, shuf);
-        // Extract the lower f64
-        let mut dst = [0.0f64; 2];
-        core::arch::x86_64::_mm_storeu_pd(dst.as_mut_ptr(), result);
-        dst[0]
-    }
+    let hi = _mm256_extractf128_pd(v, 1);
+    let lo = _mm256_castpd256_pd128(v);
+    let sum128 = _mm_add_pd(lo, hi);
+    // sum128 has [s0, s1], shuffle to get [s1, s1]
+    let shuf = _mm_unpackhi_pd(sum128, sum128);
+    let result = _mm_add_sd(sum128, shuf);
+    // Extract the lower f64. `_mm_storeu_pd` writes through a raw pointer,
+    // so it stays `unsafe` even inside a `#[target_feature]` body.
+    let mut dst = [0.0f64; 2];
+    unsafe { core::arch::x86_64::_mm_storeu_pd(dst.as_mut_ptr(), result) };
+    dst[0]
 }
 
 /// Configuration for PEIRA distillation.

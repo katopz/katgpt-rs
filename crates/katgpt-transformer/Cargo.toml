@@ -1,0 +1,49 @@
+[package]
+name = "katgpt-transformer"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Transformer substrate types (weights, KV caches, contexts) shared between katgpt-rs and riir-engine"
+repository = "https://github.com/katopz/katgpt-rs"
+readme = "README.md"
+keywords = ["transformer", "inference", "weights", "kv-cache", "modelless"]
+categories = ["data-structures", "science"]
+
+[dependencies]
+# Pure substrate types — depends only on katgpt-core for Config / Rng / math / SIMD kernels.
+# No transformer-forward composition logic lives here (that stays in katgpt-rs root).
+katgpt-core = { path = "../katgpt-core" }
+rayon = "1.10"
+blake3 = "1"
+bytemuck = { version = "1", features = ["derive", "extern_crate_alloc"] }  # extern_crate_alloc: enables pod_collect_to_vec for MTP projection binary loader
+# ArrayVec for PagedKVCache::ensure_pages/rollback stack-allocated scratch
+# (zero heap alloc, bounded to 128 layers). Ported from riir-engine.
+arrayvec = "0.7"
+
+[features]
+# All features default-on to match the historical katgpt-rs root behavior —
+# downstream consumers (riir-engine) opt OUT of features they don't want.
+default = ["wall_attention", "delta_routing", "decode_specialize", "plasma_path", "kog_cpu_fusion"]
+
+# Kog AI monokernel CPU fusion — RMSNorm gamma folding + QKV interleaving (Plan 160).
+# Gates: LayerWeights.attn_norm_gamma / mlp_norm_gamma / attn_qkv_fused fields,
+# and TransformerWeights::fold_gamma / interleave_qkv methods. Consumers that
+# don't use Kog fusion (riir-engine) disable this to get the compact 6-field
+# LayerWeights and avoid ~2×n floats/layer of dead weight.
+kog_cpu_fusion = []
+
+# Wall Attention gate projection weights (Plan 173).
+# Gates: LayerWeights.attn_wg field, WallPrefixState, GateStatistics.
+wall_attention = []
+
+# Delta routing block-delta accumulation (Plan 097).
+# Gates: TransformerWeights.delta_routing_query / delta_routing_norm fields.
+delta_routing = []
+
+# Decode-stage specialized forward paths (Plan 102: TileRT pipeline).
+# Gates: DecodeStage enum.
+decode_specialize = []
+
+# Bit-plane ternary SIMD matvec loader (Plan 148, Research 110).
+# Gates: load_ternary_bits function in contiguous.rs.
+plasma_path = []

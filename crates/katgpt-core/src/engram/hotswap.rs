@@ -1,7 +1,7 @@
 //! `EngramHotSwap` — atomic runtime table replacement.
 //!
 //! Plan 299 Phase 5 T5.1–T5.4, T5.7–T5.8. Mirrors the
-//! [`SenseHotSwap`](crate::sense::hotswap::SenseHotSwap) pattern:
+//! `SenseHotSwap` pattern (moved to riir-engine::sense::hotswap in Issue 007 Phase C):
 //! `AtomicPtr<Box<dyn EngramTable>>` + `AtomicBool` lock. The lock blocks
 //! readers during swap (Option A per plan T5.4) — acceptable because table
 //! updates are infrequent. Crossbeam-epoch reclamation is NOT used; the

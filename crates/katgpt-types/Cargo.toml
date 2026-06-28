@@ -1,0 +1,84 @@
+[package]
+name = "katgpt-types"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Shared configuration, RNG, math utilities, LoRA, domain embeddings, and inference types for katgpt-rs / riir-engine. Pure substrate leaf — no katgpt-* deps."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["inference", "config", "rng", "lora", "modelless"]
+categories = ["data-structures", "science", "algorithms"]
+
+[dependencies]
+fastrand = "2"
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+half = "2"
+rayon = "1.10"  # Parallel matmul variants in simd::dot and simd::ternary (always-compiled _parallel kernels).
+
+[features]
+# katgpt-types compiles its core substrate (config, rng, math, lora, enums,
+# sense, looping, inference) unconditionally. The features below are empty
+# tracking flags so katgpt-core can preserve its historical feature surface
+# (`domain_latent` gates DomainLatent, `plasma_path` gates TernaryWeights,
+# etc.) by forwarding them here. They gate nothing structural inside
+# katgpt-types beyond the `#[cfg(feature = "...")]` re-export lines in
+# lib.rs — mirroring the pre-promotion behavior where the whole `types`
+# module compiled inside katgpt-core and these flags only controlled the
+# re-export visibility.
+default = []
+
+# DomainLatent embedding type (Plan 038).
+domain_latent = []
+
+# GPart Isometric Partition adapter (Research 227).
+gpart_adapter = []
+
+# DataGate — task-level gating for self-play training stability (Plan 111).
+data_gate = []
+
+# SR²AM Configurator context types (Plan 112).
+sr2am_configurator = []
+
+# Hydra adaptive layer budget types (Plan 165).
+hydra_budget = []
+
+# DeltaNet layer type enum (Plan 182).
+deltanet_inference = []
+
+# Collapse-aware ThinkingBudget enum (Plan 212).
+collapse_aware_thinking = []
+
+# Wall Attention WallConfig (Plan 173).
+wall_attention = []
+
+# Sparse MLP matmul kernel (Plan 022).
+sparse_mlp = []
+
+# Bit-plane ternary weights for multiplication-free inference (Plan 148).
+plasma_path = []
+
+# MaxSim late-interaction scoring (Plan 080, Research 073).
+maxsim = []
+
+# Sigmoid margin loss + retrieval margin diagnostic (Research 123, Plan 157).
+# Implies maxsim (mirrors the katgpt-core feature dependency).
+sigmoid_margin = ["maxsim"]
+
+# RiM Reasoning Buffer Slots config fields (Plan 172, Research 192).
+rim_slots = []
+
+# NextLat Belief-State Speculative Drafter config fields (Plan 217).
+belief_drafter = []
+
+# SIA FeedbackBandit enum variants (Plan 163, Research 033).
+sia_feedback = []
+
+# LinOSS Modal Threat Prediction sense fields (Plan 241).
+spectral_threat = []
+
+# GPart pruning stats (Plan 257 Phase 3 extension).
+gpart_pruning = []
+
+# Depth-Invariance Diagnostic + MagnitudeRegularizedResidual (Plan 306).
+# Gates the depth_invariance module. Pure math (simd-only deps).
+depth_invariance = []

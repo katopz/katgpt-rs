@@ -1,13 +1,9 @@
 name: Release-plz
 
-# Two trigger modes:
-#   1. push to main/develop → automatic (normal git-flow cadence)
-#   2. workflow_dispatch      → manual via `./scripts/release.sh` or the Actions tab
+# Sole trigger: manual dispatch via `./scripts/release.sh` or the Actions tab.
+# Pushes to develop/main do NOT trigger any release-plz activity — releases are
+# gated entirely behind `scripts/release.sh` (which calls `gh workflow run`).
 on:
-  push:
-    branches:
-      - main
-      - develop
   workflow_dispatch:
     inputs:
       command:
@@ -21,15 +17,13 @@ on:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────
-  # Publish + tag + GitHub Release. Fires on:
-  #   - push to main (normal release cadence)
-  #   - manual `release` dispatch
+  # Publish + tag + GitHub Release. Fires only on manual `release` dispatch
+  # (invoked by `scripts/release.sh` after develop has been promoted to main).
   # ──────────────────────────────────────────────────────────────────────
   release-plz-release:
     name: Release-plz release (publish)
     if: >-
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && inputs.command == 'release')
+      github.event_name == 'workflow_dispatch' && inputs.command == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: write # push tags, create GitHub releases
@@ -51,17 +45,13 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────────
-  # Maintain the "Prepare release vX.Y.Z" PR on develop. Fires on:
-  #   - push to develop (accumulate changes as you work)
-  #   - push to main (clean up the PR after a real release)
-  #   - manual `release-pr` dispatch
+  # Maintain the "Prepare release vX.Y.Z" PR. Fires only on manual
+  # `release-pr` dispatch (invoked by `scripts/release.sh` step 1).
   # ──────────────────────────────────────────────────────────────────────
   release-plz-pr:
     name: Release-plz PR
     if: >-
-      (github.event_name == 'push' &&
-       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
-      (github.event_name == 'workflow_dispatch' && inputs.command == 'release-pr')
+      github.event_name == 'workflow_dispatch' && inputs.command == 'release-pr'
     runs-on: ubuntu-latest
     permissions:
       contents: write # push to the release-pr branch

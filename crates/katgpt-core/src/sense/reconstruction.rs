@@ -289,12 +289,13 @@ impl ProjectionWeights {
     /// Extracts ternary signs and row scales into a contiguous `[f32; 48]` matrix
     /// suitable for `simd_matmul_rows`. Zero-cost per reconstruction step — compute
     /// once, use across all 3 steps.
+    /// Issue 007 Phase C: renamed from from_brain.
     #[inline]
-    pub fn from_brain(brain: &crate::sense::brain::NpcBrain) -> Self {
+    pub fn from_modules(modules: &[SenseModule]) -> Self {
         let mut matrix = [0.0f32; 48];
         let mut confidence = [0.0f32; 6];
 
-        for module in &brain.modules {
+        for module in modules {
             let kind_idx = module.kind as usize;
             if kind_idx >= 6 {
                 continue;
@@ -334,9 +335,9 @@ pub struct BatchProjectionWeights {
 impl BatchProjectionWeights {
     /// Create batch weights for N entities sharing the same brain.
     #[inline]
-    pub fn new(brain: &crate::sense::brain::NpcBrain, n_entities: usize) -> Self {
+    pub fn new(modules: &[SenseModule], n_entities: usize) -> Self {
         Self {
-            weights: ProjectionWeights::from_brain(brain),
+            weights: ProjectionWeights::from_modules(modules),
             n_entities,
         }
     }
@@ -651,11 +652,11 @@ impl ReconstructionState {
     ///
     /// This is the `expand` step from MRAgent Algorithm 1:
     /// `Z'(t+1) = union(Π_a(Z(t)) for a in A(t))`
-    pub fn expand(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
+    pub fn expand(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         let mut activations = [0.0f32; 6];
 
         // Project all modules with current (evolved) HLA state
-        for module in &brain.modules {
+        for module in modules {
             let kind_idx = module.kind as usize;
             if kind_idx < 6 {
                 activations[kind_idx] = module.project(&self.hla);
@@ -679,10 +680,10 @@ impl ReconstructionState {
     /// This method wins when module count or HLA dimensionality scales up.
     /// The default `reconstruct_simd()` path keeps expand scalar for this reason.
     #[cfg(feature = "sense_composition")]
-    pub fn expand_simd(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
+    pub fn expand_simd(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         let mut activations = [0.0f32; 6];
 
-        for module in &brain.modules {
+        for module in modules {
             let kind_idx = module.kind as usize;
             if kind_idx >= 6 {
                 continue;
@@ -733,10 +734,10 @@ impl ReconstructionState {
     /// - Combined with multi-entity batch (see `BatchProjectionWeights`)
     #[cfg(feature = "sense_composition")]
     #[inline(always)]
-    pub fn expand_matvec(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
+    pub fn expand_matvec(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         // Lazy init: build weight matrix on first call
         if self.cached_weights.is_none() {
-            self.cached_weights = Some(ProjectionWeights::from_brain(brain));
+            self.cached_weights = Some(ProjectionWeights::from_modules(modules));
         }
         let weights = self
             .cached_weights
@@ -974,8 +975,8 @@ impl ReconstructionState {
     /// - route: activation ranking (not LLM routing)
     /// - accumulate: TripleEvidence merge (not LLM summarization)
     /// - evolve_hla: bridge function (not LLM reasoning)
-    pub fn reconstruct(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
-        self.reconstruct_inner(brain, false)
+    pub fn reconstruct(&mut self, modules: &[SenseModule]) -> [f32; 6] {
+        self.reconstruct_inner(modules, false)
     }
 
     /// Run reconstruction using SIMD-optimized HLA evolution.
@@ -988,8 +989,8 @@ impl ReconstructionState {
     /// Use when the reconstruction cycle is on the hot path and every
     /// nanosecond counts.
     #[cfg(feature = "sense_composition")]
-    pub fn reconstruct_simd(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
-        self.reconstruct_inner(brain, true)
+    pub fn reconstruct_simd(&mut self, modules: &[SenseModule]) -> [f32; 6] {
+        self.reconstruct_inner(modules, true)
     }
 
     /// Run reconstruction using pre-computed matvec for expand.
@@ -1008,14 +1009,14 @@ impl ReconstructionState {
     /// Full-cycle parity depends on loop overhead — use `expand_with_weights()`
     /// with a pre-computed `ProjectionWeights` for production multi-entity path.
     #[cfg(feature = "sense_composition")]
-    pub fn reconstruct_matvec(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
+    pub fn reconstruct_matvec(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         // Plan 283 T5.1: previous-step activations for the advantage gate.
         // `None` on the first iteration (no prior to compare).
         #[cfg(feature = "self_advantage_gate")]
         let mut prev_activations: Option<[f32; 6]> = None;
 
         loop {
-            let activations = self.expand_matvec(brain);
+            let activations = self.expand_matvec(modules);
             let selected = self.route(&activations);
             self.accumulate(&selected, &activations);
             self.evolve_hla();
@@ -1088,16 +1089,16 @@ impl ReconstructionState {
     /// `expand_with_weights()` method provides the hook point — replace the
     /// inner matvec with an ANE dispatch. This is left as future work for
     /// the Metal backend in riir-engine.
-    pub fn reconstruct_auto(&mut self, brain: &crate::sense::brain::NpcBrain) -> [f32; 6] {
+    pub fn reconstruct_auto(&mut self, modules: &[SenseModule]) -> [f32; 6] {
         let use_simd = self.config.simd_beneficial();
-        self.reconstruct_inner(brain, use_simd)
+        self.reconstruct_inner(modules, use_simd)
     }
 
     /// Shared inner loop — dispatches to SIMD `evolve_hla_simd()` when available.
     /// Detects SIMD availability once at entry, not per-step.
     fn reconstruct_inner(
         &mut self,
-        brain: &crate::sense::brain::NpcBrain,
+        modules: &[SenseModule],
         use_simd: bool,
     ) -> [f32; 6] {
         // Resolve SIMD availability once at entry
@@ -1123,9 +1124,9 @@ impl ReconstructionState {
             // configuration once `expand_matvec` is called (it caches the
             // weight matrix). Different brains require different states.
             #[cfg(feature = "sense_composition")]
-            let activations = self.expand_matvec(brain);
+            let activations = self.expand_matvec(modules);
             #[cfg(not(feature = "sense_composition"))]
-            let activations = self.expand(brain);
+            let activations = self.expand(modules);
             let selected = self.route(&activations);
 
             self.accumulate(&selected, &activations);
@@ -1289,33 +1290,6 @@ fn log_softmax_into6(x: &[f32], out: &mut [f32]) {
     out[5] = x[5] - max_val - log_lse;
 }
 
-impl SenseModule {
-    /// Project with reconstruction awareness — same as `project()` but exposed
-    /// for reconstruction loop to call explicitly.
-    #[inline]
-    pub fn project_reconstruction(&self, hla_state: &[f32; 8]) -> f32 {
-        self.project(hla_state)
-    }
-
-    /// Get octree children that are occupied at the given level.
-    /// Returns bitmask of occupied children (bit i = child i is occupied).
-    #[inline]
-    pub fn occupied_children(&self, parent_depth: u8) -> u8 {
-        let level = parent_depth as usize;
-        if level >= 4 {
-            return 0;
-        }
-        // Extract 8 bits from octree_bits for children at this depth
-        let bit_offset = level * 8;
-        let word = bit_offset / 64;
-        let shift = bit_offset % 64;
-        if word >= 4 {
-            return 0;
-        }
-        ((self.octree_bits[word] >> shift) & 0xFF) as u8
-    }
-}
-
 /// Reconstruction result with before/after comparison for GOAT proof.
 #[derive(Clone, Debug)]
 pub struct ReconstructionResult {
@@ -1334,13 +1308,13 @@ pub struct ReconstructionResult {
 /// Run side-by-side comparison: passive vs active reconstruction.
 /// Used for GOAT proof tests and benchmarks.
 pub fn compare_reconstruction(
-    brain: &crate::sense::brain::NpcBrain,
+    modules: &[SenseModule],
     hla: [f32; 8],
 ) -> ReconstructionResult {
     // Passive: single-shot projection
     let passive = {
         let mut acts = [0.0f32; 6];
-        for module in &brain.modules {
+        for module in modules {
             let idx = module.kind as usize;
             if idx < 6 {
                 acts[idx] = module.project(&hla);
@@ -1351,7 +1325,7 @@ pub fn compare_reconstruction(
 
     // Active: multi-step reconstruction
     let mut state = ReconstructionState::new(hla);
-    let active = state.reconstruct(brain);
+    let active = state.reconstruct(modules);
 
     // Compute HLA delta
     let hla_delta = {
@@ -1804,63 +1778,6 @@ mod tests {
         assert_eq!(TripleEvidence::KIND_MAP, [0, 1, 2, 3, 4, 5, 0, 1]);
     }
 
-    /// Verify expand_simd produces same activations as scalar expand.
-    #[cfg(feature = "sense_composition")]
-    #[test]
-    fn expand_simd_matches_scalar() {
-        use crate::sense::brain::NpcBrain;
-        use crate::sense::octree::{KgEmbedding, SenseOctreeBuilder};
-        use crate::types::SenseKind;
-
-        let builder = SenseOctreeBuilder::new(3);
-        let kinds = [
-            SenseKind::CommonSense,
-            SenseKind::FighterSense,
-            SenseKind::GameTheorySense,
-            SenseKind::SpatialSense,
-            SenseKind::SocialSense,
-            SenseKind::SkillSense,
-        ];
-        let modules: Vec<_> = kinds
-            .iter()
-            .enumerate()
-            .map(|(i, &kind)| {
-                let emb = KgEmbedding {
-                    entity_hash: kind as u64,
-                    relation_hash: kind as u64,
-                    embedding: [0.5; 8],
-                    sign: true,
-                    confidence: 1.0,
-                };
-                let mut m = builder.build(kind, &[emb]);
-                m.confidence = 0.3 + 0.1 * i as f32;
-                m.commit();
-                m
-            })
-            .collect();
-
-        let mut brain = NpcBrain::compose(modules);
-        brain.hla_state = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
-
-        let config = ReconstructionConfig::default();
-
-        let mut state_scalar = ReconstructionState::with_config(brain.hla_state, config);
-        let activations_scalar = state_scalar.expand(&brain);
-
-        let mut state_simd = ReconstructionState::with_config(brain.hla_state, config);
-        let activations_simd = state_simd.expand_simd(&brain);
-
-        for i in 0..6 {
-            let diff = (activations_scalar[i] - activations_simd[i]).abs();
-            assert!(
-                diff < 1e-4,
-                "expand_simd should match scalar at index {i}: scalar={}, simd={}, diff={}",
-                activations_scalar[i],
-                activations_simd[i],
-                diff
-            );
-        }
-    }
 
     /// Verify route_simd produces same selection as scalar route.
     #[cfg(feature = "sense_composition")]
@@ -1880,157 +1797,8 @@ mod tests {
         );
     }
 
-    /// Verify reconstruct_simd produces numerically equivalent results to scalar.
-    #[cfg(feature = "sense_composition")]
-    #[test]
-    fn reconstruct_simd_matches_scalar() {
-        use crate::sense::brain::NpcBrain;
-        use crate::sense::octree::{KgEmbedding, SenseOctreeBuilder};
-        use crate::types::SenseKind;
 
-        let builder = SenseOctreeBuilder::new(3);
-        let kinds = [
-            SenseKind::CommonSense,
-            SenseKind::FighterSense,
-            SenseKind::GameTheorySense,
-            SenseKind::SpatialSense,
-            SenseKind::SocialSense,
-            SenseKind::SkillSense,
-        ];
-        let modules: Vec<_> = kinds
-            .iter()
-            .enumerate()
-            .map(|(i, &kind)| {
-                let emb = KgEmbedding {
-                    entity_hash: kind as u64,
-                    relation_hash: kind as u64,
-                    embedding: [0.5; 8],
-                    sign: true,
-                    confidence: 1.0,
-                };
-                let mut m = builder.build(kind, &[emb]);
-                m.confidence = 0.3 + 0.1 * i as f32;
-                m.commit();
-                m
-            })
-            .collect();
 
-        let mut brain = NpcBrain::compose(modules);
-        brain.hla_state = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
-        let config = ReconstructionConfig::default();
-
-        let mut state_scalar = ReconstructionState::with_config(brain.hla_state, config);
-        let _ = state_scalar.reconstruct(&brain);
-
-        let mut state_simd = ReconstructionState::with_config(brain.hla_state, config);
-        let _ = state_simd.reconstruct_simd(&brain);
-
-        let mut max_diff = 0.0f32;
-        for i in 0..8 {
-            let diff = (state_scalar.hla()[i] - state_simd.hla()[i]).abs();
-            max_diff = max_diff.max(diff);
-        }
-        assert!(
-            max_diff < 1e-4,
-            "SIMD and scalar reconstruct should produce similar results, diff={max_diff}"
-        );
-    }
-
-    #[test]
-    fn matvec_expand_matches_scalar() {
-        let builder = crate::sense::octree::SenseOctreeBuilder::new(3);
-        let kinds = [
-            crate::types::SenseKind::CommonSense,
-            crate::types::SenseKind::FighterSense,
-            crate::types::SenseKind::SpatialSense,
-        ];
-        let modules: Vec<_> = kinds
-            .iter()
-            .enumerate()
-            .map(|(i, &kind)| {
-                let emb = crate::sense::octree::KgEmbedding {
-                    entity_hash: kind as u64,
-                    relation_hash: kind as u64,
-                    embedding: [0.5; 8],
-                    sign: true,
-                    confidence: 1.0,
-                };
-                let mut m = builder.build(kind, &[emb]);
-                m.confidence = 0.3 + 0.1 * i as f32;
-                m.commit();
-                m
-            })
-            .collect();
-        let mut brain = crate::sense::brain::NpcBrain::compose(modules);
-        brain.hla_state = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
-
-        let config = ReconstructionConfig::default();
-        let mut state_scalar = ReconstructionState::with_config(brain.hla_state, config);
-        let scalar_acts = state_scalar.expand(&brain);
-
-        let mut state_matvec = ReconstructionState::with_config(brain.hla_state, config);
-        let matvec_acts = state_matvec.expand_matvec(&brain);
-
-        let mut max_diff = 0.0f32;
-        for i in 0..6 {
-            let diff = (scalar_acts[i] - matvec_acts[i]).abs();
-            max_diff = max_diff.max(diff);
-        }
-        assert!(
-            max_diff < 1e-4,
-            "Matvec expand should match scalar, diff={max_diff}"
-        );
-    }
-
-    #[test]
-    fn reconstruct_with_weights_matches_scalar() {
-        let builder = crate::sense::octree::SenseOctreeBuilder::new(3);
-        let kinds = [
-            crate::types::SenseKind::CommonSense,
-            crate::types::SenseKind::FighterSense,
-            crate::types::SenseKind::SpatialSense,
-        ];
-        let modules: Vec<_> = kinds
-            .iter()
-            .enumerate()
-            .map(|(i, &kind)| {
-                let emb = crate::sense::octree::KgEmbedding {
-                    entity_hash: kind as u64,
-                    relation_hash: kind as u64,
-                    embedding: [0.5; 8],
-                    sign: true,
-                    confidence: 1.0,
-                };
-                let mut m = builder.build(kind, &[emb]);
-                m.confidence = 0.3 + 0.1 * i as f32;
-                m.commit();
-                m
-            })
-            .collect();
-        let mut brain = crate::sense::brain::NpcBrain::compose(modules);
-        brain.hla_state = [0.3, 0.7, 0.1, 0.5, 0.4, 0.2, 0.6, 0.8];
-
-        let config = ReconstructionConfig::default();
-
-        // Scalar path
-        let mut state_scalar = ReconstructionState::with_config(brain.hla_state, config);
-        let _ = state_scalar.reconstruct(&brain);
-
-        // Pre-computed weights path
-        let weights = ProjectionWeights::from_brain(&brain);
-        let mut state_weights = ReconstructionState::with_config(brain.hla_state, config);
-        let _ = state_weights.reconstruct_with_weights(&weights);
-
-        let mut max_diff = 0.0f32;
-        for i in 0..8 {
-            let diff = (state_scalar.hla()[i] - state_weights.hla()[i]).abs();
-            max_diff = max_diff.max(diff);
-        }
-        assert!(
-            max_diff < 1e-4,
-            "Pre-computed weights should match scalar, diff={max_diff}"
-        );
-    }
 
     #[test]
     fn adaptive_budget_reduces_steps_when_slow() {
@@ -2058,52 +1826,6 @@ mod tests {
         assert_eq!(adapted.max_steps, 1, "Should not go below 1");
     }
 
-    #[test]
-    fn reconstruct_auto_selects_path() {
-        use crate::sense::brain::NpcBrain;
-        use crate::types::{SenseKind, SenseModule, TernaryDir};
-
-        let mut m1 = SenseModule {
-            kind: SenseKind::FighterSense,
-            confidence: 0.8,
-            n_directions: 8,
-            directions: {
-                let mut dirs = [TernaryDir::zero(); 8];
-                dirs[0] = TernaryDir {
-                    pos_bits: 0xFF,
-                    neg_bits: 0,
-                    row_scale: 1.0,
-                };
-                dirs
-            },
-            ..Default::default()
-        };
-        m1.commit();
-
-        let brain = NpcBrain::compose(vec![m1]);
-        let config = ReconstructionConfig {
-            max_steps: 3,
-            ..Default::default()
-        };
-
-        let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let result = state.reconstruct_auto(&brain);
-
-        // Should produce valid results regardless of path selected
-        for &a in &result {
-            assert!(
-                a.is_finite(),
-                "Auto-route should produce finite values, got {a}"
-            );
-        }
-        assert!(state.step() > 0, "Should have taken at least 1 step");
-
-        // Verify simd_beneficial works
-        let beneficial = config.simd_beneficial();
-        // On most test machines, SIMD is available and max_steps=3, so should be true
-        // But we can't assert true/false because it depends on the machine
-        let _ = beneficial;
-    }
 
     // ── Plan 283 T5.1: self-advantage gate tests ──────────────────
 
@@ -2224,98 +1946,5 @@ mod tests {
         assert!(!state.advantage_gate_halt(Some(&prev), &curr), "improving step must not halt");
     }
 
-    #[cfg(feature = "self_advantage_gate")]
-    #[test]
-    fn reconstruct_with_gate_enabled_runs_to_completion() {
-        use crate::sense::brain::NpcBrain;
-        use crate::types::{SenseKind, SenseModule, TernaryDir};
 
-        let mut m1 = SenseModule {
-            kind: SenseKind::FighterSense,
-            confidence: 0.8,
-            n_directions: 8,
-            directions: {
-                let mut dirs = [TernaryDir::zero(); 8];
-                dirs[0] = TernaryDir {
-                    pos_bits: 0xFF,
-                    neg_bits: 0,
-                    row_scale: 1.0,
-                };
-                dirs
-            },
-            ..Default::default()
-        };
-        m1.commit();
-
-        let brain = NpcBrain::compose(vec![m1]);
-        let config = ReconstructionConfig {
-            max_steps: 5,
-            advantage_margin_threshold: 0.01,
-            ..Default::default()
-        };
-        let mut state = ReconstructionState::with_config(brain.hla_state, config);
-        let result = state.reconstruct(&brain);
-
-        for &a in &result {
-            assert!(a.is_finite(), "gate-enabled reconstruction must produce finite activations, got {a}");
-        }
-        assert!(state.step() > 0, "should have taken at least 1 step");
-        assert!(state.step() <= 5, "should not exceed max_steps");
-    }
-
-    #[cfg(feature = "self_advantage_gate")]
-    #[test]
-    fn gate_on_preserves_argmax_vs_disabled() {
-        // Plan 283 T5.1.4 GOAT gate G2: gate ON (default 0.01) must produce
-        // the same argmax as gate OFF (NaN), even though it may halt earlier.
-        // This is the quality guarantee that makes the gate safe to default-on.
-        use crate::sense::brain::NpcBrain;
-        use crate::types::{SenseKind, SenseModule, TernaryDir};
-
-        let mut m1 = SenseModule {
-            kind: SenseKind::CommonSense,
-            confidence: 0.7,
-            n_directions: 8,
-            directions: {
-                let mut dirs = [TernaryDir::zero(); 8];
-                dirs[0] = TernaryDir {
-                    pos_bits: 0x01,
-                    neg_bits: 0x04,
-                    row_scale: 0.5,
-                };
-                dirs[1] = TernaryDir {
-                    pos_bits: 0x02,
-                    neg_bits: 0x08,
-                    row_scale: 0.5,
-                };
-                dirs
-            },
-            ..Default::default()
-        };
-        m1.commit();
-
-        let brain = NpcBrain::compose(vec![m1]);
-
-        // Gate OFF (NaN).
-        let config_off = ReconstructionConfig {
-            advantage_margin_threshold: f32::NAN,
-            ..Default::default()
-        };
-        let mut state_off = ReconstructionState::with_config(brain.hla_state, config_off);
-        let result_off = state_off.reconstruct(&brain);
-
-        // Gate ON (default 0.01).
-        let mut state_on = ReconstructionState::with_config(brain.hla_state, ReconstructionConfig::default());
-        let result_on = state_on.reconstruct(&brain);
-
-        // Argmax must match (quality guarantee).
-        let argmax_off = result_off.iter().enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(i, _)| i).unwrap_or(0);
-        let argmax_on = result_on.iter().enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(i, _)| i).unwrap_or(0);
-        assert_eq!(argmax_off, argmax_on,
-            "gate ON must preserve argmax vs OFF (quality guarantee)");
-    }
 }

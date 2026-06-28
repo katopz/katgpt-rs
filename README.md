@@ -1618,6 +1618,34 @@ Feature gate: `sigmoid_graded_reject` (**DEFAULT-ON** since Plan 310 T4.1, 2026-
 
 ---
 
+### 🛌 Sleep-Time Query Anticipator — Open Primitive for Offline Query Anticipation (Plan 334, arXiv:2504.13171)
+
+Distills Lin et al. 2025 (Letta/Berkeley) into a generic, game-semantic-free math primitive for **sleep-time compute**: pre-compute answers for the queries an NPC is likely to be asked while no player is watching, then serve them at wake-time via a cheap dot-product + sigmoid-gated lookup into the pre-computed `AnticipatedQuerySet` (the paper's "c' artifact"). One sleep-time compute amortizes over many wake-time consumers — the paper's headline ~2.5× gain at N=10.
+
+The pipeline is **modelless** (katgpt-rs mandate): every step is closed-form algebra, no training/backprop.
+
+1. **Sleep-time (offline):** `SleepTimeAnticipator::anticipate(c, dirs)` orchestrates a consumer-provided `SleepTimeComputeOp` (default `IdentityFunctorOp`: `z_i = c + dir_i`) across K anticipated-query directions, scoring each via a `PredictabilityScorer` (default `DotPredictabilityScorer`: `p = sigmoid(α·dot(c,dir)+β)`). Emits a BLAKE3-committed `AnticipatedQuerySet` — one slot per direction carrying the precomputed latent answer `z_i` and predictability `p_i`.
+2. **Wake-time (online, zero-alloc hot path):** `consume(q, c')` finds the best-matching slot `i* = argmax dot(q, dir_i)`, computes `gate = sigmoid(β·(p_{i*} − τ))`, and returns the smooth blend `gate·z_{i*} + (1−gate)·fresh_think(q)`. Never a hard argmax switch (AGENTS.md: sigmoid, not softmax).
+3. **Economics:** `AmortizationCostModel` operationalizes the paper's §5.3 cost model (`cost_total = sleep_cost + N·t·b_max·(1−E[gate])`). `should_pre_compute(sleep_cost, N, E[gate])` answers the headline question: is pre-computing worth it for this context given N expected consumers?
+
+The **curiosity↔predictability inversion** — the paper's load-bearing theoretical contribution — is exposed via the `PredictabilityScorer` trait: consumers swap in a curiosity-inversion scorer (`p = sigmoid(α·(curiosity_ref − curiosity(c)))`) where high-curiosity contexts (off the forecaster's manifold) get low predictability → `should_pre_compute = false`. The shipped `DotPredictabilityScorer` is the baseline; the trait lets consumers swap scorers without touching the anticipator. See `examples/sleep_time_02_curiosity_inversion.rs`.
+
+**GOAT gate (Plan 334 Phase 2 — G1/G2/G5/G6/G7 PASS):**
+
+| Gate | Target | Result | Verdict |
+|------|--------|--------|---------|
+| **G1 mechanics** | anticipate/consume round-trip, smooth blend, predictability ∈ [0,1], deterministic | all pass | ✅ |
+| **G2 cost model** | amortization matches paper §5.3, monotone in E[gate], should_pre_compute boundary | all pass | ✅ |
+| **G5 zero-alloc** | `consume()` 0 allocs/0 bytes per call (after warmup) | 0 / 0 | ✅ |
+| **G6 latency** | `consume()` ≤ 200ns at D=64, ≤ 100ns at D=8 | **57.6 ns** (D=64), **9.5 ns** (D=8) | ✅ |
+| **G7 commitment** | BLAKE3 tamper detection, determinism | all pass | ✅ |
+
+**Decision:** **opt-in** — the quality gates G2/G3/G4 (real predictability-labeled corpus) require a live game corpus and live in riir-ai Plan 341 (the private per-NPC runtime). Promotion to default-on requires Plan 341 G1–G5 to clear on a real game corpus.
+
+Feature gate: `sleep_time_anticipation` (**opt-in**). 📖 Plan: [`.plans/334_sleep_time_query_anticipator_primitive.md`](.plans/334_sleep_time_query_anticipator_primitive.md), Research: [`.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md`](.research/318_Sleep_Time_Compute_Offline_Query_Anticipation.md), Examples: [`sleep_time_01_basic.rs`](crates/katgpt-core/examples/sleep_time_01_basic.rs) + [`sleep_time_02_curiosity_inversion.rs`](crates/katgpt-core/examples/sleep_time_02_curiosity_inversion.rs), Paper: [arXiv:2504.13171](https://arxiv.org/abs/2504.13171).
+
+---
+
 ## 🔧 KV Compression
 
 Default: **Hybrid OCT+PQ** (OCTOPUS triplet encoding + PlanarQuant 2D Givens rotation). Best MSE + 64× fewer rotation FMAs.

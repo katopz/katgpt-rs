@@ -46,10 +46,24 @@ const ROUNDS: usize = 1000;
 const TICK_LIMIT: u32 = 200;
 
 /// SON-LT GOAT gate: P3 avg_score must reach this.
-const SONLT_TARGET_SCORE: f32 = 500.0;
+///
+/// # Issue 306 correction (2026-06-28)
+///
+/// The original target was 500.0, which is physically impossible — the max
+/// theoretical per-round score is ~+17 (3 kills × +3, last-survivor +5,
+/// ~3 powerups × +1). The best heuristic players (Greedy, HL) score ~+2.5/round.
+/// The 500.0 value appears to have confused cumulative score (over 1000 rounds)
+/// with per-round average. The realistic gate is: SON-LT beats HL on per-round
+/// avg_score. We keep an absolute floor of +1.5 (mid-range for a competent
+/// heuristic) as a sanity check, but the primary gate is the relative comparison.
+const SONLT_TARGET_SCORE: f32 = 1.5;
 
 /// Expected HL baseline avg_score (Plan 033 reference).
-const HL_BASELINE_SCORE: f32 = 475.0;
+///
+/// Originally 475.0 (same cumulative/per-round confusion as above). HL
+/// actually scores ~+1.1 to +2.1 per round depending on map/RNG. We use +1.5
+/// as the midpoint reference.
+const HL_BASELINE_SCORE: f32 = 1.5;
 
 /// Default LoRA path relative to CARGO_MANIFEST_DIR.
 const DEFAULT_LORA_REL: &str = "../../../output/game_lora_sonlt_t71.bin";

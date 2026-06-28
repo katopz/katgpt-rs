@@ -360,14 +360,34 @@ where
     }
 
     /// Capture an atomic snapshot of the priority table + direction pool (T2.2).
+    ///
+    /// The snapshot format pairs one direction with one priority (paired
+    /// encoding, BLAKE3-committed). For the common single-pool case the
+    /// conjecturer's pool size equals the bandit's arm count, so this is a
+    /// 1:1 copy. For the dual-pool growth case (`DualPoolBandit` with
+    /// `growth_enabled`, Plan 282/312) the E-pool bandit can grow beyond the
+    /// conjecturer's frozen basis — those extra arms have no associated
+    /// direction (they are phantom priority slots that are never sampled,
+    /// since `PoolConjecturer::sample_candidates` clamps the sampled index
+    /// to `pool.len() - 1`). We pad the directions vec with zero vectors so
+    /// the paired format stays valid; `restore()` only copies priorities, so
+    /// the padding has no downstream effect.
     pub fn snapshot(&self) -> CuriosityPrioritySnapshot {
-        let directions: Vec<Direction> = self
-            .conjecturer
-            .pool_directions()
-            .iter()
-            .cloned()
-            .collect();
+        let pool_dirs = self.conjecturer.pool_directions();
         let priorities: Vec<f32> = self.bandit.priorities().to_vec();
+        let mut directions: Vec<Direction> = pool_dirs.iter().cloned().collect();
+        // Dual-pool growth: bandit arms may exceed the conjecturer's frozen
+        // basis. Pad with zero vectors so directions.len() == priorities.len()
+        // (required by the paired snapshot format). Zero = "no associated
+        // direction" — honest for phantom arms.
+        if directions.len() < priorities.len() {
+            let dim = directions.first().map(|d| d.dim()).unwrap_or(0);
+            let pad_count = priorities.len() - directions.len();
+            directions.reserve(pad_count);
+            for _ in 0..pad_count {
+                directions.push(Direction::zeros(dim));
+            }
+        }
         CuriosityPrioritySnapshot::new(directions, priorities)
     }
 
@@ -658,6 +678,76 @@ mod tests {
         lp.restore(&snap).expect("restore");
         let prios_after = lp.bandit().priorities().to_vec();
         assert_eq!(prios_before, prios_after, "restore must be exact");
+    }
+
+    #[test]
+    fn snapshot_pads_directions_when_bandit_grows_beyond_pool() {
+        // Regression test for the dual-pool growth case (Plan 282/312):
+        // when the bandit has more arms than the conjecturer's frozen
+        // direction pool, `snapshot()` must pad directions with zero vectors
+        // so the paired snapshot format stays valid (directions.len() ==
+        // priorities.len()). Previously this tripped a `debug_assert_eq!` in
+        // `CuriosityPrioritySnapshot::new` (see `g5_epool_persistence` in
+        // riir-ai's `dual_pool_bridge`, documented as pre-existing failure
+        // across Plans 312/341/008).
+        let pool = make_orthonormal_pool(8, 8);
+        let conj = PoolConjecturer::new(pool.clone(), 7);
+        let guide = HlaProjectionGuide::new(2.0, 1.0, ComplexityWeights::default());
+        let solver = DotSolver { sharpness: 1.0 };
+        // Build a bandit with MORE arms than the 8-direction pool, simulating
+        // the post-consolidation E-pool state in dual-pool growth mode.
+        let bandit = VecBandit {
+            prios: vec![0.5; 16],
+        };
+        let lp = CgspLoop::new(conj, guide, solver, bandit, CgspConfig::default());
+
+        // Snapshot must not panic and must produce a paired-format snapshot.
+        let snap = lp.snapshot();
+        assert_eq!(
+            snap.priorities.len(),
+            16,
+            "priorities should reflect bandit arm count"
+        );
+        assert_eq!(
+            snap.directions.len(),
+            16,
+            "directions must be padded to match priorities length"
+        );
+        // The first 8 directions are the real pool; the last 8 are zero pads.
+        for (i, d) in snap.directions.iter().take(8).enumerate() {
+            assert_eq!(
+                d.dim(),
+                pool[i].dim(),
+                "real direction {i} dim mismatch"
+            );
+            assert_ne!(
+                d.norm_sq(),
+                0.0,
+                "real direction {i} should be nonzero (orthonormal pool)"
+            );
+        }
+        for (i, d) in snap.directions.iter().enumerate().skip(8) {
+            assert_eq!(d.dim(), 8, "padded direction {i} dim should match pool dim");
+            assert_eq!(
+                d.norm_sq(),
+                0.0,
+                "padded direction {i} should be a zero vector"
+            );
+        }
+
+        // Roundtrip: restore into a fresh loop with the same bandit size.
+        // `restore()` only copies priorities; the directions padding has no
+        // downstream effect.
+        let conj2 = PoolConjecturer::new(pool.clone(), 99);
+        let guide2 = HlaProjectionGuide::new(2.0, 1.0, ComplexityWeights::default());
+        let solver2 = DotSolver { sharpness: 1.0 };
+        let bandit2 = VecBandit {
+            prios: vec![0.0; 16],
+        };
+        let mut lp2 = CgspLoop::new(conj2, guide2, solver2, bandit2, CgspConfig::default());
+        lp2.restore(&snap).expect("restore should succeed with matching arm count");
+        let prios_after = lp2.bandit().priorities().to_vec();
+        assert_eq!(prios_after, snap.priorities, "priorities must roundtrip exactly");
     }
 
     #[test]

@@ -166,11 +166,11 @@ Do NOT use `make_dct_log_basis` for **narrow low-frequency** transport tasks (th
 The plan gated Apollonian harmonics on a simpler multi-scale basis (Haar-packet) passing first. **Haar-packet passed at k≤8, τ=0.5** — the Apollonian-surrogate door is ajar, not closed.
 
 However:
-- Haar's win is narrow (+0.0846 at k=8, vs the +0.1093 achievable). Apollonian's richer geometry would need to beat Haar by a meaningful margin to justify the implementation cost.
-- The loss at k≥16 and τ=0.1 means Apollonian would face the same rank-saturation and sharp-sigmoid problems.
+- Haar's win on the narrow probe signal is narrow (+0.0846 at k=8, vs the +0.1093 of hand-crafted there), but **on the broadband PDE-like signal (the fair test), the winning fixed basis is DCT-log (+0.34), not Haar (+0.16)**. Apollonian's claimed advantage is richer localized multi-scale geometry (the Haar family) — but on broadband signals the localized family already loses to the spectral family by −0.18. So Apollonian's headroom over the *current best* fixed basis is bounded by Haar's gap to DCT-log, not by hand's gap to Haar. (The earlier "+0.0247 ceiling" framing was withdrawn after a 2026-06-28 audit: that number is narrow-probe-signal-specific and the benchmark itself classifies that signal as a non-representative artifact.)
+- The loss at k≥16 and τ=0.1 means Apollonian would face the same rank-saturation and sharp-sigmoid problems. The k≥16 elbow is signal-independent (curse of dimensionality at k≈d/4).
 - The k-sweep elbow at k=16 suggests the maximum addressable regime for any fixed structured basis is k∈[4, 16] — a small window.
 
-**Recommendation for Phase 5**: do NOT implement true d-dimensional Apollonian harmonics yet. The Phase 2 result shows the achievable gain is bounded (+0.08 to +0.11 cos), localized to small k, and already mostly captured by Haar. Apollonian's extra geometric richness is unlikely to clear the implementation-cost bar. Revisit only if a concrete use case emerges where the +0.02 cos gap between Haar and the achievable bound is the blocking factor.
+**Recommendation for Phase 5**: do NOT implement true d-dimensional Apollonian harmonics yet. On the realistic broadband regime, a fixed *spectral* basis (DCT-log) already captures +0.34 cos over random — the gain is banked. Apollonian (localized family) would need to beat DCT-log, not Haar, to justify its research-grade implementation cost, and the localized family is currently −0.18 behind. Revisit only if a concrete use case emerges where (a) the task is in k∈[4,8] × τ≥0.5, AND (b) the signal is localized-multi-scale (Haar-family territory, not broadband-spectral), AND (c) the gap to the achievable bound is the blocking factor.
 
 ---
 

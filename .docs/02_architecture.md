@@ -1220,6 +1220,47 @@ With Sleep:
 
 **Feature gate:** `sleep_consolidation` (default-on, requires `lt2_looped`, `gdn2_attention`)
 
+## Sleep-Time Query Anticipator (`crates/katgpt-core/src/sleep_time/`, Plan 334, Research 318)
+
+Open primitive for **sleep-time compute** (arXiv:2504.13171 — Lin et al.). The artifact-emission complement to Plan 154's state-internalization approach: instead of baking context into recurrent fast weights, this pre-computes *anticipated-query answers* into a reusable BLAKE3-committed `AnticipatedQuerySet` (the paper's "c' artifact") that wake-time consumers serve via a cheap dot-product + sigmoid-gated lookup.
+
+```
+Sleep-time (offline, once per context c):
+  for i in 0..K:
+    z_i = sleep_compute(c, D_set[i], budgets[i])   // consumer-provided op
+    p_i = predictability(c, D_set[i])              // sigmoid(dot(c, dir))
+  c' = AnticipatedQuerySet { slots: [(D_i, z_i, p_i)], blake3, version }
+
+Wake-time (online, per query, zero-alloc hot path):
+  i* = argmax_i dot(q, D_set[i])
+  gate = sigmoid(beta * (p_{i*} - tau))
+  out = gate * z_{i*} + (1 - gate) * fresh_think(q)
+```
+
+| Type | Description |
+|------|-------------|
+| `AnticipatedQueryDir<D>` | Frozen anticipated-query direction vector (BLAKE3-committed, versioned for freeze/thaw). |
+| `AnticipatedSlot<D>` | One slot in c': direction + precomputed latent answer `z_i` + predictability `p_i ∈ [0,1]`. |
+| `AnticipatedQuerySet<D, K>` | The c' artifact: K slots + BLAKE3 commitment + monotonic version. |
+| `PredictabilityScorer<D>` (trait) | Scores how predictable a query of class `dir` is from `c`. Default impl: `DotPredictabilityScorer` (`p = sigmoid(α·dot+β)`). Consumers swap in curiosity-inversion variants. |
+| `SleepTimeComputeOp<D>` (trait) | Per-direction sleep-time op. Default impl: `IdentityFunctorOp` (`z_i = c + dir_i`). Real consumers swap in `latent_functor` extraction or `karc_forecast`. |
+| `SleepTimeAnticipator<D,K,Op,Scorer>` | Orchestrates sleep-time compute → emits c'. Generic over the op and scorer (consumer-provided). |
+| `consume(q, c', tau, beta, fresh_think)` | Wake-time hot path: dot-product match + sigmoid gate + smooth blend. Zero-alloc (G5 gate). |
+| `consume_gate(q, c', tau, beta)` | Cheap gate-only check `(best_i, gate)` without running `fresh_think`. |
+| `AmortizationCostModel` | Paper §5.3 cost model: `total_cost`, `should_pre_compute`, `amortization_factor`, `break_even_n`. |
+
+| Module | Description |
+|--------|-------------|
+| `types` | Core types: `AnticipatedQueryDir`, `AnticipatedSlot`, `AnticipatedQuerySet`, `commit_direction`. |
+| `predictability` | `PredictabilityScorer` trait + `DotPredictabilityScorer` default impl. |
+| `anticipator` | `SleepTimeAnticipator` orchestration + `SleepTimeComputeOp` trait + `IdentityFunctorOp` default + `SleepTimeScratch`. |
+| `consume` | Wake-time `consume()` / `consume_gate()` + `ConsumeMatchMode` (Direction vs Precomputed). |
+| `cost_model` | `AmortizationCostModel` — paper §5.3 economics. |
+
+**Consumer pattern (riir-ai Plan 341):** the per-NPC runtime supplies (a) a direction-vector catalog (per-NPC-type: shopkeeper zone, quest-giver zone, lore NPC), (b) a concrete `SleepTimeComputeOp` impl (`latent_functor` extraction or `karc_forecast`), and (c) optionally a curiosity-inversion scorer. The open primitive here supplies only the orchestration + types + cost model — no game IP, no chain IP, no shard IP.
+
+**Feature gate:** `sleep_time_anticipation` (opt-in — quality gates G2/G3/G4 require a real predictability-labeled corpus, deferred to riir-ai Plan 341). Examples: [`sleep_time_01_basic.rs`](../crates/katgpt-core/examples/sleep_time_01_basic.rs) + [`sleep_time_02_curiosity_inversion.rs`](../crates/katgpt-core/examples/sleep_time_02_curiosity_inversion.rs). See `.docs/18_sleep_consolidation.md` for the relationship to Plan 154 (state-internalization vs artifact-emission).
+
 ## Spectral Hierarchy (`crates/katgpt-core/src/spectral_hierarchy.rs`, Plan 156, Research 121)
 
 Validates that hierarchical splitting geometry in co-occurrence Gram matrices emerges under the decay assumptions (Theorems 1–2 from Research 121). Three diagnostics:
