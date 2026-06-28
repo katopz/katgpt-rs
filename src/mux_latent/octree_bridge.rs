@@ -89,13 +89,13 @@ impl TernaryDir {
     /// Maps 128 ternary nodes to 8 weights by averaging groups of 16.
     pub fn to_weights(&self) -> [f32; 8] {
         let mut weights = [0.0f32; 8];
-        for group in 0..8 {
+        for (group, weight_slot) in weights.iter_mut().enumerate() {
             let base = group * 16;
             let mut sum = 0.0f32;
             for i in 0..16 {
                 sum += self.get(base + i).to_weight();
             }
-            weights[group] = sum / 16.0;
+            *weight_slot = sum / 16.0;
         }
         weights
     }
@@ -104,8 +104,8 @@ impl TernaryDir {
     /// Each weight maps to 16 ternary nodes (broadcast).
     pub fn from_weights(weights: &[f32; 8]) -> Self {
         let mut dir = Self::zero();
-        for group in 0..8 {
-            let tv = TernaryValue::from_weight(weights[group]);
+        for (group, &w) in weights.iter().enumerate() {
+            let tv = TernaryValue::from_weight(w);
             let base = group * 16;
             for i in 0..16 {
                 dir.set(base + i, tv);

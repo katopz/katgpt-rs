@@ -172,9 +172,7 @@ fn close_intervals_inplace(mask: &mut [bool], intervals: &[(usize, usize)], gap_
         let gap = b_start - a_end; // exclusive end → exclusive start distance
         if gap <= gap_threshold {
             // fill everything from a_end to b_start (exclusive)
-            for j in a_end..b_start {
-                mask[j] = true;
-            }
+            mask[a_end..b_start].fill(true);
         }
     }
 }

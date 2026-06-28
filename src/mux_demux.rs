@@ -48,9 +48,8 @@ pub fn mux_demux(logits: &[f32], k: usize, decay: f32) -> Option<Vec<usize>> {
 
     // Verify geometric decay ordering with 50% tolerance
     let mut decay_acc = decay;
-    for i in 1..peaks.len() {
+    for &(_, actual) in peaks.iter().skip(1) {
         let expected = top_val * decay_acc;
-        let actual = peaks[i].1;
         let tolerance = expected.abs() * 0.5;
         if (actual - expected).abs() > tolerance {
             return None;
@@ -222,6 +221,8 @@ pub fn compute_mux_residual(
         let marginals_p = &marginals[offset..offset + vocab_size];
 
         // Accumulate weighted codebook sum: weight * Σ_j p_ij * E_j
+        // stride math: `j` indexes marginals_p[j] and emb_start = j * n_embd into wte
+        #[allow(clippy::needless_range_loop)]
         for j in 0..vocab_size {
             let p_j = marginals_p[j];
             if p_j < 1e-10 {

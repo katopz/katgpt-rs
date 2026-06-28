@@ -118,9 +118,7 @@ pub fn simd_close_intervals(mask: &[bool], gap_threshold: usize) -> Vec<bool> {
         let (b_start, _b_end) = w[1];
         let gap = b_start - a_end;
         if gap <= gap_threshold {
-            for j in a_end..b_start {
-                result[j] = true;
-            }
+            result[a_end..b_start].fill(true);
         }
     }
 
@@ -196,9 +194,7 @@ fn scalar_close_intervals(mask: &[bool], gap_threshold: usize) -> Vec<bool> {
         let (b_start, _b_end) = w[1];
         let gap = b_start - a_end;
         if gap <= gap_threshold {
-            for j in a_end..b_start {
-                result[j] = true;
-            }
+            result[a_end..b_start].fill(true);
         }
     }
 

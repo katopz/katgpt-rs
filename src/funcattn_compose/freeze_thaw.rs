@@ -89,6 +89,7 @@ impl FuncAttnWeightsSnapshot {
     ///
     /// `version` is caller-managed (typically incremented by the store on each
     /// swap). The weights are moved into the snapshot (no copy).
+    #[allow(clippy::too_many_arguments)] // snapshot builder: bundling weight fragments API
     pub fn from_weights(
         d: usize,
         k: usize,
@@ -120,6 +121,7 @@ impl FuncAttnWeightsSnapshot {
     /// For deserialisation paths where the hash is already known (e.g. loading
     /// from disk). Call [`Self::commit`] to recompute, or [`Self::verify`] to
     /// check integrity.
+    #[allow(clippy::too_many_arguments)] // deserialisation builder: raw parts API
     pub fn from_parts(
         d: usize,
         k: usize,

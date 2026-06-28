@@ -187,6 +187,7 @@ impl ChainFolder {
     /// `CompactTraceResult` with compacted KV data and compression stats,
     /// or `None` if no compaction is needed (no folded steps or zero compression).
     #[cfg(feature = "still_kv")]
+    #[allow(clippy::too_many_arguments)] // hot-path leaf: KV compaction fragments API
     pub fn compact_trace(
         &self,
         keys: &[half::f16],

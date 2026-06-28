@@ -111,17 +111,16 @@ pub fn apply_rotation(
             if !dim.is_multiple_of(4) {
                 let g = n_full_groups;
                 let base = g * 4;
+                let n = dim - base;
                 let mut v = [0.0f32; 4];
-                for j in 0..dim - base {
-                    v[j] = input[base + j];
-                }
+                v[..n].copy_from_slice(&input[base..base + n]);
                 let r = quat_sandwich_forward(&q_left[g], &v, &qr[g]);
-                for j in 0..dim - base {
-                    output[base + j] = r[j];
-                }
+                output[base..base + n].copy_from_slice(&r[..n]);
             }
         }
         None => {
+            // stride math: `g` indexes both q_left[g] and base = g*4 into input/output
+            #[allow(clippy::needless_range_loop)]
             for g in 0..n_full_groups {
                 let base = g * 4;
                 let v = [
@@ -139,14 +138,11 @@ pub fn apply_rotation(
             if !dim.is_multiple_of(4) {
                 let g = n_full_groups;
                 let base = g * 4;
+                let n = dim - base;
                 let mut v = [0.0f32; 4];
-                for j in 0..dim - base {
-                    v[j] = input[base + j];
-                }
+                v[..n].copy_from_slice(&input[base..base + n]);
                 let r = quat_left_forward(&q_left[g], &v);
-                for j in 0..dim - base {
-                    output[base + j] = r[j];
-                }
+                output[base..base + n].copy_from_slice(&r[..n]);
             }
         }
     }
@@ -184,17 +180,16 @@ pub fn apply_inverse_rotation(
             if !dim.is_multiple_of(4) {
                 let g = n_full_groups;
                 let base = g * 4;
+                let n = dim - base;
                 let mut v = [0.0f32; 4];
-                for j in 0..dim - base {
-                    v[j] = input[base + j];
-                }
+                v[..n].copy_from_slice(&input[base..base + n]);
                 let r = quat_sandwich_inverse(&q_left[g], &v, &qr[g]);
-                for j in 0..dim - base {
-                    output[base + j] = r[j];
-                }
+                output[base..base + n].copy_from_slice(&r[..n]);
             }
         }
         None => {
+            // stride math: `g` indexes both q_left[g] and base = g*4 into input/output
+            #[allow(clippy::needless_range_loop)]
             for g in 0..n_full_groups {
                 let base = g * 4;
                 let v = [
@@ -212,14 +207,11 @@ pub fn apply_inverse_rotation(
             if !dim.is_multiple_of(4) {
                 let g = n_full_groups;
                 let base = g * 4;
+                let n = dim - base;
                 let mut v = [0.0f32; 4];
-                for j in 0..dim - base {
-                    v[j] = input[base + j];
-                }
+                v[..n].copy_from_slice(&input[base..base + n]);
                 let r = quat_left_inverse(&q_left[g], &v);
-                for j in 0..dim - base {
-                    output[base + j] = r[j];
-                }
+                output[base..base + n].copy_from_slice(&r[..n]);
             }
         }
     }
