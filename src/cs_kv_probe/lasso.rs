@@ -60,9 +60,8 @@ pub fn lasso(phi: &[Vec<f32>], y: &[f32], alpha: f32, n_iter: usize) -> Vec<f32>
         let mut acc = 0.0_f32;
         for row in phi.iter() {
             // Defensive: rows are expected equal-length; guard ragged input.
-            match j < row.len() {
-                true => acc += row[j] * row[j],
-                false => {}
+            if j < row.len() {
+                acc += row[j] * row[j];
             }
         }
         z[j] = acc;
@@ -85,9 +84,8 @@ pub fn lasso(phi: &[Vec<f32>], y: &[f32], alpha: f32, n_iter: usize) -> Vec<f32>
             // rho_j = Σ_m Phi[m][j]·r_m + z_j·x_j
             let mut phi_dot_r = 0.0_f32;
             for (row, &rm) in phi.iter().zip(r.iter()) {
-                match j < row.len() {
-                    true => phi_dot_r += row[j] * rm,
-                    false => {}
+                if j < row.len() {
+                    phi_dot_r += row[j] * rm;
                 }
             }
             let rho_j = phi_dot_r + z[j] * x[j];
@@ -96,9 +94,8 @@ pub fn lasso(phi: &[Vec<f32>], y: &[f32], alpha: f32, n_iter: usize) -> Vec<f32>
             // Only touch the residual when the update is numerically meaningful.
             if delta.abs() > 1e-12 {
                 for (row, rm) in phi.iter().zip(r.iter_mut()) {
-                    match j < row.len() {
-                        true => *rm -= delta * row[j],
-                        false => {}
+                    if j < row.len() {
+                        *rm -= delta * row[j];
                     }
                 }
                 x[j] = x_new;
