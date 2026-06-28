@@ -184,6 +184,86 @@ impl LoraAdapter {
             .ok_or_else(|| "LoRA file declared zero-length adapter list".into())
     }
 
+    /// Save adapters to a Plan 008 binary LoRA file (the inverse of [`load`](Self::load)).
+    ///
+    /// All adapters MUST share the same `rank` and `alpha` — the file format stores
+    /// them once in the header. Per-adapter `in_dim`/`out_dim` are stored individually
+    /// (they can differ across targets, e.g. Q vs K in GQA).
+    ///
+    /// Format: `["LORA" | version=1(u32) | blake3(payload)(32) | payload]` where
+    /// payload = `[n_adapters(u32) | rank(u32) | alpha(f32) | per-adapter:
+    /// in_dim(u32) | out_dim(u32) | a_f32s | b_f32s]`.
+    ///
+    /// This is the CPU-side counterpart to `riir_gpu::lora::export_lora`, producing
+    /// byte-identical files that load via either path. Used by `CpuLoraTrainer`
+    /// (Issue 018 CPU fallback) to produce arena-loadable adapters without a GPU.
+    pub fn save(
+        adapters: &[&Self],
+        rank: usize,
+        alpha: f32,
+        path: &std::path::Path,
+    ) -> Result<(), String> {
+        const LORA_MAGIC: &[u8; 4] = b"LORA";
+        const LORA_VERSION: u32 = 1;
+
+        if adapters.is_empty() {
+            return Err("Cannot save zero adapters".into());
+        }
+
+        let mut payload = Vec::with_capacity(12 + adapters.len() * (8 + 16));
+
+        // Header
+        payload.extend_from_slice(&(adapters.len() as u32).to_le_bytes());
+        payload.extend_from_slice(&(rank as u32).to_le_bytes());
+        payload.extend_from_slice(&alpha.to_le_bytes());
+
+        // Adapter data
+        for adapter in adapters {
+            if adapter.rank != rank {
+                return Err(format!(
+                    "Adapter rank mismatch: header={rank}, adapter={}",
+                    adapter.rank
+                ));
+            }
+            payload.extend_from_slice(&(adapter.in_dim as u32).to_le_bytes());
+            payload.extend_from_slice(&(adapter.out_dim as u32).to_le_bytes());
+
+            let a_count = rank * adapter.in_dim;
+            let b_count = adapter.out_dim * rank;
+            if adapter.a.len() != a_count {
+                return Err(format!(
+                    "A matrix size mismatch: expected {a_count}, got {}",
+                    adapter.a.len()
+                ));
+            }
+            if adapter.b.len() != b_count {
+                return Err(format!(
+                    "B matrix size mismatch: expected {b_count}, got {}",
+                    adapter.b.len()
+                ));
+            }
+            for val in &adapter.a {
+                payload.extend_from_slice(&val.to_le_bytes());
+            }
+            for val in &adapter.b {
+                payload.extend_from_slice(&val.to_le_bytes());
+            }
+        }
+
+        // Compute blake3 checksum of payload
+        let checksum = blake3::hash(&payload);
+
+        // Assemble file: magic + version + checksum + payload
+        let mut file_data = Vec::with_capacity(4 + 4 + 32 + payload.len());
+        file_data.extend_from_slice(LORA_MAGIC);
+        file_data.extend_from_slice(&LORA_VERSION.to_le_bytes());
+        file_data.extend_from_slice(checksum.as_bytes());
+        file_data.extend_from_slice(&payload);
+
+        std::fs::write(path, &file_data)
+            .map_err(|e| format!("Failed to write lora file: {e}"))
+    }
+
     /// Load LoRA adapters from a compact binary format.
     ///
     /// Format:
@@ -406,3 +486,110 @@ impl LoraPair {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_test_adapters() -> Vec<LoraAdapter> {
+        // 6 adapters mirroring the Bomber/Generic layout: Q, K, V, O, Mlp1, Mlp2.
+        // rank=4, in_dim=32 (n_embd), out_dim varies (GQA: K/V are n_kv_head*head_dim).
+        vec![
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 32,
+                a: (0..4 * 32).map(|i| i as f32 * 0.01).collect(),
+                b: (0..32 * 4).map(|i| i as f32 * -0.01).collect(),
+                alpha: 8.0,
+            },
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 8, // kv_dim (n_kv_head=1, head_dim=8)
+                a: (0..4 * 32).map(|i| i as f32).collect(),
+                b: (0..8 * 4).map(|i| i as f32 * 2.0).collect(),
+                alpha: 8.0,
+            },
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 8,
+                a: (0..4 * 32).map(|i| i as f32 * 0.5).collect(),
+                b: (0..8 * 4).map(|i| i as f32 * -2.0).collect(),
+                alpha: 8.0,
+            },
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 32,
+                a: (0..4 * 32).map(|i| i as f32 * 0.1).collect(),
+                b: (0..32 * 4).map(|i| i as f32 * 0.3).collect(),
+                alpha: 8.0,
+            },
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 32, // FFN up (mlp1)
+                a: (0..4 * 32).map(|i| i as f32 * 1.5).collect(),
+                b: (0..32 * 4).map(|i| i as f32 * -1.5).collect(),
+                alpha: 8.0,
+            },
+            LoraAdapter {
+                rank: 4,
+                in_dim: 32,
+                out_dim: 32, // FFN down (mlp2)
+                a: (0..4 * 32).map(|i| i as f32 * 2.5).collect(),
+                b: (0..32 * 4).map(|i| i as f32 * -2.5).collect(),
+                alpha: 8.0,
+            },
+        ]
+    }
+
+    #[test]
+    fn save_load_roundtrip_preserves_all_adapters() {
+        let tmp = std::env::temp_dir().join("katgpt_lora_roundtrip_test.bin");
+        let original = make_test_adapters();
+        let refs: Vec<&LoraAdapter> = original.iter().collect();
+
+        LoraAdapter::save(&refs, 4, 8.0, &tmp).expect("save should succeed");
+        let loaded = LoraAdapter::load(&tmp).expect("load should succeed");
+
+        assert_eq!(loaded.len(), original.len(), "adapter count must match");
+        for (i, (orig, load)) in original.iter().zip(loaded.iter()).enumerate() {
+            assert_eq!(load.rank, orig.rank, "adapter {i} rank");
+            assert_eq!(load.in_dim, orig.in_dim, "adapter {i} in_dim");
+            assert_eq!(load.out_dim, orig.out_dim, "adapter {i} out_dim");
+            assert_eq!(load.alpha, orig.alpha, "adapter {i} alpha");
+            assert_eq!(load.a.len(), orig.a.len(), "adapter {i} A length");
+            assert_eq!(load.b.len(), orig.b.len(), "adapter {i} B length");
+            for (j, (a, b)) in orig.a.iter().zip(load.a.iter()).enumerate() {
+                assert_eq!(a.to_bits(), b.to_bits(), "adapter {i} A[{j}] bit-identical");
+            }
+            for (j, (a, b)) in orig.b.iter().zip(load.b.iter()).enumerate() {
+                assert_eq!(a.to_bits(), b.to_bits(), "adapter {i} B[{j}] bit-identical");
+            }
+        }
+
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn save_rejects_empty_adapter_list() {
+        let tmp = std::env::temp_dir().join("katgpt_lora_empty_test.bin");
+        let empty: Vec<&LoraAdapter> = vec![];
+        let result = LoraAdapter::save(&empty, 4, 8.0, &tmp);
+        assert!(result.is_err());
+        let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn save_rejects_rank_mismatch() {
+        let tmp = std::env::temp_dir().join("katgpt_lora_rankmismatch_test.bin");
+        let adapters = make_test_adapters();
+        let refs: Vec<&LoraAdapter> = adapters.iter().collect();
+        // Pass rank=8 but adapters have rank=4
+        let result = LoraAdapter::save(&refs, 8, 8.0, &tmp);
+        assert!(result.is_err());
+        let _ = std::fs::remove_file(&tmp);
+    }
+}
