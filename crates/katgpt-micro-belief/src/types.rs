@@ -21,7 +21,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::simd::fast_sigmoid;
+use katgpt_types::simd::fast_sigmoid;
 
 /// Recurrence family identifier.
 ///
@@ -85,8 +85,8 @@ pub enum RecurrenceFamily {
 ///
 /// Given the same `(s_0, x_1..x_T)` sequence, [`step`](Self::step) MUST produce
 /// bit-identical `s_T` across runs (no hidden RNG, no threading-dependent
-/// reduction order). This is enforced by reusing `crate::simd::simd_dot_f32`
-/// (deterministic SIMD reduction) and `crate::simd::fast_sigmoid` (exact libm
+/// reduction order). This is enforced by reusing `katgpt_types::simd::simd_dot_f32`
+/// (deterministic SIMD reduction) and `katgpt_types::simd::fast_sigmoid` (exact libm
 /// path, no polynomial approximation).
 pub trait MicroRecurrentBeliefState: Send + Sync {
     /// Belief vector dimension (fixed at construction).
@@ -139,7 +139,7 @@ pub trait MicroRecurrentBeliefState: Send + Sync {
 /// require a custom projection.
 ///
 /// Computes `out[k] = fast_sigmoid(dot(state, &directions[k*dim..(k+1)*dim]))`
-/// for each k, reusing `crate::simd::simd_dot_f32` and `crate::simd::fast_sigmoid`.
+/// for each k, reusing `katgpt_types::simd::simd_dot_f32` and `katgpt_types::simd::fast_sigmoid`.
 ///
 /// Matches the existing `SenseModule::project` (dot + sigmoid) bridge pattern —
 /// see Plan 276 T0.5. No duplication of bridge logic.
@@ -159,7 +159,7 @@ pub(crate) fn project_to_scalars_bridge(
     );
     for k_idx in 0..k {
         let row_start = k_idx * dim;
-        let dot = crate::simd::simd_dot_f32(state, &directions[row_start..row_start + dim], dim);
+        let dot = katgpt_types::simd::simd_dot_f32(state, &directions[row_start..row_start + dim], dim);
         out[k_idx] = fast_sigmoid(dot);
     }
 }

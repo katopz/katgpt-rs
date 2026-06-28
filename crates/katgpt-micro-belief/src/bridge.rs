@@ -18,11 +18,11 @@
 //!
 //! # Determinism
 //!
-//! Reuses `crate::simd::simd_dot_f32` (deterministic SIMD reduction — same
-//! instruction order every run) and `crate::simd::fast_sigmoid` (exact libm
+//! Reuses `katgpt_types::simd::simd_dot_f32` (deterministic SIMD reduction — same
+//! instruction order every run) and `katgpt_types::simd::fast_sigmoid` (exact libm
 //! path, no polynomial approximation). Bit-identical across runs (G1.1).
 
-use crate::micro_belief::types::project_to_scalars_bridge as impl_bridge;
+use crate::types::project_to_scalars_bridge as impl_bridge;
 
 /// Project a belief vector to K bounded scalars via sigmoid(dot).
 ///
@@ -59,7 +59,7 @@ pub fn project_to_scalars(state: &[f32], directions: &[f32], dim: usize, out: &m
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::simd::fast_sigmoid;
+    use katgpt_types::simd::fast_sigmoid;
 
     #[test]
     fn bridge_zeros_for_zero_state() {

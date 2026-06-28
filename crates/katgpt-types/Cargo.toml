@@ -78,3 +78,7 @@ spectral_threat = []
 
 # GPart pruning stats (Plan 257 Phase 3 extension).
 gpart_pruning = []
+
+# Depth-Invariance Diagnostic + MagnitudeRegularizedResidual (Plan 306).
+# Gates the depth_invariance module. Pure math (simd-only deps).
+depth_invariance = []

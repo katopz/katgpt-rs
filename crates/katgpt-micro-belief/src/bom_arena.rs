@@ -1,4 +1,4 @@
-//! G2 arena harness for [`BoMSampler`](crate::micro_belief::BoMSampler)
+//! G2 arena harness for [`BoMSampler`](crate::BoMSampler)
 //! (Plan 281 Phase 2, task T2.3).
 //!
 //! This module provides the **engine-side** arena structure: traits that
@@ -53,14 +53,14 @@
 //! - Research: [`katgpt-rs/.research/248_DeltaTok_DeltaWorld_BoM_Single_Pass_Diverse_Sampling.md`]
 //! - Source paper: [arXiv:2604.04913](https://arxiv.org/abs/2604.04913)
 
-use crate::micro_belief::{
+use crate::{
     AttractorKernel, BoMSampler, LeakyIntegrator, NoiseQueryConfig,
 };
 // `MicroRecurrentBeliefState` is needed by the `#[cfg(test)]` module via
 // `use super::*` (the `.step()` / `.dim()` methods are trait methods). Listed
 // separately with `#[cfg(test)]` so the non-test build stays warning-clean.
 #[cfg(test)]
-use crate::micro_belief::MicroRecurrentBeliefState;
+use crate::MicroRecurrentBeliefState;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Traits — the abstraction boundary between engine and fuel
@@ -329,7 +329,7 @@ impl<K: BoMSampler> BeliefPlanner for BoMMinimaxPlanner<K> {
         // The actual noise values are reproducible because the harness feeds
         // the same state+observation sequence to both arms.
         let tick_salt: u64 = 0x9E37_79B9_7F4A_7C15;
-        let obs_hash = crate::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
+        let obs_hash = katgpt_types::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
         self.resample_queries(tick_salt.wrapping_add(obs_hash));
 
         // Sample K diverse next-states in one batched call.
@@ -438,7 +438,7 @@ impl<K: BoMSampler> BeliefPlanner for BoMMeanPlanner<K> {
         let dim = self.kernel.dim();
         let k = self.cfg.k;
         let tick_salt: u64 = 0x9E37_79B9_7F4A_7C15;
-        let obs_hash = crate::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
+        let obs_hash = katgpt_types::simd::simd_dot_f32(state, observation, dim).to_bits() as u64;
         self.resample_queries(tick_salt.wrapping_add(obs_hash));
         self.kernel.sample_k_states(
             state,
@@ -454,7 +454,7 @@ impl<K: BoMSampler> BeliefPlanner for BoMMeanPlanner<K> {
         self.mean.fill(0.0);
         for k_idx in 0..k {
             let row = &self.hypotheses[k_idx * dim..(k_idx + 1) * dim];
-            crate::simd::simd_add_inplace(&mut self.mean[..dim], row);
+            katgpt_types::simd::simd_add_inplace(&mut self.mean[..dim], row);
         }
         let inv_k = 1.0 / k as f32;
         for v in self.mean.iter_mut() {
@@ -978,7 +978,7 @@ pub fn bom_mean_attractor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::micro_belief::SeedStrategy;
+    use crate::SeedStrategy;
 
     const TEST_DIM: usize = 8;
     const TEST_MAX_TICKS: usize = 40;

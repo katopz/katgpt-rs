@@ -35,15 +35,15 @@
 //! concrete kernel type), so this is acceptable — it is never dispatched
 //! through `&dyn BoMSampler`.
 
-use crate::micro_belief::types::MicroRecurrentBeliefState;
-use crate::micro_belief::{assume_init_slice, uninit_stack};
-use crate::simd::simd_dot_f32;
+use crate::types::MicroRecurrentBeliefState;
+use crate::{assume_init_slice, uninit_stack};
+use katgpt_types::simd::simd_dot_f32;
 
 #[cfg(not(feature = "simd_sigmoid"))]
-use crate::simd::fast_sigmoid;
+use katgpt_types::simd::fast_sigmoid;
 
 #[cfg(feature = "simd_sigmoid")]
-use crate::simd::simd_sigmoid_tanh_clamp_inplace;
+use katgpt_types::simd::simd_sigmoid_tanh_clamp_inplace;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NoiseQueryConfig
@@ -233,7 +233,7 @@ pub fn dot_product_scorer<'a>(direction: &'a [f32], dim: usize) -> impl Fn(&[f32
 // impl BoMSampler for AttractorKernel (Family A)
 // ─────────────────────────────────────────────────────────────────────────────
 
-use crate::micro_belief::attractor::AttractorKernel;
+use crate::attractor::AttractorKernel;
 
 impl BoMSampler for AttractorKernel {
     /// Single-pass K-hypothesis sampling for Family A.
@@ -370,7 +370,7 @@ impl BoMSampler for AttractorKernel {
 // impl BoMSampler for LeakyIntegrator (Family C / evolve_hla family)
 // ─────────────────────────────────────────────────────────────────────────────
 
-use crate::micro_belief::leaky::LeakyIntegrator;
+use crate::leaky::LeakyIntegrator;
 
 impl BoMSampler for LeakyIntegrator {
     /// Single-pass K-hypothesis sampling for Family C.
@@ -469,7 +469,7 @@ impl BoMSampler for LeakyIntegrator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::micro_belief::{AttractorKernel, LeakyIntegrator, MicroRecurrentBeliefState};
+    use crate::{AttractorKernel, LeakyIntegrator, MicroRecurrentBeliefState};
 
     // ── G1.1: determinism (fixed queries → bit-identical out) ──────────────
 

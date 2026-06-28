@@ -17,9 +17,9 @@
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::Arc;
 
-use crate::micro_belief::attractor::AttractorKernel;
-use crate::micro_belief::bridge::project_to_scalars;
-use crate::micro_belief::types::MicroRecurrentBeliefState;
+use crate::attractor::AttractorKernel;
+use crate::bridge::project_to_scalars;
+use crate::types::MicroRecurrentBeliefState;
 
 // ─── helpers ──────────────────────────────────────────────────────────────
 
@@ -395,7 +395,7 @@ fn g1_5_snapshot_atomicity() {
 fn trait_is_object_safe_and_dispatches() {
     let kernels: Vec<Box<dyn MicroRecurrentBeliefState>> = vec![
         Box::new(AttractorKernel::from_seed(42, 32)),
-        Box::new(crate::micro_belief::leaky::LeakyIntegrator::hla_default(32)),
+        Box::new(crate::leaky::LeakyIntegrator::hla_default(32)),
     ];
     let mut state = vec![0.0f32; 32];
     let input = vec![0.3f32; 32];
@@ -409,6 +409,6 @@ fn trait_is_object_safe_and_dispatches() {
         assert!(v.abs() <= 6.0);
     }
     // family() dispatch works through the trait object.
-    assert_eq!(kernels[0].family(), crate::micro_belief::types::RecurrenceFamily::Attractor);
-    assert_eq!(kernels[1].family(), crate::micro_belief::types::RecurrenceFamily::DeltaRule);
+    assert_eq!(kernels[0].family(), crate::types::RecurrenceFamily::Attractor);
+    assert_eq!(kernels[1].family(), crate::types::RecurrenceFamily::DeltaRule);
 }

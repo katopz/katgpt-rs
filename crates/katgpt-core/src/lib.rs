@@ -33,7 +33,12 @@ pub mod coda;
 pub use katgpt_dec as dec;
 pub mod delta_mem;
 pub mod hla;
-pub mod leaky_core;
+// Shared leaky-integrator primitive. Spun out to the `katgpt-types` leaf
+// (Issue 007 Phase E Tier 1 #3) so both katgpt-core (`sense::reconstruction`)
+// and `katgpt-micro-belief` (`LeakyIntegrator::step`) can consume it without
+// a cycle. Re-exported here as `katgpt_core::leaky_core` for backwards
+// compatibility.
+pub use katgpt_types::leaky_core;
 /// Generic Monte Carlo Tree Search over any [`crate::traits::GameState`].
 ///
 /// Always-on substrate. Composition that needs root-only types
@@ -106,9 +111,10 @@ pub mod qgf;
 
 // MicroRecurrentBeliefState — per-entity recurrent state kernel (Plan 276, Research 242).
 // Trait + Family A (attractor) + Family C (leaky) + BLAKE3 snapshot + sigmoid bridge.
-// Opt-in until G1.1–G1.5 GOAT gate passes.
+// Spun out to the `katgpt-micro-belief` crate (Issue 007 Phase E Tier 1 #3) and
+// re-exported here as `katgpt_core::micro_belief` for backwards compatibility.
 #[cfg(feature = "micro_belief")]
-pub mod micro_belief;
+pub use katgpt_micro_belief as micro_belief;
 #[cfg(feature = "micro_belief")]
 pub use micro_belief::{
     AttractorKernel, KernelConfig, LeakyIntegrator, MicroRecurrentBeliefState,
@@ -762,9 +768,9 @@ pub use gain_cost_halt::{
 // Plan 306 Phase 1+5; Research 286; arXiv:2605.09992 Eldenk et al.
 // Opt-in until G1 (8 correctness tests) passes.
 #[cfg(feature = "depth_invariance")]
-pub mod depth_invariance;
+pub use katgpt_types::depth_invariance;
 #[cfg(feature = "depth_invariance")]
-pub use depth_invariance::{
+pub use katgpt_types::depth_invariance::{
     DepthInvarianceConfig, DepthInvarianceDiagnostic, DepthInvarianceKind, MagnitudeRegularization,
     Scratch, apply_magnitude_regularization, classify_chain, classify_chain_batched,
 };

@@ -34,16 +34,16 @@
 //! Performance impact at `dim = 32` is negligible: the matvec is 32 dot
 //! products of length 32, each dispatched to `simd_dot_f32` which auto-vectorises.
 
-use crate::micro_belief::bridge::project_to_scalars as bridge_project;
-use crate::micro_belief::types::{KernelConfig, MicroRecurrentBeliefState, RecurrenceFamily};
-use crate::micro_belief::{assume_init_slice, uninit_stack};
-use crate::simd::simd_dot_f32;
+use crate::bridge::project_to_scalars as bridge_project;
+use crate::types::{KernelConfig, MicroRecurrentBeliefState, RecurrenceFamily};
+use crate::{assume_init_slice, uninit_stack};
+use katgpt_types::simd::simd_dot_f32;
 
 #[cfg(not(feature = "simd_sigmoid"))]
-use crate::simd::fast_sigmoid;
+use katgpt_types::simd::fast_sigmoid;
 
 #[cfg(feature = "simd_sigmoid")]
-use crate::simd::simd_sigmoid_tanh_clamp_inplace;
+use katgpt_types::simd::simd_sigmoid_tanh_clamp_inplace;
 
 /// Static zero buffer for the `q` argument of `simd_sigmoid_tanh_clamp_inplace`
 /// when `step()` calls it (q is always zero in step — there is no noise query).
@@ -253,7 +253,7 @@ impl AttractorKernel {
     }
 
     /// Recursively advance the kernel for `inputs.len()` ticks and classify the
-    /// resulting belief-vector chain with [`crate::classify_chain`].
+    /// resulting belief-vector chain with [`katgpt_types::depth_invariance::classify_chain`].
     ///
     /// The chain `s_0, s_1, …, s_k` (where `s_0 = initial_state` and
     /// `k = inputs.len()`) is captured into a flattened buffer and classified.
@@ -263,7 +263,7 @@ impl AttractorKernel {
     /// **Zero per-step allocation** — double-buffered `s_a` / `s_b` plus a
     /// single up-front `Vec::with_capacity` for the chain. The depth-invariance
     /// `Scratch` is allocated inside this call; tight-loop callers should reuse
-    /// one via the raw [`crate::classify_chain`] primitive.
+    /// one via the raw [`katgpt_types::depth_invariance::classify_chain`] primitive.
     ///
     /// # Plan 306 Phase 4 (G3 — negative control)
     ///
@@ -280,8 +280,8 @@ impl AttractorKernel {
         &self,
         initial_state: &[f32],
         inputs: &[&[f32]],
-        cfg: &crate::DepthInvarianceConfig,
-    ) -> crate::DepthInvarianceDiagnostic {
+        cfg: &katgpt_types::depth_invariance::DepthInvarianceConfig,
+    ) -> katgpt_types::depth_invariance::DepthInvarianceDiagnostic {
         let dim = self.dim;
         assert_eq!(initial_state.len(), dim, "initial_state must have length dim");
         for (i, inp) in inputs.iter().enumerate() {
@@ -307,8 +307,8 @@ impl AttractorKernel {
             std::mem::swap(&mut s_a, &mut s_b);
         }
 
-        let mut scratch = crate::Scratch::with_capacity(k_plus_1, dim);
-        crate::classify_chain(&chain, dim, cfg, &mut scratch)
+        let mut scratch = katgpt_types::depth_invariance::Scratch::with_capacity(k_plus_1, dim);
+        katgpt_types::depth_invariance::classify_chain(&chain, dim, cfg, &mut scratch)
     }
 }
 

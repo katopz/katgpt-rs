@@ -25,10 +25,10 @@
 //! "skip this deliberation tick") and avoids the cost of a debug-assert panic
 //! in release callers that build `k_iters` dynamically.
 
-use crate::micro_belief::attractor::AttractorKernel;
-use crate::micro_belief::bridge::project_to_scalars as bridge_project;
-use crate::micro_belief::types::{MicroRecurrentBeliefState, RecurrenceFamily};
-use crate::micro_belief::{assume_init_slice, uninit_stack};
+use crate::attractor::AttractorKernel;
+use crate::bridge::project_to_scalars as bridge_project;
+use crate::types::{MicroRecurrentBeliefState, RecurrenceFamily};
+use crate::{assume_init_slice, uninit_stack};
 
 /// Stack-buffer capacity for the precomputed `W_x · x` scratch. Matches the
 /// `dim ≤ 1024` cap in `AttractorKernel::step`. Only `[..dim]` is used.

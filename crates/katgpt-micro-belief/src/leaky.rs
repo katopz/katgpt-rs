@@ -39,8 +39,8 @@
 //! - Zero allocation: operates on the `&mut [f32]` slice.
 //! - No softmax: pure additive update with sigmoid-style bounds.
 
-use crate::micro_belief::bridge::project_to_scalars as bridge_project;
-use crate::micro_belief::types::{MicroRecurrentBeliefState, RecurrenceFamily};
+use crate::bridge::project_to_scalars as bridge_project;
+use crate::types::{MicroRecurrentBeliefState, RecurrenceFamily};
 
 /// Family C leaky-integrator kernel — mirrors `ReconstructionState::evolve_hla`.
 ///
@@ -73,7 +73,7 @@ impl LeakyIntegrator {
     }
 
     /// Recursively advance the kernel for `inputs.len()` ticks and classify the
-    /// resulting belief-vector chain with [`crate::classify_chain`].
+    /// resulting belief-vector chain with [`katgpt_types::depth_invariance::classify_chain`].
     ///
     /// The chain `s_0, s_1, …, s_k` (where `s_0 = initial_state` and
     /// `k = inputs.len()`) is captured into a flattened buffer and classified.
@@ -83,7 +83,7 @@ impl LeakyIntegrator {
     /// **Zero per-step allocation** — double-buffered `s_a` / `s_b` plus a
     /// single up-front `Vec::with_capacity` for the chain. The depth-invariance
     /// `Scratch` is allocated inside this call; tight-loop callers should reuse
-    /// one via the raw [`crate::classify_chain`] primitive.
+    /// one via the raw [`katgpt_types::depth_invariance::classify_chain`] primitive.
     ///
     /// # Plan 306 Phase 4 (G3 — T4.3 caveat)
     ///
@@ -99,8 +99,8 @@ impl LeakyIntegrator {
         &self,
         initial_state: &[f32],
         inputs: &[&[f32]],
-        cfg: &crate::DepthInvarianceConfig,
-    ) -> crate::DepthInvarianceDiagnostic {
+        cfg: &katgpt_types::depth_invariance::DepthInvarianceConfig,
+    ) -> katgpt_types::depth_invariance::DepthInvarianceDiagnostic {
         let dim = self.dim;
         assert_eq!(initial_state.len(), dim, "initial_state must have length dim");
         for (i, inp) in inputs.iter().enumerate() {
@@ -125,8 +125,8 @@ impl LeakyIntegrator {
             std::mem::swap(&mut s_a, &mut s_b);
         }
 
-        let mut scratch = crate::Scratch::with_capacity(k_plus_1, dim);
-        crate::classify_chain(&chain, dim, cfg, &mut scratch)
+        let mut scratch = katgpt_types::depth_invariance::Scratch::with_capacity(k_plus_1, dim);
+        katgpt_types::depth_invariance::classify_chain(&chain, dim, cfg, &mut scratch)
     }
 }
 
@@ -149,7 +149,7 @@ impl MicroRecurrentBeliefState for LeakyIntegrator {
 
         // Generic Family C kernel: normalize over the full dim-length input.
         let total: f32 = input.iter().copied().sum();
-        crate::leaky_core::leaky_step(state, input, total, self.lr, self.max_delta);
+        katgpt_types::leaky_core::leaky_step(state, input, total, self.lr, self.max_delta);
     }
 
     #[inline(always)]

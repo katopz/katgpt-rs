@@ -37,7 +37,7 @@
 //! caller (riir-ai's `KernelHotSwap`) is free to tag the swap event itself
 //! with a v7 UUID.
 
-use crate::micro_belief::types::{MicroRecurrentBeliefState, RecurrenceFamily};
+use crate::types::{MicroRecurrentBeliefState, RecurrenceFamily};
 
 /// Snapshot version format. Bump if `weights_blob` layout changes.
 ///
@@ -148,7 +148,7 @@ impl MicroRecurrentKernelSnapshot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::micro_belief::attractor::AttractorKernel;
+    use crate::attractor::AttractorKernel;
 
     #[test]
     fn snapshot_roundtrips_commit() {

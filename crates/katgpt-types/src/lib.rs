@@ -41,10 +41,27 @@
 
 mod config;
 mod domain;
+/// Depth-Invariance Diagnostic & Magnitude-Regularized Residual (Plan 306).
+/// Pure math, depends only on simd. Co-located here (the leaf) so both
+/// katgpt-core (depth_invariance feature) and katgpt-micro-belief
+/// (audit_depth_invariance methods) can consume it without a cycle.
+#[cfg(feature = "depth_invariance")]
+pub mod depth_invariance;
+#[cfg(feature = "depth_invariance")]
+pub use depth_invariance::{
+    DepthInvarianceConfig, DepthInvarianceDiagnostic, DepthInvarianceKind, MagnitudeRegularization,
+    Scratch, apply_magnitude_regularization, classify_chain, classify_chain_batched,
+};
 mod enums;
 mod gpart;
 mod hydra;
 mod inference;
+/// Shared leaky-integrator / delta-rule step primitive (Plan 276 Phase 2 T2.1).
+/// Pure inline math, zero deps. Consumed by both katgpt-micro-belief
+/// (`LeakyIntegrator::step`) and katgpt-core's sense reconstruction
+/// (`ReconstructionState::evolve_hla`). Co-located here (the leaf) so both
+/// consumers can share the single source of truth without a cycle.
+pub mod leaky_core;
 mod looping;
 mod lora;
 pub mod math;
@@ -92,6 +109,7 @@ pub use math::{
     rmsnorm, rmsnorm_with_gamma, rmsnorm_with_gamma_eps, sample_token, sample_token_into, silu,
     softmax, softmax_scaled, swiglu,
 };
+pub use leaky_core::leaky_step;
 #[cfg(feature = "sparse_mlp")]
 pub use math::sparse_matmul;
 pub use rng::Rng;

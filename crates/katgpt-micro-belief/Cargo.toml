@@ -1,0 +1,40 @@
+[package]
+name = "katgpt-micro-belief"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Micro-recurrent belief-state kernel — implicit per-entity state tracking. Single-paper distillation (arXiv:2604.17121). Depends only on katgpt-types (SIMD kernels) + blake3 + fastrand."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["inference", "belief-state", "recurrent", "modelless", "latent"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+katgpt-types = { path = "../katgpt-types" }
+blake3 = "1"
+fastrand = "2"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+# katgpt-micro-belief compiles its core (AttractorKernel, LeakyIntegrator,
+# LatentThoughtKernel, snapshot, bridge, types) unconditionally. The features
+# below mirror the katgpt-core gates so the re-export shim can forward them.
+default = []
+
+# BoMSampler — K-hypothesis single-pass belief sampling (Plan 281, Research 248).
+# Enables the bom + bom_arena submodules.
+bom_sampling = []
+
+# SIMD-vectorized sigmoid→tanh→clamp fused pass for AttractorKernel::step() +
+# BoMSampler::sample_k_states (Issues 024/025, M1). Auto-enabled by bom_sampling.
+simd_sigmoid = []
+
+# Audit-only depth-invariance probes for AttractorKernel + LeakyIntegrator
+# (Plan 306 T7.4). Gates the `audit_depth_invariance` methods. The actual
+# depth-invariance test harness lives in katgpt-core's tests/ directory and
+# consumes these methods via the katgpt_core::micro_belief re-export.
+# Forwards to katgpt-types so the DepthInvarianceConfig/Diagnostic/Scratch/
+# classify_chain types resolve.
+depth_invariance = ["katgpt-types/depth_invariance"]

@@ -40,16 +40,16 @@
 //! it comes from the recurrent weight matrix's eigenvalue structure, not from
 //! the dimension count).
 //!
-//! [`LeakyIntegrator`]: crate::micro_belief::leaky::LeakyIntegrator
-//! [`AttractorKernel`]: crate::micro_belief::attractor::AttractorKernel
-//! [`LatentThoughtKernel`]: crate::micro_belief::latent_thought::LatentThoughtKernel
+//! [`LeakyIntegrator`]: crate::leaky::LeakyIntegrator
+//! [`AttractorKernel`]: crate::attractor::AttractorKernel
+//! [`LatentThoughtKernel`]: crate::latent_thought::LatentThoughtKernel
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::micro_belief::attractor::AttractorKernel;
-use crate::micro_belief::latent_thought::LatentThoughtKernel;
-use crate::micro_belief::leaky::LeakyIntegrator;
-use crate::micro_belief::types::MicroRecurrentBeliefState;
+use crate::attractor::AttractorKernel;
+use crate::latent_thought::LatentThoughtKernel;
+use crate::leaky::LeakyIntegrator;
+use crate::types::MicroRecurrentBeliefState;
 
 /// Belief-vector dimension used by the G2.1 benchmark. See module docs for why
 /// this is 16 (not 32).
