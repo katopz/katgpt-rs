@@ -216,11 +216,11 @@ impl WallPrefixState {
         // Step 5: gate_buf += 1 → gate_buf = 1 + exp(-logit) = softplus(-logit)
         simd_add_scalar_inplace(&mut gate_buf[..hd], 1.0);
 
-        // Step 6: ln + negate + clamp (scalar — ln not yet SIMD-accelerated)
+        // Step 6: ln+negate+clamp (scalar — ln not yet SIMD-accelerated)
         // log_sigmoid(logit) = -ln(1 + exp(-logit)) = -softplus(-logit)
-        for d in 0..hd {
-            let log_sig = -gate_buf[d].ln();
-            gate_buf[d] = log_sig.clamp(-gate_max, 0.0);
+        for slot in gate_buf.iter_mut().take(hd) {
+            let log_sig = -(*slot).ln();
+            *slot = log_sig.clamp(-gate_max, 0.0);
         }
     }
 

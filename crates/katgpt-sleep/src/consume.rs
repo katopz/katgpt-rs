@@ -98,8 +98,8 @@ fn find_best_match<const D: usize, const K: usize>(
             let mut best_dist = f32::INFINITY;
             for i in 0..K {
                 let mut dist_sq = 0.0f32;
-                for j in 0..D {
-                    let d = c_prime.slots[i].precomputed[j] - q[j];
+                for (q_val, &pre) in q.iter().zip(c_prime.slots[i].precomputed.iter()).take(D) {
+                    let d = pre - q_val;
                     dist_sq += d * d;
                 }
                 if dist_sq < best_dist {

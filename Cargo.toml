@@ -156,7 +156,16 @@ spectral_threat = ["katgpt-core/spectral_threat", "sense_composition"]  # LinOSS
 sense_lod = ["katgpt-core/sense_lod", "sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240, GOAT PASS 46.9%)
 spectral_pruner = ["katgpt-core/spectral_pruner"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
 chiaroscuro = ["dep:rustfft"]  # CHIAR Chiaroscuro Attention — per-token DCT spectral entropy operator routing + KV cache strategy (Plan 269, GOAT 9/9 PASS, default-ON)
-octree_ctc = ["katgpt-core/octree_ctc", "bandit"]  # OctreeCTC Reconstructive Memory Navigation (Plan 248, GOAT-gated)
+# (Removed 2026-06-28: `octree_ctc = ["katgpt-core/octree_ctc", "bandit"]` — dead alias.
+#  Issue 007 Phase C follow-up: the only katgpt-rs consumers were
+#  examples/octree_ctc_demo.rs and tests/octree_ctc_recall_test.rs, both of
+#  which moved to riir-engine (they construct NpcBrain — private NPC runtime
+#  IP). With those gone, this feature is functionally identical to
+#  `sense_composition` (both expand to katgpt-core/sense_composition + bandit).
+#  Zero source in katgpt-rs/src/ gated on it; zero external consumers
+#  (katgpt-rs is publish=false per Issue 007 Phase 5 rescind; consumers use
+#  katgpt-core directly). The octree_ctc feature still lives canonically in
+#  riir-ai/crates/riir-engine/Cargo.toml for the moved demo + recall test.)
 bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236, GOAT 10/10 but marginal drift 4.7% vs 30% target — opt-in loser)
 rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 action_bridge = ["katgpt-core/action_bridge"]  # Generic latent→raw action bridge (Plan 262). DEFAULT-ON via katgpt-core. Sigmoid-gated (`fast_sigmoid`), never softmax — ranking-preservation proven in Lean 4 (.proofs/KatgptProof, Plan 293).

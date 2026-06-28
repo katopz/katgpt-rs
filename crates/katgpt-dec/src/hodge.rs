@@ -96,12 +96,17 @@ fn cg_solve(
             let mut x_ch = vec![0.0f32; n];
             let mut scratch = CgScratch::new(n);
             for d in 0..dim {
-                for i in 0..n {
-                    rhs_ch[i] = rhs.data[i * dim + d];
+                // Strided read: channel `d` lives at indices `d, dim+d, 2*dim+d, ...`
+                for (slot, &r) in rhs_ch
+                    .iter_mut()
+                    .zip(rhs.data.iter().skip(d).step_by(dim))
+                    .take(n)
+                {
+                    *slot = r;
                 }
                 cg_solve_scalar(cx, &rhs_ch, rank, tol, max_iter, &mut x_ch, &mut scratch);
-                for i in 0..n {
-                    x.data[i * dim + d] = x_ch[i];
+                for (i, &v) in x_ch.iter().enumerate().take(n) {
+                    x.data[i * dim + d] = v;
                 }
             }
         }

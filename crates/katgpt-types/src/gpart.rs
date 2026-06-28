@@ -383,8 +383,7 @@ impl GpartAdapter {
 
         // Compute ||Pθ||²
         let mut projected_norm_sq = 0.0f32;
-        for i in 0..n {
-            let g = assignments[i];
+        for &g in assignments.iter().take(n) {
             let scale = 1.0 / (group_sizes[g] as f32).sqrt();
             let delta = scale * self.theta[g];
             projected_norm_sq += delta * delta;
@@ -441,8 +440,8 @@ impl GpartPrepared {
     /// LLVM auto-vectorises this to SIMD.
     pub fn apply(&self, base_weights: &mut [f32]) {
         let len = base_weights.len().min(self.deltas.len());
-        for i in 0..len {
-            base_weights[i] += self.deltas[i];
+        for (w, &delta) in base_weights.iter_mut().zip(self.deltas.iter()).take(len) {
+            *w += delta;
         }
     }
 }
@@ -498,7 +497,9 @@ impl TryFrom<&crate::LoraAdapter> for GpartAdapter {
 
 // NeuronShard Pod compatibility: seed(8) + d(max=90)×4(360) = 368 bytes max.
 // Exact-fit invariant — clippy::eq_op fires because 8+90*4 const-folds to 368,
-// but the assertion is a deliberate compile-time budget guard, not a mistake.
+// and clippy::assertions_on_constants fires because the whole thing is const-
+// foldable. Both are deliberate: this is a compile-time budget guard, not a
+// runtime check and not a mistake.
 #[cfg(feature = "gpart_adapter")]
-#[allow(clippy::eq_op)]
+#[allow(clippy::eq_op, clippy::assertions_on_constants)]
 const _: () = assert!(8 + 90 * 4 <= 368);
