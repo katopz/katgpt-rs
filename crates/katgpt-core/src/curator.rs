@@ -405,8 +405,10 @@ pub fn verification_weight(reputation: f32) -> f32 {
     let boosted_mask = (reputation > 0.8) as u32 as f32;
     // For 0.5..0.8: linear_val = reputation, for > 0.8: base = 1.0
     let linear_val = reputation * prob_mask * (1.0 - boosted_mask);
-    // FMA: reputation * 5.0 - 4.0 (== 1.0 + (reputation - 0.8) * 5.0).
-    let boosted_val = reputation.mul_add(5.0, -4.0) * boosted_mask;
+    // FMA: 1.0 + (reputation - 0.8) * 5.0
+    //   = 1.0 + 5*reputation - 4.0
+    //   = 5*reputation - 3.0
+    let boosted_val = reputation.mul_add(5.0, -3.0) * boosted_mask;
     linear_val + boosted_val
 }
 
@@ -665,9 +667,14 @@ mod tests {
 
     #[test]
     fn test_verification_weight_thresholds() {
+        // Epsilon for f32 comparisons — the branchless mul_add path can differ
+        // from the naive RHS by 1 ULP on non-exact inputs (e.g. 0.9).
+        const EPS: f32 = 1e-5;
+
         // High accuracy: amplified
         let w_high = verification_weight(0.9);
-        assert_eq!(w_high, 1.0 + (0.9 - 0.8) * 5.0);
+        let expected_high = 1.0 + (0.9 - 0.8) * 5.0;
+        assert!((w_high - expected_high).abs() < EPS, "high amplification: {w_high} vs {expected_high}");
         assert!(w_high > 1.0, "high accuracy should amplify");
         assert!(w_high <= 2.0, "max amplification is 2.0");
 
