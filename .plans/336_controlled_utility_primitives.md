@@ -4,7 +4,7 @@
 **Research:** [katgpt-rs/.research/320_Red_Queen_Godel_Machine_Selective_Erasure_Best_Belief.md](../.research/320_Red_Queen_Godel_Machine_Selective_Erasure_Best_Belief.md)
 **Source paper:** [arXiv:2606.26294](https://arxiv.org/pdf/2606.26294) — Iacob et al., Red Queen Gödel Machine, §3.5 + App. F Prop. 4.
 **Target:** `katgpt-rs/crates/katgpt-core/src/best_belief.rs` (new) + trait extraction over `dec/cache.rs` + `dec/zone_cache.rs`
-**Status:** Phase 1 shipped (T1.1–T1.4 done). Phase 2 measured — G1 PASS (3.099e-5 vs statrs), G4 PASS (alloc-free by construction), **G2 FAIL** (133 ns at S1,F1 vs 100 ns target; 2.2 µs select-8 vs 500 ns target). `best_belief` left opt-in per GOAT-discipline rule; T2.5 promotion blocked on a G2 unblock (see “Phase 1+2 Results”). Phase 3 (DRY trait) still deferred.
+**Status:** Phase 1+2 SHIPPED — `best_belief` G2-unblocked via 32×32×5 LUT and PROMOTED to default (commits `1da3fb8b`, `bf7f6971`). G1 PASS (3.099e-5 vs statrs), G2 PASS (3.38 ns score, 32.2 ns select-8 — well under targets after LUT), G3 PASS (924/924 tests green), G4 PASS (alloc-free by construction). **Phase 3 (DRY trait) BLOCKED by architectural drift** — see new "Phase 3 — Architectural Blocker" section below; tasks T3.1–T3.5 cannot proceed as written.
 
 ---
 
@@ -124,6 +124,77 @@ This is pure DRY — no new behavior, no new capability. Existing impls get blan
 - [ ] **T3.3** `impl CriterionVersionedCache for ZoneGeometryCache` (multi-entry — Key = ZoneHash).
 - [ ] **T3.4** Document the pattern in `katgpt-core/src/dec/cache.rs` doc-comment, pointing to the trait.
 - [ ] **T3.5** No GOAT gate (Gain-tier DRY refactor). Just `cargo check --all-features` + existing tests pass bit-identically.
+
+## Phase 3 — Architectural Blocker (2026-06-28)
+
+**Verdict: Phase 3 as specified is INFEASIBLE.** The architectural assumptions that
+made the DRY trait extraction straightforward no longer hold. Two independent
+refactors (both landed after this plan was written) moved the two target caches
+out of `katgpt-core`:
+
+### Blocker 1 — `DecCache` moved to the zero-dep `katgpt-dec` crate
+
+The `dec/` module was spun out into a new `crates/katgpt-dec/` crate (Issue 007
+Phase E Tier 1, commit `1241f658`). `DecCache` now lives at
+`crates/katgpt-dec/src/cache.rs`.
+
+`katgpt-dec` is **deliberately zero-dependency** (its `Cargo.toml` comment:
+"Zero dependencies. katgpt-dec is a pure-math substrate..."). It exists precisely
+so `katgpt-core` can re-export it as `katgpt_core::dec` without creating a cyclic
+package dependency.
+
+Therefore `DecCache` **cannot implement a trait defined in `katgpt-core`** — that
+would require `katgpt-dec` to depend on `katgpt-core`, creating the exact cycle
+the spinoff was designed to break. T3.2 is blocked at the dependency-graph level.
+
+### Blocker 2 — `ZoneGeometryCache` lives in a different repo (`riir-neuron-db`)
+
+`ZoneGeometryCache` was placed in `riir-neuron-db/src/zone_cache.rs` (different
+repo) as a **deliberate layering decision** — its own doc-comment records why:
+> "The cache stores `ZoneGeometryPod` / `ZoneGeometryPodHeader`, which live in
+> this leaf crate (`riir-neuron-db`). `katgpt-core` is the leaf — it cannot
+> depend on `riir-neuron-db` without creating a cycle."
+
+So `ZoneGeometryCache` cannot host a trait defined in `katgpt-core` either.
+T3.3 is blocked at the cross-repo level.
+
+### Why not unblock with a new shared trait crate?
+
+The DRY value proposition was always marginal: **two impls, one trait**. Creating
+a new shared trait crate (e.g. `katgpt-cache-trait`) that both `katgpt-dec` and
+`riir-neuron-db` depend on would:
+
+1. Add a new crate + cross-repo path dependency for a Gain-tier (not GOAT-tier)
+   refactor with no measurable perf/quality gain.
+2. Force `katgpt-dec` to take a dependency it was explicitly designed to avoid.
+3. Still only have two consumers — the abstraction overhead exceeds the DRY win.
+
+Per global AGENTS.md ("Avoid unneeded complexity", "DRY ... as possible" — DRY is
+a means, not an end), a cross-crate trait crate for two consumers is unjustified.
+
+### Why not implement the trait in just one repo?
+
+- Trait in `katgpt-core`, impl only for `DecCache` → blocked (Blocker 1).
+- Trait in `katgpt-dec` → "cache versioning" doesn't belong in a pure-math
+  substrate, and `riir-neuron-db` doesn't depend on `katgpt-dec`.
+- Trait in `riir-neuron-db`, impl only for `ZoneGeometryCache` → single impl,
+  no DRY win (there's no second consumer in that repo today).
+
+None of these deliver the original DRY promise.
+
+### Decision
+
+**Drop Phase 3. Do not implement T3.1–T3.5 as written.** The DRY extraction was
+conditional on both caches living in `katgpt-core`, which they no longer do.
+
+If a future crate accumulates multiple versioned caches (e.g. `riir-neuron-db`
+adds an HLA-eigenbasis cache or a Gram cache alongside `ZoneGeometryCache` and
+`ShardIndex`), the right move is to define the trait *in that repo at that time*,
+co-located with its consumers — not to pre-build a trait crate now against
+speculative future demand.
+
+The Phase 3 tasks below are left in-place for historical context but should be
+read as **superseded by this section**.
 
 ## Open Questions
 
