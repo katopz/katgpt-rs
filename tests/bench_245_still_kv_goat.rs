@@ -741,7 +741,7 @@ fn make_fold_context_for_t26() -> katgpt_rs::fold::FoldContext {
             0.85, // step 9
         ];
         for &s in &per_step {
-            scores.extend(std::iter::repeat(s).take(10));
+            scores.extend(std::iter::repeat_n(s, 10));
         }
         scores
     };

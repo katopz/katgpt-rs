@@ -61,7 +61,7 @@ fn test_phase1_state_prediction_convergence() {
     // Single fixed key-value pair — delta-rule converges monotonically on one association
     let features = vec![0.8, 0.3, -0.5];
     let key = hasher.hash_key(&features);
-    let value = hasher.hash_value(&vec![0.4, -0.2, 0.7]);
+    let value = hasher.hash_value(&[0.4, -0.2, 0.7]);
 
     let mut errors = Vec::new();
     for i in 0..200 {
@@ -246,7 +246,7 @@ fn test_phase2_observation_builds_memory() {
     let rel = pruner.relevance(5, 3, &[1, 2, 3]);
     // The relevance should be valid and in [0, 1]
     assert!(
-        rel >= 0.0 && rel <= 1.0,
+        (0.0..=1.0).contains(&rel),
         "Relevance should be in [0, 1]: got {rel}"
     );
     assert_eq!(pruner.memory().update_count(), 30);
@@ -315,7 +315,7 @@ fn test_phase2_correction_modes_sweep() {
 
         let rel = pruner.relevance(3, 1, &[0, 1]);
         assert!(
-            rel >= 0.0 && rel <= 1.0,
+            (0.0..=1.0).contains(&rel),
             "Mode {:?}: relevance should be in [0, 1], got {rel}",
             mode
         );
@@ -357,7 +357,7 @@ fn test_phase2_rank_sweep() {
 
         let rel = pruner.relevance(5, 3, &[1, 2, 3]);
         assert!(
-            rel >= 0.0 && rel <= 1.0,
+            (0.0..=1.0).contains(&rel),
             "rank={rank}: relevance should be in [0, 1], got {rel}"
         );
     }

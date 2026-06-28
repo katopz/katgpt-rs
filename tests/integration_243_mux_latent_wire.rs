@@ -481,12 +481,8 @@ fn test_octree_bridge_mixed_groups() {
     );
 
     // Groups 1-7: all Zero → 0.0
-    for g in 1..8 {
-        assert!(
-            (weights[g] - 0.0).abs() < f32::EPSILON,
-            "Group {g} should be 0.0, got {}",
-            weights[g]
-        );
+    for (g, w) in weights.iter().enumerate().take(8).skip(1) {
+        assert!((w - 0.0).abs() < f32::EPSILON, "Group {g} should be 0.0, got {}", w);
     }
 
     // Round-trip: the averaging loss means we can't recover individual alternation,

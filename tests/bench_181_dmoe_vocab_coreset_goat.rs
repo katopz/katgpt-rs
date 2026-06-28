@@ -40,9 +40,9 @@ mod tests {
             // Spread remainder uniformly over tail
             let tail_count = vocab_size.saturating_sub(50).max(1) as f32;
             let tail_prob = remaining / tail_count;
-            for v in 0..vocab_size {
-                if dist[v] == 0.0 {
-                    dist[v] = tail_prob;
+            for d in dist.iter_mut() {
+                if *d == 0.0 {
+                    *d = tail_prob;
                 }
             }
             marginals.push(dist);

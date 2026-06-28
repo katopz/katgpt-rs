@@ -192,7 +192,7 @@ fn g3_step_perf_under_200ns_release() {
     let mut entropy = 5.0f32;
     for i in 0..64 {
         entropy = if i % 16 < 8 { entropy - 0.3 } else { entropy + 0.3 };
-        entropy = entropy.max(0.1).min(10.0);
+        entropy = entropy.clamp(0.1, 10.0);
         let _ = ctrl.step(entropy, i);
     }
 
@@ -201,7 +201,7 @@ fn g3_step_perf_under_200ns_release() {
     let t0 = Instant::now();
     for i in 0..N {
         entropy = if (i % 16) < 8 { entropy - 0.3 } else { entropy + 0.3 };
-        entropy = entropy.max(0.1).min(10.0);
+        entropy = entropy.clamp(0.1, 10.0);
         let action = ctrl.step(entropy, i);
         // Prevent the compiler from optimising step() away.
         if action == StepAction::Terminate {
@@ -335,7 +335,7 @@ fn g6_kurtosis_escape_hatch_end_to_end() {
     // (5 tests). This gate re-runs the path end-to-end through the adapter to
     // verify the host wiring (StepContext → on_step → StepDirective) doesn't
     // drop the escape signal.
-    let emb = synth_embedding_matrix(VOCAB, EMB_DIM, 0x6dead_beef);
+    let emb = synth_embedding_matrix(VOCAB, EMB_DIM, 0x0006_DEAD_BEEF);
     let mut adapter = SwiRStrategyAdapter::with_config(
         VOCAB,
         EMB_DIM,
@@ -424,7 +424,7 @@ fn g7_step_zero_allocation_debug() {
         let mut entropy = 5.0f32;
         for i in 1..1024u32 {
             entropy = if (i % 16) < 8 { entropy - 0.3 } else { entropy + 0.3 };
-            entropy = entropy.max(0.1).min(10.0);
+            entropy = entropy.clamp(0.1, 10.0);
             let _ = ctrl.step(entropy, i);
             let _ = ctrl.should_mix_signal();
         }
@@ -456,7 +456,7 @@ fn g7_adapter_on_step_allocations_debug() {
     // We document the per-step cost so downstream hosts know what to expect.
     #[cfg(debug_assertions)]
     {
-        let emb = synth_embedding_matrix(VOCAB, EMB_DIM, 0x7a10c_5ee);
+        let emb = synth_embedding_matrix(VOCAB, EMB_DIM, 0x7A10_C5EE);
         let mut adapter = SwiRStrategyAdapter::new(VOCAB, EMB_DIM);
         let ids = ControlTokenIds::default();
         let probs = vec![1.0f32 / VOCAB as f32; VOCAB]; // uniform → high entropy → Latent
@@ -1149,7 +1149,7 @@ fn g1h_accuracy_gate_harness_structure() {
     assert!(cmp.swir.accuracy() >= 0.0 && cmp.swir.accuracy() <= 1.0);
     // Delta is computable.
     let delta = cmp.accuracy_delta_pp();
-    assert!(delta >= -100.0 && delta <= 100.0);
+    assert!((-100.0..=100.0).contains(&delta));
 }
 
 // ════════════════════════════════════════════════════════════════════════════

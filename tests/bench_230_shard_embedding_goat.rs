@@ -46,8 +46,8 @@ mod bench {
         let mut vectors: Vec<[f32; STYLE_DIM]> = Vec::with_capacity(n);
         for _ in 0..n {
             let mut v = [0.0f32; STYLE_DIM];
-            for j in 0..STYLE_DIM {
-                v[j] = rng();
+            for x in v.iter_mut() {
+                *x = rng();
             }
             vectors.push(v);
         }
@@ -77,11 +77,11 @@ mod bench {
             let ei = mat.project(&vectors[i]);
             let mut proj_best_j = 0;
             let mut proj_best_dist = f32::MAX;
-            for j in 0..n {
+            for (j, vector_j) in vectors.iter().enumerate() {
                 if i == j {
                     continue;
                 }
-                let ej = mat.project(&vectors[j]);
+                let ej = mat.project(vector_j);
                 let d = ei.dist_sq(&ej);
                 if d < proj_best_dist {
                     proj_best_dist = d;
@@ -150,8 +150,8 @@ mod bench {
         let mut vecs = Vec::new();
         for _ in 0..100 {
             let mut v = [0.0f32; STYLE_DIM];
-            for j in 0..STYLE_DIM {
-                v[j] = rng();
+            for x in v.iter_mut() {
+                *x = rng();
             }
             vecs.push(mat.project(&v));
         }

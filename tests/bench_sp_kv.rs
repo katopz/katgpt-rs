@@ -148,10 +148,10 @@ fn bench_gate_bias_overhead() {
 
     // ── D: Monomorphized GateBias (mixed: ~50% pruned, prune-skip active) ──
     let mut mixed_bias = vec![0.0f32; config.block_size];
-    for t in 0..t_n {
+    for (t, mb) in mixed_bias.iter_mut().enumerate().take(t_n) {
         // Prune ~50% of positions (outside window of 16)
-        if t < t_n - 16 && t % 2 == 0 {
-            mixed_bias[t] = f32::NEG_INFINITY;
+        if t < t_n - 16 && t.is_multiple_of(2) {
+            *mb = f32::NEG_INFINITY;
         }
     }
 
@@ -291,8 +291,10 @@ fn bench_kv_density_ratio() {
     let full_kv_bytes = seq_len * kvd * 4 * 2 * config.n_layer; // f32 K+V per layer
 
     for &threshold in &thresholds {
-        let mut sp_config = SpKvConfig::default();
-        sp_config.threshold = threshold;
+        let mut sp_config = SpKvConfig {
+            threshold,
+            ..SpKvConfig::default()
+        };
         sp_config.resolve_hidden(config.n_embd);
 
         let mut sp_cache = SpKvCache::new(&sp_config, config.n_layer, config.block_size, kvd);
@@ -409,8 +411,10 @@ fn bench_decode_latency() {
     let elapsed_baseline = start_baseline.elapsed();
 
     // SP-KV: sparse decode with hard gating
-    let mut sp_config = SpKvConfig::default();
-    sp_config.threshold = 0.5;
+    let mut sp_config = SpKvConfig {
+        threshold: 0.5,
+        ..SpKvConfig::default()
+    };
     sp_config.resolve_hidden(config.n_embd);
 
     let predictors = SpKvPredictors::new(config.n_layer, config.n_embd, hidden, n_kv, 5.0);
@@ -521,9 +525,11 @@ fn test_palindrome_retention() {
     let window: usize = 8.min(seq_len / 2); // Small window to make the test harder
     let palindrome_pos: usize = 0; // Anchor at start, must be attended at end
 
-    let mut sp_config = SpKvConfig::default();
-    sp_config.window = window;
-    sp_config.threshold = 0.5;
+    let mut sp_config = SpKvConfig {
+        window,
+        threshold: 0.5,
+        ..SpKvConfig::default()
+    };
     sp_config.resolve_hidden(config.n_embd);
 
     let mut sp_cache = SpKvCache::new(&sp_config, config.n_layer, config.block_size, kvd);
@@ -699,7 +705,7 @@ fn test_utility_predictor_gradient_flow() {
         for &u in &utilities {
             // Sigmoid can saturate to exactly 0.0 or 1.0 with extreme inputs.
             // Valid range: finite values in [0, 1].
-            if !u.is_finite() || u < 0.0 || u > 1.0 {
+            if !u.is_finite() || !(0.0..=1.0).contains(&u) {
                 all_valid = false;
             }
         }

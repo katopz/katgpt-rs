@@ -188,8 +188,7 @@ fn test_rubric_bandit_no_longer_equivalent_to_scalar() {
 
     // Feed same episodes to both bandits
     for _ in 0..episodes {
-        for arm in 0..num_arms {
-            let rubric = &arm_rubrics[arm];
+        for (arm, rubric) in arm_rubrics.iter().enumerate() {
             let delta = 1.0 - rubric.weighted_score();
 
             rubric_bandit.observe_rubric(arm, rubric, &reference);
@@ -203,8 +202,8 @@ fn test_rubric_bandit_no_longer_equivalent_to_scalar() {
         "Arm", "Scalar δ", "Rubric", "Delta", "Diff"
     );
     let mut any_different = false;
-    for arm in 0..num_arms {
-        let ws = arm_rubrics[arm].weighted_score();
+    for (arm, arm_rubric) in arm_rubrics.iter().enumerate() {
+        let ws = arm_rubric.weighted_score();
         let delta = 1.0 - ws;
         let r_reward = rubric_bandit.mean_reward(arm);
         let d_reward = delta_bandit.mean_delta(arm);

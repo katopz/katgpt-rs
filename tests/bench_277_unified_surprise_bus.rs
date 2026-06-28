@@ -82,13 +82,15 @@ const F1_EVENTS: [(usize, [f32; 8]); 3] = [
 const F1_WINDOW: usize = 20;
 
 fn f1_metric(af: f32, as_: f32) -> f32 {
-    let mut config = ReconstructionConfig::default();
-    config.temporal_deriv_alpha_fast = af;
-    config.temporal_deriv_alpha_slow = as_;
+    let config = ReconstructionConfig {
+        temporal_deriv_alpha_fast: af,
+        temporal_deriv_alpha_slow: as_,
+        ..ReconstructionConfig::default()
+    };
     let mut state = ReconstructionState::with_config([0.0; 8], config);
 
     let mut surprise = [0.0f32; F1_TRACE_LEN];
-    for t in 0..F1_TRACE_LEN {
+    for (t, surprise_t) in surprise.iter_mut().enumerate() {
         // Inject scripted event delta at the event tick.
         for &(tick, delta) in &F1_EVENTS {
             if t == tick {
@@ -97,7 +99,7 @@ fn f1_metric(af: f32, as_: f32) -> f32 {
         }
         // No-op evolve (zero evidence) — kernel still observes the HLA.
         state.evolve_hla();
-        surprise[t] = state.surprise_norm();
+        *surprise_t = state.surprise_norm();
     }
 
     // Peak threshold = 0.5 × max surprise (per the sweep spec).
@@ -154,6 +156,9 @@ fn f1_metric(af: f32, as_: f32) -> f32 {
 
 const F2_RANK: usize = 8;
 
+/// Key/value pair for the F2 synthetic stream.
+type F2Pair = ([f32; F2_RANK], [f32; F2_RANK]);
+
 #[inline]
 fn l2_normalize(v: &mut [f32; F2_RANK]) {
     let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt().max(1e-8);
@@ -163,11 +168,11 @@ fn l2_normalize(v: &mut [f32; F2_RANK]) {
     }
 }
 
-fn f2_build_stream() -> (Vec<([f32; F2_RANK], [f32; F2_RANK])>, usize) {
+fn f2_build_stream() -> (Vec<F2Pair>, usize) {
     // Boring centroid: first 4 dims active.
     let mut centroid_bg = [0.0f32; F2_RANK];
-    for i in 0..4 {
-        centroid_bg[i] = 1.0;
+    for c in centroid_bg.iter_mut().take(4) {
+        *c = 1.0;
     }
     l2_normalize(&mut centroid_bg);
 
@@ -185,7 +190,7 @@ fn f2_build_stream() -> (Vec<([f32; F2_RANK], [f32; F2_RANK])>, usize) {
     const BORING_BLOCK: usize = 200;
     const NOVEL_BLOCK: usize = 50;
 
-    let mut stream: Vec<([f32; F2_RANK], [f32; F2_RANK])> = Vec::new();
+    let mut stream: Vec<F2Pair> = Vec::new();
     for pair in 0..5 {
         for _ in 0..BORING_BLOCK {
             stream.push((centroid_bg, bg_val));
@@ -202,7 +207,7 @@ fn f2_build_stream() -> (Vec<([f32; F2_RANK], [f32; F2_RANK])>, usize) {
     (stream, total)
 }
 
-fn f2_metric(af: f32, as_: f32, stream: &[([f32; F2_RANK], [f32; F2_RANK])]) -> f32 {
+fn f2_metric(af: f32, as_: f32, stream: &[F2Pair]) -> f32 {
     let mut gated = DeltaMemoryState::new(DeltaMemoryConfig::default());
     gated.enable_surprise_gate_with_alphas(af, as_);
     gated.set_theta_surprise(0.10);

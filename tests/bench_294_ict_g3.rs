@@ -84,9 +84,9 @@ fn sample_decision_point(rng: &mut Lcg) -> Vec<Vec<f32>> {
                 let mut p = vec![0.0_f32; ACTION_DIM];
                 p[dom] = dom_mass;
                 let rest = (1.0 - dom_mass) / (ACTION_DIM - 1) as f32;
-                for j in 0..ACTION_DIM {
+                for (j, pj) in p.iter_mut().enumerate() {
                     if j != dom {
-                        p[j] = rest * (0.5 + rng.next_f32());
+                        *pj = rest * (0.5 + rng.next_f32());
                     }
                 }
                 p
@@ -95,18 +95,18 @@ fn sample_decision_point(rng: &mut Lcg) -> Vec<Vec<f32>> {
                 let top_count = 2 + (rng.next_u64() % 2) as usize;
                 let mut p = vec![0.0_f32; ACTION_DIM];
                 let base = 1.0 / top_count as f32;
-                for k in 0..top_count {
-                    p[k] = base * (0.8 + 0.4 * rng.next_f32());
+                for pk in p.iter_mut().take(top_count) {
+                    *pk = base * (0.8 + 0.4 * rng.next_f32());
                 }
-                for j in top_count..ACTION_DIM {
-                    p[j] = 0.02 * rng.next_f32();
+                for pj in p[top_count..].iter_mut() {
+                    *pj = 0.02 * rng.next_f32();
                 }
                 p
             }
             _ => {
                 let mut p = vec![0.0_f32; ACTION_DIM];
-                for j in 0..ACTION_DIM {
-                    p[j] = 1.0 + rng.next_f32();
+                for pj in p.iter_mut() {
+                    *pj = 1.0 + rng.next_f32();
                 }
                 p
             }

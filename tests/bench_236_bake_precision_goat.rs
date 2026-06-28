@@ -49,9 +49,9 @@ fn cosine_distance(a: &[f32; 8], b: &[f32; 8]) -> f32 {
 
 fn random_observation(seed: u32, tick: u32) -> [f32; 8] {
     let mut obs = [0.0f32; 8];
-    for d in 0..8 {
+    for (d, obs_d) in obs.iter_mut().enumerate() {
         let x = ((seed.wrapping_mul(2654435761)).wrapping_add(tick * (d as u32 + 1))) as f32;
-        obs[d] = ((x as u32) % 1000) as f32 / 1000.0 * 2.0 - 1.0; // [-1, 1]
+        *obs_d = ((x as u32) % 1000) as f32 / 1000.0 * 2.0 - 1.0; // [-1, 1]
     }
     obs
 }
@@ -83,8 +83,8 @@ fn g2_uninformative_prior_absorbs() {
     let lambda_old = [UNINFORMATIVE_PRECISION; 8];
     let obs = [1.0f32; 8];
     let (mu_new, _) = bake_update(&mu_old, &lambda_old, &obs, DEFAULT_OBS_PRECISION);
-    for d in 0..8 {
-        let error = (mu_new[d] - 1.0).abs();
+    for mu in &mu_new {
+        let error = (mu - 1.0).abs();
         assert!(
             error < 0.1,
             "G2 FAIL: uninformative prior should absorb eagerly, error={}",
@@ -102,11 +102,11 @@ fn g3_high_precision_anchors() {
     let lambda_old = [1000.0f32; 8];
     let obs = [1.0f32; 8];
     let (mu_new, _) = bake_update(&mu_old, &lambda_old, &obs, DEFAULT_OBS_PRECISION);
-    for d in 0..8 {
+    for mu in &mu_new {
         assert!(
-            mu_new[d].abs() < 0.002,
+            mu.abs() < 0.002,
             "G3 FAIL: high precision anchor should resist, moved to {}",
-            mu_new[d]
+            mu
         );
     }
     println!("G3 PASS: high precision anchors resist change");

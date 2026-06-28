@@ -117,7 +117,7 @@ mod tests {
 
         // Should have komi history entries at episode 25 and 50
         assert!(
-            results.komi_history.len() >= 1,
+            !results.komi_history.is_empty(),
             "Expected at least 1 komi adjustment, got {}",
             results.komi_history.len()
         );

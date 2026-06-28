@@ -70,7 +70,7 @@ const LR: f32 = 1.0;
 const FD_EPS: f32 = 1e-2;
 /// Global L2 clip norm for W_R gradient (T3b mitigation).
 const W_R_MAX_GRAD_NORM: f32 = 1.0;
-const SEED: u64 = 0xA11CE_2222u64;
+const SEED: u64 = 0x000A_11CE_2222_u64;
 
 // ── Deterministic xorshift64* PRNG (mirrors G2/G3 tests) ─────────────────
 

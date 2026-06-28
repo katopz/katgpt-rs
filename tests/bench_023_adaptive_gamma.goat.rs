@@ -96,9 +96,9 @@ fn synth_logits(t: usize, out: &mut [f32], rng: &mut u64) {
     let bump = (phase.sin() * 0.5 + 0.0).max(0.0); // [0, 0.5] peak at t=N/2
     // Peakiness: high at start/end (one dominant token), low in the middle.
     let peak_logit = 8.0 - bump * 7.0; // [1.0, 8.0]
-    for i in 0..n {
+    for (i, out_i) in out.iter_mut().enumerate() {
         let noise = (lcg(rng) as f32 / u32::MAX as f32) * 2.0 - 1.0;
-        out[i] = if i == 0 { peak_logit } else { noise * 0.5 };
+        *out_i = if i == 0 { peak_logit } else { noise * 0.5 };
     }
 }
 
@@ -111,19 +111,17 @@ fn synth_logits(t: usize, out: &mut [f32], rng: &mut u64) {
 fn simulate_step(gamma: usize, alpha_true: f32, forecast_cost_us: f64, rng: &mut u64) -> (usize, f64) {
     let gamma_eff = gamma.min(GAMMA_MAX);
     let mut accepted = 0usize;
-    let mut all_accepted = true;
     for _ in 0..gamma_eff {
         // Accept with probability alpha_true (rejection sampling where p≈q).
         let r = (lcg(rng) as f32 / u32::MAX as f32).abs();
         if r < alpha_true {
             accepted += 1;
         } else {
-            all_accepted = false;
             break;
         }
     }
     // Bonus token if all accepted (Leviathan Algorithm 1).
-    let returned = if all_accepted { accepted + 1 } else { accepted + 1 };
+    let returned = accepted + 1;
     // Cost: sequential draft + batched verify + fixed overhead + forecast.
     let cost = gamma_eff as f64 * C_DRAFT_PER_TOKEN_US
         + C_VERIFY_BATCHED_US
@@ -366,7 +364,7 @@ fn smoke_forecast_and_simulate() {
         let alpha = forecast.observe_and_forecast(&logits);
         assert!(alpha > 0.0 && alpha <= 1.0, "alpha out of range: {alpha}");
         let gamma = forecast.adaptive_gamma(TARGET_TOKENS, alpha, GAMMA_MIN, GAMMA_MAX);
-        assert!(gamma >= GAMMA_MIN && gamma <= GAMMA_MAX, "gamma out of bounds: {gamma}");
+        assert!((GAMMA_MIN..=GAMMA_MAX).contains(&gamma), "gamma out of bounds: {gamma}");
         let h = entropy_nats_zero_alloc(&logits);
         let alpha_true = (1.0 - 0.3 * h).clamp(0.01, 1.0);
         let (acc, cost) = simulate_step(gamma, alpha_true, 0.5, &mut rng);

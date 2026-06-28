@@ -397,7 +397,7 @@ fn test_f6_compile_hello_program() {
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| *op == "halt"),
+            .is_some_and(|(op, _)| *op == "halt"),
         "program should end with halt, last: {:?}",
         compiled.program.last()
     );
@@ -570,7 +570,7 @@ fn test_f6_runner_compile_rust_template() {
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| *op == "halt")
+            .is_some_and(|(op, _)| *op == "halt")
     );
 }
 
@@ -676,7 +676,7 @@ fn test_h5_hello_compile_through_runner() {
         compiled
             .program
             .last()
-            .map_or(false, |(op, _)| *op == "halt")
+            .is_some_and(|(op, _)| *op == "halt")
     );
 
     // Verify prefix format

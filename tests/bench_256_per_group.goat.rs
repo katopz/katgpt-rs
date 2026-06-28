@@ -52,8 +52,8 @@ fn build_cache(centroids: &[Vec<f32>], n_blocks: usize) -> BlockTopKCache {
     let router = BlockTopKRouter::new(true);
     let mut cache = BlockTopKCache::new(n_blocks, HEAD_DIM);
     let zero_values = vec![0.0f32; BLOCK_SIZE * HEAD_DIM];
-    for i in 0..n_blocks {
-        let keys = make_block_keys(&centroids[i], i);
+    for (i, centroid) in centroids.iter().enumerate().take(n_blocks) {
+        let keys = make_block_keys(centroid, i);
         router.forward_cache(&mut cache, &keys, &zero_values, i, HEAD_DIM);
     }
     cache
@@ -133,8 +133,8 @@ fn bench_per_group_vs_shared() {
                 // ── Latency: shared ──
                 let t = Instant::now();
                 for _ in 0..ITERS {
-                    for q in 0..N_QUERIES {
-                        let _ = shared.forward_indexer(&queries[q], &cache, n_blocks, top_k, &mut sc_s);
+                    for query in &queries {
+                        let _ = shared.forward_indexer(query, &cache, n_blocks, top_k, &mut sc_s);
                     }
                 }
                 let shared_ns = t.elapsed().as_nanos() as f64 / (ITERS * N_QUERIES) as f64;
@@ -142,8 +142,8 @@ fn bench_per_group_vs_shared() {
                 // ── Latency: per-group ──
                 let t = Instant::now();
                 for _ in 0..ITERS {
-                    for q in 0..N_QUERIES {
-                        let _ = pergrp.forward_indexer(&queries[q], &cache, n_blocks, top_k, &mut sc_p);
+                    for query in &queries {
+                        let _ = pergrp.forward_indexer(query, &cache, n_blocks, top_k, &mut sc_p);
                     }
                 }
                 let pg_ns = t.elapsed().as_nanos() as f64 / (ITERS * N_QUERIES) as f64;
@@ -159,9 +159,9 @@ fn bench_per_group_vs_shared() {
                 // ── Diversity + recall (single measurement pass, store decisions) ──
                 let mut dec_s: Vec<Vec<usize>> = Vec::with_capacity(N_QUERIES);
                 let mut dec_p: Vec<Vec<usize>> = Vec::with_capacity(N_QUERIES);
-                for q in 0..N_QUERIES {
-                    dec_s.push(shared.forward_indexer(&queries[q], &cache, n_blocks, top_k, &mut sc_s).blocks);
-                    dec_p.push(pergrp.forward_indexer(&queries[q], &cache, n_blocks, top_k, &mut sc_p).blocks);
+                for query in &queries {
+                    dec_s.push(shared.forward_indexer(query, &cache, n_blocks, top_k, &mut sc_s).blocks);
+                    dec_p.push(pergrp.forward_indexer(query, &cache, n_blocks, top_k, &mut sc_p).blocks);
                 }
 
                 // Coverage = union of distinct blocks selected across all queries.

@@ -94,8 +94,8 @@ fn generate_workload(rng: &mut Lcg) -> Vec<Sample> {
         if want_decisive {
             // Decisive: one large logit, rest small. softmax puts ~0.5-0.8 on top.
             let top_idx = (rng.next_u64() as usize) % VOCAB;
-            for k in 0..VOCAB {
-                logits[k] = if k == top_idx {
+            for (k, logit_k) in logits.iter_mut().enumerate() {
+                *logit_k = if k == top_idx {
                     2.0 + rng.next_f32() * 1.5 // exp(2.0) ≈ 7.4 → dominant
                 } else {
                     rng.next_std_normal() * 0.3
@@ -105,8 +105,8 @@ fn generate_workload(rng: &mut Lcg) -> Vec<Sample> {
             regime = if p[top_idx] > 0.37 { "decisive" } else { "long-tail" };
         } else {
             // Long-tail: small logits, near-uniform softmax.
-            for k in 0..VOCAB {
-                logits[k] = rng.next_std_normal() * 0.4;
+            for logit_k in logits.iter_mut() {
+                *logit_k = rng.next_std_normal() * 0.4;
             }
             p = softmax(&logits);
             // Verify long-tail: max(p) should be < 0.37 most of the time.

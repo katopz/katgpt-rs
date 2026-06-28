@@ -3,13 +3,13 @@
 //!
 //! Formal verification that the feature meets all GOAT gates:
 //! - G1: Single-request correctness — R=1 output preserves LeviathanVerifier
-//!       semantics (no selection bias from the non-anticipating early-stop).
+//!   semantics (no selection bias from the non-anticipating early-stop).
 //! - G2: Multi-request throughput — R=4, Θ_scheduler ≥ Θ_uniform * 1.05 on a
-//!       cliff SPS curve (≥5% throughput gain).
+//!   cliff SPS curve (≥5% throughput gain).
 //! - G3: No regression — the feature is isolated (no feature deps), the
-//!       default build is unaffected.
+//!   default build is unaffected.
 //! - G4: Zero-alloc hot path — `schedule_with_scratch` reuses capacity across
-//!       calls; no per-call heap allocation after warm-up.
+//!   calls; no per-call heap allocation after warm-up.
 //! - G5: Sigmoid discipline — no `softmax`/`Softmax` tokens in the source.
 //!
 //! See `.plans/339_hardware_aware_prefix_scheduler.md` for the full plan.

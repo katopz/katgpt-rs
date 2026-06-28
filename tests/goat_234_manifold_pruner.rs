@@ -37,7 +37,7 @@ impl ConstraintPruner for ThresholdPruner {
 struct EvenPruner;
 impl ConstraintPruner for EvenPruner {
     fn is_valid(&self, _depth: usize, token_idx: usize, _parent_tokens: &[usize]) -> bool {
-        token_idx % 2 == 0
+        token_idx.is_multiple_of(2)
     }
 }
 
@@ -449,8 +449,8 @@ fn g6_kernel_relevance_gaussian_vs_linear() {
             }
         } else {
             // Irrelevant: random direction, far from query
-            for d in 0..dim {
-                slot[d] = hash_f32(0xDEAD + i as u64, d) * 3.0;
+            for (d, slot_d) in slot.iter_mut().enumerate() {
+                *slot_d = hash_f32(0xDEAD + i as u64, d) * 3.0;
             }
         }
     }
@@ -743,8 +743,8 @@ fn g8_dtree_manifold_captures_boundary_tokens() {
             let peak = (vocab * 5 / 10) % vocab; // a boundary token
             probs[peak] = 0.5;
             // Also give prob to valid tokens
-            for t in 0..(vocab * 4 / 10).min(vocab) {
-                probs[t] = 0.1;
+            for p in probs.iter_mut().take((vocab * 4 / 10).min(vocab)) {
+                *p = 0.1;
             }
             // Normalize
             let sum: f32 = probs.iter().sum();

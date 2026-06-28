@@ -165,9 +165,9 @@ fn proof_t5_reversed_energy_worsens_output() {
 
     // Reverse: noise positions get signal energy and vice versa
     let mut reversed_energy = vec![0.0f32; seq_len];
-    for i in 0..seq_len {
+    for (i, re) in reversed_energy.iter_mut().enumerate() {
         let partner = seq_len - 1 - i;
-        reversed_energy[i] = energy[partner];
+        *re = energy[partner];
     }
 
     let attn_ungated = vec![1.0 / seq_len as f32; seq_len * seq_len];
@@ -227,7 +227,10 @@ fn proof_t6_high_alpha_sharper_gate() {
     let energy = [0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0f32];
     let gate = compute_energy_gate(&energy, 10.0, 0.35);
 
-    let sharp_count = gate.iter().filter(|&&g| g < 0.1 || g > 0.9).count();
+    let sharp_count = gate
+        .iter()
+        .filter(|&&g| !(0.1..=0.9).contains(&g))
+        .count();
 
     // With high alpha, most values should be near-binary (at least 5 of 8)
     assert!(
@@ -375,7 +378,7 @@ fn proof_t7_eviction_preserves_attention_quality() {
     let energy = gate.energy_scores(&x, seq_len, head_dim);
 
     // Full uniform attention
-    let mut attn_full = vec![1.0 / seq_len as f32; seq_len * seq_len];
+    let attn_full = vec![1.0 / seq_len as f32; seq_len * seq_len];
     let y_full = matmul_attn_values(&attn_full, &values, seq_len, head_dim);
 
     // Evict bottom 25% (4 positions) by energy
@@ -558,7 +561,7 @@ fn proof_t9_energy_profile_table() {
     println!("| Energy | z-norm | α=1.0 | α=2.2 | α=5.0 | α=10.0 |");
     println!("|-------:|-------:|------:|------:|------:|-------:|");
 
-    for (i, (&e, &zv)) in energy.iter().zip(&z).enumerate() {
+    for (&e, &zv) in energy.iter().zip(&z) {
         print!("| {:>6.1} | {:>6.3} |", e, zv);
         for &alpha in &alpha_values {
             let g = sigmoid(alpha * (zv - tau));
@@ -571,7 +574,7 @@ fn proof_t9_energy_profile_table() {
     let gate_default = compute_energy_gate(&energy, 2.2, tau);
     println!("\n### Gate Bar Chart (α=2.2, τ=0.35)\n");
     println!("```");
-    for (i, (&e, &g)) in energy.iter().zip(&gate_default).enumerate() {
+    for (&e, &g) in energy.iter().zip(&gate_default) {
         let bar_len = (g * 40.0).round() as usize;
         let bar: String = "█".repeat(bar_len);
         println!("  E={:>5.1} │{} {:.3}", e, bar, g);

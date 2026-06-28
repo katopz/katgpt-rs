@@ -178,7 +178,7 @@ fn make_sq_cache(head_dim: usize, max_seq_len: usize, avg_bits: f32) -> Spectral
         head_dim,
     };
 
-    SpectralQuantKVCache::from_calibration(&config, &[cal.clone()], &[cal])
+    SpectralQuantKVCache::from_calibration(&config, std::slice::from_ref(&cal), &[cal])
 }
 
 /// Build a TurboQuantKVCache with symmetric bit allocation.
@@ -805,10 +805,7 @@ fn test_proof6_cross_method_benchmark() {
     println!("  Parameters: head_dim={head_dim}, n_keys={n_keys}");
     println!();
 
-    let mut results: Vec<MethodResult> = Vec::new();
-
-    // ShardKV: avg_bits_k=4, avg_bits_v=2 → avg 3 bits
-    results.push(bench_shard_kv(head_dim, max_seq_len, n_keys, 4.0, 2.0));
+    let mut results: Vec<MethodResult> = vec![bench_shard_kv(head_dim, max_seq_len, n_keys, 4.0, 2.0)];
 
     // SpectralQuant at 3-bit
     results.push(bench_spectral_quant(head_dim, max_seq_len, n_keys, 3.0));
@@ -893,7 +890,6 @@ fn test_proof7_asymmetric_vs_symmetric() {
             "  VERDICT: PASS — asymmetric allocation wins by {:.4} combined fidelity",
             asym_fidelity - sym_fidelity
         );
-        assert!(true);
     } else {
         // Let the data speak honestly
         println!(

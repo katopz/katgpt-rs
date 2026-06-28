@@ -266,7 +266,7 @@ fn g2_g3_coreset_contract_and_well_formed_outputs() {
 
         assert_eq!(
             sizes.last(),
-            Some(&(N_EXPERTS as usize)),
+            Some(&N_EXPERTS),
             "G2c FAIL [{label}]: p=1.0 must select all experts, got {sizes:?}"
         );
 
