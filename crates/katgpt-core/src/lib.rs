@@ -32,7 +32,13 @@ pub mod coda;
 #[cfg(feature = "dec_operators")]
 pub use katgpt_dec as dec;
 pub mod delta_mem;
-pub mod hla;
+// Higher-order Linear Attention (HLA) substrate — cache types + streaming
+// kernels. Spun out to the `katgpt-hla` crate (Issue 007 Phase E Tier 2 #4)
+// and re-exported here as `katgpt_core::hla` for backwards compatibility.
+// All `crate::hla::*` and `katgpt_core::hla::*` paths resolve unchanged. The
+// composition layer (`forward_hla` / `forward_ahla`, depends on ForwardContext)
+// stays in katgpt-core; the cognitive role-aware variants stay in riir-engine.
+pub use katgpt_hla as hla;
 // Shared leaky-integrator primitive. Spun out to the `katgpt-types` leaf
 // (Issue 007 Phase E Tier 1 #3) so both katgpt-core (`sense::reconstruction`)
 // and `katgpt-micro-belief` (`LeakyIntegrator::step`) can consume it without

@@ -1,0 +1,27 @@
+[package]
+name = "katgpt-hla"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Higher-order Linear Attention (HLA) substrate — O(1) inference cache types and streaming kernels. Pure substrate, depends only on katgpt-types (Config + SIMD)."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["attention", "linear-attention", "hla", "inference", "modelless"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# katgpt-hla is a pure substrate leaf — the only katgpt-* dependency is the
+# shared types/SIMD leaf (Issue 007 Phase E Tier 2 #4). HLA's two external
+# references are `Config` (head_dim / n_head / n_kv_head / n_layer) and the
+# SIMD kernels used in the readout/update hot path. Both live in
+# katgpt-types, so the whole crate compiles without katgpt-core.
+katgpt-types = { path = "../katgpt-types" }
+
+[features]
+# katgpt-hla compiles its entire substrate (types + kernel) unconditionally.
+# No feature flags — HLA substrate is always-on inside katgpt-core (mirrors
+# the pre-promotion behavior where `pub mod hla;` was unconditional). The
+# composition layer (`forward_hla` / `forward_ahla`) stays in katgpt-core
+# because it depends on `ForwardContext`; the cognitive extensions
+# (`*_role_aware`, `ThirdOrderMoment`) stay in riir-engine because they
+# depend on `role_transport`.
+default = []

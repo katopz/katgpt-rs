@@ -17,13 +17,14 @@
 //!
 //! # Origin
 //!
-//! Moved from `katgpt-rs/src/hla/types.rs` (Plan 008 Phase 1 Step 4, 2026-06-28).
-//! This is the pure substrate half of HLA — the cognitive extensions (role-aware
-//! kernels, `ThirdOrderMoment`, `HlaUpdateMode`) live in `riir-engine/src/hla/`
-//! behind the `hla_role_aware` feature (Category C per Issue 007 §"Cross-repo
-//! consumer cleanup").
+//! Originally `katgpt-rs/src/hla/types.rs`; moved into `katgpt-core/src/hla/` by
+//! Plan 008 Phase 1 Step 4 (2026-06-28); promoted to this standalone crate by
+//! Issue 007 Phase E Tier 2 #4 (2026-06-28). This is the pure substrate half of
+//! HLA — the cognitive extensions (role-aware kernels, `ThirdOrderMoment`,
+//! `HlaUpdateMode`) live in `riir-engine/src/hla/` behind the `hla_role_aware`
+//! feature (Category C per Issue 007 §"Cross-repo consumer cleanup").
 
-use crate::types::Config;
+use katgpt_types::Config;
 
 // ── Symmetric Second-Order HLA ────────────────────────────────
 

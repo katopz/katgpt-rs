@@ -45,6 +45,13 @@ katgpt-types = { path = "../katgpt-types" }
 # in by the `micro_belief` feature and re-exported as `katgpt_core::micro_belief`
 # for backwards compatibility.
 katgpt-micro-belief = { path = "../katgpt-micro-belief", optional = true }
+# katgpt-hla houses the Higher-order Linear Attention substrate (cache types +
+# streaming kernels) spun out of katgpt-core::hla (Issue 007 Phase E Tier 2 #4).
+# Always-on — the HLA substrate is unconditional substrate (mirrors the
+# pre-promotion `pub mod hla;`), re-exported as `katgpt_core::hla` for
+# backwards compatibility. The composition layer (`forward_hla` /
+# `forward_ahla`) stays in katgpt-core because it depends on ForwardContext.
+katgpt-hla = { path = "../katgpt-hla" }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }

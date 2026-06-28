@@ -1732,6 +1732,7 @@ dependencies = [
  "fastrand",
  "half",
  "katgpt-dec",
+ "katgpt-hla",
  "katgpt-micro-belief",
  "katgpt-types",
  "log",
@@ -1750,6 +1751,13 @@ dependencies = [
 [[package]]
 name = "katgpt-dec"
 version = "0.1.0"
+
+[[package]]
+name = "katgpt-hla"
+version = "0.1.0"
+dependencies = [
+ "katgpt-types",
+]
 
 [[package]]
 name = "katgpt-micro-belief"

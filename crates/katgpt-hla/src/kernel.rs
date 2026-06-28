@@ -20,13 +20,15 @@
 //!
 //! # Origin
 //!
-//! Moved from `katgpt-rs/src/hla/kernel.rs` (Plan 008 Phase 1 Step 4, 2026-06-28).
-//! Pure substrate — depends only on `crate::simd` and `crate::hla::types`, both
-//! in katgpt-core. The cognitive role-aware variants (`*_role_aware`) live in
-//! `riir-engine/src/hla/kernel.rs` behind the `hla_role_aware` feature.
+//! Originally `katgpt-rs/src/hla/kernel.rs`; moved into `katgpt-core/src/hla/` by
+//! Plan 008 Phase 1 Step 4 (2026-06-28); promoted to this standalone crate by
+//! Issue 007 Phase E Tier 2 #4 (2026-06-28). Pure substrate — depends only on
+//! `katgpt_types::simd` and `crate::types` (also in katgpt-types). The cognitive
+//! role-aware variants (`*_role_aware`) live in `riir-engine/src/hla/kernel.rs`
+//! behind the `hla_role_aware` feature.
 
-use crate::hla::types::{AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState};
-use crate::simd;
+use crate::types::{AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState};
+use katgpt_types::simd;
 
 // ── Symmetric Second-Order HLA Kernels ─────────────────────────
 
@@ -102,11 +104,11 @@ pub fn hla_state_update(
 
     // Apply decay if needed (γ < 1.0)
     if gamma < 1.0 {
-        crate::simd::simd_scale_inplace(sk, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.cqv, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.mq, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.g, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.h, gamma);
+        katgpt_types::simd::simd_scale_inplace(sk, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.cqv, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.mq, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.g, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.h, gamma);
     }
 
     // SK_t += k_t · k_tᵀ (rank-1 update)
@@ -171,10 +173,10 @@ fn hla_per_head_update(
 
     // Step 2: Decay per-head state
     if gamma < 1.0 {
-        crate::simd::simd_scale_inplace(&mut q_head.cqv, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.mq, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.g, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.h, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.cqv, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.mq, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.g, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.h, gamma);
     }
 
     // Step 3: Accumulate per-head state
@@ -447,10 +449,10 @@ pub fn ahla_step(
 
     // Apply decay if needed (before accumulation)
     if gamma < 1.0 {
-        crate::simd::simd_scale_inplace(pkv, gamma);
-        crate::simd::simd_scale_inplace(mk, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.e, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.n, gamma);
+        katgpt_types::simd::simd_scale_inplace(pkv, gamma);
+        katgpt_types::simd::simd_scale_inplace(mk, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.e, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.n, gamma);
     }
 
     // PKV_t += k_t · v_tᵀ (rank-1 update)
@@ -532,7 +534,7 @@ pub fn hla_layer_update(
     q: &[f32],
     k: &[f32],
     v: &[f32],
-    config: &crate::types::Config,
+    config: &katgpt_types::Config,
     gamma: f32,
     tmp_k_cqv: &mut [f32],
 ) {
@@ -543,7 +545,7 @@ pub fn hla_layer_update(
     for g in 0..n_kv {
         // Decay
         if gamma < 1.0 {
-            crate::simd::simd_scale_inplace(&mut layer.sk[g], gamma);
+            katgpt_types::simd::simd_scale_inplace(&mut layer.sk[g], gamma);
         }
         // SK[g] += k_g · k_gᵀ
         let k_slice = &k[g * hd..(g + 1) * hd];
@@ -585,7 +587,7 @@ pub fn hla_layer_update(
 pub fn hla_layer_readout(
     layer: &HlaLayerState,
     q: &[f32],
-    config: &crate::types::Config,
+    config: &katgpt_types::Config,
     normalize: bool,
     eps: f32,
     attn_out: &mut [f32],
@@ -641,8 +643,8 @@ fn ahla_per_head_step(
 ) {
     // Step 1: Decay per-head state
     if gamma < 1.0 {
-        crate::simd::simd_scale_inplace(&mut q_head.e, gamma);
-        crate::simd::simd_scale_inplace(&mut q_head.n, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.e, gamma);
+        katgpt_types::simd::simd_scale_inplace(&mut q_head.n, gamma);
     }
 
     // TODO(T6): transpose matvec — see hla_readout comment
@@ -706,7 +708,7 @@ pub fn ahla_layer_step(
     q: &[f32],
     k: &[f32],
     v: &[f32],
-    config: &crate::types::Config,
+    config: &katgpt_types::Config,
     gamma: f32,
     normalize: bool,
     eps: f32,
@@ -720,8 +722,8 @@ pub fn ahla_layer_step(
     for g in 0..n_kv {
         // Decay
         if gamma < 1.0 {
-            crate::simd::simd_scale_inplace(&mut layer.pkv[g], gamma);
-            crate::simd::simd_scale_inplace(&mut layer.mk[g], gamma);
+            katgpt_types::simd::simd_scale_inplace(&mut layer.pkv[g], gamma);
+            katgpt_types::simd::simd_scale_inplace(&mut layer.mk[g], gamma);
         }
         // PKV[g] += k_g · v_gᵀ
         let k_slice = &k[g * hd..(g + 1) * hd];
@@ -775,7 +777,7 @@ mod tests {
     fn symmetric_update_order_correctness() {
         let hd = 4;
         let mut sk = vec![0.0; hd * hd];
-        let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
+        let mut q_head = crate::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
 
         let q = [1.0, 0.0, 0.0, 0.0];
@@ -833,7 +835,7 @@ mod tests {
     fn symmetric_readout_basic() {
         let hd = 2;
         let mut sk = vec![0.0; hd * hd];
-        let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
+        let mut q_head = crate::types::HlaQHeadState::new(hd);
 
         // Manually set state for predictable readout
         // SK = [[1, 0], [0, 1]] (identity)
@@ -870,7 +872,7 @@ mod tests {
         let hd = 2;
         let mut pkv = vec![0.0; hd * hd];
         let mut mk = vec![0.0; hd];
-        let mut q_head = crate::hla::types::AhlaQHeadState::new(hd);
+        let mut q_head = crate::types::AhlaQHeadState::new(hd);
         let mut out = vec![0.0; hd];
         let mut tmp_r = vec![0.0; hd];
 
@@ -933,7 +935,7 @@ mod tests {
         let hd = 2;
         let mut pkv = vec![0.0; hd * hd];
         let mut mk = vec![0.0; hd];
-        let mut q_head = crate::hla::types::AhlaQHeadState::new(hd);
+        let mut q_head = crate::types::AhlaQHeadState::new(hd);
         let mut out = vec![0.0; hd];
         let mut tmp_r = vec![0.0; hd];
 
@@ -976,7 +978,7 @@ mod tests {
     fn symmetric_decay_works() {
         let hd = 2;
         let mut sk = vec![0.0; hd * hd];
-        let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
+        let mut q_head = crate::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
 
         let q = [1.0, 1.0];
@@ -1038,7 +1040,7 @@ mod tests {
     fn symmetric_normalization_finite() {
         let hd = 4;
         let mut sk = vec![0.0; hd * hd];
-        let mut q_head = crate::hla::types::HlaQHeadState::new(hd);
+        let mut q_head = crate::types::HlaQHeadState::new(hd);
         let mut tmp_k_cqv = vec![0.0; hd];
         let mut tmp_u = vec![0.0; hd];
         let mut out = vec![0.0; hd];
