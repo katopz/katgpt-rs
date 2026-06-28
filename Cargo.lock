@@ -1731,6 +1731,7 @@ dependencies = [
  "criterion",
  "fastrand",
  "half",
+ "katgpt-dec",
  "log",
  "lz4_flex",
  "papaya",
@@ -1743,6 +1744,10 @@ dependencies = [
  "statrs",
  "unicode-normalization",
 ]
+
+[[package]]
+name = "katgpt-dec"
+version = "0.1.0"
 
 [[package]]
 name = "katgpt-rs"

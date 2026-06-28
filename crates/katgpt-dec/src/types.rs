@@ -534,7 +534,7 @@ impl CochainField {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dec::operators::exterior_derivative;
+    use crate::operators::exterior_derivative;
 
     #[test]
     fn grid_2d_cell_counts() {

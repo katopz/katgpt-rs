@@ -30,7 +30,7 @@ pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief}
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 #[cfg(feature = "dec_operators")]
-pub mod dec;
+pub use katgpt_dec as dec;
 pub mod delta_mem;
 pub mod hla;
 pub mod leaky_core;

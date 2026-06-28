@@ -10,7 +10,7 @@
 //! Bridge functions convert raw game state (projectile positions, destroyed faces)
 //! into semantic cochain values via sigmoid projections — never softmax.
 
-use super::types::{CellComplex, CochainField};
+use crate::types::{CellComplex, CochainField};
 
 /// Gaussian falloff sigma for projectile threat propagation.
 const THREAT_SIGMA: f32 = 4.0;

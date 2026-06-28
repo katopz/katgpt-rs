@@ -29,6 +29,11 @@ lz4_flex = { version = "0.13", optional = true }
 # Already a transitive dep via hashbrown 0.14 / bevy_utils — listing it here only
 # promotes it to a direct dependency for the `closure_instrument` feature.
 ahash = { version = "0.8", optional = true }
+# katgpt-dec houses the Discrete Exterior Calculus substrate spun out of
+# katgpt-core::dec (Issue 007 Phase E Tier 1). Optional — pulled in by the
+# `dec_operators` feature and re-exported as `katgpt_core::dec` for backwards
+# compatibility.
+katgpt-dec = { path = "../katgpt-dec", optional = true }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }
@@ -136,7 +141,7 @@ dflare_fusion = []  # Plan 174 — gates MarginalFusionConfig (root marks this G
 dflare_kv_routing = []  # Plan 174 — gates KvRoutingConfig (root marks this GOAT-FAILED; kept as substrate for completeness)
 dflare_progressive_budget = []  # Plan 174 — gates PositionWeightedBudget (root marks this GOAT-FAILED; kept as substrate for completeness)
 non_interference_branches = []  # Non-Interference Memory Branches — RIZZ distillation (Plan 329, Research 310, arXiv:2606.20638 Goel et al. Oxford Jun 2026). Five generic open primitives: BranchBank (bounded persistent CognitiveBranch bank with spawn/merge/prune lifecycle), BranchRouter (dot-product snap + Jaccard fallback routing), VerifierGate (reward+curiosity+centroid quarantine write gate), NonInterferenceProjection (orthogonal latent subspace per branch), BudgetCompiler (priority-cascade context compiler). Super-GOAT fusion of BAKE × CLR × MCGS × Engram × ARG × closure-instrument × Salience. Composes with arg_protocol LifecycleState when both features are on. DEFAULT-ON (Phase 3, 2026-06-26): G1 8 orthogonal directions in D=8 pairwise interference 0.00e0<1e-6 + write-to-b_i-does-not-contaminate-b_j + 9th-direction-interferes-0.3536>=1/sqrt(8), G2 route 301.5ns<1us (64-branch bank), G3 all-features/default/no-default clean, G4 0 allocs/100 calls, G5 [] deps (pure dot-product + budget arithmetic). 101/101 unit tests green.
-dec_operators = []  # Discrete Exterior Calculus — cell complexes, cochain fields, d/δ/Δ operators (Plan 251, Research 219, arXiv:2606.09806)
+dec_operators = ["dep:katgpt-dec"]  # Discrete Exterior Calculus — cell complexes, cochain fields, d/δ/Δ operators (Plan 251, Research 219, arXiv:2606.09806). Now spins in the `katgpt-dec` crate and re-exports it as `katgpt_core::dec` (Issue 007 Phase E Tier 1).
 geometric_product = []  # Channel-wise Clifford Geometric Product — per-point coherence (dot) + structure (wedge) latent interaction (Plan 319, Research 299, arXiv:2601.06793). Hadamard + cyclic shift + subtract, O(D·|S|), zero-alloc. DEFAULT-ON (2026-06-25, Issue 003 RESOLVED): polynomial Padé [4/4] SiLU approximation eliminates the exp() floor (2.06× speedup at D=64); G1 non-redundancy +17.6/+7.9pp, G2 rotational recovery r=0.90/0.96, G3 0 allocs, G4 D=8 118ns/D=64 525ns (recalibrated from structurally-impossible 50ns/200ns). Wedge-only variant (geometric_product_wedge_into) for cold-path callers. Targets recalibrated to polynomial-silu arithmetic floor.
 gpart_adapter = []  # GPart isometric partition adapter loading (Research 227, Plan 257)
 gpart_pruning = ["gpart_adapter"]  # GPart top-k group pruning — zero out low-magnitude groups at apply time (Issue 008)

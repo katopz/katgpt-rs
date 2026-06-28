@@ -24,11 +24,11 @@
 //! For rank 0 on connected complexes, we project out the constant null space
 //! before solving.
 
-use super::operators::{
+use crate::operators::{
     codifferential, exterior_derivative, graph_laplacian_into, hodge_laplacian,
     hodge_laplacian_into,
 };
-use super::types::{CellComplex, CochainField, MAX_RANK};
+use crate::types::{CellComplex, CochainField, MAX_RANK};
 
 // ---------------------------------------------------------------------------
 // Hodge Components
@@ -724,7 +724,7 @@ fn deflate(v: &mut [f32], basis: &[Vec<f32>]) {
 
 #[cfg(test)]
 mod tests {
-    use super::super::operators::graph_laplacian;
+    use crate::operators::graph_laplacian;
     use super::*;
 
     /// Tolerance for floating-point comparisons.

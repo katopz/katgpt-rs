@@ -1,12 +1,21 @@
-//! Discrete Exterior Calculus (DEC) operators on cell complexes.
+//! katgpt-dec — Discrete Exterior Calculus (DEC) substrate.
+//!
+//! Pure math substrate for Stokes calculus on cell complexes. No app semantics.
+//! Spun out of `katgpt-core::dec` (Issue 007 Phase E Tier 1) as a standalone
+//! publishable crate mirroring the `katgpt-transformer` template.
 //!
 //! Based on "Topological Neural Operators" (arXiv:2606.09806).
 //!
-//! Provides inference-time topological operators for game spatial reasoning:
+//! # What's here
+//!
 //! - **Cell complex** — vertices, edges, faces, volumes with oriented incidence
 //! - **Cochain fields** — typed feature vectors on cells of a given rank
 //! - **DEC operators** — gradient d₀, curl d₁, divergence d₂, codifferential δₖ
 //! - **Hodge Laplacian** — Δₖ = δₖ₊₁dₖ + dₖ₋₁δₖ (conservation-by-construction)
+//! - **Stokes calculus** — boundary flux, line integrals, belief-mass divergence
+//! - **Hodge decomposition** — exact ⊕ harmonic ⊕ coexact (Helmholtz split)
+//! - **Terrain cochains** — occupancy/safety/threat/destruction/interest fields
+//! - **Lattice utility** — SIMD lattice-edge utility projection (Plan 335)
 //!
 //! # Conservation Guarantees
 //!
@@ -17,7 +26,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use katgpt_core::dec::{CellComplex, CochainField, exterior_derivative};
+//! use katgpt_dec::{CellComplex, CochainField, exterior_derivative};
 //!
 //! // Create a 2D grid cell complex
 //! let cx = CellComplex::grid_2d(64, 64);
@@ -32,6 +41,12 @@
 //! // Compute curl (rank-1 → rank-2) — guaranteed zero if input is a gradient!
 //! let curl = exterior_derivative(&cx, &gradient);
 //! ```
+//!
+//! # Backwards compatibility
+//!
+//! `katgpt-core` re-exports this crate as `katgpt_core::dec` via a
+//! `pub use katgpt_dec as dec;` shim, so all historical
+//! `katgpt_core::dec::*` paths continue to work unchanged.
 
 pub mod backend;
 pub mod cache;
@@ -39,6 +54,7 @@ pub mod flow;
 pub mod hodge;
 pub mod lattice_utility;
 pub mod operators;
+pub mod simd;
 pub mod stokes_calculus;
 pub mod terrain_cochains;
 pub mod types;
@@ -58,7 +74,9 @@ pub use stokes_calculus::{
     belief_mass_divergence, boundary_flux_mass, boundary_flux_mass_indexed,
     boundary_flux_mass_only, circulation_integral, line_integral,
 };
+
+pub use types::{CellComplex, CoboundaryIndex, CochainField, MAX_RANK};
+
 pub use terrain_cochains::{
     DestructionCochain, InterestCohain, OccupancyCochain, SafetyCochain, ThreatCochain,
 };
-pub use types::{CellComplex, CoboundaryIndex, CochainField, MAX_RANK};

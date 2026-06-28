@@ -28,9 +28,9 @@
 //! - Zero allocations in wrapper code: YES (all Vecs come from delegated ops
 //!   or the pre-built coboundary index).
 
-use super::hodge::hodge_decompose;
-use super::operators::codifferential;
-use super::types::{CellComplex, CochainField};
+use crate::hodge::hodge_decompose;
+use crate::operators::codifferential;
+use crate::types::{CellComplex, CochainField};
 
 // ===========================================================================
 // belief_mass_divergence — Fokker-Planck belief-mass validator
@@ -281,8 +281,9 @@ pub fn boundary_flux_mass_indexed(
 /// If `a` is the edge tail and `b` is the head (traversal along orientation),
 /// the contribution is `+field[e]`. Reversed traversal gives `-field[e]`.
 ///
-/// Composes with Plan 312's [`manifold_geodesic`](crate::viable_manifold_graph::manifold_geodesic)
-/// path output: pass the vertex-index `Vec<u32>` directly as `path`. Useful for
+/// Composes with Plan 312's `manifold_geodesic` (in katgpt-core's
+/// `viable_manifold_graph` module) path output: pass the vertex-index
+/// `Vec<u32>` directly as `path`. Useful for
 /// path-energy / geodesic-cost / work computations.
 ///
 /// # Arguments
@@ -440,7 +441,7 @@ pub fn circulation_integral(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dec::operators::exterior_derivative;
+    use crate::operators::exterior_derivative;
 
     // ── belief_mass_divergence ──────────────────────────────────────────────
 

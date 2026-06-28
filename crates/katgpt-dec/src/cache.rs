@@ -9,8 +9,8 @@
 //! - **Betti number cache**: structural invariant — depends only on topology,
 //!   not on input cochain values
 
-use super::hodge::{HodgeComponents, hodge_decompose};
-use super::types::{CellComplex, CochainField};
+use crate::hodge::{HodgeComponents, hodge_decompose};
+use crate::types::{CellComplex, CochainField};
 
 // ---------------------------------------------------------------------------
 // DirtyRegion

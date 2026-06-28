@@ -8,7 +8,7 @@
 //!
 //! Fundamental identity: `dₖ₊₁ ∘ dₖ = 0` (curl(grad)=0, div(curl)=0).
 
-use super::types::{CellComplex, CochainField, MAX_RANK};
+use crate::types::{CellComplex, CochainField, MAX_RANK};
 
 // ---------------------------------------------------------------------------
 // Hodge Star Mₖ (T10)

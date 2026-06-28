@@ -29,8 +29,7 @@
 //! `dec::terrain_cochains::sigmoid`, which uses `1 / (1 + e^{+x})` so that
 //! high danger → low safety. We therefore do **not** reuse the terrain sigmoid;
 //! instead we route through [`crate::simd::simd_sigmoid_inplace`], whose
-//! scalar fallback is `crate::simd::fast_sigmoid` (`1 / (1 + e^{-x})`) with
-//! matching NEON/AVX2/wasm32 vectorized paths.
+//! scalar fallback is [`crate::simd::fast_sigmoid`] (`1 / (1 + e^{-x})`).
 //!
 //! # SIMD strategy
 //!
@@ -48,8 +47,8 @@
 //!    instructions on targets that have them (AVX2 `vgatherdps`, NEON
 //!    `tbl`-based emulation).
 //! 2. The sigmoid is then applied in one vectorized contiguous pass via the
-//!    existing [`crate::simd::simd_sigmoid_inplace`], which already has
-//!    hand-tuned NEON / AVX2 / wasm32 simd128 / scalar paths.
+//!    existing [`crate::simd::simd_sigmoid_inplace`], which relies on LLVM
+//!    auto-vectorization (NEON / AVX2 / wasm32 simd128 / scalar).
 //!
 //! This keeps the leaf portable (wasm32 + native) and reuses the
 //! already-validated sigmoid kernels instead of forking a new one.
@@ -186,8 +185,9 @@ impl HlaToCohainWeights {
 ///
 /// See the module docs: the raw-utility loop relies on LLVM
 /// auto-vectorization of the chunked f32 loop (gather on targets that support
-/// it); the sigmoid pass reuses [`crate::simd::simd_sigmoid_inplace`] (NEON /
-/// AVX2 / wasm32 simd128 / scalar). Explicit SIMD intrinsics are avoided in
+/// it); the sigmoid pass reuses [`crate::simd::simd_sigmoid_inplace`] (scalar loop,
+/// auto-vectorized by LLVM where available). Explicit SIMD intrinsics are
+/// avoided in
 /// the accumulation loop to keep the leaf portable.
 #[inline]
 pub fn lattice_edge_utility_into(
