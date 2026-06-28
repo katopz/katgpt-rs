@@ -21,8 +21,8 @@
 //! `softmax` symbol — predictability is per-direction, not a distribution
 //! over directions.
 
-use crate::simd::{fast_sigmoid, simd_dot_f32};
-use crate::sleep_time::types::AnticipatedQueryDir;
+use katgpt_types::simd::{fast_sigmoid, simd_dot_f32};
+use crate::types::AnticipatedQueryDir;
 
 /// Scores how predictable a query of class `dir` is from context `c`.
 ///

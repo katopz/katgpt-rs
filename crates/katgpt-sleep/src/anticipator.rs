@@ -22,8 +22,8 @@
 //! (the c' artifact). The wake-time hot path — `consume()` — is the one
 //! that must be zero-alloc; see `consume.rs`.
 
-use crate::sleep_time::predictability::PredictabilityScorer;
-use crate::sleep_time::types::{AnticipatedQueryDir, AnticipatedQuerySet, AnticipatedSlot};
+use crate::predictability::PredictabilityScorer;
+use crate::types::{AnticipatedQueryDir, AnticipatedQuerySet, AnticipatedSlot};
 
 /// One sleep-time compute call. Produces `z_i` for direction `i`.
 ///
@@ -183,7 +183,7 @@ impl<const D: usize> SleepTimeComputeOp<D> for IdentityFunctorOp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sleep_time::predictability::DotPredictabilityScorer;
+    use crate::predictability::DotPredictabilityScorer;
 
     #[test]
     fn anticipate_emits_k_slots() {

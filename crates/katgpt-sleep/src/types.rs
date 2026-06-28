@@ -12,7 +12,7 @@
 //!   output). Stays latent at the sync boundary; only its scalar gate value
 //!   crosses as a synced affect scalar.
 
-use crate::simd::simd_dot_f32;
+use katgpt_types::simd::simd_dot_f32;
 
 /// A frozen anticipated-query direction vector. One "slot key" in c'.
 ///

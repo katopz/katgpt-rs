@@ -1,0 +1,26 @@
+[package]
+name = "katgpt-sleep"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Sleep-Time Query Anticipator — offline query anticipation substrate (arXiv:2504.13171 Lin et al.). SleepTimeAnticipator orchestrates per-direction sleep-time compute, emits reusable AnticipatedQuerySet (c' artifact, BLAKE3-committed); wake-time consume() does cheap dot-product + sigmoid-gated lookup. Pure substrate, sigmoid (never softmax), modelless."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["sleep-time", "anticipation", "latent", "inference", "modelless"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# katgpt-sleep is a pure substrate leaf — the only katgpt-* dependency is the
+# shared types/SIMD leaf (Issue 007 Phase E Tier 2 #6). The consume + predict
+# hot paths use `simd_dot_f32` + `fast_sigmoid` from katgpt-types; the c'
+# artifact uses `blake3` for the commitment root. No katgpt-core dependency
+# — the whole crate compiles standalone.
+katgpt-types = { path = "../katgpt-types" }
+blake3 = "1"
+
+[features]
+# katgpt-sleep compiles its entire substrate (anticipator, consume, cost_model,
+# predictability, types) unconditionally. No features — the substrate is the
+# crate's whole purpose. The `sleep_time_anticipation` Cargo feature in
+# katgpt-core forwards to `dep:katgpt-sleep` (turns the re-export on); it does
+# not gate anything inside this crate.
+default = []

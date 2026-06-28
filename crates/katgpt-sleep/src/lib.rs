@@ -5,6 +5,14 @@
 //! for offline query anticipation. The private runtime half (per-NPC HLA
 //! wiring, chain commitment, NPC tiering) lives in riir-ai Plan 341.
 //!
+//! # Origin
+//!
+//! Promoted out of `katgpt-core/src/sleep_time/` (Issue 007 Phase E Tier 2
+//! #6, 2026-06-28). The substrate previously lived in katgpt-core behind the
+//! `sleep_time_anticipation` Cargo feature; it now ships as a standalone
+//! public MIT crate, with katgpt-core re-exporting it as
+//! `katgpt_core::sleep_time` for backwards compatibility.
+//!
 //! # The core idea (one paragraph)
 //!
 //! At **sleep-time** (offline, when no player is watching), pre-compute

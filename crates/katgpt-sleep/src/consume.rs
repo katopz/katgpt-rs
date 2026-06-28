@@ -35,8 +35,8 @@
 //! through the live consume() path — when the sleep-time forecast was accurate,
 //! the nearest precomputed slot is the player's true topic.
 
-use crate::simd::{fast_sigmoid, simd_dot_f32};
-use crate::sleep_time::types::AnticipatedQuerySet;
+use katgpt_types::simd::{fast_sigmoid, simd_dot_f32};
+use crate::types::AnticipatedQuerySet;
 
 /// How [`consume_with_match_mode`] / [`consume_gate_with_match_mode`] match a
 /// query `q` to an anticipated slot in `c'`.
@@ -266,15 +266,15 @@ pub fn consume_gate<const D: usize, const K: usize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sleep_time::anticipator::{IdentityFunctorOp, SleepTimeAnticipator, SleepTimeScratch};
-    use crate::sleep_time::predictability::DotPredictabilityScorer;
-    use crate::sleep_time::types::AnticipatedQueryDir;
+    use crate::anticipator::{IdentityFunctorOp, SleepTimeAnticipator, SleepTimeScratch};
+    use crate::predictability::DotPredictabilityScorer;
+    use crate::types::AnticipatedQueryDir;
 
     /// Build a small c' artifact for testing consume().
     fn build_artifact(
         c: &[f32; 2],
         dirs: &[AnticipatedQueryDir<2>; 2],
-    ) -> crate::sleep_time::types::AnticipatedQuerySet<2, 2> {
+    ) -> crate::types::AnticipatedQuerySet<2, 2> {
         let anticipator = SleepTimeAnticipator::<2, 2, IdentityFunctorOp, DotPredictabilityScorer> {
             op: IdentityFunctorOp,
             scorer: DotPredictabilityScorer::default(),
@@ -293,21 +293,21 @@ mod tests {
         dirs: [AnticipatedQueryDir<2>; 2],
         precomputed: [[f32; 2]; 2],
         predictability: [f32; 2],
-    ) -> crate::sleep_time::types::AnticipatedQuerySet<2, 2> {
+    ) -> crate::types::AnticipatedQuerySet<2, 2> {
         let slots = [
-            crate::sleep_time::types::AnticipatedSlot {
+            crate::types::AnticipatedSlot {
                 dir: dirs[0].clone(),
                 precomputed: precomputed[0],
                 predictability: predictability[0],
             },
-            crate::sleep_time::types::AnticipatedSlot {
+            crate::types::AnticipatedSlot {
                 dir: dirs[1].clone(),
                 precomputed: precomputed[1],
                 predictability: predictability[1],
             },
         ];
-        let blake3 = crate::sleep_time::types::AnticipatedQuerySet::<2, 2>::commit_slots(&slots);
-        crate::sleep_time::types::AnticipatedQuerySet {
+        let blake3 = crate::types::AnticipatedQuerySet::<2, 2>::commit_slots(&slots);
+        crate::types::AnticipatedQuerySet {
             slots,
             blake3,
             version: 0,
@@ -418,13 +418,13 @@ mod tests {
         // 50/50 blend of precomputed and fresh.
         let dirs = [AnticipatedQueryDir::new([1.0, 0.0])];
         // Build a single-slot artifact by hand so we control predictability.
-        let slots = [crate::sleep_time::types::AnticipatedSlot {
+        let slots = [crate::types::AnticipatedSlot {
             dir: dirs[0].clone(),
             precomputed: [10.0, 0.0],
             predictability: 0.5, // == tau → gate = sigmoid(0) = 0.5
         }];
-        let blake3 = crate::sleep_time::types::AnticipatedQuerySet::<2, 1>::commit_slots(&slots);
-        let artifact = crate::sleep_time::types::AnticipatedQuerySet {
+        let blake3 = crate::types::AnticipatedQuerySet::<2, 1>::commit_slots(&slots);
+        let artifact = crate::types::AnticipatedQuerySet {
             slots,
             blake3,
             version: 0,

@@ -880,8 +880,14 @@ pub use branching::{
 // a real predictability-labeled corpus → deferred to riir-ai Plan 341.
 // Opt-in until G1–G5 GOAT gate passes; promotion to default-on requires
 // Plan 341 G1–G5 to clear on a real game corpus.
+//
+// Substrate lives in the katgpt-sleep crate (Issue 007 Phase E Tier 2 #6,
+// 2026-06-28). Re-exported here as `katgpt_core::sleep_time` for backwards
+// compatibility — all `crate::sleep_time::*` paths resolve unchanged. The
+// `sleep_time_anticipation` Cargo feature turns on the `dep:katgpt-sleep`
+// dependency; the substrate compiles unconditionally inside the crate itself.
 #[cfg(feature = "sleep_time_anticipation")]
-pub mod sleep_time;
+pub use katgpt_sleep as sleep_time;
 #[cfg(feature = "sleep_time_anticipation")]
 pub use sleep_time::{
     AmortizationCostModel, AnticipatedQueryDir, AnticipatedQuerySet, AnticipatedSlot,

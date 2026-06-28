@@ -1735,6 +1735,7 @@ dependencies = [
  "katgpt-hla",
  "katgpt-micro-belief",
  "katgpt-personality",
+ "katgpt-sleep",
  "katgpt-types",
  "log",
  "lz4_flex",
@@ -1815,6 +1816,14 @@ dependencies = [
  "tempfile",
  "toml",
  "wasmi",
+]
+
+[[package]]
+name = "katgpt-sleep"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "katgpt-types",
 ]
 
 [[package]]

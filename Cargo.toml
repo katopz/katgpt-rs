@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-personality", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
