@@ -58,8 +58,13 @@ use crate::dec::{CellComplex, CochainField, MAX_RANK};
 /// additive identity of `(max, +)`) before accumulation — the caller does NOT
 /// need to pre-clear.
 ///
-/// Zero allocation. The inner column loop is unrolled 4-wide for SIMD
-/// auto-vectorization (`f32::max` is a single-cycle op on NEON/AVX2).
+/// Zero allocations. Dispatches to a NEON / scalar-specialised inner loop.
+/// All paths use **multiple independent accumulators** (NEON: four
+/// `float32x4_t`; scalar: four `f32`) to hide `f32::max` latency — a single
+/// serial `acc = acc.max(...)` chain is latency-bound and 4–9× slower than
+/// `simd_matvec` on the same shape (Plan 337 Phase 3 T3.3 G2 finding). The
+/// 4-accumulator tree reduction mirrors `simd_dot_f32`'s pattern in
+/// `katgpt-types/src/simd/dot.rs`.
 #[inline]
 pub fn tropical_matvec_into(
     w_row_major: &[f32],
@@ -94,30 +99,140 @@ pub fn tropical_matvec_into(
         return;
     }
 
-    let chunks = n_cols / 4;
-    let remainder = n_cols % 4;
-
-    for i in 0..n_rows {
-        let row_off = i * n_cols;
-        let mut acc = f32::NEG_INFINITY;
-
-        // 4-wide chunked inner loop for LLVM auto-vectorization.
-        for c in 0..chunks {
-            let off = row_off + c * 4;
-            let s0 = w_row_major[off] + x[c * 4];
-            let s1 = w_row_major[off + 1] + x[c * 4 + 1];
-            let s2 = w_row_major[off + 2] + x[c * 4 + 2];
-            let s3 = w_row_major[off + 3] + x[c * 4 + 3];
-            acc = acc.max(s0);
-            acc = acc.max(s1);
-            acc = acc.max(s2);
-            acc = acc.max(s3);
+    #[cfg(target_arch = "aarch64")]
+    {
+        for i in 0..n_rows {
+            let row_off = i * n_cols;
+            unsafe { out[i] = neon_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols) };
         }
-        for d in 0..remainder {
-            let j = chunks * 4 + d;
-            acc = acc.max(w_row_major[row_off + j] + x[j]);
+        return;
+    }
+
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        for i in 0..n_rows {
+            let row_off = i * n_cols;
+            out[i] = scalar_tropical_row_max_sum(&w_row_major[row_off..], x, n_cols);
         }
-        out[i] = acc;
+    }
+}
+
+/// Scalar (max, +) row reduction with 4 independent accumulators.
+///
+/// Mirrors `scalar_dot_f32`'s 4-accumulator pattern from
+/// `katgpt-types/src/simd/dot.rs`: a single-accumulator `acc = acc.max(...)`
+/// chain is latency-bound on `f32::max` (~1–4 cycles per op). Four parallel
+/// accumulators keep the FP add pipeline full.
+///
+/// On `aarch64` this is unused (the NEON path dispatches instead) but kept
+/// compiled as the portable reference + non-aarch64 fallback.
+#[cfg_attr(target_arch = "aarch64", allow(dead_code))]
+#[inline]
+fn scalar_tropical_row_max_sum(w_row: &[f32], x: &[f32], n: usize) -> f32 {
+    let mut acc = [f32::NEG_INFINITY; 4];
+    let chunks = n / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            acc[0] = acc[0].max(*w_row.get_unchecked(i) + *x.get_unchecked(i));
+            acc[1] = acc[1].max(*w_row.get_unchecked(i + 1) + *x.get_unchecked(i + 1));
+            acc[2] = acc[2].max(*w_row.get_unchecked(i + 2) + *x.get_unchecked(i + 2));
+            acc[3] = acc[3].max(*w_row.get_unchecked(i + 3) + *x.get_unchecked(i + 3));
+        }
+        i += 4;
+    }
+    let mut m = acc[0].max(acc[1]).max(acc[2]).max(acc[3]);
+    while i < n {
+        unsafe {
+            m = m.max(*w_row.get_unchecked(i) + *x.get_unchecked(i));
+        }
+        i += 1;
+    }
+    m
+}
+
+/// NEON `(max, +)` row reduction — 4 independent `float32x4_t` accumulators.
+///
+/// Mirrors `neon_dot_f32` from `katgpt-types/src/simd/dot.rs`:
+/// - 4 × `float32x4_t` = 16 lanes in flight per outer iteration (hides
+///   `vmaxq_f32` latency, ~2–3 cycles on Cortex-A / Apple Silicon).
+/// - `vaddq_f32` does the tropical "product" (the `+`), `vmaxq_f32` does the
+///   tropical "sum" (the `max`).
+/// - Horizontal max reduce via `vmaxvq_f32` at the end.
+///
+/// # Safety
+/// Caller must guarantee `w_row` and `x` each have at least `n` readable
+/// `f32`s. The 16-element main loop reads in 4-wide chunks; the tail is
+/// handled by the 4-wide and scalar fallbacks.
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_tropical_row_max_sum(w_row: &[f32], x: &[f32], n: usize) -> f32 {
+    use core::arch::aarch64::{vaddq_f32, vdupq_n_f32, vld1q_f32, vmaxq_f32, vmaxvq_f32};
+
+    unsafe {
+        let neg_inf = f32::NEG_INFINITY;
+        let mut acc0 = vdupq_n_f32(neg_inf);
+        let mut acc1 = vdupq_n_f32(neg_inf);
+        let mut acc2 = vdupq_n_f32(neg_inf);
+        let mut acc3 = vdupq_n_f32(neg_inf);
+        let mut i = 0usize;
+        let chunks16 = n / 16;
+
+        for _ in 0..chunks16 {
+            acc0 = vmaxq_f32(
+                acc0,
+                vaddq_f32(
+                    vld1q_f32(w_row.as_ptr().add(i)),
+                    vld1q_f32(x.as_ptr().add(i)),
+                ),
+            );
+            acc1 = vmaxq_f32(
+                acc1,
+                vaddq_f32(
+                    vld1q_f32(w_row.as_ptr().add(i + 4)),
+                    vld1q_f32(x.as_ptr().add(i + 4)),
+                ),
+            );
+            acc2 = vmaxq_f32(
+                acc2,
+                vaddq_f32(
+                    vld1q_f32(w_row.as_ptr().add(i + 8)),
+                    vld1q_f32(x.as_ptr().add(i + 8)),
+                ),
+            );
+            acc3 = vmaxq_f32(
+                acc3,
+                vaddq_f32(
+                    vld1q_f32(w_row.as_ptr().add(i + 12)),
+                    vld1q_f32(x.as_ptr().add(i + 12)),
+                ),
+            );
+            i += 16;
+        }
+
+        let acc01 = vmaxq_f32(acc0, acc1);
+        let acc23 = vmaxq_f32(acc2, acc3);
+        let mut merged = vmaxq_f32(acc01, acc23);
+        let mut m = vmaxvq_f32(merged);
+
+        let remaining_4 = (n - i) / 4;
+        for _ in 0..remaining_4 {
+            merged = vmaxq_f32(
+                merged,
+                vaddq_f32(
+                    vld1q_f32(w_row.as_ptr().add(i)),
+                    vld1q_f32(x.as_ptr().add(i)),
+                ),
+            );
+            i += 4;
+        }
+        m = m.max(vmaxvq_f32(merged));
+
+        while i < n {
+            m = m.max(*w_row.get_unchecked(i) + *x.get_unchecked(i));
+            i += 1;
+        }
+        m
     }
 }
 
@@ -232,7 +347,8 @@ pub fn tropical_exterior_derivative(cx: &CellComplex, input: &CochainField) -> C
         }
         for d in 0..remainder {
             let off = chunks * 4 + d;
-            output.data[dst_start + off] = output.data[dst_start + off].max(input.data[src_start + off]);
+            output.data[dst_start + off] =
+                output.data[dst_start + off].max(input.data[src_start + off]);
         }
     }
 
@@ -293,7 +409,8 @@ pub fn tropical_codifferential(cx: &CellComplex, input: &CochainField) -> Cochai
         }
         for d in 0..remainder {
             let off = chunks * 4 + d;
-            output.data[dst_start + off] = output.data[dst_start + off].max(input.data[src_start + off]);
+            output.data[dst_start + off] =
+                output.data[dst_start + off].max(input.data[src_start + off]);
         }
     }
 
@@ -381,8 +498,16 @@ mod tests {
         let x = [10.0f32, 20.0, 30.0];
         let out = tropical_matvec(&w, &x, 2, 3);
         assert_eq!(out.len(), 2);
-        assert!((out[0] - 33.0).abs() < 1e-6, "row 0: expected 33, got {}", out[0]);
-        assert!((out[1] - 36.0).abs() < 1e-6, "row 1: expected 36, got {}", out[1]);
+        assert!(
+            (out[0] - 33.0).abs() < 1e-6,
+            "row 0: expected 33, got {}",
+            out[0]
+        );
+        assert!(
+            (out[1] - 36.0).abs() < 1e-6,
+            "row 1: expected 36, got {}",
+            out[1]
+        );
     }
 
     #[test]
@@ -402,7 +527,11 @@ mod tests {
         let x = [5.0f32, 7.0];
         let out = tropical_matvec(&w, &x, 1, 2);
         assert_eq!(out.len(), 1);
-        assert!(out[0].is_infinite() && out[0].is_sign_negative(), "expected −∞, got {}", out[0]);
+        assert!(
+            out[0].is_infinite() && out[0].is_sign_negative(),
+            "expected −∞, got {}",
+            out[0]
+        );
     }
 
     #[test]
@@ -413,13 +542,21 @@ mod tests {
         let x_pos = [3.7f32, 0.0];
         let mut out_pos = 0.0f32;
         tropical_dot_into(&w_pos, &x_pos, &mut out_pos, 2);
-        assert!((out_pos - 3.7).abs() < 1e-6, "ReLU(3.7): expected 3.7, got {}", out_pos);
+        assert!(
+            (out_pos - 3.7).abs() < 1e-6,
+            "ReLU(3.7): expected 3.7, got {}",
+            out_pos
+        );
 
         // Negative x: ReLU(−2.1) = 0
         let x_neg = [-2.1f32, 0.0];
         let mut out_neg = 0.0f32;
         tropical_dot_into(&w_pos, &x_neg, &mut out_neg, 2);
-        assert!((out_neg - 0.0).abs() < 1e-6, "ReLU(−2.1): expected 0.0, got {}", out_neg);
+        assert!(
+            (out_neg - 0.0).abs() < 1e-6,
+            "ReLU(−2.1): expected 0.0, got {}",
+            out_neg
+        );
     }
 
     #[test]
@@ -434,9 +571,9 @@ mod tests {
     fn non_contiguous_strides_smoke() {
         // Smoke test: allocating wrapper matches _into on a 3×3 case.
         let w = [
-            1.0f32, 2.0, 3.0,  // row 0
-            4.0, 5.0, 6.0,     // row 1
-            7.0, 8.0, 9.0,     // row 2
+            1.0f32, 2.0, 3.0, // row 0
+            4.0, 5.0, 6.0, // row 1
+            7.0, 8.0, 9.0, // row 2
         ];
         let x = [0.1f32, 0.2, 0.3];
 
@@ -446,17 +583,34 @@ mod tests {
         tropical_matvec_into(&w, &x, &mut out_into, 3, 3);
 
         for i in 0..3 {
-            assert!((out_alloc[i] - out_into[i]).abs() < 1e-6,
-                "row {}: alloc={} vs into={}", i, out_alloc[i], out_into[i]);
+            assert!(
+                (out_alloc[i] - out_into[i]).abs() < 1e-6,
+                "row {}: alloc={} vs into={}",
+                i,
+                out_alloc[i],
+                out_into[i]
+            );
         }
 
         // Verify hand-computed values:
         // Row 0: max(1.1, 2.2, 3.3) = 3.3
         // Row 1: max(4.1, 5.2, 6.3) = 6.3
         // Row 2: max(7.1, 8.2, 9.3) = 9.3
-        assert!((out_into[0] - 3.3).abs() < 1e-6, "row 0: expected 3.3, got {}", out_into[0]);
-        assert!((out_into[1] - 6.3).abs() < 1e-6, "row 1: expected 6.3, got {}", out_into[1]);
-        assert!((out_into[2] - 9.3).abs() < 1e-6, "row 2: expected 9.3, got {}", out_into[2]);
+        assert!(
+            (out_into[0] - 3.3).abs() < 1e-6,
+            "row 0: expected 3.3, got {}",
+            out_into[0]
+        );
+        assert!(
+            (out_into[1] - 6.3).abs() < 1e-6,
+            "row 1: expected 6.3, got {}",
+            out_into[1]
+        );
+        assert!(
+            (out_into[2] - 9.3).abs() < 1e-6,
+            "row 2: expected 9.3, got {}",
+            out_into[2]
+        );
     }
 
     // ─── Phase 2 DEC wrapper tests ─────────────────────────────────────────
@@ -491,7 +645,12 @@ mod tests {
         // head vertex — since all vertices are 5.0, the max of head
         // contributions is 5.0).
         for (i, &v) in output.data.iter().enumerate() {
-            assert!((v - 5.0).abs() < 1e-6, "edge {}: expected 5.0, got {}", i, v);
+            assert!(
+                (v - 5.0).abs() < 1e-6,
+                "edge {}: expected 5.0, got {}",
+                i,
+                v
+            );
         }
     }
 
@@ -517,12 +676,18 @@ mod tests {
         // Path v0→v3→v4 (both edges traversed tail→head, sign +1).
         let path: Vec<u32> = vec![0, 3, 4];
         let tropical_result = tropical_line_integral(&cx, &edge_field, &path);
-        assert!((tropical_result - 3.0).abs() < 1e-6,
-            "tropical: expected 3.0 (bottleneck), got {}", tropical_result);
+        assert!(
+            (tropical_result - 3.0).abs() < 1e-6,
+            "tropical: expected 3.0 (bottleneck), got {}",
+            tropical_result
+        );
         // Sanity: linear would give 4.0 — prove we're NOT doing sum.
         let linear_result = crate::dec::line_integral(&cx, &edge_field, &path);
-        assert!((linear_result - 4.0).abs() < 1e-6,
-            "linear: expected 4.0 (sum), got {}", linear_result);
+        assert!(
+            (linear_result - 4.0).abs() < 1e-6,
+            "linear: expected 4.0 (sum), got {}",
+            linear_result
+        );
     }
 
     #[cfg(feature = "dec_operators")]
@@ -559,13 +724,19 @@ mod tests {
                 count_10 += 1;
             } else {
                 // All other edges should output ≤ −100.0 (from their head vertex).
-                assert!(v <= -100.0 + 1e-6,
-                    "edge {}: expected ≤ −100.0, got {}", i, v);
+                assert!(
+                    v <= -100.0 + 1e-6,
+                    "edge {}: expected ≤ −100.0, got {}",
+                    i,
+                    v
+                );
             }
         }
         // Vertex 8 is the bottom-right corner → 2 incident edges as head.
-        assert!(count_10 >= 2,
+        assert!(
+            count_10 >= 2,
             "expected ≥2 edges with output 10.0 (vertex 8 head-incident), got {}",
-            count_10);
+            count_10
+        );
     }
 }
