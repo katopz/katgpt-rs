@@ -7,11 +7,11 @@
 //! - Phase 4 G1: `compose_tau_infinity_uniform` — no personality at τ → ∞
 //! - Phase 4 G4-supporting: sigmoid stability at extreme inputs
 
-use crate::personality_composition::PersonalityWeightedComposition;
-use crate::personality_composition::kernel::tests::StaticLayer;
-use crate::personality_composition::sigmoid::sigmoid;
-use crate::personality_composition::trait_def::LayerDirectionSource;
-use crate::personality_composition::types::PersonalityConfig;
+use crate::PersonalityWeightedComposition;
+use crate::kernel::tests::StaticLayer;
+use crate::sigmoid::sigmoid;
+use crate::trait_def::LayerDirectionSource;
+use crate::types::PersonalityConfig;
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

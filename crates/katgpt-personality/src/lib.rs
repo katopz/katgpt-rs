@@ -6,6 +6,14 @@
 //! vector `w ∈ ℝ^N` with sigmoid gating, and update `w` via an EMA on reward
 //! prediction error.
 //!
+//! # Origin
+//!
+//! Promoted out of `katgpt-core/src/personality_composition/` (Issue 007 Phase
+//! E Tier 2 #5, 2026-06-28). The substrate previously lived in katgpt-core as
+//! a `personality_composition`-gated module; it now ships as a standalone
+//! public MIT crate, with katgpt-core re-exporting it as
+//! `katgpt_core::personality_composition` for backwards compatibility.
+//!
 //! # The math
 //!
 //! ```text
@@ -46,8 +54,12 @@
 //!
 //! # Feature gate
 //!
-//! Gated behind the `personality_composition` Cargo feature (default-off until
-//! GOAT G4/G5 pass). See `katgpt-rs/.plans/297_personality_weighted_composition.md`.
+//! The substrate compiles unconditionally inside this crate. katgpt-core
+//! gates the re-export behind the `personality_composition` Cargo feature
+//! (DEFAULT-ON since Plan 297 T5.1 after G4/G5 GOAT passed) — turning that
+//! feature off omits the re-export from `katgpt_core::personality_composition`
+//! but the substrate remains available via `cargo add katgpt-personality`.
+//! See `katgpt-rs/.plans/297_personality_weighted_composition.md`.
 //!
 //! # Module layout
 //!

@@ -31,7 +31,7 @@
 ///
 /// [`recent_direction`](Self::recent_direction) returns an EMA-smoothed recent
 /// direction vector, used by
-/// [`PersonalityWeightedComposition::drift`](crate::personality_composition::PersonalityWeightedComposition::drift)
+/// [`PersonalityWeightedComposition::drift`](crate::PersonalityWeightedComposition::drift)
 /// to assign credit. The host maintains this EMA externally (typically a
 /// rolling average updated each tick). The default returns an empty slice,
 /// which disables drift contribution from that layer — override to enable.

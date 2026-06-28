@@ -1734,6 +1734,7 @@ dependencies = [
  "katgpt-dec",
  "katgpt-hla",
  "katgpt-micro-belief",
+ "katgpt-personality",
  "katgpt-types",
  "log",
  "lz4_flex",
@@ -1768,6 +1769,15 @@ dependencies = [
  "katgpt-types",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "katgpt-personality"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "katgpt-types",
+ "serde",
 ]
 
 [[package]]

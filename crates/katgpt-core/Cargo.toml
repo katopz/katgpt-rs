@@ -52,6 +52,12 @@ katgpt-micro-belief = { path = "../katgpt-micro-belief", optional = true }
 # backwards compatibility. The composition layer (`forward_hla` /
 # `forward_ahla`) stays in katgpt-core because it depends on ForwardContext.
 katgpt-hla = { path = "../katgpt-hla" }
+# katgpt-personality houses the Personality-Weighted Latent Layer Composition
+# substrate (sigmoid + kernel + snapshot + types) spun out of
+# katgpt-core::personality_composition (Issue 007 Phase E Tier 2 #5). Optional
+# — pulled in by the `personality_composition` feature and re-exported as
+# `katgpt_core::personality_composition` for backwards compatibility.
+katgpt-personality = { path = "../katgpt-personality", optional = true }
 # Plan 299 T4.3: tokenizer compression (NFKC + lowercase collapse) for the
 # `engram` feature. Small dep, only compiled when `engram` is on.
 unicode-normalization = { version = "0.1", optional = true }
@@ -195,7 +201,7 @@ ict_branching = []  # ICT Distributional Branching-Point Detector — collision_
 induced_cwm = []  # Induced Code World Model kernel primitive — `InducedCwmKernel: GameState` marker + `CwmCommitment` (BLAKE3) + `BeliefInferenceFn<S>` + `TransitionUnitTest` (Plan 296, Research 275, arxiv 2510.04542). Open half of the CWM Super-GOAT: LLM-induction pipeline is private (riir-ai Plan 326). Opt-in until G1–G4 GOAT gate passes.
 induced_cwm_ismcts = ["induced_cwm"]  # Information-Set MCTS over an induced CWM + belief fn (Plan 296 Phase 2). Self-contained search tree (does NOT reuse root-crate `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the root).
 induced_cwm_tournament = ["induced_cwm"]  # Value Function Tournament — round-robin arena-play selector over `StateHeuristic` candidates for a given induced CWM (Plan 296 Phase 3). Self-contained flat-UCB1 MCTS (does NOT reuse root-crate `mcts_search` — same circular-dep constraint as Phase 2).
-personality_composition = []  # PersonalityWeightedComposition — sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3 snapshot (Plan 297, Research 276). Open primitive for the Entity Cognition Stack Super-GOAT (riir-ai Plan 327 consumes this). Default-off until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
+personality_composition = ["dep:katgpt-personality"]  # PersonalityWeightedComposition — sigmoid-gated N-layer latent direction composition + reward-surprise drift + BLAKE3 snapshot (Plan 297, Research 276). Substrate lives in the katgpt-personality crate (Issue 007 Phase E Tier 2 #5); this feature turns on the re-export. Open primitive for the Entity Cognition Stack Super-GOAT (riir-ai Plan 327 consumes this). Default-off until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
 committed_field_blend = ["personality_composition"]  # CommittedFieldBlend — sampling-invariant per-entity MoE: frozen sigmoid blend of N archetype fields, weights computed ONCE from trajectory summary + BLAKE3-committed (Plan 321, Research 302, arXiv:2510.00621 FAME). Defining property: sampling invariance (FAME Prop. 3) — dense vs sparse observation of same trajectory → identical dynamics. Reuses personality_composition's sigmoid + simd::simd_fused_scale_acc (DRY). Opt-in until G1–G5 GOAT gate passes; G2 (sampling invariance) is the make-or-break gate.
 smear_classifier = ["faithfulness_probe"]  # SmearClassifier — ternary (CoherentSingle/TokenSmear/SequenceSmear) latent-mass distribution classifier extending Plan 278's binary FaithfulnessProbe (Plan 298, Research 277, arXiv:2606.20560). Zero-alloc, SIMD-backed, #[repr(u8)] sync-friendly. Opt-in until G2 (useful discrimination) + G3 (<200ns latency) GOAT gate passes.
 engram = ["dep:unicode-normalization", "dep:papaya"]  # Engram — hash-addressed, sigmoid-fused static pattern memory open primitive (Plan 299, Research 278, arXiv:2601.07372). N-gram-suffix → multi-head hash → O(1) table lookup → sigmoid gate → residual fuse. Open half of the Engram Super-GOAT (private half: riir-ai Guide 147; chain half: riir-chain R001 TODO). Default-off until G1–G7 GOAT gate passes. T4.3 rolls in `unicode-normalization` for NFKC tokenizer compression; T6.2 rolls in `papaya` for the plasma-tier lock-free LRU.

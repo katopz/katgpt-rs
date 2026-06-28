@@ -25,8 +25,8 @@
 //! ```
 //!
 //! This matches the streaming-`Hasher` pattern used by
-//! [`MicroRecurrentKernelSnapshot`](crate::micro_belief::snapshot::MicroRecurrentKernelSnapshot)
-//! (R242) and is independent of struct layout / padding.
+//! `MicroRecurrentKernelSnapshot` in katgpt-micro-belief (R242) and is
+//! independent of struct layout / padding.
 //!
 //! # `version`
 //!
@@ -36,8 +36,8 @@
 //! identical `w` but different versions are the same personality at different
 //! points in time.
 
-use crate::personality_composition::kernel::PersonalityWeightedComposition;
-use crate::personality_composition::types::ArchetypeLabel;
+use crate::kernel::PersonalityWeightedComposition;
+use crate::types::ArchetypeLabel;
 
 /// Snapshot version format. Bump if `w` layout or hashing scheme changes.
 ///
@@ -237,8 +237,8 @@ impl<const N: usize> PersonalitySnapshot<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::personality_composition::kernel::PersonalityWeightedComposition;
-    use crate::personality_composition::types::PersonalityConfig;
+    use crate::kernel::PersonalityWeightedComposition;
+    use crate::types::PersonalityConfig;
 
     #[test]
     fn snapshot_roundtrips_commit() {

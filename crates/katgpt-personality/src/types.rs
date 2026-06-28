@@ -4,7 +4,7 @@
 //! and `katgpt-rs/.research/276_Personality_Weighted_Latent_Layer_Composition.md`
 //! for the full design rationale.
 
-/// Configuration for a [`PersonalityWeightedComposition`](crate::personality_composition::PersonalityWeightedComposition).
+/// Configuration for a [`PersonalityWeightedComposition`](crate::PersonalityWeightedComposition).
 ///
 /// All fields are host-configured constants. The kernel holds a copy (16 bytes)
 /// so it doesn't need an indirection on the hot path.
@@ -82,7 +82,7 @@ impl PersonalityConfig {
 ///
 /// The kernel does NOT interpret this label — it's an opaque 16-byte blob
 /// that the host uses to disambiguate "predator" vs "prey" vs "NPC" vs "robot"
-/// personalities. It flows into [`PersonalitySnapshot`](crate::personality_composition::PersonalitySnapshot)
+/// personalities. It flows into [`PersonalitySnapshot`](crate::PersonalitySnapshot)
 /// as part of the BLAKE3 commitment so two entities with identical weights but
 /// different archetypes produce different hashes.
 ///

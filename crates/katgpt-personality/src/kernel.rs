@@ -11,13 +11,13 @@
 //! [`compose_into`](PersonalityWeightedComposition::compose_into) is the
 //! per-tick hot path. It costs `O(N · D)` multiplies — for `N=9, D=32` that's
 //! 288 FMAs, trivially SIMD-able. The inner loop delegates to
-//! [`simd_fused_scale_acc`](crate::simd::simd_fused_scale_acc) so NEON/AVX2/FMA
+//! [`simd_fused_scale_acc`](katgpt_types::simd::simd_fused_scale_acc) so NEON/AVX2/FMA
 //! is used when available, with a scalar fallback otherwise.
 
-use crate::personality_composition::sigmoid::sigmoid;
-use crate::personality_composition::trait_def::LayerDirectionSource;
-use crate::personality_composition::types::PersonalityConfig;
-use crate::simd::simd_fused_scale_acc;
+use crate::sigmoid::sigmoid;
+use crate::trait_def::LayerDirectionSource;
+use crate::types::PersonalityConfig;
+use katgpt_types::simd::simd_fused_scale_acc;
 
 /// The personality-weighted composition kernel.
 ///
@@ -28,7 +28,7 @@ use crate::simd::simd_fused_scale_acc;
 /// # Const-generic budget
 ///
 /// Per AGENTS.md, `N` is pinned to `{1, 4, 7, 9}` via type aliases in
-/// [`types`](crate::personality_composition::types) to keep monomorphisation
+/// [`types`](crate::types) to keep monomorphisation
 /// bounded. The production Entity Cognition Stack case is `N=9, D=32`.
 ///
 /// # Layout
@@ -228,7 +228,7 @@ impl<const N: usize, const D: usize> PersonalityWeightedComposition<N, D> {
 
     /// Read-only access to the personality weights `w`.
     ///
-    /// For snapshot integration ([`PersonalitySnapshot`](crate::personality_composition::PersonalitySnapshot)::from_composition)
+    /// For snapshot integration ([`PersonalitySnapshot`](crate::PersonalitySnapshot)::from_composition)
     /// and host-side introspection (e.g. checking if `w_COMPANIONS` has risen
     /// above `τ_tame`).
     #[inline]

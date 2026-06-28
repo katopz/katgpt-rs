@@ -679,7 +679,7 @@ pub use bisimulation::{
     plan as bisimulation_plan,
 };
 
-// ── Personality-Weighted Layer Composition (Plan 297, Research 276) ───────
+// ── Personality-Weighted Layer Composition (Plan 297, Research 276) ──────
 //
 // Open MIT-licensed primitive for the Entity Cognition Stack Super-GOAT.
 // A `PersonalityWeightedComposition<N, D>` kernel composes `N` latent
@@ -691,8 +691,15 @@ pub use bisimulation::{
 // Consumed by riir-ai Plan 327 (runtime wiring) — the game-specific 7-layer
 // mapping, archetype table, taming transition stay private in riir-ai.
 // Opt-in until G4 (<1µs/entity) + G5 (zero alloc) GOAT gate passes.
+//
+// Substrate lives in the katgpt-personality crate (Issue 007 Phase E Tier 2
+// #5, 2026-06-28). Re-exported here as `katgpt_core::personality_composition`
+// for backwards compatibility — all `crate::personality_composition::*` paths
+// resolve unchanged. The `personality_composition` Cargo feature turns on the
+// `dep:katgpt-personality` dependency; the substrate compiles unconditionally
+// inside the crate itself.
 #[cfg(feature = "personality_composition")]
-pub mod personality_composition;
+pub use katgpt_personality as personality_composition;
 #[cfg(feature = "personality_composition")]
 pub use personality_composition::{
     ArchetypeLabel, EntityCognitionComposition, LayerDirectionSource, PersonalityConfig,
