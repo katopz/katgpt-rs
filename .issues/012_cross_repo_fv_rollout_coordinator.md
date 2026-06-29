@@ -38,7 +38,7 @@ aligned with:
 |---|---|---|---|
 | `katgpt-rs` (public) | ✅ `KatgptProof` (Plan 293) | `action_bridge_ranking_preserved`, `action_bridge_argmax_preserved` | this issue (coordinator) |
 | `riir-chain` (private) | ✅ `RiirChainProof` (Plans 004 + 008) | LatCal round-trip (3), quorum determinism (4), chain-side `merkle_root` (4) | `riir-chain/.issues/001_*` (T1–T5, T8, T9 done; T6/T7 deferred) |
-| `riir-neuron-db` (private) | ✅ `NeuronDbProof` (Plan 007) | `Shard/Layout` (7 thms), `Consolidation/FreezeGate` (8 thms) | `riir-neuron-db/.issues/004_*` (Phase 1 done; P1/P2 pending) |
+| `riir-neuron-db` (private) | ✅ `NeuronDbProof` (Plans 007 + 008) | `Shard/Layout` (7 thms), `Consolidation/FreezeGate` (8 thms), `Merkle/Soundness` (4 thms) | `riir-neuron-db/.issues/004_*` (Phase 1 + P1 done; P2 pending) |
 | `riir-ai` (private) | ❌ none | — | `riir-ai/.issues/348_*` (P1, now unblocked) |
 | `riir-train` (private) | ❌ none | — | `riir-train/.issues/308_*` (**EXCLUDED**) |
 
@@ -59,6 +59,17 @@ aligned with:
   batch root — together they close the bug class across both repos.
 - 🟡 **Phase 3 (P1): neuron-db + chain fill-ins** — Merkle proof soundness,
   split-key security, slashing monotonicity.
+  - ✅ **neuron-db Merkle soundness** — DONE (Plan 008, 2026-06-30). Shipped
+    `Merkle/Soundness.lean` (4 axiom-free thms: `computeRootFromProof_empty`,
+    `computeRootFromProof_injective_in_leaf` — the main tamper-evidence theorem,
+    parameterized over any injective `hashFn` so the cryptographic assumption is
+    a *hypothesis* not an axiom; `verifyProof_tamper_evident` — applied form;
+    `computeRootFromProof_deterministic`). Spec-match test
+    `tests/merkle_soundness_spec_match.rs` (7/7, incl. 1000-trial tamper stress
+    + 16K single-byte tampers) validates BLAKE3 satisfies the `h_inj`
+    hypothesis empirically.
+  - 🟡 **chain split-key security + slashing monotonicity** — still open
+    (`riir-chain/.issues/001_*` T6/T7).
 - 🟡 **Phase 4 (P1): riir-ai** — `hla_scalar_boundedness` (cheap, extends
   KatgptProof) + freeze/thaw reader invariant (the hard long pole).
 - 🟡 **Phase 5 (P2/P3): riir-ai** — bridge ordering over learned directions.
@@ -79,9 +90,9 @@ Phase 2 (P0): riir-chain/.proofs/          ← extend existing RiirChainProof
               Rationale: sync-boundary criticality; builds on LatCal lemma.
 
 Phase 3 (P1): riir-neuron-db + riir-chain fill-ins
-              ├─ Merkle proof soundness (neuron-db)
-              ├─ Split-key security (chain)
-              └─ Slashing monotonicity (chain)
+              ├─ Merkle proof soundness (neuron-db)        ← neuron-db half DONE (Plan 008)
+              ├─ Split-key security (chain)                ← open
+              └─ Slashing monotonicity (chain)             ← open
 
 Phase 4 (P1): riir-ai/.proofs/             ← new instance
               ├─ hla_scalar_boundedness.lean   (cheap, extends KatgptProof)
