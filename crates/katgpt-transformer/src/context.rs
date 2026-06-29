@@ -240,7 +240,13 @@ impl WallPrefixState {
     /// means it has decayed.
     ///
     /// Returns `1.0` if prefix sums are not yet computed (no decay).
+    //
+    // The chunk-4 `for dd in 0..4` loops below are intentional: a fixed
+    // 4-element iteration count helps LLVM emit a single SIMD exp+min
+    // reduction (see `simd_exp_inplace`). Converting to iterator form
+    // (clippy::needless_range_loop) would defeat the auto-vectorizer.
     #[inline]
+    #[allow(clippy::needless_range_loop)]
     pub fn min_retention_at_block(
         &self,
         layer_idx: usize,

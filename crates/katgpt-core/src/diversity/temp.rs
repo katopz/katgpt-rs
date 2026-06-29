@@ -41,7 +41,7 @@
 
 /// 1/√2 — the irreducible factor in the Theorem 3.1 bound.
 /// `(2δ/λ + G)(1/√2 + τ) + C_H·ε`.
-const INV_SQRT_2: f32 = 0.7071067811865476_f32;
+const INV_SQRT_2: f32 = std::f32::consts::FRAC_1_SQRT_2;
 
 // ──────────────────────────────────────────────────────────────────────────
 // LossKernel trait (T1.2)
