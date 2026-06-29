@@ -902,6 +902,238 @@ unsafe fn avx2_dist_sq(a: &[f32], b: &[f32], len: usize) -> f32 {
     }
 }
 
+// ── SIMD L-∞ Distance (Issue 003 / riir-neuron-db) ───────────
+
+/// SIMD-accelerated L-infinity distance: `max_i |a[i] - b[i]|`.
+///
+/// Computes the elementwise absolute difference and horizontal max in one
+/// pass. Used by `select_diverse_subset`'s `argmax_pair` seed (O(n²) pairwise
+/// scan) and the greedy-fill inner loop. The dispatch shape mirrors
+/// [`simd_dist_sq`] / [`simd_sum_abs_f32`]: 4-accumulator scalar fallback,
+/// NEON `vmaxq_f32` + `vmaxvq_f32` reduce, AVX2 `_mm256_max_ps` +
+/// `horizontal_max_256` reduce.
+///
+/// # Numerical note
+///
+/// `|x|` is computed as a sign-bit AND (`x & 0x7fff_ffff`), which is
+/// bit-identical to `f32::abs()` for all finite inputs (and matches the
+/// SIMD `fabs` intrinsic). The horizontal max is associative/commutative for
+/// finite `f32`, so the reduction order does not affect the result — this
+/// makes the SIMD output bit-identical to the scalar reference on all finite
+/// inputs (verified by `simd::tests::*l_inf_distance*`). NaN inputs follow
+/// IEEE 754 `max` propagation semantics (`_mm_max_ps` / `vmaxq_f32` are
+/// total-ordered max-of-magnitudes on x86/ARM, matching the scalar `if a > b`
+/// path for the non-NaN case).
+#[inline]
+pub fn simd_l_inf_distance_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+    debug_assert_eq!(a.len(), b.len());
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { neon_l_inf_distance_f32(a, b, len) }
+    }
+    #[cfg(target_arch = "x86_64")]
+    {
+        if is_avx2_fma_available() {
+            unsafe { avx2_l_inf_distance_f32(a, b, len) }
+        } else {
+            scalar_l_inf_distance_f32(a, b, len)
+        }
+    }
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        scalar_l_inf_distance_f32(a, b, len)
+    }
+}
+
+#[inline(always)]
+#[allow(dead_code)]
+pub(super) fn scalar_l_inf_distance_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+    // 4 independent max-accumulators to break the latency chain of a single
+    // `max` (cmp+select on most FPUs). Mirrors the 4-acc shape of
+    // `scalar_dist_sq` / `scalar_sum_abs_f32`. Output is bit-identical to the
+    // reference `l_inf_distance` in katgpt-core's diversity::temp.
+    let mut acc = [0.0f32; 4];
+    let chunks = len / 4;
+    let mut i = 0;
+    for _ in 0..chunks {
+        unsafe {
+            let d0 = (*a.get_unchecked(i) - *b.get_unchecked(i)).abs();
+            let d1 = (*a.get_unchecked(i + 1) - *b.get_unchecked(i + 1)).abs();
+            let d2 = (*a.get_unchecked(i + 2) - *b.get_unchecked(i + 2)).abs();
+            let d3 = (*a.get_unchecked(i + 3) - *b.get_unchecked(i + 3)).abs();
+            if d0 > acc[0] {
+                acc[0] = d0;
+            }
+            if d1 > acc[1] {
+                acc[1] = d1;
+            }
+            if d2 > acc[2] {
+                acc[2] = d2;
+            }
+            if d3 > acc[3] {
+                acc[3] = d3;
+            }
+        }
+        i += 4;
+    }
+    let mut max_abs = acc.iter().copied().fold(0.0f32, f32::max);
+    while i < len {
+        unsafe {
+            let d = (*a.get_unchecked(i) - *b.get_unchecked(i)).abs();
+            if d > max_abs {
+                max_abs = d;
+            }
+        }
+        i += 1;
+    }
+    max_abs
+}
+
+#[cfg(target_arch = "aarch64")]
+#[inline]
+unsafe fn neon_l_inf_distance_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+    use core::arch::aarch64::{vabdq_f32, vdupq_n_f32, vld1q_f32, vmaxq_f32, vmaxvq_f32};
+
+    unsafe {
+        // Single 4-wide accumulator. NEON vmaxq is single-cycle / low-latency,
+        // so the 4-accumulator chain (used for latency-bound FMA in dot/sum)
+        // is unnecessary here. We still unroll by 4 vectors (16 elements) to
+        // amortize loop overhead.
+        let mut acc = vdupq_n_f32(0.0);
+        let mut i = 0;
+        let chunks16 = len / 16;
+        for _ in 0..chunks16 {
+            // vabdq_f32: per-lane |a - b| in one intrinsic.
+            let d0 = vabdq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i)));
+            let d1 = vabdq_f32(
+                vld1q_f32(a.as_ptr().add(i + 4)),
+                vld1q_f32(b.as_ptr().add(i + 4)),
+            );
+            let d2 = vabdq_f32(
+                vld1q_f32(a.as_ptr().add(i + 8)),
+                vld1q_f32(b.as_ptr().add(i + 8)),
+            );
+            let d3 = vabdq_f32(
+                vld1q_f32(a.as_ptr().add(i + 12)),
+                vld1q_f32(b.as_ptr().add(i + 12)),
+            );
+            acc = vmaxq_f32(acc, d0);
+            acc = vmaxq_f32(acc, d1);
+            acc = vmaxq_f32(acc, d2);
+            acc = vmaxq_f32(acc, d3);
+            i += 16;
+        }
+
+        // 4-wide remainder (128-bit ops keep one intrinsic set).
+        let remaining = (len - i) / 4;
+        for _ in 0..remaining {
+            let d = vabdq_f32(vld1q_f32(a.as_ptr().add(i)), vld1q_f32(b.as_ptr().add(i)));
+            acc = vmaxq_f32(acc, d);
+            i += 4;
+        }
+
+        // Horizontal max across the 4 lanes.
+        let mut max_abs = vmaxvq_f32(acc);
+
+        // Scalar tail (1–3 trailing elements).
+        while i < len {
+            let diff = (*a.get_unchecked(i) - *b.get_unchecked(i)).abs();
+            if diff > max_abs {
+                max_abs = diff;
+            }
+            i += 1;
+        }
+
+        max_abs
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+#[inline]
+unsafe fn avx2_l_inf_distance_f32(a: &[f32], b: &[f32], len: usize) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_and_ps, _mm256_loadu_ps, _mm256_max_ps, _mm256_set1_ps, _mm256_setzero_ps,
+        _mm256_sub_ps,
+    };
+
+    unsafe {
+        // Sign-bit mask: AND with this clears the sign bit → |x|.
+        let abs_mask = _mm256_set1_ps(f32::from_bits(0x7fff_ffff));
+        // Single 8-wide accumulator. AVX2 `_mm256_max_ps` is single-cycle /
+        // 4-cycle latency (Skylake/Kaby Lake/Zen2+); a single acc keeps the
+        // throughput-bound max pipeline saturated without the 4-acc
+        // dependency-chain-breaking used for latency-bound FMA in dot/sum.
+        let mut acc = _mm256_setzero_ps();
+        let mut i = 0;
+        let chunks32 = len / 32;
+        for _ in 0..chunks32 {
+            // Unrolled by 4 vectors (32 elements) to amortize loop overhead.
+            let d0 = _mm256_and_ps(
+                _mm256_sub_ps(
+                    _mm256_loadu_ps(a.as_ptr().add(i)),
+                    _mm256_loadu_ps(b.as_ptr().add(i)),
+                ),
+                abs_mask,
+            );
+            let d1 = _mm256_and_ps(
+                _mm256_sub_ps(
+                    _mm256_loadu_ps(a.as_ptr().add(i + 8)),
+                    _mm256_loadu_ps(b.as_ptr().add(i + 8)),
+                ),
+                abs_mask,
+            );
+            let d2 = _mm256_and_ps(
+                _mm256_sub_ps(
+                    _mm256_loadu_ps(a.as_ptr().add(i + 16)),
+                    _mm256_loadu_ps(b.as_ptr().add(i + 16)),
+                ),
+                abs_mask,
+            );
+            let d3 = _mm256_and_ps(
+                _mm256_sub_ps(
+                    _mm256_loadu_ps(a.as_ptr().add(i + 24)),
+                    _mm256_loadu_ps(b.as_ptr().add(i + 24)),
+                ),
+                abs_mask,
+            );
+            acc = _mm256_max_ps(acc, d0);
+            acc = _mm256_max_ps(acc, d1);
+            acc = _mm256_max_ps(acc, d2);
+            acc = _mm256_max_ps(acc, d3);
+            i += 32;
+        }
+
+        // 8-wide remainder.
+        let remaining = (len - i) / 8;
+        for _ in 0..remaining {
+            let d = _mm256_and_ps(
+                _mm256_sub_ps(
+                    _mm256_loadu_ps(a.as_ptr().add(i)),
+                    _mm256_loadu_ps(b.as_ptr().add(i)),
+                ),
+                abs_mask,
+            );
+            acc = _mm256_max_ps(acc, d);
+            i += 8;
+        }
+
+        // Horizontal max across the 8 lanes (shared helper in horizontal.rs).
+        let mut max_abs = super::horizontal::horizontal_max_256(acc);
+
+        // Scalar tail (1–7 trailing elements).
+        while i < len {
+            let diff = (*a.get_unchecked(i) - *b.get_unchecked(i)).abs();
+            if diff > max_abs {
+                max_abs = diff;
+            }
+            i += 1;
+        }
+
+        max_abs
+    }
+}
+
 // ── SIMD Fused Subtract-Accumulate (Issue 071) ──────────────
 
 /// SIMD-accelerated fused subtract-accumulate: `dst[i] += a[i] - b[i]`.

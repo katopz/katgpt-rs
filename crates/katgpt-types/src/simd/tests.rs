@@ -1760,6 +1760,101 @@
         assert_eq!(crate::simd::simd_sum_abs_f32(&[0.0]), 0.0);
     }
 
+    // ── simd_l_inf_distance_f32 tests (riir-neuron-db Issue 003) ──────
+    //
+    // `l_inf_distance` is the inner loop of `select_diverse_subset`'s
+    // O(n²) `argmax_pair` seed. Bit-identical output to the scalar reference
+    // is REQUIRED — the greedy selector's tie-break (`> best_dist`) means
+    // even a 1-ULP drift can flip the seed pair and cascade through the
+    // whole selection. Truth reference is `scalar_l_inf_distance_f32`
+    // (imported via #[cfg(test)] use in simd/mod.rs).
+
+    #[test]
+    fn l_inf_distance_matches_scalar_across_lengths() {
+        // Deterministic xorshift64* PRNG (same family as the sum_sq_quartic
+        // test). Lengths sweep: sub-SIMD-width (1,2,3), exactly-on-boundary
+        // (4,8,16,32), one-past-boundary (5,9,17,33), and the production
+        // workload sizes for select_diverse_subset (K=8, n=256).
+        let mut state: u64 = 0x1234_5678_9ABC_DEF0;
+        let next_f32 = |s: &mut u64| -> f32 {
+            *s ^= *s << 13;
+            *s ^= *s >> 7;
+            *s ^= *s << 17;
+            (((*s & 0xFFFFFF) as f32) / ((0x1000000) as f32) - 0.5) * 8.0 // range ≈ [-4, 4]
+        };
+
+        for &len in &[
+            1usize, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128, 129,
+            255, 256, 257,
+        ] {
+            let a: Vec<f32> = (0..len).map(|_| next_f32(&mut state)).collect();
+            let b: Vec<f32> = (0..len).map(|_| next_f32(&mut state)).collect();
+            let simd = crate::simd::simd_l_inf_distance_f32(&a, &b, len);
+            let reference = scalar_l_inf_distance_f32(&a, &b, len);
+            assert_eq!(
+                simd.to_bits(), reference.to_bits(),
+                "len={len}: SIMD {simd:?} != scalar {reference:?} (a={a:?}, b={b:?})"
+            );
+        }
+    }
+
+    #[test]
+    fn l_inf_distance_known_values() {
+        // Exact cases where the answer is a clean small integer, so a
+        // tolerance-based test can't mask a sign or indexing bug.
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[1.0, 2.0, 3.0], &[0.0, 0.0, 0.0], 3),
+            3.0
+        );
+        // Negative differences → abs is the right metric.
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[-5.0, 1.0, 1.0], &[1.0, 1.0, 1.0], 3),
+            6.0
+        );
+        // Max occurs in the middle, not the last lane.
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[0.0, 10.0, 0.0], &[0.0, 0.0, 0.0], 3),
+            10.0
+        );
+        // Identical vectors → zero distance.
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[1.5, -2.25, 3.0], &[1.5, -2.25, 3.0], 3),
+            0.0
+        );
+    }
+
+    #[test]
+    fn l_inf_distance_empty_and_single() {
+        // len=0 must return 0.0 (matches scalar: empty fold → 0.0).
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[] as &[f32], &[] as &[f32], 0),
+            0.0
+        );
+        // len=1 scalar tail.
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[7.5], &[2.5], 1),
+            5.0
+        );
+        assert_eq!(
+            crate::simd::simd_l_inf_distance_f32(&[-7.5], &[2.5], 1),
+            10.0
+        );
+    }
+
+    #[test]
+    fn l_inf_distance_matches_reference_at_k8() {
+        // K=8 is the production workload for select_diverse_subset's loss
+        // vectors (Plan 005 bench fixture). Verify bit-identical match at
+        // this exact shape, since it's the one the GOAT gate benches.
+        let a = [0.125_f32, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0];
+        let b = [1.0_f32, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125];
+        let simd = crate::simd::simd_l_inf_distance_f32(&a, &b, 8);
+        let reference = scalar_l_inf_distance_f32(&a, &b, 8);
+        assert_eq!(simd.to_bits(), reference.to_bits());
+        // Sanity: the max diff is |0.125 - 1.0| = 0.875.
+        assert_eq!(simd, 0.875);
+    }
+
     // ── simd_sum_sq_quartic tests (Plan 306 T7.4) ───────────────
     //
     // Fused Σx² + Σx⁴ used by depth_invariance::classify_chain for the

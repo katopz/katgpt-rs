@@ -249,17 +249,15 @@ pub fn pairwise_bound(
 }
 
 /// L-infinity distance `||a - b||_inf` = max elementwise absolute difference.
+///
+/// Thin wrapper over `simd_l_inf_distance_f32` (NEON/AVX2/scalar dispatch).
+/// Inlined so the dispatch is hoisted into the caller's hot loop. Bit-identical
+/// to the previous scalar loop on all finite inputs (verified by
+/// `katgpt_types::simd::tests::l_inf_distance_matches_scalar_across_lengths`).
 #[inline]
 fn l_inf_distance(a: &[f32], b: &[f32]) -> f32 {
-    assert_eq!(a.len(), b.len());
-    let mut max_abs = 0.0_f32;
-    for i in 0..a.len() {
-        let diff = (a[i] - b[i]).abs();
-        if diff > max_abs {
-            max_abs = diff;
-        }
-    }
-    max_abs
+    debug_assert_eq!(a.len(), b.len());
+    crate::simd::simd_l_inf_distance_f32(a, b, a.len())
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -402,21 +400,285 @@ pub fn select_diverse_subset_into(
 
 /// Find the pair `(i, j)` with maximal L_inf distance among all candidates.
 /// O(n²); used once per `select_diverse_subset` call to seed the greedy loop.
+///
+/// # SIMD blocking (riir-neuron-db Issue 003)
+///
+/// For the production K=8 workload the naive O(n²) double loop spends most
+/// of its time in `l_inf_distance`'s per-call horizontal reduction
+/// (`vmaxvq_f32` on NEON, `horizontal_max_256` on AVX2). This impl blocks
+/// the inner `j` loop by the SIMD j-width (4 candidates at a time): one
+/// broadcast `i`-vector is diffed against 4 `j`-vectors in parallel, and
+/// the block's max-distance is reduced to a scalar ONCE per 4 distances
+/// (not once per distance). When a block beats the running `best_dist`, a
+/// scalar rescan of those 4 pairs finds the exact winning index — this
+/// branch is rare (taken only when a new global max appears, O(log n) times
+/// across the whole O(n²) scan for typical distributions), so its cost
+/// amortizes to zero.
+///
+/// Output is bit-identical to the scalar double loop: max-of-maxes is
+/// associative/commutative for finite f32, so the blocked reduction order
+/// does not change the result (verified by `g4_determinism_bit_identical`).
 fn argmax_pair(loss_vectors: &[&[f32]]) -> (usize, usize) {
     let n = loss_vectors.len();
     debug_assert!(n >= 2);
+    if n < 2 {
+        return (0, 0);
+    }
+
+    let k = loss_vectors[0].len();
+    if k == 0 {
+        return (0, 1.min(n - 1));
+    }
+
+    // Seed with the (0, 1) pair so `best_dist` starts from a real value.
     let mut best = (0_usize, 1_usize);
     let mut best_dist = l_inf_distance(loss_vectors[0], loss_vectors[1]);
+
+    // Scalar fallback for tiny K (sub-SIMD-width) or no-SIMD targets. The
+    // blocked path's amortization only wins when K >= the SIMD width; for
+    // K < 4 the per-block horizontal-reduction overhead exceeds the savings.
+    if k < 4 || !cfg!(any(target_arch = "aarch64", target_arch = "x86_64")) {
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let dist = l_inf_distance(loss_vectors[i], loss_vectors[j]);
+                if dist > best_dist {
+                    best_dist = dist;
+                    best = (i, j);
+                }
+            }
+        }
+        return best;
+    }
+
+    // SIMD-blocked path: 4 j-vectors per inner iteration against one broadcast i.
+    // BLOCK=4 is the NEON width; on AVX2 the K-inner loop still uses 8-wide ops
+    // (the j-blocking is orthogonal to the K-vectorization — we block j by 4
+    // because that keeps the register pressure manageable on both ISAs while
+    // still amortizing the horizontal reduction 4×).
+    const J_BLOCK: usize = 4;
+
     for i in 0..n {
-        for j in (i + 1)..n {
-            let dist = l_inf_distance(loss_vectors[i], loss_vectors[j]);
+        let base = loss_vectors[i];
+        let mut j = i + 1;
+        // Align j up to the largest multiple of J_BLOCK <= n.
+        let block_end = j + ((n - j) / J_BLOCK) * J_BLOCK;
+
+        while j < block_end {
+            // Compute the max L_inf distance from `base` to the 4 candidates
+            // [j, j+1, j+2, j+3] in ONE horizontal reduction (vs 4 reductions
+            // in the naive loop). This is the amortization win.
+            let block_max = block_max_l_inf_distance(base, loss_vectors, j, k);
+            if block_max > best_dist {
+                // Rare path: a new global max appeared somewhere in this block.
+                // Rescan the 4 pairs scalar to find the exact winner. Cost is
+                // O(J_BLOCK) per hit, and hits are O(log n) over the whole scan.
+                for jj in j..j + J_BLOCK {
+                    let dist = l_inf_distance(base, loss_vectors[jj]);
+                    if dist > best_dist {
+                        best_dist = dist;
+                        best = (i, jj);
+                    }
+                }
+            }
+            j += J_BLOCK;
+        }
+
+        // Scalar tail (1..J_BLOCK-1 trailing j's).
+        while j < n {
+            let dist = l_inf_distance(base, loss_vectors[j]);
             if dist > best_dist {
                 best_dist = dist;
                 best = (i, j);
             }
+            j += 1;
         }
     }
     best
+}
+
+/// Max L_inf distance from `base` to each of `candidates[j..j+4]`, reduced to
+/// ONE scalar in a single horizontal pass. Used by `argmax_pair`'s blocked
+/// inner loop to amortize the horizontal reduction across 4 distances.
+///
+/// # Safety contract (caller-enforced, debug_asserted)
+///
+/// - `j + 4 <= candidates.len()`
+/// - Every `candidates[r][..k]` has at least `k` elements (uniform-K invariant)
+#[inline]
+fn block_max_l_inf_distance(base: &[f32], candidates: &[&[f32]], j: usize, k: usize) -> f32 {
+    debug_assert!(j + 4 <= candidates.len());
+    let c0 = candidates[j];
+    let c1 = candidates[j + 1];
+    let c2 = candidates[j + 2];
+    let c3 = candidates[j + 3];
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        use core::arch::aarch64::{vabdq_f32, vdupq_n_f32, vld1q_f32, vmaxq_f32, vmaxvq_f32};
+        unsafe {
+            // Process K in 4-element chunks. Each chunk: load base + 4 candidates
+            // (5 loads), 4× vabdq, fold into one running 4-wide block_max via
+            // vmaxq. ONE vmaxvq horizontal reduce at the end → 4 distances for
+            // the price of 1 reduction (vs 4 in the naive per-call loop).
+            let mut block_max = vdupq_n_f32(0.0);
+            let mut idx = 0;
+            let chunks = k / 4;
+            for _ in 0..chunks {
+                let b = vld1q_f32(base.as_ptr().add(idx));
+                let d0 = vabdq_f32(b, vld1q_f32(c0.as_ptr().add(idx)));
+                let d1 = vabdq_f32(b, vld1q_f32(c1.as_ptr().add(idx)));
+                let d2 = vabdq_f32(b, vld1q_f32(c2.as_ptr().add(idx)));
+                let d3 = vabdq_f32(b, vld1q_f32(c3.as_ptr().add(idx)));
+                block_max = vmaxq_f32(block_max, d0);
+                block_max = vmaxq_f32(block_max, d1);
+                block_max = vmaxq_f32(block_max, d2);
+                block_max = vmaxq_f32(block_max, d3);
+                idx += 4;
+            }
+            let mut m = vmaxvq_f32(block_max);
+            // Scalar tail for K not divisible by 4.
+            while idx < k {
+                let bi = *base.get_unchecked(idx);
+                m = m
+                    .max((bi - *c0.get_unchecked(idx)).abs())
+                    .max((bi - *c1.get_unchecked(idx)).abs())
+                    .max((bi - *c2.get_unchecked(idx)).abs())
+                    .max((bi - *c3.get_unchecked(idx)).abs());
+                idx += 1;
+            }
+            m
+        }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        // AVX2 path: same structure, 8-wide chunks. One broadcast base load
+        // per chunk, 4× (sub + and-mask) for the 4 candidates, fold via
+        // _mm256_max_ps, one horizontal_max_256 reduce at the end.
+        //
+        // The intrinsics live in a `target_feature(enable="avx2,fma")`-gated
+        // helper (`avx2_block_max_l_inf_distance`) and dispatched via the
+        // shared runtime `simd_level()` check — same pattern as
+        // `katgpt_types::simd::research::avx2_dist_sq`. Non-AVX2 x86_64 CPUs
+        // fall through to the scalar block.
+        if crate::simd::simd_level() == crate::simd::SimdLevel::Avx2 {
+            unsafe { avx2_block_max_l_inf_distance(base, c0, c1, c2, c3, k) }
+        } else {
+            block_max_l_inf_distance_scalar(base, c0, c1, c2, c3, k)
+        }
+    }
+
+    #[cfg(not(any(target_arch = "aarch64", target_arch = "x86_64")))]
+    {
+        block_max_l_inf_distance_scalar(base, c0, c1, c2, c3, k)
+    }
+}
+
+/// Scalar reference for `block_max_l_inf_distance`. Computes the max L_inf
+/// distance from `base` to each of `c0..c3` over `k` elements. Used by the
+/// non-SIMD cfg branches and by non-AVX2 x86_64.
+///
+/// On aarch64 this is dead code (the NEON block path is always taken), so
+/// we silence the dead-code lint there. On every other target it's live.
+#[cfg_attr(target_arch = "aarch64", allow(dead_code))]
+#[inline]
+fn block_max_l_inf_distance_scalar(
+    base: &[f32],
+    c0: &[f32],
+    c1: &[f32],
+    c2: &[f32],
+    c3: &[f32],
+    k: usize,
+) -> f32 {
+    let mut m = 0.0_f32;
+    for idx in 0..k {
+        let bi = base[idx];
+        m = m
+            .max((bi - c0[idx]).abs())
+            .max((bi - c1[idx]).abs())
+            .max((bi - c2[idx]).abs())
+            .max((bi - c3[idx]).abs());
+    }
+    m
+}
+
+/// AVX2 kernel for `block_max_l_inf_distance`. `#[target_feature]`-gated so
+/// the `_mm256_*` intrinsics compile on any x86_64 target (the runtime
+/// `simd_level() == Avx2` check in the caller guards the actual invocation).
+/// Mirrors the structure of `katgpt_types::simd::research::avx2_dist_sq`.
+///
+/// `unsafe_op_in_unsafe_fn` is allowed here to match the existing
+/// `katgpt_types::simd::research::avx2_*` kernels (same edition-2024 lint
+/// posture — the whole body is intrinsic calls under a `target_feature`
+/// contract; wrapping each in its own `unsafe {}` would just add noise).
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+#[inline]
+#[allow(unsafe_op_in_unsafe_fn)]
+unsafe fn avx2_block_max_l_inf_distance(
+    base: &[f32],
+    c0: &[f32],
+    c1: &[f32],
+    c2: &[f32],
+    c3: &[f32],
+    k: usize,
+) -> f32 {
+    use core::arch::x86_64::{
+        _mm256_and_ps, _mm256_loadu_ps, _mm256_max_ps, _mm256_set1_ps, _mm256_setzero_ps,
+        _mm256_sub_ps,
+    };
+    let abs_mask = _mm256_set1_ps(f32::from_bits(0x7fff_ffff));
+    let mut block_max = _mm256_setzero_ps();
+    let mut idx = 0;
+    let chunks = k / 8;
+    for _ in 0..chunks {
+        let b = _mm256_loadu_ps(base.as_ptr().add(idx));
+        let d0 = _mm256_and_ps(
+            _mm256_sub_ps(b, _mm256_loadu_ps(c0.as_ptr().add(idx))),
+            abs_mask,
+        );
+        let d1 = _mm256_and_ps(
+            _mm256_sub_ps(b, _mm256_loadu_ps(c1.as_ptr().add(idx))),
+            abs_mask,
+        );
+        let d2 = _mm256_and_ps(
+            _mm256_sub_ps(b, _mm256_loadu_ps(c2.as_ptr().add(idx))),
+            abs_mask,
+        );
+        let d3 = _mm256_and_ps(
+            _mm256_sub_ps(b, _mm256_loadu_ps(c3.as_ptr().add(idx))),
+            abs_mask,
+        );
+        block_max = _mm256_max_ps(block_max, d0);
+        block_max = _mm256_max_ps(block_max, d1);
+        block_max = _mm256_max_ps(block_max, d2);
+        block_max = _mm256_max_ps(block_max, d3);
+        idx += 8;
+    }
+    // Horizontal max across the 8 lanes (inlined copy of
+    // `horizontal_max_256`, which is `pub(super)` in katgpt-types and
+    // unreachable here). Same shuffle sequence, kept in sync.
+    use core::arch::x86_64::{
+        _mm_cvtss_f32, _mm_max_ps, _mm_shuffle_ps, _mm256_castps256_ps128, _mm256_extractf128_ps,
+    };
+    let hi = _mm256_extractf128_ps(block_max, 1);
+    let lo = _mm256_castps256_ps128(block_max);
+    let m128 = _mm_max_ps(lo, hi);
+    let shuf = _mm_shuffle_ps(m128, m128, 0xB1);
+    let m2 = _mm_max_ps(m128, shuf);
+    let shuf2 = _mm_shuffle_ps(m2, m2, 0x4E);
+    let m3 = _mm_max_ps(m2, shuf2);
+    let mut m = _mm_cvtss_f32(m3);
+    while idx < k {
+        let bi = *base.get_unchecked(idx);
+        m = m
+            .max((bi - *c0.get_unchecked(idx)).abs())
+            .max((bi - *c1.get_unchecked(idx)).abs())
+            .max((bi - *c2.get_unchecked(idx)).abs())
+            .max((bi - *c3.get_unchecked(idx)).abs());
+        idx += 1;
+    }
+    m
 }
 
 // ──────────────────────────────────────────────────────────────────────────
