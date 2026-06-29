@@ -161,7 +161,7 @@ fn g1_accuracy_substrate_matches_baseline() {
 
     // Reference output: dot-product per row using the intersection set
     let mut reference_out = vec![0.0f32; rows];
-    katgpt_rs::simd::simd_sparse_matmul_rows(
+    katgpt_core::simd::simd_sparse_matmul_rows(
         &mut reference_out,
         &weight,
         &ref_idx,

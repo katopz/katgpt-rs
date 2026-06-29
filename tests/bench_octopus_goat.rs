@@ -732,7 +732,7 @@ fn goat_octopus_vs_spectralquant_maxsim() {
 
     // Ground-truth MaxSim on uncompressed flat keys
     let flat_keys: Vec<f32> = keys.iter().flatten().copied().collect();
-    let gt_ms = katgpt_rs::simd::maxsim_score(&queries, &flat_keys, lq, n_keys, dim);
+    let gt_ms = katgpt_core::simd::maxsim_score(&queries, &flat_keys, lq, n_keys, dim);
 
     for &bits in &bits_list {
         let max_seq = n_keys + 16;

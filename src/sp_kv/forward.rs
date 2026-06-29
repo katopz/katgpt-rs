@@ -14,7 +14,7 @@
 //!
 //! Positions within the sliding window always get bias = 0 (unconditionally attended).
 
-use crate::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 
 /// Pre-allocated context for SP-KV forward passes.
 ///
@@ -391,7 +391,7 @@ pub fn forward_sp_kv<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -506,7 +506,7 @@ pub fn forward_sp_kv<'a>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.attn_out, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -556,7 +556,7 @@ pub fn forward_sp_kv<'a>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.hidden, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
     }
 
     // Snapshot hidden state (Plan 009 compatibility)
@@ -637,7 +637,7 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -754,7 +754,7 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.attn_out, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -804,7 +804,7 @@ pub fn forward_sp_kv_quant<'a, C: crate::types::QuantizedKVCache>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.hidden, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
     }
 
     // Snapshot hidden state (Plan 009 compatibility)

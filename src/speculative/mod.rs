@@ -21,7 +21,6 @@ pub mod echo_env;
 pub mod echo_env_integration;
 pub mod prefill;
 pub mod residency_audit;
-pub mod sampling;
 pub mod step;
 pub mod types;
 pub mod verifier;
@@ -108,7 +107,7 @@ pub use prefill::{
     speculative_prefill, speculative_prefill_adaptive, speculative_prefill_block,
 };
 #[allow(deprecated)]
-pub use sampling::{
+pub use katgpt_core::speculative::sampling::{
     sample_from_distribution, sample_residual_distribution, sample_residual_distribution_into,
 };
 pub use step::{speculative_step, speculative_step_verifier};

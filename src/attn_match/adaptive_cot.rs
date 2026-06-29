@@ -359,7 +359,7 @@ pub fn entropy_from_logits(logits: &[f32]) -> f32 {
         return 0.0;
     }
     // Max-shift for numerical stability (SIMD-reduced).
-    let max_logit = crate::simd::simd_max_f32(logits);
+    let max_logit = katgpt_core::simd::simd_max_f32(logits);
     // Single pass: shifted_exp[i] = exp(logits[i] - max_logit).
     let mut shifted_exp: Vec<f32> = Vec::with_capacity(logits.len());
     shifted_exp.extend(logits.iter().map(|&l| (l - max_logit).exp()));

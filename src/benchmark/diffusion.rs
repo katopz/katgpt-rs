@@ -142,11 +142,11 @@ fn bench_confidence_thresholding() -> BenchResult {
     let apply_threshold = |logits: &mut [f32], thresh: f32| -> usize {
         // Softmax (SIMD batch)
         let max_val = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-        crate::simd::simd_add_scalar_inplace(logits, -max_val);
-        crate::simd::simd_exp_inplace(logits);
-        let sum = crate::simd::simd_sum_f32(logits);
+        katgpt_core::simd::simd_add_scalar_inplace(logits, -max_val);
+        katgpt_core::simd::simd_exp_inplace(logits);
+        let sum = katgpt_core::simd::simd_sum_f32(logits);
         let inv_sum = 1.0 / sum;
-        crate::simd::simd_scale_inplace(logits, inv_sum);
+        katgpt_core::simd::simd_scale_inplace(logits, inv_sum);
         // Count masked tokens (probability below threshold)
         logits.iter().filter(|&&p| p < thresh).count()
     };

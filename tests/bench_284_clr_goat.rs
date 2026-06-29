@@ -32,7 +32,7 @@ use katgpt_rs::clr::{
     brevity_tiebreak, clr_vote, Claim, ClaimVerifier, ClrConfig, ClrScratch, Cluster,
     DirectionVectorSource, FnClaimExtractor, SigmoidProjectionVerifier, Trajectory,
 };
-use katgpt_rs::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Shared helpers (also reused conceptually by the G4 binary)

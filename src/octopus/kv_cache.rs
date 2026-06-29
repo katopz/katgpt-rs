@@ -145,7 +145,7 @@ impl OctopusKVCache {
         debug_assert_eq!(key.len(), self.kv_dim);
         self.max_used_pos = self.max_used_pos.max(pos + 1);
         // SIMD norm computation (avoids scalar iteration)
-        let norm = crate::simd::simd_sum_sq(key, self.kv_dim).sqrt();
+        let norm = katgpt_core::simd::simd_sum_sq(key, self.kv_dim).sqrt();
         self.key_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -188,7 +188,7 @@ impl OctopusKVCache {
         debug_assert_eq!(value.len(), self.kv_dim);
         self.max_used_pos = self.max_used_pos.max(pos + 1);
         // SIMD norm computation (avoids scalar iteration)
-        let norm = crate::simd::simd_sum_sq(value, self.kv_dim).sqrt();
+        let norm = katgpt_core::simd::simd_sum_sq(value, self.kv_dim).sqrt();
         self.val_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -528,14 +528,14 @@ fn mat_vec_t_into(mat: &[f32], input: &[f32], out: &mut [f32]) {
         // the row-base computation out of the SIMD dot product's bounds checks.
         let m_row = unsafe { mat.get_unchecked(row_offset..row_offset + dim) };
         unsafe {
-            *out.get_unchecked_mut(row) = crate::simd::simd_dot_f32(m_row, input, dim);
+            *out.get_unchecked_mut(row) = katgpt_core::simd::simd_dot_f32(m_row, input, dim);
         }
     }
 }
 
 /// Scale buffer in-place using SIMD.
 fn scale_inplace(buf: &mut [f32], s: f32) {
-    crate::simd::simd_scale_inplace(buf, s);
+    katgpt_core::simd::simd_scale_inplace(buf, s);
 }
 
 /// Compute packed byte length for n_triplets with given nominal bits.

@@ -11,7 +11,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::simd::{
+use katgpt_core::simd::{
     simd_add_scalar_inplace, simd_exp_inplace, simd_scale_inplace, simd_scale_mul_inplace,
 };
 
@@ -244,10 +244,10 @@ fn apply_exp_rescale(gate_values: &[f32], target: &mut [f32], negate: bool) {
     while i + CHUNK <= d {
         buf.copy_from_slice(&gate_values[i..i + CHUNK]);
         if negate {
-            crate::simd::simd_scale_inplace(&mut buf, -1.0);
+            katgpt_core::simd::simd_scale_inplace(&mut buf, -1.0);
         }
-        crate::simd::simd_exp_inplace(&mut buf);
-        crate::simd::simd_scale_mul_inplace(&mut target[i..i + CHUNK], &buf, 1.0);
+        katgpt_core::simd::simd_exp_inplace(&mut buf);
+        katgpt_core::simd::simd_scale_mul_inplace(&mut target[i..i + CHUNK], &buf, 1.0);
         i += CHUNK;
     }
 

@@ -7,7 +7,7 @@
 //! stored, but attention still uses the standard dense path. Full sparse
 //! attention on active chunks will be added in a follow-up.
 
-use crate::simd;
+use katgpt_core::simd;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights};
 use crate::types::{self, Config, DashAttnConfig};
 

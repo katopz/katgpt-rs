@@ -317,7 +317,7 @@ pub fn bench_hla_quality(_config: &Config) -> BenchResult {
 /// - End-to-end `forward_hla()` and `forward_ahla()` with micro config
 #[cfg(feature = "hla_attention")]
 pub fn bench_simd(_config: &Config) -> BenchResult {
-    use crate::simd::{self, SimdLevel};
+    use katgpt_core::simd::{self, SimdLevel};
 
     let level = simd::simd_level();
     let level_name = match level {

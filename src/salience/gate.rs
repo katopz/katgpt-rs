@@ -427,7 +427,7 @@ fn dot_fma<const D: usize>(a: &[f32; D], b: &[f32; D]) -> f32 {
 /// Both branches avoid the catastrophic cancellation that the naive form
 /// hits for large negative `x`.
 ///
-// TODO Plan 303 T1.8: hoist to `crate::simd::fast_sigmoid` when SIMD
+// TODO Plan 303 T1.8: hoist to `katgpt_core::simd::fast_sigmoid` when SIMD
 // dispatcher lands. The current `crate::simd` is a pure re-export of
 // `katgpt_core::simd::*`, which exposes no sigmoid symbol — hence the
 // private copy here.

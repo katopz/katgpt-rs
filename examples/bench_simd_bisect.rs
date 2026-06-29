@@ -52,7 +52,7 @@ fn main() {
     // ── 2. Ternary matvec 128×128 ──
     #[cfg(feature = "plasma_path")]
     {
-        use katgpt_rs::simd::simd_ternary_matvec;
+        use katgpt_core::simd::simd_ternary_matvec;
         use katgpt_rs::types::TernaryWeights;
 
         let rows = 128usize;

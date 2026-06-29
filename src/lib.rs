@@ -186,7 +186,6 @@ pub mod ruliology;
 pub mod segment_checkpoint;
 #[cfg(feature = "shard_kv")]
 pub mod shard_kv;
-pub mod simd;
 #[cfg(feature = "chiaroscuro")]
 pub mod chiaroscuro;
 // Functional Attention composition layer — Plan 286 Phase 5 (T5.1–T5.3). Each

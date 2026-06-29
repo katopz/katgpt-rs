@@ -181,7 +181,7 @@ impl SparseTaskVector {
             delta_sq_sum += s * s;
         }
         // Base sum of squares — dense, use SIMD.
-        let base_sq_sum = crate::simd::simd_sum_sq(base, base.len());
+        let base_sq_sum = katgpt_core::simd::simd_sum_sq(base, base.len());
         if base_sq_sum <= f32::MIN_POSITIVE {
             return 0.0;
         }

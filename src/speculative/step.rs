@@ -13,14 +13,14 @@ use crate::types::{Config, Rng};
 use crate::speculative::dd_tree::{build_dd_tree, extract_best_path};
 use crate::speculative::dflash::dflash_predict;
 use crate::speculative::dflash::dflash_predict_conditioned;
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 use crate::transformer::{ForwardContext, MultiLayerKVCache, forward};
 use crate::types::softmax_scaled;
 
 // Zero-alloc _with imports
 use crate::speculative::dd_tree::TreeBuilder;
 use crate::speculative::dflash::{dflash_predict_conditioned_with, dflash_predict_with};
-use crate::speculative::sampling::sample_residual_distribution_into;
+use katgpt_core::speculative::sampling::sample_residual_distribution_into;
 use crate::speculative::types::{DDTreeBranchCache, NoPruner, SpeculativeContext};
 
 // SR²AM configurator imports (Plan 112 T7)

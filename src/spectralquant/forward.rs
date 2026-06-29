@@ -71,7 +71,7 @@ pub fn attention_spectralquant(
         let dot = unsafe {
             let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), head_dim);
             let k_slice = std::slice::from_raw_parts(flat_keys.as_ptr().add(k_off), head_dim);
-            crate::simd::simd_dot_f32(q_slice, k_slice, head_dim)
+            katgpt_core::simd::simd_dot_f32(q_slice, k_slice, head_dim)
         };
         let score = dot * scale;
         unsafe {
@@ -82,9 +82,9 @@ pub fn attention_spectralquant(
 
     // Pass 2: exp(scores - max) + sum (SIMD batch)
     let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    crate::simd::simd_add_scalar_inplace(scores_slice, -max_score);
-    crate::simd::simd_exp_inplace(scores_slice);
-    let sum = crate::simd::simd_sum_f32(scores_slice);
+    katgpt_core::simd::simd_add_scalar_inplace(scores_slice, -max_score);
+    katgpt_core::simd::simd_exp_inplace(scores_slice);
+    let sum = katgpt_core::simd::simd_sum_f32(scores_slice);
 
     // Pass 3: normalize + weighted value accumulation
     // Loop order: t outer, d inner — contiguous value_cache row access, better cache locality.
@@ -98,7 +98,7 @@ pub fn attention_spectralquant(
                 head_dim,
             )
         };
-        crate::simd::simd_fused_scale_acc(
+        katgpt_core::simd::simd_fused_scale_acc(
             &mut attn_out[q_head_offset..q_head_offset + head_dim],
             v_row,
             weight,
@@ -167,7 +167,7 @@ pub fn maxsim_score_spectralquant(
             // variable-bit unpack + codebook lookup all happen inside
             // dequantize_key_into. Only one key vector in memory at a time.
             cache.dequantize_key_into(layer, t, &mut key_buf);
-            let dot = crate::simd::simd_dot_f32(q_row, &key_buf, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(q_row, &key_buf, dim);
             my_max = my_max.max(dot);
         }
         score += my_max;
@@ -261,7 +261,7 @@ pub fn par_maxsim_score_spectralquant(
                 let mut my_max = f32::NEG_INFINITY;
                 for t in pos_range.clone() {
                     cache.dequantize_key_into_with_scratch(layer, t, scratch, key_buf);
-                    let dot = crate::simd::simd_dot_f32(q_row, key_buf, dim);
+                    let dot = katgpt_core::simd::simd_dot_f32(q_row, key_buf, dim);
                     my_max = my_max.max(dot);
                 }
                 my_max
@@ -295,7 +295,7 @@ fn maxsim_score_spectralquant_fallback(
         let mut my_max = f32::NEG_INFINITY;
         for t in pos_range.clone() {
             cache.dequantize_key_into_with_scratch(layer, t, &mut scratch, &mut key_buf);
-            let dot = crate::simd::simd_dot_f32(q_row, &key_buf, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(q_row, &key_buf, dim);
             my_max = my_max.max(dot);
         }
         score += my_max;
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     #[cfg(feature = "maxsim")]
     fn trace_sq_roundtrip_error() {
-        use crate::simd::maxsim_score;
+        use katgpt_core::simd::maxsim_score;
 
         let config = Config::micro();
         let kv_dim = crate::types::kv_dim(&config);

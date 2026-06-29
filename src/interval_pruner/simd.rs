@@ -65,7 +65,7 @@ pub fn simd_is_interval_closed(mask: &[bool]) -> bool {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        if crate::simd::simd_level() == crate::simd::SimdLevel::Avx2 {
+        if katgpt_core::simd::simd_level() == katgpt_core::simd::SimdLevel::Avx2 {
             unsafe { avx2_is_interval_closed(mask) }
         } else {
             scalar_is_interval_closed(mask)

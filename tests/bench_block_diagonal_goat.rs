@@ -1518,7 +1518,7 @@ fn goat_production_stack_verdict() {
 #[test]
 #[ignore = "pure measurement benchmark (no assertions), slow in debug; run with --release --ignored"]
 fn goat_maxsim_late_interaction() {
-    use katgpt_rs::simd::maxsim_score;
+    use katgpt_core::simd::maxsim_score;
 
     let dim = 128usize;
     let n_keys = 512usize;
@@ -2102,7 +2102,7 @@ fn goat_hybrid_oct_pq_quality_sweep() {
 #[test]
 #[ignore = "pure measurement benchmark (no assertions), slow in debug; run with --release --ignored"]
 fn goat_hybrid_maxsim_late_interaction() {
-    use katgpt_rs::simd::maxsim_score;
+    use katgpt_core::simd::maxsim_score;
 
     let dim = 128usize;
     let n_keys = 512usize;

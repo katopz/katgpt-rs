@@ -69,11 +69,11 @@ pub fn spectral_concentration(eigenvalues: &[f32], k: usize) -> f32 {
     let k_clamped = k.min(eigenvalues.len());
     // SIMD-accelerated sums: total over the full slice, top-k over the prefix.
     // Two vectorized passes beat one branchy scalar pass for typical sizes.
-    let total = crate::simd::simd_sum_f32(eigenvalues);
+    let total = katgpt_core::simd::simd_sum_f32(eigenvalues);
     if total <= 0.0 {
         return 0.0;
     }
-    let top_k_sum = crate::simd::simd_sum_f32(&eigenvalues[..k_clamped]);
+    let top_k_sum = katgpt_core::simd::simd_sum_f32(&eigenvalues[..k_clamped]);
     let ratio = top_k_sum / total;
     ratio.clamp(0.0, 1.0)
 }
@@ -200,7 +200,7 @@ pub fn cot_budget_from_concentration(c: f32, base: usize, max_extra: usize) -> u
 // Shared sigmoid helper
 // ---------------------------------------------------------------------------
 
-/// Numerically stable sigmoid in `(0, 1)`. Matches `crate::simd::fast_sigmoid`
+/// Numerically stable sigmoid in `(0, 1)`. Matches `katgpt_core::simd::fast_sigmoid`
 /// semantics; inlined to keep this module dependency-light.
 #[inline(always)]
 fn fast_sigmoid(x: f32) -> f32 {

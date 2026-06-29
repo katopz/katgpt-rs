@@ -9,7 +9,7 @@
 
 use std::path::Path;
 
-use crate::simd::simd_add_inplace;
+use katgpt_core::simd::simd_add_inplace;
 use crate::types::matmul;
 
 // ── Binary format constants ──────────────────────────────────

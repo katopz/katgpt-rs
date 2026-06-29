@@ -40,9 +40,9 @@ pub use query_bank::QueryBank;
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     debug_assert_eq!(a.len(), b.len());
     let n = a.len();
-    let dot = crate::simd::simd_dot_f32(a, b, n);
-    let norm_a = crate::simd::simd_dot_f32(a, a, n);
-    let norm_b = crate::simd::simd_dot_f32(b, b, n);
+    let dot = katgpt_core::simd::simd_dot_f32(a, b, n);
+    let norm_a = katgpt_core::simd::simd_dot_f32(a, a, n);
+    let norm_b = katgpt_core::simd::simd_dot_f32(b, b, n);
     let denom = norm_a.sqrt() * norm_b.sqrt();
     if denom < 1e-12 { 0.0 } else { dot / denom }
 }

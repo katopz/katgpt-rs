@@ -215,7 +215,7 @@ pub fn summarize_chunk_into(
     // iterator `.zip().map().sum()` form, which carries a single fadd
     // dependency chain that blocks LLVM auto-vectorization.
     for (t, key_chunk) in chunk_keys.chunks_exact(hd).enumerate() {
-        let dot = crate::simd::simd_dot_f32(q, key_chunk, hd);
+        let dot = katgpt_core::simd::simd_dot_f32(q, key_chunk, hd);
         scores_buf[t] = dot * scale;
     }
     // Handle remainder if hd doesn't evenly divide

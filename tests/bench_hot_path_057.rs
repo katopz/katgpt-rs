@@ -193,7 +193,7 @@ fn bench_hot_path_057() {
         game_config.n_layer,
         game_config.block_size
     );
-    println!("  SIMD level: {:?}", katgpt_rs::simd::simd_level());
+    println!("  SIMD level: {:?}", katgpt_core::simd::simd_level());
     println!();
     println!("  Component                  | μs/call   | calls/token | μs/token");
     println!("  ---------------------------|-----------|-------------|----------");

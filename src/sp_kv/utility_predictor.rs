@@ -68,14 +68,14 @@ pub fn predict_into(
     // Layer 1: hidden = SiLU(W1 · h + b1)
     for i in 0..hidden {
         let row_off = i * d_model;
-        let dot = crate::simd::simd_dot_f32(&weights.w1[row_off..row_off + d_model], h, d_model);
+        let dot = katgpt_core::simd::simd_dot_f32(&weights.w1[row_off..row_off + d_model], h, d_model);
         buf[i] = silu(dot + weights.b1[i]);
     }
 
     // Layer 2: u = sigmoid(W2 · hidden + b2)
     for k in 0..n_kv_heads {
         let row_off = k * hidden;
-        let dot = crate::simd::simd_dot_f32(
+        let dot = katgpt_core::simd::simd_dot_f32(
             &weights.w2[row_off..row_off + hidden],
             &buf[..hidden],
             hidden,
@@ -123,13 +123,13 @@ pub fn predict_single_head(
     // Layer 1: hidden = SiLU(W1 · h + b1)
     for i in 0..hidden {
         let row_off = i * d_model;
-        let dot = crate::simd::simd_dot_f32(&weights.w1[row_off..row_off + d_model], h, d_model);
+        let dot = katgpt_core::simd::simd_dot_f32(&weights.w1[row_off..row_off + d_model], h, d_model);
         buf[i] = silu(dot + weights.b1[i]);
     }
 
     // Layer 2: only compute the requested head
     let row_off = kv_head_idx * hidden;
-    let dot = crate::simd::simd_dot_f32(
+    let dot = katgpt_core::simd::simd_dot_f32(
         &weights.w2[row_off..row_off + hidden],
         &buf[..hidden],
         hidden,

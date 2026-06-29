@@ -128,7 +128,7 @@ pub fn attention_turboquant(
         let dot = unsafe {
             let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), head_dim);
             let k_slice = std::slice::from_raw_parts(flat_keys.as_ptr().add(k_off), head_dim);
-            crate::simd::simd_dot_f32(q_slice, k_slice, head_dim)
+            katgpt_core::simd::simd_dot_f32(q_slice, k_slice, head_dim)
         };
         let score = dot * scale;
         unsafe {
@@ -139,9 +139,9 @@ pub fn attention_turboquant(
 
     // Pass 2: exp(scores - max) + sum (SIMD batch)
     let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    crate::simd::simd_add_scalar_inplace(scores_slice, -max_score);
-    crate::simd::simd_exp_inplace(scores_slice);
-    let sum = crate::simd::simd_sum_f32(scores_slice);
+    katgpt_core::simd::simd_add_scalar_inplace(scores_slice, -max_score);
+    katgpt_core::simd::simd_exp_inplace(scores_slice);
+    let sum = katgpt_core::simd::simd_sum_f32(scores_slice);
 
     // Pass 3: normalize + weighted value accumulation
     // Loop order: t outer, d inner — contiguous value_cache row access, better cache locality.
@@ -156,7 +156,7 @@ pub fn attention_turboquant(
                 head_dim,
             )
         };
-        crate::simd::simd_fused_scale_acc(
+        katgpt_core::simd::simd_fused_scale_acc(
             &mut attn_out[q_head_offset..q_head_offset + head_dim],
             v_row,
             weight,
@@ -170,9 +170,9 @@ pub fn attention_turboquant(
 /// Measures reconstruction fidelity of the quantize→dequantize round-trip.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len();
-    let dot = crate::simd::simd_dot_f32(a, b, len);
-    let na = crate::simd::simd_dot_f32(a, a, len).sqrt();
-    let nb = crate::simd::simd_dot_f32(b, b, len).sqrt();
+    let dot = katgpt_core::simd::simd_dot_f32(a, b, len);
+    let na = katgpt_core::simd::simd_dot_f32(a, a, len).sqrt();
+    let nb = katgpt_core::simd::simd_dot_f32(b, b, len).sqrt();
     if na < 1e-8 || nb < 1e-8 {
         return 0.0;
     }
@@ -187,7 +187,7 @@ pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 /// the full dequantized key matrix. Each position is lazy-dequantized inside the
 /// inner loop, keeping peak memory at O(dim) instead of O(Ld × dim).
 ///
-/// This is the TurboQuant counterpart to [`maxsim_score`](crate::simd::maxsim_score).
+/// This is the TurboQuant counterpart to [`maxsim_score`](katgpt_core::simd::maxsim_score).
 /// The principle is identical (running max over doc tokens), but here each doc
 /// token's vector comes from the compressed KV cache rather than a flat buffer.
 ///
@@ -231,7 +231,7 @@ pub fn maxsim_score_turboquant(
             // Lazy dequantize into pre-allocated buffer: O(dim) peak memory,
             // zero heap allocation per position. Matches maxsim.metal streaming pattern.
             cache.dequantize_key_into(layer, t, &mut key_buf);
-            let dot = crate::simd::simd_dot_f32(q_row, &key_buf[..dim], dim);
+            let dot = katgpt_core::simd::simd_dot_f32(q_row, &key_buf[..dim], dim);
             my_max = my_max.max(dot);
         }
         score += my_max;

@@ -38,7 +38,7 @@ impl SimHashFingerprint {
             if i >= projection.len() {
                 break;
             }
-            crate::simd::simd_fused_scale_acc(&mut dots[..], &projection[i], *logit, 64);
+            katgpt_core::simd::simd_fused_scale_acc(&mut dots[..], &projection[i], *logit, 64);
         }
         let mut bits: u64 = 0;
         for (j, &dot) in dots.iter().enumerate() {

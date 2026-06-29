@@ -79,7 +79,7 @@ impl AlignedWeightMatrix {
     pub fn dot_row(&self, vec: &[f32], row_idx: usize) -> f32 {
         let row = self.row(row_idx);
         let len = self.row_dim.min(vec.len());
-        crate::simd::simd_dot_f32(&vec[..len], &row[..len], len)
+        katgpt_core::simd::simd_dot_f32(&vec[..len], &row[..len], len)
     }
 
     /// Matrix-vector multiply: y = A * x.

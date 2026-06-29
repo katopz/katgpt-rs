@@ -380,7 +380,7 @@ pub fn rank_p_retain(
     for i in 0..rows {
         let row_start = i * cols;
         let row_end = row_start + cols;
-        let sq_sum = crate::simd::simd_sum_sq(&ns_output[row_start..row_end], cols);
+        let sq_sum = katgpt_core::simd::simd_sum_sq(&ns_output[row_start..row_end], cols);
         row_norms_buf[i] = sq_sum;
     }
 

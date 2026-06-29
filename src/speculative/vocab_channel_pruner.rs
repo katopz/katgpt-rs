@@ -247,9 +247,9 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     let n = a.len();
     // Three SIMD dot-product reductions — LLVM cannot vectorize the fused
     // tuple-fold (cross-iteration data dependency).
-    let dot = crate::simd::simd_dot_f32(a, b, n);
-    let na = crate::simd::simd_dot_f32(a, a, n);
-    let nb = crate::simd::simd_dot_f32(b, b, n);
+    let dot = katgpt_core::simd::simd_dot_f32(a, b, n);
+    let na = katgpt_core::simd::simd_dot_f32(a, a, n);
+    let nb = katgpt_core::simd::simd_dot_f32(b, b, n);
     let denom = na.sqrt() * nb.sqrt();
     if denom < 1e-12 {
         return 0.0;

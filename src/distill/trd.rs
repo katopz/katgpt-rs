@@ -16,7 +16,7 @@
 
 use std::time::Instant;
 
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 use katgpt_core::ConstraintPruner;
 use katgpt_core::Rng;
 
@@ -583,7 +583,7 @@ fn find_valid_token<P: ConstraintPruner>(
 
     // K passes of SIMD argmax: find max, record it, mask to -inf
     for slot in 0..K {
-        let (idx, val) = crate::simd::simd_argmax_f32(&buf);
+        let (idx, val) = katgpt_core::simd::simd_argmax_f32(&buf);
         top_indices[slot] = idx;
         top_probs[slot] = val;
         if idx < buf.len() {
@@ -650,7 +650,7 @@ fn branch_score(branch: &[usize], marginals: &[&[f32]]) -> f32 {
             }
         }
     }
-    crate::simd::simd_sum_f32(&log_probs)
+    katgpt_core::simd::simd_sum_f32(&log_probs)
 }
 
 /// Scalar branch scoring — product of marginal log-probabilities.

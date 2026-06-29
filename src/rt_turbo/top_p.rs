@@ -85,7 +85,7 @@ fn softmax_scores_into(scores: &[f32], out: &mut [f32]) {
     }
 
     // Pass 1: max reduction via SIMD helper (aarch64 NEON / x86_64 AVX2).
-    let max_val = crate::simd::simd_max_f32(scores);
+    let max_val = katgpt_core::simd::simd_max_f32(scores);
 
     // Pass 2: per-element `exp(s - max)` written into `out`, plus a scalar sum
     // computed at the same time (avoids a second exp pass).
@@ -329,7 +329,7 @@ pub fn select_top_p_blockwise(scores: &[f32], top_p: f32, block_size: usize) -> 
         candidate_probs[i] = s;
     }
     // In-place softmax: find max via SIMD reduction, rewrite as exp, normalize.
-    let max_val = crate::simd::simd_max_f32(&candidate_probs);
+    let max_val = katgpt_core::simd::simd_max_f32(&candidate_probs);
     let mut sum = 0.0f32;
     for v in &mut candidate_probs {
         let e = (*v - max_val).exp();

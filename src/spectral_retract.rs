@@ -22,7 +22,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::simd::{simd_dot_f32, simd_fused_decay_write, simd_scale_inplace};
+use katgpt_core::simd::{simd_dot_f32, simd_fused_decay_write, simd_scale_inplace};
 
 /// Caller-owned scratch for one power-iteration + retraction.
 ///

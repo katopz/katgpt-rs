@@ -12,7 +12,7 @@
 //! Run: cargo run --example core_05_maxsim --features maxsim --release
 //! With all proofs: cargo run --example core_05_maxsim --features "maxsim,turboquant,spectral_quant" --release
 
-use katgpt_rs::simd::{maxsim_score, maxsim_score_packed, simd_dot_f32};
+use katgpt_core::simd::{maxsim_score, maxsim_score_packed, simd_dot_f32};
 use katgpt_rs::speculative::block_score_maxsim;
 
 fn main() {

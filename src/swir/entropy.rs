@@ -10,7 +10,7 @@
 //! probability vector (input is assumed already normalised, but we apply a
 //! `fastmax` floor of `1e-20` to keep `p log p` finite without branching).
 
-use crate::simd::simd_sum_f32;
+use katgpt_core::simd::simd_sum_f32;
 
 /// `H = -Σ p_i ln(p_i)` with a `1e-20` floor on each `p_i` to avoid `log(0)`.
 ///

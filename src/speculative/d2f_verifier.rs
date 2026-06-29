@@ -6,7 +6,7 @@
 
 use crate::dllm::D2fContext;
 use crate::speculative::d2f::{D2fDecodeConfig, d2f_decode_block_with_prompt_with};
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 use crate::speculative::types::{NoPruner, NoScreeningPruner};
 use crate::speculative::verifier::SpeculativeVerifier;
 use crate::transformer::TransformerWeights;

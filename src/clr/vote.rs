@@ -42,7 +42,7 @@ use crate::clr::scratch::ClrScratch;
 use crate::clr::traits::{ClaimExtractor, ClaimVerifier};
 use crate::clr::types::{Cluster, ReliabilityScore, Trajectory, VoteResult};
 use crate::clr::ClrConfig;
-use crate::simd::simd_sum_f32;
+use katgpt_core::simd::simd_sum_f32;
 
 /// Run the full CLR vote and return a [`VoteResult`] audit trail.
 ///

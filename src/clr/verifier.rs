@@ -2,7 +2,7 @@
 //!
 //! This is the only verifier required for Phase 1. It computes
 //! `sigmoid(dot(claim.embedding, direction_vec[idx]))` using the shared SIMD
-//! dot kernel (`crate::simd::simd_dot_f32`) and a scalar sigmoid (`f32::exp`).
+//! dot kernel (`katgpt_core::simd::simd_dot_f32`) and a scalar sigmoid (`f32::exp`).
 //!
 //! # Risk #3: direction-vector saturation
 //!
@@ -69,7 +69,7 @@ impl<T> ClaimVerifier<T> for SigmoidProjectionVerifier<'_> {
             self.direction_dim
         );
         // SIMD dot on the full k-dim vectors.
-        let dot = crate::simd::simd_dot_f32(&claim.embedding, d, self.direction_dim);
+        let dot = katgpt_core::simd::simd_dot_f32(&claim.embedding, d, self.direction_dim);
         // Scalar sigmoid — single value, not a vector path; f32::exp is fine.
         sigmoid(dot)
     }
@@ -78,7 +78,7 @@ impl<T> ClaimVerifier<T> for SigmoidProjectionVerifier<'_> {
 /// Numerically stable logistic sigmoid: `1 / (1 + exp(-x))`.
 ///
 /// Scalar path — for batched sigmoid over a slice, use
-/// `crate::simd::simd_exp_inplace` on a negated slice. We do NOT use softmax
+/// `katgpt_core::simd::simd_exp_inplace` on a negated slice. We do NOT use softmax
 /// anywhere (per project convention).
 #[inline(always)]
 fn sigmoid(x: f32) -> f32 {

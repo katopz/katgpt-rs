@@ -16,7 +16,7 @@ use katgpt_rs::hla::{
     AhlaQHeadState, HlaQHeadState, MultiLayerAhlaCache, MultiLayerHlaCache, ahla_step,
     forward_ahla, forward_hla, hla_state_update,
 };
-use katgpt_rs::simd::{self, SimdLevel};
+use katgpt_core::simd::{self, SimdLevel};
 use katgpt_rs::transformer::{ForwardContext, TransformerWeights, forward};
 use katgpt_rs::types::{Config, Rng};
 use std::time::Instant;

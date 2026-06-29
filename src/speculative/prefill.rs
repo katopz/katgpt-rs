@@ -444,7 +444,7 @@ pub fn block_score_maxsim(
     block_len_k: usize,
     dim: usize,
 ) -> f32 {
-    crate::simd::maxsim_score(q_block, k_block, block_len_q, block_len_k, dim)
+    katgpt_core::simd::maxsim_score(q_block, k_block, block_len_q, block_len_k, dim)
 }
 
 /// Block-sparse attention scorer (CPU fallback for PFlash).

@@ -113,10 +113,10 @@ impl VortexFlow for EntmaxRouter {
         summary.fill(0.0);
         for t in 0..block_size {
             let k_start = t * head_dim;
-            crate::simd::simd_add_inplace(summary, &keys[k_start..k_start + head_dim]);
+            katgpt_core::simd::simd_add_inplace(summary, &keys[k_start..k_start + head_dim]);
         }
         let inv = 1.0 / block_size as f32;
-        crate::simd::simd_scale_inplace(summary, inv);
+        katgpt_core::simd::simd_scale_inplace(summary, inv);
     }
 
     fn forward_indexer(

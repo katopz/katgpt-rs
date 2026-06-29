@@ -4,7 +4,7 @@
 //! selection via α-entmax (α=1.5). Computes per-head routing probabilities
 //! and normalised routing biases for downstream attention modulation.
 
-use crate::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 use crate::types::DashAttnConfig;
 
 use super::entmax::{entmax_1p5_into, entmax_gqa_aggregate, entmax_support_into};

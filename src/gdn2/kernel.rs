@@ -13,7 +13,7 @@
 //! Reference: Research 70 — Gated DeltaNet-2: O(1) Decode with Decoupled Erase/Write Gates.
 
 use super::types::Gdn2GateConfig;
-use crate::simd::{simd_outer_product_acc, simd_scale_inplace};
+use katgpt_core::simd::{simd_outer_product_acc, simd_scale_inplace};
 
 /// Core GDN2 recurrent step: O(d_k × d_v) per token per head.
 ///
@@ -226,12 +226,12 @@ pub fn gdn2_state_readout(
 
 /// Sigmoid function for gate projections.
 ///
-/// Delegates to [`crate::simd::fast_sigmoid`] which adds early-exit for
+/// Delegates to [`katgpt_core::simd::fast_sigmoid`] which adds early-exit for
 /// `|x| > 40` (where σ saturates in f32) — saves an `exp()` call when gate
 /// pre-activations are large.
 #[inline]
 pub fn sigmoid(x: f32) -> f32 {
-    crate::simd::fast_sigmoid(x)
+    katgpt_core::simd::fast_sigmoid(x)
 }
 
 /// L2 normalize a vector in-place: x /= ‖x‖₂ + ε.

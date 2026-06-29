@@ -14,7 +14,7 @@ use super::types::{
     LloydMaxCodebook, SpectralQuantCalibration, SpectralQuantKVCacheConfig, SpectralQuantLayer,
     WaterfillAllocation,
 };
-use crate::simd::simd_scale_inplace;
+use katgpt_core::simd::simd_scale_inplace;
 use rayon::prelude::*;
 
 /// Compressed KV cache using SpectralQuant quantization.
@@ -251,8 +251,8 @@ impl SpectralQuantKVCache {
                     *v = rng.normal();
                 }
                 // Step 2: normalize to unit norm
-                let norm = crate::simd::simd_sum_sq(&scratch_x, head_dim).sqrt().max(1e-8);
-                crate::simd::simd_scale_inplace(&mut scratch_x, 1.0 / norm);
+                let norm = katgpt_core::simd::simd_sum_sq(&scratch_x, head_dim).sqrt().max(1e-8);
+                katgpt_core::simd::simd_scale_inplace(&mut scratch_x, 1.0 / norm);
                 // Step 3: rotate by V^T — output[j] = Σ_i x[i] * V[i*head_dim+j]
                 // Same transpose-and-accumulate pattern as SpectralRotation::rotate().
                 scratch_rotated.fill(0.0);
@@ -1008,11 +1008,11 @@ fn rotate_into(eigenvectors: &[f32], head_dim: usize, x: &[f32], out: &mut [f32]
 #[allow(clippy::needless_range_loop)]
 fn unrotate_into(eigenvectors: &[f32], head_dim: usize, x: &[f32], out: &mut [f32]) {
     // out[i] = dot(eigenvectors row i, x) — row-major access, SIMD-friendly
-    crate::simd::simd_matmul_rows(out, eigenvectors, x, head_dim, head_dim);
+    katgpt_core::simd::simd_matmul_rows(out, eigenvectors, x, head_dim, head_dim);
 }
 
 fn simd_norm(v: &[f32]) -> f32 {
-    crate::simd::simd_sum_sq(v, v.len()).sqrt()
+    katgpt_core::simd::simd_sum_sq(v, v.len()).sqrt()
 }
 
 /// Check if a matrix is the identity matrix (diagonal 1s, off-diagonal 0s).

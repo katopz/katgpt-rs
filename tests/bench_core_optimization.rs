@@ -17,7 +17,7 @@ use std::time::Instant;
 use katgpt_core::{
     Config, Rng, SimdLevel, matmul, matmul_relu, rmsnorm, sample_token, softmax, softmax_scaled,
 };
-use katgpt_rs::simd::{
+use katgpt_core::simd::{
     simd_add_inplace, simd_add_into, simd_dot_f32, simd_max_f32, simd_scale_inplace,
 };
 use katgpt_rs::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
@@ -58,7 +58,7 @@ fn bench_mut(label: &str, warmup: usize, iters: usize, mut f: impl FnMut()) -> f
 
 #[ignore = "pure measurement benchmark (no assertions), slow in debug; run with --release --ignored"]
 fn bench_01_simd_detection() {
-    let level = katgpt_rs::simd::simd_level();
+    let level = katgpt_core::simd::simd_level();
 
     let name = match level {
         SimdLevel::Scalar => "Scalar (no SIMD)",
@@ -998,7 +998,7 @@ fn bench_09_summary() {
     println!("    Forward (pos=0):          {:.2} us/tok", fwd_us);
     println!("    Forward throughput:       {:.0} tok/s", 1000.0 / fwd_us);
     println!();
-    println!("  SIMD level: {:?}", katgpt_rs::simd::simd_level());
+    println!("  SIMD level: {:?}", katgpt_core::simd::simd_level());
     println!();
     println!("  Completed optimizations:");
     println!(

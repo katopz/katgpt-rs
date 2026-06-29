@@ -110,7 +110,7 @@ pub fn attention_octopus(
         let k_off = t * kv_dim + kv_group_offset;
         let dot = unsafe {
             let k_slice = std::slice::from_raw_parts(flat_keys.as_ptr().add(k_off), head_dim);
-            crate::simd::simd_dot_f32(q_slice, k_slice, head_dim)
+            katgpt_core::simd::simd_dot_f32(q_slice, k_slice, head_dim)
         };
         let score = dot * scale;
         unsafe {
@@ -142,7 +142,7 @@ pub fn attention_octopus(
                 head_dim,
             )
         };
-        crate::simd::simd_fused_scale_acc(out_slice, v_row, weight, head_dim);
+        katgpt_core::simd::simd_fused_scale_acc(out_slice, v_row, weight, head_dim);
     }
 }
 
@@ -151,9 +151,9 @@ pub fn attention_octopus(
 /// Measures reconstruction fidelity of the quantize→dequantize round-trip.
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let len = a.len();
-    let dot = crate::simd::simd_dot_f32(a, b, len);
-    let na = crate::simd::simd_dot_f32(a, a, len).sqrt();
-    let nb = crate::simd::simd_dot_f32(b, b, len).sqrt();
+    let dot = katgpt_core::simd::simd_dot_f32(a, b, len);
+    let na = katgpt_core::simd::simd_dot_f32(a, a, len).sqrt();
+    let nb = katgpt_core::simd::simd_dot_f32(b, b, len).sqrt();
     if na < 1e-8 || nb < 1e-8 {
         return 0.0;
     }
@@ -215,7 +215,7 @@ pub fn maxsim_score_octopus(
         for t in pos_range.clone() {
             // Zero-alloc lazy dequantize into reusable buffer.
             cache.dequantize_key_into(layer, t, &mut key_buf);
-            let dot = crate::simd::simd_dot_f32(q_row, &key_buf, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(q_row, &key_buf, dim);
             my_max = my_max.max(dot);
         }
         score += my_max;

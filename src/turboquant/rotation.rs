@@ -40,7 +40,7 @@ pub fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
         }
 
         // Normalize column i to get q_i
-        let norm = crate::simd::simd_sum_sq(&v_flat[i * dim..i * dim + dim], dim).sqrt();
+        let norm = katgpt_core::simd::simd_sum_sq(&v_flat[i * dim..i * dim + dim], dim).sqrt();
         if norm > 1e-8 {
             for k in 0..dim {
                 q[k * dim + i] = v_flat[i * dim + k] / norm;

@@ -425,7 +425,7 @@ impl RetrievalProjection {
             // wins clearly, and for 16 it is at worst parity with the scalar loop
             // while guaranteeing vectorization on targets where the autovectorizer
             // would otherwise fall back.
-            scores[n] = crate::simd::simd_dot_f32(q_proj, k_proj, self.low_dim);
+            scores[n] = katgpt_core::simd::simd_dot_f32(q_proj, k_proj, self.low_dim);
         }
 
         scores
@@ -496,7 +496,7 @@ impl RetrievalProjection {
                     k_slice[j] += ki * var_scale * w_k_head[row + j];
                 }
             }
-            let score = crate::simd::simd_dot_f32(q_slice, k_slice, ld);
+            let score = katgpt_core::simd::simd_dot_f32(q_slice, k_slice, ld);
             scores[n] = score;
         }
 

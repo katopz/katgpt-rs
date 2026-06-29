@@ -13,7 +13,7 @@
 //! Plan 027 extension: multi-strategy cycling and adaptive rescue with
 //! rejection memory from TRT (arXiv:2602.03094).
 
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 use crate::speculative::types::ScreeningPruner;
 use crate::types::Rng;
 

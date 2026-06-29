@@ -154,7 +154,7 @@ pub fn sparse_matmul_substrate(
     }
 
     // Phase 2: Sparse multiply with reduced active set
-    crate::simd::simd_sparse_matmul_rows(
+    katgpt_core::simd::simd_sparse_matmul_rows(
         output,
         weight,
         &active_indices[..alive],

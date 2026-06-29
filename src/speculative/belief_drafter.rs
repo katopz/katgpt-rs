@@ -37,7 +37,7 @@ use std::path::Path;
 
 use katgpt_core::{Config, SpeculativeGenerator};
 
-use crate::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 
 // ── Magic & Version ────────────────────────────────────────────
 const MAGIC: &[u8; 4] = b"NLDM";

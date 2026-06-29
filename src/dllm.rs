@@ -422,7 +422,7 @@ fn forward_bidirectional_positions_into(
         };
         #[cfg(not(feature = "rcd_residual"))]
         let emb = &weights.wte[token * n..(token + 1) * n];
-        crate::simd::simd_add_into(&mut bctx.x, emb, &weights.wpe[p * n..(p + 1) * n]);
+        katgpt_core::simd::simd_add_into(&mut bctx.x, emb, &weights.wpe[p * n..(p + 1) * n]);
         rmsnorm(&mut bctx.x);
         bctx.xr_all[p * n..(p + 1) * n].copy_from_slice(&bctx.x);
         rmsnorm(&mut bctx.x);
@@ -470,7 +470,7 @@ fn forward_bidirectional_positions_into(
         // `matmul` overwrites all n rows of x_proj (output[r] = dot(...)), so no
         // pre-zero is needed — matches the sibling q/k/v/hidden/x_mlp buffers.
         matmul(&mut bctx.x_proj, &layer.attn_wo, &bctx.attn_out_buf, n, n);
-        crate::simd::simd_add_inplace(&mut bctx.x_proj, &bctx.xr_all[p * n..(p + 1) * n]);
+        katgpt_core::simd::simd_add_inplace(&mut bctx.x_proj, &bctx.xr_all[p * n..(p + 1) * n]);
 
         // MLP
         bctx.xr2.copy_from_slice(&bctx.x_proj);
@@ -491,7 +491,7 @@ fn forward_bidirectional_positions_into(
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut bctx.x_mlp, &bctx.xr2);
+        katgpt_core::simd::simd_add_inplace(&mut bctx.x_mlp, &bctx.xr2);
 
         // matmul overwrites all `vocab_size` rows of bctx.logits.
         matmul(
@@ -540,7 +540,7 @@ fn attention_forward_safe_into(
         // Compute scores (reuse buffer across heads)
         let mut max_score = f32::NEG_INFINITY;
         for t in 0..seq_len {
-            let dot = crate::simd::simd_dot_f32(
+            let dot = katgpt_core::simd::simd_dot_f32(
                 &q[q_off..q_off + head_dim],
                 &k_all[t * kv_dim + kv_off..t * kv_dim + kv_off + head_dim],
                 head_dim,
@@ -552,11 +552,11 @@ fn attention_forward_safe_into(
         }
 
         // Softmax (SIMD batch exp + sum)
-        crate::simd::simd_add_scalar_inplace(&mut scores[..seq_len], -max_score);
-        crate::simd::simd_exp_inplace(&mut scores[..seq_len]);
-        let sum_exp = crate::simd::simd_sum_f32(&scores[..seq_len]);
+        katgpt_core::simd::simd_add_scalar_inplace(&mut scores[..seq_len], -max_score);
+        katgpt_core::simd::simd_exp_inplace(&mut scores[..seq_len]);
+        let sum_exp = katgpt_core::simd::simd_sum_f32(&scores[..seq_len]);
         let inv_sum = 1.0 / sum_exp;
-        crate::simd::simd_scale_inplace(&mut scores[..seq_len], inv_sum);
+        katgpt_core::simd::simd_scale_inplace(&mut scores[..seq_len], inv_sum);
         all_weights[h * seq_len..h * seq_len + seq_len].copy_from_slice(&scores[..seq_len]);
 
         // Weighted value sum: accumulate per-position scaled value rows (SIMD-friendly)
@@ -565,7 +565,7 @@ fn attention_forward_safe_into(
         for t in 0..seq_len {
             let s = scores[t];
             let v_row = &v_all[t * kv_dim + kv_off..t * kv_dim + kv_off + head_dim];
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut attn_out[q_off..q_off + head_dim],
                 v_row,
                 s,
@@ -838,7 +838,7 @@ fn forward_save<'a>(
 
     // Phase A: Embeddings + K/V
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
-        crate::simd::simd_add_into(
+        katgpt_core::simd::simd_add_into(
             &mut ctx.embeddings[p * n..(p + 1) * n],
             &weights.wte[token * n..(token + 1) * n],
             &weights.wpe[p * n..(p + 1) * n],
@@ -900,7 +900,7 @@ fn forward_save<'a>(
             n,
         );
         // Add residual: x_proj += after_norm1
-        crate::simd::simd_add_inplace(&mut ctx.x_proj_buf, &ctx.after_norm1[p * n..(p + 1) * n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x_proj_buf, &ctx.after_norm1[p * n..(p + 1) * n]);
         // after_attn_res = x_proj (the residual output)
         ctx.after_attn_res[p * n..(p + 1) * n].copy_from_slice(&ctx.x_proj_buf[..n]);
 
@@ -926,7 +926,7 @@ fn forward_save<'a>(
             config.mlp_hidden,
         );
         // Add xr2 residual (stored in x_buf)
-        crate::simd::simd_add_inplace(&mut ctx.x_mlp_buf, &ctx.x_buf[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x_mlp_buf, &ctx.x_buf[..n]);
         ctx.hidden_final[p * n..(p + 1) * n].copy_from_slice(&ctx.x_mlp_buf);
         matmul(
             &mut ctx.logits_all[p * config.vocab_size..],
@@ -974,9 +974,9 @@ fn rmsnorm_backward(x_input: &[f32], y_output: &[f32], dy: &[f32]) -> Vec<f32> {
 fn rmsnorm_backward_into(x_input: &[f32], y_output: &[f32], dy: &[f32], out: &mut [f32]) {
     let n = x_input.len();
     debug_assert!(out.len() >= n);
-    let sum_sq = crate::simd::simd_sum_sq(x_input, n);
+    let sum_sq = katgpt_core::simd::simd_sum_sq(x_input, n);
     let rms = (sum_sq / n as f32 + 1e-5).sqrt();
-    let dot_dy_y = crate::simd::simd_dot_f32(dy, y_output, n);
+    let dot_dy_y = katgpt_core::simd::simd_dot_f32(dy, y_output, n);
     let mean_dy_y = dot_dy_y / n as f32;
     let inv_rms = 1.0 / rms;
     for i in 0..n {
@@ -1001,7 +1001,7 @@ fn softmax_backward(weights: &[f32], dy: &[f32]) -> Vec<f32> {
 fn softmax_backward_into(weights: &[f32], dy: &[f32], out: &mut [f32]) {
     let n = weights.len();
     debug_assert!(out.len() >= n);
-    let dot = crate::simd::simd_dot_f32(weights, dy, n);
+    let dot = katgpt_core::simd::simd_dot_f32(weights, dy, n);
     for i in 0..n {
         out[i] = weights[i] * (dy[i] - dot);
     }
@@ -1059,19 +1059,19 @@ fn backward(
         // Cross-entropy backward: d_logit[i] = softmax(logit)[i] - (1 if i==target else 0)
         let logits_p = &act.logits[p * vocab..(p + 1) * vocab];
         let target = tokens[p];
-        let max_l = crate::simd::simd_max_f32(logits_p);
+        let max_l = katgpt_core::simd::simd_max_f32(logits_p);
         // Compute exp(logits - max) once into d_logits using SIMD, then reuse for sum and gradient
         bctx.d_logits[..vocab].copy_from_slice(logits_p);
-        crate::simd::simd_add_scalar_inplace(&mut bctx.d_logits[..vocab], -max_l);
-        crate::simd::simd_exp_inplace(&mut bctx.d_logits[..vocab]);
-        let sum_exp = crate::simd::simd_sum_f32(&bctx.d_logits[..vocab]);
+        katgpt_core::simd::simd_add_scalar_inplace(&mut bctx.d_logits[..vocab], -max_l);
+        katgpt_core::simd::simd_exp_inplace(&mut bctx.d_logits[..vocab]);
+        let sum_exp = katgpt_core::simd::simd_sum_f32(&bctx.d_logits[..vocab]);
         let inv_sum = 1.0 / sum_exp;
-        crate::simd::simd_scale_inplace(&mut bctx.d_logits[..vocab], inv_sum);
+        katgpt_core::simd::simd_scale_inplace(&mut bctx.d_logits[..vocab], inv_sum);
         bctx.d_logits[target] -= 1.0;
 
         // LM Head: d_lm_head += outer(d_logits, hidden_final)
         let hf = &act.hidden_final[p * n..(p + 1) * n];
-        crate::simd::simd_outer_product_acc(
+        katgpt_core::simd::simd_outer_product_acc(
             &mut grads.lm_head,
             &bctx.d_logits[..vocab],
             hf,
@@ -1083,7 +1083,7 @@ fn backward(
         bctx.d_hf[..n].fill(0.0);
         for i in 0..vocab {
             let grad = bctx.d_logits[i];
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut bctx.d_hf[..n],
                 &weights.lm_head[i * n..(i + 1) * n],
                 grad,
@@ -1097,12 +1097,12 @@ fn backward(
 
         // MLP w2: d_w2 += outer(d_after_mlp, mlp_hidden)
         let mh = &act.mlp_hidden[p * mlp_h..(p + 1) * mlp_h];
-        crate::simd::simd_outer_product_acc(&mut grads.mlp_w2, &bctx.d_hf[..n], mh, n, mlp_h);
+        katgpt_core::simd::simd_outer_product_acc(&mut grads.mlp_w2, &bctx.d_hf[..n], mh, n, mlp_h);
         // d_mlp_hidden = w2^T @ d_after_mlp, then ReLU backward
         bctx.d_mh[..mlp_h].fill(0.0);
         for i in 0..n {
             let grad = bctx.d_hf[i];
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut bctx.d_mh[..mlp_h],
                 &layer.mlp_w2[i * mlp_h..(i + 1) * mlp_h],
                 grad,
@@ -1116,12 +1116,12 @@ fn backward(
 
         // MLP w1: d_w1 += outer(d_mh, after_mlp_norm)
         let amn = &act.after_mlp_norm[p * n..(p + 1) * n];
-        crate::simd::simd_outer_product_acc(&mut grads.mlp_w1, &bctx.d_mh[..mlp_h], amn, mlp_h, n);
+        katgpt_core::simd::simd_outer_product_acc(&mut grads.mlp_w1, &bctx.d_mh[..mlp_h], amn, mlp_h, n);
         // d_after_mlp_norm = w1^T @ d_mh
         bctx.d_amn[..n].fill(0.0);
         for i in 0..mlp_h {
             let grad = bctx.d_mh[i];
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut bctx.d_amn[..n],
                 &layer.mlp_w1[i * n..(i + 1) * n],
                 grad,
@@ -1132,18 +1132,18 @@ fn backward(
         // RMSNorm backward (after_attn_res → after_mlp_norm)
         let aar = &act.after_attn_res[p * n..(p + 1) * n];
         rmsnorm_backward_into(aar, amn, &bctx.d_amn, &mut bctx.d_rmsnorm_buf);
-        crate::simd::simd_add_inplace(&mut bctx.d_an1[..n], &bctx.d_rmsnorm_buf[..n]); // d_after_attn_res = d_hf + d_aar_from_mlp
+        katgpt_core::simd::simd_add_inplace(&mut bctx.d_an1[..n], &bctx.d_rmsnorm_buf[..n]); // d_after_attn_res = d_hf + d_aar_from_mlp
 
         // Save d_after_attn_res for Phase 3
         bctx.d_after_attn_res_saved[p * n..(p + 1) * n].copy_from_slice(&bctx.d_an1[..n]);
 
         // Attention output projection: d_wo += outer(d_after_attn_res, attn_out)
         let ao = &act.attn_out[p * n..(p + 1) * n];
-        crate::simd::simd_outer_product_acc(&mut grads.attn_wo, &bctx.d_an1[..n], ao, n, n);
+        katgpt_core::simd::simd_outer_product_acc(&mut grads.attn_wo, &bctx.d_an1[..n], ao, n, n);
         // d_attn_out = wo^T @ d_after_attn_res
         for i in 0..n {
             let grad = bctx.d_an1[i];
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut bctx.d_attn_out[p * n..(p + 1) * n],
                 &layer.attn_wo[i * n..(i + 1) * n],
                 grad,
@@ -1168,7 +1168,7 @@ fn backward(
             // d_raw_weights[t] = dot(d_attn_out[h], v[t,h])
             // No fill needed: d_raw[t] is assigned (not accumulated) below.
             for t in 0..seq_len {
-                bctx.d_raw[t] = crate::simd::simd_dot_f32(
+                bctx.d_raw[t] = katgpt_core::simd::simd_dot_f32(
                     &d_ao[q_off..q_off + hd],
                     &act.v[t * kvd + kv_off..t * kvd + kv_off + hd],
                     hd,
@@ -1186,7 +1186,7 @@ fn backward(
 
             // d_v[t] += weights[t] * d_attn_out[h]
             for t in 0..seq_len {
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_v[t * kvd + kv_off..t * kvd + kv_off + hd],
                     &d_ao[q_off..q_off + hd],
                     w_h[t],
@@ -1196,7 +1196,7 @@ fn backward(
 
             // d_q[h] += d_scores[t] * k[t,h] * scale
             for t in 0..seq_len {
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_q[p * n + q_off..p * n + q_off + hd],
                     &act.k[t * kvd + kv_off..t * kvd + kv_off + hd],
                     d_scores[t] * scale,
@@ -1206,7 +1206,7 @@ fn backward(
 
             // d_k[t,h] += d_scores[t] * q[p,h] * scale
             for t in 0..seq_len {
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_k[t * kvd + kv_off..t * kvd + kv_off + hd],
                     &act.q[p * n + q_off..p * n + q_off + hd],
                     d_scores[t] * scale,
@@ -1228,21 +1228,21 @@ fn backward(
         for p in 0..seq_len {
             // d_wq, d_wk, d_wv
             let an2 = &act.after_norm2[p * n..(p + 1) * n];
-            crate::simd::simd_outer_product_acc(
+            katgpt_core::simd::simd_outer_product_acc(
                 &mut grads.attn_wq,
                 &bctx.d_q[p * n..p * n + n],
                 an2,
                 n,
                 n,
             );
-            crate::simd::simd_outer_product_acc(
+            katgpt_core::simd::simd_outer_product_acc(
                 &mut grads.attn_wk,
                 &bctx.d_k[p * kvd..p * kvd + kvd],
                 an2,
                 kvd,
                 n,
             );
-            crate::simd::simd_outer_product_acc(
+            katgpt_core::simd::simd_outer_product_acc(
                 &mut grads.attn_wv,
                 &bctx.d_v[p * kvd..p * kvd + kvd],
                 an2,
@@ -1254,7 +1254,7 @@ fn backward(
             bctx.d_an2[..n].fill(0.0);
             for i in 0..n {
                 let grad = bctx.d_q[p * n + i];
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_an2[..n],
                     &layer.attn_wq[i * n..(i + 1) * n],
                     grad,
@@ -1264,13 +1264,13 @@ fn backward(
             for i in 0..kvd {
                 let gk = bctx.d_k[p * kvd + i];
                 let gv = bctx.d_v[p * kvd + i];
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_an2[..n],
                     &layer.attn_wk[i * n..(i + 1) * n],
                     gk,
                     n,
                 );
-                crate::simd::simd_fused_scale_acc(
+                katgpt_core::simd::simd_fused_scale_acc(
                     &mut bctx.d_an2[..n],
                     &layer.attn_wv[i * n..(i + 1) * n],
                     gv,
@@ -1293,11 +1293,11 @@ fn backward(
         let an1 = &act.after_norm1[p * n..(p + 1) * n];
         let an2 = &act.after_norm2[p * n..(p + 1) * n];
         rmsnorm_backward_into(an1, an2, an2_grad, &mut bctx.d_rmsnorm_buf);
-        crate::simd::simd_add_inplace(&mut bctx.d_an1[..n], &bctx.d_rmsnorm_buf[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut bctx.d_an1[..n], &bctx.d_rmsnorm_buf[..n]);
 
         // From residual: after_attn_res = wo @ attn_out + after_norm1
         // d_after_norm1 += d_after_attn_res (saved from Phase 1)
-        crate::simd::simd_add_inplace(
+        katgpt_core::simd::simd_add_inplace(
             &mut bctx.d_an1[..n],
             &bctx.d_after_attn_res_saved[p * n..p * n + n],
         );
@@ -1311,11 +1311,11 @@ fn backward(
 
         // d_wte[token] += d_emb, d_wpe[p] += d_emb
         let token = tokens[p];
-        crate::simd::simd_add_inplace(
+        katgpt_core::simd::simd_add_inplace(
             &mut grads.wte[token * n..token * n + n],
             &bctx.d_rmsnorm_buf[..n],
         );
-        crate::simd::simd_add_inplace(&mut grads.wpe[p * n..p * n + n], &bctx.d_rmsnorm_buf[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut grads.wpe[p * n..p * n + n], &bctx.d_rmsnorm_buf[..n]);
     }
 }
 
@@ -1325,15 +1325,15 @@ fn sgd_update(weights: &mut TransformerWeights, grads: &TrainingGradients, lr: f
     let layer = &mut weights.layers[0];
     // SIMD-fused: w[i] = 1.0*w[i] + (-lr)*g[i] = w[i] - lr*g[i]
     let neg_lr = -lr;
-    crate::simd::simd_fused_decay_write(&mut weights.wte, 1.0, &grads.wte, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut weights.wpe, 1.0, &grads.wpe, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut weights.lm_head, 1.0, &grads.lm_head, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.attn_wq, 1.0, &grads.attn_wq, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.attn_wk, 1.0, &grads.attn_wk, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.attn_wv, 1.0, &grads.attn_wv, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.attn_wo, 1.0, &grads.attn_wo, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.mlp_w1, 1.0, &grads.mlp_w1, neg_lr);
-    crate::simd::simd_fused_decay_write(&mut layer.mlp_w2, 1.0, &grads.mlp_w2, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut weights.wte, 1.0, &grads.wte, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut weights.wpe, 1.0, &grads.wpe, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut weights.lm_head, 1.0, &grads.lm_head, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.attn_wq, 1.0, &grads.attn_wq, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.attn_wk, 1.0, &grads.attn_wk, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.attn_wv, 1.0, &grads.attn_wv, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.attn_wo, 1.0, &grads.attn_wo, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.mlp_w1, 1.0, &grads.mlp_w1, neg_lr);
+    katgpt_core::simd::simd_fused_decay_write(&mut layer.mlp_w2, 1.0, &grads.mlp_w2, neg_lr);
 }
 
 /// Compute cross-entropy loss on masked positions.
@@ -1355,11 +1355,11 @@ fn masked_loss_into(
         }
         let l = &logits[p * vocab..(p + 1) * vocab];
         // Log-softmax: log_softmax[i] = x[i] - max - ln(Σ exp(x - max))
-        let max_l = crate::simd::simd_max_f32(l);
+        let max_l = katgpt_core::simd::simd_max_f32(l);
         exp_buf[..vocab].copy_from_slice(l);
-        crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
-        crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
-        let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
+        katgpt_core::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+        katgpt_core::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+        let sum_exp = katgpt_core::simd::simd_sum_f32(&exp_buf[..vocab]);
         let log_sum_exp = sum_exp.ln();
         total -= l[targets[p]] - max_l - log_sum_exp;
         count += 1;
@@ -1421,7 +1421,7 @@ pub fn evaluate_accuracy(
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
             // Single-pass argmax: fuses max-finding and index-recovery into one
             // traversal (vs the old two-pass simd_max_f32 + position scan).
-            let (predicted, _) = crate::simd::simd_argmax_f32(logits_p);
+            let (predicted, _) = katgpt_core::simd::simd_argmax_f32(logits_p);
             if predicted == tokens[p] {
                 correct += 1;
             }
@@ -1705,7 +1705,7 @@ pub fn forward_block_causal_positions(
     let mut v_buf = vec![0.0f32; kvd];
 
     for (p, &token) in tokens.iter().enumerate().take(seq_len) {
-        crate::simd::simd_add_into(
+        katgpt_core::simd::simd_add_into(
             &mut x_buf,
             &weights.wte[token * n..(token + 1) * n],
             &weights.wpe[p * n..(p + 1) * n],
@@ -1766,13 +1766,13 @@ pub fn forward_block_causal_positions(
         }
 
         matmul(&mut x_proj, &layer.attn_wo, &attn_out_buf, n, n);
-        crate::simd::simd_add_inplace(&mut x_proj, &xr_all[p * n..(p + 1) * n]);
+        katgpt_core::simd::simd_add_inplace(&mut x_proj, &xr_all[p * n..(p + 1) * n]);
 
         xr2_buf[..n].copy_from_slice(&x_proj[..n]);
         rmsnorm(&mut x_proj);
         matmul_relu(&mut hidden, &layer.mlp_w1, &x_proj, config.mlp_hidden, n);
         matmul(&mut x_mlp, &layer.mlp_w2, &hidden, n, config.mlp_hidden);
-        crate::simd::simd_add_inplace(&mut x_mlp[..n], &xr2_buf[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut x_mlp[..n], &xr2_buf[..n]);
 
         matmul(
             &mut all_logits[p],
@@ -1949,7 +1949,7 @@ pub fn forward_block_causal_with(
     // Phase A: Fill K/V cache, x_norm, xr for UNCOMMITTED positions only
     for (p, &token) in tokens.iter().enumerate().take(seq_len).skip(committed) {
         // Embedding = wte[token] + wpe[position]
-        crate::simd::simd_add_into(
+        katgpt_core::simd::simd_add_into(
             &mut ctx.x_buf,
             &weights.wte[token * n..(token + 1) * n],
             &weights.wpe[p * n..(p + 1) * n],
@@ -1998,7 +1998,7 @@ pub fn forward_block_causal_with(
 
         // Attention output projection + residual connection
         matmul(&mut ctx.x_proj_buf, &layer.attn_wo, &ctx.attn_out_buf, n, n);
-        crate::simd::simd_add_inplace(&mut ctx.x_proj_buf, &ctx.xr[p * n..(p + 1) * n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x_proj_buf, &ctx.xr[p * n..(p + 1) * n]);
 
         // Save residual before rmsnorm by reusing x_buf (no longer needed this iteration)
         ctx.x_buf.copy_from_slice(&ctx.x_proj_buf);
@@ -2021,7 +2021,7 @@ pub fn forward_block_causal_with(
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx.x_mlp_buf, &ctx.x_buf[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x_mlp_buf, &ctx.x_buf[..n]);
 
         // Logits
         matmul(
@@ -2139,13 +2139,13 @@ pub fn denoise_loop(
             }
 
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
-            let max_l = crate::simd::simd_max_f32(logits_p);
+            let max_l = katgpt_core::simd::simd_max_f32(logits_p);
             // OPT: compute exp once, reuse for both sum and argmax
             let exp_buf = &mut bctx.all_attn_weights[..vocab]; // reuse attn weights as scratch
             exp_buf[..vocab].copy_from_slice(logits_p);
-            crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
-            crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
-            let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
+            katgpt_core::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+            katgpt_core::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+            let sum_exp = katgpt_core::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
             // Find highest-confidence valid token.
@@ -2266,12 +2266,12 @@ pub fn denoise_loop_rcd(
             }
 
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
-            let max_l = crate::simd::simd_max_f32(logits_p);
+            let max_l = katgpt_core::simd::simd_max_f32(logits_p);
             let exp_buf = &mut bctx.all_attn_weights[..vocab];
             exp_buf[..vocab].copy_from_slice(logits_p);
-            crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
-            crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
-            let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
+            katgpt_core::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+            katgpt_core::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+            let sum_exp = katgpt_core::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
             // Find highest-confidence valid token (see denoise_loop for inv_sum hoist rationale).
@@ -2311,14 +2311,14 @@ pub fn denoise_loop_rcd(
 
             // Softmax the logits for position p into scratch to get marginals p^k_i.
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
-            let max_l = crate::simd::simd_max_f32(logits_p);
+            let max_l = katgpt_core::simd::simd_max_f32(logits_p);
             softmax_scratch[..vocab].copy_from_slice(logits_p);
-            crate::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab], -max_l);
-            crate::simd::simd_exp_inplace(&mut softmax_scratch[..vocab]);
-            let sum_exp = crate::simd::simd_sum_f32(&softmax_scratch[..vocab]);
+            katgpt_core::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab], -max_l);
+            katgpt_core::simd::simd_exp_inplace(&mut softmax_scratch[..vocab]);
+            let sum_exp = katgpt_core::simd::simd_sum_f32(&softmax_scratch[..vocab]);
             if sum_exp > 0.0 {
                 let inv = 1.0 / sum_exp;
-                crate::simd::simd_scale_inplace(&mut softmax_scratch[..vocab], inv);
+                katgpt_core::simd::simd_scale_inplace(&mut softmax_scratch[..vocab], inv);
             }
 
             // α_i = H(p_i) / log(V), Δ_i = Σ_j p_ij * E_j, ẽ_i = (1-α)E_mask + α·Δ_i.
@@ -2477,12 +2477,12 @@ pub fn denoise_loop_rcd_3sr(
             }
 
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
-            let max_l = crate::simd::simd_max_f32(logits_p);
+            let max_l = katgpt_core::simd::simd_max_f32(logits_p);
             let exp_buf = &mut bctx.all_attn_weights[..vocab];
             exp_buf[..vocab].copy_from_slice(logits_p);
-            crate::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
-            crate::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
-            let sum_exp = crate::simd::simd_sum_f32(&exp_buf[..vocab]);
+            katgpt_core::simd::simd_add_scalar_inplace(&mut exp_buf[..vocab], -max_l);
+            katgpt_core::simd::simd_exp_inplace(&mut exp_buf[..vocab]);
+            let sum_exp = katgpt_core::simd::simd_sum_f32(&exp_buf[..vocab]);
             let inv_sum = 1.0 / sum_exp;
 
             let mut best_token = mask;
@@ -2518,14 +2518,14 @@ pub fn denoise_loop_rcd_3sr(
             }
 
             let logits_p = &bctx.all_logits[p * vocab..(p + 1) * vocab];
-            let max_l = crate::simd::simd_max_f32(logits_p);
+            let max_l = katgpt_core::simd::simd_max_f32(logits_p);
             softmax_scratch[..vocab].copy_from_slice(logits_p);
-            crate::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab], -max_l);
-            crate::simd::simd_exp_inplace(&mut softmax_scratch[..vocab]);
-            let sum_exp = crate::simd::simd_sum_f32(&softmax_scratch[..vocab]);
+            katgpt_core::simd::simd_add_scalar_inplace(&mut softmax_scratch[..vocab], -max_l);
+            katgpt_core::simd::simd_exp_inplace(&mut softmax_scratch[..vocab]);
+            let sum_exp = katgpt_core::simd::simd_sum_f32(&softmax_scratch[..vocab]);
             if sum_exp > 0.0 {
                 let inv = 1.0 / sum_exp;
-                crate::simd::simd_scale_inplace(&mut softmax_scratch[..vocab], inv);
+                katgpt_core::simd::simd_scale_inplace(&mut softmax_scratch[..vocab], inv);
             }
 
             let alpha = normalized_entropy(&softmax_scratch[..vocab], log_vocab);

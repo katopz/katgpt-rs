@@ -1,13 +1,13 @@
 use crate::speculative::dd_tree::{TreeBuilder, extract_best_path_into};
 use crate::speculative::dflash::dflash_predict_with;
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 use crate::speculative::types::{NoPruner, SpeculativeContext};
 use crate::transformer::TransformerWeights;
 use crate::types::{Config, Rng};
 
 use crate::speculative::dflash::dflash_predict_ar_with;
 use crate::speculative::drafter_lora::{DrafterForwardContext, DrafterLoraWeights};
-use crate::speculative::sampling::sample_residual_distribution_into;
+use katgpt_core::speculative::sampling::sample_residual_distribution_into;
 use crate::transformer::{
     ForwardContext, MultiLayerKVCache, forward, preload_kv_cache, project_target_activation,
 };

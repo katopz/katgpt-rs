@@ -28,7 +28,7 @@
 //!   component energy from queries (GOAT G3) and improves top-1 retrieval
 //!   accuracy by ≥5pp over raw cosine on synthetic OPD-style adapters (GOAT G4).
 
-use crate::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 
 /// Default sigmoid temperature for `OffPrincipalIndex::score_bounded`.
 ///
@@ -394,7 +394,7 @@ fn blake3_hash(bytes: &[f32]) -> [u8; 32] {
 }
 
 /// Numerically stable sigmoid in `(0, 1)`. Reuses the same early-exit as
-/// `crate::simd::fast_sigmoid` but inlined here so this module compiles even
+/// `katgpt_core::simd::fast_sigmoid` but inlined here so this module compiles even
 /// if the SIMD path is disabled.
 #[inline(always)]
 fn fast_sigmoid(x: f32) -> f32 {
@@ -676,7 +676,7 @@ mod tests {
     #[test]
     fn scale_inplace_helper_does_not_panic() {
         // Sanity-check that the SIMD helper used elsewhere is callable from here.
-        use crate::simd::simd_scale_inplace;
+        use katgpt_core::simd::simd_scale_inplace;
         let mut x = vec![1.0_f32, 2.0, 3.0, 4.0];
         simd_scale_inplace(&mut x, 0.5);
         assert!((x[0] - 0.5).abs() < 1e-6);

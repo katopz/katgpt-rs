@@ -54,11 +54,11 @@ fn matmul_xtx(x: &[f32], m: usize, n: usize, a: &mut [f32]) {
     for i in 0..m {
         let row_i = &x[i * n..(i + 1) * n];
         // Diagonal
-        a[i * m + i] = crate::simd::simd_dot_f32(row_i, row_i, n);
+        a[i * m + i] = katgpt_core::simd::simd_dot_f32(row_i, row_i, n);
         // Upper triangle + mirror
         for j in (i + 1)..m {
             let row_j = &x[j * n..(j + 1) * n];
-            let dot = crate::simd::simd_dot_f32(row_i, row_j, n);
+            let dot = katgpt_core::simd::simd_dot_f32(row_i, row_j, n);
             a[i * m + j] = dot;
             a[j * m + i] = dot;
         }
@@ -78,7 +78,7 @@ fn matmul_ax(a: &[f32], x: &[f32], m: usize, n: usize, r: &mut [f32], xt_buf: &m
         let a_row = &a[i * m..(i + 1) * m];
         let r_row = &mut r[i * n..(i + 1) * n];
         for j in 0..n {
-            r_row[j] = crate::simd::simd_dot_f32(a_row, &xt_buf[j * m..(j + 1) * m], m);
+            r_row[j] = katgpt_core::simd::simd_dot_f32(a_row, &xt_buf[j * m..(j + 1) * m], m);
         }
     }
 }
@@ -86,7 +86,7 @@ fn matmul_ax(a: &[f32], x: &[f32], m: usize, n: usize, r: &mut [f32], xt_buf: &m
 /// Frobenius norm of a flat matrix.
 #[inline]
 fn frobenius_norm(m: &[f32]) -> f32 {
-    crate::simd::simd_sum_sq(m, m.len()).sqrt()
+    katgpt_core::simd::simd_sum_sq(m, m.len()).sqrt()
 }
 
 /// Grow a Vec to `new_len` without zeroing the new tail.
@@ -190,14 +190,14 @@ pub fn muon_update(
 
     // Momentum accumulation: m = β*m + g — single fused FMA pass
     // (was 2 passes: scale_inplace + add_inplace).
-    crate::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
+    katgpt_core::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
 
     // Orthogonalize the momentum
     newton_schulz5(momentum, rows, cols, out);
 
     // Scale by 1/max(rows, cols) — standard Muon scaling
     let scale = 1.0 / (rows.max(cols) as f32);
-    crate::simd::simd_scale_inplace(out, scale);
+    katgpt_core::simd::simd_scale_inplace(out, scale);
 }
 
 /// Zero-alloc variant of [`muon_update`].
@@ -218,14 +218,14 @@ pub fn muon_update_into(
 
     // Momentum accumulation: m = β*m + g — single fused FMA pass
     // (was 2 passes: scale_inplace + add_inplace).
-    crate::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
+    katgpt_core::simd::simd_fused_decay_write(momentum, beta, grad, 1.0);
 
     // Orthogonalize the momentum (zero-alloc)
     newton_schulz5_into(momentum, rows, cols, out, scratch);
 
     // Scale by 1/max(rows, cols) — standard Muon scaling
     let scale = 1.0 / (rows.max(cols) as f32);
-    crate::simd::simd_scale_inplace(out, scale);
+    katgpt_core::simd::simd_scale_inplace(out, scale);
 }
 
 // ── Zero-alloc API ───────────────────────────────────────────────
@@ -481,7 +481,7 @@ pub fn ns_inv_sqrt_psd_into(
         }
     }
 
-    crate::simd::simd_scale_inplace(x_mat, inv_sqrt_t);
+    katgpt_core::simd::simd_scale_inplace(x_mat, inv_sqrt_t);
     out[..rr].copy_from_slice(x_mat);
 }
 
@@ -489,10 +489,10 @@ pub fn ns_inv_sqrt_psd_into(
 fn matmul_symmetric(a: &[f32], r: usize, c: &mut [f32]) {
     for i in 0..r {
         let a_row_i = &a[i * r..(i + 1) * r];
-        c[i * r + i] = crate::simd::simd_dot_f32(a_row_i, a_row_i, r);
+        c[i * r + i] = katgpt_core::simd::simd_dot_f32(a_row_i, a_row_i, r);
         for j in (i + 1)..r {
             let a_row_j = &a[j * r..(j + 1) * r];
-            let v = crate::simd::simd_dot_f32(a_row_i, a_row_j, r);
+            let v = katgpt_core::simd::simd_dot_f32(a_row_i, a_row_j, r);
             c[i * r + j] = v;
             c[j * r + i] = v;
         }
@@ -511,7 +511,7 @@ fn matmul_nn(a: &[f32], b: &[f32], r: usize, c: &mut [f32], bt_buf: &mut [f32]) 
         let c_row_i = &mut c[i * r..(i + 1) * r];
         for j in 0..r {
             // bt_buf row j == B column j, stored contiguously.
-            c_row_i[j] = crate::simd::simd_dot_f32(a_row_i, &bt_buf[j * r..(j + 1) * r], r);
+            c_row_i[j] = katgpt_core::simd::simd_dot_f32(a_row_i, &bt_buf[j * r..(j + 1) * r], r);
         }
     }
 }
@@ -636,7 +636,7 @@ fn newton_schulz_n_square_into_raw(
     }
     let inv_norm = 1.0 / norm;
     x[..mn].copy_from_slice(&g[..mn]);
-    crate::simd::simd_scale_inplace(&mut x[..mn], inv_norm);
+    katgpt_core::simd::simd_scale_inplace(&mut x[..mn], inv_norm);
 
     let a_mat = &mut a_mat[..mm];
     let b_mat = &mut b_mat[..mm];
@@ -651,12 +651,12 @@ fn newton_schulz_n_square_into_raw(
         for i in 0..m {
             let a_row_i = &a_mat[i * m..(i + 1) * m];
             // Diagonal
-            let a2_ii = crate::simd::simd_dot_f32(a_row_i, a_row_i, m);
+            let a2_ii = katgpt_core::simd::simd_dot_f32(a_row_i, a_row_i, m);
             b_mat[i * m + i] = B * a_row_i[i] + C * a2_ii;
             // Upper triangle + mirror
             for j in (i + 1)..m {
                 let a_col_j = &a_mat[j * m..(j + 1) * m];
-                let a2_ij = crate::simd::simd_dot_f32(a_row_i, a_col_j, m);
+                let a2_ij = katgpt_core::simd::simd_dot_f32(a_row_i, a_col_j, m);
                 let val = B * a_row_i[j] + C * a2_ij;
                 b_mat[i * m + j] = val;
                 b_mat[j * m + i] = val;
@@ -666,7 +666,7 @@ fn newton_schulz_n_square_into_raw(
         // X = A*X + BX — single fused FMA pass (was 2 passes).
         // Runs n_iters times per NS call → halves memory traffic in the
         // innermost Newton-Schulz iteration loop.
-        crate::simd::simd_fused_decay_write(&mut x[..mn], A, &bx[..mn], 1.0);
+        katgpt_core::simd::simd_fused_decay_write(&mut x[..mn], A, &bx[..mn], 1.0);
     }
 
     out.copy_from_slice(&x[..mn]);

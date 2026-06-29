@@ -153,7 +153,7 @@ fn bench_matmul(_results: &mut Vec<BenchResult>) {
 
 #[cfg(feature = "plasma_path")]
 fn bench_plasma_path(results: &mut Vec<BenchResult>) {
-    use crate::simd::simd_ternary_matvec;
+    use katgpt_core::simd::simd_ternary_matvec;
     use crate::types::TernaryWeights;
 
     println!("── PlasmaPath Ternary SIMD Matvec ─────────────────────────");

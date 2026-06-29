@@ -8,7 +8,7 @@
 use super::codebook::compute_codebook;
 use super::rotation::{generate_qjl_matrix, generate_rotation_matrix};
 use super::types::{TurboQuantKVCacheConfig, TurboQuantLayer};
-use crate::simd::{simd_scale_inplace, simd_sum_sq};
+use katgpt_core::simd::{simd_scale_inplace, simd_sum_sq};
 use crate::types;
 
 /// Compressed KV cache using TurboQuant quantization.
@@ -464,7 +464,7 @@ fn mat_vec(m: &[f32], v: &[f32]) -> Vec<f32> {
 fn mat_vec_into(m: &[f32], v: &[f32], out: &mut [f32]) {
     let dim = v.len();
     debug_assert_eq!(out.len(), dim);
-    crate::simd::simd_matmul_rows(out, m, v, dim, dim);
+    katgpt_core::simd::simd_matmul_rows(out, m, v, dim, dim);
 }
 
 /// Transpose matrix-vector multiply: result = M^T * v (M is dim×dim row-major).

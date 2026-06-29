@@ -9,7 +9,7 @@
 //! based on Deep Manifold Part 2 (arXiv:2512.06563, §2.6.2).
 //! Feature-gated behind `bt_rank`.
 
-use crate::simd::{maxsim_score, simd_add_inplace, simd_dot_f32, simd_scale_inplace};
+use katgpt_core::simd::{maxsim_score, simd_add_inplace, simd_dot_f32, simd_scale_inplace};
 
 // ── Types ─────────────────────────────────────────────────────
 

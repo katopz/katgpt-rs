@@ -44,9 +44,9 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     // Three SIMD dot products: dot = a·b, na = a·a, nb = b·b.
     // Each is a single NEON/AVX2 reduction; replaces the scalar fused loop.
     let (a, b) = (&a[..n], &b[..n]);
-    let dot = crate::simd::simd_dot_f32(a, b, n);
-    let na = crate::simd::simd_dot_f32(a, a, n);
-    let nb = crate::simd::simd_dot_f32(b, b, n);
+    let dot = katgpt_core::simd::simd_dot_f32(a, b, n);
+    let na = katgpt_core::simd::simd_dot_f32(a, a, n);
+    let nb = katgpt_core::simd::simd_dot_f32(b, b, n);
     let denom = (na * nb).sqrt();
     if denom <= f32::MIN_POSITIVE {
         0.0
@@ -667,7 +667,7 @@ pub fn perplexity_proxy(query: &QueryEmb, segments: &[KvSegment], retained: &[us
         if d == 0 {
             continue;
         }
-        let dot = crate::simd::simd_dot_f32(&rep[..d], &query.data[..d], d);
+        let dot = katgpt_core::simd::simd_dot_f32(&rep[..d], &query.data[..d], d);
         // Sigmoid-bound the affinity to (0, 1) — never exp/softmax.
         let p = sigmoid(dot).max(f32::MIN_POSITIVE);
         sum_log -= p.ln();

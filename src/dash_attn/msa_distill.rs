@@ -9,7 +9,7 @@
 
 use super::block_topk::{argtopk_with_scratch, sigmoid};
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexScratch};
-use crate::simd::{simd_dot_f32, simd_sum_sq};
+use katgpt_core::simd::{simd_dot_f32, simd_sum_sq};
 
 // ---------------------------------------------------------------------------
 // MSA cache — max-pool scores + key statistics per block

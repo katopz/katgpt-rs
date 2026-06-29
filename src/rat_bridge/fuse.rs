@@ -52,7 +52,7 @@ pub fn bridge_attention(
 /// O(n_kv * dim) extra work plus n_kv allocations per call — this version is
 /// O(n_kv * dim) work with zero allocations.
 ///
-/// Uses [`crate::simd::simd_dot_f32`] for the per-key dot product.
+/// Uses [`katgpt_core::simd::simd_dot_f32`] for the per-key dot product.
 ///
 /// Accepts KV containers as slices of anything that derefs to `&[f32]` —
 /// works for `&[Vec<f32>]`, `&[&Vec<f32>]`, `&[&[f32]]`, etc. This lets
@@ -117,7 +117,7 @@ pub fn bridge_attention_into<K: AsRef<[f32]>, V: AsRef<[f32]>>(
     if n_kv <= INLINE_MAX {
         // Two-pass with doubled sigmoid (no per-key storage).
         for k in kv_keys_dilated {
-            let dot = crate::simd::simd_dot_f32(k.as_ref(), query, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(k.as_ref(), query, dim);
             weight_sum += sigmoid(dot);
         }
         if weight_sum <= 0.0 {
@@ -126,7 +126,7 @@ pub fn bridge_attention_into<K: AsRef<[f32]>, V: AsRef<[f32]>>(
         let inv_weight_sum = 1.0 / weight_sum;
         // Pass B: add α · Σ_i σ(q·k_i) · v_i / Σ σ(q·k_i) to out.
         for (k, v) in kv_keys_dilated.iter().zip(kv_vals_dilated.iter()) {
-            let dot = crate::simd::simd_dot_f32(k.as_ref(), query, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(k.as_ref(), query, dim);
             let w = sigmoid(dot) * inv_weight_sum * alpha;
             let v_ref = v.as_ref();
             // out[d] += w * v[d]  (fused SIMD axpy)
@@ -147,7 +147,7 @@ pub fn bridge_attention_into<K: AsRef<[f32]>, V: AsRef<[f32]>>(
             weights.set_len(n_kv)
         };
         for (i, k) in kv_keys_dilated.iter().enumerate() {
-            let w = sigmoid(crate::simd::simd_dot_f32(k.as_ref(), query, dim));
+            let w = sigmoid(katgpt_core::simd::simd_dot_f32(k.as_ref(), query, dim));
             weights[i] = w;
             weight_sum += w;
         }
@@ -179,11 +179,11 @@ fn sigmoid(x: f32) -> f32 {
 /// Extracted as a standalone helper so callers like
 /// [`super::dilated_kv::dilated_decode_step_into`] can compute the gate
 /// once and reuse it for both dilated-attention and bridge-readout stages.
-/// Uses [`crate::simd::simd_dot_f32`] for the dot product.
+/// Uses [`katgpt_core::simd::simd_dot_f32`] for the dot product.
 #[inline]
 pub fn bridge_attention_gate(query: &[f32], gdn2_readout: &[f32]) -> f32 {
     let dim = query.len();
-    sigmoid(crate::simd::simd_dot_f32(query, gdn2_readout, dim))
+    sigmoid(katgpt_core::simd::simd_dot_f32(query, gdn2_readout, dim))
 }
 
 /// Full decode step with RAT+ bridge.

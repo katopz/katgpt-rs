@@ -13,7 +13,7 @@
 
 use crate::hla::kernel::{ahla_layer_step, hla_layer_readout, hla_layer_update};
 use crate::hla::types::{MultiLayerAhlaCache, MultiLayerHlaCache};
-use crate::simd::{simd_add_inplace, simd_add_into};
+use katgpt_core::simd::{simd_add_inplace, simd_add_into};
 use crate::transformer::{ForwardContext, TransformerWeights};
 use crate::types::{self, Config};
 

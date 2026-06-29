@@ -362,10 +362,10 @@ impl VortexFlow for ChannelAwareRouter {
                 // instead of relying on the autovectorizer.
                 for t in 0..block_size {
                     let k_start = t * head_dim;
-                    crate::simd::simd_add_inplace(full_centroid, &keys[k_start..k_start + head_dim]);
+                    katgpt_core::simd::simd_add_inplace(full_centroid, &keys[k_start..k_start + head_dim]);
                 }
                 let inv = 1.0 / block_size as f32;
-                crate::simd::simd_scale_inplace(full_centroid, inv);
+                katgpt_core::simd::simd_scale_inplace(full_centroid, inv);
 
                 // Extract routing channels from full centroid
                 if !cache.routing_channels.is_empty() {

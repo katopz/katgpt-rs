@@ -30,7 +30,7 @@
 
 use super::rope::RopeFreqs;
 use super::types::{ShardCalibration, ShardConfig, ShardLayer};
-use crate::simd::{simd_scale_inplace, simd_sum_sq};
+use katgpt_core::simd::{simd_scale_inplace, simd_sum_sq};
 use crate::spectralquant::spectral::{BitAllocator, LloydMaxQuantizer, waterfill_bits};
 use crate::spectralquant::spectral_rotation::SpectralRotation;
 use crate::spectralquant::types::LloydMaxCodebook;

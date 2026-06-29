@@ -50,13 +50,13 @@ pub fn z_normalize(scores: &mut [f32]) {
         return;
     }
     let n = scores.len() as f32;
-    let mean = crate::simd::simd_sum_f32(scores) / n;
+    let mean = katgpt_core::simd::simd_sum_f32(scores) / n;
     // Subtract mean in-place via SIMD
-    crate::simd::simd_add_scalar_inplace(scores, -mean);
+    katgpt_core::simd::simd_add_scalar_inplace(scores, -mean);
     // Compute variance via SIMD sum-of-squares
-    let variance = crate::simd::simd_sum_sq(scores, scores.len()) / n;
+    let variance = katgpt_core::simd::simd_sum_sq(scores, scores.len()) / n;
     let std_dev = variance.sqrt() + EPS;
-    crate::simd::simd_scale_inplace(scores, 1.0 / std_dev);
+    katgpt_core::simd::simd_scale_inplace(scores, 1.0 / std_dev);
 }
 
 /// Compute the energy gate vector g from energy scores.
@@ -77,14 +77,14 @@ pub fn compute_energy_gate_into(energy: &[f32], alpha: f32, tau: f32, out: &mut 
     out[..len].copy_from_slice(energy);
     z_normalize(&mut out[..len]);
     // Compute alpha * (z - tau) = alpha*z - alpha*tau in-place
-    crate::simd::simd_add_scalar_inplace(&mut out[..len], -tau);
-    crate::simd::simd_scale_inplace(&mut out[..len], alpha);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut out[..len], -tau);
+    katgpt_core::simd::simd_scale_inplace(&mut out[..len], alpha);
     // sigmoid(x) = 1/(1+exp(-x)). Negate then exp for SIMD-friendly batch exp.
-    crate::simd::simd_scale_inplace(&mut out[..len], -1.0);
-    crate::simd::simd_exp_inplace(&mut out[..len]);
+    katgpt_core::simd::simd_scale_inplace(&mut out[..len], -1.0);
+    katgpt_core::simd::simd_exp_inplace(&mut out[..len]);
     // Branch-free reciprocal: out[i] = 1.0 / (1.0 + out[i])
     // SIMD-accelerated +1.0, then scalar reciprocal (LLVM auto-vectorizes the branch-free div).
-    crate::simd::simd_add_scalar_inplace(&mut out[..len], 1.0);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut out[..len], 1.0);
     for o in out[..len].iter_mut() {
         *o = 1.0 / *o;
     }
@@ -155,7 +155,7 @@ impl EgaGate {
 
         for (i, out_slot) in out.iter_mut().enumerate().take(seq_len) {
             let row_off = i * dim;
-            *out_slot = crate::simd::simd_dot_f32(&x[row_off..row_off + dim], &self.w_proj, dim);
+            *out_slot = katgpt_core::simd::simd_dot_f32(&x[row_off..row_off + dim], &self.w_proj, dim);
         }
     }
 
@@ -207,12 +207,12 @@ impl EgaGate {
             let row = &mut attn_weights[row_start..row_start + seq_len];
 
             // Apply gate to each key position and compute sum (SIMD)
-            crate::simd::simd_scale_mul_inplace(row, gate_buf, 1.0);
-            let row_sum = crate::simd::simd_sum_f32(row);
+            katgpt_core::simd::simd_scale_mul_inplace(row, gate_buf, 1.0);
+            let row_sum = katgpt_core::simd::simd_sum_f32(row);
 
             // Renormalize (SIMD)
             let inv_sum = 1.0 / (row_sum + EPS);
-            crate::simd::simd_scale_inplace(row, inv_sum);
+            katgpt_core::simd::simd_scale_inplace(row, inv_sum);
         }
     }
 }

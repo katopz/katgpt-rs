@@ -62,7 +62,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::simd::{simd_dot_f32, simd_fused_scale_acc};
+use katgpt_core::simd::{simd_dot_f32, simd_fused_scale_acc};
 use crate::spectral_retract::{power_iter_retract, PowerRetractScratch};
 use blake3::Hasher;
 

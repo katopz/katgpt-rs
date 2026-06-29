@@ -26,7 +26,7 @@ use crate::speculative::types::{NoPruner, NoScreeningPruner};
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
 use crate::types::{Config, Rng, softmax_scaled};
 
-use crate::speculative::sampling::sample_from_distribution;
+use katgpt_core::speculative::sampling::sample_from_distribution;
 
 // ---------------------------------------------------------------------------
 // Anchor-Then-Fill Configuration

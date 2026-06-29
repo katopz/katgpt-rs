@@ -25,7 +25,7 @@
 //! normalize across seeds and destroy per-seed independence: a seed at `p=0.5`
 //! should always get weight 1.0 regardless of how many other seeds exist.
 
-use crate::simd::simd_sum_f32;
+use katgpt_core::simd::simd_sum_f32;
 
 /// MGPO sampling weight: `exp(-γ * |2p - 1|)`.
 ///

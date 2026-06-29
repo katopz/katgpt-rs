@@ -22,7 +22,7 @@ use katgpt_rs::clr::{
     Claim, ClrConfig, ClrScratch, DirectionVectorSource, FnClaimExtractor,
     SigmoidProjectionVerifier, Trajectory, VoteResult, clr_vote,
 };
-use katgpt_rs::simd::simd_dot_f32;
+use katgpt_core::simd::simd_dot_f32;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Direction source (flat row-major Vec<f32>)

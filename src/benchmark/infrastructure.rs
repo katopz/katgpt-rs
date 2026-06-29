@@ -698,7 +698,7 @@ pub fn bench_pflash_block_select() -> BenchResult {
 /// GOAT gate: ≥2× faster than naive for Lq≥32, Ld≥128, dim=128.
 #[cfg(feature = "maxsim")]
 pub fn bench_maxsim_score() -> Vec<BenchResult> {
-    use crate::simd::maxsim_score;
+    use katgpt_core::simd::maxsim_score;
 
     let iters = 10_000u64;
     let configs: &[(usize, usize, usize)] = &[
@@ -747,7 +747,7 @@ pub fn bench_maxsim_score() -> Vec<BenchResult> {
 /// GOAT gate: maxsim ≤3× latency overhead vs mean-K, ≥5% needle recall improvement.
 #[cfg(feature = "maxsim")]
 pub fn bench_pflash_maxsim_block_scoring() -> BenchResult {
-    use crate::simd::maxsim_score;
+    use katgpt_core::simd::maxsim_score;
 
     let block_size = 32;
     let total_tokens = 1024;

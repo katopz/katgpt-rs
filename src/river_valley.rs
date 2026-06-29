@@ -13,7 +13,7 @@
 /// Dot product of two vectors.
 #[inline]
 fn dot(a: &[f32], b: &[f32]) -> f32 {
-    crate::simd::simd_dot_f32(a, b, a.len())
+    katgpt_core::simd::simd_dot_f32(a, b, a.len())
 }
 
 /// L2 norm of a vector.
@@ -81,14 +81,14 @@ pub fn effective_rank_into(
         gram_buf[..rows * rows].fill(0.0);
         for i in 0..rows {
             // Diagonal
-            gram_buf[i * rows + i] = crate::simd::simd_dot_f32(
+            gram_buf[i * rows + i] = katgpt_core::simd::simd_dot_f32(
                 &matrix[i * cols..(i + 1) * cols],
                 &matrix[i * cols..(i + 1) * cols],
                 cols,
             );
             // Upper triangle + mirror
             for j in (i + 1)..rows {
-                let dot = crate::simd::simd_dot_f32(
+                let dot = katgpt_core::simd::simd_dot_f32(
                     &matrix[i * cols..(i + 1) * cols],
                     &matrix[j * cols..(j + 1) * cols],
                     cols,

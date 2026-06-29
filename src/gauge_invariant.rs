@@ -63,7 +63,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::simd::{simd_dot_f32, simd_scale_inplace};
+use katgpt_core::simd::{simd_dot_f32, simd_scale_inplace};
 use crate::spectral_retract::power_iter_step;
 
 /// Pre-allocated scratch for gauge rebalancing.

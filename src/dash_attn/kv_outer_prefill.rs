@@ -9,7 +9,7 @@
 //!
 //! Feature gate: `msa_kv_outer` (Plan 256 Phase 2 GOAT gate).
 
-use crate::simd::{simd_dot_f32, simd_exp_sum_inplace, simd_fused_scale_acc, simd_max_f32};
+use katgpt_core::simd::{simd_dot_f32, simd_exp_sum_inplace, simd_fused_scale_acc, simd_max_f32};
 
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexRouter, VortexScratch};
 

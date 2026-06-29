@@ -350,7 +350,7 @@ unsafe fn attention_head(
         let dot = unsafe {
             let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), hd);
             let k_slice = std::slice::from_raw_parts(key_cache.as_ptr().add(k_off), hd);
-            crate::simd::simd_dot_f32(q_slice, k_slice, hd)
+            katgpt_core::simd::simd_dot_f32(q_slice, k_slice, hd)
         };
         unsafe {
             *scores_buf.get_unchecked_mut(t) = dot;
@@ -359,21 +359,21 @@ unsafe fn attention_head(
     // Fuse scale + find max: one SIMD scale pass + one SIMD max reduction
     // replaces N scalar (dot * scale) and N scalar max operations
     let scores_raw = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    crate::simd::simd_scale_inplace(scores_raw, scale);
+    katgpt_core::simd::simd_scale_inplace(scores_raw, scale);
     let max_score =
-        crate::simd::simd_max_f32(unsafe { std::slice::from_raw_parts(scores_buf.as_ptr(), t_n) });
+        katgpt_core::simd::simd_max_f32(unsafe { std::slice::from_raw_parts(scores_buf.as_ptr(), t_n) });
 
     // Pass 2: exp(scores - max) and accumulate sum
     // Shift scores by max using SIMD broadcast add, then SIMD exp
     let scores_slice = unsafe { std::slice::from_raw_parts_mut(scores_buf.as_mut_ptr(), t_n) };
-    crate::simd::simd_add_scalar_inplace(scores_slice, -max_score);
-    crate::simd::simd_exp_inplace(scores_slice);
-    let sum: f32 = crate::simd::simd_sum_f32(scores_slice);
+    katgpt_core::simd::simd_add_scalar_inplace(scores_slice, -max_score);
+    katgpt_core::simd::simd_exp_inplace(scores_slice);
+    let sum: f32 = katgpt_core::simd::simd_sum_f32(scores_slice);
 
     // Pass 3: normalize + weighted value accumulation (no write-back of scores)
     // Pre-scale scores once using SIMD
     let inv_sum = 1.0 / sum;
-    crate::simd::simd_scale_inplace(scores_slice, inv_sum);
+    katgpt_core::simd::simd_scale_inplace(scores_slice, inv_sum);
     // Zero the output slice before accumulation
     attn_out[q_head_offset..q_head_offset + hd].fill(0.0);
     // Accumulate: t outer → contiguous value_cache row access
@@ -384,7 +384,7 @@ unsafe fn attention_head(
         };
         let out_slice =
             unsafe { std::slice::from_raw_parts_mut(attn_out.as_mut_ptr().add(q_head_offset), hd) };
-        crate::simd::simd_fused_scale_acc(out_slice, v_row, s, hd);
+        katgpt_core::simd::simd_fused_scale_acc(out_slice, v_row, s, hd);
     }
 }
 
@@ -736,7 +736,7 @@ pub fn forward_looped<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -887,7 +887,7 @@ pub fn forward_looped<'a>(
 
             // Output projection + residual
             crate::types::matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
-            crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
             // MLP: save residual → RMSNorm → MLP → residual
             ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -906,7 +906,7 @@ pub fn forward_looped<'a>(
                 n,
                 config.mlp_hidden,
             );
-            crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
         }
 
         // Per-loop residual gate: h^(τ) = h̃^(τ) + ρ_τ ⊙ h^(τ-1)
@@ -916,12 +916,12 @@ pub fn forward_looped<'a>(
             if gate_offset + n <= residual_gate.gates.len() {
                 // ctx.x += gates ⊙ prev_h  (element-wise fused multiply-accumulate)
                 ctx.hidden[..n].copy_from_slice(&ctx.prev_h[..n]);
-                crate::simd::simd_scale_mul_inplace(
+                katgpt_core::simd::simd_scale_mul_inplace(
                     &mut ctx.hidden[..n],
                     &residual_gate.gates[gate_offset..gate_offset + n],
                     1.0,
                 );
-                crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.hidden[..n]);
+                katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.hidden[..n]);
             }
         }
 
@@ -1144,7 +1144,7 @@ pub fn forward_training_free_loop<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -1383,7 +1383,7 @@ fn forward_single_layer(
 
     // Output projection + residual
     types::matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
-    crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+    katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
     // MLP: save residual → RMSNorm → MLP → residual
     ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -1402,7 +1402,7 @@ fn forward_single_layer(
         n,
         config.mlp_hidden,
     );
-    crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+    katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 }
 
 /// Standard full-vocab LM head (current behavior).
@@ -1518,7 +1518,7 @@ fn clustered_lm_head(
     let cluster_scores = &mut cluster_scores_buf[..num_clusters];
     for (c, score) in cluster_scores.iter_mut().enumerate() {
         let row_off = c * n_embd;
-        *score = crate::simd::simd_dot_f32(
+        *score = katgpt_core::simd::simd_dot_f32(
             &cluster_classifier[row_off..row_off + n_embd],
             &hidden[..n_embd],
             n_embd,
@@ -1547,7 +1547,7 @@ fn clustered_lm_head(
         for &token_idx in cluster_tokens {
             if token_idx < vocab_size {
                 let row_off = token_idx * n_embd;
-                let dot = crate::simd::simd_dot_f32(
+                let dot = katgpt_core::simd::simd_dot_f32(
                     &lm_head[row_off..row_off + n_embd],
                     &hidden[..n_embd],
                     n_embd,
@@ -1653,18 +1653,18 @@ fn depth_route(
 
     for (i, &src) in sources.iter().enumerate() {
         // SIMD sum-of-squares for RMSNorm
-        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
+        let sum_sq = katgpt_core::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
         // Scale src * inv_rms * norm_weight into scratch via fused SIMD, then dot with query
         scaled_buf[..n_embd].copy_from_slice(&src[..n_embd]);
-        crate::simd::simd_scale_mul_inplace(
+        katgpt_core::simd::simd_scale_mul_inplace(
             &mut scaled_buf[..n_embd],
             &norm_weight[..n_embd],
             inv_rms,
         );
-        let logit = crate::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
+        let logit = katgpt_core::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
 
         logits_buf[i] = logit;
         // Branch-free max reduction: f32::max compiles to a single instruction
@@ -1674,9 +1674,9 @@ fn depth_route(
     }
 
     // 2. Softmax (numerically stable, SIMD batch)
-    crate::simd::simd_add_scalar_inplace(&mut logits_buf[..n_sources], -max_logit);
-    crate::simd::simd_exp_inplace(&mut logits_buf[..n_sources]);
-    let sum_exp = crate::simd::simd_sum_f32(&logits_buf[..n_sources]);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut logits_buf[..n_sources], -max_logit);
+    katgpt_core::simd::simd_exp_inplace(&mut logits_buf[..n_sources]);
+    let sum_exp = katgpt_core::simd::simd_sum_f32(&logits_buf[..n_sources]);
     let inv_sum = 1.0 / sum_exp;
 
     // 3. Weighted sum of sources, added to residual (additive routing).
@@ -1684,7 +1684,7 @@ fn depth_route(
     //    Eliminates the scaled_buf copy + separate scale + add passes.
     for (i, &src) in sources.iter().enumerate() {
         let weight = logits_buf[i] * inv_sum;
-        crate::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
+        katgpt_core::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
     }
 }
 
@@ -1727,18 +1727,18 @@ fn depth_route_with_indices(args: DepthRouteIndicesArgs<'_>) {
     for (i, &src_idx) in source_indices.iter().enumerate() {
         let src = &block_deltas[src_idx];
         // SIMD sum-of-squares for RMSNorm
-        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
+        let sum_sq = katgpt_core::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
         // Scale src * inv_rms * norm_weight into scratch via fused SIMD, then dot with query
         scaled_buf[..n_embd].copy_from_slice(&src[..n_embd]);
-        crate::simd::simd_scale_mul_inplace(
+        katgpt_core::simd::simd_scale_mul_inplace(
             &mut scaled_buf[..n_embd],
             &norm_weight[..n_embd],
             inv_rms,
         );
-        let logit = crate::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
+        let logit = katgpt_core::simd::simd_dot_f32(&scaled_buf[..n_embd], query_weight, n_embd);
 
         logits_buf[i] = logit;
         // Branch-free max reduction: f32::max compiles to a single instruction
@@ -1748,9 +1748,9 @@ fn depth_route_with_indices(args: DepthRouteIndicesArgs<'_>) {
     }
 
     // 2. Softmax (numerically stable, SIMD batch)
-    crate::simd::simd_add_scalar_inplace(&mut logits_buf[..n_sources], -max_logit);
-    crate::simd::simd_exp_inplace(&mut logits_buf[..n_sources]);
-    let sum_exp = crate::simd::simd_sum_f32(&logits_buf[..n_sources]);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut logits_buf[..n_sources], -max_logit);
+    katgpt_core::simd::simd_exp_inplace(&mut logits_buf[..n_sources]);
+    let sum_exp = katgpt_core::simd::simd_sum_f32(&logits_buf[..n_sources]);
     let inv_sum = 1.0 / sum_exp;
 
     // 3. Weighted sum of sources, added to residual (additive routing).
@@ -1759,7 +1759,7 @@ fn depth_route_with_indices(args: DepthRouteIndicesArgs<'_>) {
     for (i, &src_idx) in source_indices.iter().enumerate() {
         let src = &block_deltas[src_idx];
         let weight = logits_buf[i] * inv_sum;
-        crate::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
+        katgpt_core::simd::simd_fused_scale_acc(&mut residual[..n_embd], &src[..n_embd], weight, n_embd);
     }
 }
 
@@ -1788,14 +1788,14 @@ pub fn depth_route_weights(
     // 1. RMSNorm each source and compute dot product with query
     for (i, &src) in sources.iter().enumerate() {
         // SIMD sum-of-squares for RMSNorm
-        let sum_sq = crate::simd::simd_sum_sq(&src[..n_embd], n_embd);
+        let sum_sq = katgpt_core::simd::simd_sum_sq(&src[..n_embd], n_embd);
         let rms = (sum_sq / n_embd as f32 + eps).sqrt();
         let inv_rms = 1.0 / rms;
 
         // Scale src * inv_rms * norm_weight into scratch via fused SIMD, then dot with query
         scaled[..n_embd].copy_from_slice(&src[..n_embd]);
-        crate::simd::simd_scale_mul_inplace(&mut scaled[..n_embd], &norm_weight[..n_embd], inv_rms);
-        let logit = crate::simd::simd_dot_f32(&scaled[..n_embd], query_weight, n_embd);
+        katgpt_core::simd::simd_scale_mul_inplace(&mut scaled[..n_embd], &norm_weight[..n_embd], inv_rms);
+        let logit = katgpt_core::simd::simd_dot_f32(&scaled[..n_embd], query_weight, n_embd);
 
         logits[i] = logit;
         // Branch-free max reduction (single SIMD instruction, no predicted branch).
@@ -1803,11 +1803,11 @@ pub fn depth_route_weights(
     }
 
     // 2. Softmax (SIMD batch)
-    crate::simd::simd_add_scalar_inplace(&mut logits, -max_logit);
-    crate::simd::simd_exp_inplace(&mut logits);
-    let sum_exp = crate::simd::simd_sum_f32(&logits);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut logits, -max_logit);
+    katgpt_core::simd::simd_exp_inplace(&mut logits);
+    let sum_exp = katgpt_core::simd::simd_sum_f32(&logits);
     let inv_sum = 1.0 / sum_exp;
-    crate::simd::simd_scale_inplace(&mut logits, inv_sum);
+    katgpt_core::simd::simd_scale_inplace(&mut logits, inv_sum);
 
     logits
 }
@@ -1835,7 +1835,7 @@ fn forward_base<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -1946,8 +1946,8 @@ fn forward_base<'a>(
         if layer_idx == config.n_layer / 2
             && let Some(dl) = domain_latent
         {
-            crate::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
-            crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
         }
 
         // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
@@ -2017,7 +2017,7 @@ fn forward_base<'a>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.attn_out, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -2109,13 +2109,13 @@ fn forward_base<'a>(
         if let Some(lora) = lora {
             crate::types::lora_apply(&mut ctx.x, lora, &ctx.hidden, &mut ctx.lora_buf);
         }
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 
         // MLS: accumulate layer delta (Plan 104)
         #[cfg(feature = "mls_aggregate")]
         {
             if config.mls_layers > 0 && layer_idx >= weights.layers.len() - config.mls_layers {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.mls_buf[..n],
                     &ctx.x[..n],
                     &ctx.hidden_state[..n],
@@ -2135,7 +2135,7 @@ fn forward_base<'a>(
             // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
             // Delta captures full layer contribution: attention + MLP residuals
             if block_idx < ctx.block_deltas.len() {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.block_deltas[block_idx][..n],
                     &ctx.x[..n],
                     &ctx.xr[..n],
@@ -2161,7 +2161,7 @@ fn forward_base<'a>(
     #[cfg(feature = "mls_aggregate")]
     if ctx.mls_count > 0 {
         let scale = 1.0 / ctx.mls_count as f32;
-        crate::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
+        katgpt_core::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
     }
 
     // Snapshot hidden state (for Plan 009 compatibility)
@@ -2257,7 +2257,7 @@ fn forward_coda<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -2333,8 +2333,8 @@ fn forward_coda<'a>(
         if layer_idx == config.n_layer / 2
             && let Some(dl) = domain_latent
         {
-            crate::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
-            crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
         }
 
         // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
@@ -2486,7 +2486,7 @@ fn forward_coda<'a>(
                 );
             } else {
                 // Sparse succeeded, add residual manually
-                crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+                katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
             }
         }
 
@@ -2499,7 +2499,7 @@ fn forward_coda<'a>(
         #[cfg(feature = "mls_aggregate")]
         {
             if config.mls_layers > 0 && layer_idx >= weights.layers.len() - config.mls_layers {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.mls_buf[..n],
                     &ctx.x[..n],
                     &ctx.hidden_state[..n],
@@ -2518,7 +2518,7 @@ fn forward_coda<'a>(
 
             // Compute delta: current x minus pre-layer residual
             if block_idx < ctx.block_deltas.len() {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.block_deltas[block_idx][..n],
                     &ctx.x[..n],
                     &ctx.xr[..n],
@@ -2544,7 +2544,7 @@ fn forward_coda<'a>(
     #[cfg(feature = "mls_aggregate")]
     if ctx.mls_count > 0 {
         let scale = 1.0 / ctx.mls_count as f32;
-        crate::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
+        katgpt_core::simd::simd_fused_decay_write(&mut ctx.x[..n], 1.0, &ctx.mls_buf[..n], scale);
     }
 
     // Snapshot hidden state (for Plan 009 compatibility)
@@ -2633,7 +2633,7 @@ pub fn forward_prefill<'a>(
         for (p, &token) in tokens.iter().enumerate().take(prompt_len) {
             let tok_off = token * n;
             let pos_off = p * n;
-            crate::simd::simd_add_into(
+            katgpt_core::simd::simd_add_into(
                 &mut prefill.hidden[p * n..(p + 1) * n],
                 &weights.wte[tok_off..tok_off + n],
                 &weights.wpe[pos_off..pos_off + n],
@@ -2663,7 +2663,7 @@ pub fn forward_prefill<'a>(
             } else {
                 let tok_off = token * n;
                 let pos_off = p * n;
-                crate::simd::simd_add_into(
+                katgpt_core::simd::simd_add_into(
                     &mut ctx.x[..n],
                     &weights.wte[tok_off..tok_off + n],
                     &weights.wpe[pos_off..pos_off + n],
@@ -2690,8 +2690,8 @@ pub fn forward_prefill<'a>(
             if layer_idx == config.n_layer / 2
                 && let Some(dl) = domain_latent
             {
-                crate::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
-                crate::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
+                katgpt_core::simd::simd_add_inplace(&mut ctx.k[..kvd], &dl.embedding[..kvd]);
+                katgpt_core::simd::simd_add_inplace(&mut ctx.v[..kvd], &dl.embedding[..kvd]);
             }
 
             // Wall Attention: gate projection + prefix sum update + Q/K rescale (Plan 173).
@@ -2900,7 +2900,7 @@ pub fn forward_prefill<'a>(
             if let Some(lora) = lora {
                 crate::types::lora_apply(&mut ctx.x, lora, &ctx.attn_out, &mut prefill.lora_buf);
             }
-            crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
             // MLP: residual → RMSNorm → MLP → residual
             ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -2948,7 +2948,7 @@ pub fn forward_prefill<'a>(
             if let Some(lora) = lora {
                 crate::types::lora_apply(&mut ctx.x, lora, &ctx.hidden, &mut prefill.lora_buf);
             }
-            crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 
             // Delta routing: accumulate per-sublayer deltas, route at block boundaries (Plan 097)
             #[cfg(feature = "delta_routing")]
@@ -2959,7 +2959,7 @@ pub fn forward_prefill<'a>(
 
                 // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
                 if block_idx < ctx.block_deltas.len() {
-                    crate::simd::simd_fused_sub_acc(
+                    katgpt_core::simd::simd_fused_sub_acc(
                         &mut ctx.block_deltas[block_idx][..n],
                         &ctx.x[..n],
                         &ctx.xr[..n],
@@ -3336,7 +3336,7 @@ pub fn forward_paged<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -3424,7 +3424,7 @@ pub fn forward_paged<'a>(
 
         // Output projection + residual
         matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -3466,7 +3466,7 @@ pub fn forward_paged<'a>(
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 
         // Delta routing: accumulate per-sublayer deltas, route at block boundaries (Plan 097)
         #[cfg(feature = "delta_routing")]
@@ -3477,7 +3477,7 @@ pub fn forward_paged<'a>(
 
             // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
             if block_idx < ctx.block_deltas.len() {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.block_deltas[block_idx][..n],
                     &ctx.x[..n],
                     &ctx.xr[..n],
@@ -3641,12 +3641,12 @@ pub fn raven_compute_router_into(
     // simd_scale_inplace(x, -1.0) compiles to a single SIMD negate per chunk.
     r_t.resize(num_slots, 0.0);
     r_t[..num_slots].copy_from_slice(&raw_logits[..num_slots]);
-    crate::simd::simd_scale_inplace(&mut r_t[..num_slots], -1.0);
-    crate::simd::simd_exp_inplace(&mut r_t[..num_slots]);
+    katgpt_core::simd::simd_scale_inplace(&mut r_t[..num_slots], -1.0);
+    katgpt_core::simd::simd_exp_inplace(&mut r_t[..num_slots]);
     // r_t now holds exp(-x). Compute sigmoid(x) = 1/(1+exp(-x)) via SIMD:
     //   add_scalar(+1) → reciprocal → done. Replaces scalar 1/(1+e) per slot.
-    crate::simd::simd_add_scalar_inplace(&mut r_t[..num_slots], 1.0);
-    crate::simd::simd_reciprocal_inplace(&mut r_t[..num_slots]);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut r_t[..num_slots], 1.0);
+    katgpt_core::simd::simd_reciprocal_inplace(&mut r_t[..num_slots]);
     // Write (index, sigmoid) pairs directly into pre-sized scored buffer
     // (avoids push reallocation). Index writes are sequential and trivially
     // auto-vectorizable by LLVM.
@@ -3677,7 +3677,7 @@ pub fn raven_compute_router_into(
     // SIMD scale is branch-free and vectorized; replaces scalar `*v *= inv_sum` loop.
     if sum > 0.0 {
         let inv_sum = 1.0 / sum;
-        crate::simd::simd_scale_inplace(&mut r_t[..num_slots], inv_sum);
+        katgpt_core::simd::simd_scale_inplace(&mut r_t[..num_slots], inv_sum);
     }
 }
 
@@ -3715,13 +3715,13 @@ pub fn raven_update(
         let write = 1.0 - decay;
         let offset = slot * kv_dim;
 
-        crate::simd::simd_fused_decay_write(
+        katgpt_core::simd::simd_fused_decay_write(
             &mut keys[offset..offset + kv_dim],
             decay,
             &new_key[..kv_dim],
             write,
         );
-        crate::simd::simd_fused_decay_write(
+        katgpt_core::simd::simd_fused_decay_write(
             &mut values[offset..offset + kv_dim],
             decay,
             &new_value[..kv_dim],
@@ -3756,7 +3756,7 @@ pub fn raven_readout_into<'a>(
     let mut max_score = f32::NEG_INFINITY;
     for s in 0..num_slots {
         let k_off = s * kv_dim;
-        let dot = crate::simd::simd_dot_f32(query, &keys[k_off..k_off + kv_dim], kv_dim);
+        let dot = katgpt_core::simd::simd_dot_f32(query, &keys[k_off..k_off + kv_dim], kv_dim);
         unsafe {
             *scores.get_unchecked_mut(s) = dot;
         }
@@ -3766,16 +3766,16 @@ pub fn raven_readout_into<'a>(
 
     // Pass 2: fused exp + accumulate + normalize (SIMD batch)
     output[..kv_dim].fill(0.0);
-    crate::simd::simd_add_scalar_inplace(&mut scores[..num_slots], -max_score);
-    crate::simd::simd_exp_inplace(&mut scores[..num_slots]);
-    let sum_exp = crate::simd::simd_sum_f32(&scores[..num_slots]);
+    katgpt_core::simd::simd_add_scalar_inplace(&mut scores[..num_slots], -max_score);
+    katgpt_core::simd::simd_exp_inplace(&mut scores[..num_slots]);
+    let sum_exp = katgpt_core::simd::simd_sum_f32(&scores[..num_slots]);
 
     if sum_exp > 0.0 {
         let inv_sum = 1.0 / sum_exp;
         for s in 0..num_slots {
             let weight = unsafe { *scores.get_unchecked(s) * inv_sum };
             let v_off = s * kv_dim;
-            crate::simd::simd_fused_scale_acc(
+            katgpt_core::simd::simd_fused_scale_acc(
                 &mut output[..kv_dim],
                 &values[v_off..v_off + kv_dim],
                 weight,
@@ -3835,7 +3835,7 @@ pub fn forward_raven<'a>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -3935,7 +3935,7 @@ pub fn forward_raven<'a>(
 
         // Output projection + residual
         matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -3977,7 +3977,7 @@ pub fn forward_raven<'a>(
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 
         // Delta routing: accumulate per-sublayer deltas, route at block boundaries (Plan 097)
         #[cfg(feature = "delta_routing")]
@@ -3988,7 +3988,7 @@ pub fn forward_raven<'a>(
 
             // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
             if block_idx < ctx.block_deltas.len() {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.block_deltas[block_idx][..n],
                     &ctx.x[..n],
                     &ctx.xr[..n],
@@ -4058,7 +4058,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
     // 1. Embedding: x = wte[token] + wpe[pos]
     let tok_off = token * n;
     let pos_off_emb = pos * n;
-    crate::simd::simd_add_into(
+    katgpt_core::simd::simd_add_into(
         &mut ctx.x[..n],
         &weights.wte[tok_off..tok_off + n],
         &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -4141,7 +4141,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
         // Output projection + residual
         matmul(&mut ctx.x, &layer_weights.attn_wo, &ctx.attn_out, n, n);
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr[..n]);
 
         // MLP: save residual → RMSNorm → MLP → residual
         ctx.xr2[..n].copy_from_slice(&ctx.x[..n]);
@@ -4183,7 +4183,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx.x[..n], &ctx.xr2[..n]);
 
         // Delta routing: accumulate per-sublayer deltas, route at block boundaries (Plan 097)
         #[cfg(feature = "delta_routing")]
@@ -4194,7 +4194,7 @@ pub fn forward_quantized<'a, C: types::QuantizedKVCache>(
 
             // Compute delta: current x minus pre-layer residual (xr was saved after first rmsnorm)
             if block_idx < ctx.block_deltas.len() {
-                crate::simd::simd_fused_sub_acc(
+                katgpt_core::simd::simd_fused_sub_acc(
                     &mut ctx.block_deltas[block_idx][..n],
                     &ctx.x[..n],
                     &ctx.xr[..n],
@@ -6715,7 +6715,7 @@ mod tests {
 
         let tok_off = 0;
         let pos_off_emb = 0;
-        crate::simd::simd_add_into(
+        katgpt_core::simd::simd_add_into(
             &mut ctx1.x[..n],
             &weights.wte[tok_off..tok_off + n],
             &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -6730,7 +6730,7 @@ mod tests {
             types::matmul(&mut ctx1.v, &layer_weights.attn_wv, &ctx1.x, kvd, n);
             // Output projection + residual
             types::matmul(&mut ctx1.x, &layer_weights.attn_wo, &ctx1.attn_out, n, n);
-            crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
             // MLP: save pre-norm residual → rmsnorm_with_gamma → MLP
             ctx1.xr2[..n].copy_from_slice(&ctx1.x[..n]);
             types::rmsnorm_with_gamma(&mut ctx1.x[..n], &mlp_gammas[li]);
@@ -6748,7 +6748,7 @@ mod tests {
                 n,
                 config.mlp_hidden,
             );
-            crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
         }
 
         let baseline_hidden: Vec<f32> = ctx1.x[..n].to_vec();
@@ -6760,7 +6760,7 @@ mod tests {
         let mut ctx2 = ForwardContext::new(&config);
         let _cache2 = MultiLayerKVCache::new(&config);
 
-        crate::simd::simd_add_into(
+        katgpt_core::simd::simd_add_into(
             &mut ctx2.x[..n],
             &weights.wte[tok_off..tok_off + n],
             &weights.wpe[pos_off_emb..pos_off_emb + n],
@@ -6774,7 +6774,7 @@ mod tests {
             types::matmul(&mut ctx2.k, &layer_weights.attn_wk, &ctx2.x, kvd, n);
             types::matmul(&mut ctx2.v, &layer_weights.attn_wv, &ctx2.x, kvd, n);
             types::matmul(&mut ctx2.x, &layer_weights.attn_wo, &ctx2.attn_out, n, n);
-            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
             // MLP: gamma folded into w1, so plain rmsnorm (gamma is now identity)
             ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
             rmsnorm(&mut ctx2.x);
@@ -6792,7 +6792,7 @@ mod tests {
                 n,
                 config.mlp_hidden,
             );
-            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
         }
 
         let folded_hidden: Vec<f32> = ctx2.x[..n].to_vec();
@@ -6833,7 +6833,7 @@ mod tests {
         let mut cache2 = MultiLayerKVCache::new(&config);
 
         // Manual forward using fused weight slices
-        crate::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+        katgpt_core::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
 
         for layer_weights in &weights.layers {
             rmsnorm(&mut ctx2.x);
@@ -6885,7 +6885,7 @@ mod tests {
                 }
             }
             types::matmul(&mut ctx2.x, &layer_weights.attn_wo, &ctx2.attn_out, n, n);
-            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
             ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
             rmsnorm(&mut ctx2.x);
             types::matmul_relu(
@@ -6902,7 +6902,7 @@ mod tests {
                 n,
                 config.mlp_hidden,
             );
-            crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+            katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
         }
 
         standard_lm_head(
@@ -6958,7 +6958,7 @@ mod tests {
         let _cache1 = MultiLayerKVCache::new(&config);
 
         // Embed
-        crate::simd::simd_add_into(&mut ctx1.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+        katgpt_core::simd::simd_add_into(&mut ctx1.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
 
         // Attention with gamma
         types::rmsnorm_with_gamma(&mut ctx1.x[..n], &attn_gamma);
@@ -6973,7 +6973,7 @@ mod tests {
             n,
             n,
         );
-        crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr[..n]);
         // MLP with gamma
         ctx1.xr2[..n].copy_from_slice(&ctx1.x[..n]);
         types::rmsnorm_with_gamma(&mut ctx1.x[..n], &mlp_gamma);
@@ -6991,7 +6991,7 @@ mod tests {
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx1.x[..n], &ctx1.xr2[..n]);
 
         let baseline_hidden: Vec<f32> = ctx1.x[..n].to_vec();
 
@@ -7002,7 +7002,7 @@ mod tests {
         let mut ctx2 = ForwardContext::new(&config);
         let _cache2 = MultiLayerKVCache::new(&config);
 
-        crate::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
+        katgpt_core::simd::simd_add_into(&mut ctx2.x[..n], &weights.wte[0..n], &weights.wpe[0..n]);
 
         // Attention with gamma (kept)
         types::rmsnorm_with_gamma(&mut ctx2.x[..n], &attn_gamma);
@@ -7017,7 +7017,7 @@ mod tests {
             n,
             n,
         );
-        crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr[..n]);
         // MLP: gamma folded, so plain rmsnorm
         ctx2.xr2[..n].copy_from_slice(&ctx2.x[..n]);
         rmsnorm(&mut ctx2.x);
@@ -7035,7 +7035,7 @@ mod tests {
             n,
             config.mlp_hidden,
         );
-        crate::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
+        katgpt_core::simd::simd_add_inplace(&mut ctx2.x[..n], &ctx2.xr2[..n]);
 
         let folded_hidden: Vec<f32> = ctx2.x[..n].to_vec();
 

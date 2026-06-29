@@ -62,7 +62,7 @@
 //! - Schönemann, P. (1966) — original Procrustes solution via SVD.
 //! - Higham, N. (1986) — Newton-Schulz iteration for polar factor.
 
-use crate::simd::{simd_dot_f32, simd_fused_scale_acc, simd_scale_inplace, simd_sum_sq};
+use katgpt_core::simd::{simd_dot_f32, simd_fused_scale_acc, simd_scale_inplace, simd_sum_sq};
 
 /// Configuration for [`orthogonal_procrustes`].
 #[derive(Clone, Copy, Debug)]

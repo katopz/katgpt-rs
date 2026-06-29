@@ -6,7 +6,7 @@
 
 use super::rotation::{apply_inverse_rotation, apply_rotation, generate_givens_rotations};
 use super::types::{PlanarQuantConfig, PlanarQuantLayer};
-use crate::simd::simd_scale_inplace;
+use katgpt_core::simd::simd_scale_inplace;
 use crate::turboquant::codebook::compute_codebook;
 
 /// Compressed KV cache using PlanarQuant 2D Givens rotation quantization.
@@ -108,7 +108,7 @@ impl PlanarQuantKVCache {
         }
 
         // Compute norm via SIMD (avoids scalar iteration)
-        let norm = crate::simd::simd_sum_sq(key, key.len()).sqrt();
+        let norm = katgpt_core::simd::simd_sum_sq(key, key.len()).sqrt();
         self.key_norms[layer][pos] = norm;
 
         if norm < 1e-8 {
@@ -159,7 +159,7 @@ impl PlanarQuantKVCache {
             self.max_used_pos = pos;
         }
 
-        let norm = crate::simd::simd_sum_sq(value, value.len()).sqrt();
+        let norm = katgpt_core::simd::simd_sum_sq(value, value.len()).sqrt();
         self.val_norms[layer][pos] = norm;
 
         if norm < 1e-8 {

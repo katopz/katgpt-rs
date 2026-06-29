@@ -220,7 +220,7 @@ pub fn interpolate_query(
     #[allow(clippy::needless_range_loop)]
     for j in 0..dim {
         let row_off = j * artifact.n_embd;
-        projected[j] = crate::simd::simd_dot_f32(
+        projected[j] = katgpt_core::simd::simd_dot_f32(
             &artifact.gate_weight[row_off..row_off + artifact.n_embd],
             query,
             artifact.n_embd,
@@ -232,7 +232,7 @@ pub fn interpolate_query(
         .checkpoints
         .iter()
         .map(|cp| {
-            let dot = crate::simd::simd_dot_f32(&projected, &cp.repr, dim);
+            let dot = katgpt_core::simd::simd_dot_f32(&projected, &cp.repr, dim);
             sigmoid_gate(dot * scale)
         })
         .collect();
@@ -244,7 +244,7 @@ pub fn interpolate_query(
     let mut interpolated = vec![0.0f32; delta_len];
     for (i, cp) in artifact.checkpoints.iter().enumerate() {
         let w = gammas[i];
-        crate::simd::simd_fused_decay_write(&mut interpolated, 1.0, &cp.delta, w);
+        katgpt_core::simd::simd_fused_decay_write(&mut interpolated, 1.0, &cp.delta, w);
     }
 
     (interpolated, gammas)
