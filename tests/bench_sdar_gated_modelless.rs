@@ -567,6 +567,7 @@ fn bench_sdar_gated_convergence() {
 // ── 4. Absorb Promotion Quality Benchmark ───────────────────────
 
 #[cfg(all(feature = "sdar_gate", feature = "bandit"))]
+#[cfg(debug_assertions)] // promotion_stats / with_promotion_stats are debug-only APIs
 #[test]
 fn bench_sdar_gated_absorb_promotion() {
     use std::time::Instant;

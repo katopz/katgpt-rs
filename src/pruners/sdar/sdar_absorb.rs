@@ -512,6 +512,11 @@ mod tests {
         SdarGatedAbsorbCompress::new(inner, num_arms, SdarAbsorbConfig::default())
     }
 
+    // Helper depends on `with_promotion_stats()` which is `#[cfg(debug_assertions)]`
+    // (the `track_promotion_stats` config field and the per-arm `Vec<PromotionStats>`
+    // are eliminated in release builds). Gating the helper keeps `cargo bench`
+    // (release) compiling.
+    #[cfg(debug_assertions)]
     fn make_layer_with_stats(num_arms: usize) -> SdarGatedAbsorbCompress<NoScreeningPruner> {
         let inner =
             AbsorbCompressLayer::new(NoScreeningPruner, num_arms, CompressConfig::default());
@@ -533,6 +538,7 @@ mod tests {
 
     // ── High benefit ratio → gate ≈ 1.0 (promote) ───────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_high_benefit_ratio_promotes() {
         // High benefit ratio (3.0) → gate ≈ 0.999+ → very likely promoted
@@ -585,6 +591,7 @@ mod tests {
 
     // ── Negative benefit ratio → gate ≈ 0.0 (block) ─────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_negative_benefit_ratio_blocks() {
         // Negative benefit ratio (0.0) → gate ≈ 0.007 → almost never promoted
@@ -663,6 +670,7 @@ mod tests {
 
     // ── observe_with_q ───────────────────────────────────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_observe_with_q_computes_ratio() {
         let mut layer = make_layer_with_stats(3);
@@ -672,6 +680,7 @@ mod tests {
         assert!((layer.benefit_ratio(0) - 2.0).abs() < 1e-6);
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_observe_with_q_zero_q_uses_reward() {
         let mut layer = make_layer_with_stats(3);
@@ -685,6 +694,7 @@ mod tests {
         );
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_observe_with_q_negative_q_uses_abs() {
         let mut layer = make_layer_with_stats(3);
@@ -709,6 +719,7 @@ mod tests {
 
     // ── Candidate arms ranked ────────────────────────────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_candidate_arms_ranked() {
         let mut layer = make_layer(5);
@@ -724,6 +735,7 @@ mod tests {
         assert_eq!(candidates[2], 0, "Third highest");
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_candidate_arms_excludes_unobserved() {
         let layer = make_layer(3);
@@ -732,6 +744,7 @@ mod tests {
 
     // ── Promotion statistics ─────────────────────────────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_promotion_stats_tracking() {
         let mut layer = make_layer_with_stats(3);
@@ -753,12 +766,14 @@ mod tests {
         assert!((stats.last_benefit_ratio - 1.5).abs() < 1e-6);
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_promotion_stats_not_tracked_by_default() {
         let layer = make_layer(3);
         assert!(layer.promotion_stats(0).is_none());
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_promotion_stats_mean_values() {
         let mut layer = make_layer_with_stats(2);
@@ -773,6 +788,7 @@ mod tests {
         assert!(stats.mean_gate_probability() > 0.9);
     }
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_promotion_stats_rate() {
         // Use varying seeds so each iteration gets a different PRNG draw
@@ -927,6 +943,7 @@ mod tests {
 
     // ── PromotionStats default ───────────────────────────────────
 
+    #[cfg(debug_assertions)]
     #[test]
     fn test_promotion_stats_default() {
         let stats = PromotionStats::default();
