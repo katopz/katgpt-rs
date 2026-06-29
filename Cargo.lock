@@ -1806,6 +1806,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "katgpt-pruners"
+version = "0.1.0"
+dependencies = [
+ "bevy_ecs",
+ "blake3",
+ "bytemuck",
+ "fastrand",
+ "half",
+ "katgpt-core",
+ "katgpt-percepta",
+ "katgpt-speculative",
+ "katgpt-transformer",
+ "katgpt-types",
+ "log",
+ "papaya",
+ "postcard",
+ "rayon",
+ "reqwest",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "wasmi",
+]
+
+[[package]]
 name = "katgpt-rs"
 version = "0.2.0"
 dependencies = [
@@ -1822,6 +1848,7 @@ dependencies = [
  "katgpt-core",
  "katgpt-kv",
  "katgpt-percepta",
+ "katgpt-pruners",
  "katgpt-spectral",
  "katgpt-speculative",
  "katgpt-tokenizer",

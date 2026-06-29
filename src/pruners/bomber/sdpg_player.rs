@@ -33,6 +33,7 @@ use crate::pruners::bandit::{BanditPruner, BanditStrategy};
 use crate::pruners::g_zero::{BomberTemplate, BomberTemplateProposer, hint_score_override};
 use crate::pruners::sdpg::AdvantageMode;
 use crate::pruners::sdpg::SdpgBanditPruner;
+use super::sdpg_helpers::SdpgBanditPrunerReplayExt;
 use crate::speculative::types::NoScreeningPruner;
 
 use super::players::BomberPlayer;

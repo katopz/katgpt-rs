@@ -19,10 +19,19 @@
 
 #[cfg(feature = "thicket_variance_probe")]
 use crate::pruners::thicket_variance_probe::{
-    TvpConfig, TvpSignal, TvpTierDecision, tvp_tier_decision,
+    ComputeTier as KpComputeTier, TvpConfig, TvpSignal, TvpTierDecision, tvp_tier_decision,
 };
 #[cfg(feature = "thicket_variance_probe")]
 use crate::trigger_gate::ComputeTier;
+
+#[cfg(feature = "thicket_variance_probe")]
+fn tier_to_kp(tier: ComputeTier) -> KpComputeTier {
+    match tier {
+        ComputeTier::CpuOnly => KpComputeTier::CpuOnly,
+        ComputeTier::CpuGpu => KpComputeTier::CpuGpu,
+        ComputeTier::CpuGpuAne => KpComputeTier::CpuGpuAne,
+    }
+}
 
 use crate::inference_router::InferenceRouter;
 
@@ -94,7 +103,7 @@ impl InferenceRouter {
             self.tvp_signal,
             self.tvp_config.promote_at,
             self.tvp_config.demote_at,
-            current_tier,
+            tier_to_kp(current_tier),
             gpu_available,
             low_load,
         );

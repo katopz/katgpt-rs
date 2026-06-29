@@ -1,0 +1,261 @@
+[package]
+name = "katgpt-pruners"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Domain-specific constraint pruners for the DDTree search engine (Plan 005 extraction from katgpt-rs/src/pruners/)."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["pruners", "speculative", "decoding", "ddtree", "modelless"]
+categories = ["algorithms", "science"]
+publish = false  # dev/examples aggregator; only katgpt-core ships to crates.io
+
+[dependencies]
+# ScreeningPruner / NoScreeningPruner / ConstraintPruner traits (Plan 107 Phase 0).
+katgpt-core = { path = "../katgpt-core" }
+# Config, Rng, LoraAdapter, matmul, rmsnorm, kv_dim, etc.
+katgpt-types = { path = "../katgpt-types" }
+# TransformerWeights, DecodeStage, ForwardContext (for non-bomber pruners that
+# touch forward paths: hydra_budget, fft/lora_player tests, collapse_detector).
+katgpt-transformer = { path = "../katgpt-transformer" }
+# DDTree core + SpeculativeContext types.
+katgpt-speculative = { path = "../katgpt-speculative" }
+# Sudoku9x9 board type (used by sudoku_pruner).
+katgpt-percepta = { path = "../katgpt-percepta" }
+
+fastrand = "2"
+rayon = "1.10"
+log = "0.4"
+blake3 = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+postcard = { version = "1", features = ["alloc"] }
+bytemuck = { version = "1", features = ["extern_crate_alloc"] }
+half = "2"
+
+# Optional — feature-gated
+bevy_ecs = { version = "0.15", optional = true }    # bomber (no, bomber stays) / monopoly
+wasmi = { version = "1.0", optional = true }          # reserved — bomber feature is in main crate
+papaya = { version = "0.2", optional = true }         # lock-free HashMap (bfcf_lfu_shard, rosetta, dynamic_rank, decision_explainer, belief_drafter)
+rustfft = { version = "6", optional = true }          # reserved
+reqwest = { version = "0.12", features = ["blocking", "json"], optional = true }  # AutoGo REST client (go feature)
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+
+# ── Pruner families (mirror root Cargo.toml; root forwards via dep:katgpt-pruners/feat:...) ──
+
+# Core bandit substrate — gates absorb_compress, bandit, hot_swap, regression, trial_log
+bandit = ["katgpt-core/review_metrics"]
+bandit_top_p = ["bandit"]
+
+# Bandit dependents
+delta_mem = ["bandit"]
+g_zero = ["bandit"]
+dreamer = ["bandit"]
+ropd_rubric = ["bandit"]
+subterranean = ["bandit"]
+tes_loop = ["bandit", "katgpt-core/tes_loop"]
+cna_steering = ["bandit"]
+deep_manifold = []
+federation = ["bandit"]
+federation_composer = ["bandit"]
+memo_reflections = ["bandit"]
+safe_bandit = ["bandit"]
+gdsd_distill = ["bandit"]
+randopt_weight = ["bandit"]
+stepcode = ["bandit"]
+skill_lifecycle = ["bandit"]
+safe_exploration_budget = ["three_mode_router"]
+epiplexity_scoring = []
+epiplexity_bandit = ["epiplexity_scoring"]
+proof_sketch_evolution = ["bandit"]
+opus_selection = ["bandit"]
+committee_boost = ["bt_rank", "bandit"]
+mech_attribution = ["cna_steering", "ropd_rubric", "bandit"]
+state_source = ["bandit"]
+nexus_elo = ["state_source", "proof_sketch_evolution"]
+questbench = ["katgpt-core/questbench"]
+nexus_elo_proxy = ["state_source"]
+gepa_reflective = ["bandit", "memo_reflections"]
+phrase_boost = []
+hydra_budget = ["katgpt-core/hydra_budget"]
+data_gate = ["katgpt-core/data_gate", "bandit"]
+sr2am_configurator = ["bandit", "g_zero", "katgpt-core/sr2am_configurator", "katgpt-speculative/sr2am_configurator"]
+sia_feedback = ["sr2am_configurator", "katgpt-core/sia_feedback"]
+ruliology = ["bandit"]
+spechop = ["bandit"]
+self_distilling_bandit = ["egcs"]
+egcs = []
+lodestar = []
+bt_rank = []
+future_probe = []
+fpcg_selector = ["future_probe"]
+feature_class = []
+emotion_vector = []
+freeze = []
+frozen_base_guard = []
+self_advantage = []
+self_advantage_gate = ["katgpt-core/self_advantage_gate"]
+collapse_aware_thinking = ["selectivity_router", "thinking_cot", "bandit", "katgpt-core/collapse_aware_thinking"]
+selectivity_router = []
+thinking_cot = ["rim_slots", "thinking_prune", "parallel_probe", "ppot", "bt_rank", "bandit"]
+thinking_prune = ["sr2am_configurator"]
+rim_slots = ["katgpt-core/rim_slots"]
+ppot = []
+parallel_probe = []
+swir_switch_thinking = ["thinking_cot"]
+
+# SDAR / VPD / RMSD
+sdar_gate = []
+sdpg_bandit = ["bandit"]
+vpd_em_distill = ["sdar_gate", "bandit"]
+rmsd_distill = ["sdar_gate", "bandit"]
+
+# Replaid variance minimizer (dllm gates this in root; here we only need the module)
+replaid_schedules = []
+
+# Sudoku (gates sudoku_pruner module — consumed by main crate's sudoku feature)
+sudoku = []
+
+# Bomber lives in the main katgpt-rs crate, but a few helpers inside this crate
+# (sdpg::from_replay, sdpg::load_teacher_q_from_replay) read bomber's ReplaySample
+# format. We expose a `bomber` feature flag here so the main crate can enable
+# those helpers via `dep:katgpt-pruners/feat:bomber`. The flag gates nothing
+# else in this crate — the actual bomber module is in the main crate.
+bomber = []
+
+# Games (bomber stays in main crate)
+monopoly = ["bevy_ecs", "bandit"]
+go = ["bandit", "reqwest"]
+game_state = []
+arena = []
+fft = ["bandit", "sr2am_configurator"]
+event_log = []
+
+# MUX
+mux_pruner = []
+mux_ddtree = ["mux_pruner"]
+mux_bandit_width = ["bandit"]
+mux_freeze_thaw = ["mux_pruner"]
+mux_bfs = ["mux_ddtree"]
+mux_demux = []
+
+# Directional / frequency / wealth
+directional_credit = []
+# freq_bandit lives in the main katgpt-rs crate (src/freq_bandit.rs). It cannot be
+# forwarded here because the integration code in bfcp_lfu_shard.rs references
+# `crate::freq_bandit::*` which only exists in the main crate. The
+# `#[cfg(feature = "freq_bandit")]` blocks in bfcp_lfu_shard.rs compile out
+# (with unexpected_cfg warnings) and the main crate re-implements the
+# integration locally if needed.
+wealth_pruner = ["bandit"]
+nds_proxy = ["bandit"]
+curvature_alloc = ["bandit"]
+
+# Spec
+spec_pruner = []
+spec_compile = ["spec_pruner"]
+
+# Neuro-symbolic / FOL / symbolic distill
+auto_constraint_synthesis = ["three_mode_router", "egcs"]
+three_mode_router = ["and_or_dtree", "bandit"]
+and_or_dtree = ["proof_sketch_evolution", "bandit", "katgpt-core/and_or_dtree"]
+partial_scoring = ["bandit", "katgpt-core/partial_scoring"]
+problem_mutator = ["bandit", "katgpt-core/problem_mutator"]
+idea_divergence = ["bandit", "partial_scoring", "katgpt-core/idea_divergence"]
+speculative_generator = ["katgpt-core/speculative_generator"]
+fol_constraints = []
+rule_extraction = []
+decision_trace = ["rule_extraction"]
+decision_explain = ["papaya"]
+reward_mem = ["egcs", "bandit"]
+symbolic_distill = []
+expression_pruner_dep = ["symbolic_distill"]   # placeholder name; expression_pruner.rs uses symbolic_expression
+concept_grounding = ["symbolic_distill"]
+reward_calibrator = []
+insight_explain = ["symbolic_distill", "concept_grounding", "decision_explain", "posterior_evolution", "mux_latent_context", "reward_calibrator"]
+
+# Posterior
+posterior_evolution = ["bandit"]
+
+# BFComputation tree
+percept_route = []
+bfcf_tree = ["and_or_dtree", "bandit", "percept_route"]
+bfcf_lfu_shard = ["bfcf_tree", "papaya"]
+bfcf_lsh_cms = ["bfcf_lfu_shard"]
+
+# Substrate
+substrate_gate = ["katgpt-core/sparse_mlp", "cna_steering"]
+belief_drafter = ["katgpt-core/belief_drafter", "papaya"]
+
+# TED-Lite / CoExplain
+ted_lite = []
+coexplain_pruner = ["ted_lite", "bandit"]
+coexplain_riir = ["coexplain_pruner"]
+
+# Regime transition
+regime_transition = ["and_or_dtree", "bandit", "decision_trace", "fol_constraints", "rule_extraction"]
+
+# Hoare
+hoare_pruner = []
+trajectory_doctor = ["hoare_pruner"]
+workflow_lattice = ["hoare_pruner"]
+
+# Manifold / dynamic rank
+dynamic_rank = ["papaya"]
+manifold_pruner = []
+
+# Residual / semiseparable
+rcd_residual = ["critical_interval_gate"]
+critical_interval_gate = []
+ss_pruner = []
+
+# TVP / RV
+rv_gated_routing = []
+thicket_variance_probe = ["rv_gated_routing"]
+
+# Soft reject
+sigmoid_graded_reject = []
+
+# Regime transition / others
+four_regime_router_dep = []   # internal: re-exported under regime_transition
+
+# Coverage helpers / misc
+domain_latent = ["katgpt-core/domain_latent"]
+
+# ── Internal-only / aliases ──
+
+# `expression_pruner.rs` is gated on `symbolic_distill` in the main crate's lib.rs.
+# Keep the same gate name here.
+expression_pruner = ["symbolic_distill"]
+
+# Chain / KV / spectral feature forwards that pruners need.
+sparse_mlp = ["katgpt-core/sparse_mlp"]
+
+# Mux latent context (re-exported via insight_explain).
+mux_latent_context = []
+
+# critical_interval_gate sub-feature for q_sample_solver (no q_sample_solver here, ignore).
+
+# ── Cross-crate feature references (Plan 005 extraction) ──
+# The following features live in the main katgpt-rs crate but are referenced by
+# `#[cfg(feature = "...")]` blocks in this crate. They are NOT defined here
+# because either (a) the gated code references main-crate-local items (e.g.
+# `crate::freq_bandit::*` for `freq_bandit`), or (b) the main crate does not
+# forward them to this crate, so the blocks compile out as dead code. We
+# declare them as expected cfg values so check-cfg does not flag them; the
+# main crate re-implements the integration locally where needed.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("freq_bandit"))',
+    'cfg(feature, values("temporal_deriv"))',
+    'cfg(feature, values("domino_correction"))',
+    'cfg(feature, values("decode_specialize"))',
+    'cfg(feature, values("rosetta_pruner"))',
+    'cfg(feature, values("bake_precision"))',
+    'cfg(feature, values("product_policy_sharpen"))',
+    'cfg(feature, values("advantage_freeze_thaw"))',
+] }

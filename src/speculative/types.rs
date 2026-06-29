@@ -22,15 +22,14 @@ use crate::transformer::{
 };
 use crate::types::Config;
 
-#[cfg(feature = "tes_loop")]
-use crate::pruners::bandit::BanditStrategy;
-
 // ── Re-exported from katgpt-core (Plan 107 Phase 0 + Plan 008 Step 5) ──
 // The substrate traits (ConstraintPruner, ScreeningPruner, DominoPruner,
 // NoPruner, NoScreeningPruner, BinaryScreeningPruner) have lived in
 // `katgpt_core::traits` since Plan 107 Phase 0. The substrate data types,
 // configs, and algorithms joined them in Plan 008 Step 5
 // (`katgpt_core::speculative::types`).
+//
+// (BanditStrategy / TesConfig moved to katgpt_pruners; no import needed here.)
 
 pub use katgpt_core::traits::{
     BinaryScreeningPruner, CompletionHorizon, ConstraintPruner, DominoPruner, NoPruner,
@@ -324,48 +323,12 @@ impl Default for SelfSpecConfig {
 
 // ── SimpleTES Config (composition — needs root-only BanditStrategy) ──
 // NB: `TesNode` + `TrajectoryCredit` (the pure-data / pure-algorithm half of
-// SimpleTES) moved to `katgpt_core::speculative::types`. `TesConfig` stays
-// here because it has a field typed as `BanditStrategy` from
-// `crate::pruners::bandit` (root-only).
-
-/// SimpleTES evaluation-driven scaling config (Plan 086).
-///
-/// Budget = C × L × K total evaluations per solve.
+// SimpleTES) live in `katgpt_core::speculative::types`. `TesConfig` moved to
+// `katgpt_pruners::tes_loop` (Plan 005) because its `bandit_strategy` field is
+// typed as `BanditStrategy` from `katgpt_pruners::bandit`. Re-exported here so
+// existing `crate::speculative::types::TesConfig` import paths still resolve.
 #[cfg(feature = "tes_loop")]
-#[derive(Clone, Debug)]
-pub struct TesConfig {
-    /// C: parallel trajectories.
-    pub global_width: usize,
-    /// L: iterations per trajectory.
-    pub refinement_depth: usize,
-    /// K: candidates per step.
-    pub local_sample_size: usize,
-    /// Bandit strategy for proposal selection (Φ).
-    pub bandit_strategy: BanditStrategy,
-}
-
-#[cfg(feature = "tes_loop")]
-impl Default for TesConfig {
-    fn default() -> Self {
-        Self {
-            global_width: 32,
-            refinement_depth: 100,
-            local_sample_size: 16,
-            bandit_strategy: BanditStrategy::Rpucg {
-                gamma: 0.8,
-                lambda: 1.0,
-            },
-        }
-    }
-}
-
-#[cfg(feature = "tes_loop")]
-impl TesConfig {
-    /// Total evaluation budget: C × L × K.
-    pub fn budget(&self) -> usize {
-        self.global_width * self.refinement_depth * self.local_sample_size
-    }
-}
+pub use katgpt_pruners::tes_loop::TesConfig;
 
 #[cfg(test)]
 mod tests {

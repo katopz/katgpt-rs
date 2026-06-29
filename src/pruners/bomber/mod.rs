@@ -42,6 +42,18 @@ pub mod event_log_player;
 #[cfg(feature = "skill_lifecycle")]
 pub mod skill_lifecycle_player;
 
+/// BomberState snapshot — moved here from katgpt-pruners during Plan 005
+/// extraction. Tightly coupled to this module (uses ARENA_H, ArenaGrid, Cell, ...).
+pub mod bomber_state;
+
+/// Bomber-specific SDPG helpers (`from_replay`) — moved here from katgpt-pruners
+/// during Plan 005 because they depend on bomber's `ReplaySample` type.
+pub mod sdpg_helpers;
+
+pub use bomber_state::{BombSnapshot, BomberHeuristic, BomberState, PlayerSnapshot};
+#[cfg(feature = "bandit")]
+pub use bomber_state::BanditBomberHeuristic;
+
 pub use arena::ArenaGrid;
 pub use gate_player::GatePlayer;
 pub use players::{BomberPlayer, GreedyPlayer, HLPlayer, RandomPlayer, ValidatorPlayer};
