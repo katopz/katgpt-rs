@@ -1803,11 +1803,11 @@ dependencies = [
  "fastrand",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
- "good_lp",
  "half",
  "katgpt-core",
  "katgpt-percepta",
  "katgpt-speculative",
+ "katgpt-tokenizer",
  "katgpt-transformer",
  "log",
  "metal",
@@ -1844,6 +1844,14 @@ dependencies = [
  "katgpt-transformer",
  "katgpt-types",
  "rayon",
+]
+
+[[package]]
+name = "katgpt-tokenizer"
+version = "0.1.0"
+dependencies = [
+ "good_lp",
+ "serde",
 ]
 
 [[package]]

@@ -3,8 +3,8 @@ use std::collections::BinaryHeap;
 #[cfg(test)]
 use katgpt_core::traits::NoScreeningPruner;
 use katgpt_core::traits::{ConstraintPruner, NoPruner, ScreeningPruner};
-use katgpt_core::speculative::types::TreeNode;
-use katgpt_types::InferenceResult;
+use katgpt_core::speculative::types::{SdeConfig, TreeNode};
+use katgpt_types::{InferenceResult, Rng};
 use rayon::prelude::*;
 
 /// Minimum candidate count to justify rayon overhead for trivial per-element work.
@@ -167,89 +167,80 @@ pub fn build_dd_tree_balanced(
     std::mem::take(&mut builder.tree)
 }
 
-/// Zero-alloc variant of `extract_best_path`.
+/// Zero-alloc variant of [`extract_best_path`].
+///
 /// Writes best-scored token at each depth into `path` (cleared first).
+///
+/// Two-pass O(N) with exactly two heap allocations (`best_score` + `best_token`),
+/// replacing the prior O(D) inner-Vec bucket allocation. Uses direct f32
+/// comparison instead of `(score * 1e6) as i64` to preserve full precision.
+/// `>=` keeps last-wins-on-tie semantics (matches `Iterator::max_by_key`).
 pub fn extract_best_path_into(tree: &[TreeNode], path: &mut Vec<usize>) {
     path.clear();
     if tree.is_empty() {
         return;
     }
+
+    // Pass 1: discover max depth (sizes the per-depth tracker).
     let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
 
-    // Stack-allocated best-per-depth tracker. Max lookahead = 25 (u128 / 5 bits).
-    // Avoids Vec allocation for the typical case.
-    let mut best_stack = [None::<(i64, usize)>; 32];
-    let use_stack = max_depth < 32;
-    let mut best_heap;
-    let best_per_depth: &mut [Option<(i64, usize)>] = if use_stack {
-        best_stack[..=max_depth].fill(None);
-        &mut best_stack[..=max_depth]
-    } else {
-        best_heap = vec![None; max_depth + 1];
-        &mut best_heap
-    };
+    // Per-depth best tracker. `>=` below preserves the prior `max_by_key`
+    // last-wins-on-tie semantics (std returns the last max element).
+    let mut best_score: Vec<f32> = vec![f32::NEG_INFINITY; max_depth + 1];
+    let mut best_token: Vec<usize> = vec![usize::MAX; max_depth + 1];
 
+    // Pass 2: single sweep, update per-depth best in place.
     for node in tree.iter() {
-        let key = (node.score * 1e6) as i64;
-        if best_per_depth[node.depth].is_none_or(|(k, _)| key > k) {
-            best_per_depth[node.depth] = Some((key, node.token_idx));
+        let d = node.depth;
+        // SAFETY: d <= max_depth by definition of max_depth.
+        if node.score >= best_score[d] {
+            best_score[d] = node.score;
+            best_token[d] = node.token_idx;
         }
     }
 
-    for entry in best_per_depth.iter() {
-        match entry {
-            Some((_, token_idx)) => path.push(*token_idx),
-            None => break,
+    // Emit one token per contiguous depth; stop at first missing depth.
+    for depth in 0..=max_depth {
+        match best_token[depth] {
+            usize::MAX => break,
+            tok => path.push(tok),
         }
     }
 }
 
 /// Extract best-scored token at each depth from a DDTree.
+///
+/// Two-pass O(N) with exactly two heap allocations (best_score + best_token),
+/// replacing the prior O(D) inner-Vec bucket allocation. Uses direct f32
+/// comparison instead of `(score * 1e6) as i64` to preserve full precision.
+///
+/// See [`extract_best_path_into`] for the zero-alloc variant.
 pub fn extract_best_path(tree: &[TreeNode]) -> Vec<usize> {
-    if tree.is_empty() {
-        return Vec::new();
-    }
-    // Single-pass: track best node per depth instead of O(D × N) nested loop.
-    let mut best_by_depth: Vec<Option<(&TreeNode, i64)>> = Vec::with_capacity(16);
-    for node in tree {
-        let score_key = (node.score * 1e6) as i64;
-        let depth = node.depth;
-        if depth >= best_by_depth.len() {
-            best_by_depth.resize(depth + 1, None);
-        }
-        match &best_by_depth[depth] {
-            Some((_, best_key)) if score_key <= *best_key => {}
-            _ => best_by_depth[depth] = Some((node, score_key)),
-        }
-    }
-
-    let mut path = Vec::with_capacity(best_by_depth.len());
-    for slot in &best_by_depth {
-        match slot {
-            Some((node, _)) => path.push(node.token_idx),
-            None => break,
-        }
-    }
+    let mut path = Vec::new();
+    extract_best_path_into(tree, &mut path);
     path
 }
 
 /// Build an InferenceResult from a completed DDTree inference.
+///
+/// `&str` args (caller-owned) avoid the allocation that `impl Into<String>`
+/// would force when the caller already holds a `&str`.
 pub fn build_inference_result(
-    domain: impl Into<String>,
+    domain: &str,
     reward: f32,
     tree_size: usize,
     budget_level: u8,
     prompt_hash: u64,
-    output: impl Into<String>,
+    output: &str,
     screening_threshold: f32,
 ) -> InferenceResult {
     InferenceResult {
-        domain: domain.into(),
+        domain: domain.to_string(),
         reward,
         tree_budget_used: tree_size,
         budget_level,
         prompt_hash,
-        output: output.into(),
+        output: output.to_string(),
         timestamp: {
             // Use simple Unix epoch millis since we don't depend on uuid/chrono
             std::time::SystemTime::now()
@@ -272,6 +263,9 @@ pub fn build_inference_result(
 ///
 /// This is a pure computation function — no feature gating needed.
 /// The REST feature provides the data; this function processes it.
+///
+/// O(D) per sequence: `parent_path` is reconstructed incrementally
+/// (shift 16 bits + token per depth) rather than per-depth O(depth) fold.
 pub fn merge_retrieved_branches(
     tree: &mut Vec<TreeNode>,
     marginals: &[&[f32]],
@@ -292,6 +286,11 @@ pub fn merge_retrieved_branches(
             continue;
         }
 
+        let sim_ln = similarity.ln();
+
+        // Incrementally reconstruct parent_path: shift 16 bits + token per depth.
+        // Avoids per-depth O(depth) fold over seq[..=depth] (was O(D²) per sequence).
+        let mut parent_path: u128 = 0;
         for (depth, &token_idx) in seq.iter().enumerate() {
             if depth >= marginals.len() {
                 break;
@@ -302,19 +301,23 @@ pub fn merge_retrieved_branches(
 
             let base_prob = marginals[depth].get(token_idx).copied().unwrap_or(0.0);
             if base_prob <= 0.0 {
+                // Still advance parent_path so deeper tokens reconstruct the
+                // same path the original fold would have produced.
+                parent_path = if depth == 0 {
+                    token_idx as u128
+                } else {
+                    (parent_path << 16) | (token_idx as u128)
+                };
                 continue;
             }
 
-            let blended = (base_prob.ln() * inv_weight) + (similarity.ln() * rest_weight);
+            let blended = (base_prob.ln() * inv_weight) + (sim_ln * rest_weight);
 
-            // Reconstruct parent_path from sequence prefix up to current depth.
-            // Branch-free accumulation: first iteration seeds acc with token,
-            // subsequent iterations shift-and-OR. Equivalent to the original fold
-            // but without a per-iteration `d == 0` branch inside the closure.
-            let mut parent_path: u128 = seq[0] as u128;
-            for &t in &seq[1..=depth] {
-                parent_path = (parent_path << 16) | (t as u128);
-            }
+            parent_path = if depth == 0 {
+                token_idx as u128
+            } else {
+                (parent_path << 16) | (token_idx as u128)
+            };
 
             tree.push(TreeNode {
                 score: blended,
@@ -325,13 +328,284 @@ pub fn merge_retrieved_branches(
         }
     }
 
-    // Re-sort by score descending
+    // Re-sort by score descending. Unstable sort is safe here: TreeNode is
+    // Copy + Eq and downstream consumers only rely on score ordering, not on
+    // tie-stability. Unstable sort avoids the O(N) auxiliary allocation that
+    // stable sort incurs on large inputs.
     tree.sort_unstable_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     tree.truncate(config.tree_budget);
+}
+
+/// Inject SDE (Score-Distortion Error) noise into marginals.
+///
+/// # Returns
+///
+/// New `Vec<Vec<f32>>` with perturbed marginals, or clones if γ=0.
+pub fn inject_sde_noise(
+    marginals: &[&[f32]],
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+) -> Vec<Vec<f32>> {
+    let mut out = Vec::with_capacity(marginals.len());
+    inject_sde_noise_into(marginals, sde_config, rng, &mut out);
+    out
+}
+
+/// **Zero-alloc variant** of [`inject_sde_noise`].
+///
+/// Writes perturbed marginals into the caller-owned `out` buffer (in-place
+/// rebuild — existing inner `Vec<f32>` slots are cleared and refilled, the
+/// outer Vec is grown or shrunk to match the input length). When the caller
+/// holds a long-lived `Vec<Vec<f32>>` across calls (e.g. inside a K-rollout
+/// loop), this skips the per-call outer allocation AND reuses the inner
+/// `Vec<f32>` allocations across iterations.
+///
+/// Identical math to [`inject_sde_noise`] — the public function is now a thin
+/// wrapper that allocates a fresh `Vec<Vec<f32>>` and delegates here.
+pub fn inject_sde_noise_into(
+    marginals: &[&[f32]],
+    sde_config: &SdeConfig,
+    rng: &mut Rng,
+    out: &mut Vec<Vec<f32>>,
+) {
+    out.reserve(marginals.len());
+
+    if !sde_config.is_enabled() {
+        // SDE disabled: clone each marginal verbatim. Reuse inner allocations
+        // when the caller's buffer already has the right shape from a prior
+        // call (typical in the K-rollout loop).
+        for (i, marginal) in marginals.iter().enumerate() {
+            if i < out.len() {
+                out[i].clear();
+                out[i].extend_from_slice(marginal);
+            } else {
+                out.push(marginal.to_vec());
+            }
+        }
+        out.truncate(marginals.len());
+        return;
+    }
+
+    for (i, marginal) in marginals.iter().enumerate() {
+        if i >= out.len() {
+            out.push(Vec::new());
+        }
+        let slot = &mut out[i];
+        slot.clear();
+        slot.extend_from_slice(marginal);
+        let perturbed = slot;
+
+        // Find argmax if preserve_top1
+        let top1_idx = if sde_config.preserve_top1 {
+            perturbed
+                .iter()
+                .enumerate()
+                .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                .map(|(i, _)| i)
+        } else {
+            None
+        };
+
+        // Convert to log-space, add noise, convert back
+        let mut sum = 0.0f32;
+        for (j, prob) in perturbed.iter_mut().enumerate() {
+            // Skip top-1 if preserving
+            if top1_idx == Some(j) {
+                sum += *prob;
+                continue;
+            }
+
+            // Skip below confidence floor
+            if *prob <= sde_config.confidence_floor {
+                continue;
+            }
+
+            // Convert to log-space, add γ * N(0,1), convert back
+            let log_p = prob.ln();
+            let noisy_log_p = log_p + sde_config.gamma * rng.normal();
+            *prob = noisy_log_p.exp().max(0.0);
+            sum += *prob;
+        }
+
+        // Re-normalize
+        if sum > 0.0 {
+            let inv_sum = 1.0 / sum;
+            for prob in perturbed.iter_mut() {
+                *prob *= inv_sum;
+            }
+        }
+    }
+    out.truncate(marginals.len());
+}
+
+/// Rebuild a `Vec<&[f32]>` view over a `&[Vec<f32>]` owned store, reusing the
+/// caller's buffer (cleared first, then refilled). Used by tree-build helpers
+/// to convert the owned `noisy: Vec<Vec<f32>>` produced by
+/// [`inject_sde_noise_into`] into the `&[&[f32]]` shape that
+/// [`build_dd_tree_screened`] consumes, without allocating a fresh refs Vec
+/// each call.
+///
+/// The returned view borrows from `owned` for the duration of the caller's use.
+#[inline]
+pub fn build_slices_view<'a>(owned: &'a [Vec<f32>], view: &mut Vec<&'a [f32]>) {
+    view.clear();
+    view.reserve(owned.len());
+    for v in owned {
+        view.push(v.as_slice());
+    }
+}
+
+/// Extract all candidate sequences from a DDTree (one per leaf node).
+///
+/// Each leaf node's `parent_path` encodes a full token sequence.
+/// Returns `(sequence, leaf_node)` pairs for all maximal-depth paths.
+///
+/// Zero per-node allocation: reuses one scratch buffer for token extraction.
+pub fn extract_candidate_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
+    if tree.is_empty() {
+        return Vec::new();
+    }
+
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
+
+    // Collect leaf nodes (nodes at max depth with no children in tree)
+    tree.iter()
+        .filter(|node| node.depth == max_depth)
+        .map(|node| {
+            let seq =
+                extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf).to_vec();
+            (seq, node)
+        })
+        .collect()
+}
+
+/// Extract candidate sequences from ALL tree nodes (not just leaves).
+///
+/// Useful when the solution might not require visiting all targets,
+/// or when partial sequences are valid solutions.
+///
+/// Zero per-node allocation: reuses one scratch buffer for token extraction.
+pub fn extract_all_sequences(tree: &[TreeNode]) -> Vec<(Vec<usize>, &TreeNode)> {
+    if tree.is_empty() {
+        return Vec::new();
+    }
+
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
+
+    tree.iter()
+        .map(|node| {
+            let seq =
+                extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf).to_vec();
+            (seq, node)
+        })
+        .collect()
+}
+
+/// Sequential version of [`par_find_valid_sequence`] — no rayon overhead.
+///
+/// Useful for small trees where rayon spawn cost outweighs parallelism benefit,
+/// or when deterministic ordering is required (first candidate wins).
+///
+/// Zero per-node allocation: reuses one scratch buffer across all candidates;
+/// allocates only when returning the winning sequence.
+pub fn find_valid_sequence<T, V>(tree: &[TreeNode], validator: V) -> Option<(Vec<usize>, T)>
+where
+    V: Fn(&[usize]) -> Option<T>,
+{
+    if tree.is_empty() {
+        return None;
+    }
+
+    // Size scratch buffer once from the deepest node we may visit.
+    let max_depth = tree.iter().map(|n| n.depth).max().unwrap_or(0);
+    let mut buf: Vec<usize> = vec![0usize; max_depth + 1];
+
+    for node in tree {
+        let seq = extract_parent_tokens_into(node.parent_path, node.depth + 1, &mut buf);
+        if let Some(result) = validator(seq) {
+            return Some((seq.to_vec(), result));
+        }
+    }
+
+    None
+}
+
+/// Parallel DDTree search: find the first candidate sequence that passes validation.
+///
+/// Extracts all candidate sequences from the DDTree, then validates them in
+/// parallel using rayon. Returns the first valid sequence found, or `None`.
+///
+/// This is the core generic primitive — the caller provides a domain-specific
+/// validator closure.
+///
+/// # Type Parameters
+/// - `V`: Validator closure `Fn(&[usize]) -> Option<T>`
+/// - `T`: Result type returned by the validator on success
+///
+/// # Performance
+/// The search phase is parallelized (each candidate validated independently).
+/// DDTree build remains sequential (inherent heap-based best-first search).
+pub fn par_find_valid_sequence<T, V>(tree: &[TreeNode], validator: V) -> Option<(Vec<usize>, T)>
+where
+    V: Fn(&[usize]) -> Option<T> + Sync,
+    T: Send,
+{
+    if tree.is_empty() {
+        return None;
+    }
+
+    // Extract all candidate sequences (one per tree node)
+    let candidates: Vec<Vec<usize>> = tree
+        .iter()
+        .map(|node| extract_parent_tokens(node.parent_path, node.depth + 1))
+        .collect();
+
+    // Parallel search: validate all candidates, return first success
+    candidates
+        .par_iter()
+        .find_map_any(|seq| validator(seq).map(|result| (seq.clone(), result)))
+}
+
+/// Parallel search for the **shortest** valid sequence by cost.
+///
+/// Unlike [`par_find_valid_sequence`] which returns the first valid candidate,
+/// this validates all candidates in parallel and returns the one with minimum cost.
+/// Use when optimality (fewest steps) matters more than speed.
+///
+/// # Arguments
+///
+/// * `tree` — DDTree nodes (one candidate sequence per node)
+/// * `validator` — Returns `Some(result)` for valid sequences, `None` for invalid
+/// * `cost_fn` — Extracts cost from result (e.g., `|r: &T| r.0.len()` for step count)
+pub fn par_find_shortest_sequence<T, V, C>(
+    tree: &[TreeNode],
+    validator: V,
+    cost_fn: C,
+) -> Option<(Vec<usize>, T)>
+where
+    V: Fn(&[usize]) -> Option<T> + Sync,
+    T: Send,
+    C: Fn(&T) -> usize + Sync,
+{
+    if tree.is_empty() {
+        return None;
+    }
+
+    let candidates: Vec<Vec<usize>> = tree
+        .iter()
+        .map(|node| extract_parent_tokens(node.parent_path, node.depth + 1))
+        .collect();
+
+    candidates
+        .par_iter()
+        .filter_map(|seq| validator(seq).map(|result| (seq.clone(), result)))
+        .min_by_key(|(_, result)| cost_fn(result))
 }
 
 /// Pre-allocated buffers for zero-alloc DDTree building.
@@ -346,6 +620,11 @@ pub struct TreeBuilder {
     parent_tokens_buf: Vec<usize>,
     candidates_buf: Vec<usize>,
     valid_buf: Vec<bool>,
+    /// Cached `ln(marginals[d][i])` — computed once per build to avoid redundant
+    /// `f32::ln()` calls in the Phase C expansion inner loop (called per token
+    /// per heap-pop). Entries for `prob <= 0.0` are `0.0` (unused since those
+    /// tokens are skipped before the lookup).
+    log_marginals: Vec<Vec<f32>>,
 }
 
 impl TreeBuilder {
@@ -359,6 +638,31 @@ impl TreeBuilder {
             parent_tokens_buf: vec![0usize; config.draft_lookahead + 1],
             candidates_buf: Vec::with_capacity(config.vocab_size),
             valid_buf: Vec::with_capacity(config.vocab_size),
+            log_marginals: Vec::new(),
+        }
+    }
+
+    /// Pre-compute `ln(prob)` for every token in every marginal depth.
+    ///
+    /// Reuses inner `Vec` allocations across builds (clear + refill pattern).
+    /// The Phase C expansion loop calls `prob.ln()` once per token per heap-pop;
+    /// caching turns that O(budget × vocab) `ln` calls into O(depths × vocab).
+    #[inline]
+    fn cache_log_marginals(&mut self, marginals: &[&[f32]]) {
+        // Grow the outer Vec if needed; existing inner Vecs are reused below.
+        if self.log_marginals.len() < marginals.len() {
+            self.log_marginals.resize_with(marginals.len(), Vec::new);
+        } else {
+            self.log_marginals.truncate(marginals.len());
+        }
+        for (log_m, &m) in self.log_marginals.iter_mut().zip(marginals) {
+            log_m.clear();
+            log_m.reserve(m.len());
+            // Branch-free: `ln(0)` would be -inf, but those entries are never
+            // read (the expansion loop skips `prob <= 0.0` before indexing).
+            for &p in m {
+                log_m.push(if p > 0.0 { p.ln() } else { 0.0 });
+            }
         }
     }
 
@@ -381,6 +685,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             // ── Phase A: Build greedy chain backbone ──────────────
@@ -658,11 +964,12 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     // NEURO-SYMBOLIC INTERCEPT: prune before adding to heap
                     if prob > 0.0 && pruner.is_valid(next_depth, i, parent_tokens) {
                         self.heap.push(TreeNode {
-                            score: best.score + prob.ln(),
+                            score: best.score + log_m[i],
                             depth: next_depth,
                             token_idx: i,
                             parent_path: (best.parent_path << 16) | (i as u128),
@@ -731,6 +1038,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         if chain_seed {
             // ── Phase A: Build greedy chain backbone with screening ──
@@ -981,6 +1290,7 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -991,7 +1301,7 @@ impl TreeBuilder {
                     }
                     // SCREENING: ln(P_llm) + ln(R) blended score
                     self.heap.push(TreeNode {
-                        score: best.score + prob.ln() + relevance.ln(),
+                        score: best.score + log_m[i] + relevance.ln(),
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),
@@ -1073,6 +1383,8 @@ impl TreeBuilder {
         if marginals.is_empty() {
             return &self.tree;
         }
+
+        self.cache_log_marginals(marginals);
 
         // Helper: compute balanced score for a node
         // score = ln(P_llm) + backward_weight × ln(R) + lambda_flow × (1 - stop_prob[depth])
@@ -1329,6 +1641,10 @@ impl TreeBuilder {
                     best.depth + 1,
                     &mut self.parent_tokens_buf,
                 );
+                // Hoist flow_bonus: depends only on next_depth, not token `i`.
+                let flow_bonus =
+                    lambda_flow * (1.0 - stop_probs.get(next_depth).copied().unwrap_or(0.5));
+                let log_m = &self.log_marginals[next_depth];
                 for (i, &prob) in marginals[next_depth].iter().enumerate() {
                     if prob <= 0.0 {
                         continue;
@@ -1338,8 +1654,9 @@ impl TreeBuilder {
                         continue;
                     }
                     // BALANCED: ln(P_llm) + backward_weight × ln(R) + flow_bonus
+                    let r_safe = relevance.max(1e-10); // Avoid ln(0)
                     self.heap.push(TreeNode {
-                        score: best.score + balanced_score(prob, relevance, next_depth),
+                        score: best.score + log_m[i] + backward_weight * r_safe.ln() + flow_bonus,
                         depth: next_depth,
                         token_idx: i,
                         parent_path: (best.parent_path << 16) | (i as u128),

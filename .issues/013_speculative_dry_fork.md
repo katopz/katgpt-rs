@@ -1,7 +1,7 @@
 # Issue 013 — Collapse the speculative/DDTree fork between katgpt-rs and riir-engine
 
 **Date:** 2026-06-29
-**Status:** Phase A complete (riir-engine fork collapsed). Root convergence = follow-up.
+**Status:** Phase A + Phase A.5 complete (root converged). Phase B (dflash) + Phase C deferred.
 **Severity:** DRY violation (user rule: "DRY, Modular, Generic, Decouple")
 
 ## Problem
@@ -67,11 +67,26 @@ Types + sampling + traits are shared via `katgpt_core`. No work needed there.
 
 ### Phase A.5 — Root convergence (follow-up)
 
-- [-] Port root's dd_tree optimizations into `katgpt-speculative/src/dd_tree.rs`:
+- [x] Port root's dd_tree optimizations into `katgpt-speculative/src/dd_tree.rs`:
       log_marginals cache, incremental path reconstruction, &str args, two-pass
       extract_best_path_into. Then flip re-export on at root and delete the
       root's duplicate core definitions. After this, BOTH sides import from
       the leaf — full DRY.
+
+  **Completed 2026-06-29.** All four optimizations ported to the leaf;
+  root's duplicate core *free functions* deleted and replaced with
+  `pub use katgpt_speculative::dd_tree::*`. Root's `TreeBuilder` struct +
+  methods MUST stay in the root because three feature-gated inherent methods
+  (`build_screened_progressive`, `build_screened_with_depth_budgets`,
+  `build_screened_recfm`) depend on root-only sibling types
+  (`PositionWeightedBudget`, `CorrelationBudgetAllocator`, `CrossScaleConfig`)
+  and need `&mut self` access to private fields — inherent methods cannot
+  span crates. The local struct shadows the glob-reexported leaf
+  `TreeBuilder`; the core free functions (`build_dd_tree`, `_pruned`,
+  `_screened`, `_balanced`, `extract_best_path*`, `build_inference_result`,
+  `merge_retrieved_branches`, `inject_sde_noise*`, `find_valid_sequence`,
+  `par_find_valid_sequence`, `build_slices_view`) all come from the leaf.
+  Tests: katgpt-speculative 24/24, katgpt-rs 3875/3875, riir-engine 2387/2387.
 
 ### Phase B — dflash (deferred to Issue 014)
 
