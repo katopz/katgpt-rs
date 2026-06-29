@@ -1,6 +1,6 @@
 # Issue 011 — Remaining test failures from 2026-06-29 full run
 
-**Status:** B1–B4 resolved; G1 resolved (broken metric, not feature quality); thermal items still open.
+**Status:** B1–B4 resolved; G1 resolved (broken metric, not feature quality); thermal flakes re-verified single-threaded (all PASS, environmental only). All tracked items closed.
 **Discovered:** 2026-06-29 full `cargo test --workspace --all-features` run (debug, ~16-core parallel, thermal-throttled host).
 **Context:** This run unblocked three separate compile failures and fixed two real bugs:
 - Workspace compile (commit `0482eee0`): `katgpt_rs::weights::ContiguousWeights` → `katgpt_rs::ContiguousWeights` (leftover from the microgpt→katgpt rename `acf08551`).
@@ -16,11 +16,11 @@ This issue tracks what remains. Bench + examples summary appended at the bottom.
 
 ## Confirmed flaky / environmental (NOT bugs — leave alone)
 
-These pass single-threaded with `--test-threads=1` and fail only under parallel test load + thermal throttling. They are perf-budget assertions with hardcoded ns/s gates that the host cannot hold under 16-way debug-mode contention. Do not relax the thresholds to mask this — re-verify on a cool host first.
+These pass single-threaded with `--test-threads=1` and fail only under parallel test load + thermal throttling. They are perf-budget assertions with hardcoded ns/s gates that the host cannot hold under 16-way debug-mode contention. **Re-verified 2026-06-29 single-threaded on a loaded host (sibling `cargo test --all-features` running concurrently) — all three PASS with comfortable margins.** Thresholds left unchanged (relaxing would mask real regressions). For CI, run these with `--test-threads=1` or accept them as known parallel-contention flakes.
 
-- [ ] `pruners::workflow_lattice::tests::test_bench_lattice_vs_noop` — 737.9ns > 500ns budget under load; passes alone.
-- [ ] `speculative::nf_flow::tests::test_bench_flow_score_v128_t5` — 15.4µs > 10µs budget under load (test explicitly annotates "debug"); passes alone.
-- [ ] `ruliology::tests::benchmarks::tests::bench_enumerate_fsm_3_states` — 11.78s > 10s budget under parallel contention; passes alone (~5s single-threaded).
+- [x] `pruners::workflow_lattice::tests::test_bench_lattice_vs_noop` — 737.9ns > 500ns budget under load; **PASSES single-threaded** (well under 500ns overhead, isolated `CARGO_TARGET_DIR=/tmp/issue011_thermal`).
+- [x] `speculative::nf_flow::tests::test_bench_flow_score_v128_t5` — 15.4µs > 10µs budget under load (test explicitly annotates "debug"); **PASSES single-threaded at 7500ns/call** (1.33× margin under 10000ns budget).
+- [x] `ruliology::tests::benchmarks::tests::bench_enumerate_fsm_3_states` — 11.78s > 10s budget under parallel contention; **PASSES single-threaded at 5.61s** (1.78× margin under 10s budget; 1054 strategies enumerated).
 
 ## Real bugs needing root-cause work (deterministic, fail single-threaded)
 
