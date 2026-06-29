@@ -540,8 +540,8 @@ mod tests {
         );
 
         // Both should select at least 1 token but not more than total
-        assert!(fine.selected_indices.len() >= 1 && fine.selected_indices.len() <= scores.len());
-        assert!(block.selected_indices.len() >= 1 && block.selected_indices.len() <= scores.len());
+        assert!(!fine.selected_indices.is_empty() && fine.selected_indices.len() <= scores.len());
+        assert!(!block.selected_indices.is_empty() && block.selected_indices.len() <= scores.len());
 
         // All indices must be valid
         for &idx in &fine.selected_indices {

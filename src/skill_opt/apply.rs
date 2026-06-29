@@ -220,7 +220,7 @@ mod tests {
     #[test]
     fn protected_section_blocks_replace() {
         let skill =
-            format!("before<!-- SLOW_UPDATE_START -->protected<!-- SLOW_UPDATE_END -->after");
+            "before<!-- SLOW_UPDATE_START -->protected<!-- SLOW_UPDATE_END -->after".to_string();
         let result = apply_edits(
             &skill,
             &[make_edit(EditOp::Replace, Some("protected"), "hacked", 1)],
@@ -233,7 +233,7 @@ mod tests {
     #[test]
     fn protected_section_allows_outside_edits() {
         let skill =
-            format!("before<!-- SLOW_UPDATE_START -->protected<!-- SLOW_UPDATE_END -->after");
+            "before<!-- SLOW_UPDATE_START -->protected<!-- SLOW_UPDATE_END -->after".to_string();
         let result = apply_edits(
             &skill,
             &[make_edit(EditOp::Replace, Some("before"), "BEFORE", 1)],

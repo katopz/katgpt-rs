@@ -452,11 +452,10 @@ mod tests {
         let mut detected = 0;
         for w in &anomalous {
             let z_scores = tracker.eigenspace_zscore(w);
-            if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min) {
-                if min_z < gate.z_threshold {
+            if let Some(min_z) = z_scores.iter().cloned().reduce(f32::min)
+                && min_z < gate.z_threshold {
                     detected += 1;
                 }
-            }
         }
         assert_eq!(
             detected, 5,

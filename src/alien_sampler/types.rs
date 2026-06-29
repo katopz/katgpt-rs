@@ -154,11 +154,9 @@ mod tests {
 
     #[test]
     fn scored_candidate_descending_order() {
-        let mut v = vec![
-            ScoredCandidate::new(0.1, 0),
+        let mut v = [ScoredCandidate::new(0.1, 0),
             ScoredCandidate::new(0.9, 1),
-            ScoredCandidate::new(0.5, 2),
-        ];
+            ScoredCandidate::new(0.5, 2)];
         v.sort();
         assert_eq!(v[0].idx, 1); // 0.9
         assert_eq!(v[1].idx, 2); // 0.5

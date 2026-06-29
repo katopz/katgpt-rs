@@ -371,11 +371,11 @@ mod tests {
 
     #[test]
     fn test_topology_edge_count() {
-        assert_eq!(Topology::chain().edge_count(), 1 * 1);
-        assert_eq!(Topology::diamond().edge_count(), 1 * 2 + 2 * 1);
+        assert_eq!(Topology::chain().edge_count(), 1);
+        assert_eq!(Topology::diamond().edge_count(), 2 + 2);
         assert_eq!(
             Topology::wide().edge_count(),
-            1 * 4 + 4 * 4 + 4 * 4 + 4 * 1
+            4 + 4 * 4 + 4 * 4 + 4
         );
     }
 

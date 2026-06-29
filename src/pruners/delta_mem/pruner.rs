@@ -260,7 +260,7 @@ mod tests {
         ] {
             let pruner = make_pruner(mode);
             let rel = pruner.relevance(5, 3, &[1, 2, 3]);
-            assert!(rel >= 0.0 && rel <= 1.0);
+            assert!((0.0..=1.0).contains(&rel));
         }
     }
 
@@ -307,6 +307,6 @@ mod tests {
             pruner.observe(&ctx, &outcome);
         }
         let after = pruner.relevance(1, 2, &[0, 1]);
-        assert!(after >= 0.0 && after <= 1.0);
+        assert!((0.0..=1.0).contains(&after));
     }
 }

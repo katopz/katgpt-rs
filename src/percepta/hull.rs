@@ -784,7 +784,7 @@ mod tests {
         for step in 1..=17 {
             let prev = head.query([1.0, 0.0], TieBreak::Latest).unwrap()[0];
             let next_val = prev + 1.0;
-            head.insert([step as f64, next_val], [next_val, 0.0], step as i32);
+            head.insert([step as f64, next_val], [next_val, 0.0], step);
         }
         let result = head.query([1.0, 0.0], TieBreak::Latest).unwrap()[0];
         assert!((result - 59.0).abs() < 1e-10, "42 + 17 = 59, got {result}");

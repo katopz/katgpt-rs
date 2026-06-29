@@ -661,7 +661,7 @@ mod tests {
         let (total, uniform, ratio) = cfg.vs_uniform5();
         // Should be close to 1.0 — most layers get 5 steps, a few get more
         assert!(
-            ratio >= 1.0 && ratio <= 1.3,
+            (1.0..=1.3).contains(&ratio),
             "ratio {ratio} should be in [1.0, 1.3] (total={total}, uniform={uniform})"
         );
     }

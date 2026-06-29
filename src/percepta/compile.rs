@@ -1770,7 +1770,7 @@ void compute(const char *input) {
             compiled
                 .program
                 .last()
-                .map_or(false, |(op, _)| *op == "halt"),
+                .is_some_and(|(op, _)| *op == "halt"),
             "program should end with halt"
         );
 

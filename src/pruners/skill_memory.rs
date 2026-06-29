@@ -433,7 +433,8 @@ mod tests {
         let iterations = 100_000u64;
         let start = Instant::now();
         for _ in 0..iterations {
-            std::hint::black_box(mem.append(std::hint::black_box(entry)));
+            mem.append(std::hint::black_box(entry));
+            std::hint::black_box(());
         }
         let elapsed = start.elapsed();
 

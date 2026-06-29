@@ -3526,7 +3526,7 @@ mod replaid_tests {
         }
 
         for &r in schedule.ratios() {
-            assert!(r >= 0.1 - 0.01 && r <= 0.9 + 0.01);
+            assert!((0.1 - 0.01..=0.9 + 0.01).contains(&r));
         }
     }
 
@@ -3581,7 +3581,7 @@ mod replaid_tests {
                 }
                 let act = forward_save(&weights_fixed, &corrupted_buf, &config, &mut fwd_ctx);
                 let loss = masked_loss(
-                    &act.logits,
+                    act.logits,
                     tokens,
                     &is_masked_buf,
                     config.vocab_size,
@@ -3658,7 +3658,7 @@ mod replaid_tests {
                 }
                 let act = forward_save(&weights_adaptive, &corrupted_buf2, &config, &mut fwd_ctx2);
                 let loss = masked_loss(
-                    &act.logits,
+                    act.logits,
                     tokens,
                     &is_masked_buf2,
                     config.vocab_size,

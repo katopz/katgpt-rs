@@ -116,7 +116,7 @@ mod tests {
 
         for i in 1..=5 {
             let val = i as f64;
-            cs.insert(val, i as f64, i as i32);
+            cs.insert(val, i as f64, i);
             expected += val;
             let got = cs.query();
             assert!(

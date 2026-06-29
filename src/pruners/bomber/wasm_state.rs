@@ -459,12 +459,12 @@ mod tests {
         let (buf, _) = serialize_game_state(&grid, 0, 0, 0, &[]);
 
         // Token indices for grid[y][x] = y * ARENA_W + x
-        assert_eq!(read_token(&buf, 0 * ARENA_W + 0), 0); // Floor at (0,0)
-        assert_eq!(read_token(&buf, 1 * ARENA_W + 0), 1); // FixedWall at (0,1)
-        assert_eq!(read_token(&buf, 2 * ARENA_W + 0), 2); // DestructibleWall at (0,2)
-        assert_eq!(read_token(&buf, 3 * ARENA_W + 0), 3); // PowerUpHidden(BombUp) at (0,3)
-        assert_eq!(read_token(&buf, 4 * ARENA_W + 0), 3); // PowerUpHidden(FireUp) at (0,4)
-        assert_eq!(read_token(&buf, 5 * ARENA_W + 0), 3); // PowerUpHidden(SpeedUp) at (0,5)
+        assert_eq!(read_token(&buf, 0 * ARENA_W), 0); // Floor at (0,0)
+        assert_eq!(read_token(&buf, ARENA_W), 1); // FixedWall at (0,1)
+        assert_eq!(read_token(&buf, 2 * ARENA_W), 2); // DestructibleWall at (0,2)
+        assert_eq!(read_token(&buf, 3 * ARENA_W), 3); // PowerUpHidden(BombUp) at (0,3)
+        assert_eq!(read_token(&buf, 4 * ARENA_W), 3); // PowerUpHidden(FireUp) at (0,4)
+        assert_eq!(read_token(&buf, 5 * ARENA_W), 3); // PowerUpHidden(SpeedUp) at (0,5)
     }
 
     #[test]

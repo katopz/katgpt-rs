@@ -150,7 +150,7 @@ fn median_top_m_paper_default_m10() {
     let avail = MedianTopMAvailability::new(bank, 10);
     let got = avail.availability(&candidate);
     // Expected: median of top-10 cosines.
-    cosines.sort_by(|a, b| a.partial_cmp(&b).unwrap());
+    cosines.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let top10 = &cosines[40..];
     let expected = (top10[4] + top10[5]) * 0.5; // even-count median
     assert!((got - expected).abs() < 1e-5, "got {got}, expected {expected}");

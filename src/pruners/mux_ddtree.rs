@@ -258,7 +258,7 @@ mod tests {
         // Only l1 and l2 are valid with decay=0.9; noise should be rejected
         // l2 was generated with decay=0.8, so it may or may not pass the 0.9 pruner
         // At minimum l1 should be accepted
-        assert!(tree.nodes[0].len() >= 1);
+        assert!(!tree.nodes[0].is_empty());
     }
 
     #[test]

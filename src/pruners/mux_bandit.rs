@@ -184,7 +184,7 @@ mod tests {
         let mut rng = Rng::with_seed(42);
 
         // First 5 selects should cover all arms (initialization)
-        let mut seen = vec![false; 5];
+        let mut seen = [false; 5];
         for _ in 0..5 {
             let width = bandit.select(&mut rng);
             let idx = bandit.arms.iter().position(|&a| a == width).unwrap();

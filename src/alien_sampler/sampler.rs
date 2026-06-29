@@ -391,9 +391,9 @@ mod tests {
     #[test]
     fn rank_empty_returns_empty() {
         let s = make_sampler(0.7);
-        let mut sc = &mut [][..];
-        let mut sa = &mut [][..];
-        let out = s.rank(&[], &mut sc, &mut sa).unwrap();
+        let sc = &mut [][..];
+        let sa = &mut [][..];
+        let out = s.rank(&[], sc, sa).unwrap();
         assert!(out.is_empty());
     }
 

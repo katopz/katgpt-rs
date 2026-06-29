@@ -425,7 +425,7 @@ mod tests {
         let fsms = FsmEnumerator::enumerate(2);
         for fsm in &fsms {
             let c = fsm.complexity();
-            assert!(c >= 0.0 && c <= 1.0, "complexity out of range: {c}");
+            assert!((0.0..=1.0).contains(&c), "complexity out of range: {c}");
         }
     }
 

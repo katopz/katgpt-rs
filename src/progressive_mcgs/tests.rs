@@ -250,7 +250,7 @@ fn smoke_full_search_cycle() {
         };
 
         // Expand primary from leaf.
-        let new_node = g.expand_primary(leaf, step, BranchId((step % 2) as u32));
+        let new_node = g.expand_primary(leaf, step, BranchId(step % 2));
 
         // Synthetic reward: branch 0 gets +1 with prob 0.6, branch 1 with prob 0.4.
         let reward = if rng.next_f32() < 0.6 {

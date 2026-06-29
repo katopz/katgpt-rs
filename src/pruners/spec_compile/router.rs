@@ -425,7 +425,7 @@ mod tests {
 
     #[test]
     fn test_default_router() {
-        let router = SpecRouter::default();
+        let router = SpecRouter;
         let spec = make_spec(1, 10);
         let tier = router.route(&spec, SpecType::Classification);
         assert_eq!(tier, ComputeTier::Cpu);

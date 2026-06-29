@@ -741,7 +741,7 @@ mod tests {
         for i in 0..BOARD_SIZE {
             let kind = square_kind(i);
             assert!(
-                format!("{kind}").len() > 0,
+                !format!("{kind}").is_empty(),
                 "Square {i} should have a valid kind"
             );
         }

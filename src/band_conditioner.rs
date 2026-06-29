@@ -541,6 +541,30 @@ impl ComputeTarget {
     }
 }
 
+// ── Minimal normal-distribution helper for synthetic tests ───────────────────
+
+#[cfg(test)]
+/// Private trait extension: `fastrand::Rng` does not have `standard_normal`
+/// out of the box, so we add one via Box-Muller.
+trait NormalRng {
+    fn standard_normal(&mut self) -> f32;
+}
+
+#[cfg(test)]
+impl NormalRng for fastrand::Rng {
+    fn standard_normal(&mut self) -> f32 {
+        // Box-Muller transform.
+        let mut u1 = self.f32();
+        if u1 < 1e-10 {
+            u1 = 1e-10;
+        }
+        let u2 = self.f32();
+        let mag = (-2.0f32 * u1.ln()).sqrt();
+        
+        mag * (2.0 * std::f32::consts::PI * u2).cos()
+    }
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -842,29 +866,5 @@ mod tests {
             "CI test took {:.2}μs/call (expected < 1000μs)",
             per_call_us,
         );
-    }
-}
-
-// ── Minimal normal-distribution helper for synthetic tests ───────────────────
-
-#[cfg(test)]
-/// Private trait extension: `fastrand::Rng` does not have `standard_normal`
-/// out of the box, so we add one via Box-Muller.
-trait NormalRng {
-    fn standard_normal(&mut self) -> f32;
-}
-
-#[cfg(test)]
-impl NormalRng for fastrand::Rng {
-    fn standard_normal(&mut self) -> f32 {
-        // Box-Muller transform.
-        let mut u1 = self.f32();
-        if u1 < 1e-10 {
-            u1 = 1e-10;
-        }
-        let u2 = self.f32();
-        let mag = (-2.0f32 * u1.ln()).sqrt();
-        let z0 = mag * (2.0 * std::f32::consts::PI * u2).cos();
-        z0
     }
 }

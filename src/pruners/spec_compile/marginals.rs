@@ -589,7 +589,7 @@ mod tests {
 
         // Should have explicit biases for the 13 allowed chars
         assert!(!marginals.is_empty());
-        assert!(marginals.len() > 0);
+        assert!(!marginals.is_empty());
 
         let empty_spec = CompiledSpec {
             spec_hash: [0u8; 32],

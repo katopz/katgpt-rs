@@ -1029,7 +1029,7 @@ mod tests {
         let mut state = BomberState::from_grid(&grid);
 
         // Manually place a PowerUpHidden wall in blast range
-        state.cells[1 * ARENA_W + 3] = Cell::PowerUpHidden(PowerUpKind::BombUp);
+        state.cells[ARENA_W + 3] = Cell::PowerUpHidden(PowerUpKind::BombUp);
         state.players[0].pos = (5, 1);
         state.bombs.push(BombSnapshot {
             pos: (1, 1),
@@ -1040,7 +1040,7 @@ mod tests {
 
         let next = state.advance(&BomberAction::Wait, 0);
         // Wall destroyed, power-up revealed
-        assert_eq!(next.cells[1 * ARENA_W + 3], Cell::Floor);
+        assert_eq!(next.cells[ARENA_W + 3], Cell::Floor);
         assert_eq!(next.revealed_powerups.len(), 1);
         assert_eq!(next.revealed_powerups[0], ((3, 1), PowerUpKind::BombUp));
     }
@@ -1159,7 +1159,7 @@ mod tests {
             owner: 1,
         });
         // Block all exits
-        state.cells[1 * ARENA_W + 2] = Cell::DestructibleWall;
+        state.cells[ARENA_W + 2] = Cell::DestructibleWall;
         state.cells[2 * ARENA_W + 1] = Cell::DestructibleWall;
 
         let h = BomberHeuristic;
