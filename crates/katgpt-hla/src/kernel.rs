@@ -30,6 +30,39 @@
 use crate::types::{AhlaLayerState, AhlaQHeadState, HlaLayerState, HlaQHeadState};
 use katgpt_types::simd;
 
+/// Transpose-matvec: `out[j] = Σ_i vec[i] · mat[i*hd + j]`.
+///
+/// This is the `qᵀ · SK` / `qᵀ · PKV` / `qᵀ · E` kernel that appears at the
+/// heart of every HLA readout and cross-term. The loop is interchanged to
+/// i-outer / j-inner so the inner loop reads `mat_row[j]` sequentially
+/// (row-major contiguous) instead of strided `mat[i*hd + j]` column access.
+///
+/// Previously this exact pattern was hand-rolled at 6+ call sites with the
+/// same `unsafe get_unchecked` dance and the same TODO(T6) comment. Hoisting
+/// it here (a) guarantees consistent cache-friendly loop order everywhere,
+/// (b) gives one place to add explicit AVX/NEON intrinsics if we ever beat
+/// auto-vectorization, (c) removes the TODO(T6) debt in one edit.
+///
+/// # Safety contract (debug-asserted)
+/// `vec.len() >= hd`, `mat.len() >= hd*hd`, `out.len() >= hd`.
+#[inline(always)]
+fn transpose_matvec_into(out: &mut [f32], vec: &[f32], mat: &[f32], hd: usize) {
+    debug_assert!(vec.len() >= hd, "vec too short: {} < {hd}", vec.len());
+    debug_assert!(mat.len() >= hd * hd, "mat too short: {} < {}", mat.len(), hd * hd);
+    debug_assert!(out.len() >= hd, "out too short: {} < {hd}", out.len());
+    // Zero the output prefix (callers expect accumulation from zero).
+    out[..hd].fill(0.0);
+    for i in 0..hd {
+        let vi = unsafe { *vec.get_unchecked(i) };
+        let row = unsafe { mat.get_unchecked(i * hd..i * hd + hd) };
+        for j in 0..hd {
+            unsafe {
+                *out.get_unchecked_mut(j) += vi * *row.get_unchecked(j);
+            }
+        }
+    }
+}
+
 // ── Symmetric Second-Order HLA Kernels ─────────────────────────
 
 /// Update symmetric HLA state with new (q_t, k_t, v_t) for one Q head.
@@ -225,22 +258,10 @@ pub fn hla_readout(
     debug_assert!(out.len() >= hd);
     debug_assert!(tmp_u.len() >= hd);
 
-    // u = q_tᵀ · SK (SIMD-accelerated matvec).
-    // SK is row-major; u[j] = Σ_i q[i] * SK[i*hd + j] is a transpose-matvec,
-    // but computing it as tmp_u[j] += q[i] * sk_row[j] per-i gives the same
-    // result and the inner accumulation is what simd_matvec specializes.
-    // We keep the explicit i-outer loop (matches the qᵀ·SK transpose form)
-    // because simd_matvec computes row-major·col-vec (SK·q), not qᵀ·SK.
-    tmp_u[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let sk_row = &sk[i * hd..i * hd + hd];
-        for j in 0..hd {
-            unsafe {
-                *tmp_u.get_unchecked_mut(j) += qi * *sk_row.get_unchecked(j);
-            }
-        }
-    }
+    // u = q_tᵀ · SK (transpose-matvec). Delegated to the shared
+    // `transpose_matvec_into` helper so all qᵀ·(matrix) sites share one
+    // cache-friendly loop order and one place to add explicit SIMD.
+    transpose_matvec_into(tmp_u, q, sk, hd);
 
     // out[j] = (u · CQV[:,j]) − (q · G[:,j])
     //
@@ -296,17 +317,8 @@ pub fn hla_denom(
     eps: f32,
     tmp_u: &mut [f32],
 ) -> f32 {
-    // TODO(T6): transpose matvec — see hla_readout comment
-    tmp_u[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let sk_row = &sk[i * hd..i * hd + hd];
-        for j in 0..hd {
-            unsafe {
-                *tmp_u.get_unchecked_mut(j) += qi * *sk_row.get_unchecked(j);
-            }
-        }
-    }
+    // u = q_tᵀ · SK (transpose-matvec). Shared helper.
+    transpose_matvec_into(tmp_u, q, sk, hd);
 
     // denom = Σ_j u[j] * mQ[j] − Σ_j q[j] * h[j]
     let mut denom = eps;
@@ -342,16 +354,7 @@ pub fn hla_readout_normalized(
     debug_assert!(tmp_u.len() >= hd);
 
     // u = q_tᵀ · SK (shared between readout and denominator)
-    tmp_u[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let sk_row = &sk[i * hd..i * hd + hd];
-        for j in 0..hd {
-            unsafe {
-                *tmp_u.get_unchecked_mut(j) += qi * *sk_row.get_unchecked(j);
-            }
-        }
-    }
+    transpose_matvec_into(tmp_u, q, sk, hd);
 
     // out[j] = (u · CQV[:,j]) − (q · G[:,j])
     // Loop interchange for cache locality + auto-vectorization
@@ -458,17 +461,8 @@ pub fn ahla_step(
     // PKV_t += k_t · v_tᵀ (rank-1 update)
     simd::simd_outer_product_acc(pkv, k, v, hd, hd);
 
-    // TODO(T6): transpose matvec — see hla_readout comment
-    tmp_r[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let pkv_row = &pkv[i * hd..i * hd + hd];
-        for j in 0..hd {
-            unsafe {
-                *tmp_r.get_unchecked_mut(j) += qi * *pkv_row.get_unchecked(j);
-            }
-        }
-    }
+    // r = q_tᵀ · PKV (transpose-matvec). Shared helper.
+    transpose_matvec_into(tmp_r, q, pkv, hd);
 
     // mK_t += k_t
     for i in 0..hd {
@@ -490,21 +484,8 @@ pub fn ahla_step(
         }
     }
 
-    // transpose-matvec (E^T · q with row-major E): loop-interchanged to
-    // i-outer / j-inner so the inner loop reads `e_row[j]` sequentially
-    // (row-major contiguous) instead of strided `e[i*hd + j]` column access.
-    // Matches the cache-friendly pattern used in `hla_readout` / `hla_denom`.
-    // The TODO(T6) above is resolved by this interchange.
-    out[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let e_row = unsafe { q_head.e.get_unchecked(i * hd..i * hd + hd) };
-        for j in 0..hd {
-            unsafe {
-                *out.get_unchecked_mut(j) += qi * *e_row.get_unchecked(j);
-            }
-        }
-    }
+    // out = E^T · q (transpose-matvec via shared helper).
+    transpose_matvec_into(out, q, &q_head.e, hd);
 }
 
 /// AHLA normalization denominator.
@@ -650,17 +631,8 @@ fn ahla_per_head_step(
         katgpt_types::simd::simd_scale_inplace(&mut q_head.n, gamma);
     }
 
-    // TODO(T6): transpose matvec — see hla_readout comment
-    tmp_r[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let pkv_row = &pkv[i * hd..i * hd + hd];
-        for j in 0..hd {
-            unsafe {
-                *tmp_r.get_unchecked_mut(j) += qi * *pkv_row.get_unchecked(j);
-            }
-        }
-    }
+    // r = q_tᵀ · PKV (transpose-matvec). Shared helper.
+    transpose_matvec_into(tmp_r, q, pkv, hd);
 
     // Step 3: E_t += k_t · r_t
     simd::simd_outer_product_acc(&mut q_head.e, k, &tmp_r[..hd], hd, hd);
@@ -677,16 +649,7 @@ fn ahla_per_head_step(
 
     // transpose-matvec (E^T · q with row-major E): loop-interchanged to
     // i-outer / j-inner for sequential `e_row[j]` reads (see ahla_step).
-    out[..hd].fill(0.0);
-    for i in 0..hd {
-        let qi = unsafe { *q.get_unchecked(i) };
-        let e_row = unsafe { q_head.e.get_unchecked(i * hd..i * hd + hd) };
-        for j in 0..hd {
-            unsafe {
-                *out.get_unchecked_mut(j) += qi * *e_row.get_unchecked(j);
-            }
-        }
-    }
+    transpose_matvec_into(out, q, &q_head.e, hd);
 }
 
 /// Update + readout all heads in one layer for AHLA.

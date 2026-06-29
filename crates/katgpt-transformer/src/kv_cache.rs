@@ -316,17 +316,43 @@ impl PagedKVCache {
         for lt in &self.layer_page_tables {
             deficits.push(pages_needed.saturating_sub(lt[seq_idx].len()));
         }
+        let total_new: usize = deficits.iter().copied().sum();
 
-        // Allocate all pages upfront
-        let mut new_pages = ArrayVec::<Vec<usize>, 128>::new();
-        for &deficit in &deficits {
-            let pages: Vec<usize> = (0..deficit).map(|_| self.alloc_page()).collect();
-            new_pages.push(pages);
-        }
-
-        // Assign new pages to each layer's page table
-        for (layer_tables, pages) in self.layer_page_tables.iter_mut().zip(new_pages) {
-            layer_tables[seq_idx].extend(pages);
+        // Distribute newly-allocated page indices back into the layer tables.
+        //
+        // Fast path (the common case — autoregressive decode advances `pos` by
+        // 1, so each layer's deficit is 0 or 1, total_new ≤ n_layers ≤ 128):
+        // allocate into a flat stack `ArrayVec<usize, 128>` and `extend_from_slice`
+        // per layer. Zero heap allocation regardless of deficit distribution.
+        //
+        // Slow path (prefill / large position jump where total_new > 128): fall
+        // back to one heap `Vec<usize>` per layer-with-deficit. Matches the
+        // previous behavior; the cost is dominated by the page-data allocation
+        // itself, not the index Vec.
+        if total_new <= 128 {
+            let mut flat_new_pages = ArrayVec::<usize, 128>::new();
+            for _ in 0..total_new {
+                flat_new_pages.push(self.alloc_page());
+            }
+            let mut cursor = 0usize;
+            for (layer_tables, &deficit) in self.layer_page_tables.iter_mut().zip(&deficits) {
+                if deficit > 0 {
+                    layer_tables[seq_idx]
+                        .extend_from_slice(&flat_new_pages[cursor..cursor + deficit]);
+                    cursor += deficit;
+                }
+            }
+            debug_assert_eq!(cursor, total_new, "distributed all allocated pages");
+        } else {
+            // Slow path: per-layer heap Vecs (original behavior).
+            let mut new_pages = ArrayVec::<Vec<usize>, 128>::new();
+            for &deficit in &deficits {
+                let pages: Vec<usize> = (0..deficit).map(|_| self.alloc_page()).collect();
+                new_pages.push(pages);
+            }
+            for (layer_tables, pages) in self.layer_page_tables.iter_mut().zip(new_pages) {
+                layer_tables[seq_idx].extend(pages);
+            }
         }
     }
 
