@@ -58,8 +58,10 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
 
 ### Tasks
 
-- [ ] **T1.1** Add `pub mod zone_density;` to `katgpt-rs/crates/katgpt-core/src/lib.rs` behind `#[cfg(feature = "zone_density_routing")]`. Add Cargo feature `zone_density_routing = []` (opt-in, NO default features) to `katgpt-rs/Cargo.toml` AND `katgpt-rs/crates/katgpt-core/Cargo.toml`. Add `papaya` to `katgpt-rs/crates/katgpt-core/Cargo.toml` dependencies if not already present (check — it's used pervasively in sibling repos but may not be in katgpt-core yet; if absent, add `papaya = "0.x"` matching sibling-repo version).
-- [ ] **T1.2** Implement `DensityTier` enum in `zone_density.rs`:
+- [x] **T1.1** Add `pub mod zone_density;` to `katgpt-rs/crates/katgpt-core/src/lib.rs` behind `#[cfg(feature = "zone_density_routing")]`. Add Cargo feature `zone_density_routing = []` (opt-in, NO default features) to `katgpt-rs/Cargo.toml` AND `katgpt-rs/crates/katgpt-core/Cargo.toml`. Add `papaya` to `katgpt-rs/crates/katgpt-core/Cargo.toml` dependencies if not already present (check — it's used pervasively in sibling repos but may not be in katgpt-core yet; if absent, add `papaya = "0.x"` matching sibling-repo version).
+  - `papaya = { version = "0.2", optional = true }` already present in katgpt-core/Cargo.toml (L25) — reused via `dep:papaya`.
+  - Feature added to BOTH manifests: `zone_density_routing = ["dep:papaya"]` (core) + `zone_density_routing = ["katgpt-core/zone_density_routing"]` (root re-export).
+- [x] **T1.2** Implement `DensityTier` enum in `zone_density.rs` (+ `from_cache_key_high` decoder helper):
   ```rust
   /// Per-zone physical compute tier. **Distinct from `ZoneGatingTier`** (Plan 305)
   /// which is cognitive. This is physical: dense = cached (NPCs can't move),
@@ -76,7 +78,7 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
   }
   ```
   Field-less + `#[repr(u8)]` per AGENTS.md (1-byte size).
-- [ ] **T1.3** Implement `DensityClassifyConfig` with `Default`:
+- [x] **T1.3** Implement `DensityClassifyConfig` with `Default`:
   ```rust
   #[derive(Clone, Copy, Debug)]
   pub struct DensityClassifyConfig {
@@ -102,7 +104,7 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
       }
   }
   ```
-- [ ] **T1.4** Implement `DensityClassifyReport` and `zone_density_classify()`:
+- [x] **T1.4** Implement `DensityClassifyReport` and `zone_density_classify()` (+ `decode_cache_key` inverse helper):
   ```rust
   #[derive(Debug, Default)]
   pub struct DensityClassifyReport {
@@ -125,7 +127,7 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
   ) -> DensityClassifyReport
   ```
   Algorithm: single-pass over `population`. Per zone: `m = fast_sigmoid(-beta * (rho - rho0))`; tier via `match` on `m` thresholds; cache_key = `(tier as u64) << 32 | density_bucket` where `density_bucket = (rho * 0.5).floor() as u64` (buckets of size 2.0). Use `crate::simd::fast_sigmoid` (already shipped, pervasively used in riir-ai).
-- [ ] **T1.5** Implement `schedule_outer_first()`:
+- [x] **T1.5** Implement `schedule_outer_first()`:
   ```rust
   /// Sort zone indices ascending by density. Outer (sparse) zones come first.
   /// O(Z log Z), stable. Uses caller-provided scratch to avoid allocation.
@@ -136,7 +138,7 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
   )
   ```
   Implementation: `scratch.clear(); scratch.reserve(population.len()); for (i,&rho) in population.iter().enumerate() { scratch.push((i as u32, rho)); } scratch.sort_by(|a,b| a.1.partial_cmp(&b.1).unwrap_or(core::cmp::Ordering::Equal)); for (i,&(z,_)) in scratch.iter().enumerate() { out_order[i] = z; }`. Stable sort preserves within-tier ordering for determinism.
-- [ ] **T1.6** Implement `ZoneDensityCache<V>`:
+- [x] **T1.6** Implement `ZoneDensityCache<V>` (+ `ttl_ticks()` / `is_empty()` accessors):
   ```rust
   use papaya::HashMap;
   
@@ -181,8 +183,8 @@ Three pure functions + one cache struct. No game semantics. No allocations in th
   }
   ```
   Get path uses `match current_tier { DensityTier::Sparse => return None, _ => {} }` early-return (per AGENTS.md "early returns").
-- [ ] **T1.7** Run `cargo check --features zone_density_routing` — clean, no warnings.
-- [ ] **T1.8** Run `cargo test -p katgpt-core --features zone_density_routing --lib zone_density::` — Phase 2 tests (below) all pass.
+- [x] **T1.7** Run `cargo check --features zone_density_routing` — clean, no warnings. Also verified: `--all-features` clean, default-features clean, root crate re-export compiles.
+- [x] **T1.8** Run `cargo test -p katgpt-core --features zone_density_routing --lib zone_density::` — 16/16 Phase 1 smoke tests pass (0.00s). Full lib suite: 689/689 pass (673 pre-existing + 16 new), zero regressions.
 
 **Exit:** all three primitives compile, type-check, basic smoke tests green.
 

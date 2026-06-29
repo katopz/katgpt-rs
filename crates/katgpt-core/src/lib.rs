@@ -356,6 +356,21 @@ pub mod viable_manifold_graph;
 #[cfg(feature = "zone_affective_manifold")]
 pub mod zone_manifold;
 
+// Zone Density Routing — modelless per-zone physical compute scheduler (Plan
+// 351, Research 350 — Treuille Continuum Crowds + Fokker-Planck-on-cochains).
+// Three primitives: zone_density_classify (mobility = fast_sigmoid(-β·(ρ−ρ₀))
+// → tier + composite cache_key), schedule_outer_first (stable ascending-density
+// sort — outer/sparse zones compute first), ZoneDensityCache<V> (papaya-backed
+// LRU with tier-transition / density-drift / TTL invalidation rules). Sibling to
+// Plan 305 cognitive gating (Plan 305 gates learning compute; this gates
+// movement compute) — they compose orthogonally, NOT overlap. Population is
+// raw/synced; mobility/tier/cache_key are latent/local. Opt-in until G5a
+// (Shannon entropy ≥+15% vs mean-agg) + G5b (≥50% compute saved on dense-dominated)
+// + G5c (zero stale reads during stampede) all pass. No UQ claim — mobility is
+// a deterministic [0,1] weight, not a probability/interval/coverage.
+#[cfg(feature = "zone_density_routing")]
+pub mod zone_density;
+
 // AC-GPT Arbitrary-Conditional Prefix — modelless mask builder + sequence
 // augmenter that turns any causal Transformer forward into a single-pass
 // arbitrary-conditional forward p(xe | xc) via position-aware copies of xc at
