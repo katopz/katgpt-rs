@@ -5,7 +5,7 @@
 //! Transformer forward pass over the 169-cell board encoding to predict
 //! the next Bomberman action.
 //!
-//! Training format (matches `riir_gpu::game`):
+//! Training format (self-contained benchmark domain spec):
 //! - Input sequence: 169 board cell tokens (values 0-3) + 1 action token (4-9).
 //! - Training layout: `input = tokens[0..169]`, `target = tokens[1..170]`, so
 //!   the model at position 168 (last board cell) predicts the action token.

@@ -43,7 +43,8 @@ use super::types::{Action, ActionType};
 
 // ── Constants ────────────────────────────────────────────────────
 
-/// State vocab (matches `riir_gpu::game::fft_replay::FFT_STATE_VOCAB`).
+/// State vocab for the public FFT benchmark domain (=10). Any downstream replay
+/// pipeline (private or public) must use this value or fail.
 const STATE_VOCAB: usize = 10;
 
 /// Action offset (10) — first 9 action tokens live at logits[10..19].

@@ -43,10 +43,12 @@
 
 use blake3;
 
-/// Magic bytes for the MSP0 format (must match riir-gpu `SOUP_MAGIC`).
+/// Magic bytes for the MSP0 format (self-canonical; downstream pipelines
+/// must honor this value, do not cross-reference private module paths).
 const MSP0_MAGIC: &[u8; 4] = b"MSP0";
 
-/// Current format version (must match riir-gpu `SOUP_VERSION`).
+/// Current format version (self-canonical; downstream pipelines must honor
+/// this value, do not cross-reference private module paths).
 const MSP0_VERSION: u32 = 1;
 
 /// A single LoRA checkpoint entry (delta + segment representation).

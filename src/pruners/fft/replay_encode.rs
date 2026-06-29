@@ -4,7 +4,7 @@
 //! - `examples/fft_05_replay_gen.rs` (writer side — encodes `BattleState` → 57 tokens)
 //! - `src/pruners/fft/lora_player.rs` (reader side — same encoding for inference)
 //!
-//! Layout MUST match `riir-gpu/src/game/fft_replay.rs`:
+//! Layout (self-contained benchmark domain spec):
 //!   `[tick, u0_team, u0_class, u0_hp, u0_mp, u0_x, u0_y, u0_alive, u1_..., ..., u7_...]`
 //! (57 tokens total = 1 tick + 8 units × 7 fields).
 //!
@@ -13,7 +13,10 @@
 use super::battle::BattleState;
 use super::types::{Class, Team, Unit, GRID_H, GRID_W};
 
-/// State vocab size — must match `riir_gpu::game::fft_replay::FFT_STATE_VOCAB`.
+/// State vocab size for the public FFT benchmark domain (=10).
+/// Any downstream replay pipeline (private or public) must use this value or
+/// fail; do not cross-reference private module paths here — see the Benchmark
+/// Domain Exception in `.research/003_Commercial_Open_Source_Strategy_Verdict.md`.
 pub const FFT_STATE_VOCAB: usize = 10;
 
 /// Number of units in a battle (4 party + 4 enemy).
