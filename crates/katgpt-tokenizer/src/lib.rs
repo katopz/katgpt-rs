@@ -1,4 +1,17 @@
-//! Tokenizer module — BPE, ToaST split-tree, and ConvexTok LP vocabulary optimization.
+//! katgpt-tokenizer — BPE, ToaST split-tree, and ConvexTok LP vocabulary optimization.
+//!
+//! Standalone modelless tokenizer crate extracted from `katgpt-rs/src/tokenizer/`
+//! (Issue 014, 2026-06-29). Leaf crate — no `katgpt-*` dependencies.
+//!
+//! # Features
+//!
+//! - *(default)* BPE encoder/decoder (`BpeTokenizer`, `BpeTokenizerImpl`, `BpeTrainer`).
+//! - `toast_tokenizer` — ToaST split-tree tokenization (Plan 122) + Double-Array
+//!   Trie vocab lookup (auto-routed above `DATRIE_VOCAB_THRESHOLD`, Plan 137).
+//! - `convex_tok` — ConvexTok LP vocabulary optimizer (Plan 127); implies
+//!   `toast_tokenizer` and pulls `good_lp`/HiGHS.
+//! - `datrie_vocab` — alias for `toast_tokenizer` (kept for back-compat with
+//!   the katgpt-rs feature surface).
 
 mod bpe;
 mod types;

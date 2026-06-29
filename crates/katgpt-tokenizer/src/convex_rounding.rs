@@ -210,8 +210,8 @@ fn dag_shortest_path(graph: &TokenisationGraph, selected_set: &[bool]) -> f64 {
 mod tests {
     use super::super::convex_types::VertexId;
     use super::*;
-    use crate::tokenizer::convex_graph::GraphBuilder;
-    use crate::tokenizer::convex_solver::ConvexSolver;
+    use crate::convex_graph::GraphBuilder;
+    use crate::convex_solver::ConvexSolver;
 
     /// Helper: build graph + solve LP for given pretokens and budget.
     fn solve(pretokens: &[Vec<u8>], budget_k: usize) -> (TokenisationGraph, LpSolution) {

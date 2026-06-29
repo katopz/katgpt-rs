@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-speculative", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -30,7 +30,10 @@ proc-macro2 = { version = "1", optional = true }
 bevy_ecs = { version = "0.15", optional = true }  # Standalone ECS (Plan 033)
 wasmi = { version = "1.0", optional = true }       # WASM bomber validator (Plan 034, wasmi migration Plan 167)
 papaya = { version = "0.2", optional = true }      # Lock-free concurrent HashMap (Plan 037)
-good_lp = { version = "1", optional = true, default-features = false, features = ["highs", "microlp"] } # MILP solver — ConvexTok (Plan 127) + percepta scheduling (Plan 064 TG-D, now in katgpt-percepta crate). Root retains for tokenizer/convex_solver.rs.
+# katgpt-tokenizer (Issue 014): extracted to standalone crate. Non-optional — the
+# BPE substrate is always compiled, matching pre-extraction `pub mod tokenizer`
+# being unconditional. `good_lp` moved into katgpt-tokenizer (gated by convex_tok).
+katgpt-tokenizer = { path = "crates/katgpt-tokenizer" }
 # katgpt-percepta (Plan 064): extracted to standalone crate. Non-optional — legacy module
 # (KVCache2D, Sudoku9x9, StreamingSolver) is zero-dep and always compiled, matching the
 # pre-extraction behavior where `pub mod percepta` was unconditional. Feature ladder gates
@@ -221,9 +224,9 @@ monopoly = ["bevy_ecs", "bandit"]  # Monopoly Board Game Engine (Plan 034)
 go = ["bandit", "dep:reqwest"]  # AutoGo API bridge + Go GameState (Plan 065)
 randopt_weight = ["bandit"]  # RandOpt weight-space perturbation ensembling (Plan 121, Research 080)
 thicket_variance_probe = ["rv_gated_routing"]  # Thicket Variance Probe — decoding-space density routing signal (Plan 267, Research 235) — composes with RV for ablation
-toast_tokenizer = []  # ToaST split-tree tokenization (Plan 122, Research 081)
-convex_tok = ["dep:good_lp", "toast_tokenizer"]  # ConvexTok LP vocabulary optimizer (Plan 127, Research 087)
-datrie_vocab = ["toast_tokenizer"]  # Alias: enables toast_tokenizer (datrie is auto-routed) + benchmark examples (Research 137)
+toast_tokenizer = ["katgpt-tokenizer/toast_tokenizer"]  # ToaST split-tree tokenization (Plan 122, Research 081). Forwards to katgpt-tokenizer (Issue 014).
+convex_tok = ["katgpt-tokenizer/convex_tok"]  # ConvexTok LP vocabulary optimizer (Plan 127, Research 087). Forwards to katgpt-tokenizer (Issue 014); good_lp lives there now.
+datrie_vocab = ["katgpt-tokenizer/datrie_vocab"]  # Alias: forwards to katgpt-tokenizer toast_tokenizer (datrie is auto-routed) + benchmark examples (Research 137)
 event_log = []  # Event-sourced game traces with fork-and-diff (Plan 124, Research 081)
 vpd_em_distill = ["sdar_gate", "bandit"]  # VPD EM-style co-evolutionary distillation (Plan 120, Research 080)
 progressive_mcgs = []  # Progressive MCGS — graph search with reference edges + entropy-gated schedule (Plan 272, Research 239)
@@ -253,7 +256,7 @@ speculative_generator = ["katgpt-core/speculative_generator"]  # SpeculativeGene
 comp_width = ["mux_bfs", "katgpt-core/comp_width"]  # Compositional DDTree partner-entropy width — continuous replacement for PEAK_DOMINANCE_RATIO (Plan 205, Research 181)
 # ── Percepta (transformer-vm RIIR, Plan 064) ─ now in katgpt-percepta crate ─
 # ordered-float + good_lp(MILP) live in the katgpt-percepta crate; root only forwards features.
-# Root good_lp is retained for tokenizer/convex_solver.rs (gated by convex_tok).
+# Root good_lp was removed in Issue 014 (tokenizer extraction) — it lives in katgpt-tokenizer now.
 # katgpt-percepta is non-optional (legacy module is zero-dep, always compiled).
 percepta = ["katgpt-percepta/percepta"]  # CHT hull cache: upper+lower, HullMeta, tie-break, cumsum (TG-A)
 percepta_gates = ["percepta", "katgpt-percepta/percepta_gates"]  # + ReGLU, stepglu, multiply, persist primitives (TG-B)

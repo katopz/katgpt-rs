@@ -1,0 +1,29 @@
+[package]
+name = "katgpt-tokenizer"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "BPE, ToaST split-tree, and ConvexTok LP vocabulary optimization — standalone modelless tokenizer crate extracted from katgpt-rs."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["tokenizer", "bpe", "lp", "vocabulary", "modelless"]
+categories = ["data-structures", "algorithms", "text-processing"]
+publish = false  # matches katgpt-rs aggregator policy; flip to true when ready to ship
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+
+# ConvexTok LP solver (Plan 127, Research 087). Optional — gated by convex_tok.
+good_lp = { version = "1", optional = true, default-features = false, features = ["highs", "microlp"] }
+
+[features]
+default = []
+
+# ToaST split-tree tokenization (Plan 122, Research 081).
+toast_tokenizer = []
+
+# ConvexTok LP vocabulary optimizer (Plan 127, Research 087).
+convex_tok = ["dep:good_lp", "toast_tokenizer"]
+
+# Alias: enables toast_tokenizer (datrie is auto-routed above DATRIE_VOCAB_THRESHOLD)
+# + benchmark examples (Research 137).
+datrie_vocab = ["toast_tokenizer"]

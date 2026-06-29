@@ -178,7 +178,7 @@ fn add_flow_constraints<M: SolverModel>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tokenizer::convex_graph::GraphBuilder;
+    use crate::convex_graph::GraphBuilder;
 
     #[test]
     fn empty_graph_returns_error() {

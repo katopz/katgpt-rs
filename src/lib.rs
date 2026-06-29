@@ -235,7 +235,7 @@ pub mod targeted_precision;
 // ThinkingStrategy trait (Plan 275 Phase 2).
 #[cfg(feature = "thinking_cot")]
 pub mod thinking_cot;
-pub mod tokenizer;
+pub use katgpt_tokenizer as tokenizer;  // re-export (Issue 014): preserves `katgpt_rs::tokenizer::*` paths for tests/examples/validator
 pub mod transformer;
 pub mod trigger_gate;
 #[cfg(feature = "turboquant")]
