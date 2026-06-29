@@ -1,0 +1,26 @@
+[package]
+name = "katgpt-speculative"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Speculative decoding + DDTree substrate shared by katgpt-rs and riir-engine (Issue 013)"
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["speculative", "decoding", "ddtree", "inference", "modelless"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# Types + traits + speculative type substrate (TreeNode, DraftResult, ConstraintPruner, etc.)
+katgpt-core = { path = "../katgpt-core" }
+# Config, Rng, InferenceResult
+katgpt-types = { path = "../katgpt-types" }
+# Parallel BFS expansion
+rayon = "1.10"
+
+[features]
+# Forward sr2am_configurator to katgpt-types so `build_inference_result` can
+# populate InferenceResult.planning_decision / plan_horizon_used (Plan 112).
+# Default-off mirrors katgpt-types / katgpt-core / katgpt-rs.
+sr2am_configurator = ["katgpt-types/sr2am_configurator"]
+
+[dev-dependencies]
+katgpt-transformer = { path = "../katgpt-transformer" }

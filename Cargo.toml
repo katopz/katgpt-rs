@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-speculative", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -11,6 +11,12 @@ publish = false  # dev/examples aggregator — never published. Only katgpt-core
 [dependencies]
 katgpt-core = { path = "crates/katgpt-core" }
 katgpt-transformer = { path = "crates/katgpt-transformer" }
+# katgpt-speculative (Issue 013): shared DDTree + speculative decoding substrate.
+# Currently consumed via the re-export at `katgpt_speculative::dd_tree::*` from
+# downstream riir-engine. The root `src/speculative/dd_tree.rs` core functions
+# have drifted (see TODO in that file) and are NOT yet re-exported from here —
+# the divergence is tracked for a follow-up convergence pass.
+katgpt-speculative = { path = "crates/katgpt-speculative" }
 plotters = "0.3"
 rayon = "1.10"
 log = "0.4"
@@ -88,7 +94,7 @@ bandit = ["katgpt-core/review_metrics"]  # Multi-armed bandit adaptive Screening
 delta_mem = ["bandit"]  # δ-Mem modelless distillation — associative bandit memory (Plan 053)
 g_zero = ["bandit"]  # G-Zero self-play distillation — Hint-δ gated absorb + bandit (Plan 049)
 dreamer = ["bandit"]  # Auto-Dreamer offline memory consolidation scheduler (Plan 107, Research 69)
-sr2am_configurator = ["bandit", "g_zero", "katgpt-core/sr2am_configurator"]  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076)
+sr2am_configurator = ["bandit", "g_zero", "katgpt-core/sr2am_configurator", "katgpt-speculative/sr2am_configurator"]  # SR²AM Configurator Bandit — learned per-turn planning regulation (Plan 112, Research 076). Also forwards to katgpt-speculative so `build_inference_result` (now living there per Issue 013) populates InferenceResult.planning_decision / plan_horizon_used.
 sia_feedback = ["sr2am_configurator", "katgpt-core/sia_feedback"]  # FeedbackBandit — harness + weight co-evolution (Plan 163, Research 033)
 gepa_reflective = ["bandit", "memo_reflections"]  # GEPA-D Reflective Config Evolution — Pareto bandit config distillation (Research 146, Plan 164)
 phrase_boost = []  # PhraseBoost — context trie phrase boosting for DDTree (Research 147, Plan 164)

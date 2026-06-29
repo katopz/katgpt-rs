@@ -7,6 +7,44 @@
 //!
 //! EqR convergence selection is only reliable after landscape shaping (RI + NI training).
 //! See Research 079 (EqR, arXiv:2605.21488) for theoretical justification.
+//!
+//! # Issue 013 — DRY migration status: DIVERGED (do NOT re-export yet)
+//!
+//! A shared `katgpt-speculative` crate now hosts the canonical DDTree core at
+//! `katgpt-speculative/src/dd_tree.rs` (copied from `riir-engine/src/dd_tree.rs`).
+//! riir-engine consumes that crate directly. This root file was supposed to
+//! re-export the same symbols (`build_dd_tree`, `build_dd_tree_pruned`,
+//! `build_dd_tree_screened`, `build_dd_tree_balanced`, `extract_best_path`,
+//! `extract_best_path_into`, `extract_parent_tokens`, `extract_parent_tokens_into`,
+//! `build_inference_result`, `merge_retrieved_branches`, `TreeBuilder`) from
+//! `katgpt_speculative::dd_tree`.
+//!
+//! **That re-export is intentionally NOT in place.** The root file's "core"
+//! functions have drifted from riir-engine's baseline in ways that change
+//! behavior and are not yet reconciled:
+//!
+//! | Symbol | Root (this file) | katgpt-speculative (riir-engine baseline) |
+//! | --- | --- | --- |
+//! | `TreeBuilder` | extra `log_marginals: Vec<Vec<f32>>` field + `cache_log_marginals()` pre-compute | no such field/method |
+//! | `build_dd_tree_pruned` / `_screened` / `_balanced` | delegate to the `log_marginals`-caching `TreeBuilder` | use the simpler `TreeBuilder` |
+//! | `extract_best_path_into` | two-pass with `>=` last-wins-on-tie semantics, full f32 precision | single-pass with `Option::is_none_or`, `(score * 1e6) as i64` quantization |
+//! | `extract_best_path` | delegates to `extract_best_path_into` | standalone two-bucket single-pass |
+//! | `build_inference_result` | `domain: &str`, `output: &str` (caller allocates) | `domain: impl Into<String>`, `output: impl Into<String>` (callee allocates) |
+//! | `merge_retrieved_branches` | incremental `parent_path` reconstruction (O(D) per sequence) | per-depth `fold` over `seq[..=depth]` (O(D²) per sequence) |
+//!
+//! The root versions are generally the MORE optimized / more recent ones
+//! (`log_marginals` cache, incremental path reconstruction). The plan is to
+//! port the root's optimizations upstream into `katgpt-speculative` in a
+//! follow-up pass, then flip the re-export on and delete the duplicates here.
+//! Until that convergence pass, both copies ship — this file remains the
+//! source of truth for `katgpt-rs` (root) consumers, and `katgpt-speculative`
+//! is the source of truth for `riir-engine` consumers.
+//!
+//! TODO(Issue 013 follow-up): port `log_marginals` cache, incremental path
+//! reconstruction, and `&str`-arg `build_inference_result` into
+//! `katgpt-speculative/src/dd_tree.rs`, then replace the duplicate definitions
+//! below with `pub use katgpt_speculative::dd_tree::{...}`. Track in
+//! `katgpt-rs/.issues/`.
 
 #![allow(clippy::needless_range_loop)]
 

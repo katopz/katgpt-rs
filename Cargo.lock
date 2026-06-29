@@ -1797,6 +1797,7 @@ dependencies = [
  "good_lp",
  "half",
  "katgpt-core",
+ "katgpt-speculative",
  "katgpt-transformer",
  "log",
  "metal",
@@ -1824,6 +1825,16 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "katgpt-types",
+]
+
+[[package]]
+name = "katgpt-speculative"
+version = "0.1.0"
+dependencies = [
+ "katgpt-core",
+ "katgpt-transformer",
+ "katgpt-types",
+ "rayon",
 ]
 
 [[package]]
