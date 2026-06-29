@@ -24,8 +24,8 @@ Ship a generic, modelless primitive that, given two latent-state checkpoints `S_
 
 ### Tasks
 
-- [ ] **T1.1** Create module `crates/katgpt-core/src/diversity/mod.rs` with feature gate `temp_loss_fingerprint`. Re-export public API under `katgpt_core::diversity::temp::*`.
-- [ ] **T1.2** Define the `LossKernel` trait:
+- [x] **T1.1** Create module `crates/katgpt-core/src/diversity/mod.rs` with feature gate `temp_loss_fingerprint`. Re-export public API under `katgpt_core::diversity::temp::*`.
+- [x] **T1.2** Define the `LossKernel` trait:
   ```rust
   /// Per-step negative-log-probability kernel at a given parameter snapshot.
   /// Implementors: `ac_prefix::ConditionalLogprob` (token-level NLL),
@@ -37,14 +37,14 @@ Ship a generic, modelless primitive that, given two latent-state checkpoints `S_
       fn short_prefix_loss(&self, theta: &[f32], z_prefix: &[f32]) -> f32;
   }
   ```
-- [ ] **T1.3** Implement `extrapolated_snapshot_schedule(s0, s1, k, lambda_schedule, noise_seeds, out)` — deterministic linear extrapolation `theta_j = s0 + lambda_j * v` where `v = s1 - s0`, with optional `xi_j` multiplicative noise from a fixed BLAKE3-seeded RNG (paper Eq. 5). Zero-allocation: writes into caller-provided `&mut [Vec<f32>]`. Unit test: `extrapolated_snapshot_schedule(k=4)` with `xi=0` produces 4 evenly-spaced points on the `[s0, s1]` line; with `xi != 0` produces points within `±lambda * sigma` of the line.
-- [ ] **T1.4** Implement `perturbed_loss_vector(kernel, theta_schedule, z_prefix, out)` — calls `kernel.short_prefix_loss(theta_j, z_prefix)` for each `j`, writes the loss vector `L_z` into `out: &mut [f32]` (len == k). Zero-allocation.
-- [ ] **T1.5** Implement `lipschitz_gradient_bound(delta, lambda, g, tau, c_h, epsilon) -> f32` — pure arithmetic, paper Theorem 3.1 bound. Unit test: `delta=0` returns `G*(1/sqrt(2)+tau) + C_H*epsilon` (the irreducible floor); monotone in `delta`.
-- [ ] **T1.6** Implement `pairwise_bound(loss_vectors, lambda, g, tau, c_h, epsilon, out)` — for each pair `(i, j)`, compute `delta_ij = ||L_i - L_j||_inf` and write `lipschitz_gradient_bound(delta_ij, ...)` into `out[i * n + j]`. Zero-allocation, rayon-parallelizable for `n > 64`.
-- [ ] **T1.7** Implement `select_diverse_subset(loss_vectors, k, scratch) -> Vec<usize>` — greedy max-min spread: seed with the two candidates with max pairwise `delta`; iteratively add the candidate that maximizes min-distance to the current subset. Returns `k` indices. Paper §3.2 Algorithm 1 modelless analog.
-- [ ] **T1.8** Feature-gate audit: `cargo check --features temp_loss_fingerprint` compiles; `cargo check` (default) does not include the module. Run `cargo hack check --each-feature` + `--all-features` per the `merkle_root` lesson.
+- [x] **T1.3** Implement `extrapolated_snapshot_schedule(s0, s1, k, lambda_schedule, noise_seeds, out)` — deterministic linear extrapolation `theta_j = s0 + lambda_j * v` where `v = s1 - s0`, with optional `xi_j` multiplicative noise from a fixed BLAKE3-seeded RNG (paper Eq. 5). Zero-allocation: writes into caller-provided `&mut [Vec<f32>]`. Unit test: `extrapolated_snapshot_schedule(k=4)` with `xi=0` produces 4 evenly-spaced points on the `[s0, s1]` line; with `xi != 0` produces points within `±lambda * sigma` of the line.
+- [x] **T1.4** Implement `perturbed_loss_vector(kernel, theta_schedule, z_prefix, out)` — calls `kernel.short_prefix_loss(theta_j, z_prefix)` for each `j`, writes the loss vector `L_z` into `out: &mut [f32]` (len == k). Zero-allocation.
+- [x] **T1.5** Implement `lipschitz_gradient_bound(delta, lambda, g, tau, c_h, epsilon) -> f32` — pure arithmetic, paper Theorem 3.1 bound. Unit test: `delta=0` returns `G*(1/sqrt(2)+tau) + C_H*epsilon` (the irreducible floor); monotone in `delta`.
+- [x] **T1.6** Implement `pairwise_bound(loss_vectors, lambda, g, tau, c_h, epsilon, out)` — for each pair `(i, j)`, compute `delta_ij = ||L_i - L_j||_inf` and write `lipschitz_gradient_bound(delta_ij, ...)` into `out[i * n + j]`. Zero-allocation, rayon-parallelizable for `n > 64`.
+- [x] **T1.7** Implement `select_diverse_subset(loss_vectors, k, scratch) -> Vec<usize>` — greedy max-min spread: seed with the two candidates with max pairwise `delta`; iteratively add the candidate that maximizes min-distance to the current subset. Returns `k` indices. Paper §3.2 Algorithm 1 modelless analog.
+- [x] **T1.8** Feature-gate audit: `cargo check --features temp_loss_fingerprint` compiles; `cargo check` (default) does not include the module. Run `cargo hack check --each-feature` + `--all-features` per the `merkle_root` lesson. **DONE 2026-06-29:** `--no-default-features`, default, `--features temp_loss_fingerprint`, `--all-features` all compile clean. 10/10 unit tests pass.
 
-**Phase 1 exit:** `cargo test -p katgpt-core --features temp_loss_fingerprint --lib diversity::temp` passes (≥8 unit tests). Module compiles in isolation, no game/chain/shard semantics, no dependencies outside `katgpt-core`.
+**Phase 1 exit (DONE 2026-06-29):** `cargo test -p katgpt-core --features temp_loss_fingerprint --lib diversity::temp` passes — **10/10 unit tests** (≥8 required). Module compiles in isolation, no game/chain/shard semantics, no dependencies outside `katgpt-core`. Feature isolation verified: `--no-default-features` + default + `--features temp_loss_fingerprint` + `--all-features` all clean.
 
 ---
 
