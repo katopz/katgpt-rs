@@ -62,6 +62,26 @@ use crate::{
 #[cfg(test)]
 use crate::MicroRecurrentBeliefState;
 
+/// Fill `out` with deterministic Gaussian(0, σ²) noise derived from `seed`.
+///
+/// Box–Muller transform per element: `u1`, `u2` uniform → `r·cos(θ)` normal.
+/// Deterministic given `(seed, sigma)` — the same seed always produces the
+/// same query bytes, so [`NoiseQueryConfig::commit`] / snapshot commitments
+/// remain stable. Shared by [`BoMMinimaxPlanner`] and [`BoMMeanPlanner`] to
+/// keep the two planners' noise derivation bit-identical (DRY: previously
+/// the body was duplicated across both impls).
+#[inline]
+fn fill_gaussian_queries(out: &mut [f32], seed: u64, sigma: f32) {
+    let mut rng = fastrand::Rng::with_seed(seed);
+    for q in out.iter_mut() {
+        let u1 = rng.f32().max(1e-9);
+        let u2 = rng.f32();
+        let r = (-2.0 * u1.ln()).sqrt();
+        let theta = 2.0 * core::f32::consts::PI * u2;
+        *q = sigma * r * theta.cos();
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Traits — the abstraction boundary between engine and fuel
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,16 +314,7 @@ impl<K: BoMSampler> BoMMinimaxPlanner<K> {
     /// (sync-safety / replay).
     #[inline]
     fn resample_queries(&mut self, seed: u64) {
-        let mut rng = fastrand::Rng::with_seed(seed);
-        let sigma = self.cfg.sigma;
-        // Box–Muller for each query element. Deterministic given (seed, sigma).
-        for q in self.queries.iter_mut() {
-            let u1 = rng.f32().max(1e-9);
-            let u2 = rng.f32();
-            let r = (-2.0 * u1.ln()).sqrt();
-            let theta = 2.0 * core::f32::consts::PI * u2;
-            *q = sigma * r * theta.cos();
-        }
+        fill_gaussian_queries(&mut self.queries, seed, self.cfg.sigma);
     }
 }
 
@@ -411,15 +422,7 @@ impl<K: BoMSampler> BoMMeanPlanner<K> {
 
     #[inline]
     fn resample_queries(&mut self, seed: u64) {
-        let mut rng = fastrand::Rng::with_seed(seed);
-        let sigma = self.cfg.sigma;
-        for q in self.queries.iter_mut() {
-            let u1 = rng.f32().max(1e-9);
-            let u2 = rng.f32();
-            let r = (-2.0 * u1.ln()).sqrt();
-            let theta = 2.0 * core::f32::consts::PI * u2;
-            *q = sigma * r * theta.cos();
-        }
+        fill_gaussian_queries(&mut self.queries, seed, self.cfg.sigma);
     }
 }
 

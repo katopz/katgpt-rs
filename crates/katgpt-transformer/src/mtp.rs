@@ -2,7 +2,7 @@
 //!
 //! Plan 016 / Plan 055 substrate. Pure data + binary loader — no forward logic.
 
-use katgpt_core::simd::simd_dot_f32;
+use katgpt_core::simd::simd_matmul_rows;
 
 /// Project target activation into the drafter's embedding space.
 ///
@@ -27,15 +27,17 @@ pub fn project_target_activation(
         Some(proj_weights) => {
             // proj_weights layout: [drafter_n_embd * target_n_embd]
             // out[i] = sum_j(proj_weights[i * target_n_embd + j] * target_hidden[j])
+            // Delegate to simd_matmul_rows (one NEON/AVX2 dot per row) instead
+            // of hand-rolling the loop — same generated code, less maintenance
+            // surface, and inherits any future simd_matmul_rows tuning.
             let out_len = out_buf.len().min(drafter_n_embd);
-            for (i, out_slot) in out_buf.iter_mut().enumerate().take(out_len) {
-                let row_off = i * target_n_embd;
-                *out_slot = simd_dot_f32(
-                    &proj_weights[row_off..row_off + target_n_embd],
-                    &target_hidden[..target_n_embd],
-                    target_n_embd,
-                );
-            }
+            simd_matmul_rows(
+                &mut out_buf[..out_len],
+                proj_weights,
+                &target_hidden[..target_n_embd],
+                out_len,
+                target_n_embd,
+            );
         }
         // Strategy 2: Truncate/Pad — zero-cost fallback
         None => {

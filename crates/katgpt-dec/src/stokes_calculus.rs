@@ -217,10 +217,58 @@ pub fn boundary_flux_mass_only(
 
     // Single allocation: boolean region-membership marker, sized to the complex.
     let mut in_region = vec![false; n_region_cells];
+    boundary_flux_mass_only_scratched(cx, region_cells, field, &mut in_region)
+}
+
+/// Zero-alloc variant of [`boundary_flux_mass_only`] that takes a caller-owned
+/// `in_region` scratch buffer instead of allocating one per call.
+///
+/// # When to use this
+///
+/// The allocating [`boundary_flux_mass_only`] builds a fresh `Vec<bool>` sized
+/// to `cx.n_cells(k+1)` on every call. For per-tick belief-region mass checks
+/// that fire many region queries against the same complex, hoist the buffer
+/// to the caller and reuse it across calls — this variant does zero allocation
+/// in steady state.
+///
+/// # Arguments
+/// * `cx` — Cell complex.
+/// * `region_cells` — Indices of (k+1)-cells defining the region.
+/// * `field` — k-cochain (dim=1).
+/// * `in_region` — Caller-owned scratch buffer. Resized to `cx.n_cells(k+1)`
+///   if smaller; the first `n_cells(k+1)` entries are overwritten, any extra
+///   capacity is left untouched. Reuse across calls for zero alloc.
+///
+/// # Returns `0.0` for an empty region.
+pub fn boundary_flux_mass_only_scratched(
+    cx: &CellComplex,
+    region_cells: &[u32],
+    field: &CochainField,
+    in_region: &mut Vec<bool>,
+) -> f32 {
+    if region_cells.is_empty() {
+        return 0.0;
+    }
+
+    let k = field.rank;
+    debug_assert_eq!(
+        field.dim, 1,
+        "boundary_flux_mass_only_scratched: field must be dim=1 (scalar per cell), got dim {}",
+        field.dim
+    );
+
+    let n_region_cells = cx.n_cells(k + 1);
+
+    // Reuse the caller's buffer; grow if needed (no-op in steady state).
+    in_region.resize(n_region_cells, false);
+    // Safety: `bool` has no Drop side-effects, so leaving the tail of a
+    // previous (larger) call's marks in place would silently corrupt this
+    // call's membership test — we must clear the prefix we're about to use.
+    in_region[..n_region_cells].fill(false);
     for &cell in region_cells {
         debug_assert!(
             (cell as usize) < n_region_cells,
-            "boundary_flux_mass_only: region cell {cell} >= n_cells({}) = {n_region_cells}",
+            "boundary_flux_mass_only_scratched: region cell {cell} >= n_cells({}) = {n_region_cells}",
             k + 1
         );
         in_region[cell as usize] = true;

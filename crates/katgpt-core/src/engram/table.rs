@@ -19,6 +19,7 @@
 //! sigmoid gate in Phase 3 filters any residual noise.
 
 use super::{EngramHash, EngramTable, HashHead, K_MAX};
+use crate::simd::simd_sum_abs_f32;
 use std::sync::OnceLock;
 
 /// Frozen in-memory engram pattern table.
@@ -89,10 +90,12 @@ impl EngramTable for InMemoryEngramTable {
             let src = &self.slots[slot_idx * d..(slot_idx + 1) * d];
             let dst = &mut out[k * d..(k + 1) * d];
             dst.copy_from_slice(src);
-            // Hit = any non-zero element in the slot. SIMD-friendly check
-            // would be `simd_sum_abs_f32(src) > 0.0` but for K_MAX=16 the
-            // scalar scan is cheap and branch-predictor-friendly.
-            if src.iter().any(|&v| v != 0.0) {
+            // Hit = any non-zero element in the slot. `simd_sum_abs_f32`
+            // is the branch-free SIMD reduction — one NEON/AVX2 horizontal
+            // add vs D scalar compares with unpredictable short-circuit
+            // branches (the slot is usually all-zero or all-nonzero, but
+            // the branch predictor can't tell which ahead of time).
+            if simd_sum_abs_f32(src) > 0.0 {
                 hits += 1;
             }
         }

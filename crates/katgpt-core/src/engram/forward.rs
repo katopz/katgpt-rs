@@ -38,6 +38,7 @@
 //!   to [`EngramConfig`].
 
 use super::{EngramHash, EngramTable, K_MAX, SigmoidFusionConfig, sigmoid_fuse_into};
+use crate::simd::{simd_add_inplace, simd_sum_abs_f32};
 
 // `EngramConfig` is DEFINED in this module (not imported) — the canonical
 // home per Plan T7.2. `mod.rs` re-exports it via
@@ -177,10 +178,10 @@ pub fn fuse_into_hidden_state(
 
         // Skip empty slots — a slot of all zeros produces gate * 0 = 0,
         // which is a no-op residual add. We check anyway to save the
-        // dot-product work; SIMD `simd_sum_abs_f32` would be faster than
-        // the scalar any() but the call frequency is K_MAX=16 per fuse
-        // step, so this is a micro-optimization. Keep it simple.
-        if !e_k.iter().any(|&v| v != 0.0) {
+        // dot-product work; `simd_sum_abs_f32` is the branch-free SIMD
+        // reduction (one NEON/AVX2 horizontal add instead of K_MAX=16
+        // short-circuiting scalar compares with unpredictable branch hits).
+        if simd_sum_abs_f32(e_k) == 0.0 {
             continue;
         }
 
@@ -193,13 +194,11 @@ pub fn fuse_into_hidden_state(
             &config.fusion,
         );
 
-        // Residual add: hidden_state[j] += scratch_out[j].
-        // Manual loop — small D=32 auto-vectorizes. Could use
-        // simd_add_inplace(query, scratch_out) but we're adding into
-        // hidden_state, not query.
-        for j in 0..d {
-            hidden_state[j] += scratch_out[j];
-        }
+        // Residual add: hidden_state[j] += scratch_out[j] for j in 0..d.
+        // `simd_add_inplace` guarantees the NEON/AVX2+FMA codegen that the
+        // manual loop only got when LLVM's auto-vectorizer was in a good
+        // mood (it usually was at D=32, but `simd_add_inplace` is certain).
+        simd_add_inplace(&mut hidden_state[..d], &scratch_out[..d]);
     }
 
     // Touch scratch_norm so the compiler doesn't complain about it being
