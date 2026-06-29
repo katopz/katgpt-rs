@@ -216,7 +216,54 @@ impl DeltaMemoryState {
     /// Uses pre-allocated `segment_key_buf` / `segment_val_buf` scratch
     /// buffers to avoid hot-path allocation. Bit-identical to the previous
     /// `vec![0.0; rank]` version (same arithmetic, same order).
+    ///
+    /// This is the `Vec<Vec<f32>>`-shaped convenience wrapper. Hot-path
+    /// callers that already hold `&[f32]` rows should prefer
+    /// [`write_segment_slices`](Self::write_segment_slices) to avoid building
+    /// a `Vec<Vec<f32>>` just to satisfy the signature.
     pub fn write_segment(&mut self, keys: &[Vec<f32>], values: &[Vec<f32>]) {
+        if keys.is_empty() {
+            return;
+        }
+
+        self.segment_key_buf.fill(0.0f32);
+        self.segment_val_buf.fill(0.0f32);
+        let inv_n = 1.0 / keys.len() as f32;
+
+        for k in keys {
+            for (j, kj) in k.iter().enumerate() {
+                self.segment_key_buf[j] += kj * inv_n;
+            }
+        }
+        for v in values {
+            for (j, vj) in v.iter().enumerate() {
+                self.segment_val_buf[j] += vj * inv_n;
+            }
+        }
+
+        // SAFETY: `write` only reads key/value (takes `&[f32]`) and mutates
+        // `self.state`/`self.update_count`. It never touches `segment_key_buf`
+        // or `segment_val_buf`, so aliasing here is sound.
+        let key: &[f32] = unsafe {
+            std::slice::from_raw_parts(self.segment_key_buf.as_ptr(), self.segment_key_buf.len())
+        };
+        let val: &[f32] = unsafe {
+            std::slice::from_raw_parts(self.segment_val_buf.as_ptr(), self.segment_val_buf.len())
+        };
+        self.write(key, val);
+    }
+
+    /// Borrowed-slice variant of [`write_segment`](Self::write_segment).
+    ///
+    /// Same semantics (average features over the segment, write once), but
+    /// accepts `&[&[f32]]` so callers that already hold `&[f32]` rows don't
+    /// have to allocate a `Vec<Vec<f32>>` just to call write. This is the
+    /// zero-alloc variant for hot paths.
+    ///
+    /// The loop body is duplicated from `write_segment` (not shared via a
+    /// helper) to keep both paths allocation-free — a shared helper would
+    /// need to re-borrow the `Vec<Vec<f32>>` into `Vec<&[f32]>`, allocating.
+    pub fn write_segment_slices(&mut self, keys: &[&[f32]], values: &[&[f32]]) {
         if keys.is_empty() {
             return;
         }

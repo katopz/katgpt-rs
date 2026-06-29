@@ -262,22 +262,25 @@ impl WallPrefixState {
             return 1.0;
         }
 
-        // Chunk-4 min of exp(prefix * block_span / current)
+        // Chunk-4 min of exp(prefix * block_span / current).
         let block_span = (block_end - block_start) as f32;
         let inv_current = 1.0 / current as f32;
         let mut min_ret: f32 = f32::MAX;
 
-        // Branch-free min reduction: f32::min is a single instruction on most ISAs
-        // (e.g. vminps on x86-64 with SSE4.1, fmin on AArch64 NEON). Replaces the
-        // branchy `if x < m { m = x; }` pattern, removing a predicted-branch stall
-        // when the retention values are similar (the common case for stable blocks).
+        // SIMD exp + branch-free min reduction. The chunk-4 form fills a
+        // 4-element stack buffer with the scaled gate values, runs
+        // `simd_exp_inplace` (one NEON/AVX2 exp approximation pass instead of
+        // 4 scalar libm `expf` calls), then min-reduces the 4 results. The
+        // scalar tail loop handles the `hd % 4` remainder.
         let mut d = 0;
+        let mut buf = [0.0f32; 4];
         while d + 4 <= hd {
             for dd in 0..4 {
-                let gate_accumulated = ps[offset + d + dd];
-                let gate_in_block = gate_accumulated * block_span * inv_current;
-                let retention = gate_in_block.exp();
-                min_ret = min_ret.min(retention);
+                buf[dd] = ps[offset + d + dd] * block_span * inv_current;
+            }
+            simd_exp_inplace(&mut buf);
+            for dd in 0..4 {
+                min_ret = min_ret.min(buf[dd]);
             }
             d += 4;
         }
