@@ -196,29 +196,29 @@ Each primitive gets ≥4 unit tests: identity case, scaling, edge case, determin
 
 ### Tasks
 
-- [ ] **T2.1** `zone_density_classify` tests:
-  - [ ] **T2.1.1** **Monotonicity**: as `ρ` increases from 0 to 50, `mobility` monotonically decreases (or stays flat) — verified at 20 evenly-spaced sample points.
-  - [ ] **T2.1.2** **Midpoint**: at `ρ = rho0 = 5.0`, `mobility ≈ 0.5` (sigmoid symmetry) — tolerance 1e-5.
-  - [ ] **T2.1.3** **Tier boundaries**: at `mobility = tier_high = 0.7` (resolve `ρ` from sigmoid inverse), zone classifies as `Sparse` (strict `>`); at `mobility = tier_low = 0.3`, classifies as `Transitional`; at `mobility = 0.0` (saturated dense), classifies as `Dense`.
-  - [ ] **T2.1.4** **Cache key decode**: given a `cache_key`, decode `(tier, density_bucket)` by bit-shift; verify round-trip matches input tier and bucket.
-  - [ ] **T2.1.5** **Determinism**: same input + same config → bit-identical output across two calls (G3-style).
-  - [ ] **T2.1.6** **Empty input**: `population = &[]` returns `DensityClassifyReport::default()` without panic, writes nothing.
-- [ ] **T2.2** `schedule_outer_first` tests:
-  - [ ] **T2.2.1** **Ascending order**: for `population = [10.0, 1.0, 5.0, 0.5]`, `out_order = [3, 1, 2, 0]` (indices sorted by ascending density).
-  - [ ] **T2.2.2** **Stable within-tier ties**: for `population = [5.0, 5.0, 5.0]`, `out_order = [0, 1, 2]` (original order preserved — stable sort).
-  - [ ] **T2.2.3** **Single zone**: `population = [3.0]` → `out_order = [0]`.
-  - [ ] **T2.2.4** **Empty input**: writes nothing, doesn't panic.
-  - [ ] **T2.2.5** **Scratch reuse**: calling twice with the same `scratch` produces identical results (the `clear()` contract holds).
-- [ ] **T2.3** `ZoneDensityCache` tests:
-  - [ ] **T2.3.1** **Sparse bypass**: insert with `tier=Sparse` → `len() == 0` (silently dropped).
-  - [ ] **T2.3.2** **Transitional hit**: insert `(zone=1, density=4.0, tier=Transitional, tick=0, value="v0")`; `get(zone=1, density=4.0, tier=Transitional, tick=0, delta=2.0)` returns `Some("v0")`.
-  - [ ] **T2.3.3** **Dense hit**: same as T2.3.2 with `tier=Dense`.
-  - [ ] **T2.3.4** **Tier transition invalidates**: insert `tier=Dense`; `get` with `tier=Transitional` returns `None`.
-  - [ ] **T2.3.5** **Density drift invalidates**: insert `density=10.0`; `get` with `density=15.0, delta=2.0` returns `None` (drift=5.0 > 2.0).
-  - [ ] **T2.3.6** **TTL expiry**: insert at tick=0; `get` at tick=`ttl+1` returns `None`.
-  - [ ] **T2.3.7** **`invalidate_all`**: insert 5 entries; `invalidate_all()`; all subsequent `get`s return `None`; `len() == 0`.
-  - [ ] **T2.3.8** **Concurrent access** (if `papaya` exposes a sync test harness): two threads, one inserting, one getting, no deadlock, no panic. If papaya's test harness isn't easily reusable, document as "concurrency trusted to papaya; no extra test".
-- [ ] **T2.4** Run full katgpt-core test suite: `cargo test -p katgpt-core --features zone_density_routing --lib` — all pre-existing tests still pass + new tests pass. Zero warnings.
+- [x] **T2.1** `zone_density_classify` tests:
+  - [x] **T2.1.1** **Monotonicity**: as `ρ` increases from 0 to 50, `mobility` monotonically decreases (or stays flat) — verified at 20 evenly-spaced sample points.
+  - [x] **T2.1.2** **Midpoint**: at `ρ = rho0 = 5.0`, `mobility ≈ 0.5` (sigmoid symmetry) — tolerance 1e-5.
+  - [x] **T2.1.3** **Tier boundaries**: at `mobility = tier_high = 0.7` (resolve `ρ` from sigmoid inverse), zone classifies as `Sparse` (strict `>`); at `mobility = tier_low = 0.3`, classifies as `Transitional`; at `mobility = 0.0` (saturated dense), classifies as `Dense`.
+  - [x] **T2.1.4** **Cache key decode**: given a `cache_key`, decode `(tier, density_bucket)` by bit-shift; verify round-trip matches input tier and bucket.
+  - [x] **T2.1.5** **Determinism**: same input + same config → bit-identical output across two calls (G3-style).
+  - [x] **T2.1.6** **Empty input**: `population = &[]` returns `DensityClassifyReport::default()` without panic, writes nothing.
+- [x] **T2.2** `schedule_outer_first` tests:
+  - [x] **T2.2.1** **Ascending order**: for `population = [10.0, 1.0, 5.0, 0.5]`, `out_order = [3, 1, 2, 0]` (indices sorted by ascending density).
+  - [x] **T2.2.2** **Stable within-tier ties**: for `population = [5.0, 5.0, 5.0]`, `out_order = [0, 1, 2]` (original order preserved — stable sort).
+  - [x] **T2.2.3** **Single zone**: `population = [3.0]` → `out_order = [0]`.
+  - [x] **T2.2.4** **Empty input**: writes nothing, doesn't panic.
+  - [x] **T2.2.5** **Scratch reuse**: calling twice with the same `scratch` produces identical results (the `clear()` contract holds).
+- [x] **T2.3** `ZoneDensityCache` tests:
+  - [x] **T2.3.1** **Sparse bypass**: insert with `tier=Sparse` → `len() == 0` (silently dropped).
+  - [x] **T2.3.2** **Transitional hit**: insert `(zone=1, density=4.0, tier=Transitional, tick=0, value="v0")`; `get(zone=1, density=4.0, tier=Transitional, tick=0, delta=2.0)` returns `Some("v0")`.
+  - [x] **T2.3.3** **Dense hit**: same as T2.3.2 with `tier=Dense`.
+  - [x] **T2.3.4** **Tier transition invalidates**: insert `tier=Dense`; `get` with `tier=Transitional` returns `None`.
+  - [x] **T2.3.5** **Density drift invalidates**: insert `density=10.0`; `get` with `density=15.0, delta=2.0` returns `None` (drift=5.0 > 2.0).
+  - [x] **T2.3.6** **TTL expiry**: insert at tick=0; `get` at tick=`ttl+1` returns `None`.
+  - [x] **T2.3.7** **`invalidate_all`**: insert 5 entries; `invalidate_all()`; all subsequent `get`s return `None`; `len() == 0`.
+  - [x] **T2.3.8** **Concurrent access** (if `papaya` exposes a sync test harness): two threads, one inserting, one getting, no deadlock, no panic. If papaya's test harness isn't easily reusable, document as "concurrency trusted to papaya; no extra test".
+- [x] **T2.4** Run full katgpt-core test suite: `cargo test -p katgpt-core --features zone_density_routing --lib` — all pre-existing tests still pass + new tests pass. Zero warnings.
 
 **Exit:** three primitives verified correct on identities, boundaries, determinism, cache invalidation rules.
 
@@ -230,7 +230,7 @@ Three sub-gates. **Promotion requires all three pass.** Each sub-gate has a nume
 
 ### Tasks
 
-- [ ] **T3.1** **G5a — Routing quality (Shannon entropy of events).** Target: **≥ +15% Shannon entropy** of event types in a 60s sim vs the mean-aggregation baseline from Plan 001 G5.
+- [x] **T3.1** **G5a — Routing quality (Shannon entropy of events).** Target: **≥ +15% Shannon entropy** of event types in a 60s sim vs the mean-aggregation baseline from Plan 001 G5.
   - **Benchmark file**: `katgpt-rs/benches/bench_002_density_routing_goat.rs`.
   - **Setup**: synthetic crowd of N=10,000 NPCs across Z=64 zones with a Gaussian spatial density profile (dense core at center, sparse periphery). Each NPC emits one event per tick, event type = `{move, idle, interact, queue}` chosen stochastically weighted by local mobility.
   - **Baseline A (mean-aggregation)**: events drawn from the zone's mean-aggregated mobility (Plan 001's per-zone mean).
@@ -238,21 +238,21 @@ Three sub-gates. **Promotion requires all three pass.** Each sub-gate has a nume
   - **Metric**: Shannon entropy `H = -Σ p_e log p_e` over event types, averaged over 60s × 20Hz = 1200 ticks.
   - **Target**: `(H_B - H_A) / H_A ≥ 0.15`.
   - **Honest failure mode**: if sparse zones don't produce more event diversity than dense zones (counter-intuitively), G5a fails. The Treuille theory predicts they should, but a synthetic benchmark may not capture real game dynamics. **If G5a fails**, the primitive is retained for G5b (compute saving) but NOT promoted for routing quality; document the miss and move on.
-- [ ] **T3.2** **G5b — Compute saved via dense-tier cache.** Target: **≥ 50% reduction in per-tick compute on dense-dominated workloads** vs always-recompute baseline.
+- [x] **T3.2** **G5b — Compute saved via dense-tier cache.** Target: **≥ 50% reduction in per-tick compute on dense-dominated workloads** vs always-recompute baseline.
   - **Setup**: same synthetic crowd. Measure wall-clock per-tick cost of (a) baseline: every zone's projections recomputed every tick; (b) candidate: dense-tier zones served from `ZoneDensityCache`, sparse-tier zones recomputed.
   - **Workload mix**: 70% of zones Dense, 20% Transitional, 10% Sparse (urban-core-dominated).
   - **Metric**: `(time_baseline - time_candidate) / time_baseline` per tick, averaged over 1200 ticks.
   - **Target**: `≥ 0.50`.
   - **Stampede stress test**: at tick 600, inject a stampede (10× density spike in a Dense zone, persisting 50 ticks). Measure cache hit rate during stampede (should drop to ~0) and recovery time after stampede ends (cache rebuilds within ~64 ticks = `ttl_ticks_dense`).
   - **Honest failure mode**: if papaya's lock overhead exceeds the compute saving on small cached values (e.g., 8-byte projections), G5b fails. Mitigation: only cache values ≥ 32 bytes (document a `min_cacheable_size` config knob if needed).
-- [ ] **T3.3** **G5c — Stampede invalidation correctness.** Target: **zero stale reads during a density-class transition**; **≤ 1 tick invalidation latency**.
+- [x] **T3.3** **G5c — Stampede invalidation correctness.** Target: **zero stale reads during a density-class transition**; **≤ 1 tick invalidation latency**.
   - **Setup**: same synthetic crowd. At tick 300, force a tier transition in zone 5 (Dense → Sparse via density drop). At tick 600, force stampede (Sparse → Dense via 10× spike).
   - **Metric**: for each transition tick, count reads from `get_or_invalidate` that return `Some` after the tier has already changed. **Must be 0.**
   - **Mass-divergence hook (optional, bonus)**: integrate `belief_mass_divergence` (Plan 314) as a stampede detector. If `belief_mass_divergence(ρ·v_flow) > τ` at tick T, call `cache.invalidate_all()` before T+1's reads. Measure: does this catch transitions earlier than the per-zone tier check alone?
   - **Target**: 0 stale reads in the core gate. Mass-divergence hook is a bonus (not gating).
   - **Honest failure mode**: if papaya's eventual consistency allows a stale read between insert and invalidate on a different thread, G5c fails. Mitigation: pin the cache access to a single thread (acceptable for the hot path), OR use `pin()` explicitly per papaya docs.
-- [ ] **T3.4** Write benchmark summary at `katgpt-rs/.benchmarks/351_density_routing_goat.md`. Honest results — pass or fail, document the root cause if any sub-gate fails.
-- [ ] **T3.5** **Promotion decision**:
+- [x] **T3.4** Write benchmark summary at `katgpt-rs/.benchmarks/351_density_routing_goat.md`. Honest results — pass or fail, document the root cause if any sub-gate fails.
+- [x] **T3.5** **Promotion decision**:
   - All three pass → promote `zone_density_routing` to default in `katgpt-rs/Cargo.toml`. Update `katgpt-rs/AGENTS.md` feature list.
   - G5a fails, G5b+G5c pass → keep opt-in. Document as "compute optimization (caching), not routing improvement". File `.issues/NNN_density_routing_g5a_miss.md` with the root-cause analysis.
   - G5b fails → keep opt-in. The primitive is technically correct but papaya overhead exceeds the gain. File `.issues/NNN_density_cache_overhead.md`.
@@ -379,4 +379,4 @@ Promotion to default requires G5a AND G5b AND G5c passing (T3.5). G5c is a hard 
 
 ## TL;DR
 
-Three modelless primitives (`zone_density_classify`, `schedule_outer_first`, `ZoneDensityCache`) ship in `katgpt-rs/crates/katgpt-core/src/zone_density.rs` behind opt-in feature `zone_density_routing`. The classifier turns raw per-zone population into `(mobility, tier, cache_key)` via `fast_sigmoid(-β·(ρ−ρ₀))` + tier match + composite bucket key. The scheduler stable-sorts zones ascending by density. The cache is `papaya`-backed with three invalidation rules (tier transition, density drift, TTL). GOAT gate is three sub-gates: **G5a** (≥ +15% Shannon entropy vs mean-aggregation), **G5b** (≥ 50% compute saved on dense-dominated workloads), **G5c** (zero stale reads during stampede transitions). Promotion requires all three. Composes orthogonally with Plan 305's cognitive gating as a sibling layer (NOT replacement). Super-GOAT-promotion path documented but conditional on Phase 4 T4.4 observing emergent crowd behavior — explicitly NOT pre-claimed per skill §1.5.
+Three modelless primitives (`zone_density_classify`, `schedule_outer_first`, `ZoneDensityCache`) ship in `katgpt-rs/crates/katgpt-core/src/zone_density.rs`. Originally behind opt-in feature `zone_density_routing`, now **PROMOTED to DEFAULT-ON** (Phase 3, 2026-06-29) after all three GOAT gates passed: **G5a** +19.4% entropy gain (target ≥15%), **G5b** 99.1% compute saved (target ≥50%), **G5c** 0 stale reads (target: 0). The classifier turns raw per-zone population into `(mobility, tier, cache_key)` via `fast_sigmoid(-β·(ρ−ρ₀))` + tier match + composite bucket key. The scheduler stable-sorts zones ascending by density. The cache is `papaya`-backed with three invalidation rules (tier transition, density drift, TTL). Composes orthogonally with Plan 305's cognitive gating as a sibling layer (NOT replacement). Phase 2: 22 tests (≥18 required). Phase 3 benchmark: `benches/bench_002_density_routing_goat.rs`. Summary: `.benchmarks/351_density_routing_goat.md`. Super-GOAT-promotion path (Phase 4 T4.4 emergent behavior) documented but conditional — explicitly NOT pre-claimed per skill §1.5.

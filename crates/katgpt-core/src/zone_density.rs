@@ -461,12 +461,13 @@ impl<V: Clone> ZoneDensityCache<V> {
     }
 }
 
-// ── Phase 1 smoke tests ────────────────────────────────────────
+// ── Phase 2 full test suite (T2.1–T2.4) ─────────────────────────
 //
-// These are the minimum-viable tests to prove the skeleton compiles and runs
-// (T1.8 exit criterion). Phase 2 (T2.1–T2.4) adds the full ≥18-test suite
-// covering monotonicity, midpoint, tier boundaries, cache key decode,
-// determinism, stable sort, and all three invalidation rules.
+// ≥18 tests covering: monotonicity (20-point sweep), midpoint, tier
+// boundaries (resolved from sigmoid inverse), cache key decode, determinism,
+// empty input, single zone, NaN defense, stable sort, scratch reuse, sparse
+// bypass, all three invalidation rules (tier / drift / TTL), TTL boundary,
+// invalidate_all, and a concurrent-access smoke test (T2.3.8).
 
 #[cfg(test)]
 mod tests {
@@ -474,18 +475,32 @@ mod tests {
 
     // ── zone_density_classify ──
 
+    // ── T2.1.1 Monotonicity (20-point sweep) ──
+
     #[test]
-    fn classify_empty_input_returns_default_no_panic() {
+    fn classify_mobility_monotone_decreasing_over_20_points() {
+        // Plan T2.1.1: as ρ increases from 0 to 50, mobility must be
+        // monotonically non-increasing. Sample 20 evenly-spaced points.
         let cfg = DensityClassifyConfig::default();
-        let mut mob = [];
-        let mut tier = [];
-        let mut key = [];
-        let report = zone_density_classify(&[], &cfg, &mut mob, &mut tier, &mut key);
-        assert_eq!(report.n_sparse, 0);
-        assert_eq!(report.n_transitional, 0);
-        assert_eq!(report.n_dense, 0);
-        assert_eq!(report.mean_mobility, 0.0);
+        let n = 20;
+        let pop: Vec<f32> = (0..n).map(|i| (i as f32) * (50.0 / (n - 1) as f32)).collect();
+        let mut mob = vec![0.0f32; n];
+        let mut tier = vec![DensityTier::Transitional; n];
+        let mut key = vec![0u64; n];
+        let _ = zone_density_classify(&pop, &cfg, &mut mob, &mut tier, &mut key);
+        for i in 1..n {
+            assert!(
+                mob[i] <= mob[i - 1] + 1e-6,
+                "monotonicity broken at i={}: mob[{}]={} > mob[{}]={}",
+                i, i - 1, mob[i - 1], i, mob[i]
+            );
+        }
+        // Sanity: endpoints actually span the dynamic range.
+        assert!(mob[0] > 0.9, "ρ=0 should give mobility near 1.0, got {}", mob[0]);
+        assert!(mob[n - 1] < 0.05, "ρ=50 should give mobility near 0, got {}", mob[n - 1]);
     }
+
+    // ── T2.1.2 Midpoint (mobility ≈ 0.5 at ρ = rho0) ──
 
     #[test]
     fn classify_midpoint_mobility_is_half() {
@@ -504,24 +519,49 @@ mod tests {
         assert_eq!(tier[0], DensityTier::Transitional);
     }
 
+    // ── T2.1.3 Tier boundaries resolved from sigmoid inverse ──
+
     #[test]
-    fn classify_extremes_land_in_correct_tier() {
+    fn classify_tier_boundaries_resolved_from_sigmoid_inverse() {
+        // Plan T2.1.3: at mobility = tier_high (0.7) the zone is Transitional
+        // (strict >), and just above tier_high it's Sparse. At mobility =
+        // tier_low (0.3) the zone is Transitional (strict <), and just below
+        // it's Dense. At mobility = 0.0 (saturated dense) it's Dense.
+        //
+        // Sigmoid inverse: ρ = rho0 - (1/β) · logit(m). logit(0.7) ≈ 0.8473.
         let cfg = DensityClassifyConfig::default();
-        // ρ = 0 → sigmoid(+2.5) ≈ 0.924 > 0.7 → Sparse
-        // ρ = 20 → sigmoid(-7.5) ≈ 5.5e-4 < 0.3 → Dense
-        let pop = [0.0f32, 20.0];
-        let mut mob = [0.0f32; 2];
-        let mut tier = [DensityTier::Transitional; 2];
-        let mut key = [0u64; 2];
-        let report = zone_density_classify(&pop, &cfg, &mut mob, &mut tier, &mut key);
-        assert_eq!(tier[0], DensityTier::Sparse, "ρ=0 should be Sparse");
-        assert_eq!(tier[1], DensityTier::Dense, "ρ=20 should be Dense");
-        assert_eq!(report.n_sparse, 1);
-        assert_eq!(report.n_dense, 1);
-        assert_eq!(report.n_transitional, 0);
-        // Mobility is monotone decreasing in ρ.
-        assert!(mob[0] > mob[1]);
+        let logit = |m: f32| (m / (1.0 - m)).ln();
+        let rho_at_high = cfg.rho0 - logit(cfg.tier_high) / cfg.beta;
+        let rho_at_low = cfg.rho0 - logit(cfg.tier_low) / cfg.beta;
+
+        // 4 cases: just-above-high, exactly-high, exactly-low, saturated-zero.
+        let pop = [
+            rho_at_high - 0.001, // mobility just above tier_high → Sparse
+            rho_at_high,         // mobility exactly tier_high → Transitional (strict >)
+            rho_at_low,          // mobility exactly tier_low → Transitional (strict <)
+            100.0,               // saturated dense → mobility ~ 0 → Dense
+        ];
+        let mut mob = [0.0f32; 4];
+        let mut tier = [DensityTier::Transitional; 4];
+        let mut key = [0u64; 4];
+        let _ = zone_density_classify(&pop, &cfg, &mut mob, &mut tier, &mut key);
+
+        assert_eq!(tier[0], DensityTier::Sparse, "just-above-high must be Sparse (mob={})", mob[0]);
+        assert_eq!(
+            tier[1], DensityTier::Transitional,
+            "mobility == tier_high must be Transitional (strict >), mob={}", mob[1]
+        );
+        assert_eq!(
+            tier[2], DensityTier::Transitional,
+            "mobility == tier_low must be Transitional (strict <), mob={}", mob[2]
+        );
+        assert_eq!(tier[3], DensityTier::Dense, "saturated dense (mob~0) must be Dense, mob={}", mob[3]);
+        // Sanity: the resolved boundaries actually produce the expected mobilities.
+        assert!((mob[1] - cfg.tier_high).abs() < 1e-4, "mob[1]={} ~= tier_high", mob[1]);
+        assert!((mob[2] - cfg.tier_low).abs() < 1e-4, "mob[2]={} ~= tier_low", mob[2]);
     }
+
+    // ── T2.1.4 Cache key round-trip ──
 
     #[test]
     fn classify_cache_key_round_trips() {
@@ -545,6 +585,8 @@ mod tests {
         }
     }
 
+    // ── T2.1.5 Determinism ──
+
     #[test]
     fn classify_is_deterministic() {
         let cfg = DensityClassifyConfig::default();
@@ -562,7 +604,72 @@ mod tests {
         assert_eq!(key_a, key_b, "cache_key must be identical");
     }
 
-    // ── schedule_outer_first ──
+    // ── T2.1.6 Empty input ──
+
+    #[test]
+    fn classify_empty_input_returns_default_no_panic() {
+        let cfg = DensityClassifyConfig::default();
+        let mut mob = [];
+        let mut tier = [];
+        let mut key = [];
+        let report = zone_density_classify(&[], &cfg, &mut mob, &mut tier, &mut key);
+        assert_eq!(report.n_sparse, 0);
+        assert_eq!(report.n_transitional, 0);
+        assert_eq!(report.n_dense, 0);
+        assert_eq!(report.mean_mobility, 0.0);
+    }
+
+    // ── T2.1.7 NaN defense (FFI boundary) ──
+    //
+    // A stray NaN in `population` (shouldn't happen by domain invariant, but
+    // the FFI boundary doesn't enforce it) must not panic. mobility will be
+    // NaN-propagated, tier will be Transitional (no match arm fires for NaN),
+    // and the cache key bucket is computed via `as u64` which saturates NaN
+    // to 0 (Rust 1.45+ cast semantics).
+
+    #[test]
+    fn classify_nan_population_does_not_panic() {
+        let cfg = DensityClassifyConfig::default();
+        let pop = [f32::NAN, 5.0, f32::INFINITY];
+        let mut mob = [0.0f32; 3];
+        let mut tier = [DensityTier::Dense; 3];
+        let mut key = [0u64; 3];
+        // Must not panic.
+        let _ = zone_density_classify(&pop, &cfg, &mut mob, &mut tier, &mut key);
+        // NaN propagates into mobility (sigmoid(NaN) = NaN).
+        assert!(mob[0].is_nan(), "NaN population → NaN mobility, got {}", mob[0]);
+        // NaN matches no `>` / `<` arm → falls through to Transitional.
+        assert_eq!(tier[0], DensityTier::Transitional, "NaN → Transitional fallback");
+        // Infinity: -β·(∞ - ρ0) = -∞ → sigmoid(-∞) = 0.0 < 0.3 → Dense.
+        assert_eq!(tier[2], DensityTier::Dense, "INFINITY → Dense");
+        // Cache key bucket for NaN: `(NaN * 0.5).floor().max(0.0) as u64` → 0.
+        let (decoded_tier, decoded_bucket) = decode_cache_key(key[0]).unwrap();
+        assert_eq!(decoded_tier, DensityTier::Transitional);
+        assert_eq!(decoded_bucket, 0, "NaN bucket saturates to 0");
+    }
+
+    // ── Endpoint sanity (complements T2.1.1 monotonicity + T2.1.3 boundaries) ──
+
+    #[test]
+    fn classify_extremes_land_in_correct_tier() {
+        let cfg = DensityClassifyConfig::default();
+        // ρ = 0 → sigmoid(+2.5) ≈ 0.924 > 0.7 → Sparse
+        // ρ = 20 → sigmoid(-7.5) ≈ 5.5e-4 < 0.3 → Dense
+        let pop = [0.0f32, 20.0];
+        let mut mob = [0.0f32; 2];
+        let mut tier = [DensityTier::Transitional; 2];
+        let mut key = [0u64; 2];
+        let report = zone_density_classify(&pop, &cfg, &mut mob, &mut tier, &mut key);
+        assert_eq!(tier[0], DensityTier::Sparse, "ρ=0 should be Sparse");
+        assert_eq!(tier[1], DensityTier::Dense, "ρ=20 should be Dense");
+        assert_eq!(report.n_sparse, 1);
+        assert_eq!(report.n_dense, 1);
+        assert_eq!(report.n_transitional, 0);
+        // Mobility is monotone decreasing in ρ.
+        assert!(mob[0] > mob[1]);
+    }
+
+    // ── T2.2.1 Ascending order ──
 
     #[test]
     fn schedule_sorts_ascending_by_density() {
@@ -574,6 +681,8 @@ mod tests {
         assert_eq!(order, [3, 1, 2, 0]);
     }
 
+    // ── T2.2.2 Stable within ties ──
+
     #[test]
     fn schedule_is_stable_within_ties() {
         let pop = [5.0f32, 5.0, 5.0];
@@ -583,6 +692,31 @@ mod tests {
         // All equal density → original order preserved (stable sort).
         assert_eq!(order, [0, 1, 2]);
     }
+
+    // ── T2.2.3 Single zone ──
+
+    #[test]
+    fn schedule_single_zone_returns_identity() {
+        let pop = [3.0f32];
+        let mut order = [0u32; 1];
+        let mut scratch = Vec::new();
+        schedule_outer_first(&pop, &mut order, &mut scratch);
+        assert_eq!(order, [0], "single zone → out_order = [0]");
+    }
+
+    // ── T2.2.4 Empty input ──
+
+    #[test]
+    fn schedule_empty_input_writes_nothing_no_panic() {
+        let pop: [f32; 0] = [];
+        let mut order = [99u32; 4]; // sentinel — must remain untouched
+        let mut scratch = Vec::new();
+        schedule_outer_first(&pop, &mut order, &mut scratch);
+        assert_eq!(order, [99, 99, 99, 99], "empty input must not write anything");
+        assert!(scratch.is_empty(), "scratch cleared after empty input");
+    }
+
+    // ── T2.2.5 Scratch reuse ──
 
     #[test]
     fn schedule_reuses_scratch_across_calls() {
@@ -595,9 +729,17 @@ mod tests {
         // Second call with same scratch — must produce identical result.
         schedule_outer_first(&pop, &mut order, &mut scratch);
         assert_eq!(order, first);
+        // Third call with different population, same scratch — no stale state.
+        let pop2 = [9.0f32, 0.0, 4.0];
+        schedule_outer_first(&pop2, &mut order, &mut scratch);
+        assert_eq!(order, [1, 2, 0], "densities idx1=0, idx2=4, idx0=9 → [1,2,0]");
     }
 
     // ── ZoneDensityCache ──
+    //
+    // T2.3.1 sparse bypass · T2.3.2 transitional hit · T2.3.3 dense hit ·
+    // T2.3.4 tier transition · T2.3.5 density drift · T2.3.6 TTL expiry ·
+    // T2.3.7 invalidate_all · T2.3.8 concurrent access.
 
     #[test]
     fn cache_never_stores_sparse_tier() {
@@ -678,5 +820,56 @@ mod tests {
             let hit = cache.get_or_invalidate(z, 10.0, DensityTier::Dense, 0, 2.0);
             assert!(hit.is_none(), "zone {} should miss after invalidate_all", z);
         }
+    }
+
+    // ── T2.3.8 Concurrent access smoke test ──
+    //
+    // papaya's lock-free HashMap is `Send + Sync`. We exercise this with two
+    // std::threads — one inserting, one getting — over 1000 iterations each
+    // on a shared cache. No deadlock, no panic, no data race. We do NOT assert
+    // specific values (interleaving is nondeterministic) — only that both
+    // threads complete cleanly and the cache is non-empty at the end.
+
+    #[test]
+    fn cache_concurrent_access_no_deadlock_no_panic() {
+        let cache: std::sync::Arc<ZoneDensityCache<u32>> =
+            std::sync::Arc::new(ZoneDensityCache::new(1000));
+        let cache_writer = cache.clone();
+        let cache_reader = cache.clone();
+
+        let writer = std::thread::spawn(move || {
+            for i in 0..1000u32 {
+                // Mix tiers; Sparse inserts are dropped by design (T2.3.1).
+                let tier = match i % 3 {
+                    0 => DensityTier::Dense,
+                    1 => DensityTier::Transitional,
+                    _ => DensityTier::Sparse,
+                };
+                cache_writer.insert(i, (i % 20) as f32, tier, 0, i);
+            }
+        });
+
+        let reader = std::thread::spawn(move || {
+            let mut total_hits = 0u32;
+            let mut total_misses = 0u32;
+            for i in 0..1000u32 {
+                let tier = if i % 2 == 0 { DensityTier::Dense } else { DensityTier::Transitional };
+                match cache_reader.get_or_invalidate(i, (i % 20) as f32, tier, 0, 2.0) {
+                    Some(_) => total_hits += 1,
+                    None => total_misses += 1,
+                }
+            }
+            (total_hits, total_misses)
+        });
+
+        writer.join().expect("writer thread panicked");
+        let (hits, misses) = reader.join().expect("reader thread panicked");
+        // Both threads completed without panic. We don't assert on hit/miss
+        // counts (interleaving-dependent) — only that the totals add up and
+        // the cache is in a consistent state.
+        assert_eq!(hits + misses, 1000, "reader must observe all 1000 zones");
+        // Cache should have *some* non-sparse entries from the writer (666 of
+        // 1000, modulo eviction races). At minimum it shouldn't be empty.
+        assert!(cache.len() > 0 || hits > 0, "cache should be non-empty or hits observed");
     }
 }
