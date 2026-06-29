@@ -939,7 +939,7 @@ impl KVarNKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for KVarNKVCache {
+impl katgpt_core::types::QuantizedKVCache for KVarNKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }

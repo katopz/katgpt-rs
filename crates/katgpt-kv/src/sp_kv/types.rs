@@ -240,7 +240,7 @@ impl UtilityPredictorWeights {
         let w1_scale = (2.0 / d_model as f32).sqrt();
         let w2_scale = (2.0 / hidden as f32).sqrt();
 
-        let mut rng = crate::types::Rng::new(42);
+        let mut rng = katgpt_core::types::Rng::new(42);
 
         let w1: Vec<f32> = (0..hidden * d_model)
             .map(|_| rng.normal() * w1_scale)
@@ -440,7 +440,7 @@ impl SpKvQuantLayerMeta {
 
 /// Hybrid SP-KV + Quantized KV cache.
 ///
-/// Combines SP-KV's utility-based selective write with any [`QuantizedKVCache`](crate::types::QuantizedKVCache) backend.
+/// Combines SP-KV's utility-based selective write with any [`QuantizedKVCache`](katgpt_core::types::QuantizedKVCache) backend.
 /// Two-stage compression pipeline:
 /// 1. **SP-KV selective write**: utility predictor decides which positions to retain
 /// 2. **Quantized storage**: retained positions are compressed (f32 → 2-4 bits)
@@ -457,7 +457,7 @@ impl SpKvQuantLayerMeta {
 ///
 /// Available when `sp_kv` is enabled. The quantized backend `C` must also be available
 /// (e.g., `turboquant` or `spectral_quant`).
-pub struct SpKvQuantCache<C: crate::types::QuantizedKVCache> {
+pub struct SpKvQuantCache<C: katgpt_core::types::QuantizedKVCache> {
     /// Per-layer SP-KV metadata (utilities, retained bitfield).
     pub meta: Vec<SpKvQuantLayerMeta>,
     /// Quantized KV cache backend (TurboQuant, SpectralQuant, etc.).
@@ -466,7 +466,7 @@ pub struct SpKvQuantCache<C: crate::types::QuantizedKVCache> {
     pub config: SpKvConfig,
 }
 
-impl<C: crate::types::QuantizedKVCache> SpKvQuantCache<C> {
+impl<C: katgpt_core::types::QuantizedKVCache> SpKvQuantCache<C> {
     /// Create a new hybrid cache wrapping an existing quantized backend.
     pub fn new(config: SpKvConfig, quant: C, n_layers: usize, block_size: usize) -> Self {
         Self {

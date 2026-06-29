@@ -31,9 +31,9 @@
 use super::rope::RopeFreqs;
 use super::types::{ShardCalibration, ShardConfig, ShardLayer};
 use katgpt_core::simd::{simd_scale_inplace, simd_sum_sq};
-use crate::spectralquant::spectral::{BitAllocator, LloydMaxQuantizer, waterfill_bits};
-use crate::spectralquant::spectral_rotation::SpectralRotation;
-use crate::spectralquant::types::LloydMaxCodebook;
+use katgpt_spectral::spectral::{BitAllocator, LloydMaxQuantizer, waterfill_bits};
+use katgpt_spectral::spectral_rotation::SpectralRotation;
+use katgpt_spectral::types::LloydMaxCodebook;
 
 /// Compressed KV cache with asymmetric K/V compression.
 ///
@@ -198,7 +198,7 @@ impl ShardKVCache {
         for (layer_idx, layer) in layers.iter_mut().enumerate() {
             let d_eff = layer.d_eff;
             let eigenvectors = &layer.calibration.k_eigenvectors;
-            let mut rng = crate::types::Rng::new(config.seed.wrapping_add(layer_idx as u64 * 31));
+            let mut rng = katgpt_core::types::Rng::new(config.seed.wrapping_add(layer_idx as u64 * 31));
 
             // Generate K-path synthetic data: normalize → rotate by V^T
             let k_synthetic: Vec<Vec<f32>> = (0..n_synthetic)
@@ -773,7 +773,7 @@ impl ShardKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for ShardKVCache {
+impl katgpt_core::types::QuantizedKVCache for ShardKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -888,7 +888,7 @@ fn kmeans_fit(
     max_iter: usize,
     seed: u64,
 ) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
 
     // Initialize centroids by randomly selecting k data points
     let mut centroids = vec![0.0f32; k * dims];
@@ -1005,7 +1005,7 @@ fn unpack_variable_bits(packed: &[u8], bits_per_dim: &[u8], n_dims: usize, out: 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spectralquant::spectral::participation_ratio;
+    use katgpt_spectral::spectral::participation_ratio;
 
     fn make_test_calibration(head_dim: usize) -> ShardCalibration {
         let mut eigenvectors = vec![0.0f32; head_dim * head_dim];
@@ -1166,7 +1166,7 @@ mod tests {
         let mut cache = ShardKVCache::from_calibration(&config, &[cal]);
 
         let layer = 0;
-        let mut rng = crate::types::Rng::new(123);
+        let mut rng = katgpt_core::types::Rng::new(123);
 
         // Store multiple positions
         let keys: Vec<Vec<f32>> = (0..10)

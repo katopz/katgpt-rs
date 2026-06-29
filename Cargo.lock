@@ -1762,6 +1762,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "katgpt-kv"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "bytemuck",
+ "fastrand",
+ "half",
+ "katgpt-core",
+ "katgpt-spectral",
+ "katgpt-types",
+ "rayon",
+ "serde",
+]
+
+[[package]]
 name = "katgpt-micro-belief"
 version = "0.1.0"
 dependencies = [
@@ -1805,7 +1820,9 @@ dependencies = [
  "getrandom 0.3.4",
  "half",
  "katgpt-core",
+ "katgpt-kv",
  "katgpt-percepta",
+ "katgpt-spectral",
  "katgpt-speculative",
  "katgpt-tokenizer",
  "katgpt-transformer",
@@ -1834,6 +1851,20 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "katgpt-types",
+]
+
+[[package]]
+name = "katgpt-spectral"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "half",
+ "katgpt-core",
+ "katgpt-transformer",
+ "katgpt-types",
+ "log",
+ "rayon",
+ "serde",
 ]
 
 [[package]]

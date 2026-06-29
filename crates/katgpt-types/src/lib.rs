@@ -65,6 +65,10 @@ pub mod leaky_core;
 mod looping;
 mod lora;
 pub mod math;
+/// QuantizedKVCache trait — shared extension point for all KV backends.
+/// Promoted from `katgpt-rs/src/types.rs` (Issue 015 Phase 1) so backend
+/// crates can depend on the trait without pulling the whole root crate.
+pub mod kv_cache;
 mod rng;
 /// SIMD-accelerated linear algebra kernels (NEON / AVX2 / WASM-SIMD128 /
 /// scalar fallback). Co-located with `types` because `types::math` calls
@@ -104,6 +108,7 @@ pub use inference::InferenceResult;
 pub use inference::{DataGate, GateDecision, ProposerTask, TaskType};
 pub use looping::{CacheStrategy, IterationMode, SubStepStrategy, TrainingFreeLoopConfig};
 pub use lora::{LoraAdapter, LoraPair, lora_apply};
+pub use kv_cache::QuantizedKVCache;
 pub use math::{
     gegelu, gegelu_tanh, matmul, matmul_f16, matmul_f16_parallel, matmul_parallel, matmul_relu,
     rmsnorm, rmsnorm_with_gamma, rmsnorm_with_gamma_eps, sample_token_into, silu,

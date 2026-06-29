@@ -233,7 +233,7 @@ impl SpectralQuantKVCache {
             let head_dim = layer.calibration.head_dim;
             let b_high = layer.b_high;
             let b_low = layer.b_low;
-            let mut rng = crate::types::Rng::new(config.seed.wrapping_add(layer_idx as u64 * 31));
+            let mut rng = katgpt_core::types::Rng::new(config.seed.wrapping_add(layer_idx as u64 * 31));
             let eigenvectors = &layer.calibration.eigenvectors;
 
             // Generate synthetic data matching the actual pipeline:
@@ -951,7 +951,7 @@ impl SpectralQuantKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for SpectralQuantKVCache {
+impl katgpt_core::types::QuantizedKVCache for SpectralQuantKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -1032,7 +1032,7 @@ fn is_identity_matrix(mat: &[f32], dim: usize) -> bool {
 /// Same quality as TurboQuant's random rotation — used as fallback when
 /// no real calibration data is available (identity eigenvectors).
 fn generate_random_rotation(dim: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     let mut mat = vec![0.0f32; dim * dim];
     for v in mat.iter_mut() {
         *v = rng.normal();

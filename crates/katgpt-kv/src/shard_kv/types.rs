@@ -4,7 +4,7 @@
 //! - K: undo RoPE → PCA rotation → water-fill bit allocation → Lloyd-Max quantize
 //! - V: Hadamard rotation → vector quantization (VQ) for prefill, 8-bit Lloyd-Max for decode
 
-use crate::spectralquant::types::LloydMaxCodebook;
+use katgpt_spectral::types::LloydMaxCodebook;
 
 /// VQ codebook for vector quantization (groups of channels).
 ///

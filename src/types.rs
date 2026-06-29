@@ -8,35 +8,30 @@
 pub use katgpt_core::types::*;
 
 // ---------------------------------------------------------------------------
-// QuantizedKVCache — katgpt-rs only
+// QuantizedKVCache — re-exported from katgpt-types (Issue 015 Phase 1)
 // ---------------------------------------------------------------------------
+//
+// The core trait was promoted to `katgpt_types::kv_cache` so backend crates
+// (`katgpt-kv`, future sibling engine crates) can implement against it
+// without depending on the root `katgpt-rs` crate. Re-export here preserves
+// the historical `katgpt_rs::types::QuantizedKVCache` path.
 
-/// Shared interface for quantized KV caches.
+pub use katgpt_core::types::QuantizedKVCache;
+
+/// Extension trait: optional KV-cache compaction.
 ///
-/// Enables [`crate::transformer::forward_quantized`] to work with any
-/// compression backend (TurboQuant, SpectralQuant, or future methods).
-pub trait QuantizedKVCache {
-    /// Quantize and store a key vector at given layer and position.
-    fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]);
-    /// Quantize and store a value vector at given layer and position.
-    fn store_value(&mut self, layer: usize, pos: usize, value: &[f32]);
-    /// Dequantize a key into a pre-allocated buffer (zero-alloc hot path).
-    fn dequantize_key_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
-    /// Dequantize a value into a pre-allocated buffer (zero-alloc hot path).
-    fn dequantize_value_into(&mut self, layer: usize, pos: usize, out: &mut [f32]);
-    /// Reset cache for a new sequence.
-    fn reset(&mut self);
-    /// Current write position.
-    fn pos(&self) -> usize;
-    /// Set the current write position.
-    fn set_pos(&mut self, pos: usize);
-
+/// Lives in the root crate (not katgpt-types) because it references
+/// `crate::still_kv::CompactionStrategy` / `CompactKVCache`, which are
+/// feature-gated KV-concrete types. Backends that support compaction
+/// implement this in addition to `QuantizedKVCache`. The default impl
+/// returns `Err` so every cache type is soundly default-impl-able.
+///
+/// Historical note: this was originally a `#[cfg(feature = "still_kv")]`
+/// method on `QuantizedKVCache` itself. Split out into an extension trait
+// during Issue 015 Phase 1 so the core trait could move to the leaf crate.
+#[cfg(feature = "still_kv")]
+pub trait CompactableKVCache: QuantizedKVCache {
     /// Compact the KV cache into a smaller representation.
-    ///
-    /// Default implementation returns an error — only meaningful when the
-    /// `still_kv` feature is enabled and the concrete cache type supports
-    /// compaction.
-    #[cfg(feature = "still_kv")]
     fn compact_into(
         &mut self,
         _budget: usize,
@@ -206,53 +201,13 @@ pub fn top_p_coreset_allocating(scores: &[f32], p: f32) -> (Vec<bool>, usize) {
 }
 
 // ---------------------------------------------------------------------------
-// Outlier-Aware Quantization Guard (Plan 224)
+// Outlier-Aware Quantization Guard types — re-exported from katgpt-spectral
+// (Issue 015 Phase 2)
 // ---------------------------------------------------------------------------
+// The type definitions were relocated to
+// `crates/katgpt-spectral/src/outlier_guard.rs` because they are consumed
+// exclusively by the outlier guard, which lives in katgpt-spectral. The
+// re-export preserves the historical `katgpt_rs::types::OutlierGuard*` path.
 
-/// Action to take when outlier injection is detected.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[repr(u8)]
-pub enum OutlierAction {
-    /// Log warning, continue loading. Default for MIT engine.
-    #[default]
-    Warn = 0,
-    /// Reject the model (return error). Useful for SaaS deployment.
-    Reject = 1,
-    /// Silent — just record metrics, no warning. Useful for benchmarking.
-    Silent = 2,
-}
-
-/// Configuration for the outlier-aware quantization guard.
-/// Runs once at model load time to detect outlier injection attacks.
-#[derive(Clone, Debug)]
-pub struct OutlierGuardConfig {
-    /// KS D-statistic threshold above which a layer is flagged.
-    /// Default: 0.15 (conservative midpoint between normal <0.1 and attacked >0.25).
-    pub ks_threshold: f32,
-    /// What to do when an outlier is detected.
-    pub on_detection: OutlierAction,
-    /// Whether to also check StiffSoft eigenvalue distribution if available.
-    pub use_stiffsoft_crosscheck: bool,
-}
-
-impl Default for OutlierGuardConfig {
-    fn default() -> Self {
-        Self {
-            ks_threshold: 0.15,
-            on_detection: OutlierAction::Warn,
-            use_stiffsoft_crosscheck: false,
-        }
-    }
-}
-
-#[cfg(feature = "serde")]
-impl serde::Serialize for OutlierGuardConfig {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeStruct;
-        let mut state = s.serialize_struct("OutlierGuardConfig", 3)?;
-        state.serialize_field("ks_threshold", &self.ks_threshold)?;
-        state.serialize_field("on_detection", &(self.on_detection as u8))?;
-        state.serialize_field("use_stiffsoft_crosscheck", &self.use_stiffsoft_crosscheck)?;
-        state.end()
-    }
-}
+#[cfg(feature = "outlier_guard")]
+pub use katgpt_spectral::outlier_guard::{OutlierAction, OutlierGuardConfig};

@@ -77,8 +77,6 @@ pub mod collider_pruner;
 // Opt-in behind the `compression_drafter` feature until GOAT gate passes.
 #[cfg(feature = "compression_drafter")]
 pub use katgpt_core::compression_drafter;
-#[cfg(feature = "cs_kv_probe")]
-pub mod cs_kv_probe;
 #[cfg(any(feature = "gdn2_attention", feature = "wall_attention"))]
 pub mod diagonal_gate;
 #[cfg(any(
@@ -126,9 +124,6 @@ pub mod inference_router;
 pub mod interval_pruner;
 #[cfg(feature = "iso_quant")]
 pub mod iso_quant;
-#[cfg(feature = "kv_share")]
-pub mod kv_share;
-pub mod kvarn;
 #[cfg(feature = "lattice_operad")]
 pub mod lattice_operad;
 #[cfg(feature = "gauge_invariant")]
@@ -144,8 +139,6 @@ pub mod newton_schulz;
 pub mod off_principal;
 #[cfg(feature = "octopus")]
 pub mod octopus;
-#[cfg(feature = "osc_kv")]
-pub mod osc_kv;
 #[cfg(feature = "modality_pruned_load")]
 pub mod pipeline_pruner;
 #[cfg(feature = "planar_quant")]
@@ -183,8 +176,6 @@ pub mod rt_turbo;
 pub mod ruliology;
 #[cfg(feature = "segment_checkpoint")]
 pub mod segment_checkpoint;
-#[cfg(feature = "shard_kv")]
-pub mod shard_kv;
 #[cfg(feature = "chiaroscuro")]
 pub mod chiaroscuro;
 // Functional Attention composition layer — Plan 286 Phase 5 (T5.1–T5.3). Each
@@ -206,8 +197,42 @@ pub mod sparse_compose;
 pub mod skill_opt;
 #[cfg(feature = "sleep_consolidation")]
 pub mod sleep;
+#[cfg(feature = "kv_share")]
+pub use katgpt_kv::kv_share;
+#[cfg(feature = "osc_kv")]
+pub use katgpt_kv::osc_kv;
+#[cfg(feature = "cs_kv_probe")]
+pub use katgpt_kv::cs_kv_probe;
+#[cfg(feature = "shard_kv")]
+pub use katgpt_kv::shard_kv;
+#[cfg(feature = "still_kv")]
+pub use katgpt_kv::still_kv;
+#[cfg(feature = "kvarn")]
+pub use katgpt_kv::kvarn;
+#[cfg(feature = "targeted_precision")]
+pub use katgpt_kv::targeted_precision;
 #[cfg(feature = "sp_kv")]
-pub mod sp_kv;
+pub mod sp_kv {
+    //! SP-KV re-export bridge (Issue 015 Phase 5).
+    //!
+    //! Combines `katgpt_kv::sp_kv` (types + utility predictor) with the local
+    //! `sp_kv_forward_mod` (transformer glue that depends on ForwardContext).
+    pub use katgpt_kv::sp_kv::*;
+    pub mod forward {
+        pub use crate::sp_kv_forward_mod::*;
+    }
+    // Re-export the forward-module building blocks at the sp_kv top level so
+    // historical `katgpt_rs::sp_kv::{GateBias, attention_head_core, ...}` paths
+    // still resolve (back-compat with tests/examples).
+    pub use crate::sp_kv_forward_mod::{
+        GateBias, NoBias, SpKvForwardContext, attention_head_core, attention_head_gated,
+        forward_sp_kv, forward_sp_kv_quant,
+    };
+}
+/// SP-KV transformer glue — full pipeline functions that take ForwardContext.
+/// Kept private; surfaced via the `sp_kv::forward` re-export above.
+#[cfg(feature = "sp_kv")]
+mod sp_kv_forward_mod;
 pub mod spec_reconciliation;
 #[cfg(feature = "spechop")]
 pub mod spechop;
@@ -216,7 +241,15 @@ pub mod spectral_budget;
 #[cfg(feature = "spectral_rank")]
 pub mod spectral_concentration;
 #[cfg(feature = "spectral_quant")]
-pub mod spectralquant;
+pub mod spectralquant {
+    //! Spectralquant re-export shim (Issue 015 Phase 5).
+    //!
+    //! The substrate physically lives in `crates/katgpt-spectral/`. This
+    //! module re-exports it so all historical `katgpt_rs::spectralquant::*`
+    //! paths continue to resolve for `funcattn_compose`, `chiaroscuro`,
+    //! `benchmark/infrastructure`, and all tests/examples.
+    pub use katgpt_spectral::*;
+}
 pub mod speculative;
 // SwiR Switch-Thinking — Explicit↔Latent mode controller (Plan 275, Research 241).
 #[cfg(feature = "swir_switch_thinking")]
@@ -225,10 +258,6 @@ pub mod swir;
 pub mod static_cal;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
-#[cfg(feature = "still_kv")]
-pub mod still_kv;
-#[cfg(feature = "targeted_precision")]
-pub mod targeted_precision;
 // thinking_cot — adaptive CoT framework (Plan 194). The feature is a
 // meta-feature that pulls in the bandit/prune/probe machinery required by
 // speculative::thinking_controller; the module itself owns the shared
@@ -347,21 +376,18 @@ pub use alien_sampler::{
     MedianTopMAvailability, ScoredCandidate,
 };
 
-// Vessel — Extract-Once Secure Wire Format Primitive (Plan 315, Research 297).
-// Generic open primitive: WASM-with-BLAKE3-header wire format + tier-aware
-// loader trait. Hot/Plasma path: `extract_payload::<T: Pod>()` (one-time
-// validate, then zero-copy SIMD borrow). Cold/Freeze path: `VesselProjector`
-// (capability-restricted WASM call, fuel-gated, fail-safe). Re-uses existing
-// `wasmi` + `blake3` + `bytemuck` deps — no new deps. Honest scope: API
-// encapsulation + chain-committed integrity, NOT cryptographic confidentiality.
-// The private Super-GOAT guide + NeuronShard wrapper live in riir-neuron-db
-// (Research 006 / Plan 003). Opt-in until G1-G5 GOAT gate passes.
-#[cfg(feature = "secure_vessel")]
-pub mod vessel;
-#[cfg(feature = "secure_vessel")]
-pub use vessel::{
-    content_addr_from_header, decode_header, encode_vessel, ensure_compiled, extract_payload,
-    extract_payload_slice, load_vessel, query_hash, verify_blake3, CompiledVessel, LoadedVessel,
-    VESSEL_HEADER_LEN, VESSEL_MAGIC, VESSEL_VERSION, VesselCache, VesselError, VesselHeader,
-    VesselProjector, WasmDotProjector,
-};
+// Vessel — Extract-Once Secure Wire Format Primitive (Plan 315 / Research 297).
+//
+// MOVED to riir-neuron-db/src/vessel/ (Plan 006, 2026-06-29). The primitive
+// is now PRIVATE — publishing the security-enforcement wire format (magic
+// bytes, BLAKE3 protocol, projector signatures, fuel-gating budgets, exact
+// 52-byte header layout) handed attackers a free threat-model blueprint with
+// zero public adoption value. No external dev builds on "secure WASM vessel
+// format"; the only consumers were the private repos (riir-neuron-db
+// NeuronVesselSidecar, riir-chain delivery, riir-ai runtime). See
+// riir-neuron-db/.plans/006_vessel_primitive_migration.md.
+//
+// The `secure_vessel` Cargo feature, the `vessel_extract_bench`, and the
+// `vessel_minimal` / `vessel_project` examples were removed in the same
+// migration. Historical docs remain in katgpt-rs/.docs, .benchmarks, .plans,
+// .research as the public record of what existed.

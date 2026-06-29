@@ -3,9 +3,62 @@
 //! Detects outlier injection attacks in quantized weight matrices.
 //! Runs once at model load, O(n log n) per weight matrix.
 
-use crate::spectralquant::spectral::ks_d_statistic;
-use crate::types::{OutlierAction, OutlierGuardConfig};
+use super::spectral::ks_d_statistic;
 use std::fmt;
+
+// ---------------------------------------------------------------------------
+// Outlier config types (moved from `katgpt-rs/src/types.rs` in Issue 015
+// Phase 2 — these are spectralquant-specific config and live with the only
+// code that consumes them; re-exported back to root via katgpt-spectral's
+// lib.rs for back-compat).
+// ---------------------------------------------------------------------------
+
+/// Action to take when outlier injection is detected.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(u8)]
+pub enum OutlierAction {
+    /// Log warning, continue loading. Default for MIT engine.
+    #[default]
+    Warn = 0,
+    /// Reject the model (return error). Useful for SaaS deployment.
+    Reject = 1,
+    /// Silent — just record metrics, no warning. Useful for benchmarking.
+    Silent = 2,
+}
+
+/// Configuration for the outlier-aware quantization guard.
+/// Runs once at model load time to detect outlier injection attacks.
+#[derive(Clone, Debug)]
+pub struct OutlierGuardConfig {
+    /// KS D-statistic threshold above which a layer is flagged.
+    /// Default: 0.15 (conservative midpoint between normal <0.1 and attacked >0.25).
+    pub ks_threshold: f32,
+    /// What to do when an outlier is detected.
+    pub on_detection: OutlierAction,
+    /// Whether to also check StiffSoft eigenvalue distribution if available.
+    pub use_stiffsoft_crosscheck: bool,
+}
+
+impl Default for OutlierGuardConfig {
+    fn default() -> Self {
+        Self {
+            ks_threshold: 0.15,
+            on_detection: OutlierAction::Warn,
+            use_stiffsoft_crosscheck: false,
+        }
+    }
+}
+
+impl serde::Serialize for OutlierGuardConfig {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut state = s.serialize_struct("OutlierGuardConfig", 3)?;
+        state.serialize_field("ks_threshold", &self.ks_threshold)?;
+        state.serialize_field("on_detection", &(self.on_detection as u8))?;
+        state.serialize_field("use_stiffsoft_crosscheck", &self.use_stiffsoft_crosscheck)?;
+        state.end()
+    }
+}
 
 /// Report for a single layer scan.
 #[derive(Clone, Debug)]
@@ -174,7 +227,7 @@ impl OutlierGuard {
     /// Call after `TransformerWeights::new()` or after deserializing weights.
     pub fn scan_transformer_weights(
         &mut self,
-        weights: &crate::transformer::TransformerWeights,
+        weights: &katgpt_transformer::TransformerWeights,
     ) -> &OutlierGuardReport {
         // Scan embedding table
         self.scan_layer(&weights.wte, 0, "embedding.wte");

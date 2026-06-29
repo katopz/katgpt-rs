@@ -291,7 +291,7 @@ mod tests {
     }
 
     fn make_rotated_data(n: usize, head_dim: usize, d_eff: usize) -> Vec<Vec<f32>> {
-        let mut rng = crate::types::Rng::new(42);
+        let mut rng = katgpt_core::types::Rng::new(42);
         (0..n)
             .map(|_| {
                 (0..head_dim)

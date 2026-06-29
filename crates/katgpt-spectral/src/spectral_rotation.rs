@@ -3,6 +3,53 @@
 //! Spectral rotation uses learned eigenvectors from covariance analysis.
 //! `RandomRotation` (TurboQuant baseline/fallback) is gated behind the `turboquant` feature.
 
+// ---------------------------------------------------------------------------
+// Vendored `generate_rotation_matrix` (Issue 015 Phase 2)
+// ---------------------------------------------------------------------------
+//
+// Inlined from `katgpt-rs/src/turboquant/rotation.rs` so that katgpt-spectral
+// can be consumed standalone (turboquant is not its own crate yet). The
+// function is 50 lines and depends only on `katgpt_core::types::Rng` +
+// `katgpt_core::simd::simd_sum_sq`, both available here. When turboquant is
+// eventually extracted into its own crate, this should be replaced by a dep.
+
+/// Generate a random orthogonal matrix via QR decomposition (modified Gram-Schmidt).
+/// Deterministic from seed for reproducibility across runs.
+#[allow(dead_code)] // gated by `turboquant` feature at call site; always compiled for crate-internal reuse
+fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
+    let mut rng = katgpt_core::types::Rng::new(seed);
+    let mut mat = vec![0.0f32; dim * dim];
+    for val in mat.iter_mut() {
+        *val = rng.normal();
+    }
+
+    let mut q = vec![0.0f32; dim * dim];
+    // Column data stored at [col * dim + row] (column-major layout).
+    let mut v_flat = vec![0.0f32; dim * dim];
+
+    for col in 0..dim {
+        for row in 0..dim {
+            v_flat[col * dim + row] = mat[row * dim + col];
+        }
+    }
+
+    for i in 0..dim {
+        for j in 0..i {
+            let dot: f32 = (0..dim).map(|k| q[k * dim + j] * v_flat[i * dim + k]).sum();
+            for k in 0..dim {
+                v_flat[i * dim + k] -= dot * q[k * dim + j];
+            }
+        }
+        let norm = katgpt_core::simd::simd_sum_sq(&v_flat[i * dim..i * dim + dim], dim).sqrt();
+        if norm > 1e-8 {
+            for k in 0..dim {
+                q[k * dim + i] = v_flat[i * dim + k] / norm;
+            }
+        }
+    }
+    q
+}
+
 /// Data-driven orthogonal rotation using calibrated eigenvectors.
 ///
 /// Forward: x_hat = V^T @ x  (project into spectral basis)
@@ -92,7 +139,7 @@ impl RandomRotation {
         let mut rotations = Vec::with_capacity(total * head_dim * head_dim);
         for idx in 0..total {
             let seed = global_seed.wrapping_add(idx as u64 * 7919);
-            let mat = crate::turboquant::rotation::generate_rotation_matrix(head_dim, seed);
+            let mat = generate_rotation_matrix(head_dim, seed);
             rotations.extend_from_slice(&mat);
         }
         Self {

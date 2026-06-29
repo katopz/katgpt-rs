@@ -25,14 +25,18 @@
 //! ## Feature Flag
 //!
 //! Enabled via `sp_kv` feature in `Cargo.toml`.
+//!
+//! ## Glue code split (Issue 015 Phase 3)
+//!
+//! The full pipeline functions `forward_sp_kv` / `forward_sp_kv_quant` live
+//! in the ROOT crate at `src/sp_kv_forward.rs` because they take
+//! `crate::transformer::ForwardContext` (a root-crate type with ~15 fields
+//! that cannot be made generic without an unergonomic trait). katgpt-kv owns
+//! the types and utility predictor; the root crate owns the transformer glue.
 
-pub mod forward;
 pub mod types;
 pub mod utility_predictor;
 
-pub use forward::{
-    GateBias, NoBias, SpKvForwardContext, attention_head_core, attention_head_gated,
-};
 pub use types::{
     GateBiasBuffer, SpKvCache, SpKvConfig, SpKvGateMode, SpKvLayerCache, SpKvPredictors,
     SpKvQuantCache, SpKvQuantLayerMeta, UtilityPredictorWeights,

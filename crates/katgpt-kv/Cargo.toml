@@ -1,0 +1,67 @@
+[package]
+name = "katgpt-kv"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "KV-cache namespace — KV-cache compression, compaction, projection-sharing, and quantization backends. Spun out of katgpt-rs/src/{kv_share,osc_kv,cs_kv_probe,shard_kv,sp_kv,still_kv,kvarn,targeted_precision} (Issue 015 Phase 3)."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["kv-cache", "quantization", "inference", "modelless", "compression"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# SIMD kernels, types re-export, QuantizedKVCache trait (via types).
+katgpt-core = { path = "../katgpt-core" }
+# Shared types — QuantizedKVCache trait lives here (Issue 015 Phase 1).
+katgpt-types = { path = "../katgpt-types" }
+# Spectral quantization substrate — used by shard_kv (K-path PCA + Lloyd-Max)
+# and kvarn (via targeted_precision). Required, non-optional.
+katgpt-spectral = { path = "../katgpt-spectral" }
+# f16 KV cache storage (still_kv, shard_kv).
+half = "2"
+# Zero-copy Pod layout for KV structs.
+bytemuck = "1"
+# KV cache parallel dequant kernels.
+rayon = "1.10"
+# serde for KV config structs.
+serde = { version = "1", features = ["derive"] }
+# Deterministic RNG (cs_kv_probe).
+fastrand = "2"
+# Hashing (cs_kv_probe masks).
+blake3 = "1"
+
+[features]
+# All flags mirror the historical katgpt-rs feature surface for KV modules.
+# Empty tracking flags — they gate `#[cfg(feature = "...")]` branches inside
+# the code, not external deps. The root crate forwards each one via
+# `feature = ["katgpt-kv/feature"]`.
+default = []
+
+# Q-K=V projection sharing — 50% KV cache reduction (Plan 185).
+kv_share = []
+
+# Oscillatory KV cache with IMEX discretization (Plan 189 Phase 2).
+osc_kv = []
+
+# CS-KV-Importance Probe + Density-Budget Interpolator (Plan 280).
+cs_kv_probe = []
+
+# ShardKV asymmetric K/V compression (Plan 147, Research 109).
+# Requires spectral_quant + turboquant from katgpt-spectral — the root
+# crate's `shard_kv` feature adds both, so callers enabling katgpt-kv's
+# shard_kv directly MUST also enable katgpt-spectral/spectral_quant +
+# katgpt-spectral/turboquant. Documented at the call site.
+shard_kv = []
+
+# SP-KV self-pruned key-value attention (Plan 070).
+sp_kv = []
+
+# StillKV perceiver-based KV cache compaction (Plan 245).
+still_kv = []
+
+# KVarN variance-normalized KV-cache quantization (Research 159).
+# Requires spectral substrate transitively via targeted_precision.
+kvarn = []
+
+# Targeted Precision Budget — per-head bit allocation (Plan 227 Phase 2).
+# Used only by kvarn; promoted to top-level module here for visibility.
+targeted_precision = []

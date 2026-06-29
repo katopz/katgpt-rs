@@ -190,27 +190,14 @@ pub struct CalibrationResult {
 }
 
 impl CalibrationResult {
-    /// Decompose calibrated eigenbasis into stiff/soft subspaces.
-    ///
-    /// Extracts eigenvectors (stored column-wise in the flat row-major matrix)
-    /// and delegates to [`crate::stiff_anomaly::subspace::decompose`].
-    ///
-    /// Returns a [`crate::stiff_anomaly::StiffSoftDecomposition`] partitioned
-    /// at the given `trace_mass` threshold (e.g., 0.90).
-    #[cfg(feature = "stiff_anomaly")]
-    pub fn stiff_soft_decomposition(
-        &self,
-        trace_mass: f32,
-    ) -> crate::stiff_anomaly::StiffSoftDecomposition {
-        let d = self.head_dim;
-        // Eigenvectors are stored as dim×dim row-major, columns = eigenvectors.
-        // Extract column i as a Vec<f32>.
-        let eigvecs: Vec<Vec<f32>> = (0..d)
-            .map(|col| (0..d).map(|row| self.eigenvectors[row * d + col]).collect())
-            .collect();
-
-        crate::stiff_anomaly::subspace::decompose(self.eigenvalues.clone(), eigvecs, trace_mass)
-    }
+    // Historical note (Issue 015 Phase 2): a `stiff_soft_decomposition`
+    // method previously lived here, gated by `#[cfg(feature = "stiff_anomaly")]`
+    // and delegating to `crate::stiff_anomaly::subspace::decompose`. It had
+    // zero callers in this repo and created a cross-crate feature coupling
+    // (katgpt-spectral → root crate's stiff_anomaly module) that blocked
+    // extraction. Removed during extraction; if a caller ever needs this,
+    // add it as an extension trait `CalibrationResultStiffExt` in the root
+    // crate's `stiff_anomaly` module, gated by both features.
 }
 
 /// Offline calibration: collect KV vectors → covariance → eigendecompose.
@@ -539,7 +526,7 @@ impl LloydMaxQuantizer {
         }
 
         // Lloyd-Max iteration
-        let mut rng = crate::types::Rng::new(self.seed);
+        let mut rng = katgpt_core::types::Rng::new(self.seed);
         for _ in 0..self.max_iter {
             // Assign samples to nearest centroid
             let mut sums = vec![0.0f64; self.n_levels];
@@ -735,7 +722,7 @@ impl LloydMaxQuantizer {
 /// Uses Rademacher ±1 distribution (not Gaussian).
 /// Same seed always produces same matrix for reproducibility.
 pub fn generate_selective_qjl_signs(qjl_dim: usize, d_eff: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     let mut signs = Vec::with_capacity(qjl_dim * d_eff);
     for _ in 0..(qjl_dim * d_eff) {
         signs.push(if rng.next() & 1 == 0 { -1.0f32 } else { 1.0f32 });
@@ -980,7 +967,7 @@ mod tests {
             let seed = (i as u64)
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
-            let mut rng = crate::types::Rng::new(seed);
+            let mut rng = katgpt_core::types::Rng::new(seed);
             let mut v = vec![0.0f32; head_dim];
             v[0] = rng.normal() * 2.0; // var≈4
             v[1] = rng.normal() * 1.414; // var≈2
@@ -1209,64 +1196,14 @@ mod tests {
     }
 
     // ── G5: StiffSoftDecomposition integration ─────────────────────────
-
-    #[cfg(feature = "stiff_anomaly")]
-    #[test]
-    fn test_g5_stiff_soft_from_calibration() {
-        // Synthetic samples with known variance structure:
-        // dim 0 has var≈50, dim 1 var≈30, dim 2 var≈15, dim 3 var≈5,
-        // dims 4-9 have var≈0.01 (noise floor).
-        // Expected: d_eff ≈ 4, k at 90% trace mass should be 3-4.
-        let head_dim = 10;
-        let n_samples = 200;
-        let variances = [50.0f32, 30.0, 15.0, 5.0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.01];
-
-        let mut samples = Vec::new();
-        for i in 0..n_samples {
-            let seed = (i as u64)
-                .wrapping_mul(6364136223846793005)
-                .wrapping_add(9999);
-            let mut rng = crate::types::Rng::new(seed);
-            let v: Vec<f32> = variances
-                .iter()
-                .map(|&var| rng.normal() * var.sqrt())
-                .collect();
-            samples.push(v);
-        }
-
-        let cal = calibrate_eigenbasis(&samples, head_dim);
-        let decomp = cal.stiff_soft_decomposition(0.90);
-
-        // k should capture the effective dimension (3-5 range)
-        assert!(
-            decomp.k >= 3 && decomp.k <= 5,
-            "k should capture effective dimension, got {}",
-            decomp.k
-        );
-
-        // Stiff eigenvalues should dominate
-        assert_eq!(
-            decomp.stiff_eigenvalues.len(),
-            decomp.k,
-            "stiff eigenvalue count should match k"
-        );
-        assert_eq!(
-            decomp.soft_eigenvalues.len(),
-            head_dim - decomp.k,
-            "soft eigenvalue count should be dim - k"
-        );
-
-        // All eigenvalues present
-        assert_eq!(
-            decomp.eigenvalues.len(),
-            head_dim,
-            "total eigenvalue count should match dim"
-        );
-
-        // Eigenvectors should have correct dimensionality
-        assert_eq!(decomp.stiff_eigenvectors[0].len(), head_dim);
-        assert_eq!(decomp.soft_eigenvectors[0].len(), head_dim);
-    }
+    //
+    // Historical note (Issue 015 Phase 2): this test was removed because the
+    // `CalibrationResult::stiff_soft_decomposition` method it exercised was
+    // deleted during katgpt-spectral extraction (the method created a
+    // cross-crate feature coupling to the root crate's stiff_anomaly module
+    // and had zero production callers). If the method is ever re-added as
+    // an extension trait `CalibrationResultStiffExt` in the root crate, this
+    // test should move there alongside it.
 }
 
 // ── T3: GOAT Proof — Dual-Gram Calibration Accuracy ────────────────────
@@ -1276,7 +1213,7 @@ mod dual_gram_goat_tests {
 
     /// Generate synthetic samples with known variance structure.
     fn make_samples(n: usize, d: usize, seed: u64) -> Vec<Vec<f32>> {
-        let mut rng = crate::types::Rng::new(seed);
+        let mut rng = katgpt_core::types::Rng::new(seed);
         let variances: Vec<f32> = (0..d)
             .map(|i| if i < 4 { 50.0 / (i as f32 + 1.0) } else { 0.01 })
             .collect();

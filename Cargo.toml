@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -39,6 +39,16 @@ katgpt-tokenizer = { path = "crates/katgpt-tokenizer" }
 # pre-extraction behavior where `pub mod percepta` was unconditional. Feature ladder gates
 # only the advanced parts (CHT, gates, graph, wasm, compile).
 katgpt-percepta = { path = "crates/katgpt-percepta" }
+# katgpt-spectral (Issue 015 Phase 2): extracted spectral quantization substrate.
+# Non-optional — `spectralquant` is `default = ["spectral_quant"]`-historically-on
+# and has non-KV consumers (funcattn_compose, chiaroscuro, benchmark). The root
+# crate re-exports it as `katgpt_rs::spectralquant` for back-compat.
+katgpt-spectral = { path = "crates/katgpt-spectral" }
+# katgpt-kv (Issue 015 Phase 3): extracted KV-cache namespace. Non-optional — the
+# root re-exports each sub-module behind its historical feature flag
+# (`kv_share`, `osc_kv`, `cs_kv_probe`, `shard_kv`, `sp_kv`, `still_kv`, `kvarn`,
+# `targeted_precision`). All flags remain default-off-or-on as before.
+katgpt-kv = { path = "crates/katgpt-kv" }
 reqwest = { version = "0.12", features = ["blocking", "json"], optional = true } # AutoGo REST API client (Plan 065)
 toml = "0.8"
 bytemuck = { version = "1", features = ["extern_crate_alloc"] }  # extern_crate_alloc: enables pod_collect_to_vec (used by transformer.rs weight loading). On native this is unified transitively via plotters→image, but wasm32 builds skip plotters so the feature must be explicit. See Plan 316.
@@ -75,7 +85,7 @@ leo_all_goals = ["katgpt-core/leo_all_goals"]  # LEO all-goals Q-value framework
 dual_leo = ["leo_all_goals", "katgpt-core/dual_leo"]  # Dual LEO teacher-student — + DualLeoMixer + AutocurriculumSampler (Plan 155)
 flow_field_nav = ["katgpt-core/flow_field_nav"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT PASS 46.9%)
 ega_attn = []  # Energy-Gated Attention spectral salience gating (Plan 139)
-sp_kv = []  # SP-KV self-pruned key-value attention (Plan 070)
+sp_kv = ["katgpt-kv/sp_kv"]  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
 parallax_attn = ["tiled_attention", "newton_schulz", "katgpt-core/parallax_attn"]  # Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, Research 135) — opt-in, requires Muon-trained weights
 sink_aware_attn = ["data_probe"]  # Sink-Aware Attention — dual-policy sigmoid gate (Plan 287 Phase 3, Research 258, arxiv 2606.08105). Implies data_probe for the classifier primitive. Opt-in: default stays Uniform pending G2/G3 GOAT gate. Standalone apply_dual_policy_gate ships now; direct wiring into parallax_attn / funcattn forward paths deferred.
@@ -139,7 +149,7 @@ eqr_convergence = ["elf_sde"]  # EqR convergence-based rollout selection — Top
 spec_cost_model = ["katgpt-core/spec_cost_model"]  # Amdahl cost model for LeviathanVerifier (Research 59, Plan 096)
 stability_metrics = ["katgpt-core/stability_metrics"]  # Per-step execution stability instrumentation — P50/P99/CV/stability_score, +0.6% overhead (Plan 102, default-on)
 coda_fusion = ["katgpt-core/coda_fusion"]  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation in single-pass (Plan 103)
-maxsim = ["katgpt-core/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
+maxsim = ["katgpt-core/maxsim", "katgpt-spectral/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
 salience_tri_gate = []  # Salience Tri-Gate Primitive — 3-way per-tick emit gate (Speak / Silent / Delegate) with silence as a first-class variant, two stacked sigmoids (never softmax), zero-allocation hot path (Plan 303, Research 281, arxiv 2606.14777, JoyAI-VL-Interaction). Open primitive; NPC wiring lives in riir-ai Plan 330. Opt-in until G1 (determinism + monotonicity) + G2 (two-sigmoid ablation parity) + <50ns decide() latency gates pass.
 closed_unit_compaction = []  # Closed-Unit Compaction Gate (CUCG) — generic rubric-gated trajectory compaction primitive (Plan 333, Research 300, arxiv 2606.23525, SelfCompact Li et al. JHU+Apple Jun 2026). ClosedUnitCompactionGate<R> + Rubric trait + FireRule enum + Backstop + CompactionAuditRecord. Cross-domain isomorphic with riir-neuron-db `can_freeze` (G7). Latent-reframed predicates (sigmoid projections, never softmax). Zero-alloc hot path. Open primitive; per-NPC sub-goal wiring lives in riir-ai (G8). DEFAULT-ON since Phase 6 (7/7 GOAT gates PASS).
 alien_sampler = []  # Alien Sampler Primitive — Coherence × Availability Frontier Ranking (Plan 311, Research 293, arxiv 2603.01092, Artiles et al. "The Alien Space of Science" May 2026). Generic within-pool z-scored linear fusion `(1−β)·zC + β·zU` of coherence × unavailability, plus `MedianTopMAvailability` implementing the paper's load-bearing median-of-top-m cosine community-aggregation rule. Open math only — NPC population banks + CGSP wiring live in riir-ai Plan 312+. Opt-in until Phase 3 GOAT gate (G1 motif collapse ≤50% of OPUS baseline, G2 quality ≥90% of coherence-only, G3 perf ≤5× baseline, G4 no Vec<f32> escapes rank()) passes.
@@ -150,11 +160,11 @@ blake3_proxy = ["complexity_prior_sampler"]  # Sub-feature for Blake3CanonicalLe
 mcts_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.1 — MCTS expansion-prior adapter (MctsExpansionPrior / UniformExpansion / KPriorExpansion). Adapter-only; wiring into pruners/game_state/mcts.rs is caller-side (documented in src/screening/integration_mcts.rs).
 bandit_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.2 — bandit K-prior wrapper (KPriorBandit<K>) exposing arm_log_prior; caller adds to their existing arm score.
 spec_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.3 — speculative drafter post-drafting re-ranker (KPriorDrafter<K>::rerank). Composes with CompressionDrafter (R256) + DendriticGate (R260).
-spectral_quant = []  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
+spectral_quant = ["katgpt-spectral/spectral_quant"]  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
 octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
-turboquant = []  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
+turboquant = ["katgpt-spectral/turboquant"]  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
 asymmetric_kv = ["turboquant"]  # Asymmetric K/V cache compression benchmarks (Plan 123, Research 081)
-shard_kv = ["spectral_quant", "turboquant"]  # ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard V path (Plan 147, Research 109)
+shard_kv = ["katgpt-kv/shard_kv", "spectral_quant", "turboquant"]  # ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard V path (Plan 147, Research 109)
 planar_quant = ["turboquant"]  # PlanarQuant 2D Givens rotation KV cache — O(d) vs TQ O(d²), 256 FMAs for d=128
 precision_aware_draft = []  # PASD boundary-aware draft scoring — penalizes tokens near quantization boundaries (Plan 227 Phase 4, GOAT 12.5% acceptance, default-ON)
 iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
@@ -206,7 +216,7 @@ caddtree_budget = ["spec_cost_model"]  # CaDDTree — Cost-Aware Adaptive DDTree
 bomber-agent = ["bomber"]  # Coding agent validator loop (Issue 052, Tasks C9-C10)
 bomber-wasm = ["bomber", "wasmi", "papaya"]    # WASM bomber validator loader (Plan 034) + batch pool (Plan 037) + wasmi migration (Plan 167)
 game_state = ["bomber"]  # GameState forward model trait + generic MCTS (Plan 056)
-dual_gram_pca = ["katgpt-core/dual_gram_pca"]  # Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159 GOAT) — default-ON
+dual_gram_pca = ["katgpt-core/dual_gram_pca", "katgpt-spectral/dual_gram_pca"]  # Dual-Gram PCA routing for short-sequence calibration (Research R130, Plan 159 GOAT) — default-ON
 roofline_cost = ["katgpt-core/roofline_cost"]  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159 GOAT) — default-ON
 bandit_mcts = ["game_state"]  # Bandit-guided MCTS rollout policy — NFSP/MCTS duality (Plan 067)
 hla_attention = []  # Higher-order Linear Attention — O(1) inference cache (Plan 057)
@@ -242,8 +252,8 @@ questbench = ["katgpt-core/questbench"]  # QuestBench underspecification scoring
 committee_boost = ["bt_rank", "bandit"]  # Committee Boost — oracle-gap recovery, debiased BtRank, budget sizing (Plan 132, Research 093)
 mech_attribution = ["cna_steering", "ropd_rubric", "bandit"]  # Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, Research 009). GOAT: 6/6 (P1-P6). NOT default-on pending full integration.
 safe_bandit = ["bandit"]  # PrudentBanker Safe-Phased Bandit — delay-calibrated safe exploration (Plan 137)
-stiff_anomaly = []  # Stiff/Soft Subspace Anomaly Gate — generic eigenvalue decomposition anomaly detection (Plan 138)
-still_kv = []  # StillKV perceiver-based KV cache compaction — modelless (Plan 245)
+stiff_anomaly = ["katgpt-spectral/stiff_anomaly"]  # Stiff/Soft Subspace Anomaly Gate — generic eigenvalue decomposition anomaly detection (Plan 138)
+still_kv = ["katgpt-kv/still_kv"]  # StillKV perceiver-based KV cache compaction — modelless (Plan 245)
 attn_match = []  # Attention Matching KV compaction — modelless (Plan 271, arxiv 2602.16284). Includes the simplified `compact_with_fixed_beta(BETA_MID)` fast path (Issue 305).
 adaptive_cot_compaction = ["attn_match", "freq_bandit"]  # Phase 6: entropy-thresholded bandit-tuned online compaction (Plan 271) — opt-in until GOAT
 cache_prune = []  # CachePrune SAT + rolling hash + sensitivity masking (Plan 140, Research 101)
@@ -327,7 +337,7 @@ nds_proxy = ["bandit"]  # NDS curvature proxy — modelless inference budget con
 wealth_pruner = ["bandit"]  # WealthPruner — economic bandit arms via Hayek market selection (Plan 187, Research 167)
 freq_bandit = ["bandit"]  # FreqBandit — oscillatory state-space modelless distillation Phase 1 (Plan 189)
 modal_spec = ["katgpt-core/modal_spec"]  # ModalSpec drafter — LinOSS cell + Fourier basis speculative decoding (Plan 189 Phase 3, experimental)
-osc_kv = ["bandit", "freq_bandit"]  # OscKV — oscillatory KV cache with IMEX discretization (Plan 189 Phase 2, opt-in)
+osc_kv = ["katgpt-kv/osc_kv", "bandit", "freq_bandit"]  # OscKV — oscillatory KV cache with IMEX discretization (Plan 189 Phase 2, opt-in)
 vocab_coreset = []  # DDTree vocab coreset for speculative decode (Plan 181, opt-in)
 trust_region_spec = ["bandit"]  # Trust-Region Adaptive Speculation — adaptive window + blend + routing (Plan 182, Research 162)
 spec_reconciliation = []  # Speculative Reconciliation Engine — verify offline trajectories against plausibility manifolds (Plan 177)
@@ -340,11 +350,11 @@ mux_demux = []  # MuxDemux Verifier — deterministic superposition recovery (Re
 mux_latent_context = []  # MUX-Latent Context Compression — inference-time context compression via vocabulary superposition (Research 211, Plan 238, GOAT G1 14-29× TTFT reduction, default-ON)
 mux_latent_wire = ["mux_latent_context", "domain_latent"]  # MUX-Latent Wire Patch — latent-to-latent patching without decompress/recompress (Plan 243, opt-in)
 lclm_adaptive_lod = ["mux_latent_context"]  # LCLM Adaptive LOD — spectral energy-based adaptive compression ratio (Research 211, Plan 238 Phase 4, opt-in)
-kvarn = []  # KVarN variance-normalized KV-cache quantization (Research 159)
+kvarn = ["katgpt-kv/kvarn"]  # KVarN variance-normalized KV-cache quantization (Research 159)
 selectivity_router = []  # Self-Learning Selectivity Router — adaptive CoT via per-position EMA kurtosis (Plan 204, default-OFF until GOAT proof)
 ruliology = ["bandit"]  # Ruliology Bandit — simple program strategies as bandit arms (Plan 188, Research 168)
 directional_credit = []  # Entropy-bifurcated screening — direction-adaptive credit (Plan 184, default on candidate)
-kv_share = []  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
+kv_share = ["katgpt-kv/kv_share"]  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
 rosetta_pruner = ["papaya"]  # Rosetta Pruners — universal cross-domain meta-pruner (Plan 201 GOAT 39-55% node reduction, default-ON)
 domino_correction = []  # Domino Causal Correction — modelless decoupled pattern: PrefixCorrectionTable + domino_score + DominoPruner (Plan 197 GOAT 25/25 -22.8% build time, Research 177, default-ON)
 dynamic_rank = ["papaya"]  # Dynamic Rank Pruner — GATv2-inspired static ranking detection & correction (Plan 232, Research 206)
@@ -358,7 +368,7 @@ nf_flow_mux = ["nf_flow_score", "mux_pruner"]  # NFCoT FlowMUX — flow scoring 
 nf_flow_fold = ["nf_flow_score", "chain_fold"]  # NFCoT FlowFold — confidence-gated chain folding (Plan 229 T7, default OFF)
 hardware_aware_scheduler = []  # Hardware-Aware Prefix Scheduler — multi-request verification budget allocator (Plan 339, Issue 003, DSpark §3.2.2). Opt-in until a real multi-request batch caller exercises the synthetic GOAT gate.
 static_cal_tables = []  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1, GOAT 100% latency, default-ON)
-targeted_precision = []  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2, GOAT 21.3% ppl, default-ON)
+targeted_precision = ["katgpt-kv/targeted_precision"]  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2, GOAT 21.3% ppl, default-ON)
 modality_pruned_load = []  # Modality-Pruned Context Loading — query classifier + pipeline selection (Plan 227 Phase 3, GOAT 97.6% latency simple queries, default-ON)
 channel_simd_align = []  # Channel SIMD Alignment — cache-line-padded weight storage for SIMD throughput (Plan 227 Phase 5)
 async_qdq_overlap = ["inference_router"]  # Async Q/DQ Overlap — double-buffered KV dequantize for GPU pipeline (Plan 227 Phase 6, GOAT 37.5% throughput, default-ON)
@@ -403,7 +413,7 @@ vocab_channel_pruner = []  # ROTATE-Derived ConstraintPruner — load-time weigh
 q_sample_solver = ["critical_interval_gate"]  # Opt-in: q-sampling for critical steps
 mbr_tree_select = []  # Opt-in: MBR selection from DDTree
 self_cond_draft = []  # Opt-in: 2-pass self-conditioned speculative draft
-outlier_guard = []  # ON BY DEFAULT — KS D-statistic outlier detection at model load (Plan 224)
+outlier_guard = ["katgpt-spectral/outlier_guard"]  # ON BY DEFAULT — KS D-statistic outlier detection at model load (Plan 224)
 regime_transition = ["and_or_dtree", "bandit", "decision_trace", "fol_constraints", "rule_extraction"]  # ON BY DEFAULT — Regime-Transition Inference, self-revising discovery (Plan 215, GOAT PROVED -0.3% overhead vs real decode)
 segment_checkpoint = []  # ON BY DEFAULT — core GRM segment caching (Plan 223b)
 ssc_spec_draft = ["segment_checkpoint", "regime_transition"]  # Opt-in — SSC sparse speculative drafting
@@ -439,7 +449,7 @@ manifold_pruner = []  # ManifoldE point-to-manifold soft validity scoring (Resea
 sigmoid_graded_reject = []  # Sigmoid-Graded Reject Confidence — tolerant soft-reject relax-and-retry caller (Plan 310 T1, Research 131 HarnessBridge Table 7). DEFAULT-ON (T4.1, 2026-06-26): T1 GOAT both halves PASS — T3.2 perf (default Δ 0.000ns, graded +3.734ns<5ns, batch 2647M/s, pipeline +0.241ns, G1 compat 0 mismatches, G5 deterministic) + T3.1 quality (tolerant FR 1.69%<strict 5.49% Δ -3.80pp, net reward +603.3 cost-weighted, precision ratio 0.9456, backward-compat, deterministic). Zero runtime cost unless a caller invokes soft_reject_with_relax; default reject_confidence() reproduces is_valid() bit-identically.
 union_bound_confidence = []  # Union bound additive branch confidence (Research 205, Plan 231, GOAT 6/6, default-ON)
 pathway_tracker = []  # Intrinsic pathway stability detection (Research 205, Plan 231, GOAT 7/7, default-ON)
-cs_kv_probe = []  # CS-KV-Importance Probe + Density-Budget Interpolator (Plan 280, Research 247) — opt-in until G2 duality gate passes
+cs_kv_probe = ["katgpt-kv/cs_kv_probe"]  # CS-KV-Importance Probe + Density-Budget Interpolator (Plan 280, Research 247) — opt-in until G2 duality gate passes
 ict_branching = ["katgpt-core/ict_branching"]  # ICT Distributional Branching-Point Detector — collision_purity β(π) + Rényi H₂ + JS-divergence-to-group-mean + BranchingDetector (Plan 294, Research 270, arxiv 2606.19771, Super-GOAT). Opt-in until G3 + G8 (riir-ai Plan 324) pass.
 induced_cwm = ["katgpt-core/induced_cwm"]  # Induced Code World Model kernel primitive — `InducedCwmKernel: GameState` marker + `CwmCommitment` (BLAKE3) + `BeliefInferenceFn<S>` + `TransitionUnitTest` (Plan 296, Research 275, arxiv 2510.04542). Open half of the CWM Super-GOAT; LLM-induction pipeline is private (riir-ai Plan 326). Opt-in until G1–G4 GOAT gate passes.
 induced_cwm_ismcts = ["katgpt-core/induced_cwm_ismcts"]  # Information-Set MCTS over an induced CWM + belief fn (Plan 296 Phase 2). Self-contained search tree (does NOT reuse root-crate `mcts_search` — that lives in katgpt-rs/src, katgpt-core cannot depend on the root).

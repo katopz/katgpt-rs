@@ -2,7 +2,7 @@
 //!
 //! Provides dequantization and attention scoring functions for the
 //! SpectralQuant KV cache path. The main forward function
-//! (`forward_quantized`) is generic and lives in [`crate::transformer`].
+//! (`forward_quantized`) is generic and lives in `katgpt_transformer`.
 
 #[cfg(all(feature = "spectral_quant", feature = "maxsim"))]
 use super::spectral_kv_cache::DequantizeScratch;
@@ -128,7 +128,7 @@ pub fn attention_spectralquant(
 ///
 /// # Relationship to TurboQuant (Research 20)
 ///
-/// [`maxsim_score_turboquant`](crate::turboquant::forward::maxsim_score_turboquant)
+/// [`maxsim_score_turboquant`](katgpt_transformer::forward::maxsim_score_turboquant)
 /// is the same pattern for TurboQuant's random-rotation + uniform-bit path.
 /// This SpectralQuant version uses calibrated eigenbasis + water-fill + selective QJL,
 /// giving higher fidelity at the same compression ratio. Both share the same
@@ -306,14 +306,14 @@ fn maxsim_score_spectralquant_fallback(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spectralquant::spectral::participation_ratio;
-    use crate::spectralquant::types::{SpectralQuantCalibration, SpectralQuantKVCacheConfig};
-    use crate::types::{Config, Rng};
+    use crate::spectral::participation_ratio;
+    use crate::types::{SpectralQuantCalibration, SpectralQuantKVCacheConfig};
+    use katgpt_core::types::{Config, Rng};
 
     #[test]
     fn test_spectralquant_forward_produces_finite() {
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let head_dim = config.head_dim;
         let n_embd = config.n_embd;
 
@@ -399,7 +399,7 @@ mod tests {
         use katgpt_core::simd::maxsim_score;
 
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let n_positions = 8;
         let lq = 2;
 
@@ -543,12 +543,12 @@ mod tests {
     #[cfg(all(feature = "spectral_quant", feature = "maxsim"))]
     fn test_par_maxsim_matches_seq() {
         use super::{maxsim_score_spectralquant, par_maxsim_score_spectralquant};
-        use crate::spectralquant::spectral::participation_ratio;
-        use crate::spectralquant::types::{SpectralQuantCalibration, SpectralQuantKVCacheConfig};
-        use crate::types::Config;
+        use crate::spectral::participation_ratio;
+        use crate::types::{SpectralQuantCalibration, SpectralQuantKVCacheConfig};
+        use katgpt_core::types::Config;
 
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let n_positions = 32;
         let lq = 8;
 

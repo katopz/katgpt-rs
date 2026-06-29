@@ -2,7 +2,7 @@
 //!
 //! Stores KV pairs as oscillatory states (y, z) using symplectic IMEX. Plan 189 Phase 2.
 
-use crate::types::QuantizedKVCache;
+use katgpt_core::types::QuantizedKVCache;
 
 // ---------------------------------------------------------------------------
 // Config

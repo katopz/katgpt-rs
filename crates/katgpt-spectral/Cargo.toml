@@ -1,0 +1,55 @@
+[package]
+name = "katgpt-spectral"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Spectral quantization substrate — calibrated eigenbasis KV cache compression, Lloyd-Max / water-fill bit allocation, outlier-aware guard. Shared by katgpt-kv (ShardKV, KVarN) and non-KV consumers (funcattn_compose, chiaroscuro, benchmark). Spun out of katgpt-rs/src/spectralquant/ (Issue 015 Phase 2)."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["quantization", "spectral", "kv-cache", "lloyd-max", "modelless"]
+categories = ["algorithms", "science"]
+
+[dependencies]
+# SIMD kernels (simd_scale_inplace, simd_sum_sq) + types re-export.
+katgpt-core = { path = "../katgpt-core" }
+# Shared types (no KV-coupling; OutlierGuardConfig is re-exported from here
+# via the local outlier_guard module — it lives with the code that consumes it).
+katgpt-types = { path = "../katgpt-types" }
+# TransformerWeights type referenced by outlier_guard.
+katgpt-transformer = { path = "../katgpt-transformer" }
+# SpectralKVCache parallel dequant kernels.
+rayon = "1.10"
+# f16 KV cache storage.
+half = "2"
+# Zero-copy Pod layout for calibration structs.
+bytemuck = "1"
+# serde impls for OutlierGuardConfig + calibration structs.
+serde = { version = "1", features = ["derive"] }
+# Diagnostics in outlier_guard / spectral.
+log = "0.4"
+
+[features]
+# All flags are empty tracking gates mirroring the historical katgpt-rs
+# feature surface. The root crate forwards them via
+# `feature = ["katgpt-spectral/feature"]` so existing `#[cfg(feature = "...")]`
+# branches inside the spectral code compile unchanged.
+default = []
+
+# Core spectral quantization flag (historical default-on at root).
+spectral_quant = []
+
+# Outlier-aware quantization guard (Plan 224). Gates outlier_guard.rs.
+outlier_guard = []
+
+# Cross-check with stiff_anomaly eigenvalue distribution.
+# (Requires the consumer crate to also enable stiff_anomaly for the
+# StiffSoftCrossCheck impl to mean anything — kept here as tracking flag.)
+stiff_anomaly = []
+
+# MaxSim late-interaction forward kernel.
+maxsim = []
+
+# Dual-gram PCA eigenbasis calibration.
+dual_gram_pca = []
+
+# TurboQuant random rotation export gate.
+turboquant = []
