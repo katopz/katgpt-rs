@@ -143,12 +143,14 @@ schema_centroid = ["dep:papaya"]  # Schema-Centroid Informed KG Embedding Initia
 bake_precision = ["dep:papaya"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236)
 spectral_threat = ["sense_composition", "modal_spec", "katgpt-types/spectral_threat"]  # LinOSS Modal Threat Prediction (Plan 241)
 sense_lod = ["sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240)
+set_attention = []  # Cross-Datapoint Set Attention — sigmoid-gated, permutation-equivariant cross-entity refinement kernel (Plan 354, Research 354, arXiv:2106.02584 Kossen et al. NeurIPS 2021). Distilled from Non-Parametric Transformers: the inference-time operator only (training of Q/K/V via BERT-style masking stays in riir-train). Substrate-agnostic: operates on &[f32], produces &mut [f32], no opinion on what vectors mean. Sigmoid gates (NEVER softmax per AGENTS.md §2) — each pair independently ∈ (0,1), so an entity may attend to 0/1/many peers. Opt-in until G1–G5 GOAT gate passes (permutation equivariance bit-exact, identity-floor meaningfulness, latency <5µs at N=64, zero-alloc, sigmoid-not-softmax lonely-query correctness); Super-GOAT promotion also requires riir-ai Plan 355 G6 (CS-ranking fusion adds value).
 flow_field_nav = ["leo_all_goals", "dep:rustfft"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT-gated)
 spectral_pruner = ["dep:rustfft"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
                                    # Inspired by arXiv:2606.02993: prunes tokens when logit spectrum shows competing modes.
 octree_ctc = ["sense_composition"]  # OctreeCTC Reconstructive Memory Navigation (Plan 248, GOAT PASS, arXiv:2606.06036)
 newton_schulz = []  # Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114, GOAT 25/25 Bench 050). Pure substrate: zero `crate::` deps, zero external deps — self-contained f32 linear algebra (transpose, matmul, 5-iteration cubic Newton-Schulz). Extracted from katgpt-rs/src/ per Issue 355 Phase 1a. Root re-exports via `pub use katgpt_core::newton_schulz;` so historical `katgpt_rs::newton_schulz::*` paths keep resolving. NOT in katgpt-core `default` — root's default-on forwarder activates it; other katgpt-core consumers (e.g. riir-gpu `lora_muon_optimizer`) enable it explicitly.
 subspace_phase_gate = []  # Subspace phase-gate primitives — participation ratio, numerical rank, N≥d phase-transition gate (Wang et al. Thm 4, arXiv:2409.02426), runtime Jacobian SVD via forward differences (Plan 301, Research 279). Pure numeric, no extra deps. Opt-in until G1 GOAT gate passes.
+group_invariance_probe = []  # Group Invariance Probe — modelless symmetry discovery on a hypothesis Lie group (Plan 356, Research 355 — distilled from LieFlow arXiv:2512.20043). Generalizes subspace_phase_gate from "subspace of R^d" to "subgroup of G": score each sampled g by direct invariance testing sigmoid(−β·d(q,g·q)), classify H as Discrete/Continuous/Partial/None. Pure numeric, no extra deps. Opt-in until G1 GOAT gate passes.
 latent_trajectory_geometry = []  # Latent Trajectory Geometry — probe-free geometric diagnostic (length + mean turning-angle curvature + min adjacent cosine + bifurcation ratio). Distilled from Pandey et al., arXiv:2606.09287 (Plan 342, Research 324). Pure numeric over &[&[f32]], no extra deps. Opt-in until the Phase 3 game-related gate (curvature catches oscillation entropy misses) passes; router integration is a separate follow-up plan.
 viable_manifold_graph = ["subspace_phase_gate"]  # Viable Manifold Graph — discrete safe-manifold navigation primitive (arXiv:2206.00106 González-Duque et al., Plan 312, Research 294). Pullback volume field + SafeManifoldGraph + A* / random-walk navigation that stays inside the viable set by construction. Depends on Plan 301's `jacobian_svd_at` (no extra deps). DEFAULT-ON since 2026-06-24 (Phase 5): G1–G7 PASS + perf bench PASS (CSR adjacency).
 zone_affective_manifold = []  # Zone Affective Manifold — crowd-scale PCA via power iteration + deflation (Issue 001). Top-k principal directions of the (N, D) crowd-activation matrix; rayon-parallel covariance for N>1024; cold-start identity fallback for N<32; sign-fixed for temporal continuity. Pure modelless (closed-form SVD on DxD covariance, no training). Opt-in until G1-G6 GOAT gate passes.
@@ -421,6 +423,13 @@ required-features = ["geometric_product"]
 [[example]]
 name = "subspace_phase_gate_goat"
 required-features = ["subspace_phase_gate"]
+
+# Plan 356 — Group Invariance Probe G4 (zero-allocation) GOAT gate. Uses a
+# CountingAllocator to verify discover_subgroup_into allocates 0 bytes after
+# warmup. Gated on group_invariance_probe so default features compile cleanly.
+[[test]]
+name = "group_invariance_probe_g4"
+required-features = ["group_invariance_probe"]
 
 # Plan 308 — KARC zero-alloc (G3) and reproducibility (G4) GOAT gates. These
 # integration tests import KarcForecaster / FourierBasis / ChebyshevBasis /
@@ -729,6 +738,14 @@ required-features = ["temp_loss_fingerprint"]
 name = "bench_342_latent_trajectory_geometry_goat"
 harness = false
 required-features = ["latent_trajectory_geometry"]
+
+# Plan 354 Phase 2 — Cross-Datapoint Set Attention perf gates.
+# G3 (latency < 5µs at N=64, d=8, k=4) + G4 (zero-alloc dense path).
+# Convention: std::time::Instant + counting allocator + harness = false.
+[[bench]]
+name = "set_attention_bench"
+harness = false
+required-features = ["set_attention"]
 
 # Issue 001 GOAT gate — Zone Affective Manifold perf + quality.
 # G1 ≤ 100µs @ N=10k, G2 ≤ 500µs @ N=50k, G3 bit-identical determinism,

@@ -365,6 +365,17 @@ pub mod irrep_pruner;
 #[cfg(feature = "subspace_phase_gate")]
 pub mod subspace_phase_gate;
 
+// Group Invariance Probe — modelless symmetry discovery on a hypothesis Lie
+// group (Plan 356, Research 355 — distilled from LieFlow, arXiv:2512.20043).
+// Generalizes `subspace_phase_gate` from "subspace of R^d" to "subgroup of G":
+// score each sampled g ∈ G by direct invariance testing σ(β·(1−d(q, g·q))),
+// then classify the discovered H as Discrete / Continuous / Partial / None via
+// a participation-ratio-style concentration measure on the score histogram.
+// Pure numeric, no game/shard/chain semantics, zero deps. Sibling of
+// `subspace_phase_gate`. Opt-in until G1 GOAT gate passes (Plan 356 Phase 1).
+#[cfg(feature = "group_invariance_probe")]
+pub mod group_invariance_probe;
+
 // Latent Trajectory Geometry — probe-free geometric diagnostic (length +
 // mean turning-angle curvature + min adjacent cosine + bifurcation ratio).
 // Distilled from Pandey et al., arXiv:2606.09287 (Plan 342, Research 324).
@@ -426,6 +437,13 @@ pub use subspace_phase_gate::{
     IntrinsicDimMethod, JacobianSvdScratch, SvdResult, SvdResultScratch, SvdScratch,
     estimate_intrinsic_dim, jacobian_svd_at, numerical_rank, participation_ratio,
     phase_transition_gate, thin_svd, thin_svd_into,
+};
+
+#[cfg(feature = "group_invariance_probe")]
+pub use group_invariance_probe::{
+    GroupAction, SubgroupClass, SubgroupReport, classify_subgroup,
+    classify_subgroup_with, discover_subgroup, discover_subgroup_into,
+    invariance_score, score_concentration, score_variance,
 };
 
 #[cfg(feature = "latent_trajectory_geometry")]
@@ -848,6 +866,36 @@ pub mod gain_cost_halt;
 #[cfg(feature = "gain_cost_halt")]
 pub use gain_cost_halt::{
     GainCostLoopHalter, HaltDecision, HaltReason, angular_change, hidden_erank, step_size,
+};
+
+// Cross-Datapoint Set Attention — sigmoid-gated, permutation-equivariant
+// cross-entity refinement kernel (Plan 354, Research 354, arXiv:2106.02584
+// Kossen et al. NeurIPS 2021, Non-Parametric Transformers). The inference-time
+// operator only — training of Q/K/V via BERT-style masking stays in riir-train.
+// Substrate-agnostic: `&[f32]` → `&mut [f32]`, no opinion on what the vectors
+// mean. The riir-ai runtime (Plan 355) wires it onto HLA belief states for
+// crowd-scale NPC joint inference; the open primitive is just the math.
+//
+// Sigmoid gates (NEVER softmax per AGENTS.md §2) — each pair α_ij ∈ (0,1)
+// independently, so an entity may attend to 0 peers (lonely), 1 peer (paired),
+// or many peers (formation). Softmax would force artificial competition.
+//
+// Permutation-equivariant by construction (NPT Lemma 4, Appendix A) —
+// shuffling input rows shuffles output rows identically. The G1 test
+// verifies this bit-exactly.
+//
+// Latent vs Raw: the primitive is substrate-agnostic. The sync boundary is
+// the caller's responsibility (see the riir-ai runtime plan 355 for the
+// HLA-specific wiring + the unchanged 5-scalar bridge).
+//
+// Opt-in until G1–G5 GOAT gate (Research 354 §5) passes; Super-GOAT promotion
+// also requires riir-ai Plan 355 G6 (CS-ranking fusion adds value).
+#[cfg(feature = "set_attention")]
+pub mod set_attention;
+#[cfg(feature = "set_attention")]
+pub use set_attention::{
+    SetAttentionConfig, SetAttentionError, identity, identity_into, identity_projection,
+    identity_projection_into, set_sigmoid_attention_into,
 };
 
 // Depth-Invariance Diagnostic + Magnitude-Regularized Residual — the
