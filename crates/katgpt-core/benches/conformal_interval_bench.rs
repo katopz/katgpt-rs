@@ -58,7 +58,7 @@ fn bench_interval_into(c: &mut Criterion) {
     for &(label, n_channels, max_h) in configs {
         let m = 12;
         let capacity = 256;
-        let cal = make_fitted_calibrator(n_channels, max_h, m, capacity);
+        let mut cal = make_fitted_calibrator(n_channels, max_h, m, capacity);
         let mut iv = PredictiveInterval::new(0.0, 0.0, 0.0, 0.05);
         let alpha = 0.05_f32;
 

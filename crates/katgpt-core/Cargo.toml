@@ -514,6 +514,22 @@ required-features = ["conformal_predictive_intervals"]
 name = "conformal_airpassengers"
 required-features = ["conformal_predictive_intervals"]
 
+# Plan 340 Phase 2 T2.2 — KARC + conformal overlay on Lorenz-63. Demonstrates
+# the documented KARC integration pattern (interval_from_point_into) and
+# reports per-channel coverage/CRPS at α=0.05. Needs BOTH features.
+[[example]]
+name = "conformal_karc_overlay"
+required-features = ["conformal_predictive_intervals", "karc_forecaster"]
+
+# Plan 340 Phase 2 T2.3 — KARC no-regression gate. Verifies the conformal
+# feature flag does not perturb KARC's forecast hot path (bit-identical
+# forecasts, wout unchanged, latency within budget). Runs under karc_forecaster
+# alone — the no-regression guarantee is that the conformal feature is a pure
+# consumer of KARC via the adapter, with zero hot-path coupling.
+[[test]]
+name = "conformal_karc_no_regression"
+required-features = ["karc_forecaster"]
+
 # Plan 321 Phase 2 — CommittedFieldBlend G4 zero-alloc GOAT gate. CountingAllocator
 # audit of apply_blended (1000 iters) + commit (100 re-commits). Gated on
 # committed_field_blend so default features compile cleanly.

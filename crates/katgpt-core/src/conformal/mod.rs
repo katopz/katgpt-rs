@@ -50,10 +50,14 @@ const WEIGHTS_BUF_LEN: usize = 1024;
 pub mod metrics;
 mod ring;
 mod seasonal;
+#[cfg(all(feature = "conformal_predictive_intervals", feature = "karc_forecaster"))]
+mod karc_adapter;
 
 pub use metrics::{crps, empirical_coverage, winkler_score};
 pub use ring::{ResidualRingBuffer, RingBuffer};
 pub use seasonal::{seasonal_naive_floor, SeasonalNaiveForecaster, SeasonalPoolForecaster};
+#[cfg(all(feature = "conformal_predictive_intervals", feature = "karc_forecaster"))]
+pub use karc_adapter::KarcChannelForecaster;
 
 /// A point forecaster that produces a single deterministic forecast.
 ///
@@ -63,10 +67,14 @@ pub use seasonal::{seasonal_naive_floor, SeasonalNaiveForecaster, SeasonalPoolFo
 /// The `delay_state` slice is forecaster-specific (delay-embedded state for
 /// KARC, ignored for the seasonal pool). Implementations MUST be deterministic
 /// in `(self, delay_state, h)` for bit-reproducibility (G4).
+///
+/// Takes `&mut self` because some forecasters (notably KARC) reuse a
+/// pre-allocated scratch buffer for the feature expansion and need to write
+/// into it. Forecasters that don't need mutation simply ignore the `&mut`.
 pub trait PointForecaster {
     /// Forecast the value at horizon `h` (1-indexed) given the delay-embedded
     /// state. Writes into `out` (zero-alloc).
-    fn forecast_into(&self, delay_state: &[f32], h: usize, out: &mut f32);
+    fn forecast_into(&mut self, delay_state: &[f32], h: usize, out: &mut f32);
 }
 
 /// Residual pool indexing strategy.
@@ -321,7 +329,7 @@ impl<F: PointForecaster> ConformalIntervalCalibrator<F> {
     /// naive per-quantile recomputation, which is the difference between
     /// meeting and missing the G2 ≤ 1µs budget at H=1.
     pub fn interval_into(
-        &self,
+        &mut self,
         channel: usize,
         h: usize,
         alpha: f32,
@@ -373,7 +381,13 @@ impl<F: PointForecaster> ConformalIntervalCalibrator<F> {
     /// `true` iff `actual` is outside the `1−α` interval at horizon `h`.
     /// The 1-bit calibrated curiosity / coverage-violation signal.
     #[inline]
-    pub fn coverage_violation(&self, actual: f32, channel: usize, h: usize, alpha: f32) -> bool {
+    pub fn coverage_violation(
+        &mut self,
+        actual: f32,
+        channel: usize,
+        h: usize,
+        alpha: f32,
+    ) -> bool {
         let mut interval = PredictiveInterval::new(0.0, 0.0, 0.0, alpha);
         self.interval_into(channel, h, alpha, &mut interval);
         !interval.contains(actual)
@@ -539,7 +553,7 @@ impl<F: PointForecaster> ConformalIntervalCalibrator<F> {
     /// **Allocates** `Vec<f32>` of length `n`. Use for CRPS evaluation only,
     /// NOT on the per-tick hot path.
     pub fn sample_predictive_distribution(
-        &self,
+        &mut self,
         channel: usize,
         h: usize,
         n: usize,
@@ -594,7 +608,7 @@ mod tests {
         value: f32,
     }
     impl PointForecaster for ConstForecaster {
-        fn forecast_into(&self, _delay_state: &[f32], _h: usize, out: &mut f32) {
+        fn forecast_into(&mut self, _delay_state: &[f32], _h: usize, out: &mut f32) {
             *out = self.value;
         }
     }
@@ -710,8 +724,8 @@ mod tests {
             }
             cal
         };
-        let a = mk();
-        let b = mk();
+        let mut a = mk();
+        let mut b = mk();
         let mut iva = PredictiveInterval::new(0.0, 0.0, 0.0, 0.05);
         let mut ivb = PredictiveInterval::new(0.0, 0.0, 0.0, 0.05);
         for &alpha in &[0.01_f32, 0.05, 0.1, 0.2] {

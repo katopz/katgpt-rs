@@ -45,6 +45,10 @@ pub use conformal::{
 };
 #[cfg(feature = "conformal_predictive_intervals")]
 pub use conformal::metrics::{crps, crps_interval, empirical_coverage, mean_crps_interval, mean_winkler, winkler_score};
+// Plan 340 Phase 2 (T2.1) — KARC adapter for the conformal overlay.
+// Gated on BOTH features: needs the conformal substrate AND the KARC forecaster.
+#[cfg(all(feature = "conformal_predictive_intervals", feature = "karc_forecaster"))]
+pub use conformal::KarcChannelForecaster;
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 #[cfg(feature = "dec_operators")]

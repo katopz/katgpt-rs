@@ -46,8 +46,8 @@ fn build_calibrator() -> ConformalIntervalCalibrator<SeasonalPoolForecaster> {
 
 #[test]
 fn g4_identical_configs_produce_identical_bounds() {
-    let a = build_calibrator();
-    let b = build_calibrator();
+    let mut a = build_calibrator();
+    let mut b = build_calibrator();
 
     let mut iva = PredictiveInterval::new(0.0, 0.0, 0.0, 0.0);
     let mut ivb = PredictiveInterval::new(0.0, 0.0, 0.0, 0.0);
@@ -103,8 +103,8 @@ fn g4_reproducible_across_pool_states() {
         }
         cal
     };
-    let a = mk();
-    let b = mk();
+    let mut a = mk();
+    let mut b = mk();
 
     // Interleave reads on `a` between pushes (no, we already pushed all).
     // Instead: read from `a` many times — the bounds should be stable.

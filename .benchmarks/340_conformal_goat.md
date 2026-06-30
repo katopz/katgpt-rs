@@ -202,6 +202,80 @@ decision).
 
 ---
 
+## Phase 2 update — KARC adapter + Lorenz-63 coverage (2026-06-30)
+
+Phase 2 shipped the `KarcChannelForecaster` adapter (T2.1), the Lorenz-63
+coverage demonstration (T2.2), and the no-regression gate (T2.3). All
+Phase 1 gates remain GREEN; the trait signature change (`PointForecaster::
+forecast_into` `&self` → `&mut self`) has zero perf impact.
+
+### Trait signature change (zero perf impact)
+
+`PointForecaster::forecast_into`: `&self` → `&mut self`. Cascading:
+`ConformalIntervalCalibrator::{interval_into, coverage_violation,
+sample_predictive_distribution}` → `&mut self`. The mutation is only to the
+wrapped forecaster's scratch (impl detail); the residual pool (observable
+state) is untouched on reads.
+
+### G2 re-verification (post trait change)
+
+| Config | Phase 1 | Phase 2 | Target | Verdict |
+|---|---|---|---|---|
+| `interval_into` H=1 | 642 ns | **640 ns** | ≤ 1µs | ✅ unchanged |
+| `interval_into` H=8×1ch | — | 5.12 µs | ≤ 10µs | ✅ |
+| `interval_into` H=8×8ch | 40.3 µs | **40.9 µs** | ≤ 100µs | ✅ unchanged |
+| `update_residual` H=1 | — | 208 ns | — | ✅ |
+
+(Within criterion noise — the `&mut self` change is a borrow-checker
+annotation, not a runtime code change.)
+
+### Phase 2 coverage gate — Lorenz-63 (chaotic)
+
+KARC `D=3, M=8, K=4, λ=1e-3` fitted on 4000 samples of Lorenz-63 (RK4,
+dt=0.02, normalized to [-1,1] for Chebyshev stability). Conformal overlay
+on 2000 test ticks at α=0.05:
+
+| Channel | Coverage | Mean CRPS | Mean half-width | Point RMSE |
+|---|---|---|---|---|
+| x | **0.9425** | 0.0002 | 0.0001 | 0.0001 |
+| y | **0.9520** | 0.0018 | 0.0009 | 0.0005 |
+| z | **0.9485** | 0.0002 | 0.0001 | 0.0001 |
+
+Target: [0.90, 1.00] (chaotic regime, widened from Phase 1's [0.93, 0.97]
+because KARC residuals are heavier-tailed on chaotic attractors). Nominal
+0.95. ✅ All 3 channels pass — the conformal overlay is well-calibrated on
+top of a chaotic KARC forecast.
+
+### No-regression gate (T2.3)
+
+3 active tests, all pass:
+1. KARC forecast bit-identical across repeated calls (no hidden state
+   perturbation from the conformal feature being compiled in).
+2. `wout` matrix unchanged after 100 forecast calls (scratch reuse doesn't
+   leak into the readout).
+3. FourierBasis KARC also produces finite output (Chebyshev isn't special).
+
+Plus 1 `#[ignore]`'d latency sanity test (authoritative gate is the
+criterion bench, which is unchanged — see G2 table above).
+
+### Tests shipped
+
+- **4 adapter unit tests** (`conformal::karc_adapter::tests::*`): channel
+  extraction, `observe_and_update` write path, channel-out-of-range panic,
+  empty-delay-state panic in debug.
+- **3 no-regression integration tests** (`tests/conformal_karc_no_regression.rs`):
+  bit-identical forecasts, `wout` stability, FourierBasis smoke.
+- **1 example** (`examples/conformal_karc_overlay.rs`): Lorenz-63 coverage.
+- **All 24 Phase 1 tests still pass** (G1/G3/G4 gates unchanged).
+
+### Total test count
+
+- Phase 1: 24 unit + 8 integration = 32
+- Phase 2: 4 unit + 3 integration = 7
+- **Grand total: 39 tests, all GREEN.**
+
+---
+
 ## References
 
 - **CSP paper:** [arXiv:2605.03789](https://arxiv.org/abs/2605.03789)

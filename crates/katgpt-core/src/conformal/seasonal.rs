@@ -137,7 +137,7 @@ impl PointForecaster for SeasonalPoolForecaster {
     /// Forecast the value at horizon `h`. The `delay_state` slice is IGNORED
     /// (the seasonal pool uses its own internal history ring as the state).
     #[inline]
-    fn forecast_into(&self, _delay_state: &[f32], h: usize, out: &mut f32) {
+    fn forecast_into(&mut self, _delay_state: &[f32], h: usize, out: &mut f32) {
         *out = self.forecast(h);
     }
 }

@@ -1,10 +1,10 @@
 # Issue 010: Retroactive "Report the Floor" — conformal-naive floor comparison for existing UQ-bearing primitives
 
 **Filed:** 2026-06-28
-**Last updated:** 2026-06-30 (T1 unblocked — Plan 340 Phase 1 shipped)
+**Last updated:** 2026-06-30 (T1 unblocked — Plan 340 Phase 1 shipped; Plan 340 Phase 2 KARC adapter shipped)
 **Policy source:** Research 322 (`.research/322_Conformal_Seasonal_Pools_Calibrated_UQ_Overlay.md`), Plan 340 (`.plans/340_conformal_predictive_intervals_primitive.md`), `katgpt-rs/AGENTS.md` Feature Flag Discipline, research skill `SKILL.md` §Workflow 2.
 **Companion paper:** *Report the Floor* (arXiv:2606.09473) — argues a training-free conformal interval is a mandatory baseline for any probabilistic forecaster.
-**Blocking dependency:** ✅ RESOLVED 2026-06-30 — Plan 340 Phase 1 shipped `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` (the floor instance) behind `conformal_predictive_intervals`. GOAT gate PASSED (see `.benchmarks/340_conformal_goat.md`). The retroactive comparison work (T2–T7) is now ACTIONABLE.
+**Blocking dependency:** ✅ RESOLVED 2026-06-30 — Plan 340 Phase 1 shipped `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` (the floor instance) behind `conformal_predictive_intervals`. GOAT gate PASSED (see `.benchmarks/340_conformal_goat.md`). Plan 340 Phase 2 additionally shipped the `KarcChannelForecaster` adapter + the Lorenz-63 coverage demonstration (x=0.9425, y=0.9520, z=0.9485 at α=0.05). The retroactive comparison work (T2–T7) is now ACTIONABLE.
 
 ---
 
