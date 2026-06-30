@@ -1,10 +1,9 @@
 # Issue 012 — Cross-repo Lean 4 FV rollout coordinator
 
-> **Status:** 🟡 OPEN — Phase 5 (riir-ai bridge ordering, P2/P3, largely
-> redundant) pending decision. All coordination tasks T1–T5 are ✅ DONE.
-> Phases 1–4 COMPLETE (79 Lean 4 theorems across 4 instances). Can be
-> CLOSED once Phase 5 is resolved (close as "covered by specialization"
-> is the recommended path).
+> **Status:** ✅ READY TO CLOSE — all phases resolved (1–4 COMPLETE, Phase 5
+> CLOSED as "covered by specialization"). All coordination tasks T1–T5 DONE.
+> 79 Lean 4 theorems across 4 instances. The cross-repo FV rollout is
+> complete; this issue can be closed.
 > **Type:** Formal verification (Lean 4) — cross-repo strategy
 > **Origin:** Discussion following `katgpt-rs/.proofs/KatgptProof` (Plan 293)
 > audit (2026-06-29). Question: "we proved katgpt-rs which is prod — should we
@@ -112,15 +111,18 @@ aligned with:
     `arcswap_store_atomicity` axiom is documentation-only. Spec-match stress
     test `concurrent_lora_no_torn_read` (100K iterations, hard-fails on any
     torn read) shipped with the Issue 354 fix.
-- 🟡 **Phase 5 (P2/P3): riir-ai** — bridge ordering over learned directions.
-  Status: **largely redundant** with the public `action_bridge_ranking_preserved`
-  theorem (which is already fully parameterized over arbitrary direction
-  vectors). The Phase 5 specialization to riir-ai's learned directions is
-  mathematically covered by instantiation. The substantive remaining work
-  would be a NEW theorem (e.g. linear independence of the committed-blend
-  direction basis) — but that's a different theorem, not the originally-
-  scoped ordering preservation. Phase 5 may close as "covered by
-  specialization" with a thin documentation file, pending a decision.
+- ✅ **Phase 5 (P2/P3): riir-ai** — bridge ordering over learned directions.
+  **CLOSED (2026-06-30) — covered by specialization.** The public
+  `action_bridge_ranking_preserved` theorem is fully parameterized over
+  arbitrary direction vectors (`q d₁ d₂ : ι → ℝ`, universally quantified),
+  so riir-ai's learned/tuned direction vectors are covered by instantiation.
+  Shipped `.proofs/RiirAiProof/Phase5Specialization.lean` (documentation-only
+  Lean module, no new theorems) as the formal record — it explains why a
+  one-line wrapper theorem would add no mathematical content and enumerates
+  the three distinct direction-shaped objects in riir-ai (canonical HLA basis,
+  committed-blend archetype fields as operators, freeze/thaw-swapped trained
+  tables). Commit `adcc3bee`. `lake build` passes (2237 jobs); axiom inventory
+  unchanged.
 
 ## 3. Recommended sequencing
 
@@ -283,17 +285,20 @@ extend (P0) → fill-ins (P1) → `riir-ai` (P1, freeze/thaw is the hard long
 pole). Lock C1-C6 conventions before Phase 1 starts. This issue coordinates
 the rollout; sibling issues own each repo's concrete theorems.
 
-**Rollout status (2026-06-30):** Phases 1–4 COMPLETE ✅. Four FV instances
-shipped (KatgptProof, RiirChainProof, NeuronDbProof, RiirAiProof) with **79
-theorems total** across the quintet (3 + 32 + 28 + 16). Phase 4 (riir-ai)
-shipped both the HLA boundedness (Plan 353, 14 thms) AND the freeze/thaw
-reader invariant (T2, 2 thms depending only on `propext`) — the long pole
-collapsed after the Issue 354 fix made the invariant hold by construction.
-The freeze/thaw proof effort also surfaced a real torn-read bug (Issue 354),
-validating FV as a bug-finding tool. **All coordination tasks T1–T5 are
-DONE** — C1–C6 conventions empirically validated (T1), all 4 phases tracked
-(T2/T3), the capability doc cites all 4 instances (T4, commit `f30daf00`),
-and the cross-repo FV pattern is distilled as a reusable Super-GOAT capture
-protocol (T5, `katgpt-rs/.research/351_*`, commit `fc0c0b80`). **Only Phase 5
-(bridge ordering, P2/P3, largely redundant with the public theorem) remains**
-— recommended path: close as "covered by specialization" with a thin doc.
+**Rollout status (2026-06-30):** ✅ **ALL PHASES COMPLETE.** Four FV
+instances shipped (KatgptProof, RiirChainProof, NeuronDbProof, RiirAiProof)
+with **79 theorems total** across the quintet (3 + 32 + 28 + 16). Phase 4
+(riir-ai) shipped both the HLA boundedness (Plan 353, 14 thms) AND the
+freeze/thaw reader invariant (T2, 2 thms depending only on `propext`) — the
+long pole collapsed after the Issue 354 fix made the invariant hold by
+construction. The freeze/thaw proof effort also surfaced a real torn-read
+bug (Issue 354), validating FV as a bug-finding tool. **All coordination
+tasks T1–T5 are DONE** — C1–C6 conventions empirically validated (T1), all
+phases tracked (T2/T3), the capability doc cites all 4 instances (T4,
+commit `f30daf00`), and the cross-repo FV pattern is distilled as a reusable
+Super-GOAT capture protocol (T5, `katgpt-rs/.research/351_*`, commit
+`fc0c0b80`). **Phase 5 (bridge ordering) CLOSED** as "covered by
+specialization" — the public theorem is fully parameterized over arbitrary
+direction vectors, so riir-ai's learned directions are covered by
+instantiation (commit `adcc3bee`, `Phase5Specialization.lean`). The
+cross-repo FV rollout is complete; this issue can be closed.
