@@ -25,7 +25,7 @@ use crate::pruners::thicket_variance_probe::{
 use crate::trigger_gate::ComputeTier;
 
 #[cfg(feature = "thicket_variance_probe")]
-fn tier_to_kp(tier: ComputeTier) -> KpComputeTier {
+pub(crate) fn tier_to_kp(tier: ComputeTier) -> KpComputeTier {
     match tier {
         ComputeTier::CpuOnly => KpComputeTier::CpuOnly,
         ComputeTier::CpuGpu => KpComputeTier::CpuGpu,

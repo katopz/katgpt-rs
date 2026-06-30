@@ -746,7 +746,7 @@ impl StateHeuristic<BomberState> for BanditBomberHeuristic {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bomber::arena::EMPTY_ARENA;
+    use crate::pruners::bomber::arena::EMPTY_ARENA;
 
     /// Create a state from the empty arena template (no destructible walls).
     fn empty_state() -> BomberState {

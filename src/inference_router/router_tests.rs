@@ -694,55 +694,59 @@ fn stats_exposes_tvp_signal() {
 #[cfg(feature = "thicket_variance_probe")]
 #[test]
 fn tvp_tier_decision_branches() {
-    use crate::pruners::thicket_variance_probe::tvp_tier_decision;
+    // Pure unit test of the pruners-side fn — use the pruners-side `ComputeTier`
+    // directly (the leaf crate mirrors the root enum bit-for-bit; values cross
+    // the boundary as u8 via `tier_to_kp` in prod). Asserting on the pruners
+    // enum here is the honest framing for an isolated-fn test.
+    use crate::pruners::thicket_variance_probe::{tvp_tier_decision, ComputeTier as KpComputeTier};
 
     // No signal → Defer.
     assert_eq!(
-        tvp_tier_decision(None, 0.6, 0.2, ComputeTier::CpuOnly, true, true),
+        tvp_tier_decision(None, 0.6, 0.2, KpComputeTier::CpuOnly, true, true),
         TvpTierDecision::Defer
     );
 
     // Promote branch.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, ComputeTier::CpuOnly, true, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, KpComputeTier::CpuOnly, true, true),
         TvpTierDecision::PromoteGpu
     );
     // No GPU → cannot promote.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, ComputeTier::CpuOnly, false, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, KpComputeTier::CpuOnly, false, true),
         TvpTierDecision::Hold
     );
     // Already CpuGpu → cannot promote further.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, ComputeTier::CpuGpu, true, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.9)), 0.6, 0.2, KpComputeTier::CpuGpu, true, true),
         TvpTierDecision::Hold
     );
 
     // Demote branch.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, ComputeTier::CpuGpu, true, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, KpComputeTier::CpuGpu, true, true),
         TvpTierDecision::DemoteCpu
     );
     // High load → cannot demote.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, ComputeTier::CpuGpu, true, false),
+        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, KpComputeTier::CpuGpu, true, false),
         TvpTierDecision::Hold
     );
     // Already CpuOnly → cannot demote.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, ComputeTier::CpuOnly, true, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.1)), 0.6, 0.2, KpComputeTier::CpuOnly, true, true),
         TvpTierDecision::Hold
     );
 
     // Mid-range disagreement → Hold.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_reasoning(0.4)), 0.6, 0.2, ComputeTier::CpuOnly, true, true),
+        tvp_tier_decision(Some(tvp_reasoning(0.4)), 0.6, 0.2, KpComputeTier::CpuOnly, true, true),
         TvpTierDecision::Hold
     );
 
     // Format-only signal → never promotes.
     assert_eq!(
-        tvp_tier_decision(Some(tvp_format_only(0.99)), 0.6, 0.2, ComputeTier::CpuOnly, true, true),
+        tvp_tier_decision(Some(tvp_format_only(0.99)), 0.6, 0.2, KpComputeTier::CpuOnly, true, true),
         TvpTierDecision::Hold
     );
 }
@@ -793,11 +797,15 @@ fn simulate_cascade(
 
     // TVP gate (Plan 267) — sits between critical and breakeven.
     let low_load = true; // we are in a test with zero QPS.
+    // `tvp_tier_decision` lives in the `katgpt-pruners` leaf crate and takes
+    // the pruners-side `ComputeTier`. Bridge the root tier across the boundary
+    // with the same `tier_to_kp` the prod router uses (DRY: one conversion).
+    use crate::inference_router::router_tvp::tier_to_kp;
     match tvp_tier_decision(
         tvp,
         tvp_promote_at,
         tvp_demote_at,
-        tier_after_critical,
+        tier_to_kp(tier_after_critical),
         gate.gpu_available(),
         low_load,
     ) {
