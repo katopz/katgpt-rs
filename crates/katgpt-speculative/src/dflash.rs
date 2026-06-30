@@ -114,6 +114,7 @@ pub trait DflashCtx<Weights: ?Sized> {
 /// * `probs_buf` — scratch `[vocab_size]` for in-place softmax.
 /// * `marginals_flat` — output `[max_steps * vocab_size]`, step `i`
 ///   occupies `[i*vocab_size .. (i+1)*vocab_size]`.
+#[allow(clippy::too_many_arguments)]
 pub fn dflash_predict_with<Ctx, Cache, Weights, F>(
     ctx: &mut Ctx,
     cache: &mut Cache,
@@ -174,6 +175,7 @@ where
 /// * `sampled_tokens` — output `[max_steps]`, populated with the sampled
 ///   token at each step.
 /// * `rng` — randomness source for sampling.
+#[allow(clippy::too_many_arguments)]
 pub fn dflash_predict_ar_with<Ctx, Cache, Weights, F>(
     ctx: &mut Ctx,
     cache: &mut Cache,
@@ -200,7 +202,7 @@ where
     let temperature = draft_config.temperature;
 
     let mut cur_token = token;
-    for step in 0..max_steps {
+    for (step, token_slot) in sampled_tokens[..max_steps].iter_mut().enumerate() {
         forward_fn(ctx, weights, cache, cur_token, pos + step, draft_config);
 
         // MTP conditioning: inject target activations into drafter's hidden state
@@ -218,7 +220,7 @@ where
         let next_token = sample_from_distribution(&probs_buf[..vocab_size], rng);
         let start = step * vocab_size;
         marginals_flat[start..start + vocab_size].copy_from_slice(&probs_buf[..vocab_size]);
-        sampled_tokens[step] = next_token;
+        *token_slot = next_token;
         cur_token = next_token;
     }
 
@@ -233,6 +235,7 @@ where
 ///
 /// `max_steps` is one short of `block_size - pos` to leave room for the
 /// seeded position.
+#[allow(clippy::too_many_arguments)]
 pub fn dflash_predict_conditioned_with<Ctx, Cache, Weights, F>(
     ctx: &mut Ctx,
     cache: &mut Cache,
@@ -265,7 +268,7 @@ where
     let temperature = draft_config.temperature;
     let mut cur_token = token;
 
-    for step in 0..max_steps {
+    for (step, token_slot) in sampled_tokens[..max_steps].iter_mut().enumerate() {
         forward_fn(ctx, weights, cache, cur_token, pos + step + 1, draft_config);
         let logits = ctx.logits_slice();
         probs_buf[..vocab_size].copy_from_slice(&logits[..vocab_size]);
@@ -274,7 +277,7 @@ where
         let next_token = sample_from_distribution(&probs_buf[..vocab_size], rng);
         let start = step * vocab_size;
         marginals_flat[start..start + vocab_size].copy_from_slice(&probs_buf[..vocab_size]);
-        sampled_tokens[step] = next_token;
+        *token_slot = next_token;
         cur_token = next_token;
     }
 
