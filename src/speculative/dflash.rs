@@ -1,8 +1,102 @@
+// `sample_from_distribution` is only used by the feature-gated dflash variants
+// (`domino_lora`, `dflare_kv_routing`); the three shared-core `_with` delegations
+// do their sampling inside `katgpt_speculative::dflash`.
+#[cfg(any(feature = "domino_lora", feature = "dflare_kv_routing"))]
 use katgpt_core::speculative::sampling::sample_from_distribution;
 use crate::speculative::types::{DraftResult, SpeculativeContext};
 use crate::transformer::{ForwardContext, MultiLayerKVCache, TransformerWeights, forward};
 use crate::types::{Config, Rng, softmax_scaled};
+use katgpt_speculative::dflash::{DflashCache, DflashCtx};
 use rayon::prelude::*;
+
+// ── Issue 013 Phase B: shared-core backend adapters ───────────
+//
+// The three `_with` algorithmic cores now live in
+// `katgpt_speculative::dflash` (generic over `Ctx: DflashCtx`,
+// `Cache: DflashCache`, a `forward_fn`, and `Weights`). This file keeps the
+// katgpt-rs-specific `_with` entry points (disjoint field borrow on
+// `SpeculativeContext`) and delegates to the shared core.
+//
+// Orphan-rule note: `ForwardContext` is local to katgpt-rs, so the
+// `DflashCtx<TransformerWeights>` impl is fine. `MultiLayerKVCache` is foreign
+// (defined in katgpt-transformer), so the `DflashCache` impl rides on a local
+// borrowing adapter `CacheAdapter<'a>` instead of the foreign concrete type.
+
+/// Borrowing adapter that satisfies `DflashCache` for our (foreign)
+/// `MultiLayerKVCache` without violating the orphan rule. Constructed locally
+/// per `_with` call from `&mut sctx.cache`; the shared core drives it via the
+/// trait, and `forward_via_adapter` unwraps the inner cache for `forward`.
+struct CacheAdapter<'a>(&'a mut MultiLayerKVCache);
+
+impl DflashCache for CacheAdapter<'_> {
+    #[inline]
+    fn reset(&mut self) {
+        self.0.reset();
+    }
+
+    #[inline]
+    fn invalidate_position(&mut self, pos: usize, kv_dim: usize) {
+        self.0.invalidate_position(pos, kv_dim);
+    }
+
+    fn seed_layers(&mut self, target_hidden: &[f32], draft_kv_dim: usize) {
+        if !target_hidden.is_empty() && draft_kv_dim > 0 {
+            let target_dim = target_hidden.len().min(draft_kv_dim);
+            for layer in &mut self.0.layers {
+                layer.key[..target_dim].copy_from_slice(&target_hidden[..target_dim]);
+                layer.key[target_dim..draft_kv_dim].fill(0.0);
+                layer.value[..target_dim].copy_from_slice(&target_hidden[..target_dim]);
+                layer.value[target_dim..draft_kv_dim].fill(0.0);
+            }
+        }
+    }
+}
+
+impl DflashCtx<TransformerWeights> for ForwardContext {
+    #[inline]
+    fn logits_slice(&self) -> &[f32] {
+        &self.logits
+    }
+
+    fn apply_mtp_conditioning(
+        &mut self,
+        weights: &TransformerWeights,
+        mtp_ctx: &[f32],
+        n_embd: usize,
+        vocab_size: usize,
+    ) {
+        let n = n_embd.min(mtp_ctx.len());
+        for i in 0..n {
+            // safety: i < n <= n_embd == hidden_state.len() and i < mtp_ctx.len()
+            unsafe {
+                *self.hidden_state.get_unchecked_mut(i) += *mtp_ctx.get_unchecked(i);
+            }
+        }
+        crate::types::matmul(
+            &mut self.logits,
+            &weights.lm_head,
+            &self.hidden_state,
+            vocab_size,
+            n_embd,
+        );
+    }
+}
+
+/// Trampoline matching the shared core's `forward_fn` shape
+/// (`Fn(&mut Ctx, &Weights, &mut Cache, usize, usize, &Config)`). Discards
+/// `forward`'s `&mut [f32]` return (a generic `Fn` can't express that borrow);
+/// the shared core reads logits back via `DflashCtx::logits_slice`.
+#[inline]
+fn forward_via_adapter(
+    ctx: &mut ForwardContext,
+    weights: &TransformerWeights,
+    cache: &mut CacheAdapter<'_>,
+    token: usize,
+    pos: usize,
+    config: &Config,
+) {
+    forward(ctx, weights, cache.0, token, pos, config);
+}
 
 // ── Zero-alloc _with variants ──────────────────────────────────
 
@@ -11,6 +105,11 @@ use rayon::prelude::*;
 /// Reuses pre-allocated buffers from `SpeculativeContext`.
 /// Each step gets an independent KV cache (reset per step).
 /// Returns number of steps populated; caller reads via `sctx.marginal_slice()`.
+///
+/// Issue 013 Phase B: delegates the loop body to the shared core in
+/// `katgpt_speculative::dflash` (which now uses Issue 053 selective
+/// `invalidate_position` between steps instead of a full per-step reset —
+/// behavior-preserving, see `dflash_predict_with` docs there).
 pub fn dflash_predict_with(
     sctx: &mut SpeculativeContext,
     draft_weights: &TransformerWeights,
@@ -18,30 +117,20 @@ pub fn dflash_predict_with(
     token: usize,
     pos: usize,
 ) -> usize {
-    let max_steps = draft_config
-        .draft_lookahead
-        .min(draft_config.block_size.saturating_sub(pos));
-    let vocab_size = draft_config.vocab_size;
-    let temperature = draft_config.temperature;
-
-    for step in 0..max_steps {
-        sctx.cache.reset();
-        let logits = forward(
-            &mut sctx.ctx,
-            draft_weights,
-            &mut sctx.cache,
-            token,
-            pos + step,
-            draft_config,
-        );
-        sctx.probs_buf.copy_from_slice(logits);
-        softmax_scaled(&mut sctx.probs_buf, 1.0 / temperature);
-        let start = step * vocab_size;
-        sctx.marginals_flat[start..start + vocab_size].copy_from_slice(&sctx.probs_buf);
-    }
-
-    sctx.steps_populated = max_steps;
-    max_steps
+    let mut cache = CacheAdapter(&mut sctx.cache);
+    let steps = katgpt_speculative::dflash::dflash_predict_with(
+        &mut sctx.ctx,
+        &mut cache,
+        draft_weights,
+        forward_via_adapter,
+        &mut sctx.probs_buf,
+        &mut sctx.marginals_flat,
+        draft_config,
+        token,
+        pos,
+    );
+    sctx.steps_populated = steps;
+    steps
 }
 
 /// Zero-alloc variant of `dflash_predict_ar`.
@@ -49,6 +138,9 @@ pub fn dflash_predict_with(
 /// Reuses pre-allocated buffers from `SpeculativeContext`.
 /// Autoregressive: single KV cache, samples feed back as next input.
 /// Returns number of steps populated; caller reads via `sctx.marginal_slice()` and `sctx.sampled_tokens()`.
+///
+/// Issue 013 Phase B: delegates the loop body (including MTP conditioning) to
+/// the shared core in `katgpt_speculative::dflash`.
 pub fn dflash_predict_ar_with(
     sctx: &mut SpeculativeContext,
     draft_weights: &TransformerWeights,
@@ -60,56 +152,23 @@ pub fn dflash_predict_ar_with(
 ) -> usize {
     // NOTE: Caller is responsible for resetting sctx before calling this function.
     // This allows KV cache preloading (Phase 3, Plan 055) between reset and AR loop.
-    let max_steps = draft_config
-        .draft_lookahead
-        .min(draft_config.block_size.saturating_sub(pos));
-    let vocab_size = draft_config.vocab_size;
-    let temperature = draft_config.temperature;
-
-    let mut cur_token = token;
-    for step in 0..max_steps {
-        let _logits = forward(
-            &mut sctx.ctx,
-            draft_weights,
-            &mut sctx.cache,
-            cur_token,
-            pos + step,
-            draft_config,
-        );
-
-        // MTP conditioning: inject target activations into drafter's hidden state
-        // on the first step, then re-compute logits from the conditioned state.
-        if step == 0
-            && let Some(mtp_ctx) = mtp_context
-        {
-            let n = draft_config.n_embd.min(mtp_ctx.len());
-            for i in 0..n {
-                unsafe {
-                    *sctx.ctx.hidden_state.get_unchecked_mut(i) += *mtp_ctx.get_unchecked(i);
-                }
-            }
-            // Re-compute logits from conditioned hidden state
-            crate::types::matmul(
-                &mut sctx.ctx.logits,
-                &draft_weights.lm_head,
-                &sctx.ctx.hidden_state,
-                draft_config.vocab_size,
-                draft_config.n_embd,
-            );
-        }
-
-        sctx.probs_buf.copy_from_slice(&sctx.ctx.logits);
-        softmax_scaled(&mut sctx.probs_buf, 1.0 / temperature);
-
-        let next_token = sample_from_distribution(&sctx.probs_buf, rng);
-        let start = step * vocab_size;
-        sctx.marginals_flat[start..start + vocab_size].copy_from_slice(&sctx.probs_buf);
-        sctx.sampled_tokens[step] = next_token;
-        cur_token = next_token;
-    }
-
-    sctx.steps_populated = max_steps;
-    max_steps
+    let mut cache = CacheAdapter(&mut sctx.cache);
+    let steps = katgpt_speculative::dflash::dflash_predict_ar_with(
+        &mut sctx.ctx,
+        &mut cache,
+        draft_weights,
+        forward_via_adapter,
+        &mut sctx.probs_buf,
+        &mut sctx.marginals_flat,
+        &mut sctx.sampled_tokens,
+        draft_config,
+        token,
+        pos,
+        rng,
+        mtp_context,
+    );
+    sctx.steps_populated = steps;
+    steps
 }
 
 /// DFlash predict with Domino LoRA correction applied to logits.
@@ -180,6 +239,9 @@ pub fn dflash_predict_ar_with_domino(
 /// Reuses pre-allocated buffers from `SpeculativeContext`.
 /// Seeds draft KV cache with target hidden state, then autoregressive.
 /// Returns number of steps populated.
+///
+/// Issue 013 Phase B: delegates the loop body (including KV seeding) to the
+/// shared core in `katgpt_speculative::dflash`.
 pub fn dflash_predict_conditioned_with(
     sctx: &mut SpeculativeContext,
     draft_weights: &TransformerWeights,
@@ -189,51 +251,23 @@ pub fn dflash_predict_conditioned_with(
     target_hidden_state: &[f32],
     rng: &mut Rng,
 ) -> usize {
-    sctx.cache.reset();
-    let max_steps = draft_config.draft_lookahead.min(
-        draft_config
-            .block_size
-            .saturating_sub(pos)
-            .saturating_sub(1),
+    let mut cache = CacheAdapter(&mut sctx.cache);
+    let steps = katgpt_speculative::dflash::dflash_predict_conditioned_with(
+        &mut sctx.ctx,
+        &mut cache,
+        draft_weights,
+        forward_via_adapter,
+        &mut sctx.probs_buf,
+        &mut sctx.marginals_flat,
+        &mut sctx.sampled_tokens,
+        draft_config,
+        token,
+        pos,
+        target_hidden_state,
+        rng,
     );
-
-    // Seed draft KV cache with target hidden state (Option C)
-    let draft_kv_dim = crate::types::kv_dim(draft_config);
-    if !target_hidden_state.is_empty() && draft_kv_dim > 0 {
-        let target_dim = target_hidden_state.len().min(draft_kv_dim);
-        for layer in &mut sctx.cache.layers {
-            layer.key[..target_dim].copy_from_slice(&target_hidden_state[..target_dim]);
-            layer.key[target_dim..draft_kv_dim].fill(0.0);
-            layer.value[..target_dim].copy_from_slice(&target_hidden_state[..target_dim]);
-            layer.value[target_dim..draft_kv_dim].fill(0.0);
-        }
-    }
-
-    let vocab_size = draft_config.vocab_size;
-    let temperature = draft_config.temperature;
-    let mut cur_token = token;
-
-    for step in 0..max_steps {
-        let logits = forward(
-            &mut sctx.ctx,
-            draft_weights,
-            &mut sctx.cache,
-            cur_token,
-            pos + step + 1,
-            draft_config,
-        );
-        sctx.probs_buf.copy_from_slice(logits);
-        softmax_scaled(&mut sctx.probs_buf, 1.0 / temperature);
-
-        let next_token = sample_from_distribution(&sctx.probs_buf, rng);
-        let start = step * vocab_size;
-        sctx.marginals_flat[start..start + vocab_size].copy_from_slice(&sctx.probs_buf);
-        sctx.sampled_tokens[step] = next_token;
-        cur_token = next_token;
-    }
-
-    sctx.steps_populated = max_steps;
-    max_steps
+    sctx.steps_populated = steps;
+    steps
 }
 
 // ── DFlare KV Routing (Plan 174 T2b, feature: dflare_kv_routing) ──
@@ -422,18 +456,12 @@ pub fn dflash_predict_ar(
         None,
     );
     let vocab_size = draft_config.vocab_size;
-    DraftResult {
-        marginals: (0..steps)
+    DraftResult::new(
+        (0..steps)
             .map(|step| sctx.marginal_slice(step, vocab_size).to_vec())
             .collect(),
-        sampled_tokens: sctx.sampled_tokens().to_vec(),
-        #[cfg(feature = "domain_latent")]
-        routing_overlap: None,
-        #[cfg(feature = "spec_cost_model")]
-        cost_snapshot: None,
-        #[cfg(feature = "stability_metrics")]
-        stability: None,
-    }
+        sctx.sampled_tokens().to_vec(),
+    )
 }
 
 /// Target-conditioned DFlash: Predict marginals using draft model
@@ -465,18 +493,12 @@ pub fn dflash_predict_conditioned(
         rng,
     );
     let vocab_size = draft_config.vocab_size;
-    DraftResult {
-        marginals: (0..steps)
+    DraftResult::new(
+        (0..steps)
             .map(|step| sctx.marginal_slice(step, vocab_size).to_vec())
             .collect(),
-        sampled_tokens: sctx.sampled_tokens().to_vec(),
-        #[cfg(feature = "domain_latent")]
-        routing_overlap: None,
-        #[cfg(feature = "spec_cost_model")]
-        cost_snapshot: None,
-        #[cfg(feature = "stability_metrics")]
-        stability: None,
-    }
+        sctx.sampled_tokens().to_vec(),
+    )
 }
 
 // ── DFlare Marginal Fusion (Plan 174 T1, feature: dflare_fusion) ──

@@ -1,7 +1,7 @@
 # Issue 013 — Collapse the speculative/DDTree fork between katgpt-rs and riir-engine
 
 **Date:** 2026-06-29
-**Status:** Phase A + Phase A.5 complete (root converged). Phase B (dflash) + Phase C deferred.
+**Status:** Complete. Phase A + Phase A.5 + Phase B done (root + riir-engine both import the shared cores). Phase C (KV/attention/quant re-org) remains user-deferred.
 **Severity:** DRY violation (user rule: "DRY, Modular, Generic, Decouple")
 
 ## Problem
@@ -40,7 +40,12 @@ Types + sampling + traits are shared via `katgpt_core`. No work needed there.
 
 **dflash:**
 - Depends on `crate::transformer::forward` (not in katgpt-transformer leaf)
-- → **Deferred to Issue 014** (needs forward trait parameterization)
+- → Resolved Phase B via a `DflashCtx` + `DflashCache` trait pair + `forward_fn` closure
+  in `katgpt-speculative::dflash` (see Phase B below). The shared core is generic
+  over `Ctx`, `Cache`, `W`; each consumer impls the two traits and passes its own
+  `forward` (via a small `Output=()` trampoline — the shared core reads logits
+  back via `DflashCtx::logits_slice` because the generic `F` bound can't return a
+  borrow tied to `&mut Ctx`).
 
 ## Plan
 
@@ -88,11 +93,42 @@ Types + sampling + traits are shared via `katgpt_core`. No work needed there.
   `par_find_valid_sequence`, `build_slices_view`) all come from the leaf.
   Tests: katgpt-speculative 24/24, katgpt-rs 3875/3875, riir-engine 2387/2387.
 
-### Phase B — dflash (deferred to Issue 014)
+### Phase B — dflash (completed 2026-06-30)
 
-- [-] dflash needs `forward` parameterization (trait or fn pointer).
-      The base `forward` signatures are identical between katgpt-rs and
-      riir-engine, but the trait needs design. Separate issue.
+- [x] Added `katgpt-speculative::dflash` module exporting two backend traits
+      and three generic zero-alloc `_with` cores:
+      - `trait DflashCache { reset / invalidate_position / seed_layers }`
+      - `trait DflashCtx<Weights> { logits_slice / apply_mtp_conditioning }`
+      - `pub fn dflash_predict_with`, `dflash_predict_ar_with`,
+        `dflash_predict_conditioned_with` — generic over `Ctx, Cache, W, F`.
+      Both crates impl the traits for their own `ForwardContext` /
+      `MultiLayerKVCache` and delegate their `_with` bodies to the shared
+      core via a disjoint field borrow on `SpeculativeContext`. The thin
+      wrappers (`dflash_predict`, `_ar`, `_conditioned`, `_parallel`) and
+      feature-gated variants (`_domino`, `_routing`, `_fusion` in katgpt-rs)
+      stay local.
+      **Free win:** the shared core carries the Issue 053 selective
+      `invalidate_position` optimization, which riir-engine previously
+      lacked — riir-engine gains it transparently (`test_*_matches_original`
+      confirms identical marginals).
+
+      **Verification:**
+      - `katgpt-speculative`: 24/24 lib tests pass
+      - `katgpt-rs`: 659/659 speculative lib tests pass (incl. 23 dflash)
+      - `riir-engine`: 24/24 dflash tests pass (incl. 3 `*_matches_original`)
+      - `cargo check --workspace` clean on both repos (default features)
+
+      **Design notes:**
+      - katgpt-rs needed a `CacheAdapter<'a>` newtype to satisfy the orphan
+        rule (`MultiLayerKVCache` is foreign — defined in
+        `katgpt-transformer`). riir-engine could impl directly because its
+        `MultiLayerKVCache` is local.
+      - Both crates needed a tiny `forward_void`/`forward_via_adapter`
+        trampoline because `forward` returns `&mut [f32]` but the shared
+        core's `F: Fn(...) -> ()` bound pins the output. The trampoline
+        discards the return; the shared core reads logits via
+        `DflashCtx::logits_slice` (verified both crates' `forward` return
+        `&mut ctx.logits`).
 
 ### Phase C — KV/attention/quant re-org (deferred)
 

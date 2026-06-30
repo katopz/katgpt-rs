@@ -18,15 +18,20 @@
 //!   `katgpt_core::speculative::types` + `katgpt_core::traits` (Plan 008 Phase 2.5).
 //! - **Sampling** (`sample_from_distribution`) → already in
 //!   `katgpt_core::speculative::sampling` (Plan 008 Phase 2.6).
-//! - **DFlash** (`dflash_predict`) → deferred to Issue 014 (needs `forward`
-//!   parameterization; the base `forward` signatures are identical between
-//!   katgpt-rs and riir-engine but the trait needs design).
+//! - **DFlash** (`dflash_predict_*_with`) → the three zero-alloc `_with`
+//!   cores live here (Issue 013 Phase B). They are generic over a `DflashCtx` +
+//!   `DflashCache` backend trait pair and a `forward_fn` closure, because the
+//!   underlying `ForwardContext` / `MultiLayerKVCache` / `TransformerWeights`
+//!   types are crate-specific. The thin wrappers (`dflash_predict`, `_ar`,
+//!   `_conditioned`, `_parallel`) and feature-gated variants (`_domino`,
+//!   `_routing`, `_fusion`) stay in each consumer.
 //! - **Feature-gated DDTree variants** (`build_dd_tree_belief`, `_speculative`,
 //!   `_kurtosis`, `_domino`, `_manifold`, `_lodestar`, `_gdsd`, …) → stay in
 //!   `katgpt-rs/src/speculative/dd_tree.rs` because they reference root-only
 //!   sibling modules (`super::belief_drafter`, `super::spec_generator`, etc.).
 
 pub mod dd_tree;
+pub mod dflash;
 
 // Re-export katgpt_core's speculative types + traits so consumers can import
 // everything from one place (`katgpt_speculative::{TreeNode, ConstraintPruner, …}`).
