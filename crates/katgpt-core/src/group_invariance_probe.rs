@@ -536,6 +536,7 @@ where
 /// After the call, `scores_scratch[..n_samples]` holds the per-sample
 /// scores (useful for downstream inspection or histogramming). The
 /// returned [`SubgroupReport`] is the only allocation.
+#[allow(clippy::too_many_arguments)]
 pub fn discover_subgroup_into<G, F>(
     group: &G,
     summary: &[f32],
@@ -565,12 +566,12 @@ where
     );
     let d = summary.len();
     let mut max_score: f32 = 0.0;
-    for i in 0..n_samples {
+    for slot in scores_scratch[..n_samples].iter_mut() {
         let g = group.sample(rng);
         group.act(&g, summary, &mut rotated_scratch[..d]);
         let dist = distance_fn(&rotated_scratch[..d], summary);
         let score = invariance_score(dist, beta);
-        scores_scratch[i] = score;
+        *slot = score;
         if score > max_score {
             max_score = score;
         }

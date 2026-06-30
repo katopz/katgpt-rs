@@ -294,13 +294,13 @@ pub fn set_sigmoid_attention_into(
             got: w_k.len(),
         });
     }
-    if let Some(wv) = w_v {
-        if wv.len() != dd {
-            return Err(SetAttentionError::WvLenMismatch {
-                expected: dd,
-                got: wv.len(),
-            });
-        }
+    if let Some(wv) = w_v
+        && wv.len() != dd
+    {
+        return Err(SetAttentionError::WvLenMismatch {
+            expected: dd,
+            got: wv.len(),
+        });
     }
     if scratch_q.len() != nk {
         return Err(SetAttentionError::ScratchQLenMismatch {
@@ -354,12 +354,12 @@ pub fn set_sigmoid_attention_into(
 
     // ── For each query i, compute α_ij and accumulate ────────────────
     match cfg.top_k {
-        None => dense_accumulate(output, states, w_v, &scratch_q, &scratch_k, scratch_alpha, cfg, n, d, k, scale),
+        None => dense_accumulate(output, states, w_v, scratch_q, scratch_k, scratch_alpha, cfg, n, d, k, scale),
         Some(k_max) => {
             if k_max == 0 {
                 return Ok(()); // top-0 = no contribution; output = states (already copied)
             }
-            topk_accumulate(output, states, w_v, &scratch_q, &scratch_k, scratch_alpha, cfg, n, d, k, scale, k_max)
+            topk_accumulate(output, states, w_v, scratch_q, scratch_k, scratch_alpha, cfg, n, d, k, scale, k_max)
         }
     }
 }
