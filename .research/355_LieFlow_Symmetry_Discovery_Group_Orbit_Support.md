@@ -163,6 +163,8 @@ Per the research skill's "no candidate escape hatch" rule: I am **not confident 
 
 Two UNCERTAIN answers → **do not claim Super-GOAT candidate**. Issue 011 tracks the design investigation; if it returns Q2+Q3 = YES, the Super-GOAT guide lands in `riir-ai/.research/` (game-runtime selling point) and the plan lands in `riir-ai/.plans/`.
 
+**[Update 2026-07-01 — Issue 011 closed, Q2+Q3 = NO.]** The design investigation resolved the modelless design questions (T1: hypothesis group = SO(2)×SO(2)×SO(2)×SO(2) on named emotion pairs, NOT full SO(8); T2: mean-shift distance, immune to the T4.8 second-moment blindness; T5: T4.8 orthogonal-blindness CONFIRMED, hypothesis group must be strict subgroup of O(d); T6: fixed-size Pod sibling of `ArchetypeBlendShard`), but Q2+Q3 are both **NO (conditional)** — the selling-point behavior change requires the SE(2) lift + group-conv pipeline (Plan 354 Phases 1–3), which is **NOT STARTED**. Without a perception operator to route to, the only consumer is "a new field in the freeze report" = descriptive, not a new capability class. **GOAT-only scope is final.** Re-open condition: Plan 354 Phases 1–3 ship AND a discrete-group-lift companion is built. See [Issue 011](../.issues/011_lieflow_fusion_super_goat_investigation.md) for the full T1–T7 findings.
+
 ---
 
 ## 4. Latent vs Raw Boundary
