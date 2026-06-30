@@ -137,6 +137,8 @@ pub mod mbu;
 pub use katgpt_core::newton_schulz;  // Extracted to katgpt-core per Issue 355 Phase 1a; re-export preserves historical `katgpt_rs::newton_schulz::*` paths.
 #[cfg(feature = "off_principal_retrieval")]
 pub mod off_principal;
+#[cfg(feature = "hla_eigenbasis_recovery")]
+pub mod hla_eigenbasis;  // Issue 001: per-NPC eigenbasis recovery from windowed HLA activations
 #[cfg(feature = "octopus")]
 pub mod octopus;
 #[cfg(feature = "modality_pruned_load")]

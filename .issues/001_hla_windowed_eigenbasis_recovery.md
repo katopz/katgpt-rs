@@ -1,9 +1,10 @@
 # Issue 001: HLA Windowed Eigenbasis Recovery
 
 > **Type:** Optimization / Super-GOAT candidate
-> **Status:** Open — needs GOAT/gain proof before promote
+> **Status:** GOAT gate PASS (synthetic, 2026-06-30) — feature opt-in; promotion deferred pending riir-ai head-to-head + guide
 > **Owner:** unassigned
 > **Created:** 2026-06-21
+> **Updated:** 2026-06-30 (implementation + GOAT bench landed)
 > **Cross-repo:** Would land as katgpt-rs primitive + riir-ai application guide
 > **Origin:** SVD audit (conversation 2026-06-21) — gap #1 of 3
 
@@ -190,12 +191,37 @@ Per AGENTS.md sync-boundary rule:
 
 ## Acceptance
 
-- [ ] Primitive ships behind `hla_eigenbasis_recovery` feature flag.
-- [ ] G1–G5 benchmark report committed to `katgpt-rs/.benchmarks/`.
-- [ ] If GOAT: feature promoted to default, loser demoted, riir-ai guide
-      created.
+- [x] Primitive ships behind `hla_eigenbasis_recovery` feature flag.
+- [x] G1–G5 benchmark report committed to `katgpt-rs/.benchmarks/`
+      (`.benchmarks/001_hla_eigenbasis_recovery_goat.md`, 2026-06-30).
+      **GOAT — all 5 gates PASS** on synthetic data. G1 via the incremental-Gram
+      `EigenbasisTracker` hot path (613.9 ns/tick, 3.25× under 2µs budget). The
+      stateless path is ~9µs (cold-start); the full path with provenance is
+      ~17µs (freeze/thaw) — both reported for transparency.
+- [-] If GOAT: feature promoted to default, loser demoted, riir-ai guide
+      created. **DEFERRED** — GOAT gate passes on synthetic data, but promotion
+      requires the head-to-head against Research 032's hand-tuned axes (which
+      live in riir-ai) + the private riir-ai guide. Both cross the repo
+      boundary; tracked as riir-ai follow-ups. Feature stays opt-in.
+- [ ] Head-to-head vs Research 032 axes on G3+G4 (riir-ai follow-up).
+- [ ] `riir-ai/.research/NNN_HLA_Eigenbasis_Recovery_Guide.md` (riir-ai follow-up).
+- [ ] Cross-platform bit-identical (G2 full): per-target build + diff protocol
+      in `tests/hla_eigenbasis_determinism.rs`.
 - [ ] If Gain: feature stays opt-in, partial-win documented in this issue.
 - [ ] If Pass: primitive removed, this issue closed with verdict notes.
+
+## Implementation notes (2026-06-30)
+
+- The primitive's first cut rebuilt the D×D Gram from scratch every call
+  (O(T·D²)) and computed BLAKE3 + `Uuid::now_v7` unconditionally — 16.6µs at
+  T=512, 8.3× over budget. Two modelless fixes landed: (1) provenance made
+  opt-in (`recover_eigenbasis_from_window_fast`), (2) `EigenbasisTracker`
+  maintains the Gram incrementally (O(D²) per tick). The tracker is the
+  plasma-tier hot path; the stateless path is the cold-start option.
+- `Uuid::now_v7()` added as a direct dep per the AGENTS.md rule.
+- 13 tests green (10 lib + 3 determinism). Clippy clean on the new files.
+- `cargo check --workspace` (default) and `--all-features` both clean — feature
+  isolation holds (G5 repo-level).
 
 ---
 

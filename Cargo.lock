@@ -1869,6 +1869,7 @@ dependencies = [
  "syn",
  "tempfile",
  "toml",
+ "uuid",
  "wasmi",
 ]
 
