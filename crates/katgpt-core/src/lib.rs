@@ -18,6 +18,14 @@
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
 
+// Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114,
+// GOAT 25/25 Bench 050). Pure substrate — self-contained f32 linear algebra,
+// zero crate:: deps, zero external deps. Extracted from katgpt-rs/src/ per
+// Issue 355 Phase 1a. Re-exported by katgpt-rs root so historical
+// `katgpt_rs::newton_schulz::*` paths continue to resolve.
+#[cfg(feature = "newton_schulz")]
+pub mod newton_schulz;
+
 // best_belief — ε-quantile Beta lower bound for conservative selection
 // (Plan 336, Research 320, RQGM arXiv:2606.26294 Prop. 4). Complements
 // `sample_beta` (Thompson sampling for EXPLORATION) with a conservative

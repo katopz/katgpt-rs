@@ -288,7 +288,7 @@ rest = []  # REST bridge test + merge stub (Plan 009, client lives in riir-ai/ri
 embedding_router = []  # Semantic embedding routing (Plan 024, not yet started)
 game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Config presets (Plan 040)
 language_domain = []  # Language domain: BPE vocab, LLM models (Plan 040, future)
-newton_schulz = []  # Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114, GOAT 25/25 Bench 050) — default-ON
+newton_schulz = ["katgpt-core/newton_schulz"]  # Newton-Schulz orthogonalization + Muon momentum (Plan 152, Research 114, GOAT 25/25 Bench 050) — default-ON. Extracted to katgpt-core per Issue 355 Phase 1a (pure substrate, zero crate:: deps); this forwards to `katgpt-core/newton_schulz`. Historical `katgpt_rs::newton_schulz::*` paths resolve via the root re-export.
 orthogonal_procrustes = []  # Orthogonal Procrustes — cross-frame embedding alignment via polar decomposition (Issue 001, GOAT 4/4 PASS G1=365us/G2=3.6ms/G4=0%/G6=50KB). Default-ON since 2026-06-23.
 spectral_budget = ["newton_schulz"]  # Spectral Budget Router — layer-adaptive NS depth + rank-p truncation (Plan 253, Research 222) — opt-in, GOAT gate
 gauge_invariant = ["newton_schulz"]  # Gauge-invariant adapter composition — LoRA-Muon distillation (Plan 270, Research 238, GOAT 17/17 PASS, default-ON). Provides ns_inv_sqrt_psd + gauge_rebalance + gauge_invariant_compose primitives.

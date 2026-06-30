@@ -134,7 +134,7 @@ pub mod manifold_power_iter_router;
 #[cfg(feature = "kog_cpu_fusion")]
 pub mod mbu;
 #[cfg(feature = "newton_schulz")]
-pub mod newton_schulz;
+pub use katgpt_core::newton_schulz;  // Extracted to katgpt-core per Issue 355 Phase 1a; re-export preserves historical `katgpt_rs::newton_schulz::*` paths.
 #[cfg(feature = "off_principal_retrieval")]
 pub mod off_principal;
 #[cfg(feature = "octopus")]
