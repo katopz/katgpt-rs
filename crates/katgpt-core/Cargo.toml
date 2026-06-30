@@ -135,6 +135,7 @@ collapse_aware_thinking = ["katgpt-types/collapse_aware_thinking"]  # Collapse-A
 substrate_gate = []  # SubstrateGate passthrough — inference-time capability substrate routing (Plan 216)
 belief_drafter = ["katgpt-types/belief_drafter"]  # NextLat Belief-State Speculative Drafter — entropy threshold config (Plan 217)
 best_belief = []  # ε-quantile Beta lower bound for conservative selection (Plan 336, Research 320, RQGM arXiv:2606.26294 Prop. 4). Complements sample_beta (Thompson exploration) with a conservative-exploitation counterpart. DEFAULT-ON (Phase 2 G2-unblock, 2026-06-28): LUT hot path 3.38ns<<100ns (32x32x5 table bit-identical to closed-form), G1 3.099e-5<1e-4, G4 0 allocs.
+conformal_predictive_intervals = []  # Conformal Predictive Intervals — modelless UQ overlay (Plan 340, Research 322, arXiv:2605.03789 CSP + arXiv:2606.09473 "Report the Floor"). Wraps any PointForecaster (SeasonalPoolForecaster ships; KARC adapter in Phase 2) with a per-channel × per-horizon-bucket exp-recency-weighted residual ring buffer, reads empirical quantiles to produce coverage-guaranteed predictive intervals [point+q_{α/2}, point+q_{1−α/2}]. CRPS / Winkler / empirical-coverage metrics (conformal::metrics). The ConformalIntervalCalibrator<SeasonalNaiveForecaster> with m=1 is the canonical conformal-naive floor — every UQ-bearing primitive's GOAT gate MUST beat it (Issue 010 "Report the Floor" rule, AGENTS.md Feature Flag Discipline). No training, no learned params. Opt-in until G1–G4 GOAT gate passes; promotion to default-on deferred until Plan 342 riir-ai runtime integration confirms the curiosity false-positive win.
 sense_composition = ["plasma_path", "domain_latent"]  # KG Latent Octree Sense Composition (Plan 221)
 slod = ["spectral_hierarchy"]  # SLoD Spectral Level-of-Detail Pruner (Plan 235, GOAT G1-G6 all pass, default-ON)
 rat_plus_bridge = []  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
@@ -485,6 +486,33 @@ required-features = ["sleep_time_anticipation"]
 name = "sleep_time_consume_bench"
 harness = false
 required-features = ["sleep_time_anticipation"]
+
+# Plan 340 Phase 1 — Conformal Predictive Intervals GOAT gate.
+# G1 (coverage), G3 (zero-alloc), G4 (bit-reproducibility) as integration
+# tests; G2 (latency) as a criterion bench. G3 uses a CountingAllocator so it
+# gets its own test target (matches karc_alloc_check / sleep_time_alloc_check
+# pattern) — the CountingAllocator doesn't pick up allocations from the G1/G4
+# tests running in parallel.
+[[test]]
+name = "conformal_coverage"
+required-features = ["conformal_predictive_intervals"]
+
+[[test]]
+name = "conformal_reproducibility"
+required-features = ["conformal_predictive_intervals"]
+
+[[test]]
+name = "conformal_alloc_check"
+required-features = ["conformal_predictive_intervals"]
+
+[[bench]]
+name = "conformal_interval_bench"
+harness = false
+required-features = ["conformal_predictive_intervals"]
+
+[[example]]
+name = "conformal_airpassengers"
+required-features = ["conformal_predictive_intervals"]
 
 # Plan 321 Phase 2 — CommittedFieldBlend G4 zero-alloc GOAT gate. CountingAllocator
 # audit of apply_blended (1000 iters) + commit (100 re-commits). Gated on

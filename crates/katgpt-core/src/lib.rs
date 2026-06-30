@@ -27,6 +27,24 @@ pub mod attention;
 pub mod best_belief;
 #[cfg(feature = "best_belief")]
 pub use best_belief::{best_belief_score, best_belief_scores, select_best_belief};
+// Conformal Predictive Intervals — modelless UQ overlay (Plan 340, Research
+// 322, arXiv:2605.03789 CSP + arXiv:2606.09473 "Report the Floor"). Wraps any
+// PointForecaster with a per-channel × per-horizon-bucket exp-recency-
+// weighted residual ring buffer, reads empirical quantiles to produce
+// coverage-guaranteed predictive intervals. The
+// ConformalIntervalCalibrator<SeasonalNaiveForecaster> with m=1 is the
+// canonical conformal-naive floor per the "Report the Floor" rule (Issue 010,
+// AGENTS.md Feature Flag Discipline). Opt-in until G1–G4 GOAT gate passes.
+#[cfg(feature = "conformal_predictive_intervals")]
+pub mod conformal;
+#[cfg(feature = "conformal_predictive_intervals")]
+pub use conformal::{
+    ConformalIntervalCalibrator, DecayUnit, PointForecaster, PredictiveInterval,
+    ResidualMode, ResidualRingBuffer, RingBuffer, SeasonalNaiveForecaster,
+    SeasonalPoolForecaster, seasonal_naive_floor,
+};
+#[cfg(feature = "conformal_predictive_intervals")]
+pub use conformal::metrics::{crps, crps_interval, empirical_coverage, mean_crps_interval, mean_winkler, winkler_score};
 #[cfg(feature = "coda_fusion")]
 pub mod coda;
 #[cfg(feature = "dec_operators")]
