@@ -257,28 +257,31 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 ### Phase 4 — Verification (cross-cutting, riir-engine REQUIRED)
 
-- [ ] **T4.1** `cargo check -p katgpt-sense` clean.
-- [ ] **T4.2** `cargo test -p katgpt-sense --lib` — count matches the 9
-  promoted files' tests.
-- [ ] **T4.3** `cargo check -p katgpt-core` clean (default + all-features).
-- [ ] **T4.4** `cargo test -p katgpt-core --lib` — default count delta
+- [x] **T4.1** `cargo check -p katgpt-sense` clean.
+- [x] **T4.2** `cargo test -p katgpt-sense --lib` — count matches the 9
+  promoted files' tests (24 default, 85 all-features).
+- [x] **T4.3** `cargo check -p katgpt-core` clean (default + all-features).
+- [x] **T4.4** `cargo test -p katgpt-core --lib` — default count delta
   matches promoted test count; all-features count delta matches
-  promoted-with-feature-gate test count.
-- [ ] **T4.5** `cargo check -p katgpt-core --features spectral_threat` clean
+  promoted-with-feature-gate test count. (default 701→661: 40 sense
+  substrate tests moved to katgpt-sense via workspace feature unification;
+  katgpt-sense default 24, all-features 85 — bit-perfect migration, sum
+  preserved across the split.)
+- [x] **T4.5** `cargo check -p katgpt-core --features spectral_threat` clean
   (this feature now activates `sense_threat` mod + the `linoss` dep).
-- [ ] **T4.6** `cargo check --workspace --all-features` clean (katgpt-rs
+- [x] **T4.6** `cargo check --workspace --all-features` clean (katgpt-rs
   workspace).
-- [ ] **T4.7** **REQUIRED (was courtesy):** `cargo check -p riir-engine`
+- [x] **T4.7** **REQUIRED (was courtesy):** `cargo check -p riir-engine`
   clean (default features) — verifies re-export shims preserve
   `katgpt_core::sense::{octree,reconstruction,serialize,lod}::*` paths used
   by kg.rs, kg_hyperedge.rs, tests, examples, benches. **Allow 7-10 min.**
-- [ ] **T4.8** **REQUIRED:** `cargo check -p riir-engine --features merkle_octree`
+- [x] **T4.8** **REQUIRED:** `cargo check -p riir-engine --features merkle_octree`
   clean — verifies `build_with_merkle` path resolves through the shim.
-- [ ] **T4.9** **REQUIRED:** `cargo check -p riir-games` clean — verifies
+- [x] **T4.9** **REQUIRED:** `cargo check -p riir-games` clean — verifies
   `katgpt_core::temporal_deriv::TemporalDerivativeKernel` path used by
   `salience_gate.rs`.
-- [ ] **T4.10** `cargo check -p riir-neuron-db --all-features` clean.
-- [ ] **T4.11** `cargo check -p riir-chain --all-features` clean.
+- [x] **T4.10** `cargo check -p riir-neuron-db --all-features` clean.
+- [x] **T4.11** `cargo check -p riir-chain --all-features` clean.
 
 ### Phase 5 — Issue 007 closure
 
