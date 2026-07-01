@@ -75,6 +75,7 @@ mod rng;
 /// these kernels and `simd::ternary` uses `types::TernaryWeights`.
 pub mod simd;
 mod sense;
+pub mod slod;
 mod ternary;
 
 #[cfg(test)]
@@ -121,6 +122,7 @@ pub use leaky_core::leaky_step;
 pub use math::sparse_matmul;
 pub use rng::Rng;
 pub use sense::{DilationConfig, SenseKind, SenseModule, ShardEmbedding, TernaryDir};
+pub use slod::ScaleBoundary;
 #[cfg(feature = "plasma_path")]
 pub use ternary::TernaryWeights;
 

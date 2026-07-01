@@ -151,17 +151,17 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 ### Phase 1 — Co-extract `ScaleBoundary` to katgpt-types
 
-- [ ] **T1.1** Audit `katgpt-core/src/slod.rs` — extract the `ScaleBoundary`
+- [x] **T1.1** Audit `katgpt-core/src/slod.rs` — extract the `ScaleBoundary`
   struct definition + its derives/impls into a new katgpt-types module
   (`katgpt-types/src/slod.rs` or extend `enums.rs`).
-- [ ] **T1.2** Update `katgpt-core/src/slod.rs` to re-export
+- [x] **T1.2** Update `katgpt-core/src/slod.rs` to re-export
   `katgpt_types::ScaleBoundary` (mirror the leaky_core / depth_invariance
   pattern from Tier 1 #3).
-- [ ] **T1.3** Run GOAT gate:
+- [x] **T1.3** Run GOAT gate:
   - `cargo check -p katgpt-types` clean.
   - `cargo check -p katgpt-core --features slod` clean.
   - `cargo test -p katgpt-core --features slod --lib` — test count matches
-    pre-extraction baseline.
+    pre-extraction baseline (714 → 714).
   - `cargo check -p riir-engine` clean (ScaleBoundary is consumed by
     `riir-engine/benches/sense_lod.rs`).
 
