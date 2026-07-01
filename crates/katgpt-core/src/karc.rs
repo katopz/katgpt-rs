@@ -1811,8 +1811,8 @@ impl<B: KarcBasis<M>, const D: usize, const M: usize, const K: usize> KarcForeca
     /// # The cross-game transfer semantics
     ///
     /// - `a_frozen` is `D × r` (row-major), transferred from a Game-A fit
-    ///   (e.g. extracted from a [`KarcShard`](riir_neuron_db::KarcShard) via
-    ///   the Plan 332 Phase 4 freeze bridge, then SVD/ALS-decomposed).
+    ///   (e.g. extracted from a frozen KARC shard in the private shard crate
+    ///   via the Plan 332 Phase 4 freeze bridge, then SVD/ALS-decomposed).
     /// - After this call, [`Self::is_low_rank_fitted`] is `true`,
     ///   [`Self::a_low_rank`] holds `a_frozen` (cast to f32), and
     ///   [`Self::b_low_rank`] holds the freshly-fit Game-B `B`.

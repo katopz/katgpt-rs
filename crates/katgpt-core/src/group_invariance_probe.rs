@@ -183,8 +183,8 @@ pub fn score_variance(scores: &[f32]) -> f32 {
 /// `≈ 1/k` when exactly `k` scores are `1` and the rest are `0` (perfect
 /// `k`-peak discrete support).
 ///
-/// This deliberately mirrors `riir-neuron-db::spectral_flatness` semantics
-/// (Wiener entropy: 0 = single-mode, 1 = uniform) so downstream consumers
+/// This deliberately mirrors the private shard crate's spectral-flatness
+/// semantics (Wiener entropy: 0 = single-mode, 1 = uniform) so downstream consumers
 /// can reason about the same scale across the two substrates. The
 /// participation-ratio form is chosen over the geometric/arithmetic-mean
 /// form because it handles zero scores gracefully (geometric mean of a
@@ -231,7 +231,8 @@ pub fn score_concentration(scores: &[f32]) -> f32 {
 ///
 /// Determined by [`classify_subgroup`] from the score histogram. Encoded
 /// as a `u8` tag ([`Self::as_u8`]) so it can cross the sync boundary as
-/// a raw deterministic value (mirrors `FreezeGateReport`'s raw fields).
+/// a raw deterministic value (mirrors the private shard crate's freeze-gate
+/// report raw fields).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SubgroupClass {
@@ -403,8 +404,8 @@ pub fn classify_subgroup_with(
 
 /// Audit record produced by [`discover_subgroup`] / [`discover_subgroup_into`].
 ///
-/// Mirrors the shape of `riir_neuron_db::FreezeGateReport` so downstream
-/// consumers can compose the two. Fields split by sync tier per the
+/// Mirrors the shape of the private shard crate's freeze-gate report so
+/// downstream consumers can compose the two. Fields split by sync tier per the
 /// global AGENTS.md raw-vs-latent rule:
 ///
 /// - **Latent** (never synced raw): the per-sample scores, the

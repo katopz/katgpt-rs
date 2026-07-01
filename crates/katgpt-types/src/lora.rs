@@ -194,9 +194,10 @@ impl LoraAdapter {
     /// payload = `[n_adapters(u32) | rank(u32) | alpha(f32) | per-adapter:
     /// in_dim(u32) | out_dim(u32) | a_f32s | b_f32s]`.
     ///
-    /// This is the CPU-side counterpart to `riir_gpu::lora::export_lora`, producing
-    /// byte-identical files that load via either path. Used by `CpuLoraTrainer`
-    /// (Issue 018 CPU fallback) to produce arena-loadable adapters without a GPU.
+    /// This is the CPU-side counterpart to the private GPU LoRA exporter,
+    /// producing byte-identical files that load via either path. Used by
+    /// `CpuLoraTrainer` (Issue 018 CPU fallback) to produce arena-loadable
+    /// adapters without a GPU.
     pub fn save(
         adapters: &[&Self],
         rank: usize,

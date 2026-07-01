@@ -17,8 +17,8 @@
 //!
 //! Per Plan 296 §T4.2, this is the SAME atomic-swap pattern used by:
 //!
-//! - [`riir_engine::episode_buffer::LoRAWeightVersion`] (ArcSwap-backed A/B
-//!   LoRA weight swap, riir-ai Plan 092).
+//! - the private runtime's ArcSwap-backed A/B LoRA weight swap
+//!   (riir-ai Plan 092).
 //! - [`crate::micro_belief::snapshot::MicroRecurrentKernelSnapshot`] (BLAKE3
 //!   snapshot with `u64 version`, the precedent Phase 1's `CwmCommitment`
 //!   follows).
@@ -73,7 +73,7 @@
 //!
 //! - Plan: [`crate::induced_cwm`] §Phase 4
 //! - Source paper: [arxiv 2510.04542](https://arxiv.org/pdf/2510.04542) §3.2
-//! - Precedent (riir-ai): `riir_engine::episode_buffer::LoRAWeightVersion`
+//! - Precedent (riir-ai): the runtime's ArcSwap-backed A/B LoRA weight swap (Plan 092)
 //! - Precedent (katgpt-core): [`crate::micro_belief::snapshot`]
 //! - Commitment artifact: [`crate::induced_cwm::CwmCommitment`]
 //! - Kernel trait: [`crate::induced_cwm::InducedCwmKernel`]
