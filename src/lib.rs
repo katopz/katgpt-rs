@@ -25,8 +25,13 @@ pub mod breakeven;
 pub mod cache_prune;
 #[cfg(feature = "channel_simd_align")]
 pub mod channel_simd;
+// CGSP inlined from src/cgsp.rs (Proposal 003 Phase 0.3, 2026-07-01): the
+// 37-line shim file is replaced by a direct module re-export. `katgpt::cgsp`
+// resolves to `katgpt_core::cgsp`, so all public types, the `traits` / `types`
+// submodules, and `sigmoid` are accessible unchanged. The `cgsp_dual_pool`
+// items resolve the same way when that feature forwards to katgpt-core.
 #[cfg(feature = "cgsp")]
-pub mod cgsp;
+pub use katgpt_core::cgsp;
 #[cfg(feature = "clr")]
 pub mod clr;
 // CLR — Claim-Level Reliability runtime (Plan 284, Research 255).

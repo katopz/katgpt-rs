@@ -366,20 +366,11 @@ fn pearson_r(x: &[f32], y: &[f32], n: usize) -> f32 {
     (cov / denom) as f32
 }
 
-/// Standard logistic sigmoid. Returns value in `(0, 1)`.
-///
-/// Used to bound CI test p-values / scores into the `[0, 1]` interval for
-/// downstream routing per the project's "sigmoid not softmax" rule.
-#[inline]
-pub fn sigmoid(x: f32) -> f32 {
-    if x >= 0.0 {
-        let z = (-x).exp();
-        1.0 / (1.0 + z)
-    } else {
-        let z = x.exp();
-        z / (1.0 + z)
-    }
-}
+// Sigmoid hoisted to `katgpt_core::sigmoid` (Proposal 003 Phase 0.1, 2026-07-01).
+// Re-exported here so historical `crate::band_conditioner::sigmoid` paths
+// (internal callers + 3 sibling modules) still resolve unchanged. The canonical
+// definition lives in `katgpt-core::sigmoid` — always on, no feature gate.
+pub use katgpt_core::sigmoid;
 
 /// Two-sided inverse normal CDF for the standard significance levels.
 ///
@@ -560,7 +551,7 @@ impl NormalRng for fastrand::Rng {
         }
         let u2 = self.f32();
         let mag = (-2.0f32 * u1.ln()).sqrt();
-        
+
         mag * (2.0 * std::f32::consts::PI * u2).cos()
     }
 }

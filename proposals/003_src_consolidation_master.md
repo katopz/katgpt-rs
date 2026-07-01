@@ -312,12 +312,25 @@ definition — no gate, just exile.
 
 Ordering: foundation first (hoists, splits), then domain crates biggest-first.
 
-- [ ] **Phase 0 — foundation moves (no new crates).**
-  - Hoist `sigmoid` from `band_conditioner.rs` → `katgpt-core`.
+- [x] **Phase 0 — foundation moves (no new crates).**
+  - Hoist `sigmoid` from `band_conditioner.rs` → `katgpt-core` (always-on,
+    no feature gate). Removed `sigmoid` from the cgsp crate-root re-export to
+    avoid conflict; `katgpt_core::cgsp::sigmoid` (module-local) still resolves.
+    Updated 3 sibling importers (`adaptive_cot_stopper`, `bckvss`,
+    `specialist_projection`) to `use katgpt_core::sigmoid`. Back-compat re-export
+    `pub use katgpt_core::sigmoid` left in `band_conditioner.rs`.
   - Split `distill/` → peira (stays, tagged for spectral) + ilc/trd (stays,
-    tagged for speculative). Wire the split in-tree first.
-  - Inline-and-delete `cgsp.rs` into `lib.rs`.
-  - GOAT gate G3 on each.
+    tagged for speculative). Wired the split in-tree via `distill/mod.rs`
+    header + per-module comments. Actual file moves deferred to Phases 4/6.
+  - Inline-and-delete `cgsp.rs` into `lib.rs`: deleted the 37-line shim,
+    replaced `pub mod cgsp` with `pub use katgpt_core::cgsp` in `src/lib.rs`.
+    All `katgpt::cgsp::*` paths (types, traits/types submodules, sigmoid,
+    dual_pool items) resolve unchanged.
+  - GOAT gate G3: `cargo check --workspace --all-features` clean;
+    `cargo check` (default features) clean. 93 tests pass across touched
+    modules (band_conditioner, adaptive_cot, bckvss, specialist_projection,
+    distill/peira, distill/trd) + 56 cgsp tests in katgpt-core.
+  **DONE 2026-07-01.**
 - [x] **Phase 0.5 — loser-sweep audit (gates every absorption).** For EACH
   opt-in feature in root + every crate: grep its name against `.benchmarks/`,
   `.plans/`, `.issues/` for the GOAT verdict. Classify into pending /

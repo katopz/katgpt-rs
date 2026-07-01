@@ -30,7 +30,8 @@
 //! All scores are **sigmoid-bounded** in `[0,1]` (project rule: never softmax).
 //! No allocations occur in the hot path beyond the result `Vec<usize>`.
 
-use crate::band_conditioner::{sigmoid, BandConditioningSet, ComputeTarget};
+use crate::band_conditioner::{BandConditioningSet, ComputeTarget};
+use katgpt_core::sigmoid; // Hoisted from band_conditioner (Proposal 003 Phase 0.1)
 
 /// Cosine similarity between two slices, truncated to the shorter length.
 /// Returns 0.0 if either slice is all-zero (avoids divide-by-zero).

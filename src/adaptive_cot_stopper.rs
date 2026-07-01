@@ -26,7 +26,7 @@
 
 use std::collections::HashSet;
 
-use crate::band_conditioner::sigmoid;
+use katgpt_core::sigmoid; // Hoisted from band_conditioner (Proposal 003 Phase 0.1)
 
 /// Configuration for [`AdaptiveCoTStopper`].
 #[derive(Clone, Copy, Debug)]

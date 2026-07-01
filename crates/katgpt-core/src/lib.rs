@@ -15,6 +15,26 @@
 //! get the full substrate. Composition layers (root-only types like
 //! `BanditRolloutPolicy`, `MemorySteeredPruner<P>`) stay in the consuming crate.
 
+/// Standard logistic sigmoid: `σ(x) = 1 / (1 + e^{-x})`.
+///
+/// Numerically stable (branches on sign of `x` to avoid `e^{-x}` overflow).
+/// Returns a value in `(0, 1)` for finite inputs. Always available — no feature
+/// gate — because it's a pure math utility consumed across many domains (band
+/// conditioning, CGSP, faithfulness gates, personality composition, etc.).
+/// Hoisted here from `band_conditioner::sigmoid` (Proposal 003 Phase 0.1) so the
+/// upcoming `katgpt-band` extraction doesn't drag a math utility into the band
+/// crate. Per the project rule: sigmoid, never softmax.
+#[inline]
+pub fn sigmoid(x: f32) -> f32 {
+    if x >= 0.0 {
+        let z = (-x).exp();
+        1.0 / (1.0 + z)
+    } else {
+        let z = x.exp();
+        z / (1.0 + z)
+    }
+}
+
 #[cfg(feature = "tiled_attention")]
 pub mod attention;
 
@@ -122,8 +142,11 @@ pub use cgsp::{
     CuriosityPrioritySnapshot, CycleResult, CycleStats, DEFAULT_HLA_DIM, DEFAULT_K,
     DEFAULT_POOL_SIZE, DifficultyFilter, Direction, EntropyCollapse, HintDeltaBandit,
     HlaProjectionGuide, NoOpBatchGate, NoOpDifficultyFilter, PoolConjecturer, Priority,
-    QualityGuide, ScratchBuffers, SolveRate, Solver, Target, entropy_nats, sigmoid,
+    QualityGuide, ScratchBuffers, SolveRate, Solver, Target, entropy_nats,
     structural_complexity,
+    // Note: `sigmoid` is no longer re-exported here — it's now an always-on
+    // top-level `katgpt_core::sigmoid` (Proposal 003 Phase 0.1). The module-local
+    // `katgpt_core::cgsp::sigmoid` (in cgsp/types.rs) remains for `cgsp::*` paths.
 };
 
 // CGSP dual-pool extension — DecentMem distillation (Plan 282, Research 249).
