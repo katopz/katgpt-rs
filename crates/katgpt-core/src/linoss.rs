@@ -929,7 +929,7 @@ mod tests {
     #[test]
     fn test_linoss_zero_forcing() {
         let cell = LinOSSCell::new(8);
-        let next = cell.imex_step(&LinOSSState::zeros(8), &vec![0.0; 8], 0.1);
+        let next = cell.imex_step(&LinOSSState::zeros(8), &[0.0; 8], 0.1);
         for i in 0..8 {
             assert!(next.y[i].abs() < 1e-10, "y should stay zero");
             assert!(next.z[i].abs() < 1e-10, "z should stay zero");

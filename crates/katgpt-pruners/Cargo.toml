@@ -201,6 +201,17 @@ bfcf_tree = ["and_or_dtree", "bandit", "percept_route"]
 bfcf_lfu_shard = ["bfcf_tree", "papaya"]
 bfcf_lsh_cms = ["bfcf_lfu_shard"]
 
+# BAKE precision-smoothing (Plan 236). Empty tracking flag — gates the
+# `#[cfg(feature = "bake_precision")]` impl block on BFCP (precision_smooth /
+# precision_smooth_label) in bfcf_types.rs. The root forwards this so
+# bench_236_bake_precision_goat can reach precision_smooth via katgpt-rs.
+bake_precision = []
+
+# Temporal Derivative alphas on S2FCollapseDetector (Plan 277). Empty
+# tracking flag — gates `with_temporal_deriv_alphas` in collapse_detector.rs.
+# The root forwards this so bench_277_unified_surprise_bus reaches the method.
+temporal_deriv = []
+
 # Substrate
 substrate_gate = ["katgpt-core/sparse_mlp", "cna_steering"]
 belief_drafter = ["katgpt-core/belief_drafter", "papaya"]

@@ -260,7 +260,7 @@ fn g2_batch_compose_into_matches_typed() {
     let suffixes_data: Vec<Vec<f32>> = (0..n)
         .map(|i| {
             (0..k * k)
-                .map(|j| (i as f32 * 0.1 + j as f32 * 0.01))
+                .map(|j| i as f32 * 0.1 + j as f32 * 0.01)
                 .collect()
         })
         .collect();
@@ -269,7 +269,7 @@ fn g2_batch_compose_into_matches_typed() {
         .map(|d| TransportOperator::from_row_major(k, d.clone()).unwrap())
         .collect();
     let suffix_slices: Vec<&[TransportOperator]> =
-        suffixes_typed.iter().map(|s| std::slice::from_ref(s)).collect();
+        suffixes_typed.iter().map(std::slice::from_ref).collect();
 
     let mut typed_out = vec![TransportOperator::zeros(k); n];
     let mut scratch = Vec::new();

@@ -155,7 +155,7 @@ mod tests {
             let candidate = unit(4, axis);
             let s = guide.score(&target, &candidate);
             assert!(s.is_finite(), "score NaN");
-            assert!(s >= 0.0 && s <= 1.0, "score out of [0,1]: {s}");
+            assert!((0.0..=1.0).contains(&s), "score out of [0,1]: {s}");
         }
     }
 

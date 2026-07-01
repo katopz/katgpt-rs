@@ -77,6 +77,12 @@ pub struct MeanTracker {
     pub m2: f32, // sum of squared deviations (Welford)
 }
 
+impl Default for MeanTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MeanTracker {
     pub fn new() -> Self { Self { n: 0.0, mean: 0.0, m2: 0.0 } }
 }

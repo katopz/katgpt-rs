@@ -600,6 +600,13 @@ impl<F: PointForecaster> ConformalIntervalCalibrator<F> {
     }
 }
 
+// Re-export the cmp::Ordering shim so the `match` arms above compile cleanly
+// under `edition = "2024"`. (Not part of the public API.)
+#[allow(dead_code)]
+fn _ordering_shim(a: f32, b: f32) -> Ordering {
+    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
+}
+
 // ---------------------------------------------------------------------------
 // fastrand convenience — `fastrand::Rng` is a concrete struct (not a trait).
 // Callers construct one with `fastrand::Rng::with_seed(...)` for determinism.
@@ -764,11 +771,4 @@ mod tests {
         assert_eq!(cal.bucket_index(4), 1);
         assert_eq!(cal.bucket_index(5), 1);
     }
-}
-
-// Re-export the cmp::Ordering shim so the `match` arms above compile cleanly
-// under `edition = "2024"`. (Not part of the public API.)
-#[allow(dead_code)]
-fn _ordering_shim(a: f32, b: f32) -> Ordering {
-    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
 }

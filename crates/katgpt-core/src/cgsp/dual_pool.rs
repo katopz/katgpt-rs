@@ -1965,7 +1965,7 @@ mod tests {
         // For this test, we declare arms 1,3,5,7 as dead (e.g., they map to
         // directions the production Solver ignores due to domain-specific
         // constraints). The gate filters them out.
-        let dead_arms = vec![1_usize, 3, 5, 7];
+        let dead_arms = [1_usize, 3, 5, 7];
         let live_arms_filtered: Vec<usize> = (0..n_x_arms)
             .filter(|a| !dead_arms.contains(a))
             .collect();

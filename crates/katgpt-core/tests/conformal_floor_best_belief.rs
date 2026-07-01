@@ -251,7 +251,7 @@ fn uniform_n_produces_identical_selections_baseline() {
     let n_trials = 5000;
 
     println!("\n=== T5 baseline: uniform n (K={}, ε={}, {} trials) ===", k, epsilon, n_trials);
-    println!("{:>6} | {:>14} | {:>14} | {}", "n", "regret_beta", "regret_mle", "verdict");
+    println!("{:>6} | {:>14} | {:>14} | verdict", "n", "regret_beta", "regret_mle");
     println!("{}", "-".repeat(54));
 
     for &n in &[4u32, 8, 16, 32, 64] {
@@ -285,8 +285,8 @@ fn beta_beats_mle_with_variable_observation_counts() {
 
     println!("\n=== T5: variable n (K={}, ε={}, {} trials) ===", k, epsilon, n_trials);
     println!(
-        "{:>8} | {:>14} | {:>14} | {:>12} | {}",
-        "n_mean", "regret_beta", "regret_mle", "improvement", "verdict"
+        "{:>8} | {:>14} | {:>14} | {:>12} | verdict",
+        "n_mean", "regret_beta", "regret_mle", "improvement"
     );
     println!("{}", "-".repeat(70));
 
@@ -335,8 +335,8 @@ fn beta_beats_mle_on_low_data_stress_test() {
 
     println!("\n=== T5: one-low-data stress (K={}, ε={}, {} trials) ===", k, epsilon, n_trials);
     println!(
-        "{:>6} {:>4} | {:>14} | {:>14} | {:>12} | {}",
-        "n_mean", "n_lo", "regret_beta", "regret_mle", "improvement", "verdict"
+        "{:>6} {:>4} | {:>14} | {:>14} | {:>12} | verdict",
+        "n_mean", "n_lo", "regret_beta", "regret_mle", "improvement"
     );
     println!("{}", "-".repeat(74));
 
@@ -395,7 +395,7 @@ fn beta_conservatism_sweep_variable_n() {
     let n_trials = 3000;
 
     println!("\n=== T5: ε sweep (K={}, Variable n_mean={}, {} trials) ===", k, n_mean, n_trials);
-    println!("{:>8} | {:>14} | {:>14} | {}", "ε", "regret_beta", "regret_mle", "verdict");
+    println!("{:>8} | {:>14} | {:>14} | verdict", "ε", "regret_beta", "regret_mle");
     println!("{}", "-".repeat(58));
 
     for &eps in &[0.01_f32, 0.05, 0.10, 0.20, 0.50] {
@@ -426,7 +426,7 @@ fn beta_full_report_for_benchmark_doc() {
     println!("### K={} candidates, θ ∈ [0.3, 0.9], {} trials\n", k, n_trials);
 
     println!("\n--- Uniform n (baseline: Beta should TIE MLE) ---\n");
-    println!("{:>6} | {:>14} | {:>14} | {}", "n", "regret_beta", "regret_mle", "verdict");
+    println!("{:>6} | {:>14} | {:>14} | verdict", "n", "regret_beta", "regret_mle");
     println!("{}", "-".repeat(54));
     for &n in &[4u32, 8, 16, 32, 64] {
         let (rb, rm) = run_experiment(
@@ -438,8 +438,8 @@ fn beta_full_report_for_benchmark_doc() {
 
     println!("\n--- Variable n (real-world: Beta should WIN at low n_mean) ---\n");
     println!(
-        "{:>8} | {:>14} | {:>14} | {:>12} | {}",
-        "n_mean", "regret_beta", "regret_mle", "improvement", "verdict"
+        "{:>8} | {:>14} | {:>14} | {:>12} | verdict",
+        "n_mean", "regret_beta", "regret_mle", "improvement"
     );
     println!("{}", "-".repeat(70));
     for &n_mean in &[4u32, 8, 16, 32, 64, 128, 256] {

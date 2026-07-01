@@ -246,7 +246,7 @@ mod tests {
         let _ = f.observe_and_forecast(&logits);
         let g = f.adaptive_gamma(8.0, 1, 16);
         // α ≈ 8.61 → γ should be clamped to [1, 16], so g = 8 (or 9).
-        assert!(g >= 1 && g <= 16, "γ out of range: {g}");
+        assert!((1..=16).contains(&g), "γ out of range: {g}");
         // Now lower α dramatically: uniform over 1024 → α = 10 - log(1024) ≈ 3.06.
         let logits_low = [0.0_f32; 1024];
         let _ = f.observe_and_forecast(&logits_low);

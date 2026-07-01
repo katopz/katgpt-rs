@@ -178,7 +178,7 @@ mod tests {
             let conf = i as f32 / 100.0;
             let w = adaptive_guidance_weight(conf, 0.5, 6.0);
             assert!(
-                w >= 0.0 && w <= 1.0,
+                (0.0..=1.0).contains(&w),
                 "weight out of [0,1] for conf={conf}: w={w}"
             );
         }

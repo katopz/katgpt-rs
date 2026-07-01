@@ -435,8 +435,7 @@ mod tests {
         // AND (b) enough corpus repetition for its hash table to actually find matches.
         // We build a corpus by repeating the seen pattern so LZ4's match-finder engages.
         let seen = b"guard needs sword\n";
-        let corpus: Vec<u8> = std::iter::repeat(seen)
-            .take(8)
+        let corpus: Vec<u8> = std::iter::repeat_n(seen, 8)
             .flatten()
             .copied()
             .collect();
@@ -572,7 +571,7 @@ mod tests {
         let out = beam_search(&scorer, b"guard", &alphabet, 5, 4, 32);
         let s = String::from_utf8_lossy(&out);
         // The beam should extend the "guard" pattern with a space + letter.
-        assert!(s.len() > 0, "beam should produce something");
+        assert!(!s.is_empty(), "beam should produce something");
     }
 
     #[test]

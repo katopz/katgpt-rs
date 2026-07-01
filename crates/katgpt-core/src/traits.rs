@@ -2130,7 +2130,7 @@ mod recursion_logits_tests {
     #[test]
     fn generator_exposes_pre_post_logits() {
         let mut g = TestRecursionGenerator::new();
-        let _ = g.sharpen_step();
+        g.sharpen_step();
 
         let pre = g.pre_recursion_logits();
         let post = g.post_recursion_logits();
@@ -2158,7 +2158,7 @@ mod recursion_logits_tests {
         }
 
         let mut g = TestRecursionGenerator::new();
-        let _ = g.sharpen_step();
+        g.sharpen_step();
         let margin = compute_margin_sign(&g, 0);
         // Index 0 is the candidate being sharpened toward, so margin should be positive.
         assert!(margin > 0.0, "sharpened candidate must have positive margin, got {}", margin);

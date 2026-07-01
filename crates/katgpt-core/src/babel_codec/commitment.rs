@@ -220,7 +220,7 @@ mod tests {
     fn commitment_copy_clone_eq_hash() {
         let c1 = BabelCommitment::of(b"clone me");
         let c2 = c1; // Copy
-        let c3 = c1.clone();
+        let c3 = c1;
         assert_eq!(c1, c2);
         assert_eq!(c1, c3);
         // Hash: collect into a HashSet to exercise Hash.

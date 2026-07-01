@@ -866,7 +866,7 @@ mod tests {
         let n = 2000;
         let mut evecs = vec![0.0f32; k * d];
         evecs[0] = 1.0; // axis 0 = e_0
-        evecs[1 * d + 1] = 1.0; // axis 1 = e_1
+        evecs[d + 1] = 1.0; // axis 1 = e_1
         let evals = [4.0f32, 1.0f32];
         let crowd = build_synthetic_crowd(n, d, &evals, &evecs, 42);
         let mut axes = vec![0.0; d * k];
@@ -989,12 +989,12 @@ mod tests {
         let n = 2000;
         let mut evecs_a = vec![0.0f32; k * d];
         evecs_a[0] = 1.0;
-        evecs_a[1 * d + 1] = 1.0;
+        evecs_a[d + 1] = 1.0;
         let crowd_a = build_synthetic_crowd(n, d, &[5.0, 0.5], &evecs_a, 11);
 
         let mut evecs_b = vec![0.0f32; k * d];
         evecs_b[2] = 1.0;
-        evecs_b[1 * d + 3] = 1.0;
+        evecs_b[d + 3] = 1.0;
         let crowd_b = build_synthetic_crowd(n, d, &[5.0, 0.5], &evecs_b, 22);
 
         let run = |crowd: &[f32]| -> Vec<f32> {
@@ -1032,7 +1032,7 @@ mod tests {
         let n = 5000;
         let mut evecs = vec![0.0f32; k * d];
         evecs[0] = 1.0;
-        evecs[1 * d + 1] = 1.0;
+        evecs[d + 1] = 1.0;
         evecs[2 * d + 2] = 1.0;
         // Well-separated eigenvalues (10:2:0.5) → stable eigenvectors.
         let crowd = build_synthetic_crowd(n, d, &[10.0, 2.0, 0.5], &evecs, 123);

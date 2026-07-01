@@ -36,7 +36,7 @@ fn g1_dedup_ratio_meets_target() {
 
     // Blob 0: N_CHUNKS distinct 64 KiB blocks, each filled with a distinct byte.
     let blob0: Vec<u8> = (0..N_CHUNKS)
-        .flat_map(|i| std::iter::repeat(i as u8).take(CHUNK_SIZE))
+        .flat_map(|i| std::iter::repeat_n(i as u8, CHUNK_SIZE))
         .collect();
     assert_eq!(blob0.len(), N_CHUNKS * CHUNK_SIZE);
 
@@ -151,8 +151,7 @@ fn g7_tamper_detection() {
 
     for blob_n in 0..N_BLOBS {
         // Each blob: deterministic but distinct fill.
-        let original: Vec<u8> = std::iter::repeat(blob_n as u8)
-            .take(BLOB_SIZE)
+        let original: Vec<u8> = std::iter::repeat_n(blob_n as u8, BLOB_SIZE)
             .collect();
         let original_id = {
             let store = InMemoryChunkedStore::new();
@@ -189,7 +188,7 @@ fn g7_tamper_detection() {
 #[test]
 fn g7_tamper_multichunk_blob() {
     let blob = (0u8..=255)
-        .flat_map(|b| std::iter::repeat(b).take(64 * 1024))
+        .flat_map(|b| std::iter::repeat_n(b, 64 * 1024))
         .collect::<Vec<u8>>(); // 256 chunks, each 64 KiB
 
     let store = InMemoryChunkedStore::new();
@@ -227,7 +226,7 @@ fn g3_inclusion_proof_cost_under_10us() {
     const N_CHUNKS: usize = 1024;
     const CHUNK_SIZE: usize = 64 * 1024;
     let blob: Vec<u8> = (0..N_CHUNKS)
-        .flat_map(|i| std::iter::repeat((i % 256) as u8).take(CHUNK_SIZE))
+        .flat_map(|i| std::iter::repeat_n((i % 256) as u8, CHUNK_SIZE))
         .collect();
 
     let store = InMemoryChunkedStore::new();

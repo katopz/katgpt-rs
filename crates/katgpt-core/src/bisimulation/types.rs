@@ -328,7 +328,7 @@ mod tests {
     fn state_id_sentinel_round_trips() {
         let s = StateId::SENTINEL;
         assert!(s.is_sentinel());
-        assert!(StateId::new(42).is_sentinel() == false);
+        assert!(!StateId::new(42).is_sentinel());
     }
 
     #[test]
