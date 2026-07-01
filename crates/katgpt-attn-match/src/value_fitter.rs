@@ -14,7 +14,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::attn_match::{STABILITY_EPS, score_matrix_simd::dot_8wide};
+use crate::{STABILITY_EPS, score_matrix_simd::dot_8wide};
 
 /// Configuration for Cv fitting.
 #[derive(Debug, Clone, Copy)]

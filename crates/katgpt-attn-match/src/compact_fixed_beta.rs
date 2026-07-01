@@ -35,11 +35,11 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::attn_match::compact::build_reconstruction_report;
-use crate::attn_match::key_selection::{
+use crate::compact::build_reconstruction_report;
+use crate::key_selection::{
     KeySelection, highest_attn::select_highest_attn_keys, omp::select_omp_keys,
 };
-use crate::attn_match::{
+use crate::{
     CompactError, CompactOutput,
     score_matrix::{compute_score_matrix, compute_softmax_attention_and_output},
     types::{AmConfig, KeySelector},
@@ -269,8 +269,8 @@ pub fn compact_with_fixed_beta(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attn_match::compact::compact;
-    use crate::attn_match::types::AmConfig;
+    use crate::compact::compact;
+    use crate::types::AmConfig;
 
     fn synth_kv(t_len: usize, d: usize, seed: u64) -> (Vec<f32>, Vec<f32>) {
         use std::num::Wrapping;

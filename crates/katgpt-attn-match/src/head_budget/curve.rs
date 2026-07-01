@@ -5,7 +5,7 @@
 //! (relative to the un-compacted head) is recorded. Downstream the solver
 //! interpolates these to estimate the marginal quality impact of any ratio.
 
-use crate::attn_match::STABILITY_EPS;
+use crate::STABILITY_EPS;
 
 /// Quality-vs-ratio sensitivity curve for one attention head.
 ///

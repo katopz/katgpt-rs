@@ -11,7 +11,7 @@
 pub mod highest_attn;
 pub mod omp;
 
-use crate::attn_match::types::{KeySelector, ScoreMethod};
+use crate::types::{KeySelector, ScoreMethod};
 
 pub use highest_attn::select_highest_attn_keys;
 pub use omp::select_omp_keys;

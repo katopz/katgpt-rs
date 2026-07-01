@@ -1,0 +1,39 @@
+[package]
+name = "katgpt-attn-match"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Attention Matching KV cache compaction — modelless (Plan 271, arxiv 2602.16284). Extracted from katgpt-rs root per Issue 359."
+repository = "https://github.com/katopz/katgpt-rs"
+readme = "README.md"
+keywords = ["attention", "kv-cache", "compaction", "modelless", "nnls"]
+categories = ["algorithms", "science"]
+publish = false  # Issue 359 extraction — only katgpt-core ships to crates.io.
+
+[dependencies]
+# rayon: parallel score-matrix compute (score_matrix_rayon.rs). Always-on.
+rayon = "1"
+# serde: HeadBudgetSchedule serialization (head_budget/schedule.rs). Always-on.
+serde = { version = "1", features = ["derive"] }
+# postcard: HeadBudgetSchedule serialization (head_budget/schedule.rs). Always-on.
+postcard = { version = "1", features = ["alloc"] }
+# blake3: HeadBudgetSchedule tamper-detection hash (head_budget/schedule.rs).
+# Per AGENTS.md ("Use blake3 as possible instead of SHA1, SHA256"). Always-on.
+blake3 = "1"
+# half: f16 conversion in the still_kv RoPE bridge (chunked.rs). Optional — only
+# needed when the `still_kv` feature is on (PositionFreeCompactor is f16-native).
+half = { version = "2", optional = true }
+# katgpt-kv: provides still_kv::position_free::PositionFreeCompactor for the
+# RoPE-preserving chunked compaction path. Optional — only for `still_kv`.
+katgpt-kv = { path = "../katgpt-kv", optional = true, default-features = false }
+
+[features]
+default = []
+
+# Core Attention Matching compaction — modelless (Plan 271 GOAT 9/9).
+# Self-contained: rayon + serde only. Zero cognitive deps, zero root deps.
+attn_match = []
+
+# RoPE-preserving chunked compaction via PositionFreeCompactor (katgpt-kv).
+# Mirrors the root crate's historical `still_kv` gate on the chunked path.
+still_kv = ["dep:katgpt-kv", "katgpt-kv/still_kv", "dep:half"]

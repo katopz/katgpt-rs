@@ -12,7 +12,7 @@
 //! Per-step work (`on_step`):
 //!
 //! 1. Compute `H = entropy_from_logits(ctx.logits)` via the existing
-//!    max-shift-stable kernel in `attn_match::adaptive_cot` — avoids a second
+//!    max-shift-stable kernel in `attn_match_adaptive_cot` — avoids a second
 //!    entropy implementation and respects the project's "DRY" rule.
 //! 2. Advance the controller: `self.ctrl.step(H, ctx.step_index)`.
 //! 3. Translate the resulting [`StepAction`] into a [`StepDirective`]:

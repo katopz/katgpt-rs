@@ -1,6 +1,6 @@
 //! Configuration and result types for Attention Matching compaction.
 
-use crate::attn_match::{DEFAULT_W_LOWER, DEFAULT_W_UPPER};
+use crate::{DEFAULT_W_LOWER, DEFAULT_W_UPPER};
 
 /// Method for aggregating per-query attention scores into a per-key importance score.
 ///

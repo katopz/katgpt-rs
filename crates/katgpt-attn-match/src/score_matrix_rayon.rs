@@ -24,7 +24,7 @@
 //!   `dot_8wide` from `score_matrix_simd`.
 //! - Per-block work far exceeds rayon dispatch overhead (~5 μs) by design.
 
-use crate::attn_match::score_matrix_simd::dot_8wide;
+use crate::score_matrix_simd::dot_8wide;
 use rayon::prelude::*;
 
 /// Default L2-resident block size in bytes. With `d` f32 elements per row,
@@ -37,7 +37,7 @@ pub const DEFAULT_BLOCK_BYTES: usize = 4096;
 
 /// Compute the score matrix `S = Q·K^T · inv_sqrt_d` in parallel using rayon.
 ///
-/// This is a drop-in replacement for [`crate::attn_match::score_matrix::compute_score_matrix`]
+/// This is a drop-in replacement for [`crate::score_matrix::compute_score_matrix`]
 /// that parallelizes across query rows in L2-resident blocks. The output is
 /// **not** stabilized — callers must apply max-shift before `exp()`.
 ///
@@ -183,7 +183,7 @@ fn compute_block_rows(d: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attn_match::score_matrix::compute_score_matrix;
+    use crate::score_matrix::compute_score_matrix;
 
     /// Parity vs the scalar reference kernel.
     #[test]

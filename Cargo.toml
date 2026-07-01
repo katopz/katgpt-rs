@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -22,6 +22,11 @@ katgpt-pruners = { path = "crates/katgpt-pruners", default-features = false }
 # have drifted (see TODO in that file) and are NOT yet re-exported from here —
 # the divergence is tracked for a follow-up convergence pass.
 katgpt-speculative = { path = "crates/katgpt-speculative" }
+# katgpt-attn-match (Issue 359): extracted Attention Matching KV compaction substrate.
+# Non-optional — `attn_match` is DEFAULT-ON (Plan 271 GOAT 9/9) and the root re-exports
+# the leaf as `pub use katgpt_attn_match as attn_match;`. The `adaptive_cot` glue
+# (composes root-only `freq_bandit`) stays in root at `src/attn_match_adaptive_cot.rs`.
+katgpt-attn-match = { path = "crates/katgpt-attn-match" }
 plotters = { version = "0.3", optional = true }  # Issue 355 Phase 2a: optional — gated behind `plot` feature. Only `src/plot.rs` + `src/main.rs` benchmark runner use it. Default-on (in `default` array) to preserve historical behavior; riir-ai consumers set `default-features = false` to drop it.
 rayon = "1.10"
 log = "0.4"
@@ -265,9 +270,9 @@ committee_boost = ["bt_rank", "bandit", "katgpt-pruners/committee_boost"]  # Com
 mech_attribution = ["cna_steering", "ropd_rubric", "bandit", "katgpt-pruners/mech_attribution"]  # Mechanistic Data Attribution — catalyst pattern detection + influence proxy (Plan 111, Research 009). GOAT: 6/6 (P1-P6). NOT default-on pending full integration.
 safe_bandit = ["bandit", "katgpt-pruners/safe_bandit"]  # PrudentBanker Safe-Phased Bandit — delay-calibrated safe exploration (Plan 137)
 stiff_anomaly = ["katgpt-spectral/stiff_anomaly"]  # Stiff/Soft Subspace Anomaly Gate — generic eigenvalue decomposition anomaly detection (Plan 138)
-still_kv = ["katgpt-kv/still_kv"]  # StillKV perceiver-based KV cache compaction — modelless (Plan 245)
-attn_match = []  # Attention Matching KV compaction — modelless (Plan 271, arxiv 2602.16284). Includes the simplified `compact_with_fixed_beta(BETA_MID)` fast path (Issue 305).
-adaptive_cot_compaction = ["attn_match", "freq_bandit"]  # Phase 6: entropy-thresholded bandit-tuned online compaction (Plan 271) — opt-in until GOAT
+still_kv = ["katgpt-kv/still_kv", "katgpt-attn-match/still_kv"]  # StillKV perceiver-based KV cache compaction — modelless (Plan 245). Also forwards to katgpt-attn-match so the chunked RoPE-preserving path (PositionFreeBridge) compiles (Issue 359).
+attn_match = ["katgpt-attn-match/attn_match"]  # Attention Matching KV compaction — modelless (Plan 271, arxiv 2602.16284). Extracted to katgpt-attn-match leaf (Issue 359). Includes the simplified `compact_with_fixed_beta(BETA_MID)` fast path (Issue 305).
+adaptive_cot_compaction = ["attn_match", "freq_bandit"]  # Phase 6: entropy-thresholded bandit-tuned online compaction (Plan 271) — opt-in until GOAT. The adaptive_cot glue lives in root at `src/attn_match_adaptive_cot.rs` (composes root-only `freq_bandit`).
 cache_prune = []  # CachePrune SAT + rolling hash + sensitivity masking (Plan 140, Research 101)
 state_source = ["bandit", "katgpt-pruners/state_source"]  # State-Source Modelless Distillation — state-visitation tracking + P-UCB + retention (Plan 142, Research 103)
 nexus_elo = ["state_source", "proof_sketch_evolution", "katgpt-pruners/nexus_elo"]  # Nexus Elo — Plackett-Luce + P-UCB + goal cache for DDTree/SR²AM (Plan 143, Research 104)

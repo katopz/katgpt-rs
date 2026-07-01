@@ -18,7 +18,7 @@
 // Index-based loops are intentional for numerical clarity in this NNLS kernel.
 #![allow(clippy::needless_range_loop)]
 
-use crate::attn_match::{STABILITY_EPS, score_matrix_simd::dot_8wide};
+use crate::{STABILITY_EPS, score_matrix_simd::dot_8wide};
 
 /// Configuration for β fitting.
 #[derive(Debug, Clone, Copy)]

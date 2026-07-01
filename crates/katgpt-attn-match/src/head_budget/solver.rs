@@ -31,7 +31,7 @@
 const SWAP_EPS: f32 = 1e-6;
 
 use super::curve::HeadSensitivityCurve;
-use crate::attn_match::STABILITY_EPS;
+use crate::STABILITY_EPS;
 
 /// Default step size η for the greedy swap. Smaller η → finer-grained but
 /// more iterations. 0.05 gives ~20 steps per head at full ratio range, which

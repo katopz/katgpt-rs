@@ -10,7 +10,7 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::attn_match::{
+use crate::{
     beta_fitter::{BetaFitConfig, fit_beta_nnls},
     key_selection::{KeySelection, highest_attn::select_highest_attn_keys, omp::select_omp_keys},
     router::{SolverBackend, SolverRouter},
@@ -265,7 +265,7 @@ pub fn compact_with_router(
     // Reuse the SIMD `dot_8wide` kernel (8-wide FMA on AVX2/NEON) instead of
     // the prior scalar dot loop. For d=64 this is ~8× fewer add/mul ops in the
     // inner loop after auto-vectorization.
-    use crate::attn_match::score_matrix_simd::dot_8wide;
+    use crate::score_matrix_simd::dot_8wide;
     for i in 0..n {
         let q_row = &queries[i * d..(i + 1) * d];
         let a_row = &mut a_mass[i * t..(i + 1) * t];
@@ -332,7 +332,7 @@ pub fn compact_with_router(
 
     // Stage 3: Fit Cv via least squares.
     // Blocked Cholesky is eligible when t >= CHOLESKY_BLOCK_SIZE (T2.4).
-    trace.blocked_cholesky_eligible = t >= crate::attn_match::value_fitter::CHOLESKY_BLOCK_SIZE;
+    trace.blocked_cholesky_eligible = t >= crate::value_fitter::CHOLESKY_BLOCK_SIZE;
 
     // Build X ∈ R^{n×t}: X_i = softmax((q_i Ck^T + β) / √d).
     let mut x_attn = vec![0.0f32; n * t];
@@ -411,7 +411,7 @@ fn dispatch_score_matrix(
             #[cfg(all(target_os = "macos", feature = "gpu_inference"))]
             {
                 // T2.8 GPU stub: try GPU, fall back to rayon on any error.
-                if crate::attn_match::score_matrix_gpu::try_compute_score_matrix_gpu(
+                if crate::score_matrix_gpu::try_compute_score_matrix_gpu(
                     queries, keys, n, t_len, d, out,
                 )
                 .is_ok()
@@ -663,7 +663,7 @@ mod tests {
     /// blocked Cholesky was eligible (T2.4 integration).
     #[test]
     fn test_compact_with_router_reports_blocked_cholesky_eligibility() {
-        use crate::attn_match::value_fitter::CHOLESKY_BLOCK_SIZE;
+        use crate::value_fitter::CHOLESKY_BLOCK_SIZE;
         let t_len = 256;
         let d = 8;
         let n = 4;

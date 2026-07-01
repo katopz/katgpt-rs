@@ -10,7 +10,7 @@
 
 #![allow(clippy::needless_range_loop)]
 
-use crate::attn_match::STABILITY_EPS;
+use crate::STABILITY_EPS;
 
 /// Compute the score matrix `S = Q·K^T · inv_sqrt_d` for `(n, d)` queries and
 /// `(T, d)` keys. Output is row-major `(n, T)` written into the caller-provided
@@ -39,7 +39,7 @@ pub fn compute_score_matrix(
     // Reuse the shared `dot_8wide` kernel (8-wide chunked FMA, auto-vectorizes
     // on AVX2/NEON) instead of a duplicated manual unroll. Keeps the scalar and
     // SIMD paths in `score_matrix_simd` bit-identical by construction (DRY).
-    use crate::attn_match::score_matrix_simd::dot_8wide;
+    use crate::score_matrix_simd::dot_8wide;
     for i in 0..n {
         let q_row = &queries[i * d..(i + 1) * d];
         let out_row = &mut out[i * t_len..(i + 1) * t_len];
@@ -210,8 +210,8 @@ pub fn compute_softmax_attention_and_output(
 /// weights and `V` is `(t_len, d)` values. Output is `(n, d)` row-major.
 ///
 /// This is the standard attention output computation `Y_i = Σ_j A_ij V_j`,
-/// shared between [`crate::attn_match::compact::compact`] and
-/// [`crate::attn_match::compact_with_fixed_beta`] for building the Cv-fit
+/// shared between [`crate::compact::compact`] and
+/// [`crate::compact_with_fixed_beta`] for building the Cv-fit
 /// target. Extracted as a single source of truth so both fast paths benefit
 /// from any future kernel improvement.
 ///

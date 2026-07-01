@@ -7,14 +7,14 @@
 //! - Max: `max_i a_ij`
 //!
 //! Returns the selected indices; the caller is responsible for fitting β
-//! (via [`crate::attn_match::fit_beta_nnls`]) on the resulting subset.
+//! (via [`crate::fit_beta_nnls`]) on the resulting subset.
 //!
 //! Per the paper (Section 3.3, "Highest attention keys"), this is the fastest
 //! selector and a strong baseline.
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::attn_match::{
+use crate::{
     key_selection::KeySelection,
     score_matrix::{compute_score_matrix, compute_softmax_attention},
     types::ScoreMethod,

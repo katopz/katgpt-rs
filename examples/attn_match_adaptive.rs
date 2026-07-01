@@ -15,8 +15,9 @@
 //! ```
 
 use katgpt_rs::attn_match::{
-    adaptive_cot::AdaptiveTraceCompactor, online::OnlineCompactor, types::AmConfig,
+    online::OnlineCompactor, types::AmConfig,
 };
+use katgpt_rs::attn_match_adaptive_cot::AdaptiveTraceCompactor;
 use katgpt_rs::freq_bandit::FrequencyBand;
 
 fn synth_kv(t_len: usize, d: usize, seed: u32) -> (Vec<f32>, Vec<f32>) {

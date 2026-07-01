@@ -3,7 +3,7 @@
 //! Reused wherever the host doesn't already supply a probability vector — the
 //! canonical entry point is [`shannon_entropy`] over a probability slice. For
 //! converting raw logits → entropy in one pass, prefer the existing
-//! `entropy_from_logits` in `attn_match::adaptive_cot` (max-shift stable), which
+//! `entropy_from_logits` in `attn_match_adaptive_cot` (max-shift stable), which
 //! the Phase 2 strategy adapter reuses when it has logits.
 //!
 //! The kernel here is the chunked SIMD-friendly inner reduction over a
@@ -75,8 +75,8 @@ pub fn shannon_entropy(probs: &[f32]) -> f32 {
 ///
 /// Returns 0 for empty input.
 ///
-/// This is a vendored twin of `attn_match::adaptive_cot::entropy_from_logits`.
-/// We duplicate rather than depend on `attn_match` because that feature is
+/// This is a vendored twin of `attn_match_adaptive_cot::entropy_from_logits`.
+/// We duplicate rather than depend on it because that feature is
 /// *opt-in* (per Plan 271 GOAT gate) and forcing every `thinking_cot` user
 /// to enable it would expand the dependency footprint for everyone. The
 /// kernel is small (~10 lines) and the duplication is intentional — keep

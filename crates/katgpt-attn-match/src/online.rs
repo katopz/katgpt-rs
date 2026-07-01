@@ -38,8 +38,8 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::attn_match::compact::{CompactError, compact};
-use crate::attn_match::types::{AmConfig, AmResult};
+use crate::compact::{CompactError, compact};
+use crate::types::{AmConfig, AmResult};
 
 /// Result of a single online compaction pass.
 #[derive(Clone, Debug)]

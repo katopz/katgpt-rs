@@ -9,7 +9,7 @@
 //!
 //! They run against synthetic data with known structure.
 
-use crate::attn_match::{
+use crate::{
     beta_fitter::{fit_beta_nnls, BetaFitConfig},
     compact::compact,
     key_selection::{omp::mass_coverage, select_highest_attn_keys, select_omp_keys},
@@ -165,7 +165,7 @@ fn goat_g3_omp_mass_coverage() {
     // Manually compute final residual: r = m - A w
     // where A is the subset and w is the selection's weights.
     // First, compute full mass feature matrix Φ and target m.
-    use crate::attn_match::score_matrix::compute_score_matrix;
+    use crate::score_matrix::compute_score_matrix;
     let mut phi = vec![0.0f32; n * t_len];
     compute_score_matrix(&queries, &keys, n, t_len, d, &mut phi);
     // Max-shift and exp.
@@ -272,9 +272,9 @@ fn goat_determinism_full_pipeline() {
     let queries = synth_queries(4, 8, 99);
 
     for selector in &[
-        crate::attn_match::types::KeySelector::HighestAttnKeys,
-        crate::attn_match::types::KeySelector::Omp,
-        crate::attn_match::types::KeySelector::OmpFast,
+        crate::types::KeySelector::HighestAttnKeys,
+        crate::types::KeySelector::Omp,
+        crate::types::KeySelector::OmpFast,
     ] {
         let cfg = AmConfig {
             compact_size: 8,
@@ -304,9 +304,9 @@ fn e2e_compact_block_data_all_selectors() {
     let queries = synth_queries(8, 16, 1);
 
     for selector in &[
-        crate::attn_match::types::KeySelector::HighestAttnKeys,
-        crate::attn_match::types::KeySelector::Omp,
-        crate::attn_match::types::KeySelector::OmpFast,
+        crate::types::KeySelector::HighestAttnKeys,
+        crate::types::KeySelector::Omp,
+        crate::types::KeySelector::OmpFast,
     ] {
         let cfg = AmConfig {
             compact_size: 16,

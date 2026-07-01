@@ -1,8 +1,17 @@
 #![allow(unexpected_cfgs)]
 #[cfg(all(target_os = "macos", feature = "ane"))]
 pub mod ane_backend;
+// Issue 359: `attn_match` extracted to the katgpt-attn-match leaf. The root
+// re-exports the leaf as `attn_match` so all historical `katgpt_rs::attn_match::*`
+// paths continue to resolve (Issue 014/015 re-export contract). The
+// `adaptive_cot` glue stays in root (composes root-only `freq_bandit`).
 #[cfg(feature = "attn_match")]
-pub mod attn_match;
+pub use katgpt_attn_match as attn_match;
+/// Adaptive CoT compaction glue — composes the leaf's online compactor with the
+/// root-only `freq_bandit` bandit threshold tuner. Stays in root per Issue 359
+/// (freq_bandit depends on root-only `trigger_gate`).
+#[cfg(feature = "adaptive_cot_compaction")]
+pub mod attn_match_adaptive_cot;
 #[cfg(feature = "async_qdq_overlap")]
 pub mod async_qdq;
 pub mod benchmark;

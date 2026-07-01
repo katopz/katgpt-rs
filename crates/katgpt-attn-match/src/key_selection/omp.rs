@@ -14,7 +14,7 @@
 // Index-based loops and wide signatures are intentional for the OMP numerical kernel.
 #![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 
-use crate::attn_match::{
+use crate::{
     STABILITY_EPS,
     beta_fitter::{BetaFitConfig, fit_beta_nnls},
     key_selection::KeySelection,

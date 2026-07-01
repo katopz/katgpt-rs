@@ -177,7 +177,7 @@ impl SwiRController {
     ///
     /// `entropy`: Shannon entropy of the current next-token distribution (the
     /// host computes this; Phase 2's strategy adapter uses
-    /// `attn_match::adaptive_cot::entropy_from_logits`).
+    /// `attn_match_adaptive_cot::entropy_from_logits`).
     /// `step_index`: 0-based decode step (used by the α_t / β_t schedule).
     ///
     /// Returns the [`StepAction`] the host should take this step. The host MUST

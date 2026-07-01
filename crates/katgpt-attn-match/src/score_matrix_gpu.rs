@@ -25,9 +25,9 @@
 //! — including "no GPU kernel available" — it returns `Err` and the caller
 //! is expected to fall back to [`compute_score_matrix_rayon`].
 //!
-//! [`compute_score_matrix_rayon`]: crate::attn_match::score_matrix_rayon::compute_score_matrix_rayon
+//! [`compute_score_matrix_rayon`]: crate::score_matrix_rayon::compute_score_matrix_rayon
 
-use crate::attn_match::score_matrix_rayon::compute_score_matrix_rayon;
+use crate::score_matrix_rayon::compute_score_matrix_rayon;
 
 /// Error returned by [`try_compute_score_matrix_gpu`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,7 +63,7 @@ impl std::error::Error for GpuDispatchError {}
 /// Attempt to compute the score matrix `S = Q·K^T · inv_sqrt_d` on GPU.
 ///
 /// This is the entry point invoked by
-/// [`crate::attn_match::compact::dispatch_score_matrix`] when the router
+/// [`crate::compact::dispatch_score_matrix`] when the router
 /// selects `SolverBackend::Gpu`. On success, `out` is fully written. On
 /// failure, `out` is left untouched and the caller falls back to the
 /// rayon-parallel CPU kernel.
@@ -129,7 +129,7 @@ pub fn compute_score_matrix_gpu_or_rayon(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attn_match::score_matrix::compute_score_matrix;
+    use crate::score_matrix::compute_score_matrix;
 
     /// Stub always returns ShaderNotAvailable — this is the documented
     /// contract until a real Metal kernel lands.

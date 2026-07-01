@@ -38,8 +38,8 @@
 
 #![allow(clippy::too_many_arguments)]
 
-use crate::attn_match::compact::{CompactError, compact};
-use crate::attn_match::types::AmConfig;
+use crate::compact::{CompactError, compact};
+use crate::types::AmConfig;
 
 /// Pre-split text chunk with its own KV slice and global position offset.
 ///
@@ -482,14 +482,14 @@ fn infer_d(chunks: &[TextChunk]) -> Result<usize, CompactError> {
 /// Encapsulates the conversion so callers stay in f32 land.
 #[cfg(feature = "still_kv")]
 struct PositionFreeBridge {
-    inner: crate::still_kv::position_free::PositionFreeCompactor,
+    inner: katgpt_kv::still_kv::position_free::PositionFreeCompactor,
 }
 
 #[cfg(feature = "still_kv")]
 impl PositionFreeBridge {
     fn new(rope_theta: f32, head_dim: usize) -> Self {
         Self {
-            inner: crate::still_kv::position_free::PositionFreeCompactor::new(rope_theta, head_dim),
+            inner: katgpt_kv::still_kv::position_free::PositionFreeCompactor::new(rope_theta, head_dim),
         }
     }
 
