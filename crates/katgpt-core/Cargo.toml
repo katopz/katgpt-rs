@@ -707,6 +707,33 @@ required-features = ["paired_loss_diagnostic"]
 name = "paired_loss_02_class_size_bound"
 required-features = ["paired_loss_diagnostic"]
 
+# Plan 268 Phase 6 T13 — minimal QGF drafter walkthrough: builds a
+# KnownLandscapeOracle + UnitGen drafter, runs tilt_logits (the pure QGF
+# hot path: `logits += w · ∇Q`, SIMD AXPY, zero-alloc), and shows the
+# induced categorical shifts mass from the BC mode toward the Q optimum
+# with ≥ 10% relative E[Q] gain. Documents the katgpt-core mechanism gate.
+[[example]]
+name = "qgf_01_guided_drafter"
+required-features = ["qgf_drafter"]
+
+# Plan 268 Phase 6 T13 — variance-adaptive guidance weight (F4). Shows the
+# per-query sigmoid `1/β` extension: low critic confidence (BFN, freeze-tier)
+# collapses guidance to ~0 → output ≈ pure BC reference; high confidence
+# (LeoHead, cached-Q) activates strong guidance. Verifies G5 stability
+# (bounded, finite, monotone) — matches the GOAT gate.
+[[example]]
+name = "qgf_02_adaptive_weight"
+required-features = ["qgf_adaptive"]
+
+# Plan 268 Phase 6 T13 — tier + backend routing demo. Shows the two
+# orthogonal routing axes: backend route (CpuSimd / GpuBatch / AneCritic,
+# decided by route_for O(1)) and oracle tier (Plasma / Hot / Warm / Cold /
+# Freeze, decided by caller-chosen oracle struct). Includes the freeze-tier
+# NoGuidanceOracle live demo (always-available graceful degradation path).
+[[example]]
+name = "qgf_03_tier_routing"
+required-features = ["qgf_drafter"]
+
 # Plan 334 Phase 3 T3.1 — minimal sleep-time anticipator walkthrough: build
 # K=4 hardcoded anticipated-query directions, run anticipate() to emit the c'
 # artifact (BLAKE3-committed), run consume() to show the sigmoid-gated blend

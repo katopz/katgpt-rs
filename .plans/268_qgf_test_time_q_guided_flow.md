@@ -2,7 +2,7 @@
 
 **Research:** `.research/236_QGF_Test_Time_Q_Guided_Flow.md`
 **Paper:** [arXiv:2606.11087](https://arxiv.org/pdf/2606.11087) — Q-Guided Flow (Zhou et al., 2026)
-**Status:** 🚧 In Progress — Phase 1 (T1-T3, incl. T2 benchmark) + Phase 2 (T4-T6) + Phase 3 (T7 partial) + Phase 4 (T8-T9) implemented, tests green. **Phase 5 katgpt-core mechanism gate DONE 2026-07-01** (G1 correctness + G2 regression-safety + G3 no-regression + G4 overhead/alloc + G5 stability all PASS, see `.benchmarks/268_qgf_goat.md`); downstream task-quality gates (Sudoku/DDTree/Bomber) **deferred to riir-ai** as the selling-point layer. Stays opt-in until a riir-ai plan proves the downstream gain.
+**Status:** 🚧 Phase 1–4 implemented, Phase 5 katgpt-core mechanism gate DONE (2026-07-01), Phase 6 docs DONE (2026-07-01). Tests green. **Phase 5 katgpt-core mechanism gate DONE 2026-07-01** (G1 correctness + G2 regression-safety + G3 no-regression + G4 overhead/alloc + G5 stability all PASS, see `.benchmarks/268_qgf_goat.md`); downstream task-quality gates (Sudoku/DDTree/Bomber) **deferred to riir-ai** as the selling-point layer. Phase 6 T13 docs shipped (README + `.docs/01_overview.md` + 3 runnable examples). Stays opt-in until a riir-ai plan proves the downstream gain.
 **Branch:** `develop` (no new feature branch per project rules)
 **Feature Gates:** `qgf` (parent, default OFF until GOAT proof)
   - `qgf_projector` (F2 — FirstOrderProjector)
@@ -355,12 +355,16 @@ At generation step t with prefix p_t and drafter velocity v_t:
 ### Phase 6: Documentation & Promotion
 
 #### T13: Documentation
-- [ ] Add QGF section to `katgpt-rs/README.md` Feature Showcase
-- [ ] Update `katgpt-rs/.docs/01_overview.md` Feature Flags table
-- [ ] Add `examples/qgf_01_guided_drafter.rs` — minimal usage
-- [ ] Add `examples/qgf_02_adaptive_weight.rs` — F4 adaptive guidance
-- [ ] Add `examples/qgf_03_tier_routing.rs` — plasma/hot/warm/cold/freeze demo
-- [ ] Cross-link Research 236 ↔ Plan 268 ↔ Plan 229 (NFCoT)
+- [x] Add QGF section to `katgpt-rs/README.md` Feature Showcase
+- [x] Update `katgpt-rs/.docs/01_overview.md` Feature Flags table
+- [x] Add `examples/qgf_01_guided_drafter.rs` — minimal usage
+- [x] Add `examples/qgf_02_adaptive_weight.rs` — F4 adaptive guidance
+- [x] Add `examples/qgf_03_tier_routing.rs` — plasma/hot/warm/cold/freeze demo
+- [x] Cross-link Research 236 ↔ Plan 268 ↔ Plan 229 (NFCoT)
+  ✅ Research 236 ↔ Plan 268 cross-linked in README + .docs + mod.rs rustdoc.
+  Plan 229 (NFCoT) cross-linked in Phase 2 T6 below (already marked ✅ COMPLETE).
+  README Feature Showcase entry references all three. `.docs/01_overview.md`
+  Feature Flags table now has rows for all 5 QGF features.
 
 #### T14: GOAT gate decision
 - [-] If G1-G5 all pass: promote `qgf_drafter` + `qgf_projector` + `qgf_oracle` to default-ON
@@ -372,7 +376,9 @@ At generation step t with prefix p_t and drafter velocity v_t:
 - [x] If any G fails: keep all QGF features opt-in, document the gap
   ✅ No katgpt-core mechanism gate failed. The downstream G1-Sudoku/G2-DDTree/G3-Bomber are deferred (not failed) — documented in `.benchmarks/268_qgf_goat.md`.
 - [ ] Update README with GOAT verdict
-  (deferred to Phase 6 T13 docs pass)
+  ✅ DONE in Phase 6 T13 — README Feature Showcase entry now carries the full
+  G1–G5 GOAT table + the "STAYS OPT-IN" verdict + scope-split framing +
+  re-open condition (riir-ai downstream integration).
 
 ---
 
