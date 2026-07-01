@@ -564,6 +564,16 @@ required-features = ["conformal_predictive_intervals"]
 name = "conformal_floor_bom"
 required-features = ["conformal_predictive_intervals", "bom_sampling"]
 
+# Issue 010 T4 — Sleep-Time Query Anticipator floor comparison. Tests whether
+# the anticipator's modelless predictability score (DotPredictabilityScorer)
+# is a calibrated UQ signal or an uncalibrated gate heuristic. Two angles:
+# (1) calibration via run_floor_comparison (CRPS/coverage/Winkler), (2)
+# correlation of (1−p_best)-derived width with actual |Δy| difficulty vs the
+# floor's width. Needs BOTH the floor harness and the sleep-time substrate.
+[[test]]
+name = "conformal_floor_sleep_time"
+required-features = ["conformal_predictive_intervals", "sleep_time_anticipation"]
+
 # Plan 321 Phase 2 — CommittedFieldBlend G4 zero-alloc GOAT gate. CountingAllocator
 # audit of apply_blended (1000 iters) + commit (100 re-commits). Gated on
 # committed_field_blend so default features compile cleanly.
