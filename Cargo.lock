@@ -1854,6 +1854,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "katgpt-quant"
+version = "0.1.0"
+dependencies = [
+ "katgpt-core",
+ "katgpt-transformer",
+]
+
+[[package]]
 name = "katgpt-rs"
 version = "0.2.0"
 dependencies = [
@@ -1873,6 +1881,7 @@ dependencies = [
  "katgpt-kv",
  "katgpt-percepta",
  "katgpt-pruners",
+ "katgpt-quant",
  "katgpt-spectral",
  "katgpt-speculative",
  "katgpt-tokenizer",

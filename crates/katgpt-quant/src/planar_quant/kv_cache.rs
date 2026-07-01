@@ -384,7 +384,7 @@ impl PlanarQuantKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for PlanarQuantKVCache {
+impl katgpt_core::types::QuantizedKVCache for PlanarQuantKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -712,7 +712,7 @@ mod tests {
     }
 
     fn make_random_vec(kv_dim: usize, seed: u64) -> Vec<f32> {
-        let mut rng = crate::types::Rng::new(seed);
+        let mut rng = katgpt_core::types::Rng::new(seed);
         (0..kv_dim).map(|_| rng.normal()).collect()
     }
 

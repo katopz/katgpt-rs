@@ -13,7 +13,7 @@ use super::types::{IsoQuantConfig, IsoQuantLayer, IsoQuantMode};
 use katgpt_core::simd::simd_scale_inplace;
 use crate::turboquant::codebook::compute_codebook;
 use crate::turboquant::types::TurboQuantCodebook;
-use crate::types;
+use katgpt_core::types;
 
 /// Compressed KV cache using IsoQuant 4D quaternion rotation.
 ///

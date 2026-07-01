@@ -430,7 +430,7 @@ impl HybridOctPqKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for HybridOctPqKVCache {
+impl katgpt_core::types::QuantizedKVCache for HybridOctPqKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -473,7 +473,7 @@ mod tests {
     use super::*;
 
     fn make_random_vec(dim: usize, seed: u64) -> Vec<f32> {
-        let mut rng = crate::types::Rng::new(seed);
+        let mut rng = katgpt_core::types::Rng::new(seed);
         (0..dim).map(|_| rng.normal()).collect()
     }
 
@@ -807,7 +807,7 @@ mod tests {
         let n_keys = 20;
         let seed = 42u64;
 
-        let mut rng = crate::types::Rng::new(seed);
+        let mut rng = katgpt_core::types::Rng::new(seed);
         let keys: Vec<Vec<f32>> = (0..n_keys)
             .map(|_| (0..dim).map(|_| rng.normal()).collect())
             .collect();

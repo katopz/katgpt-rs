@@ -1,0 +1,32 @@
+[package]
+name = "katgpt-quant"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Quantization codecs — TurboQuant, PlanarQuant, IsoQuant, OCTOPUS, Hybrid OCT-PQ. KV cache compression primitives shared across the workspace. Extracted from katgpt-rs/src/ (Proposal 003 Phase 1)."
+repository = "https://github.com/katopz/katgpt-rs"
+publish = false
+
+[dependencies]
+katgpt-core = { path = "../katgpt-core" }
+
+[dev-dependencies]
+# turboquant/forward.rs tests construct `TransformerWeights::new(...)` to exercise
+# the dequantize/attention helpers end-to-end. Test-only dependency.
+katgpt-transformer = { path = "../katgpt-transformer" }
+
+[features]
+default = []
+# Each codec is an opt-in feature, mirroring the historical root feature surface.
+turboquant = []
+planar_quant = ["turboquant"]
+iso_quant = ["turboquant"]
+octopus = []
+hybrid_oct_pq = ["planar_quant", "octopus"]
+# Asymmetric K/V cache config helper (Research 081) — gates
+# `TurboQuantKVCache::new_asymmetric`. Just `turboquant` semantically; kept as a
+# separate flag to mirror the root `asymmetric_kv` surface so the cfg-gated
+# constructor compiles when the root forwards the feature here.
+asymmetric_kv = ["turboquant"]
+# MaxSim late-interaction scoring (composes with turboquant + octopus).
+maxsim = []

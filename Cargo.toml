@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-deprecated", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-deprecated", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-quant", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -30,6 +30,12 @@ katgpt-speculative = { path = "crates/katgpt-speculative" }
 # the leaf as `pub use katgpt_attn_match as attn_match;`. The `adaptive_cot` glue
 # (composes root-only `freq_bandit`) stays in root at `src/attn_match_adaptive_cot.rs`.
 katgpt-attn-match = { path = "crates/katgpt-attn-match" }
+# katgpt-quant (Proposal 003 Phase 1, 2026-07-01): extracted quantization codecs
+# (turboquant, planar_quant, iso_quant, octopus, hybrid_oct_pq). Non-optional path dep;
+# each codec is opt-in via its feature flag. The root re-exports each module behind its
+# historical feature so `katgpt_rs::turboquant::*` / `katgpt_rs::octopus::*` / etc.
+# continue to resolve.
+katgpt-quant = { path = "crates/katgpt-quant" }
 plotters = { version = "0.3", optional = true }  # Issue 355 Phase 2a: optional — gated behind `plot` feature. Only `src/plot.rs` + `src/main.rs` benchmark runner use it. Default-on (in `default` array) to preserve historical behavior; riir-ai consumers set `default-features = false` to drop it.
 rayon = "1.10"
 log = "0.4"
@@ -169,7 +175,7 @@ eqr_convergence = ["elf_sde"]  # EqR convergence-based rollout selection — Top
 spec_cost_model = ["katgpt-core/spec_cost_model"]  # Amdahl cost model for LeviathanVerifier (Research 59, Plan 096)
 stability_metrics = ["katgpt-core/stability_metrics"]  # Per-step execution stability instrumentation — P50/P99/CV/stability_score, +0.6% overhead (Plan 102, default-on)
 coda_fusion = ["katgpt-core/coda_fusion"]  # CODA-inspired fused SIMD kernels — matmul+residual+rmsnorm+activation in single-pass (Plan 103)
-maxsim = ["katgpt-core/maxsim", "katgpt-spectral/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
+maxsim = ["katgpt-core/maxsim", "katgpt-spectral/maxsim", "katgpt-quant/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080). Forwards to katgpt-quant/maxsim so the TurboQuant + OCTOPUS late-interaction helpers (gated on `all(feature = "turboquant"|"octopus", feature = "maxsim")` in katgpt-quant/src/*/forward.rs) compile from the root.
 salience_tri_gate = []  # Salience Tri-Gate Primitive — 3-way per-tick emit gate (Speak / Silent / Delegate) with silence as a first-class variant, two stacked sigmoids (never softmax), zero-allocation hot path (Plan 303, Research 281, arxiv 2606.14777, JoyAI-VL-Interaction). Open primitive; NPC wiring lives in riir-ai Plan 330. Opt-in until G1 (determinism + monotonicity) + G2 (two-sigmoid ablation parity) + <50ns decide() latency gates pass.
 closed_unit_compaction = []  # Closed-Unit Compaction Gate (CUCG) — generic rubric-gated trajectory compaction primitive (Plan 333, Research 300, arxiv 2606.23525, SelfCompact Li et al. JHU+Apple Jun 2026). ClosedUnitCompactionGate<R> + Rubric trait + FireRule enum + Backstop + CompactionAuditRecord. Cross-domain isomorphic with riir-neuron-db `can_freeze` (G7). Latent-reframed predicates (sigmoid projections, never softmax). Zero-alloc hot path. Open primitive; per-NPC sub-goal wiring lives in riir-ai (G8). DEFAULT-ON since Phase 6 (7/7 GOAT gates PASS).
 alien_sampler = ["katgpt-deprecated/alien_sampler"]  # Alien Sampler Primitive — Coherence x Availability Frontier Ranking (Plan 311, Research 293, arxiv 2603.01092, Artiles et al. "The Alien Space of Science" May 2026). EXILED to katgpt-deprecated (Phase 3a, Proposal 003): GOAT 1/4 PASS, explicitly demoted (issues/010 T6). Re-exported here for back-compat. TODO(deprecated): delete after confirming no regression.
@@ -181,14 +187,14 @@ mcts_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.1 — MCTS expansion-
 bandit_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.2 — bandit K-prior wrapper (KPriorBandit<K>) exposing arm_log_prior; caller adds to their existing arm score.
 spec_k_prior = ["complexity_prior_sampler"]  # Plan 305 T3.3 — speculative drafter post-drafting re-ranker (KPriorDrafter<K>::rerank). Composes with CompressionDrafter (R256) + DendriticGate (R260).
 spectral_quant = ["katgpt-spectral/spectral_quant"]  # SpectralQuant calibrated eigenbasis + water-fill (Plan 077) — default-on, 9.1× compression vs TQ 5.3×, cosine 0.9917 vs TQ 0.9692 (Bench 013)
-octopus = []  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
-turboquant = ["katgpt-spectral/turboquant"]  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063)
-asymmetric_kv = ["turboquant"]  # Asymmetric K/V cache compression benchmarks (Plan 123, Research 081)
+octopus = ["katgpt-quant/octopus"]  # OCTOPUS octahedral triplet codec — data-oblivious, dominates SQ at all bit widths: -22% to -49% MSE (Bench 022, Plan 099, default-on)
+turboquant = ["katgpt-spectral/turboquant", "katgpt-quant/turboquant"]  # TurboQuant rotation + uniform codebook — legacy baseline for bench/educate only (Plan 063). Forwards to both katgpt-spectral (preserves the historical RandomRotation export) and katgpt-quant (Proposal 003 Phase 1 codec extraction).
+asymmetric_kv = ["turboquant", "katgpt-quant/asymmetric_kv"]  # Asymmetric K/V cache compression benchmarks (Plan 123, Research 081). Forwards to katgpt-quant so `TurboQuantKVCache::new_asymmetric` compiles.
 shard_kv = ["katgpt-kv/shard_kv", "spectral_quant", "turboquant"]  # ShardKV asymmetric K/V compression — undo RoPE + PCA K path, Hadamard V path (Plan 147, Research 109)
-planar_quant = ["turboquant"]  # PlanarQuant 2D Givens rotation KV cache — O(d) vs TQ O(d²), 256 FMAs for d=128
+planar_quant = ["turboquant", "katgpt-quant/planar_quant"]  # PlanarQuant 2D Givens rotation KV cache — O(d) vs TQ O(d²), 256 FMAs for d=128
 precision_aware_draft = []  # PASD boundary-aware draft scoring — penalizes tokens near quantization boundaries (Plan 227 Phase 4, GOAT 12.5% acceptance, default-ON)
-iso_quant = ["turboquant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
-hybrid_oct_pq = ["planar_quant", "octopus"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
+iso_quant = ["turboquant", "katgpt-quant/iso_quant"]  # IsoQuant 4D quaternion rotation KV cache — O(d) vs TQ O(d²), 512 FMAs for d=128
+hybrid_oct_pq = ["planar_quant", "octopus", "katgpt-quant/hybrid_oct_pq"]  # Hybrid OCT encoding + PQ rotation (Plan 101)
 bt_rank = ["katgpt-pruners/bt_rank"]  # Bradley-Terry pairwise ranking for DDtree selection (OpenDeepThink distillation)
 rcd_residual = ["critical_interval_gate", "katgpt-pruners/rcd_residual"]  # Residual Context Diffusion — entropy-weighted residual injection (Plan 258)
 closure_instrument = ["katgpt-core/closure_instrument", "rcd_residual"]  # Closure-Expansion Instrument — PTG + motif mining + PRI/CDG/TaR metrics (Plan 290, Research 264). DEFAULT-ON after G1–G4 GOAT gate passed (T4.7 + G4 fix, 2026-06-26).
@@ -375,7 +381,7 @@ selectivity_router = ["katgpt-pruners/selectivity_router"]  # Self-Learning Sele
 ruliology = ["bandit", "katgpt-pruners/ruliology"]  # Ruliology Bandit — simple program strategies as bandit arms (Plan 188, Research 168)
 directional_credit = ["katgpt-pruners/directional_credit"]  # Entropy-bifurcated screening — direction-adaptive credit (Plan 184, default on candidate)
 kv_share = ["katgpt-kv/kv_share"]  # Q-K=V projection sharing — 50% KV cache reduction (Plan 185, default on candidate)
-rosetta_pruner = ["papaya"]  # Rosetta Pruners — universal cross-domain meta-pruner (Plan 201 GOAT 39-55% node reduction, default-ON)
+rosetta_pruner = ["papaya", "katgpt-pruners/rosetta_pruner"]  # Rosetta Pruners — universal cross-domain meta-pruner (Plan 201 GOAT 39-55% node reduction, default-ON)
 domino_correction = []  # Domino Causal Correction — modelless decoupled pattern: PrefixCorrectionTable + domino_score + DominoPruner (Plan 197 GOAT 25/25 -22.8% build time, Research 177, default-ON)
 dynamic_rank = ["papaya", "katgpt-pruners/dynamic_rank"]  # Dynamic Rank Pruner — GATv2-inspired static ranking detection & correction (Plan 232, Research 206)
 kurtosis_gate = ["katgpt-core/kurtosis_gate"]  # Kurtosis Gate — polarization-driven speculative decoding (Plan 203b, default ON, zero perf cost)

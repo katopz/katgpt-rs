@@ -132,14 +132,17 @@ pub mod gdn2;
 pub mod gpu_backend;
 #[cfg(feature = "hla_attention")]
 pub mod hla;
+// katgpt-quant re-export (Proposal 003 Phase 1, 2026-07-01): quantization codecs
+// moved to crates/katgpt-quant/. Re-exported here so historical `katgpt_rs::*`
+// paths resolve.
 #[cfg(feature = "hybrid_oct_pq")]
-pub mod hybrid_oct_pq;
+pub use katgpt_quant::hybrid_oct_pq;
 pub mod inference_backend;
 pub mod inference_router;
 #[cfg(feature = "interval_pruner")]
 pub mod interval_pruner;
 #[cfg(feature = "iso_quant")]
-pub mod iso_quant;
+pub use katgpt_quant::iso_quant;
 #[cfg(feature = "lattice_operad")]
 pub mod lattice_operad;
 #[cfg(feature = "gauge_invariant")]
@@ -156,11 +159,11 @@ pub mod off_principal;
 #[cfg(feature = "hla_eigenbasis_recovery")]
 pub mod hla_eigenbasis;  // Issue 001: per-NPC eigenbasis recovery from windowed HLA activations
 #[cfg(feature = "octopus")]
-pub mod octopus;
+pub use katgpt_quant::octopus;
 #[cfg(feature = "modality_pruned_load")]
 pub mod pipeline_pruner;
 #[cfg(feature = "planar_quant")]
-pub mod planar_quant;
+pub use katgpt_quant::planar_quant;
 #[cfg(feature = "plot")]
 pub mod plot;  // Issue 355 Phase 2a: gated behind `plot` feature (plotters is now optional). DEFAULT-ON.
 // Orthogonal Procrustes — cross-frame embedding alignment via polar
@@ -287,7 +290,7 @@ pub use katgpt_tokenizer as tokenizer;  // re-export (Issue 014): preserves `kat
 pub mod transformer;
 pub mod trigger_gate;
 #[cfg(feature = "turboquant")]
-pub mod turboquant;
+pub use katgpt_quant::turboquant;
 pub mod types;
 #[cfg(feature = "unit_distance")]
 pub use katgpt_deprecated::unit_distance;

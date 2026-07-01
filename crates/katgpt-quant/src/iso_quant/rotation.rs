@@ -8,7 +8,7 @@
 //!            Fast = 32 groups × 16 FMAs = 512 FMAs.
 //! vs TurboQuant's 16,384 FMAs.
 
-use crate::types::Rng;
+use katgpt_core::types::Rng;
 
 /// Quaternion multiply (Hamilton product): 16 FMAs.
 /// a, b: (w, x, y, z).

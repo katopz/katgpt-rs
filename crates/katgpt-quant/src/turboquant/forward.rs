@@ -1,7 +1,7 @@
 //! Forward pass using TurboQuant compressed KV cache.
 //!
-//! The main [`forward_turboquant`] function lives in [`crate::transformer`] because
-//! [`ForwardContext`] fields are private to that module. This file provides
+//! The main [`forward_turboquant`] function lives in the katgpt-rs root `transformer`
+//! module (ForwardContext fields are private to that module). This file provides
 //! helper functions used by the TurboQuant attention path.
 //!
 //! Architecture:
@@ -13,7 +13,7 @@
 use super::kv_cache::TurboQuantKVCache;
 
 #[cfg(test)]
-use crate::types;
+use katgpt_core::types;
 
 /// Dequantize key vectors for positions `[0..=pos]` into a flat buffer.
 ///
@@ -242,8 +242,8 @@ pub fn maxsim_score_turboquant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transformer::TransformerWeights;
-    use crate::types::{Config, Rng};
+    use katgpt_transformer::TransformerWeights;
+    use katgpt_core::types::{Config, Rng};
 
     #[test]
     fn test_cosine_similarity_identical() {

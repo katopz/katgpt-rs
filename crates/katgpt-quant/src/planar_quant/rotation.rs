@@ -26,7 +26,7 @@ pub fn rot2_inverse(cos_sin: &[f32; 2], v0: f32, v1: f32) -> (f32, f32) {
 /// n_groups = ceil(kv_dim / 2). Each group gets an independent random angle.
 /// Deterministic from seed.
 pub fn generate_givens_rotations(n_groups: usize, seed: u64) -> Vec<[f32; 2]> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     (0..n_groups)
         .map(|_| {
             let angle = rng.uniform() * std::f32::consts::TAU;

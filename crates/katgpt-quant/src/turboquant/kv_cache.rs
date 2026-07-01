@@ -9,7 +9,7 @@ use super::codebook::compute_codebook;
 use super::rotation::{generate_qjl_matrix, generate_rotation_matrix};
 use super::types::{TurboQuantKVCacheConfig, TurboQuantLayer};
 use katgpt_core::simd::{simd_scale_inplace, simd_sum_sq};
-use crate::types;
+use katgpt_core::types;
 
 /// Compressed KV cache using TurboQuant quantization.
 ///
@@ -405,7 +405,7 @@ impl TurboQuantKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for TurboQuantKVCache {
+impl katgpt_core::types::QuantizedKVCache for TurboQuantKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -762,7 +762,7 @@ fn unpack_indices_into(packed: &[u8], bits: u8, n: usize, out: &mut [u8]) {
 mod tests {
     use super::super::types::TurboQuantKVCacheConfig;
     use super::*;
-    use crate::types::Config;
+    use katgpt_core::types::Config;
 
     fn test_config() -> Config {
         Config::micro()
@@ -1020,7 +1020,7 @@ mod tests {
             val_bits: 4,
             seed: 42,
             n_layers: config.n_layer,
-            kv_dim: crate::types::kv_dim(&config),
+            kv_dim: katgpt_core::types::kv_dim(&config),
             max_seq_len: config.block_size,
         };
         let cache_cfg = TurboQuantKVCache::with_config(&tq_config);

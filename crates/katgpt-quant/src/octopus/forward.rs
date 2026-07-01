@@ -2,8 +2,8 @@
 //!
 //! Provides dequantize-to-flat-buffer helpers and attention scoring
 //! for the OCTOPUS path. The main [`forward_octopus`] function lives
-//! in [`crate::transformer`] because [`ForwardContext`] fields are
-//! private to that module.
+//! in the katgpt-rs root `transformer` module (ForwardContext fields are
+//! private to that module).
 //!
 //! Architecture:
 //! 1. Standard embedding + RMSNorm + QKV projection (same as baseline)
@@ -226,7 +226,7 @@ pub fn maxsim_score_octopus(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Config;
+    use katgpt_core::types::Config;
 
     fn make_cache(config: &Config, key_bits: u8, val_bits: u8) -> OctopusKVCache {
         OctopusKVCache::new(config, key_bits, val_bits)
@@ -255,7 +255,7 @@ mod tests {
     #[test]
     fn test_dequantize_flat_roundtrip() {
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let mut cache = make_cache(&config, 3, 3);
 
         let key: Vec<f32> = (0..kv_dim).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     fn test_dequantize_flat_into_roundtrip() {
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let mut cache = make_cache(&config, 3, 3);
 
         let key: Vec<f32> = (0..kv_dim).map(|i| (i as f32 * 0.1).sin()).collect();
@@ -311,7 +311,7 @@ mod tests {
     #[test]
     fn test_attention_octopus_produces_finite() {
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let head_dim = config.head_dim;
         let n_embd = config.n_embd;
 
@@ -389,7 +389,7 @@ mod tests {
     #[test]
     fn test_attention_weights_normalized() {
         let config = Config::micro();
-        let kv_dim = crate::types::kv_dim(&config);
+        let kv_dim = katgpt_core::types::kv_dim(&config);
         let head_dim = config.head_dim;
         let n_embd = config.n_embd;
 

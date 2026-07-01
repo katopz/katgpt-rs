@@ -76,9 +76,9 @@ impl OctopusKVCache {
     ///
     /// Uses the same rotation matrix for all layers (deterministic from seed 42).
     /// Codebooks are shared across layers since they depend only on (kv_dim, bits).
-    pub fn new(config: &crate::types::Config, key_bits: u8, val_bits: u8) -> Self {
+    pub fn new(config: &katgpt_core::types::Config, key_bits: u8, val_bits: u8) -> Self {
         let n_layers = config.n_layer;
-        let kv_dim = crate::types::kv_dim(config);
+        let kv_dim = katgpt_core::types::kv_dim(config);
         let max_seq_len = config.block_size;
         let oct_config = OctopusConfig {
             key_bits,
@@ -380,7 +380,7 @@ impl OctopusKVCache {
     }
 }
 
-impl crate::types::QuantizedKVCache for OctopusKVCache {
+impl katgpt_core::types::QuantizedKVCache for OctopusKVCache {
     fn store_key(&mut self, layer: usize, pos: usize, key: &[f32]) {
         self.store_key(layer, pos, key);
     }
@@ -416,7 +416,7 @@ impl crate::types::QuantizedKVCache for OctopusKVCache {
 
 /// Generate a random orthogonal matrix via QR decomposition (column-major).
 fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     let mut mat = vec![0.0f32; dim * dim];
     for val in mat.iter_mut() {
         *val = rng.normal();
@@ -451,7 +451,7 @@ fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
 
 /// Generate QJL projection matrix (i.i.d. N(0,1) entries).
 fn generate_qjl_matrix(dim: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     let mut mat = vec![0.0f32; dim * dim];
     for val in mat.iter_mut() {
         *val = rng.normal();
@@ -785,7 +785,7 @@ mod tests {
         let key: Vec<f32> = (0..64).map(|i| (i as f32 * 0.1).sin()).collect();
 
         // Use trait methods
-        let trait_cache = &mut cache as &mut dyn crate::types::QuantizedKVCache;
+        let trait_cache = &mut cache as &mut dyn katgpt_core::types::QuantizedKVCache;
         trait_cache.store_key(0, 0, &key);
 
         let mut out = vec![0.0f32; 64];

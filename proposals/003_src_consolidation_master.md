@@ -344,8 +344,23 @@ Ordering: foundation first (hoists, splits), then domain crates biggest-first.
   candidates found (13 with code + 4 dead Cargo.toml entries). 3 src/ items
   exiled in Phase 3a; `dense_mesh` deferred (transformer-bound glue);
   cross-crate losers deferred to Phases 8/10.
-- [ ] **Phase 1 — `katgpt-quant` crate** (Proposal 001). 5 modules / 25 files.
+- [x] **Phase 1 — `katgpt-quant` crate** (Proposal 001). 5 modules / 26 files.
   Cleanest lift (leaf over core+types). Establishes the move pattern.
+  - New crate `crates/katgpt-quant/` with `katgpt-core` dep + `katgpt-transformer`
+    dev-dep (for turboquant/forward.rs test `TransformerWeights`).
+  - Moved: `turboquant/` (6 files), `planar_quant/` (4), `iso_quant/` (4),
+    `hybrid_oct_pq/` (3), `octopus/` (8). 26 files total.
+  - Import fixes inside moved files: `crate::types` → `katgpt_core::types`,
+    `crate::transformer::TransformerWeights` → `katgpt_transformer::TransformerWeights`.
+    Intra-crate refs (`crate::turboquant::`, `crate::octopus::`, etc.) unchanged.
+  - Root re-exports: `pub mod X` → `pub use katgpt_quant::X` for all 5 modules.
+  - Feature forwarding: `turboquant`, `planar_quant`, `iso_quant`, `octopus`,
+    `hybrid_oct_pq`, `maxsim`, `asymmetric_kv` all forward to `katgpt-quant`.
+    `turboquant` retains `katgpt-spectral/turboquant` delegation (RandomRotation export).
+  - GOAT gate G3: `cargo check --workspace --all-features` clean; default clean.
+    173 tests pass in katgpt-quant. Examples (core_05_maxsim, octpq_kvarn_fusion)
+    + tests (bench_043_044_comparison) compile via re-export chain.
+  **DONE 2026-07-01.**
 - [ ] **Phase 2 — `katgpt-attn` crate.** The attention stack. Move base
   primitives out of `katgpt-core` + absorb `ega_attn`/`diagonal_gate`/`gdn2`/
   `hla`/`dash_attn`/`rat_bridge`/`static_cal`/`chiaroscuro`/`funcattn_compose`.

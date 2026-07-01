@@ -9,7 +9,7 @@
 /// Uses modified Gram-Schmidt for numerical stability.
 /// Deterministic from seed for reproducibility across runs.
 pub fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed);
+    let mut rng = katgpt_core::types::Rng::new(seed);
     let mut mat = vec![0.0f32; dim * dim];
     for val in mat.iter_mut() {
         *val = rng.normal();
@@ -56,7 +56,7 @@ pub fn generate_rotation_matrix(dim: usize, seed: u64) -> Vec<f32> {
 /// Used for residual estimation in online quantization quality tracking.
 /// Seed is offset from the rotation seed to ensure independence.
 pub fn generate_qjl_matrix(dim: usize, seed: u64) -> Vec<f32> {
-    let mut rng = crate::types::Rng::new(seed.wrapping_add(42));
+    let mut rng = katgpt_core::types::Rng::new(seed.wrapping_add(42));
     let mut mat = vec![0.0f32; dim * dim];
     for val in mat.iter_mut() {
         *val = rng.normal();
