@@ -20,7 +20,8 @@ log = "0.4"
 [features]
 default = []  # ALWAYS empty — nothing here is ever default-on.
 # Alien Sampler — Coherence x Availability Frontier Ranking (Plan 311).
-# GOAT 1/4 PASS, explicitly DEMOTED. Exiled from src/alien_sampler/.
+# GOAT 2/4 PASS (initially 1/4, G3 closed via Rayon; G1+G2 are the demotion
+# drivers), explicitly DEMOTED. Exiled from src/alien_sampler/.
 # TODO(deprecated): delete after confirming no regression.
 alien_sampler = []
 # Dead TTT feedback stub — `log::debug!` only, never HTTP POSTs.

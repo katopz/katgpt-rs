@@ -7,7 +7,12 @@
 
 ---
 
-## GOAT Gate — 1/4 PASS → DEMOTE (opt-in, not default)
+## GOAT Gate — 2/4 PASS → DEMOTE (opt-in, not default)
+
+> **Post-Rayon update (2026-06-24):** G3 closed via NPC-parallel rayon (~4.5×).
+> Initial verdict was 1/4 PASS; now 2/4 PASS. Demotion unchanged (G1 borderline
+> + G2 fail are the real drivers — quality gates, not perf). See the
+> Post-Rayon section below for details.
 
 | Gate | Target | Result | Verdict |
 |------|--------|--------|---------|
@@ -212,4 +217,4 @@ plan, TBD) is required to address G1+G2. **The module stays opt-in
 
 ## TL;DR
 
-**Plan 311 Alien Sampler GOAT gate: 1/4 PASS → DEMOTE to opt-in.** G1 is borderline (0.5010, within 0.2% of the 0.50 threshold), G2 fails (0.67 vs 0.90 target — β sweep shows a sharp phase transition with no β satisfying both gates), G3 fails (38.86× slower than baseline), G4 passes (type-system). The dual-encoder mechanism IS validated — concentration drops 2× vs the scalar-redundancy baseline — but the synthetic scenario's single-peak coherence surface creates an unfavorable quality/diversity tradeoff that no β can resolve. **The module ships as opt-in for paper reproduction and future research; not promoted to default.** Phase 4 SIMD deferred. This matches the plan's most-likely failure mode ("the paper's evidence is on real research corpora, not synthetic NPC populations — transfer to our domain is unvalidated").
+**Plan 311 Alien Sampler GOAT gate: 2/4 PASS → DEMOTE to opt-in** (initially 1/4, G3 closed via Rayon parallelization on 2026-06-24). G1 is borderline (0.5010, within 0.2% of the 0.50 threshold), G2 fails (0.67 vs 0.90 target — β sweep shows a sharp phase transition with no β satisfying both gates), G3 passes post-Rayon (~4.5× vs 5× target; was 38.86× pre-Rayon), G4 passes (type-system). The dual-encoder mechanism IS validated — concentration drops 2× vs the scalar-redundancy baseline — but the synthetic scenario's single-peak coherence surface creates an unfavorable quality/diversity tradeoff that no β can resolve. **The demotion is driven by G1+G2 (quality gates), not G3 (perf) — closing G3 did not change the verdict.** The module ships as opt-in for paper reproduction and future research; not promoted to default. Phase 4 SIMD deferred. This matches the plan's most-likely failure mode ("the paper's evidence is on real research corpora, not synthetic NPC populations — transfer to our domain is unvalidated").

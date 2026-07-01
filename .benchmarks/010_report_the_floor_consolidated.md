@@ -19,7 +19,7 @@ Four UQ-bearing primitives were grandfathered when the "Report the Floor" rule w
 | 2 | Sleep-Time Anticipator (Plan 334) | T4 | 🟠 **EXCLUDED** | Compute-gating heuristic, not calibrated UQ. Same false-confidence signature (37–54% coverage). |
 | 3 | Best-Belief Beta Selector (Plan 336) | T5 | 🟢 **BEATS FLOOR** | 15–30% selection-regret reduction in the heteroscedastic regime (the real-world case). Genuine UQ gain. |
 | 4 | KARC + conformal overlay (Plan 308 + 340 Ph.2) | — | 🟢 **IS THE OVERLAY** | The conformal overlay *is* the floor applied to KARC's point forecast. Covered by the `conformal_karc_overlay` example. |
-| 5 | Alien Sampler (Plan 311) | T6 | 🟠 **EXCLUDED** | Relative ranking signal (which candidate is most alien), not calibrated UQ. No distribution to feed the harness. Additionally exiled to `katgpt-deprecated` (GOAT 1/4 PASS). |
+| 5 | Alien Sampler (Plan 311) | T6 | 🟠 **EXCLUDED** | Relative ranking signal (which candidate is most alien), not calibrated UQ. No distribution to feed the harness. Additionally exiled to `katgpt-deprecated` (GOAT 2/4 PASS — initially 1/4, G3 closed via Rayon). |
 
 **Net outcome:** the policy is enforceable and exercised. Of the four grandfathered primitives that actually make a UQ-adjacent claim, **only Best-Belief (T5) genuinely beats the floor on its native metric** — and it does so decisively in the regime that matters (heteroscedastic evidence). The other three are correctly excluded: their value propositions (planning diversity, compute gating, population diversity) are orthogonal to calibrated predictive intervals, and the floor comparison exposes any attempt to reframe them as UQ.
 
@@ -79,7 +79,7 @@ KARC (Plan 308) is a delay-basis ridge forecaster — a **point forecast** primi
 
 The Alien Sampler produces a within-pool z-scored ranking `score = (1−β)·z_coh + β·(−z_avail)` — a **relative selection signal** (which candidate is more diverse in this pool), not a calibrated uncertainty estimate. It claims no probability distribution, predictive interval, quantile, coverage guarantee, or confidence score. Its GOAT gate (Plan 311 Phase 3) measures motif-collapse reduction (population diversity). **Unlike BoM (which at least produces K samples projectable to an interval), Alien Sampler's output is a single ranking scalar per candidate — there is no spread to feed the harness.**
 
-Structurally the same exclusion class as T3/T4: a primitive whose value proposition (population diversity) is orthogonal to calibrated predictive intervals. Additionally, the primitive has since been **exiled to `katgpt-deprecated`** (Proposal 003 Phase 3a) after its own GOAT gate failed (1/4 PASS: G1 borderline 0.5010, G2 fail 0.6722, G3 fail 38.86×, G4 pass — see [`.benchmarks/311_alien_sampler_goat.md`](311_alien_sampler_goat.md)). The UQ-policy question is therefore doubly moot.
+Structurally the same exclusion class as T3/T4: a primitive whose value proposition (population diversity) is orthogonal to calibrated predictive intervals. Additionally, the primitive has since been **exiled to `katgpt-deprecated`** (Proposal 003 Phase 3a) after its own GOAT gate failed (2/4 PASS: G1 borderline 0.5010, G2 fail 0.6722, G3 closed via Rayon ~4.5×, G4 pass — see [`.benchmarks/311_alien_sampler_goat.md`](311_alien_sampler_goat.md)). The UQ-policy question is therefore doubly moot.
 
 **No adapter test was written** — there is nothing UQ-shaped to adapt. The exclusion is structural (not UQ-bearing by design), not empirical (no comparison was run).
 

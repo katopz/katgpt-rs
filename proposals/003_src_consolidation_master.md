@@ -108,7 +108,7 @@ Opt-in features are NOT automatically losers. The sweep classifies each into:
    regression bench still works (the bench needs both in scope). → **stays in
    domain crate** behind its feature flag.
 3. **Dead/failed** — gate ran and FAILED, OR explicitly demoted (e.g.
-   `alien_sampler`: 1/4 PASS), OR dead stub (`feedback.rs`), OR off-topic
+   `alien_sampler`: 2/4 PASS), OR dead stub (`feedback.rs`), OR off-topic
    (`unit_distance/`). → **exile to `katgpt-deprecated`.**
 
 Only category 3 moves to `katgpt-deprecated`. The distinction matters: most
@@ -158,9 +158,11 @@ forever.
 
 > **Removed from this list (misclassification fix):** `alien_sampler/` was
 > originally listed here as a winner based on its doc comment. The actual GOAT
-> history (`issues/010` T6) records **"1/4 PASS — demoted to opt-in."** It is a
-> demoted loser → exiled to `katgpt-deprecated`. This is the exact failure mode
-> the Phase 0.5 loser-sweep exists to catch.
+> history (Plan 311 Phase 3, `.benchmarks/311_alien_sampler_goat.md`) records
+> **"2/4 PASS — demoted to opt-in"** (initially 1/4; G3 closed via Rayon, but
+> G1 borderline + G2 fail are the demotion drivers). It is a demoted loser →
+> exiled to `katgpt-deprecated`. This is the exact failure mode the Phase 0.5
+> loser-sweep exists to catch.
 
 ### → `katgpt-attn` (NEW — the attention stack)
 | Item | Verdict |
@@ -257,7 +259,7 @@ forever.
 |---|---|---|
 | `feedback.rs` | L | dead stub — `log::debug!` only, no HTTP POST |
 | `unit_distance/` | L | number-theory toy, no inference role |
-| `alien_sampler/` | L | GOAT 1/4 PASS — demoted to opt-in (`issues/010` T6) |
+| `alien_sampler/` | L | GOAT 2/4 PASS — demoted to opt-in (Plan 311 Phase 3, `.benchmarks/311_alien_sampler_goat.md`) |
 
 > **This list is INCOMPLETE by design.** The full loser set is populated by the
 > Phase 0.5 loser-sweep audit — every opt-in feature checked against its GOAT
