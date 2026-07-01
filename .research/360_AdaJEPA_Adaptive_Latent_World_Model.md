@@ -196,3 +196,64 @@ The only genuinely transferable *runtime* nugget — AdaJEPA's `hard-N` buffer (
 **Files created this session:** `katgpt-rs/.research/360_AdaJEPA_Adaptive_Latent_World_Model.md` (this note — the only output).
 
 **Recommended next step:** None for katgpt-rs / riir-ai / riir-chain / riir-neuron-db. The riir-train follow-up is optional and out of scope for this workflow.
+
+---
+
+## 9. PoC Addendum — empirical check of the "parity" claim (2026-07-01)
+
+A "defend-wrong" PoC was added at `riir-ai/crates/riir-poc/benches/adajepa_modelless_goat.rs`
+to test whether the shipped modelless pattern (closed-form refit + coherence-
+triggered re-estimation) actually matches an AdaJEPA-style per-step adaptation
+loop on a planning-under-shift task. Toy domain: 2D point-mass navigation,
+`z_{t+1} = z_t + mass·a`, model prior `R=I` (mass=1), MPC sampling planner
+(horizon=4, n_samples=64), 200 episodes per shift, goal_radius=0.3, max_steps=25.
+
+**Results (raw, from the bench run):**
+
+| Shift | Frozen | PerStepGd (AdaJEPA-analog) | CoherenceTriggeredRefit (shipped) |
+|---|---|---|---|
+| in-dist (mass=1.0)  | 68.5% | 68.5% | 68.5% |
+| mild (mass=0.7)     | 73.5% | **87.0% ↑** | 73.5% (tie, **0 updates**) |
+| moderate (mass=1.5) | 61.0% | 42.0% ↓ | 57.5% ↓ |
+| severe (mass=0.4)   | 55.0% | **87.5% ↑** | **87.5% ↑** |
+| severe (mass=2.5)   | 40.5% | 25.5% ↓ | 22.5% ↓ |
+
+Latency per replan (all three ~940 ns, planner-dominated): frozen 937 ns,
+per_step_gd 945 ns, coherence_triggered 967 ns. **Latency parity confirmed** —
+sub-µs adaptation overhead, no autograd, the planner's 64-sample rollout is
+the bottleneck.
+
+**Honest revision of the verdict's "parity" claim:**
+
+- ✅ **Latency parity confirmed.** All three strategies ~940 ns/replan;
+  adaptation overhead is +8–30 ns. Sub-µs, modelless, no GD.
+- ✅ **Capability coverage confirmed.** Both adaptive strategies recover
+  success on severe *undershoot* shifts (mass<1.0): 55%→87.5% at mass=0.4.
+- ❌ **Quality parity REFUTED on two axes:**
+  1. **Coherence trigger too conservative for mild shifts.** At mass=0.7,
+     `mean_updates=0` — the coherence gate never fires because prediction
+     error stays below the threshold. PerStepGd (always updates) catches
+     mild shifts the coherence gate misses (73.5%→87.0%). The shipped
+     pattern needs a more sensitive threshold or a small-step always-on
+     background update for the mild-shift regime.
+  2. **All adaptation strategies HURT on overshoot shifts (mass>1.0).**
+     At mass=1.5 and 2.5, both adaptive strategies score *below* frozen.
+     Root cause: rank-1 GD / 2×2 LS refit diverges when actions are
+     correlated (the planner keeps picking goal-directed actions, so the
+     normal-equations matrix `AᵀA` is ill-conditioned). AdaJEPA's stop-
+    gradient + restricted-layer discipline would also struggle here on a
+     2×2 system, but the paper's neural-net predictor has more capacity
+     to absorb the correction stably.
+
+**Net:** The Research 360 verdict stands on the *architectural* claim (the
+runtime analog of plan-execute-adapt-replan ships, modellessly, at parity
+latency) but is **partially wrong** on the *quality* claim. The shipped pattern
+is a base layer that needs: (a) a more sensitive coherence threshold (or
+background-update path) for mild shifts, and (b) a stabilization mechanism
+(action decorrelation, larger buffer, or damping) for overshoot shifts.
+
+These are tracked as follow-ups in `riir-ai/.issues/` (Issue: AdaJEPA PoC —
+coherence trigger tuning + overshoot-shift stabilization). The PoC is kept
+as a permanent regression check in `riir-poc` ("defend-wrong" crate) — its
+*job* was to defend or refute the verdict's parity claim, and it refuted
+the quality half honestly.
