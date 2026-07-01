@@ -1,6 +1,6 @@
 # Issue 018 — `katgpt-sense` extraction (in-flight) workspace build regression
 
-**Status:** OPEN (non-blocking heads-up — resolves when the extraction completes)
+**Status:** RESOLVED 2026-07-01 (extraction committed as `451ae9da`)
 **Discovered:** 2026-07-01, while re-verifying riir-ai Issue 355 Phase 3c.
 **Failure class:** same as Issue 017 (extraction → compile regression).
 **Blocking:** `cargo check --workspace` in `riir-ai`, and any katgpt-rs
@@ -103,3 +103,22 @@ extraction agent knows:
 - a riir-ai GOAT re-verification is queued behind katgpt-rs building again.
 
 No action requested beyond completing the extraction as planned.
+
+## Resolution (2026-07-01)
+
+The extraction agent committed the completed work as
+`451ae9da` (`feat(katgpt-sense)!: promote sense substrate to standalone
+crate (Plan 338 Phase 3)`). Independently verified before/after the commit
+landed:
+
+- katgpt-rs `cargo check --workspace` ✅ green
+- katgpt-rs `cargo check --workspace --all-features` ✅ green
+- `cargo test -p katgpt-sense --all-features` → **85/85 pass**
+- riir-ai `cargo check --workspace` ✅ green (the downstream consumer that
+  was the original blocker)
+
+The `pub mod sense;` shim at `katgpt-core/src/lib.rs` re-exports
+`katgpt_sense::*` and forwards `spectral_threat` (which stayed local in
+katgpt-core because it depends on `linoss`). External consumers'
+`katgpt_core::sense::*` paths resolve bit-for-bit. Issue closed; the
+queued riir-ai Phase 3c GOAT re-verification is now unblocked.
