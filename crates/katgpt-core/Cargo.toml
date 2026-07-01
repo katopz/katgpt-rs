@@ -448,6 +448,14 @@ required-features = ["geometric_product"]
 name = "subspace_phase_gate_goat"
 required-features = ["subspace_phase_gate"]
 
+# Plan 301 T4.1 — jacobian_svd_at_into zero-allocation gate. Separate test
+# binary (matches karc_alloc_check / analytic_lattice_alloc_check convention):
+# #[global_allocator] is crate-binary-unique and would collide with other
+# test modules in the lib test binary.
+[[test]]
+name = "subspace_phase_gate_alloc_check"
+required-features = ["subspace_phase_gate"]
+
 # Plan 356 — Group Invariance Probe G4 (zero-allocation) GOAT gate. Uses a
 # CountingAllocator to verify discover_subgroup_into allocates 0 bytes after
 # warmup. Gated on group_invariance_probe so default features compile cleanly.

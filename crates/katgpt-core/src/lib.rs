@@ -471,8 +471,8 @@ pub use irrep_pruner::{
 #[cfg(feature = "subspace_phase_gate")]
 pub use subspace_phase_gate::{
     IntrinsicDimMethod, JacobianSvdScratch, SvdResult, SvdResultScratch, SvdScratch,
-    estimate_intrinsic_dim, jacobian_svd_at, numerical_rank, participation_ratio,
-    phase_transition_gate, thin_svd, thin_svd_into,
+    estimate_intrinsic_dim, jacobian_svd_at, jacobian_svd_at_into, numerical_rank,
+    participation_ratio, phase_transition_gate, thin_svd, thin_svd_into,
 };
 
 #[cfg(feature = "group_invariance_probe")]
