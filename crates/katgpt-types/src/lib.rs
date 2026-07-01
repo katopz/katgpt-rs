@@ -75,6 +75,7 @@ mod rng;
 /// these kernels and `simd::ternary` uses `types::TernaryWeights`.
 pub mod simd;
 mod sense;
+pub mod merkle;
 pub mod slod;
 pub mod temporal;
 mod ternary;
@@ -125,6 +126,10 @@ pub use rng::Rng;
 pub use sense::{DilationConfig, SenseKind, SenseModule, ShardEmbedding, TernaryDir};
 pub use slod::ScaleBoundary;
 pub use temporal::{TemporalDerivativeKernel, sigmoid_surprise_gate};
+pub use merkle::{
+    HASH_SIZE, MERKLE_OCTREE_BRANCHING, MERKLE_OCTREE_DEPTH, MERKLE_OCTREE_INTERNAL,
+    MERKLE_OCTREE_LEAVES, MERKLE_OCTREE_NODES, MerkleOctree, MerkleProof,
+};
 #[cfg(feature = "plasma_path")]
 pub use ternary::TernaryWeights;
 

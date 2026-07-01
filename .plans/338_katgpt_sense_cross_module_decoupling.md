@@ -190,17 +190,18 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 ### Phase 2.5 — Co-extract octree-merkle primitives to katgpt-types (NEW)
 
-- [ ] **T2.5.1** Move the octree-merkle public surface from
+- [x] **T2.5.1** Move the octree-merkle public surface from
   `katgpt-core/src/merkle.rs` to `katgpt-types/src/merkle.rs`:
   constants (`MERKLE_OCTREE_NODES`, `MERKLE_OCTREE_LEAVES`,
   `MERKLE_OCTREE_BRANCHING`, `HASH_SIZE`, `MERKLE_OCTREE_INTERNAL`,
   `MERKLE_OCTREE_DEPTH`), `MerkleOctree` struct + `build_from_leaves`,
   `MerkleProof` struct + verifiers. katgpt-core's `merkle.rs` becomes a
   re-export shim behind `#[cfg(feature = "merkle_octree")]`.
-- [ ] **T2.5.2** Run GOAT gate:
+- [x] **T2.5.2** Run GOAT gate:
   - `cargo check -p katgpt-types` clean.
   - `cargo check -p katgpt-core --features merkle_octree` clean.
-  - `cargo test -p katgpt-core --features merkle_octree --lib` clean.
+  - `cargo test -p katgpt-core --features merkle_octree --lib` clean
+    (726 → 726).
   - `cargo check -p riir-engine --features merkle_octree` clean (kg.rs /
     kg_hyperedge.rs use `build_with_merkle`).
 
