@@ -624,6 +624,19 @@ fn one_sided_jacobi_svd_into(
     let tol: f32 = 1e-7;
     let max_sweeps = 60;
 
+    // Frobenius-norm scale of the matrix, for the null-space deflation floor
+    // (Issue 008). On wide rank-deficient matrices (m ≪ n, rank = m), the
+    // (n − m) null-space columns converge to ~zero norm during Jacobi sweeps.
+    // Pairs of near-zero columns produce a degenerate per-pair test (rhs → 0)
+    // that fires spurious noise rotations every sweep; skipping pairs where
+    // both columns are below this floor prevents the noise injection and lets
+    // the signal columns converge cleanly.
+    let mut frob_sq: f32 = 0.0;
+    for v in work.a[..m * n].iter() {
+        frob_sq += v * v;
+    }
+    let col_floor_sq: f32 = frob_sq * tol * tol;
+
     for _sweep in 0..max_sweeps {
         // Convergence criterion: break when a full sweep applies no rotation.
         // This is the standard cyclic-Jacobi criterion and is scale-invariant
@@ -645,6 +658,17 @@ fn one_sided_jacobi_svd_into(
                     app += arp * arp;
                     aqq += arq * arq;
                     apq += arp * arq;
+                }
+                // Null-space deflation (Issue 008): skip pairs where BOTH
+                // columns have norm below the floor (both are null-space). A
+                // rotation between two null-space columns cannot improve the
+                // factorization — it only injects floating-point noise. We use
+                // AND (not OR) so that a near-zero column paired with a signal
+                // column is still rotated (the signal column can absorb the
+                // near-zero column's residual). Essential for wide rank-
+                // deficient matrices (m ≪ n).
+                if app < col_floor_sq && aqq < col_floor_sq {
+                    continue;
                 }
                 if apq.abs() <= tol * (app * aqq).sqrt() {
                     continue; // Already diagonal in this plane.
@@ -678,21 +702,25 @@ fn one_sided_jacobi_svd_into(
     // Extract singular values (column norms of A post-rotation) and sort desc.
     //
     // The raw singular values are column norms of work.a (post-Jacobi-rotation).
-    // We compute them into a stack array (k ≤ 64), argsort by descending value,
-    // then write the sorted triples into the SOA result. Reading from a stack
-    // snapshot avoids the read-then-write aliasing hazard on
-    // `result.singular_values` (writing sorted position `out_j` must not
-    // clobber the source position `perm[out_j']` for a later `out_j'`).
+    // We compute norms for ALL n columns into a stack array, argsort by
+    // descending value, then write the top-k sorted triples into the SOA result.
+    //
+    // **Issue 008 root cause:** the previous extraction iterated only `0..k`
+    // (= `0..min(m,n)`), missing singular values that landed in columns `k..n`
+    // after Jacobi convergence. For wide matrices (m < n, e.g. PCA on a 6×48
+    // data matrix), the m non-zero singular values can end up in ANY of the n
+    // columns — not just the first m. Iterating all n columns and selecting the
+    // top-k fixes the wide-matrix regression bit-for-bit on the G1 example.
     //
     // The 64-element cap covers ambient dims up to D=64 (e.g. the Plan 301
     // Phase 2 GOAT uses D=48). PCA via Jacobian SVD is a documented public-API
     // use case; the previous k ≤ 16 cap panicked on valid inputs (N ≥ 17, D=48).
-    let k = m.min(n); // number of singular triples
-    debug_assert!(k <= 64, "one-sided Jacobi result scratch supports k <= 64");
+    let k = m.min(n); // number of singular triples to output
+    debug_assert!(n <= 64, "one-sided Jacobi result scratch supports n <= 64");
 
-    // Stack snapshot of raw (unsorted) singular values.
+    // Stack snapshot of raw (unsorted) singular values — one per column (n total).
     let mut raw_sigma: [f32; 64] = [0.0; 64];
-    for i in 0..k {
+    for i in 0..n {
         let mut s_sq: f32 = 0.0;
         for r in 0..m {
             let ari = work.a[r * n + i];
@@ -701,14 +729,14 @@ fn one_sided_jacobi_svd_into(
         raw_sigma[i] = s_sq.sqrt();
     }
 
-    // Argsort the column indices by descending singular value.
+    // Argsort ALL n column indices by descending singular value.
     let mut perm: [usize; 64] = [0; 64];
-    for i in 0..k {
+    for i in 0..n {
         perm[i] = i;
     }
-    // Insertion sort by descending singular value — O(k²) but k ≤ 16, and
+    // Insertion sort by descending singular value — O(n²) but n ≤ 64, and
     // branch-predictable for nearly-sorted input (common after convergence).
-    for i in 1..k {
+    for i in 1..n {
         let key_idx = perm[i];
         let key_val = raw_sigma[key_idx];
         let mut j = i;
@@ -1305,5 +1333,81 @@ mod tests {
         // Accessors return slices of the right length.
         assert_eq!(result.right_singular_vector(0).len(), n_cols);
         assert_eq!(result.left_singular_vector(0).len(), m_rows);
+    }
+
+    // ── Issue 008 regression: wide rank-deficient matrices ──────────────────
+    //
+    // The one-sided Jacobi SVD extraction must scan ALL n columns for singular
+    // values, not just the first min(m,n). On a wide matrix (m ≪ n) the m
+    // non-zero singular values can land in any of the n columns after Jacobi
+    // convergence; the previous extraction only checked columns 0..min(m,n),
+    // missing them and returning a garbage spectrum. This test constructs a
+    // known wide rank-deficient matrix and verifies recovery.
+
+    /// Build a known rank-3 matrix in R^{3×12} (wide: m=3 ≪ n=12, rank=3).
+    /// The 3 non-zero singular values are {10, 5, 2} with non-canonical right
+    /// singular vectors spread across all 12 columns, so the extraction MUST
+    /// scan beyond column 2 (= min(3,12)−1) to find them.
+    fn known_rank3_wide_3x12() -> (Vec<f32>, usize, usize) {
+        let m = 3;
+        let n = 12;
+        // Non-canonical left vectors in R^3 (3×3 identity — m=rank so U is square).
+        let u = [
+            [1.0_f32, 0.0, 0.0],
+            [0.0_f32, 1.0, 0.0],
+            [0.0_f32, 0.0, 1.0],
+        ];
+        // Right singular vectors placed at columns 3, 7, 10 (NOT 0, 1, 2) to
+        // force the extraction to look beyond the first min(m,n) columns.
+        let mut v = [[0.0_f32; 12]; 3];
+        v[0][3] = 1.0;  // v1 at column 3
+        v[1][7] = 1.0;  // v2 at column 7
+        v[2][10] = 1.0; // v3 at column 10
+        let sigma = [10.0_f32, 5.0, 2.0];
+        let mut w = vec![0.0_f32; m * n];
+        for row in 0..m {
+            for col in 0..n {
+                let mut acc = 0.0;
+                for k in 0..3 {
+                    acc += sigma[k] * u[k][row] * v[k][col];
+                }
+                w[row * n + col] = acc;
+            }
+        }
+        (w, m, n)
+    }
+
+    #[test]
+    fn thin_svd_into_wide_rank_deficient_recovers_singular_values() {
+        // Issue 008: the extraction must scan ALL n columns, not just 0..min(m,n).
+        // On this 3×12 rank-3 matrix, the singular values live at columns 3, 7, 10.
+        // The old extraction (0..min(3,12)=0..3) would miss them entirely.
+        let (m_flat, m_rows, n_cols) = known_rank3_wide_3x12();
+        let mut work = SvdScratch::with_capacity(n_cols, m_rows);
+        let mut result = SvdResultScratch::with_capacity(m_rows, n_cols);
+        thin_svd_into(&m_flat, m_rows, n_cols, &mut result, &mut work);
+
+        // min(3, 12) = 3 singular triples.
+        assert_eq!(result.len(), 3, "3×12 matrix should give 3 singular triples");
+        // The top-3 singular values must be {10, 5, 2} — NOT garbage from the
+        // null-space columns 0, 1, 2.
+        let sv = [
+            result.singular_value(0),
+            result.singular_value(1),
+            result.singular_value(2),
+        ];
+        assert!(
+            (sv[0] - 10.0).abs() < 0.1,
+            "σ1 should be ≈10.0, got {}",
+            sv[0]
+        );
+        assert!((sv[1] - 5.0).abs() < 0.1, "σ2 should be ≈5.0, got {}", sv[1]);
+        assert!((sv[2] - 2.0).abs() < 0.1, "σ3 should be ≈2.0, got {}", sv[2]);
+        // Rank-3 (the 3 non-zero singular values).
+        assert_eq!(
+            result.rank, 3,
+            "rank should be 3, got {}",
+            result.rank
+        );
     }
 }

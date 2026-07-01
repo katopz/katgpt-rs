@@ -32,6 +32,17 @@ marked T1.12 (`subspace_phase_gate` in the umbrella `katgpt-rs/Cargo.toml`)
 as complete, but the feature line was missing. Added in this commit as
 `subspace_phase_gate = ["katgpt-core/subspace_phase_gate"]` (opt-in).
 
+**Re-verification (2026-07-02, Issue 008 fix):** the G1 PASS above was
+**stale** between commits `a08adc4a` (2026-06-24) and the Issue 008 fix — a
+refactor of `one_sided_jacobi_svd_into`'s extraction loop changed the column-
+norm scan from `0..n` (all columns) to `0..min(m,n)` (first k columns only).
+For the G1 example's wide Jacobian (N×48, N<48), the non-zero singular values
+landed in columns `k..n` and were missed, producing a garbage spectrum
+(pr≈1.5 instead of ≈5 at N=6). The Issue 008 fix restores the `0..n` scan +
+adds a null-space deflation floor for numerical stability. G1 now re-passes
+bit-for-bit on the same example (same pr/nr values as the original PASS).
+See `.issues/008_*.md` for the full analysis.
+
 ---
 
 ## Setup

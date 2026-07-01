@@ -5,7 +5,7 @@
 **Source paper:** [arXiv:2409.02426](https://arxiv.org/abs/2409.02426) — Wang et al., *Breaking the Curse of Dimensionality*.
 **Private Super-GOAT guide:** `riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md`
 **Target:** `katgpt-rs/crates/katgpt-core/src/subspace_phase_gate.rs` (new module) + Cargo feature `subspace_phase_gate`
-**Status:** Active — Phase 1 complete (skeleton shipped), Phase 2 (G1 GOAT proof) complete with [Bench 301](../.benchmarks/301_subspace_phase_gate_g1.md) **G1 PASS** ⚠️ **STALE — see [Issue 008](../.issues/008_subspace_phase_gate_g1_wide_matrix_regression.md)** (G1 example regressed on `develop` HEAD for wide rank-deficient matrices; the recorded PASS was valid at `e12dbda7` but a post-benchmark SVD refactor broke it), Phase 3 complete: T3.1–T3.3 PASS (square R^8×8), **T3.4 latency gate FAILS** (2403 ns/call vs <1µs target) — see bench Phase 3 section. Per T4.3 this makes **Phase 4 SIMD REQUIRED** and **blocks Phase 5 promotion** (also blocked on Issue 008). Phase 4 T4.2 (scalar investigation) concluded no cheap scalar win; T4.1 SIMD is the remaining path.
+**Status:** Active — Phase 1 complete (skeleton shipped), Phase 2 (G1 GOAT proof) complete with [Bench 301](../.benchmarks/301_subspace_phase_gate_g1.md) **G1 PASS** ✅ **re-verified 2026-07-02 after [Issue 008](../.issues/008_subspace_phase_gate_g1_wide_matrix_regression.md) fix** (wide-matrix extraction bug: the SOA refactor `a08adc4a` narrowed the column-norm scan from `0..n` to `0..min(m,n)`, missing singular values in columns `k..n`; fixed by restoring the full scan + adding a null-space deflation floor). Phase 3 complete: T3.1–T3.3 PASS (square R^8×8), **T3.4 latency gate FAILS** (2403 ns/call vs <1µs target) — see bench Phase 3 section. Per T4.3 this makes **Phase 4 SIMD REQUIRED** and **blocks Phase 5 promotion** (Issue 008 now resolved; remaining block is T3.4 latency). Phase 4 T4.2 (scalar investigation) concluded no cheap scalar win; T4.1 SIMD is the remaining path.
 
 ---
 
@@ -99,7 +99,7 @@ This is the **open** counterpart of the private Super-GOAT at `riir-neuron-db/.r
 
 ### Tasks
 
-- [ ] **T5.1** If G1 passes (phase transition reproduces) AND G3-precursor passes (Jacobian SVD recovers known singular vectors): add `subspace_phase_gate` to the default feature list in `katgpt-rs/Cargo.toml`. **BLOCKED** — G1 passes (Phase 2) but the G3-precursor latency gate (T3.4) FAILS at 2403 ns/call. Stays opt-in until Phase 4 T4.1 SIMD lands and T3.4 re-runs <1µs. (T3.1–T3.3 correctness sub-gates all PASS.)
+- [ ] **T5.1** If G1 passes (phase transition reproduces) AND G3-precursor passes (Jacobian SVD recovers known singular vectors): add `subspace_phase_gate` to the default feature list in `katgpt-rs/Cargo.toml`. **BLOCKED** — G1 passes (Phase 2, re-verified after Issue 008 fix) but the G3-precursor latency gate (T3.4) FAILS at 2403 ns/call. Stays opt-in until Phase 4 T4.1 SIMD lands and T3.4 re-runs <1µs. (T3.1–T3.3 correctness sub-gates all PASS.)
 - [ ] **T5.2** Update `katgpt-rs/README.md` Feature Showcase section with a new entry: "Subspace Phase-Gate (Plan 301)". **BLOCKED** on T5.1 promotion.
 - [ ] **T5.3** If G1 fails: downgrade to opt-in, document the failure mode in `katgpt-rs/.benchmarks/301_*.md`, create an issue. _(N/A — G1 PASSES; the block is the T3.4 latency gate, not G1. No downgrade; the feature correctly stays opt-in pending the SIMD latency fix.)_
 
