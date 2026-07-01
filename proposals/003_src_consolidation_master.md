@@ -98,16 +98,21 @@ collapse into `src/lib.rs` as private `mod` declarations, not folders:
 clean. Never default-on. Kept (not deleted) for regression comparison and
 to preserve the GOAT-gate audit trail.
 
-**Membership criteria (any one exiles a module):**
-- Dead stub (advertises a feature, does nothing) — e.g. `feedback.rs`.
-- Off-topic research toy with no inference role — e.g. `unit_distance/`
-  (number theory / CM fields; doesn't serve the modelless-inference mandate).
-- Superseded by a GOAT winner (kept until the regression harness confirms
-  the winner holds, then deleted in a follow-up).
-- Lost the GOAT gate (G1 correctness FAIL or G2 perf regression) and was
-  demoted from default-on to opt-in — these sit in deprecated *within their
-  own domain crate* behind a feature flag, NOT in `katgpt-deprecated`, unless
-  the whole mechanism is abandoned.
+**Membership criteria — 3 categories of opt-in (NOT a blanket sweep):**
+
+Opt-in features are NOT automatically losers. The sweep classifies each into:
+
+1. **Pending** — opt-in because the GOAT gate hasn't run yet (e.g. "Opt-in
+   until G1–G4 pass"). → **stays in domain crate.** Exiling these punishes WIP.
+2. **Benchmark-loser** — lost a head-to-head, kept so the winner-vs-loser A/B
+   regression bench still works (the bench needs both in scope). → **stays in
+   domain crate** behind its feature flag.
+3. **Dead/failed** — gate ran and FAILED, OR explicitly demoted (e.g.
+   `alien_sampler`: 1/4 PASS), OR dead stub (`feedback.rs`), OR off-topic
+   (`unit_distance/`). → **exile to `katgpt-deprecated`.**
+
+Only category 3 moves to `katgpt-deprecated`. The distinction matters: most
+opt-in features in the Cargo.toml are category 1 (pending), not category 3.
 
 **Cargo.toml shape:**
 ```toml
@@ -149,8 +154,13 @@ forever.
 | `skill_opt/` | O |
 | `ssd_block.rs` | O |
 | `channel_simd.rs` | O |
-| `alien_sampler/` | W |
 | `sigmoid` (hoist from `band_conditioner`) | W |
+
+> **Removed from this list (misclassification fix):** `alien_sampler/` was
+> originally listed here as a winner based on its doc comment. The actual GOAT
+> history (`issues/010` T6) records **"1/4 PASS — demoted to opt-in."** It is a
+> demoted loser → exiled to `katgpt-deprecated`. This is the exact failure mode
+> the Phase 0.5 loser-sweep exists to catch.
 
 ### → `katgpt-attn` (NEW — the attention stack)
 | Item | Verdict |
@@ -247,6 +257,14 @@ forever.
 |---|---|---|
 | `feedback.rs` | L | dead stub — `log::debug!` only, no HTTP POST |
 | `unit_distance/` | L | number-theory toy, no inference role |
+| `alien_sampler/` | L | GOAT 1/4 PASS — demoted to opt-in (`issues/010` T6) |
+
+> **This list is INCOMPLETE by design.** The full loser set is populated by the
+> Phase 0.5 loser-sweep audit — every opt-in feature checked against its GOAT
+> history in `.benchmarks/` / `.plans/` / `.issues/`. Known failures so far
+> (e.g. SDPG bomber arena, `.benchmarks/011_sdpg_bandit_arena.md` GOAT ❌ FAIL)
+> are tracked there; the sweep finds the rest before any absorption phase runs,
+> so losers don't get absorbed into winning crates.
 
 ### Stays in `src/` (root glue — collapses into `lib.rs`)
 | Item | Why |
@@ -300,6 +318,15 @@ Ordering: foundation first (hoists, splits), then domain crates biggest-first.
     tagged for speculative). Wire the split in-tree first.
   - Inline-and-delete `cgsp.rs` into `lib.rs`.
   - GOAT gate G3 on each.
+- [ ] **Phase 0.5 — loser-sweep audit (gates every absorption).** For EACH
+  opt-in feature in root + every crate: grep its name against `.benchmarks/`,
+  `.plans/`, `.issues/` for the GOAT verdict. Classify into pending /
+  benchmark-loser / dead-failed per the 3-category rule. Exile every category-3
+  to `katgpt-deprecated` with a one-line citation. **Must complete before
+  Phases 4–11** so losers aren't absorbed into winning crates. Known starting
+  set: `feedback.rs`, `unit_distance/`, `alien_sampler/` (demoted, `issues/010`
+  T6), SDPG bomber arena (`benchmarks/011` FAIL). Output: a `katgpt-deprecated`
+  membership table with a citation per row.
 - [ ] **Phase 1 — `katgpt-quant` crate** (Proposal 001). 5 modules / 25 files.
   Cleanest lift (leaf over core+types). Establishes the move pattern.
 - [ ] **Phase 2 — `katgpt-attn` crate.** The attention stack. Move base
