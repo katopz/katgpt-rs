@@ -1172,11 +1172,11 @@ mod tests {
         let b = [0.7f32, -0.3, 0.0, 0.0];
         let c = [0.4f32, 0.9, 0.0, 0.0];
         let mut x = vec![0.0f32; total];
-        for i0 in 0..4 {
-            for i1 in 0..4 {
-                for i2 in 0..4 {
+        for (i0, &av) in a.iter().enumerate() {
+            for (i1, &bv) in b.iter().enumerate() {
+                for (i2, &cv) in c.iter().enumerate() {
                     let flat = (i0 * 4 + i1) * 4 + i2;
-                    x[flat] = a[i0] * b[i1] * c[i2];
+                    x[flat] = av * bv * cv;
                 }
             }
         }

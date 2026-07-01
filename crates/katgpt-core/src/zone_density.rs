@@ -865,6 +865,6 @@ mod tests {
         assert_eq!(hits + misses, 1000, "reader must observe all 1000 zones");
         // Cache should have *some* non-sparse entries from the writer (666 of
         // 1000, modulo eviction races). At minimum it shouldn't be empty.
-        assert!(cache.len() > 0 || hits > 0, "cache should be non-empty or hits observed");
+        assert!(!cache.is_empty() || hits > 0, "cache should be non-empty or hits observed");
     }
 }

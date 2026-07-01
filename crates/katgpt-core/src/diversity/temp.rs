@@ -735,7 +735,7 @@ mod tests {
         let s1 = vec![10.0_f32, 20.0];
         let lambda = [0.0_f32, 1.0 / 3.0, 2.0 / 3.0, 1.0];
         let seeds = [0u64; 4];
-        let mut out = vec![Vec::with_capacity(2); 4];
+        let mut out = (0..4).map(|_| Vec::with_capacity(2)).collect::<Vec<_>>();
         extrapolated_snapshot_schedule(&s0, &s1, &lambda, &seeds, 0.0, &mut out);
         let expected = [
             [0.0_f32, 0.0],
@@ -781,8 +781,8 @@ mod tests {
         let s1 = vec![4.0_f32, 5.0, 6.0];
         let lambda = [0.25_f32, 0.5, 0.75];
         let seeds = [1u64, 2, 3];
-        let mut out1 = vec![Vec::with_capacity(3); 3];
-        let mut out2 = vec![Vec::with_capacity(3); 3];
+        let mut out1 = (0..3).map(|_| Vec::with_capacity(3)).collect::<Vec<_>>();
+        let mut out2 = (0..3).map(|_| Vec::with_capacity(3)).collect::<Vec<_>>();
         extrapolated_snapshot_schedule(&s0, &s1, &lambda, &seeds, 0.05, &mut out1);
         extrapolated_snapshot_schedule(&s0, &s1, &lambda, &seeds, 0.05, &mut out2);
         for j in 0..3 {
@@ -1180,7 +1180,7 @@ mod tests {
             0.0_f32, 1.0 / 7.0, 2.0 / 7.0, 3.0 / 7.0, 4.0 / 7.0, 5.0 / 7.0, 6.0 / 7.0, 1.0,
         ];
         let seeds = [0u64; 8];
-        let mut theta_schedule = vec![Vec::with_capacity(d); k];
+        let mut theta_schedule = (0..k).map(|_| Vec::with_capacity(d)).collect::<Vec<_>>();
         extrapolated_snapshot_schedule(&s0, &s1, &lambda, &seeds, 0.0, &mut theta_schedule);
 
         let kernel = SequentialDotKernel { d };
@@ -1248,6 +1248,8 @@ mod tests {
 
         let kernel = SequentialDotKernel { d };
 
+        // Test helper bundling 10 params; refactor not worth it for a test.
+        #[allow(clippy::too_many_arguments)]
         fn run(
             s0: &[f32],
             s1: &[f32],

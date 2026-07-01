@@ -38,7 +38,7 @@ fn g1_permutation_equivariance() {
     let d = 8;
     let k = 8;
     // Deterministic LCG.
-    let mut state = 0xC0FFEE_1234u64;
+    let mut state = 0x00C0_FFEE_1234_u64;
     let mut lcg = || {
         state = state
             .wrapping_mul(6364136223846793005)

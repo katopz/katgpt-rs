@@ -265,6 +265,6 @@ mod tests {
         let ptg = build_ptg(0, &[0, 1, 2, 3, 4]);
         let emb = ptg_to_motif_embedding(&ptg, &dirs);
         let scalar = motif_embedding_to_tar_score(&emb);
-        assert!(scalar >= 0.0 && scalar <= 1.0, "scalar={scalar}");
+        assert!((0.0..=1.0).contains(&scalar), "scalar={scalar}");
     }
 }

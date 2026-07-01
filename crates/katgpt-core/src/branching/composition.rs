@@ -19,7 +19,6 @@
 //! `should_write_memory(r_k, S_LP)` as a local closure (the real CLR lives in
 //! riir-ai; the composition contract is the `clr_allows: bool` parameter).
 
-#![cfg(test)]
 
 use super::{BranchBank, VerifierGate, WriteDecision};
 
@@ -637,7 +636,7 @@ mod t44_closure_composition {
             .map(|(a, b)| a * b)
             .sum();
         assert!(
-            manual_interference >= 0.0 && manual_interference <= 1.0 + 1e-6,
+            (0.0..=1.0 + 1e-6).contains(&manual_interference),
             "manual interference in [0,1]: {manual_interference}"
         );
 

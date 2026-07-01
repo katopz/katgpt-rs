@@ -396,8 +396,8 @@ fn make_broadband_pde_signal() -> (Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
     let mut s = 12345u64;
     let mut j_cycles: Vec<f32> = Vec::with_capacity(n_modes);
     let mut phases: Vec<f32> = Vec::with_capacity(n_modes);
-    for mi in 0..n_modes {
-        let f = (j_cycles_base[mi] + 0.3 * lcg_next(&mut s)).max(0.5);
+    for &base in j_cycles_base.iter() {
+        let f = (base + 0.3 * lcg_next(&mut s)).max(0.5);
         j_cycles.push(f);
         phases.push(lcg_next(&mut s) * 2.0 * core::f32::consts::PI);
     }

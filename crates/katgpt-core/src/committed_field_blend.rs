@@ -604,11 +604,11 @@ mod tests {
         // dirs 1 and 2. We craft it so pi[0] is large positive, pi[1]/pi[2]
         // large negative.
         let mut summary = vec![0.0f32; 32];
-        for j in 0..11 {
-            summary[j] = 100.0;
+        for v in &mut summary[..11] {
+            *v = 100.0;
         }
-        for j in 11..32 {
-            summary[j] = -100.0;
+        for v in &mut summary[11..32] {
+            *v = -100.0;
         }
 
         let f0 = ConstantField::new([1.0f32; 32], 0);
@@ -671,9 +671,9 @@ mod tests {
         let g1 = sigmoid(blend.pi[1] / blend.tau);
         let g2 = sigmoid(blend.pi[2] / blend.tau);
 
-        assert!(g0.is_finite() && g0 >= 0.0 && g0 <= 1.0, "g0={g0}");
-        assert!(g1.is_finite() && g1 >= 0.0 && g1 <= 1.0, "g1={g1}");
-        assert!(g2.is_finite() && g2 >= 0.0 && g2 <= 1.0, "g2={g2}");
+        assert!(g0.is_finite() && (0.0..=1.0).contains(&g0), "g0={g0}");
+        assert!(g1.is_finite() && (0.0..=1.0).contains(&g1), "g1={g1}");
+        assert!(g2.is_finite() && (0.0..=1.0).contains(&g2), "g2={g2}");
         assert!(g0 > 0.9999, "large positive → ≈1, got {g0}");
         assert!(g1 < 1e-3, "large negative → ≈0, got {g1}");
     }
@@ -714,7 +714,7 @@ mod tests {
         // Sigmoid gates individually in [0, 1].
         for k in 0..3 {
             let g = sigmoid(blend.pi[k] / blend.tau);
-            assert!(g >= 0.0 && g <= 1.0, "gate {k}={g} must be in [0,1]");
+            assert!((0.0..=1.0).contains(&g), "gate {k}={g} must be in [0,1]");
         }
     }
 
@@ -749,10 +749,10 @@ mod tests {
         let mut traj: Vec<[f32; 32]> = Vec::with_capacity(1000);
         for t in 0..1000 {
             let mut state = [0.0f32; 32];
-            for j in 0..32 {
+            for (j, state_j) in state.iter_mut().enumerate() {
                 let phase =
                     2.0 * core::f32::consts::PI * (t as f32) / (PERIOD as f32) + (j as f32) * 0.2;
-                state[j] = DC + AMP * phase.sin();
+                *state_j = DC + AMP * phase.sin();
             }
             traj.push(state);
         }

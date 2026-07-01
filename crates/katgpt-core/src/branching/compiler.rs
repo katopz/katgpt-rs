@@ -522,6 +522,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_admits_scope_ctx_first() {
         let compiler = BudgetCompiler::new(1024);
         let mut out = CompiledContext::<String>::default();
@@ -557,6 +558,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_drops_query_before_scope_ctx_on_overflow() {
         // Budget large enough for either but not both. ScopeCtx wins.
         let compiler = BudgetCompiler::new(10);
@@ -592,6 +594,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_priority_cascade_drops_lowest_first() {
         // Set up materials in every tier. Tight budget forces cascade drops.
         let compiler = BudgetCompiler::new(350);
@@ -652,6 +655,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_atomic_admission_never_partially_admits() {
         // An item larger than the entire budget is dropped, not truncated.
         let compiler = BudgetCompiler::new(10);
@@ -725,6 +729,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_reuse_out_resets_state() {
         // Two successive compiles into the same `out` should not accumulate.
         let compiler = BudgetCompiler::new(1024);
@@ -768,6 +773,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_uses_parallel_byte_arrays_when_lengths_match() {
         // cross_branch_bytes parallel array overrides the closure.
         let compiler = BudgetCompiler::new(1024);
@@ -799,6 +805,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_falls_back_to_closure_when_parallel_lengths_mismatch() {
         let compiler = BudgetCompiler::new(1024);
         let mut out = CompiledContext::<&'static str>::default();
@@ -974,6 +981,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn scope_ctx_never_dropped_before_working_memory() {
         // Even with a tiny budget, scope_ctx wins over working memory because
         // it's admitted in an earlier tier.
@@ -1007,6 +1015,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::field_reassign_with_default)]
     fn compile_admits_all_when_under_budget() {
         let compiler = BudgetCompiler::new(10000);
         let mut out = CompiledContext::<String>::default();

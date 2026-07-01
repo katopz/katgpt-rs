@@ -431,8 +431,10 @@ mod tests {
 
     #[test]
     fn branch_stats_staleness() {
-        let mut stats = BranchStats::default();
-        stats.last_touch_tick = 100;
+        let stats = BranchStats {
+            last_touch_tick: 100,
+            ..Default::default()
+        };
         assert!(!stats.is_stale(150, 100)); // 50 ticks since touch, window 100
         assert!(stats.is_stale(250, 100)); // 150 ticks since touch, window 100
         assert!(!stats.is_stale(50, 100)); // now < touch (saturating_sub → 0)

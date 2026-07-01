@@ -332,7 +332,7 @@ mod tests {
             assert!(matches!(p, PrimitiveKind::Composite(_)));
             assert_eq!(p.to_u32(), v);
         }
-        assert!(PrimitiveKind::UserDefined(0).is_composite() == false);
+        assert!(!PrimitiveKind::UserDefined(0).is_composite());
         assert!(PrimitiveKind::Composite(7).is_composite());
     }
 
