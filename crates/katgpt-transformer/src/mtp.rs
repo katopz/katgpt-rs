@@ -103,27 +103,17 @@ pub fn load_mtp_projection(path: &std::path::Path) -> Result<MtpProjection, Stri
         return Err(format!("File too small: {file_size} bytes"));
     }
 
-    // Parse header (little-endian)
-    let magic = u32::from_le_bytes(
-        data[0..4]
-            .try_into()
-            .map_err(|_| "header parse error".to_string())?,
-    );
-    let version = u32::from_le_bytes(
-        data[4..8]
-            .try_into()
-            .map_err(|_| "header parse error".to_string())?,
-    );
-    let in_dim = u32::from_le_bytes(
-        data[8..12]
-            .try_into()
-            .map_err(|_| "header parse error".to_string())?,
-    ) as usize;
-    let out_dim = u32::from_le_bytes(
-        data[12..16]
-            .try_into()
-            .map_err(|_| "header parse error".to_string())?,
-    ) as usize;
+    // Parse header (little-endian).
+    // `data[a..a+4]` slices are always exactly 4 bytes (slicing panics on OOB,
+    // not the try_into), and file_size was validated >= header_size + 4 above,
+    // so try_into() to [u8; 4] cannot fail — use expect() to avoid the
+    // per-field String allocation that map_err(|_| "...".to_string()) would
+    // incur on the (impossible) failure path.
+    let magic = u32::from_le_bytes(data[0..4].try_into().expect("static 4-byte slice"));
+    let version = u32::from_le_bytes(data[4..8].try_into().expect("static 4-byte slice"));
+    let in_dim = u32::from_le_bytes(data[8..12].try_into().expect("static 4-byte slice")) as usize;
+    let out_dim =
+        u32::from_le_bytes(data[12..16].try_into().expect("static 4-byte slice")) as usize;
 
     if magic != MTP_PROJ_MAGIC {
         return Err(format!(
@@ -149,16 +139,20 @@ pub fn load_mtp_projection(path: &std::path::Path) -> Result<MtpProjection, Stri
 
     // Verify blake3 checksum
     let payload = &data[..file_size - 4];
+    // `data[file_size-4..]` is always exactly 4 bytes (file_size >= 20 validated
+    // above), and `computed_hash.as_bytes()[..4]` is always exactly 4 bytes
+    // (blake3 output is 32 bytes). try_into() cannot fail — use expect() to
+    // avoid the String allocation on the (impossible) failure path.
     let stored_checksum = u32::from_le_bytes(
         data[file_size - 4..]
             .try_into()
-            .map_err(|_| "checksum parse error".to_string())?,
+            .expect("static 4-byte tail slice"),
     );
     let computed_hash = blake3::hash(payload);
     let computed_checksum = u32::from_le_bytes(
         computed_hash.as_bytes()[..4]
             .try_into()
-            .map_err(|_| "hash parse error".to_string())?,
+            .expect("blake3 output is 32 bytes"),
     );
 
     if computed_checksum != stored_checksum {

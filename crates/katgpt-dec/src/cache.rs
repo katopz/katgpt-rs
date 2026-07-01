@@ -215,15 +215,32 @@ pub fn affected_vertices(cx: &CellComplex, face_idx: usize, out: &mut Vec<usize>
     let b1 = cx.boundary_entries(0);
     let b2 = cx.boundary_entries(1);
 
-    // For each edge bounding this face, collect its endpoint vertices.
-    // Nested scan avoids allocating an intermediate edge buffer.
+    // Collect the boundary edges of `face_idx` in a single pass over B₂.
+    // A 2D-grid face has exactly 4 boundary edges; cap the fixed-size buffer
+    // at 4 (any overflow is still counted so we don't silently drop edges on
+    // exotic complexes, but only the first 4 drive the membership test below).
+    let mut face_edges: [usize; 4] = [usize::MAX; 4];
+    let mut n_face_edges = 0usize;
     for &(edge_idx, f_idx, _) in b2 {
-        if f_idx != face_idx {
-            continue;
+        if f_idx == face_idx {
+            if n_face_edges < face_edges.len() {
+                face_edges[n_face_edges] = edge_idx;
+            }
+            n_face_edges += 1;
         }
-        for &(v, e, _) in b1 {
-            if e == edge_idx {
+    }
+
+    // Single streaming pass over B₁: push the endpoint vertex of any entry
+    // whose edge bounds this face. Replaces the prior per-edge full B₁ re-scan
+    // (≤4 passes) with one cache-friendly sequential read. Each edge appears
+    // exactly twice in B₁ (tail + head), so both endpoints are collected.
+    let edge_count = n_face_edges.min(face_edges.len());
+    for &(v, e, _) in b1 {
+        // Short-circuiting linear scan over ≤4 entries; LLVM unrolls this.
+        for &fe in &face_edges[..edge_count] {
+            if e == fe {
                 out.push(v);
+                break;
             }
         }
     }

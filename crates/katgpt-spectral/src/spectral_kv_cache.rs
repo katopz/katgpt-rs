@@ -266,11 +266,14 @@ impl SpectralQuantKVCache {
                 synthetic_rotated.push(scratch_rotated.clone());
             }
 
-            // Fit tail codebook from tail dims (d_eff..head_dim)
-            let tail_data: Vec<f32> = synthetic_rotated
-                .iter()
-                .flat_map(|s| s.iter().skip(d_eff).copied())
-                .collect();
+            // Fit tail codebook from tail dims (d_eff..head_dim).
+            // Pre-allocate the flat tail buffer up front: each synthetic sample
+            // contributes `(head_dim − d_eff)` tail values.
+            let tail_len = head_dim.saturating_sub(d_eff);
+            let mut tail_data = Vec::with_capacity(n_synthetic * tail_len);
+            for s in &synthetic_rotated {
+                tail_data.extend(s.iter().skip(d_eff).copied());
+            }
             let mut tail_q = LloydMaxQuantizer::new(
                 b_low.max(1),
                 config.lloyd_max_iter,
@@ -281,11 +284,12 @@ impl SpectralQuantKVCache {
 
             // Fit semantic codebook(s) from semantic dims (0..d_eff)
             if let Some(ref mut cb) = layer.semantic_codebook {
-                // v1: shared semantic codebook — all semantic dims pooled
-                let semantic_data: Vec<f32> = synthetic_rotated
-                    .iter()
-                    .flat_map(|s| s.iter().take(d_eff).copied())
-                    .collect();
+                // v1: shared semantic codebook — all semantic dims pooled.
+                // Pre-allocate capacity = n_synthetic * d_eff.
+                let mut semantic_data = Vec::with_capacity(n_synthetic * d_eff);
+                for s in &synthetic_rotated {
+                    semantic_data.extend(s.iter().take(d_eff).copied());
+                }
                 let mut sem_q = LloydMaxQuantizer::new(
                     b_high.max(1),
                     config.lloyd_max_iter,
@@ -294,10 +298,14 @@ impl SpectralQuantKVCache {
                 sem_q.fit(&semantic_data);
                 cb.centroids = sem_q.centroids().to_vec();
             } else if let Some(ref mut per_dim) = layer.per_dim_semantic_codebooks {
-                // v2: per-dim semantic codebooks
+                // v2: per-dim semantic codebooks. Reuse one `dim_data` scratch
+                // buffer across dims (clear + repopulate) instead of reallocating
+                // `n_synthetic` f32 per dim.
                 let bits = layer.semantic_bits_per_dim.as_ref();
+                let mut dim_data = Vec::with_capacity(n_synthetic);
                 for (dim, cb) in per_dim.iter_mut().enumerate() {
-                    let dim_data: Vec<f32> = synthetic_rotated.iter().map(|s| s[dim]).collect();
+                    dim_data.clear();
+                    dim_data.extend(synthetic_rotated.iter().map(|s| s[dim]));
                     let bits_for_dim = bits
                         .and_then(|b| b.get(dim).copied())
                         .unwrap_or(b_high)

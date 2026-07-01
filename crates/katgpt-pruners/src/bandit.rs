@@ -1753,7 +1753,9 @@ impl<E: BanditEnv> BanditSession<E> {
             optimal_arm,
         });
 
-        let _ = trial_log.flush();
+        if let Err(e) = trial_log.flush() {
+            eprintln!("trial_log flush error: {e}");
+        }
         (events, result)
     }
 }

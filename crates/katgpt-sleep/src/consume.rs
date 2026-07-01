@@ -49,6 +49,7 @@ use crate::types::AnticipatedQuerySet;
 /// path: when the sleep-time forecast was accurate, the nearest precomputed
 /// slot is the player's true topic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ConsumeMatchMode {
     /// `argmax_i <q, dir_i.direction>` — topic-identification match.
     /// Forecast-independent (depends only on `q` and the static catalog).

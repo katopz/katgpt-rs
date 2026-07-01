@@ -23,15 +23,24 @@ use katgpt_types::simd::simd_dot_f32;
 /// is detectable without re-running sleep-time compute. `version` is a
 /// monotonic counter used by freeze/thaw (Plan 025) — the chain quorum signs
 /// `(blake3, version)` as the canonical artifact id.
+///
+/// # Layout
+///
+/// Fields are ordered by descending alignment (u64 → f32 → u8) per the
+/// AGENTS.md struct-padding rule. This eliminates inter-field padding for odd
+/// `D` (where `[f32; D]` is 4-aligned but not 8-aligned); Rust struct literals
+/// are order-independent so this is API-neutral, and there is no `#[repr(C)]`
+/// anywhere in the crate, so the on-disk codec in riir-ai (which uses its own
+/// cursor-based byte layout, not `repr(C)`) is unaffected.
 #[derive(Clone, Debug)]
 pub struct AnticipatedQueryDir<const D: usize> {
+    /// Monotonic version for freeze/thaw. Bumped on every swap.
+    pub version: u64,
     /// The direction vector itself (unit-ish; the consumer normalizes if needed).
     pub direction: [f32; D],
     /// BLAKE3 of `direction` (little-endian f32 bytes). Computed once at
     /// construction; never recomputed in the hot path.
     pub blake3: [u8; 32],
-    /// Monotonic version for freeze/thaw. Bumped on every swap.
-    pub version: u64,
 }
 
 impl<const D: usize> AnticipatedQueryDir<D> {
@@ -109,16 +118,23 @@ pub struct AnticipatedSlot<const D: usize> {
 /// Generic over `D` (latent dim) and `K` (catalog size). The consumer's wake
 /// path scans all `K` slots — `K` is bounded (paper uses K≤10; we expect
 /// K≤8 per NPC), so the O(K) scan is hot-tier-cheap.
+///
+/// # Layout
+///
+/// Fields ordered by descending alignment (`slots` carries an 8-align `u64`
+/// inside each `AnticipatedSlot`, then `version: u64`, then `blake3: [u8; 32]`)
+/// per the AGENTS.md struct-padding rule — eliminates the padding that the
+/// prior `slots → blake3 → version` order forced between `blake3` and `version`.
 #[derive(Clone, Debug)]
 pub struct AnticipatedQuerySet<const D: usize, const K: usize> {
     /// The K slots, one per anticipated-query direction.
     pub slots: [AnticipatedSlot<D>; K],
-    /// BLAKE3 over all slot bytes (dirs + precomputed + predictability).
-    /// Recomputed by `SleepTimeAnticipator::anticipate` on every emission.
-    pub blake3: [u8; 32],
     /// Monotonic version. Bumped on every anticipate() call. The chain
     /// quorum signs `(blake3, version)` as the c' artifact id.
     pub version: u64,
+    /// BLAKE3 over all slot bytes (dirs + precomputed + predictability).
+    /// Recomputed by `SleepTimeAnticipator::anticipate` on every emission.
+    pub blake3: [u8; 32],
 }
 
 impl<const D: usize, const K: usize> AnticipatedQuerySet<D, K> {

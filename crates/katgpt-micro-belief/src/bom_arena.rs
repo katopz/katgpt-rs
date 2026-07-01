@@ -913,10 +913,10 @@ where
         }
         let score = env.episode_score();
         scores.push(score);
+        // Strict win: score > 0.5. Draws (== 0.5) and losses (< 0.5) do not
+        // increment `wins` — kept as a plain `if` (no dead `else` branch).
         if score > 0.5 {
             wins += 1;
-        } else if score == 0.5 {
-            wins += 0; // explicit: draws don't count as wins
         }
     }
 

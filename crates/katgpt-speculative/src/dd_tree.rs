@@ -817,16 +817,16 @@ where
         return None;
     }
 
-    // Extract all candidate sequences (one per tree node)
-    let candidates: Vec<Vec<usize>> = tree
-        .iter()
-        .map(|node| extract_parent_tokens(node.parent_path, node.depth + 1))
-        .collect();
-
-    // Parallel search: validate all candidates, return first success
-    candidates
-        .par_iter()
-        .find_map_any(|seq| validator(seq).map(|result| (seq.clone(), result)))
+    // Lazy parallel search: extract each candidate's token sequence on-demand
+    // inside the parallel iterator. Avoids the upfront O(N) `Vec<Vec<usize>>`
+    // collection the prior collect-then-par_iter paid even when `find_map_any`
+    // short-circuits on the first hit. `find_map_any` returns as soon as any
+    // task yields `Some`, so never-examined nodes never allocate.
+    tree.par_iter()
+        .find_map_any(|node| {
+            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            validator(&seq).map(|result| (seq, result))
+        })
 }
 
 /// Parallel search for the **shortest** valid sequence by cost.
@@ -854,14 +854,14 @@ where
         return None;
     }
 
-    let candidates: Vec<Vec<usize>> = tree
-        .iter()
-        .map(|node| extract_parent_tokens(node.parent_path, node.depth + 1))
-        .collect();
-
-    candidates
-        .par_iter()
-        .filter_map(|seq| validator(seq).map(|result| (seq.clone(), result)))
+    // Lazy parallel search: extract each candidate's token sequence on-demand
+    // inside the parallel iterator, avoiding the upfront O(N) collection of
+    // all candidate sequences. Each task allocates only its own sequence.
+    tree.par_iter()
+        .filter_map(|node| {
+            let seq = extract_parent_tokens(node.parent_path, node.depth + 1);
+            validator(&seq).map(|result| (seq, result))
+        })
         .min_by_key(|(_, result)| cost_fn(result))
 }
 
@@ -1351,8 +1351,11 @@ impl TreeBuilder {
 
             // ── Phase B: Seed heap with siblings + last chain children ──
             if self.chain_nodes.is_empty() {
-                let candidate_count = marginals[0].iter().filter(|&&p| p > 0.0).count();
-                if candidate_count >= RAYON_CANDIDATE_THRESHOLD {
+                // Slice length is a sufficient condition for the rayon threshold:
+                // if the whole marginal has <512 entries it certainly has <512
+                // positive ones. Avoids a full O(vocab) counting pass that the
+                // par_iter below redoes anyway via filter_map.
+                if marginals[0].len() >= RAYON_CANDIDATE_THRESHOLD {
                     let nodes: Vec<TreeNode> = marginals[0]
                         .par_iter()
                         .enumerate()
@@ -1458,9 +1461,9 @@ impl TreeBuilder {
                 }
             }
         } else {
-            // Original seeding with screening
-            let candidate_count = marginals[0].iter().filter(|&&p| p > 0.0).count();
-            if candidate_count >= RAYON_CANDIDATE_THRESHOLD {
+            // Original seeding with screening. Slice length is a sufficient
+            // condition for the rayon threshold (see Phase B note above).
+            if marginals[0].len() >= RAYON_CANDIDATE_THRESHOLD {
                 let nodes: Vec<TreeNode> = marginals[0]
                     .par_iter()
                     .enumerate()
@@ -1703,8 +1706,9 @@ impl TreeBuilder {
 
             // ── Phase B: Seed heap with siblings + last chain children ──
             if self.chain_nodes.is_empty() {
-                let candidate_count = marginals[0].iter().filter(|&&p| p > 0.0).count();
-                if candidate_count >= RAYON_CANDIDATE_THRESHOLD {
+                // Slice length is a sufficient condition for the rayon threshold
+                // (see build_screened Phase B note). Avoids an O(vocab) count.
+                if marginals[0].len() >= RAYON_CANDIDATE_THRESHOLD {
                     let nodes: Vec<TreeNode> = marginals[0]
                         .par_iter()
                         .enumerate()
@@ -1810,9 +1814,9 @@ impl TreeBuilder {
                 }
             }
         } else {
-            // Original seeding with balanced scoring
-            let candidate_count = marginals[0].iter().filter(|&&p| p > 0.0).count();
-            if candidate_count >= RAYON_CANDIDATE_THRESHOLD {
+            // Original seeding with balanced scoring. Slice length is a
+            // sufficient condition for the rayon threshold (see Phase B note).
+            if marginals[0].len() >= RAYON_CANDIDATE_THRESHOLD {
                 let nodes: Vec<TreeNode> = marginals[0]
                     .par_iter()
                     .enumerate()

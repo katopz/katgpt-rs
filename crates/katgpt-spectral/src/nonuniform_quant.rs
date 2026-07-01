@@ -11,41 +11,53 @@ use super::types::WaterfillAllocation;
 ///
 /// Operates on pre-rotated vectors where first d_eff coords are semantic
 /// (high-energy) and the rest are tail regime.
+///
+/// Field order: Vec / Option<Vec> (24B+, 8-aligned) → usize/u64 scalars (8B)
+/// → f32 (4B) → packed u8/bool/Option<u8> tail. Removes inter-field padding
+/// in the scalar/small-type region.
 pub struct NonUniformQuantizer {
+    // ── 8-aligned, large first ──
     eigenvalues: Vec<f32>,
-    avg_bits: f32,
-    head_dim: usize,
-    max_lloyd_iter: usize,
-    seed: u64,
-    use_water_fill: bool,
-    wf_min_bits: u8,
-    wf_max_bits: Option<u8>,
-    // Fitted state:
-    allocator: BitAllocator,
-    d_eff_int: usize,
-    b_high: u8,
-    b_low: u8,
     semantic_quantizer: Option<LloydMaxQuantizer>,
     tail_quantizer: Option<LloydMaxQuantizer>,
     per_dim_semantic_quantizers: Option<Vec<LloydMaxQuantizer>>,
     semantic_bits_per_dim: Option<Vec<u8>>,
     waterfill_allocation: Option<WaterfillAllocation>,
+    // ── 8-aligned scalars ──
+    head_dim: usize,
+    max_lloyd_iter: usize,
+    d_eff_int: usize,
+    seed: u64,
+    // ── 4-aligned ──
+    avg_bits: f32,
+    // ── BitAllocator (align 1, size 2) ──
+    allocator: BitAllocator,
+    // ── 1B / Option<u8> packed together at the tail ──
+    b_high: u8,
+    b_low: u8,
+    wf_min_bits: u8,
+    wf_max_bits: Option<u8>,
+    use_water_fill: bool,
     is_fitted: bool,
 }
 
 /// Compressed vector representation.
 ///
 /// Stores indices as u32 (not bit-packed) — bit-packing is in spectral_kv_cache.rs.
+///
+/// Field order: three heap-owning fields (24B, 8-aligned) → 8B scalars →
+/// 4B f32 → packed u8 tail. Saves 8 bytes vs the prior declaration order
+/// (which placed the small `b_high`/`b_low` pair between two 8-aligned blocks).
 pub struct CompressedVector {
     pub semantic_indices: Vec<u32>,
     pub tail_indices: Vec<u32>,
+    pub semantic_bits_per_dim: Option<Vec<u8>>,
     pub d_eff: usize,
     pub head_dim: usize,
-    pub b_high: u8,
-    pub b_low: u8,
-    pub semantic_bits_per_dim: Option<Vec<u8>>,
     pub actual_bits_used: f64,
     pub mse: f32,
+    pub b_high: u8,
+    pub b_low: u8,
 }
 
 impl NonUniformQuantizer {
@@ -66,22 +78,22 @@ impl NonUniformQuantizer {
 
         Self {
             eigenvalues,
-            avg_bits,
-            head_dim,
-            max_lloyd_iter,
-            seed,
-            use_water_fill,
-            wf_min_bits,
-            wf_max_bits,
-            allocator,
-            d_eff_int,
-            b_high: 0,
-            b_low: 0,
             semantic_quantizer: None,
             tail_quantizer: None,
             per_dim_semantic_quantizers: None,
             semantic_bits_per_dim: None,
             waterfill_allocation: None,
+            head_dim,
+            max_lloyd_iter,
+            d_eff_int,
+            seed,
+            avg_bits,
+            allocator,
+            b_high: 0,
+            b_low: 0,
+            wf_min_bits,
+            wf_max_bits,
+            use_water_fill,
             is_fitted: false,
         }
     }
@@ -139,9 +151,15 @@ impl NonUniformQuantizer {
             return self;
         }
 
-        // Collect semantic and tail data
-        let mut semantic_data = Vec::new();
-        let mut tail_data = Vec::new();
+        // Collect semantic and tail data. Pre-allocate exact capacity:
+        // each sample contributes `d_eff_int` semantic + `(head_dim − d_eff_int)` tail
+        // values, so the totals are known up front.
+        let n_samples = rotated_data.len();
+        let tail_len = self
+            .head_dim
+            .saturating_sub(self.d_eff_int);
+        let mut semantic_data = Vec::with_capacity(n_samples * self.d_eff_int);
+        let mut tail_data = Vec::with_capacity(n_samples * tail_len);
         for sample in rotated_data {
             for (i, &v) in sample.iter().enumerate() {
                 if i < self.d_eff_int {
@@ -159,11 +177,15 @@ impl NonUniformQuantizer {
         self.tail_quantizer = Some(tail_q);
 
         if self.use_water_fill {
-            // v2: per-dim semantic quantizers
+            // v2: per-dim semantic quantizers. Reuse a single `dim_data` scratch
+            // buffer across dims (clear + repopulate each iter) instead of
+            // reallocating `n_samples` f32 per dim.
             let mut per_dim = Vec::with_capacity(self.d_eff_int);
             let bits = self.semantic_bits_per_dim.as_ref().unwrap();
+            let mut dim_data = Vec::with_capacity(rotated_data.len());
             for dim in 0..self.d_eff_int {
-                let dim_data: Vec<f32> = rotated_data.iter().map(|s| s[dim]).collect();
+                dim_data.clear();
+                dim_data.extend(rotated_data.iter().map(|s| s[dim]));
                 let bits_for_dim = bits.get(dim).copied().unwrap_or(b_high).max(1);
                 let mut q = LloydMaxQuantizer::new(
                     bits_for_dim,
@@ -227,13 +249,13 @@ impl NonUniformQuantizer {
         CompressedVector {
             semantic_indices,
             tail_indices,
+            semantic_bits_per_dim: self.semantic_bits_per_dim.clone(),
             d_eff: self.d_eff_int,
             head_dim: self.head_dim,
-            b_high: self.b_high,
-            b_low: self.b_low,
-            semantic_bits_per_dim: self.semantic_bits_per_dim.clone(),
             actual_bits_used: actual_bits,
             mse: 0.0,
+            b_high: self.b_high,
+            b_low: self.b_low,
         }
     }
 

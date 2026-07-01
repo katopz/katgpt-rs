@@ -322,23 +322,24 @@ impl GraphEvaluator {
                     lookup_id,
                     value_index,
                 } => {
-                    let result = match processed_lookups.get(&lookup_id) {
-                        Some(r) => r.clone(),
-                        None => {
-                            let lookup = lookup_data
-                                .get(&lookup_id)
-                                .expect("lookup_id exists in graph");
-                            let result = Self::attention_insert_and_query(
-                                &mut self.attention_entries,
-                                self.position,
-                                &mut self.scratch_attn_total,
-                                lookup,
-                                vals,
-                            );
-                            processed_lookups.insert(lookup_id, result.clone());
-                            result
-                        }
-                    };
+                    // Cache the per-lookup result so multiple dims reading the
+                    // same lookup within one step share one attention pass.
+                    // The miss path inserts first, then borrows from the map,
+                    // avoiding a redundant `Vec<f64>` clone.
+                    if !processed_lookups.contains_key(&lookup_id) {
+                        let lookup = lookup_data
+                            .get(&lookup_id)
+                            .expect("lookup_id exists in graph");
+                        let result = Self::attention_insert_and_query(
+                            &mut self.attention_entries,
+                            self.position,
+                            &mut self.scratch_attn_total,
+                            lookup,
+                            vals,
+                        );
+                        processed_lookups.insert(lookup_id, result);
+                    }
+                    let result = &processed_lookups[&lookup_id];
                     if let Some(&val) = result.get(value_index) {
                         vals.insert(dim_id, val);
                     }

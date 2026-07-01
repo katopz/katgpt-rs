@@ -145,15 +145,19 @@ pub fn schema_init_entity(
 ) -> [f32; 8] {
     // Collect (mean, std_dev) for classes found in cache — stack-allocated, max 8 classes.
     // Single pin() guard reused for all lookups — avoids 8× epoch pin/unpin.
+    // Flat arrays (no Option) — found_count tracks valid entries, eliminating
+    // per-lookup .expect() on the read path.
     let guard = cache.centroids.pin();
-    let mut found: [Option<([f32; 8], [f32; 8])>; 8] = [None; 8];
+    let mut found_means = [[0.0f32; 8]; 8];
+    let mut found_stds = [[0.0f32; 8]; 8];
     let mut found_count = 0usize;
     for &class_hash in classes {
         if found_count >= 8 {
             break;
         }
         if let Some(stats) = guard.get(&class_hash) {
-            found[found_count] = Some((stats.mean, stats.std_dev));
+            found_means[found_count] = stats.mean;
+            found_stds[found_count] = stats.std_dev;
             found_count += 1;
         }
     }
@@ -169,7 +173,8 @@ pub fn schema_init_entity(
     let mut result = [0.0f32; 8];
 
     for i in 0..found_count {
-        let (mean, std_dev) = found[i].expect("found[i] invariant: index < found_count");
+        let mean = &found_means[i];
+        let std_dev = &found_stds[i];
         for d in 0..8 {
             let noise = rng.f32() * 2.0 - 1.0; // ∈ [-1, 1]
             result[d] += (mean[d] + gamma * std_dev[d] * noise) * inv_n;
@@ -198,13 +203,20 @@ pub fn schema_init_with_precision(
 ) -> ([f32; 8], [f32; 8]) {
     use crate::bake::informed_prior_precision;
 
-    // Single pin — collect all class stats in one pass
+    // Single pin — collect all class stats in one pass. Flat array (no Option):
+    // found_count tracks valid entries, eliminating .expect() on the read path.
+    // Zero-init is cheap (CentroidStats is Copy, 72 bytes < one cache line).
     let guard = cache.centroids.pin();
-    let mut found_stats: [Option<CentroidStats>; 8] = [None; 8];
+    let zero_stats = CentroidStats {
+        mean: [0.0; 8],
+        std_dev: [0.0; 8],
+        count: 0,
+    };
+    let mut found_stats = [zero_stats; 8];
     let mut found_count = 0usize;
     for &class_hash in classes.iter().take(8) {
         if let Some(stats) = guard.get(&class_hash).cloned() {
-            found_stats[found_count] = Some(stats);
+            found_stats[found_count] = stats;
             found_count += 1;
         }
     }
@@ -223,7 +235,7 @@ pub fn schema_init_with_precision(
     let mut total_count = 0usize;
 
     for i in 0..found_count {
-        let stats = found_stats[i].expect("found_stats[i] invariant: index < found_count");
+        let stats = found_stats[i];
         total_count += stats.count;
         for d in 0..8 {
             let noise = rng.f32() * 2.0 - 1.0;

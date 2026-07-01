@@ -735,7 +735,7 @@ impl ReconstructionState {
     #[cfg(feature = "sense_composition")]
     #[inline(always)]
     pub fn expand_matvec(&mut self, modules: &[SenseModule]) -> [f32; 6] {
-        // Lazy init: build weight matrix on first call
+        // Lazy init: build weight matrix on first call, reuse on subsequent calls.
         if self.cached_weights.is_none() {
             self.cached_weights = Some(ProjectionWeights::from_modules(modules));
         }

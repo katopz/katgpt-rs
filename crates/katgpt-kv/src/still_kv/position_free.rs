@@ -92,7 +92,6 @@ impl PositionFreeCompactor {
 
             for c in 0..chunks {
                 let i = c * 4;
-                let _ = i; // Use i directly below
 
                 // Unroll 4 pairs
                 for j in 0..4 {

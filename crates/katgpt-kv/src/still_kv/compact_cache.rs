@@ -6,6 +6,7 @@ use std::fmt;
 
 /// Strategy used for KV cache compaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CompactionStrategy {
     /// k-means-style cluster representatives.
     ClusterCentroids,

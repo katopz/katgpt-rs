@@ -263,8 +263,24 @@ fn cg_solve_scalar(
         // stream. The two arrays are independent so fusing doesn't alter any
         // FP reduction order — each array's accumulation is unchanged.
         // Halves L1 cache misses on `p`, `ap`, `x_out`, `r` (each up to 16 KB
-        // on 64×64 grids).
-        for i in 0..n {
+        // on 64×64 grids). Explicit 4-wide chunking matches `exterior_derivative_into`
+        // and guarantees LLVM emits an unrolled FMA pattern for the matvec-heavy
+        // CG loop (this loop runs up to `max_iter` times per solve).
+        let chunks = n / 4;
+        let remainder = n % 4;
+        for c in 0..chunks {
+            let i = c * 4;
+            x_out[i] += alpha * p[i];
+            r[i] -= alpha * ap[i];
+            x_out[i + 1] += alpha * p[i + 1];
+            r[i + 1] -= alpha * ap[i + 1];
+            x_out[i + 2] += alpha * p[i + 2];
+            r[i + 2] -= alpha * ap[i + 2];
+            x_out[i + 3] += alpha * p[i + 3];
+            r[i + 3] -= alpha * ap[i + 3];
+        }
+        for d in 0..remainder {
+            let i = chunks * 4 + d;
             x_out[i] += alpha * p[i];
             r[i] -= alpha * ap[i];
         }
@@ -275,8 +291,16 @@ fn cg_solve_scalar(
         }
 
         let beta_cg = rs_new / rs_old;
-        // p = r + β·p
-        for i in 0..n {
+        // p = r + β·p — same 4-wide chunking as the fused SAXPY above.
+        for c in 0..chunks {
+            let i = c * 4;
+            p[i] = r[i] + beta_cg * p[i];
+            p[i + 1] = r[i + 1] + beta_cg * p[i + 1];
+            p[i + 2] = r[i + 2] + beta_cg * p[i + 2];
+            p[i + 3] = r[i + 3] + beta_cg * p[i + 3];
+        }
+        for d in 0..remainder {
+            let i = chunks * 4 + d;
             p[i] = r[i] + beta_cg * p[i];
         }
 

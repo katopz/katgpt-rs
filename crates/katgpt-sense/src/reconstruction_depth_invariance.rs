@@ -84,10 +84,11 @@ impl ReconstructionState {
     ) -> katgpt_types::DepthInvarianceDiagnostic {
         // ── Snapshot h_0 ──
         states_out.clear();
-        // Pre-grow once (reserve is a no-op if capacity already suffices). This
-        // is the only allocation, and it is amortized across calls — caller can
-        // pre-reserve to make it truly zero per call.
-        states_out.reserve((k + 1).saturating_mul(8));
+        // Pre-grow once to the exact final size. `reserve_exact` avoids any
+        // over-allocation — `(k+1)*8` is the exact number of f32s we will write.
+        // No-op if capacity already suffices. This is the only allocation; it is
+        // amortized across calls — caller can pre-reserve to make it zero per call.
+        states_out.reserve_exact((k + 1).saturating_mul(8));
         states_out.extend_from_slice(self.hla());
 
         // ── Drive the leaky integrator for k ticks ──

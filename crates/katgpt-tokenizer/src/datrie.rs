@@ -165,7 +165,8 @@ impl Datrie {
     /// Collect byte values of children of node `s` at its current base.
     fn children_at(&self, s: usize) -> Vec<usize> {
         let b = self.base[s] as usize;
-        let mut out = Vec::new();
+        // A node can have at most 256 children (one per byte value).
+        let mut out = Vec::with_capacity(256);
         // Scan all 256 possible byte offsets.
         for byte in 0..256 {
             let child = b + byte;
@@ -190,29 +191,36 @@ impl Datrie {
 
     /// Find a new base for `loser` that can host all `children` bytes
     /// (and optionally `extra_byte`) without collisions.
+    //
+    // Zero-allocation: iterates over `children` and optionally checks the
+    // `extra_byte` separately instead of building a merged Vec.
     fn find_new_base(&self, _loser: usize, children: &[usize], extra_byte: Option<usize>) -> usize {
-        let all_bytes: Vec<usize> = if let Some(eb) = extra_byte {
-            let mut v = children.to_vec();
-            if !v.contains(&eb) {
-                v.push(eb);
+        // Collision predicate at a given candidate base: true if any byte in
+        // the required set (children ∪ {extra_byte}) collides with an occupied slot.
+        let collides = |candidate: usize, eb: Option<usize>| -> bool {
+            // Check `extra_byte` first when present: it's the byte that triggered
+            // the collision, so it's the most likely to keep colliding.
+            if let Some(b) = eb {
+                let idx = candidate + b;
+                if idx < self.check.len() && self.check[idx] != UNDEF {
+                    return true;
+                }
             }
-            v
-        } else {
-            children.to_vec()
+            for &b in children {
+                let idx = candidate + b;
+                if idx < self.check.len() && self.check[idx] != UNDEF {
+                    return true;
+                }
+            }
+            false
         };
 
         // Try successive offsets until we find a collision-free base.
         let mut candidate = 1usize;
-        'outer: loop {
-            for &b in &all_bytes {
-                let idx = candidate + b;
-                if idx < self.check.len() && self.check[idx] != UNDEF {
-                    candidate += 1;
-                    continue 'outer;
-                }
-            }
-            return candidate;
+        while collides(candidate, extra_byte) {
+            candidate += 1;
         }
+        candidate
     }
 
     /// Look up `key` in the trie. Returns `Some(value)` if found, `None` otherwise.

@@ -103,24 +103,26 @@ impl BpeTrainer {
     /// `vocab_size`: target vocabulary size (including special tokens).
     /// `corpus`: training text.
     pub fn train(corpus: &str, vocab_size: usize) -> BpeTokenizer {
-        let mut vocab_to_id: HashMap<String, usize> = HashMap::new();
-        let mut id_to_vocab: Vec<String> = Vec::new();
+        // Pre-allocate: 4 special tokens + up to 256 unique byte-chars + merges.
+        let cap = 4usize.saturating_add(vocab_size).min(corpus.len() + 4);
+        let mut vocab_to_id: HashMap<String, usize> = HashMap::with_capacity(cap);
+        let mut id_to_vocab: Vec<String> = Vec::with_capacity(cap);
 
         // Special tokens: <pad>=0, <bos>=1, <eos>=2, <unk>=3
-        let special_tokens = ["<pad>", "<bos>", "<eos>", "<unk>"];
-        for (i, tok) in special_tokens.iter().enumerate() {
-            vocab_to_id.insert(tok.to_string(), i);
-            id_to_vocab.push(tok.to_string());
+        const SPECIAL_TOKENS: [&str; 4] = ["<pad>", "<bos>", "<eos>", "<unk>"];
+        for (i, tok) in SPECIAL_TOKENS.iter().enumerate() {
+            vocab_to_id.insert((*tok).to_string(), i);
+            id_to_vocab.push((*tok).to_string());
         }
 
-        // Add all unique characters from corpus
+        // Add all unique characters from corpus.
+        // Use the `entry` API to avoid the double-lookup (contains_key + insert).
         for ch in corpus.chars() {
-            let s = ch.to_string();
-            if !vocab_to_id.contains_key(&s) {
+            vocab_to_id.entry(ch.to_string()).or_insert_with(|| {
                 let id = id_to_vocab.len();
-                vocab_to_id.insert(s.clone(), id);
-                id_to_vocab.push(s);
-            }
+                id_to_vocab.push(ch.to_string());
+                id
+            });
         }
 
         let mut merges: Vec<MergeRule> = Vec::new();

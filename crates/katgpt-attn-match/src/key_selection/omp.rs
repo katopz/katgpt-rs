@@ -216,11 +216,17 @@ pub fn select_omp_keys(
     }
 
     // Final NNLS fit on the full selected set.
+    //
+    // Reuse `a_sub` (capacity `n * t`) instead of allocating a separate
+    // `a_final`. The loop guarantees `selected.len() == t`, so `final_t == t`
+    // and `a_sub` has sufficient capacity — `clear() + resize()` won't
+    // reallocate. Eliminates one `n * t` allocation per `select_omp_keys`.
     let final_t = selected.len();
-    let mut a_final = vec![0.0f32; n * final_t];
+    a_sub.clear();
+    a_sub.resize(n * final_t, 0.0);
     // Row-major construction — see periodic refit above for rationale.
     for (i, phi_row) in phi.chunks_exact(t_len).enumerate() {
-        let a_row = &mut a_final[i * final_t..(i + 1) * final_t];
+        let a_row = &mut a_sub[i * final_t..(i + 1) * final_t];
         for (col, &sel_idx) in selected.iter().enumerate() {
             a_row[col] = phi_row[sel_idx];
         }
@@ -231,7 +237,7 @@ pub fn select_omp_keys(
         w_upper,
         power_iter_steps: 0,
     };
-    let final_result = fit_beta_nnls(&a_final, &m_target, n, final_t, &cfg);
+    let final_result = fit_beta_nnls(&a_sub, &m_target, n, final_t, &cfg);
 
     KeySelection {
         indices: selected,

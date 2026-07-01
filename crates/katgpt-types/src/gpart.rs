@@ -381,11 +381,18 @@ impl GpartAdapter {
         let assignments = self.generate_assignments(n);
         let group_sizes = self.compute_group_sizes(n, &assignments);
 
-        // Compute ||Pθ||²
+        // Pre-compute per-group delta once (O(d) sqrt+div) instead of recomputing
+        // for every one of N assignments. Matches the apply()/prepare() pattern.
+        let mut group_delta = vec![0.0f32; self.d];
+        for g in 0..self.d {
+            let scale = 1.0 / (group_sizes[g] as f32).sqrt();
+            group_delta[g] = scale * self.theta[g];
+        }
+
+        // Compute ||Pθ||² = Σ_i delta[assignment[i]]²
         let mut projected_norm_sq = 0.0f32;
         for &g in assignments.iter().take(n) {
-            let scale = 1.0 / (group_sizes[g] as f32).sqrt();
-            let delta = scale * self.theta[g];
+            let delta = group_delta[g];
             projected_norm_sq += delta * delta;
         }
 

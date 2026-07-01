@@ -243,11 +243,36 @@ impl LoraAdapter {
                     adapter.b.len()
                 ));
             }
-            for val in &adapter.a {
-                payload.extend_from_slice(&val.to_le_bytes());
+            // Bulk write matrix data on LE targets (avoids per-element
+            // extend_from_slice overhead). f32 is plain-old-data with no
+            // padding; on LE targets to_ne_bytes == to_le_bytes.
+            // SAFETY: f32 has no padding and is plain-old-data; we reinterpret
+            // the contiguous &[f32] as bytes for a single bulk copy.
+            #[cfg(target_endian = "little")]
+            {
+                let a_bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        adapter.a.as_ptr() as *const u8,
+                        adapter.a.len() * std::mem::size_of::<f32>(),
+                    )
+                };
+                payload.extend_from_slice(a_bytes);
+                let b_bytes = unsafe {
+                    std::slice::from_raw_parts(
+                        adapter.b.as_ptr() as *const u8,
+                        adapter.b.len() * std::mem::size_of::<f32>(),
+                    )
+                };
+                payload.extend_from_slice(b_bytes);
             }
-            for val in &adapter.b {
-                payload.extend_from_slice(&val.to_le_bytes());
+            #[cfg(not(target_endian = "little"))]
+            {
+                for val in &adapter.a {
+                    payload.extend_from_slice(&val.to_le_bytes());
+                }
+                for val in &adapter.b {
+                    payload.extend_from_slice(&val.to_le_bytes());
+                }
             }
         }
 

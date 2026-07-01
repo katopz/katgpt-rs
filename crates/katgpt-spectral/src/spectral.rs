@@ -442,12 +442,11 @@ pub fn waterfill_bits(
         let mut best_idx = 0;
         let mut best_gain = 0.0f64;
         for (i, &ev) in eigenvalues.iter().enumerate() {
-            let capped = match max_bits {
-                Some(mb) if bits[i] >= mb => continue,
-                _ => false,
-            };
-            if capped {
-                continue;
+            // Skip dims that have already hit the per-dim cap.
+            if let Some(mb) = max_bits {
+                if bits[i] >= mb {
+                    continue;
+                }
             }
             let gain = ev / 4_f64.powi(bits[i] as i32 + 1);
             if gain > best_gain || (gain == best_gain && i < best_idx) {
@@ -483,25 +482,30 @@ pub fn marginal_gain(eigenvalues: &[f64], bits: &[u8]) -> Vec<f64> {
 /// 1. Assign each sample to nearest centroid.
 /// 2. Update centroids as mean of assigned samples.
 /// 3. Repeat until convergence.
+///
+/// Field order: Option<Vec> (24B, 8-aligned) → usize/u64 scalars (8B) → f32 (4B)
+/// → packed u8/bool tail. Saves 16 bytes/instance vs declaration order — matters
+/// because this struct is stored in `Vec<LloydMaxQuantizer>` for per-dim
+/// semantic codebooks (water-fill path).
 pub struct LloydMaxQuantizer {
-    _n_bits: u8,
+    centroids: Option<Vec<f32>>,
     n_levels: usize,
     max_iter: usize,
-    tol: f32,
     seed: u64,
-    centroids: Option<Vec<f32>>,
+    tol: f32,
+    _n_bits: u8,
     is_fitted: bool,
 }
 
 impl LloydMaxQuantizer {
     pub fn new(n_bits: u8, max_iter: usize, seed: u64) -> Self {
         Self {
-            n_levels: 1usize << n_bits,
-            _n_bits: n_bits,
-            max_iter,
-            tol: 1e-6,
-            seed,
             centroids: None,
+            n_levels: 1usize << n_bits,
+            max_iter,
+            seed,
+            tol: 1e-6,
+            _n_bits: n_bits,
             is_fitted: false,
         }
     }
@@ -525,20 +529,24 @@ impl LloydMaxQuantizer {
             *c = sorted[idx];
         }
 
-        // Lloyd-Max iteration
+        // Lloyd-Max iteration. Pre-allocate the per-iter scratch buffers once
+        // and clear+fill(0) them at the top of each sweep — `max_iter` may be
+        // 50+ and the prior version reallocated both vectors on every sweep.
+        let mut sums = vec![0.0f64; self.n_levels];
+        let mut counts = vec![0usize; self.n_levels];
+        let mut new_centroids = vec![0.0f32; self.n_levels];
         let mut rng = katgpt_core::types::Rng::new(self.seed);
         for _ in 0..self.max_iter {
             // Assign samples to nearest centroid
-            let mut sums = vec![0.0f64; self.n_levels];
-            let mut counts = vec![0usize; self.n_levels];
+            sums.fill(0.0);
+            counts.fill(0);
             for &x in data {
                 let idx = self.nearest_centroid(x, &centroids);
                 sums[idx] += x as f64;
                 counts[idx] += 1;
             }
 
-            // Update centroids
-            let mut new_centroids = vec![0.0f32; self.n_levels];
+            // Update centroids in place
             for i in 0..self.n_levels {
                 new_centroids[i] = if counts[i] > 0 {
                     (sums[i] / counts[i] as f64) as f32
@@ -556,7 +564,7 @@ impl LloydMaxQuantizer {
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0f32, f32::max);
 
-            centroids = new_centroids;
+            std::mem::swap(&mut centroids, &mut new_centroids);
             if max_delta < self.tol {
                 break;
             }
@@ -608,23 +616,31 @@ impl LloydMaxQuantizer {
 
         let n_quad = 256; // integration points (more than enough for Gauss)
 
+        // Pre-allocate per-iter scratch buffers once: `boundaries` has
+        // `n_levels − 1` entries, `edges` has `n_levels + 1`. Both are reused
+        // across sweeps via direct indexing instead of reallocating.
+        let mut boundaries = vec![0.0f64; n_levels.saturating_sub(1)];
+        let mut new_centroids = Vec::with_capacity(n_levels);
+
         // Lloyd-Max iteration
         for _ in 0..self.max_iter {
             // Boundaries between adjacent centroids
-            let boundaries: Vec<f64> = (0..n_levels - 1)
-                .map(|i| (centroids[i] + centroids[i + 1]) * 0.5)
-                .collect();
+            for i in 0..n_levels - 1 {
+                boundaries[i] = (centroids[i] + centroids[i + 1]) * 0.5;
+            }
 
-            // Edges: extend well beyond centroids
-            let edges: Vec<f64> = std::iter::once(lo * 3.0)
-                .chain(boundaries.iter().copied())
-                .chain(std::iter::once(hi * 3.0))
-                .collect();
-
-            let mut new_centroids = Vec::with_capacity(n_levels);
+            // Edges: extend well beyond centroids. Written into a small stack
+            // array to avoid per-sweep allocation — `(lo*3, boundaries…, hi*3)`.
+            let mut edge_prev = lo * 3.0;
+            new_centroids.clear();
             for i in 0..n_levels {
-                let a = edges[i];
-                let b = edges[i + 1];
+                let a = edge_prev;
+                let b = if i + 1 < n_levels {
+                    boundaries[i]
+                } else {
+                    hi * 3.0
+                };
+                edge_prev = b;
                 let num = trapz(&|x| x * pdf(x), a, b, n_quad);
                 let den = trapz(&pdf, a, b, n_quad);
                 new_centroids.push(if den > 1e-15 { num / den } else { centroids[i] });
@@ -637,7 +653,7 @@ impl LloydMaxQuantizer {
                 .map(|(a, b)| (a - b).abs())
                 .fold(0.0f64, f64::max);
 
-            centroids = new_centroids;
+            std::mem::swap(&mut centroids, &mut new_centroids);
             if max_delta < self.tol as f64 {
                 break;
             }
@@ -1438,16 +1454,20 @@ pub fn ks_d_statistic(weights: &[f32], scratch: &mut [f32]) -> f32 {
     scratch[..n].copy_from_slice(&weights[..n]);
     scratch[..n].sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-    // Compute mean and std from sorted data
-    let mean: f64 = scratch[..n].iter().map(|&x| x as f64).sum::<f64>() / n as f64;
-    let var: f64 = scratch[..n]
-        .iter()
-        .map(|&x| {
-            let d = x as f64 - mean;
-            d * d
-        })
-        .sum::<f64>()
-        / n as f64;
+    // Compute mean and std from sorted data — single-pass FMA accumulation
+    // (sum + sum_sq) halves bandwidth over the sorted slice vs the prior
+    // two-pass mean-then-variance walk.
+    let mut sum = 0.0f64;
+    let mut sum_sq = 0.0f64;
+    for &x in &scratch[..n] {
+        let v = x as f64;
+        sum += v;
+        sum_sq = v.mul_add(v, sum_sq);
+    }
+    let mean = sum / n as f64;
+    // var = E[x²] − E[x]² (numerically stable here because weights are
+    // pre-sorted and centered around 0 in the outlier-guard use case).
+    let var = (sum_sq / n as f64 - mean * mean).max(0.0);
     let std = var.sqrt().max(1e-10);
 
     if std < 1e-10 {

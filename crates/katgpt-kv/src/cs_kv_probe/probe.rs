@@ -33,13 +33,13 @@ pub fn sample_masks(
     let n_ablate = n_ablate.min(n_heads.saturating_sub(1));
 
     // Reusable index buffer for the partial Fisher–Yates shuffle — avoids a
-    // fresh allocation per mask.
-    let mut idx: Vec<usize> = (0..n_heads).collect();
+    // fresh allocation per mask. `identity` is built once and memcpy'd back
+    // each iteration (faster than rebuilding the range loop m times).
+    let identity: Vec<usize> = (0..n_heads).collect();
+    let mut idx: Vec<usize> = identity.clone();
     for _ in 0..m {
         // Reset to identity each iteration (the partial shuffle permutes in place).
-        for (i, v) in (0..n_heads).enumerate() {
-            idx[i] = v;
-        }
+        idx.copy_from_slice(&identity);
         let mut bits = vec![true; n_heads];
         for i in 0..n_ablate {
             // Swap idx[i] with a uniformly random index in [i, n_heads).

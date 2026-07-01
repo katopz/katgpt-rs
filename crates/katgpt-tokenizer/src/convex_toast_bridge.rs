@@ -83,8 +83,15 @@ impl ConvexToToastBridge {
         special_tokens: &SpecialTokens,
         min_count: u64,
     ) -> ToastTokenizer {
-        let mut vocab_to_id: HashMap<Vec<u8>, usize> = HashMap::new();
-        let mut id_to_vocab: Vec<Vec<u8>> = Vec::new();
+        // Pre-allocate: 4 special + 256 single bytes + multi-byte tokens.
+        let n_multi = rounded
+            .selected_bytes
+            .iter()
+            .filter(|b| b.len() >= 2)
+            .count();
+        let cap = 4usize.saturating_add(256).saturating_add(n_multi);
+        let mut vocab_to_id: HashMap<Vec<u8>, usize> = HashMap::with_capacity(cap);
+        let mut id_to_vocab: Vec<Vec<u8>> = Vec::with_capacity(cap);
 
         let mut add_token = |bytes: Vec<u8>| -> usize {
             match vocab_to_id.get(&bytes) {
@@ -110,7 +117,7 @@ impl ConvexToToastBridge {
         }
 
         // Step 3: Selected multi-byte tokens from ConvexTok
-        let mut multi_byte_tokens: Vec<&[u8]> = Vec::new();
+        let mut multi_byte_tokens: Vec<&[u8]> = Vec::with_capacity(n_multi);
         for bytes in &rounded.selected_bytes {
             if bytes.len() >= 2 {
                 add_token(bytes.clone());
@@ -120,7 +127,7 @@ impl ConvexToToastBridge {
 
         // Step 4: Build split trees for each selected multi-byte token
         let builder = SplitTreeBuilder::new(ngram_counts, min_count);
-        let mut trees = HashMap::new();
+        let mut trees = HashMap::with_capacity(multi_byte_tokens.len());
         for pretoken in &multi_byte_tokens {
             let tree = builder.build(pretoken);
             trees.insert(pretoken.to_vec(), tree);

@@ -58,13 +58,20 @@ use katgpt_types::simd::simd_sigmoid_tanh_clamp_inplace;
 /// σ is per-NPC-class and freeze/thaw-able via the commitment. The paper's
 /// σ=0.02 is tuned for DINOv3 features; our [-1,1] HLA space likely needs
 /// σ≈0.1–0.5 (G1.2 distinctness test will catch near-identical hypotheses).
+///
+/// # Layout
+///
+/// Fields are ordered `k` (usize, 8B) → `sigma` (f32, 4B) → `seed_strategy`
+/// (u8, 1B) to eliminate the 4B pad that the natural declaration order would
+/// insert between `sigma` and `k`. Total: 16B vs 24B (33% smaller for a `Copy`
+/// type stored inline in every BoM planner).
 #[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub struct NoiseQueryConfig {
-    /// Gaussian noise stddev. Paper default 0.02; needs calibration (R3).
-    pub sigma: f32,
     /// Number of hypotheses K. Paper trains K=256, evals K=20; plasma-tier
     /// budget caps at K=8 (1000 NPCs × 20 Hz, µs budget).
     pub k: usize,
+    /// Gaussian noise stddev. Paper default 0.02; needs calibration (R3).
+    pub sigma: f32,
     /// How seeds are derived per-NPC vs per-class.
     pub seed_strategy: SeedStrategy,
 }
