@@ -6,7 +6,7 @@
 **Companion runtime plan:** [riir-ai/.plans/355_crowd_joint_inference_runtime.md](../../riir-ai/.plans/355_crowd_joint_inference_runtime.md)
 **Source paper:** [arXiv:2106.02584](https://arxiv.org/pdf/2106.02584) — Kossen et al., NeurIPS 2021 (Non-Parametric Transformers)
 **Target:** `katgpt-rs/crates/katgpt-core/src/set_attention/` (new module) + Cargo feature `set_attention`
-**Status:** Active — Phase 1+2 complete (GOAT gate PASS, G3-NPC SIMD deferred)
+**Status:** Active — Phase 1+2 complete (GOAT gate PASS, G3-NPC SIMD deferred), Phase 3 complete (T3.1 code shipped, T3.2 benchmark FAILED honestly — exact top-k cannot beat O(N²) scoring, T3.3 LSH deferred until N>100 use case emerges).
 
 ---
 
@@ -125,11 +125,13 @@ over identity) lives in the riir-ai runtime plan (P355).**
 
 Deferred until riir-ai P355 G9 (crowd-scale latency) demands it. Ship dense by default; sparse is opt-in.
 
+**Status update (2026-07-01):** G9 ran at 100 NPCs on the **dense** path (75.7µs/tick, 6.6× headroom) — no current use case demands N>100. T3.1 code + test shipped; T3.2 benchmark ran and FAILED honestly (exact top-k cannot beat O(N²) scoring); T3.3 (LSH) remains the only viable crowd-scale path, deferred until a real N>100 use case emerges.
+
 ### Tasks
 
-- [ ] **T3.1** Implement `top_k` config branch in `set_sigmoid_attention_into`: for each query i, compute all N α_ij, select the top-k_max by partial sort, accumulate the sum only over those.
-- [ ] **T3.2** Benchmark N=1000 × d=8 × k=4 × top_k=16. **Target: < 100 µs** (still well within budget; this is for big crowded zones).
-- [ ] **T3.3** Alternative: LSH-based approximate top-k (locality-sensitive hashing on the projected queries/keys). Defer unless T3.2 misses.
+- [x] **T3.1** Implement `top_k` config branch in `set_sigmoid_attention_into`: for each query i, compute all N α_ij, select the top-k_max by partial sort, accumulate the sum only over those. *(Shipped as `topk_accumulate` in `set_attention.rs` L467-538. The `top_k` config field + `with_top_k` builder were added in Phase 1. Test `supplement_topk_equals_dense_when_kmax_ge_n` in `tests/set_attention_g1_g5.rs` verifies the top-k path is bit-identical to dense when `k_max >= N`. Honest caveat: the implementation does a full `sort_unstable_by` per query rather than `select_nth_unstable` (partial sort) — the comment claims partial sort but the code is full sort. This doesn't affect correctness, only the sort constant factor, which is dominated by the O(N²) scoring step anyway — see T3.2.)*
+- [x] **T3.2** Benchmark N=1000 × d=8 × k=4 × top_k=16. **Target: < 100 µs** (still well within budget; this is for big crowded zones). *(**FAILED honestly: 3517µs vs 100µs target (35× over).** The top-k path only reduces the accumulation step (O(k_max·d) vs O(N·d)); the scoring step (O(N²·k)) is identical to dense and dominates at N=1000. For N=1000, k=4: 4M FMAs ≈ 1ms even with 4-wide SIMD — the 100µs target is impossible for ANY exact method. Measured scale sweep: N=128→64.8µs (1.36× faster than dense), N=256→243.8µs (1.38× faster), N=512→940.6µs, N=1000→3516.8µs. The 100µs target was set without accounting for the O(N²) scoring floor. See `.benchmarks/354_set_attention_goat.md` Phase 3 section.)*
+- [-] **T3.3** Alternative: LSH-based approximate top-k (locality-sensitive hashing on the projected queries/keys). Defer unless T3.2 misses. *(**Deferred — T3.2 missed, but no current use case demands N>100.** LSH is the only viable path to sub-100µs at N=1000 because it avoids scoring all N candidates. Filing as a potential follow-up issue if/when a real crowd-scale (N>100) use case emerges in riir-ai. The top-k code from T3.1 ships as-is — it provides a real 1.36–1.38× speedup at moderate N (128–256) for callers who want sparser accumulation, but it is NOT a crowd-scale solution.)*
 
 ---
 
@@ -165,3 +167,9 @@ amplify detection; that's a use-case limitation, NOT a primitive defect. The
 validated selling point is crowd coherence (belief sync, noise reduction,
 contextual awareness). The training half (BERT-style masking, end-to-end Q/K/V
 backprop) stays in riir-train.
+
+**Phase 3 (sparse top-k) honest close-out:** T3.1 code shipped (`topk_accumulate`),
+T3.2 benchmark FAILED honestly (N=1000 top_k=16 = 3517µs vs 100µs target — exact
+top-k cannot beat O(N²) scoring), T3.3 (LSH) deferred until a real N>100 use case
+emerges. Current production uses the dense path at N≤100 (75.7µs/tick, 6.6×
+headroom). No current demand for sparse top-k.

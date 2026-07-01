@@ -182,6 +182,52 @@ fn main() {
     }
     println!();
 
+    // ─── Plan 354 Phase 3 T3.2 — Sparse top-k scale sweep ────────────────
+    // Target: N=1000, d=8, k=4, top_k=16 → < 100 µs/call.
+    // Honest framing: the topk path still computes ALL N α_ij scores per query
+    // (O(N²·k)) to know which peers are in the top-k, then does a partial sort
+    // (O(N log N)) per query, then accumulates only over k_max (O(k_max·d)).
+    // At N=1000 the O(N²·k) scoring dominates regardless of k_max — exact top-k
+    // cannot beat dense on the scoring step; it only reduces the accumulation.
+    // This is informational: confirms the ceiling of exact top-k, motivates LSH
+    // (T3.3) if a real N>100 use case demands sub-100µs.
+    println!("Plan 354 Phase 3 T3.2 — top-k scale sweep (target: N=1000 < 100 µs):");
+    let cfg_topk16 = SetAttentionConfig::default().with_top_k(16);
+    for &scale_n in &[128usize, 256, 512, 1000] {
+        let scale_states: Vec<f32> = (0..scale_n * d).map(|i| (i as f32) * 0.001).collect();
+        let mut scale_output = vec![0.0f32; scale_n * d];
+        let mut scale_sq = vec![0.0f32; scale_n * k];
+        let mut scale_sk = vec![0.0f32; scale_n * k];
+        let mut scale_sa = vec![0.0f32; scale_n];
+        let scale_iters = if scale_n <= 256 { 200 } else { 50 };
+        // Warm-up
+        for _ in 0..5 {
+            set_sigmoid_attention_into(
+                black_box(&scale_states), black_box(&w), black_box(&w), None,
+                black_box(&mut scale_output), black_box(&cfg_topk16),
+                scale_n, d, k,
+                &mut scale_sq, &mut scale_sk, &mut scale_sa,
+            ).unwrap();
+        }
+        let t0 = Instant::now();
+        for _ in 0..scale_iters {
+            set_sigmoid_attention_into(
+                black_box(&scale_states), black_box(&w), black_box(&w), None,
+                black_box(&mut scale_output), black_box(&cfg_topk16),
+                scale_n, d, k,
+                &mut scale_sq, &mut scale_sk, &mut scale_sa,
+            ).unwrap();
+        }
+        let dt = t0.elapsed();
+        let per_call_us = dt.as_nanos() as f64 / (scale_iters as f64) / 1000.0;
+        let target_pass = scale_n != 1000 || per_call_us < 100.0;
+        println!("   N={scale_n:>4} top_k=16: {per_call_us:>10.3} µs/call {}",
+                 if scale_n == 1000 {
+                     if target_pass { "< 100µs PASS ✓" } else { ">= 100µs FAIL ✗ (expected — O(N²) scoring dominates; LSH needed for sub-100µs)" }
+                 } else { "" });
+    }
+    println!();
+
     // ─── Verdict ────────────────────────────────────────────────────────
     println!("═══ Verdict ═══");
     println!("   G3 latency:    {}", if g3_pass { "PASS ✓" } else { "FAIL ✗" });

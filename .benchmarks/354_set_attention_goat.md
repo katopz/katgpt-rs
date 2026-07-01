@@ -19,6 +19,23 @@
 
 **Supplementary (top-k path):** 1 allocation per call (documented — the `Vec` for index sort). Sparse path is not the hot path for N ≤ 64; deferred to a future zero-alloc top-k API if a real crowd-scale use case demands it.
 
+## Phase 3 T3.2 — Sparse top-k scale sweep (N=1000 target)
+
+**Target:** N=1000, d=8, k=4, top_k=16 → < 100 µs/call.
+
+**Result: FAIL (35× over target).** Exact top-k cannot meet the target because the top-k path still computes ALL N² per-pair sigmoid scores to know which peers are in the top-k — it only reduces the *accumulation* step (O(k_max·d) vs O(N·d)), not the *scoring* step (O(N²·k) in both paths).
+
+| N | dense (µs/call) | top_k=16 (µs/call) | top-k speedup |
+|---|---|---|---|
+| 128 | 87.86 | 64.82 | 1.36× |
+| 256 | 336.42 | 243.76 | 1.38× |
+| 512 | — | 940.65 | — |
+| 1000 | — (est. ~5000) | **3516.80** | — |
+
+**Honest root cause:** the `topk_accumulate` implementation scores all N peers per query (`O(N²·k)`) then does a full sort (`O(N log N)` per query). Even with `select_nth_unstable` (partial sort), the O(N²·k) scoring dominates. For N=1000, k=4: 4M FMAs ≈ 1ms even with 4-wide SIMD — the 100µs target is impossible for ANY exact method at N=1000.
+
+**Verdict:** T3.2 FAILS. The only path to sub-100µs at N=1000 is T3.3 (LSH-based approximate top-k — locality-sensitive hashing avoids scoring all N candidates). T3.3 stays deferred until a real N>100 use case emerges. **Current production (Plan 355 G9) runs 100 NPCs on the DENSE path at 75.7µs/tick (6.6× headroom under 500µs gate) — no current use case demands sparse top-k.** The top-k code ships as-is for callers who want sparser accumulation at moderate N (the 1.36–1.38× speedup at N=128–256 is real), but it is NOT a crowd-scale solution.
+
 ## Latency scale sweep
 
 The dense path is O(N²·k + N·d²). Empirical measurements (release build, macOS):
@@ -56,3 +73,5 @@ cargo test -p katgpt-core --features set_attention --test set_attention_g1_g5
 ## TL;DR
 
 Cross-Datapoint Set Attention open primitive (`set_sigmoid_attention_into`) passes all 5 GOAT gates: G1 permutation equivariance, G2 identity-floor meaningfulness, G3 latency (21.96µs at N=64, production-pass), G4 zero-alloc, G5 sigmoid-not-softmax correctness. The speculative 5µs-at-N=64 SIMD target is deferred. Latency scales O(N²): N=16→1.75µs, N=32→5.93µs, N=64→22µs. **DEFAULT-ON since 2026-07-01** after Plan 355 G6/G7/G9 passed (G8 FAILED — averaging cannot amplify detection; use-case limitation, not primitive defect). Validated selling point: crowd coherence.
+
+**Phase 3 T3.2 (sparse top-k at N=1000) FAILED honestly:** 3517µs vs 100µs target. Exact top-k cannot beat O(N²) scoring — the topk path only reduces accumulation, not scoring. T3.3 (LSH) is the only viable crowd-scale path, deferred until a real N>100 use case emerges. Current production (G9, 100 NPCs) uses the dense path at 75.7µs/tick — no demand for sparse top-k yet.
