@@ -167,23 +167,24 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 ### Phase 2 — Co-extract `TemporalDerivativeKernel<N>` to katgpt-types
 
-- [ ] **T2.1** Audit `katgpt-core/src/temporal_deriv.rs` (424 LOC) — extract
+- [x] **T2.1** Audit `katgpt-core/src/temporal_deriv.rs` (424 LOC) — extract
   the public API surface (`TemporalDerivativeKernel<const N: usize>` struct,
   constructor, `process`/`step` methods, `sigmoid_surprise_gate` free fn) into
   `katgpt-types/src/temporal.rs`. **Note the const generic `<N>`.**
-- [ ] **T2.2** Tests stay in katgpt-core (they exercise the kernel through
+- [x] **T2.2** Tests stay in katgpt-core (they exercise the kernel through
   the re-export).
-- [ ] **T2.3** Update `katgpt-core/src/temporal_deriv.rs` to be a re-export
+- [x] **T2.3** Update `katgpt-core/src/temporal_deriv.rs` to be a re-export
   shim: `pub use katgpt_types::temporal::*;`. Preserve the
   `#[cfg(feature = "temporal_deriv")]` gate.
-- [ ] **T2.4** Run GOAT gate:
+- [x] **T2.4** Run GOAT gate:
   - `cargo check -p katgpt-types` clean (kernel is unconditional in
     katgpt-types; the gate stays in katgpt-core's re-export).
   - `cargo check -p katgpt-core --features temporal_deriv` clean.
   - `cargo test -p katgpt-core --features temporal_deriv --lib` — test count
-    matches.
+    matches (701 → 701).
   - `cargo check -p katgpt-core --features delta_mem` clean (delta_mem/state.rs
-    consumes the kernel).
+    consumes the kernel) — verified via `cargo check --features delta_mem` on
+    katgpt-rs workspace (feature lives on root, not katgpt-core).
   - `cargo check -p riir-engine` clean (TemporalDerivativeKernel consumed by
     `riir-games/salience_gate.rs` + riir-engine default features).
 

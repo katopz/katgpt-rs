@@ -76,6 +76,7 @@ mod rng;
 pub mod simd;
 mod sense;
 pub mod slod;
+pub mod temporal;
 mod ternary;
 
 #[cfg(test)]
@@ -123,6 +124,7 @@ pub use math::sparse_matmul;
 pub use rng::Rng;
 pub use sense::{DilationConfig, SenseKind, SenseModule, ShardEmbedding, TernaryDir};
 pub use slod::ScaleBoundary;
+pub use temporal::{TemporalDerivativeKernel, sigmoid_surprise_gate};
 #[cfg(feature = "plasma_path")]
 pub use ternary::TernaryWeights;
 
