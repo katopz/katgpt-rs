@@ -220,8 +220,9 @@ fn g1_4_attractor_step_32_under_100ns() {
     // at this small dim). The attractor does a full dim×dim matvec, which is
     // fundamentally more work than HLA's leaky integrator (the baseline).
     //
-    // Per Plan 276 R2 mitigation: this is filed as
-    // `katgpt-rs/.issues/024_micro_belief_g1_4_attractor_latency.md`.
+    // Per Plan 276 R2 mitigation: tracked in
+    // `.benchmarks/276_micro_belief_goat.md` (originally Issue 024,
+    // closed + issue removed; benchmark is the canonical record).
     // The test is INFORMATIONAL in release — it prints the number but does
     // NOT hard-assert, so `cargo test --release` stays green. The canonical
     // criterion bench produces the tight number. SKIPPED in debug builds
@@ -240,7 +241,7 @@ fn g1_4_attractor_step_32_under_100ns() {
         } else {
             eprintln!(
                 "G1.4 INFORMATIONAL FAIL: {per_step_ns:.1} ns/step exceeds 100ns budget \
-                (total {elapsed:?}) — see .issues/024_micro_belief_g1_4_attractor_latency.md"
+                (total {elapsed:?}) — see .benchmarks/276_micro_belief_goat.md"
             );
         }
     }

@@ -20,8 +20,9 @@
 //!   existing latent projection pattern (`DensityBudget` + `extract_hla_slice`,
 //!   Plan 311). Re-skin for API uniformity, NOT new capability.
 //! - [`commitment::BabelCommitment`] — BLAKE3 `[u8; 32]` newtype over the
-//!   compressed bytes. Required for future LatCal chain-commitment bridge
-//!   (`.issues/002_deterministic_babeltele_chain_commitment.md`).
+//!   compressed bytes. The proposed LatCal chain-commitment bridge
+//!   (originally Issue 002) was closed as moot — Plan 331 G2 FAILED (1.14×
+//!   vs 2× bar). The commitment primitive is retained as independently useful.
 //!
 //! # Constraints (per AGENTS.md + Plan 331)
 //!
@@ -112,8 +113,8 @@ pub trait BabelCodec {
 /// For the deterministic fixed-rule codec shipped here, `compressor` and
 /// `reader` are the same codec instance (the BT-P8 mapping is its own inverse's
 /// context). The pair shape is preserved for the learned-codec future path
-/// (→ riir-train) and for the LatCal chain-commitment bridge
-/// (`.issues/002_deterministic_babeltele_chain_commitment.md`).
+/// (→ riir-train). The LatCal chain-commitment bridge (originally Issue 002)
+/// was closed as moot — Plan 331 G2 FAILED.
 pub struct BabelPair<C, R> {
     /// Compressor side. Owns the projection / mapping.
     pub compressor: C,

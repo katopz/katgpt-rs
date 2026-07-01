@@ -1,12 +1,15 @@
 //! BLAKE3 commitment for BabelCodec compressed payloads (Plan 331 Phase 4).
 //!
 //! [`BabelCommitment`] is a `[u8; 32]` BLAKE3 digest newtype over the
-//! compressed bytes. It is the load-bearing piece for the future LatCal
-//! chain-commitment bridge (`.issues/002_deterministic_babeltele_chain_commitment.md`):
-//! because the BT-P8 codec is deterministic, two independent parties
-//! compressing the same input produce byte-identical compressed bytes and thus
-//! identical commitments — enabling trust-minimized commitment of semantic KG
-//! triples at lower byte cost than the uncompressed form.
+//! compressed bytes. It was the load-bearing piece for the proposed LatCal
+//! chain-commitment bridge; that investigation (originally Issue 002) was
+//! closed as moot — Plan 331 G2 FAILED (1.14× vs 2× bar), so the
+//! deterministic-compression → chain-commitment fusion is not viable at the
+//! current compression ratio. The commitment primitive is retained because
+//! BLAKE3 commitment of compressed payloads is independently useful. Because
+//! the BT-P8 codec is deterministic, two independent parties compressing the
+//! same input produce byte-identical compressed bytes and thus identical
+//! commitments — enabling trust-minimized commitment of semantic KG triples.
 //!
 //! # Determinism
 //!

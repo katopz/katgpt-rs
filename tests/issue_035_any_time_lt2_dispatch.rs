@@ -3,7 +3,8 @@
 //! (per-request elastic `loop_count` on `forward_looped`).
 //!
 //! Backs Research 273 (ELT arXiv:2604.09168). These tests prove the seven
-//! acceptance criteria from `.issues/035_any_time_lt2_dispatch.md`:
+//! acceptance criteria (originally tracked in Issue 035, closed + issue
+//! removed after 13/13 tests passed; these tests are the canonical record):
 //!
 //! 1. `forward_looped()` accepts `elastic_loop_override: Option<usize>`;
 //!    `None` is bit-identical to pre-Issue-035 behavior.

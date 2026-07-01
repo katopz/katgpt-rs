@@ -1,6 +1,8 @@
 //! Issue 001 — HLA Windowed Eigenbasis Recovery GOAT gate bench.
 //!
-//! Runs the five GOAT gates from `.issues/001_hla_windowed_eigenbasis_recovery.md`:
+//! Runs the five GOAT gates from `.benchmarks/001_hla_eigenbasis_recovery_goat.md`
+//! (originally tracked in Issue 001, closed + issue removed; benchmark is the
+//! canonical record):
 //!
 //! - **G1 — Latency**: single `recover_eigenbasis_from_window` call at the
 //!   plasma-tier operating point (T=512, D=8, k=4, iters=5). Budget: **≤ 2 µs**.

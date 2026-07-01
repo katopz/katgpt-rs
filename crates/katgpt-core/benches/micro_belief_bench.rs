@@ -3,8 +3,8 @@
 //! Canonical criterion wiring for the G1.4 latency gate and friends. Replaces
 //! the wall-clock `g1_4_attractor_step_32_under_100ns` test as the source of
 //! truth for the per-step ns number cited in
-//! `katgpt-rs/.issues/024_micro_belief_g1_4_attractor_latency.md` and
-//! `katgpt-rs/.benchmarks/276_micro_belief_goat.md`.
+//! `katgpt-rs/.benchmarks/276_micro_belief_goat.md` (originally also tracked in
+//! Issue 024, closed + issue removed; benchmark is the canonical record).
 //!
 //! # GOAT gates covered
 //!

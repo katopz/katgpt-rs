@@ -57,7 +57,9 @@
 //!
 //! # References
 //!
-//! - Issue 001: `riir-chain/.issues/001_orthogonal_procrustes_kg_shard_alignment.md`
+//! - Orthogonal Procrustes KG shard alignment: originally tracked in
+//!   `riir-chain/.issues/001_orthogonal_procrustes_kg_shard_alignment.md`,
+//!   closed (GOAT 4/4 PASS, promoted to default-on) + issue removed.
 //! - Newton-Schulz orthogonalization: `katgpt_core::newton_schulz` (Plan 152).
 //! - Schönemann, P. (1966) — original Procrustes solution via SVD.
 //! - Higham, N. (1986) — Newton-Schulz iteration for polar factor.
