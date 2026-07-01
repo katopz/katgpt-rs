@@ -259,7 +259,7 @@ mod tests {
     #[test]
     fn single_op_chain_is_copy() {
         let a = make_2x2(1.0, 2.0, 3.0, 4.0);
-        let out = compose_chain(&[a.clone()]).unwrap();
+        let out = compose_chain(std::slice::from_ref(&a)).unwrap();
         assert_eq!(out.as_slice(), a.as_slice());
     }
 

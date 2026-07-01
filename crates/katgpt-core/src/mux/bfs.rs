@@ -199,7 +199,7 @@ mod tests {
         tree.init_root(&logits);
         assert_eq!(tree.leaf_count(), 1);
 
-        bfs.step(&mut tree, 1, &[logits.clone()]);
+        bfs.step(&mut tree, 1, std::slice::from_ref(&logits));
         assert!(tree.leaf_count() > 1);
     }
 }

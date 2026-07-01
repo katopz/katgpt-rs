@@ -11,8 +11,6 @@
 //!
 //! See [`.benchmarks/262_chunked_content_store_goat.md`] for the full table.
 
-#![cfg(test)]
-
 use super::in_memory::InMemoryChunkedStore;
 use super::merkle::verify_binary_merkle_proof;
 use super::r#trait::ChunkedContentStore;

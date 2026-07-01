@@ -1020,6 +1020,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn parallel_matches_serial() {
         // Parallel and serial differ only in floating-point summation order.

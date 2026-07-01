@@ -52,7 +52,7 @@ static A: CountingAllocator = CountingAllocator;
 ///
 /// The plan specifies 100 warmup calls + 100 measured calls. We do 200 warmup
 /// + 1000 measured to be extra strict — the gate is "0 allocs over 100 calls",
-/// so 1000 calls with 0 allocs is a 10× stronger guarantee.
+///   so 1000 calls with 0 allocs is a 10× stronger guarantee.
 #[test]
 fn g5_zero_alloc_after_warmup_both_paths() {
     const D: usize = 8; // HLA dim (matches paper's NPC HLA scale).

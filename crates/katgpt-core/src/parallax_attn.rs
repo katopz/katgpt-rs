@@ -1315,9 +1315,9 @@ mod tests {
         let mut row = vec![0.0f32; n];
         for i in 0..n {
             let q_off = i * d;
-            for j in 0..n {
+            for (j, row_slot) in row.iter_mut().enumerate().take(n) {
                 let k_off = j * d;
-                row[j] = crate::simd::simd_dot_f32(&q[q_off..q_off + d], &k[k_off..k_off + d], d) * scale;
+                *row_slot = crate::simd::simd_dot_f32(&q[q_off..q_off + d], &k[k_off..k_off + d], d) * scale;
             }
             normalize_attention_weights(&mut row, activation);
             am[i * n..(i + 1) * n].copy_from_slice(&row);

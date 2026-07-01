@@ -357,6 +357,12 @@ impl FlowFieldCache {
     pub fn len(&self) -> usize {
         self.fields.len()
     }
+
+    /// Returns `true` if no fields are cached.
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(test)]

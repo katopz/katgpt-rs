@@ -192,7 +192,7 @@ fn fourier_basis_karc_also_unaffected() {
     let mut out = [0.0_f32; D];
     assert!(f.forecast_into(&ds, &mut out));
     // Just confirm it produces finite output (no NaN/Inf from feature flag interaction).
-    for j in 0..D {
-        assert!(out[j].is_finite(), "FourierBasis KARC channel {j} not finite");
+    for (j, o) in out.iter().enumerate() {
+        assert!(o.is_finite(), "FourierBasis KARC channel {j} not finite");
     }
 }

@@ -205,9 +205,9 @@ fn blend_with_noise(real: &[f32], n: usize, alpha: f32, rng: &mut Lcg) -> Vec<f3
         // Generate a random row-stochastic noise distribution.
         let mut noise = vec![0.0f32; n];
         let mut nsum = 0.0f32;
-        for j in 0..n {
-            noise[j] = rng.next_f32().max(1e-6);
-            nsum += noise[j];
+        for nj in noise.iter_mut() {
+            *nj = rng.next_f32().max(1e-6);
+            nsum += *nj;
         }
         let ninv = if nsum > 0.0 { 1.0 / nsum } else { 0.0 };
         let mut row_sum = 0.0f32;

@@ -882,7 +882,7 @@ mod tests {
     #[test]
     fn samples_only_primitive_is_scorable() {
         // Samples-only primitive should be scorable via samples → interval.
-        let corpus = TrajectoryCorpus::stationary_seasonal(12, 0.5, 300, 0x5A_DB_7E57);
+        let corpus = TrajectoryCorpus::stationary_seasonal(12, 0.5, 300, 0x5ADB_7E57);
         let mut samp = SamplesOnlyPrimitive { last_y: 0.0 };
         let report = run_floor_comparison(
             &mut samp,

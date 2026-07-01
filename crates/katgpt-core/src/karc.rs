@@ -2532,9 +2532,9 @@ mod tests {
         assert!(f.is_low_rank_fitted());
         assert_eq!(f.low_rank_r(), 2);
         // A must be preserved verbatim (frozen means frozen).
-        for i in 0..a_ref.len() {
+        for (i, a) in a_ref.iter().enumerate() {
             assert_eq!(
-                a_ref[i].to_bits(),
+                a.to_bits(),
                 f.a_low_rank[i].to_bits(),
                 "frozen A modified at idx {}",
                 i
@@ -2555,9 +2555,9 @@ mod tests {
             ];
             let mut out = [0.0f32; 2];
             assert!(f.forecast_low_rank_into(&delay, &mut out));
-            for d in 0..2 {
-                assert!(out[d].is_finite(), "non-finite forecast at probe {}", probe_t);
-                max_abs = max_abs.max(out[d].abs());
+            for o in out.iter() {
+                assert!(o.is_finite(), "non-finite forecast at probe {}", probe_t);
+                max_abs = max_abs.max(o.abs());
             }
         }
         assert!(max_abs > 0.0, "all forecasts are zero");

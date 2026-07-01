@@ -1392,6 +1392,7 @@ mod tests {
     ///
     /// Returns the cumulative regret curve vs `r_opt`, the `α` curve, and the
     /// total realized reward.
+    #[allow(clippy::too_many_arguments)]
     fn simulate_concave(
         t_cycles: usize,
         alpha_fn: &dyn Fn(f32) -> f32,
@@ -1745,6 +1746,7 @@ mod tests {
     /// Setup: 1-arm E-pool (minimal, practically empty), 16-arm X-pool.
     /// Run 100 cycles, rewarding X-pool arms each cycle. After each
     /// consolidate, assert E-pool size is non-decreasing and ≥ 1 new arm.
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn g3_epool_grows() {
         let e = VecBandit::constant(1, 0.1);
@@ -1804,6 +1806,7 @@ mod tests {
     ///
     /// Single-pool CGSP (static 4-arm pool) can NEVER select arm 7 —
     /// it's not in the pool. This is the GOAT gain.
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn g3_growing_pool_discovers_new_strategies() {
         // E-pool: 4 known directions (indices 0-3, priority 0.25 each).
@@ -1920,6 +1923,7 @@ mod tests {
     /// - Dead arms (1,3,5,7): the consumer ignores them entirely — modeled
     ///   as a separate "null consumer" that always returns baseline.
     #[cfg(feature = "faithfulness_probe")]
+    #[allow(clippy::field_reassign_with_default)]
     #[test]
     fn g4_faithfulness_gate_rejects_dead_items() {
         use crate::faithfulness::{DefaultFaithfulnessProbe, FaithfulnessProbe};
