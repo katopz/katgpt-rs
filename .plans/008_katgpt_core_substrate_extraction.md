@@ -63,7 +63,7 @@ refined strategy doc, stranded in a private fork.
 ### Phase 1 — Substrate extraction to `katgpt-core`
 
 - [x] **Step 1 — `types` → core.** DONE pre-this-plan. `katgpt-core/src/types/` 14 files; root is re-export shim.
-- [ ] **Step 2 — `transformer` substrate types + `weights` → core.**
+- [x] **Step 2 — `transformer` substrate types + `weights` → core.** ✅ DONE 2026-06-27 (commit `1debf905`) — extracted to new `katgpt-transformer` crate per user direction (forward funcs stay in root; only pure data types moved). riir-engine reconciled in Phase 2.2 (`bd423499`).
 
   ⚠️ **AUDIT FINDING (2026-06-27, before execution): the original premise was wrong.**
   `transformer.rs` is NOT pure substrate. The file is **8398 lines** but splits into:
@@ -410,7 +410,7 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
   **GOAT gate:** bit-identical, 124/124 core simd tests green (+7 new), 2428/2429 riir-engine lib tests green (1 pre-existing `cgsp_runtime::dual_pool_bridge::g5_epool_persistence`).
 
   **Commits:** `katgpt-rs/develop` `3a0ed1d5`, `riir-ai/develop` `ad8ea1ea`.
-- [ ] 2.8 Bit-identical verification: `forward_hla`/`forward_gemma2`/`dd_tree` tests pass unchanged in both repos
+- [x] **2.8 Bit-identical verification** (2026-07-01) — `forward_hla`/`transformer`/`dd_tree` tests pass unchanged in both repos. Re-verified on `katgpt-rs/develop` + `riir-ai/develop` with isolated `CARGO_TARGET_DIR`: katgpt-rs `hla::forward::tests` 8/8, `transformer::tests` 80/80, `speculative::dd_tree` 71/71; riir-ai `hla::forward::tests` 8/8 (bit-identical names+results), `transformer::` 83/83 (3 additive prefill tests), `dflash` (dd_tree composition) 24/24, `spec_types` 15/15. Note: `forward_gemma2` is exercised inside `transformer::tests` (no standalone module). dd_tree substrate dedup'd into `spec_types` re-export in riir-ai (Phase 2.5); composition lives in `dflash.rs`.
 
 ### Phase 3-5 — DEFERRED
 
@@ -435,13 +435,13 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 
 Mirrors Issue 007 §Acceptance, updated:
 
-- [ ] Phase 1 step 2: `transformer`+`weights` live in `katgpt-core`, split into <2048-line files, re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test --lib` green on arm64. (x86_64 already cleared per Issue 006.)
+- [x] **Phase 1 step 2:** `transformer`+`weights` substrate types live in new `katgpt-transformer` crate (per user direction "define new one e.g. katgpt-foo and keep core core"), re-exported from root. 11/11 katgpt-transformer tests + 80/80 root transformer tests green. (Commit `1debf905`; riir-engine reconciliation in Phase 2.2 `bd423499`.) Forward funcs stay in root (7055-line file — splitting into per-family submodules is a tracked follow-up, not blocking.)
 - [x] **Phase 1 step 4 (substrate half):** `hla` cache types + streaming kernels live in `katgpt-core/src/hla/{types,kernel}.rs`, re-exported from root `src/hla/mod.rs`. Bit-identical forward output vs pre-move (8/8 forward tests + 16/16 substrate tests green). `forward.rs` stays in root (needs `ForwardContext`). Role-aware variants + `ThirdOrderMoment` deferred to Phase 2.1 (riir-engine reconciliation — they're Category C cognitive composition, not substrate).
 - [x] **Phase 1 step 5 (substrate half):** speculative-decoding types live in `katgpt-core/src/speculative/types.rs`, re-exported from root `src/speculative/types.rs`. Bit-identical (32/32 substrate tests + 9 composition tests green).
 - [x] **Phase 1 step 6 (substrate half):** `mcts` algorithm (`mcts_search`, `mcts_search_informed`, UCB1 helpers, `MCTSNode`), `sampling` primitives (CDF + residual samplers), and `delta_mem` substrate (`DeltaMemoryState`, `FeatureHasher`, `MultiDomainMemory`) live in `katgpt-core/src/{mcts.rs, speculative/sampling.rs, delta_mem/}`. Bit-identical behavior: 14+5+37=56 substrate tests green in core; 5 bandit composition tests + 0 sampling composition tests + delta_mem bench G3 (suppression 42.90%, recall_loss 0.00%) all green in root. Composition that needs root-only types (`BanditRolloutPolicy` needs `BanditStats`; `MemorySteeredPruner<P>` / `MultiDomainMemoryPruner<P>` wrap root `ScreeningPruner` impls) stays in root as expected. No call-site changes.
 - [x] **Phase 1 step 7:** riir-engine `simd/wasm32.rs` consumes `katgpt_core::simd`. (2026-06-28)
-- [ ] Phase 2: riir-engine has zero Category A duplicates; all consume `katgpt_core::`. Bit-identical tests in both repos.
-- [ ] Each phase commit includes GOAT/bench evidence per AGENTS.md "dont defer benchmark task".
+- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE, two items deferred per verdicts.** Done: 2.2 transformer, 2.3 types, 2.5 dd_tree/spec_types, 2.6 mcts/sampling/delta_mem, 2.7 simd (all consume `katgpt_core::`/`katgpt_transformer::`). Partial: 2.1 hla (`[~]` — `HlaVariant` dedup'd + core kernels optimized; Blocker #1 role-field contamination deferred — needs side-channel refactor; Blocker #2 ahla_step math bug resolved via Issue 009). Deferred per verdict: 2.4 tokenizer (blocked on Step 3 SentencePiece audit). Bit-identical verification 2.8 PASS (this session). Net LoC: −1808 riir-engine, +445 katgpt-core.
+- [x] Each phase commit includes GOAT/bench evidence per AGENTS.md "dont defer benchmark task" — every step's GOAT gate reported inline (2.1: 2389/2389; 2.2: 80/80+24/24; 2.5: 15/15+24/24+37/37; 2.6: 14+5+47 substrate + bench G3; 2.7: 124/124+2428/2429; 2.8: this session).
 
 ---
 

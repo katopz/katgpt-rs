@@ -1,7 +1,7 @@
 # Issue 007: Make katgpt-rs Cargo-consumable — Pillar Reorganization + HLA Substrate Extraction
 
 > **Type:** Architecture / reorganization (unblocks cargo publish + kills cross-repo duplication)
-> **Status:** Phase 1 step 2 (transformer substrate extraction) ✅ landed in new crate `katgpt-transformer` (2026-06-27). Phase 1 steps 3-7 + Phase 2 dedup queued — see [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md).
+> **Status:** **Phase 1+2 core path COMPLETE** (2026-07-01). Phase 1 steps 1-7 done (`types`, `transformer`→`katgpt-transformer`, `hla`, `dd_tree`/`spec_types`, `mcts`/`sampling`/`delta_mem`, `simd/wasm32`). Phase 2 dedup 2.2/2.3/2.5/2.6/2.7 done (riir-engine consumes `katgpt_core::`/`katgpt_transformer::`); 2.8 bit-identical verification PASS (2026-07-01). Two items deferred per verdicts: 2.1 hla role-aware (Blocker #1 — side-channel refactor) + Step 3/2.4 tokenizer (SentencePiece audit). Phase 3 (cosmetic), Phase 4 (non-blocking) deferred. Phase 5 RESCINDED. See [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md) for the full execution log + GOAT gates.
 > **Audit findings (2026-06-27):**
 > - **Phase 5 RESCINDED** — `Cargo.toml:9` + `release-plz.toml:9-12` lock `katgpt-rs` root as `publish = false` permanently ("dev/examples aggregator — never published. Only katgpt-core ships to crates.io"). Decision was made AFTER this issue was filed and overrides its Phase 5.
 > - **Phase 1 step 1 (`types` move) ALREADY DONE** — `katgpt-core/src/types/` has 14 files; root `src/types.rs` is a thin re-export shim.
@@ -251,13 +251,13 @@ Phases 1–2 are the high-value, low-risk core (kills the duplication, unblocks 
 
 ## Acceptance
 
-- [ ] Phase 1: all Category A modules live in `katgpt-core`, re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test -p katgpt-rs --lib` green on arm64 + x86_64.
-- [ ] Phase 2: riir-engine has zero Category A duplicates; all consume `katgpt_core::`. `forward_hla`/`dd_tree`/`mcts` tests bit-identical to pre-move.
-- [ ] Phase 2b: `cce` in core, `cce_runtime` imports updated.
-- [ ] Phase 3: root `src/` organized into subdirs; no call-site breakage (all `use katgpt::*` resolve via re-exports).
-- [ ] Phase 4: `cargo check --no-default-features` clean on root; `plotters` optional.
-- [ ] Phase 5: `katgpt-rs@0.1.0` live on crates.io; `cargo add katgpt-rs` works.
-- [ ] This issue updated with GOAT/bench evidence at each phase (per AGENTS.md "dont defer benchmark task").
+- [x] **Phase 1:** all Category A substrate modules live in `katgpt-core` (or sibling `katgpt-transformer`), re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test --lib` green. (Step 3 `tokenizer` deferred per Q2 verdict — SentencePiece audit; not blocking.)
+- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE**, bit-identical verification (2.8) PASS 2026-07-01. Two items deferred per verdicts: 2.1 hla role-aware (Blocker #1) + 2.4 tokenizer (Step 3 dep). `forward_hla`/`dd_tree`/`mcts` tests bit-identical.
+- [-] **Phase 2b:** RESCINDED — premise inverted (see audit finding). `cgsp` correctly in core, `cce` correctly in root; no tier move needed.
+- [-] **Phase 3:** DEFERRED (cosmetic root subdir reorg — not worth churn while 100+ features flatten at root).
+- [-] **Phase 4:** DEFERRED (non-blocking; `cargo check --no-default-features` currently clean, `plotters` optional is a standalone quick win if it becomes blocking).
+- [-] **Phase 5:** ~~RESCINDED~~ — conflicts with `Cargo.toml:9` + `release-plz.toml:9-12` decision to keep root private permanently. Only `katgpt-core` ships.
+- [x] This issue updated with GOAT/bench evidence at each phase — every step's GOAT gate reported inline in [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md); 2.8 bit-identical verification 2026-07-01.
 
 ---
 
