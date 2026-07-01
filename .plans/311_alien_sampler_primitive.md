@@ -6,6 +6,8 @@
 **Target:** `katgpt-rs/src/alien_sampler/` (new module) + Cargo feature `alien_sampler`
 **Status:** Complete — Phase 1+2+3 done. GOAT gate FAILED (1/4). Module ships opt-in, NOT promoted to default. See `.benchmarks/311_alien_sampler_goat.md`.
 
+**"Report the Floor" UQ comparison (Issue 010 T6): N/A — EXCLUDED (not UQ-bearing).** The Alien Sampler produces a within-pool z-scored ranking (`score = (1−β)·z_coh + β·(−z_avail)`), which is a *relative selection signal* (which candidate is more diverse in this pool), not a calibrated uncertainty estimate. It claims no probability distribution, predictive interval, quantile, coverage guarantee, or confidence score. Its GOAT gate measures motif-collapse reduction (diversity), not coverage/CRPS/Winkler. Same structural exclusion as BoM (planning quality) and Sleep-Time (compute gating). No floor comparison needed.
+
 ---
 
 ## Goal

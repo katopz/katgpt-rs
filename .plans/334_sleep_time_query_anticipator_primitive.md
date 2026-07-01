@@ -308,6 +308,10 @@ Amortization factor across N consumers: `(sum_i budgets[i]) / N`. Break-even: `s
 
 These are the **mechanics + zero-alloc + commitment + latency** gates. Quality gates G2/G3/G4 require a real predictability-labeled corpus and live in riir-ai Plan 341.
 
+### "Report the Floor" UQ comparison (Issue 010 T4)
+
+**G-UQ: N/A — EXCLUDED.** The Sleep-Time Anticipator's predictability score (`DotPredictabilityScorer`, `p = sigmoid(α·dot(c,dir)+β)`) is a **gate heuristic, not a calibrated UQ signal.** Same false-confidence signature as BoM (T3): predictability-derived intervals win CRPS (0.55–0.63 ratio) but lose coverage (37–54% vs nominal 95%) and Winkler (2.5–3.4× the floor). The T4 difficulty-correlation test shows near-zero per-step correlation for BOTH the anticipator and the floor (|r| < 0.08). Excluded via the reframing escape hatch — the anticipator's value is amortized compute gating (Plan 334 G1/G2 mechanics + `AmortizationCostModel`), NOT calibrated UQ. `sleep_time_anticipation` stays OPT-IN (unchanged). See `tests/conformal_floor_sleep_time.rs`, `.benchmarks/010_sleep_time_floor_comparison.md`.
+
 ### Tasks
 
 - [x] **T2.1** `tests/sleep_time_goat.rs::g1_*` — verify:

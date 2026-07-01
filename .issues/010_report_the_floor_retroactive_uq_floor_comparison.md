@@ -65,7 +65,8 @@ These are **not** UQ-bearing under the policy definition (they don't claim a dis
   - **Verdict:** the first primitive to genuinely beat its floor (unlike BoM T3 and Sleep-Time T4, which were EXCLUDED via reframing). `best_belief` stays DEFAULT-ON (Plan 336 Phase 2 promotion confirmed). See `.benchmarks/010_best_belief_floor_comparison.md`.
 - [x] **T6** Decide on Alien Sampler (Plan 311): UQ-bearing or not? If yes, run floor comparison.
   - **DONE 2026-07-01 — EXCLUDED (not UQ-bearing).** The Alien Sampler produces a within-pool z-scored ranking: `score = (1−β)·z_coh + β·(−z_avail)`. This is a *relative selection signal* (which candidate is more diverse in this pool), not a calibrated uncertainty estimate. It claims no probability distribution, predictive interval, quantile, coverage guarantee, or confidence score. Its GOAT gate (Plan 311, 1/4 PASS — demoted to opt-in) measures **motif-collapse reduction** (a diversity metric: concentration ratio), NOT coverage/CRPS/Winkler. Same structural exclusion as BoM (planning quality) and Sleep-Time (compute gating). No floor comparison needed.
-- [ ] **T7** Document results in `.benchmarks/` and update each primitive's plan with the floor-comparison row in its GOAT gate table.
+- [x] **T7** Document results in `.benchmarks/` and update each primitive's plan with the floor-comparison row in its GOAT gate table.
+  - **DONE 2026-07-01.** Benchmark docs: `.benchmarks/010_bom_floor_comparison.md` (T3, prior session), `010_sleep_time_floor_comparison.md` (T4), `010_best_belief_floor_comparison.md` (T5). Plan updates: Plan 281 `G-UQ` row (prior session), Plan 334 "Report the Floor" subsection (T4), Plan 336 "Report the Floor" subsection (T5), Plan 311 status-line note (T6). All four UQ-bearing candidates now have a documented floor-comparison verdict in both the issue tracker and their primitive plan.
 
 ## Failure mode
 
