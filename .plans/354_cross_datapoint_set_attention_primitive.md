@@ -137,7 +137,7 @@ Deferred until riir-ai P355 G9 (crowd-scale latency) demands it. Ship dense by d
 
 ### Tasks
 
-- [ ] **T4.1** Example in `katgpt-rs/examples/set_attention_demo.rs`: simple "consensus averaging" use case — 10 sensors each produce a noisy 4-dim reading, set attention refines each reading by sigmoid-weighted averaging over similar sensors. Shows the open primitive is useful beyond NPC AI.
+- [x] **T4.1** Example in `katgpt-rs/examples/set_attention_demo.rs`: simple "consensus averaging" use case — 16 sensors (8 per cluster) each produce a noisy 4-dim reading, set attention refines each reading by sigmoid-weighted averaging over similar sensors. Shows the open primitive is useful beyond NPC AI. *(Shipped 2026-07-01. Modelless floor: identity W_Q/W_K/W_V, β=8, γ=0.5, single pass → 15.4% mean L2 noise reduction, all 16 sensors improved. Honest result: the identity floor is a genuine but modest denoiser — trained projections from riir-train would sharpen discrimination further. The demo does NOT use a `set_attention` cfg gate because the feature is default-on in katgpt-core; the example imports `katgpt_core::set_attention::*` directly.)*
 
 ---
 
