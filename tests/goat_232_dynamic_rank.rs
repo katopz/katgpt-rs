@@ -129,9 +129,7 @@ fn g3_dynamic_rank_correction_improves_diversity() {
             // Simulate reward: higher for "correct" tokens in this context
             let reward = if parent[0] < 2 {
                 if t < VOCAB / 2 { 0.8 } else { 0.2 }
-            } else {
-                if t >= VOCAB / 2 { 0.8 } else { 0.2 }
-            };
+            } else if t >= VOCAB / 2 { 0.8 } else { 0.2 };
             if reward > 0.5 {
                 wrapped.record_correction(parent, t, 0.1);
             }

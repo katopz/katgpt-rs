@@ -13,10 +13,10 @@ use fastrand::Rng;
 
 #[cfg(feature = "bandit_mcts")]
 use katgpt_rs::pruners::{
-    ArenaGrid, BanditStats, BomberAction, BomberHeuristic, BomberState, StateHeuristic,
+    ArenaGrid, BanditBomberHeuristic, BanditStats, BomberAction, BomberHeuristic, BomberState,
+    StateHeuristic,
     game_state::{
-        BanditBomberHeuristic, BanditRolloutPolicy, GameState, RandomRolloutPolicy, mcts_search,
-        mcts_search_informed,
+        BanditRolloutPolicy, GameState, RandomRolloutPolicy, mcts_search, mcts_search_informed,
     },
 };
 

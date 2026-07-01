@@ -116,15 +116,12 @@ mod tests {
                 // Re-detect with this threshold
                 let garbage_start = detect_garbage_moves(&analytics.win_rate_trace, threshold, 4);
 
-                match garbage_start {
-                    Some(start) => {
-                        games_with_garbage += 1;
-                        let ratio = (analytics.total_moves - start) as f32
-                            / analytics.total_moves.max(1) as f32;
-                        garbage_ratios.push(ratio);
-                        garbage_starts.push(start);
-                    }
-                    None => {}
+                if let Some(start) = garbage_start {
+                    games_with_garbage += 1;
+                    let ratio = (analytics.total_moves - start) as f32
+                        / analytics.total_moves.max(1) as f32;
+                    garbage_ratios.push(ratio);
+                    garbage_starts.push(start);
                 }
             }
 

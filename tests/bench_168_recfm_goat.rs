@@ -202,8 +202,8 @@ fn proof_p2_lt2_convergence() {
     let compute_variance = |traj: &[Vec<f32>]| -> f32 {
         let mut sum_sq = 0.0f32;
         for i in 1..traj.len() {
-            for j in 0..traj[i].len() {
-                let diff = traj[i][j] - traj[i - 1][j];
+            for (curr, prev) in traj[i].iter().zip(&traj[i - 1]) {
+                let diff = curr - prev;
                 sum_sq += diff * diff;
             }
         }

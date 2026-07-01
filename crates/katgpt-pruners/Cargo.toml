@@ -212,6 +212,11 @@ bake_precision = []
 # The root forwards this so bench_277_unified_surprise_bus reaches the method.
 temporal_deriv = []
 
+# Stage-specialized decode paths for speculative decoding (Plan 102). Empty
+# tracking flag — gates `should_skip_layer_stage` in hydra_budget.rs.
+# The root forwards this so bench_165_hydra_budget_goat reaches the function.
+decode_specialize = []
+
 # Substrate
 substrate_gate = ["katgpt-core/sparse_mlp", "cna_steering"]
 belief_drafter = ["katgpt-core/belief_drafter", "papaya"]

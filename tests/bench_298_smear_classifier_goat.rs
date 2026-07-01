@@ -101,8 +101,8 @@ impl ConsumerContext for SyntheticSmearConsumer {
         let mut sum: f32 = 0.0;
         for i in 0..K {
             let row_off = i * D;
-            for j in 0..D {
-                sum += memory[j] * self.weights[row_off + j];
+            for (m, w) in memory.iter().zip(&self.weights[row_off..row_off + D]) {
+                sum += *m * *w;
             }
         }
         sum / K as f32
@@ -144,6 +144,7 @@ fn build_token_smear_weights() -> Vec<f32> {
 /// Build SequenceSmear weights: row i = e_i (standard basis — pairwise
 /// orthogonal → cosine = 0, distance = 1.0). Requires d ≥ k.
 /// The classifier returns `SmearClass::SequenceSmear { n_hypotheses: K }`.
+#[allow(clippy::assertions_on_constants)] // D >= K is a compile-time invariant
 fn build_sequence_smear_weights() -> Vec<f32> {
     debug_assert!(D >= K, "SequenceSmear needs d >= k for orthogonal rows");
     let mut w = vec![0.0_f32; K * D];
@@ -268,7 +269,7 @@ fn g2_smear_class_predicts_unfaithfulness() {
 
     // Soft sanity assertions — these MUST hold regardless of G2 verdict.
     // If they fail, the test harness is broken (not the classifier).
-    assert!(cs_rate >= 0.0 && cs_rate <= 1.0, "rate out of [0,1]");
-    assert!(ts_rate >= 0.0 && ts_rate <= 1.0, "rate out of [0,1]");
-    assert!(ss_rate >= 0.0 && ss_rate <= 1.0, "rate out of [0,1]");
+    assert!((0.0..=1.0).contains(&cs_rate), "rate out of [0,1]");
+    assert!((0.0..=1.0).contains(&ts_rate), "rate out of [0,1]");
+    assert!((0.0..=1.0).contains(&ss_rate), "rate out of [0,1]");
 }

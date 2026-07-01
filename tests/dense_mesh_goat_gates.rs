@@ -72,10 +72,10 @@ fn make_diamond_topology(
 ) -> LayerwiseTopology {
     let topology = Topology::diamond(); // [1, 2, 1]
     assert_eq!(layer0_edges.len(), 2, "diamond needs 2 edges from input");
-    let mut layer1: Vec<Box<dyn katgpt_rs::dense_mesh::DenseEdge>> =
-        Vec::with_capacity(2);
-    layer1.push(Box::new(IdentityEdge::new()));
-    layer1.push(Box::new(IdentityEdge::new()));
+    let layer1: Vec<Box<dyn katgpt_rs::dense_mesh::DenseEdge>> = vec![
+        Box::new(IdentityEdge::new()),
+        Box::new(IdentityEdge::new()),
+    ];
     LayerwiseTopology::new(topology, node, vec![layer0_edges, layer1])
         .expect("diamond topology must construct cleanly")
 }
@@ -357,8 +357,7 @@ fn run_gate4_at_scale(config: &Config, config_name: &str, assert_beats_sequentia
 
     let input = DenseHidden::zeros(1, config.vocab_size);
     let mut scratch = MeshScratch::new(1, config.vocab_size);
-    let mut cfg = MeshConfig::default();
-    cfg.enable_vertex_parallelism = true; // Issue 020 Path A+B: rayon + pooled scratch/output
+    let cfg = MeshConfig { enable_vertex_parallelism: true, ..MeshConfig::default() };
 
     for _ in 0..warmup {
         let _ = mesh.forward(&input, &mut scratch, &cfg);
@@ -672,8 +671,8 @@ fn test_dense_mesh_gate5_bandit_convergence() {
     let mut rng = Rng::new(7);
     for _ in 0..500 {
         let arm_idx = bandit.sample();
-        let r = rewards[arm_idx] + (rng.normal() as f32) * 0.05;
-        let r = r.max(0.0).min(1.0);
+        let r = rewards[arm_idx] + rng.normal() * 0.05;
+        let r = r.clamp(0.0, 1.0);
         bandit.update(arm_idx, r);
     }
 
