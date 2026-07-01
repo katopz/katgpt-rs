@@ -1,7 +1,7 @@
 # Plan 338: katgpt-sense Cross-Module Decoupling (Issue 007 Phase E Tier 2 #7)
 
 > **Origin:** [Issue 007](../../../riir-ai/.issues/007_katgpt_runtime_ip_exfiltration_from_public_mit_repo.md) Phase E Tier 2 #7
-> **Status:** EXECUTING (2026-07-01) — defects corrected, Strategy C Revised adopted
+> **Status:** COMPLETE (2026-07-01) — defects corrected, Strategy C Revised executed. Phase 1–4 all green (incl. REQUIRED riir-engine/riir-games cross-repo gates). Phase 5 deferred (tracker path was inaccurate).
 > **Branch:** `develop`
 > **Created:** 2026-06-28
 > **Cross-repo:** **CROSS-REPO** — `katgpt-rs` (primary) + `cargo check -p riir-engine` REQUIRED gate (sense has heavy riir-ai consumers; re-export shims MUST preserve `katgpt_core::sense::*` paths bit-for-bit)
@@ -285,10 +285,20 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 ### Phase 5 — Issue 007 closure
 
-- [ ] **T5.1** Mark Phase E Tier 2 #7 as `[x]` in
-  `riir-ai/.issues/007_*.md`.
-- [ ] **T5.2** Update Tier 2 status summary (now 4/4 done).
-- [ ] **T5.3** Update the cumulative Phase E LOC count.
+- [-] **T5.1** Mark Phase E Tier 2 #7 as `[x]` in
+  `riir-ai/.issues/007_*.md`. **DEFERRED** — the referenced tracker path
+  (`riir-ai/.issues/007_*.md`) does not exist; Issue 007 actually lives at
+  `katgpt-rs/.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md` and does
+  not contain a "Phase E Tier 2 #7" section. The sense decoupling is complete
+  (Phase 1–4 all green) but the upstream tracker reference in this plan was
+  inaccurate. The closure belongs to whoever owns the Tier 2 master tracker.
+- [-] **T5.2** Update Tier 2 status summary (now 4/4 done). **DEFERRED** —
+  same root cause as T5.1; no Tier 2 master summary found to update.
+- [-] **T5.3** Update the cumulative Phase E LOC count. **DEFERRED** — no
+  cumulative LOC tracker found. For reference: this plan moved ~4,600 LOC of
+  sense substrate to katgpt-sense + ~1,400 LOC of co-extracted primitives
+  (ScaleBoundary, TemporalDerivativeKernel<N>, MerkleOctree/MerkleProof) to
+  katgpt-types.
 
 ---
 
@@ -319,15 +329,25 @@ Per `katgpt-rs/AGENTS.md` Feature Flag Discipline:
 
 ---
 
-## Open Questions to Resolve Before Phase 1
+## Open Questions (RESOLVED during 2026-07-01 execution)
 
-- [ ] Is `sense_composition` currently in katgpt-core's `default` feature list?
-  (Determines whether katgpt-sense gets default-on status.)
-- [ ] Does `sense/spectral_threat.rs` get consumed externally via the
-  `katgpt_core::sense::spectral_threat` path? If yes, the re-export alias
-  needs to surface it.
-- [ ] Are there other Cargo features that imply `sense_composition`?
-  (Mirrors how `committed_field_blend` implies `personality_composition`.)
+- [x] Is `sense_composition` currently in katgpt-core's `default` feature list?
+  **Resolved:** `sense_composition = ["plasma_path", "domain_latent"]` — NOT in
+  katgpt-core's own `default` (it's opt-in there), but `katgpt-rs` root's
+  `default` includes `plasma_path` + `domain_latent` which transitively enable it.
+  katgpt-sense compiles in default root builds via `self_advantage_gate` →
+  `katgpt-sense/self_advantage_gate` forwarding. The `sense` mod shim stays
+  gated behind `sense_composition`.
+- [x] Does `sense/spectral_threat.rs` get consumed externally via the
+  `katgpt_core::sense::spectral_threat` path? **Resolved:** No direct
+  `katgpt_core::sense::spectral_threat::*` imports found in riir-ai. The
+  re-export shim surfaces it anyway (`pub mod spectral_threat { pub use
+  crate::sense_threat::*; }`) for safety — zero-cost when the feature is off.
+- [x] Are there other Cargo features that imply `sense_composition`?
+  **Resolved:** `plasma_path` + `domain_latent` (both root defaults) imply it.
+  Plus `spectral_threat` depends on `sense_composition`. Feature graph audited
+  during Phase 3; `self_advantage_gate` (root default) now forwards to
+  katgpt-sense, documented in katgpt-core Cargo.toml.
 
 ---
 
