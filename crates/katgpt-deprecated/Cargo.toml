@@ -1,0 +1,31 @@
+[package]
+name = "katgpt-deprecated"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Exiled primitives — dead stubs, off-topic research toys, GOAT-failed mechanisms, and explicitly demoted primitives awaiting deletion. Never default-on. Kept for regression comparison and GOAT-gate audit trail. See .docs/001_loser_sweep_audit.md for the membership table with citations."
+repository = "https://github.com/katopz/katgpt-rs"
+keywords = ["deprecated", "exiled", "research", "goat-failed"]
+categories = ["science"]
+publish = false
+
+[dependencies]
+# feedback.rs needs InferenceResult (re-exported from katgpt-core::types).
+katgpt-core = { path = "../katgpt-core" }
+# feedback.rs serializes InferenceResult via postcard.
+postcard = { version = "1", features = ["alloc"] }
+# feedback.rs logs via log::debug!.
+log = "0.4"
+
+[features]
+default = []  # ALWAYS empty — nothing here is ever default-on.
+# Alien Sampler — Coherence x Availability Frontier Ranking (Plan 311).
+# GOAT 1/4 PASS, explicitly DEMOTED. Exiled from src/alien_sampler/.
+# TODO(deprecated): delete after confirming no regression.
+alien_sampler = []
+# Dead TTT feedback stub — `log::debug!` only, never HTTP POSTs.
+# Exiled from src/feedback.rs (Plan 042). TODO(deprecated): delete after confirming no regression.
+feedback = []
+# Number-theory Erdos unit-distance research toy (Plan 090). No inference role.
+# Exiled from src/unit_distance/. TODO(deprecated): delete after confirming no regression.
+unit_distance = []

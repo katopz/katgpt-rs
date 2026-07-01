@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-deprecated", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -11,6 +11,9 @@ publish = false  # dev/examples aggregator — never published. Only katgpt-core
 [dependencies]
 katgpt-core = { path = "crates/katgpt-core" }
 katgpt-transformer = { path = "crates/katgpt-transformer" }
+# katgpt-deprecated (Proposal 003 Phase 3a, 2026-07-01): the loser crate.
+# Exiled primitives (dead stubs, GOAT-failed, off-topic). Never default-on.
+katgpt-deprecated = { path = "crates/katgpt-deprecated" }
 # katgpt-pruners (Plan 005, 2026-06-29): extracted from src/pruners/ (minus bomber).
 # Non-optional — root re-exports the pruners surface from `crate::pruners::*` via
 # the back-compat shim in src/pruners/mod.rs (`pub use katgpt_pruners::*`).
@@ -156,7 +159,7 @@ federation = ["bandit", "katgpt-pruners/federation"]  # Deep Manifold federated 
 delta_routing = ["katgpt-transformer/delta_routing"]  # Delta Block cross-layer routing (Research 061, Plan 097, GOAT 6/6, default-on)
 decode_specialize = ["katgpt-transformer/decode_specialize"]  # Stage-specialized decode paths for speculative decoding (Plan 102)
 lattice_deduction = ["katgpt-core/lattice_deduction"]  # LDT Lattice Deduction Transformer — asymmetric pruning + conflict detection + α-operator (Plan 088, GOAT 7/7, default-on)
-unit_distance = []  # Unit Distance GOAT proof — number-theoretic lattice constructions (Plan 090)
+unit_distance = ["katgpt-deprecated/unit_distance"]  # Unit Distance GOAT proof — EXILED to katgpt-deprecated (Phase 3a, Proposal 003): number-theory Erdos research toy (Plan 090), no inference role. Re-exported here for back-compat. TODO(deprecated): delete after confirming no regression.
 sdar_gate = ["katgpt-pruners/sdar_gate"]  # SDAR sigmoid gating for modelless distillation signals (Plan 072)
 rmsd_distill = ["sdar_gate", "bandit", "katgpt-pruners/rmsd_distill"]  # RMSD relevance-masked self-distillation (Plan 125, Research 081)
 memo_reflections = ["bandit", "katgpt-pruners/memo_reflections"]  # MeMo Reflection QA pipeline — 5-step compositional data synthesis (Research 60, Plan 094)
@@ -169,7 +172,7 @@ coda_fusion = ["katgpt-core/coda_fusion"]  # CODA-inspired fused SIMD kernels �
 maxsim = ["katgpt-core/maxsim", "katgpt-spectral/maxsim"]  # MaxSim late-interaction scoring (Research 45, Plan 080)
 salience_tri_gate = []  # Salience Tri-Gate Primitive — 3-way per-tick emit gate (Speak / Silent / Delegate) with silence as a first-class variant, two stacked sigmoids (never softmax), zero-allocation hot path (Plan 303, Research 281, arxiv 2606.14777, JoyAI-VL-Interaction). Open primitive; NPC wiring lives in riir-ai Plan 330. Opt-in until G1 (determinism + monotonicity) + G2 (two-sigmoid ablation parity) + <50ns decide() latency gates pass.
 closed_unit_compaction = []  # Closed-Unit Compaction Gate (CUCG) — generic rubric-gated trajectory compaction primitive (Plan 333, Research 300, arxiv 2606.23525, SelfCompact Li et al. JHU+Apple Jun 2026). ClosedUnitCompactionGate<R> + Rubric trait + FireRule enum + Backstop + CompactionAuditRecord. Cross-domain isomorphic with riir-neuron-db `can_freeze` (G7). Latent-reframed predicates (sigmoid projections, never softmax). Zero-alloc hot path. Open primitive; per-NPC sub-goal wiring lives in riir-ai (G8). DEFAULT-ON since Phase 6 (7/7 GOAT gates PASS).
-alien_sampler = []  # Alien Sampler Primitive — Coherence × Availability Frontier Ranking (Plan 311, Research 293, arxiv 2603.01092, Artiles et al. "The Alien Space of Science" May 2026). Generic within-pool z-scored linear fusion `(1−β)·zC + β·zU` of coherence × unavailability, plus `MedianTopMAvailability` implementing the paper's load-bearing median-of-top-m cosine community-aggregation rule. Open math only — NPC population banks + CGSP wiring live in riir-ai Plan 312+. Opt-in until Phase 3 GOAT gate (G1 motif collapse ≤50% of OPUS baseline, G2 quality ≥90% of coherence-only, G3 perf ≤5× baseline, G4 no Vec<f32> escapes rank()) passes.
+alien_sampler = ["katgpt-deprecated/alien_sampler"]  # Alien Sampler Primitive — Coherence x Availability Frontier Ranking (Plan 311, Research 293, arxiv 2603.01092, Artiles et al. "The Alien Space of Science" May 2026). EXILED to katgpt-deprecated (Phase 3a, Proposal 003): GOAT 1/4 PASS, explicitly demoted (issues/010 T6). Re-exported here for back-compat. TODO(deprecated): delete after confirming no regression.
 fourier_continuation = ["katgpt-core/fourier_continuation"]  # Fourier Continuation for non-periodic latent fields (Plan 323, Research 307 §3 candidate plan #1) — closed-form polynomial periodic extension so the FFT does not produce Gibbs ringing at the boundaries. The one modelless FNO primitive the codebase genuinely lacked. Opt-in until G1–G4 GOAT gate passes; modelless gain → promote to default.
 complexity_prior_sampler = []  # Algorithmic-Probability Sampler — `sigmoid(-α·K̃(x) - β)`-weighted candidate sampling (Plan 305, Research 284, Dingle & Hutter 2026, Entropy 28(2):226). Pluggable K̃ proxies: RLE ratio, Shannon entropy, L1 norm. Sub-features `lz4_proxy` / `blake3_proxy` register stub types (Phase 2+ activates them). Safety guarantee: never worse than uniform; exponentially faster on low-K optima. Latent variant operates on `&[f32]` via byte-quantization. Opt-in until G1 (sampler safety) + G2 (exponential speedup) GOAT gates pass.
 lz4_proxy = ["complexity_prior_sampler"]  # Sub-feature for Lz4Complexity proxy (Plan 305 T1.5). Phase 1 ships a stub; activation requires `lz4_flex` dep — deferred to Phase 2+.
@@ -294,7 +297,7 @@ percepta_gates = ["percepta", "katgpt-percepta/percepta_gates"]  # + ReGLU, step
 percepta_graph = ["percepta_gates", "katgpt-percepta/percepta_graph"]  # + Expression/Dimension DSL, ProgramGraph (TG-C)
 percepta_wasm = ["percepta_graph", "katgpt-percepta/percepta_wasm"]  # + WASM decoder + lowering + interpreter — pure Rust, NOT wasmtime (TG-E+F)
 percepta_compile = ["percepta_wasm", "katgpt-percepta/percepta_compile"]  # + MILP + weights + transformer + Futamura + CLI (TG-D+G-J). good_lp now in katgpt-percepta, not root.
-feedback = []  # E2E feedback loop — sends inference results to REST endpoint (Plan 042, requires consumer in riir-gpu)
+feedback = ["katgpt-deprecated/feedback"]  # E2E feedback loop — EXILED to katgpt-deprecated (Phase 3a, Proposal 003): dead stub, `log::debug!` only, never HTTP POSTs (Plan 042). Re-exported here for back-compat. TODO(deprecated): delete after confirming no regression.
 rest = []  # REST bridge test + merge stub (Plan 009, client lives in riir-ai/riir-rest)
 embedding_router = []  # Semantic embedding routing (Plan 024, not yet started)
 game_domain = ["domain_latent"]  # Alias for domain_latent — game-specific Config presets (Plan 040)

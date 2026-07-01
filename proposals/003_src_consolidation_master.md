@@ -318,7 +318,7 @@ Ordering: foundation first (hoists, splits), then domain crates biggest-first.
     tagged for speculative). Wire the split in-tree first.
   - Inline-and-delete `cgsp.rs` into `lib.rs`.
   - GOAT gate G3 on each.
-- [ ] **Phase 0.5 — loser-sweep audit (gates every absorption).** For EACH
+- [x] **Phase 0.5 — loser-sweep audit (gates every absorption).** For EACH
   opt-in feature in root + every crate: grep its name against `.benchmarks/`,
   `.plans/`, `.issues/` for the GOAT verdict. Classify into pending /
   benchmark-loser / dead-failed per the 3-category rule. Exile every category-3
@@ -327,14 +327,24 @@ Ordering: foundation first (hoists, splits), then domain crates biggest-first.
   set: `feedback.rs`, `unit_distance/`, `alien_sampler/` (demoted, `issues/010`
   T6), SDPG bomber arena (`benchmarks/011` FAIL). Output: a `katgpt-deprecated`
   membership table with a citation per row.
+  **DONE 2026-07-01.** Audit: `.docs/001_loser_sweep_audit.md`. 17 exile
+  candidates found (13 with code + 4 dead Cargo.toml entries). 3 src/ items
+  exiled in Phase 3a; `dense_mesh` deferred (transformer-bound glue);
+  cross-crate losers deferred to Phases 8/10.
 - [ ] **Phase 1 — `katgpt-quant` crate** (Proposal 001). 5 modules / 25 files.
   Cleanest lift (leaf over core+types). Establishes the move pattern.
 - [ ] **Phase 2 — `katgpt-attn` crate.** The attention stack. Move base
   primitives out of `katgpt-core` + absorb `ega_attn`/`diagonal_gate`/`gdn2`/
   `hla`/`dash_attn`/`rat_bridge`/`static_cal`/`chiaroscuro`/`funcattn_compose`.
   Forward glue stays root. Biggest payoff, biggest lift.
-- [ ] **Phase 3 — `katgpt-deprecated` crate.** Exile `feedback.rs` +
-  `unit_distance/`. Tiny, but unblocks the "no losers in winners" rule.
+- [x] **Phase 3 — `katgpt-deprecated` crate.** Exile `feedback.rs` +
+  `unit_distance` + `alien_sampler` (Phase 3a; `dense_mesh` deferred —
+  transformer-bound glue). `katgpt-deprecated` crate created with 3 features
+  (`feedback`, `unit_distance`, `alien_sampler`), all opt-in, `default = []`.
+  Root re-exports preserved for back-compat. Cross-crate losers (dflare_*,
+  sdpg_bandit, delta_mem, rmsd_distill, manifold_pruner, compression_drafter,
+  stepcode) deferred to Phases 8/10 absorption. See `.docs/001_loser_sweep_audit.md`.
+  **DONE 2026-07-01.**
 - [ ] **Phase 4 — `katgpt-spectral` absorption.** Add `spectral_*`,
   `stiff_anomaly`, `gauge_invariant`, `manifold_power_iter_router`,
   `off_principal`, `procrustes`, `river_valley`, `distill/peira`.

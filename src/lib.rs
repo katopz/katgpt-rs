@@ -103,8 +103,10 @@ pub mod dllm;
 pub mod dllm_solver;
 #[cfg(feature = "ega_attn")]
 pub mod ega_attn;
+// `feedback` module exiled to `katgpt-deprecated` (Phase 3a, Proposal 003).
+// Re-export preserved for back-compat: `katgpt_rs::feedback::*` still resolves.
 #[cfg(feature = "feedback")]
-pub mod feedback;
+pub use katgpt_deprecated::feedback;
 #[cfg(feature = "chain_fold")]
 pub mod fold;
 // CCE — Coarse Correlated Equilibria moderator primitives (Plan 295 + Plan 300, Research 274, arxiv 2606.20062).
@@ -283,7 +285,7 @@ pub mod trigger_gate;
 pub mod turboquant;
 pub mod types;
 #[cfg(feature = "unit_distance")]
-pub mod unit_distance;
+pub use katgpt_deprecated::unit_distance;
 
 // Plan 008 Step 2: weight-packing substrate now lives in `katgpt-transformer`.
 // Historical `crate::weights::ContiguousWeights` / `load_ternary_bits` callers
@@ -381,9 +383,9 @@ pub use screening::{
 // G2 quality ≥90% of coherence-only, G3 perf ≤5× baseline, G4 no Vec<f32>
 // escapes rank()) passes.
 #[cfg(feature = "alien_sampler")]
-pub mod alien_sampler;
+pub use katgpt_deprecated::alien_sampler;
 #[cfg(feature = "alien_sampler")]
-pub use alien_sampler::{
+pub use katgpt_deprecated::alien_sampler::{
     AlienConfig, AlienSampler, AlienSamplerError, AvailabilityScorer, CoherenceScorer,
     MedianTopMAvailability, ScoredCandidate,
 };

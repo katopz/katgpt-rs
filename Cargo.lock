@@ -1768,6 +1768,15 @@ name = "katgpt-dec"
 version = "0.1.0"
 
 [[package]]
+name = "katgpt-deprecated"
+version = "0.1.0"
+dependencies = [
+ "katgpt-core",
+ "log",
+ "postcard",
+]
+
+[[package]]
 name = "katgpt-hla"
 version = "0.1.0"
 dependencies = [
@@ -1860,6 +1869,7 @@ dependencies = [
  "half",
  "katgpt-attn-match",
  "katgpt-core",
+ "katgpt-deprecated",
  "katgpt-kv",
  "katgpt-percepta",
  "katgpt-pruners",

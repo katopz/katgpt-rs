@@ -3,7 +3,8 @@
 //! Sends InferenceResult to a configurable cache endpoint.
 //! Failures are silently ignored — never block inference on cache writes.
 
-use crate::types::InferenceResult;
+// Exiled from src/feedback.rs (Plan 042). TODO(deprecated): delete after confirming no regression.
+use katgpt_core::types::InferenceResult;
 use std::sync::OnceLock;
 use std::sync::mpsc::Sender;
 
