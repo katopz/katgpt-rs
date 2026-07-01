@@ -51,7 +51,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use katgpt_rs::chiaroscuro::{
+//! use katgpt_attn::chiaroscuro::{
 //!     kv::ChiaroscuroKvStrategy,
 //!     tau::StreamingTauCalibrator,
 //! };

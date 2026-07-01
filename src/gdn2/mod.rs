@@ -56,10 +56,19 @@
 //! Language Models with Constant-State Attention."
 //! See `.research/070_Gated_DeltaNet_2.md` for full derivation.
 
+// Substrate re-export from katgpt-attn (Proposal 003 Phase 2, 2026-07-01).
+// The kernel + types moved to katgpt-attn; this root module keeps the
+// composition layer (forward) and re-exports the substrate for back-compat.
+pub use katgpt_attn::gdn2::{kernel, types};
+
+// Composition layer stays in root — depends on ForwardContext (root-only).
 pub mod forward;
-pub mod kernel;
-pub mod types;
 
 pub use forward::{forward_gdn2, generate_gdn2_into};
-pub use kernel::{gdn2_recurrent_step, gdn2_state_readout, gdn2_state_update, l2_normalize, sigmoid};
-pub use types::{Gdn2GateConfig, Gdn2HeadState, Gdn2LayerState, MultiLayerGdn2Cache};
+
+// Re-export the substrate API at `crate::gdn2::*` for backward compatibility
+// with all existing call sites.
+pub use katgpt_attn::gdn2::{
+    gdn2_recurrent_step, gdn2_state_readout, gdn2_state_update, l2_normalize, sigmoid,
+    Gdn2GateConfig, Gdn2HeadState, Gdn2LayerState, MultiLayerGdn2Cache,
+};

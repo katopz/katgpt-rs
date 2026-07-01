@@ -1,0 +1,49 @@
+[package]
+name = "katgpt-attn"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Attention stack primitives — GDN2 kernels, DashAttention, Chiaroscuro, RAT+ Bridge, EGA, StaticCal, DiagonalGate, FuncAttn composition. Extracted from katgpt-rs/src/ (Proposal 003 Phase 2)."
+repository = "https://github.com/katopz/katgpt-rs"
+publish = false
+
+[dependencies]
+katgpt-core = { path = "../katgpt-core" }
+# katgpt-spectral: needed by funcattn_compose/spectral_pre_rotate (calibrate_eigenbasis).
+# Optional — only pulled when the funcattn_spectral_pre_rotate feature is on.
+katgpt-spectral = { path = "../katgpt-spectral", optional = true }
+# rustfft: DCT spectral entropy operator for Chiaroscuro attention.
+rustfft = { version = "6.2", optional = true }
+# blake3: commitment hashing for FuncAttn freeze/thaw snapshots + StaticCal tables.
+blake3 = { version = "1.8", optional = true }
+# serde: (De)serialization for FuncAttn freeze/thaw snapshots.
+serde = { version = "1", features = ["derive"], optional = true }
+
+[dev-dependencies]
+fastrand = "2"
+serde_json = "1"
+
+[features]
+default = []
+# GDN2 recurrent attention kernels (types + kernel). The composition layer
+# (forward_gdn2) stays in root — it depends on ForwardContext.
+gdn2_attention = ["dep:blake3"]
+# Wall Attention diagonal gate — shared DiagonalGate trait used by both GDN2
+# and Wall attention. Gated alongside gdn2_attention / wall_attention in root.
+diagonal_gate = []
+# DashAttention clean core (entmax, routing, chunk_summary). The VortexFlow
+# cluster + forward/tests/meta_router/sat_analysis stay in root (cross-domain
+# deps on pruners::bandit, speculative::types, cache_prune).
+dash_attn = []
+# Chiaroscuro attention — per-token DCT spectral entropy operator routing.
+chiaroscuro = ["dep:rustfft"]
+# RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state.
+rat_plus_bridge = []
+# Energy-Gated Attention — spectral salience gating.
+ega_attn = []
+# Static Calibration Tables — pre-computed per-head attention scales.
+static_cal_tables = ["dep:blake3"]
+# FuncAttn composition layer (Plan 286 Phase 5).
+funcattn_freeze_thaw = ["dep:blake3", "dep:serde"]
+funcattn_spectral_pre_rotate = ["dep:katgpt-spectral"]
+funcattn_chiar_blend = ["chiaroscuro"]

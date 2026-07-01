@@ -92,7 +92,7 @@ pub mod collider_pruner;
 #[cfg(feature = "compression_drafter")]
 pub use katgpt_core::compression_drafter;
 #[cfg(any(feature = "gdn2_attention", feature = "wall_attention"))]
-pub mod diagonal_gate;
+pub use katgpt_attn::diagonal_gate;
 #[cfg(any(
     feature = "peira_distill",
     feature = "ilc_distill",
@@ -107,7 +107,7 @@ pub mod dllm;
 #[cfg(feature = "critical_interval_gate")]
 pub mod dllm_solver;
 #[cfg(feature = "ega_attn")]
-pub mod ega_attn;
+pub use katgpt_attn::ega_attn;
 // `feedback` module exiled to `katgpt-deprecated` (Phase 3a, Proposal 003).
 // Re-export preserved for back-compat: `katgpt_rs::feedback::*` still resolves.
 #[cfg(feature = "feedback")]
@@ -187,7 +187,7 @@ pub mod pruners;
 #[cfg(feature = "dense_mesh")]
 pub mod dense_mesh;
 #[cfg(feature = "rat_plus_bridge")]
-pub mod rat_bridge;
+pub use katgpt_attn::rat_bridge;
 #[cfg(feature = "maxsim")]
 pub mod rerank;
 #[cfg(feature = "river_valley")]
@@ -199,7 +199,7 @@ pub mod ruliology;
 #[cfg(feature = "segment_checkpoint")]
 pub mod segment_checkpoint;
 #[cfg(feature = "chiaroscuro")]
-pub mod chiaroscuro;
+pub use katgpt_attn::chiaroscuro;
 // Functional Attention composition layer — Plan 286 Phase 5 (T5.1–T5.3). Each
 // submodule is independently feature-gated; the module root compiles when any
 // of the three composition features is on.
@@ -208,7 +208,7 @@ pub mod chiaroscuro;
     feature = "funcattn_chiar_blend",
     feature = "funcattn_freeze_thaw"
 ))]
-pub mod funcattn_compose;
+pub use katgpt_attn::funcattn_compose;
 #[cfg(feature = "specialist_projection")]
 pub mod specialist_projection;
 #[cfg(feature = "sparse_task_vector")]
@@ -277,7 +277,7 @@ pub mod speculative;
 #[cfg(feature = "swir_switch_thinking")]
 pub mod swir;
 #[cfg(feature = "static_cal_tables")]
-pub mod static_cal;
+pub use katgpt_attn::static_cal;
 #[cfg(feature = "stiff_anomaly")]
 pub mod stiff_anomaly;
 // thinking_cot — adaptive CoT framework (Plan 194). The feature is a

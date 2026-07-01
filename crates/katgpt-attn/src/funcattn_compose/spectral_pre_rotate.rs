@@ -34,7 +34,7 @@
 
 use katgpt_core::funcattn::pre_rotate_basis_weights_into;
 
-use crate::spectralquant::{CalibrationResult, calibrate_eigenbasis};
+use katgpt_spectral::{CalibrationResult, calibrate_eigenbasis};
 
 /// Calibrate a SpectralQuant eigenbasis from `samples`, then pre-rotate the
 /// FUNCATTN basis weights `w_basis` into that eigen-frame, in place.

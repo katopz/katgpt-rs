@@ -39,7 +39,7 @@ impl ChunkSummaryQuery {
     }
 
     /// Create with random initialization for training.
-    pub fn new_random(n_kv_head: usize, head_dim: usize, rng: &mut crate::types::Rng) -> Self {
+    pub fn new_random(n_kv_head: usize, head_dim: usize, rng: &mut katgpt_core::types::Rng) -> Self {
         let scale = (2.0 / head_dim as f32).sqrt();
         let mut head_cls = Vec::with_capacity(n_kv_head * head_dim);
         for _ in 0..n_kv_head * head_dim {

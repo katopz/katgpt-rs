@@ -5,7 +5,7 @@
 //! and normalised routing biases for downstream attention modulation.
 
 use katgpt_core::simd::simd_dot_f32;
-use crate::types::DashAttnConfig;
+use katgpt_core::types::DashAttnConfig;
 
 use super::entmax::{entmax_1p5_into, entmax_gqa_aggregate, entmax_support_into};
 

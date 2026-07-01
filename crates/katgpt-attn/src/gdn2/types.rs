@@ -21,7 +21,7 @@
 //!
 //! KV group for Q head `h`: `kv_group = h * n_kv_head / n_head`
 
-use crate::types::Config;
+use katgpt_core::types::Config;
 
 // ── Gate Configuration ────────────────────────────────────────
 

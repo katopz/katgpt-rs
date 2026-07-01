@@ -361,10 +361,46 @@ Ordering: foundation first (hoists, splits), then domain crates biggest-first.
     173 tests pass in katgpt-quant. Examples (core_05_maxsim, octpq_kvarn_fusion)
     + tests (bench_043_044_comparison) compile via re-export chain.
   **DONE 2026-07-01.**
-- [ ] **Phase 2 — `katgpt-attn` crate.** The attention stack. Move base
+- [x] **Phase 2 — `katgpt-attn` crate.** The attention stack. Move base
   primitives out of `katgpt-core` + absorb `ega_attn`/`diagonal_gate`/`gdn2`/
   `hla`/`dash_attn`/`rat_bridge`/`static_cal`/`chiaroscuro`/`funcattn_compose`.
   Forward glue stays root. Biggest payoff, biggest lift.
+  - New crate `crates/katgpt-attn/` with deps: `katgpt-core` (simd, types,
+    funcattn), `katgpt-spectral` (optional, for funcattn_compose/spectral_pre_rotate),
+    `rustfft` (optional, chiaroscuro), `blake3` (optional, static_cal + freeze_thaw),
+    `serde` (optional, freeze_thaw).
+  - **katgpt-core attention primitives (attention, parallax_attn, set_attention,
+    funcattn) stay in katgpt-core** — moving them would invert the dependency DAG
+    (katgpt-core can't depend on katgpt-attn). katgpt-attn sits above katgpt-core.
+  - **HLA substrate already extracted** to `katgpt-hla` crate (Issue 007 Phase E).
+    `src/hla/` is pure forward glue (nothing to move).
+  - Moved (git renames): `ega_attn.rs`, `diagonal_gate.rs`, `static_cal.rs`,
+    `rat_bridge/` (6 files), `chiaroscuro/` (7 files), `gdn2/{kernel,types}.rs`,
+    `funcattn_compose/` (4 files), `dash_attn/{chunk_summary,entmax,routing}.rs`.
+    28 files total.
+  - **VortexFlow cluster stays root** (8 files: vortex_flow, block_topk,
+    channel_aware, entmax_router, kv_outer_prefill, msa_distill, value_energy,
+    adaptive_k + meta_router + sat_analysis). Root cause: `meta_router` depends
+    on `pruners::bandit` + `speculative::types` (root-only), and `vortex_flow`
+    depends on `meta_router` — cascading dep chain can't resolve in katgpt-attn.
+  - Stays in root: `gdn2/{forward,mod}.rs`, `dash_attn/{forward,tests,mod}.rs`,
+    VortexFlow cluster, `hla/{forward,mod}.rs`, `attn_match_adaptive_cot.rs`.
+  - Import fixes: `crate::types::*` → `katgpt_core::types::*` (gdn2/types,
+    dash_attn/entmax_router, dash_attn/routing, dash_attn/chunk_summary);
+    `crate::spectralquant::*` → `katgpt_spectral::*` (funcattn_compose/spectral_pre_rotate);
+    `crate::chiaroscuro::*` → `crate::chiaroscuro::*` (intra-katgpt-attn, unchanged).
+  - Root re-exports: 6 modules `pub mod X` → `pub use katgpt_attn::X`
+    (ega_attn, diagonal_gate, static_cal, rat_bridge, chiaroscuro, funcattn_compose).
+    Split modules: `gdn2/mod.rs` + `dash_attn/mod.rs` re-export kernel/types/core
+    from katgpt-attn while keeping forward glue.
+  - Feature forwarding: 10 features updated in root Cargo.toml to forward to
+    katgpt-attn (gdn2_attention, dash_attn, chiaroscuro, rat_plus_bridge, ega_attn,
+    static_cal_tables, funcattn_freeze_thaw, funcattn_spectral_pre_rotate,
+    funcattn_chiar_blend, wall_attention→diagonal_gate).
+  - GOAT gate G3: `cargo check --workspace --all-features` clean; default clean.
+    188 tests pass in katgpt-attn. 1764 tests pass in root lib (0 regressions).
+    Clippy clean.
+  **DONE 2026-07-01.**
 - [x] **Phase 3 — `katgpt-deprecated` crate.** Exile `feedback.rs` +
   `unit_distance` + `alien_sampler` (Phase 3a; `dense_mesh` deferred —
   transformer-bound glue). `katgpt-deprecated` crate created with 3 features

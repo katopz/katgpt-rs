@@ -4,7 +4,7 @@
 //! Validates that VortexFlow doesn't regress DashAttention behavior.
 //! Feature gate: `vortex_flow` (Plan 196, Phase 1).
 
-use crate::types::DashAttnConfig;
+use katgpt_core::types::DashAttnConfig;
 
 use super::routing::score_blocks_entmax;
 use super::vortex_flow::{RoutingDecision, VortexFlow, VortexScratch};

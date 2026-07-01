@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-deprecated", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-quant", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
+members = ["crates/katgpt-attn", "crates/katgpt-attn-match", "crates/katgpt-core", "crates/katgpt-dec", "crates/katgpt-deprecated", "crates/katgpt-hla", "crates/katgpt-kv", "crates/katgpt-micro-belief", "crates/katgpt-percepta", "crates/katgpt-personality", "crates/katgpt-pruners", "crates/katgpt-quant", "crates/katgpt-sense", "crates/katgpt-sleep", "crates/katgpt-spectral", "crates/katgpt-speculative", "crates/katgpt-tokenizer", "crates/katgpt-transformer", "crates/katgpt-types", "."]
 resolver = "3"
 
 [package]
@@ -36,6 +36,13 @@ katgpt-attn-match = { path = "crates/katgpt-attn-match" }
 # historical feature so `katgpt_rs::turboquant::*` / `katgpt_rs::octopus::*` / etc.
 # continue to resolve.
 katgpt-quant = { path = "crates/katgpt-quant" }
+# katgpt-attn (Proposal 003 Phase 2, 2026-07-01): extracted attention stack
+# primitives (gdn2 kernel+types, dash_attn clean core, chiaroscuro, rat_bridge,
+# ega_attn, diagonal_gate, static_cal, funcattn_compose). Non-optional path dep;
+# each module is opt-in via its feature flag. The root re-exports each module
+# behind its historical feature so `katgpt_rs::gdn2::*` / `katgpt_rs::chiaroscuro::*`
+# / etc. continue to resolve. Forward glue + VortexFlow cluster stay in root.
+katgpt-attn = { path = "crates/katgpt-attn" }
 plotters = { version = "0.3", optional = true }  # Issue 355 Phase 2a: optional — gated behind `plot` feature. Only `src/plot.rs` + `src/main.rs` benchmark runner use it. Default-on (in `default` array) to preserve historical behavior; riir-ai consumers set `default-features = false` to drop it.
 rayon = "1.10"
 log = "0.4"
@@ -105,13 +112,13 @@ dirichlet_energy = ["katgpt-core/dirichlet_energy"]  # Dirichlet Energy structur
 leo_all_goals = ["katgpt-core/leo_all_goals"]  # LEO all-goals Q-value framework — LeoHead + AllGoalsUpdate + sigmoid_bounded_q (Plan 155)
 dual_leo = ["leo_all_goals", "katgpt-core/dual_leo"]  # Dual LEO teacher-student — + DualLeoMixer + AutocurriculumSampler (Plan 155)
 flow_field_nav = ["katgpt-core/flow_field_nav"]  # Fourier-smoothed flow fields for LEO crowd navigation (Plan 242, GOAT PASS 46.9%)
-ega_attn = []  # Energy-Gated Attention spectral salience gating (Plan 139)
+ega_attn = ["katgpt-attn/ega_attn"]  # Energy-Gated Attention spectral salience gating (Plan 139)
 sp_kv = ["katgpt-kv/sp_kv"]  # SP-KV self-pruned key-value attention (Plan 070)
 tiled_attention = ["katgpt-core/tiled_attention"]  # Tiled online-softmax flash attention for CPU SIMD (Plan 115)
 parallax_attn = ["tiled_attention", "newton_schulz", "katgpt-core/parallax_attn"]  # Parallax parameterized local linear attention — R projection + covariance correction (Plan 135, Research 135) — opt-in, requires Muon-trained weights
 sink_aware_attn = ["data_probe"]  # Sink-Aware Attention — dual-policy sigmoid gate (Plan 287 Phase 3, Research 258, arxiv 2606.08105). Implies data_probe for the classifier primitive. Opt-in: default stays Uniform pending G2/G3 GOAT gate. Standalone apply_dual_policy_gate ships now; direct wiring into parallax_attn / funcattn forward paths deferred.
 depth_invariance = ["katgpt-core/depth_invariance"]  # Depth-Invariance Diagnostic + MagnitudeRegularizedResidual — root-cause counterpart to BeliefRankPruner / GainCostLoopHalter / latent_functor/reestimation / micro_belief/coherence_bench (Plan 306, Research 286, arXiv:2605.09992). Detects DepthSpecificRefinement / Collapsed / DepthInvariant on flattened &[f32] state chains. Disambiguation: different paper + mechanism than sink_aware_attn (Plan 287 / arXiv:2606.08105) — drafter-side magnitude accumulation vs target-side sink classification. DEFAULT-ON (Plan 306 T7.4, 2026-06-23): G1/G2/G3 PASS; G4 re-spec'd to absolute-latency at HLA scale (all PASS with headroom); SIMD inner-loop landed. Zero runtime cost unless a caller invokes classify_chain / apply_magnitude_regularization.
-dash_attn = []  # DashAttention adaptive sparse hierarchical attention via α-entmax routing (Plan 106, Research 68)
+dash_attn = ["katgpt-attn/dash_attn"]  # DashAttention adaptive sparse hierarchical attention via α-entmax routing (Plan 106, Research 68). Clean core (entmax/routing/chunk_summary) in katgpt-attn; VortexFlow cluster + forward glue stay root.
 vortex_flow = ["dash_attn"]  # VortexFlow composable sparse routing (Plan 196 GOAT 72/72, default-ON)
 msa_sparse = ["vortex_flow"]  # MSA blockwise sparse distillation — max-pool/stddev scoring + SIMD argtopk (Plan 256 GOAT gate, opt-in until proven)
 msa_per_group = ["msa_sparse"]  # Per-GQA-group independent top-k (Plan 256 Phase 2 GOAT gate)
@@ -209,7 +216,7 @@ slod = ["katgpt-core/slod", "spectral_hierarchy"]  # SLoD Spectral Level-of-Deta
 spectral_threat = ["katgpt-core/spectral_threat", "sense_composition"]  # LinOSS Modal Threat Prediction (Plan 241, GOAT PASS 46.9%)
 sense_lod = ["katgpt-core/sense_lod", "sense_composition", "slod"]  # Spectral NPC Perception Compression (Plan 240, GOAT PASS 46.9%)
 spectral_pruner = ["katgpt-core/spectral_pruner"]  # Spectral Irrep Pruner — spectral flatness-based speculative decoding pruning (Plan 246, GOAT PASS +3.6% overhead, default-ON)
-chiaroscuro = ["dep:rustfft"]  # CHIAR Chiaroscuro Attention — per-token DCT spectral entropy operator routing + KV cache strategy (Plan 269, GOAT 9/9 PASS, default-ON)
+chiaroscuro = ["dep:rustfft", "katgpt-attn/chiaroscuro"]  # CHIAR Chiaroscuro Attention — per-token DCT spectral entropy operator routing + KV cache strategy (Plan 269, GOAT 9/9 PASS, default-ON)
 # (Removed 2026-06-28: `octree_ctc = ["katgpt-core/octree_ctc", "bandit"]` — dead alias.
 #  Issue 007 Phase C follow-up: the only katgpt-rs consumers were
 #  examples/octree_ctc_demo.rs and tests/octree_ctc_recall_test.rs, both of
@@ -221,7 +228,7 @@ chiaroscuro = ["dep:rustfft"]  # CHIAR Chiaroscuro Attention — per-token DCT s
 #  katgpt-core directly). The octree_ctc feature still lives canonically in
 #  riir-ai/crates/riir-engine/Cargo.toml for the moved demo + recall test.)
 bake_precision = ["katgpt-core/bake_precision", "sense_composition"]  # BAKE Precision-Gated Bayesian Embedding Update (Plan 236, GOAT 10/10 but marginal drift 4.7% vs 30% target — opt-in loser)
-rat_plus_bridge = ["katgpt-core/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
+rat_plus_bridge = ["katgpt-core/rat_plus_bridge", "katgpt-attn/rat_plus_bridge"]  # RAT+ Recurrence Bridge — modelless dilated inference via GDN2 state (Plan 225)
 action_bridge = ["katgpt-core/action_bridge"]  # Generic latent→raw action bridge (Plan 262). DEFAULT-ON via katgpt-core. Sigmoid-gated (`fast_sigmoid`), never softmax — ranking-preservation proven in Lean 4 (.proofs/KatgptProof, Plan 293).
 sdpg_bandit = ["bandit", "katgpt-pruners/sdpg_bandit"]  # SDPG bandit + KL anchoring (Plan 180, Research 160)
 self_advantage_gate = ["katgpt-core/self_advantage_gate", "katgpt-pruners/self_advantage_gate"]  # Advantage-margin recursion gate — dead-compute detector (Plan 283, Research 250, arxiv:2511.16886). Root crate ships the canonical AdvantageMarginGate primitive (src/pruners/self_advantage.rs); katgpt-core ships the HLA reconstruction integration (4th early-stop criterion, Plan 283 T5.1).
@@ -246,7 +253,7 @@ dual_gram_pca = ["katgpt-core/dual_gram_pca", "katgpt-spectral/dual_gram_pca"]  
 roofline_cost = ["katgpt-core/roofline_cost"]  # Roofline cost model for GPU operator runtime prediction (Research R130, Plan 159 GOAT) — default-ON
 bandit_mcts = ["game_state"]  # Bandit-guided MCTS rollout policy — NFSP/MCTS duality (Plan 067)
 hla_attention = []  # Higher-order Linear Attention — O(1) inference cache (Plan 057)
-gdn2_attention = []  # Gated DeltaNet-2 recurrent attention — O(1) decode (Plan 105, Research 70)
+gdn2_attention = ["katgpt-attn/gdn2_attention", "katgpt-attn/diagonal_gate"]  # Gated DeltaNet-2 recurrent attention — O(1) decode (Plan 105, Research 70). Kernel+types in katgpt-attn; forward glue stays root.
 cumprodsum = []  # Cumprodsum primitive — atomic 1-SS matrix multiplication (Plan 263, Research 231) — always compiled, feature reserved for future SIMD gate
 ssd_block = []  # Dual-mode SSD block decomposition — chunked semiseparable computation (Plan 263, Phase 2, GOAT PASS 33-661x speedup, default-ON)
 ss_pruner = ["katgpt-pruners/ss_pruner"]  # SemiseparablePruner — cumprodsum temporal influence pruning for DDTree (Plan 263, Phase 3, GOAT PASS 25-56% branching reduction, default-ON)
@@ -326,7 +333,7 @@ thinking_prune = ["sr2am_configurator", "katgpt-pruners/thinking_prune"]  # Thin
 rim_slots = ["katgpt-core/rim_slots", "katgpt-pruners/rim_slots"]  # RiM Reasoning Buffer Slots — fixed latent workspace for DDTree (Plan 172, Research 192)
 budget_adaptation = []  # Compression-adaptive decode budget — PFlash complexity signal (Plan 167, Research R050)
 adaptive_gamma_forecast = []  # AcceptanceForecast — entropy-bounded adaptive γ from proven linear α≈a−b·H bound (Issue 023, Research 243, arXiv:2606.12370 §3,§7.6). GOAT-gated, default OFF until ≥5% throughput gain proven on entropy-varying workload.
-wall_attention = ["katgpt-core/wall_attention", "katgpt-transformer/wall_attention"]  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention) — opt-in, requires Wall-trained model weights
+wall_attention = ["katgpt-core/wall_attention", "katgpt-transformer/wall_attention", "katgpt-attn/diagonal_gate"]  # Wall Attention — diagonal forget gates replacing RoPE (Plan 173, Research Wall Attention) — opt-in, requires Wall-trained model weights
 ane = ["dep:coreml-native", "dep:coreml-proto", "dep:prost", "kog_cpu_fusion"]  # Apple Neural Engine inference backend (Plan 176). Implies kog_cpu_fusion: ane_backend reads attn_norm_gamma / mlp_norm_gamma unconditionally.
 gpu_inference = ["dep:metal", "kog_cpu_fusion"]  # GPU inference backend via Metal compute pipelines (Plan 176). Implies kog_cpu_fusion: gpu_backend reads attn_norm_gamma / mlp_norm_gamma unconditionally.
 inference_router = ["gpu_inference", "ane"]  # Full inference routing: TriggerGate + InferenceRouter + GPU + ANE (Plan 176)
@@ -347,9 +354,9 @@ micro_belief = ["katgpt-core/micro_belief"]  # MicroRecurrentBeliefState — per
 compression_drafter = ["katgpt-core/compression_drafter"]  # CompressionDrafter — Hot-tier modelless LZ4 corpus-as-model drafter (Plan 285, Research 256, nathan.rs/gzip-lm). Hot-tier lz4_flex scorer. Opt-in until GOAT gate passes.
 funcattn = ["tiled_attention", "katgpt-core/funcattn"]  # Functional Attention — closed-form Tikhonov k×k spectral transport operator (Plan 286, Research 257, arxiv 2605.31559). Linear-in-n, sigmoid-basis. Gain-tier open primitive: ship + run GOAT gate; **NOT default-on** until LLM-domain evidence exists (paper §6 explicitly defers NLP).
 funcattn_structured_basis = ["katgpt-core/funcattn_structured_basis"]  # Plan 332 — Principled multi-scale basis constructors (DCT-log, Haar-packet) for FUNCATTN. Implies funcattn. katgpt-core DEFAULT-ON (Phase 4, 2026-06-26): per-basis GOAT gate PASS on broadband PDE-like signal (DCT-log Δ=+0.34, Haar Δ=+0.16, both ≥G1+G2). Root stays OPT-IN because it implies the root's `funcattn` feature (Gain-tier in root until LLM-domain evidence per Plan 286).
-funcattn_spectral_pre_rotate = ["funcattn", "spectral_quant"]  # FUNCATTN × SpectralQuant — pre-rotate basis weights into the calibrated eigenbasis (Plan 286 T5.1). Opt-in experiment; ships the composition glue + `effective_basis_rank` diagnostics. The primitive lives in `katgpt-core::funcattn::pre_rotate_basis_weights_into`.
-funcattn_chiar_blend = ["funcattn", "chiaroscuro"]  # FUNCATTN × CHIAR — per-token spectral-entropy sigmoid blend of FUNCATTN (low-entropy) vs fallback op (Plan 286 T5.2). Opt-in; 2× attention cost, quality/latency knob. Plugs `FuncAttnChiaroscuroOp` into CHIAR's router for utilization/collapse tracking.
-funcattn_freeze_thaw = ["funcattn"]  # FUNCATTN × BLAKE3-committed snapshot hot-swap (Plan 286 T5.3). `FuncAttnWeightsSnapshot` + atomic `RwLock<Arc<>>` store. Freeze/thaw bridge to riir-ai Plan 318.
+funcattn_spectral_pre_rotate = ["funcattn", "spectral_quant", "katgpt-attn/funcattn_spectral_pre_rotate"]  # FUNCATTN × SpectralQuant — pre-rotate basis weights into the calibrated eigenbasis (Plan 286 T5.1). Opt-in experiment; ships the composition glue + `effective_basis_rank` diagnostics. The primitive lives in `katgpt-core::funcattn::pre_rotate_basis_weights_into`.
+funcattn_chiar_blend = ["funcattn", "chiaroscuro", "katgpt-attn/funcattn_chiar_blend"]  # FUNCATTN × CHIAR — per-token spectral-entropy sigmoid blend of FUNCATTN (low-entropy) vs fallback op (Plan 286 T5.2). Opt-in; 2× attention cost, quality/latency knob. Plugs `FuncAttnChiaroscuroOp` into CHIAR's router for utilization/collapse tracking.
+funcattn_freeze_thaw = ["funcattn", "katgpt-attn/funcattn_freeze_thaw"]  # FUNCATTN × BLAKE3-committed snapshot hot-swap (Plan 286 T5.3). `FuncAttnWeightsSnapshot` + atomic `RwLock<Arc<>>` store. Freeze/thaw bridge to riir-ai Plan 318.
 funcattn_compose = ["funcattn_spectral_pre_rotate", "funcattn_chiar_blend", "funcattn_freeze_thaw"]  # Plan 286 Phase 5 parent — all three FUNCATTN compositions. Each is independently switchable; this convenience feature enables all.
 cross_resolution_transport = ["katgpt-core/cross_resolution_transport"]  # Cross-Resolution Spectral Transport — asymmetric-basis FUNCATTN (Plan 310, Research 291, arXiv:2605.31559). Generalizes FUNCATTN to `d_src ≠ d_dst`, enabling train-on-small-deploy-on-large latent transfer without retraining. Open primitive: frozen BLAKE3-committed bases + zero-alloc transport. DEFAULT-ON (Plan 310 Phase 4, 2026-06-23): G1 mean cos 0.8944≥0.85, G2-A rank preservation mean cos 0.9300≥0.85 (Super-GOAT headline holds), G3 elbow k=8, G4 0 allocs. Promoted per AGENTS.md rule 'GOAT pass → promote to default'.
 latent_field_steering = ["katgpt-core/latent_field_steering"]  # Latent Field Steering — top-down direction-vector injection into mutable latent state (Plan 309, Research 290, CAA + functional emotions). Zero-alloc SIMD SAXPY + sigmoid-falloff localized support (radius/zone). DEFAULT-ON (Plan 309 Phase 4, 2026-06-23): G1-G5 all PASS — G1 fear-axis 1.50×≥1.30, G2 mean cos 0.9958≥0.95 min cos 0.9667≥0.90, G3 leakage 4.5e-5<0.01, G4 19.2µs<1ms, G5 0 allocs. Caveat: 8% argmax flip at α=0.3 — keep α≤0.3 for hot-path.
@@ -393,7 +400,7 @@ nf_flow = ["nf_flow_score", "nf_flow_gate", "nf_flow_budget"]  # NFCoT parent fe
 nf_flow_mux = ["nf_flow_score", "mux_pruner"]  # NFCoT FlowMUX — flow scoring for MUX trajectories (Plan 229 T6, default OFF)
 nf_flow_fold = ["nf_flow_score", "chain_fold"]  # NFCoT FlowFold — confidence-gated chain folding (Plan 229 T7, default OFF)
 hardware_aware_scheduler = []  # Hardware-Aware Prefix Scheduler — multi-request verification budget allocator (Plan 339, Issue 003, DSpark §3.2.2). Opt-in until a real multi-request batch caller exercises the synthetic GOAT gate.
-static_cal_tables = []  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1, GOAT 100% latency, default-ON)
+static_cal_tables = ["katgpt-attn/static_cal_tables"]  # Static Calibration Tables — pre-computed per-head attention scales (Plan 227 Phase 1, GOAT 100% latency, default-ON)
 targeted_precision = ["katgpt-kv/targeted_precision"]  # Targeted Precision Budget — per-head bit allocation for quantization (Plan 227 Phase 2, GOAT 21.3% ppl, default-ON)
 modality_pruned_load = []  # Modality-Pruned Context Loading — query classifier + pipeline selection (Plan 227 Phase 3, GOAT 97.6% latency simple queries, default-ON)
 channel_simd_align = []  # Channel SIMD Alignment — cache-line-padded weight storage for SIMD throughput (Plan 227 Phase 5)
