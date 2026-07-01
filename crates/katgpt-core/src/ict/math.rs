@@ -399,8 +399,8 @@ mod tests {
                 mean[a] += d[a];
             }
         }
-        for a in 0..4 {
-            mean[a] /= 3.0;
+        for m in mean.iter_mut() {
+            *m /= 3.0;
         }
         for (k, d) in dists.iter().enumerate() {
             let mut mm = [0.0_f32; 4];

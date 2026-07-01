@@ -225,8 +225,8 @@ mod tests {
         assert!((out[0] - 0.25).abs() < 1e-6, "out[0] = {}", out[0]);
         assert!((out[1] - 0.5).abs() < 1e-6, "out[1] = {}", out[1]);
         assert!((out[2] - 0.75).abs() < 1e-6, "out[2] = {}", out[2]);
-        for i in 3..6 {
-            assert!((out[i] - 1.0).abs() < 1e-6, "out[{i}] = {}", out[i]);
+        for (i, oi) in out[3..6].iter().enumerate() {
+            assert!((*oi - 1.0).abs() < 1e-6, "out[{}] = {}", i + 3, oi);
         }
     }
 

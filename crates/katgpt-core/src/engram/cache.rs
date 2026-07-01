@@ -360,8 +360,8 @@ mod tests {
         fn fetch(&self, hash: EngramHash, out: &mut [f32]) -> bool {
             if hash.0 >= self.base && (hash.0 - self.base) < self.n as u64 {
                 let i = (hash.0 - self.base) as usize;
-                for j in 0..self.d {
-                    out[j] = (i as f32) * 100.0 + j as f32;
+                for (j, oj) in out[..self.d].iter_mut().enumerate() {
+                    *oj = (i as f32) * 100.0 + j as f32;
                 }
                 true
             } else {

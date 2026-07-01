@@ -454,8 +454,7 @@ mod tests {
         tiled_attention_forward(&q, &k, &v, &mut output, 1, head_dim, scale);
 
         // Single token: attention score = 1.0, softmax = 1.0, output = V
-        for d in 0..head_dim {
-            let out_d = output[d];
+        for (d, &out_d) in output[..head_dim].iter().enumerate() {
             let diff = (out_d - 0.5).abs();
             assert!(diff < 1e-5, "output[{d}] = {out_d}, expected 0.5");
         }

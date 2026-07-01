@@ -340,11 +340,11 @@ mod tests {
         let cfg = cfg_for_dim(d);
         let mut q = vec![0.0f32; d];
         let mut k = vec![0.0f32; d];
-        for i in 0..d / 2 {
-            q[i] = (i as f32) + 1.0;
+        for (i, qi) in q.iter_mut().take(d / 2).enumerate() {
+            *qi = (i as f32) + 1.0;
         }
-        for i in d / 2..d {
-            k[i] = (i as f32) + 1.0;
+        for (i, ki) in k[d / 2..d].iter_mut().enumerate() {
+            *ki = ((i + d / 2) as f32) + 1.0;
         }
         let v = vec![1.0f32; d];
         let mut out = vec![0.0f32; d];
@@ -510,11 +510,11 @@ mod tests {
         let mk_orth_pair = |seed: f32| -> (Vec<f32>, Vec<f32>) {
             let mut q = vec![0.0f32; d];
             let mut k = vec![0.0f32; d];
-            for i in 0..d / 2 {
-                q[i] = seed + i as f32;
+            for (i, qi) in q.iter_mut().take(d / 2).enumerate() {
+                *qi = seed + i as f32;
             }
-            for i in d / 2..d {
-                k[i] = seed + i as f32;
+            for (i, ki) in k[d / 2..d].iter_mut().enumerate() {
+                *ki = seed + (i + d / 2) as f32;
             }
             (q, k)
         };
