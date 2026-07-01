@@ -54,6 +54,11 @@
 //! - Issue 002 acceptance criteria: "no regression when trace is empty".
 
 use katgpt_core::{ConfiguratorContext, PlanningDecision};
+// Re-export the shared contract from katgpt-core (Plan 310 T2.6/T2.7, Issue 002).
+// The trait + EmptyTrace + trace_signal live in katgpt-core so both the producer
+// (riir-games::ActiveStateEvent) and the consumer (this wrapper) can see them
+// via the common ancestor. This crate re-exports for backward compatibility.
+pub use katgpt_core::pruners::active_state::{ActiveStateTrace, EmptyTrace, trace_signal};
 
 use crate::feedback_bandit::FeedbackBandit;
 
@@ -63,76 +68,6 @@ use crate::feedback_bandit::FeedbackBandit;
 /// (~3.0× compression × ~1.5 trend factor = ~4.5) while rejecting the typical
 /// non-stale signal (~1.2× × ~1.0 = ~1.2).
 pub const DEFAULT_TRACE_SIGNAL_THRESHOLD: f32 = 3.5;
-
-// ── Trace trait ─────────────────────────────────────────────────────────
-
-/// Read-only view over a windowed active-state trace.
-///
-/// Implementors summarize a slice of active-state events into three scalars:
-/// - `compression_ratio_mean` — mean compression_ratio over the window.
-/// - `constraint_trend` — signed slope of active_constraint_count (rising > 0).
-/// - `hla_arousal` — HLA arousal scalar (diagnostic only, not in the decision).
-///
-/// The windowing strategy (last N events, last T ticks, exponentially
-/// weighted) is the implementor's choice. A reasonable default is
-/// "the most recent `2 × patience` events" so the trace covers the same
-/// horizon as stall detection.
-///
-/// This trait is intentionally minimal — it carries no gameplay types and
-/// no integrity hashes. The IP-heavy `ActiveStateEvent` struct (HLA scalars,
-/// BLAKE3 commitment) stays in riir-games and exposes only these three
-/// scalars through a thin adapter impl.
-pub trait ActiveStateTrace {
-    /// Mean compression_ratio over the recent trace window.
-    ///
-    /// Returns 0.0 when the trace is empty (no events recorded yet).
-    fn compression_ratio_mean(&self) -> f32;
-
-    /// Signed slope of `active_constraint_count` over the window.
-    ///
-    /// Positive = constraints are accumulating (harness struggling to fit).
-    /// Negative = constraints are being resolved (harness keeping up).
-    /// Returns 0.0 when the trace has fewer than 2 events (slope undefined).
-    fn constraint_trend(&self) -> f32;
-
-    /// HLA arousal scalar over the window (diagnostic, not in the decision).
-    ///
-    /// Included in the trait so callers can log it alongside the decision
-    /// without needing a second adapter. Not read by the wrapper's policy.
-    fn hla_arousal(&self) -> f32;
-}
-
-/// An empty trace — the default before any MUX-Latent compression events land.
-///
-/// All accessors return 0.0. The wrapper's policy degrades to the inner
-/// `FeedbackBandit`'s stall-only path when given this (the "no regression
-/// when trace is empty" acceptance criterion).
-#[derive(Debug, Clone, Copy, Default)]
-pub struct EmptyTrace;
-
-impl ActiveStateTrace for EmptyTrace {
-    #[inline]
-    fn compression_ratio_mean(&self) -> f32 {
-        0.0
-    }
-    #[inline]
-    fn constraint_trend(&self) -> f32 {
-        0.0
-    }
-    #[inline]
-    fn hla_arousal(&self) -> f32 {
-        0.0
-    }
-}
-
-/// Computed trace signal — the product `compression_ratio_mean × (1 + max(constraint_trend, 0))`.
-///
-/// Pure function of an [`ActiveStateTrace`]; exposed for callers that want
-/// to log the signal alongside the decision (e.g. "trace_signal=4.7 → WeightUpdate").
-#[inline]
-pub fn trace_signal<T: ActiveStateTrace + ?Sized>(trace: &T) -> f32 {
-    trace.compression_ratio_mean() * (1.0 + trace.constraint_trend().max(0.0))
-}
 
 // ── Wrapper ─────────────────────────────────────────────────────────────
 

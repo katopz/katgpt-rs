@@ -214,6 +214,22 @@ impl CompressionSummary {
             estimated_ttft_reduction,
         }
     }
+
+    /// Compression ratio as a scalar `>= 1.0` (`1.0` = no compression).
+    ///
+    /// `original_tokens / effective_entries` — how many original tokens each
+    /// effective prefill entry (raw or latent slot) represents. This is the
+    /// signal consumed by the Plan 310 active-state bridge: a high ratio means
+    /// the MUX-Latent compressor is working hard, which (per HarnessBridge
+    /// Fig 4) correlates with active-state-rate and predicts weight staleness.
+    ///
+    /// Returns `1.0` when `effective_entries` is zero (guard against
+    /// div-by-zero on an empty sequence).
+    #[inline]
+    pub fn compression_ratio(&self) -> f32 {
+        let denom = self.effective_entries.max(1) as f32;
+        self.original_tokens as f32 / denom
+    }
 }
 
 #[cfg(test)]

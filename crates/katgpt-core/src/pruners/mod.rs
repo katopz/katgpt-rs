@@ -2,6 +2,13 @@
 //! crates (riir-engine via katgpt-core) can consume them without depending
 //! on the root crate.
 
+/// Active-state trace contract (Plan 310 T2.6/T2.7, Issue 002).
+///
+/// Always available — zero dependencies. The shared bridge between producers
+/// (`riir-games::ActiveStateEvent`) and consumers
+/// (`katgpt-pruners::TraceInformedFeedbackBandit`).
+pub mod active_state;
+
 #[cfg(feature = "review_metrics")]
 pub mod review_metrics;
 
