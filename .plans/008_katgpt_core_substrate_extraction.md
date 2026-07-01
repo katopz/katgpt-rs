@@ -1,7 +1,7 @@
 # Plan 008: katgpt-core Substrate Extraction (Phase 1+2 of Issue 007)
 
 > **Origin:** [Issue 007](../.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md)
-> **Status:** Active — Phase 1 step 1 ✅ done (pre-existing); steps 2-7 queued
+> **Status:** **Substantively COMPLETE** (re-verified 2026-07-01). Phase 1 steps 1-7 ✅; Phase 2 dedup 2.2/2.3/2.5/2.6/2.7 ✅ + 2.8 bit-identical ✅. **Re-audit findings (2026-07-01):** Step 3 `tokenizer` DONE as standalone `katgpt-tokenizer` crate (no SentencePiece-sys dep — Q2 concern was moot); Phase 4 `plotters` optional DONE (Issue 355 Phase 2a); substrate extraction went further into a "Phase E" of 16 publishable leaf crates (see Issue 007 acceptance). 2.1 hla role-aware DEFERRED BY DESIGN (Category C — `role_transport`). One open strategy decision: the 16 publishable crates vs release-plz's "only katgpt-core ships" — see Issue 007 §Open questions Q5.
 > **Branch:** `develop`
 > **Created:** 2026-06-27
 > **Cross-repo:** katgpt-rs (primary moves), riir-ai/riir-engine (Phase 2 dedup consumer)
@@ -126,7 +126,7 @@ refined strategy doc, stranded in a private fork.
   `transformer/{gemma2,llama,prefill,raven,mtp,attention}.rs` layout. Root
   file is ~6300 lines after step 2 (forward funcs + ForwardContext + tests),
   still over the 2048 ceiling — addressed in follow-up.
-- [ ] **Step 3 — `tokenizer` → core.** DEFERRED per Q2 verdict. Audit SentencePiece-sys dep first; if present, leave in root.
+- [x] **Step 3 — `tokenizer`.** ✅ DONE (re-audit 2026-07-01) — resolved differently than the original Q2 framing. Extracted as a **standalone `katgpt-tokenizer` crate** (BPE + ToaST split-tree + ConvexTok LP). The Q2 deferral concern (SentencePiece-sys C++ build dep) was **moot**: the tokenizer is pure-Rust (BPE/trie/LP), no SentencePiece-sys dep at all. Crate builds clean (`cargo check -p katgpt-tokenizer`). Not moved into `katgpt-core` (kept as its own publishable leaf, matching the Phase E pattern).
 - [x] **Step 4 — `hla` → core (substrate half).** 2248 lines total (`forward.rs` 569 + `kernel.rs` 1019 + `types.rs` 606 + `mod.rs` 54). Depends on step 2.
 
   ⚠️ **AUDIT FINDING (2026-06-28, before execution): the original premise was wrong.**
@@ -375,7 +375,7 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 - [x] **2.3 riir-engine `src/types.rs` → `use katgpt_core::types::{...}`** (2026-06-28)
 
   **Scope:** riir-engine's `types.rs` already does `pub use katgpt_core::types::*;` at line 10. Only local addition is `NoiseSchedule` (feature-gated `dllm`, engine-specific D2F noise schedule). No further dedup possible — the substrate (Config, Rng, math utils, LoRA, DomainLatent, AttentionMode) is fully re-exported.
-- [ ] 2.4 riir-engine `src/tokenizer.rs` → consume core (after step 3, if it moves)
+- [~] 2.4 riir-engine `src/tokenizer.rs` → consume `katgpt-tokenizer` (or `katgpt_core`). UNBLOCKED as of Step 3 re-audit (2026-07-01): the `katgpt-tokenizer` crate now exists and is publishable. The riir-engine `src/tokenizer.rs` dedup pass itself was NOT separately re-run in this re-audit — it's a non-blocking follow-up (riir-engine's local tokenizer.rs continues to work; the substrate is now available for it to consume whenever a refactor pass is scheduled).
 - [x] **2.5 riir-engine `src/dd_tree.rs` + `spec_types.rs` → consume core** (2026-06-28)
 
   **Scope:** riir-engine's `spec_types.rs` local definitions of `TreeNode`, `DraftResult`, `RejectionReason`, `DraftEvent`, `PrefillMode`, `FlashPrefillConfig`, `BlockScores` replaced with `pub use katgpt_core::speculative::types::{...}` re-export. katgpt-core's versions are supersets (additive feature-gated fields/variants like `RejectionReason::KurtosisRejection`, `DraftResult.cost_snapshot`/`stability`/`routing_overlap`, `FlashPrefillConfig.score_reduction`/`budget_adaptation`).
@@ -415,7 +415,7 @@ After each Phase 1 step lands, riir-engine deletes its copy and imports from
 ### Phase 3-5 — DEFERRED
 
 - [ ] **Phase 3** (root subdir reorg into `primitives/`/`inference/`/`games/`/`backends/`) — cosmetic, not worth churn while 100+ features flatten at root. Revisit if/when root module count becomes unnavigable.
-- [ ] **Phase 4** (`plotters` optional, `cargo check --no-default-features` clean on root) — independent quick win; do as standalone if it becomes blocking.
+- [x] **Phase 4** (`plotters` optional, `cargo check --no-default-features` clean on root) — ✅ DONE (Issue 355 Phase 2a, outside this plan): `plotters = { version = "0.3", optional = true }` behind the `plot` feature (DEFAULT-ON to preserve historical behavior; riir-ai sets `default-features = false` to drop it). Re-verified 2026-07-01.
 - [ ] ~~**Phase 5** (publish `katgpt-rs` to crates.io)~~ — **RESCINDED.** Conflicts with the post-issue decision in `Cargo.toml:9` + `release-plz.toml:9-12` to keep root private permanently. Only `katgpt-core` ships.
 
 ---
@@ -440,7 +440,8 @@ Mirrors Issue 007 §Acceptance, updated:
 - [x] **Phase 1 step 5 (substrate half):** speculative-decoding types live in `katgpt-core/src/speculative/types.rs`, re-exported from root `src/speculative/types.rs`. Bit-identical (32/32 substrate tests + 9 composition tests green).
 - [x] **Phase 1 step 6 (substrate half):** `mcts` algorithm (`mcts_search`, `mcts_search_informed`, UCB1 helpers, `MCTSNode`), `sampling` primitives (CDF + residual samplers), and `delta_mem` substrate (`DeltaMemoryState`, `FeatureHasher`, `MultiDomainMemory`) live in `katgpt-core/src/{mcts.rs, speculative/sampling.rs, delta_mem/}`. Bit-identical behavior: 14+5+37=56 substrate tests green in core; 5 bandit composition tests + 0 sampling composition tests + delta_mem bench G3 (suppression 42.90%, recall_loss 0.00%) all green in root. Composition that needs root-only types (`BanditRolloutPolicy` needs `BanditStats`; `MemorySteeredPruner<P>` / `MultiDomainMemoryPruner<P>` wrap root `ScreeningPruner` impls) stays in root as expected. No call-site changes.
 - [x] **Phase 1 step 7:** riir-engine `simd/wasm32.rs` consumes `katgpt_core::simd`. (2026-06-28)
-- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE, two items deferred per verdicts.** Done: 2.2 transformer, 2.3 types, 2.5 dd_tree/spec_types, 2.6 mcts/sampling/delta_mem, 2.7 simd (all consume `katgpt_core::`/`katgpt_transformer::`). Partial: 2.1 hla (`[~]` — `HlaVariant` dedup'd + core kernels optimized; Blocker #1 role-field contamination deferred — needs side-channel refactor; Blocker #2 ahla_step math bug resolved via Issue 009). Deferred per verdict: 2.4 tokenizer (blocked on Step 3 SentencePiece audit). Bit-identical verification 2.8 PASS (this session). Net LoC: −1808 riir-engine, +445 katgpt-core.
+- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE.** Done: 2.2 transformer, 2.3 types, 2.5 dd_tree/spec_types, 2.6 mcts/sampling/delta_mem, 2.7 simd (all consume `katgpt_core::`/`katgpt_transformer::`). Partial: 2.1 hla (`[~]` — `HlaVariant` dedup'd + core kernels optimized; Blocker #2 ahla_step math bug resolved via Issue 009; Blocker #1 role-aware DEFERRED BY DESIGN — Category C `role_transport`, not a defect). Unblocked-but-not-rerun: 2.4 tokenizer (`katgpt-tokenizer` crate now exists per Step 3 re-audit; the riir-engine dedup pass is a non-blocking follow-up). Bit-identical verification 2.8 PASS. Net LoC: −1808 riir-engine, +445 katgpt-core.
+- [x] **Re-audit (2026-07-01):** Step 3 tokenizer ✅ DONE (standalone `katgpt-tokenizer`, no SentencePiece); Phase 4 plotters ✅ DONE (Issue 355 Phase 2a); substrate extraction expanded into "Phase E" — 16 publishable leaf crates; katgpt-core lib **661/0 green** (isolated `CARGO_TARGET_DIR`). Open strategy decision: 16 publishable crates vs release-plz "only core ships" — Issue 007 §Open questions Q5.
 - [x] Each phase commit includes GOAT/bench evidence per AGENTS.md "dont defer benchmark task" — every step's GOAT gate reported inline (2.1: 2389/2389; 2.2: 80/80+24/24; 2.5: 15/15+24/24+37/37; 2.6: 14+5+47 substrate + bench G3; 2.7: 124/124+2428/2429; 2.8: this session).
 
 ---

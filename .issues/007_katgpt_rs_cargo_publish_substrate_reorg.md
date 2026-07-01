@@ -1,7 +1,14 @@
 # Issue 007: Make katgpt-rs Cargo-consumable — Pillar Reorganization + HLA Substrate Extraction
 
 > **Type:** Architecture / reorganization (unblocks cargo publish + kills cross-repo duplication)
-> **Status:** **Phase 1+2 core path COMPLETE** (2026-07-01). Phase 1 steps 1-7 done (`types`, `transformer`→`katgpt-transformer`, `hla`, `dd_tree`/`spec_types`, `mcts`/`sampling`/`delta_mem`, `simd/wasm32`). Phase 2 dedup 2.2/2.3/2.5/2.6/2.7 done (riir-engine consumes `katgpt_core::`/`katgpt_transformer::`); 2.8 bit-identical verification PASS (2026-07-01). Two items deferred per verdicts: 2.1 hla role-aware (Blocker #1 — side-channel refactor) + Step 3/2.4 tokenizer (SentencePiece audit). Phase 3 (cosmetic), Phase 4 (non-blocking) deferred. Phase 5 RESCINDED. See [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md) for the full execution log + GOAT gates.
+> **Status:** **Substantively COMPLETE** (re-verified 2026-07-01). Phase 1 steps 1-7 done; Phase 2 dedup 2.2/2.3/2.5/2.6/2.7 done + 2.8 bit-identical PASS. **Re-audit (2026-07-01) found two formerly-deferred items are now DONE:**
+> - **Step 3 `tokenizer`** — DONE as standalone `katgpt-tokenizer` crate (BPE/ToaST/ConvexTok; **no SentencePiece-sys dep at all** — the Q2 deferral concern was moot). Builds clean.
+> - **Phase 4 `plotters` optional** — DONE behind the `plot` feature (Issue 355 Phase 2a). `plotters = { optional = true }` in root `Cargo.toml`.
+> - **Phase E (undocumented in original issue)** — substrate extraction went further: 16 publishable leaf crates now exist (`katgpt-types`, `katgpt-hla`, `katgpt-transformer`, `katgpt-tokenizer`, `katgpt-speculative`, `katgpt-kv`, `katgpt-dec`, `katgpt-sense`, `katgpt-sleep`, `katgpt-spectral`, `katgpt-micro-belief`, `katgpt-personality`, `katgpt-attn-match`, `katgpt-pruners`, `katgpt-quant`, `katgpt-attn`). `katgpt-core` re-exports them (e.g. `pub use katgpt_hla as hla;`) for back-compat.
+> - **2.1 hla role-aware** — DEFERRED BY DESIGN (not a defect): depends on private `role_transport` (Category C per 003). `katgpt-hla` lib docs document this split explicitly.
+> - **ONE genuinely open decision:** 16 substrate crates are `publish=true` in their `Cargo.toml`, but `release-plz.toml` only releases `katgpt-core` and comments everywhere say "only katgpt-core ships". Either flip them to `publish=false` (policy A) or actually publish the substrate leaves to fulfill this issue's cargo goal (policy B). See §Open questions Q5.
+> - katgpt-core lib tests: **661 passed / 0 failed** (re-verified 2026-07-01, isolated `CARGO_TARGET_DIR`).
+> Phase 3 (cosmetic root subdir reorg) still deferred. Phase 5 (publish root) RESCINDED. See [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md) for the full execution log + GOAT gates.
 > **Audit findings (2026-06-27):**
 > - **Phase 5 RESCINDED** — `Cargo.toml:9` + `release-plz.toml:9-12` lock `katgpt-rs` root as `publish = false` permanently ("dev/examples aggregator — never published. Only katgpt-core ships to crates.io"). Decision was made AFTER this issue was filed and overrides its Phase 5.
 > - **Phase 1 step 1 (`types` move) ALREADY DONE** — `katgpt-core/src/types/` has 14 files; root `src/types.rs` is a thin re-export shim.
@@ -251,19 +258,24 @@ Phases 1–2 are the high-value, low-risk core (kills the duplication, unblocks 
 
 ## Acceptance
 
-- [x] **Phase 1:** all Category A substrate modules live in `katgpt-core` (or sibling `katgpt-transformer`), re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test --lib` green. (Step 3 `tokenizer` deferred per Q2 verdict — SentencePiece audit; not blocking.)
-- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE**, bit-identical verification (2.8) PASS 2026-07-01. Two items deferred per verdicts: 2.1 hla role-aware (Blocker #1) + 2.4 tokenizer (Step 3 dep). `forward_hla`/`dd_tree`/`mcts` tests bit-identical.
+- [x] **Phase 1:** all Category A substrate modules live in `katgpt-core` (or sibling crates), re-exported from root. `cargo test -p katgpt-core --lib` + `cargo test --lib` green. **Step 3 `tokenizer` DONE** (re-audit 2026-07-01): extracted as standalone `katgpt-tokenizer` crate — BPE/ToaST/ConvexTok, no SentencePiece-sys dep (the Q2 concern was moot).
+- [~] **Phase 2:** riir-engine Category A dedup — **core path DONE**, bit-identical verification (2.8) PASS 2026-07-01. One item deferred by design: 2.1 hla role-aware (Category C — depends on private `role_transport`). 2.4 tokenizer unblocked now that Step 3 is done (`katgpt-tokenizer` exists) but the riir-engine `src/tokenizer.rs` dedup pass itself was not separately re-run in this re-audit; tracked as a non-blocking follow-up. `forward_hla`/`dd_tree`/`mcts` tests bit-identical.
 - [-] **Phase 2b:** RESCINDED — premise inverted (see audit finding). `cgsp` correctly in core, `cce` correctly in root; no tier move needed.
 - [-] **Phase 3:** DEFERRED (cosmetic root subdir reorg — not worth churn while 100+ features flatten at root).
-- [-] **Phase 4:** DEFERRED (non-blocking; `cargo check --no-default-features` currently clean, `plotters` optional is a standalone quick win if it becomes blocking).
+- [-] **Phase 4:** DONE — re-audit 2026-07-01: `plotters = { version = "0.3", optional = true }` behind the `plot` feature (Issue 355 Phase 2a). `cargo check --no-default-features` clean. (Kept `[-]` checkbox because the acceptance line originally framed it as deferred; the work is complete — see Issue 355 Phase 2a for the GOAT.)
 - [-] **Phase 5:** ~~RESCINDED~~ — conflicts with `Cargo.toml:9` + `release-plz.toml:9-12` decision to keep root private permanently. Only `katgpt-core` ships.
+- [x] **Phase E (post-original-issue, 2026-06-28+):** substrate extraction went beyond Phases 1-2 into 16 publishable leaf crates (`katgpt-types`/`katgpt-hla`/`katgpt-transformer`/`katgpt-tokenizer`/`katgpt-speculative`/`katgpt-kv`/`katgpt-dec`/`katgpt-sense`/`katgpt-sleep`/`katgpt-spectral`/`katgpt-micro-belief`/`katgpt-personality`/`katgpt-attn-match`/`katgpt-pruners`/`katgpt-quant`/`katgpt-attn`). `katgpt-core` re-exports the consumed surface (e.g. `pub use katgpt_hla as hla;`). katgpt-core lib: **661/0 green** (re-verified 2026-07-01).
 - [x] This issue updated with GOAT/bench evidence at each phase — every step's GOAT gate reported inline in [Plan 008](../.plans/008_katgpt_core_substrate_extraction.md); 2.8 bit-identical verification 2026-07-01.
 
 ---
 
 ## Open questions (need your call)
 
-1. **Phase 1 scope:** the full 7-step Category A chain above, or a subset (e.g. just the `types`→`transformer`→`hla` core that unblocks the HLA case study first)? Recommend the full chain — anything left behind stays duplicated.
-2. **`tokenizer`:** move to core (SentencePiece dep risk) or leave in root? Needs the Risk 4 audit.
-3. **`mcts`/`dd_tree` generic-vs-game split:** how aggressively to parameterize over core `Game`/`Node` traits vs. leave game-coupled copies in riir-engine?
-4. **Go order:** Phase 1+2 first (kills duplication, highest value), defer 3–5? Or push all the way to publish in one go?
+1. **Phase 1 scope:** the full 7-step Category A chain above, or a subset (e.g. just the `types`→`transformer`→`hla` core that unblocks the HLA case study first)? Recommend the full chain — anything left behind stays duplicated. *(Resolved: full chain done.)*
+2. **`tokenizer`:** move to core (SentencePiece dep risk) or leave in root? Needs the Risk 4 audit. *(Resolved 2026-07-01: extracted as standalone `katgpt-tokenizer` crate; no SentencePiece-sys dep at all — the risk was moot. Crate builds clean.)*
+3. **`mcts`/`dd_tree` generic-vs-game split:** how aggressively to parameterize over core `Game`/`Node` traits vs. leave game-coupled copies in riir-engine? *(Resolved per Q3 verdict: generic core trait + concrete game impls in riir-engine — done in Steps 5/6.)*
+4. **Go order:** Phase 1+2 first (kills duplication, highest value), defer 3–5? Or push all the way to publish in one go? *(Resolved: Phase 1+2 done; Phase 5 rescinded.)*
+5. **Publish policy (NEW, needs your call):** 16 substrate leaf crates are marked `publish = true` in their `Cargo.toml`, but `release-plz.toml` only releases `katgpt-core` and comments everywhere say "only katgpt-core ships to crates.io". This is inconsistent. Two coherent fixes:
+   - **(A) Lock down:** flip the 16 crates to `publish = false` to match the "only core ships" policy. Honest about current intent; no crates.io commitment. Low risk.
+   - **(B) Open up:** extend `release-plz.toml` to release the substrate leaves (at minimum `katgpt-types`, then `katgpt-hla`/`katgpt-transformer`/`katgpt-tokenizer`) — directly fulfills this issue's TL;DR goal ("I want others to use it as easily as possible aka cargo"). Higher commitment (semver, public API freeze).
+   **Recommendation (B) staged:** publish `katgpt-types` first (it's a pure leaf, the foundation), then gate the rest behind a `0.1.0` first-publish once each crate's public API is audited. This is the literal goal of Issue 007. But this is a strategy call — flagging, not deciding.
