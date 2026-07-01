@@ -217,6 +217,28 @@ temporal_deriv = []
 # The root forwards this so bench_165_hydra_budget_goat reaches the function.
 decode_specialize = []
 
+# Product-policy inference sharpening (Plan 283, Research 250). Empty tracking
+# flag — gates `ProductPolicySharpen` struct + impls in self_advantage.rs.
+# The root forwards this so examples/pruner_04_product_policy reaches the type.
+# Same "transitive feature trap" class as bake_precision (riir-ai/.issues/355):
+# the root feature used to be empty `[]`, never reaching this crate, leaving the
+# example's `use katgpt_rs::pruners::self_advantage::ProductPolicySharpen`
+# resolving to a cfg'd-out item (E0432).
+product_policy_sharpen = []
+
+# AdvantageDirectionSnapshot + EMA accumulator (Plan 283 T5.3). Empty tracking
+# flag — gates `AdvantageDirectionAccumulator` / `AdvantageDirectionSnapshot`
+# in self_advantage.rs. The root forwards this so the freeze/thaw primitives
+# are reachable via katgpt-rs.
+advantage_freeze_thaw = []
+
+# Domino Causal Correction (Plan 197). Empty tracking flag — gates the
+# `impl DominoPruner for SudokuPruner` block in sudoku_pruner.rs (references
+# `katgpt_core::traits::DominoPruner`, which is always available). The root
+# forwards this; the main PrefixCorrectionTable/domino_score machinery lives
+# in katgpt-core / the root speculative module.
+domino_correction = []
+
 # Substrate
 substrate_gate = ["katgpt-core/sparse_mlp", "cna_steering"]
 belief_drafter = ["katgpt-core/belief_drafter", "papaya"]
@@ -279,15 +301,12 @@ mux_latent_context = []
 # declare them as expected cfg values so check-cfg does not flag them; the
 # main crate re-implements the integration locally where needed.
 [lints.rust]
+# `freq_bandit` is the only remaining check-cfg-only entry: it has real
+# `#[cfg(feature = "freq_bandit")]` blocks in bfcp_lfu_shard.rs (~14 refs) but
+# the integration references `crate::freq_bandit::*` which exists only in the
+# main crate (see comment ~line 162). Declaring it as a feature here would
+# break compilation, so it stays in the allowlist. All other cfg'd features
+# in this crate are now declared in [features] above.
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(feature, values("freq_bandit"))',
-    'cfg(feature, values("temporal_deriv"))',
-    'cfg(feature, values("domino_correction"))',
-    'cfg(feature, values("decode_specialize"))',
-    'cfg(feature, values("rosetta_pruner"))',
-    'cfg(feature, values("bake_precision"))',
-    'cfg(feature, values("product_policy_sharpen"))',
-    'cfg(feature, values("advantage_freeze_thaw"))',
-    'cfg(feature, values("sudoku_mrv"))',
-    'cfg(feature, values("sudoku_cp"))',
 ] }
