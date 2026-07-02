@@ -7,6 +7,7 @@ description = "Micro-recurrent belief-state kernel — implicit per-entity state
 repository = "https://github.com/katopz/katgpt-rs"
 keywords = ["inference", "belief-state", "recurrent", "modelless", "latent"]
 categories = ["algorithms", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 katgpt-types = { path = "../katgpt-types" }

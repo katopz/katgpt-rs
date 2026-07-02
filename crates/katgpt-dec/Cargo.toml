@@ -7,6 +7,7 @@ description = "Discrete Exterior Calculus substrate — exterior derivative, cod
 repository = "https://github.com/katopz/katgpt-rs"
 keywords = ["dec", "stokes", "hodge", "exterior-calculus", "cochains"]
 categories = ["mathematics", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 # Zero dependencies. katgpt-dec is a pure-math substrate that ships its own

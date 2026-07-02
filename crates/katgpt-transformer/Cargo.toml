@@ -8,6 +8,7 @@ repository = "https://github.com/katopz/katgpt-rs"
 readme = "README.md"
 keywords = ["transformer", "inference", "weights", "kv-cache", "modelless"]
 categories = ["data-structures", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 # Pure substrate types — depends only on katgpt-core for Config / Rng / math / SIMD kernels.

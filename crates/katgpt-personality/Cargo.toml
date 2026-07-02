@@ -7,6 +7,7 @@ description = "Personality-Weighted Latent Layer Composition — sigmoid-gated N
 repository = "https://github.com/katopz/katgpt-rs"
 keywords = ["personality", "latent", "composition", "moe", "modelless"]
 categories = ["algorithms", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 # katgpt-personality is a pure substrate leaf — the only katgpt-* dependency is

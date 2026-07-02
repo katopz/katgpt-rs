@@ -7,6 +7,7 @@ description = "Sleep-Time Query Anticipator — offline query anticipation subst
 repository = "https://github.com/katopz/katgpt-rs"
 keywords = ["sleep-time", "anticipation", "latent", "inference", "modelless"]
 categories = ["algorithms", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 # katgpt-sleep is a pure substrate leaf — the only katgpt-* dependency is the

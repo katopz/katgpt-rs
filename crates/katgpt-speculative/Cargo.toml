@@ -7,6 +7,7 @@ description = "Speculative decoding + DDTree substrate shared by katgpt-rs and r
 repository = "https://github.com/katopz/katgpt-rs"
 keywords = ["speculative", "decoding", "ddtree", "inference", "modelless"]
 categories = ["algorithms", "science"]
+publish = false  # only katgpt-core ships to crates.io
 
 [dependencies]
 # Types + traits + speculative type substrate (TreeNode, DraftResult, ConstraintPruner, etc.)

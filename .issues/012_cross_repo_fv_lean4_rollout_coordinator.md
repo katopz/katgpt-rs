@@ -76,15 +76,21 @@ See `riir-ai/.proofs/README.md` §"Regenerating after Rust changes" for the full
 
 ---
 
-## Stale status line (ACTION ITEM for this issue)
+## Stale status line (ACTION ITEM for this issue) — ✅ DONE
 
-`riir-ai/AGENTS.md` → Static vs Dynamic Verification Split table still lists:
+`riir-ai/AGENTS.md` → Static vs Dynamic Verification Split table previously listed:
 
 ```
 | Bridge ordering on learned directions | 🟡 P2/P3 (Phase 5) | Coordinator `katgpt-rs/.issues/012_*` |
 ```
 
-This is **STALE**. Phase 5 is ✅ CLOSED 2026-06-30 via specialization (`Phase5Specialization.lean`). The AGENTS.md line should be updated to reflect completion. (Filed as part of this issue's commit.)
+This **was** stale. **Fixed (verified 2026-07-02):** the table now reads:
+
+```
+| **Bridge ordering on learned directions** — extends public sigmoid-monotonicity to private tuned direction vectors | ✅ DONE (Phase 5, 2026-06-30) | `.proofs/RiirAiProof/Phase5Specialization.lean` — covered by specialization ... Coordinator `katgpt-rs/.issues/012` |
+```
+
+Verified via grep of `riir-ai/AGENTS.md` (Static vs Dynamic Verification Split table). No further action needed.
 
 ---
 
