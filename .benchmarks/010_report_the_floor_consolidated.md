@@ -126,7 +126,7 @@ cargo test -p katgpt-core --test conformal_floor_best_belief \
 ## References
 
 - **Policy:** `katgpt-rs/AGENTS.md` → Feature Flag Discipline → "UQ-bearing primitive GOAT gate extension".
-- **Issue:** [`.issues/010_report_the_floor_retroactive_uq_floor_comparison.md`](../.issues/010_report_the_floor_retroactive_uq_floor_comparison.md).
+- **Consolidated audit:** this document (replaces the resolved Issue 010 tracker).
 - **Plan 340 (the floor):** [`.plans/340_conformal_predictive_intervals_primitive.md`](../.plans/340_conformal_predictive_intervals_primitive.md).
 - **Harness GOAT:** [`.benchmarks/340_conformal_floor_harness.md`](340_conformal_floor_harness.md).
 - **Companion paper:** [arXiv:2606.09473](https://arxiv.org/abs/2606.09473) — *Report the Floor*.

@@ -287,11 +287,13 @@ reconstruction files alone (`octree.rs` + `reconstruction.rs` + `serialize.rs`
 
 - [-] **T5.1** Mark Phase E Tier 2 #7 as `[x]` in
   `riir-ai/.issues/007_*.md`. **DEFERRED** — the referenced tracker path
-  (`riir-ai/.issues/007_*.md`) does not exist; Issue 007 actually lives at
-  `katgpt-rs/.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md` and does
-  not contain a "Phase E Tier 2 #7" section. The sense decoupling is complete
-  (Phase 1–4 all green) but the upstream tracker reference in this plan was
-  inaccurate. The closure belongs to whoever owns the Tier 2 master tracker.
+  (`riir-ai/.issues/007_*.md`) does not exist; Issue 007 lived at
+  `katgpt-rs/.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md` (now
+  RESOLVED + removed — all acceptance criteria `[x]`/`[~]`/`[-]`, all open
+  questions resolved) and did not contain a "Phase E Tier 2 #7" section. The
+  sense decoupling is complete (Phase 1–4 all green) but the upstream tracker
+  reference in this plan was inaccurate. The closure belongs to whoever owns
+  the Tier 2 master tracker.
 - [-] **T5.2** Update Tier 2 status summary (now 4/4 done). **DEFERRED** —
   same root cause as T5.1; no Tier 2 master summary found to update.
 - [-] **T5.3** Update the cumulative Phase E LOC count. **DEFERRED** — no

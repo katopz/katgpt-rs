@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-30
 **Plan:** [`.plans/340_conformal_predictive_intervals_primitive.md`](../.plans/340_conformal_predictive_intervals_primitive.md) Phase 1
-**Issue:** [`.issues/010_report_the_floor_retroactive_uq_floor_comparison.md`](../.issues/010_report_the_floor_retroactive_uq_floor_comparison.md) (unblocks T1)
+**Issue:** 010 (T1 — RESOLVED; tracker removed; floor shipped here)
 **Feature flag:** `conformal_predictive_intervals` (opt-in)
 **Modelless:** ✅ Yes — no training, no learned parameters, no gradient descent. Pure empirical-quantile calibration over a residual reservoir.
 
@@ -281,5 +281,5 @@ criterion bench, which is unchanged — see G2 table above).
 - **CSP paper:** [arXiv:2605.03789](https://arxiv.org/abs/2605.03789)
 - **"Report the Floor":** [arXiv:2606.09473](https://arxiv.org/abs/2606.09473)
 - **Plan 340:** [`.plans/340_conformal_predictive_intervals_primitive.md`](../.plans/340_conformal_predictive_intervals_primitive.md)
-- **Issue 010:** [`.issues/010_report_the_floor_retroactive_uq_floor_comparison.md`](../.issues/010_report_the_floor_retroactive_uq_floor_comparison.md)
+- **Issue 010:** RESOLVED; tracker removed. See `.benchmarks/010_report_the_floor_consolidated.md` for the lasting audit record.
 - **Research 322:** `.research/322_Conformal_Seasonal_Pools_Calibrated_UQ_Overlay.md`

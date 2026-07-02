@@ -1,6 +1,6 @@
 # Plan 008: katgpt-core Substrate Extraction (Phase 1+2 of Issue 007)
 
-> **Origin:** [Issue 007](../.issues/007_katgpt_rs_cargo_publish_substrate_reorg.md)
+> **Origin:** Issue 007 (cargo-publish substrate reorg — RESOLVED 2026-07-02; all phases done/deferred-by-design, all open questions resolved, issue file removed)
 > **Status:** **Substantively COMPLETE** (re-verified 2026-07-01). Phase 1 steps 1-7 ✅; Phase 2 dedup 2.2/2.3/2.5/2.6/2.7 ✅ + 2.8 bit-identical ✅. **Re-audit findings (2026-07-01):** Step 3 `tokenizer` DONE as standalone `katgpt-tokenizer` crate (no SentencePiece-sys dep — Q2 concern was moot); Phase 4 `plotters` optional DONE (Issue 355 Phase 2a); substrate extraction went further into a "Phase E" of 16 publishable leaf crates (see Issue 007 acceptance). 2.1 hla role-aware DEFERRED BY DESIGN (Category C — `role_transport`). One open strategy decision: the 16 publishable crates vs release-plz's "only katgpt-core ships" — see Issue 007 §Open questions Q5.
 > **Branch:** `develop`
 > **Created:** 2026-06-27

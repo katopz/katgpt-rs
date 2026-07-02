@@ -32,16 +32,16 @@ marked T1.12 (`subspace_phase_gate` in the umbrella `katgpt-rs/Cargo.toml`)
 as complete, but the feature line was missing. Added in this commit as
 `subspace_phase_gate = ["katgpt-core/subspace_phase_gate"]` (opt-in).
 
-**Re-verification (2026-07-02, Issue 008 fix):** the G1 PASS above was
-**stale** between commits `a08adc4a` (2026-06-24) and the Issue 008 fix — a
-refactor of `one_sided_jacobi_svd_into`'s extraction loop changed the column-
-norm scan from `0..n` (all columns) to `0..min(m,n)` (first k columns only).
-For the G1 example's wide Jacobian (N×48, N<48), the non-zero singular values
-landed in columns `k..n` and were missed, producing a garbage spectrum
-(pr≈1.5 instead of ≈5 at N=6). The Issue 008 fix restores the `0..n` scan +
-adds a null-space deflation floor for numerical stability. G1 now re-passes
-bit-for-bit on the same example (same pr/nr values as the original PASS).
-See `.issues/008_*.md` for the full analysis.
+**Re-verification (2026-07-02, Issue 008 fix — RESOLVED, commit `4e5750c3`):** the
+G1 PASS above was **stale** between commits `a08adc4a` (2026-06-24) and the fix
+— a refactor of `one_sided_jacobi_svd_into`'s extraction loop changed the
+column-norm scan from `0..n` (all columns) to `0..min(m,n)` (first k columns
+only). For the G1 example's wide Jacobian (N×48, N<48), the non-zero singular
+values landed in columns `k..n` and were missed, producing a garbage spectrum
+(pr≈1.5 instead of ≈5 at N=6). The fix restores the `0..n` scan + adds a
+null-space deflation floor for numerical stability. G1 now re-passes bit-for-bit
+on the same example (same pr/nr values as the original PASS). (Issue 008 removed
+as resolved; root-cause analysis is captured here and in commit `4e5750c3`.)
 
 ---
 
@@ -217,7 +217,7 @@ default, conditional on G3-precursor).
 > to only the first `min(m,n)` columns by the SOA refactor `a08adc4a`, missing
 > singular values that landed in columns `k..n` on wide rank-deficient
 > matrices. Fixed by restoring the `0..n` scan + adding a null-space
-> deflation floor. G1 re-passes bit-for-bit. See `.issues/008_*.md`.
+> deflation floor. G1 re-passes bit-for-bit. (Issue 008 removed as resolved.)
 >
 > ✅ **T3.4 latency gate now PASSES (2026-07-02, Plan 301 T4.1 allocation
 > elimination):** the prior 2403 ns/call figure measured the allocating
