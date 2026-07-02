@@ -14,7 +14,7 @@
 
 ## TL;DR
 
-`ForwardContext` (the type) was lifted into `katgpt-forward` in Phase F.1–F.3 — but the **function** `crate::transformer::forward` was not, and it is the deeper binding. Root's `forward()` composes root-only cognitive modules (`cce`, `clr`, `compaction`, `tf_loop`, `pruners::*`), so **any file that calls `forward()` is pinned to root** — a leaf can't depend on root (that's the cycle Phase F was supposed to kill). This pins 30 of the 34 Phase F.4 target files.
+`ForwardContext` (the type) was lifted into `katgpt-forward` in Phase F.1–F.3 — but the **function** `crate::transformer::forward` was not, and it is the deeper binding. Root's `forward()` composes root-only cognitive modules (`cce`, `clr`, `compaction`, `tf_loop`, `pruners::*`), so **any file that calls `forward()` is pinned to root** — a leaf can't depend on root (that's the cycle Phase F was supposed to kill). Original filing estimated ~30 of ~34; empirical audit (§inventory below) corrected this to **22 of 26 audited** files.
 
 **Verdict (adopted 2026-07-02): all Option C.** The proposed hybrid was abandoned after empirical audit of the two Option-A candidates:
 - **`inference_backend.rs`** already defines `InferenceBackend` — a trait with the *exact same signature* as a proposed `ForwardPass`. Creating a second trait would be redundant. Its providers (`CpuBackend`/`AneBackend`/`GpuBackend`) are all 1-line delegations to root's `forward()` and must stay in root.
@@ -125,6 +125,6 @@ Issue 007 §F step 5 already says root keeps "the 33 forward passes + the engine
 
 ## Notes
 
-- **Why this is a separate issue, not a Phase F blocker:** Phase F's structural goal was breaking the `ForwardContext` DAG cycle so the substrate leaves can be consumed without root. That is **done** (F.1–F.3 + F.4a/F.4b, GOAT green). The 30 blocked files are an *additional* extraction goal that turned out to require an architectural choice; gating Phase F acceptance on it would conflate "cycle broken" with "every composition file moved."
+- **Why this is a separate issue, not a Phase F blocker:** Phase F's structural goal was breaking the `ForwardContext` DAG cycle so the substrate leaves can be consumed without root. That is **done** (F.1–F.3 + F.4a/F.4b, GOAT green). The 22 audited blocked files are an *additional* extraction goal that turned out to require an architectural choice; gating Phase F acceptance on it would conflate "cycle broken" with "every composition file moved."
 - **The katgpt-hla cycle lesson (F.4b):** when threading the `ForwardPass` trait (if Option A), remember that `katgpt-core → katgpt-hla → katgpt-forward → katgpt-core` is a cycle. The trait goes in `katgpt-forward` (or `katgpt-core`), NOT in `katgpt-hla`. The HLA forward composition already lives in `katgpt-forward` for exactly this reason.
 - **Vortex decode path:** `forward_dash_attn_decode_vortex` was stripped from the leaf migration (commit `c76722d2`). To re-add, either move the `vortex_flow` cluster into a crate that can depend on `bandit`/`speculative`, or inject the router via a trait. Documented in `katgpt-attn/src/dash_attn/forward.rs` module comment. Non-blocking; not part of this issue.
