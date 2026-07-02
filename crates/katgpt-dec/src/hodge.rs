@@ -605,38 +605,45 @@ pub fn dec_relevance_score(cx: &CellComplex, features: &CochainField) -> f32 {
 // Hodge Spectrum — Power Iteration (T17)
 // ---------------------------------------------------------------------------
 
-/// Compute approximate eigenvalues of Δₖ using power iteration with deflation.
+/// Compute approximate eigenpairs of Δₖ using power iteration with deflation.
 ///
-/// Returns eigenvalues sorted descending. Uses `n_eigenvalues` rounds of
-/// power iteration on the Hodge Laplacian matvec to extract the top eigenvalues.
-/// For each round:
-/// 1. Start with random vector
-/// 2. Iterate: x = Δₖ(x), normalize
-/// 3. Rayleigh quotient gives eigenvalue estimate
-/// 4. Deflate: subtract projected component from previous eigenvectors
+/// Full Hodge-Laplacian eigendecomposition: returns BOTH eigenvalues AND eigenvectors.
+/// Shared backend for [`hodge_spectrum`] (which discards eigenvectors) and the
+/// heat-kernel trajectory precompute (Plan 359 [`DecEigendecomposition`]).
+///
+/// Uses `n_eigenvalues` rounds of power iteration on the Hodge Laplacian matvec
+/// to extract the top eigenpairs. For each round:
+/// 1. Start with a pseudo-random vector (LCG-seeded by eigenpair index).
+/// 2. Iterate: x ← Δₖ(x), normalize.
+/// 3. Rayleigh quotient gives the eigenvalue estimate.
+/// 4. Deflate: subtract the projected component from previously-found eigenvectors
+///    (Gram–Schmidt), so the next iteration converges to the next eigenpair.
 ///
 /// # Arguments
-/// * `cx` — The cell complex
-/// * `rank` — Rank of the cochain (determines which Δₖ to use)
-/// * `n_eigenvalues` — Number of eigenvalues to extract
-/// * `max_iter` — Maximum power-iteration steps per eigenvalue
+/// * `cx` — The cell complex.
+/// * `rank` — Rank of the cochain (determines which Δₖ to use).
+/// * `n_eigenvalues` — Number of eigenpairs to extract.
+/// * `max_iter` — Maximum power-iteration steps per eigenvalue.
 ///
 /// # Returns
-/// Eigenvalues sorted descending (largest first). Length = `n_eigenvalues`.
-pub fn hodge_spectrum(
+/// `(eigenvalues, eigenvectors)` where `eigenvectors` is flat row-major:
+/// eigenvector `k` occupies `eigenvectors[k*n_cells .. (k+1)*n_cells]`.
+/// Eigenpairs are sorted by eigenvalue **descending** (largest first — the
+/// convention used by `hodge_spectrum` and the spectrum-diagnostics consumers).
+pub(crate) fn hodge_eigendecomposition_full(
     cx: &CellComplex,
     rank: u8,
     n_eigenvalues: usize,
     max_iter: usize,
-) -> Vec<f32> {
+) -> (Vec<f32>, Vec<f32>) {
     let n = cx.n_cells(rank);
     let n_ev = n_eigenvalues.min(n);
     if n_ev == 0 {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
 
-    let mut eigenvalues = Vec::with_capacity(n_ev);
-    let mut eigenvectors = Vec::with_capacity(n_ev);
+    let mut eigenvalues: Vec<f32> = Vec::with_capacity(n_ev);
+    let mut eigenvectors_owned: Vec<Vec<f32>> = Vec::with_capacity(n_ev);
 
     // Pre-allocate reusable cochain fields for hodge_laplacian_into — reused across
     // all power-iteration steps (max_iter * n_ev calls previously allocated fresh).
@@ -662,7 +669,7 @@ pub fn hodge_spectrum(
         }
 
         // Deflate: remove projection onto already-found eigenvectors
-        deflate(&mut x, &eigenvectors);
+        deflate(&mut x, &eigenvectors_owned);
         normalize_inplace(&mut x);
 
         // Power iteration — reuses pre-allocated scratch across iterations (zero alloc per iter).
@@ -679,7 +686,7 @@ pub fn hodge_spectrum(
             x.copy_from_slice(&lap.data);
 
             // Deflate again
-            deflate(&mut x, &eigenvectors);
+            deflate(&mut x, &eigenvectors_owned);
 
             let norm = l2_norm(&x);
             if norm < 1e-12 {
@@ -705,11 +712,35 @@ pub fn hodge_spectrum(
         let rayleigh = crate::simd::simd_dot_f32(&x, &lap.data, x.len());
 
         eigenvalues.push(rayleigh.max(0.0));
-        eigenvectors.push(x);
+        eigenvectors_owned.push(x);
     }
 
-    eigenvalues.sort_unstable_by(|a, b| b.total_cmp(a));
-    eigenvalues
+    // Sort eigenpairs by eigenvalue descending. Reorder eigenvalues and the
+    // corresponding eigenvectors together via an index permutation.
+    let mut order: Vec<usize> = (0..n_ev).collect();
+    order.sort_unstable_by(|&a, &b| eigenvalues[b].total_cmp(&eigenvalues[a]));
+    let sorted_values: Vec<f32> = order.iter().map(|&i| eigenvalues[i]).collect();
+    // Flatten eigenvectors into a single Vec<f32> (row-major: vec k at offset k*n).
+    let mut sorted_vecs_flat = Vec::with_capacity(n_ev * n);
+    for &i in &order {
+        sorted_vecs_flat.extend_from_slice(&eigenvectors_owned[i]);
+    }
+
+    (sorted_values, sorted_vecs_flat)
+}
+
+/// Public eigenvalues-only API (delegates to [`hodge_eigendecomposition_full`]).
+///
+/// Backwards-compatible: the historical signature returns `Vec<f32>` (eigenvalues
+/// sorted descending). The full decomposition (Plan 359) is available via the
+/// `pub(crate)` backend.
+pub fn hodge_spectrum(
+    cx: &CellComplex,
+    rank: u8,
+    n_eigenvalues: usize,
+    max_iter: usize,
+) -> Vec<f32> {
+    hodge_eigendecomposition_full(cx, rank, n_eigenvalues, max_iter).0
 }
 
 /// Simple LCG pseudo-random number generator (no external deps).
@@ -719,13 +750,13 @@ fn simple_lcg(state: u32) -> u32 {
 }
 
 /// L2 norm of a vector.
-fn l2_norm(v: &[f32]) -> f32 {
+pub(crate) fn l2_norm(v: &[f32]) -> f32 {
     // SIMD self-dot for ||v||²; spectrum-only diagnostic path.
     crate::simd::simd_dot_f32(v, v, v.len()).sqrt()
 }
 
 /// Normalize a vector to unit length in-place.
-fn normalize_inplace(v: &mut [f32]) {
+pub(crate) fn normalize_inplace(v: &mut [f32]) {
     let norm = l2_norm(v);
     if norm > 1e-12 {
         for x in v.iter_mut() {
@@ -735,7 +766,7 @@ fn normalize_inplace(v: &mut [f32]) {
 }
 
 /// Remove projections of `v` onto each vector in `basis` (Gram–Schmidt deflation).
-fn deflate(v: &mut [f32], basis: &[Vec<f32>]) {
+pub(crate) fn deflate(v: &mut [f32], basis: &[Vec<f32>]) {
     for b in basis {
         // SIMD dot — spectrum-only path, does not feed CG.
         let dot = crate::simd::simd_dot_f32(v, b, v.len());

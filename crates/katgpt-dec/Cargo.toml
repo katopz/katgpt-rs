@@ -31,5 +31,14 @@ publish = false  # only katgpt-core ships to crates.io
 # motor gain — no new deps. Stays opt-in by design (it's a primitive, not a
 # default-on capability); promotion to downstream consumption (riir-ai
 # Research 168) is gated on the Plan 357 Phase 2 GOAT (G1–G5).
+#
+# `heat_kernel_trajectory` (Plan 359, Research 365) is the second opt-in
+# primitive: the single-shot DEC heat-kernel trajectory predictor
+# (`exp(t·A)·h₀` via precomputed eigendecomposition). It distills PhysiFormer's
+# single-shot-vs-autoregressive insight (arXiv:2606.27364) into a modelless DEC
+# analog — exact for linear propagation, zero error accumulation. Stays opt-in
+# until the Plan 359 Phase 5 GOAT gate (G1–G5) lands; the linear path (Phase 1)
+# is the promotion candidate.
 default = []
 motor_gated_field = []
+heat_kernel_trajectory = []
