@@ -4,7 +4,7 @@
 **Source:** [Still: Amortized KV Cache Compaction in a Single Forward Pass](https://arxiv.org/pdf/2606.07878v1) (O'Neill et al., Baseten, 2026)
 **Repo:** [shreyansh26/STILL-Towards-Infinite-Context-Windows](https://github.com/shreyansh26/STILL-Towards-Infinite-Context-Windows)
 **Target:** katgpt-rs modelless inference engine
-**Status:** Verdict Revised — GATE harder, synthesis-over-selection is blog-theory, not repo-proven
+**Status:** SHIPPED (Plan 245, opt-in) — DEMOTED LOSER. AM (Plan 271, default-on, GOAT 9/9) won the KV-compaction stack slot. See §2026-07-02 Post-Ship Verdict.
 
 ---
 
@@ -386,11 +386,62 @@ for chunk in chunks:
 
 ---
 
+## 2026-07-02 Post-Ship Verdict — DEMOTED LOSER (per-stack outcome)
+
+**Per-stack slot:** KV cache compaction.
+**Champion:** Attention Matching (Plan 271, Research 233) — DEFAULT-ON, GOAT 9/9.
+**Loser:** StillKV (Plan 245) — opt-in, GOAT passes but with lenient thresholds.
+
+### What shipped since this note was written (2026-06-10)
+
+| Event | Date | Impact |
+|------|------|--------|
+| Plan 245 StillKV shipped (T1–T27 all done) | 2026-06-10→ | All heuristic strategies (ClusterCentroids, AttentionWeighted, SpectralProjection, BfcfRegionBlend, MuxSuperposition) + iterative chunked compaction + ChainFolder `compact_trace` integration. |
+| Plan 271 Attention Matching shipped | 2026-06-14→ | Closed-form OMP/HighestAttn selection + NNLS-optimal β + LS-optimal Cv. GOAT 9/9. **Promoted to DEFAULT-ON.** |
+| Plan 271 Phase 6 `adaptive_cot_compaction` shipped | 2026-06-14→ | AM-based adaptive CoT compaction (`src/attn_match_adaptive_cot.rs`) — the AM version of StillCoT. Opt-in. |
+| StillKV GOAT metric fix (Issue 011) | 2026-06-29 | G1 lib test had a broken metric (cos_sim across RoPE position ranges — unsatisfiable by design, even perfect roundtrip scored 0.31). Replaced with nearest-neighbor avg-cosine-sim. 81/81 pass. |
+
+### Why StillKV lost the slot
+
+1. **G4 explicitly doesn't require beating selection.** The test comment reads: *"Not required to beat selection — synthesis creates new tokens, not copies."* Threshold is cos_sim > 0.1; H2O selection trivially scores ~1.0 (exact copies). The synthesis-vs-selection question this note posed was **never answered by the GOAT gate** — it was sidestepped.
+2. **Quality thresholds are lenient.** G1–G3: cos_sim > 0.10/0.10/0.05 at 8×/16×/32×. ClusterCentroids achieves ~0.59 (nearest-neighbor metric) — passes with 5–12× margin, but nearest-neighbor substitutability is a weak proxy for attention-quality preservation.
+3. **T26/T27 prove additivity, not superiority.** StillCoT = ThoughtFold (selection) + StillKV (synthesis). The test asserts `stillcot_total_bytes_saved >= thoughtfold_bytes_saved` — trivially true for any compaction that produces output. Does not prove synthesis quality > selection quality.
+4. **AM has provably-optimal β and Cv.** AM's NNLS β is the closed-form minimizer of `||A w − m||²`; its LS Cv is the closed-form minimizer of `||X Cv − Y||²_F`. StillKV's heuristic β (mass-matching offset, entropy, norm ratio, VortexFlow) has no optimality guarantee. The AM note (233) explicitly states: *"replaces heuristic β with NNLS-optimal β — direct upgrade path."*
+5. **AM GOAT gates are stricter.** G2 (Cv reconstruction < 5% Frobenius error), G3 (OMP mass > 80%), G5 (perplexity within 5%) vs StillKV's cos_sim > 0.1.
+
+### Per-stack outcome (per AGENTS.md promote/demote rule)
+
+| Primitive | Stack slot | GOAT | Default | Outcome |
+|-----------|-----------|------|---------|--------|
+| **Attention Matching** (Plan 271) | KV compaction | 9/9 PASS (strict) | **DEFAULT-ON** | **CHAMPION** — promoted. |
+| **StillKV** (Plan 245) | KV compaction | 7/7 PASS (lenient) | opt-in | **LOSER** — demoted. Kept opt-in for research; AM is the production path. |
+| **adaptive_cot_compaction** (Plan 271 P6) | CoT compaction | GATE | opt-in | **CHAMPION** — the AM-based StillCoT successor. |
+| **StillCoT** (Plan 245 T25–T27) | CoT compaction | T26/T27 PASS (additive) | opt-in (via `still_kv` + `chain_fold`) | **LOSER** — superseded by `adaptive_cot_compaction`. |
+
+### What stays (shared infrastructure, NOT demoted)
+
+- `BetaBias` type (`katgpt-kv/src/still_kv/beta_bias.rs`) — **shared** between StillKV and AM. AM uses it with NNLS-optimal values; StillKV uses it with heuristic values. The type itself is infrastructure, not a strategy.
+- `CompactKVCache` type — shared output container.
+- `CompactableKVCache` trait (`src/types.rs`) — shared interface.
+- `PositionFreeCompactor` (RoPE un-rotate/re-rotate) — used by both paths.
+
+These remain because AM depends on them. Only the StillKV *compaction strategies* (ClusterCentroids, AttentionWeighted, SpectralProjection, BfcfRegionBlend, MuxSuperposition) and the heuristic β generators are the demoted loser.
+
+### Follow-up (tracked, not blocking)
+
+- [ ] If StillKV is never used in production, consider deprecating the strategy modules while keeping `BetaBias`/`CompactKVCache`/`PositionFreeCompactor` (AM dependencies). Low priority — opt-in feature flags cost nothing when disabled.
+- [ ] The synthesis-vs-selection question remains scientifically open. AM (selection + optimal β) is the modelless champion today, but a future paper might produce a modelless synthesis method with provable optimality (like AM's NNLS). Until then, selection wins.
+
+---
+
 ## TL;DR
 
-Still's amortized Perceiver KV compaction distills into three modelless fusion ideas:
-1. **StillKV** (GATE HARDER) — Heuristic Perceiver compaction with 2d latents + heuristic β + internal RoPE. GOAT must prove synthesis > selection over MUX-Latent. Repo proof is weak (31.5% accuracy).
-2. **StillCoT** (GATE) — Synthesis-based CoT trace compaction, downgraded from GAIN. Depends on StillKV proving synthesis works.
-3. **StillRSM** (DEFER) — Perceiver-augmented routing slot memory
+Still's amortized Perceiver KV compaction was distilled into three modelless fusion ideas. **All three shipped** (Plan 245, opt-in). **All three lost** to Attention Matching (Plan 271, DEFAULT-ON, GOAT 9/9) in the KV-compaction stack slot:
 
-**Key corrections from repo audit**: (1) β bias is a showstopper — frozen model needs it to attend to synthetic latents, (2) latent dim is 2d not d, (3) cross-attention has its own internal RoPE, (4) repo quality is 31.5% vs blog's 85% — temper expectations. The synthesis-over-selection insight remains the key differentiator but is blog-theory, not repo-proven. GOAT gate must be explicit and strict.
+1. **StillKV** — SHIPPED, opt-in, **DEMOTE LOSER**. Heuristic Perceiver synthesis (ClusterCentroids etc.) + heuristic β. GOAT passes but G4 explicitly doesn't require beating selection; thresholds lenient (cos_sim > 0.1). AM's NNLS-optimal β + OMP selection won with strict gates (Cv < 5% error, mass > 80%, perplexity within 5%).
+2. **StillCoT** — SHIPPED, opt-in, **SUPERSEDED** by `adaptive_cot_compaction` (Plan 271 Phase 6). T26/T27 prove additivity (trivially true), not superiority.
+3. **StillRSM** — DEFER (unchanged, independent of AM).
+
+**Shared infrastructure stays**: `BetaBias`, `CompactKVCache`, `CompactableKVCache`, `PositionFreeCompactor` — AM depends on these. Only the heuristic strategy/β modules are the demoted loser.
+
+**Key corrections from repo audit** (2026-06-11, still valid): (1) β bias is a showstopper — AM resolved it via NNLS, not heuristics; (2) latent dim is 2d not d; (3) cross-attention has internal RoPE; (4) Still repo quality is 31.5% vs blog's 85%. **The synthesis-over-selection insight remains unproven** — AM (selection) won the slot without needing to prove synthesis is better.
