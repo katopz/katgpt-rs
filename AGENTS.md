@@ -741,6 +741,14 @@ sink-guard GOAT), and Issue 750's measured bisection (gemma-2-2b Q4_K:
 first behavior flip at prefix k=1 — layer 0 alone flips the sealed family;
 restoring it costs 106.7 MiB, priced by the T2 override probe). Aggregate
 perplexity can be flat while family-conditional behavior flips.
+External measured confirmations (riir-clippy Research 125, walk #7):
+arXiv 2609.01962 (post-training ternarization of Qwen3-4B — aggregate
+accuracy 64.5→54.7% yet per-task chance-corrected retention spreads
+84.6% BoolQ vs 43.8% ARC-Challenge; and a lossless packing run holds PPL
+while a lossy one was excluded from the artifact claim) and arXiv 2608.12700
+(a contract-grade verifier rejects 1,487/2,638 kernels a standard tolerance
+harness accepted — the tolerance-budget fault-class confirmation queued at
+walk #6).
 
 **UQ-bearing primitive GOAT gate extension (the "Report the Floor" rule, adopted 2026-06-28 per Research 322 / Plan 340).** Any primitive that claims a probability distribution, predictive interval, quantile, coverage guarantee, confidence score, or calibrated uncertainty (collectively: **UQ-bearing**) MUST benchmark against the **conformal-naive floor** — `ConformalIntervalCalibrator<SeasonalNaiveForecaster>` (Plan 340 with `m=1`, plain split conformal) — on CRPS / coverage / Winkler score. If the primitive cannot beat the floor, the GOAT gate FAILS. Existing UQ-bearing primitives (BoMSampler Plan 281, Sleep-Time Anticipator Plan 334, Best-Belief Beta Selector Plan 336, KARC+overlay) are grandfathered but must include the floor at their next re-gate; future UQ primitives must include it from the initial gate. Tracked in `.issues/010`. The floor shipped in Plan 340 Phase 1 (2026-06-30); the rule is now enforceable. **Issue 010 is FULLY CLOSED (T1-T7 all complete)** — see `.benchmarks/010_report_the_floor_consolidated.md` for the cross-primitive summary. **T7 (2026-07-20)** added the KARC+overlay dedicated floor test (`conformal_floor_karc_overlay.rs`) — the composite is SCOPE-LIMITED to chaotic regimes (BEATS on Lorenz-x at crps_ratio 0.0047 with K=4; LOSES on stationary seasonal at crps_ratio 5.74 with K=4), but coverage stays calibrated on both — no false-confidence signature. **T7 K-sweep (2026-07-20)** refuted the prior "K=4 too shallow" hypothesis: K=12 (matching the period) LOSES WORSE on seasonal (CRPS 5.74 → 20.26) and WINS HARDER on Lorenz (CRPS 0.0047 → 0.0018) — the scope-limit is **structural** (KARC's Chebyshev basis + ridge-fit doesn't fit periodic data regardless of K), not parametric. Production guidance: pick K by chaotic-regime memory needs; for periodic data use the floor directly.
 
