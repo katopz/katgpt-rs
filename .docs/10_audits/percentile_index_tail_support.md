@@ -289,6 +289,22 @@ site and keeping the instrument able to see it are one change**, and belong in
 one commit — otherwise the gate's next green is over a smaller world than the
 one it names.
 
+## 11. T4 disposition: the stability gate stays print-only (2026-09-04)
+
+The T1/T2 fix landed (`0333c2c1`); the remaining task — Plan 102 T6's dropped
+`stability_score > 0.7` assertion — resolved **print-only by owner call**.
+The 0.7 candidate failed 5/12 of the issue's own post-fix observations
+(0.625–0.785 across 4 runs × 3 configs at n=500, tail support 6), and a
+wall-clock tail-ratio gate on a shared box is the documented load-flaky class
+the 1-layer arm re-demonstrated on the confirmation run (CV 1.16 — one
+outlier step in the tail; scores 0.667/0.750/0.785). The 0.303 candidate (the
+plan's own parenthetical, P99 < 3.3×P50) passes with margin so wide it
+asserts nothing the adjacent `cv < 1.0` row does not already. What this issue
+buys is that the metric now means what it says and is non-vacuously tested
+(ordering + constant-pin tests, `types.rs:1483`); a wall-clock gate over it
+was never landed and is recorded as deliberately not wanted. Issue file
+removed at close; the record is this section + the AGENTS.md index row.
+
 ## 11. Reading all 10 UNRESOLVED rows found 3 DEGENERATE and 4 WEAK (2026-09-04)
 
 §"UNRESOLVED is not clean" is this report's own instruction and katgpt-rs's
