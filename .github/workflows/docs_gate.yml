@@ -60,6 +60,14 @@ on:
       - 'scripts/skill_repo_set_gate.py'
       - 'scripts/repo_set.txt'
       - '.agents/skills/**/SKILL.md'
+      # agents_repo_set_gate.py pins AGENTS.md §"Repo count" against
+      # repo_set.txt. AGENTS.md was NOT an input to this workflow before that
+      # gate existed, so without this glob the gate could not fire on the one
+      # push it exists for — an edit to that paragraph. Same defect the Issue
+      # 713 note below records, and it was found the same way: by reading the
+      # trigger list instead of trusting that adding a check wired it up.
+      - 'AGENTS.md'
+      - 'scripts/agents_repo_set_gate.py'
       # Issue 713: the cfg-gated floor gate's input is TARGET SOURCE, not docs.
       # Without these six globs the gate could not fire on the one push it
       # exists for — the push that ADDS an unarmed `*_goat.rs`. A trigger list
@@ -106,6 +114,14 @@ on:
       - 'scripts/skill_repo_set_gate.py'
       - 'scripts/repo_set.txt'
       - '.agents/skills/**/SKILL.md'
+      # agents_repo_set_gate.py pins AGENTS.md §"Repo count" against
+      # repo_set.txt. AGENTS.md was NOT an input to this workflow before that
+      # gate existed, so without this glob the gate could not fire on the one
+      # push it exists for — an edit to that paragraph. Same defect the Issue
+      # 713 note below records, and it was found the same way: by reading the
+      # trigger list instead of trusting that adding a check wired it up.
+      - 'AGENTS.md'
+      - 'scripts/agents_repo_set_gate.py'
       # Issue 713: the cfg-gated floor gate's input is TARGET SOURCE, not docs.
       # Without these six globs the gate could not fire on the one push it
       # exists for — the push that ADDS an unarmed `*_goat.rs`. A trigger list

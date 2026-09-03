@@ -245,6 +245,22 @@ paragraph said "the three" for one commit after the fourth was added):
   run) from its **population** (12 `SKILL.md` locally, 8 in CI) and prints both.
   A gate that skipped in CI instead would be the vacuous green it exists to
   catch. Mark a deliberately narrow block `<!-- repo-set-ok: <reason> -->`.
+- `agents_repo_set_gate.py` pins §"Repo count" above against
+  `scripts/repo_set.txt` — membership FIRST, cardinality second. It exists
+  because on 2026-09-03 that paragraph named a retired repo
+  (`riir-armageddon`) and omitted a new one (`seal-remake-unity`) **while its
+  count stayed correct**: one left, one arrived, total unchanged at 19. Every
+  count in sight agreed and the set was wrong anyway, which is why the
+  paragraph's own warning ("read a count in prose as a claim, not a fact") was
+  not enough — a count is not a checksum over a set. It gates ONE paragraph on
+  purpose: the obvious whole-repo version false-positives on history, and
+  boundary-guard's ledger *should* still name the retired repo, because the
+  227→225 edge delta IS that repo's two edges leaving. Both its inputs are
+  committed, so it runs in CI; `repo_set.txt`'s freshness against the real
+  workspace is a separate, workstation-only concern owned by the check above.
+  A parser regression exits **2**, not 1 — an untrustworthy instrument is not
+  the same finding as drift.
+
 - `cfg_gated_floor_gate.py` (Issue 713 T4) is the GATE over the report below,
   katgpt-rs-scoped, with its pins in `scripts/cfg_gated_floors.txt` (the count
   is deliberately not written here — see the docs-gate preamble above). The one
