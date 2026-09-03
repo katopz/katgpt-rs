@@ -18,7 +18,7 @@
       pub p99_ns: u64,
       pub mean_ns: u64,
       pub cv: f64,                           // coefficient of variation (std/mean)
-      pub stability_score: f64,             // 1.0 - (P99 / P50), 1.0 = perfect
+      pub stability_score: f64,             // p50 / p99, 1.0 = perfect (see .issues/722)
       pub total_steps: usize,
   }
   ```
@@ -37,6 +37,22 @@
   - Assert: `stability_score > 0.7` (P99 < 3.3× P50) for all sizes
   - Assert: `cv < 0.5` for micro config
   - Verify: zero overhead when feature disabled (bench with/without)
+  - **DIVERGENCE, measured 2026-09-04 (`.issues/722`): the bench exists and is
+    green, and neither of the two asserts above is the assert it runs.** The
+    `stability_score > 0.7` gate was never implemented — grep returns zero
+    `stability_score >` sites in the repo predating Issue 722 — and it could
+    not have been, because the shipped formula was `1.0 - (p99/p50).min(1.0)`,
+    which is the **constant 0.0** for every non-empty sorted sample; the gate
+    would have failed 100% of runs. `cv < 0.5` shipped as `cv < 1.0`. So T6's
+    `[x]` covers the bench's existence, not its two specified assertions —
+    which is why the constant survived a "13/13" record for as long as it did.
+  - The spec's own parenthetical is the evidence for which direction was
+    intended: `stability_score > 0.7` ⟺ **P99 < 1.43× P50** under `p50/p99`,
+    and is unsatisfiable under `1 - p99/p50`. "P99 < 3.3× P50" is score
+    **0.303**. So the author had the ratio's direction right (1.0 = perfect,
+    which only `p50/p99` achieves) and both the formula and the threshold
+    arithmetic wrong. Fixed direction in `.issues/722` T1; the threshold is
+    that issue's T4 and stays an owner call, with the measurement attached.
 
 ### D2: Contiguous Weight Allocation (Internal Refactor, No Feature Gate) — **In Progress**
 

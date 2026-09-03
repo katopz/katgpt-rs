@@ -1,7 +1,10 @@
 # The percentile-index / tail-support audit — the repair that blinded the gate
 
 **Status:** RECORD — instrument change landed + canaried; 2 sibling sites open
-(riir-ai, riir-train), both sibling-owned. katgpt-rs scope clean.
+(riir-ai, riir-train), both sibling-owned. katgpt-rs scope clean, and §9–§10
+record what resolving its UNRESOLVED rows by hand on 2026-09-04 turned up: a
+**third** instrument axis (severity, not population) and a real defect in
+shipped `katgpt-core` library code.
 
 **Instruments:** `scripts/percentile_index_audit.py` (report, 19 repos, always
 exit 0) + `scripts/percentile_floor_gate.py` (gate, katgpt-rs only, pins in
@@ -97,8 +100,15 @@ anything wrong; the vocabulary just stopped naming the code.
   truncating helper → exit **1**; `HELPER_SUBSTR` narrowed to nonsense → exit
   **2** (instrument untrustworthy, no verdict); both reverted → exit **0**.
 
-Population after: **126 sites over 9 of 19 repos — 0 DEGENERATE, 2 TRUNC-VAR,
-6 WEAK, 31 OK, 62 UNRESOLVED, 25 SAFE**, katgpt-rs 40 → **41**.
+Population after (2026-09-03 evening): **126 sites over 9 of 19 repos — 0
+DEGENERATE, 2 TRUNC-VAR, 6 WEAK, 31 OK, 62 UNRESOLVED, 25 SAFE**, katgpt-rs
+40 → **41**.
+
+Re-measured **2026-09-04 over the live 16** (three repos retired to
+`git/obsolete/`, and §9–§10's two instrument changes landed): **125 sites**,
+katgpt-rs still 41 — 0 DEGENERATE, 0 TRUNC-VAR, 0 WEAK, 20 OK, 10 UNRESOLVED,
+11 SAFE. ASSERTED 4 → 5 workspace-wide. Read the 126 → 125 edge as three
+repos leaving and one site changing class, not as a measurement of anything.
 
 ## 4. The shape claim, stated exactly — and a retraction
 
@@ -145,10 +155,23 @@ the external evidence in §1 is what settled it this time. A floor that
 ratcheted up to the last measurement would red the next such refactor and
 teach whoever hit it that the gate is noise.
 
-## 7. Open — both sibling-owned, both low severity
+## 7. Open — sibling-owned, low severity
 
 Filed where they live, not fixed here: riir-ai `.issues/861` (it moves a
 GOAT gate's measured value) and riir-train `.issues/508`.
+
+**One of the two is now CLOSED** (verified 2026-09-04 in the source, not
+inferred from the issue's absence — the file is gone per the noise-reduction
+rule, which on its own is indistinguishable from never having been filed):
+riir-train `68a08fba` reindexed the probes nearest-rank *and* renamed them
+`positional`, since `lengths` is in visit order — so the mislabel noted below
+was fixed alongside the arithmetic. riir-ai `.issues/861` is still OPEN and is
+the workspace's only remaining **TRUNC-VAR** (2 → 1).
+
+Re-measured 2026-09-04, the 6 WEAK rows are all siblings' and all correctly
+`asserted=False` — checked per site against the one-hop alias chase of §9, not
+taken from the flag: `bench_336:710`'s `p95_total_ms` is `println!`-only while
+that fn's two asserts are on `median_total_ms` / `per_npc_us`.
 
 | site | shape | severity |
 |---|---|---|
@@ -163,3 +186,101 @@ so it walks **2,525 mined third-party `.rs` files** under `riir-train/data/`
 per-site, not assumed — so the pollution is latent. Left alone deliberately: a
 `data/` skip rule is a guess about a directory name, and this report's own
 history is a run of classifiers that were narrow rather than wrong.
+
+## 9. A third instrument axis — severity, not population (2026-09-04)
+
+Every narrowness instance above made the report **smaller**. This one made it
+look **milder**, which is worse: a miss leaves a hole someone may eventually
+notice, a downgrade prints a plausible row.
+
+`is_load_bearing` searched the assert's arguments for the name bound on the
+site's **own line**. The normal shape puts one hop between them:
+
+```rust
+let p99_idx = (READS as f64 * 0.99) as usize;   // the site,  var = p99_idx
+let p99_ns = latencies_ns[p99_idx];             // the hop
+assert!(p99_ns < 200, "G5 FAIL: get_chunk p99 {p99_ns}ns >= 200ns");
+```
+
+That is `katgpt-core/src/content_store/goat.rs:323` — a percentile deciding a
+G5 gate inside **shipped library code**, printed with `asserted=False`, i.e.
+in the "print-only (misleading a reader)" bucket rather than
+"+ ASSERTED (deciding a verdict)".
+
+Closed by `_subscript_aliases` (`01c06ccd`), deliberately **one** hop and
+deliberately **subscript-only**: `var` must appear inside a bracket pair, so
+the alias IS the sample the rank selects. Chasing arbitrary arithmetic, or
+chasing transitively, buys shapes nobody writes at the cost of a false
+ASSERTED — the same defect pointed the other way, and §5b is why a false
+ASSERTED is expensive here.
+
+Measured over all 16 contract repos **before** committing: ASSERTED **4 → 5**,
+exactly the one site found by hand, zero false positives, no verdict crossed
+into a gated bucket, no pin moved. Three selftest cases, each canaried by
+reintroducing what it catches, each exiting **2** (untrustworthy instrument)
+rather than 1: same-name-only, any-mention alias, transitive chase. The third
+pins the **bound**, so a future reader widens deliberately instead of reading
+a pass as evidence that two hops were covered.
+
+The site itself is **not** a finding: `READS = 1_000_000`, idx 990,000, tail
+support 10,000.
+
+## 10. The per-site read of UNRESOLVED paid — `StabilitySnapshot` (2026-09-04)
+
+§"UNRESOLVED is not clean" is the report's own instruction, and katgpt-rs's 11
+rows had never been read. Two of the eleven are tokenizer noise (a `sin()`
+data generator, a weighted score — neither indexes anything), eight are bench
+harnesses whose n is a runtime loop count, and **one was a real defect in a
+default-on library API**:
+
+`katgpt-core/src/speculative/types.rs` — `StabilitySnapshot::compute`, feature
+`stability_metrics` (**default-on**), consumed by `katgpt-forward`:
+
+```rust
+let p99_idx = ((n as f64) * 0.99).floor() as usize;
+let p99_idx = p99_idx.min(n - 1);
+```
+
+`floor(n * 0.99) == n - 1` for **every n ≤ 100**, so `p99_ns` was the single
+worst sample — and `stability_score = 1 - p99/p50` was therefore *decided* by
+it — in any run of at most 100 steps. The `.min(n - 1)` prevented a panic, not
+a wrong statistic. It was UNRESOLVED rather than DEGENERATE because `n` is a
+slice length inside library code; the callers supply it, and the caller that
+pinned the behaviour asserted the defect outright:
+
+```rust
+let known: Vec<u64> = (100..200).collect();      // n = 100, max = 199
+assert_eq!(kn.p99_ns, 199, "P99 at index 99");   // tests/bench_102:85
+```
+
+Fixed with `nearest_rank_p99`, plus a new `p99_tail_support` field — the
+quantity AGENTS.md says nobody prints. Both constructors are private to the
+impl (grepped: zero struct-literal sites outside them across katgpt-rs,
+riir-ai, riir-train, riir-game-sdk), so the field addition is contained.
+
+Two details worth keeping:
+
+- **Integer arithmetic, not `.ceil()`.** `(100.0_f64 * 0.99).ceil()` is not
+  reliably 99 — 0.99 has no exact binary form — so a float ceil can land back
+  on the max at *exactly* the boundary being fixed. `(n * 99).div_ceil(100)` is
+  exact for every n, widened to `u64` so the multiply cannot overflow a 32-bit
+  `usize` (wasip2 is a live target).
+- **p50 was left at `n / 2`** on purpose: it can only land on `n - 1` for
+  n ≤ 2, so it is not the max-landing shape, and moving the median convention
+  would churn every published p50 for no correctness gain.
+
+**And the fix blinded the auditor, exactly as §2 predicts.** No float, no `/`,
+and `ROUNDED_RE`'s empty-parens `\.ceil\(\)` cannot see `.div_ceil(100)` — so
+the repaired site left the population (41 → 40) and every ceiling above went
+green over the hole. Third occurrence of this shape, second reached by a
+*correct* fix. Closed in the same commit by an `int_div_ceil` VOCAB entry,
+safe-by-construction, with its own selftest case: the site now reads **SAFE**
+and the population is 41 again (UNRESOLVED 11 → 10, SAFE 10 → 11). Measured
+workspace-wide before landing: **1 match, the intended one, zero false
+positives.**
+
+The lesson is not "remember to update the vocabulary". It is that **fixing a
+site and keeping the instrument able to see it are one change**, and belong in
+one commit — otherwise the gate's next green is over a smaller world than the
+one it names.
+

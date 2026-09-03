@@ -82,7 +82,15 @@ fn proof_1_stability_compute_correctness() {
     let known: Vec<u64> = (100..200).collect();
     let kn = StabilitySnapshot::compute(&known);
     assert_eq!(kn.p50_ns, 150, "P50 of 100 elements at index 50");
-    assert_eq!(kn.p99_ns, 199, "P99 at index 99");
+    // Was `199, "P99 at index 99"` — index 99 of 100 is the MAX, and this
+    // assertion is what pinned that. `floor(n * 0.99) == n - 1` for every
+    // n <= 100, so the old snapshot reported the single worst sample as p99
+    // and `stability_score = 1 - p99/p50` was decided by it. The nearest-rank
+    // p99 of 100 samples is index 98, and `p99_tail_support` now states the 2
+    // samples that back it (percentile_index_audit.py; katgpt-core
+    // speculative::types::nearest_rank_p99 carries the derivation).
+    assert_eq!(kn.p99_ns, 198, "P99 of 100 elements is nearest-rank index 98");
+    assert_eq!(kn.p99_tail_support, 2, "and it must say how thin that tail is");
 
     // Monotonicity: wider spread → higher CV
     let mut tight: Vec<u64> = vec![1000; 50].into_iter().chain(vec![1010; 50]).collect();
@@ -682,15 +690,30 @@ fn bench_f_stability_scaling() {
         latencies.sort();
         let snap = StabilitySnapshot::compute(&latencies);
 
+        // `sup` is the samples at or above the P99 rank. It is printed
+        // because the number next to it is otherwise unreadable: at
+        // n_steps=500 the tail is 6 samples, under the audit's MIN_SUPPORT of
+        // 10, so this P99 moves if one preemption lands in it. A percentile
+        // published without its support is a number nobody can weigh.
         println!(
-            "  {n_layer}-layer: P50={p50}ns P99={p99}ns CV={cv:.4} stability={ss:.4}",
+            "  {n_layer}-layer: P50={p50}ns P99={p99}ns (sup={sup}) CV={cv:.4} stability={ss:.4}",
             p50 = snap.p50_ns,
             p99 = snap.p99_ns,
+            sup = snap.p99_tail_support,
             cv = snap.cv,
             ss = snap.stability_score,
         );
     }
-    println!("  → Stability degrades gracefully with layer count (more compute = more variance)\n");
+    // The old line here read "Stability degrades gracefully with layer count
+    // (more compute = more variance)". It was written when stability_score was
+    // the constant 0.0 (.issues/722), so it described nothing measured, and
+    // both halves are refuted by the fixed metric: over 4 runs x 3 configs the
+    // score is 0.67-0.71 / 0.73-0.78 / 0.63-0.77 for 1 / 2 / 4 layers -- not
+    // monotone, with 2-layer the most stable -- and CV *falls* with layer
+    // count (0.28 -> 0.10 -> 0.09-0.15), the opposite of "more variance".
+    // Report what the run shows; the trend claim needs a quiet box and more
+    // than three points (that issue's T4).
+    println!("  → No monotone trend in layer count at n=500 (tail support 6); read the spread, not a row\n");
 }
 
 // ════════════════════════════════════════════════════════════════

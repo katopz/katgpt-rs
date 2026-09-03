@@ -109,6 +109,23 @@ VOCAB = [
      re.compile(r"\b(?P<n>[A-Za-z_]\w*(?:\.len\(\))?)\s*\*\s*(?P<num>9\d{1,2})"
                 r"\s*\)?\s*/\s*(?P<den>100|1000)\b"),
      False),
+    # (n * 99).div_ceil(100)  --  the integer nearest-rank form.
+    #
+    # SAFE BY CONSTRUCTION, and it is here for the reason the file's item-4
+    # narrowness instance documents: a CORRECT repair that leaves no pattern
+    # behind removes the site from the POPULATION, and every ceiling above is
+    # then green over a hole. katgpt-core `speculative::types::nearest_rank_p99`
+    # is that repair (it replaced `floor(n as f64 * 0.99)`, which is the max for
+    # every n <= 100) and it deliberately uses integer arithmetic rather than
+    # `.ceil()`: 0.99 has no exact binary form, so a float ceil can land back on
+    # the max at exactly the boundary being fixed. `.ceil()`/`.round()` are
+    # already cleared by ROUNDED_RE, whose empty-parens pattern cannot see
+    # `.div_ceil(100)` -- so without this entry the safest form in the workspace
+    # is the only one that vanishes.
+    ("int_div_ceil",
+     re.compile(r"\b(?P<n>[A-Za-z_]\w*(?:\.len\(\))?)\s*(?:as\s+u(?:8|16|32|64|size)\s*)?"
+                r"\*\s*(?P<num>9\d{1,2})\s*\)\s*\.\s*div_ceil\(\s*(?P<den>100|1000)\s*\)"),
+     True),
     # p * n as f64   |   n as f64 * p   with a VARIABLE p, in a
     # PERCENTILE-HELPER scope only (see HELPER_* below).
     #
@@ -201,6 +218,12 @@ def parse_site(m, kind):
     if kind == "int_ratio":
         num, den = int(m.group("num")), int(m.group("den"))
         return num / den, (lambda n: (n * num) // den)
+    if kind == "int_div_ceil":
+        num, den = int(m.group("num")), int(m.group("den"))
+        # -(-a // b) is integer div_ceil. Cleared as SAFE by construction, so
+        # classify() never calls this -- it is here so `p` is reported and so
+        # the entry stays self-consistent if `safe` is ever revisited.
+        return num / den, (lambda n: max(-(-(n * num) // den) - 1, 0))
     raw = (m.groupdict().get("p") or "").strip()
     if not raw.startswith("0."):
         return None, None          # `p / 100.0` with a variable p
@@ -503,6 +526,13 @@ def selftest():
          "let n = 200;", WEAK),
         ("    let i = ((v.len() as f64 - 1.0) * 0.99) as usize;", "float_len_minus_one", 0.99,
          "", SAFE),
+        # The integer nearest-rank form. It must stay IN the population as
+        # SAFE, not vanish -- a correct repair that leaves no pattern behind
+        # is this file's item-4 narrowness instance, and katgpt-core's
+        # nearest_rank_p99 is exactly such a repair. ROUNDED_RE cannot see it
+        # (`.div_ceil(100)` is not empty-parens `.ceil()`).
+        ("    let rank = (n as u64 * 99).div_ceil(100) as usize;", "int_div_ceil", 0.99,
+         "let n = 100;", SAFE),
         ("    let idx = ((sorted.len() as f64 - 1.0) * p / 100.0).round() as usize;",
          "float_len_minus_one", None, "", SAFE),
         ("    let p999 = s[(s.len() as f32 * 0.999) as usize];", "float_mul", 0.999,

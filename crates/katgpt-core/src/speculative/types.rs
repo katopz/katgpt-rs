@@ -206,10 +206,56 @@ pub struct StabilitySnapshot {
     pub mean_ns: u64,
     /// Coefficient of variation (std/mean)
     pub cv: f64,
-    /// Stability score: 1.0 - (P99 / P50), 1.0 = perfect
+    /// Tail-to-median stability: `p50 / p99` clamped to `[0, 1]`.
+    /// **1.0 = perfect** (no tail at all), → 0 as the tail grows.
+    ///
+    /// Was `1.0 - (p99/p50).min(1.0)`, which is **identically 0.0** for every
+    /// non-empty input — `compute` documents its input as sorted ascending, so
+    /// `p99 >= p50` by construction and the `.min(1.0)` always binds. Three
+    /// workloads with CV 0.09–0.12 all printed `stability=0.0000` while the
+    /// bench around them claimed production-ready observability
+    /// (`.issues/722`). Any 0.0000 in a historical `.benchmarks/` doc is that
+    /// constant, not a measurement, and is not comparable with a value
+    /// produced after this change.
     pub stability_score: f64,
     /// Total steps recorded
     pub total_steps: usize,
+    /// Samples at or above the reported `p99_ns` rank (`n - p99_idx`).
+    ///
+    /// The quantity that says whether `p99_ns` is a tail or a single
+    /// observation. It is **1 for every n <= 100** — with a hundred samples or
+    /// fewer there is no rank below the maximum holding 99% of the mass, so
+    /// the nearest-rank p99 legitimately IS the max and `stability_score`
+    /// is decided by the single worst step. That is the statistic being
+    /// unavailable, not a defect; reporting it without saying so was the
+    /// defect. 2 at n=101, 3 at n=200, 11 at n=1000.
+    pub p99_tail_support: usize,
+}
+
+/// 0-indexed **nearest-rank** p99 for a sample of `n`: `ceil(0.99 * n) - 1`.
+///
+/// The shape this replaced was `floor(n as f64 * 0.99)`, which returns `n - 1`
+/// — the **maximum** — for every `n <= 100`, because `floor(n * p) == n - 1`
+/// whenever `n * (1 - p) <= 1`. `.min(n - 1)` prevented a panic, not a wrong
+/// statistic, and `stability_score` (a p99/p50 ratio either way — see
+/// `.issues/722` for the separate defect in its direction) was therefore
+/// decided by the single worst step in every run of at most 100 steps. Direction: the naive
+/// index is one rank too HIGH, so a `p99 <= budget` assert was stricter than
+/// advertised (a false red, not a false green) — but the number is also
+/// printed, and a misleading printed number is the input to a promote call.
+///
+/// Integer arithmetic on purpose. `(100.0_f64 * 0.99).ceil()` is not reliably
+/// 99 — 0.99 has no exact binary representation, so a float `ceil` can land
+/// back on the max and silently reinstate the defect at exactly the boundary
+/// this fixes. `(n * 99).div_ceil(100)` is exact for every n. Widened to `u64`
+/// so the multiply cannot overflow a 32-bit `usize` (wasip2 is a live target
+/// here).
+#[cfg(feature = "stability_metrics")]
+#[inline]
+fn nearest_rank_p99(n: usize) -> usize {
+    debug_assert!(n > 0, "caller must handle the empty sample");
+    let rank = (n as u64 * 99).div_ceil(100) as usize;
+    rank.saturating_sub(1).min(n - 1)
 }
 
 #[cfg(feature = "stability_metrics")]
@@ -227,15 +273,19 @@ impl StabilitySnapshot {
                 cv: 0.0,
                 stability_score: 1.0,
                 total_steps: 0,
+                p99_tail_support: 0,
             };
         }
 
         let sum: u64 = sorted_latencies_ns.iter().sum();
         let mean = sum as f64 / n as f64;
 
+        // p50 stays at the upper-middle sample: `n / 2` can only land on
+        // `n - 1` for n <= 2, so it is not the max-landing shape, and moving
+        // the median convention would churn every published p50 for no
+        // correctness gain. p99 is a different matter — see nearest_rank_p99.
         let p50_idx = n / 2;
-        let p99_idx = ((n as f64) * 0.99).floor() as usize;
-        let p99_idx = p99_idx.min(n - 1);
+        let p99_idx = nearest_rank_p99(n);
         let p50 = sorted_latencies_ns[p50_idx];
         let p99 = sorted_latencies_ns[p99_idx];
 
@@ -256,10 +306,17 @@ impl StabilitySnapshot {
         let std_dev = variance.sqrt();
         let cv = if mean > 0.0 { std_dev / mean } else { 0.0 };
 
-        let stability_score = if p50 > 0 {
-            1.0 - (p99 as f64 / p50 as f64).min(1.0)
-        } else {
-            1.0
+        // `p50 / p99`, NOT `1.0 - p99 / p50`. The input is sorted ascending
+        // (see this fn's contract), so the p99 rank is never below the p50
+        // rank and `p99 >= p50` is an invariant of the caller's own data —
+        // which makes `1.0 - (p99/p50).min(1.0)` the constant 0.0 for every
+        // non-empty sample, and 0.0 for a SINGLE perfectly repeatable
+        // observation too. Do not "simplify" it back: the non-vacuity test
+        // `stability_score_orders_distributions_and_is_not_constant` pins the
+        // old expression's constancy by name (.issues/722).
+        let stability_score = match p99 {
+            0 => 1.0, // an all-zero sample is perfectly stable at this resolution
+            _ => (p50 as f64 / p99 as f64).clamp(0.0, 1.0),
         };
 
         Self {
@@ -270,6 +327,7 @@ impl StabilitySnapshot {
             cv,
             stability_score,
             total_steps: n,
+            p99_tail_support: n - p99_idx,
         }
     }
 
@@ -284,6 +342,7 @@ impl StabilitySnapshot {
             cv: 0.0,
             stability_score: 1.0,
             total_steps: 1,
+            p99_tail_support: 1,
         }
     }
 }
@@ -1377,6 +1436,116 @@ impl TrajectoryCredit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── StabilitySnapshot percentile rank ─────────────────────────
+
+    /// The boundary this fix exists for: `floor(n * 0.99)` is `n - 1` — the
+    /// MAX — for every `n <= 100`, and n=100 is where the two forms first
+    /// disagree. Pinned as a table rather than a spot check because the
+    /// interesting behaviour is entirely at the small-n end, where a
+    /// latency sample of a few dozen steps actually lives.
+    #[cfg(feature = "stability_metrics")]
+    #[test]
+    fn nearest_rank_p99_is_not_the_max_past_the_boundary() {
+        // (n, expected idx, expected tail support = n - idx)
+        let table = [
+            (1usize, 0usize, 1usize),
+            (2, 1, 1),
+            (10, 9, 1),
+            (50, 49, 1),
+            (99, 98, 1),
+            // n <= 100: the nearest-rank p99 legitimately IS the max. There
+            // is no rank below it holding 99% of the mass. Support 1 is what
+            // says so, which is the whole point of publishing the field.
+            (100, 98, 2),
+            (101, 99, 2),
+            (200, 197, 3),
+            (1000, 989, 11),
+        ];
+        for (n, want_idx, want_support) in table {
+            let got = nearest_rank_p99(n);
+            assert_eq!(got, want_idx, "n={n}: rank index");
+            assert_eq!(n - got, want_support, "n={n}: tail support");
+            assert!(got < n, "n={n}: index {got} out of range");
+        }
+        // The defect, stated directly: the old form returns the max at n=100.
+        assert_eq!(((100_f64) * 0.99).floor() as usize, 99, "the old shape");
+        assert_eq!(nearest_rank_p99(100), 98, "the new one");
+    }
+
+    /// T2 of `.issues/722`. NOT "the score is 0.7 here" — the constant this
+    /// replaced would have satisfied a spot check at 0.0 just as well. The
+    /// assertion that has content is that the metric **orders** distributions,
+    /// plus a direct pin on the old expression's constancy so a revert is
+    /// caught by name rather than by someone re-noticing three equal zeros.
+    #[cfg(feature = "stability_metrics")]
+    #[test]
+    fn stability_score_orders_distributions_and_is_not_constant() {
+        // Three sorted samples of the same length, same median, growing tail.
+        let mk = |tail: u64| {
+            let mut v: Vec<u64> = vec![1000; 200];
+            for (i, x) in v.iter_mut().enumerate().skip(190) {
+                *x = 1000 + tail * (i as u64 - 189);
+            }
+            v
+        };
+        let tight = StabilitySnapshot::compute(&mk(1));
+        let moderate = StabilitySnapshot::compute(&mk(100));
+        let wide = StabilitySnapshot::compute(&mk(10_000));
+
+        assert!(
+            tight.stability_score > moderate.stability_score,
+            "tight {} must beat moderate {}",
+            tight.stability_score,
+            moderate.stability_score,
+        );
+        assert!(
+            moderate.stability_score > wide.stability_score,
+            "moderate {} must beat wide {}",
+            moderate.stability_score,
+            wide.stability_score,
+        );
+        // ...and it must actually reach the useful end of the range, not just
+        // be monotone somewhere near zero.
+        assert!(tight.stability_score > 0.9, "tight = {}", tight.stability_score);
+        assert!(wide.stability_score < 0.1, "wide = {}", wide.stability_score);
+
+        // A single perfectly repeatable observation is perfectly stable. The
+        // old form scored it 0.0 — maximally UNstable — which is the defect at
+        // its clearest.
+        assert_eq!(StabilitySnapshot::compute(&[1000]).stability_score, 1.0);
+        // Empty keeps its documented 1.0 (the one arm the constant never hit,
+        // and the only value any test in the workspace had ever asserted).
+        assert_eq!(StabilitySnapshot::compute(&[]).stability_score, 1.0);
+
+        // The old expression, pinned as constant. p99 >= p50 is guaranteed by
+        // `compute`'s sorted-input contract, so this holds for every sample
+        // the API accepts — it is not a property of these fixtures.
+        for s in [&tight, &moderate, &wide] {
+            let old = 1.0 - (s.p99_ns as f64 / s.p50_ns as f64).min(1.0);
+            assert_eq!(old, 0.0, "the replaced expression is the constant 0.0");
+            assert!(s.p99_ns >= s.p50_ns, "sorted input invariant");
+        }
+    }
+
+    /// End-to-end through `compute`, on the shape the GOAT test uses: 100
+    /// distinct ascending samples. `p99_ns` must be the second-largest, not
+    /// the largest, and the snapshot must SAY its support is 2.
+    #[cfg(feature = "stability_metrics")]
+    #[test]
+    fn compute_reports_p99_with_its_tail_support() {
+        let known: Vec<u64> = (100..200).collect(); // n = 100, max = 199
+        let snap = StabilitySnapshot::compute(&known);
+        assert_eq!(snap.total_steps, 100);
+        assert_eq!(snap.p99_ns, 198, "p99 of 100 samples is the 99th, not the max");
+        assert_eq!(snap.p99_tail_support, 2);
+        assert!(snap.p99_ns < *known.last().unwrap(), "p99 must not be the max here");
+
+        // Empty and single-sample arms keep their support honest.
+        assert_eq!(StabilitySnapshot::compute(&[]).p99_tail_support, 0);
+        let one = StabilitySnapshot::compute(&[1000]);
+        assert_eq!((one.p99_ns, one.p99_tail_support), (1000, 1));
+    }
 
     // ── TreePath (Issue 670) ──────────────────────────────────────
 
