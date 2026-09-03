@@ -17,7 +17,8 @@ max_weak_asserted = 0
 # rather than folding into `max_degenerate` because the two are found by
 # different halves of the classifier and a shared pin would hide which half
 # regressed. Measured 0 in katgpt-rs (its one `nearest_rank` body rounds); 2 in
-# the workspace, both sibling-owned (riir-ai `.issues/859`).
+# the workspace, both sibling-owned (riir-ai `.issues/861`, riir-train
+# `.issues/508`).
 max_trunc_var = 0
 
 # The FLOOR is not redundant with them, and it is the pin that earns its keep.

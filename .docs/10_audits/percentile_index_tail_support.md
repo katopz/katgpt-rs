@@ -147,6 +147,9 @@ teach whoever hit it that the gate is noise.
 
 ## 7. Open — both sibling-owned, both low severity
 
+Filed where they live, not fixed here: riir-ai `.issues/861` (it moves a
+GOAT gate's measured value) and riir-train `.issues/508`.
+
 | site | shape | severity |
 |---|---|---|
 | riir-ai `crates/riir-engine/tests/bench_336_committed_blend_goat.rs:177` | `fn percentile` uses `floor(p*n)` + `.min(len-1)` | **low, but load-bearing.** n = 10,000 / 1,000 / 1,000 at its three call sites, so not degenerate — a one-rank-too-high bias. Direction is false-GREEN (§5a). A straggler of that repo's own Issue 853 sweep, missed because the literal-p vocabulary could not see it either. |
