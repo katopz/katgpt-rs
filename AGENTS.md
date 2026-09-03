@@ -699,13 +699,27 @@ This prevents the recurring drift pattern where an agent builds a parallel
 system that duplicates already-shipped substrate under a different name
 (canonical failures: ThreatField Issue 047, orchard/motivation Issues 490/493).
 
-> **Repo count:** the **product/distillation set is 8** — `katgpt-rs` (public) +
+> **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
-> `riir-armageddon`, `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **18 repos**, all of which carry a root `BOUNDARY.md`
+> `riir-dapps` (private). That is NOT the repo total: the
+> workspace is **19 repos**, all of which carry a root `BOUNDARY.md`
 > (add `riir-mmorpg-examples`, `riir-clippy`, `riir-unity`, `riir-viewbridge`,
 > `riir-auth`, `riir-burner`, `katgpt-web`, `riir-dao`, `riir-deployer`,
-> `seal-game-editor`). **Re-measured 2026-09-01** by
+> `seal-game-editor`, `seal-remake`, `seal-remake-unity`).
+>
+> **This paragraph said 8 and 18 until 2026-09-03, and the way it was wrong
+> is worse than a stale number.** `riir-armageddon` was de-enrolled by an
+> owner act — the directory is GONE — and `seal-remake-unity` was enrolled
+> in the same window (boundary-guard's 18th run: 19 repos / 225 edges, the
+> 227→225 delta being exactly armageddon's two allowlist edges leaving with
+> the directory, the new repo adding zero). **One repo left and one arrived,
+> so the total stayed 19 while the MEMBERSHIP changed** — every count in
+> sight agreed, and the set was wrong anyway. A count is not a checksum over
+> a set. The derived instruments were all correct throughout
+> (`scripts/repo_set.txt` was regenerated at `d2cb9979`, and the repo-set
+> gate is what caught the snapshot mid-session); only the prose was stale,
+> which is precisely the split the command below exists to enforce.
+> **Re-measured 2026-09-01** by
 > `../riir-ai/scripts/ci_boundary_contract.sh` — *"boundary contract clean —
 > 18 repos, 211 cross-repo dep edges measured"*. It was 15 at the 2026-08-21
 > run recorded here before; the count moved because contracts were added, not
@@ -725,14 +739,18 @@ system that duplicates already-shipped substrate under a different name
 > ```
 >
 > Four of the 2026-08-21 repos had no contract at all until that run, and
-> `riir-armageddon` had been consuming `riir-games` + `katgpt-core` unaudited.
-> Read a count in prose as a claim, not a fact.
+> `riir-armageddon` had been consuming `riir-games` + `katgpt-core` unaudited
+> (those are the two edges whose departure the 227→225 delta measures — the
+> repo is retired, so this sentence is history, not a live gap).
+> Read a count in prose as a claim, not a fact — and read a count that
+> MATCHES as a claim too, per the membership swap recorded above.
 > The historical "5-repo quintet" terminology referred to the 5 distillation
 > targets (katgpt-rs + 4 riir-* siblings); `riir-game-sdk` (game vocabulary
 > facade + dev-tool workspace) and `riir-armageddon` (arena/game-product domain
 > types) were added later, and `riir-dapps` (the dApp layer — game outcome →
-> generic chain settlement) on 2026-08-20. See Research 003 for the canonical
-> boundary.
+> generic chain settlement) on 2026-08-20. **`riir-armageddon` has since been
+> retired** (2026-09-02, owner act) — it is named here as lineage only; do
+> not route work to it. See Research 003 for the canonical boundary.
 >
 > **Two axes, not one.** Research 003's repo table is the *public/private*
 > axis; its §"The Second Axis: Layering (game / dApp / chain)" is the

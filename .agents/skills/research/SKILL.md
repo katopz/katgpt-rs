@@ -20,7 +20,9 @@ Do NOT activate for: pure refactor, bug fixes with no research angle, or ordinar
 - `riir-chain/` — private neuro-symbolic chain transport. LatCal, `riir-chaind`, economics, asset lifecycle, `catchup/` (Turso/libSQL, quorum). **Re-exports `riir-neuron-db` under `neuron_db` feature; canonical shard source is `riir-neuron-db/`.**
 - `riir-neuron-db/` — private leaf. `NeuronShard` (Pod, zero-copy mmap), `ShardIndex` (lock-free papaya), generic `MerkleTree`/`MerkleProof`, `MerkleFrozenEnvelope`, MAPE-K, Raven/δ-Mem consolidation, AnyRAG gateway, vibe KG triples, spectral init, `ShardCompactor`, dendritic LoRA branch. **No chain dep — usable standalone.**
 - `riir-train/` — private training vault. **As of 2026-08-06: actively pursued, not lazily redirected.** Applicable training papers get a Plan in `riir-train/.plans/` per §3.5 Path 0.5. `read_file riir-train/.docs/02_pipelines/training_data_pipeline.md` before any training-paper verdict.
-- `riir-game-sdk/`, `riir-armageddon/` — downstream consumers; rarely distillation targets.
+- `riir-game-sdk/` — downstream consumer; rarely a distillation target.
+  (`riir-armageddon/` sat here until it was retired 2026-09-02, owner act —
+  the directory is gone; do not route to it.)
 
 **Routing rule of thumb:** if it's about *how a shard is structured/committed/frozen/consolidated/retrieved/projected* → `riir-neuron-db`. If it's about *how a shard crosses quorum or bridges to LatCal fixed-point* → `riir-chain`.
 
@@ -332,7 +334,7 @@ If §4 surfaces rich landscape, use web search for deeper exploration of specifi
 2. **Latent-to-latent preferred** — operate in latent space as long as possible. Decode/project only at boundary. **Sigmoid, never softmax**, for projections onto learned directions. Semantic (emotion/mood/curiosity/style) → latent. Physical (position/HP/wallet) → raw, deterministic, synced.
 3. **Freeze/thaw over fine-tuning** — only runtime weight mutation is swapping a frozen snapshot (atomic, versioned, BLAKE3-checked) or applying a deterministically-constructed LoRA overlay (raw/lora hot-swap, no GD). Never mutate weights in-place during inference. Gradient updates (after §3.5) → riir-train.
 4. **Self-learn / adaptive CoT welcome** — runtime curiosity, latent prediction, trajectory folding, collapse detection. Update latent state / direction vectors / routing tables, NOT base weights.
-5. **8-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-armageddon (product domain) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
+5. **7-repo discipline** (the product/distillation set; canonical list in `katgpt-rs/AGENTS.md` §"Repo count") — katgpt-rs (public) → riir-ai → riir-chain → riir-neuron-db → riir-train (all private) + riir-game-sdk (facade) + riir-dapps (dApp layer: game outcome → generic chain settlement, added 2026-08-20). It read "8-repo" and included `riir-armageddon` until 2026-09-03; that repo was retired 2026-09-02 (owner act, directory gone). Training how never leaks to katgpt-rs; chain IP in riir-chain; shard IP in riir-neuron-db; SDK stays facade over `riir-games-shared`.
 6. **SOLID, DRY** — per `katgpt-rs/.contexts/optimization.md`. Zero-alloc hot paths. Pre-computed lookup tables. Fixed-size arrays for bounded domains.
 7. **Tests/examples** — before/after showing the gain. Latent ops: projection preserves ranking. Freeze/thaw: readers never see torn snapshots.
 8. **CPU/GPU/ANE auto-route** — threshold-adaptive. Plasma (µs SIMD) → Hot (sub-ms GPU) → Warm/Cold (ms+ GPU/ANE). L1-fitting latent ops stay SIMD; batched matmul goes GPU.

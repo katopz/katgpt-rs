@@ -42,16 +42,15 @@ riir-game-sdk      ← private game-vocabulary facade + dev-tool workspace (OUT 
                       consumes vocabulary from riir-games-shared in riir-ai, not katgpt-rs
                       engine primitives directly; transitively reaches katgpt-core only via
                       the always-on path dep, no feature-flag-gated primitives to audit)
-riir-armageddon    ← private arena/game-product domain types (OUT OF SCOPE — domain types,
-                      no engine primitives)
 ```
 
-**Why SDK + armageddon are out of scope:** this audit tracks katgpt-rs default-on
+**Why the SDK is out of scope:** this audit tracks katgpt-rs default-on
 primitives (feature-flag-gated, GOAT-validated) consumed in riir-* runtimes. The
 SDK is a facade over `riir-games-shared` (in riir-ai workspace) — its primitives
-are vocabulary types, not katgpt-rs engine features. Armageddon carries
-product-domain types. Neither ships feature-flag-gated katgpt-rs primitives
-that need cherry-pick tracking.
+are vocabulary types, not katgpt-rs engine features, so it ships no
+feature-flag-gated katgpt-rs primitive that needs cherry-pick tracking.
+(`riir-armageddon` was listed here on the same reasoning — product-domain
+types — until it was retired 2026-09-02, owner act.)
 
 ## Workflow
 
@@ -94,9 +93,11 @@ flag it. Widen it only by editing §"Repos in scope" first; the scope section is
 the decision, this grep is only its implementation.
 
 Caveat worth knowing when you read a "0 consumers" result: it is a claim about
-these three repos, not about the workspace's 18. A DUPLICATE of a primitive can
-live in an out-of-scope repo (`riir-armageddon` consumes `GenericSpatialBelief`
-in 3 files) — the anti-duplication sweep that covers all of them is
+these three repos, not about the workspace's 19. A DUPLICATE of a primitive can
+live in an out-of-scope repo (the standing example was `riir-armageddon`
+consuming `GenericSpatialBelief` in 3 files — that repo is retired as of
+2026-09-02, but the hazard it illustrates is not) — the anti-duplication
+sweep that covers all of them is
 `substrate-first` Audit Step 2, not this one.
 
 <!-- repo-set-ok: the reasoned in-scope consumer set per §"Repos in scope" -->

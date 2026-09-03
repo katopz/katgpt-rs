@@ -55,7 +55,6 @@ riir-train         ← private training vault (training-only methods — researc
 riir-game-sdk      ← private game-vocabulary facade + dev-tool workspace
                       (consumers: riir-mmorpg-examples, seal-online-remaster; vocabulary source is
                       riir-games-shared in riir-ai workspace, re-exported via facade)
-riir-armageddon    ← private arena/game-product domain types
 riir-dapps         ← private dApp layer (game outcome → generic chain settlement;
                       added 2026-08-20 — route settlement COMPOSITION here, not
                       riir-chain, which owns only value/authority primitives)
