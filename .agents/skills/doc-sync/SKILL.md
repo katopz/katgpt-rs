@@ -44,7 +44,12 @@ claims rot:
   every other repo LINKS. Never copy a cross-repo rule into a second file —
   that is the duplication doc-sync exists to catch.
 
-## The workspace repos and their doc shapes (**18**, measured 2026-09-01)
+## The workspace repos and their doc shapes (**derived, never counted** — de-counted 2026-09-04)
+>
+> The header carried a hand-typed count (**18**, measured 2026-09-01) while the
+> workspace moved to 16 live repos on 2026-09-04 (three to `git/obsolete/`) — the
+> same rot class the boundary-guard skill de-counted in its 21st run. The census
+> below is a snapshot; the one-liner derives the membership.
 
 > The header said *"14 as of 2026-08-28"* over a table of **12** rows until
 > 2026-09-01 — wrong twice, and six repos had no row at all, so a sync run that
