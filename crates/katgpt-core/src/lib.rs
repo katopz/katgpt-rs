@@ -99,6 +99,19 @@ pub mod newton_schulz;
 // modules' documented gating).
 pub mod float_order;
 
+// stats — nearest-rank percentiles with tail support (the workspace's one
+// percentile-of-record helper; promoted from five in-stack copies — the
+// canonical riir-games-shared SeriesStats + bench_336 (f32) + riir-rag p76
+// (u64) + civ bench_392 (u64) + riir-gpu ternary_dispatch (f64) — after
+// riir-ai Issue 861 recorded the 5th-copy promote trigger). Generic over a
+// Copy element (it only indexes a caller-sorted slice — no Ord bound, so
+// float callers keep their own total_cmp ordering); returns (value,
+// support) because support is the only thing that distinguishes a real
+// tail from the naive-index maximum (the Issue 853/865 defect class).
+// Always compiled (ungated, the float_order precedent) — pure integer/f64
+// rank arithmetic, zero-cost-unless-invoked.
+pub mod stats;
+
 // rating — Elo + Plackett-Luce rating primitives (Issue 686, promoted from
 // four in-stack copies: katgpt-pruners arena EloCalculator + proof
 // lambda_to_elo, riir-ai riir-games ruliology ParadigmRanking, riir-clippy
