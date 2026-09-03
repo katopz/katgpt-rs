@@ -4,6 +4,7 @@
 > Local: `.raw/HRM-dissect/` (Apache-2.0, pinned `d956ca85a753ea661bd7b952d4246e197889ed81` — read-only clone, removed after distill)
 > Date: 2026, distilled 2026-09-03
 > **Verdict: GAIN** — an analysis paper (no new method), but two modelless extractions survive the signal-diff: (1) the **convergence-cadence outcome signal** (‖Δz‖ trajectory separates solve from fail ~4.9× by mid-run → escalation semantics, not just halting), and (2) the **decodable≠causal audit discipline** for our latent-claim surfaces. Hierarchy finding validates two-brain as analyzability dividend.
+> **Status:** RECORD — both extractions LANDED (cadence: Issue 720 T1–T4, 2026-09-03→04; causal-audit: riir-ai Issue 858, `fea8c6ef5`). See §Landing record; issue files removed per the noise-reduction rule.
 
 ## TL;DR
 
@@ -44,10 +45,10 @@ Overall characterization: **HRM = constraint-aware iterative refinement on a puz
 
 | Component | Modelless analog | Verdict |
 |---|---|---|
-| Causal intervention suite (ablate/freeze/patch + random controls) | intervention-style gates exist (engram zero-query test, evidence tripwire rank inversion) | Partial — extend to svcca Track B (→ riir-ai issue) |
+| Causal intervention suite (ablate/freeze/patch + random controls) | intervention-style gates exist (engram zero-query test, evidence tripwire rank inversion) | Partial → **LANDED 2026-09-03** — riir-ai Issue 858's directed-ablation arm (`fea8c6ef5`) |
 | Linear probes + directed ablation (orthogonal projection) | dot+sigmoid projections are our house style; projection-out is a ~10-line util | No standalone primitive needed; folded into the svcca audit issue |
 | SAE + size-matched random ablation | non-vacuous control discipline ships | Covered — discard (dim-8 latents; SAE is high-dim machinery) |
-| Convergence cadence outcome signal | NOT covered (see table) | **Gain → katgpt-rs issue 720** |
+| Convergence cadence outcome signal | NOT covered (see table) | **Gain → katgpt-rs Issue 720 — LANDED (T1–T4), see §Landing record** |
 | Hierarchy-as-analyzability principle | two-brain model (info/think) | Validates; doc-level, no code |
 
 Training track: the paper trains probes/SAEs/one BPTT control for *analysis only* — no recipe, no optimizer/loss content. Path 0.5 not applicable; adversarial panel skipped (classification is interpretability-analysis; the abstract carries probing/SAE framing, not optimizer/backprop framing, and no riir-train routing decision exists to adversarially test).
@@ -71,6 +72,30 @@ Training track: the paper trains probes/SAEs/one BPTT control for *analysis only
 | cos(Δ_t, Δ_{t-1}) | ≈ 0 (orthogonal steps) | ≈ 0 |
 
 Baselines (500 Sudoku puzzles, final step): RNN@16 51.4% / UT 48.4% / HRM 45.4% / Plain-Transformer@16 0.2-0.4% / single-step 0.0%. Cross-task: top-50 SAE -3.63pp vs random-50 -3.42pp. Maze: z_L carries the intermediate path (patching), z_H the readout.
+
+## Landing record (2026-09-03 → 2026-09-04; both extractions landed, issue files removed)
+
+### Extraction 1 — convergence-cadence outcome signal (katgpt-rs Issue 720, T1–T4 DONE)
+
+- **T1 — `ConvergenceCadence` probe** (katgpt-core, opt-in `cadence_gate`): zero-alloc ring of last-K update norms, caller-fed, emits `Settled { mag } | Churning { mag, plateau_len }` from decay-ratio + plateau detection. G1 bit-identical when off; G4 zero-alloc hot path; shuffled non-vacuity. Landed `99920de2` (12/12 feature-on tests incl. paper-shape fixtures; default 1992/0 bit-unchanged).
+- **T2 — falsifiable A/B** (riir-poc `cadence_gate_poc`, `b18b7b2bb`): three arms on a controlled d=16 loop, three dynamics families (contraction-solvable / rotational-churn / reversal-churn). Verdict (all PASS):
+
+  | gate | result |
+  |---|---|
+  | G1 determinism | all 5 arms bit-identical double runs |
+  | G2 compute + no-regression | halt-only 2048 vs cadence 1044 steps on rotational churn (**1.96×**); solvable+reversal bit-identical |
+  | G3 abort precision/recall | **1.000 / 1.000** (32/32 rotational flagged, 0 false aborts) |
+  | G4 shuffled non-vacuity | control fires 46 flags, precision 1.000 → 0.696, gap 0.304 — the probe reads windowed SHAPE, not magnitude |
+  | G5 damp honest-negative | 0 compute saved, 0 flags, err 5.75 → 4.64 (19% radius shrink, no recovery) |
+
+  En-route findings pinned in the harness header: single-plane rotation = degenerate world (14-dim fixed-point axis; sub-floor plateaus invisible to BOTH signals — caught by the pre-registered gates, fixed to the 8-plane direct sum); **θ=90°: the halter's oscillation detector fires on f32 noise at true cos 0** — a real `GainCostLoopHalter` boundary characteristic (suite keeps cos θ ≥ 0.259).
+- **T3 — NPC consumer** (substrate riir-ai `681786288` + SDK forward `69a0770` + riir-mmorpg-examples `8c99624`): heading-churn windowed trigger (catches gapped oscillators the raw `flee_ticks` counter misses) + settled early-commit + corner preservation behind the opt-in `deliberation_cadence` feature; system-owned shadow state, think-brain only. G1–G4 + signal-vs-counter non-vacuity ALL PASS at 1000 NPCs (debug + release); CI gate coverage Layer 1.9b. The consumer-side doc record lives in riir-mmorpg-examples AGENTS.md §Issue 054 ("L2 trigger upgrade"). **Promotion to default is the owner-gated gameplay A/B — the reopen trigger.**
+- **T4 — doc pins**: halter "Halt ≠ classification" block `4cff9830`; riir-neuron-db `can_freeze` live-prediction-sibling note `9e45d42`.
+- **T5 `- [-]` deferred**: CGSP restart-with-new-conjecture arm (DerivativeCuriosity owns the explore axis; add the abandon axis only if a consumer shows explore-alone is insufficient).
+
+### Extraction 2 — decodable ≠ causal (riir-ai Issue 858, RESOLVED `fea8c6ef5`)
+
+The svd_cca PoC gained the directed-ablation causality matrix (`g4_issue858_directed_ablation_causality_matrix`): carrier direction = top left singular vector; ablation `z ← z − (zᵀẑ)ẑ` with a DISTINCT seeded readout (the certificate must not grade its own ablation); 16-draw random control. Measured fixture cell = **aligned+causal** (Δ 1.2327 vs band [0.0287..1.0640]); ρ̄ itself is ablation-invariant (0.9998 → 0.9998) — alignment spread across directions, not concentrated in the carrier. "Alignment ≠ causation" paragraph + required-evidence rule pinned in riir-ai Bench 836 §Disposition. T4 (reusable `causal_probe` util) deferred until a second claimed-readout consumer materializes.
 
 ## References
 
