@@ -2263,10 +2263,11 @@ pub use inversion::{
 // correlation device ω from interaction history. NOT a sync-boundary primitive
 // (ω is latent per-focal; only the final cooperate/defect u8 action crosses).
 // Sigmoid, not softmax (ω is a posterior probability, not a categorical).
-// DEFAULT-ON (2026-08-11) — Plan 526 Phase 1-5 GOAT G1–G8 ALL PASS (Bench 579:
-// G1 closed-form reproduction, G2 emergent cooperation, G5 indirect inference,
-// G7 UQ floor, G8 PD threshold); see the Cargo.toml feature-def comment for the
-// full gate record.
+// OPT-IN (demoted 2026-09-04 per riir-ai Issue 867 T1.3 — 24 days DEFAULT-ON
+// 2026-08-11..09-03 with zero consumers workspace-wide) — Plan 526 Phase 1-5
+// GOAT G1–G8 ALL PASS (Bench 579: G1 closed-form reproduction, G2 emergent
+// cooperation, G5 indirect inference, G7 UQ floor, G8 PD threshold); see the
+// Cargo.toml feature-def comment for the full gate + demotion record.
 #[cfg(feature = "similarity_inference")]
 pub mod similarity_inference;
 #[cfg(feature = "similarity_inference")]
