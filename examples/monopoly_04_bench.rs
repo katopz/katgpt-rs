@@ -7,6 +7,7 @@
 use std::time::Instant;
 
 use fastrand::Rng;
+use katgpt_core::stats::nearest_rank;
 use katgpt_rs::pruners::monopoly::{
     GreedyPlayer, HLPlayer, MonopolyPlayer, RandomPlayer, ValidatorPlayer, run_game,
 };
@@ -130,16 +131,4 @@ fn main() {
     println!("  p50: {p50}µs ({:.2}ms)", p50 as f64 / 1000.0);
     println!("  p90: {p90}µs ({:.2}ms)  [support {p90_s}]", p90 as f64 / 1000.0);
     println!("  p99: {p99}µs ({:.2}ms)  [support {p99_s}]", p99 as f64 / 1000.0);
-}
-
-/// Nearest-rank quantile of a **sorted** slice, plus its **tail support** —
-/// the count of samples at or above the returned rank.
-///
-/// `ceil(p * n) - 1`, not `floor(p * n)`: the latter lands on `n - 1` for
-/// every `n <= 1 / (1 - p)`, returning the maximum under a percentile's name.
-fn nearest_rank(sorted: &[u128], p: f64) -> (u128, usize) {
-    let n = sorted.len();
-    assert!(n > 0, "nearest_rank on an empty sample set");
-    let idx = ((p * n as f64).ceil() as usize).clamp(1, n) - 1;
-    (sorted[idx], n - idx)
 }
