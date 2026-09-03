@@ -46,13 +46,22 @@
 # two blindness floors) because a ceiling cannot fail once the auditor goes
 # blind and reports zero; see scripts/cfg_gated_floors.txt.
 #
-# orphaned_attr_gate.py (added 2026-09-03) is pinned at ZERO, with no floor to
-# negotiate: the shape it forbids -- an OUTER #[cfg] separated from its item by
-# a blank line, which Rust still binds to that item -- was measured at zero
-# sites across all 19 contract repos. It exists because that shape sat in
-# katgpt-pruners for two days and broke every RELEASE build of `sdar_gate`
-# (26d055c6 -> a08376a0), while the commit that introduced it validated in
-# debug and reported 597/0.
+# orphaned_attr_gate.py (added 2026-09-03) is pinned at ZERO offenders: the
+# shape it forbids -- an OUTER #[cfg] separated from its item by a blank line,
+# which Rust still binds to that item -- measured zero sites across every
+# contract repo at the fix (19 then; re-measured 2026-09-04 over the live 16,
+# still zero everywhere). It exists because that shape sat in katgpt-pruners for
+# two days and broke every RELEASE build of `sdar_gate` (26d055c6 -> a08376a0),
+# while the commit that introduced it validated in debug and reported 597/0.
+#
+# It DOES have floors, added 2026-09-04, and the paragraph above is why: a zero
+# ceiling cannot fail once the walk goes blind. The reasoning was written here
+# for docs_drift_sweep.py and not applied to the check three lines below it.
+# Two population floors (.rs files, outer-#[cfg] sites), katgpt-rs-scoped --
+# riir-viewbridge has 24 .rs files against this repo's 2,418, so a shared floor
+# would red every small sibling forever. The same commit stopped its PASS line
+# printing "measured 0 across 19 repos", a cross-repo claim no single-repo run
+# had made, two lines under the repo-set gate correctly saying 16.
 #
 # Runs every check even after one fails — the same reason full_gate.sh passes
 # --keep-going: stopping at the first failure under-reports the drift.
