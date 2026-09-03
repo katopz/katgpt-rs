@@ -2756,9 +2756,13 @@ pub mod recirculation;
 // LittleLearner): two-corpus log-odds table + Naive-Bayes log-LLR document
 // scope score D(x) + epistemic haircut ĉ = c·sigmoid(−κ·D) + decline wiring
 // + the paired OOS probe battery (Report-the-Floor extension). "A relevance
-// check is not a scope check." Opt-in POC — per the issue's own T5 rule,
-// promotion requires a consumer adoption (riir-clippy L4 2D gate / riir-ai
-// engram gates); otherwise record negative and close.
+// check is not a scope check." DEFAULT-ON (2026-08-19) under the issue's own
+// one-consumer T5 rule, satisfied by the riir-clippy ScopeModel adoption
+// (Bench 669 / Bench 040: installed via with_scope_model, bit-identical
+// in-distribution). The other named candidate (riir-ai engram gates) never
+// materialized — caught by the 2026-09-04 goat-audit (riir-ai Issue 867);
+// zero riir-ai consumers as of that audit, the riir-clippy consumer is the
+// load-bearing one.
 #[cfg(feature = "contrastive_scope")]
 pub mod contrastive_scope;
 
