@@ -181,6 +181,70 @@ default-off-gated ones report a green zero every time anyone names them.
    its own ambiguous class rather than guessed. Executing `test_120_vpd_arena_goat`
    to confirm its count is what found Issue 715's two-day release break.
 
+## T6 follow-up (2026-09-04) — the count moved and nothing said so
+
+Item 7 above records "60 load-bearing" and `scripts/cfg_gated_floors.txt`
+recorded "19 ALL-IGNORED (3 load-bearing)" for katgpt-rs. Re-measured the
+next evening: **66 workspace-wide, 5 in katgpt-rs.** Neither number was
+pinned, so neither moved.
+
+The two katgpt-rs arrivals are not new `#[ignore]`s. They are
+`velocity_field_disagreement_uq_floor.rs` and
+`velocity_field_ensemble_uq_floor.rs`, which became load-bearing when T4c
+widened `is_load_bearing` to the `floor` dialect — **the instrument working,
+with nothing to report that it had.** Same shape as the T4c finding itself,
+one axis over: the classifier got wider and the prose describing its output
+did not.
+
+### Both `*_uq_floor` rows were checked against their sources, and both are correct
+
+They are 0-assertion, 41-println comparison tables — a "Report the Floor"
+(Issue 010) *pre-validation*, not a gate — and neither rests a promotion on
+an unasserted verdict:
+
+| target | feature state | recorded verdict | promotion |
+|---|---|---|---|
+| `velocity_field_ensemble_uq_floor.rs` | `velocity_field_ensemble` **default-on** | `.benchmarks/376_uq_floor.md`: **BEATS FLOOR** on AR(1) | legitimate — Bench 376 states the primitive "currently makes NO UQ claim … this benchmark is a pre-validation, not a claim addition", so the UQ rule is not the gate its promotion rested on |
+| `velocity_field_disagreement_uq_floor.rs` | `velocity_field_disagreement` **opt-in** | `.benchmarks/432_vfd_uq_floor.md`: **G2 FAILS** for the epistemic-UQ claim (λ\*=0 on both corpora; the AR(1) `BeatsFloor` is inherited from the ensemble's point forecast) | correct — Plan 432 T3.2 promotion **NOT EXECUTED**, ships as an opt-in non-UQ disagreement score |
+
+The wider conformal-floor suite is genuinely armed — **11
+`crates/katgpt-core/tests/conformal_*.rs` files, 50 tests, 108 assertions, and
+exactly ONE `#[ignore]`** (in `conformal_karc_no_regression.rs`, i.e. a
+`partial` row, not an ALL-IGNORED one). The two print-only tables are the
+exception, and the exception is documented in both plans. Same conclusion as `.issues/714` T3
+and T4c: **silently unverified, not silently broken.**
+
+The other three katgpt-rs rows are equally justified, read out of their own
+`#[ignore = "..."]` strings: two "pure measurement benchmark (no assertions),
+slow in debug", and `test_120_vpd_arena_goat` at "1000 Bomber games per test —
+minutes, not seconds".
+
+### The pin: MEMBERSHIP, because the count genuinely is not gateable
+
+`cfg_gated_floors.txt` argues that the ALL-IGNORED **count** cannot be gated —
+`#[ignore]` is the right marker for a slow or hardware-gated test — and that is
+correct. It is also incomplete: **a set is gateable where its cardinality is
+not.** `scripts/all_ignored_load_bearing.txt` lists the five paths with each
+one's own reason string, and `check_membership` in `cfg_gated_floor_gate.py`
+reds on drift in *either* direction (a removal is good news and still needs the
+pin updated — `scripts/repo_set.txt` discipline).
+
+Three properties a count ceiling does not have, all canaried before landing
+(arrival → exit 1, removal → exit 1, empty allowlist → exit 1, restored → 0):
+
+1. A **sixth** row arriving reds the push that adds it, before its green
+   `ok. 0 passed` is cited as promotion evidence.
+2. A same-size **swap** fails. That is the AGENTS.md repo-set incident's lesson
+   applied one axis over, and it is pinned as its own selftest case.
+3. It is **self-protecting against blindness**: if the auditor's `#[test]` or
+   `#[ignore]` recogniser regresses, the measured set empties and the gate reds
+   on five removals. Every ceiling in this family passes when the instrument
+   dies; this one cannot. An empty *allowlist* is refused for the mirror-image
+   reason — otherwise a truncated pin file and a broken auditor would cancel.
+
+Not added to `REQUIRED_PINS`: it is not an integer, and the int-pin selftest
+drives every pin over a boundary a set does not have.
+
 ## T3 — DONE across every contract repo (2026-09-03). Load-bearing zero is now real.
 
 No longer an owner call pending per sibling: the sweep was taken. **97 targets

@@ -513,6 +513,15 @@ def main(argv: list[str]) -> int:
                 "all_ignored_load_bearing": sum(
                     1 for t in r.all_ignored if t.load_bearing
                 ),
+                # The PATHS, not just the count. A count is not a checksum over
+                # a set: one justified ALL-IGNORED target removed and one
+                # unjustified one added leaves the total unmoved, which is
+                # exactly how katgpt-rs went 3 -> 5 load-bearing with every
+                # number in sight agreeing. `cfg_gated_floor_gate.py` pins the
+                # MEMBERSHIP against scripts/all_ignored_load_bearing.txt.
+                "all_ignored_load_bearing_paths": sorted(
+                    t.path for t in r.all_ignored if t.load_bearing
+                ),
                 "reasonless_targets": len(reasonless),
                 "reasonless_paths": sorted(reasonless),
                 "partial": r.partial,

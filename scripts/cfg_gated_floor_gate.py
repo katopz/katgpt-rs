@@ -45,6 +45,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 AUDITOR = REPO_ROOT / "scripts" / "cfg_gated_target_audit.py"
 IGNORE_AUDITOR = REPO_ROOT / "scripts" / "all_ignored_target_audit.py"
 PINS_FILE = REPO_ROOT / "scripts" / "cfg_gated_floors.txt"
+# The one expectation in this gate that is a SET rather than an integer. See
+# that file's header for why a count cannot express it.
+LB_ALLOW_FILE = REPO_ROOT / "scripts" / "all_ignored_load_bearing.txt"
 
 REQUIRED_PINS = (
     "max_load_bearing",
@@ -56,6 +59,58 @@ REQUIRED_PINS = (
     "max_profile_release_only",
     "max_profile_debug_only",
 )
+
+
+def read_lb_allow() -> set[str]:
+    """The committed membership of load-bearing ALL-IGNORED targets.
+
+    An EMPTY file is refused rather than read as "nothing is allowed": that
+    would turn a deleted or truncated pin file into a gate that passes only
+    while the auditor is also broken, and the two failures would cancel.
+    """
+    allowed = {
+        line.split("#", 1)[0].strip()
+        for line in LB_ALLOW_FILE.read_text().splitlines()
+    }
+    allowed.discard("")
+    if not allowed:
+        raise SystemExit(
+            f"✗ {LB_ALLOW_FILE.name} lists no targets — an empty allowlist is "
+            "refused, not read as a ceiling of zero. Restore the file or say "
+            "explicitly that katgpt-rs has none."
+        )
+    return allowed
+
+
+def check_membership(measured: set[str], allowed: set[str]) -> list[str]:
+    """Set difference, both directions, reported apart.
+
+    Kept out of `check()` because that function's contract is int pins and its
+    selftest drives every one over its boundary; a set does not have a
+    boundary. Both directions red on purpose — a removal is good news and
+    still needs the pin updated (`scripts/repo_set.txt` discipline).
+    """
+    fail = []
+    arrived = sorted(measured - allowed)
+    left = sorted(allowed - measured)
+    if arrived:
+        fail.append(
+            f"{len(arrived)} load-bearing target(s) now have EVERY test "
+            "#[ignore]d and are not in "
+            f"{LB_ALLOW_FILE.name}: {', '.join(arrived)}. Such a target prints "
+            "`ok. 0 passed` forever while its filename says its green IS the "
+            "evidence. Either un-ignore it, or add the row WITH the reason "
+            "string from its source."
+        )
+    if left:
+        fail.append(
+            f"{len(left)} allowlisted target(s) are no longer measured as "
+            f"load-bearing ALL-IGNORED: {', '.join(left)}. If a gate was "
+            "un-ignored, good — drop the row in that commit. If the whole set "
+            "went missing, the auditor has gone blind and a count ceiling "
+            "would have passed."
+        )
+    return fail
 
 
 def read_pins() -> dict[str, int]:
@@ -208,6 +263,7 @@ def measure() -> dict[str, int]:
     m["reasonless_targets"] = igm["reasonless_targets"]
     m["ignore_scanned"] = igm["scanned"]
     m["all_ignored"] = igm["all_ignored"]
+    m["_lb_paths"] = set(igm["all_ignored_load_bearing_paths"])
     return m
 
 
@@ -288,6 +344,30 @@ def selftest() -> None:
     assert check({**ok, "gated": 399}, pins), "a degraded gate-recogniser passed"
 
 
+    # ── the membership check, both directions + the blindness case ──
+    #
+    # Not folded into `check()` above: that function's pins are integers and
+    # every one is driven over its boundary. A set has no boundary, so what
+    # has to be pinned instead is that BOTH differences are reported and that
+    # an empty measured set is a failure rather than a vacuous pass.
+    allow = {"tests/a_goat.rs", "tests/b_gate.rs"}
+    assert not check_membership(set(allow), allow), "identical sets failed"
+    assert check_membership({"tests/a_goat.rs", "tests/b_gate.rs", "tests/c_goat.rs"},
+                            allow), "an ARRIVING load-bearing all-ignored target passed"
+    assert check_membership({"tests/a_goat.rs"}, allow), (
+        "a REMOVED allowlist row passed — a removal is good news and still "
+        "needs the pin updated"
+    )
+    assert check_membership(set(), allow), (
+        "an EMPTY measured set passed — that is the blindness case a count "
+        "ceiling cannot catch"
+    )
+    # a swap keeps the CARDINALITY identical and must still fail; this is the
+    # entire reason the pin is a set (AGENTS.md's repo-set incident, one axis over)
+    assert check_membership({"tests/a_goat.rs", "tests/z_goat.rs"}, allow), (
+        "a same-size membership SWAP passed — the pin is behaving like a count"
+    )
+
 def main() -> int:
     selftest()
     pins = read_pins()
@@ -298,12 +378,13 @@ def main() -> int:
         f"{m['scanned']} targets, {m['gated']} #![cfg]-gated, {m['covered']} covered, "
         f"SILENT-NOW {m['silent_now']} (load-bearing {m['silent_now_load_bearing']}), "
         f"{m['all_ignored']} all-#[ignore]d target(s), "
-        f"{m['reasonless_targets']} of them reasonless; "
+        f"{m['reasonless_targets']} of them reasonless "
+        f"({len(m['_lb_paths'])} load-bearing, allowlisted); "
         f"profile-gated {m['profile_gated_release_only']} release-only / "
         f"{m['profile_gated_debug_only']} debug-only"
     )
 
-    fail = check(m, pins)
+    fail = check(m, pins) + check_membership(m["_lb_paths"], read_lb_allow())
     if fail:
         for line in fail:
             print(f"  ✗ {line}")
@@ -319,7 +400,10 @@ def main() -> int:
             "the ratchet tight (not a failure)"
         )
 
-    print(f"✓ cfg-gated floor gate PASSED — {len(REQUIRED_PINS)} pins held")
+    print(
+        f"✓ cfg-gated floor gate PASSED — {len(REQUIRED_PINS)} pins held "
+        f"+ {len(m['_lb_paths'])}-target load-bearing all-ignored membership"
+    )
     return 0
 
 

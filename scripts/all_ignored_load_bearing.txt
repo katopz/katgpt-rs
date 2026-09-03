@@ -1,0 +1,61 @@
+# katgpt-rs targets that are LOAD-BEARING BY NAME and in which EVERY test is
+# unconditionally `#[ignore]`d — so the binary compiles, runs, and can never
+# print anything but `ok. 0 passed`.
+#
+# MEMBERSHIP, not a count, and that distinction is the whole point
+# --------------------------------------------------------------
+# `cfg_gated_floors.txt` argues — correctly — that the COUNT of ALL-IGNORED
+# targets is not gateable, because `#[ignore]` is the right marker for a slow
+# or hardware-gated test. What that argument does not reach is that a count is
+# not a checksum over a set: one justified row leaving while one unjustified
+# row arrives keeps the total unmoved. That is not hypothetical here. The pins
+# file header recorded "19 ALL-IGNORED (3 load-bearing)" and the measurement
+# on 2026-09-03 evening was **5** — the count grew by two and nothing noticed,
+# because no pin existed on it at all. (The two arrivals are the `*_uq_floor`
+# rows below; they became load-bearing when Issue 713 T4c widened the
+# `is_load_bearing` token set to the `floor` dialect. A vocabulary widening
+# that finds two more targets is the instrument WORKING — what was missing was
+# anything that said so.)
+#
+# So this file is the allowlist. Every row is a judgement call its owner has
+# already made and this gate accepts; what it refuses is a SIXTH row arriving
+# unannounced, before its green `ok. 0 passed` is cited as evidence for a
+# promotion.
+#
+# It is also self-protecting against blindness, which a ceiling of zero never
+# is: if the auditor's `#[test]` or `#[ignore]` recogniser regresses, the
+# measured set empties and the gate reds on five REMOVALS. A count ceiling
+# would have passed.
+#
+# Re-pin DELIBERATELY, in the commit that changes the set, with the reason in
+# the commit message — and drift in EITHER direction reds. A removal is good
+# news (somebody un-ignored a load-bearing gate) and still needs the pin
+# updated, exactly as `scripts/repo_set.txt` treats an arriving repo.
+#
+# Every reason below was read out of the file's own `#[ignore = "..."]` string
+# on 2026-09-03, not inferred from the filename.
+
+# Print-only floor-comparison tables, 0 assertions by DESIGN. Both are
+# "Report the Floor" (Issue 010) pre-validations whose verdicts live in
+# .benchmarks/376_uq_floor.md (VFE: BEATS FLOOR) and .benchmarks/432_vfd_uq_floor.md
+# (VFD: G2 FAILS for the epistemic-UQ claim; lambda*=0 on both corpora).
+# Neither primitive rests a DEFAULT-ON promotion on an unasserted gate:
+# `velocity_field_disagreement` stays opt-in per Plan 432 T3.2 (NOT EXECUTED),
+# and `velocity_field_ensemble` is default-on while making NO UQ claim (Bench
+# 376: "a pre-validation, not a claim addition"). Verified against the
+# Cargo.toml default list + both plans, 2026-09-03.
+crates/katgpt-core/tests/velocity_field_disagreement_uq_floor.rs
+crates/katgpt-core/tests/velocity_field_ensemble_uq_floor.rs
+
+# "pure measurement benchmark (no assertions), slow in debug; run with
+# --release --ignored" — quality sweeps that print comparison tables. The
+# promotion evidence is the recorded .benchmarks run, not the target's exit
+# code, so a green zero here misleads nobody who reads the reason string.
+tests/bench_block_diagonal_goat.rs
+tests/bench_octopus_goat.rs
+
+# "arena proof over 1000 Bomber games per test — minutes, not seconds; run
+# with --release --ignored" — three asserting arena proofs, correctly kept off
+# the default path by wall-clock cost. This is the row whose green zero started
+# Issue 713 T6.
+tests/test_120_vpd_arena_goat.rs

@@ -67,6 +67,18 @@
 # (0 positive), 1 any(); 653 ignore-scanned targets, 460 with tests, 19
 # ALL-IGNORED (3 load-bearing), 0 reasonless.
 #
+# That "(3 load-bearing)" was measured **5** the same evening and this line did
+# not move, because NO PIN EXISTED ON IT. The two arrivals are the
+# `*_uq_floor` targets, which became load-bearing when T4c widened the
+# `is_load_bearing` token set to the `floor` dialect — the instrument working,
+# with nothing to say so. Closed by MEMBERSHIP rather than by a count:
+# `scripts/all_ignored_load_bearing.txt` lists the five paths and
+# `check_membership` reds on drift in either direction. The header's own
+# argument that "the COUNT is not gateable" was right and incomplete — a set
+# is gateable where its cardinality is not, which is also why an empty
+# allowlist is REFUSED instead of read as a ceiling of zero. That pin is not
+# in REQUIRED_PINS below: it is not an integer.
+#
 # The first measurement of the day read 376 covered / 63 SILENT-NOW, and the
 # delta is NOT churn: `max_load_bearing = 0` was a green over a population the
 # CLASSIFIER COULD NOT SEE. Widening its token set to the alloc / correctness /
