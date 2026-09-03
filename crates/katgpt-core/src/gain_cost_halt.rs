@@ -122,6 +122,24 @@ pub enum HaltReason {
 /// is a DIRECTION (cos θ) — neither divides by ‖h‖. Preserve that property;
 /// a future "normalized gain" that divides by the current state norm would
 /// read fake convergence off a diverging trajectory.
+///
+/// # Halt ≠ classification (Issue 720 T4a; evidence: riir-poc `b18b7b2bb`)
+///
+/// A halt decision is NOT an outcome read. On **rotational churn** — updates
+/// large but direction rotating (cos_updates = cos θ ≥ 0, non-oscillatory by
+/// this kernel's own contract) — the gain signal is constant-high: the
+/// scissors never fire, and this kernel burns the full loop budget and the
+/// caller commits the churned state with no warning (measured: 32/32
+/// rotational instances run to budget, zero flags). And when the detector
+/// DOES fire (gain decay, oscillation), the reason is a stop CONDITION, not
+/// a verdict that the answer is good. The outcome read is
+/// [`crate::convergence_cadence::ConvergenceCadence`] (opt-in
+/// `cadence_gate`): windowed update-magnitude trajectory ⇒
+/// `Settled | Churning` — compose the two (halt on decay, ABORT/escalate on
+/// plateau-high) per Issue 720. Boundary note from the same measurement: at
+/// true cos θ = 0 (90° rotation) the computed cos is f32 noise around zero
+/// and the patience-2 detector fires on it — a real trigger-happy edge of
+/// the oscillation detector, not part of its intended reversal contract.
 #[derive(Clone, Debug)]
 pub struct GainCostLoopHalter {
     /// Effective rank at the previous loop (for delta computation).
