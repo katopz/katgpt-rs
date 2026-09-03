@@ -351,6 +351,40 @@ def _balanced_args(text, open_idx):
     return text[open_idx + 1 :]
 
 
+def _subscript_aliases(var, scope):
+    """Names bound to `<seq>[... var ...]` in this scope -- ONE hop.
+
+    The index variable is almost never the asserted one. The normal shape is
+
+        let p99_idx = (READS as f64 * 0.99) as usize;   // the site
+        let p99_ns = latencies_ns[p99_idx];             // the hop
+        assert!(p99_ns < 200, "G5 FAIL ...");           // the verdict
+
+    so a same-name-only search reports `asserted=False` for a percentile that
+    decides a GOAT gate (measured: katgpt-core content_store/goat.rs:323).
+    That is a SEVERITY DOWNGRADE -- it moves a real finding out of the
+    "+ ASSERTED (deciding a verdict)" bucket into "print-only (misleading a
+    reader)" -- and it is silent, because a downgrade still prints a row.
+
+    Deliberately one hop and deliberately subscript-only: `var` must appear
+    inside a bracket pair, i.e. the alias IS the sample this rank selects.
+    Chasing arbitrary arithmetic, or chasing transitively, buys the shapes
+    nobody writes at the cost of a false ASSERTED -- and a false ASSERTED is
+    what makes the report's most actionable row untrustworthy, which is the
+    same defect in the other direction.
+    """
+    inside_brackets = re.compile(r"\[[^\]]*\b" + re.escape(var) + r"\b[^\]]*\]")
+    out = []
+    for line in scope.splitlines():
+        am = ASSIGN_RE.search(line)
+        if not am:
+            continue
+        rhs = line[am.end():]
+        if inside_brackets.search(rhs):
+            out.append(am.group(1))
+    return out
+
+
 def is_load_bearing(var, lines, i):
     """Does the value feed an `assert!` IN THE SAME FUNCTION?
 
@@ -358,12 +392,17 @@ def is_load_bearing(var, lines, i):
     character window, and not the whole file. A print-only quantile is
     misleading; an asserted one decides a verdict, and conflating them makes
     the report's most actionable row untrustworthy.
+
+    The index variable itself is checked, plus its one-hop subscript aliases --
+    see _subscript_aliases for why the same-name-only form was a silent
+    severity downgrade rather than a miss.
     """
     if not var:
         return False
     start, end = enclosing_scope(lines, i)
     scope = "\n".join(lines[start:end])
-    word = re.compile(r"\b" + re.escape(var) + r"\b")
+    names = [var, *_subscript_aliases(var, scope)]
+    word = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b")
     for m in ASSERT_RE.finditer(scope):
         paren = scope.find("(", m.end() - 1)
         if paren == -1:
@@ -579,6 +618,46 @@ def selftest():
     ]
     if not is_load_bearing("p99", same, 1):
         fails.append("is_load_bearing missed an assert in the same fn")
+    # (d) the ONE-HOP subscript alias: the index variable is almost never the
+    # asserted one, and a same-name-only search silently DOWNGRADES the
+    # severity of a real finding rather than dropping it. Measured shape,
+    # katgpt-core content_store/goat.rs:323.
+    hop = [
+        "fn g5() {",
+        "    let p99_idx = (READS as f64 * 0.99) as usize;",
+        "    let p99_ns = latencies_ns[p99_idx];",
+        "    assert!(p99_ns < 200, \"G5 FAIL: p99 {p99_ns}ns\");",
+        "}",
+    ]
+    if not is_load_bearing("p99_idx", hop, 1):
+        fails.append("is_load_bearing missed the one-hop subscript alias (idx -> value -> assert)")
+    # (e) ...and the hop must be a SUBSCRIPT, not any mention. An alias bound
+    # from unrelated arithmetic on the index is not the sample it selects, and
+    # crediting it would manufacture a false ASSERTED -- which is the same
+    # defect as (d) in the direction that makes the actionable rows untrusted.
+    noise = [
+        "fn g5() {",
+        "    let p99_idx = (READS as f64 * 0.99) as usize;",
+        "    let budget_ns = p99_idx * 2;",
+        "    assert!(budget_ns > 0, \"budget {budget_ns}\");",
+        "}",
+    ]
+    if is_load_bearing("p99_idx", noise, 1):
+        fails.append("is_load_bearing credited a non-subscript alias as asserted")
+    # (f) the bound is ONE hop, stated as a pin rather than left to be
+    # rediscovered: a two-hop chain is NOT claimed. If a real two-hop site
+    # ever shows up, widen here and move this case -- do not read the pass as
+    # evidence that two hops are covered.
+    two_hop = [
+        "fn g5() {",
+        "    let p99_idx = (READS as f64 * 0.99) as usize;",
+        "    let p99_ns = latencies_ns[p99_idx];",
+        "    let p99_us = p99_ns / 1000;",
+        "    assert!(p99_us < 1, \"p99 {p99_us}us\");",
+        "}",
+    ]
+    if is_load_bearing("p99_idx", two_hop, 1):
+        fails.append("is_load_bearing chased more than one hop (bound is documented as one)")
 
     # ── variable-p rank canaries, END-TO-END through audit_file ──
     #

@@ -14,7 +14,7 @@ private and simply are not there, so this check would either fail on every CI
 run or — far worse — derive an empty population and print a confident green
 over zero repos. Cadence is deliberately split:
 
-  this script            workstation, on demand, all 18 repos
+  this script            workstation, on demand, every contract repo (derived)
   docs_gate.yml          CI, per-push, katgpt-rs only
   sibling_docs_drift.yml CI, reusable, one sibling per caller
 
