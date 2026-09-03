@@ -71,7 +71,7 @@ Deterministic validation — a neuro-symbolic inference system where `rustc`/`sy
 | PartialParser | ✅ Working | Bracket balance DFA |
 | SynPruner | ✅ Working | Two-tier validation (DFA + syn) |
 | CompilerFeedback | ✅ Working | Extracts suggestions from "expected" patterns in syn errors |
-| Training data pipeline | ✅ Working | Via riir-burner + riir-gpu |
+| Training data pipeline | ✅ Working | Via riir-burner (retired 2026-09-04 → `git/obsolete/`, lineage only) + riir-gpu |
 
 ## Path Encoding
 
@@ -288,4 +288,4 @@ All phases complete:
 - `.research/000_Neuro-Symbolic LLM Architecture.md` — Original Validator concept
 - `.research/001_Advanced Neuro-Symbolic Rust Translation.md` — Grand Unification architecture
 - `syn` crate — Rust AST parser
-- `riir-burner` + `riir-gpu` — Training data pipeline (BPE training corpus)
+- `riir-burner` (retired 2026-09-04 → `git/obsolete/`, lineage only) + `riir-gpu` — Training data pipeline (BPE training corpus)

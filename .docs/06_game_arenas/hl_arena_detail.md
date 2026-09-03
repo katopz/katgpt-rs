@@ -483,7 +483,8 @@ Phase 2b — Generator Training (Length-Normalized DPO):
 ```text
 SelfImprovingCycle {
   Collecting → ReadyToSynthesize → ...
-    ├── Path A (existing):  Export JSONL → riir-burner LoRA SFT          (modelless HL)
+    ├── Path A (existing):  Export JSONL → riir-burner LoRA SFT          (modelless HL; burner retired
+    │                        2026-09-04 → git/obsolete/, lineage only)
     ├── Path B (Phase 1):   δ → DeltaGatedAbsorbCompress + DeltaBanditPruner (smarter modelless)
     └── Path C (Phase 2):   Proposer↔Generator self-play → DPO LoRA      (model-based G-Zero)
 }
