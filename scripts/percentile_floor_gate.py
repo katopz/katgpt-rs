@@ -57,11 +57,18 @@ def main():
     weak_asserted = [
         r for r in findings if r["verdict"] == pia.WEAK and r["asserted"]
     ]
+    # Reported regardless of `asserted`, unlike WEAK: a percentile HELPER is
+    # one call frame removed from the assert that its return value decides, so
+    # `is_load_bearing` (deliberately same-fn-scoped) is structurally blind
+    # here. riir-ai's `fn percentile` is print-only by that test and its p95
+    # is the subject of a `assert!(p95 >= threshold)` GOAT row two frames up.
+    trunc_var = [r for r in findings if r["verdict"] == pia.TRUNC_VAR]
 
     measured = {
         "max_degenerate": len(degenerate),
         "max_degenerate_asserted": len(deg_asserted),
         "max_weak_asserted": len(weak_asserted),
+        "max_trunc_var": len(trunc_var),
         "min_sites_scanned": len(findings),
     }
 
@@ -83,12 +90,17 @@ def main():
         print(f"✗ {label} FAILED")
         for f in failures:
             print(f"    {f}")
-        for r in degenerate + weak_asserted:
-            print(
-                f"      {r['file']}:{r['line']}  p={r['p']} n={r['n']} "
-                f"idx={r['idx']} support={r['support']} "
-                f"asserted={r['asserted']}"
-            )
+        for r in degenerate + weak_asserted + trunc_var:
+            if r["verdict"] == pia.TRUNC_VAR:
+                # p is a parameter here, so p/n/idx/support are all None and
+                # printing them tells the reader nothing. The line is the finding.
+                print(f"      {r['file']}:{r['line']}  {r['text']}")
+            else:
+                print(
+                    f"      {r['file']}:{r['line']}  p={r['p']} n={r['n']} "
+                    f"idx={r['idx']} support={r['support']} "
+                    f"asserted={r['asserted']}"
+                )
         print("    A 'p99' whose index is n-1 IS the max. Use nearest rank")
         print("    (ceil(p*n)-1) and report tail support, or drop the column")
         print("    when the sample count cannot support the quantile at all.")
@@ -98,7 +110,7 @@ def main():
     print(
         f"    ✓ {label} PASSED — {len(pins)} pins held "
         f"({measured['min_sites_scanned']} sites scanned, "
-        f"0 degenerate, 0 asserted-weak)"
+        f"0 degenerate, 0 asserted-weak, 0 trunc-var)"
     )
     return 0
 

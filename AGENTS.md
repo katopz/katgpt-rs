@@ -474,15 +474,41 @@ runtime length or a fn parameter that no static pass can reach, and a report
 that exits 1 on those is a report nobody runs. Read the split — **UNRESOLVED
 is not "clean"**, it is "needs a per-site read".
 
-Do not re-type its numbers from here. Measured 2026-09-03: **130 sites over 8
-of 19 repos — 12 DEGENERATE (all print-only), 7 WEAK, 32 OK, 65 UNRESOLVED,
-14 SAFE, and 0 DEGENERATE-AND-ASSERTED.** That last zero is the one worth
-having, and it is a zero only because riir-mmorpg-examples `.issues/093` fixed
-the single asserted one (its G2 gate, `ee9da24`).
+Do not re-type its numbers from here — the durable record with the per-repo
+table, the commit evidence and the open sibling rows is
+`.docs/10_audits/percentile_index_tail_support.md`. Measured
+**2026-09-03 evening: 126 sites over 9 of 19 repos — 0 DEGENERATE, 2 TRUNC-VAR,
+6 WEAK, 31 OK, 62 UNRESOLVED, 25 SAFE.** The DEGENERATE zero is real and
+earned: four owners fixed all 12 the same day (riir-ai `03a91ed59` swept 10,
+riir-mmorpg-examples `ee9da24` the one DEGENERATE-**ASSERTED** site,
+riir-game-sdk `f896bca`, riir-chain `7f3a3910`).
 
-**This file's own history is the lesson about classifiers.** The audit was
-wrong three times, each time by a *narrow vocabulary* rather than a bug, and
-each time the narrow version looked like good news:
+**And the fix blinded the gate, which is the part to remember.** All four
+repairs consolidated the arithmetic behind a `nearest_rank(sorted, p)` helper,
+so `p` became a **parameter** — and every pattern in the vocabulary required a
+*literal* p. Sixteen sites left the population (130 → 114); `max_degenerate = 0`
+then read green over a population that no longer contained riir-ai's percentile
+surface at all, and **seven byte-identical copies of that helper across five
+repos** were invisible. Fourth instance of the classifier-narrowness failure
+below, first one reached by a *correct* fix. Closed by a fifth verdict,
+`TRUNC-VAR` (a truncating variable-p rank inside a percentile-named scope — a
+finding without a resolvable n, since `floor(p*n)` is the max for every
+n ≤ 1/(1−p) whatever p is), a fourth ceiling `max_trunc_var = 0`, and a
+`.trunc()` hole in the rounding exclusion that had been clearing the defect's
+own second spelling as SAFE.
+
+Two corrections to the reasoning above, both in that record: **"false RED, not
+a false green" is assert-direction dependent** — it holds for `p99 < budget`
+and inverts for a `p95 >= floor` diversity row, where a too-high tail is a
+false GREEN — and **`asserted` is structurally blind for helpers**, since
+`is_load_bearing` is deliberately same-fn-scoped while a helper sits one call
+frame from the assert it decides. That is why `TRUNC-VAR` is the one class
+gated regardless of `asserted`.
+
+**This file's own history is the lesson about classifiers.** The audit has been
+wrong once per vocabulary gap — never by a bug — and every time the narrow
+version looked like good news. (The count is deliberately not written here; the
+list grew a fourth entry the same day this sentence would have said "three".)
 
 1. The first cut grepped only the **float** forms and published a 14-row hand
    table as an audit of "all 19 contract repos". The integer form
@@ -498,6 +524,15 @@ each time the narrow version looked like good news:
    called as `at(50)`, `at(99)` — feeds that repo's wall-clock budget gates.
    A variable percentile is not statically known, so it must land in
    UNRESOLVED, not vanish.
+4. The literal-only patterns were blind to a variable-p **helper body**, so
+   the 2026-09-03 repair campaign — which consolidated twelve defective sites
+   behind seven byte-identical copies of `nearest_rank(sorted, p)` — removed
+   them from the population instead of moving them to SAFE, and the ceiling
+   read green over the gap. Closed by `TRUNC-VAR` + a scope-name
+   discriminator measured against all 27 candidate sites in the workspace
+   (admits 8, rejects 19, including the two a bare `rank` substring would
+   have swallowed). **A correct fix caused this one** — which is why the
+   defence is the corpus-wide candidate table, not a second opinion.
 
 So the vocabulary is **data** (listed exhaustively in `VOCAB`) and the
 population is **derived** (BOUNDARY.md + a `.git` dir), per the workspace rule
@@ -509,7 +544,13 @@ character class that swallowed `sorted[(n` — which took every site to
 UNRESOLVED; without the selftest the run would have printed 130 sites, zero
 findings, and read as a clean repo.
 
-Two exclusions are deliberate and must not be "fixed":
+A third "exclusion" was **not** deliberate and has been fixed: `.trunc()` sat
+in the rounding exclusion beside `.ceil()` / `.round()` while the same
+comment called truncation the bug. `x.trunc()` **is** `x as usize` for
+non-negative x, so the defect spelled a second way cleared as SAFE. Latent
+when found (zero percentile-context `.trunc()` sites, measured), and
+`.floor()` was never in the set — it is the defect's own name. The two below
+are the legitimate ones:
 `((n - 1) as f64 * 0.99)` is bounded by `n - 2` and can never return the max
 (verified over n ∈ 2..=20000; it is the shape
 `katgpt-speculative/tests/weaver_real_checkpoint.rs` uses, and the one site in

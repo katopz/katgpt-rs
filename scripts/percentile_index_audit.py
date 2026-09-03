@@ -109,9 +109,64 @@ VOCAB = [
      re.compile(r"\b(?P<n>[A-Za-z_]\w*(?:\.len\(\))?)\s*\*\s*(?P<num>9\d{1,2})"
                 r"\s*\)?\s*/\s*(?P<den>100|1000)\b"),
      False),
+    # p * n as f64   |   n as f64 * p   with a VARIABLE p, in a
+    # PERCENTILE-HELPER scope only (see HELPER_* below).
+    #
+    # The FOURTH instance of the classifier-narrowness failure this file
+    # documents, and the first one arrived at through a CORRECT fix. The
+    # 2026-09-03 repair campaign (riir-ai 03a91ed59 / riir-chain 7f3a3910 /
+    # riir-mmorpg-examples ee9da24 / riir-game-sdk f896bca) took the workspace
+    # DEGENERATE count 12 -> 0 by consolidating the arithmetic behind a
+    # `nearest_rank(sorted, p)` helper -- whose `p` is a PARAMETER, so every
+    # literal-p pattern above stopped matching and 16 sites left the
+    # population entirely. `max_degenerate = 0` then read green over a
+    # population that no longer contained riir-ai's percentile surface at all.
+    #
+    # These two entries put the helper BODY back in the population -- which is
+    # the right altitude: audit the one helper, not its ~101 call sites.
+    # Correctness is decidable from the SHAPE alone even though p is unknown:
+    # `ceil(p*n)-1` can never be the max for n >= 3, and `floor(p*n)` is the
+    # max for every n <= 1/(1-p) whatever p is. So a rounded body clears as
+    # SAFE by the ROUNDED_RE path and a truncating one is reported as
+    # TRUNC_VAR -- a finding without a resolvable n, unlike UNRESOLVED.
+    ("float_var_rank_rev",
+     re.compile(r"(?P<pv>[a-z_]\w*)\s*\*\s*(?P<n>[A-Za-z_]\w*(?:\.len\(\))?)"
+                r"\s+as\s+f(?:32|64)"),
+     False),
+    ("float_var_rank",
+     re.compile(r"\b(?P<n>[A-Za-z_]\w*(?:\.len\(\))?)\s+as\s+f(?:32|64)\s*\)?"
+                r"\s*\*\s*(?P<pv>[a-z_]\w*)\b"),
+     False),
 ]
 
 DEGENERATE, WEAK, OK, UNRESOLVED, SAFE = "DEGENERATE", "WEAK", "OK", "UNRESOLVED", "SAFE"
+# A truncating variable-p rank inside a percentile helper: the sample count is
+# a runtime length so no threshold can be printed, but the SHAPE is wrong for
+# every p -- which is strictly more than UNRESOLVED knows.
+TRUNC_VAR = "TRUNC-VAR"
+VAR_RANK_KINDS = ("float_var_rank", "float_var_rank_rev")
+
+# ── Percentile-helper scope names (DATA -- extend here, then extend selftest)
+#
+# The discriminator for VAR_RANK_KINDS, and it has to be a NAME check because
+# a variable-p multiply is otherwise ordinary arithmetic. Measured over the 27
+# `let <idx-ish> = ... as fNN * <var>` candidate sites in the 19-repo
+# workspace: this set admits 8 (7 correct `nearest_rank`/`quantile` bodies +
+# riir-train's truncating `quartile` closure) and rejects all 19 non-percentile
+# ones, including the two that a bare `rank` substring would have swallowed --
+# `spectral_adaptive_ranks` (truncating, a rank BUDGET) and `principal_rank`.
+# A report that cries wolf on rank budgets is a report nobody runs, so the
+# substring set is deliberately narrow and `rank_ns` is listed EXACTLY.
+HELPER_SUBSTR = ("nearest_rank", "percentile", "quantile", "quartile",
+                 "decile", "pctl", "tail_at")
+HELPER_EXACT = frozenset({"rank_ns", "p50", "p75", "p90", "p95", "p99", "p999"})
+
+
+def in_percentile_scope(name):
+    """Is `name` (an enclosing fn or closure binding) a percentile helper?"""
+    if not name:
+        return False
+    return name in HELPER_EXACT or any(t in name for t in HELPER_SUBSTR)
 
 # `.ceil()` / `.round()` applied to the product is NOT this defect: the bug is
 # floor/truncation (`as usize`). `ceil(p*n) - 1` is the correct nearest-rank
@@ -121,7 +176,16 @@ DEGENERATE, WEAK, OK, UNRESOLVED, SAFE = "DEGENERATE", "WEAK", "OK", "UNRESOLVED
 # row ("WEAK + ASSERTED") on the second cut of this report, from
 # katgpt-rs/tests/bench_181_dmoe_vocab_coreset_goat.rs:369, which indexes
 # nothing.
-ROUNDED_RE = re.compile(r"\.\s*(?:ceil|round|trunc)\s*\(\s*\)")
+#
+# `trunc` was in this set until 2026-09-03 and it is a HOLE, not a rounding
+# mode: `x.trunc()` IS `x as usize` for every non-negative x, so a site written
+# `(p * n as f64).trunc() as usize` is the defect spelled a second way and was
+# classified SAFE by the very regex whose comment says "the bug is
+# floor/truncation". Latent when found (zero percentile-context `.trunc()`
+# sites in the 19-repo workspace, measured), but a ceiling is only as wide as
+# its classifier and this one had a spelling-shaped gap. `.floor()` was never
+# in the set and must never be: it is the defect's own name.
+ROUNDED_RE = re.compile(r"\.\s*(?:ceil|round)\s*\(\s*\)")
 
 
 def parse_site(m, kind):
@@ -132,7 +196,7 @@ def parse_site(m, kind):
     float forms. Approximating one with the other moves the boundary by a
     rank, which is the whole finding.
     """
-    if kind == "int_ratio_var":
+    if kind == "int_ratio_var" or kind in VAR_RANK_KINDS:
         return None, None          # percentile bound at the call site
     if kind == "int_ratio":
         num, den = int(m.group("num")), int(m.group("den"))
@@ -202,6 +266,30 @@ def enclosing_scope(lines, i):
             end = j
             break
     return start, end
+
+
+FN_NAME_RE = re.compile(r"\bfn\s+(\w+)")
+CLOSURE_ASSIGN_RE = re.compile(r"let\s+(\w+)\s*(?::[^=]*)?=\s*\|")
+
+
+def scope_names(lines, i):
+    """(enclosing fn name, nearest enclosing closure-binding name) for line i.
+
+    The closure half is not optional: riir-train's truncating site is a
+    `let quartile = |q: f64| { ... }` inside `fn main`, so an fn-name-only
+    discriminator would have rejected the one true positive in the workspace
+    and admitted nothing.
+    """
+    start, _ = enclosing_scope(lines, i)
+    m = FN_NAME_RE.search(lines[start]) if start < len(lines) else None
+    fn = m.group(1) if m else None
+    closure = None
+    for j in range(i, start - 1, -1):
+        cm = CLOSURE_ASSIGN_RE.search(lines[j])
+        if cm:
+            closure = cm.group(1)
+            break
+    return fn, closure
 
 
 def resolve_n(expr, file_text, scope_text):
@@ -307,12 +395,20 @@ def audit_file(path, rel):
                 before, after = line[: m.start()], line[m.end() :]
                 if "[" not in before or "]" not in after:
                     continue       # not an index -> not a percentile
+            if kind in VAR_RANK_KINDS:
+                _fn, _cl = scope_names(lines, i)
+                if not (in_percentile_scope(_fn) or in_percentile_scope(_cl)):
+                    continue       # ordinary arithmetic, not a rank
             if ROUNDED_RE.search(line[m.end():]):
                 safe = True          # explicit rounding, not truncation
             p, idx_fn = parse_site(m, kind)
             _s, _e = enclosing_scope(lines, i)
             n = resolve_n(m.group("n"), text, "\n".join(lines[_s:_e]))
             verdict, idx, support = classify(n, p, idx_fn, safe)
+            if kind in VAR_RANK_KINDS and not safe:
+                # p is unknown, so no threshold can be printed -- but the shape
+                # is the defect for EVERY p, which UNRESOLVED cannot say.
+                verdict = TRUNC_VAR
             am = ASSIGN_RE.search(line)
             var = am.group(1) if am else None
             out.append({
@@ -422,6 +518,14 @@ def selftest():
             if "[" in bare[: m2.start()] and "]" in bare[m2.end() :]:
                 fails.append("bracket filter admitted non-indexing arithmetic")
 
+    # ── the two spellings of truncation must NOT clear as rounded ──
+    for src in (
+        "        let idx = (p * n as f64).trunc() as usize;",
+        "        let idx = ((v.len() as f64) * p).floor() as usize;",
+    ):
+        if ROUNDED_RE.search(src):
+            fails.append(f"rounding exclusion cleared a TRUNCATING site: {src!r}")
+
     # ── rounding exclusion: `.ceil()` is not this defect ──
     for src in (
         "        let expected_min = (0.95 * vocab_size as f32).ceil() as usize;",
@@ -476,6 +580,86 @@ def selftest():
     if not is_load_bearing("p99", same, 1):
         fails.append("is_load_bearing missed an assert in the same fn")
 
+    # ── variable-p rank canaries, END-TO-END through audit_file ──
+    #
+    # These go through the real entry point rather than the regex, because the
+    # discriminator that keeps this class from flooding the report lives in
+    # `audit_file` (the scope-name filter), not in the vocabulary. Case (c) is
+    # the one that earns its keep: the SAME truncating shape outside a
+    # percentile scope must produce NOTHING, or the report grows 19 rank-budget
+    # and bucket-index false positives and stops being read.
+    import tempfile
+    var_cases = [
+        # (label, source, expected verdicts present / absent)
+        ("correct helper body -> SAFE",
+         "fn nearest_rank(sorted: &[f64], p: f64) -> (f64, usize) {\n"
+         "    let n = sorted.len();\n"
+         "    let idx = ((p * n as f64).ceil() as usize).clamp(1, n) - 1;\n"
+         "    (sorted[idx], n - idx)\n}\n", SAFE),
+        ("truncating helper body -> TRUNC-VAR",
+         "fn percentile(sorted: &[f64], p: f64) -> f64 {\n"
+         "    let idx = ((p * sorted.len() as f64) as usize).min(sorted.len() - 1);\n"
+         "    sorted[idx]\n}\n", TRUNC_VAR),
+        ("truncating CLOSURE in a non-percentile fn -> TRUNC-VAR via closure name",
+         "fn main() {\n"
+         "    let quartile = |q: f64| -> usize {\n"
+         "        let idx = ((q * lengths.len() as f64) as usize).min(lengths.len() - 1);\n"
+         "        lengths[idx]\n    };\n}\n", TRUNC_VAR),
+        ("same shape, rank BUDGET scope -> no finding at all",
+         "fn spectral_adaptive_ranks(alphas: &[f32]) {\n"
+         "    let rank = (total_rank_budget as f32 * a / alpha_sum) as u16;\n}\n", None),
+        ("same shape, bucket-index scope -> no finding at all",
+         "fn uniform_is_well_distributed(u: f32) {\n"
+         "    let idx = ((u * BUCKETS as f32) as usize).min(BUCKETS - 1);\n}\n", None),
+    ]
+    for label, src_txt, want in var_cases:
+        with tempfile.NamedTemporaryFile("w", suffix=".rs", delete=False,
+                                         encoding="utf-8") as fh:
+            fh.write(src_txt)
+            tmp = fh.name
+        try:
+            got = [r["verdict"] for r in audit_file(tmp, "canary.rs")]
+        finally:
+            os.unlink(tmp)
+        if want is None:
+            if got:
+                fails.append(f"var-rank canary '{label}': expected no finding, got {got}")
+        elif want not in got:
+            fails.append(f"var-rank canary '{label}': expected {want}, got {got or 'nothing'}")
+
+    # ── the shape claim TRUNC_VAR rests on, stated EXACTLY ──
+    #
+    # The first cut of this block asserted "ceil(p*n)-1 can never be the max"
+    # and it is FALSE: p=0.75, n=3 gives ceil(2.25)=3 -> idx 2 = n-1. The true
+    # relation is a one-rank shift of the SAME boundary --
+    #   floor(p*n) is the max for every n <= 1/(1-p)
+    #   ceil(p*n)-1 is the max for every n <  1/(1-p)
+    # -- so nearest rank is never worse, is strictly better at exactly the
+    # integral boundary, and is still the max below it, where no such quantile
+    # exists in the sample at all. That last part is why the helpers return
+    # `support` and why SAFE means "correct form", not "cannot be one sample".
+    # Fraction, not float: at p=0.999 the boundary lands on a value the float
+    # comparison gets wrong, which would pin the wrong claim.
+    from fractions import Fraction
+    for pn, pd in ((1, 2), (3, 4), (9, 10), (19, 20), (99, 100), (999, 1000)):
+        pf = Fraction(pn, pd)
+        strictly_better = 0
+        for n_ in range(2, 5001):
+            prod = pf * n_
+            floor_idx = min(int(prod), n_ - 1)
+            ceil_idx = min(max(-((-prod.numerator) // prod.denominator), 1), n_) - 1
+            floor_deg, ceil_deg = floor_idx == n_ - 1, ceil_idx == n_ - 1
+            assert not (ceil_deg and not floor_deg), (
+                f"nearest rank degenerate where truncation is not, n={n_} p={pf}")
+            assert ceil_deg == (Fraction(n_) * (1 - pf) < 1), (
+                f"ceil boundary wrong at n={n_} p={pf}")
+            assert floor_deg == (Fraction(n_) * (1 - pf) <= 1), (
+                f"floor boundary wrong at n={n_} p={pf}")
+            strictly_better += int(floor_deg and not ceil_deg)
+        assert strictly_better == 1, (
+            f"nearest rank should beat truncation at exactly one n, got "
+            f"{strictly_better} for p={pf}")
+
     # ── arithmetic pins, independent of every regex above ──
     assert int(100 * 0.99) == 99, "n=100 p99 truncates to the max index"
     assert int(101 * 0.99) == 99, "n=101 is the first count that is NOT the max"
@@ -528,16 +712,24 @@ def main():
          lambda r: r["verdict"] == DEGENERATE and not r["asserted"]),
         (f"WEAK + ASSERTED       (support < {MIN_SUPPORT}, one stall can flip it)",
          lambda r: r["verdict"] == WEAK and r["asserted"]),
+        ("TRUNC-VAR              (floor(p*n) in a percentile helper -- the max "
+         "for every n <= 1/(1-p), whatever p is)",
+         lambda r: r["verdict"] == TRUNC_VAR),
     ):
         rows = [r for r in all_findings if pred(r)]
         print(f"── {label}: {len(rows)}")
         for r in sorted(rows, key=lambda r: (r["repo"], r["file"], r["line"])):
-            print(f"     {r['repo']}/{r['file']}:{r['line']}  p={r['p']} n={r['n']} "
-                  f"idx={r['idx']} support={r['support']}")
+            if r["verdict"] == TRUNC_VAR:
+                # p is a parameter, so p/idx/support are all None here -- the
+                # source line is the whole finding.
+                print(f"     {r['repo']}/{r['file']}:{r['line']}  {r['text']}")
+            else:
+                print(f"     {r['repo']}/{r['file']}:{r['line']}  p={r['p']} n={r['n']} "
+                      f"idx={r['idx']} support={r['support']}")
         print()
 
     print("── per-repo tally (verdict x count) " + "─" * 30)
-    hdr = [DEGENERATE, WEAK, OK, UNRESOLVED, SAFE]
+    hdr = [DEGENERATE, TRUNC_VAR, WEAK, OK, UNRESOLVED, SAFE]
     print(f"  {'repo':<24}" + "".join(f"{h:>12}" for h in hdr) + f"{'total':>8}")
     tot = {h: 0 for h in hdr}
     for name in sorted(grand):

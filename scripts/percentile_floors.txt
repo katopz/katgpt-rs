@@ -11,6 +11,15 @@ max_degenerate = 0
 max_degenerate_asserted = 0
 max_weak_asserted = 0
 
+# The fourth ceiling (2026-09-03). `floor(p*n)` inside a percentile helper is
+# the same defect as the three above with the sample count moved out of static
+# reach, so it cannot be classified by n — only by shape. It gets its own pin
+# rather than folding into `max_degenerate` because the two are found by
+# different halves of the classifier and a shared pin would hide which half
+# regressed. Measured 0 in katgpt-rs (its one `nearest_rank` body rounds); 2 in
+# the workspace, both sibling-owned (riir-ai `.issues/859`).
+max_trunc_var = 0
+
 # The FLOOR is not redundant with them, and it is the pin that earns its keep.
 #
 # `max_degenerate = 0` is green over whatever the auditor's vocabulary can
@@ -19,7 +28,17 @@ max_weak_asserted = 0
 # katgpt-rs `cfg_gated_floor_gate.py` hazard worked (AGENTS.md: "a ceiling
 # cannot fail once the instrument goes blind and reports zero").
 #
-# Deliberately slack against normal churn (measured 40; deleting a bench or
+# Deliberately slack against normal churn (measured 41; deleting a bench or
 # two must not red the gate) and tight against blindness (a vocabulary or
 # scoping regression drops it by an order of magnitude, not by two).
+#
+# 40 -> 41 on 2026-09-03 when the variable-p vocabulary landed: katgpt-rs's own
+# `nearest_rank` body (examples/monopoly_04_bench.rs) had been outside the
+# population, like the seven identical copies of it across five sibling repos.
+# The floor is left at 30 rather than raised to 41 on purpose. A repair
+# campaign can legitimately SHRINK this number -- consolidating ten inline
+# index computations behind one correct helper removes nine sites -- and that
+# is exactly what took the workspace 130 -> 114 in the days before this pin.
+# A floor that ratchets up to the last measurement would red the next such
+# refactor and teach whoever hits it that the gate is noise.
 min_sites_scanned = 30
