@@ -118,9 +118,16 @@ fn compute_stats(samples: &[f64]) -> Stats {
     let mut sorted = samples.to_vec();
     sorted.sort_by(|a, b| a.total_cmp(b));
     let n = sorted.len();
+    // Nearest rank: `ceil(0.99 * n) - 1`, integer so 0.99's inexact binary
+    // form cannot round back onto the max. The old `(n as f64 * 0.99) as usize`
+    // is `n - 1` -- the MAX -- for every n <= 100. Not degenerate at these
+    // sample counts (LOOKUP_ITERS 10_000 -> support 101, ENCODE_ITERS 1_000 ->
+    // 11), but it was one rank too high, which biases the reported tail up.
+    // (.issues/722; scripts/percentile_index_audit.py.)
+    let p99_idx = (n * 99).div_ceil(100).saturating_sub(1).min(n - 1);
     Stats {
         p50: sorted[n / 2],
-        p99: sorted[(n as f64 * 0.99) as usize].min(sorted[n - 1]),
+        p99: sorted[p99_idx],
         mean: sorted.iter().sum::<f64>() / n as f64,
         min: sorted[0],
     }

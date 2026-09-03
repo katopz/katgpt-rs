@@ -305,7 +305,16 @@ if std::env::var("KIMI_K3_4B_SKIP").ok().as_deref() == Some("1") {
     let mut sorted = decode_latencies_ms.clone();
     sorted.sort_by(|a, b| a.total_cmp(b));
     let p50 = sorted[n / 2];
-    let p99 = sorted[(n * 99) / 100];
+    // Nearest rank: `ceil(0.99 * n) - 1`. The old `(n * 99) / 100` is `n - 1`
+    // -- the MAX -- for every n <= 100, and KIMI_N_TOKENS defaults to **8**, so
+    // this line printed the slowest single token under a p99 label on every
+    // default run. Nearest rank does not rescue it at n = 8 either: a 99th
+    // percentile does not exist in 8 samples. So the support is printed with
+    // the number -- that is what makes the label readable rather than wrong.
+    // (.issues/722; scripts/percentile_index_audit.py.)
+    let p99_idx = (n * 99).div_ceil(100).saturating_sub(1).min(n - 1);
+    let p99 = sorted[p99_idx];
+    let p99_support = n - p99_idx;
 
     println!("   📊 SUMMARY");
     println!("   generated : {} tokens (random-init — gibberish, not real text)", generated_tokens.len());
@@ -314,7 +323,10 @@ if std::env::var("KIMI_K3_4B_SKIP").ok().as_deref() == Some("1") {
     println!("   Throughput (decode-only, excluding prefill):");
     println!("     mean    : {mean_ms:>6.2} ms/tok   →  {tok_s:>6.1} tok/s");
     println!("     p50     : {p50:>6.2} ms/tok");
-    println!("     p99     : {p99:>6.2} ms/tok");
+    println!(
+        "     p99     : {p99:>6.2} ms/tok   (tail support {p99_support} of {n} \
+         — raise KIMI_N_TOKENS for a quantile rather than a worst case)"
+    );
     println!("     total   : {total_decode_ms:>6.1} ms over {n} tokens");
     println!();
     print_phase_breakdown(&phase_total, n as u64, config.num_layers, n_mla);

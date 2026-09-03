@@ -105,10 +105,15 @@ DEGENERATE, 2 TRUNC-VAR, 6 WEAK, 31 OK, 62 UNRESOLVED, 25 SAFE**, katgpt-rs
 40 → **41**.
 
 Re-measured **2026-09-04 over the live 16** (three repos retired to
-`git/obsolete/`, and §9–§10's two instrument changes landed): **125 sites**,
-katgpt-rs still 41 — 0 DEGENERATE, 0 TRUNC-VAR, 0 WEAK, 20 OK, 10 UNRESOLVED,
-11 SAFE. ASSERTED 4 → 5 workspace-wide. Read the 126 → 125 edge as three
-repos leaving and one site changing class, not as a measurement of anything.
+`git/obsolete/`, and §9–§11's instrument changes landed): **125 sites**,
+katgpt-rs still 41 — 0 DEGENERATE, 0 TRUNC-VAR, 0 WEAK, 20 OK, **2**
+UNRESOLVED, **19** SAFE. ASSERTED 4 → 5 workspace-wide. Read the 126 → 125
+edge as three repos leaving and one site changing class, not as a measurement
+of anything.
+
+UNRESOLVED 11 → 2 is §11: the rows were **read**, not reclassified by an
+instrument change. The population is unchanged at 41 throughout, which is the
+property §2 says to check.
 
 ## 4. The shape claim, stated exactly — and a retraction
 
@@ -283,4 +288,58 @@ The lesson is not "remember to update the vocabulary". It is that **fixing a
 site and keeping the instrument able to see it are one change**, and belong in
 one commit — otherwise the gate's next green is over a smaller world than the
 one it names.
+
+## 11. Reading all 10 UNRESOLVED rows found 3 DEGENERATE and 4 WEAK (2026-09-04)
+
+§"UNRESOLVED is not clean" is this report's own instruction and katgpt-rs's
+rows had never been followed. Every one, resolved by reading the caller —
+which is the only place the sample count exists:
+
+| site | n | idx | support | verdict |
+|---|---|---|---|---|
+| `katgpt-speculative/benches/bench_136_weaver_f16_latency.rs:177` | **50** (`const N`) | 49 | **1** | **DEGENERATE** |
+| `examples/kimi_k3_hello_world.rs:298` | **8** (`KIMI_N_TOKENS` default) | 7 | **1** | **DEGENERATE** |
+| `examples/kimi_k3_4b_hello_world.rs:308` | **8** (same) | 7 | **1** | **DEGENERATE** |
+| `examples/corr_budget_01_bench.rs:41` | 500 (`N_ITERS`) | 495 | 5 | **WEAK** |
+| `examples/lodestar_01_bench.rs:101` | 500 | 495 | 5 | **WEAK** |
+| `examples/rosetta_01_bench.rs:42` | 500 | 495 | 5 | **WEAK** |
+| `examples/best_buddies_01_bench.rs:48` | 500 | 495 | 5 | **WEAK** |
+| `examples/datrie_01_bench.rs:123` | 10,000 / 1,000 | 9,900 / 990 | 100 / 10 | OK, one rank high |
+| `crates/katgpt-core/src/speculative/types.rs:237` | caller's slice len | — | — | **the library defect, §10** |
+| `crates/katgpt-types/src/simd/tests.rs:850` | — | — | — | tokenizer noise |
+| `tests/precision_aware_draft_goat.rs:201` | — | — | — | tokenizer noise |
+
+**Seven real findings that `max_degenerate = 0` was green over**, because a
+degenerate site whose `n` lives in the caller is UNRESOLVED, not DEGENERATE.
+The gate is not wrong — it gates what it can resolve — but "0 DEGENERATE" and
+"clean" are different statements, and the gap between them is exactly the size
+of the UNRESOLVED bucket.
+
+Two of the three DEGENERATE ones were **published**: `bench_136` printed the
+maximum of 50 samples in a `P99` table column beside an f16-vs-f32 speedup
+ratio, and both `kimi_k3*_hello_world` printed the slowest single token as
+`p99` on every default run (`KIMI_N_TOKENS` defaults to 8).
+
+All 8 fixed to integer nearest rank. **And at n=8 and n=50 nearest rank does
+not rescue the label** — a 99th percentile does not exist in 8 or 50 samples,
+so both of those sites now print their **tail support** next to the number
+instead of pretending otherwise. That is the §4 point made concrete: `SAFE`
+means "correct form", never "cannot be one observation".
+
+The two remaining UNRESOLVED rows are tokenizer noise, read and recorded here
+so nobody re-derives them: a `(i as f32 * 0.97 - 18.0).sin()` data generator
+and a `clean as f32 * 0.90 + boundary as f32 * 0.70` weighted score. Neither
+indexes anything. They are **left in the population deliberately** — narrowing
+the vocabulary to exclude them is how this file's four documented narrowness
+instances happened, and two benign rows cost one read while a narrower
+tokenizer costs an unknown number of misses.
+
+Not fixed, and named rather than absorbed: the five byte-identical
+`compute_stats` bodies across `examples/*_01_bench.rs` are the same duplication
+AGENTS.md records as "seven byte-identical copies of that helper across five
+repos". A canonical `nearest_rank` in `katgpt-core` would be the DRY answer and
+was **declined here**: its only consumers would be examples and benches, so it
+would be new public API with no production consumer — the shape Issue 719 T2
+sits `[-]` for. The duplication is recorded as debt, not silently paid with
+API surface.
 

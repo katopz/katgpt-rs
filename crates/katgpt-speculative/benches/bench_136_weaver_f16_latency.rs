@@ -174,7 +174,19 @@ fn main() {
     times_f16.sort_by(|a, b| a.total_cmp(b));
 
     let median = |v: &[f64]| v[v.len() / 2];
-    let p99 = |v: &[f64]| v[((v.len() as f64 * 0.99) as usize).min(v.len() - 1)];
+    // N = 50, so `floor(50 * 0.99) = 49 = n - 1`: the old closure returned the
+    // MAXIMUM under a p99 label, and printed it in the table below beside a
+    // speedup ratio. `floor(n * p) == n - 1` for every n <= 1/(1-p), i.e.
+    // n <= 100 at p99. Nearest rank (`ceil(p*n) - 1`, integer so 0.99's
+    // inexact binary form cannot round back onto the max) is the correct form
+    // -- but at N = 50 it is STILL the max, because a 99th percentile does not
+    // exist in 50 samples: no rank below the maximum holds 99% of the mass.
+    // So the honest fix is the label, not only the arithmetic -- the tail
+    // support is printed with the number so the table cannot be read as a
+    // quantile. (.issues/722; scripts/percentile_index_audit.py.)
+    let p99_idx = |len: usize| (len * 99).div_ceil(100).saturating_sub(1).min(len - 1);
+    let p99 = |v: &[f64]| v[p99_idx(v.len())];
+    let p99_support = |v: &[f64]| v.len() - p99_idx(v.len());
 
     let med_f32 = median(&times_f32);
     let med_f16 = median(&times_f16);
@@ -197,6 +209,15 @@ fn main() {
         speedup
     );
     println!("└──────────────────┴──────────┴──────────┴────────────┘");
+    println!(
+        "  P99 tail support: {} of {} samples (f32) / {} of {} (f16) — \
+         at N={N} a 99th percentile does not exist in the sample; \
+         read the P99 column as the worst observation.",
+        p99_support(&times_f32),
+        times_f32.len(),
+        p99_support(&times_f16),
+        times_f16.len(),
+    );
     println!();
     println!(
         "Config: hidden={}, d_ff={}, seq_len={}, K={}",

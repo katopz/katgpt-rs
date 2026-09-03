@@ -43,9 +43,18 @@ fn compute_stats(samples: &[f64]) -> Stats {
     let mut sorted = samples.to_vec();
     sorted.sort_by(|a, b| a.total_cmp(b));
     let n = sorted.len();
+    // Nearest rank: `ceil(0.99 * n) - 1`. Was `sorted[(n * 99) / 100]`, which
+    // is `n - 1` -- the MAX -- for every n <= 100, and the `.min(sorted[n-1])`
+    // clamped a panic, not a wrong statistic. Integer arithmetic on purpose:
+    // 0.99 has no exact binary form, so a float `ceil` can round back onto the
+    // max at exactly the boundary this fixes. At N_ITERS = 500 the tail
+    // support is 6 samples, so this p99 still moves if one preemption lands in
+    // it -- read it as a thin tail, not as a stable quantile.
+    // (.issues/722; scripts/percentile_index_audit.py.)
+    let p99_idx = (n * 99).div_ceil(100).saturating_sub(1).min(n - 1);
     Stats {
         p50: sorted[n / 2],
-        p99: sorted[(n * 99) / 100].min(sorted[n - 1]),
+        p99: sorted[p99_idx],
         mean: sorted.iter().sum::<f64>() / n as f64,
         min: sorted[0],
     }
