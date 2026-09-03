@@ -72,13 +72,14 @@ it documents the canonical layout and the numbering discipline.
 | `riir-game-sdk` | **10 numbered folders** (`01_orientation/` … `10_multiplayer_topology/`; the 10th was added for the two-binary production topology + avatar/game sync facade), unnumbered files inside. Covers all `src/` modules + `examples/`. Matches the `riir-ai/.docs/` / `riir-neuron-db/.docs/` format. | Boundary rule + leaf constraint + spatial canonical + Phase 2/3 status + feature gates. | same | `develop` |
 | `riir-mmorpg-examples` | **No `.docs/` folder** — docs live in `AGENTS.md` (extensive: role, topology, plans/issues/benchmarks index, canonical-failure lessons) + `README.md` (status + build commands + env vars) + `.plans/` / `.issues/` / `.benchmarks/` files. POC consumer of `riir-game-sdk`. | Status + build commands + Plan/Issue index. | same | `develop` |
 | `riir-clippy` | **12 numbered folders** (`01_orientation/` … `11_domains/` + `12_ane/`; the 12th added for the Apple Neural Engine substrate knowledge — private runtime API, MIL/blob formats, M3 Max findings, the Rust-bridge negative result + working ObjC substrate — riir-ai Issue 726 T0 distillation), unnumbered files inside. The code-healer vault — corpus/drafter/pruner/verify/self-evolve/domains narrative. `AGENTS.md` carries the batch-mining progress notes (the sweep record home for cross-repo clippy heals). | Status + Quick Start + Usage + feature gates. | same | `develop` |
-| `riir-unity` | **No `.docs/` folder** — AGENTS.md-centric (domain boundary, Unity MCP rules, issue log) + `.benchmarks/`. The Unity host; Rust work belongs in riir-viewbridge, so doc-sync here = AGENTS.md issue-log sections + module-map freshness. | Role + boundary + sibling layout. | same | `develop` |
-| `riir-viewbridge` | **No `.docs/` folder** — AGENTS.md-centric (workspace layout, boundary rules, latent/raw wall, issue log) + `.benchmarks/` (Bench 002 node GOAT). The Rust FFI side of the Unity bridge. | Role + boundary + build commands. | same | `develop` |
+| `riir-unity` | **RETIRED 2026-09-04 → `git/obsolete/` (owner act). Lineage only; do not route work here.** No `.docs/` folder — AGENTS.md-centric (domain boundary, Unity MCP rules, issue log) + `.benchmarks/`. The Unity host; Rust work belongs in riir-viewbridge, so doc-sync here = AGENTS.md issue-log sections + module-map freshness. | Role + boundary + sibling layout. | same | `develop` |
+| `riir-viewbridge` | **1 numbered folder** (`.docs/01_orientation/` — `README.md` + `crate_role.md`) + a `.docs/README.md` index; AGENTS.md still carries the workspace layout, boundary rules (latent/raw wall, generated-bindings, catch_unwind) + issue log, and `.benchmarks/` the node GOAT. The Rust FFI side of the Unity bridge. **This row said "No `.docs/` folder" until 2026-09-04** — the folder arrived in the workspace scaffold `2f0257c` (Plan 532 P0 part 2), i.e. a shape change that never came back to this contract, which is the failure the Shape-change contract below exists to prevent. | Role + boundary + build commands. | same | `develop` |
+| `seal-remake` | **1 numbered folder** (`.docs/01_orientation/` — `README.md` + `unity_host.md`, from Plan 031 Phase 5) + AGENTS.md/README.md/BOUNDARY.md. The Bevy/wasm viewer half after the Unity host split out. **Row ADDED 2026-09-04** — the repo was enrolled 2026-09-03 and this table never got a row for it, while carrying three retired ones: 18 rows over a 16-repo workspace, wrong in BOTH directions. | Role + boundary + build/run commands + the vessel-texture + present-mode records. | same | `develop` (highwater: `.issues` 005, `.benchmarks` 002) |
 | `riir-dapps` | **No `.docs/` folder** — AGENTS.md-centric (the one-way game → dapps → chain invariant, the three-test rule, tiered-durability record) + `.plans/` / `.issues/` / `.benchmarks/`. The settlement-composition layer. | Boundary + build + the `direction_gate` + kat rail status. | same | `develop` |
 | `riir-dao` | **No `.docs/` folder** — AGENTS.md-centric (the KAT tokenomics agent: signals → strategy → guard → advisory → commit; the G5 advisory-only verdict) + `.plans/` / `.benchmarks/`. | Boundary + build + the direction gate. | same | `develop` |
-| `riir-armageddon` | **`.docs/` exists but is EMPTY** — AGENTS.md-centric in practice (arena/game-product domain types). Added 2026-09-01 | yes | `.issues` 005, `.plans` 008 | **`main`** — not `develop`; check before branching |
+| `riir-armageddon` | **RETIRED 2026-09-02 → `git/obsolete/` (owner act). Lineage only; do not route work here.** `.docs/` exists but is EMPTY — AGENTS.md-centric in practice (arena/game-product domain types). Added 2026-09-01 | yes | `.issues` 005, `.plans` 008 | **`main`** — not `develop`; check before branching |
 | `riir-auth` | **`.docs/` exists but holds only `.highwater`** — i.e. no docs at all, AGENTS.md-centric in practice (the numbering file was created ahead of the folder's first document). Added 2026-09-01 | yes | `.issues` 002, `.benchmarks` 4, `.plans`/`.docs`/`.research` at 0 | `develop` |
-| `riir-burner` | **Flat numbered FILES, no folders** — `.docs/001_model_verdict.md` … `016_*.md` (7 files; two share 016 — the numbering discipline is not enforced here). Added 2026-09-01 | yes | `.issues` 015, `.plans` 019 | `develop` |
+| `riir-burner` | **RETIRED 2026-09-04 → `git/obsolete/` (owner act). Lineage only; do not route work here.** Flat numbered FILES, no folders — `.docs/001_model_verdict.md` … `016_*.md` (7 files; two share 016 — the numbering discipline is not enforced here). Added 2026-09-01 | yes | `.issues` 015, `.plans` 019 | `develop` |
 | `riir-deployer` | **2 numbered folders** (`01_orientation/`, `02_runbooks/`) + a `.docs/README.md` index — the smallest numbered shape in the workspace. No `CLAUDE.md`. Added 2026-09-01 | yes | `.issues` 003, `.plans` 002, `.benchmarks` 001 | `develop` |
 | `katgpt-web` | **No `.docs/` folder** — AGENTS.md-centric. Added 2026-09-01 | yes | none | **`feat/percepta-arch-diagrams`** — the only repo whose checkout is not on its trunk; sync the branch you find, and say which one in the run log |
 | `seal-game-editor` | **NAMED (not numbered) `.docs/` subfolders** — `new-game-schema/`, `registry/`, plus loose `SEALM_ASSETS.md`. Carries `ARCHITECTURE.md` + `DESIGN.md` alongside AGENTS/README, and `ARCHITECTURE.md` is where the internal layering lives (`BOUNDARY.md` covers only the outer edge). Added 2026-09-01 | yes | `.issues` 141, `.plans` 140 | `develop` |
@@ -174,11 +175,11 @@ Apply the repo-specific rules:
 - **`AGENTS.md`**: the batch-mining progress notes + sweep records live here (the cross-repo clippy-heal record home). A landed heal slice in a sibling repo (katgpt-rs, riir-train, riir-ai) gets its progress note in the SAME commit as the heal — a later `doc-sync` run defers to the healing session (never write progress notes for someone else's in-flight sweep).
 - **README.md**: Status + Quick Start + Usage + feature gates.
 
-#### riir-unity (no `.docs/` folder — AGENTS.md-centric)
+#### riir-unity — RETIRED 2026-09-04 (`git/obsolete/`), lineage only
 - **`AGENTS.md`**: domain boundary (no Rust crates here; UPM package is build output; no engine substrate in C#) + the Unity MCP rules + the issue log. Doc-sync = issue-log sections for resolved issues + module-map freshness (the `Packages/com.riir.viewbridge/` population + scene wiring notes).
 - The Rust side of any feature lives in `riir-viewbridge` — cross-repo arcs (e.g. Issue 004) document on BOTH sides at arc close.
 
-#### riir-viewbridge (no `.docs/` folder — AGENTS.md-centric)
+#### riir-viewbridge (`.docs/01_orientation/` + an AGENTS.md-centric remainder)
 - **`AGENTS.md`**: workspace layout (core/derive/abi/xtask) + boundary rules (latent/raw wall, generated-bindings rule, catch_unwind) + the issue log.
 - **`.benchmarks/`**: GOAT records (e.g. Bench 002 node GOAT). Doc-sync = issue-log resolution entries + benchmark cross-refs.
 
@@ -225,11 +226,16 @@ flat→7 via the 2026-08-08 reindex, `riir-ai` 11→12 via Plan 455's orphaned
 grep-able checklist instead of an implicit expectation.
 
 **Trigger:** any plan/issue/commit that adds a new top-level `.docs/NNN_*/`
-folder to `katgpt-rs`, `riir-ai`, `riir-chain`, `riir-neuron-db`,
-`riir-train`, `riir-game-sdk`, `riir-clippy`, or `riir-mmorpg-examples`
-(`riir-mmorpg-examples`, `riir-unity`, and `riir-viewbridge` have no
-`.docs/` today — adding one is itself a shape change that requires this
-contract).
+folder to any repo that already has numbered folders — measured 2026-09-04 as
+**10 of the 16**: `katgpt-rs`, `riir-ai`, `riir-chain`, `riir-clippy`,
+`riir-deployer`, `riir-game-sdk`, `riir-neuron-db`, `riir-train`,
+`riir-viewbridge`, `seal-remake`. **Or** that gives a `.docs/` to one of the
+four with none (`katgpt-web`, `riir-dao`, `riir-dapps`,
+`riir-mmorpg-examples`) or the one whose `.docs/` holds no document
+(`riir-auth`) — creating the folder is itself a shape change and requires this
+contract. Derive the split rather than reading it here (`ls */.docs`); the
+previous version of this trigger named `riir-viewbridge` as having none while
+its `.docs/01_orientation/` had shipped in the repo's own scaffold commit.
 
 **Checklist (run in the SAME pass as the folder-adding commit):**
 
@@ -264,7 +270,7 @@ contract — fix the skill then, but also note the gap.
 - **Do not** write a doc entry for a plan that hasn't landed yet. Speculative docs go in `.proposals/`.
 - **Do not** remove a negative-result entry when closing its issue — the negative result is load-bearing documentation.
 - **Do not** upgrade a GOAT FAIL to a PASS in the docs without the benchmark file to back it.
-- **Do not** impose a `.docs/` shape that differs from the repo's existing convention (e.g. don't create a `.docs/` folder for `riir-mmorpg-examples`, `riir-unity`, `riir-viewbridge`, `riir-dapps`, `riir-dao`, `riir-armageddon`, `riir-auth` or `katgpt-web`, which are AGENTS.md-centric) — respect the repo's existing shape. Measured 2026-09-01 across all **18**, and it is four shapes, not two: **8** numbered folders (katgpt-rs, riir-ai, riir-chain, riir-neuron-db, riir-train, riir-game-sdk, riir-clippy at its 12-folder book, riir-deployer at just two), **8** AGENTS.md-centric (the list above — `riir-armageddon` and `riir-auth` have a `.docs/` directory holding no document, which reads as a shape but is not one), **1** flat numbered FILES (`riir-burner`), **1** NAMED subfolders (`seal-game-editor`). The old text said 'eight of the fourteen … and six are AGENTS.md-centric' over a 12-row table — a split that summed to neither. The rule is about matching the shape, not about whether to have one — and a shape change is a deliberate, committed decision governed by the **Shape-change contract** above (it updates THIS file in the same pass via the grep-able checklist, not something a sync run improvises).
+- **Do not** impose a `.docs/` shape that differs from the repo's existing convention — respect the shape you find. **Re-measured 2026-09-04 over the live 16** (three repos retired to `git/obsolete/` the same day; the previous text measured 18 and named two of them as routing targets): **10** numbered folders (katgpt-rs 10, riir-ai 12, riir-chain 7, riir-clippy 12, riir-deployer 2, riir-game-sdk 10, riir-neuron-db 10, riir-train 6, riir-viewbridge 1, seal-remake 1), **4** with no `.docs/` at all (katgpt-web, riir-dao, riir-dapps, riir-mmorpg-examples), **1** whose `.docs/` holds no document (riir-auth — only `.highwater`, which reads as a shape and is not one), **1** NAMED subfolders (seal-game-editor). The **flat numbered FILES** shape left the workspace with `riir-burner`. Don't re-type this census: the one-liner in the trigger above derives it, and every hand-written version of it in this file's history has been wrong within days — the previous one said "8 numbered / 8 AGENTS.md-centric" over a table whose membership differed from the workspace in BOTH directions. A shape change is a deliberate, committed decision governed by the **Shape-change contract** above.
 - **Do not** renumber existing docs — the numbering discipline is monotonic and never reused.
 - **Do not** document trivial mechanical commits (lockfile bumps, clippy fixes) unless they close a tracked issue.
 

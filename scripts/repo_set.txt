@@ -7,7 +7,6 @@ katgpt-rs
 katgpt-web
 riir-ai
 riir-auth
-riir-burner
 riir-chain
 riir-clippy
 riir-dao
@@ -17,8 +16,6 @@ riir-game-sdk
 riir-mmorpg-examples
 riir-neuron-db
 riir-train
-riir-unity
 riir-viewbridge
 seal-game-editor
 seal-remake
-seal-remake-unity

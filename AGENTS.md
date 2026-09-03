@@ -286,6 +286,23 @@ paragraph said "the three" for one commit after the fourth was added):
   45 assertions, 45 pass, 0 fail — silently *unverified*, not broken, same as
   `.docs/10_audits/alloc_gate_per_thread_counter.md` T3. Found sideways, by adding tests to one such file, not by
   auditing the gate. Re-run the corpus token table when a new dialect appears.
+
+  The **third** is what that widening did to the prose describing it. T4c made
+  the classifier wider, so katgpt-rs's load-bearing ALL-IGNORED count went
+  **3 → 5** — and both the pins-file header and
+  `.docs/10_audits/cfg_gated_silent_zero_pass.md` item 7 kept their old
+  numbers, because **nothing was pinned on that count**. The pins file argues
+  the ALL-IGNORED *count* is not gateable (`#[ignore]` is the right marker for
+  a slow or hardware-gated test) and that is correct but incomplete: **a set is
+  gateable where its cardinality is not.** `scripts/all_ignored_load_bearing.txt`
+  pins the five paths by MEMBERSHIP, each with the reason string read out of
+  its own source, and `check_membership` reds on drift either way — so a sixth
+  arrival reds the push, a same-size **swap** fails (the repo-set incident's
+  lesson, one axis over, pinned as its own selftest case), and an emptied
+  measured set reds on five removals instead of passing like every ceiling in
+  this family does. An empty *allowlist* is refused for the mirror-image
+  reason. All four directions canaried. It is deliberately NOT in
+  `REQUIRED_PINS`: it is not an integer.
 - `bench_doc_audit.py` runs a `selftest()` on every invocation pinning the line
   shapes its tokenizer must recognise. Without it a regex regression is silent:
   the audit recognises fewer labels and still prints "0 mismatches". That is how
@@ -759,10 +776,24 @@ system that duplicates already-shipped substrate under a different name
 > **Repo count:** the **product/distillation set is 7** — `katgpt-rs` (public) +
 > `riir-ai`, `riir-chain`, `riir-neuron-db`, `riir-train`, `riir-game-sdk`,
 > `riir-dapps` (private). That is NOT the repo total: the
-> workspace is **19 repos**, all of which carry a root `BOUNDARY.md`
-> (add `riir-mmorpg-examples`, `riir-clippy`, `riir-unity`, `riir-viewbridge`,
-> `riir-auth`, `riir-burner`, `katgpt-web`, `riir-dao`, `riir-deployer`,
-> `seal-game-editor`, `seal-remake`, `seal-remake-unity`).
+> workspace is **16 repos**, all of which carry a root `BOUNDARY.md`
+> (add `riir-mmorpg-examples`, `riir-clippy`, `riir-viewbridge`,
+> `riir-auth`, `katgpt-web`, `riir-dao`, `riir-deployer`,
+> `seal-game-editor`, `seal-remake`).
+>
+> **19 → 16 on 2026-09-04 00:01**, by the same owner act that retired
+> `riir-armageddon`: `riir-burner`, `riir-unity` and `seal-remake-unity` were
+> moved to `/Users/katopz/git/obsolete/`. Nothing was lost — the directories
+> are intact there and `riir-burner`'s last sweep was pushed (`ce54122`) 19
+> minutes before the move. They are named here as **lineage only; do not route
+> work to them**, exactly as with `riir-armageddon`. This time the drift was
+> caught by an instrument rather than by reading: `skill_repo_set_gate.py` went
+> red on the stale `scripts/repo_set.txt` within the hour, and
+> `agents_repo_set_gate.py` then went red on this paragraph — which is the
+> membership-first gate doing precisely the job it was written for, on its
+> second day. The cross-repo **edge** count is NOT re-measured here: the last
+> real `ci_boundary_contract.sh` run is the 2026-09-01 one quoted below, and
+> three repos leaving must have moved it. Read it as of that run.
 >
 > **This paragraph said 8 and 18 until 2026-09-03, and the way it was wrong
 > is worse than a stale number.** `riir-armageddon` was de-enrolled by an
