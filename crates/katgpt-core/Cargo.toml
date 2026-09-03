@@ -171,9 +171,9 @@ cond_audit = ["stale_residual"]
 # the probe site: absolute Δ (never relative — R35/717-T6 trap), windowed
 # shape (never single-step), tangential-first. Zero-alloc fixed ring, O(1)
 # push/classify, caller-fed norms (step_size / evolve_belief already hold the
-# delta). Pure f32, zero deps. Opt-in — T2 (riir-poc defend-wrong A/B) + T3
-# (mmorpg Issue 054 L2 consumer) pending; promotion per the no-default-
-# consumer rule.
+# delta). Pure f32, zero deps. Opt-in — T2 (riir-poc defend-wrong A/B,
+# `b18b7b2bb`) + T3 (mmorpg Issue 054 L2 consumer, riir-ai `681786288` +
+# mmorpg `8c99624`) LANDED; promotion per the no-default-consumer rule.
 cadence_gate = []
 
 # support_regime (Issue 693 / Research 513, arXiv:2608.22764 — LpWM: A Case
