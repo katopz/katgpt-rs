@@ -212,9 +212,7 @@ impl SpecCompiler {
             rules.push(SpecRule {
                 depth: Some(0),
                 prefix: Vec::new(),
-                allowed: CompactBitmap::from_token_indices(
-                    [b'{', b'['].iter().map(|&b| b as usize),
-                ),
+                allowed: CompactBitmap::from_token_indices((*b"{[").iter().map(|&b| b as usize)),
                 is_allowlist: true,
             });
 

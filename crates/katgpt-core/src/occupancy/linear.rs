@@ -272,9 +272,7 @@ impl LogRatioClass for LinearLogRatioClass {
             // where ω_θ(Xi) = e^{θ·φ_i} / Σ_j e^{θ·φ_j} = exp_buf[i] / z_sum.
 
             // 2b. Compute weighted_feature_sum = Σ_i exp_buf[i] · φ(Xi) (length d).
-            for slot in &mut scratch.weighted_feature_sum {
-                *slot = 0.0;
-            }
+            scratch.weighted_feature_sum.fill(0.0);
             for i in 0..n {
                 let e = scratch.exp_buf[i];
                 let phi = &transitions.states[i * d..(i + 1) * d];
@@ -304,9 +302,7 @@ impl LogRatioClass for LinearLogRatioClass {
             }
 
             // 2d. Hessian: H = Cov̂_{ω_θ}(φ(X)) = Ê_ν[ω_θ φ φ^T] − mean_phi mean_phi^T
-            for slot in &mut scratch.hessian {
-                *slot = 0.0;
-            }
+            scratch.hessian.fill(0.0);
             for i in 0..n {
                 let e = scratch.exp_buf[i];
                 let phi = &transitions.states[i * d..(i + 1) * d];

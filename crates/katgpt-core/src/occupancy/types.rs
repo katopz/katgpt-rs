@@ -169,9 +169,7 @@ impl KlProjectionScratch {
     pub fn compute_initial_mean(&mut self, initial: &InitialMoments<'_>) {
         debug_assert_eq!(initial.state_dim, self.feature_dim);
         debug_assert_eq!(self.initial_mean.len(), self.feature_dim);
-        for slot in &mut self.initial_mean {
-            *slot = 0.0;
-        }
+        self.initial_mean.fill(0.0);
         if initial.n_init == 0 {
             return;
         }
@@ -192,35 +190,15 @@ impl KlProjectionScratch {
     /// it persists across iterations (computed once by `compute_initial_mean`).
     #[inline]
     pub fn clear_iteration(&mut self) {
-        for slot in &mut self.exp_buf {
-            *slot = 0.0;
-        }
-        for slot in &mut self.moment {
-            *slot = 0.0;
-        }
-        for slot in &mut self.successor_weighted_sum {
-            *slot = 0.0;
-        }
-        for slot in &mut self.gradient {
-            *slot = 0.0;
-        }
-        for slot in &mut self.hessian {
-            *slot = 0.0;
-        }
-        for slot in &mut self.hessian_damped {
-            *slot = 0.0;
-        }
-        for slot in &mut self.newton_step {
-            *slot = 0.0;
-        }
-        for slot in &mut self.params_trial {
-            *slot = 0.0;
-        }
-        for slot in &mut self.y_buf {
-            *slot = 0.0;
-        }
-        for slot in &mut self.weighted_feature_sum {
-            *slot = 0.0;
-        }
+        self.exp_buf.fill(0.0);
+        self.moment.fill(0.0);
+        self.successor_weighted_sum.fill(0.0);
+        self.gradient.fill(0.0);
+        self.hessian.fill(0.0);
+        self.hessian_damped.fill(0.0);
+        self.newton_step.fill(0.0);
+        self.params_trial.fill(0.0);
+        self.y_buf.fill(0.0);
+        self.weighted_feature_sum.fill(0.0);
     }
 }

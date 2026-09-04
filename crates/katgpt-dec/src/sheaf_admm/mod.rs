@@ -1122,7 +1122,7 @@ fn sheaf_laplacian_matvec(
         // Edge-list fallback for non-grid complexes (needs fill for dims d_e..d_v).
         sheaf_laplacian_z.fill(0.0);
         let entries = cx.boundary_entries(0);
-        for pair in entries.chunks_exact(2) {
+        for pair in entries.as_chunks::<2>().0 {
             let v_tail = pair[0].0;
             let v_head = pair[1].0;
             let tail_base = v_tail * d_v;
@@ -1147,7 +1147,7 @@ fn sheaf_laplacian_matvec(
         sheaf_laplacian_z.fill(0.0);
         let entries = cx.boundary_entries(0);
         let idx = &maps.selector_indices;
-        for pair in entries.chunks_exact(2) {
+        for pair in entries.as_chunks::<2>().0 {
             let v_tail = pair[0].0;
             let e = pair[0].1;
             let v_head = pair[1].0;
@@ -1185,7 +1185,7 @@ fn sheaf_laplacian_matvec(
     sheaf_laplacian_z.fill(0.0);
 
     let entries = cx.boundary_entries(0);
-    for pair in entries.chunks_exact(2) {
+    for pair in entries.as_chunks::<2>().0 {
         let v_tail = pair[0].0;
         let e = pair[0].1;
         let v_head = pair[1].0;

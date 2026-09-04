@@ -849,7 +849,7 @@ pub fn funcattn_forward(
 ) -> Result<(), FuncAttnError> {
     let d = cfg.d;
     let k = cfg.k;
-    let n = if d > 0 { x_basis.len() / d } else { 0 };
+    let n = x_basis.len().checked_div(d).unwrap_or(0);
 
     let expected = n * d;
     debug_assert!(

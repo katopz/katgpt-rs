@@ -81,11 +81,7 @@ pub struct ClusterQueryBank {
 impl QueryBank for ClusterQueryBank {
     fn generate_queries(&self, kv_cache: &[f32], budget: usize) -> Vec<f32> {
         let kv_dim = self.latent_dim;
-        let seq_len = if kv_dim == 0 {
-            0
-        } else {
-            kv_cache.len() / kv_dim
-        };
+        let seq_len = kv_cache.len().checked_div(kv_dim).unwrap_or(0);
 
         if seq_len == 0 || budget == 0 || kv_dim == 0 {
             return vec![0.0f32; budget * self.latent_dim];
@@ -225,11 +221,7 @@ pub struct AttentionQueryBank {
 impl QueryBank for AttentionQueryBank {
     fn generate_queries(&self, kv_cache: &[f32], budget: usize) -> Vec<f32> {
         let kv_dim = self.latent_dim;
-        let seq_len = if kv_dim == 0 {
-            0
-        } else {
-            kv_cache.len() / kv_dim
-        };
+        let seq_len = kv_cache.len().checked_div(kv_dim).unwrap_or(0);
 
         if seq_len == 0 || budget == 0 || kv_dim == 0 {
             return vec![0.0f32; budget * self.latent_dim];
@@ -333,11 +325,7 @@ pub struct SpectralQueryBank {
 impl QueryBank for SpectralQueryBank {
     fn generate_queries(&self, kv_cache: &[f32], budget: usize) -> Vec<f32> {
         let kv_dim = self.latent_dim;
-        let seq_len = if kv_dim == 0 {
-            0
-        } else {
-            kv_cache.len() / kv_dim
-        };
+        let seq_len = kv_cache.len().checked_div(kv_dim).unwrap_or(0);
 
         if seq_len == 0 || budget == 0 || kv_dim == 0 {
             return vec![0.0f32; budget * self.latent_dim];
@@ -396,11 +384,7 @@ pub struct BfcfQueryBank {
 impl QueryBank for BfcfQueryBank {
     fn generate_queries(&self, kv_cache: &[f32], budget: usize) -> Vec<f32> {
         let kv_dim = self.latent_dim;
-        let seq_len = if kv_dim == 0 {
-            0
-        } else {
-            kv_cache.len() / kv_dim
-        };
+        let seq_len = kv_cache.len().checked_div(kv_dim).unwrap_or(0);
 
         if seq_len == 0 || budget == 0 || kv_dim == 0 {
             return vec![0.0f32; budget * self.latent_dim];

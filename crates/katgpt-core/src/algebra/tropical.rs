@@ -584,7 +584,7 @@ pub fn tropical_line_integral(cx: &CellComplex, edge_field: &CochainField, path:
 
         // B₁ entries from grid_2d are paired: (tail, e, −1), (head, e, +1).
         // Iterate pairs to find the edge connecting a and b.
-        for pair in entries.chunks_exact(2) {
+        for pair in entries.as_chunks::<2>().0 {
             let (v0, e0, _s0) = pair[0];
             let (v1, e1, _s1) = pair[1];
             debug_assert_eq!(e0, e1, "B₁ entries must be paired by edge index");

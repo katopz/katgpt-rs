@@ -195,12 +195,8 @@ impl GradientGuidedPolicy {
     /// Reset per-position state: zero the proxy, clear the projected bitmap,
     /// and reset the random fallback cursor. Allocation-free.
     pub fn reset(&mut self) {
-        for x in &mut self.proxy {
-            *x = 0.0;
-        }
-        for b in &mut self.projected {
-            *b = false;
-        }
+        self.proxy.fill(0.0);
+        self.projected.fill(false);
         // Random fallback is reset lazily on first use.
     }
 
@@ -272,9 +268,7 @@ mod grad_policy_tests {
         let p = InversionPolicy::gradient_guided_default();
         let mut gp = GradientGuidedPolicy::new(8, 4, 0, &p);
         // Pollute the proxy + projected bitmap.
-        for x in &mut gp.proxy {
-            *x = 1.0;
-        }
+        gp.proxy.fill(1.0);
         gp.projected[3] = true;
         gp.reset();
         assert!(gp.proxy.iter().all(|&x| x == 0.0));

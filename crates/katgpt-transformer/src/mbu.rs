@@ -59,11 +59,9 @@ pub struct MbuReport {
 
 impl MbuReport {
     pub fn bytes_per_token(&self) -> u64 {
-        if self.tokens_generated == 0 {
-            0
-        } else {
-            self.bytes_read / self.tokens_generated
-        }
+        self.bytes_read
+            .checked_div(self.tokens_generated)
+            .unwrap_or(0)
     }
 
     /// Achieved bandwidth in GB/s.

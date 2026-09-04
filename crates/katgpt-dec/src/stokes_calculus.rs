@@ -429,7 +429,7 @@ pub fn line_integral(cx: &CellComplex, edge_field: &CochainField, path: &[u32]) 
     // DEC operators directly.
     let mut edge_lookup: std::collections::HashMap<(usize, usize), (usize, i8)> =
         std::collections::HashMap::with_capacity(entries.len() / 2);
-    for pair in entries.chunks_exact(2) {
+    for pair in entries.as_chunks::<2>().0 {
         let (v0, e0, _s0) = pair[0];
         let (v1, e1, _s1) = pair[1];
         debug_assert_eq!(e0, e1, "B₁ entries must be paired by edge index");

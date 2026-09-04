@@ -613,9 +613,7 @@ impl<B: HintDeltaBandit> ReachableDualPoolRouter for DualPoolBandit<B> {
             *p = x_unif;
         }
         // Clear per-arm X-pool reward tracking for the next cycle batch.
-        for r in &mut self.x_arm_rewards {
-            *r = 0.0;
-        }
+        self.x_arm_rewards.fill(0.0);
     }
 
     #[inline]

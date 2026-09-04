@@ -233,7 +233,7 @@ impl SsmaxConfig {
 pub fn apply_ssmax_inplace(logits: &mut [f32], mode: &SsmaxMode, log_n: f32) {
     let mult = mode.multiplier(log_n);
     // Chunked 8-wide loop to help LLVM auto-vectorize (AGENTS.md hot-loop rule).
-    for chunk in logits.chunks_exact_mut(8) {
+    for chunk in logits.as_chunks_mut::<8>().0 {
         for x in chunk {
             *x *= mult;
         }

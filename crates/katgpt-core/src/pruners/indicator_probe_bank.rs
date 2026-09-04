@@ -25,7 +25,7 @@ use core::marker::PhantomData;
 use crate::simd::{fast_sigmoid, simd_dot_f32};
 
 /// Magic bytes for the frozen bank wire format.
-pub const BANK_MAGIC: [u8; 4] = [b'I', b'P', b'B', b'K']; // Indicator Probe BanK
+pub const BANK_MAGIC: [u8; 4] = *b"IPBK"; // Indicator Probe BanK
 /// Current wire-format version.
 pub const BANK_WIRE_VERSION: u64 = 1;
 

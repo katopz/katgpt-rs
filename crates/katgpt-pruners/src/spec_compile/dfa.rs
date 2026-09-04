@@ -402,7 +402,7 @@ impl FormatDfaBuilder {
         const STATE_COUNT: DfaState = 8;
 
         let digits = Self::chars_class(b'0'..=b'9');
-        let separators = Self::chars_class([b'-', b' ', b'.'].into_iter());
+        let separators = Self::chars_class((*b"- .").into_iter());
 
         let mut transitions = Vec::with_capacity(16);
 

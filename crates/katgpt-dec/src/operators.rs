@@ -348,7 +348,7 @@ fn graph_laplacian_edge_list_into(
     let chunks = dim / 4;
     let remainder = dim % 4;
 
-    for pair in entries.chunks_exact(2) {
+    for pair in entries.as_chunks::<2>().0 {
         let (v_tail, _e, _sign_t) = pair[0];
         let (v_head, _e, _sign_h) = pair[1];
         let tail_start = v_tail * dim;

@@ -420,7 +420,7 @@ where
             kept_nodes.extend_from_slice(z);
         }
     }
-    let n_kept = if dim > 0 { kept_nodes.len() / dim } else { 0 };
+    let n_kept = kept_nodes.len().checked_div(dim).unwrap_or(0);
 
     // ── Step 2: connect each kept node to its k_nearest kept neighbors ──────
     // For each node a, compute distances to all other nodes, take k nearest,
