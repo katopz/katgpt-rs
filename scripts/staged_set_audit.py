@@ -280,8 +280,17 @@ def stale_vs_head(
 
 
 def git(repo: Path, *args: str) -> str:
+    # encoding pinned: text=True alone uses the LOCALE codec, and on a Windows
+    # box set to cp874 any UTF-8 byte above that range (em-dashes, box-drawing
+    # chars in Rust comments) crashes the reader thread mid-audit
+    # (UnicodeDecodeError in subprocess._readerthread, 2026-09-04).
     return subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, check=True
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=True,
     ).stdout
 
 
