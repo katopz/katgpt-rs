@@ -10,10 +10,15 @@ mod tests {
 
     #[test]
     fn adaptive_komi_reduces_black_dominance() {
-        // Start at pre-converged komi=42 (determined from production 500-ep run).
-        // Production run showed: starting at 7.5 → converges to ~42 by ep 500.
-        // With komi=42, the avg score margin drops from +30 to <1 point.
-        // Run 150 episodes (3 windows of 50) to verify stability near equilibrium.
+        // Equilibrium re-pin (Issue 723 T8, 2026-09-04): the 42.0 premise was
+        // calibrated against the pre-PUCT engine (Bench 205 upgraded the search);
+        // under the current engine the raw Black advantage is ≈ 0, so the
+        // score-margin controller's fixed point is komi ≈ 0.1 (measured: initial
+        // 42.0 walks down to 1.5 in 6 windows with margin −3.0; initial 2.0
+        // settles at 0.1 with margin −0.392, seed 42, deterministic). The
+        // controller itself is healthy — it converged from 42 → 1.5 without
+        // oscillation, which is the property under test. Start AT equilibrium.
+        let initial_komi = 2.0f32;
         let config = GoGZeroSelfPlayConfig {
             board_size: 9,
             num_episodes: 150,
@@ -24,7 +29,7 @@ mod tests {
                 max_promotions: 2,
             },
             progress_interval: 150,
-            initial_komi: 42.0,
+            initial_komi,
             adaptive_komi: true,
             komi_adjustment_step: 10.0,
             komi_min: 0.0,
@@ -38,16 +43,15 @@ mod tests {
         let results = run_gzero_selfplay(&config, &mut rng);
 
         // Verify komi stayed near equilibrium (didn't diverge).
-        let komi_drift = (results.final_komi - 42.0).abs();
+        let komi_drift = (results.final_komi - initial_komi).abs();
         assert!(
             komi_drift < 5.0,
-            "Komi should stay near equilibrium 42.0, drifted to {} (drift={:.1})",
+            "Komi should stay near equilibrium {initial_komi}, drifted to {} (drift={:.1})",
             results.final_komi,
             komi_drift,
         );
 
         // Verify the average score margin is small (converged, not lopsided).
-        // At komi=7.5 the margin is ~30 points; at komi=42 it should be < 5.
         assert!(
             results.avg_score_margin.abs() < 0.8,
             "avg_score_margin should be near zero at equilibrium, got {:.3}",
@@ -56,7 +60,7 @@ mod tests {
 
         // Log the final state for visibility.
         eprintln!(
-            "  [converged] 150 eps @ komi=42→{:.1}: B={} W={} D={} margin={:.3}",
+            "  [converged] 150 eps @ komi={initial_komi}→{:.1}: B={} W={} D={} margin={:.3}",
             results.final_komi,
             results.black_wins,
             results.white_wins,

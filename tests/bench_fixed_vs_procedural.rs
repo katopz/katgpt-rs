@@ -249,13 +249,27 @@ fn bench_fixed_vs_procedural() {
         }
     );
 
-    let cv_ratio = fixed_stats.cv / proc_stats.cv.max(f64::EPSILON);
+    // ── Variance gate (Issue 723 T8 re-pin): compare StdDev, not CV. The CV
+    // ratio is broken at mean≈0 — the fixed map's P4 score mean measures
+    // ≈ +0.06 (players are near-balanced on the symmetric standard arena), so
+    // CV = std/|mean| explodes to ~72 while the ABSOLUTE dispersion (StdDev
+    // 4.51 vs ~5.0) shows the fixed map has LOWER variance, which is the
+    // property this gate exists to assert. Root cause + numbers recorded by
+    // the 2026-08 heal-sweep session; the CV print stays as telemetry.
+    let std_ratio = fixed_stats.std_dev / proc_stats.std_dev.max(f64::EPSILON);
+    println!(
+        "  Fixed StdDev ({:.4}) / Procedural StdDev ({:.4}) = {:.2}",
+        fixed_stats.std_dev,
+        proc_stats.std_dev,
+        std_ratio,
+    );
+
     assert!(
-        cv_ratio <= 1.5,
-        "Fixed map CV ({:.4}) should be ≤ 1.5× procedural CV ({:.4}), got ratio {:.2} — \
+        std_ratio <= 1.5,
+        "Fixed map StdDev ({:.4}) should be ≤ 1.5× procedural StdDev ({:.4}), got ratio {:.2} — \
          fixed maps should not have drastically higher variance",
-        fixed_stats.cv,
-        proc_stats.cv,
-        cv_ratio,
+        fixed_stats.std_dev,
+        proc_stats.std_dev,
+        std_ratio,
     );
 }

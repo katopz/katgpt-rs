@@ -55,15 +55,29 @@ fn assert_homogeneous_equivalence<const N: usize, const A: usize, P, D>(
         "{label}: objective mismatch homogeneous {obj_h} vs heterogeneous {obj_e}"
     );
 
-    // Entry-by-entry (tolerant — degenerate optima may differ in support).
-    for i in 0..N * A {
-        let a = rho_homogeneous.entries[i];
-        let b = rho_heterogeneous.entries[i];
-        assert!(
-            (a - b).abs() < ENTRY_TOL,
-            "{label}: entry {i} mismatch homogeneous {a} vs heterogeneous {b}"
-        );
-    }
+    // CCE validity of BOTH solutions (the load-bearing check).
+    //
+    // Issue 723 T8: the former entry-by-entry assert over-specified VERTEX
+    // identity and broke when Plan 572's solve_lp_auto routed the two arms to
+    // different solvers (RPS P=1: C(30,4)=27k → BFS; P=2: C(33,7)=4.3M →
+    // simplex). At a degenerate optimum the objective is unique but the vertex
+    // is not — RPS measured obj −1.000000 on both sides with disjoint supports
+    // (entry 1: 1.0 vs 0.0). Objective equality + CCE validity is the complete
+    // correctness spec: a wrong solution cannot share the optimal objective,
+    // and validity pins the constraint set. Vertex identity added nothing.
+    let max_entry_diff = (0..N * A)
+        .map(|i| (rho_homogeneous.entries[i] - rho_heterogeneous.entries[i]).abs())
+        .fold(0.0f32, f32::max);
+    assert!(
+        CceLp::new().is_heterogeneous_cce(&rho_heterogeneous, &game, ENTRY_TOL),
+        "{label}: heterogeneous solution violates a deviation constraint \
+         (max entry diff vs homogeneous vertex: {max_entry_diff:.6})"
+    );
+    assert!(
+        CceLp::new().is_heterogeneous_cce(&rho_homogeneous, &game, ENTRY_TOL),
+        "{label}: homogeneous solution violates the identical-player game's \
+         deviation constraints"
+    );
 
     eprintln!(
         "{label}: G1 PASS — homogeneous γ₀={obj_h:.6}, heterogeneous γ₀={obj_e:.6}, \

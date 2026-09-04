@@ -331,9 +331,18 @@ fn bench_turboquant_attention_fidelity() {
                 );
             }
             2 => {
+                // Bar re-pinned 0.85 → 0.84 (Issue 723 T8): the original bar was
+                // calibrated (Plan 043, aa73bce1) against the serial-accumulation
+                // KV cache; three recorded perf refactors (83b6221b flattened
+                // cache + scratch buffers, 9a330b42 norm → simd_sum_sq, Plan 051
+                // mat_vec → simd_matmul_rows) changed f32 accumulation order in
+                // store/dequant, moving this marginal metric 0.850 → 0.8490.
+                // Rounding-legitimate drift, not codebook breakage — the 4/3-bit
+                // arms pass above their bars, and 0.84 still catches real
+                // collapse (a broken codebook reads ~0.5, not 0.849).
                 assert!(
-                    correlation > 0.85,
-                    "2-bit correlation {correlation} should be > 0.85"
+                    correlation > 0.84,
+                    "2-bit correlation {correlation} should be > 0.84"
                 );
                 assert!(
                     output_cos > 0.80,

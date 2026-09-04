@@ -354,11 +354,16 @@ fn bench_ldt_lattice_deduction_goat_proof() {
     // ── T4: Sudoku-style GOAT Proof ─────────────────────────────
     println!("\n── T4: Sudoku-style DDTree GOAT ─────────────────────────");
 
-    // Simulate a 9-token puzzle with a known solution
+    // Simulate an 8-token puzzle with a known solution
     // Each depth has 9 possible tokens, only 1 is correct
-    let puzzle_depths = 9;
+    // (Issue 723 T8: was puzzle_depths = 9 — one past TreePath::MAX_TOKENS = 8,
+    // the Issue-670 widening's loud contract, so push() panicked at depth 8.
+    // The TreePath depth-8 ceiling is the shipped spec-decode contract; the
+    // scenario is capped to it. The claim under test — LDT retains ≥ baseline
+    // solution tokens — is depth-independent.)
+    let puzzle_depths = 8;
     let puzzle_vocab = 9;
-    let solution_tokens: Vec<usize> = vec![3, 7, 1, 5, 8, 2, 6, 0, 4];
+    let solution_tokens: Vec<usize> = vec![3, 7, 1, 5, 8, 2, 6, 0];
 
     // Build marginals: correct token gets 0.4, others get small probs
     let mut puzzle_marginals: Vec<Vec<f32>> = Vec::with_capacity(puzzle_depths);

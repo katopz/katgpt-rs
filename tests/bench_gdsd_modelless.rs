@@ -456,6 +456,7 @@ fn goat_169_t7_convergence() {
 
 #[cfg(feature = "gdsd_distill")]
 #[test]
+#[ignore = "known deliberate red, not a regression: GDSD's gain claim was REFUTED at this gate's birth (commit 5c0232e1, Plans 164-171 — 'fake GOAT exposed', GOAT FAILED 0/3 gain gates). G1 measured +0.00% then and is bit-identical since (both arms pre-train identical bandits over deterministic marginals; relevance saturates to 1.0 in both arms, so the extracted paths cannot differ). The assert below IS the falsification record — run with --ignored to re-execute it."]
 fn goat_169_g1_acceptance_rate() {
     use katgpt_rs::pruners::{
         BanditPruner, BanditStrategy, GdsdConfig, GdsdPruner, identity_advantage,

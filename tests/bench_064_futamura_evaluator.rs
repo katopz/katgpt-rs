@@ -194,16 +194,45 @@ mod tests {
         // Build specialized graph
         let (specialized_graph, _, _) = build_specialized_graph(&program);
 
-        let universal_dims = universal_graph.all_dims.len();
-        let specialized_dims = specialized_graph.all_dims.len();
+        // Interface-dimension count (Issue 723 T8): Input + Generic dims — the
+        // per-step state the model consumes. History: this gate was born
+        // (1c2cc3a7) calling a `num_dimensions()` that existed NOWHERE in src/
+        // — the file never compiled as authored — and 84def767 mechanically
+        // swapped it to `all_dims.len()` to unbreak the build. That swap made
+        // the assert count ALL-ALLOCATED dims, which specialization INFLATES
+        // (300 vs 216: per-opcode intermediate machinery) even though the
+        // specialized interface strictly SHRINKS — the interpreter's §1 drops
+        // the five instruction-fetch inputs (opcode_x, opcode_y, is_write,
+        // delta_stack_prefix, store_to_stack_prefix) when a program is given.
+        // Interface dims are the honest measurable proxy for "no
+        // instruction-fetch machinery": the persistent/unreachable
+        // intermediates are implementation detail.
+        fn interface_dims(graph: &katgpt_percepta::graph::types::ProgramGraph) -> usize {
+            use katgpt_percepta::graph::types::DimensionKind;
+            graph
+                .all_dims
+                .values()
+                .filter(|d| matches!(d.kind, DimensionKind::Input | DimensionKind::Generic))
+                .count()
+        }
 
-        println!("Universal dimensions:  {universal_dims}");
-        println!("Specialized dimensions: {specialized_dims}");
+        let universal_dims = interface_dims(&universal_graph);
+        let specialized_dims = interface_dims(&specialized_graph);
+        println!(
+            "Allocated dims: universal={}, specialized={}",
+            universal_graph.all_dims.len(),
+            specialized_graph.all_dims.len()
+        );
 
-        // Specialized should have fewer dimensions (no instruction-fetch attention heads)
+        println!("Universal interface dimensions:  {universal_dims}");
+        println!("Specialized interface dimensions: {specialized_dims}");
+
+        // Specialized should consume a strictly smaller per-step interface (no
+        // instruction-fetch inputs). ≤ keeps the gate robust to a future
+        // specialized build that matches the universal interface.
         assert!(
             specialized_dims <= universal_dims,
-            "Specialized model should have ≤ universal dimensions ({specialized_dims} vs {universal_dims})"
+            "Specialized model should have ≤ universal interface dimensions ({specialized_dims} vs {universal_dims})"
         );
 
         let reduction = if universal_dims > 0 {
