@@ -1,6 +1,6 @@
 # Bench 677 — Issue 690: `ActionSpaceLog` f64 accumulator fix
 
-**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** [690](../.issues/690_actionspacelog_f32_accumulator_drift.md)
+**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** `690`
 
 ## Defect
 

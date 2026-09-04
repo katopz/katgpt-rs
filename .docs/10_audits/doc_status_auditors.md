@@ -1,7 +1,7 @@
 # Doc-Status Auditors — Feature-Gate vs Doc-Label Drift
 
 Status: **living** (last re-verified clean 2026-07-18, Issue 180 session 16)
-Origin: [Issue 180](../../.issues/180_remaining_doc_path_drift.md) (now removed per noise-reduction rule)
+Origin: `Issue 180` (now removed per noise-reduction rule)
 Design record of the 2026-09-01 rewrite (dialect tokenizer, `(package, feature)` reachability closure, `on by transitive default`, sibling cadence): [`sibling_doc_drift_auditors.md`](sibling_doc_drift_auditors.md) (Issue 702, closed + removed)
 
 ## What these auditors catch
@@ -80,7 +80,7 @@ file is a candidate to move.
 
 ## See also
 
-- [Issue 180](../../.issues/180_remaining_doc_path_drift.md) — REMOVED per
+- `Issue 180` — REMOVED per
   noise-reduction rule; the 16-session audit history (sessions 1–16, including
   parser-bug fixes, transitive-resolution passes, and the canonical "false
   claim about `.tmp_bench_audit.py`" investigation) lived there. This doc

@@ -337,7 +337,7 @@ maze-class maps.
 ### Path 2: Flow-field hard constraint (REVERTED, Proposal 006 REJECTED)
 
 Attempted via [Proposal 006](../.proposals/006_flow_field_hard_constraint_in_guidance.md)
-+ [Issue 182](../.issues/182_flow_field_hard_constraint_in_guidance.md). Phases
++ `Issue 182`. Phases
 1-3 (bi-directional corridors + A\* hard pruner + cost-tuple demotion) were
 implemented and measured.
 

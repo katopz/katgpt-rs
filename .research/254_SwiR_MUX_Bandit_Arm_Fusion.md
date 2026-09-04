@@ -2,7 +2,7 @@
 
 > **Date:** 2026-06-17
 > **Status:** Exploratory — Super-GOAT candidate (per Research 241 §2.3). Novelty gate ⚠️ NOT FULLY CHECKED. No implementation yet.
-> **Fuses:** [Research 241](241_SwiReasoning_Explicit_Latent_Switch.md) (SwiR) × Plan 211 Three-Mode Router × [Research 158](../.research/158_MUX_Pruner_Modelless.md) (MUX Pruner)
+> **Fuses:** [Research 241](241_SwiReasoning_Explicit_Latent_Switch.md) (SwiR) × Plan 211 Three-Mode Router × `Research 158` (MUX Pruner)
 > **Related Plans:** [Plan 275](../.plans/275_swir_switch_thinking.md) (SwiR), Plan 211 (Three-Mode Router)
 > **Classification:** Public — generic inference mechanics (WHAT, not HOW)
 

@@ -223,6 +223,6 @@ Apple Silicon arm64, release profile, 2026-07-03.
 ## Cross-references
 
 - [Plan 367](../.plans/367_quasi_monte_carlo_sampling.md) — implementation plan
-- [Research 367](../.research/367_QuasiMoTTo.md) — distillation
+- `Research 367` — distillation
 - [arXiv:2607.01179](https://arxiv.org/abs/2607.01179) — QuasiMoTTo paper
 - [Benchmark 010 consolidated](010_report_the_floor_consolidated.md) — "Report the Floor" rule (excluded for QMC; see §"Report the Floor" above)

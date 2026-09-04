@@ -1,7 +1,7 @@
 # Bench 686 — LycheeDecode chain-overlap PoC (Issue 694): adjacent-layer same-head top-k overlap on Kimi-K3-0.40B real weights
 **Status:** DONE 2026-08-28 — verdict **KILL** for `fm_chains` on the measured model (span-4 chain overlap ≈ chance at every k); the paper's adjacent-layer question is structurally unmeasurable on this architecture; generality unproven (T3 [-], 4090 busy + no attention-prob tap).
 
-**Sources:** [Issue 694](../.issues/694_lychee_chain_overlap_poc.md) · [Research 514](../.research/514_LycheeDecode_Hybrid_Head_Chain_Propagation.md) (§1.2 Fig. 2 is the measurement reproduced here on OUR weights) · [arXiv:2602.04541](https://arxiv.org/abs/2602.04541) (LycheeDecode, ICLR 2026) · probe: [`686_lychee_overlap_probe.py`](686_lychee_overlap_probe.py)
+**Sources:** `Issue 694` · [Research 514](../.research/514_LycheeDecode_Hybrid_Head_Chain_Propagation.md) (§1.2 Fig. 2 is the measurement reproduced here on OUR weights) · [arXiv:2602.04541](https://arxiv.org/abs/2602.04541) (LycheeDecode, ICLR 2026) · probe: [`686_lychee_overlap_probe.py`](686_lychee_overlap_probe.py)
 
 ---
 

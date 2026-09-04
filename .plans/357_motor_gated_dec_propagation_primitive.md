@@ -95,4 +95,4 @@ Ship the **missing glue primitive** that unifies the DEC substrate (Plan 251 `ho
 - **Stokes wrappers:** [Plan 314](314_stokes_calculus_wrappers.md), [Research 296](../.research/296_Stokes_Calculus_Dec_Vocabulary_Crosswalk.md) — `belief_mass_divergence` is the G3 validator.
 - **Latent steering:** [Plan 309](309_latent_field_steering_primitive.md) — the motor-gate algebra.
 - **InducedCwmKernel:** [Plan 296](296_induced_cwm_kernel_primitive.md) — the frozen-world-model substrate (downstream consumer).
-- **sleep_time:** [Plan 341](../.plans/341_npc_sleep_time_anticipation_runtime.md) (riir-ai) — the offline consolidation cycle (downstream consumer).
+- **sleep_time:** `Plan 341` (riir-ai) — the offline consolidation cycle (downstream consumer).

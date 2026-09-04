@@ -163,5 +163,5 @@ to the pre-promotion opt-in build.
   — closed curiosity consumer; references the stale Cargo.toml comment
 - [Plan 513](../../riir-ai/.plans/513_conformal_sidecar_width_definition_fix.md)
   — width-definition fix vindicating Bench 565's G3 PASS
-- [Issue 010](../.issues/010_report_the_floor.md) — "Report the Floor" rule
+- `Issue 010` — "Report the Floor" rule
   (removed per noise reduction; consolidated in `.benchmarks/010_report_the_floor_consolidated.md`)

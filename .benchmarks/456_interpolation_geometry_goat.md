@@ -3,7 +3,7 @@
 > **Primitive:** `katgpt_core::interpolation_geometry`
 > **Feature:** `interpolation_geometry` (opt-in)
 > **Bench:** `crates/katgpt-core/benches/bench_456_interpolation_geometry_goat.rs`
-> **Source:** [Issue 158](../.issues/158_latent_interpolation_geometry_evaluation.md),
+> **Source:** `Issue 158`,
 > [Research 445](../.research/445_Latent_Thought_Flows_Text_Compression.md) —
 > Prabhudesai & Geng, *Latent Thought Flows with Text Compression* (Jun 2, 2026).
 
@@ -140,7 +140,7 @@ cargo clippy -p katgpt-core --all-features --lib
 
 ## See also
 
-- [Issue 158](../.issues/158_latent_interpolation_geometry_evaluation.md) —
+- `Issue 158` —
   the PoC issue with 4-phase breakdown + three-pressure audit.
 - [Research 445](../.research/445_Latent_Thought_Flows_Text_Compression.md) —
   the parent research note with the full paper distillation.

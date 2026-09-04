@@ -1,6 +1,6 @@
 # Benchmark 459 — GRAPE-AP Vector-Similarity Gates GOAT Gate
 
-> **Issue:** [161](../.issues/161_grape_ap_vector_similarity_gates.md)
+> **Issue:** `161`
 > **Feature:** `grape_ap_vector` (opt-in)
 > **Date:** 2026-07-17
 > **Verdict:** ✅ **G1–G5 ALL PASS** (in-crate unit tests). Primitive is GOAT-validated. Promotion to default-on **deferred** (positional-embedding projection is user-supplied; no hot-path consumer yet).
@@ -72,9 +72,9 @@ The positional-embedding projection is **user-supplied** (modelless). Learning t
 
 ## Cross-references
 
-- [Issue 161](../.issues/161_grape_ap_vector_similarity_gates.md) — source issue (T1–T6 all complete).
-- [Issue 159](../.issues/159_grapem_rank2_rodrigues_exponential.md) — GRAPE-M primitive (soft-dep for `R_ℓ`; the sin/cos fallback in `RotationSchedule` works standalone).
-- [Issue 160](../.issues/160_position_group_action_trait.md) — unified trait (independent; `WallAction` is the scalar special case).
+- `Issue 161` — source issue (T1–T6 all complete).
+- `Issue 159` — GRAPE-M primitive (soft-dep for `R_ℓ`; the sin/cos fallback in `RotationSchedule` works standalone).
+- `Issue 160` — unified trait (independent; `WallAction` is the scalar special case).
 - [Research 446](../.research/446_GRAPE_Group_Representational_Position_Encoding.md) — parent distillation.
 - [`crates/katgpt-core/src/grape_ap.rs`](../crates/katgpt-core/src/grape_ap.rs) — the primitive (~810 lines incl. docs + tests).
 - [Benchmark 457](457_grapem_rodrigues_goat.md) — Issue 159 GOAT gate.

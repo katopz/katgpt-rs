@@ -4,7 +4,7 @@
 > **Date:** 2026-06-14
 > **Status:** Active
 > **Related Research:** 134 (BES entropy shell), 172 (MUSE skill lifecycle), 190 (regime-transition MDL gate), 075 (Survive-or-Collapse), 093 (committee search), 088/170 (proof/DAG search), 216 (MRAgent memory graph), 052 (SimpleTES eval-driven scaling)
-> **Related Plans:** katgpt-rs Plan 272 (`progressive_mcgs` module, Phase 3 ✅ COMPLETE — GOAT gates G1–G5 PASS, see [.docs/progressive_mcgs.md](../.docs/progressive_mcgs.md) and [.benchmarks/272_progressive_mcgs_goat.md](../.benchmarks/272_progressive_mcgs_goat.md))
+> **Related Plans:** katgpt-rs Plan 272 (`progressive_mcgs` module, Phase 3 ✅ COMPLETE — GOAT gates G1–G5 PASS, see `.docs/progressive_mcgs.md` and [.benchmarks/272_progressive_mcgs_goat.md](../.benchmarks/272_progressive_mcgs_goat.md))
 > **Cross-ref (riir-ai):** Research 122 (Crowd-Scale Progressive MCGS for NPC Emergent Behavior), Plan 298 (riir-ai game-runtime instantiation)
 > **Classification:** Public
 

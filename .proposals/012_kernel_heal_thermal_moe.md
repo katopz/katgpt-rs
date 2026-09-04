@@ -4,7 +4,7 @@ Status: **draft**
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: [Proposal 034](../../riir-ai/.proposals/034_clippy_healing_drafter_pruner.md) (clippy-healing drafter+pruner — the direct precedent) × [Proposal 011](011_rust_swe_bench_latent_space_via_wasm_pruner.md) (WASM pruner in-loop) × [`roofline.rs`](crates/katgpt-core/src/roofline.rs) (Plasma-tier kernel-dispatch) × [`GemvAutotune`](../../riir-ai/crates/riir-gpu/src/gemv_autotune.rs) (Warm-tier runtime benchmark) × [`pick_domain`](crates/katgpt-core/src/variable_rank_domain_expert.rs) (latent-MoE expert selection) × popcorn (`katopz/popcorn`, fork of `tilde-research/popcorn` — corpus + methodology source)
-Related: [Bench 009](../riir-clippy/.benchmarks/009_*.md) (cache-vs-compute silent-miss lesson), [Bench 029](.benchmarks/029_cubecl_gpu_rewrite.md) (CubeCL GeGLU bug — the canonical class a healer catches), [Research 440](.research/440_AIDE2_Recursive_Self_Improvement_PASS.md) (KernelBench reward-hacking 63%→34%)
+Related: [Bench 009](../riir-clippy/.benchmarks/009_*.md) (cache-vs-compute silent-miss lesson), `Bench 029` (CubeCL GeGLU bug — the canonical class a healer catches), `Research 440` (KernelBench reward-hacking 63%→34%)
 
 ## TL;DR
 

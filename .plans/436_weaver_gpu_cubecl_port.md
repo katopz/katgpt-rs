@@ -413,7 +413,7 @@ feature is a backend choice, not a primitive gate.
 - Issue 131 (CLOSED 2026-07-14, removed for noise) — parent (G4
   latency criterion listed GPU port as path #1); see Plan 433/434/435
   for the runtime integration history.
-- [Issue 136](../.issues/136_weaver_f16_weight_optimization.md) — f16 CPU
+- `Issue 136` — f16 CPU
   GOAT FAIL (motivates GPU path)
 - [Plan 433](433_weaver_dflash_pipeline_wiring.md) — DFlash ↔ Weaver wiring
 - [Plan 434](434_spec_step_weaver_call_site_wiring.md) — QwenDeltaNet wiring

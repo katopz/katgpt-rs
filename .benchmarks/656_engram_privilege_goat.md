@@ -1,6 +1,6 @@
 # Benchmark 656 — Counterfactual privilege gating for engram fusion (GOAT gate)
 
-> **Issue:** [656](../.issues/656_engram_privilege_gate_modelless_delta.md) ·
+> **Issue:** `656` ·
 > **Source:** riir-train [Research 419 §5.2](../../riir-train/.research/419_LOPD_Latent_Privileged_Context_OPSD.md) (LOPD, arXiv:2608.13040), modelless corollary
 > **Feature:** `engram_privilege` (opt-in) · **Date:** 2026-08-16 · **Host:** M3 Max (aarch64, release)
 > **Verdict:** **T1 DEFENDS** the mechanism. G1–G4 PASS. **Stays opt-in** — the win is real but

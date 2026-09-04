@@ -6,7 +6,7 @@ G1/G2/G3 gates ran + PASSED same day in the 4090-exclusive window (Vulkan wgpu<s
 dev-dep carries `pot_scales`). Record: riir-ai AGENTS.md Issue 845 resolved-row (issue file
 removed at close). Structural scoping: f32-accumulator fold-invariance is out of reach on this
 surface — the integer-dot follow-up landed as riir-ai Issue 850 /
-[Bench 850](../riir-ai/.benchmarks/850_integer_dot_pot_slice.md) (all four gates PASS).
+[Bench 850](../../riir-ai/.benchmarks/850_integer_dot_pot_slice.md) (all four gates PASS).
 `pot_scales` stays opt-in (no consumer). Reconciled 2026-09-03 (the status had still read
 "GPU-window-gated stay armed" a day after the gates passed).
 

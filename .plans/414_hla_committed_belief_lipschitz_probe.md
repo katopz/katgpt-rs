@@ -1,7 +1,7 @@
 # Plan 414: HLA Committed-Belief Lipschitz-Sensitivity Probe (F4)
 
 **Date:** 2026-07-09
-**Source issue:** [`.issues/048_hla_committed_belief_probe_blocked_on_r344.md`](../.issues/048_hla_committed_belief_probe_blocked_on_r344.md)
+**Source issue:** ``.issues/048_hla_committed_belief_probe_blocked_on_r344.md``
 **Parent plan:** [`.plans/406_renoise_ce_self_verifier.md`](406_renoise_ce_self_verifier.md) (P5.4 — the last remaining follow-up)
 **Target:** `crates/katgpt-core/src/committed_field_blend.rs` (DRY refactor + new probe section)
 **Status:** CLOSED — G1+G1b+G2+G2b+G3+G4+G5 ALL PASS (2026-07-09). Stays OPT-IN (diagnostic primitive, no runtime consumer).

@@ -358,7 +358,7 @@ the perplexity comparison harness is the next step.
 - **Source paper:** [arXiv:2606.11275](https://arxiv.org/abs/2606.11275) — García-Castellanos, Weiler, Bekkers.
 - **Source code:** [github.com/AGarciaCast/RoVE](https://github.com/AGarciaCast/RoVE)
 - **Closest cousin plans:**
-  - [`.plans/446_GRAPE_Group_Representational_Position_Encoding.md`](446_GRAPE_Group_Representational_Position_Encoding.md) — provides the `PositionGroupAction` trait + `RopeAction` that RoVE consumes. **Plan 446 does not exist as a single file** — it landed as Issues 159/160/161/163 (all removed per noise rule; verdicts in `.benchmarks/457`/`458`/`459`/`460`). See Research 446 §4 for the full follow-up record.
+  - ``.plans/446_GRAPE_Group_Representational_Position_Encoding.md`` — provides the `PositionGroupAction` trait + `RopeAction` that RoVE consumes. **Plan 446 does not exist as a single file** — it landed as Issues 159/160/161/163 (all removed per noise rule; verdicts in `.benchmarks/457`/`458`/`459`/`460`). See Research 446 §4 for the full follow-up record.
   - [`.plans/271_attention_matching_compaction.md`](271_attention_matching_compaction.md) — KV compaction that preserves RoPE on keys; Phase 4 of this plan extends it to RoVE-aware V space.
   - [`.plans/173_wall_attention_diagonal_gate.md`](173_wall_attention_diagonal_gate.md) — Wall Attention (orthogonal axis; Wall replaces RoPE on QK, RoVE extends RoPE to OV).
 - **Canonical format example:** [`.plans/271_attention_matching_compaction.md`](271_attention_matching_compaction.md)

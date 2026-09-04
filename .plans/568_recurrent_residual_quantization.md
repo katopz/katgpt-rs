@@ -113,7 +113,7 @@ Ship a **modelless, calibration-free, single-checkpoint multi-precision weight q
 
 - [Research 467](../.research/467_Recurrent_Residual_Quantization.md) — the parent research note
 - [arXiv:2608.04048](https://arxiv.org/abs/2608.04048) — the source paper
-- [Plan 452](452_simd_lut_fused_dequant_dot.md) — SIMD LUT fused dequant+dot (Phase 3 substrate)
+- `Plan 452` — SIMD LUT fused dequant+dot (Phase 3 substrate)
 - [Plan 100](100_block_diagonal_rotation_quantization.md) — RotorQuant / PlanarQuant / IsoQuant (QJL residual cousin)
 - [Research 200](../.research/200_Quantization_Outlier_Collapse_Security.md) — KS D-statistic detector (Phase 2 sibling)
 - [Research 463](../.research/463_moka_freeze_thaw_lever_audit.md) — `quant_error_lora` (closest cousin; same `E = W − dequant(W_q)` problem, SVD mechanism)

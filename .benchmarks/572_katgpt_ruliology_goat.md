@@ -1,7 +1,7 @@
 # Benchmark 572: `katgpt-ruliology` GOAT Re-Gate Results
 
 **Date:** 2026-08-05
-**Issue:** [572](../.issues/572_katgpt_ruliology_goat_re_gate.md)
+**Issue:** `572`
 **Research:** [168](../.research/168_Ruliology_Competition_Enumerative_Game_Theory.md)
 **Crate:** `katgpt-rs/crates/katgpt-ruliology/`
 **Feature:** `ruliology` (opt-in, root forwards to `katgpt-ruliology/ruliology` + `katgpt-pruners/ruliology` + `bandit`)
@@ -151,5 +151,5 @@ cargo test --release -p katgpt-ruliology --features ruliology --lib bench_enumer
 
 - [Research 168](../.research/168_Ruliology_Competition_Enumerative_Game_Theory.md) — original distillation (verdict table corrected above)
 - [Loser-sweep audit](../.docs/10_audits/loser_sweep_audit.md) — Category 1 PENDING (now resolved)
-- [Issue 572](../.issues/572_katgpt_ruliology_goat_re_gate.md) — this gate's tracking issue
+- `Issue 572` — this gate's tracking issue
 - Wolfram essay: https://writings.stephenwolfram.com/2026/06/games-between-programs-the-ruliology-of-competition/

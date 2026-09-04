@@ -1,7 +1,7 @@
 # Bench 662 — Batched width-N Metal forward (Issue 660 task 5)
 
 **Date:** 2026-08-17
-**Issue:** [660](../.issues/660_metal_single_submit_forward.md) — task 5 (batched width-N forward)
+**Issue:** `660` — task 5 (batched width-N forward)
 **Device:** M3 Max (local), GPU-exclusive (no compute consumer; Unity Editor + Zed active per the exemption)
 **Config:** `Config::micro()` (vocab=27, n_embd=16, n_head=4, n_layer=1, mlp_hidden=64, block_size=16) — overhead-dominated by design; measures dispatch/sync cost, not compute.
 

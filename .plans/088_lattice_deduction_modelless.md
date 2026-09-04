@@ -1,6 +1,6 @@
 # Plan 088: Lattice Deduction Modelless Distillation
 
-> **Research:** [50_LDT_Lattice_Deduction_Transformer.md](../.research/050_LDT_Deduction_Transformer.md)
+> **Research:** `50_LDT_Lattice_Deduction_Transformer.md`
 > **Source:** [Lattice Deduction Transformers](https://arxiv.org/pdf/2605.08605) — Davis, Haller, Alfarano, Santolucito (2026)
 > **Feature Gate:** `lattice_deduction`
 > **Type:** Modelless (zero training for T1-T3)

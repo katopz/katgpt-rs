@@ -4,14 +4,14 @@
 **Plan:** [440](../.plans/440_lifelong_lacam_multi_agent_pathfinding_substrate.md)
 **Research:** [424](../.research/424_Lifelong_LaCAM_Local_Guidance_Multi_Agent_Pathfinding.md)
 **Paper:** [arXiv:2605.16855](https://arxiv.org/abs/2605.16855) — Arita & Okumura, AAAI 2026
-**Issue:** [150](../.issues/150_2wide_corridor_detection.md) — 2-wide corridor detection (mechanism correct, still near-zero effect — the cost-term tiebreak position is too weak)
-**Prior issue:** [149](../.issues/149_guided_pibt_flow_direction_assignment.md) — 1-wide corridor detection (near-zero effect due to corridor-definition mismatch)
-**Prior issue:** [148](../.issues/148_real_movingai_maps.md) — real MovingAI benchmark maps (map-fidelity hypothesis test)
-**Prior issue:** [147](../.issues/147_guided_pibt_maze_routing_exploration.md) — ht_chantry connectivity fix (10× improvement) + counter-flow Guided-PIBT (negative result)
-**Prior issue:** [144](../.issues/144_lacam_escalation_swap_warmstart_followup.md) — swap technique (negative result, infrastructure-only)
-**Prior issue:** [143](../.issues/143_lacam_escalation_full_pibt.md) — LaCAM escalation (greedy PIBT + priority shuffle retry)
-**Prior issue:** [142](../.issues/142_full_space_time_astar_guidance_upgrade.md) — full space-time A* upgrade
-**Prior issue:** [140](../.issues/140_pibt_priority_inheritance_and_warmstart_integration.md) — PIBT PI + warm-start investigation
+**Issue:** `150` — 2-wide corridor detection (mechanism correct, still near-zero effect — the cost-term tiebreak position is too weak)
+**Prior issue:** `149` — 1-wide corridor detection (near-zero effect due to corridor-definition mismatch)
+**Prior issue:** `148` — real MovingAI benchmark maps (map-fidelity hypothesis test)
+**Prior issue:** `147` — ht_chantry connectivity fix (10× improvement) + counter-flow Guided-PIBT (negative result)
+**Prior issue:** `144` — swap technique (negative result, infrastructure-only)
+**Prior issue:** `143` — LaCAM escalation (greedy PIBT + priority shuffle retry)
+**Prior issue:** `142` — full space-time A* upgrade
+**Prior issue:** `140` — PIBT PI + warm-start investigation
 
 ---
 

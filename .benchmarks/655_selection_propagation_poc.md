@@ -1,6 +1,6 @@
 # Bench 655 — Selection-Set Fixpoint Propagation POC (GOAT G1–G4)
 
-> **Source:** katgpt-rs [Issue 655](../.issues/655_set_stabilizing_propagation_poc.md) /
+> **Source:** katgpt-rs `Issue 655` /
 > [Research 483](../.research/483_KEEP_KV_Centric_Memory_Management.md) (KEEP,
 > arXiv:2602.23592, DAC 2026; HippoRAG PPR class)
 > **Date:** 2026-08-16

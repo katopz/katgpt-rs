@@ -2,8 +2,8 @@
 
 > **Date:** 2026-06-17
 > **Status:** Exploratory — Super-GOAT candidate (per Research 241 §2.3). Novelty gate ⚠️ NOT FULLY CHECKED. No implementation yet.
-> **Fuses:** [Research 241](241_SwiReasoning_Explicit_Latent_Switch.md) (SwiR) × [Research 072](../.research/072_DMax_Soft_Parallel_Decode.md) (DMax SPD)
-> **Related Plans:** [Plan 275](../.plans/275_swir_switch_thinking.md) (SwiR), [Plan 109](../.plans/109_dmax_spd.md) (DMax SPD)
+> **Fuses:** [Research 241](241_SwiReasoning_Explicit_Latent_Switch.md) (SwiR) × `Research 072` (DMax SPD)
+> **Related Plans:** [Plan 275](../.plans/275_swir_switch_thinking.md) (SwiR), `Plan 109` (DMax SPD)
 > **Classification:** Public — generic inference mechanics (WHAT, not HOW)
 
 ---

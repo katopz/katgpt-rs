@@ -1,6 +1,6 @@
 # Plan 316: wasm32 Three-Target Unblock (Native / Browser / CF Worker)
 
-[← Index](README.md)
+[← Index](../README.md)
 
 ## Summary
 
@@ -114,7 +114,7 @@ the Vessel *projection* path (Model B) needed the getrandom + bytemuck fixes.
   §22) is documented as Alarm-driven at the same 50ms/20Hz rate — **not
   re-verified against `seal-edge-worker` itself in that session** (the repo
   isn't checked out in that environment). Tracked as
-  [riir-ai Issue 566](../../riir-ai/.issues/566_seal_edge_worker_alarm_reliability_recheck.md)
+  `riir-ai Issue 566`
   (open, blocked on someone checking the real deployment) so this doesn't
   read as a settled "Model A is the doc-56 edge design ✅ Works" a few
   lines above without the caveat that the *scheduling* half (not the

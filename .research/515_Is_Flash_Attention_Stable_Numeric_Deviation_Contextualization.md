@@ -2,7 +2,7 @@
 
 > **Source:** "Is Flash Attention Stable?" — Golden, Hsia, Sun, Acun, Hosmer, Lee, DeVito, Johnson, Wei, Brooks, Wu. Meta FAIR + Harvard. [arXiv:2405.02803](https://arxiv.org/abs/2405.02803) (2024-05-05, 6 pages)
 > **Date:** 2026-08-28
-> **Status:** Active — Gain verdict; probe issue filed ([Issue 697](../.issues/697_numeric_deviation_contextualization_probe.md)), riir-train monitor issue filed (riir-train Issue 492)
+> **Status:** Active — Gain verdict; probe issue filed (`Issue 697`), riir-train monitor issue filed (riir-train Issue 492)
 > **Related Research:** 487 (Massive Activations — sink-aware KV quant, fixed tolerances), 159 (KVarN), 270 (Wasserstein ground-metric caveat for categorical vocab), 355 (LieFlow — Wasserstein-1 as distribution distance)
 > **Related Plans:** 418 (MAG — `TransferMetric::Wasserstein1d` ships in `katgpt-core::mag::transfer`)
 > **Cross-ref (riir-ai / riir-train):** riir-ai Bench 773 (certifiable-metric lesson) + Issue 753 (f16 KV, 80K ctx, shape-independent tolerances) + Issues 731/716 (misattribution case studies); riir-train Issue 492 (drift probe + divergence ledger + dist-guard axis)

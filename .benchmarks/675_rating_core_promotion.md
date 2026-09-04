@@ -1,6 +1,6 @@
 # Bench 675 — `rating` core promotion (Issue 686): Elo/PL primitives, 4 copies → 1
 
-**Date:** 2026-08-25 · **Repo:** katgpt-rs · **Issue:** [#686](../.issues/686_elo_pl_core_promotion.md) (closed by this bench)
+**Date:** 2026-08-25 · **Repo:** katgpt-rs · **Issue:** `#686` (closed by this bench)
 **Consumers:** katgpt-pruners arena `EloCalculator` · katgpt-pruners proof `lambda_to_elo` · riir-ai `riir-games` ruliology `ParadigmRanking` · riir-clippy `src/elo.rs` (Issue 039)
 
 ## Verdict

@@ -1,7 +1,7 @@
 # Benchmark 287: CompressionDrafter on REAL Seal 17k Corpus — GOAT **FAILED** (latency)
 
 **Date:** 2026-06-17
-**Plan:** [287_compression_drafter_seal.md](../.plans/287_compression_drafter_seal.md) *(not created — negative result)*
+**Plan:** `287_compression_drafter_seal.md` *(not created — negative result)*
 **Prior:** [285_compression_drafter_goat.md](285_compression_drafter_goat.md) (synthetic 2KB corpus, also FAILED)
 **Feature gates:** `compression_drafter` (katgpt-core), `quest_compression_draft` (riir-games)
 **Status:** ❌ **GOAT FAILED** — real corpus exposes latency & quality problems the synthetic bench hid.

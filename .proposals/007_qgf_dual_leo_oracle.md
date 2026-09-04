@@ -7,7 +7,7 @@ Fusion of: Plan 268 (QGF LeoHeadOracle) × Plan 155 (DualLeoMixer) × Plan 460 (
 Related:
 - [Plan 268](../.plans/268_qgf_test_time_q_guided_flow.md) — QGF substrate, ships `LeoHeadOracle` + `FlowFieldOracle`
 - [Plan 460 root-cause](../.benchmarks/460_flow_field_dual_leo_postmax_goat.md) — the pre-vs-post-max nonlinearity lesson this proposal carries forward
-- [Plan 459 pre-max dual fusion](../.benchmarks/459_flow_field_dual_leo_pre_max_goat.md) — the OG attempt; lesson carrier
+- `Plan 459 pre-max dual fusion` — the OG attempt; lesson carrier
 - Research 003 §"Cognitive/Reasoning — the New Moat" — basic public / GOAT private
 
 ## TL;DR

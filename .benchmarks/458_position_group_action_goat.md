@@ -1,6 +1,6 @@
 # Benchmark 458 — Unified `PositionGroupAction` Trait GOAT Gate
 
-> **Issue:** [160](../.issues/160_position_group_action_trait.md)
+> **Issue:** `160`
 > **Feature:** `position_group_action` (opt-in; implies `grapem_rodrigues`)
 > **Date:** 2026-07-17
 > **Verdict:** ✅ **G1–G4 ALL PASS** (in-crate unit tests). Primitive is GOAT-validated. Promotion to default-on **deferred** (vocabulary bridge — no hot-path consumer yet).
@@ -59,9 +59,9 @@ The trait implies `grapem_rodrigues` (for `GrapeMAction`), which is also opt-in.
 
 ## Cross-references
 
-- [Issue 160](../.issues/160_position_group_action_trait.md) — source issue (T1–T6 all complete).
-- [Issue 159](../.issues/159_grapem_rank2_rodrigues_exponential.md) — GRAPE-M primitive (soft-dep; `GrapeMAction` wraps `Rank2Plane`).
-- [Issue 161](../.issues/161_grape_ap_vector_similarity_gates.md) — GRAPE-AP vector gates (the strict generalization of `WallAction`).
+- `Issue 160` — source issue (T1–T6 all complete).
+- `Issue 159` — GRAPE-M primitive (soft-dep; `GrapeMAction` wraps `Rank2Plane`).
+- `Issue 161` — GRAPE-AP vector gates (the strict generalization of `WallAction`).
 - [Research 446](../.research/446_GRAPE_Group_Representational_Position_Encoding.md) — parent distillation.
 - [`crates/katgpt-core/src/position_group_action.rs`](../crates/katgpt-core/src/position_group_action.rs) — the trait + 6 impls (795 lines incl. docs + tests).
 - [Benchmark 457](457_grapem_rodrigues_goat.md) — Issue 159 GOAT gate.

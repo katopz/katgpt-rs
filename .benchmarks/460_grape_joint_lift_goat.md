@@ -1,6 +1,6 @@
 # Benchmark 460 — GRAPE Joint Lift (`GL(d+2)` Composition) GOAT Gate
 
-**Issue:** [163](../.issues/163_grape_joint_lift_gl_d_plus_2.md)
+**Issue:** `163`
 **Feature:** `grape_joint_lift` (opt-in, implies `grapem_rodrigues`)
 **Source:** Zhang et al., *GRAPE* (arXiv:2512.07805, ICLR 2026, **Appendix E**)
 **Module:** [`crates/katgpt-core/src/grape_joint_lift.rs`](../crates/katgpt-core/src/grape_joint_lift.rs)
@@ -203,7 +203,7 @@ CARGO_TARGET_DIR=/tmp/grape_joint_lift cargo clippy -p katgpt-core --all-feature
 
 ## Cross-references
 
-- [Issue 163](../.issues/163_grape_joint_lift_gl_d_plus_2.md) — this primitive's spec.
+- `Issue 163` — this primitive's spec.
 - [Research 446](../.research/446_GRAPE_Group_Representational_Position_Encoding.md) — GRAPE distillation.
 - [`.benchmarks/457`](457_grapem_rodrigues_goat.md) — GRAPE-M rotary (the top-left block).
 - [`.benchmarks/458`](458_position_group_action_goat.md) — Unified `PositionGroupAction` trait.

@@ -137,7 +137,7 @@ This phase is intentionally deferred. Per the Gain-tier verdict (Research 461), 
 ## References
 
 - [Research 461](../.research/461_PRO_LONG_Programmatic_Memory_Log_Search.md) — the Gain verdict + distillation.
-- [Plan 124](124_event_log_fork_diff.md) — the existing `EventLog<A>` primitive this plan extends.
+- `Plan 124` — the existing `EventLog<A>` primitive this plan extends.
 - [arxiv 2607.20064](https://arxiv.org/abs/2607.20064) — PRO-LONG source paper.
 - Research 368 (AutoMem) — the closest verdict cousin; LOG/PLAN two-phase memory management. Composable with this plan's filter API (AutoMem's PLAN phase can use `filter` to decide what to recall).
 - Research 300 (Trellis/Experience Graph, riir-neuron-db) — the closest shipped query layer; latent-seeded NS traversal. Composes with this plan's pattern axis via `Predicate::Custom`.

@@ -1,7 +1,7 @@
 # Bench 661 — Single-submit Metal forward (Issue 660)
 
 **Date:** 2026-08-17
-**Issue:** [660](../.issues/660_metal_single_submit_forward.md) — single-submit (graph-fused) Metal forward
+**Issue:** `660` — single-submit (graph-fused) Metal forward
 **Device:** M3 Max (local), GPU-exclusive (no other compute consumer)
 **Config:** `Config::micro()` (vocab=27, n_embd=16, n_head=4, n_layer=1, mlp_hidden=64) — overhead-dominated by design; this config measures dispatch/sync cost, not compute.
 

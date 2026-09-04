@@ -101,7 +101,7 @@ Bottom-up convergence is a **cognition-stack staging law**: sense → HLA → em
 
 | Output | File |
 |---|---|
-| Open primitive (opt-in `svd_cca` feature, G1–G4 gates) | katgpt-rs [Issue 684](../.issues/684_svd_cca_open_primitive.md) |
+| Open primitive (opt-in `svd_cca` feature, G1–G4 gates) | katgpt-rs `Issue 684` |
 | Training recipes (monitor → adaptive freeze → measured ranks → distill selection) | riir-train [Plan 349](../../riir-train/.plans/349_svcca_freeze_training_recipes.md) |
 | Consumer follow-ups (file on primitive landing) | ndb `can_freeze` v2 + staged bottom-up commitment; riir-ai hot-swap equivalence gate + belief-alignment PoC |
 

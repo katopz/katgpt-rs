@@ -2,7 +2,7 @@
 
 **Extends:** [Research 135 — Parallax](135_Parallax_Parameterized_Local_Linear_Attention.md)
 **Implementation:** `crates/katgpt-core/src/parallax_attn/mod.rs` (`ParallaxActivation::Sigmoid`)
-**Plan:** [`.plans/140_sigmoid_parallax.md`](../.plans/140_sigmoid_parallax.md)
+**Plan:** ``.plans/140_sigmoid_parallax.md``
 **Status:** ✅ Implemented, 10/10 tests pass
 
 ---

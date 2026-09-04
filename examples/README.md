@@ -295,7 +295,7 @@ cargo run --example review_01_metrics --features bandit
 ## 13. Go (AutoGo)
 
 Go AI with 6 player strategies (Random/Greedy/Validator/HL/GZero/MCTS), Tromp-Taylor scoring.
-Full docs: [`.docs/14_go_arena.md`](../.docs/14_go_arena.md). API-bridge examples need a
+Full docs: ``.docs/14_go_arena.md``. API-bridge examples need a
 running AutoGo server (`scripts/autogo_server.sh`).
 
 ```bash
@@ -372,7 +372,7 @@ cargo run --example rt_turbo_02_decode_bench --features rt_turbo
 
 ## 21. SpecHop (Plan 131)
 
-Continuous multi-hop speculation pipeline. Full docs: [`.docs/16_spechop_architecture.md`](../.docs/16_spechop_architecture.md).
+Continuous multi-hop speculation pipeline. Full docs: ``.docs/16_spechop_architecture.md``.
 
 ```bash
 cargo run --example spechop_01_pipeline --features spechop

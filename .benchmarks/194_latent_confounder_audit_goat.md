@@ -1,6 +1,6 @@
 # Benchmark 194 — LatentConfounderAudit GOAT Gate
 
-> **Issue:** [katgpt-rs/.issues/194_latent_confounder_audit_primitive.md](../.issues/194_latent_confounder_audit_primitive.md) *(removed per noise-reduction rule — this file is the durable home)*
+> **Issue:** `katgpt-rs/.issues/194_latent_confounder_audit_primitive.md` *(removed per noise-reduction rule — this file is the durable home)*
 > **Research:** [katgpt-rs/.research/460_CD_LAM_Latent_Confounder_Audit_Diagnostics.md](../.research/460_CD_LAM_Latent_Confounder_Audit_Diagnostics.md)
 > **Source paper:** [arXiv:2607.09185](https://arxiv.org/abs/2607.09185) — Wei et al., *Causally Debiased Latent Action Model for Embodied Action Conditioned World Models* (CD-LAM §III-B + Appendix A)
 > **Date:** 2026-07-28

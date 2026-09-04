@@ -373,12 +373,12 @@ The Issue 545 PoC (§8) proved the gain on Scenario C (realistic 13-node game KG
 
 ## 7. Cross-references
 
-- **Closest cousin:** [Research 398](.research/398_Canvas_Engineering_Declared_Causal_Topology_Compiler.md) — Canvas schema compiler + reachability semantics. **The declared-topology + reachability half.** This paper adds the algorithmic-identification half.
-- **DEC substrate:** [Research 219](.research/219_Topological_Neural_Operators_DEC_Inference.md) + [Research 296](.research/296_Stokes_Calculus_Dec_Vocabulary_Crosswalk.md) + Plans 251/252 — graph/topology substrate.
-- **Viable Manifold Graph:** [Research 294](.research/294_Viable_Manifold_Graph_Primitive.md) + Plan 312 — CSR reachability.
+- **Closest cousin:** `Research 398` — Canvas schema compiler + reachability semantics. **The declared-topology + reachability half.** This paper adds the algorithmic-identification half.
+- **DEC substrate:** `Research 219` + `Research 296` + Plans 251/252 — graph/topology substrate.
+- **Viable Manifold Graph:** `Research 294` + Plan 312 — CSR reachability.
 - **KG triples:** `riir-ai/crates/riir-engine/src/kg/mod.rs` + `riir-neuron-db/src/vibe.rs` — the natural ADMG source if causal ID is ever wired.
 - **Experience Graph:** `riir-neuron-db/src/experience_graph/` (Plan 319, Research 300/301) — graph database substrate, potential consumer.
-- **Interventional SFT:** [Research 043](.research/043_Interventional_SFT_Causal_Token_Masking.md) — Pearl do-calculus at the token level (training context). Different layer.
+- **Interventional SFT:** `Research 043` — Pearl do-calculus at the token level (training context). Different layer.
 - **Tropical (max,+):** Plan 337, Research 321 — the min-plus interpretation the paper mentions in §3.1.
 - **Claim Rubric:** Plan 307 — L1/L2/L3 evidence ladder, potential consumer for interventional signatures.
 - **LatCal commitment:** `riir-chain/src/encoding/latcal*.rs` — sync-boundary bridge angle for committed causal claims.

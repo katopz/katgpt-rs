@@ -819,11 +819,11 @@ flowchart LR
 
 Enables latent-to-latent streaming, freeze/thaw patching, federated context, and KG octree leaf patching. Feature gate: `mux_latent_context` (**default-ON**, GOAT 5/5 PASS).
 
-📖 Plan: [`.plans/238_mux_latent_superposition_fusion.md`](.plans/238_mux_latent_superposition_fusion.md).
+📖 Plan: ``.plans/238_mux_latent_superposition_fusion.md``.
 
 #### MUX-Latent Wire Patch (Plan 243)
 
-Latent-to-latent patching over the wire — no decompress/recompress round-trip. Patches MUX latent slots as KG octree leaf nodes. 68-byte wire format (4B segment_id + 32B weights + 32B BLAKE3). SIMD batch at ≥100K patches/sec. BLAKE3 commitment + scalar projections only on wire (no 64-dim HLA). Feature gate: `mux_latent_wire`. 📖 Plan: [`.plans/243_mux_latent_wire_patch.md`](.plans/243_mux_latent_wire_patch.md).
+Latent-to-latent patching over the wire — no decompress/recompress round-trip. Patches MUX latent slots as KG octree leaf nodes. 68-byte wire format (4B segment_id + 32B weights + 32B BLAKE3). SIMD batch at ≥100K patches/sec. BLAKE3 commitment + scalar projections only on wire (no 64-dim HLA). Feature gate: `mux_latent_wire`. 📖 Plan: ``.plans/243_mux_latent_wire_patch.md``.
 
 ### 🧵 ThoughtFold: Inference-Time Chain Folding (Plan 195)
 
@@ -1480,7 +1480,7 @@ impl<A, const D: usize> SalienceTriGate<A, D> {
 
 The D=8 latency (9.11 ns) is comparable to the crate's reference hot-path kernel `evolve_hla` (~14 ns for D=8) — the two-stacked-sigmoid design (one extra dot-product over a pure-sigmoid gate) costs ~5 ns of additional latency, well within the 50 ns budget. See [`.benchmarks/303_salience_tri_gate_goat.md`](.benchmarks/303_salience_tri_gate_goat.md).
 
-Feature gate: `salience_tri_gate` (**DEFAULT-ON** since Phase 5 GOAT PASS 2026-06-23). 📖 Plan: [`.plans/303_salience_tri_gate_primitive.md`](.plans/303_salience_tri_gate_primitive.md), Research: [`.research/281_BoM_Salience_Gate.md`](.research/281_BoM_Salience_Gate.md), Paper: [JoyAI-VL-Interaction, arxiv 2606.14777](https://arxiv.org/abs/2606.14777). NPC wiring (per-NPC salience gate runtime) lives in riir-ai Plan 330.
+Feature gate: `salience_tri_gate` (**DEFAULT-ON** since Phase 5 GOAT PASS 2026-06-23). 📖 Plan: [`.plans/303_salience_tri_gate_primitive.md`](.plans/303_salience_tri_gate_primitive.md), Research: ``.research/281_BoM_Salience_Gate.md``, Paper: [JoyAI-VL-Interaction, arxiv 2606.14777](https://arxiv.org/abs/2606.14777). NPC wiring (per-NPC salience gate runtime) lives in riir-ai Plan 330.
 
 Examples:
 - `cargo run --example salience_tri_gate_basic --features salience_tri_gate`
@@ -2035,7 +2035,7 @@ output_i = h_i + (γ / Σ_j r_j) · Σ_j α_ij · r_j · (v_j − h_i)
 
 The `r_j` weighting concentrates the aggregate toward high-reliability entities, converting plain averaging (which dilutes signal — the original G8 failure) into amplification. When `r_j = 1` for all `j`, this reduces **bit-identically** to plain SA (G1 special case). The companion `clr_reliability_scores` helper computes `r_j = (mean_m sigmoid(h_j · dir_m))^M` — the CLR headline formula (Plan 284), distilled from Wang/Plotkin PNAS 2025 feedback-payoff theory (Research 469).
 
-**G8 closure** (the quality gate the sibling targets): CLR reliability identification **17.6%** vs plain SA **8.9%** (Δ+8.7pp ≥ 5pp target); CLR-weighted aggregate amplification **3.88×** (≥ 2× target) on the Issue 575 N=64 crowd threat-detection fixture. **G1/G2/G4 ALL PASS**: uniform≡plain SA bit-identical (dense+topk), latency ratio 1.00× (≤ 2× target — one extra multiply per peer), 0 allocs/100 calls. Feature gate: `clr_weighted_set_attention` (**default-ON**). 📖 Plan: [`.plans/570_clr_weighted_set_attention.md`](.plans/570_clr_weighted_set_attention.md), PoC: [Issue 575](.issues/575_set_attention_feedback_payoff_fusion.md), Research: [469 §PoC Addendum](.research/469_collective_intelligence_payoff_schemes.md).
+**G8 closure** (the quality gate the sibling targets): CLR reliability identification **17.6%** vs plain SA **8.9%** (Δ+8.7pp ≥ 5pp target); CLR-weighted aggregate amplification **3.88×** (≥ 2× target) on the Issue 575 N=64 crowd threat-detection fixture. **G1/G2/G4 ALL PASS**: uniform≡plain SA bit-identical (dense+topk), latency ratio 1.00× (≤ 2× target — one extra multiply per peer), 0 allocs/100 calls. Feature gate: `clr_weighted_set_attention` (**default-ON**). 📖 Plan: [`.plans/570_clr_weighted_set_attention.md`](.plans/570_clr_weighted_set_attention.md), PoC: `Issue 575`, Research: [469 §PoC Addendum](.research/469_collective_intelligence_payoff_schemes.md).
 
 ---
 
@@ -2435,7 +2435,7 @@ Paper-faithful **Lifelong LaCAM with Local Guidance (LLLG)** — a modelless, tr
 
 **Five pluggable seams** (the Super-GOAT fusion surface): `CostFn<P>`, `LocalGuidanceSource<P>`, `WarmStartScheme`, `HindranceEstimator<P>`, and the new **`FlowField<P>`** (Issue 149 — static topology-aware one-way direction assignment for 1-wide corridor cells, zero regression on open maps). Real MovingAI benchmark maps landed via Issue 148 (ht_chantry improved 0.09→0.27 on the real 162×141 map vs the synthetic approximation). The two G1 failures (warehouse / ht_chantry) are honest and root-caused: the greedy PIBT lacks priority inheritance, and real game-map corridors are 2-wide (only 8 of 7461 ht_chantry cells match the strict 1-wide corridor detector — broadening to 2-wide passage detection is the documented next step). **Promotion: KEEP OPT-IN** — substrate is modelless (promotion allowed) but G1/G2 gaps and unvalidated Super-GOAT claim (pending riir-ai/489 G5–G7 fusion) make promotion premature.
 
-Feature gate: `multi_agent_path` (**opt-in**). 📖 Plan: [`.plans/440_lifelong_lacam_multi_agent_pathfinding_substrate.md`](.plans/440_lifelong_lacam_multi_agent_pathfinding_substrate.md), Research: [`.research/424_Lifelong_LaCAM_Local_Guidance_Multi_Agent_Pathfinding.md`](.research/424_Lifelong_LaCAM_Local_Guidance_Multi_Agent_Pathfinding.md), Benchmark: [`.benchmarks/440_lllg_paper_repro_goat.md`](.benchmarks/440_lllg_paper_repro_goat.md), Issues: [148](.issues/148_real_movingai_maps.md) (real MovingAI maps) · [149](.issues/149_guided_pibt_flow_direction_assignment.md) (Guided-PIBT flow field), Paper: [arXiv:2605.16855](https://arxiv.org/abs/2605.16855). Cross-refs: [Research 219](.research/219_Topological_Neural_Operators_DEC_Inference.md) (hindrance ≈ codifferential reframing), [Research 354](.research/354_Cross_Datapoint_Set_Attention_NPT.md) (latent-domain analog).
+Feature gate: `multi_agent_path` (**opt-in**). 📖 Plan: [`.plans/440_lifelong_lacam_multi_agent_pathfinding_substrate.md`](.plans/440_lifelong_lacam_multi_agent_pathfinding_substrate.md), Research: [`.research/424_Lifelong_LaCAM_Local_Guidance_Multi_Agent_Pathfinding.md`](.research/424_Lifelong_LaCAM_Local_Guidance_Multi_Agent_Pathfinding.md), Benchmark: [`.benchmarks/440_lllg_paper_repro_goat.md`](.benchmarks/440_lllg_paper_repro_goat.md), Issues: `148` (real MovingAI maps) · `149` (Guided-PIBT flow field), Paper: [arXiv:2605.16855](https://arxiv.org/abs/2605.16855). Cross-refs: [Research 219](.research/219_Topological_Neural_Operators_DEC_Inference.md) (hindrance ≈ codifferential reframing), [Research 354](.research/354_Cross_Datapoint_Set_Attention_NPT.md) (latent-domain analog).
 
 ---
 
@@ -2731,7 +2731,7 @@ Two modelless paths, both zero-allocation after construction:
 
 > **Verdict: GOAT, not Super-GOAT** (post-revision). The equilibrium *concept* is covered by shipped CCE (Plan 295). The novelty is the *mechanism* — endogenous correlation device. Phase 7 opens a separate scoped Super-GOAT claim for indirect inference ONLY.
 
-Feature gate: `similarity_inference` (**OPT-IN** — demoted from DEFAULT-ON 2026-09-04 per the quarterly goat-audit, riir-ai [Issue 867](../riir-ai/.issues/867_cross_repo_goat_cherry_pick_audit.md) T1.3: default-on for 24 days with zero consumers workspace-wide; promoted DEFAULT-ON 2026-08-11, Plan 526 Phase 6). Pure modelless (Bayesian posterior + sigmoid + best-response comparator; no training). Zero runtime cost unless invoked. 📖 Plan: [`526`](.plans/526_similarity_inference_primitive.md), Research: [`.research/471_Similarity_Inference_Embedded_Equilibrium.md`](.research/471_Similarity_Inference_Embedded_Equilibrium.md), GOAT bench: [`.benchmarks/579_similarity_inference_goat.md`](.benchmarks/579_similarity_inference_goat.md), Source: [`crates/katgpt-core/src/similarity_inference/`](crates/katgpt-core/src/similarity_inference/). Paper: [arXiv:2608.03958](https://arxiv.org/abs/2608.03958).
+Feature gate: `similarity_inference` (**OPT-IN** — demoted from DEFAULT-ON 2026-09-04 per the quarterly goat-audit, riir-ai `Issue 867` T1.3: default-on for 24 days with zero consumers workspace-wide; promoted DEFAULT-ON 2026-08-11, Plan 526 Phase 6). Pure modelless (Bayesian posterior + sigmoid + best-response comparator; no training). Zero runtime cost unless invoked. 📖 Plan: [`526`](.plans/526_similarity_inference_primitive.md), Research: [`.research/471_Similarity_Inference_Embedded_Equilibrium.md`](.research/471_Similarity_Inference_Embedded_Equilibrium.md), GOAT bench: [`.benchmarks/579_similarity_inference_goat.md`](.benchmarks/579_similarity_inference_goat.md), Source: [`crates/katgpt-core/src/similarity_inference/`](crates/katgpt-core/src/similarity_inference/). Paper: [arXiv:2608.03958](https://arxiv.org/abs/2608.03958).
 
 ---
 

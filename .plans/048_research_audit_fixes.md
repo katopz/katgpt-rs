@@ -483,7 +483,7 @@ The backward pass architecture is sound. Only the attention gradient path needs 
 
 # Research Audit Results (Plan 048)
 
-[← Index](README.md) · **Part V · Research & Results**
+[← Index](../README.md) · **Part V · Research & Results**
 
 Cross-reference of all 21 research papers evaluated against the riir-ai / katgpt-rs implementation. Audit conducted as part of Plan 048: Research Audit Fixes.
 
@@ -599,4 +599,4 @@ Free Transformer proposes routing-free inference by collapsing the routing layer
 
 ---
 
-[← Index](README.md) · **Prev:** [30 — WASM SIMD Batch](30_wasmi_simd_batch.md) · **Next:** [20 — Paper Feature Comparison](20_paper_feature_comparison.md) →
+[← Index](../README.md) · **Prev:** `30 — WASM SIMD Batch` · **Next:** `20 — Paper Feature Comparison` →

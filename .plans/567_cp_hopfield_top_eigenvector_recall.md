@@ -155,7 +155,7 @@ memories.
 
 ---
 
-## Phase 6 — Fusion B / G6 (KG Capacity) — MEASURED, FAIL (LLG unblock refuted + projected-cosine diagnostic) — [Issue 033](../../riir-neuron-db/.issues/033_cp_hopfield_phase6_g6_kg_capacity_cp2.md)
+## Phase 6 — Fusion B / G6 (KG Capacity) — MEASURED, FAIL (LLG unblock refuted + projected-cosine diagnostic) — `Issue 033`
 
 ### Scope correction (2026-08-04)
 

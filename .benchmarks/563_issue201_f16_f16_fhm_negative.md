@@ -4,8 +4,8 @@
 
 ## Origin
 
-[Issue 201](../.issues/201_full_f16_forward_investigation.md) is the successor to
-[Issue 200](../.issues/200_f16_weight_quantization_forward_base.md). Issue 200
+`Issue 201` is the successor to
+`Issue 200`. Issue 200
 honestly closed the **weight-only** f16 path (f16 weights × f32 activations) as a
 negative result on Apple Silicon: f32 activations limit the bandwidth reduction to
 25%, and the FCVT latency on the critical path eats the savings (G2 FAIL: 1.7×

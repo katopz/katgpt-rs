@@ -1,6 +1,6 @@
 # SwiR Switch-Thinking — Engine Primitive
 
-> **Plan:** [275](../../.plans/275_swir_switch_thinking.md) · **Research:** [241](../../.research/241_SwiReasoning_Explicit_Latent_Switch.md) · **Paper:** [SwiReasoning (ICLR 2026)](https://arxiv.org/abs/2510.05069) · **Feature:** `swir_switch_thinking`
+> **Plan:** `275` · **Research:** `241` · **Paper:** [SwiReasoning (ICLR 2026)](https://arxiv.org/abs/2510.05069) · **Feature:** `swir_switch_thinking`
 
 A modelless, MIT-licensed Rust port of SwiReasoning's explicit↔latent reasoning
 mode controller. Three training-free primitives that switch a transformer
@@ -112,7 +112,7 @@ Hosts that already plug into `thinking_cot` (Plan 194) should prefer
 ## References
 
 - **Paper:** [SwiReasoning: Switching between Explicit and Latent Reasoning](https://arxiv.org/abs/2510.05069) — Shi et al., ICLR 2026
-- **Plan:** [`katgpt-rs/.plans/275_swir_switch_thinking.md`](../../.plans/275_swir_switch_thinking.md)
-- **Research:** [`katgpt-rs/.research/241_SwiReasoning_Explicit_Latent_Switch.md`](../../.research/241_SwiReasoning_Explicit_Latent_Switch.md)
-- **GOAT results:** [`katgpt-rs/.benchmarks/275_swir_switch_thinking_goat.md`](../../.benchmarks/275_swir_switch_thinking_goat.md)
+- **Plan:** ``katgpt-rs/.plans/275_swir_switch_thinking.md``
+- **Research:** ``katgpt-rs/.research/241_SwiReasoning_Explicit_Latent_Switch.md``
+- **GOAT results:** ``katgpt-rs/.benchmarks/275_swir_switch_thinking_goat.md``
 - **Precedent:** Plan 271 (`attn_match`) — same synthetic-only GOAT pattern, same engine/fuel split

@@ -212,7 +212,7 @@ Per "Report the Floor" rule (Research 322), G1/G6 floor is **good system prompt*
 
 ### P5 — Promotion / demotion
 - [ ] T6.1 If G1–G6 all pass → promote `canon` to default-on; write benchmark note in `.benchmarks/`
-- [x] T6.2 If G5/G6 fail → keep opt-in, document scope limit, ship as intra-arch GOAT — **DONE 2026-07-28 (Bench 562).** G1/G2/G4 gates measured and PASS for all three adapters (ProcrustesAdapter + SubspaceAdapter + MaskAdapter). The substrate carries a measured GOAT stamp. Features stay opt-in (default-off) because the cross-arch Super-GOAT headline is permanently demoted (Bench 427); promotion to default-on would require a new proposal re-arguing the substrate's value proposition post-demotion. **Known limitation:** ProcrustesAdapter `project_into` at d=2304 is 3.9ms (O(d²) scaling — not gated against 50µs; the d=256 hot-path gate passes at 29µs). See [Bench 562](.benchmarks/562_katgpt_canon_goat.md) for the full gate matrix.
+- [x] T6.2 If G5/G6 fail → keep opt-in, document scope limit, ship as intra-arch GOAT — **DONE 2026-07-28 (Bench 562).** G1/G2/G4 gates measured and PASS for all three adapters (ProcrustesAdapter + SubspaceAdapter + MaskAdapter). The substrate carries a measured GOAT stamp. Features stay opt-in (default-off) because the cross-arch Super-GOAT headline is permanently demoted (Bench 427); promotion to default-on would require a new proposal re-arguing the substrate's value proposition post-demotion. **Known limitation:** ProcrustesAdapter `project_into` at d=2304 is 3.9ms (O(d²) scaling — not gated against 50µs; the d=256 hot-path gate passes at 29µs). See `Bench 562` for the full gate matrix.
 
 ---
 

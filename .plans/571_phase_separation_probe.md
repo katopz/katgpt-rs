@@ -163,4 +163,4 @@ Both are documented in the module rustdoc + cross-referenced to Research 470.
 - [Research 470](../.research/470_Lonely_Runner_Phase_Separation_Probe.md) — public distillation + Super-GOAT verdict
 - [riir-ai/.research/334](../../riir-ai/.research/334_phase_separation_game_runtime_guide.md) — private game-runtime guide + fusion map
 - [Research 056](../.research/056_OpenAI_Unit_Distance_Disproof.md) — same combinatorial family (chromatic number bounds on distance graphs)
-- [Plan 303](303_per_tick_salience_tri_gate.md) — Salience Tri-Gate (primary fusion target, riir-ai follow-up)
+- `Plan 303` — Salience Tri-Gate (primary fusion target, riir-ai follow-up)

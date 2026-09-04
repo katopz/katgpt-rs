@@ -9,7 +9,7 @@ default-on.** Kept for regression comparison and GOAT-gate audit trail.
 This crate exists to make deletion safe and auditable, not to live forever.
 Each item here carries a `TODO(deprecated): delete after ...` comment. The
 membership table with citations lives in
-[`katgpt-rs/.docs/001_loser_sweep_audit.md`](../../.docs/001_loser_sweep_audit.md).
+``katgpt-rs/.docs/001_loser_sweep_audit.md``.
 
 ### 3-category rule (recap)
 

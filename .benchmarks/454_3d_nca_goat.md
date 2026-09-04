@@ -6,7 +6,7 @@
 
 **Date:** 2026-07-16
 **Plan:** [katgpt-rs/.plans/454](../.plans/454_3d_cellcomplex_grid_stochastic_birth_death.md)
-**Issue:** [katgpt-rs/.issues/155](../.issues/155_3d_cellcomplex_grid_stochastic_birth_death.md)
+**Issue:** `katgpt-rs/.issues/155`
 **Bench:** `crates/katgpt-dec/benches/bench_454_3d_nca_goat.rs`
 **Status:** ✅ **ALL GATES PASS — `grid_3d` PROMOTED TO DEFAULT-ON**
 

@@ -155,6 +155,6 @@ so the negative is visible in CI logs rather than hidden.
 
 - [Plan 568](../.plans/568_recurrent_residual_quantization.md) — the parent plan
 - [Research 467](../.research/467_Recurrent_Residual_Quantization.md) — the parent research note
-- [Plan 452](../.plans/452_simd_lut_fused_dequant_dot.md) — SIMD LUT fused dequant+dot (Phase 3 substrate)
+- `Plan 452` — SIMD LUT fused dequant+dot (Phase 3 substrate)
 - [Research 418](../.research/418_StreamDQ_SIMD_LUT_DeQuant.md) — StreamDQ → SIMD LUT DeQuant
 - [Bench 563](563_issue201_f16_f16_fhm_negative.md) — the prior negative-result benchmark this file mirrors in format

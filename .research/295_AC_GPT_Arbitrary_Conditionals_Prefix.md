@@ -188,7 +188,7 @@ If G1–G4 pass → promote `ac_prefix` to default. If G2 fails (no speedup over
 
 ## 5. Cross-references
 
-- **Plan:** [295_AC_GPT_Prefix_Primitive.md](../.plans/295_AC_GPT_Prefix_Primitive.md) (next free plan slot)
+- **Plan:** `295_AC_GPT_Prefix_Primitive.md` (next free plan slot)
 - **Closest shipped cousins:**
   - P025 — Bidirectional Prefill + Modality LoRA Switching (`LoraPair { reader, writer }`)
   - P066 — D2F Discrete Diffusion Forcing (`AttentionMode::BlockCausal`)

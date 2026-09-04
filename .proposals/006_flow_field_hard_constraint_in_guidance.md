@@ -4,7 +4,7 @@ Status: **REJECTED** (2026-07-18, Issue 182 Phase 4 GOAT FAIL — see "Verdict" 
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: Plan 440 Issue 149/150 (existing `GridFlowField` soft-cost seam) × Plan 453 (one-step LaCAM escalation) × Issue 546 diagnostic (riir-ai, P95 deadlock-chain = 8)
-Related: [Issue 182](../.issues/182_flow_field_hard_constraint_in_guidance.md) (the implementation plan — CLOSED with REVERT verdict; removed per noise-reduction rule, measurement record preserved in [Benchmark 440 §Follow-up attempt](../.benchmarks/440_lllg_paper_repro_goat.md#tldr) below), Issue 546 (riir-ai, removed per noise-reduction rule) (DEFERRED — the diagnostic that motivates this), [Benchmark 440](../.benchmarks/440_lllg_paper_repro_goat.md) (3/4 PASS), [Benchmark 453](../.benchmarks/453_lacam_escalation_goat.md) (one-step shipped)
+Related: `Issue 182` (the implementation plan — CLOSED with REVERT verdict; removed per noise-reduction rule, measurement record preserved in [Benchmark 440 §Follow-up attempt](../.benchmarks/440_lllg_paper_repro_goat.md#tldr) below), Issue 546 (riir-ai, removed per noise-reduction rule) (DEFERRED — the diagnostic that motivates this), [Benchmark 440](../.benchmarks/440_lllg_paper_repro_goat.md) (3/4 PASS), [Benchmark 453](../.benchmarks/453_lacam_escalation_goat.md) (one-step shipped)
 
 ## TL;DR
 
@@ -315,7 +315,7 @@ wrong and we revert.
 
 ## References
 
-- [Issue 182](../.issues/182_flow_field_hard_constraint_in_guidance.md) — implementation plan (CLOSED with REVERT verdict; removed per noise-reduction rule)
+- `Issue 182` — implementation plan (CLOSED with REVERT verdict; removed per noise-reduction rule)
 - Issue 546 (riir-ai, removed per noise-reduction rule) — DEFERRED, motivates this proposal
 - [Issue 546 diagnostic](../crates/katgpt-core/examples/ht_chantry_deadlock_chain_diagnostic.rs) (commit `2a8c378d`) — the P95=8 result
 - [Benchmark 440](../.benchmarks/440_lllg_paper_repro_goat.md) — LLLG paper reproduction (3/4 PASS)

@@ -1,7 +1,7 @@
 # Plan 569: Transition-Kernel-Constrained CCE LP (`TransitionKernelCce`)
 
 **Date:** 2026-08-06
-**Prior PoC:** [Issue 574](../.issues/574_transition_kernel_constraint_cce_poc.md) — T4 PASS
+**Prior PoC:** `Issue 574` — T4 PASS
 **Research:** [468 §8](../.research/468_Beckmann_Transport_Divergence_Constraint_CCE_MFG_Dynamics.md) — PoC Addendum 2
 **Closes:** `.docs/04_calibration/cce_moderator.md` §Limitations #2 (MFG dynamics gap)
 **Feature flag:** `transition_kernel` (opt-in → default-on if GOAT passes)

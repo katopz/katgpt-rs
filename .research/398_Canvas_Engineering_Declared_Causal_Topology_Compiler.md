@@ -449,7 +449,7 @@ stack (Plan 426) is the story to show off, not the canvas fusion.
 > attention mask) — same reachability guarantee, no transformer backbone, no training. The gated
 > graph is R398's first potential runtime consumer. See
 > [`R403`](403_Topology_Constrained_Latent_Functor_Composition.md) and
-> [Issue 122](../.issues/122_canvas_functor_topology_modelless_poc.md) (the FaithfulnessProbe-attributed PoC).
+> `Issue 122` (the FaithfulnessProbe-attributed PoC).
 
 
 ---

@@ -1,6 +1,6 @@
 # Bench 678 — Issue 689: LaProp `NormalizedMomentumAccumulator` GOAT
 
-**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** [689](../.issues/689_laprop_normalized_momentum_accumulator.md)
+**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** `689`
 **Source:** riir-train Research 428 (LaProp arXiv:2002.04839) Path-0 C2/C3.
 
 ## What shipped

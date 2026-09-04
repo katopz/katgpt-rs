@@ -294,7 +294,7 @@ Principle: peaked attention = knows what it needs = can afford to skip positions
 
 ## Implementation Path
 
-> **Implementation Status (2026-07-11):** All Phase 1–5 tasks below implemented via [Plan 225](../.plans/225_rat_plus_recurrence_bridge.md) — ✅ Complete (all tasks done). Feature gate: `rat_plus_bridge` (opt-in). The unchecked `- [ ]` markers below are stale; see Plan 225 for completion records.
+> **Implementation Status (2026-07-11):** All Phase 1–5 tasks below implemented via `Plan 225` — ✅ Complete (all tasks done). Feature gate: `rat_plus_bridge` (opt-in). The unchecked `- [ ]` markers below are stale; see Plan 225 for completion records.
 
 ### Phase 1: Wiring (Low Effort)
 - [x] Add `DilationFactor` enum to types

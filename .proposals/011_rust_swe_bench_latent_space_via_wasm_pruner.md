@@ -278,7 +278,7 @@ The original draft said "Training on Rust-SWE-bench — modelless-first mandate.
 > T5.3 FAIL (FAME commit is deterministic but produces degenerate blends from
 > random direction vectors — concentration-of-measure artifact; real freezer
 > needs data-derived directions, not random). See
-> [Issue 569](../.issues/569_swe_trajectory_geometry_synthetic_poc.md) for the
+> `Issue 569` for the
 > full verdict table + design-constraint analysis.
 >
 > **T5.3b ran 2026-08-02 (Issue 570).** Verdict: **PASS — Layer 4 validated on

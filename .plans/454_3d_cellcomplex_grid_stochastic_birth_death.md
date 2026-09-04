@@ -229,11 +229,11 @@ competition mechanism) + G4b gate respecification (<20% → <100%).
 
 ## References
 
-- [Issue 155](../.issues/155_3d_cellcomplex_grid_stochastic_birth_death.md) — the parent issue with the PoC results
+- `Issue 155` — the parent issue with the PoC results
 - [Sudhakaran et al. 2021](https://arxiv.org/abs/2103.08737) — "3D NCA Growth", ALIFE (doi:10.1162/isal_a_00451)
 - [`graph_laplacian_grid_into`](../crates/katgpt-dec/src/operators.rs) — the 5-point-stencil path this plan extends
 - [`evolve_motor_gated_field`](../crates/katgpt-dec/src/motor_gated.rs) — the zero-alloc scratch-buffer pattern `stochastic_birth_death_step` mirrors
-- [Plan 357](../.plans/357_motor_gated_dec_field.md) — the G5 latency fix that introduced the 2D stencil fast path (the pattern T3 extends)
+- `Plan 357` — the G5 latency fix that introduced the 2D stencil fast path (the pattern T3 extends)
 - [Research 404](../.research/404_Cells2Pixels_Resolution_Decoupled_NCA.md) — the parent NCA research note (Cells2Pixels, Gain verdict)
 
 ---

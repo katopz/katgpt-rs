@@ -1,6 +1,6 @@
 # Bench 679 — Issue 688: Mux height-gated commit + gap-trend narrowing GOAT
 
-**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** [688](../.issues/688_mux_commit_timing_height_gate_gap_narrowing.md)
+**Date:** 2026-08-26 · **Repo:** katgpt-rs · **Issue:** `688`
 **Source:** Coconut (arXiv:2412.06769v4) §4.4 + Fig. 6 — classic-heuristic
 port (quiescence/CNS/LRTA* defer-commit; successive-halving/Hyperband/
 Hoeffding-races narrowing). **No novelty claim.**

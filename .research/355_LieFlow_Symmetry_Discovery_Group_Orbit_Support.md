@@ -181,7 +181,7 @@ Two UNCERTAIN answers → **do not claim Super-GOAT candidate**. Issue 011 track
 ## 5. References
 
 - **Paper:** [arXiv:2512.20043](https://arxiv.org/abs/2512.20043) — Chen et al., ICML 2026 (PMLR 306).
-- **Linear-algebraic cousin:** [`katgpt-rs/.research/279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md`](279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md) + [`katgpt-rs/.plans/301_subspace_phase_gate.md`](../.plans/301_subspace_phase_gate.md).
+- **Linear-algebraic cousin:** [`katgpt-rs/.research/279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md`](279_Diffusion_Curse_Dimensionality_Subspace_Clustering_Fusion.md) + ``katgpt-rs/.plans/301_subspace_phase_gate.md``.
 - **Closest shipped instance:** [`riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md`](../../riir-neuron-db/.research/001_Subspace_Consolidation_Quality_Gate_Guide.md) (the `can_freeze` guide).
 - **Apply-known-group sibling:** [`riir-ai/.research/166_SE2_Equivariant_Game_Maps_Guide.md`](../../riir-ai/.research/166_SE2_Equivariant_Game_Maps_Guide.md).
 - **Stabilizer insight precedent:** [`riir-ai/.plans/318_latent_functor_rank_k_upgrade.md`](../../riir-ai/.plans/318_latent_functor_rank_k_upgrade.md) T4.8 (the dual-form orthogonal-blindness null result).

@@ -402,8 +402,8 @@ Per AGENTS.md constraint #2: `ω` is a posterior probability, not a categorical.
 - [`katgpt-rs/.research/274`](274_Optimal_CCE_Moderator_LP_No_Regret.md) — CCE Moderator (the *designer-steered* cousin; this primitive is the *similarity-inferred* complement).
 - [`katgpt-rs/.research/242`](242_Topological_State_Tracking_Recurrent_Belief.md) — MicroRecurrentBeliefState (the per-NPC posterior that `ω` rides on).
 - [`katgpt-rs/.research/111`](111_Emergent_Analogical_Reasoning_Transformers.md) — Analogical Reasoning (closest latent-similarity cousin).
-- [`katgpt-rs/.research/156`](../riir-ai/.research/156_clifford_wedge_npc_emotional_complementarity_guide.md) — Clifford Wedge Complementarity (the *complementarity* cousin; this is the *similarity* cousin).
-- [`katgpt-rs/.research/284`](../riir-ai/.research/284_Simplicity_Bias_Sampler_Coincidence_Extrema.md) — CLR (the reliability-vote cousin).
+- [`katgpt-rs/.research/156`](../../riir-ai/.research/156_clifford_wedge_npc_emotional_complementarity_guide.md) — Clifford Wedge Complementarity (the *complementarity* cousin; this is the *similarity* cousin).
+- ``katgpt-rs/.research/284`` — CLR (the reliability-vote cousin).
 - [`katgpt-rs/.research/469`](469_collective_intelligence_payoff_schemes.md) — Collective Intelligence Payoff (the credit-assignment cousin).
 - [`riir-ai/.research/335`](../../riir-ai/.research/335_Similarity_Inference_Emergent_Cooperation_Guide.md) — Private Super-GOAT guide (the other half of this note).
 

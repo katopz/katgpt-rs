@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-09
 **Plan**: `.plans/417_cross_resolution_simd_encode_transpose.md`
-**Source**: Issue [042](../.issues/042_function_space_encoder_decoder_trait_re_examination.md) (closed false-DRY) → user-requested perf-actual follow-up
+**Source**: Issue `042` (closed false-DRY) → user-requested perf-actual follow-up
 **Research**: `.research/395_NNs_to_NOs_Function_Space_Operator_Learning_Recipe.md` (§3 Routing flagged this exact opportunity)
 **Target**: `crates/katgpt-core/src/cross_resolution.rs::project_to_spectral_into`
 **Target dir**: `CARGO_TARGET_DIR=/tmp/xres417`

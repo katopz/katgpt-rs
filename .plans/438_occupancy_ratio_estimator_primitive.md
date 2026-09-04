@@ -238,7 +238,7 @@ See `.benchmarks/438_occupancy_ratio_goat.md` §"Bugs found and fixed" for detai
   the full 27-crate workspace sweep). One pre-existing error surfaced in
   `tests/bench_ldt_lattice_deduction.rs` (missing `loop_stability_mode` field,
   introduced by Plan 428's `loop_stability_fix` feature — NOT caused by
-  occupancy_ratio). Filed as [Issue 140](../.issues/140_loop_stability_mode_breaks_all_features_test.md).
+  occupancy_ratio). Filed as `Issue 140`.
   Per the "don't fix unrelated bugs" rule, left for the Plan 428 owner. The
   68 warnings in `katgpt-pruners` (clone_on_copy) and `examples/recos_goat.rs`
   (doc_lazy_continuation, needless_range_loop) are also pre-existing and

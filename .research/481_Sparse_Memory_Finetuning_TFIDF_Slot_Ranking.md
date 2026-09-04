@@ -167,7 +167,7 @@ F1 is the direct fix on a shipped primitive; F3 is the private continuation of R
 ## 6. Cross-references
 
 - **Closest cousins (shipped):** Research 387 (PKM + the F5 consolidation question this continues), Research 310 (RIZZ — branch-level non-interference; this note is the slot-level complement), Research 455 + riir-neuron-db Research 303 (Hebbian fact storing — construction-level interference avoidance via margins), Research 006 (Raven slots), Research 249 (DecentMem dual-pool stability/plasticity framing).
-- **Issues:** [katgpt-rs `.issues/650`](../.issues/650_pkm_episodic_idf_write_gate.md) — the P0 implementation + GOAT gate. **RESOLVED + removed (2026-08-15)** — record in [Bench 636](../.benchmarks/636_idf_write_gate.md): G1 PASS (+12.5pp norm-ramp / +1.6pp organic no-harm), G2 1.9× plain-write, G4 0 allocs, G3 bit-identical. Honest scope note recorded: random-within-pool outperforms IDF at read-width == write-pool; IDF is the relevance-aware policy.
+- **Issues:** `katgpt-rs `.issues/650`` — the P0 implementation + GOAT gate. **RESOLVED + removed (2026-08-15)** — record in [Bench 636](../.benchmarks/636_idf_write_gate.md): G1 PASS (+12.5pp norm-ramp / +1.6pp organic no-harm), G2 1.9× plain-write, G4 0 allocs, G3 bit-identical. Honest scope note recorded: random-within-pool outperforms IDF at read-width == write-pool; IDF is the relevance-aware policy.
 - **Source paper:** [arXiv:2510.15103](https://arxiv.org/abs/2510.15103); memory layers: [arXiv:2412.09764](https://arxiv.org/abs/2412.09764); follow-up: [arXiv:2604.05248](https://arxiv.org/abs/2604.05248).
 
 ---

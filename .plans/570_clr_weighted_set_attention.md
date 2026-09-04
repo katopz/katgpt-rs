@@ -1,7 +1,7 @@
 # Plan 570: CLR-Amplified Set Attention (`clr_weighted_set_attention`)
 
 **Date:** 2026-08-06
-**Prior PoC:** [Issue 575](../.issues/575_set_attention_feedback_payoff_fusion.md) — G8 CLOSED (CLR path)
+**Prior PoC:** `Issue 575` — G8 CLOSED (CLR path)
 **Research:** [469 §PoC Addendum](../.research/469_collective_intelligence_payoff_schemes.md) — Wang/Plotkin PNAS 2025 feedback-payoff distillation
 **Closes:** [Bench 354](../.benchmarks/354_set_attention_goat.md) L71 G8 documented limitation
 **Feature flag:** `clr_weighted_set_attention` (opt-in → default-on if GOAT passes)
@@ -128,8 +128,8 @@ default-on requires the GOAT gate to pass:
 
 ## Cross-references
 
-- [Issue 575](../.issues/575_set_attention_feedback_payoff_fusion.md) — the PoC (G8 CLOSED)
+- `Issue 575` — the PoC (G8 CLOSED)
 - [Research 469](../.research/469_collective_intelligence_payoff_schemes.md) — Wang/Plotkin distillation + PoC Addendum
 - [Bench 354](../.benchmarks/354_set_attention_goat.md) — the G8 documented limitation
 - [Research 255](../.research/255_VibeThinker_CLR_Test_Time_Reliability.md) — CLR (the ^M source)
-- [Plan 284](284_clr_vote.md) — CLR voter (the `reliability_gate` function)
+- `Plan 284` — CLR voter (the `reliability_gate` function)

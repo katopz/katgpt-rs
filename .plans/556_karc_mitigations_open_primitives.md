@@ -158,7 +158,7 @@ Promotion rule: each primitive ships behind its own feature flag (`karc_regime_g
 - [Research 288](../.research/288_KARC_Delay_Basis_Ridge_Forecaster.md) — KARC distillation.
 - [Plan 308](308_karc_delay_basis_ridge_forecaster.md) — KARC open primitive.
 - [Bench 010](../.benchmarks/010_report_the_floor_consolidated.md) — the structural periodic-blindness finding (con #1).
-- [Bench 152](../.benchmarks/152_karc_cross_game_transfer.md) — cross-game transfer rejection (con #3 — out of scope here).
+- `Bench 152` — cross-game transfer rejection (con #3 — out of scope here).
 - [Benchmark 308](../.benchmarks/308_karc_goat.md) §Phase 5 — G1 threshold-leg fix track (former Issue 185, resolved + removed).
 - [riir-ai Plan 514](../../riir-ai/.plans/514_karc_mitigations_runtime.md) — runtime integration of these primitives (LOD dispatch, octree-batched cells, mux wiring).
 

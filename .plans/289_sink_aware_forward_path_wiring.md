@@ -4,7 +4,7 @@
 **Prior work:**
 - [Plan 287](./287_sink_aware_attention.md) (sink-aware classifier mechanics — DONE, G3 FAIL → opt-in only)
 - [Plan 288](./288_sink_aware_flat_layout.md) (flat `&[f32]` variants — DONE, removes layout-mismatch blocker)
-- [Issue 001](../issues/001_sink_aware_g3_latency.md) (RESOLVED via cached variant)
+- `Issue 001` (RESOLVED via cached variant)
 
 **Target:** `crates/katgpt-core/src/parallax_attn/mod.rs` (extend) + `crates/katgpt-core/src/lib.rs` (re-export)
 **Status:** Complete. All GOAT gates PASS.

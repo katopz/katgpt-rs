@@ -23,7 +23,7 @@ The paper is a **learning-dynamics analysis** of three payoff schemes (expert, n
 | Niche-expert $\pi_A = -\rho_{eA}(Y_A - Y)^2$ (inverse-frequency) | Manifold Bandit (P370, G2 FAIL) + Quantile Balance Router (P455) + CCE Moderator Γ₀ | Partial — diversity-preserving routing ships, but as load-balancing not as a credit-assignment kernel |
 | **Feedback $\pi_A = Y_A(Y - \hat{Y})$** (rewards reformers; Lyapunov-convergent) | **CLR `(mean_m v_k,m)^M` (P284, DEFAULT-ON, G1 +78pp over majority)** + **CCE Moderator Γ₀ (P295, DEFAULT-ON, G1 +37.5%/+108% over Nash)** | **Covered at the math-shape level** — both are nonlinear gates that amplify samples pulling collective toward truth |
 
-The paper provides theoretical grounding (Lyapunov convergence of the feedback payoff) for a fusion opportunity we had identified but not closed: **Set Attention (P354) G8 collective inference FAILED** ("averaging cannot amplify detection; that's a use-case limitation"). The paper's feedback payoff is precisely the credit-assignment shape that converts plain averaging into amplification. Tracked in [Issue 575](../.issues/575_set_attention_feedback_payoff_fusion.md).
+The paper provides theoretical grounding (Lyapunov convergence of the feedback payoff) for a fusion opportunity we had identified but not closed: **Set Attention (P354) G8 collective inference FAILED** ("averaging cannot amplify detection; that's a use-case limitation"). The paper's feedback payoff is precisely the credit-assignment shape that converts plain averaging into amplification. Tracked in `Issue 575`.
 
 ---
 
@@ -75,7 +75,7 @@ Grep for `G8|collective[_\s]inference|averaging.*amplif|crowd[_\s]?coherence` hi
 
 The paper's feedback payoff is **precisely the credit-assignment shape that converts plain averaging into amplification**. Plain averaging gives every sample equal weight (the "expert" failure mode in the paper — but in the limit, not at the start); feedback-payoff weighting gives a sample weight proportional to how much it moves the collective toward truth. The paper proves Lyapunov convergence of this reweighting (paper §4).
 
-**This is the BTM-lesson pattern**: a paper whose core mechanism matches a documented limitation in shipped code. Per §1.55.2, the verdict is **Gain**, not Pass. Tracked in [Issue 575](../.issues/575_set_attention_feedback_payoff_fusion.md).
+**This is the BTM-lesson pattern**: a paper whose core mechanism matches a documented limitation in shipped code. Per §1.55.2, the verdict is **Gain**, not Pass. Tracked in `Issue 575`.
 
 ### 2.4 Fusion (the gain-angle — not a Super-GOAT, just a GOAT-tier fusion)
 
@@ -94,7 +94,7 @@ The fusion is: **Set Attention (P354) × CLR-style feedback payoff (P284)** — 
 
 The paper's three payoff schemes are conceptually covered by CLR (feedback shape, +78pp over majority) + CCE Moderator Γ₀ (designer-steerable crowd coordination, +37.5%/+108% over Nash) + Manifold Bandit / Quantile Balance Router (diversity-preserving routing). No new primitive needed at the math-shape level.
 
-**However, per §1.55.2 (BTM lesson):** the Set Attention G8 collective-inference failure is a documented limitation whose mechanism maps directly to the paper's feedback payoff. The actionable improvement is a PoC: replace plain averaging in Set Attention with feedback-payoff-weighted aggregation and check whether G8 closes. Filed as [Issue 575](../.issues/575_set_attention_feedback_payoff_fusion.md) — a PoC task, not a plan (per AGENTS.md "Create issue at .issues for poc, proof, optimization or refactor task, do not create plan").
+**However, per §1.55.2 (BTM lesson):** the Set Attention G8 collective-inference failure is a documented limitation whose mechanism maps directly to the paper's feedback payoff. The actionable improvement is a PoC: replace plain averaging in Set Attention with feedback-payoff-weighted aggregation and check whether G8 closes. Filed as `Issue 575` — a PoC task, not a plan (per AGENTS.md "Create issue at .issues for poc, proof, optimization or refactor task, do not create plan").
 
 **Not Super-GOAT** because:
 - Q1 partial (feedback-payoff math ships in CLR).
@@ -148,7 +148,7 @@ If PoC passes → promote to a Plan (open primitive in katgpt-rs/.plans/, runtim
 
 ### Related issue
 
-- [`katgpt-rs/.issues/575`](../.issues/575_set_attention_feedback_payoff_fusion.md) — PoC: feedback-payoff-weighted Set Attention to close G8 collective inference.
+- ``katgpt-rs/.issues/575`` — PoC: feedback-payoff-weighted Set Attention to close G8 collective inference.
 
 ---
 

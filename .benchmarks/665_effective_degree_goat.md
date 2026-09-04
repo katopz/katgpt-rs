@@ -5,7 +5,7 @@ promotion requires the riir-neuron-db Issue 602 consumer verdict, see §Verdict)
 **Source:** [Research 488](../.research/488_Effective_Degree_Polynomial_Simplicity.md)
 — Zhang, Li, Xiao, Chen & Chen, *Quantifying and Optimizing Simplicity via
 Polynomial Representations*, arXiv:2605.29823, ICML 2026
-**Issue:** [668](../.issues/668_effective_degree_open_primitive.md)
+**Issue:** `668`
 **Date:** 2026-08-17
 **Machine:** M3 Max (Apple Silicon), release-mode timing best-of-3;
 counting-allocator G4 in an isolated debug test binary.

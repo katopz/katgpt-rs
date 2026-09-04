@@ -249,7 +249,7 @@ is Secret B — the proprietary data flywheel. This is exactly the engine/fuel s
 
 ## 7. Tasks
 
-> **Implementation Status (2026-07-11):** All F1–F4 tasks below implemented via [Plan 209](../.plans/209_fol_lnn_logical_rule_inference.md) — ✅ Done (all tasks complete). Feature gates: `fol_constraints` (F2), `rule_extraction` (F1), `reward_mem` (F3, DEFAULT-ON), `decision_trace` (F4, opt-in). The unchecked `- [ ]` markers below are stale; see Plan 209 for completion records.
+> **Implementation Status (2026-07-11):** All F1–F4 tasks below implemented via `Plan 209` — ✅ Done (all tasks complete). Feature gates: `fol_constraints` (F2), `rule_extraction` (F1), `reward_mem` (F3, DEFAULT-ON), `decision_trace` (F4, opt-in). The unchecked `- [ ]` markers below are stale; see Plan 209 for completion records.
 
 - [x] **F2:** Implement `extract_prompt_constraints()` — regex + keyword table for Rust FOL constraints
 - [x] **F2:** Build static Rust Concept Graph (keywords → types → patterns lookup table)

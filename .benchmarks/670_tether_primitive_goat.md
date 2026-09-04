@@ -1,7 +1,7 @@
 # Bench 670: `tether` primitive GOAT — closed-form outcome-fit estimator blend
 
 **Date:** 2026-08-21
-**Issue:** [katgpt-rs 675](../.issues/675_tether_blend_primitive.md) — resolved + removed in the same commit; this doc is the record.
+**Issue:** `katgpt-rs 675` — resolved + removed in the same commit; this doc is the record.
 **Source:** [Research 426](../../riir-train/.research/426_Le_Critique_PVF_TETHER.md) — arXiv:2608.16739 "Le Critique" (TETHER baseline).
 **Surface:** `katgpt_core::tether` (opt-in feature `tether`) — `TetherBlend` (ρ\* OLS + EMA + lag-law API shape), `fit_rho`/`sse` (batch forms), `EvAccumulator` (one-pass Welford EV), `control_variate_improves` (the iff gate, batch), `horizon_decay` (λ = c^(1/L) LUT).
 
