@@ -101,12 +101,50 @@ def cluster(stamps: list[float], gap: float = GAP_SECONDS) -> list[list[float]]:
     return out
 
 
+def harden_output() -> None:
+    """Make `print` survive repo content that the console codec cannot encode.
+
+    `2eee1158` pinned the DECODE side (git's output → str). The ENCODE side was
+    still locale-bound, and this report's whole point is to print FILE CONTENT
+    as evidence — signal 3's "would lose:" lines and signal 4's isolated-line
+    dump are arbitrary repo bytes. On this box (cp874) a `→` in a doc line
+    crashed `main()` at the evidence print with UnicodeEncodeError, i.e. AFTER
+    the audit had already found a real stale-vs-HEAD hazard and printed its
+    header: the finding was on screen and the reason for it was not.
+
+    `errors=` only, never `encoding=`: everything that renders today keeps
+    rendering byte-identically (cp874 does carry the Windows punctuation block,
+    so the script's own em-dashes were never the problem), and only the
+    previously-fatal characters change — to a visible `\\u2192` escape. Pinning
+    utf-8 instead would mojibake every Thai-console run to fix a crash on a
+    handful of chars.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(errors="backslashreplace")
+        except (AttributeError, ValueError):
+            # Not a TextIOWrapper (embedded, or already-detached stream).
+            # A report that cannot harden its stdout still runs; it just keeps
+            # the old failure mode on exotic content.
+            pass
+
+
 def selftest() -> None:
     """Runs on every invocation — a clustering regression must not be silent.
 
     Without this the audit would degrade to "1 cluster, always", print a
     confident single-episode verdict, and look exactly like a clean result.
     """
+    # The evidence prints are the payload, so an un-encodable char in repo
+    # content must degrade to an escape and never to a traceback. Asserted
+    # against the LIVE stream state, so a future `reconfigure` that drops the
+    # error handler (or a caller that resets it) reds here instead of dying
+    # 200 lines later, halfway through a real finding.
+    _enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+    _err = getattr(sys.stdout, "errors", None) or "strict"
+    assert "→".encode(_enc, errors=_err), (
+        f"stdout ({_enc}/{_err}) cannot encode repo content — call harden_output()"
+    )
     assert cluster([]) == [], "empty"
     assert cluster([100.0]) == [[100.0]], "single"
     assert len(cluster([0.0, 1.0, 2.0], gap=10)) == 1, "tight group is one episode"
@@ -295,6 +333,7 @@ def git(repo: Path, *args: str) -> str:
 
 
 def main() -> int:
+    harden_output()  # before selftest: its own failure message must be printable
     selftest()
     repo = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 
