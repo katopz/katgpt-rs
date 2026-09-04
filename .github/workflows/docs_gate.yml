@@ -111,6 +111,11 @@ on:
       - '.proposals/.highwater'
       - 'scripts/numbering_gate.py'
       - 'scripts/numbering_floors.txt'
+      # Issue 724 T4b: the paths-sync gate's input is the workflow file
+      # itself (already globbed above) plus this script - without the
+      # script glob, an edit to the gate would not re-fire the gate that
+      # runs it (the 713/704 trigger-omission class).
+      - 'scripts/docs_gate_paths_sync.py'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'
@@ -185,6 +190,11 @@ on:
       - '.proposals/.highwater'
       - 'scripts/numbering_gate.py'
       - 'scripts/numbering_floors.txt'
+      # Issue 724 T4b: the paths-sync gate's input is the workflow file
+      # itself (already globbed above) plus this script - without the
+      # script glob, an edit to the gate would not re-fire the gate that
+      # runs it (the 713/704 trigger-omission class).
+      - 'scripts/docs_gate_paths_sync.py'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'

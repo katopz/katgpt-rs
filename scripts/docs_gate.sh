@@ -91,6 +91,7 @@ CHECKS=(
     "scripts/orphaned_attr_gate.py:a #[cfg] separated from its item by a blank line (a08376a0)"
     "scripts/percentile_floor_gate.py:a percentile index that lands on n-1 and so reports the MAX"
     "scripts/numbering_gate.py:a .plans/.issues/.research/.proposals number allocated twice (Issue 724)"
+    "scripts/docs_gate_paths_sync.py:docs_gate.yml's two hand-duplicated trigger paths lists stay identical (Issue 724 T4b)"
 )
 
 if ! command -v python3 >/dev/null 2>&1; then

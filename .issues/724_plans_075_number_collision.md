@@ -63,13 +63,15 @@ serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plu
 
 ## Tasks
 
-- [ ] **T1** — `075`: owner decides the repo first, because the number depends on
-      it. The file's own vocabulary is **riir-clippy's** ("Batch 105", "the B60
-      discipline", "named **corpus** entries", "measured-GOAT **distill**"), and
-      riir-clippy is where rule-corpus mining lives per AGENTS.md; katgpt-rs
-      ships modelless inference primitives. BOUNDARY.md's domain test arbitrates.
-      Then renumber: **586** if it stays here, **076** if it moves (riir-clippy
-      `.plans/.highwater` is 75, no `075_*` on disk).
+- [x] **T1 — MOOT 2026-09-04: the file is gone.** The untracked
+      `075_riir_ai_m3_campaign_measured_distill.md` no longer exists in the
+      working tree (`.plans/` holds only the tracked
+      `075_residual_attention_simd_audit.md` + `076_arena_integration.md`;
+      `git status .plans/` clean; `.highwater` 587). Its author removed it
+      rather than renumbering — either way there is nothing to renumber, and
+      the T4 gate now carries the untracked-duplicate class it was written
+      for. No repo decision needed; the BOUNDARY arbitration this row asked
+      for is moot with the artifact.
 - [x] **T2 — `449` RESOLVED 2026-09-04, and the citation grep INVERTED the
       precedent.** `f98f7b51`'s rule (*renumber per git-log first-creation*)
       would keep 449 on the 2026-06-23 ActionBridge plan and move Poincaré.
@@ -124,12 +126,22 @@ serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plu
       has no YAML anchors); verified the two lists are identical at 43 entries
       each and that the file still parses.
 
-- [ ] **T4b** — nothing asserts that `docs_gate.yml`'s two `paths` lists stay
-      in sync. The file's own comment says "keep the two lists in sync by
-      hand", which is a known-unenforced invariant, and a PR-list that drifts
-      behind the push-list is silent. A ~10-line check (parse both, compare as
-      sets) belongs in `CHECKS`. Verified identical by hand this time — that is
-      exactly the state that decays.
+- [x] **T4b — DONE 2026-09-04** (`scripts/docs_gate_paths_sync.py`, wired as
+      docs_gate.sh CHECKS entry #10): parses both hand-duplicated `paths:`
+      blocks from `docs_gate.yml` (stdlib regex — 4-space `paths:` key,
+      6-space quoted items, comments/blanks between items stay in-block,
+      both YAML quote shapes), compares as SETS. Verdicts: drift → exit 1
+      naming each push-only / PR-only glob; not-exactly-2-blocks → exit 1
+      (structural); `selftest()` failure → exit **2** (5 pins: identical
+      lists parse equal, drift detected, comment interleaving, double-quoted
+      items, lone/empty block). **Canaried live both directions**: injected a
+      push-only glob → exit 1 with `CANARY_ONLY_PUSH.md` named; restored →
+      exit 0. In-gate green: `✓ docs_gate.yml trigger paths in sync — 43
+      globs in both lists` (the count matching T4's hand verification),
+      alongside numbering_gate's 994/0. The 5 remaining gate reds on this
+      box are the preamble's documented environment requirements (Python
+      3.10 lacks tomllib ×4; partial checkout stales repo_set.txt) — not
+      drift, not this gate.
 
 - [-] **T4-orig** — the axis: a numbering gate in `scripts/docs_gate.sh`'s `CHECKS`,
       scoped to `.plans/`, `.issues/`, `.research/`, `.proposals/` per §3, asserting
@@ -142,9 +154,11 @@ serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plu
       *untracked* class — a colleague's in-flight file is not a repo defect, but it
       must fail the moment it is committed. Canary all four directions before
       landing.
-- [ ] **T5** — the `075` file's header reads `Date: 2026-09-05` on a file written
-      **2026-09-04**. Trivial, but a plan whose own date is in the future is
-      unusable as a timeline.
+- [x] **T5 — MOOT 2026-09-04: the file it describes is gone** (see T1). A
+      future-dated plan header can no longer be introduced by that artifact;
+      if the class matters, it belongs to a doc-sync/numbering check as a
+      date-sanity row, not to this collision issue — not filed further (one
+      observed instance, artifact removed).
 
 ## References
 
