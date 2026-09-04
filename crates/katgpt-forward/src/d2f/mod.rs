@@ -794,6 +794,7 @@ fn d2f_decode_block_prompt_q_core(
                         q,
                         p - block_start,
                         vocab,
+                        mask,
                         &sample_exp_buf,
                         chosen_token,
                         chosen_prob,
@@ -1254,6 +1255,7 @@ fn capture_q_row(
     q_flat: &mut [f32],
     row: usize,
     vocab: usize,
+    mask: usize,
     exp_buf: &[f32],
     chosen: usize,
     chosen_prob: f32,
@@ -1278,6 +1280,17 @@ fn capture_q_row(
     let exp_buf = &exp_buf[..vocab.min(exp_buf.len())];
     for t in 0..vocab {
         q_row[t] = exp_buf.get(t).copied().unwrap_or(0.0) * inv;
+    }
+    // The temp==1 arm's `exp_buf` holds the UNWEIGHTED exps, but its sum_exp
+    // denominator excludes the mask slot (mask can never be sampled) — so the
+    // reconstructed row carries a stray mask mass of exp_buf[mask]/sum_exp,
+    // which deflates every sampleable entry and biases exact_q_step's
+    // acceptance min(1, p(d)/q(d)). Zero the mask slot: the proposal law is a
+    // distribution over SAMPLEABLE tokens (the module doc's contract), and a
+    // point-mass-at-mask row is exactly what write_q_point_mass emits for
+    // never-committed positions.
+    if mask < vocab {
+        q_row[mask] = 0.0;
     }
 }
 
