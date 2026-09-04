@@ -89,7 +89,7 @@ committed by the sentence introducing it.)
 | `-p <crate>` vs `--workspace` | *at the same default features*: a crate's own non-default feature can be switched on by the ROOT crate's defaults once the root is in the selected set |
 | no `--all-targets` | skips every test / bench / example — which is where gated code lives |
 | dev vs `--release` | `debug_assertions` is always **ON**, so every item behind `#[cfg(debug_assertions)]` — and everything that depends on one — is only ever compiled in the configuration where it works (`.docs/10_audits/debug_release_profile_axis.md`) |
-| **compile vs EXECUTE** | every axis above is about *compilation*. **No CI in this repo runs a test.** `clippy` and `check` compile test targets and execute none, and `grep -rnE "cargo (test\|nextest\|bench)" scripts/ .github/` returns only prose. **477 integration-test targets, 31 lib targets and 176 bench targets over 32 packages are executed by nothing automatic** (`.issues/718`) |
+| **compile vs EXECUTE** | every axis above is about *compilation*. **The scoped core is now EXECUTED weekly** (`test.yml` + `scripts/test_gate.sh`, Issue 718 T3(b) landed 2026-09-04: katgpt-rs + katgpt-core `--lib` at default features with count floors, the riir-train 507 shape) — but that is 2 of 32 packages' lib suites. The other 477 integration-test targets and 176 bench targets over 32 packages remain executed by nothing automatic (`.issues/718` — the full-workspace run stays dispatch-only until priced on a quiet box) |
 
 **The last axis is the one that changes how to read every gate below.** A
 green full gate is a claim that the workspace *compiles* under one feature
@@ -99,10 +99,10 @@ passing, so by that standard every Rust assertion here is unknown: the 39
 GOAT gates armed with `required-features` in Issue 713 T3 included, because
 arming made a **named** run honest and nothing names them. AGENTS.md records
 "All 39 pass there" under `--release` — that was a **workstation** run, and
-nothing repeats it. Whether to close this with a scheduled test job is an
-owner cost call (`.issues/718` T3); what is *not* optional is reading a
-green gate as nothing more than "it built" — because that is all it ever
-said.
+nothing repeats it. The scoped core (2 of 32 packages' lib suites) now has a
+scheduled answer via `test.yml`; everything outside it is still
+unknown-by-default, and what is *not* optional is reading a green gate as
+nothing more than "it built" — because that is all it ever said.
 
 The `-p` vs `--workspace` axis is the least obvious. `cargo test -p katgpt-backend --lib`
 compiled clean while `cargo test --workspace --lib` failed, because `gpu.rs` is
@@ -871,6 +871,33 @@ system that duplicates already-shipped substrate under a different name
 > layering side by `riir-dapps`.
 
 ## Issue log (resolved)
+
+- **Issue 721 — the root crate registers a `#[global_allocator]` as a library** RESOLVED
+  (T1/T2/T4 2026-09-03; **T3 2026-09-04**, the owner sequencing call executed; file removed per
+  noise-reduction — full inventory in git history). The lib-level
+  `#[cfg(debug_assertions)] #[global_allocator]` is now `cfg(all(test,
+  debug_assertions))` (this crate's unit tests only, the katgpt-core house
+  pattern): no downstream binary receives an allocator from this crate in any
+  feature set. Every alloc-gate consumer target across the 4 repos
+  self-registers instead — katgpt-rs via the new `tests/common/alloc_tracking.rs`
+  module (14 test targets + the kimi example; 12 Issue-682 force-link blocks
+  deleted), riir-train (xhc's T4 five-term guard deleted as predicted;
+  bench_558/490 own statics), riir-ai (~50 files: engine lib + 20 tests +
+  example off force-links; games-civ's `alloc_delta.rs` now ships the allocator
+  AND the liveness sentinel the crate never had; quest's
+  `not(quest_compression_draft)` guard dropped; poc's dual-profile macro debug
+  arm self-registers; agents GOAT inline). Validated: 14/14 katgpt-rs targets
+  compile under exact features + bench_271 9/9 / cross_res 1/1 / issue_717 G4
+  1/1 / lib 203/0; riir-train G4 1/1 + the formerly-conflicting kimi arm
+  compiles; riir-ai forward_base 3/3, gemma4 ring 4/4, cgsp/evpi 392/0, civ
+  canary 2/2, quest tpr 10/1i, poc 22/0, agents 3/3. **The conflict class this
+  issue documents is closed at the source — a downstream `#[global_allocator]`
+  is now always legal; the Issue-682 force-link pattern (`extern crate
+  katgpt_rs;` to keep a library shim linked) is dead and must not be
+  reintroduced.** Push order note: katgpt-rs landed before the consumer repos
+  (the inverse window is inert counters; this order would have been duplicate-
+  registration compile errors). `riir-agents`' katgpt-rs dev-dep is now
+  unreferenced (removal = owner call, BOUNDARY.md row).
 
 - **Issue 719 — conditioning-consistency audit PoC (`cond_audit`)** RESOLVED
   (T1, 2026-09-03, `995dea6d`) — opt-in `cond_audit` in katgpt-core: paired

@@ -189,6 +189,22 @@ Two mechanisms, one class:
   implementation work that remains on this issue; the floors make a
   silent-population regression loud. Until it lands, this issue stays OPEN
   as the tracker.
+
+  **T3(b) LANDED 2026-09-04 (same day):** `scripts/test_gate.sh` +
+  `.github/workflows/test.yml` (weekly Tue 05:03 UTC from `develop` +
+  dispatch, ubuntu-latest, NO sibling checkout needed). Scope: the
+  default-feature `--lib` suites of katgpt-rs (floor 203) + katgpt-core
+  (floor 1974) — 2,177 assertions now executed automatically, floors firing
+  downward only, the `#![cfg]`-green-zero trap handled by both the floor and
+  the exactly-one-result-line parse discipline, `--canary` proving the
+  floors live. Platform invariance grep-verified at landing: katgpt-core has
+  ZERO `#[cfg(target_os)]` attributes (its two `target_os` sites are runtime
+  `cfg!()` bools) and the root lib's `target_os` gates are dead at default
+  features on every platform. NOT covered (honest split, the 507 shape): the
+  477 integration-test targets, the 176 bench targets, and every
+  Metal/ANE/4090-bound surface — expanding is a one-line ROWS addition.
+  **REMAINING on this issue: (a) only** — the dispatch-only full-workspace
+  pricing on a quiet box. This issue stays OPEN as the (a) tracker.
   No other work remains on this issue: T1/T4 DONE, T2 withdrawn, G4 MET — T3
   is the sole open item and it is owner-gated on cost plus box quiet.
 - [x] **T4 — sweep every contract repo. DONE — `scripts/ci_test_execution_report.py`.**

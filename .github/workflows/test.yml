@@ -1,0 +1,68 @@
+# The scoped weekly TEST job (katgpt-rs Issue 718 T3(b), owner-authorized
+# 2026-09-04) — the riir-train 507 shape: scripts/test_gate.sh runs the
+# default-feature `--lib` suites of katgpt-rs + katgpt-core with per-target
+# count FLOORS (fires downward only), so CI now EXECUTES the
+# machine-invariant core instead of merely compiling it.
+#
+# What this job deliberately is NOT:
+#   - NOT the full-workspace `--all-features --release` execution. That stays
+#     dispatch-only and must be PRICED on a quiet box (CPU-seconds via
+#     `/usr/bin/time -l`) before any scheduled job exists — the owner decision
+#     in `.issues/718` is explicit that an unpriced scheduled job is the
+#     cost-blindness Issue 718 exists to prevent.
+#   - NOT a widening of the compile gates. full_gate.yml /
+#     feature_isolation.yml stay exactly what they are; the executed subset
+#     lives in scripts/test_gate.sh with floors.
+#   - NOT covering the 477 integration-test targets or the 176 bench targets
+#     (required-features / multi-minute single tests / Metal-ANE-4090-bound
+#     surfaces stay workstation-owned). Expanding is a one-line ROWS addition
+#     in test_gate.sh, deliberately.
+#
+# Platform note: katgpt-core has zero `#[cfg(target_os)]` attributes (its two
+# `target_os` sites are runtime `cfg!()` bools) and the root lib's
+# `target_os` gates are dead at default features on every platform, so the
+# floored counts are expected platform-invariant on ubuntu-latest. The first
+# scheduled run is the measurement; a Linux-only failure is the rot check
+# finding real debt.
+#
+# Sibling note: NONE needed — both covered crates build from this checkout
+# alone (katgpt-core's deps are crates.io-only; the root builds its own
+# member crates). This is the cheapest executable gate in the workspace.
+#
+# Trigger surface (the workspace Actions-spending-limit convention): weekly
+# schedule is the rot check and fires from the DEFAULT branch (develop here
+# since the Issue 704 flip, so it audits the branch work lands on);
+# workflow_dispatch for on-demand runs. No per-push trigger — run
+# ./scripts/test_gate.sh locally for develop work; it is the same script.
+
+name: tests
+
+on:
+  schedule:
+    # Weekly, Tuesdays 05:03 UTC — staggered from the sibling repos'
+    # Tuesday/Thursday rot checks.
+    - cron: '3 5 * * 2'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: tests-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            tests-${{ runner.os }}-cargo-
+
+      - name: Run the floored test gate
+        run: ./scripts/test_gate.sh
