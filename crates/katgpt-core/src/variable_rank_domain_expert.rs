@@ -495,7 +495,8 @@ impl<const DOMAINS: usize, const D_FULL: usize, const A: usize>
 ///
 /// ```
 /// use katgpt_core::committed_field_blend::{ArchetypeFieldSource, CommittedFieldBlend};
-/// use katgpt_core::variable_rank_domain_expert::{ClusterHolder, variable_rank_router_static};
+/// use katgpt_core::variable_rank_domain_expert::ClusterHolder;
+/// use katgpt_core::variable_rank_router_static;
 ///
 /// variable_rank_router_static! {
 ///     /// 2-domain test router: move (L=4) + combat (L=2).

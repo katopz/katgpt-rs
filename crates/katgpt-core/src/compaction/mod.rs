@@ -66,7 +66,7 @@
 //! # Example
 //!
 //! ```no_run
-//! use katgpt_rs::compaction::*;
+//! use katgpt_core::compaction::*;
 //!
 //! // A rubric with arity 4 (paper's C1/C2/C3/N1). The caller supplies the
 //! // latent features; here we stub with a trivial marker-based rubric.

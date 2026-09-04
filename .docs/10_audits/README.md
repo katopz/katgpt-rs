@@ -17,6 +17,7 @@
 | [`cfg_gated_silent_zero_pass.md`](cfg_gated_silent_zero_pass.md) | `#![cfg]`-gated targets that print a green `0 passed` — corrected 19-repo measurement, the release-profile retraction, the load-bearing token table, and the open sibling T3 table (Issue 713, closed 2026-09-03) |
 | [`alloc_gate_per_thread_counter.md`](alloc_gate_per_thread_counter.md) | Alloc gates counted sibling tests' allocations — per-thread `ThreadCounter`, two-sided verification, provenance of `62911111` (Issue 714, closed 2026-09-03) |
 | [`percentile_index_tail_support.md`](percentile_index_tail_support.md) | The 12→0 repair campaign that took its own sites out of the population — the `TRUNC-VAR` variable-p class, the `.trunc()` hole, the exact floor-vs-nearest-rank boundary, and why the floor is not ratcheted (2026-09-03) |
+| [`ci_compile_vs_execute_axis.md`](ci_compile_vs_execute_axis.md) | Compiles is not runs — CI compiled 480 test / 176 bench targets and executed none; the 4th rung after Issues 704/706/713, the 3-repo cross-workspace sweep, the two-tier resolution (scoped weekly + dispatch-only full run), and the `--all-targets` excludes doc-tests axis it found (Issue 718, closed 2026-09-04) |
 | [`debug_release_profile_axis.md`](debug_release_profile_axis.md) | The profile is part of the claim — orphaned `#[cfg]` across a blank line (Issue 715) and the full gate's release Layer 6 (Issue 716), both closed 2026-09-03 |
 
 ## Note

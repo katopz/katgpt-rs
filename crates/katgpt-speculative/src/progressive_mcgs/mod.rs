@@ -84,7 +84,7 @@
 //!
 //! ```rust
 //! # #![cfg(feature = "progressive_mcgs")]
-//! use katgpt_rs::progressive_mcgs::{
+//! use katgpt_speculative::progressive_mcgs::{
 //!     BranchId, NodeId, ProgressiveMcgs, ProgressiveMcgsConfig,
 //!     ProgressiveMcgsSearch, Reward, SearchDomain,
 //! };

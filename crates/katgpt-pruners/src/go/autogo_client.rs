@@ -54,7 +54,7 @@ type Result<T> = std::result::Result<T, AutoGoError>;
 /// ## Example
 ///
 /// ```no_run
-/// use katgpt_rs::pruners::go::AutoGoClient;
+/// use katgpt_pruners::go::AutoGoClient;
 ///
 /// let client = AutoGoClient::new("http://localhost:8000");
 /// let agents = client.list_agents().unwrap();

@@ -266,10 +266,10 @@ impl SearchFeatures {
 /// # Example
 ///
 /// ```no_run
-/// use katgpt_rs::compaction::rubrics::search::{
+/// use katgpt_core::compaction::rubrics::search::{
 ///     SearchFeatures, SearchRubric, TrajectoryFeatures,
 /// };
-/// use katgpt_rs::compaction::{ClosedUnitCompactionGate, Backstop, RubricScratch};
+/// use katgpt_core::compaction::{ClosedUnitCompactionGate, Backstop, RubricScratch};
 ///
 /// let rubric = SearchRubric::default();
 /// let gate = ClosedUnitCompactionGate::builder(rubric)

@@ -26,7 +26,7 @@
 //! # Example
 //!
 //! ```
-//! use katgpt_rs::sparse_task_vector::SparseTaskVector;
+//! use katgpt_sparse::sparse_task_vector::SparseTaskVector;
 //!
 //! // A 4×3 base weight.
 //! let mut base = vec![1.0_f32, 0.0, 0.0,  0.0, 1.0, 0.0,  0.0, 0.0, 1.0,  0.5, 0.5, 0.5];

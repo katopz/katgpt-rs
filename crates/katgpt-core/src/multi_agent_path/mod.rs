@@ -328,7 +328,7 @@ impl<P: Position> LifelongLaCam<P> {
     ///
     /// ```no_run
     /// # use katgpt_core::multi_agent_path::*;
-    /// # let warm = WarmStartCache::new(WarmStartScheme::default(), 0.0);
+    /// # let warm = WarmStartCache::<GridPos>::new(WarmStartScheme::default(), 0);
     /// let lacam = LifelongLaCam::new(warm)
     ///     .with_escalation_budget(EscalationBudget::multistep_default());
     /// ```

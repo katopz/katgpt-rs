@@ -1,5 +1,6 @@
 # The scoped weekly TEST job (katgpt-rs Issue 718 T3(b), owner-authorized
-# 2026-09-04) — the riir-train 507 shape: scripts/test_gate.sh runs the
+# 2026-09-04; Issue 718 itself is closed + removed — durable record in
+# .docs/10_audits/ci_compile_vs_execute_axis.md) — the riir-train 507 shape: scripts/test_gate.sh runs the
 # default-feature `--lib` suites of katgpt-rs + katgpt-core with per-target
 # count FLOORS (fires downward only), so CI now EXECUTES the
 # machine-invariant core instead of merely compiling it.
@@ -8,8 +9,11 @@
 #   - NOT the full-workspace `--all-features --release` execution. That stays
 #     dispatch-only and must be PRICED on a quiet box (CPU-seconds via
 #     `/usr/bin/time -l`) before any scheduled job exists — the owner decision
-#     in `.issues/718` is explicit that an unpriced scheduled job is the
-#     cost-blindness Issue 718 exists to prevent.
+#     recorded in `.docs/10_audits/ci_compile_vs_execute_axis.md` is explicit
+#     that an unpriced scheduled job is the cost-blindness Issue 718 exists to
+#     prevent. That pricing HAS now happened
+#     (`.benchmarks/701_full_workspace_execution_pricing.md`) and the verdict
+#     was still dispatch-only, so this job's scope is unchanged.
 #   - NOT a widening of the compile gates. full_gate.yml /
 #     feature_isolation.yml stay exactly what they are; the executed subset
 #     lives in scripts/test_gate.sh with floors.

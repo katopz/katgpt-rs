@@ -371,7 +371,7 @@ pub fn set_diffusion_decode<F: SetCausalForwardFn>(
 /// # Example
 ///
 /// ```
-/// # use katgpt_rs::speculative::set_diffusion::order_to_gen_steps;
+/// # use katgpt_forward::set_diffusion::order_to_gen_steps;
 /// // Singleton ordering: position 2 first, then 0, then 1.
 /// let order = vec![2, 0, 1];
 /// let gs = order_to_gen_steps(&order);
@@ -424,9 +424,9 @@ pub fn mdlm_gen_steps(l: usize) -> Vec<u32> {
 /// pipeline. Equivalent to:
 ///
 /// ```no_run
-/// # use katgpt_rs::dllm::PositionOffsetSchedule;
-/// # use katgpt_rs::speculative::set_diffusion::*;
-/// # use katgpt_rs::types::Rng;
+/// # use katgpt_core::set_diffusion_schedule::PositionOffsetSchedule;
+/// # use katgpt_forward::set_diffusion::*;
+/// # use katgpt_types::Rng;
 /// # fn wrap<F: SetCausalForwardFn>(forward: &F, cfg: &SetDiffusionConfig, sched: &PositionOffsetSchedule, prompt: &[usize], decode_len: usize, mut rng: &mut Rng) {
 /// let order = sched.sample_order_with(decode_len, || rng.uniform());
 /// let gen_steps = order_to_gen_steps(&order);
@@ -573,10 +573,10 @@ fn sample_token(
 /// # Example
 ///
 /// ```no_run
-/// use katgpt_rs::speculative::set_diffusion::{SetCausalForwardFn, SetDiffusionConfig, set_diffusion_decode};
-/// use katgpt_rs::speculative::set_diffusion::CpuSetCausalForward;
-/// use katgpt_rs::transformer::TransformerWeights;
-/// use katgpt_rs::types::{Config, Rng};
+/// use katgpt_forward::set_diffusion::{SetCausalForwardFn, SetDiffusionConfig, set_diffusion_decode};
+/// use katgpt_forward::set_diffusion::CpuSetCausalForward;
+/// use katgpt_transformer::TransformerWeights;
+/// use katgpt_types::{Config, Rng};
 ///
 /// # fn wire(weights: &TransformerWeights, config: &Config) {
 /// let forward = CpuSetCausalForward { weights, config };

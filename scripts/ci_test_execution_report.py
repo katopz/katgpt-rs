@@ -7,7 +7,8 @@ repo's compile/lint surface". It deliberately does not ask whether anything
 2026-09-03, katgpt-rs is fully covered by the first and scores ZERO on the
 second: `cargo clippy` and `cargo check` compile every test target and execute
 none, so 477 integration-test targets, 31 lib targets and 176 bench targets
-are executed by nothing automatic (`.issues/718`).
+are executed by nothing automatic (`.docs/10_audits/ci_compile_vs_execute_axis.md`,
+the durable record of Issue 718, closed + removed 2026-09-04).
 
 That is the fourth rung on a ladder this workspace has climbed three of:
 

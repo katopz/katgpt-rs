@@ -71,7 +71,7 @@ impl ProbeToken {
 /// # Construction
 ///
 /// ```no_run
-/// use katgpt_rs::compaction::probe::CacheReuseProbe;
+/// use katgpt_core::compaction::probe::CacheReuseProbe;
 /// let probe = CacheReuseProbe::new();
 /// ```
 ///

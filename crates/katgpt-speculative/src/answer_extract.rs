@@ -41,7 +41,7 @@ pub trait AnswerExtractor: Send + Sync {
 /// # Examples
 ///
 /// ```
-/// use katgpt_rs::speculative::answer_extract::{AnswerExtractor, RegexAnswerExtractor};
+/// use katgpt_speculative::answer_extract::{AnswerExtractor, RegexAnswerExtractor};
 ///
 /// let ext = RegexAnswerExtractor;
 /// assert_eq!(ext.extract_answer(&[], "The result is \\boxed{42}"), Some("42".to_string()));
@@ -235,7 +235,7 @@ impl AnswerExtractor for RegexAnswerExtractor {
 /// # Examples
 ///
 /// ```
-/// use katgpt_rs::speculative::answer_extract::{AnswerExtractor, ThinkTokenExtractor};
+/// use katgpt_speculative::answer_extract::{AnswerExtractor, ThinkTokenExtractor};
 ///
 /// let ext = ThinkTokenExtractor;
 /// let text = "<think\nstep 1...\n</think\n\n42";
@@ -307,7 +307,7 @@ impl AnswerExtractor for ThinkTokenExtractor {
 /// # Examples
 ///
 /// ```
-/// use katgpt_rs::speculative::answer_extract::{AnswerExtractor, DiscreteActionExtractor};
+/// use katgpt_speculative::answer_extract::{AnswerExtractor, DiscreteActionExtractor};
 ///
 /// let ext = DiscreteActionExtractor::new(9);
 /// assert_eq!(ext.extract_answer(&[], "I choose action 5"), Some("5".to_string()));

@@ -1,6 +1,8 @@
 #!/bin/sh
 # scripts/test_gate.sh — the first CI-executed tests in this repo
-# (katgpt-rs Issue 718 T3(b), the riir-train 507 shape).
+# (katgpt-rs Issue 718 T3(b), the riir-train 507 shape; Issue 718 closed +
+# removed 2026-09-04 — durable record in
+# `.docs/10_audits/ci_compile_vs_execute_axis.md`).
 #
 # Before this gate, every automatic trigger here (full_gate.yml,
 # feature_isolation*.yml, docs_gate.yml, lean_proofs.yml) reached only
@@ -10,10 +12,11 @@
 # uninvoked assertion is unknown, not passing, every Rust assertion here
 # was unknown. This gate makes the machine-invariant core EXECUTED and
 # FLOORED. It is the AUTHORIZED scoped tier (owner decision recorded in
-# `.issues/718`, 2026-09-04); the full-workspace `--all-features
-# --release` execution stays dispatch-only and UNPRICED — pricing it on a
-# quiet box is the separate remaining item, and no scheduled full job may
-# exist before that measurement.
+# `.docs/10_audits/ci_compile_vs_execute_axis.md`, 2026-09-04);
+# the full-workspace `--all-features --release` execution stays
+# dispatch-only. It has now been PRICED on a quiet box
+# (`.benchmarks/701_full_workspace_execution_pricing.md`) and the verdict
+# was still dispatch-only, on that measurement. No scheduled full job.
 #
 # Scope (and what it deliberately does NOT cover):
 #   COVERED     — the default-feature `--lib` suites of katgpt-rs (root)

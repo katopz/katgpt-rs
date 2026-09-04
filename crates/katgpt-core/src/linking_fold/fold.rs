@@ -138,10 +138,13 @@ pub fn gelu_smoothed_abs(x: f32, alpha: f32) -> f32 {
 /// let mut state = [-1.0_f32, 0.5, -0.25];
 /// let center = [0.0_f32; 3];
 /// fold_gelu_into(&mut state, &center, 10.0);
-/// // Smoothed fold: close to [1.0, 0.5, 0.25] but with rounded knees.
-/// assert!((state[0] - 1.0).abs() < 0.1);
-/// assert!((state[1] - 0.5).abs() < 0.01);
-/// assert!((state[2] - 0.25).abs() < 0.01);
+/// // Smoothed fold: `sqrt(x² + α⁻²) − α⁻¹`, so each coordinate lands just
+/// // *under* `|x|`. The shortfall tends to `α⁻¹ = 0.1` as `|x|` grows and
+/// // shrinks toward 0 at the center — it is largest, not smallest, for the
+/// // coordinates nearest the fold center.
+/// assert!((state[0] - 0.904_987_6).abs() < 1e-6); // |-1.00| - 0.0950
+/// assert!((state[1] - 0.409_902_0).abs() < 1e-6); // | 0.50| - 0.0901
+/// assert!((state[2] - 0.169_258_2).abs() < 1e-6); // |-0.25| - 0.0807
 /// ```
 #[inline]
 pub fn fold_gelu_into(state: &mut [f32], center: &[f32], alpha: f32) {

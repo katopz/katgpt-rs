@@ -24,12 +24,12 @@
 //! # Usage (engine-side, synthetic validation)
 //!
 //! ```
-//! use katgpt_rs::swir::bench::*;
+//! use katgpt_transformer::swir::bench::*;
 //!
 //! // Synthetic source — deterministic, exercises the harness wiring.
 //! let source = SyntheticProblemSource::new(50, 42);
-//! let backend = SyntheticDecodeBackend::new(42);
-//! let result = run_benchmark(&source, &backend, BenchConfig::default());
+//! let mut backend = SyntheticDecodeBackend::new(42);
+//! let result = run_benchmark(&source, &mut backend, BenchConfig::default());
 //! println!("{}", result.summary());
 //! ```
 //!

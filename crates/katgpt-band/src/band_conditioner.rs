@@ -43,7 +43,7 @@
 //!
 //! ```
 //! # #[cfg(feature = "band_conditioner")] {
-//! use katgpt_rs::band_conditioner::BandConditioningSet;
+//! use katgpt_band::band_conditioner::BandConditioningSet;
 //!
 //! // Sequence of 8 states partitioned into 4 segments of length L=2:
 //! //   S_1 = {s_1, s_2},  S_2 = {s_3, s_4},  S_3 = {s_5, s_6},  S_4 = {s_7, s_8}

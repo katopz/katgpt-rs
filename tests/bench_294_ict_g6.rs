@@ -91,9 +91,20 @@ fn g6_feature_isolation_no_ict_symbols_in_default_build() {
     );
 
     // Locate the rlib. The path looks like:
-    // target/release/libkatgpt_core-<hash>.rlib
+    // <target-dir>/release/libkatgpt_core-<hash>.rlib
+    //
+    // The target dir is NOT hard-coded: AGENTS.md mandates running under a
+    // per-plan `CARGO_TARGET_DIR=/tmp/...` when another cargo holds `target/`,
+    // and the `cargo build` spawned above inherits that env var. Reading a
+    // literal "target/release" made this gate unpassable under exactly the
+    // workflow the repo prescribes (Issue 718 T3(a), first full-workspace run).
+    let target_dir =
+        std::env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".to_string());
+    let release_dir = std::path::Path::new(&target_dir).join("release");
     let mut rlib_path = None;
-    for entry in std::fs::read_dir("target/release").expect("target/release missing") {
+    for entry in std::fs::read_dir(&release_dir)
+        .unwrap_or_else(|e| panic!("{} missing: {e}", release_dir.display()))
+    {
         let entry = entry.expect("dir entry");
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
@@ -102,7 +113,12 @@ fn g6_feature_isolation_no_ict_symbols_in_default_build() {
             break;
         }
     }
-    let rlib = rlib_path.expect("libkatgpt_core-*.rlib not found in target/release");
+    let rlib = rlib_path.unwrap_or_else(|| {
+        panic!(
+            "libkatgpt_core-*.rlib not found in {}",
+            release_dir.display()
+        )
+    });
 
     // nm the rlib — list global text/data symbols and grep for "ict" / "branching".
     let nm_output = Command::new("nm")

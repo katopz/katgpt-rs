@@ -37,7 +37,7 @@
 //! # Minimal end-to-end trace
 //!
 //! ```no_run
-//! use katgpt_rs::swir::{SwiRConfig, SwiRController, StepAction, soft_embedding};
+//! use katgpt_transformer::swir::{SwiRConfig, SwiRController, StepAction, soft_embedding};
 //!
 //! // 1. Host constructs the controller with paper defaults.
 //! let mut ctrl = SwiRController::new(SwiRConfig::default());
@@ -52,7 +52,7 @@
 //! # fn next_token_probs() -> Vec<f32> { vec![0.0; 32_000] }
 //! for step in 0..1024 {
 //!     let probs: Vec<f32> = next_token_probs(); // host softmax
-//!     let entropy = katgpt_rs::swir::shannon_entropy(&probs);
+//!     let entropy = katgpt_transformer::swir::shannon_entropy(&probs);
 //!     match ctrl.step(entropy, step) {
 //!         StepAction::EmitToken(_id) => {
 //!             // Sample a concrete token, feed it to the model.

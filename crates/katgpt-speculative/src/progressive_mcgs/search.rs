@@ -46,7 +46,7 @@
 //! # Example
 //!
 //! ```
-//! use katgpt_rs::progressive_mcgs::{
+//! use katgpt_speculative::progressive_mcgs::{
 //!     search::{ProgressiveMcgsSearch, SearchDomain, StepResult},
 //!     BranchId, NodeId, ProgressiveMcgsConfig, Reward, RngLite,
 //! };
@@ -56,7 +56,7 @@
 //! impl SearchDomain<u32> for CounterDomain {
 //!     fn propose(
 //!         &mut self,
-//!         _graph: &katgpt_rs::progressive_mcgs::ProgressiveMcgs<u32>,
+//!         _graph: &katgpt_speculative::progressive_mcgs::ProgressiveMcgs<u32>,
 //!         _parent: NodeId,
 //!         _branch: BranchId,
 //!         _refs: &[NodeId],
@@ -64,13 +64,19 @@
 //!     ) -> u32 { step }
 //!     fn evaluate(
 //!         &mut self,
-//!         _graph: &katgpt_rs::progressive_mcgs::ProgressiveMcgs<u32>,
+//!         _graph: &katgpt_speculative::progressive_mcgs::ProgressiveMcgs<u32>,
 //!         _node: NodeId,
 //!     ) -> Reward { Reward::Progress }
 //! }
 //!
 //! let cfg = ProgressiveMcgsConfig::default();
 //! let mut search = ProgressiveMcgsSearch::<u32>::new(cfg, 4);
+//! // `step()` returns `None` until the graph has a root, and the scheduler
+//! // needs a seed per branch to have anything to select.
+//! search.add_root(0);
+//! for b in 0..4 {
+//!     search.seed_branch(BranchId(b), 100 + b);
+//! }
 //! let mut rng = fastrand::Rng::with_seed(0);
 //! let res = search.step(&mut CounterDomain, &mut rng);
 //! assert!(res.is_some());
