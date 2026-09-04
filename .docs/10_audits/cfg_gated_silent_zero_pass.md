@@ -83,6 +83,39 @@ same cfg cannot be confused. `selftest()` pins it in **both** directions plus a
 matcher that stops seeing the term takes the column to a confident zero, and
 one that fires on any file mentioning it makes the column unreadable.
 
+### The PROFILE dimension has a DISGUISE, and it is better than a green zero
+
+Everything above is about a green **zero** — a suspicious-looking number that a
+careful reader can catch. The profile dimension also produces a green **non-zero
+result that names the very file it did not compile**, which nothing above warns
+about. Measured 2026-09-04 (riir-ai Issue 769 T10 P4,
+`riir-gpu/tests/bench_777_ane_gpu_in_hybrid.rs`, `#![cfg(all(…,
+not(debug_assertions)))]`):
+
+```
+cargo clippy -p riir-gpu --features ane_prefill,metal_tensor_gemm \
+      --test bench_777_ane_gpu_in_hybrid
+  → Finished in 0.3s
+  → warning: `riir-gpu` (test "bench_777_ane_gpu_in_hybrid") generated 16 warnings
+  →   16 × doc_list_item_overindented, each citing this file's own line numbers
+```
+
+**Nothing in that output compiled.** `//!` module doc comments precede the
+`#![cfg]` attribute, so clippy lints the doc block whether or not the body is
+configured in — and the summary line credits the target by name. Proven by
+canary rather than inferred: appending `fn c() -> i32 { "s" }` to the file
+**passes** in dev and errors `E0308` under `--release`. That run was written up
+as "compile-verified" in a bench record and a commit message on this evidence;
+the correction is in riir-ai `.benchmarks/856`.
+
+**So a doc-only finding set is evidence the body was SKIPPED, not that the body
+is clean** — `doc_list_item_overindented`, `doc_lazy_continuation`,
+`empty_line_after_outer_attr` and friends are exactly the lints that survive an
+empty compilation unit. Two rules follow: never accept a lint run as a compile
+check for a profile-gated target without a planted-error canary, and read
+`Finished in <1s` on a target you just edited as the primary tell (a real
+compile of a bench harness is tens of seconds).
+
 
 ## The shape
 
