@@ -238,6 +238,11 @@ were defects.
       calibration bar, not a regression; `bench_gdsd_modelless::goat_169_g1`
       (acceptance +0.00%) reproduces under `gdsd_distill` alone with the rest
       of the target green (8 passed).
+      **Precondition:** run the per-target reads on a SETTLED tree — this
+      worktree carried 13 sibling WIP files across katgpt-core / katgpt-dec /
+      katgpt-kv / katgpt-transformer when these datapoints were gathered, and
+      a quality-bar verdict measured against a moving lib is unattributable
+      (the Issue-066/074 class: sibling drift flips scenario verdicts).
 
 ## Gates
 
