@@ -377,7 +377,8 @@ UNRESOLVED rows are worth the same treatment. Distribution, measured
 Filed where they live, each with the sites **verified in source** and the rest
 listed explicitly as unverified candidates:
 
-- **riir-ai `.issues/863`** (`1a97d75a5`) — two confirmed:
+- **riir-ai Issue 863** (`1a97d75a5`; file RESOLVED + removed 2026-09-04 per
+  the noise-reduction rule — **outcome in §13 below**) — two confirmed:
   `bench_416_cognitive_branch_goat.rs:107`, where `per_tick_us` is pushed
   exactly `const TIMED_TICKS = 100` times so `len * 99 / 100 == 99 == n - 1`,
   and the same helper also returns `sorted.last()` — **that gate's `p99` and
@@ -425,3 +426,73 @@ And `seal-remake/crates/seal-view/tests/texture_vessel_bench.rs:589` is
 where this shape is the intended behaviour. Both are the reason a per-site read
 cannot be replaced by a pattern.
 
+
+## 13. Issue 863 closed — the riir-ai read, and the two the fix batch still missed (2026-09-04)
+
+§12 filed the riir-ai rows and recorded the two sites verified in source; this
+is the **outcome**. All 21 remaining UNRESOLVED rows in that repo were read to
+their actual sample count, and the read resolved to **2 DEGENERATE + 5 WEAK +
+14 OK**. The fix batch landed in riir-ai `b0c21283f` (all 7 flagged rows,
+nearest-rank + a printed `(sN)` tail-support label, each target live-run).
+
+**Both DEGENERATE finds were NEW** — the §12 candidate-token table had not
+priced either:
+
+| site | p | n | why |
+|---|---|---|---|
+| `riir-games-civ/benches/bench_479_emotion_mux_goat.rs` | .99 | **50** = `ROUNDS` | idx 49 = n−1 = the MAX; the candidate table had only priced this file's p95 |
+| `riir-games/benches/swarm_tick_perf.rs` (cluster row) | .99 | **≈25** | the cluster row samples every **40th** tick of 1000, so its n is not the loop bound the scan saw |
+
+**Every flagged row was print-only, so nothing was mis-gated** — the finding is
+about numbers people quote out of gate output, which is the same severity split
+§9 draws.
+
+### A post-fix re-scan found 2 MORE, and that is the durable lesson
+
+Re-running the audit *after* the batch landed surfaced two further real
+DEGENERATE sites that the classifier had been resolving as **UNRESOLVED**:
+`riir-engine/tests/bench_332_karc_goat.rs` G5 p95 at `MEASURE_ITERS = 100`
+(`floor(100·0.95) = 95 = n−1`, invisible because the file-level `percentile_95`
+helper is not statically resolvable) and `riir-games-civ/tests/prof_civ_world_state`
+p99 at n = 200. Both fixed in the same commit. **Post-fix audit over riir-ai
+reads 0 DEGENERATE / 0 TRUNC-VAR / 0 WEAK, with UNRESOLVED 20 → 12** — the 12
+survivors are exactly the verified-OK large-n rows no static pass can reach.
+
+This is the §2 / §"a repair can blind the gate" pattern arriving a third way:
+the UNRESOLVED bucket is not a queue that empties monotonically, so a
+zero-ceiling green after a repair wave is worth exactly one re-scan.
+
+### The candidate generator's measured error rate — confirmed at 4 of 4
+
+§12 reports the file-scoped literal scan as "a candidate generator, never a
+verdict", at 2 wrong out of a handful. The full read raises that to **4
+mis-attributed feeding loops out of 4 resolvable cases**:
+
+| flagged n | true n |
+|---|---|
+| `bench_411_stat_modifier_goat.rs` — 256 | **200,000** = `N` (256 was warmup) |
+| `bench_424_live_composition_goat.rs` — 50 / 1000 | **200** = `TIMED_ITERS` |
+| `bench_488_npc_migration_dispatch_latency.rs` — 200 | **10,000** = `ITERATIONS` |
+| `g_zero_04_player_ab_benchmark.rs` — 1000 | **≈10⁵–10⁶** (one push per alive player per tick × 1000 rounds) |
+
+Four for four in the same direction the shortcut was warned about. The
+discipline held — the rows were shipped as candidates and every verdict came
+from reading the caller — but the error rate is now measured rather than
+estimated, and it is high enough that a candidate list presented as findings
+would have been actively misleading.
+
+### The two ASSERTED sites are record-only — read the DIRECTION off the assert
+
+Kept as record with no code change, because at their real n both are sound and
+the reusable part is which way each would fail:
+
+| site | assert | direction | health at real n |
+|---|---|---|---|
+| `bench_332_karc_goat.rs` G1 | `p95 >= 0.3 * range` (a diversity floor) | **false-GREEN** — a too-high tail passes a floor it should not | sound: n ≈ 4005–4950 (pairwise i<j over 90–100 forecasts), support ≈ 245 |
+| `bench_488_npc_migration_dispatch_latency.rs` | `p99 <= budget` | **false-RED** — the §4 default direction | healthy: n = 10,000, support 100 |
+
+§5's first correction says the "false RED, not a false green" claim is
+assert-direction dependent; these two are the paired instance of it in one
+repo. **Read the direction off the assert, not off the defect** — the defect's
+sign is constant (one rank too high) and the consequence inverts with the
+comparison.
