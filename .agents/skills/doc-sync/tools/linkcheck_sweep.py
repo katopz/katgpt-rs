@@ -5,13 +5,14 @@ v2 changes: audit only git-TRACKED .md files (kills output//vendored noise);
 drop the per-repo containment check (cross-repo links within the workspace are
 legitimate — the real filesystem is the only truth); report [missing] only.
 """
+import os
 import re
 import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-WORKSPACE = Path("/Users/katopz/git")
+WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", "/Users/katopz/git"))  # cross-box: set to the local workspace root
 SKIP_PATH_PARTS = ("/.agents/",)  # skill files carry intentional example links
 NAMESPACE_MARKERS = (
     ".issues/", ".plans/", ".benchmarks/", ".research/",

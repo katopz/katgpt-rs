@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
-WORKSPACE = Path("/Users/katopz/git")
+WORKSPACE = Path(os.environ.get("LINKCHECK_WORKSPACE", "/Users/katopz/git"))  # cross-box: set to the local workspace root
 REPO = WORKSPACE / sys.argv[1]
 FINDINGS = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("/tmp/linkcheck_full.txt")
 
@@ -57,9 +57,19 @@ def relpath_from(md_dir: Path, target_abs: Path, keep_trailing_slash: bool):
     return rel
 
 
+KNOWN_REPOS = {"katgpt-rs", "riir-ai", "riir-chain", "riir-clippy", "riir-train", "riir-neuron-db",
+               "riir-game-sdk", "riir-mmorpg-examples", "riir-dapps", "riir-viewbridge", "riir-auth",
+               "katgpt-web", "riir-dao", "riir-deployer", "seal-game-editor", "seal-remake"}
+
+
 def decide(target: str, md: Path):
     """Return (action, new_target_or_None)."""
     if target.startswith(("~", "/Users/")) or "*" in target:
+        return "NA", None
+    # a link into a workspace repo ABSENT on this box is UNVERIFIABLE, not broken
+    # (it may resolve fine where that repo is checked out) — skip, never delink
+    m_absent = re.match(r"^(?:\.\./)+(?:[A-Za-z0-9_.-]+/)*([A-Za-z0-9_.-]+?)/", target)
+    if m_absent and m_absent.group(1) in KNOWN_REPOS and not (WORKSPACE / m_absent.group(1)).exists():
         return "NA", None
     md_dir = md.parent
     m_repo = re.match(r"^(?:\.\./)+(" + REPO_ALT + r")/(.+)$", target)
@@ -84,6 +94,8 @@ def rewrite_line(line: str, target: str, action: str, new_target):
     if action == "R3":
         def sub(mm):
             text = mm.group(1).strip()
+            if "`" in text:
+                return text  # already code-marked; wrapping would nest backticks
             return f"`{text}`" if text else f"`{target}`"
         return pat.sub(sub, line)
     # repoint: plain occurrence + title-bearing occurrence
