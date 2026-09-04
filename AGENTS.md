@@ -165,7 +165,38 @@ builds that code. Record and the open axis: `riir-ai` `.issues/857`.
 This is the same shape as `.docs/10_audits/cfg_gated_silent_zero_pass.md` one axis over — there a
 `#![cfg]`-gated test compiles to an empty binary and reports a green zero; here
 a `cfg(not(target_os))` module compiles to nothing and reports a green build.
-**A platform is part of the claim, exactly as the profile is.** `.github/workflows/full_gate.yml` **declares** a
+**A platform is part of the claim, exactly as the profile is.**
+
+**As of 2026-09-04 the compile half of that axis is REACHABLE from the M3**, so
+"we cannot build that code here" is no longer the answer:
+
+```bash
+scripts/check_platform_gated_modules.sh ../riir-train riir-train-gpu numeric_drift_cuda
+scripts/check_platform_gated_modules.sh --canary ../riir-train riir-train-gpu \
+    crates/riir-train-gpu/src/numeric_drift_tap.rs numeric_drift_cuda
+```
+
+`cargo check` never links — it needs only rust-std for the target and build
+scripts that exit 0. Three build scripts stand in the way and none needs a real
+cross toolchain: `blake3`'s NEON C (answered by `CARGO_FEATURE_NO_NEON=1`, the
+pure-Rust path) and `libsqlite3-sys` + `sentencepiece-sys` (answered by the
+**Android NDK's clang**, already installed here, which ships a complete linux
+sysroot — the macOS SDK cannot, because `sys/cdefs.h` answers a linux-gnu
+target with `#error Unsupported architecture`). Two details cost an hour each
+and are in the script's header: cc-rs injects its own `--target`, so the shim's
+must come **after** `"$@"` or clang honours cc-rs's and loses the sysroot; and
+`-llog` is required because sentencepiece's cmake build links helper binaries
+that need `__android_log_write`.
+
+Read a green run narrowly: it is the **compile** half only, nothing ran, and
+much of that CUDA code has never executed anywhere. But a green run is exactly
+what `riir-ai` `6bf51b592` did not have when it shipped a CUDA-only lib that
+did not compile and stood 7h45m. First use (riir-train `53538538`) typechecked
+two `not(target_os = "macos")` modules whose five edited call sites the issue
+had routed to "whoever next builds on the 4090". **`--canary` is not optional**
+— it plants an undefined call inside the gated module and requires `E0425`,
+because otherwise "Finished" is indistinguishable from the modules compiling
+to nothing again, which is the entire failure this section describes. `.github/workflows/full_gate.yml` **declares** a
 weekly cron, a manual dispatch, and a NARROW per-push/PR lane — the trigger is
 real but fires only when the gate's own definition changes
 (`scripts/full_gate.sh` / the workflow file itself; measured 2m17s made that
