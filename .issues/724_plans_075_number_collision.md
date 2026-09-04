@@ -1,6 +1,6 @@
 # Issue 724: `.plans/` numbering collisions REGREW after a hand-sweep fixed 11 of them — nothing gates the allocator
 
-**Status:** OPEN — filed 2026-09-04. Trigger was one untracked file; the search that followed found the pattern: **a hand-sweep resolved 11 `.plans/` collisions on 2026-07-15 (`f98f7b51`) and a new one landed 3 days later.** Fixed one at a time is how it stays invisible. The generalization first drafted here was WRONG and is corrected below — `.benchmarks/` must be excluded, on measured grounds.
+**Status:** OPEN — T2 + T3 DONE 2026-09-04; **T1 (the untracked `075`) and T4 (the gate) remain.** The tracked collision is gone: `449` now belongs to Poincaré alone. Trigger was one untracked file; the search that followed found the pattern: **a hand-sweep resolved 11 `.plans/` collisions on 2026-07-15 (`f98f7b51`) and a new one landed 3 days later.** Fixed one at a time is how it stays invisible. The generalization first drafted here was WRONG and is corrected below — `.benchmarks/` must be excluded, on measured grounds.
 
 ---
 
@@ -70,13 +70,33 @@ serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plu
       ships modelless inference primitives. BOUNDARY.md's domain test arbitrates.
       Then renumber: **586** if it stays here, **076** if it moves (riir-clippy
       `.plans/.highwater` is 75, no `075_*` on disk).
-- [ ] **T2** — `449`: renumber the later one (`449_poincare_latent_navigation_primitive.md`,
-      Plan dated 2026-07-18) per `f98f7b51`'s own precedent — *renumber per
-      git-log first-creation*, so the 2026-06-23 plan keeps 449. **Grep for
-      inbound citations of "Plan 449" first**; unlike 075 this one has been in
-      `HEAD` for seven weeks and may be cited.
-- [ ] **T3** — bump `.plans/.highwater` 585 → 586 and `.benchmarks/.highwater`
-      700 → 701. Independent of T1/T2 and safe on its own.
+- [x] **T2 — `449` RESOLVED 2026-09-04, and the citation grep INVERTED the
+      precedent.** `f98f7b51`'s rule (*renumber per git-log first-creation*)
+      would keep 449 on the 2026-06-23 ActionBridge plan and move Poincaré.
+      Measured, that is the wrong direction:
+
+      | | `Plan 449` mentions in its context | files citing its filename |
+      |---|---:|---:|
+      | Poincaré (2026-07-18) | **27** of 33 — README feature table, CHANGELOG ×4, `.docs/05_adaptation/`, a `katgpt-core` example | 5, incl. `.benchmarks/449_poincare_goat.md` + `.research/449_SeeSE3_*` sharing the number by the owner-number convention |
+      | ActionBridge (2026-06-23) | **4** | 2 |
+
+      Two reasons citation weight beats creation order here. It is 6 edits
+      against ~34; and moving Poincaré would have rewritten **CHANGELOG**
+      entries, which are historical records of what was said at the time and
+      must not be edited to match a later renumber. **So ActionBridge moved:
+      `.plans/449_action_bridge_lean4_monotonicity_proof.md` → `587_*`**, title
+      updated with the rationale, all 6 references repointed
+      (`tests/bridge_spec_match.rs` ×4, `.research/292_*` ×2),
+      `.plans/.highwater` → 587. Residual ActionBridge-449 references: **0**
+      (the one apparent hit, `README.md:2938`, is a *Poincaré* citation on a
+      long line that also lists an unrelated `action_bridge` feature flag).
+      **The precedent does not generalize past its own sweep** — record that
+      before the next collision is resolved by rule instead of by measurement.
+- [x] **T3 — DONE 2026-09-04** (`28c353a1`): `.plans/.highwater` 585 → 586 and
+      `.benchmarks/.highwater` 700 → 701, both verified against a real file
+      (`586_pot_scale_determinism_ternary_group.md`,
+      `701_full_workspace_execution_pricing.md`). `.plans/` then went 586 → 587
+      with T2's renumber.
 - [ ] **T4** — the axis: a numbering gate in `scripts/docs_gate.sh`'s `CHECKS`,
       scoped to `.plans/`, `.issues/`, `.research/`, `.proposals/` per §3, asserting
       (a) no duplicate `NNN_` prefix and (b) max ≤ `.highwater`. Requirements this

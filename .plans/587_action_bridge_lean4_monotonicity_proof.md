@@ -1,4 +1,16 @@
-# Plan 449: ActionBridge Lean 4 Monotonicity Proof
+# Plan 587: ActionBridge Lean 4 Monotonicity Proof
+
+> **Renumbered 449 -> 587 on 2026-09-04 (Issue 724 T2).** `449` was allocated
+> twice: this plan (2026-06-23) and `449_poincare_latent_navigation_primitive.md`
+> (2026-07-18). `f98f7b51`'s precedent is *renumber per git-log first-creation*,
+> which would have kept 449 here and moved Poincaré — but measured, that is the
+> wrong direction: **27 of 33 `Plan 449` mentions are Poincaré-context** (README
+> feature table, CHANGELOG, docs, an example) against **4** here, and
+> `.benchmarks/449_poincare_goat.md` + `.research/449_SeeSE3_*` already share the
+> number by the owner-number convention. Renumbering Poincaré would also have
+> rewritten CHANGELOG entries, which are historical records of what was said at
+> the time and should not be edited to match a later renumber. So citation weight
+> wins over creation order; the precedent does not generalize past its own sweep.
 
 **Date:** 2026-06-23
 **Research:** [katgpt-rs/.research/292_Bridge_Neuro_Symbolic_Formal_Verification_Gap.md](../.research/292_Bridge_Neuro_Symbolic_Formal_Verification_Gap.md)

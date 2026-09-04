@@ -2,7 +2,7 @@
 
 > **Cross-reference note.** Primary chain-side guide: `riir-chain/.research/004_LatCal_Fixed_Point_Bridge_Lean4_Proof_Guide.md`.
 > Sibling crossref: `riir-neuron-db/.research/005_Shard_Snapshot_Atomicity_Iris_Proof_Crossref.md`.
-> Plan (open primitive): `katgpt-rs/.plans/449_action_bridge_lean4_monotonicity_proof.md`.
+> Plan (open primitive): `katgpt-rs/.plans/587_action_bridge_lean4_monotonicity_proof.md`.
 > **Date:** 2026-06-23
 > **Status:** Active — GOAT (open primitive, strengthens commercial moat).
 > **Classification:** Public (katgpt-rs)
@@ -123,7 +123,7 @@ theorem action_bridge_ranking_preserved
 
 **One-line reasoning:** First real machine-checked proof in the codebase; trivial theorem, non-trivial infrastructure; sets pattern for the harder Tier 1 (LatCal round-trip) and Tier 2 (Iris atomicity).
 
-**Routing:** Open primitive in `katgpt-rs/.proofs/` + plan `katgpt-rs/.plans/449_action_bridge_lean4_monotonicity_proof.md`. No private guide (sigmoid monotonicity is public math).
+**Routing:** Open primitive in `katgpt-rs/.proofs/` + plan `katgpt-rs/.plans/587_action_bridge_lean4_monotonicity_proof.md`. No private guide (sigmoid monotonicity is public math).
 
 ---
 

@@ -1,6 +1,6 @@
 //! Spec-match test for the ActionBridge Lean 4 ranking-preservation proof.
 //!
-//! **Plan 449 / G3.** This test asserts that the Rust `ActionBridge::select_action`
+//! **Plan 587 / G3.** This test asserts that the Rust `ActionBridge::select_action`
 //! and `simd::fast_sigmoid` match the Lean 4 spec at
 //! `katgpt-rs/.proofs/KatgptProof/Bridge/Basic.lean` + `RankingPreserved.lean`.
 //!
@@ -10,7 +10,7 @@
 //! Run: `cargo test --features action_bridge --test bridge_spec_match`
 //!
 //! Cross-references:
-//! - Plan: `.plans/449_action_bridge_lean4_monotonicity_proof.md`
+//! - Plan: `.plans/587_action_bridge_lean4_monotonicity_proof.md`
 //! - Research: `.research/292_Bridge_Neuro_Symbolic_Formal_Verification_Gap.md`
 //! - Lean proof: `.proofs/KatgptProof/Bridge/RankingPreserved.lean`
 //! - Empirical test (complementary): `micro_belief/tests.rs::g1_3_bridge_ranking_preservation`
@@ -96,7 +96,7 @@ fn spec_fast_sigmoid_saturation_boundary() {
 /// Static call-graph check: `ActionBridge::select_action` must route through
 /// `crate::simd::fast_sigmoid`, never through any softmax variant.
 ///
-/// This is the G3 contract from Plan 449: the Lean proof assumes the bridge
+/// This is the G3 contract from Plan 587: the Lean proof assumes the bridge
 /// projects via the (strictly-monotone) sigmoid. If a future change swaps in a
 /// softmax (which is NOT strictly monotone in the per-action sense — it
 /// introduces inter-action competition), the ranking-preservation theorem no
@@ -273,7 +273,7 @@ fn proofs_directory_exists() {
     assert!(
         proofs_dir.exists(),
         ".proofs/ directory is missing — Lean 4 ranking-preservation proof is gone. \
-         See .plans/449_action_bridge_lean4_monotonicity_proof.md"
+         See .plans/587_action_bridge_lean4_monotonicity_proof.md"
     );
     assert!(
         proofs_dir.join("KatgptProof/Bridge/Basic.lean").exists(),
