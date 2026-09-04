@@ -819,6 +819,9 @@ mod tests {
     }
 
     /// Segment length builder only accepts L >= 2 (paper requirement).
+    /// The check is a `debug_assert!` — release builds accept any L, so the
+    /// test gates to match (the debug_release_profile_axis class).
+    #[cfg(debug_assertions)]
     #[test]
     #[should_panic(expected = "segment_len must be >= 2")]
     fn builder_rejects_bad_segment_len() {
