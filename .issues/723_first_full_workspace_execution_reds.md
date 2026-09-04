@@ -192,7 +192,7 @@ were defects.
 | Gate | Criterion |
 |---|---|
 | G1 | **MET 2026-09-04** — `cargo test --workspace --all-features --release --doc` is GREEN (34 suites / 98 passed / 0 failed), the axis the full gate cannot reach |
-| G2 | `bench_294_ict_g6` passes under BOTH a default `target/` and a `CARGO_TARGET_DIR=/tmp/...` run (Class D, canaried both ways) |
+| G2 | **MET 2026-09-04, canaried both ways** — `bench_294_ict_g6` 3/3 under `CARGO_TARGET_DIR=/tmp/...` (18.9 s warm) AND 3/3 under the default `target/` (934.5 s cold — it spawns three internal feature-set builds). Before the fix the `/tmp` direction panicked, so the two directions genuinely disagreed |
 | G3 | Class C resolved by MEASUREMENT (a default-features re-run), never by re-pinning a drifted hash |
 | G4 | No gate in the workspace reports a percentage over a zero baseline — a `NaN` is a FAIL, not a printed value (Class A2) |
 
