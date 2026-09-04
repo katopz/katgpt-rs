@@ -799,9 +799,15 @@ system that duplicates already-shipped substrate under a different name
 > red on the stale `scripts/repo_set.txt` within the hour, and
 > `agents_repo_set_gate.py` then went red on this paragraph — which is the
 > membership-first gate doing precisely the job it was written for, on its
-> second day. The cross-repo **edge** count is NOT re-measured here: the last
-> real `ci_boundary_contract.sh` run is the 2026-09-01 one quoted below, and
-> three repos leaving must have moved it. Read it as of that run.
+> second day. The cross-repo **edge** count WAS re-measured post-retirement
+> (2026-09-04, boundary-guard log): the C0e-landing contract run printed
+> **exit 0 — 16 repos / 224 edges**, and the 23rd run re-confirmed 224 via
+> `--list-deps` (its full run exited 1 only on the worktree-only C6 artifact
+> from the sibling's 461-file rustfmt sweep — all five keeper pins exact at
+> HEAD, proven formatting-only on a clean /tmp checkout). Live count drifts
+> with landings — this session's `--list-deps` already reads 226 rows after
+> the Issue-092 ndb-sdk edge landed — so don't re-type a number, run:
+> `../riir-ai/scripts/ci_boundary_contract.sh --list-deps`.
 >
 > **This paragraph said 8 and 18 until 2026-09-03, and the way it was wrong
 > is worse than a stale number.** `riir-armageddon` was de-enrolled by an
