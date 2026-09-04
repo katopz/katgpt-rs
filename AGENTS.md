@@ -421,6 +421,18 @@ expressed as `required-features`, and neither can an `any(...)` of features
 (cargo's is AND-only). Those are reported as their own classes — a report that
 cries wolf on the shape cargo cannot fix gets ignored on the ones it can.
 
+**The sibling instrument answers the next axis down: is a specific target
+named by ANY committed suite?** `cfg_gated_target_audit.py` classifies how a
+target compiles; `scripts/suite_membership_audit.py` (first census
+2026-09-04, `.docs/10_audits/suite_membership_census.md`) reports which
+`[[test]]` targets no script/workflow names — the "gate nobody runs" class
+(865, 868) as a standing census instead of an ad-hoc hand grep. "Unpinned"
+means unnamed, not broken; the actionable cut is load-bearing + unpinned +
+default-visible + no broad `cargo test` run in the repo, and on the first
+census that cut lands exactly on the two documented populations (this repo's
+723 and riir-train's 507). Run it when landing a new gate: if nothing names
+it, either add a suite row or record why not.
+
 **Read the severity split, never the pooled total.** A target gated on a
 *default-on* feature still runs on a plain `cargo test` and only vanishes under
 `--no-default-features`. A *default-off* one reports a green zero every time

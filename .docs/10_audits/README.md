@@ -19,6 +19,7 @@
 | [`percentile_index_tail_support.md`](percentile_index_tail_support.md) | The 12→0 repair campaign that took its own sites out of the population — the `TRUNC-VAR` variable-p class, the `.trunc()` hole, the exact floor-vs-nearest-rank boundary, and why the floor is not ratcheted (2026-09-03) |
 | [`ci_compile_vs_execute_axis.md`](ci_compile_vs_execute_axis.md) | Compiles is not runs — CI compiled 480 test / 176 bench targets and executed none; the 4th rung after Issues 704/706/713, the 3-repo cross-workspace sweep, the two-tier resolution (scoped weekly + dispatch-only full run), and the `--all-targets` excludes doc-tests axis it found (Issue 718, closed 2026-09-04) |
 | [`debug_release_profile_axis.md`](debug_release_profile_axis.md) | The profile is part of the claim — orphaned `#[cfg]` across a blank line (Issue 715) and the full gate's release Layer 6 (Issue 716), both closed 2026-09-03 |
+| [`suite_membership_census.md`](suite_membership_census.md) | Which test targets does anything name — the per-target "gate nobody runs" census (865/868 class as a standing instrument), first census 2026-09-04: the 346 actionable rows land exactly on this repo's 723 and riir-train's 507 documented populations |
 
 ## Note
 
