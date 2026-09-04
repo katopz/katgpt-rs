@@ -27,6 +27,17 @@
 # and markdown, no cfg(target_os) surface, so ubuntu is correct and macOS would
 # only cost more. Don't "fix" it to macos-latest.
 #
+# WORKSTATION REQUIREMENTS (measured on the partial 4090 box 2026-09-04, where
+# 5 of 8 checks red for environment, not drift): (1) python3 >= 3.11 on PATH —
+# cfg_gated_target_audit.py imports tomllib (3.10 lacks it; the Windows Store
+# python3 alias also shadows real installs); (2) PYTHONIOENCODING=utf-8 — a
+# cp874/cp1252 console cannot print the gates' checkmark output and the failure
+# masquerades as a gate failure; (3) a FULL workspace checkout —
+# skill_repo_set_gate.py re-derives the live repo set and FAILS on repos the
+# box simply has not cloned (10 of 16 here, incl. riir-mmorpg-examples/riir-dao)
+# — regenerating repo_set.txt on a partial box would corrupt the canonical set;
+# the M3 is the canonical full workstation for that half.
+#
 # skill_repo_set_gate.py (added 2026-09-01, Issue 703) has a second axis the
 # other three do not: it reads SIBLING repos, which CI does not have. It does
 # NOT skip there — it separates its VOCABULARY (committed snapshot,
