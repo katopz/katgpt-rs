@@ -165,8 +165,12 @@ This is the same shape as `.docs/10_audits/cfg_gated_silent_zero_pass.md` one ax
 `#![cfg]`-gated test compiles to an empty binary and reports a green zero; here
 a `cfg(not(target_os))` module compiles to nothing and reports a green build.
 **A platform is part of the claim, exactly as the profile is.** `.github/workflows/full_gate.yml` **declares** a
-weekly cron and a manual dispatch; per-push is deliberately not enabled — see
-that file's preamble for the measured cost and the promotion criterion. That
+weekly cron, a manual dispatch, and a NARROW per-push/PR lane — the trigger is
+real but fires only when the gate's own definition changes
+(`scripts/full_gate.sh` / the workflow file itself; measured 2m17s made that
+affordable, broadening to `**/*.rs` remains rejected — see the file's preamble
+for the cost story and the promotion criterion). An ordinary code push does not
+gate here; the rot check is the Monday cron. That
 preamble also carries the liveness-sentinel record from `.issues/705` — the
 gate's first two CI runs passed over ZERO compiled units (ANSI color codes
 defeated every `^`-anchored counter, including the error count); closed +
