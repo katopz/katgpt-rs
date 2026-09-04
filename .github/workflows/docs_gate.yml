@@ -92,6 +92,25 @@ on:
       # an input to the gate even though its own name says "report".
       - 'scripts/all_ignored_target_audit.py'
       - 'scripts/all_ignored_load_bearing.txt'
+      # Issue 724: the numbering gate's inputs are the four SERIAL-numbered doc
+      # dirs and their `.highwater` allocators. None of them was an input to
+      # this workflow before — the only doc dirs globbed above are
+      # `.benchmarks/` and `.docs/`, which are exactly the two the gate
+      # EXCLUDES — so without these the gate could not fire on the one push it
+      # exists for: the push that adds a duplicate-numbered file. Third
+      # instance of this defect in this file (see the AGENTS.md and Issue 713
+      # notes above); found the same way, by reading the trigger list instead
+      # of assuming that adding a check wired it up.
+      - '.plans/**/*.md'
+      - '.issues/**/*.md'
+      - '.research/**/*.md'
+      - '.proposals/**/*.md'
+      - '.plans/.highwater'
+      - '.issues/.highwater'
+      - '.research/.highwater'
+      - '.proposals/.highwater'
+      - 'scripts/numbering_gate.py'
+      - 'scripts/numbering_floors.txt'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'
@@ -147,6 +166,25 @@ on:
       # an input to the gate even though its own name says "report".
       - 'scripts/all_ignored_target_audit.py'
       - 'scripts/all_ignored_load_bearing.txt'
+      # Issue 724: the numbering gate's inputs are the four SERIAL-numbered doc
+      # dirs and their `.highwater` allocators. None of them was an input to
+      # this workflow before — the only doc dirs globbed above are
+      # `.benchmarks/` and `.docs/`, which are exactly the two the gate
+      # EXCLUDES — so without these the gate could not fire on the one push it
+      # exists for: the push that adds a duplicate-numbered file. Third
+      # instance of this defect in this file (see the AGENTS.md and Issue 713
+      # notes above); found the same way, by reading the trigger list instead
+      # of assuming that adding a check wired it up.
+      - '.plans/**/*.md'
+      - '.issues/**/*.md'
+      - '.research/**/*.md'
+      - '.proposals/**/*.md'
+      - '.plans/.highwater'
+      - '.issues/.highwater'
+      - '.research/.highwater'
+      - '.proposals/.highwater'
+      - 'scripts/numbering_gate.py'
+      - 'scripts/numbering_floors.txt'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'

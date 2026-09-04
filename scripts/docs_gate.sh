@@ -90,6 +90,7 @@ CHECKS=(
     "scripts/cfg_gated_floor_gate.py:#![cfg]-gated targets that report a green 0-pass (Issue 713)"
     "scripts/orphaned_attr_gate.py:a #[cfg] separated from its item by a blank line (a08376a0)"
     "scripts/percentile_floor_gate.py:a percentile index that lands on n-1 and so reports the MAX"
+    "scripts/numbering_gate.py:a .plans/.issues/.research/.proposals number allocated twice (Issue 724)"
 )
 
 if ! command -v python3 >/dev/null 2>&1; then

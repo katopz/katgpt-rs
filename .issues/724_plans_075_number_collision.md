@@ -97,7 +97,41 @@ serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plu
       (`586_pot_scale_determinism_ternary_group.md`,
       `701_full_workspace_execution_pricing.md`). `.plans/` then went 586 → 587
       with T2's renumber.
-- [ ] **T4** — the axis: a numbering gate in `scripts/docs_gate.sh`'s `CHECKS`,
+- [x] **T4 — DONE 2026-09-04.** `scripts/numbering_gate.py` +
+      `scripts/numbering_floors.txt`, wired into `scripts/docs_gate.sh`'s
+      `CHECKS` (now 9/9 clean). Scope is the four serial-numbered dirs per §3;
+      the pins file carries the measured reason `.benchmarks/` and `.docs/` are
+      excluded, so a future widening has to argue with the evidence rather than
+      rediscover it. Measured population: **995 numbered files over 4 dirs, 0
+      tracked duplicates, 0 stale allocators, 1 untracked warning** (the `075`
+      of T1). Verdicts: tracked duplicate, `.highwater` below max, per-dir
+      population **floor** (every other verdict is a ceiling, so a regex
+      regression would print a confident green over zero files), and untracked
+      duplicates in their own **non-failing** class per
+      `skill_repo_set_gate.py`'s precedent — they red the moment they are
+      committed. **Canaried in five directions**, each restored: planted tracked
+      duplicate → exit 1; `.highwater` lowered below max → exit 1; floor raised
+      above measured → exit 1; pins file with no directories → exit **2** (an
+      empty scope is refused, not passed over); broken regex → exit **2** via
+      `selftest()` (untrustworthy instrument ≠ drift).
+
+      **And the trigger was the real hazard, for the third time in this file.**
+      `docs_gate.yml`'s `paths` filter globbed `.benchmarks/**` and `.docs/**`
+      — *exactly the two directories this gate excludes* — and carried nothing
+      for `.plans/`, `.issues/`, `.research/`, `.proposals/` or any
+      `.highwater`. The gate could not have fired on the one push it exists
+      for. Ten globs added to **both** hand-duplicated lists (GitHub Actions
+      has no YAML anchors); verified the two lists are identical at 43 entries
+      each and that the file still parses.
+
+- [ ] **T4b** — nothing asserts that `docs_gate.yml`'s two `paths` lists stay
+      in sync. The file's own comment says "keep the two lists in sync by
+      hand", which is a known-unenforced invariant, and a PR-list that drifts
+      behind the push-list is silent. A ~10-line check (parse both, compare as
+      sets) belongs in `CHECKS`. Verified identical by hand this time — that is
+      exactly the state that decays.
+
+- [-] **T4-orig** — the axis: a numbering gate in `scripts/docs_gate.sh`'s `CHECKS`,
       scoped to `.plans/`, `.issues/`, `.research/`, `.proposals/` per §3, asserting
       (a) no duplicate `NNN_` prefix and (b) max ≤ `.highwater`. Requirements this
       repo's gate discipline imposes: a `selftest()` on every invocation exiting

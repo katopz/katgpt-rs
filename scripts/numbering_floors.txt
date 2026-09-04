@@ -1,0 +1,58 @@
+# Pins for scripts/numbering_gate.py — katgpt-rs scope only (Issue 724 T4).
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message.
+#
+# ── SCOPE (this is the load-bearing decision, not the numbers) ──────────────
+#
+# Only directories whose leading NNN_ is an ALLOCATOR-ISSUED SERIAL belong
+# here. Measured 2026-09-04, two directories must be EXCLUDED and the reason is
+# not stylistic:
+#
+#   .benchmarks/ — the leading number is the OWNING plan/issue, and a family
+#                  per owner is the intended convention: 010_* x5 are all
+#                  Issue 010's "Report the Floor" benches; 294_ict_g1 / g2 / g3
+#                  / g10 / goat_gates / promotion are all Plan 294's gates.
+#                  ~55 numbers there are shared this way. The directory is
+#                  MIXED — it also holds real serials (700, 701) tracked by its
+#                  own .highwater — so "duplicate" is not decidable there
+#                  without knowing which convention a given file follows, and a
+#                  gate must not guess. A duplicate check here would have
+#                  produced ~55 findings, all false, and been the cries-wolf
+#                  instrument AGENTS.md warns gets ignored.
+#   .docs/        — no flat NNN_ files at all (nested by topic: 01_orientation,
+#                  02_inference, ...) and no .highwater. Nothing to check.
+#
+# ── FLOORS (not ceilings — read the reason) ─────────────────────────────────
+#
+# Every verdict in this gate is a CEILING (0 duplicates, max <= highwater), and
+# a ceiling cannot fail once the instrument goes blind: one regex regression
+# takes the population to zero and every ceiling passes, indistinguishable from
+# a clean repo. That is the failure mode this file's floors exist to catch, and
+# it is the same lesson as scripts/percentile_floors.txt's min_sites_scanned.
+#
+# Set BELOW the measured count with headroom, because files are legitimately
+# REMOVED here per the noise-reduction rule — a floor at the measured value
+# would red on every correct removal.
+min_files.plans = 400          # measured 469
+min_files.issues = 1           # measured 2 — resolved issues are removed, so
+                               # this floor can only ever assert "not zero"
+min_files.research = 450       # measured 511
+min_files.proposals = 10       # measured 13
+
+# ── CEILINGS ────────────────────────────────────────────────────────────────
+#
+# A duplicate among TRACKED files is the defect: every cross-reference in this
+# workspace is by number, so `Plan N` resolving to two documents means a reader
+# following a citation cannot tell which. Untracked duplicates are reported in
+# their own class and do NOT fail — a colleague's in-flight file is not a repo
+# defect (the same distinction scripts/skill_repo_set_gate.py already draws for
+# its untracked population) — but they fail the moment they are committed.
+max_duplicate_numbers = 0
+
+# A .highwater BELOW its directory's max is the precursor to a collision, not a
+# cosmetic mismatch: `value + 1` is already taken, so the next allocation is
+# guaranteed to collide. Found in TWO directories on 2026-09-04 (.plans 585 vs
+# 586, .benchmarks 700 vs 701) — i.e. the loaded state is the normal state
+# unless something checks.
+max_above_highwater = 0
