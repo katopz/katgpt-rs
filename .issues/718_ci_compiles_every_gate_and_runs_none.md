@@ -174,6 +174,21 @@ Two mechanisms, one class:
   survives the wait: CPU-seconds via `/usr/bin/time -l` is load-invariant (the
   seal-remake `.benchmarks/002` lesson — CPU ratios moved <0.11 over a 2× load
   swing), so the measurement remains valid whenever a quiet window appears.
+
+  **OWNER DECISION (2026-09-04, T3 resolved as a two-tier answer):**
+  (a) **The full-workspace `--all-features --release` execution stays
+  dispatch-only** — priced on a quiet box (load ≲ 10, CPU-seconds via
+  `/usr/bin/time -l`) BEFORE any scheduled job; a scheduled job that has never
+  been priced is the cost-blindness this issue exists to prevent.
+  (b) **A scoped weekly test job is AUTHORIZED for the machine-invariant
+  core** — the riir-train 507 shape (`scripts/test_gate.sh` + count floors +
+  a separate `tests` CI job), scoped to default-features lib + integration
+  targets that are deterministic on a Linux runner (no Metal, no 4090, no
+  wall-clock bars — those stay workstation-owned per the
+  `budget_gate.sh`/wall-clock-bar precedent). The scoped subset is the
+  implementation work that remains on this issue; the floors make a
+  silent-population regression loud. Until it lands, this issue stays OPEN
+  as the tracker.
   No other work remains on this issue: T1/T4 DONE, T2 withdrawn, G4 MET — T3
   is the sole open item and it is owner-gated on cost plus box quiet.
 - [x] **T4 — sweep every contract repo. DONE — `scripts/ci_test_execution_report.py`.**
@@ -220,14 +235,16 @@ Two mechanisms, one class:
   symptom, not who already owns it.** (It is also the repo shipping the
   vessel packer `seal-remake` Issue 001 depends on.)
 
-  **Ownership of all three instances, checked rather than assumed:**
-  katgpt-rs = this issue; `riir-game-sdk` = ALREADY FILED (`.issues/024`,
-  cross-referenced not duplicated); `riir-train` = NOT owned (22 issues,
-  none on this axis) → now `riir-train/.issues/507`, filed rather than
-  fixed, because that repo is GPU/training-heavy, a blanket `cargo test
-  --workspace` is likely the wrong shape (some suites need a 4090 CI does
-  not have), and a suite that skips its real content and exits 0 is *this
-  issue's own failure mode one level down*.
+  **Ownership of all three instances, checked rather than assumed — and now
+  CLOSED rather than assumed-open (2026-09-04):** katgpt-rs = this issue (the
+  LAST remaining instance); `riir-game-sdk` = was `.issues/024`, now CLOSED
+  (`f02daa3`, 2026-09-03 — weekly scheduled `test_gate.sh` + count pins);
+  `riir-train` = was `riir-train/.issues/507`, now LANDED (`e0716476` —
+  `scripts/test_gate.sh` + a separate `tests` CI job with per-target floors,
+  1,487 tests at the floor measurement). The "filed rather than fixed"
+  posture below describes why a blanket `cargo test --workspace` is the
+  wrong shape here — that reasoning still holds for THIS repo and T3 is the
+  scoped answer.
 
   **Two defects in the report were found by disagreement, and both changed a
   verdict** — recorded because each is a trap for the next reader:

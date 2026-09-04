@@ -10,7 +10,7 @@
 > (highwater+1, highwater bumped). No external file referenced this issue at
 > renumber time — the cheapest possible moment to move it.
 
-**Status:** OPEN — T1/T2/T4 DONE 2026-09-03 (audit + full sentinel sweep + the xhc_train_phase7 interim, riir-train `e2373492`); **T3 remains: the owner sequencing call** (move the registration out of `src/lib.rs`). T2's precondition is discharged. Found 2026-09-03 while closing riir-ai `.issues/855` Class 3.
+**Status:** OPEN — T1/T2/T4 DONE 2026-09-03 (audit + full sentinel sweep + the xhc_train_phase7 interim, riir-train `e2373492`); **T3 remains: the owner sequencing call** (move the registration out of `src/lib.rs`). T2's precondition is discharged. Found 2026-09-03 while closing riir-ai `.issues/855` Class 3. **Owner sequencing decision 2026-09-04: T3 APPROVED as an opportunistic move, not a standalone campaign** — the registration moves out of the library when each dependent target is next touched for real work (the per-target list below is the checklist); until then the interim state stands, which is deliberately safe-and-loud (the xhc guard + the sentinel sweep make any new consumer conflict a compile error naming the fix, never a fabricated zero). Do not re-sweep or re-audit for T3's sake; the guard fires first.
 
 ## The defect
 

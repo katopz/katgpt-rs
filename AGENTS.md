@@ -864,6 +864,19 @@ system that duplicates already-shipped substrate under a different name
 > consensus-critical program set — `riir-chain` Issues 096 + 097, closed on the
 > layering side by `riir-dapps`.
 
+## Issue log (resolved)
+
+- **Issue 719 — conditioning-consistency audit PoC (`cond_audit`)** RESOLVED
+  (T1, 2026-09-03, `995dea6d`) — opt-in `cond_audit` in katgpt-core: paired
+  forward (compressed-conditioned vs full-context teacher) → per-junction
+  forward-KL → Pinsker `TV ≤ sqrt(eps_KL/2)` + greedy-flip counter +
+  calibrated-zero arm; KL delegates to `stale_residual::kl_logits`. G8
+  non-vacuity PASS (planted 12-nat corruption → tv 4.97 ≫ 0.05, flips 8/8;
+  control arm exactly 0.0); G2 measured 1.487× the paired-forward cost vs the
+  4.0 budget. T2–T4 deferred `[-]` — reopen on any semantic
+  eviction/windowing PR, riir-train Plan 343 T1.6 (Gemma-4 ring), or
+  Research 523 H2O un-defer. Record: `.benchmarks/700_cond_audit_poc.md`.
+
 ## Numbering Discipline
 
 Issue, plan, doc, benchmark, and research numbers are **monotonic and never
