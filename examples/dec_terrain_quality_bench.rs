@@ -186,13 +186,10 @@ fn dec_route_greedy(
             }
         }
 
-        match best {
-            Some(next) => {
-                route.push(next);
-                current = next;
-            }
-            None => return None, // local minimum — no descending neighbour
-        }
+        // Local minimum — no descending neighbour: `?` propagates the None.
+        let next = best?;
+        route.push(next);
+        current = next;
     }
     None
 }

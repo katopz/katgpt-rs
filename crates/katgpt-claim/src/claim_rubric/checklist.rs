@@ -301,7 +301,7 @@ mod tests {
     #[test]
     fn section_items_match_constants() {
         assert_eq!(section_items(ChecklistSection::S1).len(), S1_ITEMS.len());
-        assert_eq!(section_items(ChecklistSection::S4).len() as usize, 5);
+        assert_eq!(section_items(ChecklistSection::S4).len(), 5);
     }
 
     #[test]
