@@ -1,0 +1,98 @@
+# Issue 724: `.plans/` numbering collisions REGREW after a hand-sweep fixed 11 of them — nothing gates the allocator
+
+**Status:** OPEN — filed 2026-09-04. Trigger was one untracked file; the search that followed found the pattern: **a hand-sweep resolved 11 `.plans/` collisions on 2026-07-15 (`f98f7b51`) and a new one landed 3 days later.** Fixed one at a time is how it stays invisible. The generalization first drafted here was WRONG and is corrected below — `.benchmarks/` must be excluded, on measured grounds.
+
+---
+
+## 1. The two live `.plans/` collisions
+
+| number | files | state |
+|---|---|---|
+| **075** | `075_residual_attention_simd_audit.md` (tracked, `HEAD`, mtime 2026-08-02) · `075_riir_ai_m3_campaign_measured_distill.md` (**untracked**, written 2026-09-04 09:22) | caught **pre-commit** |
+| **449** | `449_action_bridge_lean4_monotonicity_proof.md` (Plan dated 2026-06-23) · `449_poincare_latent_navigation_primitive.md` (Plan dated 2026-07-18) | **both tracked** — live in `HEAD` today |
+
+Two unrelated documents each titled "Plan 449". Every cross-reference in this
+workspace is by number, so `Plan 449` resolves to two things and a reader
+following a citation cannot tell which.
+
+**And 449 is the recurrence, not the original.** `f98f7b51` (2026-07-15) is
+titled *"docs: resolve 11 `.plans/` numbering collisions (renumber per git-log
+first-creation)"* — the sweep happened, it fixed eleven, and the Poincaré plan
+dated **2026-07-18** collided three days later. A one-time cleanup with no gate
+behind it buys three days.
+
+## 2. Two allocators are BELOW their directory's max — the precursor state
+
+| dir | `.highwater` | max file number | consequence |
+|---|---:|---:|---|
+| `.plans/` | **585** | **586** | the next allocation reads 585, uses 586 → collides with the existing 586 |
+| `.benchmarks/` | **700** | **701** | same, at 701 |
+| `.issues/` | 724 | 724 | correct |
+| `.research/` | 531 | 531 | correct |
+| `.proposals/` | 013 | 013 | correct |
+
+A file claimed a number without writing the allocator back. This is not a
+cosmetic mismatch — it is the loaded gun: `value + 1` is *already* taken. Both
+are one-line fixes and are safe (recording that a number is allocated can only
+ever move `.highwater` up).
+
+## 3. CORRECTION — `.benchmarks/` is NOT part of this defect
+
+This issue's first draft proposed a duplicate-number check over
+`.plans/`/`.issues/`/`.docs/`/`.benchmarks/`. Measured, that would have fired
+**~55 findings in `.benchmarks/` alone, all false**, and been the
+cries-wolf instrument AGENTS.md warns gets ignored.
+
+In `.benchmarks/` the leading number is the **owning plan/issue**, not a serial,
+and a family per owner is the intended convention:
+
+- `010_best_belief_floor_comparison` · `010_bom_floor_comparison` ·
+  `010_report_the_floor_consolidated` · `010_sdar_arena` ·
+  `010_sleep_time_floor_comparison` — five, all Issue 010 "Report the Floor".
+- `294_ict_g1` · `294_ict_g2` · `294_ict_g3` · `294_ict_g10` ·
+  `294_ict_goat_gates` · `294_ict_promotion` — six, all Plan 294's gates.
+
+The directory is **mixed**: it also holds allocator-issued serials (`700`, `701`,
+tracked by its own `.highwater`). So "duplicate number" is not a decidable
+defect there without knowing which convention a given file follows, and the gate
+must not guess.
+
+Measured zero-duplicate directories — i.e. the ones that really are strict
+serials, and the correct scope: **`.issues/`, `.research/`, `.proposals/`**, plus
+`.plans/` (which is strict-serial by intent and is where both collisions are).
+
+## Tasks
+
+- [ ] **T1** — `075`: owner decides the repo first, because the number depends on
+      it. The file's own vocabulary is **riir-clippy's** ("Batch 105", "the B60
+      discipline", "named **corpus** entries", "measured-GOAT **distill**"), and
+      riir-clippy is where rule-corpus mining lives per AGENTS.md; katgpt-rs
+      ships modelless inference primitives. BOUNDARY.md's domain test arbitrates.
+      Then renumber: **586** if it stays here, **076** if it moves (riir-clippy
+      `.plans/.highwater` is 75, no `075_*` on disk).
+- [ ] **T2** — `449`: renumber the later one (`449_poincare_latent_navigation_primitive.md`,
+      Plan dated 2026-07-18) per `f98f7b51`'s own precedent — *renumber per
+      git-log first-creation*, so the 2026-06-23 plan keeps 449. **Grep for
+      inbound citations of "Plan 449" first**; unlike 075 this one has been in
+      `HEAD` for seven weeks and may be cited.
+- [ ] **T3** — bump `.plans/.highwater` 585 → 586 and `.benchmarks/.highwater`
+      700 → 701. Independent of T1/T2 and safe on its own.
+- [ ] **T4** — the axis: a numbering gate in `scripts/docs_gate.sh`'s `CHECKS`,
+      scoped to `.plans/`, `.issues/`, `.research/`, `.proposals/` per §3, asserting
+      (a) no duplicate `NNN_` prefix and (b) max ≤ `.highwater`. Requirements this
+      repo's gate discipline imposes: a `selftest()` on every invocation exiting
+      **2** (untrustworthy instrument ≠ drift); a **floor** on files scanned per
+      directory, because every assertion here is a ceiling and a glob regression
+      takes the population to zero and passes; and **untracked files reported
+      separately without failing**, mirroring `skill_repo_set_gate.py`'s existing
+      *untracked* class — a colleague's in-flight file is not a repo defect, but it
+      must fail the moment it is committed. Canary all four directions before
+      landing.
+- [ ] **T5** — the `075` file's header reads `Date: 2026-09-05` on a file written
+      **2026-09-04**. Trivial, but a plan whose own date is in the future is
+      unusable as a timeline.
+
+## References
+
+- AGENTS.md §"Numbering Discipline" · the prior incident: `.issues/121` · the prior sweep that regrew: `f98f7b51` (2026-07-15)
+- Found while closing a loose end flagged in a session handoff ("untracked in katgpt-rs: `.plans/075_riir_ai_m3_campaign_measured_distill.md` — not part of this task")
