@@ -101,3 +101,5 @@ None yet. The quality-parity claim ("mass/age ≥ raw-H2O at matched budget") is
 ## 7. Cross-Ref (2026-09-03)
 
 > **Cross-ref (Research 528 / Issue 719):** any un-defer of this eviction policy must gate on the **conditioning-consistency audit** (per-junction forward-KL → unconditional Pinsker `TV <= sqrt(eps/2)` between evicted-conditioned and full-context forwards) — hit-rate/quality metrics alone do not measure the train/serve conditioning-gap class (arXiv:2609.00865). T4 of Issue 719.
+
+> **PASS-Redirects (synthesis):** Wang et al. [arXiv:2609.03430 "Random Attention: Rethinking KV Cache Eviction for Efficient Reasoning"] — the null hypothesis this plan's bench lacked: prompt-pinned per-head random matches the strongest scored evictors on reasoning tasks (+32–43% serving throughput, no scoring pass); most inter-selector gap is prompt protection, not the score. Plan 585 addendum (T3.6–T3.9) adds the control arm + protection factorial; distillation in katgpt-rs `.research/531_Random_Attention_Null_Eviction.md`.

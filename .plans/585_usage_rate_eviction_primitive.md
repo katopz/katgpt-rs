@@ -1,7 +1,7 @@
 # Plan 585: Usage-Rate (Mass/Age) KV Eviction Primitive + Generation-Runaway Canary
 
 **Date:** 2026-08-31
-**Status:** DONE (2026-09-02) — Phases 1–3 landed; **MIXED GOAT verdict, opt-in** (Bench 697: G1–G4 PASS, G8 regime-bounded — 2–4× raw-H2O recall at cap ≥ 32, one honest miss at the 8%-budget extreme; no consumer = no promotion). Phase 4 stays consumer-pull-gated ([-] below). Record: [`.benchmarks/697_usage_rate_eviction_goat.md`](../.benchmarks/697_usage_rate_eviction_goat.md).
+**Status:** DONE (2026-09-02) — Phases 1–3 landed; **MIXED GOAT verdict, opt-in** (Bench 697: G1–G4 PASS, G8 regime-bounded — 2–4× raw-H2O recall at cap ≥ 32, one honest miss at the 8%-budget extreme; no consumer = no promotion). Phase 4 stays consumer-pull-gated ([-] below). Record: [`.benchmarks/697_usage_rate_eviction_goat.md`](../.benchmarks/697_usage_rate_eviction_goat.md). **ADDENDUM OPEN (2026-09-04, Research 531):** the null-hypothesis arm (prompt-pinned per-head random) is missing from the bench — T3.6/T3.7 below; G8 must be re-read against it before any future promotion.
 **Research:** [katgpt-rs/.research/523_H2O_Norm_Age_Normalized_KV_Eviction.md](../.research/523_H2O_Norm_Age_Normalized_KV_Eviction.md)
 **Source paper:** [arXiv:2608.19920](https://arxiv.org/abs/2608.19920) — "Learning how to Forget" (Seeger et al., AWS, 2026)
 **Target:** `katgpt-rs/crates/katgpt-core/src/kv_eviction/` (new module) + Cargo feature `usage_rate_eviction`
@@ -57,3 +57,19 @@ House pattern: the primitive consumes caller-supplied observational signal (`sus
 - No runtime wiring in this repo (consumers live in riir-ai — Issue 836).
 - No training anywhere (riir-train Plan 367 owns co-adaptation).
 - Bonsai-GDN: no KV eviction on recurrent state — out of scope by architecture.
+
+## Addendum (2026-09-04) — the null-hypothesis arm (Research 531)
+
+arXiv:2609.03430 ("Random Attention", Salesforce) shows prompt-pinned per-head
+uniform-random eviction matches the strongest scored evictors on reasoning tasks
+at 32–43% higher serving throughput, and that most of the inter-selector gap is
+prompt protection, not the score. Bench 697's T3.2 ran six scored/structural
+policies with **no random+pin control** — G8's "mass/age ≥ raw-H2O" does not yet
+establish signal value beyond protection.
+
+### Tasks
+
+- [ ] **T3.6** Add the `random_prompt_pin` arm to the Bench 697 harness: seeded LCG draw (bit-reproducible, G1-compatible), prompt/keystone rows pinned via the existing `select_evict(pinned)` mask, per-head independent draws (the paper's superadditivity result makes shared draws a different, weaker policy — do not conflate). Matched budget + buffer, same fixture. **Non-vacuity by construction:** the paper's passcode regime predicts the arm collapses at cap=16 (needle-at-depth); a TIE at cap=16 would instead refute signal value on this workload and mass_age's remaining case is protection alone — a demote-the-loser input, recorded either way.
+- [ ] **T3.7** Protection factorial: run `mass_age`, `ega_energy`, and the new null arm each in ±prompt-pin form; record per-arm keystone-survival fraction (the paper's keep-log statistic — the attribute-quality-to-protection-vs-signal diagnostic). Update Bench 697 with the extended tables and re-state the G8 verdict against the controlled null.
+- [ ] **T3.8** Record the round-cost axis in the bench doc: our score update is 1.22 ns/row CPU (G2) but the paper's +32–43% serving margin lives where scoring is a kernel pass over paged state — i.e. T4.1 (mass-byproduct kernel, Issue 836). Registered alternative: **if deep-needle recall is not load-bearing on our serving workloads, skip the kernel and ship the null policy** (zero kernel work; the `select_evict` API already supports it).
+- [ ] **T3.9** Fold the null arm + protection factorial into the standing promotion gate: any future lossy KV policy promoted to default must beat `random_prompt_pin` at matched budget AND matched protection (extends `runaway_gate`'s promotion rule — the gate side of Research 531).
