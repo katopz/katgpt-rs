@@ -47,6 +47,11 @@
 
 use std::path::Path;
 
+// Issue 721 T3: install the tracking allocator in THIS test binary (the root
+// lib no longer registers a `#[global_allocator]` as a library).
+#[path = "common/alloc_tracking.rs"]
+mod alloc_tracking;
+
 use katgpt_rs::kimi_k3::loader::load_kimi_k3;
 use katgpt_rs::kimi_k3::model::{
     ForwardTiming, KimiK3ModelConfig, KimiK3Runtime, kimi_k3_forward_token,
@@ -101,8 +106,9 @@ fn g4_kimi_k3_forward_zero_alloc_steady_state() {
 
     // Sentinel: confirm the allocator is actually counting on this thread.
     // If this stays at zero after an intentional alloc, the global allocator
-    // isn't installed (e.g. someone removed the `#[global_allocator]` from
-    // src/lib.rs) and the test can't measure anything.
+    // isn't installed (the per-target `alloc_tracking` module is what installs
+    // it — see `tests/common/alloc_tracking.rs`, katgpt-rs Issue 721 T3) and
+    // the test can't measure anything.
     let _sentinel: Vec<u8> = vec![0u8; 8];
     let (count_after_sentinel, _) = katgpt_core::alloc::get_alloc_stats();
     assert!(

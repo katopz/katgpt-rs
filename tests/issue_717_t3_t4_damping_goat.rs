@@ -29,6 +29,11 @@
 //! Run: `cargo test -p katgpt-rs --features lt2_looped,lt2_deep_stability --test issue_717_t3_t4_damping_goat -- --nocapture`
 
 use katgpt_rs::hla::MultiLayerAhlaCache;
+
+// Issue 721 T3: install the tracking allocator in THIS test binary (the root
+// lib no longer registers a `#[global_allocator]` as a library).
+#[path = "common/alloc_tracking.rs"]
+mod alloc_tracking;
 use katgpt_rs::transformer::loop_deep::{DirectionScales, LoopDeepRun, project_lambda, robust_norm};
 use katgpt_rs::transformer::{
     ForwardContext, MultiLayerKVCache, TransformerWeights, forward_looped,

@@ -253,8 +253,17 @@ pub mod transformer;
 // ── Types (genuine root module — re-exports + root-specific types) ─────────
 pub mod types;
 
-// ── Debug-only global allocator ────────────────────────────────────────────
-#[cfg(debug_assertions)]
+// ── Allocator registration (unit tests only) ───────────────────────────────
+// Issue 721 T3: this used to be a bare `#[cfg(debug_assertions)]` — a
+// LIBRARY registering the process allocator for every binary that links it.
+// That conflicted with any consumer's own `#[global_allocator]` (riir-ai
+// Issues 830/855, riir-train Issue 721 T4) and silently served counters to
+// consumers whose gates then depended on this crate staying linked. The
+// registration now lives only in this crate's own unit-test build — the
+// same `cfg(all(test, debug_assertions))` house pattern katgpt-core uses —
+// and every integration test / example that asserts on the alloc counters
+// installs its own copy via `tests/common/alloc_tracking.rs`.
+#[cfg(all(test, debug_assertions))]
 #[global_allocator]
 static GLOBAL_ALLOC: katgpt_core::alloc::TrackingAllocator = katgpt_core::alloc::TrackingAllocator;
 

@@ -37,13 +37,13 @@
 
 #![allow(clippy::too_many_lines)]
 
-// Issue 682: force-link the katgpt-rs root's debug-only TrackingAllocator.
-// Nothing in this file references root-crate items, so the linker would
-// otherwise drop the rlib member carrying the `#[global_allocator]` shim
-// and the alloc audits below would pass VACUOUSLY (counters never
-// increment). Verified empirically: `nm` on the previously built binary
-// found zero TrackingAllocator symbols.
-extern crate katgpt_rs;
+// Issue 721 T3: install the tracking allocator in THIS test binary. The root
+// lib no longer registers a `#[global_allocator]` as a library (that chose
+// the process allocator for every downstream binary and conflicted with any
+// consumer's own registration). Replaces the Issue-682 force-link, which
+// existed only to keep the root's library-level shim linked.
+#[path = "common/alloc_tracking.rs"]
+mod alloc_tracking;
 
 /// Liveness sentinel (Issue 682): FAIL the audit if the TrackingAllocator
 /// is not actually installed (debug builds only).

@@ -34,6 +34,12 @@
 
 #![cfg(feature = "kimi_k3_loader")]
 
+// Issue 721 T3: the root lib no longer registers a `#[global_allocator]` as a
+// library — this example installs its own copy so the debug-run per-token
+// alloc counters keep working (release runs print the not-measured notice).
+#[path = "../tests/common/alloc_tracking.rs"]
+mod alloc_tracking;
+
 use std::path::Path;
 use std::time::Instant;
 

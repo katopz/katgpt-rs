@@ -12,27 +12,13 @@
 //!   a bit-identical decision sequence (no RNG, no HashMap iteration
 //!   anywhere in the decision path — fixed arrays only).
 //! - **G4 alloc-free** — ≥10k steps at steady state allocate exactly zero
-//!   (the root crate's debug-only per-thread TrackingAllocator; Issue 682
-//!   force-link + liveness sentinel against vacuity).
-//! - **Policy firing** — the paper's two heuristics fire at exactly their
-//!   triggers: late-landing self-loop at exactly K, explorer backtrack on
-//!   the FIRST revisit, no-cycle control never halts.
-//! - **Vacuity control** — `HaltPolicy::Never` is the behavioral shape of
-//!   the feature being off; the three-layer flag-off story is documented at
-//!   the test.
-//! - **Plug seams** — the MCTS budget-loop wrapper (a never-halt monitor is
-//!   action-identical to the unarmed search with the same seed; a halt-at-N
-//!   check demonstrably cuts the loop) and the dd-tree TreeBuilder patience
-//!   seam (an armed monitor cuts a build that would otherwise fill its
-//!   whole budget).
-
-#![cfg(feature = "structural_cot_halt")]
-
-// Issue 682: force-link the katgpt-rs root's debug-only TrackingAllocator.
-// Without a root-crate item reference the linker drops the rlib member
-// carrying the `#[global_allocator]` shim and the alloc audits below pass
-// VACUOUSLY (counters never increment).
-extern crate katgpt_rs;
+// Issue 721 T3: install the tracking allocator in THIS test binary. The root
+// lib no longer registers a `#[global_allocator]` as a library (that chose
+// the process allocator for every downstream binary and conflicted with any
+// consumer's own registration). Replaces the Issue-682 force-link, which
+// existed only to keep the root's library-level shim linked.
+#[path = "common/alloc_tracking.rs"]
+mod alloc_tracking;
 
 use fastrand::Rng;
 use katgpt_core::structural_cot_halt::{
