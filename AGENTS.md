@@ -877,6 +877,21 @@ system that duplicates already-shipped substrate under a different name
 
 ## Issue log (resolved)
 
+- **Issue 724 — `.plans/` numbering collisions regrew after a hand-sweep; nothing gated the allocator** RESOLVED
+  (T2/T3/T4 2026-09-04 `24e349e9`/`28c353a1`/`322769b2`; **T4b + T1/T5 closeout 2026-09-04 `866df2a7`**;
+  file removed per noise-reduction — full narrative in git history). The tracked `449` collision
+  resolved by CITATION WEIGHT, not creation order (Poincaré kept 449 with 27 mentions; ActionBridge
+  moved to `587`); both loaded allocators re-pinned (`.plans` 587, `.benchmarks` 701). Two standing
+  gates landed: `scripts/numbering_gate.py` + `numbering_floors.txt` (duplicate-number, stale-allocator,
+  per-dir population FLOOR, tracked-vs-untracked split; canaried five directions incl. exit-2 pins)
+  and `scripts/docs_gate_paths_sync.py` (docs_gate.yml's two hand-duplicated trigger `paths:` lists
+  must stay set-identical — drift exits 1 naming each side's globs; the workflow's own LF line
+  endings preserved through a binary-safe edit). T1/T5 moot: the untracked `075_riir_ai_m3_campaign_*.md`
+  vanished from the tree before renumbering; nothing to arbitrate. Both gates wired into
+  `docs_gate.sh`'s CHECKS (now 10) with the paths-sync script globbed as its own workflow input
+  (44 = 44, the 713/704 trigger-omission class closed for this file). Record: the two scripts'
+  docstrings + `scripts/numbering_floors.txt`.
+
 - **Issue 721 — the root crate registers a `#[global_allocator]` as a library** RESOLVED
   (T1/T2/T4 2026-09-03; **T3 2026-09-04**, the owner sequencing call executed; file removed per
   noise-reduction — full inventory in git history). The lib-level
