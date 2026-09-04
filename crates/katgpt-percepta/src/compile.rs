@@ -424,6 +424,16 @@ pub fn compile_rust_to_wasm(rust_source: &str) -> Result<Vec<u8>, CompileError> 
             "--target=wasm32-unknown-unknown",
             "-O",
             "--crate-type=cdylib",
+            // Issue 723 Class B: the runtime's input_base_address reads the
+            // `__heap_base` global export to place program inputs — without
+            // the export every compiled module failed at load with
+            // "__heap_base not exported". The C→wasm path already passes
+            // this flag; the Rust path was the one missing it. NOTE the
+            // spelling: rustc drives rust-lld DIRECTLY for wasm targets, so
+            // the arg must be the raw linker flag — a `-Wl,` prefix (the cc
+            // driver form) reaches lld verbatim and fails with
+            // "unknown argument".
+            "-C", "link-args=--export=__heap_base",
             "-o",
         ])
         .arg(&wasm_path)

@@ -323,6 +323,16 @@ fn bench_mls_stability_across_positions() {
             // Track cosine similarity between consecutive positions
             if let Some(ref prev) = prev_logits {
                 let cos = cosine_sim(prev, logits);
+                // Issue 723: this gate printed a NaN average under
+                // --all-features — a non-finite cos (Inf/Inf from exploded
+                // logits under the shifted fixture RNG stream) silently
+                // averaged into the verdict. Fail LOUD at the producing
+                // position instead.
+                assert!(
+                    cos.is_finite(),
+                    "K={k}: non-finite cos_sim at pos {pos} — logits exploded under \
+                     this feature set (fixture RNG-stream shift; run under the gate's own features)"
+                );
                 all_cos_sims.push(cos);
             }
             prev_logits = Some(logits.to_vec());

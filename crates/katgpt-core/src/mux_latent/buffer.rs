@@ -84,8 +84,18 @@ impl LatentContextBuffer {
     /// Create a buffer with adaptive SLoD compression.
     #[cfg(feature = "lclm_adaptive_lod")]
     pub fn new_adaptive(tokens: &[u32], config: MuxLatentConfig, slod: SpectralLOD) -> Self {
-        let window_size = config.window_size;
         let _span_size = config.compression_ratio.span_size();
+
+        // window_size == 0 means "no windowing" throughout this module (the
+        // encoder resolves it the same way) — resolve it to ONE window of all
+        // tokens instead of panicking in `chunks(0)` (Issue 723 Class E:
+        // MuxLatentConfig::default() carries 0, so this was reachable from a
+        // plain `..Default::default()` config).
+        let window_size = if config.window_size == 0 {
+            tokens.len().max(1)
+        } else {
+            config.window_size
+        };
 
         // Split tokens into windows and determine per-window compression
         let windows: Vec<&[u32]> = tokens.chunks(window_size).collect();
@@ -517,6 +527,30 @@ mod tests {
         // Full roundtrip should still work
         let expanded = buf.full_expand();
         assert_eq!(expanded, tokens);
+    }
+
+    #[test]
+    #[cfg(feature = "lclm_adaptive_lod")]
+    fn test_buffer_adaptive_default_window_size_zero_no_panic() {
+        // Issue 723 Class E regression: `MuxLatentConfig::default()` carries
+        // `window_size: 0`, and `new_adaptive` used to feed that straight
+        // into `chunks(0)` — "chunk size must be non-zero". Zero means
+        // "no windowing" everywhere else in this module (the encoder
+        // resolves it identically), so the adaptive path must too: one
+        // window of all tokens, no panic, clean roundtrip.
+        let config = MuxLatentConfig {
+            compression_ratio: CompressionRatio::X8,
+            preserve_instructions: false,
+            ..Default::default()
+        };
+        assert_eq!(config.window_size, 0, "the default must keep carrying 0 for this regression to stay live");
+
+        let tokens = make_tokens(32);
+        let buf = LatentContextBuffer::new_adaptive(&tokens, config, SpectralLOD::default());
+
+        assert_eq!(buf.stats().total_input_tokens, 32);
+        let expanded = buf.full_expand();
+        assert_eq!(expanded, tokens, "default-config adaptive roundtrip failed");
     }
 
     #[test]

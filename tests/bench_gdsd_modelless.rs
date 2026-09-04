@@ -546,6 +546,22 @@ fn goat_169_g1_acceptance_rate() {
     println!("   ✅ G1 PASS: acceptance rate improvement ≥5%");
 }
 
+// Issue 723 Class A2: release-calibrated overhead bar. Three instrument
+// defenses: (1) bit-exact sinks the gate consumes — under
+// `--features gdsd_distill` alone, rustc 1.98.1 fat LTO eliminated the
+// unused-result pruner loops entirely (baseline measured 0 ns at 2M iters,
+// ratio +inf) — a data-dependent sink makes the work un-eliminable under
+// any inlining decision; (2) ROUNDS interleaved (baseline, gdsd) chunks
+// with a MEDIAN-of-ratios — two sequential 2M arms measured +5.2% and
+// +21.7% thirty seconds apart, so a single ratio is box-load-fragile at
+// the 20% bar; (3) a loud assert when every baseline chunk reads 0 ns, so
+// a vanished measurement is a named FAIL, never a NaN verdict. The gate
+// itself stays release-owned: in debug the wrapper cost reads ~106%
+// (unoptimized call overhead, not the measured quantity).
+#[cfg_attr(
+    debug_assertions,
+    ignore = "release-calibrated overhead bar (Issue 723 Class A2): debug wrapper cost ~106% is a profile artifact; run with --release"
+)]
 #[cfg(feature = "gdsd_distill")]
 #[test]
 fn goat_169_g3_overhead() {
@@ -558,38 +574,91 @@ fn goat_169_g3_overhead() {
     println!("{}", "═".repeat(70));
 
     let warmup = 1000;
-    let iters = 100_000;
+    // Interleaved median-of-ratios (the Bench 828/831 discipline): ROUNDS
+    // back-to-back (baseline-chunk, gdsd-chunk) pairs, one ratio per pair,
+    // MEDIAN across pairs. Two sequential 2M-iter arms measured +5.2% and
+    // +21.7% thirty seconds apart — box-load drift between the arms moves a
+    // single ratio; adjacent pairs share a load window and the median kills
+    // the residual spikes, without touching the 20% bar.
+    const ROUNDS: usize = 9;
+    let iters = 2_000_000;
+    let chunk = iters / ROUNDS;
+
+    // One timed helper for BOTH arms: identical non-pruner work per
+    // iteration (the xorshift mix), so each pair's ratio isolates the
+    // pruner delta by construction. The mix is data-dependent and its
+    // result escapes — the baseline pruner's relevance is a CONSTANT (1.0),
+    // so a bare constant sink would itself fold and the loop would die.
+    fn timed_arm<S: ScreeningPruner>(
+        pruner: &S,
+        iters: usize,
+        sink: &mut u32,
+        mix: &mut u64,
+    ) -> std::time::Duration {
+        let start = Instant::now();
+        for i in 0..iters {
+            *mix ^= *mix << 13;
+            *mix ^= *mix >> 7;
+            *mix ^= *mix << 17;
+            *sink ^= pruner.relevance(0, i % 100, &[]).to_bits() ^ (*mix as u32);
+        }
+        start.elapsed()
+    }
 
     // Baseline
     let baseline = NoScreeningPruner;
-    for i in 0..warmup {
-        let _ = baseline.relevance(0, i % 100, &[]);
-    }
-    let start = Instant::now();
-    for i in 0..iters {
-        let _ = baseline.relevance(0, i % 100, &[]);
-    }
-    let baseline_time = start.elapsed();
-
+    let mut baseline_sink = 0u32;
+    let mut mix = 0x9E37_79B9_7F4A_7C15u64;
     // GDSD
     let mut gdsd = GdsdPruner::new(NoScreeningPruner, NoScreeningPruner, identity_advantage);
     gdsd.update_advantage_mean(0.5);
-    for i in 0..warmup {
-        let _ = gdsd.relevance(0, i % 100, &[]);
-    }
-    let start = Instant::now();
-    for i in 0..iters {
-        let _ = gdsd.relevance(0, i % 100, &[]);
-    }
-    let gdsd_time = start.elapsed();
+    let mut gdsd_sink = 0u32;
+    timed_arm(&gdsd, warmup, &mut gdsd_sink, &mut mix);
 
-    let overhead_pct =
-        (gdsd_time.as_nanos() as f64 / baseline_time.as_nanos() as f64 - 1.0) * 100.0;
+    // Interleaved rounds: each round is a back-to-back (baseline, gdsd)
+    // pair over `chunk` iterations — the pair shares one load window, so
+    // its ratio is drift-resistant; the median across rounds absorbs the
+    // remaining spikes.
+    let mut ratios: Vec<f64> = Vec::with_capacity(ROUNDS);
+    let mut baseline_total_ns = 0u128;
+    for _ in 0..ROUNDS {
+        let b = timed_arm(&baseline, chunk, &mut baseline_sink, &mut mix);
+        let g = timed_arm(&gdsd, chunk, &mut gdsd_sink, &mut mix);
+        let b_ns = b.as_nanos();
+        baseline_total_ns += b_ns;
+        if b_ns > 0 {
+            ratios.push(g.as_nanos() as f64 / b_ns as f64);
+        }
+    }
 
-    println!("   NoScreeningPruner:  {baseline_time:?}");
-    println!("   GdsdPruner:         {gdsd_time:?}");
+    // Issue 723 Class A2: a vanished measurement (fold-eliminated work) or
+    // a sub-resolution chunk reads 0 ns and the ratio collapses — that is
+    // an instrument failure, not a pass. Make it LOUD instead of NaN.
+    assert!(
+        !ratios.is_empty(),
+        "G3 instrument failure: every baseline chunk measured 0 ns over {iters} iters \
+         (work eliminated or below timer resolution) — fix the harness, do not trust the ratio"
+    );
+    ratios.sort_by(|a, b| a.total_cmp(b));
+    let median_ratio = ratios[ratios.len() / 2];
+    let overhead_pct = (median_ratio - 1.0) * 100.0;
+
+    println!(
+        "   Chunks: {ROUNDS} x {chunk} iters; baseline total {baseline_total_ns} ns"
+    );
+    println!(
+        "   Per-round ratio range: {:.4} .. {:.4} (median {:.4})",
+        ratios[0],
+        ratios[ratios.len() - 1],
+        median_ratio
+    );
     println!("   Overhead:           {overhead_pct:+.1}%");
     println!("   Bar:                ≤ 20%");
+
+    // Consume the sinks: this is what pins the pruner work as live (a
+    // feature set whose inlining deleted the unused-result loops measured
+    // the baseline at 0 ns — see the header note above).
+    std::hint::black_box((baseline_sink, gdsd_sink));
 
     if overhead_pct <= 20.0 {
         println!("   ✅ G3 PASS: overhead ≤ 20%");

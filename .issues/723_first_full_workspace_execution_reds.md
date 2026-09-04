@@ -2,9 +2,9 @@
 
 **Status:** OPEN — filed 2026-09-04 by Issue 718 T3(a) (the full-workspace
 pricing run, the first time anything ever *executed* this workspace's test
-surface). **Class F (doc-tests, 8 targets / 26 doctests) and Class D
-(hard-coded `target/release`, 1 target) are FIXED in the filing commit.**
-Classes A/A2/B/C/E remain and are the tracker's content. 718 is CLOSED and
+surface). **Class F (doc-tests), Class D (hard-coded `target/release`), and
+Class B (the wasm `__heap_base` flag, both targets) are FIXED.** Classes
+A/A2/C/E remain and are the tracker's content. 718 is CLOSED and
 REMOVED (durable record: `.docs/10_audits/ci_compile_vs_execute_axis.md`); this
 issue inherits the reds it found. The cadence question 718 left open is
 answered by its own reds: the full `--all-features` run **cannot pass at any
@@ -171,21 +171,73 @@ were defects.
       AGENTS.md.
 - [x] **T2 — Class D: hard-coded target dir.** `CARGO_TARGET_DIR`-derived,
       panic names the resolved path, repo swept for other sites (none).
-- [ ] **T3 — Class C first, before any other class.** Re-run ONE
-      `issue_698_*` target at default features. Confirms-or-kills the
-      "`--all-features` changed the fixture" hypothesis for all 9 at once,
-      and it is the only class where the wrong fix (re-pinning) would
-      destroy the evidence.
-- [ ] **T4 — Class E: `bench_238_mux_latent_integration`.** The library
-      panic. Guard the zero chunk size at the `buffer.rs:91` divisor.
-- [ ] **T5 — Class A2: the three `NaN%` gates.** Raise iterations past timer
-      resolution AND assert a denominator floor so a future zero FAILs loudly.
-- [ ] **T6 — Class B: the wasm `__heap_base` flag.** Add the linker export,
-      or skip-with-reason when it is absent.
+- [x] **T3 — Class C first, before any other class.** CONFIRMED 2026-09-04:
+      `issue_698_t1_gain_spectrum` PASSES under its own committed feature set
+      (`--features lt2_looped,loop_stability_fix`, 0.24 s, pinned spectrum
+      reproduces within the hybrid band) and fails only under `--all-features`
+      unification. The gates are CORRECT under their own features and
+      MEANINGLESS under unification — exactly the Issue-830 twin. Per G3 the
+      evidence is preserved (no re-pin); the reds are documented-expected under
+      unification until owner option (iii) (dedicated lanes) is built.
+- [x] **T4 — Class E: `bench_238_mux_latent_integration`.** FIXED 2026-09-04.
+      Root cause: `LatentContextBuffer::new_adaptive` fed `config.window_size`
+      straight into `chunks()` — and `MuxLatentConfig::default()` carries 0,
+      while the encoder resolves 0 to "no windowing" (encoder.rs). The buffer
+      path now resolves 0 the same way (one window of all tokens); regression
+      test `test_buffer_adaptive_default_window_size_zero_no_panic` pins the
+      default-config roundtrip. Validation: mux_latent 38/38 under
+      `lclm_adaptive_lod`; the formerly-panicking target 5/5.
+- [x] **T5 — Class A2: the three `NaN%` gates.** FIXED 2026-09-04 — and the
+      mechanism was NOT timer resolution (the clock is fine; `sleep` measures
+      true): **rustc 1.98.1 + fat LTO eliminates inlined-callee work whose
+      outer result is dead, even through `black_box` inside the callee** (a
+      direct-call-with-used-result measured 16.6 µs; `let _ = f()` over the
+      same fn in the same binary read ~0). Fixes: (1) `rv_gated_routing` —
+      simulated forwards are xorshift chains whose results accumulate into
+      caller-consumed sinks, iters raised to clear the ~42 ns mach tick
+      (measured: baseline p50 16,500 ns, RV-gated 1,625 ns, improvement
+      **90.2%** ≥ 10% — the gate's first real measurement in its release life);
+      (2) `bench_gdsd_modelless` G3 — the fold-elimination was REAL under
+      `--features gdsd_distill` alone: the `let _ =` loops measured 0 ns at
+      2M iters and the new loud assert fired (+inf printed) — the earlier
+      −2.4% reading was a different feature unification's inlining, not a
+      stable instrument. Final fix, three defenses: bit-exact data-dependent
+      sinks (a per-iteration xorshift mix XORed with the relevance bits —
+      the baseline pruner's relevance is a CONSTANT 1.0, so a bare constant
+      sink would itself fold), 9 interleaved (baseline, gdsd) chunks with a
+      median-of-ratios (two sequential 2M arms measured +5.2% and +21.7%
+      thirty seconds apart — a single ratio is box-load-fragile at the 20%
+      bar; the Bench 828/831 discipline), and the loud all-chunks-zero
+      assert. Verdict-stable ×2: median −0.0% / +0.6%, PASS; per-round
+      ranges 0.91–1.07. Debug marked `#[ignore]` with reason (wrapper cost
+      ~106% is the profile artifact); (3) `bench_104_mls_k_sweep` — no timing at
+      all (its NaN was Inf/Inf cos_sim from exploded logits under the Class C
+      fixture shift); each cos now asserts finite at its producing position.
+      G4 (no NaN percentages) holds for all three.
+- [x] **T6 — Class B: the wasm `__heap_base` flag.** FIXED 2026-09-04: the
+      C→wasm path already passed the export; `compile_rust_to_wasm` (the Rust
+      path both failing targets use) did not. Spelling matters: rustc drives
+      rust-lld DIRECTLY for wasm, so the arg is the raw `--export=__heap_base`
+      (a `-Wl,` prefix reaches lld verbatim and fails with "unknown
+      driver form) reaches lld verbatim and fails with "unknown
+      argument" — the cc-driver form). Validated: `test_percepta_rust_wasm`
+      18/18 (was 6/12), `input_base=1048576` resolves. `bench_064` RE-VALIDATED
+      2026-09-04: **5/6** under `--features percepta_compile --release` — both
+      former Class B wasm targets now pass; the one failure is the Class E
+      dims assert (300 vs 216), which reproduces under `percepta_compile`
+      ALONE (feature-independent — a T8 data point, not a Class C pin issue).
 - [ ] **T7 — Class A: 8 wall-clock bars.** Per target, choose load-invariant
       treatment or `#[ignore]` with a reason. Owner call on which.
 - [ ] **T8 — Class E remainder (12 targets).** Per-target read; several are
-      likely stale quality bars rather than live defects.
+      likely stale quality bars rather than live defects. Data points gathered
+      2026-09-04: `bench_064` dims assert (300 vs 216) reproduces under
+      `percepta_compile` ALONE — feature-independent, not a Class C pin issue;
+      `bench_104::bench_mls_k_sweep` fails at DEFAULT features too (K=1 cos
+      0.8839 vs the 0.9 bar, deterministic, bit-identical to the failure the
+      heal-sweep records documented pre-718) — a stale/machine-marginal
+      calibration bar, not a regression; `bench_gdsd_modelless::goat_169_g1`
+      (acceptance +0.00%) reproduces under `gdsd_distill` alone with the rest
+      of the target green (8 passed).
 
 ## Gates
 
@@ -193,8 +245,8 @@ were defects.
 |---|---|
 | G1 | **MET 2026-09-04** — `cargo test --workspace --all-features --release --doc` is GREEN (34 suites / 98 passed / 0 failed), the axis the full gate cannot reach |
 | G2 | **MET 2026-09-04, canaried both ways** — `bench_294_ict_g6` 3/3 under `CARGO_TARGET_DIR=/tmp/...` (18.9 s warm) AND 3/3 under the default `target/` (934.5 s cold — it spawns three internal feature-set builds). Before the fix the `/tmp` direction panicked, so the two directions genuinely disagreed |
-| G3 | Class C resolved by MEASUREMENT (a default-features re-run), never by re-pinning a drifted hash |
-| G4 | No gate in the workspace reports a percentage over a zero baseline — a `NaN` is a FAIL, not a printed value (Class A2) |
+| G3 | **MET 2026-09-04** — Class C resolved by MEASUREMENT (T3: `issue_698_t1` passes under its own committed features, fails only under unification), never by re-pinning a drifted hash |
+| G4 | **MET 2026-09-04 for the A2 class** — the three NaN gates now carry zero-baseline / finite-value asserts (a zero denominator or a non-finite cos is a named FAIL, never a NaN verdict); the fold-elimination mechanism they guard against is recorded in T5 (rustc 1.98.1 + fat LTO drops dead-result inlined-callee work through black_box) |
 
 ## Honest caveats
 

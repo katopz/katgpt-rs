@@ -400,25 +400,40 @@ mod goat_benchmarks {
     use std::time::Instant;
 
     /// Simulated compute cost: CPU path is fast, GPU path has dispatch overhead.
-    const CPU_WORK_ITERS: u64 = 100;
-    const GPU_WORK_ITERS: u64 = 1000;
+    /// Issue 723 Class A2: the original body accumulated `Σi`, which LLVM's
+    /// induction-variable pass evaluates in CLOSED FORM — release measured
+    /// both arms at 0 ns and the improvement ratio printed NaN. The work is
+    /// now an xorshift chain (data-dependent, not foldable), sized so both
+    /// arms clear the clock's ~40 ns read granularity while keeping the
+    /// 10:1 cost ratio the routing economics model.
+    const CPU_WORK_ITERS: u64 = 1_000;
+    const GPU_WORK_ITERS: u64 = 10_000;
 
     /// Simulated CPU-forward: cheap compute.
     fn simulated_cpu_forward() -> u64 {
-        let mut acc: u64 = 0;
-        for i in 0..CPU_WORK_ITERS {
-            acc = acc.wrapping_add(i);
+        // Issue 723 Class A2: `Σi` folds to a closed form under LLVM's
+        // induction-variable pass (a black_box on the BOUND does not stop
+        // that — it only blocks unrolling), so release measured 0 ns of
+        // "work" and the ratio printed NaN. xorshift is data-dependent and
+        // not foldable; the black_box'd seed keeps the chain runtime-real.
+        let mut state = std::hint::black_box(0x9E37_79B9_7F4A_7C15u64);
+        for _ in 0..CPU_WORK_ITERS {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
         }
-        acc
+        state
     }
 
     /// Simulated GPU-forward: expensive dispatch + compute.
     fn simulated_gpu_forward() -> u64 {
-        let mut acc: u64 = 0;
-        for i in 0..GPU_WORK_ITERS {
-            acc = acc.wrapping_add(i);
+        let mut state = std::hint::black_box(0x9E37_79B9_7F4A_7C15u64);
+        for _ in 0..GPU_WORK_ITERS {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
         }
-        acc
+        state
     }
 
     /// Generate acceptance pattern for a query type.
@@ -452,25 +467,30 @@ mod goat_benchmarks {
     }
 
     /// Run one query with RV-gated routing, return latency in nanoseconds.
-    fn run_rv_gated_query(gate: &TriggerGate, thresholds: &RvThresholds, rv: f64) -> (u64, bool) {
+    /// The simulated forward's result accumulates into `sink`: rustc 1.98.1
+    /// with fat LTO eliminates inlined-callee work whose outer result is
+    /// dead (`let _ = f()` measured 0 ns even with black_box inside the
+    /// callee — the Issue 723 Class A2 direct-call-vs-loop probe), so the
+    /// work must escape through a value the test later consumes.
+    fn run_rv_gated_query(gate: &TriggerGate, thresholds: &RvThresholds, rv: f64, sink: &mut u64) -> (u64, bool) {
         let tier = gate.rv_tier_boost(rv, thresholds);
         let start = Instant::now();
         let routed_tier = match tier {
             Some(ComputeTier::CpuOnly) => {
-                let _ = simulated_cpu_forward();
+                *sink = sink.wrapping_add(simulated_cpu_forward());
                 "cpu"
             }
             Some(ComputeTier::CpuGpu) => {
-                let _ = simulated_gpu_forward();
+                *sink = sink.wrapping_add(simulated_gpu_forward());
                 "gpu"
             }
             Some(ComputeTier::CpuGpuAne) => {
-                let _ = simulated_gpu_forward();
+                *sink = sink.wrapping_add(simulated_gpu_forward());
                 "gpu"
             }
             None => {
                 // RV-neutral: defer to QPS → default GPU (baseline behavior)
-                let _ = simulated_gpu_forward();
+                *sink = sink.wrapping_add(simulated_gpu_forward());
                 "gpu"
             }
         };
@@ -479,13 +499,13 @@ mod goat_benchmarks {
     }
 
     /// Run one query WITHOUT RV routing (baseline): always GPU.
-    fn run_baseline_query() -> u64 {
+    fn run_baseline_query(sink: &mut u64) -> u64 {
         let start = Instant::now();
-        let _ = simulated_gpu_forward();
+        *sink = sink.wrapping_add(simulated_gpu_forward());
         start.elapsed().as_nanos() as u64
     }
 
-    // ── T11: P50 Latency Improvement ─────────────────────────────────
+    // ── T11: P50 Latency Improvement ─────────────────────────
 
     #[test]
     fn goat_t11_latency_improvement() {
@@ -494,6 +514,12 @@ mod goat_benchmarks {
 
         let n_queries = 1000;
         let steps_per_query = 50; // decode steps to build RV signal
+
+        // The simulated forwards' results escape through these sinks —
+        // see run_rv_gated_query's doc (rustc 1.98.1 + fat LTO eliminates
+        // dead-result work even through black_box inside the callee).
+        let mut rv_work_sink = 0u64;
+        let mut baseline_work_sink = 0u64;
 
         let mut rv_gated_latencies = Vec::with_capacity(n_queries);
         let mut baseline_latencies = Vec::with_capacity(n_queries);
@@ -510,11 +536,11 @@ mod goat_benchmarks {
             let rv = tracker.rv();
 
             // RV-gated routing
-            let (rv_latency, went_cpu) = run_rv_gated_query(&gate, &thresholds, rv);
+            let (rv_latency, went_cpu) = run_rv_gated_query(&gate, &thresholds, rv, &mut rv_work_sink);
             rv_gated_latencies.push(rv_latency);
 
             // Baseline: always GPU (no RV routing)
-            baseline_latencies.push(run_baseline_query());
+            baseline_latencies.push(run_baseline_query(&mut baseline_work_sink));
 
             // Track routing correctness
             // Confident queries should go to CPU, uncertain to GPU
@@ -542,6 +568,21 @@ mod goat_benchmarks {
         let p50_baseline = p50(&mut confident_baseline_latencies);
 
         let improvement_pct = ((p50_baseline as f64 - p50_rv as f64) / p50_baseline as f64) * 100.0;
+
+        // Issue 723 Class A2: a zero baseline means the simulated work was
+        // optimized away (or the clock resolution was beaten) — the ratio
+        // must FAIL LOUD, never print NaN.
+        assert!(
+            p50_baseline > 0,
+            "T11 instrument failure: baseline P50 = 0 ns (simulated forward \
+             eliminated or below timer resolution) — fix the harness, do not trust the ratio"
+        );
+        // Both sinks consumed: pins the work as live (the xorshift chains
+        // folded to nothing once; see the sink doc on run_rv_gated_query).
+        assert!(
+            rv_work_sink != 0 || baseline_work_sink != 0,
+            "T11 instrument failure: simulated forwards produced no observable work"
+        );
 
         // Also compute P50 for all queries (mixed workload)
         let mut all_rv = rv_gated_latencies.clone();
