@@ -58,3 +58,12 @@ Box-load caveat: measured on the shared M3 under sibling cargo load (load avg 60
 - `crates/katgpt-core/tests/cond_audit_poc.rs` — 6 PoC gates (calibrated / G8 / monotone / determinism / consistency / G2 release-gated)
 - `crates/katgpt-core/Cargo.toml` — `cond_audit = ["stale_residual"]` + `[[test]]` required-features
 - `crates/katgpt-core/src/lib.rs` — feature-gated module wiring
+
+## Addendum 2026-09-04 — trigger-2 disposition (evidence re-gathered; the issue file was removed before it could be recorded)
+
+Trigger 2 of the T2–T4 defer list ("riir-train Plan 343 T1.6 (Gemma-4 ring)") FIRED on 2026-08-25 — T1.6 landed (`maglev_drafter/infer.rs`, riir-train). Disposition: **no cond_audit work is warranted**, for two measured reasons:
+
+1. **The ring is train-time-faithful structure, not inference-time semantic eviction.** The Maglev drafter is consistency-trained WITH the ring (W=512) and self-injection present — the windowed behavior is the intended, trained operating point, not a compression of full-context conditioning. `cond_audit`'s protocol (paired compressed-conditioned forward vs full-context teacher → per-junction KL → Pinsker) targets the opposite case: a model trained on full context whose conditioning gets compressed at inference. A positional ring that simply drops old KV rows makes no per-junction semantic compression decision to audit — the eviction is physical and total, and the audit would measure the training contract, not a defect.
+2. **Consumer census (grep 2026-09-04): zero production consumers of `new_all_sliding_bounded`.** Callers are the katgpt-rs unit tests and riir-ai's Issue 752 bit-identity gates (`gemma4_sliding_ring_wrap.rs`) only. The production ring consumer (`maglev_drafter::InferenceCache`) rides `new_gemma4_sliding_bounded` with explicit per-layer kv_dim (d-wide K/V rows) — the generic constructor was the plan's *ask*; the landed consumer needed the per-layer-dim variant.
+
+Reopen conditions are unchanged: a semantic eviction/windowing PR that compresses full-context conditioning at inference (e.g. token merging, learned eviction, H2O — trigger 3), or any consumer that introduces a compressed-conditioning junction on a full-context-trained model.

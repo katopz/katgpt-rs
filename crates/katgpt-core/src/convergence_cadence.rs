@@ -292,7 +292,6 @@ impl<const K: usize> Default for ConvergenceCadence<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::alloc::{get_alloc_stats, reset_alloc_stats};
 
     /// Research 529 solved-shape: high start, decay to ~0.30 by step 8.
     fn solved_shape() -> [f32; 16] {
@@ -430,8 +429,14 @@ mod tests {
 
     /// G4: push + classify are alloc-free (counters via the crate's own
     /// test TrackingAllocator — see Issue 721 for why this static exists).
+    /// The counters are `debug_assertions`-only by design (alloc.rs), so the
+    /// test must gate to match — a `--release` test build has `cfg(test)` on
+    /// but `debug_assertions` off (the debug_release_profile_axis T1 class).
+    #[cfg(debug_assertions)]
     #[test]
     fn g4_alloc_free_hot_path() {
+        use crate::alloc::{get_alloc_stats, reset_alloc_stats};
+
         let mut c = ConvergenceCadence::<16>::new();
         // Warm + fill once outside the measurement.
         for i in 0..16 {
