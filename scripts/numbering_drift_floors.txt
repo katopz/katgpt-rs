@@ -23,8 +23,11 @@
 # ── why max_dup is a ratchet at the measured value, not 0 ───────────────────
 #
 # 35 tracked duplicates existed across four repos at the first sweep
-# (2026-09-05); riir-ai's 6 were resolved the same day (T4b) and its pin is now
-# 0, so the standing backlog is 29 across three repos. Resolving one is a citation-weight arbitration, not a rename:
+# (2026-09-05); ALL now resolved — riir-ai's 6 the same day (T4b), riir-clippy's
+# 4 via its Issue 069 (58e7c1d, owner go), riir-train's 13 via its Issue 514
+# (103ed351, hand reads overturned the UNDECIDABLE verdicts) — so the standing
+# backlog is 12 in seal-game-editor, which is READ-ONLY to these sessions
+# (report only). Resolving one is a citation-weight arbitration, not a rename:
 # Issue 724 T2's precedent is that the file with the most inbound mentions
 # KEEPS the number and the other moves to a fresh one, which requires reading
 # the corpus and updating every citation. Three of the four repos are owned by
@@ -56,7 +59,7 @@ riir-deployer       	4	0	0	0	# observed 2026-09-05: 5 files
 riir-game-sdk       	6	0	0	0	# observed 2026-09-05: 8 files · 2 malformed allocators repaired
 riir-mmorpg-examples	28	0	0	0	# observed 2026-09-05: 35 files
 riir-neuron-db      	37	0	0	0	# observed 2026-09-05: 47 files
-riir-train          	258	13	0	0	# observed 2026-09-05: 323 files · dup: .plans 186/250/252/253/255/264(×4)/267/363, .research 073/083/084/086(×3)/095 · 2 malformed allocators repaired
+riir-train          	258	0	0	0	# 2026-09-05: all 13 duplicates RESOLVED (Issue 514, citation weight + hand reads + creation-order tie-breaks) — .plans 186 (ldt→377), 250 (d2f→379), 252 (wf→380), 253 (memory_soup→385), 255 (quant_robust→378), 264 (lclm_lora→381, lclm_rim→382, posterior_gpu→383), 267 (manifold_bake→386), 363 (chat_dflash2→384); .research 073 (and_or→448), 083 (code_lora→446), 084 (workflow→447), 086 (rat_plus→444, smt→445), 095 (lclm→443 · pushed 103ed351
 riir-viewbridge     	0	0	0	0	# observed 2026-09-05: 0 files
 seal-game-editor    	175	12	0	0	# observed 2026-09-05: 219 files · READ-ONLY to these sessions — report only
 seal-remake         	1	0	0	0	# observed 2026-09-05: 1 file

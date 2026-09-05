@@ -1,6 +1,6 @@
 # Issue 725 — the numbering gate covers ONE repo; 35 duplicates and 7 broken allocators sat in the other fifteen
 
-**Status:** T1-T3 + T4a + T4b DONE (riir-ai 6/6 executed; riir-clippy + riir-train measured and filed with their owners) (instrument landed, all 7 allocator defects repaired, riir-ai's 6 duplicates arbitrated, 2026-09-05). T4c/T5 OPEN — 29 tracked duplicates across 3 repos are ratcheted so no new one can land; the renames need a per-site citation rewrite.
+**Status:** T1-T4c DONE (instrument landed, all 7 allocator defects repaired; duplicates: riir-ai 6/6 executed 2026-09-05, riir-clippy 4/4 via its Issue 069 `58e7c1d`, riir-train 13/13 via its Issue 514 `103ed351` — workspace dup 35 → **12, all remaining in read-only seal-game-editor**). T5 `[-]` deferred — the sibling-gate design question is recorded below.
 
 ## The finding, in one sentence
 
@@ -123,32 +123,26 @@ the instrument reading it was blind.
 - [x] **T4b(rest) — MEASURED and FILED with the owners, 2026-09-05.** Not executed
       here, and the reasons differ per repo:
 
-      - **riir-clippy 4 → `riir-clippy/.issues/069`.** All four arbitrated, every site
-        read, 13 citation rewrites priced. **Owner-gated:** that repo's own
-        `.plans/026` §Honest notes already deferred the `.research/083` half as an
-        owner call ("renumbering either 083 breaks live AGENTS.md references"). The
-        concern is now priced at **2 sites**, one of them the AGENTS.md link itself —
-        so the gate stands but the approval is a one-liner. The issue also names the
-        ROOT CAUSE the renames alone would not fix: the winner is the KAT product doc
-        in two pairs and the mining batch doc in the other two, i.e. **two work
-        streams drawing from one counter**, with the batch series running a contiguous
-        serial (`006_batch60` … `039_batch81`) out of the same allocator the `kat*`
-        plans use. T3 there asks for the design call: enforce one counter, or split
-        the directories.
-      - **riir-train 13 → `riir-train/.issues/514`.** Filed rather than executed on
-        MEASURED grounds, not scheduling ones: **four rows come back mechanically
-        UNDECIDABLE and two more are ties**, with UNRESOLVED as high as 86%. riir-ai's
-        six resolved cleanly because each pair described different subjects; riir-train's
-        are near-synonyms (`lora_outlier_guard` vs `training_workflow_verification`;
-        four documents at `.plans/264`, two `lclm_*` and two `posterior_*`; three at
-        `.research/086` all LoRA-training distillations). Every document is "LoRA
-        training", so the words around a citation are the same either way.
-        `--path-affinity` moves two of three sampled pairs by nothing — the citing
-        files all live under `crates/riir-train/src/` regardless. **The instrument is
-        not broken; the corpus does not distinguish these by vocabulary.** That repo's
-        arbitration is a reading job, and the issue orders it to start with the two
-        cleanest pairs (leads of 18 and 40) so the rest get a worked example in their
-        own vocabulary.
+      - **riir-clippy 4 → `riir-clippy/.issues/069`. RESOLVED 2026-09-05** (riir-clippy
+        `58e7c1d`, owner go given): all four renumbered per the table below — `.plans` 015→084,
+        026→085; `.research` 083→135, 086→136 — **17 citation rewrites** (the 13 priced + 4
+        stragglers caught by the both-names grep, incl. one live `**Plan:**` link); the
+        `.research/083` owner concern priced at 2 sites was executed without breakage; T3's
+        design call decided **(a) one counter, enforced** and recorded in that repo's AGENTS.md
+        numbering section; the allocator repaired 78→80 in the same window.
+      - **riir-train 13 → `riir-train/.issues/514`. RESOLVED 2026-09-05** (pushed
+        `103ed351`, 14 commits): all 13 pairs arbitrated and executed — the four rows 725
+        called mechanically UNDECIDABLE and the two ties all resolved by HAND reads (073's
+        86%-unresolved mass was katgpt-rs's R073 LT2, an unrelated namesake; 083's "exact
+        tie" was 3-1 on verbatim names; ties broken by creation order per the T4a fallback).
+        Keepers + moves: `.plans` 186(ldt→377) 250(d2f→379) 252(wf→380) 253(memory_soup→385)
+        255(quant_robust→378) 264×4(→381/382/383) 267(manifold_bake→386) 363(chat_dflash2→384);
+        `.research` 073(→448) 083(→446) 084(→447) 086×2(→444/445) 095(→443). Known cost,
+        documented per renumber note: number-baked test filenames (`goat_250_*`,
+        `bench_253_*`, `bench_255_*`) and ~30 source comments stay stale for the next
+        code-touching session. The lesson over 725's pessimism: **the instrument is
+        advisory; the corpus does not distinguish near-synonyms, but reading the actual
+        sites does.**
       - **seal-game-editor 12** — READ-ONLY to these sessions. Report only; the sweep
         keeps it ratcheted at 12.
 
@@ -163,25 +157,19 @@ allocating from a memory rather than from the allocator. That is worth more than
 gate passing would have been: it is the mechanism this whole issue documents,
 committed by the session documenting it, and caught by the instrument built for it.
 
-- [ ] **T4c — the ratchets come down as owners land pairs.** `riir-ai 0` (done),
-      `riir-clippy 4`, `riir-train 13`, `seal-game-editor 12`. Lower each in the commit
-      that resolves one. Owner-by-owner, by CITATION WEIGHT
-      per Issue 724 T2's precedent (the file with the most inbound mentions keeps
-      the number; the other moves to a fresh one and its citations are updated).
-      Ratcheted at the measured count per repo, so a new collision reds while the
-      backlog stays visible. `seal-game-editor` (12) is READ-ONLY to these
-      sessions — report only. Lower a repo's pin in the commit that resolves one.
-      Each rename is a file move PLUS a hand rewrite of that document's inbound
-      `Plan N` citations, which is why T4a stopped at the verdict: 28-50% of the
-      sites in every riir-ai pair are UNRESOLVED, and a mis-attributed rewrite
-      silently re-points a reader to the wrong document — strictly worse than the
-      collision it fixes. Run `scripts/citation_weight.py <repo> <dir> <N> --show 20`
-      and read the sites before moving anything.
-- [ ] **T5 — should the siblings run the gate themselves?** The sweep is a
-      workstation instrument; the per-push half only exists in katgpt-rs. The
-      `sibling_docs_drift.yml` `workflow_call` pattern is the obvious answer and
-      is NOT taken here, because `numbering_gate.py`'s pins file is
-      katgpt-rs-scoped by its own first line. Deferred, not forgotten.
+- [x] **T4c — the ratchets come down as owners land pairs.** DONE 2026-09-05: `riir-ai 0`,
+      `riir-clippy 0` (Issue 069), `riir-train 0` (Issue 514); `seal-game-editor 12` is
+      READ-ONLY to these sessions — report only, ratchet stays at the measured count. Each pin
+      lowered in katgpt-rs `scripts/numbering_drift_floors.txt` as its repo resolved (`riir-clippy`
+      by the sibling's `58e7c1d` window, `riir-train` in this closeout). Workspace dup 35 → 12,
+      all remaining read-only.
+- [-] **T5 — should the siblings run the gate themselves?** DEFERRED (2026-09-05): the
+      sweep is a workstation instrument; the per-push half only exists in katgpt-rs. The
+      `sibling_docs_drift.yml` `workflow_call` pattern is the obvious answer and is NOT taken
+      here, because `numbering_gate.py`'s pins file is katgpt-rs-scoped by its own first line
+      (riir-clippy's Issue 069 T3 recorded the same conclusion from the other side — that repo
+      uses the sweep, or gives itself its own pins). Reopen when a second repo wants its own
+      per-push gate.
 
 ## Why the ceilings are a ratchet and not zero
 

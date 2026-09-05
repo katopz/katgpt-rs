@@ -985,6 +985,45 @@ system that duplicates already-shipped substrate under a different name
 
 ## Issue log (resolved)
 
+- **Issue 727 — SP-KV misses BOTH T16 bars once the gate is measured at a realistic sequence length** RESOLVED
+  (2026-09-05 `adbc003d`; filed by 723 T7; file removed per noise-reduction — full narrative in git history).
+  The repaired instrument (T_N decoupled from `Config::micro()`'s `block_size = 16` — the "50% pruned" arm
+  had been pruning 0/16) measured gate-bias overhead +8.0/+8.1/+8.4% vs a <3% bar and prune-skip
+  1.046/1.042/1.015x vs a >1.05x bar. T2 hoist landed: `attention_head_core` split into a verbatim NoBias
+  impl + a hoisted GateBias impl (64-position chunk scan → active (position, bias) pairs on the stack, zero
+  alloc) — prune-skip **1.12–1.58x PASSES its bar** at t_n 128/512/2048 ×3; bit-identity at `to_bits` across
+  6 bias cases × 2 head offsets (two documented divergences are unreachable via `build_gate_biases`).
+  **T1 verdict: "zero-overhead gate bias" is a false claim** — any gated attention reads the gate once per
+  position per head; restated as a measured +7–12% budget (hd=4) in the bench provenance, the primitive doc
+  and both Cargo.toml comments; `#[ignore]` KEPT with the updated reason (the issue's second T4 branch — no
+  bar re-pinned, G3 held). En-route catch: a single `#[inline(always)]` body measured a **1.66x layout
+  penalty on the NoBias baseline**; the `#[inline(never)]` dispatcher split restored it. Record:
+  `tests/bench_sp_kv.rs` provenance + the `katgpt-kv` `sp_kv` feature comment.
+- **Issue 726 — `gauge_rebalance` is 3.7x its Plan 279 target; the rank-wise accumulate is scalar** RESOLVED
+  (2026-09-05 `d225fffa`; filed by 723 T7; file removed per noise-reduction — full narrative in git history).
+  T1 priced the scalar accumulate at **~77–78% of the whole call** (stub A/B, 3 interleaved runs). T2 swap to
+  `katgpt_core::simd::simd_fused_scale_acc`: t08 best-of-200 **19.21 → 9.00 µs (−53%)**, interleave medians
+  54.1/52.7/50.9% (G1 ≥20% ×3 PASS). T3 bit-compared via `to_bits`: **the scalar loop was NOT
+  FMA-contracted by LLVM**, so the swap moves results ≤1 ULP (max 1.19e-7) — every exactness assertion passes
+  at its committed tolerance (t01 84x headroom; bench_279 G6 + katgpt-sparse 39/39 re-run); no assertion
+  loosened. T4: `t08` re-pinned **30 → 15 µs** with the full provenance block; the 5 µs paper target kept as
+  aspiration (the remaining floor is the σ-dots + two full-matrix scales + the final ‖M·v‖ pass, ~5.4–6.5 µs
+  — not reachable by this swap alone). G3 zero new alloc. Record: `tests/bench_270_gauge_invariant_goat.rs`
+  t08 provenance + the `gauge_invariant.rs` comment.
+- **Issue 723 — the first full-workspace EXECUTION is red: 47 targets, six distinct classes** RESOLVED
+  (T1–T8 2026-09-04/05; **G1–G6 ALL MET**; file removed per noise-reduction — full narrative in git history).
+  Doc-tests GREEN (34 suites / 98 passed / 0 failed — the `--all-targets`-excludes-doc-tests axis added to
+  this file); Class C resolved by MEASUREMENT (gates pass at their own committed feature sets,
+  documented-expected under `--all-features` unification — the Issue-830 twin, never re-pinned); Class E
+  closed per-target at committed features. **The load-bearing refutation: "Class A's reds are partly the
+  box" was wrong** — load was the top term in none of the eight wall-clock reds; 5 of 8 were closed by
+  REPAIRING THE INSTRUMENT (a vanished denominator printing as 30x, two arms that were not the same
+  experiment, loop-invariant inputs black-boxed only in the result, in-clock operand regen, a bar measuring
+  the fixture), and the rule to carry forward is **repair the instrument first, decide the disposition
+  second** — three of the eight would have been re-pinned to numbers off by 5x/7x/140x. The two genuine
+  primitive shortfalls were filed as `.issues/726` / `.issues/727` (both resolved same day) rather than
+  absorbed into tolerances. Durable artifacts: `tests/common/ab_timing.rs` (interleaved median-of-ratios +
+  best-of-N + loud 0-ns FAIL) and `.docs/10_audits/ci_compile_vs_execute_axis.md`.
 - **Issue 724 — `.plans/` numbering collisions regrew after a hand-sweep; nothing gated the allocator** RESOLVED
   (T2/T3/T4 2026-09-04 `24e349e9`/`28c353a1`/`322769b2`; **T4b + T1/T5 closeout 2026-09-04 `866df2a7`**;
   file removed per noise-reduction — full narrative in git history). The tracked `449` collision
