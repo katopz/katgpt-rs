@@ -159,9 +159,17 @@ already decided carried forward). Its state: `/tmp/katgpt_sweep2.log`
 than start from zero:
 
 ```bash
-cat /tmp/katgpt_sweep.log /tmp/katgpt_sweep.jsonl > /tmp/resume.txt
+# BOTH progress logs — `sweep2` is the CURRENT run and `sweep` the earlier one
+# whose 16 decided rows it carried forward. Omitting sweep2.log silently
+# re-runs every row this session already decided (280 at 01:40 on 2026-09-06).
+cat /tmp/katgpt_sweep.log /tmp/katgpt_sweep2.log /tmp/katgpt_sweep.jsonl > /tmp/resume.txt
 scripts/required_features_build_audit.py . --batch --resume /tmp/resume.txt --record /tmp/katgpt_sweep.jsonl
 ```
+
+Progress at 2026-09-06 01:40: **280 / 605 rows, group 149 / 370, verdicts
+BUILDS 280 · FAILS-TO-BUILD 0**. The run does its own `--record`, so the JSONL
+is authoritative; the logs only add rows decided before a `--record` was
+attached.
 
 `read_prior` branches per LINE, so a file holding both shapes — the progress
 log and the JSONL — is a valid resume input; that is how these two runs were
