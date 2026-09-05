@@ -507,6 +507,9 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
         rows = [r for r in rows if r.kind in kinds]
     if args.grep:
         rows = [r for r in rows if args.grep in r.name]
+    if args.names:
+        wanted = {n for n in args.names.split(",") if n}
+        rows = [r for r in rows if r.name in wanted]
     rep.rows = rows
     if args.limit:
         rows = rows[: args.limit]
@@ -859,6 +862,11 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--package", help="only rows in this cargo package")
     ap.add_argument("--kind", help="comma list of test,bench,example")
     ap.add_argument("--grep", help="only rows whose target name contains this")
+    ap.add_argument(
+        "--names",
+        help="comma list of EXACT target names — for checking a prioritised "
+        "slice (e.g. the suspect rows) in one batched run",
+    )
     ap.add_argument("--limit", type=int, help="stop after N rows per repo")
     ap.add_argument(
         "--target-dir",
