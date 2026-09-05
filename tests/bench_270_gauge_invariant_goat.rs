@@ -557,6 +557,32 @@ fn t07_sparse_task_vector_compose_gauge_invariant() {
 /// as `.issues/726` — it is not a tolerance question, so it must not be
 /// smuggled into a gate re-pin.
 ///
+/// **Issue 726 LANDED — re-pinned 15 µs with provenance** (same day): the
+/// rank-wise accumulate in `power_iterate_sigma_max` was swapped from the
+/// scalar `vout[k] += row[k] * u_i` loop to `katgpt_core::simd::
+/// simd_fused_scale_acc` (`vfmaq_f32`, single-rounding FMA). T1 pricing first
+/// (interleaved A/B vs the accumulate stubbed to the k=0 lane, 9 rounds ×
+/// 200 iters × 3 runs): the accumulate was ~77–78% of the whole call. T2
+/// measured: interleaved median-of-ratios improvement 54.1% / 52.7% / 50.9%
+/// (9 rounds each, per-round ranges 0.453–0.499, 9/9 rounds survived every
+/// run, box load 3.5–4.9); absolute t08 best-of-200 18.96/19.21/19.21 µs →
+/// **9.00/9.00/9.00 µs** (three runs, −53%). T3: the swap is NOT bit-identical
+/// — the scalar loop was NOT FMA-contracted by LLVM (bit-compare: t01-shape
+/// 64/64 and 48/48 elements differ; t08-shape 3136/4096; max |Δ| = 1.19e-7 ≈
+/// 1 ULP) — and every exactness assertion still passes at its committed
+/// tolerance: t01 reads 1.2e-7 against 1e-5 (~80× headroom), the compose
+/// gauge-invariance tests against 1e-3, and the neighbours at their own
+/// tolerances (bench_279 G6 1.19e-7 vs 1e-3; katgpt-sparse lib 39/39). The
+/// swap is a rounding change absorbed by the gates, not an assertion
+/// loosening — no tolerance was touched.
+///
+/// The 5 µs paper target: 9.0 µs is now within 1.8× of it. The T1 pricing
+/// arms show the remaining floor — the per-row σ-dots, the two full-matrix
+/// in-place scales, and the final ‖M·v‖ pass alone measure ~5.4–6.5 µs at
+/// this shape — so 5 µs is not reachable by the accumulate swap alone and
+/// would need the dots/scales/final-pass optimized too. Kept as the paper
+/// aspiration, now a ~1.8× gap instead of ~3.7×.
+///
 /// The statistic is the load-invariant one: an absolute budget has no second
 /// arm to ratio against, so the minimum of N is used — contention can only
 /// ever add time, so the smallest sample is the closest observation of the
@@ -574,11 +600,13 @@ fn t08_throughput_rebalance_256x16() {
     let mut scratch = GaugeRebalanceScratch::new(m.max(n), r);
 
     // Debug builds are ~50-100× slower than release; gate threshold accordingly.
-    // Release GATE: <= 30 µs (measured, see the doc comment). Release PAPER
-    // TARGET: 5 µs — reported, not asserted, and tracked by .issues/726.
+    // Release GATE: <= 15 µs (Issue 726 re-pin — measured 9.00 µs ×3 after the
+    // simd accumulate swap; see the doc comment). Release PAPER TARGET: 5 µs —
+    // reported, not asserted (now a ~1.8× gap; the remaining floor is the
+    // σ-dots + in-place scales + final pass, not the accumulate).
     // Debug allowance: < 2000 μs (power iteration is O(m·r²·n_steps)
     // = 256·256·5 ≈ 327K ops per factor, ×2 factors, unvectorized).
-    let target_us = if cfg!(debug_assertions) { 2000.0 } else { 30.0 };
+    let target_us = if cfg!(debug_assertions) { 2000.0 } else { 15.0 };
     let us = ab_timing::best_of_us(200, 200, || {
         // Setup (NOT timed): restore the operands `gauge_rebalance` scaled in
         // place, so the matrices cannot collapse under repeated scaling.
@@ -595,7 +623,7 @@ fn t08_throughput_rebalance_256x16() {
     let paper_target_us = 5.0_f64;
     eprintln!(
         "t08 BENCH rebalance ({m}×{r}, {n}×{r}): {us:.2} μs (gate {target_us:.0} μs, \
-         Plan 279 paper target {paper_target_us:.0} μs — gap tracked by .issues/726)"
+         Plan 279 paper target {paper_target_us:.0} μs — Issue 726 simd accumulate landed)"
     );
 }
 

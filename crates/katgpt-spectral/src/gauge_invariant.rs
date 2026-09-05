@@ -64,7 +64,7 @@
 #![allow(clippy::too_many_arguments)]
 
 use crate::spectral_retract::power_iter_step;
-use katgpt_core::simd::{simd_dot_f32, simd_scale_inplace};
+use katgpt_core::simd::{simd_dot_f32, simd_fused_scale_acc, simd_scale_inplace};
 
 /// Pre-allocated scratch for gauge rebalancing.
 ///
@@ -134,15 +134,22 @@ fn power_iterate_sigma_max(
         // `outer × rank`. To avoid an `outer`-length allocation for u = M·v,
         // we recompute u[i] inline in the second pass (trading 2× compute
         // for zero allocation — original behavior preserved byte-for-byte).
+        //
+        // Issue 726 T2: the rank-wise accumulate (`vout[k] += row[k] * u_i`)
+        // was a scalar loop — measured at ~77% of the whole `gauge_rebalance`
+        // call (T1 pricing, 2026-09-05, M3 Max). `simd_fused_scale_acc` is the
+        // same `dst[i] += scale · src[i]` via `vfmaq_f32` (single-rounding
+        // FMA), so the accumulate leaves the scalar path; the outputs differ
+        // from the scalar loop only in f32 rounding (Issue 726 T3 bit-compare:
+        // the scalar loop was NOT FMA-contracted by LLVM; max |Δ| ≈ 1 ULP),
+        // which the exactness gates (t01 < 1e-5, compose < 1e-3) absorb with
+        // orders of magnitude to spare.
         let step_norm = power_iter_step(v, v_new, |vin: &[f32], vout: &mut [f32]| {
             vout.fill(0.0);
             for i in 0..outer {
                 let row = &mat[i * rank..(i + 1) * rank];
                 let u_i = simd_dot_f32(row, vin, rank);
-                // vout[k] += M[i,k] · u_i for all k.
-                for k in 0..rank {
-                    vout[k] += row[k] * u_i;
-                }
+                simd_fused_scale_acc(vout, row, u_i, rank);
             }
         });
         if step_norm < 1e-20 {
