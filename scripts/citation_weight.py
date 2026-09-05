@@ -36,6 +36,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+# The citation DIALECTS, as data. Measured over riir-ai's 4,097 tracked text
+# files (2026-09-05): the short form is not a curiosity — `R<NNN>` is 1,384
+# sites against 3,186 `Research <NNN>`, i.e. **30% of all research citations**,
+# and a long-form-only pattern is blind to every one of them. Found by
+# accident, grepping for `R020` while checking a verdict by hand — the fourth
+# instance in this workspace of a classifier that was narrow rather than wrong.
+# `P<NNN>` is rarer (284 vs 21,655) and `B<NNN>` rarer still (223 vs 4,944),
+# but they cost nothing to admit because the search is always for one specific
+# number.
+DIALECTS = {
+    "Plan": ["Plan", "P"],
+    "Research": ["Research", "R"],
+    "Bench": ["Bench", "Benchmark", "B"],
+    "Issue": ["Issue"],          # no measured short form
+    "Proposal": ["Proposal"],    # ditto
+}
+
 STOP = {
     # structural words that appear in most stems and carry no discrimination
     "the", "and", "for", "with", "into", "from", "real", "new", "phase",
@@ -50,6 +67,23 @@ def stem_tokens(stem: str) -> set[str]:
     ambiguous part) and stop-words are removed."""
     parts = re.split(r"[_\-]+", stem.lower())
     return {p for p in parts[1:] if len(p) > 2 and p not in STOP}
+
+
+def citation_re(kind: str, number: str) -> re.Pattern:
+    """Every spelling of "<kind> <number>" this corpus actually uses.
+
+    The bare-letter forms are anchored to a 3-digit zero-padded number
+    (`R020`, never `R20`), which is how the corpus writes them and which keeps
+    the pattern from matching a register name or a prefill length.
+    """
+    n = int(number)
+    alts = []
+    for prefix in DIALECTS.get(kind, [kind]):
+        if len(prefix) == 1:
+            alts.append(rf"{prefix}-?{n:03d}")
+        else:
+            alts.append(rf"{re.escape(prefix)}\s*#?\s*0*{n}")
+    return re.compile(rf"\b(?:{'|'.join(alts)})\b")
 
 
 def corpus(repo: Path) -> dict[str, str]:
@@ -78,7 +112,7 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
     won = {c: 0 for c in cands}
     unresolved, sites = 0, 0
     detail = {c: [] for c in cands}
-    pat = re.compile(rf"\b{re.escape(kind)}\s*#?\s*0*{int(number)}\b")
+    pat = citation_re(kind, number)
 
     for rel, blob in blobs.items():
         base = os.path.basename(rel)
@@ -110,7 +144,43 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
     return by_name, won, unresolved, sites, detail
 
 
+def selftest() -> list[str]:
+    """Pin the dialect table and the stem tokenizer.
+
+    Both degrade SILENTLY: a dialect that stops matching just shrinks the site
+    count, and the report still prints a confident verdict over what is left.
+    That is how the `R<NNN>` form — 30% of this corpus's research citations —
+    was missed on the first cut.
+    """
+    fails = []
+    rx = citation_re("Research", "020")
+    for good in ("see Research 20", "Research 020", "Research #020", "(R020, P163)", "R-020 "):
+        if not rx.search(good):
+            fails.append(f"dialect: missed {good!r}")
+    for bad in ("Research 200", "R0201", "R20", "xR020"):
+        if rx.search(bad):
+            fails.append(f"dialect: matched {bad!r}")
+    rp = citation_re("Plan", "163")
+    if not rp.search("(R020, P163)") or rp.search("P1630"):
+        fails.append("dialect: Plan short form wrong")
+    # `Plan 20` must NOT match `Plan 200` -- the \b after 0*N is load-bearing
+    if citation_re("Plan", "20").search("Plan 200"):
+        fails.append("dialect: number boundary lost")
+    if stem_tokens("313_swir_real_model_validation") != {"swir", "model", "validation"}:
+        fails.append(f"stem tokens: {stem_tokens('313_swir_real_model_validation')}")
+    if "313" in stem_tokens("313_swir_real_model_validation"):
+        fails.append("stem tokens: kept the ambiguous number")
+    return fails
+
+
 def main() -> int:
+    fails = selftest()
+    if fails:
+        print("✗ citation_weight SELFTEST FAILED — instrument untrustworthy:")
+        for f in fails:
+            print(f"    {f}")
+        return 2
+
     ap = argparse.ArgumentParser()
     ap.add_argument("repo")
     ap.add_argument("dirname")
