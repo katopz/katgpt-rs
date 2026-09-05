@@ -115,6 +115,39 @@ UNRESOLVED 11 → 2 is §11: the rows were **read**, not reclassified by an
 instrument change. The population is unchanged at 41 throughout, which is the
 property §2 says to check.
 
+Re-measured **2026-09-06**: **110 sites over 9 of 16 repos — 0 DEGENERATE, 0
+TRUNC-VAR, 0 WEAK-ASSERTED, 30 OK, 38 UNRESOLVED, 42 SAFE**, katgpt-rs still
+**41**. All four gated classes are zero in all sixteen repos, and the workspace
+walk is 11,132 `.rs` files.
+
+**The 125 → 110 edge was checked before it was pinned, not after.** A falling
+audit population is a REPAIR or a BLINDNESS and the count cannot tell the two
+apart — §2 above is the record of that happening, and the fourth instance of it
+was caused by a *correct* fix. Three things decide it here, and none of them is
+the total:
+
+1. The **instrument is unchanged**: `scripts/percentile_index_audit.py`'s last
+   commit is `0333c2c1`, 2026-09-04 01:04, before the 125 measurement. No
+   vocabulary, scope or rounding rule moved.
+2. **katgpt-rs holds at exactly 41**, as it has through every measurement in
+   this document. A tokenizer regression is not repo-selective; a population
+   that is invariant in the one repo whose sources did not move is the
+   signature of sibling churn, not of a blind classifier.
+3. The churn is **measured, not assumed**: 512 sibling commits and 47 deleted
+   `.rs` files in the window, headed by riir-mmorpg-examples deleting **40**
+   during its in-flight consumer-extraction campaign.
+
+What is NOT claimed: the 15 sites are not attributed one by one to the commits
+that removed them. The claim is the discriminator — instrument fixed, katgpt-rs
+invariant, sibling churn large — not a per-site reconciliation.
+
+**And the zero is now held by something.** `scripts/percentile_drift_sweep.py`
++ `scripts/percentile_drift_floors.txt` gate all four classes at 0 across every
+contract repo, with two population floors (`min_sites` per repo, and
+`min_rs_files` for the seven repos whose site floor is 0 and therefore detects
+nothing). Until 2026-09-06 the 12-site repair campaign's result was held only
+in katgpt-rs, whose own gate could never have seen a sibling.
+
 ## 4. The shape claim, stated exactly — and a retraction
 
 The first cut of the new selftest asserted *"`ceil(p*n)-1` can never be the

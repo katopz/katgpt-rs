@@ -52,24 +52,20 @@ def main():
     for f in pia.walk_rs(REPO):
         findings += pia.audit_file(f, os.path.relpath(f, REPO))
 
-    degenerate = [r for r in findings if r["verdict"] == pia.DEGENERATE]
-    deg_asserted = [r for r in degenerate if r["asserted"]]
-    weak_asserted = [
-        r for r in findings if r["verdict"] == pia.WEAK and r["asserted"]
-    ]
-    # Reported regardless of `asserted`, unlike WEAK: a percentile HELPER is
-    # one call frame removed from the assert that its return value decides, so
-    # `is_load_bearing` (deliberately same-fn-scoped) is structurally blind
-    # here. riir-ai's `fn percentile` is print-only by that test and its p95
-    # is the subject of a `assert!(p95 >= threshold)` GOAT row two frames up.
-    trunc_var = [r for r in findings if r["verdict"] == pia.TRUNC_VAR]
+    # DRY: the classification lives in the report, so this gate and the
+    # cross-repo sweep can never disagree about what a DEGENERATE is. The
+    # WEAK/TRUNC_VAR asymmetry (WEAK counted only when `asserted`, TRUNC_VAR
+    # regardless) is documented at `pia.tally`.
+    t = pia.tally(findings)
+    degenerate, deg_asserted = t["degenerate"], t["degenerate_asserted"]
+    weak_asserted, trunc_var = t["weak_asserted"], t["trunc_var"]
 
     measured = {
         "max_degenerate": len(degenerate),
         "max_degenerate_asserted": len(deg_asserted),
         "max_weak_asserted": len(weak_asserted),
         "max_trunc_var": len(trunc_var),
-        "min_sites_scanned": len(findings),
+        "min_sites_scanned": len(t["sites"]),
     }
 
     failures = []

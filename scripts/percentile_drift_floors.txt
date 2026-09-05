@@ -1,0 +1,74 @@
+# Pins for scripts/percentile_drift_sweep.py — EVERY contract repo.
+#
+# Format, 7 whitespace-separated fields:
+#
+#   <repo> <min_rs_files> <min_sites> <max_degenerate> <max_degenerate_asserted>
+#          <max_weak_asserted> <max_trunc_var>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── the four ceilings are a WALL, not a ratchet ───────────────────────────────
+# The numbering sweep pins each repo at its MEASURED backlog because one exists
+# there and resolving it is an arbitration that sweep does not own. There is no
+# backlog here: all four classes measure 0 in all 16 repos (2026-09-06), and
+# the zero was EARNED — on 2026-09-03 the report found 12 DEGENERATE sites and
+# four sibling owners fixed every one of them the same day (riir-ai 03a91ed59
+# swept 10, riir-mmorpg-examples ee9da24 the one DEGENERATE-ASSERTED site,
+# riir-game-sdk f896bca, riir-chain 7f3a3910). Nothing outside katgpt-rs was
+# holding it. Now something does.
+#
+# ── two floors, because the site floor is blind in seven of sixteen repos ─────
+# max_degenerate = 0 is green over whatever the auditor's vocabulary can NAME,
+# so a tokenizer regression takes the count to ~0 and every ceiling passes,
+# indistinguishable from a clean repo. That is why percentile_floors.txt
+# carries min_sites_scanned, and this file carries min_sites per repo.
+#
+# It cannot do that job alone across the workspace. SEVEN repos have ZERO
+# percentile sites (katgpt-web, riir-auth, riir-dao, riir-dapps, riir-deployer,
+# riir-viewbridge, seal-game-editor), so their site floor is 0 and detects
+# nothing. min_rs_files — the size of the walk that PRODUCED the sites — still
+# bites there, and it is the quantity a walk_rs regression actually moves.
+#
+# ── both floors are SLACK against churn, TIGHT against blindness ──────────────
+# Straight from percentile_floors.txt's reasoning, which is worth restating
+# because the temptation is always to ratchet: a repair campaign legitimately
+# SHRINKS the site count (consolidating ten inline index computations behind
+# one correct helper removes nine sites — that is exactly what took the
+# workspace 130 -> 114 in 2026-09-03), and a floor that ratcheted up to the
+# last measurement would red the next such refactor and teach whoever hit it
+# that the gate is noise. A vocabulary or scoping regression drops these by an
+# ORDER OF MAGNITUDE, not by a third — so ~65% of measured separates the two
+# cases cleanly.
+#
+# The .rs floors also have to survive live extraction work: riir-mmorpg-examples
+# deleted 40 .rs files in the two days before this pin (an in-flight
+# consumer-extraction campaign), so its floor is set well below the others'
+# proportion on purpose.
+#
+# ── katgpt-rs's min_sites is stated TWICE and asserted ────────────────────────
+# It must equal `min_sites_scanned` in scripts/percentile_floors.txt, the
+# per-push gate's pin for the same quantity. The sweep asserts this and exits 1
+# on drift — docs_gate_paths_sync.py exists one workflow over for exactly this
+# failure: a hand-duplicated value drifts, silently.
+#
+# Measured 2026-09-06: 16 repos, 11,132 .rs files, 110 sites, 0/0/0/0.
+#
+# repo                  rs_files  sites  deg  deg_a  weak_a  tvar
+katgpt-rs                   1500     30    0      0       0     0
+katgpt-web                     1      0    0      0       0     0
+riir-ai                     1800     15    0      0       0     0
+riir-auth                     10      0    0      0       0     0
+riir-chain                   500     10    0      0       0     0
+riir-clippy                  190      0    0      0       0     0
+riir-dao                      14      0    0      0       0     0
+riir-dapps                    50      0    0      0       0     0
+riir-deployer                 35      0    0      0       0     0
+riir-game-sdk                160      0    0      0       0     0
+riir-mmorpg-examples          40      0    0      0       0     0
+riir-neuron-db               125      6    0      0       0     0
+riir-train                  2500      3    0      0       0     0
+riir-viewbridge               15      0    0      0       0     0
+seal-game-editor             125      0    0      0       0     0
+seal-remake                   15      0    0      0       0     0

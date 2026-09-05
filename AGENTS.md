@@ -390,6 +390,29 @@ cadences, and none of them subsumes another:
 | `scripts/docs_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/numbering_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/required_features_drift_sweep.py` | workstation | on demand | every contract repo |
+| `scripts/percentile_drift_sweep.py` | workstation | on demand | every contract repo |
+
+**A fourth followed the same day, over the percentile audit.**
+`percentile_floor_gate.py` was katgpt-rs-scoped for the same structural reason,
+and the zero it protects was *earned*: on 2026-09-03 the report found **12
+DEGENERATE sites** and four sibling owners fixed every one the same day. Nothing
+outside this repo was holding that result.
+`scripts/percentile_drift_sweep.py` + `percentile_drift_floors.txt` now gate all
+four classes at 0 across every contract repo — measured 2026-09-06: **16 repos,
+11,132 `.rs` files, 110 sites, 0/0/0/0**. Same two-floor design and the same
+`min_*` slack reasoning as `percentile_floors.txt` (a repair campaign
+legitimately SHRINKS the site count; a ratcheting floor would red the next
+correct refactor). The classification was factored into the report as
+`pia.tally()` so the gate and the sweep cannot disagree about what a DEGENERATE
+is — including the deliberate asymmetry that WEAK counts only when `asserted`
+while TRUNC-VAR counts regardless.
+
+Its 125 → 110 population edge was **checked before it was pinned**, because a
+falling audit population is a repair or a blindness and the count cannot tell:
+the instrument's last commit predates the 125 measurement, **katgpt-rs is
+invariant at 41 across every measurement in the record**, and the sibling churn
+is measured (512 commits, 47 deleted `.rs` files, 40 of them from one in-flight
+extraction). Full record: `.docs/10_audits/percentile_index_tail_support.md`.
 
 **A third instrument was pointed at the siblings 2026-09-06, and this one
 found nothing — which is a result, not a non-event.**

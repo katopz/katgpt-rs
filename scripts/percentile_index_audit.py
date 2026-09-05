@@ -483,6 +483,35 @@ def audit_file(path, rel):
     return out
 
 
+def tally(findings):
+    """The four gated classes + the population, out of one findings list.
+
+    Lives here, in the REPORT, so the katgpt-rs per-push gate
+    (`percentile_floor_gate.py`) and the cross-repo sweep
+    (`percentile_drift_sweep.py`) can never disagree about what a
+    DEGENERATE is — the same DRY reason `required_features_static_gate.py`
+    imports the build audit's `parse_rows`/`static_invalid` rather than
+    restating the validity model.
+
+    Note the asymmetry, which is deliberate and load-bearing: WEAK is counted
+    only when `asserted`, TRUNC_VAR regardless of it. A percentile HELPER sits
+    one call frame from the assert its return value decides, and
+    `is_load_bearing` is deliberately same-fn-scoped, so it is structurally
+    blind there.
+    """
+    degenerate = [r for r in findings if r["verdict"] == DEGENERATE]
+    deg_asserted = [r for r in degenerate if r["asserted"]]
+    weak_asserted = [r for r in findings if r["verdict"] == WEAK and r["asserted"]]
+    trunc_var = [r for r in findings if r["verdict"] == TRUNC_VAR]
+    return {
+        "degenerate": degenerate,
+        "degenerate_asserted": deg_asserted,
+        "weak_asserted": weak_asserted,
+        "trunc_var": trunc_var,
+        "sites": findings,
+    }
+
+
 def repos(root):
     return sorted(
         d for d in os.listdir(root)
