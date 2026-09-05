@@ -1,0 +1,34 @@
+# Pins for scripts/cfg_row_implication_gate.py (Issue 513).
+#
+# The question: does a target's `required-features` row, resolved WITH the
+# package's default features, satisfy the target source's own leading
+# `#![cfg(...)]`? If not, the row builds and compiles the target to NOTHING —
+# `running 0 tests / ok. 0 passed`, exit 0 — and every other instrument in this
+# repo reports it as protected.
+#
+# Measured 2026-09-06 (katgpt-rs): 623 rows, 393 with a leading #![cfg],
+# 392 SATISFIED, 1 NO-FEATURE-REQ, 0 EMPTY-AT-ROW, 0 UNRESOLVED.
+
+# WALL, not a ratchet. A row that compiles its own target to nothing is never
+# legitimate — unlike an #[ignore], which has legitimate uses.
+max_empty_at_row = 0
+
+# Also a wall, at this repo's measured 0 — but read it as the narrow claim it
+# is. UNRESOLVED means a predicate the report declines to rule on: `any(feature
+# = ...)` (which cargo's AND-only required-features cannot express at all), or
+# a feature under `not(...)` (where the implication INVERTS). Siblings
+# legitimately have them; this repo happens not to. If a legitimate one lands
+# here, raise this pin and say which row and why — do not delete the key.
+max_unresolved = 0
+
+# FLOORS, with slack below the measured value. Both ceilings above are green
+# over whatever the instrument can NAME, so a manifest-walk or source-scanner
+# regression takes the population toward 0 and both pass — indistinguishable
+# from a clean repo. Not hypothetical: an early cut of the scanner reported two
+# riir-train targets as "source unreadable" because they use cargo's DIRECTORY
+# form (`tests/<name>/main.rs`) and silently skipped them.
+#
+# Slack is deliberate. A row legitimately leaves when a target is deleted, and
+# a ratcheting floor would red the next correct removal.
+min_rows_scanned = 560
+min_with_cfg = 350

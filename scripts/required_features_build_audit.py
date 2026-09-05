@@ -188,7 +188,20 @@ def rows_from_manifest(text: str, repo_name: str, manifest: Path) -> list[Row]:
             name = entry.get("name")
             if not req or not name:
                 continue
-            rel = entry.get("path") or f"{KIND_DIR[kind]}/{name}.rs"
+            rel = entry.get("path")
+            if not rel:
+                # Cargo supports a DIRECTORY form — `tests/<name>/main.rs` —
+                # and two riir-train targets use it. Deriving only the flat
+                # `tests/<name>.rs` made `cfg_row_implication_audit.py` report
+                # them "source unreadable" and skip them silently, which is a
+                # blind spot rather than a verdict. Harmless for THIS report
+                # (it builds by `-p`/`--test`, never by path) and load-bearing
+                # for any consumer that reads the source.
+                flat = f"{KIND_DIR[kind]}/{name}.rs"
+                nested = f"{KIND_DIR[kind]}/{name}/main.rs"
+                rel = flat if (manifest.parent / flat).is_file() else (
+                    nested if (manifest.parent / nested).is_file() else flat
+                )
             out.append(
                 Row(
                     repo=repo_name,

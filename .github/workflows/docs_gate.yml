@@ -120,6 +120,9 @@ on:
       # MANIFESTS and its own pins. Cargo.toml + crates/**/Cargo.toml are
       # already above; the gate and its floors file are not.
       - 'scripts/required_features_static_gate.py'
+      - 'scripts/cfg_row_implication_gate.py'
+      - 'scripts/cfg_row_implication_audit.py'
+      - 'scripts/cfg_row_implication_floors.txt'
       - 'scripts/required_features_build_audit.py'
       - 'scripts/required_features_floors.txt'
       # The population-sync gate's inputs are the SIX modules that each derive
@@ -216,6 +219,9 @@ on:
       # MANIFESTS and its own pins. Cargo.toml + crates/**/Cargo.toml are
       # already above; the gate and its floors file are not.
       - 'scripts/required_features_static_gate.py'
+      - 'scripts/cfg_row_implication_gate.py'
+      - 'scripts/cfg_row_implication_audit.py'
+      - 'scripts/cfg_row_implication_floors.txt'
       - 'scripts/required_features_build_audit.py'
       - 'scripts/required_features_floors.txt'
       # The population-sync gate's inputs are the SIX modules that each derive
