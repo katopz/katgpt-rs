@@ -389,6 +389,40 @@ cadences, and none of them subsumes another:
 | `sibling_docs_drift.yml` | sibling CI (reusable) | caller's choice | one caller |
 | `scripts/docs_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/numbering_drift_sweep.py` | workstation | on demand | every contract repo |
+| `scripts/required_features_drift_sweep.py` | workstation | on demand | every contract repo |
+
+**A third instrument was pointed at the siblings 2026-09-06, and this one
+found nothing — which is a result, not a non-event.**
+`scripts/required_features_drift_sweep.py` runs the free static verdict (a row
+naming a feature its package cannot enable) over every contract repo, against
+committed pins in `scripts/required_features_drift_floors.txt`: **16 repos, 138
+manifests, 1,829 rows, 0 invalid**, in under a second. The two sweeps before it
+were pointed at siblings for the first time and immediately returned 7 dead
+workflows and 35 duplicate numbers; this one confirms a clean workspace and
+**pins it there**, which is the whole point — the 0 was already measured by hand
+the day before and nothing was keeping it at 0.
+
+Two things about its pins are worth copying. `max_invalid = 0` is a **WALL, not
+a ratchet** (the numbering sweep pins each repo at its measured backlog; there
+is no backlog here and the defect is never legitimate). And it carries **two
+floors**, because the usual one is blind where it matters most: **seven of the
+sixteen repos legitimately have ZERO rows**, so `min_rows = 0` there detects
+nothing, while `parse_rows` swallows `TOMLDecodeError`/`OSError` with a bare
+`continue` — a manifest that stops parsing is indistinguishable from one
+carrying no rows, and in a 0-row repo, from the repo itself. `min_manifests`
+still bites there, and unparseable manifests are counted and reported rather
+than skipped.
+
+Canaried eleven directions before landing, and **the first pass of the
+end-to-end canary passed for the wrong reason** — with no `katgpt-rs` row in
+the temp pins, the hand-duplicated-pin assert fired and exited 1 before the
+planted invalid row was ever evaluated, so a green "the verdict fires" was
+really "some other check fires". Re-run isolated, with a control arm that must
+PASS, it fires on the row itself. That is the same shape as the shadowing bug
+this gate family was already bitten by (`parse_rows` shadowing the package's
+declared-feature set, which made the per-push gate structurally incapable of
+firing): **a canary that reds proves nothing until you check WHICH assertion
+red it.**
 
 **The same one-repo blindness was measured a second time, on a different
 instrument, 2026-09-05 (`.issues/725`).** `numbering_gate.py` also accepts a

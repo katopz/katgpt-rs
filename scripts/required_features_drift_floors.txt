@@ -1,0 +1,65 @@
+# Pins for scripts/required_features_drift_sweep.py — EVERY contract repo.
+#
+# Format, 4 whitespace-separated fields:
+#
+#   <repo>  <min_manifests>  <min_rows>  <max_invalid>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── max_invalid is a WALL, not a ratchet ──────────────────────────────────────
+# The numbering sweep pins each repo at its MEASURED duplicate count because a
+# standing backlog exists there and resolving one is a citation-weight
+# arbitration this session does not own. There is no backlog here: the whole
+# workspace measured 0 invalid rows over 1,829 (2026-09-05, re-confirmed
+# 2026-09-06), and the defect is never legitimate under any convention — cargo
+# silently SKIPS a target whose row names an unenableable feature, in every
+# invocation that does not name the target, `--all-features` and `cargo test
+# --workspace` included. So it reports a green zero forever while every audit in
+# the cfg_gated_target_audit.py family counts it as PROTECTED because the row
+# exists. 0 everywhere, and a new one reds the sweep.
+#
+# ── two floors, because one of them is blind in seven of sixteen repos ────────
+# min_rows is the usual floor: a ceiling of 0 is green over whatever the parse
+# can SEE, so a tomllib change or a manifest-walk regression takes the
+# population to 0 and the ceiling passes, byte-identical to a clean repo.
+#
+# It cannot do that job alone here. SEVEN repos legitimately carry ZERO
+# required-features rows (katgpt-web, riir-auth, riir-dao, riir-dapps,
+# riir-deployer, riir-viewbridge, seal-game-editor), so their row floor is 0 and
+# detects nothing. min_manifests still bites there: `parse_rows` swallows
+# TOMLDecodeError/OSError with a bare `continue`, so a manifest that stops
+# parsing is indistinguishable from one carrying no rows — and in a 0-row repo,
+# indistinguishable from the repo itself. All 138 manifests parsed on
+# 2026-09-06; the sweep also reports any that stop.
+#
+# min_manifests is pinned EXACTLY at the measured count: a crate leaving a
+# workspace is a deliberate act and is worth a re-pin in that commit.
+# min_rows carries ~5% headroom (the per-push gate's own precedent: 621
+# measured, 600 pinned) because test/bench targets churn constantly and a
+# tight floor there would red on ordinary sibling work.
+#
+# ── katgpt-rs's min_rows is stated TWICE and asserted ─────────────────────────
+# It must equal `min_rows_scanned` in scripts/required_features_floors.txt,
+# which is the per-push gate's pin for the same quantity. The sweep asserts
+# this and exits 1 on drift — `docs_gate_paths_sync.py` exists one workflow
+# over for exactly this failure: a hand-duplicated value drifts, silently.
+#
+# repo                    manifests  rows  invalid
+katgpt-rs                        32   600        0
+katgpt-web                        3     0        0
+riir-ai                          27   485        0
+riir-auth                         1     0        0
+riir-chain                       10   103        0
+riir-clippy                       1    41        0
+riir-dao                          2     0        0
+riir-dapps                        1     0        0
+riir-deployer                     3     0        0
+riir-game-sdk                     8    30        0
+riir-mmorpg-examples              4    19        0
+riir-neuron-db                    3    48        0
+riir-train                        4   411        0
+riir-viewbridge                   6     0        0
+seal-game-editor                 30     0        0
+seal-remake                       3     6        0
