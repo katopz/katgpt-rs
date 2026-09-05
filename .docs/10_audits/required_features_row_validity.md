@@ -97,8 +97,30 @@ inside a package by a ≥12-char common name prefix and a differing feature set
 yields **167 suspect pairs** (katgpt-rs 38, riir-ai 80, riir-train 46,
 riir-neuron-db 2, riir-game-sdk 1). That is an ORDERING heuristic and nothing
 more — most `DIVERGE` pairs are legitimately different targets and a smaller
-row is usually just a smaller target. Check the SUBSET side first; only the
-compiler decides.
+row is usually just a smaller target. Only the compiler decides.
+
+Taking only the **SUBSET side** — the row that is a strict subset of its
+twin's, i.e. the one that would have lost the feature — collapses that to a
+slice worth running first:
+
+| repo | rows | SUBSET-side suspects | groups | verdict |
+|---|---|---|---|---|
+| katgpt-rs | 621 | 9 | 8 | running |
+| riir-ai | 512 | 10 | 5 | deferred — live sibling session in that repo |
+| riir-train | 433 | 6 | 5 | running |
+| riir-neuron-db | 51 | 2 | 1 | **2/2 BUILDS** |
+| riir-game-sdk | 32 | 1 | 1 | deferred — live sibling session |
+| riir-chain / riir-clippy / riir-mmorpg-examples / seal-remake | 180 | 0 | 0 | none to check |
+| **total** | **1,829** | **28** | **20** | |
+
+**28 rows, 20 cargo invocations** against the full sweep's 1,070 — minutes
+rather than hours, aimed at the one shape both known defects had. It is a
+prior, not a substitute: a wrong row that has no near-twin is invisible to
+it, which is what the full sweep is for. The two deferred repos are deferred
+for a measured reason, not a guess — a cargo process working in the same
+repo is the documented false-RED hazard (AGENTS.md §"Several sessions, one
+target dir"), and a fresh `/tmp` target dir for a 200 GB repo is not
+affordable on this disk.
 
 ## Cost, and the box constraint
 
