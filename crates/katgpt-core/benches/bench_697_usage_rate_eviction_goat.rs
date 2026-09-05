@@ -53,9 +53,18 @@
 //!
 //! - T3.1 planted age-bias fixture (must-fire): raw-H2O evicts the hot row,
 //!   mass/age retains it — tie arm + strict arm.
-//! - T3.2 recall at matched budget: 6 policies × 3 caps × 32 seeds —
+//! - T3.2 recall at matched budget: 10 policies × 4 caps × 32 seeds —
 //!   accuracy, eviction counts, generation stats.
 //! - T3.3 Kendall-τ: per-head vs batch-summed eviction rankings.
+//! - T3.6/T3.7 null control + protection factorial (Plan 585 addendum,
+//!   Research 531 / arXiv:2609.03430 "Random Attention"): the scored arms
+//!   (mass/age, EGA) and the null (uniform-random) each run ±keystone-pin;
+//!   the pin form is the paper's prompt-protection rule translated to this
+//!   fixture (keystone = needle row). Non-vacuity is pre-registered: the
+//!   paper's passcode regime predicts the UNPINNED null collapses at cap=16
+//!   (needle-at-depth); if the null instead ties mass/age across its regime
+//!   caps (32/48/64), mass/age's remaining case is protection alone — a
+//!   demote-the-loser input, recorded either way.
 //!
 //! # Run
 //!
@@ -198,16 +207,31 @@ enum Policy {
     MassAgeSink,
     EgaEnergy,
     EgaUsage,
+    /// T3.6 null: uniform-random eviction, nothing pinned, no score —
+    /// the paper's Eq. 3 with an empty prompt set.
+    Rand,
+    /// The paper's headline arm: keystone (needle) rows pinned, uniform
+    /// random among the rest.
+    RandKeystone,
+    /// T3.7 factorial: mass/age + keystone pin (the prompt-protection
+    /// rule given to mass/age).
+    MassAgeKeystone,
+    /// T3.7 factorial: EGA energy + keystone pin.
+    EgaKeystone,
 }
 
 impl Policy {
-    const ALL: [Policy; 6] = [
+    const ALL: [Policy; 10] = [
         Policy::Ring,
         Policy::RawH2o,
         Policy::MassAge,
         Policy::MassAgeSink,
         Policy::EgaEnergy,
         Policy::EgaUsage,
+        Policy::Rand,
+        Policy::RandKeystone,
+        Policy::MassAgeKeystone,
+        Policy::EgaKeystone,
     ];
     fn name(&self) -> &'static str {
         match self {
@@ -217,7 +241,22 @@ impl Policy {
             Policy::MassAgeSink => "mass_age_sink",
             Policy::EgaEnergy => "ega_energy",
             Policy::EgaUsage => "ega_x_usage",
+            Policy::Rand => "rand",
+            Policy::RandKeystone => "rand_keystone",
+            Policy::MassAgeKeystone => "mass_age_keystone",
+            Policy::EgaKeystone => "ega_energy_keystone",
         }
+    }
+    /// True for the keystone-pinned arms (the +pin factorial form).
+    fn keystone_pinned(&self) -> bool {
+        matches!(
+            self,
+            Policy::RandKeystone | Policy::MassAgeKeystone | Policy::EgaKeystone
+        )
+    }
+    /// True for the score-free null family (tickets drawn per eviction).
+    fn is_rand(&self) -> bool {
+        matches!(self, Policy::Rand | Policy::RandKeystone)
     }
 }
 
@@ -237,10 +276,15 @@ struct SimState {
     tick: u64,
     cap: usize,
     evictions: u64,
+    /// Dedicated draw stream for the null family. Kept SEPARATE from the
+    /// workload rng so the fixture (admissions + queries) is bit-identical
+    /// across arms at the same seed — only the eviction choice differs;
+    /// this is what "same fixture" means for the A/B (T3.6).
+    rand_rng: SimpleRng,
 }
 
 impl SimState {
-    fn new(policy: Policy, cap: usize) -> Self {
+    fn new(policy: Policy, cap: usize, seed: u64) -> Self {
         Self {
             policy,
             rows: Vec::with_capacity(STREAM_LEN as usize),
@@ -248,6 +292,7 @@ impl SimState {
             tick: 0,
             cap,
             evictions: 0,
+            rand_rng: SimpleRng::new(seed ^ 0x9E37_79B9_7F4A_7C15),
         }
     }
 
@@ -293,7 +338,8 @@ impl SimState {
                     scores.push(self.table.row(i).cum_mass);
                 }
             }
-            Policy::MassAge | Policy::MassAgeSink | Policy::EgaUsage => {
+            Policy::MassAge | Policy::MassAgeSink | Policy::EgaUsage | Policy::MassAgeKeystone
+            | Policy::EgaKeystone => {
                 // per LIVE row (the table's live prefix includes dead slots)
                 for &i in &live_idx {
                     scores.push(score(self.table.row(i), self.tick));
@@ -304,6 +350,11 @@ impl SimState {
                     scores.push(ega_energy(self.rows[i].token));
                 }
             }
+            // The null family has no score: evict() draws fresh uniform
+            // tickets per eviction. This arm is unreachable from evict().
+            Policy::Rand | Policy::RandKeystone => unreachable!(
+                "null family draws tickets in evict(), never through policy_scores"
+            ),
         }
         if self.policy == Policy::EgaUsage {
             // fusion: admission prior (static z-scored energy) x online
@@ -336,11 +387,29 @@ impl SimState {
         if over == 0 {
             return;
         }
-        let scores = self.policy_scores();
-        // sink pin: slot 0 (the first-admitted row — the sink position
-        // convention) is pinned for the sink arm; other arms pin nothing.
+        // T3.6: the null family draws a fresh uniform ticket per live row
+        // PER EVICTION (the paper's Eq. 3: u_i ~ Uniform(0,1) per head per
+        // eviction) — from the dedicated stream, so the fixture is
+        // untouched and the draw replays bit-identically (G1). Per-head
+        // independence is structural: every trial owns its stream.
+        let scores = if self.policy.is_rand() {
+            let mut tickets = Vec::with_capacity(live_idx.len());
+            for _ in 0..live_idx.len() {
+                tickets.push(self.rand_rng.unit());
+            }
+            tickets
+        } else {
+            self.policy_scores()
+        };
+        // pin: slot 0 (the first-admitted row — the sink position
+        // convention) is pinned for the sink arm; the keystone arms pin
+        // every needle row (the prompt-protection rule, T3.7's +pin form);
+        // other arms pin nothing.
         let pin_mask: Vec<bool> = match self.policy {
             Policy::MassAgeSink => live_idx.iter().map(|&i| i == 0).collect(),
+            _ if self.policy.keystone_pinned() => {
+                live_idx.iter().map(|&i| self.rows[i].token >= NEEDLE_BASE).collect()
+            }
             _ => vec![false; live_idx.len()],
         };
         let mut victims = Vec::new();
@@ -423,6 +492,10 @@ fn z_score(xs: &[f32]) -> Vec<f32> {
 
 struct TrialOutcome {
     recalled: usize,
+    /// Needle rows alive at the tally (the paper's keep-log statistic;
+    /// in this fixture a surviving needle row IS a recalled needle — the
+    /// survival axis collapses onto recall, recorded as such).
+    keystones_alive: usize,
     evictions: u64,
     output_len: usize,
     target_len: usize,
@@ -442,7 +515,7 @@ struct TrialOutcome {
 /// mass is granted by the tally.
 fn run_trial(policy: Policy, cap: usize, seed: u64) -> TrialOutcome {
     let mut rng = SimpleRng::new(seed);
-    let mut st = SimState::new(policy, cap);
+    let mut st = SimState::new(policy, cap, seed);
 
     // needles: token 24+k planted at (8 + 7k)% of the stream.
     let plant_tick: Vec<u64> = (0..N_NEEDLES)
@@ -501,6 +574,7 @@ fn run_trial(policy: Policy, cap: usize, seed: u64) -> TrialOutcome {
     // Final tally: which needles survived to be answerable?
     st.tick = STREAM_LEN + 1;
     let mut recalled = 0usize;
+    let mut keystones_alive = 0usize;
     for k in 0..N_NEEDLES {
         let hits: Vec<usize> = st
             .rows
@@ -509,6 +583,9 @@ fn run_trial(policy: Policy, cap: usize, seed: u64) -> TrialOutcome {
             .filter(|(_, r)| r.alive && r.token == NEEDLE_BASE + k)
             .map(|(i, _)| i)
             .collect();
+        if !hits.is_empty() {
+            keystones_alive += 1;
+        }
         let ok = hits
             .iter()
             .any(|&h| st.rows[h].payload == payloads[k] && st.rows[h].admitted == plant_tick[k]);
@@ -539,6 +616,7 @@ fn run_trial(policy: Policy, cap: usize, seed: u64) -> TrialOutcome {
 
     TrialOutcome {
         recalled,
+        keystones_alive,
         evictions: st.evictions,
         output_len: out_len,
         target_len: GEN_TARGET,
@@ -599,29 +677,35 @@ fn main() {
     // ── T3.2 policy matrix (run TWICE for G1) ──
     let caps = [16usize, 32, 48, 64];
     let mut run_tables: Vec<Vec<Vec<u32>>> = Vec::new(); // [run][policy][cap]
+    let mut run_keystones: Vec<Vec<Vec<u64>>> = Vec::new();
     let mut run_evictions: Vec<Vec<Vec<u64>>> = Vec::new();
     let mut run_outlens: Vec<Vec<Vec<usize>>> = Vec::new();
     for _run in 0..2 {
         let mut acc = vec![vec![0u32; caps.len()]; Policy::ALL.len()];
+        let mut ks = vec![vec![0u64; caps.len()]; Policy::ALL.len()];
         let mut ev = vec![vec![0u64; caps.len()]; Policy::ALL.len()];
         let mut ol = vec![vec![0usize; caps.len()]; Policy::ALL.len()];
         for (pi, &policy) in Policy::ALL.iter().enumerate() {
             for (ci, &cap) in caps.iter().enumerate() {
                 let mut rec = 0u32;
+                let mut kee = 0u64;
                 let mut evc = 0u64;
                 let mut outsum = 0usize;
                 for seed in 0..N_SEEDS {
                     let o = run_trial(policy, cap, 1_000 + seed);
                     rec += o.recalled as u32;
+                    kee += o.keystones_alive as u64;
                     evc += o.evictions;
                     outsum += o.output_len;
                 }
                 acc[pi][ci] = rec;
+                ks[pi][ci] = kee;
                 ev[pi][ci] = evc;
                 ol[pi][ci] = outsum;
             }
         }
         run_tables.push(acc);
+        run_keystones.push(ks);
         run_evictions.push(ev);
         run_outlens.push(ol);
     }
@@ -632,7 +716,7 @@ fn main() {
         N_SEEDS, N_NEEDLES, STREAM_LEN
     );
     println!(
-        "{:<16} {:>18} {:>18} {:>18} {:>18} {:>10}",
+        "{:<22} {:>18} {:>18} {:>18} {:>18} {:>10}",
         "policy", "cap=16", "cap=32", "cap=48", "cap=64", "out@16"
     );
     for (pi, &policy) in Policy::ALL.iter().enumerate() {
@@ -646,7 +730,7 @@ fn main() {
             .collect();
         let mean_out = run_outlens[0][pi][0] as f64 / N_SEEDS as f64;
         println!(
-            "{:<16} {:>18} {:>18} {:>18} {:>18} {:>10.2}",
+            "{:<22} {:>18} {:>18} {:>18} {:>18} {:>10.2}",
             policy.name(),
             cells[0],
             cells[1],
@@ -657,12 +741,22 @@ fn main() {
     }
     // G8: the mass/age family must be >= raw_h2o at every cap. A per-cap
     // miss is recorded honestly — the regime boundary (WHERE the score
-    // wins) is a finding, not noise to be tuned away.
+    // wins) is a finding, not noise to be tuned away. Indices are derived
+    // from ALL, never hardcoded (the 10-arm addendum reordered nothing,
+    // but derivation is the drift-proof form).
+    let idx_of = |p: Policy| -> usize {
+        Policy::ALL
+            .iter()
+            .position(|&q| q == p)
+            .expect("policy must be in ALL")
+    };
+    let raw_i = idx_of(Policy::RawH2o);
     let mut g8_all = true;
     let mut g8_misses: Vec<String> = Vec::new();
     for ci in 0..caps.len() {
-        let raw = run_tables[0][1][ci];
-        for &pi in &[2usize, 3, 5] {
+        let raw = run_tables[0][raw_i][ci];
+        for &p in &[Policy::MassAge, Policy::MassAgeSink, Policy::EgaUsage] {
+            let pi = idx_of(p);
             if run_tables[0][pi][ci] < raw {
                 g8_all = false;
                 g8_misses.push(format!(
@@ -690,9 +784,122 @@ fn main() {
 
     // ── G1 determinism ──
     let g1 = run_tables[0] == run_tables[1]
+        && run_keystones[0] == run_keystones[1]
         && run_evictions[0] == run_evictions[1]
         && run_outlens[0] == run_outlens[1];
     println!("\n  G1 GATE (matrix double-run bit-identical): {}", pass_fail(g1));
+
+    // ── T3.6/T3.7 null control + protection factorial ──
+    println!(
+        "\nT3.6/T3.7 null control + protection factorial (Research 531, arXiv:2609.03430):"
+    );
+    let fac_policies = [
+        Policy::MassAge,
+        Policy::MassAgeKeystone,
+        Policy::EgaEnergy,
+        Policy::EgaKeystone,
+        Policy::Rand,
+        Policy::RandKeystone,
+    ];
+    println!(
+        "{:<22} {:>5} {:>14} {:>14} {:>14} {:>14} {:>12} {:>12}",
+        "policy", "pin", "cap=16", "cap=32", "cap=48", "cap=64", "keys@16", "evict@16"
+    );
+    for &p in fac_policies.iter() {
+        let pi = idx_of(p);
+        let cells: Vec<String> = (0..caps.len())
+            .map(|ci| {
+                let r = run_tables[0][pi][ci];
+                format!("{:>4.1}%", 100.0 * r as f64 / total_per_cell as f64)
+            })
+            .collect();
+        println!(
+            "{:<22} {:>5} {:>14} {:>14} {:>14} {:>14} {:>9}/{} {:>12}",
+            p.name(),
+            if p.keystone_pinned() { "+" } else { "-" },
+            cells[0],
+            cells[1],
+            cells[2],
+            cells[3],
+            run_keystones[0][pi][0],
+            total_per_cell,
+            run_evictions[0][pi][0],
+        );
+    }
+    // Pin-honored gate: every +pin arm must recall ALL needles at EVERY
+    // cap (pinned rows are never selectable — a miss means the mask is
+    // broken, not that the policy is weak).
+    let pin_honored = fac_policies
+        .iter()
+        .filter(|p| p.keystone_pinned())
+        .all(|p| {
+            let pi = idx_of(*p);
+            (0..caps.len()).all(|ci| run_tables[0][pi][ci] as u64 == total_per_cell)
+        });
+    println!(
+        "  pin-honored gate (all +pin arms recall {tpc}/{tpc} at every cap): {}",
+        pass_fail(pin_honored),
+        tpc = total_per_cell
+    );
+
+    // T3.6 non-vacuity, pre-registered (Plan 585 addendum / Research 531 §5):
+    // the paper's passcode regime predicts the UNPINNED null collapses at
+    // cap=16 (needle-at-depth); a null tie across mass_age's regime caps
+    // (32/48/64) refutes signal value on this workload and leaves mass_age
+    // protection alone — a demote-the-loser input, recorded either way.
+    let ma_i = idx_of(Policy::MassAge);
+    let null_i = idx_of(Policy::Rand);
+    println!("  T3.6 non-vacuity (unpinned null vs unpinned mass_age):", );
+    println!(
+        "    cap=16 collapse cell: rand {}/{} vs mass_age {}/{} (passcode regime: both at floor expected)",
+        run_tables[0][null_i][0],
+        total_per_cell,
+        run_tables[0][ma_i][0],
+        total_per_cell
+    );
+    let regime_cis = [1usize, 2, 3]; // caps 32/48/64 — mass_age's claimed regime
+    let mut signal_wins: Vec<usize> = Vec::new();
+    let mut signal_ties: Vec<usize> = Vec::new();
+    for &ci in regime_cis.iter() {
+        let ma = run_tables[0][ma_i][ci];
+        let nu = run_tables[0][null_i][ci];
+        if ma > nu {
+            signal_wins.push(ci);
+        } else {
+            signal_ties.push(ci);
+        }
+        println!(
+            "    cap={} signal cell: mass_age {}/{} vs rand {}/{} -> {}",
+            caps[ci],
+            ma,
+            total_per_cell,
+            nu,
+            total_per_cell,
+            if ma > nu { "signal WIN" } else { "TIE — signal adds nothing here" }
+        );
+    }
+    let signal_value = signal_ties.is_empty();
+    if signal_value {
+        println!(
+            "    SIGNAL VERDICT: mass_age strictly beats the null at every regime cap — signal value CONFIRMED beyond protection/luck (G8 strengthened with the null controlled)."
+        );
+    } else if signal_wins.is_empty() {
+        println!(
+            "    SIGNAL VERDICT: null TIES mass_age at every regime cap — signal value REFUTED on this workload; mass_age's remaining case is protection alone. Demote-the-loser input RECORDED (T3.8's registered alternative goes live)."
+        );
+    } else {
+        let tied: Vec<String> = signal_ties.iter().map(|&ci| caps[ci].to_string()).collect();
+        println!(
+            "    SIGNAL VERDICT: MIXED — null ties at cap(s) {}; mass_age's edge survives only where it wins. Recorded as the demote-the-loser input for the tied caps.",
+            tied.join(",")
+        );
+    }
+    // T3.7 re-state: G8's claim re-read against the controlled null.
+    println!(
+        "  T3.7 G8 re-stated vs the controlled null: mass_age >= raw_h2o everywhere={} AND mass_age > rand at 32/48/64={}",
+        pass_fail(g8_all),
+        pass_fail(signal_value)
+    );
 
     // ── canary demo (T2.2 non-vacuity at bench level) ──
     println!("\nCanary demo (RunawayStats + runaway_gate, r_max=1.5, p_cap_max=0.05):");
@@ -743,9 +950,13 @@ fn main() {
     );
 
     // ── verdict ──
-    let all = t31 && g8_all && g1 && canary_ok && ns_per_row < 10.0;
+    let all = t31 && g8_all && g1 && canary_ok && ns_per_row < 10.0 && pin_honored;
     if all {
-        println!("\n=== VERDICT: ALL GATES PASS ===");
+        if signal_value {
+            println!("\n=== VERDICT: ALL GATES PASS — null control: mass_age signal CONFIRMED at every regime cap ===");
+        } else {
+            println!("\n=== VERDICT: ALL GATES PASS — null control TIE recorded (see SIGNAL VERDICT above; T3.8 registered alternative live) ===");
+        }
     } else {
         println!("\n=== VERDICT: MIXED — {} regime miss(es); boundary recorded honestly (negative artifact + opt-in per plan rule) ===", g8_misses.len());
     }
@@ -793,7 +1004,7 @@ fn run_tau_section() {
     // here shares the row-index space by construction; documented
     // simplification).
     let build = |h: u64| -> (Vec<usize>, Vec<f32>) {
-        let mut st = SimState::new(Policy::RawH2o, usize::MAX); // no eviction
+        let mut st = SimState::new(Policy::RawH2o, usize::MAX, 50 + h); // no eviction
         let mut rng = SimpleRng::new(50 + h);
         for t in 0..120u64 {
             st.tick = t;

@@ -87,7 +87,27 @@ A Salesforce study **refutes the premise behind every scoring KV evictor**: keep
 
 ## 5. PoC Addendum
 
-None in this session. The falsifier is cheap and already scheduled: Plan 585 addendum T3.6 adds the `random_prompt_pin` arm to Bench 697's harness (seeded LCG draw + `pinned` mask — the primitive's existing API), non-vacuity by construction (the paper's passcode regime predicts the arm collapses at cap=16; if it instead TIES mass_age at cap=16, that refutes the signal value on our workload and mass_age's remaining case is protection alone — a demote-the-loser input, recorded either way).
+**RECORDED 2026-09-06 (Bench 697 addendum, Plan 585 T3.6–T3.9 landed):** the
+falsifier ran on the constructed induction-pair fixture (32 seeds × 12 needles,
+M3, release). **The passcode regime CONFIRMED and the signal verdict is
+CONFIRMED — the demote-the-loser branch did not fire:** the unpinned null
+collapses at cap=16 (7/384, floor-class — and BEATS mass_age's 0/384 there: the
+null's geometric survival `((K−ℓp)/(K+r−ℓp))^n` retains a thin recent tail,
+the paper's implicit soft-recency finding, which is mass_age's second recorded
+extreme-pressure loss), while mass_age strictly beats the null at every regime
+cap (192/38 vs 384/80 vs 384/100 — 5.0×/4.8×/3.8×). Protection factorial: every
+pinned arm hits 100% at every cap (pin-honored PASS; the paper's Table-2 shape
+reproduced — rand_keystone = the null-with-oracle ceiling at zero scoring
+cost). **Instrument find:** rand PASSES the runaway canary at cap=32 (R=1.0,
+p_cap 0.0) while recalling 9.9% — generation health rides the recent tail the
+null keeps, so the canary and the null control are complementary instruments,
+not substitutes. Gates landed: `kv_eviction::beats_random_prompt_pin` (strict;
+NaN fail-closed) — the standing promotion rule for any lossy KV policy is now
+`runaway_gate` ∧ `beats_random_prompt_pin` ∧ the protection factorial.
+Record: [Bench 697 §T3.6/T3.7 Addendum](../.benchmarks/697_usage_rate_eviction_goat.md).
+
+Original entry: the falsifier was cheap and scheduled via Plan 585 addendum
+T3.6 (superseded by the record above).
 
 ## 6. Cross-Ref (2026-09-04)
 

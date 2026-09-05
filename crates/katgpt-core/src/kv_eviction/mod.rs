@@ -43,6 +43,21 @@
 //! (output length running to the cap) is invisible to perplexity-style
 //! metrics and to tolerant substring metrics — the paper measured 35–128×
 //! output/target blowups while SubEM read fine.
+//!
+//! # The null-policy bar (Plan 585 addendum T3.9, Research 531)
+//!
+//! Research 531 (arXiv:2609.03430 "Random Attention") supplies the control
+//! every scored evictor lacked: prompt-pinned per-head uniform-random
+//! eviction — no score at all — matches the strongest scored baselines at
+//! matched budget, because most of the inter-selector gap is keystone
+//! protection, not the signal. [`beats_random_prompt_pin`] encodes the
+//! resulting promotion bar: **a scored policy keeps its slot only if its
+//! recall strictly exceeds the pinned-random null's at matched budget** —
+//! at equal recall the null wins on cost (the paper's +32–43% serving
+//! margin: it reads nothing), so a tie does not keep a scorer alive. Run
+//! it AFTER the protection factorial (Bench 697 T3.7): if the policy's
+//! recall deficit is explained by keystone loss, fix protection first —
+//! the recall comparison is only meaningful at matched protection.
 
 use crate::float_order;
 
@@ -286,6 +301,40 @@ pub fn runaway_gate(stats: &RunawayStats, r_max: f32, p_cap_max: f32) -> bool {
         return false;
     }
     stats.r_median <= r_max && stats.p_cap <= p_cap_max
+}
+
+/// Per-arm control summary fed to [`beats_random_prompt_pin`] — the two
+/// axes the Bench 697 T3.7 factorial reports for one policy arm: the
+/// fraction of deep items recalled and the fraction of keystone rows
+/// surviving. Both in `[0, 1]`.
+#[derive(Clone, Copy, Debug)]
+pub struct PolicyControl {
+    pub recall: f32,
+    pub keystone_survival: f32,
+}
+
+/// The null-policy promotion bar (Plan 585 T3.9, Research 531): does a
+/// scored eviction policy beat prompt-pinned per-head random at matched
+/// budget AND matched protection?
+///
+/// Encoded rule (doc = contract): **any scored lossy KV policy promoted
+/// toward default must strictly exceed the pinned-random null's recall at
+/// matched budget.** STRICT on purpose — at equal recall the null wins on
+/// cost (it computes no score; the paper measures +32–43% serving
+/// throughput over scored evictors at identical kernels), so a tie hands
+/// the slot to the null, it does not split it. Non-finite recall fails
+/// closed (the NaN-comparator house rule): NaN is not a pass.
+///
+/// Protection matching is the CALLER's protocol step (run the ±pin
+/// factorial first; see the module doc) — this fn takes the already-fair
+/// comparison. Companion to [`runaway_gate`]: the runaway canary clears a
+/// policy as non-toxic; this bar decides whether its signal earns its
+/// cost. Both must pass for a promotion.
+pub fn beats_random_prompt_pin(policy: &PolicyControl, null_pinned: &PolicyControl) -> bool {
+    if !policy.recall.is_finite() || !null_pinned.recall.is_finite() {
+        return false;
+    }
+    policy.recall > null_pinned.recall
 }
 
 #[cfg(test)]
@@ -612,6 +661,48 @@ mod tests {
             64,
         );
         assert!(runaway_gate(&healthy, 1.5, 0.05), "healthy arm must PASS");
+    }
+
+    // ── T3.9 null-policy bar (Research 531) ───────────────────────────
+
+    #[test]
+    fn null_bar_strictly_requires_recall_beating_the_pinned_null() {
+        // Equal recall: the null wins on cost — the tie hands the slot to
+        // the null, it does not split it.
+        let policy = PolicyControl { recall: 0.5, keystone_survival: 1.0 };
+        let null = PolicyControl { recall: 0.5, keystone_survival: 1.0 };
+        assert!(
+            !beats_random_prompt_pin(&policy, &null),
+            "a tie must NOT keep a scored policy's slot (the null is cheaper)"
+        );
+        // Strictly better recall passes.
+        let better = PolicyControl { recall: 0.5 + 1e-6, keystone_survival: 1.0 };
+        assert!(beats_random_prompt_pin(&better, &null));
+        // Strictly worse recall fails.
+        let worse = PolicyControl { recall: 0.25, keystone_survival: 1.0 };
+        assert!(!beats_random_prompt_pin(&worse, &null));
+    }
+
+    #[test]
+    fn null_bar_fails_closed_on_non_finite_recall() {
+        let null = PolicyControl { recall: 1.0, keystone_survival: 1.0 };
+        let nan_policy = PolicyControl { recall: f32::NAN, keystone_survival: 1.0 };
+        assert!(!beats_random_prompt_pin(&nan_policy, &null), "NaN is not a pass");
+        let inf_policy = PolicyControl { recall: f32::INFINITY, keystone_survival: 1.0 };
+        assert!(!beats_random_prompt_pin(&inf_policy, &null));
+        let nan_null = PolicyControl { recall: f32::NAN, keystone_survival: 1.0 };
+        let policy = PolicyControl { recall: 0.9, keystone_survival: 1.0 };
+        assert!(!beats_random_prompt_pin(&policy, &nan_null), "unfair null is not a pass");
+    }
+
+    #[test]
+    fn null_bar_negative_control_planted_over_evictor_cannot_pass() {
+        // A policy that loses recall to the pinned null on a real-shaped
+        // comparison (mass_age 0.5 vs pinned-random 1.0 on this fixture's
+        // cap=32 regime) fails even with perfect keystone survival.
+        let policy = PolicyControl { recall: 0.5, keystone_survival: 1.0 };
+        let null = PolicyControl { recall: 1.0, keystone_survival: 1.0 };
+        assert!(!beats_random_prompt_pin(&policy, &null));
     }
 
     #[test]
