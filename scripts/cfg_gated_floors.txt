@@ -94,7 +94,25 @@
 # classifier is only as wide as the classifier's vocabulary, and a vocabulary
 # gap looks identical to a clean repo.
 
-max_load_bearing	0
+# ── 2026-09-06: 0 -> 2, and the pin did not move because the repo got worse ──
+# It moved because the CLASSIFIER got wider (Issue 728). The first corpus token
+# table run over all 16 repos — rather than over katgpt-rs's 2,157 names, which
+# is the sample the token set was validated against — found `silent_now_load_
+# bearing = 0` in EVERY repo, which read as "nobody ships a silent load-bearing
+# gate" and meant "the classifier speaks one repo's dialect". Six tokens and
+# one compound later, the workspace count is 12 and TWO of them are ours:
+# `bridge_spec_match` (root, feature `action_bridge`) and `pencil_spec_match`
+# (katgpt-core, `spectral_pencil`) — both auto-discovered with no [[test]] row,
+# so a plain `cargo test` compiles each to an empty binary and prints
+# `ok. 0 passed`.
+#
+# Pinned at the MEASURED 2 rather than left at 0, on purpose. Arming them edits
+# crates/katgpt-core/Cargo.toml, whose lib units are shared across the many
+# remaining groups of the in-flight Issue 513 T2 sweep over this repo's
+# target/. The ratchet still ratchets at 2 — a THIRD instance reds the push
+# that adds it — and Issue 728 T2 takes it back to 0 in the arming commit.
+# Do not raise this pin for any other reason.
+max_load_bearing	2
 max_silent_now	44
 min_targets	700
 min_gated	400

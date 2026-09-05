@@ -148,8 +148,58 @@ LOAD_BEARING_TOKENS = frozenset(
         # Trading one named compound for five false positives is the right way
         # round; add compounds here as they are found.
         "regate",
+        # ── added 2026-09-06, by the FIRST corpus token table run over all 16
+        # repos rather than over katgpt-rs alone. The set above was measured
+        # against 2,157 katgpt-rs-era target names; the workspace corpus is
+        # 3,081, and the sibling dialects were invisible in it. Before this,
+        # `silent_now_load_bearing` was **0 in all 16 repos** — a zero that
+        # read as "nobody ships a silent load-bearing gate" and actually meant
+        # "the classifier speaks one repo's dialect". Widening it takes the
+        # workspace count 0 -> 12, TWO OF THEM IN katgpt-rs ITSELF, whose
+        # `max_load_bearing = 0` pin had been green over a population that
+        # excluded them.
+        #
+        # Each was checked against every one of its corpus matches, not just
+        # its SILENT-NOW ones, and each names a property the file exists to
+        # FAIL on:
+        "parity",         # 22 matches, ALL A-vs-B equivalence (GPU vs CPU,
+                          # cudarc vs CPU, tokenizer, install-copy). Zero false
+                          # positives; the same family as `equivalence`.
+        "monotonicity",   # 4, all riir-chain slashing / domain-registry
+                          # invariants. The same family as `invariant`.
+        "roundtrip",      # 5, all encode/decode identity assertions.
+        "integrity",      # 6, all genuine integrity assertions.
+        "exactness",      # 2, riir-chain `ledger_exactness` — exact arithmetic.
+        "reachability",   # 3. `taming_reachability` earns it: a reachability
+                          # test's green IS the evidence that an authored goal
+                          # can ever be won.
+        # DELIBERATELY NOT added, measured the same way:
+        # `e2e` (83, the largest class) and `persistence` name a SCOPE or a
+        # subsystem, not a property to fail on — the same reason `check` was
+        # rejected. `cost`/`throughput`/`overhead`/`latency`/`scale`/`growth`
+        # name MEASUREMENTS, which is exactly why `calibration` was rejected.
+        # `oracle` (3) names a technique, and in riir-chain vocabulary also a
+        # component. `identity` (6) is a genuine homonym: 4 of its 6 are
+        # `signer_identity` / `identity_matcher`, a domain NOUN.
+        # `liveness`/`conformance`/`idempotence` matched nothing at all.
     }
 )
+
+# Explicit COMPOUNDS, checked against ADJACENT token pairs. Same principle as
+# `regate` above — name the compound rather than loosening a token to a
+# substring — but here neither half can be admitted alone, which is the whole
+# argument for the mechanism:
+#
+#   `spec`  — 49 matches, and in THIS repo `spec_` means SPECULATIVE decoding
+#             (`spec_reconciliation_bench`, and a `_demo`). A homonym.
+#   `match` — 49 matches, of which `attn_match_*` (attention matching, a
+#             subsystem) and `quest_match_tui` (a game match) are not gates.
+#
+# The compound admits neither, and picks up riir-chain's 39-target `*_spec_match`
+# conformance convention — which katgpt-rs shares. Five of this repo's seven
+# `*_spec_match` targets were only ever visible because they ALSO carry `g1`;
+# `bridge_spec_match` and `pencil_spec_match` do not, and were invisible.
+LOAD_BEARING_BIGRAMS = frozenset({"spec_match"})
 
 # `g1`..`g<N>`, optionally with a variant suffix — the GOAT sub-gate naming
 # convention (G1 correctness, G2 perf, G3 no-regression, G4 alloc-free) as it
@@ -165,7 +215,8 @@ TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 def is_load_bearing(*names: str) -> bool:
     """Does any name carry a load-bearing TOKEN? Substring matches excluded."""
     for name in names:
-        for tok in TOKEN_SPLIT.split(name.lower()):
+        toks = TOKEN_SPLIT.split(name.lower())
+        for i, tok in enumerate(toks):
             # Depluralise rather than listing every plural: `gates`, `drills`,
             # `guards`, `proofs`, `audits` all appear, and a hand-listed set
             # misses whichever one is coined next. `drills` was a real miss.
@@ -173,6 +224,10 @@ def is_load_bearing(*names: str) -> bool:
             if tok in LOAD_BEARING_TOKENS or stem in LOAD_BEARING_TOKENS:
                 return True
             if GATE_ORDINAL.match(tok):
+                return True
+            # Adjacent-pair compounds, for the case where neither half can be
+            # admitted alone without dragging in a homonym class.
+            if i + 1 < len(toks) and f"{tok}_{toks[i + 1]}" in LOAD_BEARING_BIGRAMS:
                 return True
     return False
 

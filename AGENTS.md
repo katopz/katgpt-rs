@@ -553,6 +553,21 @@ Two independently-built classifiers agreeing is what licenses the
 `max_load_bearing = 0` pin; a false negative would have made that pin a
 permanent green. Run the script.
 
+**Measured a fourth time on 2026-09-06, and this time by widening the
+POPULATION rather than the vocabulary (`.issues/728`).** The classifier had
+only ever run over katgpt-rs, because the gate is katgpt-rs-scoped. Run over
+all 16 repos it reported `silent_now_load_bearing = 0` in **every one**, over
+261 SILENT-NOW targets — a zero that reads as "nobody ships a silent
+load-bearing gate" and means "the classifier speaks one repo's dialect". Six
+tokens plus the adjacent-pair compound `spec_match` took the workspace count
+**0 → 12**, **two of them katgpt-rs's own**. The compound is the mechanism
+worth knowing: neither half survives alone, because `spec` is a homonym for
+*speculative* decoding **in this repo** and `match` admits `attn_match_*`. And
+the reason the two local instances hid is the sharpest part — katgpt-rs ships
+seven `*_spec_match` targets and **five were only ever classified because they
+also carry `g1`**. A convention that is visible only by accident is not
+covered.
+
 **And do not read that agreement as more than it is.** The two classifiers
 agreed, and they agreed on the wrong *population* — T4c widened the token set
 and 17 more katgpt-rs targets appeared. Agreement licenses the pin against a

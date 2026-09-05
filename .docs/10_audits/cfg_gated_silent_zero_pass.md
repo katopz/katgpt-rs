@@ -340,6 +340,47 @@ uncommitted and the worktree carries both, so nothing of theirs was swept and
 nothing of mine reverts when they commit. Their own comment in that file had
 explicitly deferred these four to this sweep.
 
+## T4d (2026-09-06) — the fourth narrowness finding, and the first found by widening the POPULATION
+
+T4c widened the vocabulary and found 17 more katgpt-rs targets. T4d changed
+nothing about the vocabulary's *method* and everything about what it was
+measured against: the classifier had only ever been run over **katgpt-rs**,
+because `cfg_gated_floor_gate.py` is katgpt-rs-scoped. Run over all 16 repos
+for the first time:
+
+    silent_now_load_bearing = 0   in EVERY repo, over 261 SILENT-NOW targets
+
+A zero that reads as "nobody ships a silent load-bearing gate" and means "the
+classifier speaks one repo's dialect". The token set was validated against
+**2,157 katgpt-rs-era target names**; the workspace corpus is **3,081**.
+
+Six tokens and one compound were admitted after measuring every candidate
+against the full corpus — `parity` (22 matches, all A-vs-B equivalence),
+`integrity`, `roundtrip`, `monotonicity`, `reachability`, `exactness`, and the
+adjacent-pair compound `spec_match` (39). The rejections carry as much weight
+as the admissions and are reasoned in the source: `e2e` (83, the largest class)
+names a SCOPE not a property; `cost`/`throughput`/`overhead`/`latency` name
+MEASUREMENTS, the reason `calibration` was already rejected; `identity` is a
+genuine homonym (4 of 6 are `signer_identity`, a domain noun).
+
+**`spec_match` is why bigram support exists.** Neither half survives alone:
+`spec` (49) is a homonym for **speculative** decoding in this very repo
+(`spec_reconciliation_bench`, and a `_demo`), and `match` (49) admits
+`attn_match_*` and `quest_match_tui`. The compound admits neither. Same
+principle as `regate`, promoted from a one-off to a mechanism.
+
+Result: workspace load-bearing SILENT-NOW **0 → 12**, and **two are
+katgpt-rs's own** — `bridge_spec_match` and `pencil_spec_match`, both
+auto-discovered with no `[[test]]` row, both compiling to an empty binary that
+prints `ok. 0 passed` on a plain `cargo test`. The reason they hid is the sharp
+part: this repo ships **seven** `*_spec_match` targets and **five were only
+ever classified because they also carry `g1`**. The convention was always here;
+the classifier saw it by accident.
+
+`max_load_bearing` is pinned at the measured **2** in the interim (a third
+instance still reds the push that adds it) and returns to 0 in the arming
+commit — Issue 728.
+
 ## Why this is not `feature_isolation_gate.py` or `ci_feature_guard.sh`
 
 Both mention `required-features` only incidentally; neither asks whether a
