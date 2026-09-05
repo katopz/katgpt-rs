@@ -93,6 +93,7 @@ CHECKS=(
     "scripts/numbering_gate.py:a .plans/.issues/.research/.proposals number allocated twice, or a stale/malformed .highwater (Issues 724, 725)"
     "scripts/docs_gate_paths_sync.py:docs_gate.yml's two hand-duplicated trigger paths lists stay identical (Issue 724 T4b)"
     "scripts/required_features_static_gate.py:a required-features row naming a feature its package cannot enable (Issue 513)"
+    "scripts/population_sync_gate.py:the six independent contract-repo predicates must agree (else an instrument audits a different set and still prints green)"
 )
 
 if ! command -v python3 >/dev/null 2>&1; then

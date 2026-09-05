@@ -122,6 +122,14 @@ on:
       - 'scripts/required_features_static_gate.py'
       - 'scripts/required_features_build_audit.py'
       - 'scripts/required_features_floors.txt'
+      # The population-sync gate's inputs are the SIX modules that each derive
+      # "which repos are contract repos" independently. Globbing only the gate
+      # would be the 713/704 trigger-omission class again: the one push it
+      # exists for is the push that changes a PREDICATE, in any of these six.
+      - 'scripts/population_sync_gate.py'
+      - 'scripts/numbering_drift_sweep.py'
+      - 'scripts/ci_gate_coverage.py'
+      - 'scripts/suite_membership_audit.py'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'
@@ -207,6 +215,14 @@ on:
       - 'scripts/required_features_static_gate.py'
       - 'scripts/required_features_build_audit.py'
       - 'scripts/required_features_floors.txt'
+      # The population-sync gate's inputs are the SIX modules that each derive
+      # "which repos are contract repos" independently. Globbing only the gate
+      # would be the 713/704 trigger-omission class again: the one push it
+      # exists for is the push that changes a PREDICATE, in any of these six.
+      - 'scripts/population_sync_gate.py'
+      - 'scripts/numbering_drift_sweep.py'
+      - 'scripts/ci_gate_coverage.py'
+      - 'scripts/suite_membership_audit.py'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'

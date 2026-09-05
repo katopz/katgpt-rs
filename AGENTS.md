@@ -339,6 +339,29 @@ paragraph said "the three" for one commit after the fourth was added):
   this family does. An empty *allowlist* is refused for the mirror-image
   reason. All four directions canaried. It is deliberately NOT in
   `REQUIRED_PINS`: it is not an integer.
+- `population_sync_gate.py` asserts that the **six** independent
+  "which repos are contract repos" predicates agree —
+  `cfg_gated_target_audit.derive_repos`, `numbering_drift_sweep.contract_repos`,
+  `percentile_index_audit.repos`, `ci_gate_coverage.derive_repos`,
+  `skill_repo_set_gate.derive_repos`, `suite_membership_audit.derive_repos`.
+  They do (2026-09-06: 16 repos, identical, equal to `repo_set.txt`), and
+  nothing asserted it. The failure is silent in the worst way: one predicate
+  drifts, that one instrument quietly audits a different set of repos, and
+  still prints a confident green over its own slice — which this workspace has
+  already paid for once, with three instruments covering 7, 12 and 15 of 18
+  repos. It is `docs_gate_paths_sync.py` one axis over: a hand-duplicated
+  *predicate* drifts exactly like a hand-duplicated *value*.
+
+  **It runs in CI, where none of the sweeps can**, because it tests the
+  PREDICATE rather than the population — against a synthetic workspace carrying
+  every case the real walk distinguishes, including a `worktree-shaped` entry
+  whose `.git` is a FILE (admitting it double-counts a repo already in the
+  walk, which is why the `.git` test must be a directory test). The
+  real-workspace cross-check runs only when the walk finds more than one repo
+  and is REPORTED either way, never silently skipped. The canary that matters
+  is the last one: in a simulated single-checkout CI, a broken predicate still
+  reds — so the gate is not vacuous in the environment it actually runs in.
+
 - `required_features_static_gate.py` (Issue 513) is the verdict half of the
   free static pass above: a row naming a feature its package cannot enable
   reds the push that adds it. Gateable where the report's other two verdicts
