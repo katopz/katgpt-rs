@@ -3080,3 +3080,15 @@ required-features = ["parallax_attn"]
 [[test]]
 name = "plan340_latent_input_grad"
 required-features = ["kimi_k3_backward"]
+
+# Issue 728 T2 (2026-09-06) — `bridge_spec_match` was auto-discovered with no
+# row, so `#![cfg(feature = "action_bridge")]` compiled it to an empty binary
+# and a plain `cargo test` printed a green `ok. 0 passed`. The trap worth
+# knowing: `action_bridge` IS default-on in katgpt-core, so the feature reads
+# as live — but this target is gated on the ROOT crate's same-named feature,
+# which is not in the root's default list. A convention visible only by
+# accident is not covered; five of this repo's seven `*_spec_match` targets
+# were classified only because they also carry `g1` in the name.
+[[test]]
+name = "bridge_spec_match"
+required-features = ["action_bridge"]

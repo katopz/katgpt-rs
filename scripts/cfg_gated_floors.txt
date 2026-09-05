@@ -106,14 +106,19 @@
 # so a plain `cargo test` compiles each to an empty binary and prints
 # `ok. 0 passed`.
 #
-# Pinned at the MEASURED 2 rather than left at 0, on purpose. Arming them edits
-# crates/katgpt-core/Cargo.toml, whose lib units are shared across the many
-# remaining groups of the in-flight Issue 513 T2 sweep over this repo's
-# target/. The ratchet still ratchets at 2 — a THIRD instance reds the push
-# that adds it — and Issue 728 T2 takes it back to 0 in the arming commit.
-# Do not raise this pin for any other reason.
-max_load_bearing	2
-max_silent_now	44
+# Back to 0 by Issue 728 T2 (2026-09-06). The two instances that forced the
+# temporary pin of 2 — `bridge_spec_match` (root, `action_bridge`) and
+# `pencil_spec_match` (katgpt-core, `spectral_pencil`) — are armed and were RUN
+# at their own feature sets in release: 13 assertions, 13 pass, 0 fail. They
+# were silently UNVERIFIED, not broken. This is a WALL again, not a ratchet:
+# a new load-bearing SILENT-NOW target reds the push that adds it, before its
+# green zero is cited as evidence. Do not raise it.
+#
+# `max_silent_now` 44 -> 42 in the same commit: the two armed targets leave the
+# SILENT-NOW population. It stays a RATCHET (the remaining 42 are a real
+# backlog, not a claim of zero).
+max_load_bearing	0
+max_silent_now	42
 min_targets	700
 min_gated	400
 max_reasonless_ignores	0

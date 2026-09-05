@@ -1,8 +1,10 @@
 # A `required-features` row can EXIST and be WRONG — the population
 
 **Status:** IN PROGRESS — the free verdict is COMPLETE and gated for every
-repo; the compiler pass has riir-clippy fully clean, the cross-repo
-SUBSET-side suspect slice 17/17 clean, and the katgpt-rs full sweep running.
+repo; the compiler pass has **katgpt-rs fully clean (621/621 BUILDS, 0 FAILS,
+2026-09-06)**, riir-clippy fully clean (44/44), and the cross-repo SUBSET-side
+suspect slice 17/17 clean. 665 of 1,829 rows decided; the seven remaining
+repos are the backlog.
 Instrument: `scripts/required_features_build_audit.py`.
 Issue: riir-train `.issues/513`. Family: `cfg_gated_silent_zero_pass.md`.
 
@@ -66,7 +68,7 @@ entries count as dependencies for this purpose too.
 | repo | rows | groups | checked | BUILDS | FAILS | NO-FEAT | UNSEEN | date |
 |---|---|---|---|---|---|---|---|---|
 | riir-clippy | 44 | 25 | 44 | 44 | 0 | 0 | 0 | 2026-09-05 |
-| katgpt-rs | 621 | 379 | 24 (running) | 24 | 0 | 0 | 0 | 2026-09-06 |
+| katgpt-rs | 621 | 379 | **621 (COMPLETE)** | 621 | 0 | 0 | 0 | 2026-09-06 |
 | riir-ai | 512 | 307 | — | — | — | 0 | — | — |
 | riir-train | 433 | 233 | — | — | — | 0 | — | — |
 | riir-chain | 109 | 56 | — | — | — | 0 | — | — |
@@ -74,7 +76,7 @@ entries count as dependencies for this purpose too.
 | riir-game-sdk | 32 | 18 | — | — | — | 0 | — | — |
 | riir-mmorpg-examples | 20 | 11 | — | — | — | 0 | — | — |
 | seal-remake | 7 | 4 | — | — | — | 0 | — | — |
-| **total** | **1,829** | **1,070** | 68 | 68 | 0 | **0** | 0 | |
+| **total** | **1,829** | **1,070** | 665 | 665 | 0 | **0** | 0 | |
 
 The `NO-FEAT` column is complete for every repo — that is the free pass. The
 rest is the sweep.
@@ -166,10 +168,25 @@ cat /tmp/katgpt_sweep.log /tmp/katgpt_sweep2.log /tmp/katgpt_sweep.jsonl > /tmp/
 scripts/required_features_build_audit.py . --batch --resume /tmp/resume.txt --record /tmp/katgpt_sweep.jsonl
 ```
 
-Progress at 2026-09-06 01:40: **280 / 605 rows, group 149 / 370, verdicts
-BUILDS 280 · FAILS-TO-BUILD 0**. The run does its own `--record`, so the JSONL
-is authoritative; the logs only add rows decided before a `--record` was
-attached.
+**katgpt-rs is COMPLETE as of 2026-09-06 02:2x: 621 / 621 rows, 605 in this
+run plus the 16 the resume carried, verdicts BUILDS 621 · FAILS-TO-BUILD 0 ·
+NO-SUCH-FEATURE 0 · UNSEEN 0.** Every `required-features` row in this repo
+builds at its own exact feature set — the property Issue 513 exists to check,
+and the one `--all-features` structurally cannot decide. It is not a claim
+that the targets PASS: `--list` names rows, the sweep asks the compiler, and
+what runs is a separate axis (`.docs/10_audits/ci_compile_vs_execute_axis.md`).
+
+Reconciling the count is worth writing down, because the obvious check
+mis-reads it. The JSONL holds 605 labels and the population is 621; the
+missing 16 are in the resume log from the earlier interrupted run, and
+`set(jsonl) | set(resume)` is exactly the 621. A first pass at that assertion
+printed **9 rows "not covered" AND the same 9 "covered but not in the
+population"** — a trailing `"` left on the JSONL labels by a lazy regex, i.e.
+the instrument, not a gap. Two sets of equal size that are not equal is the
+signature; `len(a|b) == len(c)` alone would have read as complete.
+
+The run does its own `--record`, so the JSONL is authoritative; the logs only
+add rows decided before a `--record` was attached.
 
 `read_prior` branches per LINE, so a file holding both shapes — the progress
 log and the JSONL — is a valid resume input; that is how these two runs were

@@ -2523,3 +2523,11 @@ required-features = ["conformal_predictive_intervals", "velocity_field_disagreem
 [[test]]
 name = "cond_audit_poc"
 required-features = ["cond_audit"]
+
+# Issue 728 T2 (2026-09-06) — see the root manifest's note. `pencil_spec_match`
+# is the Lean-proof conformance counterpart for the spectral pencil and was
+# auto-discovered behind `#![cfg(feature = "spectral_pencil")]`, i.e. a green
+# zero on every default run.
+[[test]]
+name = "pencil_spec_match"
+required-features = ["spectral_pencil"]

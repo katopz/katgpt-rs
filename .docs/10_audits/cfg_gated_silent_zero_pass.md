@@ -1,9 +1,10 @@
 # `#![cfg]`-gated targets that report a green `0 passed` — measurement record (Issue 713, closed 2026-09-03, file removed 2026-09-03)
 
-Status: **historical record.** Every katgpt-rs task of Issue 713 landed; the
-one remaining row (**T3**, arming sibling repos' load-bearing targets) is an
-owner call per repo and is carried here as the table those owners should work
-from. Recover the full narrative with `git log --all -- '.issues/713_*.md'`
+Status: **historical record, and the sibling row is CLOSED.** Every katgpt-rs
+task of Issue 713 landed. The row that stood open longest (**T3**, arming
+sibling repos' load-bearing targets) was taken on 2026-09-06 rather than left
+to owners: all 12 load-bearing SILENT-NOW targets across six repos are armed
+and RUN — 49 assertions, 49 pass, 0 fail. See §T4e. Recover the full narrative with `git log --all -- '.issues/713_*.md'`
 (last revision `651f118a`).
 
 **Fix commits:** `4509b7d8` (instrument + first measurement) · `a2c8aa71`
@@ -387,9 +388,68 @@ default-on in katgpt-core, but the test is gated on the ROOT crate's
 same-named feature, which is not in the root's default — the functionality
 ships enabled while its test compiles to nothing.
 
-`max_load_bearing` is pinned at the measured **2** in the interim (a third
-instance still reds the push that adds it) and returns to 0 in the arming
-commit — Issue 728.
+`max_load_bearing` was pinned at the measured **2** in the interim (a third
+instance still reds the push that adds it) and returned to 0 in the arming
+commit — Issue 728 T2, below.
+
+## T4e (2026-09-06) — all 12 armed AND RUN, and the arming was not free
+
+**Issue 728 is CLOSED.** Every load-bearing SILENT-NOW target in the workspace
+is armed, and each was **run at its own feature set rather than merely armed**,
+because arming alone converts a green zero into a skipped target and proves
+nothing about the assertions inside. **49 assertions, 49 pass, 0 fail.**
+
+| repo | targets | assertions | commit |
+|---|---|---|---|
+| riir-chain | `mnemonic_spec_match`, `signer_identity_spec_match`, `domain_registry_monotonicity_spec_match` | 9 + 7 + 9 = **25** | `81a00607` |
+| katgpt-rs | `bridge_spec_match`, `pencil_spec_match` | 6 + 7 = **13** | this commit |
+| riir-viewbridge | `net_ffi_roundtrip` | **10** | `d6f18f5` |
+| riir-ai | `gemma4_q4k_gguf_parity`, `test_kimi_k3_gpu_forward_batched_parity`, `..._with_saved_parity` | 1 + 1 + 4 = **6** | `5a6ac2d2e` |
+| riir-train | `plan354_t3_laprop_dispatch_parity`, `plan354_t4_laprop_parity` | 2 + 3 = **5** | `55754e7d` |
+| riir-dapps | `kat_grant_reachability` (+ all 24 other silent targets) | **3** (25/25 BUILD) | `dd6261e` |
+
+Workspace `silent_now` **261 → 225**, `load_bearing` **12 → 0 in all 16
+repos** — and the sweep's `max_load_bearing` is now a **WALL**, not a ratchet.
+Canaried by un-arming `bridge_spec_match`: the sweep reds on both the wall and
+the `silent_now` ratchet, each naming its own assertion.
+
+Two of the six repos' results are worth reading past the count. riir-ai's two
+`#[ignore]`d GPU parity tests were **executed with `-- --ignored`** rather than
+recorded as unrun — the ignore reason is *"requires GPU + the ~7 GB Gemma-4
+GGUF"* and the M3 has both; Q4_K GEMV vs CPU f32 lands at `‖diff‖/‖y_cpu‖ =
+0.0001%` over 230,400 blocks, Kimi-K3 batched forward at v1 `0.00e0` / v2
+`4.77e-7`. And riir-dapps had **25 of 30 test targets** silent — the whole
+repo's default test surface — so all 25 were armed, then checked with the
+Issue 513 instrument: **25/25 BUILD at their own exact feature sets**.
+
+### The finding: "arming cannot red an existing CI" is FALSE
+
+AGENTS.md stated it, and it is a claim about *cargo*, not about gates. An empty
+`#![cfg]`-gated binary prints `test result: ok. 0 passed`, so **any gate that
+counts green test binaries counts it**. Arming removes the line and the count
+falls. Three repos count that way (`grep -c '^test result: ok'` in
+`ci_feature_guard.sh`): riir-auth (no gated targets, unaffected), riir-dapps
+and riir-viewbridge — both reddened by a *one-row* arming:
+
+| repo / layer | floor | before | after |
+|---|---|---|---|
+| riir-viewbridge L4 | `>= 13` | 13 | **12** (one row) |
+| riir-dapps L2 | `>= 32` | 32 | **31** (one row) → **7** (all 25) |
+
+Both floors' own failure message asks *"a target silently compiled to
+nothing?"*, and both were **satisfied by exactly that**: riir-dapps' `>= 32`
+was 25 empty binaries plus 7 real ones, and those 7 carry 111 passing tests.
+The mechanism was pinned in a throwaway crate before either repo was touched —
+one gated test, feature off, `grep -c '^test result: ok'` reads **3** with no
+row and **2** with one.
+
+The repair is not a re-pin. A **passed-test floor** beside the binary floor
+cannot be satisfied by a target compiling to nothing (+1 binary, +0 passed);
+both repos now carry one at every layer. What does *not* move: `--lib`-scoped
+floors (riir-ai) and count-pinned rows that name a target **with** its features
+(riir-chain `test_gate.sh`'s `mnemonic_spec_match` row, 9 — which is also the
+proof that a target can be named by a suite and still print a green zero on a
+plain `cargo test`).
 
 ## Why this is not `feature_isolation_gate.py` or `ci_feature_guard.sh`
 

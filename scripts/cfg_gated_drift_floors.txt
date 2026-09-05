@@ -7,14 +7,32 @@
 # Re-pin DELIBERATELY, in the commit that changes the measured value, with the
 # reason in the commit message.
 #
-# ── these ceilings are a RATCHET, not a wall ──────────────────────────────────
-# Unlike required_features_drift_floors.txt and percentile_drift_floors.txt —
-# both of which measured zero everywhere and are therefore walls — this class
-# has a standing backlog: 12 load-bearing SILENT-NOW targets across six repos
-# (Issue 728), ten of them sibling-owned and not this session's to arm. So each
-# repo is pinned at its MEASURED count, exactly as numbering_drift_floors.txt
-# does: a NEW instance reds immediately, and the backlog is visible in the pins
-# rather than silently tolerated. Lower a pin in the commit that arms a target.
+# ── silent_now is a RATCHET; load_bearing is now a WALL ──────────────────────
+# The two ceilings had different histories and now have different characters.
+#
+# `load_bearing` is a WALL at 0 in every repo as of 2026-09-06. Issue 728's
+# backlog was 12 load-bearing SILENT-NOW targets across six repos; all 12 are
+# armed, and each was RUN at its own feature set rather than merely armed —
+# 49 assertions, 49 pass, 0 fail (riir-chain 25, riir-ai 6 incl. both
+# #[ignore]d GPU parity tests executed with `-- --ignored` on the M3,
+# katgpt-rs 13, riir-train 5, riir-dapps 3 of its 25, riir-viewbridge 10).
+# Silently UNVERIFIED, not broken. A new load-bearing SILENT-NOW target now
+# reds the sweep instead of joining a tolerated backlog. Do not raise it.
+#
+# `silent_now` stays a RATCHET at each repo's MEASURED count, exactly as
+# numbering_drift_floors.txt does: 261 -> 225 across the workspace by that
+# arming (riir-dapps 25 -> 0, its whole silent surface). The remaining 225 are
+# a real backlog, not a claim of zero. Lower a pin in the commit that arms a
+# target.
+#
+# ── before arming, check for a binary-counting CI floor ───────────────────────
+# Arming is NOT free in every repo. A gate that counts green test binaries
+# (`grep -c '^test result: ok'`) counts an EMPTY #![cfg]-gated binary too, so
+# arming removes the line and the count falls: riir-viewbridge L4 13 -> 12
+# against `>= 13`, riir-dapps L2 32 -> 7 against `>= 32`. Both were repaired
+# with a passed-test floor beside the binary floor, which an empty binary
+# cannot satisfy. See AGENTS.md §"A green test count can be a count of
+# nothing".
 #
 # ── read the two ceilings apart, they fail independently ─────────────────────
 # max_silent_now  — targets that zero on a PLAIN `cargo test`. The severe
@@ -47,19 +65,19 @@
 # 1,765 #![cfg]-gated, 261 SILENT-NOW, 12 of those load-bearing.
 #
 # repo                  targets  gated  silent_now  load_bearing
-katgpt-rs                   700    400          44             2
-katgpt-web                    0      0           0             0
-riir-ai                     700    420          79             3
-riir-auth                     3      0           0             0
-riir-chain                  126     99          31             3
-riir-clippy                  64     40          16             0
-riir-dao                      5      0           1             0
-riir-dapps                   22     18          25             1
-riir-deployer                 6      0           0             0
-riir-game-sdk                57     36          31             0
-riir-mmorpg-examples         30     24           4             0
-riir-neuron-db               65     40           8             0
-riir-train                  369    229          21             2
-riir-viewbridge               6      0           1             1
-seal-game-editor             44      0           0             0
-seal-remake                   6      2           0             0
+katgpt-rs                    700    400          42             0
+katgpt-web                     0      0           0             0
+riir-ai                      700    420          76             0
+riir-auth                      3      0           0             0
+riir-chain                   126     99          28             0
+riir-clippy                   64     40          16             0
+riir-dao                       5      0           1             0
+riir-dapps                    22     18           0             0
+riir-deployer                  6      0           0             0
+riir-game-sdk                 57     36          31             0
+riir-mmorpg-examples          30     24           4             0
+riir-neuron-db                65     40           8             0
+riir-train                   369    229          19             0
+riir-viewbridge                6      0           0             0
+seal-game-editor              44      0           0             0
+seal-remake                    6      2           0             0

@@ -659,12 +659,41 @@ It was fixed one target at a time twice in one week — riir-train `5821cba9`
 `19beece` — before anyone asked how many there were. Fixing them one at a time
 is how it stayed invisible.
 
-Adding the rows is safe and does **not** red an existing CI: `cargo test
---workspace` silently *skips* a target whose required-features are off. What
-changes is that naming the target without its features errors with exit 101
-instead of reporting a green zero. That was verified, not assumed, before the
-katgpt-rs batch landed (`180be9c5`, 39 GOAT gates, SILENT-NOW 102 → 63, baseline re-measured with the
-corrected auditor rather than inferred from the delta).
+Adding the rows changes cargo's behaviour in exactly one way: `cargo test
+--workspace` silently *skips* a target whose required-features are off, and
+naming the target without its features errors with exit 101 instead of
+reporting a green zero. That was verified, not assumed, before the katgpt-rs
+batch landed (`180be9c5`, 39 GOAT gates, SILENT-NOW 102 → 63, baseline
+re-measured with the corrected auditor rather than inferred from the delta).
+
+**This paragraph used to open "Adding the rows is safe and does **not** red an
+existing CI", and that was false — measured 2026-09-06.** It is a claim about
+*cargo*, and it does not survive contact with a gate that counts **green test
+binaries**, because an empty `#![cfg]`-gated binary prints `test result: ok.
+0 passed` and is counted as one. Arming such a target removes the LINE, so the
+count falls. Three repos count that way (`grep -c '^test result: ok'` in
+`riir-auth`, `riir-dapps`, `riir-viewbridge` `scripts/ci_feature_guard.sh`) and
+two of them were reddened by a one-row arming:
+
+| repo | floor | before arming | after | note |
+|---|---|---|---|---|
+| riir-viewbridge L4 | `>= 13` | 13 | **12** | one row (`net_ffi_roundtrip`) |
+| riir-dapps L2 | `>= 32` | 32 | **31** → **7** | one row, then all 25 |
+
+Both floors' own failure message asks *"a target silently compiled to
+nothing?"* — and both were **satisfied by exactly that**. riir-dapps' `>= 32`
+was 25 empty binaries plus 7 real ones; the 7 real binaries carry 111 passing
+tests. The mechanism was pinned in a throwaway crate rather than inferred: one
+gated test, feature off, `grep -c '^test result: ok'` reads **3** with no row
+and **2** with one.
+
+The repair is not a re-pin. A **passed-test floor** beside the binary floor
+cannot be satisfied by a target compiling to nothing (+1 binary, +0 passed),
+and both siblings now carry one (riir-viewbridge `d6f18f5`, riir-dapps
+`dd6261e`). Check for a binary-counting floor before arming a target in any
+repo — and note the inverse holds for `--lib`-scoped floors (riir-ai) and for
+count-pinned rows that name a target *with* its features (riir-chain's
+`test_gate.sh` row for `mnemonic_spec_match`): those do not move.
 
 **Run the armed gates with `--release`.** All 39 pass there. A first sweep
 without it reported four reds and nearly filed two of them as perf
@@ -1167,6 +1196,22 @@ system that duplicates already-shipped substrate under a different name
 > layering side by `riir-dapps`.
 
 ## Issue log (resolved)
+
+- **Issue 728 — `silent_now_load_bearing` was 0 in all 16 repos because the classifier speaks ONE repo's dialect** RESOLVED
+  (T1–T5, 2026-09-06; file removed per noise-reduction — durable record in `.docs/10_audits/cfg_gated_silent_zero_pass.md` §T4d/§T4e,
+  full narrative in git history). T1 widened `is_load_bearing` (6 tokens + `LOAD_BEARING_BIGRAMS` adjacent-pair matching, every
+  candidate measured against the full 3,081-name corpus, homonym rejections pinned) taking the workspace count **0 → 12** —
+  **two of them katgpt-rs's own**, so `max_load_bearing = 0`, the pin this file calls the one that earns its keep, had been green
+  over a population excluding two local targets. T4 landed `cfg_gated_drift_sweep.py` + `cfg_gated_drift_floors.txt`, the fifth
+  sweep-family member. **T2 + T3 armed all 12 and RAN each at its own feature set — 49 assertions, 49 pass, 0 fail** (riir-chain
+  `81a00607` 25 · katgpt-rs 13 · riir-viewbridge `d6f18f5` 10 · riir-ai `5a6ac2d2e` 6 · riir-train `55754e7d` 5 · riir-dapps
+  `dd6261e` 3, which also armed **all 25** of its silent targets — 25 of 30, the workspace's highest proportion — verified 25/25
+  BUILD at their own exact feature sets). Silently *unverified*, not broken. Workspace `silent_now` **261 → 225**, `load_bearing`
+  **12 → 0 in every repo**, and `max_load_bearing` is now a **WALL**; canaried by un-arming `bridge_spec_match`, which reds both
+  ceilings, each naming its own assertion. **T5 is the finding that was not in the report:** "adding the rows cannot red an
+  existing CI" is FALSE for a gate that counts green test *binaries* — see §"A green test count can be a count of nothing" above
+  for the measured table and the passed-test-floor repair. En-route: riir-ai's two `#[ignore]`d GPU parity tests were EXECUTED
+  (`-- --ignored`) rather than recorded as unrun, since the M3 has the GPU and the 7 GB GGUF the reason names.
 
 - **Issue 727 — SP-KV misses BOTH T16 bars once the gate is measured at a realistic sequence length** RESOLVED
   (2026-09-05 `adbc003d`; filed by 723 T7; file removed per noise-reduction — full narrative in git history).
