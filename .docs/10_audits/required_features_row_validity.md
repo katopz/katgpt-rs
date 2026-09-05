@@ -1,6 +1,8 @@
 # A `required-features` row can EXIST and be WRONG — the population
 
-**Status:** IN PROGRESS — two repos measured, one sweep running.
+**Status:** IN PROGRESS — the free verdict is COMPLETE and gated for every
+repo; the compiler pass has riir-clippy fully clean, the cross-repo
+SUBSET-side suspect slice 17/17 clean, and the katgpt-rs full sweep running.
 Instrument: `scripts/required_features_build_audit.py`.
 Issue: riir-train `.issues/513`. Family: `cfg_gated_silent_zero_pass.md`.
 
@@ -64,7 +66,7 @@ entries count as dependencies for this purpose too.
 | repo | rows | groups | checked | BUILDS | FAILS | NO-FEAT | UNSEEN | date |
 |---|---|---|---|---|---|---|---|---|
 | riir-clippy | 44 | 25 | 44 | 44 | 0 | 0 | 0 | 2026-09-05 |
-| katgpt-rs | 621 | 379 | running | — | — | 0 | — | 2026-09-05 |
+| katgpt-rs | 621 | 379 | 24 (running) | 24 | 0 | 0 | 0 | 2026-09-06 |
 | riir-ai | 512 | 307 | — | — | — | 0 | — | — |
 | riir-train | 433 | 233 | — | — | — | 0 | — | — |
 | riir-chain | 109 | 56 | — | — | — | 0 | — | — |
@@ -72,7 +74,7 @@ entries count as dependencies for this purpose too.
 | riir-game-sdk | 32 | 18 | — | — | — | 0 | — | — |
 | riir-mmorpg-examples | 20 | 11 | — | — | — | 0 | — | — |
 | seal-remake | 7 | 4 | — | — | — | 0 | — | — |
-| **total** | **1,829** | **1,070** | 44 | 44 | 0 | **0** | 0 | |
+| **total** | **1,829** | **1,070** | 68 | 68 | 0 | **0** | 0 | |
 
 The `NO-FEAT` column is complete for every repo — that is the free pass. The
 rest is the sweep.
@@ -105,22 +107,32 @@ slice worth running first:
 
 | repo | rows | SUBSET-side suspects | groups | verdict |
 |---|---|---|---|---|
-| katgpt-rs | 621 | 9 | 8 | running |
-| riir-ai | 512 | 10 | 5 | deferred — live sibling session in that repo |
-| riir-train | 433 | 6 | 5 | running |
+| katgpt-rs | 621 | 9 | 8 | **9/9 BUILDS** |
+| riir-train | 433 | 6 | 5 | **6/6 BUILDS** (incl. 2 `riir-train-gpu` targets, on macOS) |
 | riir-neuron-db | 51 | 2 | 1 | **2/2 BUILDS** |
-| riir-game-sdk | 32 | 1 | 1 | deferred — live sibling session |
+| riir-ai | 512 | 10 | 5 | deferred — see below |
+| riir-game-sdk | 32 | 1 | 1 | deferred — see below |
 | riir-chain / riir-clippy / riir-mmorpg-examples / seal-remake | 180 | 0 | 0 | none to check |
-| **total** | **1,829** | **28** | **20** | |
+| **total** | **1,829** | **28** | **20** | **17/17 checked clean** |
+
+**The prior found nothing, and that is the honest result to record.** Every
+checkable suspect builds at its own row. It is not evidence that the prior
+works: the two instances that motivated it were both already repaired, so
+this population contains zero known positives — the slice reproduces a zero
+on a corpus with nothing to find. Treat it as a cheap first pass whose yield
+is unmeasured, not as a validated finder.
+
+The two deferrals are for a measured reason, and it is **not** "a sibling is
+compiling" — riir-ai had no live cargo when checked. It is that both trees
+carry **uncommitted sibling work** (riir-ai 6 files mid-extraction). A
+`FAILS-TO-BUILD` there could be someone's half-finished edit rather than the
+row, and a report that cannot tell those apart should not emit a verdict.
+Re-run those two against a clean tree.
 
 **28 rows, 20 cargo invocations** against the full sweep's 1,070 — minutes
 rather than hours, aimed at the one shape both known defects had. It is a
 prior, not a substitute: a wrong row that has no near-twin is invisible to
-it, which is what the full sweep is for. The two deferred repos are deferred
-for a measured reason, not a guess — a cargo process working in the same
-repo is the documented false-RED hazard (AGENTS.md §"Several sessions, one
-target dir"), and a fresh `/tmp` target dir for a 200 GB repo is not
-affordable on this disk.
+it, which is what the full sweep is for.
 
 ## Cost, and the box constraint
 
@@ -141,12 +153,19 @@ BUILDS / FAILS-TO-BUILD / NO-SUCH-FEATURE are skipped — TIMEOUT, ERROR and
 UNSEEN are re-run, since they describe the box or a run that never reached
 the target.
 
-The katgpt-rs sweep started 2026-09-05 23:45 writes
-`/tmp/katgpt_sweep.log`. To continue it rather than start from zero:
+The katgpt-rs sweep is running detached (relaunched 2026-09-06 with 16 rows
+already decided carried forward). Its state: `/tmp/katgpt_sweep2.log`
+(progress) and `/tmp/katgpt_sweep.jsonl` (the record). To continue it rather
+than start from zero:
 
 ```bash
-scripts/required_features_build_audit.py . --batch     --resume /tmp/katgpt_sweep.log --record /tmp/katgpt_sweep.jsonl
+cat /tmp/katgpt_sweep.log /tmp/katgpt_sweep.jsonl > /tmp/resume.txt
+scripts/required_features_build_audit.py . --batch --resume /tmp/resume.txt --record /tmp/katgpt_sweep.jsonl
 ```
+
+`read_prior` branches per LINE, so a file holding both shapes — the progress
+log and the JSONL — is a valid resume input; that is how these two runs were
+joined.
 
 A full sweep in fresh `/tmp` target dirs is **not affordable on this disk**.
 The workspace carried **378 GB of `target/debug/incremental`** against ~42 GiB
