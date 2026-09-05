@@ -70,6 +70,22 @@ on:
       - 'scripts/required_features_build_audit.py'
       - '.github/workflows/required_features_touched.yml'
   workflow_dispatch:
+    inputs:
+      base:
+        description: >-
+          Diff base to replay (default HEAD~1). Its first use is a LIVENESS
+          proof: this gate's first CI run was green over ZERO selected rows,
+          which says nothing about whether the cargo half works on a runner --
+          the exact shape of .issues/705, where two green runs had compiled
+          nothing. Dispatch with a base that selects a row (e.g. adbc003d~1,
+          which selects bridge_spec_match) to make the build path report.
+          NOTE the replay semantics: changed_rows compares the BASE revision's
+          manifest against the CHECKOUT's, so a historical base yields the
+          rows that moved between then and now -- a superset window, which is
+          what you want for a replay and is exactly the push window in normal
+          use, where the checkout IS head.
+        required: false
+        default: ''
 
 jobs:
   touched-rows:
@@ -97,6 +113,12 @@ jobs:
             base="${{ github.event.pull_request.base.sha }}"
           else
             base="${{ github.event.before }}"
+          fi
+          # A dispatch-supplied base wins outright: it is the operator saying
+          # which window to check, and silently overriding it would make the
+          # liveness proof above impossible to perform.
+          if [ -n "${{ inputs.base }}" ]; then
+            base="${{ inputs.base }}"
           fi
           # A branch's first push reports before= all-zeros, and a force-push can
           # name a commit this checkout does not have. Either way there is no
