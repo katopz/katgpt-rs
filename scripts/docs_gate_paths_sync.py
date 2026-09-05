@@ -41,7 +41,10 @@ import re
 import sys
 from pathlib import Path
 
-WORKFLOW = ".github/workflows/docs_gate.yml"
+WORKFLOWS = [
+    ".github/workflows/docs_gate.yml",
+    ".github/workflows/required_features_touched.yml",
+]
 
 # A `paths:` key at the trigger depth (4 spaces) inside an `on:` block,
 # followed by list items at 6 spaces. Both hand-duplicated lists use single
@@ -152,30 +155,40 @@ def main() -> int:
         return 2
 
     repo = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
-    wf = repo / WORKFLOW
-    if not wf.is_file():
-        print(f"✗ workflow missing: {wf}")
-        return 1
 
-    blocks = parse_paths_blocks(wf.read_text(encoding="utf-8"))
-    if len(blocks) != 2:
-        print(f"✗ expected exactly 2 paths blocks (push + pull_request), found {len(blocks)}")
-        return 1
+    rc = 0
+    for rel in WORKFLOWS:
+        wf = repo / rel
+        name = Path(rel).name
+        if not wf.is_file():
+            print(f"✗ workflow missing: {wf}")
+            rc = 1
+            continue
 
-    push, pr = blocks
-    push_set, pr_set = set(push), set(pr)
-    if push_set == pr_set:
-        print(f"✓ docs_gate.yml trigger paths in sync — {len(push_set)} globs in both lists")
-        return 0
+        blocks = parse_paths_blocks(wf.read_text(encoding="utf-8"))
+        if len(blocks) != 2:
+            print(f"✗ {name}: expected exactly 2 paths blocks "
+                  f"(push + pull_request), found {len(blocks)}")
+            rc = 1
+            continue
 
-    only_push = [g for g in push if g not in pr_set]
-    only_pr = [g for g in pr if g not in push_set]
-    print("✗ docs_gate.yml trigger paths DRIFTED (keep the two hand-duplicated lists identical):")
-    for g in only_push:
-        print(f"    push-only:   {g}")
-    for g in only_pr:
-        print(f"    PR-only:     {g}")
-    return 1
+        push, pr = blocks
+        push_set, pr_set = set(push), set(pr)
+        if push_set == pr_set:
+            print(f"✓ {name} trigger paths in sync — {len(push_set)} globs in both lists")
+            continue
+
+        only_push = [g for g in push if g not in pr_set]
+        only_pr = [g for g in pr if g not in push_set]
+        print(f"✗ {name} trigger paths DRIFTED (keep the two hand-duplicated "
+              f"lists identical):")
+        for g in only_push:
+            print(f"    push-only:   {g}")
+        for g in only_pr:
+            print(f"    PR-only:     {g}")
+        rc = 1
+
+    return rc
 
 
 if __name__ == "__main__":

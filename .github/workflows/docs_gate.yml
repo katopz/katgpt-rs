@@ -136,6 +136,9 @@ on:
       - 'scripts/orphaned_attr_gate.py'
       - 'scripts/docs_gate.sh'
       - '.github/workflows/docs_gate.yml'
+      # Issue 513 T4: docs_gate_paths_sync.py now gates BOTH workflows'
+      # hand-duplicated paths lists, so editing that one must re-run this gate.
+      - '.github/workflows/required_features_touched.yml'
   pull_request:
     # Same branch scope as push: PRs targeting main only — a PR against
     # develop is develop work, which this gate no longer covers.
@@ -229,6 +232,9 @@ on:
       - 'scripts/orphaned_attr_gate.py'
       - 'scripts/docs_gate.sh'
       - '.github/workflows/docs_gate.yml'
+      # Issue 513 T4: docs_gate_paths_sync.py now gates BOTH workflows'
+      # hand-duplicated paths lists, so editing that one must re-run this gate.
+      - '.github/workflows/required_features_touched.yml'
   workflow_dispatch:
 
 concurrency:

@@ -1,0 +1,114 @@
+# required-features touched gate — build the rows THIS push changed.
+#
+# Issue 513's defect: a `required-features` row that EXISTS and is WRONG reads
+# as protected in every audit. `cargo test --workspace` silently skips the
+# target (features unmet), `--all-features` builds it because the union supplies
+# what the row forgot, and every auditor counts it in the "w/ req-f" column. So
+# the one configuration the row names is the one configuration nobody runs.
+#
+# ── Why per-push, when the sweep that finds these is weekly-at-best ──────────
+# The sweep (scripts/required_features_build_audit.py) is 1,866 rows over 16
+# repos at a ~28 s/row mean — hours per large repo, a scheduled job. But every
+# instance in the record arrived in a COMMIT: a target copied, edited, or
+# declared in the same push that broke it. Cost here is bounded by the DIFF,
+# not by the repo, so the introduce-commit is catchable at per-push prices.
+#
+# ── Why macos-latest, and why that is a cost decision not a copy of full_gate ─
+# Same reason full_gate.yml gives: this repo's device backends are
+# `cfg(all(target_os = "macos", feature = ...))`, so a Linux runner compiles
+# them to nothing and would report a green for a row whose target is empty
+# there. Unlike docs_gate.yml — which is pure text and rightly runs on ubuntu —
+# this gate invokes cargo, so the platform IS part of its claim.
+#
+# ── Measured cost (2026-09-06, M3 Max, katgpt-rs) ───────────────────────────
+#   0 rows selected (the common case: no target source, no row moved)  ~0.4s
+#   1 row selected, feature set already warm                            3.1s
+#   1 row selected, feature set swings the graph (`bomber`)           266.7s
+# The third number is the one to size the timeout against: a feature set the
+# cache has never seen rebuilds the graph. A CI runner is slower than this box
+# and starts cold, hence 45 minutes — generous on purpose, so a hit means a
+# hang rather than a bad day.
+#
+# ── What a green here does NOT say, stated because the gate prints it too ────
+# It selects a row when the row's own target source changed, or when the row's
+# (kind, name, required-features) tuple moved. A changed `src/**.rs` can break
+# a row in any dependent package — that is exactly how the first instance
+# happened, a re-export gate widened in the library — and selecting on it is
+# unbounded (touching a core lib.rs selects the workspace). That class stays
+# the sweep's. Read a green as "the rows this push touched build", nothing more.
+
+name: required-features touched gate
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'Cargo.toml'
+      - 'crates/**/Cargo.toml'
+      - 'tests/**/*.rs'
+      - 'benches/**/*.rs'
+      - 'examples/**/*.rs'
+      - 'crates/**/tests/**/*.rs'
+      - 'crates/**/benches/**/*.rs'
+      - 'crates/**/examples/**/*.rs'
+      # The gate's own definition. A gate nobody validates after editing is a
+      # gate nobody is running — the same trigger full_gate.yml carries.
+      - 'scripts/required_features_touched_gate.py'
+      - 'scripts/required_features_build_audit.py'
+      - '.github/workflows/required_features_touched.yml'
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'crates/**/Cargo.toml'
+      - 'tests/**/*.rs'
+      - 'benches/**/*.rs'
+      - 'examples/**/*.rs'
+      - 'crates/**/tests/**/*.rs'
+      - 'crates/**/benches/**/*.rs'
+      - 'crates/**/examples/**/*.rs'
+      - 'scripts/required_features_touched_gate.py'
+      - 'scripts/required_features_build_audit.py'
+      - '.github/workflows/required_features_touched.yml'
+  workflow_dispatch:
+
+jobs:
+  touched-rows:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      # fetch-depth: 0 is not optional. The gate diffs base..head to decide
+      # which rows moved; a shallow checkout has no base commit to diff against
+      # and `git show <base>:Cargo.toml` fails, which the gate reads as "this
+      # manifest is new, select every row in it" — a REFUSE, not a silent pass,
+      # but still the wrong answer for the wrong reason.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Resolve the diff base
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          # A branch's first push reports before= all-zeros, and a force-push can
+          # name a commit this checkout does not have. Either way there is no
+          # base to diff, so fall back to the parent of HEAD: a one-commit window
+          # is a narrower claim than the push, and saying so beats inventing a
+          # base that selects the whole repo.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "no usable push base ($base) — falling back to HEAD~1"
+            base="$(git rev-parse HEAD~1)"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Build the required-features rows this push touched
+        run: ./scripts/required_features_touched_gate.py . --base "${{ steps.base.outputs.base }}" --head HEAD
