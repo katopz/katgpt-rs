@@ -424,6 +424,30 @@ cadences, and none of them subsumes another:
 | `scripts/required_features_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/percentile_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/cfg_gated_drift_sweep.py` | workstation | on demand | every contract repo |
+| `scripts/cfg_row_implication_drift_sweep.py` | workstation | on demand | every contract repo |
+
+**A sixth joined 2026-09-06, over a verdict none of the other five can
+reach.** `scripts/cfg_row_implication_drift_sweep.py` +
+`cfg_row_implication_drift_floors.txt` ask whether a target's
+`required-features` row, resolved WITH the package's defaults, satisfies that
+target's own leading `#![cfg]`. If it does not, the row builds and compiles the
+target to **nothing** — and unlike every other silent-zero in this section, the
+row is PRESENT, so `cfg_gated_target_audit.py` counts the reader as protected
+and `required_features_build_audit.py` reports BUILDS and is *right*. Measured
+2026-09-06: **16 repos, 1,868 rows, 1,172 with a leading `#![cfg]`, 1
+EMPTY-AT-ROW, 2 UNRESOLVED.** The one open instance is riir-ai's
+`self_advantage_hla_bench` (ratcheted, Issue 513 instance 7). It found
+riir-train's `bench_dflare_heterogeneous_kv`, whose row named the weaker of two
+real features; fixing it took that target from `0 passed` to `1 passed`
+(`054a39a2`).
+
+Two details are worth copying. Its floors sit under BOTH ceilings, and
+`min_with_cfg` is the load-bearing one: `leading_inner_cfgs` returns `[]` for
+"no cfg" *and* for a file it cannot find, and an early cut silently skipped
+cargo's DIRECTORY target form (`tests/<name>/main.rs`). And it asserts its
+katgpt-rs row against the per-push gate's own pins — which **caught a desync on
+its first run**, the hand-duplicated-value hazard `docs_gate_paths_sync.py`
+exists for one axis over.
 
 **The fifth completes the family, and it is the one with a backlog.**
 `scripts/cfg_gated_drift_sweep.py` + `cfg_gated_drift_floors.txt` gate the

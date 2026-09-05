@@ -1,0 +1,80 @@
+# Pins for scripts/cfg_row_implication_drift_sweep.py — EVERY contract repo.
+#
+# The verdict: does a target's `required-features` row, RESOLVED WITH THE
+# PACKAGE'S DEFAULT FEATURES, satisfy that target's own leading `#![cfg]`? If
+# not, the row builds and compiles the target to NOTHING — `running 0 tests /
+# test result: ok. 0 passed`, exit 0 — so the compiler-verified sweep reports
+# BUILDS and is RIGHT, and every audit in the cfg_gated_target_audit.py family
+# counts the reader as protected because the row EXISTS.
+#
+# Format, 5 whitespace-separated fields:
+#
+#   <repo>  <min_rows>  <min_with_cfg>  <max_empty>  <max_unresolved>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# ── max_empty: a WALL at 0 everywhere it measures 0 ──────────────────────────
+# A row that compiles its own target to nothing is never legitimate under any
+# convention. The single 1 is riir-ai's `self_advantage_hla_bench` (Issue 513
+# instance 7) — a RATCHET at the measured backlog, not tolerance: it is open,
+# its repair side is already settled by precedent inside its own manifest
+# (`reconstruction_with_brain` carries both features), and it is deferred only
+# because editing that manifest mid-sweep invalidates riir-engine for every
+# queued group. Take it to 0 in the commit that fixes it.
+#
+# ── max_unresolved: a RATCHET, because some of it is legitimate ──────────────
+# UNRESOLVED is "a predicate this report declines to rule on", NOT "clean".
+# Two exist and both are genuinely undecidable here rather than merely awkward:
+#   riir-ai  bench_624_cog_branch_cadence  #![cfg(any(feature = A, feature = B))]
+#            — `any` is a shape cargo's AND-only required-features cannot express
+#   riir-mmorpg-examples  scenarios_headless  #![cfg(not(feature = X))]
+#            — under `not` the implication INVERTS; and X is in that package's
+#              default list, so no row can satisfy it without
+#              --no-default-features, which required-features cannot say either.
+# Read the number, do not raise it casually: this is the bucket where findings
+# hide, and it was 137 before non-feature conjuncts were stripped.
+#
+# ── the two floors are the load-bearing half ─────────────────────────────────
+# Both ceilings above are green over whatever the instrument can NAME.
+#
+# min_rows catches a manifest-walk regression. min_with_cfg catches a
+# SOURCE-SCANNER regression and is the one that earns its keep, because
+# `leading_inner_cfgs` returns [] both for "no cfg" and (before the fix) for a
+# file it could not find: an early cut silently skipped cargo's DIRECTORY
+# target form (`tests/<name>/main.rs`), two riir-train targets. A narrowing
+# takes the cfg population toward 0 and both ceilings pass, indistinguishable
+# from a clean repo. Canaried: skipping everything under tests/ takes
+# katgpt-rs 393 -> 204 and reds on this floor.
+#
+# Floors carry ~10% slack below the measured value, deliberately. A row
+# legitimately leaves when a target is deleted, and a ratcheting floor would
+# red the next correct removal.
+#
+# Nine repos legitimately carry ZERO rows or zero cfg-bearing rows; their
+# floors are 0 and detect nothing. That is accepted here — unlike
+# required_features_drift_floors.txt, which needed a second floor
+# (min_manifests) for exactly that blind spot — because this sweep's
+# population comes from `parse_rows`, whose manifest floor is already asserted
+# by that neighbouring sweep over the same walk.
+#
+# Measured 2026-09-06.
+#
+# repo                  min_rows  min_with_cfg  max_empty  max_unresolved
+katgpt-rs                    560           350          0               0
+katgpt-web                     0             0          0               0
+riir-ai                      463           264          1               1
+riir-auth                      0             0          0               0
+riir-chain                   100            73          0               0
+riir-clippy                   39            19          0               0
+riir-dao                       0             0          0               0
+riir-dapps                    22            21          0               0
+riir-deployer                  0             0          0               0
+riir-game-sdk                 30            15          0               0
+riir-mmorpg-examples          18            17          0               1
+riir-neuron-db                45            35          0               0
+riir-train                   391           251          0               0
+riir-viewbridge                0             0          0               0
+seal-game-editor               0             0          0               0
+seal-remake                    6             1          0               0
