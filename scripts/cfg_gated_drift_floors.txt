@@ -1,0 +1,65 @@
+# Pins for scripts/cfg_gated_drift_sweep.py — EVERY contract repo.
+#
+# Format, 5 whitespace-separated fields:
+#
+#   <repo>  <min_targets>  <min_gated>  <max_silent_now>  <max_load_bearing>
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message.
+#
+# ── these ceilings are a RATCHET, not a wall ──────────────────────────────────
+# Unlike required_features_drift_floors.txt and percentile_drift_floors.txt —
+# both of which measured zero everywhere and are therefore walls — this class
+# has a standing backlog: 12 load-bearing SILENT-NOW targets across six repos
+# (Issue 728), ten of them sibling-owned and not this session's to arm. So each
+# repo is pinned at its MEASURED count, exactly as numbering_drift_floors.txt
+# does: a NEW instance reds immediately, and the backlog is visible in the pins
+# rather than silently tolerated. Lower a pin in the commit that arms a target.
+#
+# ── read the two ceilings apart, they fail independently ─────────────────────
+# max_silent_now  — targets that zero on a PLAIN `cargo test`. The severe
+#                   class; `latent` ones (gated on a default-ON feature) vanish
+#                   only under --no-default-features and are not gated here.
+# max_load_bearing— of those, the ones whose NAME says the green is EVIDENCE.
+#                   A silent zero on `scratch_probe` costs a reader's time; a
+#                   silent zero on `bridge_spec_match` is a promotion argument
+#                   resting on an empty binary.
+#
+# ── the floors ────────────────────────────────────────────────────────────────
+# Both ceilings are green over whatever the manifest walk and the #![cfg]
+# scanner can SEE, so a walk regression takes both populations to 0 and every
+# ceiling passes — indistinguishable from a clean repo. min_targets and
+# min_gated are pinned at ~75% of measured: slack against ordinary churn (a
+# deleted bench must not red the sweep), tight against blindness (a scanner
+# regression drops these by an order of magnitude, not by a quarter).
+#
+# Seven repos have min_gated = 0 legitimately (no #![cfg]-gated targets at
+# all); min_targets still bites for all but katgpt-web, which has no cargo
+# targets in the walk at all.
+#
+# ── katgpt-rs's four numbers are stated TWICE and asserted ────────────────────
+# All four must equal the identically-named keys in scripts/cfg_gated_floors.txt,
+# the per-push gate's pins for the same quantities. The sweep asserts every one
+# and exits 1 on drift — docs_gate_paths_sync.py exists one workflow over for
+# exactly this: a hand-duplicated value drifts, silently.
+#
+# Measured 2026-09-06 with the Issue 728 classifier: 16 repos, 2,942 targets,
+# 1,765 #![cfg]-gated, 261 SILENT-NOW, 12 of those load-bearing.
+#
+# repo                  targets  gated  silent_now  load_bearing
+katgpt-rs                   700    400          44             2
+katgpt-web                    0      0           0             0
+riir-ai                     700    420          79             3
+riir-auth                     3      0           0             0
+riir-chain                  126     99          31             3
+riir-clippy                  64     40          16             0
+riir-dao                      5      0           1             0
+riir-dapps                   22     18          25             1
+riir-deployer                 6      0           0             0
+riir-game-sdk                57     36          31             0
+riir-mmorpg-examples         30     24           4             0
+riir-neuron-db               65     40           8             0
+riir-train                  369    229          21             2
+riir-viewbridge               6      0           1             1
+seal-game-editor             44      0           0             0
+seal-remake                   6      2           0             0

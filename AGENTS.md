@@ -391,6 +391,26 @@ cadences, and none of them subsumes another:
 | `scripts/numbering_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/required_features_drift_sweep.py` | workstation | on demand | every contract repo |
 | `scripts/percentile_drift_sweep.py` | workstation | on demand | every contract repo |
+| `scripts/cfg_gated_drift_sweep.py` | workstation | on demand | every contract repo |
+
+**The fifth completes the family, and it is the one with a backlog.**
+`scripts/cfg_gated_drift_sweep.py` + `cfg_gated_drift_floors.txt` gate the
+cfg-gated silent-zero ceilings across every contract repo. Its ceilings are a
+**RATCHET at each repo's measured count**, not a wall like the two above:
+running it is what found Issue 728's **12 load-bearing SILENT-NOW targets**
+across six repos, ten of them sibling-owned and not one session's to arm. Every
+one is the same shape — auto-discovered, no `[[test]]` row at all, gated on a
+default-off feature — so each prints `ok. 0 passed` over an empty binary on a
+plain `cargo test`. Measured 2026-09-06: **16 repos, 2,942 targets, 1,765
+`#![cfg]`-gated, 261 SILENT-NOW, 12 load-bearing**.
+
+Two details worth copying. It asserts **all four** of katgpt-rs's numbers
+against `cfg_gated_floors.txt` rather than one spot check, since every field
+names the same quantity as the identically-named key there. And its selftest
+pins the **classifier in both directions** by name — the six widened tokens
+must still fire, the seven homonyms must still not — because every ceiling
+below it goes green over a smaller population the moment `is_load_bearing`
+narrows, which is precisely Issue 728.
 
 **A fourth followed the same day, over the percentile audit.**
 `percentile_floor_gate.py` was katgpt-rs-scoped for the same structural reason,

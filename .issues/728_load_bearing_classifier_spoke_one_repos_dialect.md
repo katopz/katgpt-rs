@@ -1,10 +1,13 @@
 # Issue 728 — `silent_now_load_bearing` was 0 in all 16 repos because the classifier speaks ONE repo's dialect
 
 **Status:** OPEN — **T1 DONE** (2026-09-06, the classifier is widened and the
-katgpt-rs gate now reds on 2 real defects it was blind to). **T2 is the fix**:
-arm `bridge_spec_match` + `pencil_spec_match` with `required-features` rows and
-re-pin `max_load_bearing` 2 → 0. T3 (the 10 sibling-owned instances) is a
-report to their owners, not work in this repo.
+katgpt-rs gate now reds on 2 real defects it was blind to). **T1 + T4 DONE**
+(the classifier is widened, the katgpt-rs gate now reds on 2 real defects it
+was blind to, and the cross-repo sweep ratchets all 12 instances). **T2 is the
+remaining fix**: arm `bridge_spec_match` + `pencil_spec_match` with
+`required-features` rows and re-pin `max_load_bearing` 2 → 0. T3 (the 10
+sibling-owned instances) is now reported by every sweep run, which is a better
+channel than a file in each of their repos.
 
 ## The finding
 
@@ -107,10 +110,18 @@ two that do not spell `g1`.
   ratchet keeps working while the backlog is visible.
 - [ ] **T3** — report the 10 sibling instances to their owners. Not this
   repo's to fix; the cross-repo sweep (below) is what keeps them from growing.
-- [-] **T4** — a cross-repo `cfg_gated_drift_sweep.py`, the fourth member of
-  the sweep family. Deferred until T2 lands and the ratchet baseline is 0 here:
-  pinning a sibling backlog is only meaningful once this repo's own number is
-  honest.
+- [x] **T4** — `scripts/cfg_gated_drift_sweep.py` +
+  `cfg_gated_drift_floors.txt`, the fifth member of the sweep family. **Done
+  now rather than after T2** — the deferral reasoning written here first ("only
+  meaningful once this repo's own number is 0") was wrong, and
+  `numbering_drift_floors.txt` is the precedent that refutes it: a ratchet
+  pinned at each repo's MEASURED backlog is exactly how a sweep covers repos
+  whose defects it does not own. Waiting for a 0 would have left the other ten
+  ungated for no gain. Canaried 13 directions, each verified on the RIGHT
+  assertion; the two instrument-failure directions exposed a real gap — the
+  report's selftest raises a bare `AssertionError`, so the sweep died with a
+  traceback where it should have returned the exit-2 "instrument untrustworthy"
+  verdict. Fixed.
 
 ## Why the gate could not have caught this itself
 
