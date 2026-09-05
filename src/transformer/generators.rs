@@ -49,10 +49,9 @@ pub fn generate_with_prefill(
 
     let mut generated = Vec::with_capacity(max_gen_tokens);
     generated.push(token);
-    let mut pos = prompt_tokens.len();
 
     // 3. Causal decode with writer LoRA
-    for _ in 1..max_gen_tokens {
+    for (pos, _) in (prompt_tokens.len()..).zip(1..max_gen_tokens) {
         if pos >= config.block_size {
             break;
         }
@@ -86,7 +85,6 @@ pub fn generate_with_prefill(
         };
         token = ctx.sample_next_token(config.temperature, rng);
         generated.push(token);
-        pos += 1;
 
         if token == config.bos_token {
             break;

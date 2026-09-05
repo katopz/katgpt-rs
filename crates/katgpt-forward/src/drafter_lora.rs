@@ -782,14 +782,18 @@ pub fn load_drafter_lora(path: &Path) -> Result<DrafterLoraWeights, String> {
             let b_count = out_dim * rank;
 
             let a: Vec<f32> = file_data[offset..offset + a_count * 4]
-                .chunks_exact(4)
-                .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f32::from_le_bytes(*c))
                 .collect();
             offset += a_count * 4;
 
             let b: Vec<f32> = file_data[offset..offset + b_count * 4]
-                .chunks_exact(4)
-                .map(|c| f32::from_le_bytes(c.try_into().expect("chunk is 4 bytes")))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f32::from_le_bytes(*c))
                 .collect();
             offset += b_count * 4;
 

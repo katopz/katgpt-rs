@@ -559,15 +559,13 @@ fn evaluate(
     // measure the model's assigned probability for each correct digit.
     let prompt_len = problem.prompt.len();
     let mut last_token = *problem.prompt.last().unwrap_or(&TOK_BOS);
-    let mut gen_pos = prompt_len;
     let mut nll = 0.0f32;
     let mut token_correct = 0usize;
     let mut digit_mass = 0.0f32; // total prob mass on digit tokens (0-9)
     let mut all_argmax_correct = true;
 
-    for &correct_digit in &problem.answer {
+    for (gen_pos, &correct_digit) in (prompt_len..).zip(problem.answer.iter()) {
         let (logits, _attn) = forward_token(model, &mut cache, last_token, gen_pos);
-        gen_pos += 1;
 
         // NLL of the correct digit
         nll -= logits[correct_digit as usize].max(1e-30).ln();

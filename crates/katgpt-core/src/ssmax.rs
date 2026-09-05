@@ -238,7 +238,7 @@ pub fn apply_ssmax_inplace(logits: &mut [f32], mode: &SsmaxMode, log_n: f32) {
             *x *= mult;
         }
     }
-    for x in logits.chunks_exact_mut(8).into_remainder() {
+    for x in logits.as_chunks_mut::<8>().1 {
         *x *= mult;
     }
 }

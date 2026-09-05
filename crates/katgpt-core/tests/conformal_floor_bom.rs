@@ -168,9 +168,7 @@ impl BoMSamplerAdapter {
         // and leave the rest untouched, matching "channel-0 input" semantics).
         // For a clean probe we zero the non-observation channels each call so
         // the kernel sees exactly [y, 0, 0, ..., 0].
-        for v in &mut self.x_input {
-            *v = 0.0;
-        }
+        self.x_input.fill(0.0);
         self.x_input[0] = y;
     }
 }

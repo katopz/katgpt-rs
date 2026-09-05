@@ -320,16 +320,8 @@ mod integration_tests {
         compact_keys_f32: &[f32],
         token_dim: usize,
     ) -> f32 {
-        let n_original = if token_dim == 0 {
-            0
-        } else {
-            original_keys_f16.len() / token_dim
-        };
-        let n_compact = if token_dim == 0 {
-            0
-        } else {
-            compact_keys_f32.len() / token_dim
-        };
+        let n_original = original_keys_f16.len().checked_div(token_dim).unwrap_or(0);
+        let n_compact = compact_keys_f32.len().checked_div(token_dim).unwrap_or(0);
         if n_compact == 0 || n_original == 0 {
             return 0.0;
         }

@@ -973,16 +973,12 @@ fn main() {
     );
 
     for r in &results {
-        let node_pct_ai = if r.bf_nodes > 0 {
-            100 - (r.ai_nodes * 100 / r.bf_nodes)
-        } else {
-            0
-        };
-        let node_pct_hy = if r.bf_nodes > 0 {
-            100 - (r.hy_nodes * 100 / r.bf_nodes)
-        } else {
-            0
-        };
+        let node_pct_ai = (r.ai_nodes * 100)
+            .checked_div(r.bf_nodes)
+            .map_or(0, |pct| 100 - pct);
+        let node_pct_hy = (r.hy_nodes * 100)
+            .checked_div(r.bf_nodes)
+            .map_or(0, |pct| 100 - pct);
 
         let ai_fb_tag = if r.ai_fallback { " FB" } else { "" };
         let hy_fb_tag = if r.hy_fallback { " FB" } else { "" };

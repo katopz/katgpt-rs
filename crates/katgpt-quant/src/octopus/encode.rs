@@ -178,7 +178,9 @@ pub fn decode_vector_into(indices: &[TripletIndices], codebook: &OctopusCodebook
     // three per-triplet bounds checks out of the loop. The `[..indices.len()*3]`
     // slice keeps the original panic-on-short-`out` behaviour.
     for (chunk, idx) in out[..indices.len() * 3]
-        .chunks_exact_mut(3)
+        .as_chunks_mut::<3>()
+        .0
+        .iter_mut()
         .zip(indices.iter())
     {
         chunk.copy_from_slice(&decode_triplet(idx, codebook));

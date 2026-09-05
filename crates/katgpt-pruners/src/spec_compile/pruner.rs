@@ -202,9 +202,7 @@ mod tests {
                 SpecRule {
                     depth: Some(0),
                     prefix: Vec::new(),
-                    allowed: CompactBitmap::from_token_indices(
-                        [b'{', b'['].iter().map(|&b| b as usize),
-                    ),
+                    allowed: CompactBitmap::from_token_indices(b"{[".iter().map(|&b| b as usize)),
                     is_allowlist: true,
                 },
                 // Global: JSON-safe chars
@@ -214,7 +212,7 @@ mod tests {
                     allowed: CompactBitmap::from_token_indices(
                         (b'a'..=b'z')
                             .chain(b'0'..=b'9')
-                            .chain([b'{', b'}', b'[', b']', b':', b',', b'"', b' ', b'\n'])
+                            .chain(*b"{}[]:,\" \n")
                             .map(|b| b as usize),
                     ),
                     is_allowlist: true,
@@ -290,9 +288,7 @@ mod tests {
                     depth: 0,
                     token_idx: b'{' as usize,
                 }],
-                allowed: CompactBitmap::from_token_indices(
-                    [b'"', b'}'].iter().map(|&b| b as usize),
-                ),
+                allowed: CompactBitmap::from_token_indices(b"\"}".iter().map(|&b| b as usize)),
                 is_allowlist: true,
             }],
             vocab_size: 256,
@@ -331,9 +327,7 @@ mod tests {
             rules: Vec::new(),
             vocab_size: 256,
             global_allowed: CompactBitmap::empty(),
-            global_blocked: CompactBitmap::from_token_indices(
-                [b'<', b'>'].iter().map(|&b| b as usize),
-            ),
+            global_blocked: CompactBitmap::from_token_indices(b"<>".iter().map(|&b| b as usize)),
         };
 
         assert!(!spec.is_valid(0, b'<' as usize, &[]));

@@ -244,12 +244,12 @@ impl TriggerGate {
                     return Some(ComputeTier::CpuGpu);
                 }
             }
-            ComputeTier::CpuGpu if self.ane_available => {
-                if qps >= self.config.ane_activate_qps
-                    || depth >= self.config.queue_depth_trigger * 2
-                {
-                    return Some(ComputeTier::CpuGpuAne);
-                }
+            ComputeTier::CpuGpu
+                if self.ane_available
+                    && (qps >= self.config.ane_activate_qps
+                        || depth >= self.config.queue_depth_trigger * 2) =>
+            {
+                return Some(ComputeTier::CpuGpuAne);
             }
             _ => {}
         }
@@ -266,10 +266,10 @@ impl TriggerGate {
                     return Some(ComputeTier::CpuGpu);
                 }
             }
-            ComputeTier::CpuGpu => {
-                if qps < self.config.gpu_activate_qps * self.config.hysteresis_factor {
-                    return Some(ComputeTier::CpuOnly);
-                }
+            ComputeTier::CpuGpu
+                if qps < self.config.gpu_activate_qps * self.config.hysteresis_factor =>
+            {
+                return Some(ComputeTier::CpuOnly);
             }
             _ => {}
         }

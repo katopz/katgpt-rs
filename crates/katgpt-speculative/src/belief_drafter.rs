@@ -285,7 +285,7 @@ impl LatentDynamicsMLP {
         rdr.read_exact(&mut magic)
             .map_err(|e| format!("read magic: {e}"))?;
         if &magic != MAGIC {
-            return Err(format!("bad magic: expected {:?}, got {:?}", MAGIC, &magic));
+            return Err(format!("bad magic: expected {:?}, got {:?}", MAGIC, magic));
         }
 
         // Version

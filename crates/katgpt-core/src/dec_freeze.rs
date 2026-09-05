@@ -113,8 +113,8 @@ impl CochainFreezeEnvelope {
             return None;
         }
         let mut data = Vec::with_capacity(n_floats);
-        for chunk in payload[5..].chunks_exact(4) {
-            let f = f32::from_le_bytes(chunk.try_into().ok()?);
+        for chunk in payload[5..].as_chunks::<4>().0 {
+            let f = f32::from_le_bytes(*chunk);
             if f.is_nan() {
                 return None;
             }

@@ -68,7 +68,7 @@ impl SplitMix64 {
 fn max_edge_disagreement(cx: &CellComplex, x: &CochainField) -> f32 {
     let dim = x.dim;
     let mut max_d = 0.0f32;
-    for pair in cx.boundary_entries(0).chunks_exact(2) {
+    for pair in cx.boundary_entries(0).as_chunks::<2>().0 {
         let v_tail = pair[0].0;
         let v_head = pair[1].0;
         for d in 0..dim {

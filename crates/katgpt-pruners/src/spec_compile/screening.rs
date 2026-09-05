@@ -94,13 +94,8 @@ mod tests {
     use super::*;
 
     fn make_classification_spec() -> CompiledSpec {
-        let allowed = CompactBitmap::from_token_indices(
-            [
-                b'p', b'o', b's', b'i', b't', b'v', b'e', b'n', b'g', b'a', b'r', b' ', b'\n',
-            ]
-            .iter()
-            .map(|&b| b as usize),
-        );
+        let allowed =
+            CompactBitmap::from_token_indices(b"positvengar \n".iter().map(|&b| b as usize));
 
         CompiledSpec {
             spec_hash: [0u8; 32],
@@ -123,9 +118,7 @@ mod tests {
                 SpecRule {
                     depth: Some(0),
                     prefix: Vec::new(),
-                    allowed: CompactBitmap::from_token_indices(
-                        [b'{', b'['].iter().map(|&b| b as usize),
-                    ),
+                    allowed: CompactBitmap::from_token_indices(b"{[".iter().map(|&b| b as usize)),
                     is_allowlist: false,
                 },
                 SpecRule {
@@ -134,7 +127,7 @@ mod tests {
                     allowed: CompactBitmap::from_token_indices(
                         (b'a'..=b'z')
                             .chain(b'0'..=b'9')
-                            .chain([b'{', b'}', b'[', b']', b':', b',', b'"', b' ', b'\n'])
+                            .chain(*b"{}[]:,\" \n")
                             .map(|b| b as usize),
                     ),
                     is_allowlist: false,
@@ -207,9 +200,7 @@ mod tests {
             rules: Vec::new(),
             vocab_size: 256,
             global_allowed: CompactBitmap::empty(),
-            global_blocked: CompactBitmap::from_token_indices(
-                [b'<', b'>'].iter().map(|&b| b as usize),
-            ),
+            global_blocked: CompactBitmap::from_token_indices(b"<>".iter().map(|&b| b as usize)),
         };
 
         assert!(
@@ -232,9 +223,7 @@ mod tests {
             spec_hash: [0u8; 32],
             rules: Vec::new(),
             vocab_size: 256,
-            global_allowed: CompactBitmap::from_token_indices(
-                [b'a', b'b', b'c'].iter().map(|&b| b as usize),
-            ),
+            global_allowed: CompactBitmap::from_token_indices(b"abc".iter().map(|&b| b as usize)),
             global_blocked: CompactBitmap::empty(),
         };
 
@@ -263,9 +252,7 @@ mod tests {
             rules: vec![SpecRule {
                 depth: None,
                 prefix: Vec::new(),
-                allowed: CompactBitmap::from_token_indices(
-                    [b'<', b'>'].iter().map(|&b| b as usize),
-                ),
+                allowed: CompactBitmap::from_token_indices(b"<>".iter().map(|&b| b as usize)),
                 is_allowlist: false,
             }],
             vocab_size: 256,

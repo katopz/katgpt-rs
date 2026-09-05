@@ -155,7 +155,7 @@ fn bench_ppot_resample(
     let threshold = 0.5f32;
     let positions = identify_high_entropy_positions(&marginals, threshold);
     let positions = if positions.is_empty() {
-        vec![0usize.min(steps.saturating_sub(1))]
+        vec![0usize]
     } else {
         positions
     };

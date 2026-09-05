@@ -194,12 +194,7 @@ impl<G, S> AndOrNode<G, S> {
             Self::Or { children, .. } => {
                 children.push(child);
             }
-            Self::And {
-                children,
-                solved_bits: _,
-                solved_count: _,
-                ..
-            } => {
+            Self::And { children, .. } => {
                 children.push(child);
                 // solved_bits bit for new child is 0 (unsolved) by default.
                 // solved_count unchanged — new child is unsolved.
@@ -217,17 +212,13 @@ impl<G, S> AndOrNode<G, S> {
                 solved_bits,
                 solved_count,
                 ..
-            } => {
-                if idx < children.len() && idx < 64 {
-                    let mask = 1u64 << idx;
-                    if *solved_bits & mask == 0 {
-                        *solved_bits |= mask;
-                        *solved_count += 1;
-                    }
-                    true
-                } else {
-                    false
+            } if idx < children.len() && idx < 64 => {
+                let mask = 1u64 << idx;
+                if *solved_bits & mask == 0 {
+                    *solved_bits |= mask;
+                    *solved_count += 1;
                 }
+                true
             }
             _ => false,
         }
@@ -237,13 +228,9 @@ impl<G, S> AndOrNode<G, S> {
     /// Returns `false` if not an OR node or `idx` out of bounds.
     pub fn set_best(&mut self, idx: usize) -> bool {
         match self {
-            Self::Or { children, best, .. } => {
-                if idx < children.len() {
-                    *best = Some(idx);
-                    true
-                } else {
-                    false
-                }
+            Self::Or { children, best, .. } if idx < children.len() => {
+                *best = Some(idx);
+                true
             }
             _ => false,
         }

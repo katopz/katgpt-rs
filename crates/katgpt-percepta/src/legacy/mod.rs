@@ -468,7 +468,7 @@ impl Sudoku9x9 {
         // need for tracked elimination/restore bookkeeping.
         let mut bits = mask;
         while bits != 0 {
-            let bit = bits & bits.wrapping_neg(); // lowest set bit
+            let bit = bits.isolate_lowest_one(); // lowest set bit
             bits ^= bit;
             let d = bit.trailing_zeros() as u8 + 1;
 

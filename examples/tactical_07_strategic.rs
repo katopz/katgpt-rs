@@ -1894,21 +1894,15 @@ fn draw_nav(f: &mut Frame, area: Rect, app: &App) {
                 let ai_time = app.ai.solve_time_ms;
                 let discovered = app.ai.levers_discovered;
 
-                let step_pct = if bf_steps > 0 {
-                    100 - (ai_steps * 100 / bf_steps)
-                } else {
-                    0
-                };
-                let node_pct = if bf_nodes > 0 {
-                    100 - (ai_nodes * 100 / bf_nodes)
-                } else {
-                    0
-                };
-                let speed_pct = if bf_time > 0 {
-                    (bf_time.saturating_sub(ai_time)) * 100 / bf_time
-                } else {
-                    0
-                };
+                let step_pct = (ai_steps * 100)
+                    .checked_div(bf_steps)
+                    .map_or(0, |pct| 100 - pct);
+                let node_pct = (ai_nodes * 100)
+                    .checked_div(bf_nodes)
+                    .map_or(0, |pct| 100 - pct);
+                let speed_pct = (bf_time.saturating_sub(ai_time) * 100)
+                    .checked_div(bf_time)
+                    .unwrap_or(0);
 
                 let step_label = if step_pct > 0 {
                     format!("⚡{step_pct}%↓")
@@ -1931,21 +1925,15 @@ fn draw_nav(f: &mut Frame, area: Rect, app: &App) {
                 let hy_time = app.hybrid.solve_time_ms;
                 let discovered = app.hybrid.levers_discovered;
 
-                let step_pct_vs_bf = if bf_steps > 0 {
-                    100 - (hy_steps * 100 / bf_steps)
-                } else {
-                    0
-                };
-                let node_pct_vs_bf = if bf_nodes > 0 {
-                    100 - (hy_nodes * 100 / bf_nodes)
-                } else {
-                    0
-                };
-                let speed_pct_vs_bf = if bf_time > 0 {
-                    (bf_time.saturating_sub(hy_time)) * 100 / bf_time
-                } else {
-                    0
-                };
+                let step_pct_vs_bf = (hy_steps * 100)
+                    .checked_div(bf_steps)
+                    .map_or(0, |pct| 100 - pct);
+                let node_pct_vs_bf = (hy_nodes * 100)
+                    .checked_div(bf_nodes)
+                    .map_or(0, |pct| 100 - pct);
+                let speed_pct_vs_bf = (bf_time.saturating_sub(hy_time) * 100)
+                    .checked_div(bf_time)
+                    .unwrap_or(0);
 
                 let step_label = if step_pct_vs_bf > 0 {
                     format!("⚡{step_pct_vs_bf}%↓")

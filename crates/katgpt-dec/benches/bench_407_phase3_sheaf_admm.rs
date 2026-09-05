@@ -246,7 +246,7 @@ fn t31_cg_vs_gd_residual() -> (f64, f64, bool) {
 fn max_edge_disagreement_l1(cx: &CellComplex, x: &CochainField) -> f32 {
     let d_v = x.dim;
     let mut sum = 0.0f32;
-    for pair in cx.boundary_entries(0).chunks_exact(2) {
+    for pair in cx.boundary_entries(0).as_chunks::<2>().0 {
         let v_tail = pair[0].0;
         let v_head = pair[1].0;
         for d in 0..d_v {

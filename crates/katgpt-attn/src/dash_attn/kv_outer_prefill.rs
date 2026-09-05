@@ -79,7 +79,7 @@ impl KvOuterIndex {
             .filter(|(_, v)| !v.is_empty())
             .map(|(i, v)| (i, v.len()))
             .collect();
-        blocks.sort_by(|a, b| b.1.cmp(&a.1));
+        blocks.sort_by_key(|b| std::cmp::Reverse(b.1));
         blocks
     }
 }

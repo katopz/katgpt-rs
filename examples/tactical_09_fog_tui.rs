@@ -2196,11 +2196,7 @@ fn draw_discovery(f: &mut Frame, area: Rect, app: &App) {
         .iter()
         .filter(|&&(r, c)| game.grid[r][c] != '#')
         .count();
-    let explored_pct = if total_floors > 0 {
-        seen_floors * 100 / total_floors
-    } else {
-        100
-    };
+    let explored_pct = (seen_floors * 100).checked_div(total_floors).unwrap_or(100);
 
     // Frontier count
     let frontiers = fog.frontier_tiles(&game.grid);

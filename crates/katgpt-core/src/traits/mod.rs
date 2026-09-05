@@ -1454,11 +1454,12 @@ pub fn best_buddies(corr_rows: &[&[f32]], k: usize) -> Vec<(usize, usize)> {
             continue;
         }
         match best_for[j] {
-            Some(k_idx) if k_idx == i => {
+            Some(k_idx)
+                if k_idx == i
                 // Avoid double-counting: only push when i < j
-                if i < j {
-                    buddies.push((i, j));
-                }
+                && i < j =>
+            {
+                buddies.push((i, j));
             }
             _ => {}
         }

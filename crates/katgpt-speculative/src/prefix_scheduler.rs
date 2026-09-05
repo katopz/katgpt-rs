@@ -112,7 +112,7 @@ impl SpsCurve {
         // Sort ascending by batch size (stable so original order is preserved
         // for ties, which matters for the override pass below).
         let mut sorted: Vec<(usize, f32)> = samples.to_vec();
-        sorted.sort_by(|(b1, _), (b2, _)| b1.cmp(b2));
+        sorted.sort_by_key(|(b1, _)| *b1);
         // Collapse duplicates, keeping the LAST sample per batch size
         // (override semantics: a later sample overrides an earlier one).
         let mut deduped: Vec<(usize, f32)> = Vec::with_capacity(sorted.len());

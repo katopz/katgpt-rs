@@ -364,7 +364,7 @@ fn section1() {
             }
         }
         let mut idx: Vec<(usize, u32)> = agg.iter().copied().enumerate().collect();
-        idx.sort_by(|a, b| b.1.cmp(&a.1));
+        idx.sort_by_key(|a| std::cmp::Reverse(a.1));
         let top3: Vec<&str> = idx
             .iter()
             .take(3)

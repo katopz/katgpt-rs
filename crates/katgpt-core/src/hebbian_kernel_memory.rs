@@ -611,7 +611,7 @@ impl<const D: usize> HebbianKernelMemory<D> {
         // `fwd.len() == D * keys.len()`, so `chunks_exact_mut(D)` yields exactly
         // `keys.len()` rows — the `zip` cannot iterate short.
         let mut phi = vec![0.0_f32; m];
-        for (k, out_row) in keys.iter().zip(fwd.chunks_exact_mut(D)) {
+        for (k, out_row) in keys.iter().zip(fwd.as_chunks_mut::<D>().0) {
             self.forward_into(k, &mut phi, out_row);
         }
         // Build the fact map as key_idx → value_idx for fast lookup.
@@ -626,7 +626,7 @@ impl<const D: usize> HebbianKernelMemory<D> {
         // the old `(0..keys.len()).enumerate()` produced `i == k_idx` for every
         // iteration, so the row index and the `map_by_key` index are the same
         // counter.
-        for (k_idx, fwd_i) in fwd.chunks_exact(D).enumerate() {
+        for (k_idx, fwd_i) in fwd.as_chunks::<D>().0.iter().enumerate() {
             let v_fi_idx = map_by_key[k_idx];
             if v_fi_idx == usize::MAX {
                 continue;

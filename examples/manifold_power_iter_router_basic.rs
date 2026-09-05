@@ -112,7 +112,7 @@ fn main() {
     let topk = gate_sigmoid_topk(&x, &r, n, d, cfg.beta_sigmoid, 3, &mut scores);
     let dt_gate = t_gate.elapsed();
     println!("Sigmoid top-3 gate: {dt_gate:?} (NEVER softmax — G7)");
-    println!("  token dot-prod scores: {:?}", &scores);
+    println!("  token dot-prod scores: {:?}", scores);
     println!("  top-3 expert indices:  {topk:?}");
     println!();
     println!("total snapshot-swap cost: {:?}", dt_gram + dt_mpi);

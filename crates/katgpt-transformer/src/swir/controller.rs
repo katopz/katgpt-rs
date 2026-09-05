@@ -247,14 +247,16 @@ impl SwiRController {
                 self.switch_to(ThinkMode::Explicit, entropy, step_index);
                 switched_to = Some(ThinkMode::Explicit);
             }
-            ThinkMode::Explicit if entropy_above_ref && !kurtosis_escape => {
+            ThinkMode::Explicit
+                if entropy_above_ref
+                    && !kurtosis_escape
+                    && self.dwell_steps + 1 >= self.config.w_e_to_l =>
+            {
                 // Explicit → Latent: entropy rose, model wants to explore → only
                 // allow after W_E→L dwell window to prevent chatter. Suppressed
                 // when the G6 escape hatch fires (rigid-constraint task).
-                if self.dwell_steps + 1 >= self.config.w_e_to_l {
-                    self.switch_to(ThinkMode::Latent, entropy, step_index);
-                    switched_to = Some(ThinkMode::Latent);
-                }
+                self.switch_to(ThinkMode::Latent, entropy, step_index);
+                switched_to = Some(ThinkMode::Latent);
             }
             _ => {}
         }

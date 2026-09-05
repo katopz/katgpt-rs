@@ -24,7 +24,7 @@ use katgpt_core::mux_latent::LatentContextBuffer;
 /// `needle_pos`: fraction [0.0, 1.0] where the needle starts (0=start, 0.5=middle, 1.0=end).
 /// `needle`: the diverse "needle" tokens to hide in the haystack.
 fn make_niah_tokens(haystack_size: usize, needle_pos: f32, needle: &[u32]) -> Vec<u32> {
-    let needle_start = ((haystack_size - needle.len()).max(0) as f32 * needle_pos) as usize;
+    let needle_start = ((haystack_size - needle.len()) as f32 * needle_pos) as usize;
     let mut tokens = vec![5u32; haystack_size]; // repetitive haystack
     for (i, &t) in needle.iter().enumerate() {
         if needle_start + i < haystack_size {

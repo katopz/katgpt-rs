@@ -132,15 +132,17 @@ impl VortexFlow for BlockTopKRouter {
             let mut dot1 = 0.0f32;
             let mut dot2 = 0.0f32;
             let mut dot3 = 0.0f32;
-            // `chunks_exact(4)` over pre-sliced rows: each yielded slice has a
-            // statically known length of 4, so the 8 per-iteration bounds
-            // checks collapse. The four lane accumulators receive their addends
-            // in exactly the same order as the index form and the tail covers
-            // the same `main..hd` range → bit-identical.
+            // `as_chunks::<4>()` over pre-sliced rows: each yielded `&[f32; 4]`
+            // has a statically known length, so the per-iteration bounds checks
+            // collapse. The four lane accumulators receive their addends in
+            // exactly the same order as the index form and the tail covers the
+            // same `main..hd` range → bit-identical.
             let main = (hd / 4) * 4;
             for (q_c, c_c) in query[..main]
-                .chunks_exact(4)
-                .zip(centroid[..main].chunks_exact(4))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(centroid[..main].as_chunks::<4>().0.iter())
             {
                 dot0 += q_c[0] * c_c[0];
                 dot1 += q_c[1] * c_c[1];
@@ -737,15 +739,17 @@ impl VortexFlow for PerGroupTopKRouter {
             let mut dot1 = 0.0f32;
             let mut dot2 = 0.0f32;
             let mut dot3 = 0.0f32;
-            // `chunks_exact(4)` over pre-sliced rows: each yielded slice has a
-            // statically known length of 4, so the 8 per-iteration bounds
-            // checks collapse. The four lane accumulators receive their addends
-            // in exactly the same order as the index form and the tail covers
-            // the same `main..hd` range → bit-identical.
+            // `as_chunks::<4>()` over pre-sliced rows: each yielded `&[f32; 4]`
+            // has a statically known length, so the per-iteration bounds checks
+            // collapse. The four lane accumulators receive their addends in
+            // exactly the same order as the index form and the tail covers the
+            // same `main..hd` range → bit-identical.
             let main = (hd / 4) * 4;
             for (q_c, c_c) in query[..main]
-                .chunks_exact(4)
-                .zip(centroid[..main].chunks_exact(4))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .zip(centroid[..main].as_chunks::<4>().0.iter())
             {
                 dot0 += q_c[0] * c_c[0];
                 dot1 += q_c[1] * c_c[1];
