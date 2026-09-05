@@ -1,0 +1,25 @@
+# Pins for scripts/required_features_static_gate.py — katgpt-rs scope only.
+#
+# Re-pin DELIBERATELY, in the commit that changes the measured value, with the
+# reason in the commit message. A pin that drifts behind reality is a pin
+# nobody trusts.
+#
+# The CEILING is the verdict. A `required-features` row naming a feature its
+# package cannot enable is never legitimate: cargo silently SKIPS that target
+# in every invocation that does not name it (including `--all-features` and
+# `cargo test --workspace`), so it reports as a green zero forever while every
+# audit in the cfg_gated_target_audit.py family counts it as PROTECTED because
+# the row exists. Measured 0 here, and 0 over all 1,829 rows in 16 repos
+# (2026-09-05) — this pin keeps a new one from landing, it does not clean up a
+# backlog.
+max_invalid_rows = 0
+
+# The FLOOR is the pin that earns its keep, for the reason every ceiling in
+# this family needs one: `max_invalid_rows = 0` is green over whatever the
+# manifest parse can SEE. A tomllib change, a manifest walk regression, or a
+# renamed key takes the population to 0 and the ceiling passes — byte-identical
+# to a clean repo. The floor makes the instrument going blind a RED.
+#
+# Measured 2026-09-05: 621 rows in katgpt-rs. Bumping this is expected as
+# targets are added; lowering it needs a reason in the commit message.
+min_rows_scanned = 600

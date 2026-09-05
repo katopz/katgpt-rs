@@ -27,8 +27,17 @@ exists to refuse.
 
 ## The free pass: 0 invalid rows over 1,829 (2026-09-05)
 
-Measured over all 16 contract repos in under a second. **Do not re-derive
-this check by hand — the obvious model is wrong**, and being wrong here is
+Measured over all 16 contract repos in under a second, and **gated** at
+`max_invalid_rows = 0` by `scripts/required_features_static_gate.py` (a
+`docs_gate.sh` check, katgpt-rs-scoped) so a new one reds the push that adds
+it. The number was measured twice: the first run went through a `parse_rows`
+that shadowed the package's declared-feature set with the row's own feature
+list, so every feature was trivially "declared" and no finding was reachable.
+The gate's plant-an-invalid-row canary found that within minutes of the code
+landing; re-measured after the fix, still 0. A zero from an instrument whose
+firing path was never exercised is not a measurement.
+
+**Do not re-derive this check by hand — the obvious model is wrong**, and being wrong here is
 expensive in the direction that manufactures defects.
 
 `required-features` accepts **`dep/feat`** and `dep?/feat`, which name a

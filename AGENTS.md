@@ -339,6 +339,21 @@ paragraph said "the three" for one commit after the fourth was added):
   this family does. An empty *allowlist* is refused for the mirror-image
   reason. All four directions canaried. It is deliberately NOT in
   `REQUIRED_PINS`: it is not an integer.
+- `required_features_static_gate.py` (Issue 513) is the verdict half of the
+  free static pass above: a row naming a feature its package cannot enable
+  reds the push that adds it. Gateable where the report's other two verdicts
+  are not, because it needs no compiler and is **never legitimate** — cargo
+  silently skips such a target in every invocation that does not name it,
+  `--all-features` and `cargo test --workspace` included, so it reports a
+  green zero forever while every audit counts it as protected. Pins in
+  `scripts/required_features_floors.txt`; `min_rows_scanned` is a **FLOOR**
+  for the usual reason (a manifest-parse regression takes the population to
+  0 and the ceiling passes). Canaried three ways — plant an invalid row,
+  blind the population, break the validity model — and the first canary
+  earned its keep immediately: it found that `parse_rows` shadowed the
+  package's declared-feature set with the row's own feature list, which made
+  every feature trivially "declared" and the gate structurally incapable of
+  firing.
 - `bench_doc_audit.py` runs a `selftest()` on every invocation pinning the line
   shapes its tokenizer must recognise. Without it a regex regression is silent:
   the audit recognises fewer labels and still prints "0 mismatches". That is how

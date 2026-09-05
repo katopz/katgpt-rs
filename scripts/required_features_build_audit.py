@@ -152,14 +152,18 @@ def parse_rows(repo: Path) -> list[Row]:
         pkg = (data.get("package") or {}).get("name")
         if not pkg:
             continue  # virtual workspace root — its members are their own manifests
-        feats, deps = declared_features(data)
+        pkg_feats, pkg_deps = declared_features(data)
         for kind in KIND_FLAG:
             for entry in data.get(kind, []) or []:
                 if not isinstance(entry, dict):
                     continue
-                feats = entry.get("required-features")
+                # NOT `feats` — that name belongs to the package's declared set
+                # above, and shadowing it here made every row's own features
+                # trivially "declared", so the static pass could never fire.
+                # Caught by the gate's plant-an-invalid-row canary.
+                req = entry.get("required-features")
                 name = entry.get("name")
-                if not feats or not name:
+                if not req or not name:
                     continue
                 rel = entry.get("path") or f"{KIND_DIR[kind]}/{name}.rs"
                 out.append(
@@ -168,10 +172,10 @@ def parse_rows(repo: Path) -> list[Row]:
                         package=pkg,
                         kind=kind,
                         name=name,
-                        features=list(feats),
+                        features=list(req),
                         path=str((manifest.parent / rel).resolve()),
-                        feats=feats,
-                        deps=deps,
+                        feats=pkg_feats,
+                        deps=pkg_deps,
                     )
                 )
     return out

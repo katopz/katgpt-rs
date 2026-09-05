@@ -116,6 +116,12 @@ on:
       # script glob, an edit to the gate would not re-fire the gate that
       # runs it (the 713/704 trigger-omission class).
       - 'scripts/docs_gate_paths_sync.py'
+      # Issue 513: the required-features static gate's inputs are the
+      # MANIFESTS and its own pins. Cargo.toml + crates/**/Cargo.toml are
+      # already above; the gate and its floors file are not.
+      - 'scripts/required_features_static_gate.py'
+      - 'scripts/required_features_build_audit.py'
+      - 'scripts/required_features_floors.txt'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'
@@ -195,6 +201,12 @@ on:
       # script glob, an edit to the gate would not re-fire the gate that
       # runs it (the 713/704 trigger-omission class).
       - 'scripts/docs_gate_paths_sync.py'
+      # Issue 513: the required-features static gate's inputs are the
+      # MANIFESTS and its own pins. Cargo.toml + crates/**/Cargo.toml are
+      # already above; the gate and its floors file are not.
+      - 'scripts/required_features_static_gate.py'
+      - 'scripts/required_features_build_audit.py'
+      - 'scripts/required_features_floors.txt'
       # The orphaned-attribute gate reads ALL Rust source, not just targets.
       - 'src/**/*.rs'
       - 'crates/**/src/**/*.rs'
