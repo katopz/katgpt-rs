@@ -23,7 +23,8 @@
 # ── why max_dup is a ratchet at the measured value, not 0 ───────────────────
 #
 # 35 tracked duplicates existed across four repos at the first sweep
-# (2026-09-05). Resolving one is a citation-weight arbitration, not a rename:
+# (2026-09-05); riir-ai's 6 were resolved the same day (T4b) and its pin is now
+# 0, so the standing backlog is 29 across three repos. Resolving one is a citation-weight arbitration, not a rename:
 # Issue 724 T2's precedent is that the file with the most inbound mentions
 # KEEPS the number and the other moves to a fresh one, which requires reading
 # the corpus and updating every citation. Three of the four repos are owned by
@@ -45,7 +46,7 @@
 
 katgpt-rs           	795	0	0	0	# observed 2026-09-05: 994 files
 katgpt-web          	0	0	0	0	# observed 2026-09-05: 0 files (no .plans/.research yet)
-riir-ai             	493	6	0	0	# observed 2026-09-05: 617 files · dup: .plans 175/182/229/313, .research 020/148
+riir-ai             	493	0	0	0	# 2026-09-05: all 6 duplicates RESOLVED (Issue 725 T4b) — .plans 175->568, 182->567, 229->566, 313->569; .research 020->362, 148->363
 riir-auth           	0	0	0	0	# observed 2026-09-05: 0 files
 riir-chain          	48	0	0	0	# observed 2026-09-05: 60 files · .proposals allocator repaired 007->008
 riir-clippy         	183	4	0	0	# observed 2026-09-05: 229 files · dup: .plans 015/026, .research 083/086 · .plans allocator repaired 78->80

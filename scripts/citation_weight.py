@@ -86,6 +86,28 @@ def citation_re(kind: str, number: str) -> re.Pattern:
     return re.compile(rf"\b(?:{'|'.join(alts)})\b")
 
 
+# A lead this small over the decided sites is not a signal. Measured on
+# riir-ai .plans/313: 45 vs 41 over 82 decided sites — a 4.9% lead that flipped
+# direction between two runs of the SAME instrument (the first, narrow-dialect
+# pass read 31 vs 15). Weight cannot arbitrate that pair, and pretending it can
+# is how a coin flip gets recorded as a measurement.
+TIE_FRACTION = 0.10
+
+
+def first_seen(repo: Path, relpath: str) -> str:
+    """The date this document's number was first ALLOCATED, following renames.
+
+    The tiebreak when weight is a tie: whoever held the number first keeps it.
+    That is the allocator's own semantics, and unlike weight it cannot come out
+    even.
+    """
+    out = subprocess.run(
+        ["git", "-C", str(repo), "log", "--follow", "--diff-filter=A",
+         "--format=%ad", "--date=short", "--", relpath],
+        capture_output=True, text=True).stdout.split()
+    return out[-1] if out else "unknown"
+
+
 def corpus(repo: Path) -> dict[str, str]:
     out = subprocess.run(["git", "-C", str(repo), "ls-files"],
                          capture_output=True, text=True).stdout.split("\n")
@@ -112,6 +134,7 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
     won = {c: 0 for c in cands}
     unresolved, sites = 0, 0
     detail = {c: [] for c in cands}
+    undecided: list[str] = []
     pat = citation_re(kind, number)
 
     for rel, blob in blobs.items():
@@ -141,7 +164,8 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
                 detail[top[0]].append(f"{rel}:{blob[:m.start()].count(chr(10)) + 1}")
             else:
                 unresolved += 1
-    return by_name, won, unresolved, sites, detail
+                undecided.append(f"{rel}:{blob[:m.start()].count(chr(10)) + 1}")
+    return by_name, won, unresolved, sites, detail, undecided
 
 
 def selftest() -> list[str]:
@@ -192,6 +216,8 @@ def main() -> int:
     ap.add_argument("--tokens", action="append", default=[],
                     metavar="STEM=tok,tok", help="extra discriminating tokens")
     ap.add_argument("--show", type=int, default=0, help="print N awarded sites each")
+    ap.add_argument("--show-unresolved", action="store_true",
+                    help="print every site the margin could not decide")
     a = ap.parse_args()
 
     repo = Path(a.repo).resolve()
@@ -210,7 +236,7 @@ def main() -> int:
                 tokens[c] |= {t.strip().lower() for t in toks.split(",") if t.strip()}
 
     blobs = corpus(repo)
-    by_name, won, unresolved, sites, detail = attribute(
+    by_name, won, unresolved, sites, detail, undecided = attribute(
         blobs, cands, tokens, kind, a.number, a.window, a.margin)
 
     print(f"{repo.name}{a.dirname}/{a.number} — {len(blobs)} tracked text files, "
@@ -224,6 +250,11 @@ def main() -> int:
             print(f"          {s}")
     print(f"  UNRESOLVED  {unresolved}  ({unresolved / sites:.0%} of sites)" if sites
           else "  UNRESOLVED  0")
+    # The UNRESOLVED bucket is where an audit's findings hide, so it must be
+    # readable from the report itself -- otherwise every use ends in a manual
+    # grep that re-derives the population by hand and gets it slightly wrong.
+    for u in (undecided if a.show_unresolved else undecided[:0]):
+        print(f"      {u}")
 
     for c in cands:
         if won[c] == 0 and by_name[c] == 0 and unresolved:
@@ -235,7 +266,16 @@ def main() -> int:
     ranked = sorted(cands, key=lambda c: -(won[c] + by_name[c]))
     lead = (won[ranked[0]] + by_name[ranked[0]]) - (won[ranked[1]] + by_name[ranked[1]])
     decided = sites - unresolved
-    if decided == 0 or lead <= 0:
+    if decided and 0 < lead < decided * TIE_FRACTION:
+        dates = {c: first_seen(repo, f"{a.dirname}/{c}.md") for c in cands}
+        first = min(cands, key=lambda c: dates[c])
+        print(f"  → VERDICT: TIE by weight — lead {lead} is under {TIE_FRACTION:.0%} "
+              f"of {decided} decided site(s). Falling back to CREATION ORDER, the "
+              f"allocator's own semantics:")
+        for c in cands:
+            print(f"        {dates[c]}  {c}")
+        print(f"    {first} held the number first, so it KEEPS it; the other moves.")
+    elif decided == 0 or lead <= 0:
         print("  → VERDICT: UNDECIDABLE mechanically — arbitrate by hand.")
     elif unresolved > decided:
         print(f"  → VERDICT: WEAK lead for {ranked[0]} (+{lead}), but UNRESOLVED "

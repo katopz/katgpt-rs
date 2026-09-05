@@ -1,6 +1,6 @@
 # Issue 725 — the numbering gate covers ONE repo; 35 duplicates and 7 broken allocators sat in the other fifteen
 
-**Status:** T1-T3 + T4a DONE (instrument landed, all 7 allocator defects repaired, riir-ai's 6 duplicates arbitrated, 2026-09-05). T4b/T5 OPEN — 35 tracked duplicates across 4 repos are ratcheted so no new one can land; the renames need a per-site citation rewrite.
+**Status:** T1-T3 + T4a + T4b(riir-ai, 6/6) DONE (instrument landed, all 7 allocator defects repaired, riir-ai's 6 duplicates arbitrated, 2026-09-05). T4b(rest)/T5 OPEN — 29 tracked duplicates across 3 repos are ratcheted so no new one can land; the renames need a per-site citation rewrite.
 
 ## The finding, in one sentence
 
@@ -89,7 +89,38 @@ the instrument reading it was blind.
       separator-insensitive. **A zero in a bucketed audit is a claim about the
       vocabulary, not about the world.**
 
-- [ ] **T4b — execute the renames.** Owner-by-owner, by CITATION WEIGHT
+- [x] **T4b(riir-ai) — all 6 executed 2026-09-05.** `.plans` 175->568 (LatCal, 20
+      citations), 182->567 (civ 2D map, 9), 229->566 (GM tool/day-night, 8),
+      313->569 (step-attribution, 38 + the companion bench doc); `.research`
+      020->362 (Orbit/OFT, 5), 148->363 (per-tick salience, 6). **riir-ai dup 6 -> 0**;
+      its pin is now 0 so a regression reds. Workspace total 35 -> 29.
+
+      Four things the execution taught that the T4a measurement could not:
+
+      1. **The section number beats the prose.** On `.research/148` the token
+         attributor put 11 sites on the salience guide and 10 of them were the WASM
+         vessel — the two documents describe the same subsystem from opposite sides,
+         so `gate`/`npc`/`tick`/`emit` do not discriminate at all. What did: every
+         vessel citation carries §1.2/§1.4/§3 and every salience one §5. A citation's
+         own sub-reference is a stronger signal than its context when two documents
+         share a subject, and no token widening would have found it.
+      2. **A third document is often in the population.** `Plan 313` in riir-ai also
+         means **katgpt-rs**'s Plan 313 (AC-Prefix) at ~8 sites; `Research 148` also
+         means katgpt-rs's Hydra Effect at one; `Research 020` also means katgpt-rs's
+         TurboQuant. Bare cross-repo citations are ambiguous by construction and a
+         rename cannot fix them — each renumber note says so.
+      3. **Select inclusively, never exclusively.** `.plans/175`'s candidate set was
+         built by dropping lines that mention the winner's vocabulary, and that
+         silently dropped `.plans/183:6`, which cites five plans on ONE line including
+         the loser. The inclusive residual grep — search for the LOSER's vocabulary
+         among what remains — caught it. All other pairs used the inclusive form.
+      4. **A tie needs a rule, not a nudge.** `.plans/313` was 45 vs 41 over 82 sites
+         and had pointed the other way on the narrow-dialect pass. `TIE_FRACTION = 0.10`
+         now names that, and the fallback is creation order (the allocator's own
+         semantics) — confirmed independently by source-artifact cost: SwiR's number is
+         in `[[test]]` filenames, the step-attribution plan's in nothing.
+
+- [ ] **T4b(rest) — riir-clippy 4, riir-train 13, seal-game-editor 12.** Owner-by-owner, by CITATION WEIGHT
       per Issue 724 T2's precedent (the file with the most inbound mentions keeps
       the number; the other moves to a fresh one and its citations are updated).
       Ratcheted at the measured count per repo, so a new collision reds while the
