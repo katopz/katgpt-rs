@@ -325,9 +325,13 @@ def check_group(
     # Name every target explicitly rather than `--tests/--benches/--examples`:
     # the plural flags build EVERY eligible target in the package at this
     # feature set, which is work the per-row path never did. Measured on
-    # riir-clippy (44 rows / 25 groups, cold dirs both arms): plural flags
-    # cost +9% CPU-seconds against the per-row path; naming the group's own
-    # targets instead measured -11% CPU / -12% wall.
+    # riir-clippy (44 rows / 25 groups, cold dirs, TWO pairs run in both
+    # orders): plural flags cost +9% CPU-seconds against the per-row path;
+    # naming the group's own targets instead measured -11% and -8% CPU-s.
+    # Read the CPU number, not the wall one — wall FLIPPED SIGN between the
+    # two orderings (-12%, then +13%) on a box with sibling builds live, and
+    # 25 vs 44 cargo invocations is too small a difference to separate from
+    # load at this repo's size. Verdicts were identical in all four runs.
     for row in group.rows:
         cmd += [KIND_FLAG[row.kind], row.name]
     env = dict(os.environ)
@@ -404,6 +408,10 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
             f"{mark} [{i}/{n}] {res.verdict:<15} {res.seconds:6.1f}s "
             f"{res.row.label}{suffix}"
             + (f"  ({res.detail})" if res.detail else ""),
+            # Progress belongs on stderr under --json, for the same reason the
+            # repo header does: stdout is the machine-readable document, and a
+            # long sweep still wants a live log.
+            file=sys.stderr if args.json else sys.stdout,
             flush=True,
         )
 

@@ -574,9 +574,15 @@ a target at a SUPERSET of its own row and seeing it succeed proves nothing —
 the extra features may supply the very import the row forgot, which is the
 failure the whole report exists to catch (`--all-features` builds every wrong
 row). Equality is therefore the only batchable relation, and it is worth
-batching: **1,829 rows collapse to 1,070 groups (1.71x)**, and each collapsed
-row saves a whole dependency-graph rebuild, which is what the ~28 s mean is
-made of. Verdicts stay per-target — attributed from `--message-format=json`
+batching: **1,829 rows collapse to 1,070 groups (1.71x)** cargo invocations.
+Do not read that ratio as the speedup. Measured on riir-clippy (44 rows / 25
+groups, cold dirs, two pairs run in both orders): **-11% and -8% CPU-seconds**,
+while **wall-clock flipped sign** (-12%, then +13%) on a box with sibling
+builds live — 19 saved invocations over one package whose feature sets share a
+dependency graph is not separable from load. The mechanism that pays is the
+per-invocation resolve, so expect more where a feature set swings the graph
+(riir-train's CUDA sets) and near-nothing where it does not. Verdicts stay
+per-target — attributed from `--message-format=json`
 `compiler-message`/`compiler-artifact` target names, with `--keep-going` so
 one red target does not truncate the run. A row with **neither** an error nor
 an artifact reports **UNSEEN, never BUILDS**: silence is not evidence, and
