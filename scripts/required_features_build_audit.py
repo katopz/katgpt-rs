@@ -88,6 +88,11 @@ class Row:
     name: str
     features: list[str]
     path: str
+    # The directory holding this package's Cargo.toml. Needed because a
+    # workspace-EXCLUDED package cannot be reached by `-p` from the repo root:
+    # cargo refuses with "cannot specify features for packages outside of
+    # workspace", which is not a verdict about the row.
+    crate_dir: str = ""
     # The package's own declared features and dependency names, carried so the
     # free static pass can rule on a row without invoking cargo.
     feats: set[str] = field(default_factory=set)
@@ -174,11 +179,32 @@ def parse_rows(repo: Path) -> list[Row]:
                         name=name,
                         features=list(req),
                         path=str((manifest.parent / rel).resolve()),
+                        crate_dir=str(manifest.parent.resolve()),
                         feats=pkg_feats,
                         deps=pkg_deps,
                     )
                 )
     return out
+
+
+# cargo's exact refusal when `-p X` names a package the workspace EXCLUDES.
+# Deliberately matched as a whole phrase: "outside of workspace" alone also
+# appears in unrelated path diagnostics.
+OUTSIDE_WS = "cannot specify features for packages outside of workspace"
+
+
+def outside_workspace(proc: subprocess.CompletedProcess[str]) -> bool:
+    """Did cargo refuse because the package is not a workspace member?
+
+    This is NOT a verdict about the row — the target may build perfectly from
+    its own directory (measured: riir-chain `bench_011_anomaly_sink_goat`, in
+    the deliberately-excluded `riir-chain-engine-bridge`, BUILDS there). Left
+    unhandled it lands in UNSEEN, which the report correctly refuses to call a
+    pass, but it is silence where a verdict was available — and a repo with
+    several excluded crates accumulates silent UNSEENs indistinguishable from
+    an attribution failure.
+    """
+    return proc.returncode != 0 and OUTSIDE_WS in ((proc.stderr or "") + (proc.stdout or ""))
 
 
 def classify(proc: subprocess.CompletedProcess[str]) -> tuple[str, str]:
@@ -460,6 +486,27 @@ def check_group(
     except OSError as e:
         el = time.monotonic() - t0
         return [Result(r, ERROR, el, str(e)) for r in group.rows]
+    # A workspace-EXCLUDED package cannot be reached by `-p` from the repo
+    # root. Retry from the crate's own directory, dropping `-p` (which is what
+    # cargo objects to) and letting the crate's own manifest select it. Its
+    # target dir is its own, so this does not touch the repo-root build.
+    if outside_workspace(proc) and group.rows[0].crate_dir:
+        retry = [c for c in cmd if c not in ("-p", group.package)]
+        try:
+            proc = subprocess.run(
+                retry,
+                cwd=group.rows[0].crate_dir,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            el = time.monotonic() - t0
+            return [Result(r, TIMEOUT, el, f"> {timeout}s (excluded-crate retry)") for r in group.rows]
+        except OSError as e:
+            el = time.monotonic() - t0
+            return [Result(r, ERROR, el, str(e)) for r in group.rows]
     elapsed = time.monotonic() - t0
     # A row naming a feature the package does not define fails BEFORE any unit
     # is compiled, so there is nothing to attribute — the whole group is invalid.
@@ -692,6 +739,33 @@ def selftest() -> None:
         got = read_prior(lg)
         if got != {"r:p:test:e": BUILDS, "r:p:bench:f": FAILS}:
             print(f"SELFTEST FAILED: read_prior log → {got}", file=sys.stderr)
+            raise SystemExit(2)
+
+    # outside_workspace(): a workspace-EXCLUDED package refused by `-p`.
+    # Pinned in BOTH directions because each failure is silent and opposite:
+    # too narrow and the row falls back into UNSEEN (silence where a verdict
+    # was available); too wide and an ordinary compile error is retried from
+    # the crate dir and could be reported as BUILDS. rc==0 must never match,
+    # whatever the text says — a success is not a refusal.
+    class _P:
+        def __init__(self, rc, err):
+            self.returncode, self.stderr, self.stdout = rc, err, ""
+
+    ow_cases = [
+        (_P(101, "error: cannot specify features for packages outside of workspace\n"), True),
+        (_P(101, "error[E0432]: unresolved import `x`\n"), False),
+        # The phrase alone, at rc 0, is not a refusal.
+        (_P(0, "cannot specify features for packages outside of workspace"), False),
+        # A near-miss that must NOT match: cargo says this about paths too.
+        (_P(101, "error: package is outside of workspace\n"), False),
+    ]
+    for proc, want in ow_cases:
+        if outside_workspace(proc) != want:
+            print(
+                f"SELFTEST FAILED: outside_workspace rc={proc.returncode} "
+                f"{proc.stderr!r} → {not want}, want {want}",
+                file=sys.stderr,
+            )
             raise SystemExit(2)
 
     # static_invalid(): the free pass. Its FALSE-POSITIVE direction is the
