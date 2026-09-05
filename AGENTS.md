@@ -251,7 +251,16 @@ because nothing ran the gate.
 `.github/workflows/docs_gate.yml` runs it **per-push** on ubuntu-latest. Both
 choices are deliberately the inverse of the full gate's, and both files say why:
 this gate has no `cfg(target_os)` surface so platform cannot change its verdict,
-and it costs ~3s rather than >13 min.
+and it costs ~11s rather than >13 min.
+
+That number was **~3s when this sentence was written and is now ~11s**, and the
+correction is worth more than the figure: `percentile_floor_gate.py` alone is
+**7.0s of it** — it walks all 2,330 `.rs` files and tokenizes them — and it has
+been since it landed on 2026-09-03, so this line was stale for three days while
+reading as current. Measured 2026-09-06, per check: percentile 7.01s ·
+bench_doc_audit 0.88 · cargo_comment_audit 0.86 · count_features 0.81 ·
+orphaned_attr 0.62 · cfg_gated_floor 0.52 · everything else ≤0.10s. Re-time it
+before quoting it; a cost in prose is a claim, exactly like a count.
 
 Per-push is scoped to **`main` only** (owner call 2026-09-03, was
 `[main, develop]`): develop pushes no longer fire the gate, so the

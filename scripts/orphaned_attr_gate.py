@@ -34,7 +34,11 @@ Measured across all contract repos at the fix (2026-09-03, when the workspace
 was 19): **zero** sites. Not "few" — zero. So the pin is 0 and any future
 occurrence is the push that introduces it. **Re-measured 2026-09-04 over the
 live 16** (the three retired repos left for `git/obsolete/`): still zero in
-every one of them.
+every one of them. **Re-measured 2026-09-06**, after ~500 sibling commits:
+still zero in all 16 — **11,132 `.rs` files, 49,624 outer-`#[cfg]` sites, 0
+orphaned**. The site count is the part worth keeping: a zero over 49,624 sites
+is evidence; a zero over a walk that has gone blind is not, which is why the
+PASS line prints the population it saw rather than the one it assumed.
 
 Do not read that as this gate's verdict. It audits **one** repo per
 invocation, and until 2026-09-04 its PASS line printed "measured 0 across 19
