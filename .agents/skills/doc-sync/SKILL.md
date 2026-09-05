@@ -303,6 +303,7 @@ file>` recovers any of them).
 
 | Date | Scope | Verdict | Record (primary fix commits) |
 |---|---|---|---|
+| 2026-09-06 | riir-clippy post-Issue-071 window | CLEAN — no gaps: the fix landed its own docs (`9ebac59` carries the `.docs/11_domains/docker.md` header + degradation § + tier-2 agreement row AND the AGENTS.md issue-071 row); book grep verified (registry-blocked / `classify()` / `Check complete` all present); 12-folder `.docs/` shape unchanged; no landed-but-undocumented commits (HEAD == origin/develop, clean tree). No commit. | — |
 | 2026-09-05 eve | 15-repo sweep | 4 gaps: kat `incidence_algebra` book sync, sdk `stealth_agreement_contagion` row, dapps `item_nft`/Issue-122 bullet, clippy Issue-067 digest; riir-ai deferred (69 dirty, live arc) | kat `dbc82a0f` · sdk `8596e6e` · dapps `c02f3b2` · clippy `8c16e88` |
 | 2026-09-05 | post-substrate-first-audit 15-repo sweep | 1 gap: game-sdk scenelab book sync (Proposal 029/030 six surfaces + riir-e2e enumeration rot) | sdk `8839f0a` |
 | 2026-09-05 | clippy rust_perf ledger catch-up (Batch-112 handoff window) | 1 gap: highlights table + category ledger + corpus.rs module header ~9 batches stale behind their own prose | clippy `dfd069e` |
