@@ -268,6 +268,11 @@ pub use ignition::{IgnitionSchedule, ignition_time, order_by_ignition_into};
 #[cfg(feature = "limit_fixture")]
 pub mod limit_fixture;
 pub mod conformal;
+// riir-ai Issue 874 T1 / Research 364 — thought × agent incidence-mask
+// algebra (α counts, tier weights, shared/private + retention counter,
+// Hall feasibility, mask audit). Opt-in; zero deps; zero-alloc hot path.
+#[cfg(feature = "incidence_algebra")]
+pub mod incidence;
 // Issue 837 / riir-ai Research 359 — consumption-weight evidence tripwire
 // (D-SCAN transliteration): σ-gate metrics + Kendall τ + split-conformal
 // benign-quantile threshold. Measured verdict (riir-ai Bench 832): the rank-

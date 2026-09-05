@@ -176,6 +176,18 @@ cond_audit = ["stale_residual"]
 # mmorpg `8c99624`) LANDED; promotion per the no-default-consumer rule.
 cadence_gate = []
 
+# incidence_algebra (riir-ai Issue 874 T1 / Research 364 — ThoughtComm,
+# arXiv:2510.20733): generic thought × agent incidence-mask algebra over
+# masks the stack already builds by construction — per-thought agreement
+# count α_j, the monotone σ-saturated tier ladder (routing_weight: α=1 is
+# EXACTLY the unweighted path; contagion_strength: α=1 is EXACTLY zero
+# crowd strength — the Plan-019 CLR fix), shared/private split + the
+# private-retention counter (consensus ≠ accuracy), Hall feasibility
+# (Hopcroft–Karp, zero-alloc scratch), mask audit with the density alert,
+# and deterministic tier ordering (α desc, index asc — the Issue-849
+# total-order lesson). Zero deps, zero-alloc hot path. Opt-in until a
+# consumer promotes (the no-default-consumer rule).
+incidence_algebra = []
 # support_regime (Issue 693 / Research 513, arXiv:2608.22764 — LpWM: A Case
 # for Sparse Representations in World Models, Kuang et al. 2026-08-24): the
 # consecutive-tick TEMPORAL consumer of the iou kernel — support instability
