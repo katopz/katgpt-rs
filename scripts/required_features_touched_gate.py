@@ -259,7 +259,16 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("repo", nargs="?", default=".", help="repo to gate")
     ap.add_argument("--base", default="HEAD~1", help="diff base (default HEAD~1)")
-    ap.add_argument("--head", default="HEAD", help="diff head (default HEAD)")
+    ap.add_argument(
+        "--head",
+        default="HEAD",
+        help="diff head (default HEAD). NOTE it selects the changed FILE LIST "
+        "only — a row's current definition always comes from the CHECKOUT, "
+        "because that is what would be built. The two coincide in the case "
+        "that matters (CI, where the checkout IS head); passing an older "
+        "--head widens the window rather than narrowing it, which is the safe "
+        "direction but is not what the flag's name suggests",
+    )
     ap.add_argument("--src-fanout", action="store_true",
                     help="also select rows in a package whose own src/ changed")
     ap.add_argument("--max-rows", type=int, default=24,
