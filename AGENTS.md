@@ -390,9 +390,17 @@ above-highwater ceiling passed over a corrupted allocator and a clean directory
 identically. Repairing one of them **immediately exposed a stale allocator
 underneath it** (riir-train `.plans` max 375 > 374) that had been invisible for
 as long as the file was corrupt. All 7 allocator defects are repaired and
-pinned at 0; the 35 duplicates are a **ratchet at the measured count**, because
-resolving one is a citation-weight arbitration (Issue 724 T2) across repos this
-session does not own, and a red nobody can clear gets ignored.
+pinned at 0. The 35 duplicates were then RESOLVED DOWN TO 12 the same day
+(Issue 725 T4b/T4c): **riir-ai 6 → 0** (T4a's `scripts/citation_weight.py`
+attribution instrument — by-name citations are 0-2 per side and TIED in four
+of six pairs, so `Plan N` mentions are ATTRIBUTED by token overlap with an
+UNRESOLVED bucket and a zero-is-not-zero guard measured on `.plans/229`;
+175→568, 182→567, 229→566, 313→569, R020→362, R148→363), **riir-clippy 4 → 0**
+(its Issue 069, `58e7c1d`), **riir-train 13 → 0** (its Issue 514, `103ed351`
+— hand reads overturned the four UNDECIDABLE rows). The remaining **12 are
+all in read-only seal-game-editor**, ratcheted at the measured count; the
+lesson over the pessimism: the instrument is advisory — the corpus does not
+distinguish near-synonyms, but reading the actual sites does.
 
 Both sweeps are **deliberately not** in `docs_gate.sh`'s `CHECKS`: CI has a single
 checkout, so it would derive an empty population and print a confident green
@@ -1024,6 +1032,34 @@ system that duplicates already-shipped substrate under a different name
   primitive shortfalls were filed as `.issues/726` / `.issues/727` (both resolved same day) rather than
   absorbed into tolerances. Durable artifacts: `tests/common/ab_timing.rs` (interleaved median-of-ratios +
   best-of-N + loud 0-ns FAIL) and `.docs/10_audits/ci_compile_vs_execute_axis.md`.
+- **Issue 725 — the numbering gate covers ONE repo; 35 duplicates and 7 broken allocators sat in the other fifteen** RESOLVED
+  (T1-T4c 2026-09-05; file removed per noise-reduction — full narrative in git history). The sweep
+  (`scripts/numbering_drift_sweep.py`, workstation-only, derived population, committed expectations in
+  `numbering_drift_floors.txt`) found katgpt-rs clean while four siblings carried 35 duplicates + 5 malformed
+  `.highwater` files (`echo -n` writing its own flag into the file, disarming the above-highwater check) + 2 stale
+  allocators. T1 split ABSENT from MALFORMED in `numbering_gate.py` (`read_highwater()` → `(value, malformed_raw)`,
+  selftest case 6 canaries the collapse). T3 repaired all 7 allocator defects, pinned 0 everywhere. T4a landed
+  `scripts/citation_weight.py` (advisory arbitration instrument; by-name citations tie while `Plan N` carries the
+  weight, so ambiguous mentions are ATTRIBUTED by token overlap on a strict margin with an UNRESOLVED bucket that
+  is printed and never folded into a winner; a clean-zero gets a loud warning — `.plans/229` scored 0 while two
+  citations existed under different spellings). T4b resolved **riir-ai 6 → 0** (`.plans` 175→568, 182→567,
+  229→566, 313→569; `.research` 020→362, 148→363 — 86 citation rewrites; four execution lessons recorded:
+  section number beats prose on same-subsystem pairs, third cross-repo documents share numbers, select
+  inclusively never exclusively, ties break by creation order per `TIE_FRACTION`), **riir-clippy 4 → 0** (its
+  Issue 069 `58e7c1d`, 17 citation rewrites), **riir-train 13 → 0** (its Issue 514 `103ed351`, 14 commits —
+  hand reads overturned the UNDECIDABLE verdicts; known cost: number-baked test filenames + ~30 source comments
+  stay stale for the next code-touching session). The issue's own author was the ratchet's first catch (a
+  `513_` allocation from a stale highwater read went red in minutes; renumbered 514). Remaining: **seal-game-editor
+  12, READ-ONLY** to these sessions — ratchet at the measured count, report only. T5 (siblings run the per-push
+  gate themselves) deferred `[-]` — `numbering_gate.py`'s pins file is katgpt-rs-scoped; reopen when a second repo
+  wants its own per-push gate. Record: the three scripts + `numbering_drift_floors.txt` + this paragraph.
+  **The ratchet's next catches landed at this closeout, minutes after the file's removal** — fresh drift the
+  sweep found on the verification run, both repaired same-day: riir-clippy 2 stale allocators (`.plans` 85→86
+  for Plan 086, `.research` 136→137 for Research 137, both landed unbumped by the prior session — `4db7a18`) and
+  riir-train `.issues/511` dual-allocated (the genrm-corpus issue took 511 from a stale highwater read while the
+  Sep-04 all-features census held it; citation weight keeps the census — AGENTS.md test-gate row + Issue 513 vs
+  zero refs — and the genrm file moved 511→518, highwater bumped — `e938cdc0`). Sweep PASSES at closeout:
+  12 tracked duplicates (all seal-game-editor) · 0 stale · 0 malformed.
 - **Issue 724 — `.plans/` numbering collisions regrew after a hand-sweep; nothing gated the allocator** RESOLVED
   (T2/T3/T4 2026-09-04 `24e349e9`/`28c353a1`/`322769b2`; **T4b + T1/T5 closeout 2026-09-04 `866df2a7`**;
   file removed per noise-reduction — full narrative in git history). The tracked `449` collision
