@@ -1,7 +1,7 @@
 # Plan 585: Usage-Rate (Mass/Age) KV Eviction Primitive + Generation-Runaway Canary
 
 **Date:** 2026-08-31
-**Status:** DONE (2026-09-02) — Phases 1–3 landed; **MIXED GOAT verdict, opt-in** (Bench 697: G1–G4 PASS, G8 regime-bounded — 2–4× raw-H2O recall at cap ≥ 32, one honest miss at the 8%-budget extreme; no consumer = no promotion). Phase 4 stays consumer-pull-gated ([-] below). Record: [`.benchmarks/697_usage_rate_eviction_goat.md`](../.benchmarks/697_usage_rate_eviction_goat.md). **ADDENDUM OPEN (2026-09-04, Research 531):** the null-hypothesis arm (prompt-pinned per-head random) is missing from the bench — T3.6/T3.7 below; G8 must be re-read against it before any future promotion.
+**Status:** DONE (2026-09-02) — Phases 1–3 landed; **MIXED GOAT verdict, opt-in** (Bench 697: G1–G4 PASS, G8 regime-bounded — 2–4× raw-H2O recall at cap ≥ 32, one honest miss at the 8%-budget extreme; no consumer = no promotion). Phase 4 stays consumer-pull-gated ([-] below). Record: [`.benchmarks/697_usage_rate_eviction_goat.md`](../.benchmarks/697_usage_rate_eviction_goat.md). **ADDENDUM CLOSED (2026-09-06):** the null-hypothesis arm + protection factorial landed (T3.6–T3.9, `6b840f49`) — signal value CONFIRMED beyond protection (mass_age beats the prompt-pinned random null 5.0×/4.8×/3.8× at cap 32/48/64; collapse non-vacuity confirmed at cap 16), and the standing promotion rule is now `runaway_gate` ∧ `beats_random_prompt_pin` ∧ the protection factorial. G8 verdicts in any future promotion must be read against the controlled null.
 **Research:** [katgpt-rs/.research/523_H2O_Norm_Age_Normalized_KV_Eviction.md](../.research/523_H2O_Norm_Age_Normalized_KV_Eviction.md)
 **Source paper:** [arXiv:2608.19920](https://arxiv.org/abs/2608.19920) — "Learning how to Forget" (Seeger et al., AWS, 2026)
 **Target:** `katgpt-rs/crates/katgpt-core/src/kv_eviction/` (new module) + Cargo feature `usage_rate_eviction`
@@ -58,7 +58,7 @@ House pattern: the primitive consumes caller-supplied observational signal (`sus
 - No training anywhere (riir-train Plan 367 owns co-adaptation).
 - Bonsai-GDN: no KV eviction on recurrent state — out of scope by architecture.
 
-## Addendum (2026-09-04) — the null-hypothesis arm (Research 531)
+## Addendum (2026-09-04, CLOSED 2026-09-06) — the null-hypothesis arm (Research 531)
 
 arXiv:2609.03430 ("Random Attention", Salesforce) shows prompt-pinned per-head
 uniform-random eviction matches the strongest scored evictors on reasoning tasks

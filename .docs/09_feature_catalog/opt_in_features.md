@@ -3093,3 +3093,84 @@ consumer A/B). **Opt-in with no standalone GOAT** — the substrate's gate is
 its unit suite; a consumer-level A/B is the promotion instrument when a
 routing consumer materializes (the same posture `signed_coupling` shipped
 with).
+
+## 91. usage_rate_eviction — mass/age KV eviction scoring + the generation-runaway canary (Plan 585)
+
+Distilled from H2O-normalized (arXiv:2608.19920 "Learning how to Forget",
+Seeger et al., AWS 2026 §3.2/A.4.3) via Research 523: the paper's normalized
+H2O score `cum_mass / max(1, age)` as an O(1)/row/step incremental estimator
+over caller-supplied attention-mass increments (the `suspect_indices` house
+pattern — katgpt-core stays leaf-clean; mass producers are consumer-side,
+riir-ai Issue 836 pull-gated). Fixes raw-H2O's age bias (an old-but-cold row
+ties a young-but-hot row at equal cumulative mass); per-(b,h) selection by
+construction; lowest-k eviction selection with pinned-sink exclusion +
+`float_order` NaN-safe comparators + ascending-index tie-break (the Issue-849
+determinism discipline).
+
+- **`observe` / `score` / `UsageScoreTable`** — incremental mass+age state,
+O(1) per row per step; `select_evict` / `select_evict_into` lowest-k with
+pinned-sink mask
+- **`RunawayStats` / `runaway_gate`** — the R/p128 generation-runaway canary
+(Bench 696 lineage): output-length runaway is invisible to perplexity-style
+and tolerant substring metrics — the paper measured 35–128× blowups while
+SubEM read fine. Any lossy KV policy promoted to default MUST pass it on a
+sealed long-context eval
+- **`PolicyControl` / `beats_random_prompt_pin`** (Bench 697 null-control
+addendum, Research 531) — the strict null bar: a candidate policy must beat
+the prompt-pinned per-head random baseline at matched budget AND matched
+protection; equal recall hands the slot to the cheaper null; NaN fail-closed.
+Standing promotion rule: `runaway_gate` ∧ `beats_random_prompt_pin` ∧ the
+protection factorial
+
+**Bench 697 verdict — MIXED, opt-in:** G1–G4 PASS; 2–4× raw-H2O deep-needle
+recall at cap ≥ 32 (signal value CONFIRMED against the controlled null —
+5.0×/4.8×/3.8× at cap 32/48/64); one honest miss at the 8%-budget extreme
+(cap 16, where even the random null's geometric survival beats mass_age);
+G8 regime-bounded. Round cost 1.22 ns/row (4090) / 1.78 ns/row (M3), ≥5×
+under the paper's +32–43% serving margin — the paper's kernel-pass margin
+lives where scoring rides paged state (T4.1 byproduct kernel, Issue 836
+pull-gated). The registered "skip the kernel, ship the null" alternative is
+a measured cell: `rand_keystone` = 100% needle recall at every cap with zero
+scoring work — the null ships only with a structural keystone oracle. No
+consumer = no promotion (the no-default-consumer rule); promotion re-gate =
+an Issue-836 consumer + real-corpus re-run against the controlled null.
+
+## 92. contrastive_scope — the input-scope gate (Issue 674 / Research 493; DEFAULT-ON since 2026-08-20)
+
+LittleLearner scope-gated epistemics (arXiv:2608.13545):
+`ContrastiveScoreTable` (two-corpus log-odds, BLAKE3-committed,
+freeze/thaw-able), `scope_score` D(x) (Naive-Bayes log-LLR sparse GEMV), the
+epistemic haircut ĉ = c·sigmoid(−κ·D) + decline wiring, + the paired OOS
+probe battery (the Report-the-Floor extension). "A relevance check is not a
+scope check" — a syntactic pass is not evidence the input is in-domain.
+
+**DEFAULT-ON since 2026-08-20** (Bench 669 T5 rule): the riir-clippy consumer
+adoption landed (their Bench 040 / Plan 016 — the input-scope gate at the
+`heal()` seam: `ScopeModel` over the domain corpus vs a canonical non-Rust
+corpus; out-of-scope inputs declined 8/8 vs served 8/8 un-gated;
+in-distribution healing bit-identical over the full corpus; 529 ns/input;
+steady-state alloc delta −1). κ/θ re-pinned by the consumer from its measured
+gap (θ=0, κ=4.5). No papaya dep — the built table is immutable (lock-free
+reads by construction). Pure modelless (counts + log2 + sigmoid + BLAKE3);
+zero runtime cost unless a table is constructed.
+
+## 93. anti_common_mode + anchored_reach — the Research 433 (RVM) pair (Issue 696 T1/T2)
+
+Both from arXiv:2608.23664 (RVM §C.3 / Eq. 7), landed together 2026-08-29,
+independent features:
+
+- **`anti_common_mode`** (T1) — the DT2 dynamic-tracking reward shape as a
+  scalar gate; live consumer: the riir-ai riir-poc Issue-696-T3 CLR
+  crowd-panic re-enable PoC (the `tick_swarm_emotions_collective` promotion
+  is the named future consumer).
+- **`anchored_reach`** (T2) — the anchored signed-reach blend
+  `out = anchor + A·(cand − anchor)`: scalar or per-axis A, zero-alloc
+  `*_into` forms, BIT-IDENTICAL pole fast paths at A ∈ {0, 1} (the composed
+  form loses bits: 1e-30 + (1e-40 − 1e-30) = 0.0), and the A(r) schedule
+  constructors (linear r / house-sigmoid 2σ(kr)−1 / sign-flip (2r−1)/β̄).
+  Five regimes: clamp / blend / adopt / overshoot / repel.
+  Sigmoid-not-softmax by construction (pointwise — RVM never normalizes
+  across the group). The A=1 pole is the recorded operator behind riir-ai's
+  belief-lead dead-reckon read (their Bench 796: 2.5–5× better mean lead
+  error than the frozen belief, bits-equal to this fast path). Opt-in POC —
+  promotion via the T4 consumer A/Bs.
