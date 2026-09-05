@@ -129,10 +129,11 @@ def candidates(repo: Path, dirname: str, number: str) -> list[str]:
                   and int(f.name.split("_", 1)[0]) == n)
 
 
-def attribute(blobs, cands, tokens, kind, number, window, margin):
+def attribute(blobs, cands, tokens, kind, number, window, margin, path_affinity=False):
     by_name = {c: 0 for c in cands}
     won = {c: 0 for c in cands}
     unresolved, sites = 0, 0
+    path_hits = {c: 0 for c in cands}
     detail = {c: [] for c in cands}
     undecided: list[str] = []
     pat = citation_re(kind, number)
@@ -148,6 +149,17 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
                 continue                       # self-reference inside the pair
             sites += 1
             ctx = blob[max(0, m.start() - window): m.end() + window].lower()
+            # PATH affinity, reported apart from context score. Measured on
+            # riir-ai .plans/313, the hardest pair resolved by hand: the citing
+            # file's own PATH was the strongest signal in the corpus
+            # (`swir_validation/*.rs` and `bench_313_swir_*.rs` on one side,
+            # `cognitive_branches_runtime/step_attribution_bridge.rs` on the
+            # other), and no amount of context-token widening reached it. Kept
+            # separate and additive rather than folded in, so a corpus where
+            # paths do NOT discriminate (riir-train: every document is "lora
+            # training") degrades to the context score instead of inventing a
+            # verdict out of directory names.
+            path_l = rel.lower()
             # Separator-insensitive too: measured on riir-ai .plans/229, a
             # plain substring test scored the day/night plan at ZERO because
             # every citing site spells it `day/night` and `riir-gm-tool` while
@@ -157,6 +169,12 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
             flat = re.sub(r"[^a-z0-9]", "", ctx)
             score = {c: sum(1 for t in tokens[c] if t in ctx or t in flat)
                      for c in cands}
+            if path_affinity:
+                pflat = re.sub(r"[^a-z0-9]", "", path_l)
+                for c in cands:
+                    hits = sum(1 for t in tokens[c] if t in path_l or t in pflat)
+                    score[c] += hits
+                    path_hits[c] += hits
             ranked = sorted(score.items(), key=lambda kv: -kv[1])
             top, second = ranked[0], (ranked[1] if len(ranked) > 1 else (None, 0))
             if top[1] >= 1 and top[1] - second[1] >= margin:
@@ -165,7 +183,7 @@ def attribute(blobs, cands, tokens, kind, number, window, margin):
             else:
                 unresolved += 1
                 undecided.append(f"{rel}:{blob[:m.start()].count(chr(10)) + 1}")
-    return by_name, won, unresolved, sites, detail, undecided
+    return by_name, won, unresolved, sites, detail, undecided, path_hits
 
 
 def selftest() -> list[str]:
@@ -216,6 +234,8 @@ def main() -> int:
     ap.add_argument("--tokens", action="append", default=[],
                     metavar="STEM=tok,tok", help="extra discriminating tokens")
     ap.add_argument("--show", type=int, default=0, help="print N awarded sites each")
+    ap.add_argument("--path-affinity", action="store_true",
+                    help="also score the CITING FILE'S PATH against each stem")
     ap.add_argument("--show-unresolved", action="store_true",
                     help="print every site the margin could not decide")
     a = ap.parse_args()
@@ -236,8 +256,8 @@ def main() -> int:
                 tokens[c] |= {t.strip().lower() for t in toks.split(",") if t.strip()}
 
     blobs = corpus(repo)
-    by_name, won, unresolved, sites, detail, undecided = attribute(
-        blobs, cands, tokens, kind, a.number, a.window, a.margin)
+    by_name, won, unresolved, sites, detail, undecided, path_hits = attribute(
+        blobs, cands, tokens, kind, a.number, a.window, a.margin, a.path_affinity)
 
     print(f"{repo.name}{a.dirname}/{a.number} — {len(blobs)} tracked text files, "
           f"{sites} ambiguous `{kind} {int(a.number)}` site(s)")
@@ -245,6 +265,8 @@ def main() -> int:
         print(f"  {c}")
         print(f"      tokens    {sorted(tokens[c])}")
         print(f"      by-name   {by_name[c]}")
+        if a.path_affinity:
+            print(f"      path-hits {path_hits[c]}  (folded into the score below)")
         print(f"      attributed {won[c]}")
         for s in detail[c][:a.show]:
             print(f"          {s}")
