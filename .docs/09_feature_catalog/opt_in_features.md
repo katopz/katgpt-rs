@@ -3050,3 +3050,46 @@ paper's core finding is that the strongest prover is often the least
 refutation recorded (Issue 692 T4): the dd_tree `BestAdvantage` variant
 (score by `Q_i − mean_j Q_j`) is rank-invariant vs `BestQ` by mechanism —
 not shipped.
+
+## 90. incidence_algebra — the thought × agent incidence-mask algebra (riir-ai Issue 874 T1)
+
+Distilled from ThoughtComm (arXiv:2510.20733, NeurIPS 2025) via riir-ai
+Research 364 / Issue 874: the transferable artifact is not thought *recovery*
+but the **incidence mask as a first-class object** (paper Thm 3 — the
+who-shares-what structure is the identifiable thing). This stack already
+builds such masks by construction (CLR observer sets, sheaf restriction maps,
+npc_comms slices, healer fan-out hits) and computed none of the algebra over
+them. `katgpt_core::incidence` ships it (feature `incidence_algebra`, opt-in;
+11 module unit tests):
+
+- **`agreement_counts_into` / `support_sizes_into`** — αⱼ (per-thought witness
+  counts) and per-agent support sizes over the agent-major row-major mask;
+  zero-alloc `_into` forms, deterministic fixed-index order (no hashing)
+- **`agreement_score`** — one monotone σ-saturated tier curve, α ≤ 1 anchored
+  to EXACTLY 0.5; two consumer maps that never gate:
+  `routing_weight` (α=1 returns 1.0 bit-identically — a private thought is
+  never penalized, the Bench-013 soft-bias lesson) and `contagion_strength`
+  (α=1 returns 0.0 exactly — a single witness cannot stampede the crowd, the
+  measured Plan-019 CLR failure this fixes; κ=0 kill-switch)
+- **shared/private split + `private_fractions_into`** — shared = support with
+  α ≥ 2, private = α == 1 (paper Thms 1+2); the retention counter is the
+  Appx-C.2 discipline: never report agreement without it — collapse means
+  conformity, not correctness
+- **`hall_max_matching_into`** — Hall feasibility (can every agent be matched
+  to a DISTINCT supported thought), Hopcroft–Karp, zero-alloc scratch
+- **`audit_mask`** — support sizes + α distribution + the `DENSITY_ALERT`
+  warning (a dense mask is the crowd-panic precondition — a warning, never a
+  gate)
+- **`rank_by_agreement_into`** — deterministic tier ordering (α desc, index
+  asc — the Issue-849 lesson: a partial order truncated at a cap must never
+  leave the tie-break to a per-process hasher)
+
+Think-brain local: masks, α counts, and tier weights are never synced — what
+crosses a sync surface stays raw (contagion intensity, witness counts; the
+"sync the scalars" doctrine). First consumer chain: riir-games-shared
+`agreement_tier` → riir-stealth `agreement_contagion` (riir-ai Issue 874 T2;
+see the game-sdk book's `stealth_alarm.md` §α-weighted contagion for the
+consumer A/B). **Opt-in with no standalone GOAT** — the substrate's gate is
+its unit suite; a consumer-level A/B is the promotion instrument when a
+routing consumer materializes (the same posture `signed_coupling` shipped
+with).

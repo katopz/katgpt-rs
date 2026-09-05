@@ -3289,6 +3289,27 @@ selections, with f64 twins (`desc_f64`/`asc_f64`). Generalizes riir-rag's
 reachable sites fixed across 12 crates, every fixed crate gated by a
 NaN-abort test that fails against the old comparator).
 
+### 🕸️ incidence_algebra — the thought × agent agreement substrate (riir-ai Issue 874 T1, arXiv:2510.20733)
+
+Every crowd-perception layer in the stack already builds an incidence mask —
+CLR observer sets, sheaf restriction maps, npc_comms slices, healer fan-out
+hits — and computed none of the algebra over it. ThoughtComm's Thm 3 says the
+who-shares-what mask is the identifiable artifact; `katgpt_core::incidence`
+(feature `incidence_algebra`, opt-in) ships that algebra: agreement counts
+(`αⱼ` — how many distinct agents carry thought j), one monotone σ-saturated
+tier curve with two consumer maps that are **soft biases, never gates**
+(`routing_weight`: α=1 is bit-identically the unweighted path;
+`contagion_strength`: α=1 is EXACTLY zero crowd strength — the measured
+Plan-019 CLR stampede this fixes), the shared/private split with the
+private-retention counter (never report agreement without it — collapse is
+conformity, not correctness), Hall feasibility via zero-alloc Hopcroft–Karp,
+a mask audit with the density warning (a dense mask is the crowd-panic
+precondition), and deterministic tier ordering (α desc, index asc — the
+Issue-849 tie-break lesson). Think-brain local: masks and tier weights never
+sync; only raw scalars (contagion intensity, witness counts) cross. First
+consumer: riir-stealth's `agreement_contagion` witness-scaled alarm (via
+riir-games-shared's `agreement_tier` forward).
+
 ### Dev workflow
 
 All work happens on **`develop`** (no feature branches). Use [conventional
