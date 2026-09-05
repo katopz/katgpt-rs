@@ -377,6 +377,16 @@ part: this repo ships **seven** `*_spec_match` targets and **five were only
 ever classified because they also carry `g1`**. The convention was always here;
 the classifier saw it by accident.
 
+Both katgpt-rs instances were then RUN at their own feature sets (isolated
+`CARGO_TARGET_DIR`): **13 assertions, 13 pass, 0 fail** — the T3 outcome
+(*silently unverified*), not riir-train `9da3420f`'s (silence hiding a real
+failure). Both are Lean 4 proof-conformance spec-match tests, so what had never
+executed was the check that the shipped code matches a formal proof. And
+`bridge_spec_match`'s silence has a trap in it: `action_bridge` **is**
+default-on in katgpt-core, but the test is gated on the ROOT crate's
+same-named feature, which is not in the root's default — the functionality
+ships enabled while its test compiles to nothing.
+
 `max_load_bearing` is pinned at the measured **2** in the interim (a third
 instance still reds the push that adds it) and returns to 0 in the arming
 commit — Issue 728.

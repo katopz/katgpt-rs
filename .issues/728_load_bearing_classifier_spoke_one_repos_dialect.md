@@ -91,6 +91,42 @@ they also carry `g1`** (`kda_g1_spec_match`, `mla_g1_spec_match`,
 convention was always here; the classifier saw it by accident, and missed the
 two that do not spell `g1`.
 
+## The katgpt-rs pair, RUN (2026-09-06)
+
+Both were executed at their own feature sets in an isolated
+`CARGO_TARGET_DIR=/tmp/issue728_verify`, so the in-flight Issue 513 T2 sweep
+over this repo's `target/` was untouched:
+
+```
+cargo test -p katgpt-core --features spectral_pencil --test pencil_spec_match
+    7 passed; 0 failed
+cargo test -p katgpt-rs   --features action_bridge   --test bridge_spec_match
+    6 passed; 0 failed
+```
+
+**13 assertions, 13 pass, 0 fail.** This is the Issue 713 T3 outcome —
+*silently unverified*, never silently broken — and not the riir-train
+`9da3420f` outcome, where the same class of silence was hiding a real 1-failure
+defect. Both possibilities were open until the targets were run; that is the
+whole reason to run them rather than to reason about them.
+
+What that does NOT make it is harmless. Both are **Lean 4 proof-conformance
+spec-match tests** — the bridge between `.proofs/` and the Rust
+implementation. `bridge_spec_match` asserts `ActionBridge::select_action`
+matches the Mathlib ranking-preservation proof and that no softmax appears in
+the bridge; `pencil_spec_match` asserts the spectral-pencil substrate matches
+the Issue 678 P3 proofs (Weyl-Lipschitz, eigengap preservation). A formal proof
+whose code-conformance check has never executed is a proof about a document,
+not about a binary.
+
+And the reason `bridge_spec_match` is silent is worth stating exactly, because
+it is not the obvious one: **`action_bridge` IS default-on in katgpt-core** —
+it is `crates/katgpt-core/Cargo.toml`'s default list. The test is gated on the
+**root crate's** identically-named feature, which is *not* in the root's
+default. So the functionality under test ships enabled by default while the
+test of it compiles to nothing. Reading "action_bridge is default-on" and
+concluding the test runs is the trap.
+
 ## Tasks
 
 - [x] **T1** — widen the classifier (6 tokens + `LOAD_BEARING_BIGRAMS` +
@@ -101,7 +137,9 @@ two that do not spell `g1`.
   `bench_578_mcts_budget_sweep`, `aggregate_delegate_propagate`.
 - [ ] **T2** — arm `bridge_spec_match` (root) + `pencil_spec_match`
   (katgpt-core) with `[[test]]` + `required-features` rows; re-pin
-  `max_load_bearing` **2 → 0** in the same commit. **Deliberately deferred a
+  `max_load_bearing` **2 → 0** in the same commit. **Now known safe**: both
+  targets were run at their own feature sets (above) and pass 13/13, so arming
+  cannot red anything — it is a pure manifest change with a measured outcome. **Deliberately deferred a
   few hours, not skipped**: the Issue 513 T2 sweep is mid-flight over this
   repo's `target/` (605 rows / 370 grouped cargo invocations), and editing
   `crates/katgpt-core/Cargo.toml` invalidates lib units shared across many of
