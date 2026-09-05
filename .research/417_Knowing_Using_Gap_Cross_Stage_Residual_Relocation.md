@@ -244,6 +244,8 @@ Per §3.6, ship a PoC in `riir-ai/crates/riir-poc/benches/cross_stage_relocation
 - **R388 (Jacobian-Lens, REFUTED as prefilter)** — the SVD concept-readout survives. Could combine with the permeation map: SVD identifies *what* concept is stranded; permeation map identifies *where* it's stranded.
 - **riir-train** — saturation-epoch analysis, gradient-vanishing explanation, alignment-aware training follow-up.
 
+> **PASS-Redirects (synthesis):** Muyu He ["Disabling Attention Layers", riddlehe.github.io/blog/disabling-attention-layers.html, 2026-08/09 blog] — layer-band ablation on Qwen3-8B under attention-restricted entity extraction maps this note's knowledge-circuit story onto explicit layer bands: L0–19 neither necessary nor sufficient, L20–24 bottleneck-then-recover, L31–35 collapse (= the direct-recall shortcut band). The Tolkien→JK-Rowling / Gandhi→Greta-Thunberg confusions are the KU-Gap shape observed live: abstract features (occupation/domain) extracted, the name binding lost. The blog's causal attention-score patching is the same intervention family as Plan 358's activation patching. Confirmatory; nothing to action.
+
 ---
 
 ## TL;DR
