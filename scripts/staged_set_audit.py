@@ -181,6 +181,20 @@ def selftest() -> None:
     assert sorted(["// why", "let x = 1;"], key=is_comment)[0] == "let x = 1;", (
         "code sorts first"
     )
+    # Every worktree read must pin UTF-8. `git()` pins it; `read_text()`
+    # defaults to the LOCALE codec, so on a cp874 box the two sides of signal
+    # 3's containment decode the same em-dash differently and the audit
+    # invents "would lose" rows for every non-ASCII line. Measured 2026-09-05:
+    # 5/5 dirty riir-train files reported STALE-vs-HEAD, all phantom. Pinned
+    # on the SOURCE because the bug is invisible on a UTF-8 box — a runtime
+    # assertion here would pass on CI and never fire where it bites.
+    for _fn in (reverted_lines, fmt_roundtrip):
+        for _line in _inspect.getsource(_fn).splitlines():
+            if "read_text(" in _line and not _line.lstrip().startswith("#"):
+                assert 'encoding="utf-8"' in _line, (
+                    f"{_fn.__name__}: read_text must pin encoding "
+                    f"(locale codec corrupts non-ASCII): {_line.strip()}"
+                )
 
 
 TRIVIAL = {"", "}", "{", "};", ")", ");", "),", "]", "};", "*/", "/*", "//"}
@@ -219,7 +233,20 @@ def reverted_lines(repo: Path, path: str, sha: str) -> list[str]:
         for ln in show.splitlines()
         if ln.startswith("+") and not ln.startswith("+++")
     ]
-    have = {ln.strip() for ln in (repo / path).read_text(errors="replace").splitlines()}
+    # encoding pinned for the same reason `git()` pins it, and this is the
+    # THIRD site of that bug: `git show` above is decoded UTF-8 while
+    # `read_text()` without an encoding uses the LOCALE codec. On a cp874 box
+    # an em-dash comes back from git as `—` and from the file as `โ€”`, so
+    # containment fails for EVERY line carrying a non-ASCII char and the audit
+    # invents "would lose" rows against a file that has them. Unlike the two
+    # decode/encode crashes already fixed, this one does not raise — it
+    # silently reports wrong findings, which is the worse failure.
+    have = {
+        ln.strip()
+        for ln in (repo / path)
+        .read_text(encoding="utf-8", errors="replace")
+        .splitlines()
+    }
     lost = [ln for ln in added if substantive(ln) and ln.strip() not in have]
     # Code before comments, order otherwise preserved. A commit's first
     # added lines are usually its explanatory comment block, and prose is
@@ -258,8 +285,14 @@ def fmt_roundtrip(repo: Path, path: str) -> tuple[str, list[str]]:
     if fmt.returncode != 0:
         return "skip", []
 
+    # `bytes.decode()` is UTF-8 by default; `read_text()` is NOT — it uses the
+    # locale codec. Unpinned, the two sides decode differently on any non-UTF-8
+    # box and `want == have` can never hold for a file containing an em-dash,
+    # so every such file reports "content" and the isolated diff is mojibake.
+    # Harmless in direction (a false `churn` is the one that authorises a
+    # revert) but it destroys the only signal here that yields a proof.
     want = fmt.stdout.decode(errors="replace").splitlines()
-    have = (repo / path).read_text(errors="replace").splitlines()
+    have = (repo / path).read_text(encoding="utf-8", errors="replace").splitlines()
     if want == have:
         return "churn", []
     import difflib
