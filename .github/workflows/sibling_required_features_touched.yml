@@ -43,6 +43,21 @@
 # Never set max_rows below the caller's own row count when checking all of them
 # is affordable. `--list` prints that count and builds nothing.
 
+# ── UNEXERCISED: this workflow has never run ────────────────────────────────
+# It has no caller (see the issue's T6b), and a `workflow_call` file cannot be
+# dispatched on its own — so nothing here has executed on a runner. This repo's
+# own doctrine is that a workflow file is IDENTICAL ON DISK whether or not it
+# can execute, which is exactly how Issue 704's rot check rotted. Read this
+# file as a design, not as a passing gate.
+#
+# What IS verified, on the workstation: the gate it invokes, both arms
+# (`--max-rows` refuse, and rows building), and the ENOSPC refusal. What is NOT
+# verified: this YAML, the checkout layout on a runner, and the base
+# resolution. The FIRST caller must dispatch with a base known to select a row
+# and confirm it BUILDS — a green over zero selected rows says nothing, which
+# is the liveness trap `.issues/705` records and `required_features_touched.yml`
+# carries a dispatch input specifically to avoid.
+
 name: required-features touched rows (sibling)
 
 on:
