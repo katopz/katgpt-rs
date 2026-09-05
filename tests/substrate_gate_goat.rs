@@ -12,8 +12,10 @@
 //! - G6: zero overhead — None-mask path identical to non-substrate path
 //! - G7: round-trip — mask serialization preserves all properties
 
+#[path = "common/ab_timing.rs"]
+mod ab_timing;
+
 use std::hint::black_box;
-use std::time::Instant;
 
 use katgpt_rs::pruners::substrate_ddtree::expand_substrate_branches;
 use katgpt_rs::pruners::substrate_execution::{
@@ -226,6 +228,24 @@ fn g1_accuracy_substrate_matches_baseline() {
 // G2: Throughput — substrate faster when mask is sparse
 // ═══════════════════════════════════════════════════════════════════
 
+/// G2 — the substrate path must not be slower than the dense baseline when the
+/// mask is sparse.
+///
+/// **Issue 723 Class A / T7.** As filed this read **30.267x** — and a 30x
+/// reading on two paths that differ only in how many rows they skip is not a
+/// load artifact, it is an instrument that lost an arm. Each arm ran to
+/// completion in sequence, and the only thing keeping the baseline alive was a
+/// `black_box` on the *returned count*: `sparse_matmul` communicates its work
+/// through `base_out`, which nothing downstream ever read, so dead-store
+/// elimination is free to drop the arm entirely once it inlines (Issue 723 T5:
+/// rustc 1.98.1 + fat LTO deletes inlined-callee work whose outer result is
+/// dead even through a `black_box` inside the callee). A vanished denominator
+/// prints as a 30x regression in the numerator.
+///
+/// Two fixes, both required. The **output buffers** are consumed (not the
+/// return values), which is what pins the stores as live; and the arms are
+/// interleaved with a median-of-ratios so that whatever load arrives lands in
+/// both arms of the same pair instead of entirely on the one that runs second.
 #[test]
 fn g2_throughput_substrate_faster_when_sparse() {
     let rows = 128;
@@ -237,97 +257,75 @@ fn g2_throughput_substrate_faster_when_sparse() {
     // Sparse mask: only 20% of channels active → intersection is ~12%
     let mask = make_sparse_mask(cols, 0.20, 77);
 
-    let warmup = 100;
-    let iters = 1000;
+    const ROUNDS: usize = 9;
+    let iters = 400;
 
-    // ── Warmup baseline ──
     let mut base_out = vec![0.0f32; rows];
     let mut base_idx = vec![0usize; cols];
     let mut base_val = vec![0.0f32; cols];
-    for _ in 0..warmup {
-        base_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(types::sparse_matmul(
-            &mut base_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut base_idx,
-            &mut base_val,
-        ));
-    }
-
-    // ── Time baseline ──
-    let t0 = Instant::now();
-    for _ in 0..iters {
-        base_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(types::sparse_matmul(
-            &mut base_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut base_idx,
-            &mut base_val,
-        ));
-    }
-    let baseline_ns = t0.elapsed().as_nanos();
-
-    // ── Warmup substrate ──
     let mut sub_out = vec![0.0f32; rows];
     let mut sub_idx = vec![0usize; cols];
     let mut sub_val = vec![0.0f32; cols];
-    for _ in 0..warmup {
-        sub_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(sparse_matmul_substrate(
-            &mut sub_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut sub_idx,
-            &mut sub_val,
-            &mask,
-            0,
-        ));
-    }
+    // Data-dependent sinks over the OUTPUT buffers. This is the load-bearing
+    // part: `black_box` on the returned count left both arms free to have
+    // their stores eliminated.
+    let mut base_sink = 0u32;
+    let mut sub_sink = 0u32;
 
-    // ── Time substrate ──
-    let t1 = Instant::now();
-    for _ in 0..iters {
-        sub_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(sparse_matmul_substrate(
-            &mut sub_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut sub_idx,
-            &mut sub_val,
-            &mask,
-            0,
-        ));
-    }
-    let substrate_ns = t1.elapsed().as_nanos();
-
-    let ratio = substrate_ns as f64 / baseline_ns as f64;
-
-    // Substrate with 20% mask should be noticeably faster (fewer FLOPs).
-    // We don't assert a strict threshold because timing is noisy in CI,
-    // but we verify the substrate path actually completed and is reasonable.
-    assert!(substrate_ns > 0, "G2: substrate timing must be non-zero",);
-    assert!(baseline_ns > 0, "G2: baseline timing must be non-zero",);
+    let ab = ab_timing::ab_median_ratio(
+        ROUNDS,
+        iters,
+        100,
+        |_| {
+            base_out.iter_mut().for_each(|x| *x = 0.0);
+            let alive = types::sparse_matmul(
+                &mut base_out,
+                &weight,
+                &input,
+                rows,
+                cols,
+                &mut base_idx,
+                &mut base_val,
+            );
+            base_sink ^= alive as u32 ^ base_out[0].to_bits() ^ base_out[rows - 1].to_bits();
+        },
+        |_| {
+            sub_out.iter_mut().for_each(|x| *x = 0.0);
+            let alive = sparse_matmul_substrate(
+                &mut sub_out,
+                &weight,
+                &input,
+                rows,
+                cols,
+                &mut sub_idx,
+                &mut sub_val,
+                &mask,
+                0,
+            );
+            sub_sink ^= alive as u32 ^ sub_out[0].to_bits() ^ sub_out[rows - 1].to_bits();
+        },
+    );
+    black_box((base_sink, sub_sink));
 
     // Log the ratio for CI visibility — substrate should be ≤ 1.0x (same or faster)
+    ab.report("G2 throughput substrate/baseline");
     eprintln!(
-        "G2 throughput: substrate/baseline = {ratio:.3}x (substrate={substrate_ns}ns, baseline={baseline_ns}ns)",
+        "G2 throughput: substrate/baseline = {:.3}x (per-round {:.3}..{:.3} over {} rounds)",
+        ab.median,
+        ab.min(),
+        ab.max(),
+        ab.ratios.len(),
     );
 
     // At minimum, the substrate path should not be >2x slower.
     // With a 20% active mask, intersection reduces FLOPs significantly.
     assert!(
-        ratio < 2.0,
-        "G2 FAIL: substrate path is >2x slower than baseline (ratio={ratio:.3})",
+        ab.median < 2.0,
+        "G2 FAIL: substrate path is >2x slower than baseline (ratio={:.3}, per-round \
+         {:.3}..{:.3})",
+        ab.median,
+        ab.min(),
+        ab.max(),
     );
 }
 
@@ -768,69 +766,50 @@ fn g6_zero_overhead_none_mask_identical() {
         full_mask.set(0, ch);
     }
 
-    let warmup = 100;
-    let iters = 1000;
+    // Issue 723 T7: interleaved median-of-ratios with the OUTPUT buffers
+    // consumed — same instrument fix as G2 above, applied here because the
+    // shape was byte-identical and therefore carried the same latent defect
+    // (a `black_box` on the returned count does not keep the stores alive).
+    const ROUNDS: usize = 9;
+    let iters = 400;
+    let mut base_sink = 0u32;
+    let mut sub_sink = 0u32;
 
-    // Warmup
-    for _ in 0..warmup {
-        baseline_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(types::sparse_matmul(
-            &mut baseline_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut base_idx,
-            &mut base_val,
-        ));
-    }
-
-    let t0 = Instant::now();
-    for _ in 0..iters {
-        baseline_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(types::sparse_matmul(
-            &mut baseline_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut base_idx,
-            &mut base_val,
-        ));
-    }
-    let baseline_ns = t0.elapsed().as_nanos();
-
-    for _ in 0..warmup {
-        sub_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(sparse_matmul_substrate(
-            &mut sub_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut sub_idx,
-            &mut sub_val,
-            &full_mask,
-            0,
-        ));
-    }
-
-    let t1 = Instant::now();
-    for _ in 0..iters {
-        sub_out.iter_mut().for_each(|x| *x = 0.0);
-        black_box(sparse_matmul_substrate(
-            &mut sub_out,
-            &weight,
-            &input,
-            rows,
-            cols,
-            &mut sub_idx,
-            &mut sub_val,
-            &full_mask,
-            0,
-        ));
-    }
-    let substrate_ns = t1.elapsed().as_nanos();
+    let ab = ab_timing::ab_median_ratio(
+        ROUNDS,
+        iters,
+        100,
+        |_| {
+            baseline_out.iter_mut().for_each(|x| *x = 0.0);
+            let alive = types::sparse_matmul(
+                &mut baseline_out,
+                &weight,
+                &input,
+                rows,
+                cols,
+                &mut base_idx,
+                &mut base_val,
+            );
+            base_sink ^=
+                alive as u32 ^ baseline_out[0].to_bits() ^ baseline_out[rows - 1].to_bits();
+        },
+        |_| {
+            sub_out.iter_mut().for_each(|x| *x = 0.0);
+            let alive = sparse_matmul_substrate(
+                &mut sub_out,
+                &weight,
+                &input,
+                rows,
+                cols,
+                &mut sub_idx,
+                &mut sub_val,
+                &full_mask,
+                0,
+            );
+            sub_sink ^= alive as u32 ^ sub_out[0].to_bits() ^ sub_out[rows - 1].to_bits();
+        },
+    );
+    black_box((base_sink, sub_sink));
 
     // With full mask, substrate_alive should equal baseline_alive
     sub_out.iter_mut().for_each(|x| *x = 0.0);
@@ -859,16 +838,23 @@ fn g6_zero_overhead_none_mask_identical() {
         );
     }
 
-    let ratio = substrate_ns as f64 / baseline_ns as f64;
+    ab.report("G6 zero overhead full_mask/baseline");
     eprintln!(
-        "G6 zero overhead: full_mask/baseline = {ratio:.3}x (substrate={substrate_ns}ns, baseline={baseline_ns}ns)",
+        "G6 zero overhead: full_mask/baseline = {:.3}x (per-round {:.3}..{:.3} over {} rounds)",
+        ab.median,
+        ab.min(),
+        ab.max(),
+        ab.ratios.len(),
     );
 
     // Overhead should be minimal: the full mask just adds the intersection scan,
     // which passes all channels through. Allow up to 2x overhead for the scan.
     assert!(
-        ratio < 2.0,
-        "G6 FAIL: full mask overhead too high: {ratio:.3}x",
+        ab.median < 2.0,
+        "G6 FAIL: full mask overhead too high: {:.3}x (per-round {:.3}..{:.3})",
+        ab.median,
+        ab.min(),
+        ab.max(),
     );
 
     // Also verify NoSubstrateRouter is zero-cost

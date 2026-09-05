@@ -207,48 +207,100 @@ fn test_goat_g3_hybrid_routing() {
 
 // ── G4: Per-Step Overhead ───────────────────────────────────────────────────
 
+/// G4 — per-call cost and linear scaling.
+///
+/// **Issue 723 Class A / T7.** As filed, G4.4 measured 643.6x against a 250x
+/// bar on a *provably linear* function (`total_confidence` is one `sum` over
+/// the slice). Neither the code nor the box was at fault — the instrument was,
+/// in two independent ways:
+///
+/// 1. `small_scores` was `vec![0.95; 8]`, loop-invariant, and only the
+///    **result** was `black_box`ed. LLVM hoists the whole computation out of
+///    the 100K loop and hands `black_box` the same value 100K times, so the
+///    numerator of the scaling ratio measured an empty loop. `black_box` the
+///    **inputs** — that is what makes the work un-hoistable (the 1000-element
+///    arm escaped the same fate only by accident of inlining budget, which is
+///    not a property to build a gate on).
+/// 2. `small_ns.max(1.0)` then *clamped the denominator*. A clamp prevents a
+///    division by zero, not a wrong statistic: it silently converted "the
+///    baseline vanished" into "scaling is 643x", which is Issue 723 Class A2
+///    wearing Class A's clothes. A zero baseline is now a named FAIL.
+///
+/// The claim is also restated in the scale-invariant form: per-**element**
+/// cost at n=1000 versus at n=8. Linear means the two rates agree to within a
+/// constant factor, and that comparison does not need a magic 125x.
 #[test]
 fn test_goat_g4_overhead() {
     let scorer = UnionBoundScorer;
-
-    // G4.1: Per-element cost (8 elements, typical speculative chain)
-    let small_scores: Vec<f32> = vec![0.95; 8];
     let iters = 100_000;
+
+    // G4.1: Per-call cost (8 elements, typical speculative chain).
+    let small_scores: Vec<f32> = vec![0.95; 8];
     let start = Instant::now();
     for _ in 0..iters {
-        std::hint::black_box(scorer.total_confidence(&small_scores));
+        // Inputs black_boxed: the slice is opaque to the optimiser each
+        // iteration, so the sum cannot be hoisted out of the loop.
+        std::hint::black_box(scorer.total_confidence(std::hint::black_box(&small_scores)));
     }
     let small_ns = start.elapsed().as_nanos() as f64 / iters as f64;
 
-    // G4.2: Larger chain cost (1000 elements)
+    // G4.2: Larger chain cost (1000 elements).
     let large_scores: Vec<f32> = (0..1000).map(|i| 0.9 + (i as f32 % 10.0) * 0.005).collect();
     let start = Instant::now();
     for _ in 0..iters {
-        std::hint::black_box(scorer.total_confidence(&large_scores));
+        std::hint::black_box(scorer.total_confidence(std::hint::black_box(&large_scores)));
     }
     let large_ns = start.elapsed().as_nanos() as f64 / iters as f64;
 
     println!("  G4: {iters} iterations");
-    println!("       8-element chain:  {small_ns:.1} ns/call");
-    println!("       1000-element chain: {large_ns:.1} ns/call");
+    println!(
+        "       8-element chain:    {small_ns:.2} ns/call ({:.3} ns/elem)",
+        small_ns / 8.0
+    );
+    println!(
+        "       1000-element chain: {large_ns:.2} ns/call ({:.3} ns/elem)",
+        large_ns / 1000.0
+    );
 
-    // G4.3: Per-element cost should be sub-microsecond for typical chain (8 elements)
+    // G4.0: instrument liveness. A zero baseline is an eliminated or
+    // sub-resolution measurement, never a pass — the clamp this replaces
+    // turned exactly that into a 643x "scaling regression".
+    assert!(
+        small_ns > 0.0 && large_ns > 0.0,
+        "G4.0 instrument failure: 8-elem {small_ns:.2} ns / 1000-elem {large_ns:.2} ns \
+         over {iters} iters — the work was eliminated or is below timer resolution; \
+         fix the harness, do not read a scaling verdict out of it"
+    );
+
+    // G4.3: Per-call cost should be sub-microsecond for a typical chain.
     assert!(
         small_ns < 1_000.0,
         "G4.3: 8-element overhead {small_ns:.0} ns exceeds 1μs"
     );
 
-    // G4.4: Scaling is linear (not quadratic)
-    let ratio = large_ns / small_ns.max(1.0);
-    let expected_ratio = 1000.0 / 8.0; // 125x
+    // G4.4: Scaling is LINEAR, not quadratic — stated per element so the bar
+    // does not depend on the two chosen sizes. Quadratic would put the
+    // 1000-element per-element rate 125x above the 8-element one, so 10x is
+    // still an order of magnitude clear of the defect it exists to catch.
+    //
+    // The ratio is above 1.0 in the *unintuitive* direction and that is real,
+    // not slack: at n=8 the sum is fully unrolled (measured 0.189 ns/elem)
+    // while at n=1000 it is a serial f32 add-dependency chain (0.646 ns/elem,
+    // ~2.6 cycles — the FADD latency). Measured 3.42x on the M3 Max, release,
+    // 2026-09-05. 10x leaves ~3x headroom above that so the box cannot decide
+    // the verdict, and would still fire on any accidental O(n²) rewrite.
+    let small_per_elem = small_ns / 8.0;
+    let large_per_elem = large_ns / 1000.0;
+    let per_elem_ratio = large_per_elem / small_per_elem;
     assert!(
-        ratio < expected_ratio * 2.0,
-        "G4.4: scaling ratio {ratio:.1}x is worse than 2× linear ({:.1}x)",
-        expected_ratio * 2.0
+        per_elem_ratio < 10.0,
+        "G4.4: per-element cost grows {per_elem_ratio:.2}x from n=8 ({small_per_elem:.3} ns/elem) \
+         to n=1000 ({large_per_elem:.3} ns/elem) — that is super-linear scaling"
     );
 
     eprintln!(
-        "✅ G4: overhead = {small_ns:.0} ns (8-elem), {large_ns:.0} ns (1000-elem), linear scaling"
+        "✅ G4: {small_ns:.2} ns (8-elem), {large_ns:.2} ns (1000-elem), \
+         per-element ratio {per_elem_ratio:.2}x — linear"
     );
 }
 

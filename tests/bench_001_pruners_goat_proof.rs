@@ -14,6 +14,9 @@
 
 #![cfg(all(feature = "bomber", feature = "go"))]
 
+#[path = "common/ab_timing.rs"]
+mod ab_timing;
+
 use std::collections::VecDeque;
 use std::hint::black_box;
 use std::sync::Arc;
@@ -361,11 +364,31 @@ fn bench_g4b_bfcp_cache_pipeline() {
 
 // ── G5: PhraseTrie dedup — bitset vs contains() ─────────────
 
+/// G5 — bitset dedup vs `contains()` dedup.
+///
+/// **Issue 723 Class A / T7.** As filed this read 31.9 ms (OLD) vs 54.8 ms
+/// (NEW) and was classed as a wall-clock flake. It is not: the two arms were
+/// **not comparing the same work**. The NEW arm ran the real traversal
+/// (50 active nodes x 256 vocab slots = 12,800 edge probes plus a
+/// `vec![false; 256]`), while the OLD arm ran a *different algorithm on a
+/// different input* — `contains()`-dedup over `0..256` sequential integers,
+/// which is an already-distinct stream and never traverses the trie at all.
+/// Two workloads of coincidentally similar magnitude, so which one "won" was
+/// decided by constants, not by the dedup strategy the gate names.
+///
+/// Both arms now dedup the **identical candidate stream** — the exact
+/// (node, token) edge sequence the traversal emits, reconstructed once outside
+/// the timed region through the public API (`is_token_boosted` on a
+/// single-node active set is a per-edge query). That is the claim in the
+/// gate's title, stated so that a ratio can answer it. The outputs are
+/// asserted equal, which is also what keeps either arm from being deleted by
+/// the optimiser, and the verdict is an interleaved median-of-ratios rather
+/// than one sequential pair (Issue 723 T5: two sequential arms of the *same*
+/// work measured +5.2% and +21.7% thirty seconds apart).
 #[cfg(feature = "phrase_boost")]
 #[test]
 fn bench_g5_phrase_trie_dedup_ab() {
     let vocab_size = 256;
-    let n: u64 = 10_000;
 
     // Build trie with many single-token entries to maximize dedup work
     let mut trie = PhraseTrie::new(vocab_size);
@@ -382,43 +405,85 @@ fn bench_g5_phrase_trie_dedup_ab() {
     // paths. For benchmarking, use root + first 50 node indices.
     let active: Vec<usize> = (0..50).collect();
 
-    // NEW path: bitset-based get_boosted_tokens (O(active × vocab) with bitset dedup)
-    let start = Instant::now();
-    let mut new_result = Vec::new();
-    for _ in 0..n {
-        new_result = trie.get_boosted_tokens(&active);
-        black_box(&new_result);
-    }
-    let new_time = start.elapsed();
+    // The candidate stream the traversal emits, in emission order: for each
+    // active node, every token with an outgoing edge. Reconstructed via the
+    // public per-edge query, ONCE, outside every timed region — both arms
+    // then dedup exactly this, so the ratio isolates the dedup strategy.
+    let trie_ref = &trie;
+    let candidates: Vec<usize> = active
+        .iter()
+        .flat_map(|&node| {
+            (0..vocab_size).filter(move |&tok| trie_ref.is_token_boosted(&[node], tok))
+        })
+        .collect();
 
-    // OLD path: O(n²) contains()-based dedup on same output size
-    // Simulate: collect candidate tokens, then dedup with contains()
-    let candidates: Vec<usize> = (0..vocab_size).collect();
-    let start = Instant::now();
-    let mut old_result: Vec<usize>;
-    for _ in 0..n {
-        old_result = Vec::new();
-        for &tok in &candidates {
-            if !old_result.contains(&tok) {
-                old_result.push(tok);
+    // The shipped strategy: an O(vocab) seen-bitset, one probe per candidate.
+    let bitset_dedup = |candidates: &[usize], out: &mut Vec<usize>| {
+        let mut seen = vec![false; vocab_size];
+        out.clear();
+        for &tok in candidates {
+            if !seen[tok] {
+                seen[tok] = true;
+                out.push(tok);
             }
         }
-        black_box(&old_result);
-    }
-    let old_time = start.elapsed();
+    };
+    // The superseded strategy: O(n²) linear scan of the output so far.
+    let contains_dedup = |candidates: &[usize], out: &mut Vec<usize>| {
+        out.clear();
+        for &tok in candidates {
+            if !out.contains(&tok) {
+                out.push(tok);
+            }
+        }
+    };
 
-    let gain = (old_time.as_nanos() as f64 / new_time.as_nanos() as f64 - 1.0) * 100.0;
+    // Correctness first — a faster wrong answer is not a gain, and consuming
+    // both outputs is what pins both arms as live work.
+    let (mut new_out, mut old_out) = (Vec::new(), Vec::new());
+    bitset_dedup(&candidates, &mut new_out);
+    contains_dedup(&candidates, &mut old_out);
+    assert_eq!(
+        new_out, old_out,
+        "G5: bitset dedup and contains() dedup must produce the identical \
+         token list in the identical order"
+    );
+    assert!(
+        !new_out.is_empty(),
+        "G5 instrument failure: the reconstructed candidate stream deduped to \
+         nothing — the trie layout changed and the arms measure an empty loop"
+    );
 
-    println!("\n🧪 G5 PhraseTrie Dedup A/B — {n} iterations, vocab={vocab_size}");
+    // OLD is the denominator, NEW the numerator: median < 1.0 means the
+    // shipped bitset path is faster, which is the gate.
+    let ab = ab_timing::ab_median_ratio(
+        9,
+        2_000,
+        200,
+        |_| contains_dedup(&candidates, &mut old_out),
+        |_| bitset_dedup(&candidates, &mut new_out),
+    );
+    black_box((&old_out, &new_out));
+
+    let gain = (1.0 / ab.median - 1.0) * 100.0;
+
+    println!("\n🧪 G5 PhraseTrie Dedup A/B — interleaved median-of-ratios, vocab={vocab_size}");
     println!("{}", "═".repeat(60));
-    println!("OLD (contains() O(n²)): {old_time:?}");
-    println!("NEW (bitset dedup):     {new_time:?}");
-    println!("Gain:                   {gain:.1}%");
-    println!("Boosted tokens (NEW):   {}", new_result.len());
+    println!(
+        "   Candidate stream:       {} edges → {} distinct",
+        candidates.len(),
+        new_out.len()
+    );
+    ab.report("G5");
+    println!("   Gain (OLD/NEW − 1):     {gain:+.1}%");
 
     assert!(
-        gain > 0.0,
-        "GOAT G5: bitset dedup must be faster than contains() (got {gain:.1}%)"
+        ab.median < 1.0,
+        "GOAT G5: bitset dedup must be faster than contains() dedup on the identical \
+         candidate stream (median NEW/OLD {:.4}, per-round {:.4}..{:.4}, gain {gain:+.1}%)",
+        ab.median,
+        ab.min(),
+        ab.max(),
     );
 }
 

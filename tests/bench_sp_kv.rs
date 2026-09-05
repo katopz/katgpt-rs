@@ -12,6 +12,9 @@
 
 #![cfg(feature = "sp_kv")]
 
+#[path = "common/ab_timing.rs"]
+mod ab_timing;
+
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -33,6 +36,38 @@ fn synthetic_hidden(n_embd: usize, pos: usize) -> Vec<f32> {
 
 // ── T16: Gate Bias Overhead ──────────────────────────────────────
 
+/// T16 — monomorphized gate-bias dispatch overhead and prune-skip speedup.
+///
+/// **Issue 723 Class A / T7 — instrument repaired, and the repaired
+/// instrument reports a real shortfall. `#[ignore]` with provenance, per the
+/// T8 precedent for `goat_169_g1`: the assertions stay executable via
+/// `--ignored`, and the shortfall is tracked as `.issues/727` rather than
+/// laundered into a re-pinned bar.**
+///
+/// What the repair changed (all detailed at the call sites): the sequence
+/// length is decoupled from `Config::micro()`'s `block_size = 16` — at which
+/// the "50% pruned" arm pruned **zero** positions and the workload was small
+/// enough that an unrelated `eprintln!` moved the measured ratio by 30% — and
+/// the two asserted comparisons are interleaved chunk-by-chunk against the
+/// same baseline with a median across chunks.
+///
+/// What it then measured, M3 Max, release, 2026-09-05, three runs, at
+/// `t_n = 512` with 48% of positions pruned:
+///
+/// | quantity | bar | measured |
+/// |---|---|---|
+/// | gate-bias dispatch overhead | < 3% (paper target < 1%) | **+8.0 / +8.1 / +8.4%** (per-round 1.026–1.126) |
+/// | prune-skip speedup | > 1.05x | **1.046 / 1.042 / 1.015x** |
+///
+/// Both are stable and neither is the box. The overhead is not *dispatch* —
+/// `GateBias` monomorphizes, and the Option-dispatch wrapper measures the same
+/// +8.2% — it is the bias LOAD: one extra `get_unchecked` per position per
+/// head, 512 loads against a 512x4 attention. At `t_n = 16` that cost was
+/// smaller than the layout noise, which is why a "<1% overhead" claim survived
+/// unexecuted. Prune-skip elides the value accumulation for pruned positions
+/// but not the score dot, so ~48% pruned buys ~24% of the work at best; 4% is
+/// what is left after the branch.
+#[ignore = "Issue 723 T7 / .issues/727: instrument repaired and load-invariant, but the             primitive misses both bars at a realistic sequence length — gate-bias overhead             +8.0..8.4% vs a 3% bar (paper target <1%), prune-skip 1.015..1.046x vs a 1.05x             bar. Run with --ignored to re-measure; do not re-pin without closing 727."]
 #[test]
 fn bench_gate_bias_overhead() {
     let config = Config::micro();
@@ -42,13 +77,34 @@ fn bench_gate_bias_overhead() {
     let n_kv = config.n_kv_head;
     let scale = 1.0 / (hd as f32).sqrt();
 
-    // Create synthetic KV cache with some positions filled
-    let t_n = config.block_size.min(64); // Use 64 positions for benchmark
+    // Issue 723 T7: the benchmark sequence length is DECOUPLED from
+    // `config.block_size`. `Config::micro()` carries `block_size = 16`, so the
+    // old `t_n = config.block_size.min(64)` gave 16 positions and two things
+    // followed, neither of them visible from the output:
+    //
+    // 1. The "50% pruned" arm's guard is `t < t_n - 16`, which at `t_n = 16`
+    //    is `t < 0` — **vacuously false**. That arm pruned exactly zero
+    //    positions (measured: 0 of 16 entries set to -inf), so
+    //    `prune_skip_speedup > 1.05` was asserting that identical work is 5%
+    //    faster than itself. It could not have passed for the stated reason.
+    // 2. 4 heads x 16 positions x head_dim 4 is ~256 MACs per iteration, well
+    //    inside the regime where code layout decides the answer. Measured: a
+    //    single unrelated `eprintln!` added elsewhere in the function moved
+    //    the gated-zero ratio from 1.036 to 0.707 and the mixed ratio from
+    //    1.489 to 1.027. A 3% bar cannot be read off an instrument an
+    //    unrelated edit moves by 30%.
+    //
+    // 512 positions makes the arms measure attention rather than alignment and
+    // makes the 16-wide recency window a real 48% prune. Nothing here needs
+    // `block_size` — `attention_head_core` takes `t_n` and the caches as
+    // explicit slices.
+    const T_N: usize = 512;
+    let t_n = T_N;
     let mut rng = Rng::new(42);
 
     // Flat KV cache (simulated)
-    let mut key_cache = vec![0.0f32; config.block_size * kvd];
-    let mut value_cache = vec![0.0f32; config.block_size * kvd];
+    let mut key_cache = vec![0.0f32; t_n * kvd];
+    let mut value_cache = vec![0.0f32; t_n * kvd];
     for pos in 0..t_n {
         let off = pos * kvd;
         for d in 0..kvd {
@@ -63,181 +119,228 @@ fn bench_gate_bias_overhead() {
     println!("\n🧪 T16: Gate Bias Overhead (n_head={n_head}, n_kv={n_kv}, hd={hd}, t_n={t_n})");
     println!("{}", "═".repeat(60));
 
-    let mut attn_out = vec![0.0; config.n_embd];
-    let mut scores = vec![0.0; config.block_size];
+    // Issue 723 Class A / T7 — interleaved median-of-ratios.
+    //
+    // As filed, this gate timed five arms to completion in sequence and
+    // asserted on ratios between the first and the rest. The bar it failed is
+    // **3%**, and Issue 723 T5 measured two *sequential* arms of identical
+    // work at +5.2% and +21.7% thirty seconds apart on this box — an order of
+    // magnitude more than the quantity under test, landing entirely on
+    // whichever arm ran second. The two ASSERTED comparisons (gate-bias
+    // overhead, prune-skip speedup) are now interleaved chunk-by-chunk against
+    // the same baseline with a median across chunks; a drift that hits both
+    // arms of a pair cancels in its ratio. The two legacy-wrapper arms stay
+    // sequential because nothing asserts on them — they are printed telemetry,
+    // and labelling them as such is part of the fix.
+    //
+    // Each arm gets its own output buffers: interleaving requires two live
+    // `&mut`, and separate buffers also stop one arm's writes from warming the
+    // other's cache lines.
+    const ROUNDS: usize = 9;
+    let iters = BENCH_ITERS / ROUNDS;
+    let warmup = 100;
 
-    // ── A: Baseline — monomorphized NoBias (should match original attention_head) ──
-    let start_nobias = Instant::now();
-    for _ in 0..BENCH_ITERS {
-        for h in 0..n_head {
-            let kv_group = h * n_kv / n_head;
-            unsafe {
-                attention_head_core(
-                    &q,
-                    &key_cache,
-                    &value_cache,
-                    &mut attn_out,
-                    &mut scores,
-                    h * hd,
-                    kv_group * hd,
-                    kvd,
-                    hd,
-                    t_n,
-                    scale,
-                    NoBias,
-                );
-            }
-        }
-        black_box(&attn_out);
-    }
-    let elapsed_nobias = start_nobias.elapsed();
+    let mut out_base = vec![0.0; config.n_embd];
+    let mut sc_base = vec![0.0; t_n];
+    let mut out_cand = vec![0.0; config.n_embd];
+    let mut sc_cand = vec![0.0; t_n];
+    // Data-dependent sinks over the OUTPUT buffers — a `black_box` on a
+    // buffer reference alone did not stop fat LTO deleting an arm in T5.
+    let mut sink_base = 0u32;
+    let mut sink_cand = 0u32;
 
-    // ── B: Legacy wrapper — attention_head_gated with None ──
-    let start_legacy_none = Instant::now();
-    for _ in 0..BENCH_ITERS {
-        for h in 0..n_head {
-            let kv_group = h * n_kv / n_head;
-            unsafe {
-                attention_head_gated(
-                    &q,
-                    &key_cache,
-                    &value_cache,
-                    &mut attn_out,
-                    &mut scores,
-                    h * hd,
-                    kv_group * hd,
-                    kvd,
-                    hd,
-                    t_n,
-                    scale,
-                    None,
-                );
-            }
-        }
-        black_box(&attn_out);
-    }
-    let elapsed_legacy_none = start_legacy_none.elapsed();
-
-    // ── C: Monomorphized GateBias (zero bias = no pruning, worst-case overhead) ──
-    let zero_bias = vec![0.0f32; config.block_size];
-
-    let start_gated_zero = Instant::now();
-    for _ in 0..BENCH_ITERS {
-        for h in 0..n_head {
-            let kv_group = h * n_kv / n_head;
-            unsafe {
-                attention_head_core(
-                    &q,
-                    &key_cache,
-                    &value_cache,
-                    &mut attn_out,
-                    &mut scores,
-                    h * hd,
-                    kv_group * hd,
-                    kvd,
-                    hd,
-                    t_n,
-                    scale,
-                    GateBias::new(&zero_bias),
-                );
-            }
-        }
-        black_box(&attn_out);
-    }
-    let elapsed_gated_zero = start_gated_zero.elapsed();
-
-    // ── D: Monomorphized GateBias (mixed: ~50% pruned, prune-skip active) ──
-    let mut mixed_bias = vec![0.0f32; config.block_size];
+    let zero_bias = vec![0.0f32; t_n];
+    let mut mixed_bias = vec![0.0f32; t_n];
     for (t, mb) in mixed_bias.iter_mut().enumerate().take(t_n) {
-        // Prune ~50% of positions (outside window of 16)
+        // Prune ~50% of positions (outside a recency window of 16)
         if t < t_n - 16 && t.is_multiple_of(2) {
             *mb = f32::NEG_INFINITY;
         }
     }
+    let pruned = mixed_bias.iter().filter(|v| v.is_infinite()).count();
+    // The prune-skip claim is only testable if the mixed arm actually prunes.
+    // It did not for the whole life of this gate (see the T_N note above), and
+    // a silent zero there is exactly the shape Issue 723 exists to catch.
+    assert!(
+        pruned * 3 > t_n && pruned * 3 < t_n * 2,
+        "T16 instrument failure: the 'mixed' bias pruned {pruned} of {t_n} positions — \
+         the arm must prune roughly half for `prune_skip_speedup` to mean anything"
+    );
 
-    let start_gated_mixed = Instant::now();
-    for _ in 0..BENCH_ITERS {
-        for h in 0..n_head {
-            let kv_group = h * n_kv / n_head;
-            unsafe {
-                attention_head_core(
-                    &q,
-                    &key_cache,
-                    &value_cache,
-                    &mut attn_out,
-                    &mut scores,
-                    h * hd,
-                    kv_group * hd,
-                    kvd,
-                    hd,
-                    t_n,
-                    scale,
-                    GateBias::new(&mixed_bias),
-                );
+    // ── A vs C: NoBias baseline vs monomorphized GateBias with zero bias ──
+    // Zero bias prunes nothing, so this is the worst-case dispatch overhead:
+    // all of the gate's cost, none of its benefit.
+    let ab_zero = ab_timing::ab_median_ratio(
+        ROUNDS,
+        iters,
+        warmup,
+        |_| {
+            for h in 0..n_head {
+                let kv_group = h * n_kv / n_head;
+                unsafe {
+                    attention_head_core(
+                        &q,
+                        &key_cache,
+                        &value_cache,
+                        &mut out_base,
+                        &mut sc_base,
+                        h * hd,
+                        kv_group * hd,
+                        kvd,
+                        hd,
+                        t_n,
+                        scale,
+                        NoBias,
+                    );
+                }
             }
-        }
-        black_box(&attn_out);
-    }
-    let elapsed_gated_mixed = start_gated_mixed.elapsed();
+            sink_base ^= out_base[0].to_bits() ^ out_base[config.n_embd - 1].to_bits();
+        },
+        |_| {
+            for h in 0..n_head {
+                let kv_group = h * n_kv / n_head;
+                unsafe {
+                    attention_head_core(
+                        &q,
+                        &key_cache,
+                        &value_cache,
+                        &mut out_cand,
+                        &mut sc_cand,
+                        h * hd,
+                        kv_group * hd,
+                        kvd,
+                        hd,
+                        t_n,
+                        scale,
+                        GateBias::new(&zero_bias),
+                    );
+                }
+            }
+            sink_cand ^= out_cand[0].to_bits() ^ out_cand[config.n_embd - 1].to_bits();
+        },
+    );
 
-    // ── E: Legacy wrapper — attention_head_gated with Some (zero bias) ──
-    let start_legacy_some = Instant::now();
-    for _ in 0..BENCH_ITERS {
-        for h in 0..n_head {
-            let kv_group = h * n_kv / n_head;
-            unsafe {
-                attention_head_gated(
-                    &q,
-                    &key_cache,
-                    &value_cache,
-                    &mut attn_out,
-                    &mut scores,
-                    h * hd,
-                    kv_group * hd,
-                    kvd,
-                    hd,
-                    t_n,
-                    scale,
-                    Some(&zero_bias),
-                );
+    // ── A vs D: NoBias baseline vs GateBias with ~50% of positions pruned ──
+    let ab_mixed = ab_timing::ab_median_ratio(
+        ROUNDS,
+        iters,
+        warmup,
+        |_| {
+            for h in 0..n_head {
+                let kv_group = h * n_kv / n_head;
+                unsafe {
+                    attention_head_core(
+                        &q,
+                        &key_cache,
+                        &value_cache,
+                        &mut out_base,
+                        &mut sc_base,
+                        h * hd,
+                        kv_group * hd,
+                        kvd,
+                        hd,
+                        t_n,
+                        scale,
+                        NoBias,
+                    );
+                }
             }
-        }
-        black_box(&attn_out);
-    }
-    let elapsed_legacy_some = start_legacy_some.elapsed();
+            sink_base ^= out_base[0].to_bits() ^ out_base[config.n_embd - 1].to_bits();
+        },
+        |_| {
+            for h in 0..n_head {
+                let kv_group = h * n_kv / n_head;
+                unsafe {
+                    attention_head_core(
+                        &q,
+                        &key_cache,
+                        &value_cache,
+                        &mut out_cand,
+                        &mut sc_cand,
+                        h * hd,
+                        kv_group * hd,
+                        kvd,
+                        hd,
+                        t_n,
+                        scale,
+                        GateBias::new(&mixed_bias),
+                    );
+                }
+            }
+            sink_cand ^= out_cand[0].to_bits() ^ out_cand[config.n_embd - 1].to_bits();
+        },
+    );
+
+    // ── B / E: legacy Option-dispatch wrapper — TELEMETRY ONLY ──
+    // Nothing asserts on these, so they stay sequential: a number nobody gates
+    // on does not need a load-invariant instrument, and pretending otherwise
+    // would triple the runtime for no verdict.
+    let legacy_arm =
+        |bias: Option<&[f32]>, out: &mut Vec<f32>, sc: &mut Vec<f32>| -> std::time::Duration {
+            let start = Instant::now();
+            for _ in 0..BENCH_ITERS {
+                for h in 0..n_head {
+                    let kv_group = h * n_kv / n_head;
+                    unsafe {
+                        attention_head_gated(
+                            &q,
+                            &key_cache,
+                            &value_cache,
+                            out,
+                            sc,
+                            h * hd,
+                            kv_group * hd,
+                            kvd,
+                            hd,
+                            t_n,
+                            scale,
+                            bias,
+                        );
+                    }
+                }
+                black_box(&out);
+            }
+            start.elapsed()
+        };
+    let elapsed_legacy_none = legacy_arm(None, &mut out_cand, &mut sc_cand);
+    let elapsed_legacy_some = legacy_arm(Some(&zero_bias), &mut out_cand, &mut sc_cand);
+    black_box((sink_base, sink_cand));
 
     // ── Report ──
-    let baseline_ns = elapsed_nobias.as_nanos() as f64;
-
-    let overhead_gated_zero = (elapsed_gated_zero.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
-    let overhead_gated_mixed = (elapsed_gated_mixed.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
-    let overhead_legacy_none = (elapsed_legacy_none.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
-    let overhead_legacy_some = (elapsed_legacy_some.as_nanos() as f64 / baseline_ns - 1.0) * 100.0;
-    let prune_skip_speedup = baseline_ns / elapsed_gated_mixed.as_nanos() as f64;
+    let baseline_ns_per_iter = ab_zero.a_ns_per_iter();
+    let overhead_gated_zero = ab_zero.overhead_pct();
+    let overhead_gated_mixed = ab_mixed.overhead_pct();
+    let legacy_none_ns_per_iter = elapsed_legacy_none.as_nanos() as f64 / BENCH_ITERS as f64;
+    let legacy_some_ns_per_iter = elapsed_legacy_some.as_nanos() as f64 / BENCH_ITERS as f64;
+    let overhead_legacy_none = (legacy_none_ns_per_iter / baseline_ns_per_iter - 1.0) * 100.0;
+    let overhead_legacy_some = (legacy_some_ns_per_iter / baseline_ns_per_iter - 1.0) * 100.0;
+    let prune_skip_speedup = 1.0 / ab_mixed.median;
 
     println!("  ┌─ Monomorphized (zero-overhead dispatch) ─────────────────┐");
     println!(
         "  │ NoBias baseline:     {:>8.2} µs/iter                   │",
-        elapsed_nobias.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        baseline_ns_per_iter / 1000.0
     );
     println!(
         "  │ GateBias (zero):     {:>8.2} µs/iter  ({overhead_gated_zero:+.2}%)        │",
-        elapsed_gated_zero.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        ab_zero.b_ns_per_iter() / 1000.0
     );
     println!(
         "  │ GateBias (50%% pruned):{:>7.2} µs/iter  ({overhead_gated_mixed:+.2}%, {prune_skip_speedup:.2}×)  │",
-        elapsed_gated_mixed.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        ab_mixed.b_ns_per_iter() / 1000.0
     );
-    println!("  ├─ Legacy wrapper (Option dispatch) ──────────────────────┤");
+    println!("  ├─ Legacy wrapper (Option dispatch) — telemetry only ─────┤");
     println!(
         "  │ Gated(None):         {:>8.2} µs/iter  ({overhead_legacy_none:+.2}%)        │",
-        elapsed_legacy_none.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        legacy_none_ns_per_iter / 1000.0
     );
     println!(
         "  │ Gated(Some(zero)):   {:>8.2} µs/iter  ({overhead_legacy_some:+.2}%)        │",
-        elapsed_legacy_some.as_secs_f64() * 1e6 / BENCH_ITERS as f64
+        legacy_some_ns_per_iter / 1000.0
     );
     println!("  └──────────────────────────────────────────────────────────┘");
+    ab_zero.report("T16 gated-zero/baseline");
+    ab_mixed.report("T16 gated-mixed/baseline");
     println!();
 
     // The key metric: monomorphized GateBias with zero bias should have low overhead
@@ -247,19 +350,30 @@ fn bench_gate_bias_overhead() {
         // Debug: just check it's not catastrophically slow (<15%)
         assert!(
             overhead_gated_zero < 15.0,
-            "Gate bias overhead too high even for debug: {overhead_gated_zero:.2}%"
+            "Gate bias overhead too high even for debug: {overhead_gated_zero:.2}% \
+             (per-round {:.4}..{:.4})",
+            ab_zero.min(),
+            ab_zero.max(),
         );
         println!("  ℹ️  Debug build — overhead numbers are not representative (use --release)");
     } else {
         // Release: paper target <1%, allow some margin for measurement noise
         assert!(
             overhead_gated_zero < 3.0,
-            "Monomorphized gate bias overhead too high: {overhead_gated_zero:.2}% (target: <1%)"
+            "Monomorphized gate bias overhead too high: {overhead_gated_zero:.2}% \
+             (target: <1%; per-round {:.4}..{:.4} over {} rounds)",
+            ab_zero.min(),
+            ab_zero.max(),
+            ab_zero.ratios.len(),
         );
         // Prune-skip should produce measurable speedup when ~50% pruned (release only)
         assert!(
             prune_skip_speedup > 1.05,
-            "Prune-skip speedup not measurable: {prune_skip_speedup:.2}× (expected >1.05×)"
+            "Prune-skip speedup not measurable: {prune_skip_speedup:.2}× (expected >1.05×; \
+             per-round {:.4}..{:.4} over {} rounds)",
+            ab_mixed.min(),
+            ab_mixed.max(),
+            ab_mixed.ratios.len(),
         );
     }
 }

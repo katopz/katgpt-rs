@@ -1,10 +1,15 @@
 # Issue 723 — the first full-workspace EXECUTION is red: 47 targets, six distinct classes
 
-**Status:** OPEN — filed 2026-09-04 by Issue 718 T3(a) (the full-workspace
-pricing run, the first time anything ever *executed* this workspace's test
-surface). **Class F (doc-tests), Class D (hard-coded `target/release`), and
-Class B (the wasm `__heap_base` flag, both targets) are FIXED.** Classes
-A/A2/C/E remain and are the tracker's content. 718 is CLOSED and
+**Status:** OPEN (T1–T8 ALL DONE; open only on the two follow-ups it spawned)
+— filed 2026-09-04 by Issue 718 T3(a) (the full-workspace pricing run, the
+first time anything ever *executed* this workspace's test surface). **Classes
+A, A2, B, D, E and F are all FIXED.** Class C is RESOLVED BY MEASUREMENT (the
+gates are correct at their own feature sets and meaningless under
+`--all-features` unification — T3), which is a finding, not a fix, and it is
+why the full unified run still cannot pass at any budget. What remains is not
+this issue's content: `.issues/726` (`gauge_rebalance` is 3.7x its paper
+target) and `.issues/727` (SP-KV misses both T16 bars) are the two real
+primitive shortfalls that T7's repaired instruments exposed. 718 is CLOSED and
 REMOVED (durable record: `.docs/10_audits/ci_compile_vs_execute_axis.md`); this
 issue inherits the reds it found. The cadence question 718 left open is
 answered by its own reds: the full `--all-features` run **cannot pass at any
@@ -27,7 +32,7 @@ Cost and census of the run itself: `.benchmarks/701_full_workspace_execution_pri
 Read the class before the count — these do not share a fix, and pooling them
 into "47 red targets" is what would make this issue unactionable.
 
-### Class A — wall-clock / throughput bars, measured on a box at load 8-16 (8)
+### Class A — wall-clock / throughput bars, measured on a box at load 8-16 (8) — FIXED
 
 `bench_001_pruners_goat_proof` (G5 A/B, 31.9 ms vs 54.8 ms),
 `bench_231_union_bound_goat` (G4.4 scaling 643.6x vs a 250x bar),
@@ -38,12 +43,22 @@ into "47 red targets" is what would make this issue unactionable.
 `spec_reconciliation_bench` (p50/p99 bars).
 
 These are the surface the 718 T3(b) scoping decision **deliberately left
-workstation-owned** — a Linux runner cannot hold them. The action is not
-"fix the code": it is to decide per target between the
-`make-wallclock-gates-load-invariant` treatment (interleave a control, assert
-the per-pair ratio) and an explicit `#[ignore]` with a reason string. Three
-of this repo's last four commits (`a9576e20`, `ff6a4d46`, `172f5520`) are
-already tolerance re-pins from this same run, so the class is live.
+workstation-owned** — a Linux runner cannot hold them. The action was framed
+as a per-target choice between the `make-wallclock-gates-load-invariant`
+treatment (interleave a control, assert the per-pair ratio) and an explicit
+`#[ignore]` with a reason string.
+
+**The framing was wrong, and that is the class's real finding.** Applying the
+load-invariant treatment first — before deciding anything — showed that
+**the box was the sole cause of exactly zero of the eight**. Seven were broken
+instruments (an arm the optimiser had deleted; setup inside the timed region;
+a clamped denominator; a loop-invariant baseline hoisted out; adapter
+construction charged to one arm only; a "50% pruned" arm that pruned nothing;
+a p50 over five samples) and one was an honestly unreachable bar. Load noise
+was never the top term in any of them, and three of the eight moved by
+**more than 5x** once the instrument was fixed — one by 140x, in the direction
+that turned a "30x regression" into a 4.6x *win*. Full record and the
+per-target dispositions: T7 below.
 
 ### Class A2 — timer-resolution degenerate: `0 ns` → `NaN%` (3)
 
@@ -226,9 +241,100 @@ were defects.
       former Class B wasm targets now pass; the one failure is the Class E
       dims assert (300 vs 216), which reproduces under `percepta_compile`
       ALONE (feature-independent — a T8 data point, not a Class C pin issue).
-- [ ] **T7 — Class A: 8 wall-clock bars.** Per target, choose load-invariant
-      treatment or `#[ignore]` with a reason. Owner call on which. SKIPPED by
-      this session (T8 done around it) — explicitly owner-gated.
+- [x] **T7 — Class A: 8 wall-clock bars.** DONE 2026-09-05. All eight are GREEN
+      at their own committed feature sets (63 passed, 2 ignored-with-provenance,
+      0 failed) and every verdict is now load-invariant. The shared harness is
+      `tests/common/ab_timing.rs` (`#[path]`-included like
+      `common/alloc_tracking.rs`): interleaved `(a-chunk, b-chunk)` pairs, one
+      ratio per pair, **median** across pairs, a loud FAIL when an arm reads
+      0 ns, and `best_of_us` for the absolute budgets that have no second arm.
+      **The headline is that the box caused none of these.** Dispositions:
+      - `substrate_gate_goat::g2` — **the arm had been deleted.** `black_box`
+        was on `sparse_matmul`'s returned *count*, but the function
+        communicates through `base_out`, which nothing downstream read — so
+        dead-store elimination was free to drop the whole baseline once
+        inlined (the T5 mechanism). A vanished denominator printed as a 30.267x
+        regression in the numerator. Consuming the OUTPUT buffers instead:
+        **30.267x → 0.216x**, i.e. the substrate path is 4.6x *faster*, which
+        is precisely what the gate claims. G6 carried the byte-identical
+        defect and got the same fix (now 1.017x, the "zero overhead" it
+        asserts). 10/10.
+      - `bench_001_pruners_goat_proof::g5` — **the two arms were not the same
+        experiment.** NEW ran the real 50-node x 256-vocab traversal; OLD ran
+        `contains()`-dedup over `0..256` sequential integers — an
+        already-distinct stream that never touches the trie. Both arms now
+        dedup the *identical* candidate stream, reconstructed once outside the
+        clock through the public per-edge query, with outputs asserted equal:
+        bitset is **7.4x faster** (median 0.1353, per-round 0.1317–0.1375).
+        Also fixed the manifest row: `required-features = ["bomber", "go"]`
+        does not compile (E0432 — `game_state` exports the imports), so the
+        target had only ever built under `--all-features`. 7/7.
+      - `bench_231_union_bound_goat::g4` — **643.6x on a provably linear
+        function** (`total_confidence` is one `sum`). `small_scores` was
+        loop-invariant with only the *result* `black_box`ed, so LLVM hoisted
+        the 8-element arm out of its 100K loop; `small_ns.max(1.0)` then
+        clamped the vanished denominator, converting "the baseline is gone"
+        into a scaling verdict — Class A2 wearing Class A's clothes.
+        `black_box` the **inputs**, drop the clamp, add a zero-baseline FAIL,
+        and restate the claim per **element**: 3.38–3.53x over three runs
+        against a 10x bar (quadratic would be 125x). 7/7.
+      - `bench_270_gauge_invariant_goat::t08` — three defects. The timed
+        closure re-generated both 256x16 operands inside the clock; `warmup = 3`
+        left the P-core unramped, so the gate read **47 µs run alone and
+        18.6 µs run in-suite** (a verdict decided by the test *filter*); and
+        the 5 µs bar had never been executed in release. Setup excluded,
+        200/200 warmup/iters: **17.67–21.67 µs over twelve runs** at box load
+        6–14. Re-pinned 30 µs with provenance, 5 µs kept beside it as the paper
+        target it always was. The 3.7x gap is a real optimisation with a real
+        target and is filed as **`.issues/726`**, not smuggled into the re-pin.
+        17/17.
+      - `goat_234_manifold_pruner::g7` — the 5x bar was measuring the
+        **fixture**. Interleaved and stable to ±3%, soft/binary is 10.5x, and
+        the reason is that this file's `BoundaryPruner` computes its soft score
+        with a full libm `exp` (2.33 ns/call) against an 8-element dot
+        (0.79 ns/call) — so a fixture that switched to `fast_sigmoid` would
+        have "improved" the primitive's gate without touching it. Split: **G7a**
+        is the no-regression claim (wrapped vs the inner scorer it wraps —
+        3.60x, pinned 5.0x, the wrapper genuinely adds a second transcendental)
+        and **G7b** keeps the approach-level number at a measured 15x. 11/11.
+      - `bench_257_gpart_adapter_goat::g2` — **the LoRA arm built its adapter
+        inside the timed loop** (two `Vec` clones per iteration), which is
+        model-load work the GPart arm explicitly hoists. The inflated
+        denominator *flattered* GPart and the gate failed anyway, so the honest
+        fix moves the number the wrong way: 206.1% → **220.7%**, stable at
+        2.216–2.242 over three runs. Re-pinned 2.0 → 3.0 with provenance —
+        GPart does 8x the arithmetic (4096 adds vs 512 FMAs), so 2.0x was never
+        reachable at these dimensions, and 3.0 still reds if the vectorised add
+        is lost (that puts it near 8x). The file header's stale "≤ 110%" was
+        corrected in the same pass. 4/4 (+1 pre-existing ignore).
+      - `spec_reconciliation_bench` — a p50 over **five** samples, and a
+        `sorted[(0.99*(n-1)).round()]` "p99" that was the maximum. The deeper
+        problem is that `reconcile` is O(client x k x steps) and the bench
+        passes `steps = n`, so "p50 < 1 ms at every size" cannot be right at
+        five sizes — and the two largest had never run in release, because the
+        debug arm caps `n` at 60 while the release arm runs 600. Best-of-25 at
+        n=600 is 9.8 ms, 10x the old bar and not a regression, just the first
+        look. Now asserts **best-of-N** (contention only ever adds) on the
+        scale-invariant quantity — **ns per similarity comparison**, measured
+        1.62–1.69 at n=600 and 3.21 at n=60 against an 8.0 bar — with p50/p99
+        kept as telemetry through `katgpt_core::stats::nearest_rank`, which
+        prints tail support. 2/2.
+      - `bench_sp_kv::bench_gate_bias_overhead` — **`#[ignore]` with
+        provenance, the T8 `goat_169_g1` precedent**, and the one target where
+        the repaired instrument reports a real primitive shortfall rather than
+        a fixed gate. Two things had made it unmeasurable: `Config::micro()`
+        carries `block_size = 16`, so the "50% pruned" arm's guard
+        (`t < t_n - 16`) was vacuously false and that arm pruned **0 of 16**
+        positions — `prune_skip_speedup > 1.05` was asserting identical work is
+        5% faster than itself — and at ~256 MACs/iter an unrelated `eprintln!`
+        moved the measured ratio from 1.036 to 0.707. Decoupled from
+        `block_size` (`T_N = 512`, a real 48% prune, plus an assertion that
+        makes a vacuous mixed arm a loud FAIL), interleaved, three runs:
+        gate-bias overhead **+8.0/+8.1/+8.4%** against a 3% bar and a <1% paper
+        target, prune-skip **1.046/1.042/1.015x** against a 1.05x bar. The +8%
+        is not dispatch (the Option wrapper measures the same +8.2%) — it is
+        the bias load. Tracked as **`.issues/727`**; the assertions stay
+        executable via `--ignored`. 5 passed / 1 ignored.
 - [x] **T8 — Class E remainder (12 targets).** DONE 2026-09-04, per-target reads on the
       settled tree (`0ffe0e15`). Every target now PASSES at its own committed feature set;
       dispositions:
@@ -296,6 +402,8 @@ were defects.
 | G2 | **MET 2026-09-04, canaried both ways** — `bench_294_ict_g6` 3/3 under `CARGO_TARGET_DIR=/tmp/...` (18.9 s warm) AND 3/3 under the default `target/` (934.5 s cold — it spawns three internal feature-set builds). Before the fix the `/tmp` direction panicked, so the two directions genuinely disagreed |
 | G3 | **MET 2026-09-04** — Class C resolved by MEASUREMENT (T3: `issue_698_t1` passes under its own committed features, fails only under unification), never by re-pinning a drifted hash |
 | G4 | **MET 2026-09-04 for the A2 class** — the three NaN gates now carry zero-baseline / finite-value asserts (a zero denominator or a non-finite cos is a named FAIL, never a NaN verdict); the fold-elimination mechanism they guard against is recorded in T5 (rustc 1.98.1 + fat LTO drops dead-result inlined-callee work through black_box) |
+| G5 | **MET 2026-09-05 for the A class (T7)** — all 8 targets green at their own committed feature sets (63 passed / 2 ignored-with-provenance / 0 failed) and every verdict load-invariant: interleaved median-of-ratios for the A/B bars, best-of-N for the absolute budgets, and a loud named FAIL for a 0 ns arm in both. Verdict stability re-measured 3x per re-pinned target |
+| G6 | **MET 2026-09-05** — no red was closed by loosening a bar alone. Five of the eight were closed by *repairing the instrument* (the number moved, in one case by 140x and in one case in the losing direction); the three re-pins each carry the measured band, the run count and the box load, and the two genuine primitive shortfalls were filed as `.issues/726` / `.issues/727` rather than absorbed into a tolerance |
 
 ## Honest caveats
 
@@ -303,9 +411,16 @@ were defects.
   The `-p` vs `--workspace` and platform axes apply to execution exactly as
   they do to compilation; a green here would not be total coverage, and this
   red list is not exhaustive of what other configurations would show.
-- **Class A's reds are partly the box.** Load was 8-16 during the enumerating
-  run. That does not dismiss them — a gate whose verdict the box decides is a
-  gate that cannot run in CI, which is the finding either way.
+- **"Class A's reds are partly the box" was the wrong prior, and T7 refuted it.**
+  Load was 8-16 during the enumerating run, and that framing survived a whole
+  filing because it is the *plausible* explanation for a wall-clock red. It was
+  the top term in none of the eight. The rule to carry forward is the one that
+  found this: **repair the instrument first, decide the disposition second** —
+  a tolerance argument conducted over a broken measurement is unfalsifiable,
+  and three of these would have been "re-pinned" to numbers that were off by
+  5x, 7x and 140x. Two of the eight *did* turn out to be real shortfalls
+  (`.issues/726`, `.issues/727`), and neither was visible until the instrument
+  around it was correct.
 - **The 47 is a target count, not a defect count.** 12 of the tests are one
   linker flag and 9 targets are plausibly one feature-set mismatch.
 
@@ -319,3 +434,10 @@ were defects.
   arming half; this issue is the running half
 - `scripts/test_gate.sh` + `.github/workflows/test.yml` — 718 T3(b), the
   scoped weekly job that covers the 2 lib suites but none of the above
+- `tests/common/ab_timing.rs` — the T7 shared harness (interleaved
+  median-of-ratios + best-of-N), with the three defenses and why each is
+  needed written into its module header
+- `.issues/726` — `gauge_rebalance` 3.7x its Plan 279 target; the scalar
+  rank-wise accumulate in `power_iterate_sigma_max` (spawned by T7)
+- `.issues/727` — SP-KV misses both T16 bars at a realistic sequence length
+  (spawned by T7)

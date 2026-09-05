@@ -726,7 +726,12 @@ required-features = ["bomber", "go"]
 
 [[test]]
 name = "bench_001_pruners_goat_proof"
-required-features = ["bomber", "go"]
+# Issue 723 T7: was ["bomber", "go"], which does NOT compile — the file's
+# top-level imports pull `mcts_search` / `StateHeuristic` / `BomberHeuristic`
+# / `BomberState`, all of which are exported behind `game_state` (which itself
+# implies `bomber`). Naming the target at its own declared feature set errored
+# with E0432 instead of running; it only ever compiled under `--all-features`.
+required-features = ["game_state", "go"]
 
 # ── SegmentCheckpoint (Plan 223b) ───────────────────────────────
 
