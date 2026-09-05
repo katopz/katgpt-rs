@@ -69,6 +69,7 @@ from required_features_build_audit import (  # noqa: E402
     check_group,
     disk_headroom_ok,
     free_gib,
+    print_reclaim_hint,
     group_rows,
     parse_rows,
     rows_from_manifest,
@@ -326,6 +327,7 @@ def main(argv: list[str]) -> int:
               f"this gate would red them as wrong rows. Free space, pass "
               f"--target-dir somewhere with room, or set RFBA_MIN_FREE_GIB.",
               file=sys.stderr)
+        print_reclaim_hint(str(repo))
         return 2
 
     bad: list[tuple[str, str, str]] = []

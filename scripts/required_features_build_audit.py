@@ -57,6 +57,7 @@ import json
 import os
 import shutil
 import subprocess
+import shlex
 import sys
 import time
 import tomllib
@@ -613,6 +614,58 @@ def free_gib(path: str | None = None) -> float:
 def disk_headroom_ok(path: str | None = None) -> bool:
     return free_gib(path) >= MIN_FREE_GIB
 
+
+def reclaimable_incremental(start: str | None = None) -> list[Path]:
+    """Cargo `incremental/` dirs next to `start`'s repo — pure, regenerable cache.
+
+    Named by the REFUSE below, because "free space" is not an instruction and
+    the answer is almost always this: incremental state holds no compiled
+    artifact, so deleting it costs one non-incremental rebuild of whatever is
+    already being rebuilt, and nothing else. Measured 2026-09-06 on this box,
+    it was **322 GiB across 16 repos while the volume held 16 GiB free** — the
+    sweep was refusing correctly and the reclaim was sitting in plain sight,
+    found only by a hand `du` that took minutes.
+
+    Deliberately does NOT size them: `du` over that many small files is a
+    multi-minute walk, and a refusal path that takes minutes is a refusal path
+    people work around. Existence is O(repos) and enough to act on; the printed
+    `du` is how you turn it into a number.
+    """
+    here = Path(start or ".").resolve()
+    root = next((a for a in (here, *here.parents) if (a / ".git").exists()), here).parent
+    return sorted(
+        d
+        for repo in root.iterdir()
+        if repo.is_dir()
+        for d in repo.glob("target/*/incremental")
+        if d.is_dir()
+    )
+
+
+def print_reclaim_hint(start: str | None = None, stream=None) -> None:
+    """The actionable half of a disk REFUSE, shared by both callers.
+
+    "Free space" is a complaint, not an instruction. Called by this sweep and
+    by required_features_touched_gate.py, which keep their own consequence
+    sentences (UNSEEN hides findings / this gate reds them as wrong rows) and
+    share only this — the hand-duplicated-value hazard docs_gate_paths_sync.py
+    exists for, one axis over.
+    """
+    incr = reclaimable_incremental(start)
+    if not incr:
+        return
+    root = incr[0].parents[2].parent
+    print(
+        f"\n  {len(incr)} cargo incremental cache(s) are reclaimable — pure,\n"
+        f"  regenerable state holding no compiled artifact, so deleting one\n"
+        f"  costs a non-incremental rebuild of what was being rebuilt anyway.\n"
+        f"  Size them with:\n"
+        f"    du -sg {shlex.quote(str(root))}/*/target/*/incremental | sort -rn\n"
+        f"  Reclaim by RENAMING each aside first (atomic, so a build starting\n"
+        f"  mid-delete just recreates a fresh cache), then deleting the renamed\n"
+        f"  dirs. Skip any repo with a live cargo.",
+        file=stream or sys.stderr,
+    )
 
 def concurrent_cargo(repo: Path) -> bool:
     """A cargo process with its CWD inside this repo invalidates the verdict.
@@ -1222,6 +1275,7 @@ def main(argv: list[str]) -> int:
                 f"somewhere with room.",
                 file=sys.stderr,
             )
+            print_reclaim_hint(str(repo))
             return 2
         if concurrent_cargo(repo):
             print(
