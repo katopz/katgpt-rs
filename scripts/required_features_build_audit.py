@@ -298,6 +298,50 @@ def static_invalid(feature: str, feats: set[str], deps: set[str]) -> str:
     return f"package declares no feature `{feature}`"
 
 
+# A verdict is TERMINAL when re-running it could not change it. TIMEOUT and
+# ERROR are not: they describe the box, not the row, and a resume must retry
+# them. UNSEEN is not either — it means the run never reached the target.
+TERMINAL = (BUILDS, FAILS, NO_FEATURE)
+
+
+def read_prior(path: Path) -> dict[str, str]:
+    """Labels already decided by an earlier run, from a --record JSONL or a log.
+
+    Both shapes are accepted because an hours-long sweep is routinely started
+    before anyone thinks about resuming it: the JSONL is the intended input,
+    and the progress log is what an interrupted first run actually left behind.
+    """
+    out: dict[str, str] = {}
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            label, verdict = rec.get("label"), rec.get("verdict")
+        else:
+            # "   [5/621] BUILDS   4.1s repo:pkg:kind:name  [grp 4/379]"
+            # The "!!" mark precedes the counter on every non-BUILDS row, so
+            # anchoring on a leading "[" would silently drop exactly the
+            # findings a resume most needs to carry forward.
+            parts = line.split("]", 1)
+            if len(parts) != 2 or "[" not in parts[0]:
+                continue
+            fields = parts[1].split()
+            if len(fields) < 3:
+                continue
+            verdict = fields[0]
+            label = next((f for f in fields[1:] if f.count(":") >= 3), None)
+        if label and verdict in TERMINAL:
+            out[label] = verdict
+    return out
+
+
 def group_rows(rows: list[Row]) -> list[Group]:
     """Collapse rows to (package, EXACT feature set) groups, order-preserving."""
     index: dict[tuple[str, tuple[str, ...]], Group] = {}
@@ -463,6 +507,21 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
     if args.limit:
         rows = rows[: args.limit]
 
+    prior = read_prior(Path(args.resume)) if args.resume else {}
+    if prior:
+        done = [r for r in rows if r.label in prior]
+        for row in done:
+            rep.results.append(Result(row, prior[row.label], 0.0, "resumed"))
+        rows = [r for r in rows if r.label not in prior]
+        print(
+            f"resumed {len(done)} decided row(s) from {args.resume}; "
+            f"{len(rows)} left",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    record = open(args.record, "a", encoding="utf-8") if args.record else None
+
     # The free pass first: a row naming a feature the package cannot enable is
     # decided by the manifest alone, so it must not cost a build. Over the 1,829
     # rows in the workspace this takes under a second; the compiler pass is
@@ -479,6 +538,23 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
     rows = [r for r in rows if r.label not in static_bad]
 
     def emit(res: Result, i: int, n: int, suffix: str = "") -> None:
+        if record is not None and res.verdict in TERMINAL:
+            # Append per row, flushed: an interrupted sweep must leave a
+            # machine-readable record, not only a progress log. This report
+            # takes hours and being killed is its normal ending.
+            record.write(
+                json.dumps(
+                    {
+                        "label": res.row.label,
+                        "verdict": res.verdict,
+                        "seconds": round(res.seconds, 1),
+                        "features": res.row.features,
+                        "detail": res.detail,
+                    }
+                )
+                + "\n"
+            )
+            record.flush()
         if args.quiet:
             return
         mark = "  " if res.verdict == BUILDS else "!!"
@@ -505,12 +581,13 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
                 rep.results.append(res)
                 done += 1
                 emit(res, done, len(rows), f"  [grp {gi}/{len(groups)}]")
-        return rep
-
-    for i, row in enumerate(rows, 1):
-        res = check_row(repo, row, args.target_dir, args.timeout)
-        rep.results.append(res)
-        emit(res, i, len(rows))
+    else:
+        for i, row in enumerate(rows, 1):
+            res = check_row(repo, row, args.target_dir, args.timeout)
+            rep.results.append(res)
+            emit(res, i, len(rows))
+    if record is not None:
+        record.close()
     return rep
 
 
@@ -576,6 +653,39 @@ def selftest() -> None:
                     file=sys.stderr,
                 )
                 raise SystemExit(2)
+
+    # read_prior(): resume must be conservative in exactly one direction. A
+    # TERMINAL verdict may be skipped; TIMEOUT/ERROR/UNSEEN must be RE-RUN,
+    # because they describe the box or a run that never reached the target.
+    # Skipping one of those would let a sweep "finish" over rows nothing ever
+    # decided — the green-zero this family exists to refuse, resumed.
+    with tempfile.TemporaryDirectory() as td:
+        rp = Path(td) / "prior"
+        rp.write_text(
+            json.dumps({"label": "r:p:test:a", "verdict": BUILDS}) + "\n"
+            + json.dumps({"label": "r:p:test:b", "verdict": FAILS}) + "\n"
+            + json.dumps({"label": "r:p:test:c", "verdict": TIMEOUT}) + "\n"
+            + json.dumps({"label": "r:p:test:d", "verdict": UNSEEN}) + "\n"
+            + "{ not json\n",
+            encoding="utf-8",
+        )
+        got = read_prior(rp)
+        if got != {"r:p:test:a": BUILDS, "r:p:test:b": FAILS}:
+            print(f"SELFTEST FAILED: read_prior jsonl → {got}", file=sys.stderr)
+            raise SystemExit(2)
+        lg = Path(td) / "log"
+        lg.write_text(
+            "── katgpt-rs ──\n"
+            "   [5/621] BUILDS             4.1s r:p:test:e  [grp 4/379]\n"
+            "!! [6/621] FAILS-TO-BUILD    12.0s r:p:bench:f  (E0432)\n"
+            "!! [7/621] TIMEOUT         1800.0s r:p:test:g  (> 1800s)\n"
+            "resumed 3 decided row(s) from x; 4 left\n",
+            encoding="utf-8",
+        )
+        got = read_prior(lg)
+        if got != {"r:p:test:e": BUILDS, "r:p:bench:f": FAILS}:
+            print(f"SELFTEST FAILED: read_prior log → {got}", file=sys.stderr)
+            raise SystemExit(2)
 
     # static_invalid(): the free pass. Its FALSE-POSITIVE direction is the
     # dangerous one — a `dep/feat` row read as invalid would have filed 10
@@ -751,6 +861,17 @@ def main(argv: list[str]) -> int:
         help="CARGO_TARGET_DIR (use /tmp/... when a sibling session is building)",
     )
     ap.add_argument("--timeout", type=int, default=1800, help="per-row/per-group seconds")
+    ap.add_argument(
+        "--record",
+        help="append each decided row as JSONL as it lands — an interrupted "
+        "sweep leaves usable state, and --resume reads this back",
+    )
+    ap.add_argument(
+        "--resume",
+        help="skip rows already decided in this --record JSONL (a progress log "
+        "is also accepted). TIMEOUT/ERROR/UNSEEN are re-run: they describe the "
+        "box or a run that never reached the target, not the row",
+    )
     ap.add_argument(
         "--batch",
         action="store_true",
