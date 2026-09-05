@@ -104,6 +104,103 @@ pub fn pick_domain<const N: usize, const A: usize>(
     best
 }
 
+/// Pick the top `k` domains by gate affinity, in DESCENDING score order.
+///
+/// The `k`-selection generalisation of [`pick_domain`]. The difference that
+/// matters is not the return shape but the arithmetic: a caller that wants
+/// `k` domains and only has `pick_domain` must call it `k` times, and
+/// `pick_domain` recomputes **all `N` dot products on every call** — so a
+/// top-`k` selection costs `k·N·A` multiply-adds plus one masking write per
+/// pick. This scores each domain **once** (`N·A`) and then runs `k` argmax
+/// passes over `N` scalars.
+///
+/// Measured on the first consumer (`riir-games` strategy-MoE family gate,
+/// `N = 5`, `A = 8`, riir-ai Bench 861): the repeated-`pick_domain` shape
+/// costs 11.7 ns at k=1 rising to 73.6 ns at k=5 — superlinear in `k`
+/// because each pick re-does the whole score vector.
+///
+/// # Semantics — identical to `pick_domain` where they overlap
+///
+/// - Ties break to the **lower index**, so `k = 1` with
+///   `min_score = f32::NEG_INFINITY` selects exactly what `pick_domain`
+///   selects.
+/// - `min_score` is a **strict** floor: a domain enters the selection only
+///   if its affinity is `> min_score`. Pass `f32::NEG_INFINITY` for pure
+///   argmax semantics (`pick_domain`'s), or `0.0` for the positive-affinity
+///   floor a sparse gate wants — which also makes zero-padded rows in an
+///   over-sized direction matrix drop out on their own, with no separate
+///   padding check.
+/// - A domain scoring exactly `f32::NEG_INFINITY` is never selected. This is
+///   the one divergence from `pick_domain`, which would return it as the
+///   argmax of an all-`-inf` matrix; such a matrix has no meaningful winner.
+///
+/// Returns the number of `(domain_index, score)` pairs written to `out`,
+/// which is `min(k, N)` unless the floor cuts the selection short.
+///
+/// # Modelless
+///
+/// Dot products + argmax. No softmax, no learned router, no allocation —
+/// scores live in a fixed `[f32; N]` on the stack, exactly as in
+/// [`pick_domain`].
+///
+/// # Example
+///
+/// ```
+/// use katgpt_core::variable_rank_domain_expert::pick_domains_top_k;
+///
+/// // Three domains; the activity vector leans on dim 0, then dim 1.
+/// let dirs = [[1.0, 0.0], [0.0, 1.0], [-1.0, -1.0]];
+/// let activity = [0.9, 0.4];
+/// let mut out = [(0usize, 0.0f32); 3];
+///
+/// // Positive-affinity floor: the third domain is negative and never enters.
+/// let n = pick_domains_top_k(&activity, &dirs, 3, 0.0, &mut out);
+/// assert_eq!(n, 2);
+/// assert_eq!(out[0].0, 0); // 0.9 beats 0.4
+/// assert_eq!(out[1].0, 1);
+/// ```
+#[inline]
+pub fn pick_domains_top_k<const N: usize, const A: usize>(
+    activity: &[f32; A],
+    domain_directions: &[[f32; A]; N],
+    k: usize,
+    min_score: f32,
+    out: &mut [(usize, f32); N],
+) -> usize {
+    // Score every domain ONCE — this is the whole point of the function.
+    let mut scores = [0.0f32; N];
+    for (d, dir) in domain_directions.iter().enumerate() {
+        let mut s = 0.0f32;
+        for i in 0..A {
+            s += activity[i] * dir[i];
+        }
+        scores[d] = s;
+    }
+
+    let k = k.min(N);
+    let mut count = 0usize;
+    while count < k {
+        // Strict `>` against the running best gives lowest-index-wins ties,
+        // matching `pick_domain`; seeding it with `min_score` folds the
+        // floor into the same comparison instead of a second pass.
+        let mut best = usize::MAX;
+        let mut best_score = min_score;
+        for (d, &score) in scores.iter().enumerate() {
+            if score > best_score {
+                best_score = score;
+                best = d;
+            }
+        }
+        if best == usize::MAX {
+            break;
+        }
+        out[count] = (best, best_score);
+        scores[best] = f32::NEG_INFINITY; // mask: never wins again
+        count += 1;
+    }
+    count
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Primitive 2: Guided Projection — zero-cost dimension gather
 // ────────────────────────────────────────────────────────────────────────────
@@ -614,6 +711,182 @@ mod tests {
     use super::*;
 
     // ─── G1-mechanics: pick_domain ───────────────────────────────────────────
+
+    // ─── pick_domains_top_k: EQUIVALENCE to the repeated-pick_domain shape ───
+
+    /// The shape `pick_domains_top_k` replaces: call `pick_domain`, record it,
+    /// zero the winning row so it cannot win again, repeat. Kept here as the
+    /// reference implementation so the equivalence claim is checked against
+    /// real code rather than against prose.
+    fn reference_repeated_pick_domain<const N: usize, const A: usize>(
+        activity: &[f32; A],
+        directions: &[[f32; A]; N],
+        k: usize,
+        live: usize,
+    ) -> Vec<(usize, f32)> {
+        let mut work = *directions;
+        let mut picked: Vec<usize> = Vec::new();
+        let mut out: Vec<(usize, f32)> = Vec::new();
+        for _ in 0..k.min(N) {
+            let idx = pick_domain::<N, A>(activity, &work);
+            if idx >= live || picked.contains(&idx) {
+                break;
+            }
+            let mut score = 0.0f32;
+            for i in 0..A {
+                score += activity[i] * work[idx][i];
+            }
+            if score <= 0.0 {
+                break;
+            }
+            picked.push(idx);
+            out.push((idx, score));
+            work[idx] = [0.0; A];
+        }
+        out
+    }
+
+    #[test]
+    fn top_k_reproduces_repeated_pick_domain_over_a_swept_corpus() {
+        // 8 rows with 5 "live" families + 3 zero-padded ones — the exact
+        // shape riir-games' strategy-MoE gate uses, including the padding
+        // rows whose separate `idx >= live` check the floor now subsumes.
+        const N: usize = 8;
+        const A: usize = 8;
+        const LIVE: usize = 5;
+
+        let mut checked = 0usize;
+        for seed in 0..64u32 {
+            let mut directions = [[0.0f32; A]; N];
+            for (r, row) in directions.iter_mut().enumerate().take(LIVE) {
+                for (i, v) in row.iter_mut().enumerate() {
+                    // Deterministic spread including NEGATIVE directions, so
+                    // the gate floor is exercised in both directions.
+                    let h = (seed as usize * 31 + r * 7 + i * 3) % 13;
+                    *v = (h as f32 - 6.0) / 6.0;
+                }
+            }
+            for a_seed in 0..8u32 {
+                let mut activity = [0.0f32; A];
+                for (i, v) in activity.iter_mut().enumerate() {
+                    let h = (a_seed as usize * 17 + i * 5) % 11;
+                    *v = (h as f32 - 5.0) / 5.0;
+                }
+                for k in 0..=N {
+                    let want = reference_repeated_pick_domain::<N, A>(
+                        &activity,
+                        &directions,
+                        k,
+                        LIVE,
+                    );
+                    let mut got = [(0usize, 0.0f32); N];
+                    let n = pick_domains_top_k::<N, A>(
+                        &activity,
+                        &directions,
+                        k,
+                        0.0,
+                        &mut got,
+                    );
+                    assert_eq!(
+                        n,
+                        want.len(),
+                        "count diverged at seed={seed} a_seed={a_seed} k={k}"
+                    );
+                    for (i, w) in want.iter().enumerate() {
+                        assert_eq!(
+                            got[i].0, w.0,
+                            "index diverged at seed={seed} a_seed={a_seed} k={k} slot={i}"
+                        );
+                        assert_eq!(
+                            got[i].1.to_bits(),
+                            w.1.to_bits(),
+                            "score not BIT-identical at seed={seed} a_seed={a_seed} k={k} slot={i}"
+                        );
+                    }
+                    checked += 1;
+                }
+            }
+        }
+        // Non-vacuity: the sweep must actually have run, and must have
+        // produced at least one non-empty selection (an all-negative corpus
+        // would make every comparison trivially `0 == 0`).
+        assert_eq!(checked, 64 * 8 * (N + 1), "sweep did not cover the corpus");
+        let mut any_selected = false;
+        for seed in 0..64u32 {
+            let mut directions = [[0.0f32; A]; N];
+            for (r, row) in directions.iter_mut().enumerate().take(LIVE) {
+                for (i, v) in row.iter_mut().enumerate() {
+                    let h = (seed as usize * 31 + r * 7 + i * 3) % 13;
+                    *v = (h as f32 - 6.0) / 6.0;
+                }
+            }
+            let activity = [0.4f32; A];
+            let mut got = [(0usize, 0.0f32); N];
+            if pick_domains_top_k::<N, A>(&activity, &directions, 5, 0.0, &mut got) > 0 {
+                any_selected = true;
+                break;
+            }
+        }
+        assert!(any_selected, "corpus never selected anything — the equivalence would be vacuous");
+    }
+
+    #[test]
+    fn top_k_at_k1_no_floor_matches_pick_domain() {
+        // With the floor disabled, k=1 IS pick_domain — including on a
+        // matrix whose every score is negative, where a positive floor
+        // would (correctly) select nothing.
+        let activity = [0.5f32, 0.25];
+        let directions: [[f32; 2]; 3] = [[-1.0, -1.0], [-0.5, -2.0], [-2.0, -0.1]];
+        let want = pick_domain::<3, 2>(&activity, &directions);
+        let mut out = [(0usize, 0.0f32); 3];
+        let n = pick_domains_top_k::<3, 2>(
+            &activity,
+            &directions,
+            1,
+            f32::NEG_INFINITY,
+            &mut out,
+        );
+        assert_eq!(n, 1);
+        assert_eq!(out[0].0, want);
+
+        let m = pick_domains_top_k::<3, 2>(&activity, &directions, 1, 0.0, &mut out);
+        assert_eq!(m, 0, "the positive floor admits nothing from an all-negative matrix");
+    }
+
+    #[test]
+    fn top_k_orders_descending_and_breaks_ties_by_lowest_index() {
+        let activity = [1.0f32, 1.0];
+        // Three domains tie at 1.0; one scores 2.0.
+        let directions: [[f32; 2]; 4] =
+            [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [0.5, 0.5]];
+        let mut out = [(0usize, 0.0f32); 4];
+        let n = pick_domains_top_k::<4, 2>(&activity, &directions, 4, 0.0, &mut out);
+        assert_eq!(n, 4);
+        assert_eq!(out[0], (2, 2.0), "highest first");
+        assert_eq!(out[1].0, 0, "1.0 tie → lowest index first");
+        assert_eq!(out[2].0, 1);
+        assert_eq!(out[3], (3, 1.0));
+        for w in out.windows(2) {
+            assert!(w[0].1 >= w[1].1, "scores must be descending");
+        }
+    }
+
+    #[test]
+    fn top_k_k_zero_and_k_over_n_are_clamped() {
+        let activity = [1.0f32, 1.0];
+        let directions: [[f32; 2]; 2] = [[1.0, 0.0], [0.0, 1.0]];
+        let mut out = [(0usize, 0.0f32); 2];
+        assert_eq!(
+            pick_domains_top_k::<2, 2>(&activity, &directions, 0, 0.0, &mut out),
+            0
+        );
+        assert_eq!(
+            pick_domains_top_k::<2, 2>(&activity, &directions, 99, 0.0, &mut out),
+            2,
+            "k is clamped to N, never reads past `out`"
+        );
+    }
+
 
     #[test]
     fn g1_pick_domain_argmax_picks_expected_winner() {
