@@ -1,0 +1,50 @@
+# Pins for `required_features_build_audit.py --pins` (Issue 513 T3).
+#
+# The verdict: does `cargo check -p <pkg> --<kind> <name> --features <the row,
+# verbatim>` succeed? It needs the COMPILER, which is why this file exists
+# instead of a key in cfg_gated_floor_gate.py — that gate is a docs-gate check
+# and must stay compiler-free (~0.3s, per push). A pin can only live where its
+# measurement can.
+#
+# Format, 4 whitespace-separated fields:
+#
+#   <repo>  <min_rows>  <max_fails>  <max_unseen>
+#
+# ── max_fails is a WALL at 0 wherever the repo has been measured whole ───────
+# A row that cannot build its own target is never legitimate: cargo silently
+# SKIPS such a target in every invocation that does not name it, so it reports
+# a green zero forever while every audit counts it as protected.
+#
+# ── max_unseen is a wall too, and that is the load-bearing choice ────────────
+# UNSEEN is "cargo reached no verdict" — an upstream unit failed first, or the
+# package is outside the workspace. It is NOT a pass, and Issue 513 instance 6
+# is why: ten UNSEEN rows in riir-train looked downstream of two FAILS beside
+# them, survived those fixes unchanged, and turned out to be a LIBRARY that did
+# not compile under the feature. Folding UNSEEN into the pass column would have
+# hidden it behind two unrelated repairs.
+#
+# ── min_rows is the floor under both ceilings ────────────────────────────────
+# They are green over whatever `parse_rows` can SEE. A manifest-walk regression
+# takes the population to 0 and both pass, indistinguishable from a clean repo.
+# ~10% slack below measured, deliberately: a row legitimately leaves when a
+# target is deleted, and a ratcheting floor would red the next correct removal.
+#
+# ── Only repos measured WHOLE are listed ────────────────────────────────────
+# An unlisted repo REDS the run rather than defaulting to permissive, so this
+# file is also the record of what has been decided. riir-ai (515 rows, sweep in
+# flight, 2 open instances) and riir-game-sdk (32, deferred on tree
+# contamination) are deliberately absent and must be added with their measured
+# numbers when they land.
+#
+# Measured 2026-09-06, each repo run whole with --batch.
+#
+# repo                  min_rows  max_fails  max_unseen
+katgpt-rs                    560          0           0
+riir-train                   391          0           0
+riir-chain                   100          0           0
+riir-neuron-db                45          0           0
+riir-clippy                   39          0           0
+riir-dapps                    22          0           0
+riir-mmorpg-examples          18          0           0
+seal-remake                    6          0           0
+riir-viewbridge                0          0           0

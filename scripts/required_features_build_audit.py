@@ -960,6 +960,88 @@ def selftest() -> None:
             raise SystemExit(2)
 
 
+def parse_build_pins(path: Path) -> dict[str, dict[str, int]]:
+    """`<repo> <min_rows> <max_fails> <max_unseen>`, comments after `#`."""
+    out: dict[str, dict[str, int]] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) != 4:
+            raise ValueError(f"malformed pin row (want 4 fields): {raw!r}")
+        out[parts[0]] = {
+            "min_rows": int(parts[1]),
+            "max_fails": int(parts[2]),
+            "max_unseen": int(parts[3]),
+        }
+    return out
+
+
+# Every flag that makes a run cover less than a repo's whole row set. Asserting
+# totals after one of these would compare a slice against a whole-repo pin and
+# red on nothing — so the pins are REFUSED rather than silently mis-applied.
+NARROWING = ("package", "kind", "grep", "names", "limit")
+
+
+def check_pins(path: Path, reports: list[RepoReport], args: argparse.Namespace) -> int:
+    """Assert per-repo counts against committed pins. Exit 1 drift, 2 untrustworthy.
+
+    Deliberately NOT the default. This audit costs hours over ~1,070 grouped
+    cargo invocations, so it is run sliced far more often than whole, and a
+    sliced run's totals are not the repo's. `--resume` is admitted (it carries
+    prior verdicts forward, so the totals ARE whole) while every narrowing flag
+    is refused.
+
+    Why this and not a `max_fails_to_build = 0` key in `cfg_gated_floor_gate.py`,
+    which is where Issue 513 T3 first proposed putting it: that gate is a
+    docs-gate check and must stay compiler-free (~0.3s, per push). This verdict
+    needs the compiler by construction — it is the whole reason T1 exists. A
+    pin can only live where its measurement can.
+    """
+    narrowed = [f for f in NARROWING if getattr(args, f, None)]
+    if narrowed:
+        print(f"\n✗ --pins refused: {narrowed} narrow the run to a slice, and a "
+              f"slice's totals are not the repo's. Re-run whole (--resume is fine).")
+        return 2
+    if not path.is_file():
+        print(f"\n✗ pins file missing: {path}")
+        return 2
+    try:
+        pins = parse_build_pins(path)
+    except ValueError as e:
+        print(f"\n✗ pins file unparseable: {e}")
+        return 2
+    if not pins:
+        print("\n✗ pins file declares no repos — refusing to run vacuously")
+        return 2
+
+    fails: list[str] = []
+    for r in reports:
+        pin = pins.get(r.repo)
+        if pin is None:
+            fails.append(f"{r.repo}: no pin row — a repo must be pinned "
+                         f"deliberately, not defaulted to permissive")
+            continue
+        n_fails = r.count(FAILS) + r.count(NO_FEATURE)
+        n_unseen = r.count(UNSEEN)
+        if n_fails > pin["max_fails"]:
+            fails.append(f"{r.repo}: {n_fails} FAILS/NO-FEATURE > pinned {pin['max_fails']}")
+        if n_unseen > pin["max_unseen"]:
+            fails.append(f"{r.repo}: {n_unseen} UNSEEN > pinned {pin['max_unseen']} "
+                         f"(UNSEEN is undecided, never a pass)")
+        if len(r.rows) < pin["min_rows"]:
+            fails.append(f"{r.repo}: only {len(r.rows)} rows < floor {pin['min_rows']} "
+                         f"— the manifest walk shrank, so both ceilings are vacuous")
+    if fails:
+        print("\n✗ required-features build pins FAILED:")
+        for f in fails:
+            print(f"    {f}")
+        return 1
+    print(f"\n✓ build pins held for {len(reports)} repo(s)")
+    return 0
+
+
 def main(argv: list[str]) -> int:
     selftest()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -995,6 +1077,15 @@ def main(argv: list[str]) -> int:
         help="one cargo run per (package, EXACT feature set) instead of per row "
         "(1,829 rows -> 1,070 groups over 9 repos; verdicts are per-target, and "
         "a row cargo never built reports UNSEEN, never BUILDS)",
+    )
+    ap.add_argument(
+        "--pins",
+        nargs="?",
+        const="scripts/required_features_build_floors.txt",
+        help="assert the per-repo counts against a pins file and EXIT 1 on "
+        "drift (Issue 513 T3). Without it this stays a report, which is the "
+        "right default: a partial or filtered run has no business ruling on a "
+        "repo's totals",
     )
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--quiet", action="store_true", help="summary only")
@@ -1086,7 +1177,11 @@ def main(argv: list[str]) -> int:
             print(f"      {x.row.path}")
     else:
         print("\nno row failed to build at its own required-features")
-    # Report, not a gate — same discipline as its siblings.
+
+    # Report by DEFAULT — same discipline as its siblings — and a gate only
+    # when a pins file is named. See check_pins() for why the two are split.
+    if args.pins:
+        return check_pins(Path(args.pins), reports, args)
     return 0
 
 
