@@ -238,6 +238,44 @@ def outside_workspace(proc: subprocess.CompletedProcess[str]) -> bool:
     return proc.returncode != 0 and OUTSIDE_WS in ((proc.stderr or "") + (proc.stdout or ""))
 
 
+class DiskFull(RuntimeError):
+    """The box ran out of disk mid-sweep, so every verdict after it is void.
+
+    Measured 2026-09-06, riir-ai: a 515-row sweep finished with **26 UNSEEN**
+    across 7 packages, and the obvious reading — an instance-6-shaped library
+    that does not compile at those feature sets — was wrong. The root
+    filesystem had 2.5 GiB left. cargo could not write the artifact, emitted
+    neither a `compiler-artifact` nor a `compiler-message` for the target, and
+    `attribute()` correctly reported the only thing it could see: silence.
+    Re-run with 19 GiB free, all 26 BUILD. Zero defects.
+
+    UNSEEN is the bucket this family says findings hide in, and that is exactly
+    why it must not also be the bucket the ENVIRONMENT drains into. The rule
+    "silence is not evidence" is right and insufficient: silence has more than
+    one cause, and a full disk is indistinguishable from a real defect at the
+    row level while being distinguishable in one line of cargo's stderr.
+
+    So this ABORTS rather than marking rows. A partial sweep is a smaller claim
+    and can be resumed; a completed sweep carrying an unknown number of
+    environmental UNSEENs is a WRONG claim, and it costs a reader the hours it
+    cost here to find out which.
+    """
+
+
+# cargo surfaces a full disk through whichever layer noticed first — its own
+# writes, rustc's, or the OS error text. Any of them is decisive; none of them
+# is a row's fault.
+ENOSPC_MARKERS = (
+    "No space left on device",
+    "no space left on device",
+    "os error 28",
+)
+
+
+def disk_full(proc: subprocess.CompletedProcess[str]) -> bool:
+    return any(m in ((proc.stderr or "") + (proc.stdout or "")) for m in ENOSPC_MARKERS)
+
+
 def classify(proc: subprocess.CompletedProcess[str]) -> tuple[str, str]:
     err = (proc.stderr or "") + (proc.stdout or "")
     if proc.returncode == 0:
@@ -539,6 +577,13 @@ def check_group(
             el = time.monotonic() - t0
             return [Result(r, ERROR, el, str(e)) for r in group.rows]
     elapsed = time.monotonic() - t0
+    # Before ANY attribution: a full disk makes every verdict below meaningless,
+    # and its signature is in cargo's own output. See DiskFull.
+    if disk_full(proc):
+        raise DiskFull(
+            f"cargo reported ENOSPC while building {group.package} "
+            f"at features {list(group.features)}"
+        )
     # A row naming a feature the package does not define fails BEFORE any unit
     # is compiled, so there is nothing to attribute — the whole group is invalid.
     if proc.returncode != 0:
@@ -551,6 +596,22 @@ def check_group(
         verdict, detail = verdicts[(row.kind, row.name)]
         results.append(Result(row, verdict, elapsed, detail))
     return results
+
+
+# A cargo check of a large workspace routinely writes several GiB. The floor is
+# a REFUSE rather than a warning for the reason DiskFull records: the failure
+# mode is not a crash, it is a sweep that completes and reports clean-looking
+# UNSEEN rows.
+MIN_FREE_GIB = float(os.environ.get("RFBA_MIN_FREE_GIB", "8"))
+
+
+def free_gib(path: str | None = None) -> float:
+    st = os.statvfs(path or os.environ.get("CARGO_TARGET_DIR") or ".")
+    return st.f_bavail * st.f_frsize / (1024 ** 3)
+
+
+def disk_headroom_ok(path: str | None = None) -> bool:
+    return free_gib(path) >= MIN_FREE_GIB
 
 
 def concurrent_cargo(repo: Path) -> bool:
@@ -933,6 +994,48 @@ def selftest() -> None:
         print(f"SELFTEST FAILED: attribute upstream → {up}", file=sys.stderr)
         raise SystemExit(2)
 
+    # disk_full(): pinned in BOTH directions, because each failure is silent
+    # and they fail toward opposite wrong answers. A detector that stops firing
+    # drains ENOSPC back into UNSEEN — the 26-row riir-ai incident this exists
+    # for. One that fires on an ordinary compile error aborts a healthy sweep
+    # and reads as a full disk that never happened.
+    class _Proc:
+        def __init__(self, err):
+            self.stderr, self.stdout = err, ""
+
+    for text, want in (
+        ("error: failed to write\ncaused by: No space left on device", True),
+        ("error: Os { code: 28, kind: StorageFull } (os error 28)", True),
+        ("error[E0432]: unresolved import `foo`", False),
+        ("error: could not compile `p` (test \"t\") due to 2 errors", False),
+        ("", False),
+    ):
+        if disk_full(_Proc(text)) is not want:
+            print(f"SELFTEST FAILED: disk_full({text[:40]!r}) != {want}", file=sys.stderr)
+            raise SystemExit(2)
+
+    # The headroom floor must be a real comparison, not a constant True.
+    #
+    # The FIRST version of this pin was inert and was caught by canarying it:
+    # it asserted `disk_headroom_ok(p) == (free_gib(p) >= MIN_FREE_GIB)`, which
+    # a stubbed `lambda: True` satisfies on any box that happens to have room —
+    # both sides read True and the pin passes while the floor cannot refuse.
+    # Comparing a function to its own live inputs proves nothing. Drive the
+    # floor to each end instead, where the required answer is known a priori.
+    global MIN_FREE_GIB
+    _floor = MIN_FREE_GIB
+    try:
+        MIN_FREE_GIB = float("inf")
+        if disk_headroom_ok("/") is not False:
+            print("SELFTEST FAILED: headroom passed an infinite floor", file=sys.stderr)
+            raise SystemExit(2)
+        MIN_FREE_GIB = 0.0
+        if disk_headroom_ok("/") is not True:
+            print("SELFTEST FAILED: headroom refused a zero floor", file=sys.stderr)
+            raise SystemExit(2)
+    finally:
+        MIN_FREE_GIB = _floor
+
     # classify(): the two failure verdicts must not collapse into one. A
     # missing feature is an INVALID row; a compile error is an INSUFFICIENT
     # one, and only the second is evidence about the target's own code.
@@ -1110,6 +1213,16 @@ def main(argv: list[str]) -> int:
 
     reports: list[RepoReport] = []
     for repo in repos:
+        if not disk_headroom_ok(args.target_dir):
+            print(
+                f"REFUSE: {free_gib(args.target_dir):.1f} GiB free on the filesystem holding the "
+                f"target dir — below the {MIN_FREE_GIB} GiB floor. A sweep that "
+                f"runs out of disk reports its rows as UNSEEN, which is the "
+                f"bucket real findings hide in. Free space or pass --target-dir "
+                f"somewhere with room.",
+                file=sys.stderr,
+            )
+            return 2
         if concurrent_cargo(repo):
             print(
                 f"NOTE: another cargo process is working in {repo.name}/target — "
@@ -1121,7 +1234,18 @@ def main(argv: list[str]) -> int:
             # --json must be machine-readable on stdout: a progress header here
             # made the document unparseable (`Expecting value: line 1`).
             print(f"── {repo.name} ──", flush=True)
-        reports.append(audit(repo, args))
+        try:
+            reports.append(audit(repo, args))
+        except DiskFull as e:
+            print(
+                f"\nABORT: {e}\n"
+                f"  {free_gib(args.target_dir):.1f} GiB free. Every row after this point would "
+                f"report UNSEEN for an environmental reason, indistinguishable "
+                f"at the row level from a real defect. Partial results above are "
+                f"still valid; free space and re-run with --resume.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.json:
         print(
