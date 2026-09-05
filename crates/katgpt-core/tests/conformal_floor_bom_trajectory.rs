@@ -177,9 +177,7 @@ impl BomTrajectoryAdapter {
     /// Embed the scalar observation as a uniform field.
     #[inline]
     fn embed_observation(&mut self, y: f32) {
-        for v in &mut self.h0.data {
-            *v = y;
-        }
+        self.h0.data.fill(y);
     }
 }
 

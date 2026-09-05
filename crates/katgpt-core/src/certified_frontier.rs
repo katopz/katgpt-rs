@@ -1314,13 +1314,13 @@ impl<const MAX_CELLS: usize, const D: usize> CertifiedFrontier<MAX_CELLS, D> {
         // which is what pinned this at ~1 ns/cell. Pass 1 is an 8-wide max
         // reduction with no dependency between lanes; pass 2 short-circuits.
         let mut acc = [NOT_A_CANDIDATE; 8];
-        let mut chunks = lane.chunks_exact(8);
-        for ch in &mut chunks {
+        let (chunks, remainder) = lane.as_chunks::<8>();
+        for ch in chunks {
             for (a, &v) in acc.iter_mut().zip(ch.iter()) {
                 *a = a.max(v);
             }
         }
-        let mut best = chunks.remainder().iter().fold(NOT_A_CANDIDATE, |a, &b| a.max(b));
+        let mut best = remainder.iter().fold(NOT_A_CANDIDATE, |a, &b| a.max(b));
         for &a in &acc {
             best = best.max(a);
         }

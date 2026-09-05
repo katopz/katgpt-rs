@@ -209,7 +209,7 @@ fn print_matchup_results(
 
     // Sort by wins descending
     let mut indexed: Vec<(usize, usize)> = wins.iter().copied().enumerate().collect();
-    indexed.sort_by(|a, b| b.1.cmp(&a.1));
+    indexed.sort_by_key(|a| std::cmp::Reverse(a.1));
 
     let total_wins: usize = wins.iter().sum();
     let draws = total_games.saturating_sub(total_wins);

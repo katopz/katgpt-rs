@@ -150,7 +150,7 @@ pub fn build_attention_mask(
 #[inline]
 fn frame_of(flat: usize, h_extent: usize, w_extent: usize) -> u32 {
     let hw = h_extent.saturating_mul(w_extent);
-    if hw == 0 { 0 } else { (flat / hw) as u32 }
+    (flat.checked_div(hw).unwrap_or(0)) as u32
 }
 
 /// Build the per-position loss-weight mask.

@@ -823,15 +823,9 @@ mod tests {
         let mut weights = MoeWeights::random(&config, 7);
         // Zero out shared expert so it doesn't influence the weight check.
         for se in &mut weights.shared_experts {
-            for v in &mut se.gate_proj {
-                *v = 0.0;
-            }
-            for v in &mut se.up_proj {
-                *v = 0.0;
-            }
-            for v in &mut se.down_proj {
-                *v = 0.0;
-            }
+            se.gate_proj.fill(0.0);
+            se.up_proj.fill(0.0);
+            se.down_proj.fill(0.0);
         }
         let mut scratch = MoeForwardScratch::new(&config);
         let hidden_in = vec![0.2; config.d()];

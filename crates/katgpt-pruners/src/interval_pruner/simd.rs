@@ -270,8 +270,8 @@ fn word_is_interval_closed(bytes: &[u8], chunk_bytes: usize) -> bool {
     let mut state: u8 = 0;
 
     // `chunk_bytes` is a multiple of 8, so `head` divides evenly into words.
-    for word in head.chunks_exact(8) {
-        let w = u64::from_ne_bytes(word.try_into().unwrap_or([0u8; 8]));
+    for word in head.as_chunks::<8>().0 {
+        let w = u64::from_ne_bytes(*word);
         if w == 0 {
             // Eight invalid bytes: 0 stays 0, 1 becomes 2, 2 stays 2.
             if state == 1 {

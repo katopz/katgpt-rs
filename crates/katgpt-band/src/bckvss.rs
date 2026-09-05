@@ -87,14 +87,14 @@ impl KvSegment {
     #[inline]
     pub fn d_k(&self) -> usize {
         let n = self.seg_len();
-        if n == 0 { 0 } else { self.keys.len() / n }
+        self.keys.len().checked_div(n).unwrap_or(0)
     }
 
     /// Value dimensionality `d_v`.
     #[inline]
     pub fn d_v(&self) -> usize {
         let n = self.seg_len();
-        if n == 0 { 0 } else { self.values.len() / n }
+        self.values.len().checked_div(n).unwrap_or(0)
     }
 
     /// The paper's `s_{vL}` representative: the **last** key row of this

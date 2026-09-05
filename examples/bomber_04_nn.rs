@@ -204,7 +204,7 @@ fn main() {
         "HL",
     ];
     let mut ranking: Vec<(usize, i32)> = scores.iter().copied().enumerate().collect();
-    ranking.sort_by(|a, b| b.1.cmp(&a.1));
+    ranking.sort_by_key(|a| std::cmp::Reverse(a.1));
 
     for (rank, (idx, score)) in ranking.iter().enumerate() {
         println!(

@@ -312,9 +312,7 @@ fn g1_zero_bias_matches_reference() {
     let config = tiny_config();
     let mut weights = MoeWeights::random(&config, 42);
     // Zero out the bias.
-    for b in &mut weights.e_score_correction_bias {
-        *b = 0.0;
-    }
+    weights.e_score_correction_bias.fill(0.0);
     let mut scratch = MoeForwardScratch::new(&config);
     let hidden_in: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.1 - 0.4).collect();
     let mut f32_out = vec![0.0; config.d()];
@@ -355,9 +353,7 @@ fn g1_bias_changes_selection() {
     // Prove the bias actually changes WHICH experts are picked.
     let config = tiny_config();
     let mut weights_zero_bias = MoeWeights::random(&config, 7);
-    for b in &mut weights_zero_bias.e_score_correction_bias {
-        *b = 0.0;
-    }
+    weights_zero_bias.e_score_correction_bias.fill(0.0);
     let mut weights_with_bias = weights_zero_bias.clone();
     // Set a strong bias that flips selection: boost expert 0 + 2, suppress 1 + 3.
     weights_with_bias.e_score_correction_bias = vec![0.9, -0.9, 0.9, -0.9];
@@ -449,15 +445,9 @@ fn g1_shared_expert_always_on() {
     let config = tiny_config();
     let mut weights = MoeWeights::random(&config, 55);
     for expert in &mut weights.experts {
-        for v in &mut expert.gate_proj {
-            *v = 0.0;
-        }
-        for v in &mut expert.up_proj {
-            *v = 0.0;
-        }
-        for v in &mut expert.down_proj {
-            *v = 0.0;
-        }
+        expert.gate_proj.fill(0.0);
+        expert.up_proj.fill(0.0);
+        expert.down_proj.fill(0.0);
     }
     let hidden_in: Vec<f32> = (0..config.d()).map(|i| (i as f32) * 0.1 - 0.3).collect();
 

@@ -323,7 +323,7 @@ mod tests {
                 depth: None,
                 prefix: Vec::new(),
                 allowed: CompactBitmap::from_token_indices(
-                    [b'<', b'>'].iter().map(|&b| b as usize),
+                    b"<>".iter().map(|&b| b as usize),
                 ),
                 is_allowlist: false, // blocklist
             }],
@@ -342,7 +342,7 @@ mod tests {
                     depth: Some(0),
                     prefix: Vec::new(),
                     allowed: CompactBitmap::from_token_indices(
-                        [b'{', b'['].iter().map(|&b| b as usize),
+                        b"{[".iter().map(|&b| b as usize),
                     ),
                     is_allowlist: true,
                 },
@@ -353,7 +353,7 @@ mod tests {
                     allowed: CompactBitmap::from_token_indices(
                         (b'a'..=b'z')
                             .chain(b'0'..=b'9')
-                            .chain([b'{', b'}', b'[', b']', b':', b',', b'"', b' ', b'\n'])
+                            .chain(*b"{}[]:,\" \n")
                             .map(|b| b as usize),
                     ),
                     is_allowlist: true,
@@ -563,7 +563,7 @@ mod tests {
             vocab_size: 256,
             global_allowed: CompactBitmap::empty(),
             global_blocked: CompactBitmap::from_token_indices(
-                [b'<', b'>'].iter().map(|&b| b as usize),
+                b"<>".iter().map(|&b| b as usize),
             ),
         };
         let marginals = SpecMarginals::from_spec(&spec);

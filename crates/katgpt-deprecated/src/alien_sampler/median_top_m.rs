@@ -217,7 +217,7 @@ impl MedianTopMAvailability {
                 );
             }
         }
-        let bank_len = if dim == 0 { 0 } else { bank_flat.len() / dim };
+        let bank_len = bank_flat.len().checked_div(dim).unwrap_or(0);
         let (bank_norms, bank_inv_norms) = Self::compute_norms(&bank_flat, dim);
         let scratch = vec![0.0_f32; bank_len];
         Self {
@@ -385,11 +385,7 @@ impl MedianTopMAvailability {
     #[inline]
     #[must_use]
     pub fn bank_len(&self) -> usize {
-        if self.bank_dim == 0 {
-            0
-        } else {
-            self.bank_flat.len() / self.bank_dim
-        }
+        self.bank_flat.len().checked_div(self.bank_dim).unwrap_or(0)
     }
 
     /// Embedding dimension (length of each bank item). `0` for an empty bank.

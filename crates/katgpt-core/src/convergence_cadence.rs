@@ -499,7 +499,6 @@ mod tests {
     /// endpoint) is `Settled` under the default floors (0.30 ≤ settle_floor
     /// 0.5 — absolute-low dominates) but `Churning` under tight floors
     /// (0.30 ≥ plateau_floor 0.25, ratio 1.0 = no decay evidence).
-
     /// Deliberate: calibration is the caller's contract.
     #[test]
 

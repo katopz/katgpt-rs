@@ -121,8 +121,7 @@ pub fn compute_retrieval_score(
         let row_start = t * seq_len + needle_start;
         let row_end = t * seq_len + needle_end;
         let row = &attention[row_start..row_end];
-        let chunks = row.chunks_exact(4);
-        let remainder = chunks.remainder();
+        let (chunks, remainder) = row.as_chunks::<4>();
 
         for chunk in chunks {
             acc[0] += chunk[0] as f64;

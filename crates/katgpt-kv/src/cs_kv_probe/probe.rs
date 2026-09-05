@@ -158,11 +158,7 @@ impl CsKvProbe {
         let mut scores = vec![0.0_f32; n_groups];
         let mut counts = vec![0u32; n_groups];
         for (h, &c) in coeffs.iter().enumerate() {
-            let g = if n_heads == 0 {
-                0
-            } else {
-                (h * n_kv_heads) / n_heads
-            };
+            let g = (h * n_kv_heads).checked_div(n_heads).unwrap_or(0);
             // Defensive: GQA divisor can in principle produce g == n_groups when
             // n_kv_heads == 0; clamp to avoid OOB. (n_groups is floored at 1 above.)
             let g = g.min(n_groups - 1);

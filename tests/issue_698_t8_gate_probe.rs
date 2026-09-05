@@ -431,7 +431,7 @@ fn t698_t8_conditional_gate_mechanism_probe() {
         }
         let pooled = spearman(&pool.iter().map(|p| p.0).collect::<Vec<_>>(), &pool.iter().map(|p| p.1).collect::<Vec<_>>());
         let mut per_r_rho: Vec<f32> = Vec::with_capacity(R_MAX - 1);
-        for (i, pairs) in per_r.iter().enumerate() {
+        for pairs in per_r.iter() {
             let rho = spearman(
                 &pairs.iter().map(|p| p.0).collect::<Vec<_>>(),
                 &pairs.iter().map(|p| p.1).collect::<Vec<_>>(),

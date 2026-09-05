@@ -254,8 +254,10 @@ impl BomberInner {
     /// Read u32 LE results from WASM memory.
     fn read_u32_results(&self, offset: usize, count: usize) -> Vec<u32> {
         let data = &self.memory.data(&self.store)[offset..offset + count * 4];
-        data.chunks_exact(4)
-            .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        data.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| u32::from_le_bytes(*c))
             .collect()
     }
 
@@ -265,9 +267,11 @@ impl BomberInner {
     /// allocation instead of two.
     fn read_q16_results(&self, offset: usize, count: usize) -> Vec<f32> {
         let data = &self.memory.data(&self.store)[offset..offset + count * 4];
-        data.chunks_exact(4)
+        data.as_chunks::<4>()
+            .0
+            .iter()
             .map(|c| {
-                let v = u32::from_le_bytes([c[0], c[1], c[2], c[3]]);
+                let v = u32::from_le_bytes(*c);
                 (v as f32 / 65536.0).clamp(0.0, 1.0)
             })
             .collect()

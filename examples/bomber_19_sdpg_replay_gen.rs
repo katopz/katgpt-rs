@@ -57,7 +57,7 @@ mod inner {
         let secs = duration.as_secs_f64();
         println!("\n  Results ({total} games, {secs:.1}s):");
         let mut indexed: Vec<(usize, usize)> = wins.iter().copied().enumerate().collect();
-        indexed.sort_by(|a, b| b.1.cmp(&a.1));
+        indexed.sort_by_key(|a| std::cmp::Reverse(a.1));
         for (idx, win_count) in indexed {
             let name = names[idx];
             let emoji = emojis[idx];

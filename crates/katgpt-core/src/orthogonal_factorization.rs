@@ -114,7 +114,7 @@ const REORTH_RELATIVE_FLOOR: f64 = 1e-6;
 fn dot_f64<const D: usize>(a: &[f32; D], b: &[f32; D]) -> f64 {
     debug_assert_eq!(a.len(), b.len());
     let mut acc = [0.0_f64; 8];
-    for (ca, cb) in a.chunks_exact(8).zip(b.chunks_exact(8)) {
+    for (ca, cb) in a.as_chunks::<8>().0.iter().zip(b.as_chunks::<8>().0.iter()) {
         for (slot, (x, y)) in acc.iter_mut().zip(ca.iter().zip(cb.iter())) {
             *slot += f64::from(*x) * f64::from(*y);
         }

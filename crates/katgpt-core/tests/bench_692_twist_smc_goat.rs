@@ -284,7 +284,7 @@ fn marginals_a_row(x: &[f32], t: usize, grid: &[f32], out: &mut [f32]) {
     let v = DA_SIG * DA_SIG * (1.0 - (DA_A * DA_A).powf(h)) / (1.0 - DA_A * DA_A);
     let (mx, my) = (ah * x[0], ah * x[1]);
     let mut z = 0.0f64;
-    for (j, g) in grid.chunks_exact(DA_D).enumerate() {
+    for (j, g) in grid.as_chunks::<DA_D>().0.iter().enumerate() {
         let d2 = (g[0] - mx) * (g[0] - mx) + (g[1] - my) * (g[1] - my);
         let p = (-d2 / (2.0 * v)).exp();
         out[j] = p;
@@ -660,7 +660,7 @@ fn b_candidates(prefix: &[f32], t: usize, cands: &mut Vec<f32>) {
 fn b_marginals_row(prefix: &[f32], t: usize, cands: &mut Vec<f32>, marg: &mut [f32]) {
     b_candidates(prefix, t, cands);
     let mut z = 0.0f64;
-    for (j, row) in cands.chunks_exact(DB_L).enumerate() {
+    for (j, row) in cands.as_chunks::<DB_L>().0.iter().enumerate() {
         let b = belief_b(row).exp();
         marg[j] = b;
         z += b as f64;
@@ -692,7 +692,9 @@ fn advance_b(states: &mut [f32], t: usize, us: &[f32], cdf: &[f32; DB_V]) {
 
 fn distinct_frac(rows: &[f32], n: usize) -> f32 {
     let mut bits: Vec<Vec<u32>> = rows
-        .chunks_exact(DB_L)
+        .as_chunks::<DB_L>()
+        .0
+        .iter()
         .take(n)
         .map(|r| r.iter().map(|v| v.to_bits()).collect())
         .collect();

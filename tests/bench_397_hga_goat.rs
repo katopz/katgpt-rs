@@ -158,11 +158,7 @@ fn mean_summarizer(
     n_tokens: usize,
 ) -> Vec<f32> {
     let total = positions.len();
-    let d = if total > 0 {
-        keys_flat.len() / total
-    } else {
-        8
-    };
+    let d = keys_flat.len().checked_div(total).unwrap_or(8);
     let mut s = vec![0.0f32; d];
     for t in 0..n_tokens {
         let off = (group_start + t) * d;

@@ -449,7 +449,7 @@ pub fn error_weighted_graph_laplacian_into(
     let chunks = dim / 4;
     let remainder = dim % 4;
 
-    for pair in entries.chunks_exact(2) {
+    for pair in entries.as_chunks::<2>().0 {
         let (v_tail, edge_idx, _sign_t) = pair[0];
         let (v_head, _e2, _sign_h) = pair[1];
         debug_assert_eq!(edge_idx, _e2, "boundary entry pair edge indices must match");

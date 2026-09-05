@@ -58,24 +58,12 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     if na < 1e-12 || nb < 1e-12 { 0.0 } else { dot / (na * nb) }
 }
 
-fn relative_mse(a: &[f32], b: &[f32]) -> f32 {
-    let (mut ds, mut ns) = (0.0f32, 0.0f32);
-    for (&ai, &bi) in a.iter().zip(b.iter()) {
-        ds += (ai - bi).powi(2);
-        ns += ai * ai;
-    }
-    if ns < 1e-12 { return if ds < 1e-12 { 0.0 } else { f32::INFINITY }; }
-    ds / ns
-}
-
 /// A single training triple: (query projections, block key centroid, label).
 struct TrainingTriple {
     /// `[n_heads * d_h]` — query content projections (q_c).
     q_c: Vec<f32>,
     /// `[n_heads * d_h]` — block key centroid (up-projected from latent).
     k_centroid: Vec<f32>,
-    /// Head index for this triple.
-    head: usize,
     /// Golden label: 1.0 if the block was attended (mass > threshold), else 0.0.
     label: f32,
 }
@@ -242,6 +230,7 @@ impl IndexerTrainer {
     /// Adam update for a single element in a slice. Free function pattern
     /// to avoid `&mut self` borrow conflicts.
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     fn adam_vec(
         beta1: f32, beta2: f32, epsilon: f32, lr: f32,
         param: &mut [f32], m: &mut [f32], v: &mut [f32],
@@ -256,6 +245,7 @@ impl IndexerTrainer {
 
     /// Adam update for a scalar parameter.
     #[inline]
+    #[allow(clippy::too_many_arguments)]
     fn adam_scalar(
         beta1: f32, beta2: f32, epsilon: f32, lr: f32,
         param: &mut f32, m: &mut f32, v: &mut f32,
@@ -340,7 +330,6 @@ fn run_bench() {
 
     // Extract training triples: for each query position, compute attention mass per block.
     let scale = mla_config.attn_scale();
-    let d_r = mla_config.d_r();
     let d_c = mla_config.kv_lora_rank;
 
     // Sample query positions (every 8th token to keep dataset manageable).
@@ -382,10 +371,7 @@ fn run_bench() {
                     c_kv_j, d_h, d_c,
                 );
                 let content = simd_dot_f32(q_c_h, &k_c, d_h);
-                let rope = simd_dot_f32(
-                    &q_c[head * d_h..], // wrong — need q_r, skip rope for simplicity
-                    &vec![0.0; d_r], d_r,
-                );
+                // Rope term intentionally skipped — needs q_r, kept simple.
                 scores[j] = content * scale;
                 if scores[j] > max_s { max_s = scores[j]; }
             }
@@ -413,7 +399,6 @@ fn run_bench() {
                 triples.push(TrainingTriple {
                     q_c: q_c_h.to_vec(),
                     k_centroid: k_centroid_h,
-                    head,
                     label,
                 });
             }
@@ -437,7 +422,6 @@ fn run_bench() {
     let n_epochs = 100;
     for epoch in 0..n_epochs {
         let mut total_loss = 0.0f32;
-        let n_correct = 0usize;
         for t in &triples {
             let loss = trainer.train_step(&t.q_c, &t.k_centroid, t.label);
             total_loss += loss;
@@ -506,7 +490,6 @@ fn run_bench() {
         simd_matmul_rows(&mut q_c, &mla_weights.w_uq, &c_q, n_heads * d_h, mla_config.q_lora_rank);
 
         // Build a fresh block cache for this position.
-        let bc = FlashMemoryBlockCache::new(&mla_config, &fm_config, q_pos + 1);
         // We need a cache populated up to q_pos. Use the dense cache.
         // Actually, rebuild from the dense cache up to q_pos.
         // For simplicity, use the full block_cache we already built.

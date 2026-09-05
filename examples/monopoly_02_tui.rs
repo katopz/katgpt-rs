@@ -723,7 +723,7 @@ fn cell_style(sq: u8, owner: Option<u8>, highlight: bool, has_player: bool) -> S
 
     let bg = square_bg(sq, owner);
     let fg = match square_kind(sq) {
-        SquareKind::Property(g) if owner.is_some() => Color::White,
+        SquareKind::Property(_g) if owner.is_some() => Color::White,
         SquareKind::Property(g) => group_fg(&g),
         _ if has_player => Color::White,
         _ => Color::Gray,

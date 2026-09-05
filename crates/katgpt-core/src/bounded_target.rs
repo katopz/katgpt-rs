@@ -493,8 +493,10 @@ mod tests {
 
     #[test]
     fn g4_max_d_cap_is_64_and_stack_only() {
-        assert_eq!(MAX_D, 64);
-        assert!(RAD_BYTES * 8 >= MAX_D);
+        // Compile-time pin: MAX_D == 64 is load-bearing for the fixed buffers
+        // below; a drift must fail the build, not a runtime assert.
+        const _: () = assert!(MAX_D == 64);
+        const { assert!(RAD_BYTES * 8 >= MAX_D); }
         // MAX_D-dim path exercises the fixed buffers end-to-end.
         let x = [0.2f32; MAX_D];
         let q = |v: &[f32]| v.iter().sum::<f32>();

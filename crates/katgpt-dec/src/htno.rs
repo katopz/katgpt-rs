@@ -374,7 +374,7 @@ mod tests {
             .map(|(c, &f)| (f, c))
             .collect();
         let mut coarse_edges: Vec<(usize, usize)> = Vec::new();
-        for pair in fine.boundary_entries(0).chunks_exact(2) {
+        for pair in fine.boundary_entries(0).as_chunks::<2>().0 {
             let (v_tail, _e, _) = pair[0];
             let (v_head, _e, _) = pair[1];
             if let (Some(&ct), Some(&ch)) = (rank_map.get(&v_tail), rank_map.get(&v_head)) {

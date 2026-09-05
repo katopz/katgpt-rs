@@ -164,7 +164,6 @@ mod tests {
     #[test]
     fn power_iter_underestimates_jacobi_norm() {
         const D: usize = 5;
-        const N: usize = 2;
         let mut rng = 77_u64;
         let mut full = [[0.0_f32; D]; D];
         for (i, j) in (0..D).flat_map(|i| (i..D).map(move |j| (i, j))) {

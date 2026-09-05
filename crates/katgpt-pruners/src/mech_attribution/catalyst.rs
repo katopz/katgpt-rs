@@ -103,11 +103,9 @@ fn code_score(text: &str) -> f32 {
         match ch {
             '{' | '}' | ';' => delimiter_count += 1,
             '(' => open_parens += 1,
-            ')' => {
-                if open_parens > 0 {
-                    open_parens -= 1;
-                    paren_pairs += 1;
-                }
+            ')' if open_parens > 0 => {
+                open_parens -= 1;
+                paren_pairs += 1;
             }
             _ => {}
         }

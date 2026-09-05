@@ -106,8 +106,10 @@ fn load_srtr(path: &std::path::Path) -> Option<SrtrTrace> {
     let vec_at = |off: &mut usize, n: usize| -> Vec<f32> {
         let n_bytes = n * 4;
         let v = bytes[*off..*off + n_bytes]
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect();
         *off += n_bytes;
         v

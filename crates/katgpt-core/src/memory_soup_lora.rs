@@ -134,8 +134,10 @@ pub fn import_memory_soup_artifact(data: &[u8]) -> Option<MemorySoupArtifact> {
 
     // ── Parse payload as f32 LE ────────────────────────────────────
     let payload_f32: Vec<f32> = data[40..]
-        .chunks_exact(4)
-        .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| f32::from_le_bytes(*c))
         .collect();
 
     if payload_f32.len() < 6 {

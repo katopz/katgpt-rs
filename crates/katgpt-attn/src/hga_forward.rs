@@ -214,11 +214,7 @@ mod tests {
         n_tokens: usize,
     ) -> Vec<f32> {
         let total_tokens = positions.len();
-        let d = if total_tokens > 0 {
-            keys_flat.len() / total_tokens
-        } else {
-            8
-        };
+        let d = keys_flat.len().checked_div(total_tokens).unwrap_or(8);
         let mut summary = vec![0.0f32; d];
         for t in 0..n_tokens {
             let offset = (group_start + t) * d;

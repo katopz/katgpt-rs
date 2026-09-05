@@ -245,17 +245,17 @@ mod tests {
     }
 
     /// retrieval order == gate order (benign): rank 1, never fires.
-    fn correlated(K: usize) -> (Vec<f32>, Vec<f32>) {
-        let retrieval: Vec<f32> = (0..K).map(|i| 1.0 - i as f32 * 0.1).collect();
-        let gates: Vec<f32> = (0..K).map(|i| 10.0 - i as f32).collect();
+    fn correlated(k: usize) -> (Vec<f32>, Vec<f32>) {
+        let retrieval: Vec<f32> = (0..k).map(|i| 1.0 - i as f32 * 0.1).collect();
+        let gates: Vec<f32> = (0..k).map(|i| 10.0 - i as f32).collect();
         (retrieval, gates)
     }
 
     /// top-gated source is retrieval-LAST (the adversarial signature).
-    fn inverted(K: usize) -> (Vec<f32>, Vec<f32>) {
-        let retrieval: Vec<f32> = (0..K).map(|i| 1.0 - i as f32 * 0.1).collect();
-        let mut gates = vec![1.0f32; K];
-        gates[K - 1] = 9.0;
+    fn inverted(k: usize) -> (Vec<f32>, Vec<f32>) {
+        let retrieval: Vec<f32> = (0..k).map(|i| 1.0 - i as f32 * 0.1).collect();
+        let mut gates = vec![1.0f32; k];
+        gates[k - 1] = 9.0;
         (retrieval, gates)
     }
 

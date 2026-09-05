@@ -38,15 +38,9 @@ fn real_config() -> WeaverConfig {
 fn real_weights(cfg: &WeaverConfig) -> WeaverWeights {
     let mut w = WeaverWeights::zeros(cfg.clone());
     // Unit norm scales.
-    for s in &mut w.norm_cond {
-        *s = 1.0;
-    }
-    for s in &mut w.norm_attn {
-        *s = 1.0;
-    }
-    for s in &mut w.norm_mlp {
-        *s = 1.0;
-    }
+    w.norm_cond.fill(1.0);
+    w.norm_attn.fill(1.0);
+    w.norm_mlp.fill(1.0);
     // Identity W_c (preserves the hidden state through conditioning).
     for i in 0..cfg.hidden_dim {
         w.w_c[i * cfg.hidden_dim + i] = 1.0;

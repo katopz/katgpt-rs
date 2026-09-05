@@ -197,8 +197,10 @@ impl WeaverWeights {
             }
             // Safe little-endian f32 decode — no alignment assumption.
             Ok(raw
-                .chunks_exact(4)
-                .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| f32::from_le_bytes(*c))
                 .collect())
         };
 
@@ -2247,15 +2249,9 @@ mod tests {
         let cfg = test_config();
         let mut weights = WeaverWeights::zeros(cfg.clone());
         // Set non-zero RMSNorm scales so u_final is non-zero.
-        for s in &mut weights.norm_cond {
-            *s = 1.0;
-        }
-        for s in &mut weights.norm_attn {
-            *s = 1.0;
-        }
-        for s in &mut weights.norm_mlp {
-            *s = 1.0;
-        }
+        weights.norm_cond.fill(1.0);
+        weights.norm_attn.fill(1.0);
+        weights.norm_mlp.fill(1.0);
         // Identity W_c (so conditioning preserves the hidden state direction).
         for i in 0..cfg.hidden_dim {
             weights.w_c[i * cfg.hidden_dim + i] = 1.0;
@@ -2665,15 +2661,9 @@ mod tests {
     fn nonzero_weights(cfg: &WeaverConfig) -> WeaverWeights {
         let mut w = WeaverWeights::zeros(cfg.clone());
         // Unit norm scales so RMSNorm preserves magnitude.
-        for s in &mut w.norm_cond {
-            *s = 1.0;
-        }
-        for s in &mut w.norm_attn {
-            *s = 1.0;
-        }
-        for s in &mut w.norm_mlp {
-            *s = 1.0;
-        }
+        w.norm_cond.fill(1.0);
+        w.norm_attn.fill(1.0);
+        w.norm_mlp.fill(1.0);
         // Identity W_c.
         for i in 0..cfg.hidden_dim {
             w.w_c[i * cfg.hidden_dim + i] = 1.0;

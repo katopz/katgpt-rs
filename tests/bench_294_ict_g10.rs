@@ -93,8 +93,7 @@ fn generate_workload(rng: &mut Lcg) -> Vec<Sample> {
         let want_decisive = i % 2 == 0;
         let mut logits = vec![0.0_f32; VOCAB];
         let p: Vec<f32>;
-        let regime: &'static str;
-        if want_decisive {
+        let regime: &'static str = if want_decisive {
             // Decisive: one large logit, rest small. softmax puts ~0.5-0.8 on top.
             let top_idx = (rng.next_u64() as usize) % VOCAB;
             for (k, logit_k) in logits.iter_mut().enumerate() {
@@ -105,11 +104,11 @@ fn generate_workload(rng: &mut Lcg) -> Vec<Sample> {
                 };
             }
             p = softmax(&logits);
-            regime = if p[top_idx] > 0.37 {
+            if p[top_idx] > 0.37 {
                 "decisive"
             } else {
                 "long-tail"
-            };
+            }
         } else {
             // Long-tail: small logits, near-uniform softmax.
             for logit_k in logits.iter_mut() {
@@ -118,12 +117,12 @@ fn generate_workload(rng: &mut Lcg) -> Vec<Sample> {
             p = softmax(&logits);
             // Verify long-tail: max(p) should be < 0.37 most of the time.
             let max_p = p.iter().cloned().fold(0.0_f32, f32::max);
-            regime = if max_p > 0.37 {
+            if max_p > 0.37 {
                 "decisive"
             } else {
                 "long-tail"
-            };
-        }
+            }
+        };
         let h1 = shannon_h1(&p);
         let beta = collision_purity(&p);
         let h2 = if beta > 0.0 {

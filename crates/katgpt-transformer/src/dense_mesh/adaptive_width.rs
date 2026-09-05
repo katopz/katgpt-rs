@@ -395,7 +395,6 @@ mod tests {
 
     #[cfg(feature = "collapse_aware_thinking")]
     mod collapse_integration {
-        use super::super::*;
         use super::*;
         use katgpt_core::traits::CollapseDetector;
 
@@ -503,7 +502,6 @@ mod tests {
 
     #[cfg(feature = "breakeven_routing")]
     mod breakeven_integration {
-        use super::super::*;
         use super::*;
 
         #[test]

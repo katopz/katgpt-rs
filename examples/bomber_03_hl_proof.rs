@@ -622,7 +622,7 @@ fn summarize_actions(actions: &[BomberAction]) -> String {
         *counts.entry(format!("{a}")).or_default() += 1;
     }
     let mut pairs: Vec<_> = counts.into_iter().collect();
-    pairs.sort_by(|a, b| b.1.cmp(&a.1));
+    pairs.sort_by_key(|a| std::cmp::Reverse(a.1));
     pairs
         .iter()
         .map(|(k, v)| format!("{k}×{v}"))

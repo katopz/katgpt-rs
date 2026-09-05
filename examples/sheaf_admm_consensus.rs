@@ -134,7 +134,7 @@ fn print_iteration(
 fn max_edge_disagreement(cx: &CellComplex, field: &CochainField, d_v: usize) -> f32 {
     let entries = cx.boundary_entries(0);
     let mut max_d = 0.0f32;
-    for pair in entries.chunks_exact(2) {
+    for pair in entries.as_chunks::<2>().0 {
         let v_tail = pair[0].0;
         let v_head = pair[1].0;
         let x_tail = &field.data[v_tail * d_v..(v_tail + 1) * d_v];

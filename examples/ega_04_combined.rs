@@ -164,7 +164,7 @@ fn main() {
         }
     }
     let energy = ega_gate.energy_scores(&x_head, SEQ_LEN, HEAD_DIM);
-    println!("  Energy scores: {:?}", &energy);
+    println!("  Energy scores: {:?}", energy);
 
     // Baseline attention: uniform distribution
     let uniform_w = 1.0 / SEQ_LEN as f32;
@@ -188,7 +188,7 @@ fn main() {
 
     // Compute energy gate vector
     let gate_vec = compute_energy_gate(&energy, ega_gate.alpha, ega_gate.tau);
-    println!("  Gate vector: {:?}", &gate_vec);
+    println!("  Gate vector: {:?}", gate_vec);
 
     // Apply gate to first query row and renormalize
     let mut ega_row = vec![0.0f32; SEQ_LEN];
@@ -202,7 +202,7 @@ fn main() {
             *w *= inv;
         }
     }
-    println!("  EGA attn (query 0): {:?}", &ega_row);
+    println!("  EGA attn (query 0): {:?}", ega_row);
 
     let ega_out = matmul_attn_values(&ega_row, &v, SEQ_LEN, DIM);
     let ega_l2 = l2_dist(&ega_out, &signal_mean);
@@ -215,7 +215,7 @@ fn main() {
     let mut dash_attn = baseline_attn.clone();
     simulate_dash_attn(&mut dash_attn, SEQ_LEN, DASH_THRESHOLD);
     let dash_row = dash_attn[0..SEQ_LEN].to_vec();
-    println!("  Dash attn (query 0): {:?}", &dash_row);
+    println!("  Dash attn (query 0): {:?}", dash_row);
 
     let dash_out = matmul_attn_values(&dash_row, &v, SEQ_LEN, DIM);
     let dash_l2 = l2_dist(&dash_out, &signal_mean);
@@ -248,7 +248,7 @@ fn main() {
     // Step 1: Simulated DashAttn sparsification
     simulate_dash_attn(&mut combined_attn, SEQ_LEN, DASH_THRESHOLD);
     let mut combined_row = combined_attn[0..SEQ_LEN].to_vec();
-    println!("  After DashAttn: {:?}", &combined_row);
+    println!("  After DashAttn: {:?}", combined_row);
 
     // Step 2: EGA energy gate on sparsified weights
     for j in 0..SEQ_LEN {
@@ -262,7 +262,7 @@ fn main() {
             *w *= inv;
         }
     }
-    println!("  After EGA:     {:?}", &combined_row);
+    println!("  After EGA:     {:?}", combined_row);
 
     // Step 3: Value aggregation
     let mut combined_out = matmul_attn_values(&combined_row, &v, SEQ_LEN, DIM);

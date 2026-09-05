@@ -245,11 +245,7 @@ fn full_coverage_fetch_matches_causal_sdpa() {
     let mean_fn =
         |keys_flat: &[f32], positions: &[usize], group_start: usize, n_tokens: usize| -> Vec<f32> {
             let total = positions.len();
-            let hd = if total > 0 {
-                keys_flat.len() / total
-            } else {
-                d
-            };
+            let hd = keys_flat.len().checked_div(total).unwrap_or(d);
             let mut s = vec![0.0f32; hd];
             for t in 0..n_tokens {
                 let off = (group_start + t) * hd;

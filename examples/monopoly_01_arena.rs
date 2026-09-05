@@ -112,7 +112,7 @@ fn main() {
     );
 
     let mut ranking: Vec<(usize, u32)> = wins.iter().enumerate().map(|(i, &w)| (i, w)).collect();
-    ranking.sort_by(|a, b| b.1.cmp(&a.1));
+    ranking.sort_by_key(|a| std::cmp::Reverse(a.1));
 
     let names = ["🎲 Random", "💰 Greedy", "🛡️ Validator", "🧠 HL"];
     for (rank, &(idx, w)) in ranking.iter().enumerate() {

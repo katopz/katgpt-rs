@@ -77,7 +77,7 @@ pub fn extract_translation_rules(
         })
         .collect();
 
-    result.sort_by(|a, b| b.successes.cmp(&a.successes));
+    result.sort_by_key(|r| std::cmp::Reverse(r.successes));
     result
 }
 

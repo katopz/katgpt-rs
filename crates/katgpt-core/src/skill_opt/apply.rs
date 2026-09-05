@@ -29,7 +29,7 @@ pub struct ApplyResult {
 pub fn apply_edits(skill: &str, edits: &[SkillEdit], budget: usize) -> ApplyResult {
     // Sort edits by support_count descending (stable sort preserves proposal order for ties).
     let mut sorted: Vec<&SkillEdit> = edits.iter().collect();
-    sorted.sort_by(|a, b| b.support_count.cmp(&a.support_count));
+    sorted.sort_by_key(|e| std::cmp::Reverse(e.support_count));
 
     // Pre-allocate output string with headroom for edit content.
     let mut text = String::with_capacity(skill.len() + edits.len() * 32);

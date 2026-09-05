@@ -552,7 +552,7 @@ impl MonopolyPlayer for GreedyPlayer {
         }
 
         // Sort by highest rent first
-        buildable.sort_by(|a, b| b.1.cmp(&a.1));
+        buildable.sort_by_key(|b| std::cmp::Reverse(b.1));
         buildable.into_iter().map(|(sq, _)| sq).collect()
     }
 
@@ -1286,7 +1286,7 @@ impl MonopolyPlayer for HLPlayer {
         }
 
         // Sort by rent potential
-        buildable.sort_by(|a, b| b.1.cmp(&a.1));
+        buildable.sort_by_key(|b| std::cmp::Reverse(b.1));
         buildable.into_iter().map(|(sq, _, _)| sq).collect()
     }
 

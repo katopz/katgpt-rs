@@ -377,7 +377,7 @@ pub fn beam_search<S: MatchScorer>(
         // Select top beam_width by score (descending). sort_unstable is faster
         // than stable sort and tie order doesn't affect beam-search quality
         // (same score = same quality).
-        candidates.sort_unstable_by(|a, b| b.2.cmp(&a.2));
+        candidates.sort_unstable_by_key(|c| std::cmp::Reverse(c.2));
         candidates.truncate(beam_width);
 
         // Materialize ONLY the surviving beams: beam_width clones, not

@@ -314,9 +314,9 @@ mod tests {
         // call by design, so the predicate is exercised directly here).
         assert!(!f32::NAN.is_finite());
         assert!(!f32::INFINITY.is_finite());
-        assert!(-0.5f32 < 0.0);
-        // Good increments pass the guard:
-        assert!((0.0f32).is_finite() && 0.0f32 >= 0.0);
+        // (The remaining tautological guards — `-0.5 < 0.0`, `0.0.is_finite()` —
+        // were folded into this comment; the predicate semantics they documented
+        // are non-finite and negative increments fail, finite non-negative pass.)
         // In release the bad increments are dropped, not accumulated:
         if !cfg!(debug_assertions) {
             let mut row = UsageRow {

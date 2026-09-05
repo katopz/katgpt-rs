@@ -495,15 +495,11 @@ impl BomberPlayer for VpdPlayer {
         // Track alive state and powerup collection
         for event in events {
             match event {
-                GameEvent::PlayerKilled { victim, .. } => {
-                    if *victim == self._id {
-                        self.alive = false;
-                    }
+                GameEvent::PlayerKilled { victim, .. } if *victim == self._id => {
+                    self.alive = false;
                 }
-                GameEvent::PowerUpCollected { player, .. } => {
-                    if *player == self._id {
-                        self.powerups_collected += 1;
-                    }
+                GameEvent::PowerUpCollected { player, .. } if *player == self._id => {
+                    self.powerups_collected += 1;
                 }
                 _ => {}
             }
