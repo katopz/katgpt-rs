@@ -102,7 +102,9 @@ impl SpKvForwardContext {
 /// | Provider   | Overhead vs baseline | Use case       |
 /// |------------|---------------------|----------------|
 /// | `NoBias`   | 0% (identical)      | Baseline       |
-/// | `GateBias` | <1% (fused add)     | SP-KV decode   |
+/// | `GateBias` | see `attention_head_core` — the per-position bias load is
+///   real cost; Issue 727 measured it and hoisted the probe out of the dot
+///   loop | SP-KV decode   |
 pub trait BiasProvider {
     /// Read the bias for position `t`. Returns 0.0 for no-bias providers.
     fn bias(&self, t: usize) -> f32;
@@ -158,16 +160,123 @@ impl BiasProvider for GateBias<'_> {
 /// ## Optimizations over naive `Option<&[f32]>`
 ///
 /// 1. **Monomorphization** — `B` is known at compile time; no per-iteration match.
-/// 2. **Prune skip** — when `bias[t] == -inf`, the expensive `simd_dot_f32` call
-///    is skipped entirely (score → 0 after softmax, contributes nothing).
+/// 2. **Hoisted bias probe** (Issue 727 T2) — the bias slice is scanned in
+///    contiguous 64-position chunks BEFORE the dot loop, and the dot loop
+///    iterates only the chunk's ACTIVE `(position, bias)` pairs. A pruned
+///    position therefore costs neither a bias load inside the hot loop nor a
+///    score dot nor an `exp` nor a value-accumulate; the only work left for it
+///    is one sequential load + compare + one `-inf` store in the scan. The
+///    interleave of a scalar load + compare + branch with the SIMD dot was
+///    measured (Issue 727, M3 Max, release) at +8.0..8.9% at `t_n = 512`;
+///    hoisting removes the scalar work from the dot loop entirely.
 /// 3. **Direct indexing** — `GateBias` reads via `get_unchecked`; no `Option` unwrap.
+///
+/// ## Numerics (bit-identity contract, Issue 727 T2)
+///
+/// For any bias with at least one active position and finite key/value data,
+/// `attn_out` is BIT-IDENTICAL to the previous implementation:
+///
+/// - `max_score` sees the same scores in the same ascending-`t` order (the
+///   chunk scan preserves global order; `f32::max` NaN semantics are
+///   order-sensitive and the sequence is unchanged).
+/// - Pruned positions contributed `exp(-inf - max) == +0.0` to the softmax
+///   sum; removing an exact `+0.0` from a running sum is a bit-identical
+///   no-op (the sum starts at `+0.0` and can never be `-0.0`).
+/// - Pruned positions contributed `(0.0 * inv_sum) * value == ±0.0` to each
+///   output lane; the accumulator starts at `+0.0` and can never be `-0.0`
+///   under round-to-nearest, so `x + (±0.0) == x` bit-for-bit for every state
+///   it can reach. Surviving terms keep their relative (ascending-`t`) order.
+/// - An ACTIVE position whose `exp` underflows to exact `+0.0` is skipped by
+///   the same argument (its contribution was exactly zero).
+///
+/// Two DOCUMENTED divergences, both unreachable through `build_gate_biases`
+/// (the sliding window always keeps its positions at bias 0, and KV caches
+/// hold finite data):
+/// - a bias that is `-inf` at EVERY position: the old path produced `NaN`
+///   (`exp(-inf - -inf) = exp(NaN)` poisoning the sum); the new path produces
+///   an all-zeros output with `scores_buf` left at `-inf`;
+/// - a non-finite cache value at a zero-weight (pruned or underflowed)
+///   position: the old path propagated its `±0.0 * inf = NaN` into the
+///   output; the new path skips the load, so it does not.
+///
+/// `scores_buf` contract after the call: active positions hold their post-softmax
+/// `exp` values (unchanged); pruned positions hold `-inf` (the old path left
+/// `exp(-inf) = +0.0` there — both read as zero weight; pinned by
+/// `test_hard_gate_prunes_position` and the Issue 727 bit-identity test).
 ///
 /// ## SAFETY
 ///
-/// Caller must ensure all indices are in bounds (same as `attention_head_gated`).
+/// Caller must ensure all indices are in bounds (same as `attention_head_gated`):
+/// `q`/`attn_out` at `q_head_offset + hd`, `key_cache`/`value_cache` at
+/// `t * kv_dim + kv_group_offset + hd` for all `t < t_n`, `scores_buf` at `t_n`.
 #[allow(clippy::too_many_arguments)]
-#[inline(always)]
 pub unsafe fn attention_head_core<B: BiasProvider>(
+    q: &[f32],
+    key_cache: &[f32],
+    value_cache: &[f32],
+    attn_out: &mut [f32],
+    scores_buf: &mut [f32],
+    q_head_offset: usize,
+    kv_group_offset: usize,
+    kv_dim: usize,
+    hd: usize,
+    t_n: usize,
+    scale: f32,
+    bias: B,
+) {
+    // Issue 727 T2: the two paths live in SEPARATE `#[inline(never)]` fns
+    // behind this dispatcher. The first hoist draft kept both bodies in ONE
+    // `#[inline(always)]` fn and the bench caught it immediately: the NoBias
+    // baseline's monomorphization absorbed a 1.66x layout penalty from sharing
+    // an inlining body with the hoisted path (baseline 1.79 → 2.98 µs/iter at
+    // `t_n = 128` in the SAME load window — load moves both arms of a ratio,
+    // a layout edit moves one), turning the gated-zero ratio negative. One
+    // function instance per path makes the A/B compare loops, not call-site
+    // alignment; the per-head call overhead is amortized over the whole
+    // position loop.
+    if bias.may_prune() {
+        unsafe {
+            attention_head_core_prune_impl(
+                q,
+                key_cache,
+                value_cache,
+                attn_out,
+                scores_buf,
+                q_head_offset,
+                kv_group_offset,
+                kv_dim,
+                hd,
+                t_n,
+                scale,
+                bias,
+            );
+        }
+    } else {
+        unsafe {
+            attention_head_core_noprune_impl(
+                q,
+                key_cache,
+                value_cache,
+                attn_out,
+                scores_buf,
+                q_head_offset,
+                kv_group_offset,
+                kv_dim,
+                hd,
+                t_n,
+                scale,
+                bias,
+            );
+        }
+    }
+}
+
+/// NoBias-shaped path — the PRE-Issue-727 implementation, VERBATIM (the
+/// compiler had already eliminated the `may_prune`/bias arithmetic for
+/// `NoBias`; this is that machine code as its own function instance).
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+unsafe fn attention_head_core_noprune_impl<B: BiasProvider>(
     q: &[f32],
     key_cache: &[f32],
     value_cache: &[f32],
@@ -247,6 +356,114 @@ pub unsafe fn attention_head_core<B: BiasProvider>(
     }
     for t in 0..t_n {
         let s = unsafe { *scores_buf.get_unchecked(t) } * inv_sum;
+        let v_base = t * kv_dim + kv_group_offset;
+        for d in 0..hd {
+            unsafe {
+                *attn_out.get_unchecked_mut(q_head_offset + d) +=
+                    s * *value_cache.get_unchecked(v_base + d);
+            }
+        }
+    }
+}
+
+/// GateBias path — Issue 727 T2 hoisted active-position scan.
+///
+/// 64-position chunks keep the `(position, bias)` capture on the stack (zero
+/// allocation, no thread-local): each chunk is scanned once (sequential bias
+/// loads, one compare each), then the dot loop runs over the chunk's active
+/// pairs with the bias value in hand — the hot loop carries no bias load, no
+/// compare, no branch.
+#[allow(clippy::too_many_arguments)]
+#[inline(never)]
+unsafe fn attention_head_core_prune_impl<B: BiasProvider>(
+    q: &[f32],
+    key_cache: &[f32],
+    value_cache: &[f32],
+    attn_out: &mut [f32],
+    scores_buf: &mut [f32],
+    q_head_offset: usize,
+    kv_group_offset: usize,
+    kv_dim: usize,
+    hd: usize,
+    t_n: usize,
+    scale: f32,
+    bias: B,
+) {
+    const ACTIVE_CHUNK: usize = 64;
+    debug_assert!(t_n <= u32::MAX as usize, "position must fit the u32 index");
+
+    // Scan + Pass 1, chunk by chunk. `max_score` updates stay in global
+    // ascending-`t` order across chunk boundaries (bit-identity contract —
+    // `f32::max` NaN semantics are order-sensitive).
+    let mut max_score = f32::NEG_INFINITY;
+    let mut chunk = [(0u32, 0.0f32); ACTIVE_CHUNK];
+    for base in (0..t_n).step_by(ACTIVE_CHUNK) {
+        let end = (base + ACTIVE_CHUNK).min(t_n);
+        let mut n = 0usize;
+        for t in base..end {
+            let b = bias.bias(t);
+            if b == f32::NEG_INFINITY {
+                unsafe {
+                    *scores_buf.get_unchecked_mut(t) = f32::NEG_INFINITY;
+                }
+            } else {
+                chunk[n] = (t as u32, b);
+                n += 1;
+            }
+        }
+        for &(t, b) in chunk[..n].iter() {
+            let t = t as usize;
+            let k_off = t * kv_dim + kv_group_offset;
+            let dot = unsafe {
+                let q_slice = std::slice::from_raw_parts(q.as_ptr().add(q_head_offset), hd);
+                let k_slice = std::slice::from_raw_parts(key_cache.as_ptr().add(k_off), hd);
+                simd_dot_f32(q_slice, k_slice, hd)
+            };
+            let score = dot * scale + b;
+            unsafe {
+                *scores_buf.get_unchecked_mut(t) = score;
+            }
+            max_score = max_score.max(score);
+        }
+    }
+
+    // Pass 2: exp(scores - max) for active positions only. A pruned position's
+    // contribution was `exp(-inf - max) == +0.0`; skipping that exact zero is a
+    // bit-identical no-op (see the numerics contract on [`attention_head_core`]).
+    // Pruned entries are left at `-inf` in `scores_buf` (documented contract
+    // change from the old `+0.0`).
+    let mut sum = 0.0f32;
+    for t in 0..t_n {
+        let s = unsafe { *scores_buf.get_unchecked(t) };
+        if s == f32::NEG_INFINITY {
+            continue;
+        }
+        let exp_val = (s - max_score).exp();
+        unsafe {
+            *scores_buf.get_unchecked_mut(t) = exp_val;
+        }
+        sum += exp_val;
+    }
+
+    // Pass 3: normalize + weighted value accumulation over contributing
+    // positions only. Skips are exact zeros: pruned entries (`-inf`) and active
+    // entries whose `exp` underflowed to `+0.0` both contributed exactly
+    // `±0.0` per lane — removing them is bit-identical (see the numerics
+    // contract on [`attention_head_core`]). Surviving terms keep ascending-`t`
+    // order, and the per-term grouping stays `(scores_buf[t] * inv_sum) * value`
+    // — no FMA contraction (same rule as the NoBias path above).
+    let inv_sum = 1.0 / sum;
+    for d in 0..hd {
+        unsafe {
+            *attn_out.get_unchecked_mut(q_head_offset + d) = 0.0f32;
+        }
+    }
+    for t in 0..t_n {
+        let exp_val = unsafe { *scores_buf.get_unchecked(t) };
+        if exp_val == 0.0 || exp_val == f32::NEG_INFINITY {
+            continue;
+        }
+        let s = exp_val * inv_sum;
         let v_base = t * kv_dim + kv_group_offset;
         for d in 0..hd {
             unsafe {

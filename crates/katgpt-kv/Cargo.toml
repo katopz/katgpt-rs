@@ -53,7 +53,12 @@ cs_kv_probe = []
 # katgpt-spectral/turboquant. Documented at the call site.
 shard_kv = []
 
-# SP-KV self-pruned key-value attention (Plan 070).
+# SP-KV self-pruned key-value attention (Plan 070). Issue 727 (2026-09-05):
+# the gate-bias path has a MEASURED per-position load cost of ~+7..12% vs
+# NoBias at hd=4 (roughly scale-invariant in t_n; the paper's <1% was a
+# t_n=16 artifact and the <3% bar is NOT met — known cost, not a re-pin).
+# The T2 hoist makes pruned positions ~free (prune-skip 1.12..1.58x at 48%
+# pruned, bar >1.05x met) and is bit-identical to the pre-hoist math.
 sp_kv = []
 
 # StillKV perceiver-based KV cache compaction (Plan 245).

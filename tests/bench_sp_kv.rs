@@ -18,6 +18,7 @@ mod ab_timing;
 use std::hint::black_box;
 use std::time::Instant;
 
+use katgpt_core::simd::simd_dot_f32;
 use katgpt_rs::sp_kv::{
     GateBias, GateBiasBuffer, NoBias, SpKvCache, SpKvConfig, SpKvPredictors, UtilityAggregation,
     aggregate_utilities, attention_head_core, attention_head_gated, predict,
@@ -38,38 +39,159 @@ fn synthetic_hidden(n_embd: usize, pos: usize) -> Vec<f32> {
 
 /// T16 — monomorphized gate-bias dispatch overhead and prune-skip speedup.
 ///
-/// **Issue 723 Class A / T7 — instrument repaired, and the repaired
-/// instrument reports a real shortfall. `#[ignore]` with provenance, per the
-/// T8 precedent for `goat_169_g1`: the assertions stay executable via
-/// `--ignored`, and the shortfall is tracked as `.issues/727` rather than
-/// laundered into a re-pinned bar.**
+/// **Issue 727 CLOSED-NEGATIVE-ON-THE-GATE-BIAS-BAR (2026-09-05). `#[ignore]`
+/// with provenance per the Issue 723 T8 precedent for `goat_169_g1`: the
+/// assertions stay executable via `--ignored`, and the gate-bias bar is NOT
+/// re-pinned — the measured budget is recorded here, in the primitive's docs,
+/// and in the `sp_kv` feature comment instead.**
 ///
-/// What the repair changed (all detailed at the call sites): the sequence
+/// What the T7 repair changed (all detailed at the call sites): the sequence
 /// length is decoupled from `Config::micro()`'s `block_size = 16` — at which
 /// the "50% pruned" arm pruned **zero** positions and the workload was small
 /// enough that an unrelated `eprintln!` moved the measured ratio by 30% — and
-/// the two asserted comparisons are interleaved chunk-by-chunk against the
-/// same baseline with a median across chunks.
+/// the two asserted comparisons are interleaved chunk-by-chunk against
+/// the same baseline with a median across chunks. What Issue 727 added: the
+/// sweep now runs THREE sequence lengths (128 / 512 / 2048) and every cell is
+/// printed before any assert fires; the primitive got the T2 hoist (a
+/// precomputed active-position list — pruned positions now cost neither a
+/// bias load nor a score dot nor an `exp` nor a value-accumulate);
+/// `gate_bias_hoist_bit_identity` (below) pins the hoist bit-identical to the
+/// pre-hoist implementation at `to_bits` level.
 ///
-/// What it then measured, M3 Max, release, 2026-09-05, three runs, at
-/// `t_n = 512` with 48% of positions pruned:
+/// ## Measured, M3 Max, release, 2026-09-05, 48% of positions pruned
 ///
-/// | quantity | bar | measured |
-/// |---|---|---|
-/// | gate-bias dispatch overhead | < 3% (paper target < 1%) | **+8.0 / +8.1 / +8.4%** (per-round 1.026–1.126) |
-/// | prune-skip speedup | > 1.05x | **1.046 / 1.042 / 1.015x** |
+/// BEFORE the T2 hoist (matched load window, three interleaved runs):
 ///
-/// Both are stable and neither is the box. The overhead is not *dispatch* —
-/// `GateBias` monomorphizes, and the Option-dispatch wrapper measures the same
-/// +8.2% — it is the bias LOAD: one extra `get_unchecked` per position per
-/// head, 512 loads against a 512x4 attention. At `t_n = 16` that cost was
-/// smaller than the layout noise, which is why a "<1% overhead" claim survived
-/// unexecuted. Prune-skip elides the value accumulation for pruned positions
-/// but not the score dot, so ~48% pruned buys ~24% of the work at best; 4% is
-/// what is left after the branch.
-#[ignore = "Issue 723 T7 / .issues/727: instrument repaired and load-invariant, but the             primitive misses both bars at a realistic sequence length — gate-bias overhead             +8.0..8.4% vs a 3% bar (paper target <1%), prune-skip 1.015..1.046x vs a 1.05x             bar. Run with --ignored to re-measure; do not re-pin without closing 727."]
+/// | t_n | gate-bias overhead (bar < 3%) | per-round | prune-skip (bar > 1.05x) | per-round |
+/// |---|---|---|---|---|
+/// | 128 | +7.14 / +7.35 / +7.54% | 1.01–1.09 | 0.964–0.969x | 0.94–1.13 |
+/// | 512 | +8.09 / +8.16 / +8.66% | 1.06–1.13 | 0.594–1.004x | 0.58–1.01 |
+/// | 2048 | +8.03 / +8.59 / +9.26% | 1.02–1.11 | 1.007–1.047x | 0.94–1.02 |
+///
+/// (The issue's original three runs at 512 read +8.0/+8.1/+8.4% and
+/// 1.015/1.042/1.046x — same verdict. The overhead is roughly scale-invariant
+/// in `t_n`, as a per-position cost predicts; the 512-cell 0.594x outlier is a
+/// scheduling spike the per-round spread exposes.)
+///
+/// AFTER the T2 hoist (matched load window, same instrument):
+///
+/// | t_n | gate-bias overhead (bar < 3%) | per-round | prune-skip (bar > 1.05x) | per-round |
+/// |---|---|---|---|---|
+/// | 128 | +11.1 / +11.1 / +11.7% | 1.06–1.11 | 1.12–1.22x | 0.62–1.07 |
+/// | 512 | +11.6 / +11.6 / +11.8% | 1.06–1.32 | 1.19–1.58x | 0.48–0.86 |
+/// | 2048 | +11.8 / +24.0 / +27.1% | 0.93–1.30 | 1.22–1.43x (abs 37.4→26.2 µs/iter) | 0.54–1.07 |
+///
+/// (Absolute µs/iter at 512: baseline 7.77→7.93 — the NoBias baseline is
+/// UNCHANGED by the hoist; gated-mixed 7.84→6.64. The 2048 gated-zero cells
+/// +24/+27% are a load-climb window (1x→13x during the sweep); the load-floor
+/// reading is +11.8%.)
+///
+/// ## The verdict (Issue 727 T1)
+///
+/// - **"Zero-overhead gate bias" is a false claim; the paper's <1% target was
+///   a `t_n = 16` artifact.** Any gated attention must READ the gate once per
+///   position per head. The honest measured budget: **the gate read costs
+///   ~+7–12% vs `NoBias` at these dims, roughly scale-invariant in `t_n`**
+///   (old interleaved-load structure +7–9%; the hoisted structure trades +3pp
+///   of all-active scan cost for the prune win). `NoBias` (or the `None` arm
+///   of `attention_head_gated`) remains exactly 0% — use it when not pruning.
+/// - **Prune-skip clears its bar after the hoist**: 1.12–1.58x (was
+///   1.015–1.046x). Pruned positions now cost one scan load+compare + one
+///   `-inf` store; the score dot, `exp`, and value-accumulate are all
+///   elided.
+/// - The Option-dispatch wrapper stays telemetry-only-equal: the legacy
+///   `Gated(Some)` arm measured the same overhead as monomorphized `GateBias`
+///   both before and after the hoist — dispatch was never the cost; the load
+///   is.
+#[ignore = "Issue 727 (closes the gate-bias half as a measured budget): gate-bias overhead is an \
+            inherent per-position gate read, +7..12% vs NoBias at hd=4 (paper <1% was a t_n=16 \
+            artifact; bar <3% NOT met — do not re-pin). Prune-skip PASSES after the T2 hoist \
+            (1.12..1.58x vs the 1.05x bar). Kept #[ignore]d because the gate asserts BOTH bars \
+            and the overhead bar cannot pass; run with --ignored to re-measure. Bit-identity \
+            of the hoist is pinned by gate_bias_hoist_bit_identity (not ignored)."]
 #[test]
 fn bench_gate_bias_overhead() {
+    // Issue 727 T3: the sweep runs at THREE sequence lengths — 128 / 512 /
+    // 2048. The overhead is a per-position load against a per-position dot, so
+    // the ratio should be roughly scale-invariant; a deviation is itself a
+    // finding. Each `t_n` gets a full independent instrument (fresh caches,
+    // fresh RNG, fresh buffers). Every cell is measured and printed BEFORE any
+    // bar assert fires — a miss at one `t_n` must never hide the other two
+    // cells, because the scale-invariance check IS the finding.
+    const T_NS: [usize; 3] = [128, 512, 2048];
+    let cells: Vec<T16Cell> = T_NS.iter().map(|&t_n| bench_gate_bias_overhead_at(t_n)).collect();
+
+    println!("\n  ┌─ T16 sweep summary (Issue 727 T3) ─────────────────────────────────┐");
+    println!("  │  t_n │ gated-zero │ zero rounds     │ mixed        │ speedup │ mixed rounds    │");
+    for c in &cells {
+        println!(
+            "  │ {:>4} │ {:+.2}%      │ {:.3}..{:.3} │ {:+.2}%      │ {:.3}x  │ {:.3}..{:.3} │",
+            c.t_n,
+            c.overhead_zero,
+            c.spread_zero.0,
+            c.spread_zero.1,
+            c.overhead_mixed,
+            c.prune_skip,
+            c.spread_mixed.0,
+            c.spread_mixed.1,
+        );
+    }
+    println!("  └────────────────────────────────────────────────────────────────────┘");
+
+    // Bars, per cell. Debug builds have higher overhead due to lack of
+    // inlining; release is the true measurement.
+    let mut failures: Vec<String> = Vec::new();
+    for c in &cells {
+        if cfg!(debug_assertions) {
+            if c.overhead_zero >= 15.0 {
+                failures.push(format!(
+                    "t_n={}: gate bias overhead too high even for debug: {:+.2}% (per-round {:.4}..{:.4})",
+                    c.t_n, c.overhead_zero, c.spread_zero.0, c.spread_zero.1
+                ));
+            }
+        } else {
+            if c.overhead_zero >= 3.0 {
+                failures.push(format!(
+                    "t_n={}: monomorphized gate bias overhead too high: {:+.2}% (target <3%, paper <1%; per-round {:.4}..{:.4})",
+                    c.t_n, c.overhead_zero, c.spread_zero.0, c.spread_zero.1
+                ));
+            }
+            if c.prune_skip <= 1.05 {
+                failures.push(format!(
+                    "t_n={}: prune-skip speedup not measurable: {:.3}x (expected >1.05x; per-round {:.4}..{:.4})",
+                    c.t_n, c.prune_skip, c.spread_mixed.0, c.spread_mixed.1
+                ));
+            }
+        }
+    }
+    if cfg!(debug_assertions) && failures.is_empty() {
+        println!("  ℹ️  Debug build — overhead numbers are not representative (use --release)");
+    }
+    assert!(
+        failures.is_empty(),
+        "T16 bar failures:\n  {}",
+        failures.join("\n  ")
+    );
+}
+
+/// One measured cell of the T16 sweep.
+struct T16Cell {
+    t_n: usize,
+    /// GateBias (zero bias) vs NoBias, median overhead %.
+    overhead_zero: f64,
+    /// Per-round ratio range for the gated-zero arm.
+    spread_zero: (f64, f64),
+    /// GateBias (~50% pruned) vs NoBias, median overhead %.
+    overhead_mixed: f64,
+    /// `1 / median(mixed ratios)` — the prune-skip speedup.
+    prune_skip: f64,
+    /// Per-round ratio range for the mixed arm.
+    spread_mixed: (f64, f64),
+}
+
+/// One `t_n` cell of the T16 sweep — the instrument as Issue 723 T7 repaired
+/// it, applied at a single sequence length.
+fn bench_gate_bias_overhead_at(t_n: usize) -> T16Cell {
     let config = Config::micro();
     let kvd = kv_dim(&config);
     let hd = config.head_dim;
@@ -97,9 +219,8 @@ fn bench_gate_bias_overhead() {
     // 512 positions makes the arms measure attention rather than alignment and
     // makes the 16-wide recency window a real 48% prune. Nothing here needs
     // `block_size` — `attention_head_core` takes `t_n` and the caches as
-    // explicit slices.
-    const T_N: usize = 512;
-    let t_n = T_N;
+    // explicit slices. (Issue 727 T3: now swept over 128/512/2048 by the
+    // caller — the ratio should be scale-invariant.)
     let mut rng = Rng::new(42);
 
     // Flat KV cache (simulated)
@@ -341,41 +462,208 @@ fn bench_gate_bias_overhead() {
     println!("  └──────────────────────────────────────────────────────────┘");
     ab_zero.report("T16 gated-zero/baseline");
     ab_mixed.report("T16 gated-mixed/baseline");
-    println!();
 
-    // The key metric: monomorphized GateBias with zero bias should have low overhead
-    // vs monomorphized NoBias (paper target: <1%). Debug builds have higher overhead
-    // due to lack of inlining; release is the true measurement.
-    if cfg!(debug_assertions) {
-        // Debug: just check it's not catastrophically slow (<15%)
-        assert!(
-            overhead_gated_zero < 15.0,
-            "Gate bias overhead too high even for debug: {overhead_gated_zero:.2}% \
-             (per-round {:.4}..{:.4})",
-            ab_zero.min(),
-            ab_zero.max(),
+    T16Cell {
+        t_n,
+        overhead_zero: overhead_gated_zero,
+        spread_zero: (ab_zero.min(), ab_zero.max()),
+        overhead_mixed: overhead_gated_mixed,
+        prune_skip: prune_skip_speedup,
+        spread_mixed: (ab_mixed.min(), ab_mixed.max()),
+    }
+}
+
+// ── T16b: Gate-bias hoist bit-identity (Issue 727 T2) ────────────
+
+/// The PRE-hoist implementation, reproduced verbatim as the reference oracle:
+/// same op order, same groupings, same `simd_dot_f32` calls. The hoisted path
+/// must match it BIT-FOR-BIT on `attn_out` and on active-position scores (the
+/// numerics contract on `attention_head_core` lists the two documented
+/// divergences, both unreachable through `build_gate_biases`).
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_range_loop)]
+fn reference_attention_head_pre727(
+    q: &[f32],
+    key_cache: &[f32],
+    value_cache: &[f32],
+    attn_out: &mut [f32],
+    scores_buf: &mut [f32],
+    q_head_offset: usize,
+    kv_group_offset: usize,
+    kv_dim: usize,
+    hd: usize,
+    t_n: usize,
+    scale: f32,
+    bias: &[f32],
+) {
+    let mut max_score = f32::NEG_INFINITY;
+    for t in 0..t_n {
+        let b = bias[t];
+        if b == f32::NEG_INFINITY {
+            scores_buf[t] = f32::NEG_INFINITY;
+            continue;
+        }
+        let k_off = t * kv_dim + kv_group_offset;
+        let dot = simd_dot_f32(
+            &q[q_head_offset..q_head_offset + hd],
+            &key_cache[k_off..k_off + hd],
+            hd,
         );
-        println!("  ℹ️  Debug build — overhead numbers are not representative (use --release)");
-    } else {
-        // Release: paper target <1%, allow some margin for measurement noise
-        assert!(
-            overhead_gated_zero < 3.0,
-            "Monomorphized gate bias overhead too high: {overhead_gated_zero:.2}% \
-             (target: <1%; per-round {:.4}..{:.4} over {} rounds)",
-            ab_zero.min(),
-            ab_zero.max(),
-            ab_zero.ratios.len(),
-        );
-        // Prune-skip should produce measurable speedup when ~50% pruned (release only)
-        assert!(
-            prune_skip_speedup > 1.05,
-            "Prune-skip speedup not measurable: {prune_skip_speedup:.2}× (expected >1.05×; \
-             per-round {:.4}..{:.4} over {} rounds)",
-            ab_mixed.min(),
-            ab_mixed.max(),
-            ab_mixed.ratios.len(),
+        let score = dot * scale + b;
+        scores_buf[t] = score;
+        max_score = max_score.max(score);
+    }
+    let mut sum = 0.0f32;
+    for t in 0..t_n {
+        let exp_val = (scores_buf[t] - max_score).exp();
+        scores_buf[t] = exp_val;
+        sum += exp_val;
+    }
+    let inv_sum = 1.0 / sum;
+    for d in 0..hd {
+        attn_out[q_head_offset + d] = 0.0f32;
+    }
+    for t in 0..t_n {
+        let s = scores_buf[t] * inv_sum;
+        let v_base = t * kv_dim + kv_group_offset;
+        for d in 0..hd {
+            attn_out[q_head_offset + d] += s * value_cache[v_base + d];
+        }
+    }
+}
+
+/// Issue 727 T2: the hoisted active-position scan must be bit-identical to the
+/// pre-hoist implementation. `to_bits` comparisons, not tolerances — the whole
+/// point is that removing EXACT zeros from a fixed-order accumulation changes
+/// no bits.
+#[test]
+fn gate_bias_hoist_bit_identity() {
+    let hd = 4usize;
+    let kvd = hd * 2; // two KV groups → non-zero kv_group_offset arm
+    let t_n = 130usize; // NOT a multiple of the 64-position scan chunk → ragged tail
+    let scale = 1.0 / (hd as f32).sqrt();
+
+    let mut rng = Rng::new(7271);
+    let q: Vec<f32> = (0..kvd).map(|_| rng.normal()).collect();
+    let key_cache: Vec<f32> = (0..t_n * kvd).map(|_| rng.normal()).collect();
+    let value_cache: Vec<f32> = (0..t_n * kvd).map(|_| rng.normal()).collect();
+
+    let mut cases: Vec<(&str, Vec<f32>)> = Vec::new();
+    cases.push(("zero (all active)", vec![0.0; t_n]));
+    // The bench's own mixed guard: recency window 16 + every-2 (~48% pruned).
+    let mut mixed = vec![0.0f32; t_n];
+    for (t, b) in mixed.iter_mut().enumerate().take(t_n) {
+        if t < t_n - 16 && t.is_multiple_of(2) {
+            *b = f32::NEG_INFINITY;
+        }
+    }
+    cases.push(("mixed window+every-2", mixed));
+    // Soft-mode-shaped finite biases (log(u + eps) lives in [-7, 0) here).
+    let mut u_rng = Rng::new(7272);
+    let soft: Vec<f32> = (0..t_n)
+        .map(|_| (u_rng.normal().abs() * 0.5 + 1e-3).ln())
+        .collect();
+    cases.push(("soft log(u+eps)", soft));
+    // -inf inside the FIRST scan chunk and inside the LAST one.
+    let mut edges = vec![0.0f32; t_n];
+    edges[3] = f32::NEG_INFINITY;
+    edges[t_n - 1] = f32::NEG_INFINITY;
+    cases.push(("-inf at chunk edges", edges));
+    // A NaN slot: NaN is active (NaN != -inf), poisons the sum in BOTH paths;
+    // `.max(NaN)` ignores NaN in both, and every downstream op is identical.
+    let mut nan_bias = vec![0.0f32; t_n];
+    nan_bias[t_n / 2] = f32::NAN;
+    cases.push(("one NaN slot", nan_bias));
+
+    for (name, bias) in &cases {
+        for (q_off, kv_off) in [(0usize, 0usize), (hd, hd)] {
+            let mut out_new = vec![0.0f32; kvd];
+            let mut sc_new = vec![0.0f32; t_n];
+            let mut out_ref = vec![0.0f32; kvd];
+            let mut sc_ref = vec![0.0f32; t_n];
+            unsafe {
+                attention_head_core(
+                    &q, &key_cache, &value_cache, &mut out_new, &mut sc_new,
+                    q_off, kv_off, kvd, hd, t_n, scale,
+                    GateBias::new(bias),
+                );
+            }
+            reference_attention_head_pre727(
+                &q, &key_cache, &value_cache, &mut out_ref, &mut sc_ref,
+                q_off, kv_off, kvd, hd, t_n, scale, bias,
+            );
+            for d in 0..hd {
+                assert_eq!(
+                    out_new[q_off + d].to_bits(),
+                    out_ref[q_off + d].to_bits(),
+                    "{name} @ q_off={q_off}: attn_out[{d}] differs (new {} vs ref {})",
+                    out_new[q_off + d],
+                    out_ref[q_off + d],
+                );
+            }
+            for t in 0..t_n {
+                if bias[t] == f32::NEG_INFINITY {
+                    // Documented scores_buf contract: pruned stay -inf (the
+                    // old path left exp(-inf) = +0.0 — same zero weight).
+                    assert_eq!(sc_new[t].to_bits(), f32::NEG_INFINITY.to_bits());
+                } else {
+                    assert_eq!(
+                        sc_new[t].to_bits(),
+                        sc_ref[t].to_bits(),
+                        "{name} @ q_off={q_off}: scores[{t}] differs"
+                    );
+                }
+            }
+        }
+    }
+
+    // Active-position UNDERFLOW coverage: with identical keys every dot ties,
+    // so a single -200 slot scores exactly 200 below the max and its exp is
+    // exactly +0.0. Both paths must skip it identically (its per-lane
+    // contribution was exactly ±0.0).
+    let key_flat = vec![0.7f32; t_n * kvd];
+    let value_flat = vec![1.3f32; t_n * kvd];
+    let mut under = vec![0.0f32; t_n];
+    under[5] = -200.0;
+    let mut out_new = vec![0.0f32; kvd];
+    let mut sc_new = vec![0.0f32; t_n];
+    let mut out_ref = vec![0.0f32; kvd];
+    let mut sc_ref = vec![0.0f32; t_n];
+    unsafe {
+        attention_head_core(
+            &q, &key_flat, &value_flat, &mut out_new, &mut sc_new,
+            0, 0, kvd, hd, t_n, scale,
+            GateBias::new(&under),
         );
     }
+    reference_attention_head_pre727(
+        &q, &key_flat, &value_flat, &mut out_ref, &mut sc_ref,
+        0, 0, kvd, hd, t_n, scale, &under,
+    );
+    for d in 0..hd {
+        assert_eq!(out_new[d].to_bits(), out_ref[d].to_bits());
+    }
+    for t in 0..t_n {
+        assert_eq!(sc_new[t].to_bits(), sc_ref[t].to_bits());
+    }
+
+    // DOCUMENTED DIVERGENCE: an all-pruned bias. The old path produced NaN
+    // (exp(-inf - -inf) = exp(NaN) poisoning the sum); the hoisted path
+    // produces an all-zeros output with scores left at -inf.
+    // `build_gate_biases` can never emit one: the sliding window always keeps
+    // its positions at bias 0.
+    let all_pruned = vec![f32::NEG_INFINITY; t_n];
+    let mut out = vec![0.0f32; kvd];
+    let mut sc = vec![0.0f32; t_n];
+    unsafe {
+        attention_head_core(
+            &q, &key_cache, &value_cache, &mut out, &mut sc,
+            0, 0, kvd, hd, t_n, scale,
+            GateBias::new(&all_pruned),
+        );
+    }
+    assert!(out[..hd].iter().all(|v| *v == 0.0));
+    assert!(sc.iter().all(|v| *v == f32::NEG_INFINITY));
 }
 
 // ── T17: KV Cache Density Ratio ──────────────────────────────────
