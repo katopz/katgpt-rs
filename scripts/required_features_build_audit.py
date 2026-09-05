@@ -88,6 +88,10 @@ class Row:
     name: str
     features: list[str]
     path: str
+    # The package's own declared features and dependency names, carried so the
+    # free static pass can rule on a row without invoking cargo.
+    feats: set[str] = field(default_factory=set)
+    deps: set[str] = field(default_factory=set)
 
     @property
     def label(self) -> str:
@@ -148,6 +152,7 @@ def parse_rows(repo: Path) -> list[Row]:
         pkg = (data.get("package") or {}).get("name")
         if not pkg:
             continue  # virtual workspace root — its members are their own manifests
+        feats, deps = declared_features(data)
         for kind in KIND_FLAG:
             for entry in data.get(kind, []) or []:
                 if not isinstance(entry, dict):
@@ -165,6 +170,8 @@ def parse_rows(repo: Path) -> list[Row]:
                         name=name,
                         features=list(feats),
                         path=str((manifest.parent / rel).resolve()),
+                        feats=feats,
+                        deps=deps,
                     )
                 )
     return out
@@ -233,6 +240,62 @@ def check_row(repo: Path, row: Row, target_dir: str | None, timeout: int) -> Res
         return Result(row, ERROR, time.monotonic() - t0, str(e))
     verdict, detail = classify(proc)
     return Result(row, verdict, time.monotonic() - t0, detail)
+
+
+def declared_features(data: dict) -> tuple[set[str], set[str]]:
+    """(features this package can enable, dependency names it can route through).
+
+    The second set exists because `required-features` accepts `dep/feat` and
+    `dep?/feat`, which name a DEPENDENCY's feature, not one of ours. That was
+    measured, not assumed (cargo 1.98.1, `/tmp` probe with a `compile_error!`
+    canary in the target): a `dep/extra` row is satisfied by `--features
+    <ours-that-enables-it>`, by `--features dep/extra` directly, and by
+    `--all-features`; only a plain no-features build skips it, correctly.
+    Modelling those rows as invalid would have filed **10 riir-ai benches**
+    as dead targets that are not dead.
+    """
+    feats = set((data.get("features") or {}).keys())
+    deps: set[str] = set()
+
+    def scan(table: dict) -> None:
+        for section in ("dependencies", "dev-dependencies", "build-dependencies"):
+            for name, spec in (table.get(section) or {}).items():
+                deps.add(name)
+                if isinstance(spec, dict):
+                    if spec.get("optional"):
+                        # An optional dep implies a same-named feature unless
+                        # some feature already claims the name via `dep:`.
+                        feats.add(name)
+                    renamed = spec.get("package")
+                    if renamed:
+                        deps.add(renamed)
+
+    scan(data)
+    for target_table in (data.get("target") or {}).values():
+        if isinstance(target_table, dict):
+            scan(target_table)
+    return feats, deps
+
+
+def static_invalid(feature: str, feats: set[str], deps: set[str]) -> str:
+    """"" if the row's entry is nameable; else why it is not.
+
+    Free, over the whole population, and it decides the one verdict that needs
+    no compiler: a row naming a feature the package does not define can never
+    be satisfied by any invocation.
+    """
+    if "/" in feature:
+        dep, _, _sub = feature.partition("/")
+        dep = dep.removesuffix("?")
+        if dep in deps or dep in feats:
+            return ""
+        return f"no dependency named `{dep}`"
+    if feature.startswith("dep:"):
+        # `dep:` is feature-table syntax; cargo does not accept it here.
+        return "`dep:` syntax is not valid in required-features"
+    if feature in feats:
+        return ""
+    return f"package declares no feature `{feature}`"
 
 
 def group_rows(rows: list[Row]) -> list[Group]:
@@ -400,6 +463,21 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
     if args.limit:
         rows = rows[: args.limit]
 
+    # The free pass first: a row naming a feature the package cannot enable is
+    # decided by the manifest alone, so it must not cost a build. Over the 1,829
+    # rows in the workspace this takes under a second; the compiler pass is
+    # hours.
+    static_bad: dict[str, Result] = {}
+    for row in rows:
+        reasons = [
+            r
+            for r in (static_invalid(f, row.feats, row.deps) for f in row.features)
+            if r
+        ]
+        if reasons:
+            static_bad[row.label] = Result(row, NO_FEATURE, 0.0, "; ".join(reasons))
+    rows = [r for r in rows if r.label not in static_bad]
+
     def emit(res: Result, i: int, n: int, suffix: str = "") -> None:
         if args.quiet:
             return
@@ -414,6 +492,10 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
             file=sys.stderr if args.json else sys.stdout,
             flush=True,
         )
+
+    for res in static_bad.values():
+        rep.results.append(res)
+        emit(res, len(rep.results), len(rep.rows), "  [static]")
 
     if args.batch:
         groups = group_rows(rows)
@@ -494,6 +576,41 @@ def selftest() -> None:
                     file=sys.stderr,
                 )
                 raise SystemExit(2)
+
+    # static_invalid(): the free pass. Its FALSE-POSITIVE direction is the
+    # dangerous one — a `dep/feat` row read as invalid would have filed 10
+    # riir-ai benches as dead targets, and the /tmp probe (cargo 1.98.1) shows
+    # cargo satisfies those rows three different ways. Pinned in both
+    # directions, including the renamed-dependency case.
+    sv_toml = (
+        '[package]\nname = "p"\n\n[dependencies]\n'
+        'dep = { path = "../dep" }\n'
+        'opt = { path = "../opt", optional = true }\n'
+        'aliased = { package = "real-name", path = "../r" }\n\n'
+        '[target."cfg(unix)".dependencies]\nunixdep = { path = "../u" }\n\n'
+        '[features]\nmine = []\n'
+    )
+    sv_feats, sv_deps = declared_features(tomllib.loads(sv_toml))
+    sv_cases = [
+        ("mine", ""),                       # own feature
+        ("opt", ""),                        # implicit feature of an optional dep
+        ("dep/extra", ""),                  # a dependency's feature — VALID
+        ("opt?/extra", ""),                 # weak-dep form — also valid
+        ("unixdep/extra", ""),              # platform-table dependency
+        ("real-name/extra", ""),            # renamed dependency, real name
+        ("nope", "package declares no feature `nope`"),
+        ("ghost/extra", "no dependency named `ghost`"),
+        ("dep:opt", "`dep:` syntax is not valid in required-features"),
+    ]
+    for feature, want in sv_cases:
+        got = static_invalid(feature, sv_feats, sv_deps)
+        if got != want:
+            print(
+                f"SELFTEST FAILED: static_invalid({feature!r}) → {got!r}, "
+                f"want {want!r}",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
 
     # group_rows(): grouping is on the EXACT set, and set equality must be
     # order-insensitive (a manifest may list the same features in any order)
