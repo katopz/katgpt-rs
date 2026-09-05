@@ -784,6 +784,68 @@ by naming `dep/feat` directly, and under `--all-features`, and skips the
 target only in a plain no-features build. Renamed (`package = `) and
 `[target."cfg(…)".dependencies]` entries count as dependencies too.
 
+**And that free verdict is correct AND insufficient — measured 2026-09-06.**
+The sixth instance of the class is `riir-train`'s `lora_muon_optimizer`, which
+forwarded `riir-gpu/amuse_optimizer` — the DEPENDENCY's feature — while
+`pub mod optimizer_amuse` in `riir-train-gpu` is gated on its OWN
+`amuse_optimizer`. That is a perfectly valid `dep/feat` entry, so the static
+pass is right to pass it, and only the compiler distinguishes "names a feature
+that exists" from "names the feature that gates the module".
+
+**The sixth instance also widened the class, and the widening is the part to
+carry.** Instances 1-5 are wrong ROWS: a target that cannot build at exactly
+the feature set its own `[[test]]` declares. Instance 6 is a feature set under
+which the **LIBRARY** does not compile — `cargo check -p riir-train-gpu --lib
+--features lora_muon_optimizer` was `E0432` ×2 — so cargo errors before
+reaching any target and ten rows can only report **UNSEEN**. Both are invisible
+to `cargo test --workspace` (which skips the target) and to `--all-features`
+(which supplies what was forgotten), for the same reason.
+
+Which is why **UNSEEN must never be folded into the pass column**, and this is
+now measured rather than argued. The obvious reading of those ten — "downstream
+of the two FAILS beside them, they will clear when those are fixed" — was
+TESTED and is FALSE: re-running after instances 4 and 5 landed left all ten
+still UNSEEN, which is the only reason the non-compiling library was found. A
+report that had counted them green would have hidden it behind two unrelated
+fixes.
+
+**Two instances repaired in OPPOSITE directions, which turns an anecdote into a
+rule: read the USE SITES, not the error.** `dasd_lora_goat` omitted `asft_loss`
+and its body uses `AsftConfig`/`asft_loss` unconditionally, so the ROW was
+wrong — widen it. `goat_235b_filter_training` had an UNGATED import whose only
+use site already carried `#[cfg(feature = "lora_outlier_guard")]`, with
+`..Default::default()` covering its absence — widening the row would have forced
+an optional leg on and defeated the file's per-leg design, so the IMPORT was
+wrong; narrow the cfg. Widening is the tempting repair and is right only when
+the body needs the feature unconditionally.
+
+### The per-push half — `scripts/required_features_touched_gate.py`
+
+The sweep above is the right instrument at the wrong cadence: 1,866 rows over
+16 repos at a ~28 s/row mean is a scheduled job. But every instance in the
+record arrived in a **commit**, so the affordable gate is not "check every row",
+it is "check the rows this push could have broken" — cost bounded by the diff.
+`.github/workflows/required_features_touched.yml` runs it per push and per PR
+on macos-latest (the platform is part of the claim here, unlike the pure-text
+docs gate).
+
+Two selection rules. A changed file that IS a row's target source selects that
+row; a changed `Cargo.toml` selects the rows whose own `(kind, name,
+required-features)` tuple **differs between base and head**. The second is a
+ROW diff, not "every row in the package", and that is the whole design —
+selecting the package would refuse every manifest edit in `riir-train-gpu` (440
+rows), the repo three of the six instances live in. Both sides parse through
+the sweep's own `rows_from_manifest` so the two instruments cannot disagree
+about what a row IS.
+
+**Read a green narrowly, and the gate prints why on every run.** A changed
+`src/**.rs` can break a row in any dependent package — instances 1 and 6 are
+both that axis — and selecting on it is unbounded, so it stays the sweep's
+(`--src-fanout` opts in, `--max-rows` REFUSES rather than truncates; a silent
+truncation would be the blind spot the gate exists to name). Measured cost: 0
+rows selected ~0.4s · 1 warm row 3.1s · 1 row at a feature set that swings the
+graph 266.7s.
+
 Record and the open sweep: riir-train `.issues/513`.
 
 ### A reported "p99" is often the MAX — `scripts/percentile_index_audit.py`
