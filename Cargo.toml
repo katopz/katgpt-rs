@@ -722,7 +722,14 @@ required-features = ["union_bound_confidence"]
 
 [[test]]
 name = "bench_001_pruners_goat"
-required-features = ["bomber", "go"]
+# Issue 513 T2 (2026-09-05): was ["bomber", "go"] — the SAME defect Issue 723
+# T7 fixed for `bench_001_pruners_goat_proof` below, in the twin it did not
+# look at. `BomberHeuristic` / `BomberState` are exported behind `game_state`
+# (which implies `bomber`), so naming this target at its own declared feature
+# set errored with E0432 instead of running. Found by
+# katgpt-rs `scripts/required_features_build_audit.py` in the first 6 rows it
+# checked — a hand fix of one instance does not close a class.
+required-features = ["game_state", "go"]
 
 [[test]]
 name = "bench_001_pruners_goat_proof"

@@ -529,6 +529,51 @@ about the one you didn't. Arming the gates still paid: it surfaced
 `.docs/10_audits/alloc_gate_per_thread_counter.md`, an alloc gate counting a sibling test's allocations, which
 reproduces in release.
 
+### A `required-features` row can EXIST and be WRONG — `scripts/required_features_build_audit.py`
+
+Every audit above treats a target as protected once it **has** a
+`required-features` row. That is the right check for the failure they were
+built for. It says nothing about whether the row is *correct*, and a row that
+exists and is wrong is strictly worse than a missing one:
+
+- `cargo test --workspace` silently **skips** the target (features unmet), so
+  nothing reds.
+- `--all-features` **builds** it, because the union supplies whatever the row
+  forgot — so the one configuration anybody runs it in passes.
+- Every audit counts it in the "w/ req-f" column, i.e. **protected**.
+
+It cannot be answered statically: the row is wrong relative to what the file
+*imports*, and the import resolves through `lib.rs` re-exports that are
+themselves cfg-gated — the glob-re-export problem this repo already documents
+as defeating grep. So the check is to ask the compiler, once per target:
+
+```bash
+scripts/required_features_build_audit.py --list            # rows only, no builds
+scripts/required_features_build_audit.py ../riir-train     # one repo
+scripts/required_features_build_audit.py . --grep pruners  # one slice
+```
+
+A **report, not a gate** (always exit 0) and, unlike its siblings, also for a
+cost reason: **1,818 rows over 16 repos** (2026-09-05), at ~28 s/row warm on
+the first katgpt-rs slice — a full sweep is hours, so it is filterable
+(`--package`, `--kind`, `--grep`, `--limit`) and takes `--target-dir` for when
+a sibling session is building. It warns when another cargo holds the repo's
+`target/`, by working directory, for the reason
+§"Several sessions, one target dir" gives.
+
+Two instances so far, and the second is the argument for the instrument: the
+first was found by hand (riir-train `9da3420f`, `test_cubecl_backward_grads`
+omitting `gpu_training_resident`; fixing it immediately reported 9 passed /
+1 failed, so the wrong row was hiding a real defect). The second was found by
+this script **in the first six rows it checked, in this repo** —
+`bench_001_pruners_goat`, `["bomber", "go"]`, `E0432`. Its twin
+`bench_001_pruners_goat_proof` had the identical defect *and it was already
+fixed*, by Issue 723 T7, which did not look at the file next to it. Five
+assertions that had never been runnable at their own row now run and pass. A
+hand fix of one instance does not close a class.
+
+Record and the open sweep: riir-train `.issues/513`.
+
 ### A reported "p99" is often the MAX — `scripts/percentile_index_audit.py`
 
 `sorted[(n as f64 * 0.99) as usize]` and `sorted[n * 99 / 100]` both land on
