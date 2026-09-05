@@ -31,15 +31,24 @@
 #
 # ── Only repos measured WHOLE are listed ────────────────────────────────────
 # An unlisted repo REDS the run rather than defaulting to permissive, so this
-# file is also the record of what has been decided. riir-ai (515 rows, sweep in
-# flight, 2 open instances) and riir-game-sdk (32, deferred on tree
-# contamination) are deliberately absent and must be added with their measured
-# numbers when they land.
+# file is also the record of what has been decided. riir-game-sdk (32 rows) is
+# deliberately absent: its tree is mid-refactor with a dirty Cargo.toml and a
+# live cargo, and a verdict measured against half-landed manifests is worth
+# nothing. Add it with its measured numbers once that lands.
+#
+# riir-ai landed 2026-09-06 at 515/515 — 5 FAILS repaired (Issue 513 instances
+# 7, 9, 10, 11 and 12) and 26 UNSEEN that were NOT rows. The box ran out of
+# disk mid-sweep; cargo could not write the artifacts, so it emitted neither an
+# artifact nor a message and every one of those targets reported silence. All
+# 26 BUILD on a re-run with room. That is why `max_unseen = 0` is a WALL here
+# and not a ratchet — the audit now REFUSES below 8 GiB free and aborts on
+# ENOSPC with exit 2, so a repeat cannot present as rows again.
 #
 # Measured 2026-09-06, each repo run whole with --batch.
 #
 # repo                  min_rows  max_fails  max_unseen
 katgpt-rs                    560          0           0
+riir-ai                      463          0           0
 riir-train                   391          0           0
 riir-chain                   100          0           0
 riir-neuron-db                45          0           0
