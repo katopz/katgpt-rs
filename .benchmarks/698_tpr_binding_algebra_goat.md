@@ -200,8 +200,17 @@ are nearly role/filler-collinear, so widening fillers-per-role is a corpus task.
   wins the slot, in which case demote-loser applies to `tpr` itself.
 - [-] **T8** OOD withheld-pair eval protocol + L2,1 arm A/B for trained
   artifacts. **Filed where its unblock lives: riir-train `.issues/505`** — the
-  protocol is `katgpt_core::tpr::validate` (already shipped); the trigger is
-  the next training run touching a matrix that must compose systematically.
+  protocol is `withheld_pair_top1_report` + `AtomicNull` + the readability
+  helpers (already shipped, and the shape `run_g8()` above runs), NOT
+  `validate_bindings`, which holds out **states** and is in-distribution on the
+  pair axis; the trigger is the next training run touching a matrix that must
+  compose systematically **on a corpus that crosses roles and fillers** — a
+  collinear corpus returns chance OOD as a property of the corpus (Bench 065
+  §8). The L2,1 half is untested anywhere: `run_g8()` fits at the
+  `AlsConfig::new` default `L21::Off`, so the 100% PASS says nothing about the
+  regularizer, and neither existing corpus has the headroom to (G8 is at
+  ceiling, riir-clippy's at chance). Issue 505 carries the corrected pointer,
+  the three-corpus prior and the blocking preconditions.
 - [x] **T9 — CLOSED, won't build speculatively.** A TPR surrogate over the
   riir-clippy drafter is an offline interpretability study whose one concrete
   hook (Bench-694 markov-head contract) is answerable by direct inspection.
