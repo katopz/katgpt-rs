@@ -1,0 +1,152 @@
+# Reusable required-features touched-rows gate — one definition, called by siblings.
+#
+# Issue 513 T6. The gate itself (`scripts/required_features_touched_gate.py`)
+# needs nothing repo-specific: it derives rows from the caller's own manifests
+# and diffs the caller's push. What it DOES need is a tree cargo can resolve,
+# and that is the whole reason this file exists rather than a copied job.
+#
+# ── This is sibling_docs_drift.yml's layout rule INVERTED ────────────────────
+# That workflow must keep the two checkouts UNNESTED, or the auditors' manifest
+# walk descends into katgpt-rs and folds its files into the caller's result.
+# Here the opposite is required: the caller's crates are wired by relative path
+# deps (`../katgpt-rs/crates/katgpt-core`), so katgpt-rs must sit exactly one
+# level ABOVE the caller's checkout or cargo does not resolve at all. Copying
+# the text-auditor precedent without re-reading this paragraph produces a job
+# that cannot build anything. A text auditor and a compiler gate want opposite
+# layouts from the same reusable-workflow shape.
+#
+# One checkout serves both needs — the script lives at ../katgpt-rs/scripts/
+# and the path deps resolve into the same directory.
+#
+# ── Who this is FOR, measured rather than assumed (Issue 513 T6a) ────────────
+# 2,309 real pushes were replayed across all 16 contract repos before this file
+# was written, and the ranking it produced is not the obvious one:
+#
+#   * Six repos must NEVER call this. Five carry ZERO `required-features` rows
+#     and riir-viewbridge carries one. The gate would be perfectly cheap there
+#     and structurally incapable of firing — the vacuous green Issue 513 exists
+#     to refuse, installed deliberately. Check the row count first.
+#   * riir-neuron-db is the one clean adopter: 51 rows, 0.0% of its real pushes
+#     exceed --max-rows, and it needs exactly ONE extra checkout (katgpt-rs).
+#   * Everything else costs 3-7 transitive checkouts. riir-clippy, riir-chain
+#     and riir-train each need riir-ai, the largest repo here; riir-dapps needs
+#     four. And every one of those siblings is PRIVATE, so the default
+#     GITHUB_TOKEN cannot fetch them — a caller past the first will need a PAT.
+#     That constraint, not the refuse rate, is what sets the adoption order.
+#
+# ── max_rows is NOT one number for every repo ────────────────────────────────
+# The gate REFUSES (exit 1) above `max_rows` rather than silently truncating —
+# a push that wide belongs to the scheduled sweep. The default 24 was sized
+# against katgpt-rs's 623 rows and does NOT transfer: riir-dapps has 25 rows in
+# total, so any broad manifest edit selects all 25 and refuses by ONE row, on
+# 13.0% of its real pushes, for a reason that has nothing to do with riir-dapps.
+# Never set max_rows below the caller's own row count when checking all of them
+# is affordable. `--list` prints that count and builds nothing.
+
+name: required-features touched rows (sibling)
+
+on:
+  workflow_call:
+    inputs:
+      max_rows:
+        description: >-
+          Refuse above this many selected rows. Must not sit below the caller's
+          own total row count when checking all of them is affordable — see the
+          header. `required_features_touched_gate.py <repo> --list` prints it.
+        type: number
+        default: 24
+      timeout_minutes:
+        type: number
+        default: 45
+      katgpt_ref:
+        description: katgpt-rs ref supplying the script AND the path-dep target.
+        type: string
+        default: develop
+      runs_on:
+        description: Match the caller's other Rust jobs — the platform is part of the claim.
+        type: string
+        default: ubuntu-latest
+
+jobs:
+  touched-rows:
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: ${{ inputs.timeout_minutes }}
+    steps:
+      # fetch-depth: 0 is not optional. The gate diffs base..head to decide
+      # which rows moved; a shallow checkout has no base commit, and
+      # `git show <base>:Cargo.toml` failing reads as "this manifest is new,
+      # select every row in it" — a REFUSE, not a silent pass, but the wrong
+      # answer for the wrong reason.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Public repo: the default GITHUB_TOKEN is enough, no PAT involved.
+      - name: Check out katgpt-rs (script + path-dep target)
+        uses: actions/checkout@v4
+        with:
+          repository: katopz/katgpt-rs
+          ref: ${{ inputs.katgpt_ref }}
+          path: sibling/katgpt-rs
+
+      # $GITHUB_WORKSPACE is .../<caller>/<caller>; moving the sibling to `..`
+      # puts it exactly where both the caller's path deps and the script
+      # invocation below expect it. See the layout paragraph in the header.
+      - name: Arrange the sibling layout
+        run: mv sibling/katgpt-rs ..
+
+      # The audited tree must be the CALLER's. sibling_docs_drift.yml records
+      # the failure this prevents: the scripts default to the repo they live
+      # in, so a caller that lets katgpt-rs be the subject passes forever
+      # against the wrong repository. Here the path argument is hardcoded to
+      # `.` and there is no input for a caller to get wrong, so this step only
+      # has to prove the layout is what the hardcoding assumes.
+      - name: Assert the audited tree is the caller's
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ../katgpt-rs/scripts/required_features_touched_gate.py \
+            || { echo "katgpt-rs did not land at ../katgpt-rs"; exit 1; }
+          if [ -f Cargo.toml ] && grep -qE '^name *= *"katgpt-rs"' Cargo.toml; then
+            echo "the audited tree IS katgpt-rs — the caller's checkout is missing"; exit 1
+          fi
+          echo "audited tree: $(basename "$PWD")  (repo ${{ github.repository }})"
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Resolve the diff base
+        id: base
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          # A branch's first push reports before= all-zeros, and a force-push can
+          # name a commit this checkout does not have. Either way there is no
+          # base to diff, so fall back to the parent of HEAD: a one-commit window
+          # is a narrower claim than the push, and saying so beats inventing a
+          # base that selects the whole repo.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "no usable push base ($base) — falling back to HEAD~1"
+            base="$(git rev-parse HEAD~1)"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      # Reported, not gated. The gate itself REFUSES below its own floor with
+      # exit 2 rather than letting rows report UNSEEN for an environmental
+      # reason — measured: a 515-row sweep read 26 rows as UNSEEN with 2.5 GiB
+      # free, and all 26 built on a re-run with room. This line just makes the
+      # number visible in the log when that refusal happens.
+      - name: Disk headroom
+        run: df -h .
+
+      - name: Build the required-features rows this push touched
+        run: |
+          ../katgpt-rs/scripts/required_features_touched_gate.py . \
+            --base "${{ steps.base.outputs.base }}" --head HEAD \
+            --max-rows ${{ inputs.max_rows }}
