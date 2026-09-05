@@ -64,11 +64,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from required_features_build_audit import (  # noqa: E402
     BUILDS,
+    DiskFull,
     Row,
     check_group,
+    disk_headroom_ok,
+    free_gib,
     group_rows,
     parse_rows,
     rows_from_manifest,
+    MIN_FREE_GIB,
 )
 
 
@@ -308,9 +312,33 @@ def main(argv: list[str]) -> int:
     if args.list:
         return 0
 
+    # A full disk makes every verdict below meaningless, and the way it presents
+    # is the reason this check is a REFUSE and not a warning: cargo cannot write
+    # the artifact, emits neither a compiler-artifact nor a compiler-message,
+    # and the row reports UNSEEN — which this gate treats as exit 1, i.e. as a
+    # WRONG ROW. Measured on a 515-row riir-ai sweep: 26 rows read as UNSEEN
+    # with 2.5 GiB free, and all 26 built on a re-run with room. Exit 2, because
+    # an untrustworthy instrument is not the same finding as a bad row.
+    if not disk_headroom_ok(args.target_dir):
+        print(f"REFUSE: {free_gib(args.target_dir):.1f} GiB free on the "
+              f"filesystem holding the target dir, below the {MIN_FREE_GIB} GiB "
+              f"floor. Rows would report UNSEEN for an environmental reason and "
+              f"this gate would red them as wrong rows. Free space, pass "
+              f"--target-dir somewhere with room, or set RFBA_MIN_FREE_GIB.",
+              file=sys.stderr)
+        return 2
+
     bad: list[tuple[str, str, str]] = []
     for group in group_rows(picked):
-        for res in check_group(repo, group, args.target_dir, args.timeout):
+        try:
+            results = check_group(repo, group, args.target_dir, args.timeout)
+        except DiskFull as e:
+            print(f"\nABORT: {e}\n  {free_gib(args.target_dir):.1f} GiB free. "
+                  f"Rows checked before this point are valid; the rest are not "
+                  f"decided, and reporting them as failures would be wrong.",
+                  file=sys.stderr)
+            return 2
+        for res in results:
             mark = "  " if res.verdict == BUILDS else "!!"
             print(f"{mark} {res.verdict:<16} {res.seconds:5.1f}s {res.row.label}"
                   + (f"  ({res.detail})" if res.detail else ""))
