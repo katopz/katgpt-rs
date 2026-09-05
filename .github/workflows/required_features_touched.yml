@@ -29,6 +29,26 @@
 # and starts cold, hence 45 minutes — generous on purpose, so a hit means a
 # hang rather than a bad day.
 #
+# ── Measured ON THE RUNNER, all three paths, 2026-09-05 ─────────────────────
+# The workstation numbers above are not this workflow's cost. All three of its
+# outcomes were exercised on macos-latest before this record was written,
+# because a green over 0 selected rows says nothing about the cargo half —
+# .issues/705 is this repo having already paid for that assumption twice.
+#
+#   run 33989871159  push      0 rows selected                  1m06s  exit 0
+#   run 33990209894  dispatch  32 rows -> REFUSE > --max-rows    0m33s  exit 1
+#   run 33990262258  dispatch  2 rows: BUILDS 58.3s + 24.8s      2m06s  exit 0
+#
+# So the whole-job floor is ~1 minute of checkout + toolchain + cache, and a
+# COLD build of a katgpt-rs test target is ~25-60s on a runner — comparable to
+# this box WARM, because Swatinem/rust-cache restores the dependency graph and
+# only the workspace crates rebuild. The REFUSE path is the cheapest and is the
+# one a broad refactor will hit; it names the sweep to run instead.
+#
+# The middle run also corrects a replay assumption by one operand: a dispatch
+# replay diffs base..CHECKOUT, not base against its own commit, so a base only
+# 8 commits back already selected 32 rows. Choose a dispatch base accordingly.
+#
 # ── What a green here does NOT say, stated because the gate prints it too ────
 # It selects a row when the row's own target source changed, or when the row's
 # (kind, name, required-features) tuple moved. A changed `src/**.rs` can break
