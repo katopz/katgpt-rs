@@ -35,8 +35,18 @@
 # REMOVED here per the noise-reduction rule — a floor at the measured value
 # would red on every correct removal.
 min_files.plans = 400          # measured 469
-min_files.issues = 1           # measured 2 — resolved issues are removed, so
-                               # this floor can only ever assert "not zero"
+min_files.issues = 0           # measured 0 (2026-09-05) — and 0 is the SUCCESS
+                               # state here, not a blind walk: every issue was
+                               # resolved and removed per the noise-reduction
+                               # rule (723/724/725/726/727 all closed). The
+                               # floor was 1 and RED on develop for exactly that
+                               # reason; a gate that fails when the work is
+                               # finished is measuring the wrong thing.
+                               # Blindness is still caught, twice over: the
+                               # three floors around this one breach if the walk
+                               # returns nothing, and `.issues/.highwater`
+                               # parses (727), which proves the dir is reached.
+                               # Raise this again if issues become long-lived"
 min_files.research = 450       # measured 511
 min_files.proposals = 10       # measured 13
 

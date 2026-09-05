@@ -272,6 +272,17 @@ def main() -> int:
 
     print(f"\n{len(repos)} contract repo(s) · {tot_dup} tracked duplicate(s) · "
           f"{tot_above} stale allocator(s) · {tot_mal} malformed allocator(s)")
+    # Say the scope at the point of READING, not only in the docstring. A green
+    # `dup=0` is green over SERIAL_DIRS only, and riir-ai carried four genuine
+    # cross-topic `.benchmarks/` collisions (617/619, resolved 2026-09-05) while
+    # this line printed `dup=0` for it — the number was right and the reader's
+    # inference from it was not.
+    family = "/".join(d for d in ALL_DIRS if d not in SERIAL_DIRS)
+    print(f"  scope: duplicate + stale checks cover {'/'.join(SERIAL_DIRS)} ONLY; "
+          f"{family} share numbers by OWNER convention (a family per plan/issue "
+          f"is intended) and are malformed-checked only — see "
+          f"{PINS.name} for the measured reason. A `dup=0` above is NOT a claim "
+          f"about {family}.")
     if bad:
         print("✗ numbering sweep FAILED — see the ✗ rows above")
         return 1

@@ -427,7 +427,7 @@ cargo run --example mux_latent_expand --features mux_latent_context
 
 ## Feature Flags
 
-The flags below gate the example groups above. The full set (577 flags, including
+The flags below gate the example groups above. The full set (578 flags, including
 production-default architecture features) spans the workspace manifests — the root
 [`Cargo.toml`](../Cargo.toml) `[features]` plus the per-crate manifests under
 `crates/` — and is summarised in the [README Feature Flags](../README.md#feature-flags)
