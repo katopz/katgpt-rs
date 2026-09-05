@@ -248,7 +248,8 @@ git add .proposals/NNN_*.md .proposals/.highwater
 git commit -m "docs: file proposal NNN — <one-line title> (target: <repo>)"
 ```
 
-Commit on `develop` (or `main` for riir-train, which has no develop branch).
+Commit on `develop` (the default working branch of every repo in the workspace,
+including riir-train — flipped from `main` 2026-09-04; `main` is frozen there).
 No feature branches. Do not push.
 
 ## Output format
