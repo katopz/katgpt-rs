@@ -75,6 +75,7 @@ KIND_DIR = {"test": "tests", "bench": "benches", "example": "examples"}
 FAILS = "FAILS-TO-BUILD"
 NO_FEATURE = "NO-SUCH-FEATURE"
 BUILDS = "BUILDS"
+UNSEEN = "UNSEEN"
 ERROR = "ERROR"
 TIMEOUT = "TIMEOUT"
 
@@ -91,6 +92,25 @@ class Row:
     @property
     def label(self) -> str:
         return f"{self.repo}:{self.package}:{self.kind}:{self.name}"
+
+
+@dataclass
+class Group:
+    """Rows sharing one package AND one EXACT feature set.
+
+    Exact, never subset-covering. Building target T at a superset S of its own
+    row and seeing it succeed proves nothing about the row — the extra
+    features may be supplying the very import the row forgot, which is the
+    failure this whole report exists to catch (`--all-features` builds every
+    wrong row). Grouping on equality is the only sound batching: every row in
+    a group is checked at literally its own feature set, in one cargo
+    invocation instead of N.
+    """
+
+    package: str
+    features: tuple[str, ...]
+    kinds: tuple[str, ...]
+    rows: list[Row]
 
 
 @dataclass
@@ -215,6 +235,131 @@ def check_row(repo: Path, row: Row, target_dir: str | None, timeout: int) -> Res
     return Result(row, verdict, time.monotonic() - t0, detail)
 
 
+def group_rows(rows: list[Row]) -> list[Group]:
+    """Collapse rows to (package, EXACT feature set) groups, order-preserving."""
+    index: dict[tuple[str, tuple[str, ...]], Group] = {}
+    for row in rows:
+        key = (row.package, tuple(sorted(row.features)))
+        g = index.get(key)
+        if g is None:
+            g = Group(package=row.package, features=key[1], kinds=(), rows=[])
+            index[key] = g
+        g.rows.append(row)
+    out = list(index.values())
+    for g in out:
+        g.kinds = tuple(sorted({r.kind for r in g.rows}))
+    return out
+
+
+def attribute(stdout: str, rows: list[Row]) -> dict[tuple[str, str], tuple[str, str]]:
+    """Per-target verdicts from one batched cargo run's JSON stream.
+
+    Three outcomes per row, and the third is the liveness sentinel this family
+    has needed every time it was omitted: a row with no error AND no artifact
+    is **UNSEEN**, not BUILDS. Silence is not evidence — cargo may have stopped
+    at an upstream unit, or the manifest name may not match any target cargo
+    chose to build. Reading silence as success is exactly the green-zero the
+    whole audit family exists to refuse.
+    """
+    seen: set[tuple[str, str]] = set()
+    errors: dict[tuple[str, str], set[str]] = {}
+    upstream_failed = False
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        target = msg.get("target") or {}
+        name = target.get("name")
+        kinds = target.get("kind") or []
+        if not name:
+            continue
+        reason = msg.get("reason")
+        if reason == "compiler-artifact":
+            for k in kinds:
+                seen.add((k, name))
+        elif reason == "compiler-message":
+            body = msg.get("message") or {}
+            if (body.get("level") or "") != "error":
+                continue
+            code = ((body.get("code") or {}) or {}).get("code") or ""
+            if not code:
+                code = (body.get("message") or "")[:60]
+            for k in kinds:
+                errors.setdefault((k, name), set()).add(code)
+            if any(k in ("lib", "rlib", "proc-macro", "bin", "custom-build") for k in kinds):
+                upstream_failed = True
+    out: dict[tuple[str, str], tuple[str, str]] = {}
+    for row in rows:
+        key = (row.kind, row.name)
+        if key in errors:
+            out[key] = (FAILS, ",".join(sorted(errors[key])))
+        elif key in seen:
+            out[key] = (BUILDS, "")
+        else:
+            out[key] = (
+                UNSEEN,
+                "an upstream unit failed first" if upstream_failed
+                else "cargo built no such target",
+            )
+    return out
+
+
+def check_group(
+    repo: Path, group: Group, target_dir: str | None, timeout: int
+) -> list[Result]:
+    """One `cargo check` per (package, exact feature set) — not per row.
+
+    Measured: 1,829 rows collapse to 1,070 groups over 9 repos (1.71x), and the
+    saving is a whole dependency-graph rebuild per collapsed row, which is what
+    the ~28 s/row mean is made of.
+    """
+    cmd = [
+        "cargo", "check", "-p", group.package,
+        "--features", ",".join(group.features),
+        "--keep-going", "--message-format=json",
+    ]
+    # Name every target explicitly rather than `--tests/--benches/--examples`:
+    # the plural flags build EVERY eligible target in the package at this
+    # feature set, which is work the per-row path never did. Measured on
+    # riir-clippy (44 rows / 25 groups, cold dirs both arms): plural flags
+    # cost +9% CPU-seconds against the per-row path; naming the group's own
+    # targets instead measured -11% CPU / -12% wall.
+    for row in group.rows:
+        cmd += [KIND_FLAG[row.kind], row.name]
+    env = dict(os.environ)
+    env["CARGO_TERM_COLOR"] = "never"
+    if target_dir:
+        env["CARGO_TARGET_DIR"] = target_dir
+    t0 = time.monotonic()
+    try:
+        proc = subprocess.run(
+            cmd, cwd=repo, capture_output=True, text=True, env=env, timeout=timeout
+        )
+    except subprocess.TimeoutExpired:
+        el = time.monotonic() - t0
+        return [Result(r, TIMEOUT, el, f"> {timeout}s (batch)") for r in group.rows]
+    except OSError as e:
+        el = time.monotonic() - t0
+        return [Result(r, ERROR, el, str(e)) for r in group.rows]
+    elapsed = time.monotonic() - t0
+    # A row naming a feature the package does not define fails BEFORE any unit
+    # is compiled, so there is nothing to attribute — the whole group is invalid.
+    if proc.returncode != 0:
+        verdict, detail = classify(proc)
+        if verdict == NO_FEATURE:
+            return [Result(r, NO_FEATURE, elapsed, detail) for r in group.rows]
+    verdicts = attribute(proc.stdout, group.rows)
+    results: list[Result] = []
+    for row in group.rows:
+        verdict, detail = verdicts[(row.kind, row.name)]
+        results.append(Result(row, verdict, elapsed, detail))
+    return results
+
+
 def concurrent_cargo(repo: Path) -> bool:
     """A cargo process with its CWD inside this repo invalidates the verdict.
 
@@ -250,17 +395,32 @@ def audit(repo: Path, args: argparse.Namespace) -> RepoReport:
     rep.rows = rows
     if args.limit:
         rows = rows[: args.limit]
+
+    def emit(res: Result, i: int, n: int, suffix: str = "") -> None:
+        if args.quiet:
+            return
+        mark = "  " if res.verdict == BUILDS else "!!"
+        print(
+            f"{mark} [{i}/{n}] {res.verdict:<15} {res.seconds:6.1f}s "
+            f"{res.row.label}{suffix}"
+            + (f"  ({res.detail})" if res.detail else ""),
+            flush=True,
+        )
+
+    if args.batch:
+        groups = group_rows(rows)
+        done = 0
+        for gi, group in enumerate(groups, 1):
+            for res in check_group(repo, group, args.target_dir, args.timeout):
+                rep.results.append(res)
+                done += 1
+                emit(res, done, len(rows), f"  [grp {gi}/{len(groups)}]")
+        return rep
+
     for i, row in enumerate(rows, 1):
         res = check_row(repo, row, args.target_dir, args.timeout)
         rep.results.append(res)
-        if not args.quiet:
-            mark = "  " if res.verdict == BUILDS else "!!"
-            print(
-                f"{mark} [{i}/{len(rows)}] {res.verdict:<15} {res.seconds:6.1f}s "
-                f"{row.label}"
-                + (f"  ({res.detail})" if res.detail else ""),
-                flush=True,
-            )
+        emit(res, i, len(rows))
     return rep
 
 
@@ -327,6 +487,105 @@ def selftest() -> None:
                 )
                 raise SystemExit(2)
 
+    # group_rows(): grouping is on the EXACT set, and set equality must be
+    # order-insensitive (a manifest may list the same features in any order)
+    # while two DIFFERENT sets must never merge — merging would check a row at
+    # a feature set that is not its own, which is the report's one invariant.
+    g_rows = [
+        Row("r", "p", "test", "a", ["x", "y"], "/a"),
+        Row("r", "p", "test", "b", ["y", "x"], "/b"),
+        Row("r", "p", "bench", "c", ["x"], "/c"),
+        Row("r", "q", "test", "d", ["x", "y"], "/d"),
+    ]
+    got_groups = [
+        (g.package, g.features, g.kinds, [r.name for r in g.rows])
+        for g in group_rows(g_rows)
+    ]
+    want_groups = [
+        ("p", ("x", "y"), ("test",), ["a", "b"]),
+        ("p", ("x",), ("bench",), ["c"]),
+        ("q", ("x", "y"), ("test",), ["d"]),
+    ]
+    if got_groups != want_groups:
+        print(
+            f"SELFTEST FAILED: group_rows\n  got:  {got_groups}\n"
+            f"  want: {want_groups}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    # attribute(): the batched path's parser. A regression here is silent in
+    # the direction that reads as good news — no diagnostics parsed means no
+    # FAILS — so every direction is pinned, including UNSEEN.
+    def _art(kind: str, name: str) -> str:
+        return json.dumps(
+            {"reason": "compiler-artifact", "target": {"name": name, "kind": [kind]}}
+        )
+
+    def _err(kind: str, name: str, code: str | None, text: str = "boom") -> str:
+        return json.dumps(
+            {
+                "reason": "compiler-message",
+                "target": {"name": name, "kind": [kind]},
+                "message": {
+                    "level": "error",
+                    "message": text,
+                    "code": {"code": code} if code else None,
+                },
+            }
+        )
+
+    a_rows = [
+        Row("r", "p", "test", "ok_t", ["f"], "/1"),
+        Row("r", "p", "test", "bad_t", ["f"], "/2"),
+        Row("r", "p", "bench", "gone_b", ["f"], "/3"),
+        Row("r", "p", "test", "codeless_t", ["f"], "/4"),
+    ]
+    stream = "\n".join(
+        [
+            "   Compiling p v0.1.0",  # non-JSON noise must be skipped, not fatal
+            _art("test", "ok_t"),
+            _art("test", "bad_t"),
+            _err("test", "bad_t", "E0432"),
+            _err("test", "bad_t", "E0433"),
+            _art("test", "codeless_t"),
+            _err("test", "codeless_t", None, "cannot find macro `nope`"),
+            json.dumps(
+                {
+                    "reason": "compiler-message",
+                    "target": {"name": "ok_t", "kind": ["test"]},
+                    "message": {"level": "warning", "message": "w", "code": None},
+                }
+            ),
+            "{not json",
+        ]
+    )
+    got_attr = {k: v for k, v in attribute(stream, a_rows).items()}
+    want_attr = {
+        ("test", "ok_t"): (BUILDS, ""),
+        ("test", "bad_t"): (FAILS, "E0432,E0433"),
+        ("bench", "gone_b"): (UNSEEN, "cargo built no such target"),
+        ("test", "codeless_t"): (FAILS, "cannot find macro `nope`"),
+    }
+    if got_attr != want_attr:
+        print(
+            f"SELFTEST FAILED: attribute\n  got:  {got_attr}\n"
+            f"  want: {want_attr}",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
+
+    # An upstream (lib) error explains the silence and must say so — an
+    # artifact-less row is UNSEEN either way, but the two causes are different
+    # findings: a broken lib is not a wrong row.
+    up = attribute(
+        "\n".join([_err("lib", "p", "E0599"), _art("lib", "p")]),
+        [Row("r", "p", "test", "t", ["f"], "/1")],
+    )
+    if up[("test", "t")] != (UNSEEN, "an upstream unit failed first"):
+        print(f"SELFTEST FAILED: attribute upstream → {up}", file=sys.stderr)
+        raise SystemExit(2)
+
     # classify(): the two failure verdicts must not collapse into one. A
     # missing feature is an INVALID row; a compile error is an INSUFFICIENT
     # one, and only the second is evidence about the target's own code.
@@ -366,7 +625,14 @@ def main(argv: list[str]) -> int:
         "--target-dir",
         help="CARGO_TARGET_DIR (use /tmp/... when a sibling session is building)",
     )
-    ap.add_argument("--timeout", type=int, default=1800, help="per-row seconds")
+    ap.add_argument("--timeout", type=int, default=1800, help="per-row/per-group seconds")
+    ap.add_argument(
+        "--batch",
+        action="store_true",
+        help="one cargo run per (package, EXACT feature set) instead of per row "
+        "(1,829 rows -> 1,070 groups over 9 repos; verdicts are per-target, and "
+        "a row cargo never built reports UNSEEN, never BUILDS)",
+    )
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--quiet", action="store_true", help="summary only")
     ap.add_argument(
@@ -397,7 +663,10 @@ def main(argv: list[str]) -> int:
                 f"not the row",
                 file=sys.stderr,
             )
-        print(f"── {repo.name} ──", flush=True)
+        if not args.json:
+            # --json must be machine-readable on stdout: a progress header here
+            # made the document unparseable (`Expecting value: line 1`).
+            print(f"── {repo.name} ──", flush=True)
         reports.append(audit(repo, args))
 
     if args.json:
@@ -426,15 +695,27 @@ def main(argv: list[str]) -> int:
         return 0
 
     print()
-    print(f"{'repo':<24} {'rows':>5} {'checked':>8} {'BUILDS':>7} {'FAILS':>6} {'NO-FEAT':>8}")
+    print(
+        f"{'repo':<24} {'rows':>5} {'checked':>8} {'BUILDS':>7} {'FAILS':>6} "
+        f"{'NO-FEAT':>8} {'UNSEEN':>7}"
+    )
     for r in reports:
         print(
             f"{r.repo:<24} {len(r.rows):>5} {len(r.results):>8} "
-            f"{r.count(BUILDS):>7} {r.count(FAILS):>6} {r.count(NO_FEATURE):>8}"
+            f"{r.count(BUILDS):>7} {r.count(FAILS):>6} {r.count(NO_FEATURE):>8} "
+            f"{r.count(UNSEEN):>7}"
         )
-    bad = [x for r in reports for x in r.results if x.verdict in (FAILS, NO_FEATURE)]
+    bad = [
+        x
+        for r in reports
+        for x in r.results
+        if x.verdict in (FAILS, NO_FEATURE, UNSEEN)
+    ]
     if bad:
-        print(f"\n{len(bad)} row(s) that CANNOT build at their own required-features:")
+        print(
+            f"\n{len(bad)} row(s) that did NOT build at their own "
+            f"required-features (UNSEEN = no verdict, not a pass):"
+        )
         for x in bad:
             print(f"  {x.verdict:<15} {x.row.label}")
             print(f"      required-features = {x.row.features}")

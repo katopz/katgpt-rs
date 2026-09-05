@@ -559,13 +559,30 @@ as defeating grep. So the check is to ask the compiler, once per target:
 scripts/required_features_build_audit.py --list            # rows only, no builds
 scripts/required_features_build_audit.py ../riir-train     # one repo
 scripts/required_features_build_audit.py . --grep pruners  # one slice
+scripts/required_features_build_audit.py ../riir-train --batch  # 1 run per set
 ```
 
 A **report, not a gate** (always exit 0) and, unlike its siblings, also for a
-cost reason: **1,818 rows over 16 repos** (2026-09-05), at ~28 s/row warm on
+cost reason: **1,829 rows over 16 repos** (2026-09-05), at ~28 s/row warm on
 the first katgpt-rs slice — a full sweep is hours, so it is filterable
 (`--package`, `--kind`, `--grep`, `--limit`) and takes `--target-dir` for when
-a sibling session is building. It warns when another cargo holds the repo's
+a sibling session is building.
+
+`--batch` is the cost lever, and its constraint is what makes it sound:
+**one cargo run per (package, EXACT feature set)**, never per subset. Building
+a target at a SUPERSET of its own row and seeing it succeed proves nothing —
+the extra features may supply the very import the row forgot, which is the
+failure the whole report exists to catch (`--all-features` builds every wrong
+row). Equality is therefore the only batchable relation, and it is worth
+batching: **1,829 rows collapse to 1,070 groups (1.71x)**, and each collapsed
+row saves a whole dependency-graph rebuild, which is what the ~28 s mean is
+made of. Verdicts stay per-target — attributed from `--message-format=json`
+`compiler-message`/`compiler-artifact` target names, with `--keep-going` so
+one red target does not truncate the run. A row with **neither** an error nor
+an artifact reports **UNSEEN, never BUILDS**: silence is not evidence, and
+reading it as success would be the same green-zero this family exists to
+refuse (`attribute()` is pinned by `selftest()` in both directions, canaried
+by reintroducing exactly that collapse). It warns when another cargo holds the repo's
 `target/`, by working directory, for the reason
 §"Several sessions, one target dir" gives.
 
