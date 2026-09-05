@@ -151,39 +151,57 @@ def parse_rows(repo: Path) -> list[Row]:
     out: list[Row] = []
     for manifest in manifests(repo):
         try:
-            data = tomllib.loads(manifest.read_text(encoding="utf-8", errors="replace"))
-        except (tomllib.TOMLDecodeError, OSError):
+            text = manifest.read_text(encoding="utf-8", errors="replace")
+        except OSError:
             continue
-        pkg = (data.get("package") or {}).get("name")
-        if not pkg:
-            continue  # virtual workspace root — its members are their own manifests
-        pkg_feats, pkg_deps = declared_features(data)
-        for kind in KIND_FLAG:
-            for entry in data.get(kind, []) or []:
-                if not isinstance(entry, dict):
-                    continue
-                # NOT `feats` — that name belongs to the package's declared set
-                # above, and shadowing it here made every row's own features
-                # trivially "declared", so the static pass could never fire.
-                # Caught by the gate's plant-an-invalid-row canary.
-                req = entry.get("required-features")
-                name = entry.get("name")
-                if not req or not name:
-                    continue
-                rel = entry.get("path") or f"{KIND_DIR[kind]}/{name}.rs"
-                out.append(
-                    Row(
-                        repo=repo.name,
-                        package=pkg,
-                        kind=kind,
-                        name=name,
-                        features=list(req),
-                        path=str((manifest.parent / rel).resolve()),
-                        crate_dir=str(manifest.parent.resolve()),
-                        feats=pkg_feats,
-                        deps=pkg_deps,
-                    )
+        out.extend(rows_from_manifest(text, repo.name, manifest))
+    return out
+
+
+def rows_from_manifest(text: str, repo_name: str, manifest: Path) -> list[Row]:
+    """The rows in ONE manifest's text.
+
+    Split out of `parse_rows` so a caller holding a manifest blob that is not
+    on disk — `git show <rev>:<path>`, for the touched-rows gate — parses it by
+    exactly the same rule as the sweep. Two parsers disagreeing about what a
+    row IS would make the per-push gate and the scheduled sweep answer
+    different questions while both printing a confident verdict.
+    """
+    out: list[Row] = []
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return out
+    pkg = (data.get("package") or {}).get("name")
+    if not pkg:
+        return out  # virtual workspace root — its members are their own manifests
+    pkg_feats, pkg_deps = declared_features(data)
+    for kind in KIND_FLAG:
+        for entry in data.get(kind, []) or []:
+            if not isinstance(entry, dict):
+                continue
+            # NOT `feats` — that name belongs to the package's declared set
+            # above, and shadowing it here made every row's own features
+            # trivially "declared", so the static pass could never fire.
+            # Caught by the gate's plant-an-invalid-row canary.
+            req = entry.get("required-features")
+            name = entry.get("name")
+            if not req or not name:
+                continue
+            rel = entry.get("path") or f"{KIND_DIR[kind]}/{name}.rs"
+            out.append(
+                Row(
+                    repo=repo_name,
+                    package=pkg,
+                    kind=kind,
+                    name=name,
+                    features=list(req),
+                    path=str((manifest.parent / rel).resolve()),
+                    crate_dir=str(manifest.parent.resolve()),
+                    feats=pkg_feats,
+                    deps=pkg_deps,
                 )
+            )
     return out
 
 
