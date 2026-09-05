@@ -603,6 +603,19 @@ fixed*, by Issue 723 T7, which did not look at the file next to it. Five
 assertions that had never been runnable at their own row now run and pass. A
 hand fix of one instance does not close a class.
 
+**One of its three verdicts is free.** A row naming a feature the package
+cannot enable is decided by the manifest alone, so it runs as a static
+pre-pass before any build: **0 invalid rows over all 1,829, in under a
+second** (2026-09-05). Do not re-derive that check by hand — the obvious
+model is wrong. `required-features` accepts **`dep/feat`** and `dep?/feat`,
+naming a DEPENDENCY's feature rather than one of ours, and a first cut that
+treated those as undefined reported 10 riir-ai benches as dead targets. A
+`/tmp` probe with a `compile_error!` canary inside the target (cargo 1.98.1)
+settles it: cargo satisfies such a row via a package feature that enables it,
+by naming `dep/feat` directly, and under `--all-features`, and skips the
+target only in a plain no-features build. Renamed (`package = `) and
+`[target."cfg(…)".dependencies]` entries count as dependencies too.
+
 Record and the open sweep: riir-train `.issues/513`.
 
 ### A reported "p99" is often the MAX — `scripts/percentile_index_audit.py`
