@@ -17,12 +17,19 @@
 #
 # ── max_empty: a WALL at 0 everywhere it measures 0 ──────────────────────────
 # A row that compiles its own target to nothing is never legitimate under any
-# convention. The single 1 is riir-ai's `self_advantage_hla_bench` (Issue 513
-# instance 7) — a RATCHET at the measured backlog, not tolerance: it is open,
-# its repair side is already settled by precedent inside its own manifest
-# (`reconstruction_with_brain` carries both features), and it is deferred only
-# because editing that manifest mid-sweep invalidates riir-engine for every
-# queued group. Take it to 0 in the commit that fixes it.
+# convention, and as of 2026-09-06 it is a WALL at 0 in EVERY repo: the last
+# open instance — riir-ai's `self_advantage_hla_bench` (Issue 513 instance 7) —
+# was closed by widening its row with `sense_composition_bench`.
+#
+# That fix is worth reading, because ONE edit cleared TWO different verdicts.
+# The row was independently a FAILS-TO-BUILD (E0601, no `main`) found by the
+# compiler sweep and an EMPTY-AT-ROW found by this static pass, and both had
+# the same cause: the missing feature gates the module the bench imports, so
+# the target compiled to nothing and therefore had no `main` to compile. The
+# two instruments were seeing one defect from opposite sides. Do not infer the
+# general rule from it — instance 8 (riir-train `bench_dflare_heterogeneous_kv`)
+# was EMPTY-AT-ROW while BUILDING cleanly, which is exactly why this pass
+# exists beside the compiler sweep rather than inside it.
 #
 # ── max_unresolved: a RATCHET, because some of it is legitimate ──────────────
 # UNRESOLVED is "a predicate this report declines to rule on", NOT "clean".
@@ -78,7 +85,7 @@
 # repo                  min_rows  min_with_cfg  max_empty  max_unresolved
 katgpt-rs                      560           359          0               0
 katgpt-web                       0             0          0               0
-riir-ai                        463           286          1               1
+riir-ai                        463           286          0               1
 riir-auth                        0             0          0               0
 riir-chain                     100            77          0               1
 riir-clippy                     39            20          0               0
