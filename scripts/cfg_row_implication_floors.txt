@@ -31,4 +31,4 @@ max_unresolved = 0
 # Slack is deliberate. A row legitimately leaves when a target is deleted, and
 # a ratcheting floor would red the next correct removal.
 min_rows_scanned = 560
-min_with_cfg = 350
+min_with_cfg = 359

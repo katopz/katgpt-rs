@@ -59,22 +59,36 @@
 # population comes from `parse_rows`, whose manifest floor is already asserted
 # by that neighbouring sweep over the same walk.
 #
-# Measured 2026-09-06.
+# ── the scanner handles MULTI-LINE attributes, and did not at first ──────────
+# A first cut matched single-line `#![cfg(...)]` only. The workspace carries
+# 114 attributes written across several lines (`#![cfg(all(\n  feature = "a",
+# \n))]`), and every one was classified NO-CFG and silently never checked —
+# the classifier-narrowness failure this workspace documents, reproduced on the
+# instrument's first day. Fixing it took the cfg population 1,172 -> 1,214.
+# A narrow scanner does not report LESS; it reports CLEAN.
+#
+# `//` comments inside such an attribute are stripped before the join AND
+# before the paren count. Both leaks are silent: a comment mentioning
+# `feature = "x"` invents a requirement, and one containing an unbalanced `(`
+# makes the accumulator swallow the rest of the file. riir-chain's
+# `p2_halt_probe` carries six comment lines inside its `#![cfg(all( ... ))]`.
+#
+# Measured 2026-09-06 (post multi-line fix).
 #
 # repo                  min_rows  min_with_cfg  max_empty  max_unresolved
-katgpt-rs                    560           350          0               0
-katgpt-web                     0             0          0               0
-riir-ai                      463           264          1               1
-riir-auth                      0             0          0               0
-riir-chain                   100            73          0               0
-riir-clippy                   39            19          0               0
-riir-dao                       0             0          0               0
-riir-dapps                    22            21          0               0
-riir-deployer                  0             0          0               0
-riir-game-sdk                 30            15          0               0
-riir-mmorpg-examples          18            17          0               1
-riir-neuron-db                45            35          0               0
-riir-train                   391           251          0               0
-riir-viewbridge                0             0          0               0
-seal-game-editor               0             0          0               0
-seal-remake                    6             1          0               0
+katgpt-rs                      560           359          0               0
+katgpt-web                       0             0          0               0
+riir-ai                        463           286          1               1
+riir-auth                        0             0          0               0
+riir-chain                     100            77          0               1
+riir-clippy                     39            20          0               0
+riir-dao                         0             0          0               0
+riir-dapps                      22            22          0               0
+riir-deployer                    0             0          0               0
+riir-game-sdk                   30            15          0               0
+riir-mmorpg-examples            18            17          0               1
+riir-neuron-db                  45            36          0               0
+riir-train                     391           254          0               1
+riir-viewbridge                  0             0          0               0
+seal-game-editor                 0             0          0               0
+seal-remake                      6             2          0               0

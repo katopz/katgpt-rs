@@ -94,7 +94,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from cfg_gated_target_audit import derive_repos  # noqa: E402
 from required_features_build_audit import Row, parse_rows  # noqa: E402
 
-INNER_CFG = re.compile(r"^\s*#!\[cfg\((.*)\)\]\s*$")
+INNER_CFG = re.compile(r"^\s*#!\[cfg\((.*)\)\]\s*$", re.DOTALL)
+# A `//` comment inside a multi-line attribute must be dropped BEFORE the
+# predicate is joined, and before parens are counted. Two failures otherwise,
+# and the second is silent: a comment containing `feature = "x"` invents a
+# requirement, and one containing an unbalanced `(` makes the accumulator
+# swallow the rest of the file. riir-chain's `p2_halt_probe` carries six
+# comment lines inside its `#![cfg(all( ... ))]`.
+LINE_COMMENT = re.compile(r"//.*$")
 FEATURE = re.compile(r'feature\s*=\s*"([^"]+)"')
 
 # Predicates that are not about cargo features. Reducing one of these to "no
@@ -155,24 +162,51 @@ def leading_inner_cfgs(path: str) -> list[str] | None:
     None means the file could not be read — distinct from [] (read fine, no
     inner cfg), because "no cfg" is a verdict and "cannot read" is not.
 
-    Only INNER attributes (`#![...]`) count, and only before the first item:
-    an inner attribute after an item is a compile error, and an OUTER
-    `#[cfg]` gates one item rather than the file. Doc comments, `#![allow]`
-    and friends are skipped rather than terminating the scan.
+    Only INNER attributes (`#![...]`) count, and only before the first item: an
+    inner attribute after an item is a compile error, and an OUTER `#[cfg]`
+    gates one item rather than the file. Doc comments, `#![allow]` and friends
+    are skipped rather than terminating the scan.
+
+    MULTI-LINE attributes are accumulated until the parens balance. A first cut
+    matched single lines only, and the workspace carries **114** attributes
+    written as:
+
+        #![cfg(all(
+            feature = "a",
+            feature = "b"
+        ))]
+
+    Every one of them was classified NO-CFG and silently never checked — the
+    classifier-narrowness failure this workspace documents, reproduced in this
+    file on its first day. A narrow scanner does not report less; it reports
+    CLEAN.
     """
     try:
         text = Path(path).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
     out: list[str] = []
+    pending: list[str] | None = None
     for line in text.splitlines():
+        if pending is not None:
+            pending.append(LINE_COMMENT.sub("", line))
+            joined = " ".join(x.strip() for x in pending if x.strip())
+            if joined.count("(") <= joined.count(")"):
+                m = INNER_CFG.match(joined)
+                if m:
+                    out.append(m.group(1))
+                pending = None
+            continue
         stripped = line.strip()
         if not stripped or stripped.startswith(("//", "/*", "*")):
             continue
         if stripped.startswith("#!["):
-            m = INNER_CFG.match(line)
-            if m:
-                out.append(m.group(1))
+            if INNER_CFG.match(line):
+                out.append(INNER_CFG.match(line).group(1))  # type: ignore[union-attr]
+            elif stripped.startswith("#![cfg("):
+                bare = LINE_COMMENT.sub("", line)
+                if bare.count("(") > bare.count(")"):
+                    pending = [bare]  # continued on later lines
             continue
         break  # first real item — inner attributes cannot follow it
     return out
@@ -390,6 +424,29 @@ def selftest() -> None:
         fails.append("scanner: scanned past the first item")
     if scan("fn main() {}\n") != []:
         fails.append("scanner: invented a cfg in a file with none")
+    # MULTI-LINE attributes: 114 exist in this workspace and a first cut missed
+    # every one, classifying them NO-CFG — i.e. reporting CLEAN, not "less".
+    multi = scan('#![cfg(all(\n    feature = "a",\n    feature = "b"\n))]\nfn f() {}\n')
+    if multi != ['all( feature = "a", feature = "b" )']:
+        fails.append(f"scanner: multi-line #![cfg(all(...))] not joined: {multi}")
+    if required_features(multi[0] if multi else "") != {"a", "b"}:
+        fails.append("scanner: a joined multi-line predicate did not reduce")
+    # ...and a multi-line attribute must not swallow the rest of the file.
+    if scan('#![cfg(all(\n    feature = "a"\n))]\nfn f() {}\n#[cfg(feature = "z")]\nfn g() {}\n') != [
+        'all( feature = "a" )'
+    ]:
+        fails.append("scanner: multi-line accumulation ran past its closing parens")
+    # A `//` comment INSIDE a multi-line attribute must be dropped before the
+    # join and before the paren count. Both failures are silent: a comment
+    # mentioning a feature invents a requirement, and one with an unbalanced
+    # paren swallows the rest of the file. riir-chain's p2_halt_probe is real.
+    commented = scan('#![cfg(all(\n    feature = "a",\n'
+                     '    // never enable feature = "ghost" here (see note\n'
+                     '    feature = "b"\n))]\nfn f() {}\n')
+    if commented != ['all( feature = "a", feature = "b" )']:
+        fails.append(f"scanner: a // comment inside a multi-line cfg leaked: {commented}")
+    if commented and required_features(commented[0]) != {"a", "b"}:
+        fails.append("scanner: a commented-out feature became a requirement")
     if leading_inner_cfgs("/nonexistent/definitely/not/here.rs") is not None:
         fails.append("scanner: an unreadable file reported as 'no cfg' rather than None")
 
