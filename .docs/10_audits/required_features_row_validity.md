@@ -102,6 +102,21 @@ CPU-seconds** over two pairs, with **wall-clock flipping sign** (-12%, then
 +13%) on a box carrying sibling builds. Expect more where a feature set
 swings the dependency graph, near-nothing where it is shared.
 
+**An interrupted sweep is the normal ending, so it resumes.** `--record
+<jsonl>` appends each decided row as it lands and `--resume <jsonl>` reads it
+back; a progress **log** is accepted as resume input too, because the first
+long run is always started before anyone thinks about resuming it. Only
+BUILDS / FAILS-TO-BUILD / NO-SUCH-FEATURE are skipped — TIMEOUT, ERROR and
+UNSEEN are re-run, since they describe the box or a run that never reached
+the target.
+
+The katgpt-rs sweep started 2026-09-05 23:45 writes
+`/tmp/katgpt_sweep.log`. To continue it rather than start from zero:
+
+```bash
+scripts/required_features_build_audit.py . --batch     --resume /tmp/katgpt_sweep.log --record /tmp/katgpt_sweep.jsonl
+```
+
 A full sweep in fresh `/tmp` target dirs is **not affordable on this disk**.
 The workspace carried **378 GB of `target/debug/incremental`** against ~42 GiB
 free on 2026-09-05; 168 GB was reclaimed from the four repos that were idle
